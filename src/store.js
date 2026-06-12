@@ -205,9 +205,15 @@ export function addNotification(title, body, callId) {
 }
 
 // ---- Settings ----
+// Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
+// Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
+// so keine fremden Felder in den Store schreiben oder Typen kippen.
 export function updateSettings(patch) {
   const s = load();
-  s.settings = { ...s.settings, ...patch };
+  const allowed = defaults().settings;
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (key in allowed && typeof value === typeof allowed[key]) s.settings[key] = value;
+  }
   save();
   return s.settings;
 }

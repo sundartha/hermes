@@ -62,10 +62,12 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
     bei falschem/fehlendem Token, Call-Record bleibt aktiv, offen bei korrektem
     Token, kein API-Leak, TwiML traegt das Token). safeEqual nach src/util.js
     extrahiert (Bridge + Server teilen den timing-sicheren Vergleich).
-- [ ] **2.4 Settings-Whitelist** gegen Default-Settings in `store.js` (Key + Typ).
+- [x] **2.4 Settings-Whitelist** gegen Default-Settings in `store.js` (Key + Typ).
   - Soll: `{evil:"x", allowBooking:"nein"}` -> beides ignoriert;
     `{allowBooking:false}` -> uebernommen.
-  - Verifikation: Testfall POSTet genau das. Ergebnis: (offen)
+  - Verifikation: Testfall POSTet genau das. Ergebnis: gruen, `npm test`
+    pass 35/35 (test/api.test.js: Response UND Store unveraendert bzw.
+    uebernommen).
 - [ ] **2.5 Security-Header**: nosniff, X-Frame-Options DENY, Referrer-Policy,
       CSP (Inline + Google Fonts), `Cache-Control: no-store` fuer `/api/*`.
   - Soll: Header auf `/` und `/api/state` exakt gesetzt.

@@ -30,3 +30,28 @@ test("Body-Size-Limit 100kb", async (t) => {
     await srv.stop();
   }
 });
+
+test("Settings-Whitelist", async (t) => {
+  const srv = await startServer();
+  try {
+    await t.test("unbekannter Key + falscher Typ werden ignoriert", async () => {
+      const res = await postJson(`${srv.localUrl}/api/settings`, { evil: "x", allowBooking: "nein" });
+      assert.equal(res.status, 200);
+      const settings = await res.json();
+      assert.equal("evil" in settings, false);
+      assert.equal(settings.allowBooking, true, "String 'nein' darf das Boolean nicht ueberschreiben");
+      const stored = srv.readStore().settings;
+      assert.equal("evil" in stored, false);
+      assert.equal(stored.allowBooking, true);
+    });
+
+    await t.test("bekannter Key mit korrektem Typ wird uebernommen", async () => {
+      const res = await postJson(`${srv.localUrl}/api/settings`, { allowBooking: false });
+      assert.equal(res.status, 200);
+      assert.equal((await res.json()).allowBooking, false);
+      assert.equal(srv.readStore().settings.allowBooking, false);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
