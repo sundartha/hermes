@@ -35,70 +35,78 @@ Lücken, die ohne Zugangsdaten von aussen ausnutzbar sind:
    verglichen (Timing-Seitenkanal).
    Fix: Vergleich via `crypto.timingSafeEqual`.
 
-## Phase 2 - Wichtig: Missbrauchs- und Eingabe-Haertung (offen, autonom umsetzbar)
+## Phase 2 - Wichtig: Missbrauchs- und Eingabe-Haertung ✅ (umgesetzt)
 
 Jeder Punkt traegt sein deterministisches Soll-Ergebnis (**Erwartet**) und die
 **Verifikation** (Feedback-Loop, gegen die selbststaendig iteriert wird) -
-siehe `.claude/refs/workflow.md` Regel 7. Verifikation jeweils gegen einen
-lokal gestarteten Server (`PORT=3999`, Test-Env wie in den bestehenden Tests).
+siehe `.claude/refs/workflow.md` Regel 7. Verifikation laeuft automatisiert
+in der Test-Suite (`npm test`, Server als Kindprozess mit Test-Env).
 
 1. **Rate-Limiting** fuer alle Nicht-Twilio-Routen (in-house, ohne neue
-   Dependency; localhost-Socket ausgenommen, Limit via `RATE_LIMIT_PER_MIN`).
+   Dependency; localhost-Socket ausgenommen, Limit via `RATE_LIMIT_PER_MIN`,
+   Default 120/min). ✅ (`src/middleware.js`, Fixed Window pro IP)
    - Erwartet: Request N+1 innerhalb von 60s von derselben (Nicht-localhost-)IP
      liefert HTTP 429 mit JSON-Error; Request nach Fenster-Ende wieder 200.
-   - Verifikation: Testfall, der das Limit auf einen kleinen Wert setzt und die
-     Statuscode-Folge 200...200,429 asserted.
-2. **Body-Size-Limits** (100 kb) fuer `express.json()`/`urlencoded()`.
+   - Verifikation: `test/rate-limit.test.js` (Limit 3 -> Folge 200,200,200,429;
+     localhost und /voice ausgenommen).
+2. **Body-Size-Limits** (100 kb) fuer `express.json()`/`urlencoded()`. ✅
    - Erwartet: POST mit >100 kb Body liefert HTTP 413, gueltige kleine Bodies
      unveraendert 2xx.
-   - Verifikation: curl/Test mit 200-kb-Payload -> 413.
+   - Verifikation: `test/api.test.js` (200-kb-Payload -> 413, json + urlencoded).
 3. **`/media`-WebSocket absichern**: zufaelliges `streamToken` pro Call als
    Stream-Parameter im TwiML, Pruefung beim `start`-Event in `bridge.js`.
-   WICHTIG: `/api/state` und `/api/calls/:id` duerfen das Token NICHT ausgeben.
+   WICHTIG: `/api/state` und `/api/calls/:id` duerfen das Token NICHT ausgeben. ✅
+   (timing-sicherer Vergleich via `src/util.js`; API-Antworten laufen durch
+   `publicCall()` in `server.js`)
    - Erwartet: `start`-Event mit falschem/fehlendem Token -> Socket wird
      getrennt, kein OpenAI-Connect; korrektes Token -> Stream laeuft.
      Kein API-Response enthaelt `streamToken`.
-   - Verifikation: WS-Testclient gegen /media (beide Faelle) + Assertion, dass
-     `JSON.stringify` der API-Antworten kein `streamToken` enthaelt.
+   - Verifikation: `test/media-token.test.js` (WS-Testclient beide Faelle,
+     kein API-Leak, TwiML traegt das Token, abgelehnter Stream beendet den
+     Call-Record nicht).
 4. **Settings-Whitelist**: `POST /api/settings` akzeptiert nur bekannte Keys
-   mit passendem Typ (Abgleich gegen die Default-Settings in `store.js`).
+   mit passendem Typ (Abgleich gegen die Default-Settings in `store.js`). ✅
    - Erwartet: unbekannter Key oder falscher Typ wird ignoriert (Response und
      Store unveraendert); bekannte Keys mit korrektem Typ werden uebernommen.
-   - Verifikation: Testfall POSTet `{evil: "x", allowBooking: "nein"}` ->
-     beides nicht im Store; `{allowBooking: false}` -> uebernommen.
+   - Verifikation: `test/api.test.js` (`{evil: "x", allowBooking: "nein"}` ->
+     beides nicht im Store; `{allowBooking: false}` -> uebernommen).
 5. **Security-Header**: `X-Content-Type-Options: nosniff`, `X-Frame-Options:
    DENY`, `Referrer-Policy`, CSP fuers Dashboard (Inline + Google Fonts
-   erlaubt), `Cache-Control: no-store` fuer `/api/*`.
+   erlaubt), `Cache-Control: no-store` fuer `/api/*`. ✅ (`src/middleware.js`)
    - Erwartet: Header auf `/` und `/api/state` exakt gesetzt.
-   - Verifikation: Testfall prueft die Response-Header.
+   - Verifikation: `test/headers.test.js`.
 6. **Eingabe-Validierung** der API-Routen: `to` strikt E.164
    (`^\+[1-9]\d{6,14}$` nach Normalisierung), Laengenlimits fuer Freitexte
    (objective 500, briefing/constraints 2000, caller_name 100, title 200),
-   Kalender: gueltige Datumswerte und `end > start`.
+   Kalender: gueltige Datumswerte und `end > start`. ✅
    - Erwartet: ungueltige Eingaben -> HTTP 400 mit Fehlertext, gueltige
-     unveraendert; keine bestehende gueltige Nutzung bricht.
-   - Verifikation: Testfaelle je Grenzfall (ungueltige Nummer, Overlong-String,
-     `end < start`).
+     unveraendert; keine bestehende gueltige Nutzung bricht (Dashboard sendet
+     weiterhin `{to, goal}`).
+   - Verifikation: `test/api.test.js` (ungueltige Nummern, Overlong-Strings,
+     `end <= start`, Allowlist-403 greift weiterhin nach der Validierung).
 
-## Phase 3 - Ausbau: Betrieb & Datenschutz (offen)
+## Phase 3 - Ausbau: Betrieb & Datenschutz (Punkte 2-4 umgesetzt)
 
 Autonom umsetzbar (mit Soll-Ergebnis + Verifikation):
 
 2. **Transkript-Retention** (DSGVO): Calls/Notifications aelter als
    `RETENTION_DAYS` (Default 30, 0 = aus) beim Start und periodisch loeschen;
-   offene Action Items bleiben erhalten.
+   offene Action Items bleiben erhalten. ✅ (`store.pruneOldData()`, Sweep
+   alle 6h; erledigte Action Items aelter als Cutoff werden mit entfernt)
    - Erwartet: Call mit `endedAt` aelter als Cutoff verschwindet samt
      Transkript aus dem Store; aktiver/frischer Call bleibt.
-   - Verifikation: Unit-Test gegen `store.pruneOldData()` mit praeparierten
-     Timestamps (DATA_DIR auf Temp-Verzeichnis).
+   - Verifikation: `test/retention.test.js` (praeparierte Timestamps,
+     DATA_DIR auf Temp-Verzeichnis, Persistenz auf Platte, 0 = aus).
 3. **Audit-Logging**: Outbound-Call-Ausloesung (mit Quell-IP), Cancel,
-   Settings-Aenderung und fehlgeschlagene Auth-Versuche als `[audit]`-Logzeile.
+   Settings-Aenderung und fehlgeschlagene Auth-Versuche als `[audit]`-Logzeile. ✅
+   (zusaetzlich `place_call_denied` fuer Allowlist-/Budget-Ablehnungen;
+   Settings-Audit loggt nur Keys, keine Werte)
    - Erwartet: jede dieser Aktionen erzeugt genau eine `[audit]`-Zeile mit
      Aktion + IP; keine Secrets im Log.
-   - Verifikation: Test faengt stdout des Kindprozess-Servers ab und prueft
-     auf die `[audit]`-Zeilen.
+   - Verifikation: `test/audit.test.js` (faengt stdout des Kindprozess-Servers
+     ab, prueft Zeilen-Anzahl und Secret-Freiheit).
 4. **Dependency-Scanning**: `npm audit` + Tests + Syntax-Check in CI
-   (GitHub Actions, bei jedem Push).
+   (GitHub Actions, bei jedem Push). ✅ (`.github/workflows/ci.yml`)
    - Erwartet: Workflow-Datei vorhanden; Pipeline scheitert bei rotem Test
      oder High-Severity-Audit-Finding.
    - Verifikation: lokal `npm test` gruen + `npm audit --audit-level=high`

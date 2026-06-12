@@ -114,12 +114,34 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
 
 ## Doku nach Umsetzung
 
-- [ ] PLAN-SECURITY.md: Phase 2 + 3.2-3.4 als umgesetzt markieren.
-- [ ] .env.example + render.yaml: `RATE_LIMIT_PER_MIN`, `RETENTION_DAYS`.
-- [ ] CLAUDE.md / workflow.md / clean-code.md: "kein Test-Framework"-Stellen
-      auf node:test umstellen.
+- [x] PLAN-SECURITY.md: Phase 2 + 3.2-3.4 als umgesetzt markiert (mit
+      Verweis auf die jeweiligen Testdateien).
+- [x] .env.example + render.yaml: `RATE_LIMIT_PER_MIN`, `RETENTION_DAYS`.
+- [x] CLAUDE.md / workflow.md / clean-code.md: "kein Test-Framework"-Stellen
+      auf node:test umgestellt.
 
 ## NICHT anfassen (laut Auftrag)
 
 - OAuth 2.1 fuer /mcp (Phase 3.1) - braucht Betreiber.
 - Secrets-Hygiene (Phase 3.5) - braucht Twilio-/Render-Konto.
+
+## Review (Endstand)
+
+- `npm test`: 61 Tests, 0 Fails, ~4s - dreimal in Folge stabil; laeuft ohne
+  `.env` und ohne externen Netzzugriff (Sandbox ohne Internet).
+- `npm audit --audit-level=high`: "found 0 vulnerabilities", Exit 0.
+- Smoke-Test: Server bootet, `/healthz` 200, Dashboard 200 mit allen
+  Security-Headern, `/api/state` mit `Cache-Control: no-store`.
+- Safety-Gates unveraendert und jetzt regressionsgetestet: Twilio-Signatur,
+  Basic-Auth fail-closed (inkl. X-Forwarded-For-Spoof), MCP fail-closed,
+  Allowlist (403 nach Validierung), Budget-Gate, Offenlegungssatz unberuehrt.
+- Bewusste Abweichungen/Notizen:
+  - Rate-Limit-Fenster-Reset (wieder 200 nach 60s) implementiert, aber nicht
+    automatisiert getestet (wuerde 60s Testlaufzeit kosten; die definierte
+    Verifikation verlangt nur die Folge 200...200,429).
+  - Tests, die eine Nicht-localhost-IP brauchen, laufen ueber die externe
+    Interface-IP des Hosts und werden uebersprungen, falls keine existiert.
+  - media-token.test.js (korrektes Token) loest einen wss-Connect Richtung
+    OpenAI aus, der offline fehlschlaegt - der Test haengt nicht davon ab.
+  - Calls, die durch einen Crash dauerhaft auf status=active stehen bleiben,
+    werden von der Retention nie geloescht (bewusst: endedAt-basiert lt. Plan).
