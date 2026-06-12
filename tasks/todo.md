@@ -102,12 +102,15 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
     `npm test` pass 61/61, 3 Laeufe stabil (test/audit.test.js; Pipe-Flush-
     Race ueber waitForLog-Polling in helpers.js entschaerft; place_call-Pfad
     offline testbar, weil twilio bei leerer SID synchron VOR Netzzugriff wirft).
-- [ ] **3.4 CI**: GitHub Actions mit Syntax-Check + `npm test` +
+- [x] **3.4 CI**: GitHub Actions mit Syntax-Check + `npm test` +
       `npm audit --audit-level=high` bei jedem Push.
   - Soll: Workflow-Datei vorhanden; Pipeline scheitert bei rotem Test oder
     High-Severity-Finding.
   - Verifikation: lokal `npm test` gruen + `npm audit --audit-level=high`
-    Exit 0; Workflow-Lauf nach Push. Ergebnis: (offen)
+    Exit 0; Workflow-Lauf nach Push. Ergebnis: `.github/workflows/ci.yml`
+    vorhanden; lokal `npm test` pass 61/61 + `npm audit --audit-level=high`
+    -> "found 0 vulnerabilities", Exit 0. Workflow-Lauf nach Push siehe
+    Abschlussbericht.
 
 ## Doku nach Umsetzung
 

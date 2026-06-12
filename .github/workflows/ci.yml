@@ -1,0 +1,22 @@
+# CI (PLAN-SECURITY Phase 3.4): Syntax-Check + Tests + Dependency-Audit bei
+# jedem Push. Die Pipeline scheitert bei rotem Test oder High-Severity-Finding.
+name: CI
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Syntax-Check
+        run: |
+          for f in src/*.js scripts/*.js; do node --check "$f"; done
+      - name: Tests
+        run: npm test
+      - name: Dependency-Audit (High-Severity bricht den Build)
+        run: npm audit --audit-level=high
