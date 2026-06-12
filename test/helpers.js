@@ -102,6 +102,16 @@ export function seedCall(overrides = {}) {
   };
 }
 
+// Wartet, bis das stdout des Kindprozesses auf das Pattern matcht - die
+// HTTP-Antwort kommt oft an, BEVOR die Log-Pipe beim Parent eingetroffen ist.
+export async function waitForLog(srv, regex, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!regex.test(srv.stdout)) {
+    if (Date.now() > deadline) throw new Error(`Log-Pattern ${regex} nicht gefunden in:\n${srv.stdout}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 // Startet src/server.js als Kindprozess und liefert Port, gesammeltes stdout
 // und einen stop()-Handle. Wirft bei Startproblemen mit dem bisherigen Output.
 export async function startServer({ env = {}, seed } = {}) {

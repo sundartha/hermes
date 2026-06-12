@@ -236,12 +236,17 @@ export function pruneOldData(days = config.retentionDays) {
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
 // so keine fremden Felder in den Store schreiben oder Typen kippen.
+// Liefert auch die uebernommenen Keys (fuers Audit-Log in server.js).
 export function updateSettings(patch) {
   const s = load();
   const allowed = defaults().settings;
+  const changed = [];
   for (const [key, value] of Object.entries(patch || {})) {
-    if (key in allowed && typeof value === typeof allowed[key]) s.settings[key] = value;
+    if (key in allowed && typeof value === typeof allowed[key]) {
+      s.settings[key] = value;
+      changed.push(key);
+    }
   }
   save();
-  return s.settings;
+  return { settings: s.settings, changed };
 }

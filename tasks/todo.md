@@ -94,10 +94,14 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
   - Verifikation: Unit-Test gegen `store.pruneOldData()` mit praeparierten
     Timestamps (DATA_DIR=Temp). Ergebnis: gruen, `npm test` pass 52/52
     (test/retention.test.js: Loeschung, Persistenz auf Platte, 0=aus).
-- [ ] **3.3 Audit-Logging**: place_call (mit Quell-IP), cancel, Settings-
-      Aenderung, fehlgeschlagene Auth-Versuche als `[audit]`-Zeile.
+- [x] **3.3 Audit-Logging**: place_call (mit Quell-IP), place_call_denied
+      (Allowlist/Budget), cancel, Settings-Aenderung (nur Keys, keine Werte),
+      fehlgeschlagene Auth-Versuche (Basic + MCP) als `[audit]`-Zeile.
   - Soll: je Aktion genau eine `[audit]`-Zeile mit Aktion + IP, keine Secrets.
-  - Verifikation: Test faengt stdout des Kindprozesses ab. Ergebnis: (offen)
+  - Verifikation: Test faengt stdout des Kindprozesses ab. Ergebnis: gruen,
+    `npm test` pass 61/61, 3 Laeufe stabil (test/audit.test.js; Pipe-Flush-
+    Race ueber waitForLog-Polling in helpers.js entschaerft; place_call-Pfad
+    offline testbar, weil twilio bei leerer SID synchron VOR Netzzugriff wirft).
 - [ ] **3.4 CI**: GitHub Actions mit Syntax-Check + `npm test` +
       `npm audit --audit-level=high` bei jedem Push.
   - Soll: Workflow-Datei vorhanden; Pipeline scheitert bei rotem Test oder

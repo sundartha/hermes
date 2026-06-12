@@ -10,7 +10,7 @@ import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
-import { safeEqual } from "./util.js";
+import { audit, safeEqual } from "./util.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -54,6 +54,7 @@ app.use((req, res, next) => {
   if (isLocalSocket(req)) return next();
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
   if (safeEqual(req.headers.authorization || "", expected)) return next();
+  audit("auth_failed", req, `path=${req.path}`);
   res.set("WWW-Authenticate", 'Basic realm="Vodafone Agent"');
   res.status(401).send("Auth required");
 });
@@ -309,9 +310,14 @@ app.post("/api/calls", async (req, res) => {
   if (textErr) return res.status(400).json({ error: textErr });
 
   const gateErr = allowlistError(to);
-  if (gateErr) return res.status(403).json({ error: gateErr });
-  if (store.budgetExceeded(config))
+  if (gateErr) {
+    audit("place_call_denied", req, `to=${to} grund=allowlist`);
+    return res.status(403).json({ error: gateErr });
+  }
+  if (store.budgetExceeded(config)) {
+    audit("place_call_denied", req, `to=${to} grund=budget`);
     return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
+  }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
   const call = store.createCall({
@@ -325,6 +331,7 @@ app.post("/api/calls", async (req, res) => {
     language: b.language || "de",
     maxDurationS: maxDur,
   });
+  audit("place_call", req, `to=${to} call=${call.id}`);
 
   try {
     const tw = await twilioClient().calls.create({
@@ -353,6 +360,7 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   const call = store.getCall(req.params.id);
   if (!call) return res.status(404).json({ error: "not found" });
   if (call.status !== "active") return res.json({ status: call.status });
+  audit("cancel_call", req, `call=${call.id}`);
   store.endCallRecord(call.id, "cancelled");
   if (call.twilioSid) {
     try {
@@ -392,7 +400,12 @@ app.get("/api/calls/:id", (req, res) => {
   res.json(publicCall(call));
 });
 
-app.post("/api/settings", (req, res) => res.json(store.updateSettings(req.body || {})));
+app.post("/api/settings", (req, res) => {
+  const { settings, changed } = store.updateSettings(req.body || {});
+  // Nur die Keys loggen - Werte (z.B. greeting-Freitext) gehoeren nicht ins Log
+  audit("settings_update", req, `keys=${changed.join(",") || "-"}`);
+  res.json(settings);
+});
 
 app.post("/api/action-items/:id/toggle", (req, res) => {
   const item = store.toggleActionItem(req.params.id);
@@ -420,9 +433,12 @@ app.post("/api/calendar", (req, res) => {
 // Fail-closed: ohne konfiguriertes Token ist /mcp nur von localhost erreichbar.
 app.post("/mcp", async (req, res) => {
   if (config.mcpAuthToken) {
-    if (!safeEqual(req.headers.authorization || "", `Bearer ${config.mcpAuthToken}`))
+    if (!safeEqual(req.headers.authorization || "", `Bearer ${config.mcpAuthToken}`)) {
+      audit("auth_failed", req, "path=/mcp");
       return res.status(401).json({ error: "unauthorized" });
+    }
   } else if (!isLocalSocket(req)) {
+    audit("auth_failed", req, "path=/mcp");
     return res.status(401).json({ error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost erreichbar" });
   }
   try {

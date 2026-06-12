@@ -7,3 +7,9 @@ export function safeEqual(a, b) {
   const bb = Buffer.from(String(b));
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
+
+// Audit-Logzeile fuer sicherheitsrelevante Aktionen (Call-Ausloesung, Cancel,
+// Settings, Auth-Fehlversuche). details NIEMALS mit Secrets fuellen.
+export function audit(action, req, details = "") {
+  console.log(`[audit] ${action} ip=${req.ip}${details ? " " + details : ""}`);
+}
