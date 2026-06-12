@@ -16,6 +16,28 @@ Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Men
 
 Bei nicht-trivialen Tasks (3+ Schritte oder architektonische Entscheidungen): Lies `.claude/refs/workflow.md` und befolge die Regeln dort. Das ist keine Empfehlung, das ist Pflicht. Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nicht-trivial.
 
+## Code-Qualitaet
+
+Bei nicht-trivialen Code-Aenderungen ist `.claude/refs/clean-code.md` zu lesen und zu befolgen. Pflicht, nicht Empfehlung.
+
+Trivial — und nur diese Faelle duerfen ohne Lesen des Dokuments bearbeitet werden:
+- Tippfehler in Kommentaren, Strings oder Dokumentation
+- Reines Formatting (Whitespace, Klammern, Semikolons)
+- Imports sortieren oder ungenutzte entfernen
+- Reines Umbenennen eines bestehenden Symbols, ohne strukturelle Aenderung
+
+Alles andere ist nicht-trivial. Insbesondere: neue Funktion/Datei, Logik-Aenderung, Refactoring (auch verhaltens-erhaltend), Bug-Fix mit Verhaltens-Aenderung.
+
+### Richtwerte (kein Hook in diesem Repo — Selbstdisziplin)
+
+| Heuristik | Obergrenze | Ziel (anstreben) |
+|---|---|---|
+| Verschachtelungstiefe | 4 | 2 |
+| Funktionslaenge | 100 Zeilen | deutlich darunter |
+| Argumente | 3 | 0-2 |
+
+Hart verboten: Magic Numbers (ausser 0/1/-1) ohne benannte Konstante, toter Code, auskommentierter Code, neue abgeschaltete Sicherungen (`eslint-disable`-artige Marker, uebersprungene Checks).
+
 ## Architektur
 
 - `src/server.js` — Gateway: Twilio-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware
@@ -85,6 +107,7 @@ Kein Test-Framework vorhanden — Verifikation laeuft ueber Syntax-Check + manue
 ## Referenzen
 
 - `.claude/refs/workflow.md` — Pflicht bei nicht-trivialen Tasks (Plan Mode, Subagents, Verifikation, `tasks/todo.md` + `tasks/lessons.md`)
+- `.claude/refs/clean-code.md` — Code-Qualitaetsregeln (Pruefkatalog) bei nicht-trivialen Edits
 - `PLAN-SECURITY.md` — Sicherheits-Plan in Phasen (Phase 1 umgesetzt); bei Security-Arbeit zuerst lesen
 - `README.md` — Setup, Engines, bewusste Prototyp-Abweichungen
 - `ONBOARDING.md` — Einstieg fuer Mitarbeiter
