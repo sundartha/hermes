@@ -1,6 +1,5 @@
 // Voice-Gateway: Twilio-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
-import crypto from "crypto";
 import express from "express";
 import twilio from "twilio";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -11,18 +10,12 @@ import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter } from "./middleware.js";
+import { safeEqual } from "./util.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
 // per X-Forwarded-For eine beliebige IP vortaeuschen.
 app.set("trust proxy", 1);
-
-// Timing-sicherer Vergleich fuer Passwoerter/Tokens (kein Timing-Seitenkanal wie bei ===)
-function safeEqual(a, b) {
-  const ba = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
-}
 
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
@@ -107,13 +100,22 @@ function gatherTurn(vr, call, text) {
   vr.redirect({ method: "POST" }, `/voice/turn?callId=${call.id}`);
 }
 
-// Realtime-Engine: Anruf-Audio per Media Stream an die Bridge haengen
+// Realtime-Engine: Anruf-Audio per Media Stream an die Bridge haengen.
+// stream_token authentifiziert den WebSocket: das TwiML sieht nur Twilio,
+// die Bridge prueft das Token beim start-Event (bridge.js).
 function streamTwiml(call) {
   const vr = new VoiceResponse();
   const connect = vr.connect();
   const stream = connect.stream({ url: config.publicUrl.replace(/^https/, "wss") + "/media" });
   stream.parameter({ name: "call_id", value: call.id });
+  stream.parameter({ name: "stream_token", value: call.streamToken });
   return vr;
+}
+
+// Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
+// und interne Flags duerfen den Server nie verlassen.
+function publicCall({ streamToken, _finished, ...rest }) {
+  return rest;
 }
 
 // Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge)
@@ -347,7 +349,7 @@ app.get("/api/state", (req, res) => {
   const s = store.load();
   res.json({
     settings: s.settings,
-    calls: s.calls.slice(0, 30),
+    calls: s.calls.slice(0, 30).map(publicCall),
     actionItems: s.actionItems.slice(0, 50),
     calendar: store.getCalendar().filter((e) => e.end >= new Date().toISOString()).slice(0, 10),
     usage: { ...s.usage, maxBudgetEur: config.maxBudgetEur },
@@ -366,7 +368,7 @@ app.get("/api/state", (req, res) => {
 app.get("/api/calls/:id", (req, res) => {
   const call = store.getCall(req.params.id);
   if (!call) return res.status(404).json({ error: "not found" });
-  res.json(call);
+  res.json(publicCall(call));
 });
 
 app.post("/api/settings", (req, res) => res.json(store.updateSettings(req.body || {})));

@@ -1,4 +1,5 @@
 // Einfache JSON-Persistenz (data/store.json). Fuer die Demo bewusst ohne Datenbank.
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { config } from "./config.js";
@@ -67,6 +68,10 @@ export function createCall({ direction, from, to, goal, twilioSid, briefing, con
   const s = load();
   const call = {
     id: newId("call"),
+    // Zugangsgeheimnis fuer den /media-WebSocket (steht im TwiML, das nur Twilio
+    // sieht). Wird von der Bridge beim start-Event geprueft und darf NIE ueber
+    // die API ausgegeben werden (server.js publicCall).
+    streamToken: crypto.randomBytes(16).toString("hex"),
     twilioSid: twilioSid || null,
     direction, // "inbound" | "outbound"
     from,

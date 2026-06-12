@@ -7,6 +7,7 @@ import twilio from "twilio";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { toolDefs, execTool, disclosureSentence, systemPrompt } from "./claude.js";
+import { safeEqual } from "./util.js";
 
 const twilioClient = () => twilio(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
 
@@ -177,6 +178,16 @@ export function attachMediaBridge(httpServer, onCallEnded) {
           const callId = msg.start.customParameters?.call_id;
           call = store.getCall(callId);
           if (!call) { log("unbekannte call_id, trenne"); return twilioWs.close(); }
+          // stream_token aus dem TwiML pruefen: ohne diese Pruefung koennte jeder
+          // mit erratener call_id den Audio-Stream uebernehmen. Bei Ablehnung
+          // call wieder auf null setzen, damit finalize() den echten Call-Record
+          // nicht beendet (sonst koennte ein Angreifer aktive Calls abwuergen).
+          const token = msg.start.customParameters?.stream_token || "";
+          if (!call.streamToken || !safeEqual(token, call.streamToken)) {
+            log("ungueltiges stream_token, trenne");
+            call = null;
+            return twilioWs.close();
+          }
           call.twilioSid = msg.start.callSid || call.twilioSid;
           store.markAnswered(call.id);
           log("Stream gestartet,", call.direction, call.direction === "outbound" ? call.to : call.from);

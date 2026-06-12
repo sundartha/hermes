@@ -53,12 +53,15 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
   - Soll: POST >100kb -> 413; kleine Bodies unveraendert 2xx.
   - Verifikation: Test mit 200kb-Payload -> 413. Ergebnis: gruen, `npm test`
     pass 25/25 (test/api.test.js: 413 fuer json + urlencoded, 200 fuer klein).
-- [ ] **2.3 `/media`-WebSocket**: zufaelliges `streamToken` pro Call im TwiML,
+- [x] **2.3 `/media`-WebSocket**: zufaelliges `streamToken` pro Call im TwiML,
       Pruefung beim `start`-Event; `/api/state` + `/api/calls/:id` geben es NICHT aus.
   - Soll: falsches/fehlendes Token -> Socket getrennt, kein OpenAI-Connect;
     korrektes Token -> Stream laeuft; kein API-Response enthaelt `streamToken`.
   - Verifikation: WS-Testclient beide Faelle + JSON.stringify-Assertion.
-    Ergebnis: (offen)
+    Ergebnis: gruen, `npm test` pass 32/32 (test/media-token.test.js: trennen
+    bei falschem/fehlendem Token, Call-Record bleibt aktiv, offen bei korrektem
+    Token, kein API-Leak, TwiML traegt das Token). safeEqual nach src/util.js
+    extrahiert (Bridge + Server teilen den timing-sicheren Vergleich).
 - [ ] **2.4 Settings-Whitelist** gegen Default-Settings in `store.js` (Key + Typ).
   - Soll: `{evil:"x", allowBooking:"nein"}` -> beides ignoriert;
     `{allowBooking:false}` -> uebernommen.
