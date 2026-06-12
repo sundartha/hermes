@@ -446,6 +446,17 @@ app.delete("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stat
 
 // ---------------- Start ----------------
 store.load();
+
+// Retention (DSGVO): alte Transkripte/Notifications beim Start und periodisch loeschen
+const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+function runRetention() {
+  const removed = store.pruneOldData();
+  if (removed.calls || removed.notifications || removed.actionItems)
+    console.log(`[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.retentionDays} Tage)`);
+}
+runRetention();
+setInterval(runRetention, RETENTION_SWEEP_INTERVAL_MS).unref();
+
 const ok = assertConfig();
 const httpServer = app.listen(config.port, () => {
   // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port

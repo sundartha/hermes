@@ -204,6 +204,34 @@ export function addNotification(title, body, callId) {
   save();
 }
 
+// ---- Retention (DSGVO-Datenminimierung) ----
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Loescht beendete Calls (samt Transkript), Notifications und ERLEDIGTE Action
+// Items, die aelter als `days` sind. Aktive Calls und offene Action Items
+// bleiben immer erhalten. days <= 0 schaltet die Retention ab.
+export function pruneOldData(days = config.retentionDays) {
+  const removed = { calls: 0, notifications: 0, actionItems: 0 };
+  if (!days || days <= 0) return removed;
+  const cutoff = new Date(Date.now() - days * MS_PER_DAY).toISOString();
+  const s = load();
+
+  const keepCall = (c) => c.status === "active" || !c.endedAt || c.endedAt >= cutoff;
+  const keepNotification = (n) => n.at >= cutoff;
+  const keepActionItem = (a) => !a.done || a.createdAt >= cutoff;
+
+  const before = { calls: s.calls.length, notifications: s.notifications.length, actionItems: s.actionItems.length };
+  s.calls = s.calls.filter(keepCall);
+  s.notifications = s.notifications.filter(keepNotification);
+  s.actionItems = s.actionItems.filter(keepActionItem);
+  removed.calls = before.calls - s.calls.length;
+  removed.notifications = before.notifications - s.notifications.length;
+  removed.actionItems = before.actionItems - s.actionItems.length;
+
+  if (removed.calls || removed.notifications || removed.actionItems) save();
+  return removed;
+}
+
 // ---- Settings ----
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann

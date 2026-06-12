@@ -35,6 +35,11 @@ export const config = {
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
 
+  // ---- Datenschutz ----
+  // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
+  // werden geloescht (DSGVO-Datenminimierung). 0 = Retention aus.
+  retentionDays: parseInt(process.env.RETENTION_DAYS || "30", 10),
+
   // ---- MCP ueber HTTP ----
   // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
   mcpAuthToken: process.env.MCP_AUTH_TOKEN || "",

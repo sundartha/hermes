@@ -86,12 +86,14 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
 
 ## Phase 3 (nur autonome Punkte 2-4)
 
-- [ ] **3.2 Transkript-Retention**: `RETENTION_DAYS` (Default 30, 0 = aus),
-      `store.pruneOldData()` beim Start + periodisch; offene Action Items bleiben.
+- [x] **3.2 Transkript-Retention**: `RETENTION_DAYS` (Default 30, 0 = aus),
+      `store.pruneOldData()` beim Start + periodisch (6h, unref); offene
+      Action Items bleiben, erledigte alte werden mit entfernt.
   - Soll: Call mit altem `endedAt` verschwindet samt Transkript; aktiver/
     frischer Call bleibt; offene Action Items bleiben.
   - Verifikation: Unit-Test gegen `store.pruneOldData()` mit praeparierten
-    Timestamps (DATA_DIR=Temp). Ergebnis: (offen)
+    Timestamps (DATA_DIR=Temp). Ergebnis: gruen, `npm test` pass 52/52
+    (test/retention.test.js: Loeschung, Persistenz auf Platte, 0=aus).
 - [ ] **3.3 Audit-Logging**: place_call (mit Quell-IP), cancel, Settings-
       Aenderung, fehlgeschlagene Auth-Versuche als `[audit]`-Zeile.
   - Soll: je Aktion genau eine `[audit]`-Zeile mit Aktion + IP, keine Secrets.
