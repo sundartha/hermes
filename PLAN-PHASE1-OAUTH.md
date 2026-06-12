@@ -4,6 +4,24 @@ Ausarbeitung von Phase 1 aus `PLAN-SECURITY.md`. Ziel: Nur angemeldete Team-Mitg
 können den MCP-Endpunkt nutzen — über den normalen „Connector hinzufügen → Login-Fenster"-
 Flow von claude.ai. Aufwand: ~0,5–1 Tag inkl. IdP-Einrichtung und End-to-End-Test.
 
+## Einordnung: Wo stehen wir im Gesamtplan?
+
+Der `/mcp`-Endpunkt der Produktion (https://vodafone-agent.onrender.com) ist heute
+**ohne Auth offen**; einzige Bremsen sind die `ALLOWED_NUMBERS`-Allowlist, der
+Budget-Deckel und die Max-Gesprächsdauer. `PLAN-SECURITY.md` ersetzt das in drei
+Phasen durch mehrschichtige Kontrollen:
+
+| Phase | Inhalt | Abhängigkeit | Status |
+|---|---|---|---|
+| 0 | Nummern-Regeln (E.164, Premium-/Notruf-Denylist, Länder-Gate), Rate-Limit, Twilio-Webhook-Signatur | keine — jederzeit umsetzbar, auch nach Phase 1 | offen |
+| 1 | **OAuth 2.1 auf /mcp — dieses Dokument** | IdP-Account (Schritt A, macht ein Mensch) | offen |
+| 2 | Rechteprofile pro Nutzer (wer darf welche Länder, wie viele Calls/h, Kalender ja/nein), Audit `requestedBy` am Call | baut auf `req.auth` aus Phase 1 auf | offen |
+
+Die Phasen sind unabhängig genug, dass 0 und 1 in beliebiger Reihenfolge laufen
+können. Erst wenn 1 + 2 nachweislich funktionieren, darf die starre Allowlist für
+vertrauenswürdige Nutzer gelockert werden — vorher nicht. Wer eine Phase abschließt:
+Status-Spalte hier und in `PLAN-SECURITY.md` aktualisieren.
+
 **Leitplanken:**
 - Das Gateway wird **nur Resource Server** (prüft Tokens). Kein eigener Login, keine
   Passwörter, keine Sessions bei uns.
