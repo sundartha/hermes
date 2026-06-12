@@ -40,8 +40,24 @@
 - Telephony bugs reproduce locally without real calls (see CLAUDE.md
   "Wurzel statt Symptom")
 
+### 7. Deterministic Outcome + Feedback Loop (Pflicht bei autonomer Arbeit)
+- NO task starts without two things written down upfront (in `tasks/todo.md`):
+  1. **Expected result, deterministic and checkable** - not "improve X" but
+     "request Y returns status Z / output contains W". If you cannot state the
+     expected result as a check, the task is not ready to start.
+  2. **Verification method** - the exact command or test that proves the result
+     (e.g. `npm test`, a curl call with expected status code, a log line).
+- The verification method IS your feedback loop: run it, compare against the
+  expected result, fix, run again - iterate WITHOUT user involvement until it
+  passes or you are provably blocked.
+- A task is only "done" when its verification passed in this session and the
+  result is recorded next to the todo item (command + observed output).
+- If the verification itself cannot be built (needs accounts, real phone calls,
+  deployed infra), the task is NOT autonomous - park it and flag it for the user.
+
 # Task Management
-1. **Plan First**: Write plan to `tasks/todo.md` with checkable items
+1. **Plan First**: Write plan to `tasks/todo.md` with checkable items -
+   every item carries its expected result and verification method (see rule 7)
 2. **Verify Plan**: Check in before starting implementation
 3. **Track Progress**: Mark items complete as you go
 4. **Explain Changes**: High-level summary at each step

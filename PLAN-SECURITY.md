@@ -35,28 +35,92 @@ Lücken, die ohne Zugangsdaten von aussen ausnutzbar sind:
    verglichen (Timing-Seitenkanal).
    Fix: Vergleich via `crypto.timingSafeEqual`.
 
-## Phase 2 - Wichtig: Missbrauchs- und Eingabe-Haertung (offen)
+## Phase 2 - Wichtig: Missbrauchs- und Eingabe-Haertung (offen, autonom umsetzbar)
 
-1. **Rate-Limiting** fuer `/api/*` und `/mcp` (z.B. `express-rate-limit`),
-   damit Brute-Force auf Basic-Auth/Token und API-Flooding gebremst werden.
-2. **Body-Size-Limits** fuer `express.json()`/`urlencoded()` (z.B. 100 kb).
-3. **`/media`-WebSocket absichern**: Pro Call ein zufaelliges Secret als
-   Stream-Parameter mitgeben und beim `start`-Event pruefen, damit niemand mit
-   geratener `call_id` die Audio-Bridge kapern kann.
-4. **Settings-Whitelist**: `POST /api/settings` merged aktuell beliebige Keys
-   in den Store (`updateSettings`). Nur bekannte Felder mit Typpruefung zulassen.
-5. **Security-Header** (`helmet`): CSP fuers Dashboard, `X-Content-Type-Options`,
-   kein Caching fuer API-Responses.
-6. **Eingabe-Validierung** der API-Routen (E.164-Format fuer `to`,
-   ISO-Datums-Check fuer Kalender, Laengenlimits fuer Freitexte).
+Jeder Punkt traegt sein deterministisches Soll-Ergebnis (**Erwartet**) und die
+**Verifikation** (Feedback-Loop, gegen die selbststaendig iteriert wird) -
+siehe `.claude/refs/workflow.md` Regel 7. Verifikation jeweils gegen einen
+lokal gestarteten Server (`PORT=3999`, Test-Env wie in den bestehenden Tests).
+
+1. **Rate-Limiting** fuer alle Nicht-Twilio-Routen (in-house, ohne neue
+   Dependency; localhost-Socket ausgenommen, Limit via `RATE_LIMIT_PER_MIN`).
+   - Erwartet: Request N+1 innerhalb von 60s von derselben (Nicht-localhost-)IP
+     liefert HTTP 429 mit JSON-Error; Request nach Fenster-Ende wieder 200.
+   - Verifikation: Testfall, der das Limit auf einen kleinen Wert setzt und die
+     Statuscode-Folge 200...200,429 asserted.
+2. **Body-Size-Limits** (100 kb) fuer `express.json()`/`urlencoded()`.
+   - Erwartet: POST mit >100 kb Body liefert HTTP 413, gueltige kleine Bodies
+     unveraendert 2xx.
+   - Verifikation: curl/Test mit 200-kb-Payload -> 413.
+3. **`/media`-WebSocket absichern**: zufaelliges `streamToken` pro Call als
+   Stream-Parameter im TwiML, Pruefung beim `start`-Event in `bridge.js`.
+   WICHTIG: `/api/state` und `/api/calls/:id` duerfen das Token NICHT ausgeben.
+   - Erwartet: `start`-Event mit falschem/fehlendem Token -> Socket wird
+     getrennt, kein OpenAI-Connect; korrektes Token -> Stream laeuft.
+     Kein API-Response enthaelt `streamToken`.
+   - Verifikation: WS-Testclient gegen /media (beide Faelle) + Assertion, dass
+     `JSON.stringify` der API-Antworten kein `streamToken` enthaelt.
+4. **Settings-Whitelist**: `POST /api/settings` akzeptiert nur bekannte Keys
+   mit passendem Typ (Abgleich gegen die Default-Settings in `store.js`).
+   - Erwartet: unbekannter Key oder falscher Typ wird ignoriert (Response und
+     Store unveraendert); bekannte Keys mit korrektem Typ werden uebernommen.
+   - Verifikation: Testfall POSTet `{evil: "x", allowBooking: "nein"}` ->
+     beides nicht im Store; `{allowBooking: false}` -> uebernommen.
+5. **Security-Header**: `X-Content-Type-Options: nosniff`, `X-Frame-Options:
+   DENY`, `Referrer-Policy`, CSP fuers Dashboard (Inline + Google Fonts
+   erlaubt), `Cache-Control: no-store` fuer `/api/*`.
+   - Erwartet: Header auf `/` und `/api/state` exakt gesetzt.
+   - Verifikation: Testfall prueft die Response-Header.
+6. **Eingabe-Validierung** der API-Routen: `to` strikt E.164
+   (`^\+[1-9]\d{6,14}$` nach Normalisierung), Laengenlimits fuer Freitexte
+   (objective 500, briefing/constraints 2000, caller_name 100, title 200),
+   Kalender: gueltige Datumswerte und `end > start`.
+   - Erwartet: ungueltige Eingaben -> HTTP 400 mit Fehlertext, gueltige
+     unveraendert; keine bestehende gueltige Nutzung bricht.
+   - Verifikation: Testfaelle je Grenzfall (ungueltige Nummer, Overlong-String,
+     `end < start`).
 
 ## Phase 3 - Ausbau: Betrieb & Datenschutz (offen)
 
-1. **OAuth 2.1 fuer `/mcp`** statt statischem Bearer-Token (MCP-Spec-konform).
-2. **Transkript-Retention**: Alte Calls/Transkripte automatisch loeschen
-   (DSGVO - Gespraechsdaten sind personenbezogen).
-3. **Audit-Logging**: Wer hat wann welchen Outbound-Call ausgeloest (Quelle:
-   Dashboard vs. MCP), fehlgeschlagene Auth-Versuche loggen.
-4. **Dependency-Scanning**: `npm audit` in CI, Dependabot/Renovate.
-5. **Secrets-Hygiene**: `.env`-Rechte pruefen, Token-Rotation dokumentieren,
-   Twilio-Subaccount mit minimalen Rechten fuer die Demo.
+Autonom umsetzbar (mit Soll-Ergebnis + Verifikation):
+
+2. **Transkript-Retention** (DSGVO): Calls/Notifications aelter als
+   `RETENTION_DAYS` (Default 30, 0 = aus) beim Start und periodisch loeschen;
+   offene Action Items bleiben erhalten.
+   - Erwartet: Call mit `endedAt` aelter als Cutoff verschwindet samt
+     Transkript aus dem Store; aktiver/frischer Call bleibt.
+   - Verifikation: Unit-Test gegen `store.pruneOldData()` mit praeparierten
+     Timestamps (DATA_DIR auf Temp-Verzeichnis).
+3. **Audit-Logging**: Outbound-Call-Ausloesung (mit Quell-IP), Cancel,
+   Settings-Aenderung und fehlgeschlagene Auth-Versuche als `[audit]`-Logzeile.
+   - Erwartet: jede dieser Aktionen erzeugt genau eine `[audit]`-Zeile mit
+     Aktion + IP; keine Secrets im Log.
+   - Verifikation: Test faengt stdout des Kindprozess-Servers ab und prueft
+     auf die `[audit]`-Zeilen.
+4. **Dependency-Scanning**: `npm audit` + Tests + Syntax-Check in CI
+   (GitHub Actions, bei jedem Push).
+   - Erwartet: Workflow-Datei vorhanden; Pipeline scheitert bei rotem Test
+     oder High-Severity-Audit-Finding.
+   - Verifikation: lokal `npm test` gruen + `npm audit --audit-level=high`
+     Exit-Code 0; Workflow-Lauf nach Push gruen.
+
+NICHT autonom (braucht Accounts/Entscheidungen des Betreibers):
+
+1. **OAuth 2.1 fuer `/mcp`** statt statischem Bearer-Token (MCP-Spec-konform) -
+   braucht Identity-Provider-Account und Connector-Konfiguration in Claude.
+5. **Secrets-Hygiene**: Token-Rotation dokumentieren, Twilio-Subaccount mit
+   minimalen Rechten - braucht Zugriff auf Twilio-/Render-Konto.
+
+## Voraussetzung fuer die Verifikation: Test-Suite
+
+Phase 2/3 setzen eine automatisierte Verifikation voraus. Dafuer (vor oder mit
+Phase 2) eine Test-Suite mit Node-Bordmitteln einfuehren - `node:test`, keine
+neuen Dependencies:
+
+- `DATA_DIR`-Env-Override in `config.js`, damit Tests `data/store.json` nicht
+  anfassen.
+- Integrationstests starten den Server als Kindprozess und testen per `fetch`
+  (Twilio-Signatur, MCP-Auth, Allowlist, Validierung).
+- Erwartet: `npm test` laeuft gruen in unter 60s, ohne Netz-Zugriff nach aussen
+  und ohne `.env`.
+- Verifikation: `npm test` selbst.
