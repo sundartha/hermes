@@ -12,6 +12,10 @@ Du arbeitest an einem Demo-Prototyp fuer Vodafone: ein persoenlicher KI-Telefona
 
 Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Menschen. Deshalb gilt: Sicherheits- und Kosten-Gates haben Prioritaet vor Features. Bewusste Prototyp-Vereinfachungen (JSON-Store statt DB, statisches Token statt OAuth) sind in README und `PLAN-SECURITY.md` dokumentiert — neue Abweichungen ebenfalls dort festhalten.
 
+## Workflow
+
+Bei nicht-trivialen Tasks (3+ Schritte oder architektonische Entscheidungen): Lies `.claude/refs/workflow.md` und befolge die Regeln dort. Das ist keine Empfehlung, das ist Pflicht. Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nicht-trivial.
+
 ## Architektur
 
 - `src/server.js` — Gateway: Twilio-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware
@@ -80,6 +84,7 @@ Kein Test-Framework vorhanden — Verifikation laeuft ueber Syntax-Check + manue
 
 ## Referenzen
 
+- `.claude/refs/workflow.md` — Pflicht bei nicht-trivialen Tasks (Plan Mode, Subagents, Verifikation, `tasks/todo.md` + `tasks/lessons.md`)
 - `PLAN-SECURITY.md` — Sicherheits-Plan in Phasen (Phase 1 umgesetzt); bei Security-Arbeit zuerst lesen
 - `README.md` — Setup, Engines, bewusste Prototyp-Abweichungen
 - `ONBOARDING.md` — Einstieg fuer Mitarbeiter
