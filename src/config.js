@@ -29,6 +29,8 @@ export const config = {
   allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
     .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
   maxCallDurationS: Math.min(parseInt(process.env.MAX_CALL_DURATION_S || "180", 10), 300),
+  // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
+  skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
 
   // ---- MCP ueber HTTP ----
   // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
@@ -67,5 +69,9 @@ export function assertConfig() {
         "\n(.env.example kopieren: cp .env.example .env)\n"
     );
   }
+  if (process.env.RENDER_EXTERNAL_URL && !config.dashboardPassword)
+    console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
+  if (config.skipTwilioSignatureCheck)
+    console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
   return missing.length === 0;
 }

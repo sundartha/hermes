@@ -134,7 +134,7 @@ Bonus-Tools für die Vodafone-Demo: `list_calls`, `list_action_items`, `get_cale
 
 ## Bewusste Prototyp-Abweichungen (vs. Produkt-PRD)
 
-- MCP-Auth: statisches Bearer-Token statt OAuth 2.1 (`MCP_AUTH_TOKEN`, leer = offen — nur für Demos).
+- MCP-Auth: statisches Bearer-Token statt OAuth 2.1 (`MCP_AUTH_TOKEN`, leer = `/mcp` nur von localhost erreichbar). Siehe `PLAN-SECURITY.md`.
 - Modernes JavaScript (ESM) statt TypeScript: kein Build-Step, maximale Demo-Velocity.
 - Kalender = lokaler Speicher mit Beispielterminen statt Google/Outlook.
 - Keine Nummern-Provisionierung, kein Multi-User, kein Billing, keine CAMARA-Anbindung, keine Datenbank.

@@ -1,5 +1,6 @@
 // Voice-Gateway: Twilio-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
+import crypto from "crypto";
 import express from "express";
 import twilio from "twilio";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -14,25 +15,50 @@ import { attachMediaBridge } from "./bridge.js";
 process.env.GATEWAY_URL ||= `http://localhost:${config.port}`;
 
 const app = express();
-// Hinter Render/Proxies: echte Client-IP aus X-Forwarded-For lesen (sonst wirkt jeder Request wie localhost)
-app.set("trust proxy", true);
+// Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
+// per X-Forwarded-For eine beliebige IP vortaeuschen.
+app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false })); // Twilio-Webhooks
 app.use(express.json()); // eigene API + MCP
 
+// Timing-sicherer Vergleich fuer Passwoerter/Tokens (kein Timing-Seitenkanal wie bei ===)
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+
+// Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
+// aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
+const isLocalSocket = (req) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
+
 // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
-// /voice/* (Twilio-Webhooks), /mcp (Claude-Connector), /healthz (Keep-Alive) und localhost (interne MCP-Tools).
+// /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigenes Bearer-Token),
+// /healthz (Keep-Alive) und localhost (interne MCP-Tools).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
   if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") || req.path === "/healthz") return next();
-  const ip = req.ip || "";
-  if (["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip)) return next();
+  if (isLocalSocket(req)) return next();
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
-  if (req.headers.authorization === expected) return next();
+  if (safeEqual(req.headers.authorization || "", expected)) return next();
   res.set("WWW-Authenticate", 'Basic realm="Vodafone Agent"');
   res.status(401).send("Auth required");
 });
 app.use(express.static(config.publicDir));
+
+// ---- Twilio-Signaturpruefung fuer alle /voice-Webhooks ----
+// Twilio signiert jeden Request (HMAC-SHA1 ueber URL+Params mit dem Auth-Token).
+// Ohne diese Pruefung kann jeder, der die URL kennt, Anrufe/Transkripte faelschen
+// und Claude-Turns (=Kosten) ausloesen.
+app.use("/voice", (req, res, next) => {
+  if (config.skipTwilioSignatureCheck) return next();
+  const signature = req.headers["x-twilio-signature"] || "";
+  const url = config.publicUrl + req.originalUrl;
+  if (!config.publicUrl || !twilio.validateRequest(config.twilioToken, signature, url, req.body || {}))
+    return res.status(403).send("invalid twilio signature");
+  next();
+});
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 const twilioClient = () => twilio(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
@@ -342,10 +368,15 @@ app.post("/api/calendar", (req, res) => {
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
-// Auth: optionales statisches Bearer-Token (bewusste Prototyp-Abweichung von OAuth 2.1).
+// Auth: statisches Bearer-Token (bewusste Prototyp-Abweichung von OAuth 2.1).
+// Fail-closed: ohne konfiguriertes Token ist /mcp nur von localhost erreichbar.
 app.post("/mcp", async (req, res) => {
-  if (config.mcpAuthToken && req.headers.authorization !== `Bearer ${config.mcpAuthToken}`)
-    return res.status(401).json({ error: "unauthorized" });
+  if (config.mcpAuthToken) {
+    if (!safeEqual(req.headers.authorization || "", `Bearer ${config.mcpAuthToken}`))
+      return res.status(401).json({ error: "unauthorized" });
+  } else if (!isLocalSocket(req)) {
+    return res.status(401).json({ error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost erreichbar" });
+  }
   try {
     const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });
     registerTools(server);
