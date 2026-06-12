@@ -14,6 +14,8 @@ import { attachMediaBridge } from "./bridge.js";
 process.env.GATEWAY_URL ||= `http://localhost:${config.port}`;
 
 const app = express();
+// Hinter Render/Proxies: echte Client-IP aus X-Forwarded-For lesen (sonst wirkt jeder Request wie localhost)
+app.set("trust proxy", true);
 app.use(express.urlencoded({ extended: false })); // Twilio-Webhooks
 app.use(express.json()); // eigene API + MCP
 
@@ -23,7 +25,7 @@ app.get("/healthz", (_req, res) => res.json({ ok: true }));
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
   if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") || req.path === "/healthz") return next();
-  const ip = req.socket.remoteAddress || "";
+  const ip = req.ip || "";
   if (["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip)) return next();
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
   if (req.headers.authorization === expected) return next();
