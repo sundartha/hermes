@@ -109,8 +109,8 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
   - Verifikation: lokal `npm test` gruen + `npm audit --audit-level=high`
     Exit 0; Workflow-Lauf nach Push. Ergebnis: `.github/workflows/ci.yml`
     vorhanden; lokal `npm test` pass 61/61 + `npm audit --audit-level=high`
-    -> "found 0 vulnerabilities", Exit 0. Workflow-Lauf nach Push siehe
-    Abschlussbericht.
+    -> "found 0 vulnerabilities", Exit 0. Workflow-Lauf #1 nach Push GRUEN
+    (Run 27448525604: Syntax-Check, Tests, Dependency-Audit alle success).
 
 ## Doku nach Umsetzung
 
