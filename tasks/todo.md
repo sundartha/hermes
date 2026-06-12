@@ -49,9 +49,10 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
     localhost ausgenommen, /voice ausgenommen). Fenster-Reset nach 60s ist
     implementiert, aber bewusst nicht automatisiert getestet (60s Laufzeit;
     die definierte Verifikation verlangt nur die 200...200,429-Folge).
-- [ ] **2.2 Body-Size-Limits** 100kb fuer json/urlencoded + JSON-Fehlerhandler.
+- [x] **2.2 Body-Size-Limits** 100kb fuer json/urlencoded + JSON-Fehlerhandler.
   - Soll: POST >100kb -> 413; kleine Bodies unveraendert 2xx.
-  - Verifikation: Test mit 200kb-Payload -> 413. Ergebnis: (offen)
+  - Verifikation: Test mit 200kb-Payload -> 413. Ergebnis: gruen, `npm test`
+    pass 25/25 (test/api.test.js: 413 fuer json + urlencoded, 200 fuer klein).
 - [ ] **2.3 `/media`-WebSocket**: zufaelliges `streamToken` pro Call im TwiML,
       Pruefung beim `start`-Event; `/api/state` + `/api/calls/:id` geben es NICHT aus.
   - Soll: falsches/fehlendes Token -> Socket getrennt, kein OpenAI-Connect;

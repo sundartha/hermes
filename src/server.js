@@ -37,8 +37,17 @@ app.use((req, res, next) => {
   rateLimiter(req, res, next);
 });
 
-app.use(express.urlencoded({ extended: false })); // Twilio-Webhooks
-app.use(express.json()); // eigene API + MCP
+// Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
+// und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
+const BODY_LIMIT = "100kb";
+app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT })); // Twilio-Webhooks
+app.use(express.json({ limit: BODY_LIMIT })); // eigene API + MCP
+
+// Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten
+app.use((err, _req, res, next) => {
+  if (!err.status || err.status < 400 || err.status >= 500) return next(err);
+  res.status(err.status).json({ error: err.type || "bad request" });
+});
 
 // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
 // /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigenes Bearer-Token),
