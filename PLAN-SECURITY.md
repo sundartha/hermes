@@ -8,17 +8,27 @@ Friseur an"), ohne dass der offene `/mcp`-Endpunkt ein Scheunentor bleibt.
 Phase 0 hat keine externen Abhängigkeiten und bringt sofort Nutzen; Phase 1 braucht
 eine Entscheidung + einen Account (siehe „Offene Entscheidungen").
 
-## Ist-Zustand (Kurzfassung)
+## Ist-Zustand: Was ist heute schon umgesetzt?
 
-- `/mcp` ist **ohne Auth** öffentlich (claude.ai-Connector-UI kann kein statisches
-  Bearer-Token senden, daher ist `MCP_AUTH_TOKEN` praktisch ungenutzt).
-- Einzige Outbound-Bremsen: `ALLOWED_NUMBERS`-Allowlist (`src/server.js` →
-  `allowlistError()`), Budget-Guard, `MAX_CALL_DURATION_S`, Disclosure-Satz.
+Stand 2026-06-12 (bei Änderungen aktualisieren):
+
+| Schicht | Status | Wo im Code |
+|---|---|---|
+| 1 Authentifizierung /mcp | ❌ offen → **Phase 1** | `/mcp` ist öffentlich; `MCP_AUTH_TOKEN` existiert, ist aber praktisch ungenutzt (claude.ai-UI kann kein statisches Token senden) |
+| 2 Rechte pro Nutzer | ❌ offen → **Phase 2** | nur globale Toggles für alle (`store.js → settings`: allowCalendar, allowBooking, …) |
+| 3 Nummern-Regeln | ⚠️ teilweise | Allowlist `ALLOWED_NUMBERS` vorhanden und fail-closed (`server.js → allowlistError()`); es fehlen E.164-Check, Premium-/Notruf-Denylist, Länder-Gate → **Phase 0** |
+| 4 Rate-Limit | ❌ offen → **Phase 0** | nicht vorhanden |
+| 5 Budget-Deckel | ✅ umgesetzt | `MAX_BUDGET_EUR`, `store.js → budgetExceeded()`, geprüft in `POST /api/calls` |
+| 6 Dauer + Disclosure | ✅ umgesetzt | `MAX_CALL_DURATION_S` (Twilio `timeLimit` + Timer), fester Disclosure-Satz (`claude.js`) |
+| 7 Audit | ⚠️ teilweise | Transkripte, Summaries, Logs vorhanden; es fehlt `requestedBy` (wer hat den Call beauftragt) → **Phase 2** |
+
+Außerdem vorhanden: Dashboard + REST-API hinter Basic-Auth (`DASHBOARD_PASSWORD`).
+Noch ungeschützt: Twilio-Webhooks `/voice/*` ohne Signatur-Prüfung → **Phase 0**.
+
+## Weitere Fakten zum Ist-Zustand
 - **Architektur-Glück:** Dashboard UND MCP-Tools starten Calls beide über
   `POST /api/calls` (`src/server.js`, die MCP-Tools rufen die REST-API via
   `GATEWAY_URL` auf). Alle neuen Gates gehören an genau diese eine Stelle.
-- Permissions (`allowCalendar`, `allowBooking`, …) liegen global in
-  `store.js → settings` — noch nicht pro Nutzer.
 
 ## Phase 0 — Sofortmaßnahmen ohne Auth (~2–4 h, keine Abhängigkeiten)
 
