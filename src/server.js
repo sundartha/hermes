@@ -11,9 +11,6 @@ import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
 
-// Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
-process.env.GATEWAY_URL ||= `http://localhost:${config.port}`;
-
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
 // per X-Forwarded-For eine beliebige IP vortaeuschen.
@@ -400,8 +397,12 @@ app.delete("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stat
 store.load();
 const ok = assertConfig();
 const httpServer = app.listen(config.port, () => {
-  console.log(`\n  Vodafone Agent Gateway laeuft auf http://localhost:${config.port}`);
-  console.log(`  Dashboard:      http://localhost:${config.port}`);
+  // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
+  const port = httpServer.address().port;
+  // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
+  process.env.GATEWAY_URL ||= `http://localhost:${port}`;
+  console.log(`\n  Vodafone Agent Gateway laeuft auf http://localhost:${port}`);
+  console.log(`  Dashboard:      http://localhost:${port}`);
   console.log(`  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`);
   console.log(`  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`);
   console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);

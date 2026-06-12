@@ -50,7 +50,8 @@ export const config = {
   priceOutPerMTokUsd: 5.0,
   usdToEur: 0.93,
 
-  dataDir: path.join(__dirname, "..", "data"),
+  // DATA_DIR-Override, damit Tests nicht das echte data/store.json anfassen
+  dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
   publicDir: path.join(__dirname, "..", "public"),
 };
 

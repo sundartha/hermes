@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
-    "check": "node scripts/check-setup.js"
+    "check": "node scripts/check-setup.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

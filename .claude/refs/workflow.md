@@ -20,9 +20,11 @@
 
 ### 4. Verification Before Done
 - Never mark a task complete without proving it works
-- This repo has no test framework: verify via `node --check` plus a smoke test
-  against a locally started server (`SKIP_TWILIO_SIGNATURE_CHECK=true`, curl
-  the affected routes) - see CLAUDE.md "Befehle"
+- This repo uses `node:test` (`npm test`, runs offline and without `.env`):
+  new behavior needs a test. Additionally verify via `node --check` and, where
+  tests cannot cover it (real telephony, dashboard), a smoke test against a
+  locally started server (`SKIP_TWILIO_SIGNATURE_CHECK=true`, curl the
+  affected routes) - see CLAUDE.md "Befehle"
 - Diff behavior between master and your changes when relevant
 - Ask yourself: "Would a staff engineer approve this?"
 - Check server logs, demonstrate correctness

@@ -111,16 +111,19 @@ NICHT autonom (braucht Accounts/Entscheidungen des Betreibers):
 5. **Secrets-Hygiene**: Token-Rotation dokumentieren, Twilio-Subaccount mit
    minimalen Rechten - braucht Zugriff auf Twilio-/Render-Konto.
 
-## Voraussetzung fuer die Verifikation: Test-Suite
+## Voraussetzung fuer die Verifikation: Test-Suite ✅ (umgesetzt)
 
 Phase 2/3 setzen eine automatisierte Verifikation voraus. Dafuer (vor oder mit
 Phase 2) eine Test-Suite mit Node-Bordmitteln einfuehren - `node:test`, keine
 neuen Dependencies:
 
 - `DATA_DIR`-Env-Override in `config.js`, damit Tests `data/store.json` nicht
-  anfassen.
+  anfassen. ✅
 - Integrationstests starten den Server als Kindprozess und testen per `fetch`
-  (Twilio-Signatur, MCP-Auth, Allowlist, Validierung).
+  (Twilio-Signatur, MCP-Auth, Allowlist, Validierung). ✅
+  (`test/helpers.js` + `test/*.test.js`; Server mit `PORT=0`, echter Port wird
+  aus dem Log geparst; Nicht-localhost-Faelle laufen ueber die externe
+  Interface-IP des Hosts.)
 - Erwartet: `npm test` laeuft gruen in unter 60s, ohne Netz-Zugriff nach aussen
-  und ohne `.env`.
+  und ohne `.env`. ✅
 - Verifikation: `npm test` selbst.

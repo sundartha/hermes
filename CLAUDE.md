@@ -82,7 +82,7 @@ Bei Bugs, unerwarteten Fehlern oder wiederkehrenden Issues: Ursache statt Sympto
 
 - Lies die Datei oder relevanten Bereiche zuerst (kein Edit ohne vorheriges Read)
 - Bei Funktions-Aenderungen: grep nach allen Callern (Tools werden von Budget-Engine UND Realtime-Bridge genutzt!)
-- Nach Edits: `node --check src/<datei>.js`, dann Smoke-Test (Server starten, `curl /healthz`, betroffene Routen)
+- Nach Edits: `node --check src/<datei>.js`, dann `npm test`; bei Bedarf zusaetzlich Smoke-Test (Server starten, `curl /healthz`, betroffene Routen)
 - Bei sicherheitsrelevanten Aenderungen: `PLAN-SECURITY.md` aktualisieren
 
 ## Konventionen
@@ -98,11 +98,12 @@ Bei Bugs, unerwarteten Fehlern oder wiederkehrenden Issues: Ursache statt Sympto
 Start:        npm start              (Gateway + Dashboard + MCP-HTTP)
 MCP (stdio):  npm run mcp
 Setup-Check:  npm run check
+Tests:        npm test               (node:test, laeuft ohne Netz und ohne .env)
 Syntax:       node --check src/server.js
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 ```
 
-Kein Test-Framework vorhanden — Verifikation laeuft ueber Syntax-Check + manuellen Smoke-Test gegen den lokal gestarteten Server.
+Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js`. Integrationstests starten den Server als Kindprozess mit `PORT=0` und `DATA_DIR`-Override (Temp-Verzeichnis) — `data/store.json` wird nie angefasst. Neues Verhalten braucht einen Test; der manuelle Smoke-Test bleibt fuer alles, was Tests nicht abdecken (echte Telefonie, Dashboard-Optik).
 
 ## Referenzen
 
