@@ -86,7 +86,19 @@ const GATHER = {
 };
 
 const say = (node, text) => node.say(VOICE, text);
-const normNum = (n) => (n || "").replace(/[\s\-()]/g, "");
+const normNum = (n) => (typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "");
+
+// ---- Eingabe-Validierung fuer API-Routen ----
+const E164 = /^\+[1-9]\d{6,14}$/;
+const TEXT_LIMITS = { objective: 500, briefing: 2000, constraints: 2000, caller_name: 100, title: 200 };
+
+// Fehlertext oder null; optionale Felder (null/undefined) sind erlaubt
+function invalidText(name, value) {
+  if (value == null) return null;
+  if (typeof value !== "string") return `${name} muss ein String sein`;
+  if (value.length > TEXT_LIMITS[name]) return `${name} ist zu lang (max. ${TEXT_LIMITS[name]} Zeichen)`;
+  return null;
+}
 
 function allowlistError(to) {
   if (!config.allowedNumbers.length)
@@ -288,6 +300,13 @@ app.post("/api/calls", async (req, res) => {
   const to = normNum(b.to);
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
+  if (!E164.test(to)) return res.status(400).json({ error: "to muss E.164 sein, z.B. +4917212345678" });
+  const textErr =
+    invalidText("objective", objective) ||
+    invalidText("briefing", b.briefing) ||
+    invalidText("constraints", b.constraints) ||
+    invalidText("caller_name", b.caller_name);
+  if (textErr) return res.status(400).json({ error: textErr });
 
   const gateErr = allowlistError(to);
   if (gateErr) return res.status(403).json({ error: gateErr });
@@ -384,7 +403,15 @@ app.post("/api/action-items/:id/toggle", (req, res) => {
 app.post("/api/calendar", (req, res) => {
   const { title, start, end } = req.body || {};
   if (!title || !start || !end) return res.status(400).json({ error: "title, start, end sind Pflicht" });
-  res.json(store.addCalendarEvent(title, start, end));
+  const titleErr = invalidText("title", title);
+  if (titleErr) return res.status(400).json({ error: titleErr });
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (isNaN(startDate) || isNaN(endDate))
+    return res.status(400).json({ error: "start und end muessen gueltige Datumswerte sein (ISO 8601)" });
+  if (endDate <= startDate) return res.status(400).json({ error: "end muss nach start liegen" });
+  // Normalisiert speichern: findConflict() vergleicht ISO-Strings lexikographisch
+  res.json(store.addCalendarEvent(title, startDate.toISOString(), endDate.toISOString()));
 });
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================

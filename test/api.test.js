@@ -31,6 +31,78 @@ test("Body-Size-Limit 100kb", async (t) => {
   }
 });
 
+test("Eingabe-Validierung /api/calls", async (t) => {
+  // Allowlist gesetzt: Validierungsfehler (400) muessen VOR dem Gate (403) greifen,
+  // der Twilio-Erfolgspfad wird bewusst nicht getestet (echter API-Call).
+  const srv = await startServer({ env: { ALLOWED_NUMBERS: "+4915112345678" } });
+  const call = (body) => postJson(`${srv.localUrl}/api/calls`, body);
+  try {
+    await t.test("fehlende Pflichtfelder -> 400", async () => {
+      assert.equal((await call({})).status, 400);
+      assert.equal((await call({ to: "+4915112345678" })).status, 400);
+      assert.equal((await call({ objective: "Termin" })).status, 400);
+    });
+
+    await t.test("ungueltige Nummern -> 400 mit Fehlertext", async () => {
+      for (const to of ["12345", "+012345678", "+49abc123456", "+4915112345678901234", "+49"]) {
+        const res = await call({ to, objective: "Termin" });
+        assert.equal(res.status, 400, `Nummer ${to} muss abgelehnt werden`);
+        assert.match((await res.json()).error, /E\.164/);
+      }
+    });
+
+    await t.test("Nummer wird normalisiert (Spaces/Bindestriche), Allowlist-Gate bleibt", async () => {
+      // gueltiges Format, aber nicht in der Allowlist -> 403 (nicht 400)
+      const res = await call({ to: "+49 151 9999-9999", objective: "Termin" });
+      assert.equal(res.status, 403);
+    });
+
+    await t.test("Overlong-Strings -> 400", async () => {
+      const base = { to: "+4915112345678" };
+      assert.equal((await call({ ...base, objective: "x".repeat(501) })).status, 400);
+      assert.equal((await call({ ...base, objective: "Termin", briefing: "x".repeat(2001) })).status, 400);
+      assert.equal((await call({ ...base, objective: "Termin", constraints: "x".repeat(2001) })).status, 400);
+      assert.equal((await call({ ...base, objective: "Termin", caller_name: "x".repeat(101) })).status, 400);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Eingabe-Validierung /api/calendar", async (t) => {
+  const srv = await startServer();
+  const cal = (body) => postJson(`${srv.localUrl}/api/calendar`, body);
+  try {
+    await t.test("ungueltige Datumswerte -> 400", async () => {
+      const res = await cal({ title: "Test", start: "morgen", end: "uebermorgen" });
+      assert.equal(res.status, 400);
+    });
+
+    await t.test("end <= start -> 400", async () => {
+      const res = await cal({ title: "Test", start: "2026-07-01T11:00:00Z", end: "2026-07-01T10:00:00Z" });
+      assert.equal(res.status, 400);
+      assert.match((await res.json()).error, /end muss nach start/);
+      const same = await cal({ title: "Test", start: "2026-07-01T10:00:00Z", end: "2026-07-01T10:00:00Z" });
+      assert.equal(same.status, 400);
+    });
+
+    await t.test("title zu lang -> 400", async () => {
+      const res = await cal({ title: "x".repeat(201), start: "2026-07-01T10:00:00Z", end: "2026-07-01T11:00:00Z" });
+      assert.equal(res.status, 400);
+    });
+
+    await t.test("gueltiger Eintrag -> 200 und im Store", async () => {
+      const res = await cal({ title: "Zahnarzt", start: "2026-07-01T10:00:00Z", end: "2026-07-01T11:00:00Z" });
+      assert.equal(res.status, 200);
+      const ev = await res.json();
+      assert.ok(ev.id);
+      assert.ok(srv.readStore().calendar.some((e) => e.id === ev.id));
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("Settings-Whitelist", async (t) => {
   const srv = await startServer();
   try {

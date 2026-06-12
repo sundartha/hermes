@@ -74,11 +74,15 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
   - Verifikation: Header-Test. Ergebnis: gruen, `npm test` pass 39/39
     (test/headers.test.js: Header exakt auf / und /api/state, no-store nur
     fuer /api/*).
-- [ ] **2.6 Eingabe-Validierung**: `to` strikt E.164 (`^\+[1-9]\d{6,14}$`),
+- [x] **2.6 Eingabe-Validierung**: `to` strikt E.164 (`^\+[1-9]\d{6,14}$`),
       Laengenlimits (objective 500, briefing/constraints 2000, caller_name 100,
       title 200), Kalender: gueltige Daten + `end > start`.
   - Soll: ungueltig -> 400 mit Fehlertext; gueltig unveraendert.
-  - Verifikation: Tests je Grenzfall. Ergebnis: (offen)
+  - Verifikation: Tests je Grenzfall. Ergebnis: gruen, `npm test` pass 49/49
+    (test/api.test.js: Pflichtfelder, 5 ungueltige Nummernformate,
+    Normalisierung + Allowlist-403 bleibt, 4 Overlong-Faelle, Kalender-
+    Grenzfaelle inkl. end==start, gueltiger Eintrag landet im Store).
+    Dashboard-Kompatibilitaet: `{to, goal}` wird weiter akzeptiert.
 
 ## Phase 3 (nur autonome Punkte 2-4)
 
