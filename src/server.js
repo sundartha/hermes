@@ -10,13 +10,12 @@ import * as store from "./store.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
+import { createRateLimiter } from "./middleware.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
 // per X-Forwarded-For eine beliebige IP vortaeuschen.
 app.set("trust proxy", 1);
-app.use(express.urlencoded({ extended: false })); // Twilio-Webhooks
-app.use(express.json()); // eigene API + MCP
 
 // Timing-sicherer Vergleich fuer Passwoerter/Tokens (kein Timing-Seitenkanal wie bei ===)
 function safeEqual(a, b) {
@@ -28,6 +27,18 @@ function safeEqual(a, b) {
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
 const isLocalSocket = (req) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
+
+// ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
+// /voice/* ist ausgenommen (kommt von Twilio, eigene Signaturpruefung), ebenso
+// localhost-Sockets (interne MCP-Tools, Dashboard-Entwicklung).
+const rateLimiter = createRateLimiter(config.rateLimitPerMin);
+app.use((req, res, next) => {
+  if (req.path.startsWith("/voice") || isLocalSocket(req)) return next();
+  rateLimiter(req, res, next);
+});
+
+app.use(express.urlencoded({ extended: false })); // Twilio-Webhooks
+app.use(express.json()); // eigene API + MCP
 
 // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
 // /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigenes Bearer-Token),

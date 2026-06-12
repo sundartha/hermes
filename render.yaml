@@ -36,6 +36,8 @@ services:
         value: "8"
       - key: MAX_CALL_DURATION_S
         value: "180"
+      - key: RATE_LIMIT_PER_MIN
+        value: "120"
       - key: TWILIO_EDGE
         value: frankfurt
       - key: SEND_SMS_SUMMARY

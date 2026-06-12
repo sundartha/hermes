@@ -41,10 +41,14 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
 
 ## Phase 2
 
-- [ ] **2.1 Rate-Limiting** (in-house, `RATE_LIMIT_PER_MIN`, Default 120,
+- [x] **2.1 Rate-Limiting** (in-house, `RATE_LIMIT_PER_MIN`, Default 120,
       localhost-Socket ausgenommen, /voice ausgenommen).
   - Soll: Request N+1 in 60s von Nicht-localhost-IP -> 429 mit JSON-Error.
-  - Verifikation: Test mit Limit 3 -> Folge 200,200,200,429. Ergebnis: (offen)
+  - Verifikation: Test mit Limit 3 -> Folge 200,200,200,429. Ergebnis: gruen,
+    `npm test` pass 21/21 (test/rate-limit.test.js: 429-Folge inkl. JSON-Error,
+    localhost ausgenommen, /voice ausgenommen). Fenster-Reset nach 60s ist
+    implementiert, aber bewusst nicht automatisiert getestet (60s Laufzeit;
+    die definierte Verifikation verlangt nur die 200...200,429-Folge).
 - [ ] **2.2 Body-Size-Limits** 100kb fuer json/urlencoded + JSON-Fehlerhandler.
   - Soll: POST >100kb -> 413; kleine Bodies unveraendert 2xx.
   - Verifikation: Test mit 200kb-Payload -> 413. Ergebnis: (offen)

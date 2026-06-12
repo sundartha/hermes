@@ -29,6 +29,9 @@ export const config = {
   allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
     .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
   maxCallDurationS: Math.min(parseInt(process.env.MAX_CALL_DURATION_S || "180", 10), 300),
+  // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
+  // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.
+  rateLimitPerMin: parseInt(process.env.RATE_LIMIT_PER_MIN || "120", 10),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
 
