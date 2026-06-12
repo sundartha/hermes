@@ -64,6 +64,9 @@ npm run check   # neu: warnt bei Allowlist/Länder-Widerspruch
 
 ## Phase 1 — OAuth 2.1 auf /mcp (Schicht 1, ~0,5–1 Tag inkl. IdP-Setup)
 
+> **Detailplan mit Code-Skizzen, IdP-Klickweg, Testmatrix und Rollout:
+> siehe `PLAN-PHASE1-OAUTH.md`.** Unten nur die Kurzfassung.
+
 ### Architektur
 
 Das Gateway wird **nur Resource Server** — wir bauen keinen eigenen Login.
