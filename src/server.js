@@ -1,0 +1,381 @@
+// Voice-Gateway: Twilio-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
+// MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
+import express from "express";
+import twilio from "twilio";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { config, assertConfig } from "./config.js";
+import * as store from "./store.js";
+import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
+import { registerTools } from "./mcp-tools.js";
+import { attachMediaBridge } from "./bridge.js";
+
+// Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
+process.env.GATEWAY_URL ||= `http://localhost:${config.port}`;
+
+const app = express();
+app.use(express.urlencoded({ extended: false })); // Twilio-Webhooks
+app.use(express.json()); // eigene API + MCP
+
+// ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
+// /voice/* (Twilio-Webhooks), /mcp (Claude-Connector), /healthz (Keep-Alive) und localhost (interne MCP-Tools).
+app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.use((req, res, next) => {
+  if (!config.dashboardPassword) return next();
+  if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") || req.path === "/healthz") return next();
+  const ip = req.socket.remoteAddress || "";
+  if (["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip)) return next();
+  const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
+  if (req.headers.authorization === expected) return next();
+  res.set("WWW-Authenticate", 'Basic realm="Vodafone Agent"');
+  res.status(401).send("Auth required");
+});
+app.use(express.static(config.publicDir));
+
+const VoiceResponse = twilio.twiml.VoiceResponse;
+const twilioClient = () => twilio(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
+
+// Deutsche Neural-Stimme + deutsche Spracherkennung (Budget-Engine)
+const VOICE = { voice: "Polly.Vicki-Neural", language: "de-DE" };
+const GATHER = {
+  input: "speech",
+  language: "de-DE",
+  speechTimeout: "auto",
+  speechModel: "deepgram_nova-2-general",
+  actionOnEmptyResult: true,
+};
+
+const say = (node, text) => node.say(VOICE, text);
+const normNum = (n) => (n || "").replace(/[\s\-()]/g, "");
+
+function allowlistError(to) {
+  if (!config.allowedNumbers.length)
+    return "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt.";
+  if (!config.allowedNumbers.includes(normNum(to)))
+    return `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.`;
+  return null;
+}
+
+function gatherTurn(vr, call, text) {
+  const g = vr.gather({ ...GATHER, action: `/voice/turn?callId=${call.id}`, method: "POST" });
+  if (text) g.say(VOICE, text);
+  vr.redirect({ method: "POST" }, `/voice/turn?callId=${call.id}`);
+}
+
+// Realtime-Engine: Anruf-Audio per Media Stream an die Bridge haengen
+function streamTwiml(call) {
+  const vr = new VoiceResponse();
+  const connect = vr.connect();
+  const stream = connect.stream({ url: config.publicUrl.replace(/^https/, "wss") + "/media" });
+  stream.parameter({ name: "call_id", value: call.id });
+  return vr;
+}
+
+// Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge)
+function armMaxDurationTimer(call, twilioSid) {
+  const limit = (call.maxDurationS || config.maxCallDurationS) * 1000;
+  setTimeout(() => {
+    const c = store.getCall(call.id);
+    if (c?.status === "active" && twilioSid)
+      twilioClient().calls(twilioSid).update({ status: "completed" }).catch(() => {});
+  }, limit);
+}
+
+// ---------------- INBOUND ----------------
+// Twilio-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
+app.post("/voice/incoming", (req, res) => {
+  if (store.budgetExceeded(config)) {
+    const vr = new VoiceResponse();
+    say(vr, "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.");
+    vr.hangup();
+    return res.type("text/xml").send(vr.toString());
+  }
+
+  const call = store.createCall({
+    direction: "inbound",
+    from: req.body.From || "unbekannt",
+    to: req.body.To || config.twilioNumber,
+    twilioSid: req.body.CallSid,
+  });
+  store.markAnswered(call.id);
+  armMaxDurationTimer(call, req.body.CallSid);
+
+  if (config.voiceEngine === "realtime") {
+    return res.type("text/xml").send(streamTwiml(call).toString());
+  }
+
+  const vr = new VoiceResponse();
+  const s = store.load().settings;
+  const greeting = s.greeting.replaceAll("{owner}", config.ownerName);
+  store.addTranscript(call.id, "agent", greeting);
+  gatherTurn(vr, call, greeting);
+  res.type("text/xml").send(vr.toString());
+});
+
+// ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
+app.post("/voice/turn", async (req, res) => {
+  const call = store.getCall(req.query.callId);
+  const vr = new VoiceResponse();
+  if (!call || call.status !== "active") {
+    vr.hangup();
+    return res.type("text/xml").send(vr.toString());
+  }
+
+  const heard = (req.body.SpeechResult || "").trim();
+  try {
+    if (!heard && call.transcript.some((t) => t.role === "caller")) {
+      gatherTurn(vr, call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?");
+      return res.type("text/xml").send(vr.toString());
+    }
+    const { speech, endCall } = await agentTurn(call, heard || null);
+    if (endCall) {
+      say(vr, speech);
+      vr.hangup();
+    } else {
+      gatherTurn(vr, call, speech);
+    }
+  } catch (err) {
+    console.error("[turn]", err.message);
+    say(vr, "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.");
+    vr.hangup();
+  }
+  res.type("text/xml").send(vr.toString());
+});
+
+// ---------------- OUTBOUND: Angerufener nimmt ab ----------------
+app.post("/voice/outbound", async (req, res) => {
+  const call = store.getCall(req.query.callId);
+  if (!call) {
+    const vr = new VoiceResponse();
+    vr.hangup();
+    return res.type("text/xml").send(vr.toString());
+  }
+  call.twilioSid = req.body.CallSid || call.twilioSid;
+  store.markAnswered(call.id);
+  store.save();
+
+  if (config.voiceEngine === "realtime") {
+    return res.type("text/xml").send(streamTwiml(call).toString());
+  }
+
+  const vr = new VoiceResponse();
+  try {
+    // Pflicht-Offenlegung fest verdrahtet als allererster Satz (kein KI-Ermessen)
+    const disclosure = disclosureSentence(call);
+    store.addTranscript(call.id, "agent", disclosure);
+    say(vr, disclosure);
+    const { speech, endCall } = await agentTurn(call, null); // Agent nennt sein Anliegen
+    if (endCall) {
+      say(vr, speech);
+      vr.hangup();
+    } else {
+      gatherTurn(vr, call, speech);
+    }
+  } catch (err) {
+    console.error("[outbound]", err.message);
+    vr.hangup();
+  }
+  res.type("text/xml").send(vr.toString());
+});
+
+// ---------------- Call zu Ende -> Summary + Notification + SMS ----------------
+// Idempotent: kann von Status-Callback, Bridge und cancel_call gleichzeitig angestossen werden.
+async function finishCall(call) {
+  if (!call || call._finished) return;
+  call._finished = true;
+  store.save();
+
+  if (call.status !== "completed" || !call.transcript.length) {
+    store.addNotification(
+      call.status === "cancelled" ? "Anruf abgebrochen" : "Anruf nicht zustande gekommen",
+      `${call.direction === "outbound" ? call.to : call.from} (Status: ${call.status})`,
+      call.id
+    );
+    return;
+  }
+
+  try {
+    const result = await summarizeCall(call);
+    if (!result) return;
+    const aiCount = (result.actionItems || []).length;
+    const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
+    store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);
+
+    if (config.sendSmsSummary && config.ownerNumber) {
+      const sms =
+        `[${store.load().settings.agentName}] ${who}\n\n${result.summary}` +
+        (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
+      try {
+        await twilioClient().messages.create({
+          from: config.twilioNumber,
+          to: config.ownerNumber,
+          body: sms.slice(0, 1500),
+        });
+      } catch (e) {
+        console.error("[sms]", e.message, "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)");
+      }
+    }
+  } catch (err) {
+    console.error("[summary]", err.message);
+  }
+}
+
+app.post("/voice/status", (req, res) => {
+  res.sendStatus(200);
+  const tw = req.body.CallStatus;
+  const call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
+  if (!call) return;
+  if (tw === "in-progress" || tw === "answered") return void store.markAnswered(call.id);
+  if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(tw)) return;
+  if (call.status === "active") store.endCallRecord(call.id, tw === "completed" ? "completed" : "failed");
+  finishCall(store.getCall(call.id));
+});
+
+// ================= REST-API (Dashboard + MCP-Tools) =================
+
+// Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
+app.post("/api/calls", async (req, res) => {
+  const b = req.body || {};
+  const to = normNum(b.to);
+  const objective = b.objective || b.goal;
+  if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
+
+  const gateErr = allowlistError(to);
+  if (gateErr) return res.status(403).json({ error: gateErr });
+  if (store.budgetExceeded(config))
+    return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
+
+  const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
+  const call = store.createCall({
+    direction: "outbound",
+    from: config.twilioNumber,
+    to,
+    goal: objective,
+    briefing: b.briefing,
+    constraints: b.constraints,
+    callerName: b.caller_name,
+    language: b.language || "de",
+    maxDurationS: maxDur,
+  });
+
+  try {
+    const tw = await twilioClient().calls.create({
+      from: config.twilioNumber,
+      to,
+      url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
+      statusCallback: `${config.publicUrl}/voice/status?callId=${call.id}`,
+      statusCallbackEvent: ["answered", "completed"],
+      method: "POST",
+      timeLimit: maxDur,
+    });
+    call.twilioSid = tw.sid;
+    store.save();
+    res.json({ ok: true, callId: call.id, twilioSid: tw.sid, status: "dialing" });
+  } catch (err) {
+    store.endCallRecord(call.id, "failed");
+    res.status(500).json({
+      error: err.message,
+      hint: "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.",
+    });
+  }
+});
+
+// Laufenden Anruf sauber abbrechen
+app.post("/api/calls/:id/cancel", async (req, res) => {
+  const call = store.getCall(req.params.id);
+  if (!call) return res.status(404).json({ error: "not found" });
+  if (call.status !== "active") return res.json({ status: call.status });
+  store.endCallRecord(call.id, "cancelled");
+  if (call.twilioSid) {
+    try {
+      await twilioClient().calls(call.twilioSid).update({ status: "completed" });
+    } catch (e) {
+      console.error("[cancel]", e.message);
+    }
+  }
+  finishCall(store.getCall(call.id));
+  res.json({ status: "cancelled" });
+});
+
+// Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools
+app.get("/api/state", (req, res) => {
+  const s = store.load();
+  res.json({
+    settings: s.settings,
+    calls: s.calls.slice(0, 30),
+    actionItems: s.actionItems.slice(0, 50),
+    calendar: store.getCalendar().filter((e) => e.end >= new Date().toISOString()).slice(0, 10),
+    usage: { ...s.usage, maxBudgetEur: config.maxBudgetEur },
+    notifications: s.notifications.slice(0, 10),
+    agent: {
+      number: config.twilioNumber,
+      owner: config.ownerName,
+      ownerNumber: config.ownerNumber,
+      model: config.claudeModel,
+      voiceEngine: config.voiceEngine,
+      allowedNumbers: config.allowedNumbers,
+    },
+  });
+});
+
+app.get("/api/calls/:id", (req, res) => {
+  const call = store.getCall(req.params.id);
+  if (!call) return res.status(404).json({ error: "not found" });
+  res.json(call);
+});
+
+app.post("/api/settings", (req, res) => res.json(store.updateSettings(req.body || {})));
+
+app.post("/api/action-items/:id/toggle", (req, res) => {
+  const item = store.toggleActionItem(req.params.id);
+  if (!item) return res.status(404).json({ error: "not found" });
+  res.json(item);
+});
+
+app.post("/api/calendar", (req, res) => {
+  const { title, start, end } = req.body || {};
+  if (!title || !start || !end) return res.status(400).json({ error: "title, start, end sind Pflicht" });
+  res.json(store.addCalendarEvent(title, start, end));
+});
+
+// ================= MCP ueber Streamable HTTP (Custom Connector) =================
+// Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
+// Auth: optionales statisches Bearer-Token (bewusste Prototyp-Abweichung von OAuth 2.1).
+app.post("/mcp", async (req, res) => {
+  if (config.mcpAuthToken && req.headers.authorization !== `Bearer ${config.mcpAuthToken}`)
+    return res.status(401).json({ error: "unauthorized" });
+  try {
+    const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });
+    registerTools(server);
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    res.on("close", () => {
+      transport.close();
+      server.close();
+    });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error("[mcp]", err.message);
+    if (!res.headersSent)
+      res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "internal error" }, id: null });
+  }
+});
+app.get("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
+app.delete("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
+
+// ---------------- Start ----------------
+store.load();
+const ok = assertConfig();
+const httpServer = app.listen(config.port, () => {
+  console.log(`\n  Vodafone Agent Gateway laeuft auf http://localhost:${config.port}`);
+  console.log(`  Dashboard:      http://localhost:${config.port}`);
+  console.log(`  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`);
+  console.log(`  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`);
+  console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
+  console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
+  console.log(`  Allowlist:      ${config.allowedNumbers.join(", ") || "(leer -> Outbound gesperrt)"}`);
+  if (!ok) console.log("  ACHTUNG: .env unvollstaendig, Telefonie funktioniert noch nicht.\n");
+});
+
+// Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
+attachMediaBridge(httpServer, finishCall);

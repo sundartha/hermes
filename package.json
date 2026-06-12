@@ -1,0 +1,23 @@
+{
+  "name": "vodafone-agent",
+  "version": "0.1.0",
+  "description": "Autonomer Telefon-Agent: Twilio Voice + Claude (Haiku) + MCP-Server. Inbound- und Outbound-Calls, Call Summaries, Action Items, Kalender.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "mcp": "node src/mcp-server.js",
+    "check": "node scripts/check-setup.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "twilio": "^5.3.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

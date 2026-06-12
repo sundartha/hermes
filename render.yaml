@@ -1,0 +1,41 @@
+# Render Blueprint - Gratis 24/7-Hosting (https://render.com)
+# Secrets werden NICHT hier eingetragen, sondern verschluesselt im Render-Dashboard (sync: false).
+services:
+  - type: web
+    name: vodafone-agent
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_NUMBER
+        sync: false
+      - key: OWNER_NUMBER
+        sync: false
+      - key: ALLOWED_NUMBERS
+        sync: false
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: OWNER_NAME
+        value: Jonas
+      - key: CLAUDE_MODEL
+        value: claude-haiku-4-5
+      - key: MAX_BUDGET_EUR
+        value: "8"
+      - key: MAX_CALL_DURATION_S
+        value: "180"
+      - key: TWILIO_EDGE
+        value: frankfurt
+      - key: SEND_SMS_SUMMARY
+        value: "true"
+      - key: VOICE_ENGINE
+        value: budget
+      # PUBLIC_URL nicht noetig: Render setzt RENDER_EXTERNAL_URL automatisch

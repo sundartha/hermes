@@ -1,0 +1,71 @@
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
+
+export const config = {
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
+  maxBudgetEur: parseFloat(process.env.MAX_BUDGET_EUR || "8"),
+
+  twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
+  twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
+  twilioNumber: process.env.TWILIO_NUMBER || "",
+
+  ownerName: process.env.OWNER_NAME || "Jonas",
+  ownerNumber: process.env.OWNER_NUMBER || "",
+
+  port: parseInt(process.env.PORT || "3000", 10),
+  // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
+  publicUrl: (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, ""),
+  // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
+  dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
+  sendSmsSummary: (process.env.SEND_SMS_SUMMARY || "true") === "true",
+
+  // ---- Safety-Gates ----
+  // Outbound NUR an diese Nummern (kommasepariert, E.164). Leer = alle Outbound-Calls verweigern.
+  allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
+    .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
+  maxCallDurationS: Math.min(parseInt(process.env.MAX_CALL_DURATION_S || "180", 10), 300),
+
+  // ---- MCP ueber HTTP ----
+  // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
+  mcpAuthToken: process.env.MCP_AUTH_TOKEN || "",
+
+  // ---- Voice-Engine ----
+  // "budget"  = Twilio STT/TTS + Claude Haiku (quasi gratis, Default)
+  // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
+  voiceEngine: process.env.VOICE_ENGINE || "budget",
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  realtimeModel: process.env.REALTIME_MODEL || "gpt-realtime",
+  realtimeVoice: process.env.REALTIME_VOICE || "alloy",
+  twilioEdge: process.env.TWILIO_EDGE || "frankfurt",
+
+  // Preise pro 1M Tokens in USD (Claude Haiku 4.5). Nur fuer den Budget-Guard.
+  priceInPerMTokUsd: 1.0,
+  priceOutPerMTokUsd: 5.0,
+  usdToEur: 0.93,
+
+  dataDir: path.join(__dirname, "..", "data"),
+  publicDir: path.join(__dirname, "..", "public"),
+};
+
+export function assertConfig() {
+  const missing = [];
+  if (!config.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
+  if (!config.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
+  if (!config.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
+  if (!config.twilioNumber) missing.push("TWILIO_NUMBER");
+  if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME"))
+    missing.push("PUBLIC_URL");
+  if (missing.length) {
+    console.error(
+      "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +
+        missing.join(", ") +
+        "\n(.env.example kopieren: cp .env.example .env)\n"
+    );
+  }
+  return missing.length === 0;
+}
