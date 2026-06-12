@@ -9,7 +9,7 @@ import * as store from "./store.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
-import { createRateLimiter } from "./middleware.js";
+import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { safeEqual } from "./util.js";
 
 const app = express();
@@ -20,6 +20,8 @@ app.set("trust proxy", 1);
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
 const isLocalSocket = (req) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
+
+app.use(securityHeaders);
 
 // ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
 // /voice/* ist ausgenommen (kommt von Twilio, eigene Signaturpruefung), ebenso

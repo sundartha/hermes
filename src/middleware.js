@@ -1,4 +1,29 @@
 // HTTP-Schutzschichten fuer das Gateway - bewusst in-house, ohne neue Dependency.
+
+// CSP erlaubt bewusst Inline-Skripte/-Styles und Google Fonts: das Dashboard
+// (public/index.html) nutzt Inline-<script>/<style>, onclick-Handler und Inter.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+export function securityHeaders(req, res, next) {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": CSP,
+  });
+  // API-Antworten (Transkripte!) duerfen nirgends zwischengespeichert werden
+  if (req.path.startsWith("/api/")) res.set("Cache-Control", "no-store");
+  next();
+}
+
 const RATE_WINDOW_MS = 60_000;
 const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 

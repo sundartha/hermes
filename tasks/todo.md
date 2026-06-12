@@ -68,10 +68,12 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
   - Verifikation: Testfall POSTet genau das. Ergebnis: gruen, `npm test`
     pass 35/35 (test/api.test.js: Response UND Store unveraendert bzw.
     uebernommen).
-- [ ] **2.5 Security-Header**: nosniff, X-Frame-Options DENY, Referrer-Policy,
+- [x] **2.5 Security-Header**: nosniff, X-Frame-Options DENY, Referrer-Policy,
       CSP (Inline + Google Fonts), `Cache-Control: no-store` fuer `/api/*`.
   - Soll: Header auf `/` und `/api/state` exakt gesetzt.
-  - Verifikation: Header-Test. Ergebnis: (offen)
+  - Verifikation: Header-Test. Ergebnis: gruen, `npm test` pass 39/39
+    (test/headers.test.js: Header exakt auf / und /api/state, no-store nur
+    fuer /api/*).
 - [ ] **2.6 Eingabe-Validierung**: `to` strikt E.164 (`^\+[1-9]\d{6,14}$`),
       Laengenlimits (objective 500, briefing/constraints 2000, caller_name 100,
       title 200), Kalender: gueltige Daten + `end > start`.
