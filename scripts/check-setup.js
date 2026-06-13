@@ -30,7 +30,16 @@ if (config.voiceEngine === "realtime") {
 } else {
   ok("Voice-Engine: budget (Twilio STT/TTS + Claude Haiku)");
 }
-config.mcpAuthToken ? ok("MCP_AUTH_TOKEN gesetzt (Bearer-Auth aktiv)") : wrn("MCP_AUTH_TOKEN leer", "/mcp ist ohne Auth erreichbar - fuer Demos ok, nicht laenger");
+// MCP-Auth-Modus melden (Detailpruefung fuer oauth weiter unten in Abschnitt 6)
+if (config.mcpAuth === "oauth") {
+  config.oauthIssuerUrl ? ok(`MCP-Auth: oauth (Issuer ${config.oauthIssuerUrl})`) : bad("MCP_AUTH=oauth, aber OAUTH_ISSUER_URL fehlt");
+} else if (config.mcpAuth === "off") {
+  wrn("MCP-Auth: off", "/mcp ist OHNE jede Pruefung offen - nur fuer lokale Demos!");
+} else if (config.mcpAuth === "token" || config.mcpAuthToken) {
+  config.mcpAuthToken ? ok("MCP-Auth: statisches Bearer-Token gesetzt") : bad("MCP_AUTH=token, aber MCP_AUTH_TOKEN fehlt");
+} else {
+  wrn("MCP-Auth: leer ohne Token", "/mcp ist nur von localhost erreichbar - claude.ai-Connector braucht MCP_AUTH_TOKEN oder MCP_AUTH=oauth");
+}
 
 // ---------- 2. Anthropic ----------
 h("2. Anthropic API");
@@ -136,6 +145,39 @@ if (config.publicUrl && !config.publicUrl.includes("CHANGE-ME")) {
       wrn("PUBLIC_URL antwortet, scheint aber ein anderer Server zu sein", "ngrok-URL und PUBLIC_URL abgleichen");
     }
   } catch (e) { bad("Tunnel-Check fehlgeschlagen: " + e.message); }
+}
+
+// ---------- 6. MCP-OAuth (nur bei MCP_AUTH=oauth) ----------
+if (config.mcpAuth === "oauth") {
+  h("6. MCP-OAuth (Resource Server)");
+  // (a) Issuer erreichbar + openid-configuration mit jwks_uri
+  if (config.oauthIssuerUrl) {
+    try {
+      const r = await fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
+      if (r.ok) {
+        const meta = await r.json();
+        meta.jwks_uri
+          ? ok(`IdP erreichbar, jwks_uri: ${meta.jwks_uri}`)
+          : bad("openid-configuration ohne jwks_uri", "Issuer-URL pruefen");
+      } else bad(`IdP openid-configuration HTTP ${r.status}`, "OAUTH_ISSUER_URL pruefen");
+    } catch (e) { bad("IdP nicht erreichbar: " + e.message); }
+  }
+  // (b) Gateway liefert Protected-Resource-Metadata, (c) /mcp ohne Token -> 401
+  try {
+    const base = `http://localhost:${config.port}`;
+    const meta = await fetch(`${base}/.well-known/oauth-protected-resource`).then((r) => r.ok ? r.json() : null).catch(() => null);
+    if (!meta) {
+      wrn("Gateway laeuft lokal nicht oder liefert keine Metadata", "Erst 'npm start', dann erneut pruefen");
+    } else {
+      meta.authorization_servers?.includes(config.oauthIssuerUrl)
+        ? ok("Gateway-Metadata zeigt auf den Issuer")
+        : bad("Gateway-Metadata-authorization_servers passt nicht zum Issuer");
+      const noTok = await fetch(`${base}/mcp`, { method: "POST" }).catch(() => null);
+      noTok && noTok.status === 401 && noTok.headers.get("www-authenticate")
+        ? ok("/mcp ohne Token -> 401 + WWW-Authenticate")
+        : bad(`/mcp ohne Token liefert ${noTok ? noTok.status : "(kein Response)"}`, "Erwartet 401 mit WWW-Authenticate");
+    }
+  } catch (e) { bad("Gateway-OAuth-Check fehlgeschlagen: " + e.message); }
 }
 
 // ---------- Ergebnis ----------

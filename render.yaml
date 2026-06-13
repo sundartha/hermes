@@ -24,10 +24,18 @@ services:
         sync: false
       - key: DASHBOARD_PASSWORD
         sync: false
-      # Pflicht fuers Hosting: ohne Token ist /mcp nur von localhost erreichbar.
-      # Render generiert den Wert; fuer den Claude-Connector im Dashboard auslesen.
+      # Auth-Modus fuer /mcp. Default leer = Legacy (Token unten oder localhost-only).
+      # Auf "oauth" umstellen, sobald der IdP (OAUTH_ISSUER_URL) steht und der
+      # End-to-End-Test gegen claude.ai gruen war (siehe PLAN-PHASE1-OAUTH.md).
+      - key: MCP_AUTH
+        value: ""
+      # Pflicht fuers Hosting (Modus leer/token): ohne Token ist /mcp nur von
+      # localhost erreichbar. Render generiert den Wert; fuer den Claude-Connector auslesen.
       - key: MCP_AUTH_TOKEN
         generateValue: true
+      # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
+      - key: OAUTH_ISSUER_URL
+        sync: false
       - key: OWNER_NAME
         value: Jonas
       - key: CLAUDE_MODEL

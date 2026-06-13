@@ -17,3 +17,14 @@
 - **dotenv fuellt nur UNgesetzte Variablen**: Test-Kindprozesse muessen ALLE
   config-relevanten Env-Vars explizit setzen (auch leer), sonst sickert eine
   lokale `.env` in die Tests.
+- **"Auf welchem Branch?" / "letzte Commits": erst `git fetch --all`**, bevor
+  ich antworte. `git branch -a` zeigt nur bereits gefetchte Remotes; in diesem
+  Repo lagen die juengsten Commits + `tasks/todo.md` auf einem ungefetchten
+  Branch (`claude/plan-security-phase-one-n5dl1h`). "Letzte Commits" per
+  Commit-Zeitstempel (`%cI`) ueber ALLE Branches bestimmen, nicht per HEAD des
+  gerade ausgecheckten Branches.
+- **Plaene koennen gegen aelteren Code geschrieben sein**: Der OAuth-Detailplan
+  (Branch inspiring-gates) verwies auf Zeilennummern/Strukturen VOR Phase 2/3.
+  Vor dem Umsetzen den Plan gegen den aktuellen Code abgleichen - hier u.a.: den
+  in Phase 1 gesetzten Fail-closed-Default von `/mcp` NICHT durch den im Plan
+  vorgeschlagenen offenen `off`-Default ersetzen.

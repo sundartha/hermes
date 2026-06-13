@@ -10,6 +10,7 @@ import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
+import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 
 const app = express();
@@ -45,12 +46,15 @@ app.use((err, _req, res, next) => {
 });
 
 // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
-// /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigenes Bearer-Token),
+// /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigene MCP-Auth),
+// /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
 // /healthz (Keep-Alive) und localhost (interne MCP-Tools).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
+registerWellKnown(app);
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
-  if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") || req.path === "/healthz") return next();
+  if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") ||
+      req.path.startsWith("/.well-known") || req.path === "/healthz") return next();
   if (isLocalSocket(req)) return next();
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
   if (safeEqual(req.headers.authorization || "", expected)) return next();
@@ -429,18 +433,10 @@ app.post("/api/calendar", (req, res) => {
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
-// Auth: statisches Bearer-Token (bewusste Prototyp-Abweichung von OAuth 2.1).
-// Fail-closed: ohne konfiguriertes Token ist /mcp nur von localhost erreichbar.
-app.post("/mcp", async (req, res) => {
-  if (config.mcpAuthToken) {
-    if (!safeEqual(req.headers.authorization || "", `Bearer ${config.mcpAuthToken}`)) {
-      audit("auth_failed", req, "path=/mcp");
-      return res.status(401).json({ error: "unauthorized" });
-    }
-  } else if (!isLocalSocket(req)) {
-    audit("auth_failed", req, "path=/mcp");
-    return res.status(401).json({ error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost erreichbar" });
-  }
+// Auth via mcpAuth-Middleware (src/auth.js): Legacy-Bearer-Token, statisches
+// Token oder OAuth 2.1 (MCP_AUTH). Fail-closed bleibt Default (nur localhost).
+app.post("/mcp", mcpAuth, async (req, res) => {
+  if (req.auth) console.log("[mcp]", req.auth.email || "anonym", req.body?.method || "");
   try {
     const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });
     registerTools(server);

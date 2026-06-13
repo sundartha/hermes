@@ -112,10 +112,17 @@ Autonom umsetzbar (mit Soll-Ergebnis + Verifikation):
    - Verifikation: lokal `npm test` gruen + `npm audit --audit-level=high`
      Exit-Code 0; Workflow-Lauf nach Push gruen.
 
-NICHT autonom (braucht Accounts/Entscheidungen des Betreibers):
+Teilweise autonom (Code umgesetzt, Betrieb braucht den Betreiber):
 
-1. **OAuth 2.1 fuer `/mcp`** statt statischem Bearer-Token (MCP-Spec-konform) -
-   braucht Identity-Provider-Account und Connector-Konfiguration in Claude.
+1. **OAuth 2.1 fuer `/mcp`** statt statischem Bearer-Token (MCP-Spec-konform).
+   ⚙️ Code umgesetzt: Resource Server hinter Feature-Flag `MCP_AUTH=oauth`
+   (`src/auth.js`, JWT-Verifikation via `jose`/Remote-JWKS, RFC-9728
+   Protected-Resource-Metadata), Default bleibt fail-closed. Verifikation:
+   `test/oauth.test.js` (lokaler Mini-IdP, C1-Matrix). Detailplan + Rollout:
+   `PLAN-PHASE1-OAUTH.md`. Offen (NICHT autonom): IdP-Account (WorkOS) anlegen,
+   `MCP_AUTH=oauth` scharf schalten, End-to-End-Test gegen claude.ai.
+
+NICHT autonom (braucht Accounts/Entscheidungen des Betreibers):
 5. **Secrets-Hygiene**: Token-Rotation dokumentieren, Twilio-Subaccount mit
    minimalen Rechten - braucht Zugriff auf Twilio-/Render-Konto.
 

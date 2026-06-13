@@ -43,6 +43,18 @@ export const config = {
   // ---- MCP ueber HTTP ----
   // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
   mcpAuthToken: process.env.MCP_AUTH_TOKEN || "",
+  // Auth-Modus fuer /mcp:
+  //   "" (leer, Default) = Legacy/fail-closed: mit MCP_AUTH_TOKEN gilt Bearer-Token,
+  //                        ohne Token ist /mcp nur von localhost erreichbar.
+  //   "token"            = statisches Bearer-Token erzwingen (curl/Tests; claude.ai kann das NICHT).
+  //   "oauth"            = OAuth 2.1 Resource Server (Produktion, claude.ai-Login-Flow).
+  //   "off"              = offen ohne jede Pruefung (nur lokale Demos!).
+  mcpAuth: (process.env.MCP_AUTH || "").toLowerCase(),
+  // OAuth-Issuer (IdP, z.B. WorkOS AuthKit). Das Gateway findet JWKS selbst ueber
+  // <issuer>/.well-known/openid-configuration.
+  oauthIssuerUrl: (process.env.OAUTH_ISSUER_URL || "").replace(/\/$/, ""),
+  // Erwartete Audience im Access-Token. Leer -> `${publicUrl}/mcp` (kanonische MCP-URL).
+  oauthAudience: process.env.OAUTH_AUDIENCE || "",
 
   // ---- Voice-Engine ----
   // "budget"  = Twilio STT/TTS + Claude Haiku (quasi gratis, Default)
@@ -71,6 +83,8 @@ export function assertConfig() {
   if (!config.twilioNumber) missing.push("TWILIO_NUMBER");
   if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME"))
     missing.push("PUBLIC_URL");
+  if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)
+    missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
   if (missing.length) {
     console.error(
       "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +
