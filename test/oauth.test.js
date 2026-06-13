@@ -4,63 +4,7 @@
 // Test signiert. Kein echter IdP, kein Netz nach aussen.
 import test from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
-import { generateKeyPair, exportJWK, SignJWT } from "jose";
-import { startServer, waitForLog } from "./helpers.js";
-
-const AUDIENCE = "https://agent.test/mcp"; // = PUBLIC_URL/mcp aus BASE_ENV
-const KID = "test-key-1";
-
-// Startet einen lokalen IdP: die Metadata zeigt auf den JWKS-Endpunkt, JWKS
-// enthaelt den oeffentlichen Schluessel. Liefert Issuer-URL + Signierer.
-// metadataPath waehlt, ueber welchen Well-known-Pfad die Metadata erreichbar
-// ist - WorkOS AuthKit nutzt oauth-authorization-server statt openid-configuration.
-async function startIdp({ metadataPath = "/.well-known/openid-configuration" } = {}) {
-  const { publicKey, privateKey } = await generateKeyPair("RS256");
-  const jwk = { ...(await exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
-
-  const server = http.createServer((req, res) => {
-    if (req.url === metadataPath) {
-      res.setHeader("content-type", "application/json");
-      return res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/jwks` }));
-    }
-    if (req.url === "/jwks") {
-      res.setHeader("content-type", "application/json");
-      return res.end(JSON.stringify({ keys: [jwk] }));
-    }
-    res.statusCode = 404;
-    res.end("not found");
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const issuer = `http://127.0.0.1:${server.address().port}`;
-
-  // Zweiter Schluessel mit GLEICHER kid -> jose findet den Key, die Signatur
-  // passt aber nicht: sauberer 401 ohne JWKS-Refetch.
-  const wrong = await generateKeyPair("RS256");
-
-  const sign = (claims = {}, { key = privateKey, exp = "5m", aud = AUDIENCE, iss = issuer } = {}) =>
-    new SignJWT({ ...claims })
-      .setProtectedHeader({ alg: "RS256", kid: KID })
-      .setIssuer(iss)
-      .setAudience(aud)
-      .setSubject(claims.sub || "user-1")
-      .setIssuedAt()
-      .setExpirationTime(exp)
-      .sign(key);
-
-  return { issuer, sign, wrongKey: wrong.privateKey, close: () => new Promise((r) => server.close(r)) };
-}
-
-const post = (url, token, body = { jsonrpc: "2.0", id: 1, method: "initialize" }) =>
-  fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Accept: "application/json, text/event-stream",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
+import { startServer, waitForLog, startIdp, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
 
 test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
   const idp = await startIdp();

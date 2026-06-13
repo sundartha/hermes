@@ -3,9 +3,11 @@
 // externe Interface-IP (fuer Tests, die NICHT als localhost gelten sollen).
 import { spawn } from "child_process";
 import fs from "fs";
+import http from "node:http";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import { generateKeyPair, exportJWK, SignJWT } from "jose";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STARTUP_TIMEOUT_MS = 15000;
@@ -59,7 +61,7 @@ export function tempDataDir(seedState) {
 }
 
 // Minimal-vollstaendiger Store-Zustand zum Seeden einzelner Testfaelle
-export function seedState({ calls = [], actionItems = [], notifications = [], settings = {} } = {}) {
+export function seedState({ calls = [], actionItems = [], notifications = [], settings = {}, profiles = {} } = {}) {
   return {
     settings: {
       agentName: "Vodafone Agent",
@@ -76,6 +78,7 @@ export function seedState({ calls = [], actionItems = [], notifications = [], se
     calendar: [],
     usage: { inputTokens: 0, outputTokens: 0, costEur: 0, calls: calls.length },
     notifications,
+    profiles,
   };
 }
 
@@ -113,6 +116,71 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
     await new Promise((r) => setTimeout(r, 20));
   }
 }
+
+// ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----
+// = PUBLIC_URL/mcp aus BASE_ENV (kanonische Audience).
+export const MCP_AUDIENCE = "https://agent.test/mcp";
+const KID = "test-key-1";
+
+// Lokaler IdP: Metadata zeigt auf den JWKS-Endpunkt, JWKS enthaelt den
+// oeffentlichen Schluessel. Liefert Issuer-URL + Signierer. metadataPath waehlt
+// den Well-known-Pfad (WorkOS AuthKit nutzt oauth-authorization-server).
+export async function startIdp({ metadataPath = "/.well-known/openid-configuration" } = {}) {
+  const { publicKey, privateKey } = await generateKeyPair("RS256");
+  const jwk = { ...(await exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
+
+  const server = http.createServer((req, res) => {
+    if (req.url === metadataPath) {
+      res.setHeader("content-type", "application/json");
+      return res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/jwks` }));
+    }
+    if (req.url === "/jwks") {
+      res.setHeader("content-type", "application/json");
+      return res.end(JSON.stringify({ keys: [jwk] }));
+    }
+    res.statusCode = 404;
+    res.end("not found");
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const issuer = `http://127.0.0.1:${server.address().port}`;
+
+  // Zweiter Schluessel mit GLEICHER kid -> jose findet den Key, die Signatur
+  // passt aber nicht: sauberer 401 ohne JWKS-Refetch.
+  const wrong = await generateKeyPair("RS256");
+
+  const sign = (claims = {}, { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer } = {}) =>
+    new SignJWT({ ...claims })
+      .setProtectedHeader({ alg: "RS256", kid: KID })
+      .setIssuer(iss)
+      .setAudience(aud)
+      .setSubject(claims.sub || "user-1")
+      .setIssuedAt()
+      .setExpirationTime(exp)
+      .sign(key);
+
+  return { issuer, sign, wrongKey: wrong.privateKey, close: () => new Promise((r) => server.close(r)) };
+}
+
+// POST an /mcp (Streamable HTTP). Ohne body: initialize. Antwort kann SSE sein.
+export function mcpPost(url, token, body = { jsonrpc: "2.0", id: 1, method: "initialize" }) {
+  return fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+// JSON-RPC tools/call-Body fuer ein MCP-Tool (stateless: kein initialize noetig).
+export const toolCall = (name, args = {}) => ({
+  jsonrpc: "2.0",
+  id: 1,
+  method: "tools/call",
+  params: { name, arguments: args },
+});
 
 // Startet src/server.js als Kindprozess und liefert Port, gesammeltes stdout
 // und einen stop()-Handle. Wirft bei Startproblemen mit dem bisherigen Output.
