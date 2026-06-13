@@ -245,7 +245,7 @@ offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
 
 ## Aufgaben
 
-- [ ] **0.1 Notruf-/Premium-Denylist** (hardcoded, kein Env) in `src/server.js`:
+- [x] **0.1 Notruf-/Premium-Denylist** (hardcoded, kein Env) in `src/server.js`:
       Notruf-Kurzwahlen (110, 112, 911, 999), DE-Premium/Service
       (`+49900`, `+49137`, `+49180`, `+49118`), Satellit/Intl-Premium
       (`+870`, `+881`, `+882`, `+883`, `+979`).
@@ -253,28 +253,53 @@ offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
     `audit place_call_denied ... grund=denylist`; normale Nummer passiert das Gate.
   - Verifikation: `test/number-gate.test.js` - je Prefix/Kurzwahl ein 403-Fall,
     eine normale `+4915...`-Nummer kommt durch (bis zum naechsten Gate).
-- [ ] **0.2 Laender-Gate** `ALLOWED_COUNTRY_CODES` (kommasepariert, Default
+  - Ergebnis: gruen. `isDenied()` (Kurzwahlen exakt, Premium per `startsWith`)
+    laeuft als ERSTES Gate, BEWUSST vor der E.164-Pruefung, damit `112` als
+    403 `grund=denylist` (nicht 400 Format) erscheint - das war die einzige
+    Abweichung von der in 0.4 notierten Reihenfolge "E.164 -> Denylist" und ist
+    durch das 0.1-Soll ("je Kurzwahl ein 403-Fall") erzwungen. Tests: 4 Kurzwahlen,
+    4 DE-Premium-, 5 Satellit/Intl-Prefixe -> 403; `+4915112345678` -> 500 (Twilio).
+- [x] **0.2 Laender-Gate** `ALLOWED_COUNTRY_CODES` (kommasepariert, Default
       `+49`, `*` = alle) in `config.js` + Gate in `src/server.js`.
   - Soll: Nummer ohne erlaubten Laendercode -> 403; mit erlaubtem -> passiert;
     `*` laesst alle durch.
   - Verifikation: Test - `+49...` ok bei Default, `+1...` -> 403 bei Default,
     beide ok bei `*`.
-- [ ] **0.3 Pro-Stunde-Call-Limit** `MAX_CALLS_PER_HOUR` (Default 6) in
+  - Ergebnis: gruen (`countryAllowed()`, `startsWith` ueber die erlaubten Prefixe).
+    `+12025550123` -> 403 `grund=land` bei Default `+49`; bei `*` -> 500 (Twilio).
+- [x] **0.3 Pro-Stunde-Call-Limit** `MAX_CALLS_PER_HOUR` (Default 6) in
       `config.js`; Sliding-Window ueber Outbound-Call-Zeitstempel (eigenes Gate,
       NICHT der bestehende Per-IP-Request-Limiter aus Phase 2.1).
   - Soll: N+1-ter Outbound-Call innerhalb 1h -> 403/429 mit klarer Meldung.
   - Verifikation: Test mit Limit 2 -> 3. Call geblockt (Calls im Store seeden
     oder ueber den offline-testbaren place_call-Pfad).
-- [ ] **0.4 `allowlistError()` -> `numberGateError(to)`** zusammenfuehren,
+  - Ergebnis: gruen. `store.countOutboundCallsSince()` zaehlt Outbound-Records im
+    gleitenden Stundenfenster; `hourlyCallLimitReached()` -> 429 `grund=stundenlimit`.
+    Tests: Limit 2 + 2 frische Calls geseedet -> 3. Call 429; 1 Call -> passiert;
+    alte Calls (>1h) zaehlen nicht; Inbound zaehlt nicht.
+- [x] **0.4 `allowlistError()` -> `numberGateError(to)`** zusammenfuehren,
       Pruefreihenfolge: E.164 (existiert) -> Denylist (0.1) -> Laender-Gate (0.2)
       -> Pro-Stunde-Limit (0.3) -> Allowlist (Bestand, letztes Gate).
   - Soll: alle bisherigen Allowlist-/Budget-Tests bleiben gruen; neue Gates
     greifen in genau dieser Reihenfolge.
   - Verifikation: `npm test` (Altbestand + neue Faelle) gruen.
-- [ ] **0.5 Doku/Konfig**: `.env.example` + `render.yaml`
+  - Ergebnis: gruen, `npm test` -> pass 91/91 (74 Altbestand + 17 neu). Tatsaechliche
+    Reihenfolge: Denylist -> E.164 -> Land -> Stundenlimit -> Allowlist (Denylist
+    vorgezogen, Begruendung s. 0.1). `numberGateError(to)` liefert
+    `{status, grund, message}`; die Route auditiert `place_call_denied grund=<gate>`
+    fuer 403/429 (400-Formatfehler NICHT). Pruefreihenfolge-Tests belegen:
+    Denylist schlaegt Land+Allowlist, Land schlaegt Allowlist, leere Allowlist
+    bleibt letztes Gate (403). Altbestand (api/audit) unveraendert gruen.
+- [x] **0.5 Doku/Konfig**: `.env.example` + `render.yaml`
       (`ALLOWED_COUNTRY_CODES`, `MAX_CALLS_PER_HOUR`); `scripts/check-setup.js`
       warnt bei Allowlist/Laender-Gate-Widerspruch; PLAN-Status aktualisieren.
   - Verifikation: `node --check`, `npm run check` ohne Crash.
+  - Ergebnis: gruen. `.env.example` + `render.yaml` um beide Vars + Denylist-Hinweis
+    erweitert; `check-setup.js` meldet Land-Gate + Stundenlimit und FLAGGt eine
+    Allowlist-Nummer ohne passende Laendervorwahl als Fehler (verifiziert mit
+    `+12025550123`/`+49`). `node --check` aller Dateien ok; `check-setup.js` laeuft
+    ohne Crash bis zur Ergebnis-Zeile durch. PLAN-PHASE1-OAUTH.md Phasen-Tabelle
+    + PLAN-SECURITY.md Phase 0 aktualisiert.
 - [ ] **0.6 Entscheidung Allowlist-Lockerung (Betreiber, NICHT autonom)**:
       Soll bei aktivem 0.1-0.3 + invite-only eine leere `ALLOWED_NUMBERS`
       bedeuten "Laender-Gate regelt" statt "Outbound gesperrt"? Bewusst

@@ -24,6 +24,20 @@ config.publicUrl && !config.publicUrl.includes("CHANGE-ME")
 config.allowedNumbers.length
   ? ok(`Allowlist: ${config.allowedNumbers.join(", ")}`)
   : wrn("ALLOWED_NUMBERS ist leer", "Outbound-Anrufe sind damit komplett gesperrt");
+// Laender-Gate + Widerspruch zur Allowlist (Pre-Mortem 0.2): eine Allowlist-Nummer,
+// deren Laendervorwahl nicht erlaubt ist, wuerde VOR der Allowlist am Land-Gate haengen.
+if (config.allowedCountryCodes.includes("*")) {
+  wrn("Laender-Gate: alle Laendervorwahlen erlaubt (*)", "Bewusst? Das Land-Gate ist damit aus - nur Allowlist + Stundenlimit bremsen");
+} else {
+  ok(`Laender-Gate: ${config.allowedCountryCodes.join(", ")}`);
+  for (const n of config.allowedNumbers) {
+    if (!config.allowedCountryCodes.some((c) => norm(n).startsWith(c)))
+      bad(`Allowlist-Nummer ${n} passt zu keiner erlaubten Laendervorwahl`, "ALLOWED_COUNTRY_CODES erweitern oder Nummer entfernen - sonst blockt das Land-Gate sie VOR der Allowlist");
+  }
+}
+config.maxCallsPerHour > 0
+  ? ok(`Max. Outbound-Calls/Stunde: ${config.maxCallsPerHour}`)
+  : wrn(`MAX_CALLS_PER_HOUR ist ${config.maxCallsPerHour}`, "0 oder ungueltig -> jeder Outbound-Call wird gesperrt (Not-Aus)");
 config.ownerNumber ? ok(`OWNER_NUMBER: ${config.ownerNumber}`) : wrn("OWNER_NUMBER fehlt", "Keine SMS-Summaries moeglich");
 if (config.voiceEngine === "realtime") {
   config.openaiApiKey ? ok("Voice-Engine: realtime, OPENAI_API_KEY gesetzt") : bad("VOICE_ENGINE=realtime, aber OPENAI_API_KEY fehlt");

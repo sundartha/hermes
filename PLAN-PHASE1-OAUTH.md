@@ -23,7 +23,7 @@ Phasen durch mehrschichtige Kontrollen:
 
 | Phase | Inhalt | Abhängigkeit | Status |
 |---|---|---|---|
-| 0 | Nummern-Regeln (E.164, Premium-/Notruf-Denylist, Länder-Gate), Rate-Limit, Twilio-Webhook-Signatur | keine — jederzeit umsetzbar, auch nach Phase 1 | offen |
+| 0 | Nummern-Regeln (E.164, Premium-/Notruf-Denylist, Länder-Gate, Pro-Stunde-Limit), Rate-Limit, Twilio-Webhook-Signatur | keine — jederzeit umsetzbar, auch nach Phase 1 | 0.1–0.5 umgesetzt (`numberGateError`, `test/number-gate.test.js`); 0.6 (Allowlist-Lockerung) offen, Betreiber-Entscheidung |
 | 1 | **OAuth 2.1 auf /mcp — dieses Dokument** | IdP-Account (Schritt A, macht ein Mensch) | offen |
 | 2 | Rechteprofile pro Nutzer (wer darf welche Länder, wie viele Calls/h, Kalender ja/nein), Audit `requestedBy` am Call | baut auf `req.auth` aus Phase 1 auf | offen |
 

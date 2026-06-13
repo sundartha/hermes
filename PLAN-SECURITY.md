@@ -4,6 +4,36 @@ Sicherheits-Haertung des Telefon-Agenten in drei Phasen, priorisiert nach Risiko
 Kontext: Der Dienst laeuft oeffentlich erreichbar (Render), nimmt echte Anrufe an,
 loest echte Anrufe und SMS aus (Kosten!) und speichert Gespraechs-Transkripte.
 
+## Phase 0 - Nummern-Regeln: mehrschichtige Outbound-Gates ✅ (0.1-0.5 umgesetzt)
+
+Ziel: weg von der starren `ALLOWED_NUMBERS`-Allowlist (beliebige normale Nummern
+anrufen, z.B. Friseur), ohne die einzige Bremse gegen Notruf-/Premium-/Auslands-
+Calls zu verlieren. Loesung: zusaetzliche Gates VOR der Allowlist, die als letztes
+Gate scharf bleibt. Detailplan + Phasen-Tabelle: `PLAN-PHASE1-OAUTH.md`.
+
+`allowlistError()` -> `numberGateError(to)` (`src/server.js`) mit fester
+Pruefreihenfolge **Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit ->
+Allowlist**:
+
+1. **Notruf-/Premium-Denylist** (hardcoded, kein Env, nicht abschaltbar):
+   Kurzwahlen 110/112/911/999 (exakt) + Premium-/Service-Prefixe
+   (`+49900/+49137/+49180/+49118`, `+870/+881/+882/+883/+979`). Laeuft bewusst
+   vor der Formatpruefung, damit Kurzwahlen als 403 `grund=denylist` statt 400
+   erscheinen.
+2. **Laender-Gate** `ALLOWED_COUNTRY_CODES` (Default `+49`, `*` = alle).
+3. **Pro-Stunde-Limit** `MAX_CALLS_PER_HOUR` (Default 6, eigenes Gleitfenster
+   ueber Outbound-Call-Zeitstempel, NICHT der Per-IP-Limiter aus Phase 2.1).
+4. **Allowlist** (Bestand) bleibt das letzte Gate.
+
+- Erwartet: gesperrte/falsch-Land-/ueber-Limit-Nummer -> 403/429 mit klarer
+  Meldung + `audit place_call_denied grund=<gate>`; normale `+49`-Nummer im Limit
+  passiert bis zum Twilio-Call. Allowlist NICHT entfernt/aufgeweicht.
+- Verifikation: `test/number-gate.test.js` (Denylist je Prefix/Kurzwahl,
+  Land `+49`/`*`, Stundenlimit inkl. Fenster + Outbound-only, Pruefreihenfolge);
+  `npm test` pass 91/91, `npm audit --audit-level=high` Exit 0.
+- Offen (NICHT autonom, Betreiber): **0.6** - ob bei aktivem 0.1-0.3 + invite-only
+  eine leere Allowlist "Land-Gate regelt" statt "Outbound gesperrt" bedeuten soll.
+
 ## Phase 1 - Kritisch: Authentifizierung & Webhook-Sicherheit ✅ (umgesetzt)
 
 Lücken, die ohne Zugangsdaten von aussen ausnutzbar sind:
