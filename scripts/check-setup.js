@@ -150,17 +150,21 @@ if (config.publicUrl && !config.publicUrl.includes("CHANGE-ME")) {
 // ---------- 6. MCP-OAuth (nur bei MCP_AUTH=oauth) ----------
 if (config.mcpAuth === "oauth") {
   h("6. MCP-OAuth (Resource Server)");
-  // (a) Issuer erreichbar + openid-configuration mit jwks_uri
+  // (a) Issuer erreichbar + Metadata mit jwks_uri (OIDC oder OAuth-2.1-Stil)
   if (config.oauthIssuerUrl) {
-    try {
-      const r = await fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
-      if (r.ok) {
-        const meta = await r.json();
-        meta.jwks_uri
-          ? ok(`IdP erreichbar, jwks_uri: ${meta.jwks_uri}`)
-          : bad("openid-configuration ohne jwks_uri", "Issuer-URL pruefen");
-      } else bad(`IdP openid-configuration HTTP ${r.status}`, "OAUTH_ISSUER_URL pruefen");
-    } catch (e) { bad("IdP nicht erreichbar: " + e.message); }
+    let jwksUri = null;
+    for (const p of ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"]) {
+      try {
+        const r = await fetch(`${config.oauthIssuerUrl}${p}`);
+        if (r.ok) {
+          const meta = await r.json();
+          if (meta.jwks_uri) { jwksUri = meta.jwks_uri; break; }
+        }
+      } catch { /* naechsten Pfad versuchen */ }
+    }
+    jwksUri
+      ? ok(`IdP erreichbar, jwks_uri: ${jwksUri}`)
+      : bad("IdP-Metadata nicht erreichbar oder ohne jwks_uri", "OAUTH_ISSUER_URL pruefen");
   }
   // (b) Gateway liefert Protected-Resource-Metadata, (c) /mcp ohne Token -> 401
   try {

@@ -13,16 +13,36 @@ const isLocalSocket = (req) =>
 const audience = () => config.oauthAudience || `${config.publicUrl}/mcp`;
 const metadataUrl = () => `${config.publicUrl}/.well-known/oauth-protected-resource`;
 
+// JWKS-URI ueber die Standard-Metadata des Issuers finden. Beide gaengigen
+// Pfade versuchen: OIDC (openid-configuration) und OAuth 2.1 AS-Metadata
+// (oauth-authorization-server, so dokumentiert WorkOS AuthKit). Erster Treffer
+// mit jwks_uri gewinnt.
+async function discoverJwksUri() {
+  const paths = ["/.well-known/openid-configuration", "/.well-known/oauth-authorization-server"];
+  let lastErr;
+  for (const p of paths) {
+    try {
+      const r = await fetch(`${config.oauthIssuerUrl}${p}`);
+      if (!r.ok) {
+        lastErr = new Error(`${p} HTTP ${r.status}`);
+        continue;
+      }
+      const { jwks_uri } = await r.json();
+      if (jwks_uri) return jwks_uri;
+      lastErr = new Error(`${p} ohne jwks_uri`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("keine OAuth-Metadata gefunden");
+}
+
 // Remote-JWKS, von jose gecacht. Lazy: erst beim ersten Token-Check geladen,
 // damit der Server auch ohne erreichbaren IdP startet.
 let jwks = null;
 async function getJwks() {
   if (jwks) return jwks;
-  const r = await fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
-  if (!r.ok) throw new Error(`openid-configuration HTTP ${r.status}`);
-  const { jwks_uri } = await r.json();
-  if (!jwks_uri) throw new Error("jwks_uri fehlt in openid-configuration");
-  jwks = createRemoteJWKSet(new URL(jwks_uri));
+  jwks = createRemoteJWKSet(new URL(await discoverJwksUri()));
   return jwks;
 }
 

@@ -11,14 +11,16 @@ import { startServer, waitForLog } from "./helpers.js";
 const AUDIENCE = "https://agent.test/mcp"; // = PUBLIC_URL/mcp aus BASE_ENV
 const KID = "test-key-1";
 
-// Startet einen lokalen IdP: openid-configuration zeigt auf den JWKS-Endpunkt,
-// JWKS enthaelt den oeffentlichen Schluessel. Liefert Issuer-URL + Signierer.
-async function startIdp() {
+// Startet einen lokalen IdP: die Metadata zeigt auf den JWKS-Endpunkt, JWKS
+// enthaelt den oeffentlichen Schluessel. Liefert Issuer-URL + Signierer.
+// metadataPath waehlt, ueber welchen Well-known-Pfad die Metadata erreichbar
+// ist - WorkOS AuthKit nutzt oauth-authorization-server statt openid-configuration.
+async function startIdp({ metadataPath = "/.well-known/openid-configuration" } = {}) {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const jwk = { ...(await exportJWK(publicKey)), kid: KID, alg: "RS256", use: "sig" };
 
   const server = http.createServer((req, res) => {
-    if (req.url === "/.well-known/openid-configuration") {
+    if (req.url === metadataPath) {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ issuer, jwks_uri: `${issuer}/jwks` }));
     }
@@ -120,6 +122,24 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
       const res = await post(`${srv.localUrl}/mcp`, token);
       assert.notEqual(res.status, 401);
       await waitForLog(srv, /\[mcp\] alice@team\.test/);
+    });
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
+test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurueck (WorkOS-Stil)", async (t) => {
+  // IdP liefert NUR den OAuth-2.1-Metadata-Pfad, kein openid-configuration.
+  const idp = await startIdp({ metadataPath: "/.well-known/oauth-authorization-server" });
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: AUDIENCE },
+  });
+  try {
+    await t.test("gueltiges Token wird trotzdem akzeptiert", async () => {
+      const token = await idp.sign({ email: "bob@team.test" });
+      const res = await post(`${srv.localUrl}/mcp`, token);
+      assert.notEqual(res.status, 401);
     });
   } finally {
     await srv.stop();
