@@ -362,7 +362,7 @@ Body-Felder wie `requestedBy`/`email` immer.
 
 ## Aufgaben
 
-- [ ] **2.1 Store (`src/store.js`)**: Top-Level-Key `profiles` ({} in `defaults()`
+- [x] **2.1 Store (`src/store.js`)**: Top-Level-Key `profiles` ({} in `defaults()`
       + Migration in `load()`); `OWNER_PROFILE` (permissiv) / `DEFAULT_PROFILE`
       (restriktiv) als Konstanten; `resolveProfile(email)` (null->Owner, bekannt->
       DEFAULT+stored, unbekannt->DEFAULT); `setProfile/deleteProfile/listProfiles`;
@@ -370,53 +370,49 @@ Body-Felder wie `requestedBy`/`email` immer.
       Pruefung + Nummern-Normalisierung); `countOutboundCallsSince(sinceIso,
       requestedBy=null)` um `requestedBy`-Filter erweitern; `createCall` speichert
       `requestedBy`.
-  - Soll: `resolveProfile(null)` permissiv; `resolveProfile("fremd@x")` ohne
-    Eintrag == DEFAULT (restriktiv); `sanitizeProfile` wirft Fremd-Keys/falsche
-    Typen weg; `countOutboundCallsSince(iso, "a@x")` zaehlt nur Calls mit
-    `requestedBy==="a@x"`, ohne Arg weiter ALLE Outbound.
-  - Verifikation: Unit-Asserts in `test/profiles.test.js` (offline) + Altbestand.
-- [ ] **2.2 Gateway-Gates (`src/server.js`)**: `internalIdentity(req)` (nur
+  - Ergebnis: gruen. `resolveProfile(null)`=OWNER (permissiv), Unbekannt=DEFAULT
+    (restriktiv) ueber das Gate-Verhalten in `test/profiles.test.js` belegt;
+    `sanitizeProfile`-Whitelist + Nummern-Normalisierung per Profil-Verwaltungs-
+    Test (`junk`/falscher Typ verworfen, `+49 151 ...` -> `+491511234567`);
+    `countOutboundCallsSince(requestedBy)` per pro-Nutzer-Stundenlimit-Test.
+- [x] **2.2 Gateway-Gates (`src/server.js`)**: `internalIdentity(req)` (nur
       localhost, sonst null; Body ignoriert); `numberGateError(to, profile,
       requestedBy)` - Reihenfolge Denylist->E.164->Land->Stunde->Allowlist, aber
       Land=Schnittmenge(global,profil), Stunde=global UND min(global,profil) pro
       Nutzer, Allowlist=`unrestricted`/Profil-Allowlist heben sie auf, sonst global;
       `/api/calls` resolved Profil + `requestedBy`, Audit `place_call`/
       `place_call_denied` um `requestedBy=<email|owner>` ergaenzt.
-  - Soll: (c) Profil-Land `*` bei global `+49` blockt `+1`; unrestricted-Profil
-    ruft nicht-gelistete `+49`-Nummer an (500). (d) global erschoepft -> frischer
-    Nutzer trotzdem 429. (b) externer `X-Internal-Identity` ignoriert.
-  - Verifikation: `test/profiles.test.js` (b)(c)(d), Altbestand gruen.
-- [ ] **2.3 MCP-Identitaet (`src/mcp-tools.js`, `src/server.js`)**:
+  - Ergebnis: gruen. (c) `+1` bei global `+49` trotz Profil-`*` -> 403 `land`;
+    unrestricted -> nicht-gelistete `+49` -> 500. (d) global erschoepft ->
+    frischer Nutzer 429. (b) externer `X-Internal-Identity` ignoriert (403 statt
+    500). Altbestand (number-gate/audit/api) unveraendert gruen.
+- [x] **2.3 MCP-Identitaet (`src/mcp-tools.js`, `src/server.js`)**:
       `registerTools(server, {identity, allowCalendar})`; `call()`-Closure reicht
       `X-Internal-Identity` durch; `/mcp` uebergibt `identity = req.auth ?
       (req.auth.email||req.auth.sub) : null` + `allowCalendar` aus resolvtem Profil;
       `get_calendar`-Tool nur wenn `allowCalendar`; stdio bleibt `registerTools(server)`.
-  - Soll: e2e ueber `/mcp` mit JWT(email) -> `place_call` -> Audit
-    `requestedBy=<email>` (per `waitForLog`); JWT ohne email -> `requestedBy=<sub>`
-    (NICHT owner).
-  - Verifikation: `test/profiles.test.js` e2e via Mini-IdP.
-- [ ] **2.4 Booking-Gate (`src/server.js`)**: `POST /api/calendar` prueft
+  - Ergebnis: gruen. e2e (single `tools/call`, stateless - kein initialize noetig):
+    JWT(email) -> Audit `place_call ... requestedBy=alice@team.test`; JWT ohne
+    email -> `requestedBy=subonly-9` (NICHT owner), `assert !requestedBy=owner`.
+- [x] **2.4 Booking-Gate (`src/server.js`)**: `POST /api/calendar` prueft
       `profile.allowBooking` (Owner/null = erlaubt, DEFAULT_PROFILE = 403).
-  - Soll: localhost ohne Identitaet -> 200 (Owner); `X-Internal-Identity` eines
-    profillosen Nutzers -> 403.
-  - Verifikation: `test/profiles.test.js`.
-- [ ] **2.5 Verwaltung (`src/server.js`)**: `GET /api/profiles`,
+  - Ergebnis: gruen. Owner 200, DEFAULT-Profil 403 (`/allowBooking/`),
+    `allowBooking=true` 200. `audit booking_denied` bei Ablehnung.
+- [x] **2.5 Verwaltung (`src/server.js`)**: `GET /api/profiles`,
       `POST /api/profiles` (`{email, ...felder}` -> sanitize+set), `DELETE
       /api/profiles/:email`, alle hinter Basic-Auth (Bestand deckt `/api/*`);
       Audit `profile_update`/`profile_delete` (nur email+keys, keine Werte).
-  - Soll: POST legt Profil an (GET zeigt es), DELETE entfernt es; Audit-Zeilen
-    ohne Werte.
-  - Verifikation: `test/profiles.test.js`.
-- [ ] **2.6 Tests**: `test/profiles.test.js` (node:test, offline); `startIdp`
+  - Ergebnis: gruen (Test + Smoke). POST sanitisiert + audit `keys=`, GET listet,
+    DELETE 200/404; Nummern-Wert nicht im Log.
+- [x] **2.6 Tests**: `test/profiles.test.js` (node:test, offline); `startIdp`
       aus `test/oauth.test.js` nach `test/helpers.js` extrahiert + wiederverwendet.
       Offline-Twilio-Trick (`TWILIO_ACCOUNT_SID:""` -> durchgelassen 500, Sperre
       403/429). Keine neuen Env-Vars (Profile sind Daten).
-  - Soll: alle must-prove-Faelle (b,c,d,e,e2e) beweisen Verhalten, nicht nur gruen.
-  - Verifikation: `npm test` gruen (Altbestand + neu), `npm audit
-    --audit-level=high` Exit 0.
-- [ ] **2.7 Doku**: `PLAN-SECURITY.md` Rechteprofile als umgesetzt; CLAUDE.md/
-      README nur falls noetig (keine neuen Env-Vars).
-  - Verifikation: `node --check` aller geaenderten Dateien.
+  - Ergebnis: `npm test` -> pass 113/113 (vorher 91, +22), `npm audit
+    --audit-level=high` -> "found 0 vulnerabilities", Exit 0.
+- [x] **2.7 Doku**: `PLAN-SECURITY.md` Rechteprofile als umgesetzt; keine neuen
+      Env-Vars (Profile sind Daten) -> `.env.example`/`render.yaml` unveraendert.
+  - Ergebnis: `node --check` aller geaenderten Dateien gruen.
 - [ ] **2.8 Review**: unabhaengiger Subagent / `/security-review` adversarial gegen
       Absolute Regeln + Pre-Mortem (kein Profil ueber globale Limits, requestedBy
       nicht spoofbar, Tests beweisen Verhalten). Findings einarbeiten.

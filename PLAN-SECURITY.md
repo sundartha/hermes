@@ -31,8 +31,57 @@ Allowlist**:
 - Verifikation: `test/number-gate.test.js` (Denylist je Prefix/Kurzwahl,
   Land `+49`/`*`, Stundenlimit inkl. Fenster + Outbound-only, Pruefreihenfolge);
   `npm test` pass 91/91, `npm audit --audit-level=high` Exit 0.
-- Offen (NICHT autonom, Betreiber): **0.6** - ob bei aktivem 0.1-0.3 + invite-only
-  eine leere Allowlist "Land-Gate regelt" statt "Outbound gesperrt" bedeuten soll.
+- **0.6** (Betreiber-Entscheidung 2026-06-13): KEINE globale Allowlist-Lockerung;
+  stattdessen pro Nutzer ueber Rechteprofile (siehe naechster Abschnitt). Die
+  globale Allowlist bleibt das harte letzte Gate fuer alle, die nicht per Profil
+  ausdruecklich gelockert sind.
+
+## Rechteprofile pro Nutzer (Phase 2 der Roadmap) ✅ (umgesetzt)
+
+Setzt 0.6 um: jeder authentifizierte MCP-Nutzer (OAuth-Identitaet aus `req.auth`)
+bekommt ein Rechteprofil. Ein Profil kann die GLOBALE Allowlist fuer diesen
+Nutzer lockern - `unrestricted: true` (hebt sie ganz auf) oder eine eigene
+`allowedNumbers`-Liste. In ALLEN Faellen bleiben **Denylist, Land-Gate, globales
+Pro-Stunde-Limit, Budget, Max-Dauer, Disclosure und Twilio-Signatur unveraenderte
+harte Obergrenzen**: ein Profil kann nur WEITER einschraenken, nie ueber die
+globalen Limits hinaus erweitern.
+
+- **Identitaet serverseitig, nie aus dem Body**: Der `/mcp`-Handler liest
+  `req.auth.email` (verifiziertes JWT) und reicht sie als interner Header
+  `X-Internal-Identity` an die localhost-`/api/calls`/`/api/calendar`. Das Gateway
+  akzeptiert diesen Header NUR von localhost-Sockets (`isLocalSocket`); von extern
+  wird er ignoriert (-> Owner). Body-Felder (`requestedBy`/`email`) gelten nie.
+  Fail-closed: ein Token OHNE `email`-Claim wird NICHT zum Owner, sondern bekommt
+  ueber `sub` das restriktive `DEFAULT_PROFILE`.
+- **Profile als eigener Store-Key** `profiles` (NICHT unter `settings` -
+  `updateSettings`/die Settings-Whitelist fassen sie nicht an). `OWNER_PROFILE`
+  (localhost/stdio ohne Identitaet) = permissiv = heutiges Verhalten (globale
+  Allowlist greift weiter -> Phase-0-Tests bleiben gruen). `DEFAULT_PROFILE`
+  (authentifiziert, aber profillos) = restriktiv (kein Kalender/Booking, kleines
+  Stundenlimit, keine Allowlist-Lockerung).
+- **Gate-Aenderungen** (`numberGateError(to, profile, requestedBy)`, Reihenfolge
+  unveraendert Denylist->E.164->Land->Stunde->Allowlist): Land = Schnittmenge
+  global ∩ profil (Profil `*`/leer widened NICHT); Stunde = globales Limit (alle
+  Outbound) UND pro-Nutzer `min(global, profil)`; Allowlist = `unrestricted`/
+  Profil-`allowedNumbers` heben sie auf, sonst gilt die globale (Bestand).
+  `place_call`/`place_call_denied`-Audit traegt `requestedBy=<email|owner>`.
+- **Kalender/Booking**: `profile.allowCalendar` gated das `get_calendar`-MCP-Tool
+  (wird sonst gar nicht registriert); `profile.allowBooking` gated `POST
+  /api/calendar` (Owner/null = erlaubt; vorher fehlte hier jede Pruefung).
+- **Verwaltung**: `GET/POST /api/profiles` + `DELETE /api/profiles/:email`, alle
+  hinter Basic-Auth (Bestand deckt `/api/*` ab; OAuth-MCP-Nutzer erreichen nur
+  `/mcp`, nie `/api/*` -> kein Self-Service, kein MCP-Tool dafuer). Audit
+  `profile_update`/`profile_delete` (nur email + Keys, keine Werte).
+- Keine neuen Env-Vars (Profile sind Daten im Store).
+
+- Erwartet/Verifikation: `test/profiles.test.js` (node:test, offline) beweist
+  (nicht nur "gruen"): Profil-`*` widened das Land-Gate nicht (global `+49`
+  blockt `+1`); `unrestricted` ruft eine nicht-gelistete `+49`-Nummer an (bis
+  Twilio); globales Stundenlimit bleibt fuer frische Nutzer hart (429); externer
+  `X-Internal-Identity` wird ignoriert; `POST /api/settings {profiles}` aendert
+  nichts; e2e ueber `/mcp` mit JWT -> `requestedBy=<email>` im Audit, Token ohne
+  email -> `requestedBy=<sub>` (kein fail-open zum Owner). `npm test` 113/113,
+  `npm audit --audit-level=high` Exit 0.
 
 ## Phase 1 - Kritisch: Authentifizierung & Webhook-Sicherheit ✅ (umgesetzt)
 
