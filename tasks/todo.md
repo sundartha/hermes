@@ -317,3 +317,108 @@ offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
   --audit-level=high` Exit 0, Smoke-Test: gesperrte Nummer -> 403, normale
   Nummer im erlaubten Land -> kommt durch (mit leerer Allowlist nur, falls 0.6
   so entschieden).
+
+# Phase 2: Rechteprofile pro Nutzer
+
+Branch: `claude/cool-hawking-fpq07l` (== origin/master, Feature-Branch-Basis).
+Betreiber-Entscheidung 0.6 (2026-06-13): **Allowlist + unrestricted-Flag** -
+Profile koennen die globale Allowlist pro Nutzer lockern (eigene allowedNumbers
+ODER unrestricted=true), gebunden an die unveraenderten harten Gates
+(Denylist, Land, Stunde, Budget, Dauer, Disclosure, Twilio-Signatur).
+
+## Kern-Architektur (festgelegt)
+
+- **Identitaet serverseitig, nie aus dem Body:** /mcp-Handler hat `req.auth.email`
+  (verifiziertes JWT). `registerTools(server, ctx)` bekommt die Identitaet als
+  Closure-Kontext; `mcp-tools.js` reicht sie als interner Header `X-Internal-Identity`
+  an die localhost-/api/calls weiter. Das Gateway akzeptiert den Header
+  AUSSCHLIESSLICH von localhost-Sockets - extern wird er ignoriert (kein Spoof).
+  stdio-MCP + Dashboard (Basic-Auth-Owner) = keine Identitaet = Owner-Profil.
+- **Profil verschaerft, nie ueber global hinaus** (ausser bewusste Allowlist-
+  Lockerung): Land = Schnittmenge(global, profil), Stunde = min(global, profil),
+  zusaetzlich pro-Nutzer-Zaehlung. Denylist/Budget/Dauer unveraendert.
+- **Fail-closed:** unbekannter (authentifizierter, aber profilloser) Nutzer ->
+  restriktives DEFAULT_PROFILE. Owner (null Identitaet) -> OWNER_PROFILE
+  (= heutiges Verhalten, globale Allowlist greift).
+
+## Pre-Mortem (vor Umsetzung benannt + Gegenmassnahme)
+
+- (a) Identitaet wird doch nicht durchgereicht -> alle Calls laufen als Owner.
+  Gegenmassnahme: e2e-Test ueber /mcp mit JWT beweist `requestedBy=<email>` im
+  Audit + in der Durchsetzung. Failure-Mode ist fail-SAFE: ohne Identitaet =
+  Owner-Profil = globale Allowlist greift weiter (keine stille Lockerung).
+- (b) Nutzer spooft requestedBy. Gegenmassnahme: Header nur von localhost
+  honoriert; Identitaet stammt aus verifiziertem JWT; Anti-Spoof-Test (externer
+  Header wird ignoriert) + Body-Feld `requestedBy`/`email` wird ignoriert.
+- (c) Profil erweitert ueber globale Limits -> Toll-Fraud. Gegenmassnahme:
+  min/Schnittmenge erzwungen; Test: Profil mit Land=`*` bei global=`+49` darf
+  +1 NICHT anrufen; Profil mit hoeherem Stundenlimit als global wird vom globalen
+  Limit gedeckelt.
+- (d) Nutzer-Schwarm umgeht globales Stundenlimit per Pro-Nutzer-Zaehlung.
+  Gegenmassnahme: globales Limit wird fuer JEDEN zusaetzlich geprueft; Test:
+  global erschoepft -> frischer Nutzer trotzdem 429.
+- (e) Self-Escalation: Nutzer hebt eigenes Profil hoch. Gegenmassnahme: Profile
+  sind eigener Store-Key (NICHT in settings -> updateSettings kann sie nicht
+  schreiben); Verwaltung nur ueber /api/profiles hinter Basic-Auth (Owner);
+  OAuth-MCP-Nutzer erreichen /api/* nicht. Test: POST /api/settings mit
+  `{profiles:...}` aendert nichts.
+
+## Aufgaben
+
+- [ ] **2.1 Identitaet durchreichen + Audit.** `mcp-tools.js`:
+  `api(method,path,body,identity)` setzt internen Header nur wenn identity gesetzt;
+  `registerTools(server, ctx)` baut `call()`-Closure mit `ctx.identity`. `server.js`:
+  `/mcp` ruft `registerTools(server, {identity: req.auth?.email||null, allowCalendar})`.
+  `requesterEmail(req)` liest Header nur bei `isLocalSocket(req)`. `createCall`
+  speichert `requestedBy`. Audit `place_call`/`place_call_denied` traegt
+  `requestedBy=<email|owner>`.
+  - Soll: Call ueber /mcp mit JWT alice -> Audit-Zeile `... requestedBy=alice@team.test`;
+    Call von extern mit gesetztem `X-Internal-Identity` -> Header ignoriert (owner).
+  - Verifikation: test/profiles.test.js (e2e /mcp + Anti-Spoof), waitForLog.
+- [ ] **2.2 Profil-Datenmodell im store.** `profiles` als Top-Level-Key
+  (defaults + load-Migration `state.profiles ||= {}`). `sanitizeProfile()`
+  (Whitelist+Typ wie updateSettings, inkl. string[]-Pruefung). `OWNER_PROFILE`
+  (permissiv = global), `DEFAULT_PROFILE` (restriktiv: allowCalendar/Booking false,
+  maxCallsPerHour klein, keine Lockerung). `resolveProfile(email)`,
+  `setProfile/deleteProfile/listProfiles`.
+  - Soll: `resolveProfile(null)`=Owner; unbekannte Email=Default; gesetzte Email=
+    gemergt; `setProfile` ignoriert fremde Keys/falsche Typen.
+  - Verifikation: Unit-Tests gegen store (import, DATA_DIR=Temp).
+- [ ] **2.3 Gate-Integration (tighten-only + Allowlist-Lockerung).**
+  `numberGateError(to, profile, requestedBy)`: Denylist -> E.164 -> Land
+  (Schnittmenge global/profil) -> global Stunde -> pro-Nutzer Stunde -> Allowlist
+  (profil.allowedNumbers ODER profil.unrestricted heben sie auf, sonst global).
+  - Soll: Profil-Land `*` bei global `+49` blockt +1 (403 land); unrestricted-Profil
+    ruft nicht-gelistete +49-Nummer an (passiert, offline 500); Default-Profil bei
+    leerer global Allowlist -> 403.
+  - Verifikation: test/profiles.test.js je Fall.
+- [ ] **2.4 Pro-Stunde-Limit pro Nutzer.** `countOutboundCallsSince(sinceIso,
+  requestedBy=null)` filtert optional nach `requestedBy`. Gate prueft global UND
+  Nutzer (min-Limit).
+  - Soll: profil maxCallsPerHour=1, ein frischer Call dieses Nutzers vorhanden ->
+    naechster 429; ein ANDERER Nutzer mit 0 Calls -> passiert (solange global ok).
+  - Verifikation: test/profiles.test.js mit geseedeten Calls (requestedBy gesetzt).
+- [ ] **2.5 Profil-Verwaltung (Owner-only, kein Self-Service).**
+  `GET /api/profiles`, `POST /api/profiles` (upsert: {email, ...patch}),
+  `DELETE /api/profiles/:email` - alle hinter Basic-Auth (Bestand). Audit
+  `profile_update`/`profile_delete` (nur email + keys).
+  - Soll: extern ohne Basic-Auth -> 401; mit -> upsert; gesetztes Profil greift im
+    Gate. POST /api/settings kann `profiles` NICHT schreiben.
+  - Verifikation: test/profiles.test.js (401, upsert+Wirkung, settings-Isolation).
+- [ ] **2.6 Doku/Konfig + 0.6 final.** PLAN-SECURITY.md (Phase-2-Zeile umgesetzt,
+  Testverweis), PLAN-PHASE1-OAUTH.md Phasen-Tabelle, README/ONBOARDING kurzer
+  Profil-Hinweis, 0.6-Eintrag oben final dokumentieren. KEINE neuen Env-Vars
+  (Profile sind Daten) -> kein BASE_ENV/.env.example/render.yaml-Zwang; nur
+  Doku-Notiz wo sinnvoll.
+  - Verifikation: `node --check` aller Dateien gruen.
+
+## Gesamt-Verifikation (Phase 2)
+
+- `node --check` aller geaenderten src-Dateien.
+- `npm test` gruen (Altbestand unveraendert + test/profiles.test.js neu).
+- `npm audit --audit-level=high` Exit 0.
+- Smoke-Test: Server mit MCP_AUTH=off lokal, /api/calls von localhost mit/ohne
+  X-Internal-Identity, /api/profiles-Roundtrip.
+- Unabhaengiges Review (frischer Agent / /security-review) gegen Absolute Regeln +
+  Pre-Mortem; Findings eingearbeitet.
+- NICHT autonom nach master mergen (Render autoDeploy, echte Calls/Kosten).
