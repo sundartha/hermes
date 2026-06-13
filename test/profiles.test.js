@@ -43,6 +43,18 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
       assert.equal(res.status, 500, "localhost-Header muss die Identitaet setzen");
     });
 
+    // Laeuft immer (kein externes IP noetig): beweist die andere Haelfte - die
+    // Identitaet kommt NIE aus dem Body, auch nicht von localhost.
+    await t.test("localhost: Body-Felder (requestedBy/email) gelten NICHT als Identitaet", async () => {
+      const res = await fetch(`${srv.localUrl}/api/calls`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: "+4915777777777", objective: "Test", requestedBy: "evil@x", email: "evil@x" }),
+      });
+      assert.equal(res.status, 403, "Identitaet darf nie aus dem Body kommen -> Owner -> 403");
+      assert.match((await res.json()).error, /Allowlist/);
+    });
+
     await t.test(
       "extern: Header ignoriert -> Owner -> leere globale Allowlist (403)",
       { skip: !srv.externalUrl && "keine externe Interface-IP" },
@@ -243,6 +255,15 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       // subonly-9 hat kein Profil -> DEFAULT (restriktiv) -> 403 allowlist, requestedBy=subonly-9
       await waitForLog(srv, /\[audit\] place_call_denied ip=\S+ to=\+4915123123124 grund=allowlist requestedBy=subonly-9/);
       assert.ok(!/requestedBy=owner/.test(srv.stdout), "Token ohne email darf NICHT zum Owner werden");
+    });
+
+    await t.test("JWT OHNE email UND sub -> ANON (DEFAULT), kein fail-open zum Owner", async () => {
+      const token = await idp.sign({}, { noSubject: true }); // weder email noch sub
+      const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", { to: "+4915123123125", objective: "Termin" }));
+      assert.notEqual(res.status, 401);
+      // ANON -> kein Profil -> DEFAULT (restriktiv) -> 403 allowlist, requestedBy=anon (NICHT owner).
+      await waitForLog(srv, /\[audit\] place_call_denied ip=\S+ to=\+4915123123125 grund=allowlist requestedBy=anon/);
+      assert.ok(!/requestedBy=owner/.test(srv.stdout), "Token ohne Identitaet darf NICHT zum Owner werden");
     });
   } finally {
     await srv.stop();

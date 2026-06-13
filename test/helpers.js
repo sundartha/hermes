@@ -148,15 +148,18 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
   // passt aber nicht: sauberer 401 ohne JWKS-Refetch.
   const wrong = await generateKeyPair("RS256");
 
-  const sign = (claims = {}, { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer } = {}) =>
-    new SignJWT({ ...claims })
+  // noSubject: true laesst den sub-Claim ganz weg (fuer den Fail-closed-Test:
+  // verifiziertes Token ohne email UND sub).
+  const sign = (claims = {}, { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {}) => {
+    let jwt = new SignJWT({ ...claims })
       .setProtectedHeader({ alg: "RS256", kid: KID })
       .setIssuer(iss)
       .setAudience(aud)
-      .setSubject(claims.sub || "user-1")
       .setIssuedAt()
-      .setExpirationTime(exp)
-      .sign(key);
+      .setExpirationTime(exp);
+    if (!noSubject) jwt = jwt.setSubject(claims.sub || "user-1");
+    return jwt.sign(key);
+  };
 
   return { issuer, sign, wrongKey: wrong.privateKey, close: () => new Promise((r) => server.close(r)) };
 }

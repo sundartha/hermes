@@ -34,6 +34,9 @@ function internalIdentity(req) {
 }
 // requestedBy-Marker fuer den Owner (localhost/stdio ohne Identitaet).
 const OWNER_ID = "owner";
+// Sentinel fuer ein verifiziertes Token OHNE email UND sub: bewusst NICHT Owner
+// (fail-closed), sondern restriktiv (resolveProfile -> DEFAULT_PROFILE).
+const ANON_IDENTITY = "anon";
 
 app.use(securityHeaders);
 
@@ -554,9 +557,10 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   if (req.auth) console.log("[mcp]", req.auth.email || "anonym", req.body?.method || "");
   // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub
   // (Fail-closed: ein authentifizierter Nutzer OHNE email-Claim wird NICHT zum
-  // Owner, sondern bekommt das restriktive DEFAULT_PROFILE). Kein req.auth
-  // (Legacy/localhost/stdio) -> null -> Owner.
-  const identity = req.auth ? req.auth.email || req.auth.sub || null : null;
+  // Owner, sondern bekommt das restriktive DEFAULT_PROFILE). Selbst ohne email UND
+  // sub bleibt es restriktiv (ANON_IDENTITY-Sentinel statt null/Owner). Kein
+  // req.auth (Legacy/localhost/stdio) -> null -> Owner.
+  const identity = req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
   const profile = store.resolveProfile(identity);
   try {
     const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });

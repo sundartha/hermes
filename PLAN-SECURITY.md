@@ -74,6 +74,17 @@ globalen Limits hinaus erweitern.
   `profile_update`/`profile_delete` (nur email + Keys, keine Werte).
 - Keine neuen Env-Vars (Profile sind Daten im Store).
 
+- Bewusst akzeptiertes (geerbtes) Risiko: Wie das gesamte `/api/*` (inkl. des
+  Call-ausloesenden `/api/calls`) sind auch `/api/profiles` ohne gesetztes
+  `DASHBOARD_PASSWORD` offen erreichbar - die dokumentierte Prototyp-Abweichung.
+  `assertConfig()` warnt auf Render, wenn das Passwort fehlt. Die Profil-Endpunkte
+  sind NICHT schwaecher abgesichert als der Bestand und ein offenes
+  `/api/profiles` ist weniger gefaehrlich als ein offenes `/api/calls`: ein
+  freigeschaltetes Profil nuetzt nur, wer fuer dessen email ein gueltiges JWT des
+  vertrauten IdP besitzt; die harten Gates (Denylist/Land/Stunde/Budget) bleiben
+  ohnehin. Kein neuer Angriffsvektor durch Phase 2; scharfes Fail-closed bei
+  fehlendem Passwort bleibt fuer einen spaeteren, geraeteweiten Schritt offen.
+
 - Erwartet/Verifikation: `test/profiles.test.js` (node:test, offline) beweist
   (nicht nur "gruen"): Profil-`*` widened das Land-Gate nicht (global `+49`
   blockt `+1`); `unrestricted` ruft eine nicht-gelistete `+49`-Nummer an (bis

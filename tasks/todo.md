@@ -413,6 +413,18 @@ Body-Felder wie `requestedBy`/`email` immer.
 - [x] **2.7 Doku**: `PLAN-SECURITY.md` Rechteprofile als umgesetzt; keine neuen
       Env-Vars (Profile sind Daten) -> `.env.example`/`render.yaml` unveraendert.
   - Ergebnis: `node --check` aller geaenderten Dateien gruen.
-- [ ] **2.8 Review**: unabhaengiger Subagent / `/security-review` adversarial gegen
+- [x] **2.8 Review**: unabhaengiger Subagent / `/security-review` adversarial gegen
       Absolute Regeln + Pre-Mortem (kein Profil ueber globale Limits, requestedBy
       nicht spoofbar, Tests beweisen Verhalten). Findings einarbeiten.
+  - Ergebnis: Verdikt "safe to ship: YES" gegen alle 6 Absoluten Regeln; alle
+    must-prove-Eigenschaften vom Code erzwungen + von Tests belegt. 3 S3-Findings:
+    (1) theoretischer Fail-open bei Token OHNE email UND sub -> behoben:
+    ANON_IDENTITY-Sentinel statt null/Owner (-> DEFAULT_PROFILE); neuer Test
+    "JWT ohne email UND sub -> requestedBy=anon". (2) `/api/profiles` ohne
+    DASHBOARD_PASSWORD offen = geerbte, dokumentierte Prototyp-Abweichung (gilt
+    fuer ganz `/api/*`, inkl. `/api/calls`) -> bewusst akzeptiert + in
+    PLAN-SECURITY.md begruendet (kein neuer Vektor; scharfes Fail-closed bleibt
+    fuer spaeter offen). (3) Anti-Spoof-Subtest uebersprungen ohne externe IP
+    (Projekt-Konvention, wie audit/security.test) -> zusaetzlicher IMMER laufender
+    Test "Body-Felder gelten nicht als Identitaet" ergaenzt. `npm test` 115/115
+    (2x stabil), `npm audit --audit-level=high` Exit 0.
