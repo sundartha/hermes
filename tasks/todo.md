@@ -305,6 +305,11 @@ offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
       bedeuten "Laender-Gate regelt" statt "Outbound gesperrt"? Bewusst
       entscheiden und dokumentieren; danach ggf. das letzte Gate optional machen.
       Komplettes Wegfallen pro Nutzer erst mit Phase 2 (Rechteprofile).
+  - **Betreiber-Entscheidung (2026-06-13): auf Phase 2 vertagt.** Bis dahin
+    bleibt die Allowlist das harte letzte Gate (leer = Outbound gesperrt) - KEINE
+    Lockerung autonom. Architektur ist vorbereitet: die Lockerung waere die letzte
+    Verzweigung in `numberGateError()` (leere Allowlist -> kein 403). Umsetzung
+    dann pro Nutzer mit den Rechteprofilen (Phase 2), nicht global.
 
 ## Verifikation Gesamt (Phase 0)
 
