@@ -202,8 +202,88 @@ Modus hinter `MCP_AUTH`, kein neuer Default.
   - Ergebnis: `npm test` -> pass 72/72 (vorher 61, +11 OAuth), ~6s;
     `npm audit --audit-level=high` -> "found 0 vulnerabilities".
 
-## Geparkt (nicht autonom, braucht Betreiber)
+## OAuth Rollout-Status (Stand: in Staging end-to-end gruen)
 
-- Schritt A: WorkOS-AuthKit-Account, DCR aktivieren, invite-only, Issuer-URL.
-- C3: End-to-End gegen claude.ai (Connector neu, Login-Fenster, Tool-Call).
-- Rollout-Schritte D (MCP_AUTH=oauth in Render scharf schalten).
+- [x] Schritt A: WorkOS-AuthKit-Account, Application angelegt, DCR + CIMD aktiv,
+      MCP Resource Indicator = `https://vodafone-agent.onrender.com/mcp`,
+      Issuer = `https://momentous-dune-52-staging.authkit.app` (Staging).
+- [x] Rollout D: Code auf master gemergt + von Render deployt; `OAUTH_ISSUER_URL`
+      + `MCP_AUTH=oauth` in Render gesetzt. Live verifiziert:
+      `/.well-known/oauth-protected-resource` listet Issuer + korrekte `resource`;
+      `POST /mcp` ohne Token -> 401 mit `WWW-Authenticate`/`resource_metadata`.
+- [x] C3: claude.ai-Connector hinzugefuegt -> WorkOS-Login erschienen ->
+      Tools geladen (vom Betreiber bestaetigt).
+- [ ] **Offen (Betreiber, vor Dauerbetrieb):** invite-only scharf schalten
+      (WorkOS "Sign up" aus, Team per Invite); Staging -> Production-Umgebung
+      (eigene authkit.app-Domain, `OAUTH_ISSUER_URL` umstellen).
+
+# Phase 0: Nummern-Regeln - Weg von der starren Allowlist
+
+Ziel des Betreibers: beliebige normale Nummern anrufen (z.B. Friseur), ohne sie
+vorher in `ALLOWED_NUMBERS` eintragen zu muessen. OAuth (Phase 1) ist die
+Voraussetzung (Identitaet via `req.auth`), ersetzt die Allowlist aber NICHT.
+Detailplan: `PLAN-PHASE1-OAUTH.md` (Phasen-Tabelle) bzw. Phase 0 dort.
+
+Leitsatz (Pre-Mortem, unbedingt einhalten): Die Allowlist ist aktuell die
+EINZIGE Bremse gegen das Waehlen beliebiger Nummern (Notruf, Premium, Ausland).
+Sie darf erst gelockert werden, wenn die Ersatz-Leitplanken (Denylist +
+Laender-Gate + Pro-Stunde-Limit) nachweislich greifen - vorher entstehen bei
+offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
+
+## Pre-Mortem (vor Umsetzung benannt)
+
+- **Denylist zu scharf**: blockt eine legitime Nummer, die zufaellig wie ein
+  Premium-Prefix aussieht. Gegenmassnahme: Prefixe eng fassen (z.B. `+49900`),
+  Test deckt ab, dass normale Mobilnummern (`+4915...`) durchkommen.
+- **Laender-Gate bricht bestehende Allowlist**: ein erlaubter `+1`-Eintrag faellt
+  bei Default `+49` raus. Gegenmassnahme: `scripts/check-setup.js` warnt bei
+  Widerspruch zwischen `ALLOWED_NUMBERS` und `ALLOWED_COUNTRY_CODES`.
+- **Allowlist zu frueh entfernt**: Toll-Fraud. Gegenmassnahme: Allowlist bleibt
+  letztes Gate, solange nicht bewusst (mit invite-only + Phase 2) anders entschieden.
+- **Notrufe sind nicht E.164**: `112` etc. kommen evtl. nicht als `+49112`.
+  Gegenmassnahme: Denylist prueft sowohl Kurzwahlen (roh) als auch Premium-Prefixe.
+
+## Aufgaben
+
+- [ ] **0.1 Notruf-/Premium-Denylist** (hardcoded, kein Env) in `src/server.js`:
+      Notruf-Kurzwahlen (110, 112, 911, 999), DE-Premium/Service
+      (`+49900`, `+49137`, `+49180`, `+49118`), Satellit/Intl-Premium
+      (`+870`, `+881`, `+882`, `+883`, `+979`).
+  - Soll: `POST /api/calls` an eine dieser Nummern -> 403 mit klarer Meldung,
+    `audit place_call_denied ... grund=denylist`; normale Nummer passiert das Gate.
+  - Verifikation: `test/number-gate.test.js` - je Prefix/Kurzwahl ein 403-Fall,
+    eine normale `+4915...`-Nummer kommt durch (bis zum naechsten Gate).
+- [ ] **0.2 Laender-Gate** `ALLOWED_COUNTRY_CODES` (kommasepariert, Default
+      `+49`, `*` = alle) in `config.js` + Gate in `src/server.js`.
+  - Soll: Nummer ohne erlaubten Laendercode -> 403; mit erlaubtem -> passiert;
+    `*` laesst alle durch.
+  - Verifikation: Test - `+49...` ok bei Default, `+1...` -> 403 bei Default,
+    beide ok bei `*`.
+- [ ] **0.3 Pro-Stunde-Call-Limit** `MAX_CALLS_PER_HOUR` (Default 6) in
+      `config.js`; Sliding-Window ueber Outbound-Call-Zeitstempel (eigenes Gate,
+      NICHT der bestehende Per-IP-Request-Limiter aus Phase 2.1).
+  - Soll: N+1-ter Outbound-Call innerhalb 1h -> 403/429 mit klarer Meldung.
+  - Verifikation: Test mit Limit 2 -> 3. Call geblockt (Calls im Store seeden
+    oder ueber den offline-testbaren place_call-Pfad).
+- [ ] **0.4 `allowlistError()` -> `numberGateError(to)`** zusammenfuehren,
+      Pruefreihenfolge: E.164 (existiert) -> Denylist (0.1) -> Laender-Gate (0.2)
+      -> Pro-Stunde-Limit (0.3) -> Allowlist (Bestand, letztes Gate).
+  - Soll: alle bisherigen Allowlist-/Budget-Tests bleiben gruen; neue Gates
+    greifen in genau dieser Reihenfolge.
+  - Verifikation: `npm test` (Altbestand + neue Faelle) gruen.
+- [ ] **0.5 Doku/Konfig**: `.env.example` + `render.yaml`
+      (`ALLOWED_COUNTRY_CODES`, `MAX_CALLS_PER_HOUR`); `scripts/check-setup.js`
+      warnt bei Allowlist/Laender-Gate-Widerspruch; PLAN-Status aktualisieren.
+  - Verifikation: `node --check`, `npm run check` ohne Crash.
+- [ ] **0.6 Entscheidung Allowlist-Lockerung (Betreiber, NICHT autonom)**:
+      Soll bei aktivem 0.1-0.3 + invite-only eine leere `ALLOWED_NUMBERS`
+      bedeuten "Laender-Gate regelt" statt "Outbound gesperrt"? Bewusst
+      entscheiden und dokumentieren; danach ggf. das letzte Gate optional machen.
+      Komplettes Wegfallen pro Nutzer erst mit Phase 2 (Rechteprofile).
+
+## Verifikation Gesamt (Phase 0)
+
+- `npm test` gruen (inkl. `test/number-gate.test.js`), `npm audit
+  --audit-level=high` Exit 0, Smoke-Test: gesperrte Nummer -> 403, normale
+  Nummer im erlaubten Land -> kommt durch (mit leerer Allowlist nur, falls 0.6
+  so entschieden).
