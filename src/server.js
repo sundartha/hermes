@@ -22,6 +22,19 @@ app.set("trust proxy", 1);
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
 const isLocalSocket = (req) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
 
+// Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools
+// laufen im selben Prozess und rufen die localhost-REST-API mit dem verifizierten
+// X-Internal-Identity-Header (aus req.auth.email im /mcp-Handler). Der Header wird
+// NUR von localhost-Sockets akzeptiert - von extern ist er faelschbar und wird
+// ignoriert (-> Owner). Body-Felder (requestedBy/email) NIE als Identitaet nutzen.
+function internalIdentity(req) {
+  if (!isLocalSocket(req)) return null;
+  const id = req.headers["x-internal-identity"];
+  return typeof id === "string" && id ? id : null;
+}
+// requestedBy-Marker fuer den Owner (localhost/stdio ohne Identitaet).
+const OWNER_ID = "owner";
+
 app.use(securityHeaders);
 
 // ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
@@ -105,11 +118,16 @@ function invalidText(name, value) {
   return null;
 }
 
-// ---- Nummern-Gates fuer Outbound-Calls (Safety, siehe tasks/todo.md Phase 0) ----
+// ---- Nummern-Gates fuer Outbound-Calls (Safety, siehe tasks/todo.md Phase 0+2) ----
 // Feste Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit
 // -> Allowlist (Bestand, LETZTES Gate, bleibt scharf). Die Denylist laeuft BEWUSST
 // vor der Formatpruefung: so erscheint eine Notruf-Kurzwahl (112) als bewusste
 // Sperre (403 denylist) und nicht als Formatfehler (400).
+//
+// Rechteprofile (Phase 2): das Profil kann das Land-Gate NUR weiter einschraenken
+// (Schnittmenge global ∩ profil), das Stundenlimit NUR senken (min global/profil)
+// und die Allowlist lockern (unrestricted/eigene Liste). Denylist, Land-Obergrenze,
+// globales Stundenlimit, Budget und Max-Dauer bleiben harte globale Obergrenzen.
 //
 // Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde
 // "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
@@ -119,26 +137,55 @@ const PREMIUM_PREFIXES = ["+49900", "+49137", "+49180", "+49118", "+870", "+881"
 const HOUR_MS = 60 * 60 * 1000;
 
 const isDenied = (to) => EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
-const countryAllowed = (to) =>
-  config.allowedCountryCodes.includes("*") || config.allowedCountryCodes.some((c) => to.startsWith(c));
-const hourlyCallLimitReached = () =>
-  store.countOutboundCallsSince(new Date(Date.now() - HOUR_MS).toISOString()) >= config.maxCallsPerHour;
+const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
 
-// Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
-function numberGateError(to) {
-  if (isDenied(to))
-    return { status: 403, grund: "denylist", message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.` };
-  if (!E164.test(to))
-    return { status: 400, grund: "format", message: "to muss E.164 sein, z.B. +4917212345678" };
-  if (!countryAllowed(to))
-    return { status: 403, grund: "land", message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.` };
-  if (hourlyCallLimitReached())
-    return { status: 429, grund: "stundenlimit", message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.` };
+// Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
+// nie ueber die globale Erlaubnis hinaus (Profil "*"/leer = keine Zusatz-Einschraenkung).
+function countryGateAllowed(to, profile) {
+  if (!matchesPrefix(to, config.allowedCountryCodes)) return false;
+  const p = profile.allowedCountryCodes;
+  return !p || !p.length || matchesPrefix(to, p);
+}
+
+const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
+// Globales Stundenlimit ueber ALLE Outbound-Calls (Bestand, harte Obergrenze).
+const globalHourReached = () => store.countOutboundCallsSince(hourWindowStart()) >= config.maxCallsPerHour;
+// Pro-Nutzer-Stundenlimit: effektiv min(global, profil) - ein Profil kann nur senken.
+function userHourReached(profile, requestedBy) {
+  const limit =
+    profile.maxCallsPerHour == null
+      ? config.maxCallsPerHour
+      : Math.min(config.maxCallsPerHour, profile.maxCallsPerHour);
+  return store.countOutboundCallsSince(hourWindowStart(), requestedBy) >= limit;
+}
+
+// Allowlist (letztes Gate): profil.unrestricted ODER eine Nummer in der eigenen
+// Profil-Allowlist heben die globale Allowlist auf - sonst gilt sie unveraendert
+// (Bestand). Hebt NUR die Allowlist auf, alle Gates davor liefen schon.
+function allowlistError(to, profile) {
+  if (profile.unrestricted) return null;
+  if (profile.allowedNumbers?.includes(to)) return null;
   if (!config.allowedNumbers.length)
     return { status: 403, grund: "allowlist", message: "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt." };
   if (!config.allowedNumbers.includes(to))
     return { status: 403, grund: "allowlist", message: `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.` };
   return null;
+}
+
+// Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
+// profile/requestedBy steuern Land-Schnittmenge, pro-Nutzer-Limit und Allowlist.
+function numberGateError(to, profile, requestedBy) {
+  if (isDenied(to))
+    return { status: 403, grund: "denylist", message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.` };
+  if (!E164.test(to))
+    return { status: 400, grund: "format", message: "to muss E.164 sein, z.B. +4917212345678" };
+  if (!countryGateAllowed(to, profile))
+    return { status: 403, grund: "land", message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.` };
+  if (globalHourReached())
+    return { status: 429, grund: "stundenlimit", message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.` };
+  if (userHourReached(profile, requestedBy))
+    return { status: 429, grund: "stundenlimit_nutzer", message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut." };
+  return allowlistError(to, profile);
 }
 
 function gatherTurn(vr, call, text) {
@@ -334,11 +381,16 @@ app.post("/api/calls", async (req, res) => {
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
 
+  // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
+  const identity = internalIdentity(req);
+  const profile = store.resolveProfile(identity);
+  const requestedBy = identity || OWNER_ID;
+
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
-  const gateErr = numberGateError(to);
+  const gateErr = numberGateError(to, profile, requestedBy);
   if (gateErr) {
     // 400 = Eingabe-/Formatfehler, keine Sicherheits-Ablehnung -> nicht auditieren.
-    if (gateErr.status !== 400) audit("place_call_denied", req, `to=${to} grund=${gateErr.grund}`);
+    if (gateErr.status !== 400) audit("place_call_denied", req, `to=${to} grund=${gateErr.grund} requestedBy=${requestedBy}`);
     return res.status(gateErr.status).json({ error: gateErr.message });
   }
 
@@ -365,8 +417,9 @@ app.post("/api/calls", async (req, res) => {
     callerName: b.caller_name,
     language: b.language || "de",
     maxDurationS: maxDur,
+    requestedBy,
   });
-  audit("place_call", req, `to=${to} call=${call.id}`);
+  audit("place_call", req, `to=${to} call=${call.id} requestedBy=${requestedBy}`);
 
   try {
     const tw = await twilioClient().calls.create({
@@ -449,6 +502,13 @@ app.post("/api/action-items/:id/toggle", (req, res) => {
 });
 
 app.post("/api/calendar", (req, res) => {
+  // Booking-Recht (Phase 2): Owner/null erlaubt, restriktives Profil (allowBooking
+  // false) wird abgewiesen. Identitaet nur vom localhost-Header, nie aus dem Body.
+  const identity = internalIdentity(req);
+  if (!store.resolveProfile(identity).allowBooking) {
+    audit("booking_denied", req, `requestedBy=${identity || OWNER_ID}`);
+    return res.status(403).json({ error: "Kein Recht, Termine zu buchen (allowBooking=false)." });
+  }
   const { title, start, end } = req.body || {};
   if (!title || !start || !end) return res.status(400).json({ error: "title, start, end sind Pflicht" });
   const titleErr = invalidText("title", title);
@@ -462,15 +522,45 @@ app.post("/api/calendar", (req, res) => {
   res.json(store.addCalendarEvent(title, startDate.toISOString(), endDate.toISOString()));
 });
 
+// ---- Rechteprofile verwalten (Phase 2) ----
+// Hinter Basic-Auth (Bestand deckt /api/* ab). OAuth-MCP-Nutzer erreichen nur
+// /mcp, nie /api/* -> kein Self-Service. Es gibt bewusst KEIN MCP-Tool dafuer.
+const EMAIL_MAX_LEN = 254; // RFC 5321
+const validEmail = (e) => typeof e === "string" && e.length > 0 && e.length <= EMAIL_MAX_LEN && e.includes("@");
+
+app.get("/api/profiles", (_req, res) => res.json(store.listProfiles()));
+
+app.post("/api/profiles", (req, res) => {
+  const { email, ...fields } = req.body || {};
+  if (!validEmail(email)) return res.status(400).json({ error: "email (mit @) ist Pflicht" });
+  const { profile, changed } = store.setProfile(email, fields);
+  // Nur email + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
+  audit("profile_update", req, `email=${email} keys=${changed.join(",") || "-"}`);
+  res.json({ email, profile });
+});
+
+app.delete("/api/profiles/:email", (req, res) => {
+  const { email } = req.params;
+  if (!store.deleteProfile(email)) return res.status(404).json({ error: "not found" });
+  audit("profile_delete", req, `email=${email}`);
+  res.json({ ok: true });
+});
+
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
 // Auth via mcpAuth-Middleware (src/auth.js): Legacy-Bearer-Token, statisches
 // Token oder OAuth 2.1 (MCP_AUTH). Fail-closed bleibt Default (nur localhost).
 app.post("/mcp", mcpAuth, async (req, res) => {
   if (req.auth) console.log("[mcp]", req.auth.email || "anonym", req.body?.method || "");
+  // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub
+  // (Fail-closed: ein authentifizierter Nutzer OHNE email-Claim wird NICHT zum
+  // Owner, sondern bekommt das restriktive DEFAULT_PROFILE). Kein req.auth
+  // (Legacy/localhost/stdio) -> null -> Owner.
+  const identity = req.auth ? req.auth.email || req.auth.sub || null : null;
+  const profile = store.resolveProfile(identity);
   try {
     const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });
-    registerTools(server);
+    registerTools(server, { identity, allowCalendar: profile.allowCalendar });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       transport.close();

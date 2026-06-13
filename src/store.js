@@ -27,6 +27,9 @@ const defaults = () => ({
   ],
   usage: { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 },
   notifications: [], // {id, title, body, at, callId}
+  // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
+  // Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
+  profiles: {},
 });
 
 function nextWeekday(daysAhead, hour) {
@@ -47,6 +50,7 @@ export function load() {
     state.settings = { ...d.settings, ...state.settings };
     state.usage = { ...d.usage, ...state.usage };
     state.notifications ||= [];
+    state.profiles ||= {};
   } catch {
     state = defaults();
     save();
@@ -64,7 +68,7 @@ export function newId(prefix) {
 }
 
 // ---- Calls ----
-export function createCall({ direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS }) {
+export function createCall({ direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS, requestedBy }) {
   const s = load();
   const call = {
     id: newId("call"),
@@ -82,6 +86,9 @@ export function createCall({ direction, from, to, goal, twilioSid, briefing, con
     callerName: callerName || null,
     language: language || "de",
     maxDurationS: maxDurationS || null,
+    // Wer den Call ausgeloest hat: <email> bei authentifizierten MCP-Nutzern,
+    // sonst "owner" (localhost/stdio). Fuer Audit + pro-Nutzer-Stundenlimit.
+    requestedBy: requestedBy || null,
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,
@@ -129,10 +136,16 @@ export function endCallRecord(callId, status = "completed") {
 }
 
 // Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers
-// Pro-Stunde-Gate in server.js). Zaehlt bewusst ALLE Outbound-Records, auch
-// fehlgeschlagene - konservative Kosten-/Toll-Fraud-Bremse.
-export function countOutboundCallsSince(sinceIso) {
-  return load().calls.filter((c) => c.direction === "outbound" && c.startedAt >= sinceIso).length;
+// Pro-Stunde-Gate in server.js). Ohne requestedBy: ALLE Outbound-Records (globale
+// Bremse, Bestand). Mit requestedBy: nur die Calls dieses Nutzers (pro-Nutzer-
+// Limit). Zaehlt bewusst auch fehlgeschlagene - konservative Toll-Fraud-Bremse.
+export function countOutboundCallsSince(sinceIso, requestedBy = null) {
+  return load().calls.filter(
+    (c) =>
+      c.direction === "outbound" &&
+      c.startedAt >= sinceIso &&
+      (requestedBy == null || c.requestedBy === requestedBy)
+  ).length;
 }
 
 // ---- Action Items ----
@@ -256,4 +269,101 @@ export function updateSettings(patch) {
   }
   save();
   return { settings: s.settings, changed };
+}
+
+// ---- Rechteprofile pro Nutzer (Phase 2) ----
+// Ein Profil kann die GLOBALE Allowlist fuer einen Nutzer lockern
+// (unrestricted / eigene allowedNumbers). Alle anderen Gates (Denylist, Land,
+// Stunde, Budget, Max-Dauer) bleiben harte Obergrenzen - ein Profil kann sie nur
+// WEITER einschraenken (Land-Schnittmenge, min-Stundenlimit), nie aufweichen.
+
+// Profil-Felder mit erwartetem Typ (Whitelist gegen sanitizeProfile, analog
+// updateSettings). "string[]" = Array aus Strings.
+const PROFILE_FIELDS = {
+  allowedNumbers: "string[]", // eigene Allowlist (zusaetzlich zur globalen)
+  allowedCountryCodes: "string[]", // engt das globale Land-Gate weiter ein (nie auf)
+  unrestricted: "boolean", // hebt die GLOBALE Allowlist auf (nur die Allowlist!)
+  allowCalendar: "boolean", // get_calendar-MCP-Tool
+  allowBooking: "boolean", // POST /api/calendar
+  maxCallsPerHour: "number", // pro-Nutzer-Stundenlimit (effektiv min(global, profil))
+};
+
+// Default-Profil: kleines Stundenlimit (fail-closed fuer profillose Nutzer).
+const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 2;
+
+// Owner = localhost/stdio ohne Identitaet: permissiv = heutiges Verhalten. Die
+// globale Allowlist greift weiter (unrestricted=false, leere Profil-Allowlist),
+// kein Zusatz-Stundenlimit (maxCallsPerHour=null -> effektiv global), Kalender/
+// Booking erlaubt. So bleiben die Phase-0-Tests (localhost = Owner) gruen.
+const OWNER_PROFILE = {
+  allowedNumbers: [],
+  allowedCountryCodes: [],
+  unrestricted: false,
+  allowCalendar: true,
+  allowBooking: true,
+  maxCallsPerHour: null,
+};
+
+// Default = authentifiziert, aber (noch) ohne Profil: fail-closed/restriktiv.
+// Keine Allowlist-Lockerung, kleines Stundenlimit, kein Kalender/Booking.
+const DEFAULT_PROFILE = {
+  allowedNumbers: [],
+  allowedCountryCodes: [],
+  unrestricted: false,
+  allowCalendar: false,
+  allowBooking: false,
+  maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
+};
+
+// Effektives Profil fuer eine Identitaet. null/leer (localhost/stdio ohne JWT)
+// -> Owner. Bekannte Identitaet -> gespeichertes Profil ueber DEFAULT gemerged
+// (fehlende Felder fallen restriktiv zurueck). Unbekannt -> DEFAULT.
+export function resolveProfile(email) {
+  if (!email) return { ...OWNER_PROFILE };
+  const stored = load().profiles[email];
+  return stored ? { ...DEFAULT_PROFILE, ...stored } : { ...DEFAULT_PROFILE };
+}
+
+// Whitelist gegen PROFILE_FIELDS (Key + Typ). Unbekannte Keys / falsche Typen
+// werden verworfen. allowedNumbers wird wie config.allowedNumbers normalisiert,
+// damit der Gate-Vergleich gegen E.164 trifft; Laendercodes nur getrimmt.
+function sanitizeProfile(patch) {
+  const clean = {};
+  for (const [key, value] of Object.entries(patch || {})) {
+    const type = PROFILE_FIELDS[key];
+    if (!type) continue;
+    if (type === "string[]") {
+      if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
+        clean[key] =
+          key === "allowedNumbers"
+            ? value.map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean)
+            : value.map((c) => c.trim()).filter(Boolean);
+      }
+    } else if (typeof value === type) {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
+export function listProfiles() {
+  return load().profiles;
+}
+
+// Legt ein Profil an oder ergaenzt es (Merge der sanitisierten Felder). Liefert
+// das gespeicherte Profil + die uebernommenen Keys (fuers Audit-Log, ohne Werte).
+export function setProfile(email, patch) {
+  const s = load();
+  const clean = sanitizeProfile(patch);
+  s.profiles[email] = { ...(s.profiles[email] || {}), ...clean };
+  save();
+  return { profile: s.profiles[email], changed: Object.keys(clean) };
+}
+
+export function deleteProfile(email) {
+  const s = load();
+  if (!(email in s.profiles)) return false;
+  delete s.profiles[email];
+  save();
+  return true;
 }

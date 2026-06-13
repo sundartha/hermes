@@ -317,3 +317,106 @@ offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
   --audit-level=high` Exit 0, Smoke-Test: gesperrte Nummer -> 403, normale
   Nummer im erlaubten Land -> kommt durch (mit leerer Allowlist nur, falls 0.6
   so entschieden).
+
+# Phase 2: Rechteprofile pro Nutzer
+
+Setzt 0.6 um: pro authentifiziertem MCP-Nutzer (OAuth-Identitaet aus `req.auth`)
+ein Rechteprofil. Ein Profil kann eine eigene `allowedNumbers`-Liste haben UND
+optional `unrestricted: true` (hebt die GLOBALE Allowlist fuer diesen Nutzer auf).
+In ALLEN Faellen bleiben Denylist, Land-Gate, Pro-Stunde-Limit, Budget, Max-Dauer,
+Disclosure und Twilio-Signatur unveraenderte HARTE Obergrenzen (ein Profil kann
+nur einschraenken, nie ueber die globalen Limits hinaus erweitern).
+
+Identitaet ist serverseitig und NIE aus dem Request-Body: das `/mcp`-handle hat
+`req.auth.email` (verifiziertes JWT); sie wird als interner Header
+`X-Internal-Identity` an die localhost-`/api/calls` gereicht. Das Gateway
+akzeptiert diesen Header NUR von localhost-Sockets (sonst spoofbar) und ignoriert
+Body-Felder wie `requestedBy`/`email` immer.
+
+## Pre-Mortem (Risiken, vor Umsetzung benannt)
+
+- **Profil erweitert ueber globale Limits hinaus** (z.B. `unrestricted` umgeht
+  versehentlich auch Denylist/Land/Stunde -> Toll-Fraud/Notruf). Gegenmassnahme:
+  `unrestricted`/Profil-Allowlist heben AUSSCHLIESSLICH die Allowlist auf; alle
+  anderen Gates laufen davor und unveraendert. Land = Schnittmenge(global, profil)
+  (Profil `*` widened NICHT), Stunde = global UND min(global, profil). Tests (c)/(d)
+  beweisen das.
+- **`X-Internal-Identity` von extern spoofbar** -> Privilege Escalation. Gegen-
+  massnahme: Header nur von `isLocalSocket(req)` akzeptiert; Body-Identitaet immer
+  ignoriert. Test (b) beweist: externer Header wird ignoriert (Owner-Verhalten).
+- **Fail-open bei Token ohne `email`-Claim** -> `email||null` waere `null` =
+  Owner = volle Rechte. Gegenmassnahme: Identitaet = `req.auth.email || req.auth.sub`
+  (nur wenn `req.auth` fehlt -> null -> Owner; das ist stdio/localhost-Legacy).
+  Authentifiziert ohne Profil -> DEFAULT_PROFILE (restriktiv), nicht Owner.
+- **Profile landen unter `settings`** und werden von `updateSettings`/der
+  Settings-Whitelist anfassbar/leakbar. Gegenmassnahme: eigener Top-Level-Key
+  `profiles`; `updateSettings` faesst ihn nicht an. Test (e) beweist:
+  `POST /api/settings {profiles:...}` aendert nichts.
+- **Owner-Verhalten bricht (Phase-0-Tests rot)**: localhost ohne Identitaet muss
+  weiter exakt wie heute laufen. Gegenmassnahme: OWNER_PROFILE = permissiv
+  (globale Allowlist greift weiter, kein Zusatz-Limit, Kalender/Booking erlaubt);
+  `resolveProfile(null) === OWNER_PROFILE`. Altbestand bleibt gruen.
+- **Selbst-Bedienung der Profile durch MCP-Nutzer**: `/api/profiles` hinter
+  Basic-Auth; OAuth-MCP-Nutzer erreichen nur `/mcp`, nicht `/api/*` -> kein
+  Self-Service. Kein MCP-Tool fuer Profilverwaltung.
+
+## Aufgaben
+
+- [ ] **2.1 Store (`src/store.js`)**: Top-Level-Key `profiles` ({} in `defaults()`
+      + Migration in `load()`); `OWNER_PROFILE` (permissiv) / `DEFAULT_PROFILE`
+      (restriktiv) als Konstanten; `resolveProfile(email)` (null->Owner, bekannt->
+      DEFAULT+stored, unbekannt->DEFAULT); `setProfile/deleteProfile/listProfiles`;
+      `sanitizeProfile()` (Whitelist+Typ wie `updateSettings`, inkl. `string[]`-
+      Pruefung + Nummern-Normalisierung); `countOutboundCallsSince(sinceIso,
+      requestedBy=null)` um `requestedBy`-Filter erweitern; `createCall` speichert
+      `requestedBy`.
+  - Soll: `resolveProfile(null)` permissiv; `resolveProfile("fremd@x")` ohne
+    Eintrag == DEFAULT (restriktiv); `sanitizeProfile` wirft Fremd-Keys/falsche
+    Typen weg; `countOutboundCallsSince(iso, "a@x")` zaehlt nur Calls mit
+    `requestedBy==="a@x"`, ohne Arg weiter ALLE Outbound.
+  - Verifikation: Unit-Asserts in `test/profiles.test.js` (offline) + Altbestand.
+- [ ] **2.2 Gateway-Gates (`src/server.js`)**: `internalIdentity(req)` (nur
+      localhost, sonst null; Body ignoriert); `numberGateError(to, profile,
+      requestedBy)` - Reihenfolge Denylist->E.164->Land->Stunde->Allowlist, aber
+      Land=Schnittmenge(global,profil), Stunde=global UND min(global,profil) pro
+      Nutzer, Allowlist=`unrestricted`/Profil-Allowlist heben sie auf, sonst global;
+      `/api/calls` resolved Profil + `requestedBy`, Audit `place_call`/
+      `place_call_denied` um `requestedBy=<email|owner>` ergaenzt.
+  - Soll: (c) Profil-Land `*` bei global `+49` blockt `+1`; unrestricted-Profil
+    ruft nicht-gelistete `+49`-Nummer an (500). (d) global erschoepft -> frischer
+    Nutzer trotzdem 429. (b) externer `X-Internal-Identity` ignoriert.
+  - Verifikation: `test/profiles.test.js` (b)(c)(d), Altbestand gruen.
+- [ ] **2.3 MCP-Identitaet (`src/mcp-tools.js`, `src/server.js`)**:
+      `registerTools(server, {identity, allowCalendar})`; `call()`-Closure reicht
+      `X-Internal-Identity` durch; `/mcp` uebergibt `identity = req.auth ?
+      (req.auth.email||req.auth.sub) : null` + `allowCalendar` aus resolvtem Profil;
+      `get_calendar`-Tool nur wenn `allowCalendar`; stdio bleibt `registerTools(server)`.
+  - Soll: e2e ueber `/mcp` mit JWT(email) -> `place_call` -> Audit
+    `requestedBy=<email>` (per `waitForLog`); JWT ohne email -> `requestedBy=<sub>`
+    (NICHT owner).
+  - Verifikation: `test/profiles.test.js` e2e via Mini-IdP.
+- [ ] **2.4 Booking-Gate (`src/server.js`)**: `POST /api/calendar` prueft
+      `profile.allowBooking` (Owner/null = erlaubt, DEFAULT_PROFILE = 403).
+  - Soll: localhost ohne Identitaet -> 200 (Owner); `X-Internal-Identity` eines
+    profillosen Nutzers -> 403.
+  - Verifikation: `test/profiles.test.js`.
+- [ ] **2.5 Verwaltung (`src/server.js`)**: `GET /api/profiles`,
+      `POST /api/profiles` (`{email, ...felder}` -> sanitize+set), `DELETE
+      /api/profiles/:email`, alle hinter Basic-Auth (Bestand deckt `/api/*`);
+      Audit `profile_update`/`profile_delete` (nur email+keys, keine Werte).
+  - Soll: POST legt Profil an (GET zeigt es), DELETE entfernt es; Audit-Zeilen
+    ohne Werte.
+  - Verifikation: `test/profiles.test.js`.
+- [ ] **2.6 Tests**: `test/profiles.test.js` (node:test, offline); `startIdp`
+      aus `test/oauth.test.js` nach `test/helpers.js` extrahiert + wiederverwendet.
+      Offline-Twilio-Trick (`TWILIO_ACCOUNT_SID:""` -> durchgelassen 500, Sperre
+      403/429). Keine neuen Env-Vars (Profile sind Daten).
+  - Soll: alle must-prove-Faelle (b,c,d,e,e2e) beweisen Verhalten, nicht nur gruen.
+  - Verifikation: `npm test` gruen (Altbestand + neu), `npm audit
+    --audit-level=high` Exit 0.
+- [ ] **2.7 Doku**: `PLAN-SECURITY.md` Rechteprofile als umgesetzt; CLAUDE.md/
+      README nur falls noetig (keine neuen Env-Vars).
+  - Verifikation: `node --check` aller geaenderten Dateien.
+- [ ] **2.8 Review**: unabhaengiger Subagent / `/security-review` adversarial gegen
+      Absolute Regeln + Pre-Mortem (kein Profil ueber globale Limits, requestedBy
+      nicht spoofbar, Tests beweisen Verhalten). Findings einarbeiten.

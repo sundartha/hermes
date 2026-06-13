@@ -5,10 +5,15 @@ import { z } from "zod";
 // Zur Aufrufzeit lesen (server.js setzt GATEWAY_URL ggf. erst beim Start)
 const GATEWAY = () => (process.env.GATEWAY_URL || "http://localhost:3000").replace(/\/$/, "");
 
-async function api(method, path, body) {
+// identity (optional): wird als interner X-Internal-Identity-Header an die
+// localhost-REST-API gereicht (Rechteprofile, Phase 2). Das Gateway akzeptiert
+// den Header nur von localhost-Sockets. Ohne identity -> Owner-Verhalten.
+async function api(method, path, body, identity) {
+  const headers = { "Content-Type": "application/json" };
+  if (identity) headers["X-Internal-Identity"] = identity;
   const res = await fetch(GATEWAY() + path, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => ({}));
@@ -30,7 +35,12 @@ function durationS(c) {
   return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
 }
 
-export function registerTools(server) {
+// ctx (Phase 2): { identity, allowCalendar }. identity wird per Closure an jeden
+// REST-Aufruf gehaengt (X-Internal-Identity). allowCalendar steuert, ob das
+// get_calendar-Tool ueberhaupt registriert wird. stdio ruft registerTools(server)
+// ohne ctx -> identity null (Owner), allowCalendar true.
+export function registerTools(server, { identity = null, allowCalendar = true } = {}) {
+  const call = (method, path, body) => api(method, path, body, identity);
   server.tool(
     "place_call",
     "Startet einen echten Telefonanruf des KI-Agenten an eine Nummer aus der Allowlist und verfolgt dabei das angegebene Ziel. Gibt sofort eine call_id zurueck. WICHTIG: Danach alle ~10 Sekunden get_call_status aufrufen, bis status=completed, und erst dann mit get_transcript das Ergebnis holen.",
@@ -44,7 +54,7 @@ export function registerTools(server) {
       caller_name: z.string().optional().describe("Name des Auftraggebers fuer die Offenlegung am Gespraechsbeginn."),
     },
     async (args) => {
-      const r = await api("POST", "/api/calls", args);
+      const r = await call("POST", "/api/calls", args);
       return text({ call_id: r.callId, status: "dialing" });
     }
   );
@@ -54,7 +64,7 @@ export function registerTools(server) {
     "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Waehrend eines laufenden Anrufs alle ~10 Sekunden aufrufen.",
     { call_id: z.string().describe("Die call_id aus place_call") },
     async ({ call_id }) => {
-      const c = await api("GET", `/api/calls/${call_id}`);
+      const c = await call("GET", `/api/calls/${call_id}`);
       return text({
         status: mapStatus(c),
         duration_s: durationS(c),
@@ -68,7 +78,7 @@ export function registerTools(server) {
     "Liefert nach Gespraechsende das Volltranskript, eine Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Erst aufrufen, wenn get_call_status status=completed meldet.",
     { call_id: z.string().describe("Die call_id aus place_call") },
     async ({ call_id }) => {
-      const c = await api("GET", `/api/calls/${call_id}`);
+      const c = await call("GET", `/api/calls/${call_id}`);
       if (c.status === "active") return text({ error: "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen." });
       return text({
         transcript: c.transcript.map((t) => ({ role: t.role === "agent" ? "agent" : "callee", text: t.text, t: t.at })),
@@ -83,7 +93,7 @@ export function registerTools(server) {
     "Bricht einen laufenden Anruf sauber ab.",
     { call_id: z.string().describe("Die call_id aus place_call") },
     async ({ call_id }) => {
-      await api("POST", `/api/calls/${call_id}/cancel`);
+      await call("POST", `/api/calls/${call_id}/cancel`);
       return text({ status: "cancelled" });
     }
   );
@@ -93,7 +103,7 @@ export function registerTools(server) {
     "Liefert die Rufnummer des Telefon-Agenten (die Twilio-Nummer).",
     {},
     async () => {
-      const s = await api("GET", "/api/state");
+      const s = await call("GET", "/api/state");
       return text({ number: s.agent.number });
     }
   );
@@ -104,7 +114,7 @@ export function registerTools(server) {
     "Listet die letzten Telefonate des Agenten (inbound und outbound) mit Status und Summary.",
     {},
     async () => {
-      const s = await api("GET", "/api/state");
+      const s = await call("GET", "/api/state");
       if (!s.calls.length) return text("Noch keine Anrufe.");
       return text(
         s.calls
@@ -119,30 +129,33 @@ export function registerTools(server) {
     "Listet offene Action Items aus allen Telefonaten.",
     {},
     async () => {
-      const s = await api("GET", "/api/state");
+      const s = await call("GET", "/api/state");
       const open = s.actionItems.filter((a) => !a.done);
       if (!open.length) return text("Keine offenen Action Items.");
       return text(open.map((a) => `[${a.id}] ${a.type === "appointment" ? "(Termin) " : ""}${a.text}`).join("\n"));
     }
   );
 
-  server.tool(
-    "get_calendar",
-    "Zeigt die naechsten Kalendereintraege des Besitzers.",
-    {},
-    async () => {
-      const s = await api("GET", "/api/state");
-      if (!s.calendar.length) return text("Kalender ist leer.");
-      return text(s.calendar.map((e) => `${e.title}: ${fmt(e.start)} bis ${fmt(e.end)}`).join("\n"));
-    }
-  );
+  // Kalender-Tool nur registrieren, wenn das Profil es erlaubt (Phase 2). Ein
+  // restriktives Profil sieht get_calendar gar nicht erst.
+  if (allowCalendar)
+    server.tool(
+      "get_calendar",
+      "Zeigt die naechsten Kalendereintraege des Besitzers.",
+      {},
+      async () => {
+        const s = await call("GET", "/api/state");
+        if (!s.calendar.length) return text("Kalender ist leer.");
+        return text(s.calendar.map((e) => `${e.title}: ${fmt(e.start)} bis ${fmt(e.end)}`).join("\n"));
+      }
+    );
 
   server.tool(
     "get_agent_status",
     "Status des Telefon-Agenten: Rufnummer, Voice-Engine, Modell, Kosten/Budget, Berechtigungen.",
     {},
     async () => {
-      const s = await api("GET", "/api/state");
+      const s = await call("GET", "/api/state");
       return text(
         `Agent-Nummer: ${s.agent.number}\nBesitzer: ${s.agent.owner}\nVoice-Engine: ${s.agent.voiceEngine}\nModell: ${s.agent.model}\n` +
           `Calls bisher: ${s.usage.calls}\nKI-Kosten: ${s.usage.costEur.toFixed(3)} EUR von max. ${s.usage.maxBudgetEur} EUR\n` +
