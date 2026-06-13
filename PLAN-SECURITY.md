@@ -72,7 +72,15 @@ globalen Limits hinaus erweitern.
   hinter Basic-Auth (Bestand deckt `/api/*` ab; OAuth-MCP-Nutzer erreichen nur
   `/mcp`, nie `/api/*` -> kein Self-Service, kein MCP-Tool dafuer). Audit
   `profile_update`/`profile_delete` (nur email + Keys, keine Werte).
-- Keine neuen Env-Vars (Profile sind Daten im Store).
+- **Profil-Schluessel = serverseitige Identitaet**: `req.auth.email`, wenn der IdP
+  eine email im Token liefert, SONST `req.auth.sub` (z.B. WorkOS `user_01...`). Die
+  Verwaltungs-API erzwingt daher keine Email-Form, nur einen nicht-leeren String
+  ohne Whitespace.
+- **`PROFILES_JSON`** (Env-Var): Profile werden beim Start aus dieser JSON in den
+  Store geseedet (sanitisiert, kaputtes JSON crasht den Start nicht). Noetig, weil
+  Render (free plan) ein fluechtiges Dateisystem hat - per-API angelegte Profile
+  ueberleben dort keinen Neustart, ueber `PROFILES_JSON` gesetzte schon. Format:
+  `{"<email|sub>":{"unrestricted":true,"maxCallsPerHour":6}}`.
 
 - Bewusst akzeptiertes (geerbtes) Risiko: Wie das gesamte `/api/*` (inkl. des
   Call-ausloesenden `/api/calls`) sind auch `/api/profiles` ohne gesetztes

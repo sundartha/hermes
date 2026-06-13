@@ -428,3 +428,15 @@ Body-Felder wie `requestedBy`/`email` immer.
     (Projekt-Konvention, wie audit/security.test) -> zusaetzlicher IMMER laufender
     Test "Body-Felder gelten nicht als Identitaet" ergaenzt. `npm test` 115/115
     (2x stabil), `npm audit --audit-level=high` Exit 0.
+
+## Nachtrag (Produktion, nach Live-Test mit WorkOS)
+
+- WorkOS-Access-Token traegt KEINE email -> Identitaet = `req.auth.sub`
+  (`user_01...`). Profil-Schluessel daher = email ODER sub; Verwaltungs-API
+  akzeptiert jetzt jede nicht-leere Identitaet ohne Whitespace (vorher `@`-Pflicht).
+- Render free plan = fluechtiges Dateisystem -> per-API angelegte Profile sind nach
+  jedem Neustart weg. Loesung: **`PROFILES_JSON`** (Env-Var) seedet Profile beim
+  Start (sanitisiert, fail-safe bei kaputtem JSON). Smoke-Test mit echtem sub:
+  geseedet -> Call passiert die Allowlist (500), ohne Identitaet -> 403.
+- Tool-Beschreibung von `place_call` entschaerft (nicht mehr "muss in der Allowlist
+  stehen", sondern "Server-Safety-Gates entscheiden"). `npm test` 121/121.

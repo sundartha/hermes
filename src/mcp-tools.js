@@ -43,9 +43,9 @@ export function registerTools(server, { identity = null, allowCalendar = true } 
   const call = (method, path, body) => api(method, path, body, identity);
   server.tool(
     "place_call",
-    "Startet einen echten Telefonanruf des KI-Agenten an eine Nummer aus der Allowlist und verfolgt dabei das angegebene Ziel. Gibt sofort eine call_id zurueck. WICHTIG: Danach alle ~10 Sekunden get_call_status aufrufen, bis status=completed, und erst dann mit get_transcript das Ergebnis holen.",
+    "Startet einen echten Telefonanruf des KI-Agenten an eine Telefonnummer und verfolgt dabei das angegebene Ziel. Welche Ziele erlaubt sind, entscheidet der Server ueber seine Safety-Gates (Rechteprofil/Allowlist, Denylist, Land, Limits) - einfach aufrufen; unerlaubte Ziele weist der Server mit einer klaren Meldung ab. Gibt sofort eine call_id zurueck. WICHTIG: Danach alle ~10 Sekunden get_call_status aufrufen, bis status=completed, und erst dann mit get_transcript das Ergebnis holen.",
     {
-      to: z.string().describe("Zielrufnummer in E.164, z.B. +4917212345678. Muss in der Allowlist (ALLOWED_NUMBERS) stehen."),
+      to: z.string().describe("Zielrufnummer in E.164, z.B. +4917212345678. Wird serverseitig durch die Safety-Gates geprueft (Rechteprofil/Allowlist, Denylist, Land)."),
       objective: z.string().describe("Das Ziel des Anrufs in einem Satz, z.B. 'Vereinbare einen Friseurtermin fuer Samstag vormittag.'"),
       briefing: z.string().optional().describe("Kontext fuer den Agenten (Namen, Vorlieben, Hintergrund)."),
       constraints: z.string().optional().describe("Einschraenkungen, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro.'"),

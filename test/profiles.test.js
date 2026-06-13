@@ -210,6 +210,13 @@ test("Profil-Verwaltung: POST/GET/DELETE + Audit ohne Werte", async (t) => {
       assert.equal((await postJson(`${srv.localUrl}/api/profiles`, { unrestricted: true })).status, 400);
     });
 
+    await t.test("IdP-sub (kein @) ist als Schluessel erlaubt; Whitespace nicht", async () => {
+      const ok = await postJson(`${srv.localUrl}/api/profiles`, { email: "user_01TESTKEY", unrestricted: true });
+      assert.equal(ok.status, 200);
+      assert.ok("user_01TESTKEY" in srv.readStore().profiles);
+      assert.equal((await postJson(`${srv.localUrl}/api/profiles`, { email: "a b", unrestricted: true })).status, 400);
+    });
+
     await t.test("DELETE entfernt das Profil + Audit", async () => {
       const res = await fetch(`${srv.localUrl}/api/profiles/${encodeURIComponent("dora@team.test")}`, { method: "DELETE" });
       assert.equal(res.status, 200);
@@ -221,6 +228,42 @@ test("Profil-Verwaltung: POST/GET/DELETE + Audit ohne Werte", async (t) => {
       const res = await fetch(`${srv.localUrl}/api/profiles/${encodeURIComponent("nobody@x")}`, { method: "DELETE" });
       assert.equal(res.status, 404);
     });
+  } finally {
+    await srv.stop();
+  }
+});
+
+// ---- PROFILES_JSON: Seed beim Start (persistiert ueber Render-Neustarts) ----
+test("PROFILES_JSON seedet Profile beim Start", async (t) => {
+  const srv = await startServer({
+    env: {
+      PROFILES_JSON: JSON.stringify({ user_01PERSIST: { unrestricted: true, evil: "x" } }),
+      ALLOWED_NUMBERS: "",
+      ALLOWED_COUNTRY_CODES: "*",
+      ...OFFLINE,
+    },
+  });
+  try {
+    await t.test("GET /api/profiles zeigt das geseedete Profil (sanitisiert)", async () => {
+      const profiles = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
+      assert.equal(profiles.user_01PERSIST?.unrestricted, true);
+      assert.equal("evil" in profiles.user_01PERSIST, false, "Fremd-Key muss sanitisiert sein");
+    });
+
+    await t.test("geseedetes unrestricted-Profil hebt die Allowlist auf -> 500", async () => {
+      const res = await postCall(srv.localUrl, "+4915123999999", "user_01PERSIST");
+      assert.equal(res.status, 500);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("PROFILES_JSON kaputt -> Start crasht nicht, Store bleibt leer", async () => {
+  const srv = await startServer({ env: { PROFILES_JSON: "{kein json" } });
+  try {
+    const profiles = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
+    assert.deepEqual(profiles, {});
   } finally {
     await srv.stop();
   }
@@ -238,7 +281,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       ALLOWED_COUNTRY_CODES: "*",
       ...OFFLINE,
     },
-    seed: seedState({ profiles: { "alice@team.test": { unrestricted: true } } }),
+    seed: seedState({
+      profiles: {
+        "alice@team.test": { unrestricted: true },
+        user_01PROD: { unrestricted: true }, // IdP-sub-Schluessel (Token ohne email)
+      },
+    }),
   });
   try {
     await t.test("place_call ueber MCP (JWT email) -> Audit requestedBy=<email>", async () => {
@@ -264,6 +312,16 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       // ANON -> kein Profil -> DEFAULT (restriktiv) -> 403 allowlist, requestedBy=anon (NICHT owner).
       await waitForLog(srv, /\[audit\] place_call_denied ip=\S+ to=\+4915123123125 grund=allowlist requestedBy=anon/);
       assert.ok(!/requestedBy=owner/.test(srv.stdout), "Token ohne Identitaet darf NICHT zum Owner werden");
+    });
+
+    // Produktions-Szenario: WorkOS-Token traegt nur sub (kein email). Ein Profil,
+    // das auf diese sub gekeyt ist, hebt die Allowlist auf.
+    await t.test("Profil per IdP-sub (Token ohne email) hebt die Allowlist auf -> 500", async () => {
+      const token = await idp.sign({ sub: "user_01PROD" }); // identity = sub
+      const res = await mcpPost(`${srv.localUrl}/mcp`, token, toolCall("place_call", { to: "+4915123123126", objective: "Termin" }));
+      assert.notEqual(res.status, 401);
+      // unrestricted-Profil auf der sub -> Allowlist aufgehoben -> place_call (nicht denied)
+      await waitForLog(srv, /\[audit\] place_call ip=\S+ to=\+4915123123126 .* requestedBy=user_01PROD/);
     });
   } finally {
     await srv.stop();

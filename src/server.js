@@ -528,14 +528,18 @@ app.post("/api/calendar", (req, res) => {
 // ---- Rechteprofile verwalten (Phase 2) ----
 // Hinter Basic-Auth (Bestand deckt /api/* ab). OAuth-MCP-Nutzer erreichen nur
 // /mcp, nie /api/* -> kein Self-Service. Es gibt bewusst KEIN MCP-Tool dafuer.
-const EMAIL_MAX_LEN = 254; // RFC 5321
-const validEmail = (e) => typeof e === "string" && e.length > 0 && e.length <= EMAIL_MAX_LEN && e.includes("@");
+// Der Profil-Schluessel ist die serverseitige Identitaet: req.auth.email, wenn der
+// IdP eine email im Token liefert, SONST req.auth.sub (z.B. WorkOS "user_01...").
+// Deshalb KEINE strikte Email-Form erzwingen - nur ein sauberer, nicht-leerer
+// String ohne Whitespace.
+const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub)
+const validIdentity = (e) => typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
 
 app.get("/api/profiles", (_req, res) => res.json(store.listProfiles()));
 
 app.post("/api/profiles", (req, res) => {
   const { email, ...fields } = req.body || {};
-  if (!validEmail(email)) return res.status(400).json({ error: "email (mit @) ist Pflicht" });
+  if (!validIdentity(email)) return res.status(400).json({ error: "email/identity (req.auth.email ODER IdP-sub) ist Pflicht" });
   const { profile, changed } = store.setProfile(email, fields);
   // Nur email + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
   audit("profile_update", req, `email=${email} keys=${changed.join(",") || "-"}`);

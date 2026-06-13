@@ -36,6 +36,11 @@ export const config = {
   // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
   // spaeter gelockert wird. Default 6; 0 = jeder Outbound-Call gesperrt (Not-Aus).
   maxCallsPerHour: parseInt(process.env.MAX_CALLS_PER_HOUR || "6", 10),
+  // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
+  // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
+  // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
+  // Neustart, ueber diese Env-Var gesetzte schon. Leer = keine Seed-Profile.
+  profilesSeed: process.env.PROFILES_JSON || "",
   maxCallDurationS: Math.min(parseInt(process.env.MAX_CALL_DURATION_S || "180", 10), 300),
   // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
   // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.

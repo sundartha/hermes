@@ -55,7 +55,31 @@ export function load() {
     state = defaults();
     save();
   }
+  seedProfilesFromEnv();
   return state;
+}
+
+// Profile aus config.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
+// Render (free plan) hat ein fluechtiges Dateisystem -> ohne diesen Seed waeren
+// Profile nach jedem Neustart weg. Bereits im Store vorhandene (per-API) Eintraege
+// gewinnen pro Schluessel; jeder Seed wird wie ueber die API sanitisiert (Whitelist).
+// Kaputtes JSON crasht den Start NICHT (wird geloggt und ignoriert - fail-safe).
+function seedProfilesFromEnv() {
+  if (!config.profilesSeed) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(config.profilesSeed);
+  } catch {
+    console.error("[profiles] PROFILES_JSON ist kein gueltiges JSON - ignoriert");
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    console.error("[profiles] PROFILES_JSON muss ein Objekt {identity: {...}} sein - ignoriert");
+    return;
+  }
+  const seeded = {};
+  for (const [key, value] of Object.entries(parsed)) seeded[key] = sanitizeProfile(value);
+  state.profiles = { ...seeded, ...state.profiles };
 }
 
 export function save() {

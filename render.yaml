@@ -31,6 +31,13 @@ services:
         value: "6"
       - key: DASHBOARD_PASSWORD
         sync: false
+      # Rechteprofile (Phase 2) als JSON, z.B.
+      # {"user_01ABC...":{"unrestricted":true,"maxCallsPerHour":6}}.
+      # Schluessel = die Identitaet aus dem OAuth-Token (email, sonst der IdP-sub).
+      # Hier setzen, weil der free plan ein fluechtiges Dateisystem hat (per-API
+      # angelegte Profile ueberleben sonst keinen Neustart). Leer = keine Profile.
+      - key: PROFILES_JSON
+        sync: false
       # Auth-Modus fuer /mcp. Default leer = Legacy (Token unten oder localhost-only).
       # Auf "oauth" umstellen, sobald der IdP (OAUTH_ISSUER_URL) steht und der
       # End-to-End-Test gegen claude.ai gruen war (siehe PLAN-PHASE1-OAUTH.md).
