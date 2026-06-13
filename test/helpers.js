@@ -29,6 +29,8 @@ export const BASE_ENV = {
   DASHBOARD_PASSWORD: "",
   MCP_AUTH_TOKEN: "",
   ALLOWED_NUMBERS: "",
+  ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
+  MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   MAX_CALL_DURATION_S: "180",
   SKIP_TWILIO_SIGNATURE_CHECK: "true",
   RATE_LIMIT_PER_MIN: "1000",

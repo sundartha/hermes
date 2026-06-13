@@ -105,11 +105,39 @@ function invalidText(name, value) {
   return null;
 }
 
-function allowlistError(to) {
+// ---- Nummern-Gates fuer Outbound-Calls (Safety, siehe tasks/todo.md Phase 0) ----
+// Feste Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit
+// -> Allowlist (Bestand, LETZTES Gate, bleibt scharf). Die Denylist laeuft BEWUSST
+// vor der Formatpruefung: so erscheint eine Notruf-Kurzwahl (112) als bewusste
+// Sperre (403 denylist) und nicht als Formatfehler (400).
+//
+// Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde
+// "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
+// startsWith. Eng gefasst, damit normale Mobilnummern (+4915...) durchkommen.
+const EMERGENCY_SHORT_CODES = ["110", "112", "911", "999"];
+const PREMIUM_PREFIXES = ["+49900", "+49137", "+49180", "+49118", "+870", "+881", "+882", "+883", "+979"];
+const HOUR_MS = 60 * 60 * 1000;
+
+const isDenied = (to) => EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
+const countryAllowed = (to) =>
+  config.allowedCountryCodes.includes("*") || config.allowedCountryCodes.some((c) => to.startsWith(c));
+const hourlyCallLimitReached = () =>
+  store.countOutboundCallsSince(new Date(Date.now() - HOUR_MS).toISOString()) >= config.maxCallsPerHour;
+
+// Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
+function numberGateError(to) {
+  if (isDenied(to))
+    return { status: 403, grund: "denylist", message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.` };
+  if (!E164.test(to))
+    return { status: 400, grund: "format", message: "to muss E.164 sein, z.B. +4917212345678" };
+  if (!countryAllowed(to))
+    return { status: 403, grund: "land", message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.` };
+  if (hourlyCallLimitReached())
+    return { status: 429, grund: "stundenlimit", message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.` };
   if (!config.allowedNumbers.length)
-    return "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt.";
-  if (!config.allowedNumbers.includes(normNum(to)))
-    return `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.`;
+    return { status: 403, grund: "allowlist", message: "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt." };
+  if (!config.allowedNumbers.includes(to))
+    return { status: 403, grund: "allowlist", message: `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.` };
   return null;
 }
 
@@ -305,7 +333,15 @@ app.post("/api/calls", async (req, res) => {
   const to = normNum(b.to);
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
-  if (!E164.test(to)) return res.status(400).json({ error: "to muss E.164 sein, z.B. +4917212345678" });
+
+  // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
+  const gateErr = numberGateError(to);
+  if (gateErr) {
+    // 400 = Eingabe-/Formatfehler, keine Sicherheits-Ablehnung -> nicht auditieren.
+    if (gateErr.status !== 400) audit("place_call_denied", req, `to=${to} grund=${gateErr.grund}`);
+    return res.status(gateErr.status).json({ error: gateErr.message });
+  }
+
   const textErr =
     invalidText("objective", objective) ||
     invalidText("briefing", b.briefing) ||
@@ -313,11 +349,6 @@ app.post("/api/calls", async (req, res) => {
     invalidText("caller_name", b.caller_name);
   if (textErr) return res.status(400).json({ error: textErr });
 
-  const gateErr = allowlistError(to);
-  if (gateErr) {
-    audit("place_call_denied", req, `to=${to} grund=allowlist`);
-    return res.status(403).json({ error: gateErr });
-  }
   if (store.budgetExceeded(config)) {
     audit("place_call_denied", req, `to=${to} grund=budget`);
     return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
@@ -482,6 +513,7 @@ const httpServer = app.listen(config.port, () => {
   console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
   console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
   console.log(`  Allowlist:      ${config.allowedNumbers.join(", ") || "(leer -> Outbound gesperrt)"}`);
+  console.log(`  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`);
   if (!ok) console.log("  ACHTUNG: .env unvollstaendig, Telefonie funktioniert noch nicht.\n");
 });
 
