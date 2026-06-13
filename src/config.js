@@ -28,6 +28,14 @@ export const config = {
   // Outbound NUR an diese Nummern (kommasepariert, E.164). Leer = alle Outbound-Calls verweigern.
   allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
     .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
+  // Erlaubte Laendervorwahlen fuer Outbound (kommasepariert, E.164-Prefix wie +49).
+  // Default +49 (nur Deutschland). "*" = alle Laender erlaubt (Gate effektiv aus).
+  allowedCountryCodes: (process.env.ALLOWED_COUNTRY_CODES || "+49")
+    .split(",").map((c) => c.trim()).filter(Boolean),
+  // Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, NICHT der Per-IP-Limiter
+  // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
+  // spaeter gelockert wird. Default 6; 0 = jeder Outbound-Call gesperrt (Not-Aus).
+  maxCallsPerHour: parseInt(process.env.MAX_CALLS_PER_HOUR || "6", 10),
   maxCallDurationS: Math.min(parseInt(process.env.MAX_CALL_DURATION_S || "180", 10), 300),
   // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
   // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.

@@ -128,6 +128,13 @@ export function endCallRecord(callId, status = "completed") {
   return call;
 }
 
+// Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers
+// Pro-Stunde-Gate in server.js). Zaehlt bewusst ALLE Outbound-Records, auch
+// fehlgeschlagene - konservative Kosten-/Toll-Fraud-Bremse.
+export function countOutboundCallsSince(sinceIso) {
+  return load().calls.filter((c) => c.direction === "outbound" && c.startedAt >= sinceIso).length;
+}
+
 // ---- Action Items ----
 export function addActionItem(callId, text, type = "todo") {
   const s = load();
