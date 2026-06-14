@@ -100,7 +100,7 @@ app.use("/voice", (req, res, next) => {
     url: config.publicUrl + req.originalUrl,
     params: req.body || {},
   });
-  if (!ok) return res.status(403).send("invalid twilio signature");
+  if (!ok) return res.status(403).send("invalid inbound signature");
   next();
 });
 
