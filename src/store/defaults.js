@@ -18,6 +18,14 @@ const DEMO_EVENTS = [
 // Hoechstens so viele Notifications behalten (Ring-Puffer, neueste zuerst).
 export const MAX_NOTIFICATIONS = 50;
 
+// Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Bisher
+// als "twilio" an mehreren Stellen hardcodet (state-ops.seedOwnerNumber,
+// pg.flushNumbers, migrate.seedDefaults); ab P5 (zweiter Provider Telnyx) eine
+// benannte Konstante (G25), eine Quelle (G5/G13). Die telephony-registry importiert
+// dieselben Werte fuer den Header-Dispatch.
+export const PROVIDER = Object.freeze({ TWILIO: "twilio", TELNYX: "telnyx" });
+export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
+
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);

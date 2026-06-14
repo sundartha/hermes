@@ -21,7 +21,8 @@
  * @typedef {Object} InboundRequest
  * @property {Object<string,string>} headers - Request-Header (lowercase keys, z.B. x-twilio-signature)
  * @property {Buffer} rawBody  - unveraenderter Roh-Body; fuer Twilio-HMAC ungenutzt,
- *                               fuer kuenftige Ed25519-Pruefung (Telnyx) noetig
+ *                               fuer die Telnyx-Ed25519-Pruefung (signiert ueber
+ *                               `${telnyx-timestamp}|${rawBody}`) noetig
  * @property {string} url      - vollstaendige signierte URL (publicUrl + originalUrl)
  * @property {Object<string,string>} params - geparste Form-Params (req.body) fuer den HMAC
  */
@@ -30,8 +31,11 @@
  * @typedef {Object} InboundSignatureVerifier
  * @property {(req: InboundRequest) => boolean} verifyInboundSignature
  *   Prueft die Provider-Signatur eines Inbound-Webhooks. FAIL-CLOSED: bei
- *   fehlender/falscher Signatur oder fehlender Config -> false (wirft nie).
+ *   fehlender/falscher Signatur oder fehlender Config -> false (wirft nie). Die
+ *   registry waehlt den Adapter HEADER-basiert (nicht ueber provider/To), weil die
+ *   Signatur die erste fail-closed-Stufe ist und VOR dem To-Routing laeuft.
  *   Twilio: HMAC-SHA1 ueber url + sortierte params (rawBody ungenutzt).
+ *   Telnyx: Ed25519 ueber `${telnyx-timestamp}|${rawBody}` (base64) + Replay-Fenster.
  */
 
 /**

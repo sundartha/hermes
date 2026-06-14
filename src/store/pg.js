@@ -17,7 +17,7 @@
 // spaeterer Scope, nicht P3b.
 import { config } from "../config.js";
 import * as ops from "./state-ops.js";
-import { OWNER_TENANT_ID } from "./defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 
 // Owner-Tenant zentral in defaults.js; hier re-exportiert, weil Tests + pg-helpers
@@ -422,7 +422,7 @@ async function flushNumbers(client, tenantId, numbers) {
     await client.query(
       `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1,$2,$3,$4)
        ON CONFLICT (e164) DO UPDATE SET tenant_id=EXCLUDED.tenant_id, provider=EXCLUDED.provider`,
-      [n.e164, tenantId, n.e164, n.provider || "twilio"]
+      [n.e164, tenantId, n.e164, n.provider || DEFAULT_PROVIDER]
     );
   }
 }

@@ -14,6 +14,12 @@ export const config = {
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
   twilioNumber: process.env.TWILIO_NUMBER || "",
 
+  // ---- Telnyx (zweiter Provider, P5; alle optional) ----
+  telnyxNumber: process.env.TELNYX_NUMBER || "", // config-derived Seed (idempotent, Owner-Tenant)
+  telnyxApiKey: process.env.TELNYX_API_KEY || "", // SECRET - nie loggen/leaken
+  telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "", // Ed25519-Public-Key des Telnyx-Accounts (verify)
+  telnyxApiBase: (process.env.TELNYX_API_BASE || "https://api.telnyx.com").replace(/\/$/, ""),
+
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",
 

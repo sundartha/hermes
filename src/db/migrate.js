@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { config } from "../config.js";
-import { defaultSettings, demoCalendar } from "../store/defaults.js";
+import { defaultSettings, demoCalendar, PROVIDER, DEFAULT_PROVIDER } from "../store/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "schema.sql");
@@ -47,9 +47,19 @@ export async function seedDefaults(db, tenantId) {
   // Idempotent; leere Nummer -> kein Seed (gleiche Guard wie der json-Pfad).
   if (config.twilioNumber) {
     await db.query(
-      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, 'twilio')
+      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
        ON CONFLICT (e164) DO NOTHING`,
-      [config.twilioNumber, tenantId]
+      [config.twilioNumber, tenantId, DEFAULT_PROVIDER]
+    );
+  }
+
+  // Telnyx-Owner-Nummer (config-derived, idempotent; leer -> kein Seed -> Telnyx-
+  // Inbound fail-closed). Mirror zum json-Pfad (seedOwnerNumber mit PROVIDER.TELNYX).
+  if (config.telnyxNumber) {
+    await db.query(
+      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
+       ON CONFLICT (e164) DO NOTHING`,
+      [config.telnyxNumber, tenantId, PROVIDER.TELNYX]
     );
   }
 

@@ -18,6 +18,16 @@ services:
         sync: false
       - key: TWILIO_NUMBER
         sync: false
+      # ---- Telnyx (zweiter Provider, optional - P5) ----
+      # Leer lassen, wenn nur Twilio genutzt wird (Telnyx fail-closed inaktiv).
+      - key: TELNYX_NUMBER
+        sync: false
+      - key: TELNYX_API_KEY
+        sync: false
+      - key: TELNYX_PUBLIC_KEY
+        sync: false
+      - key: TELNYX_API_BASE
+        value: "https://api.telnyx.com"
       - key: OWNER_NUMBER
         sync: false
       - key: ALLOWED_NUMBERS

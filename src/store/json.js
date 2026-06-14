@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { defaultSettings, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID } from "./defaults.js";
+import { defaultSettings, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID, PROVIDER } from "./defaults.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -31,6 +31,10 @@ export function load() {
   // seedProfilesFromEnv): ohne sie wuerde Inbound nach P3c fail-closed greifen,
   // weil seedState()-Tests/persistierte Stores keine numbers tragen.
   ops.seedOwnerNumber(state, config.twilioNumber, OWNER_TENANT_ID);
+  // Telnyx-Owner-Nummer config-derived idempotent mitseeden (NUR wenn TELNYX_NUMBER
+  // gesetzt; der !e164-Guard in seedOwnerNumber erledigt das env-gating). Leer ->
+  // kein Seed -> alle Telnyx-Inbound fail-closed (kein Default-Tenant).
+  ops.seedOwnerNumber(state, config.telnyxNumber, OWNER_TENANT_ID, PROVIDER.TELNYX);
   return state;
 }
 

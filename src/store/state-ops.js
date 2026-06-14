@@ -15,6 +15,7 @@ import {
   sanitizeProfile,
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
+  DEFAULT_PROVIDER,
 } from "./defaults.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -178,11 +179,13 @@ export function findTenantByNumber(s, e164) {
 
 // Stellt die config-abgeleitete Owner-Nummer idempotent im Spiegel sicher (json
 // load() ruft makeDefaultState nicht auf bestehenden Stores, seedState()-Tests
-// seeden ohne numbers). Leere Nummer -> kein Seed. Vorhandene e164 gewinnt.
-export function seedOwnerNumber(s, e164, tenantId) {
+// seeden ohne numbers). Leere Nummer -> kein Seed (env-gating). Vorhandene e164
+// gewinnt. provider default DEFAULT_PROVIDER (Twilio) -> bestehende Aufrufe
+// (3 Args) verhaltens-erhaltend; Telnyx-Seed reicht provider=telnyx mit.
+export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
   if (!e164) return;
   if (s.numbers.some((n) => n.e164 === e164)) return;
-  s.numbers.push({ e164, tenantId, provider: "twilio" });
+  s.numbers.push({ e164, tenantId, provider });
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
