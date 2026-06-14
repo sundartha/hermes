@@ -193,12 +193,6 @@ export function usageFor(s, tenantId) {
   return (s.usage[tenantId] ||= emptyUsage());
 }
 
-// Reiner Lese-View fuer das Owner-Dashboard: der Owner-Bucket im flachen Shape,
-// das /api/state, das Dashboard (public/index.html) und get_agent_status erwarten.
-export function ownerUsageView(s) {
-  return usageFor(s, OWNER_TENANT_ID);
-}
-
 // Plattform-Summe ueber ALLE Tenant-Buckets (globaler Budget-Notaus, R2). Fuer
 // owner-only faellt die Summe mit dem Owner-Bucket zusammen -> verhaltens-identisch.
 export function globalUsageTotals(s) {
