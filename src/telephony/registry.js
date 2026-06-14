@@ -4,8 +4,10 @@
 // byte-identisch). inboundSignatureVerifier dispatcht NACH Signatur-Header (nicht
 // nach provider/To): die Signatur ist die erste fail-closed-Stufe und liegt
 // strukturell VOR dem To-Routing (P3c) - To/provider vor gueltiger Signatur zu
-// lesen waere Tenant-Spoofing. voiceControl bleibt Twilio-only (Telnyx-Outbound
-// deferred, P6).
+// lesen waere Tenant-Spoofing. providerFromHeaders ist die EINZIGE Header->Provider-
+// Karte: der Verifier dispatcht darueber, server.js (P6a) leitet daraus den
+// Inbound-Provider ab (Single Source of Truth). voiceControl bleibt Twilio-only
+// (Telnyx-Outbound deferred, P6).
 import { twilioVoice } from "./adapters/twilio/voice.js";
 import { twilioMessaging } from "./adapters/twilio/messaging.js";
 import { renderDirectives as twilioRenderDirectives } from "./adapters/twilio/render.js";
@@ -28,15 +30,35 @@ export const voiceRenderer = (provider = PROVIDER.TWILIO) =>
     ? { renderDirectives: telnyxRenderDirectives }
     : { renderDirectives: twilioRenderDirectives };
 
+// Header -> Provider (rein, IO-frei). EINZIGE Stelle, die Inbound-Signatur-Header
+// auf einen Provider abbildet: der Signatur-Verifier dispatcht darueber UND
+// server.js leitet daraus den Inbound-Provider ab (Single Source of Truth, G5).
+// Kein erkannter Header -> null (Aufrufer entscheidet ueber den Fallback).
+export function providerFromHeaders(headers) {
+  const h = headers || {};
+  if (h["x-twilio-signature"] !== undefined) return PROVIDER.TWILIO;
+  if (h["telnyx-signature-ed25519"] !== undefined && h["telnyx-timestamp"] !== undefined)
+    return PROVIDER.TELNYX;
+  return null;
+}
+
+// Owner-Absendernummer fuer einen Provider (rein): Telnyx-Call -> Telnyx-Owner-
+// Nummer, sonst Twilio-Owner-Nummer. cfg wird hereingereicht (testbar ohne echte
+// config; finishCall reicht das echte config). Unbekannter/fehlender Provider ->
+// Twilio-Fallback (byte-identisch zum Bestand). Eine Stelle fuer die Provider->
+// Owner-Nummer-Abbildung (G5) statt Inline-Ternary im langen finishCall.
+export function ownerNumberForProvider(provider, cfg) {
+  return provider === PROVIDER.TELNYX ? cfg.telnyxNumber : cfg.twilioNumber;
+}
+
 /** @returns {import("./ports.js").InboundSignatureVerifier} */
 export const inboundSignatureVerifier = () => ({
   verifyInboundSignature(req) {
-    const h = req.headers || {};
-    // Twilio-Pfad ist exakt der bestehende Aufruf (Hot-Path byte-identisch).
-    if (h["x-twilio-signature"] !== undefined) return twilioVerify(req);
-    if (h["telnyx-signature-ed25519"] !== undefined && h["telnyx-timestamp"] !== undefined)
-      return telnyxVerify(req);
-    // Kein erkannter Provider-Header -> fail-closed.
+    // Provider aus den Headern; der Twilio-Pfad bleibt exakt der bestehende Aufruf
+    // (Hot-Path byte-identisch). Unbekannt -> fail-closed.
+    const provider = providerFromHeaders(req.headers);
+    if (provider === PROVIDER.TWILIO) return twilioVerify(req);
+    if (provider === PROVIDER.TELNYX) return telnyxVerify(req);
     return false;
   },
 });

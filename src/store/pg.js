@@ -255,6 +255,7 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     language: r.language,
     maxDurationS: r.max_duration_s,
     requestedBy: r.requested_by,
+    provider: r.provider,
     status: r.status,
     startedAt: r.started_at,
     answeredAt: r.answered_at,
@@ -332,15 +333,16 @@ async function flushCalls(client, tenantId, calls) {
       `INSERT INTO call
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
-          status, started_at, answered_at, ended_at, summary, objective_achieved)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+          status, started_at, answered_at, ended_at, summary, objective_achieved, provider)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
-         objective_achieved=EXCLUDED.objective_achieved`,
+         objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider`,
       [c.id, tenantId, c.streamToken, c.twilioSid, c.direction, c.from, c.to, c.goal,
         c.briefing, c.constraints, c.callerName, c.language, c.maxDurationS, c.requestedBy,
-        c.status, c.startedAt, c.answeredAt, c.endedAt, c.summary, serializeObjective(c.objectiveAchieved)]
+        c.status, c.startedAt, c.answeredAt, c.endedAt, c.summary, serializeObjective(c.objectiveAchieved),
+        c.provider || DEFAULT_PROVIDER]
     );
     await flushTranscript(client, tenantId, c);
   }

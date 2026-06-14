@@ -46,8 +46,14 @@ CREATE TABLE IF NOT EXISTS call (
   answered_at        TEXT,
   ended_at           TEXT,
   summary            TEXT,
-  objective_achieved TEXT
+  objective_achieved TEXT,
+  provider           TEXT
 );
+
+-- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
+-- EXISTS oben greift dann nicht) bekommt die provider-Spalte nachgezogen.
+-- Idempotent (IF NOT EXISTS); auf einer frischen DB ein No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS provider TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

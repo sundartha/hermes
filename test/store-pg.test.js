@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
 import { config } from "../src/config.js";
-import { defaultSettings, demoCalendar } from "../src/store/defaults.js";
+import { defaultSettings, demoCalendar, PROVIDER } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
@@ -59,6 +59,14 @@ test("createCall persistiert ueber Re-Hydrierung (inkl. usage.calls)", async () 
   assert.equal(got.streamToken, call.streamToken);
   assert.equal(got.direction, "inbound");
   assert.equal(reopened.load().usage[OWNER_TENANT_ID].calls, 1);
+});
+
+test("createCall: provider ueberlebt die Re-Hydrierung (call.provider, P6a)", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "inbound", from: "+49333", to: "+49444", provider: PROVIDER.TELNYX });
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.getCall(call.id).provider, PROVIDER.TELNYX);
 });
 
 test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {

@@ -42,7 +42,7 @@ export function newId(prefix) {
 }
 
 // ---- Calls ----
-export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS, requestedBy, tenantId }) {
+export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS, requestedBy, tenantId, provider }) {
   const call = {
     id: newId("call"),
     // Zugangsgeheimnis fuer den /media-WebSocket (steht im TwiML, das nur Twilio
@@ -50,6 +50,11 @@ export function createCall(s, { direction, from, to, goal, twilioSid, briefing, 
     // die API ausgegeben werden (server.js publicCall).
     streamToken: crypto.randomBytes(16).toString("hex"),
     twilioSid: twilioSid || null,
+    // Provider, ueber den dieser Call laeuft (P6a). Inbound: aus dem Signatur-
+    // Header abgeleitet (server.js); Outbound: ungesetzt -> DEFAULT_PROVIDER
+    // (Twilio-only). Folge-Webhooks + finishCall lesen call.provider (Single
+    // Source of Truth, kein erneutes Header-Parsen).
+    provider: provider || DEFAULT_PROVIDER,
     direction, // "inbound" | "outbound"
     from,
     to,

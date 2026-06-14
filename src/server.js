@@ -5,14 +5,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
-import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier } from "./telephony/registry.js";
+import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 
 const app = express();
@@ -105,8 +105,10 @@ app.use("/voice", (req, res, next) => {
   next();
 });
 
-// Kurz-Helfer fuer Direktiven-Listen -> TwiML-Antwort (Twilio-Adapter rendert).
-const render = (directives) => voiceRenderer().renderDirectives(directives);
+// Kurz-Helfer fuer Direktiven-Listen -> Provider-Markup (TwiML/TeXML). provider
+// wird vom Aufrufer durchgereicht; undefined -> voiceRenderer-Default twilio ->
+// jeder arg-lose render(x)-Aufruf bleibt byte-identisch (Hot-Path, R5).
+const render = (directives, provider) => voiceRenderer(provider).renderDirectives(directives);
 
 const normNum = (n) => (typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "");
 
@@ -237,6 +239,11 @@ function armMaxDurationTimer(call, twilioSid) {
 // Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet
 // nichts).
 app.post("/voice/incoming", (req, res) => {
+  // Provider EINMAL aus dem (bereits fail-closed signatur-geprueften) Header
+  // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> Default
+  // twilio -> byte-identisch zum Bestand. Quelle ist der Signatur-Header, nicht
+  // To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
+  const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
   const to = normNum(req.body.To);
   const tenantId = store.findTenantByNumber(to);
   if (!tenantId) {
@@ -244,7 +251,7 @@ app.post("/voice/incoming", (req, res) => {
     return res.type("text/xml").send(render([
       sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."),
       hangupD(),
-    ]));
+    ], provider));
   }
 
   // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
@@ -253,7 +260,7 @@ app.post("/voice/incoming", (req, res) => {
     return res.type("text/xml").send(render([
       sayD("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
       hangupD(),
-    ]));
+    ], provider));
   }
 
   const call = store.createCall({
@@ -262,18 +269,19 @@ app.post("/voice/incoming", (req, res) => {
     to,
     twilioSid: req.body.CallSid,
     tenantId,
+    provider,
   });
   store.markAnswered(call.id);
   armMaxDurationTimer(call, req.body.CallSid);
 
   if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(render(streamDirectives(call)));
+    return res.type("text/xml").send(render(streamDirectives(call), provider));
   }
 
   const s = store.load().settings;
   const greeting = s.greeting.replaceAll("{owner}", config.ownerName);
   store.addTranscript(call.id, "agent", greeting);
-  res.type("text/xml").send(render(turnDirectives(call, greeting)));
+  res.type("text/xml").send(render(turnDirectives(call, greeting), provider));
 });
 
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
@@ -287,18 +295,19 @@ app.post("/voice/turn", async (req, res) => {
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
       return res.type("text/xml").send(render(
-        turnDirectives(call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?")
+        turnDirectives(call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?"),
+        call.provider
       ));
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
     const directives = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
-    res.type("text/xml").send(render(directives));
+    res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
     res.type("text/xml").send(render([
       sayD("Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut."),
       hangupD(),
-    ]));
+    ], call.provider));
   }
 });
 
@@ -313,7 +322,7 @@ app.post("/voice/outbound", async (req, res) => {
   store.save();
 
   if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(render(streamDirectives(call)));
+    return res.type("text/xml").send(render(streamDirectives(call), call.provider));
   }
 
   // Pflicht-Offenlegung fest verdrahtet als allererster Satz (kein KI-Ermessen).
@@ -324,10 +333,10 @@ app.post("/voice/outbound", async (req, res) => {
   try {
     const { speech, endCall } = await agentTurn(call, null); // Agent nennt sein Anliegen
     const tail = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
-    res.type("text/xml").send(render([sayD(disclosure), ...tail]));
+    res.type("text/xml").send(render([sayD(disclosure), ...tail], call.provider));
   } catch (err) {
     console.error("[outbound]", err.message);
-    res.type("text/xml").send(render([sayD(disclosure), hangupD()]));
+    res.type("text/xml").send(render([sayD(disclosure), hangupD()], call.provider));
   }
 });
 
@@ -359,8 +368,11 @@ async function finishCall(call) {
         `[${store.load().settings.agentName}] ${who}\n\n${result.summary}` +
         (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
       try {
-        await messaging().sendSms({
-          from: config.twilioNumber,
+        await messaging(call.provider).sendSms({
+          // Owner-From provider-keyed (ownerNumberForProvider): Telnyx-Call ->
+          // Telnyx-Owner-Nummer, sonst Twilio-Owner-Nummer. Der Twilio-Zweig ist
+          // config.twilioNumber -> byte-identisch zum Bestand.
+          from: ownerNumberForProvider(call.provider, config),
           to: config.ownerNumber,
           body: sms.slice(0, 1500),
         });
