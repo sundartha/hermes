@@ -3,10 +3,10 @@
 // init() einmal aus der DB hydriert wird; jede Mutation laeuft synchron gegen den
 // Spiegel (state-ops.js, geteilte Fachlogik) und stoesst danach einen DB-Flush an.
 //
-// WARUM der Spiegel: die 24 Store-Signaturen sind synchron und werden von den
+// WARUM der Spiegel: die 25 Store-Signaturen sind synchron und werden von den
 // Callern teils ohne await aufgerufen (Bridge-Event-Handler, store.save()). pg ist
 // async. Der Spiegel ist die kleinste Aenderung, die Contract-Parity zum
-// json-Backend erreicht, ohne eine der 24 Signaturen oder einen Caller zu
+// json-Backend erreicht, ohne eine der 25 Signaturen oder einen Caller zu
 // veraendern. save() ist deshalb KEIN No-Op: die mutate-then-save()-Stellen
 // (call.twilioSid/summary/objectiveAchieved) wirken auf eine Spiegel-Referenz aus
 // getCall(); save() flusht den Spiegel zurueck in die DB.
@@ -24,7 +24,7 @@ import { migrate } from "../db/migrate.js";
 // die Konstante historisch von store/pg.js importieren (Import-Stabilitaet).
 export { OWNER_TENANT_ID };
 
-// makePgStore(runner) -> Objekt mit den 24 Store-Funktionen. runner-Vertrag:
+// makePgStore(runner) -> Objekt mit den 25 Store-Funktionen. runner-Vertrag:
 //   withClient(fn) : ruft fn(client) auf EINER Verbindung; client.query(text,
 //                    params)->{rows} und client.exec(sqlScript) (Mehrfach-DDL).
 // KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()
@@ -95,8 +95,8 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
-    countOutboundCallsSince: (sinceIso, requestedBy = null) =>
-      ops.countOutboundCallsSince(requireState(), sinceIso, requestedBy),
+    countOutboundCallsSince: (sinceIso, filters = {}) =>
+      ops.countOutboundCallsSince(requireState(), sinceIso, filters),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
 
     addActionItem(callId, text, type = "todo") {
@@ -118,12 +118,13 @@ export function makePgStore(runner) {
     },
     findConflict: (startIso, endIso) => ops.findConflict(requireState(), startIso, endIso),
 
-    trackUsage(inputTokens, outputTokens, cfg) {
-      const usage = ops.trackUsage(requireState(), inputTokens, outputTokens, cfg);
+    trackUsage(tenantId, inputTokens, outputTokens, cfg) {
+      const usage = ops.trackUsage(requireState(), tenantId, inputTokens, outputTokens, cfg);
       save();
       return usage;
     },
-    budgetExceeded: (cfg) => ops.budgetExceeded(requireState(), cfg),
+    budgetExceeded: (tenantId, cfg) => ops.budgetExceeded(requireState(), tenantId, cfg),
+    globalBudgetExceeded: (cfg) => ops.globalBudgetExceeded(requireState(), cfg),
 
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
@@ -195,7 +196,9 @@ async function hydrate(client, tenantId) {
   state.calls = callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall));
   state.actionItems = itemRows.map(rowToActionItem);
   state.calendar = calRows.map(rowToCalendarEvent);
-  state.usage = usageRows.length ? rowToUsage(usageRows[0]) : state.usage;
+  // Owner-scoped Hydrierung (P4): die usage-Zeile fuellt den Owner-Bucket der Map.
+  // Mehr-Tenant-Hydrierung ist spaeterer Scope (erst wenn ein 2. Tenant live ist).
+  if (usageRows.length) state.usage[OWNER_TENANT_ID] = rowToUsage(usageRows[0]);
   state.notifications = notifRows.map(rowToNotification);
   state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
   state.numbers = numberRows.map((r) => ({ e164: r.e164, tenantId: r.tenant_id, provider: r.provider }));
@@ -295,7 +298,7 @@ async function flush(client, tenantId, state) {
     await flushCalendar(client, tenantId, state.calendar);
     await flushNotifications(client, tenantId, state.notifications);
     await flushSettings(client, tenantId, state.settings);
-    await flushUsage(client, tenantId, state.usage);
+    await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
     await flushProfiles(client, tenantId, state.profiles);
     await flushNumbers(client, tenantId, state.numbers);
     await client.query("COMMIT");

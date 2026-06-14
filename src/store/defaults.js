@@ -48,8 +48,17 @@ export function demoCalendar() {
   }));
 }
 
+// Ein leerer Usage-Bucket (pro Tenant). costEur als JS-Float (Bestand,
+// dokumentiertes akzeptiertes Risiko; pg cost_eur NUMERIC at rest).
 export function emptyUsage() {
   return { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 };
+}
+
+// Usage-Map mit dem Owner-Bucket vorbelegt. Daten-Schicht pro-Tenant (P4):
+// s.usage ist eine Map tenantId -> Bucket. Laufzeit bleibt owner-only, der
+// Owner-Bucket existiert von Anfang an (Dashboard/get_agent_status lesen ihn).
+export function emptyUsageMap() {
+  return { [OWNER_TENANT_ID]: emptyUsage() };
 }
 
 // ---- Rechteprofile pro Nutzer (Phase 2) ----

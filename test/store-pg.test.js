@@ -30,7 +30,8 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
   assert.equal(s.actionItems.length, 0);
   assert.equal(s.notifications.length, 0);
   assert.deepEqual(s.profiles, {});
-  assert.deepEqual(s.usage, { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 });
+  // usage ist seit P4 eine Map tenantId -> Bucket; der frische Zustand traegt den Owner-Bucket.
+  assert.deepEqual(s.usage[OWNER_TENANT_ID], { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 });
   // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
   assert.deepEqual(store.getCalendar(), demoCalendar());
 });
@@ -44,7 +45,7 @@ test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionIte
   assert.equal(call.status, "active");
   assert.deepEqual(call.transcript, []);
   assert.deepEqual(call.actionItemIds, []);
-  assert.equal(store.load().usage.calls, 1);
+  assert.equal(store.load().usage[OWNER_TENANT_ID].calls, 1);
   assert.equal(store.getCall(call.id).id, call.id);
 });
 
@@ -57,7 +58,7 @@ test("createCall persistiert ueber Re-Hydrierung (inkl. usage.calls)", async () 
   assert.ok(got, "Call ueberlebt die Re-Hydrierung");
   assert.equal(got.streamToken, call.streamToken);
   assert.equal(got.direction, "inbound");
-  assert.equal(reopened.load().usage.calls, 1);
+  assert.equal(reopened.load().usage[OWNER_TENANT_ID].calls, 1);
 });
 
 test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
@@ -120,22 +121,22 @@ test("countOutboundCallsSince mit und ohne requestedBy", async () => {
   store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "b@x" });
   store.createCall({ direction: "inbound", from: "+49", to: "+49" });
   assert.equal(store.countOutboundCallsSince(since), 2);
-  assert.equal(store.countOutboundCallsSince(since, "a@x"), 1);
+  assert.equal(store.countOutboundCallsSince(since, { requestedBy: "a@x" }), 1);
 });
 
 test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
   const { store, db } = await makePgTestStore();
-  const usage = store.trackUsage(1_000_000, 1_000_000, PRICES);
+  const usage = store.trackUsage(OWNER_TENANT_ID, 1_000_000, 1_000_000, PRICES);
   const expectedUsd = 1.0 + 5.0;
   assert.equal(usage.inputTokens, 1_000_000);
   assert.equal(usage.outputTokens, 1_000_000);
   assert.ok(Math.abs(usage.costEur - expectedUsd * PRICES.usdToEur) < 1e-9);
-  assert.equal(store.budgetExceeded(PRICES), false);
-  store.trackUsage(0, 2_000_000, PRICES); // schiebt ueber 8 EUR
-  assert.equal(store.budgetExceeded(PRICES), true);
+  assert.equal(store.budgetExceeded(OWNER_TENANT_ID, PRICES), false);
+  store.trackUsage(OWNER_TENANT_ID, 0, 2_000_000, PRICES); // schiebt ueber 8 EUR
+  assert.equal(store.budgetExceeded(OWNER_TENANT_ID, PRICES), true);
   await store.save();
   const reopened = await reopen(db);
-  assert.equal(reopened.budgetExceeded(PRICES), true);
+  assert.equal(reopened.budgetExceeded(OWNER_TENANT_ID, PRICES), true);
 });
 
 test("getCalendar sortiert + addCalendarEvent + findConflict", async () => {

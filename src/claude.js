@@ -3,6 +3,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
 import * as store from "./store.js";
+import { OWNER_TENANT_ID } from "./store/defaults.js";
 
 const anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
 
@@ -175,7 +176,7 @@ export async function agentTurn(call, callerText) {
       tools: toolDefs(),
       messages,
     });
-    store.trackUsage(resp.usage.input_tokens, resp.usage.output_tokens, config);
+    store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
     if (textParts.length) speech = textParts.join(" ").trim();
@@ -222,7 +223,7 @@ export async function summarizeCall(call) {
     system: `Du fasst ein Telefonat des KI-Assistenten von ${config.ownerName} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bezieht sich auf den Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Action Items nur, wenn ${config.ownerName} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
     messages: [{ role: "user", content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}` }],
   });
-  store.trackUsage(resp.usage.input_tokens, resp.usage.output_tokens, config);
+  store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
 
   let parsed = { summary: "", actionItems: [] };
   try {

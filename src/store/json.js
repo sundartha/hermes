@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { defaultSettings, emptyUsage, sanitizeProfile, OWNER_TENANT_ID } from "./defaults.js";
+import { defaultSettings, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID } from "./defaults.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -18,7 +18,7 @@ export function load() {
     state = JSON.parse(fs.readFileSync(FILE, "utf8"));
     // Neue Default-Felder ergaenzen (Migrationen)
     state.settings = { ...defaultSettings(), ...state.settings };
-    state.usage = { ...emptyUsage(), ...state.usage };
+    state.usage = migrateUsageToMap(state.usage);
     state.notifications ||= [];
     state.profiles ||= {};
     state.numbers ||= [];
@@ -32,6 +32,26 @@ export function load() {
   // weil seedState()-Tests/persistierte Stores keine numbers tragen.
   ops.seedOwnerNumber(state, config.twilioNumber, OWNER_TENANT_ID);
   return state;
+}
+
+// Migriert einen alten FLACHEN usage-{inputTokens,...} Store auf die owner-keyed
+// Usage-Map (P4). Erkennt das alte Shape an einem numerischen costEur auf der
+// Top-Ebene. Defensiv (fehlend -> frische Map) + idempotent (bereits eine Map ->
+// fehlende Bucket-Felder defaulten). seedState()-Tests seeden usage flach ->
+// diese Migration haelt sie gruen, ohne jeden seedState-Aufrufer anzufassen.
+function migrateUsageToMap(usage) {
+  if (!usage || typeof usage !== "object") return emptyUsageMap();
+  if (typeof usage.costEur === "number") {
+    // Altes flaches Shape -> wird der Owner-Bucket.
+    return { [OWNER_TENANT_ID]: { ...emptyUsage(), ...usage } };
+  }
+  // Bereits eine Map: jeden Bucket gegen den Default auffuellen, Owner sicherstellen.
+  const map = {};
+  for (const [tenantId, bucket] of Object.entries(usage)) {
+    map[tenantId] = { ...emptyUsage(), ...bucket };
+  }
+  map[OWNER_TENANT_ID] ||= emptyUsage();
+  return map;
 }
 
 // Profile aus config.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
@@ -91,8 +111,8 @@ export function endCallRecord(callId, status = "completed") {
   return call;
 }
 
-export function countOutboundCallsSince(sinceIso, requestedBy = null) {
-  return ops.countOutboundCallsSince(load(), sinceIso, requestedBy);
+export function countOutboundCallsSince(sinceIso, filters = {}) {
+  return ops.countOutboundCallsSince(load(), sinceIso, filters);
 }
 
 // ---- Inbound-Routing: E.164 -> Tenant (P3c) ----
@@ -129,14 +149,18 @@ export function findConflict(startIso, endIso) {
 }
 
 // ---- Usage / Budget-Guard ----
-export function trackUsage(inputTokens, outputTokens, cfg) {
-  const usage = ops.trackUsage(load(), inputTokens, outputTokens, cfg);
+export function trackUsage(tenantId, inputTokens, outputTokens, cfg) {
+  const usage = ops.trackUsage(load(), tenantId, inputTokens, outputTokens, cfg);
   save();
   return usage;
 }
 
-export function budgetExceeded(cfg) {
-  return ops.budgetExceeded(load(), cfg);
+export function budgetExceeded(tenantId, cfg) {
+  return ops.budgetExceeded(load(), tenantId, cfg);
+}
+
+export function globalBudgetExceeded(cfg) {
+  return ops.globalBudgetExceeded(load(), cfg);
 }
 
 // ---- Notifications ----

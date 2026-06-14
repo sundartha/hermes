@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
+import { OWNER_TENANT_ID } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
@@ -151,7 +152,8 @@ function countryGateAllowed(to, profile) {
 }
 
 const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
-// Globales Stundenlimit ueber ALLE Outbound-Calls (Bestand, harte Obergrenze).
+// Globales Stundenlimit ueber ALLE Outbound-Calls (Plattform-Notbremse, Bestand,
+// wird nie entfernt). Tenant-unabhaengig (ohne Filter = alle Calls).
 const globalHourReached = () => store.countOutboundCallsSince(hourWindowStart()) >= config.maxCallsPerHour;
 // Pro-Nutzer-Stundenlimit: effektiv min(global, profil) - ein Profil kann nur senken.
 function userHourReached(profile, requestedBy) {
@@ -159,7 +161,7 @@ function userHourReached(profile, requestedBy) {
     profile.maxCallsPerHour == null
       ? config.maxCallsPerHour
       : Math.min(config.maxCallsPerHour, profile.maxCallsPerHour);
-  return store.countOutboundCallsSince(hourWindowStart(), requestedBy) >= limit;
+  return store.countOutboundCallsSince(hourWindowStart(), { requestedBy }) >= limit;
 }
 
 // Allowlist (letztes Gate): profil.unrestricted ODER eine Nummer in der eigenen
@@ -245,7 +247,9 @@ app.post("/voice/incoming", (req, res) => {
     ]));
   }
 
-  if (store.budgetExceeded(config)) {
+  // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
+  // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
+  if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
     return res.type("text/xml").send(render([
       sayD("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
       hangupD(),
@@ -257,6 +261,7 @@ app.post("/voice/incoming", (req, res) => {
     from: req.body.From || "unbekannt",
     to,
     twilioSid: req.body.CallSid,
+    tenantId,
   });
   store.markAnswered(call.id);
   armMaxDurationTimer(call, req.body.CallSid);
@@ -408,7 +413,9 @@ app.post("/api/calls", async (req, res) => {
     invalidText("caller_name", b.caller_name);
   if (textErr) return res.status(400).json({ error: textErr });
 
-  if (store.budgetExceeded(config)) {
+  // Outbound-from bleibt Owner bis P5 -> tenantId = OWNER_TENANT_ID. Schnittmenge
+  // (R2): pro-Tenant-Budget UND globaler Notaus. Fuer owner-only byte-identisch.
+  if (store.budgetExceeded(OWNER_TENANT_ID, config) || store.globalBudgetExceeded(config)) {
     audit("place_call_denied", req, `to=${to} grund=budget`);
     return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
   }
@@ -425,6 +432,7 @@ app.post("/api/calls", async (req, res) => {
     language: b.language || "de",
     maxDurationS: maxDur,
     requestedBy,
+    tenantId: OWNER_TENANT_ID,
   });
   audit("place_call", req, `to=${to} call=${call.id} requestedBy=${requestedBy}`);
 
@@ -476,7 +484,10 @@ app.get("/api/state", (req, res) => {
     calls: s.calls.slice(0, 30).map(publicCall),
     actionItems: s.actionItems.slice(0, 50),
     calendar: store.getCalendar().filter((e) => e.end >= new Date().toISOString()).slice(0, 10),
-    usage: { ...s.usage, maxBudgetEur: config.maxBudgetEur },
+    // Owner-Bucket im flachen Shape, das Dashboard (public/index.html) +
+    // get_agent_status erwarten. usage ist seit P4 eine Map tenantId -> Bucket;
+    // die Laufzeit ist owner-only, deshalb der Owner-Bucket.
+    usage: { ...s.usage[OWNER_TENANT_ID], maxBudgetEur: config.maxBudgetEur },
     notifications: s.notifications.slice(0, 10),
     agent: {
       number: config.twilioNumber,

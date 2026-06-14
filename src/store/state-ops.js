@@ -1,5 +1,6 @@
 // Reine In-Memory-Operationen auf dem verschachtelten Store-Zustand
-// {settings, calls, actionItems, calendar, usage, notifications, profiles}.
+// {settings, calls, actionItems, calendar, usage, notifications, profiles, numbers}.
+// usage ist eine Map tenantId -> Bucket (P4, Daten-Schicht pro-Tenant).
 // KEIN IO: weder Datei noch DB. Beide Backends (json.js, pg.js) halten denselben
 // Zustands-Shape und delegieren die Mutationen hierher - so lebt die Fachlogik
 // (Call-Record-Aufbau, Retention-Praedikate, Kostenformel, ...) genau EINMAL
@@ -9,6 +10,8 @@ import {
   defaultSettings,
   demoCalendar,
   emptyUsage,
+  emptyUsageMap,
+  OWNER_TENANT_ID,
   sanitizeProfile,
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
@@ -22,7 +25,7 @@ export function makeDefaultState() {
     calls: [], // {id, direction, from, to, goal, status, startedAt, endedAt, transcript:[{role,text,at}], summary, actionItemIds:[ids]}
     actionItems: [], // {id, callId, text, type:"todo"|"appointment", done, createdAt}
     calendar: demoCalendar(),
-    usage: emptyUsage(),
+    usage: emptyUsageMap(),
     notifications: [], // {id, title, body, at, callId}
     // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
     // Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
@@ -38,7 +41,7 @@ export function newId(prefix) {
 }
 
 // ---- Calls ----
-export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS, requestedBy }) {
+export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS, requestedBy, tenantId }) {
   const call = {
     id: newId("call"),
     // Zugangsgeheimnis fuer den /media-WebSocket (steht im TwiML, das nur Twilio
@@ -58,6 +61,11 @@ export function createCall(s, { direction, from, to, goal, twilioSid, briefing, 
     // Wer den Call ausgeloest hat: <email> bei authentifizierten MCP-Nutzern,
     // sonst "owner" (localhost/stdio). Fuer Audit + pro-Nutzer-Stundenlimit.
     requestedBy: requestedBy || null,
+    // Tenant, dem dieser Call gehoert (P4). Inbound: via findTenantByNumber
+    // aufgeloest; Outbound: OWNER_TENANT_ID (Outbound-from bleibt Owner bis P5).
+    // Steuert den Usage-Bucket + die pro-Tenant-Achse von countOutboundCallsSince.
+    // Fail-closed: fehlendes tenantId -> Owner (heute einziger realer Tenant).
+    tenantId: tenantId || OWNER_TENANT_ID,
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,
@@ -68,7 +76,7 @@ export function createCall(s, { direction, from, to, goal, twilioSid, briefing, 
     actionItemIds: [],
   };
   s.calls.unshift(call);
-  s.usage.calls++;
+  usageFor(s, call.tenantId).calls++;
   return call;
 }
 
@@ -106,15 +114,18 @@ export function endCallRecord(s, callId, status = "completed") {
 }
 
 // Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers
-// Pro-Stunde-Gate in server.js). Ohne requestedBy: ALLE Outbound-Records (globale
-// Bremse, Bestand). Mit requestedBy: nur die Calls dieses Nutzers (pro-Nutzer-
-// Limit). Zaehlt bewusst auch fehlgeschlagene - konservative Toll-Fraud-Bremse.
-export function countOutboundCallsSince(s, sinceIso, requestedBy = null) {
+// Pro-Stunde-Gate in server.js). filters (alle optional, kombinierbar als UND):
+//   requestedBy : nur Calls dieses Nutzers (pro-Nutzer-Limit, Bestand)
+//   tenantId    : nur Calls dieses Tenants (pro-Tenant-Achse, P4)
+// Ohne Filter: ALLE Outbound-Records (globale Plattform-Bremse, Bestand). Zaehlt
+// bewusst auch fehlgeschlagene - konservative Toll-Fraud-Bremse.
+export function countOutboundCallsSince(s, sinceIso, { requestedBy = null, tenantId = null } = {}) {
   return s.calls.filter(
     (c) =>
       c.direction === "outbound" &&
       c.startedAt >= sinceIso &&
-      (requestedBy == null || c.requestedBy === requestedBy)
+      (requestedBy == null || c.requestedBy === requestedBy) &&
+      (tenantId == null || c.tenantId === tenantId)
   ).length;
 }
 
@@ -174,19 +185,59 @@ export function seedOwnerNumber(s, e164, tenantId) {
   s.numbers.push({ e164, tenantId, provider: "twilio" });
 }
 
-// ---- Usage / Budget-Guard ----
-export function trackUsage(s, inputTokens, outputTokens, cfg) {
-  s.usage.inputTokens += inputTokens;
-  s.usage.outputTokens += outputTokens;
+// ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
+// Liefert den Usage-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
+// im Kommentar; der Aufrufer reicht stets eine konkrete tenantId). So lebt der
+// Map-Zugriff genau einmal (G5) - keine s.usage[tenantId]-Duplizierung verstreut.
+export function usageFor(s, tenantId) {
+  return (s.usage[tenantId] ||= emptyUsage());
+}
+
+// Reiner Lese-View fuer das Owner-Dashboard: der Owner-Bucket im flachen Shape,
+// das /api/state, das Dashboard (public/index.html) und get_agent_status erwarten.
+export function ownerUsageView(s) {
+  return usageFor(s, OWNER_TENANT_ID);
+}
+
+// Plattform-Summe ueber ALLE Tenant-Buckets (globaler Budget-Notaus, R2). Fuer
+// owner-only faellt die Summe mit dem Owner-Bucket zusammen -> verhaltens-identisch.
+export function globalUsageTotals(s) {
+  const total = emptyUsage();
+  for (const bucket of Object.values(s.usage)) {
+    total.inputTokens += bucket.inputTokens;
+    total.outputTokens += bucket.outputTokens;
+    total.costEur += bucket.costEur;
+    total.calls += bucket.calls;
+  }
+  return total;
+}
+
+// Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
+// costEur bleibt JS-Float (Bestand, akzeptiertes Risiko). Liefert den Bucket.
+export function trackUsage(s, tenantId, inputTokens, outputTokens, cfg) {
+  const usage = usageFor(s, tenantId);
+  usage.inputTokens += inputTokens;
+  usage.outputTokens += outputTokens;
   const usd =
     (inputTokens / 1e6) * cfg.priceInPerMTokUsd +
     (outputTokens / 1e6) * cfg.priceOutPerMTokUsd;
-  s.usage.costEur += usd * cfg.usdToEur;
-  return s.usage;
+  usage.costEur += usd * cfg.usdToEur;
+  return usage;
 }
 
-export function budgetExceeded(s, cfg) {
-  return s.usage.costEur >= cfg.maxBudgetEur;
+// Pro-Tenant-Budget: der Tenant-Bucket gegen config.maxBudgetEur (P4). Quelle ist
+// die bestehende usage-Tabelle (tenant_id-PK) + config-Cap; KEINE tenant_budget-
+// Tabelle, pro-Tenant-individuelle Caps = P6.
+export function budgetExceeded(s, tenantId, cfg) {
+  return usageFor(s, tenantId).costEur >= cfg.maxBudgetEur;
+}
+
+// Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
+// gegen config.maxBudgetEur. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
+// (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
+// Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt.
+export function globalBudgetExceeded(s, cfg) {
+  return globalUsageTotals(s).costEur >= cfg.maxBudgetEur;
 }
 
 // ---- Notifications ----
