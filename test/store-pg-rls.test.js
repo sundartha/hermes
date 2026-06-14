@@ -46,11 +46,21 @@ async function setup() {
      VALUES ('call_owner', $1, 'tok', 'inbound', 'active', now()::text)`,
     [OWNER_TENANT_ID]
   );
+  // Je eine number-Zeile pro Tenant (id=e164), um den number-Lookup tenant-isoliert
+  // zu pruefen (P3c): die fremde Nummer darf unter der Owner-GUC nicht sichtbar sein.
+  await db.query(
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49owner', $1, '+49owner', 'twilio')`,
+    [OWNER_TENANT_ID]
+  );
+  await db.query(
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49other', $1, '+49other', 'twilio')`,
+    [OTHER_TENANT_ID]
+  );
 
   await db.exec(
     `CREATE ROLE ${APP_ROLE} NOLOGIN;
      GRANT SELECT, INSERT, UPDATE, DELETE ON call, transcript_segment, profile,
-       settings, action_item, calendar_event, usage, notification TO ${APP_ROLE};
+       settings, action_item, calendar_event, usage, notification, number TO ${APP_ROLE};
      GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`
   );
   return db;
@@ -87,6 +97,13 @@ test("RLS: Profile sind tenant-isoliert", async () => {
   const db = await setup();
   const emails = await asAppRole(db, async () => (await db.query(`SELECT email FROM profile`)).rows.map((r) => r.email));
   assert.ok(!emails.includes("fremd@x"), "fremdes Profil ist unsichtbar");
+});
+
+test("RLS: number-Routing ist tenant-isoliert (Cross-Tenant-Read = leer)", async () => {
+  const db = await setup();
+  const e164s = await asAppRole(db, async () => (await db.query(`SELECT e164 FROM number ORDER BY e164`)).rows.map((r) => r.e164));
+  assert.deepEqual(e164s, ["+49owner"], "nur die Owner-Nummer sichtbar");
+  assert.ok(!e164s.includes("+49other"), "fremde Nummer ist unsichtbar");
 });
 
 test("RLS: Schreibzugriff auf fremde tenant_id wird blockiert (WITH CHECK = USING)", async () => {

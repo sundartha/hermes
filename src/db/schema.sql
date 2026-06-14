@@ -1,8 +1,8 @@
 -- Postgres-Schema fuer das pg-Store-Backend (P3b). Idempotent: jede Tabelle und
 -- jede RLS-Policy ist mit IF NOT EXISTS bzw. DROP-vor-CREATE wiederholbar.
 -- Spiegelt die heutige Store-Oberflaeche + einen Owner-Tenant + eigene
--- transcript_segment-Tabelle. KEINE number/number_assignment/tenant_budget/
--- usage_event-Tabellen (das ist spaeterer Scope).
+-- transcript_segment-Tabelle + number (E.164->tenant Routing, P3c). KEINE
+-- number_assignment/tenant_budget/usage_event-Tabellen (das ist spaeterer Scope).
 
 -- tenant: minimal fuer P3b (KEINE idp_subject/kyc-Spalten = spaeterer Scope).
 CREATE TABLE IF NOT EXISTS tenant (
@@ -113,6 +113,16 @@ CREATE TABLE IF NOT EXISTS notification (
   at        TEXT NOT NULL
 );
 
+-- number: E.164 -> tenant Routing (P3c). e164 UNIQUE (Constraint statt App-Logik).
+-- KEINE status/State-Machine/provider_number_id/capabilities/webhook-Spalten = P6.
+CREATE TABLE IF NOT EXISTS number (
+  id         TEXT PRIMARY KEY,
+  tenant_id  TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  e164       TEXT NOT NULL UNIQUE,
+  provider   TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---- Row Level Security (zweite Verteidigungslinie) ----
 -- Primaerlinie ist der app-seitige tenant_id-Filter; RLS faengt vergessene
 -- Filter ab. Policy: Zeile sichtbar/aenderbar nur, wenn tenant_id der GUC
@@ -133,6 +143,8 @@ ALTER TABLE profile            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profile            FORCE  ROW LEVEL SECURITY;
 ALTER TABLE notification       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE number             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE number             FORCE  ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenant_isolation ON settings;
 CREATE POLICY tenant_isolation ON settings
@@ -157,4 +169,7 @@ CREATE POLICY tenant_isolation ON profile
   USING (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
+  USING (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS tenant_isolation ON number;
+CREATE POLICY tenant_isolation ON number
   USING (tenant_id = current_setting('app.current_tenant', true));

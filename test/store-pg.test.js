@@ -1,12 +1,12 @@
 // P3b: pg-Store-Backend gegen pglite (Postgres-in-WASM, offline). Prueft die
-// 23 Store-Funktionen auf Shape-/Verhaltens-Parity zum json-Backend UND den
+// 24 Store-Funktionen auf Shape-/Verhaltens-Parity zum json-Backend UND den
 // mutate-then-save()-Vertrag (getCall-Referenz mutieren + save -> persistiert),
 // jeweils per Re-Hydrierung aus derselben DB (zweiter makePgStore-Aufbau auf
 // derselben pglite-Instanz). pglite = kein Netz, keine externe DB (F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore } from "../src/store/pg.js";
+import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
 import { config } from "../src/config.js";
 import { defaultSettings, demoCalendar } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
@@ -266,4 +266,19 @@ test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", asyn
   await reopen(db);
   const second = await reopen(db);
   assert.equal(second.getCalendar().length, demoCalendar().length);
+});
+
+test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null", async () => {
+  // number direkt in die DB seeden (deterministisch, ohne config.twilioNumber-
+  // Kopplung: der Contract-Test bekommt config nicht ueber BASE_ENV), dann
+  // reopen -> Hydrierung+Lookup wie im Inbound-Pfad.
+  const { db } = await makePgTestStore();
+  const seededE164 = "+15005550006";
+  await db.query(
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, 'twilio')`,
+    [seededE164, OWNER_TENANT_ID]
+  );
+  const reopened = await reopen(db);
+  assert.equal(reopened.findTenantByNumber(seededE164), OWNER_TENANT_ID);
+  assert.equal(reopened.findTenantByNumber("+490000"), null, "unbekannte Nummer -> null (kein Default-Tenant)");
 });

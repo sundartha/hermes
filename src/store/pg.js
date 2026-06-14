@@ -3,10 +3,10 @@
 // init() einmal aus der DB hydriert wird; jede Mutation laeuft synchron gegen den
 // Spiegel (state-ops.js, geteilte Fachlogik) und stoesst danach einen DB-Flush an.
 //
-// WARUM der Spiegel: die 23 Store-Signaturen sind synchron und werden von den
+// WARUM der Spiegel: die 24 Store-Signaturen sind synchron und werden von den
 // Callern teils ohne await aufgerufen (Bridge-Event-Handler, store.save()). pg ist
 // async. Der Spiegel ist die kleinste Aenderung, die Contract-Parity zum
-// json-Backend erreicht, ohne eine der 23 Signaturen oder einen Caller zu
+// json-Backend erreicht, ohne eine der 24 Signaturen oder einen Caller zu
 // veraendern. save() ist deshalb KEIN No-Op: die mutate-then-save()-Stellen
 // (call.twilioSid/summary/objectiveAchieved) wirken auf eine Spiegel-Referenz aus
 // getCall(); save() flusht den Spiegel zurueck in die DB.
@@ -17,13 +17,14 @@
 // spaeterer Scope, nicht P3b.
 import { config } from "../config.js";
 import * as ops from "./state-ops.js";
+import { OWNER_TENANT_ID } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 
-// Owner-Tenant: in P3b laeuft alles unter genau einem Tenant. Benannte Konstante
-// statt verstreutem Magic-String. Setzt zugleich die RLS-GUC app.current_tenant.
-export const OWNER_TENANT_ID = "owner";
+// Owner-Tenant zentral in defaults.js; hier re-exportiert, weil Tests + pg-helpers
+// die Konstante historisch von store/pg.js importieren (Import-Stabilitaet).
+export { OWNER_TENANT_ID };
 
-// makePgStore(runner) -> Objekt mit den 23 Store-Funktionen. runner-Vertrag:
+// makePgStore(runner) -> Objekt mit den 24 Store-Funktionen. runner-Vertrag:
 //   withClient(fn) : ruft fn(client) auf EINER Verbindung; client.query(text,
 //                    params)->{rows} und client.exec(sqlScript) (Mehrfach-DDL).
 // KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()
@@ -96,6 +97,7 @@ export function makePgStore(runner) {
     },
     countOutboundCallsSince: (sinceIso, requestedBy = null) =>
       ops.countOutboundCallsSince(requireState(), sinceIso, requestedBy),
+    findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
 
     addActionItem(callId, text, type = "todo") {
       const item = ops.addActionItem(requireState(), callId, text, type);
@@ -181,6 +183,9 @@ async function hydrate(client, tenantId) {
     `SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
   )).rows;
   const profileRows = (await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])).rows;
+  const numberRows = (await client.query(
+    `SELECT e164, tenant_id, provider FROM number WHERE tenant_id = $1`, [tenantId]
+  )).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
   const itemIdsByCall = groupActionItemIds(itemRows);
@@ -193,6 +198,7 @@ async function hydrate(client, tenantId) {
   state.usage = usageRows.length ? rowToUsage(usageRows[0]) : state.usage;
   state.notifications = notifRows.map(rowToNotification);
   state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
+  state.numbers = numberRows.map((r) => ({ e164: r.e164, tenantId: r.tenant_id, provider: r.provider }));
   return state;
 }
 
@@ -291,6 +297,7 @@ async function flush(client, tenantId, state) {
     await flushSettings(client, tenantId, state.settings);
     await flushUsage(client, tenantId, state.usage);
     await flushProfiles(client, tenantId, state.profiles);
+    await flushNumbers(client, tenantId, state.numbers);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -398,6 +405,21 @@ async function flushProfiles(client, tenantId, profiles) {
       `INSERT INTO profile (tenant_id, email, data) VALUES ($1,$2,$3)
        ON CONFLICT (tenant_id, email) DO UPDATE SET data=EXCLUDED.data`,
       [tenantId, email, JSON.stringify(data)]
+    );
+  }
+}
+
+// number ist in P3c config-derived (Owner-Seed via migrate); der Flush haelt den
+// Spiegel mit der DB konsistent (Full-Upsert + Delete-Missing wie die anderen
+// Tabellen), damit Re-Hydrierung den Spiegel-Shape exakt rekonstruiert. id=e164
+// (TEXT-PK; e164 ist UNIQUE und stabil), daher kein separater Surrogat-Key.
+async function flushNumbers(client, tenantId, numbers) {
+  await deleteMissingByText(client, "number", "e164", tenantId, numbers.map((n) => n.e164));
+  for (const n of numbers) {
+    await client.query(
+      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (e164) DO UPDATE SET tenant_id=EXCLUDED.tenant_id, provider=EXCLUDED.provider`,
+      [n.e164, tenantId, n.e164, n.provider || "twilio"]
     );
   }
 }

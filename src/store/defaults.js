@@ -2,6 +2,11 @@
 // (json.js + pg.js) genutzt, damit "frischer pg-Zustand == frischer json-Zustand"
 // strukturell garantiert ist (eine Quelle statt zwei). Kein DB-/Datei-Zugriff hier.
 
+// Owner-Tenant: in der Single-Tenant-Phase laeuft alles unter genau einem Tenant.
+// Benannte Konstante statt verstreutem Magic-String (von json/pg/state-ops/server
+// gemeinsam genutzt). pg.js re-exportiert sie, damit RLS-GUC + Seeding davon haengen.
+export const OWNER_TENANT_ID = "owner";
+
 // Demo-Termine relativ zum Startzeitpunkt (Tage voraus / Uhrzeit). Werte als
 // benannte Eintraege statt nackter Zahlen mitten im Code.
 const DEMO_EVENTS = [

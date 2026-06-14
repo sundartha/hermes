@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { defaultSettings, emptyUsage, sanitizeProfile } from "./defaults.js";
+import { defaultSettings, emptyUsage, sanitizeProfile, OWNER_TENANT_ID } from "./defaults.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -21,11 +21,16 @@ export function load() {
     state.usage = { ...emptyUsage(), ...state.usage };
     state.notifications ||= [];
     state.profiles ||= {};
+    state.numbers ||= [];
   } catch {
     state = ops.makeDefaultState();
     save();
   }
   seedProfilesFromEnv();
+  // Owner-Nummer config-derived bei JEDEM load() idempotent sicherstellen (analog
+  // seedProfilesFromEnv): ohne sie wuerde Inbound nach P3c fail-closed greifen,
+  // weil seedState()-Tests/persistierte Stores keine numbers tragen.
+  ops.seedOwnerNumber(state, config.twilioNumber, OWNER_TENANT_ID);
   return state;
 }
 
@@ -88,6 +93,11 @@ export function endCallRecord(callId, status = "completed") {
 
 export function countOutboundCallsSince(sinceIso, requestedBy = null) {
   return ops.countOutboundCallsSince(load(), sinceIso, requestedBy);
+}
+
+// ---- Inbound-Routing: E.164 -> Tenant (P3c) ----
+export function findTenantByNumber(e164) {
+  return ops.findTenantByNumber(load(), e164);
 }
 
 // ---- Action Items ----

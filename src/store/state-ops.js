@@ -27,6 +27,9 @@ export function makeDefaultState() {
     // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
     // Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
     profiles: {},
+    // E.164 -> tenant_id Routing-Tabelle (P3c). Owner-Nummer ist config-derived
+    // (seedOwnerNumber), keine ueber die API mutierbaren User-Daten.
+    numbers: [], // [{ e164, tenantId, provider }]
   };
 }
 
@@ -150,6 +153,25 @@ export function addCalendarEvent(s, title, startIso, endIso) {
 
 export function findConflict(s, startIso, endIso) {
   return getCalendar(s).find((ev) => ev.start < endIso && startIso < ev.end) || null;
+}
+
+// ---- Inbound-Routing: E.164 -> Tenant (P3c) ----
+// Reine Query (kein IO, keine Mutation): liefert die tenant_id der Nummer oder
+// null. null = unbekannte Nummer -> der Caller faellt fail-closed (kein Default-
+// Tenant). e164 wird exakt verglichen (Twilio liefert To bereits in E.164).
+export function findTenantByNumber(s, e164) {
+  if (!e164) return null;
+  const hit = s.numbers.find((n) => n.e164 === e164);
+  return hit ? hit.tenantId : null;
+}
+
+// Stellt die config-abgeleitete Owner-Nummer idempotent im Spiegel sicher (json
+// load() ruft makeDefaultState nicht auf bestehenden Stores, seedState()-Tests
+// seeden ohne numbers). Leere Nummer -> kein Seed. Vorhandene e164 gewinnt.
+export function seedOwnerNumber(s, e164, tenantId) {
+  if (!e164) return;
+  if (s.numbers.some((n) => n.e164 === e164)) return;
+  s.numbers.push({ e164, tenantId, provider: "twilio" });
 }
 
 // ---- Usage / Budget-Guard ----

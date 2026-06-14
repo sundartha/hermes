@@ -8,6 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { config } from "../config.js";
 import { defaultSettings, demoCalendar } from "../store/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,16 @@ export async function seedDefaults(db, tenantId) {
     `INSERT INTO usage (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING`,
     [tenantId]
   );
+
+  // Owner-Nummer config-derived (config.twilioNumber, "degradiert" zur Owner-Nummer).
+  // Idempotent; leere Nummer -> kein Seed (gleiche Guard wie der json-Pfad).
+  if (config.twilioNumber) {
+    await db.query(
+      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, 'twilio')
+       ON CONFLICT (e164) DO NOTHING`,
+      [config.twilioNumber, tenantId]
+    );
+  }
 
   // Demo-Kalender nur seeden, wenn fuer den Owner noch keiner existiert
   // (idempotent, ohne dass spaeter geloeschte Eintraege wieder auftauchen).

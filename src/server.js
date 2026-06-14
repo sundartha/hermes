@@ -229,7 +229,22 @@ function armMaxDurationTimer(call, twilioSid) {
 
 // ---------------- INBOUND ----------------
 // Twilio-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
+// Die Twilio-Signatur ist hier bereits fail-closed geprueft (app.use("/voice")).
+// Erst danach wird To gelesen und auf einen Tenant aufgeloest (Anti-Spoof: To
+// vor der Signatur waere Tenant-Spoofing). Unbekannte/fehlende To -> hoeflicher
+// Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet
+// nichts).
 app.post("/voice/incoming", (req, res) => {
+  const to = normNum(req.body.To);
+  const tenantId = store.findTenantByNumber(to);
+  if (!tenantId) {
+    audit("inbound_unrouted", req, `to=${to || "-"}`);
+    return res.type("text/xml").send(render([
+      sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."),
+      hangupD(),
+    ]));
+  }
+
   if (store.budgetExceeded(config)) {
     return res.type("text/xml").send(render([
       sayD("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
@@ -240,7 +255,7 @@ app.post("/voice/incoming", (req, res) => {
   const call = store.createCall({
     direction: "inbound",
     from: req.body.From || "unbekannt",
-    to: req.body.To || config.twilioNumber,
+    to,
     twilioSid: req.body.CallSid,
   });
   store.markAnswered(call.id);
