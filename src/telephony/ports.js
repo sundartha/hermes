@@ -37,4 +37,11 @@
  * @property {(params: SmsParams) => Promise<void>} sendSms
  *   Sendet eine SMS. Heute: messages.create(...).
  */
+
+/**
+ * @typedef {Object} VoiceRenderer
+ * @property {(directives: object[]) => string} renderDirectives
+ *   Uebersetzt eine Liste neutraler Direktiven (directives.js) in einen
+ *   Provider-Antwort-Body (Twilio: TwiML). Der einzige Ort mit Provider-Markup.
+ */
 export {};

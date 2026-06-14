@@ -12,7 +12,8 @@ import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
-import { voiceControl, messaging } from "./telephony/registry.js";
+import { voiceControl, messaging, voiceRenderer } from "./telephony/registry.js";
+import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -94,19 +95,9 @@ app.use("/voice", (req, res, next) => {
   next();
 });
 
-const VoiceResponse = twilio.twiml.VoiceResponse;
+// Kurz-Helfer fuer Direktiven-Listen -> TwiML-Antwort (Twilio-Adapter rendert).
+const render = (directives) => voiceRenderer().renderDirectives(directives);
 
-// Deutsche Neural-Stimme + deutsche Spracherkennung (Budget-Engine)
-const VOICE = { voice: "Polly.Vicki-Neural", language: "de-DE" };
-const GATHER = {
-  input: "speech",
-  language: "de-DE",
-  speechTimeout: "auto",
-  speechModel: "deepgram_nova-2-general",
-  actionOnEmptyResult: true,
-};
-
-const say = (node, text) => node.say(VOICE, text);
 const normNum = (n) => (typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "");
 
 // ---- Eingabe-Validierung fuer API-Routen ----
@@ -191,22 +182,24 @@ function numberGateError(to, profile, requestedBy) {
   return allowlistError(to, profile);
 }
 
-function gatherTurn(vr, call, text) {
-  const g = vr.gather({ ...GATHER, action: `/voice/turn?callId=${call.id}`, method: "POST" });
-  if (text) g.say(VOICE, text);
-  vr.redirect({ method: "POST" }, `/voice/turn?callId=${call.id}`);
+// Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem
+// Prompt + Redirect-Fallback auf dieselbe Turn-URL.
+function turnDirectives(call, text) {
+  const action = `/voice/turn?callId=${call.id}`;
+  return [gatherD({ promptText: text, action }), redirectD(action)];
 }
 
-// Realtime-Engine: Anruf-Audio per Media Stream an die Bridge haengen.
-// stream_token authentifiziert den WebSocket: das TwiML sieht nur Twilio,
-// die Bridge prueft das Token beim start-Event (bridge.js).
-function streamTwiml(call) {
-  const vr = new VoiceResponse();
-  const connect = vr.connect();
-  const stream = connect.stream({ url: config.publicUrl.replace(/^https/, "wss") + "/media" });
-  stream.parameter({ name: "call_id", value: call.id });
-  stream.parameter({ name: "stream_token", value: call.streamToken });
-  return vr;
+// Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. stream_token
+// authentifiziert den WebSocket (Bridge prueft beim start-Event, bridge.js).
+function streamDirectives(call) {
+  const url = config.publicUrl.replace(/^https/, "wss") + "/media";
+  return [streamD({
+    url,
+    params: [
+      { name: "call_id", value: call.id },
+      { name: "stream_token", value: call.streamToken },
+    ],
+  })];
 }
 
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
@@ -229,10 +222,10 @@ function armMaxDurationTimer(call, twilioSid) {
 // Twilio-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
 app.post("/voice/incoming", (req, res) => {
   if (store.budgetExceeded(config)) {
-    const vr = new VoiceResponse();
-    say(vr, "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.");
-    vr.hangup();
-    return res.type("text/xml").send(vr.toString());
+    return res.type("text/xml").send(render([
+      sayD("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
+      hangupD(),
+    ]));
   }
 
   const call = store.createCall({
@@ -245,81 +238,66 @@ app.post("/voice/incoming", (req, res) => {
   armMaxDurationTimer(call, req.body.CallSid);
 
   if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(streamTwiml(call).toString());
+    return res.type("text/xml").send(render(streamDirectives(call)));
   }
 
-  const vr = new VoiceResponse();
   const s = store.load().settings;
   const greeting = s.greeting.replaceAll("{owner}", config.ownerName);
   store.addTranscript(call.id, "agent", greeting);
-  gatherTurn(vr, call, greeting);
-  res.type("text/xml").send(vr.toString());
+  res.type("text/xml").send(render(turnDirectives(call, greeting)));
 });
 
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
 app.post("/voice/turn", async (req, res) => {
   const call = store.getCall(req.query.callId);
-  const vr = new VoiceResponse();
   if (!call || call.status !== "active") {
-    vr.hangup();
-    return res.type("text/xml").send(vr.toString());
+    return res.type("text/xml").send(render([hangupD()]));
   }
 
   const heard = (req.body.SpeechResult || "").trim();
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
-      gatherTurn(vr, call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?");
-      return res.type("text/xml").send(vr.toString());
+      return res.type("text/xml").send(render(
+        turnDirectives(call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?")
+      ));
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
-    if (endCall) {
-      say(vr, speech);
-      vr.hangup();
-    } else {
-      gatherTurn(vr, call, speech);
-    }
+    const directives = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
+    res.type("text/xml").send(render(directives));
   } catch (err) {
     console.error("[turn]", err.message);
-    say(vr, "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.");
-    vr.hangup();
+    res.type("text/xml").send(render([
+      sayD("Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut."),
+      hangupD(),
+    ]));
   }
-  res.type("text/xml").send(vr.toString());
 });
 
 // ---------------- OUTBOUND: Angerufener nimmt ab ----------------
 app.post("/voice/outbound", async (req, res) => {
   const call = store.getCall(req.query.callId);
   if (!call) {
-    const vr = new VoiceResponse();
-    vr.hangup();
-    return res.type("text/xml").send(vr.toString());
+    return res.type("text/xml").send(render([hangupD()]));
   }
   call.twilioSid = req.body.CallSid || call.twilioSid;
   store.markAnswered(call.id);
   store.save();
 
   if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(streamTwiml(call).toString());
+    return res.type("text/xml").send(render(streamDirectives(call)));
   }
 
-  const vr = new VoiceResponse();
   try {
     // Pflicht-Offenlegung fest verdrahtet als allererster Satz (kein KI-Ermessen)
     const disclosure = disclosureSentence(call);
     store.addTranscript(call.id, "agent", disclosure);
-    say(vr, disclosure);
     const { speech, endCall } = await agentTurn(call, null); // Agent nennt sein Anliegen
-    if (endCall) {
-      say(vr, speech);
-      vr.hangup();
-    } else {
-      gatherTurn(vr, call, speech);
-    }
+    const tail = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
+    res.type("text/xml").send(render([sayD(disclosure), ...tail]));
   } catch (err) {
     console.error("[outbound]", err.message);
-    vr.hangup();
+    res.type("text/xml").send(render([hangupD()]));
   }
-  res.type("text/xml").send(vr.toString());
 });
 
 // ---------------- Call zu Ende -> Summary + Notification + SMS ----------------
