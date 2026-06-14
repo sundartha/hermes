@@ -1,0 +1,247 @@
+// P3b: pg-Store-Backend gegen pglite (Postgres-in-WASM, offline). Prueft die
+// 23 Store-Funktionen auf Shape-/Verhaltens-Parity zum json-Backend UND den
+// mutate-then-save()-Vertrag (getCall-Referenz mutieren + save -> persistiert),
+// jeweils per Re-Hydrierung aus derselben DB (zweiter makePgStore-Aufbau auf
+// derselben pglite-Instanz). pglite = kein Netz, keine externe DB (F.I.R.S.T.).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { PGlite } from "@electric-sql/pglite";
+import { makePgStore } from "../src/store/pg.js";
+import { defaultSettings, demoCalendar } from "../src/store/defaults.js";
+import { makePgTestStore } from "./pg-helpers.js";
+
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+
+// Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert
+// den Spiegel aus der DB) - so wird Persistenz statt nur In-Memory geprueft.
+async function reopen(db) {
+  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const store = makePgStore(runner);
+  await store.init();
+  return store;
+}
+
+test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
+  const { store } = await makePgTestStore();
+  const s = store.load();
+  assert.deepEqual(s.settings, defaultSettings());
+  assert.equal(s.calls.length, 0);
+  assert.equal(s.actionItems.length, 0);
+  assert.equal(s.notifications.length, 0);
+  assert.deepEqual(s.profiles, {});
+  assert.deepEqual(s.usage, { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 });
+  // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
+  assert.deepEqual(store.getCalendar(), demoCalendar());
+});
+
+test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionItemIds", async () => {
+  const { store } = await makePgTestStore();
+  const call = store.createCall({ direction: "outbound", from: "+49111", to: "+49222", goal: "Test" });
+  assert.match(call.id, /^call_/);
+  assert.equal(typeof call.streamToken, "string");
+  assert.equal(call.streamToken.length, 32);
+  assert.equal(call.status, "active");
+  assert.deepEqual(call.transcript, []);
+  assert.deepEqual(call.actionItemIds, []);
+  assert.equal(store.load().usage.calls, 1);
+  assert.equal(store.getCall(call.id).id, call.id);
+});
+
+test("createCall persistiert ueber Re-Hydrierung (inkl. usage.calls)", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "inbound", from: "+49333", to: "+49444" });
+  await store.save();
+  const reopened = await reopen(db);
+  const got = reopened.getCall(call.id);
+  assert.ok(got, "Call ueberlebt die Re-Hydrierung");
+  assert.equal(got.streamToken, call.streamToken);
+  assert.equal(got.direction, "inbound");
+  assert.equal(reopened.load().usage.calls, 1);
+});
+
+test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  store.addTranscript(call.id, "agent", "erste");
+  store.addTranscript(call.id, "caller", "zweite");
+  await store.save();
+  const reopened = await reopen(db);
+  const got = reopened.getCall(call.id);
+  assert.deepEqual(got.transcript.map((t) => [t.role, t.text]), [
+    ["agent", "erste"],
+    ["caller", "zweite"],
+  ]);
+});
+
+test("addActionItem haengt id an call.actionItemIds + persistiert", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const item = store.addActionItem(call.id, "Rueckruf", "todo");
+  assert.deepEqual(store.getCall(call.id).actionItemIds, [item.id]);
+  await store.save();
+  const reopened = await reopen(db);
+  assert.deepEqual(reopened.getCall(call.id).actionItemIds, [item.id]);
+  assert.equal(reopened.load().actionItems[0].id, item.id);
+});
+
+test("toggleActionItem kippt done und persistiert", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const item = store.addActionItem(call.id, "x");
+  assert.equal(item.done, false);
+  store.toggleActionItem(item.id);
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.load().actionItems[0].done, true);
+});
+
+test("markAnswered + endCallRecord: Statusuebergaenge + Idempotenz", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  assert.equal(store.markAnswered(call.id).answeredAt !== null, true);
+  const firstAnswered = store.getCall(call.id).answeredAt;
+  store.markAnswered(call.id); // zweiter Aufruf aendert answeredAt nicht
+  assert.equal(store.getCall(call.id).answeredAt, firstAnswered);
+  store.endCallRecord(call.id, "completed");
+  assert.equal(store.getCall(call.id).status, "completed");
+  store.endCallRecord(call.id, "failed"); // nur aus active -> kein Wechsel mehr
+  assert.equal(store.getCall(call.id).status, "completed");
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.getCall(call.id).status, "completed");
+  assert.ok(reopened.getCall(call.id).endedAt);
+});
+
+test("countOutboundCallsSince mit und ohne requestedBy", async () => {
+  const { store } = await makePgTestStore();
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "a@x" });
+  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "b@x" });
+  store.createCall({ direction: "inbound", from: "+49", to: "+49" });
+  assert.equal(store.countOutboundCallsSince(since), 2);
+  assert.equal(store.countOutboundCallsSince(since, "a@x"), 1);
+});
+
+test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
+  const { store, db } = await makePgTestStore();
+  const usage = store.trackUsage(1_000_000, 1_000_000, PRICES);
+  const expectedUsd = 1.0 + 5.0;
+  assert.equal(usage.inputTokens, 1_000_000);
+  assert.equal(usage.outputTokens, 1_000_000);
+  assert.ok(Math.abs(usage.costEur - expectedUsd * PRICES.usdToEur) < 1e-9);
+  assert.equal(store.budgetExceeded(PRICES), false);
+  store.trackUsage(0, 2_000_000, PRICES); // schiebt ueber 8 EUR
+  assert.equal(store.budgetExceeded(PRICES), true);
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.budgetExceeded(PRICES), true);
+});
+
+test("getCalendar sortiert + addCalendarEvent + findConflict", async () => {
+  const { store, db } = await makePgTestStore();
+  store.addCalendarEvent("Termin", "2030-01-01T10:00:00.000Z", "2030-01-01T11:00:00.000Z");
+  const cal = store.getCalendar();
+  for (let i = 1; i < cal.length; i++) assert.ok(cal[i - 1].start <= cal[i].start);
+  assert.ok(store.findConflict("2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"));
+  assert.equal(store.findConflict("2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"), null);
+  await store.save();
+  const reopened = await reopen(db);
+  assert.ok(reopened.findConflict("2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"));
+});
+
+test("addNotification kappt auf 50 (neueste zuerst)", async () => {
+  const { store, db } = await makePgTestStore();
+  for (let i = 0; i < 55; i++) store.addNotification(`t${i}`, `b${i}`, null);
+  assert.equal(store.load().notifications.length, 50);
+  assert.equal(store.load().notifications[0].title, "t54");
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.load().notifications.length, 50);
+  assert.equal(reopened.load().notifications[0].title, "t54");
+});
+
+test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert", async () => {
+  const { store, db } = await makePgTestStore();
+  const { changed } = store.updateSettings({ agentName: "Neu", allowBooking: false, fremd: "x", allowCalendar: "kein-bool" });
+  assert.deepEqual(changed.sort(), ["agentName", "allowBooking"]);
+  assert.equal(store.load().settings.agentName, "Neu");
+  assert.equal(store.load().settings.allowBooking, false);
+  assert.equal("fremd" in store.load().settings, false);
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.load().settings.agentName, "Neu");
+  assert.equal(reopened.load().settings.allowBooking, false);
+});
+
+test("Profile: resolveProfile Owner/Default + setProfile/deleteProfile/listProfiles", async () => {
+  const { store, db } = await makePgTestStore();
+  // leere email -> Owner (permissiv), unbekannt -> Default (restriktiv)
+  assert.equal(store.resolveProfile("").allowCalendar, true);
+  assert.equal(store.resolveProfile("unbekannt@x").allowCalendar, false);
+  store.setProfile("a@x", { unrestricted: true, maxCallsPerHour: 6, fremd: 1 });
+  assert.equal(store.resolveProfile("a@x").unrestricted, true);
+  assert.equal(store.resolveProfile("a@x").maxCallsPerHour, 6);
+  assert.deepEqual(Object.keys(store.listProfiles()), ["a@x"]);
+  await store.save();
+  const reopened = await reopen(db);
+  assert.equal(reopened.resolveProfile("a@x").unrestricted, true);
+  assert.equal(store.deleteProfile("a@x"), true);
+  assert.equal(store.deleteProfile("a@x"), false);
+  await store.save();
+  const afterDelete = await reopen(db);
+  assert.deepEqual(afterDelete.listProfiles(), {});
+});
+
+test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", async () => {
+  const { store, db } = await makePgTestStore();
+  const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
+  const active = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  store.endCallRecord(doneOld.id, "completed");
+  // Alters-Stempel direkt im Spiegel setzen (wie der Retention-Test alte Daten seedet)
+  store.getCall(doneOld.id).endedAt = old;
+  const openItem = store.addActionItem(doneOld.id, "offen");
+  const doneItem = store.addActionItem(doneOld.id, "erledigt");
+  store.toggleActionItem(doneItem.id);
+  store.load().actionItems.find((a) => a.id === doneItem.id).createdAt = old;
+  store.addNotification("alt", "", null);
+  store.load().notifications[0].at = old;
+  await store.save();
+
+  const removed = store.pruneOldData(30);
+  assert.deepEqual(removed, { calls: 1, notifications: 1, actionItems: 1 });
+  const ids = store.load().calls.map((c) => c.id);
+  assert.ok(ids.includes(active.id), "aktiver Call bleibt");
+  assert.ok(!ids.includes(doneOld.id), "alter beendeter Call weg");
+  assert.ok(store.load().actionItems.some((a) => a.id === openItem.id), "offenes Item bleibt");
+  await store.save();
+  const reopened = await reopen(db);
+  assert.ok(!reopened.getCall(doneOld.id), "Loeschung persistiert (samt Transkript per Cascade)");
+});
+
+test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert", async () => {
+  const { store, db } = await makePgTestStore();
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  await store.save();
+  // Genau die Bestands-Muster: server.js setzt twilioSid, claude.js summary/objectiveAchieved
+  const ref = store.getCall(call.id);
+  ref.twilioSid = "CA-test-sid";
+  ref.summary = "Gespraech zusammengefasst";
+  ref.objectiveAchieved = "true";
+  store.save();
+  await store.save();
+  const reopened = await reopen(db);
+  const got = reopened.getCall(call.id);
+  assert.equal(got.twilioSid, "CA-test-sid");
+  assert.equal(got.summary, "Gespraech zusammengefasst");
+  assert.equal(got.objectiveAchieved, "true");
+  // getCall findet auch per twilioSid (wie json)
+  assert.equal(reopened.getCall("CA-test-sid").id, call.id);
+});
+
+test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", async () => {
+  const db = new PGlite();
+  await reopen(db);
+  const second = await reopen(db);
+  assert.equal(second.getCalendar().length, demoCalendar().length);
+});

@@ -62,6 +62,12 @@ services:
         value: "120"
       - key: RETENTION_DAYS
         value: "30"
+      # Store-Backend: json (Default, Datei) oder pg (Postgres). Bei pg DATABASE_URL setzen.
+      - key: STORE_BACKEND
+        value: "json"
+      # Postgres-Connection-String (nur bei STORE_BACKEND=pg). Secret -> im Dashboard.
+      - key: DATABASE_URL
+        sync: false
       - key: TWILIO_EDGE
         value: frankfurt
       - key: SEND_SMS_SUMMARY

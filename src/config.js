@@ -17,6 +17,13 @@ export const config = {
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",
 
+  // ---- Store-Backend ----
+  // "json" (Default) = Datei-Persistenz (data/store.json). "pg" = Postgres.
+  // Im json-Pfad wird KEINE DB-Verbindung erzeugt; DATABASE_URL ist dann nicht noetig.
+  storeBackend: (process.env.STORE_BACKEND || "json").toLowerCase(),
+  // Postgres-Connection-String (NUR bei STORE_BACKEND=pg). Secret -> nie loggen.
+  databaseUrl: process.env.DATABASE_URL || "",
+
   port: parseInt(process.env.PORT || "3000", 10),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
   publicUrl: (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, ""),
@@ -98,6 +105,8 @@ export function assertConfig() {
     missing.push("PUBLIC_URL");
   if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
+  if (config.storeBackend === "pg" && !config.databaseUrl)
+    missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
   if (missing.length) {
     console.error(
       "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +
