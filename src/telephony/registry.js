@@ -3,8 +3,8 @@
 import { twilioVoice } from "./adapters/twilio/voice.js";
 import { twilioMessaging } from "./adapters/twilio/messaging.js";
 
-// @returns {import("./ports.js").VoiceControl}
+/** @returns {import("./ports.js").VoiceControl} */
 export const voiceControl = () => twilioVoice;
 
-// @returns {import("./ports.js").Messaging}
+/** @returns {import("./ports.js").Messaging} */
 export const messaging = () => twilioMessaging;

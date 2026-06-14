@@ -4,13 +4,13 @@ import { twilioClient } from "./client.js";
 
 /** @type {import("../../ports.js").VoiceControl} */
 export const twilioVoice = {
-  // Outbound-Call starten. Parameter 1:1 wie bisher in server.js:428.
+  // Outbound-Call starten. Parameter-Objekt 1:1 wie bisher durchgereicht.
   async originateCall(params) {
     const tw = await twilioClient().calls.create(params);
     return { sid: tw.sid };
   },
 
-  // Laufenden Call beenden. 1:1 wie bisher (server.js:224/458, bridge.js:54).
+  // Laufenden Call beenden. Verhalten 1:1 wie bisher.
   async endCall(providerCallSid) {
     await twilioClient().calls(providerCallSid).update({ status: "completed" });
   },
