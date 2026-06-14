@@ -21,6 +21,19 @@ export async function applySchema(db) {
   await db.exec(ddl);
 }
 
+// Eine config-derived Owner-Nummer idempotent seeden. Leere Nummer -> kein Seed
+// (env-gating, fail-closed -> Inbound dieses Providers nicht routbar). Ein INSERT,
+// zwei Aufrufe (G5) statt dupliziertem Block - spiegelt die seedOwnerNumber-
+// Abstraktion des json-Pfads (state-ops.js).
+async function seedNumber(db, tenantId, e164, provider) {
+  if (!e164) return;
+  await db.query(
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
+     ON CONFLICT (e164) DO NOTHING`,
+    [e164, tenantId, provider]
+  );
+}
+
 // Seedet die Owner-Zeilen (tenant, settings, usage, Demo-Kalender) aus den
 // CODE-Defaults (defaults.js) - identisch zum frischen json-Zustand. Leere
 // calls/actionItems/notifications/profiles brauchen keinen Insert.
@@ -43,25 +56,10 @@ export async function seedDefaults(db, tenantId) {
     [tenantId]
   );
 
-  // Owner-Nummer config-derived (config.twilioNumber, "degradiert" zur Owner-Nummer).
-  // Idempotent; leere Nummer -> kein Seed (gleiche Guard wie der json-Pfad).
-  if (config.twilioNumber) {
-    await db.query(
-      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
-       ON CONFLICT (e164) DO NOTHING`,
-      [config.twilioNumber, tenantId, DEFAULT_PROVIDER]
-    );
-  }
-
-  // Telnyx-Owner-Nummer (config-derived, idempotent; leer -> kein Seed -> Telnyx-
-  // Inbound fail-closed). Mirror zum json-Pfad (seedOwnerNumber mit PROVIDER.TELNYX).
-  if (config.telnyxNumber) {
-    await db.query(
-      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
-       ON CONFLICT (e164) DO NOTHING`,
-      [config.telnyxNumber, tenantId, PROVIDER.TELNYX]
-    );
-  }
+  // Owner-Nummern config-derived ("degradiert" zur Owner-Nummer): Twilio +
+  // optional Telnyx. Idempotent; leere Nummer -> kein Seed (env-gating).
+  await seedNumber(db, tenantId, config.twilioNumber, DEFAULT_PROVIDER);
+  await seedNumber(db, tenantId, config.telnyxNumber, PROVIDER.TELNYX);
 
   // Demo-Kalender nur seeden, wenn fuer den Owner noch keiner existiert
   // (idempotent, ohne dass spaeter geloeschte Eintraege wieder auftauchen).
