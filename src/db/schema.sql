@@ -82,7 +82,9 @@ CREATE TABLE IF NOT EXISTS calendar_event (
   seq       BIGSERIAL
 );
 
--- usage: Owner-Zeile. cost_eur als NUMERIC (Geld nie als Fliesskomma).
+-- usage: Owner-Zeile. cost_eur-Spalte als NUMERIC (praezise at rest); der
+-- In-Memory-Spiegel haelt cost_eur jedoch als JS-Float und akkumuliert ihn so -
+-- wie im json-Bestand (kein neuer Verstoss, kein Geld-als-Float-Regress).
 CREATE TABLE IF NOT EXISTS usage (
   tenant_id     TEXT PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
   input_tokens  BIGINT NOT NULL DEFAULT 0,
