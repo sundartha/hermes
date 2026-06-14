@@ -12,6 +12,7 @@ import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
+import { voiceControl, messaging } from "./telephony/registry.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -94,7 +95,6 @@ app.use("/voice", (req, res, next) => {
 });
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
-const twilioClient = () => twilio(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
 
 // Deutsche Neural-Stimme + deutsche Spracherkennung (Budget-Engine)
 const VOICE = { voice: "Polly.Vicki-Neural", language: "de-DE" };
@@ -221,7 +221,7 @@ function armMaxDurationTimer(call, twilioSid) {
   setTimeout(() => {
     const c = store.getCall(call.id);
     if (c?.status === "active" && twilioSid)
-      twilioClient().calls(twilioSid).update({ status: "completed" }).catch(() => {});
+      voiceControl().endCall(twilioSid).catch(() => {});
   }, limit);
 }
 
@@ -350,7 +350,7 @@ async function finishCall(call) {
         `[${store.load().settings.agentName}] ${who}\n\n${result.summary}` +
         (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
       try {
-        await twilioClient().messages.create({
+        await messaging().sendSms({
           from: config.twilioNumber,
           to: config.ownerNumber,
           body: sms.slice(0, 1500),
@@ -425,7 +425,7 @@ app.post("/api/calls", async (req, res) => {
   audit("place_call", req, `to=${to} call=${call.id} requestedBy=${requestedBy}`);
 
   try {
-    const tw = await twilioClient().calls.create({
+    const tw = await voiceControl().originateCall({
       from: config.twilioNumber,
       to,
       url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
@@ -455,7 +455,7 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   store.endCallRecord(call.id, "cancelled");
   if (call.twilioSid) {
     try {
-      await twilioClient().calls(call.twilioSid).update({ status: "completed" });
+      await voiceControl().endCall(call.twilioSid);
     } catch (e) {
       console.error("[cancel]", e.message);
     }

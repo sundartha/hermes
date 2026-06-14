@@ -3,13 +3,11 @@
 // (input_audio_format = output_audio_format = g711_ulaw) -> kein Transcoding, minimale Latenz.
 // Audio laeuft NIEMALS durch MCP.
 import WebSocket, { WebSocketServer } from "ws";
-import twilio from "twilio";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { toolDefs, execTool, disclosureSentence, systemPrompt } from "./claude.js";
 import { safeEqual } from "./util.js";
-
-const twilioClient = () => twilio(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
+import { voiceControl } from "./telephony/registry.js";
 
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
 function realtimeTools() {
@@ -51,7 +49,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       // Bei (d) warten wir kurz, damit der letzte Audio-Puffer (Verabschiedung) noch abgespielt wird.
       log("hangup:", reason);
       const sid = call?.twilioSid;
-      if (sid) twilioClient().calls(sid).update({ status: "completed" }).catch(() => {});
+      if (sid) voiceControl().endCall(sid).catch(() => {});
     }
 
     function finalize(status) {
