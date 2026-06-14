@@ -287,16 +287,18 @@ app.post("/voice/outbound", async (req, res) => {
     return res.type("text/xml").send(render(streamDirectives(call)));
   }
 
+  // Pflicht-Offenlegung fest verdrahtet als allererster Satz (kein KI-Ermessen).
+  // Vor dem try gebaut, damit auch der Fehlerpfad (agentTurn wirft) sie als
+  // ersten Knoten ausgibt - sonst legt der Agent stumm auf (Regel 2).
+  const disclosure = disclosureSentence(call);
+  store.addTranscript(call.id, "agent", disclosure);
   try {
-    // Pflicht-Offenlegung fest verdrahtet als allererster Satz (kein KI-Ermessen)
-    const disclosure = disclosureSentence(call);
-    store.addTranscript(call.id, "agent", disclosure);
     const { speech, endCall } = await agentTurn(call, null); // Agent nennt sein Anliegen
     const tail = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
     res.type("text/xml").send(render([sayD(disclosure), ...tail]));
   } catch (err) {
     console.error("[outbound]", err.message);
-    res.type("text/xml").send(render([hangupD()]));
+    res.type("text/xml").send(render([sayD(disclosure), hangupD()]));
   }
 });
 
