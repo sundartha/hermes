@@ -3,6 +3,7 @@
 import { twilioVoice } from "./adapters/twilio/voice.js";
 import { twilioMessaging } from "./adapters/twilio/messaging.js";
 import { renderDirectives } from "./adapters/twilio/render.js";
+import { verifyInboundSignature } from "./adapters/twilio/signature.js";
 
 /** @returns {import("./ports.js").VoiceControl} */
 export const voiceControl = () => twilioVoice;
@@ -12,3 +13,6 @@ export const messaging = () => twilioMessaging;
 
 /** @returns {import("./ports.js").VoiceRenderer} */
 export const voiceRenderer = () => ({ renderDirectives });
+
+/** @returns {import("./ports.js").InboundSignatureVerifier} */
+export const inboundSignatureVerifier = () => ({ verifyInboundSignature });

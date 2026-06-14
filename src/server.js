@@ -1,7 +1,6 @@
 // Voice-Gateway: Twilio-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
 import express from "express";
-import twilio from "twilio";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
@@ -12,7 +11,7 @@ import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
-import { voiceControl, messaging, voiceRenderer } from "./telephony/registry.js";
+import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 
 const app = express();
@@ -54,8 +53,14 @@ app.use((req, res, next) => {
 // Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
 // und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
 const BODY_LIMIT = "100kb";
-app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT })); // Twilio-Webhooks
-app.use(express.json({ limit: BODY_LIMIT })); // eigene API + MCP
+// rawBody nur fuer /voice erfassen (kuenftiger Ed25519-Pfad/Telnyx braucht den
+// unveraenderten Body). Der Twilio-HMAC nutzt weiterhin nur die geparsten Params -
+// die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
+const captureRawBody = (req, _res, buf) => {
+  if (req.path.startsWith("/voice")) req.rawBody = buf;
+};
+app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Twilio-Webhooks
+app.use(express.json({ limit: BODY_LIMIT, verify: captureRawBody })); // eigene API + MCP
 
 // Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten
 app.use((err, _req, res, next) => {
@@ -82,16 +87,20 @@ app.use((req, res, next) => {
 });
 app.use(express.static(config.publicDir));
 
-// ---- Twilio-Signaturpruefung fuer alle /voice-Webhooks ----
-// Twilio signiert jeden Request (HMAC-SHA1 ueber URL+Params mit dem Auth-Token).
-// Ohne diese Pruefung kann jeder, der die URL kennt, Anrufe/Transkripte faelschen
-// und Claude-Turns (=Kosten) ausloesen.
+// ---- Inbound-Signaturpruefung fuer alle /voice-Webhooks (fail-closed) ----
+// Der Provider signiert jeden Request. Ohne diese Pruefung kann jeder, der die URL
+// kennt, Anrufe/Transkripte faelschen und Claude-Turns (=Kosten) ausloesen. Die
+// Krypto (Twilio-HMAC) lebt im Adapter; hier bleibt nur das Skip-Gate (Local/Test)
+// und die fail-closed-Antwort. rawBody (req.rawBody) ist fuer kuenftige Provider da.
 app.use("/voice", (req, res, next) => {
   if (config.skipTwilioSignatureCheck) return next();
-  const signature = req.headers["x-twilio-signature"] || "";
-  const url = config.publicUrl + req.originalUrl;
-  if (!config.publicUrl || !twilio.validateRequest(config.twilioToken, signature, url, req.body || {}))
-    return res.status(403).send("invalid twilio signature");
+  const ok = inboundSignatureVerifier().verifyInboundSignature({
+    headers: req.headers,
+    rawBody: req.rawBody,
+    url: config.publicUrl + req.originalUrl,
+    params: req.body || {},
+  });
+  if (!ok) return res.status(403).send("invalid twilio signature");
   next();
 });
 
