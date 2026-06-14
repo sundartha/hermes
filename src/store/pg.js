@@ -15,6 +15,7 @@
 // Prozessen kann der Spiegel von der DB driften - gleichwertig zur heutigen
 // json-Annahme (ein Prozess haelt den Zustand). Multi-Prozess-Korrektheit ist
 // spaeterer Scope, nicht P3b.
+import { config } from "../config.js";
 import * as ops from "./state-ops.js";
 import { migrate } from "../db/migrate.js";
 
@@ -127,7 +128,10 @@ export function makePgStore(runner) {
       save();
     },
 
-    pruneOldData(days) {
+    // Default = config.retentionDays, identisch zum json-Backend: der einzige
+    // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
+    // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).
+    pruneOldData(days = config.retentionDays) {
       const removed = ops.pruneOldData(requireState(), days);
       if (removed.calls || removed.notifications || removed.actionItems) save();
       return removed;

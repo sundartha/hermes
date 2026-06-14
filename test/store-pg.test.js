@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore } from "../src/store/pg.js";
+import { config } from "../src/config.js";
 import { defaultSettings, demoCalendar } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
@@ -217,6 +218,27 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   await store.save();
   const reopened = await reopen(db);
   assert.ok(!reopened.getCall(doneOld.id), "Loeschung persistiert (samt Transkript per Cascade)");
+});
+
+test("pruneOldData() ohne Argument nutzt config.retentionDays (Produktions-Caller server.js:583)", async () => {
+  // server.js:583 ruft store.pruneOldData() OHNE Argument. Der Default (=
+  // config.retentionDays) MUSS auch unter pg greifen, sonst ist die DSGVO-
+  // Retention still abgeschaltet. Default hier deterministisch auf 30 Tage.
+  const { store } = await makePgTestStore();
+  config.retentionDays = 30;
+  const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
+  const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  store.endCallRecord(doneOld.id, "completed");
+  store.getCall(doneOld.id).endedAt = old;
+  const freshDone = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  store.endCallRecord(freshDone.id, "completed");
+  await store.save();
+
+  const removed = store.pruneOldData(); // KEIN Argument = Produktionspfad
+  assert.equal(removed.calls, 1, "alter beendeter Call wird ueber den Default-Pfad geprunt");
+  const ids = store.load().calls.map((c) => c.id);
+  assert.ok(!ids.includes(doneOld.id), "alter beendeter Call weg");
+  assert.ok(ids.includes(freshDone.id), "frischer beendeter Call bleibt");
 });
 
 test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert", async () => {
