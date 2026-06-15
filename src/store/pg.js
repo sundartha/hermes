@@ -185,7 +185,7 @@ async function hydrate(client, tenantId) {
   )).rows;
   const profileRows = (await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])).rows;
   const numberRows = (await client.query(
-    `SELECT e164, tenant_id, provider FROM number WHERE tenant_id = $1`, [tenantId]
+    `SELECT id, e164, tenant_id, provider, status, provider_number_id FROM number WHERE tenant_id = $1`, [tenantId]
   )).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
@@ -201,7 +201,14 @@ async function hydrate(client, tenantId) {
   if (usageRows.length) state.usage[OWNER_TENANT_ID] = rowToUsage(usageRows[0]);
   state.notifications = notifRows.map(rowToNotification);
   state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
-  state.numbers = numberRows.map((r) => ({ e164: r.e164, tenantId: r.tenant_id, provider: r.provider }));
+  state.numbers = numberRows.map((r) => ({
+    id: r.id,
+    e164: r.e164,
+    tenantId: r.tenant_id,
+    provider: r.provider,
+    status: r.status,
+    providerNumberId: r.provider_number_id,
+  }));
   return state;
 }
 
@@ -414,17 +421,25 @@ async function flushProfiles(client, tenantId, profiles) {
   }
 }
 
-// number ist in P3c config-derived (Owner-Seed via migrate); der Flush haelt den
-// Spiegel mit der DB konsistent (Full-Upsert + Delete-Missing wie die anderen
-// Tabellen), damit Re-Hydrierung den Spiegel-Shape exakt rekonstruiert. id=e164
-// (TEXT-PK; e164 ist UNIQUE und stabil), daher kein separater Surrogat-Key.
+// number-Flush (Onboarding-Lifecycle): id-PK-Upsert mit allen Lifecycle-Feldern
+// (status, provider_number_id, e164 NULLABLE fuer 'requested'). Owner-scoped wie
+// der restliche pg-Spiegel (nur Zeilen dieses Tenants) - eine 'requested'/'active'
+// Nummer des OWNERS round-trippt damit korrekt.
+// DEFERRED (Multi-Tenant-Runtime, Plan P4/P8): Nummern FREMDER Tenants (Onboarding
+// neuer Tenants) werden hier NICHT geflusht (RLS-GUC=owner; cross-tenant-Flush
+// braucht per-Tenant-GUC). Produktion laeuft auf dem json-Backend (persistiert
+// alles cross-tenant); unter pg bleibt Fremd-Tenant-Onboarding spiegel-only.
 async function flushNumbers(client, tenantId, numbers) {
-  await deleteMissingByText(client, "number", "e164", tenantId, numbers.map((n) => n.e164));
-  for (const n of numbers) {
+  const own = numbers.filter((n) => n.tenantId === tenantId);
+  await deleteMissing(client, "number", tenantId, own.map((n) => n.id));
+  for (const n of own) {
     await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (e164) DO UPDATE SET tenant_id=EXCLUDED.tenant_id, provider=EXCLUDED.provider`,
-      [n.e164, tenantId, n.e164, n.provider || DEFAULT_PROVIDER]
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (id) DO UPDATE SET
+         e164=EXCLUDED.e164, provider=EXCLUDED.provider,
+         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id`,
+      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null]
     );
   }
 }

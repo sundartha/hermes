@@ -16,6 +16,7 @@ import {
   transitionNumber,
   canTransitionNumber,
   findNumber,
+  findTenantByNumber,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, TENANT_STATUS, OWNER_TENANT_ID } from "../src/store/defaults.js";
 
@@ -114,6 +115,20 @@ test("Fehlerpfad: provisioning -> failed (kein active, keine assignment)", () =>
   failNumber(s, number.id);
   assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.FAILED);
   assert.equal(s.numberAssignments.length, 0, "keine assignment bei Fehlschlag");
+});
+
+// ---- Inbound-Routing-Gate: NUR status=active routet (fail-closed) ----
+test("findTenantByNumber: nur active routet; requested/suspended/released -> null", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164: "+4915700000009", providerNumberId: "x" });
+  assert.equal(findTenantByNumber(s, "+4915700000009"), "t_user1", "active -> routet");
+  transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED);
+  assert.equal(findTenantByNumber(s, "+4915700000009"), null, "suspended -> nicht routbar");
+  transitionNumber(s, number.id, NUMBER_STATUS.RELEASED);
+  assert.equal(findTenantByNumber(s, "+4915700000009"), null, "released -> nicht routbar");
 });
 
 test("release schliesst die assignment (released_at) und gibt den Platz frei", () => {

@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
 import { config } from "../src/config.js";
-import { defaultSettings, demoCalendar, PROVIDER } from "../src/store/defaults.js";
+import { defaultSettings, demoCalendar, PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
+import { transitionNumber } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
@@ -290,4 +291,38 @@ test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null"
   const reopened = await reopen(db);
   assert.equal(reopened.findTenantByNumber(seededE164), OWNER_TENANT_ID);
   assert.equal(reopened.findTenantByNumber("+490000"), null, "unbekannte Nummer -> null (kein Default-Tenant)");
+});
+
+test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-Hydrierung; nur active routet", async () => {
+  // Auto-Seed (config.twilio/telnyxNumber aus .env) ausschalten, damit der Test
+  // nur die selbst gesetzten Nummern sieht.
+  const prevTw = config.twilioNumber, prevTx = config.telnyxNumber;
+  config.twilioNumber = ""; config.telnyxNumber = "";
+  try {
+    const { store, db } = await makePgTestStore();
+    const s = store.load();
+    // requested (e164=null, kein Kauf) + active (mit providerNumberId) in den Spiegel.
+    s.numbers.push({ id: "num_req", e164: null, tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX, status: "requested", providerNumberId: null });
+    s.numbers.push({ id: "num_act", e164: "+4915700000001", tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX, status: "active", providerNumberId: "ext_1" });
+    await store.save();
+
+    const r1 = await reopen(db);
+    const nums = r1.load().numbers;
+    const req = nums.find((n) => n.id === "num_req");
+    const act = nums.find((n) => n.id === "num_act");
+    assert.equal(req.status, "requested");
+    assert.equal(req.e164, null, "requested e164 bleibt null (kein Kauf)");
+    assert.equal(act.status, "active");
+    assert.equal(act.providerNumberId, "ext_1", "provider_number_id ueberlebt");
+    assert.equal(r1.findTenantByNumber("+4915700000001"), OWNER_TENANT_ID, "active routet");
+
+    // Suspend -> Flush schreibt status -> Re-Hydrierung -> NICHT mehr routbar (Gate).
+    transitionNumber(r1.load(), "num_act", NUMBER_STATUS.SUSPENDED);
+    await r1.save();
+    const r2 = await reopen(db);
+    assert.equal(r2.load().numbers.find((n) => n.id === "num_act").status, "suspended");
+    assert.equal(r2.findTenantByNumber("+4915700000001"), null, "suspended -> fail-closed, kein Routing");
+  } finally {
+    config.twilioNumber = prevTw; config.telnyxNumber = prevTx;
+  }
 });
