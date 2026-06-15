@@ -17,6 +17,7 @@ import { verifyInboundSignature as twilioVerify } from "./adapters/twilio/signat
 import { telnyxMessaging } from "./adapters/telnyx/messaging.js";
 import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.js";
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
+import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { PROVIDER } from "../store/defaults.js";
 
 /** @returns {import("./ports.js").VoiceControl} */
@@ -26,6 +27,15 @@ export const voiceControl = (provider = PROVIDER.TWILIO) =>
 /** @returns {import("./ports.js").Messaging} */
 export const messaging = (provider = PROVIDER.TWILIO) =>
   provider === PROVIDER.TELNYX ? telnyxMessaging : twilioMessaging;
+
+// NumberProvisioning (Port 3, Onboarding/Geld-Pfad): nur Telnyx implementiert
+// (Twilio-Provisioning ist nicht im Scope dieser Phase). Fail-closed: ein nicht
+// unterstuetzter Provider wirft, statt still einen falschen Adapter zu liefern.
+/** @returns {import("./ports.js").NumberProvisioning} */
+export const numberProvisioning = (provider = PROVIDER.TELNYX) => {
+  if (provider === PROVIDER.TELNYX) return telnyxNumberProvisioning;
+  throw new Error(`NumberProvisioning fuer Provider '${provider}' nicht unterstuetzt`);
+};
 
 /** @returns {import("./ports.js").VoiceRenderer} */
 export const voiceRenderer = (provider = PROVIDER.TWILIO) =>

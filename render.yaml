@@ -44,6 +44,17 @@ services:
       # Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, nicht RATE_LIMIT_PER_MIN).
       - key: MAX_CALLS_PER_HOUR
         value: "6"
+      # ---- Onboarding ohne Payment (Kosten-Notbremse statt Stripe) ----
+      # Harte Obergrenze provisionierbarer Nummern (jede kostet Geld). 0 = Not-Aus.
+      - key: MAX_NUMBERS
+        value: "5"
+      - key: MAX_NUMBERS_PER_TENANT
+        value: "1"
+      # Echter Nummern-Kauf. false (Default) = Dry-Run (kein Geld). Erst true -> Kaeufe.
+      - key: PROVISIONING_ENABLED
+        value: "false"
+      - key: PROVISIONING_COUNTRY
+        value: "DE"
       - key: DASHBOARD_PASSWORD
         sync: false
       # Rechteprofile (Phase 2) als JSON, z.B.

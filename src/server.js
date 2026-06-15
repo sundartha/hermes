@@ -12,8 +12,10 @@ import { attachMediaBridge } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
-import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider } from "./telephony/registry.js";
+import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
+import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
+import { provisionNumber } from "./onboarding.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -595,6 +597,58 @@ app.delete("/api/profiles/:email", (req, res) => {
   if (!store.deleteProfile(email)) return res.status(404).json({ error: "not found" });
   audit("profile_delete", req, `email=${email}`);
   res.json({ ok: true });
+});
+
+// ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
+// (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth (Bestand deckt
+// /api/* ab; localhost = Owner). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP,
+// kein offener ungegateter Geld-Endpunkt, R4). Die Kosten-Notbremse ist die
+// Nummern-Cap (maxNumbers/maxNumbersPerTenant) - sie ERSETZT das uebersprungene
+// Stripe-Schloss. Der echte Provider-Kauf laeuft NUR bei PROVISIONING_ENABLED=true;
+// sonst Dry-Run (Nummer bleibt 'requested', KEIN Geld) - fail-closed Default.
+const ONBOARD_REASON_STATUS = { tenant_inactive: 403, tenant_cap: 409, global_cap: 429 };
+
+app.post("/api/onboard", async (req, res) => {
+  const tenantId = (req.body || {}).tenantId;
+  if (!validIdentity(tenantId))
+    return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+
+  const s = store.load();
+  registerTenant(s, tenantId);
+  const reqRes = requestNumber(s, {
+    tenantId,
+    provider: PROVIDER.TELNYX,
+    maxNumbers: config.maxNumbers,
+    maxNumbersPerTenant: config.maxNumbersPerTenant,
+  });
+  if (!reqRes.ok) {
+    audit("onboard_denied", req, `tenant=${tenantId} grund=${reqRes.reason}`);
+    return res.status(ONBOARD_REASON_STATUS[reqRes.reason] || 400).json({ error: `Nummer-Anfrage abgelehnt (${reqRes.reason})` });
+  }
+  store.save(); // 'requested' persistieren (auch im Dry-Run)
+  const numberId = reqRes.number.id;
+  audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
+
+  // Dry-Run (Default, fail-closed): kein echter Kauf, Nummer bleibt 'requested'.
+  if (!config.provisioningEnabled)
+    return res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "disabled" });
+
+  // Echter Provider-Kauf (gedeckelt durch die Cap oben). Fehlerpfad in der
+  // Orchestrierung: failed + Provider-Release (kein bezahlter Orphan).
+  try {
+    const number = await provisionNumber(s, numberProvisioning(PROVIDER.TELNYX), {
+      numberId,
+      countryCode: config.provisioningCountry,
+      connectionId: config.telnyxConnectionId,
+    });
+    store.save();
+    audit("onboard_active", req, `tenant=${tenantId} number=${numberId} e164=${number.e164}`);
+    res.json({ tenantId, numberId, status: number.status, e164: number.e164 });
+  } catch (err) {
+    store.save(); // 'failed' persistieren
+    console.error("[onboard]", err.message);
+    res.status(502).json({ error: "Nummern-Provisioning fehlgeschlagen", numberId, status: findNumber(s, numberId)?.status });
+  }
 });
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================

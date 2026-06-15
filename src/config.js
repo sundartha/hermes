@@ -64,6 +64,14 @@ export const config = {
   maxNumbers: parseInt(process.env.MAX_NUMBERS || "5", 10),
   // Wie viele AKTIVE Nummern ein einzelner Tenant haben darf (zusaetzliches Gate).
   maxNumbersPerTenant: parseInt(process.env.MAX_NUMBERS_PER_TENANT || "1", 10),
+  // Self-Service-Provisioning (echter Nummern-Kauf beim Provider). DEFAULT AUS
+  // (fail-closed): die Onboarding-Route registriert + fragt dann nur an (Nummer
+  // bleibt 'requested', KEIN Geld). Erst true -> echte Kaeufe (gedeckelt durch
+  // maxNumbers). Bewusst global statt pro-Order: Blast-Radius ist durch die Caps
+  // + Auth + Allowlist bereits winzig (Owner-Phase). NIE per Default an.
+  provisioningEnabled: (process.env.PROVISIONING_ENABLED || "false") === "true",
+  // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
+  provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
   // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen

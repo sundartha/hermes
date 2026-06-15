@@ -65,4 +65,32 @@
  *   Uebersetzt eine Liste neutraler Direktiven (directives.js) in einen
  *   Provider-Antwort-Body (Twilio: TwiML). Der einzige Ort mit Provider-Markup.
  */
+
+/**
+ * @typedef {Object} AvailableNumber
+ * @property {string} e164 - verfuegbare Rufnummer (E.164)
+ */
+
+/**
+ * @typedef {Object} OrderResult
+ * @property {string} e164             - die bestellte Rufnummer (E.164)
+ * @property {string} providerNumberId - provider-seitige Nummern-ID (configure/release)
+ */
+
+/**
+ * @typedef {Object} NumberProvisioning
+ *   Port 3 (Onboarding/Provisioning-Pfad, NICHT Hot-Path). Loest ECHTES Geld aus
+ *   (Nummernkauf) - deshalb gedeckelt durch config.maxNumbers (Kosten-Notbremse,
+ *   ersetzt das uebersprungene Stripe-Schloss) und nur ueber die Onboarding-Route
+ *   hinter Auth + Gates erreichbar. Alle Methoden werfen MIT Kontext (P8), aber NIE
+ *   mit dem API-Key (Regel 4).
+ * @property {(params: {countryCode: string, type?: string, limit?: number}) => Promise<AvailableNumber[]>} searchNumbers
+ *   Sucht kaufbare Rufnummern beim Provider (Anzeige/Auswahl vor dem Kauf).
+ * @property {(params: {e164: string, idempotencyKey?: string}) => Promise<OrderResult>} orderNumber
+ *   Kauft eine Nummer. Idempotency-Key (number-id-basiert) -> Retry kauft nie doppelt.
+ * @property {(params: {providerNumberId: string, connectionId: string}) => Promise<void>} configureNumber
+ *   Setzt das Voice-Routing (connection_id der TeXML-App) auf der gekauften Nummer.
+ * @property {(providerNumberId: string) => Promise<void>} releaseNumber
+ *   Gibt eine Nummer beim Provider frei (Rollback bei Fehlern; kein bezahlter Orphan).
+ */
 export {};
