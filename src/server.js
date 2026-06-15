@@ -295,17 +295,19 @@ app.post("/voice/incoming", (req, res) => {
 
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
 app.post("/voice/turn", async (req, res) => {
+  // TEMP-DIAGNOSE (Inbound-STT, siehe PLAN-INBOUND-AUDIO-STT.md): VOR dem Guard, damit
+  // auch ein fehlender callId sichtbar wird (die relative action-URL `?callId=` verliert
+  // bei Telnyx evtl. den Query-String -> frueher Hangup, ohne dass der Turn laeuft).
+  // Nur Feld-NAMEN + Wert-LAENGEN, nie Roh-Werte (DSGVO/PII). Phase 3: wieder entfernen.
+  console.log("[turn-recv]",
+    "callId=" + (req.query.callId || "FEHLT"),
+    "fields=" + Object.entries(req.body || {}).map(([k, v]) => `${k}:${String(v).length}`).join(","));
+
   const call = store.getCall(req.query.callId);
   if (!call || call.status !== "active") {
+    console.log("[turn-recv] -> frueher Hangup: Call fehlt/inaktiv (callId nicht aufloesbar)");
     return res.type("text/xml").send(render([hangupD()]));
   }
-
-  // TEMP-DIAGNOSE (Inbound-STT, siehe PLAN-INBOUND-AUDIO-STT.md): zeigt, WELCHE
-  // Felder der Provider an /voice/turn postet - nur Feld-NAMEN + Wert-LAENGEN, nie
-  // Roh-Werte (DSGVO/PII). Belegt, ob/unter welchem Namen das Transkript ankommt.
-  // Nach Befund wieder entfernen (Phase 3 des Plans).
-  console.log("[turn-diag]", "provider=" + call.provider,
-    "fields=" + Object.entries(req.body || {}).map(([k, v]) => `${k}:${String(v).length}`).join(","));
 
   const heard = (req.body.SpeechResult || "").trim();
   try {
@@ -730,6 +732,10 @@ const httpServer = app.listen(config.port, () => {
   const port = httpServer.address().port;
   // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
   process.env.GATEWAY_URL ||= `http://localhost:${port}`;
+  // TEMP-DIAGNOSE (PLAN-INBOUND-AUDIO-STT.md): deployten Commit ausgeben, damit im
+  // Render-Log eindeutig sichtbar ist, WELCHE Version laeuft (Render setzt
+  // RENDER_GIT_COMMIT). Phase 3: wieder entfernen.
+  console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);
   console.log(`\n  Vodafone Agent Gateway laeuft auf http://localhost:${port}`);
   console.log(`  Dashboard:      http://localhost:${port}`);
   console.log(`  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`);
