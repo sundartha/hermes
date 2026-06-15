@@ -287,8 +287,8 @@ app.post("/voice/incoming", (req, res) => {
     return res.type("text/xml").send(render(streamDirectives(call), provider));
   }
 
-  const s = store.load().settings;
-  const greeting = s.greeting.replaceAll("{owner}", config.ownerName);
+  const ctx = store.tenantContext(call.tenantId);
+  const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
   store.addTranscript(call.id, "agent", greeting);
   res.type("text/xml").send(render(turnDirectives(call, greeting), provider));
 });
@@ -389,7 +389,7 @@ async function finishCall(call) {
 
     if (config.sendSmsSummary && config.ownerNumber) {
       const sms =
-        `[${store.load().settings.agentName}] ${who}\n\n${result.summary}` +
+        `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
         (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
       try {
         await messaging(call.provider).sendSms({

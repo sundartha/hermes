@@ -29,8 +29,8 @@ function providerFromMediaPath(pathname) {
 }
 
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
-function realtimeTools() {
-  return toolDefs().map((t) => ({
+function realtimeTools(tenantId) {
+  return toolDefs(tenantId).map((t) => ({
     type: "function",
     name: t.name,
     description: t.description,
@@ -105,7 +105,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             output_audio_format: "g711_ulaw",
             input_audio_transcription: { model: "whisper-1" },
             turn_detection: { type: "server_vad" },
-            tools: realtimeTools(),
+            tools: realtimeTools(call.tenantId),
             tool_choice: "auto",
           },
         }));

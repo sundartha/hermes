@@ -15,8 +15,9 @@ const fmtDate = (iso) =>
 
 // ---------- System-Prompts ----------
 export function systemPrompt(call) {
-  const s = store.load().settings;
-  const owner = config.ownerName;
+  const ctx = store.tenantContext(call.tenantId);
+  const s = ctx.settings;
+  const owner = ctx.ownerName;
   const now = new Date().toLocaleString("de-DE", {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
     hour: "2-digit", minute: "2-digit",
@@ -55,13 +56,13 @@ Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen
 
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls)
 export function disclosureSentence(call) {
-  const name = call.callerName || config.ownerName;
+  const name = call.callerName || store.tenantContext(call.tenantId).ownerName;
   return `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${name}. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.`;
 }
 
 // ---------- Tools ----------
-export function toolDefs() {
-  const s = store.load().settings;
+export function toolDefs(tenantId) {
+  const s = store.tenantContext(tenantId).settings;
   const tools = [
     {
       name: "end_call",
@@ -114,7 +115,12 @@ export function toolDefs() {
 export function execTool(call, name, input) {
   switch (name) {
     case "get_calendar": {
-      const events = store.getCalendar().slice(0, 8);
+      // READ ueber den Seam (Identitaets-Konsument). In dieser Phase ist
+      // ctx.calendar noch der globale Kalender -> verhaltens-identisch zur
+      // globalen Schreibseite. book_appointment (findConflict/addCalendarEvent)
+      // bleibt bewusst global; die Kalender-Schreib-/Konflikt-Seite ist eigener
+      // Scope (dort wird der Kalender pro Tenant getrennt).
+      const events = store.tenantContext(call.tenantId).calendar.slice(0, 8);
       if (!events.length) return "Kalender ist leer, alles frei.";
       return (
         "Naechste Termine:\n" +
@@ -173,7 +179,7 @@ export async function agentTurn(call, callerText) {
       model: config.claudeModel,
       max_tokens: 300,
       system: systemPrompt(call),
-      tools: toolDefs(),
+      tools: toolDefs(call.tenantId),
       messages,
     });
     store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
@@ -209,7 +215,9 @@ export async function agentTurn(call, callerText) {
 
 // ---------- Summary + Action Items nach dem Call ----------
 export async function summarizeCall(call) {
-  const s = store.load().settings;
+  const ctx = store.tenantContext(call.tenantId);
+  const s = ctx.settings;
+  const owner = ctx.ownerName;
   if (!s.allowSummaries) return null;
   if (!call.transcript.length) return null;
 
@@ -220,7 +228,7 @@ export async function summarizeCall(call) {
   const resp = await anthropic.messages.create({
     model: config.claudeModel,
     max_tokens: 500,
-    system: `Du fasst ein Telefonat des KI-Assistenten von ${config.ownerName} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bezieht sich auf den Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Action Items nur, wenn ${config.ownerName} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
+    system: `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bezieht sich auf den Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
     messages: [{ role: "user", content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}` }],
   });
   store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);

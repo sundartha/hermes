@@ -86,8 +86,11 @@ export function tempDataDir(seedState) {
   return dir;
 }
 
-// Minimal-vollstaendiger Store-Zustand zum Seeden einzelner Testfaelle
-export function seedState({ calls = [], actionItems = [], notifications = [], settings = {}, profiles = {} } = {}) {
+// Minimal-vollstaendiger Store-Zustand zum Seeden einzelner Testfaelle. tenants
+// und numbers haben bewusst KEINEN Default (undefined): ohne sie ist die Form
+// byte-identisch zum Altbestand (Conditional-Spread unten), mit ihnen laesst sich
+// ein aktiver Tenant samt eigener Nummer seeden (Inbound-Routing + Identitaet).
+export function seedState({ calls = [], actionItems = [], notifications = [], settings = {}, profiles = {}, tenants, numbers, calendar = [] } = {}) {
   return {
     settings: {
       agentName: "Vodafone Agent",
@@ -101,10 +104,12 @@ export function seedState({ calls = [], actionItems = [], notifications = [], se
     },
     calls,
     actionItems,
-    calendar: [],
+    calendar,
     usage: { inputTokens: 0, outputTokens: 0, costEur: 0, calls: calls.length },
     notifications,
     profiles,
+    ...(tenants ? { tenants } : {}),
+    ...(numbers ? { numbers } : {}),
   };
 }
 
