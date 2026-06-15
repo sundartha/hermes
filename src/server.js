@@ -368,6 +368,12 @@ async function finishCall(call) {
   try {
     const result = await summarizeCall(call);
     if (!result) return;
+    // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung): NUR nach Summary-Erfolg.
+    // summarizeCall hat summary/objectiveAchieved + Action Items bereits persistiert;
+    // das Roh-Transkript wird jetzt geloescht (nur noch Summary at rest). Scheitert
+    // die Summary (result null / Exception), bleibt das Transkript -> die 30-Tage-
+    // pruneOldData-Retention raeumt es als Defense-in-Depth ab.
+    store.purgeTranscript(call.id);
     const aiCount = (result.actionItems || []).length;
     const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
     store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);

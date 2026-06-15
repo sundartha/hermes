@@ -3,6 +3,12 @@
 services:
   - type: web
     name: vodafone-agent
+    # Datenresidenz DE/EU (Entscheidung #4): Server in Frankfurt, kein US-Transfer.
+    # Schuetzt gegen versehentliche US-Default-Region. Hinweis: fuer einen BEREITS
+    # bestehenden Service ist die Region per Blueprint nicht aenderbar (gilt fuer
+    # frische Deploys); Wert + Guard-Test sind der eigentliche Schutz. Steuert nur
+    # die App-Server-Region; die DB-Residenz haengt am DATABASE_URL-Provisioning.
+    region: frankfurt
     runtime: node
     plan: free
     buildCommand: npm install

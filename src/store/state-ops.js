@@ -106,6 +106,18 @@ export function addTranscript(s, callId, role, text) {
   return true;
 }
 
+// Loescht das Roh-Transkript EINES Calls (DSGVO-Datenminimierung, #7): nach
+// erfolgreicher Summary bleibt nur Summary + Action Items at rest. Reine Mutation,
+// kein IO. Liefert true, wenn etwas geaendert wurde (Call existiert + hatte
+// Transkript) -> der Backend-Wrapper save()t nur dann. summary/objectiveAchieved/
+// actionItemIds bleiben unangetastet.
+export function purgeTranscript(s, callId) {
+  const call = getCall(s, callId);
+  if (!call || call.transcript.length === 0) return false;
+  call.transcript = [];
+  return true;
+}
+
 export function markAnswered(s, callId) {
   const call = getCall(s, callId);
   let changed = false;

@@ -75,7 +75,7 @@ export function registerTools(server, { identity = null, allowCalendar = true } 
 
   server.tool(
     "get_transcript",
-    "Liefert nach Gespraechsende das Volltranskript, eine Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Erst aufrufen, wenn get_call_status status=completed meldet.",
+    "Liefert nach Gespraechsende die Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Aus Datenschutzgruenden wird das Roh-Transkript nach der Zusammenfassung nicht aufbewahrt (Datenminimierung) - das transcript-Feld ist fuer abgeschlossene Calls daher leer. Erst aufrufen, wenn get_call_status status=completed meldet.",
     { call_id: z.string().describe("Die call_id aus place_call") },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);

@@ -114,7 +114,7 @@ Du gehst nicht ran → Agent übernimmt → du bekommst SMS mit Summary + Action
 |---|---|---|
 | `place_call` | `to` (E.164, Allowlist!), `objective` (Pflicht), `briefing?`, `constraints?`, `language?` (Default de), `max_duration_s?` (Default 180, Max 300), `caller_name?` | `{call_id, status:"dialing"}` |
 | `get_call_status` | `call_id` | `{status: dialing\|in_progress\|completed\|failed\|cancelled, duration_s, last_transcript_lines[]}` |
-| `get_transcript` | `call_id` | `{transcript[], result_summary, objective_achieved: true\|false\|unclear}` |
+| `get_transcript` | `call_id` | `{result_summary, objective_achieved: true\|false\|unclear}` (Roh-Transkript wird nach der Summary geloescht, `transcript[]` daher leer fuer abgeschlossene Calls) |
 | `cancel_call` | `call_id` | `{status:"cancelled"}` |
 | `get_my_number` | — | `{number}` |
 
@@ -124,7 +124,7 @@ Bonus-Tools für die Vodafone-Demo: `list_calls`, `list_action_items`, `get_cale
 
 1. **Dashboard** (localhost:3000): Agent-Nummer + „Vodafone Verified"-Badge, Permission-Toggles, Budget-Anzeige.
 2. **Outbound aus Claude:** Custom Connector zeigen, dann „Ruf +49… an und vereinbare einen Testtermin Samstag vormittag." → Handy klingelt in ~15 s, Disclosure-Satz, Agent verhandelt. Im Dashboard läuft das Live-Transkript.
-3. Claude pollt den Status im Chat und präsentiert am Ende Transkript + Ergebnis.
+3. Claude pollt den Status im Chat und präsentiert am Ende die Zusammenfassung + Ergebnis (Roh-Transkript wird aus Datenschutzgründen nicht aufbewahrt).
 4. **Inbound:** Kollege ruft deine Handynummer an, du gehst nicht ran → Umleitung → Agent bucht den Termin gegen deinen Kalender. Danach: **SMS mit Summary + Action Items**.
 5. **Permissions live:** Kalender-Toggle aus → gleicher Anruf → Agent nimmt nur noch eine Nachricht auf.
 
@@ -142,6 +142,7 @@ Bonus-Tools für die Vodafone-Demo: `list_calls`, `list_action_items`, `get_cale
 - Modernes JavaScript (ESM) statt TypeScript: kein Build-Step, maximale Demo-Velocity.
 - Kalender = lokaler Speicher mit Beispielterminen statt Google/Outlook.
 - Keine Nummern-Provisionierung, kein Multi-User, kein Billing, keine CAMARA-Anbindung, keine Datenbank.
+- Datenminimierung (DSGVO): Roh-Transkripte werden nach erfolgreicher Zusammenfassung gelöscht — nur Summary + Action Items bleiben gespeichert. `get_transcript` liefert für abgeschlossene Calls kein Volltranskript mehr. Datenresidenz EU (`render.yaml` `region: frankfurt`; Region ist per Blueprint nur für frische Deploys setzbar).
 
 ## Dateien
 

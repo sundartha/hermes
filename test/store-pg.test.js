@@ -326,3 +326,34 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     config.twilioNumber = prevTw; config.telnyxNumber = prevTx;
   }
 });
+
+test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer Call bleiben (#7)", async () => {
+  const { store, db } = await makePgTestStore();
+  const c1 = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Ziel 1" });
+  const c2 = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Ziel 2" });
+  store.addTranscript(c1.id, "agent", "Hallo");
+  store.addTranscript(c1.id, "caller", "Geheim");
+  store.addTranscript(c2.id, "caller", "Bleibt");
+  // Summary wie der Produktionspfad (claude.js) setzt + persistiert.
+  store.getCall(c1.id).summary = "Zusammenfassung 1";
+  store.getCall(c1.id).objectiveAchieved = "true";
+  await store.save();
+
+  // Beide Calls haben vor dem Purge persistierte Segmente.
+  const r1 = await reopen(db);
+  assert.equal(r1.getCall(c1.id).transcript.length, 2);
+  assert.equal(r1.getCall(c2.id).transcript.length, 1);
+
+  // Purge auf c1 -> Reconcile-on-empty loescht NUR c1-Segmente beim naechsten Flush.
+  r1.purgeTranscript(c1.id);
+  await r1.save();
+  const r2 = await reopen(db);
+
+  const segCount = async (callId) =>
+    Number((await db.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [callId])).rows[0].n);
+  assert.equal(await segCount(c1.id), 0, "Ziel-Call: Segmente in der DB geloescht");
+  assert.equal(await segCount(c2.id), 1, "anderer Call: Segmente unberuehrt (Cross-Call-Dichtheit)");
+  assert.deepEqual(r2.getCall(c1.id).transcript, [], "Spiegel: Ziel-Transkript leer nach Re-Hydrierung");
+  assert.equal(r2.getCall(c1.id).summary, "Zusammenfassung 1", "Summary-Spalte ueberlebt den Purge");
+  assert.equal(r2.getCall(c2.id).transcript.length, 1, "anderer Call: Transkript bleibt");
+});

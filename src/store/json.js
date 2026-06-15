@@ -103,6 +103,12 @@ export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
 }
 
+// Roh-Transkript-Purge (#7): leert das Transkript des Calls + persistiert (save()
+// schreibt den Gesamt-Store). Muster identisch zu addTranscript (changed -> save).
+export function purgeTranscript(callId) {
+  if (ops.purgeTranscript(load(), callId)) save();
+}
+
 export function markAnswered(callId) {
   const { call, changed } = ops.markAnswered(load(), callId);
   if (changed) save();

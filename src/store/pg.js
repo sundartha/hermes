@@ -85,6 +85,9 @@ export function makePgStore(runner) {
     addTranscript(callId, role, text) {
       if (ops.addTranscript(requireState(), callId, role, text)) save();
     },
+    purgeTranscript(callId) {
+      if (ops.purgeTranscript(requireState(), callId)) save();
+    },
     markAnswered(callId) {
       const { call, changed } = ops.markAnswered(requireState(), callId);
       if (changed) save();
@@ -355,9 +358,16 @@ async function flushCalls(client, tenantId, calls) {
   }
 }
 
-// Transkript-Segmente sind append-only: nur fehlende anhaengen (kein Loeschen,
-// ausser der Call faellt per ON DELETE CASCADE weg).
+// Transkript-Segmente sind append-only: nur fehlende anhaengen. EINZIGE Ausnahme:
+// ein geleertes Spiegel-Transkript (Roh-Transkript-Purge nach Summary, #7) wird
+// auf die DB reconciled -> die persistierten Segmente DIESES Calls werden geloescht
+// (tenant-scoped, in derselben Flush-Transaktion mit gesetzter RLS-GUC). Trifft NUR
+// call_id; andere Calls/Tenants bleiben unberuehrt.
 async function flushTranscript(client, tenantId, call) {
+  if (call.transcript.length === 0) {
+    await client.query(`DELETE FROM transcript_segment WHERE call_id=$1`, [call.id]);
+    return;
+  }
   const existing = Number(
     (await client.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [call.id])).rows[0].n
   );
