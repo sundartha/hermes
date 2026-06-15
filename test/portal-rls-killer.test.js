@@ -67,3 +67,32 @@ test("withTenant: kein tenantId -> Error (fail-closed)", async () => {
   await assert.rejects(portal.listCalls(null), /tenantId Pflicht/);
   await assert.rejects(portal.listCalls(""), /tenantId Pflicht/);
 });
+
+test("portalStore: Tenant B sieht NUR call_tenant_b, nicht call_tenant_a", async () => {
+  const db = await setup();
+  const portal = makePortalStore(roleRunner(db));
+  const rows = await portal.listCalls(TENANT_B);
+  assert.deepEqual(rows.map((r) => r.id), ["call_tenant_b"]);
+});
+
+test("portalStore: frischer Tenant ist leer (kein Owner-Leak)", async () => {
+  const db = await setup();
+  await db.query(`INSERT INTO tenant (id) VALUES ('tenant_fresh') ON CONFLICT DO NOTHING`);
+  const portal = makePortalStore(roleRunner(db));
+  const rows = await portal.listCalls("tenant_fresh");
+  assert.equal(rows.length, 0, "leerer Tenant sieht nichts vom Owner/anderen");
+});
+
+test("portalStore: Transkript-Read ist tenant-isoliert (Leak-Schutz)", async () => {
+  const db = await setup();
+  // Geheim-Transkript fuer Tenant A, als Superuser eingefuegt (Setup laeuft als Superuser).
+  await db.query(
+    `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at)
+     VALUES ('call_tenant_a', $1, 'caller', 'GEHEIM_A', now()::text)`, [TENANT_A]
+  );
+  const portal = makePortalStore(roleRunner(db));
+  const texts = await portal.withTenant(TENANT_B, async (c) =>
+    (await c.query(`SELECT text FROM transcript_segment`)).rows.map((r) => r.text)
+  );
+  assert.ok(!texts.join(" ").includes("GEHEIM_A"), "Tenant B sieht A-Transkript nicht");
+});
