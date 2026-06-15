@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge } from "./bridge.js";
@@ -221,13 +221,17 @@ function publicCall({ streamToken, _finished, ...rest }) {
   return rest;
 }
 
-// Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge)
-function armMaxDurationTimer(call, twilioSid) {
+// Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge).
+// Provider-aware: beendet ueber denselben Provider, ueber den der Call laeuft
+// (call.provider, P6a) - sonst wuerde ein Telnyx-Call ueber Twilio-endCall
+// beendet (kein Effekt). Fuer Telnyx-Outbound ist dieser Timer der EINZIGE harte
+// Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer.
+function armMaxDurationTimer(call, providerCallSid) {
   const limit = (call.maxDurationS || config.maxCallDurationS) * 1000;
   setTimeout(() => {
     const c = store.getCall(call.id);
-    if (c?.status === "active" && twilioSid)
-      voiceControl().endCall(twilioSid).catch(() => {});
+    if (c?.status === "active" && providerCallSid)
+      voiceControl(c.provider).endCall(providerCallSid).catch(() => {});
   }, limit);
 }
 
@@ -433,9 +437,15 @@ app.post("/api/calls", async (req, res) => {
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
+  // Outbound-Provider: Telnyx, sobald eine Telnyx-Absendernummer konfiguriert ist
+  // (TELNYX_NUMBER), sonst Twilio-Default. from = passende Owner-Absendernummer
+  // (ownerNumberForProvider). Der /voice/outbound-Webhook rendert dank call.provider
+  // (P6a) automatisch TeXML statt TwiML.
+  const outboundProvider = config.telnyxNumber ? PROVIDER.TELNYX : DEFAULT_PROVIDER;
+  const fromNumber = ownerNumberForProvider(outboundProvider, config);
   const call = store.createCall({
     direction: "outbound",
-    from: config.twilioNumber,
+    from: fromNumber,
     to,
     goal: objective,
     briefing: b.briefing,
@@ -445,12 +455,13 @@ app.post("/api/calls", async (req, res) => {
     maxDurationS: maxDur,
     requestedBy,
     tenantId: OWNER_TENANT_ID,
+    provider: outboundProvider,
   });
-  audit("place_call", req, `to=${to} call=${call.id} requestedBy=${requestedBy}`);
+  audit("place_call", req, `to=${to} call=${call.id} provider=${outboundProvider} requestedBy=${requestedBy}`);
 
   try {
-    const tw = await voiceControl().originateCall({
-      from: config.twilioNumber,
+    const tw = await voiceControl(outboundProvider).originateCall({
+      from: fromNumber,
       to,
       url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
       statusCallback: `${config.publicUrl}/voice/status?callId=${call.id}`,
@@ -460,6 +471,10 @@ app.post("/api/calls", async (req, res) => {
     });
     call.twilioSid = tw.sid;
     store.save();
+    // Max-Dauer hart durchsetzen (Budget-Engine). Fuer Twilio redundant zum
+    // timeLimit-Param, fuer Telnyx der einzige verlaessliche Cap. Erst NACH
+    // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
+    if (config.voiceEngine !== "realtime") armMaxDurationTimer(call, tw.sid);
     res.json({ ok: true, callId: call.id, twilioSid: tw.sid, status: "dialing" });
   } catch (err) {
     store.endCallRecord(call.id, "failed");
@@ -479,7 +494,9 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   store.endCallRecord(call.id, "cancelled");
   if (call.twilioSid) {
     try {
-      await voiceControl().endCall(call.twilioSid);
+      // Provider-aware: ueber denselben Provider beenden, ueber den der Call
+      // laeuft (call.provider) - sonst Twilio-endCall auf einem Telnyx-Call.
+      await voiceControl(call.provider).endCall(call.twilioSid);
     } catch (e) {
       console.error("[cancel]", e.message);
     }

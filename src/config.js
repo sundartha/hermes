@@ -19,6 +19,13 @@ export const config = {
   telnyxApiKey: process.env.TELNYX_API_KEY || "", // SECRET - nie loggen/leaken
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "", // Ed25519-Public-Key des Telnyx-Accounts (verify)
   telnyxApiBase: (process.env.TELNYX_API_BASE || "https://api.telnyx.com").replace(/\/$/, ""),
+  // TeXML-Application/Connection-ID: haelt die Voice-URL beim Provider, Pflicht fuer
+  // Telnyx-Outbound (originateCall POST /v2/texml/calls/{connection_id}). Leer ->
+  // Telnyx-Outbound wirft (fail-closed), Twilio-Outbound unberuehrt.
+  telnyxConnectionId: process.env.TELNYX_CONNECTION_ID || "",
+  // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
+  // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
+  telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
 
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",

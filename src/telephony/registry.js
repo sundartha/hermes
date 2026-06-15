@@ -6,9 +6,11 @@
 // strukturell VOR dem To-Routing (P3c) - To/provider vor gueltiger Signatur zu
 // lesen waere Tenant-Spoofing. providerFromHeaders ist die EINZIGE Header->Provider-
 // Karte: der Verifier dispatcht darueber, server.js (P6a) leitet daraus den
-// Inbound-Provider ab (Single Source of Truth). voiceControl bleibt Twilio-only
-// (Telnyx-Outbound deferred, P6).
+// Inbound-Provider ab (Single Source of Truth). voiceControl ist provider-aware
+// (Telnyx-Outbound, Onboarding-Phase): Default twilio -> arg-lose Call-Sites
+// byte-identisch.
 import { twilioVoice } from "./adapters/twilio/voice.js";
+import { telnyxVoice } from "./adapters/telnyx/voice.js";
 import { twilioMessaging } from "./adapters/twilio/messaging.js";
 import { renderDirectives as twilioRenderDirectives } from "./adapters/twilio/render.js";
 import { verifyInboundSignature as twilioVerify } from "./adapters/twilio/signature.js";
@@ -18,7 +20,8 @@ import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signat
 import { PROVIDER } from "../store/defaults.js";
 
 /** @returns {import("./ports.js").VoiceControl} */
-export const voiceControl = () => twilioVoice;
+export const voiceControl = (provider = PROVIDER.TWILIO) =>
+  provider === PROVIDER.TELNYX ? telnyxVoice : twilioVoice;
 
 /** @returns {import("./ports.js").Messaging} */
 export const messaging = (provider = PROVIDER.TWILIO) =>

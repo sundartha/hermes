@@ -49,7 +49,9 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       // Bei (d) warten wir kurz, damit der letzte Audio-Puffer (Verabschiedung) noch abgespielt wird.
       log("hangup:", reason);
       const sid = call?.twilioSid;
-      if (sid) voiceControl().endCall(sid).catch(() => {});
+      // Provider-aware: ueber denselben Provider beenden, ueber den der Call laeuft
+      // (call.provider). Fehlender Provider -> Twilio-Default (byte-identisch).
+      if (sid) voiceControl(call?.provider).endCall(sid).catch(() => {});
     }
 
     function finalize(status) {

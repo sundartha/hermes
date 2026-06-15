@@ -440,3 +440,51 @@ Body-Felder wie `requestedBy`/`email` immer.
   geseedet -> Call passiert die Allowlist (500), ohne Identitaet -> 403.
 - Tool-Beschreibung von `place_call` entschaerft (nicht mehr "muss in der Allowlist
   stehen", sondern "Server-Safety-Gates entscheiden"). `npm test` 121/121.
+
+---
+
+# Onboarding ohne Payment + Telnyx-Outbound (2026-06-15, feat/onboarding-no-payment)
+
+Ziel (Auftraggeber, woertlich): "alles funktioniert, nur bezahlen ueberspringen".
+Fundament (Commit 1254e77): State-Machine + Cost-Cap (offline, JSON+Schema). Hier:
+Telnyx-Outbound, NumberProvisioning, Onboarding-Route, pg-Persistenz der neuen
+Entitaeten, cross-tenant Inbound-Routing. Stripe ersetzt durch MAX_NUMBERS-Notbremse.
+
+## Verifizierte Telnyx-API (Doku 2026-06-15, live UNBESTAETIGT -> live mit Owner fixen)
+- Outbound initiate: POST {base}/v2/texml/calls/{connection_id}, form From/To/Url/
+  StatusCallback..., Bearer; Antwort = Twilio-kompatible Call-Resource (sid=CallSid).
+- Hangup: POST {base}/v2/texml/Accounts/{account_sid}/Calls/{call_sid}, form Status=completed.
+  -> braucht account_sid (Config TELNYX_ACCOUNT_SID) + connection_id (TELNYX_CONNECTION_ID).
+
+## A) Telnyx-Outbound-Adapter  [erste Live-Test-Scheibe]
+- [ ] src/telephony/adapters/telnyx/voice.js: originateCall + endCall (TeXML-API, fetch, kein Key-Leak)
+      Erwartet: originate -> richtige URL+From/To/Url, returns {sid}; endCall -> Accounts/.../Calls Status=completed
+      Verify: test/telnyx-voice.test.js (global.fetch gestubbt) gruen
+- [ ] registry.voiceControl(provider): telnyx->telnyxVoice, Default twilio byte-identisch
+      Verify: telephony-contract.test.js / registry-unit gruen
+- [ ] config.js + .env.example + render.yaml: TELNYX_CONNECTION_ID, TELNYX_ACCOUNT_SID (optional)
+- [ ] server.js /api/calls: outbound provider=telnyx wenn TELNYX_NUMBER gesetzt; from=telnyxNumber;
+      createCall provider; originate ueber voiceControl(provider). endCall (cancel + max-dauer-timer)
+      provider-aware (call.provider). Outbound-Max-Dauer-Timer ARMEN (Telnyx-TimeLimit unbestaetigt
+      -> Timer ist der echte Cap, Absolute Regel Max-Dauer).
+      Verify: server-spawn-Test mit lokalem Telnyx-Mock (TELNYX_API_BASE) -> 200 dialing,
+      call.provider=telnyx, from=telnyx-Nummer, Mock erhielt From/To/Url. Twilio-Pfad byte-identisch.
+- [ ] Beide Backends gruen (npm test selbst gezaehlt), node --check.
+
+## D) pg-Persistenz neuer Entitaeten + cross-tenant Inbound-Routing
+- [ ] flush/hydrate: tenants[], numberAssignments[], number.status/provider_number_id/id (heute fehlt)
+- [ ] findTenantByNumber auf status='active' gaten (fail-closed) + cross-tenant hydrate
+      Verify: store-pg-*.test.js (pglite, eigene Datei) round-trip + cross-tenant read
+
+## B) NumberProvisioning (Adapter + Port) -- KEIN Live-Kauf ohne Owner-Freigabe pro Order
+- [ ] adapters/telnyx/numbers.js: searchNumbers/orderNumber/configureNumber/releaseNumber + Port
+- [ ] An State-Machine: requested->provisioning->order->activate; Fehlerpfad failNumber+release; Idempotency-Key
+      Verify: unit (fetch gestubbt) + state-machine-Integration
+
+## C) Onboarding-Route POST /api/onboard (Auth + Gates)
+- [ ] registerTenant -> requestNumber (Cap) -> provision -> activate; KEIN offener ungegateter Geld-Endpunkt
+      Verify: server-spawn-Test (Cap blockt, Auth noetig)
+
+## Absolute Regeln (Erinnerung)
+- MAX_NUMBERS Notbremse Pflicht (ersetzt Stripe), kein unbegrenzter Auto-Kauf, neue Endpunkte
+  hinter Auth + Gates. Disclosure fest verdrahtet. Outbound nur ALLOWED_NUMBERS. Secrets nie loggen.

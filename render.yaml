@@ -28,6 +28,11 @@ services:
         sync: false
       - key: TELNYX_API_BASE
         value: "https://api.telnyx.com"
+      # TeXML-Connection-ID (Outbound) + Account-ID (Hangup). Pflicht fuer Telnyx-Outbound.
+      - key: TELNYX_CONNECTION_ID
+        sync: false
+      - key: TELNYX_ACCOUNT_SID
+        sync: false
       - key: OWNER_NUMBER
         sync: false
       - key: ALLOWED_NUMBERS
