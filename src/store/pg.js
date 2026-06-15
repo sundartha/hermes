@@ -3,10 +3,10 @@
 // init() einmal aus der DB hydriert wird; jede Mutation laeuft synchron gegen den
 // Spiegel (state-ops.js, geteilte Fachlogik) und stoesst danach einen DB-Flush an.
 //
-// WARUM der Spiegel: die 25 Store-Signaturen sind synchron und werden von den
+// WARUM der Spiegel: die Store-Signaturen sind synchron und werden von den
 // Callern teils ohne await aufgerufen (Bridge-Event-Handler, store.save()). pg ist
 // async. Der Spiegel ist die kleinste Aenderung, die Contract-Parity zum
-// json-Backend erreicht, ohne eine der 25 Signaturen oder einen Caller zu
+// json-Backend erreicht, ohne eine der Signaturen oder einen Caller zu
 // veraendern. save() ist deshalb KEIN No-Op: die mutate-then-save()-Stellen
 // (call.twilioSid/summary/objectiveAchieved) wirken auf eine Spiegel-Referenz aus
 // getCall(); save() flusht den Spiegel zurueck in die DB.
@@ -24,7 +24,8 @@ import { migrate } from "../db/migrate.js";
 // die Konstante historisch von store/pg.js importieren (Import-Stabilitaet).
 export { OWNER_TENANT_ID };
 
-// makePgStore(runner) -> Objekt mit den 25 Store-Funktionen. runner-Vertrag:
+// makePgStore(runner) -> Objekt mit den Store-Funktionen (Namensliste in store.js).
+// runner-Vertrag:
 //   withClient(fn) : ruft fn(client) auf EINER Verbindung; client.query(text,
 //                    params)->{rows} und client.exec(sqlScript) (Mehrfach-DDL).
 // KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()

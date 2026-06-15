@@ -118,43 +118,47 @@ export function purgeTranscript(s, callId) {
   return true;
 }
 
+// Der EINE call-verknuepfte Tenant-Scope: die Calls eines Tenants + ihre id-Menge.
+// Von eraseTenantData (Loeschung) UND exportTenantData (Export) gemeinsam genutzt,
+// damit beide GARANTIERT denselben Umfang treffen - sonst leakt der Export Daten,
+// die das Erase loescht, oder umgekehrt (R3-Drift). Die Scoping-Regel
+// (call.tenantId === tenantId) existiert genau hier. actionItems/notifications
+// tragen KEIN eigenes tenantId -> sie werden ueber callId in callIds gescoped.
+function tenantCallScope(s, tenantId) {
+  const calls = s.calls.filter((c) => c.tenantId === tenantId);
+  return { calls, callIds: new Set(calls.map((c) => c.id)) };
+}
+
 // Per-Tenant-DSGVO-Loeschung (Art. 17): entfernt ALLE call-verknuepften Daten
 // EINES Tenants - die Calls (samt Roh-Transkript), die daraus extrahierten Action
-// Items und die call-verknuepften Notifications. Rigoros tenant-scoped ueber die
-// Call-Beziehung: targetCallIds = die call.id mit call.tenantId === tenantId;
-// Items/Notifications ueber callId in dieser Menge (sie tragen KEIN eigenes
-// tenantId). settings/profiles/numbers/tenants/calendar/usage bleiben UNANGETASTET
-// (Service-Config/Identitaet/Budget-Gate). Reine Mutation, kein IO. Liefert
-// Loesch-Zaehler fuers Audit (KEINE Inhalte). NIE cross-tenant.
+// Items und die call-verknuepften Notifications. Tenant-Scope kommt aus
+// tenantCallScope (eine Quelle). settings/profiles/numbers/tenants/calendar/usage
+// bleiben UNANGETASTET (Service-Config/Identitaet/Budget-Gate). Reine Mutation,
+// kein IO. Liefert Loesch-Zaehler fuers Audit (KEINE Inhalte). NIE cross-tenant.
 export function eraseTenantData(s, tenantId) {
-  const targetCallIds = new Set(
-    s.calls.filter((c) => c.tenantId === tenantId).map((c) => c.id)
-  );
+  const { calls: targetCalls, callIds } = tenantCallScope(s, tenantId);
   const removed = {
-    calls: targetCallIds.size,
-    transcriptSegments: s.calls
-      .filter((c) => targetCallIds.has(c.id))
-      .reduce((sum, c) => sum + c.transcript.length, 0),
+    calls: targetCalls.length,
+    transcriptSegments: targetCalls.reduce((sum, c) => sum + c.transcript.length, 0),
     actionItems: 0,
     notifications: 0,
   };
   const itemsBefore = s.actionItems.length;
   const notifsBefore = s.notifications.length;
-  s.calls = s.calls.filter((c) => !targetCallIds.has(c.id));
-  s.actionItems = s.actionItems.filter((a) => !targetCallIds.has(a.callId));
-  s.notifications = s.notifications.filter((n) => !targetCallIds.has(n.callId));
+  s.calls = s.calls.filter((c) => !callIds.has(c.id));
+  s.actionItems = s.actionItems.filter((a) => !callIds.has(a.callId));
+  s.notifications = s.notifications.filter((n) => !callIds.has(n.callId));
   removed.actionItems = itemsBefore - s.actionItems.length;
   removed.notifications = notifsBefore - s.notifications.length;
   return removed;
 }
 
 // Nicht-destruktive Auskunft/Export (Art. 15/20): reine Query, KEIN save. Liefert
-// genau den Umfang, den eraseTenantData treffen wuerde - call-verknuepfte Daten
-// EINES Tenants. KEIN Strippen hier (das macht die API-Schicht via publicCall, um
-// streamToken nicht zu leaken).
+// ueber tenantCallScope GENAU den Umfang, den eraseTenantData treffen wuerde -
+// call-verknuepfte Daten EINES Tenants. KEIN Strippen hier (das macht die
+// API-Schicht via publicCall, um streamToken nicht zu leaken).
 export function exportTenantData(s, tenantId) {
-  const calls = s.calls.filter((c) => c.tenantId === tenantId);
-  const callIds = new Set(calls.map((c) => c.id));
+  const { calls, callIds } = tenantCallScope(s, tenantId);
   return {
     tenantId,
     exportedAt: new Date().toISOString(),
