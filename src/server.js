@@ -300,6 +300,13 @@ app.post("/voice/turn", async (req, res) => {
     return res.type("text/xml").send(render([hangupD()]));
   }
 
+  // TEMP-DIAGNOSE (Inbound-STT, siehe PLAN-INBOUND-AUDIO-STT.md): zeigt, WELCHE
+  // Felder der Provider an /voice/turn postet - nur Feld-NAMEN + Wert-LAENGEN, nie
+  // Roh-Werte (DSGVO/PII). Belegt, ob/unter welchem Namen das Transkript ankommt.
+  // Nach Befund wieder entfernen (Phase 3 des Plans).
+  console.log("[turn-diag]", "provider=" + call.provider,
+    "fields=" + Object.entries(req.body || {}).map(([k, v]) => `${k}:${String(v).length}`).join(","));
+
   const heard = (req.body.SpeechResult || "").trim();
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
