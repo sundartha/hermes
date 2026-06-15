@@ -60,21 +60,22 @@ test("order wirft -> failed, KEIN Release (Kauf nicht zustande gekommen)", async
   assert.ok(!prov.log.some((l) => l.startsWith("release")));
 });
 
-test("configure wirft nach dem Kauf -> Provider-Release + failed (kein bezahlter Orphan)", async () => {
+test("configure wirft nach dem Kauf -> Provider-Release + released (kein bezahlter Orphan)", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner({ async configureNumber() { throw new Error("HTTP 500"); } });
   await assert.rejects(() => provisionNumber(s, prov, { numberId, ...ARGS }), /HTTP 500/);
-  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
+  // Provider-Release sauber -> Datensatz terminal released, NIE active.
+  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED);
   assert.ok(prov.log.includes("release:num_ext_1"), "gekaufte Nummer wird beim Provider freigegeben");
-  assert.equal(findNumber(s, numberId).status !== NUMBER_STATUS.ACTIVE, true, "NIE active ohne erfolgreiches Configure");
 });
 
-test("Release-Fehler beim Rollback maskiert den Configure-Fehler nicht", async () => {
+test("Configure- UND Release-Fehler -> bleibt 'failed' (Orphan-Reconciliation), Configure-Fehler wird geworfen", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner({
     async configureNumber() { throw new Error("configure kaputt"); },
     async releaseNumber() { throw new Error("release auch kaputt"); },
   });
   await assert.rejects(() => provisionNumber(s, prov, { numberId, ...ARGS }), /configure kaputt/);
+  // Provider-Release fehlgeschlagen -> moeglicher Orphan -> Zustand bleibt failed.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
 });

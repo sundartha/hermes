@@ -14,6 +14,7 @@ import {
   beginProvisioning,
   activateNumber,
   failNumber,
+  releaseNumber,
   findNumber,
 } from "./store/state-ops.js";
 
@@ -43,15 +44,18 @@ export async function provisionNumber(s, provisioner, { numberId, countryCode, c
   try {
     await provisioner.configureNumber({ providerNumberId: ordered.providerNumberId, connectionId });
   } catch (cfgErr) {
-    // Gekauft, aber Voice-Routing fehlgeschlagen -> beim Provider freigeben
-    // (kein bezahlter Orphan), Zustand auf failed. Release-Fehler nicht maskieren
-    // den eigentlichen Configure-Fehler, aber best-effort versuchen.
+    // Gekauft, aber Voice-Routing fehlgeschlagen -> Zustand failed, dann die
+    // Provider-Nummer freigeben (kein bezahlter Orphan). NUR wenn der Provider-
+    // Release SAUBER durchlaeuft, wird der Datensatz terminal 'released'; sonst
+    // bleibt er 'failed' (moeglicher Orphan -> manuelle Reconciliation, durch die
+    // MAX_NUMBERS-Cap gedeckelt). Der Configure-Fehler wird in jedem Fall geworfen.
+    failNumber(s, numberId); // provisioning -> failed
     try {
       await provisioner.releaseNumber(ordered.providerNumberId);
+      releaseNumber(s, numberId); // failed -> released (Provider-Nummer sauber weg)
     } catch {
-      /* Provider-Release best-effort; manuelle Reconciliation ueber MAX_NUMBERS-Cap */
+      /* Provider-Release fehlgeschlagen -> Zustand bleibt 'failed' (Reconciliation) */
     }
-    failNumber(s, numberId);
     throw cfgErr;
   }
 
