@@ -42,6 +42,31 @@ export const BASE_ENV = {
   OPENAI_API_KEY: "",
   REALTIME_MODEL: "gpt-realtime",
   REALTIME_VOICE: "alloy",
+  // ---- Telnyx (zweiter Provider) ----
+  // Alle leer: der Default-Outbound-Provider bleibt Twilio. Sonst kippt eine
+  // lokale .env mit gesetzter TELNYX_NUMBER den Outbound-Pfad auf Telnyx (200
+  // statt 500) und faelscht Profile-/Gate-/Audit-Tests.
+  TELNYX_NUMBER: "",
+  TELNYX_API_KEY: "",
+  TELNYX_PUBLIC_KEY: "",
+  TELNYX_API_BASE: "",
+  TELNYX_CONNECTION_ID: "",
+  TELNYX_ACCOUNT_SID: "",
+  // ---- Store-Backend + Onboarding/Provisioning ----
+  // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
+  // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
+  STORE_BACKEND: "json",
+  DATABASE_URL: "",
+  MAX_NUMBERS: "5",
+  MAX_NUMBERS_PER_TENANT: "1",
+  PROVISIONING_ENABLED: "false",
+  PROVISIONING_COUNTRY: "DE",
+  // ---- MCP-Auth + OAuth + Hosting ----
+  // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
+  MCP_AUTH: "",
+  OAUTH_ISSUER_URL: "",
+  OAUTH_AUDIENCE: "",
+  RENDER_EXTERNAL_URL: "",
 };
 
 // Erste nicht-interne IPv4-Adresse - Requests dorthin gelten serverseitig
