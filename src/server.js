@@ -8,7 +8,7 @@ import * as store from "./store.js";
 import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
-import { attachMediaBridge } from "./bridge.js";
+import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
@@ -204,10 +204,13 @@ function turnDirectives(call, text) {
   return [gatherD({ promptText: text, action }), redirectD(action)];
 }
 
-// Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. stream_token
-// authentifiziert den WebSocket (Bridge prueft beim start-Event, bridge.js).
+// Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
+// provider-aware (Twilio /media byte-identisch, Telnyx eigener Pfad) - der upgrade-
+// Handler leitet daraus fail-closed den Provider ab. stream_token authentifiziert
+// den WebSocket (Bridge prueft beim start-Event, bridge.js).
 function streamDirectives(call) {
-  const url = config.publicUrl.replace(/^https/, "wss") + "/media";
+  const path = MEDIA_PATH[call.provider] || MEDIA_PATH[DEFAULT_PROVIDER];
+  const url = config.publicUrl.replace(/^https/, "wss") + path;
   return [streamD({
     url,
     params: [

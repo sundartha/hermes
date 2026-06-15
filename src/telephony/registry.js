@@ -18,6 +18,8 @@ import { telnyxMessaging } from "./adapters/telnyx/messaging.js";
 import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.js";
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
+import { twilioMedia } from "./adapters/twilio/media.js";
+import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { PROVIDER } from "../store/defaults.js";
 
 /** @returns {import("./ports.js").VoiceControl} */
@@ -27,6 +29,12 @@ export const voiceControl = (provider = PROVIDER.TWILIO) =>
 /** @returns {import("./ports.js").Messaging} */
 export const messaging = (provider = PROVIDER.TWILIO) =>
   provider === PROVIDER.TELNYX ? telnyxMessaging : twilioMessaging;
+
+// MediaTransport (Port 4, Realtime-WS-Frame-Schicht, Aufrufer bridge.js). Provider-
+// aware wie voiceControl: Default twilio -> bestehender Realtime-Pfad byte-identisch.
+/** @returns {import("./ports.js").MediaTransport} */
+export const mediaTransport = (provider = PROVIDER.TWILIO) =>
+  provider === PROVIDER.TELNYX ? telnyxMedia : twilioMedia;
 
 // NumberProvisioning (Port 3, Onboarding/Geld-Pfad): nur Telnyx implementiert
 // (Twilio-Provisioning ist nicht im Scope dieser Phase). Fail-closed: ein nicht

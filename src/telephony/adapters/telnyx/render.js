@@ -1,7 +1,8 @@
 // Telnyx-Adapter: renderDirectives - uebersetzt neutrale Direktiven (directives.js)
 // in TeXML. EINZIGER Telnyx-Ort mit Provider-Voice-Namen + TeXML-Markup. Kein SDK:
 // TeXML wird als String gebaut (Telnyx liefert keinen TwiML-aequivalenten Builder).
-// Fail-closed wie der Twilio-Renderer (unbekanntes voiceProfile / STREAM -> wirft).
+// Fail-closed wie der Twilio-Renderer (unbekanntes voiceProfile -> wirft). STREAM
+// rendert seit P7 echtes <Connect><Stream> (Telnyx-Realtime ueber Port 4).
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
@@ -58,6 +59,16 @@ function renderGather(d) {
   return `${open}${renderSay({ text: d.promptText, voiceProfile: d.voiceProfile })}</Gather>`;
 }
 
+// Realtime-Media-Stream als TeXML <Connect><Stream> mit <Parameter>-Kindern.
+// Symmetrisch zum Twilio-Renderer (connect().stream({url}) + parameter(p)).
+// Parameter-Reihenfolge ist vertraglich (Snapshot-Test).
+function renderStream(d) {
+  const params = d.params
+    .map((p) => `<Parameter name="${escapeXml(p.name)}" value="${escapeXml(p.value)}"/>`)
+    .join("");
+  return `<Connect><Stream url="${escapeXml(d.url)}">${params}</Stream></Connect>`;
+}
+
 // Eine Direktive in TeXML uebersetzen (eine Abstraktionsebene, G34).
 function renderDirective(d) {
   switch (d.kind) {
@@ -70,9 +81,7 @@ function renderDirective(d) {
     case DIRECTIVE.HANGUP:
       return "<Hangup/>";
     case DIRECTIVE.STREAM:
-      // Telnyx-Realtime ist nicht in P5 (deferred P7). Fail-closed statt stiller
-      // Fallback - sonst wuerde ein realtime-Inbound ueber Telnyx still brechen.
-      throw new Error("Telnyx-Realtime (STREAM) ist nicht in P5 - P7");
+      return renderStream(d);
     default:
       throw new Error(`unbekannte Direktive: ${d.kind}`);
   }

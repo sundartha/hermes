@@ -7,7 +7,26 @@ import { config } from "./config.js";
 import * as store from "./store.js";
 import { toolDefs, execTool, disclosureSentence, systemPrompt } from "./claude.js";
 import { safeEqual } from "./util.js";
-import { voiceControl } from "./telephony/registry.js";
+import { voiceControl, mediaTransport } from "./telephony/registry.js";
+import { PROVIDER } from "./store/defaults.js";
+import { MEDIA_EVENT } from "./telephony/media-events.js";
+
+// WS-Pfad -> Provider (explizit, fail-closed). EINZIGE Quelle der Pfade (G5):
+// server.js importiert MEDIA_PATH fuer die <Stream>-URL, der upgrade-Handler
+// leitet daraus den Provider ab. KEIN Feld-Sniffing am Frame - die Adapter-Wahl
+// muss VOR dem ersten Frame feststehen (start parsen). Unbekannter Pfad -> null ->
+// Verbindung wird verworfen (kein stiller Twilio-Default fuer einen fremden
+// Stream-Pfad, Tenant-Verwechslungs-Risiko).
+export const MEDIA_PATH = Object.freeze({
+  [PROVIDER.TWILIO]: "/media",
+  [PROVIDER.TELNYX]: "/media/telnyx",
+});
+
+function providerFromMediaPath(pathname) {
+  for (const [provider, p] of Object.entries(MEDIA_PATH))
+    if (pathname === p) return provider;
+  return null;
+}
 
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
 function realtimeTools() {
@@ -28,13 +47,15 @@ export function attachMediaBridge(httpServer, onCallEnded) {
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", (req, socket, head) => {
-    if (new URL(req.url, "http://x").pathname !== "/media") return socket.destroy();
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    const provider = providerFromMediaPath(new URL(req.url, "http://x").pathname);
+    if (!provider) return socket.destroy(); // fail-closed: unbekannter Pfad -> kein Stream
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req, provider));
   });
 
-  wss.on("connection", (twilioWs) => {
+  wss.on("connection", (providerWs, _req, provider) => {
+    const media = mediaTransport(provider);
     let call = null;
-    let streamSid = null;
+    let streamRef = null;
     let openaiWs = null;
     let activeResponse = false; // laeuft gerade eine KI-Ausgabe?
     let endTimer = null; // Max-Dauer
@@ -60,7 +81,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       clearTimeout(endTimer);
       clearTimeout(hangupTimer);
       try { openaiWs?.close(); } catch {}
-      try { twilioWs.close(); } catch {}
+      try { providerWs.close(); } catch {}
       if (call) {
         store.endCallRecord(call.id, status);
         onCallEnded?.(store.getCall(call.id)); // -> Summary + SMS (server.js)
@@ -100,11 +121,12 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         try { ev = JSON.parse(buf.toString()); } catch { return; }
 
         switch (ev.type) {
-          // ---- Audio KI -> Twilio (beide Schema-Varianten: beta + GA) ----
+          // ---- Audio KI -> Telefonie (beide Schema-Varianten: beta + GA) ----
+          // Frame-Aufbau provider-spezifisch ueber Port 4 (Adapter), Rest agnostisch.
           case "response.audio.delta":
           case "response.output_audio.delta":
-            if (streamSid && ev.delta)
-              twilioWs.send(JSON.stringify({ event: "media", streamSid, media: { payload: ev.delta } }));
+            if (streamRef && ev.delta)
+              providerWs.send(JSON.stringify(media.buildMediaFrame({ payload: ev.delta, streamRef })));
             break;
 
           case "response.created":
@@ -112,12 +134,12 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             break;
 
           // HEIKLE STELLE 1: Barge-in. Spricht der Angerufene, waehrend die KI redet:
-          // 1) laufende Response bei OpenAI abbrechen, 2) bei Twilio den bereits
-          // gepufferten (noch nicht abgespielten) Audio-Stream verwerfen ('clear').
-          // Ohne (2) redet die KI scheinbar weiter, weil Twilio puffert.
+          // 1) laufende Response bei OpenAI abbrechen, 2) beim Provider den bereits
+          // gepufferten (noch nicht abgespielten) Audio-Stream verwerfen (clearPlayback).
+          // Ohne (2) redet die KI scheinbar weiter, weil der Provider puffert.
           case "input_audio_buffer.speech_started":
             if (activeResponse) openaiWs.send(JSON.stringify({ type: "response.cancel" }));
-            if (streamSid) twilioWs.send(JSON.stringify({ event: "clear", streamSid }));
+            if (streamRef) providerWs.send(JSON.stringify(media.clearPlayback({ streamRef })));
             break;
 
           // ---- Transkripte fortlaufend in den Call-Record ----
@@ -167,48 +189,50 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       openaiWs.on("error", (e) => { console.error("[bridge] OpenAI WS:", e.message); hangup("openai-error"); });
     }
 
-    // ---- Twilio Media Stream Events ----
-    twilioWs.on("message", (buf) => {
-      let msg;
-      try { msg = JSON.parse(buf.toString()); } catch { return; }
+    // ---- Provider-Media-Stream-Events (Frame-Schicht ueber Port 4) ----
+    providerWs.on("message", (buf) => {
+      let raw;
+      try { raw = JSON.parse(buf.toString()); } catch { return; }
+      const frame = media.parseMediaFrame(raw);
 
-      switch (msg.event) {
-        case "start": {
-          streamSid = msg.start.streamSid;
-          const callId = msg.start.customParameters?.call_id;
-          call = store.getCall(callId);
-          if (!call) { log("unbekannte call_id, trenne"); return twilioWs.close(); }
-          // stream_token aus dem TwiML pruefen: ohne diese Pruefung koennte jeder
-          // mit erratener call_id den Audio-Stream uebernehmen. Bei Ablehnung
-          // call wieder auf null setzen, damit finalize() den echten Call-Record
-          // nicht beendet (sonst koennte ein Angreifer aktive Calls abwuergen).
-          const token = msg.start.customParameters?.stream_token || "";
-          if (!call.streamToken || !safeEqual(token, call.streamToken)) {
+      switch (frame.event) {
+        case MEDIA_EVENT.START: {
+          streamRef = frame.streamRef;
+          call = store.getCall(frame.callId);
+          if (!call) { log("unbekannte call_id, trenne"); return providerWs.close(); }
+          // stream_token aus den start-Parametern pruefen: ohne diese Pruefung
+          // koennte jeder mit erratener call_id den Audio-Stream uebernehmen. Bleibt
+          // erste Stufe VOR markAnswered/connectOpenAI. Bei Ablehnung call wieder auf
+          // null setzen, damit finalize() den echten Call-Record nicht beendet (sonst
+          // koennte ein Angreifer aktive Calls abwuergen).
+          if (!call.streamToken || !safeEqual(frame.streamToken || "", call.streamToken)) {
             log("ungueltiges stream_token, trenne");
             call = null;
-            return twilioWs.close();
+            return providerWs.close();
           }
-          call.twilioSid = msg.start.callSid || call.twilioSid;
+          // providerCallRef -> call.twilioSid (Bestandsfeldname, von hangup/finalize/store
+          // gelesen; neutraler Port-Name ist providerCallRef, die Zuweisung ist die Bruecke).
+          call.twilioSid = frame.providerCallRef || call.twilioSid;
           store.markAnswered(call.id);
           log("Stream gestartet,", call.direction, call.direction === "outbound" ? call.to : call.from);
-          // Max-Dauer hart durchsetzen (zusaetzlich zu Twilio timeLimit)
+          // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
           endTimer = setTimeout(() => hangup("Max-Dauer erreicht"), (call.maxDurationS || config.maxCallDurationS) * 1000);
           connectOpenAI();
           break;
         }
-        case "media":
+        case MEDIA_EVENT.MEDIA:
           // Audio Anrufer -> OpenAI, 1:1 als u-law base64
           if (openaiWs?.readyState === WebSocket.OPEN)
-            openaiWs.send(JSON.stringify({ type: "input_audio_buffer.append", audio: msg.media.payload }));
+            openaiWs.send(JSON.stringify({ type: "input_audio_buffer.append", audio: frame.payload }));
           break;
-        case "stop": // (a) Gegenseite hat aufgelegt
+        case MEDIA_EVENT.STOP: // (a) Gegenseite hat aufgelegt
           finalize(call?.status === "cancelled" ? "cancelled" : "completed");
           break;
       }
     });
 
-    twilioWs.on("close", () => finalize("completed"));
-    twilioWs.on("error", () => finalize("failed"));
+    providerWs.on("close", () => finalize("completed"));
+    providerWs.on("error", () => finalize("failed"));
   });
 
   return wss;

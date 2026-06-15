@@ -1,11 +1,11 @@
 // P5: Telnyx-TeXML-Renderer byte-exakt (Snapshot, analog directive-render.test.js).
 // Nagelt Voice-Bezeichner (Polly.Vicki-Neural), Attribut-Reihenfolge und das
 // XML-Escaping fest. Grenzfaelle: Gather mit/ohne Prompt, bare Hangup, unbekanntes
-// voiceProfile -> wirft, STREAM -> wirft (kein Telnyx-Realtime in P5). Offline.
+// voiceProfile -> wirft. STREAM-Rendering (ab P7) in telnyx-stream-render.test.js. Offline.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
-import { say, gather, hangup, redirect, stream } from "../src/telephony/directives.js";
+import { say, gather, hangup, redirect } from "../src/telephony/directives.js";
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -45,11 +45,4 @@ test("Bare Hangup -> TeXML byte-identisch (inaktiver/fehlender Call)", () => {
 
 test("Unbekanntes voiceProfile -> wirft (fail-closed, kein stiller Default-Voice)", () => {
   assert.throws(() => renderDirectives([say("x", "kein-profil")]), /unbekanntes voiceProfile/);
-});
-
-test("STREAM -> wirft (kein Telnyx-Realtime in P5, deferred P7)", () => {
-  assert.throws(
-    () => renderDirectives([stream({ url: "wss://agent.test/media", params: [] })]),
-    /Telnyx-Realtime/
-  );
 });
