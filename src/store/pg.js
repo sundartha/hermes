@@ -122,6 +122,10 @@ export function makePgStore(runner) {
     },
     findConflict: (startIso, endIso) => ops.findConflict(requireState(), startIso, endIso),
 
+    // Tenant-Kontext-Seam (I0): liest den hydrierten Spiegel (kein DB-Roundtrip),
+    // config.ownerName als Owner-Fallback (Wrapper-Parity zu json.js).
+    tenantContext: (tenantId) => ops.tenantContext(requireState(), config.ownerName, tenantId),
+
     trackUsage(tenantId, inputTokens, outputTokens, cfg) {
       const usage = ops.trackUsage(requireState(), tenantId, inputTokens, outputTokens, cfg);
       save();

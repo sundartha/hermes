@@ -171,6 +171,13 @@ export function findConflict(startIso, endIso) {
   return ops.findConflict(load(), startIso, endIso);
 }
 
+// ---- Tenant-Kontext-Seam (I0) ----
+// Reicht config.ownerName als Owner-Fallback an die config-freie ops-Funktion
+// (Muster wie cfg bei trackUsage/budgetExceeded). Reine Query, kein save.
+export function tenantContext(tenantId) {
+  return ops.tenantContext(load(), config.ownerName, tenantId);
+}
+
 // ---- Usage / Budget-Guard ----
 export function trackUsage(tenantId, inputTokens, outputTokens, cfg) {
   const usage = ops.trackUsage(load(), tenantId, inputTokens, outputTokens, cfg);

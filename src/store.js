@@ -1,5 +1,5 @@
 // Store-Fassade: waehlt das aktive Backend hinter STORE_BACKEND und re-exportiert
-// dessen 28 Funktionen. Die Datei MUSS als store.js bestehen bleiben - ESM
+// dessen 29 Funktionen. Die Datei MUSS als store.js bestehen bleiben - ESM
 // resolved "./store.js" NICHT auf ein store/-Verzeichnis, die Caller
 // (server/bridge/claude) und der Retention-Test importieren store.js unveraendert.
 //
@@ -45,7 +45,7 @@ async function createPgBackend() {
 
 const backend = config.storeBackend === "pg" ? await createPgBackend() : jsonBackend;
 
-// 28 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
+// 29 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
 export const {
   load,
   save,
@@ -75,4 +75,5 @@ export const {
   listProfiles,
   setProfile,
   deleteProfile,
+  tenantContext,
 } = backend;
