@@ -1,5 +1,16 @@
 # Lessons (selbst gefundene Stolpersteine, fuer kuenftige Sessions)
 
+- **Bug-Report-Schicht != aktiver Code-Pfad**: Der Inbound-Audio-Report (2026-06-15)
+  begruendete alles mit Media-Streaming/WS/both_tracks. Der Realtime-Pfad war aber
+  gar nicht aktiv (`VOICE_ENGINE=budget` in .env). IMMER zuerst die echte aktive
+  Konfiguration lesen (.env + config.js), BEVOR man der Kausaltheorie des Reporters
+  folgt. Die genannte Symptom-Schicht ist evtl. nicht der laufende Pfad.
+- **Telnyx `<Gather input="speech">` braucht `transcriptionEngine`** (Google/Telnyx/
+  Azure/Deepgram), sonst transkribiert Telnyx GAR NICHT -> kein `SpeechResult` ->
+  Agent hoert den Angerufenen nie. Unterschied zu Twilio (dort reicht input+language,
+  `speechModel` ist optional). Telnyx-Gather-Callback ist sonst Twilio-kompatibel
+  (`SpeechResult`/`Confidence`). Quelle: Telnyx-TeXML-Gather-Doku.
+
 - **`node --test test/` schlaegt fehl** (Node 22 in diesem Setup versucht, das
   Verzeichnis als Modul zu laden). Funktioniert: `node --test "test/*.test.js"`.
 - **stdout-Assertions gegen Kindprozesse brauchen Polling**: Die HTTP-Antwort

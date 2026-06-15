@@ -15,14 +15,19 @@ const TELNYX_VOICE = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Polly.Vicki-Neural", language: "de-DE" },
 });
 
-// Telnyx-TeXML-Gather-Attribute (deutsche Spracherkennung). Bewusst nur die in der
-// Telnyx-Doku belegten Attribute - Twilios speechModel/actionOnEmptyResult und
-// speechTimeout="auto" sind Twilio-spezifisch und werden von Telnyx nicht
-// dokumentiert (s. deviations). Attribut-Reihenfolge ist vertraglich (Einfuege-
-// Reihenfolge); der Snapshot-Test nagelt sie fest.
+// Telnyx-TeXML-Gather-Attribute (deutsche Spracherkennung). transcriptionEngine ist
+// PFLICHT, damit Telnyx ueberhaupt transkribiert: ohne Engine erkennt `<Gather
+// input="speech">` keine Sprache und sendet kein SpeechResult zurueck (Telnyx-
+// TeXML-Spec) - das war der Inbound-Audio-Bug (Agent hoerte den Angerufenen nie).
+// "Telnyx" = die in-house-Engine (Owner-Wahl 2026-06-15; guenstiger als Google),
+// language="de-DE" steuert die Sprache. Twilios speechModel/speechTimeout/
+// actionOnEmptyResult sind Twilio-spezifisch und hier bewusst NICHT gesetzt.
+// Attribut-Reihenfolge ist vertraglich (Einfuege-Reihenfolge); der Snapshot-Test
+// nagelt sie fest.
 const GATHER_ATTRS = Object.freeze({
   input: "speech",
   language: "de-DE",
+  transcriptionEngine: "Telnyx",
 });
 
 // XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden

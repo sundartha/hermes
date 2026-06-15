@@ -1,5 +1,32 @@
 # Todo: Test-Suite + Phase 2 + Phase 3 (autonome Punkte)
 
+## BUGFIX (2026-06-15): Telnyx-Inbound-Audio/STT -- Agent hoert den Angerufenen nicht
+
+Symptom (live, 2 Calls): VOICE_ENGINE=budget, Telnyx-Outbound. Agent-TTS hoerbar,
+aber Transkript enthaelt NUR role:agent, nie role:caller; nach Stille wiederholt
+der Agent die Begruessung. Reporter-Verdacht (Media-Streaming/both_tracks/WS)
+greift NICHT -- der Realtime-Pfad ist gar nicht aktiv (VOICE_ENGINE=budget).
+
+Wurzel: Telnyx `<Gather input="speech">` transkribiert NUR mit explizitem
+`transcriptionEngine` (Telnyx-TeXML-Spec). Der Telnyx-Renderer setzte nur
+input+language -> Telnyx erkennt nie Sprache -> kein SpeechResult -> /voice/turn
+bekommt leeren Body -> agentTurn(null) re-greet (Redirect-Fallback). Twilio-Seite
+hat ein STT (speechModel=deepgram_nova-2-general), Telnyx-Seite hatte keins.
+Owner-Entscheidung 2026-06-15: transcriptionEngine="Telnyx" (in-house, $0.025/min).
+
+- [x] src/telephony/adapters/telnyx/render.js: transcriptionEngine="Telnyx" in GATHER_ATTRS
+      DONE: gerendertes <Gather> = `input="speech" language="de-DE" transcriptionEngine="Telnyx" ...`
+      Verify: `node --test test/telnyx-render.test.js` 6/6 gruen (inkl. neuem Regressionstest);
+      node -e Render-Smoke zeigt das Attribut im Outbound-Turn-TeXML.
+- [x] Restrisiko benannt: de-DE-Reife der Telnyx-in-house-Engine live unbestaetigt
+      (Owner-Wahl). Fallback Google = 1-Zeilen-Aenderung. In README-Abweichungen notiert.
+- [x] npm test komplett gruen + node --check.
+      DONE: `npm test` 264/264 (vorher 263, +1 Regressionstest), 0 fail. node --check render.js OK.
+      OFFEN (nicht autonom testbar): echter Telnyx-Call -> >=1 role:caller-Zeile im Transkript
+      (Akzeptanzkriterium). Lokal nicht reproduzierbar (Telnyx-STT = echte Telefonie).
+
+
+
 Branch: `claude/plan-security-phase-one-n5dl1h`. Vorgehen nach workflow.md Regel 7:
 jeder Punkt hat Soll-Ergebnis + Verifikation, wird erst abgehakt, wenn die
 Verifikation in dieser Session gruen war (Befehl + Output daneben).
