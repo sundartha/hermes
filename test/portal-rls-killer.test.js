@@ -96,3 +96,19 @@ test("portalStore: Transkript-Read ist tenant-isoliert (Leak-Schutz)", async () 
   );
   assert.ok(!texts.join(" ").includes("GEHEIM_A"), "Tenant B sieht A-Transkript nicht");
 });
+
+test("portalStore: Query-Fehler in withTenant -> ROLLBACK, naechster Request sauber isoliert", async () => {
+  const db = await setup();
+  const portal = makePortalStore(roleRunner(db));
+  // Request 1 (Tenant A) wirft mitten in der Txn -> ROLLBACK.
+  await assert.rejects(
+    () => portal.withTenant(TENANT_A, async (c) => {
+      await c.query(`SELECT 1`);
+      await c.query(`SELECT * FROM does_not_exist`); // Fehler -> ROLLBACK
+    }),
+    /does_not_exist|relation/i
+  );
+  // Request 2 (Tenant B) auf derselben Verbindung darf NUR B sehen.
+  const rows = await portal.listCalls(TENANT_B);
+  assert.deepEqual(rows.map((r) => r.id), ["call_tenant_b"], "kein GUC-Leak von A nach B");
+});
