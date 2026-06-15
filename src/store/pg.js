@@ -360,12 +360,13 @@ async function flushCalls(client, tenantId, calls) {
 
 // Transkript-Segmente sind append-only: nur fehlende anhaengen. EINZIGE Ausnahme:
 // ein geleertes Spiegel-Transkript (Roh-Transkript-Purge nach Summary, #7) wird
-// auf die DB reconciled -> die persistierten Segmente DIESES Calls werden geloescht
-// (tenant-scoped, in derselben Flush-Transaktion mit gesetzter RLS-GUC). Trifft NUR
-// call_id; andere Calls/Tenants bleiben unberuehrt.
+// auf die DB reconciled -> die persistierten Segmente DIESES Calls werden geloescht.
+// Tenant-Schutz doppelt verankert wie bei deleteMissingByText: expliziter
+// tenant_id-Filter im Statement PLUS RLS-GUC (FORCE-RLS, set_config in flush) als
+// zweite Linie. Trifft NUR diesen Call dieses Tenants; andere bleiben unberuehrt.
 async function flushTranscript(client, tenantId, call) {
   if (call.transcript.length === 0) {
-    await client.query(`DELETE FROM transcript_segment WHERE call_id=$1`, [call.id]);
+    await client.query(`DELETE FROM transcript_segment WHERE tenant_id=$1 AND call_id=$2`, [tenantId, call.id]);
     return;
   }
   const existing = Number(
