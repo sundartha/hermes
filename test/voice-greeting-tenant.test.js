@@ -39,7 +39,7 @@ test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch
       body: new URLSearchParams({ CallSid: "CAo", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER }),
     });
     assert.equal(res.status, 200);
-    assert.match(await res.text(), /Jonas/);
+    assert.match(await res.text(), new RegExp(BASE_ENV.OWNER_NAME));
   } finally {
     await srv.stop();
   }
