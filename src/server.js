@@ -546,6 +546,18 @@ app.get("/api/calls/:id", (req, res) => {
   res.json(publicCall(call));
 });
 
+// Auskunft/Export (Art. 15/20): nicht-destruktiver Owner-Tenant-Export, read-only,
+// hinter der bestehenden /api/*-Basic-Auth. Calls durch publicCall (KEIN
+// streamToken-Leak, dieselbe Invariante wie /api/state). BEWUSST KEIN MCP-Tool
+// (kein Bulk-Export ueber MCP, Regel 5). Die Loeschung (Art. 17) hat KEINEN
+// Endpunkt - nur Script (kleinste Angriffsflaeche, Safety vor Features).
+app.get("/api/tenant-data/export", (req, res) => {
+  const data = store.exportTenantData(OWNER_TENANT_ID);
+  audit("data_export", req,
+    `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`);
+  res.json({ ...data, calls: data.calls.map(publicCall) });
+});
+
 app.post("/api/settings", (req, res) => {
   const { settings, changed } = store.updateSettings(req.body || {});
   // Nur die Keys loggen - Werte (z.B. greeting-Freitext) gehoeren nicht ins Log

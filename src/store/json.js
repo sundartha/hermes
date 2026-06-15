@@ -109,6 +109,19 @@ export function purgeTranscript(callId) {
   if (ops.purgeTranscript(load(), callId)) save();
 }
 
+// Per-Tenant-DSGVO-Loeschung (Art. 17): entfernt call-verknuepfte Daten des
+// Tenants + persistiert nur bei Aenderung (Muster wie pruneOldData).
+export function eraseTenantData(tenantId) {
+  const removed = ops.eraseTenantData(load(), tenantId);
+  if (removed.calls || removed.actionItems || removed.notifications) save();
+  return removed;
+}
+
+// Nicht-destruktive Auskunft/Export (Art. 15/20): reine Query, kein save.
+export function exportTenantData(tenantId) {
+  return ops.exportTenantData(load(), tenantId);
+}
+
 export function markAnswered(callId) {
   const { call, changed } = ops.markAnswered(load(), callId);
   if (changed) save();

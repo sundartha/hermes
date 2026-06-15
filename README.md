@@ -143,6 +143,7 @@ Bonus-Tools für die Vodafone-Demo: `list_calls`, `list_action_items`, `get_cale
 - Kalender = lokaler Speicher mit Beispielterminen statt Google/Outlook.
 - Keine Nummern-Provisionierung, kein Multi-User, kein Billing, keine CAMARA-Anbindung, keine Datenbank.
 - Datenminimierung (DSGVO): Roh-Transkripte werden nach erfolgreicher Zusammenfassung gelöscht — nur Summary + Action Items bleiben gespeichert. `get_transcript` liefert für abgeschlossene Calls kein Volltranskript mehr. Datenresidenz EU (`render.yaml` `region: frankfurt`; Region ist per Blueprint nur für frische Deploys setzbar).
+- DSGVO-Betroffenenrechte (Owner-Tenant): Auskunft/Export (Art. 15/20) als read-only `GET /api/tenant-data/export` (hinter Basic-Auth, Calls ohne `streamToken`); Recht auf Löschung (Art. 17) als eigenständiges Script `node scripts/erase-tenant.js <tenantId> --confirm` (irreversibel, fail-closed, bewusst kein Netz-Endpunkt). Beide treffen call-verknüpfte Daten (Calls inkl. Transkripte, Action Items, call-verknüpfte Notifications); Einstellungen/Profile/Nummer/Kalender/Budget-Zähler bleiben erhalten.
 
 ## Dateien
 

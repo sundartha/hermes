@@ -1,7 +1,8 @@
 // Phase 2.2 (Body-Size-Limits), 2.4 (Settings-Whitelist), 2.6 (Eingabe-Validierung).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
+import { startServer, seedState, seedCall } from "./helpers.js";
+import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const postJson = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -122,6 +123,32 @@ test("Settings-Whitelist", async (t) => {
       assert.equal(res.status, 200);
       assert.equal((await res.json()).allowBooking, false);
       assert.equal(srv.readStore().settings.allowBooking, false);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
+// P8b: Auskunft/Export (Art. 15/20). Read-only Owner-Tenant-Export hinter der
+// /api/*-Basic-Auth, Calls OHNE streamToken (publicCall-Invariante wie /api/state).
+test("GET /api/tenant-data/export liefert Owner-Daten ohne streamToken", async (t) => {
+  const srv = await startServer({
+    seed: seedState({
+      calls: [seedCall({ id: "call_x", tenantId: OWNER_TENANT_ID, streamToken: "geheim-token",
+        summary: "Zusammenfassung" })],
+    }),
+  });
+  try {
+    await t.test("200 mit erwarteten Feldern, Calls ohne streamToken", async () => {
+      const res = await fetch(`${srv.localUrl}/api/tenant-data/export`);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.tenantId, OWNER_TENANT_ID);
+      assert.equal(typeof body.exportedAt, "string");
+      assert.ok(Array.isArray(body.calls) && Array.isArray(body.actionItems) && Array.isArray(body.notifications));
+      assert.equal(body.calls.length, 1, "Owner-Call im Export");
+      assert.equal("streamToken" in body.calls[0], false, "streamToken darf NIE geleakt werden");
+      assert.equal(body.calls[0].summary, "Zusammenfassung");
     });
   } finally {
     await srv.stop();

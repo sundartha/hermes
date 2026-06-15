@@ -143,6 +143,17 @@ export function makePgStore(runner) {
       return removed;
     },
 
+    // Per-Tenant-DSGVO-Loeschung (Art. 17): mutiert den Spiegel (call-verknuepfte
+    // Daten des Tenants raus), der bestehende Flush reconciled die DB tenant-scoped
+    // (deleteMissing mit leerer keep-Liste -> DELETE WHERE tenant_id; transcript_
+    // segment per ON DELETE CASCADE). KEIN eigenes DELETE noetig.
+    eraseTenantData(tenantId) {
+      const removed = ops.eraseTenantData(requireState(), tenantId);
+      if (removed.calls || removed.actionItems || removed.notifications) save();
+      return removed;
+    },
+    exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
+
     updateSettings(patch) {
       const result = ops.updateSettings(requireState(), patch);
       save();
