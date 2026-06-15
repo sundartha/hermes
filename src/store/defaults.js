@@ -26,6 +26,40 @@ export const MAX_NOTIFICATIONS = 50;
 export const PROVIDER = Object.freeze({ TWILIO: "twilio", TELNYX: "telnyx" });
 export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
 
+// ---- Number-Lifecycle (Onboarding ohne Payment) ----
+// Zustaende einer provisionierten Nummer. Eine Nummer wird NIE direkt "active"
+// gebaut - sie durchlaeuft requested -> provisioning -> active. Der reale
+// Provider-Kauf haengt strukturell an provisioning (kein Kauf ohne diesen
+// Zustand); die Cap-Pruefung (config.maxNumbers) ersetzt das frueher geplante
+// Stripe-Schloss (Payment uebersprungen, Kosten-Notbremse bleibt).
+export const NUMBER_STATUS = Object.freeze({
+  REQUESTED: "requested", // angefragt, noch KEINE e164, KEIN Provider-Kauf
+  PROVISIONING: "provisioning", // Kauf/Konfiguration beim Provider laeuft
+  ACTIVE: "active", // gekauft + konfiguriert + dem Tenant zugewiesen, routet
+  FAILED: "failed", // Kauf/Konfig fehlgeschlagen -> Rollback/Release
+  SUSPENDED: "suspended", // Abuse/Budget/manuell stillgelegt (routet nicht)
+  RELEASED: "released", // freigegeben (terminal)
+});
+
+// Erlaubte Transitionen (fail-closed: alles nicht hier Gelistete ist verboten).
+// from -> Set der zulaessigen Folge-Zustaende. RELEASED ist terminal (leer).
+export const NUMBER_TRANSITIONS = Object.freeze({
+  [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.PROVISIONING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.SUSPENDED, NUMBER_STATUS.RELEASED],
+  [NUMBER_STATUS.SUSPENDED]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED],
+  [NUMBER_STATUS.FAILED]: [NUMBER_STATUS.RELEASED],
+  [NUMBER_STATUS.RELEASED]: [],
+});
+
+// Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
+// Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
+export const TENANT_STATUS = Object.freeze({
+  ACTIVE: "active",
+  SUSPENDED: "suspended",
+  CLOSED: "closed",
+});
+
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);

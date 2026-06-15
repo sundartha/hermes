@@ -16,6 +16,9 @@ import {
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
   DEFAULT_PROVIDER,
+  NUMBER_STATUS,
+  NUMBER_TRANSITIONS,
+  TENANT_STATUS,
 } from "./defaults.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -31,9 +34,15 @@ export function makeDefaultState() {
     // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
     // Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
     profiles: {},
-    // E.164 -> tenant_id Routing-Tabelle (P3c). Owner-Nummer ist config-derived
-    // (seedOwnerNumber), keine ueber die API mutierbaren User-Daten.
-    numbers: [], // [{ e164, tenantId, provider }]
+    // Tenants (Onboarding). Der Owner existiert immer (status active). Weitere
+    // Tenants kommen ueber registerTenant (zahlungsfreies Onboarding).
+    tenants: [{ id: OWNER_TENANT_ID, status: TENANT_STATUS.ACTIVE }], // [{ id, status }]
+    // E.164 -> tenant_id Routing-Tabelle (P3c) + Lifecycle. Owner-Nummer ist
+    // config-derived (seedOwnerNumber, status active). 'requested' Nummern haben
+    // (noch) keine e164 -> identifiziert ueber id.
+    numbers: [], // [{ id, e164, tenantId, provider, status, providerNumberId }]
+    // Historie Nummer<->Tenant (Recycling-Hygiene).
+    numberAssignments: [], // [{ id, numberId, tenantId, assignedAt, releasedAt }]
   };
 }
 
@@ -190,7 +199,107 @@ export function findTenantByNumber(s, e164) {
 export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
   if (!e164) return;
   if (s.numbers.some((n) => n.e164 === e164)) return;
-  s.numbers.push({ e164, tenantId, provider });
+  // Geseedete Owner-Nummer ist in Benutzung -> status active. id, damit
+  // number_assignment/Lifecycle sie referenzieren koennen.
+  s.numbers.push({ id: newId("num"), e164, tenantId, provider, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
+}
+
+// ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----
+// Reine State-Machine + Datenschicht: Tenant registrieren, Nummer anfragen,
+// validierte Zustandsuebergaenge. KEIN Provider-Kauf (Live-API) und KEIN IO hier
+// - das macht der Adapter/die Route. Die zentrale Sicherheitseigenschaft: eine
+// Nummer wird NIE direkt 'active' gebaut, nur ueber die legale Transition-Kette.
+
+// Erlaubter Uebergang? (fail-closed: alles nicht in NUMBER_TRANSITIONS ist verboten).
+export function canTransitionNumber(from, to) {
+  return (NUMBER_TRANSITIONS[from] || []).includes(to);
+}
+
+export function findNumber(s, id) {
+  return s.numbers.find((n) => n.id === id) || null;
+}
+
+export function findTenant(s, id) {
+  return s.tenants.find((t) => t.id === id) || null;
+}
+
+// Idempotent: legt den Tenant an, falls neu (status active). Liefert den Tenant.
+export function registerTenant(s, id) {
+  const existing = findTenant(s, id);
+  if (existing) return existing;
+  const tenant = { id, status: TENANT_STATUS.ACTIVE };
+  s.tenants.push(tenant);
+  return tenant;
+}
+
+// Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
+// Kosten/Plaetze; released/failed zaehlen nicht. Basis fuer die Cap-Pruefung.
+function liveNumbers(s, tenantId = null) {
+  return s.numbers.filter(
+    (n) =>
+      n.status !== NUMBER_STATUS.RELEASED &&
+      n.status !== NUMBER_STATUS.FAILED &&
+      (tenantId == null || n.tenantId === tenantId)
+  );
+}
+
+// Fragt eine neue Nummer fuer einen Tenant an (Onboarding, ZAHLUNGSFREI). Die
+// Caps (maxNumbers global, maxNumbersPerTenant) sind die Kosten-Notbremse, die
+// das uebersprungene Stripe-Schloss ersetzt - jede echte Nummer kostet Geld.
+// KEIN Provider-Kauf hier (der haengt an beginProvisioning). caps kommen aus
+// config (state-ops bleibt config-frei). Liefert {ok, number} oder {ok:false, reason}.
+export function requestNumber(s, { tenantId, provider = DEFAULT_PROVIDER, maxNumbers, maxNumbersPerTenant }) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return { ok: false, reason: "tenant_inactive" };
+  if (liveNumbers(s).length >= maxNumbers) return { ok: false, reason: "global_cap" };
+  if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant) return { ok: false, reason: "tenant_cap" };
+  const number = { id: newId("num"), e164: null, tenantId, provider, status: NUMBER_STATUS.REQUESTED, providerNumberId: null };
+  s.numbers.push(number);
+  return { ok: true, number };
+}
+
+// Validierte Zustandsaenderung (fail-closed: illegaler Uebergang wirft). Reine
+// Status-Mutation; activate/fail/release setzen Zusatzfelder.
+export function transitionNumber(s, numberId, toStatus) {
+  const number = findNumber(s, numberId);
+  if (!number) throw new Error(`transitionNumber: Nummer ${numberId} nicht gefunden`);
+  if (!canTransitionNumber(number.status, toStatus))
+    throw new Error(`transitionNumber: illegaler Uebergang ${number.status} -> ${toStatus}`);
+  number.status = toStatus;
+  return number;
+}
+
+export function beginProvisioning(s, numberId) {
+  return transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+}
+
+// provisioning -> active: NUR nach erfolgreichem Provider-Kauf. Setzt die gekaufte
+// e164 + provider_number_id und legt die assignment-Zeile an. KEIN active ohne
+// diese Transition (zentrale fail-closed-Eigenschaft).
+export function activateNumber(s, numberId, { e164, providerNumberId }) {
+  const number = transitionNumber(s, numberId, NUMBER_STATUS.ACTIVE);
+  number.e164 = e164;
+  number.providerNumberId = providerNumberId ?? null;
+  s.numberAssignments.push({
+    id: newId("asg"),
+    numberId: number.id,
+    tenantId: number.tenantId,
+    assignedAt: new Date().toISOString(),
+    releasedAt: null,
+  });
+  return number;
+}
+
+export function failNumber(s, numberId) {
+  return transitionNumber(s, numberId, NUMBER_STATUS.FAILED);
+}
+
+// Freigabe (terminal): status released + assignment schliessen (released_at).
+export function releaseNumber(s, numberId) {
+  const number = transitionNumber(s, numberId, NUMBER_STATUS.RELEASED);
+  const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
+  if (asg) asg.releasedAt = new Date().toISOString();
+  return number;
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----

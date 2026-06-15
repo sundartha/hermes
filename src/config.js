@@ -49,6 +49,14 @@ export const config = {
   // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
   // spaeter gelockert wird. Default 6; 0 = jeder Outbound-Call gesperrt (Not-Aus).
   maxCallsPerHour: parseInt(process.env.MAX_CALLS_PER_HOUR || "6", 10),
+  // Notbremse fuer das (zahlungsfreie) Onboarding: harte Obergrenze, wie viele
+  // Nummern die Plattform INSGESAMT provisionieren darf. Jede echte Nummer kostet
+  // beim Provider Geld -> ohne Cap koennte ein offener Self-Service-Pfad das
+  // Provider-Guthaben leeren (R4 Toll-Fraud). Kein Payment-Gate, nur Blast-Radius.
+  // 0 = Provisioning gesperrt (Not-Aus). Default bewusst klein.
+  maxNumbers: parseInt(process.env.MAX_NUMBERS || "5", 10),
+  // Wie viele AKTIVE Nummern ein einzelner Tenant haben darf (zusaetzliches Gate).
+  maxNumbersPerTenant: parseInt(process.env.MAX_NUMBERS_PER_TENANT || "1", 10),
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
   // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
