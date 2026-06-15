@@ -284,22 +284,22 @@ export function findNumber(s, id) {
 }
 
 export function findTenant(s, id) {
-  return s.tenants.find((t) => t.id === id) || null;
+  // s.tenants kann fehlen (seedState seedet keine Tenants) -> defensiver Default;
+  // der Guard lebt damit an EINER Stelle (auch tenantContext nutzt ihn).
+  return (s.tenants || []).find((t) => t.id === id) || null;
 }
 
 // ---- Tenant-Kontext-Seam (Identitaets-Schicht, I0) ----
 // Reines IO-freies Domaenen-Objekt: die EINE Stelle, die Identitaet + Settings +
-// Kalender eines Tenants buendelt. In dieser Iteration liest es noch die globalen
-// Singletons (s.settings, s.calendar) + den durchgereichten ownerName; die
-// Map-Umstellung ist I2, die Konsumenten-Umstellung ist I1 - hier wird KEIN
-// Konsument angefasst. ownerName wird vom Backend-Wrapper hereingereicht (heute
+// Kalender eines Tenants buendelt. Liest noch die globalen Singletons
+// (s.settings, s.calendar) + den durchgereichten ownerName (Konsumenten/Map folgen
+// in spaeteren Phasen). ownerName wird vom Backend-Wrapper hereingereicht (heute
 // config.ownerName), damit state-ops config-frei bleibt (wie caps bei
 // requestNumber). Owner-Fallback gekapselt: hat der Tenant keinen eigenen Namen,
-// gilt der durchgereichte ownerName. s.tenants kann fehlen (seedState seedet keine
-// Tenants) -> defensiver Default. Invariante: bei genau einem Tenant ist das
+// gilt der durchgereichte ownerName. Invariante: bei genau einem Tenant ist das
 // Ergebnis byte-identisch zu den heutigen globalen Singletons.
 export function tenantContext(s, ownerName, tenantId) {
-  const tenant = (s.tenants || []).find((t) => t.id === tenantId) || null;
+  const tenant = findTenant(s, tenantId);
   return {
     tenantId,
     ownerName: (tenant && tenant.ownerName) || ownerName,
