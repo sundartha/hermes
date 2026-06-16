@@ -214,6 +214,40 @@ CREATE TABLE IF NOT EXISTS usage_event (
   stripe_meter_sent BOOLEAN NOT NULL DEFAULT false
 );
 
+-- account: identity(sub)->tenant Resolver. RLS-EXEMPT (laeuft VOR app.current_tenant).
+-- tenant_id NICHT unique -> Schema traegt spaeter mehrere Accounts pro Tenant (B2B),
+-- jetzt aber Single-User pro Tenant (B2C). role: member|admin.
+CREATE TABLE IF NOT EXISTS account (
+  sub        TEXT PRIMARY KEY,
+  email      TEXT NOT NULL,
+  tenant_id  TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- session: serverseitige Sessions fuer Invalidierung (Suspend killt Session sofort).
+CREATE TABLE IF NOT EXISTS session (
+  id             TEXT PRIMARY KEY,
+  sub            TEXT NOT NULL REFERENCES account(sub) ON DELETE CASCADE,
+  tenant_id      TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at     TIMESTAMPTZ NOT NULL,
+  invalidated_at TIMESTAMPTZ
+);
+
+-- audit_log: immutable append-only. tenant_id BEWUSST KEIN FK (muss Tenant-
+-- Loeschung ueberdauern, Compliance Art. 15). Keine RLS (privilegierter Insert-Pfad).
+-- WARNUNG: audit_log NIE ueber portalStore/Kunden-Reads exponieren - ohne RLS gibt
+-- es hier kein Sicherheitsnetz gegen einen vergessenen tenant_id-Filter.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id         BIGSERIAL PRIMARY KEY,
+  at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_sub  TEXT,
+  tenant_id  TEXT,
+  action     TEXT NOT NULL,
+  detail     TEXT
+);
+
 -- ---- Row Level Security (zweite Verteidigungslinie) ----
 -- Primaerlinie ist der app-seitige tenant_id-Filter; RLS faengt vergessene
 -- Filter ab. Policy: Zeile sichtbar/aenderbar nur, wenn tenant_id der GUC
@@ -245,42 +279,61 @@ ALTER TABLE tenant_budget      FORCE  ROW LEVEL SECURITY;
 ALTER TABLE usage_event        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_event        FORCE  ROW LEVEL SECURITY;
 
+-- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
+-- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
+-- bewusst identisch und EXPLIZIT: FOR ALL wuerde USING sonst nur implizit als
+-- WITH CHECK anwenden - diese stille Konvention zerbricht, sobald eine Policy spaeter
+-- in FOR SELECT + FOR INSERT/UPDATE aufgespalten wird. Explizit = kein Drift, kein
+-- stilles Loch fuer kuenftige schreibende Pfade.
 DROP POLICY IF EXISTS tenant_isolation ON settings;
 CREATE POLICY tenant_isolation ON settings
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON call;
 CREATE POLICY tenant_isolation ON call
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON transcript_segment;
 CREATE POLICY tenant_isolation ON transcript_segment
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON action_item;
 CREATE POLICY tenant_isolation ON action_item
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON calendar_event;
 CREATE POLICY tenant_isolation ON calendar_event
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON usage;
 CREATE POLICY tenant_isolation ON usage
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON profile;
 CREATE POLICY tenant_isolation ON profile
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON number;
 CREATE POLICY tenant_isolation ON number
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON number_assignment;
 CREATE POLICY tenant_isolation ON number_assignment
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON provisioning_job;
 CREATE POLICY tenant_isolation ON provisioning_job
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON tenant_budget;
 CREATE POLICY tenant_isolation ON tenant_budget
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON usage_event;
 CREATE POLICY tenant_isolation ON usage_event
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));

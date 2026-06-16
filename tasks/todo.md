@@ -515,3 +515,58 @@ Entitaeten, cross-tenant Inbound-Routing. Stripe ersetzt durch MAX_NUMBERS-Notbr
 ## Absolute Regeln (Erinnerung)
 - MAX_NUMBERS Notbremse Pflicht (ersetzt Stripe), kein unbegrenzter Auto-Kauf, neue Endpunkte
   hinter Auth + Gates. Disclosure fest verdrahtet. Outbound nur ALLOWED_NUMBERS. Secrets nie loggen.
+
+---
+
+# #3 Self-Service-Login-Konvergenz (web-session-only, 2026-06-16, feat/self-service-web-session)
+
+Self-Service (`/api/self-service/*`) vom `X-Internal-Identity`-Pfad auf den OIDC-
+Web-Session-Pfad (Feature B, `webAuthMw`) umstellen. Bearer-Paste in tenant.html
+entfaellt. Plan: `~/.claude/plans/moonlit-honking-wave.md`. Workflow-Regel 7: jeder
+Punkt mit Soll + Verifikation, abgehakt erst bei gruener Verifikation in der Session.
+
+## Pre-Mortem (vor Umsetzung)
+- Falscher Tenant: `tenantId` NUR aus webAuthMw (Session->account->tenant_id), kein
+  User-Input; Lese-Pfad `exportTenantData`-gefiltert. Test (a) belegt kein Leak.
+- Session-Bypass: Routen nur hinter webAuthMw (401 fail-closed), nur im pg-Block,
+  kein X-Internal-Identity mehr. Test (f) belegt 401/403.
+- Stilles 404 bei Fehlkonfig (selfService an, kein pg): assertConfig-Warnung + Doku.
+- Absolute Regeln unberuehrt: Safety-Gates/disclosure/Audio-Bridge nicht angefasst;
+  Self-Service schreibt nie Owner-Bucket (tenant = t_<sub>).
+
+## Aufgaben
+- [x] **1. RED**: `test/i9-self-service.test.js` neu (pg In-Process, Session-Cookie,
+      Template portal-route.test.js) + Flag-Gate (json->404).
+  - Ergebnis: RED bestaetigt — i9 ERR_MODULE_NOT_FOUND (self-service-routes.js fehlt),
+    flag-gate 200!=404 (alte Inline-Route lief noch).
+- [x] **2. views.js + server.js Helfer**: `src/store/views.js` (publicCall,
+      findActiveNumber, activeNumberFor, upcomingCalendar(store,tenantId)); server.js
+      importiert, lokale Defs raus, `upcomingCalendar(store,tenant)` am /api/state.
+  - Ergebnis: NUMBER_STATUS-Import aus server.js entfernt (nur findActiveNumber nutzte
+    ihn). node --check OK, Bestandssuite gruen.
+- [x] **3. self-service-routes.js + wiring**: makeSelfServiceRoutes({store,webAuthMw,
+      audit}); im pg-Block hinter selfServiceEnabled&&multiTenant; alter Inline-Block
+      + ungenutzter Import raus.
+  - Ergebnis: neue Tests GRUEN — `node --test i9-self-service + flag-gate` 14/14.
+- [x] **4. tenant.html**: Cookie-Login statt Bearer (401->Anmelden, 403->Freigabe,
+      200->Logout). Ergebnis: authHeader/TOKEN_KEY/localStorage/connect entfernt
+      (grep CLEAN); fetch same-origin schickt Cookie automatisch.
+- [x] **5. config + Doku**: assertConfig-Warnung; render.yaml, PLAN-SECURITY.md,
+      MERGE-RECONCILIATION (#3 done). Ergebnis: erledigt. AUSNAHME: `.env.example`
+      ist durch ein `.env*`-Deny (Secrets-Guard) nicht editierbar -> Kommentar-Update
+      dort als manueller 1-Zeilen-Follow-up offen (cosmetic).
+- [x] **6. GREEN + Commit**: volle Suite gruen, kein Skip/Disable, commit.
+  - Ergebnis: `npm test` -> tests 414, pass 414, fail 0, skipped 0 (~33s).
+
+## Review (Endstand)
+- `npm test`: 414 Tests, 0 fail, 0 skipped, ~33s. node --check auf alle geaenderten
+  src-Dateien (config/server/views/self-service-routes) sauber.
+- Count-Delta zur Baseline (427) ist rein strukturell: die alte i9-Datei nutzte
+  nested `t.test` (Parent+Child gezaehlt), die neue flache `test()` — keine verlorene
+  Coverage (alle Faelle a–f + Flag-Gate abgedeckt).
+- Absolute Regeln unberuehrt: Safety-Gates (numberGateError/Allowlist/Budget),
+  disclosureSentence, Audio-Bridge nicht angefasst; Auth fail-closed (webAuthMw 401/403,
+  Routen nur im pg-Block); timing-sichere Vergleiche (web-auth.js unveraendert); kein
+  neues Env (Gating ueber vorhandene Flags).
+- OFFEN (manuell): `.env.example`-Kommentar bei SELF_SERVICE_ENABLED auf web-session
+  praezisieren (Tool-Deny auf `.env*`).
