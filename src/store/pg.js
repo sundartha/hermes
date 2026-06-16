@@ -166,6 +166,8 @@ export function makePgStore(runner) {
     },
 
     resolveProfile: (email) => ops.resolveProfile(requireState(), email),
+    // Tenant-Aufloesung (I4): liest den hydrierten Spiegel (Wrapper-Parity zu json.js).
+    resolveTenant: (idpSubject) => ops.resolveTenant(requireState(), idpSubject),
     listProfiles: () => ops.listProfiles(requireState()),
     setProfile(email, patch) {
       const result = ops.setProfile(requireState(), email, patch);

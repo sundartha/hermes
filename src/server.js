@@ -42,6 +42,30 @@ const OWNER_ID = "owner";
 // (fail-closed), sondern restriktiv (resolveProfile -> DEFAULT_PROFILE).
 const ANON_IDENTITY = "anon";
 
+// Tenant-Achse (I4), getrennt von der Profile-Achse. Marker fuer eine VORHANDENE,
+// aber unbekannte/unaufloesbare Identitaet: kein Tenant -> REJECT (NIE Owner).
+// In I4 filtert noch KEIN Endpunkt; I5/I6/I7 machen daraus 404/403.
+const TENANT_REJECT = "reject";
+
+// Request-Tenant aus der Auth-Identitaet aufloesen (Geschwister zu internalIdentity).
+// Flag aus -> Owner byte-identisch (kein Aufloesungs-Pfad). Flag an: keyt auf
+// req.auth.sub (#1, MCP-Achse). FEHLENDE Identitaet (kein req.auth UND kein
+// localhost-internal-identity, also localhost/stdio) bleibt Owner - wie die Profile-
+// Achse fehlende Identitaet zum Owner macht. VORHANDENE, aber unbekannte/leere
+// Identitaet -> TENANT_REJECT (fail-closed, resolveTenant liefert null).
+// Hinweis (I5-Vorbereitung): der REST-X-Internal-Identity-Kanal traegt heute
+// email-first (mcp-tools), die Tenant-Achse keyt aber auf sub. I4 nutzt sub nur
+// auf dem /mcp-Pfad (req.auth direkt); die REST-seitige sub-Durchreichung folgt
+// in I5, wenn ein Lesepfad sie tatsaechlich filtert.
+function requestTenant(req) {
+  if (!config.multiTenant) return OWNER_TENANT_ID;
+  const sub = req.auth ? req.auth.sub : null;
+  const internal = req.auth ? null : internalIdentity(req);
+  if (!sub && !internal) return OWNER_TENANT_ID; // fehlende Identitaet (localhost/stdio) -> Owner
+  const tenantId = store.resolveTenant(sub || internal);
+  return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
+}
+
 app.use(securityHeaders);
 
 // ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
@@ -689,7 +713,9 @@ app.post("/api/onboard", async (req, res) => {
 // Auth via mcpAuth-Middleware (src/auth.js): Legacy-Bearer-Token, statisches
 // Token oder OAuth 2.1 (MCP_AUTH). Fail-closed bleibt Default (nur localhost).
 app.post("/mcp", mcpAuth, async (req, res) => {
-  if (req.auth) console.log("[mcp]", req.auth.email || "anonym", req.body?.method || "");
+  // tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die
+  // tenantId, nie email/sub). Flag aus -> immer tenant=owner (byte-identisch).
+  if (req.auth) console.log("[mcp]", req.auth.email || "anonym", `tenant=${requestTenant(req)}`, req.body?.method || "");
   // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub
   // (Fail-closed: ein authentifizierter Nutzer OHNE email-Claim wird NICHT zum
   // Owner, sondern bekommt das restriktive DEFAULT_PROFILE). Selbst ohne email UND
