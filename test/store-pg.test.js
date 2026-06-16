@@ -308,9 +308,10 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
   try {
     const { store, db } = await makePgTestStore();
     const s = store.load();
-    // requested (e164=null, kein Kauf) + active (mit providerNumberId) in den Spiegel.
+    // requested (e164=null, kein Kauf) + active (mit providerNumberId + paymentIntentId,
+    // Payment-Pfad P6b1) in den Spiegel.
     s.numbers.push({ id: "num_req", e164: null, tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX, status: "requested", providerNumberId: null });
-    s.numbers.push({ id: "num_act", e164: "+4915700000001", tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX, status: "active", providerNumberId: "ext_1" });
+    s.numbers.push({ id: "num_act", e164: "+4915700000001", tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX, status: "active", providerNumberId: "ext_1", paymentIntentId: "pi_test_1" });
     await store.save();
 
     const r1 = await reopen(db);
@@ -319,8 +320,10 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     const act = nums.find((n) => n.id === "num_act");
     assert.equal(req.status, "requested");
     assert.equal(req.e164, null, "requested e164 bleibt null (kein Kauf)");
+    assert.equal(req.paymentIntentId, null, "requested ohne PI -> null (kein undefined-Drift)");
     assert.equal(act.status, "active");
     assert.equal(act.providerNumberId, "ext_1", "provider_number_id ueberlebt");
+    assert.equal(act.paymentIntentId, "pi_test_1", "payment_intent_id ueberlebt Flush+Hydrate");
     assert.equal(r1.findTenantByNumber("+4915700000001"), OWNER_TENANT_ID, "active routet");
 
     // Suspend -> Flush schreibt status -> Re-Hydrierung -> NICHT mehr routbar (Gate).

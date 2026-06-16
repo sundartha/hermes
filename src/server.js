@@ -16,6 +16,7 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
+import { stripeBilling } from "./billing/stripe.js";
 import { selfServicePatch, GREETING_TEMPLATES } from "./self-service.js";
 
 const app = express();
@@ -860,12 +861,19 @@ app.post("/api/onboard", async (req, res) => {
 
   // Echter Provider-Kauf (gedeckelt durch die Cap oben). Fehlerpfad in der
   // Orchestrierung: failed + Provider-Release (kein bezahlter Orphan).
+  // Billing-Client NUR bei PAYMENT_ENABLED (fail-closed Default aus): dann laeuft
+  // Hold-vor-Order + Capture-vor-Aktivierung. Ohne das Flag bleibt deps.billing
+  // weg -> kein Hold/Capture, requested->provisioning->active wie bisher (byte-identisch).
+  const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
+  const opts = { numberId, countryCode: config.provisioningCountry, connectionId: config.telnyxConnectionId };
+  if (config.paymentEnabled) {
+    deps.billing = stripeBilling;
+    opts.holdAmountCents = config.numberSetupFeeCents;
+    opts.currency = config.paymentCurrency;
+    audit("onboard_hold", req, `tenant=${tenantId} number=${numberId}`); // KEIN PI/Secret
+  }
   try {
-    const number = await provisionNumber(s, numberProvisioning(PROVIDER.TELNYX), {
-      numberId,
-      countryCode: config.provisioningCountry,
-      connectionId: config.telnyxConnectionId,
-    });
+    const number = await provisionNumber(s, deps, opts);
     store.save();
     audit("onboard_active", req, `tenant=${tenantId} number=${numberId} e164=${number.e164}`);
     res.json({ tenantId, numberId, status: number.status, e164: number.e164 });

@@ -148,6 +148,9 @@ CREATE TABLE IF NOT EXISTS number (
 ALTER TABLE number ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE number ADD COLUMN IF NOT EXISTS provider_number_id TEXT;
 ALTER TABLE number ALTER COLUMN e164 DROP NOT NULL;
+-- Payment-Pfad (P6b1): Stripe-PaymentIntent-Referenz der Nummer (Hold/Capture).
+-- Additiv NULLABLE (payment-off bleibt NULL); migrate.applySchema traegt es idempotent.
+ALTER TABLE number ADD COLUMN IF NOT EXISTS payment_intent_id TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht

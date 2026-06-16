@@ -27,6 +27,18 @@ export const config = {
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
 
+  // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
+  // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
+  // DEFAULT AUS (fail-closed): die Onboard-Route reicht KEINEN Billing-Client herein
+  // -> kein Hold/Capture, requested->provisioning->active wie bisher (byte-identisch).
+  paymentEnabled: (process.env.PAYMENT_ENABLED || "false") === "true",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || "", // SECRET - nie loggen/leaken
+  stripeApiBase: (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\/$/, ""),
+  // Einmalige Setup-Gebuehr pro Nummer in GANZZAHL Cents (Geld nie als Float, G26).
+  // Bei PAYMENT_ENABLED Pflicht > 0 (assertConfig); 0 = kein Magic-Default.
+  numberSetupFeeCents: parseInt(process.env.NUMBER_SETUP_FEE_CENTS || "0", 10),
+  paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
+
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",
 
@@ -148,6 +160,12 @@ export function assertConfig() {
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
   if (config.storeBackend === "pg" && !config.databaseUrl)
     missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
+  if (config.paymentEnabled && !config.stripeSecretKey)
+    missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
+  // Number.isInteger faengt auch NaN (nicht-numerisches NUMBER_SETUP_FEE_CENTS):
+  // NaN <= 0 ist false -> ohne diesen Guard wuerde die >0-Geldsicherung still umgangen.
+  if (config.paymentEnabled && (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0))
+    missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
   if (missing.length) {
     console.error(
       "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +
@@ -159,5 +177,7 @@ export function assertConfig() {
     console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
   if (config.skipTwilioSignatureCheck)
     console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
+  if (config.paymentEnabled && !config.provisioningEnabled)
+    console.error("[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).");
   return missing.length === 0;
 }

@@ -35,6 +35,10 @@ export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
 export const NUMBER_STATUS = Object.freeze({
   REQUESTED: "requested", // angefragt, noch KEINE e164, KEIN Provider-Kauf
   PROVISIONING: "provisioning", // Kauf/Konfiguration beim Provider laeuft
+  // Geld wird eingezogen (Stripe capture), bevor die Nummer aktiv routet. NUR im
+  // Payment-Pfad erreicht (PAYMENT_ENABLED); payment-off ueberspringt diesen Zustand
+  // (provisioning -> active bleibt legal) -> byte-identisch zum Bestand.
+  CAPTURING: "capturing",
   ACTIVE: "active", // gekauft + konfiguriert + dem Tenant zugewiesen, routet
   FAILED: "failed", // Kauf/Konfig fehlgeschlagen -> Rollback/Release
   SUSPENDED: "suspended", // Abuse/Budget/manuell stillgelegt (routet nicht)
@@ -45,7 +49,8 @@ export const NUMBER_STATUS = Object.freeze({
 // from -> Set der zulaessigen Folge-Zustaende. RELEASED ist terminal (leer).
 export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.FAILED],
-  [NUMBER_STATUS.PROVISIONING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.PROVISIONING]: [NUMBER_STATUS.CAPTURING, NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.CAPTURING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
   [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.SUSPENDED, NUMBER_STATUS.RELEASED],
   [NUMBER_STATUS.SUSPENDED]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED],
   [NUMBER_STATUS.FAILED]: [NUMBER_STATUS.RELEASED],
