@@ -266,6 +266,14 @@ function publicCall({ streamToken, _finished, ...rest }) {
   return rest;
 }
 
+// Tenant-Eigentums-Pruefung fuer Einzel-Call-Lesepfade (I5; I6/I7 reusen sie nach
+// Rebase fuer cancel/Outbound). Die Scoping-Regel call.tenantId === tenantId lebt
+// fuer Listen in state-ops tenantCallScope (via exportTenantData), hier fuer den
+// Einzel-Call-Zugriff. Reines Praedikat, kein Nebeneffekt; der 404-Antwort-Code
+// bleibt in der Route (Helper wiederverwendbar). Liefert true, wenn der
+// Request-Tenant den Call besitzt.
+const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
+
 // Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge).
 // Provider-aware: beendet ueber denselben Provider, ueber den der Call laeuft
 // (call.provider, P6a) - sonst wuerde ein Telnyx-Call ueber Twilio-endCall
@@ -604,26 +612,54 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   res.json({ status: "cancelled" });
 });
 
-// Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools
+// Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
+// Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
+const STATE_CALLS = 30, STATE_ACTION_ITEMS = 50, STATE_CALENDAR = 10, STATE_NOTIFICATIONS = 10;
+
+// Aktive Nummer eines Tenants aus der numbers-Tabelle (fail-closed: keine eigene
+// aktive Nummer -> "", NIE config.twilioNumber als Fremd-Tenant-Fallback -> kein
+// PII-/Toll-Fraud-Leck). Die Owner-Nummer ist config-derived ueber seedOwnerNumber
+// (status active) -> die Owner-Sicht bleibt byte-identisch zu config.twilioNumber.
+function activeNumberFor(s, tenantId) {
+  const hit = s.numbers.find((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE);
+  return hit ? hit.e164 : "";
+}
+
+// Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools. Tenant-gescoped hinter
+// MULTI_TENANT (Flag aus -> requestTenant === OWNER_TENANT_ID + ungefilterte Listen
+// wie im Bestand, inkl. Legacy-Calls ohne tenantId -> byte-identisch). Die lesenden
+// MCP-Tools (list_calls/list_action_items/get_my_number/get_agent_status) erben das
+// Scoping AUTOMATISCH ueber diese Route (mcp-tools.js unveraendert).
 app.get("/api/state", (req, res) => {
   const s = store.load();
+  const tenant = requestTenant(req);
+  const ctx = store.tenantContext(tenant);
+
+  // Listen-Scope ueber die EINE Quelle (tenantCallScope via exportTenantData):
+  // calls/actionItems/notifications EINES Tenants. Flag aus -> ungefiltert
+  // (Bestand). Danach die Bestands-Slices.
+  const scoped = config.multiTenant ? store.exportTenantData(tenant) : s;
+  // Owner-Privatnummer ist Owner-PII -> nur in der Owner-Sicht, sonst leer.
+  const isOwnerView = !config.multiTenant || tenant === OWNER_TENANT_ID;
+
   res.json({
-    // Owner-Bucket im flachen Shape, das Dashboard (public/index.html) + die
-    // MCP-Tools erwarten. settings/calendar/usage sind seit I2/P4 Maps
-    // tenantId -> Bucket; die Laufzeit ist owner-only, deshalb der Owner-Bucket.
-    settings: s.settings[OWNER_TENANT_ID],
-    calls: s.calls.slice(0, 30).map(publicCall),
-    actionItems: s.actionItems.slice(0, 50),
-    calendar: store.getCalendar(OWNER_TENANT_ID).filter((e) => e.end >= new Date().toISOString()).slice(0, 10),
-    usage: { ...s.usage[OWNER_TENANT_ID], maxBudgetEur: config.maxBudgetEur },
-    notifications: s.notifications.slice(0, 10),
+    // settings/calendar/usage sind seit I2/P4 Maps tenantId -> Bucket; tenantContext
+    // /usageOf liefern den Bucket des Request-Tenants (Owner-Bucket bei Flag aus).
+    settings: ctx.settings,
+    calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
+    actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
+    calendar: store.getCalendar(tenant).filter((e) => e.end >= new Date().toISOString()).slice(0, STATE_CALENDAR),
+    usage: { ...store.usageOf(tenant), maxBudgetEur: config.maxBudgetEur },
+    notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
     agent: {
-      number: config.twilioNumber,
-      owner: config.ownerName,
-      ownerNumber: config.ownerNumber,
+      // Flag aus -> config.twilioNumber (Bestand). Flag an -> aktive Tenant-Nummer
+      // (fail-closed leer, NIE Owner-Nummer fuer einen fremden Tenant).
+      number: config.multiTenant ? activeNumberFor(s, tenant) : config.twilioNumber,
+      owner: ctx.ownerName,
+      ownerNumber: isOwnerView ? config.ownerNumber : "",
       model: config.claudeModel,
       voiceEngine: config.voiceEngine,
-      allowedNumbers: config.allowedNumbers,
+      allowedNumbers: config.allowedNumbers, // globales Safety-Gate, bleibt global
     },
   });
 });
@@ -631,6 +667,12 @@ app.get("/api/state", (req, res) => {
 app.get("/api/calls/:id", (req, res) => {
   const call = store.getCall(req.params.id);
   if (!call) return res.status(404).json({ error: "not found" });
+  // Tenant-Scope (I5): fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Flag
+  // aus -> requestTenant === OWNER_TENANT_ID; trotzdem ueber config.multiTenant
+  // gaten, damit Legacy-Calls ohne tenantId bei Flag aus byte-identisch (200)
+  // bleiben. getCall matcht auch twilioSid -> der Guard deckt beide id-Achsen.
+  if (config.multiTenant && !tenantOwnsCall(call, requestTenant(req)))
+    return res.status(404).json({ error: "not found" });
   res.json(publicCall(call));
 });
 
