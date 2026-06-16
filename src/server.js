@@ -16,7 +16,8 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
-import { makeWebAuthRoutes, makeOidc, makeAccounts, makeSessions } from "./web-auth.js";
+import { makeWebAuthRoutes, makeOidc, makeAccounts, makeSessions, webAuth } from "./web-auth.js";
+import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
 
@@ -91,6 +92,8 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   const accounts = makeAccounts(portalRunner);
   const sessions = makeSessions(portalRunner);
   const auditStore = makeAuditStore(portalRunner);
+  const portalStore = makePortalStore(portalRunner);
+  const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
   const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
   app.use("/auth", loginRateLimiter);
   app.use(makeWebAuthRoutes({
@@ -102,6 +105,20 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     sessions,
     audit: auditStore,
   }));
+
+  // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt
+  // req.tenant (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten.
+  // VOR der Basic-Auth-Schicht registriert -> /api/portal/* ist owner-Basic-Auth-
+  // exempt und ausschliesslich ueber webAuth (Kunden-Session) gesichert.
+  app.get("/api/portal/state", webAuthMw, async (req, res) => {
+    try {
+      const calls = await portalStore.listCalls(req.tenant.tenantId);
+      res.json({ tenantId: req.tenant.tenantId, calls });
+    } catch (e) {
+      console.error("[portal] state", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
 }
 
 app.use((req, res, next) => {
