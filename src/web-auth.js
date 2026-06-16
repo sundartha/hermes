@@ -284,6 +284,20 @@ export function webAuth(deps) {
   };
 }
 
+// ---- adminOnly -------------------------------------------------------
+// Express-Middleware NACH webAuth (braucht req.tenant): erlaubt nur Admins -
+// E-Mail in der Allowlist ODER role==='admin'. Fail-closed: ohne req.tenant
+// oder kein Admin -> 403. Kein Detail-Leak.
+export function adminOnly(deps) {
+  const allow = (deps.adminEmails || []).map((e) => e.toLowerCase());
+  return function adminOnlyMiddleware(req, res, next) {
+    const t = req.tenant;
+    const isAdmin = t && (t.role === "admin" || (t.email && allow.includes(t.email.toLowerCase())));
+    if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+    next();
+  };
+}
+
 // ---- makeSessions ----------------------------------------------------
 // Session-Lebenszyklus: anlegen, lesen, invalidieren (by id oder by tenant).
 export function makeSessions(runner) {

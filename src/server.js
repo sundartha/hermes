@@ -16,7 +16,7 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
-import { makeWebAuthRoutes, makeOidc, makeAccounts, makeSessions, webAuth } from "./web-auth.js";
+import { makeWebAuthRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
@@ -94,6 +94,7 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   const auditStore = makeAuditStore(portalRunner);
   const portalStore = makePortalStore(portalRunner);
   const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
+  const adminMw = adminOnly({ adminEmails: config.adminEmails });
   const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
   app.use("/auth", loginRateLimiter);
   app.use(makeWebAuthRoutes({
@@ -116,6 +117,31 @@ if (config.sessionSecret && config.storeBackend === "pg") {
       res.json({ tenantId: req.tenant.tenantId, calls });
     } catch (e) {
       console.error("[portal] state", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
+
+  // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
+  // Hinter webAuth + adminOnly. Suspend invalidiert sofort alle Sessions des Tenants
+  // (gesperrter Kunde kann nicht bis Cookie-Expiry weiter lesen). Jede Aktion auditiert.
+  app.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
+    try {
+      await accounts.setStatus(req.params.id, "active");
+      await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
+      res.json({ tenantId: req.params.id, status: "active" });
+    } catch (e) {
+      console.error("[admin] approve", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
+  app.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
+    try {
+      await accounts.setStatus(req.params.id, "suspended");
+      await sessions.invalidateByTenant(req.params.id);
+      await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
+      res.json({ tenantId: req.params.id, status: "suspended" });
+    } catch (e) {
+      console.error("[admin] suspend", e.message);
       res.status(500).json({ error: "interner Fehler" });
     }
   });
