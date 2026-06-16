@@ -66,6 +66,24 @@ export const NUMBER_TRANSITIONS = Object.freeze({
 export const PROVISIONING_JOB_STATUS = Object.freeze({ QUEUED: "queued", DONE: "done", FAILED: "failed" });
 export const PROVISION_NUMBER_JOB = "provision_number";
 
+// ---- Metering / Budget (P6b3) ----
+// usage_event.kind: die Stripe-Meter (Plan-Datenmodell). EINE Quelle (G5/G13): der
+// Recorder (state-ops recordUsageEvent), der Flush (billing/meter.js) UND die
+// pg-Hydrierung/Flush importieren dieselben Werte - sonst driften kind-Strings.
+// P6b3 verdrahtet die DREI im Scope (voice_minute, ai_token, number_month); SMS
+// bleibt als zukunftssicherer kind-Wert im Enum (Datenmodell-Treue, OHNE Producer
+// in dieser Phase - reine Datenkonstante, kein Code-Branch).
+export const USAGE_EVENT_KIND = Object.freeze({
+  VOICE_MINUTE: "voice_minute",
+  AI_TOKEN: "ai_token",
+  SMS: "sms",
+  NUMBER_MONTH: "number_month",
+});
+
+// Cent<->EUR-Bruecke fuer budgetExceeded (G25): hard_cap_cents (Ganzzahl Cents,
+// Money at rest) -> EUR-Vergleich gegen den bestehenden costEur-Live-Bucket.
+export const CENTS_PER_EUR = 100;
+
 // Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
 // Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
 export const TENANT_STATUS = Object.freeze({

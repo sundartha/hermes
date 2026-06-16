@@ -137,6 +137,24 @@ export function makePgStore(runner) {
     // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
     usageOf: (tenantId) => ops.usageOf(requireState(), tenantId),
 
+    // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
+    setTenantBudget(tenantId, amounts) {
+      const row = ops.setTenantBudget(requireState(), tenantId, amounts);
+      save();
+      return row;
+    },
+    recordUsageEvent(input) {
+      const event = ops.recordUsageEvent(requireState(), input);
+      save();
+      return event;
+    },
+    pendingMeterEvents: () => ops.pendingMeterEvents(requireState()),
+    markMeterEventsSent(eventIds) {
+      const n = ops.markMeterEventsSent(requireState(), eventIds);
+      if (n) save();
+      return n;
+    },
+
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
       save();
@@ -248,6 +266,13 @@ async function hydrateTenantInto(client, state, tenantId) {
     `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
        FROM provisioning_job WHERE tenant_id = $1`, [tenantId]
   )).rows;
+  const budgetRows = (await client.query(
+    `SELECT tenant_id, budget_cents, hard_cap_cents FROM tenant_budget WHERE tenant_id = $1`, [tenantId]
+  )).rows;
+  const ueRows = (await client.query(
+    `SELECT id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
+       FROM usage_event WHERE tenant_id = $1 ORDER BY id ASC`, [tenantId]
+  )).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
   const itemIdsByCall = groupActionItemIds(itemRows);
@@ -276,6 +301,21 @@ async function hydrateTenantInto(client, state, tenantId) {
     idempotencyKey: r.idempotency_key,
     attempts: r.attempts,
     lastError: r.last_error ?? null,
+  })));
+  state.tenantBudgets.push(...budgetRows.map((r) => ({
+    tenantId: r.tenant_id,
+    budgetCents: Number(r.budget_cents),
+    hardCapCents: Number(r.hard_cap_cents),
+  })));
+  state.usageEvents.push(...ueRows.map((r) => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    callId: r.call_id,
+    kind: r.kind,
+    quantity: Number(r.quantity),
+    costCents: Number(r.cost_cents),
+    occurredAt: r.occurred_at,
+    stripeMeterSent: r.stripe_meter_sent,
   })));
 
   if (tenantId === OWNER_TENANT_ID) {
@@ -412,6 +452,8 @@ async function flushTenantScope(client, tenantId, state) {
   if (tenantId === OWNER_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
+  await flushTenantBudgets(client, tenantId, state.tenantBudgets);
+  await flushUsageEvents(client, tenantId, state.usageEvents);
 }
 
 // tenant-Tabelle round-trippen (I8): id/status/owner_name/idp_subject upsert. KEINE
@@ -614,6 +656,39 @@ async function flushProvisioningJobs(client, tenantId, jobs) {
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
       [j.id, tenantId, j.numberId, j.kind, j.status, j.idempotencyKey, j.attempts, j.lastError ?? null]
+    );
+  }
+}
+
+// tenant_budget-Flush (P6b3): PK = tenant_id (eine Zeile pro Tenant), kein
+// deleteMissing noetig (setTenantBudget loescht nie). own-Filter pro Tenant unter
+// dessen RLS-GUC (zweite Linie, Muster wie flushNumbers). Upsert wie flushSettings/
+// flushUsage. Money als GANZZAHL Cents.
+async function flushTenantBudgets(client, tenantId, budgets) {
+  const own = budgets.filter((b) => b.tenantId === tenantId);
+  for (const b of own) {
+    await client.query(
+      `INSERT INTO tenant_budget (tenant_id, budget_cents, hard_cap_cents)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         budget_cents=EXCLUDED.budget_cents, hard_cap_cents=EXCLUDED.hard_cap_cents`,
+      [tenantId, b.budgetCents, b.hardCapCents]
+    );
+  }
+}
+
+// usage_event-Flush (P6b3): append-only id-PK-Ledger. own-Filter + deleteMissing
+// (Retention/Erase koennten Events entfernen) + Upsert (nur stripe_meter_sent
+// aenderbar nach dem Insert). Muster wie flushProvisioningJobs.
+async function flushUsageEvents(client, tenantId, events) {
+  const own = events.filter((e) => e.tenantId === tenantId);
+  await deleteMissing(client, "usage_event", tenantId, own.map((e) => e.id));
+  for (const e of own) {
+    await client.query(
+      `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
+      [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent]
     );
   }
 }

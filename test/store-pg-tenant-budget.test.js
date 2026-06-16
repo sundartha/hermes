@@ -4,8 +4,9 @@
 // synthetischen Tenants - nicht die owner-scoped pg-Hydrierung (die bleibt ein
 // Key, P4-Scope-Grenze). Der Spiegel wird per ops direkt manipuliert (wie der
 // pruneOldData-Test alte Daten direkt im Spiegel seedet). Test 5 belegt die
-// zweite Verteidigungslinie (RLS) auch fuer die usage-Tabelle. pglite = kein
-// Netz, keine externe DB (F.I.R.S.T.).
+// zweite Verteidigungslinie (RLS) auch fuer die usage-Tabelle, Test 6/7 (P6b3)
+// fuer die neuen tenant_budget/usage_event-Tabellen. pglite = kein Netz, keine
+// externe DB (F.I.R.S.T.).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
@@ -100,6 +101,67 @@ test("P4 Test 5: usage-Tabelle ist tenant-isoliert (Cross-Tenant-Read = leer, RL
     assert.deepEqual(tenantIds, [OWNER_TENANT_ID], "nur die Owner-usage-Zeile sichtbar");
     assert.ok(!tenantIds.includes(TENANT_A), "fremde usage-Zeile A unsichtbar");
     assert.ok(!tenantIds.includes(TENANT_B), "fremde usage-Zeile B unsichtbar");
+  } finally {
+    await db.query(`RESET ROLE`);
+  }
+});
+
+// P6b3: seedet Owner + zwei fremde Tenants mit eigenen tenant_budget- und
+// usage_event-Zeilen unter der jeweiligen RLS-GUC (FORCE-RLS blockt sonst den
+// Insert), legt die unprivilegierte Rolle an. Analog setupUsageRls, hier auf die
+// zwei neuen P6b3-Tabellen.
+async function setupMeterRls() {
+  const db = new PGlite();
+  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const store = makePgStore(runner);
+  await store.init();
+
+  for (const tenantId of [TENANT_A, TENANT_B]) {
+    await db.query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [tenantId]);
+    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
+    await db.query(
+      `INSERT INTO tenant_budget (tenant_id, budget_cents, hard_cap_cents) VALUES ($1, 400, 500)`,
+      [tenantId]
+    );
+    await db.query(
+      `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at)
+       VALUES ($1, $2, NULL, 'number_month', 1, 500, '2026-01-01T00:00:00.000Z')`,
+      [`ue_${tenantId}`, tenantId]
+    );
+  }
+  await db.query(`RESET app.current_tenant`);
+
+  await db.exec(
+    `CREATE ROLE ${APP_ROLE} NOLOGIN;
+     GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_budget TO ${APP_ROLE};
+     GRANT SELECT, INSERT, UPDATE, DELETE ON usage_event TO ${APP_ROLE};
+     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`
+  );
+  return db;
+}
+
+test("P6b3 Test 6: tenant_budget ist tenant-isoliert (Cross-Tenant-Read = leer, RLS)", async () => {
+  const db = await setupMeterRls();
+  await db.query(`SET ROLE ${APP_ROLE}`);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [TENANT_A]);
+  try {
+    const tenantIds = (await db.query(`SELECT tenant_id FROM tenant_budget ORDER BY tenant_id`)).rows.map((r) => r.tenant_id);
+    assert.deepEqual(tenantIds, [TENANT_A], "nur die eigene tenant_budget-Zeile sichtbar");
+    assert.ok(!tenantIds.includes(TENANT_B), "fremde tenant_budget-Zeile B unsichtbar");
+    assert.ok(!tenantIds.includes(OWNER_TENANT_ID), "Owner-Zeile (falls vorhanden) unsichtbar");
+  } finally {
+    await db.query(`RESET ROLE`);
+  }
+});
+
+test("P6b3 Test 7: usage_event ist tenant-isoliert (Cross-Tenant-Read = leer, RLS)", async () => {
+  const db = await setupMeterRls();
+  await db.query(`SET ROLE ${APP_ROLE}`);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [TENANT_A]);
+  try {
+    const tenantIds = (await db.query(`SELECT tenant_id FROM usage_event ORDER BY tenant_id`)).rows.map((r) => r.tenant_id);
+    assert.deepEqual(tenantIds, [TENANT_A], "nur die eigenen usage_event-Zeilen sichtbar");
+    assert.ok(!tenantIds.includes(TENANT_B), "fremde usage_event-Zeile B unsichtbar");
   } finally {
     await db.query(`RESET ROLE`);
   }

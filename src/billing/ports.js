@@ -17,6 +17,15 @@
  */
 
 /**
+ * @typedef {Object} MeterReport
+ * @property {string} tenantRef       - Tenant, fuer den gemeldet wird (Stripe-Customer-Achse)
+ * @property {string} kind            - Meter-Typ (USAGE_EVENT_KIND: voice_minute|ai_token|number_month)
+ * @property {number} quantity        - aggregierte Menge (Minuten/Tokens/Nummern-Monate)
+ * @property {number} costCents       - aggregierte Kosten in GANZZAHL Cents (Audit/Abgleich)
+ * @property {string} idempotencyKey  - stabil je Aggregat: Stripe-Retry meldet nie doppelt
+ */
+
+/**
  * @typedef {Object} BillingPort
  * @property {(params: HoldParams) => Promise<HoldResult>} placeHold
  *   Reserviert Geld OHNE Einzug (Stripe PaymentIntent capture_method=manual).
@@ -25,5 +34,8 @@
  *   der Aktivierung (kein active ohne Capture).
  * @property {(paymentIntentId: string) => Promise<void>} cancelHold
  *   Gibt eine Reservierung frei (Stripe cancel) - Rollback, wenn die Nummer nicht kommt.
+ * @property {(report: MeterReport) => Promise<void>} reportMeter
+ *   Meldet EIN aggregiertes Meter-Event an den Provider (Stripe Meter Events API).
+ *   Idempotent ueber idempotencyKey. Loest KEIN Geld aus (nur usage-Reporting).
  */
 export {};
