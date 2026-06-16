@@ -308,6 +308,19 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
 - **F4 WITH CHECK**: alle `tenant_isolation`-Policies tragen zusaetzlich `WITH CHECK` -> auch
   INSERT/UPDATE sind tenant-isoliert (nicht nur SELECT/USING). Test `test/rls-with-check.test.js`.
 
+**Self-Service-Login-Konvergenz (#3, umgesetzt 2026-06-16, `feat/self-service-web-session`):**
+- Self-Service (`/api/self-service/*`) ist jetzt **web-session-only**: hinter `webAuthMw`
+  (OIDC-Browser-Login, Feature B), `tenant = req.tenant.tenantId`. Der fruehere
+  `X-Internal-Identity`-Pfad ist ENTFERNT. Routen NUR im Web-Login-Block registriert
+  (`SESSION_SECRET` + `STORE_BACKEND=pg` + `SELF_SERVICE_ENABLED` + `MULTI_TENANT`) ->
+  ohne diese Infra 404 (fail-closed; `assertConfig`-Hinweis). Factory
+  `makeSelfServiceRoutes` (`src/self-service-routes.js`); View-Helfer store-parametrisiert
+  in `src/store/views.js` (DIP/G5, eine Quelle fuer server.js + Factory + Test).
+- Fail-closed belegt: ohne Session 401, suspendierter Tenant 403, kein Owner-/streamToken-
+  Leak. Tests `test/i9-self-service.test.js` (pglite + Session-Cookie, a–f) +
+  `test/self-service-flag-gate.test.js` (json → 404). `public/tenant.html` von Bearer-
+  Paste/localStorage auf `/auth/login`-Redirect + Cookie umgebaut.
+
 **Bewusst akzeptierte Abweichungen / Deployment-Anforderungen:**
 - **DB-Rolle**: Der `DATABASE_URL`-Nutzer MUSS non-superuser + NOBYPASSRLS sein,
   sonst greift FORCE-RLS NICHT (Superuser umgeht RLS). Harte Deployment-Anforderung.

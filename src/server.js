@@ -5,7 +5,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER } from "./store/defaults.js";
+import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from "./store/views.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
@@ -16,7 +17,7 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
-import { selfServicePatch, GREETING_TEMPLATES } from "./self-service.js";
+import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
@@ -169,13 +170,26 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
   // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404.
   app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
+
+  // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
+  // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am
+  // X-Internal-Identity-Pfad. NUR hier (im Web-Login-Block: sessionSecret + pg)
+  // registriert -> ohne Web-Login-Infra existieren die Routen nicht (404). Zusaetzlich
+  // an SELF_SERVICE_ENABLED + MULTI_TENANT gegated (eigenes Reife-Flag; ohne
+  // MULTI_TENANT keyt der Mirror nur den Owner-Bucket). VOR der Basic-Auth-Schicht ->
+  // ausschliesslich ueber webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth.
+  // audit = util.audit (nur Keys, keine Werte/PII).
+  if (config.selfServiceEnabled && config.multiTenant) {
+    app.use(makeSelfServiceRoutes({ store, webAuthMw, audit }));
+  }
 }
 
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
-  // Self-Service-Seite (I9) ist die GETRENNTE Tenant-Sicht (Decision #3): NICHT
-  // hinter der Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt
-  // KEINE Tenant-Daten (die kommen erst per Bearer-Token ueber /api/self-service/*).
+  // Self-Service-Seite (I9 + #3) ist die GETRENNTE Tenant-Sicht: NICHT hinter der
+  // Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt KEINE
+  // Tenant-Daten (die kommen ueber /api/self-service/*, abgesichert per webAuthMw +
+  // Session-Cookie aus dem OIDC-Browser-Login, nicht mehr per Bearer-Paste).
   // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
   // byte-identisch zum Bestand.
   if (config.selfServiceEnabled && config.multiTenant && req.path === "/tenant.html") return next();
@@ -320,12 +334,6 @@ function streamDirectives(call) {
   })];
 }
 
-// Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
-// und interne Flags duerfen den Server nie verlassen.
-function publicCall({ streamToken, _finished, ...rest }) {
-  return rest;
-}
-
 // Tenant-Eigentums-Pruefung fuer Einzel-Call-Lesepfade (I5; I6/I7 reusen sie nach
 // Rebase fuer cancel/Outbound). Die Scoping-Regel call.tenantId === tenantId lebt
 // fuer Listen in state-ops tenantCallScope (via exportTenantData), hier fuer den
@@ -333,11 +341,6 @@ function publicCall({ streamToken, _finished, ...rest }) {
 // bleibt in der Route (Helper wiederverwendbar). Liefert true, wenn der
 // Request-Tenant den Call besitzt.
 const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
-
-// Kommende Termine eines Tenants (vergangene weggefiltert). EINE Quelle (G5) fuer
-// /api/state und /api/self-service/state; die routen-spezifische Slice bleibt am Aufrufer.
-const upcomingCalendar = (tenant) =>
-  store.getCalendar(tenant).filter((e) => e.end >= new Date().toISOString());
 
 // Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge).
 // Provider-aware: beendet ueber denselben Provider, ueber den der Call laeuft
@@ -535,13 +538,6 @@ app.post("/voice/status", (req, res) => {
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
 
-// Die EINE aktive Nummer eines Tenants aus der numbers-Tabelle (eine Quelle fuer
-// outboundFrom (I7, Absender-Wahl) UND activeNumberFor (I5, /api/state-Anzeige) -
-// kein doppelter Tenant-/Status-Filter, G5). Liefert den Datensatz oder undefined.
-function findActiveNumber(s, tenantId) {
-  return s.numbers.find((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE);
-}
-
 // Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). Owner: die
 // config-basierte Owner-Nummer pro Provider (Telnyx sobald TELNYX_NUMBER gesetzt,
 // sonst Twilio) - byte-identisch zum Bestand. Jeder ANDERE Tenant telefoniert NUR
@@ -689,16 +685,6 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
 const STATE_CALLS = 30, STATE_ACTION_ITEMS = 50, STATE_CALENDAR = 10, STATE_NOTIFICATIONS = 10;
 
-// Aktive Nummer eines Tenants als e164-String fuer die /api/state-Anzeige
-// (fail-closed: keine eigene aktive Nummer -> "", NIE config.twilioNumber als
-// Fremd-Tenant-Fallback -> kein PII-/Toll-Fraud-Leck). Die Owner-Nummer ist
-// config-derived ueber seedOwnerNumber (status active) -> die Owner-Sicht bleibt
-// byte-identisch zu config.twilioNumber. Gleiche Quelle wie outboundFrom.
-function activeNumberFor(s, tenantId) {
-  const hit = findActiveNumber(s, tenantId);
-  return hit ? hit.e164 : "";
-}
-
 // Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools. Tenant-gescoped hinter
 // MULTI_TENANT (Flag aus -> requestTenant === OWNER_TENANT_ID + ungefilterte Listen
 // wie im Bestand, inkl. Legacy-Calls ohne tenantId -> byte-identisch). Die lesenden
@@ -722,7 +708,7 @@ app.get("/api/state", (req, res) => {
     settings: ctx.settings,
     calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
     actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
-    calendar: upcomingCalendar(tenant).slice(0, STATE_CALENDAR),
+    calendar: upcomingCalendar(store, tenant).slice(0, STATE_CALENDAR),
     usage: { ...store.usageOf(tenant), maxBudgetEur: config.maxBudgetEur },
     notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
     agent: {
@@ -772,50 +758,6 @@ app.post("/api/settings", (req, res) => {
   audit("settings_update", req, `keys=${changed.join(",") || "-"}`);
   res.json(settings);
 });
-
-// ---- Self-Service (I9): getrennter Tenant-Pfad, hinter SELF_SERVICE_ENABLED ----
-// Identitaet wie I5/I6 (requireTenant: OAuth-sub bzw. localhost-X-Internal-Identity,
-// fail-closed 403, NIE Owner). Diese Routen sind STRENGER als die Admin-Pendants:
-// Lesen ueber das tenant-gefilterte exportTenantData (I5/I6), Schreiben ueber eine
-// ENGERE Whitelist (selfServicePatch) VOR store.updateSettings. Flag aus: die
-// Routen sind nicht registriert -> 404 -> Admin-Pfad byte-identisch. Zusaetzlich an
-// MULTI_TENANT gekoppelt (defense-in-depth): ohne MULTI_TENANT ist requestTenant
-// immer Owner -> Self-Service haette keinen fremden Tenant und schriebe nur den
-// Owner-Bucket; daher beide Flags noetig (fail-closed).
-if (config.selfServiceEnabled && config.multiTenant) {
-  // Tenant-Lese-Sicht: dieselbe tenant-gefilterte Quelle wie /api/state (I5/I6),
-  // aber NUR ueber die Tenant-Identitaet (kein Admin-Basic-Auth). + die kuratierten
-  // greeting-Vorlagen, damit die UI ein Dropdown statt Freitext zeigt (Decision #7).
-  app.get("/api/self-service/state", (req, res) => {
-    const tenant = requireTenant(req, res); // REJECT -> 403
-    if (!tenant) return;
-    const data = store.exportTenantData(tenant);
-    const ctx = store.tenantContext(tenant);
-    res.json({
-      settings: ctx.settings,
-      greetingTemplates: GREETING_TEMPLATES,
-      calls: data.calls.map(publicCall),
-      actionItems: data.actionItems,
-      calendar: upcomingCalendar(tenant),
-      agent: { number: activeNumberFor(store.load(), tenant), owner: ctx.ownerName },
-    });
-  });
-
-  // Self-Service-Settings-Schreiben: ENGERE Whitelist (selfServicePatch) DAVOR,
-  // dann die bestehende strenge updateSettings (Key/Typ). greeting nur als Vorlage;
-  // allowPersonalData/allowBankData nur restriktiver; allowSummaries/Disclosure/
-  // Unbekanntes abgelehnt. updateSettings bleibt UNVERAENDERT.
-  app.post("/api/self-service/settings", (req, res) => {
-    const tenant = requireTenant(req, res); // REJECT -> 403
-    if (!tenant) return;
-    const current = store.tenantContext(tenant).settings;
-    const { clean, rejected } = selfServicePatch(req.body || {}, current);
-    const { settings, changed } = store.updateSettings(tenant, clean);
-    // Nur Keys loggen (greeting-Wert/PII gehoeren nicht ins Log, wie /api/settings).
-    audit("self_service_settings", req, `keys=${changed.join(",") || "-"} rejected=${rejected.join(",") || "-"}`);
-    res.json(settings);
-  });
-}
 
 app.post("/api/action-items/:id/toggle", (req, res) => {
   const item = store.toggleActionItem(req.params.id);

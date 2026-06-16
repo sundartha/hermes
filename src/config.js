@@ -175,6 +175,12 @@ export function assertConfig() {
     console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
   if (config.storeBackend !== "pg" && config.sessionSecret)
     console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
+  // Self-Service ist seit der Login-Konvergenz web-session-only: die Routen sind NUR
+  // im Web-Login-Block (SESSION_SECRET + STORE_BACKEND=pg) registriert. Flags an, aber
+  // ohne diese Infra -> /api/self-service/* sind nicht erreichbar (404, fail-closed).
+  if (config.selfServiceEnabled && config.multiTenant &&
+      !(config.sessionSecret && config.storeBackend === "pg"))
+    console.error("[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.");
   // OIDC-Issuer muss in Produktion https sein: ein http-Issuer (z.B. versehentlich
   // auf eine interne Metadata-IP) ist ein SSRF-/MITM-Footgun. localhost = Test-IdP ok.
   if (config.oauthIssuerUrl && config.oauthIssuerUrl.startsWith("http://") &&
