@@ -1,0 +1,76 @@
+// P0/AC5: Boot-Entkopplung. Ein Fehler im Web-Login/Portal-Block darf den Boot
+// (und damit die Telefonie) NICHT killen. Bewiesen ueber den realen Seam:
+// guardedBoot faengt den ECHTEN createPortalRunner-Fault (Superuser -> [F5]) ab.
+// Reachable-pg-over-socket ist offline n.v. (pglite ist in-process), darum Fault-
+// Injection in das echte createPortalRunner via DI-Pool (User-Entscheidung 2026-06-16).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import express from "express";
+import { guardedBoot } from "../src/boot-guard.js";
+import { createPortalRunner } from "../src/portal-pool.js";
+
+// Erreichbarer Fake-Pool, dessen Rolle Superuser ist -> assertNoBypassRls wirft den
+// realen [F5]-Fehler (die reale Boot-Fault einer Superuser-DATABASE_URL).
+const superuserPool = () => ({
+  connect: async () => ({
+    query: async () => ({ rows: [{ is_su: "on", rolbypassrls: false }] }),
+    release() {},
+  }),
+  end: async () => {},
+});
+
+async function captureErrAsync(fn) {
+  const logs = [];
+  const orig = console.error;
+  console.error = (...a) => logs.push(a.map(String).join(" "));
+  try { await fn(); } finally { console.error = orig; }
+  return logs.join("\n");
+}
+
+// T-P0-05a: guardedBoot schluckt den Fault, loggt laut, wirft nicht, returnt false.
+test("T-P0-05a: guardedBoot faengt Portal-Fault, loggt [boot] deaktiviert, returnt false", async () => {
+  let result;
+  const out = await captureErrAsync(async () => {
+    result = await guardedBoot("Web-Login/Portal", () => createPortalRunner({ pool: superuserPool() }));
+  });
+  assert.equal(result, false);
+  assert.match(out, /\[boot\] Web-Login\/Portal deaktiviert/);
+});
+
+// T-P0-05b: erfolgreicher Block -> returnt true, kein [boot]-deaktiviert-Log.
+test("T-P0-05b: guardedBoot returnt true wenn der Block durchlaeuft", async () => {
+  let logged = "";
+  const orig = console.error;
+  console.error = (...a) => { logged += a.map(String).join(" "); };
+  let result;
+  try { result = await guardedBoot("Web-Login/Portal", async () => { /* ok */ }); }
+  finally { console.error = orig; }
+  assert.equal(result, true);
+  assert.ok(!/deaktiviert/.test(logged));
+});
+
+// T-P0-05 (Kern, HTTP-Level): Portal-Fault VOR dem Route-Mount -> /auth/login wird
+// nie registriert (404), aber /healthz bleibt 200 und der Server lebt weiter.
+test("T-P0-05: Portal-Fault -> /healthz 200, /auth/login 404, Server lebt", async () => {
+  const app = express();
+  app.get("/healthz", (_q, res) => res.json({ ok: true }));
+
+  const mounted = await guardedBoot("Web-Login/Portal", async () => {
+    await createPortalRunner({ pool: superuserPool() }); // wirft [F5] VOR dem Mount
+    app.get("/auth/login", (_q, res) => res.send("login")); // nie erreicht
+  });
+  assert.equal(mounted, false);
+
+  const srv = app.listen(0);
+  try {
+    await new Promise((r) => srv.once("listening", r));
+    const port = srv.address().port;
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { ok: true });
+    const login = await fetch(`http://127.0.0.1:${port}/auth/login`);
+    assert.equal(login.status, 404, "Web-Login darf nicht gemountet sein");
+  } finally {
+    srv.close();
+  }
+});

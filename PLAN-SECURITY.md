@@ -321,6 +321,40 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
   `test/self-service-flag-gate.test.js` (json → 404). `public/tenant.html` von Bearer-
   Paste/localStorage auf `/auth/login`-Redirect + Cookie umgebaut.
 
+## Crash-Backstop & Boot-Entkopplung (P0/OT-1, umgesetzt 2026-06-16, `feat/crash-p0-backstop`)
+
+Ein Node-Prozess bedient ALLE gleichzeitigen Calls + das Web-Stack: ein entkommener
+Throw/Reject killte bisher jeden laufenden Call. P0 installiert ein globales Crash-Netz
+und entkoppelt den Boot-Pfad. Plan: `tasks/crash-hotspots/P0-plan.md`.
+
+- **Globales Crash-Netz** (`src/process-guards.js`, erste Importzeile in `server.js` +
+  `mcp-server.js`, vor `store.js` -> ESM-Eval-Order). `unhandledRejection` UND
+  `uncaughtException` werden **secret-frei** geloggt (nur `err.message`/`err.stack`, nie
+  config/Connection-String/Env). Tests `test/process-guards.test.js` (T-P0-01..03, 07).
+- **Bewusste Abweichung (AC4, akzeptiertes Risiko):** `uncaughtException` -> **loggen +
+  weiterlaufen** (kein `process.exit`). `process.exit` wuerde alle gleichzeitigen Calls
+  killen. Abweichung vom Node-Default (Zustand nach `uncaughtException` laut Doku
+  undefiniert) - der Guard ist nur das Last-Resort-Netz; der echte Fix sind quellseitige
+  try/catch (P3). Lautes `[guard]`-Logging macht den Vorfall sichtbar.
+- **Boot-Entkopplung Web-Login (AC5):** der Portal-/Web-Login-Block laeuft in
+  `guardedBoot` (`src/boot-guard.js`). Faellt `createPortalRunner` (F5-Rollen-Assertion
+  ODER Portal-DB-Fehler) oder ein Wiring-Schritt, wird der Fehler laut + secret-frei
+  gefangen -> die Web-Login/Portal-Routen werden NICHT gemountet (existieren nicht ->
+  404), **aber `/voice`, `/healthz`, `/mcp` und das Owner-Dashboard laufen weiter**.
+  Portal-pg-Fail toetet die Telefonie nicht mehr. **Sicherheits-Check:** die Owner-Basic-
+  Auth-Schicht liegt NACH dem Block (ausserhalb `guardedBoot`) -> bleibt aktiv, auch wenn
+  der Portal-Block uebersprungen wird. Test `test/boot-guard.test.js` (T-P0-05, HTTP-Level:
+  Portal-Fault -> `/healthz` 200, `/auth/login` 404, Server lebt).
+- **pg-Store bleibt HARTE Dependency (AC6):** unerreichbare pg-DB beim Boot -> klarer,
+  secret-freier Fatal (`[store] FATAL ...`, exit 1) statt roher Rejection oder stillem
+  json-Fallback (Backend-Split-Brain/Daten-Inkonsistenz-Risiko). Test
+  `test/boot-decoupling.test.js` (T-P0-06: exit 1, kein Connection-String im Log).
+- **Pool-Leak-Fix (AC7):** `createPortalRunner` zieht `pool.connect()` in den try-Block ->
+  bei connect-Fehler laeuft `pool.end()` (kein Pool-Leak); Pool ist injizierbar (DI, Prod-
+  Pfad unveraendert). Test `test/portal-pool-assertion.test.js` (T-P0-04).
+- **CLAUDE.md-Gates unangetastet:** Allowlist/Budget/Disclosure/Twilio-Signatur nicht
+  beruehrt - nur Crash-Verhalten + Boot-Robustheit.
+
 **Bewusst akzeptierte Abweichungen / Deployment-Anforderungen:**
 - **DB-Rolle**: Der `DATABASE_URL`-Nutzer MUSS non-superuser + NOBYPASSRLS sein,
   sonst greift FORCE-RLS NICHT (Superuser umgeht RLS). Harte Deployment-Anforderung.

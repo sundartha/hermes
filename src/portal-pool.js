@@ -45,24 +45,28 @@ export async function assertNoBypassRls(client) {
   }
 }
 
-export async function createPortalRunner() {
-  const pool = new pg.Pool({ connectionString: config.databaseUrl });
-  // Fail-closed: Rollen-Pruefung einmalig nach Pool-Aufbau. Wirft sie, wird der
-  // Pool sofort beendet und der Fehler propagiert - der Prozess startet nicht.
-  const client = await pool.connect();
+// pool ist injizierbar (DI) - Default = realer pg-Pool aus config.databaseUrl, also
+// ist der Produktiv-Pfad (no-arg) unveraendert. Tests injizieren einen Fake-Pool, um
+// connect-/Assertions-Fehler ohne echte DB zu pruefen.
+export async function createPortalRunner({ pool = new pg.Pool({ connectionString: config.databaseUrl }) } = {}) {
+  // Fail-closed: Rollen-Pruefung einmalig nach Pool-Aufbau. connect() liegt JETZT im
+  // try (AC7) - bei connect- ODER Assertions-Fehler wird der Pool beendet (kein
+  // Pool-Leak) und der Fehler kontrolliert propagiert (server.js faengt ihn -> AC5).
+  let client;
   try {
+    client = await pool.connect();
     await assertNoBypassRls({ query: (t, p) => client.query(t, p) });
   } catch (e) {
-    client.release();
+    if (client) client.release();
     await pool.end();
     throw e;
   }
   client.release();
   return {
     withClient: async (fn) => {
-      const client = await pool.connect();
-      try { return await fn({ query: (t, p) => client.query(t, p) }); }
-      finally { client.release(); }
+      const c = await pool.connect();
+      try { return await fn({ query: (t, p) => c.query(t, p) }); }
+      finally { c.release(); }
     },
     _pool: pool,
   };

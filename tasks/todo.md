@@ -570,3 +570,73 @@ Punkt mit Soll + Verifikation, abgehakt erst bei gruener Verifikation in der Ses
   neues Env (Gating ueber vorhandene Flags).
 - OFFEN (manuell): `.env.example`-Kommentar bei SELF_SERVICE_ENABLED auf web-session
   praezisieren (Tool-Deny auf `.env*`).
+
+---
+
+# P0 — Crash-Backstop & Boot-Entkopplung (2026-06-16, feat/crash-p0-backstop)
+
+Quelle: `tasks/crash-hotspots/P0-plan.md`. TDD nach T-P0-Cases. AC4 = uncaughtException
+loggen + weiterlaufen (kein exit). User-Entscheidung 2026-06-16: AC6 bleibt hart
+(unreachable pg -> exit 1); T-P0-05/06 in ZWEI Tests gesplittet, je eine Invariante.
+T-P0-05 nutzt den Seam-Pfad (Fault-Injection in das ECHTE createPortalRunner/
+assertNoBypassRls -> realer [F5]-Throw), reachable-pg-over-socket ist offline n.v.
+(pglite ist in-process; pglite-socket nicht installiert).
+
+## Pre-Mortem (vor Umsetzung benannt)
+- uncaughtException-continue maskiert korrupten Zustand -> akzeptiertes Risiko (AC4),
+  Backstop only, lautes [guard]-Log; echter Fix quellseitig (P3).
+- Guard schluckt Bugs leise -> lautes eindeutiges [guard]/[boot]-Logging.
+- Import-Order-Regression -> T-P0-07 statischer First-Import-Check.
+- Globaler unhandledRejection-Listener (via store.js ueberall importiert) koennte
+  node:test-Rejection-Detection aendern -> empirisch per voller Suite verifizieren (AC8).
+- Verhaltensaenderung Boot: Portal-Fail killt Telefonie nicht mehr -> nur Web-Login-
+  Routen entfallen; Owner-Basic-Auth bleibt (liegt NACH dem Block).
+
+## Items (Expected Result + Verifikation)
+- [x] **AC1-4 / T-P0-01..03 — `src/process-guards.js` (neu)**
+  - Soll: Import installiert unhandledRejection+uncaughtException-Listener
+    (listenerCount>=1); Handler loggen `[guard]` secret-frei, werfen/exiten nicht.
+  - Verify: `node --test test/process-guards.test.js`
+- [x] **AC2 / T-P0-07 — Guard-Import erste Importzeile (server.js + mcp-server.js)**
+  - Soll: erste `^import`-Zeile beider Files == `import "./process-guards.js";`
+  - Verify: `node --test test/process-guards.test.js`
+- [x] **AC7 / T-P0-04 — `portal-pool.js`: connect() in try + Pool-DI**
+  - Soll: `createPortalRunner({pool})` mit connect-rejectendem Fake -> `pool.end()`
+    aufgerufen, Fehler propagiert; Prod-Pfad (no-arg) unveraendert.
+  - Verify: `node --test test/portal-pool-assertion.test.js`
+- [x] **AC5 / T-P0-05 — Boot-Entkopplung (Seam): `src/boot-guard.js` (neu) + server.js**
+  - Soll: `guardedBoot(label,fn)` faengt Fehler, loggt `[boot] <label> deaktiviert`,
+    wirft nicht, returnt false. Echtes createPortalRunner(superuser-Pool) -> F5-Throw
+    gefangen; Express-App: `/healthz` 200, `/auth/login` 404, Server lebt. server.js
+    wrappt Portal-Block in guardedBoot.
+  - Verify: `node --test test/boot-guard.test.js`
+- [x] **AC6 / T-P0-06 — `store.js`: pg-Fatal diagnostiziert + exit(1), secret-frei**
+  - Soll: Kindprozess `node src/server.js` STORE_BACKEND=pg + unreachable DATABASE_URL
+    -> exit-code 1; stderr klare `[store]`-Diagnose; stderr OHNE Connection-String.
+  - Verify: `node --test test/boot-decoupling.test.js`
+- [x] **AC8 — Regression: volle Suite gruen**
+  - Soll: bestehende + neue Tests gruen (Baseline per npm test ermitteln, kein Drop).
+  - Verify: `npm test`
+
+## Review (Endstand)
+- TDD eingehalten: jeder Test zuerst RED gesehen (Modul fehlt / falsches Verhalten),
+  dann minimaler GREEN-Code. T-P0-06 RED zeigte EXAKT die Guard-Interaktion: die
+  store-Top-Level-Await-Rejection kommt als `uncaughtException` an -> AC4-Guard loggt +
+  laeuft weiter -> exit 0. AC6 (store-eigener try/catch + exit 1) faengt sie davor.
+- `npm test`: 425 pass, 0 fail, 0 skipped (~34s). Baseline 414 + 11 neue (kein Drop ->
+  globaler unhandledRejection-Listener bricht node:test-Detection nicht).
+- Smoke live: (1) json-Store + SESSION_SECRET -> Server lebt, `/healthz` 200,
+  `/auth/login` 404 (Web-Login gated out). (2) pg + unreachable URL -> exit 1,
+  `[store] FATAL ... ECONNREFUSED`, 0 Connection-String-/Passwort-Leak.
+- Hinweis Smoke: `GET /` von localhost = 200 (dokumentierte localhost-Basic-Auth-
+  Ausnahme, von P0 NICHT angefasst); externe 401-Absicherung weiter durch Bestandssuite.
+- Absolute Regeln unberuehrt: Allowlist/Budget/Disclosure/Twilio-Signatur nicht beruehrt;
+  Owner-Basic-Auth liegt NACH dem guardedBoot-Block (bleibt aktiv bei Portal-Skip);
+  Guards + boot-guard + store-Fatal loggen secret-frei.
+- Bewusste, in PLAN-SECURITY.md dokumentierte Abweichungen: AC4 (uncaughtException =
+  weiterlaufen, Last-Resort-Netz, echter Fix P3); AC5 (Portal-pg-Fail = Web-Login aus
+  statt Prozess-Tod); AC6 (pg-Store harte Dependency, KEIN json-Fallback).
+- Geaenderte Prod-Files: `src/process-guards.js` (neu), `src/boot-guard.js` (neu),
+  `src/server.js`, `src/mcp-server.js`, `src/portal-pool.js`, `src/store.js`. Tests:
+  `test/process-guards.test.js`, `test/boot-guard.test.js`, `test/boot-decoupling.test.js`
+  (alle neu) + `test/portal-pool-assertion.test.js` (T-P0-04/04b ergaenzt).
