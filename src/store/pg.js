@@ -155,6 +155,14 @@ export function makePgStore(runner) {
       return n;
     },
 
+    // ---- KYC (P6b4): Wrapper-Parity zu json.js ----
+    setKycLevel(tenantId, level) {
+      const tenant = ops.setKycLevel(requireState(), tenantId, level);
+      save();
+      return tenant;
+    },
+    kycReached: (tenantId, minLevel) => ops.kycReached(requireState(), tenantId, minLevel),
+
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
       save();
@@ -231,11 +239,15 @@ async function hydrate(client) {
 // entstuende ein leeres ownerName-Feld). Der Owner ist immer enthalten (seedDefaults
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
-  const rows = (await client.query(`SELECT id, status, owner_name, idp_subject FROM tenant`)).rows;
+  const rows = (await client.query(`SELECT id, status, owner_name, idp_subject, kyc_level FROM tenant`)).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
     if (r.owner_name != null) tenant.ownerName = r.owner_name;
     if (r.idp_subject != null) tenant.idpSubject = r.idp_subject;
+    // kyc_level NUR setzen, wenn nicht-null (Muster wie owner_name/idp_subject):
+    // ein Owner/Bestand ohne Wert behaelt KEIN kycLevel-Feld -> kycReached liefert
+    // true (byte-identisch zum json-Pfad, kein null-Feld-Drift, R6).
+    if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
     return tenant;
   });
 }
@@ -464,11 +476,12 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, idp_subject)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO tenant (id, status, owner_name, idp_subject, kyc_level)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO UPDATE SET
-         status=EXCLUDED.status, owner_name=EXCLUDED.owner_name, idp_subject=EXCLUDED.idp_subject`,
-      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null]
+         status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
+         idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level`,
+      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null, t.kycLevel ?? null]
     );
   }
 }
