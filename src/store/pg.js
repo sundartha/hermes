@@ -384,8 +384,7 @@ async function flush(client, state) {
 // bestehenden pro-Tenant-Accessoren bzw. den numbers-Filter. profiles NUR unter dem
 // Owner (global keyed-by-email, geerbte Entscheidung #9).
 async function flushTenantScope(client, tenantId, state) {
-  const { callIds } = scopeOf(state, tenantId);
-  const calls = state.calls.filter((c) => c.tenantId === tenantId);
+  const { calls, callIds } = scopeOf(state, tenantId);
   await flushCalls(client, tenantId, calls);
   await flushActionItems(client, tenantId, state.actionItems.filter((a) => callIds.has(a.callId)));
   await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
@@ -413,13 +412,14 @@ async function flushTenants(client, tenants) {
   }
 }
 
-// Die call-verknuepfte Tenant-Partition fuer den Flush: die callIds eines Tenants.
-// Dieselbe Regel wie ops.tenantCallScope (call.tenantId === tenantId); actionItems/
-// notifications tragen kein eigenes tenantId und werden ueber callId zugeordnet.
-// Lokal gehalten, damit state-ops.js (Store-Fachlogik) unveraendert bleibt.
+// Die call-verknuepfte Tenant-Partition fuer den Flush: die Calls eines Tenants + ihre
+// callIds (EIN Filter-Pass, dieselbe Regel wie ops.tenantCallScope: call.tenantId ===
+// tenantId). actionItems/notifications tragen kein eigenes tenantId und werden ueber
+// callId zugeordnet. Lokal gehalten, damit state-ops.js (Store-Fachlogik) unveraendert bleibt.
 function scopeOf(state, tenantId) {
-  const callIds = new Set(state.calls.filter((c) => c.tenantId === tenantId).map((c) => c.id));
-  return { callIds };
+  const calls = state.calls.filter((c) => c.tenantId === tenantId);
+  const callIds = new Set(calls.map((c) => c.id));
+  return { calls, callIds };
 }
 
 // Notifications eines Tenants: call-verknuepfte ueber callIds; manuelle (callId=null)

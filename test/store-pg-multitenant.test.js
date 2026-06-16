@@ -9,7 +9,6 @@
 // Rein pglite, NIE mit Server-Spawn gemischt (P6a-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
 import { defaultSettings, demoCalendar, PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
