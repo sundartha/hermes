@@ -66,6 +66,22 @@ function requestTenant(req) {
   return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
 }
 
+// I6: Request-Tenant fuer Schreib-/Steuer-Pfade aufloesen UND fail-closed gaten.
+// Eine VORHANDENE, aber unbekannte Identitaet (TENANT_REJECT) wird hart mit 403
+// abgewiesen, statt in einen Pseudo-Tenant-Bucket zu schreiben (Owner-Entscheidung).
+// Liefert den Tenant ODER null (dann ist 403 bereits gesendet -> Handler returnt).
+// Flag AUS / fehlende Identitaet -> requestTenant === OWNER_TENANT_ID, nie REJECT ->
+// Guard inert -> Owner-Pfad byte-identisch. Eigenstaendig von I5's call-404-Helper
+// (requireTenantOwnsCall vergleicht call.tenantId); dieser wrappt nur requestTenant.
+function requireTenant(req, res) {
+  const tenant = requestTenant(req);
+  if (tenant === TENANT_REJECT) {
+    res.status(403).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
+    return null;
+  }
+  return tenant;
+}
+
 app.use(securityHeaders);
 
 // ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
@@ -566,9 +582,14 @@ app.post("/api/calls", async (req, res) => {
 // Laufenden Anruf sauber abbrechen
 app.post("/api/calls/:id/cancel", async (req, res) => {
   const call = store.getCall(req.params.id);
-  if (!call) return res.status(404).json({ error: "not found" });
+  // L5: fremder Tenant -> 404 (kein Existenz-Leck, NICHT 403). Hinter dem Flag:
+  // aus -> ungefiltert wie heute (byte-identisch, auch fuer Calls ohne tenantId).
+  // Inline gegen I5's requireTenantOwnsCall-Signatur (Konsolidierung beim Rebase).
+  if (!call || (config.multiTenant && call.tenantId !== requestTenant(req)))
+    return res.status(404).json({ error: "not found" });
   if (call.status !== "active") return res.json({ status: call.status });
-  audit("cancel_call", req, `call=${call.id}`);
+  const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
+  audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
   store.endCallRecord(call.id, "cancelled");
   if (call.twilioSid) {
     try {
@@ -619,14 +640,18 @@ app.get("/api/calls/:id", (req, res) => {
 // (kein Bulk-Export ueber MCP, Regel 5). Die Loeschung (Art. 17) hat KEINEN
 // Endpunkt - nur Script (kleinste Angriffsflaeche, Safety vor Features).
 app.get("/api/tenant-data/export", (req, res) => {
-  const data = store.exportTenantData(OWNER_TENANT_ID);
+  const tenant = requireTenant(req, res); // L6: tenant-gescopt statt OWNER-gepinnt; REJECT -> 403
+  if (!tenant) return;
+  const data = store.exportTenantData(tenant);
   audit("data_export", req,
     `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`);
   res.json({ ...data, calls: data.calls.map(publicCall) });
 });
 
 app.post("/api/settings", (req, res) => {
-  const { settings, changed } = store.updateSettings(OWNER_TENANT_ID, req.body || {});
+  const tenant = requireTenant(req, res); // L2: tenant-gescopt; REJECT -> 403
+  if (!tenant) return;
+  const { settings, changed } = store.updateSettings(tenant, req.body || {});
   // Nur die Keys loggen - Werte (z.B. greeting-Freitext) gehoeren nicht ins Log
   audit("settings_update", req, `keys=${changed.join(",") || "-"}`);
   res.json(settings);
@@ -639,6 +664,8 @@ app.post("/api/action-items/:id/toggle", (req, res) => {
 });
 
 app.post("/api/calendar", (req, res) => {
+  const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403 (vor dem Booking-Recht)
+  if (!tenant) return;
   // Booking-Recht (Phase 2): Owner/null erlaubt, restriktives Profil (allowBooking
   // false) wird abgewiesen. Identitaet nur vom localhost-Header, nie aus dem Body.
   const identity = internalIdentity(req);
@@ -656,7 +683,7 @@ app.post("/api/calendar", (req, res) => {
     return res.status(400).json({ error: "start und end muessen gueltige Datumswerte sein (ISO 8601)" });
   if (endDate <= startDate) return res.status(400).json({ error: "end muss nach start liegen" });
   // Normalisiert speichern: findConflict() vergleicht ISO-Strings lexikographisch
-  res.json(store.addCalendarEvent(OWNER_TENANT_ID, title, startDate.toISOString(), endDate.toISOString()));
+  res.json(store.addCalendarEvent(tenant, title, startDate.toISOString(), endDate.toISOString()));
 });
 
 // ---- Rechteprofile verwalten (Phase 2) ----
