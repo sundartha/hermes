@@ -126,7 +126,8 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   // (gesperrter Kunde kann nicht bis Cookie-Expiry weiter lesen). Jede Aktion auditiert.
   app.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
     try {
-      await accounts.setStatus(req.params.id, "active");
+      const ok = await accounts.setStatus(req.params.id, "active");
+      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
       await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
       res.json({ tenantId: req.params.id, status: "active" });
     } catch (e) {
@@ -136,7 +137,8 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   });
   app.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
     try {
-      await accounts.setStatus(req.params.id, "suspended");
+      const ok = await accounts.setStatus(req.params.id, "suspended");
+      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
       await sessions.invalidateByTenant(req.params.id);
       await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
       res.json({ tenantId: req.params.id, status: "suspended" });

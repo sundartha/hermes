@@ -33,13 +33,16 @@ async function setup() {
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const adminMw = adminOnly({ adminEmails: ADMIN_EMAILS });
   const app = express();
+  // Spiegelt server.js (inkl. 404-Existenzpruefung vor Audit).
   app.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
-    await accounts.setStatus(req.params.id, "active");
+    const ok = await accounts.setStatus(req.params.id, "active");
+    if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
     await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
     res.json({ tenantId: req.params.id, status: "active" });
   });
   app.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
-    await accounts.setStatus(req.params.id, "suspended");
+    const ok = await accounts.setStatus(req.params.id, "suspended");
+    if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
     await sessions.invalidateByTenant(req.params.id);
     await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
     res.json({ tenantId: req.params.id, status: "suspended" });
@@ -105,5 +108,15 @@ test("ohne Session -> 401 (fail-closed, vor adminOnly)", async () => {
   const s = await setup();
   try {
     assert.equal((await post(`${s.base}/api/admin/tenants/t_cust1/approve`)).status, 401);
+  } finally { await s.close(); }
+});
+
+test("Admin approve/suspend auf nicht-existenten Tenant -> 404 (kein silent-noop, kein Audit)", async () => {
+  const s = await setup();
+  try {
+    assert.equal((await post(`${s.base}/api/admin/tenants/t_ghost/approve`, s.adminSession)).status, 404);
+    assert.equal((await post(`${s.base}/api/admin/tenants/t_ghost/suspend`, s.adminSession)).status, 404);
+    const rows = (await s.db.query(`SELECT 1 FROM audit_log WHERE tenant_id='t_ghost'`)).rows;
+    assert.equal(rows.length, 0, "kein Audit-Eintrag fuer nicht-existenten Tenant");
   } finally { await s.close(); }
 });

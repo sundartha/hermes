@@ -178,6 +178,8 @@ CREATE TABLE IF NOT EXISTS session (
 
 -- audit_log: immutable append-only. tenant_id BEWUSST KEIN FK (muss Tenant-
 -- Loeschung ueberdauern, Compliance Art. 15). Keine RLS (privilegierter Insert-Pfad).
+-- WARNUNG: audit_log NIE ueber portalStore/Kunden-Reads exponieren - ohne RLS gibt
+-- es hier kein Sicherheitsnetz gegen einen vergessenen tenant_id-Filter.
 CREATE TABLE IF NOT EXISTS audit_log (
   id         BIGSERIAL PRIMARY KEY,
   at         TIMESTAMPTZ NOT NULL DEFAULT now(),

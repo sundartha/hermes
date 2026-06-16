@@ -138,12 +138,17 @@ export function makeWebAuthRoutes(deps) {
 // mit id_token-Verifikation). Cached Discovery-Dokument + JWKS. Niemals loggen.
 export function makeOidc(config) {
   let discoveryCache = null;
+  let discoveryCachedAt = 0;
+  // TTL, damit eine Endpoint-/jwks_uri-Rotation beim IdP ohne Prozess-Neustart
+  // aufgefangen wird (sonst brechen alle Logins bis zum Restart).
+  const DISCOVERY_TTL_MS = 3600_000;
 
   async function discover() {
-    if (discoveryCache) return discoveryCache;
+    if (discoveryCache && Date.now() - discoveryCachedAt < DISCOVERY_TTL_MS) return discoveryCache;
     const r = await fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
     if (!r.ok) throw new Error(`OIDC discovery HTTP ${r.status}`);
     discoveryCache = await r.json();
+    discoveryCachedAt = Date.now();
     return discoveryCache;
   }
 
@@ -240,11 +245,16 @@ export function makeAccounts(runner) {
       });
     },
 
-    // Admin: Tenant-Status aendern (active/suspended).
+    // Admin: Tenant-Status aendern (active/suspended). Gibt true zurueck, wenn ein
+    // Tenant getroffen wurde - sonst false -> der Aufrufer antwortet 404 (kein
+    // silent-noop, kein Audit-Eintrag fuer eine nicht-existente Tenant-ID).
     async setStatus(tenantId, status) {
-      return runner.withClient((c) =>
-        c.query(`UPDATE tenant SET status = $1 WHERE id = $2`, [status, tenantId])
-      );
+      return runner.withClient(async (c) => {
+        const { rows } = await c.query(
+          `UPDATE tenant SET status = $1 WHERE id = $2 RETURNING id`, [status, tenantId]
+        );
+        return rows.length > 0;
+      });
     },
   };
 }

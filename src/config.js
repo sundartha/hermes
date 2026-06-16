@@ -161,5 +161,10 @@ export function assertConfig() {
     console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
   if (config.storeBackend !== "pg" && config.sessionSecret)
     console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
+  // OIDC-Issuer muss in Produktion https sein: ein http-Issuer (z.B. versehentlich
+  // auf eine interne Metadata-IP) ist ein SSRF-/MITM-Footgun. localhost = Test-IdP ok.
+  if (config.oauthIssuerUrl && config.oauthIssuerUrl.startsWith("http://") &&
+      !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(config.oauthIssuerUrl))
+    console.error("[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!");
   return missing.length === 0;
 }
