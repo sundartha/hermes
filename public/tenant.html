@@ -115,14 +115,14 @@ label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase
 
   <div class="grid">
 
-    <!-- Login (Browser-OAuth-Redirect ist deferred -> Token-Feld) -->
+    <!-- Zugang: Browser-Login (OIDC, Feature B). Das Session-Cookie kommt same-origin
+         automatisch mit jedem fetch -> kein manuelles Token mehr. -->
     <div class="card c12">
       <h3>Zugang</h3>
-      <div class="hint">Zugangstoken aus deinem Login einfuegen. Ohne gueltiges Token bleibt die Seite leer.</div>
+      <div class="hint" id="authHint">Anmeldestatus wird geprueft …</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input class="fi" id="token" placeholder="Zugangstoken" style="flex:1;min-width:240px">
-        <button class="btn btn-red" id="connect">Verbinden</button>
-        <span class="msg" id="connMsg"></span>
+        <a class="btn btn-red" id="loginBtn" href="/auth/login" style="display:none">Anmelden</a>
+        <button class="btn btn-ghost" id="logoutBtn" style="display:none">Abmelden</button>
       </div>
     </div>
 
@@ -167,12 +167,14 @@ label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase
 <script>
 const $ = (id) => document.getElementById(id);
 
-// Browser-OAuth-Redirect ist deferred: Token kommt manuell ins Feld + localStorage.
-const TOKEN_KEY = "ss_token";
-const authHeader = () => {
-  const t = localStorage.getItem(TOKEN_KEY);
-  return t ? { Authorization: "Bearer " + t } : {};
-};
+// Web-Session-only (Konvergenz #3): das Session-Cookie (HttpOnly, same-origin) wird
+// vom Browser automatisch mitgeschickt - kein Authorization-Header, kein localStorage,
+// kein manuelles Token. Login/Logout laufen ueber /auth/login bzw. /auth/logout.
+function showAuth(text, showLogin, showLogout){
+  $("authHint").textContent = text;
+  $("loginBtn").style.display = showLogin ? "inline-flex" : "none";
+  $("logoutBtn").style.display = showLogout ? "inline-flex" : "none";
+}
 
 // Nur die Felder, die der Self-Service-Pfad erlaubt (Decision #6). agentName + die
 // drei Free-Felder als Toggle; allowSummaries/Disclosure/Freitext-greeting fehlen
@@ -237,8 +239,12 @@ function renderCal(events){
 }
 
 async function refresh(){
-  const r = await fetch("/api/self-service/state", { headers: authHeader() });
-  if(!r.ok){ $("liveDot").classList.add("off"); return; } // 403/404 -> leer, fail-closed
+  const r = await fetch("/api/self-service/state");
+  // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
+  if(r.status===401){ $("liveDot").classList.add("off"); showAuth("Bitte anmelden, um deinen Bereich zu sehen.", true, false); return; }
+  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Dein Konto wartet auf Freigabe durch den Betreiber.", false, true); return; }
+  if(!r.ok){ $("liveDot").classList.add("off"); showAuth("Voruebergehend nicht erreichbar.", false, true); return; }
+  showAuth("Angemeldet.", false, true);
   const s = await r.json();
   $("agentNum").textContent = s.agent.number || "nicht konfiguriert";
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
@@ -262,25 +268,22 @@ async function save(){
   const m=$("saveMsg"); m.className="msg";
   const r = await fetch("/api/self-service/settings", {
     method:"POST",
-    headers:{ "Content-Type":"application/json", ...authHeader() },
+    headers:{ "Content-Type":"application/json" },
     body: JSON.stringify(collectPatch()),
   });
   if(r.ok){ m.textContent="Gespeichert"; m.className="msg ok"; refresh(); }
-  else{ m.textContent="Nicht gespeichert (Zugang pruefen)."; m.className="msg err"; }
+  else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
+  else{ m.textContent="Nicht gespeichert."; m.className="msg err"; }
   setTimeout(()=>m.className="msg",2500);
 }
 
-$("connect").onclick = ()=>{
-  const t = $("token").value.trim();
-  const m = $("connMsg"); m.className="msg";
-  if(!t){ m.textContent="Token eingeben."; m.className="msg err"; return; }
-  localStorage.setItem(TOKEN_KEY, t);
-  m.textContent="Verbunden."; m.className="msg ok";
-  refresh();
+$("logoutBtn").onclick = async ()=>{
+  await fetch("/auth/logout", { method:"POST" }); // invalidiert Session + loescht Cookie
+  location.reload();
 };
 $("save").onclick = save;
 
-if(localStorage.getItem(TOKEN_KEY)) refresh();
+refresh();
 </script>
 </body>
 </html>

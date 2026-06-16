@@ -1,247 +1,218 @@
-// I9 — Self-Service-Login + getrennter Tenant-Pfad + engere Settings-Whitelist.
-// Reiner Spawn-node:test (KEIN pglite in derselben Datei - Lehre p6a-Stall).
-// Zweiter synthetischer Tenant B (seedState-Vorarbeit aus I1) + zwei Identitaeten:
-//   - Tenant B = Request MIT X-Internal-Identity=<idpSubject> an srv.localUrl
-//                (localhost -> vertraut, requestTenant -> resolveTenant(sub) -> B)
-//   - unbekannt = vorhandene, aber unaufloesbare Identitaet -> REJECT -> 403
-// Flag AN = MULTI_TENANT=true + SELF_SERVICE_ENABLED=true. Flag AUS (BASE_ENV-Default
-// fuer SELF_SERVICE_ENABLED) -> Self-Service-Routen 404, Admin-Pfad byte-identisch.
-import test from "node:test";
+// #3 — Self-Service-Login-Konvergenz (web-session-only). Loest den alten i9-Pfad
+// (json + X-Internal-Identity) ab: Self-Service laeuft jetzt hinter dem echten
+// OIDC-Web-Login (Feature B, webAuthMw -> req.tenant.tenantId aus der DB-Session).
+//
+// Kompositions-Integrationstest nach dem Muster portal-route.test.js: reines pglite
+// (Postgres-in-WASM, offline, F.I.R.S.T.), KEIN Server-Spawn in dieser Datei (Lehre
+// p6a-Stall: pglite NIE mit child-process mischen). Der Flag-/Wiring-Gate-Test
+// (json -> 404) lebt separat in self-service-flag-gate.test.js.
+//
+// Identitaets-Konvergenz: webAuthMw setzt req.tenant.tenantId = account.tenant_id =
+// t_<sub>; der pg-Store-Mirror keyt seine Buckets ebenfalls auf t_<sub>. Damit ist
+// req.tenant.tenantId exakt der Bucket-Key (kein zweiter Resolver).
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
+import http from "node:http";
+import express from "express";
+import { makePgTestStore } from "./pg-helpers.js";
+import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { GREETING_TEMPLATES } from "../src/self-service.js";
+import { OWNER_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
+import * as ops from "../src/store/state-ops.js";
+import { config } from "../src/config.js";
 
-const TENANT_B = "B";
+// Owner-Nummern-Seed (config.twilio/telnyxNumber aus .env) ausschalten -> die
+// deterministischen Asserts laufen unabhaengig von einer lokalen .env (Muster wie
+// store-pg-multitenant.test.js). Prozess-isoliert pro Datei.
+config.twilioNumber = "";
+config.telnyxNumber = "";
+
+const SECRET = "self-service-web-secret-0123456789";
 const SUB_B = "sub-b";
-const SUB_UNKNOWN = "sub-unbekannt"; // VORHANDENE, aber unaufloesbare Identitaet -> REJECT
+const TENANT_B = "t_sub-b"; // upsertOnFirstLogin: tenantId = `t_${sub}`
+const SUB_SUSPENDED = "sub-susp";
+const TENANT_SUSPENDED = "t_sub-susp";
 
-const postJson = (url, body, headers = {}) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
-const getJson = (url, headers = {}) => fetch(url, { headers });
-const asTenant = (sub) => ({ "X-Internal-Identity": sub });
-const tenantB = () => ({ id: TENANT_B, status: "active", idpSubject: SUB_B });
+const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
 
-// Seed mit einem vorbelegten B-Settings-Bucket (Map-Form). seedState liefert eine
-// FLACHE settings-Form (Owner-Bucket nach Migration); fuer die restrict-only-Vektoren
-// (allowBankData-Vorbedingung) braucht B einen eigenen Bucket VOR dem ersten Write.
-// json.load() erkennt die Map an fehlendem top-level agentName und uebernimmt beide
-// Buckets gegen die Defaults aufgefuellt - der vorgeseedete B-Bucket ueberlebt.
-function seedWithBSettings(bSettings, extra = {}) {
-  const base = seedState({ tenants: [tenantB()], ...extra });
-  return { ...base, settings: { [OWNER_TENANT_ID]: {}, [TENANT_B]: bSettings } };
+// Seedet einen aktiven Tenant im Mirror (App-Daten) + in der DB (Identitaet) und
+// gibt seinen Settings-Bucket zurueck, damit der Aufrufer Vorbedingungen setzen kann.
+async function seedActiveTenant(store, accounts, { sub, tenantId, bankData }) {
+  const s = store.load();
+  ops.registerTenant(s, tenantId, { ownerName: "Kunde B" });
+  const t = s.tenants.find((x) => x.id === tenantId);
+  t.status = "active";       // Mirror-Status konsistent zur DB (Flush darf nicht downgraden)
+  t.idpSubject = sub;
+  const bucket = ops.settingsFor(s, tenantId);
+  if (bankData !== undefined) bucket.allowBankData = bankData;
+  // Identitaet in die DB: Tenant + Account anlegen, dann aktivieren (Session-Auth liest die DB).
+  await accounts.upsertOnFirstLogin({ sub, email: `${sub}@kunde.de` });
+  await accounts.setStatus(tenantId, "active");
+  return bucket;
 }
 
-const SS_ENV = { MULTI_TENANT: "true", SELF_SERVICE_ENABLED: "true" };
+// Baut Store + Identitaets-Schicht + die Self-Service-Routen auf einer Wegwerf-App.
+// Liefert base-URL, store (Mirror-Zugriff), Cookies (aktiv/suspendiert) + close().
+async function setup({ bankData } = {}) {
+  const { store, db } = await makePgTestStore();
+  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const accounts = makeAccounts(runner);
+  const sessions = makeSessions(runner);
 
-test("I9 (a) Lese-Sicht: B liest NUR B's Daten, Owner-Call nicht enthalten", async (t) => {
-  const srv = await startServer({
-    env: SS_ENV,
-    seed: seedState({
-      tenants: [tenantB()],
-      calls: [
-        seedCall({ id: "call_owner", tenantId: OWNER_TENANT_ID, streamToken: "owner-geheim" }),
-        seedCall({ id: "call_b", tenantId: TENANT_B, streamToken: "b-geheim" }),
-      ],
-    }),
+  const bucketB = await seedActiveTenant(store, accounts, { sub: SUB_B, tenantId: TENANT_B, bankData });
+
+  // Owner-Call (darf NIE in B's Sicht auftauchen) + B-Call + B-Termin im Mirror.
+  const s = store.load();
+  const ownerCall = ops.createCall(s, { direction: "inbound", from: "+49", to: "+49", tenantId: OWNER_TENANT_ID });
+  const bCall = ops.createCall(s, { direction: "inbound", from: "+49", to: "+49", tenantId: TENANT_B });
+  ops.addCalendarEvent(s, TENANT_B, "B-Termin", "2030-02-01T10:00:00.000Z", "2030-02-01T11:00:00.000Z");
+  const { id: sessionId } = await sessions.create({ sub: SUB_B, tenantId: TENANT_B, ttlSeconds: 3600 });
+
+  // Suspendierter Tenant (Account in der DB, NICHT aktiviert) fuer den 403-Fall.
+  await accounts.upsertOnFirstLogin({ sub: SUB_SUSPENDED, email: "susp@kunde.de" });
+  const { id: suspSessionId } = await sessions.create({ sub: SUB_SUSPENDED, tenantId: TENANT_SUSPENDED, ttlSeconds: 3600 });
+
+  const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
+  const app = express();
+  app.use(express.json());
+  app.use(makeSelfServiceRoutes({ store, webAuthMw, audit: () => {} }));
+  const server = await new Promise((r) => { const sv = app.listen(0, "127.0.0.1", () => r(sv)); });
+
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    store, bucketB, ownerCallId: ownerCall.id, bCallId: bCall.id,
+    cookieB: cookieFor(sessionId),
+    cookieSuspended: cookieFor(suspSessionId),
+    close: () => new Promise((r) => server.close(r)),
+  };
+}
+
+function request(method, url, { cookie, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const payload = body ? JSON.stringify(body) : null;
+    const headers = {};
+    if (cookie) headers.Cookie = cookie;
+    if (payload) { headers["Content-Type"] = "application/json"; headers["Content-Length"] = Buffer.byteLength(payload); }
+    const req = http.request(
+      { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
+      (res) => { let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b })); }
+    );
+    req.on("error", reject);
+    if (payload) req.write(payload);
+    req.end();
   });
+}
+const getState = (s) => request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookieB });
+const postSettings = (s, body, cookie = s.cookieB) =>
+  request("POST", `${s.base}/api/self-service/settings`, { cookie, body });
+
+test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, mit greetingTemplates", async () => {
+  const s = await setup();
   try {
-    await t.test("GET /api/self-service/state als B -> 200, nur B's Call, kein streamToken", async () => {
-      const res = await getJson(`${srv.localUrl}/api/self-service/state`, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      const body = await res.json();
-      assert.equal(body.calls.length, 1, "nur B's Call");
-      assert.equal(body.calls[0].id, "call_b");
-      assert.equal(body.calls.some((c) => c.id === "call_owner"), false, "Owner-Call NICHT enthalten");
-      assert.equal("streamToken" in body.calls[0], false, "streamToken NIE geleakt (publicCall)");
-      assert.deepEqual(body.greetingTemplates, GREETING_TEMPLATES, "Vorlagen mitgeliefert");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await getState(s);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(res.body);
+    assert.equal(body.calls.length, 1, "nur B's Call");
+    assert.equal(body.calls[0].id, s.bCallId);
+    assert.equal(body.calls.some((c) => c.id === s.ownerCallId), false, "Owner-Call NICHT enthalten");
+    assert.equal("streamToken" in body.calls[0], false, "streamToken NIE geleakt (publicCall)");
+    assert.deepEqual(body.greetingTemplates, GREETING_TEMPLATES, "Vorlagen mitgeliefert");
+    assert.deepEqual(body.calendar.map((e) => e.title), ["B-Termin"], "nur B's Termin");
+  } finally { await s.close(); }
 });
 
-test("I9 (b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedState({ tenants: [tenantB()] }) });
+test("(b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt", async () => {
+  const s = await setup();
   try {
-    await t.test("agentName landet in B-Bucket, Owner unveraendert", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { agentName: "B-Agent", allowCalendar: false }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      const stored = srv.readStore().settings;
-      assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
-      assert.equal(stored[TENANT_B].allowCalendar, false, "allowCalendar gesetzt");
-      assert.equal(stored[OWNER_TENANT_ID].agentName, "Vodafone Agent", "Owner-Bucket unveraendert");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { agentName: "B-Agent", allowCalendar: false });
+    assert.equal(res.status, 200);
+    const stored = s.store.load().settings;
+    assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
+    assert.equal(stored[TENANT_B].allowCalendar, false, "allowCalendar gesetzt");
+    assert.equal(stored[OWNER_TENANT_ID].agentName, defaultSettings().agentName, "Owner-Bucket unveraendert");
+  } finally { await s.close(); }
 });
 
-test("I9 (c1) Nicht-Whitelist-Feld (allowSummaries) wird ignoriert", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedState({ tenants: [tenantB()] }) });
+test("(c1) Nicht-Whitelist-Feld (allowSummaries) wird ignoriert", async () => {
+  const s = await setup();
   try {
-    await t.test("allowSummaries:false bleibt true (nicht in der Self-Service-Whitelist)", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { allowSummaries: false }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      assert.equal(srv.readStore().settings[TENANT_B].allowSummaries, true, "allowSummaries nicht geschrieben");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { allowSummaries: false });
+    assert.equal(res.status, 200);
+    assert.equal(s.store.load().settings[TENANT_B].allowSummaries, true, "allowSummaries nicht geschrieben");
+  } finally { await s.close(); }
 });
 
-test("I9 (c2) Restrict-only: allowBankData false->true wird abgelehnt", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedWithBSettings({ allowBankData: false }) });
+test("(c2) Restrict-only: allowBankData false->true wird abgelehnt", async () => {
+  const s = await setup({ bankData: false });
   try {
-    await t.test("Hochheben false->true ignoriert -> bleibt false", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { allowBankData: true }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      assert.equal(srv.readStore().settings[TENANT_B].allowBankData, false, "false->true abgelehnt");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { allowBankData: true });
+    assert.equal(res.status, 200);
+    assert.equal(s.store.load().settings[TENANT_B].allowBankData, false, "false->true abgelehnt");
+  } finally { await s.close(); }
 });
 
-test("I9 (c3) Restrict-only: allowBankData true->false ist erlaubt", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedWithBSettings({ allowBankData: true }) });
+test("(c3) Restrict-only: allowBankData true->false ist erlaubt", async () => {
+  const s = await setup({ bankData: true });
   try {
-    await t.test("Herabsetzen true->false wird geschrieben", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { allowBankData: false }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      assert.equal(srv.readStore().settings[TENANT_B].allowBankData, false, "true->false erlaubt");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { allowBankData: false });
+    assert.equal(res.status, 200);
+    assert.equal(s.store.load().settings[TENANT_B].allowBankData, false, "true->false erlaubt");
+  } finally { await s.close(); }
 });
 
-test("I9 (d1) greeting-Freitext wird abgelehnt (nur Vorlage)", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedState({ tenants: [tenantB()] }) });
+test("(d1) greeting-Freitext wird abgelehnt (nur Vorlage)", async () => {
+  const s = await setup();
   try {
-    await t.test("Freitext aendert greeting NICHT (bleibt Default)", async () => {
-      // Der (erfolglose) Write flusht den B-Bucket via updateSettings(save) als Map:
-      // greeting bleibt die geseedete Default-Begruessung, der Freitext landet nie.
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { greeting: "Hallo ich bin boese {owner}" }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      assert.equal(srv.readStore().settings[TENANT_B].greeting, defaultSettings().greeting, "greeting unveraendert (Default)");
-      assert.notEqual(srv.readStore().settings[TENANT_B].greeting, "Hallo ich bin boese {owner}", "Freitext nicht uebernommen");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { greeting: "Hallo ich bin boese {owner}" });
+    assert.equal(res.status, 200);
+    assert.equal(s.store.load().settings[TENANT_B].greeting, defaultSettings().greeting, "greeting unveraendert (Default)");
+  } finally { await s.close(); }
 });
 
-test("I9 (d2) greeting-Vorlage wird akzeptiert", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedState({ tenants: [tenantB()] }) });
+test("(d2) greeting-Vorlage wird akzeptiert", async () => {
+  const s = await setup();
   try {
-    await t.test("Vorlage aus GREETING_TEMPLATES landet im B-Bucket", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { greeting: GREETING_TEMPLATES[1] }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      assert.equal(srv.readStore().settings[TENANT_B].greeting, GREETING_TEMPLATES[1], "Vorlage uebernommen");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { greeting: GREETING_TEMPLATES[1] });
+    assert.equal(res.status, 200);
+    assert.equal(s.store.load().settings[TENANT_B].greeting, GREETING_TEMPLATES[1], "Vorlage uebernommen");
+  } finally { await s.close(); }
 });
 
-test("I9 (e) Disclosure-Abschalt-Versuch wird abgelehnt (keine neuen Keys)", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedState({ tenants: [tenantB()] }) });
+test("(e) Disclosure-Abschalt-Versuch wird abgelehnt (keine neuen Keys)", async () => {
+  const s = await setup();
   try {
-    await t.test("allowDisclosureOff/disclosure ignoriert -> nur Default-Keys im B-Bucket", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { allowDisclosureOff: true, disclosure: "" }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      const bucket = srv.readStore().settings[TENANT_B];
-      assert.equal("allowDisclosureOff" in bucket, false, "kein erfundenes Disclosure-Off-Feld");
-      assert.equal("disclosure" in bucket, false, "kein disclosure-Feld geschrieben");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { allowDisclosureOff: true, disclosure: "" });
+    assert.equal(res.status, 200);
+    const bucket = s.store.load().settings[TENANT_B];
+    assert.equal("allowDisclosureOff" in bucket, false, "kein erfundenes Disclosure-Off-Feld");
+    assert.equal("disclosure" in bucket, false, "kein disclosure-Feld geschrieben");
+  } finally { await s.close(); }
 });
 
-test("I9 (f) Fail-closed: unbekannte Identitaet -> 403, kein reject-Bucket, Owner unberuehrt", async (t) => {
-  const srv = await startServer({ env: SS_ENV, seed: seedState({ tenants: [tenantB()] }) });
+test("(f1) Fail-closed: ohne Session-Cookie -> 401, kein Datenleck", async () => {
+  const s = await setup();
   try {
-    await t.test("GET /api/self-service/state als unbekannt -> 403", async () => {
-      assert.equal((await getJson(`${srv.localUrl}/api/self-service/state`, asTenant(SUB_UNKNOWN))).status, 403);
-    });
-
-    await t.test("POST /api/self-service/settings als unbekannt -> 403, kein reject-Bucket", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`,
-        { agentName: "Boese" }, asTenant(SUB_UNKNOWN));
-      assert.equal(res.status, 403);
-      // 403 schreibt NICHT -> kein save() -> der Store bleibt in der FLACHEN Seed-Form
-      // (Owner-Settings top-level, json.load() migriert nur in-memory). Beide
-      // Invarianten sind shape-tolerant pruefbar: kein reject-Bucket UND der Owner-
-      // agentName unveraendert (NIE Owner-Fallback), egal ob flach oder Map.
-      const stored = srv.readStore().settings;
-      assert.equal("reject" in stored, false, "kein Pseudo-Tenant-Bucket");
-      assert.equal(JSON.stringify(stored).includes("Boese"), false, "boeser Wert nirgends geschrieben");
-      const ownerName = stored.agentName || (stored[OWNER_TENANT_ID] && stored[OWNER_TENANT_ID].agentName);
-      assert.equal(ownerName, "Vodafone Agent", "Owner-Bucket unveraendert (NIE Owner-Fallback)");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await request("GET", `${s.base}/api/self-service/state`);
+    assert.equal(res.status, 401);
+    assert.equal(res.body.includes(s.bCallId), false, "keine Tenant-Daten ohne Session");
+  } finally { await s.close(); }
 });
 
-test("I9 (g1) Flag AUS: Self-Service-Routen sind 404 (nicht registriert)", async (t) => {
-  // SELF_SERVICE_ENABLED nicht gesetzt (BASE_ENV: "false"), MULTI_TENANT trotzdem an.
-  const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedState({ tenants: [tenantB()] }) });
+test("(f2) Fail-closed: suspendierter Tenant -> 403 (kein Self-Service bis Freigabe)", async () => {
+  const s = await setup();
   try {
-    await t.test("GET /api/self-service/state -> 404", async () => {
-      assert.equal((await getJson(`${srv.localUrl}/api/self-service/state`, asTenant(SUB_B))).status, 404);
-    });
-
-    await t.test("POST /api/self-service/settings -> 404", async () => {
-      assert.equal((await postJson(`${srv.localUrl}/api/self-service/settings`, { agentName: "X" }, asTenant(SUB_B))).status, 404);
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookieSuspended });
+    assert.equal(res.status, 403);
+  } finally { await s.close(); }
 });
 
-test("I9 (g2) Flag AUS: Admin POST /api/settings unveraendert (I9 beruehrt Admin-Pfad nicht)", async (t) => {
-  // SELF_SERVICE_ENABLED aus, MULTI_TENANT an: POST /api/settings ist weiter
-  // tenant-gescopt (I6) - B schreibt B's Bucket, genau wie ohne I9.
-  const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedState({ tenants: [tenantB()] }) });
+test("(f3) Fail-closed: POST als suspendierter Tenant -> 403, kein Write", async () => {
+  const s = await setup();
   try {
-    await t.test("Admin-Settings als B schreiben B's Bucket (I6-Verhalten, kein I9-Eingriff)", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { agentName: "Via-Admin" }, asTenant(SUB_B));
-      assert.equal(res.status, 200);
-      const stored = srv.readStore().settings;
-      assert.equal(stored[TENANT_B].agentName, "Via-Admin", "Admin-Pfad scopt weiter auf B (I6)");
-      assert.equal(stored[OWNER_TENANT_ID].agentName, "Vodafone Agent", "Owner unveraendert");
-    });
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("I9 (g3) SELF_SERVICE_ENABLED an, MULTI_TENANT AUS: Routen 404, Owner-Bucket unberuehrt", async (t) => {
-  // Defense-in-depth (Safety-Review-Concern): ohne MULTI_TENANT ist requestTenant
-  // immer Owner -> Self-Service ist an config.multiTenant gekoppelt und darf NICHT
-  // registriert sein (sonst schriebe ein localhost-Patch in den Owner-Bucket).
-  const srv = await startServer({ env: { SELF_SERVICE_ENABLED: "true" }, seed: seedState({ tenants: [tenantB()] }) });
-  try {
-    await t.test("GET /api/self-service/state -> 404 (nicht registriert)", async () => {
-      assert.equal((await getJson(`${srv.localUrl}/api/self-service/state`, asTenant(SUB_B))).status, 404);
-    });
-
-    await t.test("POST /api/self-service/settings -> 404, kein Write in den Owner-Bucket", async () => {
-      const res = await postJson(`${srv.localUrl}/api/self-service/settings`, { agentName: "MTOFF" }, asTenant(SUB_B));
-      assert.equal(res.status, 404);
-      assert.equal(JSON.stringify(srv.readStore().settings).includes("MTOFF"), false, "kein Write");
-    });
-  } finally {
-    await srv.stop();
-  }
+    const res = await postSettings(s, { agentName: "Boese" }, s.cookieSuspended);
+    assert.equal(res.status, 403);
+    assert.equal(JSON.stringify(s.store.load().settings).includes("Boese"), false, "kein Write bei 403");
+  } finally { await s.close(); }
 });
