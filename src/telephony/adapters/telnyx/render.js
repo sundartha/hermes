@@ -8,26 +8,31 @@ import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 
 // Logisches Voice-Profil -> Telnyx-TeXML-Voice-Attribute. Telnyx TeXML akzeptiert
-// AWS-Polly-Voices im Format "Polly.<VoiceId>-Neural" (Telnyx-Doku, Say-Verb), also
-// derselbe Bezeichner wie der Twilio-Renderer. Fail-closed: unbekanntes Profil ist
-// ein Programmierfehler (wirft), kein stiller Default-Voice-Fallback.
+// Azure-NTTS-Voices im Format "Azure.<locale>-<VoiceId>Neural" (Telnyx-Doku, Say-Verb;
+// Owner-Wahl 2026-06-16: natuerlichere deutsche Stimme als AWS Polly Vicki-Neural).
+// Die Locale steckt im Voice-Namen; language="de-DE" bleibt konsistent erhalten.
+// Fail-closed: unbekanntes Profil ist ein Programmierfehler (wirft), kein stiller
+// Default-Voice-Fallback. Twilio-Renderer bleibt bewusst auf Polly (anderer Pfad).
 const TELNYX_VOICE = Object.freeze({
-  [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Polly.Vicki-Neural", language: "de-DE" },
+  [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Azure.de-DE-KatjaNeural", language: "de-DE" },
 });
 
 // Telnyx-TeXML-Gather-Attribute (deutsche Spracherkennung). transcriptionEngine ist
 // PFLICHT, damit Telnyx ueberhaupt transkribiert: ohne Engine erkennt `<Gather
 // input="speech">` keine Sprache und sendet kein SpeechResult zurueck (Telnyx-
 // TeXML-Spec) - das war der Inbound-Audio-Bug (Agent hoerte den Angerufenen nie).
-// "Telnyx" = die in-house-Engine (Owner-Wahl 2026-06-15; guenstiger als Google),
-// language="de-DE" steuert die Sprache. Twilios speechModel/speechTimeout/
-// actionOnEmptyResult sind Twilio-spezifisch und hier bewusst NICHT gesetzt.
-// Attribut-Reihenfolge ist vertraglich (Einfuege-Reihenfolge); der Snapshot-Test
-// nagelt sie fest.
+// "Deepgram" + model "deepgram/nova-3" = hoechste Erkennungsgenauigkeit (Owner-Wahl
+// 2026-06-16; Premium-Add-on, ersetzt die in-house-Engine). KRITISCH: Deepgram
+// erwartet fuer Deutsch den Sprachcode "de" (NICHT "de-DE", sonst keine Transkription);
+// der model-Vendor MUSS zu transcriptionEngine passen (Telnyx-Doku). Twilios
+// speechModel/speechTimeout/actionOnEmptyResult sind Twilio-spezifisch und hier
+// bewusst NICHT gesetzt. Attribut-Reihenfolge ist vertraglich (Einfuege-Reihenfolge);
+// der Snapshot-Test nagelt sie fest.
 const GATHER_ATTRS = Object.freeze({
   input: "speech",
-  language: "de-DE",
-  transcriptionEngine: "Telnyx",
+  language: "de",
+  transcriptionEngine: "Deepgram",
+  model: "deepgram/nova-3",
 });
 
 // XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden

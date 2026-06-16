@@ -152,7 +152,7 @@ export const config = {
   sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || "3600", 10),
 
   // ---- Voice-Engine ----
-  // "budget"  = Twilio STT/TTS + Claude Haiku (quasi gratis, Default)
+  // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)
   // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
   voiceEngine: process.env.VOICE_ENGINE || "budget",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
