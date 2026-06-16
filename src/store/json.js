@@ -23,6 +23,7 @@ export function load() {
     state.notifications ||= [];
     state.profiles ||= {};
     state.numbers ||= [];
+    state.provisioningJobs ||= []; // P6b2: Job-Spur in bestehenden Stores nachziehen
   } catch {
     state = ops.makeDefaultState();
     save();

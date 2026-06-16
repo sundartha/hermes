@@ -48,6 +48,10 @@ export const config = {
   storeBackend: (process.env.STORE_BACKEND || "json").toLowerCase(),
   // Postgres-Connection-String (NUR bei STORE_BACKEND=pg). Secret -> nie loggen.
   databaseUrl: process.env.DATABASE_URL || "",
+  // ---- Queue-Backend (async Provisioning-Worker, P6b2) ----
+  // "memory" (Default, fail-closed) = deterministische In-Memory-Queue (drain-on-
+  // demand, kein Timer). "pgboss" ist vorbereitet, aber deferred nach P8 (wirft).
+  queueBackend: (process.env.QUEUE_BACKEND || "memory").toLowerCase(),
 
   port: parseInt(process.env.PORT || "3000", 10),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig

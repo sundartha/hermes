@@ -57,6 +57,10 @@ export const BASE_ENV = {
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
   STORE_BACKEND: "json",
   DATABASE_URL: "",
+  // Queue-Backend neutral + fail-closed (In-Memory, deterministisch). Ohne diese
+  // Zeile leakt eine lokale .env mit QUEUE_BACKEND=pgboss via dotenv in Spawn-Tests
+  // -> Baseline-Drift (Lehre test-base-env-drift).
+  QUEUE_BACKEND: "memory",
   MAX_NUMBERS: "5",
   MAX_NUMBERS_PER_TENANT: "1",
   PROVISIONING_ENABLED: "false",
@@ -196,6 +200,21 @@ export function fakeBilling(overrides = {}) {
     async placeHold(args) { log.push(["placeHold", args]); return { paymentIntentId: "pi_fake_1" }; },
     async captureHold(id, amt) { log.push(["captureHold", id, amt]); },
     async cancelHold(id) { log.push(["cancelHold", id]); },
+  };
+  return { log, ...base, ...overrides };
+}
+
+// Fake-Provisioner-Adapter: aufzeichnend (log) + per-Override werfbar (DIP) -
+// reines Test-Double fuer provisionNumber/handleProvisionJob, kein Netz. Eine Quelle
+// (G5/S2) statt der frueher in onboarding-service/billing-hold-capture/provisioning-
+// worker dreifach kopierten Definition. log haelt die Schritte in Aufrufreihenfolge.
+export function fakeProvisioner(overrides = {}) {
+  const log = [];
+  const base = {
+    async searchNumbers() { log.push("search"); return [{ e164: "+4915799990001" }]; },
+    async orderNumber({ e164, idempotencyKey }) { log.push(`order:${e164}:${idempotencyKey}`); return { e164, providerNumberId: "num_ext_1" }; },
+    async configureNumber({ providerNumberId, connectionId }) { log.push(`configure:${providerNumberId}:${connectionId}`); },
+    async releaseNumber(id) { log.push(`release:${id}`); },
   };
   return { log, ...base, ...overrides };
 }

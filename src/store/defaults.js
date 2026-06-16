@@ -57,6 +57,15 @@ export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.RELEASED]: [],
 });
 
+// ---- Provisioning-Jobs (async Worker, P6b2) ----
+// Status eines enqueued Jobs. EINE Quelle (G5/G13): der In-Memory-Queue-Adapter
+// (queue/adapters/memory) UND die persistente Job-Spur im Store-Spiegel (state-ops
+// recordProvisioningJob) importieren dieselben Werte - sonst driften zwei Listen
+// von "queued"/"done"/"failed"-Strings auseinander. PROVISION_NUMBER_JOB ist der
+// einzige Job-Typ in P6b2 (Nummer kaufen + konfigurieren).
+export const PROVISIONING_JOB_STATUS = Object.freeze({ QUEUED: "queued", DONE: "done", FAILED: "failed" });
+export const PROVISION_NUMBER_JOB = "provision_number";
+
 // Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
 // Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
 export const TENANT_STATUS = Object.freeze({

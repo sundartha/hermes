@@ -163,6 +163,21 @@ CREATE TABLE IF NOT EXISTS number_assignment (
   released_at TEXT
 );
 
+-- provisioning_job: Job-Spur des async Provisioning-Workers (P6b2). idempotency_key
+-- verhindert Doppel-Records bei Retry; status = queued|done|failed. number_id/tenant_id
+-- fuer RLS + Re-Hydrierung. attempts/last_error fuer Audit/Reconciliation.
+CREATE TABLE IF NOT EXISTS provisioning_job (
+  id              TEXT PRIMARY KEY,
+  tenant_id       TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  number_id       TEXT NOT NULL REFERENCES number(id) ON DELETE CASCADE,
+  kind            TEXT NOT NULL,
+  status          TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  last_error      TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ---- Row Level Security (zweite Verteidigungslinie) ----
 -- Primaerlinie ist der app-seitige tenant_id-Filter; RLS faengt vergessene
 -- Filter ab. Policy: Zeile sichtbar/aenderbar nur, wenn tenant_id der GUC
@@ -187,6 +202,8 @@ ALTER TABLE number             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number             FORCE  ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  FORCE  ROW LEVEL SECURITY;
+ALTER TABLE provisioning_job   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provisioning_job   FORCE  ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenant_isolation ON settings;
 CREATE POLICY tenant_isolation ON settings
@@ -217,4 +234,7 @@ CREATE POLICY tenant_isolation ON number
   USING (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON number_assignment;
 CREATE POLICY tenant_isolation ON number_assignment
+  USING (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS tenant_isolation ON provisioning_job;
+CREATE POLICY tenant_isolation ON provisioning_job
   USING (tenant_id = current_setting('app.current_tenant', true));
