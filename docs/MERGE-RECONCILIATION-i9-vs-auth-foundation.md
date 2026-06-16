@@ -68,3 +68,20 @@ Die "Removal"-Sicht entstand durch Diff in Richtung `origin/master..HEAD`, wo up
 ## Empfehlung
 
 Merge ist **sicher und ueberwiegend mechanisch** — die Schreckensszenarien der ersten Sicht (erzwungenes Rewiring, silent Leak) sind durch die `merge-tree`-Verifikation widerlegt. Vorgehen: Phase 0–4 ausfuehren, Identity-Dedup + RLS-Erweiterung als Follow-up. Nicht blind `git merge` ohne Phase 2/3.
+
+---
+
+## Post-Merge Status (2026-06-16, nach Investigation des gemergten Trees)
+
+Merge ausgefuehrt (`36d0d11`, 426/426 gruen). Follow-ups gegen den GEMERGTEN Stand re-evaluiert:
+
+**#1 Identity-Dedup — ERLEDIGT** (`e44dd67`, gemerged `d7d67ce`). Befund: die zwei Kanaele waren disjunkt — `resolveTenant` matcht `tenant.idp_subject===sub`, das `upsertOnFirstLogin` nie setzte → fuer Web-Login-Tenants immer `null`. Fix (Option A, non-breaking): `upsertOnFirstLogin` setzt `idp_subject=sub` (`ON CONFLICT DO UPDATE` nur idp_subject, status unangetastet). Test: `web-auth-pg.test.js`. Beide Kanaele teilen jetzt eine Identitaetsquelle.
+
+**#2 RLS ueber Schreibpfade — KEINE ARBEIT NOETIG.** Befund (verifiziert): i9 `pg.js` `flush()` wrappt ALLE App-Daten-Writes (settings/calls/calendar/onboard/action-items) bereits in `BEGIN + set_config('app.current_tenant',…,true)`; die 9 Datentabellen haben FORCE RLS + `WITH CHECK`. `audit_log` ist BEWUSST RLS-frei (privilegierter append-only Insert via `withClient` ohne GUC; Schema-Kommentar dokumentiert es). RLS dort zu forcen wuerde Admin/Login-Audit-Writes brechen (WITH CHECK ohne GUC → reject) → Regression, NICHT machen.
+
+**#3 Login-Konvergenz (Self-Service hinter Web-Session) — GEPLANT, eigene Session.** Richtung entschieden: **web-session-only** (vollendet i9s deferred-Login-Absicht). Es ist ein echtes Restructuring, kein Wiring:
+- **Self-Service wird pg-pflichtig**: `webAuthMw` braucht DB-Sessions; heute laeuft i9-Self-Service unter json + `X-Internal-Identity`.
+- **Load-Order**: `upcomingCalendar` (`server.js`) ist `const` (nicht hoisted) → Self-Service-Routen koennen nicht naiv in den `if(sessionSecret&&pg)`-Block (Modul-Load) gezogen werden; Helfer-Refactor noetig.
+- **Test-Neubau**: `test/i9-self-service.test.js` nutzt json + seedState + Header und vermeidet pglite bewusst → muss als neuer pg-Integrationstest (Session-Cookie + Tenant-Daten) neu gebaut werden.
+- **Frontend**: `public/tenant.html` von manuellem Bearer-Paste (localStorage) auf `/auth/login`-Redirect + Cookie umbauen.
+- Umsetzungs-Skizze: Self-Service-Routen in den web-auth-Block (vor Basic-Auth) mit eigenem `selfServiceEnabled && multiTenant`-Gate + `webAuthMw`; `requireTenant` → `req.tenant.tenantId`; Helfer-TDZ vorher aufloesen. Flag-gated (`SELF_SERVICE_ENABLED=false`), nicht live → kein Zeitdruck.
