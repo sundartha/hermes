@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
@@ -446,6 +446,21 @@ app.post("/voice/status", (req, res) => {
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
 
+// Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). Owner: die
+// config-basierte Owner-Nummer pro Provider (Telnyx sobald TELNYX_NUMBER gesetzt,
+// sonst Twilio) - byte-identisch zum Bestand. Jeder ANDERE Tenant telefoniert NUR
+// unter EIGENER aktiver Nummer (e164 + provider aus s.numbers). Keine aktive eigene
+// Nummer -> null -> Reject, NIE die Owner-Nummer als Fremd-Tenant-Fallback
+// (Toll-Fraud-Riegel, Pre-Mortem R3).
+function outboundFrom(s, tenantId, cfg) {
+  if (tenantId === OWNER_TENANT_ID) {
+    const provider = cfg.telnyxNumber ? PROVIDER.TELNYX : DEFAULT_PROVIDER;
+    return { fromNumber: ownerNumberForProvider(provider, cfg), provider };
+  }
+  const own = s.numbers.find((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE);
+  return own ? { fromNumber: own.e164, provider: own.provider } : null;
+}
+
 // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
 app.post("/api/calls", async (req, res) => {
   const b = req.body || {};
@@ -454,9 +469,21 @@ app.post("/api/calls", async (req, res) => {
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
 
   // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
+  // Profile-Achse (Rechte: resolveProfile/requestedBy) UND Tenant-Achse (requestTenant)
+  // PARALLEL aus derselben Identitaet (L4). Flag aus -> requestTenant === OWNER_TENANT_ID
+  // (byte-identisch).
   const identity = internalIdentity(req);
   const profile = store.resolveProfile(identity);
   const requestedBy = identity || OWNER_ID;
+  const tenantId = requestTenant(req);
+
+  // Tenant-Achse fail-closed: VORHANDENE, aber unbekannte Identitaet -> Reject, NIE
+  // Owner (Asymmetrie zu resolveProfile). Ohne gueltigen Tenant darf gar kein
+  // Outbound entstehen.
+  if (tenantId === TENANT_REJECT) {
+    audit("place_call_denied", req, `to=${to} grund=tenant_unbekannt requestedBy=${requestedBy}`);
+    return res.status(403).json({ error: "Kein Tenant fuer diese Identitaet." });
+  }
 
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
   const gateErr = numberGateError(to, profile, requestedBy);
@@ -473,20 +500,27 @@ app.post("/api/calls", async (req, res) => {
     invalidText("caller_name", b.caller_name);
   if (textErr) return res.status(400).json({ error: textErr });
 
-  // Outbound-from bleibt Owner bis P5 -> tenantId = OWNER_TENANT_ID. Schnittmenge
-  // (R2): pro-Tenant-Budget UND globaler Notaus. Fuer owner-only byte-identisch.
-  if (store.budgetExceeded(OWNER_TENANT_ID, config) || store.globalBudgetExceeded(config)) {
-    audit("place_call_denied", req, `to=${to} grund=budget`);
+  // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): Owner behaelt die
+  // config-Owner-Nummer (byte-identisch); jeder andere Tenant nur unter EIGENER aktiver
+  // Nummer -> keine -> Reject, NIE Owner-Nummer als Fremd-Tenant-Fallback.
+  const outbound = outboundFrom(store.load(), tenantId, config);
+  if (!outbound) {
+    audit("place_call_denied", req, `to=${to} grund=keine_tenant_nummer tenant=${tenantId} requestedBy=${requestedBy}`);
+    return res.status(403).json({ error: "Kein aktive Absendernummer fuer diesen Tenant." });
+  }
+  const { fromNumber, provider: outboundProvider } = outbound;
+
+  // Budget-Schnittmenge (R2): pro-Tenant-Budget (requestTenant) UND globaler Notaus
+  // (Summe ueber alle Buckets) PARALLEL, beide fail-closed. Der globale Notaus wird
+  // NIE entfernt; pro-Tenant schraenkt nur zusaetzlich ein. Owner-only byte-identisch.
+  if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
+    audit("place_call_denied", req, `to=${to} grund=budget tenant=${tenantId}`);
     return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
-  // Outbound-Provider: Telnyx, sobald eine Telnyx-Absendernummer konfiguriert ist
-  // (TELNYX_NUMBER), sonst Twilio-Default. from = passende Owner-Absendernummer
-  // (ownerNumberForProvider). Der /voice/outbound-Webhook rendert dank call.provider
-  // (P6a) automatisch TeXML statt TwiML.
-  const outboundProvider = config.telnyxNumber ? PROVIDER.TELNYX : DEFAULT_PROVIDER;
-  const fromNumber = ownerNumberForProvider(outboundProvider, config);
+  // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
+  // statt TwiML.
   const call = store.createCall({
     direction: "outbound",
     from: fromNumber,
@@ -498,7 +532,7 @@ app.post("/api/calls", async (req, res) => {
     language: b.language || "de",
     maxDurationS: maxDur,
     requestedBy,
-    tenantId: OWNER_TENANT_ID,
+    tenantId,
     provider: outboundProvider,
   });
   audit("place_call", req, `to=${to} call=${call.id} provider=${outboundProvider} requestedBy=${requestedBy}`);
