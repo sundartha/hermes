@@ -470,6 +470,13 @@ app.post("/voice/status", (req, res) => {
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
 
+// Die EINE aktive Nummer eines Tenants aus der numbers-Tabelle (eine Quelle fuer
+// outboundFrom (I7, Absender-Wahl) UND activeNumberFor (I5, /api/state-Anzeige) -
+// kein doppelter Tenant-/Status-Filter, G5). Liefert den Datensatz oder undefined.
+function findActiveNumber(s, tenantId) {
+  return s.numbers.find((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE);
+}
+
 // Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). Owner: die
 // config-basierte Owner-Nummer pro Provider (Telnyx sobald TELNYX_NUMBER gesetzt,
 // sonst Twilio) - byte-identisch zum Bestand. Jeder ANDERE Tenant telefoniert NUR
@@ -481,7 +488,7 @@ function outboundFrom(s, tenantId, cfg) {
     const provider = cfg.telnyxNumber ? PROVIDER.TELNYX : DEFAULT_PROVIDER;
     return { fromNumber: ownerNumberForProvider(provider, cfg), provider };
   }
-  const own = s.numbers.find((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE);
+  const own = findActiveNumber(s, tenantId);
   return own ? { fromNumber: own.e164, provider: own.provider } : null;
 }
 
@@ -616,12 +623,13 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
 const STATE_CALLS = 30, STATE_ACTION_ITEMS = 50, STATE_CALENDAR = 10, STATE_NOTIFICATIONS = 10;
 
-// Aktive Nummer eines Tenants aus der numbers-Tabelle (fail-closed: keine eigene
-// aktive Nummer -> "", NIE config.twilioNumber als Fremd-Tenant-Fallback -> kein
-// PII-/Toll-Fraud-Leck). Die Owner-Nummer ist config-derived ueber seedOwnerNumber
-// (status active) -> die Owner-Sicht bleibt byte-identisch zu config.twilioNumber.
+// Aktive Nummer eines Tenants als e164-String fuer die /api/state-Anzeige
+// (fail-closed: keine eigene aktive Nummer -> "", NIE config.twilioNumber als
+// Fremd-Tenant-Fallback -> kein PII-/Toll-Fraud-Leck). Die Owner-Nummer ist
+// config-derived ueber seedOwnerNumber (status active) -> die Owner-Sicht bleibt
+// byte-identisch zu config.twilioNumber. Gleiche Quelle wie outboundFrom.
 function activeNumberFor(s, tenantId) {
-  const hit = s.numbers.find((n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE);
+  const hit = findActiveNumber(s, tenantId);
   return hit ? hit.e164 : "";
 }
 
