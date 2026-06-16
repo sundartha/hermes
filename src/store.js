@@ -43,7 +43,27 @@ async function createPgBackend() {
   return store;
 }
 
-const backend = config.storeBackend === "pg" ? await createPgBackend() : jsonBackend;
+// AC6: pg-Store ist eine HARTE Dependency (Persistenz auch fuer Telefonie). Ist die
+// DB beim Boot unerreichbar / schlaegt die Init fehl, MUSS der Prozess mit klarer,
+// secret-freier Diagnose sterben (exit 1) statt mit roher pg-Rejection (die einen
+// Connection-String-Fragment im Stack leaken koennte) ODER - schlimmer - still auf
+// json zurueckzufallen (Backend-Split-Brain / Daten-Inkonsistenz). Der globale
+// uncaughtException-Guard (AC4) wuerde die Rejection sonst nur loggen und der Prozess
+// liefe ohne Persistenz weiter - darum hier ein eigener, diagnostizierter Exit.
+let backend;
+if (config.storeBackend === "pg") {
+  try {
+    backend = await createPgBackend();
+  } catch (e) {
+    console.error(
+      "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
+      "DB unerreichbar oder Init fehlgeschlagen. Ursache: " + (e && e.message ? e.message : String(e))
+    );
+    process.exit(1);
+  }
+} else {
+  backend = jsonBackend;
+}
 
 // 31 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
 export const {

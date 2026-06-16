@@ -1,5 +1,7 @@
 // Voice-Gateway: Twilio-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
+// MUSS erste Importzeile bleiben (vor store.js) - globales Crash-Netz, ESM-Eval-Order (T-P0-07).
+import "./process-guards.js";
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -22,6 +24,7 @@ import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSession
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
+import { guardedBoot } from "./boot-guard.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -129,59 +132,65 @@ registerWellKnown(app);
 // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
 // damit /auth/login nicht durch Basic-Auth geblockt wird.
 if (config.sessionSecret && config.storeBackend === "pg") {
-  // await: createPortalRunner prueft fail-closed die DB-Rolle (F5, Superuser/BYPASSRLS).
-  // Wirft die Assertion, propagiert der Fehler und der Prozess startet nicht.
-  const portalRunner = await createPortalRunner();
-  const oidc = makeOidc(config);
-  const accounts = makeAccounts(portalRunner);
-  const sessions = makeSessions(portalRunner);
-  const auditStore = makeAuditStore(portalRunner);
-  const portalStore = makePortalStore(portalRunner);
-  const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
-  const adminMw = adminOnly({ adminEmails: config.adminEmails });
-  const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
-  app.use("/auth", loginRateLimiter);
-  app.use(makeWebAuthRoutes({
-    secret: config.sessionSecret,
-    redirectUri: config.publicUrl + "/auth/callback",
-    ttlSeconds: config.sessionTtlSeconds,
-    oidc,
-    accounts,
-    sessions,
-    audit: auditStore,
-  }));
+  // AC5 (Boot-Entkopplung): der gesamte Portal-/Web-Login-Block laeuft in guardedBoot.
+  // Wirft createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
+  // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> die Web-Login/Portal-
+  // Routen werden NICHT gemountet (existieren nicht -> 404), aber der Boot laeuft weiter:
+  // /voice, /healthz, /mcp und das Owner-Dashboard (Basic-Auth NACH diesem Block) bleiben.
+  // Portal-pg-Fail toetet die Telefonie also nicht mehr.
+  await guardedBoot("Web-Login/Portal", async () => {
+    const portalRunner = await createPortalRunner();
+    const oidc = makeOidc(config);
+    const accounts = makeAccounts(portalRunner);
+    const sessions = makeSessions(portalRunner);
+    const auditStore = makeAuditStore(portalRunner);
+    const portalStore = makePortalStore(portalRunner);
+    const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
+    const adminMw = adminOnly({ adminEmails: config.adminEmails });
+    const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
+    app.use("/auth", loginRateLimiter);
+    app.use(makeWebAuthRoutes({
+      secret: config.sessionSecret,
+      redirectUri: config.publicUrl + "/auth/callback",
+      ttlSeconds: config.sessionTtlSeconds,
+      oidc,
+      accounts,
+      sessions,
+      audit: auditStore,
+    }));
 
-  // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt
-  // req.tenant (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten.
-  // VOR der Basic-Auth-Schicht registriert -> /api/portal/* ist owner-Basic-Auth-
-  // exempt und ausschliesslich ueber webAuth (Kunden-Session) gesichert.
-  app.get("/api/portal/state", webAuthMw, async (req, res) => {
-    try {
-      const calls = await portalStore.listCalls(req.tenant.tenantId);
-      res.json({ tenantId: req.tenant.tenantId, calls });
-    } catch (e) {
-      console.error("[portal] state", e.message);
-      res.status(500).json({ error: "interner Fehler" });
+    // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt
+    // req.tenant (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten.
+    // VOR der Basic-Auth-Schicht registriert -> /api/portal/* ist owner-Basic-Auth-
+    // exempt und ausschliesslich ueber webAuth (Kunden-Session) gesichert.
+    app.get("/api/portal/state", webAuthMw, async (req, res) => {
+      try {
+        const calls = await portalStore.listCalls(req.tenant.tenantId);
+        res.json({ tenantId: req.tenant.tenantId, calls });
+      } catch (e) {
+        console.error("[portal] state", e.message);
+        res.status(500).json({ error: "interner Fehler" });
+      }
+    });
+
+    // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
+    // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben
+    // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
+    // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404.
+    app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
+
+    // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
+    // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am
+    // X-Internal-Identity-Pfad. NUR hier (im Web-Login-Block: sessionSecret + pg)
+    // registriert -> ohne Web-Login-Infra existieren die Routen nicht (404). Zusaetzlich
+    // an SELF_SERVICE_ENABLED + MULTI_TENANT gegated (eigenes Reife-Flag; ohne
+    // MULTI_TENANT keyt der Mirror nur den Owner-Bucket). VOR der Basic-Auth-Schicht ->
+    // ausschliesslich ueber webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth.
+    // audit = util.audit (nur Keys, keine Werte/PII).
+    if (config.selfServiceEnabled && config.multiTenant) {
+      app.use(makeSelfServiceRoutes({ store, webAuthMw, audit }));
     }
   });
-
-  // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
-  // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben
-  // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
-  // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404.
-  app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
-
-  // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
-  // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am
-  // X-Internal-Identity-Pfad. NUR hier (im Web-Login-Block: sessionSecret + pg)
-  // registriert -> ohne Web-Login-Infra existieren die Routen nicht (404). Zusaetzlich
-  // an SELF_SERVICE_ENABLED + MULTI_TENANT gegated (eigenes Reife-Flag; ohne
-  // MULTI_TENANT keyt der Mirror nur den Owner-Bucket). VOR der Basic-Auth-Schicht ->
-  // ausschliesslich ueber webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth.
-  // audit = util.audit (nur Keys, keine Werte/PII).
-  if (config.selfServiceEnabled && config.multiTenant) {
-    app.use(makeSelfServiceRoutes({ store, webAuthMw, audit }));
-  }
 }
 
 app.use((req, res, next) => {
