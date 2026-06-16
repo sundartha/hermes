@@ -599,8 +599,9 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   const call = store.getCall(req.params.id);
   // L5: fremder Tenant -> 404 (kein Existenz-Leck, NICHT 403). Hinter dem Flag:
   // aus -> ungefiltert wie heute (byte-identisch, auch fuer Calls ohne tenantId).
-  // Inline gegen I5's requireTenantOwnsCall-Signatur (Konsolidierung beim Rebase).
-  if (!call || (config.multiTenant && call.tenantId !== requestTenant(req)))
+  // Nutzt I5's gemeinsamen tenantOwnsCall-Helper (eine Quelle der Ownership-Regel,
+  // wie GET /api/calls/:id); !call short-circuitet vor dem tenantOwnsCall-Zugriff.
+  if (!call || (config.multiTenant && !tenantOwnsCall(call, requestTenant(req))))
     return res.status(404).json({ error: "not found" });
   if (call.status !== "active") return res.json({ status: call.status });
   const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
