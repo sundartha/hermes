@@ -271,10 +271,14 @@ export function makeAccounts(runner) {
     async upsertOnFirstLogin({ sub, email }) {
       return runner.withClient(async (c) => {
         const tenantId = `t_${sub}`;
-        // Tenant anlegen falls nicht vorhanden (idempotent)
+        // Tenant anlegen falls nicht vorhanden (idempotent). idp_subject = sub macht
+        // den Tenant ueber i9 resolveTenant (MCP/REST-Kanal) auffindbar -> EINE
+        // Identitaetsquelle fuer beide Kanaele (Web-Login B + MCP i9). ON CONFLICT
+        // aktualisiert NUR idp_subject, nie den (evtl. schon aktivierten) status.
         await c.query(
-          `INSERT INTO tenant (id, status) VALUES ($1, 'suspended') ON CONFLICT DO NOTHING`,
-          [tenantId]
+          `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)
+           ON CONFLICT (id) DO UPDATE SET idp_subject = EXCLUDED.idp_subject`,
+          [tenantId, sub]
         );
         // Account anlegen/aktualisieren
         await c.query(
