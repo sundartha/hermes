@@ -292,10 +292,13 @@ export function findNumber(s, id) {
   return s.numbers.find((n) => n.id === id) || null;
 }
 
+// s.tenants kann fehlen (seedState seedet keine Tenants) -> defensiver Default.
+// Eine Quelle fuer alle Tenant-Finder (findTenant via id, resolveTenant via
+// idpSubject); der Guard lebt damit an EINER Stelle.
+const tenantsOf = (s) => s.tenants || [];
+
 export function findTenant(s, id) {
-  // s.tenants kann fehlen (seedState seedet keine Tenants) -> defensiver Default;
-  // der Guard lebt damit an EINER Stelle (auch tenantContext nutzt ihn).
-  return (s.tenants || []).find((t) => t.id === id) || null;
+  return tenantsOf(s).find((t) => t.id === id) || null;
 }
 
 // ---- Tenant-Kontext-Seam (Identitaets-Schicht, I0) ----
@@ -523,7 +526,7 @@ export function resolveProfile(s, email) {
 // 1:1 (#2): liefert genau eine tenantId ODER null, keine Liste. Keyt auf idpSubject (#1).
 export function resolveTenant(s, idpSubject) {
   if (!idpSubject) return null; // leer/null NICHT iterieren -> kein versehentlicher Owner-Fallback
-  const tenant = (s.tenants || []).find((t) => t.idpSubject === idpSubject);
+  const tenant = tenantsOf(s).find((t) => t.idpSubject === idpSubject);
   return tenant ? tenant.id : null;
 }
 
