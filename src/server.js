@@ -639,12 +639,15 @@ app.delete("/api/profiles/:email", (req, res) => {
 const ONBOARD_REASON_STATUS = { tenant_inactive: 403, tenant_cap: 409, global_cap: 429 };
 
 app.post("/api/onboard", async (req, res) => {
-  const tenantId = (req.body || {}).tenantId;
+  // ownerName ist optional + Freitext (darf Leerzeichen, NICHT durch validIdentity);
+  // registerTenant trimmt + laesst leer weg (Owner-Fallback). validIdentity bleibt
+  // nur auf tenantId (Routing-Schluessel, kein Whitespace).
+  const { tenantId, ownerName } = req.body || {};
   if (!validIdentity(tenantId))
     return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
 
   const s = store.load();
-  registerTenant(s, tenantId);
+  registerTenant(s, tenantId, { ownerName });
   const reqRes = requestNumber(s, {
     tenantId,
     provider: PROVIDER.TELNYX,

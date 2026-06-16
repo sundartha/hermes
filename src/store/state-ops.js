@@ -316,11 +316,17 @@ export function tenantContext(s, ownerName, tenantId) {
   };
 }
 
-// Idempotent: legt den Tenant an, falls neu (status active). Liefert den Tenant.
-export function registerTenant(s, id) {
+// Idempotent + set-on-create: legt den Tenant an, falls neu (status active), und
+// setzt dabei EINMALIG die Identitaet. Liefert den Tenant. ownerName ist die Quelle
+// der Tenant-Identitaet aus dem Onboarding (I3); ein bestehender Tenant kommt
+// unveraendert zurueck (kein Upsert). Fehlt/leer/whitespace-only -> Feld weggelassen,
+// damit der Owner-Fallback im tenantContext sauber greift (kein leerer Daten-Muell).
+export function registerTenant(s, id, { ownerName } = {}) {
   const existing = findTenant(s, id);
   if (existing) return existing;
   const tenant = { id, status: TENANT_STATUS.ACTIVE };
+  const name = typeof ownerName === "string" ? ownerName.trim() : "";
+  if (name) tenant.ownerName = name;
   s.tenants.push(tenant);
   return tenant;
 }
