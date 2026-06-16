@@ -100,6 +100,22 @@ services:
       # Postgres-Connection-String (nur bei STORE_BACKEND=pg). Secret -> im Dashboard.
       - key: DATABASE_URL
         sync: false
+      # ---- Web-Login (Kunden-Portal, OIDC Auth-Code + PKCE) ----
+      # SESSION_SECRET: langer Zufallswert (z.B. openssl rand -hex 32). Secret -> Dashboard.
+      - key: SESSION_SECRET
+        sync: false
+      # OIDC-Client fuer den Browser-Flow (Issuer = OAUTH_ISSUER_URL, geteilt mit /mcp).
+      - key: OIDC_CLIENT_ID
+        sync: false
+      # WorkOS AuthKit Client-Secret. Secret -> im Dashboard.
+      - key: OIDC_CLIENT_SECRET
+        sync: false
+      # Admin-Allowlist (kommasepariert, E-Mails). Leer = kein Admin-Zugriff.
+      - key: ADMIN_EMAILS
+        sync: false
+      # Strengeres Rate-Limit fuer Login/Callback (Brute-Force-Schutz). Default 10/min.
+      - key: LOGIN_RATE_LIMIT_PER_MIN
+        value: "10"
       - key: TWILIO_EDGE
         value: frankfurt
       - key: SEND_SMS_SUMMARY
