@@ -388,3 +388,64 @@ konfigurieren, `SESSION_SECRET`/`OIDC_CLIENT_*`/`ADMIN_EMAILS` in Render setzen,
 Postgres mit non-superuser-App-Rolle + pgBouncer (transaction mode) bereitstellen,
 echten Killer-Test fahren. Portal-UI (Sub-Projekt C), Marketing/Pricing (A),
 Billing/Real-Provisioning (D) sind separater Scope.
+
+## Store-Integritaet (P1/OT-3, umgesetzt 2026-06-16, `feat/crash-p1-store-integrity`)
+
+Der JSON-Store (`src/store/json.js`) ist der einzige Persistenz-Pfad fuer Calls, Tenants,
+Usage/Budget-Counter, Profile und Nummern. P1 haertet ihn quellseitig (P0 = globales Netz,
+P1 = Quelle). Plan: `tasks/crash-hotspots/P1-plan.md`.
+
+- **Atomic write (AC1, `save()`):** Schreibt nie mehr in-place. Stattdessen Temp-File IM
+  SELBEN Verzeichnis (`<FILE>.tmp-<pid>-<rand>`) -> `fsyncSync` -> `renameSync` ueber
+  `store.json`. Ein Crash/Kill/SIGTERM mid-write hinterlaesst hoechstens ein verwaistes
+  `.tmp`-File, NIE ein truncated `store.json`. Schuetzt insb. den Budget-/Usage-Counter
+  (CLAUDE.md Regel 1) gegen truncated-write-Verlust.
+- **Single-Writer-Guard (AC2, `withStoreLock`):** Prozess-lokaler Promise-Chain-Mutex.
+  Serialisiert read-modify-write-Sequenzen mit einem `await` zwischen `load()` und `save()`,
+  damit kein Lost Update entsteht. Angewendet auf die `/api/onboard`-Saves.
+- **Korruption wird NIE still verschluckt (AC3, `load()`):** Trennt hart First-Boot
+  (`ENOENT` -> Defaults, kein Alarm) von Korruption (File vorhanden, `JSON.parse` wirft ->
+  Rename nach `<FILE>.corrupt-<ISO-ts>` + LAUTES `[store] KORRUPT`-Log + Defaults). Andere
+  Read-Fehler (z.B. `EACCES`) werden re-thrown (P0-Netz faengt sichtbar), NIE als First-Boot
+  fehlinterpretiert. Der frueher nackte `catch{}` (stiller `makeDefaultState`-Wipe, der das
+  forensisch rettbare File ueberschrieb) ist weg.
+- **`POST /api/onboard` save-Haertung (AC4):** Die zwei Request-Pfad-Saves (requested/
+  Dry-Run + Job-Spur) laufen je in `store.withStoreLock(...)` + `.catch` -> bei Save-I/O-
+  Fehler **behandelter 503** `{error:"Persistenz fehlgeschlagen"}` statt unhandled async
+  rejection. mem/disk-Divergenz wird geloggt.
+- **CLAUDE.md-Gates unangetastet:** Allowlist/Disclosure/Signatur nicht beruehrt; das
+  Budget-Gate wird durch AC1/AC2 GESTAERKT (kein Counter-Rollback durch truncated/lost write).
+
+**Bewusst akzeptierte Abweichungen / Restrisiken:**
+- **`withStoreLock` lebt in der Fassade (`src/store.js`), NICHT im json-Backend** (Plan-
+  Skizze sah json.js vor). Grund: der Mutex ist eine JS-Nebenlaeufigkeits-Eigenschaft des
+  EINEN Node-Prozesses und backend-unabhaengig. In `store.js` ist `store.withStoreLock` auch
+  im pg-Pfad definiert; eine Bindung aus dem Backend (das pg-Backend exportiert es nicht)
+  waere `undefined` -> TypeError in `/api/onboard`. Single source, kein Duplikat.
+- **Prozess-lokaler Mutex genuegt nur bei 1 Instanz.** Alle Caller teilen im selben Node-
+  Prozess das Modul-globale `state`; ein In-Process-Mutex reicht. Ein Multi-Prozess-Deploy
+  braeuchte einen File-Lock (z.B. `proper-lockfile`/`flock`) ODER das pg-Backend mit DB-
+  Transaktionen. **Heute n/a: Render free plan = 1 Instanz.** Bewusst akzeptiertes Prototyp-
+  Risiko - bei Skalierung auf >1 Instanz MUSS einer der beiden Wege her.
+- **`renameSync`-Atomaritaet nur same-FS:** das `.tmp` liegt IMMER im selben Verzeichnis wie
+  `store.json` -> gleiches Filesystem -> POSIX-atomarer Rename, kein `EXDEV`. (Genau darum
+  NICHT `os.tmpdir()`.)
+- **`.corrupt`-Rename schlaegt selbst fehl (EACCES, read-only FS):** Der Rename ist in
+  eigenem try/catch (Dienst crasht nicht). Schlaegt er fehl, ueberschreibt das folgende
+  Default-`save()` das korrupte File trotzdem -> Datenverlust des korrupten Inhalts. Bewusst
+  akzeptiert: Dienst-Ueberleben hat Vorrang, das laute `[store] KORRUPT`-Log sichert die Spur.
+- **Scope-Grenze `withStoreLock`:** NUR `/api/onboard` ist gewrappt. `place_call`
+  (`/api/calls`) und `/api/billing/flush-meters` haben zwar ein `await` zwischen `load()` und
+  `save()`, mutieren aber KEINEN Counter ueber ein vor dem `await` gelesenes lokales
+  Zwischenergebnis (place_call: `save()` haengt nur `tw.sid` an; flush-meters: markiert per
+  Referenz auf dem geteilten Singleton). Unter dem Shared-Singleton- + synchronen-
+  `writeFileSync`-Modell entsteht dort kein klassischer Lost Update. Der
+  `runProvisioningDrain`-Worker (P6, fire-and-forget, eigenes try/catch) bleibt ebenfalls
+  ungewrappt (P1-Scope = Request-Pfad). Fuer zukuenftige counter-RMW-ueber-await-Sequenzen
+  ist `withStoreLock` der Baustein.
+
+Verifikation: `npm test` 478 gruen (471 Baseline + 7 neue T-P1-01..06, 0 Drop);
+`test/store-integrity.test.js` + `test/onboard-persist-failure.test.js`. Smoke (echtes
+`src/server.js`): korruptes `store.json` -> `[store] KORRUPT`-Log + `.corrupt`-Backup
+(Inhalt erhalten) + valides neues `store.json`; zwei parallele `/api/onboard` -> beide
+persistiert (kein Lost Update).

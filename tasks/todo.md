@@ -670,3 +670,64 @@ assertNoBypassRls -> realer [F5]-Throw), reachable-pg-over-socket ist offline n.
   `src/server.js`, `src/mcp-server.js`, `src/portal-pool.js`, `src/store.js`. Tests:
   `test/process-guards.test.js`, `test/boot-guard.test.js`, `test/boot-decoupling.test.js`
   (alle neu) + `test/portal-pool-assertion.test.js` (T-P0-04/04b ergaenzt).
+
+# P1 — Store-Integritaet (2026-06-16, feat/crash-p1-store-integrity)
+
+Quelle: `tasks/crash-hotspots/P1-plan.md`. TDD nach T-P1-Cases. Baseline master `0785fed`
+(P0 + P6, 471 Tests). Drift-Hinweis: P6 hat `/api/onboard` async umgebaut (4 save-Punkte
+statt 1) -> AC4 gegen die NEUE Struktur re-lokalisiert (Request-Pfad-Saves @937/@953 im
+`withStoreLock`; Worker-Drain-Saves @985/@989 = P6-Scope, unberuehrt).
+
+## Pre-Mortem (vor Umsetzung benannt)
+- Atomic-Rename cross-device (EXDEV) -> tmp IMMER im selben Verzeichnis (same-FS), nie
+  os.tmpdir(). T-P1-01 verifiziert Rename auf realem Ziel-Verzeichnis.
+- Mutex-Re-Entrancy/Deadlock -> Hard-Rule im Kommentar: kein withStoreLock im
+  withStoreLock-Body; `.then(run, run)` (ein Fehler bricht die Kette nicht ab).
+- fsync-Latenz pro save() -> akzeptiert (Korrektheit vor Latenz; Append-Pfad nieder-
+  frequent, pro Gespraechsturn).
+- Budget-Counter-Rollback = Kern-Kostenrisiko -> AC2 + T-P1-02 direkt darauf.
+- .corrupt-Rename-EACCES -> eigenes try/catch, Restrisiko (Default-save ueberschreibt)
+  in PLAN-SECURITY.md akzeptiert.
+- First-Boot-vs-Korruption-Fehlklassifikation -> nur ENOENT -> Defaults; andere
+  Read-Fehler re-thrown.
+
+## Items (Expected Result + Verifikation)
+- [x] **AC1 / T-P1-01 — `src/store/json.js` save() atomic**
+  - Soll: tmp+fsync+rename statt in-place; bricht rename ab -> store.json unveraendert
+    (kein in-place-Write); erfolgreicher save -> kein .tmp-Leftover.
+  - Verify: `node --test test/store-integrity.test.js`
+- [x] **AC3 / T-P1-03,04 — `json.js` load() First-Boot vs. Korruption**
+  - Soll: ENOENT -> Defaults, kein Alarm (T-P1-04); korruptes File -> .corrupt-Rename +
+    `[store] KORRUPT`-Log + valides neues store.json (T-P1-03, Kindprozess).
+  - Verify: `node --test test/store-integrity.test.js`
+- [x] **AC2 / T-P1-02 — `src/store.js` withStoreLock (Fassade)**
+  - Soll: serialisiert zwei RMW-Sequenzen mit await zwischen read/write -> beide
+    Mutationen persistiert (kein Lost Update). Fassaden-Ebene (pg-safe).
+  - Verify: `node --test test/store-integrity.test.js`
+- [x] **AC4 / T-P1-05 — `src/server.js` /api/onboard save-Haertung**
+  - Soll: Save-I/O-Fehler (DATA_DIR read-only) -> 503 `{error:"Persistenz fehlgeschlagen"}`,
+    Prozess lebt, `[onboard] Persistenz fehlgeschlagen` geloggt.
+  - Verify: `node --test test/onboard-persist-failure.test.js`
+- [x] **AC5 — Happy-Path-Regression + volle Suite**
+  - Soll: Format (null,2) + Seeds unveraendert (T-P1-06); retention/store-purge/
+    onboarding-* unveraendert gruen; volle Suite kein Drop.
+  - Verify: `npm test` -> 478 pass / 0 fail (471 + 7).
+
+## Review (Endstand)
+- TDD eingehalten: 4 neue-Verhalten-Tests zuerst RED gesehen (T-P1-01b in-place-Probe,
+  T-P1-02 withStoreLock undefined, T-P1-03 kein KORRUPT-Log, T-P1-05 200 statt 503),
+  dann GREEN. T-P1-04/01a/06 sind Regression-Guards (bewahrtes Verhalten, gruen vor+nach).
+- `npm test`: 478 pass, 0 fail (Baseline 471 + 7 neue, kein Drop).
+- Smoke live (echtes src/server.js): korruptes store.json -> `[store] KORRUPT`-Log +
+  `.corrupt`-Backup (Inhalt "{ broken" erhalten) + valides neues store.json; zwei parallele
+  `/api/onboard` (smoke_a/smoke_b) -> beide persistiert (kein Lost Update).
+- Bewusste, in PLAN-SECURITY.md dokumentierte Abweichungen: withStoreLock in der Fassade
+  (pg-safe) statt json.js; nur `/api/onboard` gewrappt (place_call/flush-meters/Worker-Drain
+  kein counter-RMW-ueber-await -> Scope-Grenze); prozess-lokaler Mutex (Multi-Prozess =
+  File-Lock noetig; Render free plan = 1 Instanz).
+- CLAUDE.md-Gates unberuehrt: Allowlist/Budget/Disclosure/Twilio-Signatur nicht angefasst;
+  AC1/AC2 STAERKEN das Budget-Gate (kein Counter-Verlust durch truncated/lost write).
+- Test-Infra: `test/helpers.js` tempDataDir/startServer um optionalen `rawStore`-Parameter
+  ergaenzt (verbatim store.json fuer den Korruptions-Boot, T-P1-03).
+- Geaenderte Prod-Files: `src/store/json.js`, `src/store.js`, `src/server.js`. Tests:
+  `test/store-integrity.test.js`, `test/onboard-persist-failure.test.js` (neu) + `helpers.js`.
