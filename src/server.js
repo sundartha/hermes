@@ -123,8 +123,9 @@ app.use((req, res, next) => {
   // Self-Service-Seite (I9) ist die GETRENNTE Tenant-Sicht (Decision #3): NICHT
   // hinter der Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt
   // KEINE Tenant-Daten (die kommen erst per Bearer-Token ueber /api/self-service/*).
-  // Hinter dem Flag: aus -> nicht ausgenommen -> byte-identisch zum Bestand.
-  if (config.selfServiceEnabled && req.path === "/tenant.html") return next();
+  // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
+  // byte-identisch zum Bestand.
+  if (config.selfServiceEnabled && config.multiTenant && req.path === "/tenant.html") return next();
   if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") ||
       req.path.startsWith("/.well-known") || req.path === "/healthz") return next();
   if (isLocalSocket(req)) return next();
@@ -279,6 +280,11 @@ function publicCall({ streamToken, _finished, ...rest }) {
 // bleibt in der Route (Helper wiederverwendbar). Liefert true, wenn der
 // Request-Tenant den Call besitzt.
 const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
+
+// Kommende Termine eines Tenants (vergangene weggefiltert). EINE Quelle (G5) fuer
+// /api/state und /api/self-service/state; die routen-spezifische Slice bleibt am Aufrufer.
+const upcomingCalendar = (tenant) =>
+  store.getCalendar(tenant).filter((e) => e.end >= new Date().toISOString());
 
 // Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge).
 // Provider-aware: beendet ueber denselben Provider, ueber den der Call laeuft
@@ -663,7 +669,7 @@ app.get("/api/state", (req, res) => {
     settings: ctx.settings,
     calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
     actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
-    calendar: store.getCalendar(tenant).filter((e) => e.end >= new Date().toISOString()).slice(0, STATE_CALENDAR),
+    calendar: upcomingCalendar(tenant).slice(0, STATE_CALENDAR),
     usage: { ...store.usageOf(tenant), maxBudgetEur: config.maxBudgetEur },
     notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
     agent: {
@@ -719,8 +725,11 @@ app.post("/api/settings", (req, res) => {
 // fail-closed 403, NIE Owner). Diese Routen sind STRENGER als die Admin-Pendants:
 // Lesen ueber das tenant-gefilterte exportTenantData (I5/I6), Schreiben ueber eine
 // ENGERE Whitelist (selfServicePatch) VOR store.updateSettings. Flag aus: die
-// Routen sind nicht registriert -> 404 -> Admin-Pfad byte-identisch.
-if (config.selfServiceEnabled) {
+// Routen sind nicht registriert -> 404 -> Admin-Pfad byte-identisch. Zusaetzlich an
+// MULTI_TENANT gekoppelt (defense-in-depth): ohne MULTI_TENANT ist requestTenant
+// immer Owner -> Self-Service haette keinen fremden Tenant und schriebe nur den
+// Owner-Bucket; daher beide Flags noetig (fail-closed).
+if (config.selfServiceEnabled && config.multiTenant) {
   // Tenant-Lese-Sicht: dieselbe tenant-gefilterte Quelle wie /api/state (I5/I6),
   // aber NUR ueber die Tenant-Identitaet (kein Admin-Basic-Auth). + die kuratierten
   // greeting-Vorlagen, damit die UI ein Dropdown statt Freitext zeigt (Decision #7).
@@ -734,7 +743,7 @@ if (config.selfServiceEnabled) {
       greetingTemplates: GREETING_TEMPLATES,
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
-      calendar: store.getCalendar(tenant).filter((e) => e.end >= new Date().toISOString()),
+      calendar: upcomingCalendar(tenant),
       agent: { number: activeNumberFor(store.load(), tenant), owner: ctx.ownerName },
     });
   });

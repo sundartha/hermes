@@ -3,6 +3,8 @@
 // Tenant SELBST aendern darf, BEVOR store.updateSettings (die Admin-Whitelist)
 // laeuft. updateSettings wird NICHT aufgeweicht - diese Schicht liegt davor.
 
+import { DEFAULT_GREETING } from "./store/defaults.js";
+
 // Felder, die ein Tenant frei (Typ-gecheckt von updateSettings) setzen darf.
 export const SELF_SERVICE_FREE_FIELDS = ["agentName", "allowCalendar", "allowBooking"];
 
@@ -14,7 +16,7 @@ export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBan
 // Riegel, Decision #7). {owner} wird zur Laufzeit ersetzt wie heute. Der Disclosure-
 // Satz ist NICHT Teil des greeting und bleibt fest verdrahtet (Regel 2).
 export const GREETING_TEMPLATES = Object.freeze([
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann Nachrichten aufnehmen oder direkt einen Termin vereinbaren. Wie kann ich helfen?",
+  DEFAULT_GREETING, // = der geseedete Default; eine Quelle in defaults.js (G5, kein Drift)
   "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht auf oder vereinbare einen Termin. Wie kann ich helfen?",
   "Hallo! Der KI-Assistent von {owner} hier. Wie kann ich Ihnen weiterhelfen?",
 ]);

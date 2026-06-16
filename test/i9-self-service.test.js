@@ -225,3 +225,23 @@ test("I9 (g2) Flag AUS: Admin POST /api/settings unveraendert (I9 beruehrt Admin
     await srv.stop();
   }
 });
+
+test("I9 (g3) SELF_SERVICE_ENABLED an, MULTI_TENANT AUS: Routen 404, Owner-Bucket unberuehrt", async (t) => {
+  // Defense-in-depth (Safety-Review-Concern): ohne MULTI_TENANT ist requestTenant
+  // immer Owner -> Self-Service ist an config.multiTenant gekoppelt und darf NICHT
+  // registriert sein (sonst schriebe ein localhost-Patch in den Owner-Bucket).
+  const srv = await startServer({ env: { SELF_SERVICE_ENABLED: "true" }, seed: seedState({ tenants: [tenantB()] }) });
+  try {
+    await t.test("GET /api/self-service/state -> 404 (nicht registriert)", async () => {
+      assert.equal((await getJson(`${srv.localUrl}/api/self-service/state`, asTenant(SUB_B))).status, 404);
+    });
+
+    await t.test("POST /api/self-service/settings -> 404, kein Write in den Owner-Bucket", async () => {
+      const res = await postJson(`${srv.localUrl}/api/self-service/settings`, { agentName: "MTOFF" }, asTenant(SUB_B));
+      assert.equal(res.status, 404);
+      assert.equal(JSON.stringify(srv.readStore().settings).includes("MTOFF"), false, "kein Write");
+    });
+  } finally {
+    await srv.stop();
+  }
+});
