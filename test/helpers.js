@@ -65,6 +65,10 @@ export const BASE_ENV = {
   // Ohne diesen Eintrag wuerde eine lokale .env mit MULTI_TENANT=true via dotenv
   // in Spawn-Tests lecken -> Baseline-Drift (Lehre test-base-env-drift).
   MULTI_TENANT: "false",
+  // Self-Service default AUS (fail-closed): Bestandssuite byte-identisch. Ohne diese
+  // Zeile leakt eine lokale .env mit SELF_SERVICE_ENABLED=true via dotenv in
+  // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  SELF_SERVICE_ENABLED: "false",
   // ---- MCP-Auth + OAuth + Hosting ----
   // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
   MCP_AUTH: "",

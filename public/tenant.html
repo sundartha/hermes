@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vodafone Agent — Mein Bereich</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --vf-red:#e60000;--vf-red-deep:#ac1811;--vf-ink:#25282b;--vf-mute:#7e7e7e;
+  --vf-canvas:#fff;--vf-neutral:#f2f2f2;--vf-signal:#3860be;
+  --ease:cubic-bezier(0.22,1,0.36,1);--font:'Inter','Helvetica Neue',Arial,sans-serif;
+  --shadow:0 6px 18px rgba(0,0,0,.07);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:#fafafa;color:var(--vf-ink);font-size:15px;line-height:1.5}
+::selection{background:var(--vf-red);color:#fff}
+.wrap{max-width:1180px;margin:0 auto;padding:30px 28px 80px}
+
+/* Header */
+.top{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:28px}
+.logo-mark{width:44px;height:44px;border-radius:50%;background:var(--vf-red);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.top h1{font-size:26px;font-weight:800;letter-spacing:-.015em}
+.top h1 span{color:var(--vf-red)}
+.top .sub{color:var(--vf-mute);font-size:13px}
+.spacer{flex:1}
+.agent-chip{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ececec;border-radius:16px;padding:10px 16px;box-shadow:var(--shadow)}
+.dot{width:10px;height:10px;border-radius:50%;background:#1faa59}
+.dot.off{background:#c4c4c4}
+.agent-chip .num{font-weight:700;font-size:15px}
+.agent-chip .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--vf-mute);font-weight:600}
+
+/* Grid + cards */
+.grid{display:grid;gap:20px;grid-template-columns:repeat(12,1fr)}
+.card{background:#fff;border:1px solid #ececec;border-radius:18px;padding:24px;box-shadow:var(--shadow)}
+.c4{grid-column:span 4}.c6{grid-column:span 6}.c8{grid-column:span 8}.c12{grid-column:span 12}
+@media(max-width:980px){.c4,.c6,.c8{grid-column:span 12}}
+h3{font-size:16px;font-weight:800;margin-bottom:4px}
+.hint{color:var(--vf-mute);font-size:13px;margin-bottom:16px}
+
+/* Forms / buttons */
+label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--vf-mute);margin:14px 0 6px}
+.fi{width:100%;border:1.5px solid #e2e2e2;border-radius:12px;padding:11px 13px;font-family:var(--font);font-size:14px;color:var(--vf-ink);transition:border .2s}
+.fi:focus{outline:none;border-color:var(--vf-red)}
+.btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:12px;padding:12px 20px;font-family:var(--font);font-weight:700;font-size:14px;cursor:pointer;transition:all .22s var(--ease)}
+.btn-red{background:var(--vf-red);color:#fff}
+.btn-red:hover{background:var(--vf-red-deep)}
+.btn-ghost{background:var(--vf-neutral);color:var(--vf-ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.msg{font-size:13px;font-weight:600;margin-top:10px;display:none}
+.msg.ok{display:block;color:#177a43}
+.msg.err{display:block;color:var(--vf-red)}
+
+/* Toggles */
+.perm{display:flex;align-items:center;gap:13px;padding:13px 2px;border-bottom:1px solid #f3f3f3}
+.perm:last-child{border:none}
+.perm .t{font-weight:700;font-size:14px}
+.perm .d{color:var(--vf-mute);font-size:12.5px}
+.perm .grow{flex:1}
+.switch{position:relative;width:44px;height:25px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#d6d6d6;border-radius:99px;cursor:pointer;transition:.3s var(--ease)}
+.slider:before{content:"";position:absolute;width:19px;height:19px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s var(--ease);box-shadow:0 2px 5px rgba(0,0,0,.2)}
+.switch input:checked+.slider{background:var(--vf-red)}
+.switch input:checked+.slider:before{transform:translateX(19px)}
+
+/* Calls (read-only) */
+.call{border:1px solid #ececec;border-radius:15px;margin-bottom:12px;background:#fff;overflow:hidden}
+.call-h{display:flex;align-items:center;gap:14px;padding:15px 18px}
+.dir{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
+.dir.in{background:#e9f0fc;color:var(--vf-signal)}
+.dir.out{background:#fdeaea;color:var(--vf-red)}
+.call-h .cw{flex:1;min-width:0}
+.call-h .cn{font-weight:700;font-size:14.5px}
+.call-h .cm{color:var(--vf-mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.st.active{background:#fdeaea;color:var(--vf-red)}
+.st.completed{background:#e7f6ed;color:#177a43}
+.st.failed{background:var(--vf-neutral);color:var(--vf-mute)}
+
+/* Action items / calendar */
+.ai{display:flex;gap:10px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid #f3f3f3;font-size:13.5px}
+.ai:last-child{border:none}
+.ai.done span{text-decoration:line-through;color:var(--vf-mute)}
+.tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;border-radius:99px;padding:2px 8px;margin-left:7px}
+.tag.appointment{background:#e9f0fc;color:var(--vf-signal)}
+.cal-ev{display:flex;gap:12px;align-items:center;padding:10px 2px;border-bottom:1px solid #f3f3f3;font-size:13.5px}
+.cal-ev:last-child{border:none}
+.cal-d{background:var(--vf-neutral);border-radius:10px;padding:6px 10px;text-align:center;min-width:52px}
+.cal-d b{display:block;font-size:16px;line-height:1.1}
+.cal-d small{font-size:10px;text-transform:uppercase;color:var(--vf-mute);font-weight:700}
+.empty{color:var(--vf-mute);font-size:13px;text-align:center;padding:22px 8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="logo-mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm2.5 15.5c-2.6 0-5.3-2.3-5.4-5.6-.1-2.2 1.2-4.3 2.9-5.3 1.1-.7 2.4-1 3.4-.9-.7.3-1.5 1.2-1.5 2.4v.3c1.7.4 3.1 1.8 3.1 4 0 2.6-1.6 5.1-2.5 5.1Z" fill="#fff"/></svg></div>
+    <div>
+      <h1>Mein <span>Bereich</span></h1>
+      <div class="sub">Self-Service · Vodafone Business Demo</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="agent-chip">
+      <div class="dot off" id="liveDot"></div>
+      <div>
+        <div class="lbl">Agent-Rufnummer</div>
+        <div class="num" id="agentNum">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- Login (Browser-OAuth-Redirect ist deferred -> Token-Feld) -->
+    <div class="card c12">
+      <h3>Zugang</h3>
+      <div class="hint">Zugangstoken aus deinem Login einfuegen. Ohne gueltiges Token bleibt die Seite leer.</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input class="fi" id="token" placeholder="Zugangstoken" style="flex:1;min-width:240px">
+        <button class="btn btn-red" id="connect">Verbinden</button>
+        <span class="msg" id="connMsg"></span>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="card c6">
+      <h3>Einstellungen meines Agenten</h3>
+      <div class="hint">Wirkt sofort auf das naechste Gespraech.</div>
+      <label class="fl">Agent-Name</label>
+      <input class="fi" id="agentName">
+      <div id="perms" style="margin-top:8px"></div>
+      <label class="fl">Begruessung (Inbound) — {owner} wird ersetzt</label>
+      <select class="fi" id="greeting"></select>
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
+        <button class="btn btn-ghost" id="save">Speichern</button>
+        <span class="msg" id="saveMsg"></span>
+      </div>
+    </div>
+
+    <!-- Calendar -->
+    <div class="card c6">
+      <h3>Kalender</h3>
+      <div class="hint">Darauf greift der Agent zu.</div>
+      <div id="cal"><div class="empty">Noch nicht verbunden.</div></div>
+    </div>
+
+    <!-- Calls -->
+    <div class="card c8">
+      <h3>Anrufe</h3>
+      <div class="hint">Deine letzten Telefonate (read-only).</div>
+      <div id="calls"><div class="empty">Noch nicht verbunden.</div></div>
+    </div>
+
+    <!-- Action items -->
+    <div class="card c4">
+      <h3>Action Items</h3>
+      <div id="ai"><div class="empty">Noch nicht verbunden.</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// Browser-OAuth-Redirect ist deferred: Token kommt manuell ins Feld + localStorage.
+const TOKEN_KEY = "ss_token";
+const authHeader = () => {
+  const t = localStorage.getItem(TOKEN_KEY);
+  return t ? { Authorization: "Bearer " + t } : {};
+};
+
+// Nur die Felder, die der Self-Service-Pfad erlaubt (Decision #6). agentName + die
+// drei Free-Felder als Toggle; allowSummaries/Disclosure/Freitext-greeting fehlen
+// bewusst (kein Schreibpfad in der UI fuer abgelehnte Felder).
+const PERMS = [
+  ["allowCalendar","Kalenderzugriff","Agent darf Termine einsehen"],
+  ["allowBooking","Termine buchen","Agent darf Termine fest eintragen"],
+  ["allowPersonalData","Persoenliche Daten","Adresse, E-Mail etc. herausgeben"],
+  ["allowBankData","Bankdaten","Zahlungsdaten nennen (nicht empfohlen)"],
+];
+
+function esc(s){return String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+function renderPerms(settings){
+  $("perms").innerHTML = PERMS.map(([k,t,d])=>`
+    <div class="perm">
+      <div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div>
+      <label class="switch"><input type="checkbox" data-perm="${k}" ${settings[k]?"checked":""}><span class="slider"></span></label>
+    </div>`).join("");
+}
+
+// greeting-Dropdown NUR aus den Server-Vorlagen (kein Freitext-Input).
+function renderGreetings(templates, current){
+  $("greeting").innerHTML = templates.map((tpl)=>
+    `<option value="${esc(tpl)}" ${tpl===current?"selected":""}>${esc(tpl)}</option>`).join("");
+}
+
+function renderCalls(calls){
+  if(!calls.length){$("calls").innerHTML='<div class="empty">Keine Anrufe.</div>';return}
+  $("calls").innerHTML = calls.map(c=>{
+    const who = c.direction==="outbound" ? c.to : c.from;
+    return `<div class="call">
+      <div class="call-h">
+        <div class="dir ${c.direction==="outbound"?"out":"in"}">${c.direction==="outbound"?"&#8599;":"&#8601;"}</div>
+        <div class="cw">
+          <div class="cn">${esc(who)}</div>
+          <div class="cm">${c.goal?esc(c.goal):(c.direction==="inbound"?"Eingehender Anruf":"Ausgehender Anruf")}</div>
+        </div>
+        <span class="st ${c.status}">${c.status==="active"?"Live":c.status==="completed"?"Beendet":c.status==="cancelled"?"Abgebrochen":"Fehlgeschlagen"}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderAi(items){
+  if(!items.length){$("ai").innerHTML='<div class="empty">Keine Action Items.</div>';return}
+  $("ai").innerHTML = items.slice(0,12).map(a=>`
+    <div class="ai ${a.done?"done":""}">
+      <span>${esc(a.text)}${a.type==="appointment"?'<span class="tag appointment">Termin</span>':""}</span>
+    </div>`).join("");
+}
+
+function renderCal(events){
+  if(!events.length){$("cal").innerHTML='<div class="empty">Keine Termine.</div>';return}
+  $("cal").innerHTML = events.slice(0,6).map(e=>{
+    const d=new Date(e.start);
+    return `<div class="cal-ev">
+      <div class="cal-d"><b>${d.getDate()}</b><small>${d.toLocaleString("de-DE",{month:"short"})}</small></div>
+      <div><b style="font-size:13.5px">${esc(e.title)}</b><div style="color:var(--vf-mute);font-size:12px">${d.toLocaleString("de-DE",{weekday:"short",hour:"2-digit",minute:"2-digit"})}</div></div>
+    </div>`;
+  }).join("");
+}
+
+async function refresh(){
+  const r = await fetch("/api/self-service/state", { headers: authHeader() });
+  if(!r.ok){ $("liveDot").classList.add("off"); return; } // 403/404 -> leer, fail-closed
+  const s = await r.json();
+  $("agentNum").textContent = s.agent.number || "nicht konfiguriert";
+  $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
+  $("agentName").value = s.settings.agentName || "";
+  renderPerms(s.settings);
+  renderGreetings(s.greetingTemplates, s.settings.greeting);
+  renderCalls(s.calls);
+  renderAi(s.actionItems);
+  renderCal(s.calendar);
+}
+
+// Patch aus der UI bauen: NUR die erlaubten Felder. Der Server filtert ohnehin
+// (selfServicePatch), die UI bietet schon nur diese Felder an.
+function collectPatch(){
+  const patch = { agentName: $("agentName").value, greeting: $("greeting").value };
+  document.querySelectorAll("[data-perm]").forEach(el=>{ patch[el.dataset.perm] = el.checked; });
+  return patch;
+}
+
+async function save(){
+  const m=$("saveMsg"); m.className="msg";
+  const r = await fetch("/api/self-service/settings", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", ...authHeader() },
+    body: JSON.stringify(collectPatch()),
+  });
+  if(r.ok){ m.textContent="Gespeichert"; m.className="msg ok"; refresh(); }
+  else{ m.textContent="Nicht gespeichert (Zugang pruefen)."; m.className="msg err"; }
+  setTimeout(()=>m.className="msg",2500);
+}
+
+$("connect").onclick = ()=>{
+  const t = $("token").value.trim();
+  const m = $("connMsg"); m.className="msg";
+  if(!t){ m.textContent="Token eingeben."; m.className="msg err"; return; }
+  localStorage.setItem(TOKEN_KEY, t);
+  m.textContent="Verbunden."; m.className="msg ok";
+  refresh();
+};
+$("save").onclick = save;
+
+if(localStorage.getItem(TOKEN_KEY)) refresh();
+</script>
+</body>
+</html>

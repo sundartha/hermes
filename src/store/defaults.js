@@ -67,11 +67,16 @@ function nextWeekday(daysAhead, hour) {
   return d.toISOString();
 }
 
+// Default-Begruessung (erster Inbound-Satz). EINE Quelle (G5): defaultSettings()
+// UND die Self-Service-Vorlagen (self-service.js GREETING_TEMPLATES) referenzieren
+// sie, damit der geseedete Default IMMER eine waehlbare Vorlage bleibt (kein Drift).
+export const DEFAULT_GREETING =
+  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann Nachrichten aufnehmen oder direkt einen Termin vereinbaren. Wie kann ich helfen?";
+
 export function defaultSettings() {
   return {
     agentName: "Vodafone Agent",
-    greeting:
-      "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann Nachrichten aufnehmen oder direkt einen Termin vereinbaren. Wie kann ich helfen?",
+    greeting: DEFAULT_GREETING,
     allowCalendar: true,
     allowBooking: true,
     allowSummaries: true,

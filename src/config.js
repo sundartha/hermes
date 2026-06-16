@@ -76,6 +76,12 @@ export const config = {
   // Request-Tenant auf. EIN gemeinsames Flag fuer I4-I7 (kein separates Login-Flag;
   // Self-Service kommt spaeter unter eigenem Reife-Flag).
   multiTenant: (process.env.MULTI_TENANT || "false") === "true",
+  // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
+  // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
+  // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
+  // -> heutiges Admin-Dashboard + /api/* byte-identisch. Getrennt von MULTI_TENANT
+  // (groesste Angriffsflaeche: oeffentlicher Tenant-Login + Self-Service-Schreiben).
+  selfServiceEnabled: (process.env.SELF_SERVICE_ENABLED || "false") === "true",
   // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
   provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
