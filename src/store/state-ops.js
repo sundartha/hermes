@@ -412,6 +412,16 @@ export function usageFor(s, tenantId) {
   return (s.usage[tenantId] ||= emptyUsage());
 }
 
+// Lese-Zugriff auf den Usage-Bucket eines Tenants ueber die EINE Lazy-Default-Quelle
+// (usageFor) - so liefert /api/state/get_agent_status (I5) NIE undefined fuer einen
+// Tenant ohne Bucket, ohne den Lazy-Default ausserhalb usageFor zu duplizieren (G5).
+// Nebeneffekt geerbt von usageFor (legt den Bucket bei Bedarf an, wie settingsFor/
+// calendarFor liest); reine Query in der Fassade (kein save). Eigener Fassaden-Name,
+// damit die Lese-Absicht an der Fassaden-Grenze sichtbar ist.
+export function usageOf(s, tenantId) {
+  return usageFor(s, tenantId);
+}
+
 // Plattform-Summe ueber ALLE Tenant-Buckets (globaler Budget-Notaus, R2). Fuer
 // owner-only faellt die Summe mit dem Owner-Bucket zusammen -> verhaltens-identisch.
 export function globalUsageTotals(s) {

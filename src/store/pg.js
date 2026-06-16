@@ -133,6 +133,9 @@ export function makePgStore(runner) {
     },
     budgetExceeded: (tenantId, cfg) => ops.budgetExceeded(requireState(), tenantId, cfg),
     globalBudgetExceeded: (cfg) => ops.globalBudgetExceeded(requireState(), cfg),
+    // Lese-Zugriff auf den Usage-Bucket eines Tenants (I5): liest den Spiegel
+    // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
+    usageOf: (tenantId) => ops.usageOf(requireState(), tenantId),
 
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);

@@ -219,6 +219,13 @@ export function trackUsage(tenantId, inputTokens, outputTokens, cfg) {
   return usage;
 }
 
+// Lese-Zugriff auf den Usage-Bucket eines Tenants (I5): reine Query, kein save
+// (Lazy-Default geerbt von ops.usageOf -> usageFor). /api/state liest darueber den
+// Bucket des Request-Tenants statt s.usage[OWNER_TENANT_ID] direkt.
+export function usageOf(tenantId) {
+  return ops.usageOf(load(), tenantId);
+}
+
 export function budgetExceeded(tenantId, cfg) {
   return ops.budgetExceeded(load(), tenantId, cfg);
 }

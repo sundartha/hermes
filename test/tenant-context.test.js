@@ -62,3 +62,19 @@ test("Fassade pg.js (pglite) exportiert tenantContext und reicht config.ownerNam
   assert.equal(typeof store.tenantContext, "function", "pg.tenantContext fehlt (Re-Export-Landmine)");
   assert.equal(store.tenantContext(OWNER_TENANT_ID).ownerName, config.ownerName);
 });
+
+// I5: /api/state liest den Usage-Bucket ueber store.usageOf (Lazy-Default, NIE
+// undefined). Faengt die Re-Export-Landmine an beiden Fassaden + dass usageOf NIE
+// undefined fuer einen Tenant ohne Bucket liefert (sonst crasht get_agent_status).
+test("Fassade json.js exportiert usageOf und liefert nie undefined", () => {
+  assert.equal(typeof jsonBackend.usageOf, "function", "json.usageOf fehlt (Re-Export-Landmine)");
+  assert.ok(jsonBackend.usageOf(OWNER_TENANT_ID), "Owner-Bucket vorhanden");
+  assert.ok(jsonBackend.usageOf("unbekannt-tenant"), "Tenant ohne Bucket -> Lazy-Default, nicht undefined");
+});
+
+test("Fassade pg.js (pglite) exportiert usageOf und liefert nie undefined", async () => {
+  const { store } = await makePgTestStore();
+  assert.equal(typeof store.usageOf, "function", "pg.usageOf fehlt (Re-Export-Landmine)");
+  assert.ok(store.usageOf(OWNER_TENANT_ID), "Owner-Bucket vorhanden");
+  assert.ok(store.usageOf("unbekannt-tenant"), "Tenant ohne Bucket -> Lazy-Default, nicht undefined");
+});

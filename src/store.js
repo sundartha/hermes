@@ -45,7 +45,7 @@ async function createPgBackend() {
 
 const backend = config.storeBackend === "pg" ? await createPgBackend() : jsonBackend;
 
-// 30 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
+// 31 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
 export const {
   load,
   save,
@@ -66,6 +66,7 @@ export const {
   trackUsage,
   budgetExceeded,
   globalBudgetExceeded,
+  usageOf,
   addNotification,
   pruneOldData,
   eraseTenantData,
