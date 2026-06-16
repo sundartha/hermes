@@ -260,6 +260,19 @@ export function markMeterEventsSent(eventIds) {
   return n;
 }
 
+// ---- KYC (P6b4) ----
+// setKycLevel mutiert -> save; kycReached ist reine Query (kein save), analog
+// budgetExceeded/resolveTenant.
+export function setKycLevel(tenantId, level) {
+  const tenant = ops.setKycLevel(load(), tenantId, level);
+  save();
+  return tenant;
+}
+
+export function kycReached(tenantId, minLevel) {
+  return ops.kycReached(load(), tenantId, minLevel);
+}
+
 // ---- Notifications ----
 export function addNotification(title, body, callId) {
   ops.addNotification(load(), title, body, callId);

@@ -4,8 +4,8 @@
 -- transcript_segment-Tabelle + number (E.164->tenant Routing, P3c) +
 -- tenant_budget/usage_event (per-Tenant-Budget + Stripe-Metering, P6b3).
 
--- tenant: id + Lebenszyklus-status (Onboarding). KEINE kyc/stripe-Spalten
--- (Payment uebersprungen = spaeterer Scope). status: active|suspended|closed.
+-- tenant: id + Lebenszyklus-status (Onboarding). KEINE stripe-Spalten (Payment
+-- uebersprungen). kyc_level additiv ab P6b4 (s.u.). status: active|suspended|closed.
 CREATE TABLE IF NOT EXISTS tenant (
   id          TEXT PRIMARY KEY,
   status      TEXT NOT NULL DEFAULT 'active',
@@ -18,6 +18,11 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active
 -- idp_subject NULL = nicht ueber resolveTenant aufloesbar. Muster wie number.status.
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS owner_name  TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS idp_subject TEXT;
+-- KYC-Reifegrad (P6b4) additiv NULLABLE. NULL/fehlend = Bestand/Owner -> Gate
+-- passiert (kein Regress, kycReached liefert true). Ein gesetzter Wert
+-- (none|otp|card|id_verified) wird rangbasiert gegen die Outbound-Schwelle geprueft.
+-- KEIN CHECK-Constraint: die Validierung lebt fail-closed in setKycLevel (eine Quelle).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

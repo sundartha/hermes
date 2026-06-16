@@ -92,6 +92,24 @@ export const TENANT_STATUS = Object.freeze({
   CLOSED: "closed",
 });
 
+// KYC-Reifegrad eines Tenants (P6b4). Geordnete Stufen: jede hoehere schliesst
+// die niedrigeren ein. EINE Quelle (G5/G25): der Gate-Vergleich (state-ops
+// kycReached) UND der Setter (setKycLevel) UND die pg-Hydrierung/Flush
+// importieren dieselben Werte - sonst driften die level-Strings.
+// none < otp < card < id_verified. KYC_ORDER bildet die Vergleichbarkeit ab
+// (Index = Rang), damit ">= card" ohne magische Zahlen ausdrueckbar ist.
+export const KYC_LEVEL = Object.freeze({
+  NONE: "none",
+  OTP: "otp",
+  CARD: "card",
+  ID_VERIFIED: "id_verified",
+});
+export const KYC_ORDER = Object.freeze([KYC_LEVEL.NONE, KYC_LEVEL.OTP, KYC_LEVEL.CARD, KYC_LEVEL.ID_VERIFIED]);
+
+// Schwelle fuer Outbound (Gate). >= card. Benannte Konstante (G25), eine Quelle
+// fuer Gate + Tests.
+export const KYC_OUTBOUND_MIN = KYC_LEVEL.CARD;
+
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);

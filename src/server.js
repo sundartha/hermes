@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
@@ -234,6 +234,15 @@ function allowlistError(to, profile) {
   if (!config.allowedNumbers.includes(to))
     return { status: 403, grund: "allowlist", message: `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.` };
   return null;
+}
+
+// KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
+// (card) erreicht haben. fail-closed Schnittmenge - ergaenzt die Outbound-Gate-Kette,
+// lockert NIE ein bestehendes Gate. Owner/Bestand (kein kyc_level) -> store.kycReached
+// liefert true -> byte-identisch. Liefert {status,grund,message} (Gate-Vertrag) oder null.
+function kycGateError(tenantId) {
+  if (store.kycReached(tenantId, KYC_OUTBOUND_MIN)) return null;
+  return { status: 403, grund: "kyc", message: "Verifikation unzureichend (KYC) fuer Outbound-Anrufe. Bitte Identitaet bestaetigen." };
 }
 
 // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
@@ -574,6 +583,15 @@ app.post("/api/calls", async (req, res) => {
   if (tenantId === TENANT_REJECT) {
     audit("place_call_denied", req, `to=${to} grund=tenant_unbekannt requestedBy=${requestedBy}`);
     return res.status(403).json({ error: "Kein Tenant fuer diese Identitaet." });
+  }
+
+  // KYC-Gate (P6b4) als erstes Glied der Outbound-Gate-Kette: Tenant-Reifegrad VOR
+  // den Ziel-Gates (Schnittmenge, fail-closed). Owner/Bestand byte-identisch (kycReached
+  // true bei fehlendem kyc_level). tenantId ist hier bereits aufgeloest + REJECT abgewiesen.
+  const kycErr = kycGateError(tenantId);
+  if (kycErr) {
+    audit("place_call_denied", req, `to=${to} grund=${kycErr.grund} tenant=${tenantId} requestedBy=${requestedBy}`);
+    return res.status(kycErr.status).json({ error: kycErr.message });
   }
 
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.

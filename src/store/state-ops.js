@@ -24,6 +24,7 @@ import {
   PROVISION_NUMBER_JOB,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
+  KYC_ORDER,
 } from "./defaults.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -350,6 +351,29 @@ export function registerTenant(s, id, { ownerName } = {}) {
   if (name) tenant.ownerName = name;
   s.tenants.push(tenant);
   return tenant;
+}
+
+// Setzt den KYC-Reifegrad eines Tenants (P6b4). Nebeneffekt im Namen (N7): set*.
+// Validiert gegen KYC_ORDER (fail-closed: unbekannte Stufe wirft, statt einen
+// Muell-Wert zu persistieren, der das Gate still aushebelt). Fehlender Tenant
+// wirft (kein stilles No-Op). Reine Mutation, kein IO (Wrapper saved).
+export function setKycLevel(s, tenantId, level) {
+  if (!KYC_ORDER.includes(level)) throw new Error(`setKycLevel: unbekannte KYC-Stufe ${level}`);
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setKycLevel: Tenant ${tenantId} nicht gefunden`);
+  tenant.kycLevel = level;
+  return tenant;
+}
+
+// Gate-Praedikat (P6b4): erreicht der Tenant mindestens die geforderte KYC-Stufe?
+// Bewusste Asymmetrie (Plan-Beschluss, NICHT aufraeumen): fehlendes kycLevel-Feld
+// (Owner/Bestand) gilt als ausreichend -> true (kein Regress, byte-identisch). Ein
+// EXPLIZIT gesetzter Wert wird dagegen rangbasiert verglichen (KYC_ORDER-Index) und
+// sperrt fail-closed unter der Schwelle. Reine Query, kein IO.
+export function kycReached(s, tenantId, minLevel) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.kycLevel == null) return true; // Bestand/Owner: kein Feld -> Gate passiert
+  return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 
 // Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
