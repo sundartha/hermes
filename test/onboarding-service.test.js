@@ -34,7 +34,7 @@ function seedRequested() {
 test("happy path: search -> order -> configure -> active mit e164 + providerNumberId", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  const result = await provisionNumber(s, prov, { numberId, ...ARGS });
+  const result = await provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS });
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.e164, "+4915799990001");
   assert.equal(result.providerNumberId, "num_ext_1");
@@ -46,7 +46,7 @@ test("happy path: search -> order -> configure -> active mit e164 + providerNumb
 test("search liefert nichts -> failed, KEIN Order, KEIN Release (kein Geld)", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner({ async searchNumbers() { return []; } });
-  await assert.rejects(() => provisionNumber(s, prov, { numberId, ...ARGS }), /keine kaufbare Nummer/);
+  await assert.rejects(() => provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS }), /keine kaufbare Nummer/);
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.ok(!prov.log.includes("release:num_ext_1"));
   assert.equal(s.numberAssignments.length, 0);
@@ -55,7 +55,7 @@ test("search liefert nichts -> failed, KEIN Order, KEIN Release (kein Geld)", as
 test("order wirft -> failed, KEIN Release (Kauf nicht zustande gekommen)", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner({ async orderNumber() { throw new Error("HTTP 402"); } });
-  await assert.rejects(() => provisionNumber(s, prov, { numberId, ...ARGS }), /HTTP 402/);
+  await assert.rejects(() => provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS }), /HTTP 402/);
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.ok(!prov.log.some((l) => l.startsWith("release")));
 });
@@ -63,7 +63,7 @@ test("order wirft -> failed, KEIN Release (Kauf nicht zustande gekommen)", async
 test("configure wirft nach dem Kauf -> Provider-Release + released (kein bezahlter Orphan)", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner({ async configureNumber() { throw new Error("HTTP 500"); } });
-  await assert.rejects(() => provisionNumber(s, prov, { numberId, ...ARGS }), /HTTP 500/);
+  await assert.rejects(() => provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS }), /HTTP 500/);
   // Provider-Release sauber -> Datensatz terminal released, NIE active.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED);
   assert.ok(prov.log.includes("release:num_ext_1"), "gekaufte Nummer wird beim Provider freigegeben");
@@ -75,7 +75,7 @@ test("Configure- UND Release-Fehler -> bleibt 'failed' (Orphan-Reconciliation), 
     async configureNumber() { throw new Error("configure kaputt"); },
     async releaseNumber() { throw new Error("release auch kaputt"); },
   });
-  await assert.rejects(() => provisionNumber(s, prov, { numberId, ...ARGS }), /configure kaputt/);
+  await assert.rejects(() => provisionNumber(s, { provisioner: prov }, { numberId, ...ARGS }), /configure kaputt/);
   // Provider-Release fehlgeschlagen -> moeglicher Orphan -> Zustand bleibt failed.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
 });

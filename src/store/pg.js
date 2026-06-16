@@ -242,7 +242,7 @@ async function hydrateTenantInto(client, state, tenantId) {
     `SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
   )).rows;
   const numberRows = (await client.query(
-    `SELECT id, e164, tenant_id, provider, status, provider_number_id FROM number WHERE tenant_id = $1`, [tenantId]
+    `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id FROM number WHERE tenant_id = $1`, [tenantId]
   )).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
@@ -261,6 +261,7 @@ async function hydrateTenantInto(client, state, tenantId) {
     provider: r.provider,
     status: r.status,
     providerNumberId: r.provider_number_id,
+    paymentIntentId: r.payment_intent_id ?? null,
   })));
 
   if (tenantId === OWNER_TENANT_ID) {
@@ -573,12 +574,13 @@ async function flushNumbers(client, tenantId, numbers) {
   await deleteMissing(client, "number", tenantId, own.map((n) => n.id));
   for (const n of own) {
     await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (id) DO UPDATE SET
          e164=EXCLUDED.e164, provider=EXCLUDED.provider,
-         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id`,
-      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null]
+         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
+         payment_intent_id=EXCLUDED.payment_intent_id`,
+      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null, n.paymentIntentId ?? null]
     );
   }
 }

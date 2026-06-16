@@ -61,6 +61,17 @@ services:
         value: "false"
       - key: PROVISIONING_COUNTRY
         value: "DE"
+      # ---- Payment/Billing (Stripe Hold/Capture, P6b1) ----
+      - key: PAYMENT_ENABLED
+        value: "false"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_API_BASE
+        value: "https://api.stripe.com"
+      - key: NUMBER_SETUP_FEE_CENTS
+        value: "0"
+      - key: PAYMENT_CURRENCY
+        value: "eur"
       - key: DASHBOARD_PASSWORD
         sync: false
       # Rechteprofile (Phase 2) als JSON, z.B.

@@ -69,6 +69,14 @@ export const BASE_ENV = {
   // Zeile leakt eine lokale .env mit SELF_SERVICE_ENABLED=true via dotenv in
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   SELF_SERVICE_ENABLED: "false",
+  // ---- Payment/Billing (P6b1) ----
+  // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
+  // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.
+  PAYMENT_ENABLED: "false",
+  STRIPE_SECRET_KEY: "",
+  STRIPE_API_BASE: "",
+  NUMBER_SETUP_FEE_CENTS: "0",
+  PAYMENT_CURRENCY: "eur",
   // ---- MCP-Auth + OAuth + Hosting ----
   // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
   MCP_AUTH: "",
@@ -177,6 +185,19 @@ export async function startTelnyxMock() {
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return { url: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise((r) => server.close(r)) };
+}
+
+// Fake-Billing-Adapter (P6b1): aufzeichnend + per-Override werfbar, analog dem
+// Fake-Provisioner. Lebt in test/helpers.js (NICHT in src/) - reines Test-Double
+// fuer provisionNumber. log haelt [methode, ...args] in Aufrufreihenfolge.
+export function fakeBilling(overrides = {}) {
+  const log = [];
+  const base = {
+    async placeHold(args) { log.push(["placeHold", args]); return { paymentIntentId: "pi_fake_1" }; },
+    async captureHold(id, amt) { log.push(["captureHold", id, amt]); },
+    async cancelHold(id) { log.push(["cancelHold", id]); },
+  };
+  return { log, ...base, ...overrides };
 }
 
 // ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----

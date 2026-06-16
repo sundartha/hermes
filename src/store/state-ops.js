@@ -355,7 +355,7 @@ export function requestNumber(s, { tenantId, provider = DEFAULT_PROVIDER, maxNum
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return { ok: false, reason: "tenant_inactive" };
   if (liveNumbers(s).length >= maxNumbers) return { ok: false, reason: "global_cap" };
   if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant) return { ok: false, reason: "tenant_cap" };
-  const number = { id: newId("num"), e164: null, tenantId, provider, status: NUMBER_STATUS.REQUESTED, providerNumberId: null };
+  const number = { id: newId("num"), e164: null, tenantId, provider, status: NUMBER_STATUS.REQUESTED, providerNumberId: null, paymentIntentId: null };
   s.numbers.push(number);
   return { ok: true, number };
 }
@@ -371,8 +371,19 @@ export function transitionNumber(s, numberId, toStatus) {
   return number;
 }
 
-export function beginProvisioning(s, numberId) {
-  return transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+// requested -> provisioning. Optionaler paymentIntentId (Payment-Pfad): wird auf
+// der Nummer hinterlegt, damit die Rollback-Pfade (cancelHold) ihn nach einer
+// Re-Hydrierung wiederfinden. Ohne den Param (payment-off, 2-arg) byte-identisch.
+export function beginProvisioning(s, numberId, paymentIntentId = null) {
+  const number = transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+  if (paymentIntentId) number.paymentIntentId = paymentIntentId;
+  return number;
+}
+
+// provisioning -> capturing: Geld-Einzug laeuft (Stripe capture). NUR im Payment-
+// Pfad (provisionNumber mit deps.billing). activateNumber deckt capturing -> active ab.
+export function beginCapturing(s, numberId) {
+  return transitionNumber(s, numberId, NUMBER_STATUS.CAPTURING);
 }
 
 // provisioning -> active: NUR nach erfolgreichem Provider-Kauf. Setzt die gekaufte
