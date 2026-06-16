@@ -8,7 +8,7 @@ import http from "node:http";
 import express from "express";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
-import { webAuth, adminOnly, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { webAuth, adminOnly, makeAccounts, makeSessions, makeAdminRoutes, signValue } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
 
 const SECRET = "admin-test-secret-0123456789";
@@ -33,20 +33,9 @@ async function setup() {
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const adminMw = adminOnly({ adminEmails: ADMIN_EMAILS });
   const app = express();
-  // Spiegelt server.js (inkl. 404-Existenzpruefung vor Audit).
-  app.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
-    const ok = await accounts.setStatus(req.params.id, "active");
-    if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
-    await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
-    res.json({ tenantId: req.params.id, status: "active" });
-  });
-  app.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
-    const ok = await accounts.setStatus(req.params.id, "suspended");
-    if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
-    await sessions.invalidateByTenant(req.params.id);
-    await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
-    res.json({ tenantId: req.params.id, status: "suspended" });
-  });
+  // Produktions-Router (server.js nutzt dieselbe Factory) -> der Test prueft den
+  // echten Handler, keine handkopierte Replik.
+  app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
   const server = await new Promise((r) => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
   return {
     base: `http://127.0.0.1:${server.address().port}`,

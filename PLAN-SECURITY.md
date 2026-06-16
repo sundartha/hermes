@@ -297,9 +297,24 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
    - Verifikation: `test/schema-foundation.test.js` (CASCADE entfernt account/
      session, `audit_log` ueberdauert), `test/audit-store.test.js`.
 
+**OIDC-/RLS-Hardening (umgesetzt 2026-06-16, Review + Fix-Workflow):**
+- **F1 email_verified**: `claimsFromPayload` uebernimmt `email` nur bei `email_verified === true`
+  (Strikt-Gleichheit, kein Truthy-Cast) -> Admin-Allowlist nur ueber verifizierte Adressen.
+  Test `test/web-auth.test.js` (T-F1-01..07).
+- **F2 nonce**: `/auth/login` erzeugt signiertes `oidc_nonce`-Cookie + `nonce`-Param; `/auth/callback`
+  erzwingt es, `exchange()` bindet das `id_token` timing-sicher (`nonceMatches`). Test T-F2-01..05.
+- **F3 jwks-Rotation**: `discover()` setzt `jwksCache=null` beim TTL-Refresh -> `jwks_uri`-Rotation
+  greift ohne Prozess-Neustart. Test `test/web-auth-oidc.test.js`.
+- **F4 WITH CHECK**: alle `tenant_isolation`-Policies tragen zusaetzlich `WITH CHECK` -> auch
+  INSERT/UPDATE sind tenant-isoliert (nicht nur SELECT/USING). Test `test/rls-with-check.test.js`.
+
 **Bewusst akzeptierte Abweichungen / Deployment-Anforderungen:**
 - **DB-Rolle**: Der `DATABASE_URL`-Nutzer MUSS non-superuser + NOBYPASSRLS sein,
   sonst greift FORCE-RLS NICHT (Superuser umgeht RLS). Harte Deployment-Anforderung.
+  **F5 (umgesetzt):** `createPortalRunner()` prueft die Rolle fail-closed beim
+  Startup (`assertNoBypassRls`, `src/portal-pool.js`) - Superuser ODER `rolbypassrls`
+  -> `Error` mit `[F5]`-Prefix, Prozess startet nicht. Test:
+  `test/portal-pool-assertion.test.js` (Stub TC1-TC5 + PGlite-Rauchtest TC6).
 - **Killer-Test als Release-Gate**: pglite ist single-connection und kann pgBouncer-
   Transaction-Pooling NICHT reproduzieren. Der CI-Test beweist Isolation + GUC-Reset
   auf einer Verbindung; der ECHTE Killer-Test (2 Tenants, 50 parallele Requests,

@@ -116,6 +116,8 @@ export const config = {
     .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   // Strengeres Rate-Limit fuer Login/Callback (Brute-Force/Credential-Stuffing).
   loginRateLimitPerMin: parseInt(process.env.LOGIN_RATE_LIMIT_PER_MIN || "10", 10),
+  // Lebensdauer der Browser-Session (Session-Cookie + DB-Session) in Sekunden. Default 1 h.
+  sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || "3600", 10),
 
   // ---- Voice-Engine ----
   // "budget"  = Twilio STT/TTS + Claude Haiku (quasi gratis, Default)

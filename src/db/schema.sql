@@ -214,33 +214,49 @@ ALTER TABLE number             FORCE  ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  FORCE  ROW LEVEL SECURITY;
 
+-- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
+-- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
+-- bewusst identisch und EXPLIZIT: FOR ALL wuerde USING sonst nur implizit als
+-- WITH CHECK anwenden - diese stille Konvention zerbricht, sobald eine Policy spaeter
+-- in FOR SELECT + FOR INSERT/UPDATE aufgespalten wird. Explizit = kein Drift, kein
+-- stilles Loch fuer kuenftige schreibende Pfade.
 DROP POLICY IF EXISTS tenant_isolation ON settings;
 CREATE POLICY tenant_isolation ON settings
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON call;
 CREATE POLICY tenant_isolation ON call
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON transcript_segment;
 CREATE POLICY tenant_isolation ON transcript_segment
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON action_item;
 CREATE POLICY tenant_isolation ON action_item
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON calendar_event;
 CREATE POLICY tenant_isolation ON calendar_event
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON usage;
 CREATE POLICY tenant_isolation ON usage
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON profile;
 CREATE POLICY tenant_isolation ON profile
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON number;
 CREATE POLICY tenant_isolation ON number
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON number_assignment;
 CREATE POLICY tenant_isolation ON number_assignment
-  USING (tenant_id = current_setting('app.current_tenant', true));
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));

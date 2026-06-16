@@ -116,6 +116,9 @@ services:
       # Strengeres Rate-Limit fuer Login/Callback (Brute-Force-Schutz). Default 10/min.
       - key: LOGIN_RATE_LIMIT_PER_MIN
         value: "10"
+      # Lebensdauer der Browser-Session in Sekunden (Default 1 h).
+      - key: SESSION_TTL_SECONDS
+        value: "3600"
       - key: TWILIO_EDGE
         value: frankfurt
       - key: SEND_SMS_SUMMARY

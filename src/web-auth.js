@@ -4,6 +4,12 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { safeEqual } from "./util.js";
+
+// Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
+const RANDOM_BYTES = 16;
+// Lebensdauer der Login-Flow-Cookies (pkce/state/nonce) in Sekunden.
+const LOGIN_COOKIE_MAX_AGE = 600;
 
 const b64url = (buf) => buf.toString("base64url");
 
@@ -77,12 +83,16 @@ export function makeWebAuthRoutes(deps) {
   // Erzeugt PKCE-Paar + State, signiert beides als Cookies, redirectet zum IdP.
   router.get("/auth/login", async (req, res) => {
     const { verifier, challenge } = makePkce();
-    const state = crypto.randomBytes(16).toString("base64url");
+    const state = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
+    // nonce bindet das id_token an genau diese Login-Session (Replay/Substitution-
+    // Schutz, den PKCE nicht abdeckt): signiert als Cookie, als Param zum IdP.
+    const nonce = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
     setCookies(res, [
-      ["pkce_verifier", signValue(verifier, secret), 600],
-      ["oauth_state",   signValue(state,    secret), 600],
+      ["pkce_verifier", signValue(verifier, secret), LOGIN_COOKIE_MAX_AGE],
+      ["oauth_state",   signValue(state,    secret), LOGIN_COOKIE_MAX_AGE],
+      ["oidc_nonce",    signValue(nonce,    secret), LOGIN_COOKIE_MAX_AGE],
     ]);
-    const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
+    const url = await oidc.authorizeUrl({ challenge, state, nonce, redirectUri });
     res.redirect(302, url);
   });
 
@@ -96,24 +106,33 @@ export function makeWebAuthRoutes(deps) {
       return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
     }
 
+    // nonce: signierter Cookie muss vorhanden und gueltig sein. Fehlt/ungueltig ->
+    // 400 mit derselben generischen Meldung wie state (kein Detail-Leak, welcher
+    // Check scheiterte). Der Klarwert wird an exchange zur id_token-Bindung gereicht.
+    const signedNonce = readCookie(req, "oidc_nonce");
+    const nonce = signedNonce ? verifyValue(signedNonce, secret) : null;
+    if (!nonce) {
+      return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+    }
+
     // PKCE-Verifier aus Cookie
     const signedVerifier = readCookie(req, "pkce_verifier");
     const verifier = signedVerifier ? verifyValue(signedVerifier, secret) : null;
 
     try {
-      const { claims } = await oidc.exchange({ code: req.query.code, verifier, redirectUri });
+      const { claims } = await oidc.exchange({ code: req.query.code, verifier, nonce, redirectUri });
       const { tenantId } = await accounts.upsertOnFirstLogin({ sub: claims.sub, email: claims.email });
       const { id } = await sessions.create({ sub: claims.sub, tenantId, ttlSeconds });
 
-      // Session-Cookie setzen, PKCE/State-Cookies loeschen
+      // Session-Cookie setzen, Login-Flow-Cookies loeschen
       res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
-      clearCookies(res, ["pkce_verifier", "oauth_state"]);
+      clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
 
       await audit.record({ actorSub: claims.sub, tenantId, action: "login" });
       res.redirect(302, "/");
     } catch {
       // Generischer Fehler: kein internes Detail, keine Token-Leaks
-      clearCookies(res, ["pkce_verifier", "oauth_state"]);
+      clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
       res.status(401).send("Anmeldung fehlgeschlagen");
     }
   });
@@ -133,35 +152,67 @@ export function makeWebAuthRoutes(deps) {
   return router;
 }
 
+// ---- claimsFromPayload ----------------------------------------------
+// Mappt einen verifizierten id_token-Payload auf die Session-Claims. email
+// wird NUR uebernommen, wenn der Provider email_verified === true setzt
+// (Strikt-Gleichheit, kein Truthy-Cast: "true"/1/Abwesenheit gelten als
+// unverifiziert). Sonst email: null -> die Admin-Allowlist (adminOnly) ist
+// damit nur ueber nachweislich verifizierte Adressen erreichbar.
+export function claimsFromPayload(payload) {
+  const email = payload.email_verified === true ? (payload.email ?? null) : null;
+  return { sub: payload.sub, email };
+}
+
+// Prueft, ob das id_token den nonce dieser Login-Session traegt. Timing-sicher.
+// false bei fehlendem lokalem nonce, fehlendem Token-nonce oder Mismatch.
+function nonceMatches(payloadNonce, expected) {
+  if (!expected || payloadNonce == null) return false;
+  return safeEqual(String(payloadNonce), expected);
+}
+
 // ---- makeOidc --------------------------------------------------------
 // OIDC Auth-Code-Flow-Helfer (Authorization-Endpoint-URL bauen + Token-Exchange
 // mit id_token-Verifikation). Cached Discovery-Dokument + JWKS. Niemals loggen.
-export function makeOidc(config) {
+// Default-TTL des Discovery-Dokuments in Millisekunden (1 h). Per optionalem
+// Parameter _discoveryTtlMs nur fuer Tests uebersteuerbar (Default unveraendert).
+const DISCOVERY_TTL_MS = 3600_000;
+
+export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS } = {}) {
   let discoveryCache = null;
   let discoveryCachedAt = 0;
-  // TTL, damit eine Endpoint-/jwks_uri-Rotation beim IdP ohne Prozess-Neustart
-  // aufgefangen wird (sonst brechen alle Logins bis zum Restart).
-  const DISCOVERY_TTL_MS = 3600_000;
+  let jwksCache = null;
 
+  // TTL fuer das Discovery-Dokument. Beim Ablauf wird jwksCache ebenfalls
+  // zurueckgesetzt, damit eine jwks_uri-Rotation beim IdP ohne Prozess-Neustart
+  // aufgefangen wird (sonst brechen alle Logins bis zum Restart).
   async function discover() {
-    if (discoveryCache && Date.now() - discoveryCachedAt < DISCOVERY_TTL_MS) return discoveryCache;
+    if (discoveryCache && Date.now() - discoveryCachedAt < _discoveryTtlMs) return discoveryCache;
     const r = await fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
     if (!r.ok) throw new Error(`OIDC discovery HTTP ${r.status}`);
     discoveryCache = await r.json();
     discoveryCachedAt = Date.now();
+    // Neuladen: jwksCache zuruecksetzen, damit getJwks() die (evtl. neue)
+    // jwks_uri neu aufloest statt die alte RemoteJWKSet-Instanz zu behalten.
+    jwksCache = null;
     return discoveryCache;
   }
 
-  let jwksCache = null;
   async function getJwks() {
-    if (jwksCache) return jwksCache;
+    // Erst discover() (TTL-gated, billig): ein abgelaufener Cache wird hier neu
+    // geladen und setzt jwksCache zurueck. Erst danach den Cache pruefen, sonst
+    // wuerde eine jwks_uri-Rotation nie greifen (alte Instanz bliebe erhalten).
     const { jwks_uri } = await discover();
+    if (jwksCache) return jwksCache;
     jwksCache = createRemoteJWKSet(new URL(jwks_uri));
     return jwksCache;
   }
 
   return {
-    async authorizeUrl({ challenge, state, redirectUri }) {
+    // Test-Hook: macht getJwks fuer Unit-Tests beobachtbar (Cache-Verhalten).
+    // Kein Produktions-Aufrufer; getJwks wird intern von exchange() genutzt.
+    _getJwksForTest: getJwks,
+
+    async authorizeUrl({ challenge, state, nonce, redirectUri }) {
       const { authorization_endpoint } = await discover();
       const params = new URLSearchParams({
         response_type: "code",
@@ -171,11 +222,12 @@ export function makeOidc(config) {
         code_challenge: challenge,
         code_challenge_method: "S256",
         state,
+        nonce,
       });
       return `${authorization_endpoint}?${params}`;
     },
 
-    async exchange({ code, verifier, redirectUri }) {
+    async exchange({ code, verifier, nonce, redirectUri }) {
       const { token_endpoint } = await discover();
       const body = new URLSearchParams({
         grant_type: "authorization_code",
@@ -198,7 +250,14 @@ export function makeOidc(config) {
         audience: config.oidcClientId,
         clockTolerance: 30,
       });
-      return { claims: { sub: payload.sub, email: payload.email || null } };
+      // nonce-Bindung manuell pruefen (nicht als jwtVerify-Option, da jose die
+      // nonce-Option versionsabhaengig exponiert): id_token muss den nonce dieser
+      // Login-Session tragen. Mismatch/fehlend -> wirft, Aufrufer faengt generisch
+      // (401, kein Leak). Timing-sicherer Vergleich in nonceMatches.
+      if (!nonceMatches(payload.nonce, nonce)) {
+        throw new Error("nonce mismatch");
+      }
+      return { claims: claimsFromPayload(payload) };
     },
   };
 }
@@ -306,6 +365,41 @@ export function adminOnly(deps) {
     if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
     next();
   };
+}
+
+// ---- makeAdminRoutes -------------------------------------------------
+// Express-Router fuer die Admin-Tenant-Verwaltung (approve/suspend), hinter
+// webAuthMw + adminMw. Als Factory exportiert, damit Produktion (server.js) UND
+// Test denselben Handler nutzen (keine handkopierte Route-Replik, G5). suspend
+// invalidiert sofort alle Sessions des Tenants (gesperrter Kunde kann nicht bis
+// Cookie-Expiry weiterlesen). Jede Aktion auditiert; nicht-existenter Tenant ->
+// 404 (kein silent-noop, kein Audit-Eintrag fuer eine Phantom-Tenant-ID).
+export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw }) {
+  const router = Router();
+  router.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
+    try {
+      const ok = await accounts.setStatus(req.params.id, "active");
+      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
+      await audit.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
+      res.json({ tenantId: req.params.id, status: "active" });
+    } catch (e) {
+      console.error("[admin] approve", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
+  router.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
+    try {
+      const ok = await accounts.setStatus(req.params.id, "suspended");
+      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
+      await sessions.invalidateByTenant(req.params.id);
+      await audit.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
+      res.json({ tenantId: req.params.id, status: "suspended" });
+    } catch (e) {
+      console.error("[admin] suspend", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
+  return router;
 }
 
 // ---- makeSessions ----------------------------------------------------

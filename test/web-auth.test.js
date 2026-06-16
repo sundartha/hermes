@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { signValue, verifyValue, makePkce, makeWebAuthRoutes } from "../src/web-auth.js";
+import { signValue, verifyValue, makePkce, makeWebAuthRoutes, claimsFromPayload, adminOnly } from "../src/web-auth.js";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -152,6 +152,7 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
     const cookies = [
       `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
     const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
 
@@ -229,6 +230,7 @@ test("GET /auth/callback mit fehlschlagendem exchange -> 401, Cookies geloescht,
     const cookies = [
       `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
     const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
 
@@ -265,6 +267,204 @@ test("POST /auth/logout ohne Cookie -> 204 ohne Invalidierung (idempotent)", asy
     const res = await rawPost(`${srv.base}/auth/logout`);
     assert.equal(res.status, 204);
     assert.equal(calls.invalidate.length, 0);
+  } finally {
+    await srv.close();
+  }
+});
+
+// ---- F1: email_verified vor Admin-Allowlist erzwingen ----
+// claimsFromPayload reicht email NUR durch, wenn email_verified === true ist.
+// Verhindert Privilege-Escalation: unverifizierte/aenderbare Mail in ADMIN_EMAILS
+// darf keine Admin-Rechte freischalten.
+
+test("T-F1-01: email_verified true -> email durchgereicht", () => {
+  const claims = claimsFromPayload({ sub: "u1", email: "admin@vodafone.de", email_verified: true });
+  assert.deepEqual(claims, { sub: "u1", email: "admin@vodafone.de" });
+});
+
+test("T-F1-02: email_verified false -> email: null", () => {
+  const claims = claimsFromPayload({ sub: "u2", email: "attacker@vodafone.de", email_verified: false });
+  assert.deepEqual(claims, { sub: "u2", email: null });
+});
+
+test("T-F1-03: email_verified fehlt (undefined) -> email: null", () => {
+  const claims = claimsFromPayload({ sub: "u3", email: "x@y.de" });
+  assert.deepEqual(claims, { sub: "u3", email: null });
+});
+
+test("T-F1-04: email_verified true, email fehlt -> email: null (kein Throw)", () => {
+  const claims = claimsFromPayload({ sub: "u4", email_verified: true });
+  assert.deepEqual(claims, { sub: "u4", email: null });
+});
+
+test("T-F1-05: email_verified truthy String -> email: null (kein Truthy-Cast)", () => {
+  const claims = claimsFromPayload({ sub: "u5", email: "x@y.de", email_verified: "true" });
+  assert.deepEqual(claims, { sub: "u5", email: null });
+});
+
+// ---- F2: nonce im OIDC Auth-Code-Flow ----
+// /auth/login erzeugt nonce, legt ihn signiert als oidc_nonce-Cookie ab und gibt
+// ihn an authorizeUrl. /auth/callback liest den Cookie, reicht ihn an exchange
+// durch (id_token-nonce-Bindung) und loescht ihn beim Cleanup mit. Schuetzt vor
+// id_token-Replay/-Substitution, das PKCE nicht abdeckt.
+
+test("T-F2-01: GET /auth/login setzt signiertes oidc_nonce-Cookie und gibt nonce an authorizeUrl", async () => {
+  const { deps } = fakeDeps({
+    oidc: {
+      authorizeUrl: async ({ state, challenge, nonce, redirectUri }) =>
+        `https://idp.test/authorize?state=${state}&code_challenge=${challenge}&nonce=${nonce}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+      exchange: async () => ({ claims: { sub: "user-1", email: "neu@kunde.de" } }),
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const res = await rawGet(`${srv.base}/auth/login`);
+    assert.equal(res.status, 302);
+    const joined = res.setCookie.join("\n");
+    assert.match(joined, /oidc_nonce=/);
+    assert.match(joined, /HttpOnly/i);
+    assert.match(joined, /SameSite=Lax/i);
+    // nonce-Cookie verifizierbar signiert
+    const signedNonce = cookieValue(res.setCookie, "oidc_nonce");
+    const nonceValue = verifyValue(signedNonce, SECRET);
+    assert.ok(nonceValue, "oidc_nonce-Cookie muss verifizierbar signiert sein");
+    // nonce-Param in der URL und stimmt mit dem Cookie-Klarwert ueberein
+    const loc = new URL(res.headers.location);
+    assert.equal(loc.searchParams.get("nonce"), nonceValue);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-F2-02: GET /auth/callback ohne oidc_nonce-Cookie -> 400, keine Session", async () => {
+  const { deps, calls } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    assert.equal(res.status, 400);
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(calls.upsert.length, 0);
+    assert.equal(calls.create.length, 0);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-F2-03: GET /auth/callback mit manipuliertem oidc_nonce-Cookie -> 400, kein Leak", async () => {
+  const { deps, calls } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      // Falsche Signatur (anderes Secret) -> verifyValue gibt null
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-val", "wrong-secret"))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    assert.equal(res.status, 400);
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+    assert.equal(calls.create.length, 0);
+    assert.doesNotMatch(res.body, /nonce-val/);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-F2-04: GET /auth/callback mit nonce-Mismatch im id_token (exchange wirft) -> 401, kein Leak", async () => {
+  const { deps, calls } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => {
+        throw new Error("nonce mismatch");
+      },
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    assert.equal(res.status, 401);
+    assert.equal(calls.create.length, 0);
+    assert.doesNotMatch(res.body, /nonce/);
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-F2-05: GET /auth/callback Happy-Path: nonce-Klarwert an exchange uebergeben, oidc_nonce geloescht", async () => {
+  const { deps, calls } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async ({ nonce }) => {
+        calls.exchangeNonce = nonce;
+        return { claims: { sub: "user-1", email: "neu@kunde.de" } };
+      },
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const nonce = "nonce-abc";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue(nonce, SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    assert.equal(res.status, 302);
+    // exchange erhielt den nonce-Klarwert (nach verifyValue des Cookies)
+    assert.equal(calls.exchangeNonce, nonce);
+    // Session-Cookie gesetzt (Happy-Path unveraendert)
+    const sessionCookie = cookieValue(res.setCookie, "session");
+    assert.equal(verifyValue(sessionCookie, SECRET), "sess-abc-123");
+    // oidc_nonce wird geloescht (Max-Age=0)
+    const joined = res.setCookie.join("\n");
+    assert.match(joined, /oidc_nonce=;|oidc_nonce[\s\S]*Max-Age=0|Max-Age=0[\s\S]*oidc_nonce/i);
+  } finally {
+    await srv.close();
+  }
+});
+
+// adminOnly-Mount-Muster: req.tenant per Hilfs-Middleware setzen, dann adminOnly.
+async function mountAdmin(adminEmails, tenant) {
+  const app = express();
+  app.get(
+    "/admin-probe",
+    (req, _res, next) => { req.tenant = tenant; next(); },
+    adminOnly({ adminEmails }),
+    (_req, res) => res.json({ ok: true })
+  );
+  const server = await new Promise((r) => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
+  return { base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
+}
+
+test("T-F1-06: adminOnly mit unverifizierter Email (null) -> 403 trotz Allowlist-Treffer", async () => {
+  const srv = await mountAdmin(["admin@vodafone.de"], { email: null, role: "member", tenantId: "t_u1", sub: "u1" });
+  try {
+    const res = await rawGet(`${srv.base}/admin-probe`);
+    assert.equal(res.status, 403);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-F1-07: adminOnly mit verifizierter Email in Allowlist -> 200", async () => {
+  const srv = await mountAdmin(["admin@vodafone.de"], { email: "admin@vodafone.de", role: "member", tenantId: "t_u1", sub: "u1" });
+  try {
+    const res = await rawGet(`${srv.base}/admin-probe`);
+    assert.equal(res.status, 200);
   } finally {
     await srv.close();
   }

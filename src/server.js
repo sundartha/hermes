@@ -16,7 +16,7 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
-import { makeWebAuthRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
+import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
@@ -87,7 +87,9 @@ registerWellKnown(app);
 // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
 // damit /auth/login nicht durch Basic-Auth geblockt wird.
 if (config.sessionSecret && config.storeBackend === "pg") {
-  const portalRunner = createPortalRunner();
+  // await: createPortalRunner prueft fail-closed die DB-Rolle (F5, Superuser/BYPASSRLS).
+  // Wirft die Assertion, propagiert der Fehler und der Prozess startet nicht.
+  const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
   const accounts = makeAccounts(portalRunner);
   const sessions = makeSessions(portalRunner);
@@ -100,7 +102,7 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   app.use(makeWebAuthRoutes({
     secret: config.sessionSecret,
     redirectUri: config.publicUrl + "/auth/callback",
-    ttlSeconds: 3600,
+    ttlSeconds: config.sessionTtlSeconds,
     oidc,
     accounts,
     sessions,
@@ -122,31 +124,10 @@ if (config.sessionSecret && config.storeBackend === "pg") {
   });
 
   // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
-  // Hinter webAuth + adminOnly. Suspend invalidiert sofort alle Sessions des Tenants
-  // (gesperrter Kunde kann nicht bis Cookie-Expiry weiter lesen). Jede Aktion auditiert.
-  app.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
-    try {
-      const ok = await accounts.setStatus(req.params.id, "active");
-      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
-      await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
-      res.json({ tenantId: req.params.id, status: "active" });
-    } catch (e) {
-      console.error("[admin] approve", e.message);
-      res.status(500).json({ error: "interner Fehler" });
-    }
-  });
-  app.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
-    try {
-      const ok = await accounts.setStatus(req.params.id, "suspended");
-      if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
-      await sessions.invalidateByTenant(req.params.id);
-      await auditStore.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
-      res.json({ tenantId: req.params.id, status: "suspended" });
-    } catch (e) {
-      console.error("[admin] suspend", e.message);
-      res.status(500).json({ error: "interner Fehler" });
-    }
-  });
+  // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben
+  // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
+  // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404.
+  app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
 }
 
 app.use((req, res, next) => {
