@@ -79,12 +79,17 @@ function migrateSettingsToMap(settings) {
 
 // Migriert eine alte FLACHE calendar-Liste auf die owner-keyed Map (I2). Erkennt
 // das alte Shape an Array.isArray. Defensiv (fehlend -> calendarMap) + idempotent
-// (bereits Map -> Owner sicherstellen, fremde Buckets unveraendert).
+// (bereits Map -> frisch aufbauen wie migrateUsage/SettingsToMap, fremde Buckets
+// uebernehmen, Owner sicherstellen).
 function migrateCalendarToMap(calendar) {
   if (Array.isArray(calendar)) return { [OWNER_TENANT_ID]: calendar };
   if (!calendar || typeof calendar !== "object") return calendarMap();
-  if (!(OWNER_TENANT_ID in calendar)) calendar[OWNER_TENANT_ID] = demoCalendar();
-  return calendar;
+  const map = {};
+  for (const [tenantId, events] of Object.entries(calendar)) {
+    map[tenantId] = events;
+  }
+  map[OWNER_TENANT_ID] ||= demoCalendar();
+  return map;
 }
 
 // Profile aus config.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.

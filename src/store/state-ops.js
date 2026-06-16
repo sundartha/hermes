@@ -8,7 +8,6 @@
 import crypto from "crypto";
 import {
   defaultSettings,
-  demoCalendar,
   defaultSettingsMap,
   calendarMap,
   emptyUsage,
@@ -231,16 +230,10 @@ export function toggleActionItem(s, id) {
 }
 
 // ---- Kalender ----
-// Liefert den Settings-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
-// im Kommentar; analog usageFor). So lebt der Map-Zugriff genau einmal (G5). Ein
-// neuer Tenant bekommt frische defaultSettings(); der Owner ist in der Map vorbelegt.
-export function settingsFor(s, tenantId) {
-  return (s.settings[tenantId] ||= defaultSettings());
-}
-
-// Liefert den Kalender-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (analog
-// usageFor/settingsFor). Ein neuer Tenant startet mit einer LEEREN Liste (der
-// Owner-Demo-Kalender ist nur dem Owner vorbelegt, calendarMap).
+// Liefert den Kalender-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Lazy-Init
+// als bewusster, dokumentierter Nebeneffekt, analog usageFor). So lebt der
+// Map-Zugriff genau einmal (G5). Ein neuer Tenant startet mit einer LEEREN Liste
+// (der Owner-Demo-Kalender ist nur dem Owner vorbelegt, calendarMap).
 export function calendarFor(s, tenantId) {
   return (s.calendar[tenantId] ||= []);
 }
@@ -487,6 +480,14 @@ export function pruneOldData(s, days) {
 }
 
 // ---- Settings ----
+// Liefert den Settings-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Lazy-Init
+// als bewusster, dokumentierter Nebeneffekt, analog usageFor). So lebt der
+// Map-Zugriff genau einmal (G5). Ein neuer Tenant bekommt frische defaultSettings();
+// der Owner ist in der Map vorbelegt.
+export function settingsFor(s, tenantId) {
+  return (s.settings[tenantId] ||= defaultSettings());
+}
+
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
 // so keine fremden Felder in den Store schreiben oder Typen kippen.
