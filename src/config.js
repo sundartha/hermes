@@ -70,6 +70,12 @@ export const config = {
   // maxNumbers). Bewusst global statt pro-Order: Blast-Radius ist durch die Caps
   // + Auth + Allowlist bereits winzig (Owner-Phase). NIE per Default an.
   provisioningEnabled: (process.env.PROVISIONING_ENABLED || "false") === "true",
+  // Multi-Tenant-Identitaets-/Laufzeit-Schicht (I4-I7). DEFAULT AUS (fail-closed):
+  // requestTenant === OWNER_TENANT_ID -> Owner byte-identisch, kein Tenant-Scoping.
+  // Erst true (nach allen dichten Scope-Gates I5/I6/I7) loest die Auth-Achse den
+  // Request-Tenant auf. EIN gemeinsames Flag fuer I4-I7 (kein separates Login-Flag;
+  // Self-Service kommt spaeter unter eigenem Reife-Flag).
+  multiTenant: (process.env.MULTI_TENANT || "false") === "true",
   // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
   provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim

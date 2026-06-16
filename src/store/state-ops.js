@@ -513,6 +513,20 @@ export function resolveProfile(s, email) {
   return resolveProfileFrom(email, email ? s.profiles[email] : undefined);
 }
 
+// ---- Tenant-Aufloesung (Auth-Achse, I4) ----
+// Geschwister zu resolveProfile, ABER mit umgekehrter Fail-Semantik. resolveProfile
+// faellt bei leerer Identitaet bewusst fail-OPEN auf Owner (resolveProfileFrom(!email)
+// -> OWNER_PROFILE in defaults.js): das vergibt RECHTE konservativ an den Owner.
+// resolveTenant DARF diese Semantik NIEMALS erben: leere/null/unbekannte Identitaet
+// -> null (Reject), NIE OWNER_TENANT_ID. Ein Default-Tenant hier wuerde den ganzen
+// Tenant-Scope (I5/I6/I7) umgehbar machen - still, weil Owner-only-Tests gruen blieben.
+// 1:1 (#2): liefert genau eine tenantId ODER null, keine Liste. Keyt auf idpSubject (#1).
+export function resolveTenant(s, idpSubject) {
+  if (!idpSubject) return null; // leer/null NICHT iterieren -> kein versehentlicher Owner-Fallback
+  const tenant = (s.tenants || []).find((t) => t.idpSubject === idpSubject);
+  return tenant ? tenant.id : null;
+}
+
 export function listProfiles(s) {
   return s.profiles;
 }

@@ -252,6 +252,11 @@ export function resolveProfile(email) {
   return ops.resolveProfile(load(), email);
 }
 
+// Tenant-Aufloesung (I4): reine Query, kein save (analog resolveProfile).
+export function resolveTenant(idpSubject) {
+  return ops.resolveTenant(load(), idpSubject);
+}
+
 export function listProfiles() {
   return ops.listProfiles(load());
 }
