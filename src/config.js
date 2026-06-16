@@ -162,8 +162,10 @@ export function assertConfig() {
     missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
   if (config.paymentEnabled && !config.stripeSecretKey)
     missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
-  if (config.paymentEnabled && config.numberSetupFeeCents <= 0)
-    missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss > 0 sein)");
+  // Number.isInteger faengt auch NaN (nicht-numerisches NUMBER_SETUP_FEE_CENTS):
+  // NaN <= 0 ist false -> ohne diesen Guard wuerde die >0-Geldsicherung still umgangen.
+  if (config.paymentEnabled && (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0))
+    missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
   if (missing.length) {
     console.error(
       "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +

@@ -77,7 +77,7 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
   try {
     await provisioner.configureNumber({ providerNumberId: ordered.providerNumberId, connectionId });
   } catch (cfgErr) {
-    await rollbackAfterOrder(s, numberId, provisioner, ordered.providerNumberId, billing, paymentIntentId);
+    await rollbackAfterOrder(s, numberId, { provisioner, providerNumberId: ordered.providerNumberId, billing, paymentIntentId });
     throw cfgErr;
   }
 
@@ -86,7 +86,7 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
     try {
       await billing.captureHold(paymentIntentId, holdAmountCents);
     } catch (capErr) {
-      await rollbackAfterOrder(s, numberId, provisioner, ordered.providerNumberId, billing, paymentIntentId);
+      await rollbackAfterOrder(s, numberId, { provisioner, providerNumberId: ordered.providerNumberId, billing, paymentIntentId });
       throw capErr;
     }
   }
@@ -113,7 +113,7 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
 // (moeglicher Orphan -> Reconciliation, durch die MAX_NUMBERS-Cap gedeckelt). Eine
 // Stelle fuer beide Fehlerkanten (G5/S2). Bei billing=null ist cancelHoldIfHeld ein
 // No-op -> der payment-off configure-Pfad bleibt byte-identisch zum Bestand.
-async function rollbackAfterOrder(s, numberId, provisioner, providerNumberId, billing, paymentIntentId) {
+async function rollbackAfterOrder(s, numberId, { provisioner, providerNumberId, billing, paymentIntentId }) {
   failNumber(s, numberId); // provisioning|capturing -> failed
   try {
     await provisioner.releaseNumber(providerNumberId);
