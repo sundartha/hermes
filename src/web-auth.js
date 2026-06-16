@@ -249,6 +249,41 @@ export function makeAccounts(runner) {
   };
 }
 
+// ---- webAuth ---------------------------------------------------------
+// Express-Middleware: prueft Session-Cookie (signiert), laedt Session + Account,
+// setzt req.tenant. Fail-closed: kein Detail-Leak in Fehlerkoerpern, kein Token-
+// oder Cookie-Logging. Unerwartete Fehler -> 401.
+export function webAuth(deps) {
+  const { secret, sessions, accounts } = deps;
+
+  return async function webAuthMiddleware(req, res, next) {
+    try {
+      // 1. Cookie lesen und Signatur pruefen
+      const raw = readCookie(req, "session");
+      const sessionId = raw ? verifyValue(raw, secret) : null;
+      if (!sessionId) return res.status(401).json({ error: "Unauthorized" });
+
+      // 2. Session laden und Gueltigkeit pruefen
+      const row = await sessions.get(sessionId);
+      if (!row) return res.status(401).json({ error: "Unauthorized" });
+      if (row.invalidated_at != null) return res.status(401).json({ error: "Unauthorized" });
+      if (new Date(row.expires_at) <= new Date()) return res.status(401).json({ error: "Unauthorized" });
+
+      // 3. Account laden und Status pruefen
+      const acct = await accounts.resolve(row.sub);
+      if (!acct) return res.status(401).json({ error: "Unauthorized" });
+      if (acct.status !== "active") return res.status(403).json({ error: "Forbidden" });
+
+      // 4. Tenant-Kontext am Request setzen
+      req.tenant = { tenantId: acct.tenantId, sub: row.sub, role: acct.role, email: acct.email };
+      next();
+    } catch {
+      // Unerwarteter Fehler -> fail-closed, kein Detail-Leak
+      res.status(401).json({ error: "Unauthorized" });
+    }
+  };
+}
+
 // ---- makeSessions ----------------------------------------------------
 // Session-Lebenszyklus: anlegen, lesen, invalidieren (by id oder by tenant).
 export function makeSessions(runner) {
