@@ -148,6 +148,29 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
   }
 }
 
+// Mock der Telnyx-Provisioning-API: routet nach Pfad (search/order/configure).
+// Liefert e164 +4915799990001. Geteilt von onboarding-route + onboarding-identity
+// (G5: eine Definition statt zweier Kopien).
+export async function startTelnyxMock() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (d) => (body += d));
+    req.on("end", () => {
+      requests.push({ method: req.method, path: req.url, body });
+      res.setHeader("content-type", "application/json");
+      if (req.url.startsWith("/v2/available_phone_numbers"))
+        return res.end(JSON.stringify({ data: [{ phone_number: "+4915799990001" }] }));
+      if (req.url === "/v2/number_orders")
+        return res.end(JSON.stringify({ data: { phone_numbers: [{ id: "num_ext_1", phone_number: "+4915799990001" }] } }));
+      // configure (PATCH .../voice), release (DELETE) -> 200 ok
+      res.end(JSON.stringify({ data: {} }));
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return { url: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise((r) => server.close(r)) };
+}
+
 // ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----
 // = PUBLIC_URL/mcp aus BASE_ENV (kanonische Audience).
 export const MCP_AUDIENCE = "https://agent.test/mcp";

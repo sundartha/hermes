@@ -52,6 +52,18 @@ test("registerTenant: idempotent, Owner existiert immer", () => {
   assert.equal(s.tenants.filter((t) => t.id === "t_x").length, 1);
 });
 
+test("registerTenant: ownerName set-on-create (3-arg setzt, 2-arg leer, whitespace weg, Re-Register unveraendert)", () => {
+  const s = makeDefaultState();
+  // 3-arg setzt das Feld
+  assert.equal(registerTenant(s, "t_named", { ownerName: "Maria" }).ownerName, "Maria");
+  // 2-arg -> kein Feld (byte-identisch zum Bestand -> Owner-Fallback)
+  assert.ok(!("ownerName" in registerTenant(s, "t_plain")));
+  // whitespace-only -> Feld weggelassen (kein Daten-Muell)
+  assert.ok(!("ownerName" in registerTenant(s, "t_ws", { ownerName: "   " })));
+  // set-on-create: Re-Register mit anderem Namen aendert NICHTS (kein Upsert)
+  assert.equal(registerTenant(s, "t_named", { ownerName: "Bob" }).ownerName, "Maria");
+});
+
 // ---- requestNumber + Caps (Kosten-Notbremse) ----
 test("requestNumber: happy path -> status requested, KEINE e164/Kauf", () => {
   const s = makeDefaultState();

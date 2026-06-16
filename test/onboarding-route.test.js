@@ -4,32 +4,10 @@
 // Eigene Datei (Server-Spawn, KEIN pglite -> kein Test-Worker-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
-import { startServer } from "./helpers.js";
+import { startServer, startTelnyxMock } from "./helpers.js";
 
 const postJson = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-
-// Mock der Telnyx-Provisioning-API: routet nach Pfad (search/order/configure).
-async function startTelnyxMock() {
-  const requests = [];
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (d) => (body += d));
-    req.on("end", () => {
-      requests.push({ method: req.method, path: req.url, body });
-      res.setHeader("content-type", "application/json");
-      if (req.url.startsWith("/v2/available_phone_numbers"))
-        return res.end(JSON.stringify({ data: [{ phone_number: "+4915799990001" }] }));
-      if (req.url === "/v2/number_orders")
-        return res.end(JSON.stringify({ data: { phone_numbers: [{ id: "num_ext_1", phone_number: "+4915799990001" }] } }));
-      // configure (PATCH .../voice), release (DELETE) -> 200 ok
-      res.end(JSON.stringify({ data: {} }));
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise((r) => server.close(r)) };
-}
 
 test("Dry-Run (Default): onboard registriert + fragt an, Nummer bleibt 'requested', KEIN Geld", async () => {
   const srv = await startServer(); // PROVISIONING_ENABLED unset -> false
