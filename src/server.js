@@ -529,13 +529,13 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
 app.get("/api/state", (req, res) => {
   const s = store.load();
   res.json({
-    settings: s.settings,
+    // Owner-Bucket im flachen Shape, das Dashboard (public/index.html) + die
+    // MCP-Tools erwarten. settings/calendar/usage sind seit I2/P4 Maps
+    // tenantId -> Bucket; die Laufzeit ist owner-only, deshalb der Owner-Bucket.
+    settings: s.settings[OWNER_TENANT_ID],
     calls: s.calls.slice(0, 30).map(publicCall),
     actionItems: s.actionItems.slice(0, 50),
-    calendar: store.getCalendar().filter((e) => e.end >= new Date().toISOString()).slice(0, 10),
-    // Owner-Bucket im flachen Shape, das Dashboard (public/index.html) +
-    // get_agent_status erwarten. usage ist seit P4 eine Map tenantId -> Bucket;
-    // die Laufzeit ist owner-only, deshalb der Owner-Bucket.
+    calendar: store.getCalendar(OWNER_TENANT_ID).filter((e) => e.end >= new Date().toISOString()).slice(0, 10),
     usage: { ...s.usage[OWNER_TENANT_ID], maxBudgetEur: config.maxBudgetEur },
     notifications: s.notifications.slice(0, 10),
     agent: {
@@ -568,7 +568,7 @@ app.get("/api/tenant-data/export", (req, res) => {
 });
 
 app.post("/api/settings", (req, res) => {
-  const { settings, changed } = store.updateSettings(req.body || {});
+  const { settings, changed } = store.updateSettings(OWNER_TENANT_ID, req.body || {});
   // Nur die Keys loggen - Werte (z.B. greeting-Freitext) gehoeren nicht ins Log
   audit("settings_update", req, `keys=${changed.join(",") || "-"}`);
   res.json(settings);
@@ -598,7 +598,7 @@ app.post("/api/calendar", (req, res) => {
     return res.status(400).json({ error: "start und end muessen gueltige Datumswerte sein (ISO 8601)" });
   if (endDate <= startDate) return res.status(400).json({ error: "end muss nach start liegen" });
   // Normalisiert speichern: findConflict() vergleicht ISO-Strings lexikographisch
-  res.json(store.addCalendarEvent(title, startDate.toISOString(), endDate.toISOString()));
+  res.json(store.addCalendarEvent(OWNER_TENANT_ID, title, startDate.toISOString(), endDate.toISOString()));
 });
 
 // ---- Rechteprofile verwalten (Phase 2) ----

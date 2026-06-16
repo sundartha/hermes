@@ -94,7 +94,7 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
 test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberleben", async () => {
   const { store, db } = await setup();
   // Service/Identitaet/Budget-Gate vorab setzen, damit ihr Ueberleben pruefbar ist.
-  store.updateSettings({ agentName: "Owner-Service" });
+  store.updateSettings(OWNER_TENANT_ID, { agentName: "Owner-Service" });
   store.trackUsage(OWNER_TENANT_ID, 1_000_000, 0, PRICES);
   const c = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
   store.addTranscript(c.id, "agent", "weg");
@@ -105,7 +105,7 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
 
   const reopened = await reopen(db);
   assert.equal(reopened.load().calls.length, 0, "Owner-Calls weg nach Re-Hydrierung");
-  assert.equal(reopened.load().settings.agentName, "Owner-Service", "settings ueberleben");
+  assert.equal(reopened.load().settings[OWNER_TENANT_ID].agentName, "Owner-Service", "settings ueberleben");
   assert.equal(reopened.load().usage[OWNER_TENANT_ID].inputTokens, 1_000_000, "usage/Budget-Gate ueberlebt");
-  assert.equal(reopened.getCalendar().length, 3, "Demo-Kalender (Service-Config) bleibt");
+  assert.equal(reopened.getCalendar(OWNER_TENANT_ID).length, 3, "Demo-Kalender (Service-Config) bleibt");
 });

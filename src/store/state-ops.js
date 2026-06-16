@@ -9,6 +9,8 @@ import crypto from "crypto";
 import {
   defaultSettings,
   demoCalendar,
+  defaultSettingsMap,
+  calendarMap,
   emptyUsage,
   emptyUsageMap,
   OWNER_TENANT_ID,
@@ -25,10 +27,10 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function makeDefaultState() {
   return {
-    settings: defaultSettings(),
+    settings: defaultSettingsMap(),
     calls: [], // {id, direction, from, to, goal, status, startedAt, endedAt, transcript:[{role,text,at}], summary, actionItemIds:[ids]}
     actionItems: [], // {id, callId, text, type:"todo"|"appointment", done, createdAt}
-    calendar: demoCalendar(),
+    calendar: calendarMap(),
     usage: emptyUsageMap(),
     notifications: [], // {id, title, body, at, callId}
     // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
@@ -229,18 +231,32 @@ export function toggleActionItem(s, id) {
 }
 
 // ---- Kalender ----
-export function getCalendar(s) {
-  return s.calendar.sort((a, b) => a.start.localeCompare(b.start));
+// Liefert den Settings-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
+// im Kommentar; analog usageFor). So lebt der Map-Zugriff genau einmal (G5). Ein
+// neuer Tenant bekommt frische defaultSettings(); der Owner ist in der Map vorbelegt.
+export function settingsFor(s, tenantId) {
+  return (s.settings[tenantId] ||= defaultSettings());
 }
 
-export function addCalendarEvent(s, title, startIso, endIso) {
+// Liefert den Kalender-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (analog
+// usageFor/settingsFor). Ein neuer Tenant startet mit einer LEEREN Liste (der
+// Owner-Demo-Kalender ist nur dem Owner vorbelegt, calendarMap).
+export function calendarFor(s, tenantId) {
+  return (s.calendar[tenantId] ||= []);
+}
+
+export function getCalendar(s, tenantId) {
+  return calendarFor(s, tenantId).sort((a, b) => a.start.localeCompare(b.start));
+}
+
+export function addCalendarEvent(s, tenantId, title, startIso, endIso) {
   const ev = { id: newId("ev"), title, start: startIso, end: endIso };
-  s.calendar.push(ev);
+  calendarFor(s, tenantId).push(ev);
   return ev;
 }
 
-export function findConflict(s, startIso, endIso) {
-  return getCalendar(s).find((ev) => ev.start < endIso && startIso < ev.end) || null;
+export function findConflict(s, tenantId, startIso, endIso) {
+  return getCalendar(s, tenantId).find((ev) => ev.start < endIso && startIso < ev.end) || null;
 }
 
 // ---- Inbound-Routing: E.164 -> Tenant (P3c) ----
@@ -291,20 +307,19 @@ export function findTenant(s, id) {
 
 // ---- Tenant-Kontext-Seam (Identitaets-Schicht, I0) ----
 // Reines IO-freies Domaenen-Objekt: die EINE Stelle, die Identitaet + Settings +
-// Kalender eines Tenants buendelt. Liest noch die globalen Singletons
-// (s.settings, s.calendar) + den durchgereichten ownerName (Konsumenten/Map folgen
-// in spaeteren Phasen). ownerName wird vom Backend-Wrapper hereingereicht (heute
-// config.ownerName), damit state-ops config-frei bleibt (wie caps bei
-// requestNumber). Owner-Fallback gekapselt: hat der Tenant keinen eigenen Namen,
-// gilt der durchgereichte ownerName. Invariante: bei genau einem Tenant ist das
-// Ergebnis byte-identisch zu den heutigen globalen Singletons.
+// Kalender eines Tenants buendelt. Liest die pro-Tenant-Buckets
+// (settingsFor/calendarFor, I2) + den durchgereichten ownerName. ownerName wird vom
+// Backend-Wrapper hereingereicht (heute config.ownerName), damit state-ops
+// config-frei bleibt (wie caps bei requestNumber). Owner-Fallback gekapselt: hat der
+// Tenant keinen eigenen Namen, gilt der durchgereichte ownerName. Invariante: bei
+// genau einem Tenant ist der Owner-Bucket byte-identisch zu den heutigen Singletons.
 export function tenantContext(s, ownerName, tenantId) {
   const tenant = findTenant(s, tenantId);
   return {
     tenantId,
     ownerName: (tenant && tenant.ownerName) || ownerName,
-    settings: s.settings,
-    calendar: s.calendar,
+    settings: settingsFor(s, tenantId),
+    calendar: calendarFor(s, tenantId),
   };
 }
 
@@ -476,16 +491,17 @@ export function pruneOldData(s, days) {
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
 // so keine fremden Felder in den Store schreiben oder Typen kippen.
 // Liefert auch die uebernommenen Keys (fuers Audit-Log in server.js).
-export function updateSettings(s, patch) {
+export function updateSettings(s, tenantId, patch) {
   const allowed = defaultSettings();
   const changed = [];
+  const target = settingsFor(s, tenantId);
   for (const [key, value] of Object.entries(patch || {})) {
     if (key in allowed && typeof value === typeof allowed[key]) {
-      s.settings[key] = value;
+      target[key] = value;
       changed.push(key);
     }
   }
-  return { settings: s.settings, changed };
+  return { settings: target, changed };
 }
 
 // ---- Rechteprofile pro Nutzer (Phase 2) ----

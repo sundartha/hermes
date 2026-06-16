@@ -114,13 +114,13 @@ export function makePgStore(runner) {
       return item;
     },
 
-    getCalendar: () => ops.getCalendar(requireState()),
-    addCalendarEvent(title, startIso, endIso) {
-      const ev = ops.addCalendarEvent(requireState(), title, startIso, endIso);
+    getCalendar: (tenantId) => ops.getCalendar(requireState(), tenantId),
+    addCalendarEvent(tenantId, title, startIso, endIso) {
+      const ev = ops.addCalendarEvent(requireState(), tenantId, title, startIso, endIso);
       save();
       return ev;
     },
-    findConflict: (startIso, endIso) => ops.findConflict(requireState(), startIso, endIso),
+    findConflict: (tenantId, startIso, endIso) => ops.findConflict(requireState(), tenantId, startIso, endIso),
 
     // Tenant-Kontext-Seam (I0): liest den hydrierten Spiegel (kein DB-Roundtrip),
     // config.ownerName als Owner-Fallback (Wrapper-Parity zu json.js).
@@ -159,8 +159,8 @@ export function makePgStore(runner) {
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
 
-    updateSettings(patch) {
-      const result = ops.updateSettings(requireState(), patch);
+    updateSettings(tenantId, patch) {
+      const result = ops.updateSettings(requireState(), tenantId, patch);
       save();
       return result;
     },
@@ -211,12 +211,14 @@ async function hydrate(client, tenantId) {
   const itemIdsByCall = groupActionItemIds(itemRows);
 
   const state = ops.makeDefaultState();
-  state.settings = settingsRows.length ? rowToSettings(settingsRows[0]) : state.settings;
+  // Owner-scoped Hydrierung (I2): settings/calendar fuellen den Owner-Bucket der
+  // Map (analog der usage-Zeile, NICHT flach zuweisen - das wuerde das Map-Shape
+  // zerstoeren). Ohne Settings-Zeile bleibt der vorbelegte defaultSettingsMap-Bucket.
+  // Mehr-Tenant-Hydrierung ist spaeterer Scope (erst wenn ein 2. Tenant live ist).
+  if (settingsRows.length) state.settings[OWNER_TENANT_ID] = rowToSettings(settingsRows[0]);
   state.calls = callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall));
   state.actionItems = itemRows.map(rowToActionItem);
-  state.calendar = calRows.map(rowToCalendarEvent);
-  // Owner-scoped Hydrierung (P4): die usage-Zeile fuellt den Owner-Bucket der Map.
-  // Mehr-Tenant-Hydrierung ist spaeterer Scope (erst wenn ein 2. Tenant live ist).
+  state.calendar[OWNER_TENANT_ID] = calRows.map(rowToCalendarEvent);
   if (usageRows.length) state.usage[OWNER_TENANT_ID] = rowToUsage(usageRows[0]);
   state.notifications = notifRows.map(rowToNotification);
   state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
@@ -322,9 +324,9 @@ async function flush(client, tenantId, state) {
     await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId]);
     await flushCalls(client, tenantId, state.calls);
     await flushActionItems(client, tenantId, state.actionItems);
-    await flushCalendar(client, tenantId, state.calendar);
+    await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
     await flushNotifications(client, tenantId, state.notifications);
-    await flushSettings(client, tenantId, state.settings);
+    await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
     await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
     await flushProfiles(client, tenantId, state.profiles);
     await flushNumbers(client, tenantId, state.numbers);

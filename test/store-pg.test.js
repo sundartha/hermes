@@ -26,7 +26,9 @@ async function reopen(db) {
 test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  assert.deepEqual(s.settings, defaultSettings());
+  // settings/calendar sind seit I2 Maps tenantId -> Bucket; der frische Zustand
+  // traegt den Owner-Bucket (byte-identisch zur gemeinsamen Quelle defaults.js).
+  assert.deepEqual(s.settings[OWNER_TENANT_ID], defaultSettings());
   assert.equal(s.calls.length, 0);
   assert.equal(s.actionItems.length, 0);
   assert.equal(s.notifications.length, 0);
@@ -34,7 +36,7 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
   // usage ist seit P4 eine Map tenantId -> Bucket; der frische Zustand traegt den Owner-Bucket.
   assert.deepEqual(s.usage[OWNER_TENANT_ID], { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 });
   // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
-  assert.deepEqual(store.getCalendar(), demoCalendar());
+  assert.deepEqual(store.getCalendar(OWNER_TENANT_ID), demoCalendar());
 });
 
 test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionItemIds", async () => {
@@ -148,16 +150,18 @@ test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
   assert.equal(reopened.budgetExceeded(OWNER_TENANT_ID, PRICES), true);
 });
 
-test("getCalendar sortiert + addCalendarEvent + findConflict", async () => {
+test("getCalendar sortiert + addCalendarEvent + findConflict (tenantId-Signatur, I2)", async () => {
   const { store, db } = await makePgTestStore();
-  store.addCalendarEvent("Termin", "2030-01-01T10:00:00.000Z", "2030-01-01T11:00:00.000Z");
-  const cal = store.getCalendar();
+  store.addCalendarEvent(OWNER_TENANT_ID, "Termin", "2030-01-01T10:00:00.000Z", "2030-01-01T11:00:00.000Z");
+  const cal = store.getCalendar(OWNER_TENANT_ID);
   for (let i = 1; i < cal.length; i++) assert.ok(cal[i - 1].start <= cal[i].start);
-  assert.ok(store.findConflict("2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"));
-  assert.equal(store.findConflict("2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"), null);
+  assert.ok(store.findConflict(OWNER_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"));
+  assert.equal(store.findConflict(OWNER_TENANT_ID, "2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"), null);
   await store.save();
+  // Round-Trip durch flush/hydrate: belegt, dass ops.calendarFor ueber den pg-Pfad
+  // erreichbar ist (kein undefined-Drift, R6-pg) - der Owner-Bucket-Termin ueberlebt.
   const reopened = await reopen(db);
-  assert.ok(reopened.findConflict("2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"));
+  assert.ok(reopened.findConflict(OWNER_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"));
 });
 
 test("addNotification kappt auf 50 (neueste zuerst)", async () => {
@@ -171,17 +175,20 @@ test("addNotification kappt auf 50 (neueste zuerst)", async () => {
   assert.equal(reopened.load().notifications[0].title, "t54");
 });
 
-test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert", async () => {
+test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert (tenantId-Signatur, I2)", async () => {
   const { store, db } = await makePgTestStore();
-  const { changed } = store.updateSettings({ agentName: "Neu", allowBooking: false, fremd: "x", allowCalendar: "kein-bool" });
+  const { changed } = store.updateSettings(OWNER_TENANT_ID, { agentName: "Neu", allowBooking: false, fremd: "x", allowCalendar: "kein-bool" });
   assert.deepEqual(changed.sort(), ["agentName", "allowBooking"]);
-  assert.equal(store.load().settings.agentName, "Neu");
-  assert.equal(store.load().settings.allowBooking, false);
-  assert.equal("fremd" in store.load().settings, false);
+  // settings ist seit I2 eine Map tenantId -> Bucket; Laufzeit liest den Owner-Bucket.
+  assert.equal(store.load().settings[OWNER_TENANT_ID].agentName, "Neu");
+  assert.equal(store.load().settings[OWNER_TENANT_ID].allowBooking, false);
+  assert.equal("fremd" in store.load().settings[OWNER_TENANT_ID], false);
   await store.save();
+  // Round-Trip durch flush/hydrate: belegt, dass ops.settingsFor ueber den pg-Pfad
+  // erreichbar ist (kein undefined-Drift, R6-pg) - der Owner-Bucket ueberlebt.
   const reopened = await reopen(db);
-  assert.equal(reopened.load().settings.agentName, "Neu");
-  assert.equal(reopened.load().settings.allowBooking, false);
+  assert.equal(reopened.load().settings[OWNER_TENANT_ID].agentName, "Neu");
+  assert.equal(reopened.load().settings[OWNER_TENANT_ID].allowBooking, false);
 });
 
 test("Profile: resolveProfile Owner/Default + setProfile/deleteProfile/listProfiles", async () => {
@@ -275,7 +282,7 @@ test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", asyn
   const db = new PGlite();
   await reopen(db);
   const second = await reopen(db);
-  assert.equal(second.getCalendar().length, demoCalendar().length);
+  assert.equal(second.getCalendar(OWNER_TENANT_ID).length, demoCalendar().length);
 });
 
 test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null", async () => {

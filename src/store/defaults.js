@@ -90,6 +90,20 @@ export function demoCalendar() {
   }));
 }
 
+// Settings-Map mit dem Owner-Bucket vorbelegt (Identitaets-Schicht pro-Tenant, I2;
+// analog emptyUsageMap). s.settings ist eine Map tenantId -> Settings. Der
+// Owner-Bucket existiert von Anfang an (Dashboard/POST /api/settings lesen ihn).
+export function defaultSettingsMap() {
+  return { [OWNER_TENANT_ID]: defaultSettings() };
+}
+
+// Kalender-Map mit dem Owner-Demo-Kalender vorbelegt (I2; analog emptyUsageMap).
+// s.calendar ist eine Map tenantId -> [events]. Nur der Owner ist vorbelegt; ein
+// neuer Tenant bekommt ueber calendarFor eine leere Liste.
+export function calendarMap() {
+  return { [OWNER_TENANT_ID]: demoCalendar() };
+}
+
 // Ein leerer Usage-Bucket (pro Tenant). costEur als JS-Float (Bestand,
 // dokumentiertes akzeptiertes Risiko; pg cost_eur NUMERIC at rest).
 export function emptyUsage() {

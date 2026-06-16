@@ -33,8 +33,8 @@ test("tenantContext liefert byte-identisch die heutigen Singletons (Owner)", () 
   assert.equal(ctx.tenantId, OWNER_TENANT_ID);
   // Relativ zu config.ownerName statt gegen ein Literal -> haelt unabhaengig von .env.
   assert.equal(ctx.ownerName, config.ownerName);
-  assert.equal(ctx.settings, s.settings, "settings ist die Singleton-Referenz");
-  assert.equal(ctx.calendar, s.calendar, "calendar ist die Singleton-Referenz");
+  assert.equal(ctx.settings, s.settings[OWNER_TENANT_ID], "settings ist die Owner-Bucket-Referenz");
+  assert.equal(ctx.calendar, s.calendar[OWNER_TENANT_ID], "calendar ist die Owner-Bucket-Referenz");
 });
 
 test("Owner-Fallback greift auch ohne s.tenants (seedState-Shape)", () => {

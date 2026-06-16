@@ -115,11 +115,9 @@ export function toolDefs(tenantId) {
 export function execTool(call, name, input) {
   switch (name) {
     case "get_calendar": {
-      // READ ueber den Seam (Identitaets-Konsument). In dieser Phase ist
-      // ctx.calendar noch der globale Kalender -> verhaltens-identisch zur
-      // globalen Schreibseite. book_appointment (findConflict/addCalendarEvent)
-      // bleibt bewusst global; die Kalender-Schreib-/Konflikt-Seite ist eigener
-      // Scope (dort wird der Kalender pro Tenant getrennt).
+      // READ ueber den Seam (Identitaets-Konsument): ctx.calendar ist der
+      // pro-Tenant-Kalender (calendarFor). Konsistent zur Schreib-/Konflikt-Seite
+      // (book_appointment: findConflict/addCalendarEvent ueber call.tenantId).
       const events = store.tenantContext(call.tenantId).calendar.slice(0, 8);
       if (!events.length) return "Kalender ist leer, alles frei.";
       return (
@@ -131,10 +129,10 @@ export function execTool(call, name, input) {
       const start = new Date(input.start);
       if (isNaN(start)) return "FEHLER: Ungueltiges Datum.";
       const end = new Date(start.getTime() + (input.durationMinutes || 60) * 60000);
-      const conflict = store.findConflict(start.toISOString(), end.toISOString());
+      const conflict = store.findConflict(call.tenantId, start.toISOString(), end.toISOString());
       if (conflict)
         return `KONFLIKT: Ueberschneidung mit "${conflict.title}" (${fmtDate(conflict.start)}). Bitte anderen Slot vorschlagen.`;
-      store.addCalendarEvent(input.title, start.toISOString(), end.toISOString());
+      store.addCalendarEvent(call.tenantId, input.title, start.toISOString(), end.toISOString());
       store.addActionItem(call.id, `Termin gebucht: ${input.title} am ${fmtDate(start.toISOString())}`, "appointment");
       return `GEBUCHT: ${input.title} am ${fmtDate(start.toISOString())}.`;
     }

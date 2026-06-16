@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { defaultSettings, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID, PROVIDER } from "./defaults.js";
+import { defaultSettings, defaultSettingsMap, demoCalendar, calendarMap, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID, PROVIDER } from "./defaults.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -17,7 +17,8 @@ export function load() {
   try {
     state = JSON.parse(fs.readFileSync(FILE, "utf8"));
     // Neue Default-Felder ergaenzen (Migrationen)
-    state.settings = { ...defaultSettings(), ...state.settings };
+    state.settings = migrateSettingsToMap(state.settings);
+    state.calendar = migrateCalendarToMap(state.calendar);
     state.usage = migrateUsageToMap(state.usage);
     state.notifications ||= [];
     state.profiles ||= {};
@@ -56,6 +57,34 @@ function migrateUsageToMap(usage) {
   }
   map[OWNER_TENANT_ID] ||= emptyUsage();
   return map;
+}
+
+// Migriert ein altes FLACHES settings-{agentName,...} auf die owner-keyed Map (I2).
+// Erkennt das alte Shape an typeof agentName==="string" (stabiler Marker, NICHT
+// Anzahl). Die alte forward-compat-Zeile ({...defaultSettings(),...flach}) lebt im
+// Owner-Bucket weiter. Defensiv (fehlend -> frische Map) + idempotent (bereits Map
+// -> jeden Bucket gegen den Default auffuellen, Owner sicherstellen).
+function migrateSettingsToMap(settings) {
+  if (!settings || typeof settings !== "object") return defaultSettingsMap();
+  if (typeof settings.agentName === "string") {
+    return { [OWNER_TENANT_ID]: { ...defaultSettings(), ...settings } };
+  }
+  const map = {};
+  for (const [tenantId, bucket] of Object.entries(settings)) {
+    map[tenantId] = { ...defaultSettings(), ...bucket };
+  }
+  map[OWNER_TENANT_ID] ||= defaultSettings();
+  return map;
+}
+
+// Migriert eine alte FLACHE calendar-Liste auf die owner-keyed Map (I2). Erkennt
+// das alte Shape an Array.isArray. Defensiv (fehlend -> calendarMap) + idempotent
+// (bereits Map -> Owner sicherstellen, fremde Buckets unveraendert).
+function migrateCalendarToMap(calendar) {
+  if (Array.isArray(calendar)) return { [OWNER_TENANT_ID]: calendar };
+  if (!calendar || typeof calendar !== "object") return calendarMap();
+  if (!(OWNER_TENANT_ID in calendar)) calendar[OWNER_TENANT_ID] = demoCalendar();
+  return calendar;
 }
 
 // Profile aus config.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
@@ -157,18 +186,18 @@ export function toggleActionItem(id) {
 }
 
 // ---- Kalender ----
-export function getCalendar() {
-  return ops.getCalendar(load());
+export function getCalendar(tenantId) {
+  return ops.getCalendar(load(), tenantId);
 }
 
-export function addCalendarEvent(title, startIso, endIso) {
-  const ev = ops.addCalendarEvent(load(), title, startIso, endIso);
+export function addCalendarEvent(tenantId, title, startIso, endIso) {
+  const ev = ops.addCalendarEvent(load(), tenantId, title, startIso, endIso);
   save();
   return ev;
 }
 
-export function findConflict(startIso, endIso) {
-  return ops.findConflict(load(), startIso, endIso);
+export function findConflict(tenantId, startIso, endIso) {
+  return ops.findConflict(load(), tenantId, startIso, endIso);
 }
 
 // ---- Tenant-Kontext-Seam (I0) ----
@@ -207,8 +236,8 @@ export function pruneOldData(days = config.retentionDays) {
 }
 
 // ---- Settings ----
-export function updateSettings(patch) {
-  const result = ops.updateSettings(load(), patch);
+export function updateSettings(tenantId, patch) {
+  const result = ops.updateSettings(load(), tenantId, patch);
   save();
   return result;
 }

@@ -97,7 +97,9 @@ test("Eingabe-Validierung /api/calendar", async (t) => {
       assert.equal(res.status, 200);
       const ev = await res.json();
       assert.ok(ev.id);
-      assert.ok(srv.readStore().calendar.some((e) => e.id === ev.id));
+      // readStore() liest den rohen (migrierten) Store: calendar ist seit I2 eine
+      // Map tenantId -> [events]; der Owner-Bucket traegt die Laufzeit-Termine.
+      assert.ok(srv.readStore().calendar[OWNER_TENANT_ID].some((e) => e.id === ev.id));
     });
   } finally {
     await srv.stop();
@@ -113,7 +115,9 @@ test("Settings-Whitelist", async (t) => {
       const settings = await res.json();
       assert.equal("evil" in settings, false);
       assert.equal(settings.allowBooking, true, "String 'nein' darf das Boolean nicht ueberschreiben");
-      const stored = srv.readStore().settings;
+      // readStore() liest den rohen (migrierten) Store: settings ist seit I2 eine
+      // Map tenantId -> Bucket. Die HTTP-Response (oben) bleibt flach.
+      const stored = srv.readStore().settings[OWNER_TENANT_ID];
       assert.equal("evil" in stored, false);
       assert.equal(stored.allowBooking, true);
     });
@@ -122,7 +126,7 @@ test("Settings-Whitelist", async (t) => {
       const res = await postJson(`${srv.localUrl}/api/settings`, { allowBooking: false });
       assert.equal(res.status, 200);
       assert.equal((await res.json()).allowBooking, false);
-      assert.equal(srv.readStore().settings.allowBooking, false);
+      assert.equal(srv.readStore().settings[OWNER_TENANT_ID].allowBooking, false);
     });
   } finally {
     await srv.stop();
