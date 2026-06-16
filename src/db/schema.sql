@@ -155,6 +155,38 @@ CREATE TABLE IF NOT EXISTS number_assignment (
   released_at TEXT
 );
 
+-- account: identity(sub)->tenant Resolver. RLS-EXEMPT (laeuft VOR app.current_tenant).
+-- tenant_id NICHT unique -> Schema traegt spaeter mehrere Accounts pro Tenant (B2B),
+-- jetzt aber Single-User pro Tenant (B2C). role: member|admin.
+CREATE TABLE IF NOT EXISTS account (
+  sub        TEXT PRIMARY KEY,
+  email      TEXT NOT NULL,
+  tenant_id  TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'member',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- session: serverseitige Sessions fuer Invalidierung (Suspend killt Session sofort).
+CREATE TABLE IF NOT EXISTS session (
+  id             TEXT PRIMARY KEY,
+  sub            TEXT NOT NULL REFERENCES account(sub) ON DELETE CASCADE,
+  tenant_id      TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at     TIMESTAMPTZ NOT NULL,
+  invalidated_at TIMESTAMPTZ
+);
+
+-- audit_log: immutable append-only. tenant_id BEWUSST KEIN FK (muss Tenant-
+-- Loeschung ueberdauern, Compliance Art. 15). Keine RLS (privilegierter Insert-Pfad).
+CREATE TABLE IF NOT EXISTS audit_log (
+  id         BIGSERIAL PRIMARY KEY,
+  at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_sub  TEXT,
+  tenant_id  TEXT,
+  action     TEXT NOT NULL,
+  detail     TEXT
+);
+
 -- ---- Row Level Security (zweite Verteidigungslinie) ----
 -- Primaerlinie ist der app-seitige tenant_id-Filter; RLS faengt vergessene
 -- Filter ab. Policy: Zeile sichtbar/aenderbar nur, wenn tenant_id der GUC
