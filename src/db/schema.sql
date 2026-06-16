@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS tenant (
 );
 -- Forward-compat: bestehende tenant-Tabelle bekommt status nachgezogen (idempotent).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+-- Identitaets-Schicht (I8): Tenant-Name + IdP-Subject additiv, beide NULLABLE.
+-- NULL = kein eigener Wert -> Owner-Fallback (config.ownerName) im tenantContext;
+-- idp_subject NULL = nicht ueber resolveTenant aufloesbar. Muster wie number.status.
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS owner_name  TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS idp_subject TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

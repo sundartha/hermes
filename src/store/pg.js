@@ -51,7 +51,7 @@ export function makePgStore(runner) {
     await runner.withClient(async (client) => {
       await setTenant(client, OWNER_TENANT_ID);
       await migrate(client, OWNER_TENANT_ID);
-      state = await hydrate(client, OWNER_TENANT_ID);
+      state = await hydrate(client);
     });
     return state;
   }
@@ -64,7 +64,7 @@ export function makePgStore(runner) {
   function save() {
     const snapshot = requireState();
     flushChain = flushChain
-      .then(() => runner.withClient((client) => flush(client, OWNER_TENANT_ID, snapshot)))
+      .then(() => runner.withClient((client) => flush(client, snapshot)))
       .catch((err) => {
         console.error("[pg] Flush fehlgeschlagen:", err.message);
       });
@@ -188,9 +188,43 @@ async function setTenant(client, tenantId) {
   await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
 }
 
-// ---- Hydrierung: DB-Zeilen -> verschachtelter Spiegel-Shape ----
-// Laeuft auf einer Verbindung mit gesetzter RLS-GUC (siehe init).
-async function hydrate(client, tenantId) {
+// ---- Hydrierung: DB-Zeilen -> verschachtelter Spiegel-Shape (multi-tenant, I8) ----
+// Laeuft auf einer Verbindung. Liest zuerst die tenant-Tabelle (state.tenants), dann
+// pro Tenant unter dessen RLS-GUC die tenant-scoped Zeilen in die Buckets/Listen.
+// makeDefaultState() EINMAL (Owner-Buckets vorbelegt); pro Tenant werden Buckets
+// gefuellt (settings/calendar/usage) bzw. Listen angehaengt (calls/actionItems/
+// notifications/numbers). profiles bleiben global keyed-by-email (geerbte
+// Entscheidung #9) und werden NUR unter dem Owner geladen.
+async function hydrate(client) {
+  const state = ops.makeDefaultState();
+  state.tenants = await hydrateTenants(client);
+  for (const tenant of state.tenants) {
+    await setTenant(client, tenant.id);
+    await hydrateTenantInto(client, state, tenant.id);
+  }
+  return state;
+}
+
+// tenant-Tabelle -> Tenant-Records. owner_name/idp_subject NUR setzen, wenn in der
+// DB nicht-null (sonst kippte der config.ownerName-Fallback im tenantContext und es
+// entstuende ein leeres ownerName-Feld). Der Owner ist immer enthalten (seedDefaults
+// garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
+async function hydrateTenants(client) {
+  const rows = (await client.query(`SELECT id, status, owner_name, idp_subject FROM tenant`)).rows;
+  return rows.map((r) => {
+    const tenant = { id: r.id, status: r.status };
+    if (r.owner_name != null) tenant.ownerName = r.owner_name;
+    if (r.idp_subject != null) tenant.idpSubject = r.idp_subject;
+    return tenant;
+  });
+}
+
+// Liest die tenant-scoped Zeilen EINES Tenants (RLS-GUC ist gesetzt) und fuellt sie
+// in den Spiegel: settings/calendar/usage in den Map-Bucket dieses Tenants, calls/
+// actionItems/notifications/numbers an die globalen Listen ANGEHAENGT (nicht
+// ueberschrieben - sonst verloeren frueher hydrierte Tenants ihre Daten). profiles
+// NUR unter dem Owner (global keyed-by-email, geerbte Entscheidung #9).
+async function hydrateTenantInto(client, state, tenantId) {
   const settingsRows = (await client.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])).rows;
   const callRows = (await client.query(`SELECT * FROM call WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId])).rows;
   const segRows = (await client.query(
@@ -204,7 +238,6 @@ async function hydrate(client, tenantId) {
   const notifRows = (await client.query(
     `SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
   )).rows;
-  const profileRows = (await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])).rows;
   const numberRows = (await client.query(
     `SELECT id, e164, tenant_id, provider, status, provider_number_id FROM number WHERE tenant_id = $1`, [tenantId]
   )).rows;
@@ -212,27 +245,25 @@ async function hydrate(client, tenantId) {
   const segmentsByCall = groupTranscripts(segRows);
   const itemIdsByCall = groupActionItemIds(itemRows);
 
-  const state = ops.makeDefaultState();
-  // Owner-scoped Hydrierung (I2): settings/calendar fuellen den Owner-Bucket der
-  // Map (analog der usage-Zeile, NICHT flach zuweisen - das wuerde das Map-Shape
-  // zerstoeren). Ohne Settings-Zeile bleibt der vorbelegte defaultSettingsMap-Bucket.
-  // Mehr-Tenant-Hydrierung ist spaeterer Scope (erst wenn ein 2. Tenant live ist).
-  if (settingsRows.length) state.settings[OWNER_TENANT_ID] = rowToSettings(settingsRows[0]);
-  state.calls = callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall));
-  state.actionItems = itemRows.map(rowToActionItem);
-  state.calendar[OWNER_TENANT_ID] = calRows.map(rowToCalendarEvent);
-  if (usageRows.length) state.usage[OWNER_TENANT_ID] = rowToUsage(usageRows[0]);
-  state.notifications = notifRows.map(rowToNotification);
-  state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
-  state.numbers = numberRows.map((r) => ({
+  if (settingsRows.length) state.settings[tenantId] = rowToSettings(settingsRows[0]);
+  if (usageRows.length) state.usage[tenantId] = rowToUsage(usageRows[0]);
+  state.calendar[tenantId] = calRows.map(rowToCalendarEvent);
+  state.calls.push(...callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall)));
+  state.actionItems.push(...itemRows.map(rowToActionItem));
+  state.notifications.push(...notifRows.map(rowToNotification));
+  state.numbers.push(...numberRows.map((r) => ({
     id: r.id,
     e164: r.e164,
     tenantId: r.tenant_id,
     provider: r.provider,
     status: r.status,
     providerNumberId: r.provider_number_id,
-  }));
-  return state;
+  })));
+
+  if (tenantId === OWNER_TENANT_ID) {
+    const profileRows = (await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])).rows;
+    state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
+  }
 }
 
 function groupTranscripts(segRows) {
@@ -273,6 +304,12 @@ function rowToSettings(r) {
 function rowToCall(r, segmentsByCall, itemIdsByCall) {
   return {
     id: r.id,
+    // tenantId hydrieren (I8): der Flush partitioniert state.calls per call.tenantId
+    // (flushTenantScope/scopeOf). Ohne dieses Feld faende der Owner-Filter nach der
+    // Re-Hydrierung keinen einzigen Call (undefined !== "owner") und loeschte beim
+    // naechsten Flush alle Calls des Tenants. createCall setzt tenantId bereits im
+    // Spiegel (json-Parity) - hier wird es aus der DB-Spalte rekonstruiert.
+    tenantId: r.tenant_id,
     streamToken: r.stream_token,
     twilioSid: r.twilio_sid,
     direction: r.direction,
@@ -318,20 +355,20 @@ function rowToNotification(r) {
   return { id: r.id, title: r.title, body: r.body, callId: r.call_id, at: r.at };
 }
 
-// ---- Flush: Spiegel -> DB (eine Transaktion auf EINER Verbindung, RLS-GUC
-// transaktionslokal gesetzt). client = die von withClient gebundene Verbindung.
-async function flush(client, tenantId, state) {
+// ---- Flush: Spiegel -> DB (multi-tenant, I8). Eine Transaktion ueber den ganzen
+// Spiegel. Die tenant-Tabelle wird zuerst geschrieben (kein RLS, kein GUC noetig;
+// die FK-Ziele muessen vor den tenant-scoped Inserts existieren). Danach pro Tenant
+// die RLS-GUC setzen und NUR dessen Scheibe flushen - exakt das owner-pinned
+// Verhalten von frueher, nur N-fach. Bei genau einem Tenant identisch zu vorher.
+// client = die von withClient gebundene Verbindung.
+async function flush(client, state) {
   await client.query("BEGIN");
   try {
-    await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId]);
-    await flushCalls(client, tenantId, state.calls);
-    await flushActionItems(client, tenantId, state.actionItems);
-    await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
-    await flushNotifications(client, tenantId, state.notifications);
-    await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
-    await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
-    await flushProfiles(client, tenantId, state.profiles);
-    await flushNumbers(client, tenantId, state.numbers);
+    await flushTenants(client, state.tenants);
+    for (const tenant of state.tenants) {
+      await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
+      await flushTenantScope(client, tenant.id, state);
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -339,11 +376,78 @@ async function flush(client, tenantId, state) {
   }
 }
 
+// Flusht die tenant-scoped Scheibe EINES Tenants (RLS-GUC ist gesetzt). Die
+// call-verknuepften Entitaeten (calls + ihre actionItems/notifications) werden ueber
+// scopeOf partitioniert (dieselbe Regel wie ops.tenantCallScope: call.tenantId ===
+// tenantId) - sonst blockte die RLS-WITH-CHECK den Insert einer Call-Zeile mit
+// fremder tenant_id unter dieser GUC. settings/calendar/usage/numbers ueber die
+// bestehenden pro-Tenant-Accessoren bzw. den numbers-Filter. profiles NUR unter dem
+// Owner (global keyed-by-email, geerbte Entscheidung #9).
+async function flushTenantScope(client, tenantId, state) {
+  const { calls, callIds } = scopeOf(state, tenantId);
+  await flushCalls(client, tenantId, calls);
+  await flushActionItems(client, tenantId, state.actionItems.filter((a) => callIds.has(a.callId)));
+  await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
+  await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
+  await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
+  await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
+  if (tenantId === OWNER_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
+  await flushNumbers(client, tenantId, state.numbers);
+}
+
+// tenant-Tabelle round-trippen (I8): id/status/owner_name/idp_subject upsert. KEINE
+// RLS auf der tenant-Tabelle -> keine GUC noetig (anders als die 10 Daten-Tabellen).
+// owner_name/idp_subject sind NULLABLE; ein Owner ohne eigenen Namen schreibt NULL
+// (Owner-Fallback bleibt). Lebt VOR den tenant-scoped Inserts, weil diese per FK
+// auf tenant(id) verweisen.
+async function flushTenants(client, tenants) {
+  for (const t of tenants) {
+    await client.query(
+      `INSERT INTO tenant (id, status, owner_name, idp_subject)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET
+         status=EXCLUDED.status, owner_name=EXCLUDED.owner_name, idp_subject=EXCLUDED.idp_subject`,
+      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null]
+    );
+  }
+}
+
+// Die call-verknuepfte Tenant-Partition fuer den Flush: die Calls eines Tenants + ihre
+// callIds (EIN Filter-Pass, dieselbe Regel wie ops.tenantCallScope: call.tenantId ===
+// tenantId). actionItems/notifications tragen kein eigenes tenantId und werden ueber
+// callId zugeordnet. Lokal gehalten, damit state-ops.js (Store-Fachlogik) unveraendert bleibt.
+function scopeOf(state, tenantId) {
+  const calls = state.calls.filter((c) => c.tenantId === tenantId);
+  const callIds = new Set(calls.map((c) => c.id));
+  return { calls, callIds };
+}
+
+// Notifications eines Tenants: call-verknuepfte ueber callIds; manuelle (callId=null)
+// sind keinem Call/Tenant zuordbar -> sie gehoeren dem Owner (dokumentierte
+// Entscheidung, I8). So flusht jede manuelle Notification GENAU einmal (unter Owner)
+// und keine Notification faellt zwischen die Tenants.
+function notificationsForTenant(state, tenantId, callIds) {
+  return state.notifications.filter(
+    (n) => callIds.has(n.callId) || (n.callId == null && tenantId === OWNER_TENANT_ID)
+  );
+}
+
+// settings/usage haben tenant_id als PK und genau eine Zeile pro Tenant. Upsert
+// (INSERT ON CONFLICT) statt blossem UPDATE (I8): der Owner hat seine Zeile aus
+// seedDefaults -> ON CONFLICT DO UPDATE wirkt byte-identisch zum frueheren UPDATE;
+// ein neuer Tenant (kein Seed) bekommt seine Zeile erst hier angelegt. Gleiches
+// Upsert-Muster wie flushCalls/flushCalendar/flushNumbers (G5).
 async function flushSettings(client, tenantId, settings) {
   await client.query(
-    `UPDATE settings SET agent_name=$2, greeting=$3, allow_calendar=$4, allow_booking=$5,
-       allow_summaries=$6, allow_personal_data=$7, allow_bank_data=$8
-     WHERE tenant_id=$1`,
+    `INSERT INTO settings
+       (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
+        allow_summaries, allow_personal_data, allow_bank_data)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (tenant_id) DO UPDATE SET
+       agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
+       allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
+       allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
+       allow_bank_data=EXCLUDED.allow_bank_data`,
     [tenantId, settings.agentName, settings.greeting, settings.allowCalendar, settings.allowBooking,
       settings.allowSummaries, settings.allowPersonalData, settings.allowBankData]
   );
@@ -351,7 +455,11 @@ async function flushSettings(client, tenantId, settings) {
 
 async function flushUsage(client, tenantId, usage) {
   await client.query(
-    `UPDATE usage SET input_tokens=$2, output_tokens=$3, cost_eur=$4, calls=$5 WHERE tenant_id=$1`,
+    `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (tenant_id) DO UPDATE SET
+       input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
+       cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls`,
     [tenantId, usage.inputTokens, usage.outputTokens, usage.costEur, usage.calls]
   );
 }
@@ -453,13 +561,10 @@ async function flushProfiles(client, tenantId, profiles) {
 }
 
 // number-Flush (Onboarding-Lifecycle): id-PK-Upsert mit allen Lifecycle-Feldern
-// (status, provider_number_id, e164 NULLABLE fuer 'requested'). Owner-scoped wie
-// der restliche pg-Spiegel (nur Zeilen dieses Tenants) - eine 'requested'/'active'
-// Nummer des OWNERS round-trippt damit korrekt.
-// DEFERRED (Multi-Tenant-Runtime, Plan P4/P8): Nummern FREMDER Tenants (Onboarding
-// neuer Tenants) werden hier NICHT geflusht (RLS-GUC=owner; cross-tenant-Flush
-// braucht per-Tenant-GUC). Produktion laeuft auf dem json-Backend (persistiert
-// alles cross-tenant); unter pg bleibt Fremd-Tenant-Onboarding spiegel-only.
+// (status, provider_number_id, e164 NULLABLE fuer 'requested').
+// Multi-Tenant (I8): flush ruft flushNumbers pro Tenant unter dessen RLS-GUC; der
+// own-Filter haelt das pro Aufruf auf die Nummern DIESES Tenants (zweite Linie zur
+// per-Tenant-GUC). So round-trippen die Nummern aller Tenants (nicht mehr owner-only).
 async function flushNumbers(client, tenantId, numbers) {
   const own = numbers.filter((n) => n.tenantId === tenantId);
   await deleteMissing(client, "number", tenantId, own.map((n) => n.id));

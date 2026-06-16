@@ -104,7 +104,14 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
   await store.save();
 
   const reopened = await reopen(db);
-  assert.equal(reopened.load().calls.length, 0, "Owner-Calls weg nach Re-Hydrierung");
+  // OWNER-Calls weg nach Re-Hydrierung. Seit I8 hydriert der Store multi-tenant
+  // (ueber s.tenants), d.h. der direkt geseedete FREMDE Tenant 'other' round-trippt
+  // jetzt seinen Call mit - die Cross-Tenant-Erhaltung bleibt also auch nach der
+  // Re-Hydrierung sichtbar. Darum hier OWNER-scoped zaehlen statt blind alle Calls.
+  assert.equal(
+    reopened.load().calls.filter((c) => c.tenantId === OWNER_TENANT_ID).length, 0,
+    "Owner-Calls weg nach Re-Hydrierung"
+  );
   assert.equal(reopened.load().settings[OWNER_TENANT_ID].agentName, "Owner-Service", "settings ueberleben");
   assert.equal(reopened.load().usage[OWNER_TENANT_ID].inputTokens, 1_000_000, "usage/Budget-Gate ueberlebt");
   assert.equal(reopened.getCalendar(OWNER_TENANT_ID).length, 3, "Demo-Kalender (Service-Config) bleibt");
