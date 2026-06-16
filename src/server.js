@@ -17,6 +17,10 @@ import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirect
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
 import { selfServicePatch, GREETING_TEMPLATES } from "./self-service.js";
+import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
+import { makePortalStore } from "./store/portal.js";
+import { makeAuditStore } from "./audit-store.js";
+import { createPortalRunner } from "./portal-pool.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -118,6 +122,55 @@ app.use((err, _req, res, next) => {
 // /healthz (Keep-Alive) und localhost (interne MCP-Tools).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 registerWellKnown(app);
+
+// ---- OIDC-Browser-Login (/auth/*) -----------------------------------
+// Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
+// ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
+// damit /auth/login nicht durch Basic-Auth geblockt wird.
+if (config.sessionSecret && config.storeBackend === "pg") {
+  // await: createPortalRunner prueft fail-closed die DB-Rolle (F5, Superuser/BYPASSRLS).
+  // Wirft die Assertion, propagiert der Fehler und der Prozess startet nicht.
+  const portalRunner = await createPortalRunner();
+  const oidc = makeOidc(config);
+  const accounts = makeAccounts(portalRunner);
+  const sessions = makeSessions(portalRunner);
+  const auditStore = makeAuditStore(portalRunner);
+  const portalStore = makePortalStore(portalRunner);
+  const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
+  const adminMw = adminOnly({ adminEmails: config.adminEmails });
+  const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
+  app.use("/auth", loginRateLimiter);
+  app.use(makeWebAuthRoutes({
+    secret: config.sessionSecret,
+    redirectUri: config.publicUrl + "/auth/callback",
+    ttlSeconds: config.sessionTtlSeconds,
+    oidc,
+    accounts,
+    sessions,
+    audit: auditStore,
+  }));
+
+  // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt
+  // req.tenant (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten.
+  // VOR der Basic-Auth-Schicht registriert -> /api/portal/* ist owner-Basic-Auth-
+  // exempt und ausschliesslich ueber webAuth (Kunden-Session) gesichert.
+  app.get("/api/portal/state", webAuthMw, async (req, res) => {
+    try {
+      const calls = await portalStore.listCalls(req.tenant.tenantId);
+      res.json({ tenantId: req.tenant.tenantId, calls });
+    } catch (e) {
+      console.error("[portal] state", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
+
+  // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
+  // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben
+  // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
+  // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404.
+  app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
+}
+
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
   // Self-Service-Seite (I9) ist die GETRENNTE Tenant-Sicht (Decision #3): NICHT

@@ -240,3 +240,104 @@ neuen Dependencies:
 - Erwartet: `npm test` laeuft gruen in unter 60s, ohne Netz-Zugriff nach aussen
   und ohne `.env`. ✅
 - Verifikation: `npm test` selbst.
+
+## Multi-Tenant-Fundament (Sub-Projekt B: Auth + Tenant-Foundation) ✅ (umgesetzt)
+
+Umbau vom owner-only-Prototyp zum Multi-Tenant-SaaS (Privatkunden zuerst, B2C).
+B legt das Fundament: wer darf rein, wie werden Kunden hart getrennt, welche
+Zugriffe sind erlaubt. Spec: `docs/superpowers/specs/2026-06-15-auth-tenant-foundation-design.md`,
+adversarial geprueft via `/council` (`~/Larry/drafts/2026-06-15_council_auth-tenant-foundation.md`).
+
+**Zwei-Pfad-Architektur.** Der synchrone Owner-Spiegel-Store (`store.js`, Agent-/
+Operator-Runtime) bleibt unveraendert; `bridge.js` (HEIKLE STELLE) nicht angefasst.
+NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
+
+1. **Erzwungener RLS-Wrapper** (`portalStore.withTenant`): jede tenant-gescopte
+   DB-Arbeit laeuft in EINER Transaktion mit `SET LOCAL app.current_tenant` (txn-
+   lokal -> pgBouncer-Transaction-Pooling-sicher). Kein Query ohne vorheriges
+   SET LOCAL. Zwei Linien: app-seitiger `tenant_id`-Filter (primaer) + RLS
+   (sekundaer). Resolver-Tabelle `account` ist bewusst RLS-exempt (laeuft vor der GUC).
+   - Erwartet: Kunde A sieht nie Daten von B/Owner; abgebrochene Txn (ROLLBACK)
+     laesst die GUC nicht auf den naechsten Request leaken.
+   - Verifikation: `test/portal-rls-killer.test.js` (Isolation A/B, leerer Tenant,
+     Transkript-Leak-Schutz, Error-Injection-GUC-Reset; unprivilegierte `app_user`-
+     Rolle, weil pglite-als-Superuser RLS sonst umgeht).
+2. **Browser-Login = OIDC Authorization-Code + PKCE, in-house** (kein Provider-SDK
+   -> kein Lock-in; nur OIDC-Claims queren die Schicht). Issuer = WorkOS AuthKit
+   (`OAUTH_ISSUER_URL`, mit `/mcp` geteilt). `id_token` via `jose` gegen die JWKS
+   geprueft inkl. `issuer` UND `audience=OIDC_CLIENT_ID`. CSRF ueber signierten
+   `oauth_state`-Cookie; PKCE-Verifier signiert. Session-Cookie httpOnly + Secure
+   + SameSite=Lax, signiert (HMAC, `SESSION_SECRET`). Niemals Tokens loggen.
+   - Erwartet: state-Mismatch/fehlend -> 400 (kein Account/Session); exchange-Fehler
+     -> 401 ohne Detail-/Token-Leak im Body; Erfolg -> signiertes Session-Cookie + Redirect.
+   - Verifikation: `test/web-auth.test.js` (PKCE/Cookie-Signatur + Router-Flow),
+     `test/web-auth-pg.test.js` (`makeAccounts`/`makeSessions` gegen das echte Schema).
+3. **Tenancy + Lifecycle**: `tenant.status` (suspended -> active via Admin -> closed).
+   Account-Modell offen + E-Mail-Verifikation (Provider) + Approval-Gate; Erst-Login
+   legt Tenant `suspended` an. Single-User pro Tenant (B2C); Schema traegt Mehr-User
+   spaeter (`account.tenant_id` nicht unique), wird jetzt nicht gebaut.
+4. **webAuth (fail-closed, READ-only)**: prueft signiertes Session-Cookie ->
+   Session (`invalidated_at IS NULL AND expires_at > now()`) -> Account-Status
+   `active`. Kein Cookie/abgelaufen/invalidiert -> 401; suspended/closed -> 403.
+   `/api/portal/*` ist owner-Basic-Auth-exempt (vor der Basic-Auth-Schicht
+   registriert) und ausschliesslich ueber webAuth gesichert; aktiv NUR bei
+   `SESSION_SECRET` + `STORE_BACKEND=pg` (sonst Block uebersprungen, fail-closed).
+   - Verifikation: `test/web-auth-middleware.test.js` (no-cookie/invalidiert/
+     abgelaufen -> 401, suspended -> 403, aktiv -> req.tenant); `test/portal-route.test.js`
+     (ohne Session 401; aktive Kunden-Session sieht nur eigene leere Calls, kein Owner-Leak).
+5. **Admin (admin-allowlist, fail-closed)**: `POST /api/admin/tenants/:id/{approve,
+   suspend}` hinter webAuth + `adminOnly` (`ADMIN_EMAILS` ODER role=admin). Suspend
+   invalidiert SOFORT alle Sessions des Tenants (gesperrter Kunde liest nicht bis
+   Cookie-Expiry weiter). Jede Aktion -> `audit_log`.
+   - Verifikation: `test/admin-approval.test.js` (Nicht-Admin 403; approve -> active
+     + Audit; suspend -> suspended + Session-Invalidierung + Audit; no-session 401).
+6. **Audit + DSGVO**: `audit_log` immutable append-only; `tenant_id` BEWUSST KEIN FK
+   (ueberdauert Tenant-Loeschung, Art. 15). `ON DELETE CASCADE` auf `account`/
+   `session` (Art. 17, atomare Loeschung).
+   - Verifikation: `test/schema-foundation.test.js` (CASCADE entfernt account/
+     session, `audit_log` ueberdauert), `test/audit-store.test.js`.
+
+**OIDC-/RLS-Hardening (umgesetzt 2026-06-16, Review + Fix-Workflow):**
+- **F1 email_verified**: `claimsFromPayload` uebernimmt `email` nur bei `email_verified === true`
+  (Strikt-Gleichheit, kein Truthy-Cast) -> Admin-Allowlist nur ueber verifizierte Adressen.
+  Test `test/web-auth.test.js` (T-F1-01..07).
+- **F2 nonce**: `/auth/login` erzeugt signiertes `oidc_nonce`-Cookie + `nonce`-Param; `/auth/callback`
+  erzwingt es, `exchange()` bindet das `id_token` timing-sicher (`nonceMatches`). Test T-F2-01..05.
+- **F3 jwks-Rotation**: `discover()` setzt `jwksCache=null` beim TTL-Refresh -> `jwks_uri`-Rotation
+  greift ohne Prozess-Neustart. Test `test/web-auth-oidc.test.js`.
+- **F4 WITH CHECK**: alle `tenant_isolation`-Policies tragen zusaetzlich `WITH CHECK` -> auch
+  INSERT/UPDATE sind tenant-isoliert (nicht nur SELECT/USING). Test `test/rls-with-check.test.js`.
+
+**Bewusst akzeptierte Abweichungen / Deployment-Anforderungen:**
+- **DB-Rolle**: Der `DATABASE_URL`-Nutzer MUSS non-superuser + NOBYPASSRLS sein,
+  sonst greift FORCE-RLS NICHT (Superuser umgeht RLS). Harte Deployment-Anforderung.
+  **F5 (umgesetzt):** `createPortalRunner()` prueft die Rolle fail-closed beim
+  Startup (`assertNoBypassRls`, `src/portal-pool.js`) - Superuser ODER `rolbypassrls`
+  -> `Error` mit `[F5]`-Prefix, Prozess startet nicht. Test:
+  `test/portal-pool-assertion.test.js` (Stub TC1-TC5 + PGlite-Rauchtest TC6).
+- **Killer-Test als Release-Gate**: pglite ist single-connection und kann pgBouncer-
+  Transaction-Pooling NICHT reproduzieren. Der CI-Test beweist Isolation + GUC-Reset
+  auf einer Verbindung; der ECHTE Killer-Test (2 Tenants, 50 parallele Requests,
+  injizierte Txn-Fehler, reale Render-Topologie) ist ein manuelles Gate vor jedem
+  Deploy: `docs/RELEASE-GATE-killer-test.md`.
+- **Kosten/Write owner-only bis Sub-Projekt D**: Kunden-web-auth = READ. `place_call`/
+  `onboard` bleiben owner-only; `PROVISIONING_ENABLED` bleibt `false`. Ein frisch
+  freigegebener Kunde hat einen isolierten, aber leeren Tenant (Pre-Mortem-
+  Kostenexplosion zu).
+- **Login-Happy-Path (echter IdP + Postgres)** ist ein Staging-Smoke; CI deckt die
+  Komposition in-process via pglite + fakes ab.
+
+**Definition-of-Done (Council-Kriterien):**
+- [x] Isolations-/Error-Injection-Test (CI) gruen + Release-Gate-Doku fuer echtes Pooling
+- [x] kein Request sieht Fremddaten (portal-route + portal-rls-killer)
+- [x] Login/Registrierung rate-limited (`LOGIN_RATE_LIMIT_PER_MIN`, eigener Limiter auf `/auth`)
+- [x] Session-Invalidierung (suspend killt Tenant-Sessions sofort)
+- [x] CASCADE-Loeschung getestet (audit ueberdauert)
+- [x] fail-closed-Tests (no-session 401, suspended 403, Remote nie Owner via `internalIdentity`)
+- [x] Regression: bestehende Server-/Gateway-Suiten unveraendert gruen (json-Mode-Block uebersprungen)
+
+Offen (nicht autonom, Betreiber): WorkOS-AuthKit-Account + OIDC-Client + Redirect-URI
+konfigurieren, `SESSION_SECRET`/`OIDC_CLIENT_*`/`ADMIN_EMAILS` in Render setzen,
+Postgres mit non-superuser-App-Rolle + pgBouncer (transaction mode) bereitstellen,
+echten Killer-Test fahren. Portal-UI (Sub-Projekt C), Marketing/Pricing (A),
+Billing/Real-Provisioning (D) sind separater Scope.

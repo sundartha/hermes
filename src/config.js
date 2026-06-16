@@ -117,6 +117,20 @@ export const config = {
   // Erwartete Audience im Access-Token. Leer -> `${publicUrl}/mcp` (kanonische MCP-URL).
   oauthAudience: process.env.OAUTH_AUDIENCE || "",
 
+  // ---- Web-Login (Kunden-Portal, OIDC Auth-Code + PKCE) ----
+  // Session-Cookie-Signatur (HMAC). Secret -> nie loggen. Leer = Web-Login aus.
+  sessionSecret: process.env.SESSION_SECRET || "",
+  // OIDC-Client fuer den Browser-Flow (Issuer = config.oauthIssuerUrl, geteilt mit /mcp).
+  oidcClientId: process.env.OIDC_CLIENT_ID || "",
+  oidcClientSecret: process.env.OIDC_CLIENT_SECRET || "", // SECRET
+  // Admin-Allowlist (kommasepariert, E-Mails). Nur diese duerfen approve/suspend.
+  adminEmails: (process.env.ADMIN_EMAILS || "")
+    .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  // Strengeres Rate-Limit fuer Login/Callback (Brute-Force/Credential-Stuffing).
+  loginRateLimitPerMin: parseInt(process.env.LOGIN_RATE_LIMIT_PER_MIN || "10", 10),
+  // Lebensdauer der Browser-Session (Session-Cookie + DB-Session) in Sekunden. Default 1 h.
+  sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || "3600", 10),
+
   // ---- Voice-Engine ----
   // "budget"  = Twilio STT/TTS + Claude Haiku (quasi gratis, Default)
   // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
@@ -159,5 +173,12 @@ export function assertConfig() {
     console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
   if (config.skipTwilioSignatureCheck)
     console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
+  if (config.storeBackend !== "pg" && config.sessionSecret)
+    console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
+  // OIDC-Issuer muss in Produktion https sein: ein http-Issuer (z.B. versehentlich
+  // auf eine interne Metadata-IP) ist ein SSRF-/MITM-Footgun. localhost = Test-IdP ok.
+  if (config.oauthIssuerUrl && config.oauthIssuerUrl.startsWith("http://") &&
+      !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(config.oauthIssuerUrl))
+    console.error("[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!");
   return missing.length === 0;
 }
