@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
@@ -18,6 +18,7 @@ import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJ
 import { handleProvisionJob } from "./worker/provisioning.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
+import { flushMeters } from "./billing/meter.js";
 import { selfServicePatch, GREETING_TEMPLATES } from "./self-service.js";
 
 const app = express();
@@ -425,11 +426,51 @@ app.post("/voice/outbound", async (req, res) => {
   }
 });
 
+// Sekunden pro abgerechneter Voice-Minute (G25). Abgerechnet wird ab answeredAt
+// (vorher klingelt es nur, keine Gespraechszeit) bis endedAt, aufgerundet (Provider-
+// Minutentakt). Ein nie beantworteter Call (kein answeredAt) hat 0 Minuten.
+const MS_PER_MINUTE = 60 * 1000;
+
+// Voice-Minuten-Meter EINES beendeten Calls (P6b3, Meter 2). NUR im Metering-Pfad
+// (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt (recordUsageEvent) steht
+// im Namen. Nicht beantwortet -> 0 Minuten -> kein Event (kein Null-Beleg). Kosten-
+// Cents aus dem benannten Tarif (config.voiceMinuteCostCents x Minuten). callId
+// verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
+function recordVoiceMinuteMeter(call) {
+  if (!call.answeredAt || !call.endedAt) return;
+  const minutes = Math.ceil((new Date(call.endedAt) - new Date(call.answeredAt)) / MS_PER_MINUTE);
+  if (minutes <= 0) return;
+  store.recordUsageEvent({
+    tenantId: call.tenantId,
+    callId: call.id,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: minutes,
+    costCents: minutes * config.voiceMinuteCostCents,
+  });
+}
+
+// number_month-Meter EINER neu aktivierten Nummer (P6b3, Meter 1). NUR im Metering-
+// Pfad (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt steht im Namen.
+// number ist undefined, wenn der Job uebersprungen wurde (Re-Drain) -> kein Event.
+// callId bewusst null (Nummern-Meter hat keinen Call). costCents = der Setup-Tarif.
+function recordNumberMonthMeter(number) {
+  if (!number) return;
+  store.recordUsageEvent({
+    tenantId: number.tenantId,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: config.numberSetupFeeCents,
+  });
+}
+
 // ---------------- Call zu Ende -> Summary + Notification + SMS ----------------
 // Idempotent: kann von Status-Callback, Bridge und cancel_call gleichzeitig angestossen werden.
 async function finishCall(call) {
   if (!call || call._finished) return;
   call._finished = true;
+  // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
+  // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
+  if (config.paymentEnabled) recordVoiceMinuteMeter(call);
   store.save();
 
   if (call.status !== "completed" || !call.transcript.length) {
@@ -828,6 +869,20 @@ app.delete("/api/profiles/:email", (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
+// und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
+// Basic-Auth (Bestand deckt /api/* ab; localhost = Owner) - KEIN MCP-Tool. NUR im
+// Metering-Pfad erreichbar: ohne PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch
+// zum Bestand). "Periodisch" = extern cron-baar (echter Scheduler = P8); KEIN neuer
+// Scheduler-Dep. Antwort = nur Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
+app.post("/api/billing/flush-meters", async (req, res) => {
+  if (!config.paymentEnabled) return res.status(404).json({ error: "metering disabled (PAYMENT_ENABLED)" });
+  const result = await flushMeters(store.load(), { billing: stripeBilling });
+  store.save();
+  audit("meter_flush", req, `sent=${result.sent} failed=${result.failed}`);
+  res.json(result);
+});
+
 // ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
 // (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth (Bestand deckt
 // /api/* ab; localhost = Owner). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP,
@@ -901,6 +956,10 @@ async function runProvisioningDrain() {
     try {
       const r = await handleProvisionJob(s, queuedJob, deps, opts);
       if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);
+      // number_month-Meter (P6b3, Meter 1): NUR wenn eine Nummer NEU aktiviert wurde
+      // (r.number, nicht skipped) UND im Metering-Pfad. Erste Periode bei Aktivierung
+      // (monatlicher Scheduler = P8). costCents = der Setup-Tarif (numberSetupFeeCents).
+      if (config.paymentEnabled) recordNumberMonthMeter(r.number);
       store.save();
       return r;
     } catch (err) {

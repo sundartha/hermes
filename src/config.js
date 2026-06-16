@@ -38,6 +38,10 @@ export const config = {
   // Bei PAYMENT_ENABLED Pflicht > 0 (assertConfig); 0 = kein Magic-Default.
   numberSetupFeeCents: parseInt(process.env.NUMBER_SETUP_FEE_CENTS || "0", 10),
   paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
+  // Voice-Minuten-Tarif fuer den Stripe-Meter (P6b3), GANZZAHL Cents (G26). Nur im
+  // Metering-Pfad (PAYMENT_ENABLED) genutzt; 0 = kein Cost-Cents-Beleg (Meter meldet
+  // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
+  voiceMinuteCostCents: parseInt(process.env.VOICE_MINUTE_COST_CENTS || "0", 10),
 
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",

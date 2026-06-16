@@ -22,6 +22,8 @@ import {
   TENANT_STATUS,
   PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
+  USAGE_EVENT_KIND,
+  CENTS_PER_EUR,
 } from "./defaults.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -51,6 +53,15 @@ export function makeDefaultState() {
     // (queue/adapters/memory); diese Liste haelt den Audit-/Reconciliation-Zustand
     // (RLS-fest, hydrierbar). [{ id, numberId, tenantId, kind, status, idempotencyKey, attempts, lastError }]
     provisioningJobs: [],
+    // Per-Tenant-Kostendecke (P6b3): [{ tenantId, budgetCents, hardCapCents }].
+    // KEINE Owner-Vorbelegung -> Owner ohne Zeile faellt auf cfg.maxBudgetEur
+    // (budgetExceeded), byte-identisch zum Bestand.
+    tenantBudgets: [],
+    // Append-only Usage-Ledger (P6b3): Quelle fuer das Stripe-Metering (NICHT fuers
+    // Budget-Gate - das bleibt die usage-Map). [{ id, tenantId, callId, kind,
+    // quantity, costCents, occurredAt, stripeMeterSent }]. Eintraege werden NIE
+    // mutiert, nur stripeMeterSent flippt beim Flush.
+    usageEvents: [],
   };
 }
 
@@ -483,24 +494,101 @@ export function globalUsageTotals(s) {
   return total;
 }
 
+// USD-Kosten eines Token-Verbrauchs (Claude-Preise pro 1M Tokens). EINE Quelle
+// (G5) der Preisformel: trackUsage (Live-Bucket, EUR-Float) UND aiCostCents
+// (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
+function tokenCostUsd(inputTokens, outputTokens, cfg) {
+  return (inputTokens / 1e6) * cfg.priceInPerMTokUsd + (outputTokens / 1e6) * cfg.priceOutPerMTokUsd;
+}
+
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
 // costEur bleibt JS-Float (Bestand, akzeptiertes Risiko). Liefert den Bucket.
 export function trackUsage(s, tenantId, inputTokens, outputTokens, cfg) {
   const usage = usageFor(s, tenantId);
   usage.inputTokens += inputTokens;
   usage.outputTokens += outputTokens;
-  const usd =
-    (inputTokens / 1e6) * cfg.priceInPerMTokUsd +
-    (outputTokens / 1e6) * cfg.priceOutPerMTokUsd;
-  usage.costEur += usd * cfg.usdToEur;
+  usage.costEur += tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur;
   return usage;
 }
 
-// Pro-Tenant-Budget: der Tenant-Bucket gegen config.maxBudgetEur (P4). Quelle ist
-// die bestehende usage-Tabelle (tenant_id-PK) + config-Cap; KEINE tenant_budget-
-// Tabelle, pro-Tenant-individuelle Caps = P6.
+// Effektiver pro-Tenant-Cap in EUR: existiert eine tenant_budget-Zeile, gilt deren
+// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale
+// cfg.maxBudgetEur (Owner/Bestand ohne Zeile -> byte-identisch). EINE Stelle fuer
+// die Cap-Aufloesung (G5), von budgetExceeded genutzt.
+function effectiveCapEur(s, tenantId, cfg) {
+  const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
+  return budget ? budget.hardCapCents / CENTS_PER_EUR : cfg.maxBudgetEur;
+}
+
+// Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
+// Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetEur). Verbrauchsquelle
+// bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
+// neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL.
 export function budgetExceeded(s, tenantId, cfg) {
-  return usageFor(s, tenantId).costEur >= cfg.maxBudgetEur;
+  return usageFor(s, tenantId).costEur >= effectiveCapEur(s, tenantId, cfg);
+}
+
+// Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId
+// (eine Zeile pro Tenant). budgetCents = weiches Inklusiv-Kontingent (Billing-
+// Anzeige), hardCapCents = harte Call-Sperre (budgetExceeded). Reine Mutation,
+// kein IO. Money als GANZZAHL Cents (G26). Liefert die Zeile.
+export function setTenantBudget(s, tenantId, { budgetCents, hardCapCents }) {
+  const existing = s.tenantBudgets.find((b) => b.tenantId === tenantId);
+  if (existing) {
+    existing.budgetCents = budgetCents;
+    existing.hardCapCents = hardCapCents;
+    return existing;
+  }
+  const row = { tenantId, budgetCents, hardCapCents };
+  s.tenantBudgets.push(row);
+  return row;
+}
+
+// Logischer AI-Token-Kostenanteil in GANZZAHL Cents (P6b3, Stripe-Meter). Leitet
+// sich aus DERSELBEN Preisformel ab wie der trackUsage-Live-Bucket (tokenCostUsd,
+// G5) - hier nur nach EUR-Cents gerundet (Money at rest = Ganzzahl Cents, G26).
+export function aiCostCents(inputTokens, outputTokens, cfg) {
+  return Math.round(tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
+}
+
+// Append-only Usage-Ledger-Eintrag (P6b3, Stripe-Meter-Quelle). NIE mutiert
+// (nur stripeMeterSent flippt beim Flush). costCents als GANZZAHL Cents (G26).
+// kind aus USAGE_EVENT_KIND (fail-closed: unbekanntes kind wirft). callId
+// optional (number_month-Meter hat keinen Call). Liefert den Eintrag.
+export function recordUsageEvent(s, { tenantId, callId = null, kind, quantity, costCents }) {
+  if (!Object.values(USAGE_EVENT_KIND).includes(kind))
+    throw new Error(`recordUsageEvent: unbekanntes kind '${kind}'`);
+  const event = {
+    id: newId("ue"),
+    tenantId,
+    callId,
+    kind,
+    quantity,
+    costCents,
+    occurredAt: new Date().toISOString(),
+    stripeMeterSent: false,
+  };
+  s.usageEvents.push(event);
+  return event;
+}
+
+// Noch nicht gemeldete Ledger-Eintraege (Flush-Quelle, billing/meter.js). Reine Query.
+export function pendingMeterEvents(s) {
+  return s.usageEvents.filter((e) => !e.stripeMeterSent);
+}
+
+// Markiert die gemeldeten Events als gesendet (Idempotenz-Schloss: zweiter Flush
+// findet sie nicht mehr in pendingMeterEvents). Liefert die Anzahl der Flips.
+export function markMeterEventsSent(s, eventIds) {
+  const ids = new Set(eventIds);
+  let n = 0;
+  for (const e of s.usageEvents) {
+    if (ids.has(e.id) && !e.stripeMeterSent) {
+      e.stripeMeterSent = true;
+      n++;
+    }
+  }
+  return n;
 }
 
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets

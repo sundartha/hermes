@@ -81,6 +81,9 @@ export const BASE_ENV = {
   STRIPE_API_BASE: "",
   NUMBER_SETUP_FEE_CENTS: "0",
   PAYMENT_CURRENCY: "eur",
+  // Voice-Minuten-Meter-Tarif (P6b3) neutral 0: ohne diese Zeile leakt eine lokale
+  // .env mit VOICE_MINUTE_COST_CENTS via dotenv in Spawn-Tests -> Baseline-Drift.
+  VOICE_MINUTE_COST_CENTS: "0",
   // ---- MCP-Auth + OAuth + Hosting ----
   // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
   MCP_AUTH: "",
@@ -200,6 +203,7 @@ export function fakeBilling(overrides = {}) {
     async placeHold(args) { log.push(["placeHold", args]); return { paymentIntentId: "pi_fake_1" }; },
     async captureHold(id, amt) { log.push(["captureHold", id, amt]); },
     async cancelHold(id) { log.push(["cancelHold", id]); },
+    async reportMeter(args) { log.push(["reportMeter", args]); }, // P6b3-Meter-Aufzeichner
   };
   return { log, ...base, ...overrides };
 }

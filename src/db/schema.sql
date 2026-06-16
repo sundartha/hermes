@@ -1,8 +1,8 @@
 -- Postgres-Schema fuer das pg-Store-Backend (P3b). Idempotent: jede Tabelle und
 -- jede RLS-Policy ist mit IF NOT EXISTS bzw. DROP-vor-CREATE wiederholbar.
 -- Spiegelt die heutige Store-Oberflaeche + einen Owner-Tenant + eigene
--- transcript_segment-Tabelle + number (E.164->tenant Routing, P3c). KEINE
--- number_assignment/tenant_budget/usage_event-Tabellen (das ist spaeterer Scope).
+-- transcript_segment-Tabelle + number (E.164->tenant Routing, P3c) +
+-- tenant_budget/usage_event (per-Tenant-Budget + Stripe-Metering, P6b3).
 
 -- tenant: id + Lebenszyklus-status (Onboarding). KEINE kyc/stripe-Spalten
 -- (Payment uebersprungen = spaeterer Scope). status: active|suspended|closed.
@@ -178,6 +178,37 @@ CREATE TABLE IF NOT EXISTS provisioning_job (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- tenant_budget: per-Tenant-Kostendecke (P6b3), ersetzt NICHT das globale
+-- MAX_BUDGET_EUR (das bleibt der Plattform-Notaus), sondern ergaenzt es pro Tenant.
+-- Money als GANZZAHL Cents (G26). budget_cents = weiches Inklusiv-Kontingent,
+-- hard_cap_cents = harte Call-Sperre (budgetExceeded). PK = tenant_id (eine Zeile
+-- pro Tenant). KEINE Owner-Zeile geseedet: Owner ohne Zeile faellt auf
+-- cfg.maxBudgetEur (byte-identisch zum Bestand).
+CREATE TABLE IF NOT EXISTS tenant_budget (
+  tenant_id      TEXT PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
+  budget_cents   BIGINT NOT NULL,
+  hard_cap_cents BIGINT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- usage_event: append-only Usage-Ledger (P6b3), Quelle fuer das Stripe-Metering
+-- (NICHT fuers Budget-Gate - das bleibt die usage-Map). Money (cost_cents) als
+-- GANZZAHL Cents (G26). call_id ist BEWUSST ohne FK auf call(id): number_month-
+-- Events haben keinen Call (call_id NULL), und Billing-Belege (voice_minute)
+-- muessen ein Call-Erase/Prune UEBERLEBEN (kein CASCADE-Verlust des Abrechnungs-
+-- nachweises). tenant_id mit FK + RLS bleibt die Isolationslinie. stripe_meter_sent
+-- = Idempotenz-Flag des Flush.
+CREATE TABLE IF NOT EXISTS usage_event (
+  id                TEXT PRIMARY KEY,
+  tenant_id         TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  call_id           TEXT,
+  kind              TEXT NOT NULL,
+  quantity          NUMERIC NOT NULL,
+  cost_cents        BIGINT NOT NULL,
+  occurred_at       TEXT NOT NULL,
+  stripe_meter_sent BOOLEAN NOT NULL DEFAULT false
+);
+
 -- ---- Row Level Security (zweite Verteidigungslinie) ----
 -- Primaerlinie ist der app-seitige tenant_id-Filter; RLS faengt vergessene
 -- Filter ab. Policy: Zeile sichtbar/aenderbar nur, wenn tenant_id der GUC
@@ -204,6 +235,10 @@ ALTER TABLE number_assignment  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  FORCE  ROW LEVEL SECURITY;
 ALTER TABLE provisioning_job   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE provisioning_job   FORCE  ROW LEVEL SECURITY;
+ALTER TABLE tenant_budget      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenant_budget      FORCE  ROW LEVEL SECURITY;
+ALTER TABLE usage_event        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usage_event        FORCE  ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenant_isolation ON settings;
 CREATE POLICY tenant_isolation ON settings
@@ -237,4 +272,10 @@ CREATE POLICY tenant_isolation ON number_assignment
   USING (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON provisioning_job;
 CREATE POLICY tenant_isolation ON provisioning_job
+  USING (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS tenant_isolation ON tenant_budget;
+CREATE POLICY tenant_isolation ON tenant_budget
+  USING (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS tenant_isolation ON usage_event;
+CREATE POLICY tenant_isolation ON usage_event
   USING (tenant_id = current_setting('app.current_tenant', true));
