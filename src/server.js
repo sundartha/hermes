@@ -922,19 +922,34 @@ app.post("/api/onboard", async (req, res) => {
   if (!validIdentity(tenantId))
     return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
 
-  const s = store.load();
-  registerTenant(s, tenantId, { ownerName });
-  const reqRes = requestNumber(s, {
-    tenantId,
-    provider: PROVIDER.TELNYX,
-    maxNumbers: config.maxNumbers,
-    maxNumbersPerTenant: config.maxNumbersPerTenant,
-  });
+  // Store-Mutation + Persistenz im prozess-lokalen kritischen Abschnitt (OT-3 AC2):
+  // load -> registerTenant -> requestNumber -> save, kein fremdes await dazwischen.
+  // Ein Save-I/O-Fehler wird als behandelter 503 beantwortet (AC4), NIE als unhandled
+  // async rejection (die den Request haengen liesse / den Prozess via P0-Netz killte).
+  const reqRes = await store
+    .withStoreLock(() => {
+      const s = store.load();
+      registerTenant(s, tenantId, { ownerName });
+      const r = requestNumber(s, {
+        tenantId,
+        provider: PROVIDER.TELNYX,
+        maxNumbers: config.maxNumbers,
+        maxNumbersPerTenant: config.maxNumbersPerTenant,
+      });
+      if (r.ok) store.save(); // 'requested' persistieren (auch im Dry-Run)
+      return r;
+    })
+    .catch((e) => {
+      // mem/disk-Divergenz moeglich (In-Memory mutiert, Platte nicht) - sichtbar geloggt.
+      console.error("[onboard] Persistenz fehlgeschlagen:", e.message);
+      return { ok: false, reason: "persist_error" };
+    });
+  if (!reqRes.ok && reqRes.reason === "persist_error")
+    return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
   if (!reqRes.ok) {
     audit("onboard_denied", req, `tenant=${tenantId} grund=${reqRes.reason}`);
     return res.status(ONBOARD_REASON_STATUS[reqRes.reason] || 400).json({ error: `Nummer-Anfrage abgelehnt (${reqRes.reason})` });
   }
-  store.save(); // 'requested' persistieren (auch im Dry-Run)
   const numberId = reqRes.number.id;
   audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
 
@@ -949,10 +964,22 @@ app.post("/api/onboard", async (req, res) => {
   // Order, kein active ohne Capture, Rollback) bleiben in provisionNumber - jetzt im Worker.
   const idempotencyKey = `provision_${numberId}`;
   provisioningQueue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
-  const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
-  store.save();
-  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${job.id}`);
-  res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "queued", jobId: job.id });
+  // Job-Spur ebenfalls im kritischen Abschnitt persistieren; Save-Fehler -> 503 (AC4).
+  const jobRes = await store
+    .withStoreLock(() => {
+      const s = store.load();
+      const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
+      store.save();
+      return { ok: true, job };
+    })
+    .catch((e) => {
+      console.error("[onboard] Persistenz (Job-Spur) fehlgeschlagen:", e.message);
+      return { ok: false };
+    });
+  if (!jobRes.ok)
+    return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
+  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.job.id}`);
+  res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "queued", jobId: jobRes.job.id });
 
   // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
   // (pg-boss ist deferred nach P8), aber HTTP endet vor dem Provider-Kauf. Tests

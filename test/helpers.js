@@ -103,9 +103,13 @@ export function externalIp() {
   return null;
 }
 
-export function tempDataDir(seedState) {
+// rawStore (String, optional): schreibt den Inhalt VERBATIM als store.json - fuer
+// Tests, die ein bewusst kaputtes/nicht-JSON-File am Boot brauchen (Korruptions-
+// Pfad, T-P1-03). seedState geht weiter durch JSON.stringify (gueltiges JSON).
+export function tempDataDir(seedState, rawStore) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vodafone-agent-test-"));
-  if (seedState) fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(seedState, null, 2));
+  if (typeof rawStore === "string") fs.writeFileSync(path.join(dir, "store.json"), rawStore);
+  else if (seedState) fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(seedState, null, 2));
   return dir;
 }
 
@@ -293,8 +297,8 @@ export const toolCall = (name, args = {}) => ({
 
 // Startet src/server.js als Kindprozess und liefert Port, gesammeltes stdout
 // und einen stop()-Handle. Wirft bei Startproblemen mit dem bisherigen Output.
-export async function startServer({ env = {}, seed } = {}) {
-  const dataDir = tempDataDir(seed);
+export async function startServer({ env = {}, seed, rawStore } = {}) {
+  const dataDir = tempDataDir(seed, rawStore);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },

@@ -105,3 +105,27 @@ export const {
   setKycLevel,
   kycReached,
 } = backend;
+
+// withStoreLock(fn) - prozess-lokaler Single-Writer-Guard (OT-3 AC2). Serialisiert
+// read-modify-write-Sequenzen, die ein await zwischen load() und save() haben, damit
+// kein Lost Update entsteht. BEWUSST auf Fassaden-Ebene (nicht im json-Backend): der
+// Mutex ist eine JS-Nebenlaeufigkeits-Eigenschaft des EINEN Node-Prozesses und damit
+// backend-unabhaengig - so ist store.withStoreLock auch im pg-Pfad definiert (sonst
+// waere es undefined und die /api/onboard-Route wuerfe einen TypeError).
+//
+// Innerhalb EINES Node-Prozesses teilen sich alle Caller dasselbe Modul-`state` -> ein
+// In-Process-Mutex genuegt. Ein Multi-Prozess-Deploy braeuchte einen File-Lock (heute
+// n/a: Render free plan = 1 Instanz; bewusst akzeptiertes Prototyp-Risiko, siehe
+// PLAN-SECURITY.md OT-3).
+//
+// HARD-RULE (Re-Entrancy): ein withStoreLock(fn)-Body darf NIE erneut withStoreLock
+// aufrufen (die Kette wartet sonst auf sich selbst -> Deadlock). Kritische Abschnitte
+// kurz halten: load() -> mutiere -> save(), kein fremdes await dazwischen.
+let _writeChain = Promise.resolve();
+export function withStoreLock(fn) {
+  const run = () => fn();
+  // .then(run, run): ein Fehler im Body bricht die Kette NICHT ab - ein fehlgeschlagener
+  // Write darf nicht alle folgenden Writes blockieren.
+  _writeChain = _writeChain.then(run, run);
+  return _writeChain;
+}

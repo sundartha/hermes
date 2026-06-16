@@ -14,8 +14,22 @@ let state = null;
 
 export function load() {
   if (state) return state;
+  let raw;
   try {
-    state = JSON.parse(fs.readFileSync(FILE, "utf8"));
+    raw = fs.readFileSync(FILE, "utf8");
+  } catch (e) {
+    // Genuine First-Boot (File ABWESEND, ENOENT): Defaults sind OK, kein Alarm. Jeder
+    // ANDERE Read-Fehler (z.B. EACCES auf existierendem File) wird re-thrown -> sichtbar
+    // nach oben (P0-Netz faengt), NIE als First-Boot fehlinterpretiert (OT-3 AC3).
+    if (e.code === "ENOENT") {
+      state = ops.makeDefaultState();
+      save();
+      return finishLoad();
+    }
+    throw e;
+  }
+  try {
+    state = JSON.parse(raw);
     // Neue Default-Felder ergaenzen (Migrationen)
     state.settings = migrateSettingsToMap(state.settings);
     state.calendar = migrateCalendarToMap(state.calendar);
@@ -27,9 +41,29 @@ export function load() {
     state.tenantBudgets ||= []; // P6b3: per-Tenant-Kostendecke nachziehen
     state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
   } catch {
+    // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3):
+    // erst forensisch nach .corrupt-<ts> sichern, LAUT loggen, dann mit Defaults weiter
+    // (Telefonie ueberlebt - aber sichtbar, mit Datenverlust-Hinweis statt stillem Wipe).
+    const corruptPath = `${FILE}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    try {
+      fs.renameSync(FILE, corruptPath);
+    } catch (re) {
+      console.error("[store] .corrupt-Rename fehlgeschlagen:", re.message);
+    }
+    console.error(
+      `[store] KORRUPTES store.json erkannt - umbenannt nach ${corruptPath}. ` +
+        "Store startet mit Defaults. DATENVERLUST moeglich, File pruefen.",
+    );
     state = ops.makeDefaultState();
     save();
   }
+  return finishLoad();
+}
+
+// Gemeinsamer Abschluss von load(): First-Boot, Parse-Erfolg UND der Korruptions-Pfad
+// laufen hier durch. Ein Helper, damit KEIN Seed-Schritt in einem der drei Zweige
+// verloren geht (sonst griffe Inbound nach P3c fail-closed - vgl. seedOwnerNumber unten).
+function finishLoad() {
   seedProfilesFromEnv();
   // Owner-Nummer config-derived bei JEDEM load() idempotent sicherstellen (analog
   // seedProfilesFromEnv): ohne sie wuerde Inbound nach P3c fail-closed greifen,
@@ -120,7 +154,20 @@ function seedProfilesFromEnv() {
 
 export function save() {
   fs.mkdirSync(config.dataDir, { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(state, null, 2));
+  // Atomic write (OT-3 AC1): erst in ein Temp-File IM SELBEN Verzeichnis schreiben +
+  // fsync, dann atomar ueber FILE renamen. Ein Crash/Kill mid-write hinterlaesst so
+  // hoechstens ein verwaistes .tmp-File, NIE ein truncated store.json. Das tmp MUSS im
+  // selben Verzeichnis liegen (gleiches Filesystem) -> renameSync ist atomar (POSIX),
+  // kein EXDEV (siehe PLAN-SECURITY.md OT-3).
+  const tmp = `${FILE}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const fd = fs.openSync(tmp, "w");
+  try {
+    fs.writeFileSync(fd, JSON.stringify(state, null, 2));
+    fs.fsyncSync(fd); // Daten muessen auf der Platte sein, BEVOR der Rename committet
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, FILE);
 }
 
 export const newId = ops.newId;
