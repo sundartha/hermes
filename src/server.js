@@ -16,6 +16,7 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
+import { selfServicePatch, GREETING_TEMPLATES } from "./self-service.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -119,6 +120,11 @@ app.get("/healthz", (_req, res) => res.json({ ok: true }));
 registerWellKnown(app);
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
+  // Self-Service-Seite (I9) ist die GETRENNTE Tenant-Sicht (Decision #3): NICHT
+  // hinter der Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt
+  // KEINE Tenant-Daten (die kommen erst per Bearer-Token ueber /api/self-service/*).
+  // Hinter dem Flag: aus -> nicht ausgenommen -> byte-identisch zum Bestand.
+  if (config.selfServiceEnabled && req.path === "/tenant.html") return next();
   if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") ||
       req.path.startsWith("/.well-known") || req.path === "/healthz") return next();
   if (isLocalSocket(req)) return next();
@@ -707,6 +713,47 @@ app.post("/api/settings", (req, res) => {
   audit("settings_update", req, `keys=${changed.join(",") || "-"}`);
   res.json(settings);
 });
+
+// ---- Self-Service (I9): getrennter Tenant-Pfad, hinter SELF_SERVICE_ENABLED ----
+// Identitaet wie I5/I6 (requireTenant: OAuth-sub bzw. localhost-X-Internal-Identity,
+// fail-closed 403, NIE Owner). Diese Routen sind STRENGER als die Admin-Pendants:
+// Lesen ueber das tenant-gefilterte exportTenantData (I5/I6), Schreiben ueber eine
+// ENGERE Whitelist (selfServicePatch) VOR store.updateSettings. Flag aus: die
+// Routen sind nicht registriert -> 404 -> Admin-Pfad byte-identisch.
+if (config.selfServiceEnabled) {
+  // Tenant-Lese-Sicht: dieselbe tenant-gefilterte Quelle wie /api/state (I5/I6),
+  // aber NUR ueber die Tenant-Identitaet (kein Admin-Basic-Auth). + die kuratierten
+  // greeting-Vorlagen, damit die UI ein Dropdown statt Freitext zeigt (Decision #7).
+  app.get("/api/self-service/state", (req, res) => {
+    const tenant = requireTenant(req, res); // REJECT -> 403
+    if (!tenant) return;
+    const data = store.exportTenantData(tenant);
+    const ctx = store.tenantContext(tenant);
+    res.json({
+      settings: ctx.settings,
+      greetingTemplates: GREETING_TEMPLATES,
+      calls: data.calls.map(publicCall),
+      actionItems: data.actionItems,
+      calendar: store.getCalendar(tenant).filter((e) => e.end >= new Date().toISOString()),
+      agent: { number: activeNumberFor(store.load(), tenant), owner: ctx.ownerName },
+    });
+  });
+
+  // Self-Service-Settings-Schreiben: ENGERE Whitelist (selfServicePatch) DAVOR,
+  // dann die bestehende strenge updateSettings (Key/Typ). greeting nur als Vorlage;
+  // allowPersonalData/allowBankData nur restriktiver; allowSummaries/Disclosure/
+  // Unbekanntes abgelehnt. updateSettings bleibt UNVERAENDERT.
+  app.post("/api/self-service/settings", (req, res) => {
+    const tenant = requireTenant(req, res); // REJECT -> 403
+    if (!tenant) return;
+    const current = store.tenantContext(tenant).settings;
+    const { clean, rejected } = selfServicePatch(req.body || {}, current);
+    const { settings, changed } = store.updateSettings(tenant, clean);
+    // Nur Keys loggen (greeting-Wert/PII gehoeren nicht ins Log, wie /api/settings).
+    audit("self_service_settings", req, `keys=${changed.join(",") || "-"} rejected=${rejected.join(",") || "-"}`);
+    res.json(settings);
+  });
+}
 
 app.post("/api/action-items/:id/toggle", (req, res) => {
   const item = store.toggleActionItem(req.params.id);
