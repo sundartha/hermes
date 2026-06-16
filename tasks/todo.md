@@ -1,3 +1,33 @@
+# Task (2026-06-16): Telnyx STT/TTS auf bessere Modelle umstellen
+
+Owner-Entscheidung: STT Telnyx-in-house -> Deepgram Nova-3, TTS AWS Polly
+Vicki-Neural -> Azure Neural (de-DE, Katja). Scope: NUR Telnyx-Live-Pfad
+(`src/telephony/adapters/telnyx/render.js`). Twilio-Adapter bleibt unberuehrt.
+
+## Aenderungen
+- [x] GATHER_ATTRS: transcriptionEngine "Telnyx"->"Deepgram" + model "deepgram/nova-3",
+      language "de-DE"->"de" (Deepgram-Sprachcode fuer Deutsch).
+- [x] TELNYX_VOICE: voice "Polly.Vicki-Neural"->"Azure.de-DE-KatjaNeural".
+- [x] Kommentare in render.js nachziehen; Snapshot-Test telnyx-render.test.js anpassen.
+
+## Erwartetes Ergebnis (deterministisch, pruefbar)
+- Telnyx-Gather: `<Gather input="speech" language="de" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="..." method="POST">`
+- Telnyx-Say:    `<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">...`
+- Twilio-Renderer unveraendert (directive-render + disclosure-outbound bleiben gruen).
+
+## Verifikation
+- [x] `node --check src/telephony/adapters/telnyx/render.js` -> OK
+- [x] `npm test` -> 460/460 gruen (Baseline gehalten)
+
+## NICHT autonom (geparkt, Owner) - workflow.md Regel 7
+- Live-Smoke (echter Telnyx-Anruf): Snapshot prueft nur den String, NICHT ob Telnyx
+  ihn akzeptiert / ob STT+TTS real funktionieren.
+- Account: Deepgram-STT + Azure-NTTS muessen im Telnyx-Portal freigeschaltet sein,
+  sonst Risiko stummer Agent (Bug-Klasse 2026-06-15).
+- Kosten: Premium-Add-ons; Minutenkosten laufen AUSSERHALB des Budget-Guards.
+
+---
+
 # Todo: Test-Suite + Phase 2 + Phase 3 (autonome Punkte)
 
 ## BUGFIX (2026-06-15): Telnyx-Inbound-Audio/STT -- Agent hoert den Angerufenen nicht

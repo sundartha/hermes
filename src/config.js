@@ -27,6 +27,22 @@ export const config = {
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
 
+  // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
+  // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
+  // DEFAULT AUS (fail-closed): die Onboard-Route reicht KEINEN Billing-Client herein
+  // -> kein Hold/Capture, requested->provisioning->active wie bisher (byte-identisch).
+  paymentEnabled: (process.env.PAYMENT_ENABLED || "false") === "true",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || "", // SECRET - nie loggen/leaken
+  stripeApiBase: (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\/$/, ""),
+  // Einmalige Setup-Gebuehr pro Nummer in GANZZAHL Cents (Geld nie als Float, G26).
+  // Bei PAYMENT_ENABLED Pflicht > 0 (assertConfig); 0 = kein Magic-Default.
+  numberSetupFeeCents: parseInt(process.env.NUMBER_SETUP_FEE_CENTS || "0", 10),
+  paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
+  // Voice-Minuten-Tarif fuer den Stripe-Meter (P6b3), GANZZAHL Cents (G26). Nur im
+  // Metering-Pfad (PAYMENT_ENABLED) genutzt; 0 = kein Cost-Cents-Beleg (Meter meldet
+  // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
+  voiceMinuteCostCents: parseInt(process.env.VOICE_MINUTE_COST_CENTS || "0", 10),
+
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",
 
@@ -36,6 +52,10 @@ export const config = {
   storeBackend: (process.env.STORE_BACKEND || "json").toLowerCase(),
   // Postgres-Connection-String (NUR bei STORE_BACKEND=pg). Secret -> nie loggen.
   databaseUrl: process.env.DATABASE_URL || "",
+  // ---- Queue-Backend (async Provisioning-Worker, P6b2) ----
+  // "memory" (Default, fail-closed) = deterministische In-Memory-Queue (drain-on-
+  // demand, kein Timer). "pgboss" ist vorbereitet, aber deferred nach P8 (wirft).
+  queueBackend: (process.env.QUEUE_BACKEND || "memory").toLowerCase(),
 
   port: parseInt(process.env.PORT || "3000", 10),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
@@ -132,7 +152,7 @@ export const config = {
   sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || "3600", 10),
 
   // ---- Voice-Engine ----
-  // "budget"  = Twilio STT/TTS + Claude Haiku (quasi gratis, Default)
+  // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)
   // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
   voiceEngine: process.env.VOICE_ENGINE || "budget",
   openaiApiKey: process.env.OPENAI_API_KEY || "",
@@ -162,6 +182,12 @@ export function assertConfig() {
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
   if (config.storeBackend === "pg" && !config.databaseUrl)
     missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
+  if (config.paymentEnabled && !config.stripeSecretKey)
+    missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
+  // Number.isInteger faengt auch NaN (nicht-numerisches NUMBER_SETUP_FEE_CENTS):
+  // NaN <= 0 ist false -> ohne diesen Guard wuerde die >0-Geldsicherung still umgangen.
+  if (config.paymentEnabled && (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0))
+    missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
   if (missing.length) {
     console.error(
       "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +
@@ -173,6 +199,8 @@ export function assertConfig() {
     console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
   if (config.skipTwilioSignatureCheck)
     console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
+  if (config.paymentEnabled && !config.provisioningEnabled)
+    console.error("[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).");
   if (config.storeBackend !== "pg" && config.sessionSecret)
     console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
   // Self-Service ist seit der Login-Konvergenz web-session-only: die Routen sind NUR

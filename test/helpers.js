@@ -57,6 +57,10 @@ export const BASE_ENV = {
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
   STORE_BACKEND: "json",
   DATABASE_URL: "",
+  // Queue-Backend neutral + fail-closed (In-Memory, deterministisch). Ohne diese
+  // Zeile leakt eine lokale .env mit QUEUE_BACKEND=pgboss via dotenv in Spawn-Tests
+  // -> Baseline-Drift (Lehre test-base-env-drift).
+  QUEUE_BACKEND: "memory",
   MAX_NUMBERS: "5",
   MAX_NUMBERS_PER_TENANT: "1",
   PROVISIONING_ENABLED: "false",
@@ -69,6 +73,17 @@ export const BASE_ENV = {
   // Zeile leakt eine lokale .env mit SELF_SERVICE_ENABLED=true via dotenv in
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   SELF_SERVICE_ENABLED: "false",
+  // ---- Payment/Billing (P6b1) ----
+  // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
+  // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.
+  PAYMENT_ENABLED: "false",
+  STRIPE_SECRET_KEY: "",
+  STRIPE_API_BASE: "",
+  NUMBER_SETUP_FEE_CENTS: "0",
+  PAYMENT_CURRENCY: "eur",
+  // Voice-Minuten-Meter-Tarif (P6b3) neutral 0: ohne diese Zeile leakt eine lokale
+  // .env mit VOICE_MINUTE_COST_CENTS via dotenv in Spawn-Tests -> Baseline-Drift.
+  VOICE_MINUTE_COST_CENTS: "0",
   // ---- MCP-Auth + OAuth + Hosting ----
   // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
   MCP_AUTH: "",
@@ -177,6 +192,35 @@ export async function startTelnyxMock() {
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return { url: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise((r) => server.close(r)) };
+}
+
+// Fake-Billing-Adapter (P6b1): aufzeichnend + per-Override werfbar, analog dem
+// Fake-Provisioner. Lebt in test/helpers.js (NICHT in src/) - reines Test-Double
+// fuer provisionNumber. log haelt [methode, ...args] in Aufrufreihenfolge.
+export function fakeBilling(overrides = {}) {
+  const log = [];
+  const base = {
+    async placeHold(args) { log.push(["placeHold", args]); return { paymentIntentId: "pi_fake_1" }; },
+    async captureHold(id, amt) { log.push(["captureHold", id, amt]); },
+    async cancelHold(id) { log.push(["cancelHold", id]); },
+    async reportMeter(args) { log.push(["reportMeter", args]); }, // P6b3-Meter-Aufzeichner
+  };
+  return { log, ...base, ...overrides };
+}
+
+// Fake-Provisioner-Adapter: aufzeichnend (log) + per-Override werfbar (DIP) -
+// reines Test-Double fuer provisionNumber/handleProvisionJob, kein Netz. Eine Quelle
+// (G5/S2) statt der frueher in onboarding-service/billing-hold-capture/provisioning-
+// worker dreifach kopierten Definition. log haelt die Schritte in Aufrufreihenfolge.
+export function fakeProvisioner(overrides = {}) {
+  const log = [];
+  const base = {
+    async searchNumbers() { log.push("search"); return [{ e164: "+4915799990001" }]; },
+    async orderNumber({ e164, idempotencyKey }) { log.push(`order:${e164}:${idempotencyKey}`); return { e164, providerNumberId: "num_ext_1" }; },
+    async configureNumber({ providerNumberId, connectionId }) { log.push(`configure:${providerNumberId}:${connectionId}`); },
+    async releaseNumber(id) { log.push(`release:${id}`); },
+  };
+  return { log, ...base, ...overrides };
 }
 
 // ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----

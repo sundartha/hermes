@@ -23,6 +23,9 @@ export function load() {
     state.notifications ||= [];
     state.profiles ||= {};
     state.numbers ||= [];
+    state.provisioningJobs ||= []; // P6b2: Job-Spur in bestehenden Stores nachziehen
+    state.tenantBudgets ||= []; // P6b3: per-Tenant-Kostendecke nachziehen
+    state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
   } catch {
     state = ops.makeDefaultState();
     save();
@@ -232,6 +235,42 @@ export function budgetExceeded(tenantId, cfg) {
 
 export function globalBudgetExceeded(cfg) {
   return ops.globalBudgetExceeded(load(), cfg);
+}
+
+// ---- Per-Tenant-Budget + Metering (P6b3) ----
+export function setTenantBudget(tenantId, amounts) {
+  const row = ops.setTenantBudget(load(), tenantId, amounts);
+  save();
+  return row;
+}
+
+export function recordUsageEvent(input) {
+  const event = ops.recordUsageEvent(load(), input);
+  save();
+  return event;
+}
+
+export function pendingMeterEvents() {
+  return ops.pendingMeterEvents(load());
+}
+
+export function markMeterEventsSent(eventIds) {
+  const n = ops.markMeterEventsSent(load(), eventIds);
+  if (n) save();
+  return n;
+}
+
+// ---- KYC (P6b4) ----
+// setKycLevel mutiert -> save; kycReached ist reine Query (kein save), analog
+// budgetExceeded/resolveTenant.
+export function setKycLevel(tenantId, level) {
+  const tenant = ops.setKycLevel(load(), tenantId, level);
+  save();
+  return tenant;
+}
+
+export function kycReached(tenantId, minLevel) {
+  return ops.kycReached(load(), tenantId, minLevel);
 }
 
 // ---- Notifications ----

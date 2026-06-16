@@ -20,6 +20,11 @@ import {
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   TENANT_STATUS,
+  PROVISIONING_JOB_STATUS,
+  PROVISION_NUMBER_JOB,
+  USAGE_EVENT_KIND,
+  CENTS_PER_EUR,
+  KYC_ORDER,
 } from "./defaults.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -44,6 +49,20 @@ export function makeDefaultState() {
     numbers: [], // [{ id, e164, tenantId, provider, status, providerNumberId }]
     // Historie Nummer<->Tenant (Recycling-Hygiene).
     numberAssignments: [], // [{ id, numberId, tenantId, assignedAt, releasedAt }]
+    // Async-Provisioning-Jobs (P6b2): persistente Spur der Queue (json-Liste bzw.
+    // provisioning_job-Tabelle in pg). Die Laufzeit-Queue lebt im Adapter
+    // (queue/adapters/memory); diese Liste haelt den Audit-/Reconciliation-Zustand
+    // (RLS-fest, hydrierbar). [{ id, numberId, tenantId, kind, status, idempotencyKey, attempts, lastError }]
+    provisioningJobs: [],
+    // Per-Tenant-Kostendecke (P6b3): [{ tenantId, budgetCents, hardCapCents }].
+    // KEINE Owner-Vorbelegung -> Owner ohne Zeile faellt auf cfg.maxBudgetEur
+    // (budgetExceeded), byte-identisch zum Bestand.
+    tenantBudgets: [],
+    // Append-only Usage-Ledger (P6b3): Quelle fuer das Stripe-Metering (NICHT fuers
+    // Budget-Gate - das bleibt die usage-Map). [{ id, tenantId, callId, kind,
+    // quantity, costCents, occurredAt, stripeMeterSent }]. Eintraege werden NIE
+    // mutiert, nur stripeMeterSent flippt beim Flush.
+    usageEvents: [],
   };
 }
 
@@ -334,6 +353,29 @@ export function registerTenant(s, id, { ownerName } = {}) {
   return tenant;
 }
 
+// Setzt den KYC-Reifegrad eines Tenants (P6b4). Nebeneffekt im Namen (N7): set*.
+// Validiert gegen KYC_ORDER (fail-closed: unbekannte Stufe wirft, statt einen
+// Muell-Wert zu persistieren, der das Gate still aushebelt). Fehlender Tenant
+// wirft (kein stilles No-Op). Reine Mutation, kein IO (Wrapper saved).
+export function setKycLevel(s, tenantId, level) {
+  if (!KYC_ORDER.includes(level)) throw new Error(`setKycLevel: unbekannte KYC-Stufe ${level}`);
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setKycLevel: Tenant ${tenantId} nicht gefunden`);
+  tenant.kycLevel = level;
+  return tenant;
+}
+
+// Gate-Praedikat (P6b4): erreicht der Tenant mindestens die geforderte KYC-Stufe?
+// Bewusste Asymmetrie (Plan-Beschluss, NICHT aufraeumen): fehlendes kycLevel-Feld
+// (Owner/Bestand) gilt als ausreichend -> true (kein Regress, byte-identisch). Ein
+// EXPLIZIT gesetzter Wert wird dagegen rangbasiert verglichen (KYC_ORDER-Index) und
+// sperrt fail-closed unter der Schwelle. Reine Query, kein IO.
+export function kycReached(s, tenantId, minLevel) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.kycLevel == null) return true; // Bestand/Owner: kein Feld -> Gate passiert
+  return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
+}
+
 // Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
 // Kosten/Plaetze; released/failed zaehlen nicht. Basis fuer die Cap-Pruefung.
 function liveNumbers(s, tenantId = null) {
@@ -355,7 +397,7 @@ export function requestNumber(s, { tenantId, provider = DEFAULT_PROVIDER, maxNum
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return { ok: false, reason: "tenant_inactive" };
   if (liveNumbers(s).length >= maxNumbers) return { ok: false, reason: "global_cap" };
   if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant) return { ok: false, reason: "tenant_cap" };
-  const number = { id: newId("num"), e164: null, tenantId, provider, status: NUMBER_STATUS.REQUESTED, providerNumberId: null };
+  const number = { id: newId("num"), e164: null, tenantId, provider, status: NUMBER_STATUS.REQUESTED, providerNumberId: null, paymentIntentId: null };
   s.numbers.push(number);
   return { ok: true, number };
 }
@@ -371,8 +413,19 @@ export function transitionNumber(s, numberId, toStatus) {
   return number;
 }
 
-export function beginProvisioning(s, numberId) {
-  return transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+// requested -> provisioning. Optionaler paymentIntentId (Payment-Pfad): wird auf
+// der Nummer hinterlegt, damit die Rollback-Pfade (cancelHold) ihn nach einer
+// Re-Hydrierung wiederfinden. Ohne den Param (payment-off, 2-arg) byte-identisch.
+export function beginProvisioning(s, numberId, paymentIntentId = null) {
+  const number = transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+  if (paymentIntentId) number.paymentIntentId = paymentIntentId;
+  return number;
+}
+
+// provisioning -> capturing: Geld-Einzug laeuft (Stripe capture). NUR im Payment-
+// Pfad (provisionNumber mit deps.billing). activateNumber deckt capturing -> active ab.
+export function beginCapturing(s, numberId) {
+  return transitionNumber(s, numberId, NUMBER_STATUS.CAPTURING);
 }
 
 // provisioning -> active: NUR nach erfolgreichem Provider-Kauf. Setzt die gekaufte
@@ -402,6 +455,36 @@ export function releaseNumber(s, numberId) {
   const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;
+}
+
+// ---- Provisioning-Jobs (P6b2, async Worker) ----
+// Persistente Job-Spur (Audit + pg-Roundtrip + RLS), parallel zur Laufzeit-Queue im
+// Adapter. recordProvisioningJob ist idempotent ueber idempotencyKey (kein Doppel-
+// Record bei Retry). markProvisioningJob setzt den Endstatus (done|failed) + lastError.
+export function recordProvisioningJob(s, { numberId, tenantId, idempotencyKey }) {
+  const existing = s.provisioningJobs.find((j) => j.idempotencyKey === idempotencyKey);
+  if (existing) return existing;
+  const job = {
+    id: newId("job"),
+    numberId,
+    tenantId,
+    kind: PROVISION_NUMBER_JOB,
+    status: PROVISIONING_JOB_STATUS.QUEUED,
+    idempotencyKey,
+    attempts: 0,
+    lastError: null,
+  };
+  s.provisioningJobs.push(job);
+  return job;
+}
+
+export function markProvisioningJob(s, jobId, status, lastError = null) {
+  const job = s.provisioningJobs.find((j) => j.id === jobId);
+  if (!job) return null;
+  job.status = status;
+  job.attempts += 1;
+  if (lastError) job.lastError = lastError;
+  return job;
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
@@ -435,24 +518,101 @@ export function globalUsageTotals(s) {
   return total;
 }
 
+// USD-Kosten eines Token-Verbrauchs (Claude-Preise pro 1M Tokens). EINE Quelle
+// (G5) der Preisformel: trackUsage (Live-Bucket, EUR-Float) UND aiCostCents
+// (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
+function tokenCostUsd(inputTokens, outputTokens, cfg) {
+  return (inputTokens / 1e6) * cfg.priceInPerMTokUsd + (outputTokens / 1e6) * cfg.priceOutPerMTokUsd;
+}
+
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
 // costEur bleibt JS-Float (Bestand, akzeptiertes Risiko). Liefert den Bucket.
 export function trackUsage(s, tenantId, inputTokens, outputTokens, cfg) {
   const usage = usageFor(s, tenantId);
   usage.inputTokens += inputTokens;
   usage.outputTokens += outputTokens;
-  const usd =
-    (inputTokens / 1e6) * cfg.priceInPerMTokUsd +
-    (outputTokens / 1e6) * cfg.priceOutPerMTokUsd;
-  usage.costEur += usd * cfg.usdToEur;
+  usage.costEur += tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur;
   return usage;
 }
 
-// Pro-Tenant-Budget: der Tenant-Bucket gegen config.maxBudgetEur (P4). Quelle ist
-// die bestehende usage-Tabelle (tenant_id-PK) + config-Cap; KEINE tenant_budget-
-// Tabelle, pro-Tenant-individuelle Caps = P6.
+// Effektiver pro-Tenant-Cap in EUR: existiert eine tenant_budget-Zeile, gilt deren
+// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale
+// cfg.maxBudgetEur (Owner/Bestand ohne Zeile -> byte-identisch). EINE Stelle fuer
+// die Cap-Aufloesung (G5), von budgetExceeded genutzt.
+function effectiveCapEur(s, tenantId, cfg) {
+  const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
+  return budget ? budget.hardCapCents / CENTS_PER_EUR : cfg.maxBudgetEur;
+}
+
+// Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
+// Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetEur). Verbrauchsquelle
+// bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
+// neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL.
 export function budgetExceeded(s, tenantId, cfg) {
-  return usageFor(s, tenantId).costEur >= cfg.maxBudgetEur;
+  return usageFor(s, tenantId).costEur >= effectiveCapEur(s, tenantId, cfg);
+}
+
+// Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId
+// (eine Zeile pro Tenant). budgetCents = weiches Inklusiv-Kontingent (Billing-
+// Anzeige), hardCapCents = harte Call-Sperre (budgetExceeded). Reine Mutation,
+// kein IO. Money als GANZZAHL Cents (G26). Liefert die Zeile.
+export function setTenantBudget(s, tenantId, { budgetCents, hardCapCents }) {
+  const existing = s.tenantBudgets.find((b) => b.tenantId === tenantId);
+  if (existing) {
+    existing.budgetCents = budgetCents;
+    existing.hardCapCents = hardCapCents;
+    return existing;
+  }
+  const row = { tenantId, budgetCents, hardCapCents };
+  s.tenantBudgets.push(row);
+  return row;
+}
+
+// Logischer AI-Token-Kostenanteil in GANZZAHL Cents (P6b3, Stripe-Meter). Leitet
+// sich aus DERSELBEN Preisformel ab wie der trackUsage-Live-Bucket (tokenCostUsd,
+// G5) - hier nur nach EUR-Cents gerundet (Money at rest = Ganzzahl Cents, G26).
+export function aiCostCents(inputTokens, outputTokens, cfg) {
+  return Math.round(tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
+}
+
+// Append-only Usage-Ledger-Eintrag (P6b3, Stripe-Meter-Quelle). NIE mutiert
+// (nur stripeMeterSent flippt beim Flush). costCents als GANZZAHL Cents (G26).
+// kind aus USAGE_EVENT_KIND (fail-closed: unbekanntes kind wirft). callId
+// optional (number_month-Meter hat keinen Call). Liefert den Eintrag.
+export function recordUsageEvent(s, { tenantId, callId = null, kind, quantity, costCents }) {
+  if (!Object.values(USAGE_EVENT_KIND).includes(kind))
+    throw new Error(`recordUsageEvent: unbekanntes kind '${kind}'`);
+  const event = {
+    id: newId("ue"),
+    tenantId,
+    callId,
+    kind,
+    quantity,
+    costCents,
+    occurredAt: new Date().toISOString(),
+    stripeMeterSent: false,
+  };
+  s.usageEvents.push(event);
+  return event;
+}
+
+// Noch nicht gemeldete Ledger-Eintraege (Flush-Quelle, billing/meter.js). Reine Query.
+export function pendingMeterEvents(s) {
+  return s.usageEvents.filter((e) => !e.stripeMeterSent);
+}
+
+// Markiert die gemeldeten Events als gesendet (Idempotenz-Schloss: zweiter Flush
+// findet sie nicht mehr in pendingMeterEvents). Liefert die Anzahl der Flips.
+export function markMeterEventsSent(s, eventIds) {
+  const ids = new Set(eventIds);
+  let n = 0;
+  for (const e of s.usageEvents) {
+    if (ids.has(e.id) && !e.stripeMeterSent) {
+      e.stripeMeterSent = true;
+      n++;
+    }
+  }
+  return n;
 }
 
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets

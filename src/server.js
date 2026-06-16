@@ -7,7 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN } from "./store/defaults.js";
 import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from "./store/views.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
@@ -17,8 +17,11 @@ import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
-import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
-import { provisionNumber } from "./onboarding.js";
+import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob } from "./store/state-ops.js";
+import { handleProvisionJob } from "./worker/provisioning.js";
+import { createQueue } from "./queue/registry.js";
+import { stripeBilling } from "./billing/stripe.js";
+import { flushMeters } from "./billing/meter.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
@@ -30,6 +33,11 @@ const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
 // per X-Forwarded-For eine beliebige IP vortaeuschen.
 app.set("trust proxy", 1);
+
+// Eine Queue-Instanz pro Prozess (Konstruktion in der Naht, nicht im Handler; P15).
+// Default In-Memory (deterministisch, drain-on-demand); QUEUE_BACKEND=pgboss wirft
+// (deferred nach P8) -> kein still gestartetes No-op-Subsystem.
+const provisioningQueue = createQueue();
 
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
@@ -304,6 +312,15 @@ function allowlistError(to, profile) {
   return null;
 }
 
+// KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
+// (card) erreicht haben. fail-closed Schnittmenge - ergaenzt die Outbound-Gate-Kette,
+// lockert NIE ein bestehendes Gate. Owner/Bestand (kein kyc_level) -> store.kycReached
+// liefert true -> byte-identisch. Liefert {status,grund,message} (Gate-Vertrag) oder null.
+function kycGateError(tenantId) {
+  if (store.kycReached(tenantId, KYC_OUTBOUND_MIN)) return null;
+  return { status: 403, grund: "kyc", message: "Verifikation unzureichend (KYC) fuer Outbound-Anrufe. Bitte Identitaet bestaetigen." };
+}
+
 // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
 // profile/requestedBy steuern Land-Schnittmenge, pro-Nutzer-Limit und Allowlist.
 function numberGateError(to, profile, requestedBy) {
@@ -483,11 +500,51 @@ app.post("/voice/outbound", async (req, res) => {
   }
 });
 
+// Sekunden pro abgerechneter Voice-Minute (G25). Abgerechnet wird ab answeredAt
+// (vorher klingelt es nur, keine Gespraechszeit) bis endedAt, aufgerundet (Provider-
+// Minutentakt). Ein nie beantworteter Call (kein answeredAt) hat 0 Minuten.
+const MS_PER_MINUTE = 60 * 1000;
+
+// Voice-Minuten-Meter EINES beendeten Calls (P6b3, Meter 2). NUR im Metering-Pfad
+// (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt (recordUsageEvent) steht
+// im Namen. Nicht beantwortet -> 0 Minuten -> kein Event (kein Null-Beleg). Kosten-
+// Cents aus dem benannten Tarif (config.voiceMinuteCostCents x Minuten). callId
+// verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
+function recordVoiceMinuteMeter(call) {
+  if (!call.answeredAt || !call.endedAt) return;
+  const minutes = Math.ceil((new Date(call.endedAt) - new Date(call.answeredAt)) / MS_PER_MINUTE);
+  if (minutes <= 0) return;
+  store.recordUsageEvent({
+    tenantId: call.tenantId,
+    callId: call.id,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: minutes,
+    costCents: minutes * config.voiceMinuteCostCents,
+  });
+}
+
+// number_month-Meter EINER neu aktivierten Nummer (P6b3, Meter 1). NUR im Metering-
+// Pfad (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt steht im Namen.
+// number ist undefined, wenn der Job uebersprungen wurde (Re-Drain) -> kein Event.
+// callId bewusst null (Nummern-Meter hat keinen Call). costCents = der Setup-Tarif.
+function recordNumberMonthMeter(number) {
+  if (!number) return;
+  store.recordUsageEvent({
+    tenantId: number.tenantId,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: config.numberSetupFeeCents,
+  });
+}
+
 // ---------------- Call zu Ende -> Summary + Notification + SMS ----------------
 // Idempotent: kann von Status-Callback, Bridge und cancel_call gleichzeitig angestossen werden.
 async function finishCall(call) {
   if (!call || call._finished) return;
   call._finished = true;
+  // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
+  // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
+  if (config.paymentEnabled) recordVoiceMinuteMeter(call);
   store.save();
 
   if (call.status !== "completed" || !call.transcript.length) {
@@ -584,6 +641,15 @@ app.post("/api/calls", async (req, res) => {
   if (tenantId === TENANT_REJECT) {
     audit("place_call_denied", req, `to=${to} grund=tenant_unbekannt requestedBy=${requestedBy}`);
     return res.status(403).json({ error: "Kein Tenant fuer diese Identitaet." });
+  }
+
+  // KYC-Gate (P6b4) als erstes Glied der Outbound-Gate-Kette: Tenant-Reifegrad VOR
+  // den Ziel-Gates (Schnittmenge, fail-closed). Owner/Bestand byte-identisch (kycReached
+  // true bei fehlendem kyc_level). tenantId ist hier bereits aufgeloest + REJECT abgewiesen.
+  const kycErr = kycGateError(tenantId);
+  if (kycErr) {
+    audit("place_call_denied", req, `to=${to} grund=${kycErr.grund} tenant=${tenantId} requestedBy=${requestedBy}`);
+    return res.status(kycErr.status).json({ error: kycErr.message });
   }
 
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
@@ -825,6 +891,20 @@ app.delete("/api/profiles/:email", (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
+// und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
+// Basic-Auth (Bestand deckt /api/* ab; localhost = Owner) - KEIN MCP-Tool. NUR im
+// Metering-Pfad erreichbar: ohne PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch
+// zum Bestand). "Periodisch" = extern cron-baar (echter Scheduler = P8); KEIN neuer
+// Scheduler-Dep. Antwort = nur Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
+app.post("/api/billing/flush-meters", async (req, res) => {
+  if (!config.paymentEnabled) return res.status(404).json({ error: "metering disabled (PAYMENT_ENABLED)" });
+  const result = await flushMeters(store.load(), { billing: stripeBilling });
+  store.save();
+  audit("meter_flush", req, `sent=${result.sent} failed=${result.failed}`);
+  res.json(result);
+});
+
 // ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
 // (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth (Bestand deckt
 // /api/* ab; localhost = Owner). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP,
@@ -862,23 +942,56 @@ app.post("/api/onboard", async (req, res) => {
   if (!config.provisioningEnabled)
     return res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "disabled" });
 
-  // Echter Provider-Kauf (gedeckelt durch die Cap oben). Fehlerpfad in der
-  // Orchestrierung: failed + Provider-Release (kein bezahlter Orphan).
-  try {
-    const number = await provisionNumber(s, numberProvisioning(PROVIDER.TELNYX), {
-      numberId,
-      countryCode: config.provisioningCountry,
-      connectionId: config.telnyxConnectionId,
-    });
-    store.save();
-    audit("onboard_active", req, `tenant=${tenantId} number=${numberId} e164=${number.e164}`);
-    res.json({ tenantId, numberId, status: number.status, e164: number.e164 });
-  } catch (err) {
-    store.save(); // 'failed' persistieren
-    console.error("[onboard]", err.message);
-    res.status(502).json({ error: "Nummern-Provisioning fehlgeschlagen", numberId, status: findNumber(s, numberId)?.status });
-  }
+  // BEWUSSTE VERHALTENS-AENDERUNG (P6b2): das Provisioning ist aus dem HTTP-Request
+  // geloest. Wir enqueuen einen Job, persistieren die Job-Spur ('requested' + queued)
+  // und antworten SOFORT mit 'queued'; ein deterministischer Drain (In-Memory-Queue)
+  // fuehrt provisionNumber asynchron aus. Die Geld-Sicherheits-Invarianten (Hold-vor-
+  // Order, kein active ohne Capture, Rollback) bleiben in provisionNumber - jetzt im Worker.
+  const idempotencyKey = `provision_${numberId}`;
+  provisioningQueue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+  const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
+  store.save();
+  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${job.id}`);
+  res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "queued", jobId: job.id });
+
+  // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
+  // (pg-boss ist deferred nach P8), aber HTTP endet vor dem Provider-Kauf. Tests
+  // rufen den Drain deterministisch ueber die Queue-Instanz; hier wird er nur angestossen.
+  void runProvisioningDrain();
 });
+
+// Verarbeitet wartende provision_number-Jobs deterministisch (In-Memory-Drain).
+// Baut deps (provisioner + optional Stripe-Billing bei PAYMENT_ENABLED) genau wie
+// der frueher synchrone Onboard-Pfad. KEIN active ohne Capture / Rollback liegen in
+// provisionNumber. Persistiert nach jedem Job (Worker selbst ist save-frei, reine Fn).
+async function runProvisioningDrain() {
+  const s = store.load();
+  const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
+  const opts = { countryCode: config.provisioningCountry, connectionId: config.telnyxConnectionId };
+  if (config.paymentEnabled) {
+    deps.billing = stripeBilling;
+    opts.holdAmountCents = config.numberSetupFeeCents;
+    opts.currency = config.paymentCurrency;
+  }
+  await provisioningQueue.drain(async (queuedJob) => {
+    const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
+    try {
+      const r = await handleProvisionJob(s, queuedJob, deps, opts);
+      if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);
+      // number_month-Meter (P6b3, Meter 1): NUR wenn eine Nummer NEU aktiviert wurde
+      // (r.number, nicht skipped) UND im Metering-Pfad. Erste Periode bei Aktivierung
+      // (monatlicher Scheduler = P8). costCents = der Setup-Tarif (numberSetupFeeCents).
+      if (config.paymentEnabled) recordNumberMonthMeter(r.number);
+      store.save();
+      return r;
+    } catch (err) {
+      if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.FAILED, err.message);
+      store.save(); // 'failed'-Number + Job persistieren
+      console.error("[provision-worker]", err.message);
+      throw err; // drain markiert den Queue-Job failed; provisionNumber hat schon gerollbackt
+    }
+  });
+}
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).

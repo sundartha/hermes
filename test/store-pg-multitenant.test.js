@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
-import { defaultSettings, demoCalendar, PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
+import { defaultSettings, demoCalendar, PROVIDER, NUMBER_STATUS, KYC_LEVEL } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
 import { config } from "../src/config.js";
@@ -54,6 +54,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   // kein direkter tenant-INSERT in die DB). Identitaet (owner_name/idp_subject) setzen.
   ops.registerTenant(s, TENANT_B, { ownerName: "Maria" });
   s.tenants.find((t) => t.id === TENANT_B).idpSubject = "sub-maria";
+  ops.setKycLevel(s, TENANT_B, KYC_LEVEL.CARD); // P6b4: kyc_level round-trippt
 
   // B-Daten in den Spiegel (settings/calendar/usage/number).
   const iso1 = "2030-02-01T10:00:00.000Z";
@@ -93,6 +94,9 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   // tenant-Identitaet round-trippt (owner_name/idp_subject).
   assert.equal(rs.tenants.find((t) => t.id === TENANT_B).ownerName, "Maria");
   assert.equal(rs.tenants.find((t) => t.id === TENANT_B).idpSubject, "sub-maria");
+  // kyc_level round-trippt (P6b4); Owner ohne Wert behaelt KEIN Feld (nur-nicht-null-Hydrierung, R6).
+  assert.equal(rs.tenants.find((t) => t.id === TENANT_B).kycLevel, KYC_LEVEL.CARD, "kyc_level round-trippt");
+  assert.equal("kycLevel" in rs.tenants.find((t) => t.id === OWNER_TENANT_ID), false);
   // call + actionItem + notification getrennt zugeordnet.
   assert.ok(r.getCall(cb.id), "B-Call vorhanden");
   assert.equal(r.getCall(cb.id).tenantId, TENANT_B);

@@ -1,5 +1,5 @@
 // Store-Fassade: waehlt das aktive Backend hinter STORE_BACKEND und re-exportiert
-// dessen 30 Funktionen. Die Datei MUSS als store.js bestehen bleiben - ESM
+// dessen 36 Funktionen. Die Datei MUSS als store.js bestehen bleiben - ESM
 // resolved "./store.js" NICHT auf ein store/-Verzeichnis, die Caller
 // (server/bridge/claude) und der Retention-Test importieren store.js unveraendert.
 //
@@ -65,7 +65,7 @@ if (config.storeBackend === "pg") {
   backend = jsonBackend;
 }
 
-// 31 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
+// 36 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
 export const {
   load,
   save,
@@ -98,4 +98,10 @@ export const {
   deleteProfile,
   tenantContext,
   resolveTenant,
+  setTenantBudget,
+  recordUsageEvent,
+  pendingMeterEvents,
+  markMeterEventsSent,
+  setKycLevel,
+  kycReached,
 } = backend;

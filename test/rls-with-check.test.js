@@ -58,7 +58,9 @@ function insertCall(db, id, tenantId) {
 
 // Anzahl Tabellen mit tenant_isolation-Policy (schema.sql). AC1 verlangt fuer JEDE
 // dieser Policies ein EXPLIZITES WITH CHECK - belegbar ueber pg_policies.with_check.
-const TENANT_ISOLATION_POLICY_COUNT = 10;
+// 13 = die urspruenglichen 10 + die 3 P6-Tabellen (provisioning_job, tenant_budget,
+// usage_event), die beim Merge mit derselben expliziten WITH-CHECK-Form ergaenzt wurden.
+const TENANT_ISOLATION_POLICY_COUNT = 13;
 
 // T0 (AC1): Jede tenant_isolation-Policy hat ein explizites WITH CHECK im Katalog.
 // Ohne explizite Klausel ist pg_policies.with_check NULL (FOR ALL wendet USING nur

@@ -137,6 +137,32 @@ export function makePgStore(runner) {
     // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
     usageOf: (tenantId) => ops.usageOf(requireState(), tenantId),
 
+    // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
+    setTenantBudget(tenantId, amounts) {
+      const row = ops.setTenantBudget(requireState(), tenantId, amounts);
+      save();
+      return row;
+    },
+    recordUsageEvent(input) {
+      const event = ops.recordUsageEvent(requireState(), input);
+      save();
+      return event;
+    },
+    pendingMeterEvents: () => ops.pendingMeterEvents(requireState()),
+    markMeterEventsSent(eventIds) {
+      const n = ops.markMeterEventsSent(requireState(), eventIds);
+      if (n) save();
+      return n;
+    },
+
+    // ---- KYC (P6b4): Wrapper-Parity zu json.js ----
+    setKycLevel(tenantId, level) {
+      const tenant = ops.setKycLevel(requireState(), tenantId, level);
+      save();
+      return tenant;
+    },
+    kycReached: (tenantId, minLevel) => ops.kycReached(requireState(), tenantId, minLevel),
+
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
       save();
@@ -213,11 +239,15 @@ async function hydrate(client) {
 // entstuende ein leeres ownerName-Feld). Der Owner ist immer enthalten (seedDefaults
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
-  const rows = (await client.query(`SELECT id, status, owner_name, idp_subject FROM tenant`)).rows;
+  const rows = (await client.query(`SELECT id, status, owner_name, idp_subject, kyc_level FROM tenant`)).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
     if (r.owner_name != null) tenant.ownerName = r.owner_name;
     if (r.idp_subject != null) tenant.idpSubject = r.idp_subject;
+    // kyc_level NUR setzen, wenn nicht-null (Muster wie owner_name/idp_subject):
+    // ein Owner/Bestand ohne Wert behaelt KEIN kycLevel-Feld -> kycReached liefert
+    // true (byte-identisch zum json-Pfad, kein null-Feld-Drift, R6).
+    if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
     return tenant;
   });
 }
@@ -242,7 +272,18 @@ async function hydrateTenantInto(client, state, tenantId) {
     `SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
   )).rows;
   const numberRows = (await client.query(
-    `SELECT id, e164, tenant_id, provider, status, provider_number_id FROM number WHERE tenant_id = $1`, [tenantId]
+    `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id FROM number WHERE tenant_id = $1`, [tenantId]
+  )).rows;
+  const jobRows = (await client.query(
+    `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
+       FROM provisioning_job WHERE tenant_id = $1`, [tenantId]
+  )).rows;
+  const budgetRows = (await client.query(
+    `SELECT tenant_id, budget_cents, hard_cap_cents FROM tenant_budget WHERE tenant_id = $1`, [tenantId]
+  )).rows;
+  const ueRows = (await client.query(
+    `SELECT id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
+       FROM usage_event WHERE tenant_id = $1 ORDER BY id ASC`, [tenantId]
   )).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
@@ -261,6 +302,32 @@ async function hydrateTenantInto(client, state, tenantId) {
     provider: r.provider,
     status: r.status,
     providerNumberId: r.provider_number_id,
+    paymentIntentId: r.payment_intent_id ?? null,
+  })));
+  state.provisioningJobs.push(...jobRows.map((r) => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    numberId: r.number_id,
+    kind: r.kind,
+    status: r.status,
+    idempotencyKey: r.idempotency_key,
+    attempts: r.attempts,
+    lastError: r.last_error ?? null,
+  })));
+  state.tenantBudgets.push(...budgetRows.map((r) => ({
+    tenantId: r.tenant_id,
+    budgetCents: Number(r.budget_cents),
+    hardCapCents: Number(r.hard_cap_cents),
+  })));
+  state.usageEvents.push(...ueRows.map((r) => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    callId: r.call_id,
+    kind: r.kind,
+    quantity: Number(r.quantity),
+    costCents: Number(r.cost_cents),
+    occurredAt: r.occurred_at,
+    stripeMeterSent: r.stripe_meter_sent,
   })));
 
   if (tenantId === OWNER_TENANT_ID) {
@@ -396,6 +463,9 @@ async function flushTenantScope(client, tenantId, state) {
   await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
   if (tenantId === OWNER_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
   await flushNumbers(client, tenantId, state.numbers);
+  await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
+  await flushTenantBudgets(client, tenantId, state.tenantBudgets);
+  await flushUsageEvents(client, tenantId, state.usageEvents);
 }
 
 // tenant-Tabelle round-trippen (I8): id/status/owner_name/idp_subject upsert. KEINE
@@ -406,11 +476,12 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, idp_subject)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO tenant (id, status, owner_name, idp_subject, kyc_level)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO UPDATE SET
-         status=EXCLUDED.status, owner_name=EXCLUDED.owner_name, idp_subject=EXCLUDED.idp_subject`,
-      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null]
+         status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
+         idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level`,
+      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null, t.kycLevel ?? null]
     );
   }
 }
@@ -573,12 +644,64 @@ async function flushNumbers(client, tenantId, numbers) {
   await deleteMissing(client, "number", tenantId, own.map((n) => n.id));
   for (const n of own) {
     await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (id) DO UPDATE SET
          e164=EXCLUDED.e164, provider=EXCLUDED.provider,
-         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id`,
-      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null]
+         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
+         payment_intent_id=EXCLUDED.payment_intent_id`,
+      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null, n.paymentIntentId ?? null]
+    );
+  }
+}
+
+// provisioning_job-Flush (async Worker, P6b2): id-PK-Upsert der Job-Spur. own-Filter
+// + deleteMissing pro Tenant unter dessen RLS-GUC (zweite Linie, Muster wie
+// flushNumbers). status/attempts/last_error koennen sich aendern (Worker-Lauf), der
+// Rest (number_id/kind/idempotency_key) bleibt nach dem Insert stabil.
+async function flushProvisioningJobs(client, tenantId, jobs) {
+  const own = jobs.filter((j) => j.tenantId === tenantId);
+  await deleteMissing(client, "provisioning_job", tenantId, own.map((j) => j.id));
+  for (const j of own) {
+    await client.query(
+      `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO UPDATE SET
+         status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
+      [j.id, tenantId, j.numberId, j.kind, j.status, j.idempotencyKey, j.attempts, j.lastError ?? null]
+    );
+  }
+}
+
+// tenant_budget-Flush (P6b3): PK = tenant_id (eine Zeile pro Tenant), kein
+// deleteMissing noetig (setTenantBudget loescht nie). own-Filter pro Tenant unter
+// dessen RLS-GUC (zweite Linie, Muster wie flushNumbers). Upsert wie flushSettings/
+// flushUsage. Money als GANZZAHL Cents.
+async function flushTenantBudgets(client, tenantId, budgets) {
+  const own = budgets.filter((b) => b.tenantId === tenantId);
+  for (const b of own) {
+    await client.query(
+      `INSERT INTO tenant_budget (tenant_id, budget_cents, hard_cap_cents)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         budget_cents=EXCLUDED.budget_cents, hard_cap_cents=EXCLUDED.hard_cap_cents`,
+      [tenantId, b.budgetCents, b.hardCapCents]
+    );
+  }
+}
+
+// usage_event-Flush (P6b3): append-only id-PK-Ledger. own-Filter + deleteMissing
+// (Retention/Erase koennten Events entfernen) + Upsert (nur stripe_meter_sent
+// aenderbar nach dem Insert). Muster wie flushProvisioningJobs.
+async function flushUsageEvents(client, tenantId, events) {
+  const own = events.filter((e) => e.tenantId === tenantId);
+  await deleteMissing(client, "usage_event", tenantId, own.map((e) => e.id));
+  for (const e of own) {
+    await client.query(
+      `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
+      [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent]
     );
   }
 }

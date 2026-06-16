@@ -10,6 +10,7 @@ import {
   registerTenant,
   requestNumber,
   beginProvisioning,
+  beginCapturing,
   activateNumber,
   failNumber,
   releaseNumber,
@@ -32,6 +33,23 @@ test("canTransitionNumber: legale Kette erlaubt, Spruenge verboten", () => {
   assert.equal(canTransitionNumber(NUMBER_STATUS.REQUESTED, NUMBER_STATUS.ACTIVE), false);
   assert.equal(canTransitionNumber(NUMBER_STATUS.RELEASED, NUMBER_STATUS.ACTIVE), false);
   assert.equal(canTransitionNumber("garbage", NUMBER_STATUS.ACTIVE), false);
+  // P6b1: capturing-Edges (additiv; provisioning->active bleibt fuer payment-off legal)
+  assert.equal(canTransitionNumber(NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.CAPTURING), true);
+  assert.equal(canTransitionNumber(NUMBER_STATUS.CAPTURING, NUMBER_STATUS.ACTIVE), true);
+  assert.equal(canTransitionNumber(NUMBER_STATUS.CAPTURING, NUMBER_STATUS.FAILED), true);
+  assert.equal(canTransitionNumber(NUMBER_STATUS.CAPTURING, NUMBER_STATUS.SUSPENDED), false);
+  assert.equal(canTransitionNumber(NUMBER_STATUS.CAPTURING, NUMBER_STATUS.RELEASED), false);
+});
+
+test("beginCapturing: provisioning -> capturing legal, aus requested illegal (fail-closed)", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  // aus requested ist capturing kein legaler Sprung
+  assert.throws(() => beginCapturing(s, number.id), /illegaler Uebergang/);
+  beginProvisioning(s, number.id);
+  beginCapturing(s, number.id);
+  assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.CAPTURING);
 });
 
 test("transitionNumber: illegaler Uebergang wirft (kein active per Shortcut)", () => {

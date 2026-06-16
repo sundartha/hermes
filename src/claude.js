@@ -3,9 +3,27 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID } from "./store/defaults.js";
+import { OWNER_TENANT_ID, USAGE_EVENT_KIND } from "./store/defaults.js";
+import { aiCostCents } from "./store/state-ops.js";
 
 const anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
+
+// AI-Token-Meter EINES Anthropic-Aufrufs (P6b3, Meter 3). NUR im Metering-Pfad
+// (PAYMENT_ENABLED) - der Nebeneffekt (recordUsageEvent) steht im Namen. Laeuft
+// PARALLEL zum trackUsage-Live-Gate (getrennte Quellen, kein Doppelzaehlen):
+// trackUsage fuettert den Budget-Bucket, dieser Meter den Stripe-Ledger. quantity =
+// Gesamt-Tokens, costCents aus derselben Preisformel (aiCostCents, G5). callId
+// verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
+function meterAiTokens(call, usage) {
+  if (!config.paymentEnabled) return;
+  store.recordUsageEvent({
+    tenantId: call.tenantId || OWNER_TENANT_ID,
+    callId: call.id,
+    kind: USAGE_EVENT_KIND.AI_TOKEN,
+    quantity: usage.input_tokens + usage.output_tokens,
+    costCents: aiCostCents(usage.input_tokens, usage.output_tokens, config),
+  });
+}
 
 const fmtDate = (iso) =>
   new Date(iso).toLocaleString("de-DE", {
@@ -181,6 +199,7 @@ export async function agentTurn(call, callerText) {
       messages,
     });
     store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
+    meterAiTokens(call, resp.usage);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
     if (textParts.length) speech = textParts.join(" ").trim();
@@ -230,6 +249,7 @@ export async function summarizeCall(call) {
     messages: [{ role: "user", content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}` }],
   });
   store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
+  meterAiTokens(call, resp.usage);
 
   let parsed = { summary: "", actionItems: [] };
   try {

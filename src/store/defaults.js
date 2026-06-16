@@ -35,6 +35,10 @@ export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
 export const NUMBER_STATUS = Object.freeze({
   REQUESTED: "requested", // angefragt, noch KEINE e164, KEIN Provider-Kauf
   PROVISIONING: "provisioning", // Kauf/Konfiguration beim Provider laeuft
+  // Geld wird eingezogen (Stripe capture), bevor die Nummer aktiv routet. NUR im
+  // Payment-Pfad erreicht (PAYMENT_ENABLED); payment-off ueberspringt diesen Zustand
+  // (provisioning -> active bleibt legal) -> byte-identisch zum Bestand.
+  CAPTURING: "capturing",
   ACTIVE: "active", // gekauft + konfiguriert + dem Tenant zugewiesen, routet
   FAILED: "failed", // Kauf/Konfig fehlgeschlagen -> Rollback/Release
   SUSPENDED: "suspended", // Abuse/Budget/manuell stillgelegt (routet nicht)
@@ -45,12 +49,40 @@ export const NUMBER_STATUS = Object.freeze({
 // from -> Set der zulaessigen Folge-Zustaende. RELEASED ist terminal (leer).
 export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.FAILED],
-  [NUMBER_STATUS.PROVISIONING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.PROVISIONING]: [NUMBER_STATUS.CAPTURING, NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.CAPTURING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
   [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.SUSPENDED, NUMBER_STATUS.RELEASED],
   [NUMBER_STATUS.SUSPENDED]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED],
   [NUMBER_STATUS.FAILED]: [NUMBER_STATUS.RELEASED],
   [NUMBER_STATUS.RELEASED]: [],
 });
+
+// ---- Provisioning-Jobs (async Worker, P6b2) ----
+// Status eines enqueued Jobs. EINE Quelle (G5/G13): der In-Memory-Queue-Adapter
+// (queue/adapters/memory) UND die persistente Job-Spur im Store-Spiegel (state-ops
+// recordProvisioningJob) importieren dieselben Werte - sonst driften zwei Listen
+// von "queued"/"done"/"failed"-Strings auseinander. PROVISION_NUMBER_JOB ist der
+// einzige Job-Typ in P6b2 (Nummer kaufen + konfigurieren).
+export const PROVISIONING_JOB_STATUS = Object.freeze({ QUEUED: "queued", DONE: "done", FAILED: "failed" });
+export const PROVISION_NUMBER_JOB = "provision_number";
+
+// ---- Metering / Budget (P6b3) ----
+// usage_event.kind: die Stripe-Meter (Plan-Datenmodell). EINE Quelle (G5/G13): der
+// Recorder (state-ops recordUsageEvent), der Flush (billing/meter.js) UND die
+// pg-Hydrierung/Flush importieren dieselben Werte - sonst driften kind-Strings.
+// P6b3 verdrahtet die DREI im Scope (voice_minute, ai_token, number_month); SMS
+// bleibt als zukunftssicherer kind-Wert im Enum (Datenmodell-Treue, OHNE Producer
+// in dieser Phase - reine Datenkonstante, kein Code-Branch).
+export const USAGE_EVENT_KIND = Object.freeze({
+  VOICE_MINUTE: "voice_minute",
+  AI_TOKEN: "ai_token",
+  SMS: "sms",
+  NUMBER_MONTH: "number_month",
+});
+
+// Cent<->EUR-Bruecke fuer budgetExceeded (G25): hard_cap_cents (Ganzzahl Cents,
+// Money at rest) -> EUR-Vergleich gegen den bestehenden costEur-Live-Bucket.
+export const CENTS_PER_EUR = 100;
 
 // Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
 // Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
@@ -59,6 +91,24 @@ export const TENANT_STATUS = Object.freeze({
   SUSPENDED: "suspended",
   CLOSED: "closed",
 });
+
+// KYC-Reifegrad eines Tenants (P6b4). Geordnete Stufen: jede hoehere schliesst
+// die niedrigeren ein. EINE Quelle (G5/G25): der Gate-Vergleich (state-ops
+// kycReached) UND der Setter (setKycLevel) UND die pg-Hydrierung/Flush
+// importieren dieselben Werte - sonst driften die level-Strings.
+// none < otp < card < id_verified. KYC_ORDER bildet die Vergleichbarkeit ab
+// (Index = Rang), damit ">= card" ohne magische Zahlen ausdrueckbar ist.
+export const KYC_LEVEL = Object.freeze({
+  NONE: "none",
+  OTP: "otp",
+  CARD: "card",
+  ID_VERIFIED: "id_verified",
+});
+export const KYC_ORDER = Object.freeze([KYC_LEVEL.NONE, KYC_LEVEL.OTP, KYC_LEVEL.CARD, KYC_LEVEL.ID_VERIFIED]);
+
+// Schwelle fuer Outbound (Gate). >= card. Benannte Konstante (G25), eine Quelle
+// fuer Gate + Tests.
+export const KYC_OUTBOUND_MIN = KYC_LEVEL.CARD;
 
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
