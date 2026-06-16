@@ -8,21 +8,10 @@ import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
 import { makeDefaultState, registerTenant, requestNumber, findNumber } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
+import { fakeProvisioner } from "./helpers.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1" };
-
-// Fake-Provisioner mit aufzeichnenden, konfigurierbaren Schritten.
-function fakeProvisioner(overrides = {}) {
-  const log = [];
-  const base = {
-    async searchNumbers() { log.push("search"); return [{ e164: "+4915799990001" }]; },
-    async orderNumber({ e164, idempotencyKey }) { log.push(`order:${e164}:${idempotencyKey}`); return { e164, providerNumberId: "num_ext_1" }; },
-    async configureNumber({ providerNumberId, connectionId }) { log.push(`configure:${providerNumberId}:${connectionId}`); },
-    async releaseNumber(id) { log.push(`release:${id}`); },
-  };
-  return { log, ...base, ...overrides };
-}
 
 function seedRequested() {
   const s = makeDefaultState();

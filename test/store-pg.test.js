@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
 import { config } from "../src/config.js";
-import { defaultSettings, demoCalendar, PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
-import { transitionNumber } from "../src/store/state-ops.js";
+import { defaultSettings, demoCalendar, PROVIDER, NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../src/store/defaults.js";
+import { transitionNumber, recordProvisioningJob, markProvisioningJob } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
@@ -335,6 +335,34 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
   } finally {
     config.twilioNumber = prevTw; config.telnyxNumber = prevTx;
   }
+});
+
+test("provisioning_job ueberlebt Flush+Re-Hydrierung; markProvisioningJob -> done persistiert (P6b2)", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  // FK-Voraussetzung: number_id verweist auf number(id) -> erst die Number in den
+  // Spiegel (Owner-Scope), dann den Job. status='requested' (kein Kauf), e164=null.
+  s.numbers.push({ id: "num_job1", e164: null, tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX, status: "requested", providerNumberId: null });
+  const job = recordProvisioningJob(s, { numberId: "num_job1", tenantId: OWNER_TENANT_ID, idempotencyKey: "provision_num_job1" });
+  await store.save();
+
+  const r1 = await reopen(db);
+  const persisted = r1.load().provisioningJobs.find((j) => j.id === job.id);
+  assert.ok(persisted, "Job ueberlebt Re-Hydrierung");
+  assert.equal(persisted.status, PROVISIONING_JOB_STATUS.QUEUED);
+  assert.equal(persisted.idempotencyKey, "provision_num_job1");
+  assert.equal(persisted.numberId, "num_job1");
+  assert.equal(persisted.kind, "provision_number");
+  assert.equal(persisted.attempts, 0);
+  assert.equal(persisted.lastError, null, "ohne Fehler -> null (kein undefined-Drift)");
+
+  // Worker-Endzustand: done + attempts hochgezaehlt -> Flush -> Re-Hydrierung.
+  markProvisioningJob(r1.load(), job.id, PROVISIONING_JOB_STATUS.DONE);
+  await r1.save();
+  const r2 = await reopen(db);
+  const after = r2.load().provisioningJobs.find((j) => j.id === job.id);
+  assert.equal(after.status, PROVISIONING_JOB_STATUS.DONE, "Endstatus persistiert");
+  assert.equal(after.attempts, 1, "attempts hochgezaehlt + persistiert");
 });
 
 test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer Call bleiben (#7)", async () => {

@@ -244,6 +244,10 @@ async function hydrateTenantInto(client, state, tenantId) {
   const numberRows = (await client.query(
     `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id FROM number WHERE tenant_id = $1`, [tenantId]
   )).rows;
+  const jobRows = (await client.query(
+    `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
+       FROM provisioning_job WHERE tenant_id = $1`, [tenantId]
+  )).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
   const itemIdsByCall = groupActionItemIds(itemRows);
@@ -262,6 +266,16 @@ async function hydrateTenantInto(client, state, tenantId) {
     status: r.status,
     providerNumberId: r.provider_number_id,
     paymentIntentId: r.payment_intent_id ?? null,
+  })));
+  state.provisioningJobs.push(...jobRows.map((r) => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    numberId: r.number_id,
+    kind: r.kind,
+    status: r.status,
+    idempotencyKey: r.idempotency_key,
+    attempts: r.attempts,
+    lastError: r.last_error ?? null,
   })));
 
   if (tenantId === OWNER_TENANT_ID) {
@@ -397,6 +411,7 @@ async function flushTenantScope(client, tenantId, state) {
   await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
   if (tenantId === OWNER_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
   await flushNumbers(client, tenantId, state.numbers);
+  await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
 }
 
 // tenant-Tabelle round-trippen (I8): id/status/owner_name/idp_subject upsert. KEINE
@@ -581,6 +596,24 @@ async function flushNumbers(client, tenantId, numbers) {
          status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
          payment_intent_id=EXCLUDED.payment_intent_id`,
       [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null, n.paymentIntentId ?? null]
+    );
+  }
+}
+
+// provisioning_job-Flush (async Worker, P6b2): id-PK-Upsert der Job-Spur. own-Filter
+// + deleteMissing pro Tenant unter dessen RLS-GUC (zweite Linie, Muster wie
+// flushNumbers). status/attempts/last_error koennen sich aendern (Worker-Lauf), der
+// Rest (number_id/kind/idempotency_key) bleibt nach dem Insert stabil.
+async function flushProvisioningJobs(client, tenantId, jobs) {
+  const own = jobs.filter((j) => j.tenantId === tenantId);
+  await deleteMissing(client, "provisioning_job", tenantId, own.map((j) => j.id));
+  for (const j of own) {
+    await client.query(
+      `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO UPDATE SET
+         status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
+      [j.id, tenantId, j.numberId, j.kind, j.status, j.idempotencyKey, j.attempts, j.lastError ?? null]
     );
   }
 }

@@ -20,6 +20,8 @@ import {
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   TENANT_STATUS,
+  PROVISIONING_JOB_STATUS,
+  PROVISION_NUMBER_JOB,
 } from "./defaults.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -44,6 +46,11 @@ export function makeDefaultState() {
     numbers: [], // [{ id, e164, tenantId, provider, status, providerNumberId }]
     // Historie Nummer<->Tenant (Recycling-Hygiene).
     numberAssignments: [], // [{ id, numberId, tenantId, assignedAt, releasedAt }]
+    // Async-Provisioning-Jobs (P6b2): persistente Spur der Queue (json-Liste bzw.
+    // provisioning_job-Tabelle in pg). Die Laufzeit-Queue lebt im Adapter
+    // (queue/adapters/memory); diese Liste haelt den Audit-/Reconciliation-Zustand
+    // (RLS-fest, hydrierbar). [{ id, numberId, tenantId, kind, status, idempotencyKey, attempts, lastError }]
+    provisioningJobs: [],
   };
 }
 
@@ -413,6 +420,36 @@ export function releaseNumber(s, numberId) {
   const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;
+}
+
+// ---- Provisioning-Jobs (P6b2, async Worker) ----
+// Persistente Job-Spur (Audit + pg-Roundtrip + RLS), parallel zur Laufzeit-Queue im
+// Adapter. recordProvisioningJob ist idempotent ueber idempotencyKey (kein Doppel-
+// Record bei Retry). markProvisioningJob setzt den Endstatus (done|failed) + lastError.
+export function recordProvisioningJob(s, { numberId, tenantId, idempotencyKey }) {
+  const existing = s.provisioningJobs.find((j) => j.idempotencyKey === idempotencyKey);
+  if (existing) return existing;
+  const job = {
+    id: newId("job"),
+    numberId,
+    tenantId,
+    kind: PROVISION_NUMBER_JOB,
+    status: PROVISIONING_JOB_STATUS.QUEUED,
+    idempotencyKey,
+    attempts: 0,
+    lastError: null,
+  };
+  s.provisioningJobs.push(job);
+  return job;
+}
+
+export function markProvisioningJob(s, jobId, status, lastError = null) {
+  const job = s.provisioningJobs.find((j) => j.id === jobId);
+  if (!job) return null;
+  job.status = status;
+  job.attempts += 1;
+  if (lastError) job.lastError = lastError;
+  return job;
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----

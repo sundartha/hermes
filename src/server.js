@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS } from "./store/defaults.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
@@ -14,8 +14,9 @@ import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
-import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
-import { provisionNumber } from "./onboarding.js";
+import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob } from "./store/state-ops.js";
+import { handleProvisionJob } from "./worker/provisioning.js";
+import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { selfServicePatch, GREETING_TEMPLATES } from "./self-service.js";
 
@@ -23,6 +24,11 @@ const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
 // per X-Forwarded-For eine beliebige IP vortaeuschen.
 app.set("trust proxy", 1);
+
+// Eine Queue-Instanz pro Prozess (Konstruktion in der Naht, nicht im Handler; P15).
+// Default In-Memory (deterministisch, drain-on-demand); QUEUE_BACKEND=pgboss wirft
+// (deferred nach P8) -> kein still gestartetes No-op-Subsystem.
+const provisioningQueue = createQueue();
 
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
@@ -859,30 +865,52 @@ app.post("/api/onboard", async (req, res) => {
   if (!config.provisioningEnabled)
     return res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "disabled" });
 
-  // Echter Provider-Kauf (gedeckelt durch die Cap oben). Fehlerpfad in der
-  // Orchestrierung: failed + Provider-Release (kein bezahlter Orphan).
-  // Billing-Client NUR bei PAYMENT_ENABLED (fail-closed Default aus): dann laeuft
-  // Hold-vor-Order + Capture-vor-Aktivierung. Ohne das Flag bleibt deps.billing
-  // weg -> kein Hold/Capture, requested->provisioning->active wie bisher (byte-identisch).
+  // BEWUSSTE VERHALTENS-AENDERUNG (P6b2): das Provisioning ist aus dem HTTP-Request
+  // geloest. Wir enqueuen einen Job, persistieren die Job-Spur ('requested' + queued)
+  // und antworten SOFORT mit 'queued'; ein deterministischer Drain (In-Memory-Queue)
+  // fuehrt provisionNumber asynchron aus. Die Geld-Sicherheits-Invarianten (Hold-vor-
+  // Order, kein active ohne Capture, Rollback) bleiben in provisionNumber - jetzt im Worker.
+  const idempotencyKey = `provision_${numberId}`;
+  provisioningQueue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+  const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
+  store.save();
+  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${job.id}`);
+  res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "queued", jobId: job.id });
+
+  // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
+  // (pg-boss ist deferred nach P8), aber HTTP endet vor dem Provider-Kauf. Tests
+  // rufen den Drain deterministisch ueber die Queue-Instanz; hier wird er nur angestossen.
+  void runProvisioningDrain();
+});
+
+// Verarbeitet wartende provision_number-Jobs deterministisch (In-Memory-Drain).
+// Baut deps (provisioner + optional Stripe-Billing bei PAYMENT_ENABLED) genau wie
+// der frueher synchrone Onboard-Pfad. KEIN active ohne Capture / Rollback liegen in
+// provisionNumber. Persistiert nach jedem Job (Worker selbst ist save-frei, reine Fn).
+async function runProvisioningDrain() {
+  const s = store.load();
   const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
-  const opts = { numberId, countryCode: config.provisioningCountry, connectionId: config.telnyxConnectionId };
+  const opts = { countryCode: config.provisioningCountry, connectionId: config.telnyxConnectionId };
   if (config.paymentEnabled) {
     deps.billing = stripeBilling;
     opts.holdAmountCents = config.numberSetupFeeCents;
     opts.currency = config.paymentCurrency;
-    audit("onboard_hold", req, `tenant=${tenantId} number=${numberId}`); // KEIN PI/Secret
   }
-  try {
-    const number = await provisionNumber(s, deps, opts);
-    store.save();
-    audit("onboard_active", req, `tenant=${tenantId} number=${numberId} e164=${number.e164}`);
-    res.json({ tenantId, numberId, status: number.status, e164: number.e164 });
-  } catch (err) {
-    store.save(); // 'failed' persistieren
-    console.error("[onboard]", err.message);
-    res.status(502).json({ error: "Nummern-Provisioning fehlgeschlagen", numberId, status: findNumber(s, numberId)?.status });
-  }
-});
+  await provisioningQueue.drain(async (queuedJob) => {
+    const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
+    try {
+      const r = await handleProvisionJob(s, queuedJob, deps, opts);
+      if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);
+      store.save();
+      return r;
+    } catch (err) {
+      if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.FAILED, err.message);
+      store.save(); // 'failed'-Number + Job persistieren
+      console.error("[provision-worker]", err.message);
+      throw err; // drain markiert den Queue-Job failed; provisionNumber hat schon gerollbackt
+    }
+  });
+}
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
