@@ -16,6 +16,9 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { registerTenant, requestNumber, findNumber } from "./store/state-ops.js";
 import { provisionNumber } from "./onboarding.js";
+import { makeWebAuthRoutes, makeOidc, makeAccounts, makeSessions } from "./web-auth.js";
+import { makeAuditStore } from "./audit-store.js";
+import { createPortalRunner } from "./portal-pool.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -77,6 +80,30 @@ app.use((err, _req, res, next) => {
 // /healthz (Keep-Alive) und localhost (interne MCP-Tools).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 registerWellKnown(app);
+
+// ---- OIDC-Browser-Login (/auth/*) -----------------------------------
+// Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
+// ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
+// damit /auth/login nicht durch Basic-Auth geblockt wird.
+if (config.sessionSecret && config.storeBackend === "pg") {
+  const portalRunner = createPortalRunner();
+  const oidc = makeOidc(config);
+  const accounts = makeAccounts(portalRunner);
+  const sessions = makeSessions(portalRunner);
+  const auditStore = makeAuditStore(portalRunner);
+  const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
+  app.use("/auth", loginRateLimiter);
+  app.use(makeWebAuthRoutes({
+    secret: config.sessionSecret,
+    redirectUri: config.publicUrl + "/auth/callback",
+    ttlSeconds: 3600,
+    oidc,
+    accounts,
+    sessions,
+    audit: auditStore,
+  }));
+}
+
 app.use((req, res, next) => {
   if (!config.dashboardPassword) return next();
   if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") ||
