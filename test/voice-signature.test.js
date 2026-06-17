@@ -1,23 +1,29 @@
 // P2-Regression: Inbound-Signaturpruefung als Port (verifyInboundSignature).
-// Deckt das NEUE pruefbare Verhalten ab, das security.test.js nicht hat:
-// fail-closed bei fehlender PUBLIC_URL. Selbst MIT Signatur-Header darf der
-// /voice-Webhook ohne rekonstruierbare signierte URL nie 200 liefern (-> 403).
+// Deckt das fail-closed-Verhalten ab, das security.test.js nicht hat: ohne
+// rekonstruierbare PUBLIC_URL gilt KEINE Signatur als gueltig - selbst mit
+// gesetztem Signatur-Header.
+//
+// Frueher ein Spawn-Test mit leerer PUBLIC_URL. Seit OT-4 verweigert der Boot bei
+// leerer Pflicht-Config (PUBLIC_URL) den Start (fail-closed) -> ein laufender
+// Server mit leerer PUBLIC_URL ist nicht mehr herstellbar. Der verbleibende,
+// pruefbare Kern (`if (!config.publicUrl) return false`) wird hier als Unit gegen
+// den Port festgenagelt: offline, ohne Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, BASE_ENV } from "./helpers.js";
+import { config } from "../src/config.js";
+import { verifyInboundSignature } from "../src/telephony/adapters/twilio/signature.js";
 
-test("/voice fail-closed ohne PUBLIC_URL trotz Signatur-Header", async () => {
-  // Echte Pruefung an (skip=false) UND publicUrl leer -> verifyInboundSignature == false
-  const srv = await startServer({ env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", PUBLIC_URL: "" } });
+test("verifyInboundSignature fail-closed ohne PUBLIC_URL (selbst mit Signatur-Header)", () => {
+  const saved = config.publicUrl;
+  config.publicUrl = "";
   try {
-    const params = { CallSid: "CAtest", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER };
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
-      method: "POST",
-      headers: { "X-Twilio-Signature": "irgendwas" },
-      body: new URLSearchParams(params),
+    const ok = verifyInboundSignature({
+      headers: { "x-twilio-signature": "irgendwas" },
+      url: "https://agent.test/voice/incoming",
+      params: { CallSid: "CAtest", From: "+4915112345678", To: "+15005550006" },
     });
-    assert.equal(res.status, 403);
+    assert.equal(ok, false, "ohne publicUrl darf keine Signatur als gueltig gelten");
   } finally {
-    await srv.stop();
+    config.publicUrl = saved;
   }
 });

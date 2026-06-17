@@ -723,8 +723,13 @@ app.post("/api/calls", async (req, res) => {
     res.json({ ok: true, callId: call.id, twilioSid: tw.sid, status: "dialing" });
   } catch (err) {
     store.endCallRecord(call.id, "failed");
+    // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
+    // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
+    // secret-frei loggen (wie die P0-Guards: err.message, nie config), dem Aufrufer
+    // eine generische, stabile Meldung geben.
+    console.error(`[place_call] originate fehlgeschlagen call=${call.id}:`, err?.message || String(err));
     res.status(500).json({
-      error: err.message,
+      error: "Anruf konnte nicht gestartet werden.",
       hint: "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.",
     });
   }
@@ -1068,6 +1073,14 @@ runRetention();
 setInterval(runRetention, RETENTION_SWEEP_INTERVAL_MS).unref();
 
 const ok = assertConfig();
+// Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
+// GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp, keine Audio-Bridge.
+// Lieber kein Dienst als ein Dienst mit lautlos abgeschaltetem Budget-/Kosten-Gate
+// (R4 Toll-Fraud). Die actionable Diagnose hat assertConfig() bereits ausgegeben.
+if (!ok) {
+  console.error("[boot] Start abgebrochen: Safety-/Pflicht-Konfiguration ungueltig (siehe oben).");
+  process.exit(1);
+}
 const httpServer = app.listen(config.port, () => {
   // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
   const port = httpServer.address().port;
@@ -1085,7 +1098,6 @@ const httpServer = app.listen(config.port, () => {
   console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
   console.log(`  Allowlist:      ${config.allowedNumbers.join(", ") || "(leer -> Outbound gesperrt)"}`);
   console.log(`  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`);
-  if (!ok) console.log("  ACHTUNG: .env unvollstaendig, Telefonie funktioniert noch nicht.\n");
 });
 
 // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)

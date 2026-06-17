@@ -11,16 +11,17 @@ const postJson = (url, body) =>
 const countMatches = (text, re) => (text.match(new RegExp(re, "g")) || []).length;
 
 test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
-  // TWILIO_ACCOUNT_SID leer: calls.create() wirft synchron ("username is
-  // required") VOR jedem Netzzugriff - die Audit-Zeile steht da schon im Log.
+  // Nicht-AC TWILIO_ACCOUNT_SID ("x"): der Twilio-Client wirft synchron VOR jedem
+  // Netzzugriff - die Audit-Zeile steht da schon im Log. Nicht-leer, damit der
+  // fail-closed-Boot (OT-4) trotzdem startet.
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "+4915112345678", TWILIO_ACCOUNT_SID: "" },
+    env: { ALLOWED_NUMBERS: "+4915112345678", TWILIO_ACCOUNT_SID: "x" },
     seed: seedState({ calls: [seedCall({ id: "call_audit1" })] }),
   });
   try {
     await t.test("place_call: genau eine Zeile mit Aktion + IP + Ziel", async () => {
       const res = await postJson(`${srv.localUrl}/api/calls`, { to: "+4915112345678", objective: "Termin" });
-      assert.equal(res.status, 500); // Twilio-Client wirft (leere SID) - Audit kam davor
+      assert.equal(res.status, 500); // Twilio-Client wirft (nicht-AC SID) - Audit kam davor
       await waitForLog(srv, /\[audit\] place_call ip=\S+ to=\+4915112345678/);
       assert.equal(countMatches(srv.stdout, "\\[audit\\] place_call ip=\\S+ to=\\+4915112345678"), 1);
     });

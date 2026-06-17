@@ -295,6 +295,32 @@ export const toolCall = (name, args = {}) => ({
   params: { name, arguments: args },
 });
 
+// Startet src/server.js und ERWARTET einen Boot-Refusal (Exit statt listen). Fuer
+// die Fail-closed-Tests (OT-4): liefert { code, output }. Wirft, wenn der Prozess
+// NICHT innerhalb timeoutMs beendet (d.h. der Boot lief durch). Teilt BASE_ENV +
+// tempDataDir mit startServer (G5: keine zweite Spawn-Definition).
+export async function startServerExpectExit({ env = {}, seed, rawStore, timeoutMs = 8000 } = {}) {
+  const dataDir = tempDataDir(seed, rawStore);
+  const child = spawn(process.execPath, ["src/server.js"], {
+    cwd: ROOT,
+    env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  child.stdout.on("data", (d) => (output += d.toString()));
+  child.stderr.on("data", (d) => (output += d.toString()));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`Server ist NICHT beendet (Boot-Refusal erwartet). Output:\n${output}`));
+    }, timeoutMs);
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      resolve({ code, output });
+    });
+  });
+}
+
 // Startet src/server.js als Kindprozess und liefert Port, gesammeltes stdout
 // und einen stop()-Handle. Wirft bei Startproblemen mit dem bisherigen Output.
 export async function startServer({ env = {}, seed, rawStore } = {}) {
