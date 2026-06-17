@@ -245,6 +245,13 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 
 const normNum = (n) => (typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "");
 
+// Provider-bewusstes Auslesen des Speech-Ergebnisses aus dem Webhook-Body.
+// Twilio sendet `SpeechResult`, Telnyx sendet `Transcript` (Telnyx-TeXML-Doku).
+function extractSpeech(req, provider) {
+  if (provider === "telnyx") return (req.body.Transcript || "").trim();
+  return (req.body.SpeechResult || "").trim();
+}
+
 // ---- Eingabe-Validierung fuer API-Routen ----
 const E164 = /^\+[1-9]\d{6,14}$/;
 const TEXT_LIMITS = { objective: 500, briefing: 2000, constraints: 2000, caller_name: 100, title: 200 };
@@ -339,8 +346,12 @@ function numberGateError(to, profile, requestedBy) {
 
 // Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem
 // Prompt + Redirect-Fallback auf dieselbe Turn-URL.
+// Telnyx-TeXML loest relative URLs anders auf als Twilio -> absolute URL nutzen
+// fuer Telnyx (config.publicUrl ist im Module-Scope verfuegbar, s.o.).
 function turnDirectives(call, text) {
-  const action = `/voice/turn?callId=${call.id}`;
+  const isTelnyx = call.provider === "telnyx";
+  const base = isTelnyx ? config.publicUrl : "";
+  const action = `${base}/voice/turn?callId=${call.id}`;
   return [gatherD({ promptText: text, action }), redirectD(action)];
 }
 
@@ -451,7 +462,7 @@ app.post("/voice/turn", async (req, res) => {
     return res.type("text/xml").send(render([hangupD()]));
   }
 
-  const heard = (req.body.SpeechResult || "").trim();
+  const heard = extractSpeech(req, call.provider);
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
       return res.type("text/xml").send(render(
