@@ -449,3 +449,58 @@ Verifikation: `npm test` 478 gruen (471 Baseline + 7 neue T-P1-01..06, 0 Drop);
 `src/server.js`): korruptes `store.json` -> `[store] KORRUPT`-Log + `.corrupt`-Backup
 (Inhalt erhalten) + valides neues `store.json`; zwei parallele `/api/onboard` -> beide
 persistiert (kein Lost Update).
+
+## Safety-Gates fail-closed (P2/OT-4, umgesetzt 2026-06-17, `feat/crash-p2-failclosed-gates`)
+
+Die unheimlichste Crash-Klasse failt nicht laut, sondern lautlos OPEN: ein Safety-/Kosten-Gate
+schaltet sich ohne Signal ab (z.B. `costEur >= NaN` ist IMMER false -> Budget-Guard blockt nie).
+P2 ersetzt stilles OPEN durch lautes Refusal. Plan: `tasks/crash-hotspots/P2-plan.md`.
+
+- **`numEnv()`-Helper + `Number.isFinite`-Guards (AC1/AC2, `config.js`):** Alle 12 numerischen
+  Env-Parses (inkl. der P6-Geldwerte `numberSetupFeeCents`, `voiceMinuteCostCents`) laufen ueber
+  `numEnv(name, raw, {fallback, min, max, integer})`. NaN/Infinity (`parseFloat("acht")`) oder
+  Bereichsverletzung (negativer Gate-Wert) sind kein stiller no-op mehr, sondern landen in
+  `fatalConfigErrors[]`. Schliesst u.a. das `Math.min(NaN,300)`-Loch bei `maxCallDurationS`.
+  `0` bleibt gueltiger Not-Aus (`maxCallsPerHour`/`maxNumbers`); leere/abwesende Var faellt auf
+  den dokumentierten Default zurueck (nur gesetzt-aber-ungueltig ist fatal).
+- **`assertConfig` faellt bei Fatal (AC3):** liest `configFatalErrors()` zusaetzlich zu den
+  Presence-Checks (`missing[]`), gibt eine actionable Diagnose (Var + Erwartung, NIE ein Secret-
+  Wert) aus und liefert `false` bei (a) fehlender Pflicht-Safety-Config ODER (b) ungueltiger
+  numerischer Config. Der P6-Payment-Guard (`NUMBER_SETUP_FEE_CENTS > 0 ganzzahlig`) bleibt als
+  config-Wert-Invariante erhalten (von `config-payment-guard.test.js` direkt gepinnt) - numEnv
+  subsumiert nur die Env-Parse-Schicht, kein zweiter Pfad.
+- **Boot ehrt das Ergebnis (AC4, `server.js`):** bei `!ok` kein `app.listen`, kein
+  `attachMediaBridge`, klare `[boot] Start abgebrochen`-Zeile auf stderr, `process.exit(1)`.
+  `store.load()` + Retention laufen davor unveraendert (baut auf P0's diagnostiziertem-Exit-
+  Muster auf). Lieber kein Dienst als ein Dienst mit lautlos abgeschaltetem Budget-Gate (R4).
+- **Originate-Fehler-Response ohne rohe Provider-Message (AC5, `server.js`):** der 500-Body von
+  `POST /api/calls` gibt nur noch `{error:"Anruf konnte nicht gestartet werden.", hint:...}`; die
+  rohe Provider-Message wird serverseitig secret-frei geloggt (wie die P0-Guards), nicht an den
+  Client geleakt (Regel 4/5). Kein weiterer 500-Pfad in `server.js` leakt `err.message` (geprueft).
+- **disclosureSentence-Regressionstest (AC6, `claude.js` UNVERAENDERT):** ein Lock-Test nagelt den
+  fest verdrahteten Offenlegungssatz (Regel 2) als PFLICHT-ersten-Satz im Outbound-Prompt fest,
+  damit ein Refactor ihn nicht still droppen/umordnen kann.
+
+**Bewusst akzeptierte Abweichungen / Folgen:**
+- **Strenger als bisher: fehlende Pflicht-Config verweigert jetzt den Boot.** `TWILIO_*`,
+  `PUBLIC_URL`, `OAUTH_ISSUER_URL` (bei `MCP_AUTH=oauth`), `DATABASE_URL` (bei `STORE_BACKEND=pg`),
+  `STRIPE_SECRET_KEY` (bei `PAYMENT_ENABLED`) fehlend -> exit 1 statt warn-but-boot. Vier
+  Bestands-Tests, die den alten warn-but-boot fuer einen Offline-Trick ausnutzten, wurden
+  angepasst (TEST-only, kein Source-Verhalten aufgeweicht): `number-gate`/`audit`/`profiles`
+  nutzen jetzt eine nicht-`AC`-`TWILIO_ACCOUNT_SID` (`"x"`: synchroner Offline-Throw des Twilio-
+  Clients, aber nicht-leer -> bootet); `voice-signature` ist von Spawn auf Unit umgestellt
+  (`verifyInboundSignature` ohne PUBLIC_URL -> `false`), weil ein laufender Server mit leerer
+  PUBLIC_URL nicht mehr herstellbar ist; `oauth.test.js` #94 prueft jetzt Boot-Refusal statt
+  warn-but-boot.
+- **Render-Restart-Loop bei Fehlkonfiguration ist gewollt:** eine Boot-Refusal-Loop = Config-
+  Fehler (eindeutige `[boot]`-Zeile im Log), nicht Code-Bug. Ein Dienst ohne Budget-Gate ist
+  teurer als ein nicht-startender (R4). Vor Render-Rollout einmal mit der echten Env-Liste lokal
+  gegen den Boot testen.
+- **T-P2-11 ist offline ueber den Telnyx-Mock-Seam umgesetzt** (Mock antwortet mit Fehlerstatus ->
+  Adapter wirft secret-frei -> generischer 500-Body). Kein Defer nach P4 noetig.
+
+Verifikation: `npm test` 490 gruen (478 Baseline + 12 neue T-P2-01..11, 0 Drop);
+`test/config-failclosed.test.js`, `test/boot-failclosed.test.js`, `test/disclosure-regression.test.js`,
+`test/place-call-error.test.js`. Smoke (echtes `src/server.js`): `MAX_BUDGET_EUR=acht` -> exit 1
++ `[boot] Start abgebrochen` (nennt MAX_BUDGET_EUR, kein "Gateway laeuft"); Gegenprobe gueltige
+Config -> `/healthz` 200 `{"ok":true}`.

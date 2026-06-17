@@ -2,9 +2,10 @@
 // die globalen Safety-Gates NUR einschraenken, nie aufweichen kann, und dass die
 // Identitaet serverseitig (nicht aus dem Body) und nicht spoofbar ist.
 //
-// Offline-Twilio-Trick (wie number-gate/audit): bei leerer TWILIO_ACCOUNT_SID
-// wirft calls.create() synchron VOR jedem Netzzugriff -> ein durchgelassener Call
-// endet als 500 (alle Gates passiert), eine Sperre als 403/429.
+// Offline-Twilio-Trick (wie number-gate/audit): eine NICHT mit "AC" beginnende
+// TWILIO_ACCOUNT_SID ("x") laesst den Twilio-Client synchron VOR jedem Netzzugriff
+// werfen -> ein durchgelassener Call endet als 500 (alle Gates passiert), eine
+// Sperre als 403/429. Nicht-leer, damit der fail-closed-Boot (OT-4) startet.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -18,7 +19,7 @@ import {
   MCP_AUDIENCE,
 } from "./helpers.js";
 
-const OFFLINE = { TWILIO_ACCOUNT_SID: "" }; // durchgelassen -> 500
+const OFFLINE = { TWILIO_ACCOUNT_SID: "x" }; // nicht-AC -> Twilio-Client wirft sync -> durchgelassen = 500
 const postCall = (url, to, identity) =>
   fetch(`${url}/api/calls`, {
     method: "POST",

@@ -1,7 +1,8 @@
 // Phase 0: Nummern-Gates fuer Outbound-Calls (Denylist, Laender-Gate,
-// Pro-Stunde-Limit) + Pruefreihenfolge. Offline: bei leerer TWILIO_ACCOUNT_SID
-// wirft calls.create() synchron VOR jedem Netzzugriff -> ein durchgelassener
-// Call endet als 500 (= alle Gates passiert), eine Sperre als 403/429.
+// Pro-Stunde-Limit) + Pruefreihenfolge. Offline: eine NICHT mit "AC" beginnende
+// TWILIO_ACCOUNT_SID ("x") laesst den Twilio-Client synchron VOR jedem Netzzugriff
+// werfen -> ein durchgelassener Call endet als 500 (= alle Gates passiert), eine
+// Sperre als 403/429. Nicht-leer, damit der fail-closed-Boot (OT-4) trotzdem startet.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -16,10 +17,10 @@ const postCall = (url, to) =>
 
 // ---- 0.1 Denylist (Notruf/Premium, hardcoded) ----
 test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
-  // Land + Allowlist grosszuegig: NUR die Denylist kann hier greifen. Leere
-  // TWILIO_ACCOUNT_SID, damit der Positiv-Fall synchron als 500 endet.
+  // Land + Allowlist grosszuegig: NUR die Denylist kann hier greifen. Nicht-AC
+  // TWILIO_ACCOUNT_SID ("x"), damit der Positiv-Fall synchron als 500 endet.
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "" },
+    env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
   });
   try {
     await t.test("Notruf-Kurzwahlen -> 403 denylist (nicht 400 Format)", async () => {
@@ -56,7 +57,7 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
 test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   await t.test("Default +49: +49 passiert, +1 -> 403 grund=land", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49", TWILIO_ACCOUNT_SID: "" },
+      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49", TWILIO_ACCOUNT_SID: "x" },
     });
     try {
       const blocked = await postCall(srv.localUrl, "+12025550123"); // US
@@ -72,7 +73,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
 
   await t.test("* erlaubt alle Laender", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "" },
+      env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
     });
     try {
       const res = await postCall(srv.localUrl, "+12025550123");
@@ -86,7 +87,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
 // ---- 0.3 Pro-Stunde-Limit ----
 test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
   const recent = () => new Date().toISOString();
-  const env = { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "2", TWILIO_ACCOUNT_SID: "" };
+  const env = { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "2", TWILIO_ACCOUNT_SID: "x" };
 
   await t.test("N+1-ter Outbound-Call innerhalb 1h -> 429 grund=stundenlimit", async () => {
     const srv = await startServer({

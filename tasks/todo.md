@@ -731,3 +731,43 @@ statt 1) -> AC4 gegen die NEUE Struktur re-lokalisiert (Request-Pfad-Saves @937/
   ergaenzt (verbatim store.json fuer den Korruptions-Boot, T-P1-03).
 - Geaenderte Prod-Files: `src/store/json.js`, `src/store.js`, `src/server.js`. Tests:
   `test/store-integrity.test.js`, `test/onboard-persist-failure.test.js` (neu) + `helpers.js`.
+
+# P2 — Safety-Gates fail-closed (OT-4, 2026-06-17, `feat/crash-p2-failclosed-gates`)
+
+Off master @4254939 (P0+P1+P6). Plan: `tasks/crash-hotspots/P2-plan.md`. TDD, node:test offline.
+
+- [x] **AC1/AC2 — `numEnv()` + `Number.isFinite`/Range (`src/config.js`)**: alle 12 numerischen
+  Env-Parses (inkl. P6-Geld `numberSetupFeeCents`/`voiceMinuteCostCents`) ueber `numEnv`;
+  NaN/Infinity/negativer Gate-Wert -> `fatalConfigErrors[]`; `0` gueltiger Not-Aus; Clamp bleibt.
+  Verify: `node --test test/config-failclosed.test.js` (T-P2-01..04) RED (kein `configFatalErrors`)
+  -> GREEN.
+- [x] **AC3 — `assertConfig` faellt bei Fatal**: liest `configFatalErrors()` zusaetzlich zu
+  `missing[]`; P6-Payment-Guard bleibt (subsumiert nur Env-Schicht). Verify: T-P2-05 +
+  `test/config-payment-guard.test.js` gruen.
+- [x] **AC4 — Boot ehrt das Ergebnis (`src/server.js`)**: `!ok` -> kein `app.listen`/
+  `attachMediaBridge`, `[boot] Start abgebrochen`, `exit(1)`. Verify:
+  `node --test test/boot-failclosed.test.js` (T-P2-06..08) RED (bootete trotzdem) -> GREEN.
+- [x] **AC5 — Originate-500 ohne rohe Provider-Message (`src/server.js`)**: generischer Body +
+  serverseitiges secret-freies Log. Verify: `test/place-call-error.test.js` (T-P2-11,
+  Telnyx-Mock-Seam) RED (leakte "Telnyx ... HTTP 503") -> GREEN.
+- [x] **AC6 — disclosureSentence-Regression (`src/claude.js` UNVERAENDERT)**: Lock-Test pinnt
+  Wortlaut + "allererster Satz"-Klausel. Verify: `test/disclosure-regression.test.js` (T-P2-09/10/10b).
+- [x] **AC7 — volle Suite + AC4-Test-Anpassungen**: `npm test` -> **490 pass / 0 fail** (478 + 12).
+
+## Review (P2 Endstand)
+- TDD: 3 neue-Verhalten-Gruppen zuerst RED gesehen (config import-fail; boot bootete-trotz-Fatal;
+  place-call leakte rohe Message), dann GREEN. AC6 = Regression-Lock (claude.js nicht angefasst).
+- `npm test`: **490 pass / 0 fail** (Baseline 478 + 12 neue T-P2-01..11, kein Drop).
+- Smoke (echtes src/server.js): `MAX_BUDGET_EUR=acht` -> exit 1 + `[boot] Start abgebrochen`
+  (nennt MAX_BUDGET_EUR, kein "Gateway laeuft"); Gegenprobe gueltige Config -> `/healthz` 200
+  `{"ok":true}`.
+- **AC4-Folge (in PLAN-SECURITY.md):** fehlende Pflicht-Config verweigert jetzt den Boot. Vier
+  Bestands-Tests, die den alten warn-but-boot fuer einen Offline-Trick nutzten, angepasst
+  (TEST-only, keine Source-Sicherung aufgeweicht): `number-gate`/`audit`/`profiles` ->
+  `TWILIO_ACCOUNT_SID:"x"` (nicht-AC, synchroner Offline-Throw, bootbar); `voice-signature`
+  Spawn->Unit; `oauth.test.js` #94 prueft Boot-Refusal.
+- CLAUDE.md-Gates: P2 STAERKT Rule 1 + Rule 2; keine neue abgeschaltete Sicherung.
+- Geaenderte Prod-Files: `src/config.js`, `src/server.js`. claude.js UNVERAENDERT. Neue Tests:
+  `config-failclosed`, `boot-failclosed`, `disclosure-regression`, `place-call-error` +
+  `helpers.js` (`startServerExpectExit`). Angepasst: `number-gate`, `audit`, `profiles`,
+  `voice-signature`, `oauth`.

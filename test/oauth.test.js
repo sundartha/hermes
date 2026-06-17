@@ -4,7 +4,7 @@
 // Test signiert. Kein echter IdP, kein Netz nach aussen.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForLog, startIdp, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
+import { startServer, startServerExpectExit, waitForLog, startIdp, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
 
 test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
   const idp = await startIdp();
@@ -91,13 +91,13 @@ test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurue
   }
 });
 
-test("MCP_AUTH=oauth ohne OAUTH_ISSUER_URL: Start meldet fehlende Konfig", async () => {
-  const srv = await startServer({ env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: "" } });
-  try {
-    await waitForLog(srv, /Konfiguration unvollstaendig.*OAUTH_ISSUER_URL/s);
-  } finally {
-    await srv.stop();
-  }
+test("MCP_AUTH=oauth ohne OAUTH_ISSUER_URL: Boot verweigert (fail-closed, OT-4)", async () => {
+  // Ein OAuth-Resource-Server ohne Issuer kann keine Tokens verifizieren -> /mcp
+  // waere kaputt/offen. assertConfig wertet das als Pflicht-Config; der Boot wird
+  // jetzt verweigert (exit 1) statt nur zu warnen und trotzdem zu starten.
+  const { code, output } = await startServerExpectExit({ env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: "" } });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /OAUTH_ISSUER_URL/);
 });
 
 test("MCP_AUTH=off: /mcp offen (nur lokale Demos)", async () => {

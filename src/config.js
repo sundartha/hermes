@@ -5,10 +5,45 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
+// ---- Numerische Env-Validierung (fail-closed, OT-4) ----
+// Eine GESETZTE, aber ungueltige numerische Env-Var (NaN/Infinity oder ausserhalb
+// des erlaubten Bereichs) darf NICHT still auf einen no-op kippen - sonst schaltet
+// sich ein Safety-/Kosten-Gate lautlos ab (z.B. ist costEur >= NaN IMMER false ->
+// Budget-Guard blockt nie). numEnv() parst UND validiert; Befunde landen in
+// fatalConfigErrors[], das assertConfig() zusaetzlich zu den Presence-Checks liest
+// -> Boot wird verweigert statt lautlos ohne Gate weiterzulaufen.
+const fatalConfigErrors = [];
+
+// Leere/abwesende Var -> dokumentierter Default (KEIN Fatal); nur gesetzt-aber-
+// ungueltig ist fatal. max ist ein bewusster Clamp (Obergrenze wie maxCallDurationS),
+// kein Fehler. Die Diagnose nennt nur Var + Erwartung, NIE einen Wert (numEnv
+// betrifft ausschliesslich numerische, nicht-geheime Vars -> kein Secret-Leak).
+export function numEnv(name, raw, { fallback, min, max, integer = true } = {}) {
+  if (raw === undefined || raw === "") return fallback;
+  const n = integer ? parseInt(raw, 10) : parseFloat(raw);
+  if (!Number.isFinite(n)) {
+    fatalConfigErrors.push(
+      `${name}="${raw}" ist keine gueltige Zahl (erwartet: ${integer ? "Ganzzahl" : "Zahl"}${min !== undefined ? `, >= ${min}` : ""}).`
+    );
+    return fallback;
+  }
+  if (min !== undefined && n < min) {
+    fatalConfigErrors.push(`${name}=${n} unterschreitet das Minimum ${min}.`);
+    return fallback;
+  }
+  if (max !== undefined && n > max) return max; // bewusster Clamp auf die Obergrenze
+  return n;
+}
+
+// Kopie der bisher gesammelten numerischen Fatal-Befunde (fuer assertConfig + Tests).
+export function configFatalErrors() {
+  return fatalConfigErrors.slice();
+}
+
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
-  maxBudgetEur: parseFloat(process.env.MAX_BUDGET_EUR || "8"),
+  maxBudgetEur: numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }),
 
   twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
@@ -36,12 +71,12 @@ export const config = {
   stripeApiBase: (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\/$/, ""),
   // Einmalige Setup-Gebuehr pro Nummer in GANZZAHL Cents (Geld nie als Float, G26).
   // Bei PAYMENT_ENABLED Pflicht > 0 (assertConfig); 0 = kein Magic-Default.
-  numberSetupFeeCents: parseInt(process.env.NUMBER_SETUP_FEE_CENTS || "0", 10),
+  numberSetupFeeCents: numEnv("NUMBER_SETUP_FEE_CENTS", process.env.NUMBER_SETUP_FEE_CENTS, { fallback: 0, min: 0 }),
   paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
   // Voice-Minuten-Tarif fuer den Stripe-Meter (P6b3), GANZZAHL Cents (G26). Nur im
   // Metering-Pfad (PAYMENT_ENABLED) genutzt; 0 = kein Cost-Cents-Beleg (Meter meldet
   // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
-  voiceMinuteCostCents: parseInt(process.env.VOICE_MINUTE_COST_CENTS || "0", 10),
+  voiceMinuteCostCents: numEnv("VOICE_MINUTE_COST_CENTS", process.env.VOICE_MINUTE_COST_CENTS, { fallback: 0, min: 0 }),
 
   ownerName: process.env.OWNER_NAME || "Jonas",
   ownerNumber: process.env.OWNER_NUMBER || "",
@@ -57,7 +92,7 @@ export const config = {
   // demand, kein Timer). "pgboss" ist vorbereitet, aber deferred nach P8 (wirft).
   queueBackend: (process.env.QUEUE_BACKEND || "memory").toLowerCase(),
 
-  port: parseInt(process.env.PORT || "3000", 10),
+  port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
   publicUrl: (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, ""),
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
@@ -75,15 +110,15 @@ export const config = {
   // Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, NICHT der Per-IP-Limiter
   // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
   // spaeter gelockert wird. Default 6; 0 = jeder Outbound-Call gesperrt (Not-Aus).
-  maxCallsPerHour: parseInt(process.env.MAX_CALLS_PER_HOUR || "6", 10),
+  maxCallsPerHour: numEnv("MAX_CALLS_PER_HOUR", process.env.MAX_CALLS_PER_HOUR, { fallback: 6, min: 0 }),
   // Notbremse fuer das (zahlungsfreie) Onboarding: harte Obergrenze, wie viele
   // Nummern die Plattform INSGESAMT provisionieren darf. Jede echte Nummer kostet
   // beim Provider Geld -> ohne Cap koennte ein offener Self-Service-Pfad das
   // Provider-Guthaben leeren (R4 Toll-Fraud). Kein Payment-Gate, nur Blast-Radius.
   // 0 = Provisioning gesperrt (Not-Aus). Default bewusst klein.
-  maxNumbers: parseInt(process.env.MAX_NUMBERS || "5", 10),
+  maxNumbers: numEnv("MAX_NUMBERS", process.env.MAX_NUMBERS, { fallback: 5, min: 0 }),
   // Wie viele AKTIVE Nummern ein einzelner Tenant haben darf (zusaetzliches Gate).
-  maxNumbersPerTenant: parseInt(process.env.MAX_NUMBERS_PER_TENANT || "1", 10),
+  maxNumbersPerTenant: numEnv("MAX_NUMBERS_PER_TENANT", process.env.MAX_NUMBERS_PER_TENANT, { fallback: 1, min: 0 }),
   // Self-Service-Provisioning (echter Nummern-Kauf beim Provider). DEFAULT AUS
   // (fail-closed): die Onboarding-Route registriert + fragt dann nur an (Nummer
   // bleibt 'requested', KEIN Geld). Erst true -> echte Kaeufe (gedeckelt durch
@@ -109,17 +144,17 @@ export const config = {
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
   // Neustart, ueber diese Env-Var gesetzte schon. Leer = keine Seed-Profile.
   profilesSeed: process.env.PROFILES_JSON || "",
-  maxCallDurationS: Math.min(parseInt(process.env.MAX_CALL_DURATION_S || "180", 10), 300),
+  maxCallDurationS: numEnv("MAX_CALL_DURATION_S", process.env.MAX_CALL_DURATION_S, { fallback: 180, min: 1, max: 300 }),
   // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
   // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.
-  rateLimitPerMin: parseInt(process.env.RATE_LIMIT_PER_MIN || "120", 10),
+  rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, { fallback: 120, min: 0 }),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
 
   // ---- Datenschutz ----
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
   // werden geloescht (DSGVO-Datenminimierung). 0 = Retention aus.
-  retentionDays: parseInt(process.env.RETENTION_DAYS || "30", 10),
+  retentionDays: numEnv("RETENTION_DAYS", process.env.RETENTION_DAYS, { fallback: 30, min: 0 }),
 
   // ---- MCP ueber HTTP ----
   // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
@@ -147,9 +182,9 @@ export const config = {
   adminEmails: (process.env.ADMIN_EMAILS || "")
     .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
   // Strengeres Rate-Limit fuer Login/Callback (Brute-Force/Credential-Stuffing).
-  loginRateLimitPerMin: parseInt(process.env.LOGIN_RATE_LIMIT_PER_MIN || "10", 10),
+  loginRateLimitPerMin: numEnv("LOGIN_RATE_LIMIT_PER_MIN", process.env.LOGIN_RATE_LIMIT_PER_MIN, { fallback: 10, min: 0 }),
   // Lebensdauer der Browser-Session (Session-Cookie + DB-Session) in Sekunden. Default 1 h.
-  sessionTtlSeconds: parseInt(process.env.SESSION_TTL_SECONDS || "3600", 10),
+  sessionTtlSeconds: numEnv("SESSION_TTL_SECONDS", process.env.SESSION_TTL_SECONDS, { fallback: 3600, min: 0 }),
 
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)
@@ -184,16 +219,20 @@ export function assertConfig() {
     missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
   if (config.paymentEnabled && !config.stripeSecretKey)
     missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
-  // Number.isInteger faengt auch NaN (nicht-numerisches NUMBER_SETUP_FEE_CENTS):
-  // NaN <= 0 ist false -> ohne diesen Guard wuerde die >0-Geldsicherung still umgangen.
+  // numEnv() faengt einen nicht-numerischen NUMBER_SETUP_FEE_CENTS bereits am Env-Parse
+  // ab (fatalConfigErrors -> Boot-Refusal). Dieser Check bleibt als Invariante auf dem
+  // config-Wert (> 0 ganzzahlig bei PAYMENT_ENABLED) - direkt geprueft von
+  // config-payment-guard.test.js, das den config-Wert ohne Env-Pfad mutiert.
   if (config.paymentEnabled && (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0))
     missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
-  if (missing.length) {
-    console.error(
-      "\n[Konfiguration unvollstaendig] Bitte in .env setzen: " +
-        missing.join(", ") +
-        "\n(.env.example kopieren: cp .env.example .env)\n"
-    );
+  // Numerische Fatal-Befunde (AC1/AC2): NaN/Infinity oder Bereichsverletzung einer
+  // gesetzten Env-Var -> faellt mit in den Boot-Stop (fail-closed statt stillem Gate-Aus).
+  const fatal = configFatalErrors();
+  if (missing.length || fatal.length) {
+    console.error("\n[Konfiguration fatal] Boot wird verweigert:");
+    for (const m of missing) console.error(`  - fehlt/ungueltig: ${m}`);
+    for (const f of fatal) console.error(`  - ${f}`);
+    console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
   }
   if (process.env.RENDER_EXTERNAL_URL && !config.dashboardPassword)
     console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
@@ -214,5 +253,5 @@ export function assertConfig() {
   if (config.oauthIssuerUrl && config.oauthIssuerUrl.startsWith("http://") &&
       !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(config.oauthIssuerUrl))
     console.error("[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!");
-  return missing.length === 0;
+  return missing.length === 0 && fatal.length === 0;
 }
