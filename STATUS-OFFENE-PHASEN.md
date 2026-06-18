@@ -8,35 +8,10 @@
 
 ---
 
-## 0. Git-/Deploy-Divergenz — BEHOBEN (2026-06-18)
-
-Alle drei Staende sind jetzt **synchron auf `ae9eba0`** (lokal = origin = upstream/Live).
-
-| Stand | vorher | jetzt |
-|---|---|---|
-| **lokales Arbeitsverzeichnis** | `fb59001` (9 hinter) | `ae9eba0` |
-| **origin/master** (Antonio) | `236aaf2` | `ae9eba0` |
-| **upstream/master = Render/LIVE** (jonas986) | `83ccef9` | `ae9eba0` |
-
-Beim Fetch zeigte sich, dass origin und upstream ab `54ca2f0` **disjunkt divergiert**
-waren: Live hatte den `form-data`-Security-Fix (`83ccef9`, CVE GHSA-hmw2-7cc7-3qxx),
-den origin nicht hatte; origin hatte den Telnyx-Inbound-STT-Fix (`04549c4`) +
-`.env.example`-Doc, die Live nicht hatte. Konfliktfrei zusammengefuehrt (Merge `ae9eba0`),
-`npm test` 490/490 gruen als Pre-Push-Gate, dann origin + upstream gepusht. Render
-(`autoDeploy: true`, Region Frankfurt) deployt automatisch; `/healthz` -> 200.
-
-**Damit jetzt LIVE (war es vorher nicht):**
-- Crash-Haertung **P0/P1/P2** (Backstop, Store-Integritaet, Safety-Gates fail-closed inkl. Boot-Refusal). *(P0/P1/P2 waren bereits in `83ccef9` live; Boot-Refusal hat den laufenden Deploy ueberlebt.)*
-- **Telnyx-Inbound-STT-Fix** (`04549c4`): provider-bewusster `extractSpeech` + absolute action-URL — der Fix fuer "KI hoert mich nicht".
-- **Originate-Leak-Fix**: `/api/calls`-500 leakt keine rohe Provider-`err.message` mehr.
-
-**Direkte Folge-Aufgabe (Owner, Gate aus 1b):** STT-Fix ist live, aber unverifiziert.
-Naechster Owner-Test-Call -> Render-Log (`[turn-recv]`) lesen -> Akzeptanz `>=1 role:caller`.
-Bei Erfolg: temporaeres `[turn-recv]`-Diagnose-Log entfernen.
-
-> Hinweis fuer kuenftige Sessions: origin (Antonio) und upstream (jonas986/Render)
+> **Hinweis (Git-Topologie, dauerhaft):** origin (Antonio) und upstream (jonas986/Render)
 > divergieren aktiv — jonas986 committet selbst (z.B. den `form-data`-Fix). Vor Aussagen
 > ueber den Live-Stand IMMER `git fetch --all` und origin vs. upstream getrennt vermessen.
+> Letzter Sync 2026-06-18 auf `ae9eba0` (lokal = origin = upstream/Live); Details in Abschnitt 4.
 
 ---
 
@@ -51,10 +26,10 @@ Bei Erfolg: temporaeres `[turn-recv]`-Diagnose-Log entfernen.
 | P0 | OT-1 | Crash-Backstop & Boot-Entkopplung | Critical | ✅ gemergt (origin) |
 | P1 | OT-3 | Store-Integritaet (atomic/lock/korrupt) | Critical | ✅ gemergt (origin) |
 | P2 | OT-4 | Safety-Gates fail-closed (numEnv, Boot-Refusal, Leak-Fix) | High | ✅ gemergt (origin) |
-| **P3** | **OT-2** | **Realtime-Audio-Haertung** (`bridge.js`, twilio/media.js) | **Critical** | ❌ **OFFEN** (Plan fertig) |
+| **P3** | **OT-2** | **Realtime-Audio-Haertung** (`bridge.js`, twilio/media.js) | **Critical** | ✅ **lokal gemergt** (master @`9ecacf7`, dormant hinter `VOICE_ENGINE=realtime`; nicht gepusht), Review PASS, 493/493 — Smoke = Gate vor realtime-Aktivierung |
 | **P4** | **OT-5** | **Test-Coverage + `server.js`-Decomposition** | Medium | ❌ **OFFEN** (Plan fertig) |
 
-- [ ] **P3 (OT-2) — Realtime-Audio-Haertung.** `bridge.js` Audio-Hot-Path hat drei Crash-Klassen, die den **ganzen** Node-Prozess (= alle parallelen Calls) killen koennen. Fix ist additiv/verhaltens-erhaltend: aeusserer `try/catch` + `readyState`-Vorbedingungen an der HEIKLE STELLE (Barge-in `bridge.js:136-143`, Call-Ende `:67-89`). **Prereq P0 ist erfuellt.** Nur relevant bei `VOICE_ENGINE=realtime` — Live laeuft derzeit auf `budget`, daher Critical aber nicht akut. Verifikation: Unit-Tests offline + manueller Real-Call-Smoke.
+- [ ] **P3 (OT-2) — Realtime-Audio-Haertung.** `bridge.js` Audio-Hot-Path hat drei Crash-Klassen, die den **ganzen** Node-Prozess (= alle parallelen Calls) killen koennen. Fix ist additiv/verhaltens-erhaltend: aeusserer `try/catch` + `readyState`-Vorbedingungen an der HEIKLE STELLE (Barge-in `bridge.js:136-143`, Call-Ende `:67-89`). **Prereq P0 ist erfuellt.** Nur relevant bei `VOICE_ENGINE=realtime` — Live laeuft derzeit auf `budget`, daher Critical aber nicht akut. Verifikation: Unit-Tests offline + manueller Real-Call-Smoke. **Stand 2026-06-18:** implementiert + dualer Review PASS (kein S1/S2; ein S4 Verschachtelungstiefe-5 im `response.done`-Case bewusst auf P4-Decomposition vertagt), `npm test` 493/493 gruen. **Lokal in master gemergt** (Merge `9ecacf7`, Feature-Commit `4914226`, rebased/cherry-picked auf `b43edab`), **dormant hinter `VOICE_ENGINE=realtime`** (Live laeuft `budget` -> kein Prod-Verhaltens-Change), **nicht gepusht**. **Real-Call-Smoke** (5 Szenarien HEIKLE STELLE: Normal-Call/Barge-in/Call-Ende-Race/Sofort-Auflegen) bleibt Gate **vor realtime-Aktivierung + vor Push/Deploy** — nicht autonom moeglich (echte Telefonie/Kosten).
 - [ ] **P4 (OT-5) — Coverage + Decomposition.** Rekurrenz-Treiber: `server.js` ist God-File (944 LOC, 11 Fix-Touches), OIDC-fetch/parse hat 0 Coverage, `mcp-tools.js` dereferenziert blind aus still degradiertem `{}`. Muss **solo + zuletzt** laufen (fasst `server.js` breit an). Details inkl. AC1.. im Plan.
 
 ### 1b. Inbound-STT-Bug "Die KI hoert mich nicht" (Telnyx, Budget-Engine)
@@ -128,7 +103,6 @@ Code fertig, RLS-Haertung F1–F5 gemergt. Offen = Betrieb:
 
 ## 3. Betreiber-ToDo (nicht autonom — braucht Account/Mensch/Geld)
 
-- [ ] **`git push upstream master`** (Live deployen, siehe Abschnitt 0) + Live-Commit verifizieren.
 - [ ] **Inbound-STT Live-Test** + `[turn-recv]`-Log lesen + Diagnose-Log danach entfernen (Abschnitt 1b).
 - [ ] **Telnyx WS-Echo-Test** vor Realtime-Scharfschaltung; `TELNYX_NUMBER` erst danach produktiv.
 - [ ] **Deepgram-STT + Azure-NTTS im Telnyx-Portal freischalten** (sonst stummer Agent; Minutenkosten laufen ausserhalb des Budget-Guards).
@@ -146,5 +120,6 @@ Code fertig, RLS-Haertung F1–F5 gemergt. Offen = Betrieb:
 - **Multi-Tenant-Telefonie P0–P8** (Ports, Telnyx-Adapter, pg-Store, pro-Tenant-Budget, Onboarding, REST-P6, Realtime-Port, DSGVO-Tiefe) — ✅ (code-seitig)
 - **Multi-Tenant-Identitaet I1–I9** — ✅
 - **Auth-Foundation (Sub-Projekt B)** + RLS-Haertung F1–F5 + Self-Service-Konvergenz #3 — ✅
-- **Crash-Haertung P0/P1/P2** — ✅ (auf origin, nicht live)
+- **Crash-Haertung P0/P1/P2** — ✅ live (seit Merge `ae9eba0`, 2026-06-18)
+- **Git-/Deploy-Divergenz behoben** (2026-06-18, vormals Phase 0): origin + upstream waren ab `54ca2f0` disjunkt (Live `form-data`-Fix `83ccef9` CVE GHSA-hmw2-7cc7-3qxx vs. origin Telnyx-STT-Fix `04549c4` + `.env.example`-Doc). Konfliktfrei gemergt zu `ae9eba0`, `npm test` 490/490 als Pre-Push-Gate, origin + upstream gepusht, Render (`autoDeploy`, Frankfurt) deployt, `/healthz` -> 200. Damit live: P0/P1/P2, Telnyx-Inbound-STT-Fix (`04549c4`), Originate-Leak-Fix (`/api/calls`-500 maskiert Provider-`err.message`). **Noch offen: STT-Live-Verifikation, siehe 1b.**
 - Test-Baseline auf origin: dokumentiert **490/490** gruen (P2-Stand); lokal `fb59001` 460/460.
