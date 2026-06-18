@@ -9,12 +9,16 @@ import { MEDIA_EVENT } from "../../media-events.js";
 export function parseMediaFrame(msg) {
   switch (msg.event) {
     case "start":
+      // OT-2 (P3): msg.start nur via ?. dereffen. Ein start-Frame ohne .start-Objekt liefert
+      // dann ein wohlgeformtes neutrales Frame mit undefined-Feldern statt TypeError -> Crash.
+      // Spiegelt den bereits gehaerteten Telnyx-Adapter (msg.start?.). .customParameters trug
+      // das ?. schon; die Luecke war ausschliesslich der msg.start-Deref.
       return {
         event: MEDIA_EVENT.START,
-        streamRef: msg.start.streamSid,
-        callId: msg.start.customParameters?.call_id,
-        streamToken: msg.start.customParameters?.stream_token || "",
-        providerCallRef: msg.start.callSid, // -> call.twilioSid (Brueckenfeld)
+        streamRef: msg.start?.streamSid,
+        callId: msg.start?.customParameters?.call_id,
+        streamToken: msg.start?.customParameters?.stream_token || "",
+        providerCallRef: msg.start?.callSid, // -> call.twilioSid (Brueckenfeld)
       };
     case "media":
       return { event: MEDIA_EVENT.MEDIA, payload: msg.media?.payload };
