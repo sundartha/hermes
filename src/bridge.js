@@ -28,6 +28,13 @@ function providerFromMediaPath(pathname) {
   return null;
 }
 
+// OT-2 (P3): Send nur auf einen OPEN-Socket. Spiegelt den bestehenden Inbound-Audio-Guard
+// und ersetzt die Magic-Number readyState===1 durch eine benannte, testbare Vorbedingung.
+// Genutzt an allen vier openaiWs.send-Call-Sites (Barge-in, Tool-Result, Follow-up, Inbound).
+export function canSend(ws) {
+  return ws?.readyState === WebSocket.OPEN;
+}
+
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
 function realtimeTools(tenantId) {
   return toolDefs(tenantId).map((t) => ({
@@ -120,63 +127,77 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         let ev;
         try { ev = JSON.parse(buf.toString()); } catch { return; }
 
-        switch (ev.type) {
-          // ---- Audio KI -> Telefonie (beide Schema-Varianten: beta + GA) ----
-          // Frame-Aufbau provider-spezifisch ueber Port 4 (Adapter), Rest agnostisch.
-          case "response.audio.delta":
-          case "response.output_audio.delta":
-            if (streamRef && ev.delta)
-              providerWs.send(JSON.stringify(media.buildMediaFrame({ payload: ev.delta, streamRef })));
-            break;
+        // OT-2 (P3): aeusserer Guard um den gesamten switch-Body. Ein Throw aus store/
+        // execTool/Event-Verarbeitung darf NICHT zum ws-Emitter entkommen (ein Node-Prozess
+        // bedient ALLE Calls -> sonst Prozess-Crash). Secret-frei nur e.message; der Call
+        // degradiert (ein Event verloren), der Prozess lebt. Innerer JSON.parse-catch bleibt.
+        try {
+          switch (ev.type) {
+            // ---- Audio KI -> Telefonie (beide Schema-Varianten: beta + GA) ----
+            // Frame-Aufbau provider-spezifisch ueber Port 4 (Adapter), Rest agnostisch.
+            case "response.audio.delta":
+            case "response.output_audio.delta":
+              if (streamRef && ev.delta)
+                providerWs.send(JSON.stringify(media.buildMediaFrame({ payload: ev.delta, streamRef })));
+              break;
 
-          case "response.created":
-            activeResponse = true;
-            break;
+            case "response.created":
+              activeResponse = true;
+              break;
 
-          // HEIKLE STELLE 1: Barge-in. Spricht der Angerufene, waehrend die KI redet:
-          // 1) laufende Response bei OpenAI abbrechen, 2) beim Provider den bereits
-          // gepufferten (noch nicht abgespielten) Audio-Stream verwerfen (clearPlayback).
-          // Ohne (2) redet die KI scheinbar weiter, weil der Provider puffert.
-          case "input_audio_buffer.speech_started":
-            if (activeResponse) openaiWs.send(JSON.stringify({ type: "response.cancel" }));
-            if (streamRef) providerWs.send(JSON.stringify(media.clearPlayback({ streamRef })));
-            break;
+            // HEIKLE STELLE 1: Barge-in. Spricht der Angerufene, waehrend die KI redet:
+            // 1) laufende Response bei OpenAI abbrechen, 2) beim Provider den bereits
+            // gepufferten (noch nicht abgespielten) Audio-Stream verwerfen (clearPlayback).
+            // Ohne (2) redet die KI scheinbar weiter, weil der Provider puffert.
+            case "input_audio_buffer.speech_started":
+              // OT-2 (P3): cancel nur auf OPEN-Socket - feuert sonst im Barge-in-Race auf einen
+              // bereits schliessenden Socket (wirft). Verhalten sonst unveraendert (Reihenfolge gleich).
+              if (activeResponse && canSend(openaiWs)) openaiWs.send(JSON.stringify({ type: "response.cancel" }));
+              if (streamRef) providerWs.send(JSON.stringify(media.clearPlayback({ streamRef })));
+              break;
 
-          // ---- Transkripte fortlaufend in den Call-Record ----
-          case "conversation.item.input_audio_transcription.completed":
-            if (ev.transcript?.trim()) store.addTranscript(call.id, "caller", ev.transcript.trim());
-            break;
-          case "response.audio_transcript.done":
-          case "response.output_audio_transcript.done":
-            if (ev.transcript?.trim()) store.addTranscript(call.id, "agent", ev.transcript.trim());
-            break;
+            // ---- Transkripte fortlaufend in den Call-Record ----
+            case "conversation.item.input_audio_transcription.completed":
+              if (ev.transcript?.trim()) store.addTranscript(call.id, "caller", ev.transcript.trim());
+              break;
+            case "response.audio_transcript.done":
+            case "response.output_audio_transcript.done":
+              if (ev.transcript?.trim()) store.addTranscript(call.id, "agent", ev.transcript.trim());
+              break;
 
-          // ---- Tool-Aufrufe der KI (gleiche Tools wie Budget-Engine) ----
-          case "response.done": {
-            activeResponse = false;
-            const items = ev.response?.output || [];
-            for (const item of items) {
-              if (item.type !== "function_call") continue;
-              let args = {};
-              try { args = JSON.parse(item.arguments || "{}"); } catch {}
-              if (item.name === "end_call") {
-                // (d) KI signalisiert Zielerreichung -> 2,5s Puffer fuer die Verabschiedung
-                hangupTimer = setTimeout(() => hangup("end_call von KI"), 2500);
-              } else {
-                const result = execTool(call, item.name, args);
-                openaiWs.send(JSON.stringify({
-                  type: "conversation.item.create",
-                  item: { type: "function_call_output", call_id: item.call_id, output: String(result) },
-                }));
-                openaiWs.send(JSON.stringify({ type: "response.create" }));
+            // ---- Tool-Aufrufe der KI (gleiche Tools wie Budget-Engine) ----
+            case "response.done": {
+              activeResponse = false;
+              const items = ev.response?.output || [];
+              for (const item of items) {
+                if (item.type !== "function_call") continue;
+                let args = {};
+                try { args = JSON.parse(item.arguments || "{}"); } catch {}
+                if (item.name === "end_call") {
+                  // (d) KI signalisiert Zielerreichung -> 2,5s Puffer fuer die Verabschiedung
+                  hangupTimer = setTimeout(() => hangup("end_call von KI"), 2500);
+                } else {
+                  const result = execTool(call, item.name, args);
+                  // OT-2 (P3): execTool laeuft immer (Seiteneffekt), nur der Send geht ueber den
+                  // OPEN-Guard - feuert sonst genau im Call-Ende-Race auf einen toten Socket (wirft).
+                  if (canSend(openaiWs)) {
+                    openaiWs.send(JSON.stringify({
+                      type: "conversation.item.create",
+                      item: { type: "function_call_output", call_id: item.call_id, output: String(result) },
+                    }));
+                    openaiWs.send(JSON.stringify({ type: "response.create" }));
+                  }
+                }
               }
+              break;
             }
-            break;
-          }
 
-          case "error":
-            console.error("[bridge] OpenAI error:", ev.error?.message || ev);
-            break;
+            case "error":
+              console.error("[bridge] OpenAI error:", ev.error?.message || ev);
+              break;
+          }
+        } catch (e) {
+          console.error("[bridge] openai message handler:", e?.message || String(e));
         }
       });
 
@@ -193,41 +214,49 @@ export function attachMediaBridge(httpServer, onCallEnded) {
     providerWs.on("message", (buf) => {
       let raw;
       try { raw = JSON.parse(buf.toString()); } catch { return; }
-      const frame = media.parseMediaFrame(raw);
 
-      switch (frame.event) {
-        case MEDIA_EVENT.START: {
-          streamRef = frame.streamRef;
-          call = store.getCall(frame.callId);
-          if (!call) { log("unbekannte call_id, trenne"); return providerWs.close(); }
-          // stream_token aus den start-Parametern pruefen: ohne diese Pruefung
-          // koennte jeder mit erratener call_id den Audio-Stream uebernehmen. Bleibt
-          // erste Stufe VOR markAnswered/connectOpenAI. Bei Ablehnung call wieder auf
-          // null setzen, damit finalize() den echten Call-Record nicht beendet (sonst
-          // koennte ein Angreifer aktive Calls abwuergen).
-          if (!call.streamToken || !safeEqual(frame.streamToken || "", call.streamToken)) {
-            log("ungueltiges stream_token, trenne");
-            call = null;
-            return providerWs.close();
+      // OT-2 (P3): aeusserer Guard um parseMediaFrame + switch. Ein malformter Frame oder ein
+      // Throw aus store/markAnswered darf NICHT zum ws-Emitter entkommen (Prozess-Crash, ein
+      // Node-Prozess bedient ALLE Calls). Secret-frei nur e.message; der Call degradiert, der
+      // Prozess lebt. Innerer JSON.parse-catch bleibt unveraendert (filtert Nicht-JSON wie bisher).
+      try {
+        const frame = media.parseMediaFrame(raw);
+        switch (frame.event) {
+          case MEDIA_EVENT.START: {
+            streamRef = frame.streamRef;
+            call = store.getCall(frame.callId);
+            if (!call) { log("unbekannte call_id, trenne"); return providerWs.close(); }
+            // stream_token aus den start-Parametern pruefen: ohne diese Pruefung
+            // koennte jeder mit erratener call_id den Audio-Stream uebernehmen. Bleibt
+            // erste Stufe VOR markAnswered/connectOpenAI. Bei Ablehnung call wieder auf
+            // null setzen, damit finalize() den echten Call-Record nicht beendet (sonst
+            // koennte ein Angreifer aktive Calls abwuergen).
+            if (!call.streamToken || !safeEqual(frame.streamToken || "", call.streamToken)) {
+              log("ungueltiges stream_token, trenne");
+              call = null;
+              return providerWs.close();
+            }
+            // providerCallRef -> call.twilioSid (Bestandsfeldname, von hangup/finalize/store
+            // gelesen; neutraler Port-Name ist providerCallRef, die Zuweisung ist die Bruecke).
+            call.twilioSid = frame.providerCallRef || call.twilioSid;
+            store.markAnswered(call.id);
+            log("Stream gestartet,", call.direction, call.direction === "outbound" ? call.to : call.from);
+            // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
+            endTimer = setTimeout(() => hangup("Max-Dauer erreicht"), (call.maxDurationS || config.maxCallDurationS) * 1000);
+            connectOpenAI();
+            break;
           }
-          // providerCallRef -> call.twilioSid (Bestandsfeldname, von hangup/finalize/store
-          // gelesen; neutraler Port-Name ist providerCallRef, die Zuweisung ist die Bruecke).
-          call.twilioSid = frame.providerCallRef || call.twilioSid;
-          store.markAnswered(call.id);
-          log("Stream gestartet,", call.direction, call.direction === "outbound" ? call.to : call.from);
-          // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
-          endTimer = setTimeout(() => hangup("Max-Dauer erreicht"), (call.maxDurationS || config.maxCallDurationS) * 1000);
-          connectOpenAI();
-          break;
+          case MEDIA_EVENT.MEDIA:
+            // Audio Anrufer -> OpenAI, 1:1 als u-law base64
+            if (canSend(openaiWs))
+              openaiWs.send(JSON.stringify({ type: "input_audio_buffer.append", audio: frame.payload }));
+            break;
+          case MEDIA_EVENT.STOP: // (a) Gegenseite hat aufgelegt
+            finalize(call?.status === "cancelled" ? "cancelled" : "completed");
+            break;
         }
-        case MEDIA_EVENT.MEDIA:
-          // Audio Anrufer -> OpenAI, 1:1 als u-law base64
-          if (openaiWs?.readyState === WebSocket.OPEN)
-            openaiWs.send(JSON.stringify({ type: "input_audio_buffer.append", audio: frame.payload }));
-          break;
-        case MEDIA_EVENT.STOP: // (a) Gegenseite hat aufgelegt
-          finalize(call?.status === "cancelled" ? "cancelled" : "completed");
-          break;
+      } catch (e) {
+        console.error("[bridge] provider message handler:", e?.message || String(e));
       }
     });
 

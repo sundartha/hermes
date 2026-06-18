@@ -82,3 +82,17 @@ test("Frame-Roundtrip beide Adapter: u-law base64 unveraendert", () => {
   });
   assert.equal(telnyxOut.media.payload, payload);
 });
+
+// T-P3-01 (OT-2): malformter Twilio-start-Frame OHNE .start-Objekt darf NICHT werfen
+// (vorher: msg.start.streamSid -> TypeError -> entkommt zum ws-Emitter -> Prozess-Crash).
+// Nach Haertung liefert er ein wohlgeformtes neutrales Frame mit undefined-Feldern, genau
+// wie der bereits gehaertete Telnyx-Adapter (dynamic_variables-Fall oben, providerCallRef:undefined).
+test("Twilio parseMediaFrame start OHNE .start -> kein Throw, neutrales Frame (T-P3-01)", () => {
+  assert.deepEqual(twilioMedia.parseMediaFrame({ event: "start" }), {
+    event: "start",
+    streamRef: undefined,
+    callId: undefined,
+    streamToken: "",
+    providerCallRef: undefined,
+  });
+});
