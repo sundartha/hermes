@@ -83,7 +83,7 @@ services:
         sync: false
       # Auth-Modus fuer /mcp. Default leer = Legacy (Token unten oder localhost-only).
       # Auf "oauth" umstellen, sobald der IdP (OAUTH_ISSUER_URL) steht und der
-      # End-to-End-Test gegen claude.ai gruen war (siehe PLAN-PHASE1-OAUTH.md).
+      # End-to-End-Test gegen claude.ai gruen war (siehe PLAN-SECURITY.md, OAuth).
       - key: MCP_AUTH
         value: ""
       # Pflicht fuers Hosting (Modus leer/token): ohne Token ist /mcp nur von

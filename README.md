@@ -83,7 +83,7 @@ claude.ai oder Claude Desktop → **Settings → Connectors → Add custom conne
 - URL: `https://<ngrok>/mcp`
 - **`MCP_AUTH=oauth`** (empfohlen fürs Hosting): Beim Hinzufügen erscheint das
   Login-Fenster des IdP — anmelden, danach sind die Tools sichtbar. Einrichtung:
-  `PLAN-PHASE1-OAUTH.md`.
+  `PLAN-SECURITY.md` (Phase 1, OAuth).
 - **`MCP_AUTH_TOKEN`** (Legacy): taugt nur für curl-Tests — claude.ai kann kein
   statisches Bearer-Token senden. Ohne Token/OAuth ist `/mcp` nur von localhost erreichbar.
 
@@ -138,7 +138,7 @@ Bonus-Tools für die Vodafone-Demo: `list_calls`, `list_action_items`, `get_cale
 
 ## Bewusste Prototyp-Abweichungen (vs. Produkt-PRD)
 
-- MCP-Auth: drei Modi über `MCP_AUTH` — Legacy/statisches Bearer-Token (`MCP_AUTH_TOKEN`, leer = `/mcp` nur von localhost), oder `oauth` (OAuth 2.1 Resource Server für den claude.ai-Login-Flow, Setup in `PLAN-PHASE1-OAUTH.md`). Siehe `PLAN-SECURITY.md`.
+- MCP-Auth: drei Modi über `MCP_AUTH` — Legacy/statisches Bearer-Token (`MCP_AUTH_TOKEN`, leer = `/mcp` nur von localhost), oder `oauth` (OAuth 2.1 Resource Server für den claude.ai-Login-Flow). Setup/Rollout siehe `PLAN-SECURITY.md`.
 - Modernes JavaScript (ESM) statt TypeScript: kein Build-Step, maximale Demo-Velocity.
 - Kalender = lokaler Speicher mit Beispielterminen statt Google/Outlook.
 - Keine Nummern-Provisionierung, kein Multi-User, kein Billing, keine CAMARA-Anbindung, keine Datenbank.

@@ -205,9 +205,9 @@ Verifikation in dieser Session gruen war (Befehl + Output daneben).
 
 # Phase 3.1: OAuth 2.1 fuer /mcp (autonomer Code-Anteil)
 
-Detailplan: `PLAN-PHASE1-OAUTH.md` (urspruenglich auf Branch inspiring-gates,
-gegen die aeltere Code-Struktur geschrieben - hier an den aktuellen Stand
-angepasst). Umgesetzt wird der vollstaendig autonom test- und verifizierbare
+Detailplan: `PLAN-SECURITY.md` (OAuth-Abschnitt; der fruehere `PLAN-PHASE1-OAUTH.md`,
+urspruenglich auf Branch inspiring-gates gegen die aeltere Code-Struktur geschrieben,
+wurde nach Umsetzung entfernt). Umgesetzt wird der vollstaendig autonom test- und verifizierbare
 Code-Anteil (Schritt B + Testmatrix C1, plus C2 als lokaler Self-Test).
 NICHT autonom und ausdruecklich geparkt: IdP-Account anlegen (Schritt A,
 WorkOS) und der End-to-End-Test gegen claude.ai (C3) - braucht einen Menschen
@@ -248,7 +248,7 @@ Modus hinter `MCP_AUTH`, kein neuer Default.
       `OAUTH_ISSUER_URL`, `OAUTH_AUDIENCE`); `scripts/check-setup.js` prueft bei
       `MCP_AUTH=oauth` Issuer-Erreichbarkeit + Well-known + 401-ohne-Token;
       README/ONBOARDING Connector-Login-Hinweis; PLAN-SECURITY.md Status;
-      Detailplan `PLAN-PHASE1-OAUTH.md` auf den Branch geholt + Status-Banner.
+      Detailplan (ehemals `PLAN-PHASE1-OAUTH.md`, inzwischen entfernt -> `PLAN-SECURITY.md`) auf den Branch geholt + Status-Banner.
   - Soll: `node --check` aller geaenderten Dateien gruen; `npm run check`
     laeuft ohne Crash auch mit `MCP_AUTH=oauth`.
   - Ergebnis: gruen. `node --check` ok; `node scripts/check-setup.js` mit
@@ -279,7 +279,7 @@ Modus hinter `MCP_AUTH`, kein neuer Default.
 Ziel des Betreibers: beliebige normale Nummern anrufen (z.B. Friseur), ohne sie
 vorher in `ALLOWED_NUMBERS` eintragen zu muessen. OAuth (Phase 1) ist die
 Voraussetzung (Identitaet via `req.auth`), ersetzt die Allowlist aber NICHT.
-Detailplan: `PLAN-PHASE1-OAUTH.md` (Phasen-Tabelle) bzw. Phase 0 dort.
+Detailplan: `PLAN-SECURITY.md` (OAuth + Phase 0; der fruehere `PLAN-PHASE1-OAUTH.md` wurde entfernt).
 
 Leitsatz (Pre-Mortem, unbedingt einhalten): Die Allowlist ist aktuell die
 EINZIGE Bremse gegen das Waehlen beliebiger Nummern (Notruf, Premium, Ausland).
@@ -355,8 +355,8 @@ offener Allowlist Toll-Fraud-/Notruf-/Premium-Risiken.
     erweitert; `check-setup.js` meldet Land-Gate + Stundenlimit und FLAGGt eine
     Allowlist-Nummer ohne passende Laendervorwahl als Fehler (verifiziert mit
     `+12025550123`/`+49`). `node --check` aller Dateien ok; `check-setup.js` laeuft
-    ohne Crash bis zur Ergebnis-Zeile durch. PLAN-PHASE1-OAUTH.md Phasen-Tabelle
-    + PLAN-SECURITY.md Phase 0 aktualisiert.
+    ohne Crash bis zur Ergebnis-Zeile durch. PLAN-SECURITY.md (OAuth-Phasen-Tabelle
+    + Phase 0) aktualisiert.
 - [ ] **0.6 Entscheidung Allowlist-Lockerung (Betreiber, NICHT autonom)**:
       Soll bei aktivem 0.1-0.3 + invite-only eine leere `ALLOWED_NUMBERS`
       bedeuten "Laender-Gate regelt" statt "Outbound gesperrt"? Bewusst

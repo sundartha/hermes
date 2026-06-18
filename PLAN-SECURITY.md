@@ -9,7 +9,7 @@ loest echte Anrufe und SMS aus (Kosten!) und speichert Gespraechs-Transkripte.
 Ziel: weg von der starren `ALLOWED_NUMBERS`-Allowlist (beliebige normale Nummern
 anrufen, z.B. Friseur), ohne die einzige Bremse gegen Notruf-/Premium-/Auslands-
 Calls zu verlieren. Loesung: zusaetzliche Gates VOR der Allowlist, die als letztes
-Gate scharf bleibt. Detailplan + Phasen-Tabelle: `PLAN-PHASE1-OAUTH.md`.
+Gate scharf bleibt.
 
 `allowlistError()` -> `numberGateError(to)` (`src/server.js`) mit fester
 Pruefreihenfolge **Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit ->
@@ -216,8 +216,7 @@ Teilweise autonom (Code umgesetzt, Betrieb braucht den Betreiber):
    ⚙️ Code umgesetzt: Resource Server hinter Feature-Flag `MCP_AUTH=oauth`
    (`src/auth.js`, JWT-Verifikation via `jose`/Remote-JWKS, RFC-9728
    Protected-Resource-Metadata), Default bleibt fail-closed. Verifikation:
-   `test/oauth.test.js` (lokaler Mini-IdP, C1-Matrix). Detailplan + Rollout:
-   `PLAN-PHASE1-OAUTH.md`. Offen (NICHT autonom): IdP-Account (WorkOS) anlegen,
+   `test/oauth.test.js` (lokaler Mini-IdP, C1-Matrix). Offen (NICHT autonom): IdP-Account (WorkOS) anlegen,
    `MCP_AUTH=oauth` scharf schalten, End-to-End-Test gegen claude.ai.
 
 NICHT autonom (braucht Accounts/Entscheidungen des Betreibers):

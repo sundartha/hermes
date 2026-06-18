@@ -53,6 +53,6 @@ scripts/           check-setup.js (npm run check), set-webhooks.js
 - Google/Outlook-Kalender statt lokalem Demo-Kalender
 - OAuth 2.1 für /mcp: Code steht (`MCP_AUTH=oauth`, Resource Server). Offen ist
   nur noch der Betreiber-Teil — IdP-Account (WorkOS) + scharf schalten. Anleitung:
-  `PLAN-PHASE1-OAUTH.md`. Bis dahin schützt `/mcp` die fail-closed-Default (localhost)
+  `PLAN-SECURITY.md` (Phase 1, OAuth). Bis dahin schützt `/mcp` die fail-closed-Default (localhost)
   bzw. `MCP_AUTH_TOKEN`.
 - Realtime-Engine testen (braucht OpenAI-Key mit Guthaben): `VOICE_ENGINE=realtime`
