@@ -92,8 +92,18 @@ export function makeWebAuthRoutes(deps) {
       ["oauth_state",   signValue(state,    secret), LOGIN_COOKIE_MAX_AGE],
       ["oidc_nonce",    signValue(nonce,    secret), LOGIN_COOKIE_MAX_AGE],
     ]);
-    const url = await oidc.authorizeUrl({ challenge, state, nonce, redirectUri });
-    res.redirect(302, url);
+    // authorizeUrl triggert intern discover() -> fetch. Ist der IdP unerreichbar
+    // (oder die Discovery malformt), rejected der await. Express 4 reicht eine
+    // Route-Rejection NICHT automatisch an eine Error-MW weiter -> der Request
+    // haengt sonst bis zum Socket-Timeout. Fail-closed: sauberer 5xx, generische
+    // Meldung (KEIN IdP-/Connection-Detail, kein Leak), Login-Cookies geloescht.
+    try {
+      const url = await oidc.authorizeUrl({ challenge, state, nonce, redirectUri });
+      res.redirect(302, url);
+    } catch {
+      clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
+      res.status(500).send("Anmeldung fehlgeschlagen");
+    }
   });
 
   // GET /auth/callback
@@ -177,7 +187,7 @@ function nonceMatches(payloadNonce, expected) {
 // Parameter _discoveryTtlMs nur fuer Tests uebersteuerbar (Default unveraendert).
 const DISCOVERY_TTL_MS = 3600_000;
 
-export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS } = {}) {
+export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS, _fetch = fetch } = {}) {
   let discoveryCache = null;
   let discoveryCachedAt = 0;
   let jwksCache = null;
@@ -187,7 +197,7 @@ export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS } = {}) {
   // aufgefangen wird (sonst brechen alle Logins bis zum Restart).
   async function discover() {
     if (discoveryCache && Date.now() - discoveryCachedAt < _discoveryTtlMs) return discoveryCache;
-    const r = await fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
+    const r = await _fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
     if (!r.ok) throw new Error(`OIDC discovery HTTP ${r.status}`);
     discoveryCache = await r.json();
     discoveryCachedAt = Date.now();
@@ -203,6 +213,11 @@ export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS } = {}) {
     // wuerde eine jwks_uri-Rotation nie greifen (alte Instanz bliebe erhalten).
     const { jwks_uri } = await discover();
     if (jwksCache) return jwksCache;
+    // Eine malformte Discovery-Antwort (kein jwks_uri) wuerde sonst als
+    // `new URL(undefined)` -> roher TypeError: Invalid URL crashen (unhandled
+    // rejection). Klarer, identifizierbarer Fehler statt blindem Deref.
+    if (typeof jwks_uri !== "string" || !jwks_uri)
+      throw new Error("OIDC discovery: jwks_uri fehlt oder ist ungueltig");
     jwksCache = createRemoteJWKSet(new URL(jwks_uri));
     return jwksCache;
   }
@@ -237,13 +252,19 @@ export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS } = {}) {
         client_secret: config.oidcClientSecret,
         redirect_uri: redirectUri,
       });
-      const r = await fetch(token_endpoint, {
+      const r = await _fetch(token_endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
       });
       if (!r.ok) throw new Error(`Token-Endpoint HTTP ${r.status}`);
+      // Token-Body parsen. Ein non-JSON-Body (r.json() wirft) wird hier zu einem
+      // gefangenen Fehler statt einer rohen Rejection. Ein leeres `{}` (kein
+      // id_token) wuerde sonst als jwtVerify(undefined, ...) crashen - daher
+      // explizit pruefen, BEVOR id_token an jwtVerify geht.
       const { id_token } = await r.json();
+      if (typeof id_token !== "string" || !id_token)
+        throw new Error("Token-Endpoint: id_token fehlt in der Token-Antwort");
       const jwks = await getJwks();
       const { payload } = await jwtVerify(id_token, jwks, {
         issuer: config.oauthIssuerUrl,
