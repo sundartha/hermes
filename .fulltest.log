@@ -1,0 +1,34 @@
+
+> vodafone-agent@0.1.0 test
+> node --test "test/*.test.js"
+
+✔ Nicht-Admin (aktiver Kunde) -> 403 bei approve (6580.970546ms)
+✔ Admin approve -> Tenant active + Audit (4156.884315ms)
+✔ Admin suspend -> suspended + alle Tenant-Sessions invalidiert + Audit (5400.466953ms)
+✔ ohne Session -> 401 (fail-closed, vor adminOnly) (3977.211481ms)
+✔ Admin approve/suspend auf nicht-existenten Tenant -> 404 (kein silent-noop, kein Audit) (4257.467131ms)
+▶ Body-Size-Limit 100kb
+  ✔ POST mit 200kb-Body -> 413 (78.532889ms)
+  ✔ kleiner Body unveraendert 2xx (16.069636ms)
+  ✔ urlencoded mit 200kb-Body -> 413 (23.887325ms)
+✔ Body-Size-Limit 100kb (1695.843826ms)
+▶ Eingabe-Validierung /api/calls
+  ✔ fehlende Pflichtfelder -> 400 (42.943639ms)
+  ✔ ungueltige Nummern -> 400 mit Fehlertext (35.84953ms)
+  ✔ Nummer wird normalisiert (Spaces/Bindestriche), Allowlist-Gate bleibt (6.099354ms)
+  ✔ Overlong-Strings -> 400 (11.720577ms)
+✔ Eingabe-Validierung /api/calls (974.895519ms)
+▶ Eingabe-Validierung /api/calendar
+  ✔ ungueltige Datumswerte -> 400 (37.093674ms)
+  ✔ end <= start -> 400 (17.055851ms)
+  ✔ title zu lang -> 400 (4.876167ms)
+  ✔ gueltiger Eintrag -> 200 und im Store (8.586681ms)
+✔ Eingabe-Validierung /api/calendar (1039.206515ms)
+▶ Settings-Whitelist
+  ✔ unbekannter Key + falscher Typ werden ignoriert (39.502829ms)
+  ✔ bekannter Key mit korrektem Typ wird uebernommen (13.372682ms)
+✔ Settings-Whitelist (979.247494ms)
+▶ GET /api/tenant-data/export liefert Owner-Daten ohne streamToken
+  ✔ 200 mit erwarteten Feldern, Calls ohne streamToken (20.689619ms)
+✔ GET /api/tenant-data/export liefert Owner-Daten ohne streamToken (942.032901ms)
+✔ auditStore.record schreibt eine Zeile (keine Secrets im detail) (6081.957287ms)
