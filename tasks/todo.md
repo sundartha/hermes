@@ -1,3 +1,73 @@
+# Tech-Debt-Abbau (2026-06-19): TD-2, TD-9 + Doc-Truth-Up
+
+Quelle: `STATUS-OFFENE-PHASEN.md` Abschnitt 2 (Tech-Debt-Tabelle). Nach Verifikation
+gegen den echten Code ist der autonom-machbare, NOCH offene Rest klein:
+- **TD-2** (E.164-Seed-Normalisierung) — offen, autonom, hier umgesetzt.
+- **TD-9** (`startTelnyxMock`-Namenskollision) — offen, autonom, hier umgesetzt.
+- Bereits erledigt (nur Doc nachziehen): **TD-3** (`DEFAULT_PROVIDER` existiert in
+  defaults.js, kein `"twilio"` mehr hardcoded), **TD-5/TD-6** (P4 AC1/AC2 OIDC-Tests +
+  AC5 mcp-tools Result-Guard).
+- **TD-1** (DI Telefonie-Client) bewusst VERTAGT: die registry macht Provider-Dispatch
+  bereits (`voiceControl(provider)` etc.); per-Tenant-Client-Aufloesung wird erst bei
+  echtem Multi-Account-Bedarf gebraucht (heute ein Twilio-Konto). DI-Refactor auf dem
+  safety-kritischen Telefonie-Pfad ohne Real-Call-Smoke = Risiko > Nutzen (YAGNI).
+- TD-7 (uncaughtException) haengt an P3-Live, TD-8/TD-10 design-deferred, TD-11 auf origin.
+
+Baseline: `npm test` 509/509 gruen (2026-06-19).
+
+## Pre-Mortem (vor Umsetzung)
+- TD-2: Normalisierung aendert die GESPEICHERTE e164-Form. Fuer sauberes E.164
+  (Twilio-Normalfall) ist `normNum()` ein No-Op -> byte-identisch. Idempotenz-Check
+  (`some()`) laeuft NEU gegen die normalisierte Form -> seed("+49 151-1234567") 2x = 1 Zeile.
+  Akzeptiertes Restrisiko: ein FRUEHER mit Whitespace geseedeter Legacy-Store (theoretisch,
+  setzt malformed `TWILIO_NUMBER` voraus) koennte beim Upgrade eine 2. (normalisierte)
+  Zeile bekommen; eine solche RAW-Nummer war ohnehin nie routbar (Inbound-Lookup
+  normalisiert seit P3c). Demo-Prototyp mit sauberen Config-Nummern -> kein realer Defekt.
+- TD-9: reine Test-Umbenennung, kein `src/`-Risiko.
+- DRY-Wurzel: das Regex `/[\s\-()]/g` existiert 2x (server.js `normNum`, defaults.js
+  `sanitizeProfile`); TD-2 fuegt es als 3. Nutzung NICHT hinzu, sondern fuehrt alle in
+  einer benannten `normNum`-Quelle (defaults.js) zusammen. sanitizeProfile-Verhalten
+  byte-identisch (Elemente sind dort bereits string-gepruefte -> normNum == altes replace).
+
+## Aufgaben
+- [x] **TD-2a** `normNum` nach `src/store/defaults.js` (EINE Quelle, benannt); server.js
+      inline-Def raus + Import; sanitizeProfile-allowedNumbers nutzt `normNum`.
+  - Ergebnis: gruen. `node --check` aller 4 src-Dateien OK; `grep '/[\s\-()]/g' src/`
+    findet ausser defaults.js nur noch die config.js-Kopie (bewusst lokal, s. Pre-Mortem).
+- [x] **TD-2b** `seedOwnerNumber` (state-ops) + `seedNumber` (migrate): normalisieren-
+      dann-guarden (`const norm = normNum(e164); if (!norm) return; ...`).
+  - Ergebnis: gespeicherte e164 ist normalisiert (beide Backends), Idempotenz-Check
+    laeuft gegen die normalisierte Form.
+- [x] **TD-2c** Test `test/telnyx-seed.test.js`: Nummer mit Trennzeichen -> routbar
+      (json + pg), Idempotenz Trennzeichen+Klar-Form.
+  - Ergebnis: gruen. `seed("+49 151-1234 567")` -> `s.numbers[0].e164 == "+491511234567"`,
+    `findTenantByNumber(s, "+491511234567") == owner`; pg-Variante via migrate/pglite.
+    `npm test` 512/512 (vorher 509, +3).
+- [x] **TD-9** `startTelnyxMock` entkoppeln: helpers.js-Export ->
+      `startTelnyxProvisioningMock` (2 Importer nachgezogen), lokale Voice-Mock in
+      onboarding-outbound.test.js -> `startTelnyxVoiceMock`.
+  - Ergebnis: `grep '\bstartTelnyxMock\b' test/ src/` -> leer (exit 1). `npm test`
+    512/512 (kein Regress).
+- [x] **Doc** `STATUS-OFFENE-PHASEN.md` TD-Tabelle aktualisiert (TD-2/3/9 erledigt,
+      TD-4 teilweise, TD-5/6 P4-abgedeckt, TD-1 vertagt mit Begruendung; Header-Stand
+      2026-06-19).
+
+## Review (Endstand)
+- `npm test` 512/512, 0 fail, 0 skipped (~31s); Baseline war 509/509 -> +3 TD-2-Tests,
+  keine verlorene Coverage. `node --check` auf alle geaenderten src-Dateien sauber.
+- Absolute Regeln unberuehrt: Safety-Gates (Allowlist/Denylist/Land/Budget/Disclosure/
+  Twilio-Signatur) nicht angefasst; `normNum` ist eine reine Umbenennung/Zentralisierung
+  einer bereits bestehenden Normalisierung (byte-identisch fuer sauberes E.164).
+- DRY-Wurzel: das Regex `/[\s\-()]/g` lag 2x im src/ (server.js, defaults.js); jetzt EINE
+  benannte Quelle (`normNum` in defaults.js), zusaetzlich vom Seed (state-ops/migrate)
+  genutzt. Die config.js-Kopie bleibt bewusst lokal (Env-Boundary; `store -> config` ist
+  die etablierte Richtung, kein Rueckwaerts-Import) mit Querverweis-Kommentar.
+- TD-1 NICHT umgesetzt (bewusst, YAGNI + Risiko auf safety-kritischem Telefonie-Pfad
+  ohne Real-Call-Smoke); in der Status-Tabelle als vertagt mit Begruendung dokumentiert.
+- NICHT committet/gepusht (kein Auftrag dazu) - Aenderungen liegen im Working Tree.
+
+---
+
 # Task (2026-06-16): Telnyx STT/TTS auf bessere Modelle umstellen
 
 Owner-Entscheidung: STT Telnyx-in-house -> Deepgram Nova-3, TTS AWS Polly

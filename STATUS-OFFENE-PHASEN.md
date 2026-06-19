@@ -1,4 +1,8 @@
-# Status: Offene Phasen, Tech-Debt & ToDo (Stand 2026-06-18)
+# Status: Offene Phasen, Tech-Debt & ToDo (Stand 2026-06-19)
+
+> 2026-06-19: Tech-Debt-Tabelle (Abschnitt 2) gegen den echten Code abgeglichen —
+> TD-2/TD-9 umgesetzt, TD-3/TD-5/TD-6 als bereits erledigt markiert, TD-1 bewusst
+> vertagt (Begruendung in der Tabelle). `npm test` 512/512.
 
 > Synthese aus allen Plan-/Status-Dokumenten dieses Repos: `PLAN-SECURITY.md`,
 > `PLAN-MULTI-TENANT-TELNYX.md`, `PLAN-MULTI-TENANT-IDENTITY.md`, `PLAN-INBOUND-AUDIO-STT.md`,
@@ -82,15 +86,15 @@ Code fertig, RLS-Haertung F1–F5 gemergt. Offen = Betrieb:
 
 | # | Tech-Debt | Fundstelle | Wann faellig | Quelle |
 |---|---|---|---|---|
-| TD-1 | **DI des Telefonie-Clients** statt Lazy-Init-Singleton (`if (!client)…`) | `src/telephony/adapters/twilio/client.js` | bei P3/P5 (Registry loest pro Tenant auf) | TELNYX-Plan "Tech-Debt", P15/N7 |
-| TD-2 | **E.164-Normalisierung des Owner-Nummer-Seeds**: Lookup normalisiert via `normNum`, Seed speichert `config.twilioNumber` RAW | `src/db/migrate.js` (seedDefaults), `src/store/state-ops.js` (seedOwnerNumber) | P6 Defense-in-Depth (heute fail-closed, kein Defekt) | TELNYX-Plan, P3c-Audit S3 |
-| TD-3 | **`provider`-Default als benannte Konstante** (`"twilio"` 2x hardcoded) → `DEFAULT_PROVIDER` | `src/store/state-ops.js`, `src/store/pg.js` (flushNumbers) | sobald echte Multi-Provider-Werte (P5/P6) | TELNYX-Plan, P3c-Audit S4 |
-| TD-4 | **`server.js` God-File** (944 LOC) zerlegen — strukturelle Ursache, warum OT-1..OT-4 wiederkehren | `src/server.js` | **P4 (OT-5), offen** | crash-hotspots P4-plan |
-| TD-5 | **OIDC fetch/parse 0 Coverage** (Discovery/Token immer per DI gefaket) | `src/web-auth.js:180-246` | **P4 (OT-5), offen** | crash-hotspots P4-plan AC1/AC2 |
-| TD-6 | **`mcp-tools.js` dereferenziert blind aus still degradiertem `{}`** (`await res.json().catch(()=>({}))`) | `src/mcp-tools.js:11,19,58,148,161` | **P4 (OT-5), offen** | crash-hotspots P4-plan |
+| TD-1 | **DI des Telefonie-Clients** statt Lazy-Init-Singleton (`if (!client)…`) | `src/telephony/adapters/twilio/client.js` | **vertagt (YAGNI):** registry dispatcht bereits pro Provider (`voiceControl(provider)` …); per-Tenant-Client-Aufloesung erst bei echtem Multi-Account-Bedarf (heute ein Twilio-Konto). DI-Refactor auf safety-kritischem Pfad ohne Real-Call-Smoke = Risiko > Nutzen | TELNYX-Plan "Tech-Debt", P15/N7 |
+| TD-2 | **E.164-Normalisierung des Owner-Nummer-Seeds** | `src/db/migrate.js` (seedNumber), `src/store/state-ops.js` (seedOwnerNumber) | ✅ **erledigt 2026-06-19**: `normNum` eine Quelle in `store/defaults.js` (3 Regex-Kopien zusammengefuehrt); Seed normalisiert vor Idempotenz-Check + Speichern; `test/telnyx-seed.test.js` (json+pg). config.js-Kopie bewusst lokal (Env-Boundary, keine store-Abhaengigkeit) | TELNYX-Plan, P3c-Audit S3 |
+| TD-3 | **`provider`-Default als benannte Konstante** | `src/store/defaults.js` | ✅ **erledigt**: `PROVIDER`/`DEFAULT_PROVIDER` in `defaults.js`, kein `"twilio"` mehr hardcoded (state-ops/pg/migrate nutzen die Konstante) | TELNYX-Plan, P3c-Audit S4 |
+| TD-4 | **`server.js` God-File** zerlegen — strukturelle Ursache, warum OT-1..OT-4 wiederkehren | `src/server.js` | **teilweise (P4 AC7):** `/api/profiles` → `src/routes/api-profiles.js` extrahiert; Rest-`/api`-Gruppen + bridge.js `handleOpenAiEvent`-Extract weiter offen (Follow-up) | crash-hotspots P4-plan |
+| TD-5 | **OIDC fetch/parse 0 Coverage** (Discovery/Token immer per DI gefaket) | `src/web-auth.js` | ✅ **erledigt via P4 (AC1/AC2)**: OIDC fetch-Hook + Guards; `test/web-auth-oidc.test.js`, T-P4-04/05 | crash-hotspots P4-plan AC1/AC2 |
+| TD-6 | **`mcp-tools.js` dereferenziert blind aus still degradiertem `{}`** | `src/mcp-tools.js` | ✅ **erledigt via P4 (AC5/AC6)**: Result-Guard + per-handler Throw-Schutz → saubere `isError`-Antwort statt blindem Deref; `test/mcp-tools.test.js` | crash-hotspots P4-plan |
 | TD-7 | **`uncaughtException` laeuft weiter statt Exit** — bewusster Backstop (Exit = alle Calls weg); echter quellseitiger Fix = P3 | `src/process-guards.js` | mit P3 (OT-2) | P0-plan AC4 |
 | TD-8 | **MCP-sub-Threading im Read-Scope** (I5): fail-CLOSED gestrippt, kein Leak, aber sub noch nicht durchgereicht | I5-Bereich | spaeter | Memory `i5-design-decisions` |
-| TD-9 | **`startTelnyxMock`-Namenskollision** (Test-Helper) | Tests | Folge-Ticket | Memory `i3-design-decisions` |
+| TD-9 | **`startTelnyxMock`-Namenskollision** (Test-Helper) | Tests | ✅ **erledigt 2026-06-19**: zwei verschiedene Telnyx-APIs entkoppelt — `startTelnyxProvisioningMock` (helpers.js, Provisioning) vs. `startTelnyxVoiceMock` (onboarding-outbound.test.js, Voice/Originate) | Memory `i3-design-decisions` |
 | TD-10 | **pg persistiert ownerName/Profile** je nach Pfad — I8 deckt Tenant-Buckets ab; Profile owner-only | `src/store/pg.js` | bei Bedarf | Memory `i8-design-decisions` |
 | TD-11 | **`.env.example`-Kommentar** SELF_SERVICE_ENABLED (web-session) | `.env.example` | ✅ auf origin nachgezogen (`236aaf2`); lokal/live noch nicht | todo.md #3 |
 
