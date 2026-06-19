@@ -517,8 +517,18 @@ app.post("/voice/outbound", async (req, res) => {
       "tail=" + (endCall ? "hangup" : "gather"));
     res.type("text/xml").send(render([sayD(disclosure), ...tail], call.provider));
   } catch (err) {
+    // Fehlerpfad (T2, call-debug.md 3.2): agentTurn wirft (Anthropic-/Meter-Fehler).
+    // Statt stumm aufzulegen rendern wir EINEN Retry: Offenlegung-<Say> + <Gather>
+    // (turnDirectives mit leerem Prompt -> Gather ohne inneren Say). So bleibt STT
+    // scharf und der Call offen, statt nach der Offenlegung tot zu sein.
+    // KEIN erneuter agentTurn hier (kein Webhook-Loop): der <Gather action>-POST auf
+    // /voice/turn faehrt den normalen Turn - leeres Speech und noch keine caller-Zeile
+    // -> agentTurn(call, null) (Agent re-greet/nennt sein Anliegen, :475).
+    // Abbruchbedingung gegen Endlosschleife: scheitert auch dieser Folge-Turn, legt der
+    // /voice/turn-catch terminal auf (kein Gather, :478-484) -> genau EIN Retry; ein
+    // stiller Anrufer wird vom Max-Dauer-Timer (am Originate gesetzt, :754) beendet.
     console.error("[outbound]", err.message);
-    res.type("text/xml").send(render([sayD(disclosure), hangupD()], call.provider));
+    res.type("text/xml").send(render([sayD(disclosure), ...turnDirectives(call, "")], call.provider));
   }
 });
 
