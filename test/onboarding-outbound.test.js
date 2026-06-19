@@ -11,9 +11,11 @@ import { startServer } from "./helpers.js";
 const TELNYX_NR = "+13125550100";
 const TARGET = "+4917312345678"; // Owner-Handy (Allowlist)
 
-// Mock der Telnyx-TeXML-API: zeichnet den Initiate-Request auf und liefert eine
-// Twilio-kompatible Call-Resource ({sid}). Liefert {url, requests, close}.
-async function startTelnyxMock() {
+// Mock der Telnyx-TeXML-VOICE-API (Outbound-Originate): zeichnet den Initiate-Request
+// auf und liefert eine Twilio-kompatible Call-Resource ({sid}). Liefert {url, requests,
+// close}. Name "...VoiceMock" disjunkt vom Provisioning-Mock in helpers.js
+// (startTelnyxProvisioningMock) - zwei verschiedene Telnyx-APIs (TD-9).
+async function startTelnyxVoiceMock() {
   const requests = [];
   const server = http.createServer((req, res) => {
     let body = "";
@@ -42,7 +44,7 @@ const postJson = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 test("POST /api/calls mit TELNYX_NUMBER -> provider=telnyx, from=Telnyx-Nummer, TeXML-Originate", async () => {
-  const mock = await startTelnyxMock();
+  const mock = await startTelnyxVoiceMock();
   const srv = await startServer({ env: TELNYX_ENV(mock.url) });
   try {
     const res = await postJson(`${srv.localUrl}/api/calls`, { to: TARGET, objective: "Testziel" });
@@ -75,7 +77,7 @@ test("POST /api/calls mit TELNYX_NUMBER -> provider=telnyx, from=Telnyx-Nummer, 
 });
 
 test("Outbound-Gates greifen weiter: nicht erlaubte Nummer -> 403 (kein Telnyx-Call)", async () => {
-  const mock = await startTelnyxMock();
+  const mock = await startTelnyxVoiceMock();
   const srv = await startServer({ env: TELNYX_ENV(mock.url) });
   try {
     const res = await postJson(`${srv.localUrl}/api/calls`, { to: "+491110000000", objective: "x" });

@@ -8,7 +8,7 @@
 // (Store-Polling), bevor er die aktiv gewordene Nummer fuer den Inbound nutzt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startTelnyxMock } from "./helpers.js";
+import { startServer, startTelnyxProvisioningMock } from "./helpers.js";
 
 const postJson = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -55,7 +55,7 @@ test("onboard ohne ownerName -> Record ohne ownerName-Feld (Owner-Fallback)", as
 // (3) IDENTITAETS-KREIS (DoD): onboard SETZT -> Inbound auf die aktiv gewordene
 // Nummer NENNT den Namen
 test("Identitaets-Kreis: onboard ownerName + aktive Nummer -> Inbound nennt Maria", async () => {
-  const mock = await startTelnyxMock();
+  const mock = await startTelnyxProvisioningMock();
   const srv = await startServer({
     env: {
       PROVISIONING_ENABLED: "true",
