@@ -506,6 +506,15 @@ app.post("/voice/outbound", async (req, res) => {
   try {
     const { speech, endCall } = await agentTurn(call, null); // Agent nennt sein Anliegen
     const tail = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
+    // TEMP-DIAGNOSE (Outbound-Erfolgspfad, siehe docs/strategy/call-debug.md Abschnitt 6):
+    // macht den endCall-Fall (T1) sichtbar - der throw-Fall (T2) loggt bereits [outbound],
+    // der Erfolgsfall bisher GAR NICHTS. Nur Enums/Booleans (callId = interne ID wie bei
+    // [turn-recv]), nie Speech/PII (DSGVO). Phase 6: wieder entfernen.
+    console.log("[outbound-recv]",
+      "callId=" + call.id,
+      "engine=" + config.voiceEngine,
+      "endCall=" + endCall,
+      "tail=" + (endCall ? "hangup" : "gather"));
     res.type("text/xml").send(render([sayD(disclosure), ...tail], call.provider));
   } catch (err) {
     console.error("[outbound]", err.message);
