@@ -175,10 +175,12 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
   }
 }
 
-// Mock der Telnyx-Provisioning-API: routet nach Pfad (search/order/configure).
+// Mock der Telnyx-PROVISIONING-API: routet nach Pfad (search/order/configure).
 // Liefert e164 +4915799990001. Geteilt von onboarding-route + onboarding-identity
-// (G5: eine Definition statt zweier Kopien).
-export async function startTelnyxMock() {
+// (G5: eine Definition statt zweier Kopien). Name explizit "...ProvisioningMock",
+// um die Kollision mit dem lokalen Voice/Originate-Mock in onboarding-outbound.test.js
+// (startTelnyxVoiceMock) aufzuloesen - zwei verschiedene Telnyx-APIs (TD-9).
+export async function startTelnyxProvisioningMock() {
   const requests = [];
   const server = http.createServer((req, res) => {
     let body = "";

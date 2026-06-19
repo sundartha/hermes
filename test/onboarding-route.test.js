@@ -6,7 +6,7 @@
 // Eigene Datei (Server-Spawn, KEIN pglite -> kein Test-Worker-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startTelnyxMock } from "./helpers.js";
+import { startServer, startTelnyxProvisioningMock } from "./helpers.js";
 
 const postJson = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -77,7 +77,7 @@ test("Per-Tenant-Cap blockt die zweite Nummer desselben Tenants -> 409", async (
 });
 
 test("PROVISIONING_ENABLED + Telnyx-Mock: Route antwortet SOFORT 'queued', async Drain -> 'active'", async () => {
-  const mock = await startTelnyxMock();
+  const mock = await startTelnyxProvisioningMock();
   const srv = await startServer({
     env: {
       PROVISIONING_ENABLED: "true",
