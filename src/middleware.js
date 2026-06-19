@@ -53,3 +53,19 @@ export function createRateLimiter(limitPerMin) {
     next();
   };
 }
+
+// Catch-all 4-arg-Error-Middleware (AC4): Last-Resort-Netz fuer Routen-Fehler, die
+// nicht schon per-Route gefangen wurden (synchron geworfen oder per next(err)
+// gereicht). MUSS in server.js NACH allen Route-Mounts und VOR app.listen registriert
+// werden (Express-Error-MW sieht nur Fehler von davor gemounteten Routen). Liefert dem
+// Client IMMER eine generische 500 - NIE err.message, err.stack oder Config/Env (Secret-/
+// Param-Leak, Regel 4/5). err.stack wird NUR server-seitig laut geloggt (Debug bleibt
+// moeglich, ohne den Client-Body zu vergiften). Bei bereits gesendeten Headern an den
+// Express-Default delegieren (kein zweiter Write). Die 4-arg-Signatur ist Pflicht -
+// daran erkennt Express die Error-MW; _next bleibt deshalb in der Signatur.
+export function errorHandler(err, _req, res, next) {
+  // secret-frei + laut: nur der Stack ins Server-Log, nie in die Antwort.
+  console.error("[error]", err && err.stack ? err.stack : String(err));
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: "internal error" });
+}

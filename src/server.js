@@ -12,7 +12,7 @@ import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from 
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
-import { createRateLimiter, securityHeaders } from "./middleware.js";
+import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
@@ -1069,6 +1069,16 @@ app.post("/mcp", mcpAuth, async (req, res) => {
 });
 app.get("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
 app.delete("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
+
+// ---- Catch-all Error-Net (AC4) -------------------------------------------------
+// MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur
+// Fehler von davor gemounteten Routen. Last-Resort-Netz fuer synchron geworfene/per
+// next(err) gereichte Routen-Fehler -> generische 500, NIE err.message/stack/Env an den
+// Client (Regel 4/5); err.stack nur server-seitig laut geloggt. Die per-Route-try/catch
+// (z.B. /auth/login, /voice/turn) bleiben die primaere Schicht (Express 4 reicht
+// async-Rejections NICHT automatisch hierher). Die body-parser-Error-MW (oben, 4xx
+// Parser-Fehler) bleibt unveraendert an ihrer Stelle.
+app.use(errorHandler);
 
 // ---------------- Start ----------------
 store.load();
