@@ -771,3 +771,59 @@ Off master @4254939 (P0+P1+P6). Plan: `tasks/crash-hotspots/P2-plan.md`. TDD, no
   `config-failclosed`, `boot-failclosed`, `disclosure-regression`, `place-call-error` +
   `helpers.js` (`startServerExpectExit`). Angepasst: `number-gate`, `audit`, `profiles`,
   `voice-signature`, `oauth`.
+
+---
+
+# Task (2026-06-19): P4 — Test-Coverage & server.js-Decomposition (OT-5)
+
+Branch `feat/crash-p4-coverage-decomp` off master `0c36239`. Baseline VOR P4-Adds
+gemessen: **493 tests pass, 0 fail** (`npm test 2>&1 | tail`).
+
+## Items (jedes mit deterministischem Expected-Result + Verifikations-Befehl)
+
+### AC1/AC2 + T-P4-01..04 — OIDC fetch-Hook + un-stub (`src/web-auth.js`, `test/web-auth.test.js`)
+- Expected: `makeOidc(config, { _fetch })` injizierbar (Muster `_discoveryTtlMs`).
+  T-P4-01: Discovery 200 ohne `jwks_uri` -> `getJwks()` wirft `OIDC discovery: jwks_uri
+  fehlt` (KEIN roher `TypeError: Invalid URL`). T-P4-02: Discovery `{ok:false,status:503}`
+  -> `OIDC discovery HTTP 503` (unveraendert). T-P4-03: Token-Body `r.json()` rejected
+  -> gefangener Fehler, `jwtVerify` nie mit undefined. T-P4-04: Token-Body `{}` ohne
+  `id_token` -> `Token-Endpoint: id_token fehlt`.
+- Verify: `node --check src/web-auth.js && node --test test/web-auth.test.js`
+
+### AC3 + T-P4-05 — `/auth/login` fail-closed (`src/web-auth.js`, `test/web-auth.test.js`)
+- Expected: try/catch um `oidc.authorizeUrl`-await; bei Rejection -> 500 generisch
+  ("Anmeldung fehlgeschlagen"), KEIN IdP-Leak, Login-Cookies geloescht. Test:
+  injizierter `oidc.authorizeUrl` rejected mit secret-aehnlichem Text -> 500, Body
+  ohne Leak, kein Hang (mountRouter, deterministisch, kein pg/spawn).
+- Verify: `node --test test/web-auth.test.js`
+
+### AC4 — catch-all Error-MW (`src/server.js`)
+- Expected: 4-arg `(err,req,res,next)` NACH allen Mounts, VOR `app.listen`. Generische
+  500 `{error:"internal error"}`, nie `err.message`/`stack`/Env; `err.stack` nur
+  serverseitig laut geloggt. Body-Parser-MW (`server.js:126`) bleibt unveraendert.
+- Verify: `node --check src/server.js && npm test` (Baseline gruen)
+
+### AC5/AC6 + T-P4-06/07 — mcp-tools Guard + stdio catch (`src/mcp-tools.js`, `test/mcp-tools.test.js` neu)
+- Expected: Result-Guard vor Deref (`r.callId`, `Array.isArray(s.calendar)`, `s.usage`,
+  `s.agent`, `s.calls`, `s.actionItems`) -> klare Tool-Fehlermeldung statt `.length`-Crash
+  auf `{}`. Leerer Kalender `[]` bleibt valide. Per-handler catch in `registerTools`
+  (gilt stdio + HTTP) -> Tool-Throw wird MCP-`isError`-Antwort statt unhandled rejection.
+- Verify: `node --check src/mcp-tools.js src/mcp-server.js && node --test test/mcp-tools.test.js`
+
+### AC7 + T-P4-08 — `/api`-Route-Gruppe -> `src/routes/api.js` (neu)
+- Expected: EINE kohaerente Route-Gruppe als `makeApiRoutes(deps)` (DI wie
+  `makeWebAuthRoutes`), behavior-preserving. `git diff` = reine Verschiebung. Paritaet:
+  Gate-Treffer (gueltiger Pfad) UND Gate-Ablehnung (Allowlist 403) byte-gleich.
+- Verify: `node --check src/routes/api.js src/server.js && npm test` (alle Bestands-API-
+  Tests gruen) + `node --test test/api-routes.test.js`
+
+### AC8/T-P4-09 — `/api/calls`-Leak (Delta 1: NO-OP)
+- Bereits in master: `server.js` catch gibt generisch "Anruf konnte nicht gestartet
+  werden." + statischer hint, loggt nur `err?.message` serverseitig. Dynamischer
+  Leak-Test existiert: `test/place-call-error.test.js` (T-P2-11, `SECRET_DO_NOT_LEAK`).
+  -> NICHT doppeln.
+
+### AC9 — Gates + PLAN-SECURITY.md + Smoke
+- Verify: alle `node --check`; `npm test` 493 -> final; Smoke AC3 (IdP-down 5xx <<5s,
+  kein Leak) + AC7 (Paritaet). `PLAN-SECURITY.md` Error-MW + AC8-NO-OP dokumentieren,
+  Safety-Gates explizit als unangetastet vermerken.
