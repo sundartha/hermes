@@ -101,6 +101,9 @@ export const config = {
 
   // ---- Safety-Gates ----
   // Outbound NUR an diese Nummern (kommasepariert, E.164). Leer = alle Outbound-Calls verweigern.
+  // Normalisierung = dasselbe Schema wie store/defaults.js normNum (Whitespace/-/()
+  // strippen); hier BEWUSST lokal gehalten - config ist die Env-Boundary-Schicht und
+  // importiert nichts aus store/ (store -> config ist die etablierte Richtung).
   allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
     .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
   // Erlaubte Laendervorwahlen fuer Outbound (kommasepariert, E.164-Prefix wie +49).

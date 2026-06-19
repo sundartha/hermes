@@ -9,7 +9,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { config } from "../config.js";
-import { defaultSettings, demoCalendar, PROVIDER, DEFAULT_PROVIDER } from "../store/defaults.js";
+import { defaultSettings, demoCalendar, PROVIDER, DEFAULT_PROVIDER, normNum } from "../store/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "schema.sql");
@@ -24,13 +24,16 @@ export async function applySchema(db) {
 // Eine config-derived Owner-Nummer idempotent seeden. Leere Nummer -> kein Seed
 // (env-gating, fail-closed -> Inbound dieses Providers nicht routbar). Ein INSERT,
 // zwei Aufrufe (G5) statt dupliziertem Block - spiegelt die seedOwnerNumber-
-// Abstraktion des json-Pfads (state-ops.js).
+// Abstraktion des json-Pfads (state-ops.js). e164 wird normalisiert (normNum),
+// damit die gespeicherte Form mit dem normalisierten Inbound-Lookup uebereinstimmt
+// (TD-2; identisch zur json-Seite). Sauberes E.164 -> No-Op.
 async function seedNumber(db, tenantId, e164, provider) {
-  if (!e164) return;
+  const norm = normNum(e164);
+  if (!norm) return;
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
      ON CONFLICT (e164) DO NOTHING`,
-    [e164, tenantId, provider]
+    [norm, tenantId, provider]
   );
 }
 

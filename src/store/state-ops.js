@@ -17,6 +17,7 @@ import {
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
   DEFAULT_PROVIDER,
+  normNum,
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   TENANT_STATUS,
@@ -288,12 +289,17 @@ export function findTenantByNumber(s, e164) {
 // seeden ohne numbers). Leere Nummer -> kein Seed (env-gating). Vorhandene e164
 // gewinnt. provider default DEFAULT_PROVIDER (Twilio) -> bestehende Aufrufe
 // (3 Args) verhaltens-erhaltend; Telnyx-Seed reicht provider=telnyx mit.
+// e164 wird normalisiert (normNum) BEVOR der Idempotenz-Check + das Speichern
+// laufen, damit die gespeicherte Form mit dem normalisierten Inbound-To-Lookup
+// (findTenantByNumber) uebereinstimmt - sonst routet eine Owner-Nummer mit
+// Trennzeichen nicht (TD-2). Sauberes E.164 -> No-Op (byte-identisch).
 export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
-  if (!e164) return;
-  if (s.numbers.some((n) => n.e164 === e164)) return;
+  const norm = normNum(e164);
+  if (!norm) return;
+  if (s.numbers.some((n) => n.e164 === norm)) return;
   // Geseedete Owner-Nummer ist in Benutzung -> status active. id, damit
   // number_assignment/Lifecycle sie referenzieren koennen.
-  s.numbers.push({ id: newId("num"), e164, tenantId, provider, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
+  s.numbers.push({ id: newId("num"), e164: norm, tenantId, provider, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
 }
 
 // ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----

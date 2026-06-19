@@ -7,7 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN } from "./store/defaults.js";
+import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN, normNum } from "./store/defaults.js";
 import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from "./store/views.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
@@ -244,7 +244,8 @@ app.use("/voice", (req, res, next) => {
 // jeder arg-lose render(x)-Aufruf bleibt byte-identisch (Hot-Path, R5).
 const render = (directives, provider) => voiceRenderer(provider).renderDirectives(directives);
 
-const normNum = (n) => (typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "");
+// normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
+// geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
 
 // Provider-bewusstes Auslesen des Speech-Ergebnisses aus dem Webhook-Body.
 // Twilio sendet `SpeechResult`, Telnyx sendet `Transcript` (Telnyx-TeXML-Doku).

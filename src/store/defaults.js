@@ -184,6 +184,17 @@ export const PROFILE_FIELDS = {
   maxCallsPerHour: "number", // pro-Nutzer-Stundenlimit (effektiv min(global, profil))
 };
 
+// E.164-Normalisierung: entfernt Whitespace/Bindestriche/Klammern aus einer
+// Telefonnummer ("+49 151-(0)123" -> "+491510123"). EINE Quelle (G5/DRY) fuer die
+// Inbound-To-Pruefung (server.js), den config-derived Nummern-Seed
+// (state-ops.seedOwnerNumber, migrate.seedNumber) UND die Profil-Allowlist
+// (sanitizeProfile) - sonst driften drei Kopien desselben Regex. Nicht-String ->
+// "" (env-gating/Guard beim Aufrufer). Seed + Lookup teilen dieselbe Form, damit
+// eine gesetzte Owner-Nummer mit Trennzeichen trotzdem routbar bleibt (TD-2).
+export function normNum(n) {
+  return typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "";
+}
+
 // Whitelist gegen PROFILE_FIELDS (Key + Typ). Unbekannte Keys / falsche Typen
 // werden verworfen. allowedNumbers wird wie config.allowedNumbers normalisiert,
 // damit der Gate-Vergleich gegen E.164 trifft; Laendercodes nur getrimmt.
@@ -196,7 +207,7 @@ export function sanitizeProfile(patch) {
       if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
         clean[key] =
           key === "allowedNumbers"
-            ? value.map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean)
+            ? value.map(normNum).filter(Boolean)
             : value.map((c) => c.trim()).filter(Boolean);
       }
     } else if (typeof value === type) {

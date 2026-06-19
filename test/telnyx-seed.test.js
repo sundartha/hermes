@@ -34,6 +34,23 @@ test("json: bestehende e164 gewinnt (idempotent, kein Duplikat)", () => {
   assert.equal(s.numbers.filter((n) => n.e164 === TELNYX_NR).length, 1);
 });
 
+// TD-2: config-Nummer mit Trennzeichen (Whitespace/Bindestrich) wird normalisiert
+// gespeichert, damit der normalisierte Inbound-To-Lookup (findTenantByNumber) sie
+// trifft - sonst routet sie nicht (defense-in-depth, fail-closed).
+test("json: Nummer mit Trennzeichen wird normalisiert -> routbar (TD-2)", () => {
+  const s = makeDefaultState();
+  seedOwnerNumber(s, "+49 151-1234 567", OWNER_TENANT_ID, PROVIDER.TELNYX);
+  assert.equal(s.numbers[0].e164, "+491511234567", "gespeicherte Form ist normalisiert");
+  assert.equal(findTenantByNumber(s, "+491511234567"), OWNER_TENANT_ID);
+});
+
+test("json: Trennzeichen- und Klar-Form derselben Nummer -> 1 Zeile (Idempotenz, TD-2)", () => {
+  const s = makeDefaultState();
+  seedOwnerNumber(s, "+49 151-1234 567", OWNER_TENANT_ID, PROVIDER.TELNYX);
+  seedOwnerNumber(s, "+491511234567", OWNER_TENANT_ID, PROVIDER.TELNYX);
+  assert.equal(s.numbers.length, 1, "Idempotenz-Check laeuft gegen die normalisierte Form");
+});
+
 // ---- pg-Pfad (migrate.seedDefaults gegen pglite) ----
 test("pg: gesetzte Telnyx-Nummer ueberlebt Re-Hydrierung, provider=telnyx", async () => {
   // config.telnyxNumber temporaer setzen, damit seedDefaults sie seedet; danach
@@ -68,5 +85,27 @@ test("pg: leere Telnyx-Nummer -> kein Seed (fail-closed)", async () => {
     assert.equal(rows.length, 0, "ohne TELNYX_NUMBER kein Telnyx-Seed");
   } finally {
     config.telnyxNumber = prevTelnyx;
+  }
+});
+
+// TD-2 (pg-Seite): identisch zur json-Seite - config-Nummer mit Trennzeichen
+// landet normalisiert in der number-Tabelle (eine Norm-Quelle, beide Backends).
+test("pg: config-Nummer mit Trennzeichen wird normalisiert geseedet (TD-2)", async () => {
+  const prevTelnyx = config.telnyxNumber;
+  const prevTwilio = config.twilioNumber;
+  config.telnyxNumber = "+49 151-1234 567";
+  config.twilioNumber = "";
+  try {
+    const db = new PGlite();
+    const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+    await runner.withClient(async (client) => {
+      await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
+      await migrate(client, OWNER_TENANT_ID);
+    });
+    const rows = (await db.query(`SELECT e164 FROM number WHERE e164 = $1`, ["+491511234567"])).rows;
+    assert.equal(rows.length, 1, "normalisierte Form gespeichert (routbar)");
+  } finally {
+    config.telnyxNumber = prevTelnyx;
+    config.twilioNumber = prevTwilio;
   }
 });
