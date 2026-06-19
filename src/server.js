@@ -12,7 +12,7 @@ import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from 
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
-import { createRateLimiter, securityHeaders } from "./middleware.js";
+import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
@@ -23,6 +23,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
+import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
 import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
@@ -880,32 +881,12 @@ app.post("/api/calendar", (req, res) => {
 });
 
 // ---- Rechteprofile verwalten (Phase 2) ----
-// Hinter Basic-Auth (Bestand deckt /api/* ab). OAuth-MCP-Nutzer erreichen nur
-// /mcp, nie /api/* -> kein Self-Service. Es gibt bewusst KEIN MCP-Tool dafuer.
-// Der Profil-Schluessel ist die serverseitige Identitaet: req.auth.email, wenn der
-// IdP eine email im Token liefert, SONST req.auth.sub (z.B. WorkOS "user_01...").
-// Deshalb KEINE strikte Email-Form erzwingen - nur ein sauberer, nicht-leerer
-// String ohne Whitespace.
-const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub)
-const validIdentity = (e) => typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
-
-app.get("/api/profiles", (_req, res) => res.json(store.listProfiles()));
-
-app.post("/api/profiles", (req, res) => {
-  const { email, ...fields } = req.body || {};
-  if (!validIdentity(email)) return res.status(400).json({ error: "email/identity (req.auth.email ODER IdP-sub) ist Pflicht" });
-  const { profile, changed } = store.setProfile(email, fields);
-  // Nur email + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
-  audit("profile_update", req, `email=${email} keys=${changed.join(",") || "-"}`);
-  res.json({ email, profile });
-});
-
-app.delete("/api/profiles/:email", (req, res) => {
-  const { email } = req.params;
-  if (!store.deleteProfile(email)) return res.status(404).json({ error: "not found" });
-  audit("profile_delete", req, `email=${email}`);
-  res.json({ ok: true });
-});
+// AC7-Decomposition: die /api/profiles-Route-Gruppe lebt jetzt in
+// src/routes/api-profiles.js (makeProfileRoutes, DI-Muster wie makeWebAuthRoutes) -
+// reine Verschiebung, Verhalten unveraendert. validIdentity wird von dort importiert
+// (eine Quelle, G5) und unten in /api/onboard weiterverwendet.
+// Hinter Basic-Auth (Bestand deckt /api/* ab); KEIN MCP-Tool (s. Modul-Kommentar).
+app.use(makeProfileRoutes({ store, audit }));
 
 // ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
 // und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
@@ -1069,6 +1050,16 @@ app.post("/mcp", mcpAuth, async (req, res) => {
 });
 app.get("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
 app.delete("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
+
+// ---- Catch-all Error-Net (AC4) -------------------------------------------------
+// MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur
+// Fehler von davor gemounteten Routen. Last-Resort-Netz fuer synchron geworfene/per
+// next(err) gereichte Routen-Fehler -> generische 500, NIE err.message/stack/Env an den
+// Client (Regel 4/5); err.stack nur server-seitig laut geloggt. Die per-Route-try/catch
+// (z.B. /auth/login, /voice/turn) bleiben die primaere Schicht (Express 4 reicht
+// async-Rejections NICHT automatisch hierher). Die body-parser-Error-MW (oben, 4xx
+// Parser-Fehler) bleibt unveraendert an ihrer Stelle.
+app.use(errorHandler);
 
 // ---------------- Start ----------------
 store.load();
