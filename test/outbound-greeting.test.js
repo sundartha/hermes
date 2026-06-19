@@ -4,7 +4,8 @@
 //   (i)  normaler Turn   -> Body enthaelt <Gather> NACH dem Disclosure (AK-1).
 //   (ii) endCall=true     -> Body enthaelt KEIN <Gather> (heutiger Bug, als
 //        dokumentierte Regression: der Agent legt nach einem Satz auf, Trigger T1).
-//   (iii) agentTurn wirft -> Disclosure + Hangup ohne <Gather> (Trigger T2).
+//   (iii) agentTurn wirft -> Disclosure + Retry-<Gather> ohne stummen Hangup
+//        (T2-Fix P3b): der Fehlerpfad legt nicht mehr auf, sondern haelt STT scharf.
 //
 // agentTurn ruft Anthropic ueber das SDK auf. Statt das Netz zu treffen, lenken
 // wir den Client per ANTHROPIC_BASE_URL (SDK-Default Core.readEnv, claude.js:9)
@@ -146,12 +147,16 @@ for (const provider of ["twilio", "telnyx"]) {
     assertDisclosureBefore(body, HANGUP);
   });
 
-  test(`/voice/outbound (${provider}): agentTurn wirft -> Offenlegung + Hangup ohne <Gather> (T2)`, async () => {
+  test(`/voice/outbound (${provider}): agentTurn wirft -> Offenlegung + Retry-<Gather> statt stummem Hangup (T2-Fix P3b)`, async () => {
     const body = await outboundBody({ provider, behavior: "throw" });
-    assert.ok(!body.includes(GATHER), `Fehlerpfad darf kein <Gather> rendern: ${body}`);
-    assertDisclosureBefore(body, HANGUP);
-    // Diskriminator T1 vs T2: im Fehlerpfad faellt der Anliegen-/Abschiedssatz weg,
-    // gesprochen wird NUR die Offenlegung (vgl. call-debug.md Abschnitt 3.4).
+    // P3b-Fix (call-debug.md 3.2): der Fehlerpfad legt nicht mehr stumm auf, sondern
+    // rendert einen einmaligen Retry-<Gather> NACH der Offenlegung - STT bleibt scharf,
+    // der Call offen. Der <Gather>-POST auf /voice/turn faehrt den normalen Turn.
+    assertDisclosureBefore(body, GATHER);
+    assert.ok(!body.includes(HANGUP), `Fehlerpfad darf nicht mehr auflegen (Retry statt Hangup): ${body}`);
+    // Diskriminator T1 vs T2: agentTurn wirft -> kein Anliegen-/Abschiedssatz; der
+    // Retry-Gather hat einen leeren Prompt, gesprochen wird NUR die Offenlegung
+    // (vgl. call-debug.md Abschnitt 3.4).
     assert.ok(!body.includes(AGENT_SPEECH) && !body.includes(FAREWELL), `Fehlerpfad spricht nur die Offenlegung: ${body}`);
   });
 }

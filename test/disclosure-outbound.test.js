@@ -1,7 +1,9 @@
 // Regel 2 (Absolute Regeln): Der fest verdrahtete Offenlegungssatz muss bei
 // Outbound-Calls der allererste gesprochene Satz sein - AUCH wenn agentTurn
-// scheitert (sonst legt der Agent stumm auf). Genau dieser Fehlerpfad ging beim
-// P1-Refactor (Direktiven-Renderer) zunaechst verloren; der Test nagelt ihn fest.
+// scheitert. Genau dieser Fehlerpfad ging beim P1-Refactor (Direktiven-Renderer)
+// zunaechst verloren; der Test nagelt ihn fest. P3b (call-debug.md 3.2): der
+// Fehlerpfad legt nicht mehr stumm auf, sondern rendert einen Retry-<Gather> NACH
+// der Offenlegung (STT scharf, Call offen) - die Offenlegung bleibt erster Knoten.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -12,7 +14,7 @@ const CALL_ID = "call_test1";
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas.";
 const SAY_OPEN = '<Say voice="Polly.Vicki-Neural" language="de-DE">';
 
-test("Outbound-Fehlerpfad: Offenlegung bleibt erster Satz vor Hangup (Regel 2)", async () => {
+test("Outbound-Fehlerpfad: Offenlegung bleibt erster Satz vor dem Retry-Gather (Regel 2, T2-Fix P3b)", async () => {
   // Offline-Test-Env: agentTurn ruft Anthropic mit Fake-Key ohne Netz auf und
   // wirft -> Handler-catch. Genau der Pfad, der die Offenlegung tragen muss.
   const srv = await startServer({
@@ -27,10 +29,12 @@ test("Outbound-Fehlerpfad: Offenlegung bleibt erster Satz vor Hangup (Regel 2)",
 
     const twiml = await res.text();
     const sayIdx = twiml.indexOf(SAY_OPEN + DISCLOSURE_PREFIX);
-    const hangupIdx = twiml.indexOf("<Hangup/>");
+    const gatherIdx = twiml.indexOf("<Gather");
     assert.ok(sayIdx !== -1, `Offenlegung fehlt im Fehlerpfad-TwiML: ${twiml}`);
-    assert.ok(hangupIdx !== -1, `Hangup fehlt im Fehlerpfad-TwiML: ${twiml}`);
-    assert.ok(sayIdx < hangupIdx, `Offenlegung muss VOR dem Hangup stehen: ${twiml}`);
+    assert.ok(gatherIdx !== -1, `Retry-Gather fehlt im Fehlerpfad-TwiML: ${twiml}`);
+    assert.ok(sayIdx < gatherIdx, `Offenlegung muss VOR dem Retry-Gather stehen: ${twiml}`);
+    // P3b: der Fehlerpfad legt nicht mehr stumm auf - kein <Hangup/>, der Call bleibt offen.
+    assert.ok(!twiml.includes("<Hangup/>"), `Fehlerpfad darf nicht mehr auflegen (Retry statt Hangup): ${twiml}`);
   } finally {
     await srv.stop();
   }
