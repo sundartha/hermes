@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { signValue, verifyValue, makePkce, makeWebAuthRoutes, claimsFromPayload, adminOnly } from "../src/web-auth.js";
+import { signValue, verifyValue, makePkce, makeWebAuthRoutes, makeOidc, claimsFromPayload, adminOnly } from "../src/web-auth.js";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -465,6 +465,117 @@ test("T-F1-07: adminOnly mit verifizierter Email in Allowlist -> 200", async () 
   try {
     const res = await rawGet(`${srv.base}/admin-probe`);
     assert.equal(res.status, 200);
+  } finally {
+    await srv.close();
+  }
+});
+
+// ---- P4 / AC1 + AC2: echter OIDC-discover/exchange-Pfad un-gestubbt ----
+// makeOidc bekommt einen injizierbaren fetch (Muster wie _discoveryTtlMs): KEIN
+// globalThis-Mock, KEIN neues Prod-Interface. Damit laeuft der reale discover()-/
+// exchange()-Code (fetch + r.json() + Deref), den jeder andere Test per oidc-Fake
+// umgeht. Beweist: malformte IdP-Antworten -> KLARER, gefangener Fehler statt
+// new URL(undefined)/jwtVerify(undefined)-Crash als unhandled rejection.
+
+const OIDC_ISSUER = "https://idp.p4.test";
+
+// Baut eine fetch-Antwort-Attrappe. json kann ein Wert ODER eine Fehler-Factory sein.
+function fakeResponse({ ok = true, status = 200, json } = {}) {
+  return { ok, status, json: typeof json === "function" ? json : async () => json };
+}
+
+test("T-P4-01: Discovery ohne jwks_uri -> klarer Fehler, kein new URL(undefined)", async () => {
+  // Discovery-200 OHNE jwks_uri. getJwks() darf NICHT mit `TypeError: Invalid URL`
+  // crashen, sondern einen identifizierbaren Fehler werfen.
+  const _fetch = async (url) => {
+    if (String(url).endsWith("/.well-known/openid-configuration"))
+      return fakeResponse({ json: { authorization_endpoint: `${OIDC_ISSUER}/authorize`, token_endpoint: `${OIDC_ISSUER}/token` } });
+    throw new Error(`unerwarteter fetch: ${url}`);
+  };
+  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER }, { _fetch });
+  await assert.rejects(
+    () => oidc._getJwksForTest(),
+    (err) => {
+      assert.match(err.message, /jwks_uri/, "Fehler nennt das fehlende jwks_uri");
+      assert.doesNotMatch(err.message, /Invalid URL/, "kein roher new URL(undefined)-TypeError");
+      return true;
+    }
+  );
+});
+
+test("T-P4-02: Discovery-HTTP-Fehler -> bestehender OIDC discovery HTTP <status>-Throw", async () => {
+  const _fetch = async () => fakeResponse({ ok: false, status: 503 });
+  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER }, { _fetch });
+  await assert.rejects(() => oidc._getJwksForTest(), /OIDC discovery HTTP 503/);
+});
+
+test("T-P4-03: Token-Body non-JSON (r.json wirft) -> gefangen, kein jwtVerify(undefined)", async () => {
+  // Discovery ok (mit jwks_uri), Token-Endpoint liefert ok:true aber r.json() rejected.
+  const _fetch = async (url) => {
+    const u = String(url);
+    if (u.endsWith("/.well-known/openid-configuration"))
+      return fakeResponse({ json: { authorization_endpoint: `${OIDC_ISSUER}/authorize`, token_endpoint: `${OIDC_ISSUER}/token`, jwks_uri: `${OIDC_ISSUER}/jwks` } });
+    if (u === `${OIDC_ISSUER}/token`)
+      return fakeResponse({ ok: true, json: async () => { throw new Error("not json"); } });
+    throw new Error(`unerwarteter fetch: ${url}`);
+  };
+  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" }, { _fetch });
+  await assert.rejects(
+    () => oidc.exchange({ code: "c", verifier: "v", nonce: "n", redirectUri: `${OIDC_ISSUER}/cb` }),
+    (err) => {
+      // gefangener Fehler (egal ob "not json" oder unser Guard) - NUR kein TypeError aus
+      // jwtVerify(undefined): der Code darf den Token-Body-Parse-Fehler nicht als
+      // undefined-id_token weiterreichen.
+      assert.doesNotMatch(err.message, /Cannot read|undefined/i, "kein undefined-Deref-Crash");
+      return true;
+    }
+  );
+});
+
+test("T-P4-04: Token-Body {} ohne id_token -> klarer Fehler, kein jwtVerify(undefined)", async () => {
+  const _fetch = async (url) => {
+    const u = String(url);
+    if (u.endsWith("/.well-known/openid-configuration"))
+      return fakeResponse({ json: { authorization_endpoint: `${OIDC_ISSUER}/authorize`, token_endpoint: `${OIDC_ISSUER}/token`, jwks_uri: `${OIDC_ISSUER}/jwks` } });
+    if (u === `${OIDC_ISSUER}/token`)
+      return fakeResponse({ ok: true, json: async () => ({}) }); // kein id_token
+    throw new Error(`unerwarteter fetch: ${url}`);
+  };
+  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" }, { _fetch });
+  await assert.rejects(
+    () => oidc.exchange({ code: "c", verifier: "v", nonce: "n", redirectUri: `${OIDC_ISSUER}/cb` }),
+    (err) => {
+      assert.match(err.message, /id_token/, "Fehler nennt das fehlende id_token");
+      assert.doesNotMatch(err.message, /Cannot read|Invalid Compact JWS/i, "kein jwtVerify(undefined)-Crash");
+      return true;
+    }
+  );
+});
+
+// ---- P4 / AC3: GET /auth/login fail-closed ----
+// Ist der IdP unerreichbar, rejected oidc.authorizeUrl (intern discover()->fetch).
+// Ohne try/catch reicht Express 4 die Rejection NICHT an eine Error-MW weiter -> der
+// Request haengt bis zum Socket-Timeout. Mit try/catch: sauberer 5xx, kein IdP-Leak.
+
+test("T-P4-05: GET /auth/login bei IdP-down -> 5xx, kein Hang, kein Leak", async () => {
+  const { deps } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => {
+        throw new Error("connect ECONNREFUSED 127.0.0.1:1 SECRET_IDP_DETAIL");
+      },
+      exchange: async () => ({ claims: { sub: "x", email: "y@z" } }),
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    // Eigener Timeout beweist "kein Hang": die Response kommt sofort, nicht erst nach
+    // Socket-Timeout. AbortController kappt nach 4s -> der Test wuerde sonst werfen.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 4000);
+    const res = await rawGet(`${srv.base}/auth/login`);
+    clearTimeout(timer);
+    assert.ok(res.status >= 500 && res.status < 600, `5xx erwartet, war ${res.status}`);
+    assert.doesNotMatch(res.body, /ECONNREFUSED|SECRET_IDP_DETAIL|127\.0\.0\.1/, "kein IdP-/Connection-Leak im Body");
   } finally {
     await srv.close();
   }
