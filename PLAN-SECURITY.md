@@ -503,3 +503,62 @@ Verifikation: `npm test` 490 gruen (478 Baseline + 12 neue T-P2-01..11, 0 Drop);
 `test/place-call-error.test.js`. Smoke (echtes `src/server.js`): `MAX_BUDGET_EUR=acht` -> exit 1
 + `[boot] Start abgebrochen` (nennt MAX_BUDGET_EUR, kein "Gateway laeuft"); Gegenprobe gueltige
 Config -> `/healthz` 200 `{"ok":true}`.
+
+## Test-Coverage & server.js-Decomposition (P4/OT-5, umgesetzt 2026-06-19, `feat/crash-p4-coverage-decomp`)
+
+OT-1..OT-4 wiederkehren, weil der eigentliche Failure-Mode-Code (echte OIDC-fetch/parse,
+mcp-tools-Deref, async-Routen-Rejection) nirgends asserted war und bei jedem Refactor blind
+regredierte. P4 deckt diese ungetesteten External-I/O-Pfade ab UND beginnt, den `server.js`-God-File
+strukturell zu zerlegen. Plan: `tasks/crash-hotspots/P4-plan.md`. **Alle Safety-Gates (Allowlist,
+Budget, Max-Dauer, Twilio-Signatur) und der fest verdrahtete Disclosure-Satz bleiben inhaltlich
+UNANGETASTET** - P4 fasst nur Coverage, Error-Handling und strukturelle Verschiebung an; die
+Secret-Disziplin (Regel 4/5) wird durch AC3/AC4 sogar verschaerft.
+
+- **OIDC un-stubben + Guards (AC1/AC2, `web-auth.js`):** `makeOidc` bekommt einen optionalen
+  `_fetch`-Test-Hook (Muster `_discoveryTtlMs`, KEIN globalThis-Mock, KEIN neues Prod-Interface) -
+  damit laeuft der reale discover/exchange-Pfad endlich im Test. Zwei latente Crash-Loecher
+  geschlossen: malformte Discovery ohne `jwks_uri` -> klarer Fehler statt `new URL(undefined)`-
+  TypeError; Token-Body non-JSON oder leeres `{}` ohne `id_token` -> klarer Fehler statt
+  `jwtVerify(undefined, ...)`-Crash. Beides war zuvor eine unhandled async rejection.
+- **`GET /auth/login` fail-closed (AC3, `web-auth.js`):** try/catch um den `oidc.authorizeUrl`-await
+  (intern `discover()` -> fetch). Ist der IdP unerreichbar, rejected der await; Express 4 reicht
+  Routen-Rejections NICHT automatisch an eine Error-MW -> der Request hing zuvor bis zum Socket-
+  Timeout. Jetzt: generische `500` ("Anmeldung fehlgeschlagen"), Login-Cookies geloescht, KEIN
+  IdP-/Connection-Detail im Body (`/auth/callback` war bereits gecatcht).
+- **Catch-all Error-Middleware (AC4, `middleware.js` + `server.js`):** eine 4-arg
+  `errorHandler(err,req,res,next)` wird NACH allen Route-Mounts und VOR `app.listen` registriert.
+  Last-Resort-Netz fuer synchron geworfene/per `next(err)` gereichte Routen-Fehler -> generische
+  `500 {error:"internal error"}`, **nie** `err.message`/`err.stack`/Env an den Client (Regel 4/5);
+  `err.stack` wird NUR server-seitig laut geloggt. Die bestehende body-parser-Error-MW (4xx
+  Parser-Fehler) bleibt unveraendert. Express 4 reicht async-Rejections NICHT automatisch hierher
+  -> AC3 (per-Route try/catch) bleibt die primaere Schicht, AC4 ist das Netz darunter.
+- **mcp-tools Result-Guard + per-handler catch (AC5/AC6, `mcp-tools.js`):** `api()` degradiert bei
+  Parse-Fehler zu `{}`; die Handler derefen darauf verschachtelt (`r.callId`, `s.calendar.length`,
+  `s.usage`, `s.agent`, `s.calls`, `s.actionItems`) -> `.length`-Crash. `requireFields` prueft
+  Existenz/Typ (`Array.isArray`), NICHT Nicht-Leere (leerer Kalender `[]` bleibt valide) und wirft
+  eine generische, provider-freie Tool-Fehlermeldung (kein roher Gateway-Body, Regel 5). Ein
+  `tool()`-Wrapper in `registerTools` faengt jeden Handler-Throw -> saubere MCP-`isError`-Antwort
+  statt process-level unhandled rejection (gilt stdio UND HTTP `/mcp`, da `registerTools` geteilt).
+- **server.js-Decomposition (AC7, neu `src/routes/api-profiles.js`):** EINE kohaerente Route-Gruppe
+  (`GET/POST/DELETE /api/profiles`) als `makeProfileRoutes(deps)`-Factory extrahiert (DI-Muster wie
+  `makeWebAuthRoutes`), behavior-preserving (`git diff` = reine Verschiebung). Bewusst die Profil-
+  Gruppe gewaehlt (kleinster kohaerenter Schritt, Template fuer weitere Extraktion): sie enthaelt
+  KEINE Safety-Gates -> kein Drift-Risiko an Allowlist/Budget/Disclosure (Pre-Mortem-Mitigation).
+  `validIdentity` wandert als eine Quelle ins Modul (G5), `server.js` importiert es fuer `/api/onboard`.
+
+**Bewusst akzeptierte Abweichungen / Folgen:**
+- **AC8/T-P4-09 = NO-OP (durch P2 bereits erledigt):** der `/api/calls`-Originate-500-Body ist seit
+  P2 generisch und der dynamische Leak-Test (`test/place-call-error.test.js`, T-P2-11,
+  `SECRET_DO_NOT_LEAK`) liegt bereits in master -> NICHT doppelt gefixt (Delta 1 des Hand-offs).
+- **bridge.js-`handleOpenAiEvent`-Extract NICHT in P4 (Follow-up):** P3 hatte ihn nach "P4" verschoben,
+  der formale P4-Plan kennt ihn aber nicht (AC7 = genau EINE server.js-Route-Gruppe). Da `bridge.js`
+  eine HEIKLE STELLE ist (Barge-in/Call-Ende) und vor dem Extract Charakterisierungs-Tests der
+  Frame-Ausgabe braucht, bleibt er bewusst ein eigenes Follow-up (in `tasks/todo.md` getrackt,
+  NICHT still gedroppt) - Delta 2 des Hand-offs.
+
+Verifikation: `npm test` **509 gruen** (493 Baseline auf diesem Branch + 16 neue T-P4-01..08 +
+AC4-Unit, 0 Drop); `test/web-auth.test.js` (T-P4-01..05), `test/mcp-tools.test.js` (T-P4-06/07),
+`test/error-handler.test.js` (AC4-Unit), `test/api-routes.test.js` (T-P4-08 Paritaet). Smoke (echte
+Handler): AC3 `/auth/login` bei IdP-down -> `500` in 16ms (kein Socket-Hang), Body ohne IdP-Detail;
+AC7 `/api/profiles` Gate-Treffer (200) + Gate-Ablehnung (400 malformed, 404 unbekannt) live
+byte-identisch zum Bestand.
