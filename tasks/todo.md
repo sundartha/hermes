@@ -827,3 +827,25 @@ gemessen: **493 tests pass, 0 fail** (`npm test 2>&1 | tail`).
 - Verify: alle `node --check`; `npm test` 493 -> final; Smoke AC3 (IdP-down 5xx <<5s,
   kein Leak) + AC7 (Paritaet). `PLAN-SECURITY.md` Error-MW + AC8-NO-OP dokumentieren,
   Safety-Gates explizit als unangetastet vermerken.
+
+## Review (P4 abgeschlossen 2026-06-19)
+
+- **Baseline 493 -> final 509** (`npm test`, 0 Drop, 0 fail). +16 Tests: T-P4-01..05
+  (web-auth), T-P4-06/06b/07 (mcp-tools), AC4-Unit x3 (error-handler), T-P4-08 x5 (api-routes).
+- **AC1-AC7 done**, AC8 NO-OP (Delta 1: in master), AC9 done. Geaenderte Prod-Files:
+  `src/web-auth.js`, `src/mcp-tools.js`, `src/middleware.js`, `src/server.js`, neu
+  `src/routes/api-profiles.js`. `src/mcp-server.js` UNVERAENDERT (Schutz liegt im
+  geteilten `registerTools`). Neue Test-Files: `test/mcp-tools.test.js`,
+  `test/error-handler.test.js`, `test/api-routes.test.js`.
+- Smoke: AC3 `/auth/login` IdP-down -> 500 in 16ms, Body "Anmeldung fehlgeschlagen"
+  (kein Leak). AC7 `/api/profiles` Gate-Treffer 200 + Ablehnung 400/404 byte-identisch.
+
+## FOLLOW-UP (Delta 2, aus P3 deferred, NICHT in P4) — bridge.js handleOpenAiEvent-Extract
+
+P3 (T-P3-04) hat die echte Unit-Isolation des OpenAI-`message`-Handlers in `src/bridge.js`
+bewusst ausgelassen (Weg b) und den `handleOpenAiEvent`-Extract nach "P4 (Decomposition)"
+verschoben. Der formale P4-Plan kennt ihn NICHT (AC7 = genau EINE server.js-Route-Gruppe),
+deshalb in P4 NICHT mitgenommen. **Grund:** `bridge.js` ist HEIKLE STELLE (Barge-in,
+Call-Ende); ein sauberer Extract braucht ZUERST einen Charakterisierungs-Test der
+Frame-Ausgabe VOR dem Extract. Als eigener, klein-gehaltener Folge-Schritt einplanen
+(eigenes Branch, dualer Review). Schliesst P3s AC1-Coverage-Luecke fuer die Realtime-Bridge.
