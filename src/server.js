@@ -23,6 +23,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
+import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
 import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
@@ -880,32 +881,12 @@ app.post("/api/calendar", (req, res) => {
 });
 
 // ---- Rechteprofile verwalten (Phase 2) ----
-// Hinter Basic-Auth (Bestand deckt /api/* ab). OAuth-MCP-Nutzer erreichen nur
-// /mcp, nie /api/* -> kein Self-Service. Es gibt bewusst KEIN MCP-Tool dafuer.
-// Der Profil-Schluessel ist die serverseitige Identitaet: req.auth.email, wenn der
-// IdP eine email im Token liefert, SONST req.auth.sub (z.B. WorkOS "user_01...").
-// Deshalb KEINE strikte Email-Form erzwingen - nur ein sauberer, nicht-leerer
-// String ohne Whitespace.
-const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub)
-const validIdentity = (e) => typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
-
-app.get("/api/profiles", (_req, res) => res.json(store.listProfiles()));
-
-app.post("/api/profiles", (req, res) => {
-  const { email, ...fields } = req.body || {};
-  if (!validIdentity(email)) return res.status(400).json({ error: "email/identity (req.auth.email ODER IdP-sub) ist Pflicht" });
-  const { profile, changed } = store.setProfile(email, fields);
-  // Nur email + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
-  audit("profile_update", req, `email=${email} keys=${changed.join(",") || "-"}`);
-  res.json({ email, profile });
-});
-
-app.delete("/api/profiles/:email", (req, res) => {
-  const { email } = req.params;
-  if (!store.deleteProfile(email)) return res.status(404).json({ error: "not found" });
-  audit("profile_delete", req, `email=${email}`);
-  res.json({ ok: true });
-});
+// AC7-Decomposition: die /api/profiles-Route-Gruppe lebt jetzt in
+// src/routes/api-profiles.js (makeProfileRoutes, DI-Muster wie makeWebAuthRoutes) -
+// reine Verschiebung, Verhalten unveraendert. validIdentity wird von dort importiert
+// (eine Quelle, G5) und unten in /api/onboard weiterverwendet.
+// Hinter Basic-Auth (Bestand deckt /api/* ab); KEIN MCP-Tool (s. Modul-Kommentar).
+app.use(makeProfileRoutes({ store, audit }));
 
 // ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
 // und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
