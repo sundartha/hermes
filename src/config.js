@@ -208,6 +208,38 @@ export const config = {
   publicDir: path.join(__dirname, "..", "public"),
 };
 
+// Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen
+// einen ungesicherten IdP validiert (z.B. versehentlich auf eine interne Metadata-IP).
+// localhost/127.0.0.1/[::1] = lokaler Test-IdP und bleibt zulaessig.
+function isInsecureHttpIssuer(issuerUrl) {
+  return !!issuerUrl && issuerUrl.startsWith("http://") &&
+    !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(issuerUrl);
+}
+
+// Produktions-Footguns (H1): Konfigurationen, die im oeffentlichen Hosting (Render
+// setzt RENDER_EXTERNAL_URL) das Dashboard/API oeffentlich oeffnen ODER ein Safety-
+// Gate lautlos abschalten. Eine vergessene/verkehrte Env darf NICHT als blosse
+// Warnung durchgehen -> fail-closed: jeder Treffer ist fatal (Boot-Refusal statt
+// stiller oeffentlicher Dienst). Lokal/Test (kein RENDER_EXTERNAL_URL) bleiben
+// dieselben Punkte erlaubte Warnungen. Reine Funktion (cfg + isProduction
+// injizierbar) -> unit-testbar ohne Spawn. Diagnose nennt nur Var-Namen, NIE Werte
+// (kein Secret-Leak; betroffene Vars sind ohnehin Schalter/Presence).
+export function productionFootguns(cfg = config, isProduction = !!process.env.RENDER_EXTERNAL_URL) {
+  if (!isProduction) return [];
+  const errors = [];
+  if (!cfg.dashboardPassword)
+    errors.push("DASHBOARD_PASSWORD fehlt - Dashboard und API waeren oeffentlich erreichbar (im Hosting Pflicht).");
+  if (cfg.mcpAuth === "off")
+    errors.push("MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).");
+  if (cfg.skipTwilioSignatureCheck)
+    errors.push("SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).");
+  if (isInsecureHttpIssuer(cfg.oauthIssuerUrl))
+    errors.push("OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).");
+  if (cfg.storeBackend !== "pg")
+    errors.push("STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.");
+  return errors;
+}
+
 export function assertConfig() {
   const missing = [];
   if (!config.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
@@ -228,19 +260,25 @@ export function assertConfig() {
   // config-payment-guard.test.js, das den config-Wert ohne Env-Pfad mutiert.
   if (config.paymentEnabled && (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0))
     missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
-  // Numerische Fatal-Befunde (AC1/AC2): NaN/Infinity oder Bereichsverletzung einer
-  // gesetzten Env-Var -> faellt mit in den Boot-Stop (fail-closed statt stillem Gate-Aus).
-  const fatal = configFatalErrors();
+  // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
+  //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
+  //  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete
+  //    Auth-/Signatur-Gates. Lokal liefert productionFootguns() ein leeres Array.
+  const isProduction = !!process.env.RENDER_EXTERNAL_URL;
+  const fatal = configFatalErrors().concat(productionFootguns(config, isProduction));
   if (missing.length || fatal.length) {
     console.error("\n[Konfiguration fatal] Boot wird verweigert:");
     for (const m of missing) console.error(`  - fehlt/ungueltig: ${m}`);
     for (const f of fatal) console.error(`  - ${f}`);
     console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
   }
-  if (process.env.RENDER_EXTERNAL_URL && !config.dashboardPassword)
-    console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
-  if (config.skipTwilioSignatureCheck)
+  // Footgun-Warnungen NUR im lokalen/Test-Modus: im Hosting (isProduction) sind
+  // dieselben Punkte oben bereits fatal (productionFootguns) -> hier kein
+  // Doppel-Report, lokal aber weiterhin ein sichtbarer Hinweis.
+  if (!isProduction && config.skipTwilioSignatureCheck)
     console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
+  if (!isProduction && config.mcpAuth === "off")
+    console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
   if (config.paymentEnabled && !config.provisioningEnabled)
     console.error("[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).");
   if (config.storeBackend !== "pg" && config.sessionSecret)
@@ -251,10 +289,8 @@ export function assertConfig() {
   if (config.selfServiceEnabled && config.multiTenant &&
       !(config.sessionSecret && config.storeBackend === "pg"))
     console.error("[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.");
-  // OIDC-Issuer muss in Produktion https sein: ein http-Issuer (z.B. versehentlich
-  // auf eine interne Metadata-IP) ist ein SSRF-/MITM-Footgun. localhost = Test-IdP ok.
-  if (config.oauthIssuerUrl && config.oauthIssuerUrl.startsWith("http://") &&
-      !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(config.oauthIssuerUrl))
+  // http-OIDC-Issuer: lokal nur ein Hinweis (Test-IdP), im Hosting oben bereits fatal.
+  if (!isProduction && isInsecureHttpIssuer(config.oauthIssuerUrl))
     console.error("[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!");
   return missing.length === 0 && fatal.length === 0;
 }
