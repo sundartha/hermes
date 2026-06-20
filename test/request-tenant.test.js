@@ -16,6 +16,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog, startIdp, seedState, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
+import { hashEmail } from "../src/util.js";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";
@@ -32,7 +33,7 @@ test("V1 Flag aus + verifiziertes Token -> tenant=owner (byte-identisch)", async
     const token = await idp.sign({ sub: SUB_B, email: "alice@team.test" });
     const res = await post(`${srv.localUrl}/mcp`, token);
     assert.notEqual(res.status, 401);
-    await waitForLog(srv, /\[mcp\] alice@team\.test tenant=owner/);
+    await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=owner`));
   } finally {
     await srv.stop();
     await idp.close();
@@ -75,7 +76,7 @@ test("V4 Flag an + verifiziertes Token OHNE sub -> tenant=owner (fehlende Identi
     const token = await idp.sign({ email: "nosub@team.test" }, { noSubject: true });
     const res = await post(`${srv.localUrl}/mcp`, token);
     assert.notEqual(res.status, 401);
-    await waitForLog(srv, /\[mcp\] nosub@team\.test tenant=owner/);
+    await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("nosub@team.test")} tenant=owner`));
   } finally {
     await srv.stop();
     await idp.close();
