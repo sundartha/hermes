@@ -1,12 +1,16 @@
 // Das "Gehirn": Claude fuehrt das Gespraech, nutzt Tools (Kalender, Termin buchen,
 // Nachricht aufnehmen, auflegen) und schreibt am Ende Summary + Action Items.
-import Anthropic from "@anthropic-ai/sdk";
+import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { OWNER_TENANT_ID, USAGE_EVENT_KIND } from "./store/defaults.js";
 import { aiCostCents } from "./store/state-ops.js";
 
-const anthropic = new Anthropic({ apiKey: config.anthropicApiKey });
+// Resilienter LLM-Seam (P3b-R Schicht 2, src/llm.js): EINE Stelle fuer Timeout/
+// selektiven Retry/Breaker. Verdrahtung am Modul-Top (P15), Fachcode ruft nur
+// llm.complete(...). Wirft bei Breaker-open/Retries-erschoepft LlmUnavailableError
+// (Aufrufer behandelt das in CP4); 4xx/Auth propagieren unveraendert.
+const llm = createLlmClient({ apiKey: config.anthropicApiKey, config });
 
 // AI-Token-Meter EINES Anthropic-Aufrufs (P6b3, Meter 3). NUR im Metering-Pfad
 // (PAYMENT_ENABLED) - der Nebeneffekt (recordUsageEvent) steht im Namen. Laeuft
@@ -191,7 +195,7 @@ export async function agentTurn(call, callerText) {
 
   // Tool-Loop (max. 4 Runden pro Turn)
   for (let i = 0; i < 4; i++) {
-    const resp = await anthropic.messages.create({
+    const resp = await llm.complete({
       model: config.claudeModel,
       max_tokens: 300,
       system: systemPrompt(call),
@@ -242,7 +246,7 @@ export async function summarizeCall(call) {
     .map((t) => `${t.role === "agent" ? "AGENT" : "ANRUFER"}: ${t.text}`)
     .join("\n");
 
-  const resp = await anthropic.messages.create({
+  const resp = await llm.complete({
     model: config.claudeModel,
     max_tokens: 500,
     system: `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bezieht sich auf den Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
