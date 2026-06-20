@@ -20,6 +20,17 @@ export const BASE_ENV = {
   ANTHROPIC_API_KEY: "test-anthropic-key",
   CLAUDE_MODEL: "claude-haiku-4-5",
   MAX_BUDGET_EUR: "8",
+  // ---- LLM-Resilienz-Seam (P3b-R, src/llm.js) ----
+  // Neutral + deterministisch: kurzer Timeout/Backoff, damit Tests, die den Seam ab
+  // CP3 beruehren, nicht haengen; sonst leakt eine lokale .env via dotenv in Spawn-Tests
+  // -> Baseline-Drift (Lehre test-base-env-drift). LLM_BACKOFF_MS=1 (nicht 250), damit
+  // der ab CP3 konsumierte Seam Spawn-Tests nicht ausbremst (CP3 ownt diese Datei nicht).
+  LLM_REQUEST_TIMEOUT_MS: "3500",
+  LLM_MAX_RETRIES: "2",
+  LLM_BACKOFF_MS: "1",
+  LLM_BREAKER_THRESHOLD: "5",
+  LLM_BREAKER_WINDOW_MS: "10000",
+  LLM_BREAKER_COOLDOWN_MS: "30000",
   TWILIO_ACCOUNT_SID: "ACtest00000000000000000000000000",
   TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
   TWILIO_NUMBER: "+15005550006",

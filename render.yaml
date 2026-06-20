@@ -99,6 +99,19 @@ services:
         value: claude-haiku-4-5
       - key: MAX_BUDGET_EUR
         value: "8"
+      # ---- LLM-Resilienz (Budget-Engine, src/llm.js) ----
+      - key: LLM_REQUEST_TIMEOUT_MS
+        value: "3500"
+      - key: LLM_MAX_RETRIES
+        value: "2"
+      - key: LLM_BACKOFF_MS
+        value: "250"
+      - key: LLM_BREAKER_THRESHOLD
+        value: "5"
+      - key: LLM_BREAKER_WINDOW_MS
+        value: "10000"
+      - key: LLM_BREAKER_COOLDOWN_MS
+        value: "30000"
       - key: MAX_CALL_DURATION_S
         value: "180"
       - key: RATE_LIMIT_PER_MIN

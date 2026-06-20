@@ -45,6 +45,23 @@ export const config = {
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
   maxBudgetEur: numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }),
 
+  // ---- LLM-Resilienz-Seam (P3b-R Schicht 2, src/llm.js) ----
+  // Per-Request-Timeout je Anthropic-Versuch (SDK-Default 10 min ist webhook-toedlich:
+  // Twilio kappt nach 15 s hart). Budget-Soll: (llmMaxRetries+1)*timeout + Backoff < 12 s.
+  // Mit Defaults: 3*3500 + (<=250+500) = <=11250 ms < 12000 ms < Twilio-15s. Default
+  // bewusst 3500 (nicht 4000), damit das Budget mit Sicherheitsmarge haelt.
+  llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", process.env.LLM_REQUEST_TIMEOUT_MS, { fallback: 3500, min: 1 }),
+  // Harte Retry-Obergrenze (selektiv, nur transiente Verbindungsklasse). 0 = kein Retry.
+  llmMaxRetries: numEnv("LLM_MAX_RETRIES", process.env.LLM_MAX_RETRIES, { fallback: 2, min: 0 }),
+  // Basis fuer den exponentiellen Voll-Jitter-Backoff (gegen Thundering Herd).
+  llmBackoffMs: numEnv("LLM_BACKOFF_MS", process.env.LLM_BACKOFF_MS, { fallback: 250, min: 0 }),
+  // Circuit-Breaker: ab threshold transienten Fehlern im windowMs-Fenster -> open;
+  // nach cooldownMs -> half-open (eine Probe). Kappt Retry-Stuerme bei Anthropic-
+  // Brownout (Millionen-Skala). Startwerte konservativ; finales Tuning CP6 (Lasttest).
+  llmBreakerThreshold: numEnv("LLM_BREAKER_THRESHOLD", process.env.LLM_BREAKER_THRESHOLD, { fallback: 5, min: 1 }),
+  llmBreakerWindowMs: numEnv("LLM_BREAKER_WINDOW_MS", process.env.LLM_BREAKER_WINDOW_MS, { fallback: 10000, min: 1 }),
+  llmBreakerCooldownMs: numEnv("LLM_BREAKER_COOLDOWN_MS", process.env.LLM_BREAKER_COOLDOWN_MS, { fallback: 30000, min: 1 }),
+
   twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
   twilioNumber: process.env.TWILIO_NUMBER || "",
