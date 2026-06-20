@@ -15,7 +15,7 @@ test("Gather + Say + Redirect -> TeXML byte-identisch (inkl. XML-Escaping)", () 
   const out = renderDirectives([gather({ promptText: "Hallo & willkommen <bei> Jonas?", action }), redirect(action)]);
   assert.equal(out,
     XML + '<Response>' +
-    '<Gather input="speech" language="de" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="/voice/turn?callId=call_abc" method="POST">' +
+    '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="/voice/turn?callId=call_abc" method="POST">' +
     '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">Hallo &amp; willkommen &lt;bei&gt; Jonas?</Say>' +
     '</Gather>' +
     '<Redirect method="POST">/voice/turn?callId=call_abc</Redirect>' +
@@ -27,7 +27,7 @@ test("Gather ohne Prompt -> self-closing Gather + Redirect", () => {
   const out = renderDirectives([gather({ promptText: "", action }), redirect(action)]);
   assert.equal(out,
     XML + '<Response>' +
-    '<Gather input="speech" language="de" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="/voice/turn?callId=x" method="POST"/>' +
+    '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="/voice/turn?callId=x" method="POST"/>' +
     '<Redirect method="POST">/voice/turn?callId=x</Redirect>' +
     '</Response>');
 });
@@ -35,13 +35,15 @@ test("Gather ohne Prompt -> self-closing Gather + Redirect", () => {
 // Regression (Inbound-Audio-Bug 2026-06-15): Ohne transcriptionEngine transkribiert
 // Telnyx `<Gather input="speech">` NICHT -> kein SpeechResult -> Agent hoert den
 // Angerufenen nie. Diese Invariante schuetzt vor erneutem stillem Weglassen. Seit
-// 2026-06-16 ist die Engine "Deepgram" (Nova-3, language="de").
+// 2026-06-16 ist die Engine "Deepgram" (Nova-3); language MUSS das volle Locale "de-DE"
+// sein - "de" allein faellt Telnyx-seitig auf Englisch zurueck -> leeres Transcript
+// (echte STT-Records, 2026-06-20). Diese Invariante schuetzt vor Rueckfall auf "de".
 test("Telnyx-Gather aktiviert STT (transcriptionEngine gesetzt, sonst kein SpeechResult)", () => {
   const out = renderDirectives([gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1" })]);
   assert.match(out, /<Gather\b[^>]*\binput="speech"/, "Sprach-Eingabe aktiv");
   assert.match(out, /<Gather\b[^>]*\btranscriptionEngine="Deepgram"/, "STT-Engine gesetzt (Deepgram Nova-3)");
   assert.match(out, /<Gather\b[^>]*\bmodel="deepgram\/nova-3"/, "Deepgram-Modell gesetzt");
-  assert.match(out, /<Gather\b[^>]*\blanguage="de"/, "Deepgram-Sprachcode fuer Deutsch (de, nicht de-DE)");
+  assert.match(out, /<Gather\b[^>]*\blanguage="de-DE"/, "Sprachcode fuer Deutsch = volles Locale de-DE (nicht 'de' allein)");
 });
 
 test("Say + Hangup -> TeXML byte-identisch (Budget/EndCall)", () => {

@@ -22,15 +22,18 @@ const TELNYX_VOICE = Object.freeze({
 // input="speech">` keine Sprache und sendet kein SpeechResult zurueck (Telnyx-
 // TeXML-Spec) - das war der Inbound-Audio-Bug (Agent hoerte den Angerufenen nie).
 // "Deepgram" + model "deepgram/nova-3" = hoechste Erkennungsgenauigkeit (Owner-Wahl
-// 2026-06-16; Premium-Add-on, ersetzt die in-house-Engine). KRITISCH: Deepgram
-// erwartet fuer Deutsch den Sprachcode "de" (NICHT "de-DE", sonst keine Transkription);
-// der model-Vendor MUSS zu transcriptionEngine passen (Telnyx-Doku). Twilios
+// 2026-06-16; Premium-Add-on, ersetzt die in-house-Engine). KRITISCH: language MUSS das
+// volle Locale "de-DE" sein. Die fruehere Annahme "de allein" (2026-06-16) war FALSCH und
+// durch echte STT-Billing-Records widerlegt: Telnyx erkennt "de" nicht als Deutsch ->
+// Fallback auf Englisch (Records zeigten language:'en') -> deutsche Sprache wird mit
+// englischem Modell transkribiert -> leeres Transcript (Telnyx-Support-AI + Account-
+// Records 2026-06-20). Der model-Vendor MUSS zu transcriptionEngine passen (Telnyx-Doku). Twilios
 // speechModel/speechTimeout/actionOnEmptyResult sind Twilio-spezifisch und hier
 // bewusst NICHT gesetzt. Attribut-Reihenfolge ist vertraglich (Einfuege-Reihenfolge);
 // der Snapshot-Test nagelt sie fest.
 const GATHER_ATTRS = Object.freeze({
   input: "speech",
-  language: "de",
+  language: "de-DE",
   transcriptionEngine: "Deepgram",
   model: "deepgram/nova-3",
 });
