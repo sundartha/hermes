@@ -27,15 +27,19 @@ const TELNYX_VOICE = Object.freeze({
 // durch echte STT-Billing-Records widerlegt: Telnyx erkennt "de" nicht als Deutsch ->
 // Fallback auf Englisch (Records zeigten language:'en') -> deutsche Sprache wird mit
 // englischem Modell transkribiert -> leeres Transcript (Telnyx-Support-AI + Account-
-// Records 2026-06-20). Der model-Vendor MUSS zu transcriptionEngine passen (Telnyx-Doku). Twilios
-// speechModel/speechTimeout/actionOnEmptyResult sind Twilio-spezifisch und hier
-// bewusst NICHT gesetzt. Attribut-Reihenfolge ist vertraglich (Einfuege-Reihenfolge);
-// der Snapshot-Test nagelt sie fest.
+// Records 2026-06-20). Der model-Vendor MUSS zu transcriptionEngine passen (Telnyx-Doku).
+// speechTimeout="auto" ist gesetzt (Telnyx-Empfehlung 2026-06-20, Gather-Doku): aktiviert
+// End-of-Speech-Erkennung, damit der Gather nach dem Sprechende prompt zurueckpostet statt
+// auf einen festen Stille-Timeout zu warten - ohne diese Erkennung kann der erste Turn (in
+// dem der Agent seinen Anlass nennt) verzoegert/aus bleiben. speechModel/actionOnEmptyResult
+// bleiben Twilio-spezifisch und ungesetzt. Attribut-Reihenfolge ist vertraglich (Einfuege-
+// Reihenfolge); der Snapshot-Test nagelt sie fest.
 const GATHER_ATTRS = Object.freeze({
   input: "speech",
   language: "de-DE",
   transcriptionEngine: "Deepgram",
   model: "deepgram/nova-3",
+  speechTimeout: "auto",
 });
 
 // XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden

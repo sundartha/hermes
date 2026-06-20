@@ -15,7 +15,7 @@ test("Gather + Say + Redirect -> TeXML byte-identisch (inkl. XML-Escaping)", () 
   const out = renderDirectives([gather({ promptText: "Hallo & willkommen <bei> Jonas?", action }), redirect(action)]);
   assert.equal(out,
     XML + '<Response>' +
-    '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="/voice/turn?callId=call_abc" method="POST">' +
+    '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" speechTimeout="auto" action="/voice/turn?callId=call_abc" method="POST">' +
     '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">Hallo &amp; willkommen &lt;bei&gt; Jonas?</Say>' +
     '</Gather>' +
     '<Redirect method="POST">/voice/turn?callId=call_abc</Redirect>' +
@@ -27,7 +27,7 @@ test("Gather ohne Prompt -> self-closing Gather + Redirect", () => {
   const out = renderDirectives([gather({ promptText: "", action }), redirect(action)]);
   assert.equal(out,
     XML + '<Response>' +
-    '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" action="/voice/turn?callId=x" method="POST"/>' +
+    '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" speechTimeout="auto" action="/voice/turn?callId=x" method="POST"/>' +
     '<Redirect method="POST">/voice/turn?callId=x</Redirect>' +
     '</Response>');
 });
@@ -44,6 +44,7 @@ test("Telnyx-Gather aktiviert STT (transcriptionEngine gesetzt, sonst kein Speec
   assert.match(out, /<Gather\b[^>]*\btranscriptionEngine="Deepgram"/, "STT-Engine gesetzt (Deepgram Nova-3)");
   assert.match(out, /<Gather\b[^>]*\bmodel="deepgram\/nova-3"/, "Deepgram-Modell gesetzt");
   assert.match(out, /<Gather\b[^>]*\blanguage="de-DE"/, "Sprachcode fuer Deutsch = volles Locale de-DE (nicht 'de' allein)");
+  assert.match(out, /<Gather\b[^>]*\bspeechTimeout="auto"/, "End-of-Speech-Erkennung aktiv (Gather postet nach Sprechende prompt zurueck)");
 });
 
 test("Say + Hangup -> TeXML byte-identisch (Budget/EndCall)", () => {

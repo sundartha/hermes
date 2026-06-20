@@ -249,9 +249,12 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
 
 // Provider-bewusstes Auslesen des Speech-Ergebnisses aus dem Webhook-Body.
-// Twilio sendet `SpeechResult`, Telnyx sendet `Transcript` (Telnyx-TeXML-Doku).
+// Twilio sendet `SpeechResult`. Telnyx: laut TeXML-Doku `Transcript`, real zeigen die
+// Turn-Posts (2026-06-20, [turn-recv]) aber `SpeechResult` (und KEIN `Transcript`) -
+// daher defensiv BEIDE lesen, damit der Agent den erkannten Text nutzt, egal in welchem
+// Feld Telnyx ihn liefert (sonst hoert der Agent trotz korrekter STT nichts -> Stille).
 function extractSpeech(req, provider) {
-  if (provider === "telnyx") return (req.body.Transcript || "").trim();
+  if (provider === "telnyx") return (req.body.Transcript || req.body.SpeechResult || "").trim();
   return (req.body.SpeechResult || "").trim();
 }
 
@@ -482,6 +485,13 @@ app.post("/voice/turn", async (req, res) => {
       ));
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
+    // TEMP-DIAGNOSE (Turn-Erfolgspfad, Gegenstueck zu [turn-recv]): belegt, dass das LLM
+    // antwortet und der Agent seinen Anlass nennt (nur Laengen, nie Roh-Text/PII).
+    // Phase 3: zusammen mit [turn-recv] wieder entfernen.
+    console.log("[turn-ok]",
+      "heard=" + (heard ? heard.length : 0),
+      "reply=" + (speech ? speech.length : 0),
+      "endCall=" + !!endCall);
     const directives = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
