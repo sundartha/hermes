@@ -1,4 +1,4 @@
-// CP4 (P3b-R, call-debug-p3b-r.md 3.1): /voice/outbound ist LLM-FREI. Statt
+// CP4 (P3b-R): /voice/outbound ist LLM-FREI. Statt
 // agentTurn synchron im Webhook zu rufen, rendert der Pfad sofort, deterministisch
 // und ohne Anthropic-Call die Pflicht-Offenlegung + ein <Gather> (Vorbild Inbound).
 // Damit kollabieren die frueheren drei Faelle (normaler Turn / endCall / agentTurn

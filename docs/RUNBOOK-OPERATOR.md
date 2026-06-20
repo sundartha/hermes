@@ -3,7 +3,7 @@
 > Stand 2026-06-19. Diese Schritte kann **nur ein Mensch mit Account/Geld/Live-Zugang**
 > fahren — sie sind bewusst NICHT autonom automatisierbar. Code-seitig ist alles fertig
 > (P0-P8, I1-I9, REST-P6, F1-F5); offen sind ausschliesslich Aktivierungs- und Live-Smokes.
-> Quelle der Liste: `STATUS-OFFENE-PHASEN.md` Abschnitt 1-3. Konvention: Deutsch ohne Umlaute.
+> Quelle der Liste: `STATUS.md`. Konvention: Deutsch ohne Umlaute.
 
 ---
 
@@ -28,7 +28,7 @@ dann **4/5/6 unabhaengig**. Gate 7 (Secrets) laeuft begleitend.
 **Status:** Fix ist auf origin (`04549c4`: provider-bewusster `extractSpeech` + absolute
 action-URL), aber **unverifiziert**. Hartes Gate aus dem Pre-Mortem: kein Fix gilt als
 bestaetigt, bevor der echte Telnyx-POST-Body beobachtet ist. Details:
-`BERICHT-INBOUND-STT-2026-06-16.md`.
+`STATUS.md` Abschnitt 1.
 
 **Voraussetzung:** Fix muss live sein → erst `git push upstream master` (Abschnitt 0),
 Deploy abwarten, `[boot]`-Banner pruefen.
@@ -215,4 +215,4 @@ Offenlegungssatz bei Outbound.
 - **P8 Scale-Infra** (PgBouncer-Tuning/Read-Replicas/Partitionierung) → erst bei echter Last.
 - **Allowlist-Lockerung** (Phase 0.6) → Owner-Entscheidung 2026-06-13: auf Phase 2 vertagt;
   bis dahin bleibt die Allowlist das harte letzte Gate.
-- **Tech-Debt TD-1…TD-11** → `STATUS-OFFENE-PHASEN.md` Abschnitt 2 (mit Fundstelle + Faelligkeit).
+- **Tech-Debt TD-1…TD-11** → `STATUS.md`.

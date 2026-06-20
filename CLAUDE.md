@@ -2,15 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# Vodafone Agent
+# Sundartha
 
-Autonomer Telefon-KI-Agent: Twilio Voice + Claude (Haiku) + MCP-Server. Node.js (ESM), Express, kein Build-Step, kein TypeScript. Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
+Autonomer Telefon-KI-Agent: Twilio + Telnyx Voice, Claude (Haiku) als Gespraechs-Gehirn, optional OpenAI Realtime (Streaming-Audio), MCP-Server. Node.js (ESM), Express, kein Build-Step, kein TypeScript. Multi-Tenant, JSON- oder Postgres-Store, OAuth/OIDC-Auth. Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
 
 ## Kontext
 
-Du arbeitest an einem Demo-Prototyp fuer Vodafone: ein persoenlicher KI-Telefonassistent, der Inbound-Anrufe entgegennimmt (Nachrichten, Termine) und Outbound-Anrufe im Auftrag des Besitzers fuehrt (z.B. Friseurtermin vereinbaren). Steuerbar ueber ein Web-Dashboard und als MCP-Connector direkt aus Claude.
+Sundartha ist ein persoenlicher KI-Telefonassistent, der Inbound-Anrufe entgegennimmt (Nachrichten, Termine) und Outbound-Anrufe im Auftrag des Besitzers fuehrt (z.B. Friseurtermin vereinbaren). Steuerbar ueber ein Web-Dashboard und als MCP-Connector direkt aus Claude.
 
-Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Menschen. Deshalb gilt: Sicherheits- und Kosten-Gates haben Prioritaet vor Features. Bewusste Prototyp-Vereinfachungen (JSON-Store statt DB, statisches Token statt OAuth) sind in README und `PLAN-SECURITY.md` dokumentiert — neue Abweichungen ebenfalls dort festhalten.
+**Vision: ein Produkt, das diesen Assistenten Millionen Menschen zugaenglich machen soll.** Jede nicht-triviale Entscheidung wird an diesem Anspruch gemessen — nachhaltig, sauber, skalierbar, kein Wegwerf-Code. Die einfachste funktionsfaehige Loesung bleibt das Ziel (kein BDUF, inkrementell), aber Seams/Abstraktionen werden so gebaut, dass sie Skala tragen.
+
+Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Menschen. Deshalb gilt erst recht bei Millionen-Skala: Sicherheits- und Kosten-Gates haben Prioritaet vor Features. Das Fundament ist Richtung Produktion gebaut (Provider-Abstraktion Twilio+Telnyx, Postgres-Store, Multi-Tenancy, OAuth/OIDC, Stripe-Billing, Onboarding/Provisioning). Verbliebene bewusste Vereinfachungen sind in README und `PLAN-SECURITY.md` dokumentiert und werden schrittweise gehaertet, nicht als dauerhaft akzeptiert — neue Abweichungen ebenfalls dort festhalten.
+
+> Altname: Repo-Verzeichnis, Render-Service und einige Env-/Pfadnamen tragen noch `vodafone-agent`. Die Produktidentitaet ist **Sundartha**; eine Umbenennung von Infra/Pfaden steht separat aus und ist nicht Teil normaler Tasks.
 
 ## Workflow
 
@@ -40,17 +44,22 @@ Hart verboten: Magic Numbers (ausser 0/1/-1) ohne benannte Konstante, toter Code
 
 ## Architektur
 
-- `src/server.js` — Gateway: Twilio-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware
-- `src/bridge.js` — Audio-Bridge Twilio Media Streams <-> OpenAI Realtime (nur `VOICE_ENGINE=realtime`); enthaelt als `HEIKLE STELLE` markierte Abschnitte (Barge-in, Call-Ende) — dort besonders vorsichtig editieren
-- `src/claude.js` — Gespraechslogik (System-Prompts, Tool-Loop, Summaries); enthaelt den fest verdrahteten Offenlegungssatz
+Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (turn-basiert, Gather/STT — der heute live laufende Default) und `realtime` (Streaming-Audio ueber `bridge.js`).
+
+- `src/server.js` — Gateway: Provider-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware, Onboarding-/Self-Service-Routen
+- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`/`media-events.js`; Adapter unter `adapters/twilio/*` und `adapters/telnyx/*` (voice, render, signature, media, messaging, numbers). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
+- `src/bridge.js` — Audio-Bridge Media-Streams <-> OpenAI Realtime (nur `VOICE_ENGINE=realtime`); enthaelt als `HEIKLE STELLE` markierte Abschnitte (Barge-in, Call-Ende) — dort besonders vorsichtig editieren
+- `src/claude.js` — Gespraechslogik (System-Prompts, Tool-Loop, Summaries), pro-Tenant ueber `tenantContext`; enthaelt den fest verdrahteten Offenlegungssatz. Der resiliente LLM-Seam `src/llm.js` (Timeout/Retry/Circuit-Breaker, P3b-R) sitzt davor.
 - `src/mcp-tools.js` — MCP-Tool-Definitionen (sprechen mit der REST-API), `src/mcp-server.js` — stdio-Transport
-- `src/store.js` — JSON-Persistenz (`data/store.json`, gitignored; loeschen = Demo-Reset)
-- `src/config.js` — gesamte Konfiguration aus `.env`, inkl. Safety-Gates
-- `public/` — Dashboard (statisches HTML/JS, pollt `/api/state`)
+- `src/store.js` + `src/store/` — Persistenz-Fassade ueber zwei Backends: `json.js` (`data/store.json`, gitignored; loeschen = lokaler Reset) und `pg.js` (Postgres, RLS). `defaults.js`/`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`. Multi-Tenant: pro-Tenant settings/calendar/usage/budget.
+- `src/auth.js` / `src/web-auth.js` — MCP-Auth (Legacy-Token oder OAuth-OIDC via `jose`) bzw. Browser-Login (OIDC Auth-Code + PKCE); `src/audit-store.js`, `src/middleware.js`
+- `src/billing/` (Stripe Hold/Capture + Metering, hinter `PAYMENT_ENABLED`), `src/onboarding.js`, `src/worker/provisioning.js`, `src/queue/` (Nummern-Provisioning, Queue-Backend memory/pg-boss)
+- `src/config.js` — gesamte Konfiguration aus `.env`, inkl. Safety-Gates; `src/boot-guard.js`/`src/process-guards.js` (Start-/Prozess-Sicherungen)
+- `public/` — Dashboards (statisches HTML/JS, pollt `/api/state`): `index.html` (Owner) + `tenant.html` (Tenant-Self-Service)
 
 ## Absolute Regeln
 
-1. **SAFETY-GATES**: Allowlist (`ALLOWED_NUMBERS`), Budget-Guard (`MAX_BUDGET_EUR`), Max-Gespraechsdauer und Twilio-Signaturpruefung duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates.
+1. **SAFETY-GATES**: Allowlist (`ALLOWED_NUMBERS`), Denylist/Land-Gate/Stundenlimit, Budget-Guard (`MAX_BUDGET_EUR`, global UND pro-Tenant — Schnittmenge), Max-Gespraechsdauer und die Provider-Signaturpruefung (Twilio HMAC + Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates.
 2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
 3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind standardmaessig hinter Basic-Auth; Ausnahmen (wie `/voice`, `/mcp`, `/healthz`) brauchen eine eigene Absicherung und eine Begruendung im Code-Kommentar. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
@@ -110,7 +119,8 @@ Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js
 - `.claude/refs/workflow.md` — Pflicht bei nicht-trivialen Tasks (Plan Mode, Subagents, Verifikation, `tasks/todo.md` + `tasks/lessons.md`)
 - `.claude/refs/clean-code.md` — Code-Qualitaetsregeln (Pruefkatalog) bei nicht-trivialen Edits
 - `PLAN-SECURITY.md` — Sicherheits-Plan in Phasen (Phase 1 umgesetzt); bei Security-Arbeit zuerst lesen
-- `README.md` — Setup, Engines, bewusste Prototyp-Abweichungen
+- `README.md` — Setup, Engines, bewusste Vereinfachungen/Abweichungen
+- `STATUS.md` — offene Punkte / Status (abgeschlossene Phasen stehen in der Git-History)
 - `ONBOARDING.md` — Einstieg fuer Mitarbeiter
 - `.env.example` — alle Env-Variablen mit Erklaerung
 - `render.yaml` — Render-Deployment (Blueprint)

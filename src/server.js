@@ -462,7 +462,7 @@ app.post("/voice/incoming", (req, res) => {
 
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
 app.post("/voice/turn", async (req, res) => {
-  // TEMP-DIAGNOSE (Inbound-STT, siehe PLAN-INBOUND-AUDIO-STT.md): VOR dem Guard, damit
+  // TEMP-DIAGNOSE (STT-Live-Abschluss, siehe STATUS.md Abschnitt 2): VOR dem Guard, damit
   // auch ein fehlender callId sichtbar wird (die relative action-URL `?callId=` verliert
   // bei Telnyx evtl. den Query-String -> frueher Hangup, ohne dass der Turn laeuft).
   // Nur Feld-NAMEN + Wert-LAENGEN, nie Roh-Werte (DSGVO/PII). Phase 3: wieder entfernen.
@@ -496,7 +496,7 @@ app.post("/voice/turn", async (req, res) => {
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
-    // Schicht 2 (P3b-R, call-debug-p3b-r.md 3.2): bei anhaltender LLM-Nichtverfuegbarkeit
+    // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit
     // (Breaker offen ODER Retries erschoepft -> LlmUnavailableError aus llm.complete)
     // wuerdevoll und kontrolliert beenden statt mit einem nackten "technischen Problem"
     // aufzulegen: der Agent verabschiedet sich hoeflich und sichert die Rueckmeldung zu.
@@ -522,7 +522,7 @@ app.post("/voice/outbound", async (req, res) => {
     return res.type("text/xml").send(render(streamDirectives(call), call.provider));
   }
 
-  // Schicht 1 (P3b-R, call-debug-p3b-r.md 3.1): /voice/outbound ist LLM-FREI. Die
+  // Schicht 1 (P3b-R): /voice/outbound ist LLM-FREI. Die
   // Pflicht-Offenlegung (Regel 2) + ein <Gather> werden sofort, deterministisch,
   // ohne Anthropic-Call gerendert - exakt wie der bewaehrte Inbound-Pfad
   // (turnDirectives(call, greeting)). Der Webhook haengt damit NIE an einem
@@ -1112,7 +1112,7 @@ const httpServer = app.listen(config.port, () => {
   const port = httpServer.address().port;
   // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
   process.env.GATEWAY_URL ||= `http://localhost:${port}`;
-  // TEMP-DIAGNOSE (PLAN-INBOUND-AUDIO-STT.md): deployten Commit ausgeben, damit im
+  // TEMP-DIAGNOSE (STT-Live-Abschluss, siehe STATUS.md Abschnitt 2): deployten Commit ausgeben, damit im
   // Render-Log eindeutig sichtbar ist, WELCHE Version laeuft (Render setzt
   // RENDER_GIT_COMMIT). Phase 3: wieder entfernen.
   console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);

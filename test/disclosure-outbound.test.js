@@ -1,6 +1,5 @@
 // Regel 2 (Absolute Regeln): Der fest verdrahtete Offenlegungssatz muss bei
-// Outbound-Calls der allererste gesprochene Satz sein. CP4 (P3b-R,
-// call-debug-p3b-r.md 3.1): /voice/outbound ist LLM-frei - die Offenlegung wird
+// Outbound-Calls der allererste gesprochene Satz sein. CP4 (P3b-R): /voice/outbound ist LLM-frei - die Offenlegung wird
 // deterministisch ohne Anthropic-Call als erster Knoten gerendert, gefolgt von
 // einem <Gather> (kein stummer Hangup, der Call bleibt offen). Genau das nagelt
 // dieser Test fest.

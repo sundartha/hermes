@@ -2,3 +2,5 @@ node_modules/
 .env
 data/
 .twilio-recovery-code
+render-logs.sh
+setup-render-key.sh

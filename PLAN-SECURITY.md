@@ -244,7 +244,7 @@ neuen Dependencies:
 
 Umbau vom owner-only-Prototyp zum Multi-Tenant-SaaS (Privatkunden zuerst, B2C).
 B legt das Fundament: wer darf rein, wie werden Kunden hart getrennt, welche
-Zugriffe sind erlaubt. Spec: `docs/superpowers/specs/2026-06-15-auth-tenant-foundation-design.md`,
+Zugriffe sind erlaubt. Spec umgesetzt (Details in der Git-History),
 adversarial geprueft via `/council` (`~/Larry/drafts/2026-06-15_council_auth-tenant-foundation.md`).
 
 **Zwei-Pfad-Architektur.** Der synchrone Owner-Spiegel-Store (`store.js`, Agent-/
@@ -324,7 +324,7 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
 
 Ein Node-Prozess bedient ALLE gleichzeitigen Calls + das Web-Stack: ein entkommener
 Throw/Reject killte bisher jeden laufenden Call. P0 installiert ein globales Crash-Netz
-und entkoppelt den Boot-Pfad. Plan: `tasks/crash-hotspots/P0-plan.md`.
+und entkoppelt den Boot-Pfad. (P0 umgesetzt.)
 
 - **Globales Crash-Netz** (`src/process-guards.js`, erste Importzeile in `server.js` +
   `mcp-server.js`, vor `store.js` -> ESM-Eval-Order). `unhandledRejection` UND
@@ -392,7 +392,7 @@ Billing/Real-Provisioning (D) sind separater Scope.
 
 Der JSON-Store (`src/store/json.js`) ist der einzige Persistenz-Pfad fuer Calls, Tenants,
 Usage/Budget-Counter, Profile und Nummern. P1 haertet ihn quellseitig (P0 = globales Netz,
-P1 = Quelle). Plan: `tasks/crash-hotspots/P1-plan.md`.
+P1 = Quelle). (P1 umgesetzt.)
 
 - **Atomic write (AC1, `save()`):** Schreibt nie mehr in-place. Stattdessen Temp-File IM
   SELBEN Verzeichnis (`<FILE>.tmp-<pid>-<rand>`) -> `fsyncSync` -> `renameSync` ueber
@@ -453,7 +453,7 @@ persistiert (kein Lost Update).
 
 Die unheimlichste Crash-Klasse failt nicht laut, sondern lautlos OPEN: ein Safety-/Kosten-Gate
 schaltet sich ohne Signal ab (z.B. `costEur >= NaN` ist IMMER false -> Budget-Guard blockt nie).
-P2 ersetzt stilles OPEN durch lautes Refusal. Plan: `tasks/crash-hotspots/P2-plan.md`.
+P2 ersetzt stilles OPEN durch lautes Refusal. (P2 umgesetzt.)
 
 - **`numEnv()`-Helper + `Number.isFinite`-Guards (AC1/AC2, `config.js`):** Alle 12 numerischen
   Env-Parses (inkl. der P6-Geldwerte `numberSetupFeeCents`, `voiceMinuteCostCents`) laufen ueber
@@ -509,7 +509,7 @@ Config -> `/healthz` 200 `{"ok":true}`.
 OT-1..OT-4 wiederkehren, weil der eigentliche Failure-Mode-Code (echte OIDC-fetch/parse,
 mcp-tools-Deref, async-Routen-Rejection) nirgends asserted war und bei jedem Refactor blind
 regredierte. P4 deckt diese ungetesteten External-I/O-Pfade ab UND beginnt, den `server.js`-God-File
-strukturell zu zerlegen. Plan: `tasks/crash-hotspots/P4-plan.md`. **Alle Safety-Gates (Allowlist,
+strukturell zu zerlegen. (P4 umgesetzt.) **Alle Safety-Gates (Allowlist,
 Budget, Max-Dauer, Twilio-Signatur) und der fest verdrahtete Disclosure-Satz bleiben inhaltlich
 UNANGETASTET** - P4 fasst nur Coverage, Error-Handling und strukturelle Verschiebung an; die
 Secret-Disziplin (Regel 4/5) wird durch AC3/AC4 sogar verschaerft.

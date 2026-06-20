@@ -1,4 +1,4 @@
-// CP4 (P3b-R, call-debug-p3b-r.md): End-to-end-Verhalten des Outbound-/Turn-Pfads
+// CP4 (P3b-R): End-to-end-Verhalten des Outbound-/Turn-Pfads
 // gegen einen flackernden Anthropic-Upstream ("Premature close" = chunked-Body wird
 // vom Server abgebrochen). Pinnt fuer BEIDE Provider (Twilio + Telnyx):
 //   A - /voice/outbound ist LLM-frei: Offenlegung + <Gather>, kein LLM-Call (kein
