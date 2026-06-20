@@ -5,23 +5,30 @@
 // Disclosure - messages.create ist ein reiner, statusloser LLM-Call (idempotent,
 // kein Toll-Fraud bei Retry).
 //
-// Connection-Hygiene (CP2-Scope-Entscheidung): Der explizite Keep-Alive-Agent mit
-// kurzem freeSocketTimeout (Umbrella 3.3) wird bewusst auf CP7 verschoben - dort
-// kommt mit dem SDK-Major-Upgrade der undici-Dispatcher (keepAliveTimeout) sauberer,
-// statt tief in die node-fetch-Internals des SDK 0.39 zu greifen (waere CP7-Wegwerf).
-// In CP2 wirkt die Hygiene ueber das Retry selbst: maxRetries:0 am SDK + manueller
-// Retry holt beim Re-Request eine frische fetch-Connection (vergifteter Socket wird
-// nicht im selben fetch wiederverwendet). Keine neue Dependency.
+// Connection-Hygiene: Das SDK 0.105 nutzt native fetch (undici unter Node) statt
+// node-fetch/agentkeepalive. Ein expliziter undici-Dispatcher mit kurzem
+// keepAliveTimeout (Umbrella 3.3) bleibt VORERST aussen vor: undici ist in Node 22
+// NICHT als importierbares Modul freigegeben (nur intern fuer global fetch; empirisch
+// belegt: import "undici"/"node:undici" werfen ERR_MODULE_NOT_FOUND/ERR_UNKNOWN_BUILTIN_MODULE,
+// kein globalThis.getGlobalDispatcher). Ein eigener Dispatcher braeuchte daher undici
+// als neue Dependency - ausserhalb des CP7-Scopes (Owner-Freigabe noetig). Die Hygiene
+// wirkt weiter ueber das Retry selbst: maxRetries:0 am SDK + manueller Retry holt beim
+// Re-Request eine frische fetch-Connection (vergifteter Socket wird nicht im selben
+// fetch wiederverwendet). Zusaetzlich faengt isTransient den neuen undici-Premature-
+// close (UND_ERR_SOCKET) sowohl ueber APIConnectionError als auch als Defense-in-Depth.
 import Anthropic from "@anthropic-ai/sdk";
 
 // Transiente HTTP-Status: Verbindungs-/Lastklasse, vom Server gefahrlos wiederholbar.
 // 408 Timeout, 409 Conflict, 429 RateLimit, >=500 Server. NICHT 400/401/403/404/422.
 const RETRYABLE_STATUS = new Set([408, 409, 429]);
 const SERVER_ERROR_MIN = 500;
-// Roh-node-fetch-Transportfehler (das SDK 0.39 liest den Body AUSSERHALB des Retry
-// -> ein "Premature close" kommt als FetchError durch, nicht als APIConnectionError).
-// Plus die nackten Socket-Reset-Codes.
-const TRANSIENT_CODES = new Set(["ERR_STREAM_PREMATURE_CLOSE", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EPIPE"]);
+// Rohe Transport-Fehlercodes (Verbindungsklasse, gefahrlos wiederholbar).
+// UND_ERR_SOCKET = undici "other side closed": Unter dem SDK 0.105 (native fetch)
+// erscheint der Premature close als APIConnectionError (von isTransient ueber branch 1
+// gefangen); dessen verschachtelte cause traegt diesen undici-Code. Hier defensiv im
+// Set, falls der instanceof-Pfad je ausfaellt (Defense-in-Depth, empirisch belegt).
+// ERR_STREAM_PREMATURE_CLOSE bleibt als node-fetch-Erbe (Bedrock/aeltere Pfade).
+const TRANSIENT_CODES = new Set(["ERR_STREAM_PREMATURE_CLOSE", "UND_ERR_SOCKET", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EPIPE"]);
 const PREMATURE_CLOSE_MESSAGE = "Premature close";
 // Voll-Jitter-Backoff verdoppelt die Basis pro Versuch (gegen Thundering Herd).
 const BACKOFF_FACTOR = 2;
