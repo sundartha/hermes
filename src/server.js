@@ -10,6 +10,7 @@ import * as store from "./store.js";
 import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN, normNum } from "./store/defaults.js";
 import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from "./store/views.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
+import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
@@ -357,6 +358,14 @@ function turnDirectives(call, text) {
   return [gatherD({ promptText: text, action }), redirectD(action)];
 }
 
+// Gesprochene Degradations-Texte fuer den /voice/turn-Fehlerpfad (G25: benannt statt
+// inline). LLM_DEGRADED_SPEECH: wuerdevolles, kontrolliertes Ende bei anhaltender
+// LLM-Nichtverfuegbarkeit (LlmUnavailableError aus dem resilienten Seam). TURN_ERROR_SPEECH:
+// generisches technisches Ende fuer jeden anderen (nicht-transienten) Fehler (Bestand,
+// byte-identisch zum frueheren Inline-String).
+const LLM_DEGRADED_SPEECH = "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.";
+const TURN_ERROR_SPEECH = "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.";
+
 // Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
 // provider-aware (Twilio /media byte-identisch, Telnyx eigener Pfad) - der upgrade-
 // Handler leitet daraus fail-closed den Provider ab. stream_token authentifiziert
@@ -477,10 +486,15 @@ app.post("/voice/turn", async (req, res) => {
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
-    res.type("text/xml").send(render([
-      sayD("Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut."),
-      hangupD(),
-    ], call.provider));
+    // Schicht 2 (P3b-R, call-debug-p3b-r.md 3.2): bei anhaltender LLM-Nichtverfuegbarkeit
+    // (Breaker offen ODER Retries erschoepft -> LlmUnavailableError aus llm.complete)
+    // wuerdevoll und kontrolliert beenden statt mit einem nackten "technischen Problem"
+    // aufzulegen: der Agent verabschiedet sich hoeflich und sichert die Rueckmeldung zu.
+    // KEIN Retry hier (der Seam hat bereits begrenzt+selektiv retried); das Gespraech
+    // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
+    // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
+    const speech = err instanceof LlmUnavailableError ? LLM_DEGRADED_SPEECH : TURN_ERROR_SPEECH;
+    res.type("text/xml").send(render([sayD(speech), hangupD()], call.provider));
   }
 });
 
@@ -498,38 +512,18 @@ app.post("/voice/outbound", async (req, res) => {
     return res.type("text/xml").send(render(streamDirectives(call), call.provider));
   }
 
-  // Pflicht-Offenlegung fest verdrahtet als allererster Satz (kein KI-Ermessen).
-  // Vor dem try gebaut, damit auch der Fehlerpfad (agentTurn wirft) sie als
-  // ersten Knoten ausgibt - sonst legt der Agent stumm auf (Regel 2).
+  // Schicht 1 (P3b-R, call-debug-p3b-r.md 3.1): /voice/outbound ist LLM-FREI. Die
+  // Pflicht-Offenlegung (Regel 2) + ein <Gather> werden sofort, deterministisch,
+  // ohne Anthropic-Call gerendert - exakt wie der bewaehrte Inbound-Pfad
+  // (turnDirectives(call, greeting)). Der Webhook haengt damit NIE an einem
+  // flackernden Upstream; das Anliegen nennt der Agent erst im ersten /voice/turn,
+  // abgesichert durch den resilienten Seam (src/llm.js) + die Degradation dort.
+  // turnDirectives(call, "") -> <Gather> ohne inneren Say (leerer Prompt) -> nach der
+  // Offenlegung wird genau EINE Eingabe eingesammelt; der <Gather action>-POST auf
+  // /voice/turn faehrt den normalen, LLM-getriebenen Turn.
   const disclosure = disclosureSentence(call);
   store.addTranscript(call.id, "agent", disclosure);
-  try {
-    const { speech, endCall } = await agentTurn(call, null); // Agent nennt sein Anliegen
-    const tail = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
-    // TEMP-DIAGNOSE (Outbound-Erfolgspfad, siehe docs/strategy/call-debug.md Abschnitt 6):
-    // macht den endCall-Fall (T1) sichtbar - der throw-Fall (T2) loggt bereits [outbound],
-    // der Erfolgsfall bisher GAR NICHTS. Nur Enums/Booleans (callId = interne ID wie bei
-    // [turn-recv]), nie Speech/PII (DSGVO). Phase 6: wieder entfernen.
-    console.log("[outbound-recv]",
-      "callId=" + call.id,
-      "engine=" + config.voiceEngine,
-      "endCall=" + endCall,
-      "tail=" + (endCall ? "hangup" : "gather"));
-    res.type("text/xml").send(render([sayD(disclosure), ...tail], call.provider));
-  } catch (err) {
-    // Fehlerpfad (T2, call-debug.md 3.2): agentTurn wirft (Anthropic-/Meter-Fehler).
-    // Statt stumm aufzulegen rendern wir EINEN Retry: Offenlegung-<Say> + <Gather>
-    // (turnDirectives mit leerem Prompt -> Gather ohne inneren Say). So bleibt STT
-    // scharf und der Call offen, statt nach der Offenlegung tot zu sein.
-    // KEIN erneuter agentTurn hier (kein Webhook-Loop): der <Gather action>-POST auf
-    // /voice/turn faehrt den normalen Turn - leeres Speech und noch keine caller-Zeile
-    // -> agentTurn(call, null) (Agent re-greet/nennt sein Anliegen, :475).
-    // Abbruchbedingung gegen Endlosschleife: scheitert auch dieser Folge-Turn, legt der
-    // /voice/turn-catch terminal auf (kein Gather, :478-484) -> genau EIN Retry; ein
-    // stiller Anrufer wird vom Max-Dauer-Timer (am Originate gesetzt, :754) beendet.
-    console.error("[outbound]", err.message);
-    res.type("text/xml").send(render([sayD(disclosure), ...turnDirectives(call, "")], call.provider));
-  }
+  res.type("text/xml").send(render([sayD(disclosure), ...turnDirectives(call, "")], call.provider));
 });
 
 // Sekunden pro abgerechneter Voice-Minute (G25). Abgerechnet wird ab answeredAt

@@ -1,19 +1,14 @@
-// Phase P0 (docs/strategy/call-debug.md): Offline-Reproduktion der "No-Gather"-
-// Mechanik des Outbound-Antwort-Webhooks. Pinnt fuer BEIDE Provider (Twilio +
-// Telnyx) drei Faelle des /voice/outbound-Pfads (server.js:506-513):
-//   (i)  normaler Turn   -> Body enthaelt <Gather> NACH dem Disclosure (AK-1).
-//   (ii) endCall=true     -> Body enthaelt KEIN <Gather> (heutiger Bug, als
-//        dokumentierte Regression: der Agent legt nach einem Satz auf, Trigger T1).
-//   (iii) agentTurn wirft -> Disclosure + Retry-<Gather> ohne stummen Hangup
-//        (T2-Fix P3b): der Fehlerpfad legt nicht mehr auf, sondern haelt STT scharf.
-//
-// agentTurn ruft Anthropic ueber das SDK auf. Statt das Netz zu treffen, lenken
-// wir den Client per ANTHROPIC_BASE_URL (SDK-Default Core.readEnv, claude.js:9)
-// auf einen lokalen Mock - kein src/-Eingriff, deterministisch und offline. Der
-// Mock liefert je Fall genau eine Antwort (agentTurn ruft pro Fall genau einmal).
+// CP4 (P3b-R, call-debug-p3b-r.md 3.1): /voice/outbound ist LLM-FREI. Statt
+// agentTurn synchron im Webhook zu rufen, rendert der Pfad sofort, deterministisch
+// und ohne Anthropic-Call die Pflicht-Offenlegung + ein <Gather> (Vorbild Inbound).
+// Damit kollabieren die frueheren drei Faelle (normaler Turn / endCall / agentTurn
+// wirft): das Outbound-Markup haengt nicht mehr am LLM und ist mock-unabhaengig.
+// Dieser Test pinnt fuer BEIDE Provider (Twilio + Telnyx): Offenlegung VOR <Gather>,
+// kein <Hangup> (der Call bleibt offen), kein Agent-Speech (das Anliegen nennt der
+// Agent erst im ersten /voice/turn). Es findet KEIN LLM-Call statt -> kein
+// Anthropic-Mock noetig.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 
 const CALL_ID = "call_outbound1";
@@ -21,80 +16,15 @@ const CALL_ID = "call_outbound1";
 // callerName ist null -> ownerName = OWNER_NAME aus dem Test-Env ("Jonas"). Der Satz
 // enthaelt keine XML-Sonderzeichen, steht also in TwiML wie TeXML wortgleich im Body.
 const DISCLOSURE = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas.";
-// Agent-Anliegen im Normal-Turn (im <Gather>-Prompt gerendert).
-const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";
-// Abschiedssatz, den der Agent vor end_call sagt (zweiter <Say> im endCall-Body).
-const FAREWELL = "Vielen Dank, das war schon alles. Auf Wiederhoeren!";
+// Beide Renderer oeffnen den Sprach-Turn mit "<Gather" (Twilio-TwiML + Telnyx-TeXML).
+const GATHER = "<Gather";
+const HANGUP = "<Hangup";
 
-// Minimale, aber vollstaendige Anthropic-Message: agentTurn liest nur content +
-// usage (usage ist PFLICHT, sonst wirft trackUsage und der Fall faellt faelschlich
-// in den catch). stop_reason ist kosmetisch, wird aber realistisch gesetzt.
-function anthropicMessage(content, stopReason) {
-  return {
-    id: "msg_mock",
-    type: "message",
-    role: "assistant",
-    model: "claude-haiku-4-5",
-    content,
-    stop_reason: stopReason,
-    stop_sequence: null,
-    usage: { input_tokens: 12, output_tokens: 16 },
-  };
-}
-
-// behavior -> { status, body }. "throw" liefert 400: das SDK wiederholt 400 NICHT
-// (nur 408/409/429/5xx/Verbindungsfehler) -> agentTurn wirft sofort, kein Retry-Delay.
-function anthropicResponse(behavior) {
-  switch (behavior) {
-    case "normal":
-      return { status: 200, body: anthropicMessage([{ type: "text", text: AGENT_SPEECH }], "end_turn") };
-    case "endCall":
-      // Text + end_call in EINER Antwort: speech wird gesetzt, dann bricht der
-      // Tool-Loop ab (claude.js:222-225) -> genau ein Mock-Aufruf.
-      return {
-        status: 200,
-        body: anthropicMessage(
-          [
-            { type: "text", text: FAREWELL },
-            { type: "tool_use", id: "toolu_mock", name: "end_call", input: {} },
-          ],
-          "tool_use"
-        ),
-      };
-    case "throw":
-      return { status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "mock-fehler" } } };
-    default:
-      throw new Error(`unbekanntes behavior: ${behavior}`);
-  }
-}
-
-// Lokaler Anthropic-Messages-Mock: antwortet auf JEDEN Request identisch (Pfad
-// egal; das SDK postet /v1/messages). Request-Body wird gedraint, damit die
-// Verbindung nicht haengt. Single-Consumer-Double -> bewusst lokal, nicht in helpers.js.
-async function startAnthropicMock(behavior) {
-  const { status, body } = anthropicResponse(behavior);
-  const payload = JSON.stringify(body);
-  const server = http.createServer((req, res) => {
-    req.on("data", () => {});
-    req.on("end", () => {
-      res.statusCode = status;
-      res.setHeader("content-type", "application/json");
-      res.end(payload);
-    });
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return {
-    url: `http://127.0.0.1:${server.address().port}`,
-    close: () => new Promise((r) => server.close(r)),
-  };
-}
-
-// Faehrt /voice/outbound lokal gegen den gefakten agentTurn und liefert den
-// gerenderten Provider-Body (TwiML/TeXML). Mock + Server werden immer geschlossen.
-async function outboundBody({ provider, behavior }) {
-  const mock = await startAnthropicMock(behavior);
+// Faehrt /voice/outbound lokal und liefert den gerenderten Provider-Body
+// (TwiML/TeXML). Kein Anthropic-Mock: der Pfad ist LLM-frei. Server wird immer
+// geschlossen.
+async function outboundBody(provider) {
   const srv = await startServer({
-    env: { ANTHROPIC_BASE_URL: mock.url },
     seed: seedState({
       calls: [seedCall({ id: CALL_ID, provider, status: "active", direction: "outbound" })],
     }),
@@ -110,7 +40,6 @@ async function outboundBody({ provider, behavior }) {
     return await res.text();
   } finally {
     await srv.stop();
-    await mock.close();
   }
 }
 
@@ -123,40 +52,12 @@ function assertDisclosureBefore(body, marker) {
   assert.ok(discIdx < markerIdx, `Offenlegung muss VOR '${marker}' stehen: ${body}`);
 }
 
-// Beide Renderer oeffnen den Sprach-Turn mit "<Gather" (Twilio-TwiML + Telnyx-TeXML).
-const GATHER = "<Gather";
-const HANGUP = "<Hangup";
-
 for (const provider of ["twilio", "telnyx"]) {
-  test(`/voice/outbound (${provider}): normaler Turn rendert <Gather> nach der Offenlegung (AK-1)`, async () => {
-    const body = await outboundBody({ provider, behavior: "normal" });
+  test(`/voice/outbound (${provider}): LLM-frei -> Offenlegung + <Gather>, kein <Hangup> (CP4)`, async () => {
+    const body = await outboundBody(provider);
+    // Offenlegung als erster Knoten, dann <Gather> ohne inneren Say (leerer Prompt).
     assertDisclosureBefore(body, GATHER);
-    assert.ok(body.includes(AGENT_SPEECH), `Anliegen fehlt im Gather-Prompt: ${body}`);
-    // Kein Hangup: der Call bleibt nach dem ersten Satz offen (kein Sofort-Auflegen).
-    assert.ok(!body.includes(HANGUP), `Normaler Turn darf nicht auflegen: ${body}`);
-  });
-
-  test(`/voice/outbound (${provider}): endCall=true rendert KEIN <Gather> (Regression T1)`, async () => {
-    const body = await outboundBody({ provider, behavior: "endCall" });
-    // Dokumentierter heutiger Bug: ruft der Agent im ersten Turn end_call, endet
-    // der Body mit <Hangup/> OHNE <Gather> -> Provider legt nach dem Satz auf, STT
-    // wird nie scharf. Aendert ein Fix dieses Verhalten, MUSS dieser Test angepasst
-    // werden (er pinnt absichtlich das Ist-Verhalten als Regression).
-    assert.ok(!body.includes(GATHER), `endCall-Pfad pinnt den Bug: erwartet KEIN <Gather>, Body: ${body}`);
-    assert.ok(body.includes(FAREWELL), `Abschiedssatz fehlt vor dem Hangup: ${body}`);
-    assertDisclosureBefore(body, HANGUP);
-  });
-
-  test(`/voice/outbound (${provider}): agentTurn wirft -> Offenlegung + Retry-<Gather> statt stummem Hangup (T2-Fix P3b)`, async () => {
-    const body = await outboundBody({ provider, behavior: "throw" });
-    // P3b-Fix (call-debug.md 3.2): der Fehlerpfad legt nicht mehr stumm auf, sondern
-    // rendert einen einmaligen Retry-<Gather> NACH der Offenlegung - STT bleibt scharf,
-    // der Call offen. Der <Gather>-POST auf /voice/turn faehrt den normalen Turn.
-    assertDisclosureBefore(body, GATHER);
-    assert.ok(!body.includes(HANGUP), `Fehlerpfad darf nicht mehr auflegen (Retry statt Hangup): ${body}`);
-    // Diskriminator T1 vs T2: agentTurn wirft -> kein Anliegen-/Abschiedssatz; der
-    // Retry-Gather hat einen leeren Prompt, gesprochen wird NUR die Offenlegung
-    // (vgl. call-debug.md Abschnitt 3.4).
-    assert.ok(!body.includes(AGENT_SPEECH) && !body.includes(FAREWELL), `Fehlerpfad spricht nur die Offenlegung: ${body}`);
+    // Kein Hangup: der Call bleibt offen, der <Gather action>-POST faehrt den Turn.
+    assert.ok(!body.includes(HANGUP), `/voice/outbound darf nicht auflegen: ${body}`);
   });
 }
