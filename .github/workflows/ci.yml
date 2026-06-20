@@ -1,13 +1,29 @@
-# CI (PLAN-SECURITY Phase 3.4): Syntax-Check + Tests + Dependency-Audit bei
-# jedem Push. Die Pipeline scheitert bei rotem Test oder High-Severity-Finding.
+# CI (PLAN-SECURITY Phase 3.4): Secret-Scan + Syntax-Check + Tests+Coverage +
+# Dependency-Audit bei jedem Push und Pull-Request. Die Pipeline scheitert bei
+# geleaktem Secret, rotem Test, unterschrittener Coverage-Schwelle oder
+# High-Severity-Finding.
 name: CI
-on: push
+# pull_request zusaetzlich zu push: liefert den Status-Check "test" auf PRs, den
+# die Branch-Protection als required check erzwingt (kein Merge bei rotem Check).
+# Einrichtung des Gates: docs/RUNBOOK-BRANCH-PROTECTION.md
+on: [push, pull_request]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks braucht die volle Historie (push: Commit-Diff; pull_request: PR-Commits).
+          fetch-depth: 0
+      # Secret-Scan zuerst (fail-early): bricht ab, BEVOR npm ci / Tests / Audit
+      # laufen. Liest gitleaks.toml (extend Default-Ruleset + Pfad-Allowlist);
+      # ohne GITLEAKS_CONFIG wuerde gitleaks nur .gitleaks.toml automatisch finden.
+      - name: Secret-Scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: ${{ github.workspace }}/gitleaks.toml
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -16,7 +32,18 @@ jobs:
       - name: Syntax-Check
         run: |
           for f in src/*.js scripts/*.js; do node --check "$f"; done
-      - name: Tests
-        run: npm test
+      # Coverage-Gate ersetzt den reinen Test-Lauf (kein Doppellauf): node --test fuehrt
+      # ohnehin alle Tests aus und bricht zusaetzlich mit exit 1 ab, sobald eine Schwelle
+      # reisst. Schwellen kalibriert am schwellenlosen Lauf auf node 22 (= CI-Runtime,
+      # 2026-06-19): gemessen lines 86.5 / branches 91.3 / funcs 82.3 -> Schwelle = gemessen-5,
+      # abgerundet auf lines 81 / funcs 77 / branches 86 (konservativ, Ratchet: spaeter
+      # anheben). Node-Coverage ist versionsabhaengig
+      # (node 24 misst hier ~15 Punkte niedriger) -> Schwellen bewusst gegen die CI-Major
+      # (22) geankert, nicht gegen die lokale node-Version.
+      - name: Coverage-Gate (unterschrittene Schwelle bricht den Build)
+        run: |
+          node --test --experimental-test-coverage \
+            --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86 \
+            "test/*.test.js"
       - name: Dependency-Audit (High-Severity bricht den Build)
         run: npm audit --audit-level=high
