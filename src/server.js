@@ -321,15 +321,24 @@ function numberGateError(to, profile, requestedBy) {
   return allowlistError(to, profile);
 }
 
-// Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem
-// Prompt + Redirect-Fallback auf dieselbe Turn-URL.
-// Telnyx-TeXML loest relative URLs anders auf als Twilio -> absolute URL nutzen
-// fuer Telnyx (config.publicUrl ist im Module-Scope verfuegbar, s.o.).
-function turnDirectives(call, text) {
+// Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem Prompt +
+// Redirect-Fallback auf dieselbe Turn-URL. speechTimeoutSec (optional) setzt festes
+// STT-Endpointing statt "auto" - NUR Folge-Gathers im /voice/turn (G3). Erst-Gather
+// (Inbound-Greeting + Outbound) ruft OHNE -> "auto" bleibt (End-of-Speech-Erkennung
+// noetig, sonst Erst-Turn-Deadlock). Telnyx-TeXML loest relative URLs anders auf als
+// Twilio -> absolute URL fuer Telnyx (config.publicUrl im Module-Scope).
+function turnDirectives(call, text, { speechTimeoutSec } = {}) {
   const isTelnyx = call.provider === "telnyx";
   const base = isTelnyx ? config.publicUrl : "";
   const action = `${base}/voice/turn?callId=${call.id}`;
-  return [gatherD({ promptText: text, action }), redirectD(action)];
+  return [gatherD({ promptText: text, action, speechTimeoutSec }), redirectD(action)];
+}
+
+// Folge-Gather im laufenden Gespraech (/voice/turn): wie turnDirectives, aber mit
+// festem STT-Endpointing (config.sttSpeechTimeoutSec) gegen Satz-Truncation (G3).
+// Eigener Name statt Boolean-Flag (kein Selektor-Argument, G15/F3).
+function followupTurnDirectives(call, text) {
+  return turnDirectives(call, text, { speechTimeoutSec: config.sttSpeechTimeoutSec });
 }
 
 // Gesprochene Degradations-Texte fuer den /voice/turn-Fehlerpfad (G25: benannt statt
@@ -451,7 +460,7 @@ app.post("/voice/turn", async (req, res) => {
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
       return res.type("text/xml").send(render(
-        turnDirectives(call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?"),
+        followupTurnDirectives(call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?"),
         call.provider
       ));
     }
@@ -463,7 +472,7 @@ app.post("/voice/turn", async (req, res) => {
       "heard=" + (heard ? heard.length : 0),
       "reply=" + (speech ? speech.length : 0),
       "endCall=" + !!endCall);
-    const directives = endCall ? [sayD(speech), hangupD()] : turnDirectives(call, speech);
+    const directives = endCall ? [sayD(speech), hangupD()] : followupTurnDirectives(call, speech);
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);

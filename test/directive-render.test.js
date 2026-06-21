@@ -52,3 +52,12 @@ test("Bare Hangup -> TwiML byte-identisch (inaktiver/fehlender Call)", () => {
 test("Unbekanntes voiceProfile -> wirft (fail-closed, kein stiller Default-Voice)", () => {
   assert.throws(() => renderDirectives([say("x", "kein-profil")]), /unbekanntes voiceProfile/);
 });
+
+// G3-Drift (Twilio): speechTimeoutSec wird vom Twilio-Renderer ignoriert -> TwiML
+// byte-identisch zum auto-Bestand (Override ist Telnyx-only, Live laeuft Telnyx).
+test("G3-Drift (Twilio): speechTimeoutSec aendert das TwiML-Gather NICHT (bleibt auto)", () => {
+  const withOverride = renderDirectives([gather({ promptText: "x", action: "/voice/turn?callId=c", speechTimeoutSec: 2 })]);
+  const without = renderDirectives([gather({ promptText: "x", action: "/voice/turn?callId=c" })]);
+  assert.equal(withOverride, without, "Twilio ignoriert den Override (byte-identisch)");
+  assert.match(withOverride, /speechTimeout="auto"/, "Twilio bleibt auf auto");
+});

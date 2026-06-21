@@ -26,8 +26,11 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL) =>
 
 // Sprach-Turn: optionaler Prompt (say im Gather) + Action-URL fuers Ergebnis.
 // promptText leer -> Gather ohne inneren Say (Bestandsverhalten gatherTurn).
-export const gather = ({ promptText, action, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL }) =>
-  ({ kind: DIRECTIVE.GATHER, promptText, action, voiceProfile });
+// speechTimeoutSec (optional, Sekunden): festes STT-Endpointing statt provider-Default
+// "auto" - gesetzt nur fuer Folge-Gathers (/voice/turn), nicht fuer den Erst-Gather.
+// Weglassen -> Renderer bleibt byte-identisch beim "auto"-Bestand.
+export const gather = ({ promptText, action, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, speechTimeoutSec }) =>
+  ({ kind: DIRECTIVE.GATHER, promptText, action, voiceProfile, speechTimeoutSec });
 
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
 

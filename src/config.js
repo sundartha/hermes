@@ -174,6 +174,13 @@ export const config = {
   // Neustart, ueber diese Env-Var gesetzte schon. Leer = keine Seed-Profile.
   profilesSeed: process.env.PROFILES_JSON || "",
   maxCallDurationS: numEnv("MAX_CALL_DURATION_S", process.env.MAX_CALL_DURATION_S, { fallback: 180, min: 1, max: 300 }),
+  // STT-Endpointing fuer Folge-Gathers (/voice/turn, Budget-Engine): fester
+  // speechTimeout in Sekunden statt "auto". "auto" finalisiert auf der ERSTEN
+  // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,
+  // konservativer Wert toleriert kurze Pausen. NUR Folge-Gathers; das Outbound-Erst-
+  // Gather (G2) + Inbound-Greeting bleiben bewusst auf "auto" (End-of-Speech-Erkennung
+  // noetig, sonst Erst-Turn-Deadlock, render.js-Doku). Telnyx-only (Twilio byte-identisch).
+  sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, { fallback: 2, min: 1 }),
   // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
   // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.
   rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, { fallback: 120, min: 0 }),
