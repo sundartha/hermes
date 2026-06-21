@@ -160,7 +160,7 @@ test("Seeding der Owner-Defaults passiert die FORCE-RLS-WITH-CHECK (GUC vor Seed
     const cal = (await db.query(`SELECT id FROM calendar_event`)).rows;
     assert.equal(cal.length, demoCalendar().length, "Demo-Kalender geseedet trotz FORCE-RLS");
     const settings = (await db.query(`SELECT agent_name FROM settings`)).rows;
-    assert.equal(settings[0].agent_name, "Vodafone Agent");
+    assert.equal(settings[0].agent_name, "Hermes");
   } finally {
     await db.query(`RESET ROLE`);
   }
