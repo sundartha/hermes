@@ -50,6 +50,11 @@ function instructions(call) {
   return systemPrompt(call) + "\n\nSPRECHWEISE: natuerlich, zuegig, kurze Saetze. Mache kleine Pausen moeglich, lass dich unterbrechen.";
 }
 
+// HEIKLE STELLE 2: Call-Ende-Puffer. Ruft die KI das end_call-Tool auf, wird NICHT sofort
+// aufgelegt, sondern erst nach diesem Puffer - so spielt der letzte Audio-Frame (Verabschiedung)
+// noch aus. Benannte Konstante statt Magic-Number; Wert unveraendert zum frueheren inline 2500.
+const HANGUP_MS = 2500;
+
 export function attachMediaBridge(httpServer, onCallEnded) {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -64,10 +69,13 @@ export function attachMediaBridge(httpServer, onCallEnded) {
     let call = null;
     let streamRef = null;
     let openaiWs = null;
-    let activeResponse = false; // laeuft gerade eine KI-Ausgabe?
-    let endTimer = null; // Max-Dauer
-    let hangupTimer = null;
+    let endTimer = null; // Max-Dauer (eigener Timer, NICHT Teil des Event-Handler-state)
     let closed = false;
+    // Veraenderlicher per-Verbindung-state, den der OpenAI-Event-Handler UND finalize() teilen:
+    // activeResponse (laeuft gerade eine KI-Ausgabe? -> Barge-in-Guard) und hangupTimer
+    // (Call-Ende-Puffer). EIN Objekt statt loser Werte -> Lesen (naechstes Event, Barge-in) und
+    // Schreiben (vorheriges Event) treffen denselben Slot, kein Wert-Desync.
+    const state = { activeResponse: false, hangupTimer: null };
 
     const log = (...a) => console.log("[bridge]", call?.id || "?", ...a);
 
@@ -86,7 +94,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       if (closed) return;
       closed = true;
       clearTimeout(endTimer);
-      clearTimeout(hangupTimer);
+      clearTimeout(state.hangupTimer);
       try { openaiWs?.close(); } catch {}
       try { providerWs.close(); } catch {}
       if (call) {
@@ -100,6 +108,14 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(config.realtimeModel)}`,
         { headers: { Authorization: `Bearer ${config.openaiApiKey}`, "OpenAI-Beta": "realtime=v1" } }
       );
+
+      // Per-Verbindung-Kontext, EINMAL gebaut und an den extrahierten handleOpenAiEvent(ev, ctx)
+      // durchgereicht (Dependency-Injection statt Closure ueber den connection-Scope). Alle
+      // veraenderlichen Slots leben in state -> Handler und finalize() teilen genau eine Quelle.
+      const ctx = { call, streamRef, openaiWs, state, providerWs, log, hangup, finalize, media, store };
+      // Call-Ende-Puffer (HEIKLE STELLE 2): plant das Auflegen erst nach HANGUP_MS und legt den
+      // Timer in state ab, damit finalize() ihn beim Aufraeumen clearen kann.
+      ctx.scheduleHangup = (reason) => { ctx.state.hangupTimer = setTimeout(() => ctx.hangup(reason), HANGUP_MS); };
 
       openaiWs.on("open", () => {
         openaiWs.send(JSON.stringify({
@@ -123,79 +139,18 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         openaiWs.send(JSON.stringify({ type: "response.create", response: { instructions: opener } }));
       });
 
+      // Duenner Listener am Frame-Eingang: innerer JSON-Guard (Nicht-JSON still verwerfen) +
+      // aeusserer Crash-Guard bleiben hier; die Event-Logik lebt im exportierten
+      // handleOpenAiEvent(ev, ctx) am Datei-Ende (bekommt schon das geparste ev + ctx).
       openaiWs.on("message", (buf) => {
         let ev;
         try { ev = JSON.parse(buf.toString()); } catch { return; }
 
-        // OT-2 (P3): aeusserer Guard um den gesamten switch-Body. Ein Throw aus store/
-        // execTool/Event-Verarbeitung darf NICHT zum ws-Emitter entkommen (ein Node-Prozess
-        // bedient ALLE Calls -> sonst Prozess-Crash). Secret-frei nur e.message; der Call
-        // degradiert (ein Event verloren), der Prozess lebt. Innerer JSON.parse-catch bleibt.
+        // OT-2 (P3): aeusserer Guard um die Event-Verarbeitung. Ein Throw aus store/execTool/
+        // Event-Verarbeitung darf NICHT zum ws-Emitter entkommen (ein Node-Prozess bedient ALLE
+        // Calls -> sonst Prozess-Crash). Secret-frei nur e.message; der Call degradiert, lebt.
         try {
-          switch (ev.type) {
-            // ---- Audio KI -> Telefonie (beide Schema-Varianten: beta + GA) ----
-            // Frame-Aufbau provider-spezifisch ueber Port 4 (Adapter), Rest agnostisch.
-            case "response.audio.delta":
-            case "response.output_audio.delta":
-              if (streamRef && ev.delta)
-                providerWs.send(JSON.stringify(media.buildMediaFrame({ payload: ev.delta, streamRef })));
-              break;
-
-            case "response.created":
-              activeResponse = true;
-              break;
-
-            // HEIKLE STELLE 1: Barge-in. Spricht der Angerufene, waehrend die KI redet:
-            // 1) laufende Response bei OpenAI abbrechen, 2) beim Provider den bereits
-            // gepufferten (noch nicht abgespielten) Audio-Stream verwerfen (clearPlayback).
-            // Ohne (2) redet die KI scheinbar weiter, weil der Provider puffert.
-            case "input_audio_buffer.speech_started":
-              // OT-2 (P3): cancel nur auf OPEN-Socket - feuert sonst im Barge-in-Race auf einen
-              // bereits schliessenden Socket (wirft). Verhalten sonst unveraendert (Reihenfolge gleich).
-              if (activeResponse && canSend(openaiWs)) openaiWs.send(JSON.stringify({ type: "response.cancel" }));
-              if (streamRef) providerWs.send(JSON.stringify(media.clearPlayback({ streamRef })));
-              break;
-
-            // ---- Transkripte fortlaufend in den Call-Record ----
-            case "conversation.item.input_audio_transcription.completed":
-              if (ev.transcript?.trim()) store.addTranscript(call.id, "caller", ev.transcript.trim());
-              break;
-            case "response.audio_transcript.done":
-            case "response.output_audio_transcript.done":
-              if (ev.transcript?.trim()) store.addTranscript(call.id, "agent", ev.transcript.trim());
-              break;
-
-            // ---- Tool-Aufrufe der KI (gleiche Tools wie Budget-Engine) ----
-            case "response.done": {
-              activeResponse = false;
-              const items = ev.response?.output || [];
-              for (const item of items) {
-                if (item.type !== "function_call") continue;
-                let args = {};
-                try { args = JSON.parse(item.arguments || "{}"); } catch {}
-                if (item.name === "end_call") {
-                  // (d) KI signalisiert Zielerreichung -> 2,5s Puffer fuer die Verabschiedung
-                  hangupTimer = setTimeout(() => hangup("end_call von KI"), 2500);
-                } else {
-                  const result = execTool(call, item.name, args);
-                  // OT-2 (P3): execTool laeuft immer (Seiteneffekt), nur der Send geht ueber den
-                  // OPEN-Guard - feuert sonst genau im Call-Ende-Race auf einen toten Socket (wirft).
-                  if (canSend(openaiWs)) {
-                    openaiWs.send(JSON.stringify({
-                      type: "conversation.item.create",
-                      item: { type: "function_call_output", call_id: item.call_id, output: String(result) },
-                    }));
-                    openaiWs.send(JSON.stringify({ type: "response.create" }));
-                  }
-                }
-              }
-              break;
-            }
-
-            case "error":
-              console.error("[bridge] OpenAI error:", ev.error?.message || ev);
-              break;
-          }
+          handleOpenAiEvent(ev, ctx);
         } catch (e) {
           console.error("[bridge] openai message handler:", e?.message || String(e));
         }
@@ -265,4 +220,77 @@ export function attachMediaBridge(httpServer, onCallEnded) {
   });
 
   return wss;
+}
+
+// OpenAI-Realtime-Event-Handler, aus connectOpenAI extrahiert (A3-P2). Bekommt das bereits
+// geparste Event und den per-Verbindung-Kontext ctx (siehe connectOpenAI). Verhaltens-erhaltend
+// zum frueheren inline-switch; JSON- und Crash-Guard liegen beim Aufrufer (openaiWs.on("message")).
+// canSend/execTool bleiben Modul-Funktionen. Exportiert, damit der Pfad ohne Server-Spawn,
+// upgrade-Handshake oder echte WebSockets unit-testbar ist (Fake-ctx mit Spy-Sockets).
+export function handleOpenAiEvent(ev, ctx) {
+  const { call, streamRef, openaiWs, providerWs, media, store, state } = ctx;
+  switch (ev.type) {
+    // ---- Audio KI -> Telefonie (beide Schema-Varianten: beta + GA) ----
+    // Frame-Aufbau provider-spezifisch ueber Port 4 (Adapter), Rest agnostisch.
+    case "response.audio.delta":
+    case "response.output_audio.delta":
+      if (streamRef && ev.delta)
+        providerWs.send(JSON.stringify(media.buildMediaFrame({ payload: ev.delta, streamRef })));
+      break;
+
+    case "response.created":
+      state.activeResponse = true;
+      break;
+
+    // HEIKLE STELLE 1: Barge-in. Spricht der Angerufene, waehrend die KI redet:
+    // 1) laufende Response bei OpenAI abbrechen, 2) beim Provider den bereits gepufferten
+    // (noch nicht abgespielten) Audio-Stream verwerfen (clearPlayback). Ohne (2) redet die KI
+    // scheinbar weiter, weil der Provider puffert. Reihenfolge: cancel VOR clearPlayback.
+    case "input_audio_buffer.speech_started":
+      // OT-2 (P3): cancel nur auf OPEN-Socket - feuert sonst im Barge-in-Race auf einen
+      // bereits schliessenden Socket (wirft). Verhalten sonst unveraendert (Reihenfolge gleich).
+      if (state.activeResponse && canSend(openaiWs)) openaiWs.send(JSON.stringify({ type: "response.cancel" }));
+      if (streamRef) providerWs.send(JSON.stringify(media.clearPlayback({ streamRef })));
+      break;
+
+    // ---- Transkripte fortlaufend in den Call-Record ----
+    case "conversation.item.input_audio_transcription.completed":
+      if (ev.transcript?.trim()) store.addTranscript(call.id, "caller", ev.transcript.trim());
+      break;
+    case "response.audio_transcript.done":
+    case "response.output_audio_transcript.done":
+      if (ev.transcript?.trim()) store.addTranscript(call.id, "agent", ev.transcript.trim());
+      break;
+
+    // ---- Tool-Aufrufe der KI (gleiche Tools wie Budget-Engine) ----
+    case "response.done": {
+      state.activeResponse = false;
+      const items = ev.response?.output || [];
+      for (const item of items) {
+        if (item.type !== "function_call") continue;
+        let args = {};
+        try { args = JSON.parse(item.arguments || "{}"); } catch {}
+        if (item.name === "end_call") {
+          // (d) KI signalisiert Zielerreichung -> HANGUP_MS Puffer fuer die Verabschiedung
+          ctx.scheduleHangup("end_call von KI");
+        } else {
+          const result = execTool(call, item.name, args);
+          // OT-2 (P3): execTool laeuft immer (Seiteneffekt), nur der Send geht ueber den
+          // OPEN-Guard - feuert sonst genau im Call-Ende-Race auf einen toten Socket (wirft).
+          if (canSend(openaiWs)) {
+            openaiWs.send(JSON.stringify({
+              type: "conversation.item.create",
+              item: { type: "function_call_output", call_id: item.call_id, output: String(result) },
+            }));
+            openaiWs.send(JSON.stringify({ type: "response.create" }));
+          }
+        }
+      }
+      break;
+    }
+
+    case "error":
+      console.error("[bridge] OpenAI error:", ev.error?.message || ev);
+      break;
+  }
 }
