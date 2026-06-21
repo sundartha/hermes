@@ -47,6 +47,7 @@ export const BASE_ENV = {
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit
   MAX_CALL_DURATION_S: "180",
+  STT_SPEECH_TIMEOUT_SEC: "2", // G3: neutraler Default, sonst leakt lokales .env in Spawn-Tests (test-base-env-drift)
   SKIP_TWILIO_SIGNATURE_CHECK: "true",
   RATE_LIMIT_PER_MIN: "1000",
   RETENTION_DAYS: "0",

@@ -62,3 +62,21 @@ test("Bare Hangup -> TeXML byte-identisch (inaktiver/fehlender Call)", () => {
 test("Unbekanntes voiceProfile -> wirft (fail-closed, kein stiller Default-Voice)", () => {
   assert.throws(() => renderDirectives([say("x", "kein-profil")]), /unbekanntes voiceProfile/);
 });
+
+// G3: gesetztes speechTimeoutSec ersetzt "auto" an derselben Attribut-Position
+// (Reihenfolge vertraglich). Folge-Gather im /voice/turn.
+test("G3: Folge-Gather mit speechTimeoutSec -> speechTimeout=\"2\" (positiver Integer, nicht auto)", () => {
+  const out = renderDirectives([gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1", speechTimeoutSec: 2 })]);
+  assert.match(out, /<Gather\b[^>]*\bspeechTimeout="2"/, "festes Endpointing 2s");
+  assert.doesNotMatch(out, /speechTimeout="auto"/, "kein auto mehr im Folge-Gather");
+  // Reihenfolge unveraendert: model direkt vor speechTimeout (Snapshot-Invariante).
+  assert.match(out, /model="deepgram\/nova-3" speechTimeout="2"/, "Attribut-Reihenfolge stabil");
+});
+
+// G3-Drift (Pre-Mortem a): OHNE speechTimeoutSec bleibt der Gather byte-identisch
+// auf "auto" - schuetzt das Outbound-Erst-Gather + Inbound-Greeting vor dem
+// G2-Deadlock-Regress.
+test("G3-Drift: Gather ohne speechTimeoutSec bleibt auf speechTimeout=\"auto\"", () => {
+  const out = renderDirectives([gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1" })]);
+  assert.match(out, /<Gather\b[^>]*\bspeechTimeout="auto"/, "Default bleibt auto (Erst-Gather)");
+});

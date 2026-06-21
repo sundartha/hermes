@@ -70,8 +70,16 @@ function renderSay(d) {
   return `<Say${attrString(voiceAttrs(d.voiceProfile))}>${escapeXml(d.text)}</Say>`;
 }
 
+// Override-Seam (G3): gesetztes speechTimeoutSec ersetzt den Default "auto" an
+// DERSELBEN Attribut-Position (Reihenfolge bleibt vertraglich, Snapshot). Weglassen
+// -> attrString(GATHER_ATTRS) byte-identisch. Nur Folge-Gathers setzen den Wert.
+function gatherAttrs(d) {
+  if (d.speechTimeoutSec === undefined) return GATHER_ATTRS;
+  return { ...GATHER_ATTRS, speechTimeout: String(d.speechTimeoutSec) };
+}
+
 function renderGather(d) {
-  const open = `<Gather${attrString(GATHER_ATTRS)} action="${escapeXml(d.action)}" method="POST">`;
+  const open = `<Gather${attrString(gatherAttrs(d))} action="${escapeXml(d.action)}" method="POST">`;
   if (!d.promptText) return open.replace(/>$/, "/>");
   return `${open}${renderSay({ text: d.promptText, voiceProfile: d.voiceProfile })}</Gather>`;
 }
