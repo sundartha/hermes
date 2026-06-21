@@ -8,7 +8,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN, normNum } from "./store/defaults.js";
-import { publicCall, findActiveNumber, activeNumberFor, upcomingCalendar } from "./store/views.js";
+import { findActiveNumber } from "./store/views.js";
 import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
@@ -24,9 +24,10 @@ import { handleProvisionJob } from "./worker/provisioning.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
+import { E164, invalidText } from "./routes/_validation.js";
+import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
-import { E164, invalidText } from "./routes/_validation.js";
 import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
@@ -784,74 +785,15 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   res.json({ status: "cancelled" });
 });
 
-// Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
-// Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
-const STATE_CALLS = 30, STATE_ACTION_ITEMS = 50, STATE_CALENDAR = 10, STATE_NOTIFICATIONS = 10;
-
-// Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools. Tenant-gescoped hinter
-// MULTI_TENANT (Flag aus -> requestTenant === OWNER_TENANT_ID + ungefilterte Listen
-// wie im Bestand, inkl. Legacy-Calls ohne tenantId -> byte-identisch). Die lesenden
-// MCP-Tools (list_calls/list_action_items/get_my_number/get_agent_status) erben das
-// Scoping AUTOMATISCH ueber diese Route (mcp-tools.js unveraendert).
-app.get("/api/state", (req, res) => {
-  const s = store.load();
-  const tenant = requestTenant(req);
-  const ctx = store.tenantContext(tenant);
-
-  // Listen-Scope ueber die EINE Quelle (tenantCallScope via exportTenantData):
-  // calls/actionItems/notifications EINES Tenants. Flag aus -> ungefiltert
-  // (Bestand). Danach die Bestands-Slices.
-  const scoped = config.multiTenant ? store.exportTenantData(tenant) : s;
-  // Owner-Privatnummer ist Owner-PII -> nur in der Owner-Sicht, sonst leer.
-  const isOwnerView = !config.multiTenant || tenant === OWNER_TENANT_ID;
-
-  res.json({
-    // settings/calendar/usage sind seit I2/P4 Maps tenantId -> Bucket; tenantContext
-    // /usageOf liefern den Bucket des Request-Tenants (Owner-Bucket bei Flag aus).
-    settings: ctx.settings,
-    calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
-    actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
-    calendar: upcomingCalendar(store, tenant).slice(0, STATE_CALENDAR),
-    usage: { ...store.usageOf(tenant), maxBudgetEur: config.maxBudgetEur },
-    notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
-    agent: {
-      // Flag aus -> config.twilioNumber (Bestand). Flag an -> aktive Tenant-Nummer
-      // (fail-closed leer, NIE Owner-Nummer fuer einen fremden Tenant).
-      number: config.multiTenant ? activeNumberFor(s, tenant) : config.twilioNumber,
-      owner: ctx.ownerName,
-      ownerNumber: isOwnerView ? config.ownerNumber : "",
-      model: config.claudeModel,
-      voiceEngine: config.voiceEngine,
-      allowedNumbers: config.allowedNumbers, // globales Safety-Gate, bleibt global
-    },
-  });
-});
-
-app.get("/api/calls/:id", (req, res) => {
-  const call = store.getCall(req.params.id);
-  if (!call) return res.status(404).json({ error: "not found" });
-  // Tenant-Scope (I5): fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Flag
-  // aus -> requestTenant === OWNER_TENANT_ID; trotzdem ueber config.multiTenant
-  // gaten, damit Legacy-Calls ohne tenantId bei Flag aus byte-identisch (200)
-  // bleiben. getCall matcht auch twilioSid -> der Guard deckt beide id-Achsen.
-  if (config.multiTenant && !tenantOwnsCall(call, requestTenant(req)))
-    return res.status(404).json({ error: "not found" });
-  res.json(publicCall(call));
-});
-
-// Auskunft/Export (Art. 15/20): nicht-destruktiver Owner-Tenant-Export, read-only,
-// hinter der bestehenden /api/*-Basic-Auth. Calls durch publicCall (KEIN
-// streamToken-Leak, dieselbe Invariante wie /api/state). BEWUSST KEIN MCP-Tool
-// (kein Bulk-Export ueber MCP, Regel 5). Die Loeschung (Art. 17) hat KEINEN
-// Endpunkt - nur Script (kleinste Angriffsflaeche, Safety vor Features).
-app.get("/api/tenant-data/export", (req, res) => {
-  const tenant = requireTenant(req, res); // L6: tenant-gescopt statt OWNER-gepinnt; REJECT -> 403
-  if (!tenant) return;
-  const data = store.exportTenantData(tenant);
-  audit("data_export", req,
-    `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`);
-  res.json({ ...data, calls: data.calls.map(publicCall) });
-});
+// ---- Read-/Export-Routen (Phase 3) ----
+// T4-Decomposition: die GET-Route-Gruppe (/api/state, /api/calls/:id,
+// /api/tenant-data/export) lebt jetzt in src/routes/api-read.js (makeReadRoutes,
+// DI-Muster wie makeProfileRoutes) - reine Verschiebung, Verhalten unveraendert.
+// STATE_*-Konstanten und die View-Helfer (publicCall/upcomingCalendar/activeNumberFor)
+// sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
+// die request-tenant-Resolver werden injiziert. Hinter Basic-Auth (Bestand deckt
+// /api/* ab); die lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
+app.use(makeReadRoutes({ store, config, audit, tenant: { requestTenant, requireTenant, tenantOwnsCall } }));
 
 app.post("/api/settings", (req, res) => {
   const tenant = requireTenant(req, res); // L2: tenant-gescopt; REJECT -> 403
