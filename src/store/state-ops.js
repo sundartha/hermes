@@ -72,7 +72,7 @@ export function newId(prefix) {
 }
 
 // ---- Calls ----
-export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, callerName, language, maxDurationS, requestedBy, tenantId, provider }) {
+export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, language, maxDurationS, requestedBy, tenantId, provider }) {
   const call = {
     id: newId("call"),
     // Zugangsgeheimnis fuer den /media-WebSocket (steht im TwiML, das nur Twilio
@@ -91,7 +91,10 @@ export function createCall(s, { direction, from, to, goal, twilioSid, briefing, 
     goal: goal || null,
     briefing: briefing || null,
     constraints: constraints || null,
-    callerName: callerName || null,
+    // caller_name-Producer entfernt (G1, Identitaets-Bindung): die Offenlegung ist
+    // an tenant.ownerName gebunden, NICHT per Call-Parameter setzbar. DB-Spalte
+    // bleibt additiv nullable (kein destruktives Migrat) -> Feld bleibt im Record.
+    callerName: null,
     language: language || "de",
     maxDurationS: maxDurationS || null,
     // Wer den Call ausgeloest hat: <email> bei authentifizierten MCP-Nutzern,
@@ -336,25 +339,61 @@ export function findTenant(s, id) {
 // genau einem Tenant ist der Owner-Bucket byte-identisch zu den heutigen Singletons.
 export function tenantContext(s, ownerName, tenantId) {
   const tenant = findTenant(s, tenantId);
+  const effectiveOwner = (tenant && tenant.ownerName) || ownerName;
   return {
     tenantId,
-    ownerName: (tenant && tenant.ownerName) || ownerName,
+    ownerName: effectiveOwner,
+    // firstName (LLM-Persona, G1): eigener Tenant-Vorname falls gesetzt, sonst aus
+    // dem effektiven ownerName abgeleitet -> EINE Ableitungsstelle (G5). Leerer Name
+    // -> leerer firstName (das Outbound-Gate in /api/calls faengt das fail-closed ab).
+    firstName: (tenant && tenant.firstName) || firstNameOf(effectiveOwner),
     settings: settingsFor(s, tenantId),
     calendar: calendarFor(s, tenantId),
   };
 }
 
+// Vorname = erstes Whitespace-getrenntes Token eines vollen Namens. Leerer/falscher
+// Eingabewert -> "". Lokale Helper-Funktion, eine Quelle fuer die Persona-Ableitung.
+function firstNameOf(fullName) {
+  return typeof fullName === "string" ? fullName.trim().split(/\s+/)[0] || "" : "";
+}
+
+// Setzt firstName + komponierten ownerName auf einem Tenant-Record (G1). Geteilt von
+// registerTenant UND seedOwnerIdentity (G5: eine Kompositionsstelle). Trimmt; leere
+// Teile -> Feld bleibt weg, damit der config-Owner-Fallback im tenantContext sauber
+// greift (kein leerer Daten-Muell). ownerName = "firstName lastName".
+export function applyOwnerIdentity(tenant, firstName, lastName) {
+  const fn = typeof firstName === "string" ? firstName.trim() : "";
+  const ln = typeof lastName === "string" ? lastName.trim() : "";
+  const full = [fn, ln].filter(Boolean).join(" ");
+  if (fn) tenant.firstName = fn;
+  if (full) tenant.ownerName = full;
+}
+
+// Stellt die config-abgeleitete Owner-Identitaet (firstName/lastName -> ownerName)
+// idempotent im Spiegel sicher (Variante a, G1). Wie seedOwnerNumber: json load()
+// ruft makeDefaultState nicht auf Bestands-Stores, pg hydriert owner_name als NULL.
+// Schuetzt den UNGEGATETEN Inbound-Greeting (server.js) + summarizeCall. Idempotent:
+// traegt der Owner-Tenant bereits ownerName, No-Op (gesetzte Identitaet gewinnt).
+// Fehlender Owner-Tenant (seedState ohne tenants) -> No-Op. Leere Config-Teile ->
+// kein Seed (Boot-Refusal in assertConfig faengt das ab).
+export function seedOwnerIdentity(s, firstName, lastName, tenantId) {
+  const owner = findTenant(s, tenantId);
+  if (!owner || owner.ownerName) return;
+  applyOwnerIdentity(owner, firstName, lastName);
+}
+
 // Idempotent + set-on-create: legt den Tenant an, falls neu (status active), und
-// setzt dabei EINMALIG die Identitaet. Liefert den Tenant. ownerName ist die Quelle
-// der Tenant-Identitaet aus dem Onboarding (I3); ein bestehender Tenant kommt
-// unveraendert zurueck (kein Upsert). Fehlt/leer/whitespace-only -> Feld weggelassen,
-// damit der Owner-Fallback im tenantContext sauber greift (kein leerer Daten-Muell).
-export function registerTenant(s, id, { ownerName } = {}) {
+// setzt dabei EINMALIG die Identitaet. Liefert den Tenant. firstName + lastName
+// kommen aus dem Onboarding (I3 + G1); ownerName = "firstName lastName" wird
+// KOMPONIERT (Bestandskonsumenten lesen ownerName unveraendert), firstName zusaetzlich
+// gespeichert (LLM-Persona). Ein bestehender Tenant kommt unveraendert zurueck (kein
+// Upsert). Leere Teile -> Feld weggelassen (Owner-Fallback greift).
+export function registerTenant(s, id, { firstName, lastName } = {}) {
   const existing = findTenant(s, id);
   if (existing) return existing;
   const tenant = { id, status: TENANT_STATUS.ACTIVE };
-  const name = typeof ownerName === "string" ? ownerName.trim() : "";
-  if (name) tenant.ownerName = name;
+  applyOwnerIdentity(tenant, firstName, lastName);
   s.tenants.push(tenant);
   return tenant;
 }

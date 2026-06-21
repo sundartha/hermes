@@ -52,7 +52,18 @@ export function makePgStore(runner) {
       await setTenant(client, OWNER_TENANT_ID);
       await migrate(client, OWNER_TENANT_ID);
       state = await hydrate(client);
+      // Owner-Identitaet config-derived seeden (Variante a, G1): owner_name hydriert
+      // als NULL -> ohne Seed bliebe der Owner namenlos. Idempotent (gesetzter Wert
+      // gewinnt). Persistenz via save() unten, damit first_name/owner_name
+      // round-trippen (flushTenants).
+      ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
     });
+    // Nur flushen, wenn der Seed tatsaechlich einen ownerName gesetzt hat (leere
+    // Config -> Boot-Refusal greift ohnehin vorher, kein Leer-Flush). save() wird
+    // AWAITED: init() ist async und der Flush teilt sich die Verbindung mit den
+    // folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush
+    // wuerde mit dem ersten Folge-Query um die Transaktion konkurrieren.
+    if (state.tenants.some((t) => t.id === OWNER_TENANT_ID && t.ownerName)) await save();
     return state;
   }
 
@@ -248,11 +259,14 @@ async function hydrate(client) {
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
   const rows = (await client.query(
-    `SELECT id, status, owner_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id FROM tenant`
+    `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id FROM tenant`
   )).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
     if (r.owner_name != null) tenant.ownerName = r.owner_name;
+    // first_name NUR-nicht-null hydrieren (Muster wie owner_name, G1): Tenant ohne
+    // Wert behaelt KEIN leeres Feld -> firstName-Ableitung im tenantContext greift.
+    if (r.first_name != null) tenant.firstName = r.first_name;
     if (r.idp_subject != null) tenant.idpSubject = r.idp_subject;
     // kyc_level NUR setzen, wenn nicht-null (Muster wie owner_name/idp_subject):
     // ein Owner/Bestand ohne Wert behaelt KEIN kycLevel-Feld -> kycReached liefert
@@ -490,14 +504,15 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
+         first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id`,
-      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null, t.kycLevel ?? null,
+      [t.id, t.status, t.ownerName ?? null, t.firstName ?? null, t.idpSubject ?? null, t.kycLevel ?? null,
        t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null]
     );
   }

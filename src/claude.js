@@ -39,7 +39,11 @@ const fmtDate = (iso) =>
 export function systemPrompt(call) {
   const ctx = store.tenantContext(call.tenantId);
   const s = ctx.settings;
-  const owner = ctx.ownerName;
+  // LLM-Persona = Vorname (G1, Owner-Entscheidung #1): der Assistent spricht im
+  // Gespraech vom Vornamen seines Auftraggebers. Die PFLICHT-Offenlegung weiter unten
+  // (disclosureSentence) nennt dagegen den VOLLEN Namen. Beide aus derselben
+  // gebundenen Tenant-Identitaet (tenantContext) -> keine Impersonation.
+  const owner = ctx.firstName;
   const now = new Date().toLocaleString("de-DE", {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
     hour: "2-digit", minute: "2-digit",
@@ -68,7 +72,7 @@ Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin v
 
   return `${base}
 
-SITUATION: Du rufst gerade IM AUFTRAG von ${call.callerName || owner} bei ${call.to} an. Du bist der Anrufer.
+SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
 ${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}
@@ -76,9 +80,12 @@ PFLICHT-OFFENLEGUNG: Dein allererster Satz muss exakt lauten: "${disclosureSente
 Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen abgleichen, zusagen). Pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Sage nichts zu, was ausserhalb deines Auftrags liegt. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 }
 
-// Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls)
+// Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).
+// Identitaets-Bindung (G1, Geschwister-Regel zu Regel 2): der offengelegte
+// Auftraggeber ist die registrierte Identitaet (tenant.ownerName, voll), NICHT per
+// Call-Parameter ueberschreibbar. Wortlaut byte-identisch, nur die Quelle ist gebunden.
 export function disclosureSentence(call) {
-  const name = call.callerName || store.tenantContext(call.tenantId).ownerName;
+  const name = store.tenantContext(call.tenantId).ownerName;
   return `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${name}. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.`;
 }
 

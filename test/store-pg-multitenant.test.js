@@ -20,6 +20,11 @@ import { config } from "../src/config.js";
 // number-GRANT noetig ist (Muster wie store-pg-rls.test.js). Process-isoliert pro Datei.
 config.twilioNumber = "";
 config.telnyxNumber = "";
+// G1: in-process laeuft config OHNE .env -> Owner-Identitaet leer. Setzen, damit die
+// Variante-(a)-Seed (pg init) einen ownerName traegt (= Produktion mit gesetzten
+// OWNER_FIRST_NAME/OWNER_LAST_NAME; leer waere Boot-Refusal).
+config.ownerFirstName = "Jonas";
+config.ownerLastName = "Beispiel";
 
 const TENANT_B = "tenant_b";
 const APP_ROLE = "app_user"; // liest/schreibt unter GUC, ohne Superuser/BYPASSRLS
@@ -41,9 +46,10 @@ test("Owner-only-pg: frischer Zustand byte-identisch (Bestands-Invariante haelt)
   assert.deepEqual(store.getCalendar(OWNER_TENANT_ID), demoCalendar());
   assert.equal(s.tenants.length, 1);
   assert.equal(s.tenants[0].id, OWNER_TENANT_ID);
-  // Owner-Tenant traegt KEIN ownerName-Feld -> Owner-Fallback (config.ownerName)
-  // bleibt; kein owner_name=null-Drift (seedDefaults setzt die Spalte nicht).
-  assert.equal("ownerName" in s.tenants[0], false);
+  // G1 Variante (a): der Owner-Tenant traegt jetzt einen config-geseedeten ownerName
+  // (init seedet OWNER_FIRST_NAME/OWNER_LAST_NAME) -> der ungegatete Greeting/Disclosure
+  // ist geschuetzt. Kein owner_name=null-Drift (gesetzter Wert, kein leeres Feld).
+  assert.equal(s.tenants[0].ownerName, config.ownerName);
 });
 
 test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_subject getrennt persistiert", async () => {
@@ -52,7 +58,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
 
   // Tenant B ueber den Spiegel + Flush registrieren (genau der zu testende Pfad,
   // kein direkter tenant-INSERT in die DB). Identitaet (owner_name/idp_subject) setzen.
-  ops.registerTenant(s, TENANT_B, { ownerName: "Maria" });
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" }); // G1: komponiert ownerName="Maria"
   s.tenants.find((t) => t.id === TENANT_B).idpSubject = "sub-maria";
   ops.setKycLevel(s, TENANT_B, KYC_LEVEL.CARD); // P6b4: kyc_level round-trippt
   ops.setTenantStripe(s, TENANT_B, { customerId: "cus_b", paymentMethodId: "pm_b" }); // Pay1: stripe-Referenzen round-trippen

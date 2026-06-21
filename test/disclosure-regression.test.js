@@ -13,29 +13,32 @@ const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag v
 const DISCLOSURE_TAIL = "wird fuer meinen Auftraggeber zusammengefasst";
 const FIRST_SENTENCE_CLAUSE = "Dein allererster Satz muss exakt lauten";
 
-let systemPrompt, disclosureSentence;
+let config, systemPrompt, disclosureSentence;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
-  await import("../src/config.js");
+  ({ config } = await import("../src/config.js"));
   ({ systemPrompt, disclosureSentence } = await import("../src/claude.js"));
 });
 
-test("T-P2-09: disclosureSentence - fester Wortlaut + callerName eingesetzt", () => {
-  const sentence = disclosureSentence({ callerName: "Jonas", tenantId: OWNER_TENANT_ID });
+test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerName ignoriert, G1)", () => {
+  // G1: callerName ist NICHT mehr setzbar - selbst wenn der Aufrufer einen anderen
+  // Namen anhaengt, gewinnt die gebundene Tenant-Identitaet (ownerName).
+  const sentence = disclosureSentence({ callerName: "Klaus", tenantId: OWNER_TENANT_ID });
   assert.ok(sentence.startsWith(DISCLOSURE_PREFIX), `Wortlaut-Praefix fehlt: ${sentence}`);
-  assert.ok(sentence.includes("Jonas"), "callerName muss eingesetzt sein");
+  assert.ok(!sentence.includes("Klaus"), "callerName darf NICHT eingesetzt werden (Identitaets-Bindung)");
+  assert.ok(sentence.includes(config.ownerName), "ownerName muss eingesetzt sein");
   assert.ok(sentence.includes(DISCLOSURE_TAIL), `Zusammenfassungs-Hinweis fehlt: ${sentence}`);
 });
 
 test("T-P2-10: Outbound-Prompt verdrahtet Disclosure als PFLICHT-ersten-Satz (Regel 2)", () => {
-  const call = seedCall({ direction: "outbound", goal: "Termin", callerName: "Jonas", tenantId: OWNER_TENANT_ID });
+  const call = seedCall({ direction: "outbound", goal: "Termin", tenantId: OWNER_TENANT_ID });
   const prompt = systemPrompt(call);
   assert.ok(prompt.includes(disclosureSentence(call)), "exakter Offenlegungssatz muss im Prompt stehen");
   assert.ok(prompt.includes(FIRST_SENTENCE_CLAUSE), "Pflicht-erster-Satz-Klausel muss im Prompt stehen");
 });
 
 test("T-P2-10b: Inbound-Prompt traegt die Outbound-Offenlegung NICHT (Gegenprobe)", () => {
-  const call = seedCall({ direction: "inbound", callerName: "Jonas", tenantId: OWNER_TENANT_ID });
+  const call = seedCall({ direction: "inbound", tenantId: OWNER_TENANT_ID });
   const prompt = systemPrompt(call);
   assert.ok(!prompt.includes(FIRST_SENTENCE_CLAUSE), "Inbound darf die Outbound-Offenlegungsklausel nicht enthalten");
 });

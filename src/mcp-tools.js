@@ -87,7 +87,6 @@ export function registerTools(server, { identity = null, allowCalendar = true } 
       constraints: z.string().optional().describe("Einschraenkungen, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro.'"),
       language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
       max_duration_s: z.number().optional().describe("Maximale Gespraechsdauer in Sekunden (Default 180, Max 300)."),
-      caller_name: z.string().optional().describe("Name des Auftraggebers fuer die Offenlegung am Gespraechsbeginn."),
     },
     async (args) => {
       const r = await call("POST", "/api/calls", args);

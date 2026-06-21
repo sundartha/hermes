@@ -63,7 +63,8 @@ test("Eingabe-Validierung /api/calls", async (t) => {
       assert.equal((await call({ ...base, objective: "x".repeat(501) })).status, 400);
       assert.equal((await call({ ...base, objective: "Termin", briefing: "x".repeat(2001) })).status, 400);
       assert.equal((await call({ ...base, objective: "Termin", constraints: "x".repeat(2001) })).status, 400);
-      assert.equal((await call({ ...base, objective: "Termin", caller_name: "x".repeat(101) })).status, 400);
+      // caller_name entfernt (G1, Owner-Entscheidung #3): das Feld existiert nicht mehr,
+      // ein angehaengtes caller_name wird vom zod-Schema verworfen (kein 400).
     });
   } finally {
     await srv.stop();

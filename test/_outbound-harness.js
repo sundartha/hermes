@@ -8,10 +8,11 @@ import http from "node:http";
 import { startServer, seedState, seedCall } from "./helpers.js";
 
 // --- Gemeinsame Marker (bisher pro Datei dupliziert) ---
-// Praefix des fest verdrahteten Offenlegungssatzes (disclosureSentence, claude.js):
-// gilt fuer callerName=null + OWNER_NAME="Jonas" (BASE_ENV). G1 dreht diese Erwartung
-// bewusst um (eigener Test), der Marker bleibt hier der dokumentierte Ist-Stand.
-export const DISCLOSURE_JONAS = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas.";
+// Praefix des fest verdrahteten Offenlegungssatzes (disclosureSentence, claude.js).
+// G1: die Offenlegung ist an den VOLLEN tenant.ownerName gebunden; Variante (a) seedet
+// den Owner-Tenant config-derived = "OWNER_FIRST_NAME OWNER_LAST_NAME" ("Jonas Beispiel"
+// in BASE_ENV). callerName entfaellt komplett (nicht mehr per Call setzbar).
+export const DISCLOSURE_JONAS = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
 // Beide Renderer oeffnen den Sprach-Turn mit "<Gather" (Twilio-TwiML + Telnyx-TeXML).
 export const GATHER_OPEN = "<Gather";
 export const HANGUP_TAG = "<Hangup";

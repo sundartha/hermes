@@ -37,18 +37,19 @@ test("systemPrompt zieht B's ownerName ueber tenantContext", () => {
   assert.ok(systemPrompt(callFor(TENANT_B)).includes(B_OWNER));
 });
 
-test("Owner-Call nennt weiter config.ownerName (byte-identisch)", () => {
-  assert.ok(systemPrompt(callFor(OWNER_TENANT_ID)).includes(config.ownerName));
+test("Owner-Call-Persona nennt den Vornamen (G1: systemPrompt = firstName)", () => {
+  assert.ok(systemPrompt(callFor(OWNER_TENANT_ID)).includes(config.ownerName.split(" ")[0]));
 });
 
 test("disclosureSentence ohne callerName folgt B's ownerName (Fallback bleibt)", () => {
   assert.ok(disclosureSentence(callFor(TENANT_B)).includes(B_OWNER));
 });
 
-test("disclosureSentence Owner-Call nennt weiter config.ownerName", () => {
+test("disclosureSentence Owner-Call nennt weiter config.ownerName (voll)", () => {
   assert.ok(disclosureSentence(callFor(OWNER_TENANT_ID)).includes(config.ownerName));
 });
 
-test("callerName gewinnt weiter vor dem Tenant-ownerName (Disclosure-Vorrang unveraendert)", () => {
-  assert.ok(disclosureSentence(callFor(TENANT_B, { callerName: "Klaus" })).includes("Klaus"));
+test("callerName wird ignoriert - Tenant-ownerName bindet (G1)", () => {
+  assert.ok(disclosureSentence(callFor(TENANT_B, { callerName: "Klaus" })).includes(B_OWNER));
+  assert.ok(!disclosureSentence(callFor(TENANT_B, { callerName: "Klaus" })).includes("Klaus"));
 });

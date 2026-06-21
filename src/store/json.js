@@ -73,6 +73,10 @@ function finishLoad() {
   // gesetzt; der !e164-Guard in seedOwnerNumber erledigt das env-gating). Leer ->
   // kein Seed -> alle Telnyx-Inbound fail-closed (kein Default-Tenant).
   ops.seedOwnerNumber(state, config.telnyxNumber, OWNER_TENANT_ID, PROVIDER.TELNYX);
+  // Owner-Identitaet config-derived idempotent seeden (Variante a, G1): schuetzt den
+  // ungegateten Inbound-Greeting + summarizeCall. Leere Config -> kein Seed
+  // (assertConfig verweigert dann ohnehin den Boot).
+  ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
   return state;
 }
 

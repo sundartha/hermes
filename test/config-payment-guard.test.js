@@ -24,6 +24,8 @@ const REQUIRED_OK = {
   twilioSid: "x",
   twilioToken: "x",
   twilioNumber: "+49123",
+  ownerFirstName: "Max", // G1: Boot-Pflicht
+  ownerLastName: "Mustermann",
   publicUrl: "https://example.test",
   mcpAuth: "",
   storeBackend: "json",

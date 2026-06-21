@@ -26,21 +26,22 @@ async function waitForActiveNumber(srv, numberId, timeoutMs = 3000) {
   }
 }
 
-// (1) onboard MIT ownerName (Dry-Run) -> Tenant-Record traegt ownerName
-test("onboard mit ownerName -> Tenant-Record traegt ownerName", async () => {
+// (1) onboard MIT firstName (Dry-Run, G1) -> Tenant-Record traegt komponierten ownerName
+test("onboard mit firstName -> Tenant-Record traegt ownerName", async () => {
   const srv = await startServer(); // PROVISIONING_ENABLED unset -> Dry-Run
   try {
-    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_maria", ownerName: OWNER_NAME });
+    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_maria", firstName: OWNER_NAME });
     assert.equal(res.status, 200);
     const t = srv.readStore().tenants.find((x) => x.id === "t_maria");
-    assert.equal(t.ownerName, OWNER_NAME);
+    assert.equal(t.ownerName, OWNER_NAME); // firstName-only -> ownerName === firstName
+    assert.equal(t.firstName, OWNER_NAME);
   } finally {
     await srv.stop();
   }
 });
 
-// (2) onboard OHNE ownerName -> Record OHNE ownerName-Feld (Rueckwaerts-Kompat)
-test("onboard ohne ownerName -> Record ohne ownerName-Feld (Owner-Fallback)", async () => {
+// (2) onboard OHNE Namen -> Record OHNE ownerName-Feld (Rueckwaerts-Kompat)
+test("onboard ohne Namen -> Record ohne ownerName-Feld (Owner-Fallback)", async () => {
   const srv = await startServer();
   try {
     const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_plain" });
@@ -54,7 +55,7 @@ test("onboard ohne ownerName -> Record ohne ownerName-Feld (Owner-Fallback)", as
 
 // (3) IDENTITAETS-KREIS (DoD): onboard SETZT -> Inbound auf die aktiv gewordene
 // Nummer NENNT den Namen
-test("Identitaets-Kreis: onboard ownerName + aktive Nummer -> Inbound nennt Maria", async () => {
+test("Identitaets-Kreis: onboard firstName + aktive Nummer -> Inbound nennt Maria", async () => {
   const mock = await startTelnyxProvisioningMock();
   const srv = await startServer({
     env: {
@@ -67,7 +68,7 @@ test("Identitaets-Kreis: onboard ownerName + aktive Nummer -> Inbound nennt Mari
     },
   });
   try {
-    const onb = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_maria", ownerName: OWNER_NAME });
+    const onb = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_maria", firstName: OWNER_NAME });
     const j = await onb.json();
     // P6b2: SOFORT 'queued'; auf den async Kauf warten, dann die aktive e164 lesen.
     assert.equal(j.provisioning, "queued");

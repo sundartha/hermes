@@ -93,8 +93,12 @@ services:
       # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
       - key: OAUTH_ISSUER_URL
         sync: false
-      - key: OWNER_NAME
-        value: Jonas
+      # Owner-Identitaet (G1): Pflicht (Boot-Refusal bei leer). Echte Werte im
+      # Render-Dashboard setzen (sync:false -> kein Klartext-Name im Repo).
+      - key: OWNER_FIRST_NAME
+        sync: false
+      - key: OWNER_LAST_NAME
+        sync: false
       - key: CLAUDE_MODEL
         value: claude-haiku-4-5
       - key: MAX_BUDGET_EUR
