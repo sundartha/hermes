@@ -348,6 +348,10 @@ function followupTurnDirectives(call, text) {
 // byte-identisch zum frueheren Inline-String).
 const LLM_DEGRADED_SPEECH = "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.";
 const TURN_ERROR_SPEECH = "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.";
+// No-Speech-Rueckfrage im /voice/turn (Gather lief leer, aber der Angerufene hat schon
+// gesprochen): bewusst KNAPP gehalten (G4, spart TTS-Sekunden im Wiederholpfad) statt
+// des frueheren Zwei-Satz-Reprompts. Benannt statt inline, analog LLM_DEGRADED_SPEECH.
+const NO_SPEECH_REPROMPT_SPEECH = "Entschuldigung, koennen Sie das bitte wiederholen?";
 
 // Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
 // provider-aware (Twilio /media byte-identisch, Telnyx eigener Pfad) - der upgrade-
@@ -460,7 +464,7 @@ app.post("/voice/turn", async (req, res) => {
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
       return res.type("text/xml").send(render(
-        followupTurnDirectives(call, "Entschuldigung, ich habe Sie nicht verstanden. Koennen Sie das wiederholen?"),
+        followupTurnDirectives(call, NO_SPEECH_REPROMPT_SPEECH),
         call.provider
       ));
     }
