@@ -8,15 +8,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
 import { fakeBilling, fakeProvisioner } from "./helpers.js";
-import { makeDefaultState, registerTenant, requestNumber, findNumber } from "../src/store/state-ops.js";
+import { makeDefaultState, registerTenant, requestNumber, findNumber, setTenantStripe } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, currency: "eur" };
 
-function seedRequested() {
+// seedet einen aktiven Tenant MIT hinterlegter Karte (Pay2: ohne Karte ist der
+// billing-Pfad fail-closed). cardless=true laesst die Karte bewusst weg (Fail-closed-Test).
+function seedRequested({ cardless = false } = {}) {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
+  if (!cardless) setTenantStripe(s, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1" });
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   return { s, numberId: number.id };
 }
@@ -109,4 +112,28 @@ test("payment-off-Parity: ohne billing -> kein Hold/Capture, requested->provisio
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.paymentIntentId, null, "kein PI ohne billing");
   assert.deepEqual(prov.log, ["search", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+});
+
+test("Pay2 fail-closed: billing + Tenant OHNE Karte -> failed, KEIN placeHold, KEIN Provider-Call", async () => {
+  const { s, numberId } = seedRequested({ cardless: true });
+  const prov = fakeProvisioner();
+  const billing = fakeBilling();
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /kein hinterlegtes Zahlungsmittel/
+  );
+  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
+  assert.deepEqual(methodsOf(billing), [], "kein placeHold ohne Karte");
+  assert.deepEqual(prov.log, [], "kein Provider-Call ohne reserviertes Geld");
+});
+
+test("Pay2 durchreichen: billing + Tenant MIT Karte -> placeHold bekommt customerId + paymentMethodId, aktiv", async () => {
+  const { s, numberId } = seedRequested();
+  const prov = fakeProvisioner();
+  const billing = fakeBilling();
+  const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
+  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
+  const [, holdArgs] = billing.log[0]; // ["placeHold", args]
+  assert.equal(holdArgs.customerId, "cus_1");
+  assert.equal(holdArgs.paymentMethodId, "pm_1");
 });

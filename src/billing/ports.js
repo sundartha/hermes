@@ -8,6 +8,8 @@
  * @property {string} tenantRef       - Tenant, fuer den gehalten wird (Audit/Metadata)
  * @property {number} amountCents      - Betrag in GANZZAHL Cents (>0)
  * @property {string} currency         - ISO-4217 lowercase (z.B. "eur")
+ * @property {string} customerId       - opake Stripe-Customer-Referenz (cus_...): Karte am Customer
+ * @property {string} paymentMethodId  - opake payment_method-Referenz (pm_...): off_session belastbar
  * @property {string} idempotencyKey   - number-id-basiert ('hold_'+numberId): Retry haelt nie doppelt
  */
 

@@ -7,9 +7,9 @@
 // Verifiziert gegen die Stripe-Doku (manual capture), live UNBESTAETIGT (mit dem
 // Owner im Test-Mode live fixen, falls Felder abweichen): confirm=true +
 // capture_method=manual setzt den PaymentIntent direkt auf 'requires_capture'.
-// Beim Owner-Smoke evtl. payment_method/automatic_payment_methods nachziehen
-// (geparkter Owner-Schritt).
-//   hold:    POST /v1/payment_intents  {amount, currency, capture_method=manual, confirm=true}
+// off_session=true + gespeicherter customer/payment_method belasten die hinterlegte
+// Karte ohne Kunden-Interaktion (kein automatic_payment_methods/return_url noetig).
+//   hold:    POST /v1/payment_intents  {amount, currency, capture_method=manual, confirm=true, customer, payment_method, off_session=true}
 //   capture: POST /v1/payment_intents/{id}/capture  {amount_to_capture}
 //   cancel:  POST /v1/payment_intents/{id}/cancel
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
@@ -20,6 +20,7 @@ const METER_EVENTS_PATH = "/v1/billing/meter_events";
 const CUSTOMERS_PATH = "/v1/customers";
 const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
 const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
+const OFF_SESSION = "true"; // Karte ohne Kunden-Interaktion belasten (kein 3DS-Redirect noetig)
 
 // Logischer kind -> Stripe-Meter-event_name (Provider-Spezifik adapter-intern, G25).
 // Live mit dem Owner gegen die echten Stripe-Meter abgleichen (geparkt, wie P6b1):
@@ -50,14 +51,20 @@ const url = (path) => config.stripeApiBase + path;
 
 /** @type {import("./ports.js").BillingPort} */
 export const stripeBilling = {
-  async placeHold({ tenantRef, amountCents, currency, idempotencyKey }) {
+  async placeHold({ tenantRef, amountCents, currency, customerId, paymentMethodId, idempotencyKey }) {
     // Idempotency-Key (number-id-basiert): Retry haelt nie doppelt (Stripe-Header).
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    // off_session=true + gespeicherter customer/payment_method: Stripe belastet die am
+    // Customer hinterlegte Karte ohne Redirect (kein return_url/automatic_payment_methods
+    // noetig) - behebt den 400-Wurzel-Fehler des frueheren confirm-ohne-PM-Pfades.
     const body = new URLSearchParams({
       amount: String(amountCents),
       currency,
       capture_method: "manual",
       confirm: "true",
+      customer: customerId,
+      payment_method: paymentMethodId,
+      off_session: OFF_SESSION,
     });
     body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
     const res = await fetch(url(PAYMENT_INTENTS_PATH), { method: "POST", headers, body });

@@ -102,3 +102,29 @@ test("Leak-Guard: Nicht-2xx -> wirft mit HTTP-Status, OHNE Secret-Key (createCus
     )
   );
 });
+
+test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_session=true, manual capture", async () => {
+  let captured;
+  const result = await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({ id: "pi_held_1" });
+    },
+    () => stripeBilling.placeHold({
+      tenantRef: "tenant_a", amountCents: 500, currency: "eur",
+      customerId: "cus_1", paymentMethodId: "pm_1", idempotencyKey: "hold_num_1",
+    })
+  );
+  assert.ok(captured.url.endsWith("/v1/payment_intents"), "URL endet auf /v1/payment_intents");
+  assert.equal(captured.opts.method, "POST");
+  assert.equal(captured.opts.headers["Idempotency-Key"], "hold_num_1");
+  assert.equal(captured.opts.body.get("amount"), "500"); // GANZZAHL Cents
+  assert.equal(captured.opts.body.get("currency"), "eur");
+  assert.equal(captured.opts.body.get("capture_method"), "manual");
+  assert.equal(captured.opts.body.get("confirm"), "true");
+  assert.equal(captured.opts.body.get("customer"), "cus_1");
+  assert.equal(captured.opts.body.get("payment_method"), "pm_1");
+  assert.equal(captured.opts.body.get("off_session"), "true");
+  assert.equal(captured.opts.body.get("metadata[tenant_ref]"), "tenant_a");
+  assert.deepEqual(result, { paymentIntentId: "pi_held_1" });
+});

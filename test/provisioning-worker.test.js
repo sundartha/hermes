@@ -14,6 +14,7 @@ import {
   requestNumber,
   findNumber,
   recordProvisioningJob,
+  setTenantStripe,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS } from "../src/store/defaults.js";
 
@@ -21,9 +22,12 @@ const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1" };
 const PAY_ARGS = { ...ARGS, holdAmountCents: 500, currency: "eur" };
 
+// seedet einen Tenant MIT hinterlegter Karte (Pay2: der billing-Pfad ist ohne Karte
+// fail-closed). Im payment-off-Pfad (kein billing) ist die Karte irrelevant.
 function seedRequested() {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
+  setTenantStripe(s, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1" });
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   return { s, numberId: number.id };
 }
