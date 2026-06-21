@@ -44,3 +44,12 @@ export function selfServicePatch(patch, current) {
   }
   return { clean, rejected };
 }
+
+// Pay3: abgeleiteter Karten-Status fuer die UI-Sichtbarkeit. Eine Karte gilt erst
+// als hinterlegt, sobald ein payment_method gespeichert ist (customerId allein
+// reicht nicht - der Checkout kann abgebrochen worden sein). Reiner Praedikat-Helfer
+// (kein IO, kein id-Leak nach aussen - liefert nur boolean). stripe = das Ergebnis
+// von store.tenantStripe (stets { customerId, paymentMethodId }).
+export function hasCardOnFile(stripe) {
+  return Boolean(stripe && stripe.paymentMethodId);
+}

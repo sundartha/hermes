@@ -34,6 +34,24 @@ const TENANT_B = "t_sub-b"; // upsertOnFirstLogin: tenantId = `t_${sub}`
 const SUB_SUSPENDED = "sub-susp";
 const TENANT_SUSPENDED = "t_sub-susp";
 
+// Pay3: Fake-Billing (in-process, KEIN Netz) + Fake-Config. So testet die echte
+// Self-Service-Route die Customer-Idempotenz/Match-Logik (card-setup.js) ohne Stripe.
+const FAKE_CUST = "cus_b";
+const FAKE_PM = "pm_b";
+const FAKE_SESSION = "cs_b";
+const PUBLIC_URL = "https://test.local";
+const OTHER_SESSION = "cs_other"; // gehoert einem fremden Customer -> Customer-Mismatch
+function fakeBilling() {
+  return {
+    createCustomer: async () => ({ customerId: FAKE_CUST }),
+    createSetupCheckoutSession: async () => ({ url: `https://stripe.test/c/${FAKE_SESSION}`, sessionId: FAKE_SESSION }),
+    getCheckoutSessionResult: async (id) =>
+      id === OTHER_SESSION
+        ? { customerId: "cus_other", paymentMethodId: "pm_other" }
+        : { customerId: FAKE_CUST, paymentMethodId: FAKE_PM },
+  };
+}
+
 const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
 
 // Seedet einen aktiven Tenant im Mirror (App-Daten) + in der DB (Identitaet) und
@@ -54,7 +72,7 @@ async function seedActiveTenant(store, accounts, { sub, tenantId, bankData }) {
 
 // Baut Store + Identitaets-Schicht + die Self-Service-Routen auf einer Wegwerf-App.
 // Liefert base-URL, store (Mirror-Zugriff), Cookies (aktiv/suspendiert) + close().
-async function setup({ bankData } = {}) {
+async function setup({ bankData, paymentEnabled = true } = {}) {
   const { store, db } = await makePgTestStore();
   const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
   const accounts = makeAccounts(runner);
@@ -76,7 +94,10 @@ async function setup({ bankData } = {}) {
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const app = express();
   app.use(express.json());
-  app.use(makeSelfServiceRoutes({ store, webAuthMw, audit: () => {} }));
+  // Eigenes Config-Objekt (NICHT das Singleton kippen, F.I.R.S.T./Independent): so ist
+  // der Flag-aus-Fall in einem separaten setup() testbar, ohne andere Tests zu stoeren.
+  const cfg = { paymentEnabled, publicUrl: PUBLIC_URL };
+  app.use(makeSelfServiceRoutes({ store, webAuthMw, audit: () => {}, config: cfg, billing: fakeBilling() }));
   const server = await new Promise((r) => { const sv = app.listen(0, "127.0.0.1", () => r(sv)); });
 
   return {
@@ -97,7 +118,7 @@ function request(method, url, { cookie, body } = {}) {
     if (payload) { headers["Content-Type"] = "application/json"; headers["Content-Length"] = Buffer.byteLength(payload); }
     const req = http.request(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
-      (res) => { let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b })); }
+      (res) => { let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b, location: res.headers.location })); }
     );
     req.on("error", reject);
     if (payload) req.write(payload);
@@ -107,6 +128,11 @@ function request(method, url, { cookie, body } = {}) {
 const getState = (s) => request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookieB });
 const postSettings = (s, body, cookie = s.cookieB) =>
   request("POST", `${s.base}/api/self-service/settings`, { cookie, body });
+// Pay3-Routen-Shortcuts.
+const postSetupCheckout = (s, cookie = s.cookieB) =>
+  request("POST", `${s.base}/api/self-service/billing/setup-checkout`, { cookie });
+const getCardReturn = (s, sessionId, cookie = s.cookieB) =>
+  request("GET", `${s.base}/api/self-service/billing/return?session_id=${sessionId}`, { cookie });
 
 test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, mit greetingTemplates", async () => {
   const s = await setup();
@@ -214,5 +240,84 @@ test("(f3) Fail-closed: POST als suspendierter Tenant -> 403, kein Write", async
     const res = await postSettings(s, { agentName: "Boese" }, s.cookieSuspended);
     assert.equal(res.status, 403);
     assert.equal(JSON.stringify(s.store.load().settings).includes("Boese"), false, "kein Write bei 403");
+  } finally { await s.close(); }
+});
+
+// ---- Pay3: Karten-Erfassung aus dem Self-Service-Dashboard --------------------------
+
+test("(g1) hasCard: false ohne Karte, true nach Bindung; payment_method im B-Bucket", async () => {
+  const s = await setup();
+  try {
+    const before = JSON.parse((await getState(s)).body);
+    assert.equal(before.hasCard, false, "ohne Karte: false");
+
+    await postSetupCheckout(s);                 // Customer anlegen
+    const ret = await getCardReturn(s, FAKE_SESSION); // Karte binden
+    assert.equal(ret.status, 302);
+
+    const after = JSON.parse((await getState(s)).body);
+    assert.equal(after.hasCard, true, "nach Bindung: true");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
+    assert.equal(t.stripePaymentMethodId, FAKE_PM, "payment_method gespeichert");
+  } finally { await s.close(); }
+});
+
+test("(g2) setup-checkout liefert Stripe-URL + legt Customer im B-Bucket an", async () => {
+  const s = await setup();
+  try {
+    const res = await postSetupCheckout(s);
+    assert.equal(res.status, 200);
+    assert.equal(JSON.parse(res.body).url, `https://stripe.test/c/${FAKE_SESSION}`, "Stripe-URL durchgereicht");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
+    assert.equal(t.stripeCustomerId, FAKE_CUST, "Customer im B-Bucket");
+  } finally { await s.close(); }
+});
+
+test("(g3) return mit fremder session_id -> 403, KEIN payment_method gebunden (Customer-Match)", async () => {
+  const s = await setup();
+  try {
+    await postSetupCheckout(s); // bindet B an FAKE_CUST
+    const ret = await getCardReturn(s, OTHER_SESSION); // fremder Customer
+    assert.equal(ret.status, 403);
+    const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
+    assert.equal(t.stripePaymentMethodId ?? null, null, "kein fremdes payment_method gebunden");
+  } finally { await s.close(); }
+});
+
+test("(g4) return -> 302 mit Location /tenant.html?card=ok", async () => {
+  const s = await setup();
+  try {
+    await postSetupCheckout(s);
+    const ret = await getCardReturn(s, FAKE_SESSION);
+    assert.equal(ret.status, 302);
+    assert.equal(ret.location, "/tenant.html?card=ok", "Redirect in die UI");
+  } finally { await s.close(); }
+});
+
+test("(g5) Fail-closed: ohne Session-Cookie -> 401 auf beiden Pay3-Routen", async () => {
+  const s = await setup();
+  try {
+    const post = await request("POST", `${s.base}/api/self-service/billing/setup-checkout`);
+    assert.equal(post.status, 401, "setup-checkout ohne Session -> 401");
+    const get = await request("GET", `${s.base}/api/self-service/billing/return?session_id=${FAKE_SESSION}`);
+    assert.equal(get.status, 401, "return ohne Session -> 401");
+  } finally { await s.close(); }
+});
+
+test("(g6) Fail-closed: suspendierter Tenant -> 403 auf setup-checkout", async () => {
+  const s = await setup();
+  try {
+    const res = await postSetupCheckout(s, s.cookieSuspended);
+    assert.equal(res.status, 403);
+  } finally { await s.close(); }
+});
+
+test("(g7) PAYMENT_ENABLED aus: beide Routen 404 + hasCard fehlt im state (byte-identisch)", async () => {
+  const s = await setup({ paymentEnabled: false });
+  try {
+    const state = JSON.parse((await getState(s)).body);
+    assert.equal("hasCard" in state, false, "hasCard fehlt bei Flag aus -> UI versteckt den Block");
+    assert.equal((await postSetupCheckout(s)).status, 404, "setup-checkout -> 404");
+    assert.equal((await getCardReturn(s, FAKE_SESSION)).status, 404, "return -> 404");
   } finally { await s.close(); }
 });

@@ -31,6 +31,14 @@ test("Flags an, aber json-Backend (kein Web-Login): Self-Service-Routen sind 404
       });
       assert.equal(res.status, 404);
     });
+    // Pay3: die neuen Billing-Routen liegen in derselben Factory -> erben dieselbe
+    // Wiring-Garantie (ohne Web-Login nicht registriert -> 404).
+    await t.test("POST /api/self-service/billing/setup-checkout -> 404", async () => {
+      const res = await fetch(`${srv.localUrl}/api/self-service/billing/setup-checkout`, {
+        method: "POST", headers: asTenant("sub-b"),
+      });
+      assert.equal(res.status, 404);
+    });
   } finally {
     await srv.stop();
   }

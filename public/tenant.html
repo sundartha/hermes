@@ -148,6 +148,16 @@ label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase
       <div id="cal"><div class="empty">Noch nicht verbunden.</div></div>
     </div>
 
+    <!-- Zahlungsmethode (Pay3) - nur sichtbar wenn PAYMENT_ENABLED (state.hasCard ist
+         dann ein Boolean; sonst undefined -> Block bleibt versteckt). -->
+    <div class="card c12" id="billingCard" style="display:none">
+      <h3>Zahlungsmethode</h3>
+      <div class="hint">Fuer kostenpflichtige Funktionen (z.B. eigene Rufnummer).</div>
+      <div id="cardStatus" class="hint" style="margin-bottom:14px"></div>
+      <button class="btn btn-red" id="addCard">Zahlungsmethode hinzufuegen</button>
+      <span class="msg" id="cardMsg"></span>
+    </div>
+
     <!-- Calls -->
     <div class="card c8">
       <h3>Anrufe</h3>
@@ -254,6 +264,17 @@ async function refresh(){
   renderCalls(s.calls);
   renderAi(s.actionItems);
   renderCal(s.calendar);
+  renderBilling(s);
+}
+
+// Karten-Block nur zeigen, wenn der Server hasCard liefert (PAYMENT_ENABLED an).
+// Sonst bleibt er versteckt -> Verhalten byte-identisch zum Bestand ohne Payment.
+function renderBilling(s){
+  const card = $("billingCard");
+  if(typeof s.hasCard!=="boolean"){ card.style.display="none"; return; }
+  card.style.display="";
+  $("cardStatus").textContent = s.hasCard ? "Karte hinterlegt." : "Noch keine Karte hinterlegt.";
+  $("addCard").textContent = s.hasCard ? "Andere Karte hinterlegen" : "Zahlungsmethode hinzufuegen";
 }
 
 // Patch aus der UI bauen: NUR die erlaubten Felder. Der Server filtert ohnehin
@@ -282,6 +303,26 @@ $("logoutBtn").onclick = async ()=>{
   location.reload();
 };
 $("save").onclick = save;
+
+// Karte hinzufuegen: POST liefert die Stripe-Checkout-URL -> Browser-Redirect dorthin.
+$("addCard").onclick = async ()=>{
+  const m=$("cardMsg"); m.className="msg";
+  const r = await fetch("/api/self-service/billing/setup-checkout", { method:"POST" });
+  if(r.ok){ window.location = (await r.json()).url; return; } // Redirect zu Stripe Checkout
+  if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
+  else{ m.textContent="Konnte Checkout nicht starten."; m.className="msg err"; }
+  setTimeout(()=>m.className="msg",2500);
+};
+
+// Rueckkehr von Stripe Checkout: kurze Rueckmeldung (der Status kommt ohnehin aus refresh()).
+(function showCardReturn(){
+  const p = new URLSearchParams(location.search).get("card");
+  if(!p) return;
+  const m=$("cardMsg");
+  if(p==="ok"){ m.textContent="Karte hinterlegt."; m.className="msg ok"; }
+  else if(p==="canceled"){ m.textContent="Abgebrochen - keine Karte hinterlegt."; m.className="msg err"; }
+  history.replaceState(null, "", location.pathname); // Query entfernen (sauberer Reload)
+})();
 
 refresh();
 </script>
