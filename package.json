@@ -1,7 +1,7 @@
 {
   "name": "hermes",
   "version": "0.1.0",
-  "description": "Autonomer Telefon-Agent: Twilio Voice + Claude (Haiku) + MCP-Server. Inbound- und Outbound-Calls, Call Summaries, Action Items, Kalender.",
+  "description": "Hermes — autonomer Telefon-Assistent (MCP + echte Telefonie)",
   "type": "module",
   "scripts": {
     "start": "node src/server.js",

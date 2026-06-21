@@ -18,6 +18,7 @@ import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
+import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob } from "./store/state-ops.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
 import { createQueue } from "./queue/registry.js";
@@ -30,6 +31,7 @@ import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
 import { guardedBoot } from "./boot-guard.js";
+import { makeRequestTenant, isLocalSocket, internalIdentity, OWNER_ID, ANON_IDENTITY, TENANT_REJECT } from "./request-tenant.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -41,65 +43,16 @@ app.set("trust proxy", 1);
 // (deferred nach P8) -> kein still gestartetes No-op-Subsystem.
 const provisioningQueue = createQueue();
 
-// Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
-// aus X-Forwarded-For abgeleitet und damit von Clients faelschbar.
-const isLocalSocket = (req) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
-
-// Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools
-// laufen im selben Prozess und rufen die localhost-REST-API mit dem verifizierten
-// X-Internal-Identity-Header (aus req.auth.email im /mcp-Handler). Der Header wird
-// NUR von localhost-Sockets akzeptiert - von extern ist er faelschbar und wird
-// ignoriert (-> Owner). Body-Felder (requestedBy/email) NIE als Identitaet nutzen.
-function internalIdentity(req) {
-  if (!isLocalSocket(req)) return null;
-  const id = req.headers["x-internal-identity"];
-  return typeof id === "string" && id ? id : null;
-}
-// requestedBy-Marker fuer den Owner (localhost/stdio ohne Identitaet).
-const OWNER_ID = "owner";
-// Sentinel fuer ein verifiziertes Token OHNE email UND sub: bewusst NICHT Owner
-// (fail-closed), sondern restriktiv (resolveProfile -> DEFAULT_PROFILE).
-const ANON_IDENTITY = "anon";
-
-// Tenant-Achse (I4), getrennt von der Profile-Achse. Marker fuer eine VORHANDENE,
-// aber unbekannte/unaufloesbare Identitaet: kein Tenant -> REJECT (NIE Owner).
-// In I4 filtert noch KEIN Endpunkt; I5/I6/I7 machen daraus 404/403.
-const TENANT_REJECT = "reject";
-
-// Request-Tenant aus der Auth-Identitaet aufloesen (Geschwister zu internalIdentity).
-// Flag aus -> Owner byte-identisch (kein Aufloesungs-Pfad). Flag an: keyt auf
-// req.auth.sub (#1, MCP-Achse). FEHLENDE Identitaet (kein req.auth UND kein
-// localhost-internal-identity, also localhost/stdio) bleibt Owner - wie die Profile-
-// Achse fehlende Identitaet zum Owner macht. VORHANDENE, aber unbekannte/leere
-// Identitaet -> TENANT_REJECT (fail-closed, resolveTenant liefert null).
-// Hinweis (I5-Vorbereitung): der REST-X-Internal-Identity-Kanal traegt heute
-// email-first (mcp-tools), die Tenant-Achse keyt aber auf sub. I4 nutzt sub nur
-// auf dem /mcp-Pfad (req.auth direkt); die REST-seitige sub-Durchreichung folgt
-// in I5, wenn ein Lesepfad sie tatsaechlich filtert.
-function requestTenant(req) {
-  if (!config.multiTenant) return OWNER_TENANT_ID;
-  const sub = req.auth ? req.auth.sub : null;
-  const internal = req.auth ? null : internalIdentity(req);
-  if (!sub && !internal) return OWNER_TENANT_ID; // fehlende Identitaet (localhost/stdio) -> Owner
-  const tenantId = store.resolveTenant(sub || internal);
-  return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
-}
-
-// I6: Request-Tenant fuer Schreib-/Steuer-Pfade aufloesen UND fail-closed gaten.
-// Eine VORHANDENE, aber unbekannte Identitaet (TENANT_REJECT) wird hart mit 403
-// abgewiesen, statt in einen Pseudo-Tenant-Bucket zu schreiben (Owner-Entscheidung).
-// Liefert den Tenant ODER null (dann ist 403 bereits gesendet -> Handler returnt).
-// Flag AUS / fehlende Identitaet -> requestTenant === OWNER_TENANT_ID, nie REJECT ->
-// Guard inert -> Owner-Pfad byte-identisch. Eigenstaendig von I5's call-404-Helper
-// (requireTenantOwnsCall vergleicht call.tenantId); dieser wrappt nur requestTenant.
-function requireTenant(req, res) {
-  const tenant = requestTenant(req);
-  if (tenant === TENANT_REJECT) {
-    res.status(403).json({ error: "Keine Tenant-Zuordnung fuer diese Identitaet." });
-    return null;
-  }
-  return tenant;
-}
+// Request-Tenant-Resolver (rein, extrahiert nach src/request-tenant.js, A4): an den
+// konkreten store gebunden (Factory-Muster wie makeSelfServiceRoutes - haelt das
+// Resolver-Modul DB-frei und ohne server.js-Boot importierbar/unit-testbar). Der
+// neue Web-Session-Zweig wertet req.tenant (gesetzt von webAuthMiddleware nach
+// signiertem Cookie + gueltiger DB-Session) VOR der req.auth/MCP-Logik aus: die
+// staerkere, jederzeit invalidierbare Identitaet gewinnt, fail-closed (-> TENANT_REJECT,
+// nie Owner). Volle Begruendung im Modul-Doc von request-tenant.js. isLocalSocket/
+// internalIdentity sowie OWNER_ID/ANON_IDENTITY/TENANT_REJECT kommen aus demselben
+// Modul (oben importiert).
+const { requestTenant, requireTenant } = makeRequestTenant(store);
 
 app.use(securityHeaders);
 
@@ -256,6 +209,30 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 function extractSpeech(req, provider) {
   if (provider === "telnyx") return (req.body.Transcript || req.body.SpeechResult || "").trim();
   return (req.body.SpeechResult || "").trim();
+}
+
+// Provider-bewusstes Auslesen des Call-Lifecycle-Status aus dem StatusCallback-Body
+// (analog extractSpeech). Beide Provider senden PascalCase-Felder (CallStatus,
+// CallDuration) als form-encoded POST. Telnyx liefert zusaetzlich CallDuration
+// (Sekunden) als Diagnose; Twilio nicht -> diagnostics bleibt fuer Twilio leer
+// (byte-identisch zum Bestand). diagnostics ist bewusst PII-frei (nur Zahlen, NIE
+// From/To/Nummern). Garbage/fehlende CallDuration -> kein Diagnose-Feld (kein NaN).
+function extractLifecycleEvent(req, provider) {
+  const status = req.body.CallStatus;
+  if (provider !== PROVIDER.TELNYX) return { status, diagnostics: {} };
+  const durationS = parseInt(req.body.CallDuration, 10);
+  const diagnostics = Number.isFinite(durationS) ? { callDurationS: durationS } : {};
+  return { status, diagnostics };
+}
+
+// Provider-bewusstes Erkennen eines Telnyx-"Speak"-Command-Events (server-seitiges TTS
+// via TeXML-<Say> ueber Azure-NTTS) im Webhook-Body (analog extractSpeech/extract-
+// LifecycleEvent). Twilio kennt diese Events nicht -> immer NONE (Hot-Path byte-
+// identisch). Die Telnyx-Event-Namen + die PII-freie Klassifikation leben im Adapter
+// (parseSpeakEvent, rein/testbar); hier nur der Provider-Dispatch.
+function extractSpeakOutcome(req, provider) {
+  if (provider !== PROVIDER.TELNYX) return { outcome: SPEAK_OUTCOME.NONE, reason: null };
+  return parseSpeakEvent(req.body);
 }
 
 // ---- Eingabe-Validierung fuer API-Routen ----
@@ -629,12 +606,30 @@ async function finishCall(call) {
 
 app.post("/voice/status", (req, res) => {
   res.sendStatus(200);
-  const tw = req.body.CallStatus;
   const call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
-  if (!call) return;
-  if (tw === "in-progress" || tw === "answered") return void store.markAnswered(call.id);
-  if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(tw)) return;
-  if (call.status === "active") store.endCallRecord(call.id, tw === "completed" ? "completed" : "failed");
+  if (!call) return; // Unbekannter Call: kein Status-Effekt UND kein Log (kein PII/Debug-Rauschen).
+  const provider = call.provider || DEFAULT_PROVIDER;
+
+  // TTS-Stoerung sichtbar machen (graceful degradation): Telnyx meldet ein
+  // fehlgeschlagenes server-seitiges TTS (<Say> ueber Azure-NTTS) als Command-Event
+  // OHNE CallStatus. Ein solches Event ist KEIN Lifecycle-Uebergang -> hier terminieren,
+  // sonst wuerde es mit status=undefined faelschlich als Lifecycle-Event geloggt. Nur
+  // der Fehlschlag wird geloggt (OK-Speak waere Rauschen) und macht die sporadische
+  // Azure-Stoerung zum diagnostizierbaren, PII-freien Signal (reason = Telnyx-Token).
+  const speak = extractSpeakOutcome(req, provider);
+  if (speak.outcome !== SPEAK_OUTCOME.NONE) {
+    if (speak.outcome === SPEAK_OUTCOME.FAILED)
+      console.error("[voice/speak]", JSON.stringify({ callId: call.id, provider, outcome: speak.outcome, reason: speak.reason }));
+    return;
+  }
+
+  const { status: callStatus, diagnostics } = extractLifecycleEvent(req, provider);
+  // PII-frei (Pre-Mortem): nur callId/Status/Provider/Diagnose-Zahlen ins Log, NIE
+  // From/To/Telefonnummern. Macht Telnyx-Lifecycle-Events + CallDuration sichtbar.
+  console.log("[voice/status]", JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }));
+  if (callStatus === "in-progress" || callStatus === "answered") return void store.markAnswered(call.id);
+  if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
+  if (call.status === "active") store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
   finishCall(store.getCall(call.id));
 });
 
