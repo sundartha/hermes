@@ -1,4 +1,4 @@
-# Security-Plan: Vodafone Agent
+# Security-Plan: Hermes
 
 Sicherheits-Haertung des Telefon-Agenten in drei Phasen, priorisiert nach Risiko.
 Kontext: Der Dienst laeuft oeffentlich erreichbar (Render), nimmt echte Anrufe an,

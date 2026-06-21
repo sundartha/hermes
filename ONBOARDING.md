@@ -1,6 +1,6 @@
 # Onboarding für Mitarbeiter
 
-Willkommen beim **Vodafone Agent** – ein autonomer Telefon-Assistent (Twilio + Claude) mit MCP-Anbindung an Claude. Lies zuerst die `README.md` (Architektur, Demo-Drehbuch), dann hier weiter.
+Willkommen beim **Hermes** – ein autonomer Telefon-Assistent (Twilio + Claude) mit MCP-Anbindung an Claude. Lies zuerst die `README.md` (Architektur, Demo-Drehbuch), dann hier weiter.
 
 ## Was läuft wo
 

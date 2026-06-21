@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Vodafone Agent — Dashboard</title>
+<title>Hermes — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -133,7 +133,7 @@ textarea.fi{resize:vertical;min-height:64px}
     <div class="logo-mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm2.5 15.5c-2.6 0-5.3-2.3-5.4-5.6-.1-2.2 1.2-4.3 2.9-5.3 1.1-.7 2.4-1 3.4-.9-.7.3-1.5 1.2-1.5 2.4v.3c1.7.4 3.1 1.8 3.1 4 0 2.6-1.6 5.1-2.5 5.1Z" fill="#fff"/></svg></div>
     <div>
       <h1>Agent <span>Number</span></h1>
-      <div class="sub">Autonomer Telefon-Assistent · Vodafone Business Demo</div>
+      <div class="sub">Autonomer Telefon-Assistent · Sundartha Business Demo</div>
     </div>
     <div class="spacer"></div>
     <div class="agent-chip">
@@ -142,7 +142,7 @@ textarea.fi{resize:vertical;min-height:64px}
         <div class="lbl">Agent-Rufnummer</div>
         <div class="num" id="agentNum">—</div>
       </div>
-      <span class="badge">✓ Vodafone Verified</span>
+      <span class="badge">Powered by Sundartha</span>
     </div>
   </div>
 
@@ -218,7 +218,7 @@ textarea.fi{resize:vertical;min-height:64px}
       <h3>MCP-Verbindung <span style="color:var(--vf-red)">für Claude Desktop</span></h3>
       <div class="hint">Damit steuerst du den Agenten direkt aus Claude heraus: „Ruf beim Friseur an und mach mir einen Termin." → Claude nutzt das Tool <b>place_call</b>.</div>
       <div class="code"><span class="c">// claude_desktop_config.json → "mcpServers":</span>
-<span class="g">"vodafone-agent"</span>: {
+<span class="g">"hermes"</span>: {
   <span class="g">"command"</span>: <span class="g">"node"</span>,
   <span class="g">"args"</span>: [<span class="g">"&lt;PFAD&gt;/vodafone-agent/src/mcp-server.js"</span>]
 }</div>

@@ -1,4 +1,4 @@
-# Vodafone Agent — autonomer Telefon-Assistent (MCP + echte Telefonie)
+# Hermes — autonomer Telefon-Assistent (MCP + echte Telefonie)
 
 Ein echtes, funktionierendes Produkt (keine Simulation): Der Agent hat eine **eigene Rufnummer**, telefoniert **raus** („Ruf beim Friseur an und mach einen Termin") und nimmt **eingehende Anrufe** an (z. B. per Rufumleitung vom Handy). Gesteuert wird er aus **Claude heraus über MCP** — als Custom Connector (HTTP) oder via Claude Desktop (stdio). Nach jedem Gespräch: **Summary + Action Items**, auf Wunsch per SMS.
 
@@ -118,7 +118,7 @@ Du gehst nicht ran → Agent übernimmt → du bekommst SMS mit Summary + Action
 | `cancel_call` | `call_id` | `{status:"cancelled"}` |
 | `get_my_number` | — | `{number}` |
 
-Bonus-Tools für die Vodafone-Demo: `list_calls`, `list_action_items`, `get_calendar`, `get_agent_status`.
+Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calendar`, `get_agent_status`.
 
 ## Demo-Drehbuch (5 Minuten)
 
