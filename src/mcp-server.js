@@ -8,9 +8,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./mcp-tools.js";
 
-const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });
+const server = new McpServer({ name: "hermes", version: "0.2.0" });
 registerTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("[vodafone-agent] MCP-Server bereit (stdio). Gateway: " + (process.env.GATEWAY_URL || "http://localhost:3000"));
+console.error("[hermes] MCP-Server bereit (stdio). Gateway: " + (process.env.GATEWAY_URL || "http://localhost:3000"));
