@@ -6,8 +6,8 @@
 > `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/rebrand-sundartha.md` (Rebrand-Task),
 > `tasks/lessons.md` (Lehren).
 >
-> **Stand:** 2026-06-21 - HEAD lokal = `8d148a8` (= origin/master, in sync; A2/A3/A4/A6 gemergt);
-> upstream/jonas986 (= Live, Render) = `2ceb344`, haengt zurueck. **Tests: 679/679 gruen.**
+> **Stand:** 2026-06-21 - HEAD lokal = `30c0348` = origin/master = upstream/jonas986 (alle in sync;
+> Pay-Kette Pay1-Pay4 gemergt + nach origin UND upstream/Live gepusht). **Tests: 708/708 gruen.**
 
 ## Erledigt (Kontext, nicht offen)
 
@@ -16,6 +16,10 @@ Telnyx-Multi-Tenant **P0-P8** (Adapter/Ports/pg/Budget/Onboarding/Payment-Code/K
 Auth-Foundation **+ Fixes F1-F5**, Crash-Hotspots **P0-P4**, P3b-R LLM-Resilienz **CP1-CP7**,
 sowie der **Inbound/Outbound-STT-Fix** (de-DE + `speechTimeout="auto"` + defensives `extractSpeech`).
 Der **Outbound-Dialog laeuft seit 2026-06-20 erstmals live end-to-end** (Disclosure -> Anlass -> Dialog).
+Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4, 2026-06-21)** ist gemergt +
+live-deployt: Checkout `setup`-Mode + `off_session`-`placeHold`; Hold->Capture laeuft end-to-end im
+**Test-Mode** gruen (PaymentIntent `succeeded`, `livemode=false`). Details: `tasks/pay1..pay4-report.md`,
+Memory [[pay-chain-design-decisions]].
 
 ---
 
@@ -31,26 +35,18 @@ Der **Outbound-Dialog laeuft seit 2026-06-20 erstmals live end-to-end** (Disclos
    Produktion (Render-Env) ist davon getrennt -> dort vom Owner zu bestaetigen. **ACHTUNG /
    zu klaeren:** weicht von der bisherigen "leer/fail-closed bis gruener Live-Smoke"-Vorgabe ab,
    und es ist eine US-Nummer (`+1`) - passt nicht zum DE-Launch (`PROVISIONING_COUNTRY=DE`). Bewusst?
-4. **Stripe live** - **Test-Keys liegen jetzt vor** (`STRIPE_SECRET_KEY=sk_test_...` lokal in
-   `.env`, gitignored/nicht committet). `PAYMENT_ENABLED` bleibt `false` -> System weiter
-   fail-closed/unveraendert. Isolierte Test-Mode-Smoke 2026-06-21 (direkter `placeHold`-Aufruf
-   gegen Stripe, KEIN Telnyx / kein Nummernkauf):
-   - **GRUEN:** Key authentifiziert (PaymentIntent angelegt, HTTP 200). Voller Hold->Capture mit
-     Stripe-Test-Zahlungsmethode (`pm_card_visa`, `capture_method=manual`, `confirm=true`):
-     `requires_capture` -> Capture -> `succeeded`. Die FORM unseres Codes (`src/billing/stripe.js`)
-     ist also korrekt.
-   - **ROT:** unser heutiges `placeHold` (`confirm=true` OHNE `payment_method`) -> HTTP 400
-     ("must provide a `return_url` ... or set `automatic_payment_methods[allow_redirects]=never`").
-   - **WURZEL/OFFEN:** Es fehlt die **Karten-/Customer-Erfassung beim Onboarding**. Ohne eine
-     gespeicherte `payment_method` (Stripe-Customer pro Tenant) kann der Hold fuer einen ECHTEN
-     Tenant nie durchlaufen - Test 3 nutzte nur eine Labor-Testkarte. Das ist eine **eigene Phase**
-     (Stripe Checkout/Elements/SetupIntent -> Customer + payment_method speichern), **kein reiner
-     Env-Flip**. Deckt zugleich die in P6b3 bewusst ausgelassene `stripe_customer_id`-Bindung ab.
-   - **DANACH:** `placeHold` um `payment_method` (bzw. `automatic_payment_methods[allow_redirects]=never`)
-     erweitern; dann `PAYMENT_ENABLED=true` + `NUMBER_SETUP_FEE_CENTS>0` setzen und Hold/Capture im
-     echten Onboard-Flow verifizieren (nur sinnvoll mit `PROVISIONING_ENABLED=true`); zuletzt
-     Test->Live (`sk_live_...`, nur via Render-Dashboard, nie committen) + die 3 Meter
-     (`voice_minutes`/`ai_tokens`/`number_months`) im Stripe-Dashboard anlegen.
+4. **Stripe live** - **Karten-Erfassung + Test-Mode-Hold/Capture ERLEDIGT** (Pay1-Pay4, gemergt +
+   live-deployt, 708/708): Checkout `setup`-Mode (Stripe-Customer + `payment_method` pro Tenant) +
+   `off_session`-`placeHold` -> die fruehere 400-Wurzel (`confirm` ohne `payment_method`) ist weg;
+   Hold->Capture gegen echtes Stripe-Test gruen (`succeeded`, `livemode=false`). Deckt auch die in
+   P6b3 ausgelassene `stripe_customer_id`-Bindung. `PAYMENT_ENABLED` bleibt `false` (Gate aus =
+   byte-identisch). Reports: `tasks/pay1..pay4-report.md`. **Offen fuer ECHTES Geld:**
+   - `PAYMENT_ENABLED=true` + `NUMBER_SETUP_FEE_CENTS>0` + `PROVISIONING_ENABLED=true` im echten
+     Onboard-Flow verifizieren (echter Nummernkauf statt Fake-Provisioner).
+   - Test->Live: `sk_live_...` nur via Render-Dashboard (nie committen).
+   - Die 3 Meter (`voice_minutes`/`ai_tokens`/`number_months`) im Stripe-Dashboard anlegen.
+   - SCA/3DS-Recovery: `off_session`-Charge kann bei echten Karten `authentication_required` werfen
+     (`pm_card_visa` nie) -> der Capture-Pfad braucht dann einen Recovery-Flow.
 5. **WorkOS invite-only scharf + Staging->Production**; **Prod-Postgres** mit non-superuser/
    NOBYPASSRLS-Rolle + pgBouncer (transaction mode); **Killer-Test** fahren
    (`docs/RELEASE-GATE-killer-test.md`) VOR `MULTI_TENANT=true` in Produktion.
@@ -58,10 +54,11 @@ Der **Outbound-Dialog laeuft seit 2026-06-20 erstmals live end-to-end** (Disclos
    (Token-Rotation dokumentieren, Twilio-Subaccount auf minimale Rechte).
 7. **Crash-Hotspots P3 Real-Call-Smoke** (5 Szenarien, HEIKLE STELLE in `bridge.js`) als Gate
    VOR `VOICE_ENGINE=realtime`-Aktivierung.
-8. **upstream/Live nachziehen** - origin = lokal = `8d148a8` (in sync, Stand 2026-06-21, "origin
-   nachziehen" damit erledigt); ABER upstream/jonas986 = `2ceb344` haengt zurueck, und Render
-   deployt von **upstream** ([[deploy-repo-split]]) -> der Live-Stand laeuft HINTER lokal/origin.
-   `git push upstream master` noetig (Owner-/Deploy-Entscheidung), sonst gehen lokale Aenderungen nie live.
+8. ~~**upstream/Live nachziehen**~~ - **ERLEDIGT (2026-06-21):** `git push origin master` UND
+   `git push upstream master` ausgefuehrt -> origin = upstream/jonas986 = lokal = `30c0348` (alle in
+   sync). Render deployt von **upstream** ([[deploy-repo-split]]) -> der Live-Deploy der Pay-Kette
+   laeuft. OFFEN nur noch: Deploy-Health in Render pruefen (Build gruen + `/healthz` + `[boot]`-Banner
+   = neuer Commit live).
 
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
 > das ist KEIN offenes Gate mehr (per Account-Records 2026-06-20 verifiziert).
@@ -71,8 +68,8 @@ Der **Outbound-Dialog laeuft seit 2026-06-20 erstmals live end-to-end** (Disclos
 > Diese Items mit Vorgehen pro Item + Workflow-Einschaetzung (ist phase-impl noetig?):
 > siehe **`AUTONOM.md`**.
 
-> **Stand 2026-06-21 (2. Abgleich):** A1, A3, A4 + Rebrand-Track-A sind GEMERGT (origin `8d148a8`,
-> 679/679). Offen bleiben hier nur noch A5 (sequenziell) und A2 (in Arbeit).
+> **Stand 2026-06-21:** A1, A3, A4 + Rebrand-Track-A sind GEMERGT (master `30c0348`, 708/708).
+> Offen bleiben hier nur noch A5 (sequenziell) und A2 (in Arbeit).
 
 1. **A5 - TEMP-DIAGNOSE-Logs entfernen** - **OFFEN (bewusst sequenziell).** `[turn-recv]`/`[turn-ok]`
    (`src/server.js`) + `[boot]` (`src/boot-guard.js`). ERST nach Abschluss von Gate 1.1 entfernen -
