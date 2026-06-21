@@ -55,6 +55,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   ops.registerTenant(s, TENANT_B, { ownerName: "Maria" });
   s.tenants.find((t) => t.id === TENANT_B).idpSubject = "sub-maria";
   ops.setKycLevel(s, TENANT_B, KYC_LEVEL.CARD); // P6b4: kyc_level round-trippt
+  ops.setTenantStripe(s, TENANT_B, { customerId: "cus_b", paymentMethodId: "pm_b" }); // Pay1: stripe-Referenzen round-trippen
 
   // B-Daten in den Spiegel (settings/calendar/usage/number).
   const iso1 = "2030-02-01T10:00:00.000Z";
@@ -97,6 +98,9 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   // kyc_level round-trippt (P6b4); Owner ohne Wert behaelt KEIN Feld (nur-nicht-null-Hydrierung, R6).
   assert.equal(rs.tenants.find((t) => t.id === TENANT_B).kycLevel, KYC_LEVEL.CARD, "kyc_level round-trippt");
   assert.equal("kycLevel" in rs.tenants.find((t) => t.id === OWNER_TENANT_ID), false);
+  // stripe-Referenzen round-trippen (Pay1); Owner ohne Werte behaelt KEINE Felder (nur-nicht-null-Hydrierung, R6).
+  assert.deepEqual(r.tenantStripe(TENANT_B), { customerId: "cus_b", paymentMethodId: "pm_b" }, "stripe-Referenzen round-trippen");
+  assert.equal("stripeCustomerId" in rs.tenants.find((t) => t.id === OWNER_TENANT_ID), false);
   // call + actionItem + notification getrennt zugeordnet.
   assert.ok(r.getCall(cb.id), "B-Call vorhanden");
   assert.equal(r.getCall(cb.id).tenantId, TENANT_B);

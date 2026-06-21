@@ -320,6 +320,19 @@ export function kycReached(tenantId, minLevel) {
   return ops.kycReached(load(), tenantId, minLevel);
 }
 
+// ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
+// setTenantStripe mutiert -> save (Muster wie setKycLevel); tenantStripe ist reine
+// Query (kein save, analog kycReached).
+export function setTenantStripe(tenantId, patch) {
+  const tenant = ops.setTenantStripe(load(), tenantId, patch);
+  save();
+  return tenant;
+}
+
+export function tenantStripe(tenantId) {
+  return ops.tenantStripe(load(), tenantId);
+}
+
 // ---- Notifications ----
 export function addNotification(title, body, callId) {
   ops.addNotification(load(), title, body, callId);

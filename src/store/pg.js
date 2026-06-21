@@ -163,6 +163,14 @@ export function makePgStore(runner) {
     },
     kycReached: (tenantId, minLevel) => ops.kycReached(requireState(), tenantId, minLevel),
 
+    // ---- Stripe-Customer/Karte pro Tenant (Pay1): Wrapper-Parity zu json.js ----
+    setTenantStripe(tenantId, patch) {
+      const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
+      save();
+      return tenant;
+    },
+    tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
+
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
       save();
@@ -239,7 +247,9 @@ async function hydrate(client) {
 // entstuende ein leeres ownerName-Feld). Der Owner ist immer enthalten (seedDefaults
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
-  const rows = (await client.query(`SELECT id, status, owner_name, idp_subject, kyc_level FROM tenant`)).rows;
+  const rows = (await client.query(
+    `SELECT id, status, owner_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id FROM tenant`
+  )).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
     if (r.owner_name != null) tenant.ownerName = r.owner_name;
@@ -248,6 +258,10 @@ async function hydrateTenants(client) {
     // ein Owner/Bestand ohne Wert behaelt KEIN kycLevel-Feld -> kycReached liefert
     // true (byte-identisch zum json-Pfad, kein null-Feld-Drift, R6).
     if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
+    // Pay1: nur-nicht-null hydrieren (Muster wie kyc_level) -> Tenant ohne Karte
+    // behaelt KEIN leeres Feld (kein Drift json<->pg, R6).
+    if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
+    if (r.stripe_payment_method_id != null) tenant.stripePaymentMethodId = r.stripe_payment_method_id;
     return tenant;
   });
 }
@@ -476,12 +490,15 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, idp_subject, kyc_level)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO tenant (id, status, owner_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
-         idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level`,
-      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null, t.kycLevel ?? null]
+         idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
+         stripe_customer_id=EXCLUDED.stripe_customer_id,
+         stripe_payment_method_id=EXCLUDED.stripe_payment_method_id`,
+      [t.id, t.status, t.ownerName ?? null, t.idpSubject ?? null, t.kycLevel ?? null,
+       t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null]
     );
   }
 }
