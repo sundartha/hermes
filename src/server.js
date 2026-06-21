@@ -26,6 +26,7 @@ import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
+import { E164, TEXT_LIMITS, invalidText } from "./routes/_validation.js";
 import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
@@ -236,16 +237,7 @@ function extractSpeakOutcome(req, provider) {
 }
 
 // ---- Eingabe-Validierung fuer API-Routen ----
-const E164 = /^\+[1-9]\d{6,14}$/;
-const TEXT_LIMITS = { objective: 500, briefing: 2000, constraints: 2000, caller_name: 100, title: 200 };
-
-// Fehlertext oder null; optionale Felder (null/undefined) sind erlaubt
-function invalidText(name, value) {
-  if (value == null) return null;
-  if (typeof value !== "string") return `${name} muss ein String sein`;
-  if (value.length > TEXT_LIMITS[name]) return `${name} ist zu lang (max. ${TEXT_LIMITS[name]} Zeichen)`;
-  return null;
-}
+// E164, TEXT_LIMITS, invalidText: extrahiert nach src/routes/_validation.js (T4 Phase 2).
 
 // ---- Nummern-Gates fuer Outbound-Calls (Safety, siehe tasks/todo.md Phase 0+2) ----
 // Feste Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit
