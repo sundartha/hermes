@@ -18,6 +18,9 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active
 -- idp_subject NULL = nicht ueber resolveTenant aufloesbar. Muster wie number.status.
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS owner_name  TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS idp_subject TEXT;
+-- LLM-Persona-Vorname (G1) additiv NULLABLE. NULL = kein eigener Wert -> firstName
+-- wird aus ownerName abgeleitet im tenantContext (eine Quelle). Muster wie owner_name.
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS first_name TEXT;
 -- KYC-Reifegrad (P6b4) additiv NULLABLE. NULL/fehlend = Bestand/Owner -> Gate
 -- passiert (kein Regress, kycReached liefert true). Ein gesetzter Wert
 -- (none|otp|card|id_verified) wird rangbasiert gegen die Outbound-Schwelle geprueft.

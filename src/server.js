@@ -677,6 +677,17 @@ app.post("/api/calls", async (req, res) => {
     return res.status(kycErr.status).json({ error: kycErr.message });
   }
 
+  // Identitaets-Gate (G1, Geschwister-Regel zu Regel 2): ohne registrierten
+  // Auftraggeber-Namen KEIN Outbound (sonst renderte die Offenlegung "...von .").
+  // Fail-closed, NIE in /voice/outbound (Premature-close-Schutz) - hier am Producer.
+  // tenantContext zieht ownerName aus dem Tenant (Fallback config.ownerName, der per
+  // assertConfig nie leer ist) -> leer nur bei kaputtem Seed/manipuliertem Store.
+  const ownerName = store.tenantContext(tenantId).ownerName;
+  if (!ownerName) {
+    audit("place_call_denied", req, `to=${to} grund=keine_identitaet tenant=${tenantId} requestedBy=${requestedBy}`);
+    return res.status(403).json({ error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." });
+  }
+
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
   const gateErr = numberGateError(to, profile, requestedBy);
   if (gateErr) {
@@ -688,8 +699,7 @@ app.post("/api/calls", async (req, res) => {
   const textErr =
     invalidText("objective", objective) ||
     invalidText("briefing", b.briefing) ||
-    invalidText("constraints", b.constraints) ||
-    invalidText("caller_name", b.caller_name);
+    invalidText("constraints", b.constraints);
   if (textErr) return res.status(400).json({ error: textErr });
 
   // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): Owner behaelt die
@@ -720,7 +730,6 @@ app.post("/api/calls", async (req, res) => {
     goal: objective,
     briefing: b.briefing,
     constraints: b.constraints,
-    callerName: b.caller_name,
     language: b.language || "de",
     maxDurationS: maxDur,
     requestedBy,
@@ -908,10 +917,11 @@ app.get("/api/billing/checkout-return", async (req, res) => {
 const ONBOARD_REASON_STATUS = { tenant_inactive: 403, tenant_cap: 409, global_cap: 429 };
 
 app.post("/api/onboard", async (req, res) => {
-  // ownerName ist optional + Freitext (darf Leerzeichen, NICHT durch validIdentity);
-  // registerTenant trimmt + laesst leer weg (Owner-Fallback). validIdentity bleibt
-  // nur auf tenantId (Routing-Schluessel, kein Whitespace).
-  const { tenantId, ownerName } = req.body || {};
+  // G1: zwei Eingaben (firstName + lastName) statt eines ownerName (Owner-Entscheidung
+  // #1). Beide optional + Freitext (duerfen Leerzeichen, NICHT durch validIdentity, das
+  // nur den Routing-Schluessel tenantId prueft); registerTenant trimmt + komponiert
+  // ownerName (Owner-Fallback bei leer).
+  const { tenantId, firstName, lastName } = req.body || {};
   if (!validIdentity(tenantId))
     return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
 
@@ -922,7 +932,7 @@ app.post("/api/onboard", async (req, res) => {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      registerTenant(s, tenantId, { ownerName });
+      registerTenant(s, tenantId, { firstName, lastName });
       const r = requestNumber(s, {
         tenantId,
         provider: PROVIDER.TELNYX,

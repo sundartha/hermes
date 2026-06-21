@@ -8,7 +8,7 @@
 
 // E.164-Format: '+' gefolgt von 7-15 Ziffern, erste Ziffer != 0.
 export const E164 = /^\+[1-9]\d{6,14}$/;
-export const TEXT_LIMITS = { objective: 500, briefing: 2000, constraints: 2000, caller_name: 100, title: 200 };
+export const TEXT_LIMITS = { objective: 500, briefing: 2000, constraints: 2000, title: 200 };
 
 // Fehlertext oder null; optionale Felder (null/undefined) sind erlaubt
 export function invalidText(name, value) {

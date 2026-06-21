@@ -95,7 +95,16 @@ export const config = {
   // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
   voiceMinuteCostCents: numEnv("VOICE_MINUTE_COST_CENTS", process.env.VOICE_MINUTE_COST_CENTS, { fallback: 0, min: 0 }),
 
-  ownerName: process.env.OWNER_NAME || "Jonas",
+  // Owner-Identitaet (G1): zwei Eingaben statt eines Namens (Owner-Entscheidung #1).
+  // KEIN Default mehr ("Jonas" raus) -> assertConfig macht beide zur Boot-Pflicht
+  // (fail-closed wie TWILIO_NUMBER). ownerName wird daraus KOMPONIERT (Getter, kein
+  // Lazy-Init-Antipattern - reine Ableitung), damit Bestandskonsumenten
+  // (tenantContext-Fallback, Store-Wrapper) unveraendert laufen.
+  ownerFirstName: (process.env.OWNER_FIRST_NAME || "").trim(),
+  ownerLastName: (process.env.OWNER_LAST_NAME || "").trim(),
+  get ownerName() {
+    return [this.ownerFirstName, this.ownerLastName].filter(Boolean).join(" ");
+  },
   ownerNumber: process.env.OWNER_NUMBER || "",
 
   // ---- Store-Backend ----
@@ -231,6 +240,10 @@ export function assertConfig() {
   if (!config.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
   if (!config.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
   if (!config.twilioNumber) missing.push("TWILIO_NUMBER");
+  // G1: Owner-Identitaet fail-closed (Boot-Refusal bei leer) -> der "Jonas"-Default
+  // verschwindet an der Quelle, kein stiller Identitaets-Fallback im Greeting/Disclosure.
+  if (!config.ownerFirstName) missing.push("OWNER_FIRST_NAME");
+  if (!config.ownerLastName) missing.push("OWNER_LAST_NAME");
   if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME"))
     missing.push("PUBLIC_URL");
   if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)

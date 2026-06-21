@@ -58,7 +58,7 @@ const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`
 // gibt seinen Settings-Bucket zurueck, damit der Aufrufer Vorbedingungen setzen kann.
 async function seedActiveTenant(store, accounts, { sub, tenantId, bankData }) {
   const s = store.load();
-  ops.registerTenant(s, tenantId, { ownerName: "Kunde B" });
+  ops.registerTenant(s, tenantId, { firstName: "Kunde", lastName: "B" }); // G1: komponiert ownerName="Kunde B"
   const t = s.tenants.find((x) => x.id === tenantId);
   t.status = "active";       // Mirror-Status konsistent zur DB (Flush darf nicht downgraden)
   t.idpSubject = sub;
