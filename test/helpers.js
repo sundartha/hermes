@@ -120,7 +120,7 @@ export function tempDataDir(seedState, rawStore) {
 export function seedState({ calls = [], actionItems = [], notifications = [], settings = {}, profiles = {}, tenants, numbers } = {}) {
   return {
     settings: {
-      agentName: "Vodafone Agent",
+      agentName: "Hermes",
       greeting: "Hallo, hier ist der KI-Assistent von {owner}. Wie kann ich helfen?",
       allowCalendar: true,
       allowBooking: true,

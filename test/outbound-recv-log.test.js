@@ -16,8 +16,9 @@ const SPEECH_MARKER = "PII_GEHEIM_ANLIEGEN_4711";
 // Minimaler Anthropic-Messages-Mock: liefert einen festen content-Block (Text bzw.
 // Text+end_call) auf jeden POST. Stateless - genau EIN Request pro Turn, weil Text
 // und (optional) end_call zusammen in EINER Antwort kommen: ohne Tool bricht der Loop
-// mangels toolUses ab (claude.js:208), mit end_call via `if (endCall) if (speech) break`
-// (claude.js:222-225) - beide Pfade nach einer Runde.
+// mangels toolUses ab, mit end_call bricht er ueber `(endCall || suppressedEndCall) &&
+// speech` ab (im ersten Outbound-Turn wird end_call unterdrueckt) - beide Pfade nach
+// einer Runde.
 async function startAnthropicMock(content) {
   const server = http.createServer((req, res) => {
     req.on("data", () => {});
@@ -77,7 +78,7 @@ test("[outbound-recv]: normaler Turn -> Felder gesetzt, tail=gather, KEIN Speech
   assert.ok(!out.includes(SPEECH_MARKER), `Speech-Leak im Log (DSGVO): ${out}`);
 });
 
-test("[outbound-recv]: endCall-Turn (T1) -> endCall=true, tail=hangup, KEIN Speech-Leak", async () => {
+test("[outbound-recv]: end_call im ersten Outbound-Turn (T1) wird unterdrueckt -> endCall=false, tail=gather, KEIN Speech-Leak", async () => {
   const out = await runOutbound([
     { type: "text", text: SPEECH_MARKER },
     { type: "tool_use", id: "toolu_1", name: "end_call", input: {} },
@@ -85,8 +86,11 @@ test("[outbound-recv]: endCall-Turn (T1) -> endCall=true, tail=hangup, KEIN Spee
 
   const line = out.split("\n").find((l) => l.includes("[outbound-recv]"));
   assert.ok(line, `[outbound-recv]-Zeile fehlt im stdout:\n${out}`);
-  assert.match(line, /endCall=true/, `endCall=true fehlt (T1 unsichtbar): ${line}`);
-  assert.match(line, /tail=hangup/, `tail=hangup fehlt: ${line}`);
+  // T1-Fix P3a (claude.js): ruft der Agent im ERSTEN Outbound-Turn end_call, BEVOR der
+  // Angerufene etwas gesagt hat, wird es unterdrueckt -> agentTurn liefert endCall=false,
+  // der Webhook rendert ein <Gather> (tail=gather) statt eines stummen Hangups.
+  assert.match(line, /endCall=false/, `T1-Fix: end_call im ersten Turn muss unterdrueckt sein: ${line}`);
+  assert.match(line, /tail=gather/, `T1-Fix: tail muss gather sein (kein Hangup): ${line}`);
 
   assert.ok(!out.includes(SPEECH_MARKER), `Speech-Leak im Log (DSGVO): ${out}`);
 });

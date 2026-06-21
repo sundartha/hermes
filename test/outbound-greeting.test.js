@@ -2,8 +2,9 @@
 // Mechanik des Outbound-Antwort-Webhooks. Pinnt fuer BEIDE Provider (Twilio +
 // Telnyx) drei Faelle des /voice/outbound-Pfads (server.js:506-513):
 //   (i)  normaler Turn   -> Body enthaelt <Gather> NACH dem Disclosure (AK-1).
-//   (ii) endCall=true     -> Body enthaelt KEIN <Gather> (heutiger Bug, als
-//        dokumentierte Regression: der Agent legt nach einem Satz auf, Trigger T1).
+//   (ii) end_call im 1. Turn -> wird unterdrueckt (T1-Fix P3a), Body enthaelt ein
+//        <Gather> nach dem Disclosure statt eines Hangups: der Agent legt nicht auf,
+//        bevor der Angerufene geantwortet hat (AK-1/AK-2).
 //   (iii) agentTurn wirft -> Disclosure + Retry-<Gather> ohne stummen Hangup
 //        (T2-Fix P3b): der Fehlerpfad legt nicht mehr auf, sondern haelt STT scharf.
 //
@@ -23,7 +24,9 @@ const CALL_ID = "call_outbound1";
 const DISCLOSURE = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas.";
 // Agent-Anliegen im Normal-Turn (im <Gather>-Prompt gerendert).
 const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";
-// Abschiedssatz, den der Agent vor end_call sagt (zweiter <Say> im endCall-Body).
+// Letzte Agent-Aeusserung im end_call-Turn. Nach dem T1-Fix (P3a) wird das end_call
+// des ersten Turns unterdrueckt -> diese Aeusserung landet im <Gather>-Prompt statt
+// vor einem Hangup.
 const FAREWELL = "Vielen Dank, das war schon alles. Auf Wiederhoeren!";
 
 // Minimale, aber vollstaendige Anthropic-Message: agentTurn liest nur content +
@@ -49,8 +52,9 @@ function anthropicResponse(behavior) {
     case "normal":
       return { status: 200, body: anthropicMessage([{ type: "text", text: AGENT_SPEECH }], "end_turn") };
     case "endCall":
-      // Text + end_call in EINER Antwort: speech wird gesetzt, dann bricht der
-      // Tool-Loop ab (claude.js:222-225) -> genau ein Mock-Aufruf.
+      // Text + end_call in EINER Antwort: speech wird gesetzt; im ersten Outbound-Turn
+      // wird end_call unterdrueckt (T1-Fix P3a), der Tool-Loop bricht nach der Aeusserung
+      // ab -> genau ein Mock-Aufruf.
       return {
         status: 200,
         body: anthropicMessage(
@@ -91,12 +95,12 @@ async function startAnthropicMock(behavior) {
 
 // Faehrt /voice/outbound lokal gegen den gefakten agentTurn und liefert den
 // gerenderten Provider-Body (TwiML/TeXML). Mock + Server werden immer geschlossen.
-async function outboundBody({ provider, behavior }) {
+async function outboundBody({ provider, behavior, transcript = [] }) {
   const mock = await startAnthropicMock(behavior);
   const srv = await startServer({
     env: { ANTHROPIC_BASE_URL: mock.url },
     seed: seedState({
-      calls: [seedCall({ id: CALL_ID, provider, status: "active", direction: "outbound" })],
+      calls: [seedCall({ id: CALL_ID, provider, status: "active", direction: "outbound", transcript })],
     }),
   });
   try {
@@ -136,13 +140,28 @@ for (const provider of ["twilio", "telnyx"]) {
     assert.ok(!body.includes(HANGUP), `Normaler Turn darf nicht auflegen: ${body}`);
   });
 
-  test(`/voice/outbound (${provider}): endCall=true rendert KEIN <Gather> (Regression T1)`, async () => {
+  test(`/voice/outbound (${provider}): end_call im ersten Outbound-Turn wird unterdrueckt -> <Gather> statt Hangup (T1-Fix P3a)`, async () => {
     const body = await outboundBody({ provider, behavior: "endCall" });
-    // Dokumentierter heutiger Bug: ruft der Agent im ersten Turn end_call, endet
-    // der Body mit <Hangup/> OHNE <Gather> -> Provider legt nach dem Satz auf, STT
-    // wird nie scharf. Aendert ein Fix dieses Verhalten, MUSS dieser Test angepasst
-    // werden (er pinnt absichtlich das Ist-Verhalten als Regression).
-    assert.ok(!body.includes(GATHER), `endCall-Pfad pinnt den Bug: erwartet KEIN <Gather>, Body: ${body}`);
+    // P3a-Fix (call-debug.md 3.2): ruft der Agent im ERSTEN Turn end_call, BEVOR der
+    // Angerufene etwas gesagt hat, wird es unterdrueckt. Der Webhook rendert dann ein
+    // <Gather> nach der Offenlegung statt eines stummen Hangups -> STT bleibt scharf,
+    // der Call bleibt offen, bis der Angerufene antworten konnte (AK-1/AK-2).
+    assertDisclosureBefore(body, GATHER);
+    assert.ok(!body.includes(HANGUP), `Unterdruecktes end_call darf nicht auflegen (Gather statt Hangup): ${body}`);
+    assert.ok(body.includes(FAREWELL), `Letzte Agent-Aeusserung fehlt im Gather-Prompt: ${body}`);
+  });
+
+  test(`/voice/outbound (${provider}): end_call NACH erster Caller-Antwort legt auf (Guard greift nur im 1. Turn)`, async () => {
+    // Gegenprobe zum T1-Fix: existiert bereits eine role:caller-Zeile, ist der Guard
+    // inaktiv -> ein echtes end_call beendet den Call wie vorgesehen (<Hangup>, kein
+    // <Gather>). Belegt, dass die Unterdrueckung NUR den ersten Turn betrifft und
+    // end_call nicht dauerhaft blockiert.
+    const body = await outboundBody({
+      provider,
+      behavior: "endCall",
+      transcript: [{ role: "caller", text: "Ja, hallo?" }],
+    });
+    assert.ok(!body.includes(GATHER), `end_call nach Caller-Antwort darf kein <Gather> rendern: ${body}`);
     assert.ok(body.includes(FAREWELL), `Abschiedssatz fehlt vor dem Hangup: ${body}`);
     assertDisclosureBefore(body, HANGUP);
   });

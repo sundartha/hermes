@@ -53,7 +53,7 @@ test("eraseTenantData(owner) entfernt NUR Owner-Calls; fremder Tenant + Config b
   assert.ok(getCall(s, "call_other"), "fremder Call bleibt");
   assert.deepEqual(s.actionItems.map((a) => a.id), ["ai_other"], "nur fremdes Action Item bleibt");
   // settings/calendar/usage/profiles unangetastet (Service-Config/Budget-Gate)
-  assert.equal(s.settings.agentName, "Vodafone Agent");
+  assert.equal(s.settings.agentName, "Hermes");
   assert.deepEqual(s.calendar, []);
   assert.equal(s.usage[OWNER_TENANT_ID].costEur, 4, "Budget-Zaehler unveraendert");
   assert.deepEqual(s.profiles, {});

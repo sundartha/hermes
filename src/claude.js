@@ -69,7 +69,7 @@ DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
 ${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}
 PFLICHT-OFFENLEGUNG: Dein allererster Satz muss exakt lauten: "${disclosureSentence(call)}" Danach erklaerst du kurz dein Anliegen.
-Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen abgleichen, zusagen). Pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Sage nichts zu, was ausserhalb deines Auftrags liegt. Bei Unklarheit beende das Gespraech hoeflich.`;
+Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen abgleichen, zusagen). Pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Sage nichts zu, was ausserhalb deines Auftrags liegt. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 }
 
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls)
@@ -185,8 +185,17 @@ export async function agentTurn(call, callerText) {
     });
   }
 
+  // T1-Sicherungsboden (docs/strategy/call-debug.md 3.2): Im ersten Outbound-Turn -
+  // bevor der Angerufene ueberhaupt etwas gesagt hat - darf der Agent nicht auflegen.
+  // Solange keine role:caller-Zeile existiert, wird ein end_call unterdrueckt; der
+  // Webhook rendert dann ein <Gather> (STT bleibt scharf) statt eines stummen Hangups.
+  // Nur Outbound - Inbound bleibt unveraendert.
+  const suppressEndCall =
+    call.direction === "outbound" && !call.transcript.some((t) => t.role === "caller");
+
   let messages = history;
   let endCall = false;
+  let suppressedEndCall = false;
   let speech = "";
 
   // Tool-Loop (max. 4 Runden pro Turn)
@@ -213,16 +222,28 @@ export async function agentTurn(call, callerText) {
       {
         role: "user",
         content: toolUses.map((tu) => {
-          if (tu.name === "end_call") endCall = true;
+          if (tu.name === "end_call") {
+            if (suppressEndCall) {
+              // end_call ignorieren und das Modell anweisen, auf die Antwort zu warten.
+              suppressedEndCall = true;
+              return {
+                type: "tool_result",
+                tool_use_id: tu.id,
+                content: "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
+              };
+            }
+            endCall = true;
+          }
           const result = execTool(call, tu.name, tu.input || {});
           return { type: "tool_result", tool_use_id: tu.id, content: result };
         }),
       },
     ];
-    if (endCall) {
-      // Noch eine letzte (kurze) Antwort zulassen, falls Claude nach end_call nichts gesagt hat
-      if (speech) break;
-    }
+    // Echtes oder unterdruecktes end_call mit vorhandener Aeusserung -> Turn beenden,
+    // nicht weiter re-prompten. Bei unterdruecktem end_call bleibt endCall=false, der
+    // Webhook rendert also ein <Gather>. Ohne speech weiterlaufen (max. 4 Runden),
+    // damit das Modell nach end_call doch noch eine kurze Antwort liefern kann.
+    if ((endCall || suppressedEndCall) && speech) break;
   }
 
   if (!speech) speech = "Alles klar, vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!";
