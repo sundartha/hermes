@@ -7,9 +7,6 @@ import { PGlite } from "@electric-sql/pglite";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { makePortalStore } from "../src/store/portal.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
-import { config } from "../src/config.js";
-
-config.twilioNumber = ""; config.telnyxNumber = ""; // env-unabhaengig (wie store-pg-rls)
 
 const APP_ROLE = "app_user";
 const TENANT_A = "tenant_a", TENANT_B = "tenant_b";

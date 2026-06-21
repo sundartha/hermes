@@ -15,11 +15,6 @@ import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
 import { config } from "../src/config.js";
 
-// Owner-Nummern-Seed (config.twilio/telnyxNumber aus .env) ausschalten, damit die
-// deterministischen Number-Asserts unabhaengig von der lokalen .env laufen und kein
-// number-GRANT noetig ist (Muster wie store-pg-rls.test.js). Process-isoliert pro Datei.
-config.twilioNumber = "";
-config.telnyxNumber = "";
 // G1: in-process laeuft config OHNE .env -> Owner-Identitaet leer. Setzen, damit die
 // Variante-(a)-Seed (pg init) einen ownerName traegt (= Produktion mit gesetzten
 // OWNER_FIRST_NAME/OWNER_LAST_NAME; leer waere Boot-Refusal).

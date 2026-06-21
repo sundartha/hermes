@@ -1,5 +1,6 @@
 // Outbound ueber Telnyx end-to-end (Server-Kindprozess): POST /api/calls waehlt
-// Telnyx als Provider, sobald TELNYX_NUMBER gesetzt ist - from = Telnyx-Nummer,
+// Telnyx als Provider, weil die aktive Owner-Nummer im Store eine Telnyx-Nummer ist
+// (provider aus s.numbers, nicht mehr aus TELNYX_NUMBER-Env) - from = Telnyx-Nummer,
 // originate ueber die TeXML-API. Statt der echten Telnyx-API laeuft ein lokaler
 // Mock (TELNYX_API_BASE zeigt darauf) -> offline + deterministisch, KEIN echter
 // Anruf. Eigene Datei (Server-Spawn, KEIN pglite -> kein Test-Worker-Stall).
@@ -32,7 +33,6 @@ async function startTelnyxVoiceMock() {
 }
 
 const TELNYX_ENV = (mockUrl) => ({
-  TELNYX_NUMBER: TELNYX_NR,
   TELNYX_API_KEY: "KEYtest-secret",
   TELNYX_CONNECTION_ID: "conn_test",
   TELNYX_ACCOUNT_SID: "acct_test",
@@ -40,12 +40,16 @@ const TELNYX_ENV = (mockUrl) => ({
   ALLOWED_NUMBERS: TARGET,
 });
 
+// Owner-Absendernummer = Telnyx-Nummer im Store -> Outbound waehlt Telnyx (provider
+// aus s.numbers, statt frueher TELNYX_NUMBER-Env).
+const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx" };
+
 const postJson = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
-test("POST /api/calls mit TELNYX_NUMBER -> provider=telnyx, from=Telnyx-Nummer, TeXML-Originate", async () => {
+test("POST /api/calls mit Telnyx-Owner-Nummer im Store -> provider=telnyx, from=Telnyx-Nummer, TeXML-Originate", async () => {
   const mock = await startTelnyxVoiceMock();
-  const srv = await startServer({ env: TELNYX_ENV(mock.url) });
+  const srv = await startServer({ env: TELNYX_ENV(mock.url), ownerNumber: TELNYX_OWNER });
   try {
     const res = await postJson(`${srv.localUrl}/api/calls`, { to: TARGET, objective: "Testziel" });
     assert.equal(res.status, 200);
@@ -78,7 +82,7 @@ test("POST /api/calls mit TELNYX_NUMBER -> provider=telnyx, from=Telnyx-Nummer, 
 
 test("Outbound-Gates greifen weiter: nicht erlaubte Nummer -> 403 (kein Telnyx-Call)", async () => {
   const mock = await startTelnyxVoiceMock();
-  const srv = await startServer({ env: TELNYX_ENV(mock.url) });
+  const srv = await startServer({ env: TELNYX_ENV(mock.url), ownerNumber: TELNYX_OWNER });
   try {
     const res = await postJson(`${srv.localUrl}/api/calls`, { to: "+491110000000", objective: "x" });
     assert.equal(res.status, 403, "nicht in der Allowlist -> abgewiesen");

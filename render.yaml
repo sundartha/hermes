@@ -22,12 +22,11 @@ services:
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
-      - key: TWILIO_NUMBER
-        sync: false
+      # Hinweis: Absendernummern (Twilio/Telnyx) sind KEINE Env-Var mehr. Der Owner
+      # ist Tenant Null und haelt seine Nummer(n) im Store - einmalig eintragen via
+      # "npm run seed-owner-number -- <e164> <twilio|telnyx>" (gegen STORE_BACKEND=pg)
+      # VOR dem ersten Boot; der Boot-Guard verlangt eine aktive Owner-Nummer.
       # ---- Telnyx (zweiter Provider, optional - P5) ----
-      # Leer lassen, wenn nur Twilio genutzt wird (Telnyx fail-closed inaktiv).
-      - key: TELNYX_NUMBER
-        sync: false
       - key: TELNYX_API_KEY
         sync: false
       - key: TELNYX_PUBLIC_KEY

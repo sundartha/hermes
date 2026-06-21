@@ -30,11 +30,30 @@ Memory [[pay-chain-design-decisions]].
    Bestaetigung, dass unter `@anthropic-ai/sdk` 0.105 (CP7) kein "Premature close" mehr auftritt.
 2. **Telnyx-Realtime scharf schalten** - blockiert bis Live-WS-Echo-Test gruen (Payload-Format
    mu-law vs. RTP). Code ist dormant; Live laeuft auf `VOICE_ENGINE=budget`.
-3. **`TELNYX_NUMBER` produktiv setzen** - **lokal in `.env` jetzt gesetzt** (`+18643028341`,
-   Stand 2026-06-21) -> lokaler MCP-Telnyx-Outbound damit scharf (Schalter `server.js`).
-   Produktion (Render-Env) ist davon getrennt -> dort vom Owner zu bestaetigen. **ACHTUNG /
-   zu klaeren:** weicht von der bisherigen "leer/fail-closed bis gruener Live-Smoke"-Vorgabe ab,
-   und es ist eine US-Nummer (`+1`) - passt nicht zum DE-Launch (`PROVISIONING_COUNTRY=DE`). Bewusst?
+3. ~~**`TELNYX_NUMBER` produktiv setzen**~~ - **STRUKTURELL AUFGELOEST (2026-06-21):** Es gibt
+   keine `TWILIO_NUMBER`/`TELNYX_NUMBER`-Env-Var mehr. Der Owner ist Tenant Null und haelt seine
+   Absendernummer(n) wie jeder Tenant im Store; `outboundFrom` liest fuer ALLE Tenants via
+   `findActiveNumber`, ein Boot-Guard verlangt fail-closed eine aktive Owner-Nummer.
+   **Owner-Aktion (einmalig, statt Env):** Bestandsnummer eintragen mit
+   `npm run seed-owner-number -- <e164> <twilio|telnyx>` - lokal gegen `data/store.json`, in Prod
+   `STORE_BACKEND=pg DATABASE_URL=... npm run seed-owner-number -- ...` VOR dem ersten Boot des neuen
+   Codes; danach `TWILIO_NUMBER`/`TELNYX_NUMBER` aus der Render-Env loeschen. **Offen (Owner):** die
+   US-Nummer (`+1`) passt weiter nicht zum DE-Launch (`PROVISIONING_COUNTRY=DE`) - bewusst behalten
+   oder DE-Nummer beschaffen?
+
+   > **!! DEPLOY-RISIKO (vor dem Prod-Deploy ZWINGEND klaeren) !!** Der Umbau ist nur mit einem
+   > **persistenten** Store sicher. `render.yaml` hat `STORE_BACKEND=json` als Default, und der Render
+   > Free Plan hat ein **fluechtiges Dateisystem** -> `data/store.json` (inkl. der geseedeten
+   > Owner-Nummer) wird bei JEDEM Deploy/Neustart geloescht. Der alte Code hat das aufgefangen, indem
+   > er die Owner-Nummer bei jedem Boot aus `TWILIO_NUMBER` neu seedete - genau dieser Env-Seed ist
+   > jetzt WEG. Folge bei `STORE_BACKEND=json` in Prod: nach dem naechsten Deploy ist der Store leer ->
+   > **Boot-Guard verweigert den Start -> Dienst dauerhaft down** (ein erneuter Seed waere beim
+   > naechsten Restart wieder weg). **Vor dem Deploy pruefen:** Laeuft Prod (Render-Dashboard ->
+   > Environment) auf `pg` (persistent) oder `json` (fluechtig)?
+   > - `pg`: sicher - einmalig gegen Postgres seeden (s.o.), fertig.
+   > - `json`: **so NICHT deployen** - erst auf Postgres wechseln ODER einen Env-Fallback-Seed
+   >   wieder einbauen. Falls schon deployt und der Dienst bootet nicht: in Render den vorherigen
+   >   Commit re-deployen (Rollback).
 4. **Stripe live** - **Karten-Erfassung + Test-Mode-Hold/Capture ERLEDIGT** (Pay1-Pay4, gemergt +
    live-deployt, 708/708): Checkout `setup`-Mode (Stripe-Customer + `payment_method` pro Tenant) +
    `off_session`-`placeHold` -> die fruehere 400-Wurzel (`confirm` ohne `payment_method`) ist weg;
@@ -50,15 +69,23 @@ Memory [[pay-chain-design-decisions]].
 5. **WorkOS invite-only scharf + Staging->Production**; **Prod-Postgres** mit non-superuser/
    NOBYPASSRLS-Rolle + pgBouncer (transaction mode); **Killer-Test** fahren
    (`docs/RELEASE-GATE-killer-test.md`) VOR `MULTI_TENANT=true` in Produktion.
-6. **`MCP_AUTH=oauth`** end-to-end gegen claude.ai im Dauerbetrieb; **Secrets-Hygiene**
-   (Token-Rotation dokumentieren, Twilio-Subaccount auf minimale Rechte).
+6. **`MCP_AUTH=oauth`** end-to-end gegen claude.ai im Dauerbetrieb; **Secrets-Hygiene**.
+   - **Secrets-Hygiene ERLEDIGT (2026-06-21, Doku):** Secrets-Inventar (Blast-Radius pro Secret),
+     Token-Rotations-Prozedur (Ueberlappung/Zero-Downtime + Besonderheiten pro Secret) und
+     Twilio-Subaccount-/Telnyx-Scoped-Key-Minimalrechte-Checkliste stehen jetzt vollstaendig in
+     `docs/RUNBOOK-OPERATOR.md` Gate 7. Der OAuth-Code ist test-gedeckt (`test/oauth.test.js`).
+   - **Live-Infra VERIFIZIERT (2026-06-21):** Render-Env steht auf `MCP_AUTH=oauth`; gegen
+     `https://vodafone-agent.onrender.com` sind Gate-5b-Steps 1-2 gruen - Protected-Resource-Metadata
+     (beide Pfade) zeigt `resource=…/mcp` + WorkOS-Issuer, unautorisierter `POST /mcp` -> `401` +
+     `WWW-Authenticate`-Wegweiser. WorkOS-Issuer erreichbar (openid-configuration + AS-Metadata +
+     JWKS 1 Key) -> Token-Verify-Kette greift live.
+   - **OFFEN (nur interaktiv/Operator):** Gate-5b-Steps 3-5 - claude.ai-Connector verbinden +
+     einloggen + Dauerbetrieb (silent Refresh ueber einen Token-Ablauf). ACHTUNG: Issuer ist noch
+     eine **Staging**-AuthKit-Domain (`…-staging.authkit.app`) -> vor echtem Prod-Dauerbetrieb
+     Staging->Production-Cutover (Runbook Gate 5, Schritt 3).
 7. **Crash-Hotspots P3 Real-Call-Smoke** (5 Szenarien, HEIKLE STELLE in `bridge.js`) als Gate
    VOR `VOICE_ENGINE=realtime`-Aktivierung.
-8. ~~**upstream/Live nachziehen**~~ - **ERLEDIGT (2026-06-21):** `git push origin master` UND
-   `git push upstream master` ausgefuehrt -> origin = upstream/jonas986 = lokal = `30c0348` (alle in
-   sync). Render deployt von **upstream** ([[deploy-repo-split]]) -> der Live-Deploy der Pay-Kette
-   laeuft. OFFEN nur noch: Deploy-Health in Render pruefen (Build gruen + `/healthz` + `[boot]`-Banner
-   = neuer Commit live).
+
 
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
 > das ist KEIN offenes Gate mehr (per Account-Records 2026-06-20 verifiziert).

@@ -12,16 +12,10 @@ import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { demoCalendar } from "../src/store/defaults.js";
-import { config } from "../src/config.js";
 
 // Dieser Test kontrolliert die number-Zeilen selbst (manuelle Inserts) und prueft
-// die RLS-Isolation deterministisch. Den config-abgeleiteten Owner-Nummern-Seed
-// (TWILIO_NUMBER/TELNYX_NUMBER -> seedDefaults) ausschalten, damit die Tests
-// UNABHAENGIG von der lokalen .env laufen: sonst seedet seedDefaults eine reale
-// Owner-Nummer mit (bricht die exakte e164-Erwartung + braucht ein number-GRANT,
-// das die minimalen Test-Rollen bewusst nicht haben). Process-isoliert pro Datei.
-config.twilioNumber = "";
-config.telnyxNumber = "";
+// die RLS-Isolation deterministisch. Der frische pg-Store seedet keine Owner-Nummer
+// mehr (Owner-Nummer kommt ueber seedOwnerNumber), also keine .env-Kopplung.
 
 const OTHER_TENANT_ID = "other";
 const APP_ROLE = "app_user"; // liest Owner-Daten, ohne Superuser/BYPASSRLS

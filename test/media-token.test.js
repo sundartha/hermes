@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
-import { startServer, seedState, seedCall, BASE_ENV } from "./helpers.js";
+import { startServer, seedState, seedCall, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const TOKEN = "a".repeat(32);
 const CALL_ID = "call_test1";
@@ -81,7 +81,7 @@ test("TwiML der Realtime-Engine traegt das stream_token des Calls", async () => 
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       // To = geseedete Owner-Nummer (P3c): unbekannte To wuerde fail-closed greifen.
-      body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER }),
+      body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
     });
     assert.equal(res.status, 200);
     const twiml = await res.text();

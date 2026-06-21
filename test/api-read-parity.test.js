@@ -62,7 +62,6 @@ function makeMockStore({ listSize = 1 } = {}) {
 function makeConfig(overrides = {}) {
   return {
     multiTenant: false,
-    twilioNumber: "+15005550006",
     ownerNumber: "+4915299999999",
     claudeModel: "claude-haiku-4-5",
     voiceEngine: "budget",
@@ -124,8 +123,9 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     // upcomingCalendar filtert den vergangenen Termin weg -> nur der zukuenftige.
     assert.equal(body.calendar.length, 1);
     assert.equal(body.calendar[0].title, "future");
-    // agent-Block: Flag aus -> config.twilioNumber; Owner-Sicht -> ownerNumber sichtbar.
-    assert.equal(body.agent.number, "+15005550006");
+    // agent-Block: number = aktive Store-Nummer des Tenants (auch der Owner ist Tenant
+    // Null, keine config-Nummer mehr); Owner-Sicht -> ownerNumber sichtbar.
+    assert.equal(body.agent.number, "+4915200000001");
     assert.equal(body.agent.owner, "Jonas");
     assert.equal(body.agent.ownerNumber, "+4915299999999"); // R3.2: Owner-Sicht
     assert.equal(body.agent.model, "claude-haiku-4-5");

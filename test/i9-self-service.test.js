@@ -20,13 +20,6 @@ import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { GREETING_TEMPLATES } from "../src/self-service.js";
 import { OWNER_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
-import { config } from "../src/config.js";
-
-// Owner-Nummern-Seed (config.twilio/telnyxNumber aus .env) ausschalten -> die
-// deterministischen Asserts laufen unabhaengig von einer lokalen .env (Muster wie
-// store-pg-multitenant.test.js). Prozess-isoliert pro Datei.
-config.twilioNumber = "";
-config.telnyxNumber = "";
 
 const SECRET = "self-service-web-secret-0123456789";
 const SUB_B = "sub-b";

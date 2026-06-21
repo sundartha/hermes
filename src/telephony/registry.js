@@ -63,15 +63,6 @@ export function providerFromHeaders(headers) {
   return null;
 }
 
-// Owner-Absendernummer fuer einen Provider (rein): Telnyx-Call -> Telnyx-Owner-
-// Nummer, sonst Twilio-Owner-Nummer. cfg wird hereingereicht (testbar ohne echte
-// config; finishCall reicht das echte config). Unbekannter/fehlender Provider ->
-// Twilio-Fallback (byte-identisch zum Bestand). Eine Stelle fuer die Provider->
-// Owner-Nummer-Abbildung (G5) statt Inline-Ternary im langen finishCall.
-export function ownerNumberForProvider(provider, cfg) {
-  return provider === PROVIDER.TELNYX ? cfg.telnyxNumber : cfg.twilioNumber;
-}
-
 /** @returns {import("./ports.js").InboundSignatureVerifier} */
 export const inboundSignatureVerifier = () => ({
   verifyInboundSignature(req) {

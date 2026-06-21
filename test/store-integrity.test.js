@@ -11,7 +11,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
-import { tempDataDir, startServer } from "./helpers.js";
+import { tempDataDir, startServer, startServerExpectExit } from "./helpers.js";
 
 let store;
 let withStoreLock;
@@ -111,21 +111,24 @@ test("T-P1-02: withStoreLock verhindert Lost Update bei await zwischen read und 
 
 // ---- T-P1-03: Korruptes store.json am Boot -> bewahrt + geflaggt, NICHT gewischt
 // Kindprozess (frischer Modul-Zustand): src/server.js laedt den Store beim Boot.
-test("T-P1-03: korruptes store.json -> .corrupt-Rename + lautes Log, kein stiller Wipe", async () => {
-  const srv = await startServer({ rawStore: "{ this is not json" });
-  try {
-    assert.match(srv.stdout, /\[store\] KORRUPTES store\.json erkannt/, "lautes KORRUPT-Log");
-    const files = fs.readdirSync(srv.dataDir);
-    const corrupt = files.find((f) => f.startsWith("store.json.corrupt-"));
-    assert.ok(corrupt, "korruptes File forensisch nach .corrupt-<ts> umbenannt");
-    assert.equal(
-      fs.readFileSync(path.join(srv.dataDir, corrupt), "utf8"),
-      "{ this is not json",
-      "der .corrupt-Backup haelt den originalen kaputten Inhalt",
-    );
-    const fresh = JSON.parse(fs.readFileSync(path.join(srv.dataDir, "store.json"), "utf8"));
-    assert.ok(Array.isArray(fresh.calls), "neues store.json ist gueltiges Default-JSON (Dienst ueberlebt)");
-  } finally {
-    await srv.stop();
-  }
+// Recovery (Rename + frischer Default + lautes Log) laeuft in store.load() VOR dem
+// Boot-Guard. Da der recovered Default KEINE Owner-Nummer hat (die lebte im jetzt
+// korrupten Store), refused der Boot-Guard fail-closed -> Exit (neue Realitaet seit
+// "Owner = Tenant Null": nach Wipe muss der Owner re-seeden). Die Forensik (kein
+// stiller Wipe) ist davon unberuehrt und wird hier weiter bewiesen.
+test("T-P1-03: korruptes store.json -> .corrupt-Rename + lautes Log + fail-closed Boot (kein stiller Wipe)", async () => {
+  const { code, output, dataDir } = await startServerExpectExit({ rawStore: "{ this is not json" });
+  assert.match(output, /\[store\] KORRUPTES store\.json erkannt/, "lautes KORRUPT-Log");
+  assert.match(output, /Keine aktive Owner-Nummer im Store/, "Boot-Guard refused fail-closed nach Recovery");
+  assert.equal(code, 1, "fail-closed Boot-Refusal (Exit 1)");
+  const files = fs.readdirSync(dataDir);
+  const corrupt = files.find((f) => f.startsWith("store.json.corrupt-"));
+  assert.ok(corrupt, "korruptes File forensisch nach .corrupt-<ts> umbenannt");
+  assert.equal(
+    fs.readFileSync(path.join(dataDir, corrupt), "utf8"),
+    "{ this is not json",
+    "der .corrupt-Backup haelt den originalen kaputten Inhalt",
+  );
+  const fresh = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
+  assert.ok(Array.isArray(fresh.calls), "neues store.json ist gueltiges Default-JSON (kein stiller Wipe)");
 });

@@ -3,6 +3,13 @@
 // Aufruf: npm run check   (Gateway muss fuer den Tunnel-Check laufen: npm start)
 import twilio from "twilio";
 import { config } from "../src/config.js";
+import * as store from "../src/store.js";
+import { findActiveNumber } from "../src/store/views.js";
+import { OWNER_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
+
+// Owner-Twilio-Nummer kommt aus dem Store (nicht mehr aus TWILIO_NUMBER): der Owner
+// ist Tenant Null. Leer -> Hinweis aufs Seed-CLI.
+const ownerTwilioNumber = findActiveNumber(store.load(), OWNER_TENANT_ID, PROVIDER.TWILIO)?.e164 || "";
 
 let pass = 0, fail = 0, warn = 0;
 const ok = (m) => { pass++; console.log("  \x1b[32m✓\x1b[0m " + m); };
@@ -17,7 +24,7 @@ console.log("\n═══ Hermes — Setup-Check ═══");
 h("1. Konfiguration (.env)");
 config.anthropicApiKey ? ok("ANTHROPIC_API_KEY gesetzt") : bad("ANTHROPIC_API_KEY fehlt");
 config.twilioSid && config.twilioToken ? ok("Twilio-Credentials gesetzt") : bad("TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN fehlen");
-config.twilioNumber ? ok(`TWILIO_NUMBER: ${config.twilioNumber}`) : bad("TWILIO_NUMBER fehlt");
+ownerTwilioNumber ? ok(`Owner-Twilio-Nummer (Store): ${ownerTwilioNumber}`) : bad("Keine aktive Owner-Twilio-Nummer im Store", "npm run seed-owner-number -- <e164> twilio");
 config.publicUrl && !config.publicUrl.includes("CHANGE-ME")
   ? ok(`PUBLIC_URL: ${config.publicUrl}`)
   : bad("PUBLIC_URL fehlt oder ist Platzhalter", "ngrok http " + config.port + " starten und URL eintragen");
@@ -87,11 +94,11 @@ if (config.twilioSid && config.twilioToken) {
 
     // Nummer vorhanden + Webhooks korrekt?
     const nums = await client.incomingPhoneNumbers.list({ limit: 20 });
-    const mine = nums.find((n) => norm(n.phoneNumber) === norm(config.twilioNumber));
+    const mine = nums.find((n) => norm(n.phoneNumber) === norm(ownerTwilioNumber));
     if (!mine) {
-      bad(`TWILIO_NUMBER ${config.twilioNumber} gehoert nicht zu diesem Account`, "Nummer in der Twilio-Console pruefen");
+      bad(`Owner-Twilio-Nummer ${ownerTwilioNumber} gehoert nicht zu diesem Account`, "Nummer in der Twilio-Console pruefen");
     } else {
-      ok("TWILIO_NUMBER gehoert zum Account");
+      ok("Owner-Twilio-Nummer gehoert zum Account");
       const wantVoice = `${config.publicUrl}/voice/incoming`;
       const wantStatus = `${config.publicUrl}/voice/status`;
       norm(mine.voiceUrl) === norm(wantVoice)

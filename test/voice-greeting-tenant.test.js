@@ -5,7 +5,7 @@
 // Owner): belegt Map-freie Koexistenz ohne A-zu-B-Leck.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, BASE_ENV } from "./helpers.js";
+import { startServer, seedState, BASE_ENV, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const TENANT_B = "B";
 const B_NUMBER = "+4915255555555";
@@ -36,7 +36,7 @@ test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      body: new URLSearchParams({ CallSid: "CAo", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER }),
+      body: new URLSearchParams({ CallSid: "CAo", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
     });
     assert.equal(res.status, 200);
     assert.match(await res.text(), new RegExp(BASE_ENV.OWNER_FIRST_NAME));

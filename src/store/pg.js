@@ -187,6 +187,14 @@ export function makePgStore(runner) {
       save();
     },
 
+    // Owner-/Bestandsnummer direkt 'active' eintragen (CLI scripts/seed-owner-number.js):
+    // die EINE legitime Ausnahme zur Transition-Kette (idempotent ueber normNum). Der
+    // neue Spiegel-Eintrag wird vom save()->flushTenantScope->flushNumbers persistiert.
+    seedOwnerNumber(e164, tenantId, provider) {
+      ops.seedOwnerNumber(requireState(), e164, tenantId, provider);
+      return save();
+    },
+
     // Default = config.retentionDays, identisch zum json-Backend: der einzige
     // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
     // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).

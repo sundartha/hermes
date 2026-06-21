@@ -12,11 +12,9 @@ import express from "express";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
-import { config } from "../src/config.js";
 import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makePortalStore } from "../src/store/portal.js";
 
-config.twilioNumber = ""; config.telnyxNumber = ""; // env-unabhaengig
 const SECRET = "portal-route-secret-0123456789";
 
 async function setup() {

@@ -10,13 +10,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
-import { config } from "../src/config.js";
-
-// Auto-Seed der config-abgeleiteten Owner-Nummer ausschalten (process-isoliert pro
-// Datei, wie store-pg-rls.test.js): sonst seedet init() eine reale Owner-Nummer mit,
-// die fuer diesen Loesch-Test ohne Belang ist und die Erwartungen verrauschen kann.
-config.twilioNumber = "";
-config.telnyxNumber = "";
 
 const OTHER = "other";
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
