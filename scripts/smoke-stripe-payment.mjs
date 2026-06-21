@@ -42,6 +42,11 @@ export function isTestKey(secretKey) {
 // macht das die Stripe-Checkout-Setup-Session aus Pay1 - hier ersetzt pm_card_visa
 // die gehostete Seite. Kein Adapter-Edit -> kein toter Produktionscode (F4/G9).
 // Secret-Key NIE in Fehlermeldungen leaken (Regel 4): nur HTTP-Status.
+//
+// WICHTIG: pm_card_visa ist ein GETEILTES Test-Token, das Stripe beim Attach KLONT
+// (jeder Attach liefert eine neue pm_-id). Die echte attachte id steht im Response
+// und MUSS fuer default + off_session-Charging verwendet werden - das Token selbst
+// ist NICHT am Customer attached (sonst HTTP 400 "payment method must be attached").
 async function attachTestCard(customerId) {
   const headers = {
     Authorization: `Bearer ${config.stripeSecretKey}`,
@@ -53,16 +58,18 @@ async function attachTestCard(customerId) {
     { method: "POST", headers, body: attachBody }
   );
   if (!attached.ok) throw new Error(`attach payment_method fehlgeschlagen: HTTP ${attached.status}`);
+  const attachedPaymentMethodId = (await attached.json().catch(() => ({}))).id;
+  if (!attachedPaymentMethodId) throw new Error("attach payment_method lieferte keine id");
 
   const defaultBody = new URLSearchParams();
-  defaultBody.set("invoice_settings[default_payment_method]", TEST_PAYMENT_METHOD);
+  defaultBody.set("invoice_settings[default_payment_method]", attachedPaymentMethodId);
   const setDefault = await fetch(`${config.stripeApiBase}${CUSTOMERS_PATH}/${customerId}`, {
     method: "POST",
     headers,
     body: defaultBody,
   });
   if (!setDefault.ok) throw new Error(`set default_payment_method fehlgeschlagen: HTTP ${setDefault.status}`);
-  return TEST_PAYMENT_METHOD;
+  return attachedPaymentMethodId;
 }
 
 // Kompakte Ausgabe + Exit-Code (Muster aus telnyx-ws-echo.mjs). Eine Abstraktions-
