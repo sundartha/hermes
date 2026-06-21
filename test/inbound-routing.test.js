@@ -1,11 +1,11 @@
 // P3c: fail-closed Inbound-To-Routing. Eine unbekannte/fehlende To wird auf KEINEN
 // Tenant aufgeloest (kein Default-Tenant) -> hoeflicher Hangup + Audit, KEIN
-// Call-Record. Nur die geseedete Owner-Nummer (config.twilioNumber) routet. Die
+// Call-Record. Nur die geseedete Owner-Store-Nummer (OWNER_TEST_NUMBER) routet. Die
 // Twilio-Signatur wird VOR To geprueft (Anti-Spoof) - eine gespoofte To ohne
 // gueltige Signatur erreicht das Routing nie (403). Build-Operate-Check je Konzept.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForLog, BASE_ENV } from "./helpers.js";
+import { startServer, waitForLog, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const UNKNOWN_TO = "+49999999999"; // nicht geseedet -> nicht routbar
 
@@ -48,13 +48,13 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER }),
+      body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
     });
     assert.equal(res.status, 200);
     assert.match(await res.text(), /<Gather/, "Owner-Nummer fuehrt in den Gespraechs-Turn");
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1, "genau ein Call-Record fuer die Owner-Nummer");
-    assert.equal(calls[0].to, BASE_ENV.TWILIO_NUMBER);
+    assert.equal(calls[0].to, OWNER_TEST_NUMBER.e164);
   } finally {
     await srv.stop();
   }

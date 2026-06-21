@@ -3,7 +3,7 @@
 
 /**
  * @typedef {Object} OriginateParams
- * @property {string} from           - Anrufer-Nummer (E.164), heute config.twilioNumber
+ * @property {string} from           - Absender-Nummer (E.164), aktive Store-Nummer des Tenants
  * @property {string} to             - Zielnummer (E.164, bereits gegated)
  * @property {string} url            - TwiML-Webhook-URL (/voice/outbound?callId=...)
  * @property {string} statusCallback - Status-Callback-URL (/voice/status?callId=...)
@@ -48,7 +48,7 @@
 
 /**
  * @typedef {Object} SmsParams
- * @property {string} from - Absender-Nummer (E.164), heute config.twilioNumber
+ * @property {string} from - Absender-Nummer (E.164), aktive Store-Nummer des Tenants
  * @property {string} to   - Empfaenger-Nummer (E.164)
  * @property {string} body - Nachrichtentext (bereits auf 1500 Zeichen gekuerzt)
  */

@@ -5,7 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { defaultSettings, defaultSettingsMap, demoCalendar, calendarMap, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID, PROVIDER } from "./defaults.js";
+import { defaultSettings, defaultSettingsMap, demoCalendar, calendarMap, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID } from "./defaults.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -65,14 +65,10 @@ export function load() {
 // verloren geht (sonst griffe Inbound nach P3c fail-closed - vgl. seedOwnerNumber unten).
 function finishLoad() {
   seedProfilesFromEnv();
-  // Owner-Nummer config-derived bei JEDEM load() idempotent sicherstellen (analog
-  // seedProfilesFromEnv): ohne sie wuerde Inbound nach P3c fail-closed greifen,
-  // weil seedState()-Tests/persistierte Stores keine numbers tragen.
-  ops.seedOwnerNumber(state, config.twilioNumber, OWNER_TENANT_ID);
-  // Telnyx-Owner-Nummer config-derived idempotent mitseeden (NUR wenn TELNYX_NUMBER
-  // gesetzt; der !e164-Guard in seedOwnerNumber erledigt das env-gating). Leer ->
-  // kein Seed -> alle Telnyx-Inbound fail-closed (kein Default-Tenant).
-  ops.seedOwnerNumber(state, config.telnyxNumber, OWNER_TENANT_ID, PROVIDER.TELNYX);
+  // Owner-Nummern kommen NICHT mehr aus der config (kein TWILIO_NUMBER/TELNYX_NUMBER
+  // mehr): der Owner ist Tenant Null und haelt seine Nummer(n) wie jeder Tenant in
+  // s.numbers. Einmalig eingetragen via scripts/seed-owner-number.js. Boot-Guard in
+  // server.js verlangt fail-closed eine aktive Owner-Nummer im Store.
   // Owner-Identitaet config-derived idempotent seeden (Variante a, G1): schuetzt den
   // ungegateten Inbound-Greeting + summarizeCall. Leere Config -> kein Seed
   // (assertConfig verweigert dann ohnehin den Boot).
@@ -340,6 +336,15 @@ export function tenantStripe(tenantId) {
 // ---- Notifications ----
 export function addNotification(title, body, callId) {
   ops.addNotification(load(), title, body, callId);
+  save();
+}
+
+// ---- Owner-/Bestandsnummer eintragen (CLI scripts/seed-owner-number.js) ----
+// Bestandsnummer (bereits beim Provider gekauft) direkt 'active' eintragen - die
+// EINE legitime Ausnahme zur Transition-Kette (state-ops.seedOwnerNumber, idempotent
+// ueber normNum). Kein Provider-Kauf, kein 'requested'-Vorzustand.
+export function seedOwnerNumber(e164, tenantId, provider) {
+  ops.seedOwnerNumber(load(), e164, tenantId, provider);
   save();
 }
 

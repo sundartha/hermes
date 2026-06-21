@@ -7,10 +7,10 @@
 // Dateien, sonst hielten beide Handles den Test-Worker am Leben).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { providerFromHeaders, ownerNumberForProvider } from "../src/telephony/registry.js";
+import { providerFromHeaders } from "../src/telephony/registry.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { OWNER_TENANT_ID, PROVIDER, DEFAULT_PROVIDER } from "../src/store/defaults.js";
-import { startServer, BASE_ENV } from "./helpers.js";
+import { startServer, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const TELNYX_NR = "+13125550100";
 const TELNYX_HEADERS = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
@@ -29,15 +29,6 @@ test("providerFromHeaders: kein erkannter Header -> null (Aufrufer faellt auf De
   assert.equal(providerFromHeaders(undefined), null);
   // Nur telnyx-timestamp ohne Signatur reicht NICHT (beide Header noetig).
   assert.equal(providerFromHeaders({ "telnyx-timestamp": "1" }), null);
-});
-
-// ---- ownerNumberForProvider (rein, Provider -> Owner-Absendernummer) ----
-test("ownerNumberForProvider: telnyx -> Telnyx-Nummer, twilio/unbekannt -> Twilio-Nummer", () => {
-  const cfg = { twilioNumber: "+15005550006", telnyxNumber: TELNYX_NR };
-  assert.equal(ownerNumberForProvider(PROVIDER.TELNYX, cfg), TELNYX_NR);
-  assert.equal(ownerNumberForProvider(PROVIDER.TWILIO, cfg), cfg.twilioNumber);
-  // Fail-safe: fehlender/unbekannter Provider -> Twilio-Fallback (byte-identisch zum Bestand).
-  assert.equal(ownerNumberForProvider(undefined, cfg), cfg.twilioNumber);
 });
 
 // ---- call.provider: Default + gesetzt (json-Pfad via state-ops) ----
@@ -59,7 +50,8 @@ test("createCall: ohne provider (Outbound) -> DEFAULT_PROVIDER (twilio)", () => 
 // (BASE_ENV) ueberspringt die Signaturpruefung -> der Provider ergibt sich allein aus
 // der Header-PRAESENZ, nicht aus einer gueltigen Signatur.
 test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx", async () => {
-  const srv = await startServer({ env: { TELNYX_NUMBER: TELNYX_NR } });
+  // Owner-Telnyx-Nummer im Store (statt frueher TELNYX_NUMBER-Env): To routet darauf.
+  const srv = await startServer({ ownerNumber: { e164: TELNYX_NR, provider: PROVIDER.TELNYX } });
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
@@ -83,7 +75,7 @@ test("Twilio-Inbound -> TwiML-Greeting (speechModel) + call.provider=twilio (byt
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      body: new URLSearchParams({ CallSid: "tw1", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER }),
+      body: new URLSearchParams({ CallSid: "tw1", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
     });
     assert.equal(res.status, 200);
     const body = await res.text();

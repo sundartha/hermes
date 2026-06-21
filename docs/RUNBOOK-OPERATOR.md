@@ -1,6 +1,6 @@
 # Operator-Runbook: Live-/Account-Gates
 
-> Stand 2026-06-19. Diese Schritte kann **nur ein Mensch mit Account/Geld/Live-Zugang**
+> Stand 2026-06-21. Diese Schritte kann **nur ein Mensch mit Account/Geld/Live-Zugang**
 > fahren — sie sind bewusst NICHT autonom automatisierbar. Code-seitig ist alles fertig
 > (P0-P8, I1-I9, REST-P6, F1-F5); offen sind ausschliesslich Aktivierungs- und Live-Smokes.
 > Quelle der Liste: `STATUS.md`. Konvention: Deutsch ohne Umlaute.
@@ -137,7 +137,20 @@ nur bei erfolgreichem Capture `active`.
 **Schritte:**
 1. WorkOS-AuthKit-Account + OIDC-Client anlegen, **Redirect-URI** = `<PUBLIC_URL>/auth/callback`.
 2. **Invite-only scharf:** in WorkOS "Sign up" deaktivieren, Team-Mitglieder per Invite.
-3. **Staging → Production:** eigene authkit.app-Domain, `OAUTH_ISSUER_URL` darauf umstellen.
+3. **Staging → Production-Cutover** (eigener, bewusster Schritt — aktuell laeuft OAuth gegen die
+   **Staging**-Domain `…-staging.authkit.app`; funktional ok zum Testen, aber NICHT der finale
+   Prod-Issuer). WorkOS trennt Staging und Production in **zwei separaten Umgebungen** mit eigenen
+   Nutzern/Clients/Schluesseln — nichts wird automatisch migriert. Cutover:
+   1. In WorkOS oben auf **Production**-Umgebung umschalten.
+   2. OIDC-Client + **Redirect-URI** (`<PUBLIC_URL>/auth/callback`) in Production **neu** anlegen
+      (Staging-Werte ziehen NICHT mit).
+   3. Invite-only auch in Production scharf (Self-Signup aus).
+   4. Eigene Auth-Domain whitelabeln (z.B. `login.sundartha.com`) ODER die Prod-`….authkit.app`
+      ohne `-staging` verwenden.
+   5. In **Render-Env** tauschen: `OAUTH_ISSUER_URL` → Prod-Domain, `OIDC_CLIENT_ID` /
+      `OIDC_CLIENT_SECRET` → die **neuen** Production-Werte. Re-Deploy.
+   6. Gate-5b-Steps 1-2 erneut fahren (Metadata zeigt jetzt den Prod-Issuer; JWKS erreichbar),
+      dann Steps 3-5 (claude.ai-Login) gegen Production.
 
 **Bekannte Luecke (nicht Gate, FYI):** Remote-Browser-OAuth fuer Self-Service fehlt noch
 (`req.auth` liegt nur auf `/mcp`) → Self-Service funktioniert remote noch nicht, nur localhost.
@@ -145,6 +158,45 @@ Das ist die eine offene **Code**-Aufgabe (Plan-Doc 1d), bewusst aus I9 deferred.
 
 **Akzeptanz:** Login-Happy-Path gegen echten IdP + Postgres (Staging-Smoke) gruen;
 unautorisiert → 401, suspendiert → 403.
+
+### Gate 5b — `MCP_AUTH=oauth` end-to-end gegen claude.ai (STATUS §1.6, Teil A)
+
+**Status:** Code fertig + test-gedeckt (`src/auth.js`; `test/oauth.test.js`, 13 Faelle: JWKS-
+Discovery inkl. WorkOS-`oauth-authorization-server`-Fallback, Audience/Signatur/Expiry, fail-closed
+Boot ohne `OAUTH_ISSUER_URL`). **Live-Infra verifiziert 2026-06-21:** Render-Env auf `MCP_AUTH=oauth`,
+Steps 1-2 unten gruen (Metadata + 401-Challenge), WorkOS-Issuer
+`momentous-dune-52-staging.authkit.app` erreichbar (openid-configuration + AS-Metadata + JWKS).
+Offen ist **nur** der reale claude.ai-Connector-Flow (Steps 3-5) — reiner Account-/Live-Schritt,
+nicht autonom fahrbar. **Hinweis:** Issuer ist noch eine **Staging**-AuthKit-Domain → vor echtem
+Prod-Dauerbetrieb Staging→Production-Cutover (Gate 5, Schritt 3).
+
+**Voraussetzung:** Gate 5 (WorkOS-AuthKit + OIDC-Client + Env) steht; Deploy live (Abschnitt 0).
+
+**Schritte:**
+1. **Metadata pruefen** (ohne Login, von aussen):
+   ```
+   curl -s <PUBLIC_URL>/.well-known/oauth-protected-resource | jq .
+   ```
+   Erwartet: `resource` = `<PUBLIC_URL>/mcp`, `authorization_servers` = `[<OAUTH_ISSUER_URL>]`.
+   Beide Pfade (`/.well-known/oauth-protected-resource` **und** `…/mcp`) muessen 200 liefern.
+2. **Unautorisiert = 401 mit Wegweiser** (Pre-Mortem: fail-closed):
+   ```
+   curl -si -X POST <PUBLIC_URL>/mcp -H 'content-type: application/json' -d '{}' | grep -i 'www-authenticate'
+   ```
+   Erwartet: `401` + `WWW-Authenticate: Bearer resource_metadata="…/oauth-protected-resource", …`.
+3. **claude.ai-Connector hinzufuegen:** claude.ai → Settings → Connectors → Custom Connector →
+   URL `<PUBLIC_URL>/mcp`. claude.ai folgt der Protected-Resource-Metadata zum WorkOS-Issuer und
+   startet den OAuth-Login. Mit einer **invite-only** zugelassenen Identitaet einloggen.
+4. **Tool-Liste + ein Read-Tool** in claude.ai aufrufen (z.B. Status/Calls lesen — kein Outbound).
+   Im Render-Log erscheint **kein** `auth_failed`-Audit fuer `/mcp`; der Call traegt `req.auth.sub`.
+5. **Dauerbetrieb (der eigentliche Gate-Punkt):** nach Ablauf des ersten Access-Tokens erneut ein
+   Tool aufrufen — claude.ai muss **silent** ueber den Refresh-Token ein neues Token holen, ohne
+   erneuten interaktiven Login. Ueber mehrere Stunden/Tage stichprobenhaft wiederholen.
+
+**Akzeptanz:** Schritte 1-4 gruen UND Schritt 5 ueber mind. einen Token-Ablauf hinweg ohne
+Re-Login. Negativ-Gegenprobe: ein **suspendierter**/nicht-eingeladener Account → 401/403,
+kein Tool-Zugriff. Danach `MCP_AUTH_TOKEN` aus der Render-Env entfernen (im `oauth`-Modus ungenutzt,
+s. Gate 7.3).
 
 ---
 
@@ -172,10 +224,82 @@ Prozedur + Akzeptanz stehen vollstaendig in **`docs/RELEASE-GATE-killer-test.md`
 
 ## Gate 7 — Secrets-Hygiene (begleitend)
 
-- Secrets NUR ueber Render-Dashboard / lokale `.env` — nie committen, nie loggen, nie in
-  API-/MCP-Antworten leaken (Regel 4).
-- Token-Rotation dokumentieren; Twilio-/Telnyx-Subaccount mit minimalen Rechten.
-- `openssl rand -hex 32` fuer `MCP_AUTH_TOKEN` / `SESSION_SECRET`.
+**Grundregeln (Regel 4):** Secrets NUR ueber Render-Dashboard / lokale `.env` — nie committen,
+nie loggen, nie in API-/MCP-Antworten oder MCP-Tool-Ausgaben leaken. Selbst-erzeugte Secrets
+mit `openssl rand -hex 32` (gilt fuer `MCP_AUTH_TOKEN`, `SESSION_SECRET`, `DASHBOARD_PASSWORD`).
+
+### 7.1 Secrets-Inventar (was leakt was)
+
+| Secret (Env) | Anbieter / Quelle | Gewaehrt bei Leak | Blast-Radius |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | console.anthropic.com | LLM-Calls auf deine Kosten | Kosten (kein Daten-Leak) |
+| `TWILIO_AUTH_TOKEN` | Twilio Console | Voice/SMS-API **und** Webhook-HMAC-Schluessel | Calls/SMS auf deine Kosten + Signatur-Faelschung |
+| `TELNYX_API_KEY` | Telnyx Portal | Voice/SMS-API (Telnyx) | Calls/SMS auf deine Kosten |
+| `TELNYX_PUBLIC_KEY` | Telnyx Portal | **KEIN Secret** (Ed25519-Verify), aber falsch = Inbound bricht | Verfuegbarkeit (kein Leak) |
+| `OPENAI_API_KEY` | platform.openai.com | Realtime-API (nur `VOICE_ENGINE=realtime`) | Kosten |
+| `STRIPE_SECRET_KEY` | Stripe Dashboard | Hold/Capture, Charges (**echtes Geld** bei `sk_live`) | Geld + Kundendaten |
+| `MCP_AUTH_TOKEN` | selbst (`openssl rand -hex 32`) | `/mcp`-Zugang (Legacy-Bearer); bei `MCP_AUTH=oauth` ungenutzt | Voller MCP-Tool-Zugriff |
+| `SESSION_SECRET` | selbst (`openssl rand -hex 32`) | Faelschung von Browser-Session-Cookies | Account-Uebernahme im Portal |
+| `OIDC_CLIENT_SECRET` | WorkOS AuthKit | OIDC-Auth-Code-Tausch (Browser-Login) | Login-Flow-Kompromittierung |
+| `DASHBOARD_PASSWORD` | selbst gesetzt | Owner-Dashboard (Basic-Auth) | Voller Owner-Dashboard-Zugriff |
+| `DATABASE_URL` | Render Postgres | DB-Passwort (in der URL) | Voller DB-Zugriff (alle Tenants) |
+
+> Es gibt **kein** `STRIPE_WEBHOOK_SECRET` (Stripe-Integration ist reines Outbound-`fetch`,
+> kein verifizierter Inbound-Webhook) und **keinen** separaten WorkOS-API-Key (nur OIDC-Client +
+> AuthKit-Issuer). Stand bei Aenderung der Billing-/IdP-Integration neu pruefen.
+
+### 7.2 Token-Rotation — Standard-Prozedur (Ueberlappung = Zero-Downtime)
+
+Generisches 5-Schritt-Muster fuer jedes Secret oben:
+
+1. **Neuen Wert erzeugen** beim Anbieter — der **alte bleibt zunaechst gueltig** (Ueberlappung).
+2. **Render-Dashboard → Service → Environment** → Wert ersetzen → speichern (loest Re-Deploy aus).
+3. **Verifizieren:** `/healthz` gruen, `[boot]`-Banner = erwarteter Commit, betroffene Route
+   testen (z.B. Test-Call fuer Twilio/Telnyx, Login fuer OIDC).
+4. **Alten Wert widerrufen/loeschen** beim Anbieter — erst NACH bestaetigter Verifikation.
+5. **Rotation protokollieren** (Datum + welches Secret + Anlass) im privaten Rotation-Log
+   (nie ins Repo). Anlass = Quartals-Routine **oder** Verdacht/Personalwechsel.
+
+**Empfohlene Kadenz:** vierteljaehrlich routinemaessig; **sofort** bei Verdacht auf Leak,
+ausgeschiedenem Teammitglied oder kompromittiertem Geraet.
+
+### 7.3 Rotation — Besonderheiten pro Secret
+
+| Secret | Rotations-Besonderheit |
+|---|---|
+| `TWILIO_AUTH_TOKEN` | Twilio fuehrt **Primary + Secondary Auth Token**. Secondary erzeugen → in Env eintragen → Primary "promote/regenerate". Echtes Zero-Downtime, da kurzzeitig beide gueltig sind. Achtung: derselbe Token validiert auch die Webhook-HMAC — nach Rotation Test-Inbound pruefen. |
+| `STRIPE_SECRET_KEY` | Im Stripe-Dashboard **"Roll key"** mit Ablauf-Frist (alter Key laeuft kontrolliert aus) statt Sofort-Widerruf. Test- (`sk_test`) und Live-Key (`sk_live`) **getrennt** rotieren. |
+| `SESSION_SECRET` | Rotation **invalidiert alle aktiven Browser-Sessions** (User muessen neu einloggen). Geplant ausserhalb der Stosszeit, ggf. ankuendigen. Kein Ueberlappungs-Mechanismus. |
+| `DATABASE_URL` | Postgres-Passwort in Render rotieren (Render Postgres → Rotate) → URL in der Env des Web-Service nachziehen. Kurzer Reconnect; Pool baut neu auf. |
+| `MCP_AUTH_TOKEN` | Bei `MCP_AUTH=oauth` **nicht in Benutzung** — dann ganz aus der Env nehmen statt rotieren. Im Legacy-/`token`-Modus: Client (z.B. curl-Skripte) und Env **gleichzeitig** umstellen (keine Ueberlappung moeglich). |
+| `OIDC_CLIENT_SECRET` | In WorkOS AuthKit ein neues Client-Secret erzeugen (WorkOS erlaubt Ueberlappung) → Env tauschen → altes in WorkOS loeschen. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Zweiten Key erstellen → Env tauschen → ersten widerrufen. Ueberlappung trivial. |
+
+### 7.4 Twilio-/Telnyx-Subaccount auf minimale Rechte
+
+**Ziel:** Hermes laeuft nie mit Master-/Account-weiten Vollrechten — ein geleaktes Token
+darf nur den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
+
+**Twilio:**
+- [ ] **Subaccount** anlegen (Twilio Console → Account → Subaccounts); Hermes nutzt **nur** dessen
+      `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN`. Master-Auth-Token nie in Hermes.
+- [ ] Im Subaccount **nur** die genutzten Produkte aktiv: **Voice** + **Messaging**. Ungenutzte
+      (Verify, Lookup, etc.) nicht freischalten.
+- [ ] **Usage-Trigger / Spend-Limit** auf dem Subaccount setzen (zweite Kostenbremse zusaetzlich
+      zum app-internen `MAX_BUDGET_EUR`-Guard — die Provider-Add-on-Minuten laufen ausserhalb).
+- [ ] Geo-Permissions auf die benoetigten Laender beschraenken (passt zum `PROVISIONING_COUNTRY`).
+
+**Telnyx:**
+- [ ] **Scoped API Key** (V2, least-privilege) statt Account-weitem Key; nur die fuer Voice/SMS
+      noetigen Scopes. Pro Umgebung (Staging/Prod) eigener Key.
+- [ ] API-Key/TeXML-App an die **eine** genutzte Connection/Nummerngruppe binden.
+- [ ] Outbound-Voice-/Messaging-Profile mit Land-/Ziel-Restriktionen (Notruf-/Premium-Sperre
+      bleibt zusaetzlich app-seitig hardcoded, s. Anhang A).
+- [ ] Spend-/Concurrency-Limits im Telnyx-Portal als zweite Bremse.
+
+**Akzeptanz Gate 7:** Inventar oben stimmt mit der gesetzten Render-Env ueberein; fuer jedes
+Secret ist die Rotations-Besonderheit verstanden; Twilio-Subaccount + Telnyx-Scoped-Key sind
+mit Spend-Limit aktiv und Master-Credentials nirgends in Hermes-Env.
 
 ---
 

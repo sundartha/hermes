@@ -301,11 +301,9 @@ test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null"
 });
 
 test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-Hydrierung; nur active routet", async () => {
-  // Auto-Seed (config.twilio/telnyxNumber aus .env) ausschalten, damit der Test
-  // nur die selbst gesetzten Nummern sieht.
-  const prevTw = config.twilioNumber, prevTx = config.telnyxNumber;
-  config.twilioNumber = ""; config.telnyxNumber = "";
-  try {
+  // Kein config-Auto-Seed mehr (Owner-Nummer kommt ueber seedOwnerNumber): der
+  // frische pg-Store traegt nur die hier selbst gesetzten Nummern.
+  {
     const { store, db } = await makePgTestStore();
     const s = store.load();
     // requested (e164=null, kein Kauf) + active (mit providerNumberId + paymentIntentId,
@@ -332,8 +330,6 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     const r2 = await reopen(db);
     assert.equal(r2.load().numbers.find((n) => n.id === "num_act").status, "suspended");
     assert.equal(r2.findTenantByNumber("+4915700000001"), null, "suspended -> fail-closed, kein Routing");
-  } finally {
-    config.twilioNumber = prevTw; config.telnyxNumber = prevTx;
   }
 });
 

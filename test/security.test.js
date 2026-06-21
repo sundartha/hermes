@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import twilio from "twilio";
-import { startServer, externalIp, BASE_ENV } from "./helpers.js";
+import { startServer, externalIp, BASE_ENV, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const EXTERNAL_IP = externalIp();
 
@@ -22,7 +22,7 @@ test("Twilio-Signaturpruefung fuer /voice/*", async (t) => {
   const srv = await startServer({ env: { SKIP_TWILIO_SIGNATURE_CHECK: "false" } });
   try {
     const url = `${BASE_ENV.PUBLIC_URL}/voice/incoming`;
-    const params = { CallSid: "CAtest123", From: "+4915112345678", To: BASE_ENV.TWILIO_NUMBER };
+    const params = { CallSid: "CAtest123", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 };
 
     await t.test("ohne Signatur -> 403", async () => {
       const res = await fetch(`${srv.localUrl}/voice/incoming`, {

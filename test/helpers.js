@@ -8,9 +8,17 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
+import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { makeDefaultState } from "../src/store/state-ops.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STARTUP_TIMEOUT_MS = 15000;
+
+// Owner-Absendernummer fuer Spawn-Tests: ersetzt den frueheren config-Seed
+// (TWILIO_NUMBER), seit der Owner seine Nummer wie jeder Tenant im Store haelt.
+// Ohne sie greift der Boot-Guard (kein Owner-Outbound -> Exit). +15005550006 =
+// bisherige BASE_ENV-Nummer + seedCall.from (byte-identisch zum Altbestand).
+export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "twilio" });
 
 // ALLE config-relevanten Env-Variablen explizit setzen: dotenv fuellt nur
 // UNgesetzte Variablen, so kann eine lokale .env die Tests nicht beeinflussen.
@@ -33,7 +41,9 @@ export const BASE_ENV = {
   LLM_BREAKER_COOLDOWN_MS: "30000",
   TWILIO_ACCOUNT_SID: "ACtest00000000000000000000000000",
   TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
-  TWILIO_NUMBER: "+15005550006",
+  // Absendernummern sind keine Env-Var mehr: die Owner-Nummer kommt ueber
+  // ensureOwnerNumber in den Spawn-Store (OWNER_TEST_NUMBER). Provider-spezifische
+  // Tests reichen ownerNumber:{e164,provider} an startServer durch.
   TWILIO_EDGE: "frankfurt",
   OWNER_FIRST_NAME: "Jonas",
   OWNER_LAST_NAME: "Beispiel",
@@ -56,10 +66,8 @@ export const BASE_ENV = {
   REALTIME_MODEL: "gpt-realtime",
   REALTIME_VOICE: "alloy",
   // ---- Telnyx (zweiter Provider) ----
-  // Alle leer: der Default-Outbound-Provider bleibt Twilio. Sonst kippt eine
-  // lokale .env mit gesetzter TELNYX_NUMBER den Outbound-Pfad auf Telnyx (200
-  // statt 500) und faelscht Profile-/Gate-/Audit-Tests.
-  TELNYX_NUMBER: "",
+  // Nummern sind keine Env-Var mehr (s.o.). Keys/IDs neutral leer; Tests, die
+  // Telnyx-Outbound brauchen, seeden eine Telnyx-Owner-Nummer via ownerNumber.
   TELNYX_API_KEY: "",
   TELNYX_PUBLIC_KEY: "",
   TELNYX_API_BASE: "",
@@ -151,6 +159,31 @@ export function seedState({ calls = [], actionItems = [], notifications = [], se
     ...(tenants ? { tenants } : {}),
     ...(numbers ? { numbers } : {}),
   };
+}
+
+// Stellt eine aktive Owner-Nummer im Spawn-Store sicher (Boot-Guard-Bedingung).
+// ownerNumber === null -> bewusster Opt-out (Boot-Guard-Test, kaputter Store).
+// {e164, provider} -> spezifische Owner-Nummer (z.B. Telnyx fuer Provider-Tests).
+// Hat der Seed schon eine aktive Owner-Nummer, bleibt er unveraendert (idempotent).
+function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
+  if (ownerNumber === null) return seed;
+  // Ohne expliziten Seed den VOLLEN Default-Store (wie First-Boot, inkl. aller
+  // Listen wie numberAssignments/provisioningJobs) als Basis - nicht das flache
+  // seedState() (dem diese Listen fehlen). Gegebene Seeds bleiben unangetastet.
+  const state = seed || makeDefaultState();
+  const numbers = Array.isArray(state.numbers) ? [...state.numbers] : [];
+  const hasOwnerActive = numbers.some((n) => n.tenantId === OWNER_TENANT_ID && n.status === "active");
+  if (!hasOwnerActive) {
+    numbers.push({
+      id: "num_owner_seed",
+      e164: ownerNumber.e164,
+      tenantId: OWNER_TENANT_ID,
+      provider: ownerNumber.provider,
+      status: "active",
+      providerNumberId: null,
+    });
+  }
+  return { ...state, tenants: state.tenants || [{ id: OWNER_TENANT_ID, status: "active" }], numbers };
 }
 
 export function seedCall(overrides = {}) {
@@ -311,11 +344,12 @@ export const toolCall = (name, args = {}) => ({
 });
 
 // Startet src/server.js und ERWARTET einen Boot-Refusal (Exit statt listen). Fuer
-// die Fail-closed-Tests (OT-4): liefert { code, output }. Wirft, wenn der Prozess
-// NICHT innerhalb timeoutMs beendet (d.h. der Boot lief durch). Teilt BASE_ENV +
-// tempDataDir mit startServer (G5: keine zweite Spawn-Definition).
-export async function startServerExpectExit({ env = {}, seed, rawStore, timeoutMs = 8000 } = {}) {
-  const dataDir = tempDataDir(seed, rawStore);
+// die Fail-closed-Tests (OT-4): liefert { code, output, dataDir }. Wirft, wenn der
+// Prozess NICHT innerhalb timeoutMs beendet (d.h. der Boot lief durch). Teilt
+// BASE_ENV + tempDataDir mit startServer (G5: keine zweite Spawn-Definition).
+export async function startServerExpectExit({ env = {}, seed, rawStore, ownerNumber, timeoutMs = 8000 } = {}) {
+  // rawStore (Korruptions-Pfad) bleibt verbatim; sonst Owner-Nummer sicherstellen.
+  const dataDir = tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
@@ -331,15 +365,17 @@ export async function startServerExpectExit({ env = {}, seed, rawStore, timeoutM
     }, timeoutMs);
     child.on("exit", (code) => {
       clearTimeout(timer);
-      resolve({ code, output });
+      resolve({ code, output, dataDir });
     });
   });
 }
 
 // Startet src/server.js als Kindprozess und liefert Port, gesammeltes stdout
 // und einen stop()-Handle. Wirft bei Startproblemen mit dem bisherigen Output.
-export async function startServer({ env = {}, seed, rawStore } = {}) {
-  const dataDir = tempDataDir(seed, rawStore);
+export async function startServer({ env = {}, seed, rawStore, ownerNumber } = {}) {
+  // rawStore (Korruptions-Pfad) bleibt verbatim; sonst Owner-Nummer sicherstellen,
+  // sonst greift der Boot-Guard (kein Owner-Outbound -> Exit).
+  const dataDir = tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },

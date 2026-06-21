@@ -16,7 +16,7 @@ import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
-import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, ownerNumberForProvider, numberProvisioning } from "./telephony/registry.js";
+import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob } from "./store/state-ops.js";
@@ -588,16 +588,17 @@ async function finishCall(call) {
     const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
     store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);
 
-    if (config.sendSmsSummary && config.ownerNumber) {
+    // SMS-Absender = die aktive Nummer des Call-Tenants AUF DEMSELBEN Provider wie der
+    // Call (kein config-Sonderzweig mehr). Keine passende Nummer im Store -> kein
+    // Absender -> SMS-Summary still ueberspringen statt mit leerem from zu senden.
+    const smsFrom = findActiveNumber(store.load(), call.tenantId, call.provider);
+    if (config.sendSmsSummary && config.ownerNumber && smsFrom) {
       const sms =
         `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
         (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
       try {
         await messaging(call.provider).sendSms({
-          // Owner-From provider-keyed (ownerNumberForProvider): Telnyx-Call ->
-          // Telnyx-Owner-Nummer, sonst Twilio-Owner-Nummer. Der Twilio-Zweig ist
-          // config.twilioNumber -> byte-identisch zum Bestand.
-          from: ownerNumberForProvider(call.provider, config),
+          from: smsFrom.e164,
           to: config.ownerNumber,
           body: sms.slice(0, 1500),
         });
@@ -641,17 +642,12 @@ app.post("/voice/status", (req, res) => {
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
 
-// Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). Owner: die
-// config-basierte Owner-Nummer pro Provider (Telnyx sobald TELNYX_NUMBER gesetzt,
-// sonst Twilio) - byte-identisch zum Bestand. Jeder ANDERE Tenant telefoniert NUR
-// unter EIGENER aktiver Nummer (e164 + provider aus s.numbers). Keine aktive eigene
-// Nummer -> null -> Reject, NIE die Owner-Nummer als Fremd-Tenant-Fallback
-// (Toll-Fraud-Riegel, Pre-Mortem R3).
-function outboundFrom(s, tenantId, cfg) {
-  if (tenantId === OWNER_TENANT_ID) {
-    const provider = cfg.telnyxNumber ? PROVIDER.TELNYX : DEFAULT_PROVIDER;
-    return { fromNumber: ownerNumberForProvider(provider, cfg), provider };
-  }
+// Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). JEDER Tenant -
+// auch der Owner (Tenant Null) - telefoniert NUR unter EIGENER aktiver Nummer (e164 +
+// provider aus s.numbers); kein config-Sonderzweig mehr. Keine aktive eigene Nummer
+// -> null -> Reject, NIE die Nummer eines anderen Tenants als Fallback (Toll-Fraud-
+// Riegel, Pre-Mortem R3).
+function outboundFrom(s, tenantId) {
   const own = findActiveNumber(s, tenantId);
   return own ? { fromNumber: own.e164, provider: own.provider } : null;
 }
@@ -714,10 +710,10 @@ app.post("/api/calls", async (req, res) => {
     invalidText("constraints", b.constraints);
   if (textErr) return res.status(400).json({ error: textErr });
 
-  // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): Owner behaelt die
-  // config-Owner-Nummer (byte-identisch); jeder andere Tenant nur unter EIGENER aktiver
-  // Nummer -> keine -> Reject, NIE Owner-Nummer als Fremd-Tenant-Fallback.
-  const outbound = outboundFrom(store.load(), tenantId, config);
+  // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): JEDER Tenant - auch
+  // der Owner (Tenant Null) - telefoniert nur unter EIGENER aktiver Store-Nummer; keine
+  // -> Reject, NIE die Nummer eines anderen Tenants als Fallback.
+  const outbound = outboundFrom(store.load(), tenantId);
   if (!outbound) {
     audit("place_call_denied", req, `to=${to} grund=keine_tenant_nummer tenant=${tenantId} requestedBy=${requestedBy}`);
     return res.status(403).json({ error: "Kein aktive Absendernummer fuer diesen Tenant." });
@@ -1101,6 +1097,20 @@ if (!ok) {
   console.error("[boot] Start abgebrochen: Safety-/Pflicht-Konfiguration ungueltig (siehe oben).");
   process.exit(1);
 }
+
+// Boot-Guard (Pre-Mortem): der Owner haelt seine Absendernummer im Store, nicht mehr in
+// der Env. Nach lokalem Reset (data/store.json geloescht) oder frischem Postgres ohne
+// Seed waeren Owner-Outbound + SMS still tot. Fail-closed wie die fruehere
+// TWILIO_NUMBER-Boot-Pflicht: ohne aktive Owner-Nummer im Store startet der Dienst
+// nicht. Loggt KEINE Nummer (kein Leak), verweist auf das Seed-CLI.
+if (!findActiveNumber(store.load(), OWNER_TENANT_ID)) {
+  console.error(
+    "[boot] Keine aktive Owner-Nummer im Store. Erst seeden: " +
+      "npm run seed-owner-number -- <e164> <provider>"
+  );
+  process.exit(1);
+}
+
 const httpServer = app.listen(config.port, () => {
   // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
   const port = httpServer.address().port;

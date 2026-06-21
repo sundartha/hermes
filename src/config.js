@@ -64,10 +64,12 @@ export const config = {
 
   twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
-  twilioNumber: process.env.TWILIO_NUMBER || "",
+  // Absendernummern (Twilio/Telnyx) kommen NICHT mehr aus der config: der Owner ist
+  // Tenant Null und haelt seine Nummer(n) wie jeder Tenant im Store (s.numbers),
+  // einmalig eingetragen via scripts/seed-owner-number.js. Boot-Guard in server.js
+  // verlangt fail-closed eine aktive Owner-Nummer.
 
   // ---- Telnyx (zweiter Provider, P5; alle optional) ----
-  telnyxNumber: process.env.TELNYX_NUMBER || "", // config-derived Seed (idempotent, Owner-Tenant)
   telnyxApiKey: process.env.TELNYX_API_KEY || "", // SECRET - nie loggen/leaken
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "", // Ed25519-Public-Key des Telnyx-Accounts (verify)
   telnyxApiBase: (process.env.TELNYX_API_BASE || "https://api.telnyx.com").replace(/\/$/, ""),
@@ -246,7 +248,9 @@ export function assertConfig() {
   if (!config.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
   if (!config.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
   if (!config.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
-  if (!config.twilioNumber) missing.push("TWILIO_NUMBER");
+  // TWILIO_NUMBER ist keine Boot-Pflicht mehr: die Owner-Absendernummer lebt im Store,
+  // nicht in der Env. Stattdessen verlangt der Boot-Guard in server.js fail-closed eine
+  // aktive Owner-Nummer im Store (storefrei bleibt assertConfig).
   // G1: Owner-Identitaet fail-closed (Boot-Refusal bei leer) -> der "Jonas"-Default
   // verschwindet an der Quelle, kein stiller Identitaets-Fallback im Greeting/Disclosure.
   if (!config.ownerFirstName) missing.push("OWNER_FIRST_NAME");

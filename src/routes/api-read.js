@@ -56,9 +56,10 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       usage: { ...store.usageOf(tenantId), maxBudgetEur: config.maxBudgetEur },
       notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
       agent: {
-        // Flag aus -> config.twilioNumber (Bestand). Flag an -> aktive Tenant-Nummer
-        // (fail-closed leer, NIE Owner-Nummer fuer einen fremden Tenant).
-        number: config.multiTenant ? activeNumberFor(s, tenantId) : config.twilioNumber,
+        // Anzeige-Nummer = aktive Store-Nummer des Request-Tenants (auch der Owner ist
+        // Tenant Null; keine config-Nummer mehr). Fail-closed leer, NIE die Nummer eines
+        // fremden Tenants.
+        number: activeNumberFor(s, tenantId),
         owner: ctx.ownerName,
         ownerNumber: isOwnerView ? config.ownerNumber : "",
         model: config.claudeModel,

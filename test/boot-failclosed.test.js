@@ -21,6 +21,17 @@ test("T-P2-07: fehlender TWILIO_AUTH_TOKEN -> Boot verweigert (exit 1), nennt Va
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
+test("Boot-Guard: keine aktive Owner-Nummer im Store -> Boot verweigert (exit 1), nennt CLI", async () => {
+  // ownerNumber: null -> Spawn-Store OHNE Owner-Nummer (Opt-out vom Auto-Seed der
+  // Helper). Config ist gueltig -> der Refusal faellt NICHT in assertConfig, sondern in
+  // den Owner-Nummer-Boot-Guard (Ersatz fuer die fruehere TWILIO_NUMBER-Boot-Pflicht).
+  const { code, output } = await startServerExpectExit({ ownerNumber: null });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /Keine aktive Owner-Nummer im Store/);
+  assert.match(output, /seed-owner-number/, "verweist actionable aufs Seed-CLI");
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});
+
 test("T-P2-08: vollstaendige Config bootet -> GET /healthz 200 (kein Fehl-Refusal)", async () => {
   const srv = await startServer({ env: { MAX_BUDGET_EUR: "8" } });
   try {

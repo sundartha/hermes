@@ -8,8 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { config } from "../config.js";
-import { defaultSettings, demoCalendar, PROVIDER, DEFAULT_PROVIDER, normNum } from "../store/defaults.js";
+import { defaultSettings, demoCalendar } from "../store/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "schema.sql");
@@ -19,22 +18,6 @@ const SCHEMA_FILE = path.join(__dirname, "schema.sql");
 export async function applySchema(db) {
   const ddl = fs.readFileSync(SCHEMA_FILE, "utf8");
   await db.exec(ddl);
-}
-
-// Eine config-derived Owner-Nummer idempotent seeden. Leere Nummer -> kein Seed
-// (env-gating, fail-closed -> Inbound dieses Providers nicht routbar). Ein INSERT,
-// zwei Aufrufe (G5) statt dupliziertem Block - spiegelt die seedOwnerNumber-
-// Abstraktion des json-Pfads (state-ops.js). e164 wird normalisiert (normNum),
-// damit die gespeicherte Form mit dem normalisierten Inbound-Lookup uebereinstimmt
-// (TD-2; identisch zur json-Seite). Sauberes E.164 -> No-Op.
-async function seedNumber(db, tenantId, e164, provider) {
-  const norm = normNum(e164);
-  if (!norm) return;
-  await db.query(
-    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, $3)
-     ON CONFLICT (e164) DO NOTHING`,
-    [norm, tenantId, provider]
-  );
 }
 
 // Seedet die Owner-Zeilen (tenant, settings, usage, Demo-Kalender) aus den
@@ -59,10 +42,9 @@ export async function seedDefaults(db, tenantId) {
     [tenantId]
   );
 
-  // Owner-Nummern config-derived ("degradiert" zur Owner-Nummer): Twilio +
-  // optional Telnyx. Idempotent; leere Nummer -> kein Seed (env-gating).
-  await seedNumber(db, tenantId, config.twilioNumber, DEFAULT_PROVIDER);
-  await seedNumber(db, tenantId, config.telnyxNumber, PROVIDER.TELNYX);
+  // Owner-Nummern werden NICHT mehr beim Migrate geseedet: der Owner haelt seine
+  // Nummer(n) wie jeder Tenant in der number-Tabelle, einmalig eingetragen via
+  // scripts/seed-owner-number.js (gegen STORE_BACKEND=pg). Boot-Guard verlangt sie.
 
   // Demo-Kalender nur seeden, wenn fuer den Owner noch keiner existiert
   // (idempotent, ohne dass spaeter geloeschte Eintraege wieder auftauchen).

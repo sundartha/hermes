@@ -65,6 +65,16 @@ test("Fassade pg.js (pglite) exportiert tenantContext und reicht config.ownerNam
   assert.equal(store.tenantContext(OWNER_TENANT_ID).ownerName, config.ownerName);
 });
 
+// "Owner = Tenant Null": die Owner-Nummer kommt ueber den Fassaden-seedOwnerNumber
+// (CLI scripts/seed-owner-number.js) in den Store, nicht mehr aus der config. Faengt
+// die Re-Export-Landmine + dass die geseedete Bestandsnummer routbar landet.
+test("Fassade json.js exportiert seedOwnerNumber -> Bestandsnummer routbar", () => {
+  assert.equal(typeof jsonBackend.seedOwnerNumber, "function", "json.seedOwnerNumber fehlt (Re-Export-Landmine)");
+  const E164 = "+13125550199";
+  jsonBackend.seedOwnerNumber(E164, OWNER_TENANT_ID, "telnyx");
+  assert.equal(jsonBackend.findTenantByNumber(E164), OWNER_TENANT_ID, "geseedete Owner-Nummer routet");
+});
+
 // I5: /api/state liest den Usage-Bucket ueber store.usageOf (Lazy-Default, NIE
 // undefined). Faengt die Re-Export-Landmine an beiden Fassaden + dass usageOf NIE
 // undefined fuer einen Tenant ohne Bucket liefert (sonst crasht get_agent_status).
