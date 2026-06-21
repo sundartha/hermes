@@ -17,6 +17,9 @@ import { config } from "../config.js";
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
+const CUSTOMERS_PATH = "/v1/customers";
+const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
+const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
 
 // Logischer kind -> Stripe-Meter-event_name (Provider-Spezifik adapter-intern, G25).
 // Live mit dem Owner gegen die echten Stripe-Meter abgleichen (geparkt, wie P6b1):
@@ -94,5 +97,47 @@ export const stripeBilling = {
     body.set("payload[tenant_ref]", tenantRef); // Audit, kein Geheimnis
     const res = await fetch(url(METER_EVENTS_PATH), { method: "POST", headers, body });
     assertOk(res, "reportMeter");
+  },
+
+  // Legt einen Stripe-Customer fuer den Tenant an (POST /v1/customers). metadata
+  // [tenant_ref] zur Zuordnung (Audit, kein Geheimnis). Loest KEIN Geld aus.
+  async createCustomer({ tenantRef }) {
+    const body = new URLSearchParams();
+    body.set("metadata[tenant_ref]", tenantRef);
+    const res = await fetch(url(CUSTOMERS_PATH), { method: "POST", headers: authHeaders(), body });
+    assertOk(res, "createCustomer");
+    const json = await res.json().catch(() => ({}));
+    return { customerId: json.id };
+  },
+
+  // Checkout-Session im setup-Mode (Stripe-gehostete Seite): Karte am Customer
+  // speichern OHNE Abbuchung. Nur opake url/sessionId verlassen den Adapter.
+  async createSetupCheckoutSession({ tenantRef, customerId, successUrl, cancelUrl }) {
+    const body = new URLSearchParams({
+      mode: CHECKOUT_SETUP_MODE,
+      customer: customerId,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
+    body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
+    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), { method: "POST", headers: authHeaders(), body });
+    assertOk(res, "createSetupCheckoutSession");
+    const json = await res.json().catch(() => ({}));
+    return { url: json.url, sessionId: json.id };
+  },
+
+  // Liest customer + payment_method aus einer abgeschlossenen Setup-Session
+  // (setup_intent expandiert). Fehlt das payment_method -> klarer Fehler (Karte
+  // nicht gespeichert), KEIN stilles null (G26: kein null ungeprueft weiterreichen).
+  async getCheckoutSessionResult(sessionId) {
+    const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?expand[]=setup_intent`, {
+      method: "GET",
+      headers: authHeaders(),
+    });
+    assertOk(res, "getCheckoutSessionResult");
+    const json = await res.json().catch(() => ({}));
+    const paymentMethodId = json.setup_intent && json.setup_intent.payment_method;
+    if (!paymentMethodId) throw new Error("Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)");
+    return { customerId: json.customer, paymentMethodId };
   },
 };

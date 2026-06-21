@@ -23,6 +23,11 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS idp_subject TEXT;
 -- (none|otp|card|id_verified) wird rangbasiert gegen die Outbound-Schwelle geprueft.
 -- KEIN CHECK-Constraint: die Validierung lebt fail-closed in setKycLevel (eine Quelle).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
+-- Stripe-Customer + gespeicherte Karte pro Tenant (Pay1) additiv NULLABLE. NULL =
+-- noch keine Karte erfasst -> Pay2-Provisioning fail-closed (kein placeHold). Opake
+-- Referenzen (cus_/pm_), KEINE Secrets. Muster wie kyc_level (idempotent, kein CHECK).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_customer_id       TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

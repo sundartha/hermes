@@ -855,6 +855,55 @@ app.post("/api/billing/flush-meters", async (req, res) => {
   res.json(result);
 });
 
+// ---- Karten-Erfassung via Stripe Checkout (setup-Mode), Pay1 ----
+// Hinter Basic-Auth (Bestand deckt /api/* ab; localhost = Owner). KEIN MCP-Tool
+// (kein offener ungegateter Geld-Endpunkt, R4). tenant-scoped (requireTenant ->
+// fail-closed 403 bei TENANT_REJECT). Ohne PAYMENT_ENABLED -> 404 (byte-identisch
+// zum Bestand, Muster flush-meters). Die Karte wird OHNE Abbuchung am Customer
+// gespeichert; der spaetere Hold/Capture (Pay2) nutzt customer+payment_method.
+const CARD_ON_FILE_STATUS = "card_on_file"; // kein Magic-String (G25)
+
+app.post("/api/billing/setup-checkout", async (req, res) => {
+  if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+  if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
+  const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
+  if (!tenant) return;
+
+  // Customer einmalig anlegen (idempotent: existiert er, wird er wiederverwendet).
+  let { customerId } = store.tenantStripe(tenant);
+  if (!customerId) {
+    ({ customerId } = await stripeBilling.createCustomer({ tenantRef: tenant }));
+    store.setTenantStripe(tenant, { customerId });
+  }
+  const successUrl = `${config.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${config.publicUrl}/tenant.html?card=canceled`;
+  const { url } = await stripeBilling.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
+  audit("billing_setup_checkout", req, `tenant=${tenant}`);
+  res.json({ url });
+});
+
+app.get("/api/billing/checkout-return", async (req, res) => {
+  if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+  const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
+  if (!tenant) return;
+  const sessionId = req.query.session_id;
+  if (!sessionId || typeof sessionId !== "string")
+    return res.status(400).json({ error: "session_id ist Pflicht" });
+
+  const { customerId, paymentMethodId } = await stripeBilling.getCheckoutSessionResult(sessionId);
+  // Fail-closed (Sicherheits-Invariante): der zurueckgegebene Customer MUSS dem
+  // gespeicherten Customer des anfragenden Tenants entsprechen - sonst koennte eine
+  // fremde session_id ein fremdes payment_method an diesen Tenant binden (403, kein Store).
+  const { customerId: stored } = store.tenantStripe(tenant);
+  if (!stored || stored !== customerId) {
+    audit("billing_card_mismatch", req, `tenant=${tenant}`);
+    return res.status(403).json({ error: "Customer-Mismatch" });
+  }
+  store.setTenantStripe(tenant, { customerId, paymentMethodId });
+  audit("billing_card_saved", req, `tenant=${tenant}`);
+  res.json({ status: CARD_ON_FILE_STATUS });
+});
+
 // ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
 // (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth (Bestand deckt
 // /api/* ab; localhost = Owner). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP,

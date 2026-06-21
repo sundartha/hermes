@@ -382,6 +382,34 @@ export function kycReached(s, tenantId, minLevel) {
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 
+// ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
+// Setzt die Stripe-Referenzen eines Tenants. Reine Mutation, kein IO (Wrapper saved).
+// patch = { customerId?, paymentMethodId? }: NUR uebergebene Keys werden gesetzt
+// (selektiver Patch via !== undefined, kein Ueberschreiben mit undefined) - so kann
+// der Aufrufer customerId und paymentMethodId unabhaengig voneinander setzen.
+// Fehlender Tenant wirft (kein stilles No-Op, Muster wie setKycLevel).
+// stripe_customer_id/payment_method_id sind KEINE Secrets (opake cus_/pm_-Referenzen)
+// -> speicherbar. Liefert den Tenant.
+export function setTenantStripe(s, tenantId, { customerId, paymentMethodId } = {}) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setTenantStripe: Tenant ${tenantId} nicht gefunden`);
+  if (customerId !== undefined) tenant.stripeCustomerId = customerId;
+  if (paymentMethodId !== undefined) tenant.stripePaymentMethodId = paymentMethodId;
+  return tenant;
+}
+
+// Lese-Query der Stripe-Referenzen eines Tenants (Pay1). Reine Query, kein IO.
+// Liefert STETS ein Objekt mit beiden Feldern (fehlend -> null, nie undefined) -
+// so braucht der Aufrufer (server.js Customer-Match) keinen optional-chaining-Train
+// auf den Tenant-Datensatz (G36) und die Tenant-Form-Kenntnis lebt hier (eine Quelle, G5).
+export function tenantStripe(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return {
+    customerId: tenant?.stripeCustomerId ?? null,
+    paymentMethodId: tenant?.stripePaymentMethodId ?? null,
+  };
+}
+
 // Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
 // Kosten/Plaetze; released/failed zaehlen nicht. Basis fuer die Cap-Pruefung.
 function liveNumbers(s, tenantId = null) {
