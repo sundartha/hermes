@@ -24,6 +24,7 @@ import { handleProvisionJob } from "./worker/provisioning.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
+import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { E164, invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
@@ -153,7 +154,7 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     // ausschliesslich ueber webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth.
     // audit = util.audit (nur Keys, keine Werte/PII).
     if (config.selfServiceEnabled && config.multiTenant) {
-      app.use(makeSelfServiceRoutes({ store, webAuthMw, audit }));
+      app.use(makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing: stripeBilling }));
     }
   });
 }
@@ -869,12 +870,8 @@ app.post("/api/billing/setup-checkout", async (req, res) => {
   const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
   if (!tenant) return;
 
-  // Customer einmalig anlegen (idempotent: existiert er, wird er wiederverwendet).
-  let { customerId } = store.tenantStripe(tenant);
-  if (!customerId) {
-    ({ customerId } = await stripeBilling.createCustomer({ tenantRef: tenant }));
-    store.setTenantStripe(tenant, { customerId });
-  }
+  // Customer idempotent anlegen (geteilte Logik, G5: identisch zum Self-Service-Pfad).
+  const customerId = await ensureCustomer({ store, billing: stripeBilling, tenant });
   const successUrl = `${config.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${config.publicUrl}/tenant.html?card=canceled`;
   const { url } = await stripeBilling.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
@@ -890,16 +887,13 @@ app.get("/api/billing/checkout-return", async (req, res) => {
   if (!sessionId || typeof sessionId !== "string")
     return res.status(400).json({ error: "session_id ist Pflicht" });
 
-  const { customerId, paymentMethodId } = await stripeBilling.getCheckoutSessionResult(sessionId);
-  // Fail-closed (Sicherheits-Invariante): der zurueckgegebene Customer MUSS dem
-  // gespeicherten Customer des anfragenden Tenants entsprechen - sonst koennte eine
-  // fremde session_id ein fremdes payment_method an diesen Tenant binden (403, kein Store).
-  const { customerId: stored } = store.tenantStripe(tenant);
-  if (!stored || stored !== customerId) {
+  // Karte fail-closed an den eigenen Customer binden (geteilte Customer-Match-
+  // Invariante, G5: identisch zum Self-Service-Pfad). Mismatch -> 403, kein Store.
+  const { ok } = await bindCardFromSession({ store, billing: stripeBilling, tenant, sessionId });
+  if (!ok) {
     audit("billing_card_mismatch", req, `tenant=${tenant}`);
     return res.status(403).json({ error: "Customer-Mismatch" });
   }
-  store.setTenantStripe(tenant, { customerId, paymentMethodId });
   audit("billing_card_saved", req, `tenant=${tenant}`);
   res.json({ status: CARD_ON_FILE_STATUS });
 });
