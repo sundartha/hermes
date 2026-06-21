@@ -22,16 +22,6 @@ const DEFAULT_CALL_ID = "call_harness1";
 // Provider-Webhooks erwarten eine CallSid im Body (Test-Fixture, wie im Bestand).
 const CALL_SID = "CAtest";
 
-// Disclosure muss als erster gesprochener Satz VOR dem Folge-Knoten stehen (Regel 2).
-// Eine Quelle statt der byte-identischen Kopien in zwei Testdateien.
-export function assertDisclosureBefore(body, marker, disclosure = DISCLOSURE_JONAS) {
-  const discIdx = body.indexOf(disclosure);
-  const markerIdx = body.indexOf(marker);
-  assert.ok(discIdx !== -1, `Offenlegung fehlt im Body: ${body}`);
-  assert.ok(markerIdx !== -1, `Marker '${marker}' fehlt im Body: ${body}`);
-  assert.ok(discIdx < markerIdx, `Offenlegung muss VOR '${marker}' stehen: ${body}`);
-}
-
 // Faehrt /voice/outbound (LLM-frei) lokal und liefert den gerenderten Provider-Body
 // (TwiML/TeXML) samt Status/Content-Type/stdout. Der Server wird intern geschlossen
 // (kein srv-Handle nach aussen -> keine vom Aufrufer zu wahrende Stop-Reihenfolge,

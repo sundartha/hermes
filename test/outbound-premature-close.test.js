@@ -19,7 +19,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  runOutboundThenTurn, assertDisclosureBefore, AGENT_SPEECH,
+  runOutboundThenTurn, AGENT_SPEECH, DISCLOSURE_JONAS,
   startCountingAnthropicMock, startAlwaysPrematureMock, startAlways4xxMock,
   GATHER_OPEN as GATHER, HANGUP_TAG as HANGUP,
 } from "./_outbound-harness.js";
@@ -35,7 +35,10 @@ for (const provider of ["twilio", "telnyx"]) {
     const mock = await startCountingAnthropicMock({ failFirst: 1 });
     try {
       const { outboundBody, stdout } = await runOutboundThenTurn({ mockUrl: mock.url, provider, speechResult: "Hallo" });
-      assertDisclosureBefore(outboundBody, GATHER);
+      // G2: Offenlegung als Say IM Gather (gatherIdx < discIdx).
+      const gatherIdx = outboundBody.indexOf(GATHER);
+      const discIdx = outboundBody.indexOf(DISCLOSURE_JONAS);
+      assert.ok(gatherIdx !== -1 && discIdx !== -1 && gatherIdx < discIdx, `Offenlegung muss im Gather stehen: ${outboundBody}`);
       assert.ok(!outboundBody.includes(HANGUP), `/voice/outbound darf nicht auflegen: ${outboundBody}`);
       // LLM-frei -> nur die Offenlegung, kein Anliegen aus dem Mock.
       assert.ok(!outboundBody.includes(AGENT_SPEECH), `/voice/outbound darf kein Anliegen rendern (LLM-frei): ${outboundBody}`);

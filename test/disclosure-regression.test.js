@@ -11,7 +11,10 @@ import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ";
 const DISCLOSURE_TAIL = "wird fuer meinen Auftraggeber zusammengefasst";
-const FIRST_SENTENCE_CLAUSE = "Dein allererster Satz muss exakt lauten";
+// G2: /voice/outbound spricht Offenlegung + Anliegen LLM-frei IM Erst-Gather. Der
+// Outbound-systemPrompt weist den LLM daher an, beides NICHT zu wiederholen (statt die
+// Offenlegung als ersten Satz vom Modell zu verlangen). Diese Klausel pinnt das.
+const NO_REPEAT_CLAUSE = "Wiederhole sie NICHT";
 
 let config, systemPrompt, disclosureSentence;
 before(async () => {
@@ -30,15 +33,18 @@ test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerNa
   assert.ok(sentence.includes(DISCLOSURE_TAIL), `Zusammenfassungs-Hinweis fehlt: ${sentence}`);
 });
 
-test("T-P2-10: Outbound-Prompt verdrahtet Disclosure als PFLICHT-ersten-Satz (Regel 2)", () => {
+test("T-P2-10: Outbound-Prompt weist den LLM an, die LLM-frei gesprochene Offenlegung NICHT zu wiederholen (G2)", () => {
   const call = seedCall({ direction: "outbound", goal: "Termin", tenantId: OWNER_TENANT_ID });
   const prompt = systemPrompt(call);
-  assert.ok(prompt.includes(disclosureSentence(call)), "exakter Offenlegungssatz muss im Prompt stehen");
-  assert.ok(prompt.includes(FIRST_SENTENCE_CLAUSE), "Pflicht-erster-Satz-Klausel muss im Prompt stehen");
+  // G2: die woertliche Offenlegung wird LLM-FREI im Erst-Gather gesprochen (openingText),
+  // NICHT mehr vom Modell verlangt -> der Prompt traegt sie nicht mehr woertlich, sondern
+  // die "nicht wiederholen"-Klausel (verhindert Doppel-Nennung).
+  assert.ok(prompt.includes(NO_REPEAT_CLAUSE), "Nicht-wiederholen-Klausel muss im Outbound-Prompt stehen");
+  assert.ok(prompt.includes(call.goal), "der Outbound-Prompt muss das Anliegen nennen (Anknuepfung)");
 });
 
-test("T-P2-10b: Inbound-Prompt traegt die Outbound-Offenlegung NICHT (Gegenprobe)", () => {
+test("T-P2-10b: Inbound-Prompt traegt die Outbound-Klausel NICHT (Gegenprobe)", () => {
   const call = seedCall({ direction: "inbound", tenantId: OWNER_TENANT_ID });
   const prompt = systemPrompt(call);
-  assert.ok(!prompt.includes(FIRST_SENTENCE_CLAUSE), "Inbound darf die Outbound-Offenlegungsklausel nicht enthalten");
+  assert.ok(!prompt.includes(NO_REPEAT_CLAUSE), "Inbound darf die Outbound-Klausel nicht enthalten");
 });

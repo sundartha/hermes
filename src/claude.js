@@ -76,7 +76,7 @@ SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist de
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
 ${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}
-PFLICHT-OFFENLEGUNG: Dein allererster Satz muss exakt lauten: "${disclosureSentence(call)}" Danach erklaerst du kurz dein Anliegen.
+WICHTIG: Offenlegung UND dein Anliegen ("${call.goal}") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen abgleichen, zusagen). Pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Sage nichts zu, was ausserhalb deines Auftrags liegt. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 }
 
@@ -87,6 +87,32 @@ Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen
 export function disclosureSentence(call) {
   const name = store.tenantContext(call.tenantId).ownerName;
   return `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${name}. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.`;
+}
+
+// Maximale Zeichenzahl des Anliegens im gesprochenen Erst-Turn (G25). Kappt NUR die
+// TTS-Ausgabe; das goal-Validierungslimit (TEXT_LIMITS.objective) bleibt unberuehrt.
+const OPENING_GOAL_MAX_CHARS = 160;
+
+// Erst-Turn-Text fuer den LLM-FREIEN /voice/outbound-Pfad (G2): Offenlegung (Regel 2,
+// erster Satz) + Bruecke + gekapptes Anliegen, in EINEM Gather-Say. Rein synchron,
+// kein Anthropic-Pfad. Das Anliegen wird hier deterministisch genannt; der erste
+// LLM-Turn (systemPrompt) wiederholt es daher NICHT.
+export function openingText(call) {
+  const disclosure = disclosureSentence(call);
+  const goal = trimGoalForSpeech(call.goal);
+  if (!goal) return disclosure;
+  return `${disclosure} Ich rufe an, weil ${goal}.`;
+}
+
+// Glaettet das Anliegen fuer die Sprachausgabe: Whitespace normalisieren, an der
+// Zeichengrenze schneiden (Wortgrenze bevorzugt), Satz-Endzeichen entfernen (der
+// Aufrufer setzt genau einen Punkt). Leeres/fehlendes goal -> "".
+function trimGoalForSpeech(goal) {
+  const text = (goal || "").replace(/\s+/g, " ").trim().replace(/[.!?]+$/, "");
+  if (text.length <= OPENING_GOAL_MAX_CHARS) return text;
+  const cut = text.slice(0, OPENING_GOAL_MAX_CHARS);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[.!?]+$/, "");
 }
 
 // ---------- Tools ----------

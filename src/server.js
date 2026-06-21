@@ -9,7 +9,7 @@ import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN, normNum } from "./store/defaults.js";
 import { findActiveNumber } from "./store/views.js";
-import { agentTurn, summarizeCall, disclosureSentence } from "./claude.js";
+import { agentTurn, summarizeCall, openingText } from "./claude.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
@@ -493,18 +493,17 @@ app.post("/voice/outbound", async (req, res) => {
     return res.type("text/xml").send(render(streamDirectives(call), call.provider));
   }
 
-  // Schicht 1 (P3b-R): /voice/outbound ist LLM-FREI. Die
-  // Pflicht-Offenlegung (Regel 2) + ein <Gather> werden sofort, deterministisch,
-  // ohne Anthropic-Call gerendert - exakt wie der bewaehrte Inbound-Pfad
-  // (turnDirectives(call, greeting)). Der Webhook haengt damit NIE an einem
-  // flackernden Upstream; das Anliegen nennt der Agent erst im ersten /voice/turn,
-  // abgesichert durch den resilienten Seam (src/llm.js) + die Degradation dort.
-  // turnDirectives(call, "") -> <Gather> ohne inneren Say (leerer Prompt) -> nach der
-  // Offenlegung wird genau EINE Eingabe eingesammelt; der <Gather action>-POST auf
-  // /voice/turn faehrt den normalen, LLM-getriebenen Turn.
-  const disclosure = disclosureSentence(call);
-  store.addTranscript(call.id, "agent", disclosure);
-  res.type("text/xml").send(render([sayD(disclosure), ...turnDirectives(call, "")], call.provider));
+  // Schicht 1 (P3b-R) + G2: /voice/outbound ist LLM-FREI. Der gesamte gesprochene
+  // Erst-Turn (Pflicht-Offenlegung Regel 2 als erster Satz + Bruecke + gekapptes
+  // Anliegen) wird als EIN <Say> INNERHALB des <Gather> gerendert - byte-strukturgleich
+  // zum bewaehrten Inbound-Greeting (turnDirectives(call, greeting)). Damit ist das
+  // Mikrofon sofort offen und der Angerufene kann direkt antworten (loest den leeren-
+  // Erst-Gather-Deadlock). openingText ist rein synchron -> der Webhook haengt NIE an
+  // einem flackernden Upstream. Das Anliegen wird hier deterministisch genannt; der
+  // erste LLM-Turn (/voice/turn) wiederholt es nicht (systemPrompt-Hinweis).
+  const opening = openingText(call);
+  store.addTranscript(call.id, "agent", opening);
+  res.type("text/xml").send(render(turnDirectives(call, opening), call.provider));
 });
 
 // Sekunden pro abgerechneter Voice-Minute (G25). Abgerechnet wird ab answeredAt
