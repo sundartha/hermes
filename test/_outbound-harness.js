@@ -17,6 +17,18 @@ export const DISCLOSURE_JONAS = "Guten Tag, hier spricht ein KI-Assistent im Auf
 export const GATHER_OPEN = "<Gather";
 export const HANGUP_TAG = "<Hangup";
 
+// G2: Die Offenlegung wird als Say INNERHALB des Gather gerendert (Erst-Turn nennt
+// Offenlegung + Anliegen, Mikrofon sofort offen). Das Gather oeffnet also VOR der
+// Offenlegung (gatherIdx < discIdx). Eine Quelle statt der byte-identischen Kopien in
+// drei Testdateien (G5/S2). Marker GATHER_OPEN ist providerneutral (Twilio + Telnyx).
+export function assertDisclosureInGather(body, disclosure = DISCLOSURE_JONAS) {
+  const gatherIdx = body.indexOf(GATHER_OPEN);
+  const discIdx = body.indexOf(disclosure);
+  assert.ok(gatherIdx !== -1, `Gather fehlt im Body: ${body}`);
+  assert.ok(discIdx !== -1, `Offenlegung fehlt im Body: ${body}`);
+  assert.ok(gatherIdx < discIdx, `Offenlegung muss IM Gather stehen (Gather oeffnet zuerst): ${body}`);
+}
+
 // Default-Call-Id der Harness-Fixtures (selbsterklaerende Test-Fixture, kein Magic).
 const DEFAULT_CALL_ID = "call_harness1";
 // Provider-Webhooks erwarten eine CallSid im Body (Test-Fixture, wie im Bestand).

@@ -7,7 +7,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { runOutbound, DISCLOSURE_JONAS, GATHER_OPEN } from "./_outbound-harness.js";
+import { runOutbound, assertDisclosureInGather } from "./_outbound-harness.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 // Tenant B mit getrenntem Vorname + vollem (mehrteiligem) Nachnamen: belegt, dass die
@@ -61,8 +61,6 @@ test("Offenlegung rendert nie '...von .' (kein leerer Name)", () => {
 test("/voice/outbound rendert die Offenlegung mit registriertem ownerName im Gather", async () => {
   const { body, status } = await runOutbound({ provider: "twilio" });
   assert.equal(status, 200);
-  const gatherIdx = body.indexOf(GATHER_OPEN);
-  const discIdx = body.indexOf(DISCLOSURE_JONAS);
-  assert.ok(gatherIdx !== -1 && discIdx !== -1 && gatherIdx < discIdx, `Offenlegung muss im Gather stehen: ${body}`);
+  assertDisclosureInGather(body);
   assert.ok(!body.includes("im Auftrag von ."), "Outbound-Body darf keinen leeren Namen tragen");
 });
