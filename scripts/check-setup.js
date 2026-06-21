@@ -11,7 +11,7 @@ const wrn = (m, hint) => { warn++; console.log("  \x1b[33m!\x1b[0m " + m + (hint
 const h = (t) => console.log("\n\x1b[1m" + t + "\x1b[0m");
 const norm = (n) => (n || "").replace(/[\s\-()]/g, "");
 
-console.log("\n═══ Vodafone Agent — Setup-Check ═══");
+console.log("\n═══ Hermes — Setup-Check ═══");
 
 // ---------- 1. .env Grundlagen ----------
 h("1. Konfiguration (.env)");

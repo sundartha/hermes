@@ -148,7 +148,7 @@ export function registerTools(server, { identity = null, allowCalendar = true } 
     }
   );
 
-  // ---- Bonus-Tools (ueber den Brief hinaus, fuer die Vodafone-Demo) ----
+  // ---- Bonus-Tools (ueber den Brief hinaus, fuer die Hermes-Demo) ----
   tool(
     "list_calls",
     "Listet die letzten Telefonate des Agenten (inbound und outbound) mit Status und Summary.",
