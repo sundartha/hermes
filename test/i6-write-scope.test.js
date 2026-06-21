@@ -32,7 +32,7 @@ test("I6/L2 Flag AN: POST /api/settings ist tenant-gescopt; REJECT -> 403 (kein 
       assert.equal((await res.json()).agentName, "B-Agent");
       const stored = srv.readStore().settings;
       assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
-      assert.equal(stored[OWNER_TENANT_ID].agentName, "Vodafone Agent", "Owner-Bucket unveraendert");
+      assert.equal(stored[OWNER_TENANT_ID].agentName, "Hermes", "Owner-Bucket unveraendert");
     });
 
     await t.test("unbekannte Identitaet -> 403, KEIN reject-Bucket angelegt", async () => {

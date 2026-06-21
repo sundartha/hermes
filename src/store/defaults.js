@@ -125,7 +125,7 @@ export const DEFAULT_GREETING =
 
 export function defaultSettings() {
   return {
-    agentName: "Vodafone Agent",
+    agentName: "Hermes",
     greeting: DEFAULT_GREETING,
     allowCalendar: true,
     allowBooking: true,

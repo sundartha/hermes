@@ -1,4 +1,4 @@
-# CLAUDE.md — Vodafone Agent
+# CLAUDE.md — Hermes
 
 Autonomer Telefon-KI-Agent: Twilio Voice + Claude (Haiku) + MCP-Server.  
 Node.js (ESM), Express, kein Build/TS. Nimmt echte Anrufe an (Kosten!).

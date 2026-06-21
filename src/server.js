@@ -218,7 +218,7 @@ app.use((req, res, next) => {
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
   if (safeEqual(req.headers.authorization || "", expected)) return next();
   audit("auth_failed", req, `path=${req.path}`);
-  res.set("WWW-Authenticate", 'Basic realm="Vodafone Agent"');
+  res.set("WWW-Authenticate", 'Basic realm="Hermes"');
   res.status(401).send("Auth required");
 });
 app.use(express.static(config.publicDir));
@@ -1057,7 +1057,7 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   const identity = req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
   const profile = store.resolveProfile(identity);
   try {
-    const server = new McpServer({ name: "vodafone-agent", version: "0.2.0" });
+    const server = new McpServer({ name: "hermes", version: "0.2.0" });
     registerTools(server, { identity, allowCalendar: profile.allowCalendar });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
@@ -1116,7 +1116,7 @@ const httpServer = app.listen(config.port, () => {
   // Render-Log eindeutig sichtbar ist, WELCHE Version laeuft (Render setzt
   // RENDER_GIT_COMMIT). Phase 3: wieder entfernen.
   console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);
-  console.log(`\n  Vodafone Agent Gateway laeuft auf http://localhost:${port}`);
+  console.log(`\n  Hermes Gateway laeuft auf http://localhost:${port}`);
   console.log(`  Dashboard:      http://localhost:${port}`);
   console.log(`  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`);
   console.log(`  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`);

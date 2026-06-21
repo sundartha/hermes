@@ -118,7 +118,7 @@ export function externalIp() {
 // Tests, die ein bewusst kaputtes/nicht-JSON-File am Boot brauchen (Korruptions-
 // Pfad, T-P1-03). seedState geht weiter durch JSON.stringify (gueltiges JSON).
 export function tempDataDir(seedState, rawStore) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vodafone-agent-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-test-"));
   if (typeof rawStore === "string") fs.writeFileSync(path.join(dir, "store.json"), rawStore);
   else if (seedState) fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(seedState, null, 2));
   return dir;
