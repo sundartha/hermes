@@ -25,6 +25,7 @@ import {
   failNumber,
   releaseNumber,
   findNumber,
+  tenantStripe,
 } from "./store/state-ops.js";
 
 // Orchestriert requested -> provisioning -> (search + order + configure) -> active,
@@ -41,11 +42,22 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
   // Provider-Call, KEIN cancelHold (es wurde nichts gehalten).
   let paymentIntentId = null;
   if (billing) {
+    // Money-Safety (R4, fail-closed): ohne hinterlegte Karte KEIN placeHold und KEIN
+    // Provider-Call. Die Karte ist am Tenant gespeichert (Pay1: setup-Checkout).
+    // off_session-Hold braucht customer + payment_method - fehlt eines, ist die Nummer
+    // nicht bezahlbar -> failNumber + Throw (kein bezahlter Orphan, kein 400 von Stripe).
+    const { customerId, paymentMethodId } = tenantStripe(s, number.tenantId);
+    if (!customerId || !paymentMethodId) {
+      failNumber(s, numberId); // requested -> failed (nichts gehalten, nichts gekauft)
+      throw new Error(`provisionNumber: Tenant ${number.tenantId} hat kein hinterlegtes Zahlungsmittel`);
+    }
     try {
       const hold = await billing.placeHold({
         tenantRef: number.tenantId,
         amountCents: holdAmountCents,
         currency,
+        customerId,
+        paymentMethodId,
         idempotencyKey: `hold_${numberId}`,
       });
       paymentIntentId = hold.paymentIntentId;
