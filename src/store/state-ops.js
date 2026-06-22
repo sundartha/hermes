@@ -20,6 +20,8 @@ import {
   DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
   normNum,
+  E164,
+  countryAllowed,
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   TENANT_STATUS,
@@ -421,11 +423,17 @@ export function seedOwnerIdentity(s, firstName, lastName, tenantId) {
 // KOMPONIERT (Bestandskonsumenten lesen ownerName unveraendert), firstName zusaetzlich
 // gespeichert (LLM-Persona). Ein bestehender Tenant kommt unveraendert zurueck (kein
 // Upsert). Leere Teile -> Feld weggelassen (Owner-Fallback greift).
-export function registerTenant(s, id, { firstName, lastName } = {}) {
+// privateNumber ist OPTIONAL (F2 P4): fehlt sie, onboardet der Tenant wie bisher
+// (byte-identisch). Geteilte Normalisier-/Validier-Quelle (normalizePrivateNumber, G5):
+// ungueltig/gesperrtes Land -> throw VOR jeder State-Mutation (kein halb registrierter
+// Tenant ohne Persistenz; fail-closed). Leer/null -> kein Feld (kein Daten-Muell).
+export function registerTenant(s, id, { firstName, lastName, privateNumber } = {}) {
   const existing = findTenant(s, id);
   if (existing) return existing;
+  const e164 = normalizePrivateNumber(privateNumber); // validiert, BEVOR s.tenants mutiert
   const tenant = { id, status: TENANT_STATUS.ACTIVE };
   applyOwnerIdentity(tenant, firstName, lastName);
+  if (e164) tenant.privateNumber = e164;
   s.tenants.push(tenant);
   return tenant;
 }
@@ -479,6 +487,50 @@ export function tenantStripe(s, tenantId) {
     customerId: tenant?.stripeCustomerId ?? null,
     paymentMethodId: tenant?.stripePaymentMethodId ?? null,
   };
+}
+
+// ---- Private Summary-Nummer pro Tenant (F2) ----
+// EINE Normalisier-/Validier-Quelle (G5), geteilt von registerTenant (Onboarding) UND
+// setPrivateNumber (Self-Service) - kein Drift zwischen den beiden Schreibwegen. Reine
+// Funktion (kein Tenant, kein Store). Reihenfolge ist verbindlich (M3): normNum ZUERST
+// (strippt Whitespace/-/() ), dann E.164-Format, dann Laendercode-Gate (H1, Toll-Fraud).
+// Leer/null/"" -> null (Aufrufer entfernt das Feld; kein Daten-Muell at rest). Ungueltig
+// oder gesperrtes Land -> throw (fail-closed). PII: der Roh-/Zielwert wird NIE in die
+// Fehlermeldung gehoben (kein Nummer-Leak im Log, H4). Liefert die normalisierte E.164.
+// Exportiert, damit der Route-Layer (POST /api/onboard) VOR dem Store-Lock dieselbe
+// Quelle nutzt und ungueltige Eingaben als 400 abweist (statt Throw -> 503).
+export function normalizePrivateNumber(raw, allowedCountryCodes) {
+  if (raw == null || (typeof raw === "string" && raw.trim() === "")) return null;
+  const e164 = normNum(raw);
+  if (!E164.test(e164)) throw new Error("private number: ungueltiges E.164-Format");
+  if (!countryAllowed(e164, allowedCountryCodes)) throw new Error("private number: Laendercode nicht erlaubt");
+  return e164;
+}
+
+// Setzt die private Mobilnummer (E.164), an die nach einem Inbound-Call die Gespraechs-
+// Zusammenfassung als SMS geht. Identitaets-/Kontaktdatum -> lebt am Tenant-Record
+// (NICHT in settings: settings leakt komplett ueber /api/state + MCP, H4). Reine
+// Mutation, kein IO (Wrapper saved). Leer/null/"" -> Feld entfernen (Skip-Pfad in
+// finishCall bleibt verlaesslich). Ungueltig/gesperrtes Land -> throw (fail-closed, kein
+// Muell at rest). Fehlender Tenant -> throw (Muster setKycLevel/setTenantStripe).
+// allowedCountryCodes optional (Default ["+49"] via countryAllowed). Liefert den Tenant.
+export function setPrivateNumber(s, tenantId, raw, allowedCountryCodes) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setPrivateNumber: Tenant ${tenantId} nicht gefunden`);
+  const e164 = normalizePrivateNumber(raw, allowedCountryCodes);
+  if (e164 === null) delete tenant.privateNumber;
+  else tenant.privateNumber = e164;
+  return tenant;
+}
+
+// Lese-Query der privaten Summary-Nummer (F2). Reine Query, kein IO. Liefert die E.164-
+// Nummer oder null (nie undefined) - Pendant zu tenantStripe. finishCall zieht das SMS-
+// Ziel ueber DIESEN Reader (Schluessel call.tenantId, identisch zum Absender-Lookup ->
+// keine Cross-Tenant-Fehlzustellung, H3) - NICHT ueber tenantContext (PII gehoert nicht
+// in die LLM-View, H4). Fehlender Tenant -> null.
+export function tenantPrivateNumber(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return tenant?.privateNumber ?? null;
 }
 
 // ---- Geo-Location pro Tenant (F1, Phase 1) ----

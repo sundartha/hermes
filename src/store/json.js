@@ -342,6 +342,19 @@ export function tenantStripe(tenantId) {
   return ops.tenantStripe(load(), tenantId);
 }
 
+// ---- Private Summary-Nummer pro Tenant (F2) ----
+// setPrivateNumber mutiert -> save (Muster wie setTenantStripe); tenantPrivateNumber
+// ist reine Query (kein save, analog tenantStripe). PII: der Wert wird hier nie geloggt.
+export function setPrivateNumber(tenantId, raw) {
+  const tenant = ops.setPrivateNumber(load(), tenantId, raw);
+  save();
+  return tenant;
+}
+
+export function tenantPrivateNumber(tenantId) {
+  return ops.tenantPrivateNumber(load(), tenantId);
+}
+
 // ---- Geo-Location pro Tenant (F1) ----
 // setTenantGeo mutiert -> save (Muster wie setTenantStripe). Die settings.language-
 // Migration braucht keinen eigenen Code (migrateSettingsToMap backfillt via

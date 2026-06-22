@@ -185,6 +185,14 @@ export function makePgStore(runner) {
     },
     tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
 
+    // ---- Private Summary-Nummer pro Tenant (F2): Wrapper-Parity zu json.js ----
+    setPrivateNumber(tenantId, raw) {
+      const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
+      save();
+      return tenant;
+    },
+    tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(requireState(), tenantId),
+
     // ---- Geo-Location pro Tenant (F1): Wrapper-Parity zu json.js ----
     setTenantGeo(tenantId, patch) {
       const tenant = ops.setTenantGeo(requireState(), tenantId, patch);
@@ -277,7 +285,7 @@ async function hydrate(client) {
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
   const rows = (await client.query(
-    `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language FROM tenant`
+    `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language, private_number FROM tenant`
   )).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
@@ -299,6 +307,10 @@ async function hydrateTenants(client) {
     // der Code-Fallback || DE/de der Konsumenten greift.
     if (r.country != null) tenant.country = r.country;
     if (r.default_language != null) tenant.defaultLanguage = r.default_language;
+    // F2: private Summary-Nummer nur-nicht-null hydrieren (Muster wie kyc_level/stripe_*/
+    // geo) -> ein Tenant ohne Nummer behaelt KEIN leeres Feld (kein json<->pg-Drift, M1);
+    // der Skip-Pfad in finishCall (kein Ziel -> keine SMS) greift verlaesslich.
+    if (r.private_number != null) tenant.privateNumber = r.private_number;
     return tenant;
   });
 }
@@ -534,17 +546,19 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language, private_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
-         country=EXCLUDED.country, default_language=EXCLUDED.default_language`,
+         country=EXCLUDED.country, default_language=EXCLUDED.default_language,
+         private_number=EXCLUDED.private_number`,
       [t.id, t.status, t.ownerName ?? null, t.firstName ?? null, t.idpSubject ?? null, t.kycLevel ?? null,
-       t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null, t.country ?? null, t.defaultLanguage ?? null]
+       t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null, t.country ?? null, t.defaultLanguage ?? null,
+       t.privateNumber ?? null]
     );
   }
 }

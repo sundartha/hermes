@@ -20,7 +20,7 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
-import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo, findNumber } from "./store/state-ops.js";
+import { registerTenant, normalizePrivateNumber, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo, findNumber } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
@@ -968,9 +968,19 @@ app.post("/api/onboard", async (req, res) => {
   // #1). Beide optional + Freitext (duerfen Leerzeichen, NICHT durch validIdentity, das
   // nur den Routing-Schluessel tenantId prueft); registerTenant trimmt + komponiert
   // ownerName (Owner-Fallback bei leer).
-  const { tenantId, firstName, lastName } = req.body || {};
+  const { tenantId, firstName, lastName, privateNumber } = req.body || {};
   if (!validIdentity(tenantId))
     return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+
+  // F2: private Summary-Nummer ist OPTIONAL. VOR dem Store-Lock gegen DIESELBE Quelle
+  // pruefen (normalizePrivateNumber, G5), damit ungueltige Eingaben als 400 statt 503
+  // (Throw im Lock -> persist_error) zurueckkommen. Fehlt sie -> null, Onboarding wie
+  // bisher. PII: nie ins Audit/Log (nur ein generischer Fehlertext, kein Wert, H4).
+  try {
+    normalizePrivateNumber(privateNumber);
+  } catch {
+    return res.status(400).json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+  }
 
   // F1 Phase 6 - Land/Sprache bei der Registrierung. Praezedenz (fail-safe):
   // User-Wahl (body.country, EXPLIZIT, autoritativ R4) > IP-Geo-VORSCHLAG (lokaler
@@ -995,7 +1005,7 @@ app.post("/api/onboard", async (req, res) => {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      registerTenant(s, tenantId, { firstName, lastName });
+      registerTenant(s, tenantId, { firstName, lastName, privateNumber });
       setTenantGeo(s, tenantId, { country, defaultLanguage: language });
       const r = requestNumber(s, {
         tenantId,
