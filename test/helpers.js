@@ -272,7 +272,7 @@ export function fakeBilling(overrides = {}) {
 export function fakeProvisioner(overrides = {}) {
   const log = [];
   const base = {
-    async searchNumbers() { log.push("search"); return [{ e164: "+4915799990001" }]; },
+    async searchNumbers({ countryCode } = {}) { log.push(`search:${countryCode}`); return [{ e164: "+4915799990001" }]; },
     async orderNumber({ e164, idempotencyKey }) { log.push(`order:${e164}:${idempotencyKey}`); return { e164, providerNumberId: "num_ext_1" }; },
     async configureNumber({ providerNumberId, connectionId }) { log.push(`configure:${providerNumberId}:${connectionId}`); },
     async releaseNumber(id) { log.push(`release:${id}`); },

@@ -38,7 +38,7 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   assert.equal(result.providerNumberId, "num_ext_1");
   assert.equal(result.paymentIntentId, "pi_fake_1", "PI auf der Nummer hinterlegt");
   // Hold zuerst, dann der Provider-Kauf, dann Capture (Reihenfolge ueber beide Logs).
-  assert.deepEqual(prov.log, ["search", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
   assert.deepEqual(methodsOf(billing), ["placeHold", "captureHold"]);
   // placeHold-Args: idempotencyKey number-id-basiert + Betrag/Currency.
   const [, holdArgs] = billing.log[0];
@@ -111,7 +111,7 @@ test("payment-off-Parity: ohne billing -> kein Hold/Capture, requested->provisio
 
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, ["search", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
 });
 
 test("Pay2 fail-closed: billing + Tenant OHNE Karte -> failed, KEIN placeHold, KEIN Provider-Call", async () => {

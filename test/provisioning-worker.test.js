@@ -131,5 +131,5 @@ test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", as
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
   assert.equal(num.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, ["search", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
 });

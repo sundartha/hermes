@@ -27,7 +27,7 @@ test("happy path: search -> order -> configure -> active mit e164 + providerNumb
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.e164, "+4915799990001");
   assert.equal(result.providerNumberId, "num_ext_1");
-  assert.deepEqual(prov.log, ["search", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
   // Aktivierung legt die assignment-Zeile an.
   assert.ok(s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt));
 });
