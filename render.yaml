@@ -42,10 +42,10 @@ services:
         sync: false
       - key: ALLOWED_NUMBERS
         sync: false
-      # Erlaubte Laendervorwahlen (Default +49). * = alle Laender. Letztes Gate
-      # bleibt ALLOWED_NUMBERS; Land + Stundenlimit greifen davor.
+      # Erlaubte Laendervorwahlen (Default +49,+33,+44 = DE/FR/UK). * = alle Laender.
+      # Letztes Gate bleibt ALLOWED_NUMBERS; Land + Stundenlimit greifen davor.
       - key: ALLOWED_COUNTRY_CODES
-        value: "+49"
+        value: "+49,+33,+44"
       # Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, nicht RATE_LIMIT_PER_MIN).
       - key: MAX_CALLS_PER_HOUR
         value: "6"

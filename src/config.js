@@ -135,8 +135,10 @@ export const config = {
   allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
     .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
   // Erlaubte Laendervorwahlen fuer Outbound (kommasepariert, E.164-Prefix wie +49).
-  // Default +49 (nur Deutschland). "*" = alle Laender erlaubt (Gate effektiv aus).
-  allowedCountryCodes: (process.env.ALLOWED_COUNTRY_CODES || "+49")
+  // Default +49,+33,+44 (Deutschland, Frankreich, UK - F1 Phase 8). BEWUSST nur diese
+  // drei, NICHT global ("*"): ein zu weites Gate oeffnet teure Ziele (Pre-Mortem R2).
+  // "*" = alle Laender erlaubt (Gate effektiv aus). Das Gate prueft weiter das ZIEL.
+  allowedCountryCodes: (process.env.ALLOWED_COUNTRY_CODES || "+49,+33,+44")
     .split(",").map((c) => c.trim()).filter(Boolean),
   // Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, NICHT der Per-IP-Limiter
   // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
