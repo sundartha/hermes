@@ -212,6 +212,26 @@ export function normNum(n) {
   return typeof n === "string" ? n.replace(/[\s\-()]/g, "") : "";
 }
 
+// E.164-Format: '+' gefolgt von 7-15 Ziffern, erste Ziffer != 0. EINE Quelle (G5):
+// kanonisch hier neben normNum (dem Praezedenzort fuer geteilte Telefon-Helfer),
+// damit der private-number-Setter in state-ops normalisiert UND validiert, ohne den
+// Regex zu kopieren. routes/_validation.js re-exportiert diese Konstante (statt eine
+// zweite Definition zu pflegen) - normale Schicht-Richtung (routes -> store), kein
+// Zyklus (defaults.js importiert nichts). Wert byte-identisch zur frueheren Definition.
+export const E164 = /^\+[1-9]\d{6,14}$/;
+
+// Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines
+// Praefix-Praedikat: erlaubt nur Nummern, deren E.164-Praefix in allowedCodes liegt.
+// Default ["+49"] - BEWUSST strenger als das globale Call-Gate (+49,+33,+44): die
+// Summary-SMS soll eng sein (jede gesendete SMS kostet uns). "*" hebt das Gate auf.
+// Erwartet eine bereits normalisierte (normNum) E.164-Nummer; Nicht-String/leer -> false
+// (fail-closed). Spiegelt die Praefix-Logik von server.js matchesPrefix bewusst, bleibt
+// hier aber unabhaengig (eigener, strengerer Default; kein Import aus dem Route-Layer).
+export function countryAllowed(e164, allowedCodes = ["+49"]) {
+  if (typeof e164 !== "string" || !e164) return false;
+  return allowedCodes.includes("*") || allowedCodes.some((c) => e164.startsWith(c));
+}
+
 // Whitelist gegen PROFILE_FIELDS (Key + Typ). Unbekannte Keys / falsche Typen
 // werden verworfen. allowedNumbers wird wie config.allowedNumbers normalisiert,
 // damit der Gate-Vergleich gegen E.164 trifft; Laendercodes nur getrimmt.

@@ -38,6 +38,12 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
 -- (ALTER-only, nullable, KEIN CHECK; die Validierung lebt im Code).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS country          TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS default_language TEXT;
+-- F2: private Mobilnummer (E.164) des Tenants, an die nach einem Inbound-Call die
+-- Summary-SMS geht. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, finishCall
+-- ueberspringt die SMS still (kein Ziel). Muster wie kyc_level/stripe_*/geo (ALTER-only,
+-- nullable, KEIN CHECK; Normalisierung + E.164-/Land-Validierung lebt fail-closed in
+-- state-ops.setPrivateNumber - EINE Quelle). PII -> nie in Logs/MCP (eigene Spalte).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (
