@@ -29,7 +29,7 @@ export const meta = {
   ],
 }
 
-const REPO = "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent"
+const REPO = process.env.OCLAW_REPO || process.cwd()
 const NODE_MODULES = `${REPO}/node_modules`
 
 // FAIL-CLOSED: keine Phase ohne explizite args.phaseId. Verhindert den I2-Unfall.

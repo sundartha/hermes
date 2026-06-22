@@ -15,7 +15,7 @@ export const meta = {
   ],
 }
 
-const REPO = "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent"
+const REPO = process.env.OCLAW_REPO || process.cwd()
 const NODE_MODULES = `${REPO}/node_modules`
 
 // ====================== HART GEPINNTE PHASE (nur diesen Block editieren) ======================
