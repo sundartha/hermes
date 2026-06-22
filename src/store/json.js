@@ -333,6 +333,16 @@ export function tenantStripe(tenantId) {
   return ops.tenantStripe(load(), tenantId);
 }
 
+// ---- Geo-Location pro Tenant (F1) ----
+// setTenantGeo mutiert -> save (Muster wie setTenantStripe). Die settings.language-
+// Migration braucht keinen eigenen Code (migrateSettingsToMap backfillt via
+// defaultSettings()-Merge); dieser Setter ist fuer den store.js-Fassaden-Export noetig.
+export function setTenantGeo(tenantId, patch) {
+  const tenant = ops.setTenantGeo(load(), tenantId, patch);
+  save();
+  return tenant;
+}
+
 // ---- Notifications ----
 export function addNotification(title, body, callId) {
   ops.addNotification(load(), title, body, callId);

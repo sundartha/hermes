@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import * as store from "./store.js";
 import { OWNER_TENANT_ID, USAGE_EVENT_KIND } from "./store/defaults.js";
 import { aiCostCents } from "./store/state-ops.js";
+import { localeFor } from "./i18n/locales.js";
 
 // Resilienter LLM-Seam (P3b-R Schicht 2, src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top (P15), Fachcode ruft nur
@@ -29,8 +30,10 @@ function meterAiTokens(call, usage) {
   });
 }
 
-const fmtDate = (iso) =>
-  new Date(iso).toLocaleString("de-DE", {
+// locale (BCP-47) sprachabhaengig vom Aufrufer (call.language -> loc.dateLocale).
+// Default "de-DE": Aufrufer ohne Locale (Bestand) bleiben byte-identisch.
+const fmtDate = (iso, locale = "de-DE") =>
+  new Date(iso).toLocaleString(locale, {
     weekday: "short", day: "2-digit", month: "2-digit",
     hour: "2-digit", minute: "2-digit",
   });
@@ -44,7 +47,10 @@ export function systemPrompt(call) {
   // (disclosureSentence) nennt dagegen den VOLLEN Namen. Beide aus derselben
   // gebundenen Tenant-Identitaet (tenantContext) -> keine Impersonation.
   const owner = ctx.firstName;
-  const now = new Date().toLocaleString("de-DE", {
+  // Sprach-Resolver (F1 Phase 2): loest den frueher toten Kanal call.language in ein
+  // Locale auf (Fallback de). Steuert Datums-Locale + Output-Sprach-Regel (Regel 1).
+  const loc = localeFor(call.language);
+  const now = new Date().toLocaleString(loc.dateLocale, {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -53,7 +59,7 @@ export function systemPrompt(call) {
 Du sprichst gerade LIVE am Telefon. Heute ist ${now}.
 
 REGELN FUERS TELEFONIEREN:
-- Antworte KURZ: 1-2 gesprochene Saetze pro Antwort. Kein Markdown, keine Listen, keine Emojis. Nur natuerlich gesprochenes Deutsch.
+- Antworte KURZ: 1-2 gesprochene Saetze pro Antwort. Kein Markdown, keine Listen, keine Emojis. ${loc.speechClause}
 - Sei freundlich, professionell und effizient. Sieze fremde Anrufer.
 - Stelle pro Antwort hoechstens eine Frage.
 - Wenn das Anliegen erledigt ist oder das Gespraech zu Ende geht, verabschiede dich und rufe danach das Tool end_call auf.
@@ -86,7 +92,9 @@ Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen
 // Call-Parameter ueberschreibbar. Wortlaut byte-identisch, nur die Quelle ist gebunden.
 export function disclosureSentence(call) {
   const name = store.tenantContext(call.tenantId).ownerName;
-  return `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${name}. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.`;
+  // Sprachabhaengiger Wortlaut aus dem Locale-Bundle (de byte-identisch, fr kuratiert/
+  // byte-stabil, R8); nur der ownerName ist gebunden, die Sprache folgt call.language.
+  return localeFor(call.language).disclosure(name);
 }
 
 // Maximale Zeichenzahl des Anliegens im gesprochenen Erst-Turn (G25). Kappt NUR die
@@ -101,7 +109,8 @@ export function openingText(call) {
   const disclosure = disclosureSentence(call);
   const goal = trimGoalForSpeech(call.goal);
   if (!goal) return disclosure;
-  return `${disclosure} Ich rufe an, weil ${goal}.`;
+  // Sprachabhaengige Bruecke aus dem Bundle (de: "Ich rufe an, weil ...", byte-identisch).
+  return `${disclosure} ${localeFor(call.language).bridgePhrase(goal)}`;
 }
 
 // Glaettet das Anliegen fuer die Sprachausgabe: Whitespace normalisieren, an der
@@ -168,6 +177,9 @@ export function toolDefs(tenantId) {
 }
 
 export function execTool(call, name, input) {
+  // Datums-Locale sprachabhaengig (F1 Phase 2): die im Tool-Ergebnis genannten Termine
+  // erscheinen in der Gespraechssprache (fr-FR/de-DE), die der LLM weiterspricht.
+  const dateLocale = localeFor(call.language).dateLocale;
   switch (name) {
     case "get_calendar": {
       // READ ueber den Seam (Identitaets-Konsument): ctx.calendar ist der
@@ -177,7 +189,7 @@ export function execTool(call, name, input) {
       if (!events.length) return "Kalender ist leer, alles frei.";
       return (
         "Naechste Termine:\n" +
-        events.map((e) => `- ${e.title}: ${fmtDate(e.start)} bis ${fmtDate(e.end)}`).join("\n")
+        events.map((e) => `- ${e.title}: ${fmtDate(e.start, dateLocale)} bis ${fmtDate(e.end, dateLocale)}`).join("\n")
       );
     }
     case "book_appointment": {
@@ -186,10 +198,10 @@ export function execTool(call, name, input) {
       const end = new Date(start.getTime() + (input.durationMinutes || 60) * 60000);
       const conflict = store.findConflict(call.tenantId, start.toISOString(), end.toISOString());
       if (conflict)
-        return `KONFLIKT: Ueberschneidung mit "${conflict.title}" (${fmtDate(conflict.start)}). Bitte anderen Slot vorschlagen.`;
+        return `KONFLIKT: Ueberschneidung mit "${conflict.title}" (${fmtDate(conflict.start, dateLocale)}). Bitte anderen Slot vorschlagen.`;
       store.addCalendarEvent(call.tenantId, input.title, start.toISOString(), end.toISOString());
-      store.addActionItem(call.id, `Termin gebucht: ${input.title} am ${fmtDate(start.toISOString())}`, "appointment");
-      return `GEBUCHT: ${input.title} am ${fmtDate(start.toISOString())}.`;
+      store.addActionItem(call.id, `Termin gebucht: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}`, "appointment");
+      return `GEBUCHT: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}.`;
     }
     case "take_message": {
       store.addActionItem(call.id, input.message, "todo");
@@ -303,7 +315,9 @@ export async function summarizeCall(call) {
   const resp = await llm.complete({
     model: config.claudeModel,
     max_tokens: 500,
-    system: `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bezieht sich auf den Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
+    // Zusammenfassungs-Prompt sprachabhaengig (F1 Phase 2): die Summary entsteht in der
+    // Gespraechssprache (de byte-identisch); die JSON-Keys bleiben sprachunabhaengig.
+    system: localeFor(call.language).summarySystem(owner),
     messages: [{ role: "user", content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}` }],
   });
   store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);

@@ -182,6 +182,13 @@ export function makePgStore(runner) {
     },
     tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
 
+    // ---- Geo-Location pro Tenant (F1): Wrapper-Parity zu json.js ----
+    setTenantGeo(tenantId, patch) {
+      const tenant = ops.setTenantGeo(requireState(), tenantId, patch);
+      save();
+      return tenant;
+    },
+
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
       save();
@@ -267,7 +274,7 @@ async function hydrate(client) {
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
   const rows = (await client.query(
-    `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id FROM tenant`
+    `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language FROM tenant`
   )).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
@@ -284,6 +291,11 @@ async function hydrateTenants(client) {
     // behaelt KEIN leeres Feld (kein Drift json<->pg, R6).
     if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
     if (r.stripe_payment_method_id != null) tenant.stripePaymentMethodId = r.stripe_payment_method_id;
+    // Geo (F1): nur-nicht-null hydrieren (Muster wie kyc_level/stripe_*) -> ein
+    // Owner/Bestand ohne Wert behaelt KEIN leeres Feld (kein json<->pg-Drift, R7/R12);
+    // der Code-Fallback || DE/de der Konsumenten greift.
+    if (r.country != null) tenant.country = r.country;
+    if (r.default_language != null) tenant.defaultLanguage = r.default_language;
     return tenant;
   });
 }
@@ -308,7 +320,7 @@ async function hydrateTenantInto(client, state, tenantId) {
     `SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
   )).rows;
   const numberRows = (await client.query(
-    `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id FROM number WHERE tenant_id = $1`, [tenantId]
+    `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language FROM number WHERE tenant_id = $1`, [tenantId]
   )).rows;
   const jobRows = (await client.query(
     `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
@@ -339,6 +351,10 @@ async function hydrateTenantInto(client, state, tenantId) {
     status: r.status,
     providerNumberId: r.provider_number_id,
     paymentIntentId: r.payment_intent_id ?? null,
+    // Geo (F1): Bestands-Nummer ohne Wert -> null (kein undefined-Drift, Muster wie
+    // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
+    country: r.country ?? null,
+    language: r.language ?? null,
   })));
   state.provisioningJobs.push(...jobRows.map((r) => ({
     id: r.id,
@@ -404,6 +420,8 @@ function rowToSettings(r) {
     allowSummaries: r.allow_summaries,
     allowPersonalData: r.allow_personal_data,
     allowBankData: r.allow_bank_data,
+    // F1: NOT NULL DEFAULT 'de' -> Bestands-Zeilen tragen 'de' (kein undefined-Drift).
+    language: r.language,
   };
 }
 
@@ -512,16 +530,17 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
-         stripe_payment_method_id=EXCLUDED.stripe_payment_method_id`,
+         stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
+         country=EXCLUDED.country, default_language=EXCLUDED.default_language`,
       [t.id, t.status, t.ownerName ?? null, t.firstName ?? null, t.idpSubject ?? null, t.kycLevel ?? null,
-       t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null]
+       t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null, t.country ?? null, t.defaultLanguage ?? null]
     );
   }
 }
@@ -555,15 +574,15 @@ async function flushSettings(client, tenantId, settings) {
   await client.query(
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
-        allow_summaries, allow_personal_data, allow_bank_data)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        allow_summaries, allow_personal_data, allow_bank_data, language)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (tenant_id) DO UPDATE SET
        agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
        allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
        allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
-       allow_bank_data=EXCLUDED.allow_bank_data`,
+       allow_bank_data=EXCLUDED.allow_bank_data, language=EXCLUDED.language`,
     [tenantId, settings.agentName, settings.greeting, settings.allowCalendar, settings.allowBooking,
-      settings.allowSummaries, settings.allowPersonalData, settings.allowBankData]
+      settings.allowSummaries, settings.allowPersonalData, settings.allowBankData, settings.language]
   );
 }
 
@@ -684,13 +703,14 @@ async function flushNumbers(client, tenantId, numbers) {
   await deleteMissing(client, "number", tenantId, own.map((n) => n.id));
   for (const n of own) {
     await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (id) DO UPDATE SET
          e164=EXCLUDED.e164, provider=EXCLUDED.provider,
          status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
-         payment_intent_id=EXCLUDED.payment_intent_id`,
-      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null, n.paymentIntentId ?? null]
+         payment_intent_id=EXCLUDED.payment_intent_id,
+         country=EXCLUDED.country, language=EXCLUDED.language`,
+      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null, n.paymentIntentId ?? null, n.country ?? null, n.language ?? null]
     );
   }
 }

@@ -123,6 +123,16 @@ function nextWeekday(daysAhead, hour) {
 export const DEFAULT_GREETING =
   "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann Nachrichten aufnehmen oder direkt einen Termin vereinbaren. Wie kann ich helfen?";
 
+// ---- Geo-Location (F1): Default-Land + -Sprache ----
+// EINE Quelle (G5/G25) fuer die Geo-Defaults: defaultSettings().language, der
+// config-derived Number-Seed (seedOwnerNumber), der Nummern-Request (requestNumber)
+// UND der Code-Fallback der spaeteren Sprach-/Routing-Konsumenten leiten DE/de
+// hieraus ab. Die Geo-Felder auf Number-/Tenant-Record sind additiv NULLABLE
+// (Bestand ohne Wert -> Code-Fallback hier, nie hart angenommen, R7). country =
+// ISO-3166-1-alpha-2, language = BCP-47-kurz.
+export const DEFAULT_COUNTRY = "DE";
+export const DEFAULT_LANGUAGE = "de";
+
 export function defaultSettings() {
   return {
     agentName: "Hermes",
@@ -132,6 +142,10 @@ export function defaultSettings() {
     allowSummaries: true,
     allowPersonalData: false,
     allowBankData: false,
+    // Gespraechssprache pro Tenant (F1, Entscheidung B): im Dashboard umstellbar
+    // (updateSettings-Whitelist greift automatisch, da language in den Defaults
+    // steht). JSON-Backend backfillt Bestands-Buckets via defaultSettings()-Merge.
+    language: DEFAULT_LANGUAGE,
   };
 }
 

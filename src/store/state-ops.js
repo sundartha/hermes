@@ -17,6 +17,8 @@ import {
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
   DEFAULT_PROVIDER,
+  DEFAULT_COUNTRY,
+  DEFAULT_LANGUAGE,
   normNum,
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
@@ -296,13 +298,18 @@ export function findTenantByNumber(s, e164) {
 // laufen, damit die gespeicherte Form mit dem normalisierten Inbound-To-Lookup
 // (findTenantByNumber) uebereinstimmt - sonst routet eine Owner-Nummer mit
 // Trennzeichen nicht (TD-2). Sauberes E.164 -> No-Op (byte-identisch).
-export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
+// country/language (F1, Phase 1) als optionale Params mit DE/de-Default (eine Quelle:
+// defaults.js): die geseedete Owner-/Bestandsnummer traegt damit ihren Geo-Anker
+// (Inbound-Sprache, Outbound-Absenderwahl). Bestehende 3-/4-Arg-Aufrufe bleiben
+// verhaltens-erhaltend (Default DE/de = heutiger De-facto-Zustand). Additiv NULLABLE
+// in der DB; ein Bestands-Record ohne Werte faellt ueber den Code-Fallback zurueck.
+export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = DEFAULT_LANGUAGE) {
   const norm = normNum(e164);
   if (!norm) return;
   if (s.numbers.some((n) => n.e164 === norm)) return;
   // Geseedete Owner-Nummer ist in Benutzung -> status active. id, damit
   // number_assignment/Lifecycle sie referenzieren koennen.
-  s.numbers.push({ id: newId("num"), e164: norm, tenantId, provider, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
+  s.numbers.push({ id: newId("num"), e164: norm, tenantId, provider, country, language, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
 }
 
 // ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----
@@ -449,6 +456,22 @@ export function tenantStripe(s, tenantId) {
   };
 }
 
+// ---- Geo-Location pro Tenant (F1, Phase 1) ----
+// Setzt Default-Land + -Sprache eines Tenants, die die Registrierung aus IP-Geo-
+// Vorschlag bzw. expliziter User-Wahl ableitet (Fallback fuer neue Nummern dieses
+// Tenants). patch = { country?, defaultLanguage? }: NUR uebergebene Keys werden gesetzt
+// (selektiver Patch via !== undefined, kein Ueberschreiben mit undefined) - Muster wie
+// setTenantStripe. Fehlender Tenant wirft (kein stilles No-Op). Geo-Daten sind nicht
+// sensibel (keine Secrets) -> speicherbar. Reine Mutation, kein IO (Wrapper saved).
+// Liefert den Tenant. country = ISO-3166-1-alpha-2, defaultLanguage = BCP-47-kurz.
+export function setTenantGeo(s, tenantId, { country, defaultLanguage } = {}) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setTenantGeo: Tenant ${tenantId} nicht gefunden`);
+  if (country !== undefined) tenant.country = country;
+  if (defaultLanguage !== undefined) tenant.defaultLanguage = defaultLanguage;
+  return tenant;
+}
+
 // Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
 // Kosten/Plaetze; released/failed zaehlen nicht. Basis fuer die Cap-Pruefung.
 function liveNumbers(s, tenantId = null) {
@@ -465,12 +488,16 @@ function liveNumbers(s, tenantId = null) {
 // das uebersprungene Stripe-Schloss ersetzt - jede echte Nummer kostet Geld.
 // KEIN Provider-Kauf hier (der haengt an beginProvisioning). caps kommen aus
 // config (state-ops bleibt config-frei). Liefert {ok, number} oder {ok:false, reason}.
-export function requestNumber(s, { tenantId, provider = DEFAULT_PROVIDER, maxNumbers, maxNumbersPerTenant }) {
+// country/language (F1, Phase 1) im Destructure mit DE/de-Default (eine Quelle:
+// defaults.js): die angefragte Nummer traegt von Anfang an ihren Geo-Anker, den der
+// spaetere Provider-Kauf (Telnyx-Laendersuche) und das Inbound-/Outbound-Routing
+// lesen. Bestehende Aufrufer ohne country/language bleiben verhaltens-erhaltend (DE/de).
+export function requestNumber(s, { tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = DEFAULT_LANGUAGE, maxNumbers, maxNumbersPerTenant }) {
   const tenant = findTenant(s, tenantId);
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return { ok: false, reason: "tenant_inactive" };
   if (liveNumbers(s).length >= maxNumbers) return { ok: false, reason: "global_cap" };
   if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant) return { ok: false, reason: "tenant_cap" };
-  const number = { id: newId("num"), e164: null, tenantId, provider, status: NUMBER_STATUS.REQUESTED, providerNumberId: null, paymentIntentId: null };
+  const number = { id: newId("num"), e164: null, tenantId, provider, country, language, status: NUMBER_STATUS.REQUESTED, providerNumberId: null, paymentIntentId: null };
   s.numbers.push(number);
   return { ok: true, number };
 }

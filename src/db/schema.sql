@@ -31,6 +31,13 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
 -- Referenzen (cus_/pm_), KEINE Secrets. Muster wie kyc_level (idempotent, kein CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_customer_id       TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
+-- F1 Geo-Location (Phase 1): Tenant-Default-Land + -Sprache, die die Registrierung
+-- (IP-Geo-Vorschlag bzw. explizite User-Wahl) schreibt - Fallback fuer neue Nummern
+-- dieses Tenants. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, Code-Fallback
+-- || DE/de greift (kein Routing-/Sprach-Bruch, R7). Muster wie kyc_level/stripe_*
+-- (ALTER-only, nullable, KEIN CHECK; die Validierung lebt im Code).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS country          TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS default_language TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (
@@ -41,8 +48,14 @@ CREATE TABLE IF NOT EXISTS settings (
   allow_booking       BOOLEAN NOT NULL,
   allow_summaries     BOOLEAN NOT NULL,
   allow_personal_data BOOLEAN NOT NULL,
-  allow_bank_data     BOOLEAN NOT NULL
+  allow_bank_data     BOOLEAN NOT NULL,
+  language            TEXT NOT NULL DEFAULT 'de'
 );
+-- F1 Geo-Location (Phase 1): Gespraechssprache pro Tenant, im Dashboard umstellbar
+-- (Entscheidung B). NOT NULL DEFAULT 'de' -> bestehende settings-Zeilen bekommen 'de'
+-- nachgezogen (byte-identisch zum heutigen DE-Verhalten); das JSON-Backend backfillt
+-- analog ueber den defaultSettings()-Merge. Muster wie call.language (:63).
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'de';
 
 -- call: alle heutigen Felder AUSSER transcript[] (-> transcript_segment) + tenant_id.
 -- id = app-generierte TEXT-PK (newId-Format bleibt). seq nur fuer stabile
@@ -164,6 +177,13 @@ ALTER TABLE number ALTER COLUMN e164 DROP NOT NULL;
 -- Payment-Pfad (P6b1): Stripe-PaymentIntent-Referenz der Nummer (Hold/Capture).
 -- Additiv NULLABLE (payment-off bleibt NULL); migrate.applySchema traegt es idempotent.
 ALTER TABLE number ADD COLUMN IF NOT EXISTS payment_intent_id TEXT;
+-- F1 Geo-Location (Phase 1): country (ISO-2) + language (BCP-47-kurz) der Nummer. Die
+-- Nummer ist der dauerhafte Geo-Anker (Inbound-Sprache nach angerufener Nummer,
+-- Outbound-Absenderwahl nach Ziel-Vorwahl). Additiv NULLABLE: Bestands-Nummern ohne
+-- Wert -> NULL, Code-Fallback || DE/de greift (kein Routing-Bruch, R7). Muster wie
+-- payment_intent_id (ALTER-only, nullable).
+ALTER TABLE number ADD COLUMN IF NOT EXISTS country  TEXT;
+ALTER TABLE number ADD COLUMN IF NOT EXISTS language TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht

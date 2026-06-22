@@ -65,7 +65,7 @@ if (config.storeBackend === "pg") {
   backend = jsonBackend;
 }
 
-// 40 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
+// 41 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
 export const {
   load,
   save,
@@ -106,6 +106,7 @@ export const {
   kycReached,
   setTenantStripe,
   tenantStripe,
+  setTenantGeo,
   seedOwnerNumber,
 } = backend;
 
