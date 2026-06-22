@@ -669,9 +669,12 @@ app.post("/voice/status", (req, res) => {
 // provider aus s.numbers); kein config-Sonderzweig mehr. Keine aktive eigene Nummer
 // -> null -> Reject, NIE die Nummer eines anderen Tenants als Fallback (Toll-Fraud-
 // Riegel, Pre-Mortem R3).
+// numberRecord wird mitgegeben (nicht weggeworfen): der Geo-Anker der eigenen aktiven
+// Nummer (F1 Phase 8) ist die Quelle der Outbound-Gespraechssprache (number.language)
+// in der Praezedenz-Aufloesung. Kein neuer Absender-Pfad - nur ein zusaetzliches Feld.
 function outboundFrom(s, tenantId) {
   const own = findActiveNumber(s, tenantId);
-  return own ? { fromNumber: own.e164, provider: own.provider } : null;
+  return own ? { fromNumber: own.e164, provider: own.provider, numberRecord: own } : null;
 }
 
 // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
@@ -740,7 +743,7 @@ app.post("/api/calls", async (req, res) => {
     audit("place_call_denied", req, `to=${to} grund=keine_tenant_nummer tenant=${tenantId} requestedBy=${requestedBy}`);
     return res.status(403).json({ error: "Kein aktive Absendernummer fuer diesen Tenant." });
   }
-  const { fromNumber, provider: outboundProvider } = outbound;
+  const { fromNumber, provider: outboundProvider, numberRecord } = outbound;
 
   // Budget-Schnittmenge (R2): pro-Tenant-Budget (requestTenant) UND globaler Notaus
   // (Summe ueber alle Buckets) PARALLEL, beide fail-closed. Der globale Notaus wird
@@ -751,6 +754,13 @@ app.post("/api/calls", async (req, res) => {
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
+  // Outbound-Gespraechssprache (F1 Phase 8, Owner #8) aus DERSELBEN Praezedenz wie
+  // Inbound: settings.language (Owner-Override) -> number.language (Geo-Anker der eigenen
+  // aktiven Nummer) -> tenant.defaultLanguage -> "de". EINE Quelle (resolveCallLanguage),
+  // damit ein API-/MCP-Aufrufer die kuratierte Sprachzuordnung NICHT per Call-Body
+  // umgeht (b.language wird bewusst nicht mehr beruecksichtigt). DE byte-identisch:
+  // Nummer ohne language + ohne settings.language -> "de" wie zuvor.
+  const language = store.resolveCallLanguage({ tenantId, numberRecord });
   // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
   // statt TwiML.
   const call = store.createCall({
@@ -760,7 +770,7 @@ app.post("/api/calls", async (req, res) => {
     goal: objective,
     briefing: b.briefing,
     constraints: b.constraints,
-    language: b.language || "de",
+    language,
     maxDurationS: maxDur,
     requestedBy,
     tenantId,

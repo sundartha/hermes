@@ -71,6 +71,27 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
     }
   });
 
+  // F1 Phase 8: erweitertes Default-Gate +49,+33,+44 (DE/FR/UK). +33 und +44 passieren,
+  // ein Ziel ausserhalb der drei Vorwahlen (+1 US) bleibt fail-closed geblockt (R2:
+  // das Gate oeffnet bewusst NICHT global).
+  await t.test("+49,+33,+44: FR(+33) und UK(+44) passieren, US(+1) -> 403 grund=land", async () => {
+    const FR = "+33123456789", UK = "+447700900123", US = "+12025550123";
+    const srv = await startServer({
+      // Allowlist grosszuegig (FR/UK/US drin), damit NUR das Land-Gate die drei trennt.
+      env: { ALLOWED_NUMBERS: `${FR},${UK},${US}`, ALLOWED_COUNTRY_CODES: "+49,+33,+44", TWILIO_ACCOUNT_SID: "x" },
+    });
+    try {
+      assert.equal((await postCall(srv.localUrl, FR)).status, 500, "+33 darf das Land-Gate passieren (bis Twilio)");
+      assert.equal((await postCall(srv.localUrl, UK)).status, 500, "+44 darf das Land-Gate passieren (bis Twilio)");
+
+      const blocked = await postCall(srv.localUrl, US); // US ausserhalb der drei Vorwahlen
+      assert.equal(blocked.status, 403, "+1 bleibt fail-closed geblockt");
+      assert.match((await blocked.json()).error, /Laendervorwahl/);
+    } finally {
+      await srv.stop();
+    }
+  });
+
   await t.test("* erlaubt alle Laender", async () => {
     const srv = await startServer({
       env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
