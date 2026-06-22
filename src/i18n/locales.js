@@ -149,6 +149,26 @@ export const LOCALES = Object.freeze({
 // Unterstuetzte Sprach-Codes (Bundle-Schluessel) - fuer Tests/Iteration.
 export const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LOCALES));
 
+// F1 Geo-Location (Phase 6) - Land -> Default-Sprache. DIE eine Quelle, die ein bei der
+// Registrierung aufgeloestes/gewaehltes ISO-3166-1-alpha-2-Land auf eine Gespraechs-
+// sprache (Bundle-Schluessel) abbildet. Lebt an der i18n-Quelle (nicht in state-ops, das
+// config-frei bleibt) und nutzt das vorhandene Sprach-Set (DE/FR/EN). Generisch: eine
+// weitere Sprache = ein weiterer Eintrag (Owner #1). Unbekanntes Land -> DEFAULT_LANGUAGE
+// (de), NIE Crash (R7) - so faerbt kein unbekanntes Land den DE-Bestand ab.
+export const LANGUAGE_FOR_COUNTRY = Object.freeze({
+  DE: "de",
+  AT: "de",
+  CH: "de",
+  FR: "fr",
+  GB: "en",
+  IE: "en",
+});
+
+// Land (ISO-2, case-insensitiv) -> Default-Sprache. Fehlend/leer/unbekannt -> de.
+export function languageForCountry(country) {
+  return LANGUAGE_FOR_COUNTRY[String(country || "").toUpperCase()] || DEFAULT_LANGUAGE;
+}
+
 // Resolver: language (z.B. call.language) -> Locale. Fail-safe Fallback auf
 // DEFAULT_LANGUAGE (de) bei unbekannter/fehlender/null Sprache (R7). EINE Stelle, die den
 // frueher toten Kanal call.language in ein konkretes Locale aufloest.
