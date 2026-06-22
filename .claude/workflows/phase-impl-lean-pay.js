@@ -15,7 +15,13 @@ export const meta = {
   ],
 }
 
-const REPO = process.env.OCLAW_REPO || process.cwd()
+// Spawn-fest: im ACP-/Spawn-Kontext gibt es kein process-Global. Dann faellt REPO
+// auf '.' zurueck (Spawn-cwd ist der Worktree-Root, relative Pfade greifen korrekt).
+const REPO = (typeof process !== 'undefined' && process.env && process.env.OCLAW_REPO)
+  ? process.env.OCLAW_REPO
+  : (typeof process !== 'undefined' && typeof process.cwd === 'function')
+    ? process.cwd()
+    : '.'
 const NODE_MODULES = `${REPO}/node_modules`
 
 // ====================== HART GEPINNTE PHASE (nur diesen Block editieren) ======================
