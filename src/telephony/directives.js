@@ -4,9 +4,12 @@
 // der LOGISCHE Profilname.
 
 // Logische Voice-Profile. Der Adapter mappt sie auf provider-spezifische
-// Voice-Bezeichner. P1/DE-only: genau ein Profil.
+// Voice-Bezeichner. Werte sind deckungsgleich mit src/i18n/locales.js
+// (VOICE_PROFILE_DE/_FR) - dort waehlt das Locale-Bundle das Profil pro Sprache,
+// hier stehen die kanonischen Enum-Werte (eine Quelle, kein Drift).
 export const VOICE_PROFILE = Object.freeze({
   DE_FEMALE_NEURAL: "de-female-neural",
+  FR_FEMALE_NEURAL: "fr-female-neural",
 });
 
 // Direktiven-Typen (neutrales Enum statt Magic Strings, G25/G16).

@@ -10,36 +10,13 @@ const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 // Logisches Voice-Profil -> Telnyx-TeXML-Voice-Attribute. Telnyx TeXML akzeptiert
 // Azure-NTTS-Voices im Format "Azure.<locale>-<VoiceId>Neural" (Telnyx-Doku, Say-Verb;
 // Owner-Wahl 2026-06-16: natuerlichere deutsche Stimme als AWS Polly Vicki-Neural).
-// Die Locale steckt im Voice-Namen; language="de-DE" bleibt konsistent erhalten.
-// Fail-closed: unbekanntes Profil ist ein Programmierfehler (wirft), kein stiller
-// Default-Voice-Fallback. Twilio-Renderer bleibt bewusst auf Polly (anderer Pfad).
+// Die Locale steckt im Voice-Namen; `language` (volles BCP-47) bleibt konsistent und
+// liefert zugleich die STT-Locale des Gathers (siehe gatherAttrs) - eine Quelle pro
+// Sprache. Fail-closed: unbekanntes Profil ist ein Programmierfehler (wirft), kein
+// stiller Default-Voice-Fallback. Twilio-Renderer bleibt bewusst auf Polly (anderer Pfad).
 const TELNYX_VOICE = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Azure.de-DE-KatjaNeural", language: "de-DE" },
-});
-
-// Telnyx-TeXML-Gather-Attribute (deutsche Spracherkennung). transcriptionEngine ist
-// PFLICHT, damit Telnyx ueberhaupt transkribiert: ohne Engine erkennt `<Gather
-// input="speech">` keine Sprache und sendet kein SpeechResult zurueck (Telnyx-
-// TeXML-Spec) - das war der Inbound-Audio-Bug (Agent hoerte den Angerufenen nie).
-// "Deepgram" + model "deepgram/nova-3" = hoechste Erkennungsgenauigkeit (Owner-Wahl
-// 2026-06-16; Premium-Add-on, ersetzt die in-house-Engine). KRITISCH: language MUSS das
-// volle Locale "de-DE" sein. Die fruehere Annahme "de allein" (2026-06-16) war FALSCH und
-// durch echte STT-Billing-Records widerlegt: Telnyx erkennt "de" nicht als Deutsch ->
-// Fallback auf Englisch (Records zeigten language:'en') -> deutsche Sprache wird mit
-// englischem Modell transkribiert -> leeres Transcript (Telnyx-Support-AI + Account-
-// Records 2026-06-20). Der model-Vendor MUSS zu transcriptionEngine passen (Telnyx-Doku).
-// speechTimeout="auto" ist gesetzt (Telnyx-Empfehlung 2026-06-20, Gather-Doku): aktiviert
-// End-of-Speech-Erkennung, damit der Gather nach dem Sprechende prompt zurueckpostet statt
-// auf einen festen Stille-Timeout zu warten - ohne diese Erkennung kann der erste Turn (in
-// dem der Agent seinen Anlass nennt) verzoegert/aus bleiben. speechModel/actionOnEmptyResult
-// bleiben Twilio-spezifisch und ungesetzt. Attribut-Reihenfolge ist vertraglich (Einfuege-
-// Reihenfolge); der Snapshot-Test nagelt sie fest.
-const GATHER_ATTRS = Object.freeze({
-  input: "speech",
-  language: "de-DE",
-  transcriptionEngine: "Deepgram",
-  model: "deepgram/nova-3",
-  speechTimeout: "auto",
+  [VOICE_PROFILE.FR_FEMALE_NEURAL]: { voice: "Azure.fr-FR-DeniseNeural", language: "fr-FR" },
 });
 
 // XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden
@@ -70,12 +47,35 @@ function renderSay(d) {
   return `<Say${attrString(voiceAttrs(d.voiceProfile))}>${escapeXml(d.text)}</Say>`;
 }
 
-// Override-Seam (G3): gesetztes speechTimeoutSec ersetzt den Default "auto" an
-// DERSELBEN Attribut-Position (Reihenfolge bleibt vertraglich, Snapshot). Weglassen
-// -> attrString(GATHER_ATTRS) byte-identisch. Nur Folge-Gathers setzen den Wert.
+// Telnyx-TeXML-Gather-Attribute (Spracherkennung). transcriptionEngine ist PFLICHT,
+// damit Telnyx ueberhaupt transkribiert: ohne Engine erkennt `<Gather input="speech">`
+// keine Sprache und sendet kein SpeechResult zurueck (Telnyx-TeXML-Spec) - das war der
+// Inbound-Audio-Bug (Agent hoerte den Angerufenen nie). "Deepgram" + model
+// "deepgram/nova-3" = hoechste Erkennungsgenauigkeit (Owner-Wahl 2026-06-16; Premium-
+// Add-on, ersetzt die in-house-Engine); Nova-3 ist mehrsprachig (DE+FR), der model-Vendor
+// MUSS zu transcriptionEngine passen (Telnyx-Doku). language kommt aus dem voiceProfile
+// des Gathers (dieselbe TELNYX_VOICE-Map wie der Say-Voice), nicht hartkodiert: so
+// transkribiert STT IMMER in der Sprache, in der gesprochen wird. R9: language MUSS das
+// volle Locale ("de-DE"/"fr-FR") sein. Die fruehere Annahme "de allein" (2026-06-16) war
+// FALSCH und durch echte STT-Billing-Records widerlegt: Telnyx erkennt "de" nicht als
+// Deutsch -> Fallback auf Englisch (Records zeigten language:'en') -> deutsche Sprache wird
+// mit englischem Modell transkribiert -> leeres Transcript (Telnyx-Support-AI + Account-
+// Records 2026-06-20). Fail-closed: unbekanntes Profil wirft (via voiceAttrs).
+// speechTimeout="auto" ist Default (Telnyx-Empfehlung 2026-06-20, Gather-Doku): aktiviert
+// End-of-Speech-Erkennung, damit der Gather nach dem Sprechende prompt zurueckpostet statt
+// auf einen festen Stille-Timeout zu warten. Override-Seam (G3): gesetztes speechTimeoutSec
+// ersetzt "auto" an DERSELBEN Attribut-Position (nur Folge-Gathers setzen den Wert).
+// speechModel/actionOnEmptyResult bleiben Twilio-spezifisch und ungesetzt. Attribut-
+// Reihenfolge ist vertraglich (Einfuege-Reihenfolge); der Snapshot-Test nagelt sie fest
+// (DE bleibt dadurch byte-identisch).
 function gatherAttrs(d) {
-  if (d.speechTimeoutSec === undefined) return GATHER_ATTRS;
-  return { ...GATHER_ATTRS, speechTimeout: String(d.speechTimeoutSec) };
+  return {
+    input: "speech",
+    language: voiceAttrs(d.voiceProfile).language,
+    transcriptionEngine: "Deepgram",
+    model: "deepgram/nova-3",
+    speechTimeout: d.speechTimeoutSec === undefined ? "auto" : String(d.speechTimeoutSec),
+  };
 }
 
 function renderGather(d) {
