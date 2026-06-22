@@ -6,6 +6,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { toolDefs, execTool, disclosureSentence, systemPrompt } from "./claude.js";
+import { localeFor } from "./i18n/locales.js";
 import { safeEqual } from "./util.js";
 import { voiceControl, mediaTransport } from "./telephony/registry.js";
 import { PROVIDER } from "./store/defaults.js";
@@ -118,24 +119,35 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       ctx.scheduleHangup = (reason) => { ctx.state.hangupTimer = setTimeout(() => ctx.hangup(reason), HANGUP_MS); };
 
       openaiWs.on("open", () => {
+        // Sprachabhaengige Realtime-Felder aus dem EINEN i18n-Bundle (Phase 5). localeFor
+        // faellt fail-safe auf de zurueck (unbekannte/fehlende call.language -> Bestand).
+        // DE: realtimeVoice/whisperLocale sind null -> config.realtimeVoice bzw. Whisper-
+        // Auto-Detect (kein language-Feld) -> byte-identisch zum Bestand.
+        const loc = localeFor(call.language);
+        // Whisper-language nur setzen, wenn das Bundle einen ISO-Code liefert (FR/EN);
+        // DE bleibt ohne language-Feld (Auto-Detect, Bestand).
+        const transcription = { model: "whisper-1" };
+        if (loc.whisperLocale) transcription.language = loc.whisperLocale;
         openaiWs.send(JSON.stringify({
           type: "session.update",
           session: {
             modalities: ["text", "audio"],
             instructions: instructions(call),
-            voice: config.realtimeVoice,
+            voice: loc.realtimeVoice ?? config.realtimeVoice,
             input_audio_format: "g711_ulaw",
             output_audio_format: "g711_ulaw",
-            input_audio_transcription: { model: "whisper-1" },
+            input_audio_transcription: transcription,
             turn_detection: { type: "server_vad" },
             tools: realtimeTools(call.tenantId),
             tool_choice: "auto",
           },
         }));
-        // KI spricht zuerst. Bei Outbound: fest verdrahteter Offenlegungssatz als allererster Satz.
+        // KI spricht zuerst. Bei Outbound: fest verdrahteter Offenlegungssatz (sprach-
+        // abhaengig, kuratiert) als allererster Satz, eingebettet im sprachabhaengigen
+        // Opener-Steuertext aus dem Bundle. Bei Inbound: sprachabhaengige Begruessung.
         const opener = call.direction === "outbound"
-          ? `Beginne das Gespraech JETZT. Dein erster Satz muss exakt lauten: "${disclosureSentence(call)}" Nenne danach kurz dein Anliegen.`
-          : "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.";
+          ? loc.realtimeOpener.outbound(disclosureSentence(call))
+          : loc.realtimeOpener.inbound;
         openaiWs.send(JSON.stringify({ type: "response.create", response: { instructions: opener } }));
       });
 
