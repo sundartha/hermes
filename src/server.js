@@ -21,7 +21,7 @@ import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirect
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo, findNumber } from "./store/state-ops.js";
-import { searchParamsForCountry } from "./telephony/provisioning-geo.js";
+import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
@@ -567,14 +567,17 @@ function recordVoiceMinuteMeter(call) {
 // number_month-Meter EINER neu aktivierten Nummer (P6b3, Meter 1). NUR im Metering-
 // Pfad (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt steht im Namen.
 // number ist undefined, wenn der Job uebersprungen wurde (Re-Drain) -> kein Event.
-// callId bewusst null (Nummern-Meter hat keinen Call). costCents = der Setup-Tarif.
+// callId bewusst null (Nummern-Meter hat keinen Call). costCents = der per-Land-Setup-Tarif
+// (P9): MUSS denselben Wert nutzen wie der Hold, sonst driftet das Ledger vom real
+// gehaltenen/gecaptureten Betrag (Mini-R3 im usage_event). Land ohne eigenen Tarif / DE
+// -> numberSetupFeeCents (byte-identisch).
 function recordNumberMonthMeter(number) {
   if (!number) return;
   store.recordUsageEvent({
     tenantId: number.tenantId,
     kind: USAGE_EVENT_KIND.NUMBER_MONTH,
     quantity: 1,
-    costCents: config.numberSetupFeeCents,
+    costCents: holdAmountForCountry(number.country, config.numberSetupFeeCents),
   });
 }
 
@@ -1076,7 +1079,17 @@ async function runProvisioningDrain() {
     // searchParamsForCountry(undefined) liefert den globalen DE-Fallback (byte-identisch).
     const number = findNumber(s, queuedJob.payload.numberId);
     const geo = searchParamsForCountry(number?.country);
-    const opts = { ...moneyOpts, ...geo };
+    // Per-Land-Hold (P9, R3): ueberschreibt den globalen moneyOpts.holdAmountCents nur,
+    // wenn das Land einen eigenen Tarif hat; sonst = numberSetupFeeCents (byte-identisch).
+    // Fehlender Record / DE -> Default. NUR im Geld-Pfad (PAYMENT_ENABLED), sonst undefined.
+    const holdAmountCents = config.paymentEnabled
+      ? holdAmountForCountry(number?.country, config.numberSetupFeeCents)
+      : undefined;
+    const opts = {
+      ...moneyOpts,
+      ...geo,
+      ...(holdAmountCents !== undefined ? { holdAmountCents } : {}),
+    };
     try {
       const r = await handleProvisionJob(s, queuedJob, deps, opts);
       if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);
