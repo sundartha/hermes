@@ -12,7 +12,7 @@
 // Phase 3) brauchen die Akzente fuer die richtige Aussprache ("resume" != "résumé"). Die
 // Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>, Twilio-SDK); Akzente sind keine
 // XML-Sonderzeichen und passieren die Escaper unveraendert.
-import { DEFAULT_LANGUAGE } from "../store/defaults.js";
+import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
 
 // Logische Voice-Profile (Strings) als Forward-Referenz fuer den Telephonie-Renderer
 // (Phase 3 mappt sie auf provider-spezifische Voice-Namen Polly/Azure). Im Bundle steht
@@ -20,6 +20,7 @@ import { DEFAULT_LANGUAGE } from "../store/defaults.js";
 // ein logisches Profil; directives.js VOICE_PROFILE haelt die kanonischen Enum-Werte).
 const VOICE_PROFILE_DE = "de-female-neural";
 const VOICE_PROFILE_FR = "fr-female-neural";
+const VOICE_PROFILE_EN = "en-female-neural";
 
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
 // interpoliert wird (disclosure/bridgePhrase/summarySystem) - der Aufrufer reicht die
@@ -42,6 +43,15 @@ export const LOCALES = Object.freeze({
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
       `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bezieht sich auf den Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
+    // Statische Server-Texte (F1 Phase 4): reine Strings (keine Identitaets-Bindung).
+    // Quelle: zuvor hart in server.js (Reprompt/Fehler/Hangup) bzw. defaults.js
+    // (greetingDefault). DE-Werte BYTE-IDENTISCH zum Bestand uebernommen - ein FR/EN-Pfad
+    // faerbt DE nicht ab. greetingDefault = DEFAULT_GREETING (eine Quelle, kein Drift).
+    llmDegradedSpeech: "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
+    turnErrorSpeech: "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
+    noSpeechReprompt: "Entschuldigung, koennen Sie das bitte wiederholen?",
+    budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
+    greetingDefault: DEFAULT_GREETING,
   }),
   fr: Object.freeze({
     language: "fr",
@@ -56,6 +66,38 @@ export const LOCALES = Object.freeze({
       `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. Cette conversation sera résumée pour mon mandant.`,
     summarySystem: (owner) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved se rapporte à la mission (pour les appels entrants : si la demande de l'appelant a été résolue). N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item.`,
+    // Statische Server-Texte FR (kuratiert, mit Akzenten fuer korrekte TTS-Aussprache).
+    llmDegradedSpeech: "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
+    turnErrorSpeech: "Désolé, un problème technique est survenu. Veuillez réessayer plus tard.",
+    noSpeechReprompt: "Désolé, pouvez-vous répéter, s'il vous plaît ?",
+    budgetExhaustedHangup: "Le budget de démonstration est épuisé. Au revoir.",
+    // FR-Greeting-Default: {owner} wird zur Laufzeit ersetzt (wie DE). Nur fuer FR-Tenants
+    // relevant; der Bestands-/Owner-Tenant traegt weiter den DE-Seed (kein Backfill).
+    greetingDefault:
+      "Bonjour, vous êtes en relation avec l'assistant IA de {owner}. {owner} n'est pas disponible pour le moment. Je peux prendre un message ou convenir d'un rendez-vous. Comment puis-je vous aider ?",
+  }),
+  // EN-Bundle (F1 Phase 4, Owner-Entscheidung #1: DE+FR+EN). GB/IE -> en. Voice/STT
+  // fail-closed (R9/R10): unbekanntes Profil wirft, kein stiller DE/FR-Fallback. Live-
+  // Freischaltung (Polly Amy / Azure Sonia) ist Smoke-Gate, Produktiv-Flags bleiben aus.
+  en: Object.freeze({
+    language: "en",
+    dateLocale: "en-GB",
+    sttLocale: "en-GB",
+    voiceProfile: VOICE_PROFILE_EN,
+    speechClause: "Reply only in natural, spoken English.",
+    bridgePhrase: (goal) => `I'm calling because ${goal}.`,
+    // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
+    // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
+    disclosure: (ownerName) =>
+      `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
+    summarySystem: (owner) =>
+      `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved refers to the objective (for inbound calls: whether the caller's request was resolved). Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item.`,
+    llmDegradedSpeech: "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
+    turnErrorSpeech: "Sorry, a technical problem occurred. Please try again later.",
+    noSpeechReprompt: "Sorry, could you please repeat that?",
+    budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",
+    greetingDefault:
+      "Hi, this is the AI assistant of {owner}. {owner} can't take the call right now. I can take a message or arrange an appointment. How can I help?",
   }),
 });
 

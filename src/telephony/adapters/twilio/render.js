@@ -12,6 +12,9 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 const TWILIO_VOICE = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Polly.Vicki-Neural", language: "de-DE" },
   [VOICE_PROFILE.FR_FEMALE_NEURAL]: { voice: "Polly.Lea-Neural", language: "fr-FR" },
+  // EN (F1 P4): GB-Englisch. Polly Amy-Neural ist die britische Neural-Stimme; en-GB
+  // als volles BCP-47 fuer TTS UND STT (R9). Live-Freischaltung = Smoke-Gate (R10).
+  [VOICE_PROFILE.EN_FEMALE_NEURAL]: { voice: "Polly.Amy-Neural", language: "en-GB" },
 });
 
 function voiceAttrs(profile) {

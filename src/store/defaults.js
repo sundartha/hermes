@@ -142,10 +142,13 @@ export function defaultSettings() {
     allowSummaries: true,
     allowPersonalData: false,
     allowBankData: false,
-    // Gespraechssprache pro Tenant (F1, Entscheidung B): im Dashboard umstellbar
-    // (updateSettings-Whitelist greift automatisch, da language in den Defaults
-    // steht). JSON-Backend backfillt Bestands-Buckets via defaultSettings()-Merge.
-    language: DEFAULT_LANGUAGE,
+    // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):
+    // null = "nicht gesetzt" -> die Aufloesungs-Praezedenz (resolveCallLanguage) faellt
+    // auf number.language -> tenant.defaultLanguage -> "de" durch. Ein harter Default "de"
+    // wuerde number.language IMMER ueberstimmen (Praezedenz-Bug) -> deshalb null statt "de".
+    // Im Dashboard umstellbar (updateSettings hat eine eigene language-Validierung gegen
+    // SUPPORTED_LANGUAGES, da typeof null === "object" den generischen Typ-Check umgeht).
+    language: null,
   };
 }
 

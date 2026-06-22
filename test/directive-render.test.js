@@ -105,3 +105,33 @@ test("FR: Say + Hangup -> TwiML mit Polly.Lea-Neural + fr-FR (Akzent erhalten)",
 test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus Profil)", () => {
   assert.throws(() => renderDirectives([gather({ promptText: "", action: "/x", voiceProfile: "kein-profil" })]), /unbekanntes voiceProfile/);
 });
+
+// --- F1 Phase 4: EN-Sprachpfad (GB-Englisch). STT-Locale + TTS-Voice aus dem Profil
+// (TWILIO_VOICE). en-GB als volles BCP-47 (R9); Polly.Amy-Neural als GB-Stimme.
+const EN = VOICE_PROFILE.EN_FEMALE_NEURAL;
+
+test("EN: Turn-Direktiven -> TwiML mit en-GB-STT + Polly.Amy-Neural", () => {
+  const action = "/voice/turn?callId=call_en";
+  const out = renderDirectives([gather({ promptText: "Hello, how can I help?", action, voiceProfile: EN }), redirect(action)]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Gather input="speech" language="en-GB" speechTimeout="auto" speechModel="deepgram_nova-2-general" actionOnEmptyResult="true" action="/voice/turn?callId=call_en" method="POST">' +
+    '<Say voice="Polly.Amy-Neural" language="en-GB">Hello, how can I help?</Say>' +
+    '</Gather>' +
+    '<Redirect method="POST">/voice/turn?callId=call_en</Redirect>' +
+    '</Response>');
+});
+
+test("EN: Say + Hangup -> TwiML mit Polly.Amy-Neural + en-GB", () => {
+  const out = renderDirectives([say("The demo budget has been used up. Goodbye.", EN), hangup()]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Say voice="Polly.Amy-Neural" language="en-GB">The demo budget has been used up. Goodbye.</Say>' +
+    '<Hangup/></Response>');
+});
+
+test("EN/R9: leeres Gather traegt en-GB-STT (volles BCP-47, nicht 'en')", () => {
+  const out = renderDirectives([gather({ promptText: "", action: "/voice/turn?callId=c1", voiceProfile: EN })]);
+  assert.match(out, /<Gather\b[^>]*\blanguage="en-GB"/, "EN-STT = volles Locale en-GB");
+  assert.doesNotMatch(out, /language="en"[ />]/, "nicht das blosse 'en'");
+});

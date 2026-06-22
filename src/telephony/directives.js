@@ -10,6 +10,7 @@
 export const VOICE_PROFILE = Object.freeze({
   DE_FEMALE_NEURAL: "de-female-neural",
   FR_FEMALE_NEURAL: "fr-female-neural",
+  EN_FEMALE_NEURAL: "en-female-neural",
 });
 
 // Direktiven-Typen (neutrales Enum statt Magic Strings, G25/G16).

@@ -5,9 +5,27 @@
 // gueltige Signatur erreicht das Routing nie (403). Build-Operate-Check je Konzept.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForLog, OWNER_TEST_NUMBER } from "./helpers.js";
+import { startServer, waitForLog, OWNER_TEST_NUMBER, seedState } from "./helpers.js";
+import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const UNKNOWN_TO = "+49999999999"; // nicht geseedet -> nicht routbar
+
+// F1 P4: aktive Nummern mit Geo-Anker (language) fuer das Inbound-Wiring. Alle gehoeren
+// dem Owner-Tenant (Single-Tenant). ensureOwnerNumber ergaenzt zusaetzlich die DE-Owner-
+// Nummer (Boot-Guard); die FR/EN-Nummern testen, dass call.language aus number.language faellt.
+const FR_NUMBER = "+33111000222";
+const EN_NUMBER = "+44111000333";
+function geoSeed(extraSettings = {}) {
+  return seedState({
+    settings: extraSettings,
+    tenants: [{ id: OWNER_TENANT_ID, status: "active" }],
+    numbers: [
+      { id: "num_owner_de", e164: OWNER_TEST_NUMBER.e164, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "DE", language: "de" },
+      { id: "num_fr", e164: FR_NUMBER, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "FR", language: "fr" },
+      { id: "num_en", e164: EN_NUMBER, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "GB", language: "en" },
+    ],
+  });
+}
 
 test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record", async () => {
   const srv = await startServer({ env: { VOICE_ENGINE: "realtime" } });
@@ -55,6 +73,64 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1, "genau ein Call-Record fuer die Owner-Nummer");
     assert.equal(calls[0].to, OWNER_TEST_NUMBER.e164);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// ---- F1 P4: Inbound-Wiring (Nummer -> Sprache) ----
+
+async function postIncoming(srv, to) {
+  const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    method: "POST",
+    body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: to }),
+  });
+  assert.equal(res.status, 200);
+  return { twiml: await res.text(), call: srv.readStore().calls[0] };
+}
+
+test("DE-Nummer -> call.language=de + DE-Voice byte-identisch (Polly.Vicki/de-DE)", async () => {
+  const srv = await startServer({ seed: geoSeed() });
+  try {
+    const { twiml, call } = await postIncoming(srv, OWNER_TEST_NUMBER.e164);
+    assert.equal(call.language, "de");
+    assert.match(twiml, /language="de-DE"/, "DE-STT-Locale");
+    assert.match(twiml, /voice="Polly\.Vicki-Neural"/, "DE-Voice byte-identisch");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("FR-Nummer -> call.language=fr + FR-Voice (Polly.Lea/fr-FR)", async () => {
+  const srv = await startServer({ seed: geoSeed() });
+  try {
+    const { twiml, call } = await postIncoming(srv, FR_NUMBER);
+    assert.equal(call.language, "fr", "Inbound-Sprache aus number.language (FR)");
+    assert.match(twiml, /language="fr-FR"/, "FR-STT-Locale");
+    assert.match(twiml, /voice="Polly\.Lea-Neural"/, "FR-Voice");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("EN-Nummer -> call.language=en + EN-Voice (Polly.Amy/en-GB)", async () => {
+  const srv = await startServer({ seed: geoSeed() });
+  try {
+    const { twiml, call } = await postIncoming(srv, EN_NUMBER);
+    assert.equal(call.language, "en", "Inbound-Sprache aus number.language (EN)");
+    assert.match(twiml, /language="en-GB"/, "EN-STT-Locale");
+    assert.match(twiml, /voice="Polly\.Amy-Neural"/, "EN-Voice");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer, Override en -> call.language=en)", async () => {
+  const srv = await startServer({ seed: geoSeed({ language: "en" }) });
+  try {
+    const { twiml, call } = await postIncoming(srv, FR_NUMBER);
+    assert.equal(call.language, "en", "Owner-Override (settings.language=en) schlaegt die FR-Nummer");
+    assert.match(twiml, /language="en-GB"/, "Voice folgt dem Override");
   } finally {
     await srv.stop();
   }
