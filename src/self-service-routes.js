@@ -62,6 +62,30 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
     res.json(settings);
   });
 
+  // ---- F2 P5: Self-Service Write der privaten Summary-Nummer ----------------------
+  // DEDIZIERTE Route (NICHT die settings-Whitelist selfServicePatch/updateSettings,
+  // AK #3): privateNumber ist Identitaets-/Kontakt-PII und lebt am Tenant-Record ueber
+  // den dedizierten Setter (normNum->E164->Land-Gate, DIESELBE Quelle wie Onboarding/P4
+  // - kein Drift, G5), NIE in settings (settings leakt komplett ueber /api/state + MCP,
+  // H4). Leer/""/null -> Feld loeschen (impliziter Opt-Out: kein Ziel -> finishCall
+  // ueberspringt die SMS still). Ungueltig/gesperrtes Land -> 400 (fail-closed, kein
+  // Muell at rest; der Setter wirft VOR jeder Mutation -> alter Wert bleibt). Identitaet
+  // = Web-Session (req.tenant.tenantId), NIE ein fremder Tenant. Audit UND Response
+  // tragen NIE die Nummer - nur den Outcome-Schluessel (set|cleared|rejected, H4).
+  router.post("/api/self-service/private-number", webAuthMw, (req, res) => {
+    const tenant = req.tenant.tenantId;
+    const { privateNumber } = req.body || {};
+    try {
+      store.setPrivateNumber(tenant, privateNumber);
+    } catch {
+      audit("self_service_private_number", req, "outcome=rejected");
+      return res.status(400).json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+    }
+    const stored = store.tenantPrivateNumber(tenant) != null;
+    audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
+    res.json({ ok: true, hasPrivateNumber: stored });
+  });
+
   // ---- Pay3: Karten-Erfassung aus dem Self-Service-Dashboard ---------------------
   // Identitaet = Web-Session (req.tenant.tenantId), NICHT der Admin-/requireTenant-
   // Pfad der Pay1-Routen - so bindet ein remote-Tenant seine Karte fail-closed an
