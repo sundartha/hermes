@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
-import { say, gather, hangup, redirect } from "../src/telephony/directives.js";
+import { say, gather, hangup, redirect, VOICE_PROFILE } from "../src/telephony/directives.js";
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -79,4 +79,65 @@ test("G3: Folge-Gather mit speechTimeoutSec -> speechTimeout=\"2\" (positiver In
 test("G3-Drift: Gather ohne speechTimeoutSec bleibt auf speechTimeout=\"auto\"", () => {
   const out = renderDirectives([gather({ promptText: "Hallo?", action: "/voice/turn?callId=c1" })]);
   assert.match(out, /<Gather\b[^>]*\bspeechTimeout="auto"/, "Default bleibt auto (Erst-Gather)");
+});
+
+// --- F1 Phase 3: FR-Sprachpfad. STT-Locale UND TTS-Voice kommen aus dem voiceProfile
+// des Aufrufers (eine Quelle: TELNYX_VOICE). DE-Snapshots oben bleiben byte-identisch
+// (Default-Profil), die FR-Snapshots sind neu. Akzente sind keine XML-Sonderzeichen und
+// passieren escapeXml unveraendert; der ASCII-' wird wie im Bestand zu &apos; escaped.
+const FR = VOICE_PROFILE.FR_FEMALE_NEURAL;
+
+test("FR: Gather + Say + Redirect -> TeXML mit fr-FR-STT + Azure.fr-FR-DeniseNeural (Akzente erhalten, ' escaped)", () => {
+  const action = "/voice/turn?callId=call_fr";
+  const out = renderDirectives([gather({ promptText: "Bonjour, c'est l'assistant IA. Ça va?", action, voiceProfile: FR }), redirect(action)]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Gather input="speech" language="fr-FR" transcriptionEngine="Deepgram" model="deepgram/nova-3" speechTimeout="auto" action="/voice/turn?callId=call_fr" method="POST">' +
+    '<Say voice="Azure.fr-FR-DeniseNeural" language="fr-FR">Bonjour, c&apos;est l&apos;assistant IA. Ça va?</Say>' +
+    '</Gather>' +
+    '<Redirect method="POST">/voice/turn?callId=call_fr</Redirect>' +
+    '</Response>');
+});
+
+// R9-Falle fuer FR: die STT-Locale haengt am Profil, NICHT am inneren Say. Ein leeres
+// FR-Gather muss trotzdem fr-FR transkribieren - sonst faellt Telnyx still auf Englisch.
+test("FR: Gather ohne Prompt -> self-closing Gather mit fr-FR-STT (kein stilles de-DE)", () => {
+  const action = "/voice/turn?callId=call_fr";
+  const out = renderDirectives([gather({ promptText: "", action, voiceProfile: FR }), redirect(action)]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Gather input="speech" language="fr-FR" transcriptionEngine="Deepgram" model="deepgram/nova-3" speechTimeout="auto" action="/voice/turn?callId=call_fr" method="POST"/>' +
+    '<Redirect method="POST">/voice/turn?callId=call_fr</Redirect>' +
+    '</Response>');
+});
+
+// R9 explizit: FR-STT-Locale MUSS das volle BCP-47 "fr-FR" sein (nicht das blosse "fr",
+// das Telnyx wie bei "de" auf Englisch zuruckfallen liesse). Nova-3 deckt FR mit ab.
+test("FR/R9: Gather-STT-Locale ist fr-FR (volles BCP-47, nicht 'fr'); Nova-3 mehrsprachig", () => {
+  const out = renderDirectives([gather({ promptText: "Oui?", action: "/voice/turn?callId=c1", voiceProfile: FR })]);
+  assert.match(out, /<Gather\b[^>]*\blanguage="fr-FR"/, "FR-STT = volles Locale fr-FR");
+  assert.doesNotMatch(out, /language="fr"[ />]/, "nicht das blosse 'fr' (Englisch-Falle)");
+  assert.match(out, /<Gather\b[^>]*\bmodel="deepgram\/nova-3"/, "Deepgram Nova-3 (mehrsprachig, FR inkl.)");
+});
+
+test("FR: Say + Hangup -> TeXML mit Azure.fr-FR-DeniseNeural + fr-FR (Akzent erhalten)", () => {
+  const out = renderDirectives([say("Le budget est épuisé. Au revoir.", FR), hangup()]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Say voice="Azure.fr-FR-DeniseNeural" language="fr-FR">Le budget est épuisé. Au revoir.</Say>' +
+    '<Hangup/></Response>');
+});
+
+// G3 komponiert mit FR: gesetztes speechTimeoutSec ersetzt "auto" an derselben Position,
+// die FR-Locale bleibt davon unberuehrt (Attribut-Reihenfolge stabil).
+test("FR/G3: Folge-Gather mit speechTimeoutSec -> fr-FR + speechTimeout=\"2\" (Reihenfolge stabil)", () => {
+  const out = renderDirectives([gather({ promptText: "Oui?", action: "/voice/turn?callId=c1", voiceProfile: FR, speechTimeoutSec: 2 })]);
+  assert.match(out, /language="fr-FR" transcriptionEngine="Deepgram" model="deepgram\/nova-3" speechTimeout="2"/, "FR-Locale + festes Endpointing, Reihenfolge stabil");
+  assert.doesNotMatch(out, /speechTimeout="auto"/, "kein auto mehr im Folge-Gather");
+});
+
+// Fail-closed gilt jetzt AUCH fuer das leere Gather: die STT-Locale kommt aus dem Profil,
+// ein unbekanntes Profil wirft (vorher rendete ein promptloses Gather still durch).
+test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus Profil)", () => {
+  assert.throws(() => renderDirectives([gather({ promptText: "", action: "/x", voiceProfile: "kein-profil" })]), /unbekanntes voiceProfile/);
 });

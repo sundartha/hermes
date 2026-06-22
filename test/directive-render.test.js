@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../src/telephony/adapters/twilio/render.js";
-import { say, gather, hangup, redirect, stream } from "../src/telephony/directives.js";
+import { say, gather, hangup, redirect, stream, VOICE_PROFILE } from "../src/telephony/directives.js";
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -60,4 +60,48 @@ test("G3-Drift (Twilio): speechTimeoutSec aendert das TwiML-Gather NICHT (bleibt
   const without = renderDirectives([gather({ promptText: "x", action: "/voice/turn?callId=c" })]);
   assert.equal(withOverride, without, "Twilio ignoriert den Override (byte-identisch)");
   assert.match(withOverride, /speechTimeout="auto"/, "Twilio bleibt auf auto");
+});
+
+// --- F1 Phase 3: FR-Sprachpfad. STT-Locale UND TTS-Voice kommen aus dem voiceProfile
+// des Aufrufers (eine Quelle: TWILIO_VOICE). DE-Snapshots oben bleiben byte-identisch
+// (Default-Profil), die FR-Snapshots sind neu. Akzente sind keine XML-Sonderzeichen und
+// passieren den Render-Pfad unveraendert (UTF-8); der Twilio-SDK escaped den ASCII-' nicht.
+const FR = VOICE_PROFILE.FR_FEMALE_NEURAL;
+
+test("FR: Turn-Direktiven -> TwiML mit fr-FR-STT + Polly.Lea-Neural (Akzente erhalten)", () => {
+  const action = "/voice/turn?callId=call_fr";
+  const out = renderDirectives([gather({ promptText: "Bonjour, c'est l'assistant IA. Ça va?", action, voiceProfile: FR }), redirect(action)]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Gather input="speech" language="fr-FR" speechTimeout="auto" speechModel="deepgram_nova-2-general" actionOnEmptyResult="true" action="/voice/turn?callId=call_fr" method="POST">' +
+    '<Say voice="Polly.Lea-Neural" language="fr-FR">Bonjour, c\'est l\'assistant IA. Ça va?</Say>' +
+    '</Gather>' +
+    '<Redirect method="POST">/voice/turn?callId=call_fr</Redirect>' +
+    '</Response>');
+});
+
+// R9: Die STT-Locale haengt am Profil, NICHT am inneren Say. Ein leeres FR-Gather muss
+// daher trotzdem fr-FR transkribieren (sonst stiller Rueckfall auf de-DE/Englisch).
+test("FR: Gather ohne Prompt -> leeres Gather mit fr-FR-STT (kein stilles de-DE)", () => {
+  const action = "/voice/turn?callId=call_fr";
+  const out = renderDirectives([gather({ promptText: "", action, voiceProfile: FR }), redirect(action)]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Gather input="speech" language="fr-FR" speechTimeout="auto" speechModel="deepgram_nova-2-general" actionOnEmptyResult="true" action="/voice/turn?callId=call_fr" method="POST"/>' +
+    '<Redirect method="POST">/voice/turn?callId=call_fr</Redirect>' +
+    '</Response>');
+});
+
+test("FR: Say + Hangup -> TwiML mit Polly.Lea-Neural + fr-FR (Akzent erhalten)", () => {
+  const out = renderDirectives([say("Le budget est épuisé. Au revoir.", FR), hangup()]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Say voice="Polly.Lea-Neural" language="fr-FR">Le budget est épuisé. Au revoir.</Say>' +
+    '<Hangup/></Response>');
+});
+
+// Fail-closed gilt jetzt AUCH fuer das leere Gather: die STT-Locale kommt aus dem Profil,
+// ein unbekanntes Profil wirft (vorher rendete ein promptloses Gather still durch).
+test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus Profil)", () => {
+  assert.throws(() => renderDirectives([gather({ promptText: "", action: "/x", voiceProfile: "kein-profil" })]), /unbekanntes voiceProfile/);
 });
