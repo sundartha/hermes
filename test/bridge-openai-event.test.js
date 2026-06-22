@@ -214,6 +214,57 @@ test("open-Handshake: Inbound-Opener ist die Begruessung, kein Offenlegungssatz"
   }
 });
 
+// ---- Phase 5: Realtime-Engine-Sprache (Voice + Whisper-Locale + Opener) ----
+
+test("DE-Realtime byte-identisch: keine Whisper-language (Auto-Detect, Bestand)", async () => {
+  // DE-Pfad: whisperLocale=null im Bundle -> kein language-Feld in der Session
+  // (Auto-Detect, exakt wie der Bestand). Voice bleibt config-Default ("alloy").
+  const { fake, sends, cleanup } = await setupCall({ language: "de" });
+  try {
+    fake.emit("open");
+    const sessionUpdate = JSON.parse(sends[0][1]);
+    assert.deepEqual(sessionUpdate.session.input_audio_transcription, { model: "whisper-1" });
+    assert.equal(sessionUpdate.session.voice, "alloy");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("FR-Realtime: kuratierte Voice + Whisper-fr + FR-Opener mit FR-Offenlegung (Outbound)", async () => {
+  const { call, fake, sends, cleanup } = await setupCall({ language: "fr", direction: "outbound" });
+  try {
+    fake.emit("open");
+    const sessionUpdate = JSON.parse(sends[0][1]);
+    assert.equal(sessionUpdate.session.voice, "shimmer");
+    assert.equal(sessionUpdate.session.input_audio_transcription.language, "fr");
+    const responseCreate = JSON.parse(sends[1][1]);
+    // Absolute Regel 2: kuratierte FR-Offenlegung fest verdrahtet im Opener.
+    assert.ok(responseCreate.response.instructions.includes(disclosureSentence(call)));
+    assert.ok(responseCreate.response.instructions.includes("Commence la conversation MAINTENANT"));
+  } finally {
+    await cleanup();
+  }
+});
+
+test("EN-Realtime: kuratierte Voice + Whisper-en + EN-Inbound-Opener", async () => {
+  const { call, fake, sends, cleanup } = await setupCall({ language: "en", direction: "inbound" });
+  try {
+    fake.emit("open");
+    const sessionUpdate = JSON.parse(sends[0][1]);
+    assert.equal(sessionUpdate.session.voice, "alloy");
+    assert.equal(sessionUpdate.session.input_audio_transcription.language, "en");
+    const responseCreate = JSON.parse(sends[1][1]);
+    assert.equal(
+      responseCreate.response.instructions,
+      "The caller is on the line. Greet them now according to your instructions."
+    );
+    // Inbound: kein Offenlegungssatz im Opener.
+    assert.ok(!responseCreate.response.instructions.includes(disclosureSentence(call)));
+  } finally {
+    await cleanup();
+  }
+});
+
 // ---- Audio KI -> Telefonie (beide Schema-Varianten) ----
 
 test("Audio-Delta -> providerWs.send(buildMediaFrame), beta + GA", async () => {
