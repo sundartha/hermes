@@ -29,11 +29,21 @@ export const meta = {
   ],
 }
 
-const REPO = process.env.OCLAW_REPO || process.cwd()
+// Spawn-fest: im ACP-/Spawn-Kontext gibt es kein process-Global. Dann faellt REPO
+// auf '.' zurueck (Spawn-cwd ist der Worktree-Root, relative Pfade greifen korrekt).
+const REPO = (typeof process !== 'undefined' && process.env && process.env.OCLAW_REPO)
+  ? process.env.OCLAW_REPO
+  : (typeof process !== 'undefined' && typeof process.cwd === 'function')
+    ? process.cwd()
+    : '.'
 const NODE_MODULES = `${REPO}/node_modules`
 
+// Spawn-fest: der Spawn-Harness liefert args als JSON-String -> tolerant parsen.
+const _argsObj = (typeof args === 'string')
+  ? (() => { try { return JSON.parse(args) } catch { return null } })()
+  : args
 // FAIL-CLOSED: keine Phase ohne explizite args.phaseId. Verhindert den I2-Unfall.
-const A = (typeof args === 'object' && args && args.phaseId) ? args : null
+const A = (typeof _argsObj === 'object' && _argsObj && _argsObj.phaseId) ? _argsObj : null
 if (!A) {
   throw new Error("phase-impl-lean: args.phaseId fehlt -> fail-closed Abbruch (kein Default-Phase-Bau). Aufruf: Workflow({scriptPath, args:{phaseId, branch, baseBranch, planDoc, specFile, maxFixRounds}}).")
 }
