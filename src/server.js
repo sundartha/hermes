@@ -18,6 +18,7 @@ import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
+import { localeFor } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob } from "./store/state-ops.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
@@ -331,7 +332,17 @@ function turnDirectives(call, text, { speechTimeoutSec } = {}) {
   const isTelnyx = call.provider === "telnyx";
   const base = isTelnyx ? config.publicUrl : "";
   const action = `${base}/voice/turn?callId=${call.id}`;
-  return [gatherD({ promptText: text, action, speechTimeoutSec }), redirectD(action)];
+  // Voice-Profil (TTS-Voice + STT-Locale) aus call.language ableiten (F1 P4). DE-Call
+  // -> DE_FEMALE_NEURAL -> Renderer byte-identisch (Snapshot). Fail-safe ueber localeFor.
+  const voiceProfile = localeFor(call.language).voiceProfile;
+  return [gatherD({ promptText: text, action, voiceProfile, speechTimeoutSec }), redirectD(action)];
+}
+
+// Gesprochenen Satz im Voice-Profil des Calls rendern (F1 P4): sayD(text) defaultet auf
+// DE; in den sprachabhaengigen Pfaden (Turn-Ende, Fehler) muss die Voice der call.language
+// folgen. DE-Call -> DE-Default -> byte-identisch. EINE Ableitungsstelle (G5).
+function sayInCallVoice(call, text) {
+  return sayD(text, localeFor(call.language).voiceProfile);
 }
 
 // Folge-Gather im laufenden Gespraech (/voice/turn): wie turnDirectives, aber mit
@@ -341,17 +352,14 @@ function followupTurnDirectives(call, text) {
   return turnDirectives(call, text, { speechTimeoutSec: config.sttSpeechTimeoutSec });
 }
 
-// Gesprochene Degradations-Texte fuer den /voice/turn-Fehlerpfad (G25: benannt statt
-// inline). LLM_DEGRADED_SPEECH: wuerdevolles, kontrolliertes Ende bei anhaltender
-// LLM-Nichtverfuegbarkeit (LlmUnavailableError aus dem resilienten Seam). TURN_ERROR_SPEECH:
-// generisches technisches Ende fuer jeden anderen (nicht-transienten) Fehler (Bestand,
-// byte-identisch zum frueheren Inline-String).
-const LLM_DEGRADED_SPEECH = "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.";
-const TURN_ERROR_SPEECH = "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.";
-// No-Speech-Rueckfrage im /voice/turn (Gather lief leer, aber der Angerufene hat schon
-// gesprochen): bewusst KNAPP gehalten (G4, spart TTS-Sekunden im Wiederholpfad) statt
-// des frueheren Zwei-Satz-Reprompts. Benannt statt inline, analog LLM_DEGRADED_SPEECH.
-const NO_SPEECH_REPROMPT_SPEECH = "Entschuldigung, koennen Sie das bitte wiederholen?";
+// Gesprochene Degradations-/Reprompt-Texte fuer den /voice/turn-Fehlerpfad leben seit
+// F1 P4 sprachabhaengig im Locale-Bundle (i18n/locales.js, eine Quelle pro Sprache):
+//   llmDegradedSpeech  - wuerdevolles Ende bei anhaltender LLM-Nichtverfuegbarkeit
+//                        (LlmUnavailableError aus dem resilienten Seam)
+//   turnErrorSpeech    - generisches technisches Ende fuer jeden anderen Fehler
+//   noSpeechReprompt   - knappe Rueckfrage, wenn der Gather leer lief (G4)
+// Der Aufrufer hat call -> localeFor(call.language).<feld>. DE-Werte sind byte-identisch
+// zum frueheren Inline-Bestand (i18n-Test pinnt sie).
 
 // Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
 // provider-aware (Twilio /media byte-identisch, Telnyx eigener Pfad) - der upgrade-
@@ -405,20 +413,29 @@ app.post("/voice/incoming", (req, res) => {
   // To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
   const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
   const to = normNum(req.body.To);
-  const tenantId = store.findTenantByNumber(to);
-  if (!tenantId) {
+  // EIN Lookup liefert tenantId UND number.language (F1 P4, §0-A: die angerufene Nummer
+  // ist der Geo-Anker). null = unbekannte/nicht-aktive Nummer -> fail-closed Hangup.
+  const numberRecord = store.numberRecordByE164(to);
+  if (!numberRecord) {
     audit("inbound_unrouted", req, `to=${to || "-"}`);
+    // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
+    // (byte-identisch zum Bestand, nicht ueber-engineeren).
     return res.type("text/xml").send(render([
       sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."),
       hangupD(),
     ], provider));
   }
+  const tenantId = numberRecord.tenantId;
+  // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
+  // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
+  const language = store.resolveCallLanguage({ tenantId, numberRecord });
+  const locale = localeFor(language);
 
   // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
   // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
   if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
     return res.type("text/xml").send(render([
-      sayD("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
+      sayD(locale.budgetExhaustedHangup, locale.voiceProfile),
       hangupD(),
     ], provider));
   }
@@ -430,6 +447,7 @@ app.post("/voice/incoming", (req, res) => {
     twilioSid: req.body.CallSid,
     tenantId,
     provider,
+    language,
   });
   store.markAnswered(call.id);
   armMaxDurationTimer(call, req.body.CallSid);
@@ -464,7 +482,7 @@ app.post("/voice/turn", async (req, res) => {
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
       return res.type("text/xml").send(render(
-        followupTurnDirectives(call, NO_SPEECH_REPROMPT_SPEECH),
+        followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt),
         call.provider
       ));
     }
@@ -476,7 +494,7 @@ app.post("/voice/turn", async (req, res) => {
       "heard=" + (heard ? heard.length : 0),
       "reply=" + (speech ? speech.length : 0),
       "endCall=" + !!endCall);
-    const directives = endCall ? [sayD(speech), hangupD()] : followupTurnDirectives(call, speech);
+    const directives = endCall ? [sayInCallVoice(call, speech), hangupD()] : followupTurnDirectives(call, speech);
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
@@ -487,8 +505,9 @@ app.post("/voice/turn", async (req, res) => {
     // KEIN Retry hier (der Seam hat bereits begrenzt+selektiv retried); das Gespraech
     // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
     // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
-    const speech = err instanceof LlmUnavailableError ? LLM_DEGRADED_SPEECH : TURN_ERROR_SPEECH;
-    res.type("text/xml").send(render([sayD(speech), hangupD()], call.provider));
+    const locale = localeFor(call.language);
+    const speech = err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+    res.type("text/xml").send(render([sayInCallVoice(call, speech), hangupD()], call.provider));
   }
 });
 

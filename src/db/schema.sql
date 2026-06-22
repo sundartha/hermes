@@ -49,13 +49,16 @@ CREATE TABLE IF NOT EXISTS settings (
   allow_summaries     BOOLEAN NOT NULL,
   allow_personal_data BOOLEAN NOT NULL,
   allow_bank_data     BOOLEAN NOT NULL,
-  language            TEXT NOT NULL DEFAULT 'de'
+  language            TEXT
 );
--- F1 Geo-Location (Phase 1): Gespraechssprache pro Tenant, im Dashboard umstellbar
--- (Entscheidung B). NOT NULL DEFAULT 'de' -> bestehende settings-Zeilen bekommen 'de'
--- nachgezogen (byte-identisch zum heutigen DE-Verhalten); das JSON-Backend backfillt
--- analog ueber den defaultSettings()-Merge. Muster wie call.language (:63).
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT 'de';
+-- F1 Geo-Location: Gespraechssprache pro Tenant als OPTIONALES Override (Entscheidung #8).
+-- Phase 1 legte die Spalte NOT NULL DEFAULT 'de' an; Phase 4 macht sie NULLABLE, weil 'de'
+-- als harter Default die Aufloesungs-Praezedenz (settings.language -> number.language ->
+-- tenant.defaultLanguage -> 'de') kurzschliessen wuerde (number.language kaeme nie zum
+-- Zug). NULL = "nicht gesetzt" -> naechste Praezedenz-Stufe. ADD COLUMN IF NOT EXISTS
+-- (Erst-Anlage) OHNE NOT NULL; DROP NOT NULL zieht Phase-1-DBs idempotent nach.
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS language TEXT;
+ALTER TABLE settings ALTER COLUMN language DROP NOT NULL;
 
 -- call: alle heutigen Felder AUSSER transcript[] (-> transcript_segment) + tenant_id.
 -- id = app-generierte TEXT-PK (newId-Format bleibt). seq nur fuer stabile

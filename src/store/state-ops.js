@@ -29,6 +29,7 @@ import {
   CENTS_PER_EUR,
   KYC_ORDER,
 } from "./defaults.js";
+import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -283,10 +284,34 @@ export function findConflict(s, tenantId, startIso, endIso) {
 // (kein Default-Tenant). NUR status='active' routet: requested/provisioning haben
 // (noch) keine e164, suspended/released/failed duerfen NICHT mehr eingehende Calls
 // annehmen (Abuse/Budget/Freigabe). e164 wird exakt verglichen (E.164).
-export function findTenantByNumber(s, e164) {
+// Schwester-Query zu findTenantByNumber (F1 Phase 4): liefert den VOLLEN aktiven
+// Number-Record (e164, tenantId, country, language, provider, ...) statt nur der
+// tenantId. /voice/incoming holt damit in EINEM Lookup tenantId UND number.language
+// (Inbound-Sprache, §0-A: die angerufene Nummer ist der Geo-Anker). Dieselbe Praedikat-
+// Kette wie findTenantByNumber (nur status='active' routet, exakter E.164-Vergleich) -
+// findTenantByNumber delegiert hierher, damit es nur EINE Quelle der Routing-Regel gibt.
+// null = unbekannte ODER nicht-aktive Nummer (fail-closed beim Aufrufer).
+export function numberRecordByE164(s, e164) {
   if (!e164) return null;
-  const hit = s.numbers.find((n) => n.e164 === e164 && n.status === NUMBER_STATUS.ACTIVE);
-  return hit ? hit.tenantId : null;
+  return s.numbers.find((n) => n.e164 === e164 && n.status === NUMBER_STATUS.ACTIVE) || null;
+}
+
+export function findTenantByNumber(s, e164) {
+  return numberRecordByE164(s, e164)?.tenantId ?? null;
+}
+
+// Aufloesungs-Praezedenz der Gespraechssprache (F1 Phase 4, Owner-Entscheidung #8) an
+// EINER Stelle: settings.language (Owner-Override, falls gesetzt) -> number.language ->
+// tenant.defaultLanguage -> DEFAULT_LANGUAGE ("de"). Jede Stufe greift nur, wenn truthy
+// (additiv NULLABLE, Backfill-frei: fehlend/leer = nicht gesetzt = naechste Stufe). Eine
+// unbekannte/getippte Sprache wirft hier NICHT - der nachgelagerte localeFor()-Resolver
+// faellt fail-safe auf "de" (R7). numberRecord ist der bereits aufgeloeste Record (oder
+// null/undefined, dann faellt die Number-Stufe durch). Reine Lese-Logik, kein Nebeneffekt
+// (settingsFor legt zwar lazy einen Bucket an, aber das ist Bestandsverhalten).
+export function resolveCallLanguage(s, { tenantId, numberRecord }) {
+  const settingsLang = settingsFor(s, tenantId).language;
+  const tenant = findTenant(s, tenantId);
+  return settingsLang || numberRecord?.language || tenant?.defaultLanguage || DEFAULT_LANGUAGE;
 }
 
 // Stellt die config-abgeleitete Owner-Nummer idempotent im Spiegel sicher (json
@@ -767,16 +792,34 @@ export function settingsFor(s, tenantId) {
   return (s.settings[tenantId] ||= defaultSettings());
 }
 
+// Sprach-Override-Validierung (F1 Phase 4): language ist ein OPTIONALES Override mit
+// Default null - der generische typeof-Vergleich (typeof null === "object") wuerde jeden
+// String-Patch ablehnen, darum eine eigene fail-closed Pruefung. Erlaubt: ein bekannter
+// Sprachcode (SUPPORTED_LANGUAGES) ODER null/"" (= "automatisch", setzt das Override
+// zurueck -> Praezedenz faellt auf number.language/tenant.defaultLanguage). Alles andere
+// (Freitext, unbekannter Code) wird ignoriert (kein Schreiben), wie die uebrige Whitelist.
+function isValidLanguageOverride(value) {
+  if (value === null || value === "") return true;
+  return typeof value === "string" && SUPPORTED_LANGUAGES.includes(value);
+}
+
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
-// so keine fremden Felder in den Store schreiben oder Typen kippen.
+// so keine fremden Felder in den Store schreiben oder Typen kippen. language hat eine
+// eigene Validierung (optionales Override, siehe isValidLanguageOverride).
 // Liefert auch die uebernommenen Keys (fuers Audit-Log in server.js).
 export function updateSettings(s, tenantId, patch) {
   const allowed = defaultSettings();
   const changed = [];
   const target = settingsFor(s, tenantId);
   for (const [key, value] of Object.entries(patch || {})) {
-    if (key in allowed && typeof value === typeof allowed[key]) {
+    if (!(key in allowed)) continue;
+    if (key === "language") {
+      if (!isValidLanguageOverride(value)) continue;
+      // "" (= "automatisch") wird als null gespeichert (eine Form fuer "nicht gesetzt").
+      target.language = value === "" ? null : value;
+      changed.push(key);
+    } else if (typeof value === typeof allowed[key]) {
       target[key] = value;
       changed.push(key);
     }

@@ -5,8 +5,11 @@
 
 import { DEFAULT_GREETING } from "./store/defaults.js";
 
-// Felder, die ein Tenant frei (Typ-gecheckt von updateSettings) setzen darf.
-export const SELF_SERVICE_FREE_FIELDS = ["agentName", "allowCalendar", "allowBooking"];
+// Felder, die ein Tenant frei (Typ-gecheckt von updateSettings) setzen darf. language
+// ist seit F1 P4 self-service-aenderbar (Entscheidung #8, "im Dashboard uebersteuerbar"):
+// updateSettings validiert den Wert fail-closed gegen SUPPORTED_LANGUAGES bzw. ""/null
+// (= "automatisch"), kein Freitext - der Tenant kann nur eine bekannte Sprache waehlen.
+export const SELF_SERVICE_FREE_FIELDS = ["agentName", "allowCalendar", "allowBooking", "language"];
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
 // false->true NEIN - Aktivieren bleibt Plattform-Admin via POST /api/settings).

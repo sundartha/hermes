@@ -17,6 +17,10 @@ const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 const TELNYX_VOICE = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Azure.de-DE-KatjaNeural", language: "de-DE" },
   [VOICE_PROFILE.FR_FEMALE_NEURAL]: { voice: "Azure.fr-FR-DeniseNeural", language: "fr-FR" },
+  // EN (F1 P4): GB-Englisch. Azure en-GB-SoniaNeural ist die britische Neural-Stimme;
+  // en-GB als volles BCP-47 fuer TTS UND STT-Locale (R9). Nova-3 deckt EN mit ab (kein
+  // model-Override noetig). Live-Freischaltung (Azure Sonia / Deepgram EN) = Smoke-Gate.
+  [VOICE_PROFILE.EN_FEMALE_NEURAL]: { voice: "Azure.en-GB-SoniaNeural", language: "en-GB" },
 });
 
 // XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden

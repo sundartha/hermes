@@ -24,6 +24,9 @@ import {
   requestNumber,
   setTenantGeo,
   findTenant,
+  numberRecordByE164,
+  resolveCallLanguage,
+  updateSettings,
 } from "../src/store/state-ops.js";
 import { defaultSettings, OWNER_TENANT_ID, DEFAULT_COUNTRY, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 
@@ -46,10 +49,76 @@ before(async () => {
 });
 
 // ---- (B) settings.language im Default ----
-test("defaultSettings() traegt language = DEFAULT_LANGUAGE (Entscheidung B)", () => {
-  assert.equal(defaultSettings().language, DEFAULT_LANGUAGE);
+// P4-Aenderung (Entscheidung #8): settings.language ist ein OPTIONALES Override mit
+// Default null (NICHT mehr 'de'). Ein harter 'de'-Default wuerde number.language in der
+// Aufloesungs-Praezedenz immer ueberstimmen (Praezedenz-Bug). null = "nicht gesetzt".
+test("defaultSettings() traegt language = null (optionales Override, P4 #8)", () => {
+  assert.equal(defaultSettings().language, null);
   assert.equal(DEFAULT_LANGUAGE, "de");
   assert.equal(DEFAULT_COUNTRY, "DE");
+});
+
+// ---- (P4) numberRecordByE164: Schwester-Query liefert den vollen Record ----
+test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); inaktiv/unbekannt -> null", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: A, status: "active" }];
+  s.numbers = [
+    { id: "n_fr", e164: "+33111", tenantId: A, provider: "telnyx", status: "active", country: "FR", language: "fr" },
+    { id: "n_req", e164: "+33222", tenantId: A, provider: "telnyx", status: "requested", country: "FR", language: "fr" },
+  ];
+  const rec = numberRecordByE164(s, "+33111");
+  assert.equal(rec.tenantId, A);
+  assert.equal(rec.language, "fr");
+  assert.equal(numberRecordByE164(s, "+33222"), null, "nicht-aktive Nummer routet nicht (fail-closed)");
+  assert.equal(numberRecordByE164(s, "+49000"), null, "unbekannte Nummer -> null");
+  assert.equal(numberRecordByE164(s, ""), null, "leere e164 -> null");
+});
+
+// ---- (P4 #8) resolveCallLanguage: Aufloesungs-Praezedenz, jede Stufe einzeln ----
+test("resolveCallLanguage: settings.language-Override schlaegt number.language (hoechste Stufe)", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: A, status: "active", defaultLanguage: "de" }];
+  s.settings[A] = { ...defaultSettings(), language: "en" };
+  const numberRecord = { language: "fr" };
+  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord }), "en", "Override gewinnt");
+});
+
+test("resolveCallLanguage: ohne Override greift number.language", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: A, status: "active", defaultLanguage: "de" }];
+  s.settings[A] = { ...defaultSettings(), language: null };
+  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: { language: "fr" } }), "fr");
+});
+
+test("resolveCallLanguage: ohne Override + ohne number.language greift tenant.defaultLanguage", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: A, status: "active", defaultLanguage: "fr" }];
+  s.settings[A] = { ...defaultSettings(), language: null };
+  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: { language: null } }), "fr");
+  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: null }), "fr", "kein Record -> Number-Stufe faellt durch");
+});
+
+test("resolveCallLanguage: alles leer -> DEFAULT_LANGUAGE (de, letzter Notnagel)", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: A, status: "active" }];
+  s.settings[A] = { ...defaultSettings(), language: null };
+  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: null }), DEFAULT_LANGUAGE);
+});
+
+// ---- (P4 #8) updateSettings: language-Override fail-closed validiert ----
+test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; Freitext/unbekannt ignoriert", () => {
+  const s = makeDefaultState();
+  s.settings[OWNER_TENANT_ID] = defaultSettings();
+  assert.ok(updateSettings(s, OWNER_TENANT_ID, { language: "fr" }).changed.includes("language"));
+  assert.equal(s.settings[OWNER_TENANT_ID].language, "fr");
+  // "" -> "automatisch" -> null gespeichert
+  updateSettings(s, OWNER_TENANT_ID, { language: "" });
+  assert.equal(s.settings[OWNER_TENANT_ID].language, null);
+  // unbekannter Code wird ignoriert (fail-closed, kein Schreiben)
+  s.settings[OWNER_TENANT_ID].language = "fr";
+  const res = updateSettings(s, OWNER_TENANT_ID, { language: "xx" });
+  assert.ok(!res.changed.includes("language"), "unbekannter Sprachcode wird nicht uebernommen");
+  assert.equal(s.settings[OWNER_TENANT_ID].language, "fr", "alter Wert bleibt");
 });
 
 // ---- (A) Number-Record Geo: seedOwnerNumber ----
@@ -173,9 +242,11 @@ test("pg: Owner ohne Geo behaelt KEIN country/defaultLanguage-Feld nach Re-Hydri
 });
 
 // ---- (B)+(C) pg-Roundtrip: settings.language ----
-test("pg: frische settings tragen language='de' (frischer pg == frischer json)", async () => {
+// P4: frische settings tragen language=null (optionales Override, Spalte NULLABLE) -
+// frischer pg == frischer json (beide null, nicht 'de').
+test("pg: frische settings tragen language=null (frischer pg == frischer json, P4 #8)", async () => {
   const { store } = await makePgTestStore();
-  assert.equal(store.load().settings[OWNER_TENANT_ID].language, DEFAULT_LANGUAGE);
+  assert.equal(store.load().settings[OWNER_TENANT_ID].language, null);
 });
 
 test("pg: settings.language ist via updateSettings umstellbar + ueberlebt Re-Hydrierung", async () => {
@@ -194,5 +265,6 @@ test("pg: doppelter applySchema/init bleibt fehlerfrei (idempotente ADD COLUMN I
   await reopen(db);
   // Zweiter init auf derselben DB darf nicht an den neuen ALTER-Statements scheitern.
   const second = await reopen(db);
-  assert.equal(second.load().settings[OWNER_TENANT_ID].language, DEFAULT_LANGUAGE);
+  // P4: frische settings.language ist null (optionales Override), nicht 'de'.
+  assert.equal(second.load().settings[OWNER_TENANT_ID].language, null);
 });

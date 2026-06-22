@@ -141,3 +141,33 @@ test("FR/G3: Folge-Gather mit speechTimeoutSec -> fr-FR + speechTimeout=\"2\" (R
 test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus Profil)", () => {
   assert.throws(() => renderDirectives([gather({ promptText: "", action: "/x", voiceProfile: "kein-profil" })]), /unbekanntes voiceProfile/);
 });
+
+// --- F1 Phase 4: EN-Sprachpfad. Azure.en-GB-SoniaNeural + en-GB-STT; Nova-3 deckt EN ab.
+const EN = VOICE_PROFILE.EN_FEMALE_NEURAL;
+
+test("EN: Gather + Say + Redirect -> TeXML mit en-GB-STT + Azure.en-GB-SoniaNeural", () => {
+  const action = "/voice/turn?callId=call_en";
+  const out = renderDirectives([gather({ promptText: "Hello, how can I help?", action, voiceProfile: EN }), redirect(action)]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Gather input="speech" language="en-GB" transcriptionEngine="Deepgram" model="deepgram/nova-3" speechTimeout="auto" action="/voice/turn?callId=call_en" method="POST">' +
+    '<Say voice="Azure.en-GB-SoniaNeural" language="en-GB">Hello, how can I help?</Say>' +
+    '</Gather>' +
+    '<Redirect method="POST">/voice/turn?callId=call_en</Redirect>' +
+    '</Response>');
+});
+
+test("EN: Say + Hangup -> TeXML mit Azure.en-GB-SoniaNeural + en-GB", () => {
+  const out = renderDirectives([say("The demo budget has been used up. Goodbye.", EN), hangup()]);
+  assert.equal(out,
+    XML + '<Response>' +
+    '<Say voice="Azure.en-GB-SoniaNeural" language="en-GB">The demo budget has been used up. Goodbye.</Say>' +
+    '<Hangup/></Response>');
+});
+
+test("EN/R9: Gather-STT-Locale ist en-GB (volles BCP-47, nicht 'en'); Nova-3 mehrsprachig", () => {
+  const out = renderDirectives([gather({ promptText: "Yes?", action: "/voice/turn?callId=c1", voiceProfile: EN })]);
+  assert.match(out, /<Gather\b[^>]*\blanguage="en-GB"/, "EN-STT = volles Locale en-GB");
+  assert.doesNotMatch(out, /language="en"[ />]/, "nicht das blosse 'en' (Englisch-Falle)");
+  assert.match(out, /<Gather\b[^>]*\bmodel="deepgram\/nova-3"/, "Deepgram Nova-3 (mehrsprachig, EN inkl.)");
+});

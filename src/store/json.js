@@ -227,6 +227,15 @@ export function findTenantByNumber(e164) {
   return ops.findTenantByNumber(load(), e164);
 }
 
+// Schwester-Query + Sprach-Aufloesung (F1 Phase 4). Reine Leser (kein save).
+export function numberRecordByE164(e164) {
+  return ops.numberRecordByE164(load(), e164);
+}
+
+export function resolveCallLanguage(args) {
+  return ops.resolveCallLanguage(load(), args);
+}
+
 // ---- Action Items ----
 export function addActionItem(callId, text, type = "todo") {
   const item = ops.addActionItem(load(), callId, text, type);

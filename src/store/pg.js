@@ -113,6 +113,9 @@ export function makePgStore(runner) {
     countOutboundCallsSince: (sinceIso, filters = {}) =>
       ops.countOutboundCallsSince(requireState(), sinceIso, filters),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
+    // Schwester-Query + Sprach-Aufloesung (F1 Phase 4). Reine Leser auf dem Spiegel.
+    numberRecordByE164: (e164) => ops.numberRecordByE164(requireState(), e164),
+    resolveCallLanguage: (args) => ops.resolveCallLanguage(requireState(), args),
 
     addActionItem(callId, text, type = "todo") {
       const item = ops.addActionItem(requireState(), callId, text, type);
@@ -420,8 +423,9 @@ function rowToSettings(r) {
     allowSummaries: r.allow_summaries,
     allowPersonalData: r.allow_personal_data,
     allowBankData: r.allow_bank_data,
-    // F1: NOT NULL DEFAULT 'de' -> Bestands-Zeilen tragen 'de' (kein undefined-Drift).
-    language: r.language,
+    // F1 Phase 4: optionales Override, Spalte NULLABLE. NULL -> null (nicht gesetzt);
+    // die Praezedenz (resolveCallLanguage) faellt dann auf number/tenant/'de' durch.
+    language: r.language ?? null,
   };
 }
 

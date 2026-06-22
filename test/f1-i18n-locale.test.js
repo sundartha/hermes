@@ -28,9 +28,10 @@ const DE_SUMMARY =
 
 // ---- (A) Resolver + Bundle-Vertrag ----
 
-test("localeFor: bekannte Sprache liefert das passende Locale (de/fr)", () => {
+test("localeFor: bekannte Sprache liefert das passende Locale (de/fr/en)", () => {
   assert.equal(localeFor("de").language, "de");
   assert.equal(localeFor("fr").language, "fr");
+  assert.equal(localeFor("en").language, "en");
 });
 
 test("localeFor: unbekannte/fehlende/null Sprache faellt fail-safe auf de (R7)", () => {
@@ -42,11 +43,13 @@ test("localeFor: unbekannte/fehlende/null Sprache faellt fail-safe auf de (R7)",
 });
 
 test("Bundle-Vertrag: STT-Locale ist volles BCP-47 + Voice-Profil je Sprache gesetzt", () => {
-  assert.deepEqual([...SUPPORTED_LANGUAGES].sort(), ["de", "fr"]);
+  assert.deepEqual([...SUPPORTED_LANGUAGES].sort(), ["de", "en", "fr"]);
   assert.equal(LOCALES.de.sttLocale, "de-DE");
   assert.equal(LOCALES.fr.sttLocale, "fr-FR");
+  assert.equal(LOCALES.en.sttLocale, "en-GB");
   assert.equal(LOCALES.de.dateLocale, "de-DE");
   assert.equal(LOCALES.fr.dateLocale, "fr-FR");
+  assert.equal(LOCALES.en.dateLocale, "en-GB");
   // Voice-Profil (Phase-3-Konsument) als nicht-leerer logischer Name vorhanden.
   for (const lang of SUPPORTED_LANGUAGES) {
     assert.equal(typeof LOCALES[lang].voiceProfile, "string");
@@ -63,6 +66,37 @@ test("Bundle: DE-Summary-Prompt ist byte-identisch zum Bestand; FR ist franzoesi
     assert.ok(LOCALES.de.summarySystem(OWNER_NAME).includes(key), `DE-Key ${key} fehlt`);
     assert.ok(fr.includes(key), `FR-Key ${key} fehlt`);
   }
+});
+
+// ---- (A2) EN-Bundle (F1 P4): kuratierte Offenlegung + statische Texte ----
+
+test("EN-Bundle: kuratierte EN-Offenlegung (R8, nur ownerName gebunden) + EN-Summary mit gleichen JSON-Keys", () => {
+  const disc = LOCALES.en.disclosure(OWNER_NAME);
+  assert.ok(disc.startsWith("Hello, this is an AI assistant calling on behalf of "), `EN-Offenlegung-Wortlaut: ${disc}`);
+  assert.ok(disc.includes(OWNER_NAME), "ownerName muss gebunden sein");
+  assert.ok(!disc.includes("Guten Tag") && !disc.includes("Bonjour"), "EN darf keinen DE/FR-Rest tragen");
+  const sum = LOCALES.en.summarySystem(OWNER_NAME);
+  assert.ok(sum.includes("2-3 sentences in English"), `EN-Summary muss englisch sein: ${sum}`);
+  for (const key of ['"summary"', '"actionItems"', '"objective_achieved"']) {
+    assert.ok(sum.includes(key), `EN-Key ${key} fehlt`);
+  }
+});
+
+test("EN-Bundle: statische Server-Texte (Reprompt/Fehler/Hangup/Greeting) sind englisch + nicht-leer", () => {
+  const en = LOCALES.en;
+  for (const field of ["llmDegradedSpeech", "turnErrorSpeech", "noSpeechReprompt", "budgetExhaustedHangup", "greetingDefault"]) {
+    assert.equal(typeof en[field], "string", `${field} muss ein String sein`);
+    assert.ok(en[field].length > 0, `${field} darf nicht leer sein`);
+  }
+  assert.ok(en.greetingDefault.includes("{owner}"), "Greeting-Default behaelt den {owner}-Platzhalter");
+  assert.equal(en.voiceProfile, "en-female-neural");
+});
+
+test("Statische Texte: DE byte-identisch zum frueheren server.js-Bestand (kein Drift durch das Bundle)", () => {
+  assert.equal(LOCALES.de.llmDegradedSpeech, "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.");
+  assert.equal(LOCALES.de.turnErrorSpeech, "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.");
+  assert.equal(LOCALES.de.noSpeechReprompt, "Entschuldigung, koennen Sie das bitte wiederholen?");
+  assert.equal(LOCALES.de.budgetExhaustedHangup, "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.");
 });
 
 // ---- (B) claude.js konsumiert call.language ----
