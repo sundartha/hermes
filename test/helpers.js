@@ -86,6 +86,11 @@ export const BASE_ENV = {
   MAX_NUMBERS_PER_TENANT: "1",
   PROVISIONING_ENABLED: "false",
   PROVISIONING_COUNTRY: "DE",
+  // Geo-Quelle bei der Registrierung aus (F1 Phase 6): Null-Adapter -> DE-Fallback,
+  // netzfrei. Ohne diese Zeile leakt eine lokale .env mit GEO_ENABLED=true via dotenv
+  // in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  GEO_ENABLED: "false",
+  GEO_DB_PATH: "",
   // Multi-Tenant default AUS: Bestandssuite laeuft byte-identisch im Owner-Pfad.
   // Ohne diesen Eintrag wuerde eine lokale .env mit MULTI_TENANT=true via dotenv
   // in Spawn-Tests lecken -> Baseline-Drift (Lehre test-base-env-drift).

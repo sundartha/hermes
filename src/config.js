@@ -170,6 +170,16 @@ export const config = {
   selfServiceEnabled: (process.env.SELF_SERVICE_ENABLED || "false") === "true",
   // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
   provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
+  // Geo-Quelle bei der Registrierung (F1, Phase 6). DEFAULT AUS (fail-closed, netzfreie
+  // CI): aus -> Null-Adapter (loest IP nie auf -> Land-Fallback DE, Onboard byte-identisch).
+  // Erst true -> der lokale maxmind-Adapter (IP->Land-VORSCHLAG; die User-Wahl bleibt
+  // autoritativ, R4). Die IP verlaesst den Prozess NIE (kein HTTP-Geo). Der echte mmdb-
+  // Reader braucht ggf. ein Asset (GEO_DB_PATH) + einen Owner-genehmigten Dep; bis dahin
+  // ist der maxmind-Adapter fail-safe null (DE-Fallback, kein Crash), siehe src/geo/maxmind.js.
+  geoEnabled: (process.env.GEO_ENABLED || "false") === "true",
+  // Pfad zur lokalen GeoLite2-Country-mmdb (nur relevant bei GEO_ENABLED=true). Leer ->
+  // der maxmind-Adapter liefert fail-safe null (DE-Fallback). Das Asset committen wir NICHT.
+  geoDbPath: process.env.GEO_DB_PATH || "",
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
   // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen

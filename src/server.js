@@ -18,9 +18,11 @@ import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
 import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, numberProvisioning } from "./telephony/registry.js";
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
-import { localeFor } from "./i18n/locales.js";
+import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
-import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob } from "./store/state-ops.js";
+import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo } from "./store/state-ops.js";
+import { geoLookupAdapter } from "./geo/registry.js";
+import { resolveOnboardCountry } from "./geo/resolve.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
@@ -943,6 +945,10 @@ app.get("/api/billing/checkout-return", async (req, res) => {
 // sonst Dry-Run (Nummer bleibt 'requested', KEIN Geld) - fail-closed Default.
 const ONBOARD_REASON_STATUS = { tenant_inactive: 403, tenant_cap: 409, global_cap: 429 };
 
+// Aktiver Geo-Lookup (F1 Phase 6, config-getrieben). Bei GEO_ENABLED aus = Null-Adapter
+// (loest IP nie auf -> DE-Fallback, netzfrei). Einmal beim Routen-Setup gebaut.
+const geoLookup = geoLookupAdapter();
+
 app.post("/api/onboard", async (req, res) => {
   // G1: zwei Eingaben (firstName + lastName) statt eines ownerName (Owner-Entscheidung
   // #1). Beide optional + Freitext (duerfen Leerzeichen, NICHT durch validIdentity, das
@@ -952,17 +958,36 @@ app.post("/api/onboard", async (req, res) => {
   if (!validIdentity(tenantId))
     return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
 
+  // F1 Phase 6 - Land/Sprache bei der Registrierung. Praezedenz (fail-safe):
+  // User-Wahl (body.country, EXPLIZIT, autoritativ R4) > IP-Geo-VORSCHLAG (lokaler
+  // Lookup, nur bei GEO_ENABLED) > config.provisioningCountry > DEFAULT_COUNTRY. Die IP
+  // (req.ip, proxy-aware via 'trust proxy') verlaesst den Prozess NIE - der Lookup ist
+  // streng lokal. Eine gespoofte IP aendert nichts Autoritatives: ohne User-Wahl ist sie
+  // nur ein Vorschlag, mit User-Wahl wird sie ueberstimmt. language wird aus dem Land
+  // abgeleitet (eine Quelle: languageForCountry). country/language landen auf Tenant-Geo
+  // UND Number-Request (R12). KEIN body.country -> Verhalten byte-identisch (DE/de).
+  const proposedCountry = config.geoEnabled ? geoLookup(req.ip)?.country : null;
+  const country = resolveOnboardCountry({
+    userCountry: req.body?.country,
+    proposedCountry,
+    fallbackCountry: config.provisioningCountry,
+  });
+  const language = languageForCountry(country);
+
   // Store-Mutation + Persistenz im prozess-lokalen kritischen Abschnitt (OT-3 AC2):
-  // load -> registerTenant -> requestNumber -> save, kein fremdes await dazwischen.
-  // Ein Save-I/O-Fehler wird als behandelter 503 beantwortet (AC4), NIE als unhandled
-  // async rejection (die den Request haengen liesse / den Prozess via P0-Netz killte).
+  // load -> registerTenant -> setTenantGeo -> requestNumber -> save, kein fremdes await
+  // dazwischen. Ein Save-I/O-Fehler wird als behandelter 503 beantwortet (AC4), NIE als
+  // unhandled async rejection (die den Request haengen liesse / den Prozess via P0-Netz killte).
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
       registerTenant(s, tenantId, { firstName, lastName });
+      setTenantGeo(s, tenantId, { country, defaultLanguage: language });
       const r = requestNumber(s, {
         tenantId,
         provider: PROVIDER.TELNYX,
+        country,
+        language,
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
@@ -985,7 +1010,7 @@ app.post("/api/onboard", async (req, res) => {
 
   // Dry-Run (Default, fail-closed): kein echter Kauf, Nummer bleibt 'requested'.
   if (!config.provisioningEnabled)
-    return res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "disabled" });
+    return res.json({ tenantId, numberId, status: reqRes.number.status, country, language, provisioning: "disabled" });
 
   // BEWUSSTE VERHALTENS-AENDERUNG (P6b2): das Provisioning ist aus dem HTTP-Request
   // geloest. Wir enqueuen einen Job, persistieren die Job-Spur ('requested' + queued)
@@ -1009,7 +1034,7 @@ app.post("/api/onboard", async (req, res) => {
   if (!jobRes.ok)
     return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
   audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.job.id}`);
-  res.json({ tenantId, numberId, status: reqRes.number.status, provisioning: "queued", jobId: jobRes.job.id });
+  res.json({ tenantId, numberId, status: reqRes.number.status, country, language, provisioning: "queued", jobId: jobRes.job.id });
 
   // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
   // (pg-boss ist deferred nach P8), aber HTTP endet vor dem Provider-Kauf. Tests
