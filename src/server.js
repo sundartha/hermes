@@ -20,7 +20,8 @@ import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, provi
 import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
-import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo } from "./store/state-ops.js";
+import { registerTenant, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo, findNumber } from "./store/state-ops.js";
+import { searchParamsForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
@@ -1049,14 +1050,23 @@ app.post("/api/onboard", async (req, res) => {
 async function runProvisioningDrain() {
   const s = store.load();
   const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
-  const opts = { countryCode: config.provisioningCountry, connectionId: config.telnyxConnectionId };
+  // Geld-/Zahlungs-Optionen sind land-unabhaengig (global). Die Suchparameter
+  // (countryCode/connectionId) werden PRO JOB aus dem Number-Record abgeleitet
+  // (P7, Geo-Provisioning) - nicht mehr global aus config.provisioningCountry.
+  const moneyOpts = {};
   if (config.paymentEnabled) {
     deps.billing = stripeBilling;
-    opts.holdAmountCents = config.numberSetupFeeCents;
-    opts.currency = config.paymentCurrency;
+    moneyOpts.holdAmountCents = config.numberSetupFeeCents;
+    moneyOpts.currency = config.paymentCurrency;
   }
   await provisioningQueue.drain(async (queuedJob) => {
     const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
+    // Per-Job-Suchparameter aus dem Land des Number-Records (P7). Fehlender Record
+    // (Re-Drain einer geloeschten Number) -> Worker skippt ueber den Zustandscheck;
+    // searchParamsForCountry(undefined) liefert den globalen DE-Fallback (byte-identisch).
+    const number = findNumber(s, queuedJob.payload.numberId);
+    const geo = searchParamsForCountry(number?.country);
+    const opts = { ...moneyOpts, ...geo };
     try {
       const r = await handleProvisionJob(s, queuedJob, deps, opts);
       if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);

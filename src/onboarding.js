@@ -28,6 +28,13 @@ import {
   tenantStripe,
 } from "./store/state-ops.js";
 
+// R5 (Phase P7): statt limit:1 mehrere Kandidaten holen und den ersten verfuegbaren
+// waehlen. Eine einzelne Treffer-Anfrage scheitert haeufiger an einer zwischenzeitlich
+// vergebenen Nummer; ein kleines Fenster macht die Suche robust, ohne die Antwort
+// aufzublaehen. Auswahl bleibt deterministisch (erster Kandidat). Aendert KEIN
+// Idempotenz-Schloss (Order-Key/Hold/Zustand bleiben byte-identisch).
+const PROVISION_SEARCH_LIMIT = 10;
+
 // Orchestriert requested -> provisioning -> (search + order + configure) -> active,
 // mit optionalem Hold-vor-Order + Capture-vor-Active (deps.billing). Fehlerpfade:
 // search/order-Fehler -> failed (kein Kauf) + Hold-Freigabe; configure/capture-Fehler
@@ -76,9 +83,11 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
 
   let ordered;
   try {
-    const candidates = await provisioner.searchNumbers({ countryCode, type, limit: 1 });
+    const candidates = await provisioner.searchNumbers({ countryCode, type, limit: PROVISION_SEARCH_LIMIT });
     const candidate = candidates[0];
-    if (!candidate) throw new Error("provisionNumber: keine kaufbare Nummer verfuegbar");
+    // R5: 0 Treffer -> kontrollierter Fehler (NICHT Crash). Faengt im try/catch ->
+    // failNumber + Hold-Freigabe, kein Provider-Kauf (kein bezahlter Orphan).
+    if (!candidate) throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
     ordered = await provisioner.orderNumber({ e164: candidate.e164, idempotencyKey });
   } catch (err) {
     failNumber(s, numberId); // provisioning -> failed (kein Kauf zustande gekommen)
