@@ -7,6 +7,10 @@
 import App from "../../layouts/App.astro";
 import AuthIsland from "../../components/app/AuthIsland.astro";
 import BillingIsland from "../../components/app/BillingIsland.astro";
+import AgentChip from "../../components/app/AgentChip.astro";
+import CallsIsland from "../../components/app/CallsIsland.astro";
+import ActionItemsIsland from "../../components/app/ActionItemsIsland.astro";
+import CalendarIsland from "../../components/app/CalendarIsland.astro";
 ---
 
 <App title="Hermes — App">
@@ -40,16 +44,23 @@ import BillingIsland from "../../components/app/BillingIsland.astro";
   <div id="region-shell" hidden>
     <section class="card">
       <h1>Dein Assistent</h1>
+      <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT). -->
+      <AgentChip />
       <dl class="kv">
-        <dt>Rufnummer</dt>
-        <dd id="shell-number">—</dd>
         <dt>Besitzer</dt>
         <dd id="shell-owner">—</dd>
       </dl>
     </section>
-    <section class="card">
-      <p class="muted">Anruf-Verlauf, Aufgaben und Termine folgen.</p>
-    </section>
+
+    <!-- W4: read-only Datensicht aus dem EINEN state-Fetch (AUTH_EVENT). Anrufe
+         breit, Action Items + Kalender daneben. Jede Insel leert sich bei
+         Auth-Verlust selbst (kein stale Tenant-Datenleck). -->
+    <CallsIsland />
+    <div class="shell-cols">
+      <ActionItemsIsland />
+      <CalendarIsland />
+    </div>
+
     <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
          der Server kein hasCard liefert (PAYMENT_ENABLED aus) -> byte-identisch
          zum Bestand. Sie hoert auf AUTH_EVENT, kein zweiter state-Fetch. -->
@@ -72,7 +83,6 @@ import BillingIsland from "../../components/app/BillingIsland.astro";
     [AUTH_STATE.ERROR]: document.getElementById("region-error"),
   };
   const loadingRegion = document.getElementById("region-loading");
-  const numberEl = document.getElementById("shell-number");
   const ownerEl = document.getElementById("shell-owner");
 
   function showOnly(activeState) {
@@ -82,9 +92,11 @@ import BillingIsland from "../../components/app/BillingIsland.astro";
     }
   }
 
+  // Die Rufnummer + der Live-Dot leben jetzt in der AgentChip-Insel (W4); die
+  // Shell zeigt nur noch den Besitzer als Eckdatum. Beide hoeren auf dasselbe
+  // AUTH_EVENT (ein state-Fetch).
   function fillShell(data) {
-    const { number, owner } = agentInfo(data);
-    numberEl.textContent = number || "Noch keine Nummer zugewiesen";
+    const { owner } = agentInfo(data);
     ownerEl.textContent = owner || "—";
   }
 

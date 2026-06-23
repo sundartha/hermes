@@ -1,0 +1,26 @@
+---
+// CallsIsland (W4): read-only Anrufliste aus der state-Antwort. Pro Call:
+// Richtung (Pfeil-Glyph + Farbe), Gegenstelle, Untertitel (goal bzw.
+// Standardtext) und ein Status-Badge (Live/Beendet/Abgebrochen/Fehlgeschlagen).
+// 1:1-Verhalten zu public/tenant.html (renderCalls), portiert als Insel mit
+// W1-Tokens.
+//
+// KEIN eigener state-Fetch (AUTH_EVENT). READ-ONLY: kein POST/PUT/DELETE.
+// Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand wird die Liste
+// geleert. Der DOM-Bau (inkl. textContent-only XSS-Schutz) lebt getestet in
+// lib/render.js -- diese Insel verdrahtet nur DOM-Container + AUTH_EVENT.
+---
+
+<section class="card">
+  <h2>Anrufe</h2>
+  <p class="muted">Deine letzten Telefonate (read-only).</p>
+  <ul id="calls-list" class="data-list" aria-live="polite"></ul>
+</section>
+
+<script>
+  import { bindList, callRows } from "../../lib/render.js";
+
+  // bindList hoert auf AUTH_EVENT, rendert read-only und leert die Liste bei
+  // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
+  bindList(document, "calls-list", callRows);
+</script>

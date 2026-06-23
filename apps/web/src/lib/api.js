@@ -101,6 +101,96 @@ export function cardStatus(data) {
   return { present, hasCard: present ? data.hasCard : false };
 }
 
+// ---- W4: read-only Datensicht (Calls / ActionItems / Kalender) ----------------
+// Reine, DOM-freie Helfer fuer die Render-Logik. Sie tragen die Contract-Grenze
+// zur API (welche Felder die state-Antwort hat, R5) UND die Beschriftungs-/
+// Status-Logik -- testbar ohne DOM (P1/T1). Die Inseln bauen daraus den DOM
+// ausschliesslich mit textContent/createElement (kein innerHTML mit Tenant-
+// Strings -> kein XSS-Pfad, Leitplanke). Tenant-Werte werden NIE als HTML
+// interpretiert; diese Helfer geben nur rohe Strings/Strukturen zurueck.
+
+// Richtungen eines Calls (kein Magic-String an den Vergleichsstellen, G25).
+export const CALL_DIRECTION = Object.freeze({ INBOUND: "inbound", OUTBOUND: "outbound" });
+
+// Listen aus der state-Antwort -- jeweils nur, wenn es wirklich ein Array ist
+// (fail-closed gegen fehlende/null-Felder: leere Liste statt Absturz, G26).
+// EINE Stelle, an der das Frontend die Form `data.calls/actionItems/calendar`
+// annimmt (Contract-Grenze, R5). data==null/undefined -> ueberall leere Listen.
+function listFrom(data, key) {
+  const value = data && data[key];
+  return Array.isArray(value) ? value : [];
+}
+export const callsFrom = (data) => listFrom(data, "calls");
+export const actionItemsFrom = (data) => listFrom(data, "actionItems");
+export const calendarFrom = (data) => listFrom(data, "calendar");
+
+// Live-Dot: der Agent gilt als "live", sobald MINDESTENS ein Call aktiv ist.
+// Gleiche Bedingung wie im Bestand (tenant.html: calls.some status==="active").
+export function isAgentLive(data) {
+  return callsFrom(data).some((c) => c && c.status === "active");
+}
+
+// Gegenstelle eines Calls: bei outbound die angerufene Nummer (to), sonst der
+// Anrufer (from). Liefert immer einen String (fehlend -> ""), nie undefined.
+export function callCounterparty(call) {
+  const c = call || {};
+  const value = c.direction === CALL_DIRECTION.OUTBOUND ? c.to : c.from;
+  return value || "";
+}
+
+// Untertitel eines Calls: das Anrufziel (goal), sonst eine richtungsabhaengige
+// Standardbeschreibung -- 1:1 wie der Bestand (tenant.html renderCalls).
+const CALL_SUBTITLE_INBOUND = "Eingehender Anruf";
+const CALL_SUBTITLE_OUTBOUND = "Ausgehender Anruf";
+export function callSubtitle(call) {
+  const c = call || {};
+  if (c.goal) return c.goal;
+  return c.direction === CALL_DIRECTION.INBOUND ? CALL_SUBTITLE_INBOUND : CALL_SUBTITLE_OUTBOUND;
+}
+
+// Status-Beschriftung eines Calls (Anzeige-Text). Unbekannter/fehlender Status
+// faellt fail-closed auf "Fehlgeschlagen" (wie der Bestand: jeder Nicht-
+// active/completed/cancelled-Wert ist die Fehler-Beschriftung).
+const CALL_STATUS_LABELS = Object.freeze({
+  active: "Live",
+  completed: "Beendet",
+  cancelled: "Abgebrochen",
+  failed: "Fehlgeschlagen",
+});
+export function callStatusLabel(call) {
+  const status = (call && call.status) || "";
+  return CALL_STATUS_LABELS[status] || CALL_STATUS_LABELS.failed;
+}
+
+// Status-Klassen-Suffix fuer das Badge (active/completed -> eigene Farbe, alles
+// andere -> neutral/failed). Begrenzt auf bekannte Werte, damit kein roher
+// Tenant-/Status-String in einen CSS-Klassennamen wandert (defensiv).
+export function callStatusKind(call) {
+  const status = (call && call.status) || "";
+  return Object.prototype.hasOwnProperty.call(CALL_STATUS_LABELS, status) ? status : "failed";
+}
+
+// Ist ein Action Item ein Termin (Tag "Termin")? Gleiche Bedingung wie der
+// Bestand (tenant.html: a.type==="appointment").
+export function isAppointment(item) {
+  return Boolean(item) && item.type === "appointment";
+}
+
+// Kalender-Datumsteile fuer die Anzeige (Tag / Monat-Kurz / Wochentag+Uhrzeit),
+// aus dem ISO-start. Reine Formatierung (de-DE), DOM-frei und damit testbar.
+// Ungueltiges/fehlendes Datum -> leere Teile (kein "Invalid Date" in der UI).
+const CAL_LOCALE = "de-DE";
+export function calendarDateParts(event) {
+  const start = event && event.start;
+  const d = start ? new Date(start) : null;
+  if (!d || Number.isNaN(d.getTime())) return { day: "", month: "", when: "" };
+  return {
+    day: String(d.getDate()),
+    month: d.toLocaleString(CAL_LOCALE, { month: "short" }),
+    when: d.toLocaleString(CAL_LOCALE, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+  };
+}
+
 // Leitet den UI-Auth-Zustand aus genau EINEM state-Fetch ab -- die einzige
 // Stelle, die HTTP-Status auf UI-Zustaende mappt (testbar ohne DOM). 200 ->
 // eingeloggt (mit Daten); 401 -> anonym; 403 -> wartet auf Freigabe; alles

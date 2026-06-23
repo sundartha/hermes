@@ -1,0 +1,24 @@
+---
+// ActionItemsIsland (W4): read-only Action-Item-Liste aus der state-Antwort.
+// Pro Item: der Text und -- bei type==="appointment" -- ein "Termin"-Tag.
+// Erledigte Items (done) werden durchgestrichen dargestellt. 1:1-Verhalten zu
+// public/tenant.html (renderAi), portiert als Insel mit W1-Tokens.
+//
+// KEIN eigener state-Fetch (AUTH_EVENT). READ-ONLY: kein POST/PUT/DELETE.
+// Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand wird die Liste
+// geleert. Der DOM-Bau (inkl. textContent-only XSS-Schutz) lebt getestet in
+// lib/render.js -- diese Insel verdrahtet nur DOM-Container + AUTH_EVENT.
+---
+
+<section class="card">
+  <h2>Action Items</h2>
+  <ul id="ai-list" class="data-list" aria-live="polite"></ul>
+</section>
+
+<script>
+  import { bindList, actionItemRows } from "../../lib/render.js";
+
+  // bindList hoert auf AUTH_EVENT, rendert read-only und leert die Liste bei
+  // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
+  bindList(document, "ai-list", actionItemRows);
+</script>

@@ -105,3 +105,221 @@
   margin: var(--space-stack) 0 0;
   color: var(--color-muted);
 }
+
+/* W4: read-only Datensicht (Anrufe / Action Items / Kalender / Agent-Chip).
+   AUSSCHLIESSLICH semantische Tokens -- keine festen Werte (Strategie 2.5). */
+
+/* Zwei gleich breite Spalten fuer Action Items + Kalender. minmax(0, 1fr) statt
+   1fr verhindert, dass lange Inhalte die Spalte ueber den Container hinaus
+   dehnen. Bewusst ohne festen Breakpoint-Pixel (kein Magic-Number, G25);
+   feinere Mobil-Anordnung ist W5-Politur. */
+.shell-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-gap);
+}
+
+/* Gemeinsame Listen-Basis fuer alle drei Datensicht-Inseln. */
+.data-list {
+  list-style: none;
+  margin: var(--space-stack) 0 0;
+  padding: 0;
+}
+
+.data-empty {
+  color: var(--color-muted);
+  text-align: center;
+  padding: var(--space-card) var(--space-tight);
+}
+
+/* Agent-Chip: Live-Dot + Rufnummer. */
+.agent-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-cozy);
+  margin: var(--space-stack) 0;
+}
+
+.agent-chip__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-chip__label {
+  font-size: var(--text-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-muted);
+  font-weight: var(--weight-label);
+}
+
+.agent-chip__number {
+  font-weight: var(--weight-emphasis);
+}
+
+.live-dot {
+  width: var(--space-cozy);
+  height: var(--space-cozy);
+  border-radius: var(--radius-round);
+  background: var(--color-indicator-live);
+  flex-shrink: 0;
+}
+
+.live-dot--off {
+  background: var(--color-indicator-off);
+}
+
+/* Anruf-Zeile: Richtungs-Glyph, Gegenstelle/Untertitel, Status-Badge. */
+.call-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline);
+  padding: var(--space-cozy) 0;
+  border-bottom: var(--border-width) solid var(--color-divider);
+}
+
+.call-row:last-child {
+  border-bottom: 0;
+}
+
+.call-dir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  border-radius: var(--radius-round);
+  flex-shrink: 0;
+}
+
+.call-dir--in {
+  background: var(--color-status-info-surface);
+  color: var(--color-status-info);
+}
+
+.call-dir--out {
+  background: var(--color-status-critical-surface);
+  color: var(--color-status-critical);
+}
+
+.call-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.call-who {
+  font-weight: var(--weight-emphasis);
+}
+
+.call-sub {
+  color: var(--color-muted);
+  font-size: var(--text-eyebrow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status-Badge (Pille). Farbe pro Status ueber die Status-Rollen-Tokens. */
+.status-badge {
+  flex-shrink: 0;
+  padding: var(--space-hairline) var(--space-cozy);
+  border-radius: var(--radius-badge);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  white-space: nowrap;
+}
+
+.status-badge--active {
+  background: var(--color-status-critical-surface);
+  color: var(--color-status-critical);
+}
+
+.status-badge--completed {
+  background: var(--color-status-positive-surface);
+  color: var(--color-status-positive);
+}
+
+.status-badge--cancelled,
+.status-badge--failed {
+  background: var(--color-status-neutral-surface);
+  color: var(--color-status-neutral);
+}
+
+/* Action-Item-Zeile: Text (+ optional Termin-Tag), done -> durchgestrichen. */
+.ai-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-tight);
+  padding: var(--space-tight) 0;
+  border-bottom: var(--border-width) solid var(--color-divider);
+}
+
+.ai-row:last-child {
+  border-bottom: 0;
+}
+
+.ai-row--done .ai-text {
+  text-decoration: line-through;
+  color: var(--color-muted);
+}
+
+.tag {
+  flex-shrink: 0;
+  padding: var(--space-hairline) var(--space-tight);
+  border-radius: var(--radius-badge);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+.tag--appointment {
+  background: var(--color-status-info-surface);
+  color: var(--color-status-info);
+}
+
+/* Kalender-Zeile: Datums-Block + Titel/Wochentag. */
+.cal-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-cozy);
+  padding: var(--space-tight) 0;
+  border-bottom: var(--border-width) solid var(--color-divider);
+}
+
+.cal-row:last-child {
+  border-bottom: 0;
+}
+
+.cal-date {
+  background: var(--color-surface);
+  border-radius: var(--radius-control);
+  padding: var(--space-tight) var(--space-cozy);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.cal-date__day {
+  display: block;
+}
+
+.cal-date__month {
+  text-transform: uppercase;
+  color: var(--color-muted);
+  font-weight: var(--weight-label);
+}
+
+.cal-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cal-when {
+  color: var(--color-muted);
+  font-size: var(--text-eyebrow);
+}

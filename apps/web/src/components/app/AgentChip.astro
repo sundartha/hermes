@@ -1,0 +1,51 @@
+---
+// AgentChip (W4): zeigt die Agent-Rufnummer + einen Live-Dot (gruen, sobald
+// mindestens ein Call aktiv ist; sonst grau). Read-only aus genau dem state,
+// den die Auth-Insel ermittelt -- KEIN eigener state-Fetch (AUTH_EVENT).
+//
+// Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand (anonym/pending/
+// Fehler bzw. data==null) wird die Nummer geleert und der Dot auf "off" gesetzt
+// -- kein stehen gebliebenes Tenant-Datum.
+//
+// Tenant-Werte (die Nummer) gehen ausschliesslich ueber textContent in den DOM
+// -- nie als HTML interpretiert (XSS-Schutz, Leitplanke).
+---
+
+<div id="agent-chip" class="agent-chip" hidden>
+  <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
+  <span class="agent-chip__body">
+    <span class="agent-chip__label">Agent-Rufnummer</span>
+    <span id="agent-number" class="agent-chip__number"></span>
+  </span>
+</div>
+
+<script>
+  import { AUTH_STATE, AUTH_EVENT, agentInfo, isAgentLive } from "../../lib/api.js";
+
+  const NO_NUMBER_TEXT = "Noch keine Nummer zugewiesen";
+  const DOT_OFF_CLASS = "live-dot--off";
+
+  const chipEl = document.getElementById("agent-chip");
+  const dotEl = document.getElementById("agent-dot");
+  const numberEl = document.getElementById("agent-number");
+
+  function showChip(data) {
+    const { number } = agentInfo(data);
+    numberEl.textContent = number || NO_NUMBER_TEXT;
+    dotEl.classList.toggle(DOT_OFF_CLASS, !isAgentLive(data));
+    chipEl.hidden = false;
+  }
+
+  // Nicht eingeloggt -> Chip verstecken UND leeren (kein stale Tenant-Datum).
+  function clearChip() {
+    numberEl.textContent = "";
+    dotEl.classList.add(DOT_OFF_CLASS);
+    chipEl.hidden = true;
+  }
+
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const { state, data } = event.detail;
+    if (state === AUTH_STATE.AUTHENTICATED) showChip(data);
+    else clearChip();
+  });
+</script>

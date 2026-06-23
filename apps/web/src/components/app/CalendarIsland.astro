@@ -1,0 +1,26 @@
+---
+// CalendarIsland (W4): read-only Liste der anstehenden Termine aus der state-
+// Antwort (das Backend liefert in `calendar` bereits nur kommende, sortierte
+// Events). Pro Event: ein Datums-Block (Tag + Monat-Kurz) und Titel + Wochentag/
+// Uhrzeit. 1:1-Verhalten zu public/tenant.html (renderCal), portiert als Insel
+// mit W1-Tokens.
+//
+// KEIN eigener state-Fetch (AUTH_EVENT). READ-ONLY: kein POST/PUT/DELETE.
+// Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand wird die Liste
+// geleert. Der DOM-Bau (inkl. textContent-only XSS-Schutz) lebt getestet in
+// lib/render.js -- diese Insel verdrahtet nur DOM-Container + AUTH_EVENT.
+---
+
+<section class="card">
+  <h2>Kalender</h2>
+  <p class="muted">Darauf greift der Agent zu.</p>
+  <ul id="cal-list" class="data-list" aria-live="polite"></ul>
+</section>
+
+<script>
+  import { bindList, calendarRows } from "../../lib/render.js";
+
+  // bindList hoert auf AUTH_EVENT, rendert read-only und leert die Liste bei
+  // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
+  bindList(document, "cal-list", calendarRows);
+</script>
