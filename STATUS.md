@@ -88,9 +88,10 @@ Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemerg
    ist nur noch die **manuelle Live-Abnahme der Kundensicht**: Auth-/Login-Roundtrip, Billing-Insel
    (setup-mode), Read-only-Datensicht und Settings-/Whitelist-Editor gegen die Live-Env durchklicken
    (das Frontend hat die bisherige `express.static`-Kundensicht abgeloest - same-origin, kein CORS;
-   `docs/strategy/hermes-frontend.md`). **f2 ist erst das Datenmodell (P0-P4)** - die eigentliche
-   Inbound-SMS-Zusammenfassung an die private Tenant-Nummer + der Self-Service-Write
-   (Branch `phase/f2-p5-self-write`, NICHT gemergt) sind noch offen.
+   `docs/strategy/hermes-frontend.md`). **f2 ist das Datenmodell (P0-P4) + der Self-Service-Write
+   P5** (`POST /api/self-service/private-number`, gemergt `f3cef86`, 854/854) - die eigentliche
+   **Inbound-SMS-Zusammenfassung an die private Tenant-Nummer** (das Versenden selbst) ist noch
+   nicht gebaut.
 
 
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
