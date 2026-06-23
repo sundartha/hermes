@@ -108,6 +108,11 @@ export const config = {
     return [this.ownerFirstName, this.ownerLastName].filter(Boolean).join(" ");
   },
   ownerNumber: process.env.OWNER_NUMBER || "",
+  // Provider der Owner-Absendernummer (twilio|telnyx) fuer das Boot-Seeding
+  // (store/json.js finishLoad -> state-ops.seedOwnerNumberFromConfig). Default twilio;
+  // per OWNER_NUMBER_PROVIDER-Env setzbar (Produktion: telnyx). Ein ungueltiger Wert
+  // wird in seedOwnerNumberFromConfig fail-closed verworfen (kein Seed).
+  ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "twilio").toLowerCase(),
 
   // ---- Store-Backend ----
   // "json" (Default) = Datei-Persistenz (data/store.json). "pg" = Postgres.

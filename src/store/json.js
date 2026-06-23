@@ -73,6 +73,11 @@ function finishLoad() {
   // ungegateten Inbound-Greeting + summarizeCall. Leere Config -> kein Seed
   // (assertConfig verweigert dann ohnehin den Boot).
   ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
+  // Owner-Absendernummer config-derived idempotent seeden (wie die Identitaet darueber
+  // und seedProfilesFromEnv): Render free hat ein fluechtiges Dateisystem -> store.json
+  // ueberlebt keinen Deploy, sonst braeche der Boot-Guard fail-closed ab. Ohne
+  // OWNER_NUMBER oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
+  ops.seedOwnerNumberFromConfig(state, config.ownerNumber, OWNER_TENANT_ID, config.ownerNumberProvider);
   return state;
 }
 

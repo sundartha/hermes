@@ -40,6 +40,10 @@ services:
         sync: false
       - key: OWNER_NUMBER
         sync: false
+      # Provider der geseedeten Owner-Nummer (twilio|telnyx). Default twilio; auf telnyx
+      # setzen, wenn die Owner-Nummer eine Telnyx-Nummer ist.
+      - key: OWNER_NUMBER_PROVIDER
+        value: "telnyx"
       - key: ALLOWED_NUMBERS
         sync: false
       # Erlaubte Laendervorwahlen (Default +49,+33,+44 = DE/FR/UK). * = alle Laender.

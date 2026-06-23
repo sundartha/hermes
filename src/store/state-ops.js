@@ -17,6 +17,7 @@ import {
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
   DEFAULT_PROVIDER,
+  PROVIDER,
   DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
   normNum,
@@ -337,6 +338,19 @@ export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER, 
   // Geseedete Owner-Nummer ist in Benutzung -> status active. id, damit
   // number_assignment/Lifecycle sie referenzieren koennen.
   s.numbers.push({ id: newId("num"), e164: norm, tenantId, provider, country, language, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
+}
+
+// Config-derive Owner-Nummer-Seed beim Boot (analog seedOwnerIdentity): traegt die
+// Owner-Absendernummer aus (e164, provider) ein. Render free hat ein fluechtiges
+// Dateisystem -> ohne diesen Seed waere nach jedem Deploy keine aktive Owner-Nummer im
+// Store und der Boot-Guard (server.js) braeche fail-closed ab (Owner-Outbound/SMS tot).
+// Provider wird gegen PROVIDER validiert (wie scripts/seed-owner-number.js): ungueltig
+// oder leer -> KEIN Seed (fail-closed, kein Muell-Provider). Leere e164 -> No-Op
+// (seedOwnerNumber). Idempotent ueber seedOwnerNumber (e164 normalisiert, vorhandene
+// gewinnt). KEIN Magic-Default fuer die Nummer - e164 kommt nur vom Aufrufer.
+export function seedOwnerNumberFromConfig(s, e164, tenantId, provider) {
+  if (!Object.values(PROVIDER).includes(provider)) return;
+  seedOwnerNumber(s, e164, tenantId, provider);
 }
 
 // ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----
