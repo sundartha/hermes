@@ -15,4 +15,16 @@ export default defineConfig({
   build: {
     inlineStylesheets: "never",
   },
+  // assetsInlineLimit: 0 erzwingt, dass Astro/Vite NICHTS inlinet:
+  //  - hoisted <script> werden IMMER als externe, same-origin Module ausgegeben
+  //    (Astro inlinet sonst kleine, import-lose Single-Consumer-Skripte als
+  //    <script type="module">…</script> -> unter der strikten CSP
+  //    default-src 'self' (kein script-src 'unsafe-inline') blockiert).
+  //  - Assets werden nie als data:-URL eingebettet -> die CSP erlaubt KEIN
+  //    data: (Sicherheits-Leitplanke 3). Beides bleibt damit CSP-konform.
+  vite: {
+    build: {
+      assetsInlineLimit: 0,
+    },
+  },
 });

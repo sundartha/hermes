@@ -118,6 +118,8 @@
   /* --- Bewegungs-Rollen --- */
   --motion-ease: var(--ease-out);
   --motion-duration: var(--duration-fast);
+  --motion-duration-slow: var(--duration-slow);   /* Hero-Flow-Reveal */
+  --motion-pulse: var(--duration-pulse);           /* Aktiv-Puls */
 
   /* --- Layout-Rollen --- */
   --layout-measure: var(--measure-page);

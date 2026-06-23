@@ -5,6 +5,7 @@
 // durch den Higgsfield-Canvas-Scrubber ersetzt; bis dahin steht hier ein
 // dezentes Marken-Panel (kein Layout-Bruch, kein Asset noetig).
 import Marketing from "../layouts/Marketing.astro";
+import HeroAnimation from "../components/HeroAnimation.astro";
 
 // Use Cases: drei konkrete Einsatzfelder (Strategie/Auftrag W1).
 const useCases = [
@@ -50,10 +51,10 @@ const mcpFlow = [
       </div>
 
       <div class="hero__stage">
-        <!-- W4: Higgsfield-Scroll-Animation ersetzt diesen Platzhalter. -->
-        <div id="hero-animation-placeholder" class="hero-anim">
-          Verbindungs-Animation folgt — KI trifft Telefon.
-        </div>
+        <!-- W4: scroll-getriggerte MCP-Verbindungs-Animation (ersetzt den
+             W1-Platzhalter). Higgsfield-Frames koennen die SVG-Szene spaeter
+             ersetzen; der Scrub-Mechanismus bleibt. -->
+        <HeroAnimation />
       </div>
     </div>
   </section>

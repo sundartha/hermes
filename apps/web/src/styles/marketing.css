@@ -280,12 +280,110 @@
 
 .hero-anim {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-stack);
   min-height: var(--size-hero-stage);
-  padding: var(--space-section) var(--space-card);
+  padding: var(--space-roomy) var(--space-card);
   color: var(--color-muted-inverse);
   font-size: var(--text-body);
+}
+
+.hero-anim__caption {
+  color: var(--color-muted-inverse);
+  font-size: var(--text-body);
+  text-align: center;
+}
+
+/* MCP-Verbindungs-Flow (Inline-SVG). Die SVG-internen Zahlen (viewBox, Pfad-
+   Koordinaten, stroke-width) sind zeichnungs-intrinsische Geometrie — wie
+   viewBox/Pfade kein Magic-Wert (vgl. dokumentierte Geometrie-Ausnahme). */
+.flow {
+  width: 100%;
+  max-width: var(--layout-prose);
+  height: auto;
+}
+
+.flow__node circle {
+  fill: var(--color-inverse-tint);
+  stroke: var(--color-border-inverse);
+  stroke-width: 1.5;
+}
+
+.flow__node--mcp circle {
+  stroke: var(--color-accent);
+}
+
+.flow__glyph {
+  fill: none;
+  stroke: var(--color-text-inverse);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.flow__node--ki .flow__glyph {
+  fill: var(--color-text-inverse);
+  stroke: none;
+}
+
+.flow__label {
+  fill: var(--color-muted-inverse);
+  font-family: var(--font-body);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  text-anchor: middle;
+}
+
+.flow__link {
+  stroke: var(--color-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: opacity var(--motion-duration-slow) var(--motion-ease);
+}
+
+.flow__pulse {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  opacity: 0.5;
+  animation: flow-pulse var(--motion-pulse) var(--motion-ease) infinite;
+  transition: opacity var(--motion-duration-slow) var(--motion-ease);
+}
+
+/* Atem-Puls: reine Opazitaets-Animation (kein Transform -> robust auf SVG/iOS).
+   Die Prozent-/Opazitaets-Stops sind Animations-Geometrie, kein Magic-Wert. */
+@keyframes flow-pulse {
+  0% { opacity: 0.5; }
+  70% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Scrub-Zustand: Linien/Puls schrittweise je data-step freischalten.
+   Schritt 0 = nur KI->MCP; Schritt 1 = + MCP->Telefon; Schritt 2 = + Aktiv-Puls.
+   Ohne .is-scrubbing (kein JS / reduzierte Bewegung) bleibt die VOLLE Kette als
+   statisches Poster sichtbar. */
+.hero-anim.is-scrubbing .flow__link--2,
+.hero-anim.is-scrubbing .flow__pulse {
+  opacity: 0;
+}
+
+.hero-anim.is-scrubbing[data-step="1"] .flow__link--2,
+.hero-anim.is-scrubbing[data-step="2"] .flow__link--2 {
+  opacity: 1;
+}
+
+.hero-anim.is-scrubbing[data-step="2"] .flow__pulse {
+  opacity: 0.5;
+}
+
+/* Reduzierte Bewegung: kein Puls-Flackern (Poster bleibt ruhig sichtbar). */
+@media (prefers-reduced-motion: reduce) {
+  .flow__pulse {
+    animation: none;
+    opacity: 0.5;
+  }
 }
 
 /* --- Karten --- */
