@@ -1,0 +1,193 @@
+---
+// SettingsIsland (W5): der EINZIGE existierende Schreibpfad des Frontends.
+// POST /api/self-service/settings mit der bekannten ENGEN Whitelist
+// (src/self-service.js, NUR-Lese-Vertrag). Die UI bietet AUSSCHLIESSLICH die
+// erlaubten Felder an:
+//   - agentName  (Freitext)
+//   - allowCalendar / allowBooking      (Toggle, frei kippbar)
+//   - allowPersonalData / allowBankData (Toggle, NUR restriktiver: true->false)
+//   - greeting   (NUR Template-Auswahl aus state.greetingTemplates -- KEIN
+//                 Freitext-Eingabefeld; ein solches existiert hier bewusst nicht)
+//   - language   ("" automatisch / de / fr / en)
+// allowSummaries, Disclosure-Felder und alles Unbekannte fehlen bewusst -- der
+// Self-Service-Pfad lehnt sie ohnehin ab (kein UI-Schreibpfad fuer rejected-Felder).
+//
+// Nach Speichern: "Gespeichert", listet changed/rejected (aus der Antwort
+// abgeleitet, settingsOutcome) und RE-FETCHt den State (fetchTenantState ->
+// AUTH_EVENT neu dispatchen, damit ALLE Inseln auf den frischen Server-Stand
+// gehen). Der restriktivere Permission-Toggle greift ueber die Server-Semantik:
+// ein false->true-Versuch auf allowPersonalData/allowBankData kommt als rejected
+// zurueck (der gespeicherte Wert bleibt), die UI zeigt es an und re-fetcht.
+//
+// KEIN eigener Auth-/state-Fetch im Normalfall: die Auth-Insel ermittelt den
+// Zustand einmal und dispatcht AUTH_EVENT -- diese Insel hoert darauf und befuellt
+// das Formular. Tenant-/Vorlagen-Strings gehen NUR ueber textContent/option.value
+// in den DOM (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
+import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
+---
+
+<section id="settings-card" class="card" hidden>
+  <h2>Einstellungen meines Agenten</h2>
+  <p class="muted">Wirkt sofort auf das naechste Gespraech.</p>
+
+  <form id="settings-form" class="settings-form">
+    <label class="field-label" for="settings-name">Agent-Name</label>
+    <input id="settings-name" class="field-input" type="text" autocomplete="off" />
+
+    <fieldset class="settings-perms">
+      <legend class="field-label">Berechtigungen</legend>
+      {
+        SETTINGS_PERMISSION_TOGGLES.map(({ key, label, hint }) => (
+          <div class="perm-row">
+            <span class="perm-text">
+              <span class="perm-title">{label}</span>
+              <span class="perm-hint muted">{hint}</span>
+            </span>
+            <label class="switch">
+              <input type="checkbox" data-perm={key} />
+              <span class="switch-slider" aria-hidden="true"></span>
+            </label>
+          </div>
+        ))
+      }
+    </fieldset>
+
+    <label class="field-label" for="settings-greeting">Begruessung (Inbound) — {"{owner}"} wird ersetzt</label>
+    <select id="settings-greeting" class="field-input"></select>
+
+    <label class="field-label" for="settings-language">Sprache</label>
+    <select id="settings-language" class="field-input">
+      {SETTINGS_LANGUAGES.map(({ value, label }) => <option value={value}>{label}</option>)}
+    </select>
+
+    <div class="settings-actions">
+      <button id="settings-save" class="btn" type="submit">Speichern</button>
+      <span id="settings-msg" class="settings-msg" hidden></span>
+    </div>
+  </form>
+</section>
+
+<script>
+  import {
+    ApiError,
+    AUTH_STATE,
+    AUTH_EVENT,
+    HTTP_UNAUTHORIZED,
+    buildSettingsPatch,
+    fetchTenantState,
+    saveSettings,
+    settingsFrom,
+    settingsOutcome,
+  } from "../../lib/api.js";
+
+  const cardEl = document.getElementById("settings-card");
+  const formEl = document.getElementById("settings-form");
+  const nameEl = document.getElementById("settings-name");
+  const greetingEl = document.getElementById("settings-greeting");
+  const languageEl = document.getElementById("settings-language");
+  const saveBtn = document.getElementById("settings-save");
+  const msgEl = document.getElementById("settings-msg");
+
+  const MSG_OK_CLASS = "settings-msg--ok";
+  const MSG_ERR_CLASS = "settings-msg--err";
+
+  // Kurze Rueckmeldung mit Erfolgs-/Fehler-Faerbung. text leer -> verstecken.
+  function showMessage(text, ok) {
+    msgEl.textContent = text;
+    msgEl.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok);
+    msgEl.classList.toggle(MSG_ERR_CLASS, Boolean(text) && !ok);
+    msgEl.hidden = !text;
+  }
+
+  // greeting-Dropdown NUR aus den Server-Vorlagen (kein Freitext-Input). Optionen
+  // via createElement + textContent/value -- kein innerHTML mit Tenant-/Vorlagen-
+  // Strings (XSS-Schutz, Leitplanke). Aktuelle Vorlage vorausgewaehlt.
+  function renderGreetingOptions(templates, current) {
+    greetingEl.replaceChildren(
+      ...templates.map((tpl) => {
+        const option = document.createElement("option");
+        option.value = tpl;
+        option.textContent = tpl;
+        option.selected = tpl === current;
+        return option;
+      })
+    );
+  }
+
+  // Formular aus dem state befuellen. Permission-Toggles ueber data-perm; greeting
+  // nur aus den Vorlagen; language leer/null -> "Automatisch".
+  function fillForm(data) {
+    const { settings, greetingTemplates } = settingsFrom(data);
+    nameEl.value = settings.agentName || "";
+    languageEl.value = settings.language || "";
+    renderGreetingOptions(greetingTemplates, settings.greeting);
+    for (const input of formEl.querySelectorAll("[data-perm]")) {
+      input.checked = Boolean(settings[input.dataset.perm]);
+    }
+  }
+
+  // Roher Formular-Snapshot fuer buildSettingsPatch (die Whitelist-Grenze lebt
+  // dort, nicht hier). Toggles ueber data-perm einsammeln.
+  function readForm() {
+    const form = { agentName: nameEl.value, greeting: greetingEl.value, language: languageEl.value };
+    for (const input of formEl.querySelectorAll("[data-perm]")) {
+      form[input.dataset.perm] = input.checked;
+    }
+    return form;
+  }
+
+  // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte).
+  function outcomeText({ changed, rejected }) {
+    const parts = [`Gespeichert. Uebernommen: ${changed.length ? changed.join(", ") : "—"}`];
+    if (rejected.length) parts.push(`abgelehnt: ${rejected.join(", ")}`);
+    return parts.join(" · ");
+  }
+
+  // Re-Fetch nach dem Speichern: den State neu laden und per AUTH_EVENT an ALLE
+  // Inseln (inkl. dieser) verteilen -> das Formular zeigt den frischen Server-
+  // Stand (so erscheint ein serverseitig abgelehnter Toggle wieder im alten Wert).
+  async function refetchState() {
+    const data = await fetchTenantState();
+    document.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: { state: AUTH_STATE.AUTHENTICATED, data } }));
+  }
+
+  // Fehlertext beim Speichern: 401 = abgelaufene Session (neu anmelden), sonst
+  // generisch. Fail-closed: nie als Teil-Erfolg deuten.
+  function saveErrorText(err) {
+    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED)
+      return "Sitzung abgelaufen - bitte neu anmelden.";
+    return "Nicht gespeichert.";
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    saveBtn.disabled = true;
+    const patch = buildSettingsPatch(readForm());
+    try {
+      const saved = await saveSettings(patch);
+      showMessage(outcomeText(settingsOutcome(patch, saved)), true);
+      await refetchState(); // frischen Stand ziehen + an alle Inseln verteilen
+    } catch (err) {
+      showMessage(saveErrorText(err), false);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  formEl.addEventListener("submit", submit);
+
+  // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
+  // eingeloggten Zustand traegt die Antwort settings/greetingTemplates. Listener
+  // synchron beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht. Im
+  // Nicht-eingeloggten Zustand: Karte verstecken (kein stale Tenant-Datum, keine
+  // Schreibflaeche ohne Session).
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const { state, data } = event.detail;
+    if (state === AUTH_STATE.AUTHENTICATED) {
+      fillForm(data);
+      cardEl.hidden = false;
+    } else {
+      cardEl.hidden = true;
+    }
+  });
+</script>

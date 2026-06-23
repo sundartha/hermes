@@ -7,6 +7,7 @@
 import App from "../../layouts/App.astro";
 import AuthIsland from "../../components/app/AuthIsland.astro";
 import BillingIsland from "../../components/app/BillingIsland.astro";
+import SettingsIsland from "../../components/app/SettingsIsland.astro";
 import AgentChip from "../../components/app/AgentChip.astro";
 import CallsIsland from "../../components/app/CallsIsland.astro";
 import ActionItemsIsland from "../../components/app/ActionItemsIsland.astro";
@@ -51,6 +52,11 @@ import CalendarIsland from "../../components/app/CalendarIsland.astro";
         <dd id="shell-owner">—</dd>
       </dl>
     </section>
+
+    <!-- W5: Settings-Editor (der EINZIGE Schreibpfad). Bietet AUSSCHLIESSLICH die
+         Whitelist-Felder an (greeting nur als Vorlage, kein Freitext). Hoert auf
+         AUTH_EVENT, re-fetcht nach Speichern ueber lib/api.js. -->
+    <SettingsIsland />
 
     <!-- W4: read-only Datensicht aus dem EINEN state-Fetch (AUTH_EVENT). Anrufe
          breit, Action Items + Kalender daneben. Jede Insel leert sich bei

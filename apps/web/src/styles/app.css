@@ -106,17 +106,168 @@
   color: var(--color-muted);
 }
 
+/* W5: Settings-Editor (der einzige Schreibpfad). AUSSCHLIESSLICH semantische
+   Tokens -- keine festen Werte (Strategie 2.5). Die Toggle-Geometrie ist aus
+   den vorhandenen Space-Tokens per calc() komponiert (kein Magic-Pixel). */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+  margin-top: var(--space-stack);
+}
+
+.field-label {
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-muted);
+  margin-top: var(--space-cozy);
+}
+
+.field-input {
+  width: 100%;
+  padding: var(--space-cozy) var(--space-cozy);
+  border: var(--border-width) solid var(--color-field-border);
+  border-radius: var(--radius-control);
+  background: var(--color-card);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: var(--color-field-border-focus);
+}
+
+/* Berechtigungs-Block: rahmenlose Fieldset-Huelle (nur Gruppierung/Legende). */
+.settings-perms {
+  border: 0;
+  margin: var(--space-tight) 0 0;
+  padding: 0;
+}
+
+.perm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-cozy);
+  padding: var(--space-cozy) 0;
+  border-bottom: var(--border-width) solid var(--color-divider);
+}
+
+.perm-row:last-child {
+  border-bottom: 0;
+}
+
+.perm-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.perm-title {
+  font-weight: var(--weight-label);
+}
+
+.perm-hint {
+  font-size: var(--text-eyebrow);
+}
+
+/* Toggle-Schalter. Geometrie aus Space-Tokens: Spur-Hoehe = --space-6 (Knopf +
+   2x Rand), Knopf = --space-5, Rand = --space-1, Spur-Breite = Knopf-Weg + Raender. */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: calc(2 * var(--space-5) + 2 * var(--space-1));
+  height: var(--space-6);
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--color-indicator-off);
+  border-radius: var(--radius-badge);
+  cursor: pointer;
+  transition: background var(--motion-duration) var(--motion-ease);
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  left: var(--space-1);
+  top: var(--space-1);
+  width: var(--space-5);
+  height: var(--space-5);
+  background: var(--color-card);
+  border-radius: var(--radius-round);
+  transition: transform var(--motion-duration) var(--motion-ease);
+}
+
+.switch input:checked + .switch-slider {
+  background: var(--color-action);
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(var(--space-5));
+}
+
+.switch input:focus-visible + .switch-slider {
+  outline: var(--border-width) solid var(--color-field-border-focus);
+  outline-offset: var(--space-1);
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-cozy);
+  margin-top: var(--space-stack);
+  flex-wrap: wrap;
+}
+
+/* Rueckmeldung nach Speichern: neutral als Default, ok/err faerben den Text. */
+.settings-msg {
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  color: var(--color-muted);
+}
+
+.settings-msg--ok {
+  color: var(--color-status-positive);
+}
+
+.settings-msg--err {
+  color: var(--color-status-critical);
+}
+
 /* W4: read-only Datensicht (Anrufe / Action Items / Kalender / Agent-Chip).
    AUSSCHLIESSLICH semantische Tokens -- keine festen Werte (Strategie 2.5). */
 
 /* Zwei gleich breite Spalten fuer Action Items + Kalender. minmax(0, 1fr) statt
    1fr verhindert, dass lange Inhalte die Spalte ueber den Container hinaus
-   dehnen. Bewusst ohne festen Breakpoint-Pixel (kein Magic-Number, G25);
-   feinere Mobil-Anordnung ist W5-Politur. */
+   dehnen. Auf schmalen Viewports (W5-Politur) untereinander -- siehe Media-Query. */
 .shell-cols {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-gap);
+}
+
+/* W5-Politur (Responsiv): unter dem Tablet-Breakpoint die zweispaltige
+   Datensicht untereinander stapeln. DOKUMENTIERTE AUSNAHME: ein Media-Query-
+   Breakpoint MUSS ein roher px-Wert sein -- CSS erlaubt keine Custom-Property
+   in der Media-Bedingung. Bewusst sparsam (ein Breakpoint), nahe dem 980px der
+   Bestands-tenant.html (kein willkuerlicher Wert). */
+@media (max-width: 768px) {
+  .shell-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Gemeinsame Listen-Basis fuer alle drei Datensicht-Inseln. */

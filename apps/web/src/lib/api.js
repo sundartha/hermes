@@ -38,13 +38,17 @@ export class ApiError extends Error {
 
 // Ein einzelner same-origin-Request. Wirft ApiError bei non-2xx (fail-closed:
 // die UI behandelt jeden Nicht-Erfolg als "nicht eingeloggt"/Fehler, nie als
-// Teil-Erfolg). parseJson:false fuer Endpunkte ohne Body (logout -> 204).
-async function apiRequest(path, { method = "GET", parseJson = true } = {}) {
-  const res = await fetch(path, {
-    method,
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-  });
+// Teil-Erfolg). parseJson:false fuer Endpunkte ohne Body (logout -> 204). body
+// (Objekt) -> als JSON gesendet mit Content-Type:application/json (Schreibpfad
+// settings/billing); fehlt body, geht kein Body und kein Content-Type raus.
+async function apiRequest(path, { method = "GET", parseJson = true, body } = {}) {
+  const headers = { Accept: "application/json" };
+  const options = { method, credentials: "same-origin", headers };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, options);
   if (!res.ok) throw new ApiError(res.status, `${method} ${path} -> ${res.status}`);
   return parseJson ? res.json() : null;
 }
@@ -189,6 +193,105 @@ export function calendarDateParts(event) {
     month: d.toLocaleString(CAL_LOCALE, { month: "short" }),
     when: d.toLocaleString(CAL_LOCALE, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
   };
+}
+
+// ---- W5: Settings-Editor (der EINZIGE existierende Schreibpfad) ---------------
+// Reine, DOM-freie Helfer fuer den Settings-Editor: die Contract-Grenze zur
+// Backend-Whitelist (welche Felder POST /api/self-service/settings ueberhaupt
+// annimmt, R5) UND das Ableiten von changed/rejected aus der Antwort. Testbar
+// ohne DOM (P1/T1). Die Insel verdrahtet nur den DOM-Form + AUTH_EVENT.
+//
+// SPIEGELT die Backend-Whitelist (src/self-service.js, NUR-Lese-Vertrag) -- die
+// UI bietet AUSSCHLIESSLICH an, was der Server akzeptiert (Server filtert via
+// selfServicePatch ohnehin; die UI ist NICHT die Verteidigung, darf aber nichts
+// anbieten, was es nicht gibt). Freitext-greeting ist gar nicht erst baubar:
+// greeting ist KEIN Free-Field, sondern nur eine Template-Auswahl.
+
+// Frei setzbare Felder (Typ-Check macht updateSettings serverseitig). 1:1 zu
+// SELF_SERVICE_FREE_FIELDS in src/self-service.js -- driftet das auseinander,
+// schlaegt das Backend den Wert ohnehin als rejected zurueck (fail-closed).
+export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "allowCalendar", "allowBooking", "language"]);
+
+// Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
+// false->true NEIN -- Aktivieren bleibt Plattform-Admin). 1:1 zu
+// SELF_SERVICE_RESTRICT_ONLY_FIELDS in src/self-service.js.
+export const SETTINGS_RESTRICT_ONLY_FIELDS = Object.freeze(["allowPersonalData", "allowBankData"]);
+
+// Sprach-Optionen des language-Dropdowns. "" = "Automatisch (nach Nummer)" (das
+// Override leeren); die uebrigen Codes spiegeln SUPPORTED_LANGUAGES
+// (src/i18n/locales.js = Object.keys(LOCALES)). Hier zentralisiert + drift-
+// getestet, damit eine 4. Backend-Sprache nicht still im Dropdown fehlt (G22).
+// Der Server validiert language ohnehin fail-closed gegen SUPPORTED_LANGUAGES.
+export const SETTINGS_LANGUAGES = Object.freeze([
+  { value: "", label: "Automatisch (nach Nummer)" },
+  { value: "de", label: "Deutsch" },
+  { value: "fr", label: "Français" },
+  { value: "en", label: "English" },
+]);
+
+// Die Permission-Toggles der UI (Reihenfolge + Beschriftung). Free-Toggles
+// (allowCalendar/allowBooking) duerfen frei kippen; restrict-only-Toggles
+// (allowPersonalData/allowBankData) nur restriktiver -- dieselbe Semantik wie
+// das Backend, hier nur fuer die Anzeige zentralisiert. agentName/greeting/
+// language sind eigene Controls (Text/Dropdowns), kein Toggle.
+export const SETTINGS_PERMISSION_TOGGLES = Object.freeze([
+  { key: "allowCalendar", label: "Kalenderzugriff", hint: "Agent darf Termine einsehen", restrictOnly: false },
+  { key: "allowBooking", label: "Termine buchen", hint: "Agent darf Termine fest eintragen", restrictOnly: false },
+  { key: "allowPersonalData", label: "Persoenliche Daten", hint: "Adresse, E-Mail etc. herausgeben", restrictOnly: true },
+  { key: "allowBankData", label: "Bankdaten", hint: "Zahlungsdaten nennen (nicht empfohlen)", restrictOnly: true },
+]);
+
+// Settings + greeting-Vorlagen aus der state-Antwort -- die EINE Stelle, an der
+// das Frontend die Form `data.settings`/`data.greetingTemplates` annimmt
+// (Contract-Grenze, R5). Fehlende Felder -> leeres Objekt / leere Liste, damit
+// die Insel nie auf undefined zugreift (G26).
+export function settingsFrom(data) {
+  const settings = (data && data.settings) || {};
+  const templates = data && data.greetingTemplates;
+  return { settings, greetingTemplates: Array.isArray(templates) ? templates : [] };
+}
+
+// Baut den Schreib-Patch aus dem rohen Formular-Snapshot: NUR Whitelist-Felder.
+// `form` = { agentName, greeting, language, allowCalendar, allowBooking,
+// allowPersonalData, allowBankData }. greeting ist ein gewaehlter Template-String
+// (kein Freitext-Eingabefeld existiert). Unbekannte Schluessel werden NICHT
+// uebernommen -- die UI sendet erst gar nichts ausserhalb der Whitelist.
+export function buildSettingsPatch(form) {
+  const src = form || {};
+  const patch = {
+    agentName: String(src.agentName ?? ""),
+    greeting: String(src.greeting ?? ""),
+    language: String(src.language ?? ""),
+  };
+  for (const { key } of SETTINGS_PERMISSION_TOGGLES) patch[key] = Boolean(src[key]);
+  return patch;
+}
+
+// Leitet changed/rejected aus dem gesendeten Patch + den GESPEICHERTEN Settings
+// ab. POST /api/self-service/settings antwortet mit dem vollen settings-Objekt
+// (verifiziert in src/self-service-routes.js: res.json(settings)) -- NICHT mit
+// {changed, rejected}. Darum diffen wir hier: ein angefragtes Feld gilt als
+// uebernommen (changed), wenn der gespeicherte Wert dem angefragten entspricht,
+// sonst als abgelehnt (rejected) -- exakt der serverseitige selfServicePatch-
+// Effekt (z.B. ein false->true-Versuch auf ein restrict-only-Flag erscheint hier
+// als rejected, weil der gespeicherte Wert beim alten Wert bleibt). Reine Logik.
+export function settingsOutcome(patch, savedSettings) {
+  const saved = savedSettings || {};
+  const changed = [];
+  const rejected = [];
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (saved[key] === value) changed.push(key);
+    else rejected.push(key);
+  }
+  return { changed, rejected };
+}
+
+// Schreibt den Settings-Patch (POST same-origin, JSON-Body). Antwort = das volle,
+// serverseitig gefilterte settings-Objekt (selfServicePatch + updateSettings).
+// Wie der ganze Client: KEIN Authorization-Header, das Session-Cookie autorisiert
+// (Strategie 2.3). Wirft ApiError bei non-2xx (z.B. 401 abgelaufene Session).
+export function saveSettings(patch) {
+  return apiRequest("/api/self-service/settings", { method: "POST", body: patch });
 }
 
 // Leitet den UI-Auth-Zustand aus genau EINEM state-Fetch ab -- die einzige
