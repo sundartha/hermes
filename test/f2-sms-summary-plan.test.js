@@ -22,6 +22,8 @@ function makeStore(tenants) {
     tenantPrivateNumber: (id) => tenants[id]?.privateNumber ?? null,
     load: () => ({ numbers }),
     tenantContext: (id) => ({ settings: { smsSummaryOptIn: tenants[id]?.optIn ?? true } }),
+    // F2 P8: Tages-Cap-Zaehler (default 0 = Cap nicht erreicht -> send-Pfad unveraendert).
+    dailySmsCount: (id) => tenants[id]?.smsCount ?? 0,
   };
 }
 const call = (tenantId) => ({ id: `call_${tenantId}`, tenantId, provider: PROV });

@@ -96,6 +96,11 @@ export const config = {
   // Metering-Pfad (PAYMENT_ENABLED) genutzt; 0 = kein Cost-Cents-Beleg (Meter meldet
   // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
   voiceMinuteCostCents: numEnv("VOICE_MINUTE_COST_CENTS", process.env.VOICE_MINUTE_COST_CENTS, { fallback: 0, min: 0 }),
+  // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede
+  // erfolgreich gesendete Summary-SMS erzeugt ein USAGE_EVENT_KIND.SMS-Event mit diesem
+  // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg
+  // (wie voiceMinuteCostCents); Live mit dem Provider-SMS-Tarif abgleichen.
+  smsCostCents: numEnv("SMS_COST_CENTS", process.env.SMS_COST_CENTS, { fallback: 0, min: 0 }),
 
   // Owner-Identitaet (G1): zwei Eingaben statt eines Namens (Owner-Entscheidung #1).
   // KEIN Default mehr ("Jonas" raus) -> assertConfig macht beide zur Boot-Pflicht
@@ -131,6 +136,11 @@ export const config = {
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: (process.env.SEND_SMS_SUMMARY || "true") === "true",
+  // Tages-Cap pro Tenant fuer Summary-SMS (F2 P8, Toll-Fraud-Schutz H1): nach so vielen
+  // ERFOLGREICH gesendeten Summary-SMS im rollierenden 24h-Fenster wird die naechste still
+  // uebersprungen (Audit-Marker reason=daily_cap, kein Fehler). Pro call.tenantId, nicht
+  // global. Default 20; 0 = jede Summary-SMS gesperrt (Not-Aus, fail-closed).
+  dailySmsCap: numEnv("DAILY_SMS_CAP", process.env.DAILY_SMS_CAP, { fallback: 20, min: 0 }),
 
   // ---- Safety-Gates ----
   // Outbound NUR an diese Nummern (kommasepariert, E.164). Leer = alle Outbound-Calls verweigern.

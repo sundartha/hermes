@@ -57,13 +57,21 @@ export function makePgStore(runner) {
       // gewinnt). Persistenz via save() unten, damit first_name/owner_name
       // round-trippen (flushTenants).
       ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
+      // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog seedOwnerIdentity):
+      // seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne diesen Seed verloere der
+      // Owner nach der Umstellung still seine eigene Summary-SMS. false -> PII-freie Boot-Warnung
+      // (nur der Marker, NIE die Nummer). Persistenz via save() unten (Gate beruecksichtigt
+      // jetzt auch privateNumber, damit der Seed auch ohne ownerName round-trippt).
+      if (!ops.seedOwnerPrivateNumber(state, config.ownerNumber, OWNER_TENANT_ID))
+        console.warn("[pg] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).");
     });
-    // Nur flushen, wenn der Seed tatsaechlich einen ownerName gesetzt hat (leere
-    // Config -> Boot-Refusal greift ohnehin vorher, kein Leer-Flush). save() wird
-    // AWAITED: init() ist async und der Flush teilt sich die Verbindung mit den
-    // folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush
-    // wuerde mit dem ersten Folge-Query um die Transaktion konkurrieren.
-    if (state.tenants.some((t) => t.id === OWNER_TENANT_ID && t.ownerName)) await save();
+    // Nur flushen, wenn der Seed tatsaechlich etwas am Owner-Record gesetzt hat (ownerName
+    // ODER privateNumber, F2 P11) - leere Config -> Boot-Refusal greift ohnehin vorher, kein
+    // Leer-Flush. save() wird AWAITED: init() ist async und der Flush teilt sich die Verbindung
+    // mit den folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush wuerde
+    // mit dem ersten Folge-Query um die Transaktion konkurrieren.
+    const owner = state.tenants.find((t) => t.id === OWNER_TENANT_ID);
+    if (owner && (owner.ownerName || owner.privateNumber)) await save();
     return state;
   }
 
@@ -107,6 +115,13 @@ export function makePgStore(runner) {
     },
     endCallRecord(callId, status = "completed") {
       const { call, changed } = ops.endCallRecord(requireState(), callId, status);
+      if (changed) save();
+      return call;
+    },
+    // Persistierter Summary-SMS-Dedup-Marker (F2 P9): Wrapper-Parity zu json.js. Der
+    // Flush schreibt summary_sms_sent_at am call-Record -> ueberlebt den Restart (M2).
+    markSummarySmsSent(callId) {
+      const { call, changed } = ops.markSummarySmsSent(requireState(), callId);
       if (changed) save();
       return call;
     },
@@ -162,6 +177,9 @@ export function makePgStore(runner) {
       save();
       return event;
     },
+    // Tages-Cap-Zaehler der gesendeten Summary-SMS (F2 P8): liest den Spiegel
+    // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
+    dailySmsCount: (tenantId, sinceIso) => ops.dailySmsCount(requireState(), tenantId, sinceIso),
     pendingMeterEvents: () => ops.pendingMeterEvents(requireState()),
     markMeterEventsSent(eventIds) {
       const n = ops.markMeterEventsSent(requireState(), eventIds);
@@ -228,7 +246,9 @@ export function makePgStore(runner) {
     // segment per ON DELETE CASCADE). KEIN eigenes DELETE noetig.
     eraseTenantData(tenantId) {
       const removed = ops.eraseTenantData(requireState(), tenantId);
-      if (removed.calls || removed.actionItems || removed.notifications) save();
+      // F2 P10: auch eine geloeschte privateNumber (PII) muss persistieren - sonst kaeme sie
+      // bei einem Tenant ganz ohne Calls nach dem Restart zurueck (flushTenants schreibt NULL).
+      if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
@@ -473,6 +493,11 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     transcript: segmentsByCall.get(r.id) || [],
     summary: r.summary,
     objectiveAchieved: r.objective_achieved,
+    // F2 P9 (M2): persistierten Summary-SMS-Dedup-Marker hydrieren. Ohne dieses Feld
+    // ginge der Marker beim Prozess-Restart verloren (Spalte da, aber nie gelesen) und
+    // ein spaeter /voice/status-Retry sendete eine zweite Summary-SMS. NULL -> null
+    // (kein Marker, byte-identisch zur createCall-Initialisierung + json-Hydrierung).
+    summarySmsSentAt: r.summary_sms_sent_at ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -627,16 +652,18 @@ async function flushCalls(client, tenantId, calls) {
       `INSERT INTO call
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
-          status, started_at, answered_at, ended_at, summary, objective_achieved, provider)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+          status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
+          summary_sms_sent_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
-         objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider`,
+         objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
+         summary_sms_sent_at=EXCLUDED.summary_sms_sent_at`,
       [c.id, tenantId, c.streamToken, c.twilioSid, c.direction, c.from, c.to, c.goal,
         c.briefing, c.constraints, c.callerName, c.language, c.maxDurationS, c.requestedBy,
         c.status, c.startedAt, c.answeredAt, c.endedAt, c.summary, serializeObjective(c.objectiveAchieved),
-        c.provider || DEFAULT_PROVIDER]
+        c.provider || DEFAULT_PROVIDER, c.summarySmsSentAt ?? null]
     );
     await flushTranscript(client, tenantId, c);
   }

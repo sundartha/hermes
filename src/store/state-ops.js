@@ -118,6 +118,10 @@ export function createCall(s, { direction, from, to, goal, twilioSid, briefing, 
     transcript: [],
     summary: null,
     objectiveAchieved: null,
+    // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
+    // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
+    // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
+    summarySmsSentAt: null,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -162,9 +166,12 @@ function tenantCallScope(s, tenantId) {
 // Per-Tenant-DSGVO-Loeschung (Art. 17): entfernt ALLE call-verknuepften Daten
 // EINES Tenants - die Calls (samt Roh-Transkript), die daraus extrahierten Action
 // Items und die call-verknuepften Notifications. Tenant-Scope kommt aus
-// tenantCallScope (eine Quelle). settings/profiles/numbers/tenants/calendar/usage
-// bleiben UNANGETASTET (Service-Config/Identitaet/Budget-Gate). Reine Mutation,
-// kein IO. Liefert Loesch-Zaehler fuers Audit (KEINE Inhalte). NIE cross-tenant.
+// tenantCallScope (eine Quelle). Vom tenant-Record wird GEZIELT NUR die private
+// Summary-Nummer entfernt (F2 P10): sie ist ein personenbezogenes Kontaktdatum und
+// faellt damit unter Art. 17, anders als settings/profiles/numbers/calendar/usage
+// (Service-Config/Identitaet/Budget-Gate), die UNANGETASTET bleiben. Reine Mutation,
+// kein IO. Liefert Loesch-Zaehler fuers Audit (KEINE Inhalte; privateNumber als 0/1,
+// NIE der Wert -> kein PII-Leak ins Log). NIE cross-tenant.
 export function eraseTenantData(s, tenantId) {
   const { calls: targetCalls, callIds } = tenantCallScope(s, tenantId);
   const removed = {
@@ -172,6 +179,7 @@ export function eraseTenantData(s, tenantId) {
     transcriptSegments: targetCalls.reduce((sum, c) => sum + c.transcript.length, 0),
     actionItems: 0,
     notifications: 0,
+    privateNumber: 0,
   };
   const itemsBefore = s.actionItems.length;
   const notifsBefore = s.notifications.length;
@@ -180,18 +188,33 @@ export function eraseTenantData(s, tenantId) {
   s.notifications = s.notifications.filter((n) => !callIds.has(n.callId));
   removed.actionItems = itemsBefore - s.actionItems.length;
   removed.notifications = notifsBefore - s.notifications.length;
+  // Private Summary-Nummer (PII-Kontaktdatum) am tenant-Record loeschen, falls gesetzt.
+  // Feld ENTFERNEN (nicht null setzen) -> exportTenantData/tenantPrivateNumber faellt
+  // sauber auf "keine Nummer" zurueck (Skip-Pfad in finishCall bleibt verlaesslich, kein
+  // Daten-Muell at rest). Zaehler 0/1, damit der Wrapper auch ohne Call-Treffer saved.
+  const tenant = findTenant(s, tenantId);
+  if (tenant && tenant.privateNumber != null) {
+    delete tenant.privateNumber;
+    removed.privateNumber = 1;
+  }
   return removed;
 }
 
 // Nicht-destruktive Auskunft/Export (Art. 15/20): reine Query, KEIN save. Liefert
 // ueber tenantCallScope GENAU den Umfang, den eraseTenantData treffen wuerde -
-// call-verknuepfte Daten EINES Tenants. KEIN Strippen hier (das macht die
-// API-Schicht via publicCall, um streamToken nicht zu leaken).
+// call-verknuepfte Daten EINES Tenants - PLUS die private Summary-Nummer (F2 P10):
+// das personenbezogene Kontaktdatum, das eraseTenantData loescht, gehoert spiegelbildlich
+// in die Auskunft (gleicher tenant-Record als Quelle, kein Export/Erase-Drift). null,
+// wenn keine gesetzt. KEIN Strippen der Calls hier (das macht die API-Schicht via
+// publicCall, um streamToken nicht zu leaken). Die UNMASKIERTE Nummer erreicht nur den
+// auth-gegateten, tenant-gescopten Art.-15-Export (/api/tenant-data/export); die
+// /api/self-service/state-Sicht liest sie NICHT hieraus, sondern maskiert separat (P6, H4).
 export function exportTenantData(s, tenantId) {
   const { calls, callIds } = tenantCallScope(s, tenantId);
   return {
     tenantId,
     exportedAt: new Date().toISOString(),
+    privateNumber: findTenant(s, tenantId)?.privateNumber ?? null,
     calls,
     actionItems: s.actionItems.filter((a) => callIds.has(a.callId)),
     notifications: s.notifications.filter((n) => callIds.has(n.callId)),
@@ -215,6 +238,21 @@ export function endCallRecord(s, callId, status = "completed") {
   if (call.status === "active") {
     call.status = status;
     call.endedAt = new Date().toISOString();
+    changed = true;
+  }
+  return { call, changed };
+}
+
+// Persistierter Dedup-Marker fuer die Summary-SMS (F2 P9, M2): setzt summarySmsSentAt
+// (ISO) am Call-Record NACH erfolgreichem Send. Ueberlebt - anders als das In-Memory-
+// Flag call._finished - einen Prozess-Restart zwischen Call-Ende und spaetem
+// /voice/status-Retry und macht den Versand so idempotent (genau eine SMS). Idempotent
+// (gesetzter Marker gewinnt, Muster wie markAnswered). Wrapper saved bei changed.
+export function markSummarySmsSent(s, callId) {
+  const call = getCall(s, callId);
+  let changed = false;
+  if (call && !call.summarySmsSentAt) {
+    call.summarySmsSentAt = new Date().toISOString();
     changed = true;
   }
   return { call, changed };
@@ -351,6 +389,36 @@ export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER, 
 export function seedOwnerNumberFromConfig(s, e164, tenantId, provider) {
   if (!Object.values(PROVIDER).includes(provider)) return;
   seedOwnerNumber(s, e164, tenantId, provider);
+}
+
+// Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
+// Owner-Nummer (F2 P11). Hintergrund: seit P7 geht die Inbound-Summary-SMS an
+// tenant.privateNumber (NICHT mehr config.ownerNumber) - ohne diesen Seed verloere der
+// Owner nach der finishCall-Umstellung STILL seine eigene Summary-SMS. Config-frei:
+// rawOwnerNumber wird durchgereicht (Muster seedOwnerIdentity/seedOwnerNumberFromConfig,
+// state-ops bleibt config-frei). Idempotent: hat der Owner schon eine privateNumber, No-Op
+// (gesetzte gewinnt - kein Override einer per Self-Service gesetzten Nummer). Validierung
+// ueber die EINE geteilte Quelle normalizePrivateNumber (G5), aber mit Laendercode-Gate AUS
+// ("*"): die config-Owner-Nummer ist Plattform-TRUSTED (dieselbe, die seedOwnerNumber als
+// aktive Absendernummer eintraegt) - die Toll-Fraud-Bremse (countryAllowed) gilt nur fuer
+// USER-Eingaben (self-service/onboarding), nicht fuers Boot-Seeding der Owner-Config.
+// Ungueltiges E.164-Format ODER leere Config -> KEIN Seed (boot-sicher, KEIN Throw; der
+// Aufrufer warnt). Fehlender Owner-Tenant -> No-Op. Liefert true, wenn der Owner DANACH
+// eine privateNumber hat (frisch geseedet ODER schon vorhanden), sonst false -> der
+// Aufrufer kann fail-soft eine PII-freie Boot-Warnung emittieren.
+export function seedOwnerPrivateNumber(s, rawOwnerNumber, tenantId) {
+  const owner = findTenant(s, tenantId);
+  if (!owner) return false;
+  if (owner.privateNumber) return true; // idempotent: gesetzte Nummer gewinnt
+  let e164;
+  try {
+    e164 = normalizePrivateNumber(rawOwnerNumber, ["*"]); // "*" -> kein Laendercode-Gate (TRUSTED)
+  } catch {
+    return false; // ungueltiges E.164-Format in der Owner-Config -> kein Seed
+  }
+  if (!e164) return false; // leere/fehlende Config -> kein Seed
+  owner.privateNumber = e164;
+  return true;
 }
 
 // ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----
@@ -785,6 +853,19 @@ export function recordUsageEvent(s, { tenantId, callId = null, kind, quantity, c
   };
   s.usageEvents.push(event);
   return event;
+}
+
+// Zaehlt die ERFOLGREICH gesendeten Summary-SMS EINES Tenants seit sinceIso (F2 P8,
+// Toll-Fraud-Tages-Cap H1). Quelle ist der append-only Usage-Ledger: jede gesendete
+// Summary-SMS hinterlaesst genau ein USAGE_EVENT_KIND.SMS-Event (server.js, NUR nach
+// erfolgreichem sendSms) -> der Zaehler erfasst ausschliesslich real gesendete SMS,
+// nie uebersprungene/fehlgeschlagene. Pro call.tenantId (nicht global). sinceIso kommt
+// vom Aufrufer (rollierendes 24h-Fenster, Muster countOutboundCallsSince) -> state-ops
+// bleibt zeit-frei und testbar. Reine Query, kein IO.
+export function dailySmsCount(s, tenantId, sinceIso) {
+  return s.usageEvents.filter(
+    (e) => e.kind === USAGE_EVENT_KIND.SMS && e.tenantId === tenantId && e.occurredAt >= sinceIso
+  ).length;
 }
 
 // Noch nicht gemeldete Ledger-Eintraege (Flush-Quelle, billing/meter.js). Reine Query.
