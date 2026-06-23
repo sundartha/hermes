@@ -1,37 +1,41 @@
 ---
 // Marketing: "So funktioniert's" (SSG). Statisches HTML, kein Client-Fetch.
+// Drei Schritte vom MCP-Anschluss bis zum laufenden Agenten (Auftrag W1).
 import Marketing from "../layouts/Marketing.astro";
 
 const steps = [
   {
-    title: "Einrichten",
-    text: "Melde dich an und lege fest, was dein Agent darf — Termine einsehen, buchen oder Rueckfragen stellen.",
+    title: "KI-Assistent per MCP verbinden",
+    text: "Haenge Hermes als MCP-Server an deinen Agenten — Claude, einen eigenen Assistenten oder Workflow. Kein eigener Telefonie-Stack noetig.",
+  },
+  {
+    title: "Rufnummer und Tarif waehlen",
+    text: "Such dir eine Rufnummer und den passenden Tarif aus. Du legst fest, was dein Agent darf — Termine einsehen, buchen oder Rueckfragen stellen.",
   },
   {
     title: "Hermes telefoniert",
-    text: "Eingehende Anrufe nimmt Hermes an; ausgehende fuehrt er in deinem Auftrag und nennt zu Beginn klar, dass ein Assistent spricht.",
-  },
-  {
-    title: "Du behaeltst den Ueberblick",
-    text: "Jedes Gespraech landet als Zusammenfassung in deinem Bereich — mit Action Items und Terminen.",
+    text: "Eingehende Anrufe nimmt Hermes an, ausgehende fuehrt er in deinem Auftrag — und nennt zu Beginn klar, dass ein Assistent spricht.",
   },
 ];
 ---
 
 <Marketing
-  title="So funktioniert Hermes"
-  description="In drei Schritten zum eigenen Telefon-Assistenten: einrichten, telefonieren lassen, den Ueberblick behalten."
+  title="So funktioniert Hermes — Sundartha"
+  description="In drei Schritten zum eigenen Telefon-Assistenten: per MCP verbinden, Rufnummer und Tarif waehlen, Hermes telefonieren lassen."
 >
+  <section class="hero">
+    <div class="container">
+      <span class="hero__eyebrow">In drei Schritten</span>
+      <h1 class="hero__title">So funktioniert <span class="highlight">Hermes</span></h1>
+      <p class="hero__lead">
+        Vom MCP-Anschluss bis zum fertigen Gespraechsprotokoll — ohne eigene
+        Technik, ohne Wartezeit.
+      </p>
+    </div>
+  </section>
+
   <section class="section">
     <div class="container">
-      <div class="section__head">
-        <span class="eyebrow">In drei Schritten</span>
-        <h1 class="section__title">So funktioniert Hermes</h1>
-        <p class="section__lead">
-          Vom ersten Login bis zum fertigen Gespraechsprotokoll — ohne eigene
-          Technik, ohne Wartezeit.
-        </p>
-      </div>
       <div class="grid grid--three">
         {steps.map((step, index) => (
           <article class="card">
@@ -51,7 +55,7 @@ const steps = [
       </div>
       <div class="hero__actions">
         <a class="button button--primary" href="/auth/login">Jetzt starten</a>
-        <a class="button button--ghost" href="/preise">Preise ansehen</a>
+        <a class="button button--action" href="/preise">Preise ansehen</a>
       </div>
     </div>
   </section>

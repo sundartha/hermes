@@ -12,8 +12,10 @@ import "../styles/marketing.css";
 
 const { title, description } = Astro.props;
 
-// Navigations-Ziele zentral fuer die Kopfnavigation.
+// Navigations-Ziele zentral fuer die Kopfnavigation. "Anmelden" ist ein
+// Gateway-Pfad (OIDC-Redirect), die uebrigen sind SSG-Seiten.
 const navLinks = [
+  { href: "/", label: "Start" },
   { href: "/so-funktionierts", label: "So funktioniert's" },
   { href: "/preise", label: "Preise" },
 ];
@@ -32,7 +34,7 @@ const navLinks = [
     <div class="site">
       <header class="site-header">
         <div class="container site-header__inner">
-          <a class="brand" href="/" aria-label="Hermes — Startseite">
+          <a class="brand" href="/" aria-label="Sundartha — Startseite">
             <span class="brand__mark" aria-hidden="true">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                 <path
@@ -41,13 +43,14 @@ const navLinks = [
                 />
               </svg>
             </span>
-            <span>Her<span class="brand__accent">mes</span></span>
+            <span class="brand__name">Sundartha</span>
+            <span class="brand__product">· Hermes</span>
           </a>
           <nav class="site-nav" aria-label="Hauptnavigation">
             {navLinks.map((link) => (
               <a class="site-nav__link" href={link.href}>{link.label}</a>
             ))}
-            <a class="button button--primary" href="/auth/login">Anmelden</a>
+            <a class="button button--action" href="/auth/login">Anmelden</a>
           </nav>
         </div>
       </header>
@@ -58,10 +61,11 @@ const navLinks = [
 
       <footer class="site-footer">
         <div class="container site-footer__inner">
-          <span>Hermes — dein Telefon-Assistent von Sundartha</span>
+          <span>© Sundartha — Hermes, dein Telefon-Assistent</span>
           <nav class="site-footer__nav" aria-label="Fussnavigation">
             <a class="site-footer__link" href="/so-funktionierts">So funktioniert's</a>
             <a class="site-footer__link" href="/preise">Preise</a>
+            <a class="site-footer__link" href="mailto:kontakt@sundartha.com">Kontakt</a>
             <a class="site-footer__link" href="/auth/login">Anmelden</a>
           </nav>
         </div>

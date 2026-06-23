@@ -1,7 +1,11 @@
 /*
- * Gemeinsame Marketing-Stile. Verwendet AUSSCHLIESSLICH semantische Tokens
- * (var(--...)) — keine Hex-Literale, keine Magic-Pixel. Konkrete Werte leben
- * nur in styles/tokens/primitives.css.
+ * Gemeinsame Marketing-Stile (Sundartha). Verwendet AUSSCHLIESSLICH semantische
+ * Tokens (var(--...)) — keine Hex-Literale, keine Magic-Pixel. Konkrete Werte
+ * leben nur in styles/tokens/primitives.css.
+ *
+ * Ausnahme (dokumentiert): Media-Query-Breakpoints und der vw-Anteil der
+ * fluiden Typografie (clamp) MUESSEN rohe Werte sein — CSS erlaubt dort keine
+ * Custom-Property. Bewusst sparsam und nah an den Bestands-Breakpoints gehalten.
  */
 
 /* --- Grundgeruest --- */
@@ -20,6 +24,9 @@
 
 /* --- Kopfzeile --- */
 .site-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
   border-bottom: var(--border-width) solid var(--color-border);
   background: var(--color-card);
 }
@@ -52,6 +59,15 @@
   background: var(--color-action);
 }
 
+.brand__name {
+  font-weight: var(--weight-heading);
+}
+
+.brand__product {
+  color: var(--color-muted);
+  font-weight: var(--weight-label);
+}
+
 .brand__accent {
   color: var(--color-action);
 }
@@ -59,6 +75,7 @@
 .site-nav {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-gap);
   margin-inline-start: auto;
 }
@@ -80,25 +97,42 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-tight);
-  border: none;
+  border: var(--border-width) solid transparent;
   border-radius: var(--radius-control);
   padding-block: var(--space-cozy);
   padding-inline: var(--space-loose);
   font-family: var(--font-body);
   font-weight: var(--weight-emphasis);
-  font-size: var(--text-body);
+  font-size: var(--text-lead);
   text-decoration: none;
   cursor: pointer;
   transition: background var(--motion-duration) var(--motion-ease),
-    color var(--motion-duration) var(--motion-ease);
+    color var(--motion-duration) var(--motion-ease),
+    border-color var(--motion-duration) var(--motion-ease),
+    transform var(--motion-duration) var(--motion-ease);
 }
 
+.button:hover {
+  transform: translateY(-1px);
+}
+
+/* Primaerer CTA = warmes Gold (Strategie 2.5: Amber/Gold fuer CTAs). */
 .button--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.button--primary:hover {
+  background: var(--color-accent-hover);
+}
+
+/* Indigo-Variante (Marken-Aktion) fuer sekundaere Stellen auf hellem Grund. */
+.button--action {
   background: var(--color-action);
   color: var(--color-on-action);
 }
 
-.button--primary:hover {
+.button--action:hover {
   background: var(--color-action-hover);
 }
 
@@ -140,8 +174,10 @@
 .section__title {
   font-family: var(--font-heading);
   font-weight: var(--weight-heading);
-  font-size: var(--text-title);
+  /* Fluide Headline: rohe vw-Mitte ist die dokumentierte Ausnahme. */
+  font-size: clamp(var(--text-title), 4vw, var(--text-headline));
   letter-spacing: var(--tracking-heading);
+  line-height: var(--leading-title);
   color: var(--color-text);
 }
 
@@ -151,31 +187,64 @@
   color: var(--color-muted);
 }
 
-/* --- Hero --- */
+/* --- Hero (cineastischer dunkler Indigo-Grund) --- */
 .hero {
+  position: relative;
+  overflow: hidden;
   padding-block: var(--space-section);
   text-align: center;
+  background: linear-gradient(160deg, var(--color-hero-from), var(--color-hero-to));
+  color: var(--color-text-inverse);
+}
+
+/* Indigo-Schimmer von oben — reiner CSS-Glow, kein Asset. Die Prozente sind
+   dekorative Verlaufsgeometrie (Position/Ausdehnung des Glows), kein Magic-Wert. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 55% at 50% 0%, var(--color-hero-glow), transparent 70%);
+  pointer-events: none;
+}
+
+.hero .container {
+  position: relative;
+  z-index: 1;
+}
+
+.hero__eyebrow {
+  display: inline-block;
+  margin-bottom: var(--space-stack);
+  padding: var(--space-hairline) var(--space-cozy);
+  border: var(--border-width) solid var(--color-border-inverse);
+  border-radius: var(--radius-badge);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-inverse);
 }
 
 .hero__title {
   font-family: var(--font-heading);
   font-weight: var(--weight-heading);
-  font-size: var(--text-display);
-  line-height: 1.1;
+  /* Fluide Hero-Headline: rohe vw-Mitte ist die dokumentierte Ausnahme. */
+  font-size: clamp(var(--text-display), 6vw, var(--text-hero));
+  line-height: var(--leading-hero);
   letter-spacing: var(--tracking-heading);
-  color: var(--color-text);
+  color: var(--color-text-inverse);
 }
 
-.hero__title .brand__accent {
-  color: var(--color-action);
+.hero__title .highlight {
+  color: var(--color-accent);
 }
 
 .hero__lead {
-  max-width: var(--layout-measure);
+  max-width: var(--layout-prose);
   margin-inline: auto;
   margin-top: var(--space-loose);
   font-size: var(--text-subtitle);
-  color: var(--color-muted);
+  color: var(--color-muted-inverse);
 }
 
 .hero__actions {
@@ -184,6 +253,39 @@
   justify-content: center;
   gap: var(--space-cozy);
   margin-top: var(--space-roomy);
+}
+
+/* Ghost-CTA auf dunklem Hero: heller Rahmen statt Flaeche. */
+.hero .button--ghost {
+  background: transparent;
+  border-color: var(--color-border-inverse);
+  color: var(--color-text-inverse);
+}
+
+.hero .button--ghost:hover {
+  background: var(--color-inverse-tint-strong);
+  color: var(--color-text-inverse);
+}
+
+/* Platzhalter fuer die Higgsfield-Hero-Animation (W4 ersetzt den Inhalt durch
+   den Canvas-Scrubber). Bis dahin: dezentes Marken-Panel, kein Layout-Bruch. */
+.hero__stage {
+  position: relative;
+  margin-top: var(--space-roomy);
+  border: var(--border-width) solid var(--color-border-inverse);
+  border-radius: var(--radius-card);
+  background: var(--color-inverse-tint);
+  overflow: hidden;
+}
+
+.hero-anim {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-hero-stage);
+  padding: var(--space-section) var(--space-card);
+  color: var(--color-muted-inverse);
+  font-size: var(--text-body);
 }
 
 /* --- Karten --- */
@@ -231,13 +333,68 @@
   justify-content: center;
   width: var(--size-icon);
   height: var(--size-icon);
+  margin-bottom: var(--space-stack);
   border-radius: var(--radius-round);
-  background: var(--color-status-critical-surface);
+  background: var(--color-action-surface);
   color: var(--color-action);
   font-weight: var(--weight-emphasis);
 }
 
-/* --- Status-Badge (aus tenant.html kanonisiert) --- */
+/* --- "Was ist MCP?" — CSS-Diagramm (KI <-> MCP <-> Telefon), kein Asset --- */
+.mcp__diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-cozy);
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  margin-top: var(--space-block);
+}
+
+.mcp__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-tight);
+  min-width: var(--layout-node);
+  padding: var(--space-card);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.mcp__node--accent {
+  border-color: var(--color-action);
+  background: var(--color-action-surface);
+}
+
+.mcp__node-title {
+  font-weight: var(--weight-emphasis);
+  color: var(--color-text);
+}
+
+.mcp__node-text {
+  font-size: var(--text-eyebrow);
+  color: var(--color-muted);
+}
+
+.mcp__link {
+  flex: 0 0 auto;
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-emphasis);
+  color: var(--color-accent-hover);
+}
+
+@media (max-width: 720px) {
+  .mcp__link {
+    transform: rotate(90deg);
+  }
+}
+
+/* --- Status-Badge --- */
 .badge {
   display: inline-block;
   border-radius: var(--radius-badge);
@@ -257,16 +414,21 @@
   color: var(--color-status-info);
 }
 
+.badge--accent {
+  background: var(--color-accent-surface);
+  color: var(--color-accent-hover);
+}
+
 /* --- Preis-Tabelle --- */
 .pricing {
   display: grid;
   gap: var(--space-gap);
-  grid-template-columns: repeat(3, 1fr);
-  max-width: var(--layout-measure);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: var(--layout-pricing);
   margin-inline: auto;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 720px) {
   .pricing {
     grid-template-columns: 1fr;
   }
@@ -285,6 +447,7 @@
 
 .plan--featured {
   border-color: var(--color-action);
+  box-shadow: var(--shadow-float);
 }
 
 .plan__name {
@@ -321,11 +484,12 @@
   margin-top: auto;
 }
 
-/* --- Fusszeile --- */
+/* --- Fusszeile (dunkel, zur Erdung) --- */
 .site-footer {
   margin-top: auto;
-  border-top: var(--border-width) solid var(--color-border);
-  background: var(--color-card);
+  border-top: var(--border-width) solid var(--color-border-inverse);
+  background: var(--color-surface-inverse);
+  color: var(--color-muted-inverse);
 }
 
 .site-footer__inner {
@@ -335,20 +499,20 @@
   gap: var(--space-inline);
   padding-block: var(--space-card);
   font-size: var(--text-body);
-  color: var(--color-muted);
 }
 
 .site-footer__nav {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-gap);
   margin-inline-start: auto;
 }
 
 .site-footer__link {
   text-decoration: none;
-  color: var(--color-muted);
+  color: var(--color-muted-inverse);
 }
 
 .site-footer__link:hover {
-  color: var(--color-text);
+  color: var(--color-text-inverse);
 }

@@ -1,41 +1,85 @@
 ---
 // Marketing-Landing (SSG). Reines statisches HTML — KEIN Client-Fetch gegen
-// /api oder /auth. CTAs sind nur Links (Login bzw. App; Ziele bedient spaeter
-// der Gateway). Ersetzt den W0-Platzhalter.
+// /api oder /auth. CTAs sind nur Links (Login bedient der Gateway via OIDC).
+// Der Hero-Animations-Platzhalter (#hero-animation-placeholder) wird in W4
+// durch den Higgsfield-Canvas-Scrubber ersetzt; bis dahin steht hier ein
+// dezentes Marken-Panel (kein Layout-Bruch, kein Asset noetig).
 import Marketing from "../layouts/Marketing.astro";
 
-const features = [
+// Use Cases: drei konkrete Einsatzfelder (Strategie/Auftrag W1).
+const useCases = [
   {
-    title: "Nimmt Anrufe an",
-    text: "Hermes geht ans Telefon, notiert Nachrichten und Termine und fasst jedes Gespraech fuer dich zusammen.",
+    title: "Kundenservice automatisieren",
+    text: "Hermes nimmt Anrufe an, beantwortet Standardfragen und reicht nur das weiter, was wirklich dich braucht.",
   },
   {
-    title: "Ruft fuer dich an",
-    text: "Vom Friseurtermin bis zur Rueckfrage: Hermes erledigt Anrufe in deinem Auftrag — mit klarer Offenlegung am Gespraechsanfang.",
+    title: "Terminerinnerungen",
+    text: "Dein Agent ruft Kunden an, erinnert an Termine und traegt Zu- oder Absagen direkt in deinen Kalender.",
   },
   {
-    title: "Alles an einem Ort",
-    text: "Anruf-Verlauf, Zusammenfassungen und anstehende Termine siehst du jederzeit in deinem Bereich.",
+    title: "Automatische Rueckrufe",
+    text: "Verpasste Anrufe ruft Hermes in deinem Auftrag zurueck — mit klarer Offenlegung am Gespraechsanfang.",
   },
+];
+
+// "Was ist MCP?" — der Verbindungsfluss als Drei-Knoten-Diagramm (reines CSS,
+// kein Asset, CSP-konform).
+const mcpFlow = [
+  { title: "Dein KI-Agent", text: "Claude, ein eigener Assistent oder Workflow", accent: false },
+  { title: "MCP-Server", text: "Die Bruecke (Model Context Protocol)", accent: true },
+  { title: "Telefonnetz", text: "Echter Anschluss — annehmen und anrufen", accent: false },
 ];
 ---
 
 <Marketing
-  title="Hermes — dein persoenlicher Telefon-Assistent"
-  description="Hermes nimmt Anrufe entgegen, fuehrt Telefonate in deinem Auftrag und haelt Termine und Zusammenfassungen fuer dich bereit."
+  title="Sundartha Hermes — das Telefon fuer deine KI-Agenten"
+  description="Verbinde deinen KI-Assistenten in 5 Minuten mit einem echten Telefonanschluss: Anrufe annehmen, Termine buchen, Kunden zurueckrufen — ueber MCP."
 >
   <section class="hero">
     <div class="container">
-      <span class="eyebrow">Telefon-KI von Sundartha</span>
-      <h1 class="hero__title">Dein persoenlicher <span class="brand__accent">Telefon-Assistent</span></h1>
+      <span class="hero__eyebrow">MCP-Telefonie von Sundartha</span>
+      <h1 class="hero__title">Das Telefon fuer deine <span class="highlight">KI-Agenten</span></h1>
       <p class="hero__lead">
-        Hermes nimmt Anrufe entgegen, ruft in deinem Auftrag an und haelt
-        Nachrichten, Termine und Zusammenfassungen fuer dich bereit — rund um
-        die Uhr.
+        Verbinde deinen KI-Assistenten in 5 Minuten mit einem echten
+        Telefonanschluss — Anrufe entgegennehmen, Termine buchen, Kunden
+        kontakten.
       </p>
       <div class="hero__actions">
         <a class="button button--primary" href="/auth/login">Jetzt starten</a>
-        <a class="button button--ghost" href="/so-funktionierts">So funktioniert's</a>
+        <a class="button button--ghost" href="/preise">Preise ansehen</a>
+      </div>
+
+      <div class="hero__stage">
+        <!-- W4: Higgsfield-Scroll-Animation ersetzt diesen Platzhalter. -->
+        <div id="hero-animation-placeholder" class="hero-anim">
+          Verbindungs-Animation folgt — KI trifft Telefon.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">Was ist MCP?</span>
+        <h2 class="section__title">Die Bruecke zwischen KI und Telefon</h2>
+        <p class="section__lead">
+          Das Model Context Protocol (MCP) ist die offene Schnittstelle, ueber
+          die dein KI-Agent Werkzeuge nutzt. Hermes ist so ein Werkzeug: ein
+          MCP-Server, der deinem Agenten einen echten Telefonanschluss gibt —
+          ohne eigene Telefonie-Technik.
+        </p>
+      </div>
+      <div class="mcp__diagram">
+        {mcpFlow.map((node, index) => (
+          <>
+            {index > 0 && <span class="mcp__link" aria-hidden="true">→</span>}
+            <div class={node.accent ? "mcp__node mcp__node--accent" : "mcp__node"}>
+              <span class="mcp__node-title">{node.title}</span>
+              <span class="mcp__node-text">{node.text}</span>
+            </div>
+          </>
+        ))}
       </div>
     </div>
   </section>
@@ -43,14 +87,14 @@ const features = [
   <section class="section section--surface">
     <div class="container">
       <div class="section__head">
-        <span class="eyebrow">Was Hermes kann</span>
-        <h2 class="section__title">Ein Assistent, der wirklich telefoniert</h2>
+        <span class="eyebrow">Anwendungsfaelle</span>
+        <h2 class="section__title">Wofuer Hermes telefoniert</h2>
       </div>
       <div class="grid grid--three">
-        {features.map((feature) => (
+        {useCases.map((useCase) => (
           <article class="card">
-            <h3 class="card__title">{feature.title}</h3>
-            <p class="card__text">{feature.text}</p>
+            <h3 class="card__title">{useCase.title}</h3>
+            <p class="card__text">{useCase.text}</p>
           </article>
         ))}
       </div>

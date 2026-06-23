@@ -1,42 +1,32 @@
 ---
-// Marketing: Preise (SSG). Die Preis-Tabelle ist statisches Markup — KEINE
-// Stripe-Anbindung, KEIN Live-Plan-Fetch, KEIN Client-Fetch gegen /api oder
-// /auth. CTAs verlinken nur auf den Login (echte Buchung kommt spaeter).
+// Marketing: Preise (SSG). W1-Grundgeruest: zwei Tarife als statisches Markup,
+// CTAs verlinken auf den Login. KEINE Stripe-Anbindung, KEIN Client-Fetch — den
+// Karte-hinterlegen-Funnel (POST /api/self-service/billing/setup-checkout) und
+// den ehrlichen Hinweis zur fehlenden wiederkehrenden Abbuchung ergaenzt W2.
 import Marketing from "../layouts/Marketing.astro";
 
 const plans = [
   {
-    name: "Privat",
-    price: "0 €",
+    name: "Starter",
+    price: "$4.99",
     cadence: "pro Monat",
     featured: false,
     features: [
-      "Eingehende Anrufe annehmen",
-      "Nachrichten und Zusammenfassungen",
-      "Anruf-Verlauf im eigenen Bereich",
-    ],
-  },
-  {
-    name: "Plus",
-    price: "19 €",
-    cadence: "pro Monat",
-    featured: true,
-    features: [
-      "Alles aus Privat",
-      "Ausgehende Anrufe in deinem Auftrag",
-      "Eigene Rufnummer",
-      "Kalender-Anbindung",
+      "30 Minuten Telefonie pro Monat",
+      "1 Telefonnummer",
+      "Anrufe annehmen und zusammenfassen",
+      "Anruf-Verlauf in deinem Bereich",
     ],
   },
   {
     name: "Business",
-    price: "Auf Anfrage",
-    cadence: "individuell",
-    featured: false,
+    price: "$9.99",
+    cadence: "pro Monat",
+    featured: true,
     features: [
-      "Alles aus Plus",
-      "Mehrere Rufnummern",
-      "Hoehere Anruf-Kontingente",
+      "120 Minuten Telefonie pro Monat",
+      "3 Telefonnummern",
+      "Ausgehende Anrufe in deinem Auftrag",
       "Priorisierter Support",
     ],
   },
@@ -44,24 +34,26 @@ const plans = [
 ---
 
 <Marketing
-  title="Preise — Hermes"
-  description="Hermes-Tarife im Ueberblick: vom kostenlosen Privatzugang bis zum Business-Paket mit eigenen Rufnummern."
+  title="Preise — Sundartha Hermes"
+  description="Zwei klare Tarife fuer Hermes: Starter und Business. Telefonie-Minuten, Rufnummern und Support im Ueberblick."
 >
+  <section class="hero">
+    <div class="container">
+      <span class="hero__eyebrow">Tarife</span>
+      <h1 class="hero__title">Preise, die <span class="highlight">mitwachsen</span></h1>
+      <p class="hero__lead">
+        Starte klein und schalte mehr frei, wenn dein Assistent mehr uebernehmen
+        soll. Keine versteckten Kosten.
+      </p>
+    </div>
+  </section>
+
   <section class="section">
     <div class="container">
-      <div class="section__head">
-        <span class="eyebrow">Tarife</span>
-        <h1 class="section__title">Preise, die mitwachsen</h1>
-        <p class="section__lead">
-          Starte kostenlos und schalte mehr frei, wenn dein Assistent mehr
-          uebernehmen soll. Keine versteckten Kosten.
-        </p>
-      </div>
-
       <div class="pricing">
         {plans.map((plan) => (
           <article class={plan.featured ? "plan plan--featured" : "plan"}>
-            {plan.featured && <span class="badge badge--info">Beliebt</span>}
+            {plan.featured && <span class="badge badge--accent">Beliebt</span>}
             <h2 class="plan__name">{plan.name}</h2>
             <p class="plan__price">{plan.price} <small>{plan.cadence}</small></p>
             <ul class="plan__features">
@@ -69,7 +61,7 @@ const plans = [
                 <li class="plan__feature">{feature}</li>
               ))}
             </ul>
-            <a class="button button--primary plan__cta" href="/auth/login">Auswaehlen</a>
+            <a class="button button--primary plan__cta" href="/auth/login">Jetzt starten</a>
           </article>
         ))}
       </div>
