@@ -48,7 +48,9 @@ const dashNav = [
 
   <section id="region-error" class="card" hidden>
     <h1>Etwas ist schiefgelaufen</h1>
-    <p>Die App konnte gerade nicht geladen werden. Bitte versuche es spaeter erneut.</p>
+    <p>Die App konnte gerade nicht geladen werden. Pruefe deine Verbindung und
+      versuche es erneut.</p>
+    <button id="error-retry" class="btn" type="button">Erneut versuchen</button>
   </section>
 
   <!-- Eingeloggte Shell: Begruessung + Statistik + Verlauf + Einstellungen + Karte. -->
@@ -109,6 +111,11 @@ const dashNav = [
   };
   const loadingRegion = document.getElementById("region-loading");
   const ownerEl = document.getElementById("shell-owner");
+
+  // Retry bei Netz-/Server-Fehler: neu laden -> die Auth-Insel fetcht den state
+  // erneut (kein Insel-uebergreifendes Coupling noetig).
+  const retryBtn = document.getElementById("error-retry");
+  if (retryBtn) retryBtn.addEventListener("click", () => window.location.reload());
 
   function showOnly(activeState) {
     loadingRegion.hidden = true;

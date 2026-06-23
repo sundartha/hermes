@@ -1,19 +1,20 @@
 ---
-// Marketing-Layout: gemeinsames Geruest fuer die oeffentlichen SSG-Seiten
-// (Landing, So funktioniert's, Preise). INDEXIERBAR — kein robots noindex,
-// SEO ist der Sinn dieser Seiten (Strategie W1).
+// Marketing-Layout: gemeinsames Geruest fuer die oeffentlichen SSG-Seiten.
+// INDEXIERBAR — SEO ist der Sinn dieser Seiten (Strategie W1/W5).
 //
-// Die Token-Schicht und die Marketing-Stile werden hier im Frontmatter
-// importiert. Mit build.inlineStylesheets: "never" (astro.config.mjs) liefert
-// Astro sie als externes, same-origin <link> aus — erlaubt unter der strikten
-// Produktions-CSP (default-src 'self', kein style-src 'unsafe-inline').
+// Token-Schicht + Marketing-Stile werden hier importiert. Mit
+// build.inlineStylesheets:"never" liefert Astro sie als externes, same-origin
+// <link> aus — erlaubt unter der strikten Produktions-CSP (default-src 'self').
 import "../styles/tokens/index.css";
 import "../styles/marketing.css";
 
 const { title, description } = Astro.props;
 
-// Navigations-Ziele zentral fuer die Kopfnavigation. "Anmelden" ist ein
-// Gateway-Pfad (OIDC-Redirect), die uebrigen sind SSG-Seiten.
+// Absolute kanonische URL + OG-Ziele aus der Brand-Site (astro.config: site).
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+
+// Navigations-Ziele zentral. "Anmelden" ist ein Gateway-Pfad (OIDC-Redirect),
+// die uebrigen sind SSG-Seiten.
 const navLinks = [
   { href: "/", label: "Start" },
   { href: "/so-funktionierts", label: "So funktioniert's" },
@@ -29,7 +30,20 @@ const navLinks = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={Astro.url.pathname} />
+    <link rel="canonical" href={canonicalURL} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!-- Open Graph / Twitter: textbasiert (kein og:image-Asset vorhanden;
+         twitter:card=summary kommt ohne Bild aus). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sundartha" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
   </head>
   <body>
     <div class="site">
@@ -47,7 +61,19 @@ const navLinks = [
             <span class="brand__name">Sundartha</span>
             <span class="brand__product">· Hermes</span>
           </a>
-          <nav class="site-nav" aria-label="Hauptnavigation">
+          <button
+            id="nav-toggle"
+            class="nav-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="site-nav"
+            aria-label="Menue umschalten"
+          >
+            <span class="nav-toggle__bar" aria-hidden="true"></span>
+            <span class="nav-toggle__bar" aria-hidden="true"></span>
+            <span class="nav-toggle__bar" aria-hidden="true"></span>
+          </button>
+          <nav id="site-nav" class="site-nav" aria-label="Hauptnavigation">
             {navLinks.map((link) => (
               <a class="site-nav__link" href={link.href}>{link.label}</a>
             ))}
@@ -67,11 +93,28 @@ const navLinks = [
             <a class="site-footer__link" href="/so-funktionierts">So funktioniert's</a>
             <a class="site-footer__link" href="/preise">Preise</a>
             <a class="site-footer__link" href="/registrieren">Registrieren</a>
+            <a class="site-footer__link" href="/datenschutz">Datenschutz</a>
+            <a class="site-footer__link" href="/impressum">Impressum</a>
+            <a class="site-footer__link" href="/agb">AGB</a>
             <a class="site-footer__link" href="mailto:kontakt@sundartha.com">Kontakt</a>
-            <a class="site-footer__link" href="/auth/login">Anmelden</a>
           </nav>
         </div>
       </footer>
     </div>
+
+    <script>
+      // Mobile-Navigation umschalten (a11y: aria-expanded folgt dem Zustand).
+      // Hoisted <script>: Astro bundelt es als externes same-origin Modul;
+      // assetsInlineLimit:0 (astro.config) unterbindet das sonst uebliche
+      // Inline-Einbetten kleiner Skripte -> CSP-konform (kein unsafe-inline).
+      const toggle = document.getElementById("nav-toggle");
+      const nav = document.getElementById("site-nav");
+      if (toggle && nav) {
+        toggle.addEventListener("click", () => {
+          const open = nav.classList.toggle("is-open");
+          toggle.setAttribute("aria-expanded", String(open));
+        });
+      }
+    </script>
   </body>
 </html>

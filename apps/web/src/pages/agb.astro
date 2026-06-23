@@ -1,0 +1,43 @@
+---
+// Marketing: AGB (SSG). Geruest mit Platzhalter-Inhalt — die verbindlichen
+// Vertragsbedingungen liefert der Owner (Strategie N1, geflaggt).
+import Marketing from "../layouts/Marketing.astro";
+
+const sections = [
+  {
+    heading: "Geltungsbereich",
+    text: "Diese Bedingungen gelten fuer die Nutzung des Telefon-Assistenten Hermes von Sundartha. Der finale Text praezisiert Vertragsgegenstand und Parteien.",
+  },
+  {
+    heading: "Leistungen",
+    text: "Hermes nimmt Anrufe an und fuehrt Anrufe im Auftrag des Nutzers — mit Offenlegung am Gespraechsanfang. Umfang und Grenzen regelt die finale Fassung.",
+  },
+  {
+    heading: "Verguetung und Laufzeit",
+    text: "Tarife und Abrechnung folgen den auf der Preise-Seite genannten Konditionen. Verbindliche Details ergaenzt der finale AGB-Text.",
+  },
+];
+---
+
+<Marketing
+  title="AGB — Sundartha Hermes"
+  description="Allgemeine Geschaeftsbedingungen fuer die Nutzung von Sundartha Hermes."
+>
+  <section class="section">
+    <div class="container">
+      <div class="legal">
+        <span class="eyebrow">Rechtliches</span>
+        <h1 class="section__title">Allgemeine Geschaeftsbedingungen</h1>
+        <p class="legal__note">
+          Platzhalter-Fassung. Die rechtsverbindlichen AGB liefert Sundartha.
+        </p>
+        {sections.map((section) => (
+          <>
+            <h2 class="legal__heading">{section.heading}</h2>
+            <p class="legal__text">{section.text}</p>
+          </>
+        ))}
+      </div>
+    </div>
+  </section>
+</Marketing>

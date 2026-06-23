@@ -11,6 +11,10 @@ import { defineConfig } from "astro/config";
 // <link>-Stylesheets (unter 'self' erlaubt), unabhaengig von der Dateigroesse.
 // So bleibt die strikte CSP unangetastet (Sicherheits-Leitplanke 7).
 export default defineConfig({
+  // Kanonische Marken-URL (Strategie: sundartha.com ist die Brand-URL; der Infra-/
+  // Domain-Cutover ist Track B). Ermoeglicht absolute canonical-/og:url-Links und
+  // die statische sitemap.xml. Repo/Render-Service heissen weiter vodafone-agent.
+  site: "https://sundartha.com",
   output: "static",
   build: {
     inlineStylesheets: "never",

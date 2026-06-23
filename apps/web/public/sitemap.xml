@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Statische Sitemap (kein Plugin/keine neue Dependency). Nur indexierbare
+     Marketing-Seiten; /app ist privat (noindex) und fehlt bewusst. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://sundartha.com/</loc></url>
+  <url><loc>https://sundartha.com/so-funktionierts</loc></url>
+  <url><loc>https://sundartha.com/preise</loc></url>
+  <url><loc>https://sundartha.com/registrieren</loc></url>
+  <url><loc>https://sundartha.com/datenschutz</loc></url>
+  <url><loc>https://sundartha.com/impressum</loc></url>
+  <url><loc>https://sundartha.com/agb</loc></url>
+</urlset>

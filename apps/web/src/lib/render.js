@@ -30,9 +30,9 @@ const MAX_ACTION_ITEMS = 12;
 const MAX_CALENDAR_EVENTS = 6;
 
 // Beschriftungen/Glyphen (keine Magic-Strings an den Verwendungsstellen, G25).
-const EMPTY_CALLS = "Keine Anrufe.";
-const EMPTY_ACTION_ITEMS = "Keine Action Items.";
-const EMPTY_CALENDAR = "Keine Termine.";
+const EMPTY_CALLS = "Noch keine Anrufe — verbinde deinen ersten Agent!";
+const EMPTY_ACTION_ITEMS = "Noch keine Action Items.";
+const EMPTY_CALENDAR = "Noch keine Termine.";
 const APPOINTMENT_TAG = "Termin";
 // Richtungs-Pfeile als echte Unicode-Zeichen (kein roher HTML-Entity-String;
 // textContent-sicher). Out = nach oben rechts, In = nach unten links.

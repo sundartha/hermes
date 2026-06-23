@@ -91,6 +91,56 @@
   color: var(--color-text);
 }
 
+/* Hamburger-Schalter: auf Desktop versteckt, ab Tablet sichtbar. */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  width: var(--size-icon);
+  height: var(--size-icon);
+  margin-inline-start: auto;
+  padding: 0;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-card);
+  cursor: pointer;
+}
+
+.nav-toggle__bar {
+  width: var(--space-5);
+  /* Icon-Strichstaerke (zeichnungs-intrinsisch, wie eine SVG-stroke-width). */
+  height: 2px;
+  margin-inline: auto;
+  border-radius: var(--radius-badge);
+  background: var(--color-text);
+}
+
+@media (max-width: 720px) {
+  .site-header__inner {
+    flex-wrap: wrap;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  /* Mobil: Navigation einklappen; per Hamburger als Spalte ausklappen. */
+  .site-nav {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    margin-inline-start: 0;
+    gap: var(--space-tight);
+    padding-block: var(--space-stack);
+  }
+
+  .site-nav.is-open {
+    display: flex;
+  }
+}
+
 /* --- Buttons (CTAs sind nur Links) --- */
 .button {
   display: inline-flex;
@@ -604,6 +654,46 @@
   margin-top: var(--space-tight);
   font-size: var(--text-body);
   color: var(--color-muted);
+}
+
+/* --- Rechtliches / Prosa-Seiten (Datenschutz, Impressum, AGB) --- */
+.legal {
+  max-width: var(--layout-prose);
+  margin-inline: auto;
+}
+
+.legal__note {
+  margin-top: var(--space-stack);
+  padding: var(--space-cozy) var(--space-loose);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-surface);
+  color: var(--color-text);
+  font-size: var(--text-body);
+}
+
+.legal__heading {
+  margin-top: var(--space-block);
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-heading);
+  color: var(--color-text);
+}
+
+.legal__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-lead);
+  color: var(--color-muted);
+}
+
+/* --- 404-Seite --- */
+.error-page {
+  text-align: center;
+}
+
+.error-page__code {
+  font-size: var(--text-hero);
+  font-weight: var(--weight-heading);
+  color: var(--color-action);
+  letter-spacing: var(--tracking-heading);
 }
 
 /* --- Fusszeile (dunkel, zur Erdung) --- */
