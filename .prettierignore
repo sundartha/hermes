@@ -1,0 +1,8 @@
+node_modules
+package-lock.json
+.npm-cache
+coverage
+data
+public
+*.min.js
+*.log

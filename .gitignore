@@ -8,3 +8,12 @@ setup-render-key.sh
 
 # macOS
 .DS_Store
+
+# npm / logs / build / coverage
+.npm-cache/
+*.log
+coverage/
+dist/
+build/
+.env.local
+.env.*.local
