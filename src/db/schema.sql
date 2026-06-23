@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS settings (
   allow_summaries     BOOLEAN NOT NULL,
   allow_personal_data BOOLEAN NOT NULL,
   allow_bank_data     BOOLEAN NOT NULL,
+  -- F2 P7: Opt-Out fuer die Summary-SMS (Boolean, Muster allow_summaries). DEFAULT TRUE
+  -- = Bestandsverhalten; entkoppelt "keine SMS" vom Loeschen der privaten Nummer.
+  sms_summary_opt_in  BOOLEAN NOT NULL DEFAULT TRUE,
   language            TEXT
 );
 -- F1 Geo-Location: Gespraechssprache pro Tenant als OPTIONALES Override (Entscheidung #8).
@@ -65,6 +68,9 @@ CREATE TABLE IF NOT EXISTS settings (
 -- (Erst-Anlage) OHNE NOT NULL; DROP NOT NULL zieht Phase-1-DBs idempotent nach.
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS language TEXT;
 ALTER TABLE settings ALTER COLUMN language DROP NOT NULL;
+-- F2 P7: Opt-Out fuer die Summary-SMS. NOT NULL DEFAULT TRUE backfillt Bestands-Tenants
+-- mit Opt-In -> kein stiller SMS-Verlust beim Migrate (M1/M5). Muster wie allow_summaries.
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_summary_opt_in BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- call: alle heutigen Felder AUSSER transcript[] (-> transcript_segment) + tenant_id.
 -- id = app-generierte TEXT-PK (newId-Format bleibt). seq nur fuer stabile

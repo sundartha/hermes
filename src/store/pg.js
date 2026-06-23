@@ -433,6 +433,9 @@ function rowToSettings(r) {
     allowCalendar: r.allow_calendar,
     allowBooking: r.allow_booking,
     allowSummaries: r.allow_summaries,
+    // F2 P7: Opt-Out fuer die Summary-SMS. ?? true = Bestands-Zeilen vor dem Migrate
+    // (Spalte fehlte) fallen auf Opt-In zurueck -> kein stiller SMS-Verlust (M1).
+    smsSummaryOptIn: r.sms_summary_opt_in ?? true,
     allowPersonalData: r.allow_personal_data,
     allowBankData: r.allow_bank_data,
     // F1 Phase 4: optionales Override, Spalte NULLABLE. NULL -> null (nicht gesetzt);
@@ -592,15 +595,17 @@ async function flushSettings(client, tenantId, settings) {
   await client.query(
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
-        allow_summaries, allow_personal_data, allow_bank_data, language)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      ON CONFLICT (tenant_id) DO UPDATE SET
        agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
        allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
        allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
-       allow_bank_data=EXCLUDED.allow_bank_data, language=EXCLUDED.language`,
+       allow_bank_data=EXCLUDED.allow_bank_data, sms_summary_opt_in=EXCLUDED.sms_summary_opt_in,
+       language=EXCLUDED.language`,
     [tenantId, settings.agentName, settings.greeting, settings.allowCalendar, settings.allowBooking,
-      settings.allowSummaries, settings.allowPersonalData, settings.allowBankData, settings.language]
+      settings.allowSummaries, settings.allowPersonalData, settings.allowBankData,
+      settings.smsSummaryOptIn, settings.language]
   );
 }
 

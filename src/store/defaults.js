@@ -140,6 +140,12 @@ export function defaultSettings() {
     allowCalendar: true,
     allowBooking: true,
     allowSummaries: true,
+    // F2 P7: Opt-Out fuer die Summary-SMS an die private Nummer (Decision #2, Muster
+    // allowSummaries). Default true = Bestandsverhalten (wer eine private Nummer hinterlegt,
+    // bekommt die SMS). false = Summary ja, aber KEINE SMS - ohne die Nummer (Login-/
+    // Kontaktkanal) loeschen zu muessen. Kein PII (Boolean) -> ueber /api/state + MCP
+    // sichtbar unkritisch; schreibbar ueber die POST /api/settings-Whitelist (updateSettings).
+    smsSummaryOptIn: true,
     allowPersonalData: false,
     allowBankData: false,
     // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):

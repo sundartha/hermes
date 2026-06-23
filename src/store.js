@@ -1,5 +1,5 @@
 // Store-Fassade: waehlt das aktive Backend hinter STORE_BACKEND und re-exportiert
-// dessen 39 Funktionen. Die Datei MUSS als store.js bestehen bleiben - ESM
+// dessen Funktionen. Die Datei MUSS als store.js bestehen bleiben - ESM
 // resolved "./store.js" NICHT auf ein store/-Verzeichnis, die Caller
 // (server/bridge/claude) und der Retention-Test importieren store.js unveraendert.
 //
@@ -65,7 +65,7 @@ if (config.storeBackend === "pg") {
   backend = jsonBackend;
 }
 
-// 43 Namen explizit binden - ESM kann "export * from <Variable>" nicht.
+// Namen explizit binden - ESM kann "export * from <Variable>" nicht.
 export const {
   load,
   save,
@@ -108,6 +108,13 @@ export const {
   kycReached,
   setTenantStripe,
   tenantStripe,
+  // F2: private Summary-Nummer - Setter (Onboard/Self-Service P4/P5) + Reader (finishCall
+  // P7 via planSummarySms). Muster wie setTenantStripe/tenantStripe. OHNE diese Re-Exports
+  // sind sie auf der Fassade undefined -> self-service-routes UND planSummarySms werfen zur
+  // Laufzeit einen TypeError (die Backends json.js/pg.js exportieren beide; die Fassade ist
+  // die EINE Quelle fuer server.js).
+  setPrivateNumber,
+  tenantPrivateNumber,
   setTenantGeo,
   seedOwnerNumber,
 } = backend;

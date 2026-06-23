@@ -30,11 +30,11 @@ export async function seedDefaults(db, tenantId) {
   await db.query(
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
-        allow_summaries, allow_personal_data, allow_bank_data, language)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (tenant_id) DO NOTHING`,
     [tenantId, s.agentName, s.greeting, s.allowCalendar, s.allowBooking,
-      s.allowSummaries, s.allowPersonalData, s.allowBankData, s.language]
+      s.allowSummaries, s.allowPersonalData, s.allowBankData, s.smsSummaryOptIn, s.language]
   );
 
   await db.query(
