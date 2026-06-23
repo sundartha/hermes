@@ -391,6 +391,36 @@ export function seedOwnerNumberFromConfig(s, e164, tenantId, provider) {
   seedOwnerNumber(s, e164, tenantId, provider);
 }
 
+// Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
+// Owner-Nummer (F2 P11). Hintergrund: seit P7 geht die Inbound-Summary-SMS an
+// tenant.privateNumber (NICHT mehr config.ownerNumber) - ohne diesen Seed verloere der
+// Owner nach der finishCall-Umstellung STILL seine eigene Summary-SMS. Config-frei:
+// rawOwnerNumber wird durchgereicht (Muster seedOwnerIdentity/seedOwnerNumberFromConfig,
+// state-ops bleibt config-frei). Idempotent: hat der Owner schon eine privateNumber, No-Op
+// (gesetzte gewinnt - kein Override einer per Self-Service gesetzten Nummer). Validierung
+// ueber die EINE geteilte Quelle normalizePrivateNumber (G5), aber mit Laendercode-Gate AUS
+// ("*"): die config-Owner-Nummer ist Plattform-TRUSTED (dieselbe, die seedOwnerNumber als
+// aktive Absendernummer eintraegt) - die Toll-Fraud-Bremse (countryAllowed) gilt nur fuer
+// USER-Eingaben (self-service/onboarding), nicht fuers Boot-Seeding der Owner-Config.
+// Ungueltiges E.164-Format ODER leere Config -> KEIN Seed (boot-sicher, KEIN Throw; der
+// Aufrufer warnt). Fehlender Owner-Tenant -> No-Op. Liefert true, wenn der Owner DANACH
+// eine privateNumber hat (frisch geseedet ODER schon vorhanden), sonst false -> der
+// Aufrufer kann fail-soft eine PII-freie Boot-Warnung emittieren.
+export function seedOwnerPrivateNumber(s, rawOwnerNumber, tenantId) {
+  const owner = findTenant(s, tenantId);
+  if (!owner) return false;
+  if (owner.privateNumber) return true; // idempotent: gesetzte Nummer gewinnt
+  let e164;
+  try {
+    e164 = normalizePrivateNumber(rawOwnerNumber, ["*"]); // "*" -> kein Laendercode-Gate (TRUSTED)
+  } catch {
+    return false; // ungueltiges E.164-Format in der Owner-Config -> kein Seed
+  }
+  if (!e164) return false; // leere/fehlende Config -> kein Seed
+  owner.privateNumber = e164;
+  return true;
+}
+
 // ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----
 // Reine State-Machine + Datenschicht: Tenant registrieren, Nummer anfragen,
 // validierte Zustandsuebergaenge. KEIN Provider-Kauf (Live-API) und KEIN IO hier

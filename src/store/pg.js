@@ -57,13 +57,21 @@ export function makePgStore(runner) {
       // gewinnt). Persistenz via save() unten, damit first_name/owner_name
       // round-trippen (flushTenants).
       ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
+      // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog seedOwnerIdentity):
+      // seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne diesen Seed verloere der
+      // Owner nach der Umstellung still seine eigene Summary-SMS. false -> PII-freie Boot-Warnung
+      // (nur der Marker, NIE die Nummer). Persistenz via save() unten (Gate beruecksichtigt
+      // jetzt auch privateNumber, damit der Seed auch ohne ownerName round-trippt).
+      if (!ops.seedOwnerPrivateNumber(state, config.ownerNumber, OWNER_TENANT_ID))
+        console.warn("[pg] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).");
     });
-    // Nur flushen, wenn der Seed tatsaechlich einen ownerName gesetzt hat (leere
-    // Config -> Boot-Refusal greift ohnehin vorher, kein Leer-Flush). save() wird
-    // AWAITED: init() ist async und der Flush teilt sich die Verbindung mit den
-    // folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush
-    // wuerde mit dem ersten Folge-Query um die Transaktion konkurrieren.
-    if (state.tenants.some((t) => t.id === OWNER_TENANT_ID && t.ownerName)) await save();
+    // Nur flushen, wenn der Seed tatsaechlich etwas am Owner-Record gesetzt hat (ownerName
+    // ODER privateNumber, F2 P11) - leere Config -> Boot-Refusal greift ohnehin vorher, kein
+    // Leer-Flush. save() wird AWAITED: init() ist async und der Flush teilt sich die Verbindung
+    // mit den folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush wuerde
+    // mit dem ersten Folge-Query um die Transaktion konkurrieren.
+    const owner = state.tenants.find((t) => t.id === OWNER_TENANT_ID);
+    if (owner && (owner.ownerName || owner.privateNumber)) await save();
     return state;
   }
 
