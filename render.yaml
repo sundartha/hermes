@@ -50,10 +50,12 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
+      # Absendernummer des Owners = echte Provider-DID (From fuer Outbound + Inbound-
+      # Routing), wird beim Boot in den Store geseedet. MUSS die Telnyx-/Twilio-DID sein,
+      # NICHT die Privatnummer - sonst Provider-403 beim Originate. Im Dashboard setzen.
       - key: OWNER_NUMBER
         sync: false
-      # Provider der geseedeten Owner-Nummer (twilio|telnyx). Default twilio; auf telnyx
-      # setzen, wenn die Owner-Nummer eine Telnyx-Nummer ist.
+      # Provider der geseedeten Owner-Nummer (twilio|telnyx). Muss zur OWNER_NUMBER passen.
       - key: OWNER_NUMBER_PROVIDER
         value: "telnyx"
       - key: ALLOWED_NUMBERS
