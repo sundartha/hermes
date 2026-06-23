@@ -1,23 +1,59 @@
 ---
-// W0-Platzhalter: beweist, dass die Static Site eigenstaendig baut und
-// HTTP 200 liefert. KEINE Marketing-Inhalte, KEINE Design-Tokens (W1),
-// KEINE Auth/App-Shell (W2), KEIN fetch() gegen /api oder /auth.
-const buildTime = new Date().toISOString();
+// Marketing-Landing (SSG). Reines statisches HTML — KEIN Client-Fetch gegen
+// /api oder /auth. CTAs sind nur Links (Login bzw. App; Ziele bedient spaeter
+// der Gateway). Ersetzt den W0-Platzhalter.
+import Marketing from "../layouts/Marketing.astro";
+
+const features = [
+  {
+    title: "Nimmt Anrufe an",
+    text: "Hermes geht ans Telefon, notiert Nachrichten und Termine und fasst jedes Gespraech fuer dich zusammen.",
+  },
+  {
+    title: "Ruft fuer dich an",
+    text: "Vom Friseurtermin bis zur Rueckfrage: Hermes erledigt Anrufe in deinem Auftrag — mit klarer Offenlegung am Gespraechsanfang.",
+  },
+  {
+    title: "Alles an einem Ort",
+    text: "Anruf-Verlauf, Zusammenfassungen und anstehende Termine siehst du jederzeit in deinem Bereich.",
+  },
+];
 ---
 
-<!doctype html>
-<html lang="de">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <title>Hermes – Platzhalter</title>
-  </head>
-  <body>
-    <main>
-      <h1>Hermes</h1>
-      <p>Produkt-Frontend-Geruest (Phase W0). Inhalte folgen.</p>
-      <p>Build: {buildTime}</p>
-    </main>
-  </body>
-</html>
+<Marketing
+  title="Hermes — dein persoenlicher Telefon-Assistent"
+  description="Hermes nimmt Anrufe entgegen, fuehrt Telefonate in deinem Auftrag und haelt Termine und Zusammenfassungen fuer dich bereit."
+>
+  <section class="hero">
+    <div class="container">
+      <span class="eyebrow">Telefon-KI von Sundartha</span>
+      <h1 class="hero__title">Dein persoenlicher <span class="brand__accent">Telefon-Assistent</span></h1>
+      <p class="hero__lead">
+        Hermes nimmt Anrufe entgegen, ruft in deinem Auftrag an und haelt
+        Nachrichten, Termine und Zusammenfassungen fuer dich bereit — rund um
+        die Uhr.
+      </p>
+      <div class="hero__actions">
+        <a class="button button--primary" href="/auth/login">Jetzt starten</a>
+        <a class="button button--ghost" href="/so-funktionierts">So funktioniert's</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--surface">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">Was Hermes kann</span>
+        <h2 class="section__title">Ein Assistent, der wirklich telefoniert</h2>
+      </div>
+      <div class="grid grid--three">
+        {features.map((feature) => (
+          <article class="card">
+            <h3 class="card__title">{feature.title}</h3>
+            <p class="card__text">{feature.text}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+</Marketing>

@@ -1,0 +1,58 @@
+---
+// Marketing: "So funktioniert's" (SSG). Statisches HTML, kein Client-Fetch.
+import Marketing from "../layouts/Marketing.astro";
+
+const steps = [
+  {
+    title: "Einrichten",
+    text: "Melde dich an und lege fest, was dein Agent darf — Termine einsehen, buchen oder Rueckfragen stellen.",
+  },
+  {
+    title: "Hermes telefoniert",
+    text: "Eingehende Anrufe nimmt Hermes an; ausgehende fuehrt er in deinem Auftrag und nennt zu Beginn klar, dass ein Assistent spricht.",
+  },
+  {
+    title: "Du behaeltst den Ueberblick",
+    text: "Jedes Gespraech landet als Zusammenfassung in deinem Bereich — mit Action Items und Terminen.",
+  },
+];
+---
+
+<Marketing
+  title="So funktioniert Hermes"
+  description="In drei Schritten zum eigenen Telefon-Assistenten: einrichten, telefonieren lassen, den Ueberblick behalten."
+>
+  <section class="section">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">In drei Schritten</span>
+        <h1 class="section__title">So funktioniert Hermes</h1>
+        <p class="section__lead">
+          Vom ersten Login bis zum fertigen Gespraechsprotokoll — ohne eigene
+          Technik, ohne Wartezeit.
+        </p>
+      </div>
+      <div class="grid grid--three">
+        {steps.map((step, index) => (
+          <article class="card">
+            <span class="step__index" aria-hidden="true">{index + 1}</span>
+            <h2 class="card__title">{step.title}</h2>
+            <p class="card__text">{step.text}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--surface">
+    <div class="container">
+      <div class="section__head">
+        <h2 class="section__title">Bereit, es auszuprobieren?</h2>
+      </div>
+      <div class="hero__actions">
+        <a class="button button--primary" href="/auth/login">Jetzt starten</a>
+        <a class="button button--ghost" href="/preise">Preise ansehen</a>
+      </div>
+    </div>
+  </section>
+</Marketing>

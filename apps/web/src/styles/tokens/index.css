@@ -1,0 +1,47 @@
+/*
+ * Token-Einstieg: rohe Werte zuerst, dann semantische Aliase, dann ein
+ * minimaler Reset. Diese Datei ist der einzige Import-Punkt der Token-Schicht
+ * (Layouts importieren nur index.css). Reihenfolge ist verbindlich:
+ * semantic.css setzt voraus, dass die Primitives bereits definiert sind.
+ */
+@import "./primitives.css";
+@import "./semantic.css";
+
+/* --- Minimaler Reset --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--font-size-root);
+  line-height: var(--line-height-root);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: var(--color-action);
+  color: var(--color-on-action);
+}

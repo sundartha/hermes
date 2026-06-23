@@ -1,0 +1,71 @@
+---
+// Marketing-Layout: gemeinsames Geruest fuer die oeffentlichen SSG-Seiten
+// (Landing, So funktioniert's, Preise). INDEXIERBAR — kein robots noindex,
+// SEO ist der Sinn dieser Seiten (Strategie W1).
+//
+// Die Token-Schicht und die Marketing-Stile werden hier im Frontmatter
+// importiert. Mit build.inlineStylesheets: "never" (astro.config.mjs) liefert
+// Astro sie als externes, same-origin <link> aus — erlaubt unter der strikten
+// Produktions-CSP (default-src 'self', kein style-src 'unsafe-inline').
+import "../styles/tokens/index.css";
+import "../styles/marketing.css";
+
+const { title, description } = Astro.props;
+
+// Navigations-Ziele zentral fuer die Kopfnavigation.
+const navLinks = [
+  { href: "/so-funktionierts", label: "So funktioniert's" },
+  { href: "/preise", label: "Preise" },
+];
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={Astro.url.pathname} />
+  </head>
+  <body>
+    <div class="site">
+      <header class="site-header">
+        <div class="container site-header__inner">
+          <a class="brand" href="/" aria-label="Hermes — Startseite">
+            <span class="brand__mark" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm2.5 15.5c-2.6 0-5.3-2.3-5.4-5.6-.1-2.2 1.2-4.3 2.9-5.3 1.1-.7 2.4-1 3.4-.9-.7.3-1.5 1.2-1.5 2.4v.3c1.7.4 3.1 1.8 3.1 4 0 2.6-1.6 5.1-2.5 5.1Z"
+                  fill="var(--color-on-action)"
+                />
+              </svg>
+            </span>
+            <span>Her<span class="brand__accent">mes</span></span>
+          </a>
+          <nav class="site-nav" aria-label="Hauptnavigation">
+            {navLinks.map((link) => (
+              <a class="site-nav__link" href={link.href}>{link.label}</a>
+            ))}
+            <a class="button button--primary" href="/auth/login">Anmelden</a>
+          </nav>
+        </div>
+      </header>
+
+      <main>
+        <slot />
+      </main>
+
+      <footer class="site-footer">
+        <div class="container site-footer__inner">
+          <span>Hermes — dein Telefon-Assistent von Sundartha</span>
+          <nav class="site-footer__nav" aria-label="Fussnavigation">
+            <a class="site-footer__link" href="/so-funktionierts">So funktioniert's</a>
+            <a class="site-footer__link" href="/preise">Preise</a>
+            <a class="site-footer__link" href="/auth/login">Anmelden</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

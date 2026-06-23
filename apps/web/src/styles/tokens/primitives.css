@@ -1,0 +1,84 @@
+/*
+ * Primitive Tokens — rohe, designgebundene Werte OHNE Bedeutung.
+ * Dies ist die EINZIGE Stelle im Frontend mit konkreten Werten (Hex, px, ...).
+ * Semantische Rollen (semantic.css) zeigen ausschliesslich hierauf; Komponenten
+ * verwenden NIE Primitives direkt und nie Hex/Magic-Pixel.
+ *
+ * Werte kanonisiert aus public/tenant.html (Markenrot, Ink, Mute, Schatten,
+ * Inter, Easing) — Strategie 2.5.
+ */
+:root {
+  /* --- Farben (roh) --- */
+  --color-red-600: #e60000;        /* Markenrot */
+  --color-red-700: #ac1811;        /* Markenrot, tief (Hover) */
+  --color-red-50: #fdeaea;         /* Markenrot, sehr hell (Badge-Flaeche) */
+
+  --color-ink-900: #25282b;        /* Text */
+  --color-gray-500: #7e7e7e;       /* gedaempfter Text */
+  --color-gray-300: #c4c4c4;       /* inaktiv (Dot off) */
+  --color-gray-200: #e2e2e2;       /* Eingabe-Rahmen */
+  --color-gray-150: #ececec;       /* Karten-Rahmen */
+  --color-gray-100: #f3f3f3;       /* Trennlinie */
+  --color-gray-75: #f2f2f2;        /* neutrale Flaeche */
+  --color-gray-50: #fafafa;        /* Seiten-Hintergrund */
+  --color-white: #ffffff;          /* Karten-/Canvas-Flaeche */
+
+  --color-blue-600: #3860be;       /* Signal/Akzent */
+  --color-blue-50: #e9f0fc;        /* Signal, hell (Badge-Flaeche) */
+
+  --color-green-700: #177a43;      /* Erfolg (Text) */
+  --color-green-50: #e7f6ed;       /* Erfolg, hell (Badge-Flaeche) */
+  --color-green-500: #1faa59;      /* Live-Indikator */
+
+  /* --- Abstaende (roh) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* --- Radien (roh) --- */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 18px;
+  --radius-pill: 99px;
+  --radius-circle: 50%;
+
+  /* --- Rahmen (roh) --- */
+  --border-width-thin: 1px;
+
+  /* --- Schatten (roh) --- */
+  --shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.07);
+
+  /* --- Typografie (roh) --- */
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-size-root: 15px;
+  --line-height-root: 1.5;
+  --letter-spacing-tight: -0.015em;
+  --letter-spacing-label: 0.12em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+
+  --font-size-100: 13px;
+  --font-size-200: 14px;
+  --font-size-300: 16px;
+  --font-size-400: 20px;
+  --font-size-500: 26px;
+  --font-size-700: 40px;
+
+  /* --- Bewegung (roh) --- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 0.22s;
+
+  /* --- Layout (roh) --- */
+  --measure-page: 1180px;
+}

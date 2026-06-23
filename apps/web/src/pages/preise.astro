@@ -1,0 +1,78 @@
+---
+// Marketing: Preise (SSG). Die Preis-Tabelle ist statisches Markup — KEINE
+// Stripe-Anbindung, KEIN Live-Plan-Fetch, KEIN Client-Fetch gegen /api oder
+// /auth. CTAs verlinken nur auf den Login (echte Buchung kommt spaeter).
+import Marketing from "../layouts/Marketing.astro";
+
+const plans = [
+  {
+    name: "Privat",
+    price: "0 €",
+    cadence: "pro Monat",
+    featured: false,
+    features: [
+      "Eingehende Anrufe annehmen",
+      "Nachrichten und Zusammenfassungen",
+      "Anruf-Verlauf im eigenen Bereich",
+    ],
+  },
+  {
+    name: "Plus",
+    price: "19 €",
+    cadence: "pro Monat",
+    featured: true,
+    features: [
+      "Alles aus Privat",
+      "Ausgehende Anrufe in deinem Auftrag",
+      "Eigene Rufnummer",
+      "Kalender-Anbindung",
+    ],
+  },
+  {
+    name: "Business",
+    price: "Auf Anfrage",
+    cadence: "individuell",
+    featured: false,
+    features: [
+      "Alles aus Plus",
+      "Mehrere Rufnummern",
+      "Hoehere Anruf-Kontingente",
+      "Priorisierter Support",
+    ],
+  },
+];
+---
+
+<Marketing
+  title="Preise — Hermes"
+  description="Hermes-Tarife im Ueberblick: vom kostenlosen Privatzugang bis zum Business-Paket mit eigenen Rufnummern."
+>
+  <section class="section">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">Tarife</span>
+        <h1 class="section__title">Preise, die mitwachsen</h1>
+        <p class="section__lead">
+          Starte kostenlos und schalte mehr frei, wenn dein Assistent mehr
+          uebernehmen soll. Keine versteckten Kosten.
+        </p>
+      </div>
+
+      <div class="pricing">
+        {plans.map((plan) => (
+          <article class={plan.featured ? "plan plan--featured" : "plan"}>
+            {plan.featured && <span class="badge badge--info">Beliebt</span>}
+            <h2 class="plan__name">{plan.name}</h2>
+            <p class="plan__price">{plan.price} <small>{plan.cadence}</small></p>
+            <ul class="plan__features">
+              {plan.features.map((feature) => (
+                <li class="plan__feature">{feature}</li>
+              ))}
+            </ul>
+            <a class="button button--primary plan__cta" href="/auth/login">Auswaehlen</a>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+</Marketing>
