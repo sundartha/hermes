@@ -4,3 +4,4 @@ data/
 .twilio-recovery-code
 render-logs.sh
 setup-render-key.sh
+.claude/settings.local.json

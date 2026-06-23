@@ -6,6 +6,13 @@
       "headers": {
         "Authorization": "Bearer ${RENDER_API_KEY}"
       }
+    },
+    "telnyx": {
+      "type": "http",
+      "url": "https://api.telnyx.com/v2/mcp",
+      "headers": {
+        "Authorization": "Bearer ${TELNYX_API_KEY}"
+      }
     }
   }
 }
