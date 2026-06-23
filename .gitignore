@@ -5,3 +5,6 @@ data/
 render-logs.sh
 setup-render-key.sh
 .claude/settings.local.json
+
+# macOS
+.DS_Store

@@ -232,9 +232,10 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
 - **Test:** `npm test` — Regression v.a. `request-tenant.test.js`, `read-scope-tenant.test.js`,
   `i6-write-scope.test.js`, `security.test.js`, `resolve-tenant.test.js`, `tenant-budget-cap.test.js`.
 - **Pre-Mortem:**
-  - **R1.1 (kritisch, A4-Kollision):** A4 modifiziert `requestTenant()` und beschreibt
-    in `a4-remote-oauth-tenant-gap.md` §3.6 selbst eine noetige Extraktion fuer den
-    Test-Seam. → **Vor Phase 1 pruefen, ob A4 den Resolver schon extrahiert hat.**
+  - **R1.1 (kritisch, A4-Kollision):** A4 modifiziert `requestTenant()` und beschrieb
+    selbst eine noetige Extraktion fuer den Test-Seam (Strategie-Doc
+    `a4-remote-oauth-tenant-gap.md`, 2026-06-23 entfernt — **A4 ist gemergt**, Details in
+    der Git-History). → **Vor Phase 1 pruefen, ob A4 den Resolver schon extrahiert hat.**
     Wenn ja: Phase 1 entfaellt teilweise — T4 KONSUMIERT die A4-Naht statt sie neu zu
     bauen. Wenn nein: Phase 1 muss A4s `req.tenant`-vor-`req.auth`-Logik 1:1 mit
     uebernehmen. **Niemals zwei Resolver.**
@@ -468,7 +469,8 @@ laufen, sobald A1/A4/A6 durch sind.
 - `src/server.js` (Quelle, 1145 LOC) — alle Routen + Helfer verifiziert
 - `src/routes/api-profiles.js`, `src/self-service-routes.js`, `src/web-auth.js` — Factory-Vorbilder
 - `test/api-routes.test.js` (T-P4-08) — Parity-Test-Vorbild
-- `docs/strategy/a4-remote-oauth-tenant-gap.md` §3.6 — Resolver-Extraktions-Seam (Synergie/Kollision)
+- A4-Resolver-Extraktions-Seam (Synergie/Kollision) — Strategie-Doc `a4-remote-oauth-tenant-gap.md`
+  2026-06-23 entfernt (A4 gemergt); siehe Git-History
 - Tests je Routengruppe: `api.test.js`, `read-scope-tenant.test.js`, `number-gate.test.js`,
   `kyc-gate-outbound.test.js`, `place-call-error.test.js`, `i6-write-scope.test.js`,
   `onboarding-route.test.js`, `portal-route.test.js`, `media-token.test.js`

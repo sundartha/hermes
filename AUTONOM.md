@@ -7,9 +7,9 @@
 > Azure `speak_failed` (nur per echtem Call verifizierbar, Fix ohne Failure-Webhook unklar),
 > Rebrand-Infra/URL-Cutover (`STATUS.md` §4 Track B).
 >
-> **Stand:** 2026-06-21, 2. Abgleich NACH den A2/A3/A4/A6-Merges (HEAD `8d148a8` = origin, 679/679
-> gruen). **ERLEDIGT: A1, A3, A4, A6-Track-A.** IN ARBEIT: A2 (Decomposition). OFFEN: A5 (sequenziell
-> nach STT-Abnahme). Rebrand Track B (Repo/URL/Infra) weiter offen. Reihenfolge unten = historisch.
+> **Stand:** 2026-06-23 (HEAD `6a0b334` = origin/master, 846/846 gruen). **ERLEDIGT: A1, A3, A4,
+> A6-Track-A.** IN ARBEIT: A2 (Decomposition, inkrementell). OFFEN: A5 (sequenziell nach STT-Abnahme).
+> Rebrand Track B (Repo/URL/Infra) weiter offen. Reihenfolge unten = historisch.
 
 ## Vorgehen: wann das phase-impl-Workflow noetig ist
 

@@ -6,20 +6,27 @@
 > `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/rebrand-sundartha.md` (Rebrand-Task),
 > `tasks/lessons.md` (Lehren).
 >
-> **Stand:** 2026-06-21 - HEAD lokal = `30c0348` = origin/master = upstream/jonas986 (alle in sync;
-> Pay-Kette Pay1-Pay4 gemergt + nach origin UND upstream/Live gepusht). **Tests: 708/708 gruen.**
+> **Stand:** 2026-06-23 - HEAD lokal = `6a0b334` = **origin/master** (in sync). **ACHTUNG:
+> `upstream/master` (= Render/Live) haengt bei `995925f` zurueck** - der gesamte Frontend-Track
+> **w0-w5** und das **f2-Inbound-SMS-Datenmodell** sind in origin/master, aber **noch NICHT live**
+> (upstream-Push steht aus, owner-koordiniert). **Tests: 846/846 gruen.**
 
 ## Erledigt (Kontext, nicht offen)
 
-Vollstaendig gemergt + (bis auf den origin-Rueckstand) live: Multi-Tenant-Identitaet **I0-I9**,
+Vollstaendig gemergt (in origin/master): Multi-Tenant-Identitaet **I0-I9**,
 Telnyx-Multi-Tenant **P0-P8** (Adapter/Ports/pg/Budget/Onboarding/Payment-Code/KYC/Realtime-Port/DSGVO),
 Auth-Foundation **+ Fixes F1-F5**, Crash-Hotspots **P0-P4**, P3b-R LLM-Resilienz **CP1-CP7**,
-sowie der **Inbound/Outbound-STT-Fix** (de-DE + `speechTimeout="auto"` + defensives `extractSpeech`).
+Geo-Location **f1-P1..P9** (Sprache/Land-Gate +49/+33/+44, maxmind lokal), **f2-P0..P4**
+(Inbound-SMS-Datenmodell + `private_number`-Facades + Onboard-Wiring), der **Produkt-Frontend-Track
+w0-w5** (Marketing-SSG + Design-Token, OIDC-Login-Roundtrip, Billing-Insel setup-mode, Read-only
+Datensicht, Settings-/Whitelist-Editor; duenner Client gegen die bestehende API), sowie der
+**Inbound/Outbound-STT-Fix** (de-DE + `speechTimeout="auto"` + defensives `extractSpeech`).
 Der **Outbound-Dialog laeuft seit 2026-06-20 erstmals live end-to-end** (Disclosure -> Anlass -> Dialog).
-Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4, 2026-06-21)** ist gemergt +
-live-deployt: Checkout `setup`-Mode + `off_session`-`placeHold`; Hold->Capture laeuft end-to-end im
-**Test-Mode** gruen (PaymentIntent `succeeded`, `livemode=false`). Details: `tasks/pay1..pay4-report.md`,
-Memory [[pay-chain-design-decisions]].
+Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemergt: Checkout
+`setup`-Mode + `off_session`-`placeHold`; Hold->Capture laeuft end-to-end im **Test-Mode** gruen
+(PaymentIntent `succeeded`, `livemode=false`). Memory [[pay-chain-design-decisions]],
+[[f1-geo-p4-p9-decisions]]. (Die fruehere Detail-Report-Sammlung unter `tasks/*-report.md` wurde
+2026-06-23 entfernt - die Historie steht in der Git-History + Memory.)
 
 ---
 
@@ -34,32 +41,24 @@ Memory [[pay-chain-design-decisions]].
    keine `TWILIO_NUMBER`/`TELNYX_NUMBER`-Env-Var mehr. Der Owner ist Tenant Null und haelt seine
    Absendernummer(n) wie jeder Tenant im Store; `outboundFrom` liest fuer ALLE Tenants via
    `findActiveNumber`, ein Boot-Guard verlangt fail-closed eine aktive Owner-Nummer.
-   **Owner-Aktion (einmalig, statt Env):** Bestandsnummer eintragen mit
-   `npm run seed-owner-number -- <e164> <twilio|telnyx>` - lokal gegen `data/store.json`, in Prod
-   `STORE_BACKEND=pg DATABASE_URL=... npm run seed-owner-number -- ...` VOR dem ersten Boot des neuen
-   Codes; danach `TWILIO_NUMBER`/`TELNYX_NUMBER` aus der Render-Env loeschen. **Offen (Owner):** die
-   US-Nummer (`+1`) passt weiter nicht zum DE-Launch (`PROVISIONING_COUNTRY=DE`) - bewusst behalten
-   oder DE-Nummer beschaffen?
+   **Owner-Aktion:** Bestandsnummer setzen - lokal per
+   `npm run seed-owner-number -- <e164> <twilio|telnyx>` gegen `data/store.json`; in Prod
+   genuegt jetzt die Env (`OWNER_NUMBER` + `OWNER_NUMBER_PROVIDER`, in `render.yaml` gesetzt), die
+   beim Boot idempotent geseedet wird (s.u.). **Offen (Owner):** passt die hinterlegte Nummer
+   (Provider/Land) zum DE-Launch (`PROVISIONING_COUNTRY=DE`)?
 
-   > **!! DEPLOY-RISIKO (vor dem Prod-Deploy ZWINGEND klaeren) !!** Der Umbau ist nur mit einem
-   > **persistenten** Store sicher. `render.yaml` hat `STORE_BACKEND=json` als Default, und der Render
-   > Free Plan hat ein **fluechtiges Dateisystem** -> `data/store.json` (inkl. der geseedeten
-   > Owner-Nummer) wird bei JEDEM Deploy/Neustart geloescht. Der alte Code hat das aufgefangen, indem
-   > er die Owner-Nummer bei jedem Boot aus `TWILIO_NUMBER` neu seedete - genau dieser Env-Seed ist
-   > jetzt WEG. Folge bei `STORE_BACKEND=json` in Prod: nach dem naechsten Deploy ist der Store leer ->
-   > **Boot-Guard verweigert den Start -> Dienst dauerhaft down** (ein erneuter Seed waere beim
-   > naechsten Restart wieder weg). **Vor dem Deploy pruefen:** Laeuft Prod (Render-Dashboard ->
-   > Environment) auf `pg` (persistent) oder `json` (fluechtig)?
-   > - `pg`: sicher - einmalig gegen Postgres seeden (s.o.), fertig.
-   > - `json`: **so NICHT deployen** - erst auf Postgres wechseln ODER einen Env-Fallback-Seed
-   >   wieder einbauen. Falls schon deployt und der Dienst bootet nicht: in Render den vorherigen
-   >   Commit re-deployen (Rollback).
+   > **DEPLOY-RISIKO AUFGELOEST (2026-06-23, `f0f7fe0`):** Der Boot seedet die Owner-Nummer jetzt
+   > wieder **config-derived idempotent** aus `OWNER_NUMBER`/`OWNER_NUMBER_PROVIDER`
+   > (`state-ops.seedOwnerNumberFromConfig`, Provider fail-closed gegen die Provider-Liste validiert).
+   > Damit ueberlebt der fluechtige Render-Free-FS-Reset bei `STORE_BACKEND=json`, ohne dass der
+   > Boot-Guard den Start verweigert. Beide Render-Env-Keys stehen in `render.yaml`. (Mit `pg` ist
+   > der Seed ohnehin persistent.)
 4. **Stripe live** - **Karten-Erfassung + Test-Mode-Hold/Capture ERLEDIGT** (Pay1-Pay4, gemergt +
    live-deployt, 708/708): Checkout `setup`-Mode (Stripe-Customer + `payment_method` pro Tenant) +
    `off_session`-`placeHold` -> die fruehere 400-Wurzel (`confirm` ohne `payment_method`) ist weg;
    Hold->Capture gegen echtes Stripe-Test gruen (`succeeded`, `livemode=false`). Deckt auch die in
    P6b3 ausgelassene `stripe_customer_id`-Bindung. `PAYMENT_ENABLED` bleibt `false` (Gate aus =
-   byte-identisch). Reports: `tasks/pay1..pay4-report.md`. **Offen fuer ECHTES Geld:**
+   byte-identisch). Details: Memory [[pay-chain-design-decisions]]. **Offen fuer ECHTES Geld:**
    - `PAYMENT_ENABLED=true` + `NUMBER_SETUP_FEE_CENTS>0` + `PROVISIONING_ENABLED=true` im echten
      Onboard-Flow verifizieren (echter Nummernkauf statt Fake-Provisioner).
    - Test->Live: `sk_live_...` nur via Render-Dashboard (nie committen).
@@ -85,6 +84,13 @@ Memory [[pay-chain-design-decisions]].
      Staging->Production-Cutover (Runbook Gate 5, Schritt 3).
 7. **Crash-Hotspots P3 Real-Call-Smoke** (5 Szenarien, HEIKLE STELLE in `bridge.js`) als Gate
    VOR `VOICE_ENGINE=realtime`-Aktivierung.
+8. **Frontend w0-w5 + f2-Datenmodell live deployen** - alles in origin/master (846/846), aber
+   `upstream/master` (Render) haengt bei `995925f`. Vor dem Live-Push: das Frontend loest die
+   bisherige `express.static`-Kundensicht ab (`docs/strategy/hermes-frontend.md`) - same-origin,
+   kein CORS; vor dem Cutover die Auth-/Billing-/Datensicht gegen die Live-Env durchklicken.
+   **f2 ist erst das Datenmodell (P0-P4)** - die eigentliche Inbound-SMS-Zusammenfassung an die
+   private Tenant-Nummer + der Self-Service-Write (Branch `phase/f2-p5-self-write`, NICHT gemergt)
+   sind noch offen.
 
 
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
@@ -95,8 +101,8 @@ Memory [[pay-chain-design-decisions]].
 > Diese Items mit Vorgehen pro Item + Workflow-Einschaetzung (ist phase-impl noetig?):
 > siehe **`AUTONOM.md`**.
 
-> **Stand 2026-06-21:** A1, A3, A4 + Rebrand-Track-A sind GEMERGT (master `30c0348`, 708/708).
-> Offen bleiben hier nur noch A5 (sequenziell) und A2 (in Arbeit).
+> **Stand 2026-06-23:** A1, A3, A4 + Rebrand-Track-A sind GEMERGT. Offen bleiben hier nur noch
+> A5 (sequenziell) und A2 (in Arbeit, inkrementell).
 
 1. **A5 - TEMP-DIAGNOSE-Logs entfernen** - **OFFEN (bewusst sequenziell).** `[turn-recv]`/`[turn-ok]`
    (`src/server.js`) + `[boot]` (`src/boot-guard.js`). ERST nach Abschluss von Gate 1.1 entfernen -
