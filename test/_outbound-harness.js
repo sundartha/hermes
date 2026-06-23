@@ -12,7 +12,8 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 // G1: die Offenlegung ist an den VOLLEN tenant.ownerName gebunden; Variante (a) seedet
 // den Owner-Tenant config-derived = "OWNER_FIRST_NAME OWNER_LAST_NAME" ("Jonas Beispiel"
 // in BASE_ENV). callerName entfaellt komplett (nicht mehr per Call setzbar).
-export const DISCLOSURE_JONAS = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
+export const DISCLOSURE_JONAS =
+  "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
 // Beide Renderer oeffnen den Sprach-Turn mit "<Gather" (Twilio-TwiML + Telnyx-TeXML).
 export const GATHER_OPEN = "<Gather";
 export const HANGUP_TAG = "<Hangup";
@@ -26,7 +27,10 @@ export function assertDisclosureInGather(body, disclosure = DISCLOSURE_JONAS) {
   const discIdx = body.indexOf(disclosure);
   assert.ok(gatherIdx !== -1, `Gather fehlt im Body: ${body}`);
   assert.ok(discIdx !== -1, `Offenlegung fehlt im Body: ${body}`);
-  assert.ok(gatherIdx < discIdx, `Offenlegung muss IM Gather stehen (Gather oeffnet zuerst): ${body}`);
+  assert.ok(
+    gatherIdx < discIdx,
+    `Offenlegung muss IM Gather stehen (Gather oeffnet zuerst): ${body}`,
+  );
 }
 
 // Default-Call-Id der Harness-Fixtures (selbsterklaerende Test-Fixture, kein Magic).
@@ -53,7 +57,12 @@ export async function runOutbound({ provider = "twilio", call = {}, seed = {}, e
       body: new URLSearchParams({ CallSid: CALL_SID }),
     });
     const body = await res.text();
-    return { body, status: res.status, contentType: res.headers.get("content-type"), stdout: srv.stdout };
+    return {
+      body,
+      status: res.status,
+      contentType: res.headers.get("content-type"),
+      stdout: srv.stdout,
+    };
   } finally {
     await srv.stop();
   }
@@ -64,7 +73,13 @@ export async function runOutbound({ provider = "twilio", call = {}, seed = {}, e
 // env-Override (z.B. LLM_MAX_RETRIES) wird durchgereicht. Server wird intern
 // geschlossen (kein srv-Handle nach aussen, G31). Liefert beide Bodies, den
 // Turn-Status und stdout.
-export async function runOutboundThenTurn({ provider = "twilio", call = {}, speechResult, mockUrl, env = {} } = {}) {
+export async function runOutboundThenTurn({
+  provider = "twilio",
+  call = {},
+  speechResult,
+  mockUrl,
+  env = {},
+} = {}) {
   const id = call.id || DEFAULT_CALL_ID;
   const srv = await startServer({
     env: { ANTHROPIC_BASE_URL: mockUrl, ...env },
@@ -177,7 +192,12 @@ export async function startAlways4xxMock() {
       seen += 1;
       res.statusCode = 400;
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "mock-fehler" } }));
+      res.end(
+        JSON.stringify({
+          type: "error",
+          error: { type: "invalid_request_error", message: "mock-fehler" },
+        }),
+      );
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));

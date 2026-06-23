@@ -18,16 +18,27 @@ const SUB_B = "sub-b";
 const SUB_UNKNOWN = "sub-unbekannt"; // VORHANDENE, aber unaufloesbare Identitaet -> REJECT
 
 const postJson = (url, body, headers = {}) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 const getJson = (url, headers = {}) => fetch(url, { headers });
 const asTenant = (sub) => ({ "X-Internal-Identity": sub });
 const tenantB = () => ({ id: TENANT_B, status: "active", idpSubject: SUB_B });
 
 test("I6/L2 Flag AN: POST /api/settings ist tenant-gescopt; REJECT -> 403 (kein Junk-Bucket)", async (t) => {
-  const srv = await startServer({ env: { MULTI_TENANT: "true" }, seed: seedState({ tenants: [tenantB()] }) });
+  const srv = await startServer({
+    env: { MULTI_TENANT: "true" },
+    seed: seedState({ tenants: [tenantB()] }),
+  });
   try {
     await t.test("B schreibt NUR B's Settings; Owner-Bucket unberuehrt", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { agentName: "B-Agent" }, asTenant(SUB_B));
+      const res = await postJson(
+        `${srv.localUrl}/api/settings`,
+        { agentName: "B-Agent" },
+        asTenant(SUB_B),
+      );
       assert.equal(res.status, 200);
       assert.equal((await res.json()).agentName, "B-Agent");
       const stored = srv.readStore().settings;
@@ -36,9 +47,17 @@ test("I6/L2 Flag AN: POST /api/settings ist tenant-gescopt; REJECT -> 403 (kein 
     });
 
     await t.test("unbekannte Identitaet -> 403, KEIN reject-Bucket angelegt", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { agentName: "Boese" }, asTenant(SUB_UNKNOWN));
+      const res = await postJson(
+        `${srv.localUrl}/api/settings`,
+        { agentName: "Boese" },
+        asTenant(SUB_UNKNOWN),
+      );
       assert.equal(res.status, 403);
-      assert.equal("reject" in srv.readStore().settings, false, "kein Pseudo-Tenant-Bucket (Owner-Entscheidung)");
+      assert.equal(
+        "reject" in srv.readStore().settings,
+        false,
+        "kein Pseudo-Tenant-Bucket (Owner-Entscheidung)",
+      );
     });
   } finally {
     await srv.stop();
@@ -63,7 +82,10 @@ test("I6/L5 Flag AN: Cancel ist tenant-gescopt (fremd -> 404) + requestedBy im A
     });
 
     await t.test("B cancelt Owner's Call -> 404", async () => {
-      assert.equal((await postJson(`${srv.localUrl}/api/calls/call_owner/cancel`, {}, asTenant(SUB_B))).status, 404);
+      assert.equal(
+        (await postJson(`${srv.localUrl}/api/calls/call_owner/cancel`, {}, asTenant(SUB_B))).status,
+        404,
+      );
     });
 
     await t.test("Owner cancelt eigenen Call -> 200 + Audit requestedBy=owner", async () => {
@@ -89,7 +111,12 @@ test("I6/L6 Flag AN: Export ist tenant-gescopt (nur eigene Calls, kein streamTok
     seed: seedState({
       tenants: [tenantB()],
       calls: [
-        seedCall({ id: "call_owner", tenantId: OWNER_TENANT_ID, streamToken: "owner-geheim", summary: "Owner-Sum" }),
+        seedCall({
+          id: "call_owner",
+          tenantId: OWNER_TENANT_ID,
+          streamToken: "owner-geheim",
+          summary: "Owner-Sum",
+        }),
         seedCall({ id: "call_b", tenantId: TENANT_B, streamToken: "b-geheim", summary: "B-Sum" }),
       ],
     }),
@@ -114,7 +141,10 @@ test("I6/L6 Flag AN: Export ist tenant-gescopt (nur eigene Calls, kein streamTok
     });
 
     await t.test("unbekannte Identitaet -> 403", async () => {
-      assert.equal((await getJson(`${srv.localUrl}/api/tenant-data/export`, asTenant(SUB_UNKNOWN))).status, 403);
+      assert.equal(
+        (await getJson(`${srv.localUrl}/api/tenant-data/export`, asTenant(SUB_UNKNOWN))).status,
+        403,
+      );
     });
   } finally {
     await srv.stop();
@@ -138,12 +168,18 @@ test("I6 Flag AN: POST /api/calendar booked in den Tenant-Bucket; REJECT -> 403 
       assert.equal(res.status, 200);
       const id = (await res.json()).id;
       const cal = srv.readStore().calendar;
-      assert.ok((cal[TENANT_B] || []).some((e) => e.id === id), "Event im B-Bucket");
+      assert.ok(
+        (cal[TENANT_B] || []).some((e) => e.id === id),
+        "Event im B-Bucket",
+      );
       assert.ok(!(cal[OWNER_TENANT_ID] || []).some((e) => e.id === id), "NICHT im Owner-Bucket");
     });
 
     await t.test("unbekannte Identitaet (mit allowBooking) -> 403 (Tenant-Reject)", async () => {
-      assert.equal((await postJson(`${srv.localUrl}/api/calendar`, ev, asTenant(SUB_UNKNOWN))).status, 403);
+      assert.equal(
+        (await postJson(`${srv.localUrl}/api/calendar`, ev, asTenant(SUB_UNKNOWN))).status,
+        403,
+      );
     });
   } finally {
     await srv.stop();
@@ -155,10 +191,18 @@ test("I6 Flag AUS: X-Internal-Identity wird ignoriert -> Schreiben landet im OWN
   const srv = await startServer({ seed: seedState({ tenants: [tenantB()] }) });
   try {
     await t.test("Settings-Write mit B-Header schreibt OWNER-Bucket, kein B-Bucket", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { agentName: "Flag-Aus" }, asTenant(SUB_B));
+      const res = await postJson(
+        `${srv.localUrl}/api/settings`,
+        { agentName: "Flag-Aus" },
+        asTenant(SUB_B),
+      );
       assert.equal(res.status, 200);
       const stored = srv.readStore().settings;
-      assert.equal(stored[OWNER_TENANT_ID].agentName, "Flag-Aus", "Owner-Bucket geschrieben (Flag aus -> Owner)");
+      assert.equal(
+        stored[OWNER_TENANT_ID].agentName,
+        "Flag-Aus",
+        "Owner-Bucket geschrieben (Flag aus -> Owner)",
+      );
       assert.equal(TENANT_B in stored, false, "kein B-Bucket trotz B-Header (Flag gated alles)");
     });
   } finally {

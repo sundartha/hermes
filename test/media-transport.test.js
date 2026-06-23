@@ -8,17 +8,25 @@ import { twilioMedia } from "../src/telephony/adapters/twilio/media.js";
 import { telnyxMedia } from "../src/telephony/adapters/telnyx/media.js";
 
 test("Twilio buildMediaFrame/clearPlayback byte-identisch (Dichtheit Realtime)", () => {
-  assert.deepEqual(
-    twilioMedia.buildMediaFrame({ payload: "AAA", streamRef: "MZ1" }),
-    { event: "media", streamSid: "MZ1", media: { payload: "AAA" } }
-  );
-  assert.deepEqual(twilioMedia.clearPlayback({ streamRef: "MZ1" }), { event: "clear", streamSid: "MZ1" });
+  assert.deepEqual(twilioMedia.buildMediaFrame({ payload: "AAA", streamRef: "MZ1" }), {
+    event: "media",
+    streamSid: "MZ1",
+    media: { payload: "AAA" },
+  });
+  assert.deepEqual(twilioMedia.clearPlayback({ streamRef: "MZ1" }), {
+    event: "clear",
+    streamSid: "MZ1",
+  });
 });
 
 test("Twilio parseMediaFrame start -> neutrales MediaFrame", () => {
   const frame = twilioMedia.parseMediaFrame({
     event: "start",
-    start: { streamSid: "MZ1", callSid: "CA1", customParameters: { call_id: "c1", stream_token: "t1" } },
+    start: {
+      streamSid: "MZ1",
+      callSid: "CA1",
+      customParameters: { call_id: "c1", stream_token: "t1" },
+    },
   });
   assert.deepEqual(frame, {
     event: "start",
@@ -39,14 +47,21 @@ test("Twilio parseMediaFrame media/stop/unbekannt", () => {
 });
 
 test("Telnyx Outbound-Frames OHNE stream_id (Doku-Symmetrie)", () => {
-  assert.deepEqual(telnyxMedia.buildMediaFrame({ payload: "X" }), { event: "media", media: { payload: "X" } });
+  assert.deepEqual(telnyxMedia.buildMediaFrame({ payload: "X" }), {
+    event: "media",
+    media: { payload: "X" },
+  });
   assert.deepEqual(telnyxMedia.clearPlayback(), { event: "clear" });
 });
 
 test("Telnyx parseMediaFrame start -> dasselbe neutrale MediaFrame wie Twilio", () => {
   const fromCustom = telnyxMedia.parseMediaFrame({
     event: "start",
-    start: { stream_id: "ST1", call_control_id: "CC1", customParameters: { call_id: "c1", stream_token: "t1" } },
+    start: {
+      stream_id: "ST1",
+      call_control_id: "CC1",
+      customParameters: { call_id: "c1", stream_token: "t1" },
+    },
   });
   assert.deepEqual(fromCustom, {
     event: "start",

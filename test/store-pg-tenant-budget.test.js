@@ -54,15 +54,40 @@ test("P4 Test 4: countOutboundCallsSince pro-Tenant + pro-Nutzer + global", asyn
   const { store } = await makePgTestStore();
   const s = store.load();
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  ops.createCall(s, { direction: "outbound", from: "+49", to: "+49", tenantId: TENANT_A, requestedBy: "x@a" });
-  ops.createCall(s, { direction: "outbound", from: "+49", to: "+49", tenantId: TENANT_A, requestedBy: "y@a" });
-  ops.createCall(s, { direction: "outbound", from: "+49", to: "+49", tenantId: TENANT_B, requestedBy: "x@a" });
+  ops.createCall(s, {
+    direction: "outbound",
+    from: "+49",
+    to: "+49",
+    tenantId: TENANT_A,
+    requestedBy: "x@a",
+  });
+  ops.createCall(s, {
+    direction: "outbound",
+    from: "+49",
+    to: "+49",
+    tenantId: TENANT_A,
+    requestedBy: "y@a",
+  });
+  ops.createCall(s, {
+    direction: "outbound",
+    from: "+49",
+    to: "+49",
+    tenantId: TENANT_B,
+    requestedBy: "x@a",
+  });
   ops.createCall(s, { direction: "inbound", from: "+49", to: "+49", tenantId: TENANT_A });
   assert.equal(ops.countOutboundCallsSince(s, since, { tenantId: TENANT_A }), 2, "A-Outbound");
   assert.equal(ops.countOutboundCallsSince(s, since, { tenantId: TENANT_B }), 1, "B-Outbound");
-  assert.equal(ops.countOutboundCallsSince(s, since, { requestedBy: "x@a" }), 2, "Nutzer x@a ueber Tenants");
+  assert.equal(
+    ops.countOutboundCallsSince(s, since, { requestedBy: "x@a" }),
+    2,
+    "Nutzer x@a ueber Tenants",
+  );
   // Kombiniert (UND): nur x@a-Outbound im Tenant A.
-  assert.equal(ops.countOutboundCallsSince(s, since, { tenantId: TENANT_A, requestedBy: "x@a" }), 1);
+  assert.equal(
+    ops.countOutboundCallsSince(s, since, { tenantId: TENANT_A, requestedBy: "x@a" }),
+    1,
+  );
   assert.equal(ops.countOutboundCallsSince(s, since), 3, "alle Outbound (globale Bremse)");
 });
 
@@ -71,7 +96,9 @@ test("P4 Test 4: countOutboundCallsSince pro-Tenant + pro-Nutzer + global", asyn
 // store-pg-rls.test.js, hier auf die usage-Tabelle fokussiert.
 async function setupUsageRls() {
   const db = new PGlite();
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init(); // migriert + seedet Owner (inkl. Owner-usage-Zeile)
 
@@ -80,14 +107,14 @@ async function setupUsageRls() {
     await db.query(
       `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls)
        VALUES ($1, 100, 200, 3.5, 4)`,
-      [tenantId]
+      [tenantId],
     );
   }
 
   await db.exec(
     `CREATE ROLE ${APP_ROLE} NOLOGIN;
      GRANT SELECT, INSERT, UPDATE, DELETE ON usage TO ${APP_ROLE};
-     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`
+     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`,
   );
   return db;
 }
@@ -97,7 +124,9 @@ test("P4 Test 5: usage-Tabelle ist tenant-isoliert (Cross-Tenant-Read = leer, RL
   await db.query(`SET ROLE ${APP_ROLE}`);
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
   try {
-    const tenantIds = (await db.query(`SELECT tenant_id FROM usage ORDER BY tenant_id`)).rows.map((r) => r.tenant_id);
+    const tenantIds = (await db.query(`SELECT tenant_id FROM usage ORDER BY tenant_id`)).rows.map(
+      (r) => r.tenant_id,
+    );
     assert.deepEqual(tenantIds, [OWNER_TENANT_ID], "nur die Owner-usage-Zeile sichtbar");
     assert.ok(!tenantIds.includes(TENANT_A), "fremde usage-Zeile A unsichtbar");
     assert.ok(!tenantIds.includes(TENANT_B), "fremde usage-Zeile B unsichtbar");
@@ -112,7 +141,9 @@ test("P4 Test 5: usage-Tabelle ist tenant-isoliert (Cross-Tenant-Read = leer, RL
 // zwei neuen P6b3-Tabellen.
 async function setupMeterRls() {
   const db = new PGlite();
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init();
 
@@ -121,12 +152,12 @@ async function setupMeterRls() {
     await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
     await db.query(
       `INSERT INTO tenant_budget (tenant_id, budget_cents, hard_cap_cents) VALUES ($1, 400, 500)`,
-      [tenantId]
+      [tenantId],
     );
     await db.query(
       `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at)
        VALUES ($1, $2, NULL, 'number_month', 1, 500, '2026-01-01T00:00:00.000Z')`,
-      [`ue_${tenantId}`, tenantId]
+      [`ue_${tenantId}`, tenantId],
     );
   }
   await db.query(`RESET app.current_tenant`);
@@ -135,7 +166,7 @@ async function setupMeterRls() {
     `CREATE ROLE ${APP_ROLE} NOLOGIN;
      GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_budget TO ${APP_ROLE};
      GRANT SELECT, INSERT, UPDATE, DELETE ON usage_event TO ${APP_ROLE};
-     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`
+     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`,
   );
   return db;
 }
@@ -145,7 +176,9 @@ test("P6b3 Test 6: tenant_budget ist tenant-isoliert (Cross-Tenant-Read = leer, 
   await db.query(`SET ROLE ${APP_ROLE}`);
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [TENANT_A]);
   try {
-    const tenantIds = (await db.query(`SELECT tenant_id FROM tenant_budget ORDER BY tenant_id`)).rows.map((r) => r.tenant_id);
+    const tenantIds = (
+      await db.query(`SELECT tenant_id FROM tenant_budget ORDER BY tenant_id`)
+    ).rows.map((r) => r.tenant_id);
     assert.deepEqual(tenantIds, [TENANT_A], "nur die eigene tenant_budget-Zeile sichtbar");
     assert.ok(!tenantIds.includes(TENANT_B), "fremde tenant_budget-Zeile B unsichtbar");
     assert.ok(!tenantIds.includes(OWNER_TENANT_ID), "Owner-Zeile (falls vorhanden) unsichtbar");
@@ -159,7 +192,9 @@ test("P6b3 Test 7: usage_event ist tenant-isoliert (Cross-Tenant-Read = leer, RL
   await db.query(`SET ROLE ${APP_ROLE}`);
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [TENANT_A]);
   try {
-    const tenantIds = (await db.query(`SELECT tenant_id FROM usage_event ORDER BY tenant_id`)).rows.map((r) => r.tenant_id);
+    const tenantIds = (
+      await db.query(`SELECT tenant_id FROM usage_event ORDER BY tenant_id`)
+    ).rows.map((r) => r.tenant_id);
     assert.deepEqual(tenantIds, [TENANT_A], "nur die eigenen usage_event-Zeilen sichtbar");
     assert.ok(!tenantIds.includes(TENANT_B), "fremde usage_event-Zeile B unsichtbar");
   } finally {

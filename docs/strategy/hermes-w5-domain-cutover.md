@@ -50,15 +50,15 @@ Das Routing gehoert in Versionskontrolle und unter denselben Guard-Test-Anspruch
 wie `render.yaml` (Einwand 2): eine ungetestete Routing-Regel vor einem
 sicherheitskritischen System ist eine unsichtbare SPOF-Schicht.
 
-| Pfad | Ziel | Cache | WAF/Bot | Anmerkung |
-|---|---|---|---|---|
-| `/`, `/preise`, `/so-funktionierts`, statische Assets | Static (`hermes-web`) | cachebar | normal | reines CDN |
-| `/app/*` | Static (`hermes-web`) | cachebar (HTML noindex) | normal | App-Shell, SPA-Fallback bleibt am Static-Service |
-| `/auth/*` | Gateway | **Cache-Bypass** | normal | OIDC-Flow + Cookie-Ausstellung |
-| `/api/*` | Gateway | **Cache-Bypass** (R6) | normal | `no-store` darf NIE durch CDN-Cache umgangen werden — sonst Transkript-Leak |
-| `/.well-known/*` | Gateway | Cache-Bypass | normal | OAuth-Metadata |
-| `/mcp`, `/healthz` | Gateway | Cache-Bypass | normal | MCP-HTTP, Health |
-| `/voice/*` | Gateway | **Cache aus** | **WAF/Bot aus — Pass-Through** | Twilio/Telnyx-Webhooks, fail-closed Signatur (R10) |
+| Pfad                                                  | Ziel                  | Cache                   | WAF/Bot                        | Anmerkung                                                                   |
+| ----------------------------------------------------- | --------------------- | ----------------------- | ------------------------------ | --------------------------------------------------------------------------- |
+| `/`, `/preise`, `/so-funktionierts`, statische Assets | Static (`hermes-web`) | cachebar                | normal                         | reines CDN                                                                  |
+| `/app/*`                                              | Static (`hermes-web`) | cachebar (HTML noindex) | normal                         | App-Shell, SPA-Fallback bleibt am Static-Service                            |
+| `/auth/*`                                             | Gateway               | **Cache-Bypass**        | normal                         | OIDC-Flow + Cookie-Ausstellung                                              |
+| `/api/*`                                              | Gateway               | **Cache-Bypass** (R6)   | normal                         | `no-store` darf NIE durch CDN-Cache umgangen werden — sonst Transkript-Leak |
+| `/.well-known/*`                                      | Gateway               | Cache-Bypass            | normal                         | OAuth-Metadata                                                              |
+| `/mcp`, `/healthz`                                    | Gateway               | Cache-Bypass            | normal                         | MCP-HTTP, Health                                                            |
+| `/voice/*`                                            | Gateway               | **Cache aus**           | **WAF/Bot aus — Pass-Through** | Twilio/Telnyx-Webhooks, fail-closed Signatur (R10)                          |
 
 **`/voice/*` ist der teuerste Pfad durch die neue Schicht (Einwand 1, R10).**
 Bedingungen, sonst 403 auf echte Anrufe:
@@ -102,7 +102,7 @@ der naechste Bearbeiter setzt `PUBLIC_URL` nicht, die Signatur-URL bleibt auf
 # Signatur + OIDC-redirectUri + Stripe-Return gleichzeitig — falscher Host =
 # 403 auf alle Inbound-Anrufe (Pre-Mortem e / R1).
 - key: PUBLIC_URL
-  sync: false   # Produktdomain, manuell im Render-Dashboard gesetzt
+  sync: false # Produktdomain, manuell im Render-Dashboard gesetzt
 ```
 
 `sync:false` = der Wert wird NICHT aus dem Blueprint geseedet, sondern manuell im
@@ -119,6 +119,7 @@ Waehrend des GESAMTEN Cutovers: `/healthz` am Gateway durchgehend gruen — kein
 Telefonie-Ausfall (DoD W5 (3), Leitplanke 8).
 
 ### Schritt 0 — Vorbereitung (kein Live-Effekt)
+
 - Alle W3/W4/W5-Sichten gegen die echte API in Staging gruen (W5 ist die letzte
   Phase, damit genau das vorher steht).
 - Cloudflare-Routing-Regeln (Abschnitt 1) als versionierte Konfig vorbereitet +
@@ -128,17 +129,20 @@ Telefonie-Ausfall (DoD W5 (3), Leitplanke 8).
   (Abschnitt 4) bereit, DNS-TTL niedrig gesetzt (schneller Rollback).
 
 ### Schritt 1 — Cloudflare-Routing einrichten, `PUBLIC_URL` noch UNVERAENDERT
+
 - Routing aktivieren; `PUBLIC_URL` zeigt weiter auf die alte URL.
 - Verifizieren: `/` liefert Static, `/api/*`+`/auth/*` erreichen das Gateway,
   `/healthz` gruen. Telefonie laeuft unveraendert (Twilio zeigt noch auf alt).
 
 ### Schritt 2 — IdP-redirect_uri ADDITIV registrieren (R7)
+
 - Beim IdP (WorkOS/OIDC-Provider) die neue `https://<produktdomain>/auth/callback`
   **zusaetzlich** zur alten eintragen (alt + neu gleichzeitig gueltig).
 - Die alte URI wird ERST nach voller Verifikation (Schritt 6) entfernt. So gibt es
   kein Login-Totalausfall-Fenster (R7): waehrend der Umstellung sind beide gueltig.
 
 ### Schritt 3 — `PUBLIC_URL` auf die Produktdomain setzen (Staging-Gateway zuerst)
+
 - Zuerst auf einem **Staging-Gateway** mit einer **Test-Nummer**: `PUBLIC_URL` =
   Produktdomain (bzw. Staging-Domain hinter demselben Routing-Muster).
 - Das aendert dort gleichzeitig Twilio-Signatur-URL, OIDC-redirectUri und
@@ -146,6 +150,7 @@ Telefonie-Ausfall (DoD W5 (3), Leitplanke 8).
   wird.
 
 ### Schritt 4 — Twilio-Signaturtest gegen die NEUE URL (ohne echten Anruf)
+
 - Ein Test bildet mit dem echten `TWILIO_AUTH_TOKEN` eine Signatur ueber die NEUE
   URL (`PUBLIC_URL + /voice/...`) und schickt sie durch `verifyInboundSignature`
   → muss **gruen** sein. Dieser Test gegen die exakte Cloudflare-weitergereichte
@@ -155,6 +160,7 @@ Telefonie-Ausfall (DoD W5 (3), Leitplanke 8).
   Pruefung wirklich am neuen Host haengt).
 
 ### Schritt 5 — Test-Nummer auf neue URL, echter Test-Anruf gruen
+
 - Erst jetzt in der Twilio-Konsole die **Test-Nummer** auf die neue
   `/voice/*`-URL stellen. Echten Test-Anruf fuehren → muss durchlaufen
   (Signatur ok, Gespraech ok). Login + W3/W4/W5-Sichten end-to-end same-origin
@@ -162,6 +168,7 @@ Telefonie-Ausfall (DoD W5 (3), Leitplanke 8).
 - **Niemals die produktive Nummer als ersten Versuch** (Leitplanke 8).
 
 ### Schritt 6 — Produktion umstellen (im Wartungsfenster)
+
 - `PUBLIC_URL` am Produktions-Gateway auf die Produktdomain (Render-Dashboard,
   `sync:false`). `/healthz` gruen abwarten.
 - Signaturtest (Schritt 4) gegen die Produktions-URL gruen.
@@ -170,6 +177,7 @@ Telefonie-Ausfall (DoD W5 (3), Leitplanke 8).
 - Login + Billing-Return + Settings-Speichern end-to-end auf der Produktdomain.
 
 ### Schritt 7 — Aufraeumen
+
 - Nach voller Verifikation: alte IdP-redirect_uri entfernen (Schritt 2 rueckgaengig
   fuer die alte URL). Monitoring auf `/voice/*`-403/5xx weiter scharf halten.
 - Verbleib der alten `public/tenant.html` entscheiden (siehe Abschnitt 6, offen).

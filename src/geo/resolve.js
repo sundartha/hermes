@@ -8,7 +8,9 @@ import { DEFAULT_COUNTRY } from "../store/defaults.js";
 // Buchstaben) wird akzeptiert (Grossbuchstaben), sonst null (-> fail-safe auf den
 // naechsten Praezedenz-Schritt). KEINE Allowlist-Lockerung - reine Eingabe-Validierung.
 export function normCountry(raw) {
-  const cc = String(raw || "").trim().toUpperCase();
+  const cc = String(raw || "")
+    .trim()
+    .toUpperCase();
   return /^[A-Z]{2}$/.test(cc) ? cc : null;
 }
 
@@ -17,5 +19,7 @@ export function normCountry(raw) {
 // mit User-Wahl wird sie ueberstimmt, ohne ist sie nur ein Vorschlag. Der Fallback
 // (config.provisioningCountry) wird vom Aufrufer hereingereicht (config-frei).
 export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCountry } = {}) {
-  return normCountry(userCountry) || normCountry(proposedCountry) || fallbackCountry || DEFAULT_COUNTRY;
+  return (
+    normCountry(userCountry) || normCountry(proposedCountry) || fallbackCountry || DEFAULT_COUNTRY
+  );
 }

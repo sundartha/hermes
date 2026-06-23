@@ -4,14 +4,23 @@
 // Sequenz) deckt kyc-gate-outbound.test.js ab.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeDefaultState, registerTenant, setKycLevel, kycReached } from "../src/store/state-ops.js";
+import {
+  makeDefaultState,
+  registerTenant,
+  setKycLevel,
+  kycReached,
+} from "../src/store/state-ops.js";
 import { KYC_LEVEL, KYC_OUTBOUND_MIN, OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const A = "tenant_a";
 
 test("INV(3): Owner/Bestand ohne kyc_level -> Gate passiert (kycReached true, byte-identisch)", () => {
   const s = makeDefaultState();
-  assert.equal("kycLevel" in s.tenants[0], false, "Owner traegt KEIN kycLevel-Feld (kein Default-Seed)");
+  assert.equal(
+    "kycLevel" in s.tenants[0],
+    false,
+    "Owner traegt KEIN kycLevel-Feld (kein Default-Seed)",
+  );
   assert.equal(kycReached(s, OWNER_TENANT_ID, KYC_OUTBOUND_MIN), true, "fehlend -> ausreichend");
 });
 

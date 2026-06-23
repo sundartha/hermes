@@ -17,7 +17,10 @@ import { publicCall, activeNumberFor, upcomingCalendar } from "../store/views.js
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
-export const STATE_CALLS = 30, STATE_ACTION_ITEMS = 50, STATE_CALENDAR = 10, STATE_NOTIFICATIONS = 10;
+export const STATE_CALLS = 30,
+  STATE_ACTION_ITEMS = 50,
+  STATE_CALENDAR = 10,
+  STATE_NOTIFICATIONS = 10;
 
 // deps: { store, config, audit, tenant }. store traegt load/tenantContext/
 // exportTenantData/getCall/usageOf (+ getCalendar via upcomingCalendar). config ist
@@ -90,8 +93,11 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     const tenantId = requireTenant(req, res); // L6: tenant-gescopt statt OWNER-gepinnt; REJECT -> 403
     if (!tenantId) return;
     const data = store.exportTenantData(tenantId);
-    audit("data_export", req,
-      `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`);
+    audit(
+      "data_export",
+      req,
+      `calls=${data.calls.length} actionItems=${data.actionItems.length} notifications=${data.notifications.length}`,
+    );
     res.json({ ...data, calls: data.calls.map(publicCall) });
   });
 

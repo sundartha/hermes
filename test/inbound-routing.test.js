@@ -20,9 +20,33 @@ function geoSeed(extraSettings = {}) {
     settings: extraSettings,
     tenants: [{ id: OWNER_TENANT_ID, status: "active" }],
     numbers: [
-      { id: "num_owner_de", e164: OWNER_TEST_NUMBER.e164, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "DE", language: "de" },
-      { id: "num_fr", e164: FR_NUMBER, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "FR", language: "fr" },
-      { id: "num_en", e164: EN_NUMBER, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "GB", language: "en" },
+      {
+        id: "num_owner_de",
+        e164: OWNER_TEST_NUMBER.e164,
+        tenantId: OWNER_TENANT_ID,
+        provider: "twilio",
+        status: "active",
+        country: "DE",
+        language: "de",
+      },
+      {
+        id: "num_fr",
+        e164: FR_NUMBER,
+        tenantId: OWNER_TENANT_ID,
+        provider: "twilio",
+        status: "active",
+        country: "FR",
+        language: "fr",
+      },
+      {
+        id: "num_en",
+        e164: EN_NUMBER,
+        tenantId: OWNER_TENANT_ID,
+        provider: "twilio",
+        status: "active",
+        country: "GB",
+        language: "en",
+      },
     ],
   });
 }
@@ -66,7 +90,11 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
+      body: new URLSearchParams({
+        CallSid: "CAtest",
+        From: "+4915112345678",
+        To: OWNER_TEST_NUMBER.e164,
+      }),
     });
     assert.equal(res.status, 200);
     assert.match(await res.text(), /<Gather/, "Owner-Nummer fuehrt in den Gespraechs-Turn");
@@ -129,7 +157,11 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
   const srv = await startServer({ seed: geoSeed({ language: "en" }) });
   try {
     const { twiml, call } = await postIncoming(srv, FR_NUMBER);
-    assert.equal(call.language, "en", "Owner-Override (settings.language=en) schlaegt die FR-Nummer");
+    assert.equal(
+      call.language,
+      "en",
+      "Owner-Override (settings.language=en) schlaegt die FR-Nummer",
+    );
     assert.match(twiml, /language="en-GB"/, "Voice folgt dem Override");
   } finally {
     await srv.stop();

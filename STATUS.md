@@ -53,6 +53,7 @@ Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemerg
    > Damit ueberlebt der fluechtige Render-Free-FS-Reset bei `STORE_BACKEND=json`, ohne dass der
    > Boot-Guard den Start verweigert. Beide Render-Env-Keys stehen in `render.yaml`. (Mit `pg` ist
    > der Seed ohnehin persistent.)
+
 4. **Stripe live** - **Karten-Erfassung + Test-Mode-Hold/Capture ERLEDIGT** (Pay1-Pay4, gemergt +
    live-deployt, 708/708): Checkout `setup`-Mode (Stripe-Customer + `payment_method` pro Tenant) +
    `off_session`-`placeHold` -> die fruehere 400-Wurzel (`confirm` ohne `payment_method`) ist weg;
@@ -93,7 +94,6 @@ Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemerg
    **Inbound-SMS-Zusammenfassung an die private Tenant-Nummer** (das Versenden selbst) ist noch
    nicht gebaut.
 
-
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
 > das ist KEIN offenes Gate mehr (per Account-Records 2026-06-20 verifiziert).
 
@@ -130,7 +130,7 @@ Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemerg
 - EU-AI-Act Art. 50(2) maschinenlesbare KI-Markierung -> Compliance-Phase 08/2026
 - P8 Scale-Infra (PgBouncer / Read-Replicas / Partitionierung) -> bei echter Last
 - P3b-R CP5/CP6 (Metrik-Seam / Breaker-Tuning) -> W4 uebersprungen; **Path B** (undici als Dep
-  + expliziter Dispatcher) nur falls "Premature close" unter 0.105 erneut auftritt
+  - expliziter Dispatcher) nur falls "Premature close" unter 0.105 erneut auftritt
 - TD-8 MCP-sub-Threading (I5; aktuell fail-closed, kein Leak)
 
 ## 4. Rebrand: "Hermes" (Produkt) / "Sundartha" (Firma)

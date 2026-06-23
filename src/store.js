@@ -57,7 +57,8 @@ if (config.storeBackend === "pg") {
   } catch (e) {
     console.error(
       "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
-      "DB unerreichbar oder Init fehlgeschlagen. Ursache: " + (e && e.message ? e.message : String(e))
+        "DB unerreichbar oder Init fehlgeschlagen. Ursache: " +
+        (e && e.message ? e.message : String(e)),
     );
     process.exit(1);
   }

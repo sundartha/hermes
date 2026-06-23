@@ -14,7 +14,9 @@ import { startServer, seedState } from "./helpers.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const SUB_A = "sub-a";
-const CUST = "cus_test1", PM = "pm_test1", SESSION = "cs_1";
+const CUST = "cus_test1",
+  PM = "pm_test1",
+  SESSION = "cs_1";
 
 // Mini-Fake-Stripe (Vorlage startTelnyxProvisioningMock): die drei Pay1-Endpunkte.
 // getCheckoutSessionResult liefert per default cus_test1; ein Sonderpfad
@@ -30,7 +32,9 @@ async function startFakeStripe() {
       if (req.method === "POST" && req.url === "/v1/checkout/sessions")
         return res.end(JSON.stringify({ id: SESSION, url: `https://stripe.test/c/${SESSION}` }));
       if (req.method === "GET" && req.url.startsWith("/v1/checkout/sessions/cs_other"))
-        return res.end(JSON.stringify({ customer: "cus_other", setup_intent: { payment_method: "pm_other" } }));
+        return res.end(
+          JSON.stringify({ customer: "cus_other", setup_intent: { payment_method: "pm_other" } }),
+        );
       if (req.method === "GET" && req.url.startsWith(`/v1/checkout/sessions/${SESSION}`))
         return res.end(JSON.stringify({ customer: CUST, setup_intent: { payment_method: PM } }));
       res.statusCode = 404;
@@ -38,7 +42,10 @@ async function startFakeStripe() {
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((r) => server.close(r)),
+  };
 }
 
 // Ein aktiver Tenant A mit idpSubject (Karten-Erfassung laeuft tenant-scoped).
@@ -63,8 +70,16 @@ const getAs = (srv, idpSub, path) =>
 test("Flag aus (PAYMENT_ENABLED default false): beide Routen 404 (byte-identisch)", async () => {
   const srv = await startServer({ seed: seedTenantA() });
   try {
-    assert.equal((await postAs(srv, SUB_A, "/api/billing/setup-checkout")).status, 404, "setup-checkout 404");
-    assert.equal((await getAs(srv, SUB_A, "/api/billing/checkout-return?session_id=cs_1")).status, 404, "checkout-return 404");
+    assert.equal(
+      (await postAs(srv, SUB_A, "/api/billing/setup-checkout")).status,
+      404,
+      "setup-checkout 404",
+    );
+    assert.equal(
+      (await getAs(srv, SUB_A, "/api/billing/checkout-return?session_id=cs_1")).status,
+      404,
+      "checkout-return 404",
+    );
   } finally {
     await srv.stop();
   }
@@ -76,11 +91,15 @@ test("Happy-Path: setup-checkout legt Customer an (Store), checkout-return speic
   try {
     const checkout = await postAs(srv, SUB_A, "/api/billing/setup-checkout");
     assert.equal(checkout.status, 200);
-    assert.equal((await checkout.json()).url, `https://stripe.test/c/${SESSION}`, "Stripe-Checkout-URL durchgereicht");
+    assert.equal(
+      (await checkout.json()).url,
+      `https://stripe.test/c/${SESSION}`,
+      "Stripe-Checkout-URL durchgereicht",
+    );
     assert.equal(
       srv.readStore().tenants.find((t) => t.id === OWNER_TENANT_ID).stripeCustomerId,
       CUST,
-      "Customer im Store hinterlegt"
+      "Customer im Store hinterlegt",
     );
 
     const ret = await getAs(srv, SUB_A, `/api/billing/checkout-return?session_id=${SESSION}`);
@@ -89,7 +108,7 @@ test("Happy-Path: setup-checkout legt Customer an (Store), checkout-return speic
     assert.equal(
       srv.readStore().tenants.find((t) => t.id === OWNER_TENANT_ID).stripePaymentMethodId,
       PM,
-      "payment_method im Store gespeichert"
+      "payment_method im Store gespeichert",
     );
   } finally {
     await srv.stop();
@@ -108,7 +127,7 @@ test("Customer-Mismatch (fremde session_id -> fremder Customer) -> 403, KEIN pay
     assert.equal(
       "stripePaymentMethodId" in srv.readStore().tenants.find((t) => t.id === OWNER_TENANT_ID),
       false,
-      "kein fremdes payment_method gebunden"
+      "kein fremdes payment_method gebunden",
     );
   } finally {
     await srv.stop();

@@ -56,7 +56,7 @@ export function _resetJwksCache() {
 function deny401(res, error, description) {
   res.set(
     "WWW-Authenticate",
-    `Bearer resource_metadata="${metadataUrl()}", error="${error}", error_description="${description}"`
+    `Bearer resource_metadata="${metadataUrl()}", error="${error}", error_description="${description}"`,
   );
   return res.status(401).json({ error: description });
 }
@@ -100,7 +100,9 @@ export async function mcpAuth(req, res, next) {
   }
   if (isLocalSocket(req)) return next();
   audit("auth_failed", req, "path=/mcp");
-  return res.status(401).json({ error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost erreichbar" });
+  return res
+    .status(401)
+    .json({ error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost erreichbar" });
 }
 
 // RFC 9728: Protected Resource Metadata. Beide Pfade bedienen (generisch und

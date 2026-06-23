@@ -26,11 +26,15 @@ test("x-twilio-signature -> Twilio-Pfad (fail-closed ohne PUBLIC_URL -> false)",
 
 test("telnyx-Header -> Telnyx-Pfad (korrekte Ed25519-Signatur -> true)", () => {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-  config.telnyxPublicKey = publicKey.export({ format: "der", type: "spki" })
-    .subarray(-ED25519_RAW_KEY_LEN).toString("base64");
+  config.telnyxPublicKey = publicKey
+    .export({ format: "der", type: "spki" })
+    .subarray(-ED25519_RAW_KEY_LEN)
+    .toString("base64");
   const ts = String(Math.floor(Date.now() / 1000));
   const rawBody = Buffer.from(JSON.stringify({ data: {} }));
-  const sig = crypto.sign(null, Buffer.concat([Buffer.from(`${ts}|`), rawBody]), privateKey).toString("base64");
+  const sig = crypto
+    .sign(null, Buffer.concat([Buffer.from(`${ts}|`), rawBody]), privateKey)
+    .toString("base64");
   const ok = inboundSignatureVerifier().verifyInboundSignature({
     headers: { "telnyx-signature-ed25519": sig, "telnyx-timestamp": ts },
     rawBody,
@@ -39,6 +43,9 @@ test("telnyx-Header -> Telnyx-Pfad (korrekte Ed25519-Signatur -> true)", () => {
 });
 
 test("kein erkannter Provider-Header -> false (fail-closed)", () => {
-  const ok = inboundSignatureVerifier().verifyInboundSignature({ headers: {}, rawBody: Buffer.from("{}") });
+  const ok = inboundSignatureVerifier().verifyInboundSignature({
+    headers: {},
+    rawBody: Buffer.from("{}"),
+  });
   assert.equal(ok, false);
 });

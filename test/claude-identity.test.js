@@ -19,7 +19,16 @@ before(async () => {
   const seed = seedState({
     calls: [],
     tenants: [{ id: TENANT_B, status: "active", ownerName: B_OWNER }],
-    numbers: [{ id: "num_b", e164: B_NUMBER, tenantId: TENANT_B, provider: "twilio", status: "active", providerNumberId: null }],
+    numbers: [
+      {
+        id: "num_b",
+        e164: B_NUMBER,
+        tenantId: TENANT_B,
+        provider: "twilio",
+        status: "active",
+        providerNumberId: null,
+      },
+    ],
   });
   process.env.DATA_DIR = tempDataDir(seed);
   config = (await import("../src/config.js")).config;
@@ -27,7 +36,8 @@ before(async () => {
   ({ systemPrompt, disclosureSentence } = await import("../src/claude.js"));
 });
 
-const callFor = (tenantId, over = {}) => seedCall({ tenantId, direction: "outbound", callerName: null, ...over });
+const callFor = (tenantId, over = {}) =>
+  seedCall({ tenantId, direction: "outbound", callerName: null, ...over });
 
 test("seedState-Erweiterung ist route-faehig: B's Nummer loest auf Tenant B auf", () => {
   assert.equal(store.findTenantByNumber(B_NUMBER), TENANT_B);

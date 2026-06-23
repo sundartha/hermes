@@ -67,7 +67,7 @@ globalen Limits hinaus erweitern.
   `place_call`/`place_call_denied`-Audit traegt `requestedBy=<email|owner>`.
 - **Kalender/Booking**: `profile.allowCalendar` gated das `get_calendar`-MCP-Tool
   (wird sonst gar nicht registriert); `profile.allowBooking` gated `POST
-  /api/calendar` (Owner/null = erlaubt; vorher fehlte hier jede Pruefung).
+/api/calendar` (Owner/null = erlaubt; vorher fehlte hier jede Pruefung).
 - **Verwaltung**: `GET/POST /api/profiles` + `DELETE /api/profiles/:email`, alle
   hinter Basic-Auth (Bestand deckt `/api/*` ab; OAuth-MCP-Nutzer erreichen nur
   `/mcp`, nie `/api/*` -> kein Self-Service, kein MCP-Tool dafuer). Audit
@@ -169,7 +169,7 @@ in der Test-Suite (`npm test`, Server als Kindprozess mit Test-Env).
    - Verifikation: `test/api.test.js` (`{evil: "x", allowBooking: "nein"}` ->
      beides nicht im Store; `{allowBooking: false}` -> uebernommen).
 5. **Security-Header**: `X-Content-Type-Options: nosniff`, `X-Frame-Options:
-   DENY`, `Referrer-Policy`, CSP fuers Dashboard (Inline + Google Fonts
+DENY`, `Referrer-Policy`, CSP fuers Dashboard (Inline + Google Fonts
    erlaubt), `Cache-Control: no-store` fuer `/api/*`. ✅ (`src/middleware.js`)
    - Erwartet: Header auf `/` und `/api/state` exakt gesetzt.
    - Verifikation: `test/headers.test.js`.
@@ -219,9 +219,8 @@ Teilweise autonom (Code umgesetzt, Betrieb braucht den Betreiber):
    `test/oauth.test.js` (lokaler Mini-IdP, C1-Matrix). Offen (NICHT autonom): IdP-Account (WorkOS) anlegen,
    `MCP_AUTH=oauth` scharf schalten, End-to-End-Test gegen claude.ai.
 
-NICHT autonom (braucht Accounts/Entscheidungen des Betreibers):
-5. **Secrets-Hygiene**: Token-Rotation dokumentieren, Twilio-Subaccount mit
-   minimalen Rechten - braucht Zugriff auf Twilio-/Render-Konto.
+NICHT autonom (braucht Accounts/Entscheidungen des Betreibers): 5. **Secrets-Hygiene**: Token-Rotation dokumentieren, Twilio-Subaccount mit
+minimalen Rechten - braucht Zugriff auf Twilio-/Render-Konto.
 
 ## Voraussetzung fuer die Verifikation: Test-Suite ✅ (umgesetzt)
 
@@ -266,10 +265,10 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
    (`OAUTH_ISSUER_URL`, mit `/mcp` geteilt). `id_token` via `jose` gegen die JWKS
    geprueft inkl. `issuer` UND `audience=OIDC_CLIENT_ID`. CSRF ueber signierten
    `oauth_state`-Cookie; PKCE-Verifier signiert. Session-Cookie httpOnly + Secure
-   + SameSite=Lax, signiert (HMAC, `SESSION_SECRET`). Niemals Tokens loggen.
-   - Erwartet: state-Mismatch/fehlend -> 400 (kein Account/Session); exchange-Fehler
+   - SameSite=Lax, signiert (HMAC, `SESSION_SECRET`). Niemals Tokens loggen.
+   * Erwartet: state-Mismatch/fehlend -> 400 (kein Account/Session); exchange-Fehler
      -> 401 ohne Detail-/Token-Leak im Body; Erfolg -> signiertes Session-Cookie + Redirect.
-   - Verifikation: `test/web-auth.test.js` (PKCE/Cookie-Signatur + Router-Flow),
+   * Verifikation: `test/web-auth.test.js` (PKCE/Cookie-Signatur + Router-Flow),
      `test/web-auth-pg.test.js` (`makeAccounts`/`makeSessions` gegen das echte Schema).
 3. **Tenancy + Lifecycle**: `tenant.status` (suspended -> active via Admin -> closed).
    Account-Modell offen + E-Mail-Verifikation (Provider) + Approval-Gate; Erst-Login
@@ -285,11 +284,11 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
      abgelaufen -> 401, suspended -> 403, aktiv -> req.tenant); `test/portal-route.test.js`
      (ohne Session 401; aktive Kunden-Session sieht nur eigene leere Calls, kein Owner-Leak).
 5. **Admin (admin-allowlist, fail-closed)**: `POST /api/admin/tenants/:id/{approve,
-   suspend}` hinter webAuth + `adminOnly` (`ADMIN_EMAILS` ODER role=admin). Suspend
+suspend}` hinter webAuth + `adminOnly` (`ADMIN_EMAILS` ODER role=admin). Suspend
    invalidiert SOFORT alle Sessions des Tenants (gesperrter Kunde liest nicht bis
    Cookie-Expiry weiter). Jede Aktion -> `audit_log`.
    - Verifikation: `test/admin-approval.test.js` (Nicht-Admin 403; approve -> active
-     + Audit; suspend -> suspended + Session-Invalidierung + Audit; no-session 401).
+     - Audit; suspend -> suspended + Session-Invalidierung + Audit; no-session 401).
 6. **Audit + DSGVO**: `audit_log` immutable append-only; `tenant_id` BEWUSST KEIN FK
    (ueberdauert Tenant-Loeschung, Art. 15). `ON DELETE CASCADE` auf `account`/
    `session` (Art. 17, atomare Loeschung).
@@ -297,6 +296,7 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
      session, `audit_log` ueberdauert), `test/audit-store.test.js`.
 
 **OIDC-/RLS-Hardening (umgesetzt 2026-06-16, Review + Fix-Workflow):**
+
 - **F1 email_verified**: `claimsFromPayload` uebernimmt `email` nur bei `email_verified === true`
   (Strikt-Gleichheit, kein Truthy-Cast) -> Admin-Allowlist nur ueber verifizierte Adressen.
   Test `test/web-auth.test.js` (T-F1-01..07).
@@ -308,6 +308,7 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
   INSERT/UPDATE sind tenant-isoliert (nicht nur SELECT/USING). Test `test/rls-with-check.test.js`.
 
 **Self-Service-Login-Konvergenz (#3, umgesetzt 2026-06-16, `feat/self-service-web-session`):**
+
 - Self-Service (`/api/self-service/*`) ist jetzt **web-session-only**: hinter `webAuthMw`
   (OIDC-Browser-Login, Feature B), `tenant = req.tenant.tenantId`. Der fruehere
   `X-Internal-Identity`-Pfad ist ENTFERNT. Routen NUR im Web-Login-Block registriert
@@ -355,6 +356,7 @@ und entkoppelt den Boot-Pfad. (P0 umgesetzt.)
   beruehrt - nur Crash-Verhalten + Boot-Robustheit.
 
 **Bewusst akzeptierte Abweichungen / Deployment-Anforderungen:**
+
 - **DB-Rolle**: Der `DATABASE_URL`-Nutzer MUSS non-superuser + NOBYPASSRLS sein,
   sonst greift FORCE-RLS NICHT (Superuser umgeht RLS). Harte Deployment-Anforderung.
   **F5 (umgesetzt):** `createPortalRunner()` prueft die Rolle fail-closed beim
@@ -374,6 +376,7 @@ und entkoppelt den Boot-Pfad. (P0 umgesetzt.)
   Komposition in-process via pglite + fakes ab.
 
 **Definition-of-Done (Council-Kriterien):**
+
 - [x] Isolations-/Error-Injection-Test (CI) gruen + Release-Gate-Doku fuer echtes Pooling
 - [x] kein Request sieht Fremddaten (portal-route + portal-rls-killer)
 - [x] Login/Registrierung rate-limited (`LOGIN_RATE_LIMIT_PER_MIN`, eigener Limiter auf `/auth`)
@@ -416,6 +419,7 @@ P1 = Quelle). (P1 umgesetzt.)
   Budget-Gate wird durch AC1/AC2 GESTAERKT (kein Counter-Rollback durch truncated/lost write).
 
 **Bewusst akzeptierte Abweichungen / Restrisiken:**
+
 - **`withStoreLock` lebt in der Fassade (`src/store.js`), NICHT im json-Backend** (Plan-
   Skizze sah json.js vor). Grund: der Mutex ist eine JS-Nebenlaeufigkeits-Eigenschaft des
   EINEN Node-Prozesses und backend-unabhaengig. In `store.js` ist `store.withStoreLock` auch
@@ -481,6 +485,7 @@ P2 ersetzt stilles OPEN durch lautes Refusal. (P2 umgesetzt.)
   damit ein Refactor ihn nicht still droppen/umordnen kann.
 
 **Bewusst akzeptierte Abweichungen / Folgen:**
+
 - **Strenger als bisher: fehlende Pflicht-Config verweigert jetzt den Boot.** `TWILIO_*`,
   `PUBLIC_URL`, `OAUTH_ISSUER_URL` (bei `MCP_AUTH=oauth`), `DATABASE_URL` (bei `STORE_BACKEND=pg`),
   `STRIPE_SECRET_KEY` (bei `PAYMENT_ENABLED`) fehlend -> exit 1 statt warn-but-boot. Vier
@@ -501,8 +506,9 @@ P2 ersetzt stilles OPEN durch lautes Refusal. (P2 umgesetzt.)
 Verifikation: `npm test` 490 gruen (478 Baseline + 12 neue T-P2-01..11, 0 Drop);
 `test/config-failclosed.test.js`, `test/boot-failclosed.test.js`, `test/disclosure-regression.test.js`,
 `test/place-call-error.test.js`. Smoke (echtes `src/server.js`): `MAX_BUDGET_EUR=acht` -> exit 1
-+ `[boot] Start abgebrochen` (nennt MAX_BUDGET_EUR, kein "Gateway laeuft"); Gegenprobe gueltige
-Config -> `/healthz` 200 `{"ok":true}`.
+
+- `[boot] Start abgebrochen` (nennt MAX_BUDGET_EUR, kein "Gateway laeuft"); Gegenprobe gueltige
+  Config -> `/healthz` 200 `{"ok":true}`.
 
 ## Test-Coverage & server.js-Decomposition (P4/OT-5, umgesetzt 2026-06-19, `feat/crash-p4-coverage-decomp`)
 
@@ -547,6 +553,7 @@ Secret-Disziplin (Regel 4/5) wird durch AC3/AC4 sogar verschaerft.
   `validIdentity` wandert als eine Quelle ins Modul (G5), `server.js` importiert es fuer `/api/onboard`.
 
 **Bewusst akzeptierte Abweichungen / Folgen:**
+
 - **AC8/T-P4-09 = NO-OP (durch P2 bereits erledigt):** der `/api/calls`-Originate-500-Body ist seit
   P2 generisch und der dynamische Leak-Test (`test/place-call-error.test.js`, T-P2-11,
   `SECRET_DO_NOT_LEAK`) liegt bereits in master -> NICHT doppelt gefixt (Delta 1 des Hand-offs).

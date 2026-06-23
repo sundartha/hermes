@@ -88,16 +88,19 @@ test("Realtime-Bundle: Opener (outbound/inbound) je Sprache vorhanden, DE byte-i
     assert.equal(typeof op.inbound, "string", `${lang}: inbound-Opener fehlt`);
     assert.ok(op.inbound.length > 0, `${lang}: inbound-Opener leer`);
     // Outbound-Opener bettet die Offenlegung ein.
-    assert.ok(op.outbound("DISCLOSURE").includes("DISCLOSURE"), `${lang}: Offenlegung nicht eingebettet`);
+    assert.ok(
+      op.outbound("DISCLOSURE").includes("DISCLOSURE"),
+      `${lang}: Offenlegung nicht eingebettet`,
+    );
   }
   // DE-Opener byte-identisch zum frueheren bridge.js-Inline-Text.
   assert.equal(
     LOCALES.de.realtimeOpener.outbound("X"),
-    'Beginne das Gespraech JETZT. Dein erster Satz muss exakt lauten: "X" Nenne danach kurz dein Anliegen.'
+    'Beginne das Gespraech JETZT. Dein erster Satz muss exakt lauten: "X" Nenne danach kurz dein Anliegen.',
   );
   assert.equal(
     LOCALES.de.realtimeOpener.inbound,
-    "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen."
+    "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
   );
 });
 
@@ -110,9 +113,15 @@ test("Realtime-Bundle: localeFor-Fallback liefert DE-Sentinels (unbekannte Sprac
 
 test("EN-Bundle: kuratierte EN-Offenlegung (R8, nur ownerName gebunden) + EN-Summary mit gleichen JSON-Keys", () => {
   const disc = LOCALES.en.disclosure(OWNER_NAME);
-  assert.ok(disc.startsWith("Hello, this is an AI assistant calling on behalf of "), `EN-Offenlegung-Wortlaut: ${disc}`);
+  assert.ok(
+    disc.startsWith("Hello, this is an AI assistant calling on behalf of "),
+    `EN-Offenlegung-Wortlaut: ${disc}`,
+  );
   assert.ok(disc.includes(OWNER_NAME), "ownerName muss gebunden sein");
-  assert.ok(!disc.includes("Guten Tag") && !disc.includes("Bonjour"), "EN darf keinen DE/FR-Rest tragen");
+  assert.ok(
+    !disc.includes("Guten Tag") && !disc.includes("Bonjour"),
+    "EN darf keinen DE/FR-Rest tragen",
+  );
   const sum = LOCALES.en.summarySystem(OWNER_NAME);
   assert.ok(sum.includes("2-3 sentences in English"), `EN-Summary muss englisch sein: ${sum}`);
   for (const key of ['"summary"', '"actionItems"', '"objective_achieved"']) {
@@ -122,19 +131,37 @@ test("EN-Bundle: kuratierte EN-Offenlegung (R8, nur ownerName gebunden) + EN-Sum
 
 test("EN-Bundle: statische Server-Texte (Reprompt/Fehler/Hangup/Greeting) sind englisch + nicht-leer", () => {
   const en = LOCALES.en;
-  for (const field of ["llmDegradedSpeech", "turnErrorSpeech", "noSpeechReprompt", "budgetExhaustedHangup", "greetingDefault"]) {
+  for (const field of [
+    "llmDegradedSpeech",
+    "turnErrorSpeech",
+    "noSpeechReprompt",
+    "budgetExhaustedHangup",
+    "greetingDefault",
+  ]) {
     assert.equal(typeof en[field], "string", `${field} muss ein String sein`);
     assert.ok(en[field].length > 0, `${field} darf nicht leer sein`);
   }
-  assert.ok(en.greetingDefault.includes("{owner}"), "Greeting-Default behaelt den {owner}-Platzhalter");
+  assert.ok(
+    en.greetingDefault.includes("{owner}"),
+    "Greeting-Default behaelt den {owner}-Platzhalter",
+  );
   assert.equal(en.voiceProfile, "en-female-neural");
 });
 
 test("Statische Texte: DE byte-identisch zum frueheren server.js-Bestand (kein Drift durch das Bundle)", () => {
-  assert.equal(LOCALES.de.llmDegradedSpeech, "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.");
-  assert.equal(LOCALES.de.turnErrorSpeech, "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.");
+  assert.equal(
+    LOCALES.de.llmDegradedSpeech,
+    "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
+  );
+  assert.equal(
+    LOCALES.de.turnErrorSpeech,
+    "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
+  );
   assert.equal(LOCALES.de.noSpeechReprompt, "Entschuldigung, koennen Sie das bitte wiederholen?");
-  assert.equal(LOCALES.de.budgetExhaustedHangup, "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.");
+  assert.equal(
+    LOCALES.de.budgetExhaustedHangup,
+    "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
+  );
 });
 
 // ---- (B) claude.js konsumiert call.language ----
@@ -143,7 +170,10 @@ let systemPrompt, disclosureSentence, openingText;
 before(async () => {
   // Owner-Tenant mit explizitem ownerName seeden -> tenantContext liefert OWNER_NAME
   // deterministisch (kein Config/Env-Coupling, Muster wie claude-identity Tenant B).
-  const seed = seedState({ calls: [], tenants: [{ id: OWNER_TENANT_ID, status: "active", ownerName: OWNER_NAME }] });
+  const seed = seedState({
+    calls: [],
+    tenants: [{ id: OWNER_TENANT_ID, status: "active", ownerName: OWNER_NAME }],
+  });
   process.env.DATA_DIR = tempDataDir(seed);
   await import("../src/config.js");
   ({ systemPrompt, disclosureSentence, openingText } = await import("../src/claude.js"));

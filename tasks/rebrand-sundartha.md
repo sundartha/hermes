@@ -27,6 +27,7 @@ Entscheidung #2), damit der Render-Service-Name nie wieder die Brand-URL bestimm
 ## Owner-Entscheidungen ZUERST (blockieren Teile der Umsetzung)
 
 > **ENTSCHIEDEN 2026-06-20 (Owner):**
+>
 > - **#1 Name = `Hermes`** — Produkt-/Agent-/MCP-Server-Name. Im Code/Disclosure hart
 >   verdrahtet (NICHT "Sundartha"). Neue Disclosure: „hier spricht der KI-Assistent Hermes
 >   im Auftrag von {Owner}." (bleibt erster, fest verdrahteter Satz, Regel 2).
@@ -149,15 +150,15 @@ Verifikation: Live-Smoke (s.u.) NACH jedem externen Update.
 
 ## Pre-Mortem (ein Jahr spaeter, der Rebrand hat Schaden gemacht)
 
-| Risiko | Szenario | Gegenmassnahme |
-|---|---|---|
-| **Tote Webhooks** | URL geaendert, Twilio/Telnyx zeigen auf alte URL -> kein Anruf kommt durch | B.2/B.3 synchron mit B.1; Live-Inbound-Smoke direkt danach |
-| **OAuth-Bruch** | Resource Indicator/Redirect passt nicht -> MCP-Connector 401, Login kaputt | B.4+B.5 zusammen; OAuth-Login + Connector-Smoke |
-| **Render-Rename unmoeglich** | Service nicht in-place umbenennbar -> halber Cutover | VORHER verifizieren; sonst Custom-Domain/neuer Service |
-| **Deploy-Repo falsch** | Render deployt upstream -> Rename ohne Re-Point = kein Deploy live | B.6 inkl. Render-Verknuepfung; `[boot]`-SHA pruefen [[deploy-repo-split]] |
-| **agentName-Drift** | Default geaendert, bestehende Tenants behalten alten Namen | #1 Migration bewusst entscheiden; Tests mitziehen (A.4) |
-| **Doku-URL-Drift** | Doku-URL vor/nach Cutover inkonsistent | B.7 im Lockstep mit B.1, nicht in Track A |
-| **Marken-Claim** | "Vodafone Verified"-Badge bleibt -> falsche Markenaussage | A.5 entfernt/ersetzt den Badge |
+| Risiko                       | Szenario                                                                   | Gegenmassnahme                                                            |
+| ---------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Tote Webhooks**            | URL geaendert, Twilio/Telnyx zeigen auf alte URL -> kein Anruf kommt durch | B.2/B.3 synchron mit B.1; Live-Inbound-Smoke direkt danach                |
+| **OAuth-Bruch**              | Resource Indicator/Redirect passt nicht -> MCP-Connector 401, Login kaputt | B.4+B.5 zusammen; OAuth-Login + Connector-Smoke                           |
+| **Render-Rename unmoeglich** | Service nicht in-place umbenennbar -> halber Cutover                       | VORHER verifizieren; sonst Custom-Domain/neuer Service                    |
+| **Deploy-Repo falsch**       | Render deployt upstream -> Rename ohne Re-Point = kein Deploy live         | B.6 inkl. Render-Verknuepfung; `[boot]`-SHA pruefen [[deploy-repo-split]] |
+| **agentName-Drift**          | Default geaendert, bestehende Tenants behalten alten Namen                 | #1 Migration bewusst entscheiden; Tests mitziehen (A.4)                   |
+| **Doku-URL-Drift**           | Doku-URL vor/nach Cutover inkonsistent                                     | B.7 im Lockstep mit B.1, nicht in Track A                                 |
+| **Marken-Claim**             | "Vodafone Verified"-Badge bleibt -> falsche Markenaussage                  | A.5 entfernt/ersetzt den Badge                                            |
 
 ## Empfohlene Reihenfolge
 
@@ -170,6 +171,7 @@ Verifikation: Live-Smoke (s.u.) NACH jedem externen Update.
    Commit. Erst dann gilt der Rebrand als durch.
 
 ## Hinweis: nicht betroffen
+
 - `OWNER_NAME` (Jonas) + `disclosureSentence` nutzen den Besitzer-Namen, NICHT die
   Marke -> vom Rebrand unberuehrt (Regel 2 bleibt).
 - `.claude/worktrees/*`-Treffer sind Temp-Worktrees, kein echter Repo-Stand.

@@ -89,7 +89,8 @@
   font-size: var(--text-body);
   text-decoration: none;
   cursor: pointer;
-  transition: background var(--motion-duration) var(--motion-ease),
+  transition:
+    background var(--motion-duration) var(--motion-ease),
     color var(--motion-duration) var(--motion-ease);
 }
 

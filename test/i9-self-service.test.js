@@ -37,7 +37,10 @@ const OTHER_SESSION = "cs_other"; // gehoert einem fremden Customer -> Customer-
 function fakeBilling() {
   return {
     createCustomer: async () => ({ customerId: FAKE_CUST }),
-    createSetupCheckoutSession: async () => ({ url: `https://stripe.test/c/${FAKE_SESSION}`, sessionId: FAKE_SESSION }),
+    createSetupCheckoutSession: async () => ({
+      url: `https://stripe.test/c/${FAKE_SESSION}`,
+      sessionId: FAKE_SESSION,
+    }),
     getCheckoutSessionResult: async (id) =>
       id === OTHER_SESSION
         ? { customerId: "cus_other", paymentMethodId: "pm_other" }
@@ -53,7 +56,7 @@ async function seedActiveTenant(store, accounts, { sub, tenantId, bankData }) {
   const s = store.load();
   ops.registerTenant(s, tenantId, { firstName: "Kunde", lastName: "B" }); // G1: komponiert ownerName="Kunde B"
   const t = s.tenants.find((x) => x.id === tenantId);
-  t.status = "active";       // Mirror-Status konsistent zur DB (Flush darf nicht downgraden)
+  t.status = "active"; // Mirror-Status konsistent zur DB (Flush darf nicht downgraden)
   t.idpSubject = sub;
   const bucket = ops.settingsFor(s, tenantId);
   if (bankData !== undefined) bucket.allowBankData = bankData;
@@ -67,22 +70,52 @@ async function seedActiveTenant(store, accounts, { sub, tenantId, bankData }) {
 // Liefert base-URL, store (Mirror-Zugriff), Cookies (aktiv/suspendiert) + close().
 async function setup({ bankData, paymentEnabled = true } = {}) {
   const { store, db } = await makePgTestStore();
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
-  const bucketB = await seedActiveTenant(store, accounts, { sub: SUB_B, tenantId: TENANT_B, bankData });
+  const bucketB = await seedActiveTenant(store, accounts, {
+    sub: SUB_B,
+    tenantId: TENANT_B,
+    bankData,
+  });
 
   // Owner-Call (darf NIE in B's Sicht auftauchen) + B-Call + B-Termin im Mirror.
   const s = store.load();
-  const ownerCall = ops.createCall(s, { direction: "inbound", from: "+49", to: "+49", tenantId: OWNER_TENANT_ID });
-  const bCall = ops.createCall(s, { direction: "inbound", from: "+49", to: "+49", tenantId: TENANT_B });
-  ops.addCalendarEvent(s, TENANT_B, "B-Termin", "2030-02-01T10:00:00.000Z", "2030-02-01T11:00:00.000Z");
-  const { id: sessionId } = await sessions.create({ sub: SUB_B, tenantId: TENANT_B, ttlSeconds: 3600 });
+  const ownerCall = ops.createCall(s, {
+    direction: "inbound",
+    from: "+49",
+    to: "+49",
+    tenantId: OWNER_TENANT_ID,
+  });
+  const bCall = ops.createCall(s, {
+    direction: "inbound",
+    from: "+49",
+    to: "+49",
+    tenantId: TENANT_B,
+  });
+  ops.addCalendarEvent(
+    s,
+    TENANT_B,
+    "B-Termin",
+    "2030-02-01T10:00:00.000Z",
+    "2030-02-01T11:00:00.000Z",
+  );
+  const { id: sessionId } = await sessions.create({
+    sub: SUB_B,
+    tenantId: TENANT_B,
+    ttlSeconds: 3600,
+  });
 
   // Suspendierter Tenant (Account in der DB, NICHT aktiviert) fuer den 403-Fall.
   await accounts.upsertOnFirstLogin({ sub: SUB_SUSPENDED, email: "susp@kunde.de" });
-  const { id: suspSessionId } = await sessions.create({ sub: SUB_SUSPENDED, tenantId: TENANT_SUSPENDED, ttlSeconds: 3600 });
+  const { id: suspSessionId } = await sessions.create({
+    sub: SUB_SUSPENDED,
+    tenantId: TENANT_SUSPENDED,
+    ttlSeconds: 3600,
+  });
 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const app = express();
@@ -90,12 +123,25 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
   // Eigenes Config-Objekt (NICHT das Singleton kippen, F.I.R.S.T./Independent): so ist
   // der Flag-aus-Fall in einem separaten setup() testbar, ohne andere Tests zu stoeren.
   const cfg = { paymentEnabled, publicUrl: PUBLIC_URL };
-  app.use(makeSelfServiceRoutes({ store, webAuthMw, audit: () => {}, config: cfg, billing: fakeBilling() }));
-  const server = await new Promise((r) => { const sv = app.listen(0, "127.0.0.1", () => r(sv)); });
+  app.use(
+    makeSelfServiceRoutes({
+      store,
+      webAuthMw,
+      audit: () => {},
+      config: cfg,
+      billing: fakeBilling(),
+    }),
+  );
+  const server = await new Promise((r) => {
+    const sv = app.listen(0, "127.0.0.1", () => r(sv));
+  });
 
   return {
     base: `http://127.0.0.1:${server.address().port}`,
-    store, bucketB, ownerCallId: ownerCall.id, bCallId: bCall.id,
+    store,
+    bucketB,
+    ownerCallId: ownerCall.id,
+    bCallId: bCall.id,
     cookieB: cookieFor(sessionId),
     cookieSuspended: cookieFor(suspSessionId),
     close: () => new Promise((r) => server.close(r)),
@@ -108,10 +154,19 @@ function request(method, url, { cookie, body } = {}) {
     const payload = body ? JSON.stringify(body) : null;
     const headers = {};
     if (cookie) headers.Cookie = cookie;
-    if (payload) { headers["Content-Type"] = "application/json"; headers["Content-Length"] = Buffer.byteLength(payload); }
+    if (payload) {
+      headers["Content-Type"] = "application/json";
+      headers["Content-Length"] = Buffer.byteLength(payload);
+    }
     const req = http.request(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
-      (res) => { let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b, location: res.headers.location })); }
+      (res) => {
+        let b = "";
+        res.on("data", (d) => (b += d));
+        res.on("end", () =>
+          resolve({ status: res.statusCode, body: b, location: res.headers.location }),
+        );
+      },
     );
     req.on("error", reject);
     if (payload) req.write(payload);
@@ -135,11 +190,21 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
     const body = JSON.parse(res.body);
     assert.equal(body.calls.length, 1, "nur B's Call");
     assert.equal(body.calls[0].id, s.bCallId);
-    assert.equal(body.calls.some((c) => c.id === s.ownerCallId), false, "Owner-Call NICHT enthalten");
+    assert.equal(
+      body.calls.some((c) => c.id === s.ownerCallId),
+      false,
+      "Owner-Call NICHT enthalten",
+    );
     assert.equal("streamToken" in body.calls[0], false, "streamToken NIE geleakt (publicCall)");
     assert.deepEqual(body.greetingTemplates, GREETING_TEMPLATES, "Vorlagen mitgeliefert");
-    assert.deepEqual(body.calendar.map((e) => e.title), ["B-Termin"], "nur B's Termin");
-  } finally { await s.close(); }
+    assert.deepEqual(
+      body.calendar.map((e) => e.title),
+      ["B-Termin"],
+      "nur B's Termin",
+    );
+  } finally {
+    await s.close();
+  }
 });
 
 test("(b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt", async () => {
@@ -150,8 +215,14 @@ test("(b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt"
     const stored = s.store.load().settings;
     assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
     assert.equal(stored[TENANT_B].allowCalendar, false, "allowCalendar gesetzt");
-    assert.equal(stored[OWNER_TENANT_ID].agentName, defaultSettings().agentName, "Owner-Bucket unveraendert");
-  } finally { await s.close(); }
+    assert.equal(
+      stored[OWNER_TENANT_ID].agentName,
+      defaultSettings().agentName,
+      "Owner-Bucket unveraendert",
+    );
+  } finally {
+    await s.close();
+  }
 });
 
 test("(c1) Nicht-Whitelist-Feld (allowSummaries) wird ignoriert", async () => {
@@ -159,8 +230,14 @@ test("(c1) Nicht-Whitelist-Feld (allowSummaries) wird ignoriert", async () => {
   try {
     const res = await postSettings(s, { allowSummaries: false });
     assert.equal(res.status, 200);
-    assert.equal(s.store.load().settings[TENANT_B].allowSummaries, true, "allowSummaries nicht geschrieben");
-  } finally { await s.close(); }
+    assert.equal(
+      s.store.load().settings[TENANT_B].allowSummaries,
+      true,
+      "allowSummaries nicht geschrieben",
+    );
+  } finally {
+    await s.close();
+  }
 });
 
 test("(c2) Restrict-only: allowBankData false->true wird abgelehnt", async () => {
@@ -169,7 +246,9 @@ test("(c2) Restrict-only: allowBankData false->true wird abgelehnt", async () =>
     const res = await postSettings(s, { allowBankData: true });
     assert.equal(res.status, 200);
     assert.equal(s.store.load().settings[TENANT_B].allowBankData, false, "false->true abgelehnt");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(c3) Restrict-only: allowBankData true->false ist erlaubt", async () => {
@@ -178,7 +257,9 @@ test("(c3) Restrict-only: allowBankData true->false ist erlaubt", async () => {
     const res = await postSettings(s, { allowBankData: false });
     assert.equal(res.status, 200);
     assert.equal(s.store.load().settings[TENANT_B].allowBankData, false, "true->false erlaubt");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(d1) greeting-Freitext wird abgelehnt (nur Vorlage)", async () => {
@@ -186,8 +267,14 @@ test("(d1) greeting-Freitext wird abgelehnt (nur Vorlage)", async () => {
   try {
     const res = await postSettings(s, { greeting: "Hallo ich bin boese {owner}" });
     assert.equal(res.status, 200);
-    assert.equal(s.store.load().settings[TENANT_B].greeting, defaultSettings().greeting, "greeting unveraendert (Default)");
-  } finally { await s.close(); }
+    assert.equal(
+      s.store.load().settings[TENANT_B].greeting,
+      defaultSettings().greeting,
+      "greeting unveraendert (Default)",
+    );
+  } finally {
+    await s.close();
+  }
 });
 
 test("(d2) greeting-Vorlage wird akzeptiert", async () => {
@@ -195,8 +282,14 @@ test("(d2) greeting-Vorlage wird akzeptiert", async () => {
   try {
     const res = await postSettings(s, { greeting: GREETING_TEMPLATES[1] });
     assert.equal(res.status, 200);
-    assert.equal(s.store.load().settings[TENANT_B].greeting, GREETING_TEMPLATES[1], "Vorlage uebernommen");
-  } finally { await s.close(); }
+    assert.equal(
+      s.store.load().settings[TENANT_B].greeting,
+      GREETING_TEMPLATES[1],
+      "Vorlage uebernommen",
+    );
+  } finally {
+    await s.close();
+  }
 });
 
 test("(e) Disclosure-Abschalt-Versuch wird abgelehnt (keine neuen Keys)", async () => {
@@ -207,7 +300,9 @@ test("(e) Disclosure-Abschalt-Versuch wird abgelehnt (keine neuen Keys)", async 
     const bucket = s.store.load().settings[TENANT_B];
     assert.equal("allowDisclosureOff" in bucket, false, "kein erfundenes Disclosure-Off-Feld");
     assert.equal("disclosure" in bucket, false, "kein disclosure-Feld geschrieben");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(f1) Fail-closed: ohne Session-Cookie -> 401, kein Datenleck", async () => {
@@ -216,15 +311,21 @@ test("(f1) Fail-closed: ohne Session-Cookie -> 401, kein Datenleck", async () =>
     const res = await request("GET", `${s.base}/api/self-service/state`);
     assert.equal(res.status, 401);
     assert.equal(res.body.includes(s.bCallId), false, "keine Tenant-Daten ohne Session");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(f2) Fail-closed: suspendierter Tenant -> 403 (kein Self-Service bis Freigabe)", async () => {
   const s = await setup();
   try {
-    const res = await request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookieSuspended });
+    const res = await request("GET", `${s.base}/api/self-service/state`, {
+      cookie: s.cookieSuspended,
+    });
     assert.equal(res.status, 403);
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(f3) Fail-closed: POST als suspendierter Tenant -> 403, kein Write", async () => {
@@ -232,8 +333,14 @@ test("(f3) Fail-closed: POST als suspendierter Tenant -> 403, kein Write", async
   try {
     const res = await postSettings(s, { agentName: "Boese" }, s.cookieSuspended);
     assert.equal(res.status, 403);
-    assert.equal(JSON.stringify(s.store.load().settings).includes("Boese"), false, "kein Write bei 403");
-  } finally { await s.close(); }
+    assert.equal(
+      JSON.stringify(s.store.load().settings).includes("Boese"),
+      false,
+      "kein Write bei 403",
+    );
+  } finally {
+    await s.close();
+  }
 });
 
 // ---- Pay3: Karten-Erfassung aus dem Self-Service-Dashboard --------------------------
@@ -244,7 +351,7 @@ test("(g1) hasCard: false ohne Karte, true nach Bindung; payment_method im B-Buc
     const before = JSON.parse((await getState(s)).body);
     assert.equal(before.hasCard, false, "ohne Karte: false");
 
-    await postSetupCheckout(s);                 // Customer anlegen
+    await postSetupCheckout(s); // Customer anlegen
     const ret = await getCardReturn(s, FAKE_SESSION); // Karte binden
     assert.equal(ret.status, 302);
 
@@ -252,7 +359,9 @@ test("(g1) hasCard: false ohne Karte, true nach Bindung; payment_method im B-Buc
     assert.equal(after.hasCard, true, "nach Bindung: true");
     const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
     assert.equal(t.stripePaymentMethodId, FAKE_PM, "payment_method gespeichert");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(g2) setup-checkout liefert Stripe-URL + legt Customer im B-Bucket an", async () => {
@@ -260,10 +369,16 @@ test("(g2) setup-checkout liefert Stripe-URL + legt Customer im B-Bucket an", as
   try {
     const res = await postSetupCheckout(s);
     assert.equal(res.status, 200);
-    assert.equal(JSON.parse(res.body).url, `https://stripe.test/c/${FAKE_SESSION}`, "Stripe-URL durchgereicht");
+    assert.equal(
+      JSON.parse(res.body).url,
+      `https://stripe.test/c/${FAKE_SESSION}`,
+      "Stripe-URL durchgereicht",
+    );
     const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
     assert.equal(t.stripeCustomerId, FAKE_CUST, "Customer im B-Bucket");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(g3) return mit fremder session_id -> 403, KEIN payment_method gebunden (Customer-Match)", async () => {
@@ -274,7 +389,9 @@ test("(g3) return mit fremder session_id -> 403, KEIN payment_method gebunden (C
     assert.equal(ret.status, 403);
     const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
     assert.equal(t.stripePaymentMethodId ?? null, null, "kein fremdes payment_method gebunden");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(g4) return -> 302 mit Location /tenant.html?card=ok", async () => {
@@ -284,7 +401,9 @@ test("(g4) return -> 302 mit Location /tenant.html?card=ok", async () => {
     const ret = await getCardReturn(s, FAKE_SESSION);
     assert.equal(ret.status, 302);
     assert.equal(ret.location, "/tenant.html?card=ok", "Redirect in die UI");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(g5) Fail-closed: ohne Session-Cookie -> 401 auf beiden Pay3-Routen", async () => {
@@ -292,9 +411,14 @@ test("(g5) Fail-closed: ohne Session-Cookie -> 401 auf beiden Pay3-Routen", asyn
   try {
     const post = await request("POST", `${s.base}/api/self-service/billing/setup-checkout`);
     assert.equal(post.status, 401, "setup-checkout ohne Session -> 401");
-    const get = await request("GET", `${s.base}/api/self-service/billing/return?session_id=${FAKE_SESSION}`);
+    const get = await request(
+      "GET",
+      `${s.base}/api/self-service/billing/return?session_id=${FAKE_SESSION}`,
+    );
     assert.equal(get.status, 401, "return ohne Session -> 401");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(g6) Fail-closed: suspendierter Tenant -> 403 auf setup-checkout", async () => {
@@ -302,7 +426,9 @@ test("(g6) Fail-closed: suspendierter Tenant -> 403 auf setup-checkout", async (
   try {
     const res = await postSetupCheckout(s, s.cookieSuspended);
     assert.equal(res.status, 403);
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(g7) PAYMENT_ENABLED aus: beide Routen 404 + hasCard fehlt im state (byte-identisch)", async () => {
@@ -312,5 +438,7 @@ test("(g7) PAYMENT_ENABLED aus: beide Routen 404 + hasCard fehlt im state (byte-
     assert.equal("hasCard" in state, false, "hasCard fehlt bei Flag aus -> UI versteckt den Block");
     assert.equal((await postSetupCheckout(s)).status, 404, "setup-checkout -> 404");
     assert.equal((await getCardReturn(s, FAKE_SESSION)).status, 404, "return -> 404");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });

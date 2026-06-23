@@ -34,8 +34,11 @@ function meterAiTokens(call, usage) {
 // Default "de-DE": Aufrufer ohne Locale (Bestand) bleiben byte-identisch.
 const fmtDate = (iso, locale = "de-DE") =>
   new Date(iso).toLocaleString(locale, {
-    weekday: "short", day: "2-digit", month: "2-digit",
-    hour: "2-digit", minute: "2-digit",
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
 // ---------- System-Prompts ----------
@@ -51,8 +54,12 @@ export function systemPrompt(call) {
   // Locale auf (Fallback de). Steuert Datums-Locale + Output-Sprach-Regel (Regel 1).
   const loc = localeFor(call.language);
   const now = new Date().toLocaleString(loc.dateLocale, {
-    weekday: "long", day: "2-digit", month: "long", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
   const base = `Du bist "${s.agentName}", der persoenliche KI-Telefonassistent von ${owner}.
@@ -117,7 +124,10 @@ export function openingText(call) {
 // Zeichengrenze schneiden (Wortgrenze bevorzugt), Satz-Endzeichen entfernen (der
 // Aufrufer setzt genau einen Punkt). Leeres/fehlendes goal -> "".
 function trimGoalForSpeech(goal) {
-  const text = (goal || "").replace(/\s+/g, " ").trim().replace(/[.!?]+$/, "");
+  const text = (goal || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.!?]+$/, "");
   if (text.length <= OPENING_GOAL_MAX_CHARS) return text;
   const cut = text.slice(0, OPENING_GOAL_MAX_CHARS);
   const lastSpace = cut.lastIndexOf(" ");
@@ -189,7 +199,12 @@ export function execTool(call, name, input) {
       if (!events.length) return "Kalender ist leer, alles frei.";
       return (
         "Naechste Termine:\n" +
-        events.map((e) => `- ${e.title}: ${fmtDate(e.start, dateLocale)} bis ${fmtDate(e.end, dateLocale)}`).join("\n")
+        events
+          .map(
+            (e) =>
+              `- ${e.title}: ${fmtDate(e.start, dateLocale)} bis ${fmtDate(e.end, dateLocale)}`,
+          )
+          .join("\n")
       );
     }
     case "book_appointment": {
@@ -200,7 +215,11 @@ export function execTool(call, name, input) {
       if (conflict)
         return `KONFLIKT: Ueberschneidung mit "${conflict.title}" (${fmtDate(conflict.start, dateLocale)}). Bitte anderen Slot vorschlagen.`;
       store.addCalendarEvent(call.tenantId, input.title, start.toISOString(), end.toISOString());
-      store.addActionItem(call.id, `Termin gebucht: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}`, "appointment");
+      store.addActionItem(
+        call.id,
+        `Termin gebucht: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}`,
+        "appointment",
+      );
       return `GEBUCHT: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}.`;
     }
     case "take_message": {
@@ -256,7 +275,12 @@ export async function agentTurn(call, callerText) {
       tools: toolDefs(call.tenantId),
       messages,
     });
-    store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
+    store.trackUsage(
+      call.tenantId || OWNER_TENANT_ID,
+      resp.usage.input_tokens,
+      resp.usage.output_tokens,
+      config,
+    );
     meterAiTokens(call, resp.usage);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
@@ -278,7 +302,8 @@ export async function agentTurn(call, callerText) {
               return {
                 type: "tool_result",
                 tool_use_id: tu.id,
-                content: "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
+                content:
+                  "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
               };
             }
             endCall = true;
@@ -318,9 +343,19 @@ export async function summarizeCall(call) {
     // Zusammenfassungs-Prompt sprachabhaengig (F1 Phase 2): die Summary entsteht in der
     // Gespraechssprache (de byte-identisch); die JSON-Keys bleiben sprachunabhaengig.
     system: localeFor(call.language).summarySystem(owner),
-    messages: [{ role: "user", content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}` }],
+    messages: [
+      {
+        role: "user",
+        content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}`,
+      },
+    ],
   });
-  store.trackUsage(call.tenantId || OWNER_TENANT_ID, resp.usage.input_tokens, resp.usage.output_tokens, config);
+  store.trackUsage(
+    call.tenantId || OWNER_TENANT_ID,
+    resp.usage.input_tokens,
+    resp.usage.output_tokens,
+    config,
+  );
   meterAiTokens(call, resp.usage);
 
   let parsed = { summary: "", actionItems: [] };

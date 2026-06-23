@@ -58,7 +58,9 @@ test("defensive Grenzfaelle (null/leer/fremdes Event) -> NONE, kein Wurf", () =>
 test("PII-Klemme: Freitext im status leakt nie als reason (-> 'unknown')", () => {
   // call.speak.failed feuert FAILED unabhaengig vom Status; reason wird auf die
   // Allowlist geklemmt, damit kein injizierter Payload-Freitext (Name/Nummer) ins Log geht.
-  const ev = { data: { event_type: "call.speak.failed", payload: { status: "failed; caller=+4915112345678" } } };
+  const ev = {
+    data: { event_type: "call.speak.failed", payload: { status: "failed; caller=+4915112345678" } },
+  };
   const res = parseSpeakEvent(ev);
   assert.equal(res.outcome, SPEAK_OUTCOME.FAILED);
   assert.equal(res.reason, "unknown");

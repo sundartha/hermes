@@ -38,7 +38,9 @@ function makeOidcWithFakeFetch({ discoveryTtlMs } = {}) {
   return {
     oidc,
     getDiscoveryFetches: () => discoveryFetches,
-    setJwksUri: (uri) => { jwksUri = uri; },
+    setJwksUri: (uri) => {
+      jwksUri = uri;
+    },
   };
 }
 

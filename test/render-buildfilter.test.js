@@ -30,28 +30,40 @@ const web = serviceBlock("hermes-web");
 test("Gateway (vodafone-agent) ignoriert apps/web/** im buildFilter", () => {
   assert.match(gateway, /buildFilter:/, "Gateway hat keinen buildFilter");
   assert.match(gateway, /ignoredPaths:/, "Gateway-buildFilter hat keine ignoredPaths");
-  assert.match(gateway, /ignoredPaths:[\s\S]*?-\s*["']?apps\/web\/\*\*/,
-    "Gateway ignoriert apps/web/** NICHT -> Frontend-Commit wuerde den Gateway redeployen");
+  assert.match(
+    gateway,
+    /ignoredPaths:[\s\S]*?-\s*["']?apps\/web\/\*\*/,
+    "Gateway ignoriert apps/web/** NICHT -> Frontend-Commit wuerde den Gateway redeployen",
+  );
 });
 
 test("Gateway ignoriert src/** NICHT (Backend-/Security-Fixes deployen weiter)", () => {
   // src/** darf in KEINEM ignoredPaths-Eintrag des Gateways stehen, sonst wuerden
   // Backend-Aenderungen nie ausgerollt (fail-open gegen Security-Fixes).
-  assert.doesNotMatch(gateway, /ignoredPaths:[\s\S]*?-\s*["']?src\//,
-    "Gateway ignoriert src/** -> Backend-/Security-Fixes wuerden nie deployen");
+  assert.doesNotMatch(
+    gateway,
+    /ignoredPaths:[\s\S]*?-\s*["']?src\//,
+    "Gateway ignoriert src/** -> Backend-/Security-Fixes wuerden nie deployen",
+  );
 });
 
 test("Gateway-paths sind nicht gesetzt (sonst wuerde die Whitelist src/** verengen)", () => {
   // paths am Gateway waere eine Whitelist und koennte src/** versehentlich ausschliessen.
   // Die Isolation laeuft bewusst ueber ignoredPaths, nicht ueber paths.
-  assert.doesNotMatch(gateway, /^\s*paths:/m,
-    "Gateway nutzt buildFilter.paths -> Whitelist koennte src/**-Deploys still unterdruecken");
+  assert.doesNotMatch(
+    gateway,
+    /^\s*paths:/m,
+    "Gateway nutzt buildFilter.paths -> Whitelist koennte src/**-Deploys still unterdruecken",
+  );
 });
 
 test("hermes-web baut nur bei apps/web/** (paths-Whitelist)", () => {
   assert.match(web, /buildFilter:/, "hermes-web hat keinen buildFilter");
-  assert.match(web, /paths:[\s\S]*?-\s*["']?apps\/web\/\*\*/,
-    "hermes-web hat keine paths-Whitelist auf apps/web/** -> wuerde bei Backend-Commits bauen");
+  assert.match(
+    web,
+    /paths:[\s\S]*?-\s*["']?apps\/web\/\*\*/,
+    "hermes-web hat keine paths-Whitelist auf apps/web/** -> wuerde bei Backend-Commits bauen",
+  );
 });
 
 test("hermes-web ist eine Static Site (type: web + runtime: static)", () => {

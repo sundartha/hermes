@@ -24,8 +24,7 @@ export const MEDIA_PATH = Object.freeze({
 });
 
 function providerFromMediaPath(pathname) {
-  for (const [provider, p] of Object.entries(MEDIA_PATH))
-    if (pathname === p) return provider;
+  for (const [provider, p] of Object.entries(MEDIA_PATH)) if (pathname === p) return provider;
   return null;
 }
 
@@ -48,7 +47,10 @@ function realtimeTools(tenantId) {
 
 // Gleiche Persona/Regeln wie die Budget-Engine, plus Sprech-Hinweis fuer Speech-to-Speech.
 function instructions(call) {
-  return systemPrompt(call) + "\n\nSPRECHWEISE: natuerlich, zuegig, kurze Saetze. Mache kleine Pausen moeglich, lass dich unterbrechen.";
+  return (
+    systemPrompt(call) +
+    "\n\nSPRECHWEISE: natuerlich, zuegig, kurze Saetze. Mache kleine Pausen moeglich, lass dich unterbrechen."
+  );
 }
 
 // HEIKLE STELLE 2: Call-Ende-Puffer. Ruft die KI das end_call-Tool auf, wird NICHT sofort
@@ -88,7 +90,10 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       const sid = call?.twilioSid;
       // Provider-aware: ueber denselben Provider beenden, ueber den der Call laeuft
       // (call.provider). Fehlender Provider -> Twilio-Default (byte-identisch).
-      if (sid) voiceControl(call?.provider).endCall(sid).catch(() => {});
+      if (sid)
+        voiceControl(call?.provider)
+          .endCall(sid)
+          .catch(() => {});
     }
 
     function finalize(status) {
@@ -96,8 +101,12 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       closed = true;
       clearTimeout(endTimer);
       clearTimeout(state.hangupTimer);
-      try { openaiWs?.close(); } catch {}
-      try { providerWs.close(); } catch {}
+      try {
+        openaiWs?.close();
+      } catch {}
+      try {
+        providerWs.close();
+      } catch {}
       if (call) {
         store.endCallRecord(call.id, status);
         onCallEnded?.(store.getCall(call.id)); // -> Summary + SMS (server.js)
@@ -107,16 +116,31 @@ export function attachMediaBridge(httpServer, onCallEnded) {
     function connectOpenAI() {
       openaiWs = new WebSocket(
         `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(config.realtimeModel)}`,
-        { headers: { Authorization: `Bearer ${config.openaiApiKey}`, "OpenAI-Beta": "realtime=v1" } }
+        {
+          headers: { Authorization: `Bearer ${config.openaiApiKey}`, "OpenAI-Beta": "realtime=v1" },
+        },
       );
 
       // Per-Verbindung-Kontext, EINMAL gebaut und an den extrahierten handleOpenAiEvent(ev, ctx)
       // durchgereicht (Dependency-Injection statt Closure ueber den connection-Scope). Alle
       // veraenderlichen Slots leben in state -> Handler und finalize() teilen genau eine Quelle.
-      const ctx = { call, streamRef, openaiWs, state, providerWs, log, hangup, finalize, media, store };
+      const ctx = {
+        call,
+        streamRef,
+        openaiWs,
+        state,
+        providerWs,
+        log,
+        hangup,
+        finalize,
+        media,
+        store,
+      };
       // Call-Ende-Puffer (HEIKLE STELLE 2): plant das Auflegen erst nach HANGUP_MS und legt den
       // Timer in state ab, damit finalize() ihn beim Aufraeumen clearen kann.
-      ctx.scheduleHangup = (reason) => { ctx.state.hangupTimer = setTimeout(() => ctx.hangup(reason), HANGUP_MS); };
+      ctx.scheduleHangup = (reason) => {
+        ctx.state.hangupTimer = setTimeout(() => ctx.hangup(reason), HANGUP_MS);
+      };
 
       openaiWs.on("open", () => {
         // Sprachabhaengige Realtime-Felder aus dem EINEN i18n-Bundle (Phase 5). localeFor
@@ -128,27 +152,32 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         // DE bleibt ohne language-Feld (Auto-Detect, Bestand).
         const transcription = { model: "whisper-1" };
         if (loc.whisperLocale) transcription.language = loc.whisperLocale;
-        openaiWs.send(JSON.stringify({
-          type: "session.update",
-          session: {
-            modalities: ["text", "audio"],
-            instructions: instructions(call),
-            voice: loc.realtimeVoice ?? config.realtimeVoice,
-            input_audio_format: "g711_ulaw",
-            output_audio_format: "g711_ulaw",
-            input_audio_transcription: transcription,
-            turn_detection: { type: "server_vad" },
-            tools: realtimeTools(call.tenantId),
-            tool_choice: "auto",
-          },
-        }));
+        openaiWs.send(
+          JSON.stringify({
+            type: "session.update",
+            session: {
+              modalities: ["text", "audio"],
+              instructions: instructions(call),
+              voice: loc.realtimeVoice ?? config.realtimeVoice,
+              input_audio_format: "g711_ulaw",
+              output_audio_format: "g711_ulaw",
+              input_audio_transcription: transcription,
+              turn_detection: { type: "server_vad" },
+              tools: realtimeTools(call.tenantId),
+              tool_choice: "auto",
+            },
+          }),
+        );
         // KI spricht zuerst. Bei Outbound: fest verdrahteter Offenlegungssatz (sprach-
         // abhaengig, kuratiert) als allererster Satz, eingebettet im sprachabhaengigen
         // Opener-Steuertext aus dem Bundle. Bei Inbound: sprachabhaengige Begruessung.
-        const opener = call.direction === "outbound"
-          ? loc.realtimeOpener.outbound(disclosureSentence(call))
-          : loc.realtimeOpener.inbound;
-        openaiWs.send(JSON.stringify({ type: "response.create", response: { instructions: opener } }));
+        const opener =
+          call.direction === "outbound"
+            ? loc.realtimeOpener.outbound(disclosureSentence(call))
+            : loc.realtimeOpener.inbound;
+        openaiWs.send(
+          JSON.stringify({ type: "response.create", response: { instructions: opener } }),
+        );
       });
 
       // Duenner Listener am Frame-Eingang: innerer JSON-Guard (Nicht-JSON still verwerfen) +
@@ -156,7 +185,11 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       // handleOpenAiEvent(ev, ctx) am Datei-Ende (bekommt schon das geparste ev + ctx).
       openaiWs.on("message", (buf) => {
         let ev;
-        try { ev = JSON.parse(buf.toString()); } catch { return; }
+        try {
+          ev = JSON.parse(buf.toString());
+        } catch {
+          return;
+        }
 
         // OT-2 (P3): aeusserer Guard um die Event-Verarbeitung. Ein Throw aus store/execTool/
         // Event-Verarbeitung darf NICHT zum ws-Emitter entkommen (ein Node-Prozess bedient ALLE
@@ -174,13 +207,20 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         log("OpenAI WS zu");
         if (!closed) hangup("openai-verbindung-weg");
       });
-      openaiWs.on("error", (e) => { console.error("[bridge] OpenAI WS:", e.message); hangup("openai-error"); });
+      openaiWs.on("error", (e) => {
+        console.error("[bridge] OpenAI WS:", e.message);
+        hangup("openai-error");
+      });
     }
 
     // ---- Provider-Media-Stream-Events (Frame-Schicht ueber Port 4) ----
     providerWs.on("message", (buf) => {
       let raw;
-      try { raw = JSON.parse(buf.toString()); } catch { return; }
+      try {
+        raw = JSON.parse(buf.toString());
+      } catch {
+        return;
+      }
 
       // OT-2 (P3): aeusserer Guard um parseMediaFrame + switch. Ein malformter Frame oder ein
       // Throw aus store/markAnswered darf NICHT zum ws-Emitter entkommen (Prozess-Crash, ein
@@ -192,7 +232,10 @@ export function attachMediaBridge(httpServer, onCallEnded) {
           case MEDIA_EVENT.START: {
             streamRef = frame.streamRef;
             call = store.getCall(frame.callId);
-            if (!call) { log("unbekannte call_id, trenne"); return providerWs.close(); }
+            if (!call) {
+              log("unbekannte call_id, trenne");
+              return providerWs.close();
+            }
             // stream_token aus den start-Parametern pruefen: ohne diese Pruefung
             // koennte jeder mit erratener call_id den Audio-Stream uebernehmen. Bleibt
             // erste Stufe VOR markAnswered/connectOpenAI. Bei Ablehnung call wieder auf
@@ -207,16 +250,25 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             // gelesen; neutraler Port-Name ist providerCallRef, die Zuweisung ist die Bruecke).
             call.twilioSid = frame.providerCallRef || call.twilioSid;
             store.markAnswered(call.id);
-            log("Stream gestartet,", call.direction, call.direction === "outbound" ? call.to : call.from);
+            log(
+              "Stream gestartet,",
+              call.direction,
+              call.direction === "outbound" ? call.to : call.from,
+            );
             // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
-            endTimer = setTimeout(() => hangup("Max-Dauer erreicht"), (call.maxDurationS || config.maxCallDurationS) * 1000);
+            endTimer = setTimeout(
+              () => hangup("Max-Dauer erreicht"),
+              (call.maxDurationS || config.maxCallDurationS) * 1000,
+            );
             connectOpenAI();
             break;
           }
           case MEDIA_EVENT.MEDIA:
             // Audio Anrufer -> OpenAI, 1:1 als u-law base64
             if (canSend(openaiWs))
-              openaiWs.send(JSON.stringify({ type: "input_audio_buffer.append", audio: frame.payload }));
+              openaiWs.send(
+                JSON.stringify({ type: "input_audio_buffer.append", audio: frame.payload }),
+              );
             break;
           case MEDIA_EVENT.STOP: // (a) Gegenseite hat aufgelegt
             finalize(call?.status === "cancelled" ? "cancelled" : "completed");
@@ -261,7 +313,8 @@ export function handleOpenAiEvent(ev, ctx) {
     case "input_audio_buffer.speech_started":
       // OT-2 (P3): cancel nur auf OPEN-Socket - feuert sonst im Barge-in-Race auf einen
       // bereits schliessenden Socket (wirft). Verhalten sonst unveraendert (Reihenfolge gleich).
-      if (state.activeResponse && canSend(openaiWs)) openaiWs.send(JSON.stringify({ type: "response.cancel" }));
+      if (state.activeResponse && canSend(openaiWs))
+        openaiWs.send(JSON.stringify({ type: "response.cancel" }));
       if (streamRef) providerWs.send(JSON.stringify(media.clearPlayback({ streamRef })));
       break;
 
@@ -281,7 +334,9 @@ export function handleOpenAiEvent(ev, ctx) {
       for (const item of items) {
         if (item.type !== "function_call") continue;
         let args = {};
-        try { args = JSON.parse(item.arguments || "{}"); } catch {}
+        try {
+          args = JSON.parse(item.arguments || "{}");
+        } catch {}
         if (item.name === "end_call") {
           // (d) KI signalisiert Zielerreichung -> HANGUP_MS Puffer fuer die Verabschiedung
           ctx.scheduleHangup("end_call von KI");
@@ -290,10 +345,16 @@ export function handleOpenAiEvent(ev, ctx) {
           // OT-2 (P3): execTool laeuft immer (Seiteneffekt), nur der Send geht ueber den
           // OPEN-Guard - feuert sonst genau im Call-Ende-Race auf einen toten Socket (wirft).
           if (canSend(openaiWs)) {
-            openaiWs.send(JSON.stringify({
-              type: "conversation.item.create",
-              item: { type: "function_call_output", call_id: item.call_id, output: String(result) },
-            }));
+            openaiWs.send(
+              JSON.stringify({
+                type: "conversation.item.create",
+                item: {
+                  type: "function_call_output",
+                  call_id: item.call_id,
+                  output: String(result),
+                },
+              }),
+            );
             openaiWs.send(JSON.stringify({ type: "response.create" }));
           }
         }

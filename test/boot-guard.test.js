@@ -23,7 +23,11 @@ async function captureErrAsync(fn) {
   const logs = [];
   const orig = console.error;
   console.error = (...a) => logs.push(a.map(String).join(" "));
-  try { await fn(); } finally { console.error = orig; }
+  try {
+    await fn();
+  } finally {
+    console.error = orig;
+  }
   return logs.join("\n");
 }
 
@@ -31,7 +35,9 @@ async function captureErrAsync(fn) {
 test("T-P0-05a: guardedBoot faengt Portal-Fault, loggt [boot] deaktiviert, returnt false", async () => {
   let result;
   const out = await captureErrAsync(async () => {
-    result = await guardedBoot("Web-Login/Portal", () => createPortalRunner({ pool: superuserPool() }));
+    result = await guardedBoot("Web-Login/Portal", () =>
+      createPortalRunner({ pool: superuserPool() }),
+    );
   });
   assert.equal(result, false);
   assert.match(out, /\[boot\] Web-Login\/Portal deaktiviert/);
@@ -41,10 +47,17 @@ test("T-P0-05a: guardedBoot faengt Portal-Fault, loggt [boot] deaktiviert, retur
 test("T-P0-05b: guardedBoot returnt true wenn der Block durchlaeuft", async () => {
   let logged = "";
   const orig = console.error;
-  console.error = (...a) => { logged += a.map(String).join(" "); };
+  console.error = (...a) => {
+    logged += a.map(String).join(" ");
+  };
   let result;
-  try { result = await guardedBoot("Web-Login/Portal", async () => { /* ok */ }); }
-  finally { console.error = orig; }
+  try {
+    result = await guardedBoot("Web-Login/Portal", async () => {
+      /* ok */
+    });
+  } finally {
+    console.error = orig;
+  }
   assert.equal(result, true);
   assert.ok(!/deaktiviert/.test(logged));
 });

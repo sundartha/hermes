@@ -16,7 +16,11 @@ import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 
 const postJson = (url, body) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 test("T-P4-08: /api/profiles Route-Gruppe - Paritaet (Treffer + Ablehnung)", async (t) => {
   const srv = await startServer();
@@ -29,33 +33,49 @@ test("T-P4-08: /api/profiles Route-Gruppe - Paritaet (Treffer + Ablehnung)", asy
       assert.ok(!Array.isArray(body), "listProfiles liefert ein Objekt (Map), kein Array");
     });
 
-    await t.test("POST /api/profiles ohne gueltige email/identity -> 400 (Gate-Ablehnung)", async () => {
-      // validIdentity-Gate: leer, mit Whitespace, > Maxlen werden abgewiesen.
-      for (const email of ["", "mit leer", "x".repeat(255)]) {
-        const res = await postJson(`${srv.localUrl}/api/profiles`, { email });
-        assert.equal(res.status, 400, `email='${email.slice(0, 12)}...' muss 400 sein`);
-        assert.match((await res.json()).error, /email\/identity/);
-      }
-    });
+    await t.test(
+      "POST /api/profiles ohne gueltige email/identity -> 400 (Gate-Ablehnung)",
+      async () => {
+        // validIdentity-Gate: leer, mit Whitespace, > Maxlen werden abgewiesen.
+        for (const email of ["", "mit leer", "x".repeat(255)]) {
+          const res = await postJson(`${srv.localUrl}/api/profiles`, { email });
+          assert.equal(res.status, 400, `email='${email.slice(0, 12)}...' muss 400 sein`);
+          assert.match((await res.json()).error, /email\/identity/);
+        }
+      },
+    );
 
-    await t.test("POST /api/profiles mit gueltiger identity -> 200, { email, profile } (Gate-Treffer)", async () => {
-      const res = await postJson(`${srv.localUrl}/api/profiles`, { email: "tester@kunde.de", allowCalendar: false });
-      assert.equal(res.status, 200);
-      const body = await res.json();
-      assert.equal(body.email, "tester@kunde.de");
-      assert.equal(typeof body.profile, "object");
-      // Persistenz-Beleg: das Profil taucht in listProfiles auf
-      const list = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
-      assert.ok("tester@kunde.de" in list, "neues Profil in der Liste");
-    });
+    await t.test(
+      "POST /api/profiles mit gueltiger identity -> 200, { email, profile } (Gate-Treffer)",
+      async () => {
+        const res = await postJson(`${srv.localUrl}/api/profiles`, {
+          email: "tester@kunde.de",
+          allowCalendar: false,
+        });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.email, "tester@kunde.de");
+        assert.equal(typeof body.profile, "object");
+        // Persistenz-Beleg: das Profil taucht in listProfiles auf
+        const list = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
+        assert.ok("tester@kunde.de" in list, "neues Profil in der Liste");
+      },
+    );
 
-    await t.test("DELETE /api/profiles/:email - unbekannt -> 404, bekannt -> 200 {ok:true}", async () => {
-      const miss = await fetch(`${srv.localUrl}/api/profiles/nicht-da@x.de`, { method: "DELETE" });
-      assert.equal(miss.status, 404);
-      const hit = await fetch(`${srv.localUrl}/api/profiles/tester@kunde.de`, { method: "DELETE" });
-      assert.equal(hit.status, 200);
-      assert.deepEqual(await hit.json(), { ok: true });
-    });
+    await t.test(
+      "DELETE /api/profiles/:email - unbekannt -> 404, bekannt -> 200 {ok:true}",
+      async () => {
+        const miss = await fetch(`${srv.localUrl}/api/profiles/nicht-da@x.de`, {
+          method: "DELETE",
+        });
+        assert.equal(miss.status, 404);
+        const hit = await fetch(`${srv.localUrl}/api/profiles/tester@kunde.de`, {
+          method: "DELETE",
+        });
+        assert.equal(hit.status, 200);
+        assert.deepEqual(await hit.json(), { ok: true });
+      },
+    );
   } finally {
     await srv.stop();
   }

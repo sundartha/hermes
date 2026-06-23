@@ -78,7 +78,23 @@ export function newId(prefix) {
 }
 
 // ---- Calls ----
-export function createCall(s, { direction, from, to, goal, twilioSid, briefing, constraints, language, maxDurationS, requestedBy, tenantId, provider }) {
+export function createCall(
+  s,
+  {
+    direction,
+    from,
+    to,
+    goal,
+    twilioSid,
+    briefing,
+    constraints,
+    language,
+    maxDurationS,
+    requestedBy,
+    tenantId,
+    provider,
+  },
+) {
   const call = {
     id: newId("call"),
     // Zugangsgeheimnis fuer den /media-WebSocket (steht im TwiML, das nur Twilio
@@ -270,7 +286,7 @@ export function countOutboundCallsSince(s, sinceIso, { requestedBy = null, tenan
       c.direction === "outbound" &&
       c.startedAt >= sinceIso &&
       (requestedBy == null || c.requestedBy === requestedBy) &&
-      (tenantId == null || c.tenantId === tenantId)
+      (tenantId == null || c.tenantId === tenantId),
   ).length;
 }
 
@@ -369,13 +385,29 @@ export function resolveCallLanguage(s, { tenantId, numberRecord }) {
 // (Inbound-Sprache, Outbound-Absenderwahl). Bestehende 3-/4-Arg-Aufrufe bleiben
 // verhaltens-erhaltend (Default DE/de = heutiger De-facto-Zustand). Additiv NULLABLE
 // in der DB; ein Bestands-Record ohne Werte faellt ueber den Code-Fallback zurueck.
-export function seedOwnerNumber(s, e164, tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = DEFAULT_LANGUAGE) {
+export function seedOwnerNumber(
+  s,
+  e164,
+  tenantId,
+  provider = DEFAULT_PROVIDER,
+  country = DEFAULT_COUNTRY,
+  language = DEFAULT_LANGUAGE,
+) {
   const norm = normNum(e164);
   if (!norm) return;
   if (s.numbers.some((n) => n.e164 === norm)) return;
   // Geseedete Owner-Nummer ist in Benutzung -> status active. id, damit
   // number_assignment/Lifecycle sie referenzieren koennen.
-  s.numbers.push({ id: newId("num"), e164: norm, tenantId, provider, country, language, status: NUMBER_STATUS.ACTIVE, providerNumberId: null });
+  s.numbers.push({
+    id: newId("num"),
+    e164: norm,
+    tenantId,
+    provider,
+    country,
+    language,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: null,
+  });
 }
 
 // Config-derive Owner-Nummer-Seed beim Boot (analog seedOwnerIdentity): traegt die
@@ -585,7 +617,8 @@ export function normalizePrivateNumber(raw, allowedCountryCodes) {
   if (raw == null || (typeof raw === "string" && raw.trim() === "")) return null;
   const e164 = normNum(raw);
   if (!E164.test(e164)) throw new Error("private number: ungueltiges E.164-Format");
-  if (!countryAllowed(e164, allowedCountryCodes)) throw new Error("private number: Laendercode nicht erlaubt");
+  if (!countryAllowed(e164, allowedCountryCodes))
+    throw new Error("private number: Laendercode nicht erlaubt");
   return e164;
 }
 
@@ -638,7 +671,7 @@ function liveNumbers(s, tenantId = null) {
     (n) =>
       n.status !== NUMBER_STATUS.RELEASED &&
       n.status !== NUMBER_STATUS.FAILED &&
-      (tenantId == null || n.tenantId === tenantId)
+      (tenantId == null || n.tenantId === tenantId),
   );
 }
 
@@ -651,12 +684,34 @@ function liveNumbers(s, tenantId = null) {
 // defaults.js): die angefragte Nummer traegt von Anfang an ihren Geo-Anker, den der
 // spaetere Provider-Kauf (Telnyx-Laendersuche) und das Inbound-/Outbound-Routing
 // lesen. Bestehende Aufrufer ohne country/language bleiben verhaltens-erhaltend (DE/de).
-export function requestNumber(s, { tenantId, provider = DEFAULT_PROVIDER, country = DEFAULT_COUNTRY, language = DEFAULT_LANGUAGE, maxNumbers, maxNumbersPerTenant }) {
+export function requestNumber(
+  s,
+  {
+    tenantId,
+    provider = DEFAULT_PROVIDER,
+    country = DEFAULT_COUNTRY,
+    language = DEFAULT_LANGUAGE,
+    maxNumbers,
+    maxNumbersPerTenant,
+  },
+) {
   const tenant = findTenant(s, tenantId);
-  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return { ok: false, reason: "tenant_inactive" };
+  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE)
+    return { ok: false, reason: "tenant_inactive" };
   if (liveNumbers(s).length >= maxNumbers) return { ok: false, reason: "global_cap" };
-  if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant) return { ok: false, reason: "tenant_cap" };
-  const number = { id: newId("num"), e164: null, tenantId, provider, country, language, status: NUMBER_STATUS.REQUESTED, providerNumberId: null, paymentIntentId: null };
+  if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant)
+    return { ok: false, reason: "tenant_cap" };
+  const number = {
+    id: newId("num"),
+    e164: null,
+    tenantId,
+    provider,
+    country,
+    language,
+    status: NUMBER_STATUS.REQUESTED,
+    providerNumberId: null,
+    paymentIntentId: null,
+  };
   s.numbers.push(number);
   return { ok: true, number };
 }
@@ -781,7 +836,9 @@ export function globalUsageTotals(s) {
 // (G5) der Preisformel: trackUsage (Live-Bucket, EUR-Float) UND aiCostCents
 // (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
 function tokenCostUsd(inputTokens, outputTokens, cfg) {
-  return (inputTokens / 1e6) * cfg.priceInPerMTokUsd + (outputTokens / 1e6) * cfg.priceOutPerMTokUsd;
+  return (
+    (inputTokens / 1e6) * cfg.priceInPerMTokUsd + (outputTokens / 1e6) * cfg.priceOutPerMTokUsd
+  );
 }
 
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
@@ -864,7 +921,7 @@ export function recordUsageEvent(s, { tenantId, callId = null, kind, quantity, c
 // bleibt zeit-frei und testbar. Reine Query, kein IO.
 export function dailySmsCount(s, tenantId, sinceIso) {
   return s.usageEvents.filter(
-    (e) => e.kind === USAGE_EVENT_KIND.SMS && e.tenantId === tenantId && e.occurredAt >= sinceIso
+    (e) => e.kind === USAGE_EVENT_KIND.SMS && e.tenantId === tenantId && e.occurredAt >= sinceIso,
   ).length;
 }
 
@@ -920,7 +977,11 @@ export function pruneOldData(s, days) {
   const keepNotification = (n) => n.at >= cutoff;
   const keepActionItem = (a) => !a.done || a.createdAt >= cutoff;
 
-  const before = { calls: s.calls.length, notifications: s.notifications.length, actionItems: s.actionItems.length };
+  const before = {
+    calls: s.calls.length,
+    notifications: s.notifications.length,
+    actionItems: s.actionItems.length,
+  };
   s.calls = s.calls.filter(keepCall);
   s.notifications = s.notifications.filter(keepNotification);
   s.actionItems = s.actionItems.filter(keepActionItem);

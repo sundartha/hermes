@@ -19,6 +19,7 @@ export const TEXT_LIMITS = { objective: 500, briefing: 2000, constraints: 2000, 
 export function invalidText(name, value) {
   if (value == null) return null;
   if (typeof value !== "string") return `${name} muss ein String sein`;
-  if (value.length > TEXT_LIMITS[name]) return `${name} ist zu lang (max. ${TEXT_LIMITS[name]} Zeichen)`;
+  if (value.length > TEXT_LIMITS[name])
+    return `${name} ist zu lang (max. ${TEXT_LIMITS[name]} Zeichen)`;
   return null;
 }

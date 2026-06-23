@@ -15,7 +15,8 @@ test("Security-Header", async (t) => {
     await t.test("auf / (Dashboard) gesetzt, CSP erlaubt Inline + Google Fonts", async () => {
       const res = await fetch(`${srv.localUrl}/`);
       assert.equal(res.status, 200);
-      for (const [name, value] of Object.entries(EXPECTED)) assert.equal(res.headers.get(name), value);
+      for (const [name, value] of Object.entries(EXPECTED))
+        assert.equal(res.headers.get(name), value);
       const csp = res.headers.get("content-security-policy");
       assert.match(csp, /default-src 'self'/);
       assert.match(csp, /script-src 'self' 'unsafe-inline'/);
@@ -26,7 +27,8 @@ test("Security-Header", async (t) => {
     await t.test("auf /api/state gesetzt, zusaetzlich Cache-Control: no-store", async () => {
       const res = await fetch(`${srv.localUrl}/api/state`);
       assert.equal(res.status, 200);
-      for (const [name, value] of Object.entries(EXPECTED)) assert.equal(res.headers.get(name), value);
+      for (const [name, value] of Object.entries(EXPECTED))
+        assert.equal(res.headers.get(name), value);
       assert.equal(res.headers.get("cache-control"), "no-store");
     });
 

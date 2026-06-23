@@ -28,8 +28,15 @@ export function makePortalStore(runner) {
     withTenant,
     // WHERE tenant_id = primaere Linie; RLS (SET LOCAL) = zweite Linie (Spec 3.3, Defense-in-Depth).
     listCalls: (tenantId) =>
-      withTenant(tenantId, async (c) =>
-        (await c.query(`SELECT id, direction, status, started_at, summary FROM call WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId])).rows
+      withTenant(
+        tenantId,
+        async (c) =>
+          (
+            await c.query(
+              `SELECT id, direction, status, started_at, summary FROM call WHERE tenant_id = $1 ORDER BY seq DESC`,
+              [tenantId],
+            )
+          ).rows,
       ),
   };
 }

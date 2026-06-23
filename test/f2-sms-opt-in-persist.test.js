@@ -30,7 +30,7 @@ test("pg: smsSummaryOptIn round-trippt (set false -> save -> reopen -> false), M
   assert.equal(
     reopened.load().settings[OWNER_TENANT_ID].smsSummaryOptIn,
     false,
-    "false ueberlebt den Reopen (Spalte + hydrate/flush gemappt)"
+    "false ueberlebt den Reopen (Spalte + hydrate/flush gemappt)",
   );
 });
 
@@ -40,6 +40,6 @@ test("updateSettings: Nicht-Boolean wird abgelehnt (Typcheck), Default bleibt", 
   assert.equal(
     store.load().settings[OWNER_TENANT_ID].smsSummaryOptIn,
     true,
-    "String abgelehnt (typeof-Check) -> Default true bleibt"
+    "String abgelehnt (typeof-Check) -> Default true bleibt",
   );
 });

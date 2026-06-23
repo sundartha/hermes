@@ -2,7 +2,7 @@
 
 > **Repo-Hinweis (vodafone-agent):** Dieses Repo ist Node.js/ESM (JavaScript, kein TypeScript), ohne Lint-/Diff-Hook. Tests laufen mit `node:test` (`npm test`, Tests in `test/*.test.js`). Die Java-Einträge (J1–J3) sind hier n. z. (Geist übertragen, nicht die Syntax). Test-Einträge (T-Serie, P11–P14): neues Verhalten braucht einen automatisierten Test; nur wo Tests prinzipiell nicht greifen (echte Telefonie, Dashboard-Optik), tritt der dokumentierte Smoke-Test an ihre Stelle (siehe CLAUDE.md "Befehle") — fehlende Verifikation neuen Verhaltens zählt als S1. Sicherheitsrelevante Verstöße (Safety-Gates, Auth, Secrets — siehe CLAUDE.md "Absolute Regeln") zählen immer als S1.
 
-> Dies ist die Wissensbasis, gegen die du Code prüfst. Quelle: *Clean Code* (Robert C. Martin), destilliert. Jeder Eintrag hat eine **ID**, eine **Kurzregel**, ein **Signal** (woran man den Verstoß erkennt) und einen **Fix**. Bei den wichtigsten Heuristiken steht ein **Vorher/Nachher**-Beispiel — daran erkennst du den Verstoß im echten Code am sichersten. Die Beispiele sind in Java (Buchsprache); die Konzepte gelten sprachübergreifend.
+> Dies ist die Wissensbasis, gegen die du Code prüfst. Quelle: _Clean Code_ (Robert C. Martin), destilliert. Jeder Eintrag hat eine **ID**, eine **Kurzregel**, ein **Signal** (woran man den Verstoß erkennt) und einen **Fix**. Bei den wichtigsten Heuristiken steht ein **Vorher/Nachher**-Beispiel — daran erkennst du den Verstoß im echten Code am sichersten. Die Beispiele sind in Java (Buchsprache); die Konzepte gelten sprachübergreifend.
 >
 > Einträge mit dem Marker **`[Prozess/Repo]`** betreffen Build, Test-Prozess, Tooling, zeitliche Reihenfolge oder Autoren-Intention und sind aus einem reinen Datei-Snapshot/Diff **nicht** zuverlässig entscheidbar — Umgang siehe Audit-Regel 7.
 
@@ -18,11 +18,11 @@ Regeln für deinen Audit:
 
 1. **Bewerte nur Code, den du tatsächlich siehst.** Erfinde keine Verstöße, rate nicht über Ungesehenes, FLAGge nichts „auf Verdacht".
 2. **Schweregrad S1–S4 nach der Design-Priorität (siehe P1):** **S1** Tests · **S2** Duplizierung · **S3** Ausdrucksstärke · **S4** Anzahl Klassen/Methoden. S1 wiegt am schwersten, S4 am leichtesten — ordne jeden FLAG einer Stufe zu. **Korrektheits-/Sicherheitsverstöße** (Datenverlust, Geld als Fließkomma, abgeschaltete Sicherungen, Race Conditions) zählen wie **S1**, auch wenn sie keine der vier Regeln direkt betreffen.
-3. **Vorrang Lesbarkeit.** Würde das Beheben den Code im Einzelfall *unklarer* machen, FLAGge nicht — oder markiere es als bewusste, begründete Ausnahme.
+3. **Vorrang Lesbarkeit.** Würde das Beheben den Code im Einzelfall _unklarer_ machen, FLAGge nicht — oder markiere es als bewusste, begründete Ausnahme.
 4. **Java-Einträge (J1–J3) nur bei Java.** Sonst den Geist übertragen, nicht die Syntax. (Die Vorher/Nachher-Beispiele bei anderen IDs sind nur zufällig in Java geschrieben — sie illustrieren sprachunabhängige Prinzipien.)
 5. **Scope = die geänderten/geprüften Dateien.**
 6. **Gib am Ende eine kurze Gesamtbewertung:** Anzahl FLAGs je Schweregrad (S1–S4) + die 1–3 wichtigsten To-dos.
-7. **`[Prozess/Repo]`-Einträge nur bei direkter Evidenz im Scope bewerten.** Diese Checks sind aus dem Snapshot/Diff nicht entscheidbar (z. B. ob ein Test *zuerst* geschrieben wurde, ob der Build *ein* Schritt ist, ob ein Coverage-Tool läuft). FLAGge sie **nur**, wenn der Beleg unmittelbar sichtbar ist (z. B. eine Testdatei liegt im Scope, ein offensichtlich langsamer Test mit echtem Netz-Call). Sonst **n. z.** — niemals raten (Regel 1).
+7. **`[Prozess/Repo]`-Einträge nur bei direkter Evidenz im Scope bewerten.** Diese Checks sind aus dem Snapshot/Diff nicht entscheidbar (z. B. ob ein Test _zuerst_ geschrieben wurde, ob der Build _ein_ Schritt ist, ob ein Coverage-Tool läuft). FLAGge sie **nur**, wenn der Beleg unmittelbar sichtbar ist (z. B. eine Testdatei liegt im Scope, ein offensichtlich langsamer Test mit echtem Netz-Call). Sonst **n. z.** — niemals raten (Regel 1).
 8. **Ausgabe priorisieren (gegen FLAG-Flut).** **S1/S2-FLAGs** einzeln und vollständig melden. **S3/S4-FLAGs** (Stil-/Kleinkram) am Ende **gebündelt** auflisten (gleicher ID-Typ zusammenfassen), nicht einzeln im Fließtext — sonst geht das Wichtige unter.
 
 ---
@@ -70,7 +70,7 @@ public class Portfolio {
 // Im Test: FixedStockExchangeStub liefert feste Werte → stabil und schnell.
 ```
 
-**P5 — Command-Query-Trennung.** Eine Funktion *tut etwas* **oder** *gibt etwas zurück*, nie beides. → **Signal:** Funktion ändert Zustand **und** liefert einen Wert, auf den der Aufrufer verzweigt (`if (set("x", "y"))`). (vgl. F-Serie)
+**P5 — Command-Query-Trennung.** Eine Funktion _tut etwas_ **oder** _gibt etwas zurück_, nie beides. → **Signal:** Funktion ändert Zustand **und** liefert einen Wert, auf den der Aufrufer verzweigt (`if (set("x", "y"))`). (vgl. F-Serie)
 
 **P6 — Keine Nebeneffekte.** Eine Funktion tut nur das, was ihr Name verspricht — keine verborgenen Änderungen an Klassen-State, Parametern, Globals. „Nebeneffekte sind Lügen." → **Signal:** Name verspricht eine Sache (`checkPassword`), Body ändert zusätzlich Felder/Parameter/Globals (initialisiert nebenbei eine Session). (vgl. N7)
 
@@ -90,13 +90,13 @@ public class Employee {
 
 **P8 — Exceptions mit Kontext (Kap. 7.4).** Jede geworfene Exception nennt die gescheiterte Operation und den Typ des Scheiterns, mit einer Meldung, die beim Catch sauber protokolliert werden kann. → **Signal:** nacktes `throw new Exception()` / `throw new RuntimeException()` ohne aussagekräftige Message; Catch, der nichts Diagnostizierbares loggt.
 
-**P9 — Exception-Klassen nach Aufrufer-Sicht (Kap. 7.5).** Fehler danach klassifizieren, *wie* sie gefangen werden — nicht nach technischer Quelle. → **Signal:** viele Exception-Typen nach technischer Herkunft, die der Aufrufer aber alle gleich behandelt (identische Catch-Blöcke); fehlende gemeinsame Wrapper-Exception an der Grenze.
+**P9 — Exception-Klassen nach Aufrufer-Sicht (Kap. 7.5).** Fehler danach klassifizieren, _wie_ sie gefangen werden — nicht nach technischer Quelle. → **Signal:** viele Exception-Typen nach technischer Herkunft, die der Aufrufer aber alle gleich behandelt (identische Catch-Blöcke); fehlende gemeinsame Wrapper-Exception an der Grenze.
 
-**P10 — Learning Tests für Drittanbieter-Code (Kap. 8).** `[Prozess/Repo]` — nur prüfbar, wenn die Tests im Scope sichtbar sind. Fremde APIs mit Tests absichern, die genau die erwartete Nutzung prüfen. → **Signal (bei sichtbarer neuer Library-Integration):** keine Tests, die das angenommene Verhalten der Fremd-API festnageln. (Ob eine Integration *neu* ist, ist aus dem Snapshot allein nicht sicher erkennbar → im Zweifel n. z.)
+**P10 — Learning Tests für Drittanbieter-Code (Kap. 8).** `[Prozess/Repo]` — nur prüfbar, wenn die Tests im Scope sichtbar sind. Fremde APIs mit Tests absichern, die genau die erwartete Nutzung prüfen. → **Signal (bei sichtbarer neuer Library-Integration):** keine Tests, die das angenommene Verhalten der Fremd-API festnageln. (Ob eine Integration _neu_ ist, ist aus dem Snapshot allein nicht sicher erkennbar → im Zweifel n. z.)
 
-**P11 — TDD-Gesetze (Kap. 9).** `[Prozess/Repo]` — die zeitliche Reihenfolge ist aus einem Snapshot **nicht** sichtbar. Kein Produktionscode ohne vorher scheiternden Test; nur so viel Test, wie zum Scheitern nötig; nur so viel Produktionscode, wie zum Bestehen nötig. → **Aus Code prüfbar ist nur:** *ob überhaupt* ein zugehöriger Test existiert (Test-Existenz, nicht „test-first"). Fehlt jeder Test zu neuem Produktionscode → S1-FLAG; alles Weitere n. z.
+**P11 — TDD-Gesetze (Kap. 9).** `[Prozess/Repo]` — die zeitliche Reihenfolge ist aus einem Snapshot **nicht** sichtbar. Kein Produktionscode ohne vorher scheiternden Test; nur so viel Test, wie zum Scheitern nötig; nur so viel Produktionscode, wie zum Bestehen nötig. → **Aus Code prüfbar ist nur:** _ob überhaupt_ ein zugehöriger Test existiert (Test-Existenz, nicht „test-first"). Fehlt jeder Test zu neuem Produktionscode → S1-FLAG; alles Weitere n. z.
 
-**P12 — F.I.R.S.T.** Jeder Test ist **F**ast, **I**ndependent (unabhängig von anderen Tests, beliebige Reihenfolge), **R**epeatable (jede Umgebung, auch offline), **S**elf-validating (boolesches Bestanden/Gescheitert, kein manuelles Log-Lesen), **T**imely (kurz vor dem Code geschrieben). → **Aus Code prüfbar (FLAGgen):** Tests, die gemeinsamen veränderlichen Zustand teilen oder auf Ausführungsreihenfolge bauen (I); Tests mit echtem Netz/DB/Uhr/Zufall ohne Abstraktion (R); Tests ohne Assertion, die nur loggen (S). → *Fast (F)* und *Timely (T)* sind Laufzeit-/Prozess-Eigenschaften (vgl. T9, `[Prozess/Repo]`).
+**P12 — F.I.R.S.T.** Jeder Test ist **F**ast, **I**ndependent (unabhängig von anderen Tests, beliebige Reihenfolge), **R**epeatable (jede Umgebung, auch offline), **S**elf-validating (boolesches Bestanden/Gescheitert, kein manuelles Log-Lesen), **T**imely (kurz vor dem Code geschrieben). → **Aus Code prüfbar (FLAGgen):** Tests, die gemeinsamen veränderlichen Zustand teilen oder auf Ausführungsreihenfolge bauen (I); Tests mit echtem Netz/DB/Uhr/Zufall ohne Abstraktion (R); Tests ohne Assertion, die nur loggen (S). → _Fast (F)_ und _Timely (T)_ sind Laufzeit-/Prozess-Eigenschaften (vgl. T9, `[Prozess/Repo]`).
 
 **P13 — Build-Operate-Check.** Saubere Tests haben drei Teile: Testdaten bauen → Operation ausführen → Ergebnis prüfen. Setup-Boilerplate hinter Helper-Methoden verstecken. → **Signal:** Test mit 15+ Zeilen Setup/Parsing/Casts inline, ohne erkennbare Build→Operate→Check-Trennung.
 
@@ -109,7 +109,7 @@ public void testGetPageHierarchyAsXml() throws Exception {
 }
 ```
 
-**P14 — Ein Konzept pro Test.** Asserts minimieren; mehrere Asserts nur, wenn sie *ein* Konzept verifizieren. → **Signal:** ein Test prüft mehrere unabhängige Konzepte (Asserts zu verschiedenen, nicht zusammenhängenden Aspekten); Testname mit „and". (vgl. T1)
+**P14 — Ein Konzept pro Test.** Asserts minimieren; mehrere Asserts nur, wenn sie _ein_ Konzept verifizieren. → **Signal:** ein Test prüft mehrere unabhängige Konzepte (Asserts zu verschiedenen, nicht zusammenhängenden Aspekten); Testname mit „and". (vgl. T1)
 
 **P15 — Konstruktion von Anwendung trennen (Kap. 11).** Objekt-Erzeugung und Verdrahtung gehören nach `main` / in Factories / einen DI-Container — nicht in den Fachcode gemischt. → **Signal:** Fachcode enthält `new ConcreteImpl(...)`, Lazy-Init-Antipattern oder Verdrahtungs-Logik, statt die fertige Abhängigkeit übergeben zu bekommen.
 
@@ -124,9 +124,9 @@ public Service getService() {
 //      Abhängigkeit übergeben und weiß nichts vom Konstruktionsprozess.
 ```
 
-Außerdem: **einfachste funktionsfähige Lösung** wählen, **kein BDUF** (inkrementell wachsen). *BDUF ≠ „vorher überhaupt Design machen".* → Der BDUF-/Inkrementell-Aspekt ist eine Prozess-Bewertung (`[Prozess/Repo]`); aus Code FLAGgst du nur sichtbare Über-Vorausplanung (umfangreiche Abstraktionen/Konfiguration ohne aktuellen Nutzer).
+Außerdem: **einfachste funktionsfähige Lösung** wählen, **kein BDUF** (inkrementell wachsen). _BDUF ≠ „vorher überhaupt Design machen"._ → Der BDUF-/Inkrementell-Aspekt ist eine Prozess-Bewertung (`[Prozess/Repo]`); aus Code FLAGgst du nur sichtbare Über-Vorausplanung (umfangreiche Abstraktionen/Konfiguration ohne aktuellen Nutzer).
 
-**P16 — Nebenläufigkeit sauber halten (Kap. 13).** Nebenläufigkeitscode ist eine **eigene Verantwortlichkeit** → vom übrigen Code trennen. *(Sprachunabhängig; das Java-Beispiel illustriert nur. In Sprachen/Programmen ohne echte Parallelität → n. z.)* → **Signal:** geteilter **veränderlicher** Zustand, auf den mehrere Threads/Tasks/Coroutinen ungeschützt zugreifen; **nicht-atomares read-modify-write** (`x++`, „prüfen-dann-handeln", Lazy-Init ohne Schutz); zu große kritische Abschnitte; mehrere Sperren auf demselben Objekt; „nicht reproduzierbare" Fehler, die als Einmal-Ereignis abgetan werden.
+**P16 — Nebenläufigkeit sauber halten (Kap. 13).** Nebenläufigkeitscode ist eine **eigene Verantwortlichkeit** → vom übrigen Code trennen. _(Sprachunabhängig; das Java-Beispiel illustriert nur. In Sprachen/Programmen ohne echte Parallelität → n. z.)_ → **Signal:** geteilter **veränderlicher** Zustand, auf den mehrere Threads/Tasks/Coroutinen ungeschützt zugreifen; **nicht-atomares read-modify-write** (`x++`, „prüfen-dann-handeln", Lazy-Init ohne Schutz); zu große kritische Abschnitte; mehrere Sperren auf demselben Objekt; „nicht reproduzierbare" Fehler, die als Einmal-Ereignis abgetan werden.
 
 ```java
 // Smell: scheinbar trivial, aber nicht atomar — ++ sind mehrere Schritte (lesen, erhöhen, schreiben).
@@ -136,7 +136,7 @@ public int getNextId() {
 }
 ```
 
-Fix: geteilte Daten kapseln/kopieren, Tasks unabhängig machen, kritische Abschnitte minimal halten, atomare/`concurrent`-Bausteine der Plattform nutzen (z. B. `AtomicInteger`, Locks, `java.util.concurrent`; in anderen Sprachen das jeweilige Äquivalent). *(In diesem Repo relevant für: async/await-Races auf `store`-State, parallele Webhook-Callbacks, Timer vs. WebSocket-Events in `bridge.js`.)*
+Fix: geteilte Daten kapseln/kopieren, Tasks unabhängig machen, kritische Abschnitte minimal halten, atomare/`concurrent`-Bausteine der Plattform nutzen (z. B. `AtomicInteger`, Locks, `java.util.concurrent`; in anderen Sprachen das jeweilige Äquivalent). _(In diesem Repo relevant für: async/await-Races auf `store`-State, parallele Webhook-Callbacks, Timer vs. WebSocket-Events in `bridge.js`.)_
 
 ---
 
@@ -156,9 +156,9 @@ Fix: geteilte Daten kapseln/kopieren, Tasks unabhängig machen, kritische Abschn
 
 ## E — Umgebung
 
-**E1 — Build = mehr als ein Schritt.** `[Prozess/Repo]` — nur bei sichtbaren Build-Skripten/CI-Konfig im Scope prüfbar. Bauen soll *eine* triviale Operation sein. → **Signal (falls sichtbar):** mehrstufige Build-Anleitung (Check-out + mehrere Skripte + manuelle Handgriffe). Sonst n. z.
+**E1 — Build = mehr als ein Schritt.** `[Prozess/Repo]` — nur bei sichtbaren Build-Skripten/CI-Konfig im Scope prüfbar. Bauen soll _eine_ triviale Operation sein. → **Signal (falls sichtbar):** mehrstufige Build-Anleitung (Check-out + mehrere Skripte + manuelle Handgriffe). Sonst n. z.
 
-**E2 — Tests = mehr als ein Schritt.** `[Prozess/Repo]` — nur bei sichtbarer Test-/CI-Konfig prüfbar. Alle Unit-Tests mit *einem* Befehl ausführbar (idealerweise ein Klick). → **Signal (falls sichtbar):** Tests erfordern manuelles Setup/mehrere Befehle. Sonst n. z.
+**E2 — Tests = mehr als ein Schritt.** `[Prozess/Repo]` — nur bei sichtbarer Test-/CI-Konfig prüfbar. Alle Unit-Tests mit _einem_ Befehl ausführbar (idealerweise ein Klick). → **Signal (falls sichtbar):** Tests erfordern manuelles Setup/mehrere Befehle. Sonst n. z.
 
 ---
 
@@ -200,7 +200,7 @@ Day day = DayDate.StringToDay("Montag");
 // Fehlt das, verliert der Leser das Vertrauen in den Namen und muss den Code studieren.
 ```
 
-**G3 — Falsches Verhalten an den Grenzen.** Auf Intuition statt Tests vertraut. → **Signal:** Grenz-/Sonderfälle (leer, null, 0, Max, negativ) im Code unbehandelt und ungetestet. Fix: *alle* Grenz- und Sonderfälle testen. (vgl. T5)
+**G3 — Falsches Verhalten an den Grenzen.** Auf Intuition statt Tests vertraut. → **Signal:** Grenz-/Sonderfälle (leer, null, 0, Max, negativ) im Code unbehandelt und ungetestet. Fix: _alle_ Grenz- und Sonderfälle testen. (vgl. T5)
 
 **G4 — Übergangene Sicherungen.** Compiler-Warnungen abgeschaltet, scheiternde Tests deaktiviert („fixe ich später"), `serialVersionUID` von Hand. → **Signal:** `@SuppressWarnings` ohne Grund, `@Ignore`/`@Disabled` mit „später"-Kommentar, abgeschaltete Linter-Regeln. → **Schweregrad S1** (Sicherheit/Korrektheit).
 
@@ -211,7 +211,6 @@ Day day = DayDate.StringToDay("Montag");
 boolean isEmpty() { return 0 == size(); }
 ```
 
-
 ```java
 // Form 2 — gemeinsame Schritte extrahieren:
 // scaleToOneDimension() und rotate() enden beide mit denselben drei Zeilen → herausziehen
@@ -221,7 +220,6 @@ private void replaceImage(RenderedOp newImage) {
   image = newImage;
 }
 ```
-
 
 ```java
 // Form 3 — ähnliche Algorithmen, kleine Abweichung → Template Method
@@ -242,7 +240,7 @@ abstract public class VacationPolicy {
 
 → **Schweregrad S2.** (Form 2 über `switch`/`if-else`-Ketten → Polymorphie, siehe G23.)
 
-**G6 — Falsche Abstraktionsebene.** Konkretes in der Basisklasse. → **Signal:** Basisklasse/-Interface enthält Methode, Konstante oder Utility, die nur für *eine* konkrete Implementierung Sinn ergibt.
+**G6 — Falsche Abstraktionsebene.** Konkretes in der Basisklasse. → **Signal:** Basisklasse/-Interface enthält Methode, Konstante oder Utility, die nur für _eine_ konkrete Implementierung Sinn ergibt.
 
 ```java
 public interface Stack {
@@ -267,7 +265,7 @@ public interface Stack {
 
 **G13 — Künstliche Kopplung.** Unabhängiges aneinandergebunden. → **Signal:** allgemeines Enum/Konstante in einer speziellen Klasse eingeschlossen, sodass Verwender die spezielle Klasse importieren müssen. Fix: am richtigen, allgemeinen Ort deklarieren.
 
-**G14 — Feature Envy.** Methode interessiert sich mehr für Daten einer *anderen* Klasse. → **Signal:** Methode ruft überwiegend Accessoren/Mutatoren eines fremden Objekts auf, um dessen Daten zu manipulieren. Fix: Logik dorthin verschieben, wo die Daten leben.
+**G14 — Feature Envy.** Methode interessiert sich mehr für Daten einer _anderen_ Klasse. → **Signal:** Methode ruft überwiegend Accessoren/Mutatoren eines fremden Objekts auf, um dessen Daten zu manipulieren. Fix: Logik dorthin verschieben, wo die Daten leben.
 
 **G15 — Selektor-Argumente.** Jedes Argument (`boolean`, `enum`, `int`), das nur Verhaltensvarianten umschaltet. → **Signal:** Aufruf wie `calculateWeeklyPay(false)`, bei dem der Leser nachschlagen muss, was der Wert bedeutet. Fix: getrennte Funktionen (`calculateStraightTime()`, `calculateOverTime()`).
 
@@ -306,7 +304,7 @@ private final int PAGE_SIZE = 55;
 int pageSize = formatter.getMaxPageSize();
 ```
 
-**G23 — Polymorphie statt `switch`/`if-else`.** Zuerst eine polymorphe Lösung erwägen. → **Signal:** wiederholte `switch`/`if-else` über denselben Typ-Diskriminator in mehreren Modulen. **One-Switch-Regel:** pro Auswahl-Art nur *ein* `switch`, das die polymorphen Objekte erzeugt; jeder weitere `switch` über denselben Diskriminator ist Duplizierung (vgl. G5). *(Bewusste Ausnahme: in Abschnitten, wo neue Funktionen statt neuer Typen dazukommen, kann ein `switch` in einer Factory richtig sein.)*
+**G23 — Polymorphie statt `switch`/`if-else`.** Zuerst eine polymorphe Lösung erwägen. → **Signal:** wiederholte `switch`/`if-else` über denselben Typ-Diskriminator in mehreren Modulen. **One-Switch-Regel:** pro Auswahl-Art nur _ein_ `switch`, das die polymorphen Objekte erzeugt; jeder weitere `switch` über denselben Diskriminator ist Duplizierung (vgl. G5). _(Bewusste Ausnahme: in Abschnitten, wo neue Funktionen statt neuer Typen dazukommen, kann ein `switch` in einer Factory richtig sein.)_
 
 **G24 — Konventionen beachten.** → **Signal:** Abweichung vom im Projekt sichtbaren Codierstandard (Klammern, Benennung, Reihenfolge). Der Code selbst ist das Beispiel.
 
@@ -321,7 +319,7 @@ static final int LINES_PER_PAGE  = 55;
 static final String HOURLY_EMPLOYEE_NAME = "John Doe";
 ```
 
-→ *Ausnahme:* selbsterklärend (`2 * Math.PI`, `hourlyRate * 8`).
+→ _Ausnahme:_ selbsterklärend (`2 * Math.PI`, `hourlyRate * 8`).
 
 **G26 — Präzise sein (Vagheit = Faulheit).** → **Signale, alle FLAGgen (Korrektheit, tendenziell S1):** Geld als Fließkomma (→ Ganzzahl/`Money`); `null`-Rückgabe ungeprüft verwendet; angenommen, der erste DB-Treffer sei der einzige; Locks weggelassen, weil Konflikt „unwahrscheinlich"; `ArrayList` deklariert, wo `List` reicht (zu einschränkend); alles `protected` per Default (nicht einschränkend genug).
 
@@ -429,7 +427,7 @@ private String hrSize(int height) {
 
 → Eine der schwersten Heuristiken; mit Augenmaß (Vorrang Lesbarkeit) prüfen.
 
-**G35 — Konfigurierbare Daten hoch ansiedeln.** → **Signal:** Default-/Konfigurationswert tief in einer Low-Level-Funktion vergraben. Fix: auf Top-Level (z. B. `DEFAULT_PORT` in einer `Arguments`-Klasse, in der ersten Zeile von `main` geparst) und nach unten durchreichen. *(In diesem Repo: alle konfigurierbaren Werte gehören nach `src/config.js`.)*
+**G35 — Konfigurierbare Daten hoch ansiedeln.** → **Signal:** Default-/Konfigurationswert tief in einer Low-Level-Funktion vergraben. Fix: auf Top-Level (z. B. `DEFAULT_PORT` in einer `Arguments`-Klasse, in der ersten Zeile von `main` geparst) und nach unten durchreichen. _(In diesem Repo: alle konfigurierbaren Werte gehören nach `src/config.js`.)_
 
 **G36 — Transitive Navigation vermeiden (Law of Demeter).** Ein Modul kennt nur seine unmittelbaren Mitarbeiter. → **Signal:** Aufrufketten über mehrere Objekte (`a.getB().getC().doSomething()`, „Train Wreck").
 
@@ -443,7 +441,7 @@ myCollaborator.doSomething();     // gut — der unmittelbare Mitarbeiter bietet
 
 ## J — Java (nur bei Java-Code; sonst Geist übertragen — in diesem Repo n. z.)
 
-**J1 — Lange Importlisten → Platzhalter.** Bei ≥2 Klassen aus einem Package `import package.*;` — reduziert Kopplung (Platzhalter erzeugt keine harte Abhängigkeit auf Einzelklassen). → **Signal:** viele Einzel-Imports aus demselben Package. *Allgemein:* Imports schlank nach Sprach-Norm.
+**J1 — Lange Importlisten → Platzhalter.** Bei ≥2 Klassen aus einem Package `import package.*;` — reduziert Kopplung (Platzhalter erzeugt keine harte Abhängigkeit auf Einzelklassen). → **Signal:** viele Einzel-Imports aus demselben Package. _Allgemein:_ Imports schlank nach Sprach-Norm.
 
 **J2 — Konstanten nicht vererben.** → **Signal:** Klasse `implements`/`extends` ein Interface nur, um an dessen Konstanten zu kommen.
 
@@ -458,7 +456,7 @@ public interface PayrollConstants {
 import static PayrollConstants.*;
 ```
 
-→ *Allgemein:* Konstanten nicht via Vererbung einschmuggeln, um Scope-Regeln zu umgehen.
+→ _Allgemein:_ Konstanten nicht via Vererbung einschmuggeln, um Scope-Regeln zu umgehen.
 
 **J3 — Enums statt `public static final int`.** → **Signal:** Gruppen verwandter `public static final int`-Konstanten, die eine Aufzählung darstellen. Enums tragen Methoden/Felder und verlieren ihre Bedeutung nicht.
 
@@ -472,7 +470,7 @@ public enum HourlyPayGrade {
 }
 ```
 
-→ *Allgemein:* typsichere Aufzählung vor nackten Integer-Konstanten.
+→ _Allgemein:_ typsichere Aufzählung vor nackten Integer-Konstanten.
 
 ---
 
@@ -564,4 +562,4 @@ public ObjectOutputStream createOrReturnOos() throws IOException { ... }
 
 ---
 
-*Die Liste ist bewusst nicht „vollständig" — Clean Code entsteht nicht durch Regel-Befolgung, sondern durch das zugrunde liegende Wertesystem. Prüfe mit Urteilsvermögen, nicht mechanisch.*
+_Die Liste ist bewusst nicht „vollständig" — Clean Code entsteht nicht durch Regel-Befolgung, sondern durch das zugrunde liegende Wertesystem. Prüfe mit Urteilsvermögen, nicht mechanisch._

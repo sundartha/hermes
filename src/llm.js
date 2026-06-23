@@ -28,7 +28,14 @@ const SERVER_ERROR_MIN = 500;
 // gefangen); dessen verschachtelte cause traegt diesen undici-Code. Hier defensiv im
 // Set, falls der instanceof-Pfad je ausfaellt (Defense-in-Depth, empirisch belegt).
 // ERR_STREAM_PREMATURE_CLOSE bleibt als node-fetch-Erbe (Bedrock/aeltere Pfade).
-const TRANSIENT_CODES = new Set(["ERR_STREAM_PREMATURE_CLOSE", "UND_ERR_SOCKET", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EPIPE"]);
+const TRANSIENT_CODES = new Set([
+  "ERR_STREAM_PREMATURE_CLOSE",
+  "UND_ERR_SOCKET",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ECONNREFUSED",
+  "EPIPE",
+]);
 const PREMATURE_CLOSE_MESSAGE = "Premature close";
 // Voll-Jitter-Backoff verdoppelt die Basis pro Versuch (gegen Thundering Herd).
 const BACKOFF_FACTOR = 2;
@@ -138,7 +145,13 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Factory (P15: Konstruktion/Verdrahtung getrennt vom Fachcode). <=4 benannte Felder
 // in EINEM Optionsobjekt (F1). messagesCreate ist ein optionaler Test-Seam (DIP):
 // gesetzt -> ersetzt sdk.messages.create; sonst = der echte Prod-Pfad (kein toter Code).
-export function createLlmClient({ apiKey, config, sleep = defaultSleep, metrics = noopMetrics, messagesCreate } = {}) {
+export function createLlmClient({
+  apiKey,
+  config,
+  sleep = defaultSleep,
+  metrics = noopMetrics,
+  messagesCreate,
+} = {}) {
   const sdk = new Anthropic({
     apiKey,
     timeout: config.llmRequestTimeoutMs, // expliziter Per-Request-Timeout (Pflicht; SDK-Default 10 min waere webhook-toedlich)
@@ -146,7 +159,11 @@ export function createLlmClient({ apiKey, config, sleep = defaultSleep, metrics 
   });
   const create = messagesCreate || ((params) => sdk.messages.create(params));
   const breaker = makeBreaker(
-    { threshold: config.llmBreakerThreshold, windowMs: config.llmBreakerWindowMs, cooldownMs: config.llmBreakerCooldownMs },
+    {
+      threshold: config.llmBreakerThreshold,
+      windowMs: config.llmBreakerWindowMs,
+      cooldownMs: config.llmBreakerCooldownMs,
+    },
     Date.now,
   );
   async function complete(params) {
@@ -162,10 +179,22 @@ export function createLlmClient({ apiKey, config, sleep = defaultSleep, metrics 
           attempts += 1;
           return create(params);
         },
-        { max: config.llmMaxRetries, baseMs: config.llmBackoffMs, jitter: true, retryable: isTransient, sleep, random: Math.random },
+        {
+          max: config.llmMaxRetries,
+          baseMs: config.llmBackoffMs,
+          jitter: true,
+          retryable: isTransient,
+          sleep,
+          random: Math.random,
+        },
         breaker,
       );
-      metrics.llmCall({ outcome: "success", attempts, latencyMs: Date.now() - startedAt, breakerState: breaker.state() });
+      metrics.llmCall({
+        outcome: "success",
+        attempts,
+        latencyMs: Date.now() - startedAt,
+        breakerState: breaker.state(),
+      });
       return resp;
     } catch (err) {
       const exhausted = isTransient(err); // transient + durch withRetry geworfen -> Retries erschoepft

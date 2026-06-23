@@ -25,5 +25,5 @@ console.log(
   `actionItems=${removed.actionItems} notifications=${removed.notifications}`,
   // privateNumber als 0/1-Zaehler (F2 P10): zeigt, ob eine private Summary-Nummer
   // mitgeloescht wurde - NIE der Wert (PII-frei, wie die uebrigen Zaehler).
-  `privateNumber=${removed.privateNumber}`
+  `privateNumber=${removed.privateNumber}`,
 );

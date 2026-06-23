@@ -9,7 +9,11 @@
 // Anthropic-Mock noetig. Spawn/POST + Marker leben in test/_outbound-harness.js (G0).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runOutbound, HANGUP_TAG as HANGUP, assertDisclosureInGather } from "./_outbound-harness.js";
+import {
+  runOutbound,
+  HANGUP_TAG as HANGUP,
+  assertDisclosureInGather,
+} from "./_outbound-harness.js";
 
 for (const provider of ["twilio", "telnyx"]) {
   test(`/voice/outbound (${provider}): LLM-frei -> Offenlegung im <Gather>, kein <Hangup> (G2)`, async () => {

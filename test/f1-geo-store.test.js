@@ -28,7 +28,12 @@ import {
   resolveCallLanguage,
   updateSettings,
 } from "../src/store/state-ops.js";
-import { defaultSettings, OWNER_TENANT_ID, DEFAULT_COUNTRY, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import {
+  defaultSettings,
+  OWNER_TENANT_ID,
+  DEFAULT_COUNTRY,
+  DEFAULT_LANGUAGE,
+} from "../src/store/defaults.js";
 
 const A = "tenant_a";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 5 };
@@ -36,7 +41,9 @@ const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 5 };
 // Re-hydriert einen frischen Store aus einer BESTEHENDEN pglite-Instanz (Persistenz
 // statt nur In-Memory) - Muster aus store-pg.test.js.
 async function reopen(db) {
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init();
   return store;
@@ -63,13 +70,33 @@ test("numberRecordByE164: aktive Nummer -> voller Record (tenantId+language); in
   const s = makeDefaultState();
   s.tenants = [{ id: A, status: "active" }];
   s.numbers = [
-    { id: "n_fr", e164: "+33111", tenantId: A, provider: "telnyx", status: "active", country: "FR", language: "fr" },
-    { id: "n_req", e164: "+33222", tenantId: A, provider: "telnyx", status: "requested", country: "FR", language: "fr" },
+    {
+      id: "n_fr",
+      e164: "+33111",
+      tenantId: A,
+      provider: "telnyx",
+      status: "active",
+      country: "FR",
+      language: "fr",
+    },
+    {
+      id: "n_req",
+      e164: "+33222",
+      tenantId: A,
+      provider: "telnyx",
+      status: "requested",
+      country: "FR",
+      language: "fr",
+    },
   ];
   const rec = numberRecordByE164(s, "+33111");
   assert.equal(rec.tenantId, A);
   assert.equal(rec.language, "fr");
-  assert.equal(numberRecordByE164(s, "+33222"), null, "nicht-aktive Nummer routet nicht (fail-closed)");
+  assert.equal(
+    numberRecordByE164(s, "+33222"),
+    null,
+    "nicht-aktive Nummer routet nicht (fail-closed)",
+  );
   assert.equal(numberRecordByE164(s, "+49000"), null, "unbekannte Nummer -> null");
   assert.equal(numberRecordByE164(s, ""), null, "leere e164 -> null");
 });
@@ -95,7 +122,11 @@ test("resolveCallLanguage: ohne Override + ohne number.language greift tenant.de
   s.tenants = [{ id: A, status: "active", defaultLanguage: "fr" }];
   s.settings[A] = { ...defaultSettings(), language: null };
   assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: { language: null } }), "fr");
-  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: null }), "fr", "kein Record -> Number-Stufe faellt durch");
+  assert.equal(
+    resolveCallLanguage(s, { tenantId: A, numberRecord: null }),
+    "fr",
+    "kein Record -> Number-Stufe faellt durch",
+  );
 });
 
 test("resolveCallLanguage: alles leer -> DEFAULT_LANGUAGE (de, letzter Notnagel)", () => {
@@ -149,7 +180,12 @@ test("requestNumber: Default-Geo = DE/de", () => {
 
 test("requestNumber: explizites country/language (FR) landet auf der angefragten Nummer", () => {
   const s = makeDefaultState();
-  const res = requestNumber(s, { tenantId: OWNER_TENANT_ID, country: "FR", language: "fr", ...CAPS });
+  const res = requestNumber(s, {
+    tenantId: OWNER_TENANT_ID,
+    country: "FR",
+    language: "fr",
+    ...CAPS,
+  });
   assert.equal(res.ok, true);
   assert.equal(res.number.country, "FR");
   assert.equal(res.number.language, "fr");
@@ -162,7 +198,11 @@ test("setTenantGeo: selektiver Patch - country setzen laesst defaultLanguage unb
   registerTenant(s, A);
   setTenantGeo(s, A, { country: "FR" });
   assert.equal(findTenant(s, A).country, "FR");
-  assert.equal("defaultLanguage" in findTenant(s, A), false, "defaultLanguage unberuehrt (kein undefined-Feld)");
+  assert.equal(
+    "defaultLanguage" in findTenant(s, A),
+    false,
+    "defaultLanguage unberuehrt (kein undefined-Feld)",
+  );
   setTenantGeo(s, A, { defaultLanguage: "fr" });
   assert.equal(findTenant(s, A).country, "FR", "country bleibt erhalten");
   assert.equal(findTenant(s, A).defaultLanguage, "fr");
@@ -179,7 +219,11 @@ test("setTenantGeo: Owner ohne Geo-Patch bleibt byte-identisch (kein leeres Feld
   setTenantGeo(s, OWNER_TENANT_ID, {});
   assert.deepEqual(findTenant(s, OWNER_TENANT_ID), before, "leerer Patch aendert nichts");
   assert.equal("country" in findTenant(s, OWNER_TENANT_ID), false, "kein country-Feld am Owner");
-  assert.equal("defaultLanguage" in findTenant(s, OWNER_TENANT_ID), false, "kein defaultLanguage-Feld am Owner");
+  assert.equal(
+    "defaultLanguage" in findTenant(s, OWNER_TENANT_ID),
+    false,
+    "kein defaultLanguage-Feld am Owner",
+  );
 });
 
 // ---- json-Fassade ----
@@ -199,7 +243,16 @@ test("json-Roundtrip: setTenantGeo via Fassade persistiert -> Tenant-Record trae
 test("pg: Number-Geo (country/language) ueberlebt Flush + Re-Hydrierung", async () => {
   const { store, db } = await makePgTestStore();
   const s = store.load();
-  s.numbers.push({ id: "num_fr", e164: "+33999000111", tenantId: OWNER_TENANT_ID, provider: "telnyx", status: "active", providerNumberId: null, country: "FR", language: "fr" });
+  s.numbers.push({
+    id: "num_fr",
+    e164: "+33999000111",
+    tenantId: OWNER_TENANT_ID,
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: null,
+    country: "FR",
+    language: "fr",
+  });
   await store.save();
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_fr");
@@ -214,7 +267,7 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   const { db } = await makePgTestStore();
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'twilio','active')`,
-    ["num_legacy", OWNER_TENANT_ID, "+4915700099999"]
+    ["num_legacy", OWNER_TENANT_ID, "+4915700099999"],
   );
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_legacy");
@@ -256,7 +309,11 @@ test("pg: settings.language ist via updateSettings umstellbar + ueberlebt Re-Hyd
   assert.equal(store.load().settings[OWNER_TENANT_ID].language, "fr");
   await store.save();
   const reopened = await reopen(db);
-  assert.equal(reopened.load().settings[OWNER_TENANT_ID].language, "fr", "umgestellte Sprache persistiert");
+  assert.equal(
+    reopened.load().settings[OWNER_TENANT_ID].language,
+    "fr",
+    "umgestellte Sprache persistiert",
+  );
 });
 
 // ---- Idempotenz des additiven Schemas ----

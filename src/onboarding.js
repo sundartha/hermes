@@ -39,7 +39,11 @@ const PROVISION_SEARCH_LIMIT = 10;
 // mit optionalem Hold-vor-Order + Capture-vor-Active (deps.billing). Fehlerpfade:
 // search/order-Fehler -> failed (kein Kauf) + Hold-Freigabe; configure/capture-Fehler
 // nach dem Kauf -> Provider-Release + failed + Hold-Freigabe. Liefert die aktivierte Nummer.
-export async function provisionNumber(s, deps, { numberId, countryCode, connectionId, type, holdAmountCents, currency }) {
+export async function provisionNumber(
+  s,
+  deps,
+  { numberId, countryCode, connectionId, type, holdAmountCents, currency },
+) {
   const { provisioner, billing } = deps;
   const number = findNumber(s, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
@@ -56,7 +60,9 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
     const { customerId, paymentMethodId } = tenantStripe(s, number.tenantId);
     if (!customerId || !paymentMethodId) {
       failNumber(s, numberId); // requested -> failed (nichts gehalten, nichts gekauft)
-      throw new Error(`provisionNumber: Tenant ${number.tenantId} hat kein hinterlegtes Zahlungsmittel`);
+      throw new Error(
+        `provisionNumber: Tenant ${number.tenantId} hat kein hinterlegtes Zahlungsmittel`,
+      );
     }
     try {
       const hold = await billing.placeHold({
@@ -83,11 +89,16 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
 
   let ordered;
   try {
-    const candidates = await provisioner.searchNumbers({ countryCode, type, limit: PROVISION_SEARCH_LIMIT });
+    const candidates = await provisioner.searchNumbers({
+      countryCode,
+      type,
+      limit: PROVISION_SEARCH_LIMIT,
+    });
     const candidate = candidates[0];
     // R5: 0 Treffer -> kontrollierter Fehler (NICHT Crash). Faengt im try/catch ->
     // failNumber + Hold-Freigabe, kein Provider-Kauf (kein bezahlter Orphan).
-    if (!candidate) throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
+    if (!candidate)
+      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
     ordered = await provisioner.orderNumber({ e164: candidate.e164, idempotencyKey });
   } catch (err) {
     failNumber(s, numberId); // provisioning -> failed (kein Kauf zustande gekommen)
@@ -98,7 +109,12 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
   try {
     await provisioner.configureNumber({ providerNumberId: ordered.providerNumberId, connectionId });
   } catch (cfgErr) {
-    await rollbackAfterOrder(s, numberId, { provisioner, providerNumberId: ordered.providerNumberId, billing, paymentIntentId });
+    await rollbackAfterOrder(s, numberId, {
+      provisioner,
+      providerNumberId: ordered.providerNumberId,
+      billing,
+      paymentIntentId,
+    });
     throw cfgErr;
   }
 
@@ -107,12 +123,20 @@ export async function provisionNumber(s, deps, { numberId, countryCode, connecti
     try {
       await billing.captureHold(paymentIntentId, holdAmountCents);
     } catch (capErr) {
-      await rollbackAfterOrder(s, numberId, { provisioner, providerNumberId: ordered.providerNumberId, billing, paymentIntentId });
+      await rollbackAfterOrder(s, numberId, {
+        provisioner,
+        providerNumberId: ordered.providerNumberId,
+        billing,
+        paymentIntentId,
+      });
       throw capErr;
     }
   }
 
-  return activateNumber(s, numberId, { e164: ordered.e164, providerNumberId: ordered.providerNumberId });
+  return activateNumber(s, numberId, {
+    e164: ordered.e164,
+    providerNumberId: ordered.providerNumberId,
+  });
 }
 
 // Hold freigeben, falls einer gehalten wurde (Rollback). billing/paymentIntentId
@@ -134,7 +158,11 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
 // (moeglicher Orphan -> Reconciliation, durch die MAX_NUMBERS-Cap gedeckelt). Eine
 // Stelle fuer beide Fehlerkanten (G5/S2). Bei billing=null ist cancelHoldIfHeld ein
 // No-op -> der payment-off configure-Pfad bleibt byte-identisch zum Bestand.
-async function rollbackAfterOrder(s, numberId, { provisioner, providerNumberId, billing, paymentIntentId }) {
+async function rollbackAfterOrder(
+  s,
+  numberId,
+  { provisioner, providerNumberId, billing, paymentIntentId },
+) {
   failNumber(s, numberId); // provisioning|capturing -> failed
   try {
     await provisioner.releaseNumber(providerNumberId);

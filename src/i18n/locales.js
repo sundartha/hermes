@@ -58,7 +58,8 @@ export const LOCALES = Object.freeze({
     realtimeOpener: {
       outbound: (disclosure) =>
         `Beginne das Gespraech JETZT. Dein erster Satz muss exakt lauten: "${disclosure}" Nenne danach kurz dein Anliegen.`,
-      inbound: "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
+      inbound:
+        "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
     },
     // System-Prompt-Sprach-Teil: die Output-Sprach-Regel in Regel 1 (claude.js).
     speechClause: "Nur natuerlich gesprochenes Deutsch.",
@@ -76,8 +77,10 @@ export const LOCALES = Object.freeze({
     // Quelle: zuvor hart in server.js (Reprompt/Fehler/Hangup) bzw. defaults.js
     // (greetingDefault). DE-Werte BYTE-IDENTISCH zum Bestand uebernommen - ein FR/EN-Pfad
     // faerbt DE nicht ab. greetingDefault = DEFAULT_GREETING (eine Quelle, kein Drift).
-    llmDegradedSpeech: "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
-    turnErrorSpeech: "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
+    llmDegradedSpeech:
+      "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
+    turnErrorSpeech:
+      "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
     noSpeechReprompt: "Entschuldigung, koennen Sie das bitte wiederholen?",
     budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
     greetingDefault: DEFAULT_GREETING,
@@ -104,7 +107,8 @@ export const LOCALES = Object.freeze({
     summarySystem: (owner) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved se rapporte à la mission (pour les appels entrants : si la demande de l'appelant a été résolue). N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item.`,
     // Statische Server-Texte FR (kuratiert, mit Akzenten fuer korrekte TTS-Aussprache).
-    llmDegradedSpeech: "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
+    llmDegradedSpeech:
+      "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
     turnErrorSpeech: "Désolé, un problème technique est survenu. Veuillez réessayer plus tard.",
     noSpeechReprompt: "Désolé, pouvez-vous répéter, s'il vous plaît ?",
     budgetExhaustedHangup: "Le budget de démonstration est épuisé. Au revoir.",
@@ -137,7 +141,8 @@ export const LOCALES = Object.freeze({
       `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
     summarySystem: (owner) =>
       `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved refers to the objective (for inbound calls: whether the caller's request was resolved). Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item.`,
-    llmDegradedSpeech: "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
+    llmDegradedSpeech:
+      "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
     turnErrorSpeech: "Sorry, a technical problem occurred. Please try again later.",
     noSpeechReprompt: "Sorry, could you please repeat that?",
     budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",

@@ -20,20 +20,39 @@ before(async () => {
   dataDir = tempDataDir(
     seedState({
       calls: [
-        seedCall({ id: "call_old_done", status: "completed", startedAt: OLD, endedAt: OLD,
-          transcript: [{ role: "caller", text: "altes Transkript", at: OLD }] }),
+        seedCall({
+          id: "call_old_done",
+          status: "completed",
+          startedAt: OLD,
+          endedAt: OLD,
+          transcript: [{ role: "caller", text: "altes Transkript", at: OLD }],
+        }),
         seedCall({ id: "call_fresh_done", status: "completed", startedAt: FRESH, endedAt: FRESH }),
         seedCall({ id: "call_old_active", status: "active", startedAt: OLD, endedAt: null }),
       ],
       actionItems: [
-        { id: "ai_old_done", callId: "call_old_done", text: "erledigt", type: "todo", done: true, createdAt: OLD },
-        { id: "ai_old_open", callId: "call_old_done", text: "offen", type: "todo", done: false, createdAt: OLD },
+        {
+          id: "ai_old_done",
+          callId: "call_old_done",
+          text: "erledigt",
+          type: "todo",
+          done: true,
+          createdAt: OLD,
+        },
+        {
+          id: "ai_old_open",
+          callId: "call_old_done",
+          text: "offen",
+          type: "todo",
+          done: false,
+          createdAt: OLD,
+        },
       ],
       notifications: [
         { id: "nt_old", title: "alt", body: "", callId: null, at: OLD },
         { id: "nt_fresh", title: "frisch", body: "", callId: null, at: FRESH },
       ],
-    })
+    }),
   );
   // DATA_DIR muss vor dem Import gesetzt sein (config.js liest Env beim Laden)
   process.env.DATA_DIR = dataDir;
@@ -50,7 +69,10 @@ test("pruneOldData loescht nur Altes und Beendetes", () => {
   assert.ok(callIds.includes("call_fresh_done"), "frischer beendeter Call bleibt");
   assert.ok(callIds.includes("call_old_active"), "aktiver Call bleibt trotz Alter");
 
-  assert.deepEqual(s.notifications.map((n) => n.id), ["nt_fresh"]);
+  assert.deepEqual(
+    s.notifications.map((n) => n.id),
+    ["nt_fresh"],
+  );
 
   const itemIds = s.actionItems.map((a) => a.id);
   assert.ok(!itemIds.includes("ai_old_done"), "erledigtes altes Item ist weg");

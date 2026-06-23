@@ -16,8 +16,14 @@ function fakeRes() {
     statusCode: null,
     body: null,
     headersSent: false,
-    status(c) { this.statusCode = c; return this; },
-    json(b) { this.body = b; return this; },
+    status(c) {
+      this.statusCode = c;
+      return this;
+    },
+    json(b) {
+      this.body = b;
+      return this;
+    },
   };
   return res;
 }
@@ -27,7 +33,11 @@ function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
   console.error = (...args) => lines.push(args.map(String).join(" "));
-  try { fn(); } finally { console.error = orig; }
+  try {
+    fn();
+  } finally {
+    console.error = orig;
+  }
   return lines;
 }
 
@@ -40,7 +50,11 @@ test("T-P4-AC4-01: generische 500 {error:'internal error'}, KEIN err.message/sta
   assert.equal(res.statusCode, 500);
   assert.deepEqual(res.body, { error: "internal error" });
   const bodyStr = JSON.stringify(res.body);
-  assert.doesNotMatch(bodyStr, /ROH_SECRET|abc123|secret\.js/, "kein err.message/stack im Client-Body");
+  assert.doesNotMatch(
+    bodyStr,
+    /ROH_SECRET|abc123|secret\.js/,
+    "kein err.message/stack im Client-Body",
+  );
 });
 
 test("T-P4-AC4-02: err.stack wird server-seitig laut geloggt (nur Log, nie Response)", () => {
@@ -48,7 +62,10 @@ test("T-P4-AC4-02: err.stack wird server-seitig laut geloggt (nur Log, nie Respo
   const err = new Error("boom");
   err.stack = "Error: boom\n  at x (y.js:1:1)";
   const logs = captureConsoleError(() => errorHandler(err, {}, res, () => {}));
-  assert.ok(logs.some((l) => /boom/.test(l)), "Fehler wird server-seitig geloggt");
+  assert.ok(
+    logs.some((l) => /boom/.test(l)),
+    "Fehler wird server-seitig geloggt",
+  );
 });
 
 test("T-P4-AC4-03: headersSent -> an next(err) delegieren (Express-Default uebernimmt)", () => {
@@ -56,7 +73,11 @@ test("T-P4-AC4-03: headersSent -> an next(err) delegieren (Express-Default ueber
   res.headersSent = true;
   let delegated = null;
   const err = new Error("late");
-  captureConsoleError(() => errorHandler(err, {}, res, (e) => { delegated = e; }));
+  captureConsoleError(() =>
+    errorHandler(err, {}, res, (e) => {
+      delegated = e;
+    }),
+  );
   // Bei bereits gesendeten Headern darf die MW nicht erneut schreiben, sondern
   // delegiert an Express' Default-Handler (schliesst die Verbindung).
   assert.equal(delegated, err);

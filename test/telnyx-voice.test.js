@@ -95,7 +95,7 @@ test("originateCall: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", asyn
       assert.match(err.message, /HTTP 422/);
       assert.ok(!err.message.includes(API_KEY), "API-Key darf nicht in der Fehlermeldung stehen");
       return true;
-    }
+    },
   );
 });
 
@@ -106,7 +106,15 @@ test("originateCall: 403 mit Telnyx-errors[] haengt code+title + providerStatus 
   stubFetch({
     ok: false,
     status: 403,
-    json: { errors: [{ code: "10015", title: "Caller ID not allowed", detail: "from=+18643028341 secret-fragment" }] },
+    json: {
+      errors: [
+        {
+          code: "10015",
+          title: "Caller ID not allowed",
+          detail: "from=+18643028341 secret-fragment",
+        },
+      ],
+    },
   });
   await assert.rejects(
     () => telnyxVoice.originateCall(ORIGINATE),
@@ -114,12 +122,19 @@ test("originateCall: 403 mit Telnyx-errors[] haengt code+title + providerStatus 
       assert.match(err.message, /HTTP 403/);
       assert.match(err.message, /10015/, "Telnyx-Fehlercode sichtbar (Diagnose)");
       assert.match(err.message, /Caller ID not allowed/, "Telnyx-Titel sichtbar");
-      assert.equal(err.providerStatus, 403, "Status strukturiert fuer die Aufrufer-Kategorisierung");
+      assert.equal(
+        err.providerStatus,
+        403,
+        "Status strukturiert fuer die Aufrufer-Kategorisierung",
+      );
       assert.ok(!err.message.includes(API_KEY), "API-Key darf nicht leaken");
-      assert.ok(!err.message.includes("detail"), "rohes detail-Feld nicht durchreichen (Allowlist code/title)");
+      assert.ok(
+        !err.message.includes("detail"),
+        "rohes detail-Feld nicht durchreichen (Allowlist code/title)",
+      );
       assert.ok(!err.message.includes("secret-fragment"), "kein Roh-Body-Fragment");
       return true;
-    }
+    },
   );
 });
 
@@ -139,24 +154,24 @@ test("endCall: HTTP-Fehler wirft ohne Key-Leak", async () => {
       assert.match(err.message, /HTTP 404/);
       assert.ok(!err.message.includes(API_KEY));
       return true;
-    }
+    },
   );
 });
 
 test("originateCall: fail-closed bei fehlendem TELNYX_API_KEY / CONNECTION_ID", async () => {
   stubFetch({ json: { sid: "should_not_reach" } });
   await withBlankedConfig("telnyxApiKey", () =>
-    assert.rejects(() => telnyxVoice.originateCall(ORIGINATE), /TELNYX_API_KEY fehlt/)
+    assert.rejects(() => telnyxVoice.originateCall(ORIGINATE), /TELNYX_API_KEY fehlt/),
   );
   await withBlankedConfig("telnyxConnectionId", () =>
-    assert.rejects(() => telnyxVoice.originateCall(ORIGINATE), /TELNYX_CONNECTION_ID fehlt/)
+    assert.rejects(() => telnyxVoice.originateCall(ORIGINATE), /TELNYX_CONNECTION_ID fehlt/),
   );
 });
 
 test("endCall: fail-closed bei fehlendem TELNYX_ACCOUNT_SID", async () => {
   stubFetch({ json: {} });
   await withBlankedConfig("telnyxAccountSid", () =>
-    assert.rejects(() => telnyxVoice.endCall("tnx_1"), /TELNYX_ACCOUNT_SID fehlt/)
+    assert.rejects(() => telnyxVoice.endCall("tnx_1"), /TELNYX_ACCOUNT_SID fehlt/),
   );
 });
 

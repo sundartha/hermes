@@ -55,9 +55,10 @@ async function attachTestCard(customerId) {
   const attachBody = new URLSearchParams({ customer: customerId });
   const attached = await fetch(
     `${config.stripeApiBase}${PAYMENT_METHODS_PATH}/${TEST_PAYMENT_METHOD}/attach`,
-    { method: "POST", headers, body: attachBody }
+    { method: "POST", headers, body: attachBody },
   );
-  if (!attached.ok) throw new Error(`attach payment_method fehlgeschlagen: HTTP ${attached.status}`);
+  if (!attached.ok)
+    throw new Error(`attach payment_method fehlgeschlagen: HTTP ${attached.status}`);
   const attachedPaymentMethodId = (await attached.json().catch(() => ({}))).id;
   if (!attachedPaymentMethodId) throw new Error("attach payment_method lieferte keine id");
 
@@ -68,7 +69,8 @@ async function attachTestCard(customerId) {
     headers,
     body: defaultBody,
   });
-  if (!setDefault.ok) throw new Error(`set default_payment_method fehlgeschlagen: HTTP ${setDefault.status}`);
+  if (!setDefault.ok)
+    throw new Error(`set default_payment_method fehlgeschlagen: HTTP ${setDefault.status}`);
   return attachedPaymentMethodId;
 }
 
@@ -114,7 +116,7 @@ async function main() {
       connectionId: SMOKE_CONNECTION_ID,
       holdAmountCents: SMOKE_AMOUNT_CENTS,
       currency: config.paymentCurrency,
-    }
+    },
   );
 
   const ok = result.status === NUMBER_STATUS.ACTIVE && Boolean(result.paymentIntentId);

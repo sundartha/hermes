@@ -10,7 +10,8 @@ const API_KEY = "KEYtest-secret-do-not-leak";
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 
-const { telnyxNumberProvisioning: prov } = await import("../src/telephony/adapters/telnyx/numbers.js");
+const { telnyxNumberProvisioning: prov } =
+  await import("../src/telephony/adapters/telnyx/numbers.js");
 const { numberProvisioning } = await import("../src/telephony/registry.js");
 const { PROVIDER } = await import("../src/store/defaults.js");
 const { config } = await import("../src/config.js");
@@ -29,7 +30,9 @@ function stubFetch(response) {
 }
 
 test("searchNumbers: GET available_phone_numbers mit country/voice-Filter -> e164-Liste", async () => {
-  const calls = stubFetch({ json: { data: [{ phone_number: "+4915112340001" }, { phone_number: "+4915112340002" }] } });
+  const calls = stubFetch({
+    json: { data: [{ phone_number: "+4915112340001" }, { phone_number: "+4915112340002" }] },
+  });
   const res = await prov.searchNumbers({ countryCode: "DE", limit: 2 });
   assert.deepEqual(res, [{ e164: "+4915112340001" }, { e164: "+4915112340002" }]);
   assert.equal(calls[0].method, "GET");
@@ -40,13 +43,17 @@ test("searchNumbers: GET available_phone_numbers mit country/voice-Filter -> e16
 });
 
 test("orderNumber: POST number_orders mit Idempotency-Key -> {e164, providerNumberId}", async () => {
-  const calls = stubFetch({ json: { data: { phone_numbers: [{ id: "num_abc", phone_number: "+4915112340001" }] } } });
+  const calls = stubFetch({
+    json: { data: { phone_numbers: [{ id: "num_abc", phone_number: "+4915112340001" }] } },
+  });
   const res = await prov.orderNumber({ e164: "+4915112340001", idempotencyKey: "order_x" });
   assert.deepEqual(res, { e164: "+4915112340001", providerNumberId: "num_abc" });
   assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].url, `${API_BASE}/v2/number_orders`);
   assert.equal(calls[0].headers["Idempotency-Key"], "order_x");
-  assert.deepEqual(JSON.parse(calls[0].body), { phone_numbers: [{ phone_number: "+4915112340001" }] });
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    phone_numbers: [{ phone_number: "+4915112340001" }],
+  });
 });
 
 test("configureNumber: PATCH /v2/phone_numbers/{id}/voice mit connection_id", async () => {
@@ -72,7 +79,7 @@ test("orderNumber: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", async 
       assert.match(err.message, /HTTP 402/);
       assert.ok(!err.message.includes(API_KEY));
       return true;
-    }
+    },
   );
 });
 

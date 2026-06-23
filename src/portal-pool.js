@@ -20,27 +20,27 @@ export async function assertNoBypassRls(client) {
             r.rolbypassrls                  AS rolbypassrls
      FROM   pg_roles r
      WHERE  r.rolname = current_user`,
-    []
+    [],
   );
   const row = rows[0];
   if (!row) {
     throw new Error(
       "[F5] Portal-Pool: aktive Rolle nicht in pg_roles gefunden - " +
-      "Rollen-Status nicht pruefbar, Pool fail-closed abgelehnt."
+        "Rollen-Status nicht pruefbar, Pool fail-closed abgelehnt.",
     );
   }
   if (row.is_su === IS_SUPERUSER_ON) {
     throw new Error(
       `[F5] Portal-Pool laeuft als Superuser (current_user=${row.rolname}). ` +
-      "Superuser umgehen FORCE-RLS vollstaendig. Richte eine dedizierte " +
-      "non-superuser NOBYPASSRLS-Rolle ein und setze DATABASE_URL auf deren Credentials."
+        "Superuser umgehen FORCE-RLS vollstaendig. Richte eine dedizierte " +
+        "non-superuser NOBYPASSRLS-Rolle ein und setze DATABASE_URL auf deren Credentials.",
     );
   }
   if (row.rolbypassrls === true) {
     throw new Error(
       `[F5] Portal-Pool hat BYPASSRLS (current_user=${row.rolname}). ` +
-      "BYPASSRLS umgeht FORCE-RLS vollstaendig. Entferne BYPASSRLS von der Rolle " +
-      "oder nutze eine dedizierte NOBYPASSRLS-Rolle fuer DATABASE_URL."
+        "BYPASSRLS umgeht FORCE-RLS vollstaendig. Entferne BYPASSRLS von der Rolle " +
+        "oder nutze eine dedizierte NOBYPASSRLS-Rolle fuer DATABASE_URL.",
     );
   }
 }
@@ -48,7 +48,9 @@ export async function assertNoBypassRls(client) {
 // pool ist injizierbar (DI) - Default = realer pg-Pool aus config.databaseUrl, also
 // ist der Produktiv-Pfad (no-arg) unveraendert. Tests injizieren einen Fake-Pool, um
 // connect-/Assertions-Fehler ohne echte DB zu pruefen.
-export async function createPortalRunner({ pool = new pg.Pool({ connectionString: config.databaseUrl }) } = {}) {
+export async function createPortalRunner({
+  pool = new pg.Pool({ connectionString: config.databaseUrl }),
+} = {}) {
   // Fail-closed: Rollen-Pruefung einmalig nach Pool-Aufbau. connect() liegt JETZT im
   // try (AC7) - bei connect- ODER Assertions-Fehler wird der Pool beendet (kein
   // Pool-Leak) und der Fehler kontrolliert propagiert (server.js faengt ihn -> AC5).
@@ -65,8 +67,11 @@ export async function createPortalRunner({ pool = new pg.Pool({ connectionString
   return {
     withClient: async (fn) => {
       const c = await pool.connect();
-      try { return await fn({ query: (t, p) => c.query(t, p) }); }
-      finally { c.release(); }
+      try {
+        return await fn({ query: (t, p) => c.query(t, p) });
+      } finally {
+        c.release();
+      }
     },
     _pool: pool,
   };

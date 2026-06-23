@@ -6,8 +6,8 @@ export function makeAuditStore(runner) {
       runner.withClient((c) =>
         c.query(
           `INSERT INTO audit_log (actor_sub, tenant_id, action, detail) VALUES ($1,$2,$3,$4)`,
-          [actorSub, tenantId, action, detail]
-        )
+          [actorSub, tenantId, action, detail],
+        ),
       ),
   };
 }

@@ -8,7 +8,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makeDefaultState, registerTenant, recordUsageEvent, dailySmsCount } from "../src/store/state-ops.js";
+import {
+  makeDefaultState,
+  registerTenant,
+  recordUsageEvent,
+  dailySmsCount,
+} from "../src/store/state-ops.js";
 import { makePgStore } from "../src/store/pg.js";
 import { USAGE_EVENT_KIND, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { planSummarySms } from "../src/sms-summary.js";
@@ -27,7 +32,12 @@ test("dailySmsCount zaehlt NUR SMS-Events DES Tenants (nicht voice_minute, nicht
   registerTenant(s, B);
   recordUsageEvent(s, { tenantId: A, kind: USAGE_EVENT_KIND.SMS, quantity: 1, costCents: 0 });
   recordUsageEvent(s, { tenantId: A, kind: USAGE_EVENT_KIND.SMS, quantity: 1, costCents: 0 });
-  recordUsageEvent(s, { tenantId: A, kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 2, costCents: 0 });
+  recordUsageEvent(s, {
+    tenantId: A,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 2,
+    costCents: 0,
+  });
   recordUsageEvent(s, { tenantId: B, kind: USAGE_EVENT_KIND.SMS, quantity: 1, costCents: 0 });
   assert.equal(dailySmsCount(s, A, FAR_PAST), 2, "nur A's SMS, nicht voice_minute, nicht B");
   assert.equal(dailySmsCount(s, B, FAR_PAST), 1, "pro Tenant, nicht global");
@@ -37,7 +47,16 @@ test("dailySmsCount: Events vor sinceIso zaehlen nicht (rollierendes Fenster)", 
   const s = makeDefaultState();
   registerTenant(s, A);
   // Ein alter Beleg (ausserhalb des Fensters) + ein frischer (recordUsageEvent stempelt now).
-  s.usageEvents.push({ id: "ue_old", tenantId: A, callId: null, kind: USAGE_EVENT_KIND.SMS, quantity: 1, costCents: 0, occurredAt: FAR_PAST, stripeMeterSent: false });
+  s.usageEvents.push({
+    id: "ue_old",
+    tenantId: A,
+    callId: null,
+    kind: USAGE_EVENT_KIND.SMS,
+    quantity: 1,
+    costCents: 0,
+    occurredAt: FAR_PAST,
+    stripeMeterSent: false,
+  });
   recordUsageEvent(s, { tenantId: A, kind: USAGE_EVENT_KIND.SMS, quantity: 1, costCents: 0 });
   assert.equal(dailySmsCount(s, A, FAR_PAST), 2, "Fenster ab FAR_PAST: beide");
   assert.equal(dailySmsCount(s, A, FAR_FUTURE), 0, "Fenster ab FAR_FUTURE: keiner");
@@ -51,8 +70,15 @@ test("dailySmsCount: Tenant ohne SMS -> 0 (Grenzfall, nie undefined)", () => {
 
 // ---- 2. planSummarySms: Cap-Entscheidung ----
 
-function planStore({ smsCount = 0, sender = "+4915100000001", to = "+491701234567", optIn = true } = {}) {
-  const numbers = sender ? [{ tenantId: A, e164: sender, status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TWILIO }] : [];
+function planStore({
+  smsCount = 0,
+  sender = "+4915100000001",
+  to = "+491701234567",
+  optIn = true,
+} = {}) {
+  const numbers = sender
+    ? [{ tenantId: A, e164: sender, status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TWILIO }]
+    : [];
   return {
     tenantPrivateNumber: () => to,
     load: () => ({ numbers }),
@@ -95,7 +121,9 @@ test("planSummarySms: fehlt config.dailySmsCap -> Fallback 20 greift (count 19 -
 // ---- 3. pglite-Round-Trip: SMS-Beleg + Cap-Zaehler ueberleben den Restart ----
 
 async function reopen(db) {
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init();
   return store;
@@ -103,10 +131,17 @@ async function reopen(db) {
 
 test("pglite: recordUsageEvent(SMS) persistiert -> dailySmsCount sieht ihn nach Re-Hydrierung (Cap restart-fest)", async () => {
   const db = new PGlite();
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init();
-  store.recordUsageEvent({ tenantId: store.load().tenants[0].id, kind: USAGE_EVENT_KIND.SMS, quantity: 1, costCents: 7 });
+  store.recordUsageEvent({
+    tenantId: store.load().tenants[0].id,
+    kind: USAGE_EVENT_KIND.SMS,
+    quantity: 1,
+    costCents: 7,
+  });
   await store.save();
   const ownerId = store.load().tenants[0].id;
 

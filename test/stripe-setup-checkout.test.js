@@ -34,7 +34,7 @@ test("createCustomer: POST /v1/customers, Bearer + form-urlencoded, metadata[ten
       captured = { url, opts };
       return okJson({ id: "cus_new1" });
     },
-    () => stripeBilling.createCustomer({ tenantRef: "tenant_a" })
+    () => stripeBilling.createCustomer({ tenantRef: "tenant_a" }),
   );
   assert.ok(captured.url.endsWith("/v1/customers"), "URL endet auf /v1/customers");
   assert.equal(captured.opts.method, "POST");
@@ -51,10 +51,13 @@ test("createSetupCheckoutSession: POST /v1/checkout/sessions, mode=setup + custo
       captured = { url, opts };
       return okJson({ id: "cs_1", url: "https://stripe.test/c/cs_1" });
     },
-    () => stripeBilling.createSetupCheckoutSession({
-      tenantRef: "tenant_a", customerId: "cus_new1",
-      successUrl: "https://agent.test/ok", cancelUrl: "https://agent.test/no",
-    })
+    () =>
+      stripeBilling.createSetupCheckoutSession({
+        tenantRef: "tenant_a",
+        customerId: "cus_new1",
+        successUrl: "https://agent.test/ok",
+        cancelUrl: "https://agent.test/no",
+      }),
   );
   assert.ok(captured.url.endsWith("/v1/checkout/sessions"), "URL endet auf /v1/checkout/sessions");
   assert.equal(captured.opts.method, "POST");
@@ -73,7 +76,7 @@ test("getCheckoutSessionResult: GET /v1/checkout/sessions/<id>?expand[]=setup_in
       captured = { url, opts };
       return okJson({ customer: "cus_new1", setup_intent: { payment_method: "pm_1" } });
     },
-    () => stripeBilling.getCheckoutSessionResult("cs_1")
+    () => stripeBilling.getCheckoutSessionResult("cs_1"),
   );
   assert.ok(captured.url.includes("/v1/checkout/sessions/cs_1"), "URL traegt die session_id");
   assert.ok(captured.url.includes("expand[]=setup_intent"), "setup_intent wird expandiert");
@@ -85,21 +88,26 @@ test("getCheckoutSessionResult: GET /v1/checkout/sessions/<id>?expand[]=setup_in
 test("getCheckoutSessionResult: fehlendes payment_method -> wirft (Karte nicht gespeichert), KEIN stilles null", async () => {
   await withStripeStub(
     async () => okJson({ customer: "cus_new1", setup_intent: {} }),
-    () => assert.rejects(() => stripeBilling.getCheckoutSessionResult("cs_1"), /Karte nicht gespeichert/)
+    () =>
+      assert.rejects(
+        () => stripeBilling.getCheckoutSessionResult("cs_1"),
+        /Karte nicht gespeichert/,
+      ),
   );
 });
 
 test("Leak-Guard: Nicht-2xx -> wirft mit HTTP-Status, OHNE Secret-Key (createCustomer)", async () => {
   await withStripeStub(
     async () => ({ ok: false, status: 402, json: async () => ({}) }),
-    () => assert.rejects(
-      () => stripeBilling.createCustomer({ tenantRef: "tenant_a" }),
-      (err) => {
-        assert.match(err.message, /HTTP 402/);
-        assert.doesNotMatch(err.message, /sk_test|Bearer/, "Secret-Key/Bearer darf nicht leaken");
-        return true;
-      }
-    )
+    () =>
+      assert.rejects(
+        () => stripeBilling.createCustomer({ tenantRef: "tenant_a" }),
+        (err) => {
+          assert.match(err.message, /HTTP 402/);
+          assert.doesNotMatch(err.message, /sk_test|Bearer/, "Secret-Key/Bearer darf nicht leaken");
+          return true;
+        },
+      ),
   );
 });
 
@@ -110,10 +118,15 @@ test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_se
       captured = { url, opts };
       return okJson({ id: "pi_held_1" });
     },
-    () => stripeBilling.placeHold({
-      tenantRef: "tenant_a", amountCents: 500, currency: "eur",
-      customerId: "cus_1", paymentMethodId: "pm_1", idempotencyKey: "hold_num_1",
-    })
+    () =>
+      stripeBilling.placeHold({
+        tenantRef: "tenant_a",
+        amountCents: 500,
+        currency: "eur",
+        customerId: "cus_1",
+        paymentMethodId: "pm_1",
+        idempotencyKey: "hold_num_1",
+      }),
   );
   assert.ok(captured.url.endsWith("/v1/payment_intents"), "URL endet auf /v1/payment_intents");
   assert.equal(captured.opts.method, "POST");

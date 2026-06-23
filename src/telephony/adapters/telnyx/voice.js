@@ -40,7 +40,9 @@ async function assertOk(res, op) {
   } catch {
     // Body nicht lesbar/kein JSON -> nur der Status, kein Rohtext (Leak-Schutz).
   }
-  const err = new Error(`Telnyx ${op} fehlgeschlagen: HTTP ${res.status}${detail ? ` (${detail})` : ""}`);
+  const err = new Error(
+    `Telnyx ${op} fehlgeschlagen: HTTP ${res.status}${detail ? ` (${detail})` : ""}`,
+  );
   err.providerStatus = res.status;
   throw err;
 }
@@ -51,7 +53,8 @@ export const telnyxVoice = {
   // beim Provider; From/To/Url/StatusCallback steuern den konkreten Call.
   async originateCall({ from, to, url, statusCallback, statusCallbackEvent, method, timeLimit }) {
     if (!config.telnyxApiKey) throw new Error("Telnyx originateCall: TELNYX_API_KEY fehlt");
-    if (!config.telnyxConnectionId) throw new Error("Telnyx originateCall: TELNYX_CONNECTION_ID fehlt");
+    if (!config.telnyxConnectionId)
+      throw new Error("Telnyx originateCall: TELNYX_CONNECTION_ID fehlt");
     const form = new URLSearchParams({ From: from, To: to, Url: url });
     if (statusCallback) form.set("StatusCallback", statusCallback);
     if (method) {
@@ -63,11 +66,14 @@ export const telnyxVoice = {
     // setzt server.js zusaetzlich den harten Max-Dauer-Timer (Absolute Regel). Das
     // Feld wird trotzdem mitgegeben (schadet nicht, greift falls unterstuetzt).
     if (timeLimit) form.set("TimeLimit", String(timeLimit));
-    const res = await fetch(`${config.telnyxApiBase}${TEXML_BASE}/calls/${config.telnyxConnectionId}`, {
-      method: "POST",
-      headers: headers(),
-      body: form,
-    });
+    const res = await fetch(
+      `${config.telnyxApiBase}${TEXML_BASE}/calls/${config.telnyxConnectionId}`,
+      {
+        method: "POST",
+        headers: headers(),
+        body: form,
+      },
+    );
     await assertOk(res, "originateCall");
     // Twilio-kompatible Call-Resource. Telnyx-v2 wrappt manche Antworten in {data};
     // beide Formen abdecken. sid = CallSid (Fallback call_sid).
@@ -85,7 +91,7 @@ export const telnyxVoice = {
     if (!config.telnyxAccountSid) throw new Error("Telnyx endCall: TELNYX_ACCOUNT_SID fehlt");
     const res = await fetch(
       `${config.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telnyxAccountSid}/Calls/${callSid}`,
-      { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) }
+      { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) },
     );
     await assertOk(res, "endCall");
   },

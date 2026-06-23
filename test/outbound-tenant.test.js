@@ -24,9 +24,15 @@ import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 const TO = "+4915112345678"; // erlaubtes Ziel (steht in ALLOWED_NUMBERS), kein Premium/Notruf
 const OWNER_NUMBER = "+15005550006"; // = BASE_ENV.TWILIO_NUMBER (config-basierte Owner-Absendernummer)
 
-const A = "tenant-a", SUB_A = "sub-a", NUM_A = "+4915110000001";
-const B = "tenant-b", SUB_B = "sub-b", NUM_B = "+4915110000002";
-const C = "tenant-c", SUB_C = "sub-c", NUM_C = "+4915110000003";
+const A = "tenant-a",
+  SUB_A = "sub-a",
+  NUM_A = "+4915110000001";
+const B = "tenant-b",
+  SUB_B = "sub-b",
+  NUM_B = "+4915110000002";
+const C = "tenant-c",
+  SUB_C = "sub-c",
+  NUM_C = "+4915110000003";
 
 const activeNumber = (id, e164, tenantId, status = "active") => ({
   id,
@@ -61,14 +67,18 @@ const bucket = (costEur) => ({ inputTokens: 0, outputTokens: 0, costEur, calls: 
 function placeCall(srv, identity, body = {}) {
   return fetch(`${srv.localUrl}/api/calls`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(identity ? { "X-Internal-Identity": identity } : {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(identity ? { "X-Internal-Identity": identity } : {}),
+    },
     body: JSON.stringify({ to: TO, objective: "Termin vereinbaren", ...body }),
   });
 }
 
 const FLAG_ON = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
 
-const outboundCallsTo = (srv) => srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
+const outboundCallsTo = (srv) =>
+  srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 // (1) Attribution: A telefoniert unter A's Nummer/tenantId, B unter B's. Beide
 // passieren Gates+Budget (fresh) -> erreichen den offline scheiternden Originate (500,
@@ -85,10 +95,17 @@ test("Flag an: Outbound attribuiert from + tenantId pro Tenant (A->A-Nummer/A-Bu
     const callA = calls.find((c) => c.tenantId === A);
     const callB = calls.find((c) => c.tenantId === B);
     assert.ok(callA, "Call mit tenantId=A erzeugt");
-    assert.equal(callA.from, NUM_A, "A telefoniert unter EIGENER aktiver Nummer (-> A-Budget via tenantId)");
+    assert.equal(
+      callA.from,
+      NUM_A,
+      "A telefoniert unter EIGENER aktiver Nummer (-> A-Budget via tenantId)",
+    );
     assert.ok(callB, "Call mit tenantId=B erzeugt");
     assert.equal(callB.from, NUM_B, "B telefoniert unter EIGENER aktiver Nummer");
-    assert.ok(!calls.some((c) => c.from === OWNER_NUMBER), "NIE Owner-Nummer fuer einen Fremd-Tenant");
+    assert.ok(
+      !calls.some((c) => c.from === OWNER_NUMBER),
+      "NIE Owner-Nummer fuer einen Fremd-Tenant",
+    );
   } finally {
     await srv.stop();
   }
@@ -107,7 +124,7 @@ test("Flag an: Tenant ohne eigene AKTIVE Nummer -> 403 Reject, KEIN Call, NIE Ow
     assert.equal(outboundCallsTo(srv).length, 0, "Reject VOR createCall -> kein Call erzeugt");
     assert.ok(
       !srv.readStore().calls.some((c) => c.from === OWNER_NUMBER),
-      "NIE Owner-Nummer als Fremd-Tenant-Fallback"
+      "NIE Owner-Nummer als Fremd-Tenant-Fallback",
     );
   } finally {
     await srv.stop();
@@ -133,7 +150,11 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 402, "A-Budget erschoepft -> A geblockt");
-    assert.equal(outboundCallsTo(srv).length, 0, "kein Call bei Budget-Block (Reject vor createCall)");
+    assert.equal(
+      outboundCallsTo(srv).length,
+      0,
+      "kein Call bei Budget-Block (Reject vor createCall)",
+    );
   } finally {
     await srv.stop();
   }
@@ -143,11 +164,17 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
 // reisst ihn -> 402. Wuerde der globale Notaus durch den pro-Tenant-Bucket ERSETZT
 // (Schnittmenge gebrochen), liefe A (5 < 8) durch -> dieser Test faengt das.
 test("Flag an: globaler Notaus greift bei Summe (je Tenant < Cap) -> 402; global unveraendert", async () => {
-  const seed = seedTenants({ usage: { [OWNER_TENANT_ID]: bucket(0), [A]: bucket(5), [B]: bucket(5) } }); // 5+5=10 >= 8
+  const seed = seedTenants({
+    usage: { [OWNER_TENANT_ID]: bucket(0), [A]: bucket(5), [B]: bucket(5) },
+  }); // 5+5=10 >= 8
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
     const res = await placeCall(srv, SUB_A); // A einzeln 5 < Cap 8, aber Summe 10 >= 8
-    assert.equal(res.status, 402, "globaler Notaus blockt, obwohl A unter dem pro-Tenant-Cap liegt");
+    assert.equal(
+      res.status,
+      402,
+      "globaler Notaus blockt, obwohl A unter dem pro-Tenant-Cap liegt",
+    );
     assert.equal(outboundCallsTo(srv).length, 0, "kein Call bei globalem Notaus");
   } finally {
     await srv.stop();
@@ -164,7 +191,11 @@ test("Flag AUS: Identitaets-Header wird fuer den Tenant ignoriert -> Owner-Numme
 
     const call = outboundCallsTo(srv)[0];
     assert.ok(call, "Call erzeugt");
-    assert.equal(call.tenantId, OWNER_TENANT_ID, "Flag aus -> tenantId=owner (Tenant-Achse inaktiv)");
+    assert.equal(
+      call.tenantId,
+      OWNER_TENANT_ID,
+      "Flag aus -> tenantId=owner (Tenant-Achse inaktiv)",
+    );
     assert.equal(call.from, OWNER_NUMBER, "Flag aus -> config-Owner-Nummer, NICHT A's Nummer");
   } finally {
     await srv.stop();

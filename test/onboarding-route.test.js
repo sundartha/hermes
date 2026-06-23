@@ -9,7 +9,11 @@ import assert from "node:assert/strict";
 import { startServer, startTelnyxProvisioningMock } from "./helpers.js";
 
 const postJson = (url, body) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 // Wartet auf den fire-and-forget Drain (P6b2): pollt den persistierten Store, bis
 // die Nummer den Zielzustand erreicht. Deterministisch (der Worker save()t nach
@@ -19,7 +23,8 @@ async function waitForNumberStatus(srv, numberId, status, timeoutMs = 3000) {
   for (;;) {
     const num = srv.readStore().numbers.find((n) => n.id === numberId);
     if (num && num.status === status) return num;
-    if (Date.now() > deadline) throw new Error(`Nummer ${numberId} nicht '${status}' (ist '${num?.status}')`);
+    if (Date.now() > deadline)
+      throw new Error(`Nummer ${numberId} nicht '${status}' (ist '${num?.status}')`);
     await new Promise((r) => setTimeout(r, 20));
   }
 }
@@ -33,7 +38,10 @@ test("Dry-Run (Default): onboard registriert + fragt an, Nummer bleibt 'requeste
     assert.equal(json.status, "requested");
     assert.equal(json.provisioning, "disabled");
     const store = srv.readStore();
-    assert.ok(store.tenants.find((t) => t.id === "t_user1"), "Tenant registriert");
+    assert.ok(
+      store.tenants.find((t) => t.id === "t_user1"),
+      "Tenant registriert",
+    );
     const num = store.numbers.find((n) => n.id === json.numberId);
     assert.equal(num.status, "requested");
     assert.equal(num.e164, null, "requested Nummer hat keine e164 (kein Kauf)");
@@ -68,7 +76,10 @@ test("Globaler Cap (Kosten-Notbremse) blockt -> 429", async () => {
 test("Per-Tenant-Cap blockt die zweite Nummer desselben Tenants -> 409", async () => {
   const srv = await startServer({ env: { MAX_NUMBERS: "10", MAX_NUMBERS_PER_TENANT: "1" } });
   try {
-    assert.equal((await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_user1" })).status, 200);
+    assert.equal(
+      (await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_user1" })).status,
+      200,
+    );
     const second = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_user1" });
     assert.equal(second.status, 409);
   } finally {
@@ -102,13 +113,20 @@ test("PROVISIONING_ENABLED + Telnyx-Mock: Route antwortet SOFORT 'queued', async
     assert.equal(num.e164, "+4915799990001");
     assert.equal(num.providerNumberId, "num_ext_1");
     const store = srv.readStore();
-    assert.ok(store.numberAssignments.find((a) => a.numberId === json.numberId && !a.releasedAt), "assignment angelegt");
+    assert.ok(
+      store.numberAssignments.find((a) => a.numberId === json.numberId && !a.releasedAt),
+      "assignment angelegt",
+    );
     // Persistente Job-Spur auf 'done'.
     assert.equal(store.provisioningJobs.find((j) => j.id === json.jobId)?.status, "done");
     // Mock hat Suche + Order + Configure gesehen.
     assert.ok(mock.requests.some((r) => r.path.startsWith("/v2/available_phone_numbers")));
     assert.ok(mock.requests.some((r) => r.path === "/v2/number_orders"));
-    assert.ok(mock.requests.some((r) => r.method === "PATCH" && r.path === "/v2/phone_numbers/num_ext_1/voice"));
+    assert.ok(
+      mock.requests.some(
+        (r) => r.method === "PATCH" && r.path === "/v2/phone_numbers/num_ext_1/voice",
+      ),
+    );
   } finally {
     await srv.stop();
     await mock.close();

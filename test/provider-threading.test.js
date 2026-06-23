@@ -34,7 +34,13 @@ test("providerFromHeaders: kein erkannter Header -> null (Aufrufer faellt auf De
 // ---- call.provider: Default + gesetzt (json-Pfad via state-ops) ----
 test("createCall: Inbound mit provider=telnyx -> call.provider=telnyx", () => {
   const s = makeDefaultState();
-  const call = createCall(s, { direction: "inbound", from: "+49150", to: TELNYX_NR, tenantId: OWNER_TENANT_ID, provider: PROVIDER.TELNYX });
+  const call = createCall(s, {
+    direction: "inbound",
+    from: "+49150",
+    to: TELNYX_NR,
+    tenantId: OWNER_TENANT_ID,
+    provider: PROVIDER.TELNYX,
+  });
   assert.equal(call.provider, PROVIDER.TELNYX);
 });
 
@@ -64,7 +70,11 @@ test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx
     assert.ok(!body.includes("speechModel"), "TeXML traegt KEIN Twilio-speechModel");
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].provider, PROVIDER.TELNYX, "call.provider aus dem Telnyx-Header abgeleitet");
+    assert.equal(
+      calls[0].provider,
+      PROVIDER.TELNYX,
+      "call.provider aus dem Telnyx-Header abgeleitet",
+    );
   } finally {
     await srv.stop();
   }
@@ -75,7 +85,11 @@ test("Twilio-Inbound -> TwiML-Greeting (speechModel) + call.provider=twilio (byt
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      body: new URLSearchParams({ CallSid: "tw1", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
+      body: new URLSearchParams({
+        CallSid: "tw1",
+        From: "+4915112345678",
+        To: OWNER_TEST_NUMBER.e164,
+      }),
     });
     assert.equal(res.status, 200);
     const body = await res.text();

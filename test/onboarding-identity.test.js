@@ -11,7 +11,11 @@ import assert from "node:assert/strict";
 import { startServer, startTelnyxProvisioningMock } from "./helpers.js";
 
 const postJson = (url, body) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 const OWNER_NAME = "Maria";
 
 // Wartet auf den async Drain (P6b2): pollt den persistierten Store, bis die Nummer
@@ -21,7 +25,8 @@ async function waitForActiveNumber(srv, numberId, timeoutMs = 3000) {
   for (;;) {
     const num = srv.readStore().numbers.find((n) => n.id === numberId);
     if (num && num.status === "active") return num;
-    if (Date.now() > deadline) throw new Error(`Nummer ${numberId} nicht 'active' (ist '${num?.status}')`);
+    if (Date.now() > deadline)
+      throw new Error(`Nummer ${numberId} nicht 'active' (ist '${num?.status}')`);
     await new Promise((r) => setTimeout(r, 20));
   }
 }
@@ -30,7 +35,10 @@ async function waitForActiveNumber(srv, numberId, timeoutMs = 3000) {
 test("onboard mit firstName -> Tenant-Record traegt ownerName", async () => {
   const srv = await startServer(); // PROVISIONING_ENABLED unset -> Dry-Run
   try {
-    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_maria", firstName: OWNER_NAME });
+    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+      tenantId: "t_maria",
+      firstName: OWNER_NAME,
+    });
     assert.equal(res.status, 200);
     const t = srv.readStore().tenants.find((x) => x.id === "t_maria");
     assert.equal(t.ownerName, OWNER_NAME); // firstName-only -> ownerName === firstName
@@ -68,7 +76,10 @@ test("Identitaets-Kreis: onboard firstName + aktive Nummer -> Inbound nennt Mari
     },
   });
   try {
-    const onb = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_maria", firstName: OWNER_NAME });
+    const onb = await postJson(`${srv.localUrl}/api/onboard`, {
+      tenantId: "t_maria",
+      firstName: OWNER_NAME,
+    });
     const j = await onb.json();
     // P6b2: SOFORT 'queued'; auf den async Kauf warten, dann die aktive e164 lesen.
     assert.equal(j.provisioning, "queued");

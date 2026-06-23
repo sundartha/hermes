@@ -20,7 +20,8 @@ import { OWNER_TENANT_ID } from "../store/defaults.js";
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar. Reine Funktion ohne
 // Deps: von Middleware UND Resolver genutzt -> EINE Quelle (T4 R1.3), nicht doppeln.
-export const isLocalSocket = (req) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
+export const isLocalSocket = (req) =>
+  ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
 
 // Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools
 // laufen im selben Prozess und rufen die localhost-REST-API mit dem verifizierten

@@ -34,17 +34,18 @@ bestaetigt, bevor der echte Telnyx-POST-Body beobachtet ist. Details:
 Deploy abwarten, `[boot]`-Banner pruefen.
 
 **Schritte:**
+
 1. Render-Dashboard → Service (Region Frankfurt) → **Logs** offen lassen.
 2. Echter Test-Anruf von einer **Allowlist-Nummer** auf die Telnyx-Nummer. Kurz halten
    (Kosten-/Max-Dauer-Gates bleiben unangetastet). In den Hoerer sprechen.
 3. Im Log die `[turn-recv]`-Zeile suchen (`src/server.js:456`). Sie trennt die drei Aeste:
 
-   | Beobachtung | Diagnose | Fix |
-   |---|---|---|
-   | **kein** `[turn-recv]` + ein **403** | Signatur weist Telnyx-POST ab | Telnyx-Verifier provider-korrekt machen — NIE abschalten (Regel 1/3) |
-   | **kein** `[turn-recv]`, **kein** 403 | action-URL falsch aufgeloest, POST kommt nie an | action absolut (`04549c4` — sollte schon drin sein) |
-   | `[turn-recv]` mit `callId=FEHLT` | Query-String verloren | dito, action absolut |
-   | `[turn-recv]` mit `callId=…` aber **leerem** `SpeechResult` | Deepgram liefert nichts (Add-on/Modell/Sprache) | → **Gate 3** |
+   | Beobachtung                                                 | Diagnose                                        | Fix                                                                  |
+   | ----------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
+   | **kein** `[turn-recv]` + ein **403**                        | Signatur weist Telnyx-POST ab                   | Telnyx-Verifier provider-korrekt machen — NIE abschalten (Regel 1/3) |
+   | **kein** `[turn-recv]`, **kein** 403                        | action-URL falsch aufgeloest, POST kommt nie an | action absolut (`04549c4` — sollte schon drin sein)                  |
+   | `[turn-recv]` mit `callId=FEHLT`                            | Query-String verloren                           | dito, action absolut                                                 |
+   | `[turn-recv]` mit `callId=…` aber **leerem** `SpeechResult` | Deepgram liefert nichts (Add-on/Modell/Sprache) | → **Gate 3**                                                         |
 
 **Akzeptanz:** Transkript enthaelt **>=1 Zeile `role:caller`** UND der Agent antwortet
 inhaltlich (kein Re-Greet nach Stille).
@@ -61,6 +62,7 @@ base64 vs. RTP-gewrappt) ist live unbestaetigt. **Live laeuft ohnehin auf `VOICE
 — dieses Gate ist nur noetig, wenn auf Realtime umgestellt werden soll.
 
 **Schritte:**
+
 1. Live-Zugang/Env setzen: `TELNYX_NUMBER`, `TELNYX_CONNECTION_ID`, `OPENAI_API_KEY`, `PUBLIC_URL`.
 2. Harness laufen lassen (kein Teil von `npm test`, braucht Netz):
    ```
@@ -84,6 +86,7 @@ freigeschaltete/falsche Kombi scheitert **still** (leeres `SpeechResult`) → st
 Minutenkosten dieser Add-ons laufen **ausserhalb** des `MAX_BUDGET_EUR`-Guards.
 
 **Schritte (Telnyx Mission-Control-Portal):**
+
 1. **Deepgram-STT** freischalten (Premium-Add-on). Falls weiter leer:
    `transcriptionEngine="Telnyx"` oder `"Google"` testen, bzw. `model="deepgram/nova-2"`
    statt `nova-3`, bzw. `language="de-DE"` statt `de`.
@@ -99,12 +102,14 @@ Minutenkosten dieser Add-ons laufen **ausserhalb** des `MAX_BUDGET_EUR`-Guards.
 **Status:** nur Test-Fakes; keine Stripe-Keys. `PAYMENT_ENABLED=false` (byte-identisch aus).
 
 **Voraussetzungen (sonst Boot-Refusal per `assertConfig`, `config.js:220-242`):**
+
 - `PAYMENT_ENABLED=true` braucht `STRIPE_SECRET_KEY` gesetzt UND
   `NUMBER_SETUP_FEE_CENTS` als Ganzzahl **> 0**.
 - Nur wirksam mit `PROVISIONING_ENABLED=true` (sonst kein echter Kauf → kein Capture;
   `config.js:241` warnt).
 
 **Schritte:**
+
 1. **Test-Mode zuerst:** `STRIPE_SECRET_KEY=sk_test_...`, `PAYMENT_ENABLED=true`,
    `PROVISIONING_ENABLED=true`, `NUMBER_SETUP_FEE_CENTS=<z.B. 100>`, `MAX_NUMBERS` klein lassen.
 2. Onboarding ausloesen (`POST /api/onboard`, `server.js:954/988-1008`): Hold → Provision
@@ -126,6 +131,7 @@ nur bei erfolgreichem Capture `active`.
 **Status:** Code fertig (F1-F5), offen = Betrieb.
 
 **Env in Render setzen:**
+
 - `MCP_AUTH=oauth` (claude.ai-Login-Flow; statisches Token kann claude.ai NICHT senden).
 - `OAUTH_ISSUER_URL=<WorkOS-AuthKit-Issuer>` (JWKS findet das Gateway selbst via
   `/.well-known/openid-configuration`). Wird mit dem Web-Login geteilt.
@@ -135,6 +141,7 @@ nur bei erfolgreichem Capture `active`.
   (beide Default false/fail-closed; NIE per Default an).
 
 **Schritte:**
+
 1. WorkOS-AuthKit-Account + OIDC-Client anlegen, **Redirect-URI** = `<PUBLIC_URL>/auth/callback`.
 2. **Invite-only scharf:** in WorkOS "Sign up" deaktivieren, Team-Mitglieder per Invite.
 3. **Staging → Production-Cutover** (eigener, bewusster Schritt — aktuell laeuft OAuth gegen die
@@ -173,6 +180,7 @@ Prod-Dauerbetrieb Staging→Production-Cutover (Gate 5, Schritt 3).
 **Voraussetzung:** Gate 5 (WorkOS-AuthKit + OIDC-Client + Env) steht; Deploy live (Abschnitt 0).
 
 **Schritte:**
+
 1. **Metadata pruefen** (ohne Login, von aussen):
    ```
    curl -s <PUBLIC_URL>/.well-known/oauth-protected-resource | jq .
@@ -206,6 +214,7 @@ s. Gate 7.3).
 Killer-Test als manuelles Release-Gate dokumentiert.
 
 **Harte Deployment-Anforderung:**
+
 - `STORE_BACKEND=pg`, `DATABASE_URL` = **non-superuser UND NOBYPASSRLS**-Rolle (sonst greift
   FORCE-RLS nicht — Superuser umgeht RLS). `createPortalRunner()` prueft das beim Start;
   Superuser/`rolbypassrls` → `[F5]`-Error, Prozess startet **nicht** (fail-closed).
@@ -230,19 +239,19 @@ mit `openssl rand -hex 32` (gilt fuer `MCP_AUTH_TOKEN`, `SESSION_SECRET`, `DASHB
 
 ### 7.1 Secrets-Inventar (was leakt was)
 
-| Secret (Env) | Anbieter / Quelle | Gewaehrt bei Leak | Blast-Radius |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | console.anthropic.com | LLM-Calls auf deine Kosten | Kosten (kein Daten-Leak) |
-| `TWILIO_AUTH_TOKEN` | Twilio Console | Voice/SMS-API **und** Webhook-HMAC-Schluessel | Calls/SMS auf deine Kosten + Signatur-Faelschung |
-| `TELNYX_API_KEY` | Telnyx Portal | Voice/SMS-API (Telnyx) | Calls/SMS auf deine Kosten |
-| `TELNYX_PUBLIC_KEY` | Telnyx Portal | **KEIN Secret** (Ed25519-Verify), aber falsch = Inbound bricht | Verfuegbarkeit (kein Leak) |
-| `OPENAI_API_KEY` | platform.openai.com | Realtime-API (nur `VOICE_ENGINE=realtime`) | Kosten |
-| `STRIPE_SECRET_KEY` | Stripe Dashboard | Hold/Capture, Charges (**echtes Geld** bei `sk_live`) | Geld + Kundendaten |
-| `MCP_AUTH_TOKEN` | selbst (`openssl rand -hex 32`) | `/mcp`-Zugang (Legacy-Bearer); bei `MCP_AUTH=oauth` ungenutzt | Voller MCP-Tool-Zugriff |
-| `SESSION_SECRET` | selbst (`openssl rand -hex 32`) | Faelschung von Browser-Session-Cookies | Account-Uebernahme im Portal |
-| `OIDC_CLIENT_SECRET` | WorkOS AuthKit | OIDC-Auth-Code-Tausch (Browser-Login) | Login-Flow-Kompromittierung |
-| `DASHBOARD_PASSWORD` | selbst gesetzt | Owner-Dashboard (Basic-Auth) | Voller Owner-Dashboard-Zugriff |
-| `DATABASE_URL` | Render Postgres | DB-Passwort (in der URL) | Voller DB-Zugriff (alle Tenants) |
+| Secret (Env)         | Anbieter / Quelle               | Gewaehrt bei Leak                                              | Blast-Radius                                     |
+| -------------------- | ------------------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
+| `ANTHROPIC_API_KEY`  | console.anthropic.com           | LLM-Calls auf deine Kosten                                     | Kosten (kein Daten-Leak)                         |
+| `TWILIO_AUTH_TOKEN`  | Twilio Console                  | Voice/SMS-API **und** Webhook-HMAC-Schluessel                  | Calls/SMS auf deine Kosten + Signatur-Faelschung |
+| `TELNYX_API_KEY`     | Telnyx Portal                   | Voice/SMS-API (Telnyx)                                         | Calls/SMS auf deine Kosten                       |
+| `TELNYX_PUBLIC_KEY`  | Telnyx Portal                   | **KEIN Secret** (Ed25519-Verify), aber falsch = Inbound bricht | Verfuegbarkeit (kein Leak)                       |
+| `OPENAI_API_KEY`     | platform.openai.com             | Realtime-API (nur `VOICE_ENGINE=realtime`)                     | Kosten                                           |
+| `STRIPE_SECRET_KEY`  | Stripe Dashboard                | Hold/Capture, Charges (**echtes Geld** bei `sk_live`)          | Geld + Kundendaten                               |
+| `MCP_AUTH_TOKEN`     | selbst (`openssl rand -hex 32`) | `/mcp`-Zugang (Legacy-Bearer); bei `MCP_AUTH=oauth` ungenutzt  | Voller MCP-Tool-Zugriff                          |
+| `SESSION_SECRET`     | selbst (`openssl rand -hex 32`) | Faelschung von Browser-Session-Cookies                         | Account-Uebernahme im Portal                     |
+| `OIDC_CLIENT_SECRET` | WorkOS AuthKit                  | OIDC-Auth-Code-Tausch (Browser-Login)                          | Login-Flow-Kompromittierung                      |
+| `DASHBOARD_PASSWORD` | selbst gesetzt                  | Owner-Dashboard (Basic-Auth)                                   | Voller Owner-Dashboard-Zugriff                   |
+| `DATABASE_URL`       | Render Postgres                 | DB-Passwort (in der URL)                                       | Voller DB-Zugriff (alle Tenants)                 |
 
 > Es gibt **kein** `STRIPE_WEBHOOK_SECRET` (Stripe-Integration ist reines Outbound-`fetch`,
 > kein verifizierter Inbound-Webhook) und **keinen** separaten WorkOS-API-Key (nur OIDC-Client +
@@ -265,15 +274,15 @@ ausgeschiedenem Teammitglied oder kompromittiertem Geraet.
 
 ### 7.3 Rotation — Besonderheiten pro Secret
 
-| Secret | Rotations-Besonderheit |
-|---|---|
-| `TWILIO_AUTH_TOKEN` | Twilio fuehrt **Primary + Secondary Auth Token**. Secondary erzeugen → in Env eintragen → Primary "promote/regenerate". Echtes Zero-Downtime, da kurzzeitig beide gueltig sind. Achtung: derselbe Token validiert auch die Webhook-HMAC — nach Rotation Test-Inbound pruefen. |
-| `STRIPE_SECRET_KEY` | Im Stripe-Dashboard **"Roll key"** mit Ablauf-Frist (alter Key laeuft kontrolliert aus) statt Sofort-Widerruf. Test- (`sk_test`) und Live-Key (`sk_live`) **getrennt** rotieren. |
-| `SESSION_SECRET` | Rotation **invalidiert alle aktiven Browser-Sessions** (User muessen neu einloggen). Geplant ausserhalb der Stosszeit, ggf. ankuendigen. Kein Ueberlappungs-Mechanismus. |
-| `DATABASE_URL` | Postgres-Passwort in Render rotieren (Render Postgres → Rotate) → URL in der Env des Web-Service nachziehen. Kurzer Reconnect; Pool baut neu auf. |
-| `MCP_AUTH_TOKEN` | Bei `MCP_AUTH=oauth` **nicht in Benutzung** — dann ganz aus der Env nehmen statt rotieren. Im Legacy-/`token`-Modus: Client (z.B. curl-Skripte) und Env **gleichzeitig** umstellen (keine Ueberlappung moeglich). |
-| `OIDC_CLIENT_SECRET` | In WorkOS AuthKit ein neues Client-Secret erzeugen (WorkOS erlaubt Ueberlappung) → Env tauschen → altes in WorkOS loeschen. |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Zweiten Key erstellen → Env tauschen → ersten widerrufen. Ueberlappung trivial. |
+| Secret                                 | Rotations-Besonderheit                                                                                                                                                                                                                                                        |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TWILIO_AUTH_TOKEN`                    | Twilio fuehrt **Primary + Secondary Auth Token**. Secondary erzeugen → in Env eintragen → Primary "promote/regenerate". Echtes Zero-Downtime, da kurzzeitig beide gueltig sind. Achtung: derselbe Token validiert auch die Webhook-HMAC — nach Rotation Test-Inbound pruefen. |
+| `STRIPE_SECRET_KEY`                    | Im Stripe-Dashboard **"Roll key"** mit Ablauf-Frist (alter Key laeuft kontrolliert aus) statt Sofort-Widerruf. Test- (`sk_test`) und Live-Key (`sk_live`) **getrennt** rotieren.                                                                                              |
+| `SESSION_SECRET`                       | Rotation **invalidiert alle aktiven Browser-Sessions** (User muessen neu einloggen). Geplant ausserhalb der Stosszeit, ggf. ankuendigen. Kein Ueberlappungs-Mechanismus.                                                                                                      |
+| `DATABASE_URL`                         | Postgres-Passwort in Render rotieren (Render Postgres → Rotate) → URL in der Env des Web-Service nachziehen. Kurzer Reconnect; Pool baut neu auf.                                                                                                                             |
+| `MCP_AUTH_TOKEN`                       | Bei `MCP_AUTH=oauth` **nicht in Benutzung** — dann ganz aus der Env nehmen statt rotieren. Im Legacy-/`token`-Modus: Client (z.B. curl-Skripte) und Env **gleichzeitig** umstellen (keine Ueberlappung moeglich).                                                             |
+| `OIDC_CLIENT_SECRET`                   | In WorkOS AuthKit ein neues Client-Secret erzeugen (WorkOS erlaubt Ueberlappung) → Env tauschen → altes in WorkOS loeschen.                                                                                                                                                   |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Zweiten Key erstellen → Env tauschen → ersten widerrufen. Ueberlappung trivial.                                                                                                                                                                                               |
 
 ### 7.4 Twilio-/Telnyx-Subaccount auf minimale Rechte
 
@@ -281,6 +290,7 @@ ausgeschiedenem Teammitglied oder kompromittiertem Geraet.
 darf nur den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
 
 **Twilio:**
+
 - [ ] **Subaccount** anlegen (Twilio Console → Account → Subaccounts); Hermes nutzt **nur** dessen
       `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN`. Master-Auth-Token nie in Hermes.
 - [ ] Im Subaccount **nur** die genutzten Produkte aktiv: **Voice** + **Messaging**. Ungenutzte
@@ -290,6 +300,7 @@ darf nur den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
 - [ ] Geo-Permissions auf die benoetigten Laender beschraenken (passt zum `PROVISIONING_COUNTRY`).
 
 **Telnyx:**
+
 - [ ] **Scoped API Key** (V2, least-privilege) statt Account-weitem Key; nur die fuer Voice/SMS
       noetigen Scopes. Pro Umgebung (Staging/Prod) eigener Key.
 - [ ] API-Key/TeXML-App an die **eine** genutzte Connection/Nummerngruppe binden.
@@ -305,16 +316,16 @@ mit Spend-Limit aktiv und Master-Credentials nirgends in Hermes-Env.
 
 ## Anhang A — "Scharfe Schalter" (fail-closed Defaults, NIE per Default an)
 
-| Env-Var | Default | Schaltet scharf | Fundstelle |
-|---|---|---|---|
-| `TELNYX_NUMBER` | leer | Telnyx-Outbound/Inbound + Provider-Routing | `config.js:53`, `server.js:627` |
-| `PROVISIONING_ENABLED` | false | echter Nummern-Kauf (Geld), gedeckelt durch `MAX_NUMBERS` | `config.js:127`, `server.js:954` |
-| `PAYMENT_ENABLED` | false | Stripe Hold/Capture | `config.js:69`, Pflichtfelder `:220-242` |
-| `MULTI_TENANT` | false | Request-Tenant-Aufloesung aus `req.auth.sub` | `config.js` |
-| `SELF_SERVICE_ENABLED` | false | Self-Service-Routen + Tenant-Dashboard | `config.js` |
-| `MCP_AUTH` | leer | `oauth` = claude.ai-Login; leer = localhost-only | `.env.example:127-134` |
-| `STORE_BACKEND` | json | `pg` = Postgres + RLS (braucht F5-Rolle) | `.env.example:143-148` |
-| `VOICE_ENGINE` | budget | `realtime` = OpenAI (teuer; Gate 2 zuerst) | `.env.example:165-169` |
+| Env-Var                | Default | Schaltet scharf                                           | Fundstelle                               |
+| ---------------------- | ------- | --------------------------------------------------------- | ---------------------------------------- |
+| `TELNYX_NUMBER`        | leer    | Telnyx-Outbound/Inbound + Provider-Routing                | `config.js:53`, `server.js:627`          |
+| `PROVISIONING_ENABLED` | false   | echter Nummern-Kauf (Geld), gedeckelt durch `MAX_NUMBERS` | `config.js:127`, `server.js:954`         |
+| `PAYMENT_ENABLED`      | false   | Stripe Hold/Capture                                       | `config.js:69`, Pflichtfelder `:220-242` |
+| `MULTI_TENANT`         | false   | Request-Tenant-Aufloesung aus `req.auth.sub`              | `config.js`                              |
+| `SELF_SERVICE_ENABLED` | false   | Self-Service-Routen + Tenant-Dashboard                    | `config.js`                              |
+| `MCP_AUTH`             | leer    | `oauth` = claude.ai-Login; leer = localhost-only          | `.env.example:127-134`                   |
+| `STORE_BACKEND`        | json    | `pg` = Postgres + RLS (braucht F5-Rolle)                  | `.env.example:143-148`                   |
+| `VOICE_ENGINE`         | budget  | `realtime` = OpenAI (teuer; Gate 2 zuerst)                | `.env.example:165-169`                   |
 
 **Nie abschaltbar (hardcoded, kein Env):** Allowlist als letztes Outbound-Gate (`ALLOWED_NUMBERS`
 leer = gesperrt), Budget-Guard (`MAX_BUDGET_EUR`), Max-Dauer (`MAX_CALL_DURATION_S`, Max 300),
@@ -323,13 +334,13 @@ Offenlegungssatz bei Outbound.
 
 ## Anhang B — Vorhandenes Tooling
 
-| Zweck | Befehl |
-|---|---|
-| Setup-Check (Env-Vollstaendigkeit) | `npm run check` |
-| Twilio-Webhooks setzen | `node scripts/set-webhooks.js <https://url>` |
-| Telnyx WS-Echo (Gate 2) | `node scripts/telnyx-ws-echo.mjs` |
-| Tenant-Daten loeschen (DSGVO Art. 17) | `node scripts/erase-tenant.js <tenantId>` |
-| Tests (offline, kein Netz/.env) | `npm test` |
+| Zweck                                 | Befehl                                       |
+| ------------------------------------- | -------------------------------------------- |
+| Setup-Check (Env-Vollstaendigkeit)    | `npm run check`                              |
+| Twilio-Webhooks setzen                | `node scripts/set-webhooks.js <https://url>` |
+| Telnyx WS-Echo (Gate 2)               | `node scripts/telnyx-ws-echo.mjs`            |
+| Tenant-Daten loeschen (DSGVO Art. 17) | `node scripts/erase-tenant.js <tenantId>`    |
+| Tests (offline, kein Netz/.env)       | `npm test`                                   |
 
 ## Anhang C — Bewusst vertagt (kein "jetzt")
 

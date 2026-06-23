@@ -93,7 +93,8 @@ test("L-CP7-3: abgebrochener Body -> APIConnectionError mit cause-Kette (neue SD
     const client = new Anthropic({ apiKey: "x", baseURL: mock.url, timeout: 3000, maxRetries: 0 });
     await assert.rejects(
       () => client.messages.create(createParams()),
-      (err) => err instanceof Anthropic.APIConnectionError && err.cause?.cause?.code === "UND_ERR_SOCKET",
+      (err) =>
+        err instanceof Anthropic.APIConnectionError && err.cause?.cause?.code === "UND_ERR_SOCKET",
     );
   } finally {
     await mock.close();

@@ -27,7 +27,7 @@ export function numEnv(name, raw, { fallback, min, max, integer = true } = {}) {
   const n = integer ? parseInt(raw, 10) : parseFloat(raw);
   if (!Number.isFinite(n)) {
     fatalConfigErrors.push(
-      `${name}="${raw}" ist keine gueltige Zahl (erwartet: ${integer ? "Ganzzahl" : "Zahl"}${min !== undefined ? `, >= ${min}` : ""}).`
+      `${name}="${raw}" ist keine gueltige Zahl (erwartet: ${integer ? "Ganzzahl" : "Zahl"}${min !== undefined ? `, >= ${min}` : ""}).`,
     );
     return fallback;
   }
@@ -47,14 +47,21 @@ export function configFatalErrors() {
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
-  maxBudgetEur: numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }),
+  maxBudgetEur: numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, {
+    fallback: 8,
+    min: 0,
+    integer: false,
+  }),
 
   // ---- LLM-Resilienz-Seam (P3b-R Schicht 2, src/llm.js) ----
   // Per-Request-Timeout je Anthropic-Versuch (SDK-Default 10 min ist webhook-toedlich:
   // Twilio kappt nach 15 s hart). Budget-Soll: (llmMaxRetries+1)*timeout + Backoff < 12 s.
   // Mit Defaults: 3*3500 + (<=250+500) = <=11250 ms < 12000 ms < Twilio-15s. Default
   // bewusst 3500 (nicht 4000), damit das Budget mit Sicherheitsmarge haelt.
-  llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", process.env.LLM_REQUEST_TIMEOUT_MS, { fallback: 3500, min: 1 }),
+  llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", process.env.LLM_REQUEST_TIMEOUT_MS, {
+    fallback: 3500,
+    min: 1,
+  }),
   // Harte Retry-Obergrenze (selektiv, nur transiente Verbindungsklasse). 0 = kein Retry.
   llmMaxRetries: numEnv("LLM_MAX_RETRIES", process.env.LLM_MAX_RETRIES, { fallback: 2, min: 0 }),
   // Basis fuer den exponentiellen Voll-Jitter-Backoff (gegen Thundering Herd).
@@ -62,9 +69,18 @@ export const config = {
   // Circuit-Breaker: ab threshold transienten Fehlern im windowMs-Fenster -> open;
   // nach cooldownMs -> half-open (eine Probe). Kappt Retry-Stuerme bei Anthropic-
   // Brownout (Millionen-Skala). Startwerte konservativ; finales Tuning CP6 (Lasttest).
-  llmBreakerThreshold: numEnv("LLM_BREAKER_THRESHOLD", process.env.LLM_BREAKER_THRESHOLD, { fallback: 5, min: 1 }),
-  llmBreakerWindowMs: numEnv("LLM_BREAKER_WINDOW_MS", process.env.LLM_BREAKER_WINDOW_MS, { fallback: 10000, min: 1 }),
-  llmBreakerCooldownMs: numEnv("LLM_BREAKER_COOLDOWN_MS", process.env.LLM_BREAKER_COOLDOWN_MS, { fallback: 30000, min: 1 }),
+  llmBreakerThreshold: numEnv("LLM_BREAKER_THRESHOLD", process.env.LLM_BREAKER_THRESHOLD, {
+    fallback: 5,
+    min: 1,
+  }),
+  llmBreakerWindowMs: numEnv("LLM_BREAKER_WINDOW_MS", process.env.LLM_BREAKER_WINDOW_MS, {
+    fallback: 10000,
+    min: 1,
+  }),
+  llmBreakerCooldownMs: numEnv("LLM_BREAKER_COOLDOWN_MS", process.env.LLM_BREAKER_COOLDOWN_MS, {
+    fallback: 30000,
+    min: 1,
+  }),
 
   twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
@@ -94,12 +110,18 @@ export const config = {
   stripeApiBase: (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\/$/, ""),
   // Einmalige Setup-Gebuehr pro Nummer in GANZZAHL Cents (Geld nie als Float, G26).
   // Bei PAYMENT_ENABLED Pflicht > 0 (assertConfig); 0 = kein Magic-Default.
-  numberSetupFeeCents: numEnv("NUMBER_SETUP_FEE_CENTS", process.env.NUMBER_SETUP_FEE_CENTS, { fallback: 0, min: 0 }),
+  numberSetupFeeCents: numEnv("NUMBER_SETUP_FEE_CENTS", process.env.NUMBER_SETUP_FEE_CENTS, {
+    fallback: 0,
+    min: 0,
+  }),
   paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
   // Voice-Minuten-Tarif fuer den Stripe-Meter (P6b3), GANZZAHL Cents (G26). Nur im
   // Metering-Pfad (PAYMENT_ENABLED) genutzt; 0 = kein Cost-Cents-Beleg (Meter meldet
   // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
-  voiceMinuteCostCents: numEnv("VOICE_MINUTE_COST_CENTS", process.env.VOICE_MINUTE_COST_CENTS, { fallback: 0, min: 0 }),
+  voiceMinuteCostCents: numEnv("VOICE_MINUTE_COST_CENTS", process.env.VOICE_MINUTE_COST_CENTS, {
+    fallback: 0,
+    min: 0,
+  }),
   // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede
   // erfolgreich gesendete Summary-SMS erzeugt ein USAGE_EVENT_KIND.SMS-Event mit diesem
   // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg
@@ -152,17 +174,24 @@ export const config = {
   // strippen); hier BEWUSST lokal gehalten - config ist die Env-Boundary-Schicht und
   // importiert nichts aus store/ (store -> config ist die etablierte Richtung).
   allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
-    .split(",").map((n) => n.replace(/[\s\-()]/g, "")).filter(Boolean),
+    .split(",")
+    .map((n) => n.replace(/[\s\-()]/g, ""))
+    .filter(Boolean),
   // Erlaubte Laendervorwahlen fuer Outbound (kommasepariert, E.164-Prefix wie +49).
   // Default +49,+33,+44 (Deutschland, Frankreich, UK - F1 Phase 8). BEWUSST nur diese
   // drei, NICHT global ("*"): ein zu weites Gate oeffnet teure Ziele (Pre-Mortem R2).
   // "*" = alle Laender erlaubt (Gate effektiv aus). Das Gate prueft weiter das ZIEL.
   allowedCountryCodes: (process.env.ALLOWED_COUNTRY_CODES || "+49,+33,+44")
-    .split(",").map((c) => c.trim()).filter(Boolean),
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean),
   // Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, NICHT der Per-IP-Limiter
   // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
   // spaeter gelockert wird. Default 6; 0 = jeder Outbound-Call gesperrt (Not-Aus).
-  maxCallsPerHour: numEnv("MAX_CALLS_PER_HOUR", process.env.MAX_CALLS_PER_HOUR, { fallback: 6, min: 0 }),
+  maxCallsPerHour: numEnv("MAX_CALLS_PER_HOUR", process.env.MAX_CALLS_PER_HOUR, {
+    fallback: 6,
+    min: 0,
+  }),
   // Notbremse fuer das (zahlungsfreie) Onboarding: harte Obergrenze, wie viele
   // Nummern die Plattform INSGESAMT provisionieren darf. Jede echte Nummer kostet
   // beim Provider Geld -> ohne Cap koennte ein offener Self-Service-Pfad das
@@ -170,7 +199,10 @@ export const config = {
   // 0 = Provisioning gesperrt (Not-Aus). Default bewusst klein.
   maxNumbers: numEnv("MAX_NUMBERS", process.env.MAX_NUMBERS, { fallback: 5, min: 0 }),
   // Wie viele AKTIVE Nummern ein einzelner Tenant haben darf (zusaetzliches Gate).
-  maxNumbersPerTenant: numEnv("MAX_NUMBERS_PER_TENANT", process.env.MAX_NUMBERS_PER_TENANT, { fallback: 1, min: 0 }),
+  maxNumbersPerTenant: numEnv("MAX_NUMBERS_PER_TENANT", process.env.MAX_NUMBERS_PER_TENANT, {
+    fallback: 1,
+    min: 0,
+  }),
   // Self-Service-Provisioning (echter Nummern-Kauf beim Provider). DEFAULT AUS
   // (fail-closed): die Onboarding-Route registriert + fragt dann nur an (Nummer
   // bleibt 'requested', KEIN Geld). Erst true -> echte Kaeufe (gedeckelt durch
@@ -206,17 +238,27 @@ export const config = {
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
   // Neustart, ueber diese Env-Var gesetzte schon. Leer = keine Seed-Profile.
   profilesSeed: process.env.PROFILES_JSON || "",
-  maxCallDurationS: numEnv("MAX_CALL_DURATION_S", process.env.MAX_CALL_DURATION_S, { fallback: 180, min: 1, max: 300 }),
+  maxCallDurationS: numEnv("MAX_CALL_DURATION_S", process.env.MAX_CALL_DURATION_S, {
+    fallback: 180,
+    min: 1,
+    max: 300,
+  }),
   // STT-Endpointing fuer Folge-Gathers (/voice/turn, Budget-Engine): fester
   // speechTimeout in Sekunden statt "auto". "auto" finalisiert auf der ERSTEN
   // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,
   // konservativer Wert toleriert kurze Pausen. NUR Folge-Gathers; das Outbound-Erst-
   // Gather (G2) + Inbound-Greeting bleiben bewusst auf "auto" (End-of-Speech-Erkennung
   // noetig, sonst Erst-Turn-Deadlock, render.js-Doku). Telnyx-only (Twilio byte-identisch).
-  sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, { fallback: 2, min: 1 }),
+  sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, {
+    fallback: 2,
+    min: 1,
+  }),
   // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
   // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.
-  rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, { fallback: 120, min: 0 }),
+  rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
+    fallback: 120,
+    min: 0,
+  }),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
 
@@ -249,11 +291,19 @@ export const config = {
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET || "", // SECRET
   // Admin-Allowlist (kommasepariert, E-Mails). Nur diese duerfen approve/suspend.
   adminEmails: (process.env.ADMIN_EMAILS || "")
-    .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
   // Strengeres Rate-Limit fuer Login/Callback (Brute-Force/Credential-Stuffing).
-  loginRateLimitPerMin: numEnv("LOGIN_RATE_LIMIT_PER_MIN", process.env.LOGIN_RATE_LIMIT_PER_MIN, { fallback: 10, min: 0 }),
+  loginRateLimitPerMin: numEnv("LOGIN_RATE_LIMIT_PER_MIN", process.env.LOGIN_RATE_LIMIT_PER_MIN, {
+    fallback: 10,
+    min: 0,
+  }),
   // Lebensdauer der Browser-Session (Session-Cookie + DB-Session) in Sekunden. Default 1 h.
-  sessionTtlSeconds: numEnv("SESSION_TTL_SECONDS", process.env.SESSION_TTL_SECONDS, { fallback: 3600, min: 0 }),
+  sessionTtlSeconds: numEnv("SESSION_TTL_SECONDS", process.env.SESSION_TTL_SECONDS, {
+    fallback: 3600,
+    min: 0,
+  }),
 
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)
@@ -286,8 +336,7 @@ export function assertConfig() {
   // verschwindet an der Quelle, kein stiller Identitaets-Fallback im Greeting/Disclosure.
   if (!config.ownerFirstName) missing.push("OWNER_FIRST_NAME");
   if (!config.ownerLastName) missing.push("OWNER_LAST_NAME");
-  if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME"))
-    missing.push("PUBLIC_URL");
+  if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME")) missing.push("PUBLIC_URL");
   if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
   if (config.storeBackend === "pg" && !config.databaseUrl)
@@ -298,7 +347,10 @@ export function assertConfig() {
   // ab (fatalConfigErrors -> Boot-Refusal). Dieser Check bleibt als Invariante auf dem
   // config-Wert (> 0 ganzzahlig bei PAYMENT_ENABLED) - direkt geprueft von
   // config-payment-guard.test.js, das den config-Wert ohne Env-Pfad mutiert.
-  if (config.paymentEnabled && (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0))
+  if (
+    config.paymentEnabled &&
+    (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0)
+  )
     missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
   // Numerische Fatal-Befunde (AC1/AC2): NaN/Infinity oder Bereichsverletzung einer
   // gesetzten Env-Var -> faellt mit in den Boot-Stop (fail-closed statt stillem Gate-Aus).
@@ -310,23 +362,39 @@ export function assertConfig() {
     console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
   }
   if (process.env.RENDER_EXTERNAL_URL && !config.dashboardPassword)
-    console.error("[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!");
+    console.error(
+      "[Sicherheit] DASHBOARD_PASSWORD fehlt - Dashboard und API sind oeffentlich zugaenglich!",
+    );
   if (config.skipTwilioSignatureCheck)
-    console.error("[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!");
+    console.error(
+      "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
+    );
   if (config.paymentEnabled && !config.provisioningEnabled)
-    console.error("[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).");
+    console.error(
+      "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",
+    );
   if (config.storeBackend !== "pg" && config.sessionSecret)
     console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
   // Self-Service ist seit der Login-Konvergenz web-session-only: die Routen sind NUR
   // im Web-Login-Block (SESSION_SECRET + STORE_BACKEND=pg) registriert. Flags an, aber
   // ohne diese Infra -> /api/self-service/* sind nicht erreichbar (404, fail-closed).
-  if (config.selfServiceEnabled && config.multiTenant &&
-      !(config.sessionSecret && config.storeBackend === "pg"))
-    console.error("[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.");
+  if (
+    config.selfServiceEnabled &&
+    config.multiTenant &&
+    !(config.sessionSecret && config.storeBackend === "pg")
+  )
+    console.error(
+      "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.",
+    );
   // OIDC-Issuer muss in Produktion https sein: ein http-Issuer (z.B. versehentlich
   // auf eine interne Metadata-IP) ist ein SSRF-/MITM-Footgun. localhost = Test-IdP ok.
-  if (config.oauthIssuerUrl && config.oauthIssuerUrl.startsWith("http://") &&
-      !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(config.oauthIssuerUrl))
-    console.error("[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!");
+  if (
+    config.oauthIssuerUrl &&
+    config.oauthIssuerUrl.startsWith("http://") &&
+    !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(config.oauthIssuerUrl)
+  )
+    console.error(
+      "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!",
+    );
   return missing.length === 0 && fatal.length === 0;
 }

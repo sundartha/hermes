@@ -23,11 +23,17 @@ for (const provider of ["twilio", "telnyx"]) {
     // Der Say steht INNERHALB des Gather: <Gather ...><Say ...>... -> gatherIdx < sayIdx.
     const gatherIdx = body.indexOf(GATHER_OPEN);
     const sayIdx = body.search(/<Say[ >]/);
-    assert.ok(gatherIdx !== -1 && sayIdx !== -1 && gatherIdx < sayIdx, `Say muss IM Gather stehen: ${body}`);
+    assert.ok(
+      gatherIdx !== -1 && sayIdx !== -1 && gatherIdx < sayIdx,
+      `Say muss IM Gather stehen: ${body}`,
+    );
     // Offenlegung als Praefix VOR dem Anliegen (Regel 2: erster Satz bleibt Offenlegung).
     const discIdx = body.indexOf(DISCLOSURE_JONAS);
     const goalIdx = body.indexOf(SEED_GOAL);
-    assert.ok(discIdx !== -1 && goalIdx !== -1, `Offenlegung + Anliegen muessen beide im Erst-Turn stehen: ${body}`);
+    assert.ok(
+      discIdx !== -1 && goalIdx !== -1,
+      `Offenlegung + Anliegen muessen beide im Erst-Turn stehen: ${body}`,
+    );
     assert.ok(discIdx < goalIdx, `Offenlegung muss VOR dem Anliegen stehen: ${body}`);
     // Kein Hangup: der Call bleibt offen.
     assert.ok(!body.includes(HANGUP_TAG), `kein Hangup im Erst-Turn: ${body}`);

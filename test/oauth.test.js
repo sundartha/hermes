@@ -4,7 +4,14 @@
 // Test signiert. Kein echter IdP, kein Netz nach aussen.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startServerExpectExit, waitForLog, startIdp, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
+import {
+  startServer,
+  startServerExpectExit,
+  waitForLog,
+  startIdp,
+  mcpPost as post,
+  MCP_AUDIENCE as AUDIENCE,
+} from "./helpers.js";
 
 test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
   const idp = await startIdp();
@@ -35,7 +42,10 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
       const res = await post(`${srv.localUrl}/mcp`, null);
       assert.equal(res.status, 401);
       const wa = res.headers.get("www-authenticate") || "";
-      assert.match(wa, /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/);
+      assert.match(
+        wa,
+        /resource_metadata="https:\/\/agent\.test\/\.well-known\/oauth-protected-resource"/,
+      );
     });
 
     await t.test("Muell-Token -> 401", async () => {
@@ -95,7 +105,9 @@ test("MCP_AUTH=oauth ohne OAUTH_ISSUER_URL: Boot verweigert (fail-closed, OT-4)"
   // Ein OAuth-Resource-Server ohne Issuer kann keine Tokens verifizieren -> /mcp
   // waere kaputt/offen. assertConfig wertet das als Pflicht-Config; der Boot wird
   // jetzt verweigert (exit 1) statt nur zu warnen und trotzdem zu starten.
-  const { code, output } = await startServerExpectExit({ env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: "" } });
+  const { code, output } = await startServerExpectExit({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: "" },
+  });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
   assert.match(output, /OAUTH_ISSUER_URL/);
 });

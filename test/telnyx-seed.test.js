@@ -56,7 +56,9 @@ test("json: Trennzeichen- und Klar-Form derselben Nummer -> 1 Zeile (Idempotenz,
 // Eine frische Store-Instanz auf DERSELBEN DB beweist, dass save()->flushNumbers die
 // Nummer durablt und die Re-Hydrierung sie mit provider=telnyx zurueckliefert.
 function pgStoreOn(db) {
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   return makePgStore(runner);
 }
 
@@ -77,7 +79,8 @@ test("pg: ueber die Fassade geseedete Telnyx-Nummer ueberlebt Re-Hydrierung, pro
 
 test("pg: frischer Store ohne Seed -> keine Telnyx-Nummer (fail-closed)", async () => {
   const { db } = await makePgTestStore();
-  const rows = (await db.query(`SELECT e164 FROM number WHERE provider = $1`, [PROVIDER.TELNYX])).rows;
+  const rows = (await db.query(`SELECT e164 FROM number WHERE provider = $1`, [PROVIDER.TELNYX]))
+    .rows;
   assert.equal(rows.length, 0, "ohne Seed kein Telnyx-Eintrag");
 });
 

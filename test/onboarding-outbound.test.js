@@ -45,7 +45,11 @@ const TELNYX_ENV = (mockUrl) => ({
 const TELNYX_OWNER = { e164: TELNYX_NR, provider: "telnyx" };
 
 const postJson = (url, body) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 test("POST /api/calls mit Telnyx-Owner-Nummer im Store -> provider=telnyx, from=Telnyx-Nummer, TeXML-Originate", async () => {
   const mock = await startTelnyxVoiceMock();
@@ -84,7 +88,10 @@ test("Outbound-Gates greifen weiter: nicht erlaubte Nummer -> 403 (kein Telnyx-C
   const mock = await startTelnyxVoiceMock();
   const srv = await startServer({ env: TELNYX_ENV(mock.url), ownerNumber: TELNYX_OWNER });
   try {
-    const res = await postJson(`${srv.localUrl}/api/calls`, { to: "+491110000000", objective: "x" });
+    const res = await postJson(`${srv.localUrl}/api/calls`, {
+      to: "+491110000000",
+      objective: "x",
+    });
     assert.equal(res.status, 403, "nicht in der Allowlist -> abgewiesen");
     assert.equal(mock.requests.length, 0, "kein Originate bei gesperrtem Ziel");
   } finally {

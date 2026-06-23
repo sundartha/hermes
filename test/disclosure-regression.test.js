@@ -28,7 +28,10 @@ test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerNa
   // Namen anhaengt, gewinnt die gebundene Tenant-Identitaet (ownerName).
   const sentence = disclosureSentence({ callerName: "Klaus", tenantId: OWNER_TENANT_ID });
   assert.ok(sentence.startsWith(DISCLOSURE_PREFIX), `Wortlaut-Praefix fehlt: ${sentence}`);
-  assert.ok(!sentence.includes("Klaus"), "callerName darf NICHT eingesetzt werden (Identitaets-Bindung)");
+  assert.ok(
+    !sentence.includes("Klaus"),
+    "callerName darf NICHT eingesetzt werden (Identitaets-Bindung)",
+  );
   assert.ok(sentence.includes(config.ownerName), "ownerName muss eingesetzt sein");
   assert.ok(sentence.includes(DISCLOSURE_TAIL), `Zusammenfassungs-Hinweis fehlt: ${sentence}`);
 });
@@ -39,12 +42,21 @@ test("T-P2-10: Outbound-Prompt weist den LLM an, die LLM-frei gesprochene Offenl
   // G2: die woertliche Offenlegung wird LLM-FREI im Erst-Gather gesprochen (openingText),
   // NICHT mehr vom Modell verlangt -> der Prompt traegt sie nicht mehr woertlich, sondern
   // die "nicht wiederholen"-Klausel (verhindert Doppel-Nennung).
-  assert.ok(prompt.includes(NO_REPEAT_CLAUSE), "Nicht-wiederholen-Klausel muss im Outbound-Prompt stehen");
-  assert.ok(prompt.includes(call.goal), "der Outbound-Prompt muss das Anliegen nennen (Anknuepfung)");
+  assert.ok(
+    prompt.includes(NO_REPEAT_CLAUSE),
+    "Nicht-wiederholen-Klausel muss im Outbound-Prompt stehen",
+  );
+  assert.ok(
+    prompt.includes(call.goal),
+    "der Outbound-Prompt muss das Anliegen nennen (Anknuepfung)",
+  );
 });
 
 test("T-P2-10b: Inbound-Prompt traegt die Outbound-Klausel NICHT (Gegenprobe)", () => {
   const call = seedCall({ direction: "inbound", tenantId: OWNER_TENANT_ID });
   const prompt = systemPrompt(call);
-  assert.ok(!prompt.includes(NO_REPEAT_CLAUSE), "Inbound darf die Outbound-Klausel nicht enthalten");
+  assert.ok(
+    !prompt.includes(NO_REPEAT_CLAUSE),
+    "Inbound darf die Outbound-Klausel nicht enthalten",
+  );
 });

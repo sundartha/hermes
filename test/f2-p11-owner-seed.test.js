@@ -24,7 +24,11 @@ test("seedt Owner-privateNumber aus der config-Nummer (normalisiert), liefert tr
   const s = makeDefaultState();
   const ok = seedOwnerPrivateNumber(s, "+49 170 123 4567", OWNER_TENANT_ID);
   assert.equal(ok, true);
-  assert.equal(findTenant(s, OWNER_TENANT_ID).privateNumber, "+491701234567", "normalisiert gespeichert");
+  assert.equal(
+    findTenant(s, OWNER_TENANT_ID).privateNumber,
+    "+491701234567",
+    "normalisiert gespeichert",
+  );
 });
 
 // A) Idempotent: eine bereits gesetzte privateNumber (z.B. per Self-Service) gewinnt.
@@ -33,7 +37,11 @@ test("idempotent: vorhandene privateNumber wird NICHT ueberschrieben", () => {
   findTenant(s, OWNER_TENANT_ID).privateNumber = "+491729998877"; // z.B. Self-Service gesetzt
   const ok = seedOwnerPrivateNumber(s, "+491701234567", OWNER_TENANT_ID);
   assert.equal(ok, true, "Owner hat danach eine Nummer -> true");
-  assert.equal(findTenant(s, OWNER_TENANT_ID).privateNumber, "+491729998877", "gesetzte Nummer gewinnt");
+  assert.equal(
+    findTenant(s, OWNER_TENANT_ID).privateNumber,
+    "+491729998877",
+    "gesetzte Nummer gewinnt",
+  );
 });
 
 // B) Trust-Modell: Laendercode-Gate AUS ("*") - die Owner-Config ist Plattform-TRUSTED,
@@ -50,14 +58,20 @@ test("leere config.ownerNumber -> kein Seed, false (Boot-Warnung), kein Feld", (
   const s = makeDefaultState();
   const ok = seedOwnerPrivateNumber(s, "", OWNER_TENANT_ID);
   assert.equal(ok, false);
-  assert.equal("privateNumber" in findTenant(s, OWNER_TENANT_ID), false, "kein leeres Feld at rest");
+  assert.equal(
+    "privateNumber" in findTenant(s, OWNER_TENANT_ID),
+    false,
+    "kein leeres Feld at rest",
+  );
 });
 
 // C) Fail-soft: ungueltiges E.164-Format -> kein Seed, false, KEIN Throw (boot-sicher).
 test("ungueltiges Format -> kein Seed, false, KEIN Throw (boot-sicher)", () => {
   const s = makeDefaultState();
   let ok;
-  assert.doesNotThrow(() => { ok = seedOwnerPrivateNumber(s, "nicht-eine-nummer", OWNER_TENANT_ID); });
+  assert.doesNotThrow(() => {
+    ok = seedOwnerPrivateNumber(s, "nicht-eine-nummer", OWNER_TENANT_ID);
+  });
   assert.equal(ok, false);
   assert.equal("privateNumber" in findTenant(s, OWNER_TENANT_ID), false);
 });
@@ -78,15 +92,25 @@ test("pg init seedet Owner-privateNumber aus config.ownerNumber und persistiert 
 
   const db = new PGlite();
   const open = async () => {
-    const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+    const runner = {
+      withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+    };
     const store = makePgStore(runner);
     await store.init();
     return store;
   };
 
   const store = await open();
-  assert.equal(store.tenantPrivateNumber(OWNER_TENANT_ID), "+491701234567", "init hat aus config geseedet");
+  assert.equal(
+    store.tenantPrivateNumber(OWNER_TENANT_ID),
+    "+491701234567",
+    "init hat aus config geseedet",
+  );
 
   const reopened = await open(); // Prozess-Restart simuliert
-  assert.equal(reopened.tenantPrivateNumber(OWNER_TENANT_ID), "+491701234567", "ueberlebt den Restart (persistiert)");
+  assert.equal(
+    reopened.tenantPrivateNumber(OWNER_TENANT_ID),
+    "+491701234567",
+    "ueberlebt den Restart (persistiert)",
+  );
 });

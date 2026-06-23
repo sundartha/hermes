@@ -11,7 +11,8 @@ import { findActiveNumber } from "../src/store/views.js";
 import { OWNER_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
 
 // Owner-Telnyx-Nummer aus dem Store (Owner = Tenant Null, keine TELNYX_NUMBER-Env mehr).
-const ownerTelnyxNumber = findActiveNumber(store.load(), OWNER_TENANT_ID, PROVIDER.TELNYX)?.e164 || "";
+const ownerTelnyxNumber =
+  findActiveNumber(store.load(), OWNER_TENANT_ID, PROVIDER.TELNYX)?.e164 || "";
 
 // Zu pruefende Punkte, sobald Telnyx-Live-Zugang besteht (echter WS-Loop):
 // - start-Frame: stream_id + <Parameter> (call_id/stream_token) wie ANGENOMMEN?
@@ -52,4 +53,7 @@ if (missing.length) {
 // Voraussetzungen gesetzt, aber der echte WS-Loop ist hier (noch) nicht
 // implementiert - das Gate bleibt bewusst manuell/live. Ohne echten Loop kein
 // gruener Beleg -> smokePass=false (nie faelschlich gruen melden).
-report(false, "WS-Echo-Loop nur mit Telnyx-Live-Zugang ausfuehrbar (manuelles Gate, nicht automatisiert)");
+report(
+  false,
+  "WS-Echo-Loop nur mit Telnyx-Live-Zugang ausfuehrbar (manuelles Gate, nicht automatisiert)",
+);

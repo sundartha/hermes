@@ -29,7 +29,7 @@ async function setup() {
      GRANT SELECT, INSERT, UPDATE, DELETE ON call, settings, transcript_segment,
        action_item, calendar_event, usage, profile, notification, number,
        number_assignment TO ${APP_ROLE};
-     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`
+     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`,
   );
   return { db, conn };
 }
@@ -52,7 +52,7 @@ function insertCall(db, id, tenantId) {
   return db.query(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
      VALUES ($1, $2, 'tok', 'inbound', 'active', now()::text)`,
-    [id, tenantId]
+    [id, tenantId],
   );
 }
 
@@ -68,9 +68,11 @@ const TENANT_ISOLATION_POLICY_COUNT = 13;
 // vor dem Fix ROT (with_check IS NULL) und gruen, sobald die Klausel explizit ist.
 test("AC1: alle tenant_isolation-Policies tragen ein explizites WITH CHECK", async () => {
   const { db } = await setup();
-  const rows = (await db.query(
-    `SELECT tablename, with_check FROM pg_policies WHERE policyname = 'tenant_isolation'`
-  )).rows;
+  const rows = (
+    await db.query(
+      `SELECT tablename, with_check FROM pg_policies WHERE policyname = 'tenant_isolation'`,
+    )
+  ).rows;
   assert.equal(rows.length, TENANT_ISOLATION_POLICY_COUNT, "alle Policies vorhanden");
   const missing = rows.filter((r) => r.with_check === null).map((r) => r.tablename);
   assert.deepEqual(missing, [], `Policies ohne explizites WITH CHECK: ${missing.join(", ")}`);
@@ -89,7 +91,7 @@ test("WITH CHECK: INSERT mit fremder tenant_id wird von RLS blockiert", async ()
   const { db } = await setup();
   await assert.rejects(
     () => asAppRole(db, TENANT_A, () => insertCall(db, "c_evil", TENANT_B)),
-    RLS_ERROR
+    RLS_ERROR,
   );
 });
 
@@ -98,7 +100,7 @@ test("WITH CHECK: INSERT ohne GUC wird von RLS blockiert (fail-closed)", async (
   const { db } = await setup();
   await assert.rejects(
     () => asAppRole(db, null, () => insertCall(db, "c_noguc", TENANT_A)),
-    RLS_ERROR
+    RLS_ERROR,
   );
 });
 
@@ -109,10 +111,11 @@ test("WITH CHECK: UPDATE das tenant_id auf fremden Tenant setzt, wird blockiert"
   const { db } = await setup();
   await insertCall(db, "c_update", TENANT_A); // als Superuser anlegen
   await assert.rejects(
-    () => asAppRole(db, TENANT_A, () =>
-      db.query(`UPDATE call SET tenant_id = $1 WHERE id = 'c_update'`, [TENANT_B])
-    ),
-    RLS_ERROR
+    () =>
+      asAppRole(db, TENANT_A, () =>
+        db.query(`UPDATE call SET tenant_id = $1 WHERE id = 'c_update'`, [TENANT_B]),
+      ),
+    RLS_ERROR,
   );
 });
 
@@ -121,7 +124,7 @@ test("WITH CHECK: UPDATE eigener Zeile ohne tenant_id-Aenderung passiert RLS", a
   const { db } = await setup();
   await insertCall(db, "c_update2", TENANT_A); // als Superuser anlegen
   await asAppRole(db, TENANT_A, () =>
-    db.query(`UPDATE call SET status = 'completed' WHERE id = 'c_update2'`)
+    db.query(`UPDATE call SET status = 'completed' WHERE id = 'c_update2'`),
   );
   const status = (await db.query(`SELECT status FROM call WHERE id = 'c_update2'`)).rows[0].status;
   assert.equal(status, "completed", "legitimes Update wurde uebernommen");

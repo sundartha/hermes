@@ -9,20 +9,37 @@ import { stream } from "../src/telephony/directives.js";
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
 
 test("STREAM -> Connect/Stream/Parameter byte-identisch (Realtime, Telnyx-Pfad)", () => {
-  const out = renderDirectives([stream({ url: "wss://agent.test/media/telnyx", params: [
-    { name: "call_id", value: "call_abc" }, { name: "stream_token", value: "tok_123" }] })]);
-  assert.equal(out,
-    XML + '<Response><Connect><Stream url="wss://agent.test/media/telnyx">' +
-    '<Parameter name="call_id" value="call_abc"/>' +
-    '<Parameter name="stream_token" value="tok_123"/>' +
-    '</Stream></Connect></Response>');
+  const out = renderDirectives([
+    stream({
+      url: "wss://agent.test/media/telnyx",
+      params: [
+        { name: "call_id", value: "call_abc" },
+        { name: "stream_token", value: "tok_123" },
+      ],
+    }),
+  ]);
+  assert.equal(
+    out,
+    XML +
+      '<Response><Connect><Stream url="wss://agent.test/media/telnyx">' +
+      '<Parameter name="call_id" value="call_abc"/>' +
+      '<Parameter name="stream_token" value="tok_123"/>' +
+      "</Stream></Connect></Response>",
+  );
 });
 
 test("STREAM escaped Sonderzeichen in url/value (&, <)", () => {
-  const out = renderDirectives([stream({ url: "wss://agent.test/media/telnyx?a=1&b=2", params: [
-    { name: "call_id", value: "<x>&y" }] })]);
-  assert.equal(out,
-    XML + '<Response><Connect><Stream url="wss://agent.test/media/telnyx?a=1&amp;b=2">' +
-    '<Parameter name="call_id" value="&lt;x&gt;&amp;y"/>' +
-    '</Stream></Connect></Response>');
+  const out = renderDirectives([
+    stream({
+      url: "wss://agent.test/media/telnyx?a=1&b=2",
+      params: [{ name: "call_id", value: "<x>&y" }],
+    }),
+  ]);
+  assert.equal(
+    out,
+    XML +
+      '<Response><Connect><Stream url="wss://agent.test/media/telnyx?a=1&amp;b=2">' +
+      '<Parameter name="call_id" value="&lt;x&gt;&amp;y"/>' +
+      "</Stream></Connect></Response>",
+  );
 });

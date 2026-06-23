@@ -65,7 +65,11 @@ test("T-P4-06: degradierte api-Antwort ({}) -> klare Tool-Fehlermeldung, kein .l
       result = await handlers.get("get_calendar")();
     }, "get_calendar darf nicht mit TypeError crashen");
     assert.ok(result?.isError, "degradierte Antwort -> isError-Tool-Antwort");
-    assert.doesNotMatch(toolText(result), /Cannot read|undefined|TypeError/i, "kein roher Deref-Fehler");
+    assert.doesNotMatch(
+      toolText(result),
+      /Cannot read|undefined|TypeError/i,
+      "kein roher Deref-Fehler",
+    );
 
     // get_agent_status derefed s.agent.number + s.usage.calls/costEur -> ebenfalls Guard.
     let statusResult;

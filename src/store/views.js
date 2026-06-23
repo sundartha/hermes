@@ -23,7 +23,7 @@ export function findActiveNumber(s, tenantId, provider) {
     (n) =>
       n.tenantId === tenantId &&
       n.status === NUMBER_STATUS.ACTIVE &&
-      (provider === undefined || n.provider === provider)
+      (provider === undefined || n.provider === provider),
   );
 }
 

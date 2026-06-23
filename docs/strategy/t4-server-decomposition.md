@@ -20,12 +20,12 @@ Verantwortungen in einer Datei:
 
 Bereits extrahiert (Vorbilder, DI-Factory-Muster `makeXxxRoutes({...})`):
 
-| Gruppe | Modul | Mount in server.js |
-|---|---|---|
-| `/api/profiles` (GET/POST/DELETE) | `src/routes/api-profiles.js` (`makeProfileRoutes`) | Z. 927 |
-| `/api/self-service/*` | `src/self-service-routes.js` (`makeSelfServiceRoutes`) | Z. 200 (im guardedBoot) |
-| Admin (`/admin/*`) | `src/web-auth.js` (`makeAdminRoutes`) | Z. 189 (im guardedBoot) |
-| Web-Login (`/auth/*`) | `src/web-auth.js` (`makeWebAuthRoutes`) | Z. 161 (im guardedBoot) |
+| Gruppe                            | Modul                                                  | Mount in server.js      |
+| --------------------------------- | ------------------------------------------------------ | ----------------------- |
+| `/api/profiles` (GET/POST/DELETE) | `src/routes/api-profiles.js` (`makeProfileRoutes`)     | Z. 927                  |
+| `/api/self-service/*`             | `src/self-service-routes.js` (`makeSelfServiceRoutes`) | Z. 200 (im guardedBoot) |
+| Admin (`/admin/*`)                | `src/web-auth.js` (`makeAdminRoutes`)                  | Z. 189 (im guardedBoot) |
+| Web-Login (`/auth/*`)             | `src/web-auth.js` (`makeWebAuthRoutes`)                | Z. 161 (im guardedBoot) |
 
 **Problem:** Die verbleibenden `/api/*`-Handler haengen direkt an `app` und teilen
 sich **Modul-Scope-Helfer** (Tenant-Aufloesung, Nummern-Gates, Validierung,
@@ -35,19 +35,19 @@ zuerst eine saubere Naht fuer die geteilten Helfer.
 
 ### 1.1 Verbleibende `/api/*`-Routen in `server.js` (vollstaendig, verifiziert)
 
-| # | Methode + Pfad | Zeilen | Auth | Mutiert | Risiko |
-|---|---|---|---|---|---|
-| 1 | `GET  /api/portal/state` | 175–183 | webAuthMw (im guardedBoot) | nein (read) | mittel (Sonderfall) |
-| 2 | `POST /api/calls` | 673–786 | Basic-Auth | **echte Calls + Kosten** | **HOCH** |
-| 3 | `POST /api/calls/:id/cancel` | 789–812 | Basic-Auth | Call-Ende | hoch |
-| 4 | `GET  /api/state` | 823–855 | Basic-Auth | nein (read) | niedrig |
-| 5 | `GET  /api/calls/:id` | 857–867 | Basic-Auth | nein (read) | niedrig |
-| 6 | `GET  /api/tenant-data/export` | 874–881 | Basic-Auth | nein (read) | niedrig |
-| 7 | `POST /api/settings` | 883–890 | Basic-Auth | Tenant-Settings | niedrig |
-| 8 | `POST /api/action-items/:id/toggle` | 892–896 | Basic-Auth | Action-Item | niedrig |
-| 9 | `POST /api/calendar` | 898–919 | Basic-Auth | Termin | niedrig–mittel |
-| 10 | `POST /api/billing/flush-meters` | 935–941 | Basic-Auth | Stripe-Meter | mittel (Geld) |
-| 11 | `POST /api/onboard` | 952–1023 | Basic-Auth | Tenant + Nummer-Job | mittel–hoch |
+| #   | Methode + Pfad                      | Zeilen   | Auth                       | Mutiert                  | Risiko              |
+| --- | ----------------------------------- | -------- | -------------------------- | ------------------------ | ------------------- |
+| 1   | `GET  /api/portal/state`            | 175–183  | webAuthMw (im guardedBoot) | nein (read)              | mittel (Sonderfall) |
+| 2   | `POST /api/calls`                   | 673–786  | Basic-Auth                 | **echte Calls + Kosten** | **HOCH**            |
+| 3   | `POST /api/calls/:id/cancel`        | 789–812  | Basic-Auth                 | Call-Ende                | hoch                |
+| 4   | `GET  /api/state`                   | 823–855  | Basic-Auth                 | nein (read)              | niedrig             |
+| 5   | `GET  /api/calls/:id`               | 857–867  | Basic-Auth                 | nein (read)              | niedrig             |
+| 6   | `GET  /api/tenant-data/export`      | 874–881  | Basic-Auth                 | nein (read)              | niedrig             |
+| 7   | `POST /api/settings`                | 883–890  | Basic-Auth                 | Tenant-Settings          | niedrig             |
+| 8   | `POST /api/action-items/:id/toggle` | 892–896  | Basic-Auth                 | Action-Item              | niedrig             |
+| 9   | `POST /api/calendar`                | 898–919  | Basic-Auth                 | Termin                   | niedrig–mittel      |
+| 10  | `POST /api/billing/flush-meters`    | 935–941  | Basic-Auth                 | Stripe-Meter             | mittel (Geld)       |
+| 11  | `POST /api/onboard`                 | 952–1023 | Basic-Auth                 | Tenant + Nummer-Job      | mittel–hoch         |
 
 `/api/profiles` (Z. 927) ist bereits extrahiert. `/mcp` (Z. 1062) ist kein `/api/*`
 und bleibt inline.
@@ -57,6 +57,7 @@ und bleibt inline.
 ## 2. Ziel & Akzeptanzkriterien
 
 ### Ziel
+
 Die verbleibenden `/api/*`-Routen inkrementell aus `server.js` in kohaerente
 Module unter `src/routes/` extrahieren — **verhaltens-erhaltend** (reine
 Verschiebung, keine Logik-Aenderung), nach dem etablierten DI-Factory-Muster.
@@ -64,6 +65,7 @@ Endzustand: `server.js` enthaelt nur noch Boot/Wiring, `/voice/*`, `/mcp` und
 eine Reihe `app.use(makeXxxRoutes({...}))`-Mounts.
 
 ### Akzeptanzkriterien (Definition of Done)
+
 1. **Nach JEDER Phase**: `npm test` vollstaendig gruen (keine neue rote/uebersprungene Spec).
 2. **Byte-identisches Verhalten**: gleiche Pfade, Status-Codes, Response-Shapes,
    Audit-Events und Log-Zeilen VOR und NACH jeder Phase. Beleg = die bestehenden
@@ -78,6 +80,7 @@ eine Reihe `app.use(makeXxxRoutes({...}))`-Mounts.
    SAUBER pro Phase.
 
 ### Nicht-Ziele (Scope-Grenze, Regel 6)
+
 - `/voice/*`-Handler werden NICHT verschoben.
 - `/mcp`-Handler bleibt inline.
 - Keine API-Vertragsaenderung, keine neuen Endpunkte, keine Umbenennung von Pfaden.
@@ -110,29 +113,30 @@ Modul-Scope-Helfer sauber zu schneiden. Drei Klassen (alle am Code verifiziert):
 
 **(A) Tenant-/Identitaets-Aufloesung — von VIELEN `/api`-Routen UND `/mcp` genutzt:**
 
-| Helfer | Def. | Aufrufer (verifiziert) |
-|---|---|---|
-| `isLocalSocket` | Z. 45 | rate-limit-MW (110), basic-auth-MW (216), `internalIdentity` (53) |
-| `internalIdentity` | Z. 52 | `requestTenant` (81), `/api/calls` (683), `/api/calls/:id/cancel` (798), `/api/calendar` (903) |
-| `requestTenant` | Z. 78 | `requireTenant` (95), `/api/calls` (686), `cancel` (795), `/api/state` (825), `/api/calls/:id` (864), `/mcp` (1065) |
-| `requireTenant` | Z. 94 | `/api/tenant-data/export` (875), `/api/settings` (884), `/api/calendar` (899) |
-| `tenantOwnsCall` | Z. 396 | `cancel` (795), `/api/calls/:id` (864) |
-| Konstanten | — | `OWNER_ID` (58), `ANON_IDENTITY` (61), `TENANT_REJECT` (66) |
+| Helfer             | Def.   | Aufrufer (verifiziert)                                                                                              |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------- |
+| `isLocalSocket`    | Z. 45  | rate-limit-MW (110), basic-auth-MW (216), `internalIdentity` (53)                                                   |
+| `internalIdentity` | Z. 52  | `requestTenant` (81), `/api/calls` (683), `/api/calls/:id/cancel` (798), `/api/calendar` (903)                      |
+| `requestTenant`    | Z. 78  | `requireTenant` (95), `/api/calls` (686), `cancel` (795), `/api/state` (825), `/api/calls/:id` (864), `/mcp` (1065) |
+| `requireTenant`    | Z. 94  | `/api/tenant-data/export` (875), `/api/settings` (884), `/api/calendar` (899)                                       |
+| `tenantOwnsCall`   | Z. 396 | `cancel` (795), `/api/calls/:id` (864)                                                                              |
+| Konstanten         | —      | `OWNER_ID` (58), `ANON_IDENTITY` (61), `TENANT_REJECT` (66)                                                         |
 
 → **Loesung:** Factory `makeTenantResolver({ store, config })` in `src/routes/_tenant.js`,
 die `{ isLocalSocket, internalIdentity, requestTenant, requireTenant, tenantOwnsCall }`
-+ die Konstanten liefert. `server.js` baut EINE Instanz im Modul-Scope, nutzt sie in
-der Middleware UND `/mcp`, und **injiziert dieselbe Instanz** in jede Route-Factory.
-Kein zweiter Resolver (G5/DIP), keine TDZ auf Modul-Helfer.
-`isLocalSocket` ist eine reine Funktion ohne Deps — kann auch separat exportiert und
-sowohl von der Middleware als auch vom Resolver importiert werden.
+
+- die Konstanten liefert. `server.js` baut EINE Instanz im Modul-Scope, nutzt sie in
+  der Middleware UND `/mcp`, und **injiziert dieselbe Instanz** in jede Route-Factory.
+  Kein zweiter Resolver (G5/DIP), keine TDZ auf Modul-Helfer.
+  `isLocalSocket` ist eine reine Funktion ohne Deps — kann auch separat exportiert und
+  sowohl von der Middleware als auch vom Resolver importiert werden.
 
 **(B) Cross-cutting mit `/voice` — bleiben in `server.js`, werden INJIZIERT:**
 
-| Helfer | Def. | Voice-Aufrufer | API-Aufrufer |
-|---|---|---|---|
-| `armMaxDurationTimer` | Z. 403 | `/voice/incoming` (453) | `/api/calls` (772) |
-| `finishCall` | Z. 588 | `/voice/status` (652), Bridge (1144) | `/api/calls/:id/cancel` (810) |
+| Helfer                | Def.   | Voice-Aufrufer                       | API-Aufrufer                  |
+| --------------------- | ------ | ------------------------------------ | ----------------------------- |
+| `armMaxDurationTimer` | Z. 403 | `/voice/incoming` (453)              | `/api/calls` (772)            |
+| `finishCall`          | Z. 588 | `/voice/status` (652), Bridge (1144) | `/api/calls/:id/cancel` (810) |
 
 → Diese DUERFEN nicht nach `src/routes/` wandern (Voice ist out of scope und braucht
 sie weiter). Sie bleiben in `server.js` und werden als Dependency in `makeCallRoutes`
@@ -140,14 +144,14 @@ gereicht. Das haelt die Naht klein und vermeidet Doppel-Definition.
 
 **(C) API-only Helfer — wandern MIT ihrer Route (keine Voice-Bindung):**
 
-| Cluster | Helfer | Nur-Aufrufer |
-|---|---|---|
-| Validierung | `E164` (272), `TEXT_LIMITS` (273), `invalidText` (276) | `/api/calls` (714–717), `/api/calendar` (910) → **geteilt zwischen 2 API-Routen** |
-| Nummern-Gates | `EMERGENCY_SHORT_CODES`, `PREMIUM_PREFIXES`, `HOUR_MS`, `isDenied`, `matchesPrefix`, `countryGateAllowed`, `hourWindowStart`, `globalHourReached`, `userHourReached`, `allowlistError`, `kycGateError`, `numberGateError` (297–361) | ausschliesslich `/api/calls` (699, 706) |
-| Absendernummer | `outboundFrom` (663) | ausschliesslich `/api/calls` (723) |
-| State-Slices | `STATE_CALLS/ACTION_ITEMS/CALENDAR/NOTIFICATIONS` (816) | ausschliesslich `/api/state` |
-| Onboard | `ONBOARD_REASON_STATUS` (950), `runProvisioningDrain` (1029), `recordNumberMonthMeter` (576) | ausschliesslich `/api/onboard`-Pfad |
-| Billing/Meter | `recordVoiceMinuteMeter` (559), `MS_PER_MINUTE` (552) | `finishCall` (voice-seitig) → bleibt mit `finishCall` |
+| Cluster        | Helfer                                                                                                                                                                                                                              | Nur-Aufrufer                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Validierung    | `E164` (272), `TEXT_LIMITS` (273), `invalidText` (276)                                                                                                                                                                              | `/api/calls` (714–717), `/api/calendar` (910) → **geteilt zwischen 2 API-Routen** |
+| Nummern-Gates  | `EMERGENCY_SHORT_CODES`, `PREMIUM_PREFIXES`, `HOUR_MS`, `isDenied`, `matchesPrefix`, `countryGateAllowed`, `hourWindowStart`, `globalHourReached`, `userHourReached`, `allowlistError`, `kycGateError`, `numberGateError` (297–361) | ausschliesslich `/api/calls` (699, 706)                                           |
+| Absendernummer | `outboundFrom` (663)                                                                                                                                                                                                                | ausschliesslich `/api/calls` (723)                                                |
+| State-Slices   | `STATE_CALLS/ACTION_ITEMS/CALENDAR/NOTIFICATIONS` (816)                                                                                                                                                                             | ausschliesslich `/api/state`                                                      |
+| Onboard        | `ONBOARD_REASON_STATUS` (950), `runProvisioningDrain` (1029), `recordNumberMonthMeter` (576)                                                                                                                                        | ausschliesslich `/api/onboard`-Pfad                                               |
+| Billing/Meter  | `recordVoiceMinuteMeter` (559), `MS_PER_MINUTE` (552)                                                                                                                                                                               | `finishCall` (voice-seitig) → bleibt mit `finishCall`                             |
 
 → Validierung (C-Validierung) wird von ZWEI API-Routen geteilt → eigenes Mini-Modul
 `_validation.js`, importiert von beiden. Nummern-Gates sind ein kohaerenter „Outbound-
@@ -159,16 +163,33 @@ brauchen).
 
 ```js
 // server.js (nach voller Dekomposition, Skizze)
-const tenant = makeTenantResolver({ store, config });     // EINE Instanz
+const tenant = makeTenantResolver({ store, config }); // EINE Instanz
 // ... Middleware nutzt tenant.isLocalSocket / tenant.requestTenant ...
 app.use(makeReadRoutes({ store, config, audit, tenant }));
 app.use(makeTenantWriteRoutes({ store, audit, tenant }));
 const gates = makeOutboundGates({ store, config });
-app.use(makeCallRoutes({ store, config, audit, tenant, gates,
-                         outboundFrom, armMaxDurationTimer, finishCall }));
+app.use(
+  makeCallRoutes({
+    store,
+    config,
+    audit,
+    tenant,
+    gates,
+    outboundFrom,
+    armMaxDurationTimer,
+    finishCall,
+  }),
+);
 app.use(makeBillingRoutes({ store, config, audit, billing: stripeBilling }));
-app.use(makeOnboardRoutes({ store, config, audit,
-                            queue: provisioningQueue, runDrain: runProvisioningDrain }));
+app.use(
+  makeOnboardRoutes({
+    store,
+    config,
+    audit,
+    queue: provisioningQueue,
+    runDrain: runProvisioningDrain,
+  }),
+);
 ```
 
 Jede Factory liefert einen `express.Router()` mit denselben Pfaden/Handlern wie heute.
@@ -181,17 +202,17 @@ Jede Factory liefert einen `express.Router()` mit denselben Pfaden/Handlern wie 
 
 Importe stammen aus heute schon existierenden Modulen (keine neuen Deps, Regel-Konvention):
 
-| Modul | store | config | audit (util) | views | telephony/registry | sonstige |
-|---|---|---|---|---|---|---|
-| `_tenant.js` | ✓ | ✓ | — | — | — | store/defaults (OWNER_TENANT_ID) |
-| `_validation.js` | — | — | — | — | — | reine Konstanten/Fns |
-| `api-read.js` | ✓ | ✓ | ✓ | publicCall, upcomingCalendar, activeNumberFor | — | tenant (DI) |
-| `api-tenant.js` | ✓ | — | ✓ | — | — | tenant (DI), `_validation` |
-| `outbound-gates.js` | ✓ | ✓ | — | — | — | store/defaults (KYC_OUTBOUND_MIN, PROVIDER) |
-| `api-calls.js` | ✓ | ✓ | ✓ | findActiveNumber | voiceControl, ownerNumberForProvider | tenant, gates, `_validation`, `outboundFrom`, `armMaxDurationTimer`+`finishCall` (DI) |
-| `api-billing.js` | ✓ | ✓ | ✓ | — | — | billing/stripe, billing/meter (flushMeters) |
-| `api-onboard.js` | ✓ | ✓ | ✓ | — | numberProvisioning | store/state-ops, worker/provisioning, queue (DI), validIdentity (api-profiles) |
-| `api-portal.js` | — | — | — | publicCall | — | portalStore + webAuthMw (DI, nur im guardedBoot) |
+| Modul               | store | config | audit (util) | views                                         | telephony/registry                   | sonstige                                                                              |
+| ------------------- | ----- | ------ | ------------ | --------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `_tenant.js`        | ✓     | ✓      | —            | —                                             | —                                    | store/defaults (OWNER_TENANT_ID)                                                      |
+| `_validation.js`    | —     | —      | —            | —                                             | —                                    | reine Konstanten/Fns                                                                  |
+| `api-read.js`       | ✓     | ✓      | ✓            | publicCall, upcomingCalendar, activeNumberFor | —                                    | tenant (DI)                                                                           |
+| `api-tenant.js`     | ✓     | —      | ✓            | —                                             | —                                    | tenant (DI), `_validation`                                                            |
+| `outbound-gates.js` | ✓     | ✓      | —            | —                                             | —                                    | store/defaults (KYC_OUTBOUND_MIN, PROVIDER)                                           |
+| `api-calls.js`      | ✓     | ✓      | ✓            | findActiveNumber                              | voiceControl, ownerNumberForProvider | tenant, gates, `_validation`, `outboundFrom`, `armMaxDurationTimer`+`finishCall` (DI) |
+| `api-billing.js`    | ✓     | ✓      | ✓            | —                                             | —                                    | billing/stripe, billing/meter (flushMeters)                                           |
+| `api-onboard.js`    | ✓     | ✓      | ✓            | —                                             | numberProvisioning                   | store/state-ops, worker/provisioning, queue (DI), validIdentity (api-profiles)        |
+| `api-portal.js`     | —     | —      | —            | publicCall                                    | —                                    | portalStore + webAuthMw (DI, nur im guardedBoot)                                      |
 
 ---
 
@@ -203,14 +224,16 @@ mit `npm test` verifizierbar.** Reihenfolge ist load-bearing: Phase 1 (Resolver)
 Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
 
 > **Hinweis zur Parallelisierbarkeit:** JEDE Phase editiert `server.js` (Block loeschen
-> + Import + Mount-Zeile). Nach der Regel „zwei Phasen, die dieselbe Datei anfassen,
-> sind NICHT parallel" sind daher **alle Phasen untereinander `parallelisierbar: nein`**
-> (gemeinsame Datei `server.js`). Was sich parallel VORBEREITEN laesst, ist der reine
-> Modul-Entwurf der NEUEN Datei; die Integration (server.js-Edit + Test) muss serialisieren.
+>
+> - Import + Mount-Zeile). Nach der Regel „zwei Phasen, die dieselbe Datei anfassen,
+>   sind NICHT parallel" sind daher **alle Phasen untereinander `parallelisierbar: nein`**
+>   (gemeinsame Datei `server.js`). Was sich parallel VORBEREITEN laesst, ist der reine
+>   Modul-Entwurf der NEUEN Datei; die Integration (server.js-Edit + Test) muss serialisieren.
 
 ---
 
 ### Phase 0 — Vorbedingung: A1/A4/A6 abwarten + rebasen
+
 - **Aktion:** keine Code-Aenderung. Warten, bis A1 (`/voice/status`-Provider-Parsing),
   A4 (Remote-OAuth, aendert `requestTenant`) und A6 (Rebrand, beruehrt Strings in ganz
   `server.js`) in `master` sind. Danach rebasen.
@@ -219,7 +242,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
   Konflikt. Diese Aufgabe ist explizit aufschiebbar.
 - **Test:** `npm test` gruen auf dem frischen Rebase-Stand (Baseline).
 
-### Phase 1 — Tenant-/Identitaets-Resolver extrahieren  → `src/routes/_tenant.js`
+### Phase 1 — Tenant-/Identitaets-Resolver extrahieren → `src/routes/_tenant.js`
+
 - **Routen:** keine (reiner Helfer-Schnitt, enabling refactor).
 - **Verschiebt:** `isLocalSocket`, `internalIdentity`, `requestTenant`, `requireTenant`,
   `tenantOwnsCall` + Konstanten `OWNER_ID`, `ANON_IDENTITY`, `TENANT_REJECT` in
@@ -246,7 +270,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
   - **R1.3:** `isLocalSocket` wird von Middleware UND Resolver genutzt — bei Extraktion
     nicht doppeln. → eine Quelle, beide importieren.
 
-### Phase 2 — Validierungs-Helfer extrahieren  → `src/routes/_validation.js`
+### Phase 2 — Validierungs-Helfer extrahieren → `src/routes/_validation.js`
+
 - **Routen:** keine (enabling, von Phase 4 + Phase 5 gebraucht).
 - **Verschiebt:** `E164`, `TEXT_LIMITS`, `invalidText` (reine Fns, keine Deps).
 - **Dateien:** `src/routes/_validation.js` (NEU), `src/server.js` (raus), kein neuer
@@ -258,7 +283,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
     ab — eine vergessene Konstante bricht still die Laengenpruefung (400→200). →
     vollstaendige Map mitnehmen, `i6-write-scope.test.js` belegt `title`-Pfad.
 
-### Phase 3 — Read-/Export-Routen  → `src/routes/api-read.js`
+### Phase 3 — Read-/Export-Routen → `src/routes/api-read.js`
+
 - **Routen:** `GET /api/state` (4), `GET /api/calls/:id` (5), `GET /api/tenant-data/export` (6).
 - **Factory:** `makeReadRoutes({ store, config, audit, tenant })`.
 - **Dateien:** `src/routes/api-read.js` (NEU), `src/server.js` (Bloecke raus + Mount),
@@ -275,7 +301,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
   - **R3.2:** Owner-PII (`ownerNumber`, `allowedNumbers`) nur in Owner-Sicht. Die
     `isOwnerView`-Verzweigung exakt mitnehmen.
 
-### Phase 4 — Tenant-Write-Routen  → `src/routes/api-tenant.js`
+### Phase 4 — Tenant-Write-Routen → `src/routes/api-tenant.js`
+
 - **Routen:** `POST /api/settings` (7), `POST /api/action-items/:id/toggle` (8), `POST /api/calendar` (9).
 - **Factory:** `makeTenantWriteRoutes({ store, audit, tenant })` (+ `_validation`).
 - **Dateien:** `src/routes/api-tenant.js` (NEU), `src/server.js` (Bloecke raus + Mount),
@@ -291,13 +318,14 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
   - **R4.2:** `/api/calendar` haengt am `allowBooking`-Profil-Recht UND `requireTenant`
     (Reihenfolge: Tenant-Reject 403 VOR booking-denied 403). Reihenfolge exakt halten.
 
-### Phase 5 — Outbound-Gates + Call-Routen  → `src/routes/outbound-gates.js` + `src/routes/api-calls.js`
+### Phase 5 — Outbound-Gates + Call-Routen → `src/routes/outbound-gates.js` + `src/routes/api-calls.js`
+
 - **Routen:** `POST /api/calls` (2) **[sicherheitskritisch]**, `POST /api/calls/:id/cancel` (3).
 - **Aufteilbar (empfohlen):** 5a = `cancel` (leichter: braucht `tenant.tenantOwnsCall`
-  + `finishCall`-DI), 5b = `POST /api/calls` (die Geld-/Gate-Schwergewicht-Route).
+  - `finishCall`-DI), 5b = `POST /api/calls` (die Geld-/Gate-Schwergewicht-Route).
 - **Factory:** `makeOutboundGates({ store, config })` liefert `numberGateError`,
   `kycGateError`; `makeCallRoutes({ store, config, audit, tenant, gates, outboundFrom,
-  armMaxDurationTimer, finishCall })`.
+armMaxDurationTimer, finishCall })`.
 - **Dateien:** `src/routes/outbound-gates.js` (NEU, der ganze 297–361-Block),
   `src/routes/api-calls.js` (NEU, + `outboundFrom`), `src/server.js` (Bloecke raus +
   `armMaxDurationTimer`/`finishCall` als DI rein, Mount), `test/api-calls-parity.test.js` (NEU).
@@ -324,7 +352,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
   - **R5.4:** Originate-Fehler darf NIE die rohe Provider-Message leaken (Z. 776–784).
     → `place-call-error.test.js` bleibt gruen.
 
-### Phase 6 — Billing-Flush  → `src/routes/api-billing.js`
+### Phase 6 — Billing-Flush → `src/routes/api-billing.js`
+
 - **Routen:** `POST /api/billing/flush-meters` (10).
 - **Factory:** `makeBillingRoutes({ store, config, audit, billing })`.
 - **Dateien:** `src/routes/api-billing.js` (NEU), `src/server.js` (raus + Mount),
@@ -339,7 +368,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
     sonst laeuft Metering still ungegated. Da heute KEIN dedizierter Test existiert,
     ist eine Parity-Spec hier Pflicht, nicht optional.
 
-### Phase 7 — Onboarding  → `src/routes/api-onboard.js`
+### Phase 7 — Onboarding → `src/routes/api-onboard.js`
+
 - **Routen:** `POST /api/onboard` (11).
 - **Factory:** `makeOnboardRoutes({ store, config, audit, queue, runDrain })`.
 - **Dateien:** `src/routes/api-onboard.js` (NEU, + `ONBOARD_REASON_STATUS`),
@@ -361,7 +391,8 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
     muss die Queue-Instanz EINE bleiben (sonst zwei Queues → verlorene Jobs). →
     vorerst Drain in server.js lassen, nur injizieren (kleinste Blast-Radius).
 
-### Phase 8 — (optional) Portal-Read  → `src/routes/api-portal.js`
+### Phase 8 — (optional) Portal-Read → `src/routes/api-portal.js`
+
 - **Routen:** `GET /api/portal/state` (1).
 - **Sonderfall:** lebt INNERHALB des `guardedBoot`-Web-Login-Blocks (Z. 175–183),
   haengt an `webAuthMw` (NICHT Basic-Auth) und an `portalStore`, das NUR dort
@@ -381,17 +412,17 @@ Phase 2 (Validierung) sind Voraussetzung fuer mehrere spaetere Phasen.
 
 ## 6. Parallelisierungs-Matrix
 
-| Phase | Neue Datei | Editiert `server.js`? | Parallel zu anderen T4-Phasen? | Braucht vorher |
-|---|---|---|---|---|
-| 0 Warten | — | nein | — | A1, A4, A6 gemerged |
-| 1 `_tenant` | ✓ | **ja** | nein | 0 (+ A4-Abgleich) |
-| 2 `_validation` | ✓ | **ja** | nein | 0 |
-| 3 `api-read` | ✓ | **ja** | nein | 1 |
-| 4 `api-tenant` | ✓ | **ja** | nein | 1, 2 |
-| 5 `api-calls`+gates | ✓✓ | **ja** | nein | 1, 2 |
-| 6 `api-billing` | ✓ | **ja** | nein | 0 |
-| 7 `api-onboard` | ✓ | **ja** | nein | 0 |
-| 8 `api-portal` | ✓ | **ja** | nein | 0 |
+| Phase               | Neue Datei | Editiert `server.js`? | Parallel zu anderen T4-Phasen? | Braucht vorher      |
+| ------------------- | ---------- | --------------------- | ------------------------------ | ------------------- |
+| 0 Warten            | —          | nein                  | —                              | A1, A4, A6 gemerged |
+| 1 `_tenant`         | ✓          | **ja**                | nein                           | 0 (+ A4-Abgleich)   |
+| 2 `_validation`     | ✓          | **ja**                | nein                           | 0                   |
+| 3 `api-read`        | ✓          | **ja**                | nein                           | 1                   |
+| 4 `api-tenant`      | ✓          | **ja**                | nein                           | 1, 2                |
+| 5 `api-calls`+gates | ✓✓         | **ja**                | nein                           | 1, 2                |
+| 6 `api-billing`     | ✓          | **ja**                | nein                           | 0                   |
+| 7 `api-onboard`     | ✓          | **ja**                | nein                           | 0                   |
+| 8 `api-portal`      | ✓          | **ja**                | nein                           | 0                   |
 
 **Fazit:** Innerhalb von T4 ist NICHTS parallel — gemeinsame Datei `server.js`. Die
 Phasen serialisieren in Reihenfolge 0→1→2→{3,4,5}→{6,7,8}. Die geschweiften Gruppen
@@ -408,26 +439,26 @@ laufen, sobald A1/A4/A6 durch sind.
 
 1. **Tenant-Leck durch Resolver-Drift (R1.2).** Beim Verschieben von `requestTenant`
    wurde der fail-closed-Pfad (`TENANT_REJECT`) subtil veraendert → ein fremder Tenant
-   sieht/cancelt fremde Calls. *Gegenmittel:* Paritaets-Test fuer alle drei
+   sieht/cancelt fremde Calls. _Gegenmittel:_ Paritaets-Test fuer alle drei
    Identitaets-Pfade + `read-scope-tenant`/`i6-write-scope` als Gate.
 2. **Doppelter Resolver / Doppelte Queue (R1.1, R7.2).** Zwei Quellen derselben Logik
-   driften auseinander. *Gegenmittel:* EINE Instanz im Modul-Scope, ueberall injiziert;
+   driften auseinander. _Gegenmittel:_ EINE Instanz im Modul-Scope, ueberall injiziert;
    `isLocalSocket`/`finishCall`/`provisioningQueue` nie kopieren.
 3. **A4-Merge-Konflikt (R1.1).** T4 Phase 1 und A4 editieren dieselbe Funktion. Beide
    gleichzeitig → harter Konflikt oder schlimmer: stiller Logik-Verlust beim Aufloesen.
-   *Gegenmittel:* Phase 0 strikt einhalten; nach A4 pruefen, ob der Resolver schon
+   _Gegenmittel:_ Phase 0 strikt einhalten; nach A4 pruefen, ob der Resolver schon
    extrahiert ist und ihn KONSUMIEREN.
 4. **Kosten-Explosion durch Gate-Drift (R5.1).** Eine verlorene/umsortierte Gate-Stufe
-   in `/api/calls` laesst gesperrte Nummern durch. *Gegenmittel:* Phase 5 als eigene,
+   in `/api/calls` laesst gesperrte Nummern durch. _Gegenmittel:_ Phase 5 als eigene,
    spaete Phase mit Gate-fuer-Gate-Parity-Test; `clean-code-reviewer` mit Fokus Regel 1.
 5. **Stilles Verhalten geaendert, Test merkt nichts.** Eine Route ohne dedizierten Test
-   (`/api/billing/flush-meters`) wird verschoben und subtil veraendert. *Gegenmittel:*
+   (`/api/billing/flush-meters`) wird verschoben und subtil veraendert. _Gegenmittel:_
    Phase 6 bringt die fehlende Parity-Spec ZUERST.
 6. **streamToken-Leak (R3.1).** Read-Route serialisiert `call` direkt statt `publicCall`.
-   *Gegenmittel:* `media-token.test.js` + Parity-Assertion.
+   _Gegenmittel:_ `media-token.test.js` + Parity-Assertion.
 7. **„Mitgefixt" statt verschoben.** Beim Extrahieren wird eine vermeintliche
    Inkonsistenz (z.B. fehlender Tenant-Guard bei `action-items/toggle`) „verbessert" →
-   Verhaltens-Aenderung, Scope-Bruch (Regel 6). *Gegenmittel:* reine Verschiebung;
+   Verhaltens-Aenderung, Scope-Bruch (Regel 6). _Gegenmittel:_ reine Verschiebung;
    Auffaelligkeiten dokumentieren, NICHT in dieser Aufgabe aendern.
 
 ---
@@ -466,6 +497,7 @@ laufen, sobald A1/A4/A6 durch sind.
   ungefaehrlichen Lesepfaden, wenn das Muster schon belegt ist.
 
 ### Relevante Dateien
+
 - `src/server.js` (Quelle, 1145 LOC) — alle Routen + Helfer verifiziert
 - `src/routes/api-profiles.js`, `src/self-service-routes.js`, `src/web-auth.js` — Factory-Vorbilder
 - `test/api-routes.test.js` (T-P4-08) — Parity-Test-Vorbild
@@ -474,5 +506,5 @@ laufen, sobald A1/A4/A6 durch sind.
 - Tests je Routengruppe: `api.test.js`, `read-scope-tenant.test.js`, `number-gate.test.js`,
   `kyc-gate-outbound.test.js`, `place-call-error.test.js`, `i6-write-scope.test.js`,
   `onboarding-route.test.js`, `portal-route.test.js`, `media-token.test.js`
-</content>
-</invoke>
+  </content>
+  </invoke>

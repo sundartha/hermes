@@ -15,7 +15,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { makeReadRoutes, STATE_CALLS, STATE_ACTION_ITEMS, STATE_CALENDAR, STATE_NOTIFICATIONS } from "../src/routes/api-read.js";
+import {
+  makeReadRoutes,
+  STATE_CALLS,
+  STATE_ACTION_ITEMS,
+  STATE_CALENDAR,
+  STATE_NOTIFICATIONS,
+} from "../src/routes/api-read.js";
 import { OWNER_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 
 const STREAM_TOKEN = "s".repeat(32); // WS-Zugangsgeheimnis, darf nie eine Antwort verlassen
@@ -43,7 +49,9 @@ function makeMockStore({ listSize = 1 } = {}) {
       calls,
       actionItems: bulk("ai"),
       notifications: bulk("n"),
-      numbers: [{ tenantId: OWNER_TENANT_ID, e164: "+4915200000001", status: NUMBER_STATUS.ACTIVE }],
+      numbers: [
+        { tenantId: OWNER_TENANT_ID, e164: "+4915200000001", status: NUMBER_STATUS.ACTIVE },
+      ],
     }),
     tenantContext: () => ({ settings: { greeting: "hi" }, ownerName: "Jonas" }),
     // Flag-an-Pfad: tenant-gescopte Listen. calls nach tenantId gefiltert.
@@ -54,7 +62,10 @@ function makeMockStore({ listSize = 1 } = {}) {
     }),
     usageOf: () => ({ spentEur: 2 }),
     getCall: (id) => calls.find((c) => c.id === id),
-    getCalendar: () => [{ end: FUTURE, title: "future" }, { end: PAST, title: "past" }],
+    getCalendar: () => [
+      { end: FUTURE, title: "future" },
+      { end: PAST, title: "past" },
+    ],
   };
 }
 
@@ -80,7 +91,10 @@ function makeTenant() {
   return {
     requestTenant: resolve,
     requireTenant: (req, res) => {
-      if (req.headers["x-test-reject"]) { res.status(403).json({ error: "tenant" }); return null; }
+      if (req.headers["x-test-reject"]) {
+        res.status(403).json({ error: "tenant" });
+        return null;
+      }
       return resolve(req);
     },
     tenantOwnsCall: (call, tenant) => call.tenantId === tenant,
@@ -94,7 +108,9 @@ async function mount(store, config) {
   const app = express();
   app.use(express.json());
   app.use(makeReadRoutes({ store, config, audit: (...a) => audits.push(a), tenant: makeTenant() }));
-  const server = await new Promise((res) => { const s = app.listen(0, () => res(s)); });
+  const server = await new Promise((res) => {
+    const s = app.listen(0, () => res(s));
+  });
   const base = `http://127.0.0.1:${server.address().port}`;
   return { base, audits, stop: () => new Promise((r) => server.close(r)) };
 }
@@ -160,7 +176,9 @@ test("GET /api/state (Flag an, fremder Tenant): R3.2 Owner-PII geblockt + scoped
 test("GET /api/state (Flag an, Owner-Tenant): Owner-PII sichtbar + aktive Owner-Nummer", async () => {
   const srv = await mount(makeMockStore(), makeConfig({ multiTenant: true }));
   try {
-    const res = await fetch(`${srv.base}/api/state`, { headers: { "x-test-tenant": OWNER_TENANT_ID } });
+    const res = await fetch(`${srv.base}/api/state`, {
+      headers: { "x-test-tenant": OWNER_TENANT_ID },
+    });
     assert.equal(res.status, 200);
     const body = await res.json();
 
@@ -175,7 +193,10 @@ test("GET /api/state (Flag an, Owner-Tenant): Owner-PII sichtbar + aktive Owner-
 
 test("GET /api/state: Slices kappen auf STATE_*-Grenzen", async () => {
   // Mehr Eintraege als jede Slice-Grenze -> die benannten Konstanten greifen.
-  const srv = await mount(makeMockStore({ listSize: STATE_ACTION_ITEMS + 20 }), makeConfig({ multiTenant: false }));
+  const srv = await mount(
+    makeMockStore({ listSize: STATE_ACTION_ITEMS + 20 }),
+    makeConfig({ multiTenant: false }),
+  );
   try {
     const body = await (await fetch(`${srv.base}/api/state`)).json();
     assert.equal(body.actionItems.length, STATE_ACTION_ITEMS); // 50
@@ -216,7 +237,9 @@ test("GET /api/calls/:id (Flag an): fremder Call -> 404 (kein Existenz-Leck, NIC
   const srv = await mount(makeMockStore(), makeConfig({ multiTenant: true }));
   try {
     // Owner fragt den fremden Call ab -> tenantOwnsCall false -> 404.
-    const res = await fetch(`${srv.base}/api/calls/call_foreign`, { headers: { "x-test-tenant": OWNER_TENANT_ID } });
+    const res = await fetch(`${srv.base}/api/calls/call_foreign`, {
+      headers: { "x-test-tenant": OWNER_TENANT_ID },
+    });
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: "not found" });
   } finally {
@@ -261,7 +284,9 @@ test("GET /api/tenant-data/export: Owner-Export, Calls gestrippt (R3.1) + audit"
 test("GET /api/tenant-data/export: requireTenant REJECT -> 403, kein Export, kein audit", async () => {
   const srv = await mount(makeMockStore(), makeConfig({ multiTenant: true }));
   try {
-    const res = await fetch(`${srv.base}/api/tenant-data/export`, { headers: { "x-test-reject": "1" } });
+    const res = await fetch(`${srv.base}/api/tenant-data/export`, {
+      headers: { "x-test-reject": "1" },
+    });
     assert.equal(res.status, 403);
     // Fail-closed: kein Export-Body und KEIN audit (der Handler bricht vor beidem ab).
     assert.equal(srv.audits.length, 0);

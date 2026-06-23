@@ -56,52 +56,62 @@ test("Twilio-Signaturpruefung fuer /voice/*", async (t) => {
   }
 });
 
-test("Basic-Auth fuer Dashboard + API", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, async (t) => {
-  const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
-  try {
-    await t.test("localhost ist ausgenommen (interne MCP-Tools)", async () => {
-      const res = await fetch(`${srv.localUrl}/api/state`);
-      assert.equal(res.status, 200);
-    });
-
-    await t.test("extern ohne Credentials -> 401", async () => {
-      const res = await fetch(`${srv.externalUrl}/api/state`);
-      assert.equal(res.status, 401);
-    });
-
-    await t.test("X-Forwarded-For-Spoofing umgeht Auth NICHT", async () => {
-      const res = await fetch(`${srv.externalUrl}/api/state`, {
-        headers: { "X-Forwarded-For": "127.0.0.1" },
+test(
+  "Basic-Auth fuer Dashboard + API",
+  { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
+  async (t) => {
+    const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
+    try {
+      await t.test("localhost ist ausgenommen (interne MCP-Tools)", async () => {
+        const res = await fetch(`${srv.localUrl}/api/state`);
+        assert.equal(res.status, 200);
       });
-      assert.equal(res.status, 401);
-    });
 
-    await t.test("extern mit korrekten Credentials -> 200", async () => {
-      const auth = "Basic " + Buffer.from("admin:test-geheim").toString("base64");
-      const res = await fetch(`${srv.externalUrl}/api/state`, { headers: { Authorization: auth } });
-      assert.equal(res.status, 200);
-    });
-  } finally {
-    await srv.stop();
-  }
-});
+      await t.test("extern ohne Credentials -> 401", async () => {
+        const res = await fetch(`${srv.externalUrl}/api/state`);
+        assert.equal(res.status, 401);
+      });
 
-test("/mcp fail-closed ohne MCP_AUTH_TOKEN", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, async (t) => {
-  const srv = await startServer();
-  try {
-    await t.test("extern -> 401", async () => {
-      const res = await fetch(`${srv.externalUrl}/mcp`, { method: "POST" });
-      assert.equal(res.status, 401);
-    });
+      await t.test("X-Forwarded-For-Spoofing umgeht Auth NICHT", async () => {
+        const res = await fetch(`${srv.externalUrl}/api/state`, {
+          headers: { "X-Forwarded-For": "127.0.0.1" },
+        });
+        assert.equal(res.status, 401);
+      });
 
-    await t.test("localhost -> kein 401", async () => {
-      const res = await fetch(`${srv.localUrl}/mcp`, { method: "POST" });
-      assert.notEqual(res.status, 401);
-    });
-  } finally {
-    await srv.stop();
-  }
-});
+      await t.test("extern mit korrekten Credentials -> 200", async () => {
+        const auth = "Basic " + Buffer.from("admin:test-geheim").toString("base64");
+        const res = await fetch(`${srv.externalUrl}/api/state`, {
+          headers: { Authorization: auth },
+        });
+        assert.equal(res.status, 200);
+      });
+    } finally {
+      await srv.stop();
+    }
+  },
+);
+
+test(
+  "/mcp fail-closed ohne MCP_AUTH_TOKEN",
+  { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
+  async (t) => {
+    const srv = await startServer();
+    try {
+      await t.test("extern -> 401", async () => {
+        const res = await fetch(`${srv.externalUrl}/mcp`, { method: "POST" });
+        assert.equal(res.status, 401);
+      });
+
+      await t.test("localhost -> kein 401", async () => {
+        const res = await fetch(`${srv.localUrl}/mcp`, { method: "POST" });
+        assert.notEqual(res.status, 401);
+      });
+    } finally {
+      await srv.stop();
+    }
+  },
+);
 
 test("/mcp mit MCP_AUTH_TOKEN verlangt korrektes Bearer-Token", async (t) => {
   const srv = await startServer({ env: { MCP_AUTH_TOKEN: "test-mcp-token" } });

@@ -14,12 +14,12 @@ Verifikation + Synthese). Jede Phase = ein `phase-impl-lean`-Schnitt, Merge im L
 Belegt gegen den real laufenden Code. Kein stale-deploy: lokal = origin = upstream.
 Engine live = BUDGET (turn-basiert, Gather/STT), Provider live = Telnyx (TeXML).
 
-| # | Befund | Wurzel | Beleg |
-|---|---|---|---|
-| 1 | **~15s Totzeit nach der Offenlegung** | `/voice/outbound` ist (bewusst) LLM-frei und rendert Offenlegung + **leeres** `<Gather>`; das Anliegen entsteht erst im naechsten `/voice/turn`, der erst nach No-Speech-Timeout feuert. Beide Seiten warten. | `server.js:483-508`, `:328-332`; `telnyx/render.js:73-77`. **Log: erster Turn jedes Calls = `SpeechResult:0` (3/3 Calls heute).** |
-| 2 | **"Jonas" + Rollenverwirrung + Impersonation** | `systemPrompt`/`disclosureSentence` mischen `call.callerName` (Freitext aus `place_call`) und `ctx.ownerName`. ownerName faellt auf `config.ownerName` zurueck, Default **"Jonas"** — und `render.yaml:97` setzt `OWNER_NAME: Jonas` **hart live**. `caller_name` ist pro Call frei waehlbar → jeder Offenlegungsname setzbar. | `claude.js:48,71,76,80-83`; `config.js:98`; `render.yaml:96-97`; `mcp-tools.js:90` → `server.js:723`. |
-| 3 | **STT-Truncation ("geht" statt ganzem Satz)** | `speechTimeout="auto"` delegiert Endpointing an Deepgram-VAD, das auf der **ersten internen Sprechpause** finalisiert. Keine Fragment-Reassemblierung. `de-DE`/nova-3 sind korrekt (nicht anfassen). | `telnyx/render.js:37-43`; `server.js:212-215`. Log: `SpeechResult:12` im frueheren Call. |
-| 4 | **"kann nicht selbst auflegen"** | **Kein Defekt.** `end_call → <Hangup/>` ist robust (Tool-Loop + Fail-safe-Floor). Symptom = Perzeption der Totzeit aus #1. | `claude.js:90-98,221,250,253`; `server.js:466`; `telnyx/render.js:98-99`. |
+| #   | Befund                                         | Wurzel                                                                                                                                                                                                                                                                                                                         | Beleg                                                                                                                             |
+| --- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **~15s Totzeit nach der Offenlegung**          | `/voice/outbound` ist (bewusst) LLM-frei und rendert Offenlegung + **leeres** `<Gather>`; das Anliegen entsteht erst im naechsten `/voice/turn`, der erst nach No-Speech-Timeout feuert. Beide Seiten warten.                                                                                                                  | `server.js:483-508`, `:328-332`; `telnyx/render.js:73-77`. **Log: erster Turn jedes Calls = `SpeechResult:0` (3/3 Calls heute).** |
+| 2   | **"Jonas" + Rollenverwirrung + Impersonation** | `systemPrompt`/`disclosureSentence` mischen `call.callerName` (Freitext aus `place_call`) und `ctx.ownerName`. ownerName faellt auf `config.ownerName` zurueck, Default **"Jonas"** — und `render.yaml:97` setzt `OWNER_NAME: Jonas` **hart live**. `caller_name` ist pro Call frei waehlbar → jeder Offenlegungsname setzbar. | `claude.js:48,71,76,80-83`; `config.js:98`; `render.yaml:96-97`; `mcp-tools.js:90` → `server.js:723`.                             |
+| 3   | **STT-Truncation ("geht" statt ganzem Satz)**  | `speechTimeout="auto"` delegiert Endpointing an Deepgram-VAD, das auf der **ersten internen Sprechpause** finalisiert. Keine Fragment-Reassemblierung. `de-DE`/nova-3 sind korrekt (nicht anfassen).                                                                                                                           | `telnyx/render.js:37-43`; `server.js:212-215`. Log: `SpeechResult:12` im frueheren Call.                                          |
+| 4   | **"kann nicht selbst auflegen"**               | **Kein Defekt.** `end_call → <Hangup/>` ist robust (Tool-Loop + Fail-safe-Floor). Symptom = Perzeption der Totzeit aus #1.                                                                                                                                                                                                     | `claude.js:90-98,221,250,253`; `server.js:466`; `telnyx/render.js:98-99`.                                                         |
 
 **Kernerkenntnis:** #1 und #4 sind dieselbe Wurzel (leerer Erst-Gather). #2 ist Safety
 (Identitaets-Bindung, Geschwister-Regel zu Regel 2) und muss **isoliert + zuerst**. #3
@@ -44,6 +44,7 @@ Geteilte Hotspot-Dateien `server.js` und `claude.js` werden von mehreren Phasen
 angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G2 → G3 → G4**.
 
 ### G0 — Repro-Harness & Instrumentierung (Fundament, kein Verhaltens-Diff)
+
 - **Ziel:** deterministische Offline-Bank, gegen die G1–G4 ihre TeXML-/Identitaets-Asserts
   fahren. Vorhandene Bausteine (`startServer`/`seedState`/`seedCall`, `ANTHROPIC_BASE_URL`-
   Mock aus `outbound-premature-close.test.js`) zu einem Outbound-TeXML-Helper buendeln
@@ -58,6 +59,7 @@ angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G
 - **Dateien:** `test/helpers.js`, neu `test/_outbound-harness.js`.
 
 ### G1 — Identitaets-Bindung (Safety, isoliert, ZUERST)
+
 - **Ziel:** EINE autoritative Identitaetsquelle, fail-closed, Default "Jonas" raus.
 - **Design (Approach A mit Pflicht-Anpassungen — Verdikt haelt nur so):**
   - `claude.js:71` + `:81`: `call.callerName || …` → **ausschliesslich**
@@ -68,14 +70,14 @@ angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G
     - **Offenlegung** (`disclosureSentence`) = voller Name `${firstName} ${lastName}` (lastName
       darf mehrteilig sein, z.B. firstName="Antonio", lastName="Fotiadis dos Santos Francisco").
     - **LLM-Persona** (`systemPrompt`-Zeilen 48/76: "Assistent von {X}", "{X}s Kalender") = `firstName`.
-    - Eine Quelle bleibt erhalten: `tenant.ownerName` (voll) wird beim Registrieren **komponiert
-      + gespeichert**, damit die bestehenden Konsumenten (Inbound-Greeting `server.js:429`,
-      Dashboard/`api-read`/`self-service`, `summarizeCall`) unveraendert laufen; zusaetzlich wird
-      `firstName` gespeichert (Persona).
+    - Eine Quelle bleibt erhalten: `tenant.ownerName` (voll) wird beim Registrieren \*\*komponiert
+      - gespeichert\*\*, damit die bestehenden Konsumenten (Inbound-Greeting `server.js:429`,
+        Dashboard/`api-read`/`self-service`, `summarizeCall`) unveraendert laufen; zusaetzlich wird
+        `firstName` gespeichert (Persona).
   - **Datenmodell additiv (wie I8):** nullable Spalten `first_name`/`last_name` in `schema.sql`
-    + pg-Hydrierung/Flush (`pg.js`), `registerTenant`-Signatur `{ firstName, lastName }` (komponiert
-    ownerName, setzt firstName), `POST /api/onboard` nimmt `firstName`/`lastName`. Kein Rename des
-    bestehenden `owner_name`. Per-Tenant-Daten (aktuell nur der Owner registriert) — niemals hardcoden.
+    - pg-Hydrierung/Flush (`pg.js`), `registerTenant`-Signatur `{ firstName, lastName }` (komponiert
+      ownerName, setzt firstName), `POST /api/onboard` nimmt `firstName`/`lastName`. Kein Rename des
+      bestehenden `owner_name`. Per-Tenant-Daten (aktuell nur der Owner registriert) — niemals hardcoden.
   - **Owner-Name-Quelle = Variante (a):** Owner-Tenant wird beim Seeding
     (`makeDefaultState`/`seedDefaults`) mit `firstName`/`lastName` aus der Config belegt und
     `tenant.ownerName` komponiert. **Schuetzt Inbound** (`server.js:429` greeting,
@@ -113,15 +115,16 @@ angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G
   Lean-Phase G1 in G1a=Datenmodell/firstName+lastName und G1b=Bindung/caller_name splitten.)
 
 ### G2 — Erst-Turn-Deadlock aufloesen (Wurzel-Tempo #1+#4) — nach G1
+
 - **Ziel:** Nach der Offenlegung spricht der Agent sofort sein Anliegen im **selben** Turn.
   `/voice/outbound` bleibt strikt **LLM-frei**.
 - **Design (Approach A):** rein lokaler Helper `openingText(call)` in `claude.js` **neben**
   `disclosureSentence` (kein systemPrompt-/Anthropic-Pfad): `${disclosure} ${bruecke}
-  ${kappe(call.goal)}.`. In `/voice/outbound` ersetzt `turnDirectives(call, anliegen)` das
+${kappe(call.goal)}.`. In `/voice/outbound` ersetzt `turnDirectives(call, anliegen)` das
   `turnDirectives(call, "")` → promptText rendert als `<Say>` **innerhalb** des `<Gather>`
   (byte-identisch zum bewaehrten Inbound-Greeting, `render.js:75-76`).
   - **Opening-Kappe** als benannte Konstante `OPENING_GOAL_MAX_CHARS` (Magic-Number-Verbot)
-    + Satz-Glaettung; `goal`-Validierungslimit (500) bleibt unberuehrt.
+    - Satz-Glaettung; `goal`-Validierungslimit (500) bleibt unberuehrt.
   - **systemPrompt-Outbound (`claude.js:75`) mitaendern**, sodass der erste LLM-Turn das
     Anliegen **nicht erneut** nennt (sonst Doppel-Nennung deterministisch + LLM).
 - **Pre-Mortem:** (a) versehentlicher LLM-Pull in den stummen Erst-Turn → Helper rein synchron,
@@ -136,6 +139,7 @@ angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G
 - **Dateien:** `server.js`, `claude.js`, `config.js`, `.env.example` + Outbound-Tests.
 
 ### G3 — STT-Endpointing-Truncation — nach G2
+
 - **Ziel:** interne Sprechpausen tolerieren, ohne den Erst-Turn zu verschlechtern.
 - **Design (Approach A mit Pflicht-Korrektur — Verdikt haelt nur so):** `speechTimeout`
   config-getrieben (`config.telnyxSpeechTimeoutSec`, `.env STT_SPEECH_TIMEOUT_SEC`, Default
@@ -158,6 +162,7 @@ angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G
   `.env.example`, `test/helpers.js`, `test/telnyx-render.test.js`.
 
 ### G4 — Reprompt-Verschlankung + Log-Cleanup (Tempo-Politur, risikoarm) — zuletzt
+
 - **Ziel:** TTS-Sekunden im No-Speech-Wiederholpfad sparen; G0-Diagnose-Logs entfernen.
 - **Design:** No-Speech-Reprompt (`server.js:454`) auf knappe Rueckfrage kuerzen.
   `redirectD`-Entfernung **NICHT** (kein Offline-Beleg). Danach `[turn-recv]`/`[turn-ok]`-Logs
@@ -169,6 +174,7 @@ angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G
 ---
 
 ## 4. Verworfene Ansaetze (zur Nachvollziehbarkeit)
+
 - **Opening-Caching in pg/json-Spalte (G2-B):** YAGNI + Stale-Drift, kein Latenzgewinn.
 - **Zweiter Redirect-Turn fuers Opening (G2-C):** erzeugt eine NEUE Totzeit + neue Route.
 - **caller_name nur ignorieren (G1-B):** toter, irrefuehrender Vertrag (CLAUDE.md verbietet).
@@ -200,6 +206,7 @@ Nicht-blockierend (Default, im Live-Gate justierbar): Bruecken-Phrasierung des A
 ---
 
 ## 6. Restrisiken / Folge-Arbeit (NICHT in dieser Kette)
+
 - **Onboarding-Identitaet:** `tenant.ownerName` ist erst dann wirklich impersonationssicher,
   wenn an eine authentifizierte `idp_subject`-Identitaet gebunden. `registerTenant` nimmt heute
   Freitext aus `POST /api/onboard`. G1 schliesst die `place_call`-Luecke, verschiebt aber den

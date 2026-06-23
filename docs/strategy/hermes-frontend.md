@@ -84,7 +84,7 @@ services:
 
   # ---- 2) Produkt-Frontend (neu, Static Site aufs CDN) ----
   - type: web
-    runtime: static            # Render-Static-Site (Syntax vor Merge verifizieren, s.u.)
+    runtime: static # Render-Static-Site (Syntax vor Merge verifizieren, s.u.)
     name: hermes-web
     plan: free
     autoDeploy: true
@@ -94,10 +94,10 @@ services:
       paths:
         - "apps/web/**"
     routes:
-      - type: rewrite          # SPA-Fallback NUR fuer den interaktiven App-Teil
+      - type: rewrite # SPA-Fallback NUR fuer den interaktiven App-Teil
         source: /app/*
         destination: /app/index.html
-    headers:                   # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
+    headers: # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
       - path: /*
         name: X-Frame-Options
         value: DENY
@@ -111,7 +111,7 @@ services:
 - `buildFilter.paths` (Whitelist): Service deployt **nur**, wenn der Commit mindestens eine passende Datei beruehrt. `hermes-web` baut also nur bei Aenderungen unter `apps/web/**`.
 - `buildFilter.ignoredPaths` (Blacklist): Service deployt, **ausser** alle geaenderten Dateien passen ausschliesslich auf die ignorierten Muster. Der Gateway deployt also **nicht**, wenn ein Commit ausschliesslich `apps/web/**`/`docs/**` anfasst.
 
-**Warum das die harte Isolation erfuellt.** Ein *reiner* Frontend-Commit faellt aus dem Gateway-Auto-Deploy → der telefonierende Prozess bleibt unangetastet. Symmetrisch baut das Frontend nicht bei Backend-Commits. **Wichtig:** ein *gemischter* Commit (beruehrt `src/` UND `apps/web/`) deployt **beide** Services. Die Isolation ist also Filter PLUS Commit-Hygiene — Frontend- und Backend-Aenderungen landen als getrennte Commits/PRs.
+**Warum das die harte Isolation erfuellt.** Ein _reiner_ Frontend-Commit faellt aus dem Gateway-Auto-Deploy → der telefonierende Prozess bleibt unangetastet. Symmetrisch baut das Frontend nicht bei Backend-Commits. **Wichtig:** ein _gemischter_ Commit (beruehrt `src/` UND `apps/web/`) deployt **beide** Services. Die Isolation ist also Filter PLUS Commit-Hygiene — Frontend- und Backend-Aenderungen landen als getrennte Commits/PRs.
 
 **Ehrliche Unsicherheiten zur Render-Blueprint-Syntax** (vor dem Merge gegen die aktuelle Render-Doku gegenpruefen — Render benennt Blueprint-Felder gelegentlich um):
 
@@ -124,13 +124,13 @@ services:
 
 Der App-Teil (`/app/*`) ist reine View-Schicht — keine Geschaeftslogik, kein Geheimnis, kein privilegierter Status. Er konsumiert exakt die Endpunkte, die heute `public/tenant.html` nutzt:
 
-| Zweck | Aufruf | Bestand |
-|---|---|---|
-| Login | Link auf `/auth/login` (Server-Redirect zum IdP) | `makeWebAuthRoutes` |
-| Lesen | `fetch("/api/self-service/state")` | settings, greetingTemplates, optional hasCard, calls, actionItems, calendar, agent{number,owner} |
-| Schreiben | `POST /api/self-service/settings` | strenge Whitelist (2.6) |
-| Billing | `POST /api/self-service/billing/setup-checkout` → Stripe-Redirect; `GET .../return` | nur Karte hinterlegen |
-| Logout | `POST /auth/logout` | invalidiert Session, loescht Cookie |
+| Zweck     | Aufruf                                                                              | Bestand                                                                                          |
+| --------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Login     | Link auf `/auth/login` (Server-Redirect zum IdP)                                    | `makeWebAuthRoutes`                                                                              |
+| Lesen     | `fetch("/api/self-service/state")`                                                  | settings, greetingTemplates, optional hasCard, calls, actionItems, calendar, agent{number,owner} |
+| Schreiben | `POST /api/self-service/settings`                                                   | strenge Whitelist (2.6)                                                                          |
+| Billing   | `POST /api/self-service/billing/setup-checkout` → Stripe-Redirect; `GET .../return` | nur Karte hinterlegen                                                                            |
+| Logout    | `POST /auth/logout`                                                                 | invalidiert Session, loescht Cookie                                                              |
 
 **Cookie traegt automatisch.** Im same-origin-Modell (2.4) liegen Frontend und Gateway hinter derselben Domain. Das `session`-Cookie (`HttpOnly; Secure; SameSite=Lax; Path=/`) fliesst bei jedem `fetch("/api/...")` mit — exakt wie bei `tenant.html`. JS kommt wegen `HttpOnly` nie ans Cookie (kein XSS-Token-Diebstahl) und muss es auch nicht. Der einzige defensive Zusatz im fetch-Wrapper ist `credentials: "same-origin"`.
 
@@ -142,14 +142,14 @@ Der App-Teil (`/app/*`) ist reine View-Schicht — keine Geschaeftslogik, kein G
 
 **Empfehlung: same-origin via Pfad-Routing** (z.B. Cloudflare vor beiden Services). Aus Browser-Sicht ist alles EINE Origin:
 
-| Pfad | Ziel | Warum |
-|---|---|---|
-| `/`, Marketing-Pfade, `/app/*` | Static Site (`hermes-web`) | reines CDN-Ausliefern |
-| `/auth/*` | Gateway | OIDC-Flow + Cookie-Ausstellung (`makeWebAuthRoutes`) |
-| `/api/*` | Gateway | gesamte REST-/Self-Service-Logik + `webAuth` |
-| `/.well-known/*` | Gateway | OAuth-Metadata |
-| `/voice/*` | Gateway | Twilio/Telnyx-Webhooks (fail-closed Signatur) |
-| `/mcp`, `/healthz` | Gateway | MCP-HTTP, Health |
+| Pfad                           | Ziel                       | Warum                                                |
+| ------------------------------ | -------------------------- | ---------------------------------------------------- |
+| `/`, Marketing-Pfade, `/app/*` | Static Site (`hermes-web`) | reines CDN-Ausliefern                                |
+| `/auth/*`                      | Gateway                    | OIDC-Flow + Cookie-Ausstellung (`makeWebAuthRoutes`) |
+| `/api/*`                       | Gateway                    | gesamte REST-/Self-Service-Logik + `webAuth`         |
+| `/.well-known/*`               | Gateway                    | OAuth-Metadata                                       |
+| `/voice/*`                     | Gateway                    | Twilio/Telnyx-Webhooks (fail-closed Signatur)        |
+| `/mcp`, `/healthz`             | Gateway                    | MCP-HTTP, Health                                     |
 
 `/auth/*` und `/api/*` MUESSEN zum Gateway, weil dort und nur dort die Auth-/Geschaeftslogik liegt. Im same-origin-Modell bleibt die CSP `connect-src 'self'` (`src/middleware.js`) gueltig — **keine** Lockerung noetig, weder am Gateway noch in der neuen Frontend-CSP. Das ist der entscheidende Sicherheitsvorteil: same-origin haelt die strikteste CSP intakt, vermeidet jeglichen CORS-Code, behaelt `SameSite=Lax` als impliziten CSRF-Schutz und lebt mit dem bestehenden `res.redirect(302, "/")` ohne Aenderung.
 
@@ -194,6 +194,7 @@ Next.js waere richtig, wenn das Frontend selbst serverseitige Logik/eigene API-R
 Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem Geruest (W0) laufen Marketing (W1) und Login (W2) parallel, sodass der Login-Roundtrip gegen `/auth/*` frueh echten Mehrwert zeigt.
 
 ### W0 — Geruest + Deploy-Isolation
+
 - **Ziel:** Zweiter Render-Static-Service existiert, baut ein minimales `apps/web`-Astro-Geruest, deployt unabhaengig; ein Commit unter `apps/web/` loest **keinen** Gateway-Deploy aus und umgekehrt.
 - **Umfang:** Monorepo-Struktur (`apps/web/` mit minimalem Astro-Setup, Platzhalter-Index, eigener Lockfile); `render.yaml` um zweiten Service + `buildFilter` auf BEIDEN Services erweitern. Static laeuft erstmal unter eigener `onrender.com`-URL.
 - **NICHT enthalten:** Marketing-Inhalte, Tokens, Auth, API-Calls, Domain-Cutover, Cloudflare, jegliche Backend-Logik-Aenderung.
@@ -204,6 +205,7 @@ Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem 
 - **Parallelisierbar: nein** — fasst die von allen geteilte `render.yaml` an und legt das Geruest; muss seriell zuerst.
 
 ### W1 — Marketing-Seiten (SSG) + Token-Schicht
+
 - **Ziel:** Landing, "So funktioniert's", Preise als statisch generierte Astro-Seiten, getragen von der zentralen Token-Schicht, die alle Folgephasen wiederverwenden.
 - **Umfang:** Token-Schicht als EINE Quelle (`styles/tokens/`); Marketing-Seiten als reine SSG ohne API-Call. Preis-Tabelle als Markup (keine Stripe-Anbindung, kein Live-Plan-Fetch). CTAs verlinken nur (spaeter `/auth/login`), buchen nichts.
 - **NICHT enthalten:** Login/Auth, App-Shell, jegliche `fetch()` gegen `/api/*` oder `/auth/*`, echte Abo-Buchung.
@@ -214,6 +216,7 @@ Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem 
 - **Parallelisierbar: ja** (mit W2) — DISJUNKT, solange `tokens.*` Eigentum von W1 bleibt und W2 sie nur liest. W2 besitzt `components/app/`, `layouts/App.astro`, `lib/api.*`; W1 besitzt `pages/*.astro` + `tokens.*`. Konfliktpunkt waere allein `tokens.*` — daher die Eigentumsregel.
 
 ### W2 — Auth/Login gegen `/auth/*` (frueh klickbar)
+
 - **Ziel:** Echter Login-Roundtrip aus dem neuen Frontend: Login-Button → OIDC ueber den Gateway → Session-Cookie → eingeloggter Zustand mit geschuetzter App-Shell; Logout invalidiert. Erste Phase mit echtem Mehrwert gegen die Bestands-API.
 - **Umfang:** same-origin-Pfad-Routing funktional einfuehren (Cloudflare/Proxy: `/auth/*` + `/api/*` → Gateway, Rest → Static, EINE Origin); Auth-Insel (Astro Island): "Anmelden" → `/auth/login`, "Abmelden" → `POST /auth/logout`; Auth-Zustand via `fetch("/api/self-service/state")` (401 → Login, 403 → "wartet auf Freigabe", 200 → App-Shell); leere geschuetzte App-Shell (Header/Karten-Layout aus Tokens), die W4 fuellt.
 - **NICHT enthalten:** Anruf-/Item-/Kalender-Rendering (W4), Billing-UI (W3), Settings-Editor (W5), Produktions-Domain-Cutover/DNS (W5). **Keine** Reimplementierung von OIDC/PKCE/Session — lebt im Gateway.
@@ -224,6 +227,7 @@ Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem 
 - **Parallelisierbar: ja** (mit W1, Eigentumsregel). **Nein** mit W3/W4, die auf der App-Shell aufsetzen.
 
 ### W3 — Billing gegen `/api/self-service/billing/*` (NUR Karte hinterlegen)
+
 - **Ziel:** Im eingeloggten Bereich eine Zahlungsmethode via Stripe Checkout hinterlegen und den Karten-Status sehen — exakt der heute existierende Umfang.
 - **Umfang (was API-seitig HEUTE existiert):** Billing-Block analog `tenant.html`, sichtbar NUR wenn `state.hasCard` ein Boolean ist (also `PAYMENT_ENABLED` an; sonst versteckt, byte-identisch zum Bestand). "Zahlungsmethode hinzufuegen" → `POST /api/self-service/billing/setup-checkout` → Redirect zur Stripe-URL; Rueckkehr ueber `?card=ok|canceled` → kurze Rueckmeldung; Karten-Status aus `state.hasCard`.
 - **NICHT enthalten / EHRLICHE ABGRENZUNG (Backend-Luecke, NICHT als Frontend gebaut):** Abo buchen/kuendigen/upgraden/downgraden, Plan-/Tier-Wechsel, Rechnungssicht — **existieren API-seitig HEUTE NICHT.** Verifiziert: `BillingPort` (`src/billing/ports.js`) + `stripe.js` decken Hold/Capture/Cancel (Nummern-Provisioning), Metering und Karten-Setup ab. Es gibt **keine** Stripe-Subscriptions-Nutzung, **keine** Subscribe-Routen, **kein** Plan-Modell im Store-View. Diese Operationen sind **offene Backend-Arbeit** (Abhaengigkeit, siehe 6), kein Frontend-Task dieser Welle. Das Frontend darf nichts Nicht-Existentes aufrufen.
@@ -234,6 +238,7 @@ Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem 
 - **Parallelisierbar: ja** mit W4 (disjunkte Insel-Dateien, beide nur lesend auf `lib/api.*` + Shell-Slots), **nachdem** W2 gemerged ist; **nein** gegenueber W2.
 
 ### W4 — Anruf-Verlauf + Zusammenfassungen + Kalender gegen `/api/self-service/state` (read-only)
+
 - **Ziel:** Die geschuetzte App-Shell zeigt echte Tenant-Daten: Anrufliste, Action Items, anstehende Termine, Agent-Rufnummer — read-only aus dem bestehenden State.
 - **Umfang:** Datensicht-Inseln, die `GET /api/self-service/state` lesen und rendern: `calls` (Richtung, Gegenstelle, `goal`, Status-Badge active/completed/cancelled/failed), `actionItems` (mit `appointment`-Tag), `calendar` (`upcomingCalendar`), `agent.number` + Live-Dot. Direkte Uebernahme der Render-Logik aus `tenant.html` als Astro-Inseln mit W1-Tokens. **HTML-Escaping** (`esc()` im Bestand — XSS-Schutz fuer Tenant-Strings) muss erhalten bleiben.
 - **NICHT enthalten:** Schreibaktionen auf Calls/Items/Kalender (API-seitig nicht vorhanden — read-only), Settings-Editor (W5), Billing (W3).
@@ -244,6 +249,7 @@ Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem 
 - **Parallelisierbar: ja** mit W3 (disjunkte Inseln; Bedingung: keine der beiden editiert `layouts/App.astro` gleichzeitig — die Shell-Slots werden in W2 fest definiert, W3/W4 haengen nur eigene Komponenten in vorhandene Slots).
 
 ### W5 — Domain-Cutover + Settings-Editor + Politur
+
 - **Ziel:** Produktions-Domain endgueltig auf das neue Frontend (eine Domain: `/` → Static, `/api/*` + `/auth/*` → Gateway), Abloesung der Kundensicht-Auslieferung, plus der einzige existierende Schreibpfad (Settings) als Editor und Schliff.
 - **Umfang:** **Domain-Cutover** (Cloudflare-Pfad-Routing produktiv; `PUBLIC_URL`/`redirectUri` auf finale Origin; IdP-Redirect-URI additiv migriert); **Settings-Editor** (`POST /api/self-service/settings` mit der bekannten engen Whitelist — UI bietet AUSSCHLIESSLICH diese Felder an, Server filtert ohnehin via `selfServicePatch`); Politur (Fehlerzustaende, Empty-States, Responsiv, A11y, Lighthouse).
 - **NICHT enthalten:** Abo-Lifecycle-UI (haengt an der Backend-Phase), Owner-Admin-Dashboard, neue Settings-Felder ueber die Whitelist hinaus.
@@ -255,14 +261,14 @@ Reihenfolge so, dass frueh etwas Klickbares gegen die ECHTE API steht: nach dem 
 
 ### Parallelisierungs-Karte (disjunkte Datei-Mengen)
 
-| Phase | Schreibt | Liest nur | Parallel mit |
-|---|---|---|---|
-| W0 | `render.yaml`, `apps/web/`-Geruest | — | nein (Wurzel) |
-| W1 | `pages/*.astro`, `styles/tokens/*`, `layouts/Marketing.astro` | — | W2 |
-| W2 | `components/app/AuthIsland.*`, `layouts/App.astro`, `lib/api.*`, Routing | `tokens.*` | W1 |
-| W3 | `components/app/BillingIsland.*` | `lib/api.*`, `tokens.*`, Shell-Slots | W4 |
-| W4 | `components/app/{Calls,ActionItems,Calendar,AgentChip}.*` | `lib/api.*`, `tokens.*`, Shell-Slots | W3 |
-| W5 | `SettingsIsland.*`, Cloudflare/DNS/Gateway-Env, ggf. `render.yaml` | alles | nein (Cutover global) |
+| Phase | Schreibt                                                                 | Liest nur                            | Parallel mit          |
+| ----- | ------------------------------------------------------------------------ | ------------------------------------ | --------------------- |
+| W0    | `render.yaml`, `apps/web/`-Geruest                                       | —                                    | nein (Wurzel)         |
+| W1    | `pages/*.astro`, `styles/tokens/*`, `layouts/Marketing.astro`            | —                                    | W2                    |
+| W2    | `components/app/AuthIsland.*`, `layouts/App.astro`, `lib/api.*`, Routing | `tokens.*`                           | W1                    |
+| W3    | `components/app/BillingIsland.*`                                         | `lib/api.*`, `tokens.*`, Shell-Slots | W4                    |
+| W4    | `components/app/{Calls,ActionItems,Calendar,AgentChip}.*`                | `lib/api.*`, `tokens.*`, Shell-Slots | W3                    |
+| W5    | `SettingsIsland.*`, Cloudflare/DNS/Gateway-Env, ggf. `render.yaml`       | alles                                | nein (Cutover global) |
 
 Serialisierende Konfliktdateien: `render.yaml` (W0, W5) und `layouts/App.astro` (in W2 final geschnitten, danach von W3/W4 nur als Slot-Konsument genutzt). `lib/api.*` (W2) und `tokens.*` (W1) sind Single-Owner und werden danach nur gelesen — das ist die Bedingung der Parallel-Aussagen.
 
@@ -280,13 +286,16 @@ Serialisierende Konfliktdateien: `render.yaml` (W0, W5) und `layouts/App.astro` 
 ## 6. Offene Fragen / Owner-Entscheidungen
 
 Vor W2 (Login) zu klaeren:
+
 - **Produktdomain + Cloudflare-Pfad-Routing.** Welche Domain? Steht Cloudflare (oder ein anderer Reverse-Proxy) als Routing-Layer bereit? Ohne same-origin traegt das Cookie nicht.
 - **Staging-Gateway mit Feature-Flags an.** `SESSION_SECRET` + `STORE_BACKEND=pg` + `MULTI_TENANT=true` + `SELF_SERVICE_ENABLED=true` (+ IdP/WorkOS-Client) muessen in einer Test-Instanz gesetzt sein.
 
 Vor W3 (Billing) zu klaeren:
+
 - **Abo-Modell + Backend-Phase.** Soll es echte Abos (Stripe Subscriptions) geben? Falls ja, ist eine eigene Backend-Phase (Subscriptions am `BillingPort` + `stripe.js`, neue `/api/self-service/billing/*`-Routen, Plan-Feld in `exportTenantData`/Store-View) Voraussetzung. Das Frontend wartet darauf.
 
 Vor W5 (Cutover) zu klaeren:
+
 - **`PUBLIC_URL`-Cutover-Plan.** Wer fuehrt den gestaffelten Flip aus (IdP-Redirect-URI additiv, Twilio-Test-Nummer zuerst, Signaturtest gegen die neue URL)? Wartungsfenster? Rollback-Pfad? Siehe Pre-Mortem (e).
 - **Der `render.yaml`-Kommentar "PUBLIC_URL nicht noetig"** (Zeile 164) wird mit dem Shared-Domain-Modell falsch und MUSS im Cutover-PR korrigiert werden (Einwand 3).
 - **Verbleib der alten `public/tenant.html`.** Wird sie nach dem Cutover entfernt oder als Fallback gehalten? (Owner-`index.html` bleibt.)
@@ -297,34 +306,34 @@ Vor W5 (Cutover) zu klaeren:
 
 Ein Jahr spaeter, der Bau ist gescheitert. Die wahrscheinlichsten Fehlschlaege — und wie die Strategie sie mechanisch verhindert.
 
-**a) Ein Frontend-Deploy hat den live telefonierenden Gateway umgeworfen.** *Ursache:* `render.yaml` hat heute EINEN Service mit `autoDeploy: true` ohne `buildFilter`. Ein CSS-Commit triggert einen Gateway-Deploy; der alte Container wird mitten im Gather/STT-Zyklus SIGTERMed (free plan, ein Replica, kein Blue/Green), der naechste `/voice/*`-Webhook trifft auf einen noch nicht `/healthz`-gruenen Container → Anruf bricht mit einem echten Menschen ab. Schlaegt der Build fehl (Frontend-Dep in der Wurzel-Lockfile), bleibt der Gateway unten. *Verhindert durch:* getrennter Static-Service + `buildFilter` auf beiden (`ignoredPaths: [apps/web/**, docs/**]` am Gateway, `paths: [apps/web/**]` am Frontend). *Bewiesen durch:* `render list_deploys`-Diff (Frontend-Commit erzeugt KEINEN Gateway-Deploy; Gegenprobe: `src/`-Commit MUSS deployen, sonst wuerden Security-Fixes nie ausgerollt) + Guard-Test auf `render.yaml`. *Falle:* eine gemeinsame Wurzel-Lockfile (R8) — daher eigene Lockfile unter `apps/web/`.
+**a) Ein Frontend-Deploy hat den live telefonierenden Gateway umgeworfen.** _Ursache:_ `render.yaml` hat heute EINEN Service mit `autoDeploy: true` ohne `buildFilter`. Ein CSS-Commit triggert einen Gateway-Deploy; der alte Container wird mitten im Gather/STT-Zyklus SIGTERMed (free plan, ein Replica, kein Blue/Green), der naechste `/voice/*`-Webhook trifft auf einen noch nicht `/healthz`-gruenen Container → Anruf bricht mit einem echten Menschen ab. Schlaegt der Build fehl (Frontend-Dep in der Wurzel-Lockfile), bleibt der Gateway unten. _Verhindert durch:_ getrennter Static-Service + `buildFilter` auf beiden (`ignoredPaths: [apps/web/**, docs/**]` am Gateway, `paths: [apps/web/**]` am Frontend). _Bewiesen durch:_ `render list_deploys`-Diff (Frontend-Commit erzeugt KEINEN Gateway-Deploy; Gegenprobe: `src/`-Commit MUSS deployen, sonst wuerden Security-Fixes nie ausgerollt) + Guard-Test auf `render.yaml`. _Falle:_ eine gemeinsame Wurzel-Lockfile (R8) — daher eigene Lockfile unter `apps/web/`.
 
-**b) Cross-origin-Auth-Fehlkonfiguration hat Sessions/Daten exponiert.** *Ursache (im Parallel-Universum ohne same-origin):* Frontend `app.*`, API `api.*`. Damit das Cookie cross-origin traegt, musste jemand `SameSite=None` setzen (heute korrekt `Lax`) — was den impliziten CSRF-Schutz entfernt, und es gibt nirgends CSRF-Token. Plus CORS mit `credentials: true`; ein Allowlist-Tippfehler (Wildcard-Subdomain oder Origin-Echo) reicht, damit eine fremde Seite mit dem Opfer-Cookie `/api/self-service/state` liest → Transkripte/Kalender leaken. Plus CSP `connect-src` musste geoeffnet werden. *Verhindert durch:* same-origin Pfad-Routing → alles EINE Origin → Cookie bleibt `SameSite=Lax`, KEIN CORS (man kann nicht falsch konfigurieren, was nicht existiert), `connect-src 'self'` bleibt korrekt. **Wichtig:** der Static-Service muss die Sicherheits-Header (CSP, X-Frame-Options, Referrer-Policy) SELBST setzen — `securityHeaders` wirkt nur auf Gateway-Antworten.
+**b) Cross-origin-Auth-Fehlkonfiguration hat Sessions/Daten exponiert.** _Ursache (im Parallel-Universum ohne same-origin):_ Frontend `app.*`, API `api.*`. Damit das Cookie cross-origin traegt, musste jemand `SameSite=None` setzen (heute korrekt `Lax`) — was den impliziten CSRF-Schutz entfernt, und es gibt nirgends CSRF-Token. Plus CORS mit `credentials: true`; ein Allowlist-Tippfehler (Wildcard-Subdomain oder Origin-Echo) reicht, damit eine fremde Seite mit dem Opfer-Cookie `/api/self-service/state` liest → Transkripte/Kalender leaken. Plus CSP `connect-src` musste geoeffnet werden. _Verhindert durch:_ same-origin Pfad-Routing → alles EINE Origin → Cookie bleibt `SameSite=Lax`, KEIN CORS (man kann nicht falsch konfigurieren, was nicht existiert), `connect-src 'self'` bleibt korrekt. **Wichtig:** der Static-Service muss die Sicherheits-Header (CSP, X-Frame-Options, Referrer-Policy) SELBST setzen — `securityHeaders` wirkt nur auf Gateway-Antworten.
 
-**c) Frontend und API-Datenmodell sind auseinandergedriftet.** *Ursache:* Das Frontend rendert `state.subscription.plan` und ruft `POST /api/billing/subscribe` — beides existiert nicht (`/api/self-service/state` liefert verifiziert nur settings/greetingTemplates/[hasCard]/calls/actionItems/calendar/agent). Ergebnis: leere Bloecke, 404-Buttons, kaputtes Dashboard. *Verhindert durch:* Monorepo + EIN-Commit — API-Aenderung und Frontend-Anpassung im selben PR; ein **Contract-Test** (im bestehenden `node:test`-Stil, Server als Kindprozess / `self-service-routes` per pglite) validiert die echte `/api/self-service/state`-Antwort gegen eine versionierte Schema-Definition. Driftet die API, wird der Test im selben PR rot — Drift kann nicht ueber eine Deploy-Grenze schleichen. Das Frontend bleibt duenner Client und nimmt nichts an, was nicht im Contract steht.
+**c) Frontend und API-Datenmodell sind auseinandergedriftet.** _Ursache:_ Das Frontend rendert `state.subscription.plan` und ruft `POST /api/billing/subscribe` — beides existiert nicht (`/api/self-service/state` liefert verifiziert nur settings/greetingTemplates/[hasCard]/calls/actionItems/calendar/agent). Ergebnis: leere Bloecke, 404-Buttons, kaputtes Dashboard. _Verhindert durch:_ Monorepo + EIN-Commit — API-Aenderung und Frontend-Anpassung im selben PR; ein **Contract-Test** (im bestehenden `node:test`-Stil, Server als Kindprozess / `self-service-routes` per pglite) validiert die echte `/api/self-service/state`-Antwort gegen eine versionierte Schema-Definition. Driftet die API, wird der Test im selben PR rot — Drift kann nicht ueber eine Deploy-Grenze schleichen. Das Frontend bleibt duenner Client und nimmt nichts an, was nicht im Contract steht.
 
-**d) Das Design liess sich nicht billig austauschen.** *Ursache:* Tokens existierten, waren aber nicht verpflichtend; Komponenten hartkodierten `#0a84ff`, `padding: 14px` inline (so lebt das heutige `index.html`). Beim Rebrand musste jede Komponente einzeln angefasst werden. *Verhindert durch:* Tokens als einzige Quelle (CSS-Custom-Properties) + ein **Lint-Gate** (stylelint gegen Hex-Literale/Magic-Pixel ausserhalb der Token-Definition), das im CI rot wird — eingerichtet, BEVOR die erste echte Seite gebaut wird, sonst sammelt sich Schuld an, die nie zurueckgezahlt wird.
+**d) Das Design liess sich nicht billig austauschen.** _Ursache:_ Tokens existierten, waren aber nicht verpflichtend; Komponenten hartkodierten `#0a84ff`, `padding: 14px` inline (so lebt das heutige `index.html`). Beim Rebrand musste jede Komponente einzeln angefasst werden. _Verhindert durch:_ Tokens als einzige Quelle (CSS-Custom-Properties) + ein **Lint-Gate** (stylelint gegen Hex-Literale/Magic-Pixel ausserhalb der Token-Definition), das im CI rot wird — eingerichtet, BEVOR die erste echte Seite gebaut wird, sonst sammelt sich Schuld an, die nie zurueckgezahlt wird.
 
-**e) Der `PUBLIC_URL`-Cutover hat OIDC + Stripe + Twilio-Signatur GLEICHZEITIG gebrochen — echte Anrufe gingen auf 403.** *Das gefaehrlichste Szenario, mechanisch verifiziert.* `config.publicUrl` (gespeist aus `PUBLIC_URL || RENDER_EXTERNAL_URL`) steuert DREI externe Vertraege auf einmal: (1) **Twilio-Inbound-Signatur** `config.publicUrl + req.originalUrl` → `twilio.validateRequest`, fail-closed (ohne publicUrl `false`, bei falschem Host HMAC-Mismatch → `403 invalid inbound signature` auf JEDEN eingehenden Anruf — der Agent ist blind, und das ist "korrektes" fail-closed-Verhalten; nur die Config luegt); (2) **OIDC-redirectUri** `config.publicUrl + "/auth/callback"` → bei IdP-Mismatch kann sich niemand einloggen; (3) **Stripe-Return-URLs** → Karte wird nie gebunden. Same-origin ERZWINGT, `PUBLIC_URL` explizit auf die geteilte Domain zu setzen (der `render.yaml`-Kommentar "nicht noetig" gilt dann NICHT mehr — `RENDER_EXTERNAL_URL` zeigt auf `*.onrender.com`). *Verhindert durch gestaffelten, bewiesenen Cutover, Telefonie zuletzt:* (i) Cloudflare-Routing einrichten, `PUBLIC_URL` noch unveraendert; (ii) neue `/auth/callback`-Redirect-URI beim IdP ADDITIV registrieren (alt + neu gleichzeitig); (iii) Signatur-Pfad gegen die NEUE URL testen, ohne echten Anruf (Test bildet mit echtem `TWILIO_AUTH_TOKEN` eine Signatur ueber die neue URL und bekommt `verifyInboundSignature` gruen) BEVOR die Twilio-Konsole umgestellt wird; (iv) zuerst eine Test-Nummer auf neue URL + neues `PUBLIC_URL` (Staging-Gateway), echter Test-Anruf gruen → dann erst die Produktionsnummer. Niemals die produktive Nummer als ersten Versuch. Der Boot-Guard faengt nur "PUBLIC_URL leer", NICHT "gesetzt aber falscher Host" — dagegen hilft nur der Signaturtest.
+**e) Der `PUBLIC_URL`-Cutover hat OIDC + Stripe + Twilio-Signatur GLEICHZEITIG gebrochen — echte Anrufe gingen auf 403.** _Das gefaehrlichste Szenario, mechanisch verifiziert._ `config.publicUrl` (gespeist aus `PUBLIC_URL || RENDER_EXTERNAL_URL`) steuert DREI externe Vertraege auf einmal: (1) **Twilio-Inbound-Signatur** `config.publicUrl + req.originalUrl` → `twilio.validateRequest`, fail-closed (ohne publicUrl `false`, bei falschem Host HMAC-Mismatch → `403 invalid inbound signature` auf JEDEN eingehenden Anruf — der Agent ist blind, und das ist "korrektes" fail-closed-Verhalten; nur die Config luegt); (2) **OIDC-redirectUri** `config.publicUrl + "/auth/callback"` → bei IdP-Mismatch kann sich niemand einloggen; (3) **Stripe-Return-URLs** → Karte wird nie gebunden. Same-origin ERZWINGT, `PUBLIC_URL` explizit auf die geteilte Domain zu setzen (der `render.yaml`-Kommentar "nicht noetig" gilt dann NICHT mehr — `RENDER_EXTERNAL_URL` zeigt auf `*.onrender.com`). _Verhindert durch gestaffelten, bewiesenen Cutover, Telefonie zuletzt:_ (i) Cloudflare-Routing einrichten, `PUBLIC_URL` noch unveraendert; (ii) neue `/auth/callback`-Redirect-URI beim IdP ADDITIV registrieren (alt + neu gleichzeitig); (iii) Signatur-Pfad gegen die NEUE URL testen, ohne echten Anruf (Test bildet mit echtem `TWILIO_AUTH_TOKEN` eine Signatur ueber die neue URL und bekommt `verifyInboundSignature` gruen) BEVOR die Twilio-Konsole umgestellt wird; (iv) zuerst eine Test-Nummer auf neue URL + neues `PUBLIC_URL` (Staging-Gateway), echter Test-Anruf gruen → dann erst die Produktionsnummer. Niemals die produktive Nummer als ersten Versuch. Der Boot-Guard faengt nur "PUBLIC_URL leer", NICHT "gesetzt aber falscher Host" — dagegen hilft nur der Signaturtest.
 
-**f) Secret-/Tenant-Datenleck uebers Frontend.** *Ursachen:* ein `STRIPE_SECRET_KEY`/`OIDC_CLIENT_SECRET`/`DATABASE_URL` landet im Static-Build (Astro-Env ohne `PUBLIC_`-Disziplin, oder `.env` ins Build-Verzeichnis kopiert) → oeffentlich und CDN-gecacht; ein Transkript landet im CDN-Cache (ueber einen Static-/Edge-Pfad statt `/api/*`); ein Token landet in `localStorage` (statt HttpOnly-Cookie) → XSS-erreichbar. *Verhindert durch:* "keine Secrets im Frontend" (CLAUDE.md Regel 4/5) — nur `PUBLIC_`-praefixierte Env erreicht den Client-Bundle, alles andere ist build-only und darf kein Secret sein; Secret-Scan ueber `apps/web/dist` im CI. `no-store` fuer alle `/api/*`-Antworten (`middleware.js`) — Transkripte kommen ausschliesslich ueber `/api/*` und sind nie cachebar; Cloudflare muss `/api/*` als Cache-Bypass behandeln (R6). HttpOnly-Cookie statt localStorage — der duenne Client braucht kein Token im JS-Zugriff. Die `publicCall`/`exportTenantData`-Filtergrenze (kein `streamToken`/`cus_`/`pm_`-Leak) bleibt; das Frontend bekommt nie eine rohe Store-Sicht.
+**f) Secret-/Tenant-Datenleck uebers Frontend.** _Ursachen:_ ein `STRIPE_SECRET_KEY`/`OIDC_CLIENT_SECRET`/`DATABASE_URL` landet im Static-Build (Astro-Env ohne `PUBLIC_`-Disziplin, oder `.env` ins Build-Verzeichnis kopiert) → oeffentlich und CDN-gecacht; ein Transkript landet im CDN-Cache (ueber einen Static-/Edge-Pfad statt `/api/*`); ein Token landet in `localStorage` (statt HttpOnly-Cookie) → XSS-erreichbar. _Verhindert durch:_ "keine Secrets im Frontend" (CLAUDE.md Regel 4/5) — nur `PUBLIC_`-praefixierte Env erreicht den Client-Bundle, alles andere ist build-only und darf kein Secret sein; Secret-Scan ueber `apps/web/dist` im CI. `no-store` fuer alle `/api/*`-Antworten (`middleware.js`) — Transkripte kommen ausschliesslich ueber `/api/*` und sind nie cachebar; Cloudflare muss `/api/*` als Cache-Bypass behandeln (R6). HttpOnly-Cookie statt localStorage — der duenne Client braucht kein Token im JS-Zugriff. Die `publicCall`/`exportTenantData`-Filtergrenze (kein `streamToken`/`cus_`/`pm_`-Leak) bleibt; das Frontend bekommt nie eine rohe Store-Sicht.
 
 ---
 
 ## 8. Restrisiko-Tabelle
 
-| # | Risiko | Schweregrad | Gegenmassnahme |
-|---|--------|-------------|----------------|
-| R1 | `PUBLIC_URL`-Flip mit falschem Host → Twilio-Signatur 403 auf ALLE Inbound-Anrufe | **Kritisch** | Staging-Signaturtest gegen neue URL VOR Konsolen-Umstellung; Test-Nummer zuerst; Boot-Guard faengt nur "leer" |
-| R2 | `buildFilter` fehlt/zu locker → Frontend-Commit redeployt Gateway, kappt aktive Anrufe | **Kritisch** | `ignoredPaths`/`paths` auf beiden Services + Guard-Test; Beweis via `list_deploys`-Diff |
-| R3 | Secret im Static-Build (Stripe/DB/OIDC im CDN) | **Kritisch** | `PUBLIC_`-Disziplin, Secret-Scan ueber `dist` im CI, getrennte Env-Grenze |
-| R4 | Static-Service liefert HTML ohne CSP/X-Frame-Options | Hoch | Static-Service setzt Header selbst; CSP-Smoke-Test gegen die ausgelieferte Seite |
-| R5 | API↔Frontend-Drift (nicht-existente Felder/Endpunkte) | Hoch | geteilter Contract + Contract-Test im selben PR; Frontend bleibt duenner Client |
-| R6 | Cloudflare cached `/api/*` → `no-store` umgangen, Transkript-Leak | Hoch | Cache-Bypass fuer `/api/*` + `/auth/*` + `/voice/*`; nur `/` cachebar |
-| R7 | IdP-Redirect-URI nicht additiv migriert → Login-Totalausfall im Cutover-Fenster | Mittel | alte + neue URI gleichzeitig registrieren, alte erst nach Verifikation entfernen |
-| R8 | Wurzel-Lockfile zieht Frontend-Dep-Bump in den Gateway-`paths`-Filter | Mittel | eigene Lockfile unter `apps/web/` |
-| R9 | Design-Token-Erosion (hartkodierte Werte) | Niedrig-Mittel | stylelint-Gate, VOR der ersten Seite |
-| R10 | Cloudflare als neue SPOF-/Vertrauensschicht vor der Telefonie | Mittel | Routing versioniert + getestet; `/voice/*` von WAF/Bot/Cache ausgenommen; Monitoring auf 403/5xx-Rate an `/voice/*` |
+| #   | Risiko                                                                                 | Schweregrad    | Gegenmassnahme                                                                                                      |
+| --- | -------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| R1  | `PUBLIC_URL`-Flip mit falschem Host → Twilio-Signatur 403 auf ALLE Inbound-Anrufe      | **Kritisch**   | Staging-Signaturtest gegen neue URL VOR Konsolen-Umstellung; Test-Nummer zuerst; Boot-Guard faengt nur "leer"       |
+| R2  | `buildFilter` fehlt/zu locker → Frontend-Commit redeployt Gateway, kappt aktive Anrufe | **Kritisch**   | `ignoredPaths`/`paths` auf beiden Services + Guard-Test; Beweis via `list_deploys`-Diff                             |
+| R3  | Secret im Static-Build (Stripe/DB/OIDC im CDN)                                         | **Kritisch**   | `PUBLIC_`-Disziplin, Secret-Scan ueber `dist` im CI, getrennte Env-Grenze                                           |
+| R4  | Static-Service liefert HTML ohne CSP/X-Frame-Options                                   | Hoch           | Static-Service setzt Header selbst; CSP-Smoke-Test gegen die ausgelieferte Seite                                    |
+| R5  | API↔Frontend-Drift (nicht-existente Felder/Endpunkte)                                  | Hoch           | geteilter Contract + Contract-Test im selben PR; Frontend bleibt duenner Client                                     |
+| R6  | Cloudflare cached `/api/*` → `no-store` umgangen, Transkript-Leak                      | Hoch           | Cache-Bypass fuer `/api/*` + `/auth/*` + `/voice/*`; nur `/` cachebar                                               |
+| R7  | IdP-Redirect-URI nicht additiv migriert → Login-Totalausfall im Cutover-Fenster        | Mittel         | alte + neue URI gleichzeitig registrieren, alte erst nach Verifikation entfernen                                    |
+| R8  | Wurzel-Lockfile zieht Frontend-Dep-Bump in den Gateway-`paths`-Filter                  | Mittel         | eigene Lockfile unter `apps/web/`                                                                                   |
+| R9  | Design-Token-Erosion (hartkodierte Werte)                                              | Niedrig-Mittel | stylelint-Gate, VOR der ersten Seite                                                                                |
+| R10 | Cloudflare als neue SPOF-/Vertrauensschicht vor der Telefonie                          | Mittel         | Routing versioniert + getestet; `/voice/*` von WAF/Bot/Cache ausgenommen; Monitoring auf 403/5xx-Rate an `/voice/*` |
 
 ---
 
@@ -347,10 +356,10 @@ In jeder Phase, ausnahmslos:
 
 ## 10. Einwaende (gegen die festen Entscheidungen — begruendet, Strategie baut trotzdem darauf auf)
 
-**Einwand 1 — Cloudflare-Pfad-Routing macht Cloudflare zum SPOF VOR der Telefonie.** Heute spricht Twilio direkt mit Render. Ein Routing-Layer davor laesst `/voice/*` durch eine NEUE Schicht laufen, deren Fehlkonfiguration (falsche Route, aggressive Bot-/WAF-Regel auf POST-Webhooks, TLS-/Host-Eigenheit, die die Signatur-URL veraendert) die Telefonie kappt — und nach "Twilio-Problem" aussieht, obwohl es das Routing ist. Besonders heikel: aendert Cloudflare Host/Protokoll im weitergereichten Request, passt die rekonstruierte Signatur-URL nicht mehr → 403. *Trotzdem darauf gebaut, WENN:* (a) `/voice/*` von WAF/Bot/Caching ausgenommen ist (Pass-Through), (b) die Signatur-URL explizit gegen die Cloudflare-weitergereichte URL getestet ist, (c) Monitoring die 403/5xx-Rate an `/voice/*` ueberwacht. Die same-origin-Vorteile fuer Auth (Pre-Mortem b) ueberwiegen — aber `/voice/*` ist der teuerste Pfad durch eine neue Schicht und verdient den schaerfsten Test.
+**Einwand 1 — Cloudflare-Pfad-Routing macht Cloudflare zum SPOF VOR der Telefonie.** Heute spricht Twilio direkt mit Render. Ein Routing-Layer davor laesst `/voice/*` durch eine NEUE Schicht laufen, deren Fehlkonfiguration (falsche Route, aggressive Bot-/WAF-Regel auf POST-Webhooks, TLS-/Host-Eigenheit, die die Signatur-URL veraendert) die Telefonie kappt — und nach "Twilio-Problem" aussieht, obwohl es das Routing ist. Besonders heikel: aendert Cloudflare Host/Protokoll im weitergereichten Request, passt die rekonstruierte Signatur-URL nicht mehr → 403. _Trotzdem darauf gebaut, WENN:_ (a) `/voice/*` von WAF/Bot/Caching ausgenommen ist (Pass-Through), (b) die Signatur-URL explizit gegen die Cloudflare-weitergereichte URL getestet ist, (c) Monitoring die 403/5xx-Rate an `/voice/*` ueberwacht. Die same-origin-Vorteile fuer Auth (Pre-Mortem b) ueberwiegen — aber `/voice/*` ist der teuerste Pfad durch eine neue Schicht und verdient den schaerfsten Test.
 
-**Einwand 2 — same-origin via Proxy fuehrt eine versteckte Kopplung wieder ein, die die Service-Trennung gerade aufloesen sollte.** Wir trennen die Render-Services (gut, Pre-Mortem a), kleben sie aber per Cloudflare-Pfad zu EINER Origin zusammen. *Trotzdem darauf gebaut:* die Kopplung ist gewollt und auf den Browser-Origin-Vorteil begrenzt; sie ist deklarativ (Routing-Regeln, versionierbar, testbar) statt prozessual (geteilter Container). Bedingung: die Routing-Regeln gehoeren in Versionskontrolle und unter denselben Guard-Test-Anspruch wie `render.yaml` — sonst ist es eine unsichtbare, ungetestete Konfiguration vor einem sicherheitskritischen System.
+**Einwand 2 — same-origin via Proxy fuehrt eine versteckte Kopplung wieder ein, die die Service-Trennung gerade aufloesen sollte.** Wir trennen die Render-Services (gut, Pre-Mortem a), kleben sie aber per Cloudflare-Pfad zu EINER Origin zusammen. _Trotzdem darauf gebaut:_ die Kopplung ist gewollt und auf den Browser-Origin-Vorteil begrenzt; sie ist deklarativ (Routing-Regeln, versionierbar, testbar) statt prozessual (geteilter Container). Bedingung: die Routing-Regeln gehoeren in Versionskontrolle und unter denselben Guard-Test-Anspruch wie `render.yaml` — sonst ist es eine unsichtbare, ungetestete Konfiguration vor einem sicherheitskritischen System.
 
-**Einwand 3 — der `render.yaml`-Kommentar "PUBLIC_URL nicht noetig" (Zeile 164) wird zur Falle.** Die feste Entscheidung (shared domain) macht genau diesen Kommentar FALSCH, aber er steht noch da und suggeriert dem naechsten Bearbeiter, `PUBLIC_URL` nicht zu setzen — die wahrscheinlichste Praxis-Ursache fuer Pre-Mortem (e). *Konsequenz:* im selben PR, der den Cutover macht, MUSS dieser Kommentar korrigiert und `PUBLIC_URL` explizit als Pflicht (sync:false, Produktdomain) in `render.yaml` aufgenommen werden. Ein veralteter Kommentar ist hier kein Schoenheitsfehler, sondern ein direkter Pfad zu "403 auf alle Anrufe".
+**Einwand 3 — der `render.yaml`-Kommentar "PUBLIC_URL nicht noetig" (Zeile 164) wird zur Falle.** Die feste Entscheidung (shared domain) macht genau diesen Kommentar FALSCH, aber er steht noch da und suggeriert dem naechsten Bearbeiter, `PUBLIC_URL` nicht zu setzen — die wahrscheinlichste Praxis-Ursache fuer Pre-Mortem (e). _Konsequenz:_ im selben PR, der den Cutover macht, MUSS dieser Kommentar korrigiert und `PUBLIC_URL` explizit als Pflicht (sync:false, Produktdomain) in `render.yaml` aufgenommen werden. Ein veralteter Kommentar ist hier kein Schoenheitsfehler, sondern ein direkter Pfad zu "403 auf alle Anrufe".
 
 Zusammengefasst: Die festen Entscheidungen sind tragfaehig. Die zwei Stellen, an denen sie scheitern koennen, haengen beide an EINER Variable und EINER neuen Schicht — `PUBLIC_URL` (drei externe Vertraege gleichzeitig) und Cloudflare vor `/voice/*`. Beide sind nicht durch mehr Code zu sichern, sondern durch gestaffelten, bewiesenen Cutover und einen Signaturtest gegen die exakte neue URL, bevor die produktive Telefonie umgestellt wird.

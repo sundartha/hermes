@@ -14,7 +14,8 @@
 import { Router } from "express";
 
 export const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub)
-export const validIdentity = (e) => typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
+export const validIdentity = (e) =>
+  typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
 
 // deps: { store, audit }. store traegt listProfiles/setProfile/deleteProfile;
 // audit ist die util.audit-Funktion (loggt nur Keys, keine Werte/PII).
@@ -25,7 +26,10 @@ export function makeProfileRoutes({ store, audit }) {
 
   router.post("/api/profiles", (req, res) => {
     const { email, ...fields } = req.body || {};
-    if (!validIdentity(email)) return res.status(400).json({ error: "email/identity (req.auth.email ODER IdP-sub) ist Pflicht" });
+    if (!validIdentity(email))
+      return res
+        .status(400)
+        .json({ error: "email/identity (req.auth.email ODER IdP-sub) ist Pflicht" });
     const { profile, changed } = store.setProfile(email, fields);
     // Nur email + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
     audit("profile_update", req, `email=${email} keys=${changed.join(",") || "-"}`);

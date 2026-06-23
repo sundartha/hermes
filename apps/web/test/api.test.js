@@ -78,7 +78,7 @@ test("logout schickt POST /auth/logout same-origin und liefert null bei 204", as
       json: () => {
         throw new Error("204 hat keinen Body");
       },
-    })
+    }),
   );
   try {
     const result = await logout();
@@ -189,7 +189,11 @@ test("cardStatus: present=true mit Boolean -> hasCard wird durchgereicht", () =>
 // (Backend antwortet mit JSON { url } -- verifiziert in self-service-routes.js).
 test("startBillingSetupCheckout postet same-origin und liefert die Stripe-url", async () => {
   const f = stubFetch(() =>
-    fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_test" } })
+    fakeResponse({
+      ok: true,
+      status: 200,
+      json: { url: "https://checkout.stripe.com/c/pay/cs_test" },
+    }),
   );
   try {
     const url = await startBillingSetupCheckout();

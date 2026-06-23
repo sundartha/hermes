@@ -14,21 +14,27 @@ function stubClient(rows) {
 // TC1 - Superuser-Rolle wirft (AC1)
 test("assertNoBypassRls: Superuser -> Error mit [F5] + Superuser", async () => {
   const client = stubClient([{ is_su: "on", rolbypassrls: false }]);
-  await assert.rejects(() => assertNoBypassRls(client), (e) => {
-    assert.match(e.message, /\[F5\]/);
-    assert.match(e.message, /superuser/i);
-    return true;
-  });
+  await assert.rejects(
+    () => assertNoBypassRls(client),
+    (e) => {
+      assert.match(e.message, /\[F5\]/);
+      assert.match(e.message, /superuser/i);
+      return true;
+    },
+  );
 });
 
 // TC2 - BYPASSRLS-Rolle wirft (AC2)
 test("assertNoBypassRls: BYPASSRLS -> Error mit [F5] + bypassrls", async () => {
   const client = stubClient([{ is_su: "off", rolbypassrls: true }]);
-  await assert.rejects(() => assertNoBypassRls(client), (e) => {
-    assert.match(e.message, /\[F5\]/);
-    assert.match(e.message, /bypassrls/i);
-    return true;
-  });
+  await assert.rejects(
+    () => assertNoBypassRls(client),
+    (e) => {
+      assert.match(e.message, /\[F5\]/);
+      assert.match(e.message, /bypassrls/i);
+      return true;
+    },
+  );
 });
 
 // TC3 - Normaler non-superuser/NOBYPASSRLS-Pfad kein Fehler (AC3)
@@ -55,8 +61,12 @@ test("assertNoBypassRls: leeres rows -> Error (fail-closed)", async () => {
 test("T-P0-04: createPortalRunner connect-Fehler -> pool.end + throw (kein Pool-Leak)", async () => {
   let ended = false;
   const fakePool = {
-    connect: async () => { throw new Error("connect ECONNREFUSED 127.0.0.1:1"); },
-    end: async () => { ended = true; },
+    connect: async () => {
+      throw new Error("connect ECONNREFUSED 127.0.0.1:1");
+    },
+    end: async () => {
+      ended = true;
+    },
   };
   await assert.rejects(() => createPortalRunner({ pool: fakePool }), /ECONNREFUSED/);
   assert.equal(ended, true, "pool.end muss laufen, sonst leakt der Pool");
@@ -70,9 +80,16 @@ test("T-P0-04b: createPortalRunner Superuser-Assertion -> client.release + pool.
   let ended = false;
   const client = {
     query: async () => ({ rows: [{ is_su: "on", rolbypassrls: false }] }),
-    release: () => { released = true; },
+    release: () => {
+      released = true;
+    },
   };
-  const fakePool = { connect: async () => client, end: async () => { ended = true; } };
+  const fakePool = {
+    connect: async () => client,
+    end: async () => {
+      ended = true;
+    },
+  };
   await assert.rejects(() => createPortalRunner({ pool: fakePool }), /\[F5\]/);
   assert.equal(released, true, "client.release muss laufen");
   assert.equal(ended, true, "pool.end muss laufen");

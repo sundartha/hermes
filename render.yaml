@@ -186,7 +186,7 @@ services:
   # ein reiner apps/web/**-Commit loest hier (paths), aber NICHT am Gateway
   # (ignoredPaths oben) einen Deploy aus. Erstmal unter eigener onrender.com-URL.
   - type: web
-    runtime: static            # Render-Static-Site (gegen render.yaml-Schema geprueft: type:web + runtime:static + staticPublishPath)
+    runtime: static # Render-Static-Site (gegen render.yaml-Schema geprueft: type:web + runtime:static + staticPublishPath)
     name: hermes-web
     # KEIN plan-Feld: Static Sites haben keine Plan-Stufen (immer kostenlos). Ein
     # "plan: free" lehnt Render beim Blueprint ab ("no such plan free for service
@@ -203,10 +203,10 @@ services:
       paths:
         - "apps/web/**"
     routes:
-      - type: rewrite          # SPA-Fallback NUR fuer den interaktiven App-Teil (W2+)
+      - type: rewrite # SPA-Fallback NUR fuer den interaktiven App-Teil (W2+)
         source: /app/*
         destination: /app/index.html
-    headers:                   # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
+    headers: # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
       - path: /*
         name: X-Frame-Options
         value: DENY

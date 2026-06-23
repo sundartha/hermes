@@ -63,7 +63,9 @@ export function makePgStore(runner) {
       // (nur der Marker, NIE die Nummer). Persistenz via save() unten (Gate beruecksichtigt
       // jetzt auch privateNumber, damit der Seed auch ohne ownerName round-trippt).
       if (!ops.seedOwnerPrivateNumber(state, config.ownerNumber, OWNER_TENANT_ID))
-        console.warn("[pg] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).");
+        console.warn(
+          "[pg] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).",
+        );
     });
     // Nur flushen, wenn der Seed tatsaechlich etwas am Owner-Record gesetzt hat (ownerName
     // ODER privateNumber, F2 P11) - leere Config -> Boot-Refusal greift ohnehin vorher, kein
@@ -149,7 +151,8 @@ export function makePgStore(runner) {
       save();
       return ev;
     },
-    findConflict: (tenantId, startIso, endIso) => ops.findConflict(requireState(), tenantId, startIso, endIso),
+    findConflict: (tenantId, startIso, endIso) =>
+      ops.findConflict(requireState(), tenantId, startIso, endIso),
 
     // Tenant-Kontext-Seam (I0): liest den hydrierten Spiegel (kein DB-Roundtrip),
     // config.ownerName als Owner-Fallback (Wrapper-Parity zu json.js).
@@ -248,7 +251,8 @@ export function makePgStore(runner) {
       const removed = ops.eraseTenantData(requireState(), tenantId);
       // F2 P10: auch eine geloeschte privateNumber (PII) muss persistieren - sonst kaeme sie
       // bei einem Tenant ganz ohne Calls nach dem Restart zurueck (flushTenants schreibt NULL).
-      if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
+      if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
+        save();
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
@@ -304,9 +308,11 @@ async function hydrate(client) {
 // entstuende ein leeres ownerName-Feld). Der Owner ist immer enthalten (seedDefaults
 // garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
-  const rows = (await client.query(
-    `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language, private_number FROM tenant`
-  )).rows;
+  const rows = (
+    await client.query(
+      `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language, private_number FROM tenant`,
+    )
+  ).rows;
   return rows.map((r) => {
     const tenant = { id: r.id, status: r.status };
     if (r.owner_name != null) tenant.ownerName = r.owner_name;
@@ -321,7 +327,8 @@ async function hydrateTenants(client) {
     // Pay1: nur-nicht-null hydrieren (Muster wie kyc_level) -> Tenant ohne Karte
     // behaelt KEIN leeres Feld (kein Drift json<->pg, R6).
     if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
-    if (r.stripe_payment_method_id != null) tenant.stripePaymentMethodId = r.stripe_payment_method_id;
+    if (r.stripe_payment_method_id != null)
+      tenant.stripePaymentMethodId = r.stripe_payment_method_id;
     // Geo (F1): nur-nicht-null hydrieren (Muster wie kyc_level/stripe_*) -> ein
     // Owner/Bestand ohne Wert behaelt KEIN leeres Feld (kein json<->pg-Drift, R7/R12);
     // der Code-Fallback || DE/de der Konsumenten greift.
@@ -341,33 +348,60 @@ async function hydrateTenants(client) {
 // ueberschrieben - sonst verloeren frueher hydrierte Tenants ihre Daten). profiles
 // NUR unter dem Owner (global keyed-by-email, geerbte Entscheidung #9).
 async function hydrateTenantInto(client, state, tenantId) {
-  const settingsRows = (await client.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])).rows;
-  const callRows = (await client.query(`SELECT * FROM call WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId])).rows;
-  const segRows = (await client.query(
-    `SELECT * FROM transcript_segment WHERE tenant_id = $1 ORDER BY id ASC`, [tenantId]
-  )).rows;
-  const itemRows = (await client.query(
-    `SELECT * FROM action_item WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
-  )).rows;
-  const calRows = (await client.query(`SELECT * FROM calendar_event WHERE tenant_id = $1 ORDER BY seq ASC`, [tenantId])).rows;
-  const usageRows = (await client.query(`SELECT * FROM usage WHERE tenant_id = $1`, [tenantId])).rows;
-  const notifRows = (await client.query(
-    `SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId]
-  )).rows;
-  const numberRows = (await client.query(
-    `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language FROM number WHERE tenant_id = $1`, [tenantId]
-  )).rows;
-  const jobRows = (await client.query(
-    `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
-       FROM provisioning_job WHERE tenant_id = $1`, [tenantId]
-  )).rows;
-  const budgetRows = (await client.query(
-    `SELECT tenant_id, budget_cents, hard_cap_cents FROM tenant_budget WHERE tenant_id = $1`, [tenantId]
-  )).rows;
-  const ueRows = (await client.query(
-    `SELECT id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
-       FROM usage_event WHERE tenant_id = $1 ORDER BY id ASC`, [tenantId]
-  )).rows;
+  const settingsRows = (
+    await client.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])
+  ).rows;
+  const callRows = (
+    await client.query(`SELECT * FROM call WHERE tenant_id = $1 ORDER BY seq DESC`, [tenantId])
+  ).rows;
+  const segRows = (
+    await client.query(`SELECT * FROM transcript_segment WHERE tenant_id = $1 ORDER BY id ASC`, [
+      tenantId,
+    ])
+  ).rows;
+  const itemRows = (
+    await client.query(`SELECT * FROM action_item WHERE tenant_id = $1 ORDER BY seq DESC`, [
+      tenantId,
+    ])
+  ).rows;
+  const calRows = (
+    await client.query(`SELECT * FROM calendar_event WHERE tenant_id = $1 ORDER BY seq ASC`, [
+      tenantId,
+    ])
+  ).rows;
+  const usageRows = (await client.query(`SELECT * FROM usage WHERE tenant_id = $1`, [tenantId]))
+    .rows;
+  const notifRows = (
+    await client.query(`SELECT * FROM notification WHERE tenant_id = $1 ORDER BY seq DESC`, [
+      tenantId,
+    ])
+  ).rows;
+  const numberRows = (
+    await client.query(
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language FROM number WHERE tenant_id = $1`,
+      [tenantId],
+    )
+  ).rows;
+  const jobRows = (
+    await client.query(
+      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
+       FROM provisioning_job WHERE tenant_id = $1`,
+      [tenantId],
+    )
+  ).rows;
+  const budgetRows = (
+    await client.query(
+      `SELECT tenant_id, budget_cents, hard_cap_cents FROM tenant_budget WHERE tenant_id = $1`,
+      [tenantId],
+    )
+  ).rows;
+  const ueRows = (
+    await client.query(
+      `SELECT id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
+       FROM usage_event WHERE tenant_id = $1 ORDER BY id ASC`,
+      [tenantId],
+    )
+  ).rows;
 
   const segmentsByCall = groupTranscripts(segRows);
   const itemIdsByCall = groupActionItemIds(itemRows);
@@ -378,47 +412,57 @@ async function hydrateTenantInto(client, state, tenantId) {
   state.calls.push(...callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall)));
   state.actionItems.push(...itemRows.map(rowToActionItem));
   state.notifications.push(...notifRows.map(rowToNotification));
-  state.numbers.push(...numberRows.map((r) => ({
-    id: r.id,
-    e164: r.e164,
-    tenantId: r.tenant_id,
-    provider: r.provider,
-    status: r.status,
-    providerNumberId: r.provider_number_id,
-    paymentIntentId: r.payment_intent_id ?? null,
-    // Geo (F1): Bestands-Nummer ohne Wert -> null (kein undefined-Drift, Muster wie
-    // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
-    country: r.country ?? null,
-    language: r.language ?? null,
-  })));
-  state.provisioningJobs.push(...jobRows.map((r) => ({
-    id: r.id,
-    tenantId: r.tenant_id,
-    numberId: r.number_id,
-    kind: r.kind,
-    status: r.status,
-    idempotencyKey: r.idempotency_key,
-    attempts: r.attempts,
-    lastError: r.last_error ?? null,
-  })));
-  state.tenantBudgets.push(...budgetRows.map((r) => ({
-    tenantId: r.tenant_id,
-    budgetCents: Number(r.budget_cents),
-    hardCapCents: Number(r.hard_cap_cents),
-  })));
-  state.usageEvents.push(...ueRows.map((r) => ({
-    id: r.id,
-    tenantId: r.tenant_id,
-    callId: r.call_id,
-    kind: r.kind,
-    quantity: Number(r.quantity),
-    costCents: Number(r.cost_cents),
-    occurredAt: r.occurred_at,
-    stripeMeterSent: r.stripe_meter_sent,
-  })));
+  state.numbers.push(
+    ...numberRows.map((r) => ({
+      id: r.id,
+      e164: r.e164,
+      tenantId: r.tenant_id,
+      provider: r.provider,
+      status: r.status,
+      providerNumberId: r.provider_number_id,
+      paymentIntentId: r.payment_intent_id ?? null,
+      // Geo (F1): Bestands-Nummer ohne Wert -> null (kein undefined-Drift, Muster wie
+      // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
+      country: r.country ?? null,
+      language: r.language ?? null,
+    })),
+  );
+  state.provisioningJobs.push(
+    ...jobRows.map((r) => ({
+      id: r.id,
+      tenantId: r.tenant_id,
+      numberId: r.number_id,
+      kind: r.kind,
+      status: r.status,
+      idempotencyKey: r.idempotency_key,
+      attempts: r.attempts,
+      lastError: r.last_error ?? null,
+    })),
+  );
+  state.tenantBudgets.push(
+    ...budgetRows.map((r) => ({
+      tenantId: r.tenant_id,
+      budgetCents: Number(r.budget_cents),
+      hardCapCents: Number(r.hard_cap_cents),
+    })),
+  );
+  state.usageEvents.push(
+    ...ueRows.map((r) => ({
+      id: r.id,
+      tenantId: r.tenant_id,
+      callId: r.call_id,
+      kind: r.kind,
+      quantity: Number(r.quantity),
+      costCents: Number(r.cost_cents),
+      occurredAt: r.occurred_at,
+      stripeMeterSent: r.stripe_meter_sent,
+    })),
+  );
 
   if (tenantId === OWNER_TENANT_ID) {
-    const profileRows = (await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])).rows;
+    const profileRows = (
+      await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])
+    ).rows;
     state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
   }
 }
@@ -503,7 +547,14 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
 }
 
 function rowToActionItem(r) {
-  return { id: r.id, callId: r.call_id, text: r.text, type: r.type, done: r.done, createdAt: r.created_at };
+  return {
+    id: r.id,
+    callId: r.call_id,
+    text: r.text,
+    type: r.type,
+    done: r.done,
+    createdAt: r.created_at,
+  };
 }
 
 function rowToCalendarEvent(r) {
@@ -554,7 +605,11 @@ async function flush(client, state) {
 async function flushTenantScope(client, tenantId, state) {
   const { calls, callIds } = scopeOf(state, tenantId);
   await flushCalls(client, tenantId, calls);
-  await flushActionItems(client, tenantId, state.actionItems.filter((a) => callIds.has(a.callId)));
+  await flushActionItems(
+    client,
+    tenantId,
+    state.actionItems.filter((a) => callIds.has(a.callId)),
+  );
   await flushCalendar(client, tenantId, ops.calendarFor(state, tenantId));
   await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
   await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
@@ -584,9 +639,19 @@ async function flushTenants(client, tenants) {
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
          private_number=EXCLUDED.private_number`,
-      [t.id, t.status, t.ownerName ?? null, t.firstName ?? null, t.idpSubject ?? null, t.kycLevel ?? null,
-       t.stripeCustomerId ?? null, t.stripePaymentMethodId ?? null, t.country ?? null, t.defaultLanguage ?? null,
-       t.privateNumber ?? null]
+      [
+        t.id,
+        t.status,
+        t.ownerName ?? null,
+        t.firstName ?? null,
+        t.idpSubject ?? null,
+        t.kycLevel ?? null,
+        t.stripeCustomerId ?? null,
+        t.stripePaymentMethodId ?? null,
+        t.country ?? null,
+        t.defaultLanguage ?? null,
+        t.privateNumber ?? null,
+      ],
     );
   }
 }
@@ -607,7 +672,7 @@ function scopeOf(state, tenantId) {
 // und keine Notification faellt zwischen die Tenants.
 function notificationsForTenant(state, tenantId, callIds) {
   return state.notifications.filter(
-    (n) => callIds.has(n.callId) || (n.callId == null && tenantId === OWNER_TENANT_ID)
+    (n) => callIds.has(n.callId) || (n.callId == null && tenantId === OWNER_TENANT_ID),
   );
 }
 
@@ -628,9 +693,18 @@ async function flushSettings(client, tenantId, settings) {
        allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
        allow_bank_data=EXCLUDED.allow_bank_data, sms_summary_opt_in=EXCLUDED.sms_summary_opt_in,
        language=EXCLUDED.language`,
-    [tenantId, settings.agentName, settings.greeting, settings.allowCalendar, settings.allowBooking,
-      settings.allowSummaries, settings.allowPersonalData, settings.allowBankData,
-      settings.smsSummaryOptIn, settings.language]
+    [
+      tenantId,
+      settings.agentName,
+      settings.greeting,
+      settings.allowCalendar,
+      settings.allowBooking,
+      settings.allowSummaries,
+      settings.allowPersonalData,
+      settings.allowBankData,
+      settings.smsSummaryOptIn,
+      settings.language,
+    ],
   );
 }
 
@@ -641,12 +715,17 @@ async function flushUsage(client, tenantId, usage) {
      ON CONFLICT (tenant_id) DO UPDATE SET
        input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
        cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls`,
-    [tenantId, usage.inputTokens, usage.outputTokens, usage.costEur, usage.calls]
+    [tenantId, usage.inputTokens, usage.outputTokens, usage.costEur, usage.calls],
   );
 }
 
 async function flushCalls(client, tenantId, calls) {
-  await deleteMissing(client, "call", tenantId, calls.map((c) => c.id));
+  await deleteMissing(
+    client,
+    "call",
+    tenantId,
+    calls.map((c) => c.id),
+  );
   for (const c of calls) {
     await client.query(
       `INSERT INTO call
@@ -660,10 +739,30 @@ async function flushCalls(client, tenantId, calls) {
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
          summary_sms_sent_at=EXCLUDED.summary_sms_sent_at`,
-      [c.id, tenantId, c.streamToken, c.twilioSid, c.direction, c.from, c.to, c.goal,
-        c.briefing, c.constraints, c.callerName, c.language, c.maxDurationS, c.requestedBy,
-        c.status, c.startedAt, c.answeredAt, c.endedAt, c.summary, serializeObjective(c.objectiveAchieved),
-        c.provider || DEFAULT_PROVIDER, c.summarySmsSentAt ?? null]
+      [
+        c.id,
+        tenantId,
+        c.streamToken,
+        c.twilioSid,
+        c.direction,
+        c.from,
+        c.to,
+        c.goal,
+        c.briefing,
+        c.constraints,
+        c.callerName,
+        c.language,
+        c.maxDurationS,
+        c.requestedBy,
+        c.status,
+        c.startedAt,
+        c.answeredAt,
+        c.endedAt,
+        c.summary,
+        serializeObjective(c.objectiveAchieved),
+        c.provider || DEFAULT_PROVIDER,
+        c.summarySmsSentAt ?? null,
+      ],
     );
     await flushTranscript(client, tenantId, c);
   }
@@ -677,23 +776,32 @@ async function flushCalls(client, tenantId, calls) {
 // zweite Linie. Trifft NUR diesen Call dieses Tenants; andere bleiben unberuehrt.
 async function flushTranscript(client, tenantId, call) {
   if (call.transcript.length === 0) {
-    await client.query(`DELETE FROM transcript_segment WHERE tenant_id=$1 AND call_id=$2`, [tenantId, call.id]);
+    await client.query(`DELETE FROM transcript_segment WHERE tenant_id=$1 AND call_id=$2`, [
+      tenantId,
+      call.id,
+    ]);
     return;
   }
   const existing = Number(
-    (await client.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [call.id])).rows[0].n
+    (await client.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [call.id]))
+      .rows[0].n,
   );
   for (let i = existing; i < call.transcript.length; i++) {
     const seg = call.transcript[i];
     await client.query(
       `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`,
-      [call.id, tenantId, seg.role, seg.text, seg.at]
+      [call.id, tenantId, seg.role, seg.text, seg.at],
     );
   }
 }
 
 async function flushActionItems(client, tenantId, items) {
-  await deleteMissing(client, "action_item", tenantId, items.map((i) => i.id));
+  await deleteMissing(
+    client,
+    "action_item",
+    tenantId,
+    items.map((i) => i.id),
+  );
   // Aelteste zuerst einfuegen, damit seq die unshift-Reihenfolge widerspiegelt.
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
@@ -701,32 +809,42 @@ async function flushActionItems(client, tenantId, items) {
       `INSERT INTO action_item (id, tenant_id, call_id, text, type, done, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (id) DO UPDATE SET done=EXCLUDED.done`,
-      [it.id, tenantId, it.callId, it.text, it.type, it.done, it.createdAt]
+      [it.id, tenantId, it.callId, it.text, it.type, it.done, it.createdAt],
     );
   }
 }
 
 async function flushCalendar(client, tenantId, events) {
-  await deleteMissing(client, "calendar_event", tenantId, events.map((e) => e.id));
+  await deleteMissing(
+    client,
+    "calendar_event",
+    tenantId,
+    events.map((e) => e.id),
+  );
   for (const ev of events) {
     await client.query(
       `INSERT INTO calendar_event (id, tenant_id, title, starts_at, ends_at)
        VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, starts_at=EXCLUDED.starts_at, ends_at=EXCLUDED.ends_at`,
-      [ev.id, tenantId, ev.title, ev.start, ev.end]
+      [ev.id, tenantId, ev.title, ev.start, ev.end],
     );
   }
 }
 
 async function flushNotifications(client, tenantId, notifications) {
-  await deleteMissing(client, "notification", tenantId, notifications.map((n) => n.id));
+  await deleteMissing(
+    client,
+    "notification",
+    tenantId,
+    notifications.map((n) => n.id),
+  );
   // Aelteste zuerst, damit seq die unshift-Reihenfolge (neueste zuerst) ergibt.
   for (let i = notifications.length - 1; i >= 0; i--) {
     const n = notifications[i];
     await client.query(
       `INSERT INTO notification (id, tenant_id, title, body, call_id, at)
        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
-      [n.id, tenantId, n.title, n.body, n.callId, n.at]
+      [n.id, tenantId, n.title, n.body, n.callId, n.at],
     );
   }
 }
@@ -738,7 +856,7 @@ async function flushProfiles(client, tenantId, profiles) {
     await client.query(
       `INSERT INTO profile (tenant_id, email, data) VALUES ($1,$2,$3)
        ON CONFLICT (tenant_id, email) DO UPDATE SET data=EXCLUDED.data`,
-      [tenantId, email, JSON.stringify(data)]
+      [tenantId, email, JSON.stringify(data)],
     );
   }
 }
@@ -750,7 +868,12 @@ async function flushProfiles(client, tenantId, profiles) {
 // per-Tenant-GUC). So round-trippen die Nummern aller Tenants (nicht mehr owner-only).
 async function flushNumbers(client, tenantId, numbers) {
   const own = numbers.filter((n) => n.tenantId === tenantId);
-  await deleteMissing(client, "number", tenantId, own.map((n) => n.id));
+  await deleteMissing(
+    client,
+    "number",
+    tenantId,
+    own.map((n) => n.id),
+  );
   for (const n of own) {
     await client.query(
       `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language)
@@ -760,7 +883,17 @@ async function flushNumbers(client, tenantId, numbers) {
          status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
          payment_intent_id=EXCLUDED.payment_intent_id,
          country=EXCLUDED.country, language=EXCLUDED.language`,
-      [n.id, tenantId, n.e164 ?? null, n.provider || DEFAULT_PROVIDER, n.status, n.providerNumberId ?? null, n.paymentIntentId ?? null, n.country ?? null, n.language ?? null]
+      [
+        n.id,
+        tenantId,
+        n.e164 ?? null,
+        n.provider || DEFAULT_PROVIDER,
+        n.status,
+        n.providerNumberId ?? null,
+        n.paymentIntentId ?? null,
+        n.country ?? null,
+        n.language ?? null,
+      ],
     );
   }
 }
@@ -771,14 +904,28 @@ async function flushNumbers(client, tenantId, numbers) {
 // Rest (number_id/kind/idempotency_key) bleibt nach dem Insert stabil.
 async function flushProvisioningJobs(client, tenantId, jobs) {
   const own = jobs.filter((j) => j.tenantId === tenantId);
-  await deleteMissing(client, "provisioning_job", tenantId, own.map((j) => j.id));
+  await deleteMissing(
+    client,
+    "provisioning_job",
+    tenantId,
+    own.map((j) => j.id),
+  );
   for (const j of own) {
     await client.query(
       `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
-      [j.id, tenantId, j.numberId, j.kind, j.status, j.idempotencyKey, j.attempts, j.lastError ?? null]
+      [
+        j.id,
+        tenantId,
+        j.numberId,
+        j.kind,
+        j.status,
+        j.idempotencyKey,
+        j.attempts,
+        j.lastError ?? null,
+      ],
     );
   }
 }
@@ -795,7 +942,7 @@ async function flushTenantBudgets(client, tenantId, budgets) {
        VALUES ($1,$2,$3)
        ON CONFLICT (tenant_id) DO UPDATE SET
          budget_cents=EXCLUDED.budget_cents, hard_cap_cents=EXCLUDED.hard_cap_cents`,
-      [tenantId, b.budgetCents, b.hardCapCents]
+      [tenantId, b.budgetCents, b.hardCapCents],
     );
   }
 }
@@ -805,13 +952,18 @@ async function flushTenantBudgets(client, tenantId, budgets) {
 // aenderbar nach dem Insert). Muster wie flushProvisioningJobs.
 async function flushUsageEvents(client, tenantId, events) {
   const own = events.filter((e) => e.tenantId === tenantId);
-  await deleteMissing(client, "usage_event", tenantId, own.map((e) => e.id));
+  await deleteMissing(
+    client,
+    "usage_event",
+    tenantId,
+    own.map((e) => e.id),
+  );
   for (const e of own) {
     await client.query(
       `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
-      [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent]
+      [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent],
     );
   }
 }
@@ -834,8 +986,8 @@ async function deleteMissingByText(client, table, column, tenantId, keepValues) 
     await client.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenantId]);
     return;
   }
-  await client.query(
-    `DELETE FROM ${table} WHERE tenant_id=$1 AND ${column} <> ALL($2::text[])`,
-    [tenantId, keepValues]
-  );
+  await client.query(`DELETE FROM ${table} WHERE tenant_id=$1 AND ${column} <> ALL($2::text[])`, [
+    tenantId,
+    keepValues,
+  ]);
 }

@@ -6,7 +6,11 @@
 // weil der Override Telnyx-only ist (Twilio byte-identisch, siehe directive-render).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runOutbound, runOutboundThenTurn, startCountingAnthropicMock } from "./_outbound-harness.js";
+import {
+  runOutbound,
+  runOutboundThenTurn,
+  startCountingAnthropicMock,
+} from "./_outbound-harness.js";
 
 test("G3: Outbound-Erst-Gather bleibt auf auto (kein festes N) - Telnyx", async () => {
   const { body } = await runOutbound({ provider: "telnyx" });
@@ -19,7 +23,11 @@ test("G3: Folge-Turn-Gather traegt festes speechTimeout=2 (kein auto) - Telnyx",
   // einen Folge-Gather ueber followupTurnDirectives.
   const mock = await startCountingAnthropicMock({ failFirst: 0 });
   try {
-    const { turnBody } = await runOutboundThenTurn({ provider: "telnyx", speechResult: "Ja gerne", mockUrl: mock.url });
+    const { turnBody } = await runOutboundThenTurn({
+      provider: "telnyx",
+      speechResult: "Ja gerne",
+      mockUrl: mock.url,
+    });
     assert.match(turnBody, /speechTimeout="2"/);
     assert.doesNotMatch(turnBody, /speechTimeout="auto"/);
   } finally {

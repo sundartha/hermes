@@ -56,21 +56,31 @@ function emptyRow(doc, text) {
 // ---- Anrufe ----
 function directionIcon(doc, call) {
   const isOutbound = call.direction === CALL_DIRECTION.OUTBOUND;
-  return el(doc, "span", `call-dir call-dir--${isOutbound ? "out" : "in"}`, isOutbound ? ARROW_OUT : ARROW_IN);
+  return el(
+    doc,
+    "span",
+    `call-dir call-dir--${isOutbound ? "out" : "in"}`,
+    isOutbound ? ARROW_OUT : ARROW_IN,
+  );
 }
 
 function callBody(doc, call) {
   const body = el(doc, "div", "call-body");
   body.append(
     el(doc, "span", "call-who", callCounterparty(call)),
-    el(doc, "span", "call-sub", callSubtitle(call))
+    el(doc, "span", "call-sub", callSubtitle(call)),
   );
   return body;
 }
 
 function callRow(doc, call) {
   const row = el(doc, "li", "call-row");
-  const badge = el(doc, "span", `status-badge status-badge--${callStatusKind(call)}`, callStatusLabel(call));
+  const badge = el(
+    doc,
+    "span",
+    `status-badge status-badge--${callStatusKind(call)}`,
+    callStatusLabel(call),
+  );
   row.append(directionIcon(doc, call), callBody(doc, call), badge);
   return row;
 }
@@ -91,19 +101,27 @@ function actionItemRow(doc, item) {
 
 export function actionItemRows(doc, data) {
   const items = actionItemsFrom(data).slice(0, MAX_ACTION_ITEMS);
-  return items.length ? items.map((i) => actionItemRow(doc, i)) : [emptyRow(doc, EMPTY_ACTION_ITEMS)];
+  return items.length
+    ? items.map((i) => actionItemRow(doc, i))
+    : [emptyRow(doc, EMPTY_ACTION_ITEMS)];
 }
 
 // ---- Kalender ----
 function calendarDateBlock(doc, parts) {
   const block = el(doc, "div", "cal-date");
-  block.append(el(doc, "strong", "cal-date__day", parts.day), el(doc, "small", "cal-date__month", parts.month));
+  block.append(
+    el(doc, "strong", "cal-date__day", parts.day),
+    el(doc, "small", "cal-date__month", parts.month),
+  );
   return block;
 }
 
 function calendarBody(doc, event, parts) {
   const body = el(doc, "div", "cal-body");
-  body.append(el(doc, "strong", "cal-title", event.title || ""), el(doc, "span", "cal-when", parts.when));
+  body.append(
+    el(doc, "strong", "cal-title", event.title || ""),
+    el(doc, "span", "cal-when", parts.when),
+  );
   return body;
 }
 

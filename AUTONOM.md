@@ -32,8 +32,10 @@ Auth-/Isolations-Grenze. Alles andere = workflow.md-Disziplin + gezielte Tests r
 ## Items
 
 ### A1 - `/voice/status` Telnyx-Lifecycle parsen — ✅ ERLEDIGT (2026-06-21, gemergt)
+
 > Umgesetzt: provider-bewusst, `extractLifecycleEvent` + `extractSpeakOutcome`, PII-frei,
 > `CallDuration`/Status sichtbar (`src/server.js` ~600). Kam ueber einen Merge (kein "A1"-Commit-Label).
+
 - **Was/Warum:** `/voice/status` (`src/server.js` ~620) liest nur Twilio-Felder
   (`CallStatus`/`CallSid`). Telnyx-Call-Ende/Hangup-Ursachen kommen dadurch nicht an ->
   kuenftiges Call-Debugging blind (haette dieses STT-Debugging stark verkuerzt).
@@ -49,8 +51,10 @@ Auth-/Isolations-Grenze. Alles andere = workflow.md-Disziplin + gezielte Tests r
 - **Blocker:** keine.
 
 ### A2 - `server.js` entzerren (TD-4 Decomposition) — 🔧 IN ARBEIT (2026-06-21)
+
 > Extrahiert: `routes/api-profiles.js`, `routes/api-read.js`, `routes/_tenant.js`,
 > `routes/_validation.js`; `server.js` 1130 -> 1059 LOC. Weitere `/api`-Gruppen koennen folgen.
+
 - **Was/Warum:** `src/server.js` ist ~1130 LOC God-File; bisher nur `/api/profiles` nach
   `src/routes/api-profiles.js` extrahiert. Rekurrenz-Treiber, erschwert jede Aenderung.
 - **Scope:** weitere `/api`-Routen-Gruppen in `src/routes/*` ausziehen (verhaltens-erhaltend).
@@ -62,6 +66,7 @@ Auth-/Isolations-Grenze. Alles andere = workflow.md-Disziplin + gezielte Tests r
 - **Blocker:** keine. Am besten NACH den anderen Items (sonst Merge-Reibung).
 
 ### A3 - `handleOpenAiEvent` aus `bridge.js` extrahieren (Delta-2) — ✅ ERLEDIGT (2026-06-21)
+
 - **Was/Warum:** `src/bridge.js` (Realtime) hat den OpenAI-Event-Handler inline -> nicht offline
   unit-isolierbar. Nur relevant, falls die Realtime-Engine je aktiviert wird.
 - **Scope:** `src/bridge.js`.
@@ -73,8 +78,10 @@ Auth-/Isolations-Grenze. Alles andere = workflow.md-Disziplin + gezielte Tests r
 - **Blocker:** entfallen.
 
 ### A4 - Remote-Browser-OAuth fuer Self-Service — ✅ ERLEDIGT (2026-06-21, gemergt)
+
 > REST-Pfad liest `req.tenant` (Web-Session) VOR `req.auth`, fail-closed (`routes/_tenant.js:87`;
 > `web-auth.js` setzt `req.tenant`). Merge `b855f5a` (`phase/a4-remote-oauth`) + Unit-Tests `86ee0eb`.
+
 - **Was/Warum:** `req.auth` wird im REST-Pfad nur auf `/mcp` gelesen; Tenant-Self-Service ist
   remote nicht nutzbar (nur localhost). Einziger funktionaler Gap der Mandanten-Schicht.
 - **Scope:** `src/server.js` (`requestTenant`/REST-Auth-Pfad), `src/web-auth.js` (Web-Session ->
@@ -88,6 +95,7 @@ Auth-/Isolations-Grenze. Alles andere = workflow.md-Disziplin + gezielte Tests r
 - **Blocker:** keine (Code), aber das sensibelste der Items.
 
 ### A5 - Diagnose-Logs entfernen — ⏳ OFFEN (sequenziell nach STT-Abnahme, STATUS.md §1.1)
+
 - **Was/Warum:** `[turn-recv]`, `[turn-ok]`, `[boot]`-Commit-Log in `src/server.js` sind TEMP.
 - **Scope:** 3 Log-Stellen in `src/server.js`.
 - **Vorgehen:** entfernen + zugehoerige Kommentare.
@@ -97,8 +105,10 @@ Auth-/Isolations-Grenze. Alles andere = workflow.md-Disziplin + gezielte Tests r
   sind die Logs noch nuetzlich.
 
 ### A6 - Rebrand Track A (Code/Doku-Umbenennung) — ✅ ERLEDIGT (2026-06-21, gemergt; Track B offen)
+
 > A6-P1..P4: kein `vodafone` mehr in `src/`; agentName/package.json/MCP-Name/Banner/Dashboards+Badge
 > = **Hermes**; Tests nachgezogen. Reste = Track B (URL/Repo/Infra) + kleine Doku/Fixture (STATUS.md §4).
+
 - **Was/Warum:** `vodafone-agent` / "Vodafone Agent" -> neuer Name in Code/Doku, null
   Runtime-Risiko. Detail: `tasks/rebrand-sundartha.md` (Track A).
 - **Scope:** `package.json`, `src/mcp-server.js` (Server-Name), `src/store/defaults.js`

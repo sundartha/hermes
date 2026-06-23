@@ -7,7 +7,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN, normNum } from "./store/defaults.js";
+import {
+  OWNER_TENANT_ID,
+  DEFAULT_PROVIDER,
+  PROVIDER,
+  NUMBER_STATUS,
+  PROVISION_NUMBER_JOB,
+  PROVISIONING_JOB_STATUS,
+  USAGE_EVENT_KIND,
+  KYC_OUTBOUND_MIN,
+  normNum,
+} from "./store/defaults.js";
 import { findActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
@@ -17,11 +27,32 @@ import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual } from "./util.js";
-import { voiceControl, messaging, voiceRenderer, inboundSignatureVerifier, providerFromHeaders, numberProvisioning } from "./telephony/registry.js";
-import { say as sayD, gather as gatherD, hangup as hangupD, redirect as redirectD, stream as streamD } from "./telephony/directives.js";
+import {
+  voiceControl,
+  messaging,
+  voiceRenderer,
+  inboundSignatureVerifier,
+  providerFromHeaders,
+  numberProvisioning,
+} from "./telephony/registry.js";
+import {
+  say as sayD,
+  gather as gatherD,
+  hangup as hangupD,
+  redirect as redirectD,
+  stream as streamD,
+} from "./telephony/directives.js";
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
-import { registerTenant, normalizePrivateNumber, requestNumber, recordProvisioningJob, markProvisioningJob, setTenantGeo, findNumber } from "./store/state-ops.js";
+import {
+  registerTenant,
+  normalizePrivateNumber,
+  requestNumber,
+  recordProvisioningJob,
+  markProvisioningJob,
+  setTenantGeo,
+  findNumber,
+} from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
@@ -34,12 +65,27 @@ import { E164, invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
-import { makeWebAuthRoutes, makeAdminRoutes, makeOidc, makeAccounts, makeSessions, webAuth, adminOnly } from "./web-auth.js";
+import {
+  makeWebAuthRoutes,
+  makeAdminRoutes,
+  makeOidc,
+  makeAccounts,
+  makeSessions,
+  webAuth,
+  adminOnly,
+} from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
 import { guardedBoot } from "./boot-guard.js";
-import { makeRequestTenant, isLocalSocket, internalIdentity, OWNER_ID, ANON_IDENTITY, TENANT_REJECT } from "./request-tenant.js";
+import {
+  makeRequestTenant,
+  isLocalSocket,
+  internalIdentity,
+  OWNER_ID,
+  ANON_IDENTITY,
+  TENANT_REJECT,
+} from "./request-tenant.js";
 
 const app = express();
 // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
@@ -120,15 +166,17 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     const adminMw = adminOnly({ adminEmails: config.adminEmails });
     const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
     app.use("/auth", loginRateLimiter);
-    app.use(makeWebAuthRoutes({
-      secret: config.sessionSecret,
-      redirectUri: config.publicUrl + "/auth/callback",
-      ttlSeconds: config.sessionTtlSeconds,
-      oidc,
-      accounts,
-      sessions,
-      audit: auditStore,
-    }));
+    app.use(
+      makeWebAuthRoutes({
+        secret: config.sessionSecret,
+        redirectUri: config.publicUrl + "/auth/callback",
+        ttlSeconds: config.sessionTtlSeconds,
+        oidc,
+        accounts,
+        sessions,
+        audit: auditStore,
+      }),
+    );
 
     // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt
     // req.tenant (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten.
@@ -173,8 +221,13 @@ app.use((req, res, next) => {
   // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
   // byte-identisch zum Bestand.
   if (config.selfServiceEnabled && config.multiTenant && req.path === "/tenant.html") return next();
-  if (req.path.startsWith("/voice") || req.path.startsWith("/mcp") ||
-      req.path.startsWith("/.well-known") || req.path === "/healthz") return next();
+  if (
+    req.path.startsWith("/voice") ||
+    req.path.startsWith("/mcp") ||
+    req.path.startsWith("/.well-known") ||
+    req.path === "/healthz"
+  )
+    return next();
   if (isLocalSocket(req)) return next();
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
   if (safeEqual(req.headers.authorization || "", expected)) return next();
@@ -261,10 +314,21 @@ function extractSpeakOutcome(req, provider) {
 // "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
 // startsWith. Eng gefasst, damit normale Mobilnummern (+4915...) durchkommen.
 const EMERGENCY_SHORT_CODES = ["110", "112", "911", "999"];
-const PREMIUM_PREFIXES = ["+49900", "+49137", "+49180", "+49118", "+870", "+881", "+882", "+883", "+979"];
+const PREMIUM_PREFIXES = [
+  "+49900",
+  "+49137",
+  "+49180",
+  "+49118",
+  "+870",
+  "+881",
+  "+882",
+  "+883",
+  "+979",
+];
 const HOUR_MS = 60 * 60 * 1000;
 
-const isDenied = (to) => EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
+const isDenied = (to) =>
+  EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
 
 // Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
@@ -278,7 +342,8 @@ function countryGateAllowed(to, profile) {
 const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
 // Globales Stundenlimit ueber ALLE Outbound-Calls (Plattform-Notbremse, Bestand,
 // wird nie entfernt). Tenant-unabhaengig (ohne Filter = alle Calls).
-const globalHourReached = () => store.countOutboundCallsSince(hourWindowStart()) >= config.maxCallsPerHour;
+const globalHourReached = () =>
+  store.countOutboundCallsSince(hourWindowStart()) >= config.maxCallsPerHour;
 // Pro-Nutzer-Stundenlimit: effektiv min(global, profil) - ein Profil kann nur senken.
 function userHourReached(profile, requestedBy) {
   const limit =
@@ -295,9 +360,17 @@ function allowlistError(to, profile) {
   if (profile.unrestricted) return null;
   if (profile.allowedNumbers?.includes(to)) return null;
   if (!config.allowedNumbers.length)
-    return { status: 403, grund: "allowlist", message: "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt." };
+    return {
+      status: 403,
+      grund: "allowlist",
+      message: "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt.",
+    };
   if (!config.allowedNumbers.includes(to))
-    return { status: 403, grund: "allowlist", message: `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.` };
+    return {
+      status: 403,
+      grund: "allowlist",
+      message: `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.`,
+    };
   return null;
 }
 
@@ -307,22 +380,42 @@ function allowlistError(to, profile) {
 // liefert true -> byte-identisch. Liefert {status,grund,message} (Gate-Vertrag) oder null.
 function kycGateError(tenantId) {
   if (store.kycReached(tenantId, KYC_OUTBOUND_MIN)) return null;
-  return { status: 403, grund: "kyc", message: "Verifikation unzureichend (KYC) fuer Outbound-Anrufe. Bitte Identitaet bestaetigen." };
+  return {
+    status: 403,
+    grund: "kyc",
+    message: "Verifikation unzureichend (KYC) fuer Outbound-Anrufe. Bitte Identitaet bestaetigen.",
+  };
 }
 
 // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
 // profile/requestedBy steuern Land-Schnittmenge, pro-Nutzer-Limit und Allowlist.
 function numberGateError(to, profile, requestedBy) {
   if (isDenied(to))
-    return { status: 403, grund: "denylist", message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.` };
+    return {
+      status: 403,
+      grund: "denylist",
+      message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
+    };
   if (!E164.test(to))
     return { status: 400, grund: "format", message: "to muss E.164 sein, z.B. +4917212345678" };
   if (!countryGateAllowed(to, profile))
-    return { status: 403, grund: "land", message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.` };
+    return {
+      status: 403,
+      grund: "land",
+      message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.`,
+    };
   if (globalHourReached())
-    return { status: 429, grund: "stundenlimit", message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.` };
+    return {
+      status: 429,
+      grund: "stundenlimit",
+      message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.`,
+    };
   if (userHourReached(profile, requestedBy))
-    return { status: 429, grund: "stundenlimit_nutzer", message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut." };
+    return {
+      status: 429,
+      grund: "stundenlimit_nutzer",
+      message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
+    };
   return allowlistError(to, profile);
 }
 
@@ -372,13 +465,15 @@ function followupTurnDirectives(call, text) {
 function streamDirectives(call) {
   const path = MEDIA_PATH[call.provider] || MEDIA_PATH[DEFAULT_PROVIDER];
   const url = config.publicUrl.replace(/^https/, "wss") + path;
-  return [streamD({
-    url,
-    params: [
-      { name: "call_id", value: call.id },
-      { name: "stream_token", value: call.streamToken },
-    ],
-  })];
+  return [
+    streamD({
+      url,
+      params: [
+        { name: "call_id", value: call.id },
+        { name: "stream_token", value: call.streamToken },
+      ],
+    }),
+  ];
 }
 
 // Tenant-Eigentums-Pruefung fuer Einzel-Call-Lesepfade (I5; I6/I7 reusen sie nach
@@ -399,7 +494,9 @@ function armMaxDurationTimer(call, providerCallSid) {
   setTimeout(() => {
     const c = store.getCall(call.id);
     if (c?.status === "active" && providerCallSid)
-      voiceControl(c.provider).endCall(providerCallSid).catch(() => {});
+      voiceControl(c.provider)
+        .endCall(providerCallSid)
+        .catch(() => {});
   }, limit);
 }
 
@@ -424,10 +521,11 @@ app.post("/voice/incoming", (req, res) => {
     audit("inbound_unrouted", req, `to=${to || "-"}`);
     // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
     // (byte-identisch zum Bestand, nicht ueber-engineeren).
-    return res.type("text/xml").send(render([
-      sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."),
-      hangupD(),
-    ], provider));
+    return res
+      .type("text/xml")
+      .send(
+        render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
+      );
   }
   const tenantId = numberRecord.tenantId;
   // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
@@ -438,10 +536,9 @@ app.post("/voice/incoming", (req, res) => {
   // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
   // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
   if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
-    return res.type("text/xml").send(render([
-      sayD(locale.budgetExhaustedHangup, locale.voiceProfile),
-      hangupD(),
-    ], provider));
+    return res
+      .type("text/xml")
+      .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
   }
 
   const call = store.createCall({
@@ -472,9 +569,14 @@ app.post("/voice/turn", async (req, res) => {
   // auch ein fehlender callId sichtbar wird (die relative action-URL `?callId=` verliert
   // bei Telnyx evtl. den Query-String -> frueher Hangup, ohne dass der Turn laeuft).
   // Nur Feld-NAMEN + Wert-LAENGEN, nie Roh-Werte (DSGVO/PII). Phase 3: wieder entfernen.
-  console.log("[turn-recv]",
+  console.log(
+    "[turn-recv]",
     "callId=" + (req.query.callId || "FEHLT"),
-    "fields=" + Object.entries(req.body || {}).map(([k, v]) => `${k}:${String(v).length}`).join(","));
+    "fields=" +
+      Object.entries(req.body || {})
+        .map(([k, v]) => `${k}:${String(v).length}`)
+        .join(","),
+  );
 
   const call = store.getCall(req.query.callId);
   if (!call || call.status !== "active") {
@@ -485,20 +587,28 @@ app.post("/voice/turn", async (req, res) => {
   const heard = extractSpeech(req, call.provider);
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
-      return res.type("text/xml").send(render(
-        followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt),
-        call.provider
-      ));
+      return res
+        .type("text/xml")
+        .send(
+          render(
+            followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt),
+            call.provider,
+          ),
+        );
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
     // TEMP-DIAGNOSE (Turn-Erfolgspfad, Gegenstueck zu [turn-recv]): belegt, dass das LLM
     // antwortet und der Agent seinen Anlass nennt (nur Laengen, nie Roh-Text/PII).
     // Phase 3: zusammen mit [turn-recv] wieder entfernen.
-    console.log("[turn-ok]",
+    console.log(
+      "[turn-ok]",
       "heard=" + (heard ? heard.length : 0),
       "reply=" + (speech ? speech.length : 0),
-      "endCall=" + !!endCall);
-    const directives = endCall ? [sayInCallVoice(call, speech), hangupD()] : followupTurnDirectives(call, speech);
+      "endCall=" + !!endCall,
+    );
+    const directives = endCall
+      ? [sayInCallVoice(call, speech), hangupD()]
+      : followupTurnDirectives(call, speech);
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
@@ -510,7 +620,8 @@ app.post("/voice/turn", async (req, res) => {
     // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
     // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
     const locale = localeFor(call.language);
-    const speech = err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+    const speech =
+      err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
     res.type("text/xml").send(render([sayInCallVoice(call, speech), hangupD()], call.provider));
   }
 });
@@ -596,7 +707,7 @@ async function finishCall(call) {
     store.addNotification(
       call.status === "cancelled" ? "Anruf abgebrochen" : "Anruf nicht zustande gekommen",
       `${call.direction === "outbound" ? call.to : call.from} (Status: ${call.status})`,
-      call.id
+      call.id,
     );
     return;
   }
@@ -625,7 +736,9 @@ async function finishCall(call) {
     if (plan.send) {
       const sms =
         `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
-        (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
+        (aiCount
+          ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
+          : "");
       try {
         await messaging(call.provider).sendSms({
           from: plan.smsFrom.e164,
@@ -649,7 +762,11 @@ async function finishCall(call) {
         // NACH recordUsageEvent: der Marker steht erst, wenn die SMS real raus ist.
         store.markSummarySmsSent(call.id);
       } catch (e) {
-        console.error("[sms]", e.message, "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)");
+        console.error(
+          "[sms]",
+          e.message,
+          "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)",
+        );
       }
     } else if (plan.reason) {
       // Kein Ziel -> SMS still uebersprungen. Notification (oben) bleibt, kein Throw (M4).
@@ -676,17 +793,25 @@ app.post("/voice/status", (req, res) => {
   const speak = extractSpeakOutcome(req, provider);
   if (speak.outcome !== SPEAK_OUTCOME.NONE) {
     if (speak.outcome === SPEAK_OUTCOME.FAILED)
-      console.error("[voice/speak]", JSON.stringify({ callId: call.id, provider, outcome: speak.outcome, reason: speak.reason }));
+      console.error(
+        "[voice/speak]",
+        JSON.stringify({ callId: call.id, provider, outcome: speak.outcome, reason: speak.reason }),
+      );
     return;
   }
 
   const { status: callStatus, diagnostics } = extractLifecycleEvent(req, provider);
   // PII-frei (Pre-Mortem): nur callId/Status/Provider/Diagnose-Zahlen ins Log, NIE
   // From/To/Telefonnummern. Macht Telnyx-Lifecycle-Events + CallDuration sichtbar.
-  console.log("[voice/status]", JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }));
-  if (callStatus === "in-progress" || callStatus === "answered") return void store.markAnswered(call.id);
+  console.log(
+    "[voice/status]",
+    JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }),
+  );
+  if (callStatus === "in-progress" || callStatus === "answered")
+    return void store.markAnswered(call.id);
   if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
-  if (call.status === "active") store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
+  if (call.status === "active")
+    store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
   finishCall(store.getCall(call.id));
 });
 
@@ -734,7 +859,11 @@ app.post("/api/calls", async (req, res) => {
   // true bei fehlendem kyc_level). tenantId ist hier bereits aufgeloest + REJECT abgewiesen.
   const kycErr = kycGateError(tenantId);
   if (kycErr) {
-    audit("place_call_denied", req, `to=${to} grund=${kycErr.grund} tenant=${tenantId} requestedBy=${requestedBy}`);
+    audit(
+      "place_call_denied",
+      req,
+      `to=${to} grund=${kycErr.grund} tenant=${tenantId} requestedBy=${requestedBy}`,
+    );
     return res.status(kycErr.status).json({ error: kycErr.message });
   }
 
@@ -745,15 +874,22 @@ app.post("/api/calls", async (req, res) => {
   // assertConfig nie leer ist) -> leer nur bei kaputtem Seed/manipuliertem Store.
   const ownerName = store.tenantContext(tenantId).ownerName;
   if (!ownerName) {
-    audit("place_call_denied", req, `to=${to} grund=keine_identitaet tenant=${tenantId} requestedBy=${requestedBy}`);
-    return res.status(403).json({ error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." });
+    audit(
+      "place_call_denied",
+      req,
+      `to=${to} grund=keine_identitaet tenant=${tenantId} requestedBy=${requestedBy}`,
+    );
+    return res
+      .status(403)
+      .json({ error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." });
   }
 
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
   const gateErr = numberGateError(to, profile, requestedBy);
   if (gateErr) {
     // 400 = Eingabe-/Formatfehler, keine Sicherheits-Ablehnung -> nicht auditieren.
-    if (gateErr.status !== 400) audit("place_call_denied", req, `to=${to} grund=${gateErr.grund} requestedBy=${requestedBy}`);
+    if (gateErr.status !== 400)
+      audit("place_call_denied", req, `to=${to} grund=${gateErr.grund} requestedBy=${requestedBy}`);
     return res.status(gateErr.status).json({ error: gateErr.message });
   }
 
@@ -768,7 +904,11 @@ app.post("/api/calls", async (req, res) => {
   // -> Reject, NIE die Nummer eines anderen Tenants als Fallback.
   const outbound = outboundFrom(store.load(), tenantId);
   if (!outbound) {
-    audit("place_call_denied", req, `to=${to} grund=keine_tenant_nummer tenant=${tenantId} requestedBy=${requestedBy}`);
+    audit(
+      "place_call_denied",
+      req,
+      `to=${to} grund=keine_tenant_nummer tenant=${tenantId} requestedBy=${requestedBy}`,
+    );
     return res.status(403).json({ error: "Kein aktive Absendernummer fuer diesen Tenant." });
   }
   const { fromNumber, provider: outboundProvider, numberRecord } = outbound;
@@ -804,7 +944,11 @@ app.post("/api/calls", async (req, res) => {
     tenantId,
     provider: outboundProvider,
   });
-  audit("place_call", req, `to=${to} call=${call.id} provider=${outboundProvider} requestedBy=${requestedBy}`);
+  audit(
+    "place_call",
+    req,
+    `to=${to} call=${call.id} provider=${outboundProvider} requestedBy=${requestedBy}`,
+  );
 
   try {
     const tw = await voiceControl(outboundProvider).originateCall({
@@ -829,7 +973,10 @@ app.post("/api/calls", async (req, res) => {
     // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
     // secret-frei loggen (wie die P0-Guards: err.message, nie config), dem Aufrufer
     // eine generische, stabile Meldung geben.
-    console.error(`[place_call] originate fehlgeschlagen call=${call.id}:`, err?.message || String(err));
+    console.error(
+      `[place_call] originate fehlgeschlagen call=${call.id}:`,
+      err?.message || String(err),
+    );
     // Der Adapter haengt bei einer Provider-HTTP-Ablehnung err.providerStatus an
     // (secret-frei). Liegt sie vor -> kategorisierte, provider-NEUTRALE Meldung mit
     // Statusklasse (502 Upstream), damit der Aufrufer den echten Grund erkennt statt
@@ -837,7 +984,9 @@ app.post("/api/calls", async (req, res) => {
     // nur bei Provider Twilio. Kein Roh-Body/Key an den Client (Regel 4/5).
     const providerStatus = err?.providerStatus;
     const body = providerStatus
-      ? { error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.` }
+      ? {
+          error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,
+        }
       : { error: "Anruf konnte nicht gestartet werden." };
     if (outboundProvider === "twilio") {
       body.hint = "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.";
@@ -880,7 +1029,14 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
 // sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
 // die request-tenant-Resolver werden injiziert. Hinter Basic-Auth (Bestand deckt
 // /api/* ab); die lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
-app.use(makeReadRoutes({ store, config, audit, tenant: { requestTenant, requireTenant, tenantOwnsCall } }));
+app.use(
+  makeReadRoutes({
+    store,
+    config,
+    audit,
+    tenant: { requestTenant, requireTenant, tenantOwnsCall },
+  }),
+);
 
 app.post("/api/settings", (req, res) => {
   const tenant = requireTenant(req, res); // L2: tenant-gescopt; REJECT -> 403
@@ -908,13 +1064,16 @@ app.post("/api/calendar", (req, res) => {
     return res.status(403).json({ error: "Kein Recht, Termine zu buchen (allowBooking=false)." });
   }
   const { title, start, end } = req.body || {};
-  if (!title || !start || !end) return res.status(400).json({ error: "title, start, end sind Pflicht" });
+  if (!title || !start || !end)
+    return res.status(400).json({ error: "title, start, end sind Pflicht" });
   const titleErr = invalidText("title", title);
   if (titleErr) return res.status(400).json({ error: titleErr });
   const startDate = new Date(start);
   const endDate = new Date(end);
   if (isNaN(startDate) || isNaN(endDate))
-    return res.status(400).json({ error: "start und end muessen gueltige Datumswerte sein (ISO 8601)" });
+    return res
+      .status(400)
+      .json({ error: "start und end muessen gueltige Datumswerte sein (ISO 8601)" });
   if (endDate <= startDate) return res.status(400).json({ error: "end muss nach start liegen" });
   // Normalisiert speichern: findConflict() vergleicht ISO-Strings lexikographisch
   res.json(store.addCalendarEvent(tenant, title, startDate.toISOString(), endDate.toISOString()));
@@ -935,7 +1094,8 @@ app.use(makeProfileRoutes({ store, audit }));
 // zum Bestand). "Periodisch" = extern cron-baar (echter Scheduler = P8); KEIN neuer
 // Scheduler-Dep. Antwort = nur Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
 app.post("/api/billing/flush-meters", async (req, res) => {
-  if (!config.paymentEnabled) return res.status(404).json({ error: "metering disabled (PAYMENT_ENABLED)" });
+  if (!config.paymentEnabled)
+    return res.status(404).json({ error: "metering disabled (PAYMENT_ENABLED)" });
   const result = await flushMeters(store.load(), { billing: stripeBilling });
   store.save();
   audit("meter_flush", req, `sent=${result.sent} failed=${result.failed}`);
@@ -951,7 +1111,8 @@ app.post("/api/billing/flush-meters", async (req, res) => {
 const CARD_ON_FILE_STATUS = "card_on_file"; // kein Magic-String (G25)
 
 app.post("/api/billing/setup-checkout", async (req, res) => {
-  if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+  if (!config.paymentEnabled)
+    return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
   if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
   const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
   if (!tenant) return;
@@ -960,13 +1121,19 @@ app.post("/api/billing/setup-checkout", async (req, res) => {
   const customerId = await ensureCustomer({ store, billing: stripeBilling, tenant });
   const successUrl = `${config.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${config.publicUrl}/tenant.html?card=canceled`;
-  const { url } = await stripeBilling.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
+  const { url } = await stripeBilling.createSetupCheckoutSession({
+    tenantRef: tenant,
+    customerId,
+    successUrl,
+    cancelUrl,
+  });
   audit("billing_setup_checkout", req, `tenant=${tenant}`);
   res.json({ url });
 });
 
 app.get("/api/billing/checkout-return", async (req, res) => {
-  if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+  if (!config.paymentEnabled)
+    return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
   const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
   if (!tenant) return;
   const sessionId = req.query.session_id;
@@ -1004,7 +1171,9 @@ app.post("/api/onboard", async (req, res) => {
   // ownerName (Owner-Fallback bei leer).
   const { tenantId, firstName, lastName, privateNumber } = req.body || {};
   if (!validIdentity(tenantId))
-    return res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+    return res
+      .status(400)
+      .json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
 
   // F2: private Summary-Nummer ist OPTIONAL. VOR dem Store-Lock gegen DIESELBE Quelle
   // pruefen (normalizePrivateNumber, G5), damit ungueltige Eingaben als 400 statt 503
@@ -1013,7 +1182,9 @@ app.post("/api/onboard", async (req, res) => {
   try {
     normalizePrivateNumber(privateNumber);
   } catch {
-    return res.status(400).json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+    return res
+      .status(400)
+      .json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
   }
 
   // F1 Phase 6 - Land/Sprache bei der Registrierung. Praezedenz (fail-safe):
@@ -1061,14 +1232,23 @@ app.post("/api/onboard", async (req, res) => {
     return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
   if (!reqRes.ok) {
     audit("onboard_denied", req, `tenant=${tenantId} grund=${reqRes.reason}`);
-    return res.status(ONBOARD_REASON_STATUS[reqRes.reason] || 400).json({ error: `Nummer-Anfrage abgelehnt (${reqRes.reason})` });
+    return res
+      .status(ONBOARD_REASON_STATUS[reqRes.reason] || 400)
+      .json({ error: `Nummer-Anfrage abgelehnt (${reqRes.reason})` });
   }
   const numberId = reqRes.number.id;
   audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
 
   // Dry-Run (Default, fail-closed): kein echter Kauf, Nummer bleibt 'requested'.
   if (!config.provisioningEnabled)
-    return res.json({ tenantId, numberId, status: reqRes.number.status, country, language, provisioning: "disabled" });
+    return res.json({
+      tenantId,
+      numberId,
+      status: reqRes.number.status,
+      country,
+      language,
+      provisioning: "disabled",
+    });
 
   // BEWUSSTE VERHALTENS-AENDERUNG (P6b2): das Provisioning ist aus dem HTTP-Request
   // geloest. Wir enqueuen einen Job, persistieren die Job-Spur ('requested' + queued)
@@ -1089,10 +1269,17 @@ app.post("/api/onboard", async (req, res) => {
       console.error("[onboard] Persistenz (Job-Spur) fehlgeschlagen:", e.message);
       return { ok: false };
     });
-  if (!jobRes.ok)
-    return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
+  if (!jobRes.ok) return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
   audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.job.id}`);
-  res.json({ tenantId, numberId, status: reqRes.number.status, country, language, provisioning: "queued", jobId: jobRes.job.id });
+  res.json({
+    tenantId,
+    numberId,
+    status: reqRes.number.status,
+    country,
+    language,
+    provisioning: "queued",
+    jobId: jobRes.job.id,
+  });
 
   // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
   // (pg-boss ist deferred nach P8), aber HTTP endet vor dem Provider-Kauf. Tests
@@ -1159,7 +1346,13 @@ async function runProvisioningDrain() {
 app.post("/mcp", mcpAuth, async (req, res) => {
   // tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die
   // tenantId, nie email/sub). Flag aus -> immer tenant=owner (byte-identisch).
-  if (req.auth) console.log("[mcp]", req.auth.email || "anonym", `tenant=${requestTenant(req)}`, req.body?.method || "");
+  if (req.auth)
+    console.log(
+      "[mcp]",
+      req.auth.email || "anonym",
+      `tenant=${requestTenant(req)}`,
+      req.body?.method || "",
+    );
   // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub
   // (Fail-closed: ein authentifizierter Nutzer OHNE email-Claim wird NICHT zum
   // Owner, sondern bekommt das restriktive DEFAULT_PROFILE). Selbst ohne email UND
@@ -1180,11 +1373,15 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   } catch (err) {
     console.error("[mcp]", err.message);
     if (!res.headersSent)
-      res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "internal error" }, id: null });
+      res
+        .status(500)
+        .json({ jsonrpc: "2.0", error: { code: -32603, message: "internal error" }, id: null });
   }
 });
 app.get("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
-app.delete("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
+app.delete("/mcp", (_req, res) =>
+  res.status(405).json({ error: "POST only (stateless transport)" }),
+);
 
 // ---- Catch-all Error-Net (AC4) -------------------------------------------------
 // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur
@@ -1204,7 +1401,9 @@ const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 function runRetention() {
   const removed = store.pruneOldData();
   if (removed.calls || removed.notifications || removed.actionItems)
-    console.log(`[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.retentionDays} Tage)`);
+    console.log(
+      `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.retentionDays} Tage)`,
+    );
 }
 runRetention();
 setInterval(runRetention, RETENTION_SWEEP_INTERVAL_MS).unref();
@@ -1227,7 +1426,7 @@ if (!ok) {
 if (!findActiveNumber(store.load(), OWNER_TENANT_ID)) {
   console.error(
     "[boot] Keine aktive Owner-Nummer im Store. Erst seeden: " +
-      "npm run seed-owner-number -- <e164> <provider>"
+      "npm run seed-owner-number -- <e164> <provider>",
   );
   process.exit(1);
 }
@@ -1243,12 +1442,20 @@ const httpServer = app.listen(config.port, () => {
   console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);
   console.log(`\n  Hermes Gateway laeuft auf http://localhost:${port}`);
   console.log(`  Dashboard:      http://localhost:${port}`);
-  console.log(`  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`);
-  console.log(`  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`);
+  console.log(
+    `  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
+  );
+  console.log(
+    `  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
+  );
   console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
   console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
-  console.log(`  Allowlist:      ${config.allowedNumbers.join(", ") || "(leer -> Outbound gesperrt)"}`);
-  console.log(`  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`);
+  console.log(
+    `  Allowlist:      ${config.allowedNumbers.join(", ") || "(leer -> Outbound gesperrt)"}`,
+  );
+  console.log(
+    `  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
+  );
 });
 
 // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)

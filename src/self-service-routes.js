@@ -75,7 +75,11 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
     const current = store.tenantContext(tenant).settings;
     const { clean, rejected } = selfServicePatch(req.body || {}, current);
     const { settings, changed } = store.updateSettings(tenant, clean);
-    audit("self_service_settings", req, `keys=${changed.join(",") || "-"} rejected=${rejected.join(",") || "-"}`);
+    audit(
+      "self_service_settings",
+      req,
+      `keys=${changed.join(",") || "-"} rejected=${rejected.join(",") || "-"}`,
+    );
     res.json(settings);
   });
 
@@ -96,7 +100,9 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
       store.setPrivateNumber(tenant, privateNumber);
     } catch {
       audit("self_service_private_number", req, "outcome=rejected");
-      return res.status(400).json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+      return res
+        .status(400)
+        .json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
     }
     const stored = store.tenantPrivateNumber(tenant) != null;
     audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
@@ -110,13 +116,19 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
   // card-setup-Helfer (G5: Customer-Idempotenz + Customer-Match leben einmal).
   // Ohne PAYMENT_ENABLED -> 404 (Muster flush-meters/Pay1, byte-identisch zum Bestand).
   router.post("/api/self-service/billing/setup-checkout", webAuthMw, async (req, res) => {
-    if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+    if (!config.paymentEnabled)
+      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
     const tenant = req.tenant.tenantId;
     const customerId = await ensureCustomer({ store, billing, tenant });
     const successUrl = `${config.publicUrl}/api/self-service/billing/return?session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
-    const { url } = await billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
+    const { url } = await billing.createSetupCheckoutSession({
+      tenantRef: tenant,
+      customerId,
+      successUrl,
+      cancelUrl,
+    });
     audit("self_service_setup_checkout", req, `tenant=${tenant}`);
     res.json({ url });
   });
@@ -125,7 +137,8 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
   // Cookie). Bindet das payment_method fail-closed an den eigenen Customer (Customer-
   // Match im Helfer). Antwortet mit 302 in die UI (Pay3), NICHT JSON.
   router.get("/api/self-service/billing/return", webAuthMw, async (req, res) => {
-    if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+    if (!config.paymentEnabled)
+      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     const tenant = req.tenant.tenantId;
     const sessionId = req.query.session_id;
     if (!sessionId || typeof sessionId !== "string")

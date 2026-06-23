@@ -57,7 +57,10 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
   try {
     // Zuerst: unbekannter Call -> 200, aber KEINE Logzeile, KEIN Effekt (if (!call) return).
     // Wird vor allen bekannten Faellen abgesetzt, also garantiert vor deren Logs verarbeitet.
-    let r = await postStatus(srv, "st_unknown_xyz", { CallStatus: "completed", CallDuration: "99" });
+    let r = await postStatus(srv, "st_unknown_xyz", {
+      CallStatus: "completed",
+      CallDuration: "99",
+    });
     assert.equal(r.status, 200);
 
     // a) Telnyx completed + CallDuration -> callDurationS===45.

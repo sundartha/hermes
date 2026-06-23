@@ -49,7 +49,11 @@ export const NUMBER_STATUS = Object.freeze({
 // from -> Set der zulaessigen Folge-Zustaende. RELEASED ist terminal (leer).
 export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.REQUESTED]: [NUMBER_STATUS.PROVISIONING, NUMBER_STATUS.FAILED],
-  [NUMBER_STATUS.PROVISIONING]: [NUMBER_STATUS.CAPTURING, NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
+  [NUMBER_STATUS.PROVISIONING]: [
+    NUMBER_STATUS.CAPTURING,
+    NUMBER_STATUS.ACTIVE,
+    NUMBER_STATUS.FAILED,
+  ],
   [NUMBER_STATUS.CAPTURING]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.FAILED],
   [NUMBER_STATUS.ACTIVE]: [NUMBER_STATUS.SUSPENDED, NUMBER_STATUS.RELEASED],
   [NUMBER_STATUS.SUSPENDED]: [NUMBER_STATUS.ACTIVE, NUMBER_STATUS.RELEASED],
@@ -63,7 +67,11 @@ export const NUMBER_TRANSITIONS = Object.freeze({
 // recordProvisioningJob) importieren dieselben Werte - sonst driften zwei Listen
 // von "queued"/"done"/"failed"-Strings auseinander. PROVISION_NUMBER_JOB ist der
 // einzige Job-Typ in P6b2 (Nummer kaufen + konfigurieren).
-export const PROVISIONING_JOB_STATUS = Object.freeze({ QUEUED: "queued", DONE: "done", FAILED: "failed" });
+export const PROVISIONING_JOB_STATUS = Object.freeze({
+  QUEUED: "queued",
+  DONE: "done",
+  FAILED: "failed",
+});
 export const PROVISION_NUMBER_JOB = "provision_number";
 
 // ---- Metering / Budget (P6b3) ----
@@ -104,7 +112,12 @@ export const KYC_LEVEL = Object.freeze({
   CARD: "card",
   ID_VERIFIED: "id_verified",
 });
-export const KYC_ORDER = Object.freeze([KYC_LEVEL.NONE, KYC_LEVEL.OTP, KYC_LEVEL.CARD, KYC_LEVEL.ID_VERIFIED]);
+export const KYC_ORDER = Object.freeze([
+  KYC_LEVEL.NONE,
+  KYC_LEVEL.OTP,
+  KYC_LEVEL.CARD,
+  KYC_LEVEL.ID_VERIFIED,
+]);
 
 // Schwelle fuer Outbound (Gate). >= card. Benannte Konstante (G25), eine Quelle
 // fuer Gate + Tests.

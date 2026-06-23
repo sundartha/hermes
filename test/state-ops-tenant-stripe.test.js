@@ -9,7 +9,12 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
-import { makeDefaultState, registerTenant, setTenantStripe, tenantStripe } from "../src/store/state-ops.js";
+import {
+  makeDefaultState,
+  registerTenant,
+  setTenantStripe,
+  tenantStripe,
+} from "../src/store/state-ops.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const A = "tenant_a";
@@ -24,9 +29,17 @@ test("selektiver Patch: customerId setzen laesst paymentMethodId unberuehrt; spa
   const s = makeDefaultState();
   registerTenant(s, A);
   setTenantStripe(s, A, { customerId: "cus_1" });
-  assert.deepEqual(tenantStripe(s, A), { customerId: "cus_1", paymentMethodId: null }, "PM unberuehrt");
+  assert.deepEqual(
+    tenantStripe(s, A),
+    { customerId: "cus_1", paymentMethodId: null },
+    "PM unberuehrt",
+  );
   setTenantStripe(s, A, { paymentMethodId: "pm_1" });
-  assert.deepEqual(tenantStripe(s, A), { customerId: "cus_1", paymentMethodId: "pm_1" }, "beide gesetzt");
+  assert.deepEqual(
+    tenantStripe(s, A),
+    { customerId: "cus_1", paymentMethodId: "pm_1" },
+    "beide gesetzt",
+  );
 });
 
 test("setTenantStripe: fehlender Tenant wirft (fail-closed, kein stilles No-Op)", () => {
@@ -42,7 +55,10 @@ test("tenantStripe: Tenant ohne Referenzen -> beide null (Grenzfall, nie undefin
 test("json-Roundtrip: setTenantStripe via Fassade persistiert -> tenantStripe liest beide Felder", () => {
   // Owner existiert in makeDefaultState (load() seedet ihn) -> kein registerTenant noetig.
   jsonBackend.setTenantStripe(OWNER_TENANT_ID, { customerId: "cus_rt", paymentMethodId: "pm_rt" });
-  assert.deepEqual(jsonBackend.tenantStripe(OWNER_TENANT_ID), { customerId: "cus_rt", paymentMethodId: "pm_rt" });
+  assert.deepEqual(jsonBackend.tenantStripe(OWNER_TENANT_ID), {
+    customerId: "cus_rt",
+    paymentMethodId: "pm_rt",
+  });
 });
 
 test("json-Fassade exportiert setTenantStripe + tenantStripe (Re-Export-Landmine)", () => {

@@ -8,7 +8,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
 import { fakeBilling, fakeProvisioner } from "./helpers.js";
-import { makeDefaultState, registerTenant, requestNumber, findNumber, setTenantStripe } from "../src/store/state-ops.js";
+import {
+  makeDefaultState,
+  registerTenant,
+  requestNumber,
+  findNumber,
+  setTenantStripe,
+} from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
@@ -38,7 +44,11 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   assert.equal(result.providerNumberId, "num_ext_1");
   assert.equal(result.paymentIntentId, "pi_fake_1", "PI auf der Nummer hinterlegt");
   // Hold zuerst, dann der Provider-Kauf, dann Capture (Reihenfolge ueber beide Logs).
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, [
+    "search:DE",
+    `order:+4915799990001:order_${numberId}`,
+    "configure:num_ext_1:conn_1",
+  ]);
   assert.deepEqual(methodsOf(billing), ["placeHold", "captureHold"]);
   // placeHold-Args: idempotencyKey number-id-basiert + Betrag/Currency.
   const [, holdArgs] = billing.log[0];
@@ -52,8 +62,15 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
 test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-Call, KEIN cancelHold", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  const billing = fakeBilling({ async placeHold() { throw new Error("Stripe placeHold fehlgeschlagen: HTTP 402"); } });
-  await assert.rejects(() => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }), /HTTP 402/);
+  const billing = fakeBilling({
+    async placeHold() {
+      throw new Error("Stripe placeHold fehlgeschlagen: HTTP 402");
+    },
+  });
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /HTTP 402/,
+  );
 
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.deepEqual(prov.log, [], "kein Provider-Call ohne reserviertes Geld");
@@ -63,8 +80,15 @@ test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-Call, KEIN cancel
 test("kein active ohne Capture: captureHold wirft -> failed/released, releaseNumber + cancelHold, NIE active", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
-  const billing = fakeBilling({ async captureHold() { throw new Error("Stripe captureHold fehlgeschlagen: HTTP 500"); } });
-  await assert.rejects(() => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }), /HTTP 500/);
+  const billing = fakeBilling({
+    async captureHold() {
+      throw new Error("Stripe captureHold fehlgeschlagen: HTTP 500");
+    },
+  });
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /HTTP 500/,
+  );
 
   // Provider-Release sauber -> terminal released, NIE active.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED);
@@ -74,32 +98,65 @@ test("kein active ohne Capture: captureHold wirft -> failed/released, releaseNum
 
 test("Rollback order/search-Fehler: failed, cancelHold, KEIN releaseNumber (nichts gekauft)", async () => {
   const { s, numberId } = seedRequested();
-  const prov = fakeProvisioner({ async orderNumber() { throw new Error("HTTP 402"); } });
+  const prov = fakeProvisioner({
+    async orderNumber() {
+      throw new Error("HTTP 402");
+    },
+  });
   const billing = fakeBilling();
-  await assert.rejects(() => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }), /HTTP 402/);
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /HTTP 402/,
+  );
 
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.ok(!prov.log.some((l) => l.startsWith("release")), "kein Release, da nichts gekauft");
-  assert.deepEqual(methodsOf(billing), ["placeHold", "cancelHold"], "Hold gehalten + wieder freigegeben");
+  assert.deepEqual(
+    methodsOf(billing),
+    ["placeHold", "cancelHold"],
+    "Hold gehalten + wieder freigegeben",
+  );
 });
 
 test("Rollback configure-Fehler: failed/released, releaseNumber + cancelHold", async () => {
   const { s, numberId } = seedRequested();
-  const prov = fakeProvisioner({ async configureNumber() { throw new Error("HTTP 500"); } });
+  const prov = fakeProvisioner({
+    async configureNumber() {
+      throw new Error("HTTP 500");
+    },
+  });
   const billing = fakeBilling();
-  await assert.rejects(() => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }), /HTTP 500/);
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /HTTP 500/,
+  );
 
-  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED, "sauberer Release -> released");
+  assert.equal(
+    findNumber(s, numberId).status,
+    NUMBER_STATUS.RELEASED,
+    "sauberer Release -> released",
+  );
   assert.ok(prov.log.includes("release:num_ext_1"));
   assert.ok(methodsOf(billing).includes("cancelHold"));
 });
 
 test("Rollback verschluckt cancelHold-Fehler: Aufrufer-Fehler bleibt, Zustand released", async () => {
   const { s, numberId } = seedRequested();
-  const prov = fakeProvisioner({ async configureNumber() { throw new Error("configure kaputt"); } });
+  const prov = fakeProvisioner({
+    async configureNumber() {
+      throw new Error("configure kaputt");
+    },
+  });
   // cancelHold wirft -> darf den configure-Fehler NICHT maskieren (Best-Effort-Rollback).
-  const billing = fakeBilling({ async cancelHold() { throw new Error("cancel auch kaputt"); } });
-  await assert.rejects(() => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }), /configure kaputt/);
+  const billing = fakeBilling({
+    async cancelHold() {
+      throw new Error("cancel auch kaputt");
+    },
+  });
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /configure kaputt/,
+  );
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED);
 });
 
@@ -111,7 +168,11 @@ test("payment-off-Parity: ohne billing -> kein Hold/Capture, requested->provisio
 
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, [
+    "search:DE",
+    `order:+4915799990001:order_${numberId}`,
+    "configure:num_ext_1:conn_1",
+  ]);
 });
 
 test("Pay2 fail-closed: billing + Tenant OHNE Karte -> failed, KEIN placeHold, KEIN Provider-Call", async () => {
@@ -120,7 +181,7 @@ test("Pay2 fail-closed: billing + Tenant OHNE Karte -> failed, KEIN placeHold, K
   const billing = fakeBilling();
   await assert.rejects(
     () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
-    /kein hinterlegtes Zahlungsmittel/
+    /kein hinterlegtes Zahlungsmittel/,
   );
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
   assert.deepEqual(methodsOf(billing), [], "kein placeHold ohne Karte");

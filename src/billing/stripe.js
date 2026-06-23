@@ -51,7 +51,14 @@ const url = (path) => config.stripeApiBase + path;
 
 /** @type {import("./ports.js").BillingPort} */
 export const stripeBilling = {
-  async placeHold({ tenantRef, amountCents, currency, customerId, paymentMethodId, idempotencyKey }) {
+  async placeHold({
+    tenantRef,
+    amountCents,
+    currency,
+    customerId,
+    paymentMethodId,
+    idempotencyKey,
+  }) {
     // Idempotency-Key (number-id-basiert): Retry haelt nie doppelt (Stripe-Header).
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     // off_session=true + gespeicherter customer/payment_method: Stripe belastet die am
@@ -127,7 +134,11 @@ export const stripeBilling = {
       cancel_url: cancelUrl,
     });
     body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
-    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), { method: "POST", headers: authHeaders(), body });
+    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), {
+      method: "POST",
+      headers: authHeaders(),
+      body,
+    });
     assertOk(res, "createSetupCheckoutSession");
     const json = await res.json().catch(() => ({}));
     return { url: json.url, sessionId: json.id };
@@ -144,7 +155,10 @@ export const stripeBilling = {
     assertOk(res, "getCheckoutSessionResult");
     const json = await res.json().catch(() => ({}));
     const paymentMethodId = json.setup_intent && json.setup_intent.payment_method;
-    if (!paymentMethodId) throw new Error("Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)");
+    if (!paymentMethodId)
+      throw new Error(
+        "Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)",
+      );
     return { customerId: json.customer, paymentMethodId };
   },
 };

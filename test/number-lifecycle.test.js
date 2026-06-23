@@ -57,7 +57,11 @@ test("transitionNumber: illegaler Uebergang wirft (kein active per Shortcut)", (
   seedTenant(s);
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   assert.throws(() => transitionNumber(s, number.id, NUMBER_STATUS.ACTIVE), /illegaler Uebergang/);
-  assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.REQUESTED, "Status unveraendert nach Reject");
+  assert.equal(
+    findNumber(s, number.id).status,
+    NUMBER_STATUS.REQUESTED,
+    "Status unveraendert nach Reject",
+  );
 });
 
 // ---- registerTenant ----
@@ -98,7 +102,9 @@ test("requestNumber: happy path -> status requested, KEINE e164/Kauf", () => {
 test("requestNumber: globaler Cap blockt (Kosten-Notbremse)", () => {
   const s = makeDefaultState();
   // Cap 2 global, viele Tenants -> ab der 3. Nummer blockiert.
-  registerTenant(s, "a"); registerTenant(s, "b"); registerTenant(s, "c");
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  registerTenant(s, "c");
   const caps = { maxNumbers: 2, maxNumbersPerTenant: 1 };
   assert.equal(requestNumber(s, { tenantId: "a", ...caps }).ok, true);
   assert.equal(requestNumber(s, { tenantId: "b", ...caps }).ok, true);
@@ -172,7 +178,10 @@ test("release schliesst die assignment (released_at) und gibt den Platz frei", (
   activateNumber(s, number.id, { e164: "+4915788888888", providerNumberId: "tnx_9" });
   releaseNumber(s, number.id);
   assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.RELEASED);
-  assert.ok(s.numberAssignments.find((a) => a.numberId === number.id).releasedAt, "assignment geschlossen");
+  assert.ok(
+    s.numberAssignments.find((a) => a.numberId === number.id).releasedAt,
+    "assignment geschlossen",
+  );
   // Platz wieder frei -> neue Anfrage erlaubt (per-Tenant-Cap 1).
   assert.equal(requestNumber(s, { tenantId: "t_user1", ...CAPS }).ok, true);
 });

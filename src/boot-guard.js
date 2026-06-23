@@ -12,7 +12,10 @@ export async function guardedBoot(label, fn) {
     return true;
   } catch (e) {
     // secret-frei: NUR die Fehler-Message, nie config/Connection-String/Env.
-    console.error(`[boot] ${label} deaktiviert (Portal-Pool-Fehler):`, e && e.message ? e.message : String(e));
+    console.error(
+      `[boot] ${label} deaktiviert (Portal-Pool-Fehler):`,
+      e && e.message ? e.message : String(e),
+    );
     return false;
   }
 }

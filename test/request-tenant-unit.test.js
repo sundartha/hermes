@@ -64,8 +64,14 @@ function fakeRes() {
   return {
     statusCode: null,
     body: null,
-    status(c) { this.statusCode = c; return this; },
-    json(b) { this.body = b; return this; },
+    status(c) {
+      this.statusCode = c;
+      return this;
+    },
+    json(b) {
+      this.body = b;
+      return this;
+    },
   };
 }
 
@@ -87,7 +93,10 @@ test("isLocalSocket: externe Adresse -> false", () => {
 // === internalIdentity ==========================================================
 
 test("internalIdentity: localhost + Header-String -> Identitaet", () => {
-  const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-identity": "alice@team.test" } });
+  const req = reqWith({
+    remoteAddress: "127.0.0.1",
+    headers: { "x-internal-identity": "alice@team.test" },
+  });
   assert.equal(internalIdentity(req), "alice@team.test");
 });
 
@@ -103,12 +112,18 @@ test("internalIdentity: localhost + leerer Header -> null (leerer String ist fal
 
 test("internalIdentity: localhost + nicht-String-Header -> null (typeof-Guard)", () => {
   // Ein doppelt gesetzter Header ist in Express ein string[] -> typeof !== "string" -> null.
-  const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-identity": ["a", "b"] } });
+  const req = reqWith({
+    remoteAddress: "127.0.0.1",
+    headers: { "x-internal-identity": ["a", "b"] },
+  });
   assert.equal(internalIdentity(req), null);
 });
 
 test("internalIdentity: extern + Header gesetzt -> null (von extern faelschbar, ignoriert)", () => {
-  const req = reqWith({ remoteAddress: "203.0.113.7", headers: { "x-internal-identity": "evil@attacker.test" } });
+  const req = reqWith({
+    remoteAddress: "203.0.113.7",
+    headers: { "x-internal-identity": "evil@attacker.test" },
+  });
   assert.equal(internalIdentity(req), null);
 });
 
@@ -150,7 +165,10 @@ test("requestTenant: Flag AN + auth ohne sub, extern -> OWNER (fehlende Identita
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
-    assert.equal(requestTenant(reqWith({ auth: {}, remoteAddress: "203.0.113.7" })), OWNER_TENANT_ID);
+    assert.equal(
+      requestTenant(reqWith({ auth: {}, remoteAddress: "203.0.113.7" })),
+      OWNER_TENANT_ID,
+    );
   });
   assert.deepEqual(store.calls, [], "kein Lookup ohne Identitaet");
 });
@@ -170,17 +188,27 @@ test("requestTenant: Flag AN + localhost internalIdentity, bekannt -> Tenant", (
   const store = makeStore({ "alice@team.test": "B" });
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
-    const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-identity": "alice@team.test" } });
+    const req = reqWith({
+      remoteAddress: "127.0.0.1",
+      headers: { "x-internal-identity": "alice@team.test" },
+    });
     assert.equal(requestTenant(req), "B");
   });
-  assert.deepEqual(store.calls, ["alice@team.test"], "resolveTenant wird mit der internal-Identitaet aufgeloest");
+  assert.deepEqual(
+    store.calls,
+    ["alice@team.test"],
+    "resolveTenant wird mit der internal-Identitaet aufgeloest",
+  );
 });
 
 test("requestTenant: Flag AN + localhost internalIdentity, unbekannt -> TENANT_REJECT", () => {
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
-    const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-identity": "fremd@x.test" } });
+    const req = reqWith({
+      remoteAddress: "127.0.0.1",
+      headers: { "x-internal-identity": "fremd@x.test" },
+    });
     assert.equal(requestTenant(req), TENANT_REJECT);
   });
 });
@@ -207,7 +235,11 @@ test("requestTenant: Web-Session (req.tenant) gueltig -> direkter Tenant, kein z
   withMultiTenant(true, () => {
     assert.equal(requestTenant(reqWith({ tenant: { tenantId: "B" } })), "B");
   });
-  assert.deepEqual(store.calls, [], "req.tenant.tenantId wird direkt zurueckgegeben (R7: kein resolveTenant)");
+  assert.deepEqual(
+    store.calls,
+    [],
+    "req.tenant.tenantId wird direkt zurueckgegeben (R7: kein resolveTenant)",
+  );
 });
 
 test("requestTenant: Web-Session mit leerer tenantId -> TENANT_REJECT (fail-closed, ||)", () => {
@@ -254,9 +286,7 @@ test("requireTenant: gueltiger Tenant -> Tenant-String, kein 403", () => {
   const store = makeStore({ "sub-b": "B" });
   const { requireTenant } = makeRequestTenant(store);
   const res = fakeRes();
-  const out = withMultiTenant(true, () =>
-    requireTenant(reqWith({ auth: { sub: "sub-b" } }), res),
-  );
+  const out = withMultiTenant(true, () => requireTenant(reqWith({ auth: { sub: "sub-b" } }), res));
   assert.equal(out, "B");
   assert.equal(res.statusCode, null, "kein Status-Write auf dem Erfolgs-Pfad");
 });

@@ -109,7 +109,10 @@ test("Konstanten tragen ihre Bestands-Werte", () => {
 const RESOLVER_FACTORIES = [
   ["routes/_tenant.js::makeTenantResolver", (store) => canonical.makeTenantResolver({ store })],
   ["routes/_tenant.js::createTenantResolver", (store) => canonical.createTenantResolver({ store })],
-  ["request-tenant.js::makeRequestTenant (Re-Export)", (store) => viaReexport.makeRequestTenant(store)],
+  [
+    "request-tenant.js::makeRequestTenant (Re-Export)",
+    (store) => viaReexport.makeRequestTenant(store),
+  ],
 ];
 
 for (const [label, build] of RESOLVER_FACTORIES) {

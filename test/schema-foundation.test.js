@@ -21,10 +21,16 @@ test("CASCADE: tenant-Loeschung entfernt account/session, NICHT audit_log", asyn
   const db = await freshDb();
   await db.query(`INSERT INTO tenant (id) VALUES ('t1')`);
   await db.query(`INSERT INTO account (sub, email, tenant_id) VALUES ('s1','a@x','t1')`);
-  await db.query(`INSERT INTO session (id, sub, tenant_id, expires_at) VALUES ('sess1','s1','t1', now()+interval '1h')`);
+  await db.query(
+    `INSERT INTO session (id, sub, tenant_id, expires_at) VALUES ('sess1','s1','t1', now()+interval '1h')`,
+  );
   await db.query(`INSERT INTO audit_log (tenant_id, action) VALUES ('t1','tenant_create')`);
   await db.query(`DELETE FROM tenant WHERE id='t1'`);
   assert.equal((await db.query(`SELECT 1 FROM account`)).rows.length, 0, "account cascaded");
   assert.equal((await db.query(`SELECT 1 FROM session`)).rows.length, 0, "session cascaded");
-  assert.equal((await db.query(`SELECT 1 FROM audit_log`)).rows.length, 1, "audit_log ueberdauert (compliance)");
+  assert.equal(
+    (await db.query(`SELECT 1 FROM audit_log`)).rows.length,
+    1,
+    "audit_log ueberdauert (compliance)",
+  );
 });

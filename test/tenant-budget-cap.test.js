@@ -7,7 +7,13 @@
 // Quelle, kein Doppelzaehlen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeDefaultState, trackUsage, budgetExceeded, globalBudgetExceeded, setTenantBudget } from "../src/store/state-ops.js";
+import {
+  makeDefaultState,
+  trackUsage,
+  budgetExceeded,
+  globalBudgetExceeded,
+  setTenantBudget,
+} from "../src/store/state-ops.js";
 
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
 const TENANT_A = "tenant_a";
@@ -23,7 +29,11 @@ test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.maxBudgetEur (byte-iden
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "unter 8 EUR -> frei");
   // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costEur >= maxBudgetEur)
   trackUsage(s, TENANT_A, Math.ceil(TOKENS_PER_EUR * 0.2), 0, PRICES);
-  assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, ">= 8 EUR -> exceeded (Grenze inklusiv wie Bestand)");
+  assert.equal(
+    budgetExceeded(s, TENANT_A, PRICES),
+    true,
+    ">= 8 EUR -> exceeded (Grenze inklusiv wie Bestand)",
+  );
 });
 
 test("INV(1): pro-Tenant-Cap blockt A, B ohne Zeile telefoniert weiter", () => {
@@ -44,7 +54,11 @@ test("INV(2): Schnittmenge - globaler Notaus greift, waehrend jeder unter SEINEM
   trackUsage(s, TENANT_B, Math.floor(TOKENS_PER_EUR * 5), 0, PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "A einzeln unter Cap");
   assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B einzeln unter Cap");
-  assert.equal(globalBudgetExceeded(s, PRICES), true, "Plattform-Summe ueber Cap (Notaus bleibt parallel)");
+  assert.equal(
+    globalBudgetExceeded(s, PRICES),
+    true,
+    "Plattform-Summe ueber Cap (Notaus bleibt parallel)",
+  );
 });
 
 test("INV(2b): pro-Tenant-Cap greift unabhaengig vom globalen (A blockt, global frei)", () => {
@@ -52,7 +66,11 @@ test("INV(2b): pro-Tenant-Cap greift unabhaengig vom globalen (A blockt, global 
   setTenantBudget(s, TENANT_A, { budgetCents: 100, hardCapCents: 200 }); // 2 EUR
   trackUsage(s, TENANT_A, Math.ceil(TOKENS_PER_EUR * 3), 0, PRICES); // 3 EUR > 2-EUR-Cap, < 8 global
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "A ueber pro-Tenant-Cap");
-  assert.equal(globalBudgetExceeded(s, PRICES), false, "global noch frei -> pro-Tenant greift unabhaengig");
+  assert.equal(
+    globalBudgetExceeded(s, PRICES),
+    false,
+    "global noch frei -> pro-Tenant greift unabhaengig",
+  );
 });
 
 test("Grenzfall (T5/G3): hardCapCents exakt = Verbrauch -> exceeded (>= wie Bestand)", () => {

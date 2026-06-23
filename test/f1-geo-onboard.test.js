@@ -15,7 +15,11 @@ import { startServer } from "./helpers.js";
 import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 
 const postJson = (url, body) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 // User-Wahl (body.country=FR) ist autoritativ (R4): FR/fr landen auf Tenant + Number.
 test("Onboard mit body.country=FR -> tenant.country/defaultLanguage UND number.country/language = FR/fr", async () => {
@@ -78,7 +82,10 @@ test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async 
 test("Onboard mit ungueltigem country -> ignoriert, Fallback DE/de (fail-safe)", async () => {
   const srv = await startServer();
   try {
-    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_junk", country: "ZZZ!" });
+    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+      tenantId: "t_junk",
+      country: "ZZZ!",
+    });
     const json = await res.json();
     assert.equal(json.country, DEFAULT_COUNTRY);
     assert.equal(json.language, DEFAULT_LANGUAGE);

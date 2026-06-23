@@ -2,12 +2,20 @@
 // Reine state-ops-Units (kein IO, kein config/DATA_DIR) - statisch importierbar.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerTenant, seedOwnerIdentity, tenantContext, makeDefaultState } from "../src/store/state-ops.js";
+import {
+  registerTenant,
+  seedOwnerIdentity,
+  tenantContext,
+  makeDefaultState,
+} from "../src/store/state-ops.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 test("registerTenant komponiert ownerName aus firstName + mehrteiligem lastName", () => {
   const s = makeDefaultState();
-  const t = registerTenant(s, "t_a", { firstName: "Antonio", lastName: "Fotiadis dos Santos Francisco" });
+  const t = registerTenant(s, "t_a", {
+    firstName: "Antonio",
+    lastName: "Fotiadis dos Santos Francisco",
+  });
   assert.equal(t.firstName, "Antonio");
   assert.equal(t.ownerName, "Antonio Fotiadis dos Santos Francisco");
 });

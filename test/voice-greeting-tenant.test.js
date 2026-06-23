@@ -13,7 +13,16 @@ const B_NUMBER = "+4915255555555";
 function seedWithB() {
   return seedState({
     tenants: [{ id: TENANT_B, status: "active", ownerName: "Maria" }],
-    numbers: [{ id: "num_b", e164: B_NUMBER, tenantId: TENANT_B, provider: "twilio", status: "active", providerNumberId: null }],
+    numbers: [
+      {
+        id: "num_b",
+        e164: B_NUMBER,
+        tenantId: TENANT_B,
+        provider: "twilio",
+        status: "active",
+        providerNumberId: null,
+      },
+    ],
   });
 }
 
@@ -36,7 +45,11 @@ test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
-      body: new URLSearchParams({ CallSid: "CAo", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 }),
+      body: new URLSearchParams({
+        CallSid: "CAo",
+        From: "+4915112345678",
+        To: OWNER_TEST_NUMBER.e164,
+      }),
     });
     assert.equal(res.status, 200);
     assert.match(await res.text(), new RegExp(BASE_ENV.OWNER_FIRST_NAME));

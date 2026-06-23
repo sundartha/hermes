@@ -84,25 +84,40 @@ test("resolveOnboardCountry: User-Wahl ist autoritativ (schlaegt IP-Vorschlag, R
   assert.equal(
     resolveOnboardCountry({ userCountry: "FR", proposedCountry: "DE", fallbackCountry: "DE" }),
     "FR",
-    "Override gewinnt gegen gespoofte/abweichende IP"
+    "Override gewinnt gegen gespoofte/abweichende IP",
   );
 });
 
 test("resolveOnboardCountry: ohne User-Wahl greift der IP-Vorschlag", () => {
-  assert.equal(resolveOnboardCountry({ userCountry: null, proposedCountry: "FR", fallbackCountry: "DE" }), "FR");
-  assert.equal(resolveOnboardCountry({ userCountry: "", proposedCountry: "GB", fallbackCountry: "DE" }), "GB");
+  assert.equal(
+    resolveOnboardCountry({ userCountry: null, proposedCountry: "FR", fallbackCountry: "DE" }),
+    "FR",
+  );
+  assert.equal(
+    resolveOnboardCountry({ userCountry: "", proposedCountry: "GB", fallbackCountry: "DE" }),
+    "GB",
+  );
 });
 
 test("resolveOnboardCountry: ohne User + ohne IP greift der config-Fallback", () => {
-  assert.equal(resolveOnboardCountry({ userCountry: null, proposedCountry: null, fallbackCountry: "FR" }), "FR");
+  assert.equal(
+    resolveOnboardCountry({ userCountry: null, proposedCountry: null, fallbackCountry: "FR" }),
+    "FR",
+  );
 });
 
 test("resolveOnboardCountry: alles leer -> DEFAULT_COUNTRY (de-Welt: DE)", () => {
-  assert.equal(resolveOnboardCountry({ userCountry: null, proposedCountry: null, fallbackCountry: "" }), DEFAULT_COUNTRY);
+  assert.equal(
+    resolveOnboardCountry({ userCountry: null, proposedCountry: null, fallbackCountry: "" }),
+    DEFAULT_COUNTRY,
+  );
   assert.equal(resolveOnboardCountry({}), DEFAULT_COUNTRY);
 });
 
 test("resolveOnboardCountry: ungueltige Eingaben fallen fail-safe durch (kein Schreiben von Muell)", () => {
   // ungueltige User-Wahl + ungueltiger Vorschlag -> Fallback
-  assert.equal(resolveOnboardCountry({ userCountry: "xx!", proposedCountry: "12", fallbackCountry: "FR" }), "FR");
+  assert.equal(
+    resolveOnboardCountry({ userCountry: "xx!", proposedCountry: "12", fallbackCountry: "FR" }),
+    "FR",
+  );
 });

@@ -18,7 +18,8 @@ export async function handleProvisionJob(s, job, deps, opts) {
   const number = findNumber(s, numberId);
   // Idempotenz-Schloss #2 (Zustandscheck): nur 'requested' wird gekauft. Re-Run eines
   // bereits provisionierten/failed Jobs ist ein No-op (kein Doppelkauf).
-  if (!number || number.status !== NUMBER_STATUS.REQUESTED) return { skipped: true, status: number?.status ?? null };
+  if (!number || number.status !== NUMBER_STATUS.REQUESTED)
+    return { skipped: true, status: number?.status ?? null };
   const result = await provisionNumber(s, deps, { numberId, ...opts });
   return { number: result };
 }

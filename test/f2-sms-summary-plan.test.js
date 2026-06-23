@@ -17,7 +17,8 @@ const PROV = PROVIDER.TWILIO;
 function makeStore(tenants) {
   const numbers = [];
   for (const [tenantId, t] of Object.entries(tenants))
-    if (t.sender) numbers.push({ tenantId, e164: t.sender, status: NUMBER_STATUS.ACTIVE, provider: PROV });
+    if (t.sender)
+      numbers.push({ tenantId, e164: t.sender, status: NUMBER_STATUS.ACTIVE, provider: PROV });
   return {
     tenantPrivateNumber: (id) => tenants[id]?.privateNumber ?? null,
     load: () => ({ numbers }),
@@ -30,7 +31,9 @@ const call = (tenantId) => ({ id: `call_${tenantId}`, tenantId, provider: PROV }
 const cfg = (sendSmsSummary = true) => ({ sendSmsSummary });
 
 test("alles vorhanden -> send=true, Ziel = private Nummer des Call-Tenants", () => {
-  const store = makeStore({ A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: true } });
+  const store = makeStore({
+    A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: true },
+  });
   const plan = planSummarySms(store, cfg(), call("A"));
   assert.equal(plan.send, true);
   assert.equal(plan.to, "+491701234567");
@@ -43,8 +46,16 @@ test("H3: Ziel IMMER ueber call.tenantId - Call an A -> A's Nummer, nie B's", ()
     A: { privateNumber: "+491701111111", sender: "+4915100000001", optIn: true },
     B: { privateNumber: "+492209999999", sender: "+4915100000002", optIn: true },
   });
-  assert.equal(planSummarySms(store, cfg(), call("A")).to, "+491701111111", "Call an A -> A's Nummer");
-  assert.equal(planSummarySms(store, cfg(), call("B")).to, "+492209999999", "Call an B -> B's Nummer");
+  assert.equal(
+    planSummarySms(store, cfg(), call("A")).to,
+    "+491701111111",
+    "Call an A -> A's Nummer",
+  );
+  assert.equal(
+    planSummarySms(store, cfg(), call("B")).to,
+    "+492209999999",
+    "Call an B -> B's Nummer",
+  );
 });
 
 test("kein Ziel (keine private Nummer) -> send=false, reason=no_private_number (M4)", () => {
@@ -56,14 +67,18 @@ test("kein Ziel (keine private Nummer) -> send=false, reason=no_private_number (
 });
 
 test("Opt-Out (smsSummaryOptIn=false) -> send=false, KEIN reason (kein Ziel-Defizit)", () => {
-  const store = makeStore({ A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: false } });
+  const store = makeStore({
+    A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: false },
+  });
   const plan = planSummarySms(store, cfg(), call("A"));
   assert.equal(plan.send, false);
   assert.equal(plan.reason, null);
 });
 
 test("Feature-Schalter aus (config.sendSmsSummary=false) -> send=false, kein reason", () => {
-  const store = makeStore({ A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: true } });
+  const store = makeStore({
+    A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: true },
+  });
   const plan = planSummarySms(store, cfg(false), call("A"));
   assert.equal(plan.send, false);
   assert.equal(plan.reason, null);

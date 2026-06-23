@@ -33,14 +33,23 @@ export async function seedDefaults(db, tenantId) {
         allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (tenant_id) DO NOTHING`,
-    [tenantId, s.agentName, s.greeting, s.allowCalendar, s.allowBooking,
-      s.allowSummaries, s.allowPersonalData, s.allowBankData, s.smsSummaryOptIn, s.language]
+    [
+      tenantId,
+      s.agentName,
+      s.greeting,
+      s.allowCalendar,
+      s.allowBooking,
+      s.allowSummaries,
+      s.allowPersonalData,
+      s.allowBankData,
+      s.smsSummaryOptIn,
+      s.language,
+    ],
   );
 
-  await db.query(
-    `INSERT INTO usage (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING`,
-    [tenantId]
-  );
+  await db.query(`INSERT INTO usage (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING`, [
+    tenantId,
+  ]);
 
   // Owner-Nummern werden NICHT mehr beim Migrate geseedet: der Owner haelt seine
   // Nummer(n) wie jeder Tenant in der number-Tabelle, einmalig eingetragen via
@@ -48,16 +57,15 @@ export async function seedDefaults(db, tenantId) {
 
   // Demo-Kalender nur seeden, wenn fuer den Owner noch keiner existiert
   // (idempotent, ohne dass spaeter geloeschte Eintraege wieder auftauchen).
-  const existing = await db.query(
-    `SELECT 1 FROM calendar_event WHERE tenant_id = $1 LIMIT 1`,
-    [tenantId]
-  );
+  const existing = await db.query(`SELECT 1 FROM calendar_event WHERE tenant_id = $1 LIMIT 1`, [
+    tenantId,
+  ]);
   if (existing.rows.length === 0) {
     for (const ev of demoCalendar()) {
       await db.query(
         `INSERT INTO calendar_event (id, tenant_id, title, starts_at, ends_at)
          VALUES ($1, $2, $3, $4, $5)`,
-        [ev.id, tenantId, ev.title, ev.start, ev.end]
+        [ev.id, tenantId, ev.title, ev.start, ev.end],
       );
     }
   }

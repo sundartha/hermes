@@ -6,7 +6,11 @@ import { startServer, externalIp, seedState, seedCall, waitForLog } from "./help
 
 const EXTERNAL_IP = externalIp();
 const postJson = (url, body) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 const countMatches = (text, re) => (text.match(new RegExp(re, "g")) || []).length;
 
@@ -20,17 +24,35 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
   });
   try {
     await t.test("place_call: genau eine Zeile mit Aktion + IP + Ziel", async () => {
-      const res = await postJson(`${srv.localUrl}/api/calls`, { to: "+4915112345678", objective: "Termin" });
+      const res = await postJson(`${srv.localUrl}/api/calls`, {
+        to: "+4915112345678",
+        objective: "Termin",
+      });
       assert.equal(res.status, 500); // Twilio-Client wirft (nicht-AC SID) - Audit kam davor
       await waitForLog(srv, /\[audit\] place_call ip=\S+ to=\+4915112345678/);
-      assert.equal(countMatches(srv.stdout, "\\[audit\\] place_call ip=\\S+ to=\\+4915112345678"), 1);
+      assert.equal(
+        countMatches(srv.stdout, "\\[audit\\] place_call ip=\\S+ to=\\+4915112345678"),
+        1,
+      );
     });
 
     await t.test("place_call_denied: Allowlist-Ablehnung wird auditiert", async () => {
-      const res = await postJson(`${srv.localUrl}/api/calls`, { to: "+4915199999999", objective: "Termin" });
+      const res = await postJson(`${srv.localUrl}/api/calls`, {
+        to: "+4915199999999",
+        objective: "Termin",
+      });
       assert.equal(res.status, 403);
-      await waitForLog(srv, /\[audit\] place_call_denied ip=\S+ to=\+4915199999999 grund=allowlist/);
-      assert.equal(countMatches(srv.stdout, "\\[audit\\] place_call_denied ip=\\S+ to=\\+4915199999999 grund=allowlist"), 1);
+      await waitForLog(
+        srv,
+        /\[audit\] place_call_denied ip=\S+ to=\+4915199999999 grund=allowlist/,
+      );
+      assert.equal(
+        countMatches(
+          srv.stdout,
+          "\\[audit\\] place_call_denied ip=\\S+ to=\\+4915199999999 grund=allowlist",
+        ),
+        1,
+      );
     });
 
     await t.test("cancel_call: genau eine Zeile", async () => {
@@ -41,12 +63,18 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
     });
 
     await t.test("settings_update: nur Keys im Log, keine Werte", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { greeting: "GEHEIMER-FREITEXT", allowBooking: false });
+      const res = await postJson(`${srv.localUrl}/api/settings`, {
+        greeting: "GEHEIMER-FREITEXT",
+        allowBooking: false,
+      });
       assert.equal(res.status, 200);
       await waitForLog(srv, /\[audit\] settings_update ip=\S+ keys=/);
       assert.equal(countMatches(srv.stdout, "\\[audit\\] settings_update ip=\\S+ keys="), 1);
       assert.match(srv.stdout, /settings_update ip=\S+ keys=greeting,allowBooking/);
-      assert.ok(!srv.stdout.includes("GEHEIMER-FREITEXT"), "Settings-Werte duerfen nicht im Log stehen");
+      assert.ok(
+        !srv.stdout.includes("GEHEIMER-FREITEXT"),
+        "Settings-Werte duerfen nicht im Log stehen",
+      );
     });
   } finally {
     await srv.stop();
@@ -63,12 +91,17 @@ test("Audit-Zeilen fuer fehlgeschlagene Auth-Versuche", async (t) => {
       { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
       async () => {
         const res = await fetch(`${srv.externalUrl}/api/state`, {
-          headers: { Authorization: "Basic " + Buffer.from("admin:falsches-pw").toString("base64") },
+          headers: {
+            Authorization: "Basic " + Buffer.from("admin:falsches-pw").toString("base64"),
+          },
         });
         assert.equal(res.status, 401);
         await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/api\/state/);
-        assert.equal(countMatches(srv.stdout, "\\[audit\\] auth_failed ip=\\S+ path=/api/state"), 1);
-      }
+        assert.equal(
+          countMatches(srv.stdout, "\\[audit\\] auth_failed ip=\\S+ path=/api/state"),
+          1,
+        );
+      },
     );
 
     await t.test("MCP-Fehlversuch -> genau eine Zeile", async () => {
@@ -82,7 +115,12 @@ test("Audit-Zeilen fuer fehlgeschlagene Auth-Versuche", async (t) => {
     });
 
     await t.test("keine Secrets im Log", () => {
-      for (const secret of ["super-geheim-pw", "geheimes-mcp-token", "falsches-pw", "falsches-token"])
+      for (const secret of [
+        "super-geheim-pw",
+        "geheimes-mcp-token",
+        "falsches-pw",
+        "falsches-token",
+      ])
         assert.ok(!srv.stdout.includes(secret), `${secret} darf nicht im Log stehen`);
     });
   } finally {

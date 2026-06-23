@@ -21,16 +21,47 @@ const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93
 function freshState() {
   const s = seedState({
     calls: [
-      seedCall({ id: "call_owner1", tenantId: OWNER_TENANT_ID, status: "completed",
-        summary: "Zusammenfassung 1", actionItemIds: ["ai1"],
-        transcript: [{ role: "agent", text: "Hallo", at: AT }, { role: "caller", text: "Geheim", at: AT }] }),
-      seedCall({ id: "call_owner2", tenantId: OWNER_TENANT_ID, status: "completed", transcript: [] }),
-      seedCall({ id: "call_other", tenantId: OTHER, status: "completed",
-        transcript: [{ role: "caller", text: "Fremd", at: AT }] }),
+      seedCall({
+        id: "call_owner1",
+        tenantId: OWNER_TENANT_ID,
+        status: "completed",
+        summary: "Zusammenfassung 1",
+        actionItemIds: ["ai1"],
+        transcript: [
+          { role: "agent", text: "Hallo", at: AT },
+          { role: "caller", text: "Geheim", at: AT },
+        ],
+      }),
+      seedCall({
+        id: "call_owner2",
+        tenantId: OWNER_TENANT_ID,
+        status: "completed",
+        transcript: [],
+      }),
+      seedCall({
+        id: "call_other",
+        tenantId: OTHER,
+        status: "completed",
+        transcript: [{ role: "caller", text: "Fremd", at: AT }],
+      }),
     ],
     actionItems: [
-      { id: "ai1", callId: "call_owner1", text: "Rueckruf", type: "todo", done: false, createdAt: AT },
-      { id: "ai_other", callId: "call_other", text: "Fremd-Item", type: "todo", done: false, createdAt: AT },
+      {
+        id: "ai1",
+        callId: "call_owner1",
+        text: "Rueckruf",
+        type: "todo",
+        done: false,
+        createdAt: AT,
+      },
+      {
+        id: "ai_other",
+        callId: "call_other",
+        text: "Fremd-Item",
+        type: "todo",
+        done: false,
+        createdAt: AT,
+      },
     ],
     notifications: [
       { id: "nt1", title: "Owner-Notif", body: "", callId: "call_owner1", at: AT },
@@ -51,7 +82,11 @@ test("eraseTenantData(owner) entfernt NUR Owner-Calls; fremder Tenant + Config b
   assert.equal(getCall(s, "call_owner1"), undefined, "Owner-Call 1 geloescht");
   assert.equal(getCall(s, "call_owner2"), undefined, "Owner-Call 2 geloescht");
   assert.ok(getCall(s, "call_other"), "fremder Call bleibt");
-  assert.deepEqual(s.actionItems.map((a) => a.id), ["ai_other"], "nur fremdes Action Item bleibt");
+  assert.deepEqual(
+    s.actionItems.map((a) => a.id),
+    ["ai_other"],
+    "nur fremdes Action Item bleibt",
+  );
   // settings/calendar/usage/profiles unangetastet (Service-Config/Budget-Gate)
   assert.equal(s.settings.agentName, "Hermes");
   assert.deepEqual(s.calendar, []);
@@ -64,14 +99,26 @@ test("eraseTenantData(owner) liefert exakte Loesch-Zaehler", () => {
   const removed = eraseTenantData(s, OWNER_TENANT_ID);
   // privateNumber:0 -> freshState setzt keine private Summary-Nummer (F2 P10, PII-freier
   // 0/1-Zaehler statt des Werts). Die gesetzte-Nummer-Loeschung deckt f2-p10-* ab.
-  assert.deepEqual(removed, { calls: 2, transcriptSegments: 2, actionItems: 1, notifications: 1, privateNumber: 0 });
+  assert.deepEqual(removed, {
+    calls: 2,
+    transcriptSegments: 2,
+    actionItems: 1,
+    notifications: 1,
+    privateNumber: 0,
+  });
 });
 
 test("eraseTenantData ist idempotent: zweiter Lauf loescht nichts mehr", () => {
   const s = freshState();
   eraseTenantData(s, OWNER_TENANT_ID);
   const removed = eraseTenantData(s, OWNER_TENANT_ID);
-  assert.deepEqual(removed, { calls: 0, transcriptSegments: 0, actionItems: 0, notifications: 0, privateNumber: 0 });
+  assert.deepEqual(removed, {
+    calls: 0,
+    transcriptSegments: 0,
+    actionItems: 0,
+    notifications: 0,
+    privateNumber: 0,
+  });
 });
 
 test("allgemeine Notification (callId:null) bleibt - kein notification.tenantId-Scoping", () => {
@@ -90,8 +137,15 @@ test("exportTenantData(owner) liefert NUR Owner-Daten und mutiert den State NICH
   assert.equal(data.tenantId, OWNER_TENANT_ID);
   assert.equal(typeof data.exportedAt, "string");
   assert.deepEqual(data.calls.map((c) => c.id).sort(), ["call_owner1", "call_owner2"]);
-  assert.deepEqual(data.actionItems.map((a) => a.id), ["ai1"]);
-  assert.deepEqual(data.notifications.map((n) => n.id), ["nt1"], "nur call-verknuepfte Owner-Notification");
+  assert.deepEqual(
+    data.actionItems.map((a) => a.id),
+    ["ai1"],
+  );
+  assert.deepEqual(
+    data.notifications.map((n) => n.id),
+    ["nt1"],
+    "nur call-verknuepfte Owner-Notification",
+  );
   // reine Query: der fremde Call ist vorher == nachher (kein Seiteneffekt)
   assert.deepEqual(getCall(s, "call_other"), otherBefore, "Export mutiert den State nicht");
   assert.equal(s.calls.length, 3, "Export entfernt keine Calls");
@@ -113,5 +167,9 @@ test("json-Persistenz: eraseTenantData(owner) loescht Owner-Calls, Budget-Gate +
   assert.ok(store.getCall("call_other"), "fremder Call bleibt persistiert");
   // calendar wird beim load() aus den Demo-Defaults gemergt (seedState liefert []),
   // bleibt aber vom Erase unangetastet - hier nur die Budget-Gate-Invariante pruefen.
-  assert.equal(store.budgetExceeded(OWNER_TENANT_ID, PRICES), gateBefore, "Budget-Gate unveraendert");
+  assert.equal(
+    store.budgetExceeded(OWNER_TENANT_ID, PRICES),
+    gateBefore,
+    "Budget-Gate unveraendert",
+  );
 });

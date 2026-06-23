@@ -25,6 +25,7 @@ Bei nicht-trivialen Tasks (3+ Schritte oder architektonische Entscheidungen): Li
 Bei nicht-trivialen Code-Aenderungen ist `.claude/refs/clean-code.md` zu lesen und zu befolgen. Pflicht, nicht Empfehlung.
 
 Trivial — und nur diese Faelle duerfen ohne Lesen des Dokuments bearbeitet werden:
+
 - Tippfehler in Kommentaren, Strings oder Dokumentation
 - Reines Formatting (Whitespace, Klammern, Semikolons)
 - Imports sortieren oder ungenutzte entfernen
@@ -34,11 +35,11 @@ Alles andere ist nicht-trivial. Insbesondere: neue Funktion/Datei, Logik-Aenderu
 
 ### Richtwerte (kein Hook in diesem Repo — Selbstdisziplin)
 
-| Heuristik | Obergrenze | Ziel (anstreben) |
-|---|---|---|
-| Verschachtelungstiefe | 4 | 2 |
-| Funktionslaenge | 100 Zeilen | deutlich darunter |
-| Argumente | 3 | 0-2 |
+| Heuristik             | Obergrenze | Ziel (anstreben)  |
+| --------------------- | ---------- | ----------------- |
+| Verschachtelungstiefe | 4          | 2                 |
+| Funktionslaenge       | 100 Zeilen | deutlich darunter |
+| Argumente             | 3          | 0-2               |
 
 Hart verboten: Magic Numbers (ausser 0/1/-1) ohne benannte Konstante, toter Code, auskommentierter Code, neue abgeschaltete Sicherungen (`eslint-disable`-artige Marker, uebersprungene Checks).
 
@@ -69,7 +70,7 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
 
 ## Pre-Mortem vor Entscheidungen
 
-Vor jeder nicht-trivialen Entscheidung, jedem Plan und jeder Architektur-Wahl: **versetz dich ein Jahr in die Zukunft und nimm an, die Entscheidung war falsch — das Feature ist gescheitert, der Umbau hat Schaden angerichtet.** Frage rueckwaerts: *Was ist passiert? Was hat dazu gefuehrt?* Die so gefundenen Risiken benennst du **vor** der Umsetzung — entweder entschaerfen oder bewusst als akzeptiertes Risiko festhalten. In diesem Repo heisst das konkret: Was passiert, wenn der Agent jemanden ungewollt anruft, Kosten explodieren oder Transkripte leaken?
+Vor jeder nicht-trivialen Entscheidung, jedem Plan und jeder Architektur-Wahl: **versetz dich ein Jahr in die Zukunft und nimm an, die Entscheidung war falsch — das Feature ist gescheitert, der Umbau hat Schaden angerichtet.** Frage rueckwaerts: _Was ist passiert? Was hat dazu gefuehrt?_ Die so gefundenen Risiken benennst du **vor** der Umsetzung — entweder entschaerfen oder bewusst als akzeptiertes Risiko festhalten. In diesem Repo heisst das konkret: Was passiert, wenn der Agent jemanden ungewollt anruft, Kosten explodieren oder Transkripte leaken?
 
 ## Wurzel statt Symptom
 

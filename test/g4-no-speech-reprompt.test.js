@@ -10,14 +10,16 @@ test("G4: leerer Gather nach bereits-gesprochenem Caller -> knappe Rueckfrage, k
   const id = "call_g4";
   const srv = await startServer({
     seed: seedState({
-      calls: [seedCall({
-        id,
-        provider: "telnyx",
-        status: "active",
-        direction: "outbound",
-        // Caller hat schon gesprochen -> der leere Gather trifft den No-Speech-Zweig.
-        transcript: [{ role: "caller", text: "..." }],
-      })],
+      calls: [
+        seedCall({
+          id,
+          provider: "telnyx",
+          status: "active",
+          direction: "outbound",
+          // Caller hat schon gesprochen -> der leere Gather trifft den No-Speech-Zweig.
+          transcript: [{ role: "caller", text: "..." }],
+        }),
+      ],
     }),
   });
   try {

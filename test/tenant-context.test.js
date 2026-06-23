@@ -55,13 +55,21 @@ test("ein eigener tenant.ownerName gewinnt vor dem durchgereichten Fallback", ()
 });
 
 test("Fassade json.js exportiert tenantContext und reicht config.ownerName durch", () => {
-  assert.equal(typeof jsonBackend.tenantContext, "function", "json.tenantContext fehlt (Re-Export-Landmine)");
+  assert.equal(
+    typeof jsonBackend.tenantContext,
+    "function",
+    "json.tenantContext fehlt (Re-Export-Landmine)",
+  );
   assert.equal(jsonBackend.tenantContext(OWNER_TENANT_ID).ownerName, config.ownerName);
 });
 
 test("Fassade pg.js (pglite) exportiert tenantContext und reicht config.ownerName durch", async () => {
   const { store } = await makePgTestStore();
-  assert.equal(typeof store.tenantContext, "function", "pg.tenantContext fehlt (Re-Export-Landmine)");
+  assert.equal(
+    typeof store.tenantContext,
+    "function",
+    "pg.tenantContext fehlt (Re-Export-Landmine)",
+  );
   assert.equal(store.tenantContext(OWNER_TENANT_ID).ownerName, config.ownerName);
 });
 
@@ -69,10 +77,18 @@ test("Fassade pg.js (pglite) exportiert tenantContext und reicht config.ownerNam
 // (CLI scripts/seed-owner-number.js) in den Store, nicht mehr aus der config. Faengt
 // die Re-Export-Landmine + dass die geseedete Bestandsnummer routbar landet.
 test("Fassade json.js exportiert seedOwnerNumber -> Bestandsnummer routbar", () => {
-  assert.equal(typeof jsonBackend.seedOwnerNumber, "function", "json.seedOwnerNumber fehlt (Re-Export-Landmine)");
+  assert.equal(
+    typeof jsonBackend.seedOwnerNumber,
+    "function",
+    "json.seedOwnerNumber fehlt (Re-Export-Landmine)",
+  );
   const E164 = "+13125550199";
   jsonBackend.seedOwnerNumber(E164, OWNER_TENANT_ID, "telnyx");
-  assert.equal(jsonBackend.findTenantByNumber(E164), OWNER_TENANT_ID, "geseedete Owner-Nummer routet");
+  assert.equal(
+    jsonBackend.findTenantByNumber(E164),
+    OWNER_TENANT_ID,
+    "geseedete Owner-Nummer routet",
+  );
 });
 
 // I5: /api/state liest den Usage-Bucket ueber store.usageOf (Lazy-Default, NIE
@@ -81,12 +97,18 @@ test("Fassade json.js exportiert seedOwnerNumber -> Bestandsnummer routbar", () 
 test("Fassade json.js exportiert usageOf und liefert nie undefined", () => {
   assert.equal(typeof jsonBackend.usageOf, "function", "json.usageOf fehlt (Re-Export-Landmine)");
   assert.ok(jsonBackend.usageOf(OWNER_TENANT_ID), "Owner-Bucket vorhanden");
-  assert.ok(jsonBackend.usageOf("unbekannt-tenant"), "Tenant ohne Bucket -> Lazy-Default, nicht undefined");
+  assert.ok(
+    jsonBackend.usageOf("unbekannt-tenant"),
+    "Tenant ohne Bucket -> Lazy-Default, nicht undefined",
+  );
 });
 
 test("Fassade pg.js (pglite) exportiert usageOf und liefert nie undefined", async () => {
   const { store } = await makePgTestStore();
   assert.equal(typeof store.usageOf, "function", "pg.usageOf fehlt (Re-Export-Landmine)");
   assert.ok(store.usageOf(OWNER_TENANT_ID), "Owner-Bucket vorhanden");
-  assert.ok(store.usageOf("unbekannt-tenant"), "Tenant ohne Bucket -> Lazy-Default, nicht undefined");
+  assert.ok(
+    store.usageOf("unbekannt-tenant"),
+    "Tenant ohne Bucket -> Lazy-Default, nicht undefined",
+  );
 });

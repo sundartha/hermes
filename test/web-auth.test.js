@@ -2,7 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { signValue, verifyValue, makePkce, makeWebAuthRoutes, makeOidc, claimsFromPayload, adminOnly } from "../src/web-auth.js";
+import {
+  signValue,
+  verifyValue,
+  makePkce,
+  makeWebAuthRoutes,
+  makeOidc,
+  claimsFromPayload,
+  adminOnly,
+} from "../src/web-auth.js";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -57,7 +65,12 @@ function rawGet(url, headers = {}) {
       let body = "";
       res.on("data", (d) => (body += d));
       res.on("end", () =>
-        resolve({ status: res.statusCode, headers: res.headers, setCookie: res.headers["set-cookie"] || [], body })
+        resolve({
+          status: res.statusCode,
+          headers: res.headers,
+          setCookie: res.headers["set-cookie"] || [],
+          body,
+        }),
       );
     });
     req.on("error", reject);
@@ -73,9 +86,14 @@ function rawPost(url, headers = {}) {
         let body = "";
         res.on("data", (d) => (body += d));
         res.on("end", () =>
-          resolve({ status: res.statusCode, headers: res.headers, setCookie: res.headers["set-cookie"] || [], body })
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            setCookie: res.headers["set-cookie"] || [],
+            body,
+          }),
         );
-      }
+      },
     );
     req.on("error", reject);
     req.end();
@@ -116,9 +134,10 @@ function fakeDeps(overrides = {}) {
   };
   // Tiefer Merge fuer die verschachtelten Fakes.
   for (const k of Object.keys(overrides)) {
-    deps[k] = overrides[k] && typeof overrides[k] === "object" && !Array.isArray(overrides[k])
-      ? { ...deps[k], ...overrides[k] }
-      : overrides[k];
+    deps[k] =
+      overrides[k] && typeof overrides[k] === "object" && !Array.isArray(overrides[k])
+        ? { ...deps[k], ...overrides[k] }
+        : overrides[k];
   }
   return { deps, calls };
 }
@@ -154,7 +173,9 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
       `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
 
     assert.equal(res.status, 302);
     assert.equal(res.headers.location, "/");
@@ -167,12 +188,19 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
     assert.equal(calls.create[0].tenantId, "t_user-1");
     // Set-Cookie traegt die SIGNIERTE Session-id
     const sessionCookie = cookieValue(res.setCookie, "session");
-    assert.equal(verifyValue(sessionCookie, SECRET), "sess-abc-123", "Session-Cookie = signierte Session-id");
+    assert.equal(
+      verifyValue(sessionCookie, SECRET),
+      "sess-abc-123",
+      "Session-Cookie = signierte Session-id",
+    );
     const joined = res.setCookie.join("\n");
     assert.match(joined, /HttpOnly/i);
     assert.match(joined, /SameSite=Lax/i);
     // verifier + state werden geloescht (Max-Age=0 / Expires Vergangenheit)
-    assert.match(joined, /pkce_verifier=;|pkce_verifier=deleted|Max-Age=0[\s\S]*pkce_verifier|pkce_verifier[\s\S]*Max-Age=0|pkce_verifier[\s\S]*Expires=Thu, 01 Jan 1970/i);
+    assert.match(
+      joined,
+      /pkce_verifier=;|pkce_verifier=deleted|Max-Age=0[\s\S]*pkce_verifier|pkce_verifier[\s\S]*Max-Age=0|pkce_verifier[\s\S]*Expires=Thu, 01 Jan 1970/i,
+    );
     // Audit-Eintrag login
     assert.equal(calls.audit.length, 1);
     assert.equal(calls.audit[0].action, "login");
@@ -191,7 +219,9 @@ test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
     ].join("; ");
     // Angreifer-state weicht vom Cookie ab
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=attacker-state`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=attacker-state`, {
+      Cookie: cookies,
+    });
 
     assert.equal(res.status, 400);
     assert.equal(calls.upsert.length, 0, "kein Account-Upsert bei CSRF");
@@ -232,7 +262,9 @@ test("GET /auth/callback mit fehlschlagendem exchange -> 401, Cookies geloescht,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
       `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
 
     assert.equal(res.status, 401);
     assert.equal(calls.create.length, 0);
@@ -283,7 +315,11 @@ test("T-F1-01: email_verified true -> email durchgereicht", () => {
 });
 
 test("T-F1-02: email_verified false -> email: null", () => {
-  const claims = claimsFromPayload({ sub: "u2", email: "attacker@vodafone.de", email_verified: false });
+  const claims = claimsFromPayload({
+    sub: "u2",
+    email: "attacker@vodafone.de",
+    email_verified: false,
+  });
   assert.deepEqual(claims, { sub: "u2", email: null });
 });
 
@@ -345,7 +381,9 @@ test("T-F2-02: GET /auth/callback ohne oidc_nonce-Cookie -> 400, keine Session",
       `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
     assert.equal(res.status, 400);
     assert.equal(cookieValue(res.setCookie, "session"), null);
     assert.equal(calls.upsert.length, 0);
@@ -366,7 +404,9 @@ test("T-F2-03: GET /auth/callback mit manipuliertem oidc_nonce-Cookie -> 400, ke
       // Falsche Signatur (anderes Secret) -> verifyValue gibt null
       `oidc_nonce=${encodeURIComponent(signValue("nonce-val", "wrong-secret"))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
     assert.equal(res.status, 400);
     assert.equal(cookieValue(res.setCookie, "session"), null);
     assert.equal(calls.create.length, 0);
@@ -393,7 +433,9 @@ test("T-F2-04: GET /auth/callback mit nonce-Mismatch im id_token (exchange wirft
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
       `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
     assert.equal(res.status, 401);
     assert.equal(calls.create.length, 0);
     assert.doesNotMatch(res.body, /nonce/);
@@ -422,7 +464,9 @@ test("T-F2-05: GET /auth/callback Happy-Path: nonce-Klarwert an exchange ueberge
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
       `oidc_nonce=${encodeURIComponent(signValue(nonce, SECRET))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, { Cookie: cookies });
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
     assert.equal(res.status, 302);
     // exchange erhielt den nonce-Klarwert (nach verifyValue des Cookies)
     assert.equal(calls.exchangeNonce, nonce);
@@ -442,16 +486,29 @@ async function mountAdmin(adminEmails, tenant) {
   const app = express();
   app.get(
     "/admin-probe",
-    (req, _res, next) => { req.tenant = tenant; next(); },
+    (req, _res, next) => {
+      req.tenant = tenant;
+      next();
+    },
     adminOnly({ adminEmails }),
-    (_req, res) => res.json({ ok: true })
+    (_req, res) => res.json({ ok: true }),
   );
-  const server = await new Promise((r) => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
-  return { base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
+  const server = await new Promise((r) => {
+    const s = app.listen(0, "127.0.0.1", () => r(s));
+  });
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((r) => server.close(r)),
+  };
 }
 
 test("T-F1-06: adminOnly mit unverifizierter Email (null) -> 403 trotz Allowlist-Treffer", async () => {
-  const srv = await mountAdmin(["admin@vodafone.de"], { email: null, role: "member", tenantId: "t_u1", sub: "u1" });
+  const srv = await mountAdmin(["admin@vodafone.de"], {
+    email: null,
+    role: "member",
+    tenantId: "t_u1",
+    sub: "u1",
+  });
   try {
     const res = await rawGet(`${srv.base}/admin-probe`);
     assert.equal(res.status, 403);
@@ -461,7 +518,12 @@ test("T-F1-06: adminOnly mit unverifizierter Email (null) -> 403 trotz Allowlist
 });
 
 test("T-F1-07: adminOnly mit verifizierter Email in Allowlist -> 200", async () => {
-  const srv = await mountAdmin(["admin@vodafone.de"], { email: "admin@vodafone.de", role: "member", tenantId: "t_u1", sub: "u1" });
+  const srv = await mountAdmin(["admin@vodafone.de"], {
+    email: "admin@vodafone.de",
+    role: "member",
+    tenantId: "t_u1",
+    sub: "u1",
+  });
   try {
     const res = await rawGet(`${srv.base}/admin-probe`);
     assert.equal(res.status, 200);
@@ -489,7 +551,12 @@ test("T-P4-01: Discovery ohne jwks_uri -> klarer Fehler, kein new URL(undefined)
   // crashen, sondern einen identifizierbaren Fehler werfen.
   const _fetch = async (url) => {
     if (String(url).endsWith("/.well-known/openid-configuration"))
-      return fakeResponse({ json: { authorization_endpoint: `${OIDC_ISSUER}/authorize`, token_endpoint: `${OIDC_ISSUER}/token` } });
+      return fakeResponse({
+        json: {
+          authorization_endpoint: `${OIDC_ISSUER}/authorize`,
+          token_endpoint: `${OIDC_ISSUER}/token`,
+        },
+      });
     throw new Error(`unerwarteter fetch: ${url}`);
   };
   const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER }, { _fetch });
@@ -499,7 +566,7 @@ test("T-P4-01: Discovery ohne jwks_uri -> klarer Fehler, kein new URL(undefined)
       assert.match(err.message, /jwks_uri/, "Fehler nennt das fehlende jwks_uri");
       assert.doesNotMatch(err.message, /Invalid URL/, "kein roher new URL(undefined)-TypeError");
       return true;
-    }
+    },
   );
 });
 
@@ -514,12 +581,26 @@ test("T-P4-03: Token-Body non-JSON (r.json wirft) -> gefangen, kein jwtVerify(un
   const _fetch = async (url) => {
     const u = String(url);
     if (u.endsWith("/.well-known/openid-configuration"))
-      return fakeResponse({ json: { authorization_endpoint: `${OIDC_ISSUER}/authorize`, token_endpoint: `${OIDC_ISSUER}/token`, jwks_uri: `${OIDC_ISSUER}/jwks` } });
+      return fakeResponse({
+        json: {
+          authorization_endpoint: `${OIDC_ISSUER}/authorize`,
+          token_endpoint: `${OIDC_ISSUER}/token`,
+          jwks_uri: `${OIDC_ISSUER}/jwks`,
+        },
+      });
     if (u === `${OIDC_ISSUER}/token`)
-      return fakeResponse({ ok: true, json: async () => { throw new Error("not json"); } });
+      return fakeResponse({
+        ok: true,
+        json: async () => {
+          throw new Error("not json");
+        },
+      });
     throw new Error(`unerwarteter fetch: ${url}`);
   };
-  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" }, { _fetch });
+  const oidc = makeOidc(
+    { oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" },
+    { _fetch },
+  );
   await assert.rejects(
     () => oidc.exchange({ code: "c", verifier: "v", nonce: "n", redirectUri: `${OIDC_ISSUER}/cb` }),
     (err) => {
@@ -528,7 +609,7 @@ test("T-P4-03: Token-Body non-JSON (r.json wirft) -> gefangen, kein jwtVerify(un
       // undefined-id_token weiterreichen.
       assert.doesNotMatch(err.message, /Cannot read|undefined/i, "kein undefined-Deref-Crash");
       return true;
-    }
+    },
   );
 });
 
@@ -536,19 +617,31 @@ test("T-P4-04: Token-Body {} ohne id_token -> klarer Fehler, kein jwtVerify(unde
   const _fetch = async (url) => {
     const u = String(url);
     if (u.endsWith("/.well-known/openid-configuration"))
-      return fakeResponse({ json: { authorization_endpoint: `${OIDC_ISSUER}/authorize`, token_endpoint: `${OIDC_ISSUER}/token`, jwks_uri: `${OIDC_ISSUER}/jwks` } });
-    if (u === `${OIDC_ISSUER}/token`)
-      return fakeResponse({ ok: true, json: async () => ({}) }); // kein id_token
+      return fakeResponse({
+        json: {
+          authorization_endpoint: `${OIDC_ISSUER}/authorize`,
+          token_endpoint: `${OIDC_ISSUER}/token`,
+          jwks_uri: `${OIDC_ISSUER}/jwks`,
+        },
+      });
+    if (u === `${OIDC_ISSUER}/token`) return fakeResponse({ ok: true, json: async () => ({}) }); // kein id_token
     throw new Error(`unerwarteter fetch: ${url}`);
   };
-  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" }, { _fetch });
+  const oidc = makeOidc(
+    { oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" },
+    { _fetch },
+  );
   await assert.rejects(
     () => oidc.exchange({ code: "c", verifier: "v", nonce: "n", redirectUri: `${OIDC_ISSUER}/cb` }),
     (err) => {
       assert.match(err.message, /id_token/, "Fehler nennt das fehlende id_token");
-      assert.doesNotMatch(err.message, /Cannot read|Invalid Compact JWS/i, "kein jwtVerify(undefined)-Crash");
+      assert.doesNotMatch(
+        err.message,
+        /Cannot read|Invalid Compact JWS/i,
+        "kein jwtVerify(undefined)-Crash",
+      );
       return true;
-    }
+    },
   );
 });
 
@@ -575,7 +668,11 @@ test("T-P4-05: GET /auth/login bei IdP-down -> 5xx, kein Hang, kein Leak", async
     const res = await rawGet(`${srv.base}/auth/login`);
     clearTimeout(timer);
     assert.ok(res.status >= 500 && res.status < 600, `5xx erwartet, war ${res.status}`);
-    assert.doesNotMatch(res.body, /ECONNREFUSED|SECRET_IDP_DETAIL|127\.0\.0\.1/, "kein IdP-/Connection-Leak im Body");
+    assert.doesNotMatch(
+      res.body,
+      /ECONNREFUSED|SECRET_IDP_DETAIL|127\.0\.0\.1/,
+      "kein IdP-/Connection-Leak im Body",
+    );
   } finally {
     await srv.close();
   }

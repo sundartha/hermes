@@ -13,8 +13,14 @@ import { telnyxMessaging } from "../src/telephony/adapters/telnyx/messaging.js";
 import { verifyInboundSignature as twilioVerify } from "../src/telephony/adapters/twilio/signature.js";
 import { verifyInboundSignature as telnyxVerify } from "../src/telephony/adapters/telnyx/signature.js";
 
-const RENDERERS = [["twilio", twilioRender], ["telnyx", telnyxRender]];
-const VERIFIERS = [["twilio", twilioVerify], ["telnyx", telnyxVerify]];
+const RENDERERS = [
+  ["twilio", twilioRender],
+  ["telnyx", telnyxRender],
+];
+const VERIFIERS = [
+  ["twilio", twilioVerify],
+  ["telnyx", telnyxVerify],
+];
 
 test("renderDirectives liefert fuer beide Adapter einen String", () => {
   for (const [name, render] of RENDERERS) {

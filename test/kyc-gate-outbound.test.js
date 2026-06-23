@@ -8,9 +8,18 @@ import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const TO = "+4915112345678";
 const OWNER_NUMBER = "+15005550006"; // = BASE_ENV.TWILIO_NUMBER
-const A = "tenant-a", SUB_A = "sub-a", NUM_A = "+4915110000001";
+const A = "tenant-a",
+  SUB_A = "sub-a",
+  NUM_A = "+4915110000001";
 
-const activeNumber = (id, e164, tenantId) => ({ id, e164, tenantId, provider: "twilio", status: "active", providerNumberId: null });
+const activeNumber = (id, e164, tenantId) => ({
+  id,
+  e164,
+  tenantId,
+  provider: "twilio",
+  status: "active",
+  providerNumberId: null,
+});
 
 // kycLevel optional auf Tenant A. Owner ohne kyc_level (Bestand).
 function seedKyc(kycLevel) {
@@ -23,14 +32,19 @@ function seedKyc(kycLevel) {
   });
 }
 
-const placeCall = (srv, identity) => fetch(`${srv.localUrl}/api/calls`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json", ...(identity ? { "X-Internal-Identity": identity } : {}) },
-  body: JSON.stringify({ to: TO, objective: "Termin vereinbaren" }),
-});
+const placeCall = (srv, identity) =>
+  fetch(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(identity ? { "X-Internal-Identity": identity } : {}),
+    },
+    body: JSON.stringify({ to: TO, objective: "Termin vereinbaren" }),
+  });
 
 const FLAG_ON = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO };
-const outboundCalls = (srv) => srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
+const outboundCalls = (srv) =>
+  srv.readStore().calls.filter((c) => c.direction === "outbound" && c.to === TO);
 
 test("Flag an: Tenant kyc_level<card (otp) -> 403 KYC-Reject, KEIN Call", async () => {
   const srv = await startServer({ env: FLAG_ON, seed: seedKyc("otp") });
@@ -39,18 +53,26 @@ test("Flag an: Tenant kyc_level<card (otp) -> 403 KYC-Reject, KEIN Call", async 
     assert.equal(res.status, 403, "otp < card -> Reject");
     assert.match((await res.json()).error, /KYC/i);
     assert.equal(outboundCalls(srv).length, 0, "Reject VOR createCall -> kein Call");
-  } finally { await srv.stop(); }
+  } finally {
+    await srv.stop();
+  }
 });
 
 test("Flag an: Tenant kyc_level>=card -> KYC passiert (erreicht Originate, offline 500)", async () => {
   const srv = await startServer({ env: FLAG_ON, seed: seedKyc("card") });
   try {
     const res = await placeCall(srv, SUB_A);
-    assert.equal(res.status, 500, "card passiert KYC+Gates+Budget -> scheitert erst am Offline-Originate");
+    assert.equal(
+      res.status,
+      500,
+      "card passiert KYC+Gates+Budget -> scheitert erst am Offline-Originate",
+    );
     const call = outboundCalls(srv).find((c) => c.tenantId === A);
     assert.ok(call, "Call mit tenantId=A erzeugt (KYC passiert)");
     assert.equal(call.from, NUM_A, "unter eigener Nummer");
-  } finally { await srv.stop(); }
+  } finally {
+    await srv.stop();
+  }
 });
 
 test("Flag an: Gate-Schnittmenge - kyc<card sperrt, OBWOHL alle anderen Gates frei waeren", async () => {
@@ -61,7 +83,9 @@ test("Flag an: Gate-Schnittmenge - kyc<card sperrt, OBWOHL alle anderen Gates fr
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 403, "none sperrt trotz freier Nummer/Budget (Schnittmenge)");
     assert.equal(outboundCalls(srv).length, 0);
-  } finally { await srv.stop(); }
+  } finally {
+    await srv.stop();
+  }
 });
 
 test("Flag an: Tenant OHNE kyc_level (Bestand) -> Gate passiert byte-identisch", async () => {
@@ -69,8 +93,13 @@ test("Flag an: Tenant OHNE kyc_level (Bestand) -> Gate passiert byte-identisch",
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 500, "kein kyc_level -> kycReached true -> passiert (kein Regress)");
-    assert.ok(outboundCalls(srv).some((c) => c.tenantId === A), "Call erzeugt");
-  } finally { await srv.stop(); }
+    assert.ok(
+      outboundCalls(srv).some((c) => c.tenantId === A),
+      "Call erzeugt",
+    );
+  } finally {
+    await srv.stop();
+  }
 });
 
 test("Flag AUS: Owner-Pfad byte-identisch (KYC-Gate inert)", async () => {
@@ -81,5 +110,7 @@ test("Flag AUS: Owner-Pfad byte-identisch (KYC-Gate inert)", async () => {
     const call = outboundCalls(srv)[0];
     assert.equal(call.tenantId, OWNER_TENANT_ID);
     assert.equal(call.from, OWNER_NUMBER);
-  } finally { await srv.stop(); }
+  } finally {
+    await srv.stop();
+  }
 });

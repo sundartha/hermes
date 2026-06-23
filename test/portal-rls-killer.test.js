@@ -9,7 +9,8 @@ import { makePortalStore } from "../src/store/portal.js";
 import { OWNER_TENANT_ID } from "../src/store/defaults.js";
 
 const APP_ROLE = "app_user";
-const TENANT_A = "tenant_a", TENANT_B = "tenant_b";
+const TENANT_A = "tenant_a",
+  TENANT_B = "tenant_b";
 
 async function setup() {
   const db = new PGlite();
@@ -24,14 +25,14 @@ async function setup() {
     await query(
       `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
        VALUES ($1, $2, 'tok', 'inbound', 'active', now()::text)`,
-      [`call_${t}`, t]
+      [`call_${t}`, t],
     );
   }
   await db.exec(
     `CREATE ROLE ${APP_ROLE} NOLOGIN NOBYPASSRLS;
      GRANT SELECT, INSERT, UPDATE, DELETE ON call, transcript_segment, profile, settings,
        action_item, calendar_event, usage, notification, number TO ${APP_ROLE};
-     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`
+     GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`,
   );
   return db;
 }
@@ -44,8 +45,11 @@ function roleRunner(db) {
   return {
     withClient: async (fn) => {
       await db.query(`SET ROLE ${APP_ROLE}`);
-      try { return await fn({ query: (t, p) => db.query(t, p) }); }
-      finally { await db.query(`RESET ROLE`); }
+      try {
+        return await fn({ query: (t, p) => db.query(t, p) });
+      } finally {
+        await db.query(`RESET ROLE`);
+      }
     },
   };
 }
@@ -54,7 +58,10 @@ test("portalStore: Tenant A sieht nur eigene Calls", async () => {
   const db = await setup();
   const portal = makePortalStore(roleRunner(db));
   const rows = await portal.listCalls(TENANT_A);
-  assert.deepEqual(rows.map((r) => r.id), ["call_tenant_a"]);
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    ["call_tenant_a"],
+  );
   assert.ok(!rows.some((r) => r.id === "call_tenant_b"), "fremder Call unsichtbar");
 });
 
@@ -69,7 +76,10 @@ test("portalStore: Tenant B sieht NUR call_tenant_b, nicht call_tenant_a", async
   const db = await setup();
   const portal = makePortalStore(roleRunner(db));
   const rows = await portal.listCalls(TENANT_B);
-  assert.deepEqual(rows.map((r) => r.id), ["call_tenant_b"]);
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    ["call_tenant_b"],
+  );
 });
 
 test("portalStore: frischer Tenant ist leer (kein Owner-Leak)", async () => {
@@ -85,11 +95,12 @@ test("portalStore: Transkript-Read ist tenant-isoliert (Leak-Schutz)", async () 
   // Geheim-Transkript fuer Tenant A, als Superuser eingefuegt (Setup laeuft als Superuser).
   await db.query(
     `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at)
-     VALUES ('call_tenant_a', $1, 'caller', 'GEHEIM_A', now()::text)`, [TENANT_A]
+     VALUES ('call_tenant_a', $1, 'caller', 'GEHEIM_A', now()::text)`,
+    [TENANT_A],
   );
   const portal = makePortalStore(roleRunner(db));
   const texts = await portal.withTenant(TENANT_B, async (c) =>
-    (await c.query(`SELECT text FROM transcript_segment`)).rows.map((r) => r.text)
+    (await c.query(`SELECT text FROM transcript_segment`)).rows.map((r) => r.text),
   );
   assert.ok(!texts.join(" ").includes("GEHEIM_A"), "Tenant B sieht A-Transkript nicht");
 });
@@ -99,13 +110,18 @@ test("portalStore: Query-Fehler in withTenant -> ROLLBACK, naechster Request sau
   const portal = makePortalStore(roleRunner(db));
   // Request 1 (Tenant A) wirft mitten in der Txn -> ROLLBACK.
   await assert.rejects(
-    () => portal.withTenant(TENANT_A, async (c) => {
-      await c.query(`SELECT 1`);
-      await c.query(`SELECT * FROM does_not_exist`); // Fehler -> ROLLBACK
-    }),
-    /does_not_exist|relation/i
+    () =>
+      portal.withTenant(TENANT_A, async (c) => {
+        await c.query(`SELECT 1`);
+        await c.query(`SELECT * FROM does_not_exist`); // Fehler -> ROLLBACK
+      }),
+    /does_not_exist|relation/i,
   );
   // Request 2 (Tenant B) auf derselben Verbindung darf NUR B sehen.
   const rows = await portal.listCalls(TENANT_B);
-  assert.deepEqual(rows.map((r) => r.id), ["call_tenant_b"], "kein GUC-Leak von A nach B");
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    ["call_tenant_b"],
+    "kein GUC-Leak von A nach B",
+  );
 });

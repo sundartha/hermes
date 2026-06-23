@@ -114,8 +114,14 @@ test("isAgentLive: true nur wenn mindestens ein Call aktiv ist", () => {
 
 // ---- Call-Helfer ------------------------------------------------------------
 test("callCounterparty: outbound -> to, inbound -> from, fehlend -> leer", () => {
-  assert.equal(callCounterparty({ direction: CALL_DIRECTION.OUTBOUND, to: "+491", from: "+492" }), "+491");
-  assert.equal(callCounterparty({ direction: CALL_DIRECTION.INBOUND, to: "+491", from: "+492" }), "+492");
+  assert.equal(
+    callCounterparty({ direction: CALL_DIRECTION.OUTBOUND, to: "+491", from: "+492" }),
+    "+491",
+  );
+  assert.equal(
+    callCounterparty({ direction: CALL_DIRECTION.INBOUND, to: "+491", from: "+492" }),
+    "+492",
+  );
   assert.equal(callCounterparty({ direction: CALL_DIRECTION.OUTBOUND }), "");
   assert.equal(callCounterparty(null), "");
 });
@@ -158,7 +164,11 @@ test("calendarDateParts: Tag/Monat/Wochentag aus ISO-start, ungueltig -> leer", 
 
 // ---- DOM-Bau: Empty-States --------------------------------------------------
 test("callRows/actionItemRows/calendarRows: leere Daten -> genau eine Empty-Zeile", () => {
-  for (const rows of [callRows(fakeDocument, {}), actionItemRows(fakeDocument, {}), calendarRows(fakeDocument, {})]) {
+  for (const rows of [
+    callRows(fakeDocument, {}),
+    actionItemRows(fakeDocument, {}),
+    calendarRows(fakeDocument, {}),
+  ]) {
     assert.equal(rows.length, 1);
     assert.ok(rows[0].hasClass("data-empty"));
   }
@@ -171,7 +181,13 @@ test("callRows/actionItemRows/calendarRows: leere Daten -> genau eine Empty-Zeil
 test("callRows rendert pro Call eine Zeile mit Gegenstelle, Untertitel und Status", () => {
   const data = {
     calls: [
-      { direction: "outbound", to: "+4915112345", from: "+49301", goal: "Termin", status: "completed" },
+      {
+        direction: "outbound",
+        to: "+4915112345",
+        from: "+49301",
+        goal: "Termin",
+        status: "completed",
+      },
       { direction: "inbound", from: "+49302", status: "active" },
     ],
   };
@@ -205,7 +221,7 @@ test("calendarRows begrenzt auf 6 Termine", () => {
 });
 
 // ---- XSS-Beleg: Tenant-Strings landen als Text, nie als HTML -----------------
-test("Tenant-Strings mit </>/\" und <script> landen ausschliesslich als textContent", () => {
+test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent', () => {
   const attack = '<script>alert("x")</script><img src="y" onerror="z">';
   // Der boese String in jeder Tenant-Quelle: Gegenstelle (from), goal,
   // Item-Text, Kalender-Titel. Wuerde irgendwo innerHTML gesetzt, wirft das
@@ -214,7 +230,9 @@ test("Tenant-Strings mit </>/\" und <script> landen ausschliesslich als textCont
   const calls = callRows(fakeDocument, {
     calls: [{ direction: "inbound", from: attack, goal: attack, status: "completed" }],
   });
-  const items = actionItemRows(fakeDocument, { actionItems: [{ text: attack, type: "appointment" }] });
+  const items = actionItemRows(fakeDocument, {
+    actionItems: [{ text: attack, type: "appointment" }],
+  });
   const cal = calendarRows(fakeDocument, {
     calendar: [{ title: attack, start: "2026-06-23T09:00:00.000Z" }],
   });

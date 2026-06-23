@@ -15,7 +15,13 @@ const TENANT_B = "tenant_b";
 
 test("INV(6): recordUsageEvent speichert Cents als Ganzzahl + setzt Defaults", () => {
   const s = makeDefaultState();
-  const ev = recordUsageEvent(s, { tenantId: TENANT_A, callId: "call_1", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 3, costCents: 150 });
+  const ev = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "call_1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 3,
+    costCents: 150,
+  });
   assert.match(ev.id, /^ue_/);
   assert.equal(ev.costCents, 150);
   assert.equal(Number.isInteger(ev.costCents), true, "costCents Ganzzahl");
@@ -27,30 +33,73 @@ test("INV(6b): recordUsageEvent wirft bei unbekanntem kind (fail-closed)", () =>
   const s = makeDefaultState();
   assert.throws(
     () => recordUsageEvent(s, { tenantId: TENANT_A, kind: "fantasie", quantity: 1, costCents: 0 }),
-    /unbekanntes kind/
+    /unbekanntes kind/,
   );
   assert.equal(s.usageEvents.length, 0, "kein Event bei ungueltigem kind");
 });
 
 test("recordUsageEvent: callId optional (number_month-Meter ohne Call -> null)", () => {
   const s = makeDefaultState();
-  const ev = recordUsageEvent(s, { tenantId: TENANT_A, kind: USAGE_EVENT_KIND.NUMBER_MONTH, quantity: 1, costCents: 500 });
+  const ev = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: 500,
+  });
   assert.equal(ev.callId, null);
 });
 
 test("INV(4): aggregatePendingMeters summiert je (tenant,kind), Tenants getrennt", () => {
   const s = makeDefaultState();
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 2, costCents: 100 });
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c2", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 3, costCents: 150 });
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c3", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 1, costCents: 50 });
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.AI_TOKEN, quantity: 1000, costCents: 7 });
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c2", kind: USAGE_EVENT_KIND.AI_TOKEN, quantity: 2000, costCents: 14 });
-  recordUsageEvent(s, { tenantId: TENANT_B, callId: "c9", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 5, costCents: 250 });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 2,
+    costCents: 100,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c2",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 3,
+    costCents: 150,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c3",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 1,
+    costCents: 50,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.AI_TOKEN,
+    quantity: 1000,
+    costCents: 7,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c2",
+    kind: USAGE_EVENT_KIND.AI_TOKEN,
+    quantity: 2000,
+    costCents: 14,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_B,
+    callId: "c9",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 5,
+    costCents: 250,
+  });
 
   const aggs = aggregatePendingMeters(s);
   assert.equal(aggs.length, 3, "3 Aggregate: A/voice, A/ai_token, B/voice");
 
-  const aVoice = aggs.find((a) => a.tenantId === TENANT_A && a.kind === USAGE_EVENT_KIND.VOICE_MINUTE);
+  const aVoice = aggs.find(
+    (a) => a.tenantId === TENANT_A && a.kind === USAGE_EVENT_KIND.VOICE_MINUTE,
+  );
   assert.equal(aVoice.quantity, 6, "A voice quantity summiert (2+3+1)");
   assert.equal(aVoice.costCents, 300, "A voice costCents summiert (100+150+50)");
   assert.equal(aVoice.eventIds.length, 3);
@@ -65,8 +114,20 @@ test("INV(4): aggregatePendingMeters summiert je (tenant,kind), Tenants getrennt
 
 test("INV(5): flushMeters meldet je Aggregat EINMAL + ist idempotent (zweiter Flush 0x)", async () => {
   const s = makeDefaultState();
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 2, costCents: 100 });
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.AI_TOKEN, quantity: 500, costCents: 4 });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 2,
+    costCents: 100,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.AI_TOKEN,
+    quantity: 500,
+    costCents: 4,
+  });
   const billing = fakeBilling();
 
   const first = await flushMeters(s, { billing });
@@ -81,8 +142,20 @@ test("INV(5): flushMeters meldet je Aggregat EINMAL + ist idempotent (zweiter Fl
 
 test("INV(5b): wirft reportMeter fuer EIN Aggregat -> dessen Events bleiben pending, andere gesendet", async () => {
   const s = makeDefaultState();
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 2, costCents: 100 });
-  recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.AI_TOKEN, quantity: 500, costCents: 4 });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 2,
+    costCents: 100,
+  });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.AI_TOKEN,
+    quantity: 500,
+    costCents: 4,
+  });
   // billing wirft NUR fuer ai_token-Meter, voice_minute geht durch.
   const billing = fakeBilling({
     async reportMeter(args) {
@@ -106,8 +179,20 @@ test("INV(5b): wirft reportMeter fuer EIN Aggregat -> dessen Events bleiben pend
 
 test("INV(5c): idempotencyKey stabil je Aggregat (meter_<tenant>_<kind>_<minEventId>)", async () => {
   const s = makeDefaultState();
-  const e1 = recordUsageEvent(s, { tenantId: TENANT_A, callId: "c1", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 2, costCents: 100 });
-  const e2 = recordUsageEvent(s, { tenantId: TENANT_A, callId: "c2", kind: USAGE_EVENT_KIND.VOICE_MINUTE, quantity: 3, costCents: 150 });
+  const e1 = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 2,
+    costCents: 100,
+  });
+  const e2 = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "c2",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 3,
+    costCents: 150,
+  });
   const billing = fakeBilling();
   await flushMeters(s, { billing });
   const [, args] = billing.log[0];

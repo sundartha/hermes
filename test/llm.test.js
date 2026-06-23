@@ -68,8 +68,10 @@ test("T-CP2-2: isTransient klassifiziert APIConnectionError als transient", () =
 });
 
 test("T-CP2-3: isTransient klassifiziert HTTP-Status korrekt (transient vs. nicht)", () => {
-  for (const s of [408, 409, 429, 500, 502, 503]) assert.equal(isTransient(apiError(s)), true, `status ${s} sollte transient sein`);
-  for (const s of [400, 401, 403, 404, 422]) assert.equal(isTransient(apiError(s)), false, `status ${s} sollte NICHT transient sein`);
+  for (const s of [408, 409, 429, 500, 502, 503])
+    assert.equal(isTransient(apiError(s)), true, `status ${s} sollte transient sein`);
+  for (const s of [400, 401, 403, 404, 422])
+    assert.equal(isTransient(apiError(s)), false, `status ${s} sollte NICHT transient sein`);
 });
 
 test("T-CP2-4: isTransient folgt verschachtelter cause (ECONNRESET) als transient", () => {
@@ -100,7 +102,10 @@ test("T-CP2-6: withRetry wirft bei nicht-transient sofort, kein sleep", async ()
     calls += 1;
     throw apiError(400);
   };
-  await assert.rejects(() => withRetry(fn, retryOpts({ sleep }), null), (e) => e.status === 400);
+  await assert.rejects(
+    () => withRetry(fn, retryOpts({ sleep }), null),
+    (e) => e.status === 400,
+  );
   assert.equal(calls, 1);
   assert.equal(sleep.calls.length, 0);
 });
@@ -112,7 +117,10 @@ test("T-CP2-7: withRetry haelt die Obergrenze ein (1 + max Versuche)", async () 
     calls += 1;
     throw prematureClose();
   };
-  await assert.rejects(() => withRetry(fn, retryOpts({ sleep, max: 2 }), null), (e) => e.message === "Premature close");
+  await assert.rejects(
+    () => withRetry(fn, retryOpts({ sleep, max: 2 }), null),
+    (e) => e.message === "Premature close",
+  );
   assert.equal(calls, 3); // 1 + max
   assert.equal(sleep.calls.length, 2);
 });
@@ -125,7 +133,9 @@ test("T-CP2-8: withRetry-Jitter-Backoff ist via injiziertem random deterministis
     throw prematureClose();
   };
   // random=0.5, baseMs=100, jitter=true: delay = floor(0.5 * 100*2^attempt) = 50, 100.
-  await assert.rejects(() => withRetry(fn, retryOpts({ sleep, max: 2, baseMs: 100, jitter: true, random: () => 0.5 }), null));
+  await assert.rejects(() =>
+    withRetry(fn, retryOpts({ sleep, max: 2, baseMs: 100, jitter: true, random: () => 0.5 }), null),
+  );
   assert.deepEqual(sleep.calls, [50, 100]);
 });
 

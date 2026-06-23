@@ -27,7 +27,10 @@ async function startTelnyxErrorMock() {
     res.end(JSON.stringify({ errors: [{ detail: "boom token=SECRET_DO_NOT_LEAK" }] }));
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)) };
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((r) => server.close(r)),
+  };
 }
 
 const TELNYX_ENV = (mockUrl) => ({
@@ -62,9 +65,12 @@ test("T-P2-11: Originate-Fehler -> kategorisierte 502 (Statusklasse sichtbar), k
     assert.match(body.error, /HTTP 503/, "Statusklasse sichtbar fuer Diagnose");
     assert.ok(
       !/Telnyx|SECRET_DO_NOT_LEAK|token=/.test(JSON.stringify(body)),
-      `Secret/Provider-Name/Roh-Body im Body: ${JSON.stringify(body)}`
+      `Secret/Provider-Name/Roh-Body im Body: ${JSON.stringify(body)}`,
     );
-    assert.ok(!body.hint, "kein Twilio-Trial-Hint bei Provider Telnyx (war die irrefuehrende Meldung)");
+    assert.ok(
+      !body.hint,
+      "kein Twilio-Trial-Hint bei Provider Telnyx (war die irrefuehrende Meldung)",
+    );
   } finally {
     await srv.stop();
     await mock.close();

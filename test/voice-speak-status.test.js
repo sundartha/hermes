@@ -93,7 +93,10 @@ test("/voice/status: Regression - Telnyx-Lifecycle (completed) endet den Call we
     }),
   });
   try {
-    const r = await postLifecycle(srv, "sp_lifecycle", { CallStatus: "completed", CallDuration: "30" });
+    const r = await postLifecycle(srv, "sp_lifecycle", {
+      CallStatus: "completed",
+      CallDuration: "30",
+    });
     assert.equal(r.status, 200);
     // Auf den STORE-Effekt pollen, nicht auf die Log-Zeile (siehe waitForCall): sonst
     // liest der Test den Store ggf. vor dem endCallRecord-writeFileSync (Race).

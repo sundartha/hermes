@@ -4,13 +4,13 @@ Willkommen beim **Hermes** – ein autonomer Telefon-Assistent (Twilio + Claude)
 
 ## Was läuft wo
 
-| Komponente | Ort |
-|---|---|
-| Produktion (24/7) | https://vodafone-agent.onrender.com – deployt automatisch bei jedem Push auf `master` |
-| Dashboard | https://vodafone-agent.onrender.com (User `admin`, Passwort bekommst du von Jonas) |
+| Komponente               | Ort                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| Produktion (24/7)        | https://vodafone-agent.onrender.com – deployt automatisch bei jedem Push auf `master`    |
+| Dashboard                | https://vodafone-agent.onrender.com (User `admin`, Passwort bekommst du von Jonas)       |
 | MCP-Connector für Claude | `https://vodafone-agent.onrender.com/mcp` (Settings → Connectors → Add custom connector) |
-| Hosting | Render.com Free Tier, Region Frankfurt, Service `vodafone-agent` (Account: Jonas) |
-| Telefonie | Twilio Trial, Agent-Nummer +1 572 223 8544 (Account: Jonas) |
+| Hosting                  | Render.com Free Tier, Region Frankfurt, Service `vodafone-agent` (Account: Jonas)        |
+| Telefonie                | Twilio Trial, Agent-Nummer +1 572 223 8544 (Account: Jonas)                              |
 
 ## Lokal entwickeln
 

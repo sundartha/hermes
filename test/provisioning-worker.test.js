@@ -16,7 +16,11 @@ import {
   recordProvisioningJob,
   setTenantStripe,
 } from "../src/store/state-ops.js";
-import { NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS } from "../src/store/defaults.js";
+import {
+  NUMBER_STATUS,
+  PROVISION_NUMBER_JOB,
+  PROVISIONING_JOB_STATUS,
+} from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const ARGS = { countryCode: "DE", connectionId: "conn_1" };
@@ -50,7 +54,11 @@ function drainWith(queue, s, deps, opts) {
 
 function enqueueProvision(queue, s, tenantId, numberId) {
   const idempotencyKey = `provision_${numberId}`;
-  const queueJobId = queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+  const queueJobId = queue.enqueue({
+    kind: PROVISION_NUMBER_JOB,
+    payload: { numberId },
+    idempotencyKey,
+  });
   const record = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
   return { record, queueJobId };
 }
@@ -68,8 +76,14 @@ test("enqueue -> drain -> active: Number aktiv, e164 gesetzt, assignment + Job '
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
   assert.equal(num.e164, "+4915799990001");
-  assert.ok(s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt), "assignment angelegt");
-  assert.equal(s.provisioningJobs.find((j) => j.id === record.id).status, PROVISIONING_JOB_STATUS.DONE);
+  assert.ok(
+    s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt),
+    "assignment angelegt",
+  );
+  assert.equal(
+    s.provisioningJobs.find((j) => j.id === record.id).status,
+    PROVISIONING_JOB_STATUS.DONE,
+  );
   assert.equal(queue.jobStatus(queueJobId), PROVISIONING_JOB_STATUS.DONE, "Adapter-Job 'done'");
 });
 
@@ -80,7 +94,12 @@ test("Worker nur fuer 'requested': andere Zustaende -> skipped, KEIN Provider-Ca
   await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov }, ARGS); // erster Lauf -> active
   prov.log.length = 0; // Log fuer den zweiten Lauf leeren
 
-  const result = await handleProvisionJob(s, { payload: { numberId } }, { provisioner: prov }, ARGS);
+  const result = await handleProvisionJob(
+    s,
+    { payload: { numberId } },
+    { provisioner: prov },
+    ARGS,
+  );
 
   assert.deepEqual(result, { skipped: true, status: NUMBER_STATUS.ACTIVE });
   assert.deepEqual(prov.log, [], "kein Provider-Call fuer eine nicht-requested Number");
@@ -107,17 +126,31 @@ test("Idempotenz: doppeltes enqueue = ein Job; zweiter drain ist No-op (kein Dop
 test("Fehler -> Rollback im Worker: configure wirft -> released, cancelHold, Job 'failed'", async () => {
   const { s, numberId } = seedRequested();
   const queue = makeMemoryQueue();
-  const prov = fakeProvisioner({ async configureNumber() { throw new Error("HTTP 500"); } });
+  const prov = fakeProvisioner({
+    async configureNumber() {
+      throw new Error("HTTP 500");
+    },
+  });
   const billing = fakeBilling();
   const { record } = enqueueProvision(queue, s, "t_user1", numberId);
 
   await drainWith(queue, s, { provisioner: prov, billing }, PAY_ARGS);
 
   // Hold-vor-Order + Rollback gelten jetzt im Worker (provisionNumber unveraendert).
-  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED, "gekaufte Nummer freigegeben");
+  assert.equal(
+    findNumber(s, numberId).status,
+    NUMBER_STATUS.RELEASED,
+    "gekaufte Nummer freigegeben",
+  );
   assert.ok(prov.log.includes("release:num_ext_1"), "Provider-Release");
-  assert.ok(billing.log.some((e) => e[0] === "cancelHold"), "Hold freigegeben");
-  assert.equal(s.provisioningJobs.find((j) => j.id === record.id).status, PROVISIONING_JOB_STATUS.FAILED);
+  assert.ok(
+    billing.log.some((e) => e[0] === "cancelHold"),
+    "Hold freigegeben",
+  );
+  assert.equal(
+    s.provisioningJobs.find((j) => j.id === record.id).status,
+    PROVISIONING_JOB_STATUS.FAILED,
+  );
 });
 
 test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", async () => {
@@ -131,5 +164,9 @@ test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", as
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
   assert.equal(num.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`, "configure:num_ext_1:conn_1"]);
+  assert.deepEqual(prov.log, [
+    "search:DE",
+    `order:+4915799990001:order_${numberId}`,
+    "configure:num_ext_1:conn_1",
+  ]);
 });

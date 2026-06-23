@@ -22,7 +22,14 @@ const OWNER_FR_NUMBER = "+33123456789";
 // Owner-Store mit EINER aktiven Owner-Nummer (gegebener Geo-Anker) + optionalem
 // settings-Override. country/language sind die F1-Geo-Felder der Nummer.
 function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
-  const number = { id: "num_owner", e164: OWNER_FR_NUMBER, tenantId: OWNER_TENANT_ID, provider: "twilio", status: "active", country: "FR" };
+  const number = {
+    id: "num_owner",
+    e164: OWNER_FR_NUMBER,
+    tenantId: OWNER_TENANT_ID,
+    provider: "twilio",
+    status: "active",
+    country: "FR",
+  };
   if (numberLanguage) number.language = numberLanguage;
   return seedState({
     settings: settingsLanguage ? { language: settingsLanguage } : {},
@@ -43,7 +50,8 @@ function placeCall(srv) {
 }
 
 const ENV = { ALLOWED_NUMBERS: TO, TWILIO_ACCOUNT_SID: "x" };
-const outboundCall = (srv) => srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === TO);
+const outboundCall = (srv) =>
+  srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === TO);
 
 // (1) number.language faellt durch auf call.language: FR-Nummer -> Outbound fuehrt FR.
 test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.language=fr)", async () => {
@@ -59,10 +67,17 @@ test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.
 // (2) Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer +
 // Override en -> call.language=en). Beweist die Override-Stufe am Outbound.
 test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer + en -> call.language=en)", async () => {
-  const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr", settingsLanguage: "en" }) });
+  const srv = await startServer({
+    env: ENV,
+    seed: ownerSeed({ numberLanguage: "fr", settingsLanguage: "en" }),
+  });
   try {
     assert.equal((await placeCall(srv)).status, 500);
-    assert.equal(outboundCall(srv).language, "en", "Owner-Override (settings.language=en) schlaegt die FR-Nummer");
+    assert.equal(
+      outboundCall(srv).language,
+      "en",
+      "Owner-Override (settings.language=en) schlaegt die FR-Nummer",
+    );
   } finally {
     await srv.stop();
   }
@@ -74,7 +89,11 @@ test("DE-Default byte-identisch: Nummer ohne language -> call.language=de", asyn
   const srv = await startServer({ env: ENV, seed: ownerSeed() }); // weder number.language noch settings.language
   try {
     assert.equal((await placeCall(srv)).status, 500);
-    assert.equal(outboundCall(srv).language, "de", "ohne Geo-Anker faellt die Praezedenz auf de (byte-identisch)");
+    assert.equal(
+      outboundCall(srv).language,
+      "de",
+      "ohne Geo-Anker faellt die Praezedenz auf de (byte-identisch)",
+    );
   } finally {
     await srv.stop();
   }

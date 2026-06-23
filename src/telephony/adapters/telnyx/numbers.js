@@ -18,7 +18,11 @@ const DEFAULT_SEARCH_LIMIT = 1;
 
 function authHeaders(extra = {}) {
   if (!config.telnyxApiKey) throw new Error("Telnyx NumberProvisioning: TELNYX_API_KEY fehlt");
-  return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": "application/json", ...extra };
+  return {
+    Authorization: `Bearer ${config.telnyxApiKey}`,
+    "Content-Type": "application/json",
+    ...extra,
+  };
 }
 
 function assertOk(res, op) {

@@ -15,14 +15,27 @@
 // ist damit am Audit-Log nicht beobachtbar; die Semantik ist dieselbe).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForLog, startIdp, seedState, mcpPost as post, MCP_AUDIENCE as AUDIENCE } from "./helpers.js";
+import {
+  startServer,
+  waitForLog,
+  startIdp,
+  seedState,
+  mcpPost as post,
+  MCP_AUDIENCE as AUDIENCE,
+} from "./helpers.js";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";
 const UNKNOWN_SUB = "sub-unbekannt";
 // Tenant B aktiv mit idpSubject -> resolveTenant trifft ihn ueber den sub-Claim.
-const seedTenantB = () => seedState({ tenants: [{ id: TENANT_B, status: "active", idpSubject: SUB_B }] });
-const oauthEnv = (issuer, extra = {}) => ({ MCP_AUTH: "oauth", OAUTH_ISSUER_URL: issuer, OAUTH_AUDIENCE: AUDIENCE, ...extra });
+const seedTenantB = () =>
+  seedState({ tenants: [{ id: TENANT_B, status: "active", idpSubject: SUB_B }] });
+const oauthEnv = (issuer, extra = {}) => ({
+  MCP_AUTH: "oauth",
+  OAUTH_ISSUER_URL: issuer,
+  OAUTH_AUDIENCE: AUDIENCE,
+  ...extra,
+});
 
 test("V1 Flag aus + verifiziertes Token -> tenant=owner (byte-identisch)", async () => {
   const idp = await startIdp();
@@ -41,7 +54,10 @@ test("V1 Flag aus + verifiziertes Token -> tenant=owner (byte-identisch)", async
 
 test("V2 Flag an + bekannter sub -> tenant=B", async () => {
   const idp = await startIdp();
-  const srv = await startServer({ env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }), seed: seedTenantB() });
+  const srv = await startServer({
+    env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }),
+    seed: seedTenantB(),
+  });
   try {
     const token = await idp.sign({ sub: SUB_B });
     const res = await post(`${srv.localUrl}/mcp`, token);
@@ -55,7 +71,10 @@ test("V2 Flag an + bekannter sub -> tenant=B", async () => {
 
 test("V3 Flag an + unbekannter sub -> tenant=reject (NIE Owner)", async () => {
   const idp = await startIdp();
-  const srv = await startServer({ env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }), seed: seedTenantB() });
+  const srv = await startServer({
+    env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }),
+    seed: seedTenantB(),
+  });
   try {
     const token = await idp.sign({ sub: UNKNOWN_SUB });
     const res = await post(`${srv.localUrl}/mcp`, token);
@@ -69,7 +88,10 @@ test("V3 Flag an + unbekannter sub -> tenant=reject (NIE Owner)", async () => {
 
 test("V4 Flag an + verifiziertes Token OHNE sub -> tenant=owner (fehlende Identitaet bleibt Owner)", async () => {
   const idp = await startIdp();
-  const srv = await startServer({ env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }), seed: seedTenantB() });
+  const srv = await startServer({
+    env: oauthEnv(idp.issuer, { MULTI_TENANT: "true" }),
+    seed: seedTenantB(),
+  });
   try {
     // noSubject: kein sub-Claim -> req.auth.sub undefined -> !sub && !internal -> Owner.
     const token = await idp.sign({ email: "nosub@team.test" }, { noSubject: true });

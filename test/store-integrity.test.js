@@ -48,7 +48,10 @@ test("T-P1-04: First-Boot (ENOENT) -> Defaults, KEIN KORRUPT-Alarm", () => {
   assert.ok(fs.existsSync(file), "store.json wird beim First-Boot angelegt");
   const onDisk = JSON.parse(fs.readFileSync(file, "utf8")); // gueltiges JSON
   assert.ok(Array.isArray(onDisk.calls), "Default-Shape: calls[]");
-  assert.ok(state.tenants.some((t) => t.status === "active"), "Owner-Tenant aktiv (Default)");
+  assert.ok(
+    state.tenants.some((t) => t.status === "active"),
+    "Owner-Tenant aktiv (Default)",
+  );
 });
 
 // ---- T-P1-01: Atomic write -> kein in-place-Write, kein truncated File ------
@@ -78,10 +81,15 @@ test("T-P1-01b: bricht der finale Rename ab, bleibt store.json unveraendert (NIE
   }
   const after = fs.readFileSync(file, "utf8");
   assert.ok(!after.includes("p1-inplace-probe"), "kein in-place-Write: Platte ohne Probe-Marker");
-  assert.equal(after, before, "store.json byte-identisch zum Stand vor dem fehlgeschlagenen save()");
+  assert.equal(
+    after,
+    before,
+    "store.json byte-identisch zum Stand vor dem fehlgeschlagenen save()",
+  );
   // Aufraeumen: In-Memory-Mutation zuruecknehmen, verwaiste .tmp loeschen.
   s.notifications.pop();
-  for (const f of fs.readdirSync(dataDir).filter((n) => n.includes(".tmp-"))) fs.unlinkSync(path.join(dataDir, f));
+  for (const f of fs.readdirSync(dataDir).filter((n) => n.includes(".tmp-")))
+    fs.unlinkSync(path.join(dataDir, f));
 });
 
 // ---- T-P1-06: Happy-Path-Regression -> Format + Round-Trip unveraendert -----
@@ -106,7 +114,11 @@ test("T-P1-02: withStoreLock verhindert Lost Update bei await zwischen read und 
   // OHNE Lock (Negativ-Kontrolle): beide lesen 0, schreiben 1 -> Endwert 1 (Lost Update).
   // MIT Lock: serialisiert -> A vollstaendig vor B -> Endwert 2.
   await Promise.all([withStoreLock(seq), withStoreLock(seq)]);
-  assert.equal(shared.count, 2, "beide Mutationen persistiert (Budget-Counter-Schutz, CLAUDE.md Regel 1)");
+  assert.equal(
+    shared.count,
+    2,
+    "beide Mutationen persistiert (Budget-Counter-Schutz, CLAUDE.md Regel 1)",
+  );
 });
 
 // ---- T-P1-03: Korruptes store.json am Boot -> bewahrt + geflaggt, NICHT gewischt
@@ -119,7 +131,11 @@ test("T-P1-02: withStoreLock verhindert Lost Update bei await zwischen read und 
 test("T-P1-03: korruptes store.json -> .corrupt-Rename + lautes Log + fail-closed Boot (kein stiller Wipe)", async () => {
   const { code, output, dataDir } = await startServerExpectExit({ rawStore: "{ this is not json" });
   assert.match(output, /\[store\] KORRUPTES store\.json erkannt/, "lautes KORRUPT-Log");
-  assert.match(output, /Keine aktive Owner-Nummer im Store/, "Boot-Guard refused fail-closed nach Recovery");
+  assert.match(
+    output,
+    /Keine aktive Owner-Nummer im Store/,
+    "Boot-Guard refused fail-closed nach Recovery",
+  );
   assert.equal(code, 1, "fail-closed Boot-Refusal (Exit 1)");
   const files = fs.readdirSync(dataDir);
   const corrupt = files.find((f) => f.startsWith("store.json.corrupt-"));
@@ -130,5 +146,8 @@ test("T-P1-03: korruptes store.json -> .corrupt-Rename + lautes Log + fail-close
     "der .corrupt-Backup haelt den originalen kaputten Inhalt",
   );
   const fresh = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
-  assert.ok(Array.isArray(fresh.calls), "neues store.json ist gueltiges Default-JSON (kein stiller Wipe)");
+  assert.ok(
+    Array.isArray(fresh.calls),
+    "neues store.json ist gueltiges Default-JSON (kein stiller Wipe)",
+  );
 });

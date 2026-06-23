@@ -27,7 +27,7 @@ async function setup() {
   await q(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
      VALUES ('call_owner', $1, 'tok', 'inbound', 'active', now()::text)`,
-    [OWNER_TENANT_ID]
+    [OWNER_TENANT_ID],
   );
   const runner = { withClient: (fn) => fn({ query: q }) };
   const accounts = makeAccounts(runner);
@@ -37,22 +37,37 @@ async function setup() {
   // Kunde anlegen, aktivieren, Session erzeugen (echte Factories).
   await accounts.upsertOnFirstLogin({ sub: "cust1", email: "c@x" });
   await accounts.setStatus("t_cust1", "active");
-  const { id: sessionId } = await sessions.create({ sub: "cust1", tenantId: "t_cust1", ttlSeconds: 3600 });
+  const { id: sessionId } = await sessions.create({
+    sub: "cust1",
+    tenantId: "t_cust1",
+    ttlSeconds: 3600,
+  });
 
   // Route wie in server.js.
   const app = express();
-  app.get("/api/portal/state", webAuth({ secret: SECRET, sessions, accounts }), async (req, res) => {
-    const calls = await portalStore.listCalls(req.tenant.tenantId);
-    res.json({ tenantId: req.tenant.tenantId, calls });
+  app.get(
+    "/api/portal/state",
+    webAuth({ secret: SECRET, sessions, accounts }),
+    async (req, res) => {
+      const calls = await portalStore.listCalls(req.tenant.tenantId);
+      res.json({ tenantId: req.tenant.tenantId, calls });
+    },
+  );
+  const server = await new Promise((r) => {
+    const s = app.listen(0, "127.0.0.1", () => r(s));
   });
-  const server = await new Promise((r) => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
-  return { base: `http://127.0.0.1:${server.address().port}`, sessionId, close: () => new Promise((r) => server.close(r)) };
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    sessionId,
+    close: () => new Promise((r) => server.close(r)),
+  };
 }
 
 function get(url, cookie) {
   return new Promise((resolve, reject) => {
     const req = http.get(url, cookie ? { headers: { Cookie: cookie } } : {}, (res) => {
-      let body = ""; res.on("data", (d) => (body += d));
+      let body = "";
+      res.on("data", (d) => (body += d));
       res.on("end", () => resolve({ status: res.statusCode, body }));
     });
     req.on("error", reject);
@@ -63,7 +78,9 @@ test("/api/portal/state ohne Session -> 401 (fail-closed)", async () => {
   const s = await setup();
   try {
     assert.equal((await get(`${s.base}/api/portal/state`)).status, 401);
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("/api/portal/state mit aktiver Kunden-Session -> nur eigene (leere) Calls, kein Owner-Leak", async () => {
@@ -76,5 +93,7 @@ test("/api/portal/state mit aktiver Kunden-Session -> nur eigene (leere) Calls, 
     assert.equal(body.tenantId, "t_cust1");
     assert.deepEqual(body.calls, [], "Kunde hat keine eigenen Calls");
     assert.ok(!res.body.includes("call_owner"), "Owner-Call leakt NICHT ins Kunden-Portal");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });

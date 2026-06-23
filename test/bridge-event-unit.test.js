@@ -132,13 +132,14 @@ test("response.audio.delta ohne delta oder ohne streamRef sendet nichts", () => 
 // ziehen (das waere eine stille Verhaltensaenderung gegenueber dem heutigen System).
 test("Crash-Guard liegt im Listener: ein Throw aus store.addTranscript propagiert", () => {
   const ctx = makeCtx({
-    store: { addTranscript: () => { throw new Error("store kaputt"); } },
+    store: {
+      addTranscript: () => {
+        throw new Error("store kaputt");
+      },
+    },
   });
   assert.throws(
-    () => handleOpenAiEvent(
-      { type: "response.audio_transcript.done", transcript: "hallo" },
-      ctx,
-    ),
+    () => handleOpenAiEvent({ type: "response.audio_transcript.done", transcript: "hallo" }, ctx),
     /store kaputt/,
   );
 });
@@ -152,9 +153,14 @@ test("kaputtes function_call.arguments wirft nicht (In-Handler-Guard -> args = {
   const ctx = makeCtx();
   assert.doesNotThrow(() =>
     handleOpenAiEvent(
-      { type: "response.done", response: { output: [
-        { type: "function_call", name: "end_call", arguments: "{kein-json", call_id: "x" },
-      ] } },
+      {
+        type: "response.done",
+        response: {
+          output: [
+            { type: "function_call", name: "end_call", arguments: "{kein-json", call_id: "x" },
+          ],
+        },
+      },
       ctx,
     ),
   );

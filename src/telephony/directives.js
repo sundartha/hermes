@@ -25,16 +25,23 @@ export const DIRECTIVE = Object.freeze({
 // --- Builder (intentions-ausdrueckende Namen, <=3 Args via Objekt-Param) ---
 
 // Gesprochener Satz. voiceProfile ist ein VOICE_PROFILE-Wert.
-export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL) =>
-  ({ kind: DIRECTIVE.SAY, text, voiceProfile });
+export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL) => ({
+  kind: DIRECTIVE.SAY,
+  text,
+  voiceProfile,
+});
 
 // Sprach-Turn: optionaler Prompt (say im Gather) + Action-URL fuers Ergebnis.
 // promptText leer -> Gather ohne inneren Say (Bestandsverhalten gatherTurn).
 // speechTimeoutSec (optional, Sekunden): festes STT-Endpointing statt provider-Default
 // "auto" - gesetzt nur fuer Folge-Gathers (/voice/turn), nicht fuer den Erst-Gather.
 // Weglassen -> Renderer bleibt byte-identisch beim "auto"-Bestand.
-export const gather = ({ promptText, action, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, speechTimeoutSec }) =>
-  ({ kind: DIRECTIVE.GATHER, promptText, action, voiceProfile, speechTimeoutSec });
+export const gather = ({
+  promptText,
+  action,
+  voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL,
+  speechTimeoutSec,
+}) => ({ kind: DIRECTIVE.GATHER, promptText, action, voiceProfile, speechTimeoutSec });
 
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
 

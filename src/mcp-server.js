@@ -13,4 +13,7 @@ registerTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("[hermes] MCP-Server bereit (stdio). Gateway: " + (process.env.GATEWAY_URL || "http://localhost:3000"));
+console.error(
+  "[hermes] MCP-Server bereit (stdio). Gateway: " +
+    (process.env.GATEWAY_URL || "http://localhost:3000"),
+);

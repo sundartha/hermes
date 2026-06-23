@@ -18,7 +18,11 @@ import {
   findNumber,
   recordProvisioningJob,
 } from "../src/store/state-ops.js";
-import { NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS } from "../src/store/defaults.js";
+import {
+  NUMBER_STATUS,
+  PROVISION_NUMBER_JOB,
+  PROVISIONING_JOB_STATUS,
+} from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 
@@ -178,7 +182,11 @@ test("P9: kein Geld-Pfad (Default undefined) -> kein holdAmountCents durchgereic
 test("R5: 0 Treffer -> sauberer Fehler (failed), KEIN Kauf, KEIN Crash", async () => {
   const { s, numberId } = seedRequested("FR");
   const queue = makeMemoryQueue();
-  const prov = fakeProvisioner({ async searchNumbers() { return []; } });
+  const prov = fakeProvisioner({
+    async searchNumbers() {
+      return [];
+    },
+  });
   enqueueProvision(queue, s, numberId);
 
   // drain faengt den handler-Fehler (Adapter) -> kein throw nach aussen; Fachzustand pruefen.

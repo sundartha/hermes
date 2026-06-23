@@ -35,21 +35,41 @@ async function seedActiveTenant(store, accounts, { sub, tenantId }) {
 
 async function setup() {
   const { store, db } = await makePgTestStore();
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
 
   await seedActiveTenant(store, accounts, { sub: SUB_A, tenantId: TENANT_A });
   await seedActiveTenant(store, accounts, { sub: SUB_B, tenantId: TENANT_B });
-  const { id: sessionA } = await sessions.create({ sub: SUB_A, tenantId: TENANT_A, ttlSeconds: 3600 });
-  const { id: sessionB } = await sessions.create({ sub: SUB_B, tenantId: TENANT_B, ttlSeconds: 3600 });
+  const { id: sessionA } = await sessions.create({
+    sub: SUB_A,
+    tenantId: TENANT_A,
+    ttlSeconds: 3600,
+  });
+  const { id: sessionB } = await sessions.create({
+    sub: SUB_B,
+    tenantId: TENANT_B,
+    ttlSeconds: 3600,
+  });
 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
   const audit = () => {};
   const app = express();
   app.use(express.json());
-  app.use(makeSelfServiceRoutes({ store, webAuthMw, audit, config: { paymentEnabled: false }, billing: {} }));
-  const server = await new Promise((r) => { const sv = app.listen(0, "127.0.0.1", () => r(sv)); });
+  app.use(
+    makeSelfServiceRoutes({
+      store,
+      webAuthMw,
+      audit,
+      config: { paymentEnabled: false },
+      billing: {},
+    }),
+  );
+  const server = await new Promise((r) => {
+    const sv = app.listen(0, "127.0.0.1", () => r(sv));
+  });
 
   return {
     base: `http://127.0.0.1:${server.address().port}`,
@@ -67,13 +87,18 @@ function request(method, url, { cookie } = {}) {
     if (cookie) headers.Cookie = cookie;
     const req = http.request(
       { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method, headers },
-      (res) => { let b = ""; res.on("data", (d) => (b += d)); res.on("end", () => resolve({ status: res.statusCode, body: b })); }
+      (res) => {
+        let b = "";
+        res.on("data", (d) => (b += d));
+        res.on("end", () => resolve({ status: res.statusCode, body: b }));
+      },
     );
     req.on("error", reject);
     req.end();
   });
 }
-const getState = (s, cookie = s.cookieB) => request("GET", `${s.base}/api/self-service/state`, { cookie });
+const getState = (s, cookie = s.cookieB) =>
+  request("GET", `${s.base}/api/self-service/state`, { cookie });
 
 test("(a) eigene gesetzte Nummer -> maskiert (+49…4567), volle E.164 NIE im Body (H4)", async () => {
   const s = await setup();
@@ -88,7 +113,9 @@ test("(a) eigene gesetzte Nummer -> maskiert (+49…4567), volle E.164 NIE im Bo
     assert.equal(res.body.includes("17012"), false, "mittlere Ziffern NIE im Body");
     // Niemals in der settings-View (die ueber /api/state + MCP komplett leakt, H4).
     assert.equal("privateNumber" in (body.settings || {}), false, "privateNumber NIE in settings");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(b) keine Nummer hinterlegt -> privateNumber: null", async () => {
@@ -97,7 +124,9 @@ test("(b) keine Nummer hinterlegt -> privateNumber: null", async () => {
     const res = await getState(s);
     assert.equal(res.status, 200);
     assert.equal(JSON.parse(res.body).privateNumber, null, "kein Wert -> null");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(c) NIE eine fremde Tenant-Nummer: B sieht nur B's Nummer, nie A's (H3)", async () => {
@@ -111,7 +140,9 @@ test("(c) NIE eine fremde Tenant-Nummer: B sieht nur B's Nummer, nie A's (H3)", 
     assert.equal(body.privateNumber, "+49…4567", "B sieht B's maskierte Nummer");
     assert.equal(res.body.includes("1999000111"), false, "A's Ziffern NIE im B-Body");
     assert.equal(res.body.includes("0111"), false, "auch A's letzte 4 Ziffern nicht");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });
 
 test("(d) kein Session-Cookie -> 401 (fail-closed)", async () => {
@@ -121,5 +152,7 @@ test("(d) kein Session-Cookie -> 401 (fail-closed)", async () => {
     const res = await request("GET", `${s.base}/api/self-service/state`);
     assert.equal(res.status, 401);
     assert.equal(res.body.includes("491701234567"), false, "keine Nummer ohne Session");
-  } finally { await s.close(); }
+  } finally {
+    await s.close();
+  }
 });

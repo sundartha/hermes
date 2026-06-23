@@ -46,11 +46,21 @@ function fakeResponse({ ok, status, json }) {
 // Diese Mengen spiegeln src/self-service.js. Driftet die UI, faengt der Server es
 // (rejected), aber die UI soll erst gar nichts ausserhalb anbieten.
 test("Whitelist-Mengen entsprechen dem Backend-Vertrag (self-service.js)", () => {
-  assert.deepEqual(SETTINGS_FREE_FIELDS, ["agentName", "allowCalendar", "allowBooking", "language"]);
+  assert.deepEqual(SETTINGS_FREE_FIELDS, [
+    "agentName",
+    "allowCalendar",
+    "allowBooking",
+    "language",
+  ]);
   assert.deepEqual(SETTINGS_RESTRICT_ONLY_FIELDS, ["allowPersonalData", "allowBankData"]);
   // Die vier Toggles = die beiden Bool-Free-Felder + die beiden Restrict-Only-Felder.
   const toggleKeys = SETTINGS_PERMISSION_TOGGLES.map((t) => t.key);
-  assert.deepEqual(toggleKeys, ["allowCalendar", "allowBooking", "allowPersonalData", "allowBankData"]);
+  assert.deepEqual(toggleKeys, [
+    "allowCalendar",
+    "allowBooking",
+    "allowPersonalData",
+    "allowBankData",
+  ]);
   // restrictOnly-Flag korrekt gesetzt (Anzeige-Semantik = Server-Semantik).
   for (const t of SETTINGS_PERMISSION_TOGGLES) {
     assert.equal(t.restrictOnly, SETTINGS_RESTRICT_ONLY_FIELDS.includes(t.key));
@@ -124,7 +134,11 @@ test("buildSettingsPatch: fehlende Felder -> leere Strings / false (nie undefine
 });
 
 test("buildSettingsPatch: Toggle-Werte werden zu Boolean normalisiert", () => {
-  const patch = buildSettingsPatch({ allowCalendar: 1, allowBooking: "", allowPersonalData: undefined });
+  const patch = buildSettingsPatch({
+    allowCalendar: 1,
+    allowBooking: "",
+    allowPersonalData: undefined,
+  });
   assert.equal(patch.allowCalendar, true);
   assert.equal(patch.allowBooking, false);
   assert.equal(patch.allowPersonalData, false);
@@ -159,12 +173,18 @@ test("settingsOutcome: leerer Patch -> leere Listen", () => {
 test("settingsFrom: leere Defaults bei fehlendem data/settings/templates", () => {
   assert.deepEqual(settingsFrom(undefined), { settings: {}, greetingTemplates: [] });
   assert.deepEqual(settingsFrom({}), { settings: {}, greetingTemplates: [] });
-  assert.deepEqual(settingsFrom({ greetingTemplates: "x" }), { settings: {}, greetingTemplates: [] });
+  assert.deepEqual(settingsFrom({ greetingTemplates: "x" }), {
+    settings: {},
+    greetingTemplates: [],
+  });
 });
 
 test("settingsFrom: befuellte Felder unveraendert durch", () => {
   const data = { settings: { agentName: "A" }, greetingTemplates: ["t1", "t2"] };
-  assert.deepEqual(settingsFrom(data), { settings: { agentName: "A" }, greetingTemplates: ["t1", "t2"] });
+  assert.deepEqual(settingsFrom(data), {
+    settings: { agentName: "A" },
+    greetingTemplates: ["t1", "t2"],
+  });
 });
 
 // ---- saveSettings: Request-Form (POST, JSON-Body, same-origin, kein Token) -----

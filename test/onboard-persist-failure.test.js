@@ -36,8 +36,16 @@ test("T-P1-05: Onboard-Save-Failure -> 503, Prozess lebt weiter, Fehler geloggt"
     assert.equal(res.status, 503, "Persistenz-Fehler -> definierter 503");
     const body = await res.json();
     assert.match(body.error, /Persistenz fehlgeschlagen/, "klare, secret-freie Fehlermeldung");
-    assert.equal(srv.child.exitCode, null, "Prozess lebt weiter (keine unhandled rejection / kein Crash)");
-    assert.match(srv.stdout, /\[onboard\] Persistenz fehlgeschlagen/, "Fehler ist geloggt (mem/disk-Divergenz sichtbar)");
+    assert.equal(
+      srv.child.exitCode,
+      null,
+      "Prozess lebt weiter (keine unhandled rejection / kein Crash)",
+    );
+    assert.match(
+      srv.stdout,
+      /\[onboard\] Persistenz fehlgeschlagen/,
+      "Fehler ist geloggt (mem/disk-Divergenz sichtbar)",
+    );
   } finally {
     // Rechte zuruecksetzen, damit Temp-Aufraeumung nicht blockiert.
     try {

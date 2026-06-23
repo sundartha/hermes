@@ -56,7 +56,11 @@ register("data:text/javascript," + encodeURIComponent(loaderSrc), import.meta.ur
 const { attachMediaBridge } = await import("../src/bridge.js");
 const store = await import("../src/store.js");
 const { disclosureSentence } = await import("../src/claude.js");
-const { openAiSockets, resetOpenAiSockets, default: WebSocket } = await import("./helpers/ws-openai-shim.mjs");
+const {
+  openAiSockets,
+  resetOpenAiSockets,
+  default: WebSocket,
+} = await import("./helpers/ws-openai-shim.mjs");
 
 const STREAM_REF = "MZ1"; // Twilio streamSid aus dem start-Frame == bridge-interner streamRef
 const TAKE_MESSAGE_RESULT = "Nachricht ist notiert."; // execTool(take_message) heute
@@ -142,8 +146,11 @@ async function setupCall(callOverrides = {}) {
   client.send(
     JSON.stringify({
       event: "start",
-      start: { streamSid: STREAM_REF, customParameters: { call_id: call.id, stream_token: call.streamToken } },
-    })
+      start: {
+        streamSid: STREAM_REF,
+        customParameters: { call_id: call.id, stream_token: call.streamToken },
+      },
+    }),
   );
 
   const fake = await waitForFake();
@@ -206,7 +213,7 @@ test("open-Handshake: Inbound-Opener ist die Begruessung, kein Offenlegungssatz"
     // Inbound: fester Begruessungs-Opener, NICHT der Outbound-Offenlegungssatz.
     assert.equal(
       responseCreate.response.instructions,
-      "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen."
+      "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
     );
     assert.ok(!responseCreate.response.instructions.includes(disclosureSentence(call)));
   } finally {
@@ -256,7 +263,7 @@ test("EN-Realtime: kuratierte Voice + Whisper-en + EN-Inbound-Opener", async () 
     const responseCreate = JSON.parse(sends[1][1]);
     assert.equal(
       responseCreate.response.instructions,
-      "The caller is on the line. Greet them now according to your instructions."
+      "The caller is on the line. Greet them now according to your instructions.",
     );
     // Inbound: kein Offenlegungssatz im Opener.
     assert.ok(!responseCreate.response.instructions.includes(disclosureSentence(call)));
@@ -273,8 +280,14 @@ test("Audio-Delta -> providerWs.send(buildMediaFrame), beta + GA", async () => {
     feed(fake, { type: "response.audio.delta", delta: "AAA" });
     feed(fake, { type: "response.output_audio.delta", delta: "BBB" });
     assert.deepStrictEqual(sends, [
-      ["provider", JSON.stringify(twilioMedia.buildMediaFrame({ payload: "AAA", streamRef: STREAM_REF }))],
-      ["provider", JSON.stringify(twilioMedia.buildMediaFrame({ payload: "BBB", streamRef: STREAM_REF }))],
+      [
+        "provider",
+        JSON.stringify(twilioMedia.buildMediaFrame({ payload: "AAA", streamRef: STREAM_REF })),
+      ],
+      [
+        "provider",
+        JSON.stringify(twilioMedia.buildMediaFrame({ payload: "BBB", streamRef: STREAM_REF })),
+      ],
     ]);
   } finally {
     await cleanup();
@@ -342,12 +355,15 @@ test("Barge-in bei geschlossenem OpenAI-Socket -> kein cancel trotz aktiver Resp
 test("Transkript Anrufer: input_audio_transcription.completed -> addTranscript(caller, getrimmt)", async () => {
   const { call, fake, sends, cleanup } = await setupCall();
   try {
-    feed(fake, { type: "conversation.item.input_audio_transcription.completed", transcript: "  hallo  " });
+    feed(fake, {
+      type: "conversation.item.input_audio_transcription.completed",
+      transcript: "  hallo  ",
+    });
     assert.deepStrictEqual(sends, []);
     const t = store.getCall(call.id).transcript;
     assert.deepEqual(
       t.map((x) => ({ role: x.role, text: x.text })),
-      [{ role: "caller", text: "hallo" }]
+      [{ role: "caller", text: "hallo" }],
     );
   } finally {
     await cleanup();
@@ -357,7 +373,10 @@ test("Transkript Anrufer: input_audio_transcription.completed -> addTranscript(c
 test("Transkript Anrufer: nur Whitespace -> kein addTranscript", async () => {
   const { call, fake, cleanup } = await setupCall();
   try {
-    feed(fake, { type: "conversation.item.input_audio_transcription.completed", transcript: "   " });
+    feed(fake, {
+      type: "conversation.item.input_audio_transcription.completed",
+      transcript: "   ",
+    });
     assert.equal(store.getCall(call.id).transcript.length, 0);
   } finally {
     await cleanup();
@@ -376,7 +395,7 @@ test("Transkript Agent: response.audio_transcript.done + output-Variante -> addT
       [
         { role: "agent", text: "Guten Tag" },
         { role: "agent", text: "Auf Wiederhoeren" },
-      ]
+      ],
     );
   } finally {
     await cleanup();
@@ -391,7 +410,14 @@ test("Tool-Call: response.done(take_message) -> execTool + function_call_output 
     feed(fake, {
       type: "response.done",
       response: {
-        output: [{ type: "function_call", name: "take_message", arguments: JSON.stringify({ message: "Rueckruf erbeten" }), call_id: "c1" }],
+        output: [
+          {
+            type: "function_call",
+            name: "take_message",
+            arguments: JSON.stringify({ message: "Rueckruf erbeten" }),
+            call_id: "c1",
+          },
+        ],
       },
     });
     assert.deepStrictEqual(sends, [
@@ -418,7 +444,14 @@ test("Tool-Call bei geschlossenem Socket: execTool laeuft, aber KEINE Sends", as
     feed(fake, {
       type: "response.done",
       response: {
-        output: [{ type: "function_call", name: "take_message", arguments: JSON.stringify({ message: "x" }), call_id: "c1" }],
+        output: [
+          {
+            type: "function_call",
+            name: "take_message",
+            arguments: JSON.stringify({ message: "x" }),
+            call_id: "c1",
+          },
+        ],
       },
     });
     // Absolute Regel 5: execTool laeuft IMMER, nur die Sends stehen unter canSend.
@@ -434,7 +467,11 @@ test("Tool-Call mit kaputten arguments -> args={}, kein Throw, Sends laufen", as
   try {
     feed(fake, {
       type: "response.done",
-      response: { output: [{ type: "function_call", name: "take_message", arguments: "{kaputt", call_id: "c2" }] },
+      response: {
+        output: [
+          { type: "function_call", name: "take_message", arguments: "{kaputt", call_id: "c2" },
+        ],
+      },
     });
     assert.deepStrictEqual(sends, [
       [
@@ -462,14 +499,22 @@ test("end_call: response.done(end_call) plant hangup nach 2500ms, kein execTool/
   try {
     feed(fake, {
       type: "response.done",
-      response: { output: [{ type: "function_call", name: "end_call", arguments: "{}", call_id: "e1" }] },
+      response: {
+        output: [{ type: "function_call", name: "end_call", arguments: "{}", call_id: "e1" }],
+      },
     });
     assert.deepStrictEqual(sends, []); // end_call: kein function_call_output, kein response.create
     assert.equal(store.getCall(call.id).actionItemIds.length, 0); // kein execTool fuer end_call
-    assert.ok(!cap.logs.some((l) => l.includes("hangup:")), "hangup darf noch nicht gefeuert haben");
+    assert.ok(
+      !cap.logs.some((l) => l.includes("hangup:")),
+      "hangup darf noch nicht gefeuert haben",
+    );
 
     t.mock.timers.tick(2500);
-    assert.ok(cap.logs.some((l) => l.includes("hangup: end_call von KI")), "hangup nach 2500ms erwartet");
+    assert.ok(
+      cap.logs.some((l) => l.includes("hangup: end_call von KI")),
+      "hangup nach 2500ms erwartet",
+    );
   } finally {
     t.mock.timers.reset(); // echte Timer fuer cleanup wiederherstellen
     cap.restore();
@@ -526,7 +571,10 @@ test("Crash-Guard: werfendes Event wird vom aeusseren try/catch gefangen (kein R
     // transcript ist eine Zahl -> ev.transcript?.trim() wirft TypeError im switch-Body.
     // Wenn der aeussere Guard intakt ist, kommt der Throw NICHT aus feed() heraus.
     assert.doesNotThrow(() =>
-      feed(fake, { type: "conversation.item.input_audio_transcription.completed", transcript: 12345 })
+      feed(fake, {
+        type: "conversation.item.input_audio_transcription.completed",
+        transcript: 12345,
+      }),
     );
     assert.deepStrictEqual(sends, []);
     assert.ok(cap.errors.some((e) => e.includes("openai message handler")));

@@ -33,16 +33,23 @@ function withConfig(overrides, fn) {
   }
 }
 const REQUIRED_OK = {
-  anthropicApiKey: "x", twilioSid: "x", twilioToken: "x", twilioNumber: "+49123",
-  ownerFirstName: "Max", ownerLastName: "Mustermann", // G1: Boot-Pflicht
-  publicUrl: "https://example.test", mcpAuth: "", storeBackend: "json", paymentEnabled: false,
+  anthropicApiKey: "x",
+  twilioSid: "x",
+  twilioToken: "x",
+  twilioNumber: "+49123",
+  ownerFirstName: "Max",
+  ownerLastName: "Mustermann", // G1: Boot-Pflicht
+  publicUrl: "https://example.test",
+  mcpAuth: "",
+  storeBackend: "json",
+  paymentEnabled: false,
 };
 
 test("T-P2-01: NaN-Budget -> numEnv sammelt Fatal (nennt MAX_BUDGET_EUR)", () => {
   numEnv("MAX_BUDGET_EUR", "acht", { fallback: 8, min: 0, integer: false });
   assert.ok(
     configFatalErrors().some((e) => e.includes("MAX_BUDGET_EUR")),
-    "configFatalErrors muss MAX_BUDGET_EUR nennen"
+    "configFatalErrors muss MAX_BUDGET_EUR nennen",
   );
 });
 
@@ -59,7 +66,7 @@ test("T-P2-03: negativer Gate-Wert -> Fatal (nennt Minimum); '0' bleibt gueltige
   const added = configFatalErrors().slice(beforeNeg);
   assert.ok(
     added.some((e) => e.includes("MAX_CALLS_PER_HOUR") && e.includes("Minimum")),
-    "negativer Gate-Wert muss als Minimum-Verletzung gemeldet werden"
+    "negativer Gate-Wert muss als Minimum-Verletzung gemeldet werden",
   );
   const before0 = configFatalErrors().length;
   const v0 = numEnv("MAX_CALLS_PER_HOUR", "0", { fallback: 6, min: 0 });
@@ -71,8 +78,10 @@ test("T-P2-04: maxCallDurationS NaN -> Fatal (kein stilles 300); Clamp-Pfad blei
   const before = configFatalErrors().length;
   numEnv("MAX_CALL_DURATION_S", "lang", { fallback: 180, min: 1, max: 300 });
   assert.ok(
-    configFatalErrors().slice(before).some((e) => e.includes("MAX_CALL_DURATION_S")),
-    "NaN-Max-Dauer muss Fatal sein (frueheres Math.min(NaN,300)-Loch geschlossen)"
+    configFatalErrors()
+      .slice(before)
+      .some((e) => e.includes("MAX_CALL_DURATION_S")),
+    "NaN-Max-Dauer muss Fatal sein (frueheres Math.min(NaN,300)-Loch geschlossen)",
   );
   // Clamp bleibt Bestandsverhalten: > max -> max, KEIN Fatal.
   const beforeClamp = configFatalErrors().length;
@@ -89,7 +98,7 @@ test("T-P2-05: assertConfig faellt bei numerischem Fatal und nennt die Var", () 
     });
     assert.ok(
       lines.join("\n").includes("RATE_LIMIT_PER_MIN"),
-      "Diagnose muss die verletzte Var nennen"
+      "Diagnose muss die verletzte Var nennen",
     );
   });
 });

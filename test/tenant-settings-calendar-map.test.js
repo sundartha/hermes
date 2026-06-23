@@ -41,7 +41,11 @@ before(async () => {
 // ---- (1) Map-Trennung ----
 test("settingsFor liefert verschiedene Buckets pro Tenant; updateSettings(B) laesst A unberuehrt", () => {
   const s = makeDefaultState();
-  assert.notEqual(settingsFor(s, TENANT_A), settingsFor(s, TENANT_B), "A und B sind verschiedene Referenzen");
+  assert.notEqual(
+    settingsFor(s, TENANT_A),
+    settingsFor(s, TENANT_B),
+    "A und B sind verschiedene Referenzen",
+  );
   updateSettings(s, TENANT_B, { agentName: "Maria-Agent" });
   assert.equal(settingsFor(s, TENANT_B).agentName, "Maria-Agent");
   assert.equal(settingsFor(s, TENANT_A).agentName, defaultSettings().agentName, "A bleibt Default");
@@ -90,11 +94,24 @@ const FLAT_SETTINGS = {
 };
 
 test("Migration: flaches settings + flache calendar-Liste -> owner-keyed Map", async () => {
-  const ev = { id: "ev_old", title: "Alt-Termin", start: "2030-02-01T09:00:00.000Z", end: "2030-02-01T10:00:00.000Z" };
+  const ev = {
+    id: "ev_old",
+    title: "Alt-Termin",
+    start: "2030-02-01T09:00:00.000Z",
+    end: "2030-02-01T10:00:00.000Z",
+  };
   const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [ev] });
-  assert.equal(state.settings[OWNER_TENANT_ID].agentName, "Alt-Agent", "altes settings im Owner-Bucket");
+  assert.equal(
+    state.settings[OWNER_TENANT_ID].agentName,
+    "Alt-Agent",
+    "altes settings im Owner-Bucket",
+  );
   assert.equal(state.calendar[OWNER_TENANT_ID][0].id, "ev_old", "alter Kalender im Owner-Bucket");
-  assert.equal(typeof state.settings.agentName, "undefined", "settings ist eine Map (kein flaches Feld)");
+  assert.equal(
+    typeof state.settings.agentName,
+    "undefined",
+    "settings ist eine Map (kein flaches Feld)",
+  );
 });
 
 test("Migration: leere calendar-Liste -> leerer Owner-Bucket", async () => {
@@ -108,8 +125,16 @@ test("Migration ist idempotent: bereits-Map-Shape bleibt unveraendert (Owner-Buc
     calendar: { [OWNER_TENANT_ID]: [] },
   };
   const state = await loadFlatStore(mapShape);
-  assert.equal(state.settings[OWNER_TENANT_ID].agentName, "Alt-Agent", "Owner-Settings unveraendert");
-  assert.deepEqual(state.calendar[OWNER_TENANT_ID], [], "Owner-Kalender unveraendert (leer bleibt leer)");
+  assert.equal(
+    state.settings[OWNER_TENANT_ID].agentName,
+    "Alt-Agent",
+    "Owner-Settings unveraendert",
+  );
+  assert.deepEqual(
+    state.calendar[OWNER_TENANT_ID],
+    [],
+    "Owner-Kalender unveraendert (leer bleibt leer)",
+  );
 });
 
 test("Migration forward-compat: flaches settings ohne neues Feld -> Default im Owner-Bucket", async () => {
@@ -118,7 +143,7 @@ test("Migration forward-compat: flaches settings ohne neues Feld -> Default im O
   assert.equal(
     state.settings[OWNER_TENANT_ID].allowBankData,
     defaultSettings().allowBankData,
-    "fehlendes Feld faellt auf den defaultSettings()-Default"
+    "fehlendes Feld faellt auf den defaultSettings()-Default",
   );
 });
 
@@ -142,8 +167,20 @@ test("tenantContext(owner) bei frischem State: settings == defaults, calendar ==
 // Wrapper-Parity): findConflict findet den ueber addCalendarEvent gebuchten Termin
 // im selben Owner-Bucket (json-Backend, gegen das migrierte Temp-store.json).
 test("Fassade json.js: addCalendarEvent/findConflict round-trippen ueber tenantId", () => {
-  jsonBackend.addCalendarEvent(OWNER_TENANT_ID, "Fassaden-Termin", "2031-01-01T10:00:00.000Z", "2031-01-01T11:00:00.000Z");
-  const conflict = jsonBackend.findConflict(OWNER_TENANT_ID, "2031-01-01T10:30:00.000Z", "2031-01-01T10:45:00.000Z");
+  jsonBackend.addCalendarEvent(
+    OWNER_TENANT_ID,
+    "Fassaden-Termin",
+    "2031-01-01T10:00:00.000Z",
+    "2031-01-01T11:00:00.000Z",
+  );
+  const conflict = jsonBackend.findConflict(
+    OWNER_TENANT_ID,
+    "2031-01-01T10:30:00.000Z",
+    "2031-01-01T10:45:00.000Z",
+  );
   assert.ok(conflict, "gebuchter Termin wird als Konflikt gefunden");
-  assert.equal(jsonBackend.getCalendar(OWNER_TENANT_ID).some((e) => e.title === "Fassaden-Termin"), true);
+  assert.equal(
+    jsonBackend.getCalendar(OWNER_TENANT_ID).some((e) => e.title === "Fassaden-Termin"),
+    true,
+  );
 });

@@ -135,7 +135,8 @@ export function externalIp() {
 export function tempDataDir(seedState, rawStore) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-test-"));
   if (typeof rawStore === "string") fs.writeFileSync(path.join(dir, "store.json"), rawStore);
-  else if (seedState) fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(seedState, null, 2));
+  else if (seedState)
+    fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(seedState, null, 2));
   return dir;
 }
 
@@ -143,7 +144,15 @@ export function tempDataDir(seedState, rawStore) {
 // und numbers haben bewusst KEINEN Default (undefined): ohne sie ist die Form
 // byte-identisch zum Altbestand (Conditional-Spread unten), mit ihnen laesst sich
 // ein aktiver Tenant samt eigener Nummer seeden (Inbound-Routing + Identitaet).
-export function seedState({ calls = [], actionItems = [], notifications = [], settings = {}, profiles = {}, tenants, numbers } = {}) {
+export function seedState({
+  calls = [],
+  actionItems = [],
+  notifications = [],
+  settings = {},
+  profiles = {},
+  tenants,
+  numbers,
+} = {}) {
   return {
     settings: {
       agentName: "Hermes",
@@ -177,7 +186,9 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
   // seedState() (dem diese Listen fehlen). Gegebene Seeds bleiben unangetastet.
   const state = seed || makeDefaultState();
   const numbers = Array.isArray(state.numbers) ? [...state.numbers] : [];
-  const hasOwnerActive = numbers.some((n) => n.tenantId === OWNER_TENANT_ID && n.status === "active");
+  const hasOwnerActive = numbers.some(
+    (n) => n.tenantId === OWNER_TENANT_ID && n.status === "active",
+  );
   if (!hasOwnerActive) {
     numbers.push({
       id: "num_owner_seed",
@@ -188,7 +199,11 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
       providerNumberId: null,
     });
   }
-  return { ...state, tenants: state.tenants || [{ id: OWNER_TENANT_ID, status: "active" }], numbers };
+  return {
+    ...state,
+    tenants: state.tenants || [{ id: OWNER_TENANT_ID, status: "active" }],
+    numbers,
+  };
 }
 
 export function seedCall(overrides = {}) {
@@ -221,7 +236,8 @@ export function seedCall(overrides = {}) {
 export async function waitForLog(srv, regex, timeoutMs = 3000) {
   const deadline = Date.now() + timeoutMs;
   while (!regex.test(srv.stdout)) {
-    if (Date.now() > deadline) throw new Error(`Log-Pattern ${regex} nicht gefunden in:\n${srv.stdout}`);
+    if (Date.now() > deadline)
+      throw new Error(`Log-Pattern ${regex} nicht gefunden in:\n${srv.stdout}`);
     await new Promise((r) => setTimeout(r, 20));
   }
 }
@@ -242,13 +258,21 @@ export async function startTelnyxProvisioningMock() {
       if (req.url.startsWith("/v2/available_phone_numbers"))
         return res.end(JSON.stringify({ data: [{ phone_number: "+4915799990001" }] }));
       if (req.url === "/v2/number_orders")
-        return res.end(JSON.stringify({ data: { phone_numbers: [{ id: "num_ext_1", phone_number: "+4915799990001" }] } }));
+        return res.end(
+          JSON.stringify({
+            data: { phone_numbers: [{ id: "num_ext_1", phone_number: "+4915799990001" }] },
+          }),
+        );
       // configure (PATCH .../voice), release (DELETE) -> 200 ok
       res.end(JSON.stringify({ data: {} }));
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, requests, close: () => new Promise((r) => server.close(r)) };
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    requests,
+    close: () => new Promise((r) => server.close(r)),
+  };
 }
 
 // Fake-Billing-Adapter (P6b1): aufzeichnend + per-Override werfbar, analog dem
@@ -257,10 +281,19 @@ export async function startTelnyxProvisioningMock() {
 export function fakeBilling(overrides = {}) {
   const log = [];
   const base = {
-    async placeHold(args) { log.push(["placeHold", args]); return { paymentIntentId: "pi_fake_1" }; },
-    async captureHold(id, amt) { log.push(["captureHold", id, amt]); },
-    async cancelHold(id) { log.push(["cancelHold", id]); },
-    async reportMeter(args) { log.push(["reportMeter", args]); }, // P6b3-Meter-Aufzeichner
+    async placeHold(args) {
+      log.push(["placeHold", args]);
+      return { paymentIntentId: "pi_fake_1" };
+    },
+    async captureHold(id, amt) {
+      log.push(["captureHold", id, amt]);
+    },
+    async cancelHold(id) {
+      log.push(["cancelHold", id]);
+    },
+    async reportMeter(args) {
+      log.push(["reportMeter", args]);
+    }, // P6b3-Meter-Aufzeichner
   };
   return { log, ...base, ...overrides };
 }
@@ -272,10 +305,20 @@ export function fakeBilling(overrides = {}) {
 export function fakeProvisioner(overrides = {}) {
   const log = [];
   const base = {
-    async searchNumbers({ countryCode } = {}) { log.push(`search:${countryCode}`); return [{ e164: "+4915799990001" }]; },
-    async orderNumber({ e164, idempotencyKey }) { log.push(`order:${e164}:${idempotencyKey}`); return { e164, providerNumberId: "num_ext_1" }; },
-    async configureNumber({ providerNumberId, connectionId }) { log.push(`configure:${providerNumberId}:${connectionId}`); },
-    async releaseNumber(id) { log.push(`release:${id}`); },
+    async searchNumbers({ countryCode } = {}) {
+      log.push(`search:${countryCode}`);
+      return [{ e164: "+4915799990001" }];
+    },
+    async orderNumber({ e164, idempotencyKey }) {
+      log.push(`order:${e164}:${idempotencyKey}`);
+      return { e164, providerNumberId: "num_ext_1" };
+    },
+    async configureNumber({ providerNumberId, connectionId }) {
+      log.push(`configure:${providerNumberId}:${connectionId}`);
+    },
+    async releaseNumber(id) {
+      log.push(`release:${id}`);
+    },
   };
   return { log, ...base, ...overrides };
 }
@@ -313,7 +356,10 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
 
   // noSubject: true laesst den sub-Claim ganz weg (fuer den Fail-closed-Test:
   // verifiziertes Token ohne email UND sub).
-  const sign = (claims = {}, { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {}) => {
+  const sign = (
+    claims = {},
+    { key = privateKey, exp = "5m", aud = MCP_AUDIENCE, iss = issuer, noSubject = false } = {},
+  ) => {
     let jwt = new SignJWT({ ...claims })
       .setProtectedHeader({ alg: "RS256", kid: KID })
       .setIssuer(iss)
@@ -324,7 +370,12 @@ export async function startIdp({ metadataPath = "/.well-known/openid-configurati
     return jwt.sign(key);
   };
 
-  return { issuer, sign, wrongKey: wrong.privateKey, close: () => new Promise((r) => server.close(r)) };
+  return {
+    issuer,
+    sign,
+    wrongKey: wrong.privateKey,
+    close: () => new Promise((r) => server.close(r)),
+  };
 }
 
 // POST an /mcp (Streamable HTTP). Ohne body: initialize. Antwort kann SSE sein.
@@ -352,7 +403,13 @@ export const toolCall = (name, args = {}) => ({
 // die Fail-closed-Tests (OT-4): liefert { code, output, dataDir }. Wirft, wenn der
 // Prozess NICHT innerhalb timeoutMs beendet (d.h. der Boot lief durch). Teilt
 // BASE_ENV + tempDataDir mit startServer (G5: keine zweite Spawn-Definition).
-export async function startServerExpectExit({ env = {}, seed, rawStore, ownerNumber, timeoutMs = 8000 } = {}) {
+export async function startServerExpectExit({
+  env = {},
+  seed,
+  rawStore,
+  ownerNumber,
+  timeoutMs = 8000,
+} = {}) {
   // rawStore (Korruptions-Pfad) bleibt verbatim; sonst Owner-Nummer sicherstellen.
   const dataDir = tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
   const child = spawn(process.execPath, ["src/server.js"], {
@@ -394,7 +451,7 @@ export async function startServer({ env = {}, seed, rawStore, ownerNumber } = {}
   const port = await new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`Server-Start Timeout. Output:\n${output.text}`)),
-      STARTUP_TIMEOUT_MS
+      STARTUP_TIMEOUT_MS,
     );
     const onData = (d) => {
       const m = output.text.match(/laeuft auf http:\/\/localhost:(\d+)/);

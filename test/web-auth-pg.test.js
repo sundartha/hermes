@@ -24,7 +24,10 @@ test("makeAccounts.upsertOnFirstLogin legt Tenant(suspended)+Account an, idempot
   // zweiter Login -> kein Duplikat
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   assert.equal((await db.query(`SELECT count(*)::int AS n FROM account`)).rows[0].n, 1);
-  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant WHERE id='t_u1'`)).rows[0].n, 1);
+  assert.equal(
+    (await db.query(`SELECT count(*)::int AS n FROM tenant WHERE id='t_u1'`)).rows[0].n,
+    1,
+  );
 });
 
 test("upsertOnFirstLogin setzt tenant.idp_subject=sub (Bruecke zu i9 resolveTenant, Identity-Dedup)", async () => {
@@ -32,11 +35,17 @@ test("upsertOnFirstLogin setzt tenant.idp_subject=sub (Bruecke zu i9 resolveTena
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
   // i9 resolveTenant matcht tenant.idp_subject === sub -> ohne dieses Feld bleiben
   // Web-Login-Kanal (B) und MCP-Kanal (i9) disjunkt (resolveTenant liefert null).
-  assert.equal((await db.query(`SELECT idp_subject FROM tenant WHERE id='t_u1'`)).rows[0].idp_subject, "u1");
+  assert.equal(
+    (await db.query(`SELECT idp_subject FROM tenant WHERE id='t_u1'`)).rows[0].idp_subject,
+    "u1",
+  );
   // Repeat-Login bleibt idempotent + ueberschreibt einen aktivierten Status NICHT.
   await accounts.setStatus("t_u1", "active");
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
-  assert.equal((await db.query(`SELECT status FROM tenant WHERE id='t_u1'`)).rows[0].status, "active");
+  assert.equal(
+    (await db.query(`SELECT status FROM tenant WHERE id='t_u1'`)).rows[0].status,
+    "active",
+  );
 });
 
 test("makeAccounts.resolve liefert tenantId/role/status/email", async () => {

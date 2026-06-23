@@ -40,22 +40,22 @@
   --color-indicator-off: var(--color-gray-300);
 
   /* --- Abstands-Rollen [W2-Pflicht] --- */
-  --space-gap: var(--space-5);        /* Abstand zwischen Karten im Grid */
-  --space-inline: var(--space-4);     /* horizontaler Innenabstand */
-  --space-stack: var(--space-4);      /* vertikaler Abstand gestapelter Elemente */
-  --space-card: var(--space-6);       /* Karten-Innenabstand */
-  --space-section: var(--space-20);   /* Abstand zwischen Seitenabschnitten */
+  --space-gap: var(--space-5); /* Abstand zwischen Karten im Grid */
+  --space-inline: var(--space-4); /* horizontaler Innenabstand */
+  --space-stack: var(--space-4); /* vertikaler Abstand gestapelter Elemente */
+  --space-card: var(--space-6); /* Karten-Innenabstand */
+  --space-section: var(--space-20); /* Abstand zwischen Seitenabschnitten */
 
   /* --- Abstands-Rollen (Marketing, additiv) --- */
-  --space-hairline: var(--space-1);   /* feinste Abstaende (Badge-Innenabstand) */
+  --space-hairline: var(--space-1); /* feinste Abstaende (Badge-Innenabstand) */
   --space-tight: var(--space-2);
   --space-cozy: var(--space-3);
-  --space-loose: var(--space-5);      /* grosszuegiger Innen-/Aussenabstand */
-  --space-roomy: var(--space-8);      /* Abstand vor Aktions-Clustern */
-  --space-block: var(--space-12);     /* Abstand unter Abschnitts-Koepfen */
+  --space-loose: var(--space-5); /* grosszuegiger Innen-/Aussenabstand */
+  --space-roomy: var(--space-8); /* Abstand vor Aktions-Clustern */
+  --space-block: var(--space-12); /* Abstand unter Abschnitts-Koepfen */
 
   /* --- Groessen-Rollen (Marketing, additiv) --- */
-  --size-icon: var(--space-8);        /* runde Marken-/Schritt-Glyphen */
+  --size-icon: var(--space-8); /* runde Marken-/Schritt-Glyphen */
 
   /* --- Form-Rollen [W2-Pflicht] --- */
   --radius-card: var(--radius-lg);

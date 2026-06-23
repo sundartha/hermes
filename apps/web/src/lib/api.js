@@ -210,7 +210,12 @@ export function calendarDateParts(event) {
 // Frei setzbare Felder (Typ-Check macht updateSettings serverseitig). 1:1 zu
 // SELF_SERVICE_FREE_FIELDS in src/self-service.js -- driftet das auseinander,
 // schlaegt das Backend den Wert ohnehin als rejected zurueck (fail-closed).
-export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "allowCalendar", "allowBooking", "language"]);
+export const SETTINGS_FREE_FIELDS = Object.freeze([
+  "agentName",
+  "allowCalendar",
+  "allowBooking",
+  "language",
+]);
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
 // false->true NEIN -- Aktivieren bleibt Plattform-Admin). 1:1 zu
@@ -235,10 +240,30 @@ export const SETTINGS_LANGUAGES = Object.freeze([
 // das Backend, hier nur fuer die Anzeige zentralisiert. agentName/greeting/
 // language sind eigene Controls (Text/Dropdowns), kein Toggle.
 export const SETTINGS_PERMISSION_TOGGLES = Object.freeze([
-  { key: "allowCalendar", label: "Kalenderzugriff", hint: "Agent darf Termine einsehen", restrictOnly: false },
-  { key: "allowBooking", label: "Termine buchen", hint: "Agent darf Termine fest eintragen", restrictOnly: false },
-  { key: "allowPersonalData", label: "Persoenliche Daten", hint: "Adresse, E-Mail etc. herausgeben", restrictOnly: true },
-  { key: "allowBankData", label: "Bankdaten", hint: "Zahlungsdaten nennen (nicht empfohlen)", restrictOnly: true },
+  {
+    key: "allowCalendar",
+    label: "Kalenderzugriff",
+    hint: "Agent darf Termine einsehen",
+    restrictOnly: false,
+  },
+  {
+    key: "allowBooking",
+    label: "Termine buchen",
+    hint: "Agent darf Termine fest eintragen",
+    restrictOnly: false,
+  },
+  {
+    key: "allowPersonalData",
+    label: "Persoenliche Daten",
+    hint: "Adresse, E-Mail etc. herausgeben",
+    restrictOnly: true,
+  },
+  {
+    key: "allowBankData",
+    label: "Bankdaten",
+    hint: "Zahlungsdaten nennen (nicht empfohlen)",
+    restrictOnly: true,
+  },
 ]);
 
 // Settings + greeting-Vorlagen aus der state-Antwort -- die EINE Stelle, an der

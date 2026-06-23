@@ -25,9 +25,12 @@ console.log("✓ .env: PUBLIC_URL =", url);
 
 // 2. Twilio-Webhooks setzen
 // Owner-Twilio-Nummer aus dem Store (Owner = Tenant Null, keine TWILIO_NUMBER-Env mehr).
-const ownerTwilioNumber = findActiveNumber(store.load(), OWNER_TENANT_ID, PROVIDER.TWILIO)?.e164 || "";
+const ownerTwilioNumber =
+  findActiveNumber(store.load(), OWNER_TENANT_ID, PROVIDER.TWILIO)?.e164 || "";
 if (!ownerTwilioNumber) {
-  console.error("✗ Keine aktive Owner-Twilio-Nummer im Store. Erst: npm run seed-owner-number -- <e164> twilio");
+  console.error(
+    "✗ Keine aktive Owner-Twilio-Nummer im Store. Erst: npm run seed-owner-number -- <e164> twilio",
+  );
   process.exit(1);
 }
 const c = twilio(config.twilioSid, config.twilioToken);

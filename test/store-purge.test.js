@@ -15,12 +15,24 @@ const AT = "2026-01-01T00:00:00Z";
 function freshState() {
   return seedState({
     calls: [
-      seedCall({ id: "call1", status: "completed", summary: "Zusammenfassung 1", objectiveAchieved: true,
-        actionItemIds: ["ai1"], transcript: [{ role: "agent", text: "Hallo", at: AT }] }),
-      seedCall({ id: "call2", status: "completed", summary: "Zusammenfassung 2",
-        transcript: [{ role: "caller", text: "Geheim", at: AT }] }),
+      seedCall({
+        id: "call1",
+        status: "completed",
+        summary: "Zusammenfassung 1",
+        objectiveAchieved: true,
+        actionItemIds: ["ai1"],
+        transcript: [{ role: "agent", text: "Hallo", at: AT }],
+      }),
+      seedCall({
+        id: "call2",
+        status: "completed",
+        summary: "Zusammenfassung 2",
+        transcript: [{ role: "caller", text: "Geheim", at: AT }],
+      }),
     ],
-    actionItems: [{ id: "ai1", callId: "call1", text: "Rueckruf", type: "todo", done: false, createdAt: AT }],
+    actionItems: [
+      { id: "ai1", callId: "call1", text: "Rueckruf", type: "todo", done: false, createdAt: AT },
+    ],
   });
 }
 
@@ -30,8 +42,11 @@ test("purgeTranscript leert NUR das Transkript des Ziel-Calls", () => {
   const s = freshState();
   assert.equal(purgeTranscript(s, "call1"), true);
   assert.deepEqual(getCall(s, "call1").transcript, [], "Ziel-Call hat leeres Transkript");
-  assert.deepEqual(getCall(s, "call2").transcript, [{ role: "caller", text: "Geheim", at: AT }],
-    "anderer Call bleibt unangetastet");
+  assert.deepEqual(
+    getCall(s, "call2").transcript,
+    [{ role: "caller", text: "Geheim", at: AT }],
+    "anderer Call bleibt unangetastet",
+  );
 });
 
 test("purgeTranscript laesst Summary + objectiveAchieved + Action Items unangetastet", () => {

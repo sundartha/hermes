@@ -26,7 +26,9 @@ const PROV = PROVIDER.TWILIO;
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
 // Spiegel aus der DB) -> simuliert den Prozess-Restart zwischen zwei Callbacks.
 async function reopen(db) {
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init();
   return store;
@@ -45,7 +47,10 @@ test("Marker round-trippt durch flush/hydrate (pg): summarySmsSentAt ueberlebt d
 
   const reopened = await reopen(db);
   const sentAt = reopened.getCall(c.id).summarySmsSentAt;
-  assert.ok(typeof sentAt === "string" && !Number.isNaN(Date.parse(sentAt)), "Marker ist eine persistierte ISO-Zeit");
+  assert.ok(
+    typeof sentAt === "string" && !Number.isNaN(Date.parse(sentAt)),
+    "Marker ist eine persistierte ISO-Zeit",
+  );
 });
 
 // B) Guard (AK2, AK3): planSummarySms prueft den persistierten Marker VOR allen anderen
@@ -56,7 +61,11 @@ test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein 
   // Fake-Store, der genau die vier planSummarySms-Reads abbildet und sonst SENDEN wuerde.
   const store = {
     tenantPrivateNumber: () => "+491701234567",
-    load: () => ({ numbers: [{ tenantId: "A", e164: "+4915100000001", status: NUMBER_STATUS.ACTIVE, provider: PROV }] }),
+    load: () => ({
+      numbers: [
+        { tenantId: "A", e164: "+4915100000001", status: NUMBER_STATUS.ACTIVE, provider: PROV },
+      ],
+    }),
     tenantContext: () => ({ settings: { smsSummaryOptIn: true } }),
     dailySmsCount: () => 0,
   };
@@ -66,15 +75,30 @@ test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein 
   assert.equal(before.send, true, "ohne Marker wuerde gesendet (Kontroll-Pfad)");
 
   // Zweiter Callback nach Restart: derselbe Call, jetzt mit persistiertem Marker.
-  const after = planSummarySms(store, cfg, { id: "call_A", tenantId: "A", provider: PROV, summarySmsSentAt: new Date().toISOString() });
+  const after = planSummarySms(store, cfg, {
+    id: "call_A",
+    tenantId: "A",
+    provider: PROV,
+    summarySmsSentAt: new Date().toISOString(),
+  });
   assert.equal(after.send, false, "mit Marker wird NICHT erneut gesendet");
-  assert.equal(after.reason, null, "normaler Dedup -> kein Ziel-Defizit, kein reason zu auditieren");
+  assert.equal(
+    after.reason,
+    null,
+    "normaler Dedup -> kein Ziel-Defizit, kein reason zu auditieren",
+  );
 });
 
 // C) View (AK4): der interne Marker darf den Server nie verlassen - publicCall strippt
 // ihn (wie streamToken/_finished). Sonst leakte ein internes Timing-Detail in die API.
 test("publicCall strippt summarySmsSentAt (kein API-Leak)", () => {
-  const out = publicCall({ id: "call_A", summary: "ok", streamToken: "secret", _finished: true, summarySmsSentAt: "2026-06-23T10:00:00.000Z" });
+  const out = publicCall({
+    id: "call_A",
+    summary: "ok",
+    streamToken: "secret",
+    _finished: true,
+    summarySmsSentAt: "2026-06-23T10:00:00.000Z",
+  });
   assert.equal(out.summarySmsSentAt, undefined, "Marker nicht in der API-View");
   assert.equal(out.streamToken, undefined, "streamToken weiterhin gestrippt");
   assert.equal(out._finished, undefined, "_finished weiterhin gestrippt");

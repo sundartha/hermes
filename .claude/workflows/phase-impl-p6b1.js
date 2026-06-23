@@ -4,17 +4,27 @@
 // .claude/workflows/phase-impl.js; nur das A-Objekt + STATUS-Kommentar sind P6b1.
 
 export const meta = {
-  name: 'phase-impl-p6b1',
-  description: 'P6b1 umsetzen: capturing-State + Billing-Port + Stripe Hold/Capture (synchron). Plan -> Implementieren (Worktree) -> dualer Review (Safety + Clean-Code). S1/S2 = Blocker.',
+  name: "phase-impl-p6b1",
+  description:
+    "P6b1 umsetzen: capturing-State + Billing-Port + Stripe Hold/Capture (synchron). Plan -> Implementieren (Worktree) -> dualer Review (Safety + Clean-Code). S1/S2 = Blocker.",
   phases: [
-    { title: 'Plan', detail: 'Regelkonformer Umsetzungsplan (liest clean-code.md + Plan-Doku + echten Code)' },
-    { title: 'Implementieren', detail: 'Umsetzung im Worktree, clean-code-konform, npm test gruen' },
-    { title: 'Review', detail: 'Safety/Verhalten-Reviewer + dedizierter Clean-Code-Auditor (parallel)' },
+    {
+      title: "Plan",
+      detail: "Regelkonformer Umsetzungsplan (liest clean-code.md + Plan-Doku + echten Code)",
+    },
+    {
+      title: "Implementieren",
+      detail: "Umsetzung im Worktree, clean-code-konform, npm test gruen",
+    },
+    {
+      title: "Review",
+      detail: "Safety/Verhalten-Reviewer + dedizierter Clean-Code-Auditor (parallel)",
+    },
   ],
-}
+};
 
-const REPO = "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent"
-const NODE_MODULES = `${REPO}/node_modules`
+const REPO = "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent";
+const NODE_MODULES = `${REPO}/node_modules`;
 
 // STATUS: Onboarding-Scheibe + P6a + P7 + P8a + P8b + Identitaets-Schicht I0-I9 GEMERGT
 // (master=origin/master=8a8bceb, 2026-06-16, 361/361 selbst verifiziert; NICHT upstream/live).
@@ -22,13 +32,17 @@ const NODE_MODULES = `${REPO}/node_modules`
 // P6b1-P6b4 (wie P3->P3a/b/c). DIES ist P6b1 (Money-Safety-Kern, synchron). NICHT pushen,
 // NICHT mergen (Owner merged koordiniert). Plan-Doc-Umbrella: "**P6 — Onboarding + Stripe
 // Hold/Capture + Provisioning-Worker**". Owner-Entscheidungen diese Session fixiert (s. extraNotes).
-const A = (typeof args === 'object' && args) ? args : {
-  phaseId: "P6b1",
-  phaseTitle: "capturing-State + Billing-Port + Stripe Hold/Capture (synchron, hinter PAYMENT_ENABLED, fail-closed)",
-  branch: "phase/p6b1-capturing-billing",
-  baseBranch: "master",
-  planDoc: "PLAN-MULTI-TENANT-TELNYX.md",
-  extraNotes: `WICHTIG ZUR PHASE: P6b1 ist die erste Sub-Scheibe von P6 (Split wie P3->P3a/b/c). Der Plan-Doc-Abschnitt "**P6 — Onboarding + Stripe Hold/Capture + Provisioning-Worker**" ist die UMBRELLA; der Onboarding-Teil (POST /api/onboard, Number-Lifecycle requested->provisioning->active, synchrone Orchestrierung, Caps, PROVISIONING_ENABLED-Dry-Run) ist BEREITS GEMERGT. Die AUTORITATIVE Scope-Definition fuer P6b1 ist DIESER ZUSATZ-HINWEIS (nicht der Doc-Abschnitt, der den ganzen P6 beschreibt). Base ist master @8a8bceb.
+const A =
+  typeof args === "object" && args
+    ? args
+    : {
+        phaseId: "P6b1",
+        phaseTitle:
+          "capturing-State + Billing-Port + Stripe Hold/Capture (synchron, hinter PAYMENT_ENABLED, fail-closed)",
+        branch: "phase/p6b1-capturing-billing",
+        baseBranch: "master",
+        planDoc: "PLAN-MULTI-TENANT-TELNYX.md",
+        extraNotes: `WICHTIG ZUR PHASE: P6b1 ist die erste Sub-Scheibe von P6 (Split wie P3->P3a/b/c). Der Plan-Doc-Abschnitt "**P6 — Onboarding + Stripe Hold/Capture + Provisioning-Worker**" ist die UMBRELLA; der Onboarding-Teil (POST /api/onboard, Number-Lifecycle requested->provisioning->active, synchrone Orchestrierung, Caps, PROVISIONING_ENABLED-Dry-Run) ist BEREITS GEMERGT. Die AUTORITATIVE Scope-Definition fuer P6b1 ist DIESER ZUSATZ-HINWEIS (nicht der Doc-Abschnitt, der den ganzen P6 beschreibt). Base ist master @8a8bceb.
 
 P6b1 = der Money-Safety-Kern "provision-after-payment", SYNCHRON: ein Billing-Port (Hold/Capture/Cancel) + ein echter Stripe-Adapter (fetch+Bearer, KEIN SDK) + ein neuer Number-State 'capturing'. Alles hinter dem fail-closed Master-Flag PAYMENT_ENABLED (Default AUS) -> solange aus, ist das beobachtbare Verhalten BYTE-IDENTISCH zum Bestand (kein Hold, keine capturing-Transition, requested->provisioning->active wie heute). KEIN echtes Geld, kein Live-Stripe-Call in den Tests (alles ueber einen Fake-Billing-Adapter im test/helpers.js).
 
@@ -104,14 +118,14 @@ DETERMINISTISCHER CHECK (Gate, DREIFACH):
 (c) Dreifach: Bestandssuite byte-identisch gruen (payment-off) + Rollback-Matrix/Invarianten-Test (Fake wirft gezielt) + pg payment_intent_id-Roundtrip.
 (d) Dichtheit: git diff master HEAD zeigt 0 Verhaltens-Diff in bridge.js, claude.js, mcp-tools.js, auth.js, json.js, migrate.js, den Safety-Gate-/Auth-Pfaden, den Telephony-Adaptern, der Disclosure; package.json 0 Diff (kein neuer Dep); geaendert NUR: defaults.js (capturing + Edges), state-ops.js (paymentIntentId in requestNumber + beginProvisioning-3.Param + beginCapturing), onboarding.js (deps-Signatur + Hold/Capture/Rollback), server.js (NUR Onboard-Route payment-Zweig + stripeBilling-Import), config.js (5 neue Vars + assertConfig), .env.example + render.yaml (5 Keys), schema.sql (1 ALTER) + pg.js (payment_intent_id), src/billing/* (neu), test/* (neu + justiert).
 
-COMMIT: git add EXPLIZIT src/ test/ + die geaenderten config/doc-Dateien (config.js .env.example render.yaml src/db/schema.sql). KEINE neuen Dependencies (package.json/package-lock NICHT aendern). node_modules-Symlink NICHT committen (git rm --cached node_modules falls gestaged). Commit-Msg: feat(p6b1): capturing-State + Billing-Port + Stripe Hold/Capture (synchron, hinter PAYMENT_ENABLED; payment-off byte-identisch, kein neuer Dep).`
-}
-const PHASE = A.phaseId || 'P?'
-const PHASE_TITLE = A.phaseTitle || ''
-const BRANCH = A.branch || `phase/${String(PHASE).toLowerCase()}-impl`
-const BASE = A.baseBranch || 'master'
-const EXTRA = A.extraNotes ? `\nZUSATZ-HINWEISE DES AUFTRAGGEBERS:\n${A.extraNotes}\n` : ''
-const PLAN_DOC = A.planDoc || "PLAN-MULTI-TENANT-TELNYX.md"
+COMMIT: git add EXPLIZIT src/ test/ + die geaenderten config/doc-Dateien (config.js .env.example render.yaml src/db/schema.sql). KEINE neuen Dependencies (package.json/package-lock NICHT aendern). node_modules-Symlink NICHT committen (git rm --cached node_modules falls gestaged). Commit-Msg: feat(p6b1): capturing-State + Billing-Port + Stripe Hold/Capture (synchron, hinter PAYMENT_ENABLED; payment-off byte-identisch, kein neuer Dep).`,
+      };
+const PHASE = A.phaseId || "P?";
+const PHASE_TITLE = A.phaseTitle || "";
+const BRANCH = A.branch || `phase/${String(PHASE).toLowerCase()}-impl`;
+const BASE = A.baseBranch || "master";
+const EXTRA = A.extraNotes ? `\nZUSATZ-HINWEISE DES AUFTRAGGEBERS:\n${A.extraNotes}\n` : "";
+const PLAN_DOC = A.planDoc || "PLAN-MULTI-TENANT-TELNYX.md";
 
 const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT, kein Optional): Lies "${REPO}/.claude/refs/clean-code.md" - das ist der verbindliche Prueftkatalog dieses Repos - und befolge ihn bei JEDER Code-Entscheidung. Insbesondere:
 - Keine Duplizierung (G5/S2) - gemeinsame Logik extrahieren.
@@ -122,17 +136,17 @@ const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT, kein Optional): Lies "${REPO}/.clau
 - Konstruktion von Fachlogik trennen, Lazy-Init-Antipattern vermeiden (P15).
 - Kommentare: kein brittle Datei:Zeile-Verweis (rottet -> C2), nichts Redundantes (C3).
 - Konventionen des Bestands einhalten (G24/G11): ESM, kein Build-Step, kein TypeScript, Kommentare deutsch OHNE Umlaute (ue/oe/ae).
-- Neues Verhalten braucht einen automatisierten Test (P11/T-Serie); bei reinem Refactor muss die bestehende Suite OHNE Test-Aenderung gruen bleiben.`
+- Neues Verhalten braucht einen automatisierten Test (P11/T-Serie); bei reinem Refactor muss die bestehende Suite OHNE Test-Aenderung gruen bleiben.`;
 
 const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
 - Safety-Gates (numberGateError: Denylist/Allowlist/Land/Stundenlimit/Budget/Max-Dauer) NIE entfernen/aufweichen/per-Default umgehen. Neue Endpunkte, die Calls/SMS ausloesen, brauchen dieselben Gates.
 - Disclosure-Satz (disclosureSentence, claude.js + bridge.js) bleibt fest verdrahtet, unveraendert.
 - Auth fail-closed: Twilio-Signaturpruefung (/voice), Basic-Auth (Dashboard/API), MCP-Auth - timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth.
 - Secrets nur via env, nie loggen/in Responses oder MCP-Ausgaben leaken. Audio nie durch MCP.
-- SCOPE: NUR diese Phase. Keine ungefragten Extras.`
+- SCOPE: NUR diese Phase. Keine ungefragten Extras.`;
 
 // ---------- Phase 1: Plan ----------
-phase('Plan')
+phase("Plan");
 const plan = await agent(
   `Du erstellst den DETAILLIERTEN, code-gegroundeten und CLEAN-CODE-KONFORMEN Umsetzungsplan fuer Phase ${PHASE} ${PHASE_TITLE} im Repo "${REPO}". NUR PLANEN, NICHTS aendern.
 
@@ -144,38 +158,48 @@ ${CLEAN_CODE_REQ}
 ${ABS_RULES}${EXTRA}
 
 LIEFERE: (1) exakte Liste neuer Dateien inkl. Funktionssignaturen + Inhalts-Skizze; (2) pro bestehender Datei die exakten Edits als Vorher/Nachher mit Datei:Zeile; (3) welche Tests neu/angepasst werden (oder Begruendung, warum die Bestandssuite reicht); (4) das deterministisch pruefbare Ergebnis dieser Phase als konkreten Check (Befehl + erwartete Ausgabe). Halte den Blast-Radius klein. Deine Rueckgabe IST der Plan.`,
-  { label: `${PHASE}-plan`, phase: 'Plan' }
-)
+  { label: `${PHASE}-plan`, phase: "Plan" },
+);
 
 // ---------- Phase 2: Implementieren + Verifizieren (Worktree) ----------
-phase('Implementieren')
+phase("Implementieren");
 const IMPL_SCHEMA = {
-  type: 'object', additionalProperties: false,
+  type: "object",
+  additionalProperties: false,
   properties: {
-    branch: { type: 'string' },
-    baseBranch: { type: 'string' },
-    filesCreated: { type: 'array', items: { type: 'string' } },
-    filesEdited: { type: 'array', items: { type: 'string' } },
-    testsAddedOrChanged: { type: 'array', items: { type: 'string' } },
-    nodeCheckPass: { type: 'boolean' },
-    testsPass: { type: 'boolean' },
-    testPassCount: { type: 'number' },
-    testFailCount: { type: 'number' },
-    smokePass: { type: 'boolean' },
-    smokeNote: { type: 'string' },
-    cleanCodeSelfCheck: { type: 'string', description: 'kurze Selbstpruefung gegen clean-code.md' },
-    committed: { type: 'boolean' },
-    deviations: { type: 'array', items: { type: 'string' } },
-    diff: { type: 'string', description: `voller git diff ${BASE} HEAD` },
-    summary: { type: 'string' },
+    branch: { type: "string" },
+    baseBranch: { type: "string" },
+    filesCreated: { type: "array", items: { type: "string" } },
+    filesEdited: { type: "array", items: { type: "string" } },
+    testsAddedOrChanged: { type: "array", items: { type: "string" } },
+    nodeCheckPass: { type: "boolean" },
+    testsPass: { type: "boolean" },
+    testPassCount: { type: "number" },
+    testFailCount: { type: "number" },
+    smokePass: { type: "boolean" },
+    smokeNote: { type: "string" },
+    cleanCodeSelfCheck: { type: "string", description: "kurze Selbstpruefung gegen clean-code.md" },
+    committed: { type: "boolean" },
+    deviations: { type: "array", items: { type: "string" } },
+    diff: { type: "string", description: `voller git diff ${BASE} HEAD` },
+    summary: { type: "string" },
   },
-  required: ['branch', 'nodeCheckPass', 'testsPass', 'testPassCount', 'testFailCount', 'committed', 'diff', 'summary'],
-}
+  required: [
+    "branch",
+    "nodeCheckPass",
+    "testsPass",
+    "testPassCount",
+    "testFailCount",
+    "committed",
+    "diff",
+    "summary",
+  ],
+};
 const impl = await agent(
   `Du arbeitest in einem FRISCHEN Git-Worktree (isoliert vom Arbeitsstand des Nutzers - du fasst dessen Working-Tree NICHT an). Setze Phase ${PHASE} ${PHASE_TITLE} GENAU gemaess diesem Plan um:
 
 === PLAN ===
-${plan || '(Plan fehlt - brich ab und melde es in deviations)'}
+${plan || "(Plan fehlt - brich ab und melde es in deviations)"}
 === ENDE PLAN ===
 
 VORGEHEN:
@@ -192,47 +216,70 @@ VORGEHEN:
 ${ABS_RULES}
 
 Fuelle das Ergebnis EHRLICH. Wenn Tests nicht gruen werden oder du blockiert bist: testsPass=false + ehrliche deviations, nicht schoenen.`,
-  { label: `${PHASE}-implement`, phase: 'Implementieren', schema: IMPL_SCHEMA, isolation: 'worktree' }
-)
+  {
+    label: `${PHASE}-implement`,
+    phase: "Implementieren",
+    schema: IMPL_SCHEMA,
+    isolation: "worktree",
+  },
+);
 
 // ---------- Phase 3: Dualer Review (parallel) ----------
-phase('Review')
+phase("Review");
 const SAFETY_SCHEMA = {
-  type: 'object', additionalProperties: false,
+  type: "object",
+  additionalProperties: false,
   properties: {
-    testsPassIndependently: { type: 'boolean' },
-    independentTestSummary: { type: 'string' },
-    scopeRespected: { type: 'boolean' },
-    safetyGatesIntact: { type: 'boolean' },
-    disclosureIntact: { type: 'boolean' },
-    authFailClosedIntact: { type: 'boolean' },
-    noSecretsLeaked: { type: 'boolean' },
-    behaviorAsIntended: { type: 'boolean' },
-    approved: { type: 'boolean' },
-    blockers: { type: 'array', items: { type: 'string' } },
-    concerns: { type: 'array', items: { type: 'string' } },
-    verdict: { type: 'string' },
+    testsPassIndependently: { type: "boolean" },
+    independentTestSummary: { type: "string" },
+    scopeRespected: { type: "boolean" },
+    safetyGatesIntact: { type: "boolean" },
+    disclosureIntact: { type: "boolean" },
+    authFailClosedIntact: { type: "boolean" },
+    noSecretsLeaked: { type: "boolean" },
+    behaviorAsIntended: { type: "boolean" },
+    approved: { type: "boolean" },
+    blockers: { type: "array", items: { type: "string" } },
+    concerns: { type: "array", items: { type: "string" } },
+    verdict: { type: "string" },
   },
-  required: ['approved', 'testsPassIndependently', 'safetyGatesIntact', 'disclosureIntact', 'blockers', 'verdict'],
-}
+  required: [
+    "approved",
+    "testsPassIndependently",
+    "safetyGatesIntact",
+    "disclosureIntact",
+    "blockers",
+    "verdict",
+  ],
+};
 const CC_SCHEMA = {
-  type: 'object', additionalProperties: false,
+  type: "object",
+  additionalProperties: false,
   properties: {
-    s1: { type: 'array', items: { type: 'string' }, description: 'Tests/Sicherheit/Korrektheit - Format: "ID · Datei:Zeile · Verstoss · Fix"' },
-    s2: { type: 'array', items: { type: 'string' }, description: 'Duplizierung' },
-    s3: { type: 'array', items: { type: 'string' }, description: 'Ausdrucksstaerke/Namen/Kommentare' },
-    s4: { type: 'array', items: { type: 'string' }, description: 'Struktur/Anzahl' },
-    blocker: { type: 'boolean', description: 'true wenn s1 oder s2 nicht leer' },
-    passNotes: { type: 'string' },
-    topTodos: { type: 'array', items: { type: 'string' } },
-    verdict: { type: 'string' },
+    s1: {
+      type: "array",
+      items: { type: "string" },
+      description: 'Tests/Sicherheit/Korrektheit - Format: "ID · Datei:Zeile · Verstoss · Fix"',
+    },
+    s2: { type: "array", items: { type: "string" }, description: "Duplizierung" },
+    s3: {
+      type: "array",
+      items: { type: "string" },
+      description: "Ausdrucksstaerke/Namen/Kommentare",
+    },
+    s4: { type: "array", items: { type: "string" }, description: "Struktur/Anzahl" },
+    blocker: { type: "boolean", description: "true wenn s1 oder s2 nicht leer" },
+    passNotes: { type: "string" },
+    topTodos: { type: "array", items: { type: "string" } },
+    verdict: { type: "string" },
   },
-  required: ['s1', 's2', 's3', 's4', 'blocker', 'verdict'],
-}
+  required: ["s1", "s2", "s3", "s4", "blocker", "verdict"],
+};
 
 const reviews = await parallel([
-  () => agent(
-    `Du bist ein STRENGER, adversarialer Safety-/Verhaltens-Reviewer in einem frischen Worktree. Pruefe Phase ${PHASE} auf Branch "${BRANCH}".
+  () =>
+    agent(
+      `Du bist ein STRENGER, adversarialer Safety-/Verhaltens-Reviewer in einem frischen Worktree. Pruefe Phase ${PHASE} auf Branch "${BRANCH}".
 UNABHAENGIGE VERIFIKATION (selbst ausfuehren):
 1. ln -s "${NODE_MODULES}" node_modules
 2. git checkout -b review-${String(PHASE).toLowerCase()} ${BRANCH}
@@ -241,30 +288,46 @@ UNABHAENGIGE VERIFIKATION (selbst ausfuehren):
 PRUEFE: scopeRespected (nur ${PHASE}, keine Extras - KEIN Worker/Meter/KYC, kein neuer npm-Dep), safetyGatesIntact (numberGateError/Allowlist/Budget/Max-Dauer), disclosureIntact (claude.js+bridge.js), authFailClosedIntact (Signaturpruefung/Basic-Auth/MCP-Auth), noSecretsLeaked (Stripe-Key nie in Log/Response/Fehler), behaviorAsIntended (payment-off BYTE-IDENTISCH; payment-on Hold-vor-Order + kein-active-ohne-capture + Rollback wie im Plan).
 ${ABS_RULES}
 approved=true NUR wenn alles erfuellt UND deine eigenen Tests gruen. Sei skeptisch; im Zweifel blockieren. Rueckgabe IST das Urteil.`,
-    { label: `${PHASE}-review-safety`, phase: 'Review', schema: SAFETY_SCHEMA, isolation: 'worktree' }
-  ),
-  () => agent(
-    `Du bist der CLEAN-CODE-AUDITOR. Pruefe den Diff der Phase ${PHASE} (Branch "${BRANCH}", Basis "${BASE}") streng gegen den Prueftkatalog.
+      {
+        label: `${PHASE}-review-safety`,
+        phase: "Review",
+        schema: SAFETY_SCHEMA,
+        isolation: "worktree",
+      },
+    ),
+  () =>
+    agent(
+      `Du bist der CLEAN-CODE-AUDITOR. Pruefe den Diff der Phase ${PHASE} (Branch "${BRANCH}", Basis "${BASE}") streng gegen den Prueftkatalog.
 1. Lies "${REPO}/.claude/refs/clean-code.md" VOLLSTAENDIG - das ist deine Wissensbasis und definiert die Schweregrade S1-S4 und die Audit-Regeln (u.a.: nur gesehenen Code bewerten, nicht raten; [Prozess/Repo]-Eintraege nur bei direkter Evidenz).
 2. Lies den geaenderten Code: git diff ${BASE} ${BRANCH} ; und die neuen Dateien per git show ${BRANCH}:<pfad>.
 3. Gehe Kategorie fuer Kategorie, Eintrag fuer Eintrag durch. Pro FLAG: "ID · Datei:Zeile · was den Verstoss ausmacht · konkreter Fix". Ordne jedem FLAG den Schweregrad zu (S1 Tests/Sicherheit/Korrektheit, S2 Duplizierung, S3 Ausdrucksstaerke, S4 Struktur/Anzahl). S3/S4 gebuendelt. Achte besonders auf: F1 (<=3 Args bei provisionNumber/deps-Objekt), G5/S2 (Rollback-Logik nicht dupliziert), N7 (Nebeneffekte im Namen), C2 (keine Datei:Zeile-Kommentare).
 Setze blocker=true, wenn s1 ODER s2 nicht leer ist (das verhindert den Merge). passNotes: was sauber ist. topTodos: die 1-3 wichtigsten. Rueckgabe IST der strukturierte Audit. Erfinde nichts (Audit-Regel 1).`,
-    { label: `${PHASE}-review-cleancode`, phase: 'Review', schema: CC_SCHEMA, isolation: 'worktree' }
-  ),
-])
+      {
+        label: `${PHASE}-review-cleancode`,
+        phase: "Review",
+        schema: CC_SCHEMA,
+        isolation: "worktree",
+      },
+    ),
+]);
 
-const safetyReview = reviews[0]
-const cleanCodeAudit = reviews[1]
-const approved = !!(safetyReview && safetyReview.approved && cleanCodeAudit && !cleanCodeAudit.blocker)
+const safetyReview = reviews[0];
+const cleanCodeAudit = reviews[1];
+const approved = !!(
+  safetyReview &&
+  safetyReview.approved &&
+  cleanCodeAudit &&
+  !cleanCodeAudit.blocker
+);
 
 return {
   phaseId: PHASE,
   branch: BRANCH,
   baseBranch: BASE,
   approved,
-  gate: approved ? 'PASS' : 'BLOCKED (Safety nicht approved ODER Clean-Code S1/S2)',
+  gate: approved ? "PASS" : "BLOCKED (Safety nicht approved ODER Clean-Code S1/S2)",
   plan,
   impl,
   safetyReview,
   cleanCodeAudit,
-}
+};

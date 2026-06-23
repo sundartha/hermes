@@ -53,7 +53,10 @@ test("Persona nennt den Vornamen, Offenlegung den vollen Namen (G1)", () => {
 test("Offenlegung rendert nie '...von .' (kein leerer Name)", () => {
   const sentence = disclosureSentence(callFor(TENANT_B));
   assert.ok(!sentence.includes("im Auftrag von ."), "leerer Name darf nie gerendert werden");
-  assert.ok(!disclosureSentence(callFor(OWNER_TENANT_ID)).includes("im Auftrag von ."), "auch nicht fuer den Owner");
+  assert.ok(
+    !disclosureSentence(callFor(OWNER_TENANT_ID)).includes("im Auftrag von ."),
+    "auch nicht fuer den Owner",
+  );
 });
 
 // (4) /voice/outbound (LLM-frei) offenlegt mit dem registrierten Owner-Namen (voll),

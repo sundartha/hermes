@@ -31,7 +31,10 @@ before(async () => {
 
 // Seedet einen aktiven Tenant B mit idpSubject DIREKT in s.tenants.
 const seedWithTenantB = () =>
-  seedState({ calls: [seedCall({ id: "c1" })], tenants: [{ id: TENANT_B, status: "active", idpSubject: SUB_B }] });
+  seedState({
+    calls: [seedCall({ id: "c1" })],
+    tenants: [{ id: TENANT_B, status: "active", idpSubject: SUB_B }],
+  });
 
 // --- KERN-GATE: Fail-closed-Asymmetrie (beide Asserts explizit) ---
 test("resolveTenant: null/leerer idpSubject -> null, NIEMALS Owner", () => {
@@ -64,10 +67,18 @@ test("resolveTenant: 1:1 -> genau ein Treffer (Einzelwert, keine Liste)", () => 
 
 // --- Re-Export-Parity (R6): zahlfrei, jeder erwartete Name typeof function ---
 test("Fassade json.js exportiert resolveTenant", () => {
-  assert.equal(typeof jsonBackend.resolveTenant, "function", "json.resolveTenant fehlt (Re-Export-Landmine)");
+  assert.equal(
+    typeof jsonBackend.resolveTenant,
+    "function",
+    "json.resolveTenant fehlt (Re-Export-Landmine)",
+  );
 });
 
 test("Fassade pg.js (pglite) exportiert resolveTenant", async () => {
   const { store } = await makePgTestStore();
-  assert.equal(typeof store.resolveTenant, "function", "pg.resolveTenant fehlt (Re-Export-Landmine)");
+  assert.equal(
+    typeof store.resolveTenant,
+    "function",
+    "pg.resolveTenant fehlt (Re-Export-Landmine)",
+  );
 });

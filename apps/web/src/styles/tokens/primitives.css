@@ -9,26 +9,26 @@
  */
 :root {
   /* --- Farben (roh) --- */
-  --color-red-600: #e60000;        /* Markenrot */
-  --color-red-700: #ac1811;        /* Markenrot, tief (Hover) */
-  --color-red-50: #fdeaea;         /* Markenrot, sehr hell (Badge-Flaeche) */
+  --color-red-600: #e60000; /* Markenrot */
+  --color-red-700: #ac1811; /* Markenrot, tief (Hover) */
+  --color-red-50: #fdeaea; /* Markenrot, sehr hell (Badge-Flaeche) */
 
-  --color-ink-900: #25282b;        /* Text */
-  --color-gray-500: #7e7e7e;       /* gedaempfter Text */
-  --color-gray-300: #c4c4c4;       /* inaktiv (Dot off) */
-  --color-gray-200: #e2e2e2;       /* Eingabe-Rahmen */
-  --color-gray-150: #ececec;       /* Karten-Rahmen */
-  --color-gray-100: #f3f3f3;       /* Trennlinie */
-  --color-gray-75: #f2f2f2;        /* neutrale Flaeche */
-  --color-gray-50: #fafafa;        /* Seiten-Hintergrund */
-  --color-white: #ffffff;          /* Karten-/Canvas-Flaeche */
+  --color-ink-900: #25282b; /* Text */
+  --color-gray-500: #7e7e7e; /* gedaempfter Text */
+  --color-gray-300: #c4c4c4; /* inaktiv (Dot off) */
+  --color-gray-200: #e2e2e2; /* Eingabe-Rahmen */
+  --color-gray-150: #ececec; /* Karten-Rahmen */
+  --color-gray-100: #f3f3f3; /* Trennlinie */
+  --color-gray-75: #f2f2f2; /* neutrale Flaeche */
+  --color-gray-50: #fafafa; /* Seiten-Hintergrund */
+  --color-white: #ffffff; /* Karten-/Canvas-Flaeche */
 
-  --color-blue-600: #3860be;       /* Signal/Akzent */
-  --color-blue-50: #e9f0fc;        /* Signal, hell (Badge-Flaeche) */
+  --color-blue-600: #3860be; /* Signal/Akzent */
+  --color-blue-50: #e9f0fc; /* Signal, hell (Badge-Flaeche) */
 
-  --color-green-700: #177a43;      /* Erfolg (Text) */
-  --color-green-50: #e7f6ed;       /* Erfolg, hell (Badge-Flaeche) */
-  --color-green-500: #1faa59;      /* Live-Indikator */
+  --color-green-700: #177a43; /* Erfolg (Text) */
+  --color-green-50: #e7f6ed; /* Erfolg, hell (Badge-Flaeche) */
+  --color-green-500: #1faa59; /* Live-Indikator */
 
   /* --- Abstaende (roh) --- */
   --space-1: 4px;

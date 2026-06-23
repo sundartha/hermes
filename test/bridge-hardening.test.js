@@ -43,9 +43,11 @@ test("Provider-message-Handler: malformter start-Frame erreicht den P0-Backstop 
     await waitForLog(srv, /unbekannte call_id, trenne/, 4000);
     assert.ok(
       !srv.stdout.includes("[guard] uncaughtException"),
-      "Throw aus dem Provider-Handler ist zum P0-Backstop entkommen:\n" + srv.stdout
+      "Throw aus dem Provider-Handler ist zum P0-Backstop entkommen:\n" + srv.stdout,
     );
-    try { ws.close(); } catch {}
+    try {
+      ws.close();
+    } catch {}
   } finally {
     await srv.stop();
   }

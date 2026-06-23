@@ -19,12 +19,12 @@ Angerufenes Handy ◄──Mobilfunknetz──► Twilio ◄──┬── Budg
 
 **Zwei Voice-Engines, gleicher Agent** (gleiche Persona, gleiche Tools, gleiche Permissions, gleiche Summaries):
 
-| | `VOICE_ENGINE=budget` (Default) | `VOICE_ENGINE=realtime` |
-|---|---|---|
-| Sprachverarbeitung | Twilio STT/TTS (Polly Neural, de-DE) | OpenAI Realtime, Speech-to-Speech |
-| Gesprächsgefühl | Walkie-Talkie-Takt, 1–3 s Latenz | natürlich, unterbrechbar (Barge-in) |
-| Kosten pro Call | ~0,5–2 Cent Claude + Twilio-Guthaben | zusätzlich ~0,30–0,50 €/min OpenAI |
-| Voraussetzungen | nur Claude-Key | OpenAI-Key mit Guthaben |
+|                    | `VOICE_ENGINE=budget` (Default)      | `VOICE_ENGINE=realtime`             |
+| ------------------ | ------------------------------------ | ----------------------------------- |
+| Sprachverarbeitung | Twilio STT/TTS (Polly Neural, de-DE) | OpenAI Realtime, Speech-to-Speech   |
+| Gesprächsgefühl    | Walkie-Talkie-Takt, 1–3 s Latenz     | natürlich, unterbrechbar (Barge-in) |
+| Kosten pro Call    | ~0,5–2 Cent Claude + Twilio-Guthaben | zusätzlich ~0,30–0,50 €/min OpenAI  |
+| Voraussetzungen    | nur Claude-Key                       | OpenAI-Key mit Guthaben             |
 
 Audio läuft **niemals durch MCP**. Realtime nutzt G.711 μ-law 8 kHz **1:1 durchgereicht** (kein Transcoding). Call-Records liegen in `data/store.json` (bewusst ohne Datenbank).
 
@@ -32,28 +32,30 @@ Audio läuft **niemals durch MCP**. Realtime nutzt G.711 μ-law 8 kHz **1:1 durc
 
 - **Allowlist:** Outbound nur an Nummern aus `ALLOWED_NUMBERS`. Leer = Outbound gesperrt.
 - **Max-Dauer:** `MAX_CALL_DURATION_S` (Default 180 s, Max 300) beendet jeden Call hart (Twilio `timeLimit` + Timer).
-- **Disclosure-Pflicht:** Erster gesprochener Satz bei Outbound ist fest verdrahtet: *„Guten Tag, hier spricht ein KI-Assistent im Auftrag von [Name]. Das Gespräch wird für meinen Auftraggeber zusammengefasst."*
+- **Disclosure-Pflicht:** Erster gesprochener Satz bei Outbound ist fest verdrahtet: _„Guten Tag, hier spricht ein KI-Assistent im Auftrag von [Name]. Das Gespräch wird für meinen Auftraggeber zusammengefasst."_
 - **Budget-Guard:** `MAX_BUDGET_EUR` stoppt neue Calls, Verbrauch live im Dashboard.
 - **Permissions:** Kalender / Buchen / persönliche Daten / Bankdaten pro Toggle im Dashboard — wirkt sofort auf die Tools des Agenten.
 
 ## Kosten
 
-| Posten | Kosten |
-|---|---|
-| Twilio Trial | **gratis** (~15 $ Startguthaben, Rufnummer inklusive) |
-| Budget-Engine komplett | ~0,5–2 Cent Claude pro Call → 10 € ≈ **hunderte Demo-Calls** |
-| Realtime-Engine (optional) | + ~0,30–0,50 €/min vom OpenAI-Guthaben |
-| ngrok | gratis |
+| Posten                     | Kosten                                                       |
+| -------------------------- | ------------------------------------------------------------ |
+| Twilio Trial               | **gratis** (~15 $ Startguthaben, Rufnummer inklusive)        |
+| Budget-Engine komplett     | ~0,5–2 Cent Claude pro Call → 10 € ≈ **hunderte Demo-Calls** |
+| Realtime-Engine (optional) | + ~0,30–0,50 €/min vom OpenAI-Guthaben                       |
+| ngrok                      | gratis                                                       |
 
 ## Setup (~20 Minuten)
 
 ### 1. Twilio-Trial-Account (gratis)
+
 1. https://www.twilio.com/try-twilio (keine Kreditkarte nötig)
 2. Console → **Get a Trial Number**. Eine **US-Nummer (+1)** geht sofort und ruft deutsche Handys an; eine deutsche Nummer braucht einen Adressnachweis (Bundesnetzagentur, 1–2 Tage) — fürs Erste unnötig.
 3. **Trial-Einschränkung:** Anrufe/SMS nur an **verifizierte Nummern** → Console → Phone Numbers → **Verified Caller IDs** → alle Demo-Handys eintragen. (Alternativ: Account-Upgrade ~20 €, dann entfällt auch die Trial-Ansage am Gesprächsbeginn.)
 4. `Account SID` + `Auth Token` kopieren.
 
 ### 2. Projekt starten
+
 ```bash
 cd vodafone-agent
 npm install
@@ -62,24 +64,32 @@ npm start               # Gateway + Dashboard auf http://localhost:3000
 ```
 
 ### 3. ngrok (gratis)
+
 ```bash
 ngrok http 3000
 ```
+
 Angezeigte URL als `PUBLIC_URL` in `.env` eintragen, Server neu starten. (Free-URLs wechseln bei jedem ngrok-Start → dann `PUBLIC_URL` **und** den Connector in Claude aktualisieren.)
 
 ### 3b. Setup pruefen (empfohlen, vor jeder Demo)
+
 ```bash
 npm run check
 ```
+
 Prüft automatisch: Keys gültig, Twilio-Nummer + Webhooks korrekt, Allowlist-/Owner-Nummern im Trial verifiziert, ngrok-Tunnel zeigt auf dieses Gateway, OpenAI-Key (bei realtime). Erst demoen, wenn alles grün ist.
 
 ### 4. Twilio-Webhooks setzen
+
 Console → Phone Numbers → deine Nummer → **Voice Configuration**:
+
 - **A call comes in** → Webhook, `POST` → `https://<ngrok>/voice/incoming`
 - **Call status changes** → `POST` → `https://<ngrok>/voice/status`
 
 ### 5. MCP mit Claude verbinden — Variante A: Custom Connector (empfohlen)
+
 claude.ai oder Claude Desktop → **Settings → Connectors → Add custom connector**:
+
 - URL: `https://<ngrok>/mcp`
 - **`MCP_AUTH=oauth`** (empfohlen fürs Hosting): Beim Hinzufügen erscheint das
   Login-Fenster des IdP — anmelden, danach sind die Tools sichtbar. Einrichtung:
@@ -88,11 +98,13 @@ claude.ai oder Claude Desktop → **Settings → Connectors → Add custom conne
   statisches Bearer-Token senden. Ohne Token/OAuth ist `/mcp` nur von localhost erreichbar.
 
 Danach sind die Tools im Chat sichtbar. Prompt-Beispiel:
+
 > „Ruf +49172… an und vereinbare einen Testtermin für Samstag vormittag. Halte mich über den Fortschritt auf dem Laufenden."
 
 Claude ruft `place_call` auf, pollt `get_call_status` (~alle 10 s) und holt bei `completed` das Ergebnis mit `get_transcript`.
 
 ### Variante B: Claude Desktop (stdio)
+
 ```json
 {
   "mcpServers": {
@@ -105,18 +117,19 @@ Claude ruft `place_call` auf, pollt `get_call_status` (~alle 10 s) und holt bei 
 ```
 
 ### 6. Rufumleitung vom eigenen Handy (Inbound-Use-Case)
+
 Umleitung „bei Nichtannahme" auf die Agent-Nummer: `**61*<AGENT-NUMMER>#` anrufen (aus: `##61#`).
 Du gehst nicht ran → Agent übernimmt → du bekommst SMS mit Summary + Action Items.
 
 ## MCP-Tools (Verträge)
 
-| Tool | Parameter | Rückgabe |
-|---|---|---|
-| `place_call` | `to` (E.164, Allowlist!), `objective` (Pflicht), `briefing?`, `constraints?`, `language?` (Default de), `max_duration_s?` (Default 180, Max 300), `caller_name?` | `{call_id, status:"dialing"}` |
-| `get_call_status` | `call_id` | `{status: dialing\|in_progress\|completed\|failed\|cancelled, duration_s, last_transcript_lines[]}` |
-| `get_transcript` | `call_id` | `{result_summary, objective_achieved: true\|false\|unclear}` (Roh-Transkript wird nach der Summary geloescht, `transcript[]` daher leer fuer abgeschlossene Calls) |
-| `cancel_call` | `call_id` | `{status:"cancelled"}` |
-| `get_my_number` | — | `{number}` |
+| Tool              | Parameter                                                                                                                                                        | Rückgabe                                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `place_call`      | `to` (E.164, Allowlist!), `objective` (Pflicht), `briefing?`, `constraints?`, `language?` (Default de), `max_duration_s?` (Default 180, Max 300), `caller_name?` | `{call_id, status:"dialing"}`                                                                                                                                      |
+| `get_call_status` | `call_id`                                                                                                                                                        | `{status: dialing\|in_progress\|completed\|failed\|cancelled, duration_s, last_transcript_lines[]}`                                                                |
+| `get_transcript`  | `call_id`                                                                                                                                                        | `{result_summary, objective_achieved: true\|false\|unclear}` (Roh-Transkript wird nach der Summary geloescht, `transcript[]` daher leer fuer abgeschlossene Calls) |
+| `cancel_call`     | `call_id`                                                                                                                                                        | `{status:"cancelled"}`                                                                                                                                             |
+| `get_my_number`   | —                                                                                                                                                                | `{number}`                                                                                                                                                         |
 
 Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calendar`, `get_agent_status`.
 

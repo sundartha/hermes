@@ -26,7 +26,9 @@ import {
 const NUM = "+491701234567";
 
 async function reopen(db) {
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const runner = {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
   const store = makePgStore(runner);
   await store.init();
   return store;
@@ -37,20 +39,40 @@ test("Export enthaelt privateNumber; Erase entfernt sie (state-ops, Art. 15 <-> 
   const s = makeDefaultState();
   setPrivateNumber(s, OWNER_TENANT_ID, NUM);
 
-  assert.equal(exportTenantData(s, OWNER_TENANT_ID).privateNumber, NUM, "Export enthaelt die Nummer");
+  assert.equal(
+    exportTenantData(s, OWNER_TENANT_ID).privateNumber,
+    NUM,
+    "Export enthaelt die Nummer",
+  );
 
   const removed = eraseTenantData(s, OWNER_TENANT_ID);
 
   assert.equal(removed.privateNumber, 1, "Loesch-Zaehler meldet die entfernte Nummer (0/1)");
-  assert.equal(exportTenantData(s, OWNER_TENANT_ID).privateNumber, null, "Export nach Erase: keine Nummer");
-  assert.equal("privateNumber" in findTenant(s, OWNER_TENANT_ID), false, "tenant-Record ohne das Feld (entfernt, nicht null)");
+  assert.equal(
+    exportTenantData(s, OWNER_TENANT_ID).privateNumber,
+    null,
+    "Export nach Erase: keine Nummer",
+  );
+  assert.equal(
+    "privateNumber" in findTenant(s, OWNER_TENANT_ID),
+    false,
+    "tenant-Record ohne das Feld (entfernt, nicht null)",
+  );
 });
 
 // Kein gesetzter Wert -> Export null, Erase ist ein No-op fuer das Feld (Zaehler 0).
 test("ohne gesetzte privateNumber: Export null, Erase-Zaehler 0 (kein Phantom-Loeschen)", () => {
   const s = makeDefaultState();
-  assert.equal(exportTenantData(s, OWNER_TENANT_ID).privateNumber, null, "kein Feld -> Export null");
-  assert.equal(eraseTenantData(s, OWNER_TENANT_ID).privateNumber, 0, "nichts zu loeschen -> Zaehler 0");
+  assert.equal(
+    exportTenantData(s, OWNER_TENANT_ID).privateNumber,
+    null,
+    "kein Feld -> Export null",
+  );
+  assert.equal(
+    eraseTenantData(s, OWNER_TENANT_ID).privateNumber,
+    0,
+    "nichts zu loeschen -> Zaehler 0",
+  );
 });
 
 // B) AK4: der Audit-/Loesch-Zaehler traegt NIE den PII-Wert, nur die Anzahl (0/1).
@@ -60,7 +82,11 @@ test("AK4: Loesch-Zaehler ist PII-frei (Zahl, nicht der Nummern-Wert)", () => {
   const removed = eraseTenantData(s, OWNER_TENANT_ID);
   assert.equal(typeof removed.privateNumber, "number", "Zaehler ist eine Zahl");
   assert.notEqual(removed.privateNumber, NUM, "Zaehler ist NICHT der Nummern-Wert");
-  assert.equal(JSON.stringify(removed).includes(NUM), false, "der Nummern-Wert taucht nirgends im Zaehler auf");
+  assert.equal(
+    JSON.stringify(removed).includes(NUM),
+    false,
+    "der Nummern-Wert taucht nirgends im Zaehler auf",
+  );
 });
 
 // C) Persistenz-Regressions-Anker (pglite): Tenant GANZ OHNE Calls. Die Erase muss trotzdem
@@ -73,7 +99,11 @@ test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", asy
   await store.save();
 
   // Re-Hydrierung belegt: die Nummer ist real persistiert (nicht nur in-memory).
-  assert.equal((await reopen(db)).tenantPrivateNumber(OWNER_TENANT_ID), NUM, "Nummer vor Erase persistiert");
+  assert.equal(
+    (await reopen(db)).tenantPrivateNumber(OWNER_TENANT_ID),
+    NUM,
+    "Nummer vor Erase persistiert",
+  );
 
   const removed = store.eraseTenantData(OWNER_TENANT_ID);
   assert.equal(removed.calls, 0, "Owner ohne Calls -> der alte save-Gate haette NICHT gespeichert");
@@ -81,8 +111,16 @@ test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", asy
   await store.save();
 
   const reopened = await reopen(db);
-  assert.equal(reopened.tenantPrivateNumber(OWNER_TENANT_ID), null, "Nummer nach Erase weg (ueberlebt den Restart)");
-  assert.equal(reopened.exportTenantData(OWNER_TENANT_ID).privateNumber, null, "Export nach Restart: keine Nummer");
+  assert.equal(
+    reopened.tenantPrivateNumber(OWNER_TENANT_ID),
+    null,
+    "Nummer nach Erase weg (ueberlebt den Restart)",
+  );
+  assert.equal(
+    reopened.exportTenantData(OWNER_TENANT_ID).privateNumber,
+    null,
+    "Export nach Restart: keine Nummer",
+  );
 });
 
 // Cross-Tenant-Dichtheit: Erase(owner) laesst die privateNumber eines FREMDEN Tenants intakt.

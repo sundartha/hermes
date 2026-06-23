@@ -21,9 +21,11 @@ export function signValue(value, secret) {
 export function verifyValue(signed, secret) {
   const i = String(signed).lastIndexOf(".");
   if (i < 1) return null;
-  const value = signed.slice(0, i), sig = signed.slice(i + 1);
+  const value = signed.slice(0, i),
+    sig = signed.slice(i + 1);
   const expected = crypto.createHmac("sha256", secret).update(value).digest("base64url");
-  const a = Buffer.from(sig), b = Buffer.from(expected);
+  const a = Buffer.from(sig),
+    b = Buffer.from(expected);
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? value : null;
 }
 
@@ -44,7 +46,11 @@ function readCookie(req, name) {
     const i = part.indexOf("=");
     if (i < 1) continue;
     if (part.slice(0, i) === name) {
-      try { return decodeURIComponent(part.slice(i + 1)); } catch { return null; }
+      try {
+        return decodeURIComponent(part.slice(i + 1));
+      } catch {
+        return null;
+      }
     }
   }
   return null;
@@ -89,8 +95,8 @@ export function makeWebAuthRoutes(deps) {
     const nonce = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
     setCookies(res, [
       ["pkce_verifier", signValue(verifier, secret), LOGIN_COOKIE_MAX_AGE],
-      ["oauth_state",   signValue(state,    secret), LOGIN_COOKIE_MAX_AGE],
-      ["oidc_nonce",    signValue(nonce,    secret), LOGIN_COOKIE_MAX_AGE],
+      ["oauth_state", signValue(state, secret), LOGIN_COOKIE_MAX_AGE],
+      ["oidc_nonce", signValue(nonce, secret), LOGIN_COOKIE_MAX_AGE],
     ]);
     // authorizeUrl triggert intern discover() -> fetch. Ist der IdP unerreichbar
     // (oder die Discovery malformt), rejected der await. Express 4 reicht eine
@@ -130,8 +136,16 @@ export function makeWebAuthRoutes(deps) {
     const verifier = signedVerifier ? verifyValue(signedVerifier, secret) : null;
 
     try {
-      const { claims } = await oidc.exchange({ code: req.query.code, verifier, nonce, redirectUri });
-      const { tenantId } = await accounts.upsertOnFirstLogin({ sub: claims.sub, email: claims.email });
+      const { claims } = await oidc.exchange({
+        code: req.query.code,
+        verifier,
+        nonce,
+        redirectUri,
+      });
+      const { tenantId } = await accounts.upsertOnFirstLogin({
+        sub: claims.sub,
+        email: claims.email,
+      });
       const { id } = await sessions.create({ sub: claims.sub, tenantId, ttlSeconds });
 
       // Session-Cookie setzen, Login-Flow-Cookies loeschen
@@ -299,18 +313,18 @@ export function makeAccounts(runner) {
         await c.query(
           `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)
            ON CONFLICT (id) DO UPDATE SET idp_subject = EXCLUDED.idp_subject`,
-          [tenantId, sub]
+          [tenantId, sub],
         );
         // Account anlegen/aktualisieren
         await c.query(
           `INSERT INTO account (sub, tenant_id, email, role)
            VALUES ($1, $2, $3, 'member')
            ON CONFLICT (sub) DO UPDATE SET email = EXCLUDED.email`,
-          [sub, tenantId, email]
+          [sub, tenantId, email],
         );
         const { rows } = await c.query(
           `SELECT a.role, t.status FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
-          [sub]
+          [sub],
         );
         const row = rows[0] || { role: "member", status: "suspended" };
         return { tenantId, status: row.status, role: row.role };
@@ -323,7 +337,7 @@ export function makeAccounts(runner) {
         const { rows } = await c.query(
           `SELECT a.sub, a.email, a.role, a.tenant_id AS "tenantId", t.status
            FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
-          [sub]
+          [sub],
         );
         return rows[0] || null;
       });
@@ -334,9 +348,10 @@ export function makeAccounts(runner) {
     // silent-noop, kein Audit-Eintrag fuer eine nicht-existente Tenant-ID).
     async setStatus(tenantId, status) {
       return runner.withClient(async (c) => {
-        const { rows } = await c.query(
-          `UPDATE tenant SET status = $1 WHERE id = $2 RETURNING id`, [status, tenantId]
-        );
+        const { rows } = await c.query(`UPDATE tenant SET status = $1 WHERE id = $2 RETURNING id`, [
+          status,
+          tenantId,
+        ]);
         return rows.length > 0;
       });
     },
@@ -361,7 +376,8 @@ export function webAuth(deps) {
       const row = await sessions.get(sessionId);
       if (!row) return res.status(401).json({ error: "Unauthorized" });
       if (row.invalidated_at != null) return res.status(401).json({ error: "Unauthorized" });
-      if (new Date(row.expires_at) <= new Date()) return res.status(401).json({ error: "Unauthorized" });
+      if (new Date(row.expires_at) <= new Date())
+        return res.status(401).json({ error: "Unauthorized" });
 
       // 3. Account laden und Status pruefen
       const acct = await accounts.resolve(row.sub);
@@ -405,7 +421,11 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw 
     try {
       const ok = await accounts.setStatus(req.params.id, "active");
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
-      await audit.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_approve" });
+      await audit.record({
+        actorSub: req.tenant.sub,
+        tenantId: req.params.id,
+        action: "tenant_approve",
+      });
       res.json({ tenantId: req.params.id, status: "active" });
     } catch (e) {
       console.error("[admin] approve", e.message);
@@ -417,7 +437,11 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw 
       const ok = await accounts.setStatus(req.params.id, "suspended");
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
       await sessions.invalidateByTenant(req.params.id);
-      await audit.record({ actorSub: req.tenant.sub, tenantId: req.params.id, action: "tenant_suspend" });
+      await audit.record({
+        actorSub: req.tenant.sub,
+        tenantId: req.params.id,
+        action: "tenant_suspend",
+      });
       res.json({ tenantId: req.params.id, status: "suspended" });
     } catch (e) {
       console.error("[admin] suspend", e.message);
@@ -437,8 +461,8 @@ export function makeSessions(runner) {
         c.query(
           `INSERT INTO session (id, sub, tenant_id, expires_at)
            VALUES ($1, $2, $3, now() + ($4 || ' seconds')::interval)`,
-          [id, sub, tenantId, String(ttlSeconds)]
-        )
+          [id, sub, tenantId, String(ttlSeconds)],
+        ),
       );
       return { id };
     },
@@ -450,7 +474,7 @@ export function makeSessions(runner) {
         const { rows } = await c.query(
           `SELECT id, sub, tenant_id AS "tenantId", expires_at, invalidated_at
            FROM session WHERE id = $1`,
-          [id]
+          [id],
         );
         return rows[0] || null;
       });
@@ -460,8 +484,8 @@ export function makeSessions(runner) {
       return runner.withClient((c) =>
         c.query(
           `UPDATE session SET invalidated_at = now() WHERE id = $1 AND invalidated_at IS NULL`,
-          [id]
-        )
+          [id],
+        ),
       );
     },
 
@@ -469,8 +493,8 @@ export function makeSessions(runner) {
       return runner.withClient((c) =>
         c.query(
           `UPDATE session SET invalidated_at = now() WHERE tenant_id = $1 AND invalidated_at IS NULL`,
-          [tenantId]
-        )
+          [tenantId],
+        ),
       );
     },
   };

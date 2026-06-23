@@ -5,7 +5,16 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { defaultSettings, defaultSettingsMap, demoCalendar, calendarMap, emptyUsage, emptyUsageMap, sanitizeProfile, OWNER_TENANT_ID } from "./defaults.js";
+import {
+  defaultSettings,
+  defaultSettingsMap,
+  demoCalendar,
+  calendarMap,
+  emptyUsage,
+  emptyUsageMap,
+  sanitizeProfile,
+  OWNER_TENANT_ID,
+} from "./defaults.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -77,7 +86,12 @@ function finishLoad() {
   // und seedProfilesFromEnv): Render free hat ein fluechtiges Dateisystem -> store.json
   // ueberlebt keinen Deploy, sonst braeche der Boot-Guard fail-closed ab. Ohne
   // OWNER_NUMBER oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
-  ops.seedOwnerNumberFromConfig(state, config.ownerNumber, OWNER_TENANT_ID, config.ownerNumberProvider);
+  ops.seedOwnerNumberFromConfig(
+    state,
+    config.ownerNumber,
+    OWNER_TENANT_ID,
+    config.ownerNumberProvider,
+  );
   // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog der Identitaet/
   // Absendernummer darueber): seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne
   // diesen Seed verloere der Owner nach der Umstellung still seine eigene Summary-SMS. Liefert
@@ -85,7 +99,9 @@ function finishLoad() {
   // PII-freie Boot-Warnung (nur der Marker, NIE die Nummer). assertConfig verlangt OWNER_NUMBER
   // ohnehin fail-closed - die Warnung faengt eine ungueltige/fehlende Nummer sichtbar ab.
   if (!ops.seedOwnerPrivateNumber(state, config.ownerNumber, OWNER_TENANT_ID))
-    console.warn("[store] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).");
+    console.warn(
+      "[store] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).",
+    );
   return state;
 }
 
@@ -212,7 +228,8 @@ export function eraseTenantData(tenantId) {
   const removed = ops.eraseTenantData(load(), tenantId);
   // F2 P10: auch eine geloeschte privateNumber (PII) muss persistieren - sonst kaeme sie
   // bei einem Tenant ganz ohne Calls nach dem Restart zurueck.
-  if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
+  if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
+    save();
   return removed;
 }
 
