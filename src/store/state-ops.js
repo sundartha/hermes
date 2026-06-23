@@ -166,9 +166,12 @@ function tenantCallScope(s, tenantId) {
 // Per-Tenant-DSGVO-Loeschung (Art. 17): entfernt ALLE call-verknuepften Daten
 // EINES Tenants - die Calls (samt Roh-Transkript), die daraus extrahierten Action
 // Items und die call-verknuepften Notifications. Tenant-Scope kommt aus
-// tenantCallScope (eine Quelle). settings/profiles/numbers/tenants/calendar/usage
-// bleiben UNANGETASTET (Service-Config/Identitaet/Budget-Gate). Reine Mutation,
-// kein IO. Liefert Loesch-Zaehler fuers Audit (KEINE Inhalte). NIE cross-tenant.
+// tenantCallScope (eine Quelle). Vom tenant-Record wird GEZIELT NUR die private
+// Summary-Nummer entfernt (F2 P10): sie ist ein personenbezogenes Kontaktdatum und
+// faellt damit unter Art. 17, anders als settings/profiles/numbers/calendar/usage
+// (Service-Config/Identitaet/Budget-Gate), die UNANGETASTET bleiben. Reine Mutation,
+// kein IO. Liefert Loesch-Zaehler fuers Audit (KEINE Inhalte; privateNumber als 0/1,
+// NIE der Wert -> kein PII-Leak ins Log). NIE cross-tenant.
 export function eraseTenantData(s, tenantId) {
   const { calls: targetCalls, callIds } = tenantCallScope(s, tenantId);
   const removed = {
@@ -176,6 +179,7 @@ export function eraseTenantData(s, tenantId) {
     transcriptSegments: targetCalls.reduce((sum, c) => sum + c.transcript.length, 0),
     actionItems: 0,
     notifications: 0,
+    privateNumber: 0,
   };
   const itemsBefore = s.actionItems.length;
   const notifsBefore = s.notifications.length;
@@ -184,18 +188,33 @@ export function eraseTenantData(s, tenantId) {
   s.notifications = s.notifications.filter((n) => !callIds.has(n.callId));
   removed.actionItems = itemsBefore - s.actionItems.length;
   removed.notifications = notifsBefore - s.notifications.length;
+  // Private Summary-Nummer (PII-Kontaktdatum) am tenant-Record loeschen, falls gesetzt.
+  // Feld ENTFERNEN (nicht null setzen) -> exportTenantData/tenantPrivateNumber faellt
+  // sauber auf "keine Nummer" zurueck (Skip-Pfad in finishCall bleibt verlaesslich, kein
+  // Daten-Muell at rest). Zaehler 0/1, damit der Wrapper auch ohne Call-Treffer saved.
+  const tenant = findTenant(s, tenantId);
+  if (tenant && tenant.privateNumber != null) {
+    delete tenant.privateNumber;
+    removed.privateNumber = 1;
+  }
   return removed;
 }
 
 // Nicht-destruktive Auskunft/Export (Art. 15/20): reine Query, KEIN save. Liefert
 // ueber tenantCallScope GENAU den Umfang, den eraseTenantData treffen wuerde -
-// call-verknuepfte Daten EINES Tenants. KEIN Strippen hier (das macht die
-// API-Schicht via publicCall, um streamToken nicht zu leaken).
+// call-verknuepfte Daten EINES Tenants - PLUS die private Summary-Nummer (F2 P10):
+// das personenbezogene Kontaktdatum, das eraseTenantData loescht, gehoert spiegelbildlich
+// in die Auskunft (gleicher tenant-Record als Quelle, kein Export/Erase-Drift). null,
+// wenn keine gesetzt. KEIN Strippen der Calls hier (das macht die API-Schicht via
+// publicCall, um streamToken nicht zu leaken). Die UNMASKIERTE Nummer erreicht nur den
+// auth-gegateten, tenant-gescopten Art.-15-Export (/api/tenant-data/export); die
+// /api/self-service/state-Sicht liest sie NICHT hieraus, sondern maskiert separat (P6, H4).
 export function exportTenantData(s, tenantId) {
   const { calls, callIds } = tenantCallScope(s, tenantId);
   return {
     tenantId,
     exportedAt: new Date().toISOString(),
+    privateNumber: findTenant(s, tenantId)?.privateNumber ?? null,
     calls,
     actionItems: s.actionItems.filter((a) => callIds.has(a.callId)),
     notifications: s.notifications.filter((n) => callIds.has(n.callId)),

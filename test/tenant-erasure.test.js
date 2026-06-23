@@ -62,14 +62,16 @@ test("eraseTenantData(owner) entfernt NUR Owner-Calls; fremder Tenant + Config b
 test("eraseTenantData(owner) liefert exakte Loesch-Zaehler", () => {
   const s = freshState();
   const removed = eraseTenantData(s, OWNER_TENANT_ID);
-  assert.deepEqual(removed, { calls: 2, transcriptSegments: 2, actionItems: 1, notifications: 1 });
+  // privateNumber:0 -> freshState setzt keine private Summary-Nummer (F2 P10, PII-freier
+  // 0/1-Zaehler statt des Werts). Die gesetzte-Nummer-Loeschung deckt f2-p10-* ab.
+  assert.deepEqual(removed, { calls: 2, transcriptSegments: 2, actionItems: 1, notifications: 1, privateNumber: 0 });
 });
 
 test("eraseTenantData ist idempotent: zweiter Lauf loescht nichts mehr", () => {
   const s = freshState();
   eraseTenantData(s, OWNER_TENANT_ID);
   const removed = eraseTenantData(s, OWNER_TENANT_ID);
-  assert.deepEqual(removed, { calls: 0, transcriptSegments: 0, actionItems: 0, notifications: 0 });
+  assert.deepEqual(removed, { calls: 0, transcriptSegments: 0, actionItems: 0, notifications: 0, privateNumber: 0 });
 });
 
 test("allgemeine Notification (callId:null) bleibt - kein notification.tenantId-Scoping", () => {

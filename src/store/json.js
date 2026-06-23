@@ -202,7 +202,9 @@ export function purgeTranscript(callId) {
 // Tenants + persistiert nur bei Aenderung (Muster wie pruneOldData).
 export function eraseTenantData(tenantId) {
   const removed = ops.eraseTenantData(load(), tenantId);
-  if (removed.calls || removed.actionItems || removed.notifications) save();
+  // F2 P10: auch eine geloeschte privateNumber (PII) muss persistieren - sonst kaeme sie
+  // bei einem Tenant ganz ohne Calls nach dem Restart zurueck.
+  if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
   return removed;
 }
 

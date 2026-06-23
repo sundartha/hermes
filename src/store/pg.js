@@ -238,7 +238,9 @@ export function makePgStore(runner) {
     // segment per ON DELETE CASCADE). KEIN eigenes DELETE noetig.
     eraseTenantData(tenantId) {
       const removed = ops.eraseTenantData(requireState(), tenantId);
-      if (removed.calls || removed.actionItems || removed.notifications) save();
+      // F2 P10: auch eine geloeschte privateNumber (PII) muss persistieren - sonst kaeme sie
+      // bei einem Tenant ganz ohne Calls nach dem Restart zurueck (flushTenants schreibt NULL).
+      if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber) save();
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
