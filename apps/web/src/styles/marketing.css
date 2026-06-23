@@ -484,6 +484,30 @@
   margin-top: auto;
 }
 
+/* Ehrlicher Abrechnungs-Hinweis unter der Tarif-Tabelle. */
+.note {
+  max-width: var(--layout-pricing);
+  margin-inline: auto;
+  margin-top: var(--space-block);
+  padding: var(--space-card);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-action-surface);
+  text-align: center;
+}
+
+.note__title {
+  font-size: var(--text-lead);
+  font-weight: var(--weight-heading);
+  color: var(--color-text);
+}
+
+.note__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-body);
+  color: var(--color-muted);
+}
+
 /* --- Fusszeile (dunkel, zur Erdung) --- */
 .site-footer {
   margin-top: auto;

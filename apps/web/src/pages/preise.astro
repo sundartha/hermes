@@ -1,8 +1,14 @@
 ---
-// Marketing: Preise (SSG). W1-Grundgeruest: zwei Tarife als statisches Markup,
-// CTAs verlinken auf den Login. KEINE Stripe-Anbindung, KEIN Client-Fetch — den
-// Karte-hinterlegen-Funnel (POST /api/self-service/billing/setup-checkout) und
-// den ehrlichen Hinweis zur fehlenden wiederkehrenden Abbuchung ergaenzt W2.
+// Marketing: Preise (SSG). Zwei Tarife als statisches Markup; CTAs funneln in
+// den Registrieren-/Login-Flow. KEINE Stripe-Anbindung, KEIN Client-Fetch hier.
+//
+// EHRLICHER BEFUND (Strategie R1, §2.6): Das Backend kennt KEINE Abo-/Preis-
+// Tiers — nur Karten-Hinterlegung (Stripe setup-mode), nutzungsbasiertes
+// Metering und eine einmalige Nummern-Gebuehr. Die Karte hinterlegst du nach
+// dem Login in deinem Bereich (auth-gated). Die automatische monatliche
+// Abbuchung (echtes Subscription-Billing) ist ein benannter Backend-Follow-up
+// und wird hier NICHT vorgetaeuscht (kein Fake-Charge). Der Hinweis-Block unten
+// macht das transparent.
 import Marketing from "../layouts/Marketing.astro";
 
 const plans = [
@@ -61,9 +67,20 @@ const plans = [
                 <li class="plan__feature">{feature}</li>
               ))}
             </ul>
-            <a class="button button--primary plan__cta" href="/auth/login">Jetzt starten</a>
+            <a class="button button--primary plan__cta" href="/registrieren">Jetzt starten</a>
           </article>
         ))}
+      </div>
+
+      <div class="note">
+        <h2 class="note__title">So funktioniert die Abrechnung</h2>
+        <p class="note__text">
+          Deine Zahlungsmethode hinterlegst du sicher in deinem Bereich, sobald
+          dein Konto freigeschaltet ist — abgerechnet wird nutzungsbasiert. Die
+          automatische monatliche Abbuchung richten wir gerade ein; bis dahin
+          aktivieren wir deinen Tarif manuell. Es wird nichts ohne deine
+          Zustimmung abgebucht.
+        </p>
       </div>
     </div>
   </section>

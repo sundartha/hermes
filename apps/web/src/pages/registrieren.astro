@@ -1,0 +1,78 @@
+---
+// Marketing: Registrieren (SSG). KEIN Self-Service-Registrierungsformular —
+// das Backend kennt keinen Signup-Endpunkt (Strategie R2): ein Konto entsteht
+// beim ersten Login ueber den Gateway-OIDC-Flow (/auth/login) und ist danach
+// erst nach Admin-Freigabe nutzbar (bis dahin "in Pruefung"). Diese Seite
+// erklaert genau diesen Ablauf und funnelt nach /auth/login. KEIN Client-Fetch,
+// kein Formular, das gegen einen nicht existierenden Endpunkt liefe.
+import Marketing from "../layouts/Marketing.astro";
+
+const steps = [
+  {
+    title: "Anmelden",
+    text: "Du startest die Anmeldung ueber unseren sicheren Login. Ein eigenes Passwort-Formular gibt es nicht — die Anmeldung laeuft ueber deinen verknuepften Zugang.",
+  },
+  {
+    title: "Konto wird geprueft",
+    text: "Nach der ersten Anmeldung legen wir dein Konto an und pruefen es kurz. Das schuetzt das Telefonnetz vor Missbrauch — Hermes loest echte Anrufe und Kosten aus.",
+  },
+  {
+    title: "Freischaltung",
+    text: "Sobald dein Konto freigegeben ist, erscheint dein Assistent im Bereich. Du legst Rufnummer, Berechtigungen und Begruessung fest und kannst loslegen.",
+  },
+];
+---
+
+<Marketing
+  title="Registrieren — Sundartha Hermes"
+  description="So legst du dein Hermes-Konto an: anmelden, kurze Pruefung, Freischaltung. Danach verbindest du deinen KI-Agenten mit einem echten Telefonanschluss."
+>
+  <section class="hero">
+    <div class="container">
+      <span class="hero__eyebrow">Konto anlegen</span>
+      <h1 class="hero__title">In wenigen Minuten <span class="highlight">startklar</span></h1>
+      <p class="hero__lead">
+        Hermes hat keinen klassischen Registrierungs-Bogen. Du meldest dich an,
+        wir pruefen dein Konto kurz und schalten es frei — dann gehoert der
+        Telefon-Assistent dir.
+      </p>
+      <div class="hero__actions">
+        <a class="button button--primary" href="/auth/login">Jetzt anmelden</a>
+        <a class="button button--ghost" href="/preise">Preise ansehen</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section__head">
+        <span class="eyebrow">So laeuft es ab</span>
+        <h2 class="section__title">Vom Login bis zum eigenen Agenten</h2>
+      </div>
+      <div class="grid grid--three">
+        {steps.map((step, index) => (
+          <article class="card">
+            <span class="step__index" aria-hidden="true">{index + 1}</span>
+            <h3 class="card__title">{step.title}</h3>
+            <p class="card__text">{step.text}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--surface">
+    <div class="container">
+      <div class="section__head">
+        <h2 class="section__title">Schon ein Konto?</h2>
+        <p class="section__lead">
+          Melde dich an und verwalte deinen Assistenten direkt in deinem Bereich.
+        </p>
+      </div>
+      <div class="hero__actions">
+        <a class="button button--primary" href="/auth/login">Anmelden</a>
+        <a class="button button--action" href="/so-funktionierts">So funktioniert's</a>
+      </div>
+    </div>
+  </section>
+</Marketing>
