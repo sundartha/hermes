@@ -3,7 +3,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, "..", ".env") });
+// Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
+// Entwickler-.env (z.B. Beispiel-OWNER_NUMBER) Test-Annahmen verfaelscht.
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config({ path: path.join(__dirname, "..", ".env") });
+}
 
 // ---- Numerische Env-Validierung (fail-closed, OT-4) ----
 // Eine GESETZTE, aber ungueltige numerische Env-Var (NaN/Infinity oder ausserhalb
