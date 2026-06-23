@@ -99,6 +99,30 @@ test("originateCall: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", asyn
   );
 });
 
+test("originateCall: 403 mit Telnyx-errors[] haengt code+title + providerStatus an, ohne Key/Roh-Body", async () => {
+  // Telnyx liefert bei einer Konfig-Ablehnung einen errors[]-Body. Der Adapter
+  // soll NUR code+title sichtbar machen (Diagnose im Log), NIE detail/Roh-Body
+  // (kann Auth-/Nummern-Fragmente tragen) und NIE den API-Key (Regel 4/5).
+  stubFetch({
+    ok: false,
+    status: 403,
+    json: { errors: [{ code: "10015", title: "Caller ID not allowed", detail: "from=+18643028341 secret-fragment" }] },
+  });
+  await assert.rejects(
+    () => telnyxVoice.originateCall(ORIGINATE),
+    (err) => {
+      assert.match(err.message, /HTTP 403/);
+      assert.match(err.message, /10015/, "Telnyx-Fehlercode sichtbar (Diagnose)");
+      assert.match(err.message, /Caller ID not allowed/, "Telnyx-Titel sichtbar");
+      assert.equal(err.providerStatus, 403, "Status strukturiert fuer die Aufrufer-Kategorisierung");
+      assert.ok(!err.message.includes(API_KEY), "API-Key darf nicht leaken");
+      assert.ok(!err.message.includes("detail"), "rohes detail-Feld nicht durchreichen (Allowlist code/title)");
+      assert.ok(!err.message.includes("secret-fragment"), "kein Roh-Body-Fragment");
+      return true;
+    }
+  );
+});
+
 test("endCall: Twilio-kompatible URL (Accounts/.../Calls), Status=completed", async () => {
   const calls = stubFetch({ json: {} });
   await telnyxVoice.endCall("tnx_call_1");

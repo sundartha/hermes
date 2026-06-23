@@ -814,10 +814,19 @@ app.post("/api/calls", async (req, res) => {
     // secret-frei loggen (wie die P0-Guards: err.message, nie config), dem Aufrufer
     // eine generische, stabile Meldung geben.
     console.error(`[place_call] originate fehlgeschlagen call=${call.id}:`, err?.message || String(err));
-    res.status(500).json({
-      error: "Anruf konnte nicht gestartet werden.",
-      hint: "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.",
-    });
+    // Der Adapter haengt bei einer Provider-HTTP-Ablehnung err.providerStatus an
+    // (secret-frei). Liegt sie vor -> kategorisierte, provider-NEUTRALE Meldung mit
+    // Statusklasse (502 Upstream), damit der Aufrufer den echten Grund erkennt statt
+    // einer irrefuehrenden Twilio-Meldung bei einem Telnyx-Call. Der Twilio-Trial-Hint
+    // nur bei Provider Twilio. Kein Roh-Body/Key an den Client (Regel 4/5).
+    const providerStatus = err?.providerStatus;
+    const body = providerStatus
+      ? { error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.` }
+      : { error: "Anruf konnte nicht gestartet werden." };
+    if (outboundProvider === "twilio") {
+      body.hint = "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.";
+    }
+    res.status(providerStatus ? 502 : 500).json(body);
   }
 });
 
