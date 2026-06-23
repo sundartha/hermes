@@ -110,6 +110,13 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // Persistierter Summary-SMS-Dedup-Marker (F2 P9): Wrapper-Parity zu json.js. Der
+    // Flush schreibt summary_sms_sent_at am call-Record -> ueberlebt den Restart (M2).
+    markSummarySmsSent(callId) {
+      const { call, changed } = ops.markSummarySmsSent(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
     countOutboundCallsSince: (sinceIso, filters = {}) =>
       ops.countOutboundCallsSince(requireState(), sinceIso, filters),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
@@ -476,6 +483,11 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     transcript: segmentsByCall.get(r.id) || [],
     summary: r.summary,
     objectiveAchieved: r.objective_achieved,
+    // F2 P9 (M2): persistierten Summary-SMS-Dedup-Marker hydrieren. Ohne dieses Feld
+    // ginge der Marker beim Prozess-Restart verloren (Spalte da, aber nie gelesen) und
+    // ein spaeter /voice/status-Retry sendete eine zweite Summary-SMS. NULL -> null
+    // (kein Marker, byte-identisch zur createCall-Initialisierung + json-Hydrierung).
+    summarySmsSentAt: r.summary_sms_sent_at ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -630,16 +642,18 @@ async function flushCalls(client, tenantId, calls) {
       `INSERT INTO call
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
-          status, started_at, answered_at, ended_at, summary, objective_achieved, provider)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+          status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
+          summary_sms_sent_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
-         objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider`,
+         objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
+         summary_sms_sent_at=EXCLUDED.summary_sms_sent_at`,
       [c.id, tenantId, c.streamToken, c.twilioSid, c.direction, c.from, c.to, c.goal,
         c.briefing, c.constraints, c.callerName, c.language, c.maxDurationS, c.requestedBy,
         c.status, c.startedAt, c.answeredAt, c.endedAt, c.summary, serializeObjective(c.objectiveAchieved),
-        c.provider || DEFAULT_PROVIDER]
+        c.provider || DEFAULT_PROVIDER, c.summarySmsSentAt ?? null]
     );
     await flushTranscript(client, tenantId, c);
   }

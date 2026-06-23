@@ -97,13 +97,20 @@ CREATE TABLE IF NOT EXISTS call (
   ended_at           TEXT,
   summary            TEXT,
   objective_achieved TEXT,
-  provider           TEXT
+  provider           TEXT,
+  -- F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit). Additiv NULLABLE:
+  -- gesetzt NACH erfolgreichem SMS-Send, sonst NULL. Ueberlebt - anders als das
+  -- In-Memory-Flag _finished - den Prozess-Restart -> genau eine Summary-SMS pro Call.
+  summary_sms_sent_at TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
 -- EXISTS oben greift dann nicht) bekommt die provider-Spalte nachgezogen.
 -- Idempotent (IF NOT EXISTS); auf einer frischen DB ein No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS provider TEXT;
+-- F2 P9: Summary-SMS-Dedup-Marker auf Bestands-call-Tabellen nachziehen (Muster wie
+-- provider). Idempotent; frische DB = No-op (CREATE TABLE oben hat die Spalte schon).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS summary_sms_sent_at TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

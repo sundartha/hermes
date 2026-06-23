@@ -27,6 +27,12 @@ export function planSummarySms(store, config, call) {
   // Absender = aktive Nummer des Call-Tenants auf DEMSELBEN Provider wie der Call.
   const smsFrom = findActiveNumber(store.load(), call.tenantId, call.provider);
   const optIn = store.tenantContext(call.tenantId).settings.smsSummaryOptIn;
+  // F2 P9 (M2): persistierter Dedup-Marker - wurde fuer diesen Call schon eine Summary-SMS
+  // gesendet, NIE erneut senden. Der Marker (call.summarySmsSentAt) ueberlebt den Prozess-
+  // Restart, anders als das In-Memory-Flag call._finished -> genau eine SMS pro Call, auch
+  // bei mehrfachem /voice/status-Callback mit Restart dazwischen. Kein reason (normaler
+  // Dedup, kein Ziel-Defizit -> nichts pro Tenant zu auditieren).
+  if (call.summarySmsSentAt) return { to, smsFrom, send: false, reason: null };
   if (!config.sendSmsSummary) return { to, smsFrom, send: false, reason: null };
   if (!to) return { to, smsFrom, send: false, reason: "no_private_number" };
   if (!smsFrom || !optIn) return { to, smsFrom, send: false, reason: null };

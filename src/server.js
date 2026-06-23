@@ -643,6 +643,11 @@ async function finishCall(call) {
           quantity: 1,
           costCents: config.smsCostCents,
         });
+        // F2 P9 (M2): persistierten Dedup-Marker setzen - NUR nach erfolgreichem Send.
+        // Ueberlebt den Prozess-Restart und unterdrueckt eine zweite Summary-SMS bei einem
+        // spaeten /voice/status-Retry (planSummarySms prueft summarySmsSentAt). Bewusst
+        // NACH recordUsageEvent: der Marker steht erst, wenn die SMS real raus ist.
+        store.markSummarySmsSent(call.id);
       } catch (e) {
         console.error("[sms]", e.message, "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)");
       }

@@ -76,6 +76,7 @@ export const {
   purgeTranscript,
   markAnswered,
   endCallRecord,
+  markSummarySmsSent,
   countOutboundCallsSince,
   findTenantByNumber,
   numberRecordByE164,

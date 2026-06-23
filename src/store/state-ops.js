@@ -118,6 +118,10 @@ export function createCall(s, { direction, from, to, goal, twilioSid, briefing, 
     transcript: [],
     summary: null,
     objectiveAchieved: null,
+    // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
+    // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
+    // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
+    summarySmsSentAt: null,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -215,6 +219,21 @@ export function endCallRecord(s, callId, status = "completed") {
   if (call.status === "active") {
     call.status = status;
     call.endedAt = new Date().toISOString();
+    changed = true;
+  }
+  return { call, changed };
+}
+
+// Persistierter Dedup-Marker fuer die Summary-SMS (F2 P9, M2): setzt summarySmsSentAt
+// (ISO) am Call-Record NACH erfolgreichem Send. Ueberlebt - anders als das In-Memory-
+// Flag call._finished - einen Prozess-Restart zwischen Call-Ende und spaetem
+// /voice/status-Retry und macht den Versand so idempotent (genau eine SMS). Idempotent
+// (gesetzter Marker gewinnt, Muster wie markAnswered). Wrapper saved bei changed.
+export function markSummarySmsSent(s, callId) {
+  const call = getCall(s, callId);
+  let changed = false;
+  if (call && !call.summarySmsSentAt) {
+    call.summarySmsSentAt = new Date().toISOString();
     changed = true;
   }
   return { call, changed };

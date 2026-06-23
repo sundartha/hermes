@@ -6,8 +6,9 @@
 import { NUMBER_STATUS } from "./defaults.js";
 
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
-// und interne Flags duerfen den Server nie verlassen.
-export function publicCall({ streamToken, _finished, ...rest }) {
+// und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
+// rein interner persistierter Dedup-Marker -> wie _finished gestrippt (kein API-Leak).
+export function publicCall({ streamToken, _finished, summarySmsSentAt, ...rest }) {
   return rest;
 }
 

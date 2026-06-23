@@ -223,6 +223,14 @@ export function endCallRecord(callId, status = "completed") {
   return call;
 }
 
+// Persistierter Summary-SMS-Dedup-Marker (F2 P9): mutiert -> save bei changed (Muster
+// wie markAnswered). Der Marker ueberlebt den Prozess-Restart (M2).
+export function markSummarySmsSent(callId) {
+  const { call, changed } = ops.markSummarySmsSent(load(), callId);
+  if (changed) save();
+  return call;
+}
+
 export function countOutboundCallsSince(sinceIso, filters = {}) {
   return ops.countOutboundCallsSince(load(), sinceIso, filters);
 }
