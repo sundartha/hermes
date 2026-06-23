@@ -15,6 +15,18 @@ services:
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeploy: true
+    # Deploy-Isolation (W0): rein-Frontend-/rein-Doku-Commits duerfen diesen
+    # live telefonierenden Prozess NICHT neu deployen (Blast-Radius: ein
+    # Frontend-Commit wuerde sonst den Container mitten im Anruf SIGTERMen).
+    # ignoredPaths = der Service deployt NUR dann nicht, wenn ALLE geaenderten
+    # Dateien auf diese Muster passen; jeder src/**-Commit deployt weiterhin.
+    # Falls Render den Filter fuer den bestehenden Service nicht nachtraeglich
+    # per Blueprint anwendet (analog zur Region-Einschraenkung): im Dashboard
+    # setzen. Der Wert + render-buildfilter.test.js sind der eigentliche Schutz.
+    buildFilter:
+      ignoredPaths:
+        - "apps/web/**"
+        - "docs/**"
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -166,3 +178,34 @@ services:
       - key: VOICE_ENGINE
         value: budget
       # PUBLIC_URL nicht noetig: Render setzt RENDER_EXTERNAL_URL automatisch
+
+  # ---- 2) Produkt-Frontend (W0, Static Site aufs CDN) ----
+  # Eigenstaendiges Astro-Paket unter apps/web/. Deployt getrennt vom Gateway;
+  # ein reiner apps/web/**-Commit loest hier (paths), aber NICHT am Gateway
+  # (ignoredPaths oben) einen Deploy aus. Erstmal unter eigener onrender.com-URL.
+  - type: web
+    runtime: static            # Render-Static-Site (gegen render.yaml-Schema geprueft: type:web + runtime:static + staticPublishPath)
+    name: hermes-web
+    plan: free
+    autoDeploy: true
+    # Build-Isolation via eigener Lockfile (R8): apps/web/ traegt ein eigenes
+    # package-lock.json. Darum rootDir + npm ci (NICHT die Root-Workspace-Variante)
+    # — die Root-package.json hat KEINE workspaces, und eine gemeinsame Lockfile
+    # wuerde ein Frontend-Dep-Bump in den Gateway-paths-Filter ziehen.
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    buildFilter:
+      paths:
+        - "apps/web/**"
+    routes:
+      - type: rewrite          # SPA-Fallback NUR fuer den interaktiven App-Teil (W2+)
+        source: /app/*
+        destination: /app/index.html
+    headers:                   # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"

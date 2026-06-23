@@ -1,0 +1,4 @@
+# Astro build output und Abhaengigkeiten — nie committen.
+dist/
+node_modules/
+.astro/

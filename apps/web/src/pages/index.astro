@@ -1,0 +1,23 @@
+---
+// W0-Platzhalter: beweist, dass die Static Site eigenstaendig baut und
+// HTTP 200 liefert. KEINE Marketing-Inhalte, KEINE Design-Tokens (W1),
+// KEINE Auth/App-Shell (W2), KEIN fetch() gegen /api oder /auth.
+const buildTime = new Date().toISOString();
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Hermes – Platzhalter</title>
+  </head>
+  <body>
+    <main>
+      <h1>Hermes</h1>
+      <p>Produkt-Frontend-Geruest (Phase W0). Inhalte folgen.</p>
+      <p>Build: {buildTime}</p>
+    </main>
+  </body>
+</html>
