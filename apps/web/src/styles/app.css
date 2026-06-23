@@ -98,3 +98,10 @@
 .kv dd {
   margin: 0;
 }
+
+/* W3: kurze Rueckmeldung der Billing-Insel (Checkout-Start/Rueckkehr). Bewusst
+   neutral gehalten -- nur semantische Tokens, kein fester Wert (Strategie 2.5). */
+.billing-msg {
+  margin: var(--space-stack) 0 0;
+  color: var(--color-muted);
+}

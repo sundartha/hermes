@@ -6,6 +6,7 @@
 // (Rufnummer, Besitzer). Die leeren Slots fuellt W4 (Anrufe/Items/Kalender).
 import App from "../../layouts/App.astro";
 import AuthIsland from "../../components/app/AuthIsland.astro";
+import BillingIsland from "../../components/app/BillingIsland.astro";
 ---
 
 <App title="Hermes — App">
@@ -49,6 +50,10 @@ import AuthIsland from "../../components/app/AuthIsland.astro";
     <section class="card">
       <p class="muted">Anruf-Verlauf, Aufgaben und Termine folgen.</p>
     </section>
+    <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
+         der Server kein hasCard liefert (PAYMENT_ENABLED aus) -> byte-identisch
+         zum Bestand. Sie hoert auf AUTH_EVENT, kein zweiter state-Fetch. -->
+    <BillingIsland />
   </div>
 
   <noscript>

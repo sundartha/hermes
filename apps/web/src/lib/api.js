@@ -7,7 +7,9 @@
 
 // HTTP-Status, die die fail-closed Auth-Schicht des Gateways (webAuth) liefert:
 // 401 = kein/ungueltiges Session-Cookie, 403 = Tenant noch nicht freigegeben.
-const HTTP_UNAUTHORIZED = 401;
+// HTTP_UNAUTHORIZED exportiert, damit Inseln den 401-Fall (abgelaufene Session)
+// erkennen, ohne den Magic-Wert zu duplizieren.
+export const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 
 // UI-Zustaende, die die App-Shell aus genau EINEM state-Fetch ableitet. Eine
@@ -59,6 +61,26 @@ export function logout() {
   return apiRequest("/auth/logout", { method: "POST", parseJson: false });
 }
 
+// Startet die Stripe-Checkout-Session (setup-mode) zum Hinterlegen einer Karte.
+// Der Gateway-Endpunkt antwortet mit JSON { url } (verifiziert in
+// src/self-service-routes.js) -- der einzige existierende Billing-Schreibpfad.
+// Der Aufrufer macht den Browser-Redirect auf diese url (zur Stripe-gehosteten
+// Seite); das Frontend selbst kennt KEINE Stripe-Logik (duenner Client, 2.3).
+// Bewusst NUR Karte hinterlegen: es gibt API-seitig kein Abo (subscribe/cancel/
+// upgrade existieren nicht) -- ein solcher Aufruf liefe gegen 404 (CLAUDE.md
+// Regel 6) und ist hier verboten.
+export async function startBillingSetupCheckout() {
+  const { url } = await apiRequest("/api/self-service/billing/setup-checkout", {
+    method: "POST",
+  });
+  // Contract-Grenze (R5): das Backend garantiert { url } -- ein 200 ohne url
+  // waere ein Drift. Fail-closed pruefen, statt window.location.assign(undefined)
+  // an den Aufrufer durchzureichen (G26: null/undefined nie ungeprueft nutzen).
+  if (typeof url !== "string" || url === "")
+    throw new ApiError(0, "billing setup-checkout: Antwort ohne url");
+  return url;
+}
+
 // Liest die Agent-Eckdaten (Nummer, Besitzer) aus der state-Antwort -- die EINE
 // Stelle, an der das Frontend die Form `data.agent` annimmt (Contract-Grenze zur
 // API, R5: Annahme nicht ueber mehrere Dateien streuen). Fehlende Felder -> leere
@@ -66,6 +88,17 @@ export function logout() {
 export function agentInfo(data) {
   const agent = (data && data.agent) || {};
   return { number: agent.number || "", owner: agent.owner || "" };
+}
+
+// Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das
+// Frontend die Form `data.hasCard` annimmt (Contract-Grenze zur API, R5).
+// hasCard ist NUR ein Boolean, wenn PAYMENT_ENABLED am Gateway an ist; sonst
+// fehlt das Feld komplett. Liefert daher { present, hasCard }: present=false
+// (kein Boolean) -> die UI versteckt den Billing-Block byte-identisch zum
+// Bestand; present=true -> hasCard sagt, ob bereits eine Karte hinterlegt ist.
+export function cardStatus(data) {
+  const present = typeof (data && data.hasCard) === "boolean";
+  return { present, hasCard: present ? data.hasCard : false };
 }
 
 // Leitet den UI-Auth-Zustand aus genau EINEM state-Fetch ab -- die einzige

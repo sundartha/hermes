@@ -9,9 +9,11 @@ import {
   ApiError,
   AUTH_STATE,
   agentInfo,
+  cardStatus,
   fetchTenantState,
   logout,
   loadAuthState,
+  startBillingSetupCheckout,
 } from "../src/lib/api.js";
 
 // Ersetzt globalThis.fetch durch einen Stub, der die Aufrufe aufzeichnet und
@@ -163,4 +165,69 @@ test("agentInfo reicht befuellte Felder unveraendert durch", () => {
     number: "+49123",
     owner: "Alex",
   });
+});
+
+// cardStatus ist die Contract-Grenze zur API fuer state.hasCard. Sichtbarkeits-
+// Regel (W3): nur wenn hasCard ein Boolean ist (PAYMENT_ENABLED an), ist der
+// Block sichtbar; sonst present=false -> versteckt (byte-identisch zum Bestand).
+test("cardStatus: present=false, wenn hasCard fehlt (PAYMENT_ENABLED aus)", () => {
+  assert.deepEqual(cardStatus(undefined), { present: false, hasCard: false });
+  assert.deepEqual(cardStatus(null), { present: false, hasCard: false });
+  assert.deepEqual(cardStatus({}), { present: false, hasCard: false });
+  // hasCard nur als Boolean zaehlt -- Nicht-Boolean-Werte => versteckt.
+  assert.deepEqual(cardStatus({ hasCard: "true" }), { present: false, hasCard: false });
+  assert.deepEqual(cardStatus({ hasCard: 1 }), { present: false, hasCard: false });
+  assert.deepEqual(cardStatus({ hasCard: null }), { present: false, hasCard: false });
+});
+
+test("cardStatus: present=true mit Boolean -> hasCard wird durchgereicht", () => {
+  assert.deepEqual(cardStatus({ hasCard: false }), { present: true, hasCard: false });
+  assert.deepEqual(cardStatus({ hasCard: true }), { present: true, hasCard: true });
+});
+
+// startBillingSetupCheckout: POST same-origin, gibt die Stripe-url zurueck
+// (Backend antwortet mit JSON { url } -- verifiziert in self-service-routes.js).
+test("startBillingSetupCheckout postet same-origin und liefert die Stripe-url", async () => {
+  const f = stubFetch(() =>
+    fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_test" } })
+  );
+  try {
+    const url = await startBillingSetupCheckout();
+    assert.equal(url, "https://checkout.stripe.com/c/pay/cs_test");
+    const { path, options } = f.calls[0];
+    assert.equal(path, "/api/self-service/billing/setup-checkout");
+    assert.equal(options.method, "POST");
+    assert.equal(options.credentials, "same-origin");
+    // Fail-closed gegen Token-Leak: niemals ein Authorization-Header.
+    assert.equal(options.headers.Authorization, undefined);
+  } finally {
+    f.restore();
+  }
+});
+
+test("startBillingSetupCheckout wirft ApiError bei non-2xx (z.B. 404 Payment aus)", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 404, json: {} }));
+  try {
+    await assert.rejects(startBillingSetupCheckout(), (err) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.status, 404);
+      return true;
+    });
+  } finally {
+    f.restore();
+  }
+});
+
+// Contract-Grenze (R5): ein 200 ohne url-Feld waere Drift -> fail-closed werfen,
+// statt window.location.assign(undefined) an die Insel durchzureichen.
+test("startBillingSetupCheckout wirft bei 200 ohne url-Feld", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: {} }));
+  try {
+    await assert.rejects(startBillingSetupCheckout(), (err) => {
+      assert.ok(err instanceof ApiError);
+      return true;
+    });
+  } finally {
+    f.restore();
+  }
 });
