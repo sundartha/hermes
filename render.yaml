@@ -188,7 +188,9 @@ services:
   - type: web
     runtime: static            # Render-Static-Site (gegen render.yaml-Schema geprueft: type:web + runtime:static + staticPublishPath)
     name: hermes-web
-    plan: free
+    # KEIN plan-Feld: Static Sites haben keine Plan-Stufen (immer kostenlos). Ein
+    # "plan: free" lehnt Render beim Blueprint ab ("no such plan free for service
+    # type web"); nur der Node-Service oben traegt plan:free.
     autoDeploy: true
     # Build-Isolation via eigener Lockfile (R8): apps/web/ traegt ein eigenes
     # package-lock.json. Darum rootDir + npm ci (NICHT die Root-Workspace-Variante)
