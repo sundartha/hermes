@@ -1,0 +1,71 @@
+---
+// DashboardStats (W3): abgeleitete Kennzahlen aus genau dem state, den die
+// Auth-Insel ermittelt (AUTH_EVENT) — KEIN eigener state-Fetch. Alle Zahlen
+// stammen aus echten Call-Feldern (callStats in lib/api.js, getestet); es wird
+// KEIN Kontingent/Guthaben erfunden (Strategie R3). Werte gehen ausschliesslich
+// ueber textContent in den DOM (XSS-Schutz, Leitplanke).
+//
+// EHRLICHER HINWEIS: "Verbleibendes Guthaben"/exakte Rest-Minuten lassen sich
+// heute NICHT zeigen — Roh-Nutzung ist nicht im /state. Wir zeigen die genutzte
+// Gespraechszeit; die praezise Rest-Quote ist ein benannter Backend-Follow-up.
+const stats = [
+  { id: "stat-total", label: "Anrufe gesamt" },
+  { id: "stat-week", label: "Diese Woche" },
+  { id: "stat-month", label: "Diesen Monat" },
+  { id: "stat-duration", label: "Gespraechszeit gesamt" },
+  { id: "stat-direction", label: "Eingehend / Ausgehend" },
+  { id: "stat-summary", label: "Mit Zusammenfassung" },
+];
+---
+
+<section id="stats" class="card">
+  <h2>Ueberblick</h2>
+  <p class="muted">Aus deinem Anruf-Verlauf abgeleitet.</p>
+  <div class="stat-grid">
+    {stats.map(({ id, label }) => (
+      <div class="stat">
+        <span id={id} class="stat__value">—</span>
+        <span class="stat__label">{label}</span>
+      </div>
+    ))}
+  </div>
+  <p class="stat-note muted">
+    Dein genaues Rest-Kontingent zeigen wir, sobald es im Konto verfuegbar ist.
+  </p>
+</section>
+
+<script>
+  import { AUTH_STATE, AUTH_EVENT, callStats, formatCallDuration } from "../../lib/api.js";
+
+  const EMPTY_VALUE = "—";
+
+  const totalEl = document.getElementById("stat-total");
+  const weekEl = document.getElementById("stat-week");
+  const monthEl = document.getElementById("stat-month");
+  const durationEl = document.getElementById("stat-duration");
+  const directionEl = document.getElementById("stat-direction");
+  const summaryEl = document.getElementById("stat-summary");
+  const valueEls = [totalEl, weekEl, monthEl, durationEl, directionEl, summaryEl];
+
+  // Kennzahlen fuellen. Zahlen/Dauer-Strings gehen ueber textContent (nie HTML).
+  function fillStats(data) {
+    const s = callStats(data);
+    totalEl.textContent = String(s.total);
+    weekEl.textContent = String(s.thisWeek);
+    monthEl.textContent = String(s.thisMonth);
+    durationEl.textContent = formatCallDuration(s.durationSec);
+    directionEl.textContent = `${s.inbound} / ${s.outbound}`;
+    summaryEl.textContent = String(s.withSummary);
+  }
+
+  // Nicht eingeloggt -> Platzhalter zuruecksetzen (kein stale Tenant-Datum).
+  function clearStats() {
+    for (const el of valueEls) el.textContent = EMPTY_VALUE;
+  }
+
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const { state, data } = event.detail;
+    if (state === AUTH_STATE.AUTHENTICATED) fillStats(data);
+    else clearStats();
+  });
+</script>

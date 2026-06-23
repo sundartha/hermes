@@ -49,6 +49,94 @@
   padding: var(--space-card);
 }
 
+/* W3: Begruessungs-Kopf der eingeloggten Shell. */
+.dash-head__eyebrow {
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--color-muted);
+}
+
+.dash-head__title {
+  margin-top: var(--space-tight);
+  font-size: var(--text-title);
+  font-weight: var(--weight-heading);
+  letter-spacing: var(--tracking-heading);
+  color: var(--color-text);
+}
+
+/* W3: In-App-Navigation (Anker auf die Bereiche). */
+.dash-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-tight);
+}
+
+.dash-nav__link {
+  padding: var(--space-tight) var(--space-cozy);
+  border-radius: var(--radius-badge);
+  background: var(--color-action-surface);
+  color: var(--color-action);
+  font-size: var(--text-body);
+  font-weight: var(--weight-label);
+  text-decoration: none;
+}
+
+.dash-nav__link:hover {
+  background: var(--color-action);
+  color: var(--color-on-action);
+}
+
+/* Anker-Sprungziele nicht am oberen Rand kleben lassen. */
+#stats,
+#anrufe,
+#einstellungen,
+#abrechnung {
+  scroll-margin-top: var(--space-card);
+}
+
+/* W3: Kennzahlen-Raster. Vier Werte, auf schmalen Viewports zweispaltig
+   (gleicher 768px-Breakpoint wie .shell-cols, kein neuer Magic-Wert). */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-gap);
+  margin-top: var(--space-stack);
+}
+
+@media (max-width: 768px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-hairline);
+  padding: var(--space-cozy);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+}
+
+.stat__value {
+  font-size: var(--text-title);
+  font-weight: var(--weight-heading);
+  color: var(--color-text);
+}
+
+.stat__label {
+  font-size: var(--text-eyebrow);
+  color: var(--color-muted);
+}
+
+.stat-note {
+  margin-top: var(--space-cozy);
+  font-size: var(--text-eyebrow);
+}
+
 .btn {
   display: inline-block;
   padding: var(--space-gap) var(--space-inline);
