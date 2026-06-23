@@ -6,10 +6,10 @@
 > `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/rebrand-sundartha.md` (Rebrand-Task),
 > `tasks/lessons.md` (Lehren).
 >
-> **Stand:** 2026-06-23 - HEAD lokal = `6a0b334` = **origin/master** (in sync). **ACHTUNG:
-> `upstream/master` (= Render/Live) haengt bei `995925f` zurueck** - der gesamte Frontend-Track
-> **w0-w5** und das **f2-Inbound-SMS-Datenmodell** sind in origin/master, aber **noch NICHT live**
-> (upstream-Push steht aus, owner-koordiniert). **Tests: 846/846 gruen.**
+> **Stand:** 2026-06-23 - HEAD lokal = `4e5d4e9` = **origin/master = upstream/master** (alle in
+> sync). Der Render-Deploy von `4e5d4e9` ist **live** (gesund hochgekommen) - der Frontend-Track
+> **w0-w5** und das **f2-Inbound-SMS-Datenmodell** sind damit **deployt/live**
+> (auto-sync-Hook + Render-autoDeploy). **Tests: 846/846 gruen.**
 
 ## Erledigt (Kontext, nicht offen)
 
@@ -84,13 +84,13 @@ Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemerg
      Staging->Production-Cutover (Runbook Gate 5, Schritt 3).
 7. **Crash-Hotspots P3 Real-Call-Smoke** (5 Szenarien, HEIKLE STELLE in `bridge.js`) als Gate
    VOR `VOICE_ENGINE=realtime`-Aktivierung.
-8. **Frontend w0-w5 + f2-Datenmodell live deployen** - alles in origin/master (846/846), aber
-   `upstream/master` (Render) haengt bei `995925f`. Vor dem Live-Push: das Frontend loest die
-   bisherige `express.static`-Kundensicht ab (`docs/strategy/hermes-frontend.md`) - same-origin,
-   kein CORS; vor dem Cutover die Auth-/Billing-/Datensicht gegen die Live-Env durchklicken.
-   **f2 ist erst das Datenmodell (P0-P4)** - die eigentliche Inbound-SMS-Zusammenfassung an die
-   private Tenant-Nummer + der Self-Service-Write (Branch `phase/f2-p5-self-write`, NICHT gemergt)
-   sind noch offen.
+8. **Frontend w0-w5 + f2-Datenmodell sind LIVE deployt** (Render-Deploy `4e5d4e9` gesund). Offen
+   ist nur noch die **manuelle Live-Abnahme der Kundensicht**: Auth-/Login-Roundtrip, Billing-Insel
+   (setup-mode), Read-only-Datensicht und Settings-/Whitelist-Editor gegen die Live-Env durchklicken
+   (das Frontend hat die bisherige `express.static`-Kundensicht abgeloest - same-origin, kein CORS;
+   `docs/strategy/hermes-frontend.md`). **f2 ist erst das Datenmodell (P0-P4)** - die eigentliche
+   Inbound-SMS-Zusammenfassung an die private Tenant-Nummer + der Self-Service-Write
+   (Branch `phase/f2-p5-self-write`, NICHT gemergt) sind noch offen.
 
 
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
