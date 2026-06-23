@@ -311,6 +311,12 @@ export function recordUsageEvent(input) {
   return event;
 }
 
+// Tages-Cap-Zaehler der gesendeten Summary-SMS eines Tenants (F2 P8): reine Query
+// (kein save, analog tenantStripe). finishCall->planSummarySms liest darueber.
+export function dailySmsCount(tenantId, sinceIso) {
+  return ops.dailySmsCount(load(), tenantId, sinceIso);
+}
+
 export function pendingMeterEvents() {
   return ops.pendingMeterEvents(load());
 }

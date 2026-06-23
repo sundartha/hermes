@@ -787,6 +787,19 @@ export function recordUsageEvent(s, { tenantId, callId = null, kind, quantity, c
   return event;
 }
 
+// Zaehlt die ERFOLGREICH gesendeten Summary-SMS EINES Tenants seit sinceIso (F2 P8,
+// Toll-Fraud-Tages-Cap H1). Quelle ist der append-only Usage-Ledger: jede gesendete
+// Summary-SMS hinterlaesst genau ein USAGE_EVENT_KIND.SMS-Event (server.js, NUR nach
+// erfolgreichem sendSms) -> der Zaehler erfasst ausschliesslich real gesendete SMS,
+// nie uebersprungene/fehlgeschlagene. Pro call.tenantId (nicht global). sinceIso kommt
+// vom Aufrufer (rollierendes 24h-Fenster, Muster countOutboundCallsSince) -> state-ops
+// bleibt zeit-frei und testbar. Reine Query, kein IO.
+export function dailySmsCount(s, tenantId, sinceIso) {
+  return s.usageEvents.filter(
+    (e) => e.kind === USAGE_EVENT_KIND.SMS && e.tenantId === tenantId && e.occurredAt >= sinceIso
+  ).length;
+}
+
 // Noch nicht gemeldete Ledger-Eintraege (Flush-Quelle, billing/meter.js). Reine Query.
 export function pendingMeterEvents(s) {
   return s.usageEvents.filter((e) => !e.stripeMeterSent);

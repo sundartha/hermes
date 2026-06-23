@@ -102,6 +102,7 @@ export const {
   resolveTenant,
   setTenantBudget,
   recordUsageEvent,
+  dailySmsCount,
   pendingMeterEvents,
   markMeterEventsSent,
   setKycLevel,

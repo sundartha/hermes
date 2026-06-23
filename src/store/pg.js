@@ -162,6 +162,9 @@ export function makePgStore(runner) {
       save();
       return event;
     },
+    // Tages-Cap-Zaehler der gesendeten Summary-SMS (F2 P8): liest den Spiegel
+    // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
+    dailySmsCount: (tenantId, sinceIso) => ops.dailySmsCount(requireState(), tenantId, sinceIso),
     pendingMeterEvents: () => ops.pendingMeterEvents(requireState()),
     markMeterEventsSent(eventIds) {
       const n = ops.markMeterEventsSent(requireState(), eventIds);

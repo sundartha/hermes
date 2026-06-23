@@ -632,6 +632,17 @@ async function finishCall(call) {
           to: plan.to,
           body: sms.slice(0, 1500),
         });
+        // F2 P8 (H1): Kosten-Beleg + Quelle des Tages-Cap-Zaehlers (dailySmsCount). NUR
+        // nach ERFOLGREICHEM Send - schlaegt sendSms fehl, springt der catch an, es wird
+        // KEIN Event geschrieben -> der Cap zaehlt nur real gesendete SMS (AK #3). grobe
+        // Kosten aus dem benannten Tarif (config.smsCostCents); NIE die Zielnummer (PII).
+        store.recordUsageEvent({
+          tenantId: call.tenantId,
+          callId: call.id,
+          kind: USAGE_EVENT_KIND.SMS,
+          quantity: 1,
+          costCents: config.smsCostCents,
+        });
       } catch (e) {
         console.error("[sms]", e.message, "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)");
       }

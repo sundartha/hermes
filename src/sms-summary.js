@@ -13,8 +13,14 @@
 //  - Opt-Out (settings.smsSummaryOptIn === false, Decision #2), globaler Feature-Schalter
 //    (config.sendSmsSummary) und fehlender Absender unterdruecken den Versand OHNE
 //    reason-Audit (das sind keine "Ziel fehlt"-Faelle, nichts pro Tenant zu melden).
-//  - reason ist NUR bei fehlendem Ziel != null; sonst null.
+//  - Tages-Cap (F2 P8, Toll-Fraud H1): N erfolgreich gesendete Summary-SMS pro Tenant im
+//    rollierenden 24h-Fenster -> die naechste wird mit reason="daily_cap" still uebersprungen
+//    (PII-frei auditierbar). Quelle ist der Usage-Ledger (store.dailySmsCount).
+//  - reason ist bei fehlendem Ziel ("no_private_number") UND bei erreichtem Tages-Cap
+//    ("daily_cap") != null; sonst null.
 import { findActiveNumber } from "./store/views.js";
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export function planSummarySms(store, config, call) {
   const to = store.tenantPrivateNumber(call.tenantId);
@@ -24,5 +30,10 @@ export function planSummarySms(store, config, call) {
   if (!config.sendSmsSummary) return { to, smsFrom, send: false, reason: null };
   if (!to) return { to, smsFrom, send: false, reason: "no_private_number" };
   if (!smsFrom || !optIn) return { to, smsFrom, send: false, reason: null };
+  // Tages-Cap pro Tenant (H1): zaehlt NUR erfolgreich gesendete SMS (Ledger), im
+  // rollierenden 24h-Fenster. Cap erreicht -> still uebersprungen, kein Fehler.
+  const since = new Date(Date.now() - MS_PER_DAY).toISOString();
+  if (store.dailySmsCount(call.tenantId, since) >= (config.dailySmsCap ?? 20))
+    return { to, smsFrom, send: false, reason: "daily_cap" };
   return { to, smsFrom, send: true, reason: null };
 }
