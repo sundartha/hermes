@@ -1,0 +1,93 @@
+---
+// App-Shell (/app): Einstiegspunkt nach dem Login. Hostet die Auth-Insel und
+// zeigt -- je nach gemeldetem Auth-Zustand -- genau eine Region: Laden / anonym /
+// wartet auf Freigabe / Fehler / eingeloggte Shell. Die Shell beweist den
+// Roundtrip, indem sie echte Tenant-Daten aus /api/self-service/state zeigt
+// (Rufnummer, Besitzer). Die leeren Slots fuellt W4 (Anrufe/Items/Kalender).
+import App from "../../layouts/App.astro";
+import AuthIsland from "../../components/app/AuthIsland.astro";
+---
+
+<App title="Hermes — App">
+  <AuthIsland slot="auth" />
+
+  <!-- Auth-Gate: genau eine Region sichtbar. Default = "Laden" (vor JS / bis der
+       erste state-Fetch antwortet). Die Insel meldet den Zustand per Event. -->
+  <section id="region-loading" class="card">
+    <p class="muted">Lade…</p>
+  </section>
+
+  <section id="region-anonymous" class="card" hidden>
+    <h1>Anmeldung erforderlich</h1>
+    <p>Bitte melde dich an, um deinen Telefon-Assistenten zu verwalten.</p>
+    <a class="btn" href="/auth/login">Anmelden</a>
+  </section>
+
+  <section id="region-pending" class="card" hidden>
+    <h1>Konto wartet auf Freigabe</h1>
+    <p>Dein Zugang wurde angelegt und wartet auf die Freischaltung. Sobald er
+      aktiv ist, erscheint hier dein Assistent.</p>
+  </section>
+
+  <section id="region-error" class="card" hidden>
+    <h1>Etwas ist schiefgelaufen</h1>
+    <p>Die App konnte gerade nicht geladen werden. Bitte versuche es spaeter erneut.</p>
+  </section>
+
+  <!-- Eingeloggte Shell. W2 zeigt nur den Beweis (echte Tenant-Daten); die
+       leere Karte ist der Slot, in den W4 Anrufe/Items/Kalender haengt. -->
+  <div id="region-shell" hidden>
+    <section class="card">
+      <h1>Dein Assistent</h1>
+      <dl class="kv">
+        <dt>Rufnummer</dt>
+        <dd id="shell-number">—</dd>
+        <dt>Besitzer</dt>
+        <dd id="shell-owner">—</dd>
+      </dl>
+    </section>
+    <section class="card">
+      <p class="muted">Anruf-Verlauf, Aufgaben und Termine folgen.</p>
+    </section>
+  </div>
+
+  <noscript>
+    <p>Diese App benoetigt JavaScript.</p>
+  </noscript>
+</App>
+
+<script>
+  import { AUTH_STATE, AUTH_EVENT, agentInfo } from "../../lib/api.js";
+
+  // Region pro Auth-Zustand. "Laden" ist separat (Default vor dem ersten Event).
+  const regions = {
+    [AUTH_STATE.ANONYMOUS]: document.getElementById("region-anonymous"),
+    [AUTH_STATE.PENDING]: document.getElementById("region-pending"),
+    [AUTH_STATE.AUTHENTICATED]: document.getElementById("region-shell"),
+    [AUTH_STATE.ERROR]: document.getElementById("region-error"),
+  };
+  const loadingRegion = document.getElementById("region-loading");
+  const numberEl = document.getElementById("shell-number");
+  const ownerEl = document.getElementById("shell-owner");
+
+  function showOnly(activeState) {
+    loadingRegion.hidden = true;
+    for (const [state, el] of Object.entries(regions)) {
+      el.hidden = state !== activeState;
+    }
+  }
+
+  function fillShell(data) {
+    const { number, owner } = agentInfo(data);
+    numberEl.textContent = number || "Noch keine Nummer zugewiesen";
+    ownerEl.textContent = owner || "—";
+  }
+
+  // Listener synchron registrieren, BEVOR die Auth-Insel (hinter ihrem fetch)
+  // dispatcht -- so geht kein Event verloren.
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const { state, data } = event.detail;
+    if (state === AUTH_STATE.AUTHENTICATED) fillShell(data);
+    showOnly(state);
+  });
+</script>

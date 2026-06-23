@@ -1,0 +1,29 @@
+---
+// Layout fuer den eingeloggten Produkt-Bereich (/app/*). Reine Huelle: Header
+// mit Marke + Auth-Steuerung (named slot "auth") und ein Inhalts-Slot. Keine
+// Geschaeftslogik, kein fetch hier -- das machen die Inseln. noindex, weil der
+// App-Bereich privat ist (Marketing-SEO lebt in W1 unter eigenem Layout).
+import "../styles/tokens/index.css";
+import "../styles/app.css";
+
+const { title = "Hermes" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <a class="app-brand" href="/">Hermes</a>
+      <slot name="auth" />
+    </header>
+    <main class="app-main">
+      <slot />
+    </main>
+  </body>
+</html>

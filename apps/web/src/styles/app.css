@@ -1,0 +1,100 @@
+/* W2: gemeinsame Stile der eingeloggten App (Header, Karte, Button, Key-Value).
+   AUSSCHLIESSLICH ueber semantische Tokens -- keine festen Werte (Strategie 2.5).
+   Global eingebunden vom App-Layout; W3/W4-Inseln setzen darauf auf. */
+
+/* Lokale App-Konstante: gedaempfte Deckkraft fuer deaktivierte Controls. Bewusst
+   KEIN W1-Token -- die Semantik-Schicht (tokens/, NUR-Lese) kennt keine Opacity-
+   Rolle, und ein Disabled-State ist kein brand-/layout-relevanter Wert, der beim
+   Rebrand mitwandern muesste. Hier benannt statt als Magic-Number (G25/G16). */
+:root {
+  --app-disabled-opacity: 0.6;
+}
+
+/* Robust gegen display-setzende Klassen: das hidden-Attribut muss IMMER
+   gewinnen (die Auth-Inseln togglen Sichtbarkeit per [hidden]). */
+[hidden] {
+  display: none !important;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline);
+  padding: var(--space-gap) var(--space-section);
+  background: var(--color-card);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.app-brand {
+  font-weight: var(--weight-emphasis);
+  color: var(--color-action);
+  text-decoration: none;
+}
+
+.app-main {
+  max-width: var(--measure-content);
+  margin: 0 auto;
+  padding: var(--space-section) var(--space-inline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack);
+}
+
+.card {
+  background: var(--color-card);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-card);
+}
+
+.btn {
+  display: inline-block;
+  padding: var(--space-gap) var(--space-inline);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--color-action);
+  color: var(--color-on-action);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: var(--color-action-hover);
+}
+
+.btn:disabled {
+  opacity: var(--app-disabled-opacity);
+  cursor: default;
+}
+
+.auth-account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-gap);
+}
+
+.auth-who {
+  color: var(--color-muted);
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-gap) var(--space-inline);
+  margin: 0;
+}
+
+.kv dt {
+  color: var(--color-muted);
+}
+
+.kv dd {
+  margin: 0;
+}

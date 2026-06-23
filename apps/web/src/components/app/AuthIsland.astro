@@ -1,0 +1,66 @@
+---
+// Auth-Insel: die EINE interaktive Stelle, die den Auth-Zustand ermittelt.
+// Sie ruft genau einmal loadAuthState() (ein fetch gegen /api/self-service/state),
+// schaltet ihre eigene Steuerung (Anmelden-Link vs. Konto+Abmelden) und meldet
+// den Zustand per AUTH_EVENT an die App-Shell weiter -- so faellt der state-Fetch
+// nur einmal an. KEINE OIDC-/Session-Logik hier (lebt im Gateway): "Anmelden" ist
+// nur ein Link auf /auth/login, "Abmelden" ein POST auf /auth/logout.
+---
+
+<div class="auth-island">
+  <a id="auth-login" class="btn" href="/auth/login">Anmelden</a>
+  <div id="auth-account" class="auth-account" hidden>
+    <span id="auth-who" class="auth-who"></span>
+    <button id="auth-logout" class="btn" type="button">Abmelden</button>
+  </div>
+</div>
+
+<script>
+  import { AUTH_STATE, AUTH_EVENT, agentInfo, loadAuthState, logout } from "../../lib/api.js";
+
+  const loginLink = document.getElementById("auth-login");
+  const account = document.getElementById("auth-account");
+  const whoEl = document.getElementById("auth-who");
+  const logoutBtn = document.getElementById("auth-logout");
+
+  // Eine bestehende Session liegt vor, sobald das Cookie den webAuth-Check
+  // passiert (200) ODER der Tenant nur auf Freigabe wartet (403). In beiden
+  // Faellen ist "Abmelden" sinnvoll; nur anonym/Fehler zeigt "Anmelden".
+  function hasSession(state) {
+    return state === AUTH_STATE.AUTHENTICATED || state === AUTH_STATE.PENDING;
+  }
+
+  function whoText(result) {
+    if (result.state === AUTH_STATE.PENDING) return "Konto wartet auf Freigabe";
+    const { owner } = agentInfo(result.data);
+    return owner ? `Angemeldet als ${owner}` : "Angemeldet";
+  }
+
+  function applyControls(result) {
+    const session = hasSession(result.state);
+    loginLink.hidden = session;
+    account.hidden = !session;
+    if (session) whoEl.textContent = whoText(result);
+  }
+
+  async function refresh() {
+    const result = await loadAuthState();
+    applyControls(result);
+    // App-Shell ueber den ermittelten Zustand + Daten informieren. Empfaenger
+    // registriert seinen Listener synchron beim Modul-Start; dieser dispatch
+    // liegt hinter dem await oben und damit garantiert danach.
+    document.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: result }));
+  }
+
+  logoutBtn.addEventListener("click", async () => {
+    logoutBtn.disabled = true;
+    try {
+      await logout();
+    } finally {
+      logoutBtn.disabled = false;
+    }
+    await refresh(); // nach Logout neu bewerten -> faellt auf "anonym" zurueck
+  });
+
+  refresh();
+</script>
