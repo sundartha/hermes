@@ -9,6 +9,7 @@ import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import { OWNER_TENANT_ID, DEFAULT_PROVIDER, PROVIDER, NUMBER_STATUS, PROVISION_NUMBER_JOB, PROVISIONING_JOB_STATUS, USAGE_EVENT_KIND, KYC_OUTBOUND_MIN, normNum } from "./store/defaults.js";
 import { findActiveNumber } from "./store/views.js";
+import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
@@ -613,23 +614,31 @@ async function finishCall(call) {
     const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
     store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);
 
-    // SMS-Absender = die aktive Nummer des Call-Tenants AUF DEMSELBEN Provider wie der
-    // Call (kein config-Sonderzweig mehr). Keine passende Nummer im Store -> kein
-    // Absender -> SMS-Summary still ueberspringen statt mit leerem from zu senden.
-    const smsFrom = findActiveNumber(store.load(), call.tenantId, call.provider);
-    if (config.sendSmsSummary && config.ownerNumber && smsFrom) {
+    // F2 P7: Ziel + Sende-Entscheidung in planSummarySms ausgelagert (offline testbar -
+    // server.js bootet beim Import). Ziel ist die PRIVATE Nummer des Call-Tenants (ueber
+    // call.tenantId, identischer Schluessel wie der Absender -> keine Cross-Tenant-Fehl-
+    // zustellung, H3), NICHT mehr config.ownerNumber (kein Fallback im finishCall-Pfad,
+    // AK #5). Der Guard prueft Ziel + Absender + Opt-Out VOR jedem String-Bau, damit ein
+    // fehlendes Ziel die .slice-Operation nie crasht (M4). settings.agentName fuer den
+    // Body kommt aus derselben in-memory tenantContext-Quelle.
+    const plan = planSummarySms(store, config, call);
+    if (plan.send) {
       const sms =
         `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
         (aiCount ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n") : "");
       try {
         await messaging(call.provider).sendSms({
-          from: smsFrom.e164,
-          to: config.ownerNumber,
+          from: plan.smsFrom.e164,
+          to: plan.to,
           body: sms.slice(0, 1500),
         });
       } catch (e) {
         console.error("[sms]", e.message, "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)");
       }
+    } else if (plan.reason) {
+      // Kein Ziel -> SMS still uebersprungen. Notification (oben) bleibt, kein Throw (M4).
+      // Audit nur Marker + Reason, NIE die Nummer (H4); req=null -> ip=system.
+      audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
     }
   } catch (err) {
     console.error("[summary]", err.message);

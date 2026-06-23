@@ -9,7 +9,9 @@ export function safeEqual(a, b) {
 }
 
 // Audit-Logzeile fuer sicherheitsrelevante Aktionen (Call-Ausloesung, Cancel,
-// Settings, Auth-Fehlversuche). details NIEMALS mit Secrets fuellen.
+// Settings, Auth-Fehlversuche). details NIEMALS mit Secrets/PII fuellen.
+// req optional: server-interne Ereignisse OHNE Request (z.B. finishCall ->
+// sms_summary_skipped) rufen mit req=null und werden als ip=system markiert.
 export function audit(action, req, details = "") {
-  console.log(`[audit] ${action} ip=${req.ip}${details ? " " + details : ""}`);
+  console.log(`[audit] ${action} ip=${req?.ip ?? "system"}${details ? " " + details : ""}`);
 }

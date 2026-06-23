@@ -22,6 +22,19 @@ import { publicCall, activeNumberFor, upcomingCalendar } from "./store/views.js"
 const CARD_RETURN_OK = "/tenant.html?card=ok";
 const CARD_RETURN_CANCELED = "/tenant.html?card=canceled";
 
+// F2 P6: maskiert die EIGENE private Summary-Nummer fuer die Self-Service-Read-View
+// (Decision #5, H4). Zeigt NUR den Laendercode (erste 3 Zeichen) + die letzten 4 Ziffern,
+// der Rest wird zu "…" - genug, dass der Eingeloggte SEINE Nummer wiedererkennt, ohne die
+// volle PII in Browser-History/Logs/Schulter-Sicht zu spiegeln. Reine Praesentation; der
+// einzige Aufrufer ist die eigene-Nummer-View (nie eine fremde - Schluessel ist die Web-
+// Session). null/leer -> null (Feld signalisiert "keine Nummer hinterlegt"). Gespeicherte
+// Werte sind immer valide E.164 (>=8 Zeichen via setPrivateNumber-Gate) -> die ersten 3
+// und letzten 4 Zeichen ueberlappen nie.
+function maskPrivateNumber(e164) {
+  if (!e164) return null;
+  return `${e164.slice(0, 3)}…${e164.slice(-4)}`;
+}
+
 // config (paymentEnabled/publicUrl) + billing (BillingPort) werden injiziert (P4/DIP):
 // derselbe Handler in Produktion (server.js) UND im in-process pglite-Test mit Fake-
 // Billing, ohne echten Stripe-Call. Bleibt EIN Objekt-Argument (kein F1-Verstoss).
@@ -38,6 +51,10 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
     res.json({
       settings: ctx.settings,
       greetingTemplates: GREETING_TEMPLATES,
+      // F2 P6: die EIGENE private Summary-Nummer (maskiert, s. maskPrivateNumber).
+      // Dedizierter Record-Reader, Schluessel req.tenant.tenantId (nie fremd, H3) - NIE
+      // ueber settings/tenantContext, die ueber /api/state + MCP komplett leaken (H4).
+      privateNumber: maskPrivateNumber(store.tenantPrivateNumber(tenant)),
       // Pay3: abgeleiteter boolescher Karten-Status. KEIN id-Leak (cus_/pm_ sind keine
       // Secrets, gehoeren aber nicht in die UI-View) - nur "Karte liegt vor ja/nein".
       // Bei PAYMENT_ENABLED aus: Feld fehlt (keine Karten-Erfassung) -> UI versteckt
