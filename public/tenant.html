@@ -163,6 +163,16 @@ label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase
       <div id="cardStatus" class="hint" style="margin-bottom:14px"></div>
       <button class="btn btn-red" id="addCard">Zahlungsmethode hinzufuegen</button>
       <span class="msg" id="cardMsg"></span>
+      <!-- W4: Abo-Buchung. Ohne aktives Abo zwei Plan-Buttons; mit Abo der aktive Plan
+           + Verlaengerungsdatum (Cancel ist ein Folge-Ticket, hier nur Anzeige). -->
+      <div id="subBlock" style="margin-top:18px">
+        <div id="subStatus" class="hint" style="margin-bottom:14px"></div>
+        <div id="subButtons">
+          <button class="btn btn-red" data-plan="starter">Starter abonnieren</button>
+          <button class="btn btn-red" data-plan="business">Business abonnieren</button>
+        </div>
+        <span class="msg" id="subMsg"></span>
+      </div>
     </div>
 
     <!-- Calls -->
@@ -284,6 +294,22 @@ function renderBilling(s){
   card.style.display="";
   $("cardStatus").textContent = s.hasCard ? "Karte hinterlegt." : "Noch keine Karte hinterlegt.";
   $("addCard").textContent = s.hasCard ? "Andere Karte hinterlegen" : "Zahlungsmethode hinzufuegen";
+  renderSubscription(s);
+}
+
+// W4: Abo-Anzeige. Mit aktivem Plan -> Plan + Verlaengerungsdatum, Plan-Buttons aus.
+// Ohne Abo -> die Plan-Buttons (Subscribe). Cancel ist ein Folge-Ticket (nur Anzeige).
+function renderSubscription(s){
+  const sub = s.subscription || {};
+  if(sub.planSlug){
+    const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString("de-DE") : "";
+    const name = sub.planSlug.charAt(0).toUpperCase()+sub.planSlug.slice(1);
+    $("subStatus").textContent = until ? `Aktiver Plan: ${name} (verlaengert am ${until}).` : `Aktiver Plan: ${name}.`;
+    $("subButtons").style.display="none";
+  } else {
+    $("subStatus").textContent = "Kein aktives Abo. Waehle einen Plan.";
+    $("subButtons").style.display="";
+  }
 }
 
 // Patch aus der UI bauen: NUR die erlaubten Felder. Der Server filtert ohnehin
@@ -322,6 +348,28 @@ $("addCard").onclick = async ()=>{
   else{ m.textContent="Konnte Checkout nicht starten."; m.className="msg err"; }
   setTimeout(()=>m.className="msg",2500);
 };
+
+// W4: Abo buchen. POST {plan} -> bei Erfolg ist der Tenant aktiv (Status-Flip im Server);
+// 409 no_card -> erst Karte hinterlegen; sonst kurze Fehlermeldung. Danach refresh().
+document.querySelectorAll("[data-plan]").forEach(btn=>{
+  btn.onclick = async ()=>{
+    const m=$("subMsg"); m.className="msg";
+    const r = await fetch("/api/self-service/billing/subscribe", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ plan: btn.dataset.plan }),
+    });
+    if(r.ok){ m.textContent="Abo gebucht."; m.className="msg ok"; refresh(); }
+    else if(r.status===409){
+      const e = await r.json().catch(()=>({}));
+      m.textContent = e.error==="already_subscribed" ? "Du hast bereits ein Abo." : "Bitte zuerst eine Karte hinterlegen.";
+      m.className="msg err";
+    }
+    else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
+    else{ m.textContent="Abo konnte nicht gebucht werden."; m.className="msg err"; }
+    setTimeout(()=>m.className="msg",3000);
+  };
+});
 
 // Rueckkehr von Stripe Checkout: kurze Rueckmeldung (der Status kommt ohnehin aus refresh()).
 (function showCardReturn(){

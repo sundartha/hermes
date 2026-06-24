@@ -127,6 +127,15 @@ export const config = {
   // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg
   // (wie voiceMinuteCostCents); Live mit dem Provider-SMS-Tarif abgleichen.
   smsCostCents: numEnv("SMS_COST_CENTS", process.env.SMS_COST_CENTS, { fallback: 0, min: 0 }),
+  // ---- Abo-Buchung (Stripe Recurring, W4) ----
+  // Stripe-Price-Ids (recurring monatlich, USD) je Tier. Leer = Tier nicht buchbar
+  // (priceIdForPlan -> null -> Route 500, KEIN Boot-Stop). Opake price_-Referenzen,
+  // KEINE Secrets.
+  stripeStarterPriceId: process.env.STRIPE_STARTER_PRICE_ID || "",
+  stripeBusinessPriceId: process.env.STRIPE_BUSINESS_PRICE_ID || "",
+  // Stripe-Webhook-Signing-Secret (whsec_...). SECRET - nie loggen/leaken. Leer +
+  // PAYMENT_ENABLED -> assertConfig Boot-Refusal (Webhook fail-closed unverifizierbar).
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
 
   // Owner-Identitaet (G1): zwei Eingaben statt eines Namens (Owner-Entscheidung #1).
   // KEIN Default mehr ("Jonas" raus) -> assertConfig macht beide zur Boot-Pflicht
@@ -343,6 +352,12 @@ export function assertConfig() {
     missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
   if (config.paymentEnabled && !config.stripeSecretKey)
     missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
+  // W4: das Webhook-Signing-Secret ist sicherheitskritisch (ohne ist der Stripe-Webhook
+  // fail-closed unverifizierbar -> kein Abo-Lifecycle). Boot-Pflicht bei aktivem Payment
+  // (Muster STRIPE_SECRET_KEY). Die Price-Ids sind BEWUSST keine Boot-Pflicht: ein Tier
+  // darf unbuchbar bleiben (Route-500), das stoppt den Boot nicht.
+  if (config.paymentEnabled && !config.stripeWebhookSecret)
+    missing.push("STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)");
   // numEnv() faengt einen nicht-numerischen NUMBER_SETUP_FEE_CENTS bereits am Env-Parse
   // ab (fatalConfigErrors -> Boot-Refusal). Dieser Check bleibt als Invariante auf dem
   // config-Wert (> 0 ganzzahlig bei PAYMENT_ENABLED) - direkt geprueft von

@@ -33,6 +33,20 @@
  */
 
 /**
+ * @typedef {Object} SubscribeParams
+ * @property {string} tenantRef       - Tenant, fuer den das Abo erstellt wird (Audit/Metadata)
+ * @property {string} customerId      - opake Stripe-Customer-Referenz (cus_...): traegt die Karte
+ * @property {string} priceId         - opake recurring Stripe-Price-Referenz (price_...)
+ * @property {string} idempotencyKey  - tenant+plan-basiert ('sub_'+tenant+'_'+plan): Retry legt nie zwei Abos an
+ */
+
+/**
+ * @typedef {Object} SubscribeResult
+ * @property {string} subscriptionId    - opake Stripe-Subscription-Referenz (sub_...); KEIN Stripe-Objekt
+ * @property {number} currentPeriodEnd  - Ende der laufenden Abrechnungsperiode (Unix-Sekunden)
+ */
+
+/**
  * @typedef {Object} CheckoutResult
  * @property {string} customerId       - opake Stripe-Customer-Referenz (cus_...)
  * @property {string} paymentMethodId  - opake payment_method-Referenz (pm_...)
@@ -65,5 +79,9 @@
  *   Erzeugt eine Stripe-Checkout-Session im setup-Mode (Karte speichern OHNE Abbuchung).
  * @property {(sessionId: string) => Promise<CheckoutResult>} getCheckoutSessionResult
  *   Liest customer + payment_method aus einer abgeschlossenen Setup-Session.
+ * @property {(params: SubscribeParams) => Promise<SubscribeResult>} createSubscription
+ *   Erstellt ein echtes monatliches Recurring (Stripe POST /v1/subscriptions). Loest
+ *   ECHTES Geld aus (Erstzahlung off_session). Nur subscriptionId + currentPeriodEnd
+ *   verlassen den Adapter (KEIN Stripe-Objekt).
  */
 export {};

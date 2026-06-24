@@ -107,6 +107,12 @@ export const BASE_ENV = {
   STRIPE_API_BASE: "",
   NUMBER_SETUP_FEE_CENTS: "0",
   PAYMENT_CURRENCY: "eur",
+  // W4: Abo-Env neutral leer (fail-closed): ohne diese Zeilen leakt eine lokale .env mit
+  // STRIPE_*_PRICE_ID / STRIPE_WEBHOOK_SECRET via dotenv in Spawn-Tests -> Baseline-Drift
+  // (Lehre test-base-env-drift). PAYMENT_ENABLED=false -> der Webhook-Secret-Boot-Check greift nicht.
+  STRIPE_STARTER_PRICE_ID: "",
+  STRIPE_BUSINESS_PRICE_ID: "",
+  STRIPE_WEBHOOK_SECRET: "",
   // Voice-Minuten-Meter-Tarif (P6b3) neutral 0: ohne diese Zeile leakt eine lokale
   // .env mit VOICE_MINUTE_COST_CENTS via dotenv in Spawn-Tests -> Baseline-Drift.
   VOICE_MINUTE_COST_CENTS: "0",

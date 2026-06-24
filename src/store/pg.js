@@ -206,6 +206,16 @@ export function makePgStore(runner) {
     },
     tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
 
+    // ---- Abo-Referenzen pro Tenant (W4): Wrapper-Parity zu json.js ----
+    setTenantSubscription(tenantId, patch) {
+      const tenant = ops.setTenantSubscription(requireState(), tenantId, patch);
+      save();
+      return tenant;
+    },
+    tenantSubscription: (tenantId) => ops.tenantSubscription(requireState(), tenantId),
+    findTenantBySubscription: (subscriptionId) =>
+      ops.findTenantBySubscription(requireState(), subscriptionId),
+
     // ---- Private Summary-Nummer pro Tenant (F2): Wrapper-Parity zu json.js ----
     setPrivateNumber(tenantId, raw) {
       const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
@@ -310,7 +320,7 @@ async function hydrate(client) {
 async function hydrateTenants(client) {
   const rows = (
     await client.query(
-      `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language, private_number FROM tenant`,
+      `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, country, default_language, private_number FROM tenant`,
     )
   ).rows;
   return rows.map((r) => {
@@ -329,6 +339,14 @@ async function hydrateTenants(client) {
     if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
     if (r.stripe_payment_method_id != null)
       tenant.stripePaymentMethodId = r.stripe_payment_method_id;
+    // W4: Abo-Referenzen nur-nicht-null hydrieren (Muster wie stripe_*) -> Tenant ohne
+    // Abo behaelt KEIN leeres Feld (kein json<->pg-Drift). KRITISCH (I8-Lehre): MUSS hier
+    // UND in flushTenants stehen, sonst loescht der naechste Flush das Abo (Datenverlust).
+    if (r.stripe_subscription_id != null) tenant.stripeSubscriptionId = r.stripe_subscription_id;
+    if (r.stripe_plan_slug != null) tenant.stripePlanSlug = r.stripe_plan_slug;
+    if (r.stripe_current_period_end != null)
+      // BIGINT kommt als String aus pg -> zurueck zur Zahl (Unix-Sekunden, kein Float-Geld).
+      tenant.stripeCurrentPeriodEnd = Number(r.stripe_current_period_end);
     // Geo (F1): nur-nicht-null hydrieren (Muster wie kyc_level/stripe_*) -> ein
     // Owner/Bestand ohne Wert behaelt KEIN leeres Feld (kein json<->pg-Drift, R7/R12);
     // der Code-Fallback || DE/de der Konsumenten greift.
@@ -629,14 +647,17 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, country, default_language, private_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, country, default_language, private_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
+         stripe_subscription_id=EXCLUDED.stripe_subscription_id,
+         stripe_plan_slug=EXCLUDED.stripe_plan_slug,
+         stripe_current_period_end=EXCLUDED.stripe_current_period_end,
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
          private_number=EXCLUDED.private_number`,
       [
@@ -648,6 +669,9 @@ async function flushTenants(client, tenants) {
         t.kycLevel ?? null,
         t.stripeCustomerId ?? null,
         t.stripePaymentMethodId ?? null,
+        t.stripeSubscriptionId ?? null,
+        t.stripePlanSlug ?? null,
+        t.stripeCurrentPeriodEnd ?? null,
         t.country ?? null,
         t.defaultLanguage ?? null,
         t.privateNumber ?? null,
