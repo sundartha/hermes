@@ -82,7 +82,12 @@ function clearCookies(res, names) {
 // Alle externen Abhaengigkeiten (oidc, accounts, sessions, audit) per Dependency-
 // Injection -> testbar ohne echten IdP oder pg.
 export function makeWebAuthRoutes(deps) {
+  // postLoginPath: Ziel des Browser-Redirects nach erfolgreichem Callback. Default "/"
+  // (byte-identisch zum Bestand). server.js reicht das Kunden-Portal durch, damit ein
+  // frisch eingeloggter (noch suspendierter) Tenant NICHT auf dem Owner-Dashboard hinter
+  // Basic-Auth landet (rohe 403-/Auth-Sackgasse), sondern auf der "Choose your plan"-Shell.
   const { secret, redirectUri, ttlSeconds, oidc, accounts, sessions, audit } = deps;
+  const postLoginPath = deps.postLoginPath || "/";
   const router = Router();
 
   // GET /auth/login
@@ -153,7 +158,7 @@ export function makeWebAuthRoutes(deps) {
       clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
 
       await audit.record({ actorSub: claims.sub, tenantId, action: "login" });
-      res.redirect(302, "/");
+      res.redirect(302, postLoginPath);
     } catch {
       // Generischer Fehler: kein internes Detail, keine Token-Leaks
       clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);

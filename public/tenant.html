@@ -259,7 +259,7 @@ async function refresh(){
   const r = await fetch("/api/self-service/state");
   // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
   if(r.status===401){ $("liveDot").classList.add("off"); showAuth("Bitte anmelden, um deinen Bereich zu sehen.", true, false); return; }
-  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Dein Konto wartet auf Freigabe durch den Betreiber.", false, true); return; }
+  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Choose your plan to activate your account.", false, true); return; }
   if(!r.ok){ $("liveDot").classList.add("off"); showAuth("Voruebergehend nicht erreichbar.", false, true); return; }
   showAuth("Angemeldet.", false, true);
   const s = await r.json();

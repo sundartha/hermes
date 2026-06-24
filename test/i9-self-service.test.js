@@ -322,7 +322,12 @@ test("(f2) Fail-closed: suspendierter Tenant -> 403 (kein Self-Service bis Freig
     const res = await request("GET", `${s.base}/api/self-service/state`, {
       cookie: s.cookieSuspended,
     });
+    // W3-Backend der "Choose your plan"-Landeseite: 403 ist die erreichbare Antwort,
+    // die die tenant.html-Shell abfaengt (kein roher Basic-Auth-Prompt). Der Body
+    // traegt KEINE Tenant-Daten (kein calls/settings) -> suspended ist nicht datenfaehig.
     assert.equal(res.status, 403);
+    assert.equal(res.body.includes("calls"), false, "kein Datenleck im 403-Body");
+    assert.equal(res.body.includes("settings"), false, "kein Datenleck im 403-Body");
   } finally {
     await s.close();
   }
