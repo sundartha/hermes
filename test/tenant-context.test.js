@@ -16,61 +16,65 @@ import { tenantContext, makeDefaultState } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OTHER_OWNER = "Mara";
+// P2b: der durchgereichte ownerName-Fallback ist nicht mehr config-derived, sondern
+// ein vom Aufrufer uebergebener Wert (die Fassaden reichen "" durch). Eigenes Literal
+// statt config.ownerName, da config.ownerName entfernt ist.
+const PASSED_OWNER = "Test Owner";
 
-let config;
 let jsonBackend;
 let makePgTestStore;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
-  config = (await import("../src/config.js")).config;
+  await import("../src/config.js");
   jsonBackend = await import("../src/store/json.js");
   ({ makePgTestStore } = await import("./pg-helpers.js"));
 });
 
-test("tenantContext liefert byte-identisch die heutigen Singletons (Owner)", () => {
+test("tenantContext nutzt den durchgereichten ownerName als Owner-Fallback", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
+  const ctx = tenantContext(s, PASSED_OWNER, BOOTSTRAP_TENANT_ID);
   assert.equal(ctx.tenantId, BOOTSTRAP_TENANT_ID);
-  // Relativ zu config.ownerName statt gegen ein Literal -> haelt unabhaengig von .env.
-  assert.equal(ctx.ownerName, config.ownerName);
+  // Owner-Tenant ohne eigenen ownerName -> der durchgereichte Fallback gilt.
+  assert.equal(ctx.ownerName, PASSED_OWNER);
   // G1: firstName wird aus dem effektiven ownerName abgeleitet (erstes Token).
-  assert.equal(ctx.firstName, config.ownerName.split(" ")[0]);
+  assert.equal(ctx.firstName, PASSED_OWNER.split(" ")[0]);
   assert.equal(ctx.settings, s.settings[BOOTSTRAP_TENANT_ID], "settings ist die Owner-Bucket-Referenz");
   assert.equal(ctx.calendar, s.calendar[BOOTSTRAP_TENANT_ID], "calendar ist die Owner-Bucket-Referenz");
 });
 
-test("Owner-Fallback greift auch ohne s.tenants (seedState-Shape)", () => {
+test("Fallback greift auch ohne s.tenants (seedState-Shape)", () => {
   // seedState() seedet KEINE tenants -> der Fallback muss defensiv gegen das
   // fehlende Feld sein, sonst wirft die find()-Suche.
   const s = seedState({ calls: [seedCall({ id: "call1" })] });
-  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
-  assert.equal(ctx.ownerName, config.ownerName);
+  const ctx = tenantContext(s, PASSED_OWNER, BOOTSTRAP_TENANT_ID);
+  assert.equal(ctx.ownerName, PASSED_OWNER);
 });
 
 test("ein eigener tenant.ownerName gewinnt vor dem durchgereichten Fallback", () => {
   const s = makeDefaultState();
   s.tenants = [{ id: BOOTSTRAP_TENANT_ID, ownerName: OTHER_OWNER }];
-  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
+  const ctx = tenantContext(s, PASSED_OWNER, BOOTSTRAP_TENANT_ID);
   assert.equal(ctx.ownerName, OTHER_OWNER);
 });
 
-test("Fassade json.js exportiert tenantContext und reicht config.ownerName durch", () => {
+test("Fassade json.js exportiert tenantContext, leerer Owner-Fallback (P2b)", () => {
   assert.equal(
     typeof jsonBackend.tenantContext,
     "function",
     "json.tenantContext fehlt (Re-Export-Landmine)",
   );
-  assert.equal(jsonBackend.tenantContext(BOOTSTRAP_TENANT_ID).ownerName, config.ownerName);
+  // P2b: kein config.ownerName mehr -> frischer Owner-Tenant ohne ownerName -> "".
+  assert.equal(jsonBackend.tenantContext(BOOTSTRAP_TENANT_ID).ownerName, "");
 });
 
-test("Fassade pg.js (pglite) exportiert tenantContext und reicht config.ownerName durch", async () => {
+test("Fassade pg.js (pglite) exportiert tenantContext, leerer Owner-Fallback (P2b)", async () => {
   const { store } = await makePgTestStore();
   assert.equal(
     typeof store.tenantContext,
     "function",
     "pg.tenantContext fehlt (Re-Export-Landmine)",
   );
-  assert.equal(store.tenantContext(BOOTSTRAP_TENANT_ID).ownerName, config.ownerName);
+  assert.equal(store.tenantContext(BOOTSTRAP_TENANT_ID).ownerName, "");
 });
 
 // "Owner = Tenant Null": die Owner-Nummer kommt ueber den Fassaden-seedBootstrapNumber

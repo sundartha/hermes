@@ -19,13 +19,10 @@ import {
 } from "../src/store/defaults.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
-import { config } from "../src/config.js";
 
-// G1: in-process laeuft config OHNE .env -> Owner-Identitaet leer. Setzen, damit die
-// Variante-(a)-Seed (pg init) einen ownerName traegt (= Produktion mit gesetzten
-// OWNER_FIRST_NAME/OWNER_LAST_NAME; leer waere Boot-Refusal).
-config.ownerFirstName = "Jonas";
-config.ownerLastName = "Beispiel";
+// P2b: kein config-derived Identitaets-Seed mehr -> ein frischer pg-Store hat den
+// Owner-Tenant (status active) OHNE ownerName. Die Identitaet kommt ueber Self-Service
+// bzw. scripts/bootstrap-tenant.js und round-trippt dann (Tenant B unten beweist das).
 
 const TENANT_B = "tenant_b";
 const APP_ROLE = "app_user"; // liest/schreibt unter GUC, ohne Superuser/BYPASSRLS
@@ -49,10 +46,9 @@ test("Owner-only-pg: frischer Zustand byte-identisch (Bestands-Invariante haelt)
   assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
   assert.equal(s.tenants.length, 1);
   assert.equal(s.tenants[0].id, BOOTSTRAP_TENANT_ID);
-  // G1 Variante (a): der Owner-Tenant traegt jetzt einen config-geseedeten ownerName
-  // (init seedet OWNER_FIRST_NAME/OWNER_LAST_NAME) -> der ungegatete Greeting/Disclosure
-  // ist geschuetzt. Kein owner_name=null-Drift (gesetzter Wert, kein leeres Feld).
-  assert.equal(s.tenants[0].ownerName, config.ownerName);
+  // P2b: kein config-derived Identitaets-Seed mehr -> frischer Owner-Tenant OHNE
+  // ownerName (kommt ueber Self-Service/bootstrap-tenant, round-trippt dann).
+  assert.ok(!s.tenants[0].ownerName, "frischer Owner-Tenant traegt keinen ownerName (P2b)");
 });
 
 test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_subject getrennt persistiert", async () => {

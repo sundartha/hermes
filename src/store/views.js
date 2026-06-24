@@ -27,6 +27,13 @@ export function findActiveNumber(s, tenantId, provider) {
   );
 }
 
+// Existiert IRGENDEINE aktive Nummer im Store? Tenant-agnostisches Boot-Gate-Praedikat
+// (P2b): der Dienst ist "telefonbar", sobald mind. ein Tenant eine aktive Nummer hat -
+// kein OWNER/BOOTSTRAP-Pin mehr. Gleiche Status-Quelle wie findActiveNumber (G5).
+export function hasActiveNumber(s) {
+  return s.numbers.some((n) => n.status === NUMBER_STATUS.ACTIVE);
+}
+
 // Aktive Nummer eines Tenants als e164-String fuer die Anzeige (fail-closed: keine
 // eigene aktive Nummer -> "", NIE die Nummer eines fremden Tenants als Fallback ->
 // kein PII-/Toll-Fraud-Leck). Gleiche Quelle wie outboundFrom (findActiveNumber).

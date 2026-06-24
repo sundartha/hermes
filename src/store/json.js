@@ -74,34 +74,11 @@ export function load() {
 // verloren geht (sonst griffe Inbound nach P3c fail-closed - vgl. seedBootstrapNumber unten).
 function finishLoad() {
   seedProfilesFromEnv();
-  // Owner-Nummern kommen NICHT mehr aus der config (kein TWILIO_NUMBER/TELNYX_NUMBER
-  // mehr): der Owner ist Tenant Null und haelt seine Nummer(n) wie jeder Tenant in
-  // s.numbers. Einmalig eingetragen via scripts/seed-owner-number.js. Boot-Guard in
-  // server.js verlangt fail-closed eine aktive Owner-Nummer im Store.
-  // Owner-Identitaet config-derived idempotent seeden (Variante a, G1): schuetzt den
-  // ungegateten Inbound-Greeting + summarizeCall. Leere Config -> kein Seed
-  // (assertConfig verweigert dann ohnehin den Boot).
-  ops.seedBootstrapIdentity(state, config.ownerFirstName, config.ownerLastName, BOOTSTRAP_TENANT_ID);
-  // Owner-Absendernummer config-derived idempotent seeden (wie die Identitaet darueber
-  // und seedProfilesFromEnv): Render free hat ein fluechtiges Dateisystem -> store.json
-  // ueberlebt keinen Deploy, sonst braeche der Boot-Guard fail-closed ab. Ohne
-  // OWNER_NUMBER oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
-  ops.seedBootstrapNumberFromConfig(
-    state,
-    config.ownerNumber,
-    BOOTSTRAP_TENANT_ID,
-    config.ownerNumberProvider,
-  );
-  // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog der Identitaet/
-  // Absendernummer darueber): seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne
-  // diesen Seed verloere der Owner nach der Umstellung still seine eigene Summary-SMS. Liefert
-  // false, wenn der Owner danach KEINE privateNumber hat (OWNER_NUMBER fehlt/ungueltig) -> eine
-  // PII-freie Boot-Warnung (nur der Marker, NIE die Nummer). assertConfig verlangt OWNER_NUMBER
-  // ohnehin fail-closed - die Warnung faengt eine ungueltige/fehlende Nummer sichtbar ab.
-  if (!ops.seedBootstrapPrivateNumber(state, config.ownerNumber, BOOTSTRAP_TENANT_ID))
-    console.warn(
-      "[store] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).",
-    );
+  // Kein config-derived Tenant-/Nummern-/Identitaets-Seed mehr (P2b): der erste Tenant
+  // wird einmalig per scripts/bootstrap-tenant.js angelegt (Tenant-Record + aktive
+  // Nummer) und lebt dann im Store. Identitaet (ownerName) und private Summary-Nummer
+  // setzt der Tenant ueber Self-Service. Boot bleibt fail-closed (server.js verlangt
+  // eine aktive Nummer im Store).
   return state;
 }
 
@@ -305,10 +282,12 @@ export function findConflict(tenantId, startIso, endIso) {
 }
 
 // ---- Tenant-Kontext-Seam (I0) ----
-// Reicht config.ownerName als Owner-Fallback an die config-freie ops-Funktion
-// (Muster wie cfg bei trackUsage/budgetExceeded). Reine Query, kein save.
+// Owner-Identitaet ist nicht mehr config-derived (P2b): kein config.ownerName-Fallback
+// mehr. Der Owner-Tenant traegt seinen ownerName im Store (Self-Service); fehlt er, gilt
+// der leere Fallback "" - fail-closed (kein Default-Name, das Outbound-Gate in /api/calls
+// faengt einen leeren ownerName ab). Reine Query, kein save.
 export function tenantContext(tenantId) {
-  return ops.tenantContext(load(), config.ownerName, tenantId);
+  return ops.tenantContext(load(), "", tenantId);
 }
 
 // ---- Usage / Budget-Guard ----
@@ -440,6 +419,15 @@ export function addNotification(title, body, callId) {
 // ueber normNum). Kein Provider-Kauf, kein 'requested'-Vorzustand.
 export function seedBootstrapNumber(e164, tenantId, provider) {
   ops.seedBootstrapNumber(load(), e164, tenantId, provider);
+  save();
+}
+
+// ---- Bootstrap-Tenant (CLI scripts/bootstrap-tenant.js, P2b) ----
+// Legt den ersten Tenant an (status active) + traegt seine aktive Bestandsnummer ein,
+// in EINER Mutation (state-ops.bootstrapTenant). Loest den fruehen config-derived
+// Boot-Seed ab. Idempotent (zweiter Lauf = No-Op). Muster wie seedBootstrapNumber.
+export function bootstrapTenant(e164, tenantId, provider) {
+  ops.bootstrapTenant(load(), e164, tenantId, provider);
   save();
 }
 

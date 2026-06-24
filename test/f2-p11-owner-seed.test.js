@@ -3,19 +3,16 @@
 // Tenant muss seine privateNumber daher EINMALIG idempotent aus der Owner-Config bekommen,
 // sonst verloere er nach der Umstellung still seine eigene Summary-SMS.
 //
-// Achsen, alle offline (reine state-ops-Funktion + pglite, kein Netz) -> F.I.R.S.T.:
+// Achsen, alle offline (reine state-ops-Funktion, kein Netz) -> F.I.R.S.T.:
 //   A) seedBootstrapPrivateNumber setzt/normalisiert/idempotent (state-ops, config-frei).
 //   B) Trust-Modell: Laendercode-Gate AUS - eine Nicht-DE-Owner-Config-Nummer wird geseedet.
 //   C) Fail-soft: leere/ungueltige Config -> kein Seed, KEIN Throw, false (Boot-Warnung).
-//   D) Integration (pglite): init() seedet aus config.ownerNumber UND persistiert ueber Restart.
 //
-// state-ops ist config-frei -> der statische Import laedt config.js NICHT. Erst der
-// DYNAMISCHE pg.js-Import in D laedt config (dann ist OWNER_NUMBER gesetzt). node --test
-// laeuft pro Datei in eigenem Prozess -> kein env-Leak in andere Suiten.
-// ISOLATION: pglite NIE mit einem Server-Spawn in einer Datei (P3/P6a-Lehre) - hier nur pglite.
+// P2b: die fruehere Achse D (pg init() seedet aus config.ownerNumber) ist ENTFERNT - der
+// config-derived Boot-Seed existiert nicht mehr (Erst-Setup via scripts/bootstrap-tenant.js).
+// state-ops ist config-frei -> der statische Import laedt config.js NICHT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PGlite } from "@electric-sql/pglite";
 import { makeDefaultState, seedBootstrapPrivateNumber, findTenant } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
@@ -53,8 +50,8 @@ test("Laendercode-Gate aus: Nicht-DE-Owner-Config-Nummer wird geseedet", () => {
   assert.equal(findTenant(s, BOOTSTRAP_TENANT_ID).privateNumber, "+12025550123");
 });
 
-// C) Fail-soft: leere Config -> kein Seed, false (Boot-Warnungs-Signal), kein Throw.
-test("leere config.ownerNumber -> kein Seed, false (Boot-Warnung), kein Feld", () => {
+// C) Fail-soft: leere Eingabe -> kein Seed, false (Boot-Warnungs-Signal), kein Throw.
+test("leere Owner-Nummer -> kein Seed, false (Boot-Warnung), kein Feld", () => {
   const s = makeDefaultState();
   const ok = seedBootstrapPrivateNumber(s, "", BOOTSTRAP_TENANT_ID);
   assert.equal(ok, false);
@@ -81,36 +78,4 @@ test("fehlender Owner-Tenant -> false, kein Throw", () => {
   const s = makeDefaultState();
   s.tenants = []; // Owner entfernt (seedState-aehnlicher Grenzfall)
   assert.equal(seedBootstrapPrivateNumber(s, "+491701234567", BOOTSTRAP_TENANT_ID), false);
-});
-
-// D) Integration: pg init() seedet die Owner-privateNumber aus config.ownerNumber UND
-// persistiert sie ueber einen Restart (Re-Hydrierung aus derselben DB).
-test("pg init seedet Owner-privateNumber aus config.ownerNumber und persistiert ueber Restart", async () => {
-  // VOR dem ersten config.js-Import setzen (state-ops/defaults laden config nicht).
-  process.env.OWNER_NUMBER = "+491701234567";
-  const { makePgStore } = await import("../src/store/pg.js");
-
-  const db = new PGlite();
-  const open = async () => {
-    const runner = {
-      withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
-    };
-    const store = makePgStore(runner);
-    await store.init();
-    return store;
-  };
-
-  const store = await open();
-  assert.equal(
-    store.tenantPrivateNumber(BOOTSTRAP_TENANT_ID),
-    "+491701234567",
-    "init hat aus config geseedet",
-  );
-
-  const reopened = await open(); // Prozess-Restart simuliert
-  assert.equal(
-    reopened.tenantPrivateNumber(BOOTSTRAP_TENANT_ID),
-    "+491701234567",
-    "ueberlebt den Restart (persistiert)",
-  );
 });

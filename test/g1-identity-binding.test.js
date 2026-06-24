@@ -20,13 +20,15 @@ let systemPrompt, disclosureSentence;
 before(async () => {
   const seed = seedState({
     calls: [],
-    tenants: [{ id: TENANT_B, status: "active", firstName: B_FIRST, ownerName: B_FULL }],
+    // P2b: Owner-Identitaet lebt im Store (kein config-Seed mehr). Beide Tenants tragen
+    // ihren ownerName direkt -> der Owner-Disclosure-Pfad (Test 3/4) rendert keinen
+    // leeren Namen.
+    tenants: [
+      { id: BOOTSTRAP_TENANT_ID, status: "active", firstName: "Jonas", ownerName: "Jonas Beispiel" },
+      { id: TENANT_B, status: "active", firstName: B_FIRST, ownerName: B_FULL },
+    ],
   });
   process.env.DATA_DIR = tempDataDir(seed);
-  // G1: Owner-Identitaet im Env setzen (in-process gibt es keine .env) -> der
-  // Owner-Fallback (config.ownerName) ist non-empty wie in Produktion (Boot-Pflicht).
-  process.env.OWNER_FIRST_NAME = "Jonas";
-  process.env.OWNER_LAST_NAME = "Beispiel";
   await import("../src/config.js");
   ({ systemPrompt, disclosureSentence } = await import("../src/claude.js"));
 });

@@ -47,8 +47,10 @@ export function makeDefaultState() {
     // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
     // Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
     profiles: {},
-    // Tenants (Onboarding). Der Owner existiert immer (status active). Weitere
-    // Tenants kommen ueber registerTenant (zahlungsfreies Onboarding).
+    // Bootstrap-Tenant als Code-Default (status active), konsistent zu den
+    // [BOOTSTRAP_TENANT_ID]-Buckets in settings/calendar/usage. Identitaet (ownerName)
+    // ist NICHT mehr vorbelegt (P2b: kein config-Seed) - sie kommt ueber Self-Service
+    // bzw. scripts/bootstrap-tenant.js. Weitere Tenants ueber registerTenant (Onboarding).
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: TENANT_STATUS.ACTIVE }], // [{ id, status }]
     // E.164 -> tenant_id Routing-Tabelle (P3c) + Lifecycle. Owner-Nummer ist
     // config-derived (seedBootstrapNumber, status active). 'requested' Nummern haben
@@ -423,6 +425,19 @@ export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
   seedBootstrapNumber(s, e164, tenantId, provider);
 }
 
+// Operativer Erst-Setup (CLI scripts/bootstrap-tenant.js): stellt den Bootstrap-Tenant
+// (status active) sicher UND traegt seine aktive Bestandsnummer ein. Komponiert die
+// bestehenden Bausteine (G5): Tenant-Record idempotent + seedBootstrapNumber (idempotent
+// ueber normNum). Ersetzt den fruehen config-derived Boot-Seed (P2b): der erste Tenant
+// lebt danach im Store, nicht in der Env. seedBootstrapNumber allein wuerde nur die Nummer
+// eintragen - auf einem Bestands-Store ohne diesen Tenant fehlte der Tenant-Record
+// (tenantContext/Identitaet liefen ins Leere), darum beides in EINER Mutation. Kein IO
+// (der Backend-Wrapper saved). Idempotent: zweiter Lauf = No-Op (findTenant hoisted).
+export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
+  if (!findTenant(s, tenantId)) s.tenants.push({ id: tenantId, status: TENANT_STATUS.ACTIVE });
+  seedBootstrapNumber(s, e164, tenantId, provider);
+}
+
 // Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
 // Owner-Nummer (F2 P11). Hintergrund: seit P7 geht die Inbound-Summary-SMS an
 // tenant.privateNumber (NICHT mehr config.ownerNumber) - ohne diesen Seed verloere der
@@ -481,10 +496,10 @@ export function findTenant(s, id) {
 // Reines IO-freies Domaenen-Objekt: die EINE Stelle, die Identitaet + Settings +
 // Kalender eines Tenants buendelt. Liest die pro-Tenant-Buckets
 // (settingsFor/calendarFor, I2) + den durchgereichten ownerName. ownerName wird vom
-// Backend-Wrapper hereingereicht (heute config.ownerName), damit state-ops
-// config-frei bleibt (wie caps bei requestNumber). Owner-Fallback gekapselt: hat der
-// Tenant keinen eigenen Namen, gilt der durchgereichte ownerName. Invariante: bei
-// genau einem Tenant ist der Owner-Bucket byte-identisch zu den heutigen Singletons.
+// Backend-Wrapper hereingereicht (P2b: leerer "" - kein config.ownerName mehr), damit
+// state-ops config-frei bleibt (wie caps bei requestNumber). Fallback gekapselt: hat der
+// Tenant keinen eigenen Namen, gilt der durchgereichte (heute leere) ownerName -> ""
+// (das Outbound-Gate in server.js faengt einen leeren ownerName fail-closed ab).
 export function tenantContext(s, ownerName, tenantId) {
   const tenant = findTenant(s, tenantId);
   const effectiveOwner = (tenant && tenant.ownerName) || ownerName;

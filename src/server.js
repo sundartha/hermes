@@ -18,7 +18,7 @@ import {
   KYC_OUTBOUND_MIN,
   normNum,
 } from "./store/defaults.js";
-import { findActiveNumber } from "./store/views.js";
+import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
 import { LlmUnavailableError } from "./llm.js";
@@ -959,8 +959,9 @@ app.post("/api/calls", async (req, res) => {
   // Identitaets-Gate (G1, Geschwister-Regel zu Regel 2): ohne registrierten
   // Auftraggeber-Namen KEIN Outbound (sonst renderte die Offenlegung "...von .").
   // Fail-closed, NIE in /voice/outbound (Premature-close-Schutz) - hier am Producer.
-  // tenantContext zieht ownerName aus dem Tenant (Fallback config.ownerName, der per
-  // assertConfig nie leer ist) -> leer nur bei kaputtem Seed/manipuliertem Store.
+  // tenantContext zieht ownerName aus dem Tenant (P2b: kein config-Fallback mehr, leerer
+  // Default "") -> leer, solange der Tenant keinen ownerName im Store gesetzt hat. Genau
+  // dann sperrt dieses Gate Outbound fail-closed (kein "...von ."-Leak in der Offenlegung).
   const ownerName = store.tenantContext(tenantId).ownerName;
   if (!ownerName) {
     audit(
@@ -1510,15 +1511,17 @@ if (!ok) {
   process.exit(1);
 }
 
-// Boot-Guard (Pre-Mortem): der Owner haelt seine Absendernummer im Store, nicht mehr in
-// der Env. Nach lokalem Reset (data/store.json geloescht) oder frischem Postgres ohne
-// Seed waeren Owner-Outbound + SMS still tot. Fail-closed wie die fruehere
-// TWILIO_NUMBER-Boot-Pflicht: ohne aktive Owner-Nummer im Store startet der Dienst
-// nicht. Loggt KEINE Nummer (kein Leak), verweist auf das Seed-CLI.
-if (!findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID)) {
+// Boot-Guard (Pre-Mortem): jeder Tenant - auch der Bootstrap-Tenant - haelt seine
+// Absendernummer im Store, nicht in der Env. Tenant-agnostisch (P2b): der Dienst ist
+// "telefonbar", sobald IRGENDEIN Tenant eine aktive Nummer hat (kein OWNER/BOOTSTRAP-Pin
+// mehr). Nach lokalem Reset (data/store.json geloescht) oder frischem Postgres ohne Seed
+// waere keine aktive Nummer da -> Outbound + SMS still tot. Fail-closed wie die fruehere
+// TWILIO_NUMBER-Boot-Pflicht: leerer Store -> kein Start. Loggt KEINE Nummer (kein Leak),
+// verweist auf das Bootstrap-CLI.
+if (!hasActiveNumber(store.load())) {
   console.error(
-    "[boot] Keine aktive Owner-Nummer im Store. Erst seeden: " +
-      "npm run seed-owner-number -- <e164> <provider>",
+    "[boot] Keine aktive Nummer im Store. Erst seeden: " +
+      "npm run bootstrap-tenant -- <e164> <provider>",
   );
   process.exit(1);
 }

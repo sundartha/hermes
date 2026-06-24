@@ -32,7 +32,7 @@ const SUB_OWNER = "sub-owner",
 const B = "B";
 const OWNER_NUM = "+4915200000001",
   B_NUM = "+4915200000002";
-const OWNER_NAME = "Jonas Beispiel"; // = komponiert aus BASE_ENV.OWNER_FIRST_NAME/OWNER_LAST_NAME (Owner-Fallback, G1)
+const OWNER_NAME = "Jonas Beispiel"; // P2b: vom Harness in den Store geseedet (ensureOwnerNumber), G1
 const B_NAME = "Maria";
 
 // Zwei aktive Tenants, je eine aktive Nummer + je 1 call+actionItem+notification.

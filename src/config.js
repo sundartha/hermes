@@ -137,22 +137,10 @@ export const config = {
   // PAYMENT_ENABLED -> assertConfig Boot-Refusal (Webhook fail-closed unverifizierbar).
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
 
-  // Owner-Identitaet (G1): zwei Eingaben statt eines Namens (Owner-Entscheidung #1).
-  // KEIN Default mehr ("Jonas" raus) -> assertConfig macht beide zur Boot-Pflicht
-  // (fail-closed wie TWILIO_NUMBER). ownerName wird daraus KOMPONIERT (Getter, kein
-  // Lazy-Init-Antipattern - reine Ableitung), damit Bestandskonsumenten
-  // (tenantContext-Fallback, Store-Wrapper) unveraendert laufen.
-  ownerFirstName: (process.env.OWNER_FIRST_NAME || "").trim(),
-  ownerLastName: (process.env.OWNER_LAST_NAME || "").trim(),
-  get ownerName() {
-    return [this.ownerFirstName, this.ownerLastName].filter(Boolean).join(" ");
-  },
-  ownerNumber: process.env.OWNER_NUMBER || "",
-  // Provider der Owner-Absendernummer (twilio|telnyx) fuer das Boot-Seeding
-  // (store/json.js finishLoad -> state-ops.seedBootstrapNumberFromConfig). Default twilio;
-  // per OWNER_NUMBER_PROVIDER-Env setzbar (Produktion: telnyx). Ein ungueltiger Wert
-  // wird in seedBootstrapNumberFromConfig fail-closed verworfen (kein Seed).
-  ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "twilio").toLowerCase(),
+  // Owner-Identitaet + -Absendernummer kommen NICHT mehr aus der Env (P2b): der erste
+  // Tenant wird einmalig per scripts/bootstrap-tenant.js angelegt und lebt im Store;
+  // ownerName/privateNumber setzt der Tenant ueber Self-Service. Kein OWNER_FIRST_NAME/
+  // OWNER_LAST_NAME/OWNER_NUMBER/OWNER_NUMBER_PROVIDER mehr.
 
   // ---- Store-Backend ----
   // "json" (Default) = Datei-Persistenz (data/store.json). "pg" = Postgres.
@@ -370,13 +358,10 @@ export function assertConfig() {
   if (!config.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
   if (!config.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
   if (!config.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
-  // TWILIO_NUMBER ist keine Boot-Pflicht mehr: die Owner-Absendernummer lebt im Store,
-  // nicht in der Env. Stattdessen verlangt der Boot-Guard in server.js fail-closed eine
-  // aktive Owner-Nummer im Store (storefrei bleibt assertConfig).
-  // Owner-Removal P2a: ownerFirstName/lastName sind KEINE Boot-Pflicht mehr (ein
-  // neutraler Bootstrap-Tenant braucht keine fixe Identitaet). Der "Jonas"-Default ist
-  // an der Quelle weg (Default ""); ein leerer Owner-Tenant scheitert ohnehin am
-  // Boot-Gate (aktive Nummer). env bleibt funktionsfaehig - Entfernung folgt in P2b.
+  // Absendernummer + Owner-Identitaet sind keine Boot-Pflicht-Env mehr (P2b): sie leben
+  // im Store (Bootstrap-CLI/Onboarding/Self-Service), nicht in der Env. Stattdessen
+  // verlangt der Boot-Guard in server.js fail-closed eine aktive Nummer im Store
+  // (assertConfig bleibt storefrei).
   if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME")) missing.push("PUBLIC_URL");
   if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");

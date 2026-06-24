@@ -9,10 +9,7 @@
 // Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab). Die View-
 // Helfer (publicCall/upcomingCalendar/activeNumberFor) kommen direkt aus store/views
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
-// BOOTSTRAP_TENANT_ID ist eine Konstante aus store/defaults (direkt importiert wie die
-// Views, nicht injiziert).
 import { Router } from "express";
-import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
 import { publicCall, activeNumberFor, upcomingCalendar } from "../store/views.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
@@ -46,8 +43,6 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     // calls/actionItems/notifications EINES Tenants. Flag aus -> ungefiltert
     // (Bestand). Danach die Bestands-Slices.
     const scoped = config.multiTenant ? store.exportTenantData(tenantId) : s;
-    // Owner-Privatnummer ist Owner-PII -> nur in der Owner-Sicht, sonst leer.
-    const isOwnerView = !config.multiTenant || tenantId === BOOTSTRAP_TENANT_ID;
 
     res.json({
       // settings/calendar/usage sind seit I2/P4 Maps tenantId -> Bucket; tenantContext
@@ -64,7 +59,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
         // fremden Tenants.
         number: activeNumberFor(s, tenantId),
         owner: ctx.ownerName,
-        ownerNumber: isOwnerView ? config.ownerNumber : "",
+        ownerNumber: "", // P2b: config.ownerNumber entfernt (Owner-Nummer lebt im Store, agent.number)
         model: config.claudeModel,
         voiceEngine: config.voiceEngine,
         allowedNumbers: config.allowedNumbers, // globales Safety-Gate, bleibt global

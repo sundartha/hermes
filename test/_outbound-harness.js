@@ -9,9 +9,10 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 
 // --- Gemeinsame Marker (bisher pro Datei dupliziert) ---
 // Praefix des fest verdrahteten Offenlegungssatzes (disclosureSentence, claude.js).
-// G1: die Offenlegung ist an den VOLLEN tenant.ownerName gebunden; Variante (a) seedet
-// den Owner-Tenant config-derived = "OWNER_FIRST_NAME OWNER_LAST_NAME" ("Jonas Beispiel"
-// in BASE_ENV). callerName entfaellt komplett (nicht mehr per Call setzbar).
+// G1: die Offenlegung ist an den VOLLEN tenant.ownerName gebunden. P2b: die Owner-
+// Identitaet lebt im Store (kein config-Seed mehr) - ensureOwnerNumber seedet den
+// Owner-Tenant mit ownerName "Jonas Beispiel" (OWNER_TEST_FIRST_NAME/-LAST_NAME in
+// helpers.js). callerName entfaellt komplett (nicht mehr per Call setzbar).
 export const DISCLOSURE_JONAS =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
 // Beide Renderer oeffnen den Sprach-Turn mit "<Gather" (Twilio-TwiML + Telnyx-TeXML).
