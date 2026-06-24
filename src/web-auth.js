@@ -361,6 +361,19 @@ export function makeAccounts(runner) {
       });
     },
 
+    // Admin: alle Tenants listen (Cross-Tenant-Uebersicht fuers Admin-Panel). Read-only,
+    // RLS-exempt wie setStatus (account/tenant laufen VOR app.current_tenant). Liefert nur
+    // nicht-sensible Lebenszyklus-Felder (id/status/createdAt) - KEINE Transkripte/PII,
+    // KEINE Settings/Nummern (Regel 4/5: kein Cross-Tenant-Daten-Leak ueber die Admin-Sicht).
+    async listTenants() {
+      return runner.withClient(async (c) => {
+        const { rows } = await c.query(
+          `SELECT id, status, created_at AS "createdAt" FROM tenant ORDER BY created_at`,
+        );
+        return rows;
+      });
+    },
+
     // Admin-Rolle setzen (grant-admin-Script). Idempotent: setzt role per E-Mail,
     // zweiter Lauf mit demselben Wert = derselbe Effekt. Gibt true zurueck, wenn ein
     // Account getroffen wurde - sonst false -> der Aufrufer meldet "nicht gefunden"
@@ -429,7 +442,7 @@ export function adminOnly(deps) {
 }
 
 // ---- makeAdminRoutes -------------------------------------------------
-// Express-Router fuer die Admin-Tenant-Verwaltung (approve/suspend), hinter
+// Express-Router fuer die Admin-Tenant-Verwaltung (list/approve/suspend), hinter
 // webAuthMw + adminMw. Als Factory exportiert, damit Produktion (server.js) UND
 // Test denselben Handler nutzen (keine handkopierte Route-Replik, G5). suspend
 // invalidiert sofort alle Sessions des Tenants (gesperrter Kunde kann nicht bis
@@ -437,6 +450,14 @@ export function adminOnly(deps) {
 // 404 (kein silent-noop, kein Audit-Eintrag fuer eine Phantom-Tenant-ID).
 export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw }) {
   const router = Router();
+  router.get("/api/admin/tenants", webAuthMw, adminMw, async (req, res) => {
+    try {
+      res.json({ tenants: await accounts.listTenants() });
+    } catch (e) {
+      console.error("[admin] list", e.message);
+      res.status(500).json({ error: "interner Fehler" });
+    }
+  });
   router.post("/api/admin/tenants/:id/approve", webAuthMw, adminMw, async (req, res) => {
     try {
       const ok = await accounts.setStatus(req.params.id, "active");

@@ -155,9 +155,11 @@ test("I5 /api/state agent-Block ist tenant-gescoped + fail-closed (Nummer/Owner/
     assert.equal(b.agent.owner, B_NAME, "B sieht 'Maria'");
     assert.notEqual(owner.agent.owner, B_NAME, "Owner sieht NICHT 'Maria'");
 
-    // agent.ownerNumber: Owner-PII -> NUR in Owner-Sicht (fail-OPEN-Fallback wuerde
-    // hier B die Owner-Privatnummer leaken). OWNER_NUMBER ist in BASE_ENV leer ("").
-    assert.equal(b.agent.ownerNumber, "", "B sieht KEINE Owner-Privatnummer (gestrippt)");
+    // agent.ownerNumber: Feld seit P4 ganz entfernt (war seit P2b immer "") -> keine
+    // Sicht traegt es, ein fail-OPEN-Leak der Owner-Privatnummer ist strukturell
+    // unmoeglich.
+    assert.ok(!("ownerNumber" in b.agent), "ownerNumber-Feld ist entfernt (P4)");
+    assert.ok(!("ownerNumber" in owner.agent), "ownerNumber-Feld ist entfernt (P4)");
 
     // Plattform-Service-Config + globales Safety-Gate bleiben global (kein Daten-Leck)
     assert.equal(owner.agent.voiceEngine, b.agent.voiceEngine, "voiceEngine bleibt global");

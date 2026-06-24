@@ -59,7 +59,6 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
         // fremden Tenants.
         number: activeNumberFor(s, tenantId),
         owner: ctx.ownerName,
-        ownerNumber: "", // P2b: config.ownerNumber entfernt (Owner-Nummer lebt im Store, agent.number)
         model: config.claudeModel,
         voiceEngine: config.voiceEngine,
         allowedNumbers: config.allowedNumbers, // globales Safety-Gate, bleibt global
