@@ -1,0 +1,24 @@
+---
+// Marketing: 404 (SSG). Gestylte Fehlerseite im Marken-Look mit Rueckweg.
+import Marketing from "../layouts/Marketing.astro";
+---
+
+<Marketing
+  title="Seite nicht gefunden — Sundartha Hermes"
+  description="Diese Seite gibt es nicht. Zurueck zur Startseite von Sundartha Hermes."
+>
+  <section class="hero">
+    <div class="container error-page">
+      <span class="error-page__code">404</span>
+      <h1 class="hero__title">Seite nicht <span class="highlight">gefunden</span></h1>
+      <p class="hero__lead">
+        Diese Seite gibt es nicht (mehr). Vielleicht hilft dir der Weg zurueck
+        zum Start oder ein Blick auf die Preise.
+      </p>
+      <div class="hero__actions">
+        <a class="button button--primary" href="/">Zur Startseite</a>
+        <a class="button button--ghost" href="/so-funktionierts">So funktioniert's</a>
+      </div>
+    </div>
+  </section>
+</Marketing>

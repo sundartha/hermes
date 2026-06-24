@@ -1,24 +1,35 @@
 ---
 // App-Shell (/app): Einstiegspunkt nach dem Login. Hostet die Auth-Insel und
 // zeigt -- je nach gemeldetem Auth-Zustand -- genau eine Region: Laden / anonym /
-// wartet auf Freigabe / Fehler / eingeloggte Shell. Die Shell beweist den
-// Roundtrip, indem sie echte Tenant-Daten aus /api/self-service/state zeigt
-// (Rufnummer, Besitzer). Die leeren Slots fuellt W4 (Anrufe/Items/Kalender).
+// wartet auf Freigabe / Fehler / eingeloggte Shell. Die Shell zeigt echte
+// Tenant-Daten aus /api/self-service/state (Begruessung, Statistik, Verlauf,
+// Einstellungen, Karte). KEIN eigener state-Fetch je Insel -- die Auth-Insel
+// ermittelt den Zustand einmal und verteilt ihn per AUTH_EVENT.
 import App from "../../layouts/App.astro";
 import AuthIsland from "../../components/app/AuthIsland.astro";
 import BillingIsland from "../../components/app/BillingIsland.astro";
 import SettingsIsland from "../../components/app/SettingsIsland.astro";
 import AgentChip from "../../components/app/AgentChip.astro";
+import DashboardStats from "../../components/app/DashboardStats.astro";
 import CallsIsland from "../../components/app/CallsIsland.astro";
 import ActionItemsIsland from "../../components/app/ActionItemsIsland.astro";
 import CalendarIsland from "../../components/app/CalendarIsland.astro";
+
+// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS).
+const dashNav = [
+  { href: "#stats", label: "Ueberblick" },
+  { href: "#anrufe", label: "Anrufe" },
+  { href: "#einstellungen", label: "Einstellungen" },
+  { href: "#abrechnung", label: "Abrechnung" },
+];
 ---
 
 <App title="Hermes — App">
   <AuthIsland slot="auth" />
 
   <!-- Auth-Gate: genau eine Region sichtbar. Default = "Laden" (vor JS / bis der
-       erste state-Fetch antwortet). Die Insel meldet den Zustand per Event. -->
+       erste state-Fetch antwortet). Die Insel meldet den Zustand per Event. Nur
+       die eingeloggte Shell zeigt Tenant-Daten -- das ist das Gate. -->
   <section id="region-loading" class="card">
     <p class="muted">Lade…</p>
   </section>
@@ -37,40 +48,50 @@ import CalendarIsland from "../../components/app/CalendarIsland.astro";
 
   <section id="region-error" class="card" hidden>
     <h1>Etwas ist schiefgelaufen</h1>
-    <p>Die App konnte gerade nicht geladen werden. Bitte versuche es spaeter erneut.</p>
+    <p>Die App konnte gerade nicht geladen werden. Pruefe deine Verbindung und
+      versuche es erneut.</p>
+    <button id="error-retry" class="btn" type="button">Erneut versuchen</button>
   </section>
 
-  <!-- Eingeloggte Shell. W2 zeigt nur den Beweis (echte Tenant-Daten); die
-       leere Karte ist der Slot, in den W4 Anrufe/Items/Kalender haengt. -->
+  <!-- Eingeloggte Shell: Begruessung + Statistik + Verlauf + Einstellungen + Karte. -->
   <div id="region-shell" hidden>
-    <section class="card">
-      <h1>Dein Assistent</h1>
-      <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT). -->
-      <AgentChip />
-      <dl class="kv">
-        <dt>Besitzer</dt>
-        <dd id="shell-owner">—</dd>
-      </dl>
-    </section>
+    <header class="dash-head card">
+      <div class="dash-head__intro">
+        <span class="dash-head__eyebrow">Dein Bereich</span>
+        <h1 class="dash-head__title">Willkommen, <span id="shell-owner">—</span></h1>
+        <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT). -->
+        <AgentChip />
+      </div>
+    </header>
 
-    <!-- W5: Settings-Editor (der EINZIGE Schreibpfad). Bietet AUSSCHLIESSLICH die
-         Whitelist-Felder an (greeting nur als Vorlage, kein Freitext). Hoert auf
-         AUTH_EVENT, re-fetcht nach Speichern ueber lib/api.js. -->
-    <SettingsIsland />
+    <nav class="dash-nav" aria-label="Bereichsnavigation">
+      {dashNav.map((item) => (
+        <a class="dash-nav__link" href={item.href}>{item.label}</a>
+      ))}
+    </nav>
 
-    <!-- W4: read-only Datensicht aus dem EINEN state-Fetch (AUTH_EVENT). Anrufe
-         breit, Action Items + Kalender daneben. Jede Insel leert sich bei
-         Auth-Verlust selbst (kein stale Tenant-Datenleck). -->
-    <CallsIsland />
+    <!-- W3: abgeleitete Kennzahlen (Anzahl/Woche/Monat/Dauer) aus dem state. -->
+    <DashboardStats />
+
+    <!-- W4: read-only Anruf-Verlauf aus dem EINEN state-Fetch (AUTH_EVENT). -->
+    <div id="anrufe">
+      <CallsIsland />
+    </div>
     <div class="shell-cols">
       <ActionItemsIsland />
       <CalendarIsland />
     </div>
 
+    <!-- W5: Settings-Editor (der EINZIGE Schreibpfad), nur Whitelist-Felder. -->
+    <div id="einstellungen">
+      <SettingsIsland />
+    </div>
+
     <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
-         der Server kein hasCard liefert (PAYMENT_ENABLED aus) -> byte-identisch
-         zum Bestand. Sie hoert auf AUTH_EVENT, kein zweiter state-Fetch. -->
-    <BillingIsland />
+         der Server kein hasCard liefert (PAYMENT_ENABLED aus). -->
+    <div id="abrechnung">
+      <BillingIsland />
+    </div>
   </div>
 
   <noscript>
@@ -91,6 +112,11 @@ import CalendarIsland from "../../components/app/CalendarIsland.astro";
   const loadingRegion = document.getElementById("region-loading");
   const ownerEl = document.getElementById("shell-owner");
 
+  // Retry bei Netz-/Server-Fehler: neu laden -> die Auth-Insel fetcht den state
+  // erneut (kein Insel-uebergreifendes Coupling noetig).
+  const retryBtn = document.getElementById("error-retry");
+  if (retryBtn) retryBtn.addEventListener("click", () => window.location.reload());
+
   function showOnly(activeState) {
     loadingRegion.hidden = true;
     for (const [state, el] of Object.entries(regions)) {
@@ -98,9 +124,8 @@ import CalendarIsland from "../../components/app/CalendarIsland.astro";
     }
   }
 
-  // Die Rufnummer + der Live-Dot leben jetzt in der AgentChip-Insel (W4); die
-  // Shell zeigt nur noch den Besitzer als Eckdatum. Beide hoeren auf dasselbe
-  // AUTH_EVENT (ein state-Fetch).
+  // Begruessung mit dem Besitzer-Namen; Rufnummer/Live-Dot liefert die AgentChip-
+  // Insel (W4). Beide hoeren auf dasselbe AUTH_EVENT (ein state-Fetch).
   function fillShell(data) {
     const { owner } = agentInfo(data);
     ownerEl.textContent = owner || "—";

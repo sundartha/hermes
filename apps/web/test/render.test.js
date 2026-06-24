@@ -172,9 +172,9 @@ test("callRows/actionItemRows/calendarRows: leere Daten -> genau eine Empty-Zeil
     assert.equal(rows.length, 1);
     assert.ok(rows[0].hasClass("data-empty"));
   }
-  assert.equal(textOf(callRows(fakeDocument, {})), "Keine Anrufe.");
-  assert.equal(textOf(actionItemRows(fakeDocument, {})), "Keine Action Items.");
-  assert.equal(textOf(calendarRows(fakeDocument, {})), "Keine Termine.");
+  assert.equal(textOf(callRows(fakeDocument, {})), "Noch keine Anrufe — verbinde deinen ersten Agent!");
+  assert.equal(textOf(actionItemRows(fakeDocument, {})), "Noch keine Action Items.");
+  assert.equal(textOf(calendarRows(fakeDocument, {})), "Noch keine Termine.");
 });
 
 // ---- DOM-Bau: Normalfall + Begrenzung --------------------------------------

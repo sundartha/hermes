@@ -195,6 +195,81 @@ export function calendarDateParts(event) {
   };
 }
 
+// ---- W3: Dashboard-Statistik (clientseitig aus calls[] abgeleitet) ------------
+// Reine, DOM-freie Helfer. WICHTIG (Strategie R3): Roh-Nutzung (Minuten-
+// Kontingent, Guthaben, Tarif) ist NICHT im /state. Wir leiten ausschliesslich
+// aus den real vorhandenen Call-Feldern ab (direction, summary, startedAt,
+// answeredAt, endedAt) — KEIN erfundenes Kontingent. Eine praezise
+// "Rest-Minuten"-Anzeige braucht ein neues /state-Feld (Backend-Follow-up).
+
+// Gespraechsdauer EINES Calls in Sekunden: answeredAt -> endedAt. Fehlt einer
+// der Zeitstempel (nicht beantwortet / noch aktiv) oder ist er ungueltig/negativ
+// -> 0 (fail-closed, kein NaN/keine Negativdauer in der Summe, G26).
+const MS_PER_SECOND = 1000;
+export function callDurationSec(call) {
+  const c = call || {};
+  if (!c.answeredAt || !c.endedAt) return 0;
+  const answered = new Date(c.answeredAt).getTime();
+  const ended = new Date(c.endedAt).getTime();
+  if (Number.isNaN(answered) || Number.isNaN(ended) || ended <= answered) return 0;
+  return Math.round((ended - answered) / MS_PER_SECOND);
+}
+
+// Liegt ein ISO-Zeitstempel im aktuellen Kalendermonat von `ref`? Fehlend/
+// ungueltig -> false. Reine Zeit-Logik (ref injiziert -> testbar, P12-R).
+function isSameMonth(iso, ref) {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+}
+
+// Liegt ein ISO-Zeitstempel innerhalb der letzten 7 Tage vor `ref` (nicht in der
+// Zukunft)? Fehlend/ungueltig -> false.
+const DAYS_PER_WEEK = 7;
+const MS_PER_DAY = 24 * 60 * 60 * MS_PER_SECOND;
+function isWithinWeek(iso, refMs) {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  return t <= refMs && refMs - t <= DAYS_PER_WEEK * MS_PER_DAY;
+}
+
+// Abgeleitete Anruf-Statistik aus dem state. `now` ist injiziert (Default: jetzt)
+// -> die Zeit-abhaengigen Zahlen (Woche/Monat) sind deterministisch testbar.
+// Liefert nur Zahlen, die aus echten Feldern stammen (kein erfundenes Kontingent).
+export function callStats(data, now = new Date()) {
+  const calls = callsFrom(data);
+  const refMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const ref = new Date(refMs);
+  const stats = { total: 0, thisWeek: 0, thisMonth: 0, inbound: 0, outbound: 0, withSummary: 0, durationSec: 0 };
+  for (const call of calls) {
+    stats.total += 1;
+    if (call && call.direction === CALL_DIRECTION.OUTBOUND) stats.outbound += 1;
+    else stats.inbound += 1;
+    if (call && call.summary) stats.withSummary += 1;
+    stats.durationSec += callDurationSec(call);
+    const startedAt = call && call.startedAt;
+    if (isWithinWeek(startedAt, refMs)) stats.thisWeek += 1;
+    if (isSameMonth(startedAt, ref)) stats.thisMonth += 1;
+  }
+  return stats;
+}
+
+// Formatiert eine Dauer in Sekunden fuer die Anzeige (de): "0 Min" / "< 1 Min" /
+// "N Min" / "H Std" / "H Std M Min". Reine Formatierung, DOM-frei.
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+export function formatCallDuration(totalSec) {
+  const sec = Number.isFinite(totalSec) && totalSec > 0 ? Math.round(totalSec) : 0;
+  if (sec < SECONDS_PER_MINUTE) return sec === 0 ? "0 Min" : "< 1 Min";
+  const minutes = Math.floor(sec / SECONDS_PER_MINUTE);
+  if (minutes < MINUTES_PER_HOUR) return `${minutes} Min`;
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  const remMinutes = minutes % MINUTES_PER_HOUR;
+  return remMinutes ? `${hours} Std ${remMinutes} Min` : `${hours} Std`;
+}
+
 // ---- W5: Settings-Editor (der EINZIGE existierende Schreibpfad) ---------------
 // Reine, DOM-freie Helfer fuer den Settings-Editor: die Contract-Grenze zur
 // Backend-Whitelist (welche Felder POST /api/self-service/settings ueberhaupt

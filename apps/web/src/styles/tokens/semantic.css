@@ -23,6 +23,7 @@
 
   /* --- Farb-Rollen (Marketing/Status, additiv) --- */
   --color-accent: var(--color-blue-600);
+  --color-action-surface: var(--color-red-50); /* zarte Marken-Tint-Flaeche (Schritt-Index, Badge, Hinweis) */
   --color-divider: var(--color-gray-100);
   --color-field-border: var(--color-gray-200);
   --color-field-border-focus: var(--color-red-600);
@@ -91,6 +92,7 @@
   /* --- Bewegungs-Rollen --- */
   --motion-ease: var(--ease-out);
   --motion-duration: var(--duration-fast);
+  --motion-pulse: var(--duration-pulse); /* additiv: Atem-Puls der Hero-Animation */
 
   /* --- Layout-Rolle --- */
   --layout-measure: var(--measure-page);

@@ -78,6 +78,10 @@
   /* --- Bewegung (roh) --- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 0.22s;
+  /* Additiv (NICHT-farbig): langsamer Atem-Puls am aktiven Telefon-Knoten der
+   * Hero-Verbindungs-Animation. Reiner Bewegungswert — die Palette bleibt exakt
+   * Master. */
+  --duration-pulse: 1.8s;
 
   /* --- Layout (roh) --- */
   --measure-page: 1180px;

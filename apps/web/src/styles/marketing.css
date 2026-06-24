@@ -1,7 +1,15 @@
 /*
- * Gemeinsame Marketing-Stile. Verwendet AUSSCHLIESSLICH semantische Tokens
- * (var(--...)) — keine Hex-Literale, keine Magic-Pixel. Konkrete Werte leben
- * nur in styles/tokens/primitives.css.
+ * Gemeinsame Marketing-Stile (Sundartha). Verwendet AUSSCHLIESSLICH semantische
+ * Tokens (var(--...)) — keine Hex-Literale, keine Magic-Pixel. Konkrete Werte
+ * leben nur in styles/tokens/primitives.css.
+ *
+ * Palette = Master (Markenrot/Grau/Blau/Ink). Helle Marken-Optik wie der Master:
+ * heller Hero, helle Fusszeile, roter Marken-CTA.
+ *
+ * Ausnahme (dokumentiert): rohe Werte sind nur dort erlaubt, wo CSS keine
+ * Custom-Property zulaesst — Media-Query-Breakpoints, min-height:100vh, das
+ * Hero-Headline-Leading (1.1, wie im Master) sowie zeichnungs-intrinsische
+ * Geometrie (SVG stroke-width/Pfade, Icon-Strichstaerke, Keyframe-Stops).
  */
 
 /* --- Grundgeruest --- */
@@ -52,6 +60,15 @@
   background: var(--color-action);
 }
 
+.brand__name {
+  font-weight: var(--weight-heading);
+}
+
+.brand__product {
+  color: var(--color-muted);
+  font-weight: var(--weight-label);
+}
+
 .brand__accent {
   color: var(--color-action);
 }
@@ -59,6 +76,7 @@
 .site-nav {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-gap);
   margin-inline-start: auto;
 }
@@ -74,32 +92,93 @@
   color: var(--color-text);
 }
 
+/* Hamburger-Schalter: auf Desktop versteckt, ab Tablet sichtbar. */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-hairline);
+  width: var(--size-icon);
+  height: var(--size-icon);
+  margin-inline-start: auto;
+  padding: 0;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-card);
+  cursor: pointer;
+}
+
+.nav-toggle__bar {
+  width: var(--space-loose);
+  /* Icon-Strichstaerke (zeichnungs-intrinsisch, wie eine SVG-stroke-width). */
+  height: 2px;
+  margin-inline: auto;
+  border-radius: var(--radius-badge);
+  background: var(--color-text);
+}
+
+@media (max-width: 720px) {
+  .site-header__inner {
+    flex-wrap: wrap;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  /* Mobil: Navigation einklappen; per Hamburger als Spalte ausklappen. */
+  .site-nav {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    margin-inline-start: 0;
+    gap: var(--space-tight);
+    padding-block: var(--space-stack);
+  }
+
+  .site-nav.is-open {
+    display: flex;
+  }
+}
+
 /* --- Buttons (CTAs sind nur Links) --- */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-tight);
-  border: none;
+  border: var(--border-width) solid transparent;
   border-radius: var(--radius-control);
   padding-block: var(--space-cozy);
   padding-inline: var(--space-loose);
   font-family: var(--font-body);
   font-weight: var(--weight-emphasis);
-  font-size: var(--text-body);
+  font-size: var(--text-lead);
   text-decoration: none;
   cursor: pointer;
-  transition:
-    background var(--motion-duration) var(--motion-ease),
-    color var(--motion-duration) var(--motion-ease);
+  transition: background var(--motion-duration) var(--motion-ease),
+    color var(--motion-duration) var(--motion-ease),
+    border-color var(--motion-duration) var(--motion-ease);
 }
 
+/* Primaerer CTA = Markenrot (Master-Palette). */
 .button--primary {
   background: var(--color-action);
   color: var(--color-on-action);
 }
 
 .button--primary:hover {
+  background: var(--color-action-hover);
+}
+
+/* Marken-Aktion (sekundaere Stellen) — gleiche rote Marke. */
+.button--action {
+  background: var(--color-action);
+  color: var(--color-on-action);
+}
+
+.button--action:hover {
   background: var(--color-action-hover);
 }
 
@@ -152,22 +231,37 @@
   color: var(--color-muted);
 }
 
-/* --- Hero --- */
+/* --- Hero (helle Marken-Optik wie der Master) --- */
 .hero {
   padding-block: var(--space-section);
   text-align: center;
+}
+
+.hero__eyebrow {
+  display: inline-block;
+  margin-bottom: var(--space-stack);
+  padding: var(--space-hairline) var(--space-cozy);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-badge);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  background: var(--color-action-surface);
+  color: var(--color-action);
 }
 
 .hero__title {
   font-family: var(--font-heading);
   font-weight: var(--weight-heading);
   font-size: var(--text-display);
+  /* Hero-Display-Leading: rohes 1.1 wie im Master (zeichnungs-intrinsisch eng). */
   line-height: 1.1;
   letter-spacing: var(--tracking-heading);
   color: var(--color-text);
 }
 
-.hero__title .brand__accent {
+.hero__title .highlight {
   color: var(--color-action);
 }
 
@@ -232,13 +326,14 @@
   justify-content: center;
   width: var(--size-icon);
   height: var(--size-icon);
+  margin-bottom: var(--space-stack);
   border-radius: var(--radius-round);
-  background: var(--color-status-critical-surface);
+  background: var(--color-action-surface);
   color: var(--color-action);
   font-weight: var(--weight-emphasis);
 }
 
-/* --- Status-Badge (aus tenant.html kanonisiert) --- */
+/* --- Status-Badge --- */
 .badge {
   display: inline-block;
   border-radius: var(--radius-badge);
@@ -258,16 +353,21 @@
   color: var(--color-status-info);
 }
 
+.badge--accent {
+  background: var(--color-action-surface);
+  color: var(--color-action);
+}
+
 /* --- Preis-Tabelle --- */
 .pricing {
   display: grid;
   gap: var(--space-gap);
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   max-width: var(--layout-measure);
   margin-inline: auto;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 720px) {
   .pricing {
     grid-template-columns: 1fr;
   }
@@ -322,7 +422,71 @@
   margin-top: auto;
 }
 
-/* --- Fusszeile --- */
+/* Ehrlicher Abrechnungs-Hinweis unter der Tarif-Tabelle. */
+.note {
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  margin-top: var(--space-block);
+  padding: var(--space-card);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-action-surface);
+  text-align: center;
+}
+
+.note__title {
+  font-size: var(--text-lead);
+  font-weight: var(--weight-heading);
+  color: var(--color-text);
+}
+
+.note__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-body);
+  color: var(--color-muted);
+}
+
+/* --- Rechtliches / Prosa-Seiten (Datenschutz, Impressum, AGB) --- */
+.legal {
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+}
+
+.legal__note {
+  margin-top: var(--space-stack);
+  padding: var(--space-cozy) var(--space-loose);
+  border-radius: var(--radius-control);
+  background: var(--color-action-surface);
+  color: var(--color-text);
+  font-size: var(--text-body);
+}
+
+.legal__heading {
+  margin-top: var(--space-block);
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-heading);
+  color: var(--color-text);
+}
+
+.legal__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-lead);
+  color: var(--color-muted);
+}
+
+/* --- 404-Seite --- */
+.error-page {
+  text-align: center;
+}
+
+.error-page__code {
+  font-size: var(--text-display);
+  font-weight: var(--weight-heading);
+  color: var(--color-action);
+  letter-spacing: var(--tracking-heading);
+}
+
+/* --- Fusszeile (hell, wie der Master) --- */
 .site-footer {
   margin-top: auto;
   border-top: var(--border-width) solid var(--color-border);
@@ -341,6 +505,7 @@
 
 .site-footer__nav {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-gap);
   margin-inline-start: auto;
 }

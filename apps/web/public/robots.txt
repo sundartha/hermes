@@ -1,0 +1,6 @@
+# Marketing-Seiten sind indexierbar; der private App-Bereich nicht.
+User-agent: *
+Allow: /
+Disallow: /app
+
+Sitemap: https://sundartha.com/sitemap.xml
