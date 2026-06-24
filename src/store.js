@@ -111,6 +111,13 @@ export const {
   kycReached,
   setTenantStripe,
   tenantStripe,
+  // W4: Abo-Referenzen - Setter (Subscribe + Webhook) + Reader (Self-Service-View) +
+  // Lookup (Webhook-Tenant-Aufloesung ueber subscriptionId). Muster wie setTenantStripe/
+  // tenantStripe. OHNE diese Re-Exports sind sie auf der Fassade undefined -> subscribe.js
+  // und der Webhook-Helper werfen zur Laufzeit einen TypeError.
+  setTenantSubscription,
+  tenantSubscription,
+  findTenantBySubscription,
   // F2: private Summary-Nummer - Setter (Onboard/Self-Service P4/P5) + Reader (finishCall
   // P7 via planSummarySms). Muster wie setTenantStripe/tenantStripe. OHNE diese Re-Exports
   // sind sie auf der Fassade undefined -> self-service-routes UND planSummarySms werfen zur

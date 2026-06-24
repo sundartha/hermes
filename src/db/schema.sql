@@ -31,6 +31,12 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
 -- Referenzen (cus_/pm_), KEINE Secrets. Muster wie kyc_level (idempotent, kein CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_customer_id       TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
+-- Abo-Referenzen pro Tenant (W4) additiv NULLABLE. NULL = kein aktives Abo. Opake
+-- Stripe-Referenzen (sub_/price-slug/Unix-s), KEINE Secrets. Muster wie stripe_* (kein
+-- CHECK). current_period_end als BIGINT (Unix-Sekunden, wie Stripe liefert).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_subscription_id    TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_plan_slug          TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_current_period_end BIGINT;
 -- F1 Geo-Location (Phase 1): Tenant-Default-Land + -Sprache, die die Registrierung
 -- (IP-Geo-Vorschlag bzw. explizite User-Wahl) schreibt - Fallback fuer neue Nummern
 -- dieses Tenants. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, Code-Fallback

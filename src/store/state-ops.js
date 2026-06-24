@@ -603,6 +603,46 @@ export function tenantStripe(s, tenantId) {
   };
 }
 
+// ---- Abo-Referenzen pro Tenant (W4) ----
+// Setzt die Stripe-Abo-Referenzen eines Tenants. Reine Mutation, kein IO (Wrapper saved).
+// patch = { subscriptionId?, planSlug?, currentPeriodEnd? }: NUR uebergebene Keys werden
+// gesetzt (selektiver Patch via !== undefined, Muster wie setTenantStripe) - so kann der
+// Webhook currentPeriodEnd nachziehen, ohne subscriptionId/planSlug zu beruehren.
+// Fehlender Tenant wirft (kein stilles No-Op, Muster setTenantStripe). Opake Referenzen
+// (sub_/price-slug/Unix-s), KEINE Secrets. Liefert den Tenant.
+export function setTenantSubscription(
+  s,
+  tenantId,
+  { subscriptionId, planSlug, currentPeriodEnd } = {},
+) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
+  if (subscriptionId !== undefined) tenant.stripeSubscriptionId = subscriptionId;
+  if (planSlug !== undefined) tenant.stripePlanSlug = planSlug;
+  if (currentPeriodEnd !== undefined) tenant.stripeCurrentPeriodEnd = currentPeriodEnd;
+  return tenant;
+}
+
+// Lese-Query der Abo-Referenzen eines Tenants (W4). Reine Query, kein IO. Liefert STETS
+// ein Objekt mit allen Feldern (fehlend -> null, nie undefined) - Pendant zu tenantStripe
+// (kein optional-chaining-Train beim Aufrufer, Tenant-Form-Kenntnis lebt hier, G5).
+export function tenantSubscription(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return {
+    subscriptionId: tenant?.stripeSubscriptionId ?? null,
+    planSlug: tenant?.stripePlanSlug ?? null,
+    currentPeriodEnd: tenant?.stripeCurrentPeriodEnd ?? null,
+  };
+}
+
+// Webhook-Tenant-Aufloesung (W4): Tenant ueber sein gespeichertes Abo finden. Reine
+// Query, kein IO. Kein Treffer (oder leere subscriptionId) -> null (der Webhook ignoriert
+// fail-closed, kein Cross-Tenant-Effekt - kein Suspend eines fremden/unbekannten Tenants).
+export function findTenantBySubscription(s, subscriptionId) {
+  if (!subscriptionId) return null;
+  return s.tenants.find((t) => t.stripeSubscriptionId === subscriptionId) ?? null;
+}
+
 // ---- Private Summary-Nummer pro Tenant (F2) ----
 // EINE Normalisier-/Validier-Quelle (G5), geteilt von registerTenant (Onboarding) UND
 // setPrivateNumber (Self-Service) - kein Drift zwischen den beiden Schreibwegen. Reine

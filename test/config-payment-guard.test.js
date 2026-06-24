@@ -31,6 +31,7 @@ const REQUIRED_OK = {
   storeBackend: "json",
   paymentEnabled: true,
   stripeSecretKey: "x",
+  stripeWebhookSecret: "x", // W4: Boot-Pflicht bei PAYMENT_ENABLED (sonst Webhook unverifizierbar)
 };
 
 test("assertConfig: NaN NUMBER_SETUP_FEE_CENTS bei PAYMENT_ENABLED ist fail-closed (KORR1)", () => {
@@ -48,5 +49,13 @@ test("assertConfig: nicht-ganzzahliges NUMBER_SETUP_FEE_CENTS ist fail-closed", 
 test("assertConfig: gueltiges ganzzahliges NUMBER_SETUP_FEE_CENTS > 0 ist ok", () => {
   withConfig({ ...REQUIRED_OK, numberSetupFeeCents: 100 }, () => {
     assert.equal(assertConfig(), true);
+  });
+});
+
+test("assertConfig: PAYMENT_ENABLED ohne STRIPE_WEBHOOK_SECRET ist fail-closed (W4)", () => {
+  // Ohne Webhook-Secret ist der Stripe-Webhook fail-closed unverifizierbar (kein
+  // Abo-Lifecycle) -> Boot-Refusal, exakt wie STRIPE_SECRET_KEY.
+  withConfig({ ...REQUIRED_OK, numberSetupFeeCents: 100, stripeWebhookSecret: "" }, () => {
+    assert.equal(assertConfig(), false);
   });
 });

@@ -89,6 +89,13 @@ services:
         value: "0"
       - key: PAYMENT_CURRENCY
         value: "eur"
+      # ---- Abo-Buchung (Stripe Recurring, W4) ----
+      - key: STRIPE_STARTER_PRICE_ID
+        sync: false
+      - key: STRIPE_BUSINESS_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
       - key: DASHBOARD_PASSWORD
         sync: false
       # Rechteprofile (Phase 2) als JSON, z.B.

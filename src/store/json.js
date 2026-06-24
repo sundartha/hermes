@@ -388,6 +388,23 @@ export function tenantStripe(tenantId) {
   return ops.tenantStripe(load(), tenantId);
 }
 
+// ---- Abo-Referenzen pro Tenant (W4) ----
+// setTenantSubscription mutiert -> save (Muster wie setTenantStripe); tenantSubscription
+// und findTenantBySubscription sind reine Queries (kein save, analog tenantStripe).
+export function setTenantSubscription(tenantId, patch) {
+  const tenant = ops.setTenantSubscription(load(), tenantId, patch);
+  save();
+  return tenant;
+}
+
+export function tenantSubscription(tenantId) {
+  return ops.tenantSubscription(load(), tenantId);
+}
+
+export function findTenantBySubscription(subscriptionId) {
+  return ops.findTenantBySubscription(load(), subscriptionId);
+}
+
 // ---- Private Summary-Nummer pro Tenant (F2) ----
 // setPrivateNumber mutiert -> save (Muster wie setTenantStripe); tenantPrivateNumber
 // ist reine Query (kein save, analog tenantStripe). PII: der Wert wird hier nie geloggt.

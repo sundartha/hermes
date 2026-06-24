@@ -19,8 +19,12 @@ const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
 const CUSTOMERS_PATH = "/v1/customers";
 const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
+const SUBSCRIPTIONS_PATH = "/v1/subscriptions"; // W4: monatliches Recurring
 const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
 const OFF_SESSION = "true"; // Karte ohne Kunden-Interaktion belasten (kein 3DS-Redirect noetig)
+// W4: Stripe legt bei fehlgeschlagener Erstzahlung KEIN incomplete-Abo an, sondern wirft
+// (fail-closed, kein "Abo ohne Zahlung"). Kein Magic-String (G25).
+const SUBSCRIPTION_FAILCLOSED_BEHAVIOR = "error_if_incomplete";
 
 // Logischer kind -> Stripe-Meter-event_name (Provider-Spezifik adapter-intern, G25).
 // Live mit dem Owner gegen die echten Stripe-Meter abgleichen (geparkt, wie P6b1):
@@ -160,5 +164,27 @@ export const stripeBilling = {
         "Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)",
       );
     return { customerId: json.customer, paymentMethodId };
+  },
+
+  // Erstellt ein echtes monatliches Recurring (POST /v1/subscriptions). off_session +
+  // error_if_incomplete: Stripe belastet die hinterlegte Karte sofort; gelingt die
+  // Erstzahlung nicht (3DS/Ablehnung), wirft Stripe statt ein incomplete-Abo anzulegen
+  // (fail-closed, kein "Abo ohne Zahlung"). Idempotency-Key (tenant+plan): Retry legt
+  // nie zwei Abos an. tenant_ref + plan_slug als metadata reisen in die Subscription-
+  // Webhook-Events zurueck (Tenant-/Plan-Aufloesung; Audit, KEINE Secrets). Nur
+  // subscriptionId + current_period_end (Unix-s) verlassen den Adapter (KEIN Stripe-Objekt).
+  async createSubscription({ tenantRef, customerId, priceId, idempotencyKey }) {
+    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    const body = new URLSearchParams({
+      customer: customerId,
+      "items[0][price]": priceId,
+      off_session: OFF_SESSION,
+      payment_behavior: SUBSCRIPTION_FAILCLOSED_BEHAVIOR,
+    });
+    body.set("metadata[tenant_ref]", tenantRef);
+    const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
+    assertOk(res, "createSubscription");
+    const json = await res.json().catch(() => ({}));
+    return { subscriptionId: json.id, currentPeriodEnd: json.current_period_end };
   },
 };

@@ -15,6 +15,7 @@
 import { Router } from "express";
 import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
+import { createTenantSubscription } from "./billing/subscribe.js";
 import { publicCall, activeNumberFor, upcomingCalendar } from "./store/views.js";
 
 // Pay3: Redirect-Ziele nach Rueckkehr von Stripe Checkout (kein Magic-String, G25).
@@ -35,10 +36,25 @@ function maskPrivateNumber(e164) {
   return `${e164.slice(0, 3)}…${e164.slice(-4)}`;
 }
 
-// config (paymentEnabled/publicUrl) + billing (BillingPort) werden injiziert (P4/DIP):
-// derselbe Handler in Produktion (server.js) UND im in-process pglite-Test mit Fake-
-// Billing, ohne echten Stripe-Call. Bleibt EIN Objekt-Argument (kein F1-Verstoss).
-export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing }) {
+// Pay3/W4: der payment-bezogene Anteil der Self-Service-Lese-View. Bei PAYMENT_ENABLED
+// aus -> {} (Felder fehlen, UI versteckt den Block, byte-identisch zum Bestand). An ->
+// hasCard (abgeleiteter Karten-Status) + subscription (aktiver Plan/Periode). KEIN
+// id-Leak: subscriptionId bleibt draussen (fuer die UI reichen planSlug + currentPeriodEnd;
+// die opake sub_-Referenz gehoert nicht in die Browser-View). Reine Praesentation.
+function paymentView(store, config, tenant) {
+  if (!config.paymentEnabled) return {};
+  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenant);
+  return {
+    hasCard: hasCardOnFile(store.tenantStripe(tenant)),
+    subscription: { planSlug, currentPeriodEnd },
+  };
+}
+
+// config (paymentEnabled/publicUrl) + billing (BillingPort) + accounts (pg-Status-Seam
+// fuer die W4-Aktivierung) werden injiziert (P4/DIP): derselbe Handler in Produktion
+// (server.js) UND im in-process pglite-Test mit Fake-Billing, ohne echten Stripe-Call.
+// Bleibt EIN Objekt-Argument (kein F1-Verstoss).
+export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing, accounts }) {
   const router = Router();
 
   // Tenant-Lese-Sicht: dieselbe tenant-gefilterte Quelle wie /api/state, aber NUR
@@ -55,11 +71,11 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
       // Dedizierter Record-Reader, Schluessel req.tenant.tenantId (nie fremd, H3) - NIE
       // ueber settings/tenantContext, die ueber /api/state + MCP komplett leaken (H4).
       privateNumber: maskPrivateNumber(store.tenantPrivateNumber(tenant)),
-      // Pay3: abgeleiteter boolescher Karten-Status. KEIN id-Leak (cus_/pm_ sind keine
-      // Secrets, gehoeren aber nicht in die UI-View) - nur "Karte liegt vor ja/nein".
-      // Bei PAYMENT_ENABLED aus: Feld fehlt (keine Karten-Erfassung) -> UI versteckt
-      // den Block, Lese-View byte-identisch zum Bestand.
-      ...(config.paymentEnabled ? { hasCard: hasCardOnFile(store.tenantStripe(tenant)) } : {}),
+      // Pay3/W4: Karten- + Abo-Status. KEIN id-Leak (cus_/pm_/sub_ sind keine Secrets,
+      // gehoeren aber nicht in die UI-View) - nur "Karte liegt vor ja/nein" + der aktive
+      // Plan/Periode. Bei PAYMENT_ENABLED aus: Felder fehlen -> UI versteckt den Block,
+      // Lese-View byte-identisch zum Bestand. (s. paymentView, eine Quelle).
+      ...paymentView(store, config, tenant),
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
       calendar: upcomingCalendar(store, tenant),
@@ -153,5 +169,40 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
     res.redirect(CARD_RETURN_OK); // 302 -> UI zeigt "Karte hinterlegt"
   });
 
+  // ---- W4: Abo buchen aus dem Self-Service-Dashboard -----------------------------
+  // Identitaet = Web-Session (req.tenant.tenantId). Ohne PAYMENT_ENABLED -> 404 (byte-
+  // identisch, Muster setup-checkout). createTenantSubscription gated fail-closed
+  // (unbekannter Plan/unkonfigurierter Price/bereits abonniert/keine Karte) und loest
+  // ECHTES Geld aus (Recurring) -> der reason mappt auf den HTTP-Code (SUBSCRIBE_REJECT_*).
+  // Bei Erfolg Tenant AKTIV ueber accounts.setStatus (DERSELBE pg-Status-Seam wie der
+  // Admin-approve, den webAuthMw liest - kein Drift zur Store-Fassade). Die Safety-Gates
+  // (Allowlist/Budget/KYC/Disclosure) bleiben unberuehrt: active != outbound-faehig.
+  router.post("/api/self-service/billing/subscribe", webAuthMw, async (req, res) => {
+    if (!config.paymentEnabled)
+      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+    const tenant = req.tenant.tenantId;
+    const planSlug = (req.body || {}).plan;
+    const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
+    if (!result.ok) {
+      audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+      return res.status(subscribeRejectStatus(result.reason)).json({ error: result.reason });
+    }
+    // Status-Flip NUR ueber den pg-Status-Seam (webAuthMw-Quelle), nie ueber die Store-
+    // Fassade -> eine Schreibquelle fuer tenant.status (kein Drift, Pre-Mortem "Status-Drift").
+    await accounts.setStatus(tenant, "active");
+    audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
+    res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
+  });
+
   return router;
+}
+
+// W4: reason -> HTTP-Code (kein Magic-String/Number, G25). no_card/already_subscribed =
+// Client-Vorbedingung (409, UI leitet auf setup-checkout bzw. zeigt das aktive Abo);
+// plan_unconfigured = Server-Fehlkonfiguration (500, Price-Id fehlt); unknown_plan =
+// Client-Eingabe (400). Default fail-closed 400.
+function subscribeRejectStatus(reason) {
+  if (reason === "no_card" || reason === "already_subscribed") return 409;
+  if (reason === "plan_unconfigured") return 500;
+  return 400;
 }

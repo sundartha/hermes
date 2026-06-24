@@ -54,10 +54,14 @@ const seedTenantA = () =>
 
 // Env mit PAYMENT_ENABLED an: NUMBER_SETUP_FEE_CENTS>0 ist assertConfig-Pflicht,
 // STRIPE_API_BASE muss auf die Fake-Stripe zeigen (sonst Live-Default api.stripe.com).
+// STRIPE_WEBHOOK_SECRET ist seit W4 Boot-Pflicht bei PAYMENT_ENABLED (Webhook sonst
+// fail-closed unverifizierbar) - ohne diese Zeile verweigert assertConfig den Boot und
+// der Spawn haengt; der Wert ist hier neutral (dieser Test nutzt den Webhook nicht).
 const PAY_ENV = (stripeUrl) => ({
   MULTI_TENANT: "true",
   PAYMENT_ENABLED: "true",
   STRIPE_SECRET_KEY: "sk_test_x",
+  STRIPE_WEBHOOK_SECRET: "whsec_test_x",
   STRIPE_API_BASE: stripeUrl,
   NUMBER_SETUP_FEE_CENTS: "500",
 });

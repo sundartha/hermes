@@ -61,6 +61,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
+import { verifyStripeSignature, applyStripeWebhook } from "./billing/webhook.js";
 import { E164, invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
@@ -126,11 +127,14 @@ const BODY_LIMIT = "100kb";
 // Exemption: ein frisch eingeloggter (suspendierter) Tenant landet hier (zeigt
 // "Choose your plan"), NICHT auf "/" (Owner-Dashboard hinter Basic-Auth = Sackgasse).
 const CUSTOMER_PORTAL_PATH = "/tenant.html";
-// rawBody nur fuer /voice erfassen (kuenftiger Ed25519-Pfad/Telnyx braucht den
-// unveraenderten Body). Der Twilio-HMAC nutzt weiterhin nur die geparsten Params -
-// die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
+// W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
+// den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
+const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
+// rawBody fuer /voice (Twilio/Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
+// gegen den unveraenderten Body. Der Twilio-HMAC nutzt weiterhin nur die geparsten
+// Params - die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
 const captureRawBody = (req, _res, buf) => {
-  if (req.path.startsWith("/voice")) req.rawBody = buf;
+  if (req.path.startsWith("/voice") || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
 };
 app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Twilio-Webhooks
 app.use(express.json({ limit: BODY_LIMIT, verify: captureRawBody })); // eigene API + MCP
@@ -217,8 +221,47 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     // ausschliesslich ueber webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth.
     // audit = util.audit (nur Keys, keine Werte/PII).
     if (config.selfServiceEnabled && config.multiTenant) {
-      app.use(makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing: stripeBilling }));
+      app.use(
+        makeSelfServiceRoutes({
+          store,
+          webAuthMw,
+          audit,
+          config,
+          billing: stripeBilling,
+          accounts,
+        }),
+      );
     }
+
+    // ---- Stripe-Webhook (W4): Abo-Lifecycle nachziehen ------------------------------
+    // KEINE Basic-Auth (Stripe kann keine Credentials senden) - die Sicherung ist die
+    // HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed, eigener Begruendungs-
+    // Kommentar wie /voice, Regel 3). Ohne PAYMENT_ENABLED -> 404 (byte-identisch).
+    // Liegt im guardedBoot-Block, weil applyStripeWebhook accounts.setStatus +
+    // sessions.invalidateByTenant braucht (nur hier konstruiert). Idempotent: jeder
+    // Event wirkt nur als Vorwaerts-Zustand; Wiederholung aendert nichts.
+    app.post(STRIPE_WEBHOOK_PATH, async (req, res) => {
+      if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled" });
+      const ok = verifyStripeSignature({
+        rawBody: req.rawBody,
+        signatureHeader: req.headers["stripe-signature"],
+        secret: config.stripeWebhookSecret,
+        nowS: Math.floor(Date.now() / 1000),
+      });
+      if (!ok) {
+        audit("stripe_webhook_rejected", req, "signature");
+        return res.status(400).json({ error: "invalid signature" });
+      }
+      // rawBody ist verifiziert -> jetzt erst parsen (kein Vertrauen vor der Signatur).
+      let event;
+      try {
+        event = JSON.parse(req.rawBody.toString("utf8"));
+      } catch {
+        return res.status(400).json({ error: "bad payload" });
+      }
+      await applyStripeWebhook(event, { store, accounts, sessions, audit, req });
+      res.json({ received: true });
+    });
   });
 }
 
@@ -232,10 +275,16 @@ app.use((req, res, next) => {
   // byte-identisch zum Bestand.
   if (config.selfServiceEnabled && config.multiTenant && req.path === CUSTOMER_PORTAL_PATH)
     return next();
+  // /webhooks/stripe ist Basic-Auth-exempt: Stripe kann KEINE Basic-Auth-Credentials
+  // senden. Die Sicherung ist die HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET
+  // (fail-closed, Regel 3) - exakt analog zu /voice (Twilio-/Telnyx-Signatur). Zusaetzlich
+  // PAYMENT_ENABLED-gegated (aus -> 404). Der Handler liegt im guardedBoot-Block (braucht
+  // accounts/sessions), die Exemption hier ist die Basic-Auth-Vorschaltung.
   if (
     req.path.startsWith("/voice") ||
     req.path.startsWith("/mcp") ||
     req.path.startsWith("/.well-known") ||
+    req.path === STRIPE_WEBHOOK_PATH ||
     req.path === "/healthz"
   )
     return next();
