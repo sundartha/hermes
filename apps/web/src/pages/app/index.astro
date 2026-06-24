@@ -6,6 +6,7 @@
 // Einstellungen, Karte). KEIN eigener state-Fetch je Insel -- die Auth-Insel
 // ermittelt den Zustand einmal und verteilt ihn per AUTH_EVENT.
 import App from "../../layouts/App.astro";
+import { LOGIN_URL } from "../../lib/routes.js";
 import AuthIsland from "../../components/app/AuthIsland.astro";
 import BillingIsland from "../../components/app/BillingIsland.astro";
 import SettingsIsland from "../../components/app/SettingsIsland.astro";
@@ -37,7 +38,7 @@ const dashNav = [
   <section id="region-anonymous" class="card" hidden>
     <h1>Anmeldung erforderlich</h1>
     <p>Bitte melde dich an, um deinen Telefon-Assistenten zu verwalten.</p>
-    <a class="btn" href="/auth/login">Anmelden</a>
+    <a class="btn" href={LOGIN_URL}>Anmelden</a>
   </section>
 
   <section id="region-pending" class="card" hidden>

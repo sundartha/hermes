@@ -1,5 +1,6 @@
 # Astro build output und Abhaengigkeiten — nie committen.
 dist/
 dist-test/
+dist-test-links/
 node_modules/
 .astro/

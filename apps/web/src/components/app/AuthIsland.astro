@@ -4,11 +4,12 @@
 // schaltet ihre eigene Steuerung (Anmelden-Link vs. Konto+Abmelden) und meldet
 // den Zustand per AUTH_EVENT an die App-Shell weiter -- so faellt der state-Fetch
 // nur einmal an. KEINE OIDC-/Session-Logik hier (lebt im Gateway): "Anmelden" ist
-// nur ein Link auf /auth/login, "Abmelden" ein POST auf /auth/logout.
+// nur ein Link auf LOGIN_URL, "Abmelden" ein POST auf /auth/logout.
+import { LOGIN_URL } from "../../lib/routes.js";
 ---
 
 <div class="auth-island">
-  <a id="auth-login" class="btn" href="/auth/login">Anmelden</a>
+  <a id="auth-login" class="btn" href={LOGIN_URL}>Anmelden</a>
   <div id="auth-account" class="auth-account" hidden>
     <span id="auth-who" class="auth-who"></span>
     <button id="auth-logout" class="btn" type="button">Abmelden</button>
