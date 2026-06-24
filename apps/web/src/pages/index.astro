@@ -1,104 +1,239 @@
 ---
-// Marketing-Landing (SSG). Reines statisches HTML — KEIN Client-Fetch gegen
-// /api oder /auth. CTAs sind nur Links (Login bedient der Gateway via OIDC).
-// Der Hero-Animations-Platzhalter (#hero-animation-placeholder) wird in W4
-// durch den Higgsfield-Canvas-Scrubber ersetzt; bis dahin steht hier ein
-// dezentes Marken-Panel (kein Layout-Bruch, kein Asset noetig).
-import Marketing from "../layouts/Marketing.astro";
-import HeroAnimation from "../components/HeroAnimation.astro";
+// Hermes-Startseite — 1:1-Umsetzung des verbindlichen Claude-Design-Entwurfs
+// "Hermes Hero.dc.html". Das Quell-Design nutzt das x-dc-Framework (Inline-Styles,
+// style-hover, {{ }}-Platzhalter, Google-Fonts-CDN). Unter der strikten Produktions-
+// CSP des Static-Service (default-src 'self', KEIN style-src 'unsafe-inline'; siehe
+// render.yaml) waere das alles blockiert -> ungestyltes HTML. Darum hier pixelgenau
+// nachgebaut: identische Schrift/Farbe/Layout, aber CSP-konform als externe,
+// same-origin Stylesheets (Astro build.inlineStylesheets:"never") + selbst gehostete
+// Fonts (src/styles/fonts.css) + externes Modul-Script. Ergebnis ist identisch.
+//
+// Standalone-Dokument (KEIN Marketing-Layout): der Entwurf ist ein Vollbild-Hero mit
+// eigener, transparent ueberlagerter Navigation.
+import "../styles/fonts.css";
 
-// Use Cases: drei konkrete Einsatzfelder (Strategie/Auftrag W1).
-const useCases = [
-  {
-    title: "Kundenservice automatisieren",
-    text: "Hermes nimmt Anrufe an, beantwortet Standardfragen und reicht nur das weiter, was wirklich dich braucht.",
-  },
-  {
-    title: "Terminerinnerungen",
-    text: "Dein Agent ruft Kunden an, erinnert an Termine und traegt Zu- oder Absagen direkt in deinen Kalender.",
-  },
-  {
-    title: "Automatische Rueckrufe",
-    text: "Verpasste Anrufe ruft Hermes in deinem Auftrag zurueck — mit klarer Offenlegung am Gespraechsanfang.",
-  },
-];
-
-// "Was ist MCP?" — der Verbindungsfluss als Drei-Knoten-Diagramm (reines CSS,
-// kein Asset, CSP-konform).
-const mcpFlow = [
-  { title: "Dein KI-Agent", text: "Claude, ein eigener Assistent oder Workflow", accent: false },
-  { title: "MCP-Server", text: "Die Bruecke (Model Context Protocol)", accent: true },
-  { title: "Telefonnetz", text: "Echter Anschluss — annehmen und anrufen", accent: false },
-];
+const title = "Hermes — The phone line for your AI agents";
+const description = "Give your AI wings. The phone line for your AI agents — works with Claude & Gemini via the Model Context Protocol.";
 ---
 
-<Marketing
-  title="Sundartha Hermes — das Telefon fuer deine KI-Agenten"
-  description="Verbinde deinen KI-Assistenten in 5 Minuten mit einem echten Telefonanschluss: Anrufe annehmen, Termine buchen, Kunden zurueckrufen — ueber MCP."
->
-  <section class="hero">
-    <div class="container">
-      <span class="hero__eyebrow">MCP-Telefonie von Sundartha</span>
-      <h1 class="hero__title">Das Telefon fuer deine <span class="highlight">KI-Agenten</span></h1>
-      <p class="hero__lead">
-        Verbinde deinen KI-Assistenten in 5 Minuten mit einem echten
-        Telefonanschluss — Anrufe entgegennehmen, Termine buchen, Kunden
-        kontakten.
-      </p>
-      <div class="hero__actions">
-        <a class="button button--primary" href="/registrieren">Jetzt starten</a>
-        <a class="button button--ghost" href="/preise">Preise ansehen</a>
-      </div>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={Astro.url.pathname} />
+  </head>
+  <body>
+    <div class="hero-root">
+      <!-- BACKGROUND: Mount Olympus (Standbild, mit Farbverlauf-Fallback) -->
+      <div class="hero-bg"></div>
 
-      <div class="hero__stage">
-        <!-- W4: scroll-getriggerte MCP-Verbindungs-Animation (ersetzt den
-             W1-Platzhalter). Higgsfield-Frames koennen die SVG-Szene spaeter
-             ersetzen; der Scrub-Mechanismus bleibt. -->
-        <HeroAnimation />
+      <!-- BACKGROUND: langsam treibende Wolken (Video, ohne Ton); poster faellt
+           auf das Standbild zurueck, falls das Video (noch) fehlt -->
+      <video
+        id="hermesSky"
+        class="hero-sky"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="auto"
+        poster="/assets/olymp_3.jpg"
+      >
+        <source src="/assets/hermes_olymp.mp4" type="video/mp4" />
+      </video>
+
+      <!-- Lesbarkeit: weiches oberes Band + sanftes unteres Scrim -->
+      <div class="scrim scrim--top"></div>
+      <div class="scrim scrim--bottom"></div>
+
+      <!-- NAV -->
+      <nav class="hero-nav">
+        <div class="nav-brand">
+          <img class="nav-logo" src="/assets/sandal_solid.png" alt="Hermes winged sandal" />
+          <div class="brand-text">
+            <span class="brand-name">HERMES</span>
+            <span class="brand-by">by Sundartha</span>
+          </div>
+        </div>
+        <div class="nav-center">
+          <a class="nav-link" href="#product">Product</a>
+          <a class="nav-link" href="#pricing">Pricing</a>
+        </div>
+        <div class="nav-right">
+          <a class="nav-link nav-login" href="/auth/login">Log in</a>
+          <a class="btn btn--nav" href="/auth/login">Get started
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10305a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+          </a>
+        </div>
+      </nav>
+
+      <!-- HERO-CONTENT -->
+      <div class="hero-content">
+        <div class="hero-inner">
+          <h1 class="hero-title">Give your AI <em>wings</em>.</h1>
+          <p class="hero-sub">The phone line for your AI agents.</p>
+          <a class="btn btn--hero" href="/auth/login">Get started
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10305a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+          </a>
+        </div>
+        <div class="hero-foot">Works with Claude &amp; Gemini · Model Context Protocol</div>
       </div>
     </div>
-  </section>
 
-  <section class="section">
-    <div class="container">
-      <div class="section__head">
-        <span class="eyebrow">Was ist MCP?</span>
-        <h2 class="section__title">Die Bruecke zwischen KI und Telefon</h2>
-        <p class="section__lead">
-          Das Model Context Protocol (MCP) ist die offene Schnittstelle, ueber
-          die dein KI-Agent Werkzeuge nutzt. Hermes ist so ein Werkzeug: ein
-          MCP-Server, der deinem Agenten einen echten Telefonanschluss gibt —
-          ohne eigene Telefonie-Technik.
-        </p>
-      </div>
-      <div class="mcp__diagram">
-        {mcpFlow.map((node, index) => (
-          <>
-            {index > 0 && <span class="mcp__link" aria-hidden="true">→</span>}
-            <div class={node.accent ? "mcp__node mcp__node--accent" : "mcp__node"}>
-              <span class="mcp__node-title">{node.title}</span>
-              <span class="mcp__node-text">{node.text}</span>
-            </div>
-          </>
-        ))}
-      </div>
-    </div>
-  </section>
+    <!-- Externes Script aus /public (same-origin) statt eines gebundelten Astro-
+         Skripts: letzteres wuerde Astro inline einbetten und unter der CSP
+         (script-src 'self', kein 'unsafe-inline') blockiert. -->
+    <script is:inline src="/assets/hero.js" defer></script>
 
-  <section class="section section--surface">
-    <div class="container">
-      <div class="section__head">
-        <span class="eyebrow">Anwendungsfaelle</span>
-        <h2 class="section__title">Wofuer Hermes telefoniert</h2>
-      </div>
-      <div class="grid grid--three">
-        {useCases.map((useCase) => (
-          <article class="card">
-            <h3 class="card__title">{useCase.title}</h3>
-            <p class="card__text">{useCase.text}</p>
-          </article>
-        ))}
-      </div>
-    </div>
-  </section>
-</Marketing>
+    <style is:global>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: #0f2d52; }
+
+      .hero-root {
+        position: relative;
+        width: 100%;
+        min-height: 100vh;
+        overflow: hidden;
+        background: #0f2d52;
+        font-family: "Space Grotesk", sans-serif;
+      }
+
+      /* Hintergrund: Olymp-Standbild + Farbverlauf-Fallback (greift, solange das
+         grosse Foto noch nicht in /public/assets liegt) */
+      .hero-bg {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        background:
+          url("/assets/olymp_3.jpg") center / cover no-repeat,
+          radial-gradient(120% 90% at 50% 0%, #1b4f86 0%, #0f2d52 55%, #0a2245 100%);
+      }
+      .hero-sky {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: 0;
+        opacity: 1;
+      }
+
+      .scrim { position: absolute; left: 0; right: 0; z-index: 1; pointer-events: none; }
+      .scrim--top {
+        top: 0;
+        height: 42%;
+        background: linear-gradient(to bottom, rgba(8,22,48,.52) 0%, rgba(8,22,48,.18) 40%, rgba(8,22,48,0) 100%);
+      }
+      .scrim--bottom {
+        bottom: 0;
+        height: 40%;
+        background: linear-gradient(to top, rgba(8,20,44,.6) 0%, rgba(8,20,44,.14) 55%, rgba(8,20,44,0) 100%);
+      }
+
+      /* NAV */
+      .hero-nav {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 26px 46px;
+      }
+      .nav-brand { display: flex; align-items: center; gap: 12px; }
+      .nav-logo {
+        width: auto; height: 34px; display: block;
+        filter: drop-shadow(0 2px 9px rgba(7,18,40,.6));
+      }
+      .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
+      .brand-name {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600; font-size: 20px; letter-spacing: .3em;
+        color: #ffffff; text-shadow: 0 1px 12px rgba(7,18,40,.7);
+      }
+      .brand-by {
+        margin-top: 3px; font-size: 9.5px; font-weight: 400;
+        letter-spacing: .24em; text-transform: uppercase;
+        color: rgba(255,255,255,.82);
+      }
+      .nav-center {
+        display: flex; gap: 32px; align-items: center;
+        font-size: 15px; font-weight: 500; letter-spacing: .01em;
+        color: rgba(255,255,255,.94); text-shadow: 0 1px 10px rgba(7,18,40,.6);
+      }
+      .nav-right { display: flex; gap: 20px; align-items: center; }
+      .nav-login {
+        font-size: 15px; font-weight: 500;
+        color: rgba(255,255,255,.94);
+        text-shadow: 0 1px 10px rgba(7,18,40,.6);
+      }
+      .nav-link {
+        cursor: pointer; text-decoration: none; color: inherit;
+        transition: opacity .18s;
+      }
+      .nav-link:hover { opacity: .7; }
+
+      /* Buttons (weisse Pille) */
+      .btn {
+        border: none; cursor: pointer; text-decoration: none;
+        background: #ffffff; color: #10305a;
+        font-family: "Space Grotesk", sans-serif; font-weight: 600; letter-spacing: .01em;
+        border-radius: 999px;
+        display: inline-flex; align-items: center;
+        transition: transform .18s, box-shadow .18s;
+      }
+      .btn--nav {
+        font-size: 14px; padding: 11px 20px; gap: 7px;
+        box-shadow: 0 10px 26px -12px rgba(7,18,40,.7);
+      }
+      .btn--nav:hover { transform: translateY(-1px); box-shadow: 0 14px 32px -12px rgba(7,18,40,.85); }
+      .btn--hero {
+        margin-top: 30px;
+        font-size: 15px; padding: 15px 32px; gap: 9px;
+        box-shadow: 0 18px 44px -16px rgba(7,16,38,.8);
+      }
+      .btn--hero:hover { transform: translateY(-2px); box-shadow: 0 24px 54px -16px rgba(7,16,38,.9); }
+
+      /* HERO-CONTENT */
+      .hero-content {
+        position: relative; z-index: 2;
+        min-height: 100vh;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: flex-start;
+        text-align: center;
+        padding: clamp(118px, 15vh, 190px) 24px 64px;
+      }
+      .hero-inner { display: flex; flex-direction: column; align-items: center; max-width: 700px; }
+      .hero-title {
+        margin: 0; white-space: nowrap;
+        font-family: "Instrument Serif", serif; font-weight: 400;
+        font-size: clamp(50px, 7.4vw, 98px); line-height: 0.98; letter-spacing: .004em;
+        color: #ffffff; text-shadow: 0 2px 40px rgba(7,16,38,.55);
+      }
+      .hero-title em { font-style: italic; font-weight: 400; }
+      .hero-sub {
+        margin: 16px 0 0;
+        font-family: "Space Grotesk", sans-serif; font-weight: 500;
+        font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5;
+        color: rgba(255,255,255,.96); text-shadow: 0 1px 16px rgba(7,16,38,.6);
+      }
+      .hero-foot {
+        position: absolute; left: 0; right: 0; bottom: 30px;
+        text-align: center;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase;
+        color: rgba(255,255,255,.7); text-shadow: 0 1px 12px rgba(7,16,38,.75);
+      }
+
+      /* Kleine Viewports: H1 darf umbrechen, Mittel-Nav weicht */
+      @media (max-width: 560px) {
+        .hero-title { white-space: normal; }
+        .hero-nav { padding: 20px 22px; }
+        .nav-center { display: none; }
+      }
+    </style>
+  </body>
+</html>
