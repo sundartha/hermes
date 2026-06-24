@@ -57,6 +57,16 @@ export function makePgStore(runner) {
       // gewinnt). Persistenz via save() unten, damit first_name/owner_name
       // round-trippen (flushTenants).
       ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
+      // Owner-Absendernummer config-derived idempotent seeden (analog json.js finishLoad):
+      // pg hydriert eine frische/leere DB ohne aktive Owner-Nummer -> der Boot-Guard in
+      // server.js braeche fail-closed ab (alle Deploys update_failed). Ohne OWNER_NUMBER
+      // oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
+      ops.seedOwnerNumberFromConfig(
+        state,
+        config.ownerNumber,
+        OWNER_TENANT_ID,
+        config.ownerNumberProvider,
+      );
       // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog seedOwnerIdentity):
       // seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne diesen Seed verloere der
       // Owner nach der Umstellung still seine eigene Summary-SMS. false -> PII-freie Boot-Warnung
@@ -73,7 +83,11 @@ export function makePgStore(runner) {
     // mit den folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush wuerde
     // mit dem ersten Folge-Query um die Transaktion konkurrieren.
     const owner = state.tenants.find((t) => t.id === OWNER_TENANT_ID);
-    if (owner && (owner.ownerName || owner.privateNumber)) await save();
+    // Flush auch, wenn (nur) eine aktive Owner-Nummer geseedet wurde: seedOwnerNumber und
+    // seedOwnerPrivateNumber nutzen unterschiedliche Validierung -> die aktive Nummer kann
+    // ohne privateNumber existieren; ohne diesen Flush bliebe sie nach der Re-Hydrierung weg.
+    const hasOwnerNumber = state.numbers.some((n) => n.tenantId === OWNER_TENANT_ID);
+    if (owner && (owner.ownerName || owner.privateNumber || hasOwnerNumber)) await save();
     return state;
   }
 
