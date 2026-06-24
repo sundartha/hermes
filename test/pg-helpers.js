@@ -3,7 +3,7 @@
 // erwartet. pglite ist ein-verbindig: withClient reicht die pglite-Instanz als
 // Client (query + exec) durch.
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 
 // Liefert {store, db, runner}. store ist bereits initialisiert (migriert +
 // hydriert). db ist die rohe pglite-Instanz fuer Direktzugriffe im Test.
@@ -17,4 +17,4 @@ export async function makePgTestStore() {
   return { store, db, runner };
 }
 
-export { OWNER_TENANT_ID };
+export { BOOTSTRAP_TENANT_ID };

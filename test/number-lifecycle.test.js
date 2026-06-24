@@ -19,7 +19,7 @@ import {
   findNumber,
   findTenantByNumber,
 } from "../src/store/state-ops.js";
-import { NUMBER_STATUS, TENANT_STATUS, OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { NUMBER_STATUS, TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const seedTenant = (s, id = "t_user1") => registerTenant(s, id);
@@ -67,7 +67,7 @@ test("transitionNumber: illegaler Uebergang wirft (kein active per Shortcut)", (
 // ---- registerTenant ----
 test("registerTenant: idempotent, Owner existiert immer", () => {
   const s = makeDefaultState();
-  assert.equal(s.tenants.find((t) => t.id === OWNER_TENANT_ID).status, TENANT_STATUS.ACTIVE);
+  assert.equal(s.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID).status, TENANT_STATUS.ACTIVE);
   const a = registerTenant(s, "t_x");
   const b = registerTenant(s, "t_x");
   assert.equal(a, b);

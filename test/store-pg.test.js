@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { config } from "../src/config.js";
 import {
   defaultSettings,
@@ -41,20 +41,20 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
   const s = store.load();
   // settings/calendar sind seit I2 Maps tenantId -> Bucket; der frische Zustand
   // traegt den Owner-Bucket (byte-identisch zur gemeinsamen Quelle defaults.js).
-  assert.deepEqual(s.settings[OWNER_TENANT_ID], defaultSettings());
+  assert.deepEqual(s.settings[BOOTSTRAP_TENANT_ID], defaultSettings());
   assert.equal(s.calls.length, 0);
   assert.equal(s.actionItems.length, 0);
   assert.equal(s.notifications.length, 0);
   assert.deepEqual(s.profiles, {});
   // usage ist seit P4 eine Map tenantId -> Bucket; der frische Zustand traegt den Owner-Bucket.
-  assert.deepEqual(s.usage[OWNER_TENANT_ID], {
+  assert.deepEqual(s.usage[BOOTSTRAP_TENANT_ID], {
     inputTokens: 0,
     outputTokens: 0,
     costEur: 0,
     calls: 0,
   });
   // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
-  assert.deepEqual(store.getCalendar(OWNER_TENANT_ID), demoCalendar());
+  assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
 });
 
 test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionItemIds", async () => {
@@ -71,7 +71,7 @@ test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionIte
   assert.equal(call.status, "active");
   assert.deepEqual(call.transcript, []);
   assert.deepEqual(call.actionItemIds, []);
-  assert.equal(store.load().usage[OWNER_TENANT_ID].calls, 1);
+  assert.equal(store.load().usage[BOOTSTRAP_TENANT_ID].calls, 1);
   assert.equal(store.getCall(call.id).id, call.id);
 });
 
@@ -84,7 +84,7 @@ test("createCall persistiert ueber Re-Hydrierung (inkl. usage.calls)", async () 
   assert.ok(got, "Call ueberlebt die Re-Hydrierung");
   assert.equal(got.streamToken, call.streamToken);
   assert.equal(got.direction, "inbound");
-  assert.equal(reopened.load().usage[OWNER_TENANT_ID].calls, 1);
+  assert.equal(reopened.load().usage[BOOTSTRAP_TENANT_ID].calls, 1);
 });
 
 test("createCall: provider ueberlebt die Re-Hydrierung (call.provider, P6a)", async () => {
@@ -168,34 +168,34 @@ test("countOutboundCallsSince mit und ohne requestedBy", async () => {
 
 test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
   const { store, db } = await makePgTestStore();
-  const usage = store.trackUsage(OWNER_TENANT_ID, 1_000_000, 1_000_000, PRICES);
+  const usage = store.trackUsage(BOOTSTRAP_TENANT_ID, 1_000_000, 1_000_000, PRICES);
   const expectedUsd = 1.0 + 5.0;
   assert.equal(usage.inputTokens, 1_000_000);
   assert.equal(usage.outputTokens, 1_000_000);
   assert.ok(Math.abs(usage.costEur - expectedUsd * PRICES.usdToEur) < 1e-9);
-  assert.equal(store.budgetExceeded(OWNER_TENANT_ID, PRICES), false);
-  store.trackUsage(OWNER_TENANT_ID, 0, 2_000_000, PRICES); // schiebt ueber 8 EUR
-  assert.equal(store.budgetExceeded(OWNER_TENANT_ID, PRICES), true);
+  assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), false);
+  store.trackUsage(BOOTSTRAP_TENANT_ID, 0, 2_000_000, PRICES); // schiebt ueber 8 EUR
+  assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), true);
   await store.save();
   const reopened = await reopen(db);
-  assert.equal(reopened.budgetExceeded(OWNER_TENANT_ID, PRICES), true);
+  assert.equal(reopened.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), true);
 });
 
 test("getCalendar sortiert + addCalendarEvent + findConflict (tenantId-Signatur, I2)", async () => {
   const { store, db } = await makePgTestStore();
   store.addCalendarEvent(
-    OWNER_TENANT_ID,
+    BOOTSTRAP_TENANT_ID,
     "Termin",
     "2030-01-01T10:00:00.000Z",
     "2030-01-01T11:00:00.000Z",
   );
-  const cal = store.getCalendar(OWNER_TENANT_ID);
+  const cal = store.getCalendar(BOOTSTRAP_TENANT_ID);
   for (let i = 1; i < cal.length; i++) assert.ok(cal[i - 1].start <= cal[i].start);
   assert.ok(
-    store.findConflict(OWNER_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
+    store.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
   );
   assert.equal(
-    store.findConflict(OWNER_TENANT_ID, "2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"),
+    store.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T12:00:00.000Z", "2030-01-01T13:00:00.000Z"),
     null,
   );
   await store.save();
@@ -203,7 +203,7 @@ test("getCalendar sortiert + addCalendarEvent + findConflict (tenantId-Signatur,
   // erreichbar ist (kein undefined-Drift, R6-pg) - der Owner-Bucket-Termin ueberlebt.
   const reopened = await reopen(db);
   assert.ok(
-    reopened.findConflict(OWNER_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
+    reopened.findConflict(BOOTSTRAP_TENANT_ID, "2030-01-01T10:30:00.000Z", "2030-01-01T10:45:00.000Z"),
   );
 });
 
@@ -220,7 +220,7 @@ test("addNotification kappt auf 50 (neueste zuerst)", async () => {
 
 test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert (tenantId-Signatur, I2)", async () => {
   const { store, db } = await makePgTestStore();
-  const { changed } = store.updateSettings(OWNER_TENANT_ID, {
+  const { changed } = store.updateSettings(BOOTSTRAP_TENANT_ID, {
     agentName: "Neu",
     allowBooking: false,
     fremd: "x",
@@ -228,15 +228,15 @@ test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert (
   });
   assert.deepEqual(changed.sort(), ["agentName", "allowBooking"]);
   // settings ist seit I2 eine Map tenantId -> Bucket; Laufzeit liest den Owner-Bucket.
-  assert.equal(store.load().settings[OWNER_TENANT_ID].agentName, "Neu");
-  assert.equal(store.load().settings[OWNER_TENANT_ID].allowBooking, false);
-  assert.equal("fremd" in store.load().settings[OWNER_TENANT_ID], false);
+  assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].agentName, "Neu");
+  assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
+  assert.equal("fremd" in store.load().settings[BOOTSTRAP_TENANT_ID], false);
   await store.save();
   // Round-Trip durch flush/hydrate: belegt, dass ops.settingsFor ueber den pg-Pfad
   // erreichbar ist (kein undefined-Drift, R6-pg) - der Owner-Bucket ueberlebt.
   const reopened = await reopen(db);
-  assert.equal(reopened.load().settings[OWNER_TENANT_ID].agentName, "Neu");
-  assert.equal(reopened.load().settings[OWNER_TENANT_ID].allowBooking, false);
+  assert.equal(reopened.load().settings[BOOTSTRAP_TENANT_ID].agentName, "Neu");
+  assert.equal(reopened.load().settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
 });
 
 test("Profile: resolveProfile Owner/Default + setProfile/deleteProfile/listProfiles", async () => {
@@ -333,7 +333,7 @@ test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", asyn
   const db = new PGlite();
   await reopen(db);
   const second = await reopen(db);
-  assert.equal(second.getCalendar(OWNER_TENANT_ID).length, demoCalendar().length);
+  assert.equal(second.getCalendar(BOOTSTRAP_TENANT_ID).length, demoCalendar().length);
 });
 
 test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null", async () => {
@@ -344,10 +344,10 @@ test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null"
   const seededE164 = "+15005550006";
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, 'twilio')`,
-    [seededE164, OWNER_TENANT_ID],
+    [seededE164, BOOTSTRAP_TENANT_ID],
   );
   const reopened = await reopen(db);
-  assert.equal(reopened.findTenantByNumber(seededE164), OWNER_TENANT_ID);
+  assert.equal(reopened.findTenantByNumber(seededE164), BOOTSTRAP_TENANT_ID);
   assert.equal(
     reopened.findTenantByNumber("+490000"),
     null,
@@ -356,7 +356,7 @@ test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null"
 });
 
 test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-Hydrierung; nur active routet", async () => {
-  // Kein config-Auto-Seed mehr (Owner-Nummer kommt ueber seedOwnerNumber): der
+  // Kein config-Auto-Seed mehr (Owner-Nummer kommt ueber seedBootstrapNumber): der
   // frische pg-Store traegt nur die hier selbst gesetzten Nummern.
   {
     const { store, db } = await makePgTestStore();
@@ -366,7 +366,7 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     s.numbers.push({
       id: "num_req",
       e164: null,
-      tenantId: OWNER_TENANT_ID,
+      tenantId: BOOTSTRAP_TENANT_ID,
       provider: PROVIDER.TELNYX,
       status: "requested",
       providerNumberId: null,
@@ -374,7 +374,7 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     s.numbers.push({
       id: "num_act",
       e164: "+4915700000001",
-      tenantId: OWNER_TENANT_ID,
+      tenantId: BOOTSTRAP_TENANT_ID,
       provider: PROVIDER.TELNYX,
       status: "active",
       providerNumberId: "ext_1",
@@ -392,7 +392,7 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
     assert.equal(act.status, "active");
     assert.equal(act.providerNumberId, "ext_1", "provider_number_id ueberlebt");
     assert.equal(act.paymentIntentId, "pi_test_1", "payment_intent_id ueberlebt Flush+Hydrate");
-    assert.equal(r1.findTenantByNumber("+4915700000001"), OWNER_TENANT_ID, "active routet");
+    assert.equal(r1.findTenantByNumber("+4915700000001"), BOOTSTRAP_TENANT_ID, "active routet");
 
     // Suspend -> Flush schreibt status -> Re-Hydrierung -> NICHT mehr routbar (Gate).
     transitionNumber(r1.load(), "num_act", NUMBER_STATUS.SUSPENDED);
@@ -415,14 +415,14 @@ test("provisioning_job ueberlebt Flush+Re-Hydrierung; markProvisioningJob -> don
   s.numbers.push({
     id: "num_job1",
     e164: null,
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     provider: PROVIDER.TELNYX,
     status: "requested",
     providerNumberId: null,
   });
   const job = recordProvisioningJob(s, {
     numberId: "num_job1",
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     idempotencyKey: "provision_num_job1",
   });
   await store.save();
@@ -494,19 +494,19 @@ test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer
 
 test("tenant_budget ueberlebt Flush+Re-Hydrierung (Money als Ganzzahl Cents, P6b3)", async () => {
   const { store, db } = await makePgTestStore();
-  store.setTenantBudget(OWNER_TENANT_ID, { budgetCents: 400, hardCapCents: 500 });
+  store.setTenantBudget(BOOTSTRAP_TENANT_ID, { budgetCents: 400, hardCapCents: 500 });
   await store.save();
   const r1 = await reopen(db);
-  const budget = r1.load().tenantBudgets.find((b) => b.tenantId === OWNER_TENANT_ID);
+  const budget = r1.load().tenantBudgets.find((b) => b.tenantId === BOOTSTRAP_TENANT_ID);
   assert.ok(budget, "tenant_budget-Zeile ueberlebt Re-Hydrierung");
   assert.equal(budget.budgetCents, 400);
   assert.equal(budget.hardCapCents, 500);
   assert.equal(Number.isInteger(budget.hardCapCents), true, "Cents Ganzzahl at rest");
   // Upsert: zweiter setTenantBudget aktualisiert dieselbe Zeile.
-  r1.setTenantBudget(OWNER_TENANT_ID, { budgetCents: 700, hardCapCents: 900 });
+  r1.setTenantBudget(BOOTSTRAP_TENANT_ID, { budgetCents: 700, hardCapCents: 900 });
   await r1.save();
   const r2 = await reopen(db);
-  const updated = r2.load().tenantBudgets.filter((b) => b.tenantId === OWNER_TENANT_ID);
+  const updated = r2.load().tenantBudgets.filter((b) => b.tenantId === BOOTSTRAP_TENANT_ID);
   assert.equal(updated.length, 1, "PK tenant_id -> kein Duplikat");
   assert.equal(updated[0].hardCapCents, 900);
 });
@@ -514,7 +514,7 @@ test("tenant_budget ueberlebt Flush+Re-Hydrierung (Money als Ganzzahl Cents, P6b
 test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persistiert (P6b3)", async () => {
   const { store, db } = await makePgTestStore();
   const ev = store.recordUsageEvent({
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     callId: null,
     kind: USAGE_EVENT_KIND.NUMBER_MONTH,
     quantity: 1,

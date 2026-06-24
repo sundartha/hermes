@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 
 const OTHER = "other";
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
@@ -70,23 +70,23 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
   store.addNotification("Owner-Notif", "", c.id);
   await store.save();
 
-  store.eraseTenantData(OWNER_TENANT_ID);
+  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   await store.save();
 
   // Direkt in der DB (Superuser sieht alles): Owner-Zeilen = 0 in allen 4 Tabellen.
-  assert.equal(await countWhereTenant(db, "call", OWNER_TENANT_ID), 0, "Owner-Calls weg");
+  assert.equal(await countWhereTenant(db, "call", BOOTSTRAP_TENANT_ID), 0, "Owner-Calls weg");
   assert.equal(
-    await countWhereTenant(db, "transcript_segment", OWNER_TENANT_ID),
+    await countWhereTenant(db, "transcript_segment", BOOTSTRAP_TENANT_ID),
     0,
     "Owner-Transkripte weg (CASCADE)",
   );
   assert.equal(
-    await countWhereTenant(db, "action_item", OWNER_TENANT_ID),
+    await countWhereTenant(db, "action_item", BOOTSTRAP_TENANT_ID),
     0,
     "Owner-Action-Items weg",
   );
   assert.equal(
-    await countWhereTenant(db, "notification", OWNER_TENANT_ID),
+    await countWhereTenant(db, "notification", BOOTSTRAP_TENANT_ID),
     0,
     "Owner-Notifications weg",
   );
@@ -108,13 +108,13 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
 test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberleben", async () => {
   const { store, db } = await setup();
   // Service/Identitaet/Budget-Gate vorab setzen, damit ihr Ueberleben pruefbar ist.
-  store.updateSettings(OWNER_TENANT_ID, { agentName: "Owner-Service" });
-  store.trackUsage(OWNER_TENANT_ID, 1_000_000, 0, PRICES);
+  store.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Owner-Service" });
+  store.trackUsage(BOOTSTRAP_TENANT_ID, 1_000_000, 0, PRICES);
   const c = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
   store.addTranscript(c.id, "agent", "weg");
   await store.save();
 
-  store.eraseTenantData(OWNER_TENANT_ID);
+  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   await store.save();
 
   const reopened = await reopen(db);
@@ -123,22 +123,22 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
   // jetzt seinen Call mit - die Cross-Tenant-Erhaltung bleibt also auch nach der
   // Re-Hydrierung sichtbar. Darum hier OWNER-scoped zaehlen statt blind alle Calls.
   assert.equal(
-    reopened.load().calls.filter((c) => c.tenantId === OWNER_TENANT_ID).length,
+    reopened.load().calls.filter((c) => c.tenantId === BOOTSTRAP_TENANT_ID).length,
     0,
     "Owner-Calls weg nach Re-Hydrierung",
   );
   assert.equal(
-    reopened.load().settings[OWNER_TENANT_ID].agentName,
+    reopened.load().settings[BOOTSTRAP_TENANT_ID].agentName,
     "Owner-Service",
     "settings ueberleben",
   );
   assert.equal(
-    reopened.load().usage[OWNER_TENANT_ID].inputTokens,
+    reopened.load().usage[BOOTSTRAP_TENANT_ID].inputTokens,
     1_000_000,
     "usage/Budget-Gate ueberlebt",
   );
   assert.equal(
-    reopened.getCalendar(OWNER_TENANT_ID).length,
+    reopened.getCalendar(BOOTSTRAP_TENANT_ID).length,
     3,
     "Demo-Kalender (Service-Config) bleibt",
   );

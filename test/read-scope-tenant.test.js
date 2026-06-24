@@ -25,7 +25,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SUB_OWNER = "sub-owner",
   SUB_B = "sub-b";
@@ -36,13 +36,13 @@ const OWNER_NAME = "Jonas Beispiel"; // = komponiert aus BASE_ENV.OWNER_FIRST_NA
 const B_NAME = "Maria";
 
 // Zwei aktive Tenants, je eine aktive Nummer + je 1 call+actionItem+notification.
-// Owner-Call traegt tenantId=OWNER_TENANT_ID, B-Call tenantId=B; actionItems/
+// Owner-Call traegt tenantId=BOOTSTRAP_TENANT_ID, B-Call tenantId=B; actionItems/
 // notifications haengen ueber callId an "ihrem" Call (kein eigenes tenantId).
 function seedTwoTenants() {
   const ownerCall = seedCall({
     id: "call_owner",
     twilioSid: "CAowner",
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     status: "completed",
   });
   const bCall = seedCall({ id: "call_b", twilioSid: "CAb", tenantId: B, status: "completed" });
@@ -77,14 +77,14 @@ function seedTwoTenants() {
       { id: "nt_b", title: "B-Notif", body: "b", callId: "call_b", at: new Date().toISOString() },
     ],
     tenants: [
-      { id: OWNER_TENANT_ID, status: "active", idpSubject: SUB_OWNER },
+      { id: BOOTSTRAP_TENANT_ID, status: "active", idpSubject: SUB_OWNER },
       { id: B, status: "active", idpSubject: SUB_B, ownerName: B_NAME },
     ],
     numbers: [
       {
         id: "num_owner",
         e164: OWNER_NUM,
-        tenantId: OWNER_TENANT_ID,
+        tenantId: BOOTSTRAP_TENANT_ID,
         provider: "twilio",
         status: "active",
         providerNumberId: null,

@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer, seedState } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SUB_A = "sub-a";
 const CUST = "cus_test1",
@@ -50,7 +50,7 @@ async function startFakeStripe() {
 
 // Ein aktiver Tenant A mit idpSubject (Karten-Erfassung laeuft tenant-scoped).
 const seedTenantA = () =>
-  seedState({ tenants: [{ id: OWNER_TENANT_ID, status: "active", idpSubject: SUB_A }] });
+  seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", idpSubject: SUB_A }] });
 
 // Env mit PAYMENT_ENABLED an: NUMBER_SETUP_FEE_CENTS>0 ist assertConfig-Pflicht,
 // STRIPE_API_BASE muss auf die Fake-Stripe zeigen (sonst Live-Default api.stripe.com).
@@ -101,7 +101,7 @@ test("Happy-Path: setup-checkout legt Customer an (Store), checkout-return speic
       "Stripe-Checkout-URL durchgereicht",
     );
     assert.equal(
-      srv.readStore().tenants.find((t) => t.id === OWNER_TENANT_ID).stripeCustomerId,
+      srv.readStore().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID).stripeCustomerId,
       CUST,
       "Customer im Store hinterlegt",
     );
@@ -110,7 +110,7 @@ test("Happy-Path: setup-checkout legt Customer an (Store), checkout-return speic
     assert.equal(ret.status, 200);
     assert.equal((await ret.json()).status, "card_on_file");
     assert.equal(
-      srv.readStore().tenants.find((t) => t.id === OWNER_TENANT_ID).stripePaymentMethodId,
+      srv.readStore().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID).stripePaymentMethodId,
       PM,
       "payment_method im Store gespeichert",
     );
@@ -129,7 +129,7 @@ test("Customer-Mismatch (fremde session_id -> fremder Customer) -> 403, KEIN pay
     const ret = await getAs(srv, SUB_A, "/api/billing/checkout-return?session_id=cs_other");
     assert.equal(ret.status, 403, "Customer-Mismatch -> 403");
     assert.equal(
-      "stripePaymentMethodId" in srv.readStore().tenants.find((t) => t.id === OWNER_TENANT_ID),
+      "stripePaymentMethodId" in srv.readStore().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID),
       false,
       "kein fremdes payment_method gebunden",
     );

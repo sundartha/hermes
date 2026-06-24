@@ -1,6 +1,6 @@
 // I7: Outbound tenant-aware (L4 dicht). POST /api/calls loest den Request-Tenant
 // ueber requestTenant (I4) auf und belastet pro-Tenant Nummer + Budget statt hart
-// OWNER_TENANT_ID. Reiner Spawn (startServer + seedState), KEIN pglite in derselben
+// BOOTSTRAP_TENANT_ID. Reiner Spawn (startServer + seedState), KEIN pglite in derselben
 // Datei (Lehre p6a-Stall: NIE mischen).
 //
 // Identitaet kommt hier ueber den localhost-only X-Internal-Identity-Header. In der
@@ -19,7 +19,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TO = "+4915112345678"; // erlaubtes Ziel (steht in ALLOWED_NUMBERS), kein Premium/Notruf
 const OWNER_NUMBER = "+15005550006"; // = BASE_ENV.TWILIO_NUMBER (config-basierte Owner-Absendernummer)
@@ -49,7 +49,7 @@ const activeNumber = (id, e164, tenantId, status = "active") => ({
 function seedTenants({ extraNumbers = [], usage } = {}) {
   const s = seedState({
     tenants: [
-      { id: OWNER_TENANT_ID, status: "active" },
+      { id: BOOTSTRAP_TENANT_ID, status: "active" },
       { id: A, status: "active", idpSubject: SUB_A, ownerName: "Alice" },
       { id: B, status: "active", idpSubject: SUB_B, ownerName: "Bob" },
       { id: C, status: "active", idpSubject: SUB_C, ownerName: "Carol" },
@@ -145,7 +145,7 @@ test("Flag an: unbekannte Identitaet -> 403 Reject (NIE Owner-Tenant)", async ()
 
 // (3) Pro-Tenant-Budget erschoepft -> der Tenant ist geblockt, kein Call entsteht.
 test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", async () => {
-  const seed = seedTenants({ usage: { [OWNER_TENANT_ID]: bucket(0), [A]: bucket(99) } }); // 99 >= MAX_BUDGET_EUR(8)
+  const seed = seedTenants({ usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) } }); // 99 >= MAX_BUDGET_EUR(8)
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
     const res = await placeCall(srv, SUB_A);
@@ -165,7 +165,7 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
 // (Schnittmenge gebrochen), liefe A (5 < 8) durch -> dieser Test faengt das.
 test("Flag an: globaler Notaus greift bei Summe (je Tenant < Cap) -> 402; global unveraendert", async () => {
   const seed = seedTenants({
-    usage: { [OWNER_TENANT_ID]: bucket(0), [A]: bucket(5), [B]: bucket(5) },
+    usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(5), [B]: bucket(5) },
   }); // 5+5=10 >= 8
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
@@ -193,7 +193,7 @@ test("Flag AUS: Identitaets-Header wird fuer den Tenant ignoriert -> Owner-Numme
     assert.ok(call, "Call erzeugt");
     assert.equal(
       call.tenantId,
-      OWNER_TENANT_ID,
+      BOOTSTRAP_TENANT_ID,
       "Flag aus -> tenantId=owner (Tenant-Achse inaktiv)",
     );
     assert.equal(call.from, OWNER_NUMBER, "Flag aus -> config-Owner-Nummer, NICHT A's Nummer");

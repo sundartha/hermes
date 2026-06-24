@@ -1,4 +1,4 @@
-// I8: pg-Backend von OWNER_TENANT_ID entpinnt (multi-tenant hydrate/flush ueber
+// I8: pg-Backend von BOOTSTRAP_TENANT_ID entpinnt (multi-tenant hydrate/flush ueber
 // s.tenants + additive tenant-Spalten owner_name/idp_subject). Prueft die drei
 // I8-Invarianten gegen pglite (Postgres-in-WASM, offline, F.I.R.S.T.):
 //   1. Owner-only byte-identisch (per-Tenant-Schleife mit genau einem Tenant ==
@@ -9,7 +9,7 @@
 // Rein pglite, NIE mit Server-Spawn gemischt (P6a-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import {
   defaultSettings,
   demoCalendar,
@@ -45,10 +45,10 @@ async function reopen(db) {
 test("Owner-only-pg: frischer Zustand byte-identisch (Bestands-Invariante haelt)", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  assert.deepEqual(s.settings[OWNER_TENANT_ID], defaultSettings());
-  assert.deepEqual(store.getCalendar(OWNER_TENANT_ID), demoCalendar());
+  assert.deepEqual(s.settings[BOOTSTRAP_TENANT_ID], defaultSettings());
+  assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
   assert.equal(s.tenants.length, 1);
-  assert.equal(s.tenants[0].id, OWNER_TENANT_ID);
+  assert.equal(s.tenants[0].id, BOOTSTRAP_TENANT_ID);
   // G1 Variante (a): der Owner-Tenant traegt jetzt einen config-geseedeten ownerName
   // (init seedet OWNER_FIRST_NAME/OWNER_LAST_NAME) -> der ungegatete Greeting/Disclosure
   // ist geschuetzt. Kein owner_name=null-Drift (gesetzter Wert, kein leeres Feld).
@@ -96,7 +96,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
     direction: "outbound",
     from: "+49",
     to: "+49",
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
   });
   ops.addActionItem(s, co.id, "Owner-Item");
 
@@ -106,16 +106,16 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
 
   // settings getrennt: B geaendert, Owner unveraendert (kein Leak).
   assert.equal(rs.settings[TENANT_B].agentName, "B-Agent");
-  assert.equal(rs.settings[OWNER_TENANT_ID].agentName, defaultSettings().agentName);
+  assert.equal(rs.settings[BOOTSTRAP_TENANT_ID].agentName, defaultSettings().agentName);
   // calendar getrennt: B-Termin nur bei B, Owner behaelt den Demo-Kalender.
   assert.deepEqual(
     r.getCalendar(TENANT_B).map((e) => e.title),
     ["B-Termin"],
   );
-  assert.deepEqual(r.getCalendar(OWNER_TENANT_ID), demoCalendar());
+  assert.deepEqual(r.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());
   // usage getrennt.
   assert.equal(rs.usage[TENANT_B].inputTokens, 1_000_000);
-  assert.equal(rs.usage[OWNER_TENANT_ID].inputTokens, 0);
+  assert.equal(rs.usage[BOOTSTRAP_TENANT_ID].inputTokens, 0);
   // number-Routing: B's Nummer loest auf B auf.
   assert.equal(r.findTenantByNumber("+49999000111"), TENANT_B);
   // tenant-Identitaet round-trippt (owner_name/idp_subject).
@@ -127,19 +127,19 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
     KYC_LEVEL.CARD,
     "kyc_level round-trippt",
   );
-  assert.equal("kycLevel" in rs.tenants.find((t) => t.id === OWNER_TENANT_ID), false);
+  assert.equal("kycLevel" in rs.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID), false);
   // stripe-Referenzen round-trippen (Pay1); Owner ohne Werte behaelt KEINE Felder (nur-nicht-null-Hydrierung, R6).
   assert.deepEqual(
     r.tenantStripe(TENANT_B),
     { customerId: "cus_b", paymentMethodId: "pm_b" },
     "stripe-Referenzen round-trippen",
   );
-  assert.equal("stripeCustomerId" in rs.tenants.find((t) => t.id === OWNER_TENANT_ID), false);
+  assert.equal("stripeCustomerId" in rs.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID), false);
   // call + actionItem + notification getrennt zugeordnet.
   assert.ok(r.getCall(cb.id), "B-Call vorhanden");
   assert.equal(r.getCall(cb.id).tenantId, TENANT_B);
   assert.ok(r.getCall(co.id), "Owner-Call separat vorhanden");
-  assert.equal(r.getCall(co.id).tenantId, OWNER_TENANT_ID);
+  assert.equal(r.getCall(co.id).tenantId, BOOTSTRAP_TENANT_ID);
   assert.ok(rs.actionItems.some((a) => a.callId === cb.id && a.text === "B-Item"));
   assert.ok(rs.actionItems.some((a) => a.callId === co.id && a.text === "Owner-Item"));
   assert.ok(rs.notifications.some((n) => n.callId === cb.id && n.title === "B-Notif"));
@@ -166,7 +166,7 @@ test("RLS-WITH-CHECK: Insert mit fremder tenant_id unter gesetzter GUC wird gebl
 
   await assert.rejects(async () => {
     await db.query(`SET ROLE ${APP_ROLE}`);
-    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
+    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
     try {
       await db.query(
         `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)

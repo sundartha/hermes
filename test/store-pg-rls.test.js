@@ -9,13 +9,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { demoCalendar } from "../src/store/defaults.js";
 
 // Dieser Test kontrolliert die number-Zeilen selbst (manuelle Inserts) und prueft
 // die RLS-Isolation deterministisch. Der frische pg-Store seedet keine Owner-Nummer
-// mehr (Owner-Nummer kommt ueber seedOwnerNumber), also keine .env-Kopplung.
+// mehr (Owner-Nummer kommt ueber seedBootstrapNumber), also keine .env-Kopplung.
 
 const OTHER_TENANT_ID = "other";
 const APP_ROLE = "app_user"; // liest Owner-Daten, ohne Superuser/BYPASSRLS
@@ -50,13 +50,13 @@ async function setup() {
   await db.query(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
      VALUES ('call_owner', $1, 'tok', 'inbound', 'active', now()::text)`,
-    [OWNER_TENANT_ID],
+    [BOOTSTRAP_TENANT_ID],
   );
   // Je eine number-Zeile pro Tenant (id=e164), um den number-Lookup tenant-isoliert
   // zu pruefen (P3c): die fremde Nummer darf unter der Owner-GUC nicht sichtbar sein.
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49owner', $1, '+49owner', 'twilio')`,
-    [OWNER_TENANT_ID],
+    [BOOTSTRAP_TENANT_ID],
   );
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49other', $1, '+49other', 'twilio')`,
@@ -75,7 +75,7 @@ async function setup() {
 // Fuehrt eine Aktion als unprivilegierte Rolle mit gesetzter Owner-GUC aus.
 async function asAppRole(db, fn) {
   await db.query(`SET ROLE ${APP_ROLE}`);
-  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
   try {
     return await fn();
   } finally {
@@ -157,11 +157,11 @@ test("Seeding der Owner-Defaults passiert die FORCE-RLS-WITH-CHECK (GUC vor Seed
 
   await db.query(`SET ROLE ${OWNER_ROLE}`);
   try {
-    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
+    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
     // seedDefaults mit gesetzter GUC -> Inserts passieren die WITH-CHECK.
     await seedDefaults(
       { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) },
-      OWNER_TENANT_ID,
+      BOOTSTRAP_TENANT_ID,
     );
     const cal = (await db.query(`SELECT id FROM calendar_event`)).rows;
     assert.equal(cal.length, demoCalendar().length, "Demo-Kalender geseedet trotz FORCE-RLS");
@@ -188,7 +188,7 @@ test("Ohne GUC blockt die FORCE-RLS-WITH-CHECK das Owner-Seeding", async () => {
       () =>
         seedDefaults(
           { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) },
-          OWNER_TENANT_ID,
+          BOOTSTRAP_TENANT_ID,
         ),
       /row-level security|policy/i,
     );

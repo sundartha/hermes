@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { config } from "../src/config.js";
 import { PROVIDER } from "../src/store/defaults.js";
 import { findActiveNumber } from "../src/store/views.js";
@@ -26,12 +26,12 @@ test("pg-Init seedet aktive Owner-Nummer aus config UND persistiert (Re-Hydrieru
   try {
     const store1 = makePgStore(runnerFor(db));
     await store1.init();
-    assert.ok(findActiveNumber(store1.load(), OWNER_TENANT_ID), "aktive Owner-Nummer nach init");
+    assert.ok(findActiveNumber(store1.load(), BOOTSTRAP_TENANT_ID), "aktive Owner-Nummer nach init");
     // Zweiter Aufbau auf derselben DB -> re-hydriert aus der DB, beweist den init-Flush.
     const store2 = makePgStore(runnerFor(db));
     await store2.init();
     assert.ok(
-      findActiveNumber(store2.load(), OWNER_TENANT_ID),
+      findActiveNumber(store2.load(), BOOTSTRAP_TENANT_ID),
       "aktive Owner-Nummer nach Re-Hydrierung (persistiert)",
     );
   } finally {
@@ -47,7 +47,7 @@ test("pg-Init ohne config.ownerNumber -> keine Owner-Nummer (No-Op, boot-sicher)
   try {
     const store = makePgStore(runnerFor(db));
     await store.init();
-    assert.ok(!findActiveNumber(store.load(), OWNER_TENANT_ID));
+    assert.ok(!findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID));
   } finally {
     config.ownerNumber = prevNum;
   }

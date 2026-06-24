@@ -8,7 +8,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -193,13 +193,13 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
   const state = seed || makeDefaultState();
   const numbers = Array.isArray(state.numbers) ? [...state.numbers] : [];
   const hasOwnerActive = numbers.some(
-    (n) => n.tenantId === OWNER_TENANT_ID && n.status === "active",
+    (n) => n.tenantId === BOOTSTRAP_TENANT_ID && n.status === "active",
   );
   if (!hasOwnerActive) {
     numbers.push({
       id: "num_owner_seed",
       e164: ownerNumber.e164,
-      tenantId: OWNER_TENANT_ID,
+      tenantId: BOOTSTRAP_TENANT_ID,
       provider: ownerNumber.provider,
       status: "active",
       providerNumberId: null,
@@ -207,7 +207,7 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
   }
   return {
     ...state,
-    tenants: state.tenants || [{ id: OWNER_TENANT_ID, status: "active" }],
+    tenants: state.tenants || [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
     numbers,
   };
 }

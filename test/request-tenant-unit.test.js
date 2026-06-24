@@ -14,7 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   isLocalSocket,
   internalIdentity,
@@ -129,13 +129,13 @@ test("internalIdentity: extern + Header gesetzt -> null (von extern faelschbar, 
 
 // === makeRequestTenant -> requestTenant ========================================
 
-test("requestTenant: Flag AUS -> immer OWNER_TENANT_ID, kein resolveTenant-Lookup", () => {
+test("requestTenant: Flag AUS -> immer BOOTSTRAP_TENANT_ID, kein resolveTenant-Lookup", () => {
   const store = makeStore({ "sub-b": "B" });
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(false, () => {
     // Selbst mit gesetztem auth/tenant kurzschliesst der Flag-Check zuerst (R5).
-    assert.equal(requestTenant(reqWith({ auth: { sub: "sub-b" } })), OWNER_TENANT_ID);
-    assert.equal(requestTenant(reqWith({ tenant: { tenantId: "B" } })), OWNER_TENANT_ID);
+    assert.equal(requestTenant(reqWith({ auth: { sub: "sub-b" } })), BOOTSTRAP_TENANT_ID);
+    assert.equal(requestTenant(reqWith({ tenant: { tenantId: "B" } })), BOOTSTRAP_TENANT_ID);
   });
   assert.deepEqual(store.calls, [], "Flag-aus-Pfad darf store.resolveTenant nie aufrufen");
 });
@@ -155,7 +155,7 @@ test("requestTenant: Flag AN + sub vorhanden, resolveTenant=null -> TENANT_REJEC
   withMultiTenant(true, () => {
     const out = requestTenant(reqWith({ auth: { sub: "sub-unbekannt" } }));
     assert.equal(out, TENANT_REJECT);
-    assert.notEqual(out, OWNER_TENANT_ID);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID);
   });
 });
 
@@ -167,7 +167,7 @@ test("requestTenant: Flag AN + auth ohne sub, extern -> OWNER (fehlende Identita
   withMultiTenant(true, () => {
     assert.equal(
       requestTenant(reqWith({ auth: {}, remoteAddress: "203.0.113.7" })),
-      OWNER_TENANT_ID,
+      BOOTSTRAP_TENANT_ID,
     );
   });
   assert.deepEqual(store.calls, [], "kein Lookup ohne Identitaet");
@@ -179,7 +179,7 @@ test("requestTenant: Flag AN + kein auth/tenant/internal -> OWNER (localhost/std
   withMultiTenant(true, () => {
     // localhost-Socket OHNE X-Internal-Identity -> internal null -> Owner.
     const req = reqWith({ remoteAddress: "127.0.0.1", headers: {} });
-    assert.equal(requestTenant(req), OWNER_TENANT_ID);
+    assert.equal(requestTenant(req), BOOTSTRAP_TENANT_ID);
   });
   assert.deepEqual(store.calls, []);
 });
@@ -291,21 +291,21 @@ test("requireTenant: gueltiger Tenant -> Tenant-String, kein 403", () => {
   assert.equal(res.statusCode, null, "kein Status-Write auf dem Erfolgs-Pfad");
 });
 
-test("requireTenant: Flag AUS -> OWNER_TENANT_ID, Gate inert (kein 403)", () => {
+test("requireTenant: Flag AUS -> BOOTSTRAP_TENANT_ID, Gate inert (kein 403)", () => {
   const store = makeStore();
   const { requireTenant } = makeRequestTenant(store);
   const res = fakeRes();
   const out = withMultiTenant(false, () =>
     requireTenant(reqWith({ tenant: { tenantId: "B" } }), res),
   );
-  assert.equal(out, OWNER_TENANT_ID);
+  assert.equal(out, BOOTSTRAP_TENANT_ID);
   assert.equal(res.statusCode, null);
 });
 
 // === Vertrags-Invariante =======================================================
 
-test("Vertrags-Invariante: TENANT_REJECT ist nie gleich OWNER_TENANT_ID", () => {
+test("Vertrags-Invariante: TENANT_REJECT ist nie gleich BOOTSTRAP_TENANT_ID", () => {
   // Locking-Test gegen ein versehentliches Zusammenfallen der beiden Marker - sonst
   // koennte eine unbekannte Identitaet still zu Owner kollabieren (Cross-Tenant-Leak).
-  assert.notEqual(TENANT_REJECT, OWNER_TENANT_ID);
+  assert.notEqual(TENANT_REJECT, BOOTSTRAP_TENANT_ID);
 });

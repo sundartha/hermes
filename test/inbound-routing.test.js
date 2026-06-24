@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog, OWNER_TEST_NUMBER, seedState } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const UNKNOWN_TO = "+49999999999"; // nicht geseedet -> nicht routbar
 
@@ -18,12 +18,12 @@ const EN_NUMBER = "+44111000333";
 function geoSeed(extraSettings = {}) {
   return seedState({
     settings: extraSettings,
-    tenants: [{ id: OWNER_TENANT_ID, status: "active" }],
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
     numbers: [
       {
         id: "num_owner_de",
         e164: OWNER_TEST_NUMBER.e164,
-        tenantId: OWNER_TENANT_ID,
+        tenantId: BOOTSTRAP_TENANT_ID,
         provider: "twilio",
         status: "active",
         country: "DE",
@@ -32,7 +32,7 @@ function geoSeed(extraSettings = {}) {
       {
         id: "num_fr",
         e164: FR_NUMBER,
-        tenantId: OWNER_TENANT_ID,
+        tenantId: BOOTSTRAP_TENANT_ID,
         provider: "twilio",
         status: "active",
         country: "FR",
@@ -41,7 +41,7 @@ function geoSeed(extraSettings = {}) {
       {
         id: "num_en",
         e164: EN_NUMBER,
-        tenantId: OWNER_TENANT_ID,
+        tenantId: BOOTSTRAP_TENANT_ID,
         provider: "twilio",
         status: "active",
         country: "GB",

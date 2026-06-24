@@ -8,7 +8,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import {
-  OWNER_TENANT_ID,
+  BOOTSTRAP_TENANT_ID,
   DEFAULT_PROVIDER,
   PROVIDER,
   NUMBER_STATUS,
@@ -928,7 +928,7 @@ app.post("/api/calls", async (req, res) => {
 
   // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
   // Profile-Achse (Rechte: resolveProfile/requestedBy) UND Tenant-Achse (requestTenant)
-  // PARALLEL aus derselben Identitaet (L4). Flag aus -> requestTenant === OWNER_TENANT_ID
+  // PARALLEL aus derselben Identitaet (L4). Flag aus -> requestTenant === BOOTSTRAP_TENANT_ID
   // (byte-identisch).
   const identity = internalIdentity(req);
   const profile = store.resolveProfile(identity);
@@ -1515,7 +1515,7 @@ if (!ok) {
 // Seed waeren Owner-Outbound + SMS still tot. Fail-closed wie die fruehere
 // TWILIO_NUMBER-Boot-Pflicht: ohne aktive Owner-Nummer im Store startet der Dienst
 // nicht. Loggt KEINE Nummer (kein Leak), verweist auf das Seed-CLI.
-if (!findActiveNumber(store.load(), OWNER_TENANT_ID)) {
+if (!findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID)) {
   console.error(
     "[boot] Keine aktive Owner-Nummer im Store. Erst seeden: " +
       "npm run seed-owner-number -- <e164> <provider>",

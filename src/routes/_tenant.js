@@ -13,7 +13,7 @@
 // makeTenantResolver({ store, config })) und defaultet auf das config-Singleton - das
 // haelt das Modul DB-frei und vermeidet einen Zirkel-Import mit server.js.
 import { config as defaultConfig } from "../config.js";
-import { OWNER_TENANT_ID } from "../store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
 
 // === Reine Helfer / Konstanten (ohne store/config) =============================
 
@@ -84,11 +84,11 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // auf dem /mcp-Pfad (req.auth direkt); die REST-seitige sub-Durchreichung folgt
   // in I5, wenn ein Lesepfad sie tatsaechlich filtert.
   function requestTenant(req) {
-    if (!config.multiTenant) return OWNER_TENANT_ID;
+    if (!config.multiTenant) return BOOTSTRAP_TENANT_ID;
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
     const sub = req.auth ? req.auth.sub : null;
     const internal = req.auth ? null : internalIdentity(req);
-    if (!sub && !internal) return OWNER_TENANT_ID; // fehlende Identitaet (localhost/stdio) -> Owner
+    if (!sub && !internal) return BOOTSTRAP_TENANT_ID; // fehlende Identitaet (localhost/stdio) -> Owner
     const tenantId = store.resolveTenant(sub || internal);
     return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
   }
@@ -97,7 +97,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // Eine VORHANDENE, aber unbekannte Identitaet (TENANT_REJECT) wird hart mit 403
   // abgewiesen, statt in einen Pseudo-Tenant-Bucket zu schreiben (Owner-Entscheidung).
   // Liefert den Tenant ODER null (dann ist 403 bereits gesendet -> Handler returnt).
-  // Flag AUS / fehlende Identitaet -> requestTenant === OWNER_TENANT_ID, nie REJECT ->
+  // Flag AUS / fehlende Identitaet -> requestTenant === BOOTSTRAP_TENANT_ID, nie REJECT ->
   // Guard inert -> Owner-Pfad byte-identisch. Eigenstaendig von I5's call-404-Helper
   // (requireTenantOwnsCall vergleicht call.tenantId); dieser wrappt nur requestTenant.
   function requireTenant(req, res) {

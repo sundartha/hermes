@@ -18,7 +18,7 @@ import { makePgTestStore } from "./pg-helpers.js";
 import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { GREETING_TEMPLATES } from "../src/self-service.js";
-import { OWNER_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
 
 const SECRET = "self-service-web-secret-0123456789";
@@ -88,7 +88,7 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
     direction: "inbound",
     from: "+49",
     to: "+49",
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
   });
   const bCall = ops.createCall(s, {
     direction: "inbound",
@@ -216,7 +216,7 @@ test("(b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt"
     assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
     assert.equal(stored[TENANT_B].allowCalendar, false, "allowCalendar gesetzt");
     assert.equal(
-      stored[OWNER_TENANT_ID].agentName,
+      stored[BOOTSTRAP_TENANT_ID].agentName,
       defaultSettings().agentName,
       "Owner-Bucket unveraendert",
     );

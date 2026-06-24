@@ -10,7 +10,7 @@ import {
   setKycLevel,
   kycReached,
 } from "../src/store/state-ops.js";
-import { KYC_LEVEL, KYC_OUTBOUND_MIN, OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { KYC_LEVEL, KYC_OUTBOUND_MIN, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const A = "tenant_a";
 
@@ -21,7 +21,7 @@ test("INV(3): Owner/Bestand ohne kyc_level -> Gate passiert (kycReached true, by
     false,
     "Owner traegt KEIN kycLevel-Feld (kein Default-Seed)",
   );
-  assert.equal(kycReached(s, OWNER_TENANT_ID, KYC_OUTBOUND_MIN), true, "fehlend -> ausreichend");
+  assert.equal(kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), true, "fehlend -> ausreichend");
 });
 
 test("INV(1): explizit < card -> Gate sperrt (none + otp)", () => {

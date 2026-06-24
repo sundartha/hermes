@@ -8,7 +8,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { runOutbound, assertDisclosureInGather } from "./_outbound-harness.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Tenant B mit getrenntem Vorname + vollem (mehrteiligem) Nachnamen: belegt, dass die
 // Persona NUR den Vornamen nennt, die Offenlegung den VOLLEN Namen.
@@ -54,7 +54,7 @@ test("Offenlegung rendert nie '...von .' (kein leerer Name)", () => {
   const sentence = disclosureSentence(callFor(TENANT_B));
   assert.ok(!sentence.includes("im Auftrag von ."), "leerer Name darf nie gerendert werden");
   assert.ok(
-    !disclosureSentence(callFor(OWNER_TENANT_ID)).includes("im Auftrag von ."),
+    !disclosureSentence(callFor(BOOTSTRAP_TENANT_ID)).includes("im Auftrag von ."),
     "auch nicht fuer den Owner",
   );
 });

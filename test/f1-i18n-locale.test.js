@@ -11,7 +11,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
 // Heutiges DE-Verhalten, woertlich gepinnt. ownerName wird im before EXPLIZIT auf den
@@ -172,15 +172,15 @@ before(async () => {
   // deterministisch (kein Config/Env-Coupling, Muster wie claude-identity Tenant B).
   const seed = seedState({
     calls: [],
-    tenants: [{ id: OWNER_TENANT_ID, status: "active", ownerName: OWNER_NAME }],
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER_NAME }],
   });
   process.env.DATA_DIR = tempDataDir(seed);
   await import("../src/config.js");
   ({ systemPrompt, disclosureSentence, openingText } = await import("../src/claude.js"));
 });
 
-const deCall = (over = {}) => seedCall({ tenantId: OWNER_TENANT_ID, language: "de", ...over });
-const frCall = (over = {}) => seedCall({ tenantId: OWNER_TENANT_ID, language: "fr", ...over });
+const deCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "de", ...over });
+const frCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "fr", ...over });
 
 test("DE byte-identisch: disclosureSentence(de) == Bestands-Wortlaut", () => {
   assert.equal(disclosureSentence(deCall()), DE_DISCLOSURE);
@@ -188,7 +188,7 @@ test("DE byte-identisch: disclosureSentence(de) == Bestands-Wortlaut", () => {
 
 test("DE byte-identisch: fehlende Sprache faellt auf de zurueck (Bestands-Aufrufer ohne language)", () => {
   // disclosure-regression ruft disclosureSentence OHNE language auf -> muss de bleiben.
-  assert.equal(disclosureSentence({ tenantId: OWNER_TENANT_ID }), DE_DISCLOSURE);
+  assert.equal(disclosureSentence({ tenantId: BOOTSTRAP_TENANT_ID }), DE_DISCLOSURE);
 });
 
 test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Regel", () => {

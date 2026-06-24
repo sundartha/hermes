@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TO = "+4915112345678";
 const OWNER_NUMBER = "+15005550006"; // = BASE_ENV.TWILIO_NUMBER
@@ -25,7 +25,7 @@ const activeNumber = (id, e164, tenantId) => ({
 function seedKyc(kycLevel) {
   return seedState({
     tenants: [
-      { id: OWNER_TENANT_ID, status: "active" },
+      { id: BOOTSTRAP_TENANT_ID, status: "active" },
       { id: A, status: "active", idpSubject: SUB_A, ...(kycLevel ? { kycLevel } : {}) },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
@@ -108,7 +108,7 @@ test("Flag AUS: Owner-Pfad byte-identisch (KYC-Gate inert)", async () => {
     const res = await placeCall(srv, SUB_A); // Identitaet ignoriert -> Owner
     assert.equal(res.status, 500, "Flag aus -> tenantId=owner, kein kyc_level -> Gate inert");
     const call = outboundCalls(srv)[0];
-    assert.equal(call.tenantId, OWNER_TENANT_ID);
+    assert.equal(call.tenantId, BOOTSTRAP_TENANT_ID);
     assert.equal(call.from, OWNER_NUMBER);
   } finally {
     await srv.stop();

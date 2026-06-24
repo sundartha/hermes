@@ -20,7 +20,7 @@ import { makePgTestStore } from "./pg-helpers.js";
 import {
   makeDefaultState,
   registerTenant,
-  seedOwnerNumber,
+  seedBootstrapNumber,
   requestNumber,
   setTenantGeo,
   findTenant,
@@ -30,7 +30,7 @@ import {
 } from "../src/store/state-ops.js";
 import {
   defaultSettings,
-  OWNER_TENANT_ID,
+  BOOTSTRAP_TENANT_ID,
   DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
 } from "../src/store/defaults.js";
@@ -139,31 +139,31 @@ test("resolveCallLanguage: alles leer -> DEFAULT_LANGUAGE (de, letzter Notnagel)
 // ---- (P4 #8) updateSettings: language-Override fail-closed validiert ----
 test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; Freitext/unbekannt ignoriert", () => {
   const s = makeDefaultState();
-  s.settings[OWNER_TENANT_ID] = defaultSettings();
-  assert.ok(updateSettings(s, OWNER_TENANT_ID, { language: "fr" }).changed.includes("language"));
-  assert.equal(s.settings[OWNER_TENANT_ID].language, "fr");
+  s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
+  assert.ok(updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "fr" }).changed.includes("language"));
+  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "fr");
   // "" -> "automatisch" -> null gespeichert
-  updateSettings(s, OWNER_TENANT_ID, { language: "" });
-  assert.equal(s.settings[OWNER_TENANT_ID].language, null);
+  updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "" });
+  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, null);
   // unbekannter Code wird ignoriert (fail-closed, kein Schreiben)
-  s.settings[OWNER_TENANT_ID].language = "fr";
-  const res = updateSettings(s, OWNER_TENANT_ID, { language: "xx" });
+  s.settings[BOOTSTRAP_TENANT_ID].language = "fr";
+  const res = updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "xx" });
   assert.ok(!res.changed.includes("language"), "unbekannter Sprachcode wird nicht uebernommen");
-  assert.equal(s.settings[OWNER_TENANT_ID].language, "fr", "alter Wert bleibt");
+  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "fr", "alter Wert bleibt");
 });
 
-// ---- (A) Number-Record Geo: seedOwnerNumber ----
-test("seedOwnerNumber: Default-Geo = DE/de (bestehende Aufrufe verhaltens-erhaltend)", () => {
+// ---- (A) Number-Record Geo: seedBootstrapNumber ----
+test("seedBootstrapNumber: Default-Geo = DE/de (bestehende Aufrufe verhaltens-erhaltend)", () => {
   const s = makeDefaultState();
-  seedOwnerNumber(s, "+491511234567", OWNER_TENANT_ID);
+  seedBootstrapNumber(s, "+491511234567", BOOTSTRAP_TENANT_ID);
   const num = s.numbers.find((n) => n.e164 === "+491511234567");
   assert.equal(num.country, DEFAULT_COUNTRY);
   assert.equal(num.language, DEFAULT_LANGUAGE);
 });
 
-test("seedOwnerNumber: explizites country/language landet auf dem Record (FR/+33)", () => {
+test("seedBootstrapNumber: explizites country/language landet auf dem Record (FR/+33)", () => {
   const s = makeDefaultState();
-  seedOwnerNumber(s, "+33123456789", OWNER_TENANT_ID, undefined, "FR", "fr");
+  seedBootstrapNumber(s, "+33123456789", BOOTSTRAP_TENANT_ID, undefined, "FR", "fr");
   const num = s.numbers.find((n) => n.e164 === "+33123456789");
   assert.equal(num.country, "FR");
   assert.equal(num.language, "fr");
@@ -172,7 +172,7 @@ test("seedOwnerNumber: explizites country/language landet auf dem Record (FR/+33
 // ---- (A) Number-Record Geo: requestNumber ----
 test("requestNumber: Default-Geo = DE/de", () => {
   const s = makeDefaultState();
-  const res = requestNumber(s, { tenantId: OWNER_TENANT_ID, ...CAPS });
+  const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, ...CAPS });
   assert.equal(res.ok, true);
   assert.equal(res.number.country, DEFAULT_COUNTRY);
   assert.equal(res.number.language, DEFAULT_LANGUAGE);
@@ -181,7 +181,7 @@ test("requestNumber: Default-Geo = DE/de", () => {
 test("requestNumber: explizites country/language (FR) landet auf der angefragten Nummer", () => {
   const s = makeDefaultState();
   const res = requestNumber(s, {
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     country: "FR",
     language: "fr",
     ...CAPS,
@@ -215,12 +215,12 @@ test("setTenantGeo: fehlender Tenant wirft (fail-closed, kein stilles No-Op)", (
 
 test("setTenantGeo: Owner ohne Geo-Patch bleibt byte-identisch (kein leeres Feld, Read-Fallback)", () => {
   const s = makeDefaultState();
-  const before = { ...findTenant(s, OWNER_TENANT_ID) };
-  setTenantGeo(s, OWNER_TENANT_ID, {});
-  assert.deepEqual(findTenant(s, OWNER_TENANT_ID), before, "leerer Patch aendert nichts");
-  assert.equal("country" in findTenant(s, OWNER_TENANT_ID), false, "kein country-Feld am Owner");
+  const before = { ...findTenant(s, BOOTSTRAP_TENANT_ID) };
+  setTenantGeo(s, BOOTSTRAP_TENANT_ID, {});
+  assert.deepEqual(findTenant(s, BOOTSTRAP_TENANT_ID), before, "leerer Patch aendert nichts");
+  assert.equal("country" in findTenant(s, BOOTSTRAP_TENANT_ID), false, "kein country-Feld am Owner");
   assert.equal(
-    "defaultLanguage" in findTenant(s, OWNER_TENANT_ID),
+    "defaultLanguage" in findTenant(s, BOOTSTRAP_TENANT_ID),
     false,
     "kein defaultLanguage-Feld am Owner",
   );
@@ -233,8 +233,8 @@ test("json-Fassade exportiert setTenantGeo (Re-Export-Landmine)", () => {
 
 test("json-Roundtrip: setTenantGeo via Fassade persistiert -> Tenant-Record traegt country/defaultLanguage", () => {
   // Owner existiert in makeDefaultState (load() seedet ihn) -> kein registerTenant noetig.
-  jsonBackend.setTenantGeo(OWNER_TENANT_ID, { country: "FR", defaultLanguage: "fr" });
-  const owner = jsonBackend.load().tenants.find((t) => t.id === OWNER_TENANT_ID);
+  jsonBackend.setTenantGeo(BOOTSTRAP_TENANT_ID, { country: "FR", defaultLanguage: "fr" });
+  const owner = jsonBackend.load().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID);
   assert.equal(owner.country, "FR");
   assert.equal(owner.defaultLanguage, "fr");
 });
@@ -246,7 +246,7 @@ test("pg: Number-Geo (country/language) ueberlebt Flush + Re-Hydrierung", async 
   s.numbers.push({
     id: "num_fr",
     e164: "+33999000111",
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     provider: "telnyx",
     status: "active",
     providerNumberId: null,
@@ -267,7 +267,7 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   const { db } = await makePgTestStore();
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'twilio','active')`,
-    ["num_legacy", OWNER_TENANT_ID, "+4915700099999"],
+    ["num_legacy", BOOTSTRAP_TENANT_ID, "+4915700099999"],
   );
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_legacy");
@@ -278,10 +278,10 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
 // ---- (C) pg-Roundtrip: Tenant-Geo ----
 test("pg: setTenantGeo ueberlebt Flush + Re-Hydrierung (nur-nicht-null hydriert)", async () => {
   const { store, db } = await makePgTestStore();
-  store.setTenantGeo(OWNER_TENANT_ID, { country: "FR", defaultLanguage: "fr" });
+  store.setTenantGeo(BOOTSTRAP_TENANT_ID, { country: "FR", defaultLanguage: "fr" });
   await store.save();
   const reopened = await reopen(db);
-  const owner = reopened.load().tenants.find((t) => t.id === OWNER_TENANT_ID);
+  const owner = reopened.load().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID);
   assert.equal(owner.country, "FR");
   assert.equal(owner.defaultLanguage, "fr");
 });
@@ -289,7 +289,7 @@ test("pg: setTenantGeo ueberlebt Flush + Re-Hydrierung (nur-nicht-null hydriert)
 test("pg: Owner ohne Geo behaelt KEIN country/defaultLanguage-Feld nach Re-Hydrierung (Owner byte-identisch)", async () => {
   const { db } = await makePgTestStore();
   const reopened = await reopen(db);
-  const owner = reopened.load().tenants.find((t) => t.id === OWNER_TENANT_ID);
+  const owner = reopened.load().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID);
   assert.equal("country" in owner, false, "kein country-Feld am frischen Owner");
   assert.equal("defaultLanguage" in owner, false, "kein defaultLanguage-Feld am frischen Owner");
 });
@@ -299,18 +299,18 @@ test("pg: Owner ohne Geo behaelt KEIN country/defaultLanguage-Feld nach Re-Hydri
 // frischer pg == frischer json (beide null, nicht 'de').
 test("pg: frische settings tragen language=null (frischer pg == frischer json, P4 #8)", async () => {
   const { store } = await makePgTestStore();
-  assert.equal(store.load().settings[OWNER_TENANT_ID].language, null);
+  assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].language, null);
 });
 
 test("pg: settings.language ist via updateSettings umstellbar + ueberlebt Re-Hydrierung", async () => {
   const { store, db } = await makePgTestStore();
-  const { changed } = store.updateSettings(OWNER_TENANT_ID, { language: "fr" });
+  const { changed } = store.updateSettings(BOOTSTRAP_TENANT_ID, { language: "fr" });
   assert.ok(changed.includes("language"), "language in der Whitelist (Default-Feld)");
-  assert.equal(store.load().settings[OWNER_TENANT_ID].language, "fr");
+  assert.equal(store.load().settings[BOOTSTRAP_TENANT_ID].language, "fr");
   await store.save();
   const reopened = await reopen(db);
   assert.equal(
-    reopened.load().settings[OWNER_TENANT_ID].language,
+    reopened.load().settings[BOOTSTRAP_TENANT_ID].language,
     "fr",
     "umgestellte Sprache persistiert",
   );
@@ -323,5 +323,5 @@ test("pg: doppelter applySchema/init bleibt fehlerfrei (idempotente ADD COLUMN I
   // Zweiter init auf derselben DB darf nicht an den neuen ALTER-Statements scheitern.
   const second = await reopen(db);
   // P4: frische settings.language ist null (optionales Override), nicht 'de'.
-  assert.equal(second.load().settings[OWNER_TENANT_ID].language, null);
+  assert.equal(second.load().settings[BOOTSTRAP_TENANT_ID].language, null);
 });

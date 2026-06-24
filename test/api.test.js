@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const postJson = (url, body) =>
   fetch(url, {
@@ -131,7 +131,7 @@ test("Eingabe-Validierung /api/calendar", async (t) => {
       assert.ok(ev.id);
       // readStore() liest den rohen (migrierten) Store: calendar ist seit I2 eine
       // Map tenantId -> [events]; der Owner-Bucket traegt die Laufzeit-Termine.
-      assert.ok(srv.readStore().calendar[OWNER_TENANT_ID].some((e) => e.id === ev.id));
+      assert.ok(srv.readStore().calendar[BOOTSTRAP_TENANT_ID].some((e) => e.id === ev.id));
     });
   } finally {
     await srv.stop();
@@ -156,7 +156,7 @@ test("Settings-Whitelist", async (t) => {
       );
       // readStore() liest den rohen (migrierten) Store: settings ist seit I2 eine
       // Map tenantId -> Bucket. Die HTTP-Response (oben) bleibt flach.
-      const stored = srv.readStore().settings[OWNER_TENANT_ID];
+      const stored = srv.readStore().settings[BOOTSTRAP_TENANT_ID];
       assert.equal("evil" in stored, false);
       assert.equal(stored.allowBooking, true);
     });
@@ -165,7 +165,7 @@ test("Settings-Whitelist", async (t) => {
       const res = await postJson(`${srv.localUrl}/api/settings`, { allowBooking: false });
       assert.equal(res.status, 200);
       assert.equal((await res.json()).allowBooking, false);
-      assert.equal(srv.readStore().settings[OWNER_TENANT_ID].allowBooking, false);
+      assert.equal(srv.readStore().settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
     });
   } finally {
     await srv.stop();
@@ -180,7 +180,7 @@ test("GET /api/tenant-data/export liefert Owner-Daten ohne streamToken", async (
       calls: [
         seedCall({
           id: "call_x",
-          tenantId: OWNER_TENANT_ID,
+          tenantId: BOOTSTRAP_TENANT_ID,
           streamToken: "geheim-token",
           summary: "Zusammenfassung",
         }),
@@ -192,7 +192,7 @@ test("GET /api/tenant-data/export liefert Owner-Daten ohne streamToken", async (
       const res = await fetch(`${srv.localUrl}/api/tenant-data/export`);
       assert.equal(res.status, 200);
       const body = await res.json();
-      assert.equal(body.tenantId, OWNER_TENANT_ID);
+      assert.equal(body.tenantId, BOOTSTRAP_TENANT_ID);
       assert.equal(typeof body.exportedAt, "string");
       assert.ok(
         Array.isArray(body.calls) &&

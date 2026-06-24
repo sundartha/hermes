@@ -12,7 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TO = "+4915112345678"; // erlaubtes DE-Ziel (in Allowlist, kein Premium/Notruf)
 // Owner-Absendernummer mit FR-Geo-Anker: ersetzt die DE-Default-Owner-Nummer aus dem
@@ -25,7 +25,7 @@ function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
   const number = {
     id: "num_owner",
     e164: OWNER_FR_NUMBER,
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     provider: "twilio",
     status: "active",
     country: "FR",
@@ -33,7 +33,7 @@ function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
   if (numberLanguage) number.language = numberLanguage;
   return seedState({
     settings: settingsLanguage ? { language: settingsLanguage } : {},
-    tenants: [{ id: OWNER_TENANT_ID, status: "active" }],
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
     numbers: [number],
   });
 }

@@ -17,12 +17,12 @@
 // spaeterer Scope, nicht P3b.
 import { config } from "../config.js";
 import * as ops from "./state-ops.js";
-import { OWNER_TENANT_ID, DEFAULT_PROVIDER } from "./defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_PROVIDER } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 
 // Owner-Tenant zentral in defaults.js; hier re-exportiert, weil Tests + pg-helpers
 // die Konstante historisch von store/pg.js importieren (Import-Stabilitaet).
-export { OWNER_TENANT_ID };
+export { BOOTSTRAP_TENANT_ID };
 
 // makePgStore(runner) -> Objekt mit den Store-Funktionen (Namensliste in store.js).
 // runner-Vertrag:
@@ -49,30 +49,30 @@ export function makePgStore(runner) {
   // DB-Rolle blocken.
   async function init() {
     await runner.withClient(async (client) => {
-      await setTenant(client, OWNER_TENANT_ID);
-      await migrate(client, OWNER_TENANT_ID);
+      await setTenant(client, BOOTSTRAP_TENANT_ID);
+      await migrate(client, BOOTSTRAP_TENANT_ID);
       state = await hydrate(client);
       // Owner-Identitaet config-derived seeden (Variante a, G1): owner_name hydriert
       // als NULL -> ohne Seed bliebe der Owner namenlos. Idempotent (gesetzter Wert
       // gewinnt). Persistenz via save() unten, damit first_name/owner_name
       // round-trippen (flushTenants).
-      ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
+      ops.seedBootstrapIdentity(state, config.ownerFirstName, config.ownerLastName, BOOTSTRAP_TENANT_ID);
       // Owner-Absendernummer config-derived idempotent seeden (analog json.js finishLoad):
       // pg hydriert eine frische/leere DB ohne aktive Owner-Nummer -> der Boot-Guard in
       // server.js braeche fail-closed ab (alle Deploys update_failed). Ohne OWNER_NUMBER
       // oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
-      ops.seedOwnerNumberFromConfig(
+      ops.seedBootstrapNumberFromConfig(
         state,
         config.ownerNumber,
-        OWNER_TENANT_ID,
+        BOOTSTRAP_TENANT_ID,
         config.ownerNumberProvider,
       );
-      // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog seedOwnerIdentity):
+      // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog seedBootstrapIdentity):
       // seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne diesen Seed verloere der
       // Owner nach der Umstellung still seine eigene Summary-SMS. false -> PII-freie Boot-Warnung
       // (nur der Marker, NIE die Nummer). Persistenz via save() unten (Gate beruecksichtigt
       // jetzt auch privateNumber, damit der Seed auch ohne ownerName round-trippt).
-      if (!ops.seedOwnerPrivateNumber(state, config.ownerNumber, OWNER_TENANT_ID))
+      if (!ops.seedBootstrapPrivateNumber(state, config.ownerNumber, BOOTSTRAP_TENANT_ID))
         console.warn(
           "[pg] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).",
         );
@@ -82,11 +82,11 @@ export function makePgStore(runner) {
     // Leer-Flush. save() wird AWAITED: init() ist async und der Flush teilt sich die Verbindung
     // mit den folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush wuerde
     // mit dem ersten Folge-Query um die Transaktion konkurrieren.
-    const owner = state.tenants.find((t) => t.id === OWNER_TENANT_ID);
-    // Flush auch, wenn (nur) eine aktive Owner-Nummer geseedet wurde: seedOwnerNumber und
-    // seedOwnerPrivateNumber nutzen unterschiedliche Validierung -> die aktive Nummer kann
+    const owner = state.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID);
+    // Flush auch, wenn (nur) eine aktive Owner-Nummer geseedet wurde: seedBootstrapNumber und
+    // seedBootstrapPrivateNumber nutzen unterschiedliche Validierung -> die aktive Nummer kann
     // ohne privateNumber existieren; ohne diesen Flush bliebe sie nach der Re-Hydrierung weg.
-    const hasOwnerNumber = state.numbers.some((n) => n.tenantId === OWNER_TENANT_ID);
+    const hasOwnerNumber = state.numbers.some((n) => n.tenantId === BOOTSTRAP_TENANT_ID);
     if (owner && (owner.ownerName || owner.privateNumber || hasOwnerNumber)) await save();
     return state;
   }
@@ -253,8 +253,8 @@ export function makePgStore(runner) {
     // Owner-/Bestandsnummer direkt 'active' eintragen (CLI scripts/seed-owner-number.js):
     // die EINE legitime Ausnahme zur Transition-Kette (idempotent ueber normNum). Der
     // neue Spiegel-Eintrag wird vom save()->flushTenantScope->flushNumbers persistiert.
-    seedOwnerNumber(e164, tenantId, provider) {
-      ops.seedOwnerNumber(requireState(), e164, tenantId, provider);
+    seedBootstrapNumber(e164, tenantId, provider) {
+      ops.seedBootstrapNumber(requireState(), e164, tenantId, provider);
       return save();
     },
 
@@ -491,7 +491,7 @@ async function hydrateTenantInto(client, state, tenantId) {
     })),
   );
 
-  if (tenantId === OWNER_TENANT_ID) {
+  if (tenantId === BOOTSTRAP_TENANT_ID) {
     const profileRows = (
       await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])
     ).rows;
@@ -646,7 +646,7 @@ async function flushTenantScope(client, tenantId, state) {
   await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
   await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
   await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
-  if (tenantId === OWNER_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
+  if (tenantId === BOOTSTRAP_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
   await flushTenantBudgets(client, tenantId, state.tenantBudgets);
@@ -710,7 +710,7 @@ function scopeOf(state, tenantId) {
 // und keine Notification faellt zwischen die Tenants.
 function notificationsForTenant(state, tenantId, callIds) {
   return state.notifications.filter(
-    (n) => callIds.has(n.callId) || (n.callId == null && tenantId === OWNER_TENANT_ID),
+    (n) => callIds.has(n.callId) || (n.callId == null && tenantId === BOOTSTRAP_TENANT_ID),
   );
 }
 

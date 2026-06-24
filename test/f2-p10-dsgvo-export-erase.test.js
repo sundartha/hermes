@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import {
   makeDefaultState,
   createCall,
@@ -37,24 +37,24 @@ async function reopen(db) {
 // A) Set -> Export enthaelt die Nummer -> Erase -> Export hat sie nicht mehr; tenant-Record ohne Feld.
 test("Export enthaelt privateNumber; Erase entfernt sie (state-ops, Art. 15 <-> Art. 17)", () => {
   const s = makeDefaultState();
-  setPrivateNumber(s, OWNER_TENANT_ID, NUM);
+  setPrivateNumber(s, BOOTSTRAP_TENANT_ID, NUM);
 
   assert.equal(
-    exportTenantData(s, OWNER_TENANT_ID).privateNumber,
+    exportTenantData(s, BOOTSTRAP_TENANT_ID).privateNumber,
     NUM,
     "Export enthaelt die Nummer",
   );
 
-  const removed = eraseTenantData(s, OWNER_TENANT_ID);
+  const removed = eraseTenantData(s, BOOTSTRAP_TENANT_ID);
 
   assert.equal(removed.privateNumber, 1, "Loesch-Zaehler meldet die entfernte Nummer (0/1)");
   assert.equal(
-    exportTenantData(s, OWNER_TENANT_ID).privateNumber,
+    exportTenantData(s, BOOTSTRAP_TENANT_ID).privateNumber,
     null,
     "Export nach Erase: keine Nummer",
   );
   assert.equal(
-    "privateNumber" in findTenant(s, OWNER_TENANT_ID),
+    "privateNumber" in findTenant(s, BOOTSTRAP_TENANT_ID),
     false,
     "tenant-Record ohne das Feld (entfernt, nicht null)",
   );
@@ -64,12 +64,12 @@ test("Export enthaelt privateNumber; Erase entfernt sie (state-ops, Art. 15 <-> 
 test("ohne gesetzte privateNumber: Export null, Erase-Zaehler 0 (kein Phantom-Loeschen)", () => {
   const s = makeDefaultState();
   assert.equal(
-    exportTenantData(s, OWNER_TENANT_ID).privateNumber,
+    exportTenantData(s, BOOTSTRAP_TENANT_ID).privateNumber,
     null,
     "kein Feld -> Export null",
   );
   assert.equal(
-    eraseTenantData(s, OWNER_TENANT_ID).privateNumber,
+    eraseTenantData(s, BOOTSTRAP_TENANT_ID).privateNumber,
     0,
     "nichts zu loeschen -> Zaehler 0",
   );
@@ -78,8 +78,8 @@ test("ohne gesetzte privateNumber: Export null, Erase-Zaehler 0 (kein Phantom-Lo
 // B) AK4: der Audit-/Loesch-Zaehler traegt NIE den PII-Wert, nur die Anzahl (0/1).
 test("AK4: Loesch-Zaehler ist PII-frei (Zahl, nicht der Nummern-Wert)", () => {
   const s = makeDefaultState();
-  setPrivateNumber(s, OWNER_TENANT_ID, NUM);
-  const removed = eraseTenantData(s, OWNER_TENANT_ID);
+  setPrivateNumber(s, BOOTSTRAP_TENANT_ID, NUM);
+  const removed = eraseTenantData(s, BOOTSTRAP_TENANT_ID);
   assert.equal(typeof removed.privateNumber, "number", "Zaehler ist eine Zahl");
   assert.notEqual(removed.privateNumber, NUM, "Zaehler ist NICHT der Nummern-Wert");
   assert.equal(
@@ -95,29 +95,29 @@ test("AK4: Loesch-Zaehler ist PII-frei (Zahl, nicht der Nummern-Wert)", () => {
 test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", async () => {
   const db = new PGlite();
   const store = await reopen(db);
-  store.setPrivateNumber(OWNER_TENANT_ID, NUM);
+  store.setPrivateNumber(BOOTSTRAP_TENANT_ID, NUM);
   await store.save();
 
   // Re-Hydrierung belegt: die Nummer ist real persistiert (nicht nur in-memory).
   assert.equal(
-    (await reopen(db)).tenantPrivateNumber(OWNER_TENANT_ID),
+    (await reopen(db)).tenantPrivateNumber(BOOTSTRAP_TENANT_ID),
     NUM,
     "Nummer vor Erase persistiert",
   );
 
-  const removed = store.eraseTenantData(OWNER_TENANT_ID);
+  const removed = store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   assert.equal(removed.calls, 0, "Owner ohne Calls -> der alte save-Gate haette NICHT gespeichert");
   assert.equal(removed.privateNumber, 1, "privateNumber entfernt");
   await store.save();
 
   const reopened = await reopen(db);
   assert.equal(
-    reopened.tenantPrivateNumber(OWNER_TENANT_ID),
+    reopened.tenantPrivateNumber(BOOTSTRAP_TENANT_ID),
     null,
     "Nummer nach Erase weg (ueberlebt den Restart)",
   );
   assert.equal(
-    reopened.exportTenantData(OWNER_TENANT_ID).privateNumber,
+    reopened.exportTenantData(BOOTSTRAP_TENANT_ID).privateNumber,
     null,
     "Export nach Restart: keine Nummer",
   );
@@ -127,11 +127,11 @@ test("Erase persistiert ueber Restart, auch ohne Calls (pglite, save-Gate)", asy
 test("Erase ist tenant-scoped: fremde privateNumber bleibt unberuehrt", () => {
   const s = makeDefaultState();
   s.tenants.push({ id: "other", status: "active" });
-  setPrivateNumber(s, OWNER_TENANT_ID, NUM);
+  setPrivateNumber(s, BOOTSTRAP_TENANT_ID, NUM);
   setPrivateNumber(s, "other", "+491729998877");
 
-  eraseTenantData(s, OWNER_TENANT_ID);
+  eraseTenantData(s, BOOTSTRAP_TENANT_ID);
 
-  assert.equal(exportTenantData(s, OWNER_TENANT_ID).privateNumber, null, "Owner-Nummer weg");
+  assert.equal(exportTenantData(s, BOOTSTRAP_TENANT_ID).privateNumber, null, "Owner-Nummer weg");
   assert.equal(exportTenantData(s, "other").privateNumber, "+491729998877", "fremde Nummer bleibt");
 });

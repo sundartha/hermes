@@ -22,7 +22,7 @@ import {
   STATE_CALENDAR,
   STATE_NOTIFICATIONS,
 } from "../src/routes/api-read.js";
-import { OWNER_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 
 const STREAM_TOKEN = "s".repeat(32); // WS-Zugangsgeheimnis, darf nie eine Antwort verlassen
 const FOREIGN = "tenant_foreign";
@@ -39,7 +39,7 @@ function makeCall(id, tenantId) {
 // counts skaliert die Listen (Slice-Kappung); calendar liefert je 1 zukuenftigen +
 // 1 vergangenen Termin (upcomingCalendar-Filter).
 function makeMockStore({ listSize = 1 } = {}) {
-  const ownerCall = makeCall("call_owner", OWNER_TENANT_ID);
+  const ownerCall = makeCall("call_owner", BOOTSTRAP_TENANT_ID);
   const foreignCall = makeCall("call_foreign", FOREIGN);
   const calls = [ownerCall, foreignCall];
   const bulk = (prefix) => Array.from({ length: listSize }, (_, i) => ({ id: `${prefix}${i}` }));
@@ -50,7 +50,7 @@ function makeMockStore({ listSize = 1 } = {}) {
       actionItems: bulk("ai"),
       notifications: bulk("n"),
       numbers: [
-        { tenantId: OWNER_TENANT_ID, e164: "+4915200000001", status: NUMBER_STATUS.ACTIVE },
+        { tenantId: BOOTSTRAP_TENANT_ID, e164: "+4915200000001", status: NUMBER_STATUS.ACTIVE },
       ],
     }),
     tenantContext: () => ({ settings: { greeting: "hi" }, ownerName: "Jonas" }),
@@ -87,7 +87,7 @@ function makeConfig(overrides = {}) {
 // (exakt wie der reale requireTenant: Antwort gesendet, null zurueck). tenantOwnsCall
 // = das reale Praedikat (call.tenantId === tenant), eine Quelle wie in server.js.
 function makeTenant() {
-  const resolve = (req) => req.headers["x-test-tenant"] || OWNER_TENANT_ID;
+  const resolve = (req) => req.headers["x-test-tenant"] || BOOTSTRAP_TENANT_ID;
   return {
     requestTenant: resolve,
     requireTenant: (req, res) => {
@@ -177,7 +177,7 @@ test("GET /api/state (Flag an, Owner-Tenant): Owner-PII sichtbar + aktive Owner-
   const srv = await mount(makeMockStore(), makeConfig({ multiTenant: true }));
   try {
     const res = await fetch(`${srv.base}/api/state`, {
-      headers: { "x-test-tenant": OWNER_TENANT_ID },
+      headers: { "x-test-tenant": BOOTSTRAP_TENANT_ID },
     });
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -238,7 +238,7 @@ test("GET /api/calls/:id (Flag an): fremder Call -> 404 (kein Existenz-Leck, NIC
   try {
     // Owner fragt den fremden Call ab -> tenantOwnsCall false -> 404.
     const res = await fetch(`${srv.base}/api/calls/call_foreign`, {
-      headers: { "x-test-tenant": OWNER_TENANT_ID },
+      headers: { "x-test-tenant": BOOTSTRAP_TENANT_ID },
     });
     assert.equal(res.status, 404);
     assert.deepEqual(await res.json(), { error: "not found" });

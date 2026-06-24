@@ -7,7 +7,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { runOutbound, GATHER_OPEN, HANGUP_TAG, DISCLOSURE_JONAS } from "./_outbound-harness.js";
 
 // Muss zu OPENING_GOAL_MAX_CHARS (claude.js, 160) passen: dieser Test pinnt das
@@ -75,7 +75,7 @@ test("G2: ueberlanges Anliegen wird im Erst-Turn gekappt (Wortgrenze, kein Satzz
 // (3b) Grenzfall leeres Anliegen: nur Offenlegung, kein "weil ."-Artefakt.
 test("G2: leeres Anliegen -> nur Offenlegung, kein 'weil .'-Artefakt", () => {
   const text = openingText(
-    seedCall({ direction: "outbound", goal: "", tenantId: OWNER_TENANT_ID }),
+    seedCall({ direction: "outbound", goal: "", tenantId: BOOTSTRAP_TENANT_ID }),
   );
   assert.ok(text.includes("Guten Tag"), `Offenlegung fehlt: ${text}`);
   // Bei leerem Anliegen wird die Bruecke ("Ich rufe an, weil ...") komplett weggelassen
@@ -87,7 +87,7 @@ test("G2: leeres Anliegen -> nur Offenlegung, kein 'weil .'-Artefakt", () => {
 // gesprochene Offenlegung + Anliegen NICHT zu wiederholen (statt sie zu verlangen).
 test("G2: Outbound-systemPrompt verhindert Doppel-Nennung (nicht wiederholen, kein 'allererster Satz')", () => {
   const prompt = systemPrompt(
-    seedCall({ direction: "outbound", goal: "Termin", tenantId: OWNER_TENANT_ID }),
+    seedCall({ direction: "outbound", goal: "Termin", tenantId: BOOTSTRAP_TENANT_ID }),
   );
   assert.ok(prompt.includes("Wiederhole sie NICHT"), `Nicht-wiederholen-Hinweis fehlt: ${prompt}`);
   assert.ok(
