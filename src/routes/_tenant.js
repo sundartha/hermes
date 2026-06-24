@@ -61,10 +61,16 @@ export const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 // (makeRequestTenant) ohne explizite config byte-identisch dieselbe Quelle liest
 // (Tests mutieren config.multiTenant live auf dem Singleton).
 export function makeTenantResolver({ store, config = defaultConfig }) {
+  // EXPLIZITE Bindung an den konfigurierten Single-Tenant-Bootstrap (P3). Genau EINE
+  // Stelle, an der der Flag-aus-/Single-Tenant-Pfad an einen Tenant gebunden wird -
+  // benannt statt als roher BOOTSTRAP_TENANT_ID-Constant-Return verstreut (G5/N3).
+  const singleTenantBootstrap = () => BOOTSTRAP_TENANT_ID;
+
   // Request-Tenant aus der Auth-Identitaet aufloesen (Geschwister zu internalIdentity).
   // Aufloesungs-Reihenfolge (load-bearing):
-  //   (1) Flag aus -> Owner byte-identisch (kein Aufloesungs-Pfad; muss ZUERST stehen,
-  //       sonst kaeme bei Flag aus ein Session-Tenant statt Owner -> R5).
+  //   (1) Flag aus -> explizite Bootstrap-Bindung (singleTenantBootstrap, kein
+  //       Aufloesungs-Pfad; muss ZUERST stehen, sonst kaeme bei Flag aus ein
+  //       Session-Tenant statt des Bootstrap-Tenants -> R5).
   //   (2) req.tenant (Web-Session, A4): VOR der req.auth-Logik. req.tenant wird im
   //       ganzen src/ NUR von webAuthMiddleware gesetzt (web-auth.js) - erst nach
   //       signiertem Cookie + gueltiger, nicht-invalidierter DB-Session + aktivem
@@ -75,20 +81,28 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   //       zweiter Resolver bei einem Tenant ohne idpSubject von der DB-Session
   //       divergieren (R7). fail-closed: leere/fehlende tenantId -> TENANT_REJECT,
   //       NIE Owner. Bewusst `||`, NICHT `??` - `??` liesse `""` durch (R2).
-  //   (3) req.auth.sub (MCP-Achse) bzw. localhost-internalIdentity - byte-identisch
-  //       zum Bestand. FEHLENDE Identitaet (kein req.auth UND kein localhost-internal,
-  //       also localhost/stdio) bleibt Owner. VORHANDENE, aber unbekannte/leere
-  //       Identitaet -> TENANT_REJECT (resolveTenant liefert null).
+  //   (3) req.auth.sub (MCP-Achse) bzw. localhost-internalIdentity. FEHLENDE Identitaet
+  //       (kein req.auth UND kein localhost-internal, also der localhost-/stdio-
+  //       Single-Operator-Kanal) -> explizite Bootstrap-Bindung (P3, singleTenantBootstrap;
+  //       vormals roher BOOTSTRAP_TENANT_ID-Constant-Return). VORHANDENE, aber
+  //       unbekannte/leere Identitaet -> TENANT_REJECT (resolveTenant liefert null).
   // Hinweis (I5-Vorbereitung): der REST-X-Internal-Identity-Kanal traegt heute
   // email-first (mcp-tools), die Tenant-Achse keyt aber auf sub. I4 nutzt sub nur
   // auf dem /mcp-Pfad (req.auth direkt); die REST-seitige sub-Durchreichung folgt
   // in I5, wenn ein Lesepfad sie tatsaechlich filtert.
   function requestTenant(req) {
-    if (!config.multiTenant) return BOOTSTRAP_TENANT_ID;
+    if (!config.multiTenant) return singleTenantBootstrap();
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
     const sub = req.auth ? req.auth.sub : null;
     const internal = req.auth ? null : internalIdentity(req);
-    if (!sub && !internal) return BOOTSTRAP_TENANT_ID; // fehlende Identitaet (localhost/stdio) -> Owner
+    // FEHLENDE Identitaet (kein req.auth UND kein localhost-internal, also der
+    // localhost-/stdio-Single-Operator-Kanal): EXPLIZITE Bindung an den Bootstrap-
+    // Tenant (P3, singleTenantBootstrap), NICHT mehr als roher BOOTSTRAP_TENANT_ID-
+    // Constant-Return. Das ist KEIN Leck: ohne Identitaet ist dies der vertraute
+    // Owner-/Betreiber-Kanal (V4-Kontrakt, von I4 security-reviewed). Der echte
+    // fail-closed-Riegel sitzt eine Zeile tiefer: eine VORHANDENE, aber unbekannte
+    // Identitaet -> TENANT_REJECT (NIE Owner).
+    if (!sub && !internal) return singleTenantBootstrap();
     const tenantId = store.resolveTenant(sub || internal);
     return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
   }
@@ -97,8 +111,9 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // Eine VORHANDENE, aber unbekannte Identitaet (TENANT_REJECT) wird hart mit 403
   // abgewiesen, statt in einen Pseudo-Tenant-Bucket zu schreiben (Owner-Entscheidung).
   // Liefert den Tenant ODER null (dann ist 403 bereits gesendet -> Handler returnt).
-  // Flag AUS / fehlende Identitaet -> requestTenant === BOOTSTRAP_TENANT_ID, nie REJECT ->
-  // Guard inert -> Owner-Pfad byte-identisch. Eigenstaendig von I5's call-404-Helper
+  // Flag AUS / fehlende Identitaet -> requestTenant === singleTenantBootstrap(), nie
+  // REJECT -> Guard inert -> Owner-Pfad byte-identisch. Nur eine VORHANDENE, aber
+  // unbekannte Identitaet -> REJECT -> 403. Eigenstaendig von I5's call-404-Helper
   // (requireTenantOwnsCall vergleicht call.tenantId); dieser wrappt nur requestTenant.
   function requireTenant(req, res) {
     const tenant = requestTenant(req);

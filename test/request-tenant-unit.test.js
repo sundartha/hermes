@@ -129,7 +129,7 @@ test("internalIdentity: extern + Header gesetzt -> null (von extern faelschbar, 
 
 // === makeRequestTenant -> requestTenant ========================================
 
-test("requestTenant: Flag AUS -> immer BOOTSTRAP_TENANT_ID, kein resolveTenant-Lookup", () => {
+test("requestTenant: Flag AUS -> explizite Bootstrap-Bindung (kein REJECT, kein Lookup)", () => {
   const store = makeStore({ "sub-b": "B" });
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(false, () => {
@@ -159,9 +159,11 @@ test("requestTenant: Flag AN + sub vorhanden, resolveTenant=null -> TENANT_REJEC
   });
 });
 
-test("requestTenant: Flag AN + auth ohne sub, extern -> OWNER (fehlende Identitaet)", () => {
+test("requestTenant: Flag AN + auth ohne sub -> Bootstrap-Bindung (fehlende Identitaet)", () => {
   // Verifiziertes Token ohne sub-Claim: req.auth truthy, sub null -> internal wird
-  // NICHT konsultiert (req.auth ? null) -> !sub && !internal -> Owner (V4-Semantik).
+  // NICHT konsultiert (req.auth ? null) -> !sub && !internal -> explizite Bootstrap-
+  // Bindung (singleTenantBootstrap, V4-Kontrakt). NICHT REJECT - der Single-Operator-
+  // Kanal ohne Identitaet ist der vertraute Owner-Pfad.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
@@ -173,11 +175,11 @@ test("requestTenant: Flag AN + auth ohne sub, extern -> OWNER (fehlende Identita
   assert.deepEqual(store.calls, [], "kein Lookup ohne Identitaet");
 });
 
-test("requestTenant: Flag AN + kein auth/tenant/internal -> OWNER (localhost/stdio)", () => {
+test("requestTenant: Flag AN + kein auth/tenant/internal -> Bootstrap-Bindung (localhost/stdio)", () => {
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
-    // localhost-Socket OHNE X-Internal-Identity -> internal null -> Owner.
+    // localhost-Socket OHNE X-Internal-Identity -> internal null -> Bootstrap-Bindung.
     const req = reqWith({ remoteAddress: "127.0.0.1", headers: {} });
     assert.equal(requestTenant(req), BOOTSTRAP_TENANT_ID);
   });
@@ -303,6 +305,24 @@ test("requireTenant: Flag AUS -> BOOTSTRAP_TENANT_ID, Gate inert (kein 403)", ()
 });
 
 // === Vertrags-Invariante =======================================================
+
+test("P3 fail-closed: Flag AN + VORHANDENE-aber-unbekannte Identitaet -> NIE realer Tenant", () => {
+  // P3-Riegel: eine vorhandene, aber unaufloesbare Identitaet (sub ODER localhost-
+  // internal-Header) faellt NIE auf einen anderen realen Tenant - immer TENANT_REJECT.
+  // (Die FEHLENDE Identitaet ist davon getrennt -> explizite Bootstrap-Bindung, V4.)
+  const store = makeStore({ "sub-real": "REAL" });
+  const { requestTenant } = makeRequestTenant(store);
+  withMultiTenant(true, () => {
+    for (const req of [
+      reqWith({ auth: { sub: "ghost" }, remoteAddress: "203.0.113.7" }),
+      reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-identity": "ghost@x.test" } }),
+    ]) {
+      const out = requestTenant(req);
+      assert.equal(out, TENANT_REJECT, "unbekannte Identitaet -> REJECT");
+      assert.notEqual(out, "REAL", "darf NIE auf einen realen Tenant fallen");
+    }
+  });
+});
 
 test("Vertrags-Invariante: TENANT_REJECT ist nie gleich BOOTSTRAP_TENANT_ID", () => {
   // Locking-Test gegen ein versehentliches Zusammenfallen der beiden Marker - sonst

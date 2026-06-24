@@ -3,7 +3,7 @@
 import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "./store/defaults.js";
+import { USAGE_EVENT_KIND } from "./store/defaults.js";
 import { aiCostCents } from "./store/state-ops.js";
 import { localeFor } from "./i18n/locales.js";
 
@@ -22,7 +22,7 @@ const llm = createLlmClient({ apiKey: config.anthropicApiKey, config });
 function meterAiTokens(call, usage) {
   if (!config.paymentEnabled) return;
   store.recordUsageEvent({
-    tenantId: call.tenantId || BOOTSTRAP_TENANT_ID,
+    tenantId: call.tenantId,
     callId: call.id,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
     quantity: usage.input_tokens + usage.output_tokens,
@@ -275,12 +275,7 @@ export async function agentTurn(call, callerText) {
       tools: toolDefs(call.tenantId),
       messages,
     });
-    store.trackUsage(
-      call.tenantId || BOOTSTRAP_TENANT_ID,
-      resp.usage.input_tokens,
-      resp.usage.output_tokens,
-      config,
-    );
+    store.trackUsage(call.tenantId, resp.usage.input_tokens, resp.usage.output_tokens, config);
     meterAiTokens(call, resp.usage);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
@@ -350,12 +345,7 @@ export async function summarizeCall(call) {
       },
     ],
   });
-  store.trackUsage(
-    call.tenantId || BOOTSTRAP_TENANT_ID,
-    resp.usage.input_tokens,
-    resp.usage.output_tokens,
-    config,
-  );
+  store.trackUsage(call.tenantId, resp.usage.input_tokens, resp.usage.output_tokens, config);
   meterAiTokens(call, resp.usage);
 
   let parsed = { summary: "", actionItems: [] };

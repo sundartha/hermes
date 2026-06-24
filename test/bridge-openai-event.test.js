@@ -26,6 +26,7 @@ import { register, createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { BASE_ENV, tempDataDir } from "./helpers.js";
 import { twilioMedia } from "../src/telephony/adapters/twilio/media.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // ---- Umgebung deterministisch fixieren, BEVOR config.js (via bridge.js) laedt ----
 // BASE_ENV ist der gleiche neutrale Satz wie bei den Spawn-Tests (keine .env-Leaks).
@@ -132,6 +133,7 @@ async function setupCall(callOverrides = {}) {
     to: "+4915112345678",
     goal: "Testziel",
     maxDurationS: 60,
+    tenantId: BOOTSTRAP_TENANT_ID,
     ...callOverrides,
   });
 

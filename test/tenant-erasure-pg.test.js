@@ -63,7 +63,7 @@ const countWhereTenant = async (db, table, tenantId) =>
 test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant bleibt unberuehrt", async () => {
   const { store, db } = await setup();
   // Owner-Call-Satz ueber die Store-API anlegen (call + Transkript + Action Item + Notification).
-  const c = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Owner" });
+  const c = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Owner", tenantId: BOOTSTRAP_TENANT_ID });
   store.addTranscript(c.id, "agent", "Hallo Owner");
   store.addTranscript(c.id, "caller", "Owner-Geheim");
   store.addActionItem(c.id, "Owner-Rueckruf");
@@ -110,7 +110,7 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
   // Service/Identitaet/Budget-Gate vorab setzen, damit ihr Ueberleben pruefbar ist.
   store.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Owner-Service" });
   store.trackUsage(BOOTSTRAP_TENANT_ID, 1_000_000, 0, PRICES);
-  const c = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const c = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.addTranscript(c.id, "agent", "weg");
   await store.save();
 
