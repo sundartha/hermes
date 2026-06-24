@@ -26,7 +26,7 @@ import { registerTools } from "./mcp-tools.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
-import { audit, safeEqual } from "./util.js";
+import { audit, safeEqual, maskNumber, hashEmail } from "./util.js";
 import {
   voiceControl,
   messaging,
@@ -1435,10 +1435,13 @@ async function runProvisioningDrain() {
 app.post("/mcp", mcpAuth, async (req, res) => {
   // tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die
   // tenantId, nie email/sub). Flag aus -> immer tenant=owner (byte-identisch).
+  // E-Mail wird gehasht (T-P0-7): dieses Diagnose-Log laeuft pro Request und landet
+  // im Render-stdout - die Klartext-Adresse waere PII at rest. Der forensische
+  // Identitaets-Nachweis bleibt vollstaendig im audit()-Trail (requestedBy).
   if (req.auth)
     console.log(
       "[mcp]",
-      req.auth.email || "anonym",
+      req.auth.email ? hashEmail(req.auth.email) : "anonym",
       `tenant=${requestTenant(req)}`,
       req.body?.method || "",
     );
@@ -1539,8 +1542,11 @@ const httpServer = app.listen(config.port, () => {
   );
   console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
   console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
+  // Allowlist maskiert (T-P0-7): das Startup-Banner landet im Render-stdout; die
+  // Owner-Allowlist sind Nummern realer Kontakte (PII at rest). Letzte 4 Ziffern +
+  // Korrelations-Hash genuegen zur Konfig-Sichtpruefung; der Vollwert steht in .env.
   console.log(
-    `  Allowlist:      ${config.allowedNumbers.join(", ") || "(leer -> Outbound gesperrt)"}`,
+    `  Allowlist:      ${config.allowedNumbers.map(maskNumber).join(", ") || "(leer -> Outbound gesperrt)"}`,
   );
   console.log(
     `  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,

@@ -17,3 +17,6 @@ dist/
 build/
 .env.local
 .env.*.local
+_cacache/
+_logs/
+_update-notifier-last-checked

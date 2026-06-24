@@ -9,6 +9,11 @@ echo "═══ Vodafone Agent - Deploy ═══"
 
 command -v git >/dev/null || { echo "FEHLER: git fehlt"; read -r; exit 1; }
 
+# 0. Tests laufen lassen (fail-closed: roter Test -> kein Commit/Push)
+echo "Tests laufen..."
+npm test || { echo "FEHLER: Tests rot. Kein Deploy."; read -r; exit 1; }
+echo "✓ Tests gruen"
+
 # 1. Offene Aenderungen committen (falls vorhanden)
 if [ -n "$(git status --porcelain)" ]; then
   git add -A

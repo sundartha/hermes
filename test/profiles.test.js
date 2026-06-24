@@ -18,6 +18,7 @@ import {
   waitForLog,
   MCP_AUDIENCE,
 } from "./helpers.js";
+import { hashEmail } from "../src/util.js";
 
 const OFFLINE = { TWILIO_ACCOUNT_SID: "x" }; // nicht-AC -> Twilio-Client wirft sync -> durchgelassen = 500
 const postCall = (url, to, identity) =>
@@ -350,6 +351,13 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       await waitForLog(
         srv,
         /\[audit\] place_call ip=\S+ to=\+4915123123123 .* requestedBy=alice@team\.test/,
+      );
+      // T-P0-7: das pro-Request-[mcp]-Diagnose-Log zeigt die E-Mail nur gehasht,
+      // nie im Klartext (der forensische Klartext bleibt allein im audit()-Trail).
+      await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=`));
+      assert.ok(
+        !/\[mcp\] alice@team\.test/.test(srv.stdout),
+        "[mcp]-Log darf die Adresse nicht im Klartext zeigen",
       );
     });
 

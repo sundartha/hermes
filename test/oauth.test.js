@@ -12,6 +12,7 @@ import {
   mcpPost as post,
   MCP_AUDIENCE as AUDIENCE,
 } from "./helpers.js";
+import { hashEmail } from "../src/util.js";
 
 test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
   const idp = await startIdp();
@@ -71,11 +72,12 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
       assert.equal(res.status, 401);
     });
 
-    await t.test("gueltiges Token -> kein 401, req.auth.email im Log", async () => {
+    await t.test("gueltiges Token -> kein 401, req.auth.email gehasht im Log", async () => {
       const token = await idp.sign({ email: "alice@team.test" });
       const res = await post(`${srv.localUrl}/mcp`, token);
       assert.notEqual(res.status, 401);
-      await waitForLog(srv, /\[mcp\] alice@team\.test/);
+      // T-P0-7: das [mcp]-Diagnose-Log zeigt die E-Mail nur gehasht, nie im Klartext.
+      await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("alice@team.test")} tenant=`));
     });
   } finally {
     await srv.stop();
