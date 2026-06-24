@@ -2,5 +2,6 @@
 dist/
 dist-test/
 dist-test-links/
+dist-test-failclosed/
 node_modules/
 .astro/

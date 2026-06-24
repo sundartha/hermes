@@ -211,6 +211,14 @@ services:
     rootDir: apps/web
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
+    envVars:
+      # Build-Zeit-Var: Astro inlinet PUBLIC_*-Vars ins statische HTML. Absoluter
+      # Auth-Origin des Gateways fuer die Login-/Funnel-Links (routes.js -> LOGIN_URL).
+      # Die Static Site hat selbst kein /auth/login (404); der OIDC-Flow lebt auf dem
+      # Gateway-Service. routes.js ist fail-closed -> fehlt die Var, bricht der Build ab
+      # (statt still 404 zu liefern). Spaeterer Track-B-Cutover = nur dieser Wert.
+      - key: PUBLIC_GATEWAY_URL
+        value: "https://vodafone-agent.onrender.com"
     buildFilter:
       paths:
         - "apps/web/**"
