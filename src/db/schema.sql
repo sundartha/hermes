@@ -162,14 +162,23 @@ CREATE TABLE IF NOT EXISTS usage (
   calls         BIGINT NOT NULL DEFAULT 0
 );
 
--- profile: in P3b weiter keyed-by-email, owner-tenant-scoped. Sanitisiertes
--- Profil-Objekt als JSONB (Whitelist bleibt im Code).
+-- profile: Owner-Removal P5 - GLOBAL, keine Tenant-Bindung mehr (Rechteprofile sind
+-- betreiber-/admin-weit, nicht pro Telefon-Workspace). email ist alleiniger PK.
+-- Sanitisiertes Profil-Objekt als JSONB (Whitelist bleibt im Code).
 CREATE TABLE IF NOT EXISTS profile (
-  tenant_id TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-  email     TEXT NOT NULL,
-  data      JSONB NOT NULL,
-  PRIMARY KEY (tenant_id, email)
+  email TEXT PRIMARY KEY,
+  data  JSONB NOT NULL
 );
+-- Forward-compat fuer eine bestehende (owner-tenant-scoped) profile-Tabelle:
+-- tenant_id aus dem PK loesen, dann die Spalte droppen (idempotent). Bestehende
+-- owner-keyed Profile (email/data) bleiben erreichbar (R6, kein Datenverlust).
+ALTER TABLE profile DROP CONSTRAINT IF EXISTS profile_pkey;
+ALTER TABLE profile DROP COLUMN IF EXISTS tenant_id;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profile_pkey') THEN
+    ALTER TABLE profile ADD PRIMARY KEY (email);
+  END IF;
+END $$;
 
 -- notification: Ring-Puffer (neueste zuerst), seq fuer stabile Reihenfolge.
 CREATE TABLE IF NOT EXISTS notification (
@@ -365,10 +374,15 @@ DROP POLICY IF EXISTS tenant_isolation ON usage;
 CREATE POLICY tenant_isolation ON usage
   USING (tenant_id = current_setting('app.current_tenant', true))
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
+-- profile: Owner-Removal P5 - GLOBAL, haengt NICHT mehr an app.current_tenant.
+-- Eine fuer die App-Rolle global lesbare/schreibbare Tabelle (admin-weit). Die
+-- Zugriffskontrolle liegt bewusst eine Schicht hoeher (Basic-/adminOnly-Auth der
+-- /api/profiles-Routen + sanitizeProfile-Whitelist), NICHT in der RLS. RLS bleibt
+-- FORCE-aktiv (Konsistenz, kein Sonder-Disable), die Policy ist nur permissiv -
+-- es gibt keine Tenant-Dimension mehr, also auch keinen Cross-Tenant-Leak.
 DROP POLICY IF EXISTS tenant_isolation ON profile;
-CREATE POLICY tenant_isolation ON profile
-  USING (tenant_id = current_setting('app.current_tenant', true))
-  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS profile_global ON profile;
+CREATE POLICY profile_global ON profile USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
   USING (tenant_id = current_setting('app.current_tenant', true))
