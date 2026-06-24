@@ -1,0 +1,603 @@
+/*
+ * Site-Chrome (dunkles Hero-Layout) — ersetzt marketing.css. Verwendet
+ * AUSSCHLIESSLICH semantische Tokens (var(--...)); konkrete Werte (Hex, px,
+ * Gradients) leben nur in styles/tokens/primitives.css.
+ *
+ * EINE Design-Referenz: Jeder sichtbare Farb-/Font-/Schatten-Wert stammt aus
+ * den --hero-*-Primitives (ueber die Hero/Dark-Rollen in semantic.css). Die
+ * Unterseiten erben damit exakt die Aesthetik des Vollbild-Hero (index.astro);
+ * sie KOENNEN nicht abweichen.
+ *
+ * Token-Import-Strategie (bewusst): NICHT tokens/index.css und NICHT die App-
+ * Token-Schicht (primitives.css/semantic.css) importieren — die wuerden die
+ * App-Palette (Markenrot, Grautoene) als ungenutzte Token-Definitionen in den
+ * Unterseiten-Bundle ziehen (#e60000 im Output). Stattdessen NUR tokens/hero.css
+ * (eigenstaendige Dark-Token-Schicht). Der Dunkel-Reset steht EINMAL hier.
+ *
+ * Ausnahme (dokumentiert, wie im Bestand): rohe Werte sind nur dort erlaubt, wo
+ * CSS keine Custom-Property zulaesst — Media-Query-Breakpoints, min-height:100vh,
+ * sowie zeichnungs-intrinsische Geometrie (SVG stroke-width). Alle anderen
+ * Werte sind Tokens.
+ */
+@import "./tokens/hero.css";
+
+/* --- Dunkel-Reset (einmalig; ersetzt den hellen Reset aus tokens/index.css) --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: var(--font-size-root);
+  line-height: var(--line-height-root);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-grotesk);
+  color: var(--text-on-dark);
+  background: var(--site-bg);
+}
+
+a {
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: var(--accent-on-dark);
+  color: var(--text-on-dark-brand);
+}
+
+/* --- Seiten-Geruest mit Hero-Hintergrund (Gradient, kein Video) --- */
+.site-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--site-bg);
+}
+
+.site-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--site-bg-gradient);
+}
+
+.scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.scrim--top {
+  top: 0;
+  height: 42%;
+  background: var(--scrim-top);
+}
+
+.scrim--bottom {
+  bottom: 0;
+  height: 40%;
+  background: var(--scrim-bottom);
+}
+
+/* --- Navigation (transparente Overlay-Nav, Hero-Werte) --- */
+.site-nav-wrap {
+  position: relative;
+  z-index: 3;
+}
+
+.site-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-gap);
+  padding-block: var(--space-loose);
+  padding-inline: var(--space-block);
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+}
+
+.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-cozy);
+  text-decoration: none;
+}
+
+.nav-logo {
+  width: auto;
+  height: var(--size-icon);
+  filter: var(--shadow-logo);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.brand-name {
+  font-family: var(--font-grotesk);
+  font-weight: var(--weight-label);
+  font-size: var(--text-subtitle);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-on-dark-brand);
+  text-shadow: var(--text-shadow-brand);
+}
+
+.brand-by {
+  margin-top: var(--space-hairline);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-on-dark-muted);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-gap);
+}
+
+.nav-link {
+  font-size: var(--text-lead);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  color: var(--text-on-dark-strong);
+  text-shadow: var(--text-shadow-nav);
+  transition: opacity var(--motion-duration) var(--motion-ease);
+}
+
+.nav-link:hover {
+  opacity: 0.7;
+}
+
+/* Hamburger-Schalter: auf Desktop versteckt, ab Tablet sichtbar. */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-hairline);
+  width: var(--size-icon);
+  height: var(--size-icon);
+  padding: 0;
+  border: var(--border-width) solid var(--text-on-dark-muted);
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+}
+
+.nav-toggle__bar {
+  width: var(--space-loose);
+  /* Icon-Strichstaerke (zeichnungs-intrinsisch, wie eine SVG-stroke-width). */
+  height: 2px;
+  margin-inline: auto;
+  border-radius: var(--radius-badge);
+  background: var(--text-on-dark-brand);
+}
+
+/* --- Buttons (weisse Pille = Hero-CTA) --- */
+.btn,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-pill-cta);
+  padding-block: var(--space-cozy);
+  padding-inline: var(--space-loose);
+  font-family: var(--font-grotesk);
+  font-weight: var(--weight-label);
+  font-size: var(--text-lead);
+  text-decoration: none;
+  cursor: pointer;
+  color: var(--pill-ink);
+  background: var(--pill-bg);
+  box-shadow: var(--shadow-pill);
+  transition: transform var(--motion-duration) var(--motion-ease),
+    box-shadow var(--motion-duration) var(--motion-ease);
+}
+
+.btn:hover,
+.button:hover {
+  transform: translateY(-1px);
+}
+
+/* Pfeil-Icon im CTA erbt die Pillen-Tinte (kein rohes Hex im SVG-Markup). */
+.btn svg,
+.button svg {
+  color: var(--pill-ink);
+}
+
+/* Primaerer/Marken-CTA = weisse Pille (Hero). */
+.button--primary,
+.button--action,
+.btn--nav,
+.btn--hero {
+  color: var(--pill-ink);
+  background: var(--pill-bg);
+}
+
+/* Sekundaerer CTA: transparente Pille mit hellem Rand. */
+.button--ghost {
+  color: var(--text-on-dark-strong);
+  background: transparent;
+  border-color: var(--text-on-dark-muted);
+  box-shadow: none;
+}
+
+.button--ghost:hover {
+  border-color: var(--text-on-dark-brand);
+}
+
+/* --- Hauptinhalt (ueber dem Scrim) --- */
+.site-main {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  padding-inline: var(--space-card);
+}
+
+/* --- Seiten-Hero (Sektion, NICHT Vollbild) --- */
+.hero {
+  padding-block: var(--space-section);
+  text-align: center;
+}
+
+.hero__eyebrow,
+.eyebrow {
+  display: inline-block;
+  margin-bottom: var(--space-cozy);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-on-dark-muted);
+}
+
+.hero__title {
+  font-family: var(--font-serif);
+  font-weight: var(--weight-normal);
+  font-size: var(--text-display-hero);
+  line-height: 0.98;
+  color: var(--text-on-dark-brand);
+  text-shadow: var(--text-shadow-hero);
+}
+
+.hero__title .highlight {
+  color: var(--accent-on-dark);
+  font-style: italic;
+}
+
+.hero__lead {
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  margin-top: var(--space-loose);
+  font-size: var(--text-subtitle);
+  color: var(--text-on-dark-strong);
+  text-shadow: var(--text-shadow-sub);
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-cozy);
+  margin-top: var(--space-roomy);
+}
+
+/* --- Abschnitte --- */
+.section {
+  padding-block: var(--space-section);
+}
+
+.section--surface {
+  background: var(--surface-card-dark);
+}
+
+.section__head {
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  margin-bottom: var(--space-block);
+  text-align: center;
+}
+
+.section__title {
+  font-family: var(--font-serif);
+  font-weight: var(--weight-normal);
+  font-size: var(--text-title);
+  color: var(--text-on-dark-brand);
+  text-shadow: var(--text-shadow-hero);
+}
+
+.section__lead {
+  margin-top: var(--space-stack);
+  font-size: var(--text-lead);
+  color: var(--text-on-dark);
+}
+
+/* --- Karten (dunkle, lesbare Surface) --- */
+.card {
+  background: var(--surface-card-dark);
+  border: var(--border-width) solid var(--accent-on-dark);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  box-shadow: var(--shadow-pill);
+}
+
+.card__title {
+  font-size: var(--text-lead);
+  font-weight: var(--weight-emphasis);
+  color: var(--text-on-dark-brand);
+}
+
+.card__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-body);
+  color: var(--text-on-dark);
+}
+
+/* --- Feature-/Schritt-Raster --- */
+.grid {
+  display: grid;
+  gap: var(--space-gap);
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+}
+
+.grid--three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.step__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  margin-bottom: var(--space-stack);
+  border-radius: var(--radius-round);
+  background: var(--accent-on-dark);
+  color: var(--text-on-dark-brand);
+  font-weight: var(--weight-emphasis);
+}
+
+/* --- Status-Badge --- */
+.badge {
+  display: inline-block;
+  border-radius: var(--radius-badge);
+  padding-block: var(--space-hairline);
+  padding-inline: var(--space-cozy);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-emphasis);
+}
+
+.badge--accent {
+  background: var(--accent-on-dark);
+  color: var(--text-on-dark-brand);
+}
+
+/* --- Preis-Tabelle --- */
+.pricing {
+  display: grid;
+  gap: var(--space-gap);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack);
+  background: var(--surface-card-dark);
+  border: var(--border-width) solid var(--accent-on-dark);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  box-shadow: var(--shadow-pill);
+}
+
+.plan--featured {
+  border-color: var(--text-on-dark-brand);
+}
+
+.plan__name {
+  font-size: var(--text-lead);
+  font-weight: var(--weight-emphasis);
+  color: var(--text-on-dark-brand);
+}
+
+.plan__price {
+  font-size: var(--text-title);
+  font-weight: var(--weight-emphasis);
+  color: var(--text-on-dark-brand);
+}
+
+.plan__price small {
+  font-size: var(--text-body);
+  font-weight: var(--weight-normal);
+  color: var(--text-on-dark-muted);
+}
+
+.plan__features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-cozy);
+}
+
+.plan__feature {
+  font-size: var(--text-body);
+  color: var(--text-on-dark);
+}
+
+.plan__cta {
+  margin-top: auto;
+}
+
+/* Ehrlicher Abrechnungs-Hinweis unter der Tarif-Tabelle. */
+.note {
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  margin-top: var(--space-block);
+  padding: var(--space-card);
+  border: var(--border-width) solid var(--accent-on-dark);
+  border-radius: var(--radius-card);
+  background: var(--surface-card-dark);
+  text-align: center;
+}
+
+.note__title {
+  font-size: var(--text-lead);
+  font-weight: var(--weight-emphasis);
+  color: var(--text-on-dark-brand);
+}
+
+.note__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-body);
+  color: var(--text-on-dark);
+}
+
+/* --- Rechtliches / Prosa-Seiten (Datenschutz, Impressum, AGB) ---
+ * Dunkle Card-Surface mit hellem Text fuer ausreichenden Kontrast (WCAG AA). */
+.legal {
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  padding: var(--space-card);
+  border: var(--border-width) solid var(--accent-on-dark);
+  border-radius: var(--radius-card);
+  background: var(--surface-card-dark);
+}
+
+.legal__note {
+  margin-top: var(--space-stack);
+  padding: var(--space-cozy) var(--space-loose);
+  border-radius: var(--radius-control);
+  background: var(--accent-on-dark);
+  color: var(--text-on-dark-brand);
+  font-size: var(--text-body);
+}
+
+.legal__heading {
+  margin-top: var(--space-block);
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-emphasis);
+  color: var(--text-on-dark-brand);
+}
+
+.legal__text {
+  margin-top: var(--space-tight);
+  font-size: var(--text-lead);
+  color: var(--text-on-dark);
+}
+
+/* --- 404-Seite --- */
+.error-page {
+  text-align: center;
+}
+
+.error-page__code {
+  font-size: var(--text-display-hero);
+  font-family: var(--font-serif);
+  font-weight: var(--weight-normal);
+  color: var(--text-on-dark-brand);
+  text-shadow: var(--text-shadow-hero);
+}
+
+/* --- Fusszeile (dunkle Variante) --- */
+.site-footer {
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+  border-top: var(--border-width) solid var(--accent-on-dark);
+}
+
+.site-footer__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-inline);
+  max-width: var(--layout-measure);
+  margin-inline: auto;
+  padding-block: var(--space-card);
+  padding-inline: var(--space-card);
+  font-size: var(--text-body);
+  color: var(--text-on-dark-muted);
+}
+
+.site-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-gap);
+  margin-inline-start: auto;
+}
+
+.site-footer__link {
+  text-decoration: none;
+  color: var(--text-on-dark-muted);
+}
+
+.site-footer__link:hover {
+  color: var(--text-on-dark-brand);
+}
+
+/* --- Responsive --- */
+@media (max-width: 980px) {
+  .grid--three {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .pricing {
+    grid-template-columns: 1fr;
+  }
+
+  .site-nav-bar {
+    flex-wrap: wrap;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  /* Mobil: Navigation einklappen; per Hamburger als Spalte ausklappen. */
+  .nav-links {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: var(--space-tight);
+    padding-block: var(--space-stack);
+  }
+
+  .nav-links.is-open {
+    display: flex;
+  }
+}

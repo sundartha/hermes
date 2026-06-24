@@ -1,7 +1,7 @@
 ---
 // Marketing: AGB (SSG). Geruest mit Platzhalter-Inhalt — die verbindlichen
 // Vertragsbedingungen liefert der Owner (Strategie N1, geflaggt).
-import Marketing from "../layouts/Marketing.astro";
+import Site from "../layouts/Site.astro";
 
 const sections = [
   {
@@ -19,7 +19,8 @@ const sections = [
 ];
 ---
 
-<Marketing
+<Site
+  lang="de"
   title="AGB — Sundartha Hermes"
   description="Allgemeine Geschaeftsbedingungen fuer die Nutzung von Sundartha Hermes."
 >
@@ -40,4 +41,4 @@ const sections = [
       </div>
     </div>
   </section>
-</Marketing>
+</Site>

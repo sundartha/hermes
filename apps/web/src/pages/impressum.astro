@@ -1,7 +1,7 @@
 ---
 // Marketing: Impressum (SSG). Geruest mit Platzhalter-Inhalt — die
 // verbindlichen Angaben (Anbieterkennzeichnung) liefert der Owner (N1, geflaggt).
-import Marketing from "../layouts/Marketing.astro";
+import Site from "../layouts/Site.astro";
 
 const sections = [
   {
@@ -19,7 +19,8 @@ const sections = [
 ];
 ---
 
-<Marketing
+<Site
+  lang="de"
   title="Impressum — Sundartha Hermes"
   description="Anbieterkennzeichnung und Kontaktangaben zu Sundartha Hermes."
 >
@@ -41,4 +42,4 @@ const sections = [
       </div>
     </div>
   </section>
-</Marketing>
+</Site>
