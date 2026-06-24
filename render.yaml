@@ -14,7 +14,7 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeploy: false
     # Deploy-Isolation (W0): rein-Frontend-/rein-Doku-Commits duerfen diesen
     # live telefonierenden Prozess NICHT neu deployen (Blast-Radius: ein
     # Frontend-Commit wuerde sonst den Container mitten im Anruf SIGTERMen).
@@ -198,7 +198,7 @@ services:
     # KEIN plan-Feld: Static Sites haben keine Plan-Stufen (immer kostenlos). Ein
     # "plan: free" lehnt Render beim Blueprint ab ("no such plan free for service
     # type web"); nur der Node-Service oben traegt plan:free.
-    autoDeploy: true
+    autoDeploy: false
     # Build-Isolation via eigener Lockfile (R8): apps/web/ traegt ein eigenes
     # package-lock.json. Darum rootDir + npm ci (NICHT die Root-Workspace-Variante)
     # — die Root-package.json hat KEINE workspaces, und eine gemeinsame Lockfile
