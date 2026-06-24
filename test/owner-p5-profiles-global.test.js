@@ -58,11 +58,20 @@ test("P5: Migration owner-keyed profile bleibt nach Schema-Migrate erreichbar", 
   const db = new PGlite();
   const conn = { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) };
   // Alte (owner-tenant-scoped) profile-Tabelle simulieren + eine owner-keyed Zeile.
+  // WICHTIG: inkl. der alten tenant_isolation-Policy + FORCE-RLS - genau die haengt
+  // an tenant_id und liess den Schema-Migrate auf der Prod-DB scheitern ("cannot drop
+  // column tenant_id ... because other objects depend on it"). Ohne diese Policy im
+  // Setup war der Migrationsfall nicht repraesentativ (frische DB = kein Dependent).
   await db.exec(
     `CREATE TABLE tenant (id TEXT PRIMARY KEY);
      CREATE TABLE profile (
        tenant_id TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-       email TEXT NOT NULL, data JSONB NOT NULL, PRIMARY KEY (tenant_id, email));`,
+       email TEXT NOT NULL, data JSONB NOT NULL, PRIMARY KEY (tenant_id, email));
+     ALTER TABLE profile ENABLE ROW LEVEL SECURITY;
+     ALTER TABLE profile FORCE  ROW LEVEL SECURITY;
+     CREATE POLICY tenant_isolation ON profile
+       USING (tenant_id = current_setting('app.current_tenant', true))
+       WITH CHECK (tenant_id = current_setting('app.current_tenant', true));`,
   );
   await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [BOOTSTRAP_TENANT_ID]);
   await db.query(`INSERT INTO profile (tenant_id, email, data) VALUES ($1, 'alt@x', '{"unrestricted":true}')`, [

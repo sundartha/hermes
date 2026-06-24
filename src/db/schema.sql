@@ -172,6 +172,11 @@ CREATE TABLE IF NOT EXISTS profile (
 -- Forward-compat fuer eine bestehende (owner-tenant-scoped) profile-Tabelle:
 -- tenant_id aus dem PK loesen, dann die Spalte droppen (idempotent). Bestehende
 -- owner-keyed Profile (email/data) bleiben erreichbar (R6, kein Datenverlust).
+-- Die alte tenant_isolation-Policy referenziert tenant_id und blockt sonst den
+-- Column-Drop auf einer Bestands-DB (Postgres: "cannot drop column tenant_id ...
+-- because other objects depend on it"). Erst die Policy loesen, dann migrieren;
+-- die globale profile_global-Policy wird weiter unten (RLS-Sektion) gesetzt.
+DROP POLICY IF EXISTS tenant_isolation ON profile;
 ALTER TABLE profile DROP CONSTRAINT IF EXISTS profile_pkey;
 ALTER TABLE profile DROP COLUMN IF EXISTS tenant_id;
 DO $$ BEGIN
