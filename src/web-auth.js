@@ -360,6 +360,21 @@ export function makeAccounts(runner) {
         return rows.length > 0;
       });
     },
+
+    // Admin-Rolle setzen (grant-admin-Script). Idempotent: setzt role per E-Mail,
+    // zweiter Lauf mit demselben Wert = derselbe Effekt. Gibt true zurueck, wenn ein
+    // Account getroffen wurde - sonst false -> der Aufrufer meldet "nicht gefunden"
+    // (kein silent-noop fuer eine nicht-existente E-Mail). account ist RLS-exempt,
+    // daher kein app.current_tenant-GUC noetig (Muster wie setStatus).
+    async setRole(email, role) {
+      return runner.withClient(async (c) => {
+        const { rows } = await c.query(
+          `UPDATE account SET role = $1 WHERE email = $2 RETURNING sub`,
+          [role, email],
+        );
+        return rows.length > 0;
+      });
+    },
   };
 }
 
