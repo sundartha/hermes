@@ -1,7 +1,7 @@
 // HTTP-Schutzschichten fuer das Gateway - bewusst in-house, ohne neue Dependency.
 
 // CSP erlaubt bewusst Inline-Skripte/-Styles und Google Fonts: das Dashboard
-// (public/index.html) nutzt Inline-<script>/<style>, onclick-Handler und Inter.
+// (public/tenant.html) nutzt Inline-<script>/<style>, onclick-Handler und Inter.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",

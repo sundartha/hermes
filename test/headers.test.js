@@ -12,8 +12,10 @@ const EXPECTED = {
 test("Security-Header", async (t) => {
   const srv = await startServer();
   try {
-    await t.test("auf / (Dashboard) gesetzt, CSP erlaubt Inline + Google Fonts", async () => {
-      const res = await fetch(`${srv.localUrl}/`);
+    await t.test("auf /tenant.html (Dashboard) gesetzt, CSP erlaubt Inline + Google Fonts", async () => {
+      // P4: index.html aufgegeben -> tenant.html ist das einzige Dashboard. Die Security-
+      // Header + CSP gelten unveraendert (securityHeaders laeuft global vor express.static).
+      const res = await fetch(`${srv.localUrl}/tenant.html`);
       assert.equal(res.status, 200);
       for (const [name, value] of Object.entries(EXPECTED))
         assert.equal(res.headers.get(name), value);
@@ -33,7 +35,7 @@ test("Security-Header", async (t) => {
     });
 
     await t.test("Dashboard-HTML wird ohne no-store ausgeliefert", async () => {
-      const res = await fetch(`${srv.localUrl}/`);
+      const res = await fetch(`${srv.localUrl}/tenant.html`);
       assert.notEqual(res.headers.get("cache-control"), "no-store");
     });
   } finally {

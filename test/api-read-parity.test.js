@@ -8,7 +8,8 @@
 // Risiken der Phase (t4-server-decomposition.md, Phase 3):
 //   R3.1  streamToken (WS-Zugangsgeheimnis) + interne Flags leaken in KEINER der drei
 //         Antworten (publicCall-Invariante, dieselbe wie media-token.test.js).
-//   R3.2  Owner-PII (ownerNumber) nur in der Owner-Sicht, sonst leer.
+//   R3.2  Owner-PII-Naht: das ownerNumber-Feld ist seit P4 ganz entfernt (war seit P2b
+//         immer "") - keine Antwort traegt es mehr (verhindert Re-Einfuehrung).
 // Der Voll-Server-Pfad (realer Mount + reale Stores) ist ueber api.test.js/read-scope-
 // tenant.test.js/media-token.test.js abgedeckt; dieser Test sichert die Naht selbst -
 // die Factory bekommt store/config/audit/tenant injiziert, also pruefbar ohne Boot.
@@ -139,11 +140,11 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     assert.equal(body.calendar.length, 1);
     assert.equal(body.calendar[0].title, "future");
     // agent-Block: number = aktive Store-Nummer des Tenants (auch der Owner ist Tenant
-    // Null, keine config-Nummer mehr). P2b: ownerNumber-Anzeige entfaellt (kein
-    // config.ownerNumber mehr) -> immer "".
+    // Null, keine config-Nummer mehr). P4: ownerNumber-Feld ganz entfernt (war seit P2b
+    // immer "", toter Ballast) -> der Schluessel existiert nicht mehr.
     assert.equal(body.agent.number, "+4915200000001");
     assert.equal(body.agent.owner, "Jonas");
-    assert.equal(body.agent.ownerNumber, ""); // P2b: config.ownerNumber entfernt
+    assert.ok(!("ownerNumber" in body.agent), "ownerNumber-Feld ist entfernt (P4)");
     assert.equal(body.agent.model, "claude-haiku-4-5");
     assert.equal(body.agent.voiceEngine, "budget");
     assert.deepEqual(body.agent.allowedNumbers, ["+49152"]);
@@ -159,8 +160,8 @@ test("GET /api/state (Flag an, fremder Tenant): R3.2 Owner-PII geblockt + scoped
     assert.equal(res.status, 200);
     const body = await res.json();
 
-    // R3.2: kein Owner -> ownerNumber leer (Owner-PII bleibt in der Owner-Sicht).
-    assert.equal(body.agent.ownerNumber, "");
+    // R3.2: ownerNumber-Feld ist entfernt (P4) - keine Sicht traegt es mehr.
+    assert.ok(!("ownerNumber" in body.agent), "ownerNumber-Feld ist entfernt (P4)");
     // Listen-Scope ueber exportTenantData(FOREIGN) -> nur der fremde Call.
     assert.equal(body.calls.length, 1);
     assert.equal(body.calls[0].id, "call_foreign");
@@ -182,7 +183,7 @@ test("GET /api/state (Flag an, Owner-Tenant): Owner-PII sichtbar + aktive Owner-
     assert.equal(res.status, 200);
     const body = await res.json();
 
-    assert.equal(body.agent.ownerNumber, ""); // P2b: config.ownerNumber entfernt (immer "")
+    assert.ok(!("ownerNumber" in body.agent), "ownerNumber-Feld ist entfernt (P4)");
     assert.equal(body.agent.number, "+4915200000001"); // aktive Owner-Nummer
     assert.equal(body.calls.length, 1);
     assert.equal(body.calls[0].id, "call_owner");

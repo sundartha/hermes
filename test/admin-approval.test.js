@@ -61,14 +61,16 @@ async function setup() {
   };
 }
 
-function post(url, sessionId) {
+// Eine Quelle fuer Cookie-Signatur + HTTP-Roundtrip (G5); post/get sind duenne
+// Methoden-Wrapper darueber.
+function request(method, url, sessionId) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const headers = sessionId
       ? { Cookie: `session=${encodeURIComponent(signValue(sessionId, SECRET))}` }
       : {};
     const req = http.request(
-      { hostname: u.hostname, port: u.port, path: u.pathname, method: "POST", headers },
+      { hostname: u.hostname, port: u.port, path: u.pathname, method, headers },
       (res) => {
         let body = "";
         res.on("data", (d) => (body += d));
@@ -79,6 +81,9 @@ function post(url, sessionId) {
     req.end();
   });
 }
+
+const post = (url, sessionId) => request("POST", url, sessionId);
+const get = (url, sessionId) => request("GET", url, sessionId);
 
 test("Nicht-Admin (aktiver Kunde) -> 403 bei approve", async () => {
   const s = await setup();
@@ -152,6 +157,40 @@ test("Admin approve/suspend auf nicht-existenten Tenant -> 404 (kein silent-noop
     );
     const rows = (await s.db.query(`SELECT 1 FROM audit_log WHERE tenant_id='t_ghost'`)).rows;
     assert.equal(rows.length, 0, "kein Audit-Eintrag fuer nicht-existenten Tenant");
+  } finally {
+    await s.close();
+  }
+});
+
+test("Admin -> 200 + listet alle Tenants (id/status, keine PII)", async () => {
+  const s = await setup();
+  try {
+    const res = await get(`${s.base}/api/admin/tenants`, s.adminSession);
+    assert.equal(res.status, 200);
+    const { tenants } = JSON.parse(res.body);
+    const ids = tenants.map((t) => t.id);
+    assert.ok(ids.includes("t_admin1") && ids.includes("t_cust1"));
+    // Kein Cross-Tenant-Leak: nur Lebenszyklus-Felder, keine Calls/Settings/Nummern.
+    for (const t of tenants)
+      assert.deepEqual(Object.keys(t).sort(), ["createdAt", "id", "status"]);
+  } finally {
+    await s.close();
+  }
+});
+
+test("Nicht-Admin -> 403 bei tenant-list", async () => {
+  const s = await setup();
+  try {
+    assert.equal((await get(`${s.base}/api/admin/tenants`, s.custSession)).status, 403);
+  } finally {
+    await s.close();
+  }
+});
+
+test("ohne Session -> 401 bei tenant-list (fail-closed)", async () => {
+  const s = await setup();
+  try {
+    assert.equal((await get(`${s.base}/api/admin/tenants`)).status, 401);
   } finally {
     await s.close();
   }
