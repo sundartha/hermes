@@ -137,10 +137,25 @@ export const config = {
   // PAYMENT_ENABLED -> assertConfig Boot-Refusal (Webhook fail-closed unverifizierbar).
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
 
-  // Owner-Identitaet + -Absendernummer kommen NICHT mehr aus der Env (P2b): der erste
-  // Tenant wird einmalig per scripts/bootstrap-tenant.js angelegt und lebt im Store;
-  // ownerName/privateNumber setzt der Tenant ueber Self-Service. Kein OWNER_FIRST_NAME/
-  // OWNER_LAST_NAME/OWNER_NUMBER/OWNER_NUMBER_PROVIDER mehr.
+  // Owner-Identitaet kommt NICHT mehr aus der Env (P2b): der erste Tenant wird einmalig
+  // per scripts/bootstrap-tenant.js angelegt und lebt im Store; ownerName/privateNumber
+  // setzt der Tenant ueber Self-Service. Kein OWNER_FIRST_NAME/OWNER_LAST_NAME/OWNER_NUMBER
+  // (privater SMS-Empfaenger) mehr.
+  //
+  // AUSNAHME Render-Autoseed der Owner-/Betriebsnummer (render-owner-autoseed): Render
+  // (free plan) hat ein fluechtiges Dateisystem -> data/store.json (und damit die per
+  // bootstrap-tenant eingetragene aktive Owner-Nummer) ist nach jedem Deploy weg, der
+  // Boot-Guard (server.js) braeche fail-closed mit exit(1) ab. OWNER_NUMBER_SEED traegt die
+  // Owner-Betriebsnummer beim Boot idempotent in den json-Store (Muster PROFILES_JSON ->
+  // seedProfilesFromEnv). Das ist die Absende-/Routing-Nummer (Tenant "owner"), NICHT der
+  // frueher private OWNER_NUMBER-SMS-Empfaenger (D1: keine Konflation). Leer = kein Seed
+  // -> Boot-Guard bleibt fail-closed.
+  ownerNumberSeed: process.env.OWNER_NUMBER_SEED || "",
+  // Provider der geseedeten Owner-Betriebsnummer (twilio|telnyx). Leer (Default) -> Twilio
+  // (DEFAULT_PROVIDER, haeufigste Konfiguration); ein gesetzter, aber ungueltiger Wert
+  // (Tippfehler) -> KEIN Seed -> Boot-Refusal (fail-closed, kein stiller Falsch-Carrier,
+  // R1). Telnyx-Owner MUSS OWNER_NUMBER_PROVIDER=telnyx setzen. Lowercase-normalisiert.
+  ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
 
   // ---- Store-Backend ----
   // "json" (Default) = Datei-Persistenz (data/store.json). "pg" = Postgres.

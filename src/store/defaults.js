@@ -29,6 +29,20 @@ export const MAX_NOTIFICATIONS = 50;
 export const PROVIDER = Object.freeze({ TWILIO: "twilio", TELNYX: "telnyx" });
 export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
 
+// Provider fuer den Owner-Number-Autoseed aufloesen (render-owner-autoseed, AC4 /
+// Pre-Mortem R1 - stiller Falsch-Carrier). PURE Entscheidung (providerRaw als Arg,
+// lowercase erwartet wie config.ownerNumberProvider), bewusst getrennt vom IO-Wrapper
+// in json.js und so direkt unit-testbar: ungesetzt/leer -> DEFAULT_PROVIDER (Twilio,
+// haeufigste Konfiguration, Zero-Config); gesetzt + gueltig (twilio|telnyx) -> dieser
+// Provider; gesetzt + ungueltig (z.B. Tippfehler "twillio") -> null (fail-closed -> der
+// Aufrufer seedet NICHT, der Boot-Guard greift, statt still den falschen Carrier zu
+// schreiben). Die Trennung leer<->Muell ist gewollt: nur Muell ist ein Refusal-Grund.
+// Validierungs-Quelle ist dasselbe Object.values(PROVIDER) wie in seedBootstrapNumberFromConfig (G5).
+export function resolveSeedProvider(providerRaw) {
+  if (!providerRaw) return DEFAULT_PROVIDER;
+  return Object.values(PROVIDER).includes(providerRaw) ? providerRaw : null;
+}
+
 // ---- Number-Lifecycle (Onboarding ohne Payment) ----
 // Zustaende einer provisionierten Nummer. Eine Nummer wird NIE direkt "active"
 // gebaut - sie durchlaeuft requested -> provisioning -> active. Der reale

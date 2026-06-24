@@ -14,7 +14,11 @@ import {
   emptyUsageMap,
   sanitizeProfile,
   BOOTSTRAP_TENANT_ID,
+  normNum,
+  E164,
+  resolveSeedProvider,
 } from "./defaults.js";
+import { findActiveNumber } from "./views.js";
 import * as ops from "./state-ops.js";
 
 const FILE = path.join(config.dataDir, "store.json");
@@ -74,11 +78,15 @@ export function load() {
 // verloren geht (sonst griffe Inbound nach P3c fail-closed - vgl. seedBootstrapNumber unten).
 function finishLoad() {
   seedProfilesFromEnv();
-  // Kein config-derived Tenant-/Nummern-/Identitaets-Seed mehr (P2b): der erste Tenant
-  // wird einmalig per scripts/bootstrap-tenant.js angelegt (Tenant-Record + aktive
-  // Nummer) und lebt dann im Store. Identitaet (ownerName) und private Summary-Nummer
-  // setzt der Tenant ueber Self-Service. Boot bleibt fail-closed (server.js verlangt
-  // eine aktive Nummer im Store).
+  // render-owner-autoseed: die Owner-/Betriebsnummer wird (nur) bei gesetzter Env-Var
+  // OWNER_NUMBER_SEED idempotent geseedet - Render (free plan) hat ein fluechtiges
+  // Dateisystem, sonst braeche der Boot-Guard nach jedem Deploy fail-closed ab. Liegt in
+  // finishLoad (= gemeinsamer Abschluss ALLER load()-Zweige) -> kein Seed-Pfad geht
+  // verloren, und der Seed laeuft VOR dem Boot-Guard (server.js: store.load() < Guard).
+  // Tenant-Record (status active), Identitaet (ownerName) und private Summary-Nummer
+  // bleiben config-frei: erster Tenant via scripts/bootstrap-tenant.js, Rest ueber
+  // Self-Service. Leere OWNER_NUMBER_SEED -> kein Seed -> Boot bleibt fail-closed.
+  seedOwnerNumberFromEnv();
   return state;
 }
 
@@ -156,6 +164,41 @@ function seedProfilesFromEnv() {
   const seeded = {};
   for (const [key, value] of Object.entries(parsed)) seeded[key] = sanitizeProfile(value);
   state.profiles = { ...seeded, ...state.profiles };
+}
+
+// Owner-/Betriebsnummer aus config.ownerNumberSeed (Env OWNER_NUMBER_SEED) beim Boot
+// idempotent in den json-Store seeden (render-owner-autoseed). Render (free plan) hat ein
+// fluechtiges Dateisystem -> ohne diesen Seed waere nach jedem Deploy keine aktive
+// Owner-Nummer im Store und der Boot-Guard (server.js) braeche fail-closed mit exit(1) ab.
+// Muster wie seedProfilesFromEnv (config-gegated, fail-safe, in-memory). Fail-closed:
+//   - leere Var               -> kein Seed (Boot-Guard bleibt, AC2)
+//   - aktive Owner-Nummer da   -> No-Op (Store gewinnt, kein Doppel-Seed/Drift, AC6/AC8)
+//   - kein gueltiges E.164     -> kein Seed (kein gruener Boot mit totem Routing, AC3)
+//   - ungueltiger Provider     -> kein Seed (kein stiller Falsch-Carrier, AC4/R1)
+// Die E.164-Pruefung sitzt BEWUSST hier im Wrapper (nicht in seedBootstrapNumberFromConfig):
+// normNum strippt nur Trennzeichen, validiert KEIN Format - "hallo" waere sonst truthy und
+// als aktive Nummer geseedet. Keine Diagnose loggt die Nummer (nur Var-Name + Erwartung,
+// AC7: kein PII-Leak).
+function seedOwnerNumberFromEnv() {
+  const raw = config.ownerNumberSeed;
+  if (!raw) return; // AC2: leere Var = kein Seed -> Boot-Guard bleibt fail-closed
+  if (findActiveNumber(state, BOOTSTRAP_TENANT_ID)) return; // AC6/AC8: Store gewinnt
+  const norm = normNum(raw);
+  if (!E164.test(norm)) {
+    console.error("[owner-number] OWNER_NUMBER_SEED hat kein gueltiges E.164-Format - ignoriert");
+    return; // AC3: kein Seed -> Guard greift (AC7: Nummer NIE im Log)
+  }
+  const provider = resolveSeedProvider(config.ownerNumberProvider);
+  if (provider === null) {
+    console.error(
+      "[owner-number] OWNER_NUMBER_PROVIDER ungueltig (erwartet twilio|telnyx) - ignoriert",
+    );
+    return; // AC4: kein Seed -> Guard greift
+  }
+  // provider ist hier garantiert gueltig; seedBootstrapNumberFromConfig re-validiert ihn
+  // intern gegen dasselbe PROVIDER-Set (gewollte Defense-in-Depth, damit das Primitiv
+  // eigenstaendig sicher bleibt) - aus diesem Aufrufpfad kann das innere Gate nie greifen.
+  ops.seedBootstrapNumberFromConfig(state, norm, BOOTSTRAP_TENANT_ID, provider);
 }
 
 export function save() {
