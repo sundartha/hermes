@@ -127,3 +127,69 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
     await srv.stop();
   }
 });
+
+// A1 (#tk_tu9zt9a): Telnyx-"Call Completed"-Callback liefert die Hangup-Ursache in
+// PascalCase-Feldern (HangupCause/HangupSource/SipHangupCause; Feldnamen aus der
+// Telnyx-OpenAPI-Spec texml/calls.yml). /voice/status loggt sie jetzt als PII-freie
+// Diagnose - das Telnyx-Call-Ende war beim Debugging vorher blind. Dieser Test pinnt:
+//   a) sauberer completed-Callback -> alle drei Tokens (+ CallDuration) in diagnostics
+//   b) unsauberes Hangup-Feld (Freitext/E.164/zu lang) -> verworfen, NIE im Log
+test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", async () => {
+  const srv = await startServer({
+    seed: seedState({
+      calls: [
+        seedCall({ id: "st_tnx_hangup", provider: "telnyx", status: "active" }),
+        seedCall({ id: "st_tnx_hangup_dirty", provider: "telnyx", status: "active" }),
+      ],
+    }),
+  });
+  try {
+    // a) Telnyx completed mit Hangup-Feldern -> alle drei Tokens + CallDuration sichtbar.
+    let r = await postStatus(srv, "st_tnx_hangup", {
+      CallStatus: "completed",
+      CallDuration: "30",
+      HangupCause: "normal_clearing",
+      HangupSource: "callee",
+      SipHangupCause: "486",
+    });
+    assert.equal(r.status, 200);
+    let ev = await statusEvent(srv, "st_tnx_hangup");
+    assert.equal(ev.provider, "telnyx");
+    assert.equal(ev.status, "completed");
+    assert.deepEqual(ev.diagnostics, {
+      callDurationS: 30,
+      hangupCause: "normal_clearing",
+      hangupSource: "callee",
+      sipHangupCause: "486",
+    });
+
+    // b) Defensiv: unsaubere Hangup-Felder werden verworfen (kein Diagnose-Feld); nur das
+    // saubere Token bleibt. Kein PII-Leak. Geprueft: E.164-Form ("+" + Nummer, zu lang)
+    // UND ein Mehrwort-ASCII-Freitext (Space nicht in der Allowlist -> kein Klarname-Leak).
+    const dirty = `+491511234 ${"x".repeat(60)}`;
+    r = await postStatus(srv, "st_tnx_hangup_dirty", {
+      CallStatus: "failed",
+      HangupCause: dirty,
+      HangupSource: "Erika Mustermann", // Mehrwort-ASCII -> muss verworfen werden
+      SipHangupCause: "603",
+    });
+    assert.equal(r.status, 200);
+    ev = await statusEvent(srv, "st_tnx_hangup_dirty");
+    assert.deepEqual(ev.diagnostics, { sipHangupCause: "603" });
+    assert.ok(
+      !srv.stdout.includes("491511234"),
+      `Unsauberes Hangup-Feld darf nicht ins Log: ${srv.stdout}`,
+    );
+    assert.ok(
+      !srv.stdout.includes("Erika Mustermann"),
+      `Mehrwort-Freitext darf nicht ins Log: ${srv.stdout}`,
+    );
+
+    // Store-Effekt: beide completed/failed -> Call beendet (endedAt gesetzt).
+    const calls = Object.fromEntries(srv.readStore().calls.map((c) => [c.id, c]));
+    assert.ok(calls.st_tnx_hangup.endedAt, "completed: endedAt muss gesetzt sein");
+    assert.ok(calls.st_tnx_hangup_dirty.endedAt, "failed: endedAt muss gesetzt sein");
+  } finally {
+    await srv.stop();
+  }
+});
