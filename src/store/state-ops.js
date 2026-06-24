@@ -80,6 +80,16 @@ export function newId(prefix) {
 }
 
 // ---- Calls ----
+
+// createCall verlangt seit P3 einen expliziten tenantId (kein stiller Bootstrap-Default
+// mehr). Ein Call ohne Tenant darf NIE entstehen - er liefe sonst auf einen fremden
+// Usage-/Budget-Bucket (Cross-Tenant). Wirft fail-closed mit Kontext (P8), statt still
+// zu defaulten. Beide realen Aufrufer (server.js Inbound/Outbound) liefern tenantId.
+function requireTenantId(tenantId) {
+  if (!tenantId) throw new Error("createCall: tenantId ist Pflicht (kein Default-Tenant)");
+  return tenantId;
+}
+
 export function createCall(
   s,
   {
@@ -124,11 +134,11 @@ export function createCall(
     // Wer den Call ausgeloest hat: <email> bei authentifizierten MCP-Nutzern,
     // sonst "owner" (localhost/stdio). Fuer Audit + pro-Nutzer-Stundenlimit.
     requestedBy: requestedBy || null,
-    // Tenant, dem dieser Call gehoert (P4). Inbound: via findTenantByNumber
-    // aufgeloest; Outbound: BOOTSTRAP_TENANT_ID (Outbound-from bleibt Owner bis P5).
-    // Steuert den Usage-Bucket + die pro-Tenant-Achse von countOutboundCallsSince.
-    // Fail-closed: fehlendes tenantId -> Owner (heute einziger realer Tenant).
-    tenantId: tenantId || BOOTSTRAP_TENANT_ID,
+    // Tenant, dem dieser Call gehoert (P4). Inbound: via numberRecord.tenantId;
+    // Outbound: aufgeloester, REJECT-gepruefter requestTenant (server.js). Steuert den
+    // Usage-Bucket + die pro-Tenant-Achse von countOutboundCallsSince. Fail-closed (P3):
+    // fehlendes tenantId -> Throw (requireTenantId), KEIN stiller Bootstrap-Default.
+    tenantId: requireTenantId(tenantId),
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,

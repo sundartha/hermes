@@ -19,7 +19,7 @@ import { makePgStore } from "../src/store/pg.js";
 import { planSummarySms } from "../src/sms-summary.js";
 import { publicCall } from "../src/store/views.js";
 import { makeDefaultState, createCall, markSummarySmsSent } from "../src/store/state-ops.js";
-import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
+import { NUMBER_STATUS, PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const PROV = PROVIDER.TWILIO;
 
@@ -39,7 +39,12 @@ async function reopen(db) {
 test("Marker round-trippt durch flush/hydrate (pg): summarySmsSentAt ueberlebt den Restart", async () => {
   const db = new PGlite();
   const store = await reopen(db);
-  const c = store.createCall({ direction: "inbound", from: "+491701234567", to: "+4915100000001" });
+  const c = store.createCall({
+    direction: "inbound",
+    from: "+491701234567",
+    to: "+4915100000001",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
   assert.equal(store.getCall(c.id).summarySmsSentAt, null, "frischer Call hat keinen Marker");
 
   store.markSummarySmsSent(c.id);
@@ -109,7 +114,12 @@ test("publicCall strippt summarySmsSentAt (kein API-Leak)", () => {
 // No-op (changed=false) -> der zuerst gesetzte Zeitstempel gewinnt und bleibt stabil.
 test("markSummarySmsSent ist idempotent: gesetzter Marker gewinnt, kein zweites Schreiben", () => {
   const s = makeDefaultState();
-  const c = createCall(s, { direction: "inbound", from: "+49170", to: "+49151" });
+  const c = createCall(s, {
+    direction: "inbound",
+    from: "+49170",
+    to: "+49151",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
 
   const first = markSummarySmsSent(s, c.id);
   assert.equal(first.changed, true, "erstes Setzen aendert den Record");

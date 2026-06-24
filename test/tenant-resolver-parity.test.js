@@ -125,7 +125,7 @@ for (const [label, build] of RESOLVER_FACTORIES) {
     assert.equal(store.calls.length, 0, "Flag aus darf keinen resolveTenant-Lookup ausloesen");
   });
 
-  test(`[${label}] Flag an + fehlende Identitaet (localhost/stdio) -> Owner`, () => {
+  test(`[${label}] Flag an + fehlende Identitaet (localhost/stdio) -> Owner (Bootstrap-Bindung)`, () => {
     const store = makeStore();
     const { requestTenant } = build(store);
     withMultiTenant(true, () => {

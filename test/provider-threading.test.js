@@ -46,8 +46,29 @@ test("createCall: Inbound mit provider=telnyx -> call.provider=telnyx", () => {
 
 test("createCall: ohne provider (Outbound) -> DEFAULT_PROVIDER (twilio)", () => {
   const s = makeDefaultState();
-  const call = createCall(s, { direction: "outbound", from: "+15005550006", to: "+49150" });
+  const call = createCall(s, {
+    direction: "outbound",
+    from: "+15005550006",
+    to: "+49150",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
   assert.equal(call.provider, DEFAULT_PROVIDER);
+});
+
+// ---- P3: tenantId ist Pflicht (kein stiller Bootstrap-Default mehr) ----
+test("createCall ohne tenantId -> Throw, kein Default-Bucket (P3 fail-closed)", () => {
+  const s = makeDefaultState();
+  assert.throws(
+    () => createCall(s, { direction: "outbound", from: "+491", to: "+490" }),
+    /tenantId ist Pflicht/,
+  );
+  assert.equal(s.calls.length, 0, "kein Call ohne Tenant angelegt");
+});
+
+test("createCall mit explizitem tenantId -> Call dem Tenant zugeordnet (P3)", () => {
+  const s = makeDefaultState();
+  const call = createCall(s, { direction: "inbound", from: "+491", to: "+490", tenantId: "B" });
+  assert.equal(call.tenantId, "B");
 });
 
 // ---- Render-Threading end-to-end: Telnyx-Inbound -> TeXML, Twilio -> TwiML ----

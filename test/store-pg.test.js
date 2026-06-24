@@ -64,6 +64,7 @@ test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionIte
     from: "+49111",
     to: "+49222",
     goal: "Test",
+    tenantId: BOOTSTRAP_TENANT_ID,
   });
   assert.match(call.id, /^call_/);
   assert.equal(typeof call.streamToken, "string");
@@ -77,7 +78,12 @@ test("createCall + getCall: Shape inkl. streamToken, leeres transcript/actionIte
 
 test("createCall persistiert ueber Re-Hydrierung (inkl. usage.calls)", async () => {
   const { store, db } = await makePgTestStore();
-  const call = store.createCall({ direction: "inbound", from: "+49333", to: "+49444" });
+  const call = store.createCall({
+    direction: "inbound",
+    from: "+49333",
+    to: "+49444",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
   await store.save();
   const reopened = await reopen(db);
   const got = reopened.getCall(call.id);
@@ -94,6 +100,7 @@ test("createCall: provider ueberlebt die Re-Hydrierung (call.provider, P6a)", as
     from: "+49333",
     to: "+49444",
     provider: PROVIDER.TELNYX,
+    tenantId: BOOTSTRAP_TENANT_ID,
   });
   await store.save();
   const reopened = await reopen(db);
@@ -102,7 +109,7 @@ test("createCall: provider ueberlebt die Re-Hydrierung (call.provider, P6a)", as
 
 test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
   const { store, db } = await makePgTestStore();
-  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.addTranscript(call.id, "agent", "erste");
   store.addTranscript(call.id, "caller", "zweite");
   await store.save();
@@ -119,7 +126,7 @@ test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
 
 test("addActionItem haengt id an call.actionItemIds + persistiert", async () => {
   const { store, db } = await makePgTestStore();
-  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   const item = store.addActionItem(call.id, "Rueckruf", "todo");
   assert.deepEqual(store.getCall(call.id).actionItemIds, [item.id]);
   await store.save();
@@ -130,7 +137,7 @@ test("addActionItem haengt id an call.actionItemIds + persistiert", async () => 
 
 test("toggleActionItem kippt done und persistiert", async () => {
   const { store, db } = await makePgTestStore();
-  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   const item = store.addActionItem(call.id, "x");
   assert.equal(item.done, false);
   store.toggleActionItem(item.id);
@@ -141,7 +148,7 @@ test("toggleActionItem kippt done und persistiert", async () => {
 
 test("markAnswered + endCallRecord: Statusuebergaenge + Idempotenz", async () => {
   const { store, db } = await makePgTestStore();
-  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   assert.equal(store.markAnswered(call.id).answeredAt !== null, true);
   const firstAnswered = store.getCall(call.id).answeredAt;
   store.markAnswered(call.id); // zweiter Aufruf aendert answeredAt nicht
@@ -159,9 +166,10 @@ test("markAnswered + endCallRecord: Statusuebergaenge + Idempotenz", async () =>
 test("countOutboundCallsSince mit und ohne requestedBy", async () => {
   const { store } = await makePgTestStore();
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "a@x" });
-  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "b@x" });
-  store.createCall({ direction: "inbound", from: "+49", to: "+49" });
+  const t = BOOTSTRAP_TENANT_ID;
+  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "a@x", tenantId: t });
+  store.createCall({ direction: "outbound", from: "+49", to: "+49", requestedBy: "b@x", tenantId: t });
+  store.createCall({ direction: "inbound", from: "+49", to: "+49", tenantId: t });
   assert.equal(store.countOutboundCallsSince(since), 2);
   assert.equal(store.countOutboundCallsSince(since, { requestedBy: "a@x" }), 1);
 });
@@ -261,8 +269,8 @@ test("Profile: resolveProfile Owner/Default + setProfile/deleteProfile/listProfi
 test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", async () => {
   const { store, db } = await makePgTestStore();
   const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
-  const active = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
-  const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const active = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
+  const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.endCallRecord(doneOld.id, "completed");
   // Alters-Stempel direkt im Spiegel setzen (wie der Retention-Test alte Daten seedet)
   store.getCall(doneOld.id).endedAt = old;
@@ -295,10 +303,10 @@ test("pruneOldData() ohne Argument nutzt config.retentionDays (Produktions-Calle
   const { store } = await makePgTestStore();
   config.retentionDays = 30;
   const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
-  const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.endCallRecord(doneOld.id, "completed");
   store.getCall(doneOld.id).endedAt = old;
-  const freshDone = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const freshDone = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.endCallRecord(freshDone.id, "completed");
   await store.save();
 
@@ -311,7 +319,7 @@ test("pruneOldData() ohne Argument nutzt config.retentionDays (Produktions-Calle
 
 test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert", async () => {
   const { store, db } = await makePgTestStore();
-  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49" });
+  const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   await store.save();
   // Genau die Bestands-Muster: server.js setzt twilioSid, claude.js summary/objectiveAchieved
   const ref = store.getCall(call.id);
@@ -448,8 +456,8 @@ test("provisioning_job ueberlebt Flush+Re-Hydrierung; markProvisioningJob -> don
 
 test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer Call bleiben (#7)", async () => {
   const { store, db } = await makePgTestStore();
-  const c1 = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Ziel 1" });
-  const c2 = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Ziel 2" });
+  const c1 = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Ziel 1", tenantId: BOOTSTRAP_TENANT_ID });
+  const c2 = store.createCall({ direction: "outbound", from: "+49", to: "+49", goal: "Ziel 2", tenantId: BOOTSTRAP_TENANT_ID });
   store.addTranscript(c1.id, "agent", "Hallo");
   store.addTranscript(c1.id, "caller", "Geheim");
   store.addTranscript(c2.id, "caller", "Bleibt");
