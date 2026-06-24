@@ -293,8 +293,8 @@ async function setTenant(client, tenantId) {
 // pro Tenant unter dessen RLS-GUC die tenant-scoped Zeilen in die Buckets/Listen.
 // makeDefaultState() EINMAL (Owner-Buckets vorbelegt); pro Tenant werden Buckets
 // gefuellt (settings/calendar/usage) bzw. Listen angehaengt (calls/actionItems/
-// notifications/numbers). profiles bleiben global keyed-by-email (geerbte
-// Entscheidung #9) und werden NUR unter dem Owner geladen.
+// notifications/numbers). profiles sind global keyed-by-email (Owner-Removal P5)
+// und werden in EINEM tenant-unabhaengigen Schritt nach der Tenant-Schleife geladen.
 async function hydrate(client) {
   const state = ops.makeDefaultState();
   state.tenants = await hydrateTenants(client);
@@ -302,7 +302,18 @@ async function hydrate(client) {
     await setTenant(client, tenant.id);
     await hydrateTenantInto(client, state, tenant.id);
   }
+  // Profiles global (Owner-Removal P5): an KEINEN Tenant gebunden. Die profile-Tabelle
+  // haengt nicht mehr an app.current_tenant (Policy profile_global, USING(true)) - die
+  // gesetzte GUC ist fuer diesen Read irrelevant. EIN Read, nicht pro Tenant.
+  state.profiles = await hydrateProfiles(client);
   return state;
+}
+
+// Liest die globale profile-Tabelle (email-PK) in die flache {email: data}-Map des
+// Spiegels. Tenant-unabhaengig (Owner-Removal P5).
+async function hydrateProfiles(client) {
+  const rows = (await client.query(`SELECT email, data FROM profile`)).rows;
+  return Object.fromEntries(rows.map((r) => [r.email, r.data]));
 }
 
 // tenant-Tabelle -> Tenant-Records. owner_name/idp_subject NUR setzen, wenn in der
@@ -356,7 +367,7 @@ async function hydrateTenants(client) {
 // in den Spiegel: settings/calendar/usage in den Map-Bucket dieses Tenants, calls/
 // actionItems/notifications/numbers an die globalen Listen ANGEHAENGT (nicht
 // ueberschrieben - sonst verloeren frueher hydrierte Tenants ihre Daten). profiles
-// NUR unter dem Owner (global keyed-by-email, geerbte Entscheidung #9).
+// sind NICHT tenant-scoped (Owner-Removal P5) -> eigener Schritt in hydrate().
 async function hydrateTenantInto(client, state, tenantId) {
   const settingsRows = (
     await client.query(`SELECT * FROM settings WHERE tenant_id = $1`, [tenantId])
@@ -468,13 +479,6 @@ async function hydrateTenantInto(client, state, tenantId) {
       stripeMeterSent: r.stripe_meter_sent,
     })),
   );
-
-  if (tenantId === BOOTSTRAP_TENANT_ID) {
-    const profileRows = (
-      await client.query(`SELECT email, data FROM profile WHERE tenant_id = $1`, [tenantId])
-    ).rows;
-    state.profiles = Object.fromEntries(profileRows.map((r) => [r.email, r.data]));
-  }
 }
 
 function groupTranscripts(segRows) {
@@ -598,6 +602,10 @@ async function flush(client, state) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, tenant.id, state);
     }
+    // Profiles sind global (Owner-Removal P5): EIN Flush pro Transaktion, an KEINEN
+    // Tenant gebunden (Policy profile_global, kein app.current_tenant). Liegt bewusst
+    // AUSSERHALB der per-Tenant-Schleife - sonst N-fach gegen dieselben Zeilen.
+    await flushProfiles(client, state.profiles);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -610,8 +618,8 @@ async function flush(client, state) {
 // scopeOf partitioniert (dieselbe Regel wie ops.tenantCallScope: call.tenantId ===
 // tenantId) - sonst blockte die RLS-WITH-CHECK den Insert einer Call-Zeile mit
 // fremder tenant_id unter dieser GUC. settings/calendar/usage/numbers ueber die
-// bestehenden pro-Tenant-Accessoren bzw. den numbers-Filter. profiles NUR unter dem
-// Owner (global keyed-by-email, geerbte Entscheidung #9).
+// bestehenden pro-Tenant-Accessoren bzw. den numbers-Filter. profiles sind NICHT
+// tenant-scoped (Owner-Removal P5) -> eigener globaler Flush in flush().
 async function flushTenantScope(client, tenantId, state) {
   const { calls, callIds } = scopeOf(state, tenantId);
   await flushCalls(client, tenantId, calls);
@@ -624,7 +632,6 @@ async function flushTenantScope(client, tenantId, state) {
   await flushNotifications(client, tenantId, notificationsForTenant(state, tenantId, callIds));
   await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
   await flushUsage(client, tenantId, ops.usageFor(state, tenantId));
-  if (tenantId === BOOTSTRAP_TENANT_ID) await flushProfiles(client, tenantId, state.profiles);
   await flushNumbers(client, tenantId, state.numbers);
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
   await flushTenantBudgets(client, tenantId, state.tenantBudgets);
@@ -865,16 +872,30 @@ async function flushNotifications(client, tenantId, notifications) {
   }
 }
 
-async function flushProfiles(client, tenantId, profiles) {
+// Profile-Flush (Owner-Removal P5): global, an KEINEN Tenant gebunden. profile.email
+// ist jetzt PK allein (schema.sql); deleteMissingProfiles raeumt entfernte Profile ab,
+// ohne tenant_id-Filter. Policy profile_global schuetzt die Tabelle (kein Tenant-Filter
+// mehr, also auch kein Cross-Tenant-Leak).
+async function flushProfiles(client, profiles) {
   const emails = Object.keys(profiles);
-  await deleteMissingByText(client, "profile", "email", tenantId, emails);
+  await deleteMissingProfiles(client, emails);
   for (const [email, data] of Object.entries(profiles)) {
     await client.query(
-      `INSERT INTO profile (tenant_id, email, data) VALUES ($1,$2,$3)
-       ON CONFLICT (tenant_id, email) DO UPDATE SET data=EXCLUDED.data`,
-      [tenantId, email, JSON.stringify(data)],
+      `INSERT INTO profile (email, data) VALUES ($1,$2)
+       ON CONFLICT (email) DO UPDATE SET data=EXCLUDED.data`,
+      [email, JSON.stringify(data)],
     );
   }
+}
+
+// Loescht Profile-Zeilen, deren email nicht mehr im Spiegel steht (global, kein
+// tenant_id-Filter). Leere keep-Liste -> alle Profile weg (Parity zu deleteMissing).
+async function deleteMissingProfiles(client, keepEmails) {
+  if (keepEmails.length === 0) {
+    await client.query(`DELETE FROM profile`);
+    return;
+  }
+  await client.query(`DELETE FROM profile WHERE email <> ALL($1::text[])`, [keepEmails]);
 }
 
 // number-Flush (Onboarding-Lifecycle): id-PK-Upsert mit allen Lifecycle-Feldern

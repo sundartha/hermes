@@ -42,10 +42,8 @@ async function setup() {
      VALUES ('call_other', $1, 'caller', 'GEHEIM fremder Tenant', now()::text)`,
     [OTHER_TENANT_ID],
   );
-  await db.query(
-    `INSERT INTO profile (tenant_id, email, data) VALUES ($1, 'fremd@x', '{"unrestricted":true}')`,
-    [OTHER_TENANT_ID],
-  );
+  // profile ist seit Owner-Removal P5 global (kein tenant_id) - email-PK allein.
+  await db.query(`INSERT INTO profile (email, data) VALUES ('fremd@x', '{"unrestricted":true}')`);
   // Auch eine Owner-Call-Zeile, damit die Sichtbarkeit positiv geprueft werden kann.
   await db.query(
     `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at)
@@ -101,12 +99,15 @@ test("RLS: Transkripte des fremden Tenants sind nicht lesbar (Leak-Schutz)", asy
   assert.ok(!texts.join(" ").includes("GEHEIM"));
 });
 
-test("RLS: Profile sind tenant-isoliert", async () => {
+test("P5: Profile sind global (kein Tenant-Filter)", async () => {
   const db = await setup();
+  // Owner-Removal P5: profile haengt nicht mehr an app.current_tenant (Policy
+  // profile_global). Unter der Owner-GUC ist JEDES Profil sichtbar - Gegenteil der
+  // frueheren tenant-Isolation. Beweist die Entkopplung vom Tenant.
   const emails = await asAppRole(db, async () =>
     (await db.query(`SELECT email FROM profile`)).rows.map((r) => r.email),
   );
-  assert.ok(!emails.includes("fremd@x"), "fremdes Profil ist unsichtbar");
+  assert.ok(emails.includes("fremd@x"), "Profil ist global sichtbar (kein Tenant-Filter)");
 });
 
 test("RLS: number-Routing ist tenant-isoliert (Cross-Tenant-Read = leer)", async () => {
