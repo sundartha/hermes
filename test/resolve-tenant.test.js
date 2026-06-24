@@ -4,7 +4,7 @@
 // Re-Export-Landmine, ohne pglite mit Server-Spawn zu mischen.
 //
 // Kern-Gate ist die FAIL-CLOSED-ASYMMETRIE zu resolveProfile: leere/null/unbekannte
-// Identitaet -> null, NIE OWNER_TENANT_ID. resolveProfile faellt bei !email bewusst
+// Identitaet -> null, NIE BOOTSTRAP_TENANT_ID. resolveProfile faellt bei !email bewusst
 // auf Owner zurueck (Rechte konservativ); resolveTenant DARF das nicht erben, sonst
 // waere der Tenant-Scope (I5/I6/I7) still umgehbar.
 //
@@ -14,7 +14,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { resolveTenant } from "../src/store/state-ops.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Konstanten statt Magic-Strings (G25).
 const TENANT_B = "B";
@@ -41,14 +41,14 @@ test("resolveTenant: null/leerer idpSubject -> null, NIEMALS Owner", () => {
   const s = seedWithTenantB();
   for (const bad of [null, "", undefined]) {
     assert.equal(resolveTenant(s, bad), null);
-    assert.notEqual(resolveTenant(s, bad), OWNER_TENANT_ID); // beweist die Asymmetrie zu resolveProfileFrom(!email)->OWNER
+    assert.notEqual(resolveTenant(s, bad), BOOTSTRAP_TENANT_ID); // beweist die Asymmetrie zu resolveProfileFrom(!email)->OWNER
   }
 });
 
 test("resolveTenant: unbekannter sub -> null, NIEMALS Owner", () => {
   const s = seedWithTenantB();
   assert.equal(resolveTenant(s, UNKNOWN_SUB), null);
-  assert.notEqual(resolveTenant(s, UNKNOWN_SUB), OWNER_TENANT_ID);
+  assert.notEqual(resolveTenant(s, UNKNOWN_SUB), BOOTSTRAP_TENANT_ID);
 });
 
 test("resolveTenant: ohne s.tenants -> null (defensiver Guard)", () => {

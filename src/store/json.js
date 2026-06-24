@@ -13,7 +13,7 @@ import {
   emptyUsage,
   emptyUsageMap,
   sanitizeProfile,
-  OWNER_TENANT_ID,
+  BOOTSTRAP_TENANT_ID,
 } from "./defaults.js";
 import * as ops from "./state-ops.js";
 
@@ -71,7 +71,7 @@ export function load() {
 
 // Gemeinsamer Abschluss von load(): First-Boot, Parse-Erfolg UND der Korruptions-Pfad
 // laufen hier durch. Ein Helper, damit KEIN Seed-Schritt in einem der drei Zweige
-// verloren geht (sonst griffe Inbound nach P3c fail-closed - vgl. seedOwnerNumber unten).
+// verloren geht (sonst griffe Inbound nach P3c fail-closed - vgl. seedBootstrapNumber unten).
 function finishLoad() {
   seedProfilesFromEnv();
   // Owner-Nummern kommen NICHT mehr aus der config (kein TWILIO_NUMBER/TELNYX_NUMBER
@@ -81,15 +81,15 @@ function finishLoad() {
   // Owner-Identitaet config-derived idempotent seeden (Variante a, G1): schuetzt den
   // ungegateten Inbound-Greeting + summarizeCall. Leere Config -> kein Seed
   // (assertConfig verweigert dann ohnehin den Boot).
-  ops.seedOwnerIdentity(state, config.ownerFirstName, config.ownerLastName, OWNER_TENANT_ID);
+  ops.seedBootstrapIdentity(state, config.ownerFirstName, config.ownerLastName, BOOTSTRAP_TENANT_ID);
   // Owner-Absendernummer config-derived idempotent seeden (wie die Identitaet darueber
   // und seedProfilesFromEnv): Render free hat ein fluechtiges Dateisystem -> store.json
   // ueberlebt keinen Deploy, sonst braeche der Boot-Guard fail-closed ab. Ohne
   // OWNER_NUMBER oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
-  ops.seedOwnerNumberFromConfig(
+  ops.seedBootstrapNumberFromConfig(
     state,
     config.ownerNumber,
-    OWNER_TENANT_ID,
+    BOOTSTRAP_TENANT_ID,
     config.ownerNumberProvider,
   );
   // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog der Identitaet/
@@ -98,7 +98,7 @@ function finishLoad() {
   // false, wenn der Owner danach KEINE privateNumber hat (OWNER_NUMBER fehlt/ungueltig) -> eine
   // PII-freie Boot-Warnung (nur der Marker, NIE die Nummer). assertConfig verlangt OWNER_NUMBER
   // ohnehin fail-closed - die Warnung faengt eine ungueltige/fehlende Nummer sichtbar ab.
-  if (!ops.seedOwnerPrivateNumber(state, config.ownerNumber, OWNER_TENANT_ID))
+  if (!ops.seedBootstrapPrivateNumber(state, config.ownerNumber, BOOTSTRAP_TENANT_ID))
     console.warn(
       "[store] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).",
     );
@@ -114,14 +114,14 @@ function migrateUsageToMap(usage) {
   if (!usage || typeof usage !== "object") return emptyUsageMap();
   if (typeof usage.costEur === "number") {
     // Altes flaches Shape -> wird der Owner-Bucket.
-    return { [OWNER_TENANT_ID]: { ...emptyUsage(), ...usage } };
+    return { [BOOTSTRAP_TENANT_ID]: { ...emptyUsage(), ...usage } };
   }
   // Bereits eine Map: jeden Bucket gegen den Default auffuellen, Owner sicherstellen.
   const map = {};
   for (const [tenantId, bucket] of Object.entries(usage)) {
     map[tenantId] = { ...emptyUsage(), ...bucket };
   }
-  map[OWNER_TENANT_ID] ||= emptyUsage();
+  map[BOOTSTRAP_TENANT_ID] ||= emptyUsage();
   return map;
 }
 
@@ -133,13 +133,13 @@ function migrateUsageToMap(usage) {
 function migrateSettingsToMap(settings) {
   if (!settings || typeof settings !== "object") return defaultSettingsMap();
   if (typeof settings.agentName === "string") {
-    return { [OWNER_TENANT_ID]: { ...defaultSettings(), ...settings } };
+    return { [BOOTSTRAP_TENANT_ID]: { ...defaultSettings(), ...settings } };
   }
   const map = {};
   for (const [tenantId, bucket] of Object.entries(settings)) {
     map[tenantId] = { ...defaultSettings(), ...bucket };
   }
-  map[OWNER_TENANT_ID] ||= defaultSettings();
+  map[BOOTSTRAP_TENANT_ID] ||= defaultSettings();
   return map;
 }
 
@@ -148,13 +148,13 @@ function migrateSettingsToMap(settings) {
 // (bereits Map -> frisch aufbauen wie migrateUsage/SettingsToMap, fremde Buckets
 // uebernehmen, Owner sicherstellen).
 function migrateCalendarToMap(calendar) {
-  if (Array.isArray(calendar)) return { [OWNER_TENANT_ID]: calendar };
+  if (Array.isArray(calendar)) return { [BOOTSTRAP_TENANT_ID]: calendar };
   if (!calendar || typeof calendar !== "object") return calendarMap();
   const map = {};
   for (const [tenantId, events] of Object.entries(calendar)) {
     map[tenantId] = events;
   }
-  map[OWNER_TENANT_ID] ||= demoCalendar();
+  map[BOOTSTRAP_TENANT_ID] ||= demoCalendar();
   return map;
 }
 
@@ -320,7 +320,7 @@ export function trackUsage(tenantId, inputTokens, outputTokens, cfg) {
 
 // Lese-Zugriff auf den Usage-Bucket eines Tenants (I5): reine Query, kein save
 // (Lazy-Default geerbt von ops.usageOf -> usageFor). /api/state liest darueber den
-// Bucket des Request-Tenants statt s.usage[OWNER_TENANT_ID] direkt.
+// Bucket des Request-Tenants statt s.usage[BOOTSTRAP_TENANT_ID] direkt.
 export function usageOf(tenantId) {
   return ops.usageOf(load(), tenantId);
 }
@@ -436,10 +436,10 @@ export function addNotification(title, body, callId) {
 
 // ---- Owner-/Bestandsnummer eintragen (CLI scripts/seed-owner-number.js) ----
 // Bestandsnummer (bereits beim Provider gekauft) direkt 'active' eintragen - die
-// EINE legitime Ausnahme zur Transition-Kette (state-ops.seedOwnerNumber, idempotent
+// EINE legitime Ausnahme zur Transition-Kette (state-ops.seedBootstrapNumber, idempotent
 // ueber normNum). Kein Provider-Kauf, kein 'requested'-Vorzustand.
-export function seedOwnerNumber(e164, tenantId, provider) {
-  ops.seedOwnerNumber(load(), e164, tenantId, provider);
+export function seedBootstrapNumber(e164, tenantId, provider) {
+  ops.seedBootstrapNumber(load(), e164, tenantId, provider);
   save();
 }
 

@@ -7,7 +7,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { eraseTenantData, exportTenantData } from "../src/store/state-ops.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const AT = "2026-01-01T00:00:00Z";
 const OTHER = "other";
@@ -23,7 +23,7 @@ function freshState() {
     calls: [
       seedCall({
         id: "call_owner1",
-        tenantId: OWNER_TENANT_ID,
+        tenantId: BOOTSTRAP_TENANT_ID,
         status: "completed",
         summary: "Zusammenfassung 1",
         actionItemIds: ["ai1"],
@@ -34,7 +34,7 @@ function freshState() {
       }),
       seedCall({
         id: "call_owner2",
-        tenantId: OWNER_TENANT_ID,
+        tenantId: BOOTSTRAP_TENANT_ID,
         status: "completed",
         transcript: [],
       }),
@@ -70,7 +70,7 @@ function freshState() {
     ],
   });
   // usage flach -> auf die P4-Map heben + Owner-Budget knapp UNTER dem Gate.
-  s.usage = { [OWNER_TENANT_ID]: { inputTokens: 0, outputTokens: 0, costEur: 4, calls: 2 } };
+  s.usage = { [BOOTSTRAP_TENANT_ID]: { inputTokens: 0, outputTokens: 0, costEur: 4, calls: 2 } };
   return s;
 }
 
@@ -78,7 +78,7 @@ const getCall = (s, id) => s.calls.find((c) => c.id === id);
 
 test("eraseTenantData(owner) entfernt NUR Owner-Calls; fremder Tenant + Config bleiben", () => {
   const s = freshState();
-  eraseTenantData(s, OWNER_TENANT_ID);
+  eraseTenantData(s, BOOTSTRAP_TENANT_ID);
   assert.equal(getCall(s, "call_owner1"), undefined, "Owner-Call 1 geloescht");
   assert.equal(getCall(s, "call_owner2"), undefined, "Owner-Call 2 geloescht");
   assert.ok(getCall(s, "call_other"), "fremder Call bleibt");
@@ -90,13 +90,13 @@ test("eraseTenantData(owner) entfernt NUR Owner-Calls; fremder Tenant + Config b
   // settings/calendar/usage/profiles unangetastet (Service-Config/Budget-Gate)
   assert.equal(s.settings.agentName, "Hermes");
   assert.deepEqual(s.calendar, []);
-  assert.equal(s.usage[OWNER_TENANT_ID].costEur, 4, "Budget-Zaehler unveraendert");
+  assert.equal(s.usage[BOOTSTRAP_TENANT_ID].costEur, 4, "Budget-Zaehler unveraendert");
   assert.deepEqual(s.profiles, {});
 });
 
 test("eraseTenantData(owner) liefert exakte Loesch-Zaehler", () => {
   const s = freshState();
-  const removed = eraseTenantData(s, OWNER_TENANT_ID);
+  const removed = eraseTenantData(s, BOOTSTRAP_TENANT_ID);
   // privateNumber:0 -> freshState setzt keine private Summary-Nummer (F2 P10, PII-freier
   // 0/1-Zaehler statt des Werts). Die gesetzte-Nummer-Loeschung deckt f2-p10-* ab.
   assert.deepEqual(removed, {
@@ -110,8 +110,8 @@ test("eraseTenantData(owner) liefert exakte Loesch-Zaehler", () => {
 
 test("eraseTenantData ist idempotent: zweiter Lauf loescht nichts mehr", () => {
   const s = freshState();
-  eraseTenantData(s, OWNER_TENANT_ID);
-  const removed = eraseTenantData(s, OWNER_TENANT_ID);
+  eraseTenantData(s, BOOTSTRAP_TENANT_ID);
+  const removed = eraseTenantData(s, BOOTSTRAP_TENANT_ID);
   assert.deepEqual(removed, {
     calls: 0,
     transcriptSegments: 0,
@@ -123,7 +123,7 @@ test("eraseTenantData ist idempotent: zweiter Lauf loescht nichts mehr", () => {
 
 test("allgemeine Notification (callId:null) bleibt - kein notification.tenantId-Scoping", () => {
   const s = freshState();
-  eraseTenantData(s, OWNER_TENANT_ID);
+  eraseTenantData(s, BOOTSTRAP_TENANT_ID);
   const ids = s.notifications.map((n) => n.id);
   assert.ok(ids.includes("nt_general"), "allgemeine Notification ueberlebt");
   assert.ok(!ids.includes("nt1"), "call-verknuepfte Owner-Notification geloescht");
@@ -133,8 +133,8 @@ test("allgemeine Notification (callId:null) bleibt - kein notification.tenantId-
 test("exportTenantData(owner) liefert NUR Owner-Daten und mutiert den State NICHT", () => {
   const s = freshState();
   const otherBefore = structuredClone(getCall(s, "call_other"));
-  const data = exportTenantData(s, OWNER_TENANT_ID);
-  assert.equal(data.tenantId, OWNER_TENANT_ID);
+  const data = exportTenantData(s, BOOTSTRAP_TENANT_ID);
+  assert.equal(data.tenantId, BOOTSTRAP_TENANT_ID);
   assert.equal(typeof data.exportedAt, "string");
   assert.deepEqual(data.calls.map((c) => c.id).sort(), ["call_owner1", "call_owner2"]);
   assert.deepEqual(
@@ -160,15 +160,15 @@ before(async () => {
 });
 
 test("json-Persistenz: eraseTenantData(owner) loescht Owner-Calls, Budget-Gate + Calendar bleiben", () => {
-  const gateBefore = store.budgetExceeded(OWNER_TENANT_ID, PRICES);
-  const removed = store.eraseTenantData(OWNER_TENANT_ID);
+  const gateBefore = store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES);
+  const removed = store.eraseTenantData(BOOTSTRAP_TENANT_ID);
   assert.equal(removed.calls, 2, "beide Owner-Calls geloescht");
   assert.equal(store.getCall("call_owner1"), null, "Owner-Call weg (Lesepfad)");
   assert.ok(store.getCall("call_other"), "fremder Call bleibt persistiert");
   // calendar wird beim load() aus den Demo-Defaults gemergt (seedState liefert []),
   // bleibt aber vom Erase unangetastet - hier nur die Budget-Gate-Invariante pruefen.
   assert.equal(
-    store.budgetExceeded(OWNER_TENANT_ID, PRICES),
+    store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES),
     gateBefore,
     "Budget-Gate unveraendert",
   );

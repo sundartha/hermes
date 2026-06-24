@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, OWNER_TENANT_ID } from "../src/store/pg.js";
+import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
 
@@ -122,12 +122,12 @@ async function setupUsageRls() {
 test("P4 Test 5: usage-Tabelle ist tenant-isoliert (Cross-Tenant-Read = leer, RLS)", async () => {
   const db = await setupUsageRls();
   await db.query(`SET ROLE ${APP_ROLE}`);
-  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
   try {
     const tenantIds = (await db.query(`SELECT tenant_id FROM usage ORDER BY tenant_id`)).rows.map(
       (r) => r.tenant_id,
     );
-    assert.deepEqual(tenantIds, [OWNER_TENANT_ID], "nur die Owner-usage-Zeile sichtbar");
+    assert.deepEqual(tenantIds, [BOOTSTRAP_TENANT_ID], "nur die Owner-usage-Zeile sichtbar");
     assert.ok(!tenantIds.includes(TENANT_A), "fremde usage-Zeile A unsichtbar");
     assert.ok(!tenantIds.includes(TENANT_B), "fremde usage-Zeile B unsichtbar");
   } finally {
@@ -181,7 +181,7 @@ test("P6b3 Test 6: tenant_budget ist tenant-isoliert (Cross-Tenant-Read = leer, 
     ).rows.map((r) => r.tenant_id);
     assert.deepEqual(tenantIds, [TENANT_A], "nur die eigene tenant_budget-Zeile sichtbar");
     assert.ok(!tenantIds.includes(TENANT_B), "fremde tenant_budget-Zeile B unsichtbar");
-    assert.ok(!tenantIds.includes(OWNER_TENANT_ID), "Owner-Zeile (falls vorhanden) unsichtbar");
+    assert.ok(!tenantIds.includes(BOOTSTRAP_TENANT_ID), "Owner-Zeile (falls vorhanden) unsichtbar");
   } finally {
     await db.query(`RESET ROLE`);
   }

@@ -126,7 +126,7 @@ export const {
   setPrivateNumber,
   tenantPrivateNumber,
   setTenantGeo,
-  seedOwnerNumber,
+  seedBootstrapNumber,
 } = backend;
 
 // withStoreLock(fn) - prozess-lokaler Single-Writer-Guard (OT-3 AC2). Serialisiert

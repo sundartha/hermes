@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { makePortalStore } from "../src/store/portal.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const APP_ROLE = "app_user";
 const TENANT_A = "tenant_a",
@@ -18,8 +18,8 @@ async function setup() {
   const query = (t, p) => db.query(t, p);
   await applySchema({ query, exec });
   // GUC vor Seed (FORCE-RLS WITH-CHECK), wie init() es macht.
-  await query(`SELECT set_config('app.current_tenant', $1, false)`, [OWNER_TENANT_ID]);
-  await seedDefaults({ query, exec }, OWNER_TENANT_ID);
+  await query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+  await seedDefaults({ query, exec }, BOOTSTRAP_TENANT_ID);
   for (const t of [TENANT_A, TENANT_B]) {
     await query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [t]);
     await query(

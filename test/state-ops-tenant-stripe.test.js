@@ -15,7 +15,7 @@ import {
   setTenantStripe,
   tenantStripe,
 } from "../src/store/state-ops.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const A = "tenant_a";
 
@@ -49,13 +49,13 @@ test("setTenantStripe: fehlender Tenant wirft (fail-closed, kein stilles No-Op)"
 
 test("tenantStripe: Tenant ohne Referenzen -> beide null (Grenzfall, nie undefined)", () => {
   const s = makeDefaultState();
-  assert.deepEqual(tenantStripe(s, OWNER_TENANT_ID), { customerId: null, paymentMethodId: null });
+  assert.deepEqual(tenantStripe(s, BOOTSTRAP_TENANT_ID), { customerId: null, paymentMethodId: null });
 });
 
 test("json-Roundtrip: setTenantStripe via Fassade persistiert -> tenantStripe liest beide Felder", () => {
   // Owner existiert in makeDefaultState (load() seedet ihn) -> kein registerTenant noetig.
-  jsonBackend.setTenantStripe(OWNER_TENANT_ID, { customerId: "cus_rt", paymentMethodId: "pm_rt" });
-  assert.deepEqual(jsonBackend.tenantStripe(OWNER_TENANT_ID), {
+  jsonBackend.setTenantStripe(BOOTSTRAP_TENANT_ID, { customerId: "cus_rt", paymentMethodId: "pm_rt" });
+  assert.deepEqual(jsonBackend.tenantStripe(BOOTSTRAP_TENANT_ID), {
     customerId: "cus_rt",
     paymentMethodId: "pm_rt",
   });

@@ -14,7 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import * as viaReexport from "../src/request-tenant.js";
 import * as canonical from "../src/routes/_tenant.js";
 
@@ -120,7 +120,7 @@ for (const [label, build] of RESOLVER_FACTORIES) {
     const store = makeStore({ "user-1": "tenant-a" });
     const { requestTenant } = build(store);
     withMultiTenant(false, () => {
-      assert.equal(requestTenant(makeReq({ auth: { sub: "user-1" } })), OWNER_TENANT_ID);
+      assert.equal(requestTenant(makeReq({ auth: { sub: "user-1" } })), BOOTSTRAP_TENANT_ID);
     });
     assert.equal(store.calls.length, 0, "Flag aus darf keinen resolveTenant-Lookup ausloesen");
   });
@@ -129,7 +129,7 @@ for (const [label, build] of RESOLVER_FACTORIES) {
     const store = makeStore();
     const { requestTenant } = build(store);
     withMultiTenant(true, () => {
-      assert.equal(requestTenant(makeReq()), OWNER_TENANT_ID);
+      assert.equal(requestTenant(makeReq()), BOOTSTRAP_TENANT_ID);
     });
     assert.equal(store.calls.length, 0, "fehlende Identitaet darf keinen Lookup ausloesen");
   });
@@ -149,7 +149,7 @@ for (const [label, build] of RESOLVER_FACTORIES) {
     withMultiTenant(true, () => {
       const result = requestTenant(makeReq({ auth: { sub: "ghost" } }));
       assert.equal(result, canonical.TENANT_REJECT);
-      assert.notEqual(result, OWNER_TENANT_ID, "fail-closed: unbekannt darf nie Owner werden");
+      assert.notEqual(result, BOOTSTRAP_TENANT_ID, "fail-closed: unbekannt darf nie Owner werden");
     });
   });
 

@@ -7,7 +7,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ";
 const DISCLOSURE_TAIL = "wird fuer meinen Auftraggeber zusammengefasst";
@@ -26,7 +26,7 @@ before(async () => {
 test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerName ignoriert, G1)", () => {
   // G1: callerName ist NICHT mehr setzbar - selbst wenn der Aufrufer einen anderen
   // Namen anhaengt, gewinnt die gebundene Tenant-Identitaet (ownerName).
-  const sentence = disclosureSentence({ callerName: "Klaus", tenantId: OWNER_TENANT_ID });
+  const sentence = disclosureSentence({ callerName: "Klaus", tenantId: BOOTSTRAP_TENANT_ID });
   assert.ok(sentence.startsWith(DISCLOSURE_PREFIX), `Wortlaut-Praefix fehlt: ${sentence}`);
   assert.ok(
     !sentence.includes("Klaus"),
@@ -37,7 +37,7 @@ test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerNa
 });
 
 test("T-P2-10: Outbound-Prompt weist den LLM an, die LLM-frei gesprochene Offenlegung NICHT zu wiederholen (G2)", () => {
-  const call = seedCall({ direction: "outbound", goal: "Termin", tenantId: OWNER_TENANT_ID });
+  const call = seedCall({ direction: "outbound", goal: "Termin", tenantId: BOOTSTRAP_TENANT_ID });
   const prompt = systemPrompt(call);
   // G2: die woertliche Offenlegung wird LLM-FREI im Erst-Gather gesprochen (openingText),
   // NICHT mehr vom Modell verlangt -> der Prompt traegt sie nicht mehr woertlich, sondern
@@ -53,7 +53,7 @@ test("T-P2-10: Outbound-Prompt weist den LLM an, die LLM-frei gesprochene Offenl
 });
 
 test("T-P2-10b: Inbound-Prompt traegt die Outbound-Klausel NICHT (Gegenprobe)", () => {
-  const call = seedCall({ direction: "inbound", tenantId: OWNER_TENANT_ID });
+  const call = seedCall({ direction: "inbound", tenantId: BOOTSTRAP_TENANT_ID });
   const prompt = systemPrompt(call);
   assert.ok(
     !prompt.includes(NO_REPEAT_CLAUSE),

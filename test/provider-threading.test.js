@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { providerFromHeaders } from "../src/telephony/registry.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
-import { OWNER_TENANT_ID, PROVIDER, DEFAULT_PROVIDER } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, PROVIDER, DEFAULT_PROVIDER } from "../src/store/defaults.js";
 import { startServer, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const TELNYX_NR = "+13125550100";
@@ -38,7 +38,7 @@ test("createCall: Inbound mit provider=telnyx -> call.provider=telnyx", () => {
     direction: "inbound",
     from: "+49150",
     to: TELNYX_NR,
-    tenantId: OWNER_TENANT_ID,
+    tenantId: BOOTSTRAP_TENANT_ID,
     provider: PROVIDER.TELNYX,
   });
   assert.equal(call.provider, PROVIDER.TELNYX);

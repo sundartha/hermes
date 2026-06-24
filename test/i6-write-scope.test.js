@@ -11,7 +11,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT_B = "B";
 const SUB_B = "sub-b";
@@ -43,7 +43,7 @@ test("I6/L2 Flag AN: POST /api/settings ist tenant-gescopt; REJECT -> 403 (kein 
       assert.equal((await res.json()).agentName, "B-Agent");
       const stored = srv.readStore().settings;
       assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
-      assert.equal(stored[OWNER_TENANT_ID].agentName, "Hermes", "Owner-Bucket unveraendert");
+      assert.equal(stored[BOOTSTRAP_TENANT_ID].agentName, "Hermes", "Owner-Bucket unveraendert");
     });
 
     await t.test("unbekannte Identitaet -> 403, KEIN reject-Bucket angelegt", async () => {
@@ -70,7 +70,7 @@ test("I6/L5 Flag AN: Cancel ist tenant-gescopt (fremd -> 404) + requestedBy im A
     seed: seedState({
       tenants: [tenantB()],
       calls: [
-        seedCall({ id: "call_owner", tenantId: OWNER_TENANT_ID, status: "active" }),
+        seedCall({ id: "call_owner", tenantId: BOOTSTRAP_TENANT_ID, status: "active" }),
         seedCall({ id: "call_b", tenantId: TENANT_B, status: "active" }),
       ],
     }),
@@ -113,7 +113,7 @@ test("I6/L6 Flag AN: Export ist tenant-gescopt (nur eigene Calls, kein streamTok
       calls: [
         seedCall({
           id: "call_owner",
-          tenantId: OWNER_TENANT_ID,
+          tenantId: BOOTSTRAP_TENANT_ID,
           streamToken: "owner-geheim",
           summary: "Owner-Sum",
         }),
@@ -135,7 +135,7 @@ test("I6/L6 Flag AN: Export ist tenant-gescopt (nur eigene Calls, kein streamTok
 
     await t.test("Owner exportiert NUR Owner's Call", async () => {
       const body = await (await getJson(`${srv.localUrl}/api/tenant-data/export`)).json();
-      assert.equal(body.tenantId, OWNER_TENANT_ID);
+      assert.equal(body.tenantId, BOOTSTRAP_TENANT_ID);
       assert.equal(body.calls.length, 1);
       assert.equal(body.calls[0].id, "call_owner");
     });
@@ -172,7 +172,7 @@ test("I6 Flag AN: POST /api/calendar booked in den Tenant-Bucket; REJECT -> 403 
         (cal[TENANT_B] || []).some((e) => e.id === id),
         "Event im B-Bucket",
       );
-      assert.ok(!(cal[OWNER_TENANT_ID] || []).some((e) => e.id === id), "NICHT im Owner-Bucket");
+      assert.ok(!(cal[BOOTSTRAP_TENANT_ID] || []).some((e) => e.id === id), "NICHT im Owner-Bucket");
     });
 
     await t.test("unbekannte Identitaet (mit allowBooking) -> 403 (Tenant-Reject)", async () => {
@@ -199,7 +199,7 @@ test("I6 Flag AUS: X-Internal-Identity wird ignoriert -> Schreiben landet im OWN
       assert.equal(res.status, 200);
       const stored = srv.readStore().settings;
       assert.equal(
-        stored[OWNER_TENANT_ID].agentName,
+        stored[BOOTSTRAP_TENANT_ID].agentName,
         "Flag-Aus",
         "Owner-Bucket geschrieben (Flag aus -> Owner)",
       );

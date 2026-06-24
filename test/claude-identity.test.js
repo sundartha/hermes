@@ -6,7 +6,7 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { OWNER_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TENANT_B = "B";
 const B_OWNER = "Maria"; // tenant.ownerName von B
@@ -48,7 +48,7 @@ test("systemPrompt zieht B's ownerName ueber tenantContext", () => {
 });
 
 test("Owner-Call-Persona nennt den Vornamen (G1: systemPrompt = firstName)", () => {
-  assert.ok(systemPrompt(callFor(OWNER_TENANT_ID)).includes(config.ownerName.split(" ")[0]));
+  assert.ok(systemPrompt(callFor(BOOTSTRAP_TENANT_ID)).includes(config.ownerName.split(" ")[0]));
 });
 
 test("disclosureSentence ohne callerName folgt B's ownerName (Fallback bleibt)", () => {
@@ -56,7 +56,7 @@ test("disclosureSentence ohne callerName folgt B's ownerName (Fallback bleibt)",
 });
 
 test("disclosureSentence Owner-Call nennt weiter config.ownerName (voll)", () => {
-  assert.ok(disclosureSentence(callFor(OWNER_TENANT_ID)).includes(config.ownerName));
+  assert.ok(disclosureSentence(callFor(BOOTSTRAP_TENANT_ID)).includes(config.ownerName));
 });
 
 test("callerName wird ignoriert - Tenant-ownerName bindet (G1)", () => {

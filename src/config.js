@@ -149,9 +149,9 @@ export const config = {
   },
   ownerNumber: process.env.OWNER_NUMBER || "",
   // Provider der Owner-Absendernummer (twilio|telnyx) fuer das Boot-Seeding
-  // (store/json.js finishLoad -> state-ops.seedOwnerNumberFromConfig). Default twilio;
+  // (store/json.js finishLoad -> state-ops.seedBootstrapNumberFromConfig). Default twilio;
   // per OWNER_NUMBER_PROVIDER-Env setzbar (Produktion: telnyx). Ein ungueltiger Wert
-  // wird in seedOwnerNumberFromConfig fail-closed verworfen (kein Seed).
+  // wird in seedBootstrapNumberFromConfig fail-closed verworfen (kein Seed).
   ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "twilio").toLowerCase(),
 
   // ---- Store-Backend ----
@@ -219,7 +219,7 @@ export const config = {
   // + Auth + Allowlist bereits winzig (Owner-Phase). NIE per Default an.
   provisioningEnabled: (process.env.PROVISIONING_ENABLED || "false") === "true",
   // Multi-Tenant-Identitaets-/Laufzeit-Schicht (I4-I7). DEFAULT AUS (fail-closed):
-  // requestTenant === OWNER_TENANT_ID -> Owner byte-identisch, kein Tenant-Scoping.
+  // requestTenant === BOOTSTRAP_TENANT_ID -> Owner byte-identisch, kein Tenant-Scoping.
   // Erst true (nach allen dichten Scope-Gates I5/I6/I7) loest die Auth-Achse den
   // Request-Tenant auf. EIN gemeinsames Flag fuer I4-I7 (kein separates Login-Flag;
   // Self-Service kommt spaeter unter eigenem Reife-Flag).
@@ -373,10 +373,10 @@ export function assertConfig() {
   // TWILIO_NUMBER ist keine Boot-Pflicht mehr: die Owner-Absendernummer lebt im Store,
   // nicht in der Env. Stattdessen verlangt der Boot-Guard in server.js fail-closed eine
   // aktive Owner-Nummer im Store (storefrei bleibt assertConfig).
-  // G1: Owner-Identitaet fail-closed (Boot-Refusal bei leer) -> der "Jonas"-Default
-  // verschwindet an der Quelle, kein stiller Identitaets-Fallback im Greeting/Disclosure.
-  if (!config.ownerFirstName) missing.push("OWNER_FIRST_NAME");
-  if (!config.ownerLastName) missing.push("OWNER_LAST_NAME");
+  // Owner-Removal P2a: ownerFirstName/lastName sind KEINE Boot-Pflicht mehr (ein
+  // neutraler Bootstrap-Tenant braucht keine fixe Identitaet). Der "Jonas"-Default ist
+  // an der Quelle weg (Default ""); ein leerer Owner-Tenant scheitert ohnehin am
+  // Boot-Gate (aktive Nummer). env bleibt funktionsfaehig - Entfernung folgt in P2b.
   if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME")) missing.push("PUBLIC_URL");
   if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");

@@ -9,10 +9,10 @@
 // Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab). Die View-
 // Helfer (publicCall/upcomingCalendar/activeNumberFor) kommen direkt aus store/views
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
-// OWNER_TENANT_ID ist eine Konstante aus store/defaults (direkt importiert wie die
+// BOOTSTRAP_TENANT_ID ist eine Konstante aus store/defaults (direkt importiert wie die
 // Views, nicht injiziert).
 import { Router } from "express";
-import { OWNER_TENANT_ID } from "../store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
 import { publicCall, activeNumberFor, upcomingCalendar } from "../store/views.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
@@ -26,14 +26,14 @@ export const STATE_CALLS = 30,
 // exportTenantData/getCall/usageOf (+ getCalendar via upcomingCalendar). config ist
 // das globale Config-Objekt. audit ist util.audit (loggt nur Keys/Counts, keine
 // PII/Werte). tenant buendelt die request-tenant-Resolver: requestTenant (Flag aus
-// -> OWNER_TENANT_ID), requireTenant (tenant-gescopt; REJECT -> 403) und
+// -> BOOTSTRAP_TENANT_ID), requireTenant (tenant-gescopt; REJECT -> 403) und
 // tenantOwnsCall (Ownership-Praedikat, eine Quelle wie POST /api/calls/:id/cancel).
 export function makeReadRoutes({ store, config, audit, tenant }) {
   const { requestTenant, requireTenant, tenantOwnsCall } = tenant;
   const router = Router();
 
   // Gesamter Zustand fuers Dashboard (Polling) + MCP-Tools. Tenant-gescoped hinter
-  // MULTI_TENANT (Flag aus -> requestTenant === OWNER_TENANT_ID + ungefilterte Listen
+  // MULTI_TENANT (Flag aus -> requestTenant === BOOTSTRAP_TENANT_ID + ungefilterte Listen
   // wie im Bestand, inkl. Legacy-Calls ohne tenantId -> byte-identisch). Die lesenden
   // MCP-Tools (list_calls/list_action_items/get_my_number/get_agent_status) erben das
   // Scoping AUTOMATISCH ueber diese Route (mcp-tools.js unveraendert).
@@ -47,7 +47,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     // (Bestand). Danach die Bestands-Slices.
     const scoped = config.multiTenant ? store.exportTenantData(tenantId) : s;
     // Owner-Privatnummer ist Owner-PII -> nur in der Owner-Sicht, sonst leer.
-    const isOwnerView = !config.multiTenant || tenantId === OWNER_TENANT_ID;
+    const isOwnerView = !config.multiTenant || tenantId === BOOTSTRAP_TENANT_ID;
 
     res.json({
       // settings/calendar/usage sind seit I2/P4 Maps tenantId -> Bucket; tenantContext
@@ -76,7 +76,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     const call = store.getCall(req.params.id);
     if (!call) return res.status(404).json({ error: "not found" });
     // Tenant-Scope (I5): fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Flag
-    // aus -> requestTenant === OWNER_TENANT_ID; trotzdem ueber config.multiTenant
+    // aus -> requestTenant === BOOTSTRAP_TENANT_ID; trotzdem ueber config.multiTenant
     // gaten, damit Legacy-Calls ohne tenantId bei Flag aus byte-identisch (200)
     // bleiben. getCall matcht auch twilioSid -> der Guard deckt beide id-Achsen.
     if (config.multiTenant && !tenantOwnsCall(call, requestTenant(req)))

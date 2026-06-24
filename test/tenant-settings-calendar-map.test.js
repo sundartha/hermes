@@ -22,7 +22,7 @@ import {
   findConflict,
   tenantContext,
 } from "../src/store/state-ops.js";
-import { OWNER_TENANT_ID, defaultSettings, demoCalendar } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, defaultSettings, demoCalendar } from "../src/store/defaults.js";
 
 // Zwei NICHT-Owner-Tenants fuer die Map-Trennung: der Owner-Bucket ist vorbelegt
 // (defaultSettingsMap/calendarMap) und taugt daher nicht fuer die "Bucket bleibt
@@ -102,11 +102,11 @@ test("Migration: flaches settings + flache calendar-Liste -> owner-keyed Map", a
   };
   const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [ev] });
   assert.equal(
-    state.settings[OWNER_TENANT_ID].agentName,
+    state.settings[BOOTSTRAP_TENANT_ID].agentName,
     "Alt-Agent",
     "altes settings im Owner-Bucket",
   );
-  assert.equal(state.calendar[OWNER_TENANT_ID][0].id, "ev_old", "alter Kalender im Owner-Bucket");
+  assert.equal(state.calendar[BOOTSTRAP_TENANT_ID][0].id, "ev_old", "alter Kalender im Owner-Bucket");
   assert.equal(
     typeof state.settings.agentName,
     "undefined",
@@ -116,22 +116,22 @@ test("Migration: flaches settings + flache calendar-Liste -> owner-keyed Map", a
 
 test("Migration: leere calendar-Liste -> leerer Owner-Bucket", async () => {
   const state = await loadFlatStore({ settings: FLAT_SETTINGS, calendar: [] });
-  assert.deepEqual(state.calendar[OWNER_TENANT_ID], [], "leerer Owner-Kalender bleibt leer");
+  assert.deepEqual(state.calendar[BOOTSTRAP_TENANT_ID], [], "leerer Owner-Kalender bleibt leer");
 });
 
 test("Migration ist idempotent: bereits-Map-Shape bleibt unveraendert (Owner-Bucket gleich)", async () => {
   const mapShape = {
-    settings: { [OWNER_TENANT_ID]: FLAT_SETTINGS },
-    calendar: { [OWNER_TENANT_ID]: [] },
+    settings: { [BOOTSTRAP_TENANT_ID]: FLAT_SETTINGS },
+    calendar: { [BOOTSTRAP_TENANT_ID]: [] },
   };
   const state = await loadFlatStore(mapShape);
   assert.equal(
-    state.settings[OWNER_TENANT_ID].agentName,
+    state.settings[BOOTSTRAP_TENANT_ID].agentName,
     "Alt-Agent",
     "Owner-Settings unveraendert",
   );
   assert.deepEqual(
-    state.calendar[OWNER_TENANT_ID],
+    state.calendar[BOOTSTRAP_TENANT_ID],
     [],
     "Owner-Kalender unveraendert (leer bleibt leer)",
   );
@@ -141,7 +141,7 @@ test("Migration forward-compat: flaches settings ohne neues Feld -> Default im O
   const { allowBankData, ...withoutBankData } = FLAT_SETTINGS;
   const state = await loadFlatStore({ settings: withoutBankData, calendar: [] });
   assert.equal(
-    state.settings[OWNER_TENANT_ID].allowBankData,
+    state.settings[BOOTSTRAP_TENANT_ID].allowBankData,
     defaultSettings().allowBankData,
     "fehlendes Feld faellt auf den defaultSettings()-Default",
   );
@@ -150,15 +150,15 @@ test("Migration forward-compat: flaches settings ohne neues Feld -> Default im O
 // ---- (3) tenantContext(owner) byte-identisch ----
 test("tenantContext(owner).settings/.calendar sind die Owner-Bucket-Referenzen", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, config.ownerName, OWNER_TENANT_ID);
-  assert.equal(ctx.settings, settingsFor(s, OWNER_TENANT_ID));
-  assert.equal(ctx.settings, s.settings[OWNER_TENANT_ID], "Owner-Bucket-Referenz, nicht die Map");
-  assert.equal(ctx.calendar, calendarFor(s, OWNER_TENANT_ID));
+  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
+  assert.equal(ctx.settings, settingsFor(s, BOOTSTRAP_TENANT_ID));
+  assert.equal(ctx.settings, s.settings[BOOTSTRAP_TENANT_ID], "Owner-Bucket-Referenz, nicht die Map");
+  assert.equal(ctx.calendar, calendarFor(s, BOOTSTRAP_TENANT_ID));
 });
 
 test("tenantContext(owner) bei frischem State: settings == defaults, calendar == demoCalendar", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, config.ownerName, OWNER_TENANT_ID);
+  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
   assert.deepEqual(ctx.settings, defaultSettings());
   assert.deepEqual(ctx.calendar, demoCalendar());
 });
@@ -168,19 +168,19 @@ test("tenantContext(owner) bei frischem State: settings == defaults, calendar ==
 // im selben Owner-Bucket (json-Backend, gegen das migrierte Temp-store.json).
 test("Fassade json.js: addCalendarEvent/findConflict round-trippen ueber tenantId", () => {
   jsonBackend.addCalendarEvent(
-    OWNER_TENANT_ID,
+    BOOTSTRAP_TENANT_ID,
     "Fassaden-Termin",
     "2031-01-01T10:00:00.000Z",
     "2031-01-01T11:00:00.000Z",
   );
   const conflict = jsonBackend.findConflict(
-    OWNER_TENANT_ID,
+    BOOTSTRAP_TENANT_ID,
     "2031-01-01T10:30:00.000Z",
     "2031-01-01T10:45:00.000Z",
   );
   assert.ok(conflict, "gebuchter Termin wird als Konflikt gefunden");
   assert.equal(
-    jsonBackend.getCalendar(OWNER_TENANT_ID).some((e) => e.title === "Fassaden-Termin"),
+    jsonBackend.getCalendar(BOOTSTRAP_TENANT_ID).some((e) => e.title === "Fassaden-Termin"),
     true,
   );
 });

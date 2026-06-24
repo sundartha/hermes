@@ -12,7 +12,7 @@ import {
   calendarMap,
   emptyUsage,
   emptyUsageMap,
-  OWNER_TENANT_ID,
+  BOOTSTRAP_TENANT_ID,
   sanitizeProfile,
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
@@ -49,9 +49,9 @@ export function makeDefaultState() {
     profiles: {},
     // Tenants (Onboarding). Der Owner existiert immer (status active). Weitere
     // Tenants kommen ueber registerTenant (zahlungsfreies Onboarding).
-    tenants: [{ id: OWNER_TENANT_ID, status: TENANT_STATUS.ACTIVE }], // [{ id, status }]
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: TENANT_STATUS.ACTIVE }], // [{ id, status }]
     // E.164 -> tenant_id Routing-Tabelle (P3c) + Lifecycle. Owner-Nummer ist
-    // config-derived (seedOwnerNumber, status active). 'requested' Nummern haben
+    // config-derived (seedBootstrapNumber, status active). 'requested' Nummern haben
     // (noch) keine e164 -> identifiziert ueber id.
     numbers: [], // [{ id, e164, tenantId, provider, status, providerNumberId }]
     // Historie Nummer<->Tenant (Recycling-Hygiene).
@@ -123,10 +123,10 @@ export function createCall(
     // sonst "owner" (localhost/stdio). Fuer Audit + pro-Nutzer-Stundenlimit.
     requestedBy: requestedBy || null,
     // Tenant, dem dieser Call gehoert (P4). Inbound: via findTenantByNumber
-    // aufgeloest; Outbound: OWNER_TENANT_ID (Outbound-from bleibt Owner bis P5).
+    // aufgeloest; Outbound: BOOTSTRAP_TENANT_ID (Outbound-from bleibt Owner bis P5).
     // Steuert den Usage-Bucket + die pro-Tenant-Achse von countOutboundCallsSince.
     // Fail-closed: fehlendes tenantId -> Owner (heute einziger realer Tenant).
-    tenantId: tenantId || OWNER_TENANT_ID,
+    tenantId: tenantId || BOOTSTRAP_TENANT_ID,
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,
@@ -385,7 +385,7 @@ export function resolveCallLanguage(s, { tenantId, numberRecord }) {
 // (Inbound-Sprache, Outbound-Absenderwahl). Bestehende 3-/4-Arg-Aufrufe bleiben
 // verhaltens-erhaltend (Default DE/de = heutiger De-facto-Zustand). Additiv NULLABLE
 // in der DB; ein Bestands-Record ohne Werte faellt ueber den Code-Fallback zurueck.
-export function seedOwnerNumber(
+export function seedBootstrapNumber(
   s,
   e164,
   tenantId,
@@ -410,35 +410,35 @@ export function seedOwnerNumber(
   });
 }
 
-// Config-derive Owner-Nummer-Seed beim Boot (analog seedOwnerIdentity): traegt die
+// Config-derive Owner-Nummer-Seed beim Boot (analog seedBootstrapIdentity): traegt die
 // Owner-Absendernummer aus (e164, provider) ein. Render free hat ein fluechtiges
 // Dateisystem -> ohne diesen Seed waere nach jedem Deploy keine aktive Owner-Nummer im
 // Store und der Boot-Guard (server.js) braeche fail-closed ab (Owner-Outbound/SMS tot).
 // Provider wird gegen PROVIDER validiert (wie scripts/seed-owner-number.js): ungueltig
 // oder leer -> KEIN Seed (fail-closed, kein Muell-Provider). Leere e164 -> No-Op
-// (seedOwnerNumber). Idempotent ueber seedOwnerNumber (e164 normalisiert, vorhandene
+// (seedBootstrapNumber). Idempotent ueber seedBootstrapNumber (e164 normalisiert, vorhandene
 // gewinnt). KEIN Magic-Default fuer die Nummer - e164 kommt nur vom Aufrufer.
-export function seedOwnerNumberFromConfig(s, e164, tenantId, provider) {
+export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
   if (!Object.values(PROVIDER).includes(provider)) return;
-  seedOwnerNumber(s, e164, tenantId, provider);
+  seedBootstrapNumber(s, e164, tenantId, provider);
 }
 
 // Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
 // Owner-Nummer (F2 P11). Hintergrund: seit P7 geht die Inbound-Summary-SMS an
 // tenant.privateNumber (NICHT mehr config.ownerNumber) - ohne diesen Seed verloere der
 // Owner nach der finishCall-Umstellung STILL seine eigene Summary-SMS. Config-frei:
-// rawOwnerNumber wird durchgereicht (Muster seedOwnerIdentity/seedOwnerNumberFromConfig,
+// rawOwnerNumber wird durchgereicht (Muster seedBootstrapIdentity/seedBootstrapNumberFromConfig,
 // state-ops bleibt config-frei). Idempotent: hat der Owner schon eine privateNumber, No-Op
 // (gesetzte gewinnt - kein Override einer per Self-Service gesetzten Nummer). Validierung
 // ueber die EINE geteilte Quelle normalizePrivateNumber (G5), aber mit Laendercode-Gate AUS
-// ("*"): die config-Owner-Nummer ist Plattform-TRUSTED (dieselbe, die seedOwnerNumber als
+// ("*"): die config-Owner-Nummer ist Plattform-TRUSTED (dieselbe, die seedBootstrapNumber als
 // aktive Absendernummer eintraegt) - die Toll-Fraud-Bremse (countryAllowed) gilt nur fuer
 // USER-Eingaben (self-service/onboarding), nicht fuers Boot-Seeding der Owner-Config.
 // Ungueltiges E.164-Format ODER leere Config -> KEIN Seed (boot-sicher, KEIN Throw; der
 // Aufrufer warnt). Fehlender Owner-Tenant -> No-Op. Liefert true, wenn der Owner DANACH
 // eine privateNumber hat (frisch geseedet ODER schon vorhanden), sonst false -> der
 // Aufrufer kann fail-soft eine PII-freie Boot-Warnung emittieren.
-export function seedOwnerPrivateNumber(s, rawOwnerNumber, tenantId) {
+export function seedBootstrapPrivateNumber(s, rawOwnerNumber, tenantId) {
   const owner = findTenant(s, tenantId);
   if (!owner) return false;
   if (owner.privateNumber) return true; // idempotent: gesetzte Nummer gewinnt
@@ -507,7 +507,7 @@ function firstNameOf(fullName) {
 }
 
 // Setzt firstName + komponierten ownerName auf einem Tenant-Record (G1). Geteilt von
-// registerTenant UND seedOwnerIdentity (G5: eine Kompositionsstelle). Trimmt; leere
+// registerTenant UND seedBootstrapIdentity (G5: eine Kompositionsstelle). Trimmt; leere
 // Teile -> Feld bleibt weg, damit der config-Owner-Fallback im tenantContext sauber
 // greift (kein leerer Daten-Muell). ownerName = "firstName lastName".
 export function applyOwnerIdentity(tenant, firstName, lastName) {
@@ -519,13 +519,13 @@ export function applyOwnerIdentity(tenant, firstName, lastName) {
 }
 
 // Stellt die config-abgeleitete Owner-Identitaet (firstName/lastName -> ownerName)
-// idempotent im Spiegel sicher (Variante a, G1). Wie seedOwnerNumber: json load()
+// idempotent im Spiegel sicher (Variante a, G1). Wie seedBootstrapNumber: json load()
 // ruft makeDefaultState nicht auf Bestands-Stores, pg hydriert owner_name als NULL.
 // Schuetzt den UNGEGATETEN Inbound-Greeting (server.js) + summarizeCall. Idempotent:
 // traegt der Owner-Tenant bereits ownerName, No-Op (gesetzte Identitaet gewinnt).
 // Fehlender Owner-Tenant (seedState ohne tenants) -> No-Op. Leere Config-Teile ->
 // kein Seed (Boot-Refusal in assertConfig faengt das ab).
-export function seedOwnerIdentity(s, firstName, lastName, tenantId) {
+export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
   const owner = findTenant(s, tenantId);
   if (!owner || owner.ownerName) return;
   applyOwnerIdentity(owner, firstName, lastName);
@@ -1088,7 +1088,7 @@ export function resolveProfile(s, email) {
 // faellt bei leerer Identitaet bewusst fail-OPEN auf Owner (resolveProfileFrom(!email)
 // -> OWNER_PROFILE in defaults.js): das vergibt RECHTE konservativ an den Owner.
 // resolveTenant DARF diese Semantik NIEMALS erben: leere/null/unbekannte Identitaet
-// -> null (Reject), NIE OWNER_TENANT_ID. Ein Default-Tenant hier wuerde den ganzen
+// -> null (Reject), NIE BOOTSTRAP_TENANT_ID. Ein Default-Tenant hier wuerde den ganzen
 // Tenant-Scope (I5/I6/I7) umgehbar machen - still, weil Owner-only-Tests gruen blieben.
 // 1:1 (#2): liefert genau eine tenantId ODER null, keine Liste. Keyt auf idpSubject (#1).
 export function resolveTenant(s, idpSubject) {

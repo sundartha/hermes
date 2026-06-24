@@ -2,10 +2,13 @@
 // (json.js + pg.js) genutzt, damit "frischer pg-Zustand == frischer json-Zustand"
 // strukturell garantiert ist (eine Quelle statt zwei). Kein DB-/Datei-Zugriff hier.
 
-// Owner-Tenant: in der Single-Tenant-Phase laeuft alles unter genau einem Tenant.
+// Bootstrap-Tenant: in der Single-Tenant-Phase laeuft alles unter genau einem Tenant
+// (der "erste" Tenant, kein hartcodierter Owner-Sonderfall mehr - Owner-Removal P2a).
 // Benannte Konstante statt verstreutem Magic-String (von json/pg/state-ops/server
 // gemeinsam genutzt). pg.js re-exportiert sie, damit RLS-GUC + Seeding davon haengen.
-export const OWNER_TENANT_ID = "owner";
+// Wert bleibt vorerst "owner" (Symbol neutralisiert; ein Wert-Wechsel waere eine
+// Store-Migration und gehoert nach P2b/P5).
+export const BOOTSTRAP_TENANT_ID = "owner";
 
 // Demo-Termine relativ zum Startzeitpunkt (Tage voraus / Uhrzeit). Werte als
 // benannte Eintraege statt nackter Zahlen mitten im Code.
@@ -19,7 +22,7 @@ const DEMO_EVENTS = [
 export const MAX_NOTIFICATIONS = 50;
 
 // Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Bisher
-// als "twilio" an mehreren Stellen hardcodet (state-ops.seedOwnerNumber,
+// als "twilio" an mehreren Stellen hardcodet (state-ops.seedBootstrapNumber,
 // pg.flushNumbers, migrate.seedDefaults); ab P5 (zweiter Provider Telnyx) eine
 // benannte Konstante (G25), eine Quelle (G5/G13). Die telephony-registry importiert
 // dieselben Werte fuer den Header-Dispatch.
@@ -138,7 +141,7 @@ export const DEFAULT_GREETING =
 
 // ---- Geo-Location (F1): Default-Land + -Sprache ----
 // EINE Quelle (G5/G25) fuer die Geo-Defaults: defaultSettings().language, der
-// config-derived Number-Seed (seedOwnerNumber), der Nummern-Request (requestNumber)
+// config-derived Number-Seed (seedBootstrapNumber), der Nummern-Request (requestNumber)
 // UND der Code-Fallback der spaeteren Sprach-/Routing-Konsumenten leiten DE/de
 // hieraus ab. Die Geo-Felder auf Number-/Tenant-Record sind additiv NULLABLE
 // (Bestand ohne Wert -> Code-Fallback hier, nie hart angenommen, R7). country =
@@ -185,14 +188,14 @@ export function demoCalendar() {
 // analog emptyUsageMap). s.settings ist eine Map tenantId -> Settings. Der
 // Owner-Bucket existiert von Anfang an (Dashboard/POST /api/settings lesen ihn).
 export function defaultSettingsMap() {
-  return { [OWNER_TENANT_ID]: defaultSettings() };
+  return { [BOOTSTRAP_TENANT_ID]: defaultSettings() };
 }
 
 // Kalender-Map mit dem Owner-Demo-Kalender vorbelegt (I2; analog emptyUsageMap).
 // s.calendar ist eine Map tenantId -> [events]. Nur der Owner ist vorbelegt; ein
 // neuer Tenant bekommt ueber calendarFor eine leere Liste.
 export function calendarMap() {
-  return { [OWNER_TENANT_ID]: demoCalendar() };
+  return { [BOOTSTRAP_TENANT_ID]: demoCalendar() };
 }
 
 // Ein leerer Usage-Bucket (pro Tenant). costEur als JS-Float (Bestand,
@@ -205,7 +208,7 @@ export function emptyUsage() {
 // s.usage ist eine Map tenantId -> Bucket. Laufzeit bleibt owner-only, der
 // Owner-Bucket existiert von Anfang an (Dashboard/get_agent_status lesen ihn).
 export function emptyUsageMap() {
-  return { [OWNER_TENANT_ID]: emptyUsage() };
+  return { [BOOTSTRAP_TENANT_ID]: emptyUsage() };
 }
 
 // ---- Rechteprofile pro Nutzer (Phase 2) ----
@@ -223,7 +226,7 @@ export const PROFILE_FIELDS = {
 // E.164-Normalisierung: entfernt Whitespace/Bindestriche/Klammern aus einer
 // Telefonnummer ("+49 151-(0)123" -> "+491510123"). EINE Quelle (G5/DRY) fuer die
 // Inbound-To-Pruefung (server.js), den config-derived Nummern-Seed
-// (state-ops.seedOwnerNumber, migrate.seedNumber) UND die Profil-Allowlist
+// (state-ops.seedBootstrapNumber, migrate.seedNumber) UND die Profil-Allowlist
 // (sanitizeProfile) - sonst driften drei Kopien desselben Regex. Nicht-String ->
 // "" (env-gating/Guard beim Aufrufer). Seed + Lookup teilen dieselbe Form, damit
 // eine gesetzte Owner-Nummer mit Trennzeichen trotzdem routbar bleibt (TD-2).
