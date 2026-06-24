@@ -9,6 +9,7 @@
     "check": "node scripts/check-setup.js",
     "grant-admin": "node scripts/grant-admin.js",
     "seed-owner-number": "node scripts/seed-owner-number.js",
+    "bootstrap-tenant": "node scripts/bootstrap-tenant.js",
     "test": "NODE_ENV=test node --test \"test/*.test.js\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

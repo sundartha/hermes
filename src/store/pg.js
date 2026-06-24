@@ -52,42 +52,12 @@ export function makePgStore(runner) {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
       await migrate(client, BOOTSTRAP_TENANT_ID);
       state = await hydrate(client);
-      // Owner-Identitaet config-derived seeden (Variante a, G1): owner_name hydriert
-      // als NULL -> ohne Seed bliebe der Owner namenlos. Idempotent (gesetzter Wert
-      // gewinnt). Persistenz via save() unten, damit first_name/owner_name
-      // round-trippen (flushTenants).
-      ops.seedBootstrapIdentity(state, config.ownerFirstName, config.ownerLastName, BOOTSTRAP_TENANT_ID);
-      // Owner-Absendernummer config-derived idempotent seeden (analog json.js finishLoad):
-      // pg hydriert eine frische/leere DB ohne aktive Owner-Nummer -> der Boot-Guard in
-      // server.js braeche fail-closed ab (alle Deploys update_failed). Ohne OWNER_NUMBER
-      // oder mit ungueltigem Provider bleibt es ein No-Op (Guard greift weiter).
-      ops.seedBootstrapNumberFromConfig(
-        state,
-        config.ownerNumber,
-        BOOTSTRAP_TENANT_ID,
-        config.ownerNumberProvider,
-      );
-      // Owner-Privatnummer (F2 P11) config-derived idempotent seeden (analog seedBootstrapIdentity):
-      // seit P7 ist tenant.privateNumber das Summary-SMS-Ziel - ohne diesen Seed verloere der
-      // Owner nach der Umstellung still seine eigene Summary-SMS. false -> PII-freie Boot-Warnung
-      // (nur der Marker, NIE die Nummer). Persistenz via save() unten (Gate beruecksichtigt
-      // jetzt auch privateNumber, damit der Seed auch ohne ownerName round-trippt).
-      if (!ops.seedBootstrapPrivateNumber(state, config.ownerNumber, BOOTSTRAP_TENANT_ID))
-        console.warn(
-          "[pg] Owner-Tenant ohne private Summary-Nummer - Inbound-Summary-SMS an den Owner wird uebersprungen (OWNER_NUMBER gesetzt + gueltig?).",
-        );
+      // Kein config-derived Seed mehr (P2b): Erst-Setup laeuft einmalig ueber
+      // scripts/bootstrap-tenant.js -> persistiert dann in der DB. hydrate ist read-only;
+      // ohne Seed-Mutation gibt es nichts zu flushen (ein Flush-after-hydrate waere ein
+      // No-Op gegen sich selbst). Boot bleibt fail-closed (server.js verlangt eine aktive
+      // Nummer im Store).
     });
-    // Nur flushen, wenn der Seed tatsaechlich etwas am Owner-Record gesetzt hat (ownerName
-    // ODER privateNumber, F2 P11) - leere Config -> Boot-Refusal greift ohnehin vorher, kein
-    // Leer-Flush. save() wird AWAITED: init() ist async und der Flush teilt sich die Verbindung
-    // mit den folgenden Zugriffen (pglite = eine Verbindung) -> ein nicht-erwarteter Flush wuerde
-    // mit dem ersten Folge-Query um die Transaktion konkurrieren.
-    const owner = state.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID);
-    // Flush auch, wenn (nur) eine aktive Owner-Nummer geseedet wurde: seedBootstrapNumber und
-    // seedBootstrapPrivateNumber nutzen unterschiedliche Validierung -> die aktive Nummer kann
-    // ohne privateNumber existieren; ohne diesen Flush bliebe sie nach der Re-Hydrierung weg.
-    const hasOwnerNumber = state.numbers.some((n) => n.tenantId === BOOTSTRAP_TENANT_ID);
-    if (owner && (owner.ownerName || owner.privateNumber || hasOwnerNumber)) await save();
     return state;
   }
 
@@ -168,9 +138,10 @@ export function makePgStore(runner) {
     findConflict: (tenantId, startIso, endIso) =>
       ops.findConflict(requireState(), tenantId, startIso, endIso),
 
-    // Tenant-Kontext-Seam (I0): liest den hydrierten Spiegel (kein DB-Roundtrip),
-    // config.ownerName als Owner-Fallback (Wrapper-Parity zu json.js).
-    tenantContext: (tenantId) => ops.tenantContext(requireState(), config.ownerName, tenantId),
+    // Tenant-Kontext-Seam (I0): liest den hydrierten Spiegel (kein DB-Roundtrip).
+    // Owner-Identitaet nicht mehr config-derived (P2b): leerer ownerName-Fallback ""
+    // (Wrapper-Parity zu json.js); der Owner-Tenant traegt ownerName im Store.
+    tenantContext: (tenantId) => ops.tenantContext(requireState(), "", tenantId),
 
     trackUsage(tenantId, inputTokens, outputTokens, cfg) {
       const usage = ops.trackUsage(requireState(), tenantId, inputTokens, outputTokens, cfg);
@@ -258,6 +229,13 @@ export function makePgStore(runner) {
       return save();
     },
 
+    // Bootstrap-Tenant (CLI scripts/bootstrap-tenant.js, P2b): Tenant-Record + aktive
+    // Bestandsnummer in EINER Mutation. save() flusht beides (flushTenants + flushNumbers).
+    bootstrapTenant(e164, tenantId, provider) {
+      ops.bootstrapTenant(requireState(), e164, tenantId, provider);
+      return save();
+    },
+
     // Default = config.retentionDays, identisch zum json-Backend: der einzige
     // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
     // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).
@@ -328,9 +306,9 @@ async function hydrate(client) {
 }
 
 // tenant-Tabelle -> Tenant-Records. owner_name/idp_subject NUR setzen, wenn in der
-// DB nicht-null (sonst kippte der config.ownerName-Fallback im tenantContext und es
-// entstuende ein leeres ownerName-Feld). Der Owner ist immer enthalten (seedDefaults
-// garantiert die Zeile). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
+// DB nicht-null (sonst entstuende ein leeres ownerName-Feld, das den leeren
+// tenantContext-Fallback "" verdeckte). Tenants kommen ueber bootstrap-tenant/
+// Onboarding (P2b: kein config-Seed mehr). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
 async function hydrateTenants(client) {
   const rows = (
     await client.query(

@@ -150,7 +150,7 @@ test("Migration forward-compat: flaches settings ohne neues Feld -> Default im O
 // ---- (3) tenantContext(owner) byte-identisch ----
 test("tenantContext(owner).settings/.calendar sind die Owner-Bucket-Referenzen", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
+  const ctx = tenantContext(s, "", BOOTSTRAP_TENANT_ID); // P2b: ownerName-Fallback irrelevant hier
   assert.equal(ctx.settings, settingsFor(s, BOOTSTRAP_TENANT_ID));
   assert.equal(ctx.settings, s.settings[BOOTSTRAP_TENANT_ID], "Owner-Bucket-Referenz, nicht die Map");
   assert.equal(ctx.calendar, calendarFor(s, BOOTSTRAP_TENANT_ID));
@@ -158,7 +158,7 @@ test("tenantContext(owner).settings/.calendar sind die Owner-Bucket-Referenzen",
 
 test("tenantContext(owner) bei frischem State: settings == defaults, calendar == demoCalendar", () => {
   const s = makeDefaultState();
-  const ctx = tenantContext(s, config.ownerName, BOOTSTRAP_TENANT_ID);
+  const ctx = tenantContext(s, "", BOOTSTRAP_TENANT_ID); // P2b: ownerName-Fallback irrelevant hier
   assert.deepEqual(ctx.settings, defaultSettings());
   assert.deepEqual(ctx.calendar, demoCalendar());
 });

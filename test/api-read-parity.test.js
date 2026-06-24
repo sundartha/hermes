@@ -73,7 +73,6 @@ function makeMockStore({ listSize = 1 } = {}) {
 function makeConfig(overrides = {}) {
   return {
     multiTenant: false,
-    ownerNumber: "+4915299999999",
     claudeModel: "claude-haiku-4-5",
     voiceEngine: "budget",
     allowedNumbers: ["+49152"],
@@ -140,10 +139,11 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     assert.equal(body.calendar.length, 1);
     assert.equal(body.calendar[0].title, "future");
     // agent-Block: number = aktive Store-Nummer des Tenants (auch der Owner ist Tenant
-    // Null, keine config-Nummer mehr); Owner-Sicht -> ownerNumber sichtbar.
+    // Null, keine config-Nummer mehr). P2b: ownerNumber-Anzeige entfaellt (kein
+    // config.ownerNumber mehr) -> immer "".
     assert.equal(body.agent.number, "+4915200000001");
     assert.equal(body.agent.owner, "Jonas");
-    assert.equal(body.agent.ownerNumber, "+4915299999999"); // R3.2: Owner-Sicht
+    assert.equal(body.agent.ownerNumber, ""); // P2b: config.ownerNumber entfernt
     assert.equal(body.agent.model, "claude-haiku-4-5");
     assert.equal(body.agent.voiceEngine, "budget");
     assert.deepEqual(body.agent.allowedNumbers, ["+49152"]);
@@ -182,7 +182,7 @@ test("GET /api/state (Flag an, Owner-Tenant): Owner-PII sichtbar + aktive Owner-
     assert.equal(res.status, 200);
     const body = await res.json();
 
-    assert.equal(body.agent.ownerNumber, "+4915299999999"); // R3.2: Owner-Sicht
+    assert.equal(body.agent.ownerNumber, ""); // P2b: config.ownerNumber entfernt (immer "")
     assert.equal(body.agent.number, "+4915200000001"); // aktive Owner-Nummer
     assert.equal(body.calls.length, 1);
     assert.equal(body.calls[0].id, "call_owner");

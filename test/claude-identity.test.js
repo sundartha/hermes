@@ -11,14 +11,21 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 const TENANT_B = "B";
 const B_OWNER = "Maria"; // tenant.ownerName von B
 const B_NUMBER = "+4915255555555";
+// P2b: Owner-Identitaet lebt im Store (kein config.ownerName mehr) -> Owner-Tenant
+// explizit mit ownerName seeden.
+const OWNER_NAME = "Jonas Beispiel";
 
-let config, store, systemPrompt, disclosureSentence;
+let store, systemPrompt, disclosureSentence;
 before(async () => {
-  // Store mit aktivem Tenant B (eigener ownerName) ueber tempDataDir seeden, dann
-  // DATA_DIR setzen, DANN dynamisch importieren (config/json.js binden dataDir beim Laden).
+  // Store mit aktivem Tenant B (eigener ownerName) UND Owner-Tenant (eigener ownerName)
+  // ueber tempDataDir seeden, dann DATA_DIR setzen, DANN dynamisch importieren
+  // (config/json.js binden dataDir beim Laden).
   const seed = seedState({
     calls: [],
-    tenants: [{ id: TENANT_B, status: "active", ownerName: B_OWNER }],
+    tenants: [
+      { id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER_NAME },
+      { id: TENANT_B, status: "active", ownerName: B_OWNER },
+    ],
     numbers: [
       {
         id: "num_b",
@@ -31,7 +38,7 @@ before(async () => {
     ],
   });
   process.env.DATA_DIR = tempDataDir(seed);
-  config = (await import("../src/config.js")).config;
+  await import("../src/config.js");
   store = await import("../src/store.js");
   ({ systemPrompt, disclosureSentence } = await import("../src/claude.js"));
 });
@@ -48,15 +55,15 @@ test("systemPrompt zieht B's ownerName ueber tenantContext", () => {
 });
 
 test("Owner-Call-Persona nennt den Vornamen (G1: systemPrompt = firstName)", () => {
-  assert.ok(systemPrompt(callFor(BOOTSTRAP_TENANT_ID)).includes(config.ownerName.split(" ")[0]));
+  assert.ok(systemPrompt(callFor(BOOTSTRAP_TENANT_ID)).includes(OWNER_NAME.split(" ")[0]));
 });
 
 test("disclosureSentence ohne callerName folgt B's ownerName (Fallback bleibt)", () => {
   assert.ok(disclosureSentence(callFor(TENANT_B)).includes(B_OWNER));
 });
 
-test("disclosureSentence Owner-Call nennt weiter config.ownerName (voll)", () => {
-  assert.ok(disclosureSentence(callFor(BOOTSTRAP_TENANT_ID)).includes(config.ownerName));
+test("disclosureSentence Owner-Call nennt den geseedeten Owner-ownerName (voll)", () => {
+  assert.ok(disclosureSentence(callFor(BOOTSTRAP_TENANT_ID)).includes(OWNER_NAME));
 });
 
 test("callerName wird ignoriert - Tenant-ownerName bindet (G1)", () => {

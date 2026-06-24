@@ -16,10 +16,19 @@ const DISCLOSURE_TAIL = "wird fuer meinen Auftraggeber zusammengefasst";
 // Offenlegung als ersten Satz vom Modell zu verlangen). Diese Klausel pinnt das.
 const NO_REPEAT_CLAUSE = "Wiederhole sie NICHT";
 
-let config, systemPrompt, disclosureSentence;
+// P2b: ownerName lebt im Store (kein config.ownerName mehr) -> Owner-Tenant explizit
+// mit ownerName seeden, damit der ungegatete Disclosure-Pfad einen Namen einsetzt.
+const OWNER_NAME = "Jonas Beispiel";
+
+let systemPrompt, disclosureSentence;
 before(async () => {
-  process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
-  ({ config } = await import("../src/config.js"));
+  process.env.DATA_DIR = tempDataDir(
+    seedState({
+      calls: [],
+      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER_NAME }],
+    }),
+  );
+  await import("../src/config.js");
   ({ systemPrompt, disclosureSentence } = await import("../src/claude.js"));
 });
 
@@ -32,7 +41,7 @@ test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerNa
     !sentence.includes("Klaus"),
     "callerName darf NICHT eingesetzt werden (Identitaets-Bindung)",
   );
-  assert.ok(sentence.includes(config.ownerName), "ownerName muss eingesetzt sein");
+  assert.ok(sentence.includes(OWNER_NAME), "ownerName muss eingesetzt sein");
   assert.ok(sentence.includes(DISCLOSURE_TAIL), `Zusammenfassungs-Hinweis fehlt: ${sentence}`);
 });
 

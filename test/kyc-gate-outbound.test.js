@@ -7,7 +7,7 @@ import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TO = "+4915112345678";
-const OWNER_NUMBER = "+15005550006"; // = BASE_ENV.TWILIO_NUMBER
+const OWNER_NUMBER = "+15005550006"; // = OWNER_TEST_NUMBER (helpers.js, in den Spawn-Store geseedet)
 const A = "tenant-a",
   SUB_A = "sub-a",
   NUM_A = "+4915110000001";
@@ -21,12 +21,14 @@ const activeNumber = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
-// kycLevel optional auf Tenant A. Owner ohne kyc_level (Bestand).
+// kycLevel optional auf Tenant A. Owner ohne kyc_level (Bestand). A traegt einen
+// ownerName (P2b: das Outbound-Identitaets-Gate verlangt einen registrierten Namen;
+// fehlt er, sperrt es VOR dem KYC-Gate mit 403 - hier wollen wir das KYC-Gate testen).
 function seedKyc(kycLevel) {
   return seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
-      { id: A, status: "active", idpSubject: SUB_A, ...(kycLevel ? { kycLevel } : {}) },
+      { id: A, status: "active", idpSubject: SUB_A, ownerName: "Alice A", ...(kycLevel ? { kycLevel } : {}) },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
   });

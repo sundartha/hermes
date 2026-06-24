@@ -14,11 +14,10 @@ import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
-// Heutiges DE-Verhalten, woertlich gepinnt. ownerName wird im before EXPLIZIT auf den
-// Owner-Tenant geseedet (in-Process-Config liest OWNER_FIRST_NAME nicht aus BASE_ENV -
-// das gilt nur fuer Spawn-Server), damit der Test env-unabhaengig deterministisch ist.
-// Diese DE-Strings duerfen sich NIE aendern (byte-identisch); ein Refactor, der sie
-// verschiebt, faellt hier auf.
+// Heutiges DE-Verhalten, woertlich gepinnt. OWNER_NAME ist ein lokales Literal, das
+// direkt in die reinen Locale-Funktionen geht (kein Store/Config noetig) - der Test ist
+// damit env-unabhaengig deterministisch. Diese DE-Strings duerfen sich NIE aendern
+// (byte-identisch); ein Refactor, der sie verschiebt, faellt hier auf.
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.";

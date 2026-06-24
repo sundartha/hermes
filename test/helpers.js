@@ -20,6 +20,15 @@ const STARTUP_TIMEOUT_MS = 15000;
 // bisherige BASE_ENV-Nummer + seedCall.from (byte-identisch zum Altbestand).
 export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "twilio" });
 
+// Owner-Identitaet fuer Spawn-Tests: ersetzt den frueheren config-derived Identitaets-
+// Seed (OWNER_FIRST_NAME/OWNER_LAST_NAME, P2b entfernt). Die Identitaet lebt jetzt im
+// Store (wie die Owner-Nummer) -> ensureOwnerNumber traegt sie auf dem Owner-Tenant ein.
+// firstName/lastName getrennt, ownerName = "firstName lastName" (= "Jonas Beispiel",
+// woertlich gepinnt von Disclosure-/Greeting-Tests).
+export const OWNER_TEST_FIRST_NAME = "Jonas";
+export const OWNER_TEST_LAST_NAME = "Beispiel";
+const OWNER_TEST_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
+
 // ALLE config-relevanten Env-Variablen explizit setzen: dotenv fuellt nur
 // UNgesetzte Variablen, so kann eine lokale .env die Tests nicht beeinflussen.
 export const BASE_ENV = {
@@ -45,9 +54,9 @@ export const BASE_ENV = {
   // ensureOwnerNumber in den Spawn-Store (OWNER_TEST_NUMBER). Provider-spezifische
   // Tests reichen ownerNumber:{e164,provider} an startServer durch.
   TWILIO_EDGE: "frankfurt",
-  OWNER_FIRST_NAME: "Jonas",
-  OWNER_LAST_NAME: "Beispiel",
-  OWNER_NUMBER: "",
+  // P2b: OWNER_FIRST_NAME/OWNER_LAST_NAME/OWNER_NUMBER sind keine Config-Env mehr. Die
+  // Owner-Identitaet + -Nummer seedet ensureOwnerNumber direkt in den Spawn-Store
+  // (OWNER_TEST_FIRST_NAME/OWNER_TEST_NUMBER), wie in Produktion (Store statt Env).
   SEND_SMS_SUMMARY: "false",
   PUBLIC_URL: "https://agent.test",
   DASHBOARD_PASSWORD: "",
@@ -181,10 +190,12 @@ export function seedState({
   };
 }
 
-// Stellt eine aktive Owner-Nummer im Spawn-Store sicher (Boot-Guard-Bedingung).
-// ownerNumber === null -> bewusster Opt-out (Boot-Guard-Test, kaputter Store).
-// {e164, provider} -> spezifische Owner-Nummer (z.B. Telnyx fuer Provider-Tests).
-// Hat der Seed schon eine aktive Owner-Nummer, bleibt er unveraendert (idempotent).
+// Stellt einen telefonbaren Owner-Tenant im Spawn-Store sicher: aktive Owner-Nummer
+// (Boot-Guard-Bedingung) UND Owner-Identitaet im Store (ownerName/firstName), seit P2b
+// keine config-derived Seeds mehr greifen. ownerNumber === null -> bewusster Opt-out
+// (Boot-Guard-Test, kaputter Store). {e164, provider} -> spezifische Owner-Nummer (z.B.
+// Telnyx fuer Provider-Tests). Idempotent: eine vorhandene aktive Owner-Nummer bzw. ein
+// bereits gesetzter ownerName bleiben unangetastet (explizite Test-Seeds gewinnen).
 function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
   if (ownerNumber === null) return seed;
   // Ohne expliziten Seed den VOLLEN Default-Store (wie First-Boot, inkl. aller
@@ -205,16 +216,35 @@ function ensureOwnerNumber(seed, ownerNumber = OWNER_TEST_NUMBER) {
       providerNumberId: null,
     });
   }
-  return {
-    ...state,
-    tenants: state.tenants || [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
-    numbers,
+  return { ...state, tenants: ensureOwnerIdentity(state.tenants), numbers };
+}
+
+// Owner-Tenant mit Identitaet im Spiegel sicherstellen (P2b: ownerName lebt im Store).
+// Fehlt der Owner-Tenant -> anlegen; fehlt nur sein ownerName -> setzen. Ein bereits
+// gesetzter ownerName bleibt unangetastet (explizite Test-Seeds gewinnen, idempotent).
+function ensureOwnerIdentity(tenants) {
+  const list = Array.isArray(tenants) ? [...tenants] : [];
+  const owner = list.find((t) => t.id === BOOTSTRAP_TENANT_ID);
+  const identity = {
+    status: "active",
+    firstName: OWNER_TEST_FIRST_NAME,
+    ownerName: OWNER_TEST_NAME,
   };
+  if (!owner) {
+    list.push({ id: BOOTSTRAP_TENANT_ID, ...identity });
+  } else if (!owner.ownerName) {
+    Object.assign(owner, identity, { status: owner.status });
+  }
+  return list;
 }
 
 export function seedCall(overrides = {}) {
   return {
     id: "call_test1",
+    // tenantId wie createCall (state-ops): Default = Owner-Tenant. P2b haengt die
+    // Offenlegung an tenant.ownerName (kein config.ownerName-Fallback mehr) -> ein
+    // Call OHNE tenantId fiele sonst auf einen leeren Owner-Namen zurueck.
+    tenantId: BOOTSTRAP_TENANT_ID,
     twilioSid: null,
     direction: "outbound",
     from: "+15005550006",

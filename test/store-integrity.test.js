@@ -133,7 +133,7 @@ test("T-P1-03: korruptes store.json -> .corrupt-Rename + lautes Log + fail-close
   assert.match(output, /\[store\] KORRUPTES store\.json erkannt/, "lautes KORRUPT-Log");
   assert.match(
     output,
-    /Keine aktive Owner-Nummer im Store/,
+    /Keine aktive Nummer im Store/,
     "Boot-Guard refused fail-closed nach Recovery",
   );
   assert.equal(code, 1, "fail-closed Boot-Refusal (Exit 1)");

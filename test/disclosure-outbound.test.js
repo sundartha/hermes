@@ -11,8 +11,8 @@ import assert from "node:assert/strict";
 import { runOutbound } from "./_outbound-harness.js";
 
 // Praefix des Offenlegungssatzes (disclosureSentence, claude.js). G1: Name = voller
-// tenant.ownerName, config-derived geseedet (Variante a) = "OWNER_FIRST_NAME
-// OWNER_LAST_NAME" ("Jonas Beispiel" im Test-Env). callerName entfaellt komplett.
+// tenant.ownerName. P2b: vom Harness in den Store geseedet (ensureOwnerNumber) =
+// "Jonas Beispiel". callerName entfaellt komplett.
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
 const SAY_OPEN = '<Say voice="Polly.Vicki-Neural" language="de-DE">';
 

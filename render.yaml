@@ -50,14 +50,10 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
-      # Absendernummer des Owners = echte Provider-DID (From fuer Outbound + Inbound-
-      # Routing), wird beim Boot in den Store geseedet. MUSS die Telnyx-/Twilio-DID sein,
-      # NICHT die Privatnummer - sonst Provider-403 beim Originate. Im Dashboard setzen.
-      - key: OWNER_NUMBER
-        sync: false
-      # Provider der geseedeten Owner-Nummer (twilio|telnyx). Muss zur OWNER_NUMBER passen.
-      - key: OWNER_NUMBER_PROVIDER
-        value: "telnyx"
+      # Owner-Absendernummer ist KEINE Env-Var mehr (P2b): einmalig per CLI in den Store
+      # seeden (npm run bootstrap-tenant -- <e164> <twilio|telnyx>), die DID muss eine
+      # echte Provider-DID sein (nicht die Privatnummer). Der Boot-Guard verlangt
+      # fail-closed eine aktive Nummer im Store.
       - key: ALLOWED_NUMBERS
         sync: false
       # Erlaubte Laendervorwahlen (Default +49,+33,+44 = DE/FR/UK). * = alle Laender.
@@ -117,12 +113,8 @@ services:
       # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
       - key: OAUTH_ISSUER_URL
         sync: false
-      # Owner-Identitaet (G1): Pflicht (Boot-Refusal bei leer). Echte Werte im
-      # Render-Dashboard setzen (sync:false -> kein Klartext-Name im Repo).
-      - key: OWNER_FIRST_NAME
-        sync: false
-      - key: OWNER_LAST_NAME
-        sync: false
+      # Owner-Identitaet ist KEINE Env-Var mehr (P2b): ownerName setzt der Tenant ueber
+      # das Self-Service-Dashboard (nach dem Bootstrap-CLI), nicht ueber die Env.
       - key: CLAUDE_MODEL
         value: claude-haiku-4-5
       - key: MAX_BUDGET_EUR

@@ -127,6 +127,9 @@ export const {
   tenantPrivateNumber,
   setTenantGeo,
   seedBootstrapNumber,
+  // P2b: Bootstrap-Tenant-Setup (CLI scripts/bootstrap-tenant.js). OHNE diesen Re-Export
+  // ist store.bootstrapTenant undefined -> das CLI wuerfe einen TypeError.
+  bootstrapTenant,
 } = backend;
 
 // withStoreLock(fn) - prozess-lokaler Single-Writer-Guard (OT-3 AC2). Serialisiert

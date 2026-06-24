@@ -5,7 +5,7 @@
 // Owner): belegt Map-freie Koexistenz ohne A-zu-B-Leck.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, BASE_ENV, OWNER_TEST_NUMBER } from "./helpers.js";
+import { startServer, seedState, OWNER_TEST_FIRST_NAME, OWNER_TEST_NUMBER } from "./helpers.js";
 
 const TENANT_B = "B";
 const B_NUMBER = "+4915255555555";
@@ -52,7 +52,7 @@ test("Inbound auf Owner-Nummer -> Begruessung nennt weiter Jonas (byte-identisch
       }),
     });
     assert.equal(res.status, 200);
-    assert.match(await res.text(), new RegExp(BASE_ENV.OWNER_FIRST_NAME));
+    assert.match(await res.text(), new RegExp(OWNER_TEST_FIRST_NAME));
   } finally {
     await srv.stop();
   }

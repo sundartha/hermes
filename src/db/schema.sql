@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS tenant (
 -- Forward-compat: bestehende tenant-Tabelle bekommt status nachgezogen (idempotent).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 -- Identitaets-Schicht (I8): Tenant-Name + IdP-Subject additiv, beide NULLABLE.
--- NULL = kein eigener Wert -> Owner-Fallback (config.ownerName) im tenantContext;
--- idp_subject NULL = nicht ueber resolveTenant aufloesbar. Muster wie number.status.
+-- NULL = kein eigener Wert -> leerer ownerName-Fallback "" im tenantContext (P2b: kein
+-- config.ownerName mehr); idp_subject NULL = nicht ueber resolveTenant aufloesbar.
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS owner_name  TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS idp_subject TEXT;
 -- LLM-Persona-Vorname (G1) additiv NULLABLE. NULL = kein eigener Wert -> firstName
