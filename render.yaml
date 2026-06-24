@@ -13,6 +13,14 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
+    # Pre-Deploy (Owner-Removal P2b): seedet den ersten Tenant + seine aktive Nummer
+    # IN-NETWORK, BEVOR der Web-Prozess startet - loest den fail-closed Boot-Refusal
+    # (leerer/frischer Store ohne Nummer -> exit 1) an der Wurzel, ohne die DB extern
+    # zu oeffnen. Idempotent (zweiter Lauf = No-Op), laeuft bei jedem Deploy -> eine
+    # frische DB heilt sich selbst. BOOTSTRAP_E164/PROVIDER sind NEUTRALE Deploy-
+    # Parameter (KEINE Owner-Identitaet; ownerName setzt der Tenant per Self-Service).
+    # Leeres BOOTSTRAP_E164 -> Script wirft fail-closed -> Deploy bricht ab (korrekt).
+    preDeployCommand: npm run bootstrap-tenant -- "$BOOTSTRAP_E164" "$BOOTSTRAP_PROVIDER"
     healthCheckPath: /healthz
     autoDeploy: false
     # Deploy-Isolation (W0): rein-Frontend-/rein-Doku-Commits duerfen diesen
@@ -50,10 +58,15 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
-      # Owner-Absendernummer ist KEINE Env-Var mehr (P2b): einmalig per CLI in den Store
-      # seeden (npm run bootstrap-tenant -- <e164> <twilio|telnyx>), die DID muss eine
-      # echte Provider-DID sein (nicht die Privatnummer). Der Boot-Guard verlangt
-      # fail-closed eine aktive Nummer im Store.
+      # ---- Bootstrap (Owner-Removal P2b, vom preDeployCommand oben genutzt) ----
+      # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
+      # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
+      # damit der Wert nicht im Repo steht. Pflicht: leer -> Deploy bricht fail-closed.
+      - key: BOOTSTRAP_E164
+        sync: false
+      # Provider der Bootstrap-Nummer: twilio | telnyx.
+      - key: BOOTSTRAP_PROVIDER
+        value: "telnyx"
       - key: ALLOWED_NUMBERS
         sync: false
       # Erlaubte Laendervorwahlen (Default +49,+33,+44 = DE/FR/UK). * = alle Laender.
