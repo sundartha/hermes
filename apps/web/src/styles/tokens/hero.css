@@ -1,0 +1,168 @@
+/*
+ * Hero-/Dark-Tokens — die EINE Design-Referenz fuer das dunkle Hero-Chrome der
+ * oeffentlichen Unterseiten (Site.astro/site.css). Bewusst eine eigene Datei,
+ * getrennt von der App-Token-Schicht (primitives.css/semantic.css): so traegt
+ * der Unterseiten-Bundle KEINE App-Palette (kein Markenrot, keine Grautoene) und
+ * erfuellt das W1-Akzeptanzkriterium "kein #e60000 im gerenderten Output".
+ *
+ * Konkrete Werte (Hex, Gradients, px) sind 1:1 aus pages/index.astro (dem
+ * Vollbild-Hero) gehoben — die Unterseiten KOENNEN damit nicht von der Hero-
+ * Aesthetik abweichen. Diese Datei ist die einzige Stelle mit rohen Werten fuer
+ * das Site-Chrome.
+ *
+ * Ausnahme (dokumentiert): rohe Werte sind nur dort, wo CSS keine Custom-
+ * Property zulaesst — sowie zeichnungs-intrinsische Geometrie (Gradient-/
+ * Schatten-Stops). Sie leben hier benannt, also genau einmal.
+ */
+:root {
+  /* --- Rohe Hero-Werte (1:1 aus dem Hero) --- */
+  --hero-navy-900: #0a2245; /* tiefster Gradient-Stop */
+  --hero-navy-800: #0f2d52; /* Body/Hero-Grundton */
+  --hero-navy-700: #1b4f86; /* heller Gradient-Stop (oben), heller Akzent */
+  --hero-navy-card: #13335c; /* leicht aufgehellte Card-Surface (Lesbarkeit) */
+  --hero-blue-ink: #10305a; /* Pill-Button-Text */
+  --hero-white: #ffffff;
+
+  --hero-scrim-top: linear-gradient(
+    to bottom,
+    rgba(8, 22, 48, 0.52) 0%,
+    rgba(8, 22, 48, 0.18) 40%,
+    rgba(8, 22, 48, 0) 100%
+  );
+  --hero-scrim-bottom: linear-gradient(
+    to top,
+    rgba(8, 20, 44, 0.6) 0%,
+    rgba(8, 20, 44, 0.14) 55%,
+    rgba(8, 20, 44, 0) 100%
+  );
+  --hero-bg-gradient: radial-gradient(
+    120% 90% at 50% 0%,
+    #1b4f86 0%,
+    #0f2d52 55%,
+    #0a2245 100%
+  );
+
+  --hero-text-shadow-title: 0 2px 40px rgba(7, 16, 38, 0.55);
+  --hero-text-shadow-nav: 0 1px 10px rgba(7, 18, 40, 0.6);
+  --hero-shadow-pill: 0 10px 26px -12px rgba(7, 18, 40, 0.7);
+  --hero-shadow-logo: drop-shadow(0 2px 9px rgba(7, 18, 40, 0.6));
+  --hero-text-shadow-brand: 0 1px 12px rgba(7, 18, 40, 0.7);
+  --hero-text-shadow-sub: 0 1px 16px rgba(7, 16, 38, 0.6);
+
+  --hero-text-strong: rgba(255, 255, 255, 0.96);
+  --hero-text-soft: rgba(255, 255, 255, 0.92);
+  --hero-text-muted: rgba(255, 255, 255, 0.82);
+  --hero-text-faint: rgba(255, 255, 255, 0.7);
+
+  --font-serif-raw: "Instrument Serif", serif;
+  --font-grotesk-raw: "Space Grotesk", sans-serif;
+
+  --hero-radius-pill: 999px;
+  --hero-title-clamp: clamp(50px, 7.4vw, 98px);
+
+  /* Rohe Layout-/Typo-Werte, die das Site-Chrome braucht (eigenstaendig, damit
+   * die App-Token-Schicht nicht importiert werden muss). 1:1 wie der Bestand. */
+  --hero-font-size-root: 15px;
+  --hero-line-height-root: 1.5;
+  --hero-letter-spacing-label: 0.12em;
+  --hero-measure-page: 1180px;
+
+  --hero-weight-regular: 400;
+  --hero-weight-medium: 500;
+  --hero-weight-semibold: 600;
+
+  --hero-font-size-eyebrow: 13px;
+  --hero-font-size-body: 14px;
+  --hero-font-size-lead: 16px;
+  --hero-font-size-subtitle: 20px;
+  --hero-font-size-title: 26px;
+
+  --hero-space-1: 4px;
+  --hero-space-2: 8px;
+  --hero-space-3: 12px;
+  --hero-space-4: 16px;
+  --hero-space-5: 20px;
+  --hero-space-6: 24px;
+  --hero-space-8: 32px;
+  --hero-space-12: 48px;
+  --hero-space-20: 80px;
+
+  --hero-radius-sm: 12px;
+  --hero-radius-lg: 18px;
+  --hero-radius-pill-badge: 99px;
+  --hero-radius-circle: 50%;
+
+  --hero-border-width-thin: 1px;
+  --hero-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --hero-duration-fast: 0.22s;
+
+  /* --- Semantische Hero/Dark-Rollen (zeigen nur auf die Werte oben) --- */
+  --font-serif: var(--font-serif-raw);
+  --font-grotesk: var(--font-grotesk-raw);
+
+  --site-bg: var(--hero-navy-800);
+  --site-bg-gradient: var(--hero-bg-gradient);
+  --surface-card-dark: var(--hero-navy-card);
+  --accent-on-dark: var(--hero-navy-700); /* heller Akzent statt Markenrot */
+
+  --text-on-dark: var(--hero-text-soft);
+  --text-on-dark-strong: var(--hero-text-strong);
+  --text-on-dark-muted: var(--hero-text-muted);
+  --text-on-dark-faint: var(--hero-text-faint);
+  --text-on-dark-brand: var(--hero-white);
+
+  --scrim-top: var(--hero-scrim-top);
+  --scrim-bottom: var(--hero-scrim-bottom);
+
+  --pill-bg: var(--hero-white);
+  --pill-ink: var(--hero-blue-ink);
+  --radius-pill-cta: var(--hero-radius-pill);
+
+  --text-display-hero: var(--hero-title-clamp);
+
+  --text-shadow-hero: var(--hero-text-shadow-title);
+  --text-shadow-nav: var(--hero-text-shadow-nav);
+  --text-shadow-brand: var(--hero-text-shadow-brand);
+  --text-shadow-sub: var(--hero-text-shadow-sub);
+  --shadow-pill: var(--hero-shadow-pill);
+  --shadow-logo: var(--hero-shadow-logo);
+
+  /* Layout-/Typo-/Abstands-Rollen fuer das Site-Chrome */
+  --font-size-root: var(--hero-font-size-root);
+  --line-height-root: var(--hero-line-height-root);
+  --tracking-label: var(--hero-letter-spacing-label);
+  --layout-measure: var(--hero-measure-page);
+
+  --weight-normal: var(--hero-weight-regular);
+  --weight-medium: var(--hero-weight-medium);
+  --weight-label: var(--hero-weight-semibold);
+  --weight-emphasis: var(--hero-weight-semibold);
+
+  --text-eyebrow: var(--hero-font-size-eyebrow);
+  --text-body: var(--hero-font-size-body);
+  --text-lead: var(--hero-font-size-lead);
+  --text-subtitle: var(--hero-font-size-subtitle);
+  --text-title: var(--hero-font-size-title);
+
+  --space-hairline: var(--hero-space-1);
+  --space-tight: var(--hero-space-2);
+  --space-cozy: var(--hero-space-3);
+  --space-stack: var(--hero-space-4);
+  --space-inline: var(--hero-space-4);
+  --space-loose: var(--hero-space-5);
+  --space-gap: var(--hero-space-5);
+  --space-card: var(--hero-space-6);
+  --space-roomy: var(--hero-space-8);
+  --space-block: var(--hero-space-12);
+  --space-section: var(--hero-space-20);
+  --size-icon: var(--hero-space-8);
+
+  --radius-control: var(--hero-radius-sm);
+  --radius-card: var(--hero-radius-lg);
+  --radius-badge: var(--hero-radius-pill-badge);
+  --radius-round: var(--hero-radius-circle);
+
+  --border-width: var(--hero-border-width-thin);
+  --motion-ease: var(--hero-ease-out);
+  --motion-duration: var(--hero-duration-fast);
+}

@@ -1,0 +1,159 @@
+---
+// Site-Layout: gemeinsames dunkles Hero-Chrome fuer die oeffentlichen SSG-
+// Unterseiten (Marketing EN, Legal DE). Loest das alte Marketing-Layout ab und
+// erbt die Aesthetik des Vollbild-Hero (pages/index.astro) ueber dieselben
+// --hero-*-Tokens — kein Video, nur der dunkle Gradient + Scrims.
+//
+// INDEXIERBAR — SEO ist der Sinn dieser Seiten (Strategie W1/W5).
+//
+// Selbst gehostete Fonts (Instrument Serif + Space Grotesk) + Site-Chrome werden
+// hier importiert. Mit build.inlineStylesheets:"never" liefert Astro sie als
+// externes, same-origin <link> aus — erlaubt unter der strikten Produktions-CSP
+// (default-src 'self'). site.css importiert NICHT tokens/index.css (dessen heller
+// Reset + rotes ::selection gehoeren der App-Welt) — es bringt Tokens + dunklen
+// Reset selbst mit.
+import "../styles/fonts.css";
+import "../styles/site.css";
+
+// lang ist ein echter Sprachwert (kein Verhaltens-Flag): Marketing EN, Legal DE.
+const { title, description, lang = "en" } = Astro.props;
+
+// Absolute kanonische URL + OG-Ziele aus der Brand-Site (astro.config: site).
+const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const ogLocale = lang === "de" ? "de_DE" : "en_US";
+
+// Nav-/Footer-Ziele zentral. Labels englisch (Owner-Entscheidung Q-LANG); die
+// Ziele bleiben Bestand (Link-Ziel-Aenderungen sind W2). "Log in"/"Get started"
+// ist der Gateway-Pfad (OIDC-Redirect), die uebrigen sind SSG-Seiten.
+const navLinks = [
+  { href: "/so-funktionierts", label: "How it works" },
+  { href: "/preise", label: "Pricing" },
+];
+const footerMarketing = [
+  { href: "/so-funktionierts", label: "How it works" },
+  { href: "/preise", label: "Pricing" },
+  { href: "/registrieren", label: "Sign up" },
+];
+const footerLegal = [
+  { href: "/datenschutz", label: "Privacy" },
+  { href: "/impressum", label: "Imprint" },
+  { href: "/agb", label: "Terms" },
+];
+const contactEmail = "kontakt@sundartha.com";
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalURL} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!-- Open Graph / Twitter: textbasiert (kein og:image-Asset vorhanden;
+         twitter:card=summary kommt ohne Bild aus). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sundartha" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalURL} />
+    <meta property="og:locale" content={ogLocale} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+  </head>
+  <body>
+    <div class="site-shell">
+      <div class="site-bg" aria-hidden="true"></div>
+      <div class="scrim scrim--top" aria-hidden="true"></div>
+      <div class="scrim scrim--bottom" aria-hidden="true"></div>
+
+      <header class="site-nav-wrap">
+        <nav class="site-nav-bar" aria-label="Hauptnavigation">
+          <a class="nav-brand" href="/" aria-label="Hermes — Startseite">
+            <img
+              class="nav-logo"
+              src="/assets/sandal_solid.png"
+              alt="Hermes winged sandal"
+            />
+            <span class="brand-text">
+              <span class="brand-name">HERMES</span>
+              <span class="brand-by">by Sundartha</span>
+            </span>
+          </a>
+          <button
+            id="nav-toggle"
+            class="nav-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="site-nav"
+            aria-label="Menue umschalten"
+          >
+            <span class="nav-toggle__bar" aria-hidden="true"></span>
+            <span class="nav-toggle__bar" aria-hidden="true"></span>
+            <span class="nav-toggle__bar" aria-hidden="true"></span>
+          </button>
+          <div id="site-nav" class="nav-links">
+            {navLinks.map((link) => (
+              <a class="nav-link" href={link.href}>{link.label}</a>
+            ))}
+            <a class="nav-link nav-login" href="/auth/login">Log in</a>
+            <a class="btn btn--nav" href="/auth/login">
+              Get started
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h13"></path>
+                <path d="M12 5l7 7-7 7"></path>
+              </svg>
+            </a>
+          </div>
+        </nav>
+      </header>
+
+      <main class="site-main">
+        <slot />
+      </main>
+
+      <footer class="site-footer">
+        <div class="site-footer__inner">
+          <span>© Sundartha — Hermes, your phone assistant</span>
+          <nav class="site-footer__nav" aria-label="Fussnavigation">
+            {footerMarketing.map((link) => (
+              <a class="site-footer__link" href={link.href}>{link.label}</a>
+            ))}
+            {footerLegal.map((link) => (
+              <a class="site-footer__link" href={link.href}>{link.label}</a>
+            ))}
+            <a class="site-footer__link" href={`mailto:${contactEmail}`}>Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      // Mobile-Navigation umschalten (a11y: aria-expanded folgt dem Zustand).
+      // Hoisted <script>: Astro bundelt es als externes same-origin Modul;
+      // assetsInlineLimit:0 (astro.config) unterbindet das sonst uebliche
+      // Inline-Einbetten kleiner Skripte -> CSP-konform (kein unsafe-inline).
+      const toggle = document.getElementById("nav-toggle");
+      const nav = document.getElementById("site-nav");
+      if (toggle && nav) {
+        toggle.addEventListener("click", () => {
+          const open = nav.classList.toggle("is-open");
+          toggle.setAttribute("aria-expanded", String(open));
+        });
+      }
+    </script>
+  </body>
+</html>

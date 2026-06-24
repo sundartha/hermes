@@ -1,5 +1,5 @@
 ---
-// Marketing: Preise (SSG). Zwei Tarife als statisches Markup; CTAs funneln in
+// Marketing: Pricing (SSG). Zwei Tarife als statisches Markup; CTAs funneln in
 // den Registrieren-/Login-Flow. KEINE Stripe-Anbindung, KEIN Client-Fetch hier.
 //
 // EHRLICHER BEFUND (Strategie R1, §2.6): Das Backend kennt KEINE Abo-/Preis-
@@ -9,47 +9,51 @@
 // Abbuchung (echtes Subscription-Billing) ist ein benannter Backend-Follow-up
 // und wird hier NICHT vorgetaeuscht (kein Fake-Charge). Der Hinweis-Block unten
 // macht das transparent.
-import Marketing from "../layouts/Marketing.astro";
+//
+// SCOPE W1: nur Design + Sprach-Vereinheitlichung. Die Tier-Zahlen sind 1:1 aus
+// der DE-Fassung uebersetzt; die inhaltliche Tier-Korrektur (Business = 1 Nummer)
+// ist W2 und wird hier NICHT vorgenommen.
+import Site from "../layouts/Site.astro";
 
 const plans = [
   {
     name: "Starter",
     price: "$4.99",
-    cadence: "pro Monat",
+    cadence: "per month",
     featured: false,
     features: [
-      "30 Minuten Telefonie pro Monat",
-      "1 Telefonnummer",
-      "Anrufe annehmen und zusammenfassen",
-      "Anruf-Verlauf in deinem Bereich",
+      "30 minutes of calls per month",
+      "1 phone number",
+      "Answer and summarise calls",
+      "Call history in your area",
     ],
   },
   {
     name: "Business",
     price: "$9.99",
-    cadence: "pro Monat",
+    cadence: "per month",
     featured: true,
     features: [
-      "120 Minuten Telefonie pro Monat",
-      "3 Telefonnummern",
-      "Ausgehende Anrufe in deinem Auftrag",
-      "Priorisierter Support",
+      "120 minutes of calls per month",
+      "3 phone numbers",
+      "Outgoing calls on your behalf",
+      "Priority support",
     ],
   },
 ];
 ---
 
-<Marketing
-  title="Preise — Sundartha Hermes"
-  description="Zwei klare Tarife fuer Hermes: Starter und Business. Telefonie-Minuten, Rufnummern und Support im Ueberblick."
+<Site
+  title="Pricing — Sundartha Hermes"
+  description="Two clear plans for Hermes: Starter and Business. Call minutes, phone numbers and support at a glance."
 >
   <section class="hero">
     <div class="container">
-      <span class="hero__eyebrow">Tarife</span>
-      <h1 class="hero__title">Preise, die <span class="highlight">mitwachsen</span></h1>
+      <span class="hero__eyebrow">Plans</span>
+      <h1 class="hero__title">Pricing that <span class="highlight">grows with you</span></h1>
       <p class="hero__lead">
-        Starte klein und schalte mehr frei, wenn dein Assistent mehr uebernehmen
-        soll. Keine versteckten Kosten.
+        Start small and unlock more as your assistant takes on more. No hidden
+        costs.
       </p>
     </div>
   </section>
@@ -59,7 +63,7 @@ const plans = [
       <div class="pricing">
         {plans.map((plan) => (
           <article class={plan.featured ? "plan plan--featured" : "plan"}>
-            {plan.featured && <span class="badge badge--accent">Beliebt</span>}
+            {plan.featured && <span class="badge badge--accent">Popular</span>}
             <h2 class="plan__name">{plan.name}</h2>
             <p class="plan__price">{plan.price} <small>{plan.cadence}</small></p>
             <ul class="plan__features">
@@ -67,21 +71,20 @@ const plans = [
                 <li class="plan__feature">{feature}</li>
               ))}
             </ul>
-            <a class="button button--primary plan__cta" href="/registrieren">Jetzt starten</a>
+            <a class="button button--primary plan__cta" href="/registrieren">Get started</a>
           </article>
         ))}
       </div>
 
       <div class="note">
-        <h2 class="note__title">So funktioniert die Abrechnung</h2>
+        <h2 class="note__title">How billing works</h2>
         <p class="note__text">
-          Deine Zahlungsmethode hinterlegst du sicher in deinem Bereich, sobald
-          dein Konto freigeschaltet ist — abgerechnet wird nutzungsbasiert. Die
-          automatische monatliche Abbuchung richten wir gerade ein; bis dahin
-          aktivieren wir deinen Tarif manuell. Es wird nichts ohne deine
-          Zustimmung abgebucht.
+          You add your payment method securely in your area once your account is
+          activated — billing is usage-based. We are still setting up automatic
+          monthly charging; until then we activate your plan manually. Nothing is
+          charged without your consent.
         </p>
       </div>
     </div>
   </section>
-</Marketing>
+</Site>
