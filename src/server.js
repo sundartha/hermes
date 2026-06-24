@@ -332,17 +332,44 @@ function extractSpeech(req, provider) {
   return (req.body.SpeechResult || "").trim();
 }
 
+// PII-freie Sanitisierung eines Telnyx-Hangup-Tokens fuers Log (defensiv, analog
+// safeReason in adapters/telnyx/speak-events.js). HangupCause ("normal_clearing"),
+// HangupSource ("caller"/"callee") und SipHangupCause (SIP-Code, z.B. "486") sind
+// kurze Enums/Codes, NIE Telefonnummern/Namen. Trotzdem nie ungefiltert ins Log:
+// nur ein kurzes Token aus einer Zeichen-Allowlist (alnum, _ . : -) bis 48 Zeichen
+// wird uebernommen; alles andere (Freitext, E.164-Nummern mit "+", zu lang)
+// -> undefined -> kein Diagnose-Feld. BEWUSST OHNE Space: Telnyx liefert diese
+// Felder als snake_case-Enum, festes Token oder numerischen SIP-Code (nie mit
+// Leerzeichen), also weist die Allowlist Mehrwort-Freitext (theoretischer ASCII-
+// Klarname) zusaetzlich ab. So bleibt das Log byte-knapp und PII-frei.
+const SAFE_CAUSE_TOKEN = /^[A-Za-z0-9_.:-]{1,48}$/;
+function safeCauseToken(value) {
+  if (typeof value !== "string") return undefined;
+  const token = value.trim();
+  return SAFE_CAUSE_TOKEN.test(token) ? token : undefined;
+}
+
 // Provider-bewusstes Auslesen des Call-Lifecycle-Status aus dem StatusCallback-Body
 // (analog extractSpeech). Beide Provider senden PascalCase-Felder (CallStatus,
-// CallDuration) als form-encoded POST. Telnyx liefert zusaetzlich CallDuration
-// (Sekunden) als Diagnose; Twilio nicht -> diagnostics bleibt fuer Twilio leer
-// (byte-identisch zum Bestand). diagnostics ist bewusst PII-frei (nur Zahlen, NIE
-// From/To/Nummern). Garbage/fehlende CallDuration -> kein Diagnose-Feld (kein NaN).
+// CallDuration) als form-encoded POST. Telnyx liefert zusaetzlich Diagnose-Felder:
+// CallDuration (Sekunden) und beim "Call Completed"-Callback die Hangup-Ursache
+// (HangupCause/HangupSource/SipHangupCause - Feldnamen aus der Telnyx-OpenAPI-Spec
+// texml/calls.yml, TexmlCallCompletedWebhookSchema). Twilio sendet diese nicht ->
+// diagnostics bleibt fuer Twilio leer (byte-identisch zum Bestand). diagnostics ist
+// bewusst PII-frei (nur Zahlen + sanitisierte Tokens, NIE From/To/Nummern). Garbage/
+// fehlende Felder -> kein Diagnose-Feld (kein NaN, kein leeres/unsauberes Token).
 function extractLifecycleEvent(req, provider) {
   const status = req.body.CallStatus;
   if (provider !== PROVIDER.TELNYX) return { status, diagnostics: {} };
   const durationS = parseInt(req.body.CallDuration, 10);
-  const diagnostics = Number.isFinite(durationS) ? { callDurationS: durationS } : {};
+  const diagnostics = {};
+  if (Number.isFinite(durationS)) diagnostics.callDurationS = durationS;
+  const hangupCause = safeCauseToken(req.body.HangupCause);
+  const hangupSource = safeCauseToken(req.body.HangupSource);
+  const sipHangupCause = safeCauseToken(req.body.SipHangupCause);
+  if (hangupCause) diagnostics.hangupCause = hangupCause;
+  if (hangupSource) diagnostics.hangupSource = hangupSource;
+  if (sipHangupCause) diagnostics.sipHangupCause = sipHangupCause;
   return { status, diagnostics };
 }
 
@@ -861,8 +888,10 @@ app.post("/voice/status", (req, res) => {
   }
 
   const { status: callStatus, diagnostics } = extractLifecycleEvent(req, provider);
-  // PII-frei (Pre-Mortem): nur callId/Status/Provider/Diagnose-Zahlen ins Log, NIE
-  // From/To/Telefonnummern. Macht Telnyx-Lifecycle-Events + CallDuration sichtbar.
+  // PII-frei (Pre-Mortem): nur callId/Status/Provider/Diagnose ins Log, NIE
+  // From/To/Telefonnummern. Macht Telnyx-Lifecycle-Events + CallDuration + die
+  // Hangup-Ursache (HangupCause/HangupSource/SipHangupCause) sichtbar - sonst ist
+  // das Telnyx-Call-Ende beim Debugging blind.
   console.log(
     "[voice/status]",
     JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }),
