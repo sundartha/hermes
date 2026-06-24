@@ -3,9 +3,13 @@
  * Tokens (var(--...)) — keine Hex-Literale, keine Magic-Pixel. Konkrete Werte
  * leben nur in styles/tokens/primitives.css.
  *
- * Ausnahme (dokumentiert): Media-Query-Breakpoints und der vw-Anteil der
- * fluiden Typografie (clamp) MUESSEN rohe Werte sein — CSS erlaubt dort keine
- * Custom-Property. Bewusst sparsam und nah an den Bestands-Breakpoints gehalten.
+ * Palette = Master (Markenrot/Grau/Blau/Ink). Helle Marken-Optik wie der Master:
+ * heller Hero, helle Fusszeile, roter Marken-CTA.
+ *
+ * Ausnahme (dokumentiert): rohe Werte sind nur dort erlaubt, wo CSS keine
+ * Custom-Property zulaesst — Media-Query-Breakpoints, min-height:100vh, das
+ * Hero-Headline-Leading (1.1, wie im Master) sowie zeichnungs-intrinsische
+ * Geometrie (SVG stroke-width/Pfade, Icon-Strichstaerke, Keyframe-Stops).
  */
 
 /* --- Grundgeruest --- */
@@ -24,9 +28,6 @@
 
 /* --- Kopfzeile --- */
 .site-header {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
   border-bottom: var(--border-width) solid var(--color-border);
   background: var(--color-card);
 }
@@ -96,7 +97,7 @@
   display: none;
   flex-direction: column;
   justify-content: center;
-  gap: var(--space-1);
+  gap: var(--space-hairline);
   width: var(--size-icon);
   height: var(--size-icon);
   margin-inline-start: auto;
@@ -108,7 +109,7 @@
 }
 
 .nav-toggle__bar {
-  width: var(--space-5);
+  width: var(--space-loose);
   /* Icon-Strichstaerke (zeichnungs-intrinsisch, wie eine SVG-stroke-width). */
   height: 2px;
   margin-inline: auto;
@@ -158,25 +159,20 @@
   cursor: pointer;
   transition: background var(--motion-duration) var(--motion-ease),
     color var(--motion-duration) var(--motion-ease),
-    border-color var(--motion-duration) var(--motion-ease),
-    transform var(--motion-duration) var(--motion-ease);
+    border-color var(--motion-duration) var(--motion-ease);
 }
 
-.button:hover {
-  transform: translateY(-1px);
-}
-
-/* Primaerer CTA = warmes Gold (Strategie 2.5: Amber/Gold fuer CTAs). */
+/* Primaerer CTA = Markenrot (Master-Palette). */
 .button--primary {
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  background: var(--color-action);
+  color: var(--color-on-action);
 }
 
 .button--primary:hover {
-  background: var(--color-accent-hover);
+  background: var(--color-action-hover);
 }
 
-/* Indigo-Variante (Marken-Aktion) fuer sekundaere Stellen auf hellem Grund. */
+/* Marken-Aktion (sekundaere Stellen) — gleiche rote Marke. */
 .button--action {
   background: var(--color-action);
   color: var(--color-on-action);
@@ -224,10 +220,8 @@
 .section__title {
   font-family: var(--font-heading);
   font-weight: var(--weight-heading);
-  /* Fluide Headline: rohe vw-Mitte ist die dokumentierte Ausnahme. */
-  font-size: clamp(var(--text-title), 4vw, var(--text-headline));
+  font-size: var(--text-title);
   letter-spacing: var(--tracking-heading);
-  line-height: var(--leading-title);
   color: var(--color-text);
 }
 
@@ -237,64 +231,46 @@
   color: var(--color-muted);
 }
 
-/* --- Hero (cineastischer dunkler Indigo-Grund) --- */
+/* --- Hero (helle Marken-Optik wie der Master) --- */
 .hero {
-  position: relative;
-  overflow: hidden;
   padding-block: var(--space-section);
   text-align: center;
-  background: linear-gradient(160deg, var(--color-hero-from), var(--color-hero-to));
-  color: var(--color-text-inverse);
-}
-
-/* Indigo-Schimmer von oben — reiner CSS-Glow, kein Asset. Die Prozente sind
-   dekorative Verlaufsgeometrie (Position/Ausdehnung des Glows), kein Magic-Wert. */
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(60% 55% at 50% 0%, var(--color-hero-glow), transparent 70%);
-  pointer-events: none;
-}
-
-.hero .container {
-  position: relative;
-  z-index: 1;
 }
 
 .hero__eyebrow {
   display: inline-block;
   margin-bottom: var(--space-stack);
   padding: var(--space-hairline) var(--space-cozy);
-  border: var(--border-width) solid var(--color-border-inverse);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-badge);
   font-size: var(--text-eyebrow);
   font-weight: var(--weight-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
-  color: var(--color-text-inverse);
+  background: var(--color-action-surface);
+  color: var(--color-action);
 }
 
 .hero__title {
   font-family: var(--font-heading);
   font-weight: var(--weight-heading);
-  /* Fluide Hero-Headline: rohe vw-Mitte ist die dokumentierte Ausnahme. */
-  font-size: clamp(var(--text-display), 6vw, var(--text-hero));
-  line-height: var(--leading-hero);
+  font-size: var(--text-display);
+  /* Hero-Display-Leading: rohes 1.1 wie im Master (zeichnungs-intrinsisch eng). */
+  line-height: 1.1;
   letter-spacing: var(--tracking-heading);
-  color: var(--color-text-inverse);
+  color: var(--color-text);
 }
 
 .hero__title .highlight {
-  color: var(--color-accent);
+  color: var(--color-action);
 }
 
 .hero__lead {
-  max-width: var(--layout-prose);
+  max-width: var(--layout-measure);
   margin-inline: auto;
   margin-top: var(--space-loose);
   font-size: var(--text-subtitle);
-  color: var(--color-muted-inverse);
+  color: var(--color-muted);
 }
 
 .hero__actions {
@@ -305,26 +281,13 @@
   margin-top: var(--space-roomy);
 }
 
-/* Ghost-CTA auf dunklem Hero: heller Rahmen statt Flaeche. */
-.hero .button--ghost {
-  background: transparent;
-  border-color: var(--color-border-inverse);
-  color: var(--color-text-inverse);
-}
-
-.hero .button--ghost:hover {
-  background: var(--color-inverse-tint-strong);
-  color: var(--color-text-inverse);
-}
-
-/* Platzhalter fuer die Higgsfield-Hero-Animation (W4 ersetzt den Inhalt durch
-   den Canvas-Scrubber). Bis dahin: dezentes Marken-Panel, kein Layout-Bruch. */
+/* Buehne der scroll-getriggerten MCP-Animation (W4) — helles Marken-Panel. */
 .hero__stage {
   position: relative;
   margin-top: var(--space-roomy);
-  border: var(--border-width) solid var(--color-border-inverse);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
-  background: var(--color-inverse-tint);
+  background: var(--color-surface);
   overflow: hidden;
 }
 
@@ -334,14 +297,13 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-stack);
-  min-height: var(--size-hero-stage);
   padding: var(--space-roomy) var(--space-card);
-  color: var(--color-muted-inverse);
+  color: var(--color-muted);
   font-size: var(--text-body);
 }
 
 .hero-anim__caption {
-  color: var(--color-muted-inverse);
+  color: var(--color-muted);
   font-size: var(--text-body);
   text-align: center;
 }
@@ -351,35 +313,35 @@
    viewBox/Pfade kein Magic-Wert (vgl. dokumentierte Geometrie-Ausnahme). */
 .flow {
   width: 100%;
-  max-width: var(--layout-prose);
+  max-width: var(--layout-measure);
   height: auto;
 }
 
 .flow__node circle {
-  fill: var(--color-inverse-tint);
-  stroke: var(--color-border-inverse);
+  fill: var(--color-card);
+  stroke: var(--color-border);
   stroke-width: 1.5;
 }
 
 .flow__node--mcp circle {
-  stroke: var(--color-accent);
+  stroke: var(--color-action);
 }
 
 .flow__glyph {
   fill: none;
-  stroke: var(--color-text-inverse);
+  stroke: var(--color-text);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .flow__node--ki .flow__glyph {
-  fill: var(--color-text-inverse);
+  fill: var(--color-text);
   stroke: none;
 }
 
 .flow__label {
-  fill: var(--color-muted-inverse);
+  fill: var(--color-muted);
   font-family: var(--font-body);
   font-size: var(--text-eyebrow);
   font-weight: var(--weight-label);
@@ -387,19 +349,19 @@
 }
 
 .flow__link {
-  stroke: var(--color-accent);
+  stroke: var(--color-action);
   stroke-width: 3;
   stroke-linecap: round;
-  transition: opacity var(--motion-duration-slow) var(--motion-ease);
+  transition: opacity var(--motion-duration) var(--motion-ease);
 }
 
 .flow__pulse {
   fill: none;
-  stroke: var(--color-accent);
+  stroke: var(--color-action);
   stroke-width: 2;
   opacity: 0.5;
   animation: flow-pulse var(--motion-pulse) var(--motion-ease) infinite;
-  transition: opacity var(--motion-duration-slow) var(--motion-ease);
+  transition: opacity var(--motion-duration) var(--motion-ease);
 }
 
 /* Atem-Puls: reine Opazitaets-Animation (kein Transform -> robust auf SVG/iOS).
@@ -505,7 +467,6 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-tight);
-  min-width: var(--layout-node);
   padding: var(--space-card);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
@@ -533,7 +494,7 @@
   flex: 0 0 auto;
   font-size: var(--text-subtitle);
   font-weight: var(--weight-emphasis);
-  color: var(--color-accent-hover);
+  color: var(--color-action);
 }
 
 @media (max-width: 720px) {
@@ -563,8 +524,8 @@
 }
 
 .badge--accent {
-  background: var(--color-accent-surface);
-  color: var(--color-accent-hover);
+  background: var(--color-action-surface);
+  color: var(--color-action);
 }
 
 /* --- Preis-Tabelle --- */
@@ -572,7 +533,7 @@
   display: grid;
   gap: var(--space-gap);
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: var(--layout-pricing);
+  max-width: var(--layout-measure);
   margin-inline: auto;
 }
 
@@ -595,7 +556,6 @@
 
 .plan--featured {
   border-color: var(--color-action);
-  box-shadow: var(--shadow-float);
 }
 
 .plan__name {
@@ -634,7 +594,7 @@
 
 /* Ehrlicher Abrechnungs-Hinweis unter der Tarif-Tabelle. */
 .note {
-  max-width: var(--layout-pricing);
+  max-width: var(--layout-measure);
   margin-inline: auto;
   margin-top: var(--space-block);
   padding: var(--space-card);
@@ -658,7 +618,7 @@
 
 /* --- Rechtliches / Prosa-Seiten (Datenschutz, Impressum, AGB) --- */
 .legal {
-  max-width: var(--layout-prose);
+  max-width: var(--layout-measure);
   margin-inline: auto;
 }
 
@@ -666,7 +626,7 @@
   margin-top: var(--space-stack);
   padding: var(--space-cozy) var(--space-loose);
   border-radius: var(--radius-control);
-  background: var(--color-accent-surface);
+  background: var(--color-action-surface);
   color: var(--color-text);
   font-size: var(--text-body);
 }
@@ -690,18 +650,17 @@
 }
 
 .error-page__code {
-  font-size: var(--text-hero);
+  font-size: var(--text-display);
   font-weight: var(--weight-heading);
   color: var(--color-action);
   letter-spacing: var(--tracking-heading);
 }
 
-/* --- Fusszeile (dunkel, zur Erdung) --- */
+/* --- Fusszeile (hell, wie der Master) --- */
 .site-footer {
   margin-top: auto;
-  border-top: var(--border-width) solid var(--color-border-inverse);
-  background: var(--color-surface-inverse);
-  color: var(--color-muted-inverse);
+  border-top: var(--border-width) solid var(--color-border);
+  background: var(--color-card);
 }
 
 .site-footer__inner {
@@ -711,6 +670,7 @@
   gap: var(--space-inline);
   padding-block: var(--space-card);
   font-size: var(--text-body);
+  color: var(--color-muted);
 }
 
 .site-footer__nav {
@@ -722,9 +682,9 @@
 
 .site-footer__link {
   text-decoration: none;
-  color: var(--color-muted-inverse);
+  color: var(--color-muted);
 }
 
 .site-footer__link:hover {
-  color: var(--color-text-inverse);
+  color: var(--color-text);
 }

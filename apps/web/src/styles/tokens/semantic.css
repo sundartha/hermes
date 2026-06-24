@@ -1,49 +1,32 @@
 /*
  * Semantische Tokens — bedeutungstragende Rollen, die NUR auf Primitives
  * (primitives.css) zeigen. Komponenten/Layouts/Pages kennen ausschliesslich
- * diese Ebene (var(--color-action), nie var(--color-indigo-600), nie #4338ca).
+ * diese Ebene (var(--color-action), nie var(--color-red-600), nie #e60000).
  *
  * Beim Rebrand aendert sich NUR primitives.css (Werte) oder die Zuordnung
  * hier — der Komponentenbaum bleibt invariant (Strategie 2.5).
  *
- * KOMPATIBILITAET: Die mit [W2] markierten Rollen sind das von der App-Schicht
- * (styles/app.css) konsumierte Pflicht-Set. Namen NICHT umbenennen oder
- * entfernen; Marketing-Rollen duerfen additiv hinzukommen.
+ * KOMPATIBILITAET: Die mit [W2] markierten Rollen sind das von der spaeteren
+ * App-Schicht (styles/app.css) konsumierte Pflicht-Set. Namen NICHT umbenennen
+ * oder entfernen; Marketing-Rollen duerfen additiv hinzukommen.
  */
 :root {
   /* --- Farb-Rollen [W2-Pflicht] --- */
-  --color-text: var(--color-slate-900);
-  --color-muted: var(--color-slate-500);
-  --color-surface: var(--color-slate-50);
+  --color-text: var(--color-ink-900);
+  --color-muted: var(--color-gray-500);
+  --color-surface: var(--color-gray-50);
   --color-card: var(--color-white);
-  --color-border: var(--color-slate-150);
-  --color-action: var(--color-indigo-600);
-  --color-action-hover: var(--color-indigo-700);
+  --color-border: var(--color-gray-150);
+  --color-action: var(--color-red-600);
+  --color-action-hover: var(--color-red-700);
   --color-on-action: var(--color-white);
 
   /* --- Farb-Rollen (Marketing/Status, additiv) --- */
-  --color-accent: var(--color-amber-500);            /* Gold-Akzent (Highlights) */
-  --color-accent-hover: var(--color-amber-600);
-  --color-accent-surface: var(--color-amber-50);
-  --color-on-accent: var(--color-slate-900);         /* dunkler Text auf Gold */
-
-  --color-action-surface: var(--color-indigo-50);    /* Indigo-Tint-Flaeche */
-  --color-divider: var(--color-slate-100);
-  --color-field-border: var(--color-slate-200);
-  --color-field-border-focus: var(--color-indigo-600);
-
-  /* Inverse Rollen fuer dunkle Flaechen (Hero/Footer) */
-  --color-text-inverse: var(--color-slate-50);
-  --color-muted-inverse: var(--color-slate-400);
-  --color-border-inverse: var(--color-overlay-border);
-  --color-surface-inverse: var(--color-slate-950);
-  --color-inverse-tint: var(--color-overlay-soft);          /* dezente Flaeche auf Dark */
-  --color-inverse-tint-strong: var(--color-overlay-strong); /* Hover-Flaeche auf Dark */
-
-  /* Hero-Verlauf (cineastisch): Indigo -> tiefes Slate */
-  --color-hero-from: var(--color-indigo-950);
-  --color-hero-to: var(--color-slate-950);
-  --color-hero-glow: var(--color-indigo-glow);       /* Indigo-Schimmer */
+  --color-accent: var(--color-blue-600);
+  --color-action-surface: var(--color-red-50); /* zarte Marken-Tint-Flaeche (Schritt-Index, Badge, Hinweis) */
+  --color-divider: var(--color-gray-100);
+  --color-field-border: var(--color-gray-200);
+  --color-field-border-focus: var(--color-red-600);
 
   --color-status-positive: var(--color-green-700);
   --color-status-positive-surface: var(--color-green-50);
@@ -51,29 +34,29 @@
   --color-status-critical-surface: var(--color-red-50);
   --color-status-info: var(--color-blue-600);
   --color-status-info-surface: var(--color-blue-50);
-  --color-status-neutral: var(--color-slate-500);
-  --color-status-neutral-surface: var(--color-slate-75);
+  --color-status-neutral: var(--color-gray-500);
+  --color-status-neutral-surface: var(--color-gray-75);
 
   --color-indicator-live: var(--color-green-500);
-  --color-indicator-off: var(--color-slate-300);
+  --color-indicator-off: var(--color-gray-300);
 
   /* --- Abstands-Rollen [W2-Pflicht] --- */
-  --space-gap: var(--space-5);        /* Abstand zwischen Karten im Grid */
-  --space-inline: var(--space-4);     /* horizontaler Innenabstand */
-  --space-stack: var(--space-4);      /* vertikaler Abstand gestapelter Elemente */
-  --space-card: var(--space-6);       /* Karten-Innenabstand */
-  --space-section: var(--space-20);   /* Abstand zwischen Seitenabschnitten */
+  --space-gap: var(--space-5); /* Abstand zwischen Karten im Grid */
+  --space-inline: var(--space-4); /* horizontaler Innenabstand */
+  --space-stack: var(--space-4); /* vertikaler Abstand gestapelter Elemente */
+  --space-card: var(--space-6); /* Karten-Innenabstand */
+  --space-section: var(--space-20); /* Abstand zwischen Seitenabschnitten */
 
   /* --- Abstands-Rollen (Marketing, additiv) --- */
-  --space-hairline: var(--space-1);   /* feinste Abstaende (Badge-Innenabstand) */
+  --space-hairline: var(--space-1); /* feinste Abstaende (Badge-Innenabstand) */
   --space-tight: var(--space-2);
   --space-cozy: var(--space-3);
-  --space-loose: var(--space-5);      /* grosszuegiger Innen-/Aussenabstand */
-  --space-roomy: var(--space-8);      /* Abstand vor Aktions-Clustern */
-  --space-block: var(--space-12);     /* Abstand unter Abschnitts-Koepfen */
+  --space-loose: var(--space-5); /* grosszuegiger Innen-/Aussenabstand */
+  --space-roomy: var(--space-8); /* Abstand vor Aktions-Clustern */
+  --space-block: var(--space-12); /* Abstand unter Abschnitts-Koepfen */
 
   /* --- Groessen-Rollen (Marketing, additiv) --- */
-  --size-icon: var(--space-8);        /* runde Marken-/Schritt-Glyphen */
+  --size-icon: var(--space-8); /* runde Marken-/Schritt-Glyphen */
 
   /* --- Form-Rollen [W2-Pflicht] --- */
   --radius-card: var(--radius-lg);
@@ -88,7 +71,6 @@
   --radius-control: var(--radius-sm);
   --radius-badge: var(--radius-pill);
   --radius-round: var(--radius-circle);
-  --shadow-float: var(--shadow-lift);   /* gehobene Karten/Hero-Panel */
 
   /* --- Typografie-Rollen --- */
   --font-heading: var(--font-sans);
@@ -102,29 +84,16 @@
   --text-lead: var(--font-size-300);
   --text-subtitle: var(--font-size-400);
   --text-title: var(--font-size-500);
-  --text-headline: var(--font-size-600);   /* Abschnitts-Headline */
-  --text-display: var(--font-size-700);     /* Hero-Headline */
-  --text-hero: var(--font-size-800);        /* grosse Hero-Headline (Desktop) */
+  --text-display: var(--font-size-700);
 
   --tracking-heading: var(--letter-spacing-tight);
   --tracking-label: var(--letter-spacing-label);
 
-  --leading-title: var(--line-height-tight);   /* Abschnitts-Headlines */
-  --leading-hero: var(--line-height-display);   /* grosse Hero-Headline */
-
-  /* --- Ebenen-Rolle --- */
-  --z-sticky: var(--layer-sticky);
-
   /* --- Bewegungs-Rollen --- */
   --motion-ease: var(--ease-out);
   --motion-duration: var(--duration-fast);
-  --motion-duration-slow: var(--duration-slow);   /* Hero-Flow-Reveal */
-  --motion-pulse: var(--duration-pulse);           /* Aktiv-Puls */
+  --motion-pulse: var(--duration-pulse); /* additiv: Atem-Puls der Hero-Animation */
 
-  /* --- Layout-Rollen --- */
+  /* --- Layout-Rolle --- */
   --layout-measure: var(--measure-page);
-  --layout-prose: var(--measure-prose);     /* Lesebreite (Hero-Lead) */
-  --layout-pricing: var(--measure-pricing); /* Breite der Tarif-Tabelle */
-  --layout-node: var(--measure-node);       /* MCP-Knoten-Mindestbreite */
-  --size-hero-stage: var(--size-stage);     /* Hoehe der Hero-Animations-Buehne */
 }

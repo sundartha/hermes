@@ -4,56 +4,31 @@
  * Semantische Rollen (semantic.css) zeigen ausschliesslich hierauf; Komponenten
  * verwenden NIE Primitives direkt und nie Hex/Magic-Pixel.
  *
- * Sundartha-Palette (Strategie 2.5): Indigo = Marke/Aktion, Amber/Gold = Akzent
- * (CTAs/Highlights), Slate = Neutralstufen. Loest das fruehere Vodafone-Markenrot
- * ab. Ein dunkler Indigo/Slate-Grund traegt die cineastische Marketing-Hero.
- * Rebrand = nur diese Werte (und ggf. die Zuordnung in semantic.css) aendern —
- * der Komponentenbaum bleibt invariant.
+ * Werte kanonisiert aus public/tenant.html (Markenrot, Ink, Mute, Schatten,
+ * Inter, Easing) — Strategie 2.5.
  */
 :root {
   /* --- Farben (roh) --- */
-  /* Indigo = Markenfarbe / Aktion */
-  --color-indigo-700: #3730a3;     /* Aktion, tief (Hover) */
-  --color-indigo-600: #4338ca;     /* Aktion / Markenfarbe */
-  --color-indigo-50: #eef2ff;      /* Aktion, sehr hell (Tint-/Badge-Flaeche) */
+  --color-red-600: #e60000; /* Markenrot */
+  --color-red-700: #ac1811; /* Markenrot, tief (Hover) */
+  --color-red-50: #fdeaea; /* Markenrot, sehr hell (Badge-Flaeche) */
 
-  /* Amber/Gold = Akzent (CTAs, Highlights) */
-  --color-amber-500: #f59e0b;      /* Akzent */
-  --color-amber-600: #d97706;      /* Akzent, tief (Hover) */
-  --color-amber-50: #fffbeb;       /* Akzent, sehr hell (Badge-Flaeche) */
+  --color-ink-900: #25282b; /* Text */
+  --color-gray-500: #7e7e7e; /* gedaempfter Text */
+  --color-gray-300: #c4c4c4; /* inaktiv (Dot off) */
+  --color-gray-200: #e2e2e2; /* Eingabe-Rahmen */
+  --color-gray-150: #ececec; /* Karten-Rahmen */
+  --color-gray-100: #f3f3f3; /* Trennlinie */
+  --color-gray-75: #f2f2f2; /* neutrale Flaeche */
+  --color-gray-50: #fafafa; /* Seiten-Hintergrund */
+  --color-white: #ffffff; /* Karten-/Canvas-Flaeche */
 
-  /* Slate = Neutralstufen */
-  --color-slate-900: #0f172a;      /* Text */
-  --color-slate-500: #64748b;      /* gedaempfter Text */
-  --color-slate-400: #94a3b8;      /* gedaempfter Text auf dunklem Grund */
-  --color-slate-300: #cbd5e1;      /* inaktiv (Dot off) */
-  --color-slate-200: #e2e8f0;      /* Eingabe-Rahmen */
-  --color-slate-150: #e6ebf2;      /* Karten-Rahmen */
-  --color-slate-100: #f1f5f9;      /* Trennlinie */
-  --color-slate-75: #f1f4f8;       /* neutrale Flaeche */
-  --color-slate-50: #f8fafc;       /* Seiten-Hintergrund */
-  --color-white: #ffffff;          /* Karten-/Canvas-Flaeche */
+  --color-blue-600: #3860be; /* Signal/Akzent */
+  --color-blue-50: #e9f0fc; /* Signal, hell (Badge-Flaeche) */
 
-  /* Dunkler Marketing-Grund (Hero/Footer) — Indigo/Slate */
-  --color-indigo-950: #1e1b4b;     /* Hero-Grund, indigo */
-  --color-slate-950: #020617;      /* tiefster Grund */
-
-  /* Overlays/Glows (roh) — durchscheinende Schichten auf dunklem Grund */
-  --color-overlay-border: rgba(255, 255, 255, 0.14);  /* heller Rahmen auf Dark */
-  --color-overlay-soft: rgba(255, 255, 255, 0.04);    /* dezente helle Flaeche */
-  --color-overlay-strong: rgba(255, 255, 255, 0.08);  /* hellere Flaeche (Hover) */
-  --color-indigo-glow: rgba(99, 102, 241, 0.35);      /* Indigo-Schimmer (Hero) */
-
-  /* Status (NICHT Marke): Fehler/Erfolg/Signal */
-  --color-red-600: #dc2626;        /* Fehler/kritisch (Text) */
-  --color-red-50: #fef2f2;         /* Fehler, hell (Badge-Flaeche) */
-
-  --color-blue-600: #2563eb;       /* Signal/Info (Text) */
-  --color-blue-50: #eff6ff;        /* Signal, hell (Badge-Flaeche) */
-
-  --color-green-700: #15803d;      /* Erfolg (Text) */
-  --color-green-50: #f0fdf4;       /* Erfolg, hell (Badge-Flaeche) */
-  --color-green-500: #22c55e;      /* Live-Indikator */
+  --color-green-700: #177a43; /* Erfolg (Text) */
+  --color-green-50: #e7f6ed; /* Erfolg, hell (Badge-Flaeche) */
+  --color-green-500: #1faa59; /* Live-Indikator */
 
   /* --- Abstaende (roh) --- */
   --space-1: 4px;
@@ -78,19 +53,13 @@
   --border-width-thin: 1px;
 
   /* --- Schatten (roh) --- */
-  --shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.08);
-  --shadow-lift: 0 20px 50px rgba(15, 23, 42, 0.18);
+  --shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.07);
 
   /* --- Typografie (roh) --- */
-  /* Inter zuerst, falls je selbst-gehostet (same-origin) -- sonst die System-UI-
-   * Schrift. KEIN externer Font-Load (strikte CSP, Strategie 2.9): wir binden
-   * bewusst keine entfernte Schrift ein, der System-Stack traegt das Design. */
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-size-root: 16px;
-  --line-height-root: 1.55;
-  --line-height-tight: 1.15;       /* Abschnitts-Headlines */
-  --line-height-display: 1.05;     /* grosse Hero-Headline */
-  --letter-spacing-tight: -0.02em;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-size-root: 15px;
+  --line-height-root: 1.5;
+  --letter-spacing-tight: -0.015em;
   --letter-spacing-label: 0.12em;
 
   --weight-regular: 400;
@@ -103,24 +72,17 @@
   --font-size-200: 14px;
   --font-size-300: 16px;
   --font-size-400: 20px;
-  --font-size-500: 28px;
-  --font-size-600: 36px;
-  --font-size-700: 48px;
-  --font-size-800: 60px;
+  --font-size-500: 26px;
+  --font-size-700: 40px;
 
   /* --- Bewegung (roh) --- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 0.2s;
-  --duration-slow: 0.45s;          /* Reveal der Verbindungslinien (Hero-Flow) */
-  --duration-pulse: 1.8s;          /* Atem-Puls am aktiven Telefon-Knoten */
-
-  /* --- Ebenen (roh) --- */
-  --layer-sticky: 10;            /* klebende Kopfzeile ueber dem Inhalt */
+  --duration-fast: 0.22s;
+  /* Additiv (NICHT-farbig): langsamer Atem-Puls am aktiven Telefon-Knoten der
+   * Hero-Verbindungs-Animation. Reiner Bewegungswert — die Palette bleibt exakt
+   * Master. */
+  --duration-pulse: 1.8s;
 
   /* --- Layout (roh) --- */
-  --measure-page: 1180px;        /* maximale Seitenbreite */
-  --measure-prose: 46rem;        /* angenehme Lesebreite (Hero-Lead) */
-  --measure-pricing: 56rem;      /* Breite der Zwei-Tarif-Tabelle */
-  --measure-node: 9rem;          /* Mindestbreite eines MCP-Diagramm-Knotens */
-  --size-stage: 14rem;           /* Mindesthoehe der Hero-Animations-Buehne */
+  --measure-page: 1180px;
 }
