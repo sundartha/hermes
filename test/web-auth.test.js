@@ -210,6 +210,49 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
   }
 });
 
+test("GET /auth/callback mit postLoginPath: redirectet ins Kunden-Portal statt /", async () => {
+  // Bug-Wurzel W3: ein frisch eingeloggter (suspendierter) Tenant darf NICHT auf "/"
+  // (Owner-Dashboard hinter Basic-Auth) landen, sondern auf der Self-Service-Shell.
+  const { deps } = fakeDeps({ postLoginPath: "/tenant.html" });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, "/tenant.html");
+  } finally {
+    await srv.close();
+  }
+});
+
+test("GET /auth/callback ohne postLoginPath: Default-Redirect bleibt / (byte-identisch)", async () => {
+  // fail-safe Default: fehlt postLoginPath, bleibt das Bestands-Verhalten erhalten.
+  const { deps } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.location, "/");
+  } finally {
+    await srv.close();
+  }
+});
+
 test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async () => {
   const { deps, calls } = fakeDeps();
   const srv = await mountRouter(deps);

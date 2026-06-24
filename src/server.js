@@ -122,6 +122,10 @@ app.use((req, res, next) => {
 // Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
 // und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
 const BODY_LIMIT = "100kb";
+// Kunden-Portal (Self-Service-Shell). Ziel des Post-Login-Redirects UND der Basic-Auth-
+// Exemption: ein frisch eingeloggter (suspendierter) Tenant landet hier (zeigt
+// "Choose your plan"), NICHT auf "/" (Owner-Dashboard hinter Basic-Auth = Sackgasse).
+const CUSTOMER_PORTAL_PATH = "/tenant.html";
 // rawBody nur fuer /voice erfassen (kuenftiger Ed25519-Pfad/Telnyx braucht den
 // unveraenderten Body). Der Twilio-HMAC nutzt weiterhin nur die geparsten Params -
 // die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
@@ -175,6 +179,12 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         accounts,
         sessions,
         audit: auditStore,
+        // Post-Login ins Kunden-Portal NUR wenn die Self-Service-Shell gemountet ist
+        // (gleicher Flag-Gate wie die /tenant.html-Basic-Auth-Exemption unten). Sonst
+        // Default "/" -> byte-identisch zum Bestand (kein Redirect auf eine Seite, die
+        // ohne Self-Service-Flags nicht Basic-Auth-exempt waere).
+        postLoginPath:
+          config.selfServiceEnabled && config.multiTenant ? CUSTOMER_PORTAL_PATH : undefined,
       }),
     );
 
@@ -220,7 +230,8 @@ app.use((req, res, next) => {
   // Session-Cookie aus dem OIDC-Browser-Login, nicht mehr per Bearer-Paste).
   // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
   // byte-identisch zum Bestand.
-  if (config.selfServiceEnabled && config.multiTenant && req.path === "/tenant.html") return next();
+  if (config.selfServiceEnabled && config.multiTenant && req.path === CUSTOMER_PORTAL_PATH)
+    return next();
   if (
     req.path.startsWith("/voice") ||
     req.path.startsWith("/mcp") ||
