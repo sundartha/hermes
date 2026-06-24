@@ -65,6 +65,13 @@ export const BASE_ENV = {
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit
+  // Owner-Number-Autoseed neutral leer (render-owner-autoseed, R8): ohne diese Zeilen
+  // leakt eine lokale .env mit OWNER_NUMBER_SEED/OWNER_NUMBER_PROVIDER via dotenv in
+  // Spawn-Tests -> eine geseedete Owner-Nummer braeche u.a. den Boot-Refusal-Test
+  // (boot-failclosed.test.js, ownerNumber:null) (Lehre test-base-env-drift). Tests, die
+  // den Autoseed pruefen (owner-number-seed.test.js), setzen sie explizit per env-Override.
+  OWNER_NUMBER_SEED: "",
+  OWNER_NUMBER_PROVIDER: "",
   MAX_CALL_DURATION_S: "180",
   STT_SPEECH_TIMEOUT_SEC: "2", // G3: neutraler Default, sonst leakt lokales .env in Spawn-Tests (test-base-env-drift)
   SKIP_TWILIO_SIGNATURE_CHECK: "true",
