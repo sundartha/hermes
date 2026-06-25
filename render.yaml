@@ -226,6 +226,15 @@ services:
       - type: rewrite # SPA-Fallback NUR fuer den interaktiven App-Teil (W2+)
         source: /app/*
         destination: /app/index.html
+      # Deep-Link-Hardening (Bug B, Phase 2): /auth/* existiert auf der Static Site
+      # nicht (404). Die Funnel-Links zeigen zwar absolut auf den Gateway (routes.js
+      # -> PUBLIC_GATEWAY_URL), aber direkt eingegebene/gebookmarkte/alt-verlinkte
+      # sundartha.com/auth/*-URLs wuerden sonst 404en. Redirect leitet sie an den
+      # Gateway-Auth-Origin. CSP-konform (Top-Level-Navigation, nicht connect-src);
+      # :splat erhaelt den Restpfad. Disjunkt zu /app/* -> keine Reihenfolge-Kollision.
+      - type: redirect
+        source: /auth/*
+        destination: https://vodafone-agent.onrender.com/auth/:splat
     headers: # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
       - path: /*
         name: X-Frame-Options
