@@ -381,20 +381,16 @@ test("T-F1-05: email_verified truthy String -> email: null (kein Truthy-Cast)", 
   assert.deepEqual(claims, { sub: "u5", email: null });
 });
 
-// ---- F2: nonce im OIDC Auth-Code-Flow ----
-// /auth/login erzeugt nonce, legt ihn signiert als oidc_nonce-Cookie ab und gibt
-// ihn an authorizeUrl. /auth/callback liest den Cookie, reicht ihn an exchange
-// durch (id_token-nonce-Bindung) und loescht ihn beim Cleanup mit. Schuetzt vor
-// id_token-Replay/-Substitution, das PKCE nicht abdeckt.
+// ---- F2: oidc_nonce-Cookie als Same-Session-Bindung ----
+// WorkOS User Management kennt im authorize-Endpoint keinen `nonce`-Param und die
+// authenticate-Antwort enthaelt kein id_token -> ein OIDC-nonce-Round-Trip ist nicht
+// moeglich. Der Replay-Schutz liegt bei PKCE (code nur mit code_verifier einloesbar).
+// Das signierte oidc_nonce-Cookie bleibt als zusaetzliche Same-Session-Bindung: /auth/login
+// setzt es, /auth/callback erzwingt Vorhandensein + gueltige Signatur VOR dem Token-Tausch
+// und loescht es beim Cleanup mit.
 
-test("T-F2-01: GET /auth/login setzt signiertes oidc_nonce-Cookie und gibt nonce an authorizeUrl", async () => {
-  const { deps } = fakeDeps({
-    oidc: {
-      authorizeUrl: async ({ state, challenge, nonce, redirectUri }) =>
-        `https://idp.test/authorize?state=${state}&code_challenge=${challenge}&nonce=${nonce}&redirect_uri=${encodeURIComponent(redirectUri)}`,
-      exchange: async () => ({ claims: { sub: "user-1", email: "neu@kunde.de" } }),
-    },
-  });
+test("T-F2-01: GET /auth/login setzt signiertes oidc_nonce-Cookie (Same-Session-Bindung)", async () => {
+  const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
     const res = await rawGet(`${srv.base}/auth/login`);
@@ -405,11 +401,10 @@ test("T-F2-01: GET /auth/login setzt signiertes oidc_nonce-Cookie und gibt nonce
     assert.match(joined, /SameSite=Lax/i);
     // nonce-Cookie verifizierbar signiert
     const signedNonce = cookieValue(res.setCookie, "oidc_nonce");
-    const nonceValue = verifyValue(signedNonce, SECRET);
-    assert.ok(nonceValue, "oidc_nonce-Cookie muss verifizierbar signiert sein");
-    // nonce-Param in der URL und stimmt mit dem Cookie-Klarwert ueberein
-    const loc = new URL(res.headers.location);
-    assert.equal(loc.searchParams.get("nonce"), nonceValue);
+    assert.ok(
+      verifyValue(signedNonce, SECRET),
+      "oidc_nonce-Cookie muss verifizierbar signiert sein",
+    );
   } finally {
     await srv.close();
   }
@@ -459,12 +454,12 @@ test("T-F2-03: GET /auth/callback mit manipuliertem oidc_nonce-Cookie -> 400, ke
   }
 });
 
-test("T-F2-04: GET /auth/callback mit nonce-Mismatch im id_token (exchange wirft) -> 401, kein Leak", async () => {
+test("T-F2-04: GET /auth/callback mit fehlschlagendem exchange (WorkOS-Fehler) -> 401, kein Leak", async () => {
   const { deps, calls } = fakeDeps({
     oidc: {
       authorizeUrl: async () => "https://idp.test/authorize",
       exchange: async () => {
-        throw new Error("nonce mismatch");
+        throw new Error("authenticate HTTP 401: super-secret-detail");
       },
     },
   });
@@ -481,23 +476,15 @@ test("T-F2-04: GET /auth/callback mit nonce-Mismatch im id_token (exchange wirft
     });
     assert.equal(res.status, 401);
     assert.equal(calls.create.length, 0);
-    assert.doesNotMatch(res.body, /nonce/);
+    assert.doesNotMatch(res.body, /super-secret-detail/);
     assert.equal(cookieValue(res.setCookie, "session"), null);
   } finally {
     await srv.close();
   }
 });
 
-test("T-F2-05: GET /auth/callback Happy-Path: nonce-Klarwert an exchange uebergeben, oidc_nonce geloescht", async () => {
-  const { deps, calls } = fakeDeps({
-    oidc: {
-      authorizeUrl: async () => "https://idp.test/authorize",
-      exchange: async ({ nonce }) => {
-        calls.exchangeNonce = nonce;
-        return { claims: { sub: "user-1", email: "neu@kunde.de" } };
-      },
-    },
-  });
+test("T-F2-05: GET /auth/callback Happy-Path: oidc_nonce-Cookie wird beim Cleanup geloescht", async () => {
+  const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
     const state = "state-xyz";
@@ -511,8 +498,6 @@ test("T-F2-05: GET /auth/callback Happy-Path: nonce-Klarwert an exchange ueberge
       Cookie: cookies,
     });
     assert.equal(res.status, 302);
-    // exchange erhielt den nonce-Klarwert (nach verifyValue des Cookies)
-    assert.equal(calls.exchangeNonce, nonce);
     // Session-Cookie gesetzt (Happy-Path unveraendert)
     const sessionCookie = cookieValue(res.setCookie, "session");
     assert.equal(verifyValue(sessionCookie, SECRET), "sess-abc-123");
@@ -575,125 +560,141 @@ test("T-F1-07: adminOnly mit verifizierter Email in Allowlist -> 200", async () 
   }
 });
 
-// ---- P4 / AC1 + AC2: echter OIDC-discover/exchange-Pfad un-gestubbt ----
-// makeOidc bekommt einen injizierbaren fetch (Muster wie _discoveryTtlMs): KEIN
-// globalThis-Mock, KEIN neues Prod-Interface. Damit laeuft der reale discover()-/
-// exchange()-Code (fetch + r.json() + Deref), den jeder andere Test per oidc-Fake
-// umgeht. Beweist: malformte IdP-Antworten -> KLARER, gefangener Fehler statt
-// new URL(undefined)/jwtVerify(undefined)-Crash als unhandled rejection.
+// ---- AC1/AC2: realer WorkOS-UM authorizeUrl/exchange-Pfad (un-gestubbt) ----
+// makeOidc bekommt einen injizierbaren fetch (KEIN globalThis-Mock, KEIN neues
+// Prod-Interface). Damit laeuft der reale authorizeUrl-/exchange()-Code, den die
+// Router-Tests per oidc-Fake umgehen. Beweist: authorizeUrl zeigt auf den WorkOS-UM-
+// authorize-Endpoint (+provider=authkit, PKCE); exchange spricht /user_management/
+// authenticate, uebernimmt die Identitaet aus dem `user`-Objekt (kein id_token) und
+// faengt malformte Antworten als KLAREN Fehler statt undefined-Deref-Crash.
 
-const OIDC_ISSUER = "https://idp.p4.test";
+const WORKOS_BASE = "https://api.workos.test";
+const OIDC_CFG = {
+  workosApiBase: WORKOS_BASE,
+  oidcClientId: "client_abc",
+  oidcClientSecret: "sk_test_secret",
+};
 
-// Baut eine fetch-Antwort-Attrappe. json kann ein Wert ODER eine Fehler-Factory sein.
-function fakeResponse({ ok = true, status = 200, json } = {}) {
-  return { ok, status, json: typeof json === "function" ? json : async () => json };
+// fetch-Attrappe: zeichnet den letzten Request auf, liefert die konfigurierte Antwort.
+// json kann ein Wert ODER eine Fehler-Factory sein.
+function captureFetch({ ok = true, status = 200, json } = {}) {
+  const seen = {};
+  const _fetch = async (url, opts = {}) => {
+    seen.url = String(url);
+    seen.opts = opts;
+    return { ok, status, json: typeof json === "function" ? json : async () => json };
+  };
+  return { _fetch, seen };
 }
 
-test("T-P4-01: Discovery ohne jwks_uri -> klarer Fehler, kein new URL(undefined)", async () => {
-  // Discovery-200 OHNE jwks_uri. getJwks() darf NICHT mit `TypeError: Invalid URL`
-  // crashen, sondern einen identifizierbaren Fehler werfen.
-  const _fetch = async (url) => {
-    if (String(url).endsWith("/.well-known/openid-configuration"))
-      return fakeResponse({
-        json: {
-          authorization_endpoint: `${OIDC_ISSUER}/authorize`,
-          token_endpoint: `${OIDC_ISSUER}/token`,
-        },
-      });
-    throw new Error(`unerwarteter fetch: ${url}`);
-  };
-  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER }, { _fetch });
-  await assert.rejects(
-    () => oidc._getJwksForTest(),
-    (err) => {
-      assert.match(err.message, /jwks_uri/, "Fehler nennt das fehlende jwks_uri");
-      assert.doesNotMatch(err.message, /Invalid URL/, "kein roher new URL(undefined)-TypeError");
-      return true;
+test("T-AC1-01: authorizeUrl zeigt auf WorkOS-UM-authorize (+provider=authkit, PKCE, kein scope/nonce)", async () => {
+  const oidc = makeOidc(OIDC_CFG);
+  const url = await oidc.authorizeUrl({
+    challenge: "chal-123",
+    state: "state-xyz",
+    redirectUri: "https://agent.test/auth/callback",
+  });
+  const u = new URL(url);
+  assert.equal(u.origin + u.pathname, `${WORKOS_BASE}/user_management/authorize`);
+  assert.equal(u.searchParams.get("provider"), "authkit");
+  assert.equal(u.searchParams.get("response_type"), "code");
+  assert.equal(u.searchParams.get("client_id"), "client_abc");
+  assert.equal(u.searchParams.get("redirect_uri"), "https://agent.test/auth/callback");
+  assert.equal(u.searchParams.get("code_challenge"), "chal-123");
+  assert.equal(u.searchParams.get("code_challenge_method"), "S256");
+  assert.equal(u.searchParams.get("state"), "state-xyz");
+  // WorkOS-UM-authorize kennt weder scope noch nonce
+  assert.equal(u.searchParams.get("scope"), null);
+  assert.equal(u.searchParams.get("nonce"), null);
+});
+
+test("T-AC2-01: exchange spricht /user_management/authenticate und uebernimmt Identitaet aus user", async () => {
+  const { _fetch, seen } = captureFetch({
+    json: {
+      user: { id: "user_01ABC", email: "kunde@firma.de", email_verified: true },
+      access_token: "eyJ.aaa.bbb",
+      refresh_token: "rt_123",
     },
-  );
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
+  const { claims } = await oidc.exchange({ code: "authcode", verifier: "ver-123" });
+  // Identitaet aus dem user-Objekt (sub = user.id, email da email_verified===true)
+  assert.deepEqual(claims, { sub: "user_01ABC", email: "kunde@firma.de" });
+  // Request: POST an den UM-authenticate-Endpoint, JSON-Body mit grant_type+code+verifier+client
+  assert.equal(seen.url, `${WORKOS_BASE}/user_management/authenticate`);
+  assert.equal(seen.opts.method, "POST");
+  assert.match(seen.opts.headers["Content-Type"], /application\/json/);
+  const body = JSON.parse(seen.opts.body);
+  assert.equal(body.grant_type, "authorization_code");
+  assert.equal(body.code, "authcode");
+  assert.equal(body.code_verifier, "ver-123");
+  assert.equal(body.client_id, "client_abc");
+  assert.equal(body.client_secret, "sk_test_secret");
 });
 
-test("T-P4-02: Discovery-HTTP-Fehler -> bestehender OIDC discovery HTTP <status>-Throw", async () => {
-  const _fetch = async () => fakeResponse({ ok: false, status: 503 });
-  const oidc = makeOidc({ oauthIssuerUrl: OIDC_ISSUER }, { _fetch });
-  await assert.rejects(() => oidc._getJwksForTest(), /OIDC discovery HTTP 503/);
+test("T-AC2-02: exchange mit email_verified=false -> email: null (Gate via claimsFromPayload)", async () => {
+  const { _fetch } = captureFetch({
+    json: { user: { id: "user_01X", email: "unverified@firma.de", email_verified: false } },
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
+  const { claims } = await oidc.exchange({ code: "c", verifier: "v" });
+  assert.deepEqual(claims, { sub: "user_01X", email: null });
 });
 
-test("T-P4-03: Token-Body non-JSON (r.json wirft) -> gefangen, kein jwtVerify(undefined)", async () => {
-  // Discovery ok (mit jwks_uri), Token-Endpoint liefert ok:true aber r.json() rejected.
-  const _fetch = async (url) => {
-    const u = String(url);
-    if (u.endsWith("/.well-known/openid-configuration"))
-      return fakeResponse({
-        json: {
-          authorization_endpoint: `${OIDC_ISSUER}/authorize`,
-          token_endpoint: `${OIDC_ISSUER}/token`,
-          jwks_uri: `${OIDC_ISSUER}/jwks`,
-        },
-      });
-    if (u === `${OIDC_ISSUER}/token`)
-      return fakeResponse({
-        ok: true,
-        json: async () => {
-          throw new Error("not json");
-        },
-      });
-    throw new Error(`unerwarteter fetch: ${url}`);
-  };
-  const oidc = makeOidc(
-    { oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" },
-    { _fetch },
-  );
+test("T-AC2-03: exchange ohne user in der Antwort -> klarer Fehler, kein undefined-Deref", async () => {
+  const { _fetch } = captureFetch({ json: {} });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
   await assert.rejects(
-    () => oidc.exchange({ code: "c", verifier: "v", nonce: "n", redirectUri: `${OIDC_ISSUER}/cb` }),
+    () => oidc.exchange({ code: "c", verifier: "v" }),
     (err) => {
-      // gefangener Fehler (egal ob "not json" oder unser Guard) - NUR kein TypeError aus
-      // jwtVerify(undefined): der Code darf den Token-Body-Parse-Fehler nicht als
-      // undefined-id_token weiterreichen.
+      assert.match(err.message, /user/, "Fehler nennt das fehlende user-Objekt");
       assert.doesNotMatch(err.message, /Cannot read|undefined/i, "kein undefined-Deref-Crash");
       return true;
     },
   );
 });
 
-test("T-P4-04: Token-Body {} ohne id_token -> klarer Fehler, kein jwtVerify(undefined)", async () => {
-  const _fetch = async (url) => {
-    const u = String(url);
-    if (u.endsWith("/.well-known/openid-configuration"))
-      return fakeResponse({
-        json: {
-          authorization_endpoint: `${OIDC_ISSUER}/authorize`,
-          token_endpoint: `${OIDC_ISSUER}/token`,
-          jwks_uri: `${OIDC_ISSUER}/jwks`,
-        },
-      });
-    if (u === `${OIDC_ISSUER}/token`) return fakeResponse({ ok: true, json: async () => ({}) }); // kein id_token
-    throw new Error(`unerwarteter fetch: ${url}`);
-  };
-  const oidc = makeOidc(
-    { oauthIssuerUrl: OIDC_ISSUER, oidcClientId: "cid", oidcClientSecret: "csec" },
-    { _fetch },
-  );
+test("T-AC2-04: exchange mit non-JSON-Body (r.json wirft) -> gefangen, kein undefined-Crash", async () => {
+  const _fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => {
+      throw new Error("not json");
+    },
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
   await assert.rejects(
-    () => oidc.exchange({ code: "c", verifier: "v", nonce: "n", redirectUri: `${OIDC_ISSUER}/cb` }),
+    () => oidc.exchange({ code: "c", verifier: "v" }),
     (err) => {
-      assert.match(err.message, /id_token/, "Fehler nennt das fehlende id_token");
-      assert.doesNotMatch(
-        err.message,
-        /Cannot read|Invalid Compact JWS/i,
-        "kein jwtVerify(undefined)-Crash",
-      );
+      assert.doesNotMatch(err.message, /Cannot read|undefined/i, "kein undefined-Deref-Crash");
+      return true;
+    },
+  );
+});
+
+test("T-AC2-05: exchange bei authenticate-HTTP-Fehler -> Throw ohne Body-Leak", async () => {
+  const { _fetch } = captureFetch({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: "unauthorized_client", detail: "super-secret-detail" }),
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
+  await assert.rejects(
+    () => oidc.exchange({ code: "c", verifier: "v" }),
+    (err) => {
+      assert.match(err.message, /authenticate HTTP 401/, "nennt Status, kein Body");
+      assert.doesNotMatch(err.message, /super-secret-detail/, "kein Body-/Detail-Leak im Fehler");
       return true;
     },
   );
 });
 
 // ---- P4 / AC3: GET /auth/login fail-closed ----
-// Ist der IdP unerreichbar, rejected oidc.authorizeUrl (intern discover()->fetch).
-// Ohne try/catch reicht Express 4 die Rejection NICHT an eine Error-MW weiter -> der
-// Request haengt bis zum Socket-Timeout. Mit try/catch: sauberer 5xx, kein IdP-Leak.
+// authorizeUrl baut zwar nur eine URL (kein I/O), bleibt aber awaited: wirft es
+// unerwartet, reicht Express 4 die Rejection NICHT an eine Error-MW weiter -> der
+// Request haengt bis zum Socket-Timeout. Mit try/catch: sauberer 5xx, kein Detail-Leak.
 
-test("T-P4-05: GET /auth/login bei IdP-down -> 5xx, kein Hang, kein Leak", async () => {
+test("T-P4-05: GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein Hang, kein Leak", async () => {
   const { deps } = fakeDeps({
     oidc: {
       authorizeUrl: async () => {

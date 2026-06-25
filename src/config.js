@@ -298,9 +298,15 @@ export const config = {
   // ---- Web-Login (Kunden-Portal, OIDC Auth-Code + PKCE) ----
   // Session-Cookie-Signatur (HMAC). Secret -> nie loggen. Leer = Web-Login aus.
   sessionSecret: process.env.SESSION_SECRET || "",
-  // OIDC-Client fuer den Browser-Flow (Issuer = config.oauthIssuerUrl, geteilt mit /mcp).
+  // WorkOS-Client fuer den Browser-Login (WorkOS User Management, authorize/authenticate).
+  // client_secret = WorkOS-API-Key der Umgebung. Geteilte client_id mit dem /mcp-Kanal
+  // (access_token-sub == user.id -> EINE Identitaetsquelle).
   oidcClientId: process.env.OIDC_CLIENT_ID || "",
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET || "", // SECRET
+  // WorkOS User-Management API-Basis (authorize/authenticate). Die Umgebung wird ueber
+  // client_id + API-Key unterschieden, NICHT ueber den Host -> derselbe Host fuer Staging
+  // und Produktion. Konstanter Default; nur fuer Tests/Self-Hosting ueberschreibbar.
+  workosApiBase: (process.env.WORKOS_API_BASE || "https://api.workos.com").replace(/\/$/, ""),
   // Admin-Allowlist (kommasepariert, E-Mails). Nur diese duerfen approve/suspend.
   adminEmails: (process.env.ADMIN_EMAILS || "")
     .split(",")
@@ -340,8 +346,11 @@ export const config = {
 // einen ungesicherten IdP validiert (z.B. versehentlich auf eine interne Metadata-IP).
 // localhost/127.0.0.1/[::1] = lokaler Test-IdP und bleibt zulaessig.
 function isInsecureHttpIssuer(issuerUrl) {
-  return !!issuerUrl && issuerUrl.startsWith("http://") &&
-    !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(issuerUrl);
+  return (
+    !!issuerUrl &&
+    issuerUrl.startsWith("http://") &&
+    !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(issuerUrl)
+  );
 }
 
 // Produktions-Footguns (H1): Konfigurationen, die im oeffentlichen Hosting (Render
@@ -356,15 +365,21 @@ export function productionFootguns(cfg = config, isProduction = !!process.env.RE
   if (!isProduction) return [];
   const errors = [];
   if (!cfg.dashboardPassword)
-    errors.push("DASHBOARD_PASSWORD fehlt - Dashboard und API waeren oeffentlich erreichbar (im Hosting Pflicht).");
+    errors.push(
+      "DASHBOARD_PASSWORD fehlt - Dashboard und API waeren oeffentlich erreichbar (im Hosting Pflicht).",
+    );
   if (cfg.mcpAuth === "off")
     errors.push("MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).");
   if (cfg.skipTwilioSignatureCheck)
-    errors.push("SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).");
+    errors.push(
+      "SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
+    );
   if (isInsecureHttpIssuer(cfg.oauthIssuerUrl))
     errors.push("OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).");
   if (cfg.storeBackend !== "pg")
-    errors.push("STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.");
+    errors.push(
+      "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
+    );
   return errors;
 }
 
@@ -419,9 +434,7 @@ export function assertConfig() {
       "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
     );
   if (!isProduction && config.mcpAuth === "off")
-    console.error(
-      "[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!",
-    );
+    console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
   if (config.paymentEnabled && !config.provisioningEnabled)
     console.error(
       "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",

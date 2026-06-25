@@ -3,8 +3,6 @@
 // PKCE mit crypto (kein neuer Dep). Niemals Tokens/Secrets loggen.
 import crypto from "crypto";
 import { Router } from "express";
-import { createRemoteJWKSet, jwtVerify } from "jose";
-import { safeEqual } from "./util.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
@@ -95,21 +93,23 @@ export function makeWebAuthRoutes(deps) {
   router.get("/auth/login", async (req, res) => {
     const { verifier, challenge } = makePkce();
     const state = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
-    // nonce bindet das id_token an genau diese Login-Session (Replay/Substitution-
-    // Schutz, den PKCE nicht abdeckt): signiert als Cookie, als Param zum IdP.
+    // oidc_nonce: zusaetzliche signierte Same-Session-Bindung. WorkOS User Management
+    // kennt im authorize-Endpoint keinen nonce-Param und liefert kein id_token -> kein
+    // IdP-Round-Trip; der Replay-Schutz liegt bei PKCE (code nur mit code_verifier
+    // einloesbar). Der Callback erzwingt dieses Cookie (Vorhandensein + Signatur) vor
+    // dem Token-Tausch.
     const nonce = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
     setCookies(res, [
       ["pkce_verifier", signValue(verifier, secret), LOGIN_COOKIE_MAX_AGE],
       ["oauth_state", signValue(state, secret), LOGIN_COOKIE_MAX_AGE],
       ["oidc_nonce", signValue(nonce, secret), LOGIN_COOKIE_MAX_AGE],
     ]);
-    // authorizeUrl triggert intern discover() -> fetch. Ist der IdP unerreichbar
-    // (oder die Discovery malformt), rejected der await. Express 4 reicht eine
-    // Route-Rejection NICHT automatisch an eine Error-MW weiter -> der Request
-    // haengt sonst bis zum Socket-Timeout. Fail-closed: sauberer 5xx, generische
-    // Meldung (KEIN IdP-/Connection-Detail, kein Leak), Login-Cookies geloescht.
+    // authorizeUrl baut nur eine URL (kein I/O), bleibt aber awaited + fail-closed: ein
+    // unerwarteter Fehler darf den Request nicht bis zum Socket-Timeout haengen lassen
+    // (Express 4 reicht Route-Rejections NICHT automatisch an die Error-MW weiter).
+    // Generische 5xx, Login-Cookies geloescht, kein Detail-Leak.
     try {
-      const url = await oidc.authorizeUrl({ challenge, state, nonce, redirectUri });
+      const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
       res.redirect(302, url);
     } catch {
       clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
@@ -129,7 +129,10 @@ export function makeWebAuthRoutes(deps) {
 
     // nonce: signierter Cookie muss vorhanden und gueltig sein. Fehlt/ungueltig ->
     // 400 mit derselben generischen Meldung wie state (kein Detail-Leak, welcher
-    // Check scheiterte). Der Klarwert wird an exchange zur id_token-Bindung gereicht.
+    // Check scheiterte). Bindet den Callback an die Login-Session dieses Browsers
+    // (Same-Session). WorkOS User Management liefert kein id_token, an das ein nonce
+    // gebunden werden koennte -> das Cookie selbst ist die Bindung; der Replay-Schutz
+    // liegt bei PKCE.
     const signedNonce = readCookie(req, "oidc_nonce");
     const nonce = signedNonce ? verifyValue(signedNonce, secret) : null;
     if (!nonce) {
@@ -141,12 +144,7 @@ export function makeWebAuthRoutes(deps) {
     const verifier = signedVerifier ? verifyValue(signedVerifier, secret) : null;
 
     try {
-      const { claims } = await oidc.exchange({
-        code: req.query.code,
-        verifier,
-        nonce,
-        redirectUri,
-      });
+      const { claims } = await oidc.exchange({ code: req.query.code, verifier });
       const { tenantId } = await accounts.upsertOnFirstLogin({
         sub: claims.sub,
         email: claims.email,
@@ -182,122 +180,82 @@ export function makeWebAuthRoutes(deps) {
 }
 
 // ---- claimsFromPayload ----------------------------------------------
-// Mappt einen verifizierten id_token-Payload auf die Session-Claims. email
-// wird NUR uebernommen, wenn der Provider email_verified === true setzt
-// (Strikt-Gleichheit, kein Truthy-Cast: "true"/1/Abwesenheit gelten als
-// unverifiziert). Sonst email: null -> die Admin-Allowlist (adminOnly) ist
-// damit nur ueber nachweislich verifizierte Adressen erreichbar.
+// Mappt einen Identitaets-Payload (sub/email/email_verified) auf die Session-Claims.
+// Gespeist aus dem WorkOS-`user`-Objekt (exchange) bzw. direkt im Test. email wird NUR
+// uebernommen, wenn email_verified === true ist (Strikt-Gleichheit, kein Truthy-Cast:
+// "true"/1/Abwesenheit gelten als unverifiziert). Sonst email: null -> die Admin-
+// Allowlist (adminOnly) ist damit nur ueber nachweislich verifizierte Adressen erreichbar.
 export function claimsFromPayload(payload) {
   const email = payload.email_verified === true ? (payload.email ?? null) : null;
   return { sub: payload.sub, email };
 }
 
-// Prueft, ob das id_token den nonce dieser Login-Session traegt. Timing-sicher.
-// false bei fehlendem lokalem nonce, fehlendem Token-nonce oder Mismatch.
-function nonceMatches(payloadNonce, expected) {
-  if (!expected || payloadNonce == null) return false;
-  return safeEqual(String(payloadNonce), expected);
-}
-
 // ---- makeOidc --------------------------------------------------------
-// OIDC Auth-Code-Flow-Helfer (Authorization-Endpoint-URL bauen + Token-Exchange
-// mit id_token-Verifikation). Cached Discovery-Dokument + JWKS. Niemals loggen.
-// Default-TTL des Discovery-Dokuments in Millisekunden (1 h). Per optionalem
-// Parameter _discoveryTtlMs nur fuer Tests uebersteuerbar (Default unveraendert).
-const DISCOVERY_TTL_MS = 3600_000;
-
-export function makeOidc(config, { _discoveryTtlMs = DISCOVERY_TTL_MS, _fetch = fetch } = {}) {
-  let discoveryCache = null;
-  let discoveryCachedAt = 0;
-  let jwksCache = null;
-
-  // TTL fuer das Discovery-Dokument. Beim Ablauf wird jwksCache ebenfalls
-  // zurueckgesetzt, damit eine jwks_uri-Rotation beim IdP ohne Prozess-Neustart
-  // aufgefangen wird (sonst brechen alle Logins bis zum Restart).
-  async function discover() {
-    if (discoveryCache && Date.now() - discoveryCachedAt < _discoveryTtlMs) return discoveryCache;
-    const r = await _fetch(`${config.oauthIssuerUrl}/.well-known/openid-configuration`);
-    if (!r.ok) throw new Error(`OIDC discovery HTTP ${r.status}`);
-    discoveryCache = await r.json();
-    discoveryCachedAt = Date.now();
-    // Neuladen: jwksCache zuruecksetzen, damit getJwks() die (evtl. neue)
-    // jwks_uri neu aufloest statt die alte RemoteJWKSet-Instanz zu behalten.
-    jwksCache = null;
-    return discoveryCache;
-  }
-
-  async function getJwks() {
-    // Erst discover() (TTL-gated, billig): ein abgelaufener Cache wird hier neu
-    // geladen und setzt jwksCache zurueck. Erst danach den Cache pruefen, sonst
-    // wuerde eine jwks_uri-Rotation nie greifen (alte Instanz bliebe erhalten).
-    const { jwks_uri } = await discover();
-    if (jwksCache) return jwksCache;
-    // Eine malformte Discovery-Antwort (kein jwks_uri) wuerde sonst als
-    // `new URL(undefined)` -> roher TypeError: Invalid URL crashen (unhandled
-    // rejection). Klarer, identifizierbarer Fehler statt blindem Deref.
-    if (typeof jwks_uri !== "string" || !jwks_uri)
-      throw new Error("OIDC discovery: jwks_uri fehlt oder ist ungueltig");
-    jwksCache = createRemoteJWKSet(new URL(jwks_uri));
-    return jwksCache;
-  }
+// WorkOS-User-Management Auth-Code-Flow (PKCE). authorizeUrl baut die URL zum WorkOS-UM-
+// authorize-Endpoint (provider=authkit = gehostete AuthKit-Login-Seite); exchange loest
+// den Code beim UM-authenticate-Endpoint ein und uebernimmt die Identitaet aus dem
+// zurueckgelieferten `user`-Objekt. WorkOS UM liefert KEIN id_token: die Antwort kommt
+// server-zu-server (client_secret + TLS, single-use code + PKCE-verifier) und ist damit
+// die Vertrauensquelle. CSRF = state-Cookie, Replay-Schutz = PKCE (beides im Router).
+// Niemals Code/Secret/Token loggen.
+export function makeOidc(config, { _fetch = fetch } = {}) {
+  const authorizeEndpoint = `${config.workosApiBase}/user_management/authorize`;
+  const authenticateEndpoint = `${config.workosApiBase}/user_management/authenticate`;
 
   return {
-    // Test-Hook: macht getJwks fuer Unit-Tests beobachtbar (Cache-Verhalten).
-    // Kein Produktions-Aufrufer; getJwks wird intern von exchange() genutzt.
-    _getJwksForTest: getJwks,
-
-    async authorizeUrl({ challenge, state, nonce, redirectUri }) {
-      const { authorization_endpoint } = await discover();
+    // authorizeUrl bleibt async (Router awaitet + faengt fail-closed). provider=authkit
+    // waehlt die gehostete AuthKit-Login-Seite; PKCE S256 + state queren als Query.
+    // WorkOS UM kennt im authorize-Endpoint weder scope noch nonce.
+    async authorizeUrl({ challenge, state, redirectUri }) {
       const params = new URLSearchParams({
         response_type: "code",
         client_id: config.oidcClientId,
         redirect_uri: redirectUri,
-        scope: "openid email",
+        provider: "authkit",
         code_challenge: challenge,
         code_challenge_method: "S256",
         state,
-        nonce,
       });
-      return `${authorization_endpoint}?${params}`;
+      return `${authorizeEndpoint}?${params}`;
     },
 
-    async exchange({ code, verifier, nonce, redirectUri }) {
-      const { token_endpoint } = await discover();
-      const body = new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        code_verifier: verifier,
-        client_id: config.oidcClientId,
-        client_secret: config.oidcClientSecret,
-        redirect_uri: redirectUri,
-      });
-      const r = await _fetch(token_endpoint, {
+    // exchange loest den Auth-Code beim UM-authenticate-Endpoint ein. JSON-Body mit
+    // client_secret = WorkOS-API-Key der Umgebung (Confidential-Client). Antwort:
+    // {user, access_token, refresh_token, ...} OHNE id_token -> Identitaet aus `user`.
+    async exchange({ code, verifier }) {
+      const r = await _fetch(authenticateEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "authorization_code",
+          code,
+          code_verifier: verifier,
+          client_id: config.oidcClientId,
+          client_secret: config.oidcClientSecret,
+        }),
       });
-      if (!r.ok) throw new Error(`Token-Endpoint HTTP ${r.status}`);
-      // Token-Body parsen. Ein non-JSON-Body (r.json() wirft) wird hier zu einem
-      // gefangenen Fehler statt einer rohen Rejection. Ein leeres `{}` (kein
-      // id_token) wuerde sonst als jwtVerify(undefined, ...) crashen - daher
-      // explizit pruefen, BEVOR id_token an jwtVerify geht.
-      const { id_token } = await r.json();
-      if (typeof id_token !== "string" || !id_token)
-        throw new Error("Token-Endpoint: id_token fehlt in der Token-Antwort");
-      const jwks = await getJwks();
-      const { payload } = await jwtVerify(id_token, jwks, {
-        issuer: config.oauthIssuerUrl,
-        audience: config.oidcClientId,
-        clockTolerance: 30,
-      });
-      // nonce-Bindung manuell pruefen (nicht als jwtVerify-Option, da jose die
-      // nonce-Option versionsabhaengig exponiert): id_token muss den nonce dieser
-      // Login-Session tragen. Mismatch/fehlend -> wirft, Aufrufer faengt generisch
-      // (401, kein Leak). Timing-sicherer Vergleich in nonceMatches.
-      if (!nonceMatches(payload.nonce, nonce)) {
-        throw new Error("nonce mismatch");
-      }
-      return { claims: claimsFromPayload(payload) };
+      // Fehlerstatus: NUR den Status nennen, NIE den Body (WorkOS-Fehlerkoerper kann
+      // Detail tragen) -> kein Leak. Aufrufer faengt generisch (401).
+      if (!r.ok) throw new Error(`authenticate HTTP ${r.status}`);
+      // Body parsen. Ein non-JSON-Body (r.json() wirft) wird hier zu einem gefangenen
+      // Fehler statt einer rohen Rejection.
+      const data = await r.json();
+      // user fehlt/kein Objekt wuerde sonst als undefined-Deref crashen -> klarer Fehler.
+      const user = data && data.user;
+      if (!user || typeof user !== "object")
+        throw new Error("authenticate: user fehlt in der Antwort");
+      // sub = user.id (== access_token-sub -> EINE Identitaetsquelle fuer Web-Login UND
+      // MCP-Kanal ueber idp_subject). Fehlt die id, ist die Identitaet unbrauchbar.
+      if (typeof user.id !== "string" || !user.id)
+        throw new Error("authenticate: user.id fehlt in der Antwort");
+      // email durchlaeuft das unveraenderte email_verified-Gate (claimsFromPayload).
+      return {
+        claims: claimsFromPayload({
+          sub: user.id,
+          email: user.email,
+          email_verified: user.email_verified,
+        }),
+      };
     },
   };
 }

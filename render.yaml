@@ -167,6 +167,10 @@ services:
       # WorkOS AuthKit Client-Secret. Secret -> im Dashboard.
       - key: OIDC_CLIENT_SECRET
         sync: false
+      # WorkOS User-Management API-Basis (authorize/authenticate). Default api.workos.com
+      # (gleich fuer Staging/Prod; Umgebung via client_id/API-Key). Nur Self-Hosting/Tests aendern.
+      - key: WORKOS_API_BASE
+        value: https://api.workos.com
       # Admin-Allowlist (kommasepariert, E-Mails). Leer = kein Admin-Zugriff.
       - key: ADMIN_EMAILS
         sync: false

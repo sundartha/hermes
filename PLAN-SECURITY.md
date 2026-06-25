@@ -260,16 +260,22 @@ NEU: `src/store/portal.js` = async, per-Request, RLS-wrapped Kunden-Read-Pfad.
    - Verifikation: `test/portal-rls-killer.test.js` (Isolation A/B, leerer Tenant,
      Transkript-Leak-Schutz, Error-Injection-GUC-Reset; unprivilegierte `app_user`-
      Rolle, weil pglite-als-Superuser RLS sonst umgeht).
-2. **Browser-Login = OIDC Authorization-Code + PKCE, in-house** (kein Provider-SDK
-   -> kein Lock-in; nur OIDC-Claims queren die Schicht). Issuer = WorkOS AuthKit
-   (`OAUTH_ISSUER_URL`, mit `/mcp` geteilt). `id_token` via `jose` gegen die JWKS
-   geprueft inkl. `issuer` UND `audience=OIDC_CLIENT_ID`. CSRF ueber signierten
-   `oauth_state`-Cookie; PKCE-Verifier signiert. Session-Cookie httpOnly + Secure
-   - SameSite=Lax, signiert (HMAC, `SESSION_SECRET`). Niemals Tokens loggen.
-   * Erwartet: state-Mismatch/fehlend -> 400 (kein Account/Session); exchange-Fehler
-     -> 401 ohne Detail-/Token-Leak im Body; Erfolg -> signiertes Session-Cookie + Redirect.
-   * Verifikation: `test/web-auth.test.js` (PKCE/Cookie-Signatur + Router-Flow),
-     `test/web-auth-pg.test.js` (`makeAccounts`/`makeSessions` gegen das echte Schema).
+2. **Browser-Login = WorkOS User Management Auth-Code + PKCE, in-house** (kein Provider-
+   SDK -> kein Lock-in). `authorizeUrl` -> `${WORKOS_API_BASE}/user_management/authorize`
+   (`provider=authkit`, PKCE S256, `state`); `exchange` -> `POST .../user_management/authenticate`
+   (JSON, `client_secret`=WorkOS-API-Key). WorkOS UM liefert KEIN `id_token`: die Identitaet
+   (`sub=user.id`, `email` nur bei `email_verified===true`) stammt aus dem `user`-Objekt der
+   Back-Channel-Antwort (server-zu-server, client_secret+TLS, single-use code+PKCE = Vertrauens-
+   quelle). Replay-Schutz = PKCE; CSRF = signierter `oauth_state`-Cookie; zusaetzlich signiertes
+   `oidc_nonce`-Cookie als Same-Session-Bindung (kein IdP-Round-Trip moeglich). Session-Cookie
+   httpOnly + Secure + SameSite=Lax, signiert (HMAC, `SESSION_SECRET`). Niemals Code/Tokens/Secret
+   loggen. (Frueher generischer `/oauth2/*`-Endpoint via OIDC-Discovery -> `application_not_found`;
+   Fix 2026-06-25, s.u.)
+   * Erwartet: state-Mismatch/fehlend ODER fehlendes/ungueltiges `oidc_nonce` -> 400 (kein
+     Account/Session); authenticate-Fehler -> 401 ohne Detail-/Token-Leak im Body; Erfolg ->
+     signiertes Session-Cookie + Redirect.
+   * Verifikation: `test/web-auth.test.js` (PKCE/Cookie-Signatur + Router-Flow + T-AC1/AC2
+     authorize/authenticate), `test/web-auth-pg.test.js` (`makeAccounts`/`makeSessions`).
 3. **Tenancy + Lifecycle**: `tenant.status` (suspended -> active via Admin -> closed).
    Account-Modell offen + E-Mail-Verifikation (Provider) + Approval-Gate; Erst-Login
    legt Tenant `suspended` an. Single-User pro Tenant (B2C); Schema traegt Mehr-User
@@ -300,12 +306,40 @@ suspend}` hinter webAuth + `adminOnly` (`ADMIN_EMAILS` ODER role=admin). Suspend
 - **F1 email_verified**: `claimsFromPayload` uebernimmt `email` nur bei `email_verified === true`
   (Strikt-Gleichheit, kein Truthy-Cast) -> Admin-Allowlist nur ueber verifizierte Adressen.
   Test `test/web-auth.test.js` (T-F1-01..07).
-- **F2 nonce**: `/auth/login` erzeugt signiertes `oidc_nonce`-Cookie + `nonce`-Param; `/auth/callback`
-  erzwingt es, `exchange()` bindet das `id_token` timing-sicher (`nonceMatches`). Test T-F2-01..05.
-- **F3 jwks-Rotation**: `discover()` setzt `jwksCache=null` beim TTL-Refresh -> `jwks_uri`-Rotation
-  greift ohne Prozess-Neustart. Test `test/web-auth-oidc.test.js`.
+- **F2 nonce-Cookie**: `/auth/login` erzeugt signiertes `oidc_nonce`-Cookie, `/auth/callback`
+  erzwingt Vorhandensein + Signatur VOR dem Token-Tausch (Same-Session-Bindung). Seit dem WorkOS-
+  UM-Cutover (2026-06-25) KEIN `id_token`-Round-Trip mehr -> Replay-Schutz via PKCE; das Cookie
+  bleibt als zusaetzliche Bindung. Test T-F2-01..05.
+- **F3 jwks-Rotation**: ENTFERNT mit dem WorkOS-UM-Cutover (2026-06-25) — der Web-Login macht keine
+  OIDC-Discovery/JWKS mehr (Identitaet aus der authenticate-Antwort). Die JWKS-Pruefung des
+  `/mcp`-Kanals (`src/auth.js`, Bearer-Access-Token) ist davon unberuehrt.
 - **F4 WITH CHECK**: alle `tenant_isolation`-Policies tragen zusaetzlich `WITH CHECK` -> auch
   INSERT/UPDATE sind tenant-isoliert (nicht nur SELECT/USING). Test `test/rls-with-check.test.js`.
+
+**Bug A — Web-Login auf WorkOS User Management (umgesetzt 2026-06-25, `fix/web-login-workos-um`):**
+
+- **Wurzel**: `makeOidc.authorizeUrl()` nahm den `authorization_endpoint` aus der OIDC-Discovery
+  (`.../oauth2/authorize` = WorkOS OAuth-2.1/Connect-Server). Der kennt User-Management-Apps NICHT
+  -> jeder Login endete auf `/oauth2/error?error=application_not_found` (per `curl` mit der echten
+  `client_id` reproduziert; ein Dummy-`client_id` liefert denselben Fehler).
+- **Fix**: `authorizeUrl` -> `${WORKOS_API_BASE}/user_management/authorize?...&provider=authkit`
+  (PKCE S256 + `state`, kein `scope`/`nonce`); `exchange` -> `POST .../user_management/authenticate`
+  (JSON, `grant_type=authorization_code`, `code`, `code_verifier`, `client_id`, `client_secret`).
+  WorkOS UM liefert `{user, access_token, refresh_token, ...}` OHNE `id_token` -> Identitaet aus
+  `user` (`sub=user.id`, `email` durch das unveraenderte `email_verified`-Gate). `user.id` ==
+  access_token-`sub` -> Web-Login und `/mcp`-Kanal loesen denselben Tenant (`idp_subject`) auf.
+- **Doku-Entscheidung (b)**: Option (a) (`jwtVerify` mit `issuer`/`audience`/`nonce`) ist nicht
+  anwendbar — das WorkOS-`access_token` traegt weder `email` noch `aud` noch `nonce`; die
+  Back-Channel-authenticate-Antwort (client_secret+TLS, single-use code+PKCE) ist die Vertrauens-
+  quelle. OIDC-Discovery/JWKS/`jose`/`nonceMatches` im Web-Login entfernt (toter Code).
+- **Bindungen erhalten**: PKCE = Replay; `oauth_state` = CSRF; `oidc_nonce`-Cookie bleibt als
+  signierte Same-Session-Bindung (kein IdP-Round-Trip moeglich, da kein `id_token`).
+- **Verifikation**: `npm test` (1001 grün), neue `test/web-auth.test.js` T-AC1-01/T-AC2-01..05
+  (authorize-URL + authenticate-Antwortform), F2 angepasst; `oidc.authorizeUrl(...)` per `curl`
+  -> 302 AuthKit-Login (`/bootstrap?...authorization_session_id=...`) statt `application_not_found`.
+- **NICHT geaendert**: `OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` auf Render; keine DCR/Self-Registration.
+  Neue Env `WORKOS_API_BASE` (Default `https://api.workos.com`, konstant Staging=Prod) in
+  `config.js`/`render.yaml`. `.env.example` konnte wegen `.env*`-Read-Guard nicht editiert werden.
 
 **Self-Service-Login-Konvergenz (#3, umgesetzt 2026-06-16, `feat/self-service-web-session`):**
 
