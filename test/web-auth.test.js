@@ -509,6 +509,67 @@ test("T-F2-05: GET /auth/callback Happy-Path: oidc_nonce-Cookie wird beim Cleanu
   }
 });
 
+// ---- Callback-Eingabevalidierung: PKCE-Verifier + code fail-fast ----
+// state und nonce werden bereits mit 400 erzwungen; der PKCE-Verifier (Cookie) und der
+// code-Query-Param ebenso, BEVOR WorkOS angerufen wird (kein null/undefined an
+// authenticate). Fehlt eins -> 400, kein exchange, keine Session.
+
+test("T-CB-01: GET /auth/callback ohne pkce_verifier-Cookie -> 400, kein exchange", async () => {
+  const { deps, calls } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => {
+        calls.exchangeCalled = true;
+        return { claims: { sub: "user-1", email: "neu@kunde.de" } };
+      },
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 400);
+    assert.equal(calls.exchangeCalled, undefined, "exchange darf ohne Verifier nicht laufen");
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-CB-02: GET /auth/callback ohne code-Query-Param -> 400, kein exchange", async () => {
+  const { deps, calls } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => {
+        calls.exchangeCalled = true;
+        return { claims: { sub: "user-1", email: "neu@kunde.de" } };
+      },
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    // Callback ohne code (z.B. WorkOS-Fehler-Redirect)
+    const res = await rawGet(`${srv.base}/auth/callback?state=${state}`, { Cookie: cookies });
+    assert.equal(res.status, 400);
+    assert.equal(calls.exchangeCalled, undefined, "exchange darf ohne code nicht laufen");
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+  } finally {
+    await srv.close();
+  }
+});
+
 // adminOnly-Mount-Muster: req.tenant per Hilfs-Middleware setzen, dann adminOnly.
 async function mountAdmin(adminEmails, tenant) {
   const app = express();

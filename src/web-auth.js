@@ -118,7 +118,8 @@ export function makeWebAuthRoutes(deps) {
   });
 
   // GET /auth/callback
-  // Validiert State (CSRF), tauscht Code gegen id_token, upsert Account, setzt Session-Cookie.
+  // Validiert State (CSRF) + nonce + PKCE-Verifier + code, tauscht den Code bei WorkOS,
+  // upsert Account, setzt Session-Cookie.
   router.get("/auth/callback", async (req, res) => {
     // CSRF: state-Cookie muss vorhanden und mit Query-Param uebereinstimmen
     const signedState = readCookie(req, "oauth_state");
@@ -142,6 +143,15 @@ export function makeWebAuthRoutes(deps) {
     // PKCE-Verifier aus Cookie
     const signedVerifier = readCookie(req, "pkce_verifier");
     const verifier = signedVerifier ? verifyValue(signedVerifier, secret) : null;
+
+    // Verifier + code muessen vorhanden sein, BEVOR wir WorkOS anrufen: ein fehlender
+    // Verifier (Cookie weg/ungueltig) oder ein Callback ohne code (z.B. WorkOS-Fehler-
+    // Redirect ?error=...) wuerde sonst als null/undefined an authenticate gehen. Fail-
+    // fast lokal (400, gleiche generische Meldung wie state/nonce - kein Detail-Leak,
+    // welcher Check scheiterte), statt einen garantiert ungueltigen Request abzusetzen.
+    if (!verifier || typeof req.query.code !== "string" || !req.query.code) {
+      return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+    }
 
     try {
       const { claims } = await oidc.exchange({ code: req.query.code, verifier });
