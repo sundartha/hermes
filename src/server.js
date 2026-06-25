@@ -397,6 +397,12 @@ function extractSpeakOutcome(req, provider) {
 // und die Allowlist lockern (unrestricted/eigene Liste). Denylist, Land-Obergrenze,
 // globales Stundenlimit, Budget und Max-Dauer bleiben harte globale Obergrenzen.
 //
+// Abo-Kopplung (W5, Tenant-Achse): ein AKTIVER, KYC-verifizierter Subscriber gilt im
+// Allowlist-Gate als unrestricted (das Abo ersetzt die statische ALLOWED_NUMBERS); ein
+// suspendierter/geschlossener Tenant wird dort HART abgewiesen (Defense-in-depth). Beides
+// wirkt NUR innerhalb des Allowlist-Gates und lockert KEIN hartes Gate davor. Owner/Bestand
+// (kein explizites kyc_level) bleiben byte-identisch (statische Allowlist).
+//
 // Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde
 // "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
 // startsWith. Eng gefasst, damit normale Mobilnummern (+4915...) durchkommen.
@@ -440,12 +446,30 @@ function userHourReached(profile, requestedBy) {
   return store.countOutboundCallsSince(hourWindowStart(), { requestedBy }) >= limit;
 }
 
-// Allowlist (letztes Gate): profil.unrestricted ODER eine Nummer in der eigenen
-// Profil-Allowlist heben die globale Allowlist auf - sonst gilt sie unveraendert
-// (Bestand). Hebt NUR die Allowlist auf, alle Gates davor liefen schon.
-function allowlistError(to, profile) {
+// Allowlist (letztes Gate): mehrere Lockerungspfade, ALLE optional - schlaegt keiner an,
+// gilt die statische ALLOWED_NUMBERS (Test-/Notbremse, Bestand). Reihenfolge load-bearing:
+//   0. Defense-in-depth (W5): suspendierter/geschlossener Tenant -> HART 403, VOR jeder
+//      Lockerung (ein gueltiges profile.unrestricted hebt das BEWUSST NICHT auf). Abo
+//      gekuendigt / Zahlung gescheitert -> kein freies Waehlen mehr, unabhaengig von der
+//      Stripe-Webhook-Session-Invalidierung (belt-and-suspenders).
+//   1. Admin-Override (Bestand): profile.unrestricted ODER Ziel in profile.allowedNumbers
+//      (Testaccounts, gezielte Freigabe) -> Allowlist erfuellt.
+//   2. Abo-Kopplung (W5): aktiver, KYC-verifizierter Subscriber -> Allowlist erfuellt (das
+//      Abo ersetzt die statische Liste). Owner/Bestand ohne explizites kyc_level fallen
+//      NICHT hierunter (tenantActiveSubscriber) -> byte-identisch zum Bestand.
+//   3. ALLOWED_NUMBERS (reine Test-/Notbremse): leer -> 403, Ziel nicht enthalten -> 403.
+// Hebt NUR die Allowlist auf; alle harten Gates davor (Denylist/Land/Limit) liefen schon.
+// caller = aufgeloeste Aufrufer-Identitaet (profile = Rechte-Achse, tenantId = Tenant-Achse).
+function allowlistError(to, { profile, tenantId }) {
+  if (store.tenantInactive(tenantId))
+    return {
+      status: 403,
+      grund: "abo",
+      message: "Abo inaktiv (Tenant gesperrt). Outbound-Anrufe sind gesperrt.",
+    };
   if (profile.unrestricted) return null;
   if (profile.allowedNumbers?.includes(to)) return null;
+  if (store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) return null;
   if (!config.allowedNumbers.length)
     return {
       status: 403,
@@ -474,9 +498,12 @@ function kycGateError(tenantId) {
   };
 }
 
-// Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null.
-// profile/requestedBy steuern Land-Schnittmenge, pro-Nutzer-Limit und Allowlist.
-function numberGateError(to, profile, requestedBy) {
+// Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null. caller =
+// aufgeloeste Aufrufer-Identitaet { profile, requestedBy, tenantId } (F1: die drei reisen
+// zusammen): profile/requestedBy steuern Land-Schnittmenge + pro-Nutzer-Limit, tenantId
+// (Tenant-Achse) die Abo-Kopplung + den Defense-in-depth-Block im Allowlist-Gate.
+function numberGateError(to, caller) {
+  const { profile, requestedBy } = caller;
   if (isDenied(to))
     return {
       status: 403,
@@ -503,7 +530,7 @@ function numberGateError(to, profile, requestedBy) {
       grund: "stundenlimit_nutzer",
       message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
     };
-  return allowlistError(to, profile);
+  return allowlistError(to, caller);
 }
 
 // Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem Prompt +
@@ -975,7 +1002,7 @@ app.post("/api/calls", async (req, res) => {
   }
 
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
-  const gateErr = numberGateError(to, profile, requestedBy);
+  const gateErr = numberGateError(to, { profile, requestedBy, tenantId });
   if (gateErr) {
     // 400 = Eingabe-/Formatfehler, keine Sicherheits-Ablehnung -> nicht auditieren.
     if (gateErr.status !== 400)

@@ -600,6 +600,36 @@ export function kycReached(s, tenantId, minLevel) {
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 
+// ---- Abo-gekoppeltes Outbound-Allowlist-Gate (W5, Tenant-Achse) ----
+// Ist der Tenant ein AKTIVER, KYC-verifizierter Subscriber? GENAU dann gilt im Outbound-
+// Allowlist-Gate (server.js) das ZIEL als erfuellt - das aktive Abo + KYC ersetzt die
+// statische ALLOWED_NUMBERS-Liste. BEWUSST STRENGER als kycReached: ein EXPLIZIT gesetztes
+// kycLevel (>= minLevel) ist Pflicht. kycReached liefert fuer Owner/Bestand (kein kycLevel-
+// Feld) bewusst true - das wuerde auch den Owner-/Bestandspfad lockern und ihn vom heutigen
+// Verhalten (statische Allowlist) abweichen lassen (Regress). Der zahlende Subscriber
+// unterscheidet sich vom Owner GENAU durch das gesetzte kyc_level; nur er wird gelockert.
+// Lockert NIE ein hartes Gate (Denylist/Land/Limit/Budget) - dies ist nur das Allowlist-
+// Erfuellungssignal. Reine Query, kein IO.
+export function tenantActiveSubscriber(s, tenantId, minLevel) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE) return false;
+  if (tenant.kycLevel == null) return false; // Owner/Bestand: kein Abo-Subscriber
+  return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
+}
+
+// Defense-in-depth fuers Outbound-Gate (W5): ist der Tenant gesperrt/geschlossen? Ein
+// EXISTIERENDER Tenant mit status !== active (suspended nach Abo-Kuendigung/Zahlungsausfall,
+// oder closed) darf NICHT mehr frei waehlen - das prueft das Gate HART, VOR jeder Profil-/
+// Abo-Lockerung. Verlaesst sich NICHT allein auf die Stripe-Webhook-Session-Invalidierung
+// (belt-and-suspenders: der Status lebt am selben tenant-Record, den accounts.setStatus
+// schreibt). Fehlender Tenant -> false (KEIN Hard-Block: der vorgelagerte TENANT_REJECT-
+// Riegel deckt unbekannte Identitaeten ab, und Owner/Bestand bleiben byte-identisch). Reine
+// Query, kein IO.
+export function tenantInactive(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return !!tenant && tenant.status !== TENANT_STATUS.ACTIVE;
+}
+
 // ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
 // Setzt die Stripe-Referenzen eines Tenants. Reine Mutation, kein IO (Wrapper saved).
 // patch = { customerId?, paymentMethodId? }: NUR uebergebene Keys werden gesetzt

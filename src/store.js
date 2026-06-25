@@ -109,6 +109,12 @@ export const {
   markMeterEventsSent,
   setKycLevel,
   kycReached,
+  // W5: Abo-gekoppeltes Outbound-Allowlist-Gate - Lockerungssignal (aktiver, KYC-
+  // verifizierter Subscriber) + Defense-in-depth-Hard-Block (suspended/closed). OHNE
+  // diese Re-Exports sind sie auf der Fassade undefined -> das Gate in server.js wuerfe
+  // zur Laufzeit einen TypeError. Muster wie kycReached (reine Queries).
+  tenantActiveSubscriber,
+  tenantInactive,
   setTenantStripe,
   tenantStripe,
   // W4: Abo-Referenzen - Setter (Subscribe + Webhook) + Reader (Self-Service-View) +

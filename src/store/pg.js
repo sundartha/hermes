@@ -183,6 +183,11 @@ export function makePgStore(runner) {
     },
     kycReached: (tenantId, minLevel) => ops.kycReached(requireState(), tenantId, minLevel),
 
+    // ---- Abo-gekoppeltes Outbound-Allowlist-Gate (W5): Wrapper-Parity zu json.js ----
+    tenantActiveSubscriber: (tenantId, minLevel) =>
+      ops.tenantActiveSubscriber(requireState(), tenantId, minLevel),
+    tenantInactive: (tenantId) => ops.tenantInactive(requireState(), tenantId),
+
     // ---- Stripe-Customer/Karte pro Tenant (Pay1): Wrapper-Parity zu json.js ----
     setTenantStripe(tenantId, patch) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);

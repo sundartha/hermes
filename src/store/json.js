@@ -397,6 +397,18 @@ export function kycReached(tenantId, minLevel) {
   return ops.kycReached(load(), tenantId, minLevel);
 }
 
+// ---- Abo-gekoppeltes Outbound-Allowlist-Gate (W5) ----
+// Beide reine Queries (kein save, analog kycReached): tenantActiveSubscriber liefert dem
+// Gate das Allowlist-Lockerungssignal (aktiver + KYC-verifizierter Subscriber),
+// tenantInactive den Defense-in-depth-Hard-Block (suspendierter/geschlossener Tenant).
+export function tenantActiveSubscriber(tenantId, minLevel) {
+  return ops.tenantActiveSubscriber(load(), tenantId, minLevel);
+}
+
+export function tenantInactive(tenantId) {
+  return ops.tenantInactive(load(), tenantId);
+}
+
 // ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
 // setTenantStripe mutiert -> save (Muster wie setKycLevel); tenantStripe ist reine
 // Query (kein save, analog kycReached).
