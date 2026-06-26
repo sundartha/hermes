@@ -1,0 +1,22 @@
+{
+  "name": "hermes-animation-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes Animation Lab — isolierte Dev-Umgebung fuer die Fluegel-Mesh-Animation (PixiJS 8 + GSAP). Eigenes Paket/Lockfile, deployt nicht, beruehrt MCP-Server und apps/web nicht.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "capture": "node scripts/capture-keyposes.mjs"
+  },
+  "dependencies": {
+    "gsap": "^3.12.5",
+    "pixi.js": "^8.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
+  }
+}

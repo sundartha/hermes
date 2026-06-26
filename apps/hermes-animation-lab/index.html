@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes Animation Lab</title>
+  </head>
+  <body>
+    <header class="lab-header">
+      <h1>Hermes Animation Lab</h1>
+      <p class="lab-sub">
+        Ein Fluegel, ein Mesh, drei Bewegungsvarianten. Deterministische Verformung
+        ueber GSAP-gesteuerte Parameter.
+      </p>
+      <p class="lab-note" id="reduced-motion-note" hidden>
+        <code>prefers-reduced-motion</code> ist aktiv — statischer Fluegel, keine Animation.
+      </p>
+    </header>
+
+    <!-- Drei Presets nebeneinander (je eine eigenstaendige Einzel-Instanz) -->
+    <section class="lab-section">
+      <h2>Presets</h2>
+      <div class="preset-gallery" id="preset-gallery">
+        <figure class="preset-tile" data-preset="classic">
+          <div class="canvas-host" data-role="tile-classic"></div>
+          <figcaption><strong>A · Hermes Classic</strong><span>Cartoon-Doppelschlag</span></figcaption>
+          <button type="button" class="tile-load" data-load="classic">In Stage laden</button>
+        </figure>
+        <figure class="preset-tile" data-preset="rapid">
+          <div class="canvas-host" data-role="tile-rapid"></div>
+          <figcaption><strong>B · Rapid Messenger</strong><span>Drei schnelle Schlaege</span></figcaption>
+          <button type="button" class="tile-load" data-load="rapid">In Stage laden</button>
+        </figure>
+        <figure class="preset-tile" data-preset="premium">
+          <div class="canvas-host" data-role="tile-premium"></div>
+          <figcaption><strong>C · Premium UI</strong><span>Eleganter Doppelschlag</span></figcaption>
+          <button type="button" class="tile-load" data-load="premium">In Stage laden</button>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Haupt-Stage: von den Reglern gesteuert -->
+    <section class="lab-section lab-stage-section">
+      <h2>Stage <span class="muted" id="active-preset-label">(classic)</span></h2>
+      <div class="stage-grid">
+        <div class="stage-wrap" data-bg="brand">
+          <div class="canvas-host stage-host" id="stage-host" data-role="stage"></div>
+        </div>
+
+        <div class="stage-controls">
+          <div class="control-row">
+            <span class="control-label">Status</span>
+            <div class="btn-group" id="status-group">
+              <button type="button" data-status="idle">idle</button>
+              <button type="button" data-status="connecting">connecting</button>
+              <button type="button" data-status="working" class="is-active">working</button>
+              <button type="button" data-status="success">success</button>
+              <button type="button" data-status="error">error</button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <span class="control-label">Transport</span>
+            <div class="btn-group" id="transport-group">
+              <button type="button" data-action="play">Play</button>
+              <button type="button" data-action="pause">Pause</button>
+              <button type="button" data-action="restart">Neustart</button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <span class="control-label">Tempo</span>
+            <div class="btn-group" id="rate-group">
+              <button type="button" data-rate="0.25">0,25×</button>
+              <button type="button" data-rate="0.5">0,5×</button>
+              <button type="button" data-rate="1" class="is-active">1×</button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <span class="control-label">Hintergrund</span>
+            <div class="btn-group" id="bg-group">
+              <button type="button" data-bg="white">Weiss</button>
+              <button type="button" data-bg="dark">Dunkel</button>
+              <button type="button" data-bg="checker">Transparent</button>
+              <button type="button" data-bg="brand" class="is-active">Marke</button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <span class="control-label">Groesse</span>
+            <div class="btn-group" id="size-group">
+              <button type="button" data-size="48">48</button>
+              <button type="button" data-size="96">96</button>
+              <button type="button" data-size="240" class="is-active">240</button>
+              <button type="button" data-size="500">500</button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <label class="check"><input type="checkbox" id="root-marker" /> Root-Punkt anzeigen</label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Regler -->
+    <section class="lab-section">
+      <h2>Parameter</h2>
+      <div class="sliders" id="sliders"><!-- per JS befuellt --></div>
+
+      <div class="actions">
+        <button type="button" id="btn-reset">Reset</button>
+        <button type="button" id="btn-copy">Parameter als JSON kopieren</button>
+        <span class="copy-feedback" id="copy-feedback" aria-live="polite"></span>
+      </div>
+
+      <pre class="json-readout" id="json-readout" aria-live="polite"></pre>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

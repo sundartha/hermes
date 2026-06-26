@@ -1,0 +1,254 @@
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --ink: #25282b;
+  --muted: #6b7177;
+  --line: #e2e5e9;
+  --brand: #e60000;
+  --brand-surface: #f6eee9;
+  --radius: 12px;
+  --gap: 16px;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  max-width: 1100px;
+  margin-inline: auto;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 4px;
+}
+h2 {
+  font-size: 1.05rem;
+  margin: 0 0 12px;
+  letter-spacing: 0.01em;
+}
+.muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.lab-header {
+  margin-bottom: 24px;
+}
+.lab-sub {
+  margin: 0;
+  color: var(--muted);
+  max-width: 60ch;
+}
+.lab-note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  background: #fff6e5;
+  border: 1px solid #f0d9a8;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.lab-section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+/* --- Preset-Galerie ------------------------------------------------------ */
+.preset-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+}
+.preset-tile {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--brand-surface);
+}
+.preset-tile figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.82rem;
+}
+.preset-tile figcaption span {
+  color: var(--muted);
+}
+
+/* --- Canvas-Hosts -------------------------------------------------------- */
+.canvas-host {
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+.canvas-host canvas {
+  display: block;
+}
+
+/* --- Stage --------------------------------------------------------------- */
+.stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 820px) {
+  .stage-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stage-wrap {
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  /* feste Hoehe = kein Layout-Shift bei Groessenwechsel */
+  min-height: 540px;
+}
+.stage-wrap[data-bg="white"] {
+  background: #ffffff;
+}
+.stage-wrap[data-bg="dark"] {
+  background: #15171a;
+}
+.stage-wrap[data-bg="brand"] {
+  background: var(--brand-surface);
+}
+.stage-wrap[data-bg="checker"] {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #d9dde2 25%, transparent 25%),
+    linear-gradient(-45deg, #d9dde2 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d9dde2 75%),
+    linear-gradient(-45deg, transparent 75%, #d9dde2 75%);
+  background-size: 22px 22px;
+  background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+}
+
+.stage-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.control-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+.btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+button {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+button:hover {
+  border-color: #c4c9cf;
+}
+button.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.tile-load {
+  font-size: 0.76rem;
+  padding: 5px 10px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+/* --- Sliders ------------------------------------------------------------- */
+.sliders {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px 24px;
+}
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.slider-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+.slider-head output {
+  font-variant-numeric: tabular-nums;
+  color: var(--brand);
+  font-weight: 600;
+}
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--brand);
+}
+
+/* --- Aktionen + JSON ----------------------------------------------------- */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.copy-feedback {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.json-readout {
+  margin: 16px 0 0;
+  padding: 14px;
+  background: #1d2024;
+  color: #e7eaee;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  overflow: auto;
+  max-height: 320px;
+}
+.boot-error {
+  background: #fde8e8;
+  color: #8a1f1f;
+  padding: 16px;
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+}
