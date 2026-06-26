@@ -60,3 +60,13 @@ test("Cross-Package-Drift: Marketing-Spiegel ist 1:1 zum Backend-Katalog", () =>
   // (Deploy-Isolation: getrennte Render-Services) ist hier ein roter Build.
   assert.deepEqual(WEB_CATALOG, PLAN_CATALOG);
 });
+
+// BK1: die Dashboard-Kacheln rendern features[] (Leistungsliste) + GENAU eine Popular-
+// Markierung. Pinnt die Daten, auf die sich die In-App-Pricing-Ansicht verlaesst
+// (GET /api/plans gibt PLAN_CATALOG verbatim zurueck).
+test("Katalog traegt die Kachel-Render-Daten: features[] nichtleer, genau ein featured", () => {
+  for (const plan of PLAN_CATALOG) {
+    assert.ok(Array.isArray(plan.features) && plan.features.length > 0, `${plan.slug}: features leer`);
+  }
+  assert.equal(PLAN_CATALOG.filter((p) => p.featured).length, 1, "genau ein featured (Popular)");
+});

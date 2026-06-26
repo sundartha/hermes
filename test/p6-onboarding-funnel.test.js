@@ -56,16 +56,18 @@ test("Flush reaktiviert einen geschlossenen Tenant NICHT", async () => {
   assert.equal((await accounts.resolve(SUB)).status, "closed");
 });
 
-// (B) Dedizierte Plan-Auswahl: genau zwei Plaene mit Preisen, KEIN Free.
-test("tenant.html: Plan-Auswahl Starter/Business mit Preisen, kein Free", () => {
+// (B) BK1: Kacheln kommen aus dem geteilten Katalog (GET /api/plans, SSoT), NICHT mehr aus
+// lokalen Preis-Literalen. Drift-Guard: keine hartkodierten Preise/Slugs mehr; Features +
+// Popular-Badge werden gerendert; weiterhin kein Free-Tarif.
+test("tenant.html: Pricing-Kacheln aus /api/plans, keine Preis-Literale, kein Free", () => {
   const dir = path.dirname(fileURLToPath(import.meta.url));
   const html = fs.readFileSync(path.join(dir, "../public/tenant.html"), "utf8");
-  assert.match(html, /data-plan="starter"/);
-  assert.match(html, /data-plan="business"/);
-  assert.equal((html.match(/data-plan=/g) || []).length, 2, "genau zwei Plaene");
-  assert.match(html, /4,99/);
-  assert.match(html, /9,99/);
-  assert.match(html, /PLAN_PRICES/); // Preise als benannte Konstante (G25)
+  assert.match(html, /\/api\/plans/);            // Katalog ist die Datenquelle
+  assert.doesNotMatch(html, /PLAN_PRICES/);      // altes Preis-Literal entfernt
+  assert.doesNotMatch(html, /4,99/);             // keine hartkodierten Preise (Drift-Guard)
+  assert.doesNotMatch(html, /9,99/);
+  assert.match(html, /Popular/);                 // Featured-Badge (Parity zur Marketing-Seite)
+  assert.match(html, /plan-features/);           // Leistungs-Liste je Kachel
   assert.doesNotMatch(html, /data-plan="free"/i);
   assert.doesNotMatch(html, /Kostenlos|Gratis/i);
 });

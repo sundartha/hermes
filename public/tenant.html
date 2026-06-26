@@ -83,10 +83,15 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
 .empty{color:var(--text-muted);font-size:13px;text-align:center;padding:22px 8px}
 /* p6-funnel: Plan-Auswahl-Karten (Starter/Business, KEIN Free) */
 .plans{display:flex;gap:14px;flex-wrap:wrap}
-.plan{flex:1 1 200px;border:1px solid var(--navy-700);border-radius:15px;padding:18px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;gap:10px}
+.plan{position:relative;flex:1 1 200px;border:1px solid var(--navy-700);border-radius:15px;padding:18px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;gap:10px}
+.plan--featured{border-color:rgba(255,255,255,.5)}
+.plan-badge{position:absolute;top:-10px;right:14px;background:#fff;color:var(--ink-pill);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 10px;border-radius:99px}
 .plan-name{font-weight:600;font-size:15px}
 .plan-price{font-size:24px;font-weight:600}
 .plan-per{font-size:12.5px;font-weight:500;color:var(--text-muted)}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:7px;margin:2px 0 4px}
+.plan-feature{font-size:13px;color:var(--text-soft);padding-left:18px;position:relative}
+.plan-feature::before{content:"\2713";position:absolute;left:0;color:var(--ok);font-weight:700}
 .plan-cta{align-self:flex-start;margin-top:auto}
 </style>
 </head>
@@ -138,18 +143,10 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
            + Verlaengerungsdatum (Cancel ist ein Folge-Ticket, hier nur Anzeige). -->
       <div id="subBlock" style="margin-top:18px">
         <div id="subStatus" class="hint" style="margin-bottom:14px"></div>
-        <div id="subButtons" class="plans">
-          <div class="plan">
-            <div class="plan-name">Starter</div>
-            <div class="plan-price"><span data-price="starter"></span><span class="plan-per"> / Monat</span></div>
-            <button class="btn btn-primary plan-cta" data-plan="starter">Abonnieren</button>
-          </div>
-          <div class="plan">
-            <div class="plan-name">Business</div>
-            <div class="plan-price"><span data-price="business"></span><span class="plan-per"> / Monat</span></div>
-            <button class="btn btn-primary plan-cta" data-plan="business">Abonnieren</button>
-          </div>
-        </div>
+        <!-- BK1: Kacheln aus dem geteilten Plan-Katalog (GET /api/plans, SSoT src/plans.js)
+             gerendert - kein lokales Preis-/Leistungs-Literal mehr (G5/S2, kein Drift zur
+             Marketing-Seite preise.astro). Gefuellt von renderPlanCards(). -->
+        <div id="subButtons" class="plans"></div>
         <span class="msg" id="subMsg"></span>
       </div>
     </div>
@@ -167,14 +164,59 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
 <script>
 const $ = (id) => document.getElementById(id);
 
-// p6-funnel: dedizierte Plan-Preise (Starter/Business, KEIN Free). Benannte Konstante
-// (G25, keine Magic Number) - reine Anzeige; MUSS zum je-Slug hinterlegten Stripe-Price
-// (PLAN_SLUGS in src/billing/subscribe.js) passen. Waehrung konsistent (EUR).
-const PLAN_PRICES = Object.freeze({ starter: "4,99 €", business: "9,99 €" });
-function fillPlanPrices(){
-  document.querySelectorAll("[data-price]").forEach((el)=>{
-    el.textContent = PLAN_PRICES[el.dataset.price] || "";
-  });
+// BK1: Pricing-Kacheln aus dem geteilten Plan-Katalog (GET /api/plans, SSoT src/plans.js).
+// Kein lokales Preis-/Leistungs-Literal mehr (G5/S2: eine Quelle, kein Drift zur Marketing-
+// Seite). amountCents bleibt Ganzzahl (G26); erst an der Anzeige-Grenze wird durch CENTS_PER_EURO
+// dividiert und ueber Intl.NumberFormat im de-DE-Format lokalisiert (Komma-Dezimaltrenner +
+// Euro-Symbol). currency ist server-kontrolliert (eingefrorener Katalog), kein User-Input.
+const CENTS_PER_EURO = 100; // Anzeige-Grenze: Katalog haelt Cents, Intl will die Major-Einheit
+let planCatalog = null;     // einmal geladener Katalog (gecacht; aendert sich pro Sitzung nicht)
+
+function formatPlanPrice(amountCents, currency){
+  return new Intl.NumberFormat("de-DE", { style:"currency", currency: String(currency).toUpperCase() })
+    .format(amountCents / CENTS_PER_EURO);
+}
+
+// Laedt den oeffentlichen Katalog (auth-exempt, kein Login noetig). Fail-soft: JEDER Fehler
+// (HTTP !ok, fetch-Rejection bei offline/DNS/Reset, non-JSON Body eines Proxy/Interstitial)
+// -> leeres Array statt Reject. Damit ist garantiert, dass das Promise nie rejectet und der
+// Bootstrap-Aufrufer refresh() immer ausfuehrt (das Dashboard haengt nicht am Katalog-Fetch).
+// "load" macht den Fetch-Nebeneffekt im Namen sichtbar (N7); der Cache ist Memoisierung eines
+// Reads, kein DI-Lazy-Init (P15 betrifft Objekt-Konstruktion im Fachcode, nicht einen Fetch).
+async function loadPlanCatalog(){
+  if(planCatalog) return planCatalog;
+  try {
+    const r = await fetch("/api/plans");
+    planCatalog = r.ok ? await r.json() : [];
+  } catch {
+    planCatalog = []; // Netzfehler oder non-JSON Body -> leerer Katalog statt Crash
+  }
+  return planCatalog;
+}
+
+// Anzeige-Name aus dem Katalog (SSoT); Fallback Slug-kapitalisiert, falls Katalog noch
+// nicht geladen ist. Eine Namensquelle fuer Kachel UND Aktiv-Status (G5/G11).
+function planName(slug){
+  const p = (planCatalog || []).find((x)=>x.slug===slug);
+  return p ? p.name : slug.charAt(0).toUpperCase()+slug.slice(1);
+}
+
+// Eine Kachel aus einem Katalog-Plan. Einheitlich escaped wie renderCalls (G11); featured
+// -> "Popular"-Badge (Parity zu preise.astro). Reine Praesentation, keine Logik.
+function planCard(plan){
+  const price = formatPlanPrice(plan.amountCents, plan.currency);
+  const badge = plan.featured ? '<span class="plan-badge">Popular</span>' : "";
+  const features = plan.features.map((f)=>`<li class="plan-feature">${esc(f)}</li>`).join("");
+  return `<div class="plan${plan.featured?" plan--featured":""}">${badge}
+    <div class="plan-name">${esc(plan.name)}</div>
+    <div class="plan-price">${esc(price)}<span class="plan-per"> / Monat</span></div>
+    <ul class="plan-features">${features}</ul>
+    <button class="btn btn-primary plan-cta" data-plan="${esc(plan.slug)}">Abonnieren</button>
+  </div>`;
+}
+
+function renderPlanCards(plans){
+  $("subButtons").innerHTML = plans.map(planCard).join("");
 }
 
 // Web-Session-only (Konvergenz #3): das Session-Cookie (HttpOnly, same-origin) wird
@@ -230,17 +272,19 @@ function renderBilling(s){
   renderSubscription(s);
 }
 
-// W4: Abo-Anzeige. Mit aktivem Plan -> Plan + Verlaengerungsdatum, Plan-Buttons aus.
-// Ohne Abo -> die Plan-Buttons (Subscribe). Cancel ist ein Folge-Ticket (nur Anzeige).
+// W4/BK1: Mit aktivem Plan -> Name (Katalog-SSoT) + Verlaengerungsdatum, Kacheln aus
+// (keine doppelte Buchungsoption, Plan-Wechsel ist Folge-Ticket §7.5). Ohne Abo -> die
+// Pricing-Kacheln aus dem Katalog. #subStatus-Logik beibehalten.
 function renderSubscription(s){
   const sub = s.subscription || {};
   if(sub.planSlug){
     const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString("de-DE") : "";
-    const name = sub.planSlug.charAt(0).toUpperCase()+sub.planSlug.slice(1);
+    const name = planName(sub.planSlug);
     $("subStatus").textContent = until ? `Aktiver Plan: ${name} (verlaengert am ${until}).` : `Aktiver Plan: ${name}.`;
     $("subButtons").style.display="none";
   } else {
     $("subStatus").textContent = "Kein aktives Abo. Waehle einen Plan.";
+    renderPlanCards(planCatalog || []);
     $("subButtons").style.display="";
   }
 }
@@ -275,26 +319,31 @@ $("logoutBtn").onclick = async ()=>{
 // Karte hinzufuegen: POST liefert die Stripe-Checkout-URL -> Browser-Redirect dorthin.
 $("addCard").onclick = ()=>{ const m=$("cardMsg"); m.className="msg"; startCardSetup(m); };
 
-// W4: Abo buchen. POST {plan} -> bei Erfolg ist der Tenant aktiv (Status-Flip im Server);
-// 409 no_card -> erst Karte hinterlegen; sonst kurze Fehlermeldung. Danach refresh().
-document.querySelectorAll("[data-plan]").forEach(btn=>{
-  btn.onclick = async ()=>{
-    const m=$("subMsg"); m.className="msg";
-    const r = await fetch("/api/self-service/billing/subscribe", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ plan: btn.dataset.plan }),
-    });
-    if(r.ok){ m.textContent="Abo gebucht."; m.className="msg ok"; refresh(); }
-    else if(r.status===409){
-      const e = await r.json().catch(()=>({}));
-      if(e.error==="no_card"){ startCardSetup(m); return; } // P5: gefuehrt -> erst Karte, dann zurueck + Plan
-      m.textContent="Du hast bereits ein Abo."; m.className="msg err";
-    }
-    else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
-    else{ m.textContent="Abo konnte nicht gebucht werden."; m.className="msg err"; }
-    setTimeout(()=>m.className="msg",3000);
-  };
+// W4/BK1: Abo buchen. POST {plan} -> Erfolg = Tenant aktiv (Status-Flip im Server);
+// 409 no_card -> gefuehrter Checkout; 409 sonst = bereits aboniert; 401 -> neu anmelden.
+async function subscribePlan(plan){
+  const m=$("subMsg"); m.className="msg";
+  const r = await fetch("/api/self-service/billing/subscribe", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ plan }),
+  });
+  if(r.ok){ m.textContent="Abo gebucht."; m.className="msg ok"; refresh(); }
+  else if(r.status===409){
+    const e = await r.json().catch(()=>({}));
+    if(e.error==="no_card"){ startCardSetup(m); return; } // P5: gefuehrt -> erst Karte, dann zurueck + Plan
+    m.textContent="Du hast bereits ein Abo."; m.className="msg err";
+  }
+  else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
+  else{ m.textContent="Abo konnte nicht gebucht werden."; m.className="msg err"; }
+  setTimeout(()=>m.className="msg",3000);
+}
+
+// Delegation: die Kacheln sind dynamisch (Katalog) -> ein Listener am stabilen Container
+// statt Binding pro Button (G5, kein Listener-Leak bei Neu-Render).
+$("subButtons").addEventListener("click", (ev)=>{
+  const btn = ev.target.closest("[data-plan]");
+  if(btn) subscribePlan(btn.dataset.plan);
 });
 
 // Rueckkehr von Stripe Checkout: kurze Rueckmeldung (der Status kommt ohnehin aus refresh()).
@@ -307,8 +356,9 @@ document.querySelectorAll("[data-plan]").forEach(btn=>{
   history.replaceState(null, "", location.pathname); // Query entfernen (sauberer Reload)
 })();
 
-fillPlanPrices();
-refresh();
+// BK1: Katalog zuerst (Kachel-Daten), dann der Status-Render. loadPlanCatalog ist fail-
+// soft -> ein Fetch-Fehler laesst die Seite laufen (nur Kacheln leer).
+loadPlanCatalog().then(refresh);
 </script>
 </body>
 </html>
