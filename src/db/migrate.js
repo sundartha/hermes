@@ -24,7 +24,13 @@ export async function applySchema(db) {
 // CODE-Defaults (defaults.js) - identisch zum frischen json-Zustand. Leere
 // calls/actionItems/notifications/profiles brauchen keinen Insert.
 export async function seedDefaults(db, tenantId) {
-  await db.query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [tenantId]);
+  // Owner-Lockout-Schutz (Invariante O, p6-funnel): der Status-Default ist seit p6
+  // 'suspended' (fail-safe). Der Owner/Bootstrap-Tenant MUSS explizit 'active' sein,
+  // sonst sperrt der neue Default den Owner aus. ON CONFLICT DO NOTHING haelt es
+  // idempotent (bestehende Owner-Zeile bleibt unveraendert).
+  await db.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active') ON CONFLICT DO NOTHING`, [
+    tenantId,
+  ]);
 
   const s = defaultSettings();
   await db.query(

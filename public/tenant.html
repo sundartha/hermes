@@ -81,6 +81,13 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
 .st.completed{background:rgba(31,170,89,.16);color:#7fe3aa}
 .st.failed{background:rgba(255,255,255,.1);color:var(--text-muted)}
 .empty{color:var(--text-muted);font-size:13px;text-align:center;padding:22px 8px}
+/* p6-funnel: Plan-Auswahl-Karten (Starter/Business, KEIN Free) */
+.plans{display:flex;gap:14px;flex-wrap:wrap}
+.plan{flex:1 1 200px;border:1px solid var(--navy-700);border-radius:15px;padding:18px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;gap:10px}
+.plan-name{font-weight:600;font-size:15px}
+.plan-price{font-size:24px;font-weight:600}
+.plan-per{font-size:12.5px;font-weight:500;color:var(--text-muted)}
+.plan-cta{align-self:flex-start;margin-top:auto}
 </style>
 </head>
 <body>
@@ -131,9 +138,17 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
            + Verlaengerungsdatum (Cancel ist ein Folge-Ticket, hier nur Anzeige). -->
       <div id="subBlock" style="margin-top:18px">
         <div id="subStatus" class="hint" style="margin-bottom:14px"></div>
-        <div id="subButtons">
-          <button class="btn btn-primary" data-plan="starter">Starter abonnieren</button>
-          <button class="btn btn-primary" data-plan="business">Business abonnieren</button>
+        <div id="subButtons" class="plans">
+          <div class="plan">
+            <div class="plan-name">Starter</div>
+            <div class="plan-price"><span data-price="starter"></span><span class="plan-per"> / Monat</span></div>
+            <button class="btn btn-primary plan-cta" data-plan="starter">Abonnieren</button>
+          </div>
+          <div class="plan">
+            <div class="plan-name">Business</div>
+            <div class="plan-price"><span data-price="business"></span><span class="plan-per"> / Monat</span></div>
+            <button class="btn btn-primary plan-cta" data-plan="business">Abonnieren</button>
+          </div>
         </div>
         <span class="msg" id="subMsg"></span>
       </div>
@@ -151,6 +166,16 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// p6-funnel: dedizierte Plan-Preise (Starter/Business, KEIN Free). Benannte Konstante
+// (G25, keine Magic Number) - reine Anzeige; MUSS zum je-Slug hinterlegten Stripe-Price
+// (PLAN_SLUGS in src/billing/subscribe.js) passen. Waehrung konsistent (EUR).
+const PLAN_PRICES = Object.freeze({ starter: "4,99 €", business: "9,99 €" });
+function fillPlanPrices(){
+  document.querySelectorAll("[data-price]").forEach((el)=>{
+    el.textContent = PLAN_PRICES[el.dataset.price] || "";
+  });
+}
 
 // Web-Session-only (Konvergenz #3): das Session-Cookie (HttpOnly, same-origin) wird
 // vom Browser automatisch mitgeschickt - kein Authorization-Header, kein localStorage,
@@ -282,6 +307,7 @@ document.querySelectorAll("[data-plan]").forEach(btn=>{
   history.replaceState(null, "", location.pathname); // Query entfernen (sauberer Reload)
 })();
 
+fillPlanPrices();
 refresh();
 </script>
 </body>

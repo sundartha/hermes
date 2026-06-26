@@ -648,13 +648,18 @@ async function flushTenantScope(client, tenantId, state) {
 // owner_name/idp_subject sind NULLABLE; ein Owner ohne eigenen Namen schreibt NULL
 // (Owner-Fallback bleibt). Lebt VOR den tenant-scoped Inserts, weil diese per FK
 // auf tenant(id) verweisen.
+// p6-funnel: Der Lebenszyklus-status gehoert der accounts-Schicht (upsertOnFirstLogin
+// = suspended bei Anlage, setStatus = Admin/Aktivierung/Webhook, seedDefaults = Owner).
+// Beim INSERT setzt der Flush status (neuer Mirror-only-Tenant: Operator-Onboard/Owner);
+// per ON CONFLICT wird status NICHT ueberschrieben - sonst degradiert/reaktiviert der
+// Mirror einen bestehenden Tenant (Clobber des suspended frischer Web-Logins).
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
       `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, country, default_language, private_number)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        ON CONFLICT (id) DO UPDATE SET
-         status=EXCLUDED.status, owner_name=EXCLUDED.owner_name,
+         owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
