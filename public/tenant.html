@@ -6,114 +6,107 @@
 <title>Hermes — Mein Bereich</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --vf-red:#e60000;--vf-red-deep:#ac1811;--vf-ink:#25282b;--vf-mute:#7e7e7e;
-  --vf-canvas:#fff;--vf-neutral:#f2f2f2;--vf-signal:#3860be;
-  --ease:cubic-bezier(0.22,1,0.36,1);--font:'Inter','Helvetica Neue',Arial,sans-serif;
-  --shadow:0 6px 18px rgba(0,0,0,.07);
+  /* Sundartha-Navy - 1:1 aus apps/web/src/styles/tokens/hero.css (kein Vodafone-Rot mehr) */
+  --navy-900:#0a2245;   /* tiefster Gradient-Stop */
+  --navy-800:#0f2d52;   /* Grundton */
+  --navy-700:#1b4f86;   /* heller Akzent + Card-Border */
+  --surface:#13335c;    /* Card-Flaeche */
+  --ink-pill:#10305a;   /* Text auf weisser Pill */
+  --text:#ffffff;
+  --text-soft:rgba(255,255,255,.82);
+  --text-muted:rgba(255,255,255,.7);
+  --live:#1faa59;       /* Live-Dot aktiv */
+  --live-off:rgba(255,255,255,.3);
+  --ok:#5fd39a;         /* Erfolgs-Text auf Navy */
+  --danger:#ff8a8a;     /* Fehler-Text auf Navy */
+  --bg:radial-gradient(120% 90% at 50% 0%,#1b4f86 0%,#0f2d52 55%,#0a2245 100%);
+  --ease:cubic-bezier(0.22,1,0.36,1);
+  --font:'Space Grotesk','Helvetica Neue',Arial,sans-serif;
+  --shadow:0 18px 40px -24px rgba(7,18,40,.7);
+  --shadow-pill:0 10px 26px -12px rgba(7,18,40,.7);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--font);background:#fafafa;color:var(--vf-ink);font-size:15px;line-height:1.5}
-::selection{background:var(--vf-red);color:#fff}
+body{font-family:var(--font);background:var(--navy-900);background-image:var(--bg);background-attachment:fixed;color:var(--text);font-size:15px;line-height:1.5;min-height:100vh}
+::selection{background:var(--navy-700);color:#fff}
 .wrap{max-width:1180px;margin:0 auto;padding:30px 28px 80px}
 
-/* Header */
+/* Header / Wortmarke */
 .top{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:28px}
-.logo-mark{width:44px;height:44px;border-radius:50%;background:var(--vf-red);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.top h1{font-size:26px;font-weight:800;letter-spacing:-.015em}
-.top h1 span{color:var(--vf-red)}
-.top .sub{color:var(--vf-mute);font-size:13px}
+.brand{display:flex;align-items:center;gap:13px}
+.logo-mark{width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.brand-text{display:flex;flex-direction:column;line-height:1.12}
+.brand-name{font-weight:600;font-size:20px;letter-spacing:.04em}
+.brand-by{font-size:10.5px;text-transform:uppercase;letter-spacing:.16em;color:var(--text-muted);font-weight:600}
 .spacer{flex:1}
-.agent-chip{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid #ececec;border-radius:16px;padding:10px 16px;box-shadow:var(--shadow)}
-.dot{width:10px;height:10px;border-radius:50%;background:#1faa59}
-.dot.off{background:#c4c4c4}
-.agent-chip .num{font-weight:700;font-size:15px}
-.agent-chip .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--vf-mute);font-weight:600}
 
-/* Grid + cards */
+/* Grid + Cards */
 .grid{display:grid;gap:20px;grid-template-columns:repeat(12,1fr)}
-.card{background:#fff;border:1px solid #ececec;border-radius:18px;padding:24px;box-shadow:var(--shadow)}
+.card{background:var(--surface);border:1px solid var(--navy-700);border-radius:18px;padding:24px;box-shadow:var(--shadow)}
 .c4{grid-column:span 4}.c6{grid-column:span 6}.c8{grid-column:span 8}.c12{grid-column:span 12}
 @media(max-width:980px){.c4,.c6,.c8{grid-column:span 12}}
-h3{font-size:16px;font-weight:800;margin-bottom:4px}
-.hint{color:var(--vf-mute);font-size:13px;margin-bottom:16px}
+h3{font-size:16px;font-weight:600;margin-bottom:4px}
+.hint{color:var(--text-muted);font-size:13px;margin-bottom:16px}
 
-/* Forms / buttons */
-label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--vf-mute);margin:14px 0 6px}
-.fi{width:100%;border:1.5px solid #e2e2e2;border-radius:12px;padding:11px 13px;font-family:var(--font);font-size:14px;color:var(--vf-ink);transition:border .2s}
-.fi:focus{outline:none;border-color:var(--vf-red)}
-.btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:12px;padding:12px 20px;font-family:var(--font);font-weight:700;font-size:14px;cursor:pointer;transition:all .22s var(--ease)}
-.btn-red{background:var(--vf-red);color:#fff}
-.btn-red:hover{background:var(--vf-red-deep)}
-.btn-ghost{background:var(--vf-neutral);color:var(--vf-ink)}
+/* Agent-Rufnummer (prominente eigene Anzeige) */
+.number-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.number-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--text-muted);font-weight:600}
+.number-value{font-size:34px;font-weight:600;letter-spacing:.01em}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--live);flex-shrink:0}
+.dot.off{background:var(--live-off)}
+
+/* Buttons (weisse Pill / Ghost) */
+.btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:99px;padding:12px 22px;font-family:var(--font);font-weight:600;font-size:14px;cursor:pointer;transition:all .22s var(--ease)}
+.btn-primary{background:#fff;color:var(--ink-pill);box-shadow:var(--shadow-pill)}
+.btn-primary:hover{transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:rgba(255,255,255,.96);border:1px solid rgba(255,255,255,.82)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .msg{font-size:13px;font-weight:600;margin-top:10px;display:none}
-.msg.ok{display:block;color:#177a43}
-.msg.err{display:block;color:var(--vf-red)}
+.msg.ok{display:block;color:var(--ok)}
+.msg.err{display:block;color:var(--danger)}
 
-/* Toggles */
-.perm{display:flex;align-items:center;gap:13px;padding:13px 2px;border-bottom:1px solid #f3f3f3}
-.perm:last-child{border:none}
-.perm .t{font-weight:700;font-size:14px}
-.perm .d{color:var(--vf-mute);font-size:12.5px}
-.perm .grow{flex:1}
-.switch{position:relative;width:44px;height:25px;flex-shrink:0}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;inset:0;background:#d6d6d6;border-radius:99px;cursor:pointer;transition:.3s var(--ease)}
-.slider:before{content:"";position:absolute;width:19px;height:19px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s var(--ease);box-shadow:0 2px 5px rgba(0,0,0,.2)}
-.switch input:checked+.slider{background:var(--vf-red)}
-.switch input:checked+.slider:before{transform:translateX(19px)}
-
-/* Calls (read-only) */
-.call{border:1px solid #ececec;border-radius:15px;margin-bottom:12px;background:#fff;overflow:hidden}
+/* Anrufe (read-only) */
+.call{border:1px solid var(--navy-700);border-radius:15px;margin-bottom:12px;background:rgba(255,255,255,.03);overflow:hidden}
 .call-h{display:flex;align-items:center;gap:14px;padding:15px 18px}
 .dir{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}
-.dir.in{background:#e9f0fc;color:var(--vf-signal)}
-.dir.out{background:#fdeaea;color:var(--vf-red)}
+.dir.in{background:rgba(79,140,255,.18);color:#a9c7ff}
+.dir.out{background:rgba(255,255,255,.12);color:#fff}
 .call-h .cw{flex:1;min-width:0}
-.call-h .cn{font-weight:700;font-size:14.5px}
-.call-h .cm{color:var(--vf-mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:3px 10px;border-radius:99px;white-space:nowrap}
-.st.active{background:#fdeaea;color:var(--vf-red)}
-.st.completed{background:#e7f6ed;color:#177a43}
-.st.failed{background:var(--vf-neutral);color:var(--vf-mute)}
-
-/* Action items / calendar */
-.ai{display:flex;gap:10px;align-items:flex-start;padding:10px 2px;border-bottom:1px solid #f3f3f3;font-size:13.5px}
-.ai:last-child{border:none}
-.ai.done span{text-decoration:line-through;color:var(--vf-mute)}
-.tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;border-radius:99px;padding:2px 8px;margin-left:7px}
-.tag.appointment{background:#e9f0fc;color:var(--vf-signal)}
-.cal-ev{display:flex;gap:12px;align-items:center;padding:10px 2px;border-bottom:1px solid #f3f3f3;font-size:13.5px}
-.cal-ev:last-child{border:none}
-.cal-d{background:var(--vf-neutral);border-radius:10px;padding:6px 10px;text-align:center;min-width:52px}
-.cal-d b{display:block;font-size:16px;line-height:1.1}
-.cal-d small{font-size:10px;text-transform:uppercase;color:var(--vf-mute);font-weight:700}
-.empty{color:var(--vf-mute);font-size:13px;text-align:center;padding:22px 8px}
+.call-h .cn{font-weight:600;font-size:14.5px}
+.call-h .cm{color:var(--text-muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;padding:3px 10px;border-radius:99px;white-space:nowrap;background:rgba(255,255,255,.1);color:var(--text-soft)}
+.st.active{background:rgba(31,170,89,.22);color:#7fe3aa}
+.st.completed{background:rgba(31,170,89,.16);color:#7fe3aa}
+.st.failed{background:rgba(255,255,255,.1);color:var(--text-muted)}
+.empty{color:var(--text-muted);font-size:13px;text-align:center;padding:22px 8px}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <div class="top">
-    <div class="logo-mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm2.5 15.5c-2.6 0-5.3-2.3-5.4-5.6-.1-2.2 1.2-4.3 2.9-5.3 1.1-.7 2.4-1 3.4-.9-.7.3-1.5 1.2-1.5 2.4v.3c1.7.4 3.1 1.8 3.1 4 0 2.6-1.6 5.1-2.5 5.1Z" fill="#fff"/></svg></div>
-    <div>
-      <h1>Mein <span>Bereich</span></h1>
-      <div class="sub">Self-Service · Sundartha Business Demo</div>
+    <div class="brand">
+      <span class="logo-mark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm2.5 15.5c-2.6 0-5.3-2.3-5.4-5.6-.1-2.2 1.2-4.3 2.9-5.3 1.1-.7 2.4-1 3.4-.9-.7.3-1.5 1.2-1.5 2.4v.3c1.7.4 3.1 1.8 3.1 4 0 2.6-1.6 5.1-2.5 5.1Z" fill="#fff"/></svg></span>
+      <span class="brand-text">
+        <span class="brand-name">HERMES</span>
+        <span class="brand-by">by Sundartha</span>
+      </span>
     </div>
     <div class="spacer"></div>
-    <div class="agent-chip">
-      <div class="dot off" id="liveDot"></div>
-      <div>
-        <div class="lbl">Agent-Rufnummer</div>
-        <div class="num" id="agentNum">—</div>
-      </div>
-    </div>
   </div>
 
   <div class="grid">
+
+    <!-- Agent-Rufnummer: prominente eigene Anzeige (P1), Live-Dot inline -->
+    <div class="card c12">
+      <div class="number-head">
+        <span class="dot off" id="liveDot"></span>
+        <span class="number-label">Deine Agent-Rufnummer</span>
+      </div>
+      <div class="number-value" id="agentNum">—</div>
+    </div>
 
     <!-- Zugang: Browser-Login (OIDC, Feature B). Das Session-Cookie kommt same-origin
          automatisch mit jedem fetch -> kein manuelles Token mehr. -->
@@ -121,38 +114,9 @@ label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase
       <h3>Zugang</h3>
       <div class="hint" id="authHint">Anmeldestatus wird geprueft …</div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <a class="btn btn-red" id="loginBtn" href="/auth/login" style="display:none">Anmelden</a>
+        <a class="btn btn-primary" id="loginBtn" href="/auth/login" style="display:none">Anmelden</a>
         <button class="btn btn-ghost" id="logoutBtn" style="display:none">Abmelden</button>
       </div>
-    </div>
-
-    <!-- Settings -->
-    <div class="card c6">
-      <h3>Einstellungen meines Agenten</h3>
-      <div class="hint">Wirkt sofort auf das naechste Gespraech.</div>
-      <label class="fl">Agent-Name</label>
-      <input class="fi" id="agentName">
-      <div id="perms" style="margin-top:8px"></div>
-      <label class="fl">Begruessung (Inbound) — {owner} wird ersetzt</label>
-      <select class="fi" id="greeting"></select>
-      <label class="fl">Sprache</label>
-      <select class="fi" id="language">
-        <option value="">Automatisch (nach Nummer)</option>
-        <option value="de">Deutsch</option>
-        <option value="fr">Français</option>
-        <option value="en">English</option>
-      </select>
-      <div style="margin-top:14px;display:flex;gap:10px;align-items:center">
-        <button class="btn btn-ghost" id="save">Speichern</button>
-        <span class="msg" id="saveMsg"></span>
-      </div>
-    </div>
-
-    <!-- Calendar -->
-    <div class="card c6">
-      <h3>Kalender</h3>
-      <div class="hint">Darauf greift der Agent zu.</div>
-      <div id="cal"><div class="empty">Noch nicht verbunden.</div></div>
     </div>
 
     <!-- Zahlungsmethode (Pay3) - nur sichtbar wenn PAYMENT_ENABLED (state.hasCard ist
@@ -161,31 +125,25 @@ label.fl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase
       <h3>Zahlungsmethode</h3>
       <div class="hint">Fuer kostenpflichtige Funktionen (z.B. eigene Rufnummer).</div>
       <div id="cardStatus" class="hint" style="margin-bottom:14px"></div>
-      <button class="btn btn-red" id="addCard">Zahlungsmethode hinzufuegen</button>
+      <button class="btn btn-primary" id="addCard">Zahlungsmethode hinzufuegen</button>
       <span class="msg" id="cardMsg"></span>
       <!-- W4: Abo-Buchung. Ohne aktives Abo zwei Plan-Buttons; mit Abo der aktive Plan
            + Verlaengerungsdatum (Cancel ist ein Folge-Ticket, hier nur Anzeige). -->
       <div id="subBlock" style="margin-top:18px">
         <div id="subStatus" class="hint" style="margin-bottom:14px"></div>
         <div id="subButtons">
-          <button class="btn btn-red" data-plan="starter">Starter abonnieren</button>
-          <button class="btn btn-red" data-plan="business">Business abonnieren</button>
+          <button class="btn btn-primary" data-plan="starter">Starter abonnieren</button>
+          <button class="btn btn-primary" data-plan="business">Business abonnieren</button>
         </div>
         <span class="msg" id="subMsg"></span>
       </div>
     </div>
 
-    <!-- Calls -->
-    <div class="card c8">
+    <!-- Anrufe (read-only Historie) -->
+    <div class="card c12">
       <h3>Anrufe</h3>
       <div class="hint">Deine letzten Telefonate (read-only).</div>
       <div id="calls"><div class="empty">Noch nicht verbunden.</div></div>
-    </div>
-
-    <!-- Action items -->
-    <div class="card c4">
-      <h3>Action Items</h3>
-      <div id="ai"><div class="empty">Noch nicht verbunden.</div></div>
     </div>
 
   </div>
@@ -203,31 +161,7 @@ function showAuth(text, showLogin, showLogout){
   $("logoutBtn").style.display = showLogout ? "inline-flex" : "none";
 }
 
-// Nur die Felder, die der Self-Service-Pfad erlaubt (Decision #6). agentName + die
-// drei Free-Felder als Toggle; allowSummaries/Disclosure/Freitext-greeting fehlen
-// bewusst (kein Schreibpfad in der UI fuer abgelehnte Felder).
-const PERMS = [
-  ["allowCalendar","Kalenderzugriff","Agent darf Termine einsehen"],
-  ["allowBooking","Termine buchen","Agent darf Termine fest eintragen"],
-  ["allowPersonalData","Persoenliche Daten","Adresse, E-Mail etc. herausgeben"],
-  ["allowBankData","Bankdaten","Zahlungsdaten nennen (nicht empfohlen)"],
-];
-
 function esc(s){return String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
-
-function renderPerms(settings){
-  $("perms").innerHTML = PERMS.map(([k,t,d])=>`
-    <div class="perm">
-      <div class="grow"><div class="t">${t}</div><div class="d">${d}</div></div>
-      <label class="switch"><input type="checkbox" data-perm="${k}" ${settings[k]?"checked":""}><span class="slider"></span></label>
-    </div>`).join("");
-}
-
-// greeting-Dropdown NUR aus den Server-Vorlagen (kein Freitext-Input).
-function renderGreetings(templates, current){
-  $("greeting").innerHTML = templates.map((tpl)=>
-    `<option value="${esc(tpl)}" ${tpl===current?"selected":""}>${esc(tpl)}</option>`).join("");
-}
 
 function renderCalls(calls){
   if(!calls.length){$("calls").innerHTML='<div class="empty">Keine Anrufe.</div>';return}
@@ -246,43 +180,17 @@ function renderCalls(calls){
   }).join("");
 }
 
-function renderAi(items){
-  if(!items.length){$("ai").innerHTML='<div class="empty">Keine Action Items.</div>';return}
-  $("ai").innerHTML = items.slice(0,12).map(a=>`
-    <div class="ai ${a.done?"done":""}">
-      <span>${esc(a.text)}${a.type==="appointment"?'<span class="tag appointment">Termin</span>':""}</span>
-    </div>`).join("");
-}
-
-function renderCal(events){
-  if(!events.length){$("cal").innerHTML='<div class="empty">Keine Termine.</div>';return}
-  $("cal").innerHTML = events.slice(0,6).map(e=>{
-    const d=new Date(e.start);
-    return `<div class="cal-ev">
-      <div class="cal-d"><b>${d.getDate()}</b><small>${d.toLocaleString("de-DE",{month:"short"})}</small></div>
-      <div><b style="font-size:13.5px">${esc(e.title)}</b><div style="color:var(--vf-mute);font-size:12px">${d.toLocaleString("de-DE",{weekday:"short",hour:"2-digit",minute:"2-digit"})}</div></div>
-    </div>`;
-  }).join("");
-}
-
 async function refresh(){
   const r = await fetch("/api/self-service/state");
   // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
   if(r.status===401){ $("liveDot").classList.add("off"); showAuth("Bitte anmelden, um deinen Bereich zu sehen.", true, false); return; }
-  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Choose your plan to activate your account.", false, true); return; }
+  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Waehle einen Plan, um dein Konto zu aktivieren.", false, true); return; }
   if(!r.ok){ $("liveDot").classList.add("off"); showAuth("Voruebergehend nicht erreichbar.", false, true); return; }
   showAuth("Angemeldet.", false, true);
   const s = await r.json();
   $("agentNum").textContent = s.agent.number || "nicht konfiguriert";
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
-  $("agentName").value = s.settings.agentName || "";
-  renderPerms(s.settings);
-  renderGreetings(s.greetingTemplates, s.settings.greeting);
-  // language ist ein optionales Override: leer/null -> "Automatisch (nach Nummer)".
-  $("language").value = s.settings.language || "";
   renderCalls(s.calls);
-  renderAi(s.actionItems);
-  renderCal(s.calendar);
   renderBilling(s);
 }
 
@@ -312,32 +220,10 @@ function renderSubscription(s){
   }
 }
 
-// Patch aus der UI bauen: NUR die erlaubten Felder. Der Server filtert ohnehin
-// (selfServicePatch), die UI bietet schon nur diese Felder an.
-function collectPatch(){
-  const patch = { agentName: $("agentName").value, greeting: $("greeting").value, language: $("language").value };
-  document.querySelectorAll("[data-perm]").forEach(el=>{ patch[el.dataset.perm] = el.checked; });
-  return patch;
-}
-
-async function save(){
-  const m=$("saveMsg"); m.className="msg";
-  const r = await fetch("/api/self-service/settings", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify(collectPatch()),
-  });
-  if(r.ok){ m.textContent="Gespeichert"; m.className="msg ok"; refresh(); }
-  else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
-  else{ m.textContent="Nicht gespeichert."; m.className="msg err"; }
-  setTimeout(()=>m.className="msg",2500);
-}
-
 $("logoutBtn").onclick = async ()=>{
   await fetch("/auth/logout", { method:"POST" }); // invalidiert Session + loescht Cookie
   location.reload();
 };
-$("save").onclick = save;
 
 // Karte hinzufuegen: POST liefert die Stripe-Checkout-URL -> Browser-Redirect dorthin.
 $("addCard").onclick = async ()=>{
