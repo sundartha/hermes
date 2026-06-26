@@ -43,3 +43,25 @@ test("hermes-web behaelt den /app/*-SPA-rewrite (Regressions-Guard)", () => {
     "hermes-web hat den /app/*-rewrite verloren",
   );
 });
+
+// Liest einen einzelnen Wert aus dem hermes-web-Block. Beide Origins (Funnel-Link
+// und Deep-Link-Redirect) muessen denselben Gateway-Auth-Origin nennen.
+function originOf(rawUrl) {
+  return new URL(rawUrl).origin;
+}
+
+test("hermes-web PUBLIC_GATEWAY_URL und /auth/*-Redirect nennen denselben Gateway-Auth-Origin", () => {
+  // Regressions-Guard gegen halben Track-B-Cutover (P5): Aendert man PUBLIC_GATEWAY_URL
+  // (Funnel-Links -> routes.js) ohne die /auth/*-Redirect-Destination (oder umgekehrt),
+  // zeigt der Login-Link auf eine Domain, die render.yaml nicht zum Gateway routet ->
+  // HTTP-400 / ausgesperrte Nutzer. Der Cutover ist nur atomar (beide zusammen) zulaessig.
+  const gatewayUrl = web.match(/key:\s*PUBLIC_GATEWAY_URL[\s\S]*?value:\s*"?(https:\/\/[^"\s]+)"?/);
+  assert.ok(gatewayUrl, "hermes-web hat keine PUBLIC_GATEWAY_URL gesetzt");
+  const redirect = web.match(/-\s*type:\s*redirect[\s\S]*?source:\s*\/auth\/\*[\s\S]*?destination:\s*(https:\/\/[^/\s]+)\/auth\/:splat/);
+  assert.ok(redirect, "hermes-web hat keine /auth/*-Redirect-Destination");
+  assert.equal(
+    originOf(gatewayUrl[1]),
+    originOf(redirect[1]),
+    "PUBLIC_GATEWAY_URL und /auth/*-Redirect zeigen auf verschiedene Origins -> halber Cutover, Login-Link bricht",
+  );
+});
