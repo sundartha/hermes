@@ -76,6 +76,7 @@ import {
   makeAccounts,
   makeSessions,
   webAuth,
+  webAuthAllowPending,
   adminOnly,
 } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
@@ -130,6 +131,10 @@ const BODY_LIMIT = "100kb";
 // Exemption: ein frisch eingeloggter (suspendierter) Tenant landet hier (zeigt
 // "Choose your plan"), NICHT auf "/" (Owner-Dashboard hinter Basic-Auth = Sackgasse).
 const CUSTOMER_PORTAL_PATH = "/tenant.html";
+// P5: Ziel des Landing-Redirects (kein Magic-String, G25). "/" hat kein Index ->
+// 302 auf den Login (= Registrierung, Strategie R2). Pfad lebt auf dem Gateway
+// (makeWebAuthRoutes GET /auth/login), nicht auf der Static Site.
+const LOGIN_PATH = "/auth/login";
 // W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
 // den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
@@ -155,6 +160,12 @@ app.use((err, _req, res, next) => {
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 registerWellKnown(app);
 
+// P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
+// Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
+// Basic-Auth + express.static gemountet wie /auth/*; traegt keine Tenant-Daten, braucht
+// keine Session - daher unkonditional (greift auch ohne Web-Login-Infra).
+app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
+
 // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
 // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
 // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
@@ -174,6 +185,13 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     const auditStore = makeAuditStore(portalRunner);
     const portalStore = makePortalStore(portalRunner);
     const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
+    // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst
+    // 403-Deadlock). Gleiche Session-Mechanik, nur das Status-Gate ist gelockert (web-auth.js).
+    const webAuthPendingMw = webAuthAllowPending({
+      secret: config.sessionSecret,
+      sessions,
+      accounts,
+    });
     const adminMw = adminOnly({ adminEmails: config.adminEmails });
     const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
     app.use("/auth", loginRateLimiter);
@@ -228,10 +246,12 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         makeSelfServiceRoutes({
           store,
           webAuthMw,
+          webAuthPendingMw,
           audit,
           config,
           billing: stripeBilling,
           accounts,
+          provision: triggerTenantProvisioning,
         }),
       );
     }

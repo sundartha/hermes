@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 
@@ -55,7 +55,9 @@ async function setup({ card = true, paymentEnabled = true } = {}) {
   const { id: sessionId } = await sessions.create({ sub: SUB_B, tenantId: TENANT_B, ttlSeconds: 3600 });
 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
+  const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const billingSpy = {};
+  const provisionSpy = [];
   const app = express();
   app.use(express.json());
   const cfg = { ...CONFIG, paymentEnabled };
@@ -63,10 +65,12 @@ async function setup({ card = true, paymentEnabled = true } = {}) {
     makeSelfServiceRoutes({
       store,
       webAuthMw,
+      webAuthPendingMw,
       audit: () => {},
       config: cfg,
       billing: fakeBilling(billingSpy),
       accounts,
+      provision: async (t) => provisionSpy.push(t),
     }),
   );
   const server = await new Promise((r) => {
@@ -77,6 +81,7 @@ async function setup({ card = true, paymentEnabled = true } = {}) {
     store,
     accounts,
     billingSpy,
+    provisionSpy,
     cookieB: cookieFor(sessionId),
     close: () => new Promise((r) => server.close(r)),
   };
@@ -127,6 +132,10 @@ test("(a) Happy: subscribe mit Karte -> Abo persistiert + Tenant aktiv (accounts
     assert.equal(acct.status, "active", "Tenant ueber accounts.setStatus aktiviert");
     // Stripe-Call mit dem richtigen Price.
     assert.equal(s.billingSpy.params.priceId, "price_starter");
+    // P5: volle 3-Effekt-Aktivierung - KYC auf CARD gehoben (Outbound-Gate offen) +
+    // Provisioning genau 1x mit dem EIGENEN Tenant (idempotent ueber den geteilten Trigger).
+    assert.equal(t.kycLevel, "card", "KYC auf CARD gehoben");
+    assert.deepEqual(s.provisionSpy, [TENANT_B], "Provisioning genau 1x mit dem eigenen Tenant");
   } finally {
     await s.close();
   }

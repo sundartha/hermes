@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 
@@ -55,6 +55,7 @@ async function setup() {
   });
 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
+  const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const audit = () => {};
   const app = express();
   app.use(express.json());
@@ -62,9 +63,11 @@ async function setup() {
     makeSelfServiceRoutes({
       store,
       webAuthMw,
+      webAuthPendingMw,
       audit,
       config: { paymentEnabled: false },
       billing: {},
+      provision: async () => {},
     }),
   );
   const server = await new Promise((r) => {

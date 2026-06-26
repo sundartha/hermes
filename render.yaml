@@ -222,7 +222,7 @@ services:
       # Gateway-Service. routes.js ist fail-closed -> fehlt die Var, bricht der Build ab
       # (statt still 404 zu liefern). Spaeterer Track-B-Cutover = nur dieser Wert.
       - key: PUBLIC_GATEWAY_URL
-        value: "https://vodafone-agent.onrender.com"
+        value: "https://app.sundartha.com"
     buildFilter:
       paths:
         - "apps/web/**"

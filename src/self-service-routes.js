@@ -16,6 +16,7 @@ import { Router } from "express";
 import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { createTenantSubscription } from "./billing/subscribe.js";
+import { activatePaidTenant } from "./billing/activation.js";
 import { publicCall, activeNumberFor, upcomingCalendar } from "./store/views.js";
 
 // Pay3: Redirect-Ziele nach Rueckkehr von Stripe Checkout (kein Magic-String, G25).
@@ -54,7 +55,16 @@ function paymentView(store, config, tenant) {
 // fuer die W4-Aktivierung) werden injiziert (P4/DIP): derselbe Handler in Produktion
 // (server.js) UND im in-process pglite-Test mit Fake-Billing, ohne echten Stripe-Call.
 // Bleibt EIN Objekt-Argument (kein F1-Verstoss).
-export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing, accounts }) {
+export function makeSelfServiceRoutes({
+  store,
+  webAuthMw,
+  webAuthPendingMw,
+  audit,
+  config,
+  billing,
+  accounts,
+  provision,
+}) {
   const router = Router();
 
   // Tenant-Lese-Sicht: dieselbe tenant-gefilterte Quelle wie /api/state, aber NUR
@@ -125,13 +135,30 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
     res.json({ ok: true, hasPrivateNumber: stored });
   });
 
+  // ---- P5: schlanker Billing-Status fuer die gefuehrte Aktivierung -----------------
+  // Hinter webAuthPendingMw (suspended erreichbar): liefert NUR die Flags, die die
+  // Aktivierungs-Ansicht (tenant.html 403-Zweig) braucht - paymentEnabled (gibt es etwas
+  // zu tun?), hasCard (zuerst Karte?), planSlug (schon abonniert?), status (schon aktiv?).
+  // OEFFNET NICHT die active-only /state-View: kein calls/settings/Nummer-Leak (H4). Reine
+  // Lifecycle-Flags, keine Secrets/PII (kein cus_/sub_/pm_). Read-only -> kein Audit (wie /state).
+  router.get("/api/self-service/billing/status", webAuthPendingMw, (req, res) => {
+    const tenant = req.tenant.tenantId;
+    res.json({
+      paymentEnabled: !!config.paymentEnabled,
+      hasCard: hasCardOnFile(store.tenantStripe(tenant)),
+      planSlug: store.tenantSubscription(tenant).planSlug,
+      status: req.tenant.status,
+    });
+  });
+
   // ---- Pay3: Karten-Erfassung aus dem Self-Service-Dashboard ---------------------
   // Identitaet = Web-Session (req.tenant.tenantId), NICHT der Admin-/requireTenant-
   // Pfad der Pay1-Routen - so bindet ein remote-Tenant seine Karte fail-closed an
   // SEINEN Customer (nie an den Owner-Fallback, R4). Stripe-Logik aus dem geteilten
   // card-setup-Helfer (G5: Customer-Idempotenz + Customer-Match leben einmal).
   // Ohne PAYMENT_ENABLED -> 404 (Muster flush-meters/Pay1, byte-identisch zum Bestand).
-  router.post("/api/self-service/billing/setup-checkout", webAuthMw, async (req, res) => {
+  // webAuthPendingMw (P5): suspended muss die Karte hinterlegen koennen (Aktivierungs-Schritt).
+  router.post("/api/self-service/billing/setup-checkout", webAuthPendingMw, async (req, res) => {
     if (!config.paymentEnabled)
       return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
@@ -152,7 +179,7 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
   // Stripe-Browser-Redirect-Ziel: GET (same-origin -> webAuthMw sieht das Session-
   // Cookie). Bindet das payment_method fail-closed an den eigenen Customer (Customer-
   // Match im Helfer). Antwortet mit 302 in die UI (Pay3), NICHT JSON.
-  router.get("/api/self-service/billing/return", webAuthMw, async (req, res) => {
+  router.get("/api/self-service/billing/return", webAuthPendingMw, async (req, res) => {
     if (!config.paymentEnabled)
       return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     const tenant = req.tenant.tenantId;
@@ -177,7 +204,7 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
   // Bei Erfolg Tenant AKTIV ueber accounts.setStatus (DERSELBE pg-Status-Seam wie der
   // Admin-approve, den webAuthMw liest - kein Drift zur Store-Fassade). Die Safety-Gates
   // (Allowlist/Budget/KYC/Disclosure) bleiben unberuehrt: active != outbound-faehig.
-  router.post("/api/self-service/billing/subscribe", webAuthMw, async (req, res) => {
+  router.post("/api/self-service/billing/subscribe", webAuthPendingMw, async (req, res) => {
     if (!config.paymentEnabled)
       return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     const tenant = req.tenant.tenantId;
@@ -187,9 +214,11 @@ export function makeSelfServiceRoutes({ store, webAuthMw, audit, config, billing
       audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
       return res.status(subscribeRejectStatus(result.reason)).json({ error: result.reason });
     }
-    // Status-Flip NUR ueber den pg-Status-Seam (webAuthMw-Quelle), nie ueber die Store-
-    // Fassade -> eine Schreibquelle fuer tenant.status (kein Drift, Pre-Mortem "Status-Drift").
-    await accounts.setStatus(tenant, "active");
+    // P5: volle Aktivierung (status=active + kyc=CARD + payment-gegatetes Provisioning) -
+    // EINE Quelle (activation.js), identisch zum Webhook-Backup. Unabhaengig von der Stripe-
+    // Event-Subscription; idempotent ueber den geteilten tenantHasLiveNumber-Guard. Der
+    // Status-Flip bleibt am pg-Status-Seam (webAuthMw-Quelle), kein Drift zur Store-Fassade.
+    await activatePaidTenant({ store, accounts, provision, tenant });
     audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
     res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
   });

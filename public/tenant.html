@@ -184,7 +184,7 @@ async function refresh(){
   const r = await fetch("/api/self-service/state");
   // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
   if(r.status===401){ $("liveDot").classList.add("off"); showAuth("Bitte anmelden, um deinen Bereich zu sehen.", true, false); return; }
-  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Waehle einen Plan, um dein Konto zu aktivieren.", false, true); return; }
+  if(r.status===403){ $("liveDot").classList.add("off"); showAuth("Aktiviere dein Konto: waehle einen Plan.", false, true); renderActivation(); return; }
   if(!r.ok){ $("liveDot").classList.add("off"); showAuth("Voruebergehend nicht erreichbar.", false, true); return; }
   showAuth("Angemeldet.", false, true);
   const s = await r.json();
@@ -220,20 +220,35 @@ function renderSubscription(s){
   }
 }
 
+// P5: Gefuehrte Aktivierung. /api/self-service/state ist fuer suspended 403 (kein Leak),
+// darum holt diese Ansicht den schlanken Billing-Status (suspended-erreichbar) und rendert
+// DENSELBEN billingCard (Plan-Buttons + Karte) wie der aktive Pfad - eine Render-Quelle
+// (renderBilling), nur die Datenquelle unterscheidet sich.
+async function renderActivation(){
+  const r = await fetch("/api/self-service/billing/status");
+  if(!r.ok) return; // 401 -> refresh() hat den Login-Hinweis bereits gesetzt
+  const st = await r.json();
+  if(!st.paymentEnabled){ $("billingCard").style.display="none"; return; }
+  renderBilling({ hasCard: st.hasCard, subscription: { planSlug: st.planSlug } });
+}
+
+// P5: Checkout-Start, geteilt vom "Karte hinzufuegen"-Button UND vom gefuehrten no_card-
+// Pfad beim Abonnieren (G5: eine Quelle fuer den Stripe-Checkout-Redirect).
+async function startCardSetup(msgEl){
+  const r = await fetch("/api/self-service/billing/setup-checkout", { method:"POST" });
+  if(r.ok){ window.location = (await r.json()).url; return; } // Redirect zu Stripe Checkout
+  if(r.status===401){ msgEl.textContent="Sitzung abgelaufen - bitte neu anmelden."; msgEl.className="msg err"; refresh(); }
+  else{ msgEl.textContent="Konnte Checkout nicht starten."; msgEl.className="msg err"; }
+  setTimeout(()=>msgEl.className="msg",2500);
+}
+
 $("logoutBtn").onclick = async ()=>{
   await fetch("/auth/logout", { method:"POST" }); // invalidiert Session + loescht Cookie
   location.reload();
 };
 
 // Karte hinzufuegen: POST liefert die Stripe-Checkout-URL -> Browser-Redirect dorthin.
-$("addCard").onclick = async ()=>{
-  const m=$("cardMsg"); m.className="msg";
-  const r = await fetch("/api/self-service/billing/setup-checkout", { method:"POST" });
-  if(r.ok){ window.location = (await r.json()).url; return; } // Redirect zu Stripe Checkout
-  if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
-  else{ m.textContent="Konnte Checkout nicht starten."; m.className="msg err"; }
-  setTimeout(()=>m.className="msg",2500);
-};
+$("addCard").onclick = ()=>{ const m=$("cardMsg"); m.className="msg"; startCardSetup(m); };
 
 // W4: Abo buchen. POST {plan} -> bei Erfolg ist der Tenant aktiv (Status-Flip im Server);
 // 409 no_card -> erst Karte hinterlegen; sonst kurze Fehlermeldung. Danach refresh().
@@ -248,8 +263,8 @@ document.querySelectorAll("[data-plan]").forEach(btn=>{
     if(r.ok){ m.textContent="Abo gebucht."; m.className="msg ok"; refresh(); }
     else if(r.status===409){
       const e = await r.json().catch(()=>({}));
-      m.textContent = e.error==="already_subscribed" ? "Du hast bereits ein Abo." : "Bitte zuerst eine Karte hinterlegen.";
-      m.className="msg err";
+      if(e.error==="no_card"){ startCardSetup(m); return; } // P5: gefuehrt -> erst Karte, dann zurueck + Plan
+      m.textContent="Du hast bereits ein Abo."; m.className="msg err";
     }
     else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
     else{ m.textContent="Abo konnte nicht gebucht werden."; m.className="msg err"; }
