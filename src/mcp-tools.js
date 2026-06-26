@@ -3,7 +3,6 @@
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
 import { WIDGET_CALL_STATUS, WIDGET_TRANSCRIPT } from "./ui/adapters/mcp-native.js";
-import { UI_META_KEY } from "./ui/contract.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
@@ -145,7 +144,7 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
   const enableWidgetUi = (widgetId) => {
     if (!uiRenderer || !uiRenderer.hasWidget(widgetId)) return {};
     uiRenderer.registerResource(server, widgetId);
-    return { _meta: { [UI_META_KEY]: { resourceUri: uiRenderer.resourceUri(widgetId) } } };
+    return { _meta: uiRenderer.toolMeta(widgetId) };
   };
 
   // AC6 per-handler Throw-Schutz (gilt stdio UND HTTP /mcp, da registerTools geteilt
