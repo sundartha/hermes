@@ -3,6 +3,7 @@
 // Krypto vom /voice-Gate trennt). Kein express, kein store - reine Funktionen ->
 // unit-testbar ohne Server. Kein Stripe-SDK (Regel: wenige Deps); node:crypto reicht.
 import crypto from "node:crypto";
+import { KYC_LEVEL } from "../store/defaults.js"; // reine Konstante, kein IO
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -11,6 +12,7 @@ const SIGNATURE_TOLERANCE_S = 300;
 // In-scope Subscription-Lifecycle-Event-Typen (kein Magic-String, G25). Alles andere
 // -> interpretStripeEvent liefert action="ignore" (idempotent, kein Fehler).
 export const SUBSCRIPTION_EVENT = Object.freeze({
+  CREATED: "customer.subscription.created",
   UPDATED: "customer.subscription.updated",
   DELETED: "customer.subscription.deleted",
   PAYMENT_FAILED: "invoice.payment_failed",
@@ -72,11 +74,13 @@ export function verifyStripeSignature({ rawBody, signatureHeader, secret, nowS }
 // planSlug?, currentPeriodEnd?} aus einem geparsten Stripe-Event. tenantRef kommt aus
 // metadata.tenant_ref (das createSubscription mitgibt); fehlt es, loest der Route-Layer
 // den Tenant ueber subscriptionId auf. Nur die in-scope Typen wirken; alles andere ->
-// action=ignore (idempotent, kein Fehler). UPDATED=activate (Plan/Period nachziehen),
-// DELETED/PAYMENT_FAILED=suspend (Spec: nur diese beiden suspenden).
+// action=ignore (idempotent, kein Fehler). CREATED/UPDATED=activate (Plan/Period
+// nachziehen; ein Subscription-Checkout feuert .created, ein spaeterer Lifecycle-Wechsel
+// .updated), DELETED/PAYMENT_FAILED=suspend (Spec: nur diese beiden suspenden).
 export function interpretStripeEvent(event) {
   const object = (event && event.data && event.data.object) || {};
   switch (event && event.type) {
+    case SUBSCRIPTION_EVENT.CREATED:
     case SUBSCRIPTION_EVENT.UPDATED:
       return {
         action: WEBHOOK_ACTION.ACTIVATE,
@@ -123,11 +127,17 @@ function planSlugOf(object) {
 // kein express, kein direkter IO/Stripe-Zugriff -> unit-testbar ohne Server-Spawn.
 // Tenant-Aufloesung: zuerst metadata.tenant_ref (createSubscription gibt es mit), sonst
 // ueber die gespeicherte subscriptionId (store.findTenantBySubscription) - kein Treffer ->
-// still ignorieren (fail-closed, KEIN Cross-Tenant-Suspend). activate zieht Plan/Periode
-// nach und aktiviert ueber accounts.setStatus (DERSELBE Status-Seam wie webAuthMw/
-// Admin-approve - eine Schreibquelle, kein Drift). suspend setzt suspended + invalidiert
-// alle Sessions des Tenants. ignore = No-Op. Nebeneffekt (Status-/Abo-Schreibung) im Namen.
-export async function applyStripeWebhook(event, { store, accounts, sessions, audit, req }) {
+// still ignorieren (fail-closed, KEIN Cross-Tenant-Suspend). activate hat DREI Effekte:
+// Plan/Periode nachziehen, KYC auf CARD heben (store.setKycLevel - oeffnet das Outbound-Gate
+// nach bestaetigter Zahlung) und ueber accounts.setStatus aktivieren (DERSELBE Status-Seam
+// wie webAuthMw/Admin-approve - eine Schreibquelle, kein Drift); danach stoesst der injizierte
+// provision-Seam das (idempotente, payment-gegatete) Nummern-Provisioning an. suspend setzt
+// suspended + invalidiert alle Sessions des Tenants und ruft provision NIE. ignore = No-Op.
+// Nebeneffekt (Status-/Abo-/KYC-Schreibung + Provisioning) im Namen.
+export async function applyStripeWebhook(
+  event,
+  { store, accounts, sessions, audit, req, provision },
+) {
   const { action, tenantRef, subscriptionId, planSlug, currentPeriodEnd } =
     interpretStripeEvent(event);
   if (action === WEBHOOK_ACTION.IGNORE) return;
@@ -144,7 +154,15 @@ export async function applyStripeWebhook(event, { store, accounts, sessions, aud
     if (planSlug != null) patch.planSlug = planSlug;
     if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
     store.setTenantSubscription(tenant, patch);
+    // P3 Kern-Fix: bestaetigte Zahlung hebt den KYC-Reifegrad auf CARD - ohne das bleibt
+    // das Outbound-Gate (tenantActiveSubscriber, KYC>=CARD) trotz aktivem Abo zu.
+    store.setKycLevel(tenant, KYC_LEVEL.CARD);
     await accounts.setStatus(tenant, "active");
+    // P3: Provisioning (Telnyx, payment-gated) anstossen. Idempotent im Trigger (kein
+    // Doppelkauf bei Webhook-Retry/Folge-Events); bei PROVISIONING_ENABLED=false bleibt
+    // die Nummer 'requested' (KEIN Kauf, KEIN Geld). Injizierter Seam -> applyStripeWebhook
+    // bleibt rein/unit-testbar (der Trigger kennt Queue/Provider und lebt in server.js).
+    await provision(tenant);
     audit("stripe_webhook_activate", req, `tenant=${tenant}`);
     return;
   }

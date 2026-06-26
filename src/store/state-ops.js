@@ -763,6 +763,14 @@ export function setTenantGeo(s, tenantId, { country, defaultLanguage } = {}) {
   return tenant;
 }
 
+// Lese-Query der Geo-Felder eines Tenants (F1). Reine Query, kein IO. Liefert STETS ein
+// Objekt mit beiden Feldern (fehlend -> null). Der Webhook-Provisioning-Trigger (P3) liest
+// hieraus das Land der anzufragenden Nummer (onboard hat es via setTenantGeo gesetzt).
+export function tenantGeo(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return { country: tenant?.country ?? null, defaultLanguage: tenant?.defaultLanguage ?? null };
+}
+
 // Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
 // Kosten/Plaetze; released/failed zaehlen nicht. Basis fuer die Cap-Pruefung.
 function liveNumbers(s, tenantId = null) {
@@ -772,6 +780,14 @@ function liveNumbers(s, tenantId = null) {
       n.status !== NUMBER_STATUS.FAILED &&
       (tenantId == null || n.tenantId === tenantId),
   );
+}
+
+// Hat der Tenant mindestens eine NICHT-terminale Nummer? Idempotenz-Praedikat fuer den
+// Webhook-Provisioning-Trigger (P3, Invariante 4): GENAU eine Nummer pro bezahltem Abo -
+// ein Webhook-Retry/Folge-'updated' findet die bestehende und fragt keine zweite an.
+// Reine Query, kein IO. Nutzt liveNumbers (eine Quelle, G5).
+export function tenantHasLiveNumber(s, tenantId) {
+  return liveNumbers(s, tenantId).length > 0;
 }
 
 // Fragt eine neue Nummer fuer einen Tenant an (Onboarding, ZAHLUNGSFREI). Die

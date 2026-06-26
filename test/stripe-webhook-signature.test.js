@@ -88,6 +88,17 @@ test("interpretStripeEvent: subscription.updated -> activate, tenantRef aus meta
   assert.equal(r.currentPeriodEnd, 1893456000);
 });
 
+test("interpretStripeEvent: subscription.created -> activate (neuer Subscription-Checkout, P3)", () => {
+  const event = {
+    type: SUBSCRIPTION_EVENT.CREATED,
+    data: { object: { id: "sub_new", metadata: { tenant_ref: "t_c", plan_slug: "starter" } } },
+  };
+  const r = interpretStripeEvent(event);
+  assert.equal(r.action, WEBHOOK_ACTION.ACTIVATE);
+  assert.equal(r.tenantRef, "t_c");
+  assert.equal(r.subscriptionId, "sub_new");
+});
+
 test("interpretStripeEvent: subscription.deleted -> suspend", () => {
   const event = {
     type: SUBSCRIPTION_EVENT.DELETED,

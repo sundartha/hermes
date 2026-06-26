@@ -53,6 +53,8 @@ import {
   markProvisioningJob,
   setTenantGeo,
   findNumber,
+  tenantHasLiveNumber,
+  tenantGeo,
 } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
@@ -260,7 +262,14 @@ if (config.sessionSecret && config.storeBackend === "pg") {
       } catch {
         return res.status(400).json({ error: "bad payload" });
       }
-      await applyStripeWebhook(event, { store, accounts, sessions, audit, req });
+      await applyStripeWebhook(event, {
+        store,
+        accounts,
+        sessions,
+        audit,
+        req,
+        provision: triggerTenantProvisioning,
+      });
       res.json({ received: true });
     });
   });
@@ -1385,22 +1394,10 @@ app.post("/api/onboard", async (req, res) => {
   // und antworten SOFORT mit 'queued'; ein deterministischer Drain (In-Memory-Queue)
   // fuehrt provisionNumber asynchron aus. Die Geld-Sicherheits-Invarianten (Hold-vor-
   // Order, kein active ohne Capture, Rollback) bleiben in provisionNumber - jetzt im Worker.
-  const idempotencyKey = `provision_${numberId}`;
-  provisioningQueue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
-  // Job-Spur ebenfalls im kritischen Abschnitt persistieren; Save-Fehler -> 503 (AC4).
-  const jobRes = await store
-    .withStoreLock(() => {
-      const s = store.load();
-      const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
-      store.save();
-      return { ok: true, job };
-    })
-    .catch((e) => {
-      console.error("[onboard] Persistenz (Job-Spur) fehlgeschlagen:", e.message);
-      return { ok: false };
-    });
+  // Enqueue + Job-Spur teilen sich jetzt mit dem Webhook-Trigger (queueProvisioning, G5).
+  const jobRes = await queueProvisioning(numberId, tenantId);
   if (!jobRes.ok) return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
-  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.job.id}`);
+  audit("onboard_queued", req, `tenant=${tenantId} number=${numberId} job=${jobRes.jobId}`);
   res.json({
     tenantId,
     numberId,
@@ -1408,7 +1405,7 @@ app.post("/api/onboard", async (req, res) => {
     country,
     language,
     provisioning: "queued",
-    jobId: jobRes.job.id,
+    jobId: jobRes.jobId,
   });
 
   // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
@@ -1416,6 +1413,65 @@ app.post("/api/onboard", async (req, res) => {
   // rufen den Drain deterministisch ueber die Queue-Instanz; hier wird er nur angestossen.
   void runProvisioningDrain();
 });
+
+// Provisioning-Job einreihen + Job-Spur persistieren (geteilt von /api/onboard UND dem
+// Webhook-Aktivierungs-Trigger, G5). Enqueue ist idempotent ueber den number-id-Key;
+// recordProvisioningJob dedupt die Spur. Liefert {ok, jobId} | {ok:false}. Der Aufrufer
+// stoesst den Drain an (Reihenfolge bleibt aufrufer-spezifisch).
+async function queueProvisioning(numberId, tenantId) {
+  const idempotencyKey = `provision_${numberId}`;
+  provisioningQueue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+  return store
+    .withStoreLock(() => {
+      const s = store.load();
+      const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
+      store.save();
+      return { ok: true, jobId: job.id };
+    })
+    .catch((e) => {
+      console.error("[provision] Job-Spur fehlgeschlagen:", e.message);
+      return { ok: false };
+    });
+}
+
+// Webhook-Aktivierungs-Trigger (P3): nach bestaetigter Zahlung GENAU EINE Nummer pro
+// Tenant anfragen und (bei PROVISIONING_ENABLED) den Kauf-Job einreihen. Idempotent
+// (Invariante 4): hat der Tenant schon eine lebende Nummer -> No-op (Webhook-Retry/Folge-
+// 'updated' kaufen nie doppelt). Land aus dem Tenant-Geo (onboard) mit config-Fallback;
+// Sprache aus dem Land (eine Quelle, wie onboard). Geld-/Kauf-Invarianten (Hold-vor-Order,
+// kein active ohne Capture, Rollback) bleiben in provisionNumber. Diagnose PII-frei
+// (tenantId/Grund) ueber console - applyStripeWebhook bekommt keinen req-Kanal hierfuer.
+async function triggerTenantProvisioning(tenantId) {
+  const reqRes = await store
+    .withStoreLock(() => {
+      const s = store.load();
+      if (tenantHasLiveNumber(s, tenantId)) return { ok: false, reason: "already_provisioned" };
+      const country = tenantGeo(s, tenantId).country || config.provisioningCountry;
+      const r = requestNumber(s, {
+        tenantId,
+        provider: PROVIDER.TELNYX,
+        country,
+        language: languageForCountry(country),
+        maxNumbers: config.maxNumbers,
+        maxNumbersPerTenant: config.maxNumbersPerTenant,
+      });
+      if (r.ok) store.save();
+      return r;
+    })
+    .catch((e) => {
+      console.error("[webhook-provision] Persistenz fehlgeschlagen:", e.message);
+      return { ok: false, reason: "persist_error" };
+    });
+  if (!reqRes.ok) {
+    if (reqRes.reason !== "already_provisioned")
+      console.warn(`[webhook-provision] kein Kauf tenant=${tenantId} grund=${reqRes.reason}`);
+    return;
+  }
+  // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf.
+  if (!config.provisioningEnabled) return;
+  const jobRes = await queueProvisioning(reqRes.number.id, tenantId);
+  if (jobRes.ok) void runProvisioningDrain();
+}
 
 // Verarbeitet wartende provision_number-Jobs deterministisch (In-Memory-Drain).
 // Baut deps (provisioner + optional Stripe-Billing bei PAYMENT_ENABLED) genau wie
