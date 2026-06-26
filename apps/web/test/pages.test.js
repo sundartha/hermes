@@ -89,3 +89,13 @@ test("Marketing-Seiten sind englisch (lang=en), Legal-Seiten deutsch (lang=de)",
     assert.match(readDist(page), /<html lang="de"/, `${page} sollte lang=de sein`);
   }
 });
+
+test("Pricing rendert EUR aus dem Katalog (kein Dollar-Preis), beide Tarife", () => {
+  // BK0: Preise kommen aus lib/plans.js (Spiegel der Backend-SSoT). 4.99/9.99 statt
+  // "€..." -> robust gegen evtl. Euro-Entity-Encoding; /\$\d/ trifft praezise nur den
+  // alten Dollar-Preis-Bug, nicht harmlose "$" in Asset-Namen.
+  const html = readDist("preise/index.html");
+  assert.ok(html.includes("4.99") && html.includes("9.99"), "Katalog-Preise fehlen");
+  assert.ok(!/\$\d/.test(html), "alter Dollar-Preis ($X.XX) noch im Output");
+  assert.ok(html.includes("Starter") && html.includes("Business"), "Tarifnamen fehlen");
+});
