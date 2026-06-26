@@ -53,13 +53,12 @@ import {
   markProvisioningJob,
   setTenantGeo,
   findNumber,
-  tenantHasLiveNumber,
-  tenantGeo,
 } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
+import { requestNumberForPaidTenant } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
@@ -1469,19 +1468,18 @@ async function queueProvisioning(numberId, tenantId) {
 // (Invariante 4): hat der Tenant schon eine lebende Nummer -> No-op (Webhook-Retry/Folge-
 // 'updated' kaufen nie doppelt). Land aus dem Tenant-Geo (onboard) mit config-Fallback;
 // Sprache aus dem Land (eine Quelle, wie onboard). Geld-/Kauf-Invarianten (Hold-vor-Order,
-// kein active ohne Capture, Rollback) bleiben in provisionNumber. Diagnose PII-frei
-// (tenantId/Grund) ueber console - applyStripeWebhook bekommt keinen req-Kanal hierfuer.
+// kein active ohne Capture, Rollback) bleiben in provisionNumber. Ein geblockter Kauf
+// (Cap/persist_error) landet PII-frei (tenantId/Grund) im Audit-Trail (BK3); der Trigger
+// hat keinen req-Kanal, daher req=null (audit markiert die Quelle als "system").
 async function triggerTenantProvisioning(tenantId) {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      if (tenantHasLiveNumber(s, tenantId)) return { ok: false, reason: "already_provisioned" };
-      const country = tenantGeo(s, tenantId).country || config.provisioningCountry;
-      const r = requestNumber(s, {
+      // Decision-Core (Guard + requestNumber) liegt jetzt in provision-trigger.js -
+      // EINE Quelle fuer Produktion und Test (G5). save bleibt hier (IO, P15).
+      const r = requestNumberForPaidTenant(s, {
         tenantId,
-        provider: PROVIDER.TELNYX,
-        country,
-        language: languageForCountry(country),
+        fallbackCountry: config.provisioningCountry,
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
@@ -1493,8 +1491,14 @@ async function triggerTenantProvisioning(tenantId) {
       return { ok: false, reason: "persist_error" };
     });
   if (!reqRes.ok) {
+    // already_provisioned ist ein erwarteter idempotenter No-op (Webhook-Retry/Folge-
+    // event) - kein Audit-Wert. Jeder andere Grund (tenant_cap/global_cap = Kosten-
+    // Notbremse, persist_error) ist forensisch relevant: kein Kauf trotz bezahltem Abo
+    // -> in den Audit-Trail (Spec BK3: "Limit ueberschritten -> kein Kauf, Audit-Eintrag").
+    // req=null -> audit-util markiert die Quelle als "system" (kein HTTP-Kontext im Webhook-
+    // Trigger). Nur die tenantId + Grund-Code, kein Secret/PII (H4).
     if (reqRes.reason !== "already_provisioned")
-      console.warn(`[webhook-provision] kein Kauf tenant=${tenantId} grund=${reqRes.reason}`);
+      audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${reqRes.reason}`);
     return;
   }
   // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf.

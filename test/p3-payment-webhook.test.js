@@ -19,6 +19,7 @@ import {
   tenantActiveSubscriber,
 } from "../src/store/state-ops.js";
 import { KYC_LEVEL, KYC_OUTBOUND_MIN, NUMBER_STATUS } from "../src/store/defaults.js";
+import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
 
 // Cap hoch genug, dass die Kosten-Notbremse in diesen Tests nie greift (nur die
 // Idempotenz/Geo-Logik wird geprueft, nicht der Cap - der hat eigene Tests).
@@ -129,13 +130,6 @@ test("A(e) updated mit Dunning-Status (past_due) -> ignore: kein KYC/active/prov
 
 // ---- Teil B: state-ops-Ebene (Unit, makeDefaultState) ----
 
-// Spiegelt den state-ops-Kern von triggerTenantProvisioning (Guard + requestNumber),
-// ohne Queue/Server: GENAU die Komposition, die der Trigger im Store-Lock ausfuehrt.
-function triggerCore(s, tenantId) {
-  if (tenantHasLiveNumber(s, tenantId)) return { ok: false, reason: "already_provisioned" };
-  return requestNumber(s, { tenantId, ...CAPS });
-}
-
 test("B(e) tenantHasLiveNumber: kein/requested/active -> live, nur released/failed -> false", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_n", {});
@@ -184,9 +178,10 @@ test("B(g) Outbound-Gate offen: aktiver Tenant + setKycLevel(card) -> tenantActi
 test("B(h) Idempotenz: zweiter Trigger-Kern kauft nicht doppelt (genau eine Nummer)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_one", {});
-  const first = triggerCore(s, "t_one");
+  const opts = { tenantId: "t_one", fallbackCountry: "DE", ...CAPS };
+  const first = requestNumberForPaidTenant(s, opts);
   assert.equal(first.ok, true, "erster Lauf fragt eine Nummer an");
-  const second = triggerCore(s, "t_one");
+  const second = requestNumberForPaidTenant(s, opts);
   assert.equal(second.ok, false, "zweiter Lauf -> Guard greift");
   assert.equal(second.reason, "already_provisioned");
   assert.equal(
