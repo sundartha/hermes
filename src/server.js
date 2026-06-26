@@ -69,6 +69,7 @@ import { E164, invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
+import { PLAN_CATALOG } from "./plans.js";
 import {
   makeWebAuthRoutes,
   makeAdminRoutes,
@@ -158,6 +159,15 @@ app.use((err, _req, res, next) => {
 // /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
 // /healthz (Keep-Alive) und localhost (interne MCP-Tools).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
+// ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
+// AUTH-AUSNAHME (Regel 3, begruendet): bewusst VOR der Basic-Auth gemountet, ohne
+// Login erreichbar - exakt wie /healthz. Liefert NUR den oeffentlichen Tarif-Katalog
+// (Preise/Leistungen, identisch zu www.sundartha.com/preise) - KEINE Tenant-Daten,
+// KEINE Secrets, KEINE PII, kein Schreibpfad. SSoT: src/plans.js (Marketing-Spiegel
+// apps/web/src/lib/plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
+app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
+
 registerWellKnown(app);
 
 // P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die

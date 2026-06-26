@@ -1,46 +1,20 @@
 ---
 // Marketing: Pricing (SSG). Zwei Tarife als statisches Markup; der CTA funnelt
-// ueber LOGIN_URL in den Login-Einstieg (echter Checkout kommt in W4). KEINE
+// ueber LOGIN_URL in den Login-Einstieg (echter Checkout kommt in BK2). KEINE
 // Stripe-Anbindung, KEIN Client-Fetch hier.
 //
-// EHRLICHER BEFUND (Strategie R1, §2.6): Das Backend kennt KEINE Abo-/Preis-
-// Tiers — nur Karten-Hinterlegung (Stripe setup-mode), nutzungsbasiertes
-// Metering und eine einmalige Nummern-Gebuehr. Die Karte hinterlegst du nach
-// dem Login in deinem Bereich (auth-gated). Echtes Subscription-Billing
-// (Recurring) ist ein benannter Backend-Follow-up (W4) und wird hier NICHT
-// vorgetaeuscht (kein Fake-Charge). Der Hinweis-Block unten macht das transparent.
+// BK0: Preise/Leistungen kommen aus dem geteilten Plan-Katalog (lib/plans.js,
+// Marketing-Spiegel der Backend-SSoT src/plans.js, drift-getestet) - kein lokales
+// Preis-Literal mehr. Zur BUILD-Zeit gerendert (zero-JS SSG), NICHT per fetch.
 //
-// W2: Tier-Korrektur umgesetzt (Business = 1 Nummer, Q-ABO); der CTA funnelt
-// ueber LOGIN_URL. Echter Checkout = W4.
+// EHRLICHER BEFUND (Strategie R1, §2.6): Das Backend kennt die Abo-/Preis-Tiers
+// jetzt (Plan-Katalog), aber der Self-Service bucht noch nicht von hier aus. Die
+// Karte hinterlegst du nach dem Login in deinem Bereich (auth-gated). Echter
+// Checkout von dieser Seite aus ist BK2 und wird hier NICHT vorgetaeuscht (kein
+// Fake-Charge). Der Hinweis-Block unten macht das transparent.
 import Site from "../layouts/Site.astro";
 import { LOGIN_URL } from "../lib/routes.js";
-
-const plans = [
-  {
-    name: "Starter",
-    price: "$4.99",
-    cadence: "per month",
-    featured: false,
-    features: [
-      "30 minutes of calls per month",
-      "1 phone number",
-      "Answer and summarise calls",
-      "Call history in your area",
-    ],
-  },
-  {
-    name: "Business",
-    price: "$9.99",
-    cadence: "per month",
-    featured: true,
-    features: [
-      "120 minutes of calls per month",
-      "1 phone number",
-      "Outgoing calls on your behalf",
-      "Priority support",
-    ],
-  },
-];
+import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 ---
 
 <Site
@@ -61,11 +35,11 @@ const plans = [
   <section class="section">
     <div class="container">
       <div class="pricing">
-        {plans.map((plan) => (
+        {PLAN_CATALOG.map((plan) => (
           <article class={plan.featured ? "plan plan--featured" : "plan"}>
             {plan.featured && <span class="badge badge--accent">Popular</span>}
             <h2 class="plan__name">{plan.name}</h2>
-            <p class="plan__price">{plan.price} <small>{plan.cadence}</small></p>
+            <p class="plan__price">{formatPlanPrice(plan.amountCents, plan.currency)} <small>per {plan.cadence}</small></p>
             <ul class="plan__features">
               {plan.features.map((feature) => (
                 <li class="plan__feature">{feature}</li>
