@@ -41,19 +41,21 @@ Direkt im Render-Dashboard am Service `vodafone-agent`:
 
 ---
 
-## D. Was Claude danach macht (deine Freigabe noetig)
+## D. Env-Flags (Stand 2026-06-26)
 
-Sobald A+B+C stehen, kann Claude per Render-MCP (kein Secret):
-
-| Env | Wert | Voraussetzung |
+| Env | Wert | Stand |
 |---|---|---|
-| `PUBLIC_URL` | `https://app.sundartha.com` | DNS+Domain live (A1/A2); baut `redirect_uri = publicUrl + /auth/callback` |
-| `PAYMENT_ENABLED` | `true` | P3 im Stripe-**Testmodus** verifiziert |
-| `PROVISIONING_ENABLED` | `true` | **echtes Geld** (P4) — nach gruenem Test + deiner Freigabe |
+| `PUBLIC_GATEWAY_URL` | `https://app.sundartha.com` | ✅ live (Custom-Domain) |
+| `PAYMENT_ENABLED` | `true` | ✅ gesetzt + deployed (Testmodus), Webhook-Endpoint aktiv (400 statt 404) |
+| `PROVISIONING_ENABLED` | `false` | ✅ bewusst false = Dry-Run, KEIN echter Telnyx-Kauf beim Testen |
+| `PROVISIONING_ENABLED` | `true` | offen (P4, echtes Geld) — erst nach gruenem E2E + deiner Freigabe |
 
-**Ankreuzen (damit Claude nicht wartet):**
-- [ ] Claude darf `PAYMENT_ENABLED=true` setzen, sobald P3 im Stripe-Testmodus gruen.
-- [ ] Claude darf `PROVISIONING_ENABLED=true` (echtes Geld) setzen: JA / nur nach Rueckfrage.
+## D2. Restliste vor echtem Go-live (Jonas — Browser/Secrets)
+
+1. **Stripe-Webhook-Event `customer.subscription.created` ergaenzen** — aktuell nur `.updated`/`.deleted` + `invoice.payment_failed`. Sofort-aktive Abos (Stripe `error_if_incomplete` -> Subscription wird direkt `active`) feuern `.created`; ohne dieses Event laeuft die Aktivierung NUR ueber den synchronen P5-Subscribe-Fix, der Webhook ist dann nur Backup. Endpoint: `https://app.sundartha.com/webhooks/stripe`.
+2. **WorkOS Staging -> Production** — live laeuft noch gegen `…-staging.authkit.app` (Staging-Client `client_01KVWCMPXRT0K2CWEJ9B2255XX`). Prod-AuthKit-Environment + `WORKOS_*`-Secrets in Render verdrahten.
+3. **Stripe Live-Keys (`sk_live_…`)** fuer echten Umsatz — aktuell `sk_test`. Erst zusammen mit `PROVISIONING_ENABLED=true` (P4).
+4. **E2E-Abnahme:** Register -> Stripe Checkout (Testkarte) -> Tenant `active` + `kycLevel=CARD` + Nummer im Dashboard (bei `PROVISIONING_ENABLED=false`: Nummer `requested`, kein Kauf). Siehe E.
 
 ## E. Abnahme nach go-live (End-to-End)
 
