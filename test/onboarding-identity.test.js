@@ -61,6 +61,37 @@ test("onboard ohne Namen -> Record ohne ownerName-Feld (Owner-Fallback)", async 
   }
 });
 
+// (2b) P0: onboard MIT idpSubject -> kanonische tenantId (t_<sub>), idp-gebunden.
+// Genau EIN Record, kein zweiter (email-artiger) Record. resolveTenant (MCP/REST)
+// findet danach denselben Tenant wie der Web-Login (t_<sub>).
+test("onboard mit idpSubject -> genau ein idp-gebundener Tenant t_<sub>", async () => {
+  const srv = await startServer(); // Dry-Run
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+      idpSubject: "sub-maria",
+      firstName: OWNER_NAME,
+    });
+    assert.equal(res.status, 200);
+    const tenants = srv.readStore().tenants.filter((t) => t.idpSubject === "sub-maria");
+    assert.equal(tenants.length, 1); // 1:1, kein Zweit-Record
+    assert.equal(tenants[0].id, "t_sub-maria"); // kanonische ID aus tenantIdForSubject
+    assert.equal(tenants[0].ownerName, OWNER_NAME);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// (2c) P0: leeres/Whitespace-idpSubject -> 400 (fail-closed, kein stiller Owner-Pfad).
+test("onboard mit Whitespace-idpSubject -> 400", async () => {
+  const srv = await startServer();
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard`, { idpSubject: "  " });
+    assert.equal(res.status, 400);
+  } finally {
+    await srv.stop();
+  }
+});
+
 // (3) IDENTITAETS-KREIS (DoD): onboard SETZT -> Inbound auf die aktiv gewordene
 // Nummer NENNT den Namen
 test("Identitaets-Kreis: onboard firstName + aktive Nummer -> Inbound nennt Maria", async () => {

@@ -16,6 +16,7 @@ import {
   PROVISIONING_JOB_STATUS,
   USAGE_EVENT_KIND,
   KYC_OUTBOUND_MIN,
+  tenantIdForSubject,
   normNum,
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
@@ -1286,7 +1287,19 @@ app.post("/api/onboard", async (req, res) => {
   // #1). Beide optional + Freitext (duerfen Leerzeichen, NICHT durch validIdentity, das
   // nur den Routing-Schluessel tenantId prueft); registerTenant trimmt + komponiert
   // ownerName (Owner-Fallback bei leer).
-  const { tenantId, firstName, lastName, privateNumber } = req.body || {};
+  const { tenantId: bodyTenantId, firstName, lastName, privateNumber, idpSubject } = req.body || {};
+  // P0: kanonische Identitaet. Ist idpSubject (WorkOS sub) gesetzt, ist DAS die Identitaet
+  // -> kanonische tenantId deterministisch daraus (tenantIdForSubject, gleiche Quelle wie
+  // der Web-Login) und der Record wird idp-gebunden (resolveTenant findet ihn -> MCP/REST
+  // + Web-Login loesen denselben Tenant auf, Invarianten 1+2). Ohne idpSubject bleibt der
+  // Owner-/Operator-Pfad byte-identisch (tenantId aus dem Body). Ein gesetztes, aber
+  // ungueltiges idpSubject -> 400 (fail-closed, kein stiller Fallback auf den Owner-Pfad).
+  if (idpSubject !== undefined && !validIdentity(idpSubject))
+    return res
+      .status(400)
+      .json({ error: "idpSubject ungueltig (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+  const sub = idpSubject ?? null;
+  const tenantId = sub ? tenantIdForSubject(sub) : bodyTenantId;
   if (!validIdentity(tenantId))
     return res
       .status(400)
@@ -1327,7 +1340,7 @@ app.post("/api/onboard", async (req, res) => {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      registerTenant(s, tenantId, { firstName, lastName, privateNumber });
+      registerTenant(s, tenantId, { firstName, lastName, privateNumber, idpSubject: sub });
       setTenantGeo(s, tenantId, { country, defaultLanguage: language });
       const r = requestNumber(s, {
         tenantId,

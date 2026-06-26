@@ -3,6 +3,7 @@
 // PKCE mit crypto (kein neuer Dep). Niemals Tokens/Secrets loggen.
 import crypto from "crypto";
 import { Router } from "express";
+import { tenantIdForSubject } from "./store/defaults.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
@@ -278,7 +279,7 @@ export function makeAccounts(runner) {
     // Gibt {tenantId, status, role} zurueck.
     async upsertOnFirstLogin({ sub, email }) {
       return runner.withClient(async (c) => {
-        const tenantId = `t_${sub}`;
+        const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
         // Tenant anlegen falls nicht vorhanden (idempotent). idp_subject = sub macht
         // den Tenant ueber i9 resolveTenant (MCP/REST-Kanal) auffindbar -> EINE
         // Identitaetsquelle fuer beide Kanaele (Web-Login B + MCP i9). ON CONFLICT

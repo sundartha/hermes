@@ -556,22 +556,26 @@ export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
   applyOwnerIdentity(owner, firstName, lastName);
 }
 
-// Idempotent + set-on-create: legt den Tenant an, falls neu (status active), und
-// setzt dabei EINMALIG die Identitaet. Liefert den Tenant. firstName + lastName
-// kommen aus dem Onboarding (I3 + G1); ownerName = "firstName lastName" wird
-// KOMPONIERT (Bestandskonsumenten lesen ownerName unveraendert), firstName zusaetzlich
-// gespeichert (LLM-Persona). Ein bestehender Tenant kommt unveraendert zurueck (kein
-// Upsert). Leere Teile -> Feld weggelassen (Owner-Fallback greift).
-// privateNumber ist OPTIONAL (F2 P4): fehlt sie, onboardet der Tenant wie bisher
-// (byte-identisch). Geteilte Normalisier-/Validier-Quelle (normalizePrivateNumber, G5):
-// ungueltig/gesperrtes Land -> throw VOR jeder State-Mutation (kein halb registrierter
-// Tenant ohne Persistenz; fail-closed). Leer/null -> kein Feld (kein Daten-Muell).
-export function registerTenant(s, id, { firstName, lastName, privateNumber } = {}) {
+// Idempotent. Set-on-create: legt den Tenant an (status active) und setzt EINMALIG die
+// Identitaet (firstName/lastName -> ownerName, idpSubject = WorkOS sub). idpSubject macht
+// den Record ueber resolveTenant (MCP/REST) auffindbar -> EINE kanonische Identitaet fuer
+// Web-Login UND MCP (Invarianten 1+3). Existiert der Tenant bereits (z.B. per Web-Login
+// gebunden), werden NUR FEHLENDE Identitaetsfelder ergaenzt (set-if-absent) - bestehende
+// Werte UND der Status bleiben unveraendert (P0 aktiviert nicht; Aktivierung = P3,
+// Invariante 5). normalizePrivateNumber validiert in BEIDEN Zweigen VOR jeder Mutation
+// (fail-closed; ungueltig/gesperrtes Land -> throw, kein halb gebundener Record).
+export function registerTenant(s, id, { firstName, lastName, privateNumber, idpSubject } = {}) {
+  const e164 = normalizePrivateNumber(privateNumber); // validiert VOR jeder Mutation
   const existing = findTenant(s, id);
-  if (existing) return existing;
-  const e164 = normalizePrivateNumber(privateNumber); // validiert, BEVOR s.tenants mutiert
+  if (existing) {
+    if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
+    if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
+    if (e164 && !existing.privateNumber) existing.privateNumber = e164;
+    return existing;
+  }
   const tenant = { id, status: TENANT_STATUS.ACTIVE };
   applyOwnerIdentity(tenant, firstName, lastName);
+  if (idpSubject) tenant.idpSubject = idpSubject;
   if (e164) tenant.privateNumber = e164;
   s.tenants.push(tenant);
   return tenant;

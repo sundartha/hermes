@@ -117,6 +117,13 @@ export const TENANT_STATUS = Object.freeze({
   CLOSED: "closed",
 });
 
+// Kanonische Tenant-ID aus einer IdP-Identitaet (WorkOS access_token sub). EINE Quelle
+// (G5) fuer Web-Login (upsertOnFirstLogin) UND den idp-gebundenen Onboard-Pfad: derselbe
+// sub MUSS denselben Tenant-Record adressieren, sonst entstehen zwei Records pro Person.
+// Praefix als benannte Konstante (G25), nicht als verstreuter Magic-String.
+const TENANT_ID_PREFIX = "t_";
+export const tenantIdForSubject = (sub) => `${TENANT_ID_PREFIX}${sub}`;
+
 // KYC-Reifegrad eines Tenants (P6b4). Geordnete Stufen: jede hoehere schliesst
 // die niedrigeren ein. EINE Quelle (G5/G25): der Gate-Vergleich (state-ops
 // kycReached) UND der Setter (setKycLevel) UND die pg-Hydrierung/Flush
