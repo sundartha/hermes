@@ -303,8 +303,12 @@ async function renderActivation(){
 
 // P5: Checkout-Start, geteilt vom "Karte hinzufuegen"-Button UND vom gefuehrten no_card-
 // Pfad beim Abonnieren (G5: eine Quelle fuer den Stripe-Checkout-Redirect).
-async function startCardSetup(msgEl){
-  const r = await fetch("/api/self-service/billing/setup-checkout", { method:"POST" });
+async function startCardSetup(msgEl, plan){
+  const r = await fetch("/api/self-service/billing/setup-checkout", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ plan }),
+  });
   if(r.ok){ window.location = (await r.json()).url; return; } // Redirect zu Stripe Checkout
   if(r.status===401){ msgEl.textContent="Sitzung abgelaufen - bitte neu anmelden."; msgEl.className="msg err"; refresh(); }
   else{ msgEl.textContent="Konnte Checkout nicht starten."; msgEl.className="msg err"; }
@@ -331,7 +335,7 @@ async function subscribePlan(plan){
   if(r.ok){ m.textContent="Abo gebucht."; m.className="msg ok"; refresh(); }
   else if(r.status===409){
     const e = await r.json().catch(()=>({}));
-    if(e.error==="no_card"){ startCardSetup(m); return; } // P5: gefuehrt -> erst Karte, dann zurueck + Plan
+    if(e.error==="no_card"){ startCardSetup(m, plan); return; } // BK2: Plan -> nach Karte gebucht
     m.textContent="Du hast bereits ein Abo."; m.className="msg err";
   }
   else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
@@ -347,12 +351,17 @@ $("subButtons").addEventListener("click", (ev)=>{
 });
 
 // Rueckkehr von Stripe Checkout: kurze Rueckmeldung (der Status kommt ohnehin aus refresh()).
-(function showCardReturn(){
-  const p = new URLSearchParams(location.search).get("card");
-  if(!p) return;
+// ?card=ok|canceled: reiner Karten-Flow. ?sub=ok|failed: BK2-Kachel-Flow. Bei sub=ok zeigt
+// refresh() ohnehin den aktiven Plan.
+(function showCheckoutReturn(){
+  const q = new URLSearchParams(location.search);
+  const card = q.get("card"), sub = q.get("sub");
+  if(!card && !sub) return;
   const m=$("cardMsg");
-  if(p==="ok"){ m.textContent="Karte hinterlegt."; m.className="msg ok"; }
-  else if(p==="canceled"){ m.textContent="Abgebrochen - keine Karte hinterlegt."; m.className="msg err"; }
+  if(card==="ok"){ m.textContent="Karte hinterlegt."; m.className="msg ok"; }
+  else if(card==="canceled"){ m.textContent="Abgebrochen - keine Karte hinterlegt."; m.className="msg err"; }
+  else if(sub==="ok"){ m.textContent="Abo gebucht."; m.className="msg ok"; }
+  else if(sub==="failed"){ m.textContent="Karte gespeichert, aber das Abo konnte nicht gebucht werden. Bitte erneut versuchen."; m.className="msg err"; }
   history.replaceState(null, "", location.pathname); // Query entfernen (sauberer Reload)
 })();
 

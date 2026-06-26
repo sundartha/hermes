@@ -18,11 +18,18 @@ import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { createTenantSubscription } from "./billing/subscribe.js";
 import { activatePaidTenant } from "./billing/activation.js";
 import { publicCall, activeNumberFor, upcomingCalendar } from "./store/views.js";
+import { CATALOG_SLUGS } from "./plans.js";
 
 // Pay3: Redirect-Ziele nach Rueckkehr von Stripe Checkout (kein Magic-String, G25).
 // Die UI (tenant.html) liest den ?card-Parameter und zeigt eine kurze Rueckmeldung.
 const CARD_RETURN_OK = "/tenant.html?card=ok";
 const CARD_RETURN_CANCELED = "/tenant.html?card=canceled";
+
+// BK2: Rueckkehr-Ziele bei getragenem Plan (Kachel-Flow). sub=ok: gebucht+aktiviert.
+// sub=failed: Karte gespeichert, Buchung scheiterte (z.B. already_subscribed) -> UI sagt
+// das, Kunde kann erneut. Kein Magic-String (G25).
+const SUB_RETURN_OK = "/tenant.html?sub=ok";
+const SUB_RETURN_FAILED = "/tenant.html?sub=failed";
 
 // F2 P6: maskiert die EIGENE private Summary-Nummer fuer die Self-Service-Read-View
 // (Decision #5, H4). Zeigt NUR den Laendercode (erste 3 Zeichen) + die letzten 4 Ziffern,
@@ -49,6 +56,30 @@ function paymentView(store, config, tenant) {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd },
   };
+}
+
+// BK2: Reiner Selektor (N7, kein Nebeneffekt): untrusted Input (Body ODER zurueckgetragene
+// Query) -> bekannter Katalog-Slug oder null. SSoT = CATALOG_SLUGS (G5, kein zweites Literal).
+function knownPlanSlug(raw) {
+  return typeof raw === "string" && CATALOG_SLUGS.includes(raw) ? raw : null;
+}
+
+// BK2: Baut die Stripe-successUrl. {CHECKOUT_SESSION_ID} = Stripe-Platzhalter. Optionaler,
+// bereits katalog-validierter (-> URL-sicher) Plan als Query -> return kann ihn buchen.
+// Slug = oeffentliche Katalog-Daten, KEIN Id-Leak.
+function returnSuccessUrl(publicUrl, planSlug) {
+  const base = `${publicUrl}/api/self-service/billing/return?session_id={CHECKOUT_SESSION_ID}`;
+  return planSlug ? `${base}&plan=${planSlug}` : base;
+}
+
+// BK2: Geteilte Buchungs-Sequenz hinter BEIDEN Eingaengen (G5/S2). Bucht fail-closed
+// (createTenantSubscription) + aktiviert NUR bei Erfolg voll (activatePaidTenant:
+// status=active + kyc=CARD + idempotentes Provisioning). KEIN HTTP/Audit hier (G34).
+async function subscribeAndActivate({ store, billing, config, accounts, provision, tenant, planSlug }) {
+  const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
+  if (!result.ok) return result;
+  await activatePaidTenant({ store, accounts, provision, tenant });
+  return result;
 }
 
 // config (paymentEnabled/publicUrl) + billing (BillingPort) + accounts (pg-Status-Seam
@@ -163,8 +194,11 @@ export function makeSelfServiceRoutes({
       return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
     const tenant = req.tenant.tenantId;
+    // BK2: optionaler Plan aus dem Kachel-Flow -> successUrl. Bare "Karte hinzufuegen"
+    // (kein Plan) -> null -> reine Karten-successUrl (byte-identisch zum Bestand).
+    const planSlug = knownPlanSlug((req.body || {}).plan);
     const customerId = await ensureCustomer({ store, billing, tenant });
-    const successUrl = `${config.publicUrl}/api/self-service/billing/return?session_id={CHECKOUT_SESSION_ID}`;
+    const successUrl = returnSuccessUrl(config.publicUrl, planSlug);
     const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
     const { url } = await billing.createSetupCheckoutSession({
       tenantRef: tenant,
@@ -193,7 +227,23 @@ export function makeSelfServiceRoutes({
       return res.status(403).json({ error: "Customer-Mismatch" });
     }
     audit("self_service_card_saved", req, `tenant=${tenant}`);
-    res.redirect(CARD_RETURN_OK); // 302 -> UI zeigt "Karte hinterlegt"
+
+    // BK2: getragener Plan (Query) -> direkt buchen+aktivieren (gefuehrter Kachel-Flow:
+    // keine Karte -> Checkout -> Rueckkehr -> Plan). Fehlt/unbekannt -> reiner Karten-Flow
+    // (byte-identisch). Slug katalog-validiert (kein Id-Leak). Geld-Gates: PAYMENT_ENABLED
+    // (404 oben) + webAuthPendingMw + createTenantSubscription (fail-closed, idempotent).
+    const carriedPlan = knownPlanSlug(req.query.plan);
+    if (!carriedPlan) return res.redirect(CARD_RETURN_OK); // 302 -> "Karte hinterlegt"
+
+    const result = await subscribeAndActivate({
+      store, billing, config, accounts, provision, tenant, planSlug: carriedPlan,
+    });
+    audit(
+      "self_service_subscribe",
+      req,
+      `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason}`,
+    );
+    res.redirect(result.ok ? SUB_RETURN_OK : SUB_RETURN_FAILED);
   });
 
   // ---- W4: Abo buchen aus dem Self-Service-Dashboard -----------------------------
@@ -209,16 +259,15 @@ export function makeSelfServiceRoutes({
       return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
     const tenant = req.tenant.tenantId;
     const planSlug = (req.body || {}).plan;
-    const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
+    // BK2: bucht + aktiviert ueber die geteilte Sequenz (subscribeAndActivate) - DIESELBE
+    // Quelle wie der Karten-Checkout-Rueckkehr-Pfad (G5/S2). Verhalten unveraendert.
+    const result = await subscribeAndActivate({
+      store, billing, config, accounts, provision, tenant, planSlug,
+    });
     if (!result.ok) {
       audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
       return res.status(subscribeRejectStatus(result.reason)).json({ error: result.reason });
     }
-    // P5: volle Aktivierung (status=active + kyc=CARD + payment-gegatetes Provisioning) -
-    // EINE Quelle (activation.js), identisch zum Webhook-Backup. Unabhaengig von der Stripe-
-    // Event-Subscription; idempotent ueber den geteilten tenantHasLiveNumber-Guard. Der
-    // Status-Flip bleibt am pg-Status-Seam (webAuthMw-Quelle), kein Drift zur Store-Fassade.
-    await activatePaidTenant({ store, accounts, provision, tenant });
     audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
     res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
   });
