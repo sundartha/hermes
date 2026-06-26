@@ -177,14 +177,20 @@ function formatPlanPrice(amountCents, currency){
     .format(amountCents / CENTS_PER_EURO);
 }
 
-// Laedt den oeffentlichen Katalog (auth-exempt, kein Login noetig). Fail-soft: bei Fehler
-// leeres Array -> keine Kacheln (Block bleibt leer statt Crash). "load" macht den Fetch-
-// Nebeneffekt im Namen sichtbar (N7); der Cache ist Memoisierung eines Reads, kein DI-
-// Lazy-Init (P15 betrifft Objekt-Konstruktion im Fachcode, nicht einen Daten-Fetch).
+// Laedt den oeffentlichen Katalog (auth-exempt, kein Login noetig). Fail-soft: JEDER Fehler
+// (HTTP !ok, fetch-Rejection bei offline/DNS/Reset, non-JSON Body eines Proxy/Interstitial)
+// -> leeres Array statt Reject. Damit ist garantiert, dass das Promise nie rejectet und der
+// Bootstrap-Aufrufer refresh() immer ausfuehrt (das Dashboard haengt nicht am Katalog-Fetch).
+// "load" macht den Fetch-Nebeneffekt im Namen sichtbar (N7); der Cache ist Memoisierung eines
+// Reads, kein DI-Lazy-Init (P15 betrifft Objekt-Konstruktion im Fachcode, nicht einen Fetch).
 async function loadPlanCatalog(){
   if(planCatalog) return planCatalog;
-  const r = await fetch("/api/plans");
-  planCatalog = r.ok ? await r.json() : [];
+  try {
+    const r = await fetch("/api/plans");
+    planCatalog = r.ok ? await r.json() : [];
+  } catch {
+    planCatalog = []; // Netzfehler oder non-JSON Body -> leerer Katalog statt Crash
+  }
   return planCatalog;
 }
 
