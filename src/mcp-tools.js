@@ -2,7 +2,7 @@
 // Die Tools sprechen mit der REST-API des Gateways.
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
-import { WIDGET_CALL_STATUS } from "./ui/adapters/mcp-native.js";
+import { WIDGET_CALL_STATUS, WIDGET_TRANSCRIPT } from "./ui/adapters/mcp-native.js";
 import { UI_META_KEY } from "./ui/contract.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -104,6 +104,29 @@ const CALL_STATUS_OUTPUT = {
   last_transcript_lines: z.array(z.string()),
 };
 
+// Daten-Kontrakt get_transcript (Strategie Abschnitt 5.1, DSGVO): GENAU diese Felder
+// duerfen nach aussen (structuredContent + Text + Widget). Das Roh-Transkript
+// (c.transcript: role/text/t) wird NIE durchgereicht - es wird serverseitig nach der
+// Summary gepurged (P8a) und faellt hier per Whitelist (nicht Blacklist) ohnehin raus.
+// EIN Filter, VOR jeder Sicht (Pre-Mortem #1).
+function pickTranscript(callId, c) {
+  return {
+    call_id: callId,
+    result_summary:
+      c.summary ||
+      "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
+    objective_achieved: c.objectiveAchieved ?? "unclear",
+  };
+}
+
+// outputSchema fuer get_transcript: validiert GENAU die Whitelist. objective_achieved
+// ist true|false|"unclear" (Bool oder String), daher union.
+const TRANSCRIPT_OUTPUT = {
+  call_id: z.string(),
+  result_summary: z.string(),
+  objective_achieved: z.union([z.boolean(), z.string()]),
+};
+
 // ctx (Phase 2): { identity, allowCalendar }. identity wird per Closure an jeden
 // REST-Aufruf gehaengt (X-Internal-Identity). allowCalendar steuert, ob das
 // get_calendar-Tool ueberhaupt registriert wird. stdio ruft registerTools(server)
@@ -111,6 +134,19 @@ const CALL_STATUS_OUTPUT = {
 export function registerTools(server, { identity = null, allowCalendar = true, uiHost = null } = {}) {
   const call = (method, path, body) => api(method, path, body, identity);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
+
+  // Stufe 1 fuer EIN Widget aktivieren - geteilt von ALLEN UI-Tools (G5/S2, keine
+  // Duplizierung der Anhang-Logik). Registriert die statische ui://-Resource am Server
+  // UND liefert das _meta-Fragment fuer den Tool-Deskriptor - aber NUR wenn der
+  // Renderer das Widget kennt und der Host faehig ist. Sonst {} (kein _meta, keine
+  // Resource = fail-closed Stufe-0-only, AC3). Der Name nennt den Seiteneffekt
+  // (Registrierung, N7); idempotent pro Server-Instanz (stateless: frischer Server je
+  // Request).
+  const enableWidgetUi = (widgetId) => {
+    if (!uiRenderer || !uiRenderer.hasWidget(widgetId)) return {};
+    uiRenderer.registerResource(server, widgetId);
+    return { _meta: { [UI_META_KEY]: { resourceUri: uiRenderer.resourceUri(widgetId) } } };
+  };
 
   // AC6 per-handler Throw-Schutz (gilt stdio UND HTTP /mcp, da registerTools geteilt
   // ist): wickelt JEDEN Handler in ein catch. Ein Tool-Throw (Gateway-Fehler,
@@ -176,12 +212,7 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
   );
 
   // Stufe 1 NUR wenn ein faehiger Renderer das Widget kennt (Capability vorhanden).
-  // Sonst kein _meta, keine Resource (fail-closed, AC3). Resource-Registrierung ist
-  // idempotent pro Server-Instanz (stateless: frischer Server je Request).
-  const callStatusUi =
-    uiRenderer && uiRenderer.hasWidget(WIDGET_CALL_STATUS) ? uiRenderer : null;
-  if (callStatusUi) callStatusUi.registerResource(server, WIDGET_CALL_STATUS);
-
+  // enableWidgetUi registriert die Resource und liefert das _meta; sonst {} (AC3).
   uiTool(
     "get_call_status",
     {
@@ -189,9 +220,7 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
         "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Waehrend eines laufenden Anrufs alle ~10 Sekunden aufrufen.",
       inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
       outputSchema: CALL_STATUS_OUTPUT,
-      ...(callStatusUi
-        ? { _meta: { [UI_META_KEY]: { resourceUri: callStatusUi.resourceUri(WIDGET_CALL_STATUS) } } }
-        : {}),
+      ...enableWidgetUi(WIDGET_CALL_STATUS),
     },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);
@@ -219,28 +248,41 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
     },
   );
 
-  tool(
+  uiTool(
     "get_transcript",
-    "Liefert nach Gespraechsende die Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Aus Datenschutzgruenden wird das Roh-Transkript nach der Zusammenfassung nicht aufbewahrt (Datenminimierung) - das transcript-Feld ist fuer abgeschlossene Calls daher leer. Erst aufrufen, wenn get_call_status status=completed meldet.",
-    { call_id: z.string().describe("Die call_id aus place_call") },
+    {
+      description:
+        "Liefert nach Gespraechsende die Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Aus Datenschutzgruenden wird das Roh-Transkript nach der Zusammenfassung nicht aufbewahrt (Datenminimierung) und NICHT zurueckgegeben - nur Zusammenfassung und Ziel-Status. Erst aufrufen, wenn get_call_status status=completed meldet.",
+      inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
+      outputSchema: TRANSCRIPT_OUTPUT,
+      ...enableWidgetUi(WIDGET_TRANSCRIPT),
+    },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);
       if (c.status === "active")
         return text({
           error: "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
         });
+      // Validiert, dass ein echtes Call-Objekt zurueckkam (transcript-Feld vorhanden);
+      // das Roh-Transkript selbst wird bewusst NICHT durchgereicht (Whitelist unten).
       requireFields(c, { transcript: "array" });
-      return text({
-        transcript: c.transcript.map((t) => ({
-          role: t.role === "agent" ? "agent" : "callee",
-          text: t.text,
-          t: t.at,
-        })),
-        result_summary:
-          c.summary ||
-          "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
-        objective_achieved: c.objectiveAchieved ?? "unclear",
-      });
+      const data = pickTranscript(call_id, c); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      // Textblock = Summary/Ziel-Sicht (kein call_id, analog get_call_status);
+      // structuredContent ist die SSOT-Obermenge inkl. call_id (Whitelist). Roh-
+      // Transkript taucht in KEINER Sicht auf (DSGVO).
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { result_summary: data.result_summary, objective_achieved: data.objective_achieved },
+              null,
+              2,
+            ),
+          },
+        ],
+        structuredContent: data,
+      };
     },
   );
 
