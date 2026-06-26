@@ -115,6 +115,10 @@ export const BASE_ENV = {
   // Zeile leakt eine lokale .env mit SELF_SERVICE_ENABLED=true via dotenv in
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   SELF_SERVICE_ENABLED: "false",
+  // Rich-UI default AUS (fail-closed): Bestandssuite byte-identisch (nur Text/
+  // structuredContent). Ohne diese Zeile leakt eine lokale .env mit MCP_UI_ENABLED=true
+  // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  MCP_UI_ENABLED: "false",
   // ---- Payment/Billing (P6b1) ----
   // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
   // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.

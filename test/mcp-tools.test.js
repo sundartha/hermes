@@ -26,6 +26,13 @@ function captureTools(ctx) {
     tool(name, _desc, _schema, handler) {
       handlers.set(name, handler);
     },
+    // P1: get_call_status nutzt registerTool/registerResource. Der Stub muss sie
+    // kennen, sonst wirft registerTools (TypeError). Capture nach Name (cb an
+    // Position 3 bei registerTool). registerResource ist hier ein No-Op.
+    registerTool(name, _config, handler) {
+      handlers.set(name, handler);
+    },
+    registerResource() {},
   };
   registerTools(fakeServer, ctx);
   return handlers;
