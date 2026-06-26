@@ -1551,7 +1551,17 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   const profile = store.resolveProfile(identity);
   try {
     const server = new McpServer({ name: "hermes", version: "0.2.0" });
-    registerTools(server, { identity, allowCalendar: profile.allowCalendar });
+    // Rich-UI-Host-Hinweis (P1, fail-closed): Capability aus dem initialize-Body
+    // (params.capabilities), gegated durch den Master-Schalter config.mcpUiEnabled
+    // (Default aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Kein
+    // neuer Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert (AC7).
+    // Stateless-Caveat: bei sessionIdGenerator=undefined traegt nur der
+    // initialize-POST params.capabilities; der spaetere tools/list-POST nicht. Der
+    // fail-closed Kern (Master-Schalter + Capability-Pflicht) greift trotzdem; der
+    // vollstaendige capabilityDeclaresUi-Mechanismus ist im Seam getestet und greift,
+    // sobald der Transport stateful wird (eigener Schritt, nicht P1).
+    const uiHost = { enabled: config.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
+    registerTools(server, { identity, allowCalendar: profile.allowCalendar, uiHost });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       transport.close();

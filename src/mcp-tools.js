@@ -1,6 +1,12 @@
 // MCP-Tool-Definitionen (gemeinsam fuer stdio-Transport und Streamable HTTP /mcp).
 // Die Tools sprechen mit der REST-API des Gateways.
 import { z } from "zod";
+import { uiRendererFor } from "./ui/registry.js";
+import { WIDGET_CALL_STATUS } from "./ui/adapters/mcp-native.js";
+import { UI_META_KEY } from "./ui/contract.js";
+
+// Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
+const LAST_TRANSCRIPT_LINES = 6;
 
 // Zur Aufrufzeit lesen (server.js setzt GATEWAY_URL ggf. erst beim Start)
 const GATEWAY = () => (process.env.GATEWAY_URL || "http://localhost:3000").replace(/\/$/, "");
@@ -74,20 +80,47 @@ function durationS(c) {
   return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
 }
 
+// Daten-Kontrakt get_call_status (P1-Spec Abschnitt 5): GENAU diese Felder duerfen
+// nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. Sitzt
+// NACH der Tenant-Aufloesung (Gateway) und VOR jeder Sicht - eine einzige Stelle.
+// Kein Secret/Identitaet/Audio/Cross-Tenant-Feld passiert diese Funktion.
+function pickCallStatus(callId, c) {
+  return {
+    call_id: callId,
+    status: mapStatus(c),
+    duration_s: durationS(c),
+    last_transcript_lines: c.transcript
+      .slice(-LAST_TRANSCRIPT_LINES)
+      .map((t) => `${t.role === "agent" ? "Agent" : "Gegenseite"}: ${t.text}`),
+  };
+}
+
+// outputSchema fuer get_call_status: validiert GENAU die Whitelist (Stufe 0,
+// schema-validiert). Modul-Konstante (G35, an einer Stelle).
+const CALL_STATUS_OUTPUT = {
+  call_id: z.string(),
+  status: z.string(),
+  duration_s: z.number(),
+  last_transcript_lines: z.array(z.string()),
+};
+
 // ctx (Phase 2): { identity, allowCalendar }. identity wird per Closure an jeden
 // REST-Aufruf gehaengt (X-Internal-Identity). allowCalendar steuert, ob das
 // get_calendar-Tool ueberhaupt registriert wird. stdio ruft registerTools(server)
 // ohne ctx -> identity null (Owner), allowCalendar true.
-export function registerTools(server, { identity = null, allowCalendar = true } = {}) {
+export function registerTools(server, { identity = null, allowCalendar = true, uiHost = null } = {}) {
   const call = (method, path, body) => api(method, path, body, identity);
+  const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
 
   // AC6 per-handler Throw-Schutz (gilt stdio UND HTTP /mcp, da registerTools geteilt
   // ist): wickelt JEDEN Handler in ein catch. Ein Tool-Throw (Gateway-Fehler,
   // Result-Guard, Deref) wird zu einer sauberen MCP-Fehlerantwort (isError) statt
   // einer process-level unhandled rejection. requireFields-Meldungen sind bereits
   // generisch; alles andere bekommt eine stabile, provider-freie Meldung (kein Leak).
-  const tool = (name, desc, schema, handler) =>
-    server.tool(name, desc, schema, async (...args) => {
+  // EINE Fehlerhuelle, geteilt von tool() und uiTool() (G5/S2 - keine Duplizierung).
+  const wrapHandler =
+    (handler) =>
+    async (...args) => {
       try {
         return await handler(...args);
       } catch (err) {
@@ -96,7 +129,16 @@ export function registerTools(server, { identity = null, allowCalendar = true } 
             "Der Telefon-Agent ist momentan nicht erreichbar. Bitte spaeter erneut versuchen.",
         );
       }
-    });
+    };
+
+  // Bestands-Tools: positionsbasiertes server.tool (frozen API, kein outputSchema/_meta).
+  const tool = (name, desc, schema, handler) => server.tool(name, desc, schema, wrapHandler(handler));
+
+  // Wie tool(), aber ueber registerTool(config) -> erlaubt outputSchema (Stufe 0
+  // schema-validiert) und _meta.ui.resourceUri (Stufe 1). config ohne _meta ->
+  // Stufe-0-only. Dieselbe Fehlerhuelle wie tool() (Single Source via wrapHandler).
+  const uiTool = (name, config, handler) =>
+    server.registerTool(name, config, wrapHandler(handler));
 
   tool(
     "place_call",
@@ -133,20 +175,47 @@ export function registerTools(server, { identity = null, allowCalendar = true } 
     },
   );
 
-  tool(
+  // Stufe 1 NUR wenn ein faehiger Renderer das Widget kennt (Capability vorhanden).
+  // Sonst kein _meta, keine Resource (fail-closed, AC3). Resource-Registrierung ist
+  // idempotent pro Server-Instanz (stateless: frischer Server je Request).
+  const callStatusUi =
+    uiRenderer && uiRenderer.hasWidget(WIDGET_CALL_STATUS) ? uiRenderer : null;
+  if (callStatusUi) callStatusUi.registerResource(server, WIDGET_CALL_STATUS);
+
+  uiTool(
     "get_call_status",
-    "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Waehrend eines laufenden Anrufs alle ~10 Sekunden aufrufen.",
-    { call_id: z.string().describe("Die call_id aus place_call") },
+    {
+      description:
+        "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Waehrend eines laufenden Anrufs alle ~10 Sekunden aufrufen.",
+      inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
+      outputSchema: CALL_STATUS_OUTPUT,
+      ...(callStatusUi
+        ? { _meta: { [UI_META_KEY]: { resourceUri: callStatusUi.resourceUri(WIDGET_CALL_STATUS) } } }
+        : {}),
+    },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);
       requireFields(c, { transcript: "array" });
-      return text({
-        status: mapStatus(c),
-        duration_s: durationS(c),
-        last_transcript_lines: c.transcript
-          .slice(-6)
-          .map((t) => `${t.role === "agent" ? "Agent" : "Gegenseite"}: ${t.text}`),
-      });
+      const data = pickCallStatus(call_id, c); // EIN Filter, VOR Text + structuredContent
+      // Textblock bleibt die heutige 3-Feld-Sicht (Legacy/stdio byte-kompatibel, AC8);
+      // structuredContent ist die SSOT-Obermenge inkl. call_id (Whitelist).
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: data.status,
+                duration_s: data.duration_s,
+                last_transcript_lines: data.last_transcript_lines,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        structuredContent: data,
+      };
     },
   );
 

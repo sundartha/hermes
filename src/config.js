@@ -227,6 +227,10 @@ export const config = {
   // Request-Tenant auf. EIN gemeinsames Flag fuer I4-I7 (kein separates Login-Flag;
   // Self-Service kommt spaeter unter eigenem Reife-Flag).
   multiTenant: (process.env.MULTI_TENANT || "false") === "true",
+  // Rich-UI ui://-Resource fuer faehige MCP-Hosts (P1). DEFAULT AUS (fail-closed):
+  // ohne dieses Flag bleibt der gesamte Rich-UI-Pfad inaktiv -> nur Text/
+  // structuredContent (byte-identisch). Capability-Pflicht des Hosts kommt zusaetzlich.
+  mcpUiEnabled: (process.env.MCP_UI_ENABLED || "false") === "true",
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
