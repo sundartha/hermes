@@ -9,10 +9,11 @@ import http from "node:http";
 import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { uiRendererFor } from "../src/ui/registry.js";
-import { mcpNativeRenderer, WIDGET_CALL_STATUS } from "../src/ui/adapters/mcp-native.js";
+import { mcpNativeRenderer, WIDGET_CALL_STATUS, WIDGET_TRANSCRIPT } from "../src/ui/adapters/mcp-native.js";
 import { UI_MIME, capabilityDeclaresUi, uiResourceUri } from "../src/ui/contract.js";
 
 const RESOURCE_URI = uiResourceUri(WIDGET_CALL_STATUS); // ui://hermes/call-status
+const RESOURCE_URI_TRANSCRIPT = uiResourceUri(WIDGET_TRANSCRIPT); // ui://hermes/transcript
 
 // Faehiger Host: deklariert die UI-Capability mit UI_MIME (SEP-1865 initialize).
 const CAPABLE_CAPS = {
@@ -231,4 +232,164 @@ test("T-P1-UI-seam: uiRendererFor + Adapter + capabilityDeclaresUi Grenzfaelle",
 
   assert.equal(capabilityDeclaresUi(undefined), false, "Grenzfall: undefined -> false");
   assert.equal(capabilityDeclaresUi({}), false);
+});
+
+// ===== P2: get_transcript ueber den BESTEHENDEN Seam (Seam-Wiederverwendung) =====
+// Datensatz eines ABGESCHLOSSENEN Calls MIT Roh-Transkript-Zeilen + Summary/Ziel +
+// PII. Der Whitelist-Test beweist, dass NUR Summary/objective/call_id durchkommen,
+// das Roh-Transkript NIE - auch wenn der Datensatz es noch traegt (DSGVO).
+const RICH_TRANSCRIPT = {
+  status: "completed",
+  summary: "Termin Donnerstag 14:30 bei Salon Bella gebucht.",
+  objectiveAchieved: true,
+  transcript: [
+    { role: "agent", text: "Guten Tag, ich rufe im Auftrag von Antonio an.", at: "2026-06-26T10:00:01.000Z" },
+    { role: "callee", text: "Donnerstag 14:30 koennen wir machen.", at: "2026-06-26T10:00:05.000Z" },
+  ],
+  // Felder, die NIEMALS nach aussen duerfen (Whitelist-Test):
+  email: "secret@example.com",
+  apiKey: "sk_live_LEAK",
+  tenantId: "tenant-XYZ",
+  audioUrl: "https://example.com/recording.wav",
+};
+
+const transcriptOutput = z.object({
+  call_id: z.string(),
+  result_summary: z.string(),
+  objective_achieved: z.union([z.boolean(), z.string()]),
+});
+
+test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiertes structuredContent", async () => {
+  await withGateway(RICH_TRANSCRIPT, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("get_transcript");
+    assert.ok(config.outputSchema, "outputSchema am config deklariert");
+    const result = await handler({ call_id: "call_1" });
+
+    assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten");
+    const textObj = JSON.parse(result.content[0].text);
+    assert.deepEqual(
+      Object.keys(textObj).sort(),
+      ["objective_achieved", "result_summary"],
+      "Textblock: Summary/Ziel-Sicht ohne call_id (kein Roh-Transkript)",
+    );
+
+    assert.ok(result.structuredContent, "structuredContent vorhanden");
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "call_id",
+      "objective_achieved",
+      "result_summary",
+    ]);
+    assert.equal(result.structuredContent.call_id, "call_1");
+    assert.equal(result.structuredContent.objective_achieved, true);
+    assert.doesNotThrow(
+      () => transcriptOutput.parse(result.structuredContent),
+      "structuredContent validiert gegen outputSchema",
+    );
+  });
+});
+
+test("T-P2-UI-AC2: Stufe 1 (faehiger Host) - genau eine transcript-Resource + _meta zeigt darauf", async () => {
+  await withGateway(RICH_TRANSCRIPT, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const transcriptResources = resources.filter((r) => r.uri === RESOURCE_URI_TRANSCRIPT);
+    assert.equal(transcriptResources.length, 1, "genau eine transcript-Resource");
+    assert.equal(transcriptResources[0].config.mimeType, UI_MIME);
+
+    const { config } = tools.get("get_transcript");
+    assert.equal(config._meta.ui.resourceUri, RESOURCE_URI_TRANSCRIPT, "_meta zeigt auf dieselbe URI");
+  });
+});
+
+test("T-P2-UI-AC3: Fallback fail-closed - kein _meta, keine transcript-Resource, structuredContent voll", async () => {
+  const cases = {
+    "stdio (uiHost=null)": null,
+    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
+    "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
+    "unbekannter Host (fremder mimeType)": {
+      enabled: true,
+      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
+    },
+  };
+  await withGateway(RICH_TRANSCRIPT, async () => {
+    for (const [label, uiHost] of Object.entries(cases)) {
+      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
+      const { config, handler } = tools.get("get_transcript");
+      assert.equal(
+        resources.filter((r) => r.uri === RESOURCE_URI_TRANSCRIPT).length,
+        0,
+        `${label}: keine transcript-Resource`,
+      );
+      assert.ok(!config._meta, `${label}: kein _meta`);
+      const result = await handler({ call_id: "call_1" });
+      assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
+      assert.equal(result.structuredContent.call_id, "call_1");
+    }
+  });
+});
+
+test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/Text/Resource", async () => {
+  await withGateway(RICH_TRANSCRIPT, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_transcript");
+    const result = await handler({ call_id: "call_1" });
+
+    const serialized = JSON.stringify(result);
+    // Roh-Transkript-Zeilen (role/text) UND PII duerfen NIRGENDS auftauchen.
+    for (const leak of [
+      "Donnerstag 14:30 koennen wir machen.",
+      "ich rufe im Auftrag von Antonio an",
+      "callee",
+      "secret@example.com",
+      "sk_live_LEAK",
+      "tenant-XYZ",
+      "recording.wav",
+    ]) {
+      assert.ok(!serialized.includes(leak), `kein Leck von "${leak}" im Tool-Result`);
+    }
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "call_id",
+      "objective_achieved",
+      "result_summary",
+    ]);
+
+    // Resource-HTML ist statisch -> enthaelt per Konstruktion keine Call-Daten.
+    const transcriptRes = resources.find((r) => r.uri === RESOURCE_URI_TRANSCRIPT);
+    const html = (await transcriptRes.readCallback()).contents[0].text;
+    for (const leak of ["Donnerstag 14:30", "secret@example.com", "sk_live_LEAK", "tenant-XYZ"]) {
+      assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
+    }
+  });
+});
+
+test("T-P2-UI-AC5: Fehlerpfad - degradierte Antwort -> isError, text-only, auch bei faehigem Host", async () => {
+  // Body ohne transcript -> requireFields wirft -> wrapHandler liefert isError.
+  await withGateway({ status: "completed" }, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_transcript");
+    const result = await handler({ call_id: "call_1" });
+    assert.ok(result.isError, "degradierte Antwort -> isError");
+    assert.ok(!result.structuredContent, "Fehlerpfad ohne structuredContent");
+    const txt = result.content.map((c) => c.text).join("\n");
+    assert.doesNotMatch(txt, /Cannot read|undefined|TypeError/i, "generischer, provider-freier Text");
+  });
+});
+
+test("T-P2-UI-AC6: transcript.html self-contained - kein @import/Linkback, @dsCard, readback=UI_MIME", async () => {
+  const readback = await new Promise((resolve) => {
+    const fakeServer = {
+      registerResource(_name, _uri, _config, readCallback) {
+        resolve(readCallback());
+      },
+    };
+    mcpNativeRenderer.registerResource(fakeServer, WIDGET_TRANSCRIPT);
+  });
+  const content = readback.contents[0];
+  assert.equal(content.mimeType, UI_MIME);
+  const html = content.text;
+  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+  assert.ok(!html.includes("@import"), "kein @import");
+  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
+  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_TRANSCRIPT), true, "Adapter kennt transcript");
 });

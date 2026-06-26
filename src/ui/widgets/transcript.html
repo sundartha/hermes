@@ -1,0 +1,47 @@
+<!-- @dsCard group="MCP" name="get_transcript" subtitle="Result summary + objective (no raw transcript)" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Transcript</title>
+<style>
+  /* Inline-Tokens: Subset aus design-system/_shared/tokens.css (Werte identisch,
+     self-contained fuer die Iframe-Sandbox - kein externer CSS-Import/Linkback, AC6). */
+  :root {
+    --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
+    --color-white:#fff; --color-green-700:#177a43; --color-green-50:#e7f6ed;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --radius-md:16px; --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
+  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
+        border-radius:var(--radius-md);padding:var(--space-4);max-width:420px}
+  .head{display:flex;align-items:center;gap:var(--space-2)}
+  .title{font-weight:600}
+  .sub{color:var(--color-gray-500);font-size:13px}
+  .badge{margin-left:auto;font-size:12px;color:var(--color-green-700);
+         background:var(--color-green-50);border-radius:var(--radius-md);
+         padding:var(--space-1) var(--space-2)}
+  .summary{margin:var(--space-3) 0 0;padding-top:var(--space-3);
+           border-top:1px solid var(--color-gray-150);font-size:14px;line-height:1.5}
+  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
+        display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <span><span class="title">Gespraechs-Ergebnis</span><br />
+      <span class="sub">get_transcript</span></span>
+      <span class="badge" data-mcp="objective_achieved">—</span>
+    </div>
+    <p class="summary" data-mcp="result_summary">—</p>
+    <div class="foot"><span data-mcp="call_id">—</span><span>Hermes</span></div>
+  </div>
+  <!-- Read-only Widget (P2): kein Callback (Q3/P4). Der Host fuellt data-mcp-* aus
+       dem gepushten structuredContent - NUR result_summary, objective_achieved, call_id
+       (DSGVO-Whitelist). NIE das Roh-Transkript: es wird serverseitig nach der Summary
+       gepurged und faellt hier per Whitelist ohnehin raus. -->
+</body>
+</html>
