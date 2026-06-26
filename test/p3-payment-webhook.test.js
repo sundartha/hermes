@@ -54,6 +54,7 @@ test("A(a) updated mit tenant_ref -> Abo + KYC(card) + active + provision genau 
       data: {
         object: {
           id: "sub_1",
+          status: "active",
           current_period_end: 1893456000,
           metadata: { tenant_ref: "t_a", plan_slug: "starter" },
         },
@@ -74,7 +75,7 @@ test("A(b) created aktiviert identisch (deckt das .created-Mapping)", async () =
   await applyStripeWebhook(
     {
       type: SUBSCRIPTION_EVENT.CREATED,
-      data: { object: { id: "sub_2", metadata: { tenant_ref: "t_b" } } },
+      data: { object: { id: "sub_2", status: "active", metadata: { tenant_ref: "t_b" } } },
     },
     deps,
   );
@@ -86,7 +87,7 @@ test("A(b) created aktiviert identisch (deckt das .created-Mapping)", async () =
 test("A(c) ohne tenant_ref: Tenant via findTenantBySubscription, dieselben Effekte", async () => {
   const deps = fakeDeps({ tenantBySub: "t_c" });
   await applyStripeWebhook(
-    { type: SUBSCRIPTION_EVENT.UPDATED, data: { object: { id: "sub_3", metadata: {} } } },
+    { type: SUBSCRIPTION_EVENT.UPDATED, data: { object: { id: "sub_3", status: "active", metadata: {} } } },
     deps,
   );
   assert.deepEqual(deps.calls.kyc, [["t_c", KYC_LEVEL.CARD]]);
@@ -110,6 +111,20 @@ test("A(d) Suspend (deleted/payment_failed) ruft provision NIE (Suspend kauft ni
     assert.deepEqual(deps.calls.provision, [], "provision nie bei Suspend");
     assert.deepEqual(deps.calls.kyc, [], "kein KYC-Set bei Suspend");
   }
+});
+
+test("A(e) updated mit Dunning-Status (past_due) -> ignore: kein KYC/active/provision", async () => {
+  const deps = fakeDeps({ tenantBySub: "t_pd" });
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: { object: { id: "sub_pd", status: "past_due", metadata: { tenant_ref: "t_pd" } } },
+    },
+    deps,
+  );
+  assert.deepEqual(deps.calls.provision, [], "unbezahlt -> kein provision (Invariante 1/2)");
+  assert.deepEqual(deps.calls.kyc, [], "unbezahlt -> kein KYC=CARD");
+  assert.deepEqual(deps.calls.setStatus, [], "unbezahlt -> kein active (Outbound-Gate bleibt zu)");
 });
 
 // ---- Teil B: state-ops-Ebene (Unit, makeDefaultState) ----

@@ -26,6 +26,14 @@ export const WEBHOOK_ACTION = Object.freeze({
   IGNORE: "ignore",
 });
 
+// Stripe-Subscription-Status, die eine BESTAETIGTE Zahlung bedeuten und das Gate
+// oeffnen duerfen (Stripe-API-Werte). Stripe feuert .created auch bei 'incomplete'
+// (vor erster Zahlung) und .updated bei Dunning (past_due/unpaid); solche Events duerfen
+// weder KYC=CARD setzen noch Provisioning ausloesen (Invariante 1/2). Nur active/trialing
+// aktivieren; alle anderen Status -> ignore. Suspend laeuft weiter ausschliesslich ueber
+// DELETED/PAYMENT_FAILED (Spec: nur diese beiden suspenden).
+const CONFIRMED_SUBSCRIPTION_STATUS = Object.freeze(new Set(["active", "trialing"]));
+
 // Parst den Stripe-Signature-Header "t=<ts>,v1=<hex>[,v1=<hex>...]" in {timestamp, v1[]}.
 // Fail-closed: fehlt t oder ein v1, -> null (Aufrufer lehnt ab). Mehrere v1 (Secret-
 // Rotation) werden alle gesammelt.
@@ -74,14 +82,22 @@ export function verifyStripeSignature({ rawBody, signatureHeader, secret, nowS }
 // planSlug?, currentPeriodEnd?} aus einem geparsten Stripe-Event. tenantRef kommt aus
 // metadata.tenant_ref (das createSubscription mitgibt); fehlt es, loest der Route-Layer
 // den Tenant ueber subscriptionId auf. Nur die in-scope Typen wirken; alles andere ->
-// action=ignore (idempotent, kein Fehler). CREATED/UPDATED=activate (Plan/Period
-// nachziehen; ein Subscription-Checkout feuert .created, ein spaeterer Lifecycle-Wechsel
-// .updated), DELETED/PAYMENT_FAILED=suspend (Spec: nur diese beiden suspenden).
+// action=ignore (idempotent, kein Fehler). CREATED/UPDATED=activate NUR bei bestaetigter
+// Subscription (status active/trialing -> CONFIRMED_SUBSCRIPTION_STATUS; incomplete/
+// past_due/unpaid/... -> ignore), DELETED/PAYMENT_FAILED=suspend (Spec: nur diese beiden
+// suspenden).
 export function interpretStripeEvent(event) {
   const object = (event && event.data && event.data.object) || {};
   switch (event && event.type) {
     case SUBSCRIPTION_EVENT.CREATED:
     case SUBSCRIPTION_EVENT.UPDATED:
+      // Nur eine bestaetigte Subscription (status active/trialing) oeffnet Gate +
+      // Provisioning. incomplete/past_due/unpaid/... -> ignore: kein faelschliches
+      // Gate-Open fuer eine unbezahlte Subscription, keine Re-Aktivierung eines gerade
+      // ueber PAYMENT_FAILED gesperrten Tenants durch ein nachgelagertes Dunning-Event.
+      if (!CONFIRMED_SUBSCRIPTION_STATUS.has(object.status)) {
+        return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
+      }
       return {
         action: WEBHOOK_ACTION.ACTIVATE,
         tenantRef: tenantRefOf(object),

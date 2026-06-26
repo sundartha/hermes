@@ -75,6 +75,7 @@ test("interpretStripeEvent: subscription.updated -> activate, tenantRef aus meta
     data: {
       object: {
         id: "sub_1",
+        status: "active",
         current_period_end: 1893456000,
         metadata: { tenant_ref: "t_a", plan_slug: "starter" },
       },
@@ -91,12 +92,32 @@ test("interpretStripeEvent: subscription.updated -> activate, tenantRef aus meta
 test("interpretStripeEvent: subscription.created -> activate (neuer Subscription-Checkout, P3)", () => {
   const event = {
     type: SUBSCRIPTION_EVENT.CREATED,
-    data: { object: { id: "sub_new", metadata: { tenant_ref: "t_c", plan_slug: "starter" } } },
+    data: { object: { id: "sub_new", status: "active", metadata: { tenant_ref: "t_c", plan_slug: "starter" } } },
   };
   const r = interpretStripeEvent(event);
   assert.equal(r.action, WEBHOOK_ACTION.ACTIVATE);
   assert.equal(r.tenantRef, "t_c");
   assert.equal(r.subscriptionId, "sub_new");
+});
+
+test("interpretStripeEvent: created/updated mit unbestaetigtem Status -> ignore (Invariante 1/2)", () => {
+  for (const status of ["incomplete", "past_due", "unpaid", "canceled"]) {
+    const created = interpretStripeEvent({
+      type: SUBSCRIPTION_EVENT.CREATED,
+      data: { object: { id: "sub_x", status, metadata: { tenant_ref: "t_x" } } },
+    });
+    assert.equal(created.action, WEBHOOK_ACTION.IGNORE, `created/${status} -> ignore`);
+    const updated = interpretStripeEvent({
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: { object: { id: "sub_x", status, metadata: { tenant_ref: "t_x" } } },
+    });
+    assert.equal(updated.action, WEBHOOK_ACTION.IGNORE, `updated/${status} -> ignore`);
+  }
+  const trial = interpretStripeEvent({
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    data: { object: { id: "sub_t", status: "trialing", metadata: { tenant_ref: "t_t" } } },
+  });
+  assert.equal(trial.action, WEBHOOK_ACTION.ACTIVATE, "trialing -> activate (bestaetigt)");
 });
 
 test("interpretStripeEvent: subscription.deleted -> suspend", () => {
