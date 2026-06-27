@@ -26,6 +26,13 @@ const MARKER_RADIUS_PX = 9;
 const MARKER_COLOR = 0xe60000;
 
 /**
+ * Vertikaler Auftrieb in Textur-Pixeln pro Einheit `lift` (positiv = hebt sich).
+ * ~7% der sichtbaren Fluegelhoehe -> deutlich spuerbares Schweben, ohne den
+ * Fluegel aus dem Canvas zu schieben. Skaliert mit displaySize (Textur-Raum).
+ */
+const LIFT_GAIN_PX = 30;
+
+/**
  * Kapselt genau EINEN Fluegel: eine Textur auf einem MeshPlane. Keine Klone,
  * Spiegelungen, Trails oder zweiten Ebenen. Verformt deterministisch ueber
  * `applyState` und raeumt sich bei `destroy` vollstaendig ab.
@@ -103,6 +110,12 @@ export class HermesWing {
 
   /** Verformt das Mesh deterministisch aus dem aktuellen Zustand. */
   applyState(state: HermesMotionState): void {
+    // Auftrieb als Gesamt-Versatz: hebt/senkt den ganzen Fluegel relativ zum
+    // Zentrum. Positiv = nach oben (kleinere y). Skaliert mit intensity, damit
+    // der Regler das Schweben mitnimmt. Bei lift=0 byte-gleich zur Ruhepose.
+    const liftPx = state.lift * LIFT_GAIN_PX * state.intensity;
+    this.holder.position.set(-WING_CENTER_X, -WING_CENTER_Y - liftPx);
+
     deform(this.ctx, state, this.gains, this.live);
     this.positionBuffer.update();
   }

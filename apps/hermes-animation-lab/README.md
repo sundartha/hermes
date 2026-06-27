@@ -34,6 +34,10 @@ jeden Frame deterministisch aus der **unveraenderten Originalgeometrie** neue Ve
 gewichtet zur Fluegelwurzel (Root ~ keine Bewegung, lange Aussenfedern am staerksten, Spitzen mit
 verzoegertem `tipLag`). Kein Zufall, kein Akkumulieren — bei Ruhe ist das Mesh exakt das Original.
 
+Der Kanal `lift` hebt zusaetzlich den **ganzen** Fluegel als Gesamt-Versatz (nicht pro Vertex,
+siehe `HermesWing.applyState`): der kraeftige Abschlag erzeugt sichtbaren Auftrieb, der Fluegel
+schwebt oben aus und sinkt langsam zurueck — getragener Flug statt reinem Klappen.
+
 Drei Presets (`src/wing/presets.ts`): **A Hermes Classic**, **B Rapid Messenger**, **C Premium UI**.
 
 ## Status-API (vorbereitet, noch nicht an MCP verdrahtet)
@@ -44,7 +48,9 @@ window.setHermesStatus("working");
 ```
 
 `src/wing/status.ts` haelt **genau eine** aktive Timeline; jeder Wechsel killt die alte sauber
-(kein Overlap). `idle` ist statisch (keine Atemanimation).
+(kein Overlap). `idle` ist ein sehr sanftes Dauer-Schweben (kleine `lift`/`flap`-Amplitude, langsames
+yoyo) — die geflügelte Sandale flattert auch in Ruhe leise. Unter `prefers-reduced-motion` bleibt der
+Fluegel statisch (idle wird beim Boot nicht abgespielt).
 
 ## Performance / A11y
 

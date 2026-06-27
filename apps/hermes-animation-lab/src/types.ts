@@ -16,6 +16,13 @@ export type HermesMotionState = {
   compression: number;
   /** Verzoegertes elastisches Nachschwingen der Federspitzen, typ. -1..1. */
   tipLag: number;
+  /**
+   * Vertikaler Auftrieb des GANZEN Fluegels (Schweben), typ. -1..1.
+   * Positiv = hebt sich (steigt), negativ = sinkt. Wird NICHT pro Vertex
+   * gerechnet, sondern als Gesamt-Versatz des Fluegels appliziert
+   * (siehe HermesWing.applyState) -> Flatter erzeugt sichtbaren Auftrieb.
+   */
+  lift: number;
   /** Kleine Gesamtneigung des ganzen Fluegels um den Root, typ. -1..1. */
   rootRotation: number;
   /** Globaler Amplituden-Multiplikator, typ. 0..2 (Ruhe: 1). */

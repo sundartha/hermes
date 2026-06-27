@@ -34,7 +34,7 @@ const SLIDER_SPECS: readonly SliderSpec[] = [
   { key: "rootRotation", label: "rootRotation", min: -1, max: 1, step: 0.01, value: 0 },
   { key: "rootX", label: "Root-X", min: 0, max: 1, step: 0.005, value: DEFAULT_ROOT.x },
   { key: "rootY", label: "Root-Y", min: 0, max: 1, step: 0.005, value: DEFAULT_ROOT.y },
-  { key: "groupPause", label: "Pause (s)", min: 0, max: 1.5, step: 0.01, value: 0.45 },
+  { key: "groupPause", label: "Pause (s)", min: 0, max: 1.5, step: 0.01, value: 0.12 },
 ];
 
 export class LabControls {

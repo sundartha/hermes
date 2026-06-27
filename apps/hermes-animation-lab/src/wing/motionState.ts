@@ -9,6 +9,7 @@ export const REST_STATE: Readonly<HermesMotionState> = Object.freeze({
   bend: 0,
   compression: 0,
   tipLag: 0,
+  lift: 0,
   rootRotation: 0,
   intensity: 1,
   speed: 1,
@@ -25,6 +26,7 @@ export function resetState(target: HermesMotionState): void {
   target.bend = REST_STATE.bend;
   target.compression = REST_STATE.compression;
   target.tipLag = REST_STATE.tipLag;
+  target.lift = REST_STATE.lift;
   target.rootRotation = REST_STATE.rootRotation;
   target.intensity = REST_STATE.intensity;
   target.speed = REST_STATE.speed;

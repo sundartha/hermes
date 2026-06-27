@@ -10,7 +10,9 @@ import { HermesWing } from "./HermesWing.js";
 import { HermesStatusController } from "./status.js";
 
 const MAX_DPR = 2;
-const DEFAULT_GROUP_PAUSE = 0.45;
+// Kurze Pause zwischen den Schlaggruppen: gerade genug Atempause, damit der
+// Flug getragen wirkt statt stop-and-go (frueher 0.45 -> fuehlte sich abgehackt an).
+const DEFAULT_GROUP_PAUSE = 0.12;
 
 export type WingAppOptions = {
   host: HTMLElement;
@@ -133,7 +135,10 @@ export class WingApp {
   // --- Steuerung -----------------------------------------------------------
 
   setStatus(status: HermesStatus): void {
-    this.intendedPlaying = status !== "idle";
+    // Auch idle laeuft jetzt (sanftes Dauer-Schweben). Reduced-Motion bleibt
+    // statisch, weil dort intendedPlaying schon im Boot auf false steht und
+    // hier nur explizite Nutzer-Wechsel landen.
+    this.intendedPlaying = true;
     this.status.set(status);
     this.syncRunning();
   }
