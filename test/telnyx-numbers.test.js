@@ -16,14 +16,17 @@ const { numberProvisioning } = await import("../src/telephony/registry.js");
 const { PROVIDER } = await import("../src/store/defaults.js");
 const { config } = await import("../src/config.js");
 
+// response: statisches Antwort-Objekt ODER ein per-URL-Responder (url, opts) => Antwort.
+// orderNumber macht jetzt ZWEI Calls (POST order + GET resolve), deshalb der Responder.
 function stubFetch(response) {
   const calls = [];
   global.fetch = async (url, opts = {}) => {
     calls.push({ url, method: opts.method || "GET", headers: opts.headers || {}, body: opts.body });
+    const r = typeof response === "function" ? response(url, opts) : response;
     return {
-      ok: response.ok ?? true,
-      status: response.status ?? 200,
-      json: async () => response.json ?? {},
+      ok: r.ok ?? true,
+      status: r.status ?? 200,
+      json: async () => r.json ?? {},
     };
   };
   return calls;
@@ -42,26 +45,45 @@ test("searchNumbers: GET available_phone_numbers mit country/voice-Filter -> e16
   assert.equal(calls[0].headers.Authorization, `Bearer ${API_KEY}`);
 });
 
-test("orderNumber: POST number_orders mit Idempotency-Key -> {e164, providerNumberId}", async () => {
-  const calls = stubFetch({
-    json: { data: { phone_numbers: [{ id: "num_abc", phone_number: "+4915112340001" }] } },
+// Routet POST /v2/number_orders -> Order-Sub-Resource (id ord_sub_1, vom Adapter ignoriert);
+// jeden anderen (GET /v2/phone_numbers?filter...) -> die phone_number-Ressource (id num_abc,
+// = das providerNumberId, das release/voice brauchen). Eine Quelle fuer beide orderNumber-Tests.
+const orderResponder = (url) =>
+  url.includes("/v2/number_orders")
+    ? { json: { data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+4915112340001" }] } } }
+    : { json: { data: [{ id: "num_abc", phone_number: "+4915112340001" }] } };
+
+test("orderNumber: connection_id im Order-Body + Idempotency-Key -> {e164, providerNumberId via resolve}", async () => {
+  const calls = stubFetch(orderResponder);
+  const res = await prov.orderNumber({
+    e164: "+4915112340001",
+    connectionId: "conn_1",
+    idempotencyKey: "order_x",
   });
-  const res = await prov.orderNumber({ e164: "+4915112340001", idempotencyKey: "order_x" });
+  // providerNumberId kommt aus dem resolve-GET (num_abc), NICHT aus der Order-Antwort (ord_sub_1).
   assert.deepEqual(res, { e164: "+4915112340001", providerNumberId: "num_abc" });
+  // POST: connection_id im Body (Voice-Routing in EINEM Schritt) + Idempotency-Key-Header.
   assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].url, `${API_BASE}/v2/number_orders`);
   assert.equal(calls[0].headers["Idempotency-Key"], "order_x");
   assert.deepEqual(JSON.parse(calls[0].body), {
     phone_numbers: [{ phone_number: "+4915112340001" }],
+    connection_id: "conn_1",
   });
+  // resolve: GET /v2/phone_numbers?filter[phone_number]=...
+  assert.equal(calls[1].method, "GET");
+  assert.ok(calls[1].url.startsWith(`${API_BASE}/v2/phone_numbers?`));
+  assert.match(decodeURIComponent(calls[1].url), /filter\[phone_number\]=\+4915112340001/);
 });
 
-test("configureNumber: PATCH /v2/phone_numbers/{id}/voice mit connection_id", async () => {
-  const calls = stubFetch({ json: {} });
-  await prov.configureNumber({ providerNumberId: "num_abc", connectionId: "conn_1" });
-  assert.equal(calls[0].method, "PATCH");
-  assert.equal(calls[0].url, `${API_BASE}/v2/phone_numbers/num_abc/voice`);
-  assert.deepEqual(JSON.parse(calls[0].body), { connection_id: "conn_1" });
+test("orderNumber ohne connectionId: KEIN connection_id im Order-Body", async () => {
+  const calls = stubFetch(orderResponder);
+  const res = await prov.orderNumber({ e164: "+4915112340001", idempotencyKey: "order_x" });
+  assert.equal(res.providerNumberId, "num_abc");
+  // Grenzfall (G3/T5): ohne connectionId bleibt der Body schlank (nur phone_numbers).
+  assert.deepEqual(JSON.parse(calls[0].body), {
+    phone_numbers: [{ phone_number: "+4915112340001" }],
+  });
 });
 
 test("releaseNumber: DELETE /v2/phone_numbers/{id}", async () => {

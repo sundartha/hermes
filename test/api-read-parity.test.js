@@ -143,6 +143,7 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     // Null, keine config-Nummer mehr). P4: ownerNumber-Feld ganz entfernt (war seit P2b
     // immer "", toter Ballast) -> der Schluessel existiert nicht mehr.
     assert.equal(body.agent.number, "+4915200000001");
+    assert.equal(body.agent.numberStatus, "active"); // AM5: aktive Owner-Nummer -> "active"
     assert.equal(body.agent.owner, "Jonas");
     assert.ok(!("ownerNumber" in body.agent), "ownerNumber-Feld ist entfernt (P4)");
     assert.equal(body.agent.model, "claude-haiku-4-5");
@@ -168,6 +169,7 @@ test("GET /api/state (Flag an, fremder Tenant): R3.2 Owner-PII geblockt + scoped
     // activeNumberFor fail-closed: FOREIGN hat keine aktive Nummer -> "", NIE die
     // Owner-Nummer als Fremd-Tenant-Fallback (kein PII-/Toll-Fraud-Leck).
     assert.equal(body.agent.number, "");
+    assert.equal(body.agent.numberStatus, "none"); // AM5: keine eigene Nummer -> "none"
     assertNoStreamToken(body, "/api/state(scoped)"); // R3.1 auch im scoped-Pfad
   } finally {
     await srv.stop();

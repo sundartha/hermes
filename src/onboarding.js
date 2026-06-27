@@ -5,19 +5,20 @@
 // hereingereicht (testbar mit makeDefaultState + Fake-Provisioner/Fake-Billing).
 //
 // Geld-Sicherheit (R4): eine Nummer erreicht 'active' NUR nach erfolgreichem Order
-// UND Configure (Voice-Routing). Schlaegt Configure nach dem Kauf fehl, wird die
-// Nummer beim Provider wieder FREIGEGEBEN (kein bezahlter Orphan) und der Zustand
-// faellt auf 'failed'. Der Idempotency-Key (number-id-basiert) verhindert
-// Doppelkaeufe bei Retry. Die Cap-Notbremse (maxNumbers) sitzt VOR diesem Schritt
-// (requestNumber) - hier wird nur eine bereits angefragte Nummer durchgereicht.
+// (inkl. Voice-Routing via connection_id im Order-Body) und - im Payment-Pfad -
+// Capture. Schlaegt der Capture nach dem Kauf fehl, wird die Nummer beim Provider
+// wieder FREIGEGEBEN (kein bezahlter Orphan) und der Zustand faellt auf 'failed'.
+// Der Idempotency-Key (number-id-basiert) verhindert Doppelkaeufe bei Retry. Die
+// Cap-Notbremse (maxNumbers) sitzt VOR diesem Schritt (requestNumber) - hier wird
+// nur eine bereits angefragte Nummer durchgereicht.
 //
 // Payment (P6b1, optional ueber deps.billing): ist ein Billing-Client injiziert,
-// wird VOR dem ersten Provider-Call Geld reserviert (placeHold) und NACH dem
-// Configure - direkt vor der Aktivierung - eingezogen (captureHold). Schlaegt etwas
-// nach dem Hold fehl, gibt cancelHold die Reservierung wieder frei. 'billing' ist
-// eine Dependency (kein Datum) -> sie reist mit 'provisioner' im deps-Objekt
-// ({ provisioner, billing }), billing optional/null (F1, 3 Args). Ohne billing
-// (payment-off) ist der Pfad byte-identisch zum Bestand (kein Hold/Capture).
+// wird VOR dem ersten Provider-Call Geld reserviert (placeHold) und NACH dem Order -
+// direkt vor der Aktivierung - eingezogen (captureHold). Schlaegt etwas nach dem Hold
+// fehl, gibt cancelHold die Reservierung wieder frei. 'billing' ist eine Dependency
+// (kein Datum) -> sie reist mit 'provisioner' im deps-Objekt ({ provisioner, billing }),
+// billing optional/null (F1, 3 Args). Ohne billing (payment-off) ist der Pfad
+// byte-identisch zum Bestand (kein Hold/Capture).
 import {
   beginProvisioning,
   beginCapturing,
@@ -35,16 +36,16 @@ import {
 // Idempotenz-Schloss (Order-Key/Hold/Zustand bleiben byte-identisch).
 const PROVISION_SEARCH_LIMIT = 10;
 
-// Orchestriert requested -> provisioning -> (search + order + configure) -> active,
+// Orchestriert requested -> provisioning -> (search + order[+routing]) -> active,
 // mit optionalem Hold-vor-Order + Capture-vor-Active (deps.billing). Fehlerpfade:
-// search/order-Fehler -> failed (kein Kauf) + Hold-Freigabe; configure/capture-Fehler
-// nach dem Kauf -> Provider-Release + failed + Hold-Freigabe. Liefert die aktivierte Nummer.
+// search/order-Fehler -> failed (kein Kauf) + Hold-Freigabe; capture-Fehler (Payment-
+// Pfad) nach dem Kauf -> Provider-Release + failed + Hold-Freigabe. Liefert die aktivierte Nummer.
 export async function provisionNumber(
   s,
   deps,
   { numberId, countryCode, connectionId, type, holdAmountCents, currency },
 ) {
-  const { provisioner, billing } = deps;
+  const { provisioner, billing, logger = console } = deps;
   const number = findNumber(s, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
@@ -99,23 +100,11 @@ export async function provisionNumber(
     // failNumber + Hold-Freigabe, kein Provider-Kauf (kein bezahlter Orphan).
     if (!candidate)
       throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
-    ordered = await provisioner.orderNumber({ e164: candidate.e164, idempotencyKey });
+    ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
     failNumber(s, numberId); // provisioning -> failed (kein Kauf zustande gekommen)
     await cancelHoldIfHeld(billing, paymentIntentId); // Geld freigeben (nichts gekauft)
     throw err;
-  }
-
-  try {
-    await provisioner.configureNumber({ providerNumberId: ordered.providerNumberId, connectionId });
-  } catch (cfgErr) {
-    await rollbackAfterOrder(s, numberId, {
-      provisioner,
-      providerNumberId: ordered.providerNumberId,
-      billing,
-      paymentIntentId,
-    });
-    throw cfgErr;
   }
 
   if (billing) {
@@ -128,6 +117,7 @@ export async function provisionNumber(
         providerNumberId: ordered.providerNumberId,
         billing,
         paymentIntentId,
+        logger,
       });
       throw capErr;
     }
@@ -152,23 +142,29 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
   }
 }
 
-// Rollback NACH erfolgreichem Order (configure- oder capture-Fehler): Zustand failed,
+// Rollback NACH erfolgreichem Order (capture-Fehler, Payment-Pfad): Zustand failed,
 // Provider-Nummer freigeben (kein bezahlter Orphan), Hold freigeben. Bei sauberem
 // Provider-Release wird der Datensatz terminal released; sonst bleibt er failed
 // (moeglicher Orphan -> Reconciliation, durch die MAX_NUMBERS-Cap gedeckelt). Eine
 // Stelle fuer beide Fehlerkanten (G5/S2). Bei billing=null ist cancelHoldIfHeld ein
-// No-op -> der payment-off configure-Pfad bleibt byte-identisch zum Bestand.
+// No-op -> der payment-off Pfad erreicht diese Stelle nicht (nur Capture wirft hier).
 async function rollbackAfterOrder(
   s,
   numberId,
-  { provisioner, providerNumberId, billing, paymentIntentId },
+  { provisioner, providerNumberId, billing, paymentIntentId, logger },
 ) {
   failNumber(s, numberId); // provisioning|capturing -> failed
   try {
     await provisioner.releaseNumber(providerNumberId);
     releaseNumber(s, numberId); // failed -> released (Provider-Nummer sauber weg)
-  } catch {
-    /* Provider-Release fehlgeschlagen -> Zustand bleibt 'failed' (Reconciliation) */
+  } catch (relErr) {
+    // GAP-2: Release-Fehler NICHT mehr still schlucken. Ein gekaufter, nicht freigegebener
+    // Provider-Datensatz = bezahlter Orphan -> sichtbar fuers Owner-Reconcile-Runbook.
+    // PII-/Secret-frei: nur interne ids + Adapter-Meldung (Regel 4: kein API-Key im Text).
+    logger.warn(
+      `provisionNumber: releaseNumber fehlgeschlagen -> Orphan, Reconcile noetig ` +
+        `(number=${numberId} provider=${providerNumberId}): ${relErr.message}`,
+    );
   }
   await cancelHoldIfHeld(billing, paymentIntentId);
 }

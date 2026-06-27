@@ -10,7 +10,7 @@
 // Helfer (publicCall/upcomingCalendar/activeNumberFor) kommen direkt aus store/views
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
-import { publicCall, activeNumberFor, upcomingCalendar } from "../store/views.js";
+import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -56,8 +56,10 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       agent: {
         // Anzeige-Nummer = aktive Store-Nummer des Request-Tenants (auch der Owner ist
         // Tenant Null; keine config-Nummer mehr). Fail-closed leer, NIE die Nummer eines
-        // fremden Tenants.
+        // fremden Tenants. numberStatus = Anzeige-Lifecycle (provisioning/none) fuer den
+        // Dashboard-Chip "wird eingerichtet..." (eine Quelle wie number, tenant-gescoped).
         number: activeNumberFor(s, tenantId),
+        numberStatus: numberStatusFor(s, tenantId),
         owner: ctx.ownerName,
         model: config.claudeModel,
         voiceEngine: config.voiceEngine,

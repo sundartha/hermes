@@ -123,15 +123,16 @@ test("Idempotenz: doppeltes enqueue = ein Job; zweiter drain ist No-op (kein Dop
   assert.equal(s.provisioningJobs.length, 1, "nur ein persistenter Job-Record");
 });
 
-test("Fehler -> Rollback im Worker: configure wirft -> released, cancelHold, Job 'failed'", async () => {
+test("Fehler -> Rollback im Worker: captureHold wirft -> released, cancelHold, Job 'failed'", async () => {
   const { s, numberId } = seedRequested();
   const queue = makeMemoryQueue();
-  const prov = fakeProvisioner({
-    async configureNumber() {
+  const prov = fakeProvisioner();
+  // AM5: kein configure-Schritt mehr; der Post-Order-Fehlerpfad wird vom Capture ausgeloest.
+  const billing = fakeBilling({
+    async captureHold() {
       throw new Error("HTTP 500");
     },
   });
-  const billing = fakeBilling();
   const { record } = enqueueProvision(queue, s, "t_user1", numberId);
 
   await drainWith(queue, s, { provisioner: prov, billing }, PAY_ARGS);
@@ -164,9 +165,5 @@ test("payment-off byte-identisch: ohne billing -> active, kein Hold/Capture", as
   const num = findNumber(s, numberId);
   assert.equal(num.status, NUMBER_STATUS.ACTIVE);
   assert.equal(num.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, [
-    "search:DE",
-    `order:+4915799990001:order_${numberId}`,
-    "configure:num_ext_1:conn_1",
-  ]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
 });

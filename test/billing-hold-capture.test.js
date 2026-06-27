@@ -1,9 +1,10 @@
 // Payment-Pfad (P6b1): provisionNumber mit injiziertem Fake-Provisioner UND
 // Fake-Billing (DIP) - kein Netz, kein Server, kein pglite (eigene Datei gegen
 // Worker-Stall, Lehre P6a). Prueft die Geld-Sicherheits-Invarianten der
-// Hold/Capture-Mechanik: Hold VOR Order; Capture NACH Configure, VOR active;
+// Hold/Capture-Mechanik: Hold VOR Order; Capture NACH Order, VOR active;
 // kein active ohne Capture; Rollback (releaseNumber + cancelHold) in allen
-// Fehlerkanten; payment-off (kein billing) byte-identisch ohne capturing.
+// Fehlerkanten inkl. Orphan-Log bei fehlgeschlagenem Release (AM5/GAP-2);
+// payment-off (kein billing) byte-identisch ohne capturing.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { provisionNumber } from "../src/onboarding.js";
@@ -44,11 +45,7 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   assert.equal(result.providerNumberId, "num_ext_1");
   assert.equal(result.paymentIntentId, "pi_fake_1", "PI auf der Nummer hinterlegt");
   // Hold zuerst, dann der Provider-Kauf, dann Capture (Reihenfolge ueber beide Logs).
-  assert.deepEqual(prov.log, [
-    "search:DE",
-    `order:+4915799990001:order_${numberId}`,
-    "configure:num_ext_1:conn_1",
-  ]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
   assert.deepEqual(methodsOf(billing), ["placeHold", "captureHold"]);
   // placeHold-Args: idempotencyKey number-id-basiert + Betrag/Currency.
   const [, holdArgs] = billing.log[0];
@@ -118,44 +115,53 @@ test("Rollback order/search-Fehler: failed, cancelHold, KEIN releaseNumber (nich
   );
 });
 
-test("Rollback configure-Fehler: failed/released, releaseNumber + cancelHold", async () => {
+test("AM5/GAP-2 Orphan-Log: captureHold + releaseNumber werfen -> failed, logger.warn 'Orphan', kein Secret-Leak", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner({
-    async configureNumber() {
-      throw new Error("HTTP 500");
+    async releaseNumber() {
+      throw new Error("Telnyx releaseNumber fehlgeschlagen: HTTP 500");
     },
   });
-  const billing = fakeBilling();
+  const billing = fakeBilling({
+    async captureHold() {
+      throw new Error("Stripe captureHold fehlgeschlagen: HTTP 500");
+    },
+  });
+  const logs = [];
+  const logger = { warn: (m) => logs.push(m) };
   await assert.rejects(
-    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
-    /HTTP 500/,
+    () => provisionNumber(s, { provisioner: prov, billing, logger }, { numberId, ...ARGS }),
+    /Stripe captureHold/,
   );
 
-  assert.equal(
-    findNumber(s, numberId).status,
-    NUMBER_STATUS.RELEASED,
-    "sauberer Release -> released",
+  // Provider-Release fehlgeschlagen -> bezahlter Orphan -> Zustand bleibt failed (NICHT released).
+  assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
+  // GAP-2: der Orphan wird geloggt (sichtbar fuers Reconcile-Runbook), nicht still geschluckt.
+  assert.ok(
+    logs.some((m) => m.includes("Orphan")),
+    "Orphan-Warnung geloggt",
   );
-  assert.ok(prov.log.includes("release:num_ext_1"));
-  assert.ok(methodsOf(billing).includes("cancelHold"));
+  // Regel 4: die Meldung traegt NIE Stripe-Ids oder einen API-Key.
+  const joined = logs.join(" ");
+  assert.ok(!joined.includes("cus_") && !joined.includes("pm_"), "kein Stripe-Id-Leak");
 });
 
 test("Rollback verschluckt cancelHold-Fehler: Aufrufer-Fehler bleibt, Zustand released", async () => {
   const { s, numberId } = seedRequested();
-  const prov = fakeProvisioner({
-    async configureNumber() {
-      throw new Error("configure kaputt");
-    },
-  });
-  // cancelHold wirft -> darf den configure-Fehler NICHT maskieren (Best-Effort-Rollback).
+  const prov = fakeProvisioner();
+  // captureHold wirft (Geld-Einzug scheitert) UND cancelHold wirft -> der cancelHold-Fehler
+  // darf den captureHold-Fehler NICHT maskieren (Best-Effort-Rollback). Provider-Release ok.
   const billing = fakeBilling({
+    async captureHold() {
+      throw new Error("capture kaputt");
+    },
     async cancelHold() {
       throw new Error("cancel auch kaputt");
     },
   });
   await assert.rejects(
     () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
-    /configure kaputt/,
+    /capture kaputt/,
   );
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.RELEASED);
 });
@@ -168,11 +174,7 @@ test("payment-off-Parity: ohne billing -> kein Hold/Capture, requested->provisio
 
   assert.equal(result.status, NUMBER_STATUS.ACTIVE);
   assert.equal(result.paymentIntentId, null, "kein PI ohne billing");
-  assert.deepEqual(prov.log, [
-    "search:DE",
-    `order:+4915799990001:order_${numberId}`,
-    "configure:num_ext_1:conn_1",
-  ]);
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
 });
 
 test("Pay2 fail-closed: billing + Tenant OHNE Karte -> failed, KEIN placeHold, KEIN Provider-Call", async () => {

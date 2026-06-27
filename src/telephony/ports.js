@@ -74,7 +74,7 @@
 /**
  * @typedef {Object} OrderResult
  * @property {string} e164             - die bestellte Rufnummer (E.164)
- * @property {string} providerNumberId - provider-seitige Nummern-ID (configure/release)
+ * @property {string} providerNumberId - provider-seitige Nummern-ID (release)
  */
 
 /**
@@ -86,10 +86,9 @@
  *   mit dem API-Key (Regel 4).
  * @property {(params: {countryCode: string, type?: string, limit?: number}) => Promise<AvailableNumber[]>} searchNumbers
  *   Sucht kaufbare Rufnummern beim Provider (Anzeige/Auswahl vor dem Kauf).
- * @property {(params: {e164: string, idempotencyKey?: string}) => Promise<OrderResult>} orderNumber
- *   Kauft eine Nummer. Idempotency-Key (number-id-basiert) -> Retry kauft nie doppelt.
- * @property {(params: {providerNumberId: string, connectionId: string}) => Promise<void>} configureNumber
- *   Setzt das Voice-Routing (connection_id der TeXML-App) auf der gekauften Nummer.
+ * @property {(params: {e164: string, connectionId?: string, idempotencyKey?: string}) => Promise<OrderResult>} orderNumber
+ *   Kauft eine voll routbare Nummer: connectionId wird im Order-Body gesetzt (Voice-Routing
+ *   in EINEM Schritt). Idempotency-Key (number-id-basiert) -> Retry kauft nie doppelt.
  * @property {(providerNumberId: string) => Promise<void>} releaseNumber
  *   Gibt eine Nummer beim Provider frei (Rollback bei Fehlern; kein bezahlter Orphan).
  */

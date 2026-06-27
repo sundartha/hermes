@@ -17,7 +17,7 @@ import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-serv
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { createTenantSubscription } from "./billing/subscribe.js";
 import { activatePaidTenant } from "./billing/activation.js";
-import { publicCall, activeNumberFor, upcomingCalendar } from "./store/views.js";
+import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { quotaView } from "./billing/meter.js";
 
@@ -141,6 +141,9 @@ export function makeSelfServiceRoutes({
     const tenant = req.tenant.tenantId;
     const data = store.exportTenantData(tenant);
     const ctx = store.tenantContext(tenant);
+    // s einmal laden fuer agent.number + numberStatus (selbe Quelle wie /api/state, G5;
+    // eine Last statt zweier store.load()-Aufrufe).
+    const agentState = store.load();
     res.json({
       settings: ctx.settings,
       greetingTemplates: GREETING_TEMPLATES,
@@ -156,7 +159,11 @@ export function makeSelfServiceRoutes({
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
       calendar: upcomingCalendar(store, tenant),
-      agent: { number: activeNumberFor(store.load(), tenant), owner: ctx.ownerName },
+      agent: {
+        number: activeNumberFor(agentState, tenant),
+        owner: ctx.ownerName,
+        numberStatus: numberStatusFor(agentState, tenant),
+      },
     });
   });
 
