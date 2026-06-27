@@ -99,6 +99,28 @@ test("AM6 fail-closed: unbekannter sub -> tenant=reject + get_my_number leer (ke
   }
 });
 
+test("AM6 fail-closed: verifiziertes Token OHNE sub -> tenant=reject + get_my_number leer (NIE Owner)", async () => {
+  // FAIL-CLOSED-REGRESSION (AM6-Blocker R2): jose erzwingt den sub-Claim nicht. Ein
+  // verifiziertes REMOTE-Token mit email, aber OHNE sub (noSubject) darf NICHT auf den
+  // Owner-/Bootstrap-Tenant fallen - sonst laese der Angreifer die Owner-Nummer (PII)
+  // und koennte place_call als Owner ausloesen. Erwartet: leere Nummer + tenant=reject.
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: oauthEnv(idp),
+    ownerNumber: { e164: OWNER_NUM, provider: "twilio" },
+  });
+  try {
+    const token = await idp.sign({ email: "evil@attacker.test" }, { noSubject: true });
+    const number = await myNumberOver(srv, token);
+    assert.ok(!number, "subloses Token -> keine Nummer (kein Owner-Tenant)");
+    assert.notEqual(number, OWNER_NUM, "NIE die Owner-Nummer");
+    await waitForLog(srv, new RegExp(`\\[mcp\\] ${hashEmail("evil@attacker.test")} tenant=reject`));
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
 test("AM6 set-if-absent: bestehende idpSubject-Bindung gewinnt gegen OWNER_IDP_SUBJECT", async () => {
   const idp = await startIdp();
   // Owner-Tenant traegt schon eine Bindung (bound-sub); OWNER_IDP_SUBJECT weicht ab.

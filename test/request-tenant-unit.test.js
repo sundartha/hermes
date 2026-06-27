@@ -261,20 +261,38 @@ test("requestTenant: Flag AN + sub vorhanden, resolveTenant=null -> TENANT_REJEC
   });
 });
 
-test("requestTenant: Flag AN + auth ohne sub -> Bootstrap-Bindung (fehlende Identitaet)", () => {
-  // Verifiziertes Token ohne sub-Claim: req.auth truthy, sub null -> internal wird
-  // NICHT konsultiert (req.auth ? null) -> !sub && !internal -> explizite Bootstrap-
-  // Bindung (singleTenantBootstrap, V4-Kontrakt). NICHT REJECT - der Single-Operator-
-  // Kanal ohne Identitaet ist der vertraute Owner-Pfad.
+test("requestTenant: Flag AN + verifiziertes Token OHNE sub -> TENANT_REJECT (NIE Owner)", () => {
+  // FAIL-CLOSED-REGRESSION (AM6-Blocker R2): jose erzwingt den sub-Claim nicht, ein
+  // verifiziertes REMOTE-OAuth-Token kann req.auth tragen, aber req.auth.sub===undefined.
+  // Das Owner-/Bootstrap-Gate haengt an der ABWESENHEIT von req.auth (!req.auth), NICHT
+  // an einem falsy sub: ein vorhandenes Token ist eine vorhandene Identitaet und darf NIE
+  // zum Owner kollabieren (sonst laese ein subloser Angreifer Owner-Transkripte und
+  // koennte place_call als Owner ausloesen). resolveTenant(null) liefert null -> REJECT.
+  const store = makeStore({ "sub-b": "B" });
+  const { requestTenant } = makeRequestTenant(store);
+  withMultiTenant(true, () => {
+    const out = requestTenant(reqWith({ auth: { email: "evil@attacker.test" } }));
+    assert.equal(out, TENANT_REJECT);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID, "subloses Token darf NIE auf Owner fallen");
+  });
+});
+
+test("requestTenant: Flag AN + subloses Token, externer Loopback+XFF -> TENANT_REJECT", () => {
+  // Wie oben, aber explizit der Render-Proxy-Pfad (Loopback-Socket + X-Forwarded-For):
+  // selbst wenn ein Angreifer X-Internal-Identity mitsendet, wird der Header verworfen
+  // (isTrustedLocalCaller=false) UND das sublose Token faellt auf REJECT, nie Owner.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
-    assert.equal(
-      requestTenant(reqWith({ auth: {}, remoteAddress: "203.0.113.7" })),
-      BOOTSTRAP_TENANT_ID,
-    );
+    const req = reqWith({
+      remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "203.0.113.9", "x-internal-identity": "evil@x.test" },
+      auth: { email: "evil@attacker.test" },
+    });
+    const out = requestTenant(req);
+    assert.equal(out, TENANT_REJECT);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID);
   });
-  assert.deepEqual(store.calls, [], "kein Lookup ohne Identitaet");
 });
 
 test("requestTenant: Flag AN + kein auth/tenant/internal -> Bootstrap-Bindung (localhost/stdio)", () => {

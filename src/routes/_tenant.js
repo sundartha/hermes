@@ -138,14 +138,17 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
     if (forwarded) return forwarded;
     const sub = req.auth ? req.auth.sub : null;
     const internal = req.auth ? null : internalIdentity(req);
-    // FEHLENDE Identitaet (kein req.auth UND kein localhost-internal, also der
-    // localhost-/stdio-Single-Operator-Kanal): EXPLIZITE Bindung an den Bootstrap-
-    // Tenant (P3, singleTenantBootstrap), NICHT mehr als roher BOOTSTRAP_TENANT_ID-
-    // Constant-Return. Das ist KEIN Leck: ohne Identitaet ist dies der vertraute
-    // Owner-/Betreiber-Kanal (V4-Kontrakt, von I4 security-reviewed). Der echte
-    // fail-closed-Riegel sitzt eine Zeile tiefer: eine VORHANDENE, aber unbekannte
-    // Identitaet -> TENANT_REJECT (NIE Owner).
-    if (!sub && !internal) return singleTenantBootstrap();
+    // FEHLENDE Identitaet (WEDER ein verifiziertes Token req.auth NOCH eine localhost-
+    // interne Identitaet, also der localhost-/stdio-Single-Operator-Kanal): EXPLIZITE
+    // Bindung an den Bootstrap-Tenant (P3, singleTenantBootstrap), NICHT als roher
+    // BOOTSTRAP_TENANT_ID-Constant-Return. Das ist KEIN Leck: ohne Identitaet ist dies
+    // der vertraute Owner-/Betreiber-Kanal (V4-Kontrakt, von I4 security-reviewed).
+    // KRITISCH (Regel #3 fail-closed): das Gate haengt an !req.auth, NICHT an !sub. Ein
+    // VORHANDENES, verifiziertes Token OHNE sub-Claim (jose erzwingt sub nicht) ist eine
+    // vorhandene Identitaet und darf NIE zum Owner kollabieren - es faellt eine Zeile
+    // tiefer auf resolveTenant(null) -> TENANT_REJECT. Der echte fail-closed-Riegel:
+    // jede VORHANDENE, aber unbekannte/leere Identitaet -> TENANT_REJECT (NIE Owner).
+    if (!req.auth && !internal) return singleTenantBootstrap();
     const tenantId = store.resolveTenant(sub || internal);
     return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
   }
