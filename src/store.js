@@ -102,6 +102,11 @@ export const {
   deleteProfile,
   tenantContext,
   resolveTenant,
+  // Signup-Spiegel-Nachzug: pg zieht einen nach Boot per Web-Login angelegten Tenant in den
+  // Spiegel (sonst werfen die WRITE-Setter auf dem Subscribe-Pfad fail-closed); json = No-Op.
+  // OHNE diesen Re-Export waere store.ensureTenant undefined -> mintSession (web-auth) UND
+  // triggerTenantProvisioning (server) wuerfen zur Laufzeit einen TypeError.
+  ensureTenant,
   setTenantBudget,
   recordUsageEvent,
   dailySmsCount,

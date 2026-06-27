@@ -273,6 +273,63 @@ export function makePgStore(runner) {
     resolveProfile: (email) => ops.resolveProfile(requireState(), email),
     // Tenant-Aufloesung (I4): liest den hydrierten Spiegel (Wrapper-Parity zu json.js).
     resolveTenant: (idpSubject) => ops.resolveTenant(requireState(), idpSubject),
+
+    // Nach-Boot-Spiegel-Nachzug eines einzelnen Tenants (Signup-Hydrierung). Der OIDC-
+    // Web-Login (accounts.upsertOnFirstLogin) legt die tenant-Zeile NACH dem Boot in der
+    // DB an; der Spiegel wird sonst nur bei init() hydriert -> ein frisch registrierter
+    // Tenant fehlt in s.tenants, bis jede WRITE-Store-Op (setTenantStripe/setKycLevel/
+    // setTenantSubscription/...) ueber findTenant fail-closed wirft. ensureTenant zieht
+    // GENAU diesen Tenant idempotent + FAIL-SAFE nach. KRITISCH (Regel 1): es uebernimmt
+    // NUR den REALEN DB-status (nie ein hartcodiertes ACTIVE) - drei Gates lesen den
+    // Spiegel-status (requestNumber/tenantInactive/tenantActiveSubscriber); ein faelschlich
+    // aktiver Spiegel machte einen suspendierten Tenant outbound-faehig. Eigene Methode
+    // (kein ops-Wrapper): braucht runner (DB-Read) UND Spiegel zugleich.
+    async ensureTenant(tenantId) {
+      try {
+        const state = requireState();
+        return await runner.withClient(async (client) => {
+          // Billiger Existenz-/Status-Read: der haeufige Fall (Tenant schon im Spiegel -
+          // jeder Provision-Trigger, jeder Folge-Login) braucht nur den accounts-owned
+          // status, nicht alle Spalten. KEINE Zeile -> Tenant existiert nicht in der DB
+          // -> false (NIE einen Tenant aus dem Nichts erfinden).
+          const statusRows = (
+            await client.query(`SELECT status FROM tenant WHERE id = $1`, [tenantId])
+          ).rows;
+          if (statusRows.length === 0) return false;
+          const present = ops.findTenant(state, tenantId);
+          if (present) {
+            // NUR den status nachziehen - das einzige accounts-owned, nie geflushte Feld.
+            // Spiegel-eigene Felder (kyc/stripe/sub/identitaet/private_number) bleiben
+            // unberuehrt, sonst clobberte der Nachzug ungeflushte Writes.
+            present.status = statusRows[0].status;
+            return true;
+          }
+          // Abwesend (frischer Web-Login nach Boot): vollen Tenant-Row holen, dann SYNCHRON
+          // unmittelbar vor dem push erneut pruefen (KEIN await dazwischen): zwei parallele
+          // erste Logins desselben Tenants duerfen ihn nicht doppelt in den Spiegel legen.
+          const full = (
+            await client.query(`SELECT ${TENANT_COLUMNS} FROM tenant WHERE id = $1`, [tenantId])
+          ).rows[0];
+          const raced = ops.findTenant(state, tenantId);
+          if (raced) {
+            raced.status = full.status;
+            return true;
+          }
+          state.tenants.push(rowToTenant(full));
+          // tenant-scoped Zeilen nachladen (settings/calls/...): fuer einen frischen Signup
+          // leer (nichts angelegt), aber zukunftssicher. Eigener tenant_id-Filter je Query
+          // (zweite Linie zur RLS) - kein Cross-Tenant-Leck.
+          await hydrateTenantInto(client, state, tenantId);
+          return true;
+        });
+      } catch (e) {
+        // FAIL-SAFE: ein DB-Schluckauf darf den Login-/Provision-Pfad nie mit einer
+        // Rejection treffen. Kein Secret im Log (nur die Meldung). Der Spiegel bleibt
+        // unveraendert -> die Setter werfen weiter fail-CLOSED (kein Gate geht auf).
+        console.error("[pg] ensureTenant fehlgeschlagen:", e.message);
+        return false;
+      }
+    },
     listProfiles: () => ops.listProfiles(requireState()),
     setProfile(email, patch) {
       const result = ops.setProfile(requireState(), email, patch);
@@ -321,51 +378,47 @@ async function hydrateProfiles(client) {
   return Object.fromEntries(rows.map((r) => [r.email, r.data]));
 }
 
-// tenant-Tabelle -> Tenant-Records. owner_name/idp_subject NUR setzen, wenn in der
-// DB nicht-null (sonst entstuende ein leeres ownerName-Feld, das den leeren
-// tenantContext-Fallback "" verdeckte). Tenants kommen ueber bootstrap-tenant/
-// Onboarding (P2b: kein config-Seed mehr). KEINE GUC noetig - die tenant-Tabelle hat keine RLS.
+// Spalten der tenant-Tabelle, geteilt von hydrateTenants (Boot-Hydrierung) UND
+// ensureTenant (Nach-Boot-Spiegel-Nachzug eines einzelnen Tenants): EINE Quelle, damit
+// SELECT-Liste und rowToTenant nie auseinanderdriften (G5). KEINE GUC noetig - die
+// tenant-Tabelle hat keine RLS.
+const TENANT_COLUMNS =
+  "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
+  "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
+  "stripe_current_period_end, country, default_language, private_number";
+
+// Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
+// owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
+// Fallback "" bzw. die firstName-Ableitung verdeckte (G1); kyc_level/stripe_*/geo/
+// private_number analog -> Owner/Bestand ohne Wert behaelt KEIN leeres Feld, der jeweilige
+// Code-Fallback greift (kein json<->pg-Drift, R6/R7). KRITISCH (I8-Lehre): die
+// stripe_subscription_* MUESSEN hier UND in flushTenants stehen, sonst loescht der naechste
+// Flush das Abo (Datenverlust). Tenants kommen ueber bootstrap-tenant/Onboarding/Web-Login
+// (P2b: kein config-Seed). Geteilt von hydrateTenants UND ensureTenant (G5).
+function rowToTenant(r) {
+  const tenant = { id: r.id, status: r.status };
+  if (r.owner_name != null) tenant.ownerName = r.owner_name;
+  if (r.first_name != null) tenant.firstName = r.first_name;
+  if (r.idp_subject != null) tenant.idpSubject = r.idp_subject;
+  if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
+  if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
+  if (r.stripe_payment_method_id != null) tenant.stripePaymentMethodId = r.stripe_payment_method_id;
+  if (r.stripe_subscription_id != null) tenant.stripeSubscriptionId = r.stripe_subscription_id;
+  if (r.stripe_plan_slug != null) tenant.stripePlanSlug = r.stripe_plan_slug;
+  // BIGINT kommt als String aus pg -> zurueck zur Zahl (Unix-Sekunden, kein Float-Geld).
+  if (r.stripe_current_period_end != null)
+    tenant.stripeCurrentPeriodEnd = Number(r.stripe_current_period_end);
+  if (r.country != null) tenant.country = r.country;
+  if (r.default_language != null) tenant.defaultLanguage = r.default_language;
+  if (r.private_number != null) tenant.privateNumber = r.private_number;
+  return tenant;
+}
+
+// tenant-Tabelle -> Tenant-Records (Boot-Hydrierung). Reine Projektion ueber rowToTenant
+// (byte-identisch zur frueheren Inline-Map).
 async function hydrateTenants(client) {
-  const rows = (
-    await client.query(
-      `SELECT id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, country, default_language, private_number FROM tenant`,
-    )
-  ).rows;
-  return rows.map((r) => {
-    const tenant = { id: r.id, status: r.status };
-    if (r.owner_name != null) tenant.ownerName = r.owner_name;
-    // first_name NUR-nicht-null hydrieren (Muster wie owner_name, G1): Tenant ohne
-    // Wert behaelt KEIN leeres Feld -> firstName-Ableitung im tenantContext greift.
-    if (r.first_name != null) tenant.firstName = r.first_name;
-    if (r.idp_subject != null) tenant.idpSubject = r.idp_subject;
-    // kyc_level NUR setzen, wenn nicht-null (Muster wie owner_name/idp_subject):
-    // ein Owner/Bestand ohne Wert behaelt KEIN kycLevel-Feld -> kycReached liefert
-    // true (byte-identisch zum json-Pfad, kein null-Feld-Drift, R6).
-    if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
-    // Pay1: nur-nicht-null hydrieren (Muster wie kyc_level) -> Tenant ohne Karte
-    // behaelt KEIN leeres Feld (kein Drift json<->pg, R6).
-    if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
-    if (r.stripe_payment_method_id != null)
-      tenant.stripePaymentMethodId = r.stripe_payment_method_id;
-    // W4: Abo-Referenzen nur-nicht-null hydrieren (Muster wie stripe_*) -> Tenant ohne
-    // Abo behaelt KEIN leeres Feld (kein json<->pg-Drift). KRITISCH (I8-Lehre): MUSS hier
-    // UND in flushTenants stehen, sonst loescht der naechste Flush das Abo (Datenverlust).
-    if (r.stripe_subscription_id != null) tenant.stripeSubscriptionId = r.stripe_subscription_id;
-    if (r.stripe_plan_slug != null) tenant.stripePlanSlug = r.stripe_plan_slug;
-    if (r.stripe_current_period_end != null)
-      // BIGINT kommt als String aus pg -> zurueck zur Zahl (Unix-Sekunden, kein Float-Geld).
-      tenant.stripeCurrentPeriodEnd = Number(r.stripe_current_period_end);
-    // Geo (F1): nur-nicht-null hydrieren (Muster wie kyc_level/stripe_*) -> ein
-    // Owner/Bestand ohne Wert behaelt KEIN leeres Feld (kein json<->pg-Drift, R7/R12);
-    // der Code-Fallback || DE/de der Konsumenten greift.
-    if (r.country != null) tenant.country = r.country;
-    if (r.default_language != null) tenant.defaultLanguage = r.default_language;
-    // F2: private Summary-Nummer nur-nicht-null hydrieren (Muster wie kyc_level/stripe_*/
-    // geo) -> ein Tenant ohne Nummer behaelt KEIN leeres Feld (kein json<->pg-Drift, M1);
-    // der Skip-Pfad in finishCall (kein Ziel -> keine SMS) greift verlaesslich.
-    if (r.private_number != null) tenant.privateNumber = r.private_number;
-    return tenant;
-  });
+  const rows = (await client.query(`SELECT ${TENANT_COLUMNS} FROM tenant`)).rows;
+  return rows.map(rowToTenant);
 }
 
 // Liest die tenant-scoped Zeilen EINES Tenants (RLS-GUC ist gesetzt) und fuellt sie

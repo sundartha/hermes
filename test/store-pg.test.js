@@ -15,6 +15,7 @@ import {
   NUMBER_STATUS,
   PROVISIONING_JOB_STATUS,
   USAGE_EVENT_KIND,
+  TENANT_STATUS,
 } from "../src/store/defaults.js";
 import {
   transitionNumber,
@@ -550,4 +551,64 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
     "Flip persistiert",
   );
   assert.equal(r2.pendingMeterEvents().length, 0, "kein pending Event mehr (Idempotenz-Schloss)");
+});
+
+// ---- ensureTenant: Signup-Spiegel-Nachzug (Nach-Boot, idempotent, fail-safe) ----
+// Der OIDC-Web-Login legt die tenant-Zeile NACH dem Boot in der DB an; der Spiegel wird
+// sonst nur bei init() hydriert. ensureTenant zieht GENAU diesen Tenant nach - mit dem
+// REALEN DB-status (Regel 1: nie ein hartcodiertes active).
+
+test("ensureTenant: abwesender DB-Tenant wird mit REALEM (suspended) Status nachgezogen", async () => {
+  const { store, db } = await makePgTestStore();
+  // Web-Login-Pfad simuliert: die tenant-Zeile existiert in der DB (suspended), aber NICHT
+  // im Boot-hydrierten Spiegel (kein registerTenant). Direktes INSERT (tenant hat keine RLS).
+  await db.query(`INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)`, [
+    "t_signup",
+    "sub-signup",
+  ]);
+  assert.equal(
+    store.load().tenants.find((t) => t.id === "t_signup"),
+    undefined,
+    "vor dem Nachzug nicht im Spiegel",
+  );
+  const ok = await store.ensureTenant("t_signup");
+  assert.equal(ok, true);
+  const tenant = store.load().tenants.find((t) => t.id === "t_signup");
+  assert.ok(tenant, "jetzt im Spiegel");
+  assert.equal(
+    tenant.status,
+    TENANT_STATUS.SUSPENDED,
+    "REALER DB-Status hydriert, NICHT hardcodiert active (Regel 1)",
+  );
+  assert.equal(tenant.idpSubject, "sub-signup", "voller Row hydriert (rowToTenant)");
+});
+
+test("ensureTenant: vorhandener Spiegel-Tenant -> NUR status-Refresh (suspended -> active), Felder bleiben", async () => {
+  const { store, db } = await makePgTestStore();
+  await db.query(`INSERT INTO tenant (id, status) VALUES ($1, 'suspended')`, ["t_refresh"]);
+  await store.ensureTenant("t_refresh"); // in den Spiegel (suspended)
+  store.setTenantStripe("t_refresh", { customerId: "cus_keep" }); // Spiegel-eigenes Feld
+  assert.equal(
+    store.load().tenants.find((t) => t.id === "t_refresh").status,
+    TENANT_STATUS.SUSPENDED,
+  );
+  // DB-Status wird aktiv (wie accounts.setStatus es taete); ensureTenant zieht NUR ihn nach.
+  await db.query(`UPDATE tenant SET status = 'active' WHERE id = $1`, ["t_refresh"]);
+  const ok = await store.ensureTenant("t_refresh");
+  assert.equal(ok, true);
+  const t = store.load().tenants.find((x) => x.id === "t_refresh");
+  assert.equal(t.status, TENANT_STATUS.ACTIVE, "status auf den DB-Wert nachgezogen");
+  assert.equal(
+    t.stripeCustomerId,
+    "cus_keep",
+    "Spiegel-eigenes Feld nicht geclobbert (refresh ONLY status)",
+  );
+});
+
+test("ensureTenant: unbekannte Id -> false, fabriziert keinen Tenant", async () => {
+  const { store } = await makePgTestStore();
+  const before = store.load().tenants.length;
+  const ok = await store.ensureTenant("t_nonexistent");
+  assert.equal(ok, false);
+  assert.equal(store.load().tenants.length, before, "kein Tenant aus dem Nichts");
 });

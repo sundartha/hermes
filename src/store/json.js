@@ -510,6 +510,15 @@ export function resolveTenant(idpSubject) {
   return ops.resolveTenant(load(), idpSubject);
 }
 
+// Nach-Boot-Spiegel-Nachzug eines Tenants (Signup-Hydrierung): No-Op im json-Backend.
+// Der OIDC-Web-Login/Self-Service ist nur mit STORE_BACKEND=pg gemountet (server.js) -
+// json hat keine separate accounts-DB, aus der ein nach Boot angelegter Tenant nachzuziehen
+// waere (load() haelt ohnehin den einen In-Memory-Zustand). Der Export existiert fuer
+// Fassaden-Vollstaendigkeit (store.js re-exportiert ihn fuer beide Backends).
+export async function ensureTenant() {
+  return false;
+}
+
 export function listProfiles() {
   return ops.listProfiles(load());
 }

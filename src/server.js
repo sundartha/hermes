@@ -237,6 +237,10 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         // Lokaler Dev-Login-Shim (NUR mit config.devLoginEnabled, fail-closed): mintet
         // dieselbe Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
         devLoginEnabled: config.devLoginEnabled,
+        // Signup-Spiegel-Nachzug: zieht den per accounts.upsertOnFirstLogin (mintSession)
+        // frisch angelegten Tenant in den pg-Store-Spiegel, BEVOR der Self-Service-Subscribe-
+        // Pfad eine WRITE-Store-Op (setTenantStripe etc.) ausloest, die ihn sonst nicht faende.
+        ensureTenant: (tid) => store.ensureTenant(tid),
       }),
     );
 
@@ -1521,6 +1525,13 @@ async function queueProvisioning(numberId, tenantId) {
 // (Cap/persist_error) landet PII-frei (tenantId/Grund) im Audit-Trail (BK3); der Trigger
 // hat keinen req-Kanal, daher req=null (audit markiert die Quelle als "system").
 async function triggerTenantProvisioning(tenantId) {
+  // Spiegel-Nachzug VOR der Provisionierung: activatePaidTenant aktiviert den Tenant nur in
+  // der DB (accounts.setStatus) - der Store-Spiegel traegt noch den suspended-Login-Wert.
+  // requestNumber liest den Spiegel-status; ohne Nachzug -> tenant_inactive -> kein Kauf
+  // trotz bezahltem Abo (still uebersprungen). ensureTenant zieht den realen (jetzt active)
+  // status nach. Laeuft VOR dem withStoreLock (eigener DB-Read via withClient, fail-safe,
+  // kein Re-Entrancy-Konflikt mit dem Lock-Body).
+  await store.ensureTenant(tenantId);
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();

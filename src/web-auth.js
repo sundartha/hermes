@@ -87,6 +87,11 @@ export function makeWebAuthRoutes(deps) {
   // Basic-Auth landet (rohe 403-/Auth-Sackgasse), sondern auf der "Choose your plan"-Shell.
   const { secret, redirectUri, ttlSeconds, oidc, accounts, sessions, audit } = deps;
   const postLoginPath = deps.postLoginPath || "/";
+  // Optionaler Signup-Spiegel-Nachzug (Default async No-Op -> Bestands-Auth-Tests
+  // unveraendert): zieht den frisch per accounts.upsertOnFirstLogin angelegten Tenant in
+  // den pg-Store-Spiegel, BEVOR die Session steht. Sonst faende jede WRITE-Store-Op auf dem
+  // Self-Service-Subscribe-Pfad (setTenantStripe etc.) den Tenant nicht und wuerfe fail-closed.
+  const ensureTenant = deps.ensureTenant || (async () => {});
   const router = Router();
 
   // EINE Quelle fuer das Session-Minting (G5 - kein paralleler Auth-Pfad): Account-Upsert
@@ -97,6 +102,12 @@ export function makeWebAuthRoutes(deps) {
   // (Callback auditiert + raeumt die pkce/state/nonce-Cookies, Dev-Login nicht).
   async function mintSession(res, { sub, email }) {
     const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
+    // Spiegel-Nachzug NACH dem Account-/Tenant-Upsert (die DB-Zeile existiert jetzt), VOR
+    // sessions.create. FAIL-OPEN bewusst: die Auth-Entscheidung (account+session) ist
+    // bereits getroffen, der Spiegel ist nur ein Betriebs-Cache. Ein Nachzug-Schluckauf
+    // oeffnet KEIN Gate (fehlt der Spiegel-Tenant, werfen die Setter weiter fail-CLOSED -
+    // der alte 502, nie suspended-sieht-aktiv-aus). Deckt Callback UND Dev-Login (G5).
+    await ensureTenant(tenantId);
     const { id } = await sessions.create({ sub, tenantId, ttlSeconds });
     res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
     return { tenantId, id };
