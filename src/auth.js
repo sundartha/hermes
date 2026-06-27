@@ -6,8 +6,18 @@ import { config } from "./config.js";
 import { audit, safeEqual } from "./util.js";
 
 // Localhost anhand der echten Socket-Adresse (nicht spoofbar via X-Forwarded-For).
+// ACHTUNG: hinter einem Reverse-Proxy (Render) ist remoteAddress IMMER der Loopback-
+// Sidecar -> fuer den /mcp-Bypass deshalb NUR ueber legacyLocalBypassAllowed nutzen.
 const isLocalSocket = (req) =>
   ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
+
+// AM1: Der Legacy-Socket-Bypass (MCP_AUTH="" ohne MCP_AUTH_TOKEN) ist reine lokale Dev-
+// Bequemlichkeit und darf in Produktion /mcp NIE oeffnen (s.o. - dort ist jeder Request
+// "localhost"). Nur ausserhalb der Produktion (config.isProduction = RENDER_EXTERNAL_URL).
+// isProduction injizierbar -> unit-testbar (Muster productionFootguns). Reine Query.
+export function legacyLocalBypassAllowed(req, isProduction = config.isProduction) {
+  return !isProduction && isLocalSocket(req);
+}
 
 // Erwartete Audience: explizit gesetzt oder kanonische MCP-URL.
 const audience = () => config.oauthAudience || `${config.publicUrl}/mcp`;
@@ -92,17 +102,18 @@ export async function mcpAuth(req, res, next) {
     audit("auth_failed", req, "path=/mcp");
     return res.status(401).json({ error: "unauthorized" });
   }
-  // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt auf
-  // localhost-only zurueck (fail-closed wie seit Phase 1).
+  // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
+  // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
+  // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
   if (config.mcpAuth === "token") {
     audit("auth_failed", req, "path=/mcp grund=kein_token");
     return res.status(401).json({ error: "unauthorized" });
   }
-  if (isLocalSocket(req)) return next();
+  if (legacyLocalBypassAllowed(req)) return next();
   audit("auth_failed", req, "path=/mcp");
-  return res
-    .status(401)
-    .json({ error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost erreichbar" });
+  return res.status(401).json({
+    error: "MCP_AUTH_TOKEN nicht gesetzt - /mcp ist nur von localhost (ausserhalb Produktion) erreichbar",
+  });
 }
 
 // RFC 9728: Protected Resource Metadata. Beide Pfade bedienen (generisch und
