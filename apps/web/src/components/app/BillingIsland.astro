@@ -1,30 +1,39 @@
 ---
-// Billing-Insel (W3): NUR Karte hinterlegen -- exakt der heute existierende
-// Backend-Umfang. 1:1-Verhalten zu public/tenant.html (renderBilling + addCard):
-//   - sichtbar NUR wenn state.hasCard ein Boolean ist (PAYMENT_ENABLED an);
-//     sonst versteckt (byte-identisch zum Bestand ohne Payment).
-//   - "Zahlungsmethode hinzufuegen" -> POST /api/self-service/billing/setup-checkout
-//     (ueber lib/api.js) -> Browser-Redirect zur Stripe-Checkout-URL.
-//   - Rueckkehr ueber ?card=ok|canceled -> kurze Rueckmeldung.
+// Billing-Insel (W3 + P2): Karte hinterlegen UND Abo buchen -- der heute existierende
+// Backend-Umfang. 1:1-Verhalten zu public/tenant.html (renderBilling + renderSubscription
+// + subscribePlan), portiert als Insel:
+//   - sichtbar NUR wenn state.hasCard ein Boolean ist (PAYMENT_ENABLED an); sonst
+//     versteckt (byte-identisch zum Bestand ohne Payment).
+//   - "Add payment method" -> POST /api/self-service/billing/setup-checkout -> Browser-
+//     Redirect zur Stripe-Checkout-URL. Rueckkehr ueber ?card=ok|canceled / ?sub=ok|failed.
+//   - Abo-Region: aktiver Plan -> Plan-Zeile + Minuten-Kontingent; sonst Prompt
+//     "Subscribe so Hermes can call for you" + Plan-Kacheln (aus dem Build-Spiegel
+//     lib/plans.js, KEIN runtime /api/plans-Fetch). Subscribe-Klick -> Zustandsmaschine
+//     (lib/subscribe.js): ok -> Tenant aktiv + alle Inseln refreshen; 409 no_card ->
+//     gefuehrter Stripe-Checkout MIT Plan; 409 sonst -> "bereits aboniert"; 401 -> Session.
 //
-// BEWUSSTE ABGRENZUNG (CLAUDE.md Regel 6, kein toter Code/404-Pfad): Abo buchen/
-// kuendigen/upgraden/downgraden, Plan-/Tier-Wechsel, Rechnungssicht existieren
-// API-seitig NICHT (verifiziert: src/billing/ports.js + stripe.js kennen nur
-// Karten-Setup + Hold/Capture/Cancel + Metering, keine Stripe-Subscriptions).
-// Diese Insel bietet daher AUSSCHLIESSLICH "Karte hinterlegen" an.
-//
-// Kein eigener state-Fetch: die App-Shell ermittelt den Zustand einmal (Auth-
-// Insel) und meldet ihn per AUTH_EVENT -- diese Insel hoert nur darauf mit.
+// Kein eigener state-Fetch im Normalfall: die Auth-Insel ermittelt den Zustand einmal und
+// meldet ihn per AUTH_EVENT -- diese Insel hoert mit. Nach erfolgreicher Buchung re-fetcht
+// sie den State selbst und re-dispatcht AUTH_EVENT (so gehen ALLE Inseln auf den frischen
+// Stand: aktiver Plan, ggf. Nummer). Anzeige-Strings nur ueber textContent (XSS-Schutz).
 ---
 
 <!-- Default versteckt: ohne PAYMENT_ENABLED (hasCard kein Boolean) bleibt der
      Block verborgen, byte-identisch zum Bestand. JS zeigt ihn nur bei present. -->
 <section id="billing-card" class="card" hidden>
-  <h2>Zahlungsmethode</h2>
-  <p class="muted">Fuer kostenpflichtige Funktionen (z.B. eigene Rufnummer).</p>
+  <h2>Payment method</h2>
+  <p class="muted">For paid features (e.g. your own phone number).</p>
   <p id="billing-status" class="muted"></p>
-  <button id="billing-add" class="btn" type="button">Zahlungsmethode hinzufuegen</button>
+  <button id="billing-add" class="btn" type="button">Add payment method</button>
   <p id="billing-msg" class="billing-msg" hidden></p>
+
+  <!-- Abo-Region: aktiver Plan -> Plan-Zeile + Kontingent; sonst Prompt + Kacheln. -->
+  <div id="sub-block" class="sub-block">
+    <p id="sub-status" class="muted"></p>
+    <p id="sub-quota" class="muted" hidden></p>
+    <div id="sub-tiles" class="plans"></div>
+    <p id="sub-msg" class="billing-msg" hidden></p>
+  </div>
 </section>
 
 <script>
@@ -34,42 +43,83 @@
     AUTH_EVENT,
     HTTP_UNAUTHORIZED,
     cardStatus,
+    subscriptionFrom,
+    quotaFrom,
+    fetchTenantState,
     startBillingSetupCheckout,
   } from "../../lib/api.js";
+  import { planTiles, subscriptionLine, quotaLine, wireSubscribe } from "../../lib/subscribe.js";
 
   // Rueckkehr-Parameter (kein Magic-String an den Vergleichsstellen).
-  const RETURN_PARAM = "card";
+  const RETURN_PARAM_CARD = "card";
+  const RETURN_PARAM_SUB = "sub";
   const RETURN_OK = "ok";
   const RETURN_CANCELED = "canceled";
+  const RETURN_FAILED = "failed";
+
+  // Prompt ohne aktives Abo (no-sub). Eine Quelle (G25).
+  const NO_SUB_PROMPT = "Subscribe so Hermes can call for you";
 
   const cardEl = document.getElementById("billing-card");
   const statusEl = document.getElementById("billing-status");
   const addBtn = document.getElementById("billing-add");
   const msgEl = document.getElementById("billing-msg");
+  const subStatusEl = document.getElementById("sub-status");
+  const subQuotaEl = document.getElementById("sub-quota");
+  const subTilesEl = document.getElementById("sub-tiles");
+  const subMsgEl = document.getElementById("sub-msg");
 
   function showMessage(text) {
     msgEl.textContent = text;
     msgEl.hidden = false;
   }
 
+  function showSubMessage(text) {
+    subMsgEl.textContent = text;
+    subMsgEl.hidden = !text;
+  }
+
+  // Kontingent-Zeile (text==null -> verstecken; sonst zeigen).
+  function renderQuota(text) {
+    subQuotaEl.textContent = text || "";
+    subQuotaEl.hidden = !text;
+  }
+
+  // Abo-Region: aktiver Plan -> Plan-Zeile + Kontingent, Kacheln aus; sonst no-sub
+  // Prompt + Plan-Kacheln. 1:1 zu tenant.html renderSubscription.
+  function renderSubscription(data) {
+    const sub = subscriptionFrom(data);
+    if (sub.planSlug) {
+      subStatusEl.textContent = subscriptionLine(sub);
+      renderQuota(quotaLine(quotaFrom(data)));
+      subTilesEl.replaceChildren();
+      subTilesEl.hidden = true;
+    } else {
+      subStatusEl.textContent = NO_SUB_PROMPT;
+      renderQuota(null);
+      subTilesEl.replaceChildren(...planTiles(document));
+      subTilesEl.hidden = false;
+    }
+  }
+
   // Sichtbarkeit + Status aus genau dem state, den die Auth-Insel ermittelt hat.
   // result.present===false (hasCard kein Boolean) -> Block versteckt; sonst
-  // Status/Button-Text wie im Bestand (renderBilling in tenant.html).
+  // Karten-Status/Button-Text + Abo-Region (renderBilling in tenant.html).
   function renderBilling(data) {
     const { present, hasCard } = cardStatus(data);
     cardEl.hidden = !present;
     if (!present) return;
-    statusEl.textContent = hasCard ? "Karte hinterlegt." : "Noch keine Karte hinterlegt.";
-    addBtn.textContent = hasCard ? "Andere Karte hinterlegen" : "Zahlungsmethode hinzufuegen";
+    statusEl.textContent = hasCard ? "Card on file." : "No card on file yet.";
+    addBtn.textContent = hasCard ? "Add a different card" : "Add payment method";
+    renderSubscription(data);
   }
 
   // Fehler -> kurze Meldung wie in der Vorlage (tenant.html addCard): 401 sagt
-  // "Sitzung abgelaufen" (der Nutzer soll sich neu anmelden), alles andere die
-  // generische Meldung. Fail-closed: nie als Teil-Erfolg deuten.
+  // "Session expired" (neu anmelden), alles andere die generische Meldung.
   function checkoutErrorText(err) {
     if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED)
-      return "Sitzung abgelaufen - bitte neu anmelden.";
-    return "Konnte Checkout nicht starten.";
+      return "Session expired - please sign in again.";
+    return "Couldn't start checkout.";
   }
 
   // Checkout starten: POST liefert die Stripe-URL -> Browser dorthin leiten.
@@ -84,19 +134,42 @@
     }
   });
 
-  // Rueckkehr von Stripe Checkout: kurze Rueckmeldung. Der echte Karten-Status
-  // kommt ohnehin aus dem naechsten state-Fetch (AUTH_EVENT). Query danach
-  // entfernen, damit ein Reload die Meldung nicht wiederholt.
+  // Re-Fetch nach erfolgreicher Buchung: den State neu laden und per AUTH_EVENT an
+  // ALLE Inseln (inkl. dieser) verteilen -> aktiver Plan, ggf. Nummer, ohne Reload.
+  async function refreshState() {
+    const data = await fetchTenantState();
+    document.dispatchEvent(
+      new CustomEvent(AUTH_EVENT, { detail: { state: AUTH_STATE.AUTHENTICATED, data } }),
+    );
+  }
+
+  // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5). Die Kacheln
+  // werden bei jedem Render ersetzt -> kein Binding pro Button, kein Listener-Leak.
+  wireSubscribe(subTilesEl, { onSubscribed: refreshState, onMessage: showSubMessage });
+
+  // Rueckkehr von Stripe Checkout: kurze Rueckmeldung. Der echte Status kommt ohnehin
+  // aus dem naechsten state-Fetch (AUTH_EVENT). ?card=ok|canceled = reiner Karten-Flow;
+  // ?sub=ok|failed = Kachel-Flow (BK2). Query danach entfernen (kein Wiederholen).
+  function returnMessageText(card, sub) {
+    if (card === RETURN_OK) return "Card saved.";
+    if (card === RETURN_CANCELED) return "Cancelled - no card saved.";
+    if (sub === RETURN_OK) return "Subscription booked.";
+    if (sub === RETURN_FAILED)
+      return "Card saved, but the subscription couldn't be booked. Please try again.";
+    return "";
+  }
+
   function showReturnMessage() {
-    const value = new URLSearchParams(location.search).get(RETURN_PARAM);
-    if (value !== RETURN_OK && value !== RETURN_CANCELED) return;
-    showMessage(value === RETURN_OK ? "Karte hinterlegt." : "Abgebrochen - keine Karte hinterlegt.");
+    const params = new URLSearchParams(location.search);
+    const text = returnMessageText(params.get(RETURN_PARAM_CARD), params.get(RETURN_PARAM_SUB));
+    if (!text) return;
+    showMessage(text);
     history.replaceState(null, "", location.pathname);
   }
 
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
-  // eingeloggten Zustand traegt die state-Antwort hasCard. Listener synchron beim
-  // Modul-Start registrieren, BEVOR die Auth-Insel (hinter ihrem fetch) dispatcht.
+  // eingeloggten Zustand traegt die state-Antwort hasCard/subscription. Listener
+  // synchron beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht.
   document.addEventListener(AUTH_EVENT, (event) => {
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) renderBilling(data);

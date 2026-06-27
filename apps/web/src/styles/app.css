@@ -194,6 +194,96 @@
   color: var(--color-muted);
 }
 
+/* P2: Abo-Region + Plan-Kacheln (Subscribe). Konsistent mit der Karten-Bildsprache
+   (Surface/Border/Radius) -- AUSSCHLIESSLICH semantische Tokens (Strategie 2.5). Das
+   Kachel-Raster spiegelt .shell-cols: zwei gleich breite Spalten, unter dem 768px-
+   Breakpoint gestapelt (siehe Media-Query unten, kein neuer Magic-Wert). */
+.sub-block {
+  margin-top: var(--space-stack);
+}
+
+.plans {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-gap);
+  margin-top: var(--space-stack);
+}
+
+.plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-cozy);
+  padding: var(--space-card);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.plan--featured {
+  border-color: var(--color-action);
+}
+
+.plan-badge {
+  position: absolute;
+  top: 0;
+  right: var(--space-cozy);
+  transform: translateY(-50%);
+  padding: var(--space-hairline) var(--space-cozy);
+  border-radius: var(--radius-badge);
+  background: var(--color-action);
+  color: var(--color-on-action);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+
+.plan-name {
+  font-weight: var(--weight-emphasis);
+}
+
+.plan-price {
+  font-size: var(--text-title);
+  font-weight: var(--weight-heading);
+  color: var(--color-text);
+}
+
+.plan-per {
+  font-size: var(--text-body);
+  font-weight: var(--weight-label);
+  color: var(--color-muted);
+}
+
+.plan-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+  margin: 0;
+  padding: 0;
+}
+
+.plan-feature {
+  position: relative;
+  padding-left: var(--space-inline);
+  font-size: var(--text-body);
+  color: var(--color-muted);
+}
+
+.plan-feature::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-status-positive);
+  font-weight: var(--weight-emphasis);
+}
+
+.plan-cta {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
 /* W5: Settings-Editor (der einzige Schreibpfad). AUSSCHLIESSLICH semantische
    Tokens -- keine festen Werte (Strategie 2.5). Die Toggle-Geometrie ist aus
    den vorhandenen Space-Tokens per calc() komponiert (kein Magic-Pixel). */
@@ -353,7 +443,8 @@
    in der Media-Bedingung. Bewusst sparsam (ein Breakpoint), nahe dem 980px der
    Bestands-tenant.html (kein willkuerlicher Wert). */
 @media (max-width: 768px) {
-  .shell-cols {
+  .shell-cols,
+  .plans {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -30,10 +30,10 @@ const MAX_ACTION_ITEMS = 12;
 const MAX_CALENDAR_EVENTS = 6;
 
 // Beschriftungen/Glyphen (keine Magic-Strings an den Verwendungsstellen, G25).
-const EMPTY_CALLS = "Noch keine Anrufe — verbinde deinen ersten Agent!";
-const EMPTY_ACTION_ITEMS = "Noch keine Action Items.";
-const EMPTY_CALENDAR = "Noch keine Termine.";
-const APPOINTMENT_TAG = "Termin";
+const EMPTY_CALLS = "No calls yet — connect your first agent!";
+const EMPTY_ACTION_ITEMS = "No action items yet.";
+const EMPTY_CALENDAR = "No appointments yet.";
+const APPOINTMENT_TAG = "Appointment";
 // Richtungs-Pfeile als echte Unicode-Zeichen (kein roher HTML-Entity-String;
 // textContent-sicher). Out = nach oben rechts, In = nach unten links.
 const ARROW_OUT = "↗";
@@ -41,8 +41,9 @@ const ARROW_IN = "↙";
 
 // Element-Fabrik: setzt className optional, Text NUR ueber textContent. `doc`
 // ist injiziert (DIP) -> derselbe Bau in Produktion (document) UND im Test
-// (Fake-Document). undefined-Text bleibt unangetastet (leerer Knoten).
-function el(doc, tag, className, text) {
+// (Fake-Document). undefined-Text bleibt unangetastet (leerer Knoten). Exportiert,
+// damit lib/subscribe.js denselben textContent-only Bau nutzt (G5, eine el-Quelle).
+export function el(doc, tag, className, text) {
   const node = doc.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;

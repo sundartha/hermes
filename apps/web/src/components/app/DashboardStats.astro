@@ -9,18 +9,18 @@
 // heute NICHT zeigen — Roh-Nutzung ist nicht im /state. Wir zeigen die genutzte
 // Gespraechszeit; die praezise Rest-Quote ist ein benannter Backend-Follow-up.
 const stats = [
-  { id: "stat-total", label: "Anrufe gesamt" },
-  { id: "stat-week", label: "Diese Woche" },
-  { id: "stat-month", label: "Diesen Monat" },
-  { id: "stat-duration", label: "Gespraechszeit gesamt" },
-  { id: "stat-direction", label: "Eingehend / Ausgehend" },
-  { id: "stat-summary", label: "Mit Zusammenfassung" },
+  { id: "stat-total", label: "Total calls" },
+  { id: "stat-week", label: "This week" },
+  { id: "stat-month", label: "This month" },
+  { id: "stat-duration", label: "Total talk time" },
+  { id: "stat-direction", label: "Inbound / Outbound" },
+  { id: "stat-summary", label: "With summary" },
 ];
 ---
 
 <section id="stats" class="card">
-  <h2>Ueberblick</h2>
-  <p class="muted">Aus deinem Anruf-Verlauf abgeleitet.</p>
+  <h2>Overview</h2>
+  <p class="muted">Derived from your call history.</p>
   <div class="stat-grid">
     {stats.map(({ id, label }) => (
       <div class="stat">
@@ -30,7 +30,7 @@ const stats = [
     ))}
   </div>
   <p class="stat-note muted">
-    Dein genaues Rest-Kontingent zeigen wir, sobald es im Konto verfuegbar ist.
+    We'll show your exact remaining quota as soon as it's available in your account.
   </p>
 </section>
 

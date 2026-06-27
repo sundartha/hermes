@@ -128,18 +128,18 @@ test("callCounterparty: outbound -> to, inbound -> from, fehlend -> leer", () =>
 
 test("callSubtitle: goal hat Vorrang, sonst richtungsabhaengiger Standardtext", () => {
   assert.equal(callSubtitle({ direction: "inbound", goal: "Rueckruf" }), "Rueckruf");
-  assert.equal(callSubtitle({ direction: "inbound" }), "Eingehender Anruf");
-  assert.equal(callSubtitle({ direction: "outbound" }), "Ausgehender Anruf");
+  assert.equal(callSubtitle({ direction: "inbound" }), "Inbound call");
+  assert.equal(callSubtitle({ direction: "outbound" }), "Outbound call");
 });
 
 test("callStatusLabel/callStatusKind: bekannte Status + fail-closed auf failed", () => {
   assert.equal(callStatusLabel({ status: "active" }), "Live");
-  assert.equal(callStatusLabel({ status: "completed" }), "Beendet");
-  assert.equal(callStatusLabel({ status: "cancelled" }), "Abgebrochen");
-  assert.equal(callStatusLabel({ status: "failed" }), "Fehlgeschlagen");
+  assert.equal(callStatusLabel({ status: "completed" }), "Completed");
+  assert.equal(callStatusLabel({ status: "cancelled" }), "Cancelled");
+  assert.equal(callStatusLabel({ status: "failed" }), "Failed");
   // Unbekannter/fehlender Status -> Fehler-Beschriftung + Fehler-Klasse.
-  assert.equal(callStatusLabel({ status: "weird" }), "Fehlgeschlagen");
-  assert.equal(callStatusLabel({}), "Fehlgeschlagen");
+  assert.equal(callStatusLabel({ status: "weird" }), "Failed");
+  assert.equal(callStatusLabel({}), "Failed");
   assert.equal(callStatusKind({ status: "active" }), "active");
   assert.equal(callStatusKind({ status: "weird" }), "failed");
 });
@@ -172,9 +172,9 @@ test("callRows/actionItemRows/calendarRows: leere Daten -> genau eine Empty-Zeil
     assert.equal(rows.length, 1);
     assert.ok(rows[0].hasClass("data-empty"));
   }
-  assert.equal(textOf(callRows(fakeDocument, {})), "Noch keine Anrufe — verbinde deinen ersten Agent!");
-  assert.equal(textOf(actionItemRows(fakeDocument, {})), "Noch keine Action Items.");
-  assert.equal(textOf(calendarRows(fakeDocument, {})), "Noch keine Termine.");
+  assert.equal(textOf(callRows(fakeDocument, {})), "No calls yet — connect your first agent!");
+  assert.equal(textOf(actionItemRows(fakeDocument, {})), "No action items yet.");
+  assert.equal(textOf(calendarRows(fakeDocument, {})), "No appointments yet.");
 });
 
 // ---- DOM-Bau: Normalfall + Begrenzung --------------------------------------
@@ -197,7 +197,7 @@ test("callRows rendert pro Call eine Zeile mit Gegenstelle, Untertitel und Statu
   assert.ok(all.includes("+4915112345")); // outbound -> to
   assert.ok(all.includes("Termin")); // goal als Untertitel
   assert.ok(all.includes("+49302")); // inbound -> from
-  assert.ok(all.includes("Eingehender Anruf")); // kein goal -> Standardtext
+  assert.ok(all.includes("Inbound call")); // kein goal -> Standardtext
   assert.ok(rows[1].hasClass("status-badge--active"));
 });
 
@@ -207,7 +207,7 @@ test("actionItemRows begrenzt auf 12 und taggt Termine", () => {
   const rows = actionItemRows(fakeDocument, { actionItems: items });
   assert.equal(rows.length, 12); // MAX_ITEMS
   assert.ok(rows[0].hasClass("tag--appointment"));
-  assert.ok(textOf([rows[0]]).includes("Termin"));
+  assert.ok(textOf([rows[0]]).includes("Appointment"));
 });
 
 test("calendarRows begrenzt auf 6 Termine", () => {

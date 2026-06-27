@@ -30,11 +30,13 @@ fs.writeFileSync(
 after(() => fs.rmSync(WEB_DIST, { recursive: true, force: true }));
 
 // Roher GET ohne Redirect-Follow (node:http folgt 3xx nicht) -> {status, location}.
+// path traegt pathname + search, damit der Query-erhaltende /tenant.html-Redirect
+// (P2/D2) pruefbar ist.
 function rawGet(url) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const req = http.request(
-      { hostname: u.hostname, port: u.port, path: u.pathname, method: "GET" },
+      { hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: "GET" },
       (res) => {
         res.resume();
         resolve({ status: res.statusCode, location: res.headers.location });
@@ -73,6 +75,22 @@ test("WEB_DIST_DIR: /tenant.html -> 302 /app (Altpfad-Redirect, Bookmarks)", asy
     const res = await rawGet(`${srv.localUrl}/tenant.html`);
     assert.equal(res.status, 302);
     assert.equal(res.location, "/app");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// P2/D2: der Query-String muss den Redirect ueberleben, sonst geht die Post-Checkout-
+// Rueckkehr (?sub=ok / ?card=ok) auf dem Weg /tenant.html -> /app verloren und die
+// BillingIsland zeigt die Rueckmeldung nie an.
+test("WEB_DIST_DIR: /tenant.html?sub=ok -> 302 /app?sub=ok (Query erhalten)", async () => {
+  const srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
+  try {
+    const res = await rawGet(`${srv.localUrl}/tenant.html?sub=ok`);
+    assert.equal(res.status, 302);
+    assert.equal(res.location, "/app?sub=ok");
+    const card = await rawGet(`${srv.localUrl}/tenant.html?card=ok`);
+    assert.equal(card.location, "/app?card=ok");
   } finally {
     await srv.stop();
   }

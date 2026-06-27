@@ -11,6 +11,10 @@
 // erkennen, ohne den Magic-Wert zu duplizieren.
 export const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
+// 409 = Vorbedingung verletzt beim Abo-Buchen (no_card / already_subscribed).
+// Exportiert, damit die Subscribe-Verdrahtung (lib/subscribe.js) den gefuehrten
+// Karten-Flow vom "bereits aboniert"-Hinweis trennt, ohne den Magic-Wert zu doppeln.
+export const HTTP_CONFLICT = 409;
 
 // UI-Zustaende, die die App-Shell aus genau EINEM state-Fetch ableitet. Eine
 // Quelle (kein Magic-String an den Verbrauchsstellen), eingefroren gegen Mutation.
@@ -29,10 +33,27 @@ export const AUTH_EVENT = "hermes:authstate";
 // Fehler eines API-Aufrufs mit HTTP-Status. Der Aufrufer (loadAuthState)
 // unterscheidet 401/403 darueber, ohne den rohen Response durchzureichen.
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    // Optionaler Backend-Fehlercode aus dem {error}-Body (z.B. "no_card",
+    // "already_subscribed"). undefined, wenn der Body keinen JSON-Code trug -- die
+    // Status-basierte Behandlung bleibt fail-closed (kein Verlass auf den Code).
+    this.code = code;
+  }
+}
+
+// Best-effort: liest den Backend-Fehlercode aus einem non-2xx JSON-Body ({error}).
+// Additiv und fail-closed: JEDER Fehler (kein JSON, kein error-Feld) -> undefined.
+// Der Aufrufer behandelt non-2xx ohnehin als Misserfolg; der Code verfeinert nur die
+// Folge (z.B. 409 no_card -> gefuehrter Checkout statt generischer Fehler).
+async function readErrorCode(res) {
+  try {
+    const body = await res.json();
+    return body && typeof body.error === "string" ? body.error : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -49,7 +70,10 @@ async function apiRequest(path, { method = "GET", parseJson = true, body } = {})
     options.body = JSON.stringify(body);
   }
   const res = await fetch(path, options);
-  if (!res.ok) throw new ApiError(res.status, `${method} ${path} -> ${res.status}`);
+  if (!res.ok) {
+    const code = await readErrorCode(res);
+    throw new ApiError(res.status, `${method} ${path} -> ${res.status}`, code);
+  }
   return parseJson ? res.json() : null;
 }
 
@@ -67,22 +91,37 @@ export function logout() {
 
 // Startet die Stripe-Checkout-Session (setup-mode) zum Hinterlegen einer Karte.
 // Der Gateway-Endpunkt antwortet mit JSON { url } (verifiziert in
-// src/self-service-routes.js) -- der einzige existierende Billing-Schreibpfad.
-// Der Aufrufer macht den Browser-Redirect auf diese url (zur Stripe-gehosteten
-// Seite); das Frontend selbst kennt KEINE Stripe-Logik (duenner Client, 2.3).
-// Bewusst NUR Karte hinterlegen: es gibt API-seitig kein Abo (subscribe/cancel/
-// upgrade existieren nicht) -- ein solcher Aufruf liefe gegen 404 (CLAUDE.md
-// Regel 6) und ist hier verboten.
-export async function startBillingSetupCheckout() {
-  const { url } = await apiRequest("/api/self-service/billing/setup-checkout", {
-    method: "POST",
-  });
+// src/self-service-routes.js); der Aufrufer macht den Browser-Redirect auf diese
+// url (zur Stripe-gehosteten Seite) -- das Frontend kennt KEINE Stripe-Logik (2.3).
+// Optionaler plan (Kachel-Flow, BK2): wird als Body { plan } mitgesendet, damit die
+// Rueckkehr (billing/return) den getragenen Plan direkt bucht (gefuehrter no_card-Pfad).
+// OHNE plan geht KEIN Body raus -> byte-identisch zum reinen "Karte hinterlegen".
+export async function startBillingSetupCheckout(plan) {
+  const options = { method: "POST" };
+  if (plan !== undefined) options.body = { plan };
+  const { url } = await apiRequest("/api/self-service/billing/setup-checkout", options);
   // Contract-Grenze (R5): das Backend garantiert { url } -- ein 200 ohne url
   // waere ein Drift. Fail-closed pruefen, statt window.location.assign(undefined)
   // an den Aufrufer durchzureichen (G26: null/undefined nie ungeprueft nutzen).
   if (typeof url !== "string" || url === "")
     throw new ApiError(0, "billing setup-checkout: Antwort ohne url");
   return url;
+}
+
+// Bucht ein Abo (POST same-origin, JSON-Body { plan }). Loest beim Backend ECHTES
+// wiederkehrendes Geld aus (Recurring) -> NUR vom expliziten Subscribe-Klick. Erfolg:
+// { plan, currentPeriodEnd } + der Tenant wird aktiv. Wirft ApiError bei non-2xx; der
+// .code (no_card / already_subscribed) steuert die gefuehrte Folge in lib/subscribe.js.
+export function startBillingSubscribe(plan) {
+  return apiRequest("/api/self-service/billing/subscribe", { method: "POST", body: { plan } });
+}
+
+// Liest den schlanken Billing-Status (GET, webAuthPendingMw -> auch fuer suspendierte
+// Tenants erreichbar). NUR Lifecycle-Flags { paymentEnabled, hasCard, planSlug, status }
+// -- keine PII/Secrets, keine active-only /state-Felder. Der Aktivierungs-Pfad (suspended)
+// rendert daraus dieselben Plan-Kacheln wie der aktive Pfad.
+export function fetchBillingStatus() {
+  return apiRequest("/api/self-service/billing/status");
 }
 
 // Liest die Agent-Eckdaten (Nummer, Besitzer) aus der state-Antwort -- die EINE
@@ -103,6 +142,31 @@ export function agentInfo(data) {
 export function cardStatus(data) {
   const present = typeof (data && data.hasCard) === "boolean";
   return { present, hasCard: present ? data.hasCard : false };
+}
+
+// Liest die Abo-Sicht aus der state-Antwort -- die EINE Stelle, an der das Frontend
+// die Form `data.subscription` annimmt (Contract-Grenze, R5). Fehlt das Feld
+// (PAYMENT_ENABLED aus / kein Abo) -> { planSlug:"", currentPeriodEnd:0 } (neutral,
+// nie undefined). currentPeriodEnd ist ein Unix-Sekunden-Epoch (Backend, store.tenantSubscription).
+export function subscriptionFrom(data) {
+  const sub = (data && data.subscription) || {};
+  return { planSlug: sub.planSlug || "", currentPeriodEnd: sub.currentPeriodEnd || 0 };
+}
+
+// Liest das Minuten-Kontingent aus der state-Antwort (BK4). Nur ein Objekt mit den
+// erwarteten Zahlen zaehlt; alles andere (fehlend / kein aktives Abo -> Backend liefert
+// null) -> null (die UI versteckt die Kontingent-Zeile). Keys gespiegelt aus
+// src/billing/meter.js quotaView (includedMinutes/remainingMinutes).
+export function quotaFrom(data) {
+  const quota = data && data.quota;
+  if (
+    !quota ||
+    typeof quota.includedMinutes !== "number" ||
+    typeof quota.remainingMinutes !== "number"
+  ) {
+    return null;
+  }
+  return { includedMinutes: quota.includedMinutes, remainingMinutes: quota.remainingMinutes };
 }
 
 // ---- W4: read-only Datensicht (Calls / ActionItems / Kalender) ----------------
@@ -144,8 +208,8 @@ export function callCounterparty(call) {
 
 // Untertitel eines Calls: das Anrufziel (goal), sonst eine richtungsabhaengige
 // Standardbeschreibung -- 1:1 wie der Bestand (tenant.html renderCalls).
-const CALL_SUBTITLE_INBOUND = "Eingehender Anruf";
-const CALL_SUBTITLE_OUTBOUND = "Ausgehender Anruf";
+const CALL_SUBTITLE_INBOUND = "Inbound call";
+const CALL_SUBTITLE_OUTBOUND = "Outbound call";
 export function callSubtitle(call) {
   const c = call || {};
   if (c.goal) return c.goal;
@@ -153,13 +217,13 @@ export function callSubtitle(call) {
 }
 
 // Status-Beschriftung eines Calls (Anzeige-Text). Unbekannter/fehlender Status
-// faellt fail-closed auf "Fehlgeschlagen" (wie der Bestand: jeder Nicht-
+// faellt fail-closed auf "Failed" (wie der Bestand: jeder Nicht-
 // active/completed/cancelled-Wert ist die Fehler-Beschriftung).
 const CALL_STATUS_LABELS = Object.freeze({
   active: "Live",
-  completed: "Beendet",
-  cancelled: "Abgebrochen",
-  failed: "Fehlgeschlagen",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  failed: "Failed",
 });
 export function callStatusLabel(call) {
   const status = (call && call.status) || "";
@@ -181,9 +245,9 @@ export function isAppointment(item) {
 }
 
 // Kalender-Datumsteile fuer die Anzeige (Tag / Monat-Kurz / Wochentag+Uhrzeit),
-// aus dem ISO-start. Reine Formatierung (de-DE), DOM-frei und damit testbar.
+// aus dem ISO-start. Reine Formatierung (en-US), DOM-frei und damit testbar.
 // Ungueltiges/fehlendes Datum -> leere Teile (kein "Invalid Date" in der UI).
-const CAL_LOCALE = "de-DE";
+const CAL_LOCALE = "en-US";
 export function calendarDateParts(event) {
   const start = event && event.start;
   const d = start ? new Date(start) : null;
@@ -256,18 +320,18 @@ export function callStats(data, now = new Date()) {
   return stats;
 }
 
-// Formatiert eine Dauer in Sekunden fuer die Anzeige (de): "0 Min" / "< 1 Min" /
-// "N Min" / "H Std" / "H Std M Min". Reine Formatierung, DOM-frei.
+// Formatiert eine Dauer in Sekunden fuer die Anzeige (en): "0 min" / "< 1 min" /
+// "N min" / "H h" / "H h M min". Reine Formatierung, DOM-frei.
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 export function formatCallDuration(totalSec) {
   const sec = Number.isFinite(totalSec) && totalSec > 0 ? Math.round(totalSec) : 0;
-  if (sec < SECONDS_PER_MINUTE) return sec === 0 ? "0 Min" : "< 1 Min";
+  if (sec < SECONDS_PER_MINUTE) return sec === 0 ? "0 min" : "< 1 min";
   const minutes = Math.floor(sec / SECONDS_PER_MINUTE);
-  if (minutes < MINUTES_PER_HOUR) return `${minutes} Min`;
+  if (minutes < MINUTES_PER_HOUR) return `${minutes} min`;
   const hours = Math.floor(minutes / MINUTES_PER_HOUR);
   const remMinutes = minutes % MINUTES_PER_HOUR;
-  return remMinutes ? `${hours} Std ${remMinutes} Min` : `${hours} Std`;
+  return remMinutes ? `${hours} h ${remMinutes} min` : `${hours} h`;
 }
 
 // ---- W5: Settings-Editor (der EINZIGE existierende Schreibpfad) ---------------
@@ -297,15 +361,15 @@ export const SETTINGS_FREE_FIELDS = Object.freeze([
 // SELF_SERVICE_RESTRICT_ONLY_FIELDS in src/self-service.js.
 export const SETTINGS_RESTRICT_ONLY_FIELDS = Object.freeze(["allowPersonalData", "allowBankData"]);
 
-// Sprach-Optionen des language-Dropdowns. "" = "Automatisch (nach Nummer)" (das
+// Sprach-Optionen des language-Dropdowns. "" = "Automatic (by number)" (das
 // Override leeren); die uebrigen Codes spiegeln SUPPORTED_LANGUAGES
 // (src/i18n/locales.js = Object.keys(LOCALES)). Hier zentralisiert + drift-
 // getestet, damit eine 4. Backend-Sprache nicht still im Dropdown fehlt (G22).
 // Der Server validiert language ohnehin fail-closed gegen SUPPORTED_LANGUAGES.
 export const SETTINGS_LANGUAGES = Object.freeze([
-  { value: "", label: "Automatisch (nach Nummer)" },
-  { value: "de", label: "Deutsch" },
-  { value: "fr", label: "Français" },
+  { value: "", label: "Automatic (by number)" },
+  { value: "de", label: "German" },
+  { value: "fr", label: "French" },
   { value: "en", label: "English" },
 ]);
 
@@ -317,26 +381,26 @@ export const SETTINGS_LANGUAGES = Object.freeze([
 export const SETTINGS_PERMISSION_TOGGLES = Object.freeze([
   {
     key: "allowCalendar",
-    label: "Kalenderzugriff",
-    hint: "Agent darf Termine einsehen",
+    label: "Calendar access",
+    hint: "Agent may view appointments",
     restrictOnly: false,
   },
   {
     key: "allowBooking",
-    label: "Termine buchen",
-    hint: "Agent darf Termine fest eintragen",
+    label: "Book appointments",
+    hint: "Agent may create appointments",
     restrictOnly: false,
   },
   {
     key: "allowPersonalData",
-    label: "Persoenliche Daten",
-    hint: "Adresse, E-Mail etc. herausgeben",
+    label: "Personal data",
+    hint: "Share address, email, etc.",
     restrictOnly: true,
   },
   {
     key: "allowBankData",
-    label: "Bankdaten",
-    hint: "Zahlungsdaten nennen (nicht empfohlen)",
+    label: "Bank details",
+    hint: "Share payment data (not recommended)",
     restrictOnly: true,
   },
 ]);

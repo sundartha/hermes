@@ -334,8 +334,16 @@ if (config.sessionSecret && config.storeBackend === "pg") {
 // die Owner-Legacy-API liegt HINTER der Basic-Auth (unten) -> von diesem Mount unberuehrt.
 if (config.webDistDir) {
   // /tenant.html -> /app: schattet die public/tenant.html (Owner-Removal-Altpfad) und
-  // erhaelt alte Bookmarks - das Tenant-Dashboard lebt im Build unter /app.
-  app.get(CUSTOMER_PORTAL_PATH, (_req, res) => res.redirect(302, APP_PATH));
+  // erhaelt alte Bookmarks - das Tenant-Dashboard lebt im Build unter /app. P2/D2: den
+  // Query-String ERHALTEN. Der Post-Checkout-Rueckkehrpfad landet auf /tenant.html?sub=ok
+  // bzw. ?card=ok (self-service-routes.js); ohne Weitergabe ginge der Parameter beim
+  // Redirect verloren und die BillingIsland (?sub/?card-Handler) saehe ihn nie. Nur den
+  // Such-Teil anhaengen (kein Query -> reines /app, byte-identisch zum Altverhalten).
+  app.get(CUSTOMER_PORTAL_PATH, (req, res) => {
+    const queryAt = req.originalUrl.indexOf("?");
+    const search = queryAt === -1 ? "" : req.originalUrl.slice(queryAt);
+    res.redirect(302, APP_PATH + search);
+  });
   // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
   // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
   app.use(express.static(config.webDistDir, { extensions: ["html"] }));

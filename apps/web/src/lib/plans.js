@@ -51,3 +51,12 @@ export function formatPlanPrice(amountCents, currency) {
   const minor = String(amountCents % CENTS_PER_MAJOR).padStart(2, "0");
   return `${CURRENCY_SYMBOLS[currency] || ""}${major}.${minor}`;
 }
+
+// Katalog-Lookup nach Slug (1:1-Spiegel von src/plans.js findPlan). Reiner Accessor
+// -- kapselt, dass der Katalog ein Array ist (G17/G36), kein verstreutes .find beim
+// Aufrufer (lib/subscribe.js: Plan-Name fuer die Abo-Zeile). Unbekannter/leerer Slug
+// -> null. Der Cross-Package-Drift-Guard (test/plans-catalog.test.js) vergleicht NUR
+// die Katalog-DATEN -> diese zusaetzliche Funktion bricht ihn nicht.
+export function findPlan(slug) {
+  return PLAN_CATALOG.find((p) => p.slug === slug) ?? null;
+}

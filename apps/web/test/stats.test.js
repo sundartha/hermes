@@ -27,19 +27,19 @@ test("callDurationSec: Dauer aus answeredAt/endedAt, sonst 0", () => {
   assert.equal(callDurationSec({}), 0);
 });
 
-// ---- formatCallDuration: de-Formatierung, Grenzfaelle -----------------------
-test("formatCallDuration: 0/< 1 Min/Min/Std-Grenzen", () => {
-  assert.equal(formatCallDuration(0), "0 Min");
-  assert.equal(formatCallDuration(30), "< 1 Min");
-  assert.equal(formatCallDuration(60), "1 Min");
-  assert.equal(formatCallDuration(90), "1 Min"); // abgerundet
-  assert.equal(formatCallDuration(480), "8 Min");
-  assert.equal(formatCallDuration(3600), "1 Std");
-  assert.equal(formatCallDuration(3660), "1 Std 1 Min");
-  assert.equal(formatCallDuration(7320), "2 Std 2 Min");
-  // Defensive: negativ/NaN -> 0 Min.
-  assert.equal(formatCallDuration(-5), "0 Min");
-  assert.equal(formatCallDuration(NaN), "0 Min");
+// ---- formatCallDuration: en-Formatierung, Grenzfaelle -----------------------
+test("formatCallDuration: 0/< 1 min/min/h-Grenzen", () => {
+  assert.equal(formatCallDuration(0), "0 min");
+  assert.equal(formatCallDuration(30), "< 1 min");
+  assert.equal(formatCallDuration(60), "1 min");
+  assert.equal(formatCallDuration(90), "1 min"); // abgerundet
+  assert.equal(formatCallDuration(480), "8 min");
+  assert.equal(formatCallDuration(3600), "1 h");
+  assert.equal(formatCallDuration(3660), "1 h 1 min");
+  assert.equal(formatCallDuration(7320), "2 h 2 min");
+  // Defensive: negativ/NaN -> 0 min.
+  assert.equal(formatCallDuration(-5), "0 min");
+  assert.equal(formatCallDuration(NaN), "0 min");
 });
 
 // ---- callStats: abgeleitete Zahlen bei fixem now ----------------------------

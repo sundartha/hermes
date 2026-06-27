@@ -16,12 +16,13 @@ import CallsIsland from "../../components/app/CallsIsland.astro";
 import ActionItemsIsland from "../../components/app/ActionItemsIsland.astro";
 import CalendarIsland from "../../components/app/CalendarIsland.astro";
 
-// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS).
+// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS). Die
+// #anrufe/#einstellungen/#abrechnung-Anker bleiben (interne ids, nicht user-facing).
 const dashNav = [
-  { href: "#stats", label: "Ueberblick" },
-  { href: "#anrufe", label: "Anrufe" },
-  { href: "#einstellungen", label: "Einstellungen" },
-  { href: "#abrechnung", label: "Abrechnung" },
+  { href: "#stats", label: "Overview" },
+  { href: "#anrufe", label: "Calls" },
+  { href: "#einstellungen", label: "Settings" },
+  { href: "#abrechnung", label: "Billing" },
 ];
 ---
 
@@ -32,40 +33,44 @@ const dashNav = [
        erste state-Fetch antwortet). Die Insel meldet den Zustand per Event. Nur
        die eingeloggte Shell zeigt Tenant-Daten -- das ist das Gate. -->
   <section id="region-loading" class="card">
-    <p class="muted">Lade…</p>
+    <p class="muted">Loading…</p>
   </section>
 
   <section id="region-anonymous" class="card" hidden>
-    <h1>Anmeldung erforderlich</h1>
-    <p>Bitte melde dich an, um deinen Telefon-Assistenten zu verwalten.</p>
-    <a class="btn" href={LOGIN_URL}>Anmelden</a>
+    <h1>Sign in required</h1>
+    <p>Please sign in to manage your phone assistant.</p>
+    <a class="btn" href={LOGIN_URL}>Sign in</a>
   </section>
 
+  <!-- Suspended-Pfad (P2): wartet auf Aktivierung. Bei PAYMENT_ENABLED rendert das
+       Script die Plan-Kacheln (billing/status, suspended-erreichbar) -> der Tenant
+       aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. -->
   <section id="region-pending" class="card" hidden>
-    <h1>Konto wartet auf Freigabe</h1>
-    <p>Dein Zugang wurde angelegt und wartet auf die Freischaltung. Sobald er
-      aktiv ist, erscheint hier dein Assistent.</p>
+    <h1>Account awaiting activation</h1>
+    <p id="pending-text">Your account has been created and is awaiting activation.
+      Once it's active, your assistant will appear here.</p>
+    <div id="pending-tiles" class="plans"></div>
+    <p id="pending-msg" class="billing-msg" hidden></p>
   </section>
 
   <section id="region-error" class="card" hidden>
-    <h1>Etwas ist schiefgelaufen</h1>
-    <p>Die App konnte gerade nicht geladen werden. Pruefe deine Verbindung und
-      versuche es erneut.</p>
-    <button id="error-retry" class="btn" type="button">Erneut versuchen</button>
+    <h1>Something went wrong</h1>
+    <p>The app couldn't load just now. Check your connection and try again.</p>
+    <button id="error-retry" class="btn" type="button">Try again</button>
   </section>
 
   <!-- Eingeloggte Shell: Begruessung + Statistik + Verlauf + Einstellungen + Karte. -->
   <div id="region-shell" hidden>
     <header class="dash-head card">
       <div class="dash-head__intro">
-        <span class="dash-head__eyebrow">Dein Bereich</span>
-        <h1 class="dash-head__title">Willkommen, <span id="shell-owner">—</span></h1>
+        <span class="dash-head__eyebrow">Your area</span>
+        <h1 class="dash-head__title">Welcome, <span id="shell-owner">—</span></h1>
         <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT). -->
         <AgentChip />
       </div>
     </header>
 
-    <nav class="dash-nav" aria-label="Bereichsnavigation">
+    <nav class="dash-nav" aria-label="Section navigation">
       {dashNav.map((item) => (
         <a class="dash-nav__link" href={item.href}>{item.label}</a>
       ))}
@@ -96,12 +101,13 @@ const dashNav = [
   </div>
 
   <noscript>
-    <p>Diese App benoetigt JavaScript.</p>
+    <p>This app requires JavaScript.</p>
   </noscript>
 </App>
 
 <script>
-  import { AUTH_STATE, AUTH_EVENT, agentInfo } from "../../lib/api.js";
+  import { AUTH_STATE, AUTH_EVENT, agentInfo, fetchBillingStatus } from "../../lib/api.js";
+  import { planTiles, wireSubscribe } from "../../lib/subscribe.js";
 
   // Region pro Auth-Zustand. "Laden" ist separat (Default vor dem ersten Event).
   const regions = {
@@ -132,11 +138,47 @@ const dashNav = [
     ownerEl.textContent = owner || "—";
   }
 
+  // Suspended-Pfad (P2): die Aktivierungs-Region. Holt den schlanken Billing-Status
+  // (suspended-erreichbar, webAuthPendingMw) und rendert bei PAYMENT_ENABLED dieselben
+  // Plan-Kacheln wie der aktive Pfad -> der Tenant aktiviert sich per Abo selbst. Sonst
+  // bleibt der uebersetzte Wartetext (literal port von tenant.html renderActivation).
+  const PENDING_SUBSCRIBE_PROMPT = "Subscribe to activate your account.";
+  const pendingTextEl = document.getElementById("pending-text");
+  const pendingTilesEl = document.getElementById("pending-tiles");
+  const pendingMsgEl = document.getElementById("pending-msg");
+
+  function showPendingMessage(text) {
+    pendingMsgEl.textContent = text;
+    pendingMsgEl.hidden = !text;
+  }
+
+  async function renderPending() {
+    let status;
+    try {
+      status = await fetchBillingStatus();
+    } catch {
+      return; // 401/Netzfehler -> Wartetext bleibt (kein Leak, kein Crash)
+    }
+    if (!status.paymentEnabled) return; // ohne Payment: nur der Wartetext
+    pendingTextEl.textContent = PENDING_SUBSCRIBE_PROMPT;
+    pendingTilesEl.replaceChildren(...planTiles(document));
+  }
+
+  // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5, kein Binding
+  // pro Button). Nach erfolgreicher Buchung wird der Tenant aktiv -> ein Reload zieht
+  // die volle Shell (die meisten suspended-Tenants laufen aber ueber 409 no_card ->
+  // gefuehrter Stripe-Checkout -> Rueckkehr aktiviert).
+  wireSubscribe(pendingTilesEl, {
+    onSubscribed: () => window.location.reload(),
+    onMessage: showPendingMessage,
+  });
+
   // Listener synchron registrieren, BEVOR die Auth-Insel (hinter ihrem fetch)
   // dispatcht -- so geht kein Event verloren.
   document.addEventListener(AUTH_EVENT, (event) => {
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) fillShell(data);
+    if (state === AUTH_STATE.PENDING) renderPending();
     showOnly(state);
   });
 </script>

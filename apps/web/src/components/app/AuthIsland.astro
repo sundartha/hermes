@@ -9,10 +9,10 @@ import { LOGIN_URL } from "../../lib/routes.js";
 ---
 
 <div class="auth-island">
-  <a id="auth-login" class="btn" href={LOGIN_URL}>Anmelden</a>
+  <a id="auth-login" class="btn" href={LOGIN_URL}>Sign in</a>
   <div id="auth-account" class="auth-account" hidden>
     <span id="auth-who" class="auth-who"></span>
-    <button id="auth-logout" class="btn" type="button">Abmelden</button>
+    <button id="auth-logout" class="btn" type="button">Sign out</button>
   </div>
 </div>
 
@@ -32,9 +32,9 @@ import { LOGIN_URL } from "../../lib/routes.js";
   }
 
   function whoText(result) {
-    if (result.state === AUTH_STATE.PENDING) return "Konto wartet auf Freigabe";
+    if (result.state === AUTH_STATE.PENDING) return "Account awaiting activation";
     const { owner } = agentInfo(result.data);
-    return owner ? `Angemeldet als ${owner}` : "Angemeldet";
+    return owner ? `Signed in as ${owner}` : "Signed in";
   }
 
   function applyControls(result) {

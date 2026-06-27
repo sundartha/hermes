@@ -27,15 +27,15 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 ---
 
 <section id="settings-card" class="card" hidden>
-  <h2>Einstellungen meines Agenten</h2>
-  <p class="muted">Wirkt sofort auf das naechste Gespraech.</p>
+  <h2>My agent settings</h2>
+  <p class="muted">Takes effect on the next call.</p>
 
   <form id="settings-form" class="settings-form">
-    <label class="field-label" for="settings-name">Agent-Name</label>
+    <label class="field-label" for="settings-name">Agent name</label>
     <input id="settings-name" class="field-input" type="text" autocomplete="off" />
 
     <fieldset class="settings-perms">
-      <legend class="field-label">Berechtigungen</legend>
+      <legend class="field-label">Permissions</legend>
       {
         SETTINGS_PERMISSION_TOGGLES.map(({ key, label, hint }) => (
           <div class="perm-row">
@@ -52,16 +52,16 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
       }
     </fieldset>
 
-    <label class="field-label" for="settings-greeting">Begruessung (Inbound) — {"{owner}"} wird ersetzt</label>
+    <label class="field-label" for="settings-greeting">Greeting (inbound) — {"{owner}"} is replaced</label>
     <select id="settings-greeting" class="field-input"></select>
 
-    <label class="field-label" for="settings-language">Sprache</label>
+    <label class="field-label" for="settings-language">Language</label>
     <select id="settings-language" class="field-input">
       {SETTINGS_LANGUAGES.map(({ value, label }) => <option value={value}>{label}</option>)}
     </select>
 
     <div class="settings-actions">
-      <button id="settings-save" class="btn" type="submit">Speichern</button>
+      <button id="settings-save" class="btn" type="submit">Save</button>
       <span id="settings-msg" class="settings-msg" hidden></span>
     </div>
   </form>
@@ -138,8 +138,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 
   // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte).
   function outcomeText({ changed, rejected }) {
-    const parts = [`Gespeichert. Uebernommen: ${changed.length ? changed.join(", ") : "—"}`];
-    if (rejected.length) parts.push(`abgelehnt: ${rejected.join(", ")}`);
+    const parts = [`Saved. Applied: ${changed.length ? changed.join(", ") : "—"}`];
+    if (rejected.length) parts.push(`rejected: ${rejected.join(", ")}`);
     return parts.join(" · ");
   }
 
@@ -155,8 +155,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   // generisch. Fail-closed: nie als Teil-Erfolg deuten.
   function saveErrorText(err) {
     if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED)
-      return "Sitzung abgelaufen - bitte neu anmelden.";
-    return "Nicht gespeichert.";
+      return "Session expired - please sign in again.";
+    return "Not saved.";
   }
 
   async function submit(event) {

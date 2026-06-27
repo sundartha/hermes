@@ -14,7 +14,7 @@
 <div id="agent-chip" class="agent-chip" hidden>
   <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
   <span class="agent-chip__body">
-    <span class="agent-chip__label">Agent-Rufnummer</span>
+    <span class="agent-chip__label">Agent number</span>
     <span id="agent-number" class="agent-chip__number"></span>
   </span>
 </div>
@@ -22,7 +22,7 @@
 <script>
   import { AUTH_STATE, AUTH_EVENT, agentInfo, isAgentLive } from "../../lib/api.js";
 
-  const NO_NUMBER_TEXT = "Noch keine Nummer zugewiesen";
+  const NO_NUMBER_TEXT = "No number assigned yet";
   const DOT_OFF_CLASS = "live-dot--off";
 
   const chipEl = document.getElementById("agent-chip");
