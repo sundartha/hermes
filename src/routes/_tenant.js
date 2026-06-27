@@ -43,30 +43,32 @@ const isProxyForwarded = (req) => Boolean(req.headers["x-forwarded-for"]);
 // wird. Topologie-basiert, daher in Dev UND Produktion korrekt (kein Env-Schalter noetig).
 export const isTrustedLocalCaller = (req) => isLocalSocket(req) && !isProxyForwarded(req);
 
-// Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools
-// laufen im selben Prozess und rufen die localhost-REST-API mit dem verifizierten
-// X-Internal-Identity-Header (aus req.auth.email im /mcp-Handler). Der Header wird NUR
-// von einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert
+// Gemeinsame Vertrauensgrenze fuer einen vom /mcp-Gateway hereingereichten In-Process-
+// Header (internalIdentity + internalTenant). EINE Stelle, an der das Trust-Modell sitzt:
+// nur von einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert
 // (isTrustedLocalCaller: echtes Loopback OHNE Proxy-Weiterleitung) - ueber den
-// Render-Proxy (Loopback-Socket + X-Forwarded-For) ist er faelschbar und wird ignoriert
-// (-> Owner/Bootstrap). Body-Felder (requestedBy/email) NIE als Identitaet nutzen.
-export function internalIdentity(req) {
+// Render-Proxy (Loopback-Socket + X-Forwarded-For) faelschbar und ignoriert (-> null).
+// Nicht-leerer String, sonst null (ein doppelt gesetzter Header ist string[] -> typeof-
+// Guard greift). Beide oeffentlichen Reader delegieren hierher, damit eine Aenderung am
+// Trust-Modell nicht in zwei Pfaden lockstep gepflegt werden muss (G5/DIP).
+const trustedLocalHeader = (req, name) => {
   if (!isTrustedLocalCaller(req)) return null;
-  const id = req.headers["x-internal-identity"];
-  return typeof id === "string" && id ? id : null;
-}
+  const value = req.headers[name];
+  return typeof value === "string" && value ? value : null;
+};
+
+// Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools laufen im
+// selben Prozess und rufen die localhost-REST-API mit dem verifizierten X-Internal-Identity-
+// Header (aus req.auth.email im /mcp-Handler). Body-Felder (requestedBy/email) NIE als
+// Identitaet nutzen. Trust-Gate siehe trustedLocalHeader.
+export const internalIdentity = (req) => trustedLocalHeader(req, "x-internal-identity");
 
 // AM6: gateway-aufgeloester Request-Tenant fuer den In-Process-MCP-Tool-Aufruf. Das /mcp-
 // Gateway loest die Identitaet EINMAL aus dem verifizierten JWT (req.auth.sub) auf und reicht
 // das ERGEBNIS als X-Internal-Tenant herein; die REST-Tools muessen nicht aus email-first
-// re-aufloesen (schliesst die in requestTenant dokumentierte sub/email-Divergenz). Nur von
-// einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert (isTrustedLocalCaller) -
-// ueber den Render-Proxy faelschbar und ignoriert. Body-Felder NIE als Tenant nutzen.
-export function internalTenant(req) {
-  if (!isTrustedLocalCaller(req)) return null;
-  const t = req.headers["x-internal-tenant"];
-  return typeof t === "string" && t ? t : null;
-}
+// re-aufloesen (schliesst die in requestTenant dokumentierte sub/email-Divergenz). Body-Felder
+// NIE als Tenant nutzen. Trust-Gate siehe trustedLocalHeader.
+export const internalTenant = (req) => trustedLocalHeader(req, "x-internal-tenant");
 
 // requestedBy-Marker fuer den Owner (localhost/stdio ohne Identitaet).
 export const OWNER_ID = "owner";

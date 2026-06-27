@@ -177,6 +177,30 @@ test("internalTenant: Loopback-Socket + X-Forwarded-For -> null (Render-Proxy, k
   assert.equal(internalTenant(req), null);
 });
 
+// === Konsolidierungs-Invariante (S2-1) =========================================
+// internalIdentity und internalTenant teilen sich EINE Trust-Gate-/typeof-Guard-Quelle
+// (trustedLocalHeader) und duerfen sich NUR im gelesenen Header-Namen unterscheiden. Dieser
+// Tabellentest riegelt die Konsolidierung ab: divergiert ein Pfad still (z.B. ein Reader
+// verliert den Trust-Gate), schlaegt er hier fehl - die Sicherheits-Vertrauensgrenze bleibt
+// in beiden Lesepfaden lockstep.
+const TRUSTED_HEADER_READERS = [
+  ["internalIdentity", internalIdentity, "x-internal-identity"],
+  ["internalTenant", internalTenant, "x-internal-tenant"],
+];
+
+for (const [label, read, header] of TRUSTED_HEADER_READERS) {
+  test(`${label}: localhost + Header -> Wert, identische Trust-Gate-Semantik`, () => {
+    const local = (h) => reqWith({ remoteAddress: "127.0.0.1", headers: h });
+    assert.equal(read(local({ [header]: "B" })), "B");
+    // Trust-Gate: Loopback + X-Forwarded-For (Render-Proxy) -> ignoriert, NIE faelschbar.
+    assert.equal(read(local({ [header]: "B", "x-forwarded-for": "1.2.3.4" })), null);
+    // Extern -> ignoriert; leer/nicht-String -> null (typeof-Guard).
+    assert.equal(read(reqWith({ remoteAddress: "203.0.113.7", headers: { [header]: "B" } })), null);
+    assert.equal(read(local({ [header]: "" })), null);
+    assert.equal(read(local({ [header]: ["B", "C"] })), null);
+  });
+}
+
 // === isTrustedLocalCaller (AM1) ================================================
 // Hinter Render erscheint externer Traffic als Loopback-Socket -> isLocalSocket allein
 // taugt NICHT als Vertrauensgrenze. Vertrauenswuerdig = echtes Loopback UND nicht ueber
