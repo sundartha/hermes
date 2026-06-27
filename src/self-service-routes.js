@@ -19,6 +19,7 @@ import { createTenantSubscription } from "./billing/subscribe.js";
 import { activatePaidTenant } from "./billing/activation.js";
 import { publicCall, activeNumberFor, upcomingCalendar } from "./store/views.js";
 import { CATALOG_SLUGS } from "./plans.js";
+import { quotaView } from "./billing/meter.js";
 
 // Pay3: Redirect-Ziele nach Rueckkehr von Stripe Checkout (kein Magic-String, G25).
 // Die UI (tenant.html) liest den ?card-Parameter und zeigt eine kurze Rueckmeldung.
@@ -46,15 +47,20 @@ function maskPrivateNumber(e164) {
 
 // Pay3/W4: der payment-bezogene Anteil der Self-Service-Lese-View. Bei PAYMENT_ENABLED
 // aus -> {} (Felder fehlen, UI versteckt den Block, byte-identisch zum Bestand). An ->
-// hasCard (abgeleiteter Karten-Status) + subscription (aktiver Plan/Periode). KEIN
-// id-Leak: subscriptionId bleibt draussen (fuer die UI reichen planSlug + currentPeriodEnd;
-// die opake sub_-Referenz gehoert nicht in die Browser-View). Reine Praesentation.
+// hasCard (abgeleiteter Karten-Status) + subscription (aktiver Plan/Periode) + quota
+// (abgeleitetes Minuten-Kontingent). KEIN id-Leak: subscriptionId bleibt draussen (fuer
+// die UI reichen planSlug + currentPeriodEnd; die opake sub_-Referenz gehoert nicht in
+// die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
   if (!config.paymentEnabled) return {};
   const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd },
+    // BK4: abgeleitetes Minuten-Kontingent des laufenden Zeitraums (includedMinutes -
+    // verbrauchte Voice-Minuten). Kein Abo -> null (UI: Leerzustand). store.load() = der
+    // Ledger-State (Muster activeNumberFor(store.load(), ...) im /state-Handler).
+    quota: quotaView(store.load(), { tenantId: tenant, planSlug, currentPeriodEnd }),
   };
 }
 

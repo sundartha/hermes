@@ -51,3 +51,10 @@ export const PLAN_CATALOG = Object.freeze([
 // Buchbare Slugs in Katalog-Reihenfolge (eingefroren). EINE Quelle fuer
 // billing/subscribe.js (PLAN_SLUGS) - kein zweites Slug-Literal (G5/S2).
 export const CATALOG_SLUGS = Object.freeze(PLAN_CATALOG.map((p) => p.slug));
+
+// Katalog-Lookup nach Slug (BK4: includedMinutes der Minuten-Kontingent-Anzeige).
+// Reiner Accessor - kapselt, dass der Katalog ein Array ist (G17/G36), kein .find
+// verstreut beim Aufrufer. Unbekannter/leerer Slug -> null (Aufrufer zeigt Leerzustand).
+export function findPlan(slug) {
+  return PLAN_CATALOG.find((p) => p.slug === slug) ?? null;
+}

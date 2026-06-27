@@ -143,6 +143,9 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
            + Verlaengerungsdatum (Cancel ist ein Folge-Ticket, hier nur Anzeige). -->
       <div id="subBlock" style="margin-top:18px">
         <div id="subStatus" class="hint" style="margin-bottom:14px"></div>
+        <!-- BK4: Minuten-Kontingent des laufenden Zeitraums (X von Y verbleibend).
+             Versteckt ohne aktives Abo bzw. ohne quota (Aktivierungs-Pfad/Flag aus). -->
+        <div id="quotaLine" class="hint" style="margin-bottom:14px;display:none"></div>
         <!-- BK1: Kacheln aus dem geteilten Plan-Katalog (GET /api/plans, SSoT src/plans.js)
              gerendert - kein lokales Preis-/Leistungs-Literal mehr (G5/S2, kein Drift zur
              Marketing-Seite preise.astro). Gefuellt von renderPlanCards(). -->
@@ -281,12 +284,25 @@ function renderSubscription(s){
     const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString("de-DE") : "";
     const name = planName(sub.planSlug);
     $("subStatus").textContent = until ? `Aktiver Plan: ${name} (verlaengert am ${until}).` : `Aktiver Plan: ${name}.`;
+    renderQuota(s.quota);
     $("subButtons").style.display="none";
   } else {
     $("subStatus").textContent = "Kein aktives Abo. Waehle einen Plan.";
+    renderQuota(null);
     renderPlanCards(planCatalog || []);
     $("subButtons").style.display="";
   }
+}
+
+// BK4: Minuten-Kontingent des laufenden Zeitraums. Fehlendes quota (kein Abo,
+// Aktivierungs-Pfad ohne /state-View, oder PAYMENT_ENABLED aus) -> Zeile versteckt
+// (neutraler Leerzustand). Reine Praesentation: included/used/remaining sind
+// serverseitig abgeleitet (kein Rechnen im Client).
+function renderQuota(quota){
+  const el = $("quotaLine");
+  if(!quota){ el.style.display="none"; return; }
+  el.textContent = `${quota.remainingMinutes} von ${quota.includedMinutes} Minuten verbleibend`;
+  el.style.display="";
 }
 
 // P5: Gefuehrte Aktivierung. /api/self-service/state ist fuer suspended 403 (kein Leak),
