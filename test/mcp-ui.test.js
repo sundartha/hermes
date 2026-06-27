@@ -14,6 +14,7 @@ import {
   WIDGET_CALL_STATUS,
   WIDGET_CALL_RESULT,
   WIDGET_TRANSCRIPT,
+  WIDGET_AGENT_STATUS,
 } from "../src/ui/adapters/mcp-native.js";
 import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
 import {
@@ -701,4 +702,178 @@ test("T-P4-UI-AC6: call-result.html self-contained + zielt auf das gegatete canc
   assert.ok(html.includes("cancel_call"), "Widget ruft cancel_call");
   assert.ok(html.includes('data-mcp="call_id"'), "Widget liest call_id aus structuredContent");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALL_RESULT), true, "Adapter kennt call-result");
+});
+
+// ===== W3: drittes read-only Widget (get_agent_status) ueber den BESTEHENDEN Seam =====
+// Stufe 0 (structuredContent + Backward-Compat-Text) + Stufe 1 (agent-status Widget) bei
+// faehigem Host; Fallback Stufe-0 bei unfaehigem. Whitelist beweist Nicht-Durchreichung
+// von PII/Secrets/Cross-Tenant-State. Read-only: kein Callback/Button. Erbt W1-Binding.
+const RICH_STATE = {
+  agent: {
+    number: "+18643028341",
+    owner: "Antonio",
+    voiceEngine: "budget",
+    model: "claude-haiku",
+    allowedNumbers: ["+4917212345678"],
+    secretAgentField: "agent-LEAK", // darf NIE durch
+  },
+  usage: { calls: 3, costEur: 2.1, maxBudgetEur: 10, internalCounter: 999 },
+  settings: {
+    allowCalendar: true,
+    allowBooking: false,
+    allowSummaries: true,
+    allowPersonalData: false,
+    allowBankData: false,
+    secretSetting: "settings-LEAK",
+  },
+  // Felder, die NIEMALS nach aussen duerfen:
+  email: "secret@example.com",
+  apiKey: "sk_live_LEAK",
+  tenantId: "tenant-XYZ",
+  calls: [{ id: "c1", from: "+49170000000" }], // fremder state, nicht durchreichen
+};
+const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/agent-status
+const AGENT_KEYS = [
+  "allowedNumbers",
+  "calls",
+  "costEur",
+  "maxBudgetEur",
+  "model",
+  "number",
+  "owner",
+  "permissions",
+  "voiceEngine",
+];
+const PERMISSIONS_STR =
+  "Kalender=true, Buchen=false, Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
+const agentStatusOutput = z.object({
+  number: z.string().nullable(),
+  owner: z.string().nullable(),
+  voiceEngine: z.string(),
+  model: z.string(),
+  calls: z.number(),
+  costEur: z.number(),
+  maxBudgetEur: z.number(),
+  allowedNumbers: z.array(z.string()),
+  permissions: z.string(),
+});
+
+test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes structuredContent", async () => {
+  await withGateway(RICH_STATE, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("get_agent_status");
+    assert.ok(config.outputSchema, "outputSchema am config deklariert");
+    const result = await handler({});
+
+    assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten");
+    const txt = result.content[0].text;
+    assert.match(txt, /Agent-Nummer:/, "Backward-Compat-Format (Agent-Nummer)");
+    assert.match(txt, /Berechtigungen:/, "Backward-Compat-Format (Berechtigungen)");
+
+    assert.ok(result.structuredContent, "structuredContent vorhanden");
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
+    assert.equal(result.structuredContent.permissions, PERMISSIONS_STR);
+    assert.doesNotThrow(
+      () => agentStatusOutput.parse(result.structuredContent),
+      "structuredContent validiert gegen outputSchema",
+    );
+  });
+});
+
+test("T-W3-AC2: Stufe 1 (faehiger Host) - genau eine agent-status-Resource + _meta zeigt darauf", async () => {
+  await withGateway(RICH_STATE, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const agentResources = resources.filter((r) => r.uri === RESOURCE_URI_AGENT);
+    assert.equal(agentResources.length, 1, "genau eine agent-status-Resource");
+    assert.equal(agentResources[0].config.mimeType, UI_MIME);
+
+    const { config } = tools.get("get_agent_status");
+    assert.equal(config._meta.ui.resourceUri, RESOURCE_URI_AGENT, "_meta zeigt auf dieselbe URI");
+  });
+});
+
+test("T-W3-AC3: Fallback fail-closed - kein _meta, keine agent-status-Resource, Tool bleibt", async () => {
+  const cases = {
+    "stdio (uiHost=null)": null,
+    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
+    "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
+    "unbekannter Host (fremder mimeType)": {
+      enabled: true,
+      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
+    },
+  };
+  await withGateway(RICH_STATE, async () => {
+    for (const [label, uiHost] of Object.entries(cases)) {
+      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
+      const { config, handler } = tools.get("get_agent_status");
+      assert.equal(
+        resources.filter((r) => r.uri === RESOURCE_URI_AGENT).length,
+        0,
+        `${label}: keine agent-status-Resource`,
+      );
+      assert.ok(!config._meta, `${label}: kein _meta`);
+      // Default-Tool: existiert in ALLEN Faellen, nur das Widget faellt weg.
+      const result = await handler({});
+      assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
+      assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
+    }
+  });
+});
+
+test("T-W3-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Text/Resource", async () => {
+  await withGateway(RICH_STATE, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_agent_status");
+    const result = await handler({});
+
+    const serialized = JSON.stringify(result);
+    for (const leak of [
+      "secret@example.com",
+      "sk_live_LEAK",
+      "tenant-XYZ",
+      "agent-LEAK",
+      "settings-LEAK",
+      "c1",
+    ]) {
+      assert.ok(!serialized.includes(leak), `kein Leck von ${leak} im Tool-Result`);
+    }
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
+
+    // Resource-HTML ist statisch -> enthaelt per Konstruktion keine Agent-Daten.
+    const agentRes = resources.find((r) => r.uri === RESOURCE_URI_AGENT);
+    const html = (await agentRes.readCallback()).contents[0].text;
+    for (const leak of ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "agent-LEAK", "settings-LEAK"]) {
+      assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
+    }
+  });
+});
+
+test("T-W3-AC5: Fehlerpfad - Body ohne agent -> isError, text-only, auch bei faehigem Host", async () => {
+  // Body ohne agent -> requireFields wirft VOR pickAgentStatus -> wrapHandler isError.
+  await withGateway({ usage: {}, settings: {} }, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_agent_status");
+    const result = await handler({});
+    assert.ok(result.isError, "degradierte Antwort -> isError");
+    assert.ok(!result.structuredContent, "Fehlerpfad ohne structuredContent");
+    const txt = result.content.map((c) => c.text).join("\n");
+    assert.doesNotMatch(txt, /Cannot read|undefined|TypeError/i, "generischer, provider-freier Text");
+  });
+});
+
+test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding", async () => {
+  const readback = await readbackResource(mcpNativeRenderer, WIDGET_AGENT_STATUS);
+  const content = readback.contents[0];
+  assert.equal(content.mimeType, UI_MIME);
+  const html = content.text;
+  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+  assert.ok(!html.includes("@import"), "kein @import");
+  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
+  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
+  // Read-only: kein Callback/Button/Tool-Trigger im Widget (W3).
+  assert.doesNotMatch(html, /<button/, "kein <button> (read-only)");
+  assert.ok(!html.includes("callTool"), "kein callTool (read-only, kein Callback)");
+  // Erbt W1-Binding: die injizierte Bootstrap-Quelle (run(window)) ist vorhanden.
+  assert.ok(html.includes("run(window)"), "injiziertes W1-Binding (run(window)) vorhanden");
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_AGENT_STATUS), true, "Adapter kennt agent-status");
 });

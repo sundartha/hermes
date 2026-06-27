@@ -13,10 +13,12 @@ import { BIND_SCRIPT } from "./widget-bind.js";
 export const WIDGET_CALL_STATUS = "call-status";
 export const WIDGET_CALL_RESULT = "call-result";
 export const WIDGET_TRANSCRIPT = "transcript";
+export const WIDGET_AGENT_STATUS = "agent-status";
 const WIDGET_DEFS = {
   [WIDGET_CALL_STATUS]: { file: "call-status.html", title: "Hermes Call Status" },
   [WIDGET_CALL_RESULT]: { file: "call-result.html", title: "Hermes Call Result" },
   [WIDGET_TRANSCRIPT]: { file: "transcript.html", title: "Hermes Transcript" },
+  [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status" },
 };
 
 // Schliessendes body-Tag - davor wird das gemeinsame Daten-Binding eingefuegt, damit
