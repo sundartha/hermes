@@ -21,3 +21,19 @@ export function capabilityDeclaresUi(clientCapabilities) {
   const mimeTypes = clientCapabilities?.extensions?.[UI_CAPABILITY_KEY]?.mimeTypes;
   return Array.isArray(mimeTypes) && mimeTypes.includes(UI_MIME);
 }
+
+// ChatGPT Apps SDK (OpenAI "skybridge"), P0-Befund. Zweiter Host neben MCP-nativ.
+// mimeType der UI-Resource in dieser Host-Konvention (disjunkt zu UI_MIME).
+export const CHATGPT_UI_MIME = "text/html+skybridge";
+// _meta-Schluessel am Tool-Deskriptor; Wert = die ui://-Resource-URI (flacher String,
+// NICHT das verschachtelte _meta.ui.resourceUri der MCP-nativen Konvention).
+export const CHATGPT_META_KEY = "openai/outputTemplate";
+
+// fail-closed: true NUR wenn der Host die UI-Capability mit CHATGPT_UI_MIME deklariert.
+// Symmetrisch zu capabilityDeclaresUi; disjunkter mimeType -> eindeutige Adapter-Wahl.
+// Bei abweichendem P0-Beleg aendert sich AUSSCHLIESSLICH dieser Body (fail-closed bleibt
+// invariant: kein belegter Marker -> false -> Stufe 0).
+export function capabilityDeclaresChatgptUi(clientCapabilities) {
+  const mimeTypes = clientCapabilities?.extensions?.[UI_CAPABILITY_KEY]?.mimeTypes;
+  return Array.isArray(mimeTypes) && mimeTypes.includes(CHATGPT_UI_MIME);
+}

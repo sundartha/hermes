@@ -10,7 +10,15 @@ import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { uiRendererFor } from "../src/ui/registry.js";
 import { mcpNativeRenderer, WIDGET_CALL_STATUS, WIDGET_TRANSCRIPT } from "../src/ui/adapters/mcp-native.js";
-import { UI_MIME, capabilityDeclaresUi, uiResourceUri } from "../src/ui/contract.js";
+import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
+import {
+  UI_MIME,
+  CHATGPT_UI_MIME,
+  CHATGPT_META_KEY,
+  capabilityDeclaresUi,
+  capabilityDeclaresChatgptUi,
+  uiResourceUri,
+} from "../src/ui/contract.js";
 
 const RESOURCE_URI = uiResourceUri(WIDGET_CALL_STATUS); // ui://hermes/call-status
 const RESOURCE_URI_TRANSCRIPT = uiResourceUri(WIDGET_TRANSCRIPT); // ui://hermes/transcript
@@ -392,4 +400,143 @@ test("T-P2-UI-AC6: transcript.html self-contained - kein @import/Linkback, @dsCa
   assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
   assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_TRANSCRIPT), true, "Adapter kennt transcript");
+});
+
+// ===== P3: zweiter Host-Adapter (ChatGPT Apps SDK) hinter dem UiRenderer-Port =====
+// Beweist: dasselbe Widget rendert in BEIDEN Host-Konventionen; der mcp-native Pfad
+// bleibt byte-kompatibel (die P1/P2-Tests oben sind unveraendert), nur die Host-eigene
+// _meta-Form + der mimeType unterscheiden sich.
+const CHATGPT_CAPS = {
+  extensions: { "io.modelcontextprotocol/ui": { mimeTypes: [CHATGPT_UI_MIME] } },
+};
+const chatgptHost = () => ({ enabled: true, capabilities: CHATGPT_CAPS });
+
+// Liest die statische ui://-Resource eines Renderers fuer ein Widget zurueck (readback).
+function readbackResource(renderer, widgetId) {
+  return new Promise((resolve) => {
+    const fakeServer = {
+      registerResource(_name, _uri, _config, readCallback) {
+        resolve(readCallback());
+      },
+    };
+    renderer.registerResource(fakeServer, widgetId);
+  });
+}
+
+const P3_WIDGETS = [
+  { tool: "get_call_status", widgetId: WIDGET_CALL_STATUS, body: RICH_CALL },
+  { tool: "get_transcript", widgetId: WIDGET_TRANSCRIPT, body: RICH_TRANSCRIPT },
+];
+
+test("T-P3-AC1: beide Widgets, mcp-nativer Host - eine Resource je Tool + _meta.ui.resourceUri", async () => {
+  for (const { tool, widgetId, body } of P3_WIDGETS) {
+    await withGateway(body, async () => {
+      const { tools, resources } = captureUi({ uiHost: capableHost() });
+      const uri = uiResourceUri(widgetId);
+      const matching = resources.filter((r) => r.uri === uri);
+      assert.equal(matching.length, 1, `${tool}: genau eine Resource`);
+      assert.equal(matching[0].config.mimeType, UI_MIME);
+      assert.equal(tools.get(tool).config._meta.ui.resourceUri, uri, `${tool}: _meta zeigt darauf`);
+    });
+  }
+});
+
+test("T-P3-AC2: beide Widgets, ChatGPT-Host - eine Resource je Tool + flaches openai/outputTemplate", async () => {
+  for (const { tool, widgetId, body } of P3_WIDGETS) {
+    await withGateway(body, async () => {
+      const capable = captureUi({ uiHost: capableHost() });
+      const chat = captureUi({ uiHost: chatgptHost() });
+      const uri = uiResourceUri(widgetId);
+      const matching = chat.resources.filter((r) => r.uri === uri);
+      assert.equal(matching.length, 1, `${tool}: genau eine Resource`);
+      assert.equal(matching[0].config.mimeType, CHATGPT_UI_MIME);
+      const meta = chat.tools.get(tool).config._meta;
+      assert.equal(meta[CHATGPT_META_KEY], uri, `${tool}: flacher String unter openai/outputTemplate`);
+      assert.ok(!meta.ui, `${tool}: kein verschachteltes _meta.ui (das ist mcp-nativ)`);
+
+      // Stufe 0 (structuredContent) ist host-UNabhaengig -> identische Keys.
+      const a = await capable.tools.get(tool).handler({ call_id: "call_1" });
+      const b = await chat.tools.get(tool).handler({ call_id: "call_1" });
+      assert.deepEqual(
+        Object.keys(b.structuredContent).sort(),
+        Object.keys(a.structuredContent).sort(),
+        `${tool}: structuredContent-Keys host-unabhaengig identisch`,
+      );
+    });
+  }
+});
+
+test("T-P3-AC3: Registry waehlt GENAU EINEN Adapter pro Host, fail-closed", () => {
+  assert.equal(uiRendererFor(capableHost()), mcpNativeRenderer, "mcp-nativer Host -> mcp-native");
+  assert.equal(uiRendererFor(chatgptHost()), chatgptRenderer, "ChatGPT-Host -> chatgpt");
+  assert.equal(
+    uiRendererFor({
+      enabled: true,
+      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
+    }),
+    null,
+    "fremder mimeType -> null",
+  );
+  assert.equal(uiRendererFor({ enabled: false, capabilities: CHATGPT_CAPS }), null, "Master-Schalter aus -> null");
+  assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
+});
+
+test("T-P3-AC4: Whitelist unveraendert auch im ChatGPT-Pfad (kein PII-/Audio-Leck)", async () => {
+  const leaks = {
+    get_call_status: ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "recording.wav"],
+    get_transcript: [
+      "Donnerstag 14:30 koennen wir machen.",
+      "ich rufe im Auftrag von Antonio an",
+      "callee",
+      "secret@example.com",
+      "sk_live_LEAK",
+      "tenant-XYZ",
+      "recording.wav",
+    ],
+  };
+  for (const { tool, body } of P3_WIDGETS) {
+    await withGateway(body, async () => {
+      const capable = captureUi({ uiHost: capableHost() });
+      const chat = captureUi({ uiHost: chatgptHost() });
+      const a = await capable.tools.get(tool).handler({ call_id: "call_1" });
+      const b = await chat.tools.get(tool).handler({ call_id: "call_1" });
+      const serialized = JSON.stringify(b);
+      for (const leak of leaks[tool]) {
+        assert.ok(!serialized.includes(leak), `${tool}: kein Leck von "${leak}" im ChatGPT-Result`);
+      }
+      assert.deepEqual(
+        Object.keys(b.structuredContent).sort(),
+        Object.keys(a.structuredContent).sort(),
+        `${tool}: structuredContent-Keys exakt wie mcp-nativ`,
+      );
+    });
+  }
+});
+
+test("T-P3-AC5: gleiche Widget-Bytes in beiden Hosts (Resource-HTML byte-genau)", async () => {
+  for (const { widgetId } of P3_WIDGETS) {
+    const nativeBack = await readbackResource(mcpNativeRenderer, widgetId);
+    const chatBack = await readbackResource(chatgptRenderer, widgetId);
+    assert.equal(chatBack.contents[0].mimeType, CHATGPT_UI_MIME, "ChatGPT-readback mimeType");
+    const nativeHtml = nativeBack.contents[0].text;
+    const chatHtml = chatBack.contents[0].text;
+    assert.equal(chatHtml, nativeHtml, `${widgetId}: identische Widget-Bytes in beiden Hosts`);
+    assert.ok(chatHtml.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+    assert.ok(!chatHtml.includes("@import"), "kein @import");
+    assert.doesNotMatch(chatHtml, /<link[\s>]/, "kein <link>-Element");
+    assert.doesNotMatch(chatHtml, /href\s*=/, "kein href-Linkback");
+  }
+});
+
+test("T-P3-AC6: chatgptRenderer-Grenzfaelle + Detektor", () => {
+  assert.equal(chatgptRenderer.hasWidget(WIDGET_CALL_STATUS), true);
+  assert.equal(chatgptRenderer.hasWidget(WIDGET_TRANSCRIPT), true);
+  assert.equal(chatgptRenderer.hasWidget("unknown"), false);
+  assert.equal(chatgptRenderer.mimeType, CHATGPT_UI_MIME);
+
+  assert.equal(capabilityDeclaresChatgptUi(undefined), false, "Grenzfall: undefined -> false");
+  assert.equal(capabilityDeclaresChatgptUi({}), false);
+  // Detektoren disjunkt: ein mcp-nativer Host ist KEIN ChatGPT-Host und umgekehrt.
+  assert.equal(capabilityDeclaresChatgptUi(CAPABLE_CAPS), false, "mcp-Caps -> kein ChatGPT");
+  assert.equal(capabilityDeclaresUi(CHATGPT_CAPS), false, "ChatGPT-Caps -> kein mcp-nativ");
 });
