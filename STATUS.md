@@ -28,6 +28,8 @@ Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemerg
 [[f1-geo-p4-p9-decisions]]. (Die fruehere Detail-Report-Sammlung unter `tasks/*-report.md` wurde
 2026-06-23 entfernt - die Historie steht in der Git-History + Memory.)
 
+Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scripts/check-token-sync.js`) erkennt fail-closed Drift zwischen `apps/web/src/styles/tokens/` und `design-system/_shared/tokens.css` (Hash-Manifest `tokens.lock`) und prueft @import-Verbot + @dsCard-Marker. Lokal, nicht gepusht.
+
 ---
 
 ## 1. Live-/Betreiber-Gates (nicht autonom: Mensch / Account / Geld / echter Call)

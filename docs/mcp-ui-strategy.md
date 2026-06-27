@@ -352,5 +352,5 @@ sondern ein hartes P0-Forschungs-Akzeptanzkriterium (fail-closed bis empirisch b
   Apps); die P1-Referenz-Impl ist MCP-nativ. Der Port ist host-abstrakt; das **ChatGPT Apps SDK**
   kommt in **P3** als zweiter Renderer/Adapter daneben, nicht als Kern.
 - **Q6 (Token-Pull-Disziplin) = ENTSCHIEDEN:** Token-Sync (`apps/web/src/styles/tokens/` ->
-  `design-system/_shared/tokens.css`) wird ein **verpflichtendes CI-/Review-Gate (in P5 verankert)**;
+  `design-system/_shared/tokens.css`) wird ein **verpflichtendes CI-/Review-Gate (in P5 verankert — UMGESETZT: `scripts/check-token-sync.js`, `npm run check:tokens`)**;
   Drift wird automatisch verhindert.
