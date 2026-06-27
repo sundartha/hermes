@@ -81,7 +81,7 @@ export const LOCALES = Object.freeze({
       "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
     turnErrorSpeech:
       "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
-    noSpeechReprompt: "Entschuldigung, koennen Sie das bitte wiederholen?",
+    noSpeechReprompt: "Koennen Sie das bitte wiederholen?",
     budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
     greetingDefault: DEFAULT_GREETING,
   }),
@@ -110,7 +110,7 @@ export const LOCALES = Object.freeze({
     llmDegradedSpeech:
       "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
     turnErrorSpeech: "Désolé, un problème technique est survenu. Veuillez réessayer plus tard.",
-    noSpeechReprompt: "Désolé, pouvez-vous répéter, s'il vous plaît ?",
+    noSpeechReprompt: "Pouvez-vous répéter ?",
     budgetExhaustedHangup: "Le budget de démonstration est épuisé. Au revoir.",
     // FR-Greeting-Default: {owner} wird zur Laufzeit ersetzt (wie DE). Nur fuer FR-Tenants
     // relevant; der Bestands-/Owner-Tenant traegt weiter den DE-Seed (kein Backfill).
@@ -144,7 +144,7 @@ export const LOCALES = Object.freeze({
     llmDegradedSpeech:
       "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
     turnErrorSpeech: "Sorry, a technical problem occurred. Please try again later.",
-    noSpeechReprompt: "Sorry, could you please repeat that?",
+    noSpeechReprompt: "Could you repeat that?",
     budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",
     greetingDefault:
       "Hi, this is the AI assistant of {owner}. {owner} can't take the call right now. I can take a message or arrange an appointment. How can I help?",

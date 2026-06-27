@@ -156,7 +156,7 @@ test("Statische Texte: DE byte-identisch zum frueheren server.js-Bestand (kein D
     LOCALES.de.turnErrorSpeech,
     "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
   );
-  assert.equal(LOCALES.de.noSpeechReprompt, "Entschuldigung, koennen Sie das bitte wiederholen?");
+  assert.equal(LOCALES.de.noSpeechReprompt, "Koennen Sie das bitte wiederholen?");
   assert.equal(
     LOCALES.de.budgetExhaustedHangup,
     "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",

@@ -428,7 +428,7 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 
 // Provider-bewusstes Auslesen des Speech-Ergebnisses aus dem Webhook-Body.
 // Twilio sendet `SpeechResult`. Telnyx: laut TeXML-Doku `Transcript`, real zeigen die
-// Turn-Posts (2026-06-20, [turn-recv]) aber `SpeechResult` (und KEIN `Transcript`) -
+// Turn-Posts (Live-Beleg 2026-06-20) aber `SpeechResult` (und KEIN `Transcript`) -
 // daher defensiv BEIDE lesen, damit der Agent den erkannten Text nutzt, egal in welchem
 // Feld Telnyx ihn liefert (sonst hoert der Agent trotz korrekter STT nichts -> Stille).
 function extractSpeech(req, provider) {
@@ -783,22 +783,8 @@ app.post("/voice/incoming", (req, res) => {
 
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
 app.post("/voice/turn", async (req, res) => {
-  // TEMP-DIAGNOSE (STT-Live-Abschluss, siehe STATUS.md Abschnitt 2): VOR dem Guard, damit
-  // auch ein fehlender callId sichtbar wird (die relative action-URL `?callId=` verliert
-  // bei Telnyx evtl. den Query-String -> frueher Hangup, ohne dass der Turn laeuft).
-  // Nur Feld-NAMEN + Wert-LAENGEN, nie Roh-Werte (DSGVO/PII). Phase 3: wieder entfernen.
-  console.log(
-    "[turn-recv]",
-    "callId=" + (req.query.callId || "FEHLT"),
-    "fields=" +
-      Object.entries(req.body || {})
-        .map(([k, v]) => `${k}:${String(v).length}`)
-        .join(","),
-  );
-
   const call = store.getCall(req.query.callId);
   if (!call || call.status !== "active") {
-    console.log("[turn-recv] -> frueher Hangup: Call fehlt/inaktiv (callId nicht aufloesbar)");
     return res.type("text/xml").send(render([hangupD()]));
   }
 
@@ -815,15 +801,6 @@ app.post("/voice/turn", async (req, res) => {
         );
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
-    // TEMP-DIAGNOSE (Turn-Erfolgspfad, Gegenstueck zu [turn-recv]): belegt, dass das LLM
-    // antwortet und der Agent seinen Anlass nennt (nur Laengen, nie Roh-Text/PII).
-    // Phase 3: zusammen mit [turn-recv] wieder entfernen.
-    console.log(
-      "[turn-ok]",
-      "heard=" + (heard ? heard.length : 0),
-      "reply=" + (speech ? speech.length : 0),
-      "endCall=" + !!endCall,
-    );
     const directives = endCall
       ? [sayInCallVoice(call, speech), hangupD()]
       : followupTurnDirectives(call, speech);
