@@ -58,6 +58,9 @@ export async function createTenantSubscription({ store, billing, config, tenant,
   const { subscriptionId, currentPeriodEnd } = await billing.createSubscription({
     tenantRef: tenant,
     customerId: stripe.customerId,
+    // Die on-file-Karte als Default-Zahlungsmittel des Abos (sonst kann Stripe die erste
+    // Rechnung off_session nicht belasten -> HTTP 400). hasCardOnFile oben garantiert sie.
+    paymentMethodId: stripe.paymentMethodId,
     priceId,
     idempotencyKey: subscribeIdempotencyKey(tenant, planSlug),
   });

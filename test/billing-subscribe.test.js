@@ -90,6 +90,8 @@ test("createTenantSubscription: Happy-Pfad persistiert Abo-Felder + reicht Idemp
   // Stripe-Call mit dem richtigen Price + stabilem Idempotency-Key (tenant+plan).
   assert.equal(spy.params.priceId, "price_business");
   assert.equal(spy.params.customerId, "cus_x");
+  // Die on-file-Karte wird als default_payment_method durchgereicht (sonst Stripe-400).
+  assert.equal(spy.params.paymentMethodId, "pm_x");
   assert.equal(spy.params.idempotencyKey, "sub_t_x_business");
   // persistiert am Tenant (KEIN Status-Flip - der liegt im Route-Layer).
   assert.equal(store.state.subscription.subscriptionId, "sub_new");

@@ -177,17 +177,35 @@ export const stripeBilling = {
   // nie zwei Abos an. tenant_ref + plan_slug als metadata reisen in die Subscription-
   // Webhook-Events zurueck (Tenant-/Plan-Aufloesung; Audit, KEINE Secrets). Nur
   // subscriptionId + current_period_end (Unix-s) verlassen den Adapter (KEIN Stripe-Objekt).
-  async createSubscription({ tenantRef, customerId, priceId, idempotencyKey }) {
+  async createSubscription({ tenantRef, customerId, priceId, paymentMethodId, idempotencyKey }) {
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     const body = new URLSearchParams({
       customer: customerId,
       "items[0][price]": priceId,
+      // default_payment_method: die am Customer gespeicherte Karte wird die Zahlungsquelle
+      // der Abo-Rechnungen. OHNE das kann Stripe die erste Rechnung off_session NICHT
+      // belasten (am Customer attached != invoice-default) -> mit error_if_incomplete
+      // -> HTTP 400 ("Abo passiert nichts"). Spiegelt placeHold (payment_method).
+      default_payment_method: paymentMethodId,
       off_session: OFF_SESSION,
       payment_behavior: SUBSCRIPTION_FAILCLOSED_BEHAVIOR,
     });
     body.set("metadata[tenant_ref]", tenantRef);
     const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
-    assertOk(res, "createSubscription");
+    // Diagnose: bei Fehler den Stripe-Fehlerbody (error.message/code) mitgeben. Der Body
+    // enthaelt KEINE Secrets (sk_/Bearer liegen nur in den Request-Headern). Best-effort:
+    // ist der Body nicht lesbar, bleibt es beim Status (wie assertOk).
+    if (!res.ok) {
+      let detail = "";
+      try {
+        detail = await res.text();
+      } catch {
+        /* Body nicht lesbar -> nur Status melden */
+      }
+      throw new Error(
+        `Stripe createSubscription fehlgeschlagen: HTTP ${res.status} ${detail}`.trim(),
+      );
+    }
     const json = await res.json().catch(() => ({}));
     // Die aktuelle Stripe-API liefert current_period_end NICHT mehr top-level an der
     // Subscription, sondern pro Item (items.data[0].current_period_end). Fallback auf

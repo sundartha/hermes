@@ -125,12 +125,16 @@ test("createSubscription: liest current_period_end aus items.data[0] (aktuelle S
         tenantRef: "tenant_a",
         customerId: "cus_1",
         priceId: "price_starter",
+        paymentMethodId: "pm_1",
         idempotencyKey: "sub_tenant_a_starter",
       }),
   );
   assert.ok(captured.url.endsWith("/v1/subscriptions"), "URL endet auf /v1/subscriptions");
   assert.equal(captured.opts.method, "POST");
   assert.equal(captured.opts.body.get("items[0][price]"), "price_starter");
+  // default_payment_method MUSS mit: ohne das wirft Stripe HTTP 400 (off_session-Abbuchung
+  // der ersten Rechnung scheitert). Regressionsschutz fuer den Abo-"passiert-nichts"-Bug.
+  assert.equal(captured.opts.body.get("default_payment_method"), "pm_1");
   assert.equal(captured.opts.body.get("off_session"), "true");
   assert.equal(captured.opts.headers["Idempotency-Key"], "sub_tenant_a_starter");
   assert.deepEqual(result, { subscriptionId: "sub_1", currentPeriodEnd: 1893456000 });
