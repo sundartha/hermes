@@ -32,10 +32,19 @@ export function priceIdForPlan(slug, config) {
   return config[key] || null;
 }
 
-// Idempotenz-Key je (Tenant, Plan): ein Doppelklick/Retry erstellt NIE zwei Abos
-// (Stripe-Header). Stabil tenant+plan-basiert (Muster hold_/meter_).
-function subscribeIdempotencyKey(tenant, slug) {
-  return `sub_${tenant}_${slug}`;
+// Suffix-Laenge der paymentMethodId im Idempotenz-Key. Genug Entropie, um zwei
+// verschiedene Karten desselben Tenants sicher zu unterscheiden (Stripe-pm-Ids enden
+// auf Zufall), ohne den vollen PM-Wert in den Key zu schreiben (Invariante AM4: nur Suffix).
+const PM_KEY_SUFFIX_LEN = 12;
+
+// Idempotenz-Key je (Tenant, Plan, Karte): ein echter Doppelklick mit DERSELBEN Karte
+// dedupt weiter (gleiche Params -> Stripe liefert dieselbe Subscription). Eine KORRIGIERTE
+// Karte (neue paymentMethodId nach Neu-Erfassung) erzeugt einen NEUEN Key und kollidiert
+// nicht mit den geaenderten Stripe-Params unter dem alten Key (behebt den idempotency_error,
+// der einen Retry mit anderer Karte sonst gesperrt hat). Nur das PM-Suffix, nie der Vollwert
+// (Invariante). paymentMethodId ist hier garantiert gesetzt (no_card-Gate laeuft davor).
+function subscribeIdempotencyKey(tenant, slug, paymentMethodId) {
+  return `sub_${tenant}_${slug}_${paymentMethodId.slice(-PM_KEY_SUFFIX_LEN)}`;
 }
 
 // Erstellt das Abo fail-closed und persistiert seine Referenzen am Tenant.
@@ -62,7 +71,7 @@ export async function createTenantSubscription({ store, billing, config, tenant,
     // Rechnung off_session nicht belasten -> HTTP 400). hasCardOnFile oben garantiert sie.
     paymentMethodId: stripe.paymentMethodId,
     priceId,
-    idempotencyKey: subscribeIdempotencyKey(tenant, planSlug),
+    idempotencyKey: subscribeIdempotencyKey(tenant, planSlug, stripe.paymentMethodId),
   });
   store.setTenantSubscription(tenant, { subscriptionId, planSlug, currentPeriodEnd });
   return { ok: true, subscriptionId, planSlug, currentPeriodEnd };

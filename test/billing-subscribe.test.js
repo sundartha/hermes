@@ -11,9 +11,9 @@ const CONFIG = { stripeStarterPriceId: "price_starter", stripeBusinessPriceId: "
 
 // Fake-Store: haelt EINEN Tenant-Bucket mit stripe-Karte + Abo-Referenzen, exakt die
 // Felder, die subscribe.js liest/schreibt (Fassaden-Form).
-function fakeStore({ card = true, sub = null } = {}) {
+function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
   const state = {
-    stripe: card ? { customerId: "cus_x", paymentMethodId: "pm_x" } : { customerId: null, paymentMethodId: null },
+    stripe: card ? { customerId: "cus_x", paymentMethodId: pm } : { customerId: null, paymentMethodId: null },
     subscription: { subscriptionId: sub, planSlug: null, currentPeriodEnd: null },
   };
   return {
@@ -87,14 +87,29 @@ test("createTenantSubscription: Happy-Pfad persistiert Abo-Felder + reicht Idemp
   assert.equal(r.planSlug, "business");
   assert.equal(r.subscriptionId, "sub_new");
   assert.equal(r.currentPeriodEnd, 1893456000);
-  // Stripe-Call mit dem richtigen Price + stabilem Idempotency-Key (tenant+plan).
+  // Stripe-Call mit dem richtigen Price + Idempotency-Key (tenant+plan+Karten-Suffix).
   assert.equal(spy.params.priceId, "price_business");
   assert.equal(spy.params.customerId, "cus_x");
   // Die on-file-Karte wird als default_payment_method durchgereicht (sonst Stripe-400).
   assert.equal(spy.params.paymentMethodId, "pm_x");
-  assert.equal(spy.params.idempotencyKey, "sub_t_x_business");
+  assert.equal(spy.params.idempotencyKey, "sub_t_x_business_pm_x");
   // persistiert am Tenant (KEIN Status-Flip - der liegt im Route-Layer).
   assert.equal(store.state.subscription.subscriptionId, "sub_new");
   assert.equal(store.state.subscription.planSlug, "business");
   assert.equal(store.state.subscription.currentPeriodEnd, 1893456000);
+});
+
+test("createTenantSubscription: andere Karte -> anderer Idempotenz-Key (kein Param-Konflikt nach Karten-Neuwahl), gleiche Karte dedupt", async () => {
+  const a = {}, b = {}, again = {};
+  const runWith = (pm, spy) =>
+    createTenantSubscription({
+      store: fakeStore({ pm }), billing: fakeBilling(spy), config: CONFIG, tenant: TENANT, planSlug: "starter",
+    });
+  await runWith("pm_first", a);
+  await runWith("pm_second", b);
+  await runWith("pm_first", again);
+  assert.notEqual(a.params.idempotencyKey, b.params.idempotencyKey, "neue Karte -> neuer Key");
+  assert.equal(a.params.idempotencyKey, again.params.idempotencyKey, "gleiche Karte -> selber Key (Doppelklick dedupt)");
+  assert.ok(a.params.idempotencyKey.startsWith("sub_t_x_starter_"), "Tenant+Plan bleiben stabil im Key");
+  assert.ok(a.params.idempotencyKey.endsWith("pm_first"), "nur das PM-Suffix, nie ein anderer Wert");
 });

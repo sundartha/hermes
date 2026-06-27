@@ -20,7 +20,10 @@ const SUBSCRIBE_LABEL = "Subscribe";
 const POPULAR_BADGE = "Popular";
 const ACTIVE_PLAN_PREFIX = "Active plan: ";
 const PLAN_ATTR = "plan"; // data-plan: Slug am Subscribe-Button (delegierter Klick)
-const NO_CARD_CODE = "no_card";
+// AM4: Funnel-Hinweis aus dem no_card-Response (Feld next). Spiegelt NEXT_SETUP_CHECKOUT in
+// src/self-service-routes.js -- ein Contract-String ueber die Origin-Grenze (kein gemeinsames
+// Modul im Build-freien Frontend, wie die gespiegelten Settings-/error-Strings).
+const SETUP_CHECKOUT_NEXT = "setup-checkout";
 
 const MS_PER_SECOND = 1000;
 const DATE_LOCALE = "en-US";
@@ -143,7 +146,10 @@ async function guidedCardSetup(plan, { onMessage, navigate }) {
 // -> gefuehrter Checkout; 409 sonst (already_subscribed) -> Hinweis; 401 -> Session
 // abgelaufen; alles andere -> generischer Fehler. Fail-closed: nie als Erfolg deuten.
 async function handleSubscribeError(err, plan, opts) {
-  if (isConflict(err) && err.code === NO_CARD_CODE) {
+  // Funnel statt Sackgasse: der Server weist per next="setup-checkout" in die Karten-
+  // Erfassung (no_card). Diskriminierung ueber den expliziten next-Hinweis, nicht ueber die
+  // ueberladene error-Zeichenkette; das verbleibende 409 (kein next) = already_subscribed.
+  if (isConflict(err) && err.next === SETUP_CHECKOUT_NEXT) {
     await guidedCardSetup(plan, opts);
     return;
   }

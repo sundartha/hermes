@@ -33,27 +33,33 @@ export const AUTH_EVENT = "hermes:authstate";
 // Fehler eines API-Aufrufs mit HTTP-Status. Der Aufrufer (loadAuthState)
 // unterscheidet 401/403 darueber, ohne den rohen Response durchzureichen.
 export class ApiError extends Error {
-  constructor(status, message, code) {
+  // info = die maschinenlesbaren Felder des {error}-Body: code (z.B. "no_card",
+  // "already_subscribed") + next (optionaler Funnel-Hinweis, z.B. "setup-checkout",
+  // dem die UI deterministisch folgt). Beide undefined, wenn der Body sie nicht trug --
+  // die Status-basierte Behandlung bleibt fail-closed (kein Verlass auf code/next).
+  constructor(status, message, { code, next } = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
-    // Optionaler Backend-Fehlercode aus dem {error}-Body (z.B. "no_card",
-    // "already_subscribed"). undefined, wenn der Body keinen JSON-Code trug -- die
-    // Status-basierte Behandlung bleibt fail-closed (kein Verlass auf den Code).
     this.code = code;
+    this.next = next;
   }
 }
 
-// Best-effort: liest den Backend-Fehlercode aus einem non-2xx JSON-Body ({error}).
-// Additiv und fail-closed: JEDER Fehler (kein JSON, kein error-Feld) -> undefined.
-// Der Aufrufer behandelt non-2xx ohnehin als Misserfolg; der Code verfeinert nur die
-// Folge (z.B. 409 no_card -> gefuehrter Checkout statt generischer Fehler).
-async function readErrorCode(res) {
+// Best-effort: liest die maschinenlesbaren Felder eines non-2xx JSON-Body ({error, next}).
+// Additiv und fail-closed: JEDER Fehler (kein JSON, kein Objekt) -> {} (kein code/next).
+// Der Aufrufer behandelt non-2xx ohnehin als Misserfolg; code/next verfeinern nur die Folge
+// (z.B. next:"setup-checkout" -> gefuehrter Checkout statt generischer Fehler).
+async function readErrorInfo(res) {
   try {
     const body = await res.json();
-    return body && typeof body.error === "string" ? body.error : undefined;
+    if (!body || typeof body !== "object") return {};
+    return {
+      code: typeof body.error === "string" ? body.error : undefined,
+      next: typeof body.next === "string" ? body.next : undefined,
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -71,8 +77,8 @@ async function apiRequest(path, { method = "GET", parseJson = true, body } = {})
   }
   const res = await fetch(path, options);
   if (!res.ok) {
-    const code = await readErrorCode(res);
-    throw new ApiError(res.status, `${method} ${path} -> ${res.status}`, code);
+    const info = await readErrorInfo(res);
+    throw new ApiError(res.status, `${method} ${path} -> ${res.status}`, info);
   }
   return parseJson ? res.json() : null;
 }
@@ -111,7 +117,7 @@ export async function startBillingSetupCheckout(plan) {
 // Bucht ein Abo (POST same-origin, JSON-Body { plan }). Loest beim Backend ECHTES
 // wiederkehrendes Geld aus (Recurring) -> NUR vom expliziten Subscribe-Klick. Erfolg:
 // { plan, currentPeriodEnd } + der Tenant wird aktiv. Wirft ApiError bei non-2xx; der
-// .code (no_card / already_subscribed) steuert die gefuehrte Folge in lib/subscribe.js.
+// .next ("setup-checkout") steuert die gefuehrte Folge (Funnel) in lib/subscribe.js.
 export function startBillingSubscribe(plan) {
   return apiRequest("/api/self-service/billing/subscribe", { method: "POST", body: { plan } });
 }

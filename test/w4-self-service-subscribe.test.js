@@ -154,12 +154,16 @@ test("(b) state zeigt das Abo (planSlug/currentPeriodEnd), KEIN subscriptionId-L
   }
 });
 
-test("(c) ohne Karte -> 409 no_card, kein Abo, kein Status-Flip", async () => {
+test("(c) ohne Karte -> 409 no_card + Funnel-Hinweis (next/plan), kein Abo, kein Status-Flip", async () => {
   const s = await setup({ card: false });
   try {
     const res = await subscribe(s, "starter");
     assert.equal(res.status, 409);
-    assert.equal(JSON.parse(res.body).error, "no_card");
+    const body = JSON.parse(res.body);
+    assert.equal(body.error, "no_card");
+    // AM4: maschinenlesbarer Funnel statt Sackgasse -> Client springt in setup-checkout.
+    assert.equal(body.next, "setup-checkout");
+    assert.equal(body.plan, "starter");
     const t = s.store.load().tenants.find((x) => x.id === TENANT_B);
     assert.equal(t.stripeSubscriptionId ?? null, null, "kein Abo ohne Karte");
   } finally {
