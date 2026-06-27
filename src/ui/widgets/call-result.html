@@ -48,8 +48,9 @@
   <!-- Schreib-Aktion (P4): der Button laesst den HOST cancel_call als NORMALEN,
        authentisierten MCP-Tool-Call ausloesen (durch ALLE Safety-Gates +
        Tenant-Isolation, Regel 1/Q3). KEIN privilegierter Seitenkanal - das Widget
-       ruft NUR die vom Host bereitgestellte Tool-Bruecke und uebergibt die call_id
-       aus dem gepushten structuredContent. Exakte Bruecke wird per Smoke bestaetigt
+       ruft NUR die vom Host bereitgestellte Tool-Bruecke und uebergibt die call_id,
+       die das eingefuegte Binding-Script (widget-bind.js) aus dem host-gepushten
+       structuredContent in den call_id-Slot schreibt. Exakte Bruecke wird per Smoke bestaetigt
        (nicht ohne realen Host unit-testbar); die Server-Sicherheit haengt NICHT
        davon ab (cancel_call laeuft so oder so durch alle Gates). -->
   <script>
