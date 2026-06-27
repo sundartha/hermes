@@ -55,6 +55,24 @@ function hashFile(absPath) {
   return createHash(HASH_ALGO).update(readFileSync(absPath)).digest("hex");
 }
 
+// Einheitliche fail-closed-Meldung fuer eine fehlende Pflichtdatei. Geteilt von
+// Hash-Drift- und Struktur-Pruefungen, damit die Meldung nicht dupliziert wird.
+function fileMissingProblem(rel) {
+  return `Datei fehlt (fail-closed): ${rel}`;
+}
+
+// Liest eine Textdatei; fehlt sie, wird das zum fail-closed-Problem und null
+// zurueckgegeben (der Aufrufer bricht dann ab). Buendelt das in mehreren
+// Struktur-Pruefungen wiederkehrende Lese-/Fehler-Muster (verpasste Abstraktion).
+function readTextOrProblem(rootDir, rel, problems) {
+  try {
+    return readFileSync(join(rootDir, rel), "utf8");
+  } catch {
+    problems.push(fileMissingProblem(rel));
+    return null;
+  }
+}
+
 // Listet die HTML-Dateien eines Verzeichnisses als rel-Pfade. Fehlt das
 // Verzeichnis, ist das ein fail-closed-Problem (kein stiller leerer Lauf).
 function listHtmlRels(rootDir, relDir, problems) {
@@ -96,7 +114,7 @@ function checkHashDrift(rootDir, lock, problems) {
     try {
       actual = hashFile(join(rootDir, rel));
     } catch {
-      problems.push(`Datei fehlt (fail-closed): ${rel}`);
+      problems.push(fileMissingProblem(rel));
       continue;
     }
     if (actual !== expected) {
@@ -108,13 +126,8 @@ function checkHashDrift(rootDir, lock, problems) {
 // Iframe-Sandbox-Verbot: kein @import in den isolierten Token-/Widget-/Mockup-
 // HTMLs (Sandbox laedt sonst nichts nach -> stilloser Inhalt beim Nutzer).
 function assertNoImport(rootDir, rel, problems) {
-  let content;
-  try {
-    content = readFileSync(join(rootDir, rel), "utf8");
-  } catch {
-    problems.push(`Datei fehlt (fail-closed): ${rel}`);
-    return;
-  }
+  const content = readTextOrProblem(rootDir, rel, problems);
+  if (content === null) return;
   if (content.includes(IMPORT_AT_RULE)) {
     problems.push(`${rel} enthaelt ${IMPORT_AT_RULE} (Iframe-Sandbox-Verbot)`);
   }
@@ -122,13 +135,8 @@ function assertNoImport(rootDir, rel, problems) {
 
 // Katalog-Invariante: jedes Mockup traegt den @dsCard-Marker in Zeile 1.
 function assertDsCardLine1(rootDir, rel, problems) {
-  let content;
-  try {
-    content = readFileSync(join(rootDir, rel), "utf8");
-  } catch {
-    problems.push(`Datei fehlt (fail-closed): ${rel}`);
-    return;
-  }
+  const content = readTextOrProblem(rootDir, rel, problems);
+  if (content === null) return;
   const firstLine = content.split("\n", 1)[0];
   if (!firstLine.includes(DSCARD_MARKER)) {
     problems.push(`${rel} hat ${DSCARD_MARKER} nicht in Zeile 1`);

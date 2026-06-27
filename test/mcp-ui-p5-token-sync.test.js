@@ -98,6 +98,22 @@ describe("check-token-sync gate", () => {
     assert.equal(checkTokens({ rootDir: root }).ok, false);
   });
 
+  // Regression: der geteilte fail-closed-Helper (readTextOrProblem /
+  // fileMissingProblem) muss die fehlende kanonische Kopie weiter mit der
+  // einheitlichen "Datei fehlt"-Meldung melden (Struktur-Pruefungs-Pfad).
+  it("(d') fehlende Kopie -> einheitliche fail-closed-Meldung", () => {
+    const root = makeSyncedFixture();
+    rmSync(join(root, COPY_REL));
+    const { ok, problems } = checkTokens({ rootDir: root });
+    assert.equal(ok, false);
+    assert.ok(
+      problems.some(
+        (p) => p.includes("Datei fehlt (fail-closed)") && p.includes("tokens.css"),
+      ),
+      `erwartete fail-closed-Meldung fehlt: ${problems.join(" | ")}`,
+    );
+  });
+
   it("(e) Lock fehlt -> fail-closed", () => {
     const root = makeSyncedFixture();
     rmSync(join(root, LOCK_REL));
