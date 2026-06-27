@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -237,6 +238,12 @@ export const config = {
   // -> heutiges Admin-Dashboard + /api/* byte-identisch. Getrennt von MULTI_TENANT
   // (groesste Angriffsflaeche: oeffentlicher Tenant-Login + Self-Service-Schreiben).
   selfServiceEnabled: (process.env.SELF_SERVICE_ENABLED || "false") === "true",
+  // Lokaler Dev-Login-Shim (Single-Origin P1): POST /auth/dev-login mintet eine Session
+  // OHNE WorkOS-Round-Trip - NUR fuer den lokalen Chrome-e2e-Loop. DOPPELT fail-closed:
+  // explizites Opt-in (=== "true") UND nie im Hosting (Render setzt RENDER_EXTERNAL_URL ->
+  // hier zu false neutralisiert). Eine versehentlich auf Render gesetzte DEV_LOGIN_ENABLED
+  // verweigert zusaetzlich den Boot (productionFootguns liest die rohe Env, zweite Sperre).
+  devLoginEnabled: process.env.DEV_LOGIN_ENABLED === "true" && !process.env.RENDER_EXTERNAL_URL,
   // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
   provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
   // Geo-Quelle bei der Registrierung (F1, Phase 6). DEFAULT AUS (fail-closed, netzfreie
@@ -344,6 +351,11 @@ export const config = {
   // DATA_DIR-Override, damit Tests nicht das echte data/store.json anfassen
   dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
   publicDir: path.join(__dirname, "..", "public"),
+  // Single-Origin (P1): Verzeichnis des apps/web-Builds (astro build -> apps/web/dist).
+  // Leer (Default) = AUS -> heutiges Serving byte-identisch (nur public/, hinter Basic-
+  // Auth). Gesetzt -> der Gateway liefert Marketing + App-Shell same-origin (server.js),
+  // VOR der Basic-Auth. Pfad-Flag (Muster MULTI_TENANT/PAYMENT_ENABLED, fail-closed).
+  webDistDir: process.env.WEB_DIST_DIR || "",
 };
 
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen
@@ -384,6 +396,12 @@ export function productionFootguns(cfg = config, isProduction = !!process.env.RE
     errors.push(
       "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
     );
+  // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
+  // config.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
+  // unabhaengige Sperre liest die ROHE Env, damit eine versehentlich auf Render gesetzte
+  // DEV_LOGIN_ENABLED=true den Boot verweigert statt still ignoriert zu werden (Regel 3).
+  if (process.env.DEV_LOGIN_ENABLED === "true")
+    errors.push("DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).");
   return errors;
 }
 
@@ -418,6 +436,13 @@ export function assertConfig() {
     (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0)
   )
     missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
+  // Single-Origin (P1): WEB_DIST_DIR gesetzt, aber der Build (<dir>/index.html) fehlt ->
+  // sichtbarer Boot-Fehler statt stiller 401. Ohne index.html faende express.static nichts,
+  // jeder Marketing-Request fiele auf die Basic-Auth durch (Admin-Passwort statt Landing).
+  if (config.webDistDir && !existsSync(path.join(config.webDistDir, "index.html")))
+    missing.push(
+      "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
+    );
   // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
   //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
   //  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete

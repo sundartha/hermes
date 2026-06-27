@@ -115,6 +115,12 @@ export const BASE_ENV = {
   // Zeile leakt eine lokale .env mit SELF_SERVICE_ENABLED=true via dotenv in
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   SELF_SERVICE_ENABLED: "false",
+  // Single-Origin (P1) default AUS: ohne unified Build serviert der Gateway byte-
+  // identisch (nur public/). Ohne diese Zeilen leakt eine lokale .env mit WEB_DIST_DIR/
+  // DEV_LOGIN_ENABLED via dotenv in Spawn-Tests -> Baseline-Drift (test-base-env-drift).
+  // Tests, die das unified Serving / den Dev-Login pruefen, setzen sie explizit.
+  WEB_DIST_DIR: "",
+  DEV_LOGIN_ENABLED: "false",
   // Rich-UI default AUS (fail-closed): Bestandssuite byte-identisch (nur Text/
   // structuredContent). Ohne diese Zeile leakt eine lokale .env mit MCP_UI_ENABLED=true
   // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).

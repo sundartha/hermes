@@ -2,6 +2,7 @@
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
 // MUSS erste Importzeile bleiben (vor store.js) - globales Crash-Netz, ESM-Eval-Order (T-P0-07).
 import "./process-guards.js";
+import path from "path";
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -135,6 +136,10 @@ const CUSTOMER_PORTAL_PATH = "/tenant.html";
 // 302 auf den Login (= Registrierung, Strategie R2). Pfad lebt auf dem Gateway
 // (makeWebAuthRoutes GET /auth/login), nicht auf der Static Site.
 const LOGIN_PATH = "/auth/login";
+// Single-Origin (P1): App-Shell-Pfad im apps/web-Build (kein Magic-String, G25). Ziel
+// des Post-Login-Redirects UND des /tenant.html-Altpfad-Redirects, sobald WEB_DIST_DIR
+// aktiv ist (das Tenant-Dashboard lebt dann unter /app im unified Build).
+const APP_PATH = "/app";
 // W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
 // den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
@@ -173,7 +178,12 @@ registerWellKnown(app);
 // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
 // Basic-Auth + express.static gemountet wie /auth/*; traegt keine Tenant-Daten, braucht
 // keine Session - daher unkonditional (greift auch ohne Web-Login-Infra).
-app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
+// Single-Origin (P1): mit WEB_DIST_DIR faellt "/" bewusst durch auf die statische
+// Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
+// gilt nur OHNE den unified Build (byte-identisch zum Bestand).
+if (!config.webDistDir) {
+  app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
+}
 
 // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
 // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
@@ -217,8 +227,16 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         // (gleicher Flag-Gate wie die /tenant.html-Basic-Auth-Exemption unten). Sonst
         // Default "/" -> byte-identisch zum Bestand (kein Redirect auf eine Seite, die
         // ohne Self-Service-Flags nicht Basic-Auth-exempt waere).
-        postLoginPath:
-          config.selfServiceEnabled && config.multiTenant ? CUSTOMER_PORTAL_PATH : undefined,
+        // Single-Origin (P1): mit WEB_DIST_DIR landet der frisch eingeloggte Tenant auf
+        // der App-Shell (/app) im unified Build (vorrangig vor dem Self-Service-Portal).
+        postLoginPath: config.webDistDir
+          ? APP_PATH
+          : config.selfServiceEnabled && config.multiTenant
+            ? CUSTOMER_PORTAL_PATH
+            : undefined,
+        // Lokaler Dev-Login-Shim (NUR mit config.devLoginEnabled, fail-closed): mintet
+        // dieselbe Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
+        devLoginEnabled: config.devLoginEnabled,
       }),
     );
 
@@ -302,6 +320,29 @@ if (config.sessionSecret && config.storeBackend === "pg") {
       res.json({ received: true });
     });
   });
+}
+
+// ---- Single-Origin: apps/web (Astro-Build) statisch ausliefern (WEB_DIST_DIR) ----
+// Hinter dem Pfad-Flag (leer = aus -> heutiges Serving byte-identisch). MUSS VOR der
+// Basic-Auth (unten) liegen, SONST verlangte die oeffentliche Marketing-Site das
+// Admin-Passwort.
+// AUTH-AUSNAHME (Regel 3, begruendet): Marketing-Seiten + die /app-Shell sind bewusst
+// oeffentlich - statisches HTML/JS OHNE Tenant-Daten. Jede Tenant-Sicht laedt ihre Daten
+// erst ueber /api/self-service/* (webAuthMw, active-only, Session-Cookie) -> kein
+// Datenleck ueber das statische Serving. /api/*, /auth/*, /.well-known/*, der Stripe-
+// Webhook und /healthz sind oben bereits gematcht (Mount-Reihenfolge) -> kein Shadowing;
+// die Owner-Legacy-API liegt HINTER der Basic-Auth (unten) -> von diesem Mount unberuehrt.
+if (config.webDistDir) {
+  // /tenant.html -> /app: schattet die public/tenant.html (Owner-Removal-Altpfad) und
+  // erhaelt alte Bookmarks - das Tenant-Dashboard lebt im Build unter /app.
+  app.get(CUSTOMER_PORTAL_PATH, (_req, res) => res.redirect(302, APP_PATH));
+  // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
+  // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
+  app.use(express.static(config.webDistDir, { extensions: ["html"] }));
+  // SPA-Fallback: Unterpfade unter /app liefern die App-Shell (Client-seitiges Routing).
+  app.get("/app/*", (_req, res) =>
+    res.sendFile(path.join(config.webDistDir, "app", "index.html")),
+  );
 }
 
 app.use((req, res, next) => {

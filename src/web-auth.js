@@ -89,6 +89,19 @@ export function makeWebAuthRoutes(deps) {
   const postLoginPath = deps.postLoginPath || "/";
   const router = Router();
 
+  // EINE Quelle fuer das Session-Minting (G5 - kein paralleler Auth-Pfad): Account-Upsert
+  // -> Session anlegen -> signiertes Session-Cookie setzen. Callback UND Dev-Login-Shim
+  // teilen sich diese Mechanik, damit eine kuenftige Haertung (zusaetzliche Cookie-Flags,
+  // Session-Rotation/-Binding) an EINER Stelle nachgezogen wird. Setzt NUR das Session-
+  // Cookie; Login-Flow-Cookie-Cleanup, audit und redirect bleiben Sache des Aufrufers
+  // (Callback auditiert + raeumt die pkce/state/nonce-Cookies, Dev-Login nicht).
+  async function mintSession(res, { sub, email }) {
+    const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
+    const { id } = await sessions.create({ sub, tenantId, ttlSeconds });
+    res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
+    return { tenantId, id };
+  }
+
   // GET /auth/login
   // Erzeugt PKCE-Paar + State, signiert beides als Cookies, redirectet zum IdP.
   router.get("/auth/login", async (req, res) => {
@@ -156,14 +169,9 @@ export function makeWebAuthRoutes(deps) {
 
     try {
       const { claims } = await oidc.exchange({ code: req.query.code, verifier });
-      const { tenantId } = await accounts.upsertOnFirstLogin({
-        sub: claims.sub,
-        email: claims.email,
-      });
-      const { id } = await sessions.create({ sub: claims.sub, tenantId, ttlSeconds });
-
-      // Session-Cookie setzen, Login-Flow-Cookies loeschen
-      res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
+      // Session ueber die gemeinsame Mint-Mechanik (setzt das Session-Cookie). Danach die
+      // Login-Flow-Cookies loeschen.
+      const { tenantId } = await mintSession(res, { sub: claims.sub, email: claims.email });
       clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
 
       await audit.record({ actorSub: claims.sub, tenantId, action: "login" });
@@ -186,6 +194,31 @@ export function makeWebAuthRoutes(deps) {
     clearCookies(res, ["session"]);
     res.status(204).end();
   });
+
+  // POST /auth/dev-login (NUR lokal, hinter deps.devLoginEnabled - config ist doppelt
+  // fail-closed: explizites Opt-in UND nie auf Render, plus Boot-Refusal dort). Login-
+  // Shim fuer den lokalen Chrome-e2e-Loop OHNE WorkOS-Round-Trip: mintet die Session
+  // ueber DIESELBE Quelle wie der echte Callback (accounts.upsertOnFirstLogin +
+  // sessions.create, G5 - kein paralleler Auth-Pfad), setzt das signierte Session-Cookie
+  // und redirectet auf postLoginPath. Aktiviert den Tenant NICHT (bleibt suspended) -
+  // Aktivierung/Seed macht das Test-Harness. Liegt unter /auth/* (vor Basic-Auth, hinter
+  // dem /auth-Rate-Limiter in server.js) -> keine zusaetzliche Auth-Ausnahme noetig.
+  // Niemals Tokens/Secrets loggen. sub/email aus dem Body, sonst dev-Defaults.
+  if (deps.devLoginEnabled) {
+    router.post("/auth/dev-login", async (req, res) => {
+      try {
+        const body = req.body || {};
+        const sub = typeof body.sub === "string" && body.sub ? body.sub : "dev-user";
+        const email =
+          typeof body.email === "string" && body.email ? body.email : "dev@local.test";
+        // Dieselbe Mint-Quelle wie der echte Callback (mintSession) - kein paralleler Pfad.
+        await mintSession(res, { sub, email });
+        res.redirect(302, postLoginPath);
+      } catch {
+        res.status(500).send("dev-login fehlgeschlagen");
+      }
+    });
+  }
 
   return router;
 }
