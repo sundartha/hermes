@@ -1040,6 +1040,24 @@ export function dailySmsCount(s, tenantId, sinceIso) {
   ).length;
 }
 
+// Verbrauchte Voice-Minuten EINES Tenants seit sinceIso (BK4, Minuten-Kontingent).
+// Sibling zu dailySmsCount: dieselbe append-only usage_event-Quelle, dasselbe
+// rollierende Fenster (sinceIso vom Aufrufer -> zeit-frei/testbar), aber kind=
+// VOICE_MINUTE und SUMME der quantity (Minuten, Ganzzahl via Math.ceil im Recorder)
+// statt Anzahl. ZAEHLT BEWUSST AUCH bereits gemeldete Events (stripeMeterSent): der
+// Flush-Marker ist ein Abrechnungs-Flag, KEINE Perioden-Grenze - das Kontingent misst
+// Verbrauch, nicht Meldung. Pro tenantId (nie global, H3). Reine Query, kein IO.
+export function voiceMinutesUsedSince(s, tenantId, sinceIso) {
+  return s.usageEvents
+    .filter(
+      (e) =>
+        e.kind === USAGE_EVENT_KIND.VOICE_MINUTE &&
+        e.tenantId === tenantId &&
+        e.occurredAt >= sinceIso,
+    )
+    .reduce((sum, e) => sum + e.quantity, 0);
+}
+
 // Noch nicht gemeldete Ledger-Eintraege (Flush-Quelle, billing/meter.js). Reine Query.
 export function pendingMeterEvents(s) {
   return s.usageEvents.filter((e) => !e.stripeMeterSent);
