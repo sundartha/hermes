@@ -1,9 +1,54 @@
 # Strategie: Abo-Abschluss + Unifizierung auf sundartha.com
 
-> Status: **Analyse + Plan** (kein Produktionscode geaendert). Erstellt aus einem 3-Agenten-Investigations-Team.
-> Owner-Entscheidungen gesetzt: **(D1) Unifizieren auf sundartha.com (eine Website, ein Origin)** ·
-> **(D2) Ziellinie = gruen im Stripe-Test-Mode** (kein echtes Geld; Prod-Go-Live separat owner-gated) ·
-> **(D3) Stripe-Setup autonom via API** (vorhandener `sk_test`-Key).
+> Status: **UMGESETZT + LIVE deployed (test-mode)** — siehe "Stand (2026-06-27)". Owner-Entscheidungen:
+> **(D1) Unifizieren auf sundartha.com** · **(D2) Ziellinie gruen im Stripe-Test-Mode** · **(D3) Stripe via API**.
+
+## Stand (2026-06-27)
+
+**Vier Commits auf `jonas986/master` (= Render-Live), alle verifiziert, 1160/1160 Tests:**
+- `1bcae39` fix(billing): Money-Path test-mode green — 3 echte Bugs (currency fehlte im setup-checkout = Stripe
+  HTTP 400; asyncBilling-Wrapper gegen Express-4-Hang; current_period_end aus `items.data[0]`).
+- `806550a` feat(web): Single-Origin-Serving (`WEB_DIST_DIR`-Flag, aus = byte-identisch) + fail-closed Dev-Login-Shim.
+- `d4f1eb5` feat(web): /app-Dashboard auf ENGLISCH + Subscribe-Flow (Plan-Kacheln, "Subscribe so Hermes can call
+  for you"-Hinweis, no-card->checkout gefuehrt; neues `lib/subscribe.js`).
+- `ce4b77b` fix(store): **ensureTenant** — NEUER echter Prod-Bug, via Chrome-e2e gefunden: ein Self-Service-Signup
+  landet in der Auth-DB, aber NICHT im Store-Mirror (nur beim Boot hydriert) -> subscribe warf 502 "Tenant nicht
+  gefunden" auf einem warmen Server. ensureTenant hydriert den ECHTEN Status (nie hardcoded ACTIVE, Regel 1 - der
+  Mirror-Status speist W5-Outbound-Block + Allowlist + Provisioning-Gate). Regressionstest deckt den echten
+  Signup-Pfad ab, den die alte Suite uebersprang.
+
+**Lokal end-to-end verifiziert (Stripe-Test):** no-sub Dashboard (EN) -> Subscribe -> echte `cs_test`-Checkout-URL
+("Sundartha Sandbox") im Browser; ganze subscribe->active-Kette gruen via Regressionstest.
+
+**PROD-Aktivierung (test-mode) erledigt:**
+- Stripe-Test-Webhook angelegt: `we_1Tmu6A3QGz3ubjYAUuJQ9MiR` -> `https://vodafone-agent.onrender.com/webhooks/stripe`
+  (customer.subscription.*, invoice.payment_failed). Signing-Secret in lokaler Datei, NICHT im Chat.
+- Gateway-Env (Render-API, merge): `STRIPE_STARTER_PRICE_ID`/`STRIPE_BUSINESS_PRICE_ID` (test), `NUMBER_SETUP_FEE_CENTS=100`,
+  **`PAYMENT_ENABLED=true`**. Owner setzte die zwei Secrets (`STRIPE_SECRET_KEY` sk_test + `STRIPE_WEBHOOK_SECRET`).
+- **Gateway bootete sauber mit `PAYMENT_ENABLED=true`** (Boot-Guard validierte Secrets+Fee+Price-IDs) ->
+  **Subscribe funktioniert in Prod test-mode** ueber das Gateway-Dashboard (`vodafone-agent.onrender.com`).
+  (Owner-Bestaetigung via Test-Registrierung + Karte 4242 ausstehend - ich habe in Prod keinen Login.)
+
+**WICHTIGER BEFUND:** Die Render-Services sind **Dashboard-managed** — die Live-Config weicht von `render.yaml` ab
+(z.B. `MULTI_TENANT`/`SELF_SERVICE_ENABLED` in Prod AN trotz `render.yaml`=false; `autoDeploy` AN trotz false). ->
+Config-Aenderungen laufen ueber die **Render-API/Dashboard**, NICHT ueber `render.yaml`.
+
+## OFFEN — die letzte Meile (kosmetisch: das funktionierende Subscribe auf sundartha.com mit der schoenen UI)
+
+1. **Gateway serviert die apps/web-App (Single-Origin):** Gateway-Build-Command auf apps/web-Build erweitern
+   (`npm install && npm --prefix apps/web ci && npm --prefix apps/web run build`, mit `PUBLIC_GATEWAY_URL=https://sundartha.com`)
+   + `WEB_DIST_DIR=apps/web/dist`. REIHENFOLGE zwingend: erst Build-Command (dist entsteht), DANN `WEB_DIST_DIR`
+   (P1-Boot-Guard: `WEB_DIST_DIR` gesetzt aber `dist/index.html` fehlt -> Boot-Fail). Safe-Failure (Build fehlt ->
+   alte Version bleibt live). Hinweis: gateway `buildFilter.ignoredPaths: apps/web/**` -> kuenftige apps/web-Commits
+   redeployen das Gateway NICHT (separat loesen, sonst stale App).
+2. **DNS-Cutover:** `sundartha.com` -> Gateway-Service (**Owner-Aufgabe**, eigener DNS-Provider; ich kann mich dort
+   nicht einloggen). Heute zeigt `sundartha.com` auf die Static-Site `hermes-web`.
+3. **Owner-Verifikation:** auf sundartha.com registrieren + Abo mit Test-Karte `4242 4242 4242 4242` -> aktiv.
+
+**Constraints (warum ein paar Schritte beim Owner liegen):** kein Passwort-Eintippen (Login Stripe/DNS-Provider);
+keine API-Keys/Secrets in Felder eintippen oder durch den Chat schleusen (Owner setzt sk_test + Webhook-Secret);
+die Chrome-Extension ist fuer das Stripe-Dashboard blockiert (Webhook daher via Stripe-API angelegt). Render-
+Dashboard IS drivable; render.yaml ist NICHT die Live-Quelle (s.o.).
 
 ## 1. Owner-Vision (Soll-Flow)
 
