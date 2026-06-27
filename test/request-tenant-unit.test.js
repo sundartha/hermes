@@ -17,6 +17,7 @@ import { config } from "../src/config.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import {
   isLocalSocket,
+  isTrustedLocalCaller,
   internalIdentity,
   makeRequestTenant,
   TENANT_REJECT,
@@ -125,6 +126,46 @@ test("internalIdentity: extern + Header gesetzt -> null (von extern faelschbar, 
     headers: { "x-internal-identity": "evil@attacker.test" },
   });
   assert.equal(internalIdentity(req), null);
+});
+
+test("internalIdentity: Loopback-Socket + X-Forwarded-For -> null (Render-Proxy, kein Spoofing)", () => {
+  // AM1: hinter Render hat AUCH externer Traffic einen Loopback-Socket, traegt aber
+  // X-Forwarded-For (vom Proxy gesetzt). Ohne den XFF-Check koennte ein Angreifer per
+  // X-Internal-Identity eine fremde Tenant-Identitaet vortaeuschen. Mit isTrustedLocalCaller
+  // -> ignoriert (null), nur echtes In-Process-Loopback (ohne XFF) wird vertraut.
+  const req = reqWith({
+    remoteAddress: "127.0.0.1",
+    headers: { "x-internal-identity": "victim@team.test", "x-forwarded-for": "203.0.113.9" },
+  });
+  assert.equal(internalIdentity(req), null);
+});
+
+// === isTrustedLocalCaller (AM1) ================================================
+// Hinter Render erscheint externer Traffic als Loopback-Socket -> isLocalSocket allein
+// taugt NICHT als Vertrauensgrenze. Vertrauenswuerdig = echtes Loopback UND nicht ueber
+// den Proxy weitergereicht (kein X-Forwarded-For).
+
+test("isTrustedLocalCaller: Loopback ohne X-Forwarded-For -> true (In-Process-Aufruf)", () => {
+  for (const addr of LOCAL_ADDRS) {
+    assert.equal(isTrustedLocalCaller(reqWith({ remoteAddress: addr, headers: {} })), true, addr);
+  }
+});
+
+test("isTrustedLocalCaller: Loopback MIT X-Forwarded-For -> false (Render-Proxy von extern)", () => {
+  for (const addr of LOCAL_ADDRS) {
+    const req = reqWith({ remoteAddress: addr, headers: { "x-forwarded-for": "203.0.113.9" } });
+    assert.equal(isTrustedLocalCaller(req), false, addr);
+  }
+});
+
+test("isTrustedLocalCaller: externe Socket-Adresse -> false (mit und ohne XFF)", () => {
+  assert.equal(isTrustedLocalCaller(reqWith({ remoteAddress: "203.0.113.7", headers: {} })), false);
+  assert.equal(
+    isTrustedLocalCaller(
+      reqWith({ remoteAddress: "203.0.113.7", headers: { "x-forwarded-for": "203.0.113.7" } }),
+    ),
+    false,
+  );
 });
 
 // === makeRequestTenant -> requestTenant ========================================

@@ -86,7 +86,7 @@ import { createPortalRunner } from "./portal-pool.js";
 import { guardedBoot } from "./boot-guard.js";
 import {
   makeRequestTenant,
-  isLocalSocket,
+  isTrustedLocalCaller,
   internalIdentity,
   OWNER_ID,
   ANON_IDENTITY,
@@ -109,7 +109,7 @@ const provisioningQueue = createQueue();
 // neue Web-Session-Zweig wertet req.tenant (gesetzt von webAuthMiddleware nach
 // signiertem Cookie + gueltiger DB-Session) VOR der req.auth/MCP-Logik aus: die
 // staerkere, jederzeit invalidierbare Identitaet gewinnt, fail-closed (-> TENANT_REJECT,
-// nie Owner). Volle Begruendung im Modul-Doc von request-tenant.js. isLocalSocket/
+// nie Owner). Volle Begruendung im Modul-Doc von request-tenant.js. isTrustedLocalCaller/
 // internalIdentity sowie OWNER_ID/ANON_IDENTITY/TENANT_REJECT kommen aus demselben
 // Modul (oben importiert).
 const { requestTenant, requireTenant } = makeRequestTenant(store);
@@ -118,10 +118,13 @@ app.use(securityHeaders);
 
 // ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
 // /voice/* ist ausgenommen (kommt von Twilio, eigene Signaturpruefung), ebenso
-// localhost-Sockets (interne MCP-Tools, Dashboard-Entwicklung).
+// vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes Loopback OHNE
+// Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
+// externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
+// Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
 const rateLimiter = createRateLimiter(config.rateLimitPerMin);
 app.use((req, res, next) => {
-  if (req.path.startsWith("/voice") || isLocalSocket(req)) return next();
+  if (req.path.startsWith("/voice") || isTrustedLocalCaller(req)) return next();
   rateLimiter(req, res, next);
 });
 
@@ -161,7 +164,8 @@ app.use((err, _req, res, next) => {
 // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
 // /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigene MCP-Auth),
 // /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
-// /healthz (Keep-Alive) und localhost (interne MCP-Tools).
+// /healthz (Keep-Alive) und vertrauenswuerdige lokale In-Process-Aufrufe (interne
+// MCP-Tools, isTrustedLocalCaller - NICHT per Socket-Adresse allein, s.u.).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
 
 // ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
@@ -380,7 +384,12 @@ app.use((req, res, next) => {
     req.path === "/healthz"
   )
     return next();
-  if (isLocalSocket(req)) return next();
+  // Genuiner lokaler In-Process-Aufrufer (MCP-Tools rufen die eigene /api ueber
+  // http://localhost) ist von der Basic-Auth ausgenommen. NICHT per Socket-Adresse
+  // allein: hinter Render ist auch externer Traffic Loopback -> das oeffnete Dashboard
+  // + API ohne Passwort fuer das ganze Internet (AM1, empirisch bestaetigt).
+  // isTrustedLocalCaller verlangt zusaetzlich KEIN X-Forwarded-For (Proxy-Weiterleitung).
+  if (isTrustedLocalCaller(req)) return next();
   const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
   if (safeEqual(req.headers.authorization || "", expected)) return next();
   audit("auth_failed", req, `path=${req.path}`);

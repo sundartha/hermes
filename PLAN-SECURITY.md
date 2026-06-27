@@ -120,7 +120,21 @@ Lücken, die ohne Zugangsdaten von aussen ausnutzbar sind:
    kompletten Passwortschutz von Dashboard + API umgehen.
    Fix: `trust proxy` auf `1` begrenzt (genau ein Proxy: Render); die
    Localhost-Ausnahme prueft jetzt die echte Socket-Adresse
-   (`req.socket.remoteAddress`), die nicht spoofbar ist.
+   (`req.socket.remoteAddress`).
+
+   **KORREKTUR (AM1):** Die urspruengliche Annahme "`req.socket.remoteAddress`
+   ist nicht spoofbar" war auf Render FALSCH. Empirisch bestaetigt: hinter dem
+   Render-Proxy ist die Socket-Adresse fuer JEDEN von aussen kommenden Request
+   der Loopback-Sidecar (`GET https://<host>/api/state` lieferte OHNE Auth 200
+   mit Owner-Daten) -> die reine `isLocalSocket`-Ausnahme hatte Dashboard + API
+   (und denselben Bypass bei Rate-Limit + `X-Internal-Identity`) fuer das ganze
+   Internet ohne Passwort geoeffnet. Korrigierter Fix: gemeinsame Vertrauensgrenze
+   `isTrustedLocalCaller` (`src/routes/_tenant.js`) = echtes Loopback UND KEIN
+   `X-Forwarded-For`. Der Render-Proxy setzt XFF bei jedem externen Request; ein
+   prozess-interner Loopback-Aufruf (MCP-Tools -> eigene `/api`) NICHT -> nur der
+   bleibt ausgenommen. Topologie-basiert (Dev + Prod korrekt, kein Env-Schalter).
+   Regression: `test/security.test.js` (Loopback + XFF ohne Credentials -> 401),
+   `test/rate-limit.test.js`, `test/request-tenant-unit.test.js` (internalIdentity).
 
 3. **`/mcp` fail-closed statt fail-open** ✅
    Problem: Ohne gesetztes `MCP_AUTH_TOKEN` war der MCP-Endpunkt oeffentlich -
