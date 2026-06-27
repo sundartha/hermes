@@ -1,0 +1,10 @@
+{
+  "_comment": "Auto-generiert via scripts/check-token-sync.js --write. Soll-Hashes der Token-Quelle (apps/web/src/styles/tokens/) + kanonischer Kopie (design-system/_shared/tokens.css). Bei legitimer Token-Aenderung: Kopie nachziehen, dann --write, dann committen.",
+  "algo": "sha256",
+  "hashes": {
+    "apps/web/src/styles/tokens/primitives.css": "bc322b4b1527d2e9d1887540fd9faef54d163ad3a7f5e4cd03e996f8dd865fc1",
+    "apps/web/src/styles/tokens/semantic.css": "bad9082cc3d17291edbebbb458f4ab45cb53280e8e8a224267ef43fbaf7d42fb",
+    "apps/web/src/styles/tokens/hero.css": "1d3c9e9bc48682be9b3ffe11e4d89c654338f5ee528efdc3fa3e4014436e372f",
+    "design-system/_shared/tokens.css": "64a3abbd03a1198bfe8c81911b60e197095dd2c688e8fcf9aaaa342d40561039"
+  }
+}

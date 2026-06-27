@@ -130,6 +130,7 @@ einem Host-abstrakten Port (analog `src/telephony/ports.js`/`registry.js`).
   Akzeptanzkriterium/Check; `@dsCard`-Index + `@import`-Verbot pruefen; offene Owner-Fragen aus
   P0/Q1/Q5 endgueltig schliessen.
 - **DoD:** Token-Sync-Check gruen; Doku aktualisiert; Review PASS.
+- **Status:** UMGESETZT — `scripts/check-token-sync.js` (Hash-Manifest `design-system/_shared/tokens.lock` + @import-Verbot + @dsCard-Marker), `npm run check:tokens`, Test `test/mcp-ui-p5-token-sync.test.js`.
 - **Abhaengigkeit:** P1 (mind. ein Widget live).
 
 ---
