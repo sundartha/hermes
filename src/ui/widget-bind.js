@@ -14,6 +14,18 @@
 // CSS-Klasse je gerenderter Transkriptzeile - matcht .turn in den Widget-Styles.
 const LINE_CLASS = "turn";
 
+// Objekt-Listen (z.B. list_calls / get_calendar): ein data-mcp-Slot rendert eine
+// Liste von Objekten als wiederholte Rows. Welche Sub-Felder eine Row zeigt,
+// deklariert der Slot generisch im HTML via data-mcp-row="feld1,feld2,..." - das
+// Binding kennt KEINE konkreten Widget-Felder (OCP, eine Quelle fuer alle Listen).
+// Klassen matchen .row/.cell in den Widget-Styles; data-field erlaubt der CSS, eine
+// einzelne Spalte gezielt zu stylen.
+const ROW_CLASS = "row";
+const CELL_CLASS = "cell";
+const ROW_FIELDS_ATTR = "data-mcp-row";
+const FIELD_ATTR = "data-field";
+const FIELD_SEP = ",";
+
 // true nur fuer ein nicht-null Objekt (geteilte Pruefung, keine Duplizierung G5).
 export function isObject(value) {
   return typeof value === "object" && value !== null;
@@ -52,13 +64,50 @@ export function renderLines(doc, container, lines) {
   }
 }
 
-// Fuellt ALLE Slots eines Schluessels. Array -> renderLines, sonst textContent.
-// Fehlender Slot -> no-op (Selektor-Treffer leer).
+// Liest die deklarierten Row-Felder eines Containers (data-mcp-row="a,b,c").
+// Kein Attribut / leere Deklaration -> [] (der Aufrufer faellt dann auf die flache
+// Zeilen-Sicht renderLines zurueck). getAttribute fehlt im Fake-DOM -> defensiv null.
+export function rowFields(container) {
+  const raw = container.getAttribute ? container.getAttribute(ROW_FIELDS_ATTR) : null;
+  if (!raw) return [];
+  return raw.split(FIELD_SEP).map((f) => f.trim()).filter(Boolean);
+}
+
+// Liste von Objekten -> je Eintrag eine Row mit einer Zelle je deklariertem Feld
+// (data-mcp-row am Container). Werte landen AUSSCHLIESSLICH ueber textContent
+// (XSS-sicher, nie innerHTML); fehlende Felder -> leere Zelle (kein Crash). Container
+// vorher leeren (kein Doppeln beim erneuten Binden) - dieselbe 3-arg-Signatur und
+// Disziplin wie renderLines.
+export function renderRows(doc, container, items) {
+  const fields = rowFields(container);
+  while (container.firstChild) container.removeChild(container.firstChild);
+  for (const item of items) {
+    const row = doc.createElement("div");
+    row.className = ROW_CLASS;
+    for (const field of fields) {
+      const cell = doc.createElement("span");
+      cell.className = CELL_CLASS;
+      if (cell.setAttribute) cell.setAttribute(FIELD_ATTR, field);
+      const value = isObject(item) ? item[field] : undefined;
+      cell.textContent = value === null || value === undefined ? "" : String(value);
+      row.appendChild(cell);
+    }
+    container.appendChild(row);
+  }
+}
+
+// Fuellt ALLE Slots eines Schluessels. Array von Objekten mit deklarierten Row-Feldern
+// (data-mcp-row) -> renderRows; sonst Array -> renderLines (skalare Zeilen); sonst
+// textContent. Fehlender Slot -> no-op (Selektor-Treffer leer).
 export function applyField(doc, key, value) {
   const nodes = doc.querySelectorAll('[data-mcp="' + key + '"]');
   for (const el of nodes) {
-    if (Array.isArray(value)) renderLines(doc, el, value);
-    else el.textContent = String(value);
+    if (Array.isArray(value)) {
+      if (rowFields(el).length) renderRows(doc, el, value);
+      else renderLines(doc, el, value);
+    } else {
+      el.textContent = String(value);
+    }
   }
 }
 
@@ -96,10 +145,17 @@ function buildBindScript() {
   const body = [
     '"use strict";',
     `var LINE_CLASS = ${JSON.stringify(LINE_CLASS)};`,
+    `var ROW_CLASS = ${JSON.stringify(ROW_CLASS)};`,
+    `var CELL_CLASS = ${JSON.stringify(CELL_CLASS)};`,
+    `var ROW_FIELDS_ATTR = ${JSON.stringify(ROW_FIELDS_ATTR)};`,
+    `var FIELD_ATTR = ${JSON.stringify(FIELD_ATTR)};`,
+    `var FIELD_SEP = ${JSON.stringify(FIELD_SEP)};`,
     isObject.toString(),
     readHostData.toString(),
     readMessageData.toString(),
     renderLines.toString(),
+    rowFields.toString(),
+    renderRows.toString(),
     applyField.toString(),
     bind.toString(),
     run.toString(),

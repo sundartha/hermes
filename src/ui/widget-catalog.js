@@ -14,11 +14,17 @@ export const WIDGET_CALL_STATUS = "call-status";
 export const WIDGET_CALL_RESULT = "call-result";
 export const WIDGET_TRANSCRIPT = "transcript";
 export const WIDGET_AGENT_STATUS = "agent-status";
+export const WIDGET_MY_NUMBER = "my-number";
+export const WIDGET_CALLS = "calls";
+export const WIDGET_CALENDAR = "calendar";
 const WIDGET_DEFS = {
   [WIDGET_CALL_STATUS]: { file: "call-status.html", title: "Hermes Call Status" },
   [WIDGET_CALL_RESULT]: { file: "call-result.html", title: "Hermes Call Result" },
   [WIDGET_TRANSCRIPT]: { file: "transcript.html", title: "Hermes Transcript" },
   [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status" },
+  [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number" },
+  [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List" },
+  [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar" },
 };
 
 // Schliessendes body-Tag - davor wird das gemeinsame Daten-Binding eingefuegt, damit

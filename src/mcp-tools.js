@@ -8,6 +8,13 @@ import {
   WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
 } from "./ui/adapters/mcp-native.js";
+// Neue read-only Widgets aus der kanonischen Quelle (widget-catalog.js); der
+// mcp-native-Re-Export oben ist historisch (siehe Datei-Kommentar dort).
+import {
+  WIDGET_MY_NUMBER,
+  WIDGET_CALLS,
+  WIDGET_CALENDAR,
+} from "./ui/widget-catalog.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
@@ -174,6 +181,60 @@ const AGENT_STATUS_OUTPUT = {
   allowedNumbers: z.array(z.string()),
   permissions: z.string(),
 };
+
+// Daten-Kontrakt get_my_number: GENAU das eine Eigen-Feld number. Whitelist, keine
+// Blacklist. number kann fail-closed leer sein (kein aktiver Nummern-Seed) -> auf null
+// normalisiert (Schema nullable), damit der Schluessel erhalten bleibt.
+function pickMyNumber(s) {
+  return { number: s.agent.number ?? null };
+}
+const MY_NUMBER_OUTPUT = { number: z.string().nullable() };
+
+// Daten-Kontrakt list_calls: pro Eintrag GENAU diese Eigen-Felder. counterparty ist die
+// Gegenseite (to bei outbound, from bei inbound), status via mapStatus, startedAt
+// server-seitig formatiert (fmt - eine Quelle, derselbe Formatter wie der Stufe-0-Text).
+// summary optional. Kein Roh-Transkript/Audio/internes Feld passiert diese Funktion.
+// counterparty nullable: eine einzelne defekte Zeile darf nicht die ganze Liste killen.
+function pickCall(c) {
+  const entry = {
+    id: c.id,
+    direction: c.direction,
+    counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null,
+    status: mapStatus(c),
+    startedAt: fmt(c.startedAt),
+  };
+  if (c.summary) entry.summary = c.summary;
+  return entry;
+}
+const CALL_LIST_ENTRY = z.object({
+  id: z.string(),
+  direction: z.string(),
+  counterparty: z.string().nullable(),
+  status: z.string(),
+  startedAt: z.string(),
+  summary: z.string().optional(),
+});
+const CALLS_OUTPUT = { calls: z.array(CALL_LIST_ENTRY) };
+
+// Stufe-0-Textzeile eines Calls aus den GEWHITELISTETEN Feldern (eine Quelle: kein
+// zweites Aufloesen von to/from/status/Datum). Format byte-identisch zum Bestand.
+function callTextLine(e) {
+  const arrow = e.direction === "outbound" ? "->" : "<-";
+  return `[${e.id}] ${arrow} ${e.counterparty} | ${e.status} | ${e.startedAt}${e.summary ? " | " + e.summary : ""}`;
+}
+
+// Daten-Kontrakt get_calendar: pro Eintrag GENAU title/start/end (start/end server-seitig
+// formatiert via fmt - eine Quelle, derselbe Formatter wie der Stufe-0-Text). title
+// nullable (Robustheit, eine defekte Zeile killt nicht die Liste). Kein internes Feld.
+function pickCalendarEntry(e) {
+  return { title: e.title ?? null, start: fmt(e.start), end: fmt(e.end) };
+}
+const CALENDAR_ENTRY = z.object({
+  title: z.string().nullable(),
+  start: z.string(),
+  end: z.string(),
+});
+const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
 // ctx (Phase 2): { identity, allowCalendar }. identity wird per Closure an jeden
 // REST-Aufruf gehaengt (X-Internal-Identity). allowCalendar steuert, ob das
@@ -371,34 +432,55 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
     },
   );
 
-  tool(
+  // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1
+  // (my-number Widget) NUR bei faehigem Host. Der Textblock bleibt JSON.stringify ueber
+  // den ROHEN agent.number (undefined -> "{}", byte-identisch); structuredContent
+  // normalisiert auf null (Schema nullable), damit fehlende Nummer kein isError ist.
+  uiTool(
     "get_my_number",
-    "Liefert die Rufnummer des Telefon-Agenten (die Twilio-Nummer).",
-    {},
+    {
+      description: "Liefert die Rufnummer des Telefon-Agenten (die Twilio-Nummer).",
+      inputSchema: {},
+      outputSchema: MY_NUMBER_OUTPUT,
+      ...enableWidgetUi(WIDGET_MY_NUMBER),
+    },
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { agent: "object" });
-      return text({ number: s.agent.number });
+      const data = pickMyNumber(s); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      return {
+        content: [
+          { type: "text", text: JSON.stringify({ number: s.agent.number }, null, 2) },
+        ],
+        structuredContent: data,
+      };
     },
   );
 
   // ---- Bonus-Tools (ueber den Brief hinaus, fuer die Hermes-Demo) ----
-  tool(
+  // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist: Liste mit
+  // genau den pickCall-Feldern) + Stufe 1 (calls Widget) NUR bei faehigem Host. Text UND
+  // structuredContent lesen DIESELBEN gewhitelisteten Eintraege (eine Quelle, G5/S2). Der
+  // leere Fall behaelt den "Noch keine Anrufe."-Text + leere Liste (Schema verlangt
+  // structuredContent auch leer).
+  uiTool(
     "list_calls",
-    "Listet die letzten Telefonate des Agenten (inbound und outbound) mit Status und Summary.",
-    {},
+    {
+      description:
+        "Listet die letzten Telefonate des Agenten (inbound und outbound) mit Status und Summary.",
+      inputSchema: {},
+      outputSchema: CALLS_OUTPUT,
+      ...enableWidgetUi(WIDGET_CALLS),
+    },
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { calls: "array" });
-      if (!s.calls.length) return text("Noch keine Anrufe.");
-      return text(
-        s.calls
-          .map(
-            (c) =>
-              `[${c.id}] ${c.direction === "outbound" ? "->" : "<-"} ${c.direction === "outbound" ? c.to : c.from} | ${mapStatus(c)} | ${fmt(c.startedAt)}${c.summary ? " | " + c.summary : ""}`,
-          )
-          .join("\n"),
-      );
+      const entries = s.calls.map(pickCall); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      const txt = entries.length ? entries.map(callTextLine).join("\n") : "Noch keine Anrufe.";
+      return {
+        content: [{ type: "text", text: txt }],
+        structuredContent: { calls: entries },
+      };
     },
   );
 
@@ -415,18 +497,34 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
   });
 
   // Kalender-Tool nur registrieren, wenn das Profil es erlaubt (Phase 2). Ein
-  // restriktives Profil sieht get_calendar gar nicht erst.
+  // restriktives Profil sieht get_calendar gar nicht erst. Stufe 0 (Text byte-identisch)
+  // + structuredContent (Whitelist: title/start/end je Eintrag) + Stufe 1 (calendar
+  // Widget) bei faehigem Host. Text UND structuredContent lesen dieselben gewhitelisteten
+  // Eintraege (eine Quelle); leerer Kalender behaelt "Kalender ist leer." + leere Liste.
   if (allowCalendar)
-    tool("get_calendar", "Zeigt die naechsten Kalendereintraege des Besitzers.", {}, async () => {
-      const s = await call("GET", "/api/state");
-      // Existenz/Typ pruefen, NICHT Nicht-Leere: leerer Kalender ([]) ist valide
-      // und behaelt den bestehenden "Kalender ist leer."-Pfad.
-      requireFields(s, { calendar: "array" });
-      if (!s.calendar.length) return text("Kalender ist leer.");
-      return text(
-        s.calendar.map((e) => `${e.title}: ${fmt(e.start)} bis ${fmt(e.end)}`).join("\n"),
-      );
-    });
+    uiTool(
+      "get_calendar",
+      {
+        description: "Zeigt die naechsten Kalendereintraege des Besitzers.",
+        inputSchema: {},
+        outputSchema: CALENDAR_OUTPUT,
+        ...enableWidgetUi(WIDGET_CALENDAR),
+      },
+      async () => {
+        const s = await call("GET", "/api/state");
+        // Existenz/Typ pruefen, NICHT Nicht-Leere: leerer Kalender ([]) ist valide
+        // und behaelt den bestehenden "Kalender ist leer."-Pfad.
+        requireFields(s, { calendar: "array" });
+        const entries = s.calendar.map(pickCalendarEntry); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+        const txt = entries.length
+          ? entries.map((e) => `${e.title}: ${e.start} bis ${e.end}`).join("\n")
+          : "Kalender ist leer.";
+        return {
+          content: [{ type: "text", text: txt }],
+          structuredContent: { calendar: entries },
+        };
+      },
+    );
 
   // Stufe 0 (Text byte-identisch zum Bestand, Backward-Compat) + structuredContent
   // (Whitelist) + Stufe 1 (agent-status Widget) NUR bei faehigem Host (enableWidgetUi).
