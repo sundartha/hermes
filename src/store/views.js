@@ -42,6 +42,26 @@ export function activeNumberFor(s, tenantId) {
   return hit ? hit.e164 : "";
 }
 
+// Anzeige-Status der EINEN Nummer eines Tenants fuer den Dashboard-Chip (read-only,
+// tenant-gescoped, fail-closed). Praesentations-Enum (NICHT der interne Lifecycle):
+// provisioning+capturing -> "provisioning" ("wird eingerichtet"); keine Nummer -> "none".
+// EINE Quelle (G5) fuer /api/state UND /api/self-service/state; kein Fremd-Tenant-Leck.
+export const NUMBER_DISPLAY_STATUS = Object.freeze({
+  ACTIVE: "active",
+  PROVISIONING: "provisioning",
+  REQUESTED: "requested",
+  NONE: "none",
+});
+
+export function numberStatusFor(s, tenantId) {
+  const own = s.numbers.filter((n) => n.tenantId === tenantId);
+  if (own.some((n) => n.status === NUMBER_STATUS.ACTIVE)) return NUMBER_DISPLAY_STATUS.ACTIVE;
+  if (own.some((n) => n.status === NUMBER_STATUS.PROVISIONING || n.status === NUMBER_STATUS.CAPTURING))
+    return NUMBER_DISPLAY_STATUS.PROVISIONING;
+  if (own.some((n) => n.status === NUMBER_STATUS.REQUESTED)) return NUMBER_DISPLAY_STATUS.REQUESTED;
+  return NUMBER_DISPLAY_STATUS.NONE;
+}
+
 // Kommende Termine eines Tenants (vergangene weggefiltert). EINE Quelle (G5) fuer
 // /api/state und /api/self-service/state; die routen-spezifische Slice bleibt am
 // Aufrufer. store wird injiziert (DIP), damit Test- und Produktions-Store dieselbe

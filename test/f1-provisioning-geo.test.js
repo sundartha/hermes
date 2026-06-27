@@ -90,6 +90,14 @@ test("searchParamsForCountry: case-insensitiv (fr -> FR)", () => {
   assert.equal(searchParamsForCountry("fr").countryCode, "FR");
 });
 
+// AM5: US als Test-Land (entkoppelt vom config.provisioningCountry-Default; connectionId
+// faellt weiter auf den globalen config-Wert).
+test("searchParamsForCountry: US -> +1-Suche (countryCode US, case-insensitiv)", () => {
+  assert.equal(searchParamsForCountry("US").countryCode, "US");
+  assert.equal(searchParamsForCountry("us").countryCode, "US");
+  assert.equal(searchParamsForCountry("US").connectionId, config.telnyxConnectionId);
+});
+
 // ---- holdAmountForCountry (Hold pro Land, P9) ----
 
 const DEFAULT_HOLD = 1234; // beliebiger Default-Cent-Wert (steht fuer numberSetupFeeCents)

@@ -298,7 +298,7 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
   }
 }
 
-// Mock der Telnyx-PROVISIONING-API: routet nach Pfad (search/order/configure).
+// Mock der Telnyx-PROVISIONING-API: routet nach Pfad (search/order/resolve/release).
 // Liefert e164 +4915799990001. Geteilt von onboarding-route + onboarding-identity
 // (G5: eine Definition statt zweier Kopien). Name explizit "...ProvisioningMock",
 // um die Kollision mit dem lokalen Voice/Originate-Mock in onboarding-outbound.test.js
@@ -314,12 +314,19 @@ export async function startTelnyxProvisioningMock() {
       if (req.url.startsWith("/v2/available_phone_numbers"))
         return res.end(JSON.stringify({ data: [{ phone_number: "+4915799990001" }] }));
       if (req.url === "/v2/number_orders")
+        // id hier ist die Order-Sub-Resource-id (NICHT die phone_number-Ressourcen-id) -
+        // der Adapter nutzt sie nicht mehr; die echte id liefert der resolve-GET unten.
         return res.end(
           JSON.stringify({
-            data: { phone_numbers: [{ id: "num_ext_1", phone_number: "+4915799990001" }] },
+            data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+4915799990001" }] },
           }),
         );
-      // configure (PATCH .../voice), release (DELETE) -> 200 ok
+      // resolveNumberId: GET /v2/phone_numbers?filter[phone_number]=... -> Ressourcen-id.
+      if (req.url.startsWith("/v2/phone_numbers?"))
+        return res.end(
+          JSON.stringify({ data: [{ id: "num_ext_1", phone_number: "+4915799990001" }] }),
+        );
+      // release (DELETE /v2/phone_numbers/{id}) -> 200 ok
       res.end(JSON.stringify({ data: {} }));
     });
   });
@@ -360,23 +367,24 @@ export function fakeBilling(overrides = {}) {
 // worker dreifach kopierten Definition. log haelt die Schritte in Aufrufreihenfolge.
 export function fakeProvisioner(overrides = {}) {
   const log = [];
+  const orderCalls = []; // additiv: jeder orderNumber-Aufruf mit connectionId (AM5-Threading)
   const base = {
     async searchNumbers({ countryCode } = {}) {
       log.push(`search:${countryCode}`);
       return [{ e164: "+4915799990001" }];
     },
-    async orderNumber({ e164, idempotencyKey }) {
+    async orderNumber({ e164, connectionId, idempotencyKey }) {
+      // log-String UNVERAENDERT (Bestands-deepEquals gruen); orderCalls traegt zusaetzlich
+      // die connectionId fuer die AM5-Threading-Pruefung (connection_id im Order-Body).
       log.push(`order:${e164}:${idempotencyKey}`);
+      orderCalls.push({ e164, connectionId, idempotencyKey });
       return { e164, providerNumberId: "num_ext_1" };
-    },
-    async configureNumber({ providerNumberId, connectionId }) {
-      log.push(`configure:${providerNumberId}:${connectionId}`);
     },
     async releaseNumber(id) {
       log.push(`release:${id}`);
     },
   };
-  return { log, ...base, ...overrides };
+  return { log, orderCalls, ...base, ...overrides };
 }
 
 // ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----

@@ -25,6 +25,15 @@ test("BK3-T1 Aktivierung fragt genau eine Dry-Run-Nummer an", () => {
   assert.equal(s.numbers.filter((n) => n.tenantId === "t1").length, 1);
 });
 
+// AM5: ohne Tenant-Geo greift fallbackCountry als Land der Nummer (US fuer Tests).
+test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_us", {});
+  const r = requestNumberForPaidTenant(s, { tenantId: "t_us", fallbackCountry: "US", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.country, "US");
+});
+
 // T2: Idempotenz - zweite Aktivierung kauft nicht doppelt.
 test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () => {
   const s = makeDefaultState();

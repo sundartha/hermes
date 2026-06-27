@@ -130,13 +130,32 @@ export function fetchBillingStatus() {
   return apiRequest("/api/self-service/billing/status");
 }
 
-// Liest die Agent-Eckdaten (Nummer, Besitzer) aus der state-Antwort -- die EINE
-// Stelle, an der das Frontend die Form `data.agent` annimmt (Contract-Grenze zur
-// API, R5: Annahme nicht ueber mehrere Dateien streuen). Fehlende Felder -> leere
+// Liest die Agent-Eckdaten (Nummer, Besitzer, numberStatus) aus der state-Antwort --
+// die EINE Stelle, an der das Frontend die Form `data.agent` annimmt (Contract-Grenze
+// zur API, R5: Annahme nicht ueber mehrere Dateien streuen). Fehlende Felder -> leere
 // Strings; ueber Platzhaltertexte entscheidet der Aufrufer.
 export function agentInfo(data) {
   const agent = (data && data.agent) || {};
-  return { number: agent.number || "", owner: agent.owner || "" };
+  return {
+    number: agent.number || "",
+    owner: agent.owner || "",
+    numberStatus: agent.numberStatus || "",
+  };
+}
+
+// Spiegel von NUMBER_DISPLAY_STATUS (src/store/views.js) -- Werte identisch (Drift-Test).
+export const NUMBER_STATUS = Object.freeze({
+  ACTIVE: "active",
+  PROVISIONING: "provisioning",
+  REQUESTED: "requested",
+  NONE: "none",
+});
+
+// "Wird die Nummer gerade eingerichtet?" -- true fuer requested/provisioning (noch keine
+// aktive e164, aber unterwegs), sonst false. Steuert den Chip-Platzhalter "Setting up...".
+export function isNumberProvisioning(data) {
+  const { numberStatus } = agentInfo(data);
+  return numberStatus === NUMBER_STATUS.PROVISIONING || numberStatus === NUMBER_STATUS.REQUESTED;
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das

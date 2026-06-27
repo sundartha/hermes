@@ -119,13 +119,19 @@ test("PROVISIONING_ENABLED + Telnyx-Mock: Route antwortet SOFORT 'queued', async
     );
     // Persistente Job-Spur auf 'done'.
     assert.equal(store.provisioningJobs.find((j) => j.id === json.jobId)?.status, "done");
-    // Mock hat Suche + Order + Configure gesehen.
+    // AM5: Mock hat Suche + Order (connection_id im Body, kein separater configure-PATCH)
+    // + den resolve-GET der phone_number-Ressource gesehen.
     assert.ok(mock.requests.some((r) => r.path.startsWith("/v2/available_phone_numbers")));
-    assert.ok(mock.requests.some((r) => r.path === "/v2/number_orders"));
+    const order = mock.requests.find((r) => r.path === "/v2/number_orders");
+    assert.ok(order, "number_orders bestellt");
+    assert.match(order.body, /"connection_id":"conn_1"/);
     assert.ok(
-      mock.requests.some(
-        (r) => r.method === "PATCH" && r.path === "/v2/phone_numbers/num_ext_1/voice",
-      ),
+      mock.requests.some((r) => r.method === "GET" && r.path.startsWith("/v2/phone_numbers?")),
+      "resolve-GET der phone_number-Ressource",
+    );
+    assert.ok(
+      !mock.requests.some((r) => r.method === "PATCH"),
+      "kein configure-PATCH mehr",
     );
   } finally {
     await srv.stop();

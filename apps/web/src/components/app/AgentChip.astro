@@ -20,9 +20,16 @@
 </div>
 
 <script>
-  import { AUTH_STATE, AUTH_EVENT, agentInfo, isAgentLive } from "../../lib/api.js";
+  import {
+    AUTH_STATE,
+    AUTH_EVENT,
+    agentInfo,
+    isAgentLive,
+    isNumberProvisioning,
+  } from "../../lib/api.js";
 
   const NO_NUMBER_TEXT = "No number assigned yet";
+  const SETTING_UP_TEXT = "Setting up your number…";
   const DOT_OFF_CLASS = "live-dot--off";
 
   const chipEl = document.getElementById("agent-chip");
@@ -31,7 +38,9 @@
 
   function showChip(data) {
     const { number } = agentInfo(data);
-    numberEl.textContent = number || NO_NUMBER_TEXT;
+    // Noch keine aktive Nummer, aber Provisioning laeuft -> "wird eingerichtet..."
+    // statt "keine Nummer". Tenant-Werte weiter ausschliesslich via textContent (XSS).
+    numberEl.textContent = number || (isNumberProvisioning(data) ? SETTING_UP_TEXT : NO_NUMBER_TEXT);
     dotEl.classList.toggle(DOT_OFF_CLASS, !isAgentLive(data));
     chipEl.hidden = false;
   }

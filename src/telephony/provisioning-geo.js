@@ -34,6 +34,7 @@ import { config } from "../config.js";
 const COUNTRY_SEARCH_PARAMS = Object.freeze({
   FR: { telnyxCountryCode: "FR" },
   GB: { telnyxCountryCode: "GB" },
+  US: { telnyxCountryCode: "US" },
 });
 
 // Loest das Land (ISO-2, case-insensitiv) auf die telnyx-Suchparameter auf.

@@ -11,10 +11,15 @@ import {
   agentInfo,
   cardStatus,
   fetchTenantState,
+  isNumberProvisioning,
   logout,
   loadAuthState,
+  NUMBER_STATUS,
   startBillingSetupCheckout,
 } from "../src/lib/api.js";
+// Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
+// Frontend-Spiegel NUMBER_STATUS muss exakt NUMBER_DISPLAY_STATUS entsprechen.
+import { NUMBER_DISPLAY_STATUS } from "../../../src/store/views.js";
 
 // Ersetzt globalThis.fetch durch einen Stub, der die Aufrufe aufzeichnet und
 // eine vorgegebene Antwort liefert. Gibt eine restore-Funktion zurueck.
@@ -148,23 +153,42 @@ test("loadAuthState -> ERROR bei 5xx und bei Netzwerkfehler", async () => {
 // fehlendes data/agent und leere Felder duerfen nie undefined durchlassen, sonst
 // stuende "undefined" in der App-Shell. Voll befuellt: Werte unveraendert durch.
 test("agentInfo liefert leere Strings bei fehlendem data oder agent", () => {
-  assert.deepEqual(agentInfo(undefined), { number: "", owner: "" });
-  assert.deepEqual(agentInfo(null), { number: "", owner: "" });
-  assert.deepEqual(agentInfo({}), { number: "", owner: "" });
+  assert.deepEqual(agentInfo(undefined), { number: "", owner: "", numberStatus: "" });
+  assert.deepEqual(agentInfo(null), { number: "", owner: "", numberStatus: "" });
+  assert.deepEqual(agentInfo({}), { number: "", owner: "", numberStatus: "" });
 });
 
 test("agentInfo faengt leere/null-Felder als leere Strings ab", () => {
-  assert.deepEqual(agentInfo({ agent: { number: "", owner: null } }), {
+  assert.deepEqual(agentInfo({ agent: { number: "", owner: null, numberStatus: null } }), {
     number: "",
     owner: "",
+    numberStatus: "",
   });
 });
 
-test("agentInfo reicht befuellte Felder unveraendert durch", () => {
-  assert.deepEqual(agentInfo({ agent: { number: "+49123", owner: "Alex" } }), {
+test("agentInfo reicht befuellte Felder unveraendert durch (inkl. numberStatus)", () => {
+  assert.deepEqual(agentInfo({ agent: { number: "+49123", owner: "Alex", numberStatus: "active" } }), {
     number: "+49123",
     owner: "Alex",
+    numberStatus: "active",
   });
+});
+
+// isNumberProvisioning: der Chip zeigt "Setting up..." nur waehrend requested/provisioning
+// (noch keine aktive e164, aber unterwegs); active/none/fehlend -> false.
+test("isNumberProvisioning: true fuer requested/provisioning, false fuer active/none/fehlend", () => {
+  assert.equal(isNumberProvisioning({ agent: { numberStatus: "provisioning" } }), true);
+  assert.equal(isNumberProvisioning({ agent: { numberStatus: "requested" } }), true);
+  assert.equal(isNumberProvisioning({ agent: { numberStatus: "active" } }), false);
+  assert.equal(isNumberProvisioning({ agent: { numberStatus: "none" } }), false);
+  assert.equal(isNumberProvisioning(undefined), false);
+  assert.equal(isNumberProvisioning({}), false);
+});
+
+// Drift-Guard (G22): der Frontend-Spiegel muss exakt dem Backend-Enum entsprechen --
+// sonst faerbt eine neue Backend-Status-Variante den Chip still falsch.
+test("NUMBER_STATUS spiegelt NUMBER_DISPLAY_STATUS (kein Drift)", () => {
+  assert.deepEqual(NUMBER_STATUS, NUMBER_DISPLAY_STATUS);
 });
 
 // cardStatus ist die Contract-Grenze zur API fuer state.hasCard. Sichtbarkeits-
