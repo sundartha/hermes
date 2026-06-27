@@ -478,6 +478,24 @@ export function seedBootstrapPrivateNumber(s, rawOwnerNumber, tenantId) {
   return true;
 }
 
+// Bindet die Owner-OAuth-Identitaet (WorkOS sub) idempotent an den Bootstrap-Tenant
+// (AM6 G4) ueber das I8-additive idpSubject-Feld. Geschwister zu seedBootstrapPrivateNumber:
+// set-if-absent (eine per Self-Service/Web-Login gebundene Identitaet gewinnt), config-frei
+// (rawSub durchgereicht), kein IO. resolveTenant findet danach den Tenant mit der aktiven
+// Nummer ueber den sub-Claim. Minimaler Sanity-Guard (getrimmt, nicht-leer) statt Voll-
+// Validierung: der Wert ist Owner-TRUSTED Config, und resolveTenant macht exakt-match
+// (ein Muellwert loest fail-closed schlicht nichts auf). Liefert true NUR bei echter
+// Mutation -> der pg-Aufrufer flusht dann gezielt die tenant-Tabelle. Fehlender Owner /
+// schon gebunden / leer -> false (kein Seed, kein Throw).
+export function seedBootstrapIdpSubject(s, rawSub, tenantId) {
+  const owner = findTenant(s, tenantId);
+  if (!owner || owner.idpSubject) return false; // fehlt / schon gebunden -> kein Seed
+  const sub = typeof rawSub === "string" ? rawSub.trim() : "";
+  if (!sub) return false; // leere/fehlende Env -> kein Seed (fail-closed)
+  owner.idpSubject = sub;
+  return true; // mutiert -> pg flusht die tenant-Tabelle
+}
+
 // ---- Onboarding / Number-Lifecycle (zahlungsfrei, Cap statt Stripe) ----
 // Reine State-Machine + Datenschicht: Tenant registrieren, Nummer anfragen,
 // validierte Zustandsuebergaenge. KEIN Provider-Kauf (Live-API) und KEIN IO hier

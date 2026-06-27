@@ -56,6 +56,18 @@ export function internalIdentity(req) {
   return typeof id === "string" && id ? id : null;
 }
 
+// AM6: gateway-aufgeloester Request-Tenant fuer den In-Process-MCP-Tool-Aufruf. Das /mcp-
+// Gateway loest die Identitaet EINMAL aus dem verifizierten JWT (req.auth.sub) auf und reicht
+// das ERGEBNIS als X-Internal-Tenant herein; die REST-Tools muessen nicht aus email-first
+// re-aufloesen (schliesst die in requestTenant dokumentierte sub/email-Divergenz). Nur von
+// einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert (isTrustedLocalCaller) -
+// ueber den Render-Proxy faelschbar und ignoriert. Body-Felder NIE als Tenant nutzen.
+export function internalTenant(req) {
+  if (!isTrustedLocalCaller(req)) return null;
+  const t = req.headers["x-internal-tenant"];
+  return typeof t === "string" && t ? t : null;
+}
+
 // requestedBy-Marker fuer den Owner (localhost/stdio ohne Identitaet).
 export const OWNER_ID = "owner";
 // Sentinel fuer ein verifiziertes Token OHNE email UND sub: bewusst NICHT Owner
@@ -108,13 +120,20 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   //       Single-Operator-Kanal) -> explizite Bootstrap-Bindung (P3, singleTenantBootstrap;
   //       vormals roher BOOTSTRAP_TENANT_ID-Constant-Return). VORHANDENE, aber
   //       unbekannte/leere Identitaet -> TENANT_REJECT (resolveTenant liefert null).
-  // Hinweis (I5-Vorbereitung): der REST-X-Internal-Identity-Kanal traegt heute
-  // email-first (mcp-tools), die Tenant-Achse keyt aber auf sub. I4 nutzt sub nur
-  // auf dem /mcp-Pfad (req.auth direkt); die REST-seitige sub-Durchreichung folgt
-  // in I5, wenn ein Lesepfad sie tatsaechlich filtert.
+  // Hinweis (AM6, umgesetzt): der REST-X-Internal-Identity-Kanal traegt email-first
+  // (mcp-tools, Profile-Achse), die Tenant-Achse keyt aber auf sub. Statt die REST-
+  // Identitaet sub-seitig neu aufzuloesen, reicht das /mcp-Gateway den BEREITS
+  // aufgeloesten Tenant als X-Internal-Tenant durch (internalTenant, s.u.); der
+  // Lesepfad get_my_number unter MULTI_TENANT konsumiert ihn -> die sub/email-
+  // Divergenz verschwindet an EINER autoritativen Aufloesung am JWT.
   function requestTenant(req) {
     if (!config.multiTenant) return singleTenantBootstrap();
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
+    // AM6: am /mcp-Gateway bereits aufgeloester Tenant (X-Internal-Tenant, trusted-
+    // localhost). Analog req.tenant eine Vorab-Aufloesung -> direkt zurueck, kein zweiter
+    // resolveTenant. fail-closed: traegt der Header TENANT_REJECT, bleibt es Reject (NIE Owner).
+    const forwarded = internalTenant(req);
+    if (forwarded) return forwarded;
     const sub = req.auth ? req.auth.sub : null;
     const internal = req.auth ? null : internalIdentity(req);
     // FEHLENDE Identitaet (kein req.auth UND kein localhost-internal, also der
@@ -149,6 +168,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   return {
     isLocalSocket,
     internalIdentity,
+    internalTenant,
     requestTenant,
     requireTenant,
     tenantOwnsCall,

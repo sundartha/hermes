@@ -1641,11 +1641,16 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   // E-Mail wird gehasht (T-P0-7): dieses Diagnose-Log laeuft pro Request und landet
   // im Render-stdout - die Klartext-Adresse waere PII at rest. Der forensische
   // Identitaets-Nachweis bleibt vollstaendig im audit()-Trail (requestedBy).
+  // AM6: Tenant EINMAL aus dem verifizierten JWT aufloesen (req.auth.sub) und an die
+  // In-Process-Tools reichen (scopedTenant als X-Internal-Tenant), damit der REST-Hop
+  // nicht aus der email-first Identitaet re-aufloest (sub/email-Divergenz). Flag aus ->
+  // requestTenant === BOOTSTRAP_TENANT_ID (byte-identisch).
+  const scopedTenant = requestTenant(req);
   if (req.auth)
     console.log(
       "[mcp]",
       req.auth.email ? hashEmail(req.auth.email) : "anonym",
-      `tenant=${requestTenant(req)}`,
+      `tenant=${scopedTenant}`,
       req.body?.method || "",
     );
   // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub
@@ -1667,7 +1672,7 @@ app.post("/mcp", mcpAuth, async (req, res) => {
     // vollstaendige capabilityDeclaresUi-Mechanismus ist im Seam getestet und greift,
     // sobald der Transport stateful wird (eigener Schritt, nicht P1).
     const uiHost = { enabled: config.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
-    registerTools(server, { identity, allowCalendar: profile.allowCalendar, uiHost });
+    registerTools(server, { identity, scopedTenant, allowCalendar: profile.allowCalendar, uiHost });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       transport.close();
