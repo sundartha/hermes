@@ -45,6 +45,14 @@ export function configFatalErrors() {
   return fatalConfigErrors.slice();
 }
 
+// Produktions-Erkennung: Render setzt RENDER_EXTERNAL_URL automatisch -> echtes
+// oeffentliches Hosting. EINE Quelle des Diskriminators (G5). Call-time gelesen, damit
+// productionFootguns/assertConfig denselben Ausdruck treffen, auch wenn ein Test das
+// Hosting per process.env simuliert (config-prod-footguns).
+function detectProduction() {
+  return !!process.env.RENDER_EXTERNAL_URL;
+}
+
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -172,6 +180,10 @@ export const config = {
   port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
   publicUrl: (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, ""),
+  // Import-Zeit-Snapshot der Produktions-Erkennung fuer Laufzeit-Konsumenten (z.B. der
+  // /mcp-Auth-Bypass-Gate in auth.js). productionFootguns/assertConfig nutzen denselben
+  // Begriff call-time ueber detectProduction() (injizierbarer Test-Seam).
+  isProduction: detectProduction(),
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: (process.env.SEND_SMS_SUMMARY || "true") === "true",
@@ -296,7 +308,8 @@ export const config = {
   mcpAuthToken: process.env.MCP_AUTH_TOKEN || "",
   // Auth-Modus fuer /mcp:
   //   "" (leer, Default) = Legacy/fail-closed: mit MCP_AUTH_TOKEN gilt Bearer-Token,
-  //                        ohne Token ist /mcp nur von localhost erreichbar.
+  //                        ohne Token ist /mcp nur von localhost erreichbar - in Produktion
+  //                        (RENDER_EXTERNAL_URL) gar nicht (AM1: kein Socket-Bypass, 401).
   //   "token"            = statisches Bearer-Token erzwingen (curl/Tests; claude.ai kann das NICHT).
   //   "oauth"            = OAuth 2.1 Resource Server (Produktion, claude.ai-Login-Flow).
   //   "off"              = offen ohne jede Pruefung (nur lokale Demos!).
@@ -378,7 +391,7 @@ function isInsecureHttpIssuer(issuerUrl) {
 // dieselben Punkte erlaubte Warnungen. Reine Funktion (cfg + isProduction
 // injizierbar) -> unit-testbar ohne Spawn. Diagnose nennt nur Var-Namen, NIE Werte
 // (kein Secret-Leak; betroffene Vars sind ohnehin Schalter/Presence).
-export function productionFootguns(cfg = config, isProduction = !!process.env.RENDER_EXTERNAL_URL) {
+export function productionFootguns(cfg = config, isProduction = detectProduction()) {
   if (!isProduction) return [];
   const errors = [];
   if (!cfg.dashboardPassword)
@@ -448,7 +461,7 @@ export function assertConfig() {
   //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
   //  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete
   //    Auth-/Signatur-Gates. Lokal liefert productionFootguns() ein leeres Array.
-  const isProduction = !!process.env.RENDER_EXTERNAL_URL;
+  const isProduction = detectProduction();
   const fatal = configFatalErrors().concat(productionFootguns(config, isProduction));
   if (missing.length || fatal.length) {
     console.error("\n[Konfiguration fatal] Boot wird verweigert:");
