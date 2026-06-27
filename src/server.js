@@ -53,13 +53,12 @@ import {
   markProvisioningJob,
   setTenantGeo,
   findNumber,
-  tenantHasLiveNumber,
-  tenantGeo,
 } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
+import { requestNumberForPaidTenant } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
@@ -69,6 +68,7 @@ import { E164, invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
+import { PLAN_CATALOG } from "./plans.js";
 import {
   makeWebAuthRoutes,
   makeAdminRoutes,
@@ -76,6 +76,7 @@ import {
   makeAccounts,
   makeSessions,
   webAuth,
+  webAuthAllowPending,
   adminOnly,
 } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
@@ -130,6 +131,10 @@ const BODY_LIMIT = "100kb";
 // Exemption: ein frisch eingeloggter (suspendierter) Tenant landet hier (zeigt
 // "Choose your plan"), NICHT auf "/" (Owner-Dashboard hinter Basic-Auth = Sackgasse).
 const CUSTOMER_PORTAL_PATH = "/tenant.html";
+// P5: Ziel des Landing-Redirects (kein Magic-String, G25). "/" hat kein Index ->
+// 302 auf den Login (= Registrierung, Strategie R2). Pfad lebt auf dem Gateway
+// (makeWebAuthRoutes GET /auth/login), nicht auf der Static Site.
+const LOGIN_PATH = "/auth/login";
 // W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
 // den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
@@ -153,7 +158,22 @@ app.use((err, _req, res, next) => {
 // /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
 // /healthz (Keep-Alive) und localhost (interne MCP-Tools).
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
+
+// ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
+// AUTH-AUSNAHME (Regel 3, begruendet): bewusst VOR der Basic-Auth gemountet, ohne
+// Login erreichbar - exakt wie /healthz. Liefert NUR den oeffentlichen Tarif-Katalog
+// (Preise/Leistungen, identisch zu www.sundartha.com/preise) - KEINE Tenant-Daten,
+// KEINE Secrets, KEINE PII, kein Schreibpfad. SSoT: src/plans.js (Marketing-Spiegel
+// apps/web/src/lib/plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
+app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
+
 registerWellKnown(app);
+
+// P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
+// Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
+// Basic-Auth + express.static gemountet wie /auth/*; traegt keine Tenant-Daten, braucht
+// keine Session - daher unkonditional (greift auch ohne Web-Login-Infra).
+app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
 
 // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
 // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
@@ -174,6 +194,13 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     const auditStore = makeAuditStore(portalRunner);
     const portalStore = makePortalStore(portalRunner);
     const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
+    // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst
+    // 403-Deadlock). Gleiche Session-Mechanik, nur das Status-Gate ist gelockert (web-auth.js).
+    const webAuthPendingMw = webAuthAllowPending({
+      secret: config.sessionSecret,
+      sessions,
+      accounts,
+    });
     const adminMw = adminOnly({ adminEmails: config.adminEmails });
     const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
     app.use("/auth", loginRateLimiter);
@@ -228,10 +255,12 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         makeSelfServiceRoutes({
           store,
           webAuthMw,
+          webAuthPendingMw,
           audit,
           config,
           billing: stripeBilling,
           accounts,
+          provision: triggerTenantProvisioning,
         }),
       );
     }
@@ -1439,19 +1468,18 @@ async function queueProvisioning(numberId, tenantId) {
 // (Invariante 4): hat der Tenant schon eine lebende Nummer -> No-op (Webhook-Retry/Folge-
 // 'updated' kaufen nie doppelt). Land aus dem Tenant-Geo (onboard) mit config-Fallback;
 // Sprache aus dem Land (eine Quelle, wie onboard). Geld-/Kauf-Invarianten (Hold-vor-Order,
-// kein active ohne Capture, Rollback) bleiben in provisionNumber. Diagnose PII-frei
-// (tenantId/Grund) ueber console - applyStripeWebhook bekommt keinen req-Kanal hierfuer.
+// kein active ohne Capture, Rollback) bleiben in provisionNumber. Ein geblockter Kauf
+// (Cap/persist_error) landet PII-frei (tenantId/Grund) im Audit-Trail (BK3); der Trigger
+// hat keinen req-Kanal, daher req=null (audit markiert die Quelle als "system").
 async function triggerTenantProvisioning(tenantId) {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      if (tenantHasLiveNumber(s, tenantId)) return { ok: false, reason: "already_provisioned" };
-      const country = tenantGeo(s, tenantId).country || config.provisioningCountry;
-      const r = requestNumber(s, {
+      // Decision-Core (Guard + requestNumber) liegt jetzt in provision-trigger.js -
+      // EINE Quelle fuer Produktion und Test (G5). save bleibt hier (IO, P15).
+      const r = requestNumberForPaidTenant(s, {
         tenantId,
-        provider: PROVIDER.TELNYX,
-        country,
-        language: languageForCountry(country),
+        fallbackCountry: config.provisioningCountry,
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
@@ -1463,8 +1491,14 @@ async function triggerTenantProvisioning(tenantId) {
       return { ok: false, reason: "persist_error" };
     });
   if (!reqRes.ok) {
+    // already_provisioned ist ein erwarteter idempotenter No-op (Webhook-Retry/Folge-
+    // event) - kein Audit-Wert. Jeder andere Grund (tenant_cap/global_cap = Kosten-
+    // Notbremse, persist_error) ist forensisch relevant: kein Kauf trotz bezahltem Abo
+    // -> in den Audit-Trail (Spec BK3: "Limit ueberschritten -> kein Kauf, Audit-Eintrag").
+    // req=null -> audit-util markiert die Quelle als "system" (kein HTTP-Kontext im Webhook-
+    // Trigger). Nur die tenantId + Grund-Code, kein Secret/PII (H4).
     if (reqRes.reason !== "already_provisioned")
-      console.warn(`[webhook-provision] kein Kauf tenant=${tenantId} grund=${reqRes.reason}`);
+      audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${reqRes.reason}`);
     return;
   }
   // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf.

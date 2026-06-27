@@ -39,3 +39,17 @@
   Vor dem Umsetzen den Plan gegen den aktuellen Code abgleichen - hier u.a.: den
   in Phase 1 gesetzten Fail-closed-Default von `/mcp` NICHT durch den im Plan
   vorgeschlagenen offenen `off`-Default ersetzen.
+
+## BK-Chain (Buchung/Pricing-Funnel)
+
+- **Seltener Suite-Flake (401 statt 403) unter hoher node:test-Parallelitaet**:
+  Beim BK5-Merge-Lauf failte einmalig ein Auth-Assert (`actual:401, expected:403`),
+  5 direkte Reruns danach 1089/1089 gruen. Ursache ist KEIN Produkt-Bug und KEIN
+  shared State: `test/pg-helpers.js makePgTestStore()` baut pro Aufruf ein frisches
+  `new PGlite()` (kein Singleton, `app.listen(0)`, kein env-Mutate) - jede Suite voll
+  isoliert. BK5 fuegte 0 src-Files hinzu (nur Test + Report), das Produkt-Verhalten ist
+  unveraendert. Der Flake ist ein seltenes Test-Infra-Timing-Artefakt (viele pglite-WASM-
+  Instanzen booten gleichzeitig -> eine Session-Resolution kommt spaet -> fail-closed 401
+  statt rollen-403). Lehre: bei einmaligem Auth-Flake erst `git show --stat HEAD` (src
+  beruehrt?) + Re-Runs, bevor man eine Race-Hypothese im Produkt-Code jagt. Falls die Rate
+  steigt: node:test-Concurrency fuer die pglite-Suiten senken, nicht den Auth-Pfad anfassen.

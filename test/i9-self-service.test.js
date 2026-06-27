@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { GREETING_TEMPLATES } from "../src/self-service.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
@@ -118,6 +118,7 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
   });
 
   const webAuthMw = webAuth({ secret: SECRET, sessions, accounts });
+  const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const app = express();
   app.use(express.json());
   // Eigenes Config-Objekt (NICHT das Singleton kippen, F.I.R.S.T./Independent): so ist
@@ -127,9 +128,11 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
     makeSelfServiceRoutes({
       store,
       webAuthMw,
+      webAuthPendingMw,
       audit: () => {},
       config: cfg,
       billing: fakeBilling(),
+      provision: async () => {},
     }),
   );
   const server = await new Promise((r) => {
@@ -139,6 +142,7 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
   return {
     base: `http://127.0.0.1:${server.address().port}`,
     store,
+    accounts,
     bucketB,
     ownerCallId: ownerCall.id,
     bCallId: bCall.id,
@@ -426,9 +430,14 @@ test("(g5) Fail-closed: ohne Session-Cookie -> 401 auf beiden Pay3-Routen", asyn
   }
 });
 
-test("(g6) Fail-closed: suspendierter Tenant -> 403 auf setup-checkout", async () => {
+test("(g6) Fail-closed: GESCHLOSSENER Tenant -> 403 auf setup-checkout (P5: suspended darf, closed nicht)", async () => {
   const s = await setup();
   try {
+    // P5: webAuthAllowPending laesst suspended (Selbst-Aktivierung) an die Pay3-/Aktivierungs-
+    // Routen, blockt aber closed HART - auf Middleware-Ebene (403 VOR dem Handler, kein
+    // ensureCustomer, kein Store-Schreiben). Der frisch suspendierte Tenant wird dafuer auf
+    // closed gesetzt; ein suspended-darf-durch-Fall ist in p5-onboarding-funnel.test.js (Case 4).
+    await s.accounts.setStatus(TENANT_SUSPENDED, "closed");
     const res = await postSetupCheckout(s, s.cookieSuspended);
     assert.equal(res.status, 403);
   } finally {

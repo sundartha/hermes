@@ -128,7 +128,7 @@ export const config = {
   // (wie voiceMinuteCostCents); Live mit dem Provider-SMS-Tarif abgleichen.
   smsCostCents: numEnv("SMS_COST_CENTS", process.env.SMS_COST_CENTS, { fallback: 0, min: 0 }),
   // ---- Abo-Buchung (Stripe Recurring, W4) ----
-  // Stripe-Price-Ids (recurring monatlich, USD) je Tier. Leer = Tier nicht buchbar
+  // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer = Tier nicht buchbar
   // (priceIdForPlan -> null -> Route 500, KEIN Boot-Stop). Opake price_-Referenzen,
   // KEINE Secrets.
   stripeStarterPriceId: process.env.STRIPE_STARTER_PRICE_ID || "",

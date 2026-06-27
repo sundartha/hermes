@@ -9,10 +9,13 @@
 // Store-Fassade). Diese Schicht persistiert nur die Abo-Referenzen am Tenant.
 
 import { hasCardOnFile } from "../self-service.js";
+import { CATALOG_SLUGS } from "../plans.js";
 
-// Plan-slug -> Stripe-Price-Id-Config-Key (kein Magic-String, G25). Eine Quelle fuer
-// die erlaubten Slugs; ein unbekannter Slug wird fail-closed abgelehnt (kein Default).
-export const PLAN_SLUGS = Object.freeze(["starter", "business"]);
+// Buchbare Plan-Slugs = die EINE Quelle aus dem Plan-Katalog (src/plans.js, SSoT).
+// Kein zweites Slug-Literal hier (G5/S2): der Katalog definiert die Tiers, diese
+// Schicht nur die Tier->Stripe-Price-Bindung (PLAN_PRICE_CONFIG_KEY). Unbekannter
+// Slug bleibt fail-closed (createTenantSubscription -> unknown_plan).
+export const PLAN_SLUGS = CATALOG_SLUGS;
 
 // Plan-slug -> der config-Schluessel mit der Stripe-Price-Id. Lokal gehalten (G13):
 // die Tier->Price-Zuordnung gehoert in diese Schicht, nicht in config.js.

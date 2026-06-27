@@ -3,7 +3,7 @@
 // PKCE mit crypto (kein neuer Dep). Niemals Tokens/Secrets loggen.
 import crypto from "crypto";
 import { Router } from "express";
-import { tenantIdForSubject } from "./store/defaults.js";
+import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
@@ -360,37 +360,78 @@ export function makeAccounts(runner) {
   };
 }
 
+// ---- resolveWebSession (gemeinsame Auth-Mechanik, G5) ----------------
+// Cookie -> Session -> Account. Liefert {acct, sub} bei gueltiger Session, sonst null
+// (Aufrufer -> 401). KEIN Status-Gate hier - das ist die Politik der jeweiligen
+// Middleware. EINE Quelle fuer Cookie/Session/Account-Pruefung, damit webAuth und
+// webAuthAllowPending nicht auseinanderdriften. Fail-closed: kein Detail-Leak, kein
+// Token-/Cookie-Logging (der Aufrufer faengt unerwartete Fehler generisch ab).
+async function resolveWebSession({ secret, sessions, accounts }, req) {
+  const raw = readCookie(req, "session");
+  const sessionId = raw ? verifyValue(raw, secret) : null;
+  if (!sessionId) return null;
+  const row = await sessions.get(sessionId);
+  if (!row || row.invalidated_at != null || new Date(row.expires_at) <= new Date()) return null;
+  const acct = await accounts.resolve(row.sub);
+  if (!acct) return null;
+  return { acct, sub: row.sub };
+}
+
+// Request-Tenant-Kontext aus der aufgeloesten Session (eine Quelle fuer die req.tenant-
+// Form). status zusaetzlich exponiert (P5): die gefuehrte Aktivierung (billing/status)
+// liest die Lebenszyklus-Stufe, ohne die active-only /state-View zu oeffnen.
+const tenantContextOf = ({ acct, sub }) => ({
+  tenantId: acct.tenantId,
+  sub,
+  role: acct.role,
+  email: acct.email,
+  status: acct.status,
+});
+
+// Status, die die suspended-erreichbaren Self-Aktivierungs-Routen passieren duerfen:
+// active (normal) ODER suspended (frisch eingeloggt, darf sich selbst aktivieren). Alles
+// andere - closed (hart gesperrt) oder unerwartet - fail-closed (403). Benannte Quelle (G25).
+const PENDING_ALLOWED_STATUS = Object.freeze(
+  new Set([TENANT_STATUS.ACTIVE, TENANT_STATUS.SUSPENDED]),
+);
+
 // ---- webAuth ---------------------------------------------------------
 // Express-Middleware: prueft Session-Cookie (signiert), laedt Session + Account,
 // setzt req.tenant. Fail-closed: kein Detail-Leak in Fehlerkoerpern, kein Token-
-// oder Cookie-Logging. Unerwartete Fehler -> 401.
+// oder Cookie-Logging. Unerwartete Fehler -> 401. Status-Gate: nur active passiert
+// (suspended/closed -> 403); die suspended-erreichbare Variante ist webAuthAllowPending.
 export function webAuth(deps) {
-  const { secret, sessions, accounts } = deps;
-
   return async function webAuthMiddleware(req, res, next) {
     try {
-      // 1. Cookie lesen und Signatur pruefen
-      const raw = readCookie(req, "session");
-      const sessionId = raw ? verifyValue(raw, secret) : null;
-      if (!sessionId) return res.status(401).json({ error: "Unauthorized" });
-
-      // 2. Session laden und Gueltigkeit pruefen
-      const row = await sessions.get(sessionId);
-      if (!row) return res.status(401).json({ error: "Unauthorized" });
-      if (row.invalidated_at != null) return res.status(401).json({ error: "Unauthorized" });
-      if (new Date(row.expires_at) <= new Date())
-        return res.status(401).json({ error: "Unauthorized" });
-
-      // 3. Account laden und Status pruefen
-      const acct = await accounts.resolve(row.sub);
-      if (!acct) return res.status(401).json({ error: "Unauthorized" });
-      if (acct.status !== "active") return res.status(403).json({ error: "Forbidden" });
-
-      // 4. Tenant-Kontext am Request setzen
-      req.tenant = { tenantId: acct.tenantId, sub: row.sub, role: acct.role, email: acct.email };
+      const ctx = await resolveWebSession(deps, req);
+      if (!ctx) return res.status(401).json({ error: "Unauthorized" });
+      if (ctx.acct.status !== TENANT_STATUS.ACTIVE)
+        return res.status(403).json({ error: "Forbidden" });
+      req.tenant = tenantContextOf(ctx);
       next();
     } catch {
-      // Unerwarteter Fehler -> fail-closed, kein Detail-Leak
+      res.status(401).json({ error: "Unauthorized" });
+    }
+  };
+}
+
+// ---- webAuthAllowPending (P5) ----------------------------------------
+// Variante fuer die drei Self-Aktivierungs-Routen (setup-checkout/return/subscribe) +
+// billing/status: verlangt eine GUELTIGE Session (fail-closed: kein/abgelaufenes Cookie
+// -> 401) und bindet jede Wirkung an den EIGENEN Tenant, laesst aber suspended durch -
+// SONST koennte sich ein frisch eingeloggter Tenant nie selbst aktivieren (403-Deadlock).
+// closed/unbekannt bleibt HART gesperrt (kein Reaktivieren). Oeffnet KEINE Tenant-Daten:
+// nur active-only webAuth haengt an /state + Settings-Routen.
+export function webAuthAllowPending(deps) {
+  return async function webAuthAllowPendingMiddleware(req, res, next) {
+    try {
+      const ctx = await resolveWebSession(deps, req);
+      if (!ctx) return res.status(401).json({ error: "Unauthorized" });
+      if (!PENDING_ALLOWED_STATUS.has(ctx.acct.status))
+        return res.status(403).json({ error: "Forbidden" });
+      req.tenant = tenantContextOf(ctx);
+      next();
+    } catch {
       res.status(401).json({ error: "Unauthorized" });
     }
   };

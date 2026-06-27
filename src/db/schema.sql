@@ -6,13 +6,17 @@
 
 -- tenant: id + Lebenszyklus-status (Onboarding). KEINE stripe-Spalten (Payment
 -- uebersprungen). kyc_level additiv ab P6b4 (s.u.). status: active|suspended|closed.
+-- p6-funnel: Default 'suspended' (fail-safe). Ein status-loser INSERT sperrt damit
+-- fail-closed statt fail-open zu aktivieren. Der Owner/Bootstrap wird in seedDefaults
+-- EXPLIZIT 'active' gesetzt (Invariante O). Bestandszeilen bleiben unveraendert:
+-- ADD COLUMN IF NOT EXISTS ueberspringt die existierende Spalte (kein Backfill).
 CREATE TABLE IF NOT EXISTS tenant (
   id          TEXT PRIMARY KEY,
-  status      TEXT NOT NULL DEFAULT 'active',
+  status      TEXT NOT NULL DEFAULT 'suspended',
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 -- Forward-compat: bestehende tenant-Tabelle bekommt status nachgezogen (idempotent).
-ALTER TABLE tenant ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'suspended';
 -- Identitaets-Schicht (I8): Tenant-Name + IdP-Subject additiv, beide NULLABLE.
 -- NULL = kein eigener Wert -> leerer ownerName-Fallback "" im tenantContext (P2b: kein
 -- config.ownerName mehr); idp_subject NULL = nicht ueber resolveTenant aufloesbar.
