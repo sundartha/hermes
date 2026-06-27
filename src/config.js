@@ -347,6 +347,14 @@ export const config = {
     fallback: 3600,
     min: 0,
   }),
+  // Lebensdauer der Login-Flow-Cookies (pkce/state/oauth_state) in Sekunden. Default 30 min:
+  // grosszuegig genug fuer den E-Mail-Verifizierungs-Round-Trip (Mail oeffnen, Link klicken),
+  // aber begrenzt. Laeuft das Cookie dennoch ab, faengt die Callback-Recovery (AM2) es benign
+  // ab (Flow-Neustart statt 400). Separat von sessionTtlSeconds (Browser-Session).
+  loginCookieTtlSeconds: numEnv("LOGIN_COOKIE_TTL_SECONDS", process.env.LOGIN_COOKIE_TTL_SECONDS, {
+    fallback: 1800,
+    min: 0,
+  }),
 
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)

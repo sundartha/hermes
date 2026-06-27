@@ -61,6 +61,7 @@ export const BASE_ENV = {
   PUBLIC_URL: "https://agent.test",
   DASHBOARD_PASSWORD: "",
   MCP_AUTH_TOKEN: "",
+  LOGIN_COOKIE_TTL_SECONDS: "1800", // AM2: neutral gepinnt (sonst leakt lokale .env in Spawn-Tests)
   ALLOWED_NUMBERS: "",
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
