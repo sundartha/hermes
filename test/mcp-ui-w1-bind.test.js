@@ -19,9 +19,15 @@ import {
   WIDGET_CALL_STATUS,
   WIDGET_CALL_RESULT,
   WIDGET_TRANSCRIPT,
+  WIDGET_AGENT_STATUS,
 } from "../src/ui/widget-catalog.js";
 
-const WIDGET_IDS = [WIDGET_CALL_STATUS, WIDGET_CALL_RESULT, WIDGET_TRANSCRIPT];
+const WIDGET_IDS = [
+  WIDGET_CALL_STATUS,
+  WIDGET_CALL_RESULT,
+  WIDGET_TRANSCRIPT,
+  WIDGET_AGENT_STATUS,
+];
 
 // Minimal-Fake der DOM-Oberflaeche, die widget-bind.js nutzt: querySelectorAll,
 // createElement, textContent (Setter leert Kinder wie echtes DOM), firstChild,

@@ -2,7 +2,12 @@
 // Die Tools sprechen mit der REST-API des Gateways.
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
-import { WIDGET_CALL_STATUS, WIDGET_CALL_RESULT, WIDGET_TRANSCRIPT } from "./ui/adapters/mcp-native.js";
+import {
+  WIDGET_CALL_STATUS,
+  WIDGET_CALL_RESULT,
+  WIDGET_TRANSCRIPT,
+  WIDGET_AGENT_STATUS,
+} from "./ui/adapters/mcp-native.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
@@ -124,6 +129,50 @@ const TRANSCRIPT_OUTPUT = {
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
+};
+
+// Berechtigungen als EIN flacher String (passt in genau einen data-mcp-Slot, W1-Binding
+// rendert Nicht-Arrays via textContent). EINE Quelle - auch der Stufe-0-Textblock liest
+// data.permissions (keine Duplizierung der allow*-Formatierung, G5/S2).
+function permissionsSummary(settings) {
+  return (
+    `Kalender=${settings.allowCalendar}, Buchen=${settings.allowBooking}, ` +
+    `Summaries=${settings.allowSummaries}, PersoenlicheDaten=${settings.allowPersonalData}, ` +
+    `Bankdaten=${settings.allowBankData}`
+  );
+}
+
+// Daten-Kontrakt get_agent_status (W3-Spec): GENAU diese flachen Eigen-Felder duerfen
+// nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. number/
+// owner koennen fail-closed leer sein (kein aktiver Nummern-Seed / Tenant ohne
+// ownerName) -> auf null normalisiert, damit der Schluessel erhalten bleibt und das
+// Schema (nullable) NICHT zu isError fuehrt. Kein Secret/internes Feld passiert hier.
+function pickAgentStatus(s) {
+  return {
+    number: s.agent.number ?? null,
+    owner: s.agent.owner ?? null,
+    voiceEngine: s.agent.voiceEngine,
+    model: s.agent.model,
+    calls: s.usage.calls,
+    costEur: s.usage.costEur,
+    maxBudgetEur: s.usage.maxBudgetEur,
+    allowedNumbers: s.agent.allowedNumbers || [],
+    permissions: permissionsSummary(s.settings),
+  };
+}
+
+// outputSchema fuer get_agent_status: validiert GENAU die Whitelist (Stufe 0
+// schema-validiert). number/owner nullable (fail-closed leer ist ein gueltiger Zustand).
+const AGENT_STATUS_OUTPUT = {
+  number: z.string().nullable(),
+  owner: z.string().nullable(),
+  voiceEngine: z.string(),
+  model: z.string(),
+  calls: z.number(),
+  costEur: z.number(),
+  maxBudgetEur: z.number(),
+  allowedNumbers: z.array(z.string()),
+  permissions: z.string(),
 };
 
 // ctx (Phase 2): { identity, allowCalendar }. identity wird per Closure an jeden
@@ -379,19 +428,36 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
       );
     });
 
-  tool(
+  // Stufe 0 (Text byte-identisch zum Bestand, Backward-Compat) + structuredContent
+  // (Whitelist) + Stufe 1 (agent-status Widget) NUR bei faehigem Host (enableWidgetUi).
+  // Der Textblock liest dieselben gewhitelisteten Daten (data.*) - eine Quelle, keine
+  // Duplizierung der Formatierung (permissions/allowlist).
+  uiTool(
     "get_agent_status",
-    "Status des Telefon-Agenten: Rufnummer, Voice-Engine, Modell, Kosten/Budget, Berechtigungen.",
-    {},
+    {
+      description:
+        "Status des Telefon-Agenten: Rufnummer, Voice-Engine, Modell, Kosten/Budget, Berechtigungen.",
+      inputSchema: {},
+      outputSchema: AGENT_STATUS_OUTPUT,
+      ...enableWidgetUi(WIDGET_AGENT_STATUS),
+    },
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { agent: "object", usage: "object", settings: "object" });
-      return text(
-        `Agent-Nummer: ${s.agent.number}\nBesitzer: ${s.agent.owner}\nVoice-Engine: ${s.agent.voiceEngine}\nModell: ${s.agent.model}\n` +
-          `Calls bisher: ${s.usage.calls}\nKI-Kosten: ${s.usage.costEur.toFixed(3)} EUR von max. ${s.usage.maxBudgetEur} EUR\n` +
-          `Allowlist: ${s.agent.allowedNumbers?.join(", ") || "(leer - Outbound gesperrt)"}\n` +
-          `Berechtigungen: Kalender=${s.settings.allowCalendar}, Buchen=${s.settings.allowBooking}, Summaries=${s.settings.allowSummaries}, PersoenlicheDaten=${s.settings.allowPersonalData}, Bankdaten=${s.settings.allowBankData}`,
-      );
+      const data = pickAgentStatus(s); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              `Agent-Nummer: ${data.number}\nBesitzer: ${data.owner}\nVoice-Engine: ${data.voiceEngine}\nModell: ${data.model}\n` +
+              `Calls bisher: ${data.calls}\nKI-Kosten: ${data.costEur.toFixed(3)} EUR von max. ${data.maxBudgetEur} EUR\n` +
+              `Allowlist: ${data.allowedNumbers.join(", ") || "(leer - Outbound gesperrt)"}\n` +
+              `Berechtigungen: ${data.permissions}`,
+          },
+        ],
+        structuredContent: data,
+      };
     },
   );
 }
