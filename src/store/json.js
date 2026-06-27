@@ -87,6 +87,7 @@ function finishLoad() {
   // bleiben config-frei: erster Tenant via scripts/bootstrap-tenant.js, Rest ueber
   // Self-Service. Leere OWNER_NUMBER_SEED -> kein Seed -> Boot bleibt fail-closed.
   seedOwnerNumberFromEnv();
+  seedOwnerIdpSubjectFromEnv();
   return state;
 }
 
@@ -199,6 +200,14 @@ function seedOwnerNumberFromEnv() {
   // intern gegen dasselbe PROVIDER-Set (gewollte Defense-in-Depth, damit das Primitiv
   // eigenstaendig sicher bleibt) - aus diesem Aufrufpfad kann das innere Gate nie greifen.
   ops.seedBootstrapNumberFromConfig(state, norm, BOOTSTRAP_TENANT_ID, provider);
+}
+
+// AM6: Owner-OAuth-Identitaet aus OWNER_IDP_SUBJECT idempotent an den Bootstrap-Tenant
+// binden (set-if-absent). Muster wie seedOwnerNumberFromEnv (config-gegated, fail-safe,
+// in-memory; re-seedet jeden Boot, idempotent). Leer -> kein Seed (Tenant bleibt ohne
+// Bindung -> resolveTenant fail-closed). Loggt KEINE Identitaet.
+function seedOwnerIdpSubjectFromEnv() {
+  ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID);
 }
 
 export function save() {

@@ -19,6 +19,7 @@ import {
   isLocalSocket,
   isTrustedLocalCaller,
   internalIdentity,
+  internalTenant,
   makeRequestTenant,
   TENANT_REJECT,
 } from "../src/request-tenant.js";
@@ -140,6 +141,66 @@ test("internalIdentity: Loopback-Socket + X-Forwarded-For -> null (Render-Proxy,
   assert.equal(internalIdentity(req), null);
 });
 
+// === internalTenant (AM6) ======================================================
+// Geschwister zu internalIdentity, aber fuer die Tenant-Achse (X-Internal-Tenant): das
+// /mcp-Gateway reicht den bereits aufgeloesten Tenant herein. Dieselbe Vertrauensgrenze.
+
+test("internalTenant: localhost + Header-String -> Tenant", () => {
+  const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-tenant": "B" } });
+  assert.equal(internalTenant(req), "B");
+});
+
+test("internalTenant: localhost ohne Header -> null", () => {
+  assert.equal(internalTenant(reqWith({ remoteAddress: "::1", headers: {} })), null);
+});
+
+test("internalTenant: localhost + leerer Header -> null (leerer String ist falsy)", () => {
+  const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-tenant": "" } });
+  assert.equal(internalTenant(req), null);
+});
+
+test("internalTenant: localhost + nicht-String-Header -> null (typeof-Guard)", () => {
+  const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-tenant": ["B", "C"] } });
+  assert.equal(internalTenant(req), null);
+});
+
+test("internalTenant: extern + Header gesetzt -> null (von extern faelschbar, ignoriert)", () => {
+  const req = reqWith({ remoteAddress: "203.0.113.7", headers: { "x-internal-tenant": "B" } });
+  assert.equal(internalTenant(req), null);
+});
+
+test("internalTenant: Loopback-Socket + X-Forwarded-For -> null (Render-Proxy, kein Spoofing)", () => {
+  const req = reqWith({
+    remoteAddress: "127.0.0.1",
+    headers: { "x-internal-tenant": "B", "x-forwarded-for": "203.0.113.9" },
+  });
+  assert.equal(internalTenant(req), null);
+});
+
+// === Konsolidierungs-Invariante (S2-1) =========================================
+// internalIdentity und internalTenant teilen sich EINE Trust-Gate-/typeof-Guard-Quelle
+// (trustedLocalHeader) und duerfen sich NUR im gelesenen Header-Namen unterscheiden. Dieser
+// Tabellentest riegelt die Konsolidierung ab: divergiert ein Pfad still (z.B. ein Reader
+// verliert den Trust-Gate), schlaegt er hier fehl - die Sicherheits-Vertrauensgrenze bleibt
+// in beiden Lesepfaden lockstep.
+const TRUSTED_HEADER_READERS = [
+  ["internalIdentity", internalIdentity, "x-internal-identity"],
+  ["internalTenant", internalTenant, "x-internal-tenant"],
+];
+
+for (const [label, read, header] of TRUSTED_HEADER_READERS) {
+  test(`${label}: localhost + Header -> Wert, identische Trust-Gate-Semantik`, () => {
+    const local = (h) => reqWith({ remoteAddress: "127.0.0.1", headers: h });
+    assert.equal(read(local({ [header]: "B" })), "B");
+    // Trust-Gate: Loopback + X-Forwarded-For (Render-Proxy) -> ignoriert, NIE faelschbar.
+    assert.equal(read(local({ [header]: "B", "x-forwarded-for": "1.2.3.4" })), null);
+    // Extern -> ignoriert; leer/nicht-String -> null (typeof-Guard).
+    assert.equal(read(reqWith({ remoteAddress: "203.0.113.7", headers: { [header]: "B" } })), null);
+    assert.equal(read(local({ [header]: "" })), null);
+    assert.equal(read(local({ [header]: ["B", "C"] })), null);
+  });
+}
+
 // === isTrustedLocalCaller (AM1) ================================================
 // Hinter Render erscheint externer Traffic als Loopback-Socket -> isLocalSocket allein
 // taugt NICHT als Vertrauensgrenze. Vertrauenswuerdig = echtes Loopback UND nicht ueber
@@ -200,20 +261,38 @@ test("requestTenant: Flag AN + sub vorhanden, resolveTenant=null -> TENANT_REJEC
   });
 });
 
-test("requestTenant: Flag AN + auth ohne sub -> Bootstrap-Bindung (fehlende Identitaet)", () => {
-  // Verifiziertes Token ohne sub-Claim: req.auth truthy, sub null -> internal wird
-  // NICHT konsultiert (req.auth ? null) -> !sub && !internal -> explizite Bootstrap-
-  // Bindung (singleTenantBootstrap, V4-Kontrakt). NICHT REJECT - der Single-Operator-
-  // Kanal ohne Identitaet ist der vertraute Owner-Pfad.
+test("requestTenant: Flag AN + verifiziertes Token OHNE sub -> TENANT_REJECT (NIE Owner)", () => {
+  // FAIL-CLOSED-REGRESSION (AM6-Blocker R2): jose erzwingt den sub-Claim nicht, ein
+  // verifiziertes REMOTE-OAuth-Token kann req.auth tragen, aber req.auth.sub===undefined.
+  // Das Owner-/Bootstrap-Gate haengt an der ABWESENHEIT von req.auth (!req.auth), NICHT
+  // an einem falsy sub: ein vorhandenes Token ist eine vorhandene Identitaet und darf NIE
+  // zum Owner kollabieren (sonst laese ein subloser Angreifer Owner-Transkripte und
+  // koennte place_call als Owner ausloesen). resolveTenant(null) liefert null -> REJECT.
+  const store = makeStore({ "sub-b": "B" });
+  const { requestTenant } = makeRequestTenant(store);
+  withMultiTenant(true, () => {
+    const out = requestTenant(reqWith({ auth: { email: "evil@attacker.test" } }));
+    assert.equal(out, TENANT_REJECT);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID, "subloses Token darf NIE auf Owner fallen");
+  });
+});
+
+test("requestTenant: Flag AN + subloses Token, externer Loopback+XFF -> TENANT_REJECT", () => {
+  // Wie oben, aber explizit der Render-Proxy-Pfad (Loopback-Socket + X-Forwarded-For):
+  // selbst wenn ein Angreifer X-Internal-Identity mitsendet, wird der Header verworfen
+  // (isTrustedLocalCaller=false) UND das sublose Token faellt auf REJECT, nie Owner.
   const store = makeStore();
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
-    assert.equal(
-      requestTenant(reqWith({ auth: {}, remoteAddress: "203.0.113.7" })),
-      BOOTSTRAP_TENANT_ID,
-    );
+    const req = reqWith({
+      remoteAddress: "127.0.0.1",
+      headers: { "x-forwarded-for": "203.0.113.9", "x-internal-identity": "evil@x.test" },
+      auth: { email: "evil@attacker.test" },
+    });
+    const out = requestTenant(req);
+    assert.equal(out, TENANT_REJECT);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID);
   });
-  assert.deepEqual(store.calls, [], "kein Lookup ohne Identitaet");
 });
 
 test("requestTenant: Flag AN + kein auth/tenant/internal -> Bootstrap-Bindung (localhost/stdio)", () => {
@@ -270,6 +349,44 @@ test("requestTenant: req.auth hat Vorrang vor localhost-internalIdentity-Header"
     assert.equal(requestTenant(req), "B");
   });
   assert.deepEqual(store.calls, ["sub-b"], "nur der sub-Claim wird aufgeloest, nicht der Header");
+});
+
+// --- AM6: X-Internal-Tenant Kurzschluss (gateway-aufgeloester Tenant) ---
+
+test("requestTenant: Flag AN + localhost x-internal-tenant -> direkter Tenant, KEIN resolveTenant", () => {
+  const store = makeStore({ "sub-b": "B" });
+  const { requestTenant } = makeRequestTenant(store);
+  withMultiTenant(true, () => {
+    const req = reqWith({ remoteAddress: "127.0.0.1", headers: { "x-internal-tenant": "B" } });
+    assert.equal(requestTenant(req), "B");
+  });
+  assert.deepEqual(store.calls, [], "der durchgereichte Tenant kurzschliesst (kein zweiter Lookup)");
+});
+
+test("requestTenant: Flag AN + x-internal-tenant=reject -> TENANT_REJECT (fail-closed, NIE Owner)", () => {
+  const store = makeStore();
+  const { requestTenant } = makeRequestTenant(store);
+  withMultiTenant(true, () => {
+    const req = reqWith({
+      remoteAddress: "127.0.0.1",
+      headers: { "x-internal-tenant": TENANT_REJECT },
+    });
+    const out = requestTenant(req);
+    assert.equal(out, TENANT_REJECT);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID);
+  });
+});
+
+test("requestTenant: extern + x-internal-tenant -> ignoriert (faellt auf bisherigen Pfad)", () => {
+  // Externer Socket (faelschbar) -> internalTenant null -> Kurzschluss greift NICHT.
+  // Ohne auth/internal-Identitaet bleibt der Single-Operator-Pfad: Bootstrap-Bindung.
+  const store = makeStore({ B: "B" });
+  const { requestTenant } = makeRequestTenant(store);
+  withMultiTenant(true, () => {
+    const req = reqWith({ remoteAddress: "203.0.113.7", headers: { "x-internal-tenant": "B" } });
+    assert.equal(requestTenant(req), BOOTSTRAP_TENANT_ID);
+  });
+  assert.deepEqual(store.calls, [], "externer X-Internal-Tenant wird ignoriert (kein Lookup)");
 });
 
 test("requestTenant: Web-Session (req.tenant) gueltig -> direkter Tenant, kein zweiter Lookup", () => {

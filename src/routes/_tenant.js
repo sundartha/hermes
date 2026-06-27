@@ -43,18 +43,32 @@ const isProxyForwarded = (req) => Boolean(req.headers["x-forwarded-for"]);
 // wird. Topologie-basiert, daher in Dev UND Produktion korrekt (kein Env-Schalter noetig).
 export const isTrustedLocalCaller = (req) => isLocalSocket(req) && !isProxyForwarded(req);
 
-// Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools
-// laufen im selben Prozess und rufen die localhost-REST-API mit dem verifizierten
-// X-Internal-Identity-Header (aus req.auth.email im /mcp-Handler). Der Header wird NUR
-// von einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert
+// Gemeinsame Vertrauensgrenze fuer einen vom /mcp-Gateway hereingereichten In-Process-
+// Header (internalIdentity + internalTenant). EINE Stelle, an der das Trust-Modell sitzt:
+// nur von einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert
 // (isTrustedLocalCaller: echtes Loopback OHNE Proxy-Weiterleitung) - ueber den
-// Render-Proxy (Loopback-Socket + X-Forwarded-For) ist er faelschbar und wird ignoriert
-// (-> Owner/Bootstrap). Body-Felder (requestedBy/email) NIE als Identitaet nutzen.
-export function internalIdentity(req) {
+// Render-Proxy (Loopback-Socket + X-Forwarded-For) faelschbar und ignoriert (-> null).
+// Nicht-leerer String, sonst null (ein doppelt gesetzter Header ist string[] -> typeof-
+// Guard greift). Beide oeffentlichen Reader delegieren hierher, damit eine Aenderung am
+// Trust-Modell nicht in zwei Pfaden lockstep gepflegt werden muss (G5/DIP).
+const trustedLocalHeader = (req, name) => {
   if (!isTrustedLocalCaller(req)) return null;
-  const id = req.headers["x-internal-identity"];
-  return typeof id === "string" && id ? id : null;
-}
+  const value = req.headers[name];
+  return typeof value === "string" && value ? value : null;
+};
+
+// Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools laufen im
+// selben Prozess und rufen die localhost-REST-API mit dem verifizierten X-Internal-Identity-
+// Header (aus req.auth.email im /mcp-Handler). Body-Felder (requestedBy/email) NIE als
+// Identitaet nutzen. Trust-Gate siehe trustedLocalHeader.
+export const internalIdentity = (req) => trustedLocalHeader(req, "x-internal-identity");
+
+// AM6: gateway-aufgeloester Request-Tenant fuer den In-Process-MCP-Tool-Aufruf. Das /mcp-
+// Gateway loest die Identitaet EINMAL aus dem verifizierten JWT (req.auth.sub) auf und reicht
+// das ERGEBNIS als X-Internal-Tenant herein; die REST-Tools muessen nicht aus email-first
+// re-aufloesen (schliesst die in requestTenant dokumentierte sub/email-Divergenz). Body-Felder
+// NIE als Tenant nutzen. Trust-Gate siehe trustedLocalHeader.
+export const internalTenant = (req) => trustedLocalHeader(req, "x-internal-tenant");
 
 // requestedBy-Marker fuer den Owner (localhost/stdio ohne Identitaet).
 export const OWNER_ID = "owner";
@@ -108,23 +122,33 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   //       Single-Operator-Kanal) -> explizite Bootstrap-Bindung (P3, singleTenantBootstrap;
   //       vormals roher BOOTSTRAP_TENANT_ID-Constant-Return). VORHANDENE, aber
   //       unbekannte/leere Identitaet -> TENANT_REJECT (resolveTenant liefert null).
-  // Hinweis (I5-Vorbereitung): der REST-X-Internal-Identity-Kanal traegt heute
-  // email-first (mcp-tools), die Tenant-Achse keyt aber auf sub. I4 nutzt sub nur
-  // auf dem /mcp-Pfad (req.auth direkt); die REST-seitige sub-Durchreichung folgt
-  // in I5, wenn ein Lesepfad sie tatsaechlich filtert.
+  // Hinweis (AM6, umgesetzt): der REST-X-Internal-Identity-Kanal traegt email-first
+  // (mcp-tools, Profile-Achse), die Tenant-Achse keyt aber auf sub. Statt die REST-
+  // Identitaet sub-seitig neu aufzuloesen, reicht das /mcp-Gateway den BEREITS
+  // aufgeloesten Tenant als X-Internal-Tenant durch (internalTenant, s.u.); der
+  // Lesepfad get_my_number unter MULTI_TENANT konsumiert ihn -> die sub/email-
+  // Divergenz verschwindet an EINER autoritativen Aufloesung am JWT.
   function requestTenant(req) {
     if (!config.multiTenant) return singleTenantBootstrap();
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
+    // AM6: am /mcp-Gateway bereits aufgeloester Tenant (X-Internal-Tenant, trusted-
+    // localhost). Analog req.tenant eine Vorab-Aufloesung -> direkt zurueck, kein zweiter
+    // resolveTenant. fail-closed: traegt der Header TENANT_REJECT, bleibt es Reject (NIE Owner).
+    const forwarded = internalTenant(req);
+    if (forwarded) return forwarded;
     const sub = req.auth ? req.auth.sub : null;
     const internal = req.auth ? null : internalIdentity(req);
-    // FEHLENDE Identitaet (kein req.auth UND kein localhost-internal, also der
-    // localhost-/stdio-Single-Operator-Kanal): EXPLIZITE Bindung an den Bootstrap-
-    // Tenant (P3, singleTenantBootstrap), NICHT mehr als roher BOOTSTRAP_TENANT_ID-
-    // Constant-Return. Das ist KEIN Leck: ohne Identitaet ist dies der vertraute
-    // Owner-/Betreiber-Kanal (V4-Kontrakt, von I4 security-reviewed). Der echte
-    // fail-closed-Riegel sitzt eine Zeile tiefer: eine VORHANDENE, aber unbekannte
-    // Identitaet -> TENANT_REJECT (NIE Owner).
-    if (!sub && !internal) return singleTenantBootstrap();
+    // FEHLENDE Identitaet (WEDER ein verifiziertes Token req.auth NOCH eine localhost-
+    // interne Identitaet, also der localhost-/stdio-Single-Operator-Kanal): EXPLIZITE
+    // Bindung an den Bootstrap-Tenant (P3, singleTenantBootstrap), NICHT als roher
+    // BOOTSTRAP_TENANT_ID-Constant-Return. Das ist KEIN Leck: ohne Identitaet ist dies
+    // der vertraute Owner-/Betreiber-Kanal (V4-Kontrakt, von I4 security-reviewed).
+    // KRITISCH (Regel #3 fail-closed): das Gate haengt an !req.auth, NICHT an !sub. Ein
+    // VORHANDENES, verifiziertes Token OHNE sub-Claim (jose erzwingt sub nicht) ist eine
+    // vorhandene Identitaet und darf NIE zum Owner kollabieren - es faellt eine Zeile
+    // tiefer auf resolveTenant(null) -> TENANT_REJECT. Der echte fail-closed-Riegel:
+    // jede VORHANDENE, aber unbekannte/leere Identitaet -> TENANT_REJECT (NIE Owner).
+    if (!req.auth && !internal) return singleTenantBootstrap();
     const tenantId = store.resolveTenant(sub || internal);
     return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
   }
@@ -149,6 +173,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   return {
     isLocalSocket,
     internalIdentity,
+    internalTenant,
     requestTenant,
     requireTenant,
     tenantOwnsCall,

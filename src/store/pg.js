@@ -52,11 +52,16 @@ export function makePgStore(runner) {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
       await migrate(client, BOOTSTRAP_TENANT_ID);
       state = await hydrate(client);
-      // Kein config-derived Seed mehr (P2b): Erst-Setup laeuft einmalig ueber
-      // scripts/bootstrap-tenant.js -> persistiert dann in der DB. hydrate ist read-only;
-      // ohne Seed-Mutation gibt es nichts zu flushen (ein Flush-after-hydrate waere ein
-      // No-Op gegen sich selbst). Boot bleibt fail-closed (server.js verlangt eine aktive
-      // Nummer im Store).
+      // AM6: Owner-OAuth-Identitaet (OWNER_IDP_SUBJECT) idempotent an den Bootstrap-Tenant
+      // binden. Nur bei echter Mutation (set-if-absent) wird GEZIELT die bootstrap-Zeile
+      // geflusht (flushTenants ist RLS-frei -> unter der init-GUC zulaessig); danach ist
+      // idp_subject persistent -> Folge-Boots sind No-Op/byte-identisch. P2b bleibt sonst:
+      // kein config-derived Daten-Seed (Erst-Setup ueber scripts/bootstrap-tenant.js).
+      if (ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
+        await flushTenants(
+          client,
+          state.tenants.filter((t) => t.id === BOOTSTRAP_TENANT_ID),
+        );
     });
     return state;
   }

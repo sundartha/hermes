@@ -85,6 +85,41 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
   }
 });
 
+test("MCP_AUTH=oauth: OAUTH_AUDIENCE-Override gilt (AM6, nicht der publicUrl/mcp-Default)", async (t) => {
+  // Bestand testet nur mit OAUTH_AUDIENCE == ${publicUrl}/mcp (= AUDIENCE), also den
+  // ||-Linkszweig mit identischem Wert. AM6 nagelt den ECHTEN Override-Pfad fest: ein
+  // OAUTH_AUDIENCE != publicUrl/mcp (WorkOS Resource Indicator) wird verlangt, der
+  // kanonische Default NICHT mehr akzeptiert.
+  const CUSTOM = "https://workos-resource.example/mcp";
+  const idp = await startIdp();
+  const srv = await startServer({
+    env: { MCP_AUTH: "oauth", OAUTH_ISSUER_URL: idp.issuer, OAUTH_AUDIENCE: CUSTOM },
+  });
+  try {
+    await t.test("Well-known.resource = OAUTH_AUDIENCE (Override, nicht publicUrl/mcp)", async () => {
+      const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
+      const doc = await res.json();
+      assert.equal(doc.resource, CUSTOM);
+      assert.notEqual(doc.resource, AUDIENCE, "der kanonische publicUrl/mcp-Default gilt NICHT");
+    });
+
+    await t.test("Token mit aud=Override -> kein 401", async () => {
+      const token = await idp.sign({ email: "over@team.test" }, { aud: CUSTOM });
+      const res = await post(`${srv.localUrl}/mcp`, token);
+      assert.notEqual(res.status, 401);
+    });
+
+    await t.test("Token mit aud=kanonisch (publicUrl/mcp) -> 401 (Override gilt)", async () => {
+      const token = await idp.sign({ email: "canon@team.test" }, { aud: AUDIENCE });
+      const res = await post(`${srv.localUrl}/mcp`, token);
+      assert.equal(res.status, 401);
+    });
+  } finally {
+    await srv.stop();
+    await idp.close();
+  }
+});
+
 test("MCP_AUTH=oauth: JWKS-Discovery faellt auf oauth-authorization-server zurueck (WorkOS-Stil)", async (t) => {
   // IdP liefert NUR den OAuth-2.1-Metadata-Pfad, kein openid-configuration.
   const idp = await startIdp({ metadataPath: "/.well-known/oauth-authorization-server" });

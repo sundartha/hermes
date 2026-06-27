@@ -25,9 +25,14 @@ const GATEWAY = () => (process.env.GATEWAY_URL || "http://localhost:3000").repla
 // identity (optional): wird als interner X-Internal-Identity-Header an die
 // localhost-REST-API gereicht (Rechteprofile, Phase 2). Das Gateway akzeptiert
 // den Header nur von localhost-Sockets. Ohne identity -> Owner-Verhalten.
-async function api(method, path, body, identity) {
+// scopedTenant (optional, AM6): am /mcp-Gateway aufgeloester Request-Tenant, als
+// X-Internal-Tenant gereicht (ebenfalls nur localhost akzeptiert). Tenant-Achse
+// getrennt von der email-first Profile-Achse (X-Internal-Identity). Ohne
+// scopedTenant -> Owner/Bootstrap.
+async function api(method, path, body, identity, scopedTenant) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;
+  if (scopedTenant) headers["X-Internal-Tenant"] = scopedTenant;
   const res = await fetch(GATEWAY() + path, {
     method,
     headers,
@@ -236,12 +241,16 @@ const CALENDAR_ENTRY = z.object({
 });
 const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
-// ctx (Phase 2): { identity, allowCalendar }. identity wird per Closure an jeden
-// REST-Aufruf gehaengt (X-Internal-Identity). allowCalendar steuert, ob das
+// ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
+// an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
+// X-Internal-Tenant (am /mcp-Gateway aufgeloest). allowCalendar steuert, ob das
 // get_calendar-Tool ueberhaupt registriert wird. stdio ruft registerTools(server)
-// ohne ctx -> identity null (Owner), allowCalendar true.
-export function registerTools(server, { identity = null, allowCalendar = true, uiHost = null } = {}) {
-  const call = (method, path, body) => api(method, path, body, identity);
+// ohne ctx -> identity/scopedTenant null (Owner), allowCalendar true.
+export function registerTools(
+  server,
+  { identity = null, scopedTenant = null, allowCalendar = true, uiHost = null } = {},
+) {
+  const call = (method, path, body) => api(method, path, body, identity, scopedTenant);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
 
   // Stufe 1 fuer EIN Widget aktivieren - geteilt von ALLEN UI-Tools (G5/S2, keine

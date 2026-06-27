@@ -75,6 +75,10 @@ export const BASE_ENV = {
   // den Autoseed pruefen (owner-number-seed.test.js), setzen sie explizit per env-Override.
   OWNER_NUMBER_SEED: "",
   OWNER_NUMBER_PROVIDER: "",
+  // AM6: Owner-OAuth-Identitaets-Seed neutral leer (kein idp_subject-Seed). Ohne diese
+  // Zeile leakt eine lokale .env mit OWNER_IDP_SUBJECT via dotenv in Spawn-Tests ->
+  // Baseline-Drift (Lehre test-base-env-drift). am6-oauth-tenant.test.js setzt es explizit.
+  OWNER_IDP_SUBJECT: "",
   MAX_CALL_DURATION_S: "180",
   STT_SPEECH_TIMEOUT_SEC: "2", // G3: neutraler Default, sonst leakt lokales .env in Spawn-Tests (test-base-env-drift)
   SKIP_TWILIO_SIGNATURE_CHECK: "true",
@@ -462,6 +466,20 @@ export const toolCall = (name, args = {}) => ({
   method: "tools/call",
   params: { name, arguments: args },
 });
+
+// Liest das JSON-RPC-result aus einer /mcp tools/call-Antwort. Der stateless
+// StreamableHTTP-Transport antwortet als SSE (text/event-stream): das result steht in
+// der data:-Zeile (faellt auf rohes JSON zurueck, falls der Transport doch JSON liefert).
+// EINE Quelle fuer Tests, die den Tool-HTTP-Body parsen (heute parst kein anderer Test ihn).
+export async function readToolResult(res) {
+  const body = await res.text();
+  const trimmed = body.trim();
+  const raw = trimmed.startsWith("{")
+    ? trimmed
+    : (body.split(/\r?\n/).find((l) => l.startsWith("data:")) || "").slice("data:".length).trim();
+  if (!raw) throw new Error(`Keine JSON-RPC-Daten in der MCP-Antwort:\n${body}`);
+  return JSON.parse(raw).result;
+}
 
 // Startet src/server.js und ERWARTET einen Boot-Refusal (Exit statt listen). Fuer
 // die Fail-closed-Tests (OT-4): liefert { code, output, dataDir }. Wirft, wenn der

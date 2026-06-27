@@ -134,6 +134,11 @@ services:
       # Nur bei MCP_AUTH=oauth noetig: Issuer-URL des IdP (im Dashboard eintragen).
       - key: OAUTH_ISSUER_URL
         sync: false
+      # AM6 (nur MCP_AUTH=oauth): WorkOS user.id (sub) des Owners -> bindet den Bootstrap-
+      # Tenant idempotent (idp_subject), damit get_my_number ueber den OAuth-sub nicht leer
+      # ist. Im Dashboard eintragen; opake user_-Id, kein Secret. Leer = kein Seed.
+      - key: OWNER_IDP_SUBJECT
+        sync: false
       # Owner-Identitaet ist KEINE Env-Var mehr (P2b): ownerName setzt der Tenant ueber
       # das Self-Service-Dashboard (nach dem Bootstrap-CLI), nicht ueber die Env.
       - key: CLAUDE_MODEL

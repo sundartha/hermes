@@ -166,6 +166,13 @@ export const config = {
   // R1). Telnyx-Owner MUSS OWNER_NUMBER_PROVIDER=telnyx setzen. Lowercase-normalisiert.
   ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
 
+  // AM6: Owner-OAuth-Identitaet (WorkOS sub/user.id) idempotent an den Bootstrap-Tenant
+  // binden (idp_subject). Wie OWNER_NUMBER_SEED ein Boot-Seed gegen Renders fluechtiges FS /
+  // No-CLI-Free-Tier: resolveTenant findet so den Tenant MIT der aktiven Nummer ueber den
+  // sub-Claim (EINE Identitaetsquelle wie der Web-Login). Leer = kein Seed (fail-closed:
+  // unbekannte Identitaet -> kein Tenant). Opake user_-Id, KEIN Secret. set-if-absent.
+  ownerIdpSubject: process.env.OWNER_IDP_SUBJECT || "",
+
   // ---- Store-Backend ----
   // "json" (Default) = Datei-Persistenz (data/store.json). "pg" = Postgres.
   // Im json-Pfad wird KEINE DB-Verbindung erzeugt; DATABASE_URL ist dann nicht noetig.
