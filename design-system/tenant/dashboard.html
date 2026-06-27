@@ -1,0 +1,76 @@
+<!-- @dsCard group="Tenant" name="Tenant dashboard (rebranded)" subtitle="Self-service area aligned to the Hermes brand" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tenant dashboard — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/tokens.css" />
+<link rel="stylesheet" href="../_shared/preview.css" />
+</head>
+<body class="ds">
+<header style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-inline); padding: var(--space-gap) var(--space-section); background: var(--color-card); border-bottom: var(--border-width) solid var(--color-border)">
+  <span style="display:flex; align-items:center; gap: var(--space-tight)">
+    <span style="width: var(--size-icon); height: var(--size-icon); border-radius: var(--radius-round); background: var(--color-action); color: var(--color-on-action); display:grid; place-items:center; font-weight: var(--weight-emphasis)">H</span>
+    <strong style="color: var(--color-action)">Hermes</strong>
+    <span class="muted">· My area</span>
+  </span>
+  <button class="btn btn--ghost">Sign out</button>
+</header>
+
+<div class="ds-frame ds-frame--wide" style="padding: var(--space-section) var(--space-inline)">
+  <div class="agent-chip">
+    <span class="live-dot"></span>
+    <span class="agent-chip__body"><span class="agent-chip__label">Your number</span><span class="agent-chip__number">+1 864 302 8341</span></span>
+  </div>
+
+  <div class="shell-cols" style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--space-gap)">
+    <div class="card">
+      <h2 class="card__title">Settings</h2>
+      <div class="ds-stack">
+        <div><div class="field-label">Greeting</div><input class="field-input" value="Hi, you've reached Antonio's assistant." /></div>
+        <div class="perm-row">
+          <div class="perm-text"><span class="perm-title">Outbound calls</span><span class="perm-hint">Place calls for you</span></div>
+          <label class="switch"><input type="checkbox" checked /><span class="switch-slider"></span></label>
+        </div>
+        <button class="btn">Save</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="card__title">Calendar</h2>
+      <ul class="data-list">
+        <li class="cal-row">
+          <span class="cal-date"><span class="cal-date__day">26</span><span class="cal-date__month">Jun</span></span>
+          <span class="cal-body"><span>Haircut — Salon Bella</span><span class="cal-when">Thu · 14:30</span></span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Calls</h2>
+    <ul class="data-list">
+      <li class="call-row">
+        <span class="call-dir call-dir--in">&#8600;</span>
+        <span class="call-body"><span class="call-who">+49 173 725 2163</span><span class="call-sub">Inbound · message taken</span></span>
+        <span class="status-badge status-badge--completed">Completed</span>
+      </li>
+      <li class="call-row">
+        <span class="call-dir call-dir--out">&#8599;</span>
+        <span class="call-body"><span class="call-who">Salon Bella</span><span class="call-sub">Outbound · booking</span></span>
+        <span class="status-badge status-badge--active">Active</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Payment</h2>
+    <dl class="kv">
+      <dt>Plan</dt><dd>Starter — $4.99 / mo</dd>
+      <dt>Card</dt><dd>Visa ···· 4242</dd>
+    </dl>
+    <div class="ds-row" style="margin-top: var(--space-stack)"><button class="btn">Manage</button><button class="btn btn--ghost">Update card</button></div>
+  </div>
+</div>
+</body>
+</html>

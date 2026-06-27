@@ -1,0 +1,64 @@
+<!-- @dsCard group="Components" name="Data rows" subtitle="Agent chip, call row, action item, calendar row" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Data rows — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/tokens.css" />
+<link rel="stylesheet" href="../_shared/preview.css" />
+</head>
+<body class="ds">
+<div class="ds-frame ds-frame--narrow">
+  <header>
+    <p class="ds-eyebrow">Components</p>
+    <h1 class="ds-title">Data rows</h1>
+  </header>
+
+  <div class="card">
+    <p class="ds-eyebrow">Agent chip</p>
+    <div class="agent-chip">
+      <span class="live-dot"></span>
+      <span class="agent-chip__body">
+        <span class="agent-chip__label">Your number</span>
+        <span class="agent-chip__number">+1 864 302 8341</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="ds-eyebrow">Calls</p>
+    <ul class="data-list">
+      <li class="call-row">
+        <span class="call-dir call-dir--in">&#8600;</span>
+        <span class="call-body"><span class="call-who">+49 173 725 2163</span><span class="call-sub">Inbound · message taken</span></span>
+        <span class="status-badge status-badge--completed">Completed</span>
+      </li>
+      <li class="call-row">
+        <span class="call-dir call-dir--out">&#8599;</span>
+        <span class="call-body"><span class="call-who">Salon Bella</span><span class="call-sub">Outbound · booking appointment</span></span>
+        <span class="status-badge status-badge--active">Active</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <p class="ds-eyebrow">Action items</p>
+    <ul class="data-list">
+      <li class="ai-row"><span class="ai-text">Call back Salon Bella before 5pm</span><span class="tag tag--appointment">Appt</span></li>
+      <li class="ai-row ai-row--done"><span class="ai-text">Confirm dentist Tuesday</span></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <p class="ds-eyebrow">Calendar</p>
+    <ul class="data-list">
+      <li class="cal-row">
+        <span class="cal-date"><span class="cal-date__day">26</span><span class="cal-date__month">Jun</span></span>
+        <span class="cal-body"><span>Haircut — Salon Bella</span><span class="cal-when">Thu · 14:30</span></span>
+      </li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

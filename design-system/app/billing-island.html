@@ -1,0 +1,36 @@
+<!-- @dsCard group="App / Dashboard" name="Billing island" subtitle="Payment method & subscription (Stripe)" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Billing island — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/tokens.css" />
+<link rel="stylesheet" href="../_shared/preview.css" />
+</head>
+<body class="ds">
+<div class="ds-frame ds-frame--narrow">
+  <div class="card">
+    <h2 class="card__title">Billing</h2>
+    <dl class="kv">
+      <dt>Plan</dt><dd>Starter — $4.99 / mo</dd>
+      <dt>Included</dt><dd>30 min · 1 number</dd>
+      <dt>Card</dt><dd>Visa ···· 4242</dd>
+      <dt>Status</dt><dd><span class="status-badge status-badge--completed">Active</span></dd>
+    </dl>
+    <div class="ds-row" style="margin-top: var(--space-stack)">
+      <button class="btn">Manage subscription</button>
+      <button class="btn btn--ghost">Update card</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Plans</h2>
+    <div class="shell-cols" style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--space-gap)">
+      <div class="stat"><span class="stat__value">$4.99</span><span class="stat__label">Starter · 30 min · 1 number</span></div>
+      <div class="stat"><span class="stat__value">$9.99</span><span class="stat__label">Business · 120 min · 1 number</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

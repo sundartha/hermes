@@ -1,0 +1,196 @@
+/*
+ * Hermes Design Tokens — kanonische Kopie fuer das Design-System.
+ * Quelle: apps/web/src/styles/tokens/{primitives,semantic,hero}.css
+ *
+ * Light/App-Tokens leben auf :root. Dark/Hero-Tokens leben unter .on-dark,
+ * damit Light- und Dark-Spezimen im selben Stylesheet kollisionsfrei rendern
+ * (im echten Frontend liegen sie auf getrennten Seiten/Bundles).
+ *
+ * KEINE neuen Werte — beim Token-Aenderung in apps/web/ hier nachziehen.
+ */
+
+/* ============================================================
+ * LIGHT / APP  (primitives.css + semantic.css)
+ * ============================================================ */
+:root {
+  /* --- Farben (roh) --- */
+  --color-red-600: #e60000;
+  --color-red-700: #ac1811;
+  --color-red-50: #fdeaea;
+  --color-ink-900: #25282b;
+  --color-gray-500: #7e7e7e;
+  --color-gray-300: #c4c4c4;
+  --color-gray-200: #e2e2e2;
+  --color-gray-150: #ececec;
+  --color-gray-100: #f3f3f3;
+  --color-gray-75: #f2f2f2;
+  --color-gray-50: #fafafa;
+  --color-white: #ffffff;
+  --color-blue-600: #3860be;
+  --color-blue-50: #e9f0fc;
+  --color-green-700: #177a43;
+  --color-green-50: #e7f6ed;
+  --color-green-500: #1faa59;
+
+  /* --- Abstaende (roh) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* --- Radien (roh) --- */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 18px;
+  --radius-pill: 99px;
+  --radius-circle: 50%;
+
+  /* --- Rahmen / Schatten (roh) --- */
+  --border-width-thin: 1px;
+  --shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.07);
+
+  /* --- Typografie (roh) --- */
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-size-root: 15px;
+  --line-height-root: 1.5;
+  --letter-spacing-tight: -0.015em;
+  --letter-spacing-label: 0.12em;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+  --font-size-100: 13px;
+  --font-size-200: 14px;
+  --font-size-300: 16px;
+  --font-size-400: 20px;
+  --font-size-500: 26px;
+  --font-size-700: 40px;
+
+  /* --- Bewegung / Layout (roh) --- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 0.22s;
+  --duration-pulse: 1.8s;
+  --measure-page: 1180px;
+
+  /* --- Semantische Rollen (zeigen nur auf Primitives) --- */
+  --color-text: var(--color-ink-900);
+  --color-muted: var(--color-gray-500);
+  --color-surface: var(--color-gray-50);
+  --color-card: var(--color-white);
+  --color-border: var(--color-gray-150);
+  --color-action: var(--color-red-600);
+  --color-action-hover: var(--color-red-700);
+  --color-on-action: var(--color-white);
+  --color-accent: var(--color-blue-600);
+  --color-action-surface: var(--color-red-50);
+  --color-divider: var(--color-gray-100);
+  --color-field-border: var(--color-gray-200);
+  --color-field-border-focus: var(--color-red-600);
+  --color-status-positive: var(--color-green-700);
+  --color-status-positive-surface: var(--color-green-50);
+  --color-status-critical: var(--color-red-600);
+  --color-status-critical-surface: var(--color-red-50);
+  --color-status-info: var(--color-blue-600);
+  --color-status-info-surface: var(--color-blue-50);
+  --color-status-neutral: var(--color-gray-500);
+  --color-status-neutral-surface: var(--color-gray-75);
+  --color-indicator-live: var(--color-green-500);
+  --color-indicator-off: var(--color-gray-300);
+
+  --space-gap: var(--space-5);
+  --space-inline: var(--space-4);
+  --space-stack: var(--space-4);
+  --space-card: var(--space-6);
+  --space-section: var(--space-20);
+  --space-hairline: var(--space-1);
+  --space-tight: var(--space-2);
+  --space-cozy: var(--space-3);
+  --space-loose: var(--space-5);
+  --space-roomy: var(--space-8);
+  --space-block: var(--space-12);
+  --size-icon: var(--space-8);
+
+  --radius-card: var(--radius-lg);
+  --radius-control: var(--radius-sm);
+  --radius-badge: var(--radius-pill);
+  --radius-round: var(--radius-circle);
+  --shadow-card: var(--shadow-soft);
+  --border-width: var(--border-width-thin);
+  --measure-content: var(--measure-page);
+
+  --font-body: var(--font-sans);
+  --font-heading: var(--font-sans);
+  --weight-heading: var(--weight-heavy);
+  --weight-emphasis: var(--weight-bold);
+  --weight-label: var(--weight-semibold);
+  --weight-normal: var(--weight-regular);
+  --text-eyebrow: var(--font-size-100);
+  --text-body: var(--font-size-200);
+  --text-lead: var(--font-size-300);
+  --text-subtitle: var(--font-size-400);
+  --text-title: var(--font-size-500);
+  --text-display: var(--font-size-700);
+  --tracking-heading: var(--letter-spacing-tight);
+  --tracking-label: var(--letter-spacing-label);
+  --motion-ease: var(--ease-out);
+  --motion-duration: var(--duration-fast);
+  --motion-pulse: var(--duration-pulse);
+  --layout-measure: var(--measure-page);
+}
+
+/* ============================================================
+ * DARK / HERO + SITE  (hero.css) — gescoped unter .on-dark
+ * ============================================================ */
+.on-dark {
+  --hero-navy-900: #0a2245;
+  --hero-navy-800: #0f2d52;
+  --hero-navy-700: #1b4f86;
+  --hero-navy-card: #13335c;
+  --hero-blue-ink: #10305a;
+  --hero-white: #ffffff;
+
+  --hero-bg-gradient: radial-gradient(120% 90% at 50% 0%, #1b4f86 0%, #0f2d52 55%, #0a2245 100%);
+  --hero-scrim-top: linear-gradient(to bottom, rgba(8, 22, 48, 0.52) 0%, rgba(8, 22, 48, 0.18) 40%, rgba(8, 22, 48, 0) 100%);
+  --hero-scrim-bottom: linear-gradient(to top, rgba(8, 20, 44, 0.6) 0%, rgba(8, 20, 44, 0.14) 55%, rgba(8, 20, 44, 0) 100%);
+
+  --hero-text-shadow-title: 0 2px 40px rgba(7, 16, 38, 0.55);
+  --hero-text-shadow-nav: 0 1px 10px rgba(7, 18, 40, 0.6);
+  --hero-shadow-pill: 0 10px 26px -12px rgba(7, 18, 40, 0.7);
+  --hero-shadow-logo: drop-shadow(0 2px 9px rgba(7, 18, 40, 0.6));
+  --hero-text-shadow-brand: 0 1px 12px rgba(7, 18, 40, 0.7);
+  --hero-text-shadow-sub: 0 1px 16px rgba(7, 16, 38, 0.6);
+
+  --font-serif: "Instrument Serif", serif;
+  --font-grotesk: "Space Grotesk", sans-serif;
+  --hero-title-clamp: clamp(50px, 7.4vw, 98px);
+
+  /* Semantische Dark-Rollen */
+  --site-bg: var(--hero-navy-800);
+  --site-bg-gradient: var(--hero-bg-gradient);
+  --surface-card-dark: var(--hero-navy-card);
+  --accent-on-dark: var(--hero-navy-700);
+  --text-on-dark: rgba(255, 255, 255, 0.92);
+  --text-on-dark-strong: rgba(255, 255, 255, 0.96);
+  --text-on-dark-muted: rgba(255, 255, 255, 0.82);
+  --text-on-dark-faint: rgba(255, 255, 255, 0.7);
+  --text-on-dark-brand: var(--hero-white);
+  --scrim-top: var(--hero-scrim-top);
+  --scrim-bottom: var(--hero-scrim-bottom);
+  --pill-bg: var(--hero-white);
+  --pill-ink: var(--hero-blue-ink);
+  --radius-pill-cta: 999px;
+  --text-display-hero: var(--hero-title-clamp);
+  --text-shadow-hero: var(--hero-text-shadow-title);
+  --text-shadow-nav: var(--hero-text-shadow-nav);
+  --text-shadow-brand: var(--hero-text-shadow-brand);
+  --text-shadow-sub: var(--hero-text-shadow-sub);
+  --shadow-pill: var(--hero-shadow-pill);
+  --shadow-logo: var(--hero-shadow-logo);
+}

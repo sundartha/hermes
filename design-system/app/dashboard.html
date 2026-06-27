@@ -1,0 +1,83 @@
+<!-- @dsCard group="App / Dashboard" name="Dashboard shell" subtitle="Header, KPIs, calls, action items, calendar" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/tokens.css" />
+<link rel="stylesheet" href="../_shared/preview.css" />
+</head>
+<body class="ds">
+<header style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-inline); padding: var(--space-gap) var(--space-section); background: var(--color-card); border-bottom: var(--border-width) solid var(--color-border)">
+  <a style="font-weight: var(--weight-emphasis); color: var(--color-action); text-decoration:none" href="#">HERMES</a>
+  <span class="auth-account ds-row" style="gap: var(--space-gap)"><span class="muted">antonio&#64;sundartha.com</span><button class="btn btn--ghost">Sign out</button></span>
+</header>
+
+<div class="ds-frame ds-frame--wide" style="padding: var(--space-section) var(--space-inline)">
+  <div>
+    <p class="ds-eyebrow">Signed in</p>
+    <h1 class="ds-title">Good afternoon, Antonio</h1>
+  </div>
+
+  <nav class="dash-nav">
+    <a class="dash-nav__link" href="#">Stats</a>
+    <a class="dash-nav__link" href="#">Calls</a>
+    <a class="dash-nav__link" href="#">Settings</a>
+    <a class="dash-nav__link" href="#">Billing</a>
+  </nav>
+
+  <div class="agent-chip">
+    <span class="live-dot"></span>
+    <span class="agent-chip__body"><span class="agent-chip__label">Your number</span><span class="agent-chip__number">+1 864 302 8341</span></span>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat"><span class="stat__value">3</span><span class="stat__label">Calls today</span></div>
+    <div class="stat"><span class="stat__value">11m</span><span class="stat__label">Talk time</span></div>
+    <div class="stat"><span class="stat__value">2</span><span class="stat__label">Action items</span></div>
+    <div class="stat"><span class="stat__value">1</span><span class="stat__label">Upcoming</span></div>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Recent calls</h2>
+    <ul class="data-list">
+      <li class="call-row">
+        <span class="call-dir call-dir--in">&#8600;</span>
+        <span class="call-body"><span class="call-who">+49 173 725 2163</span><span class="call-sub">Inbound · message taken</span></span>
+        <span class="status-badge status-badge--completed">Completed</span>
+      </li>
+      <li class="call-row">
+        <span class="call-dir call-dir--out">&#8599;</span>
+        <span class="call-body"><span class="call-who">Salon Bella</span><span class="call-sub">Outbound · booking appointment</span></span>
+        <span class="status-badge status-badge--active">Active</span>
+      </li>
+      <li class="call-row">
+        <span class="call-dir call-dir--out">&#8599;</span>
+        <span class="call-body"><span class="call-who">Dr. Weber</span><span class="call-sub">Outbound · could not reach</span></span>
+        <span class="status-badge status-badge--failed">Failed</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="shell-cols" style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--space-gap)">
+    <div class="card">
+      <h2 class="card__title">Action items</h2>
+      <ul class="data-list">
+        <li class="ai-row"><span class="ai-text">Call back Salon Bella before 5pm</span><span class="tag tag--appointment">Appt</span></li>
+        <li class="ai-row ai-row--done"><span class="ai-text">Confirm dentist Tuesday</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2 class="card__title">Calendar</h2>
+      <ul class="data-list">
+        <li class="cal-row">
+          <span class="cal-date"><span class="cal-date__day">26</span><span class="cal-date__month">Jun</span></span>
+          <span class="cal-body"><span>Haircut — Salon Bella</span><span class="cal-when">Thu · 14:30</span></span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>
