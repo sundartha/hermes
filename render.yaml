@@ -11,7 +11,15 @@ services:
     region: frankfurt
     runtime: node
     plan: free
-    buildCommand: npm install
+    # HINWEIS: Dieser Service ist DASHBOARD-MANAGED (Config via Render-API, nicht via
+    # Blueprint-Sync). Werte hier sind REFERENZ/Doku - die Quelle der Wahrheit ist das
+    # Render-Dashboard. NICHT blind annehmen, dass ein render.yaml-Push die Live-Config
+    # aendert (autoDeploy/healthCheckPath/MULTI_TENANT/SELF_SERVICE weichen live ab).
+    # Single-Origin (Phase A, 2026-06-27): der Gateway baut UND serviert das apps/web-
+    # Astro-Build (WEB_DIST_DIR unten), damit Frontend + /api + /auth + Session-Cookie
+    # unter EINEM Origin (app.sundartha.com) laufen. apps/web hat eine eigene Lockfile
+    # -> --prefix + ci. PUBLIC_GATEWAY_URL inline = nur Build-Zeit (same-origin Funnel-Links).
+    buildCommand: npm install && npm --prefix apps/web ci && PUBLIC_GATEWAY_URL=https://app.sundartha.com npm --prefix apps/web run build
     startCommand: npm start
     # Pre-Deploy (Owner-Removal P2b): seedet den ersten Tenant + seine aktive Nummer
     # IN-NETWORK, BEVOR der Web-Prozess startet - loest den fail-closed Boot-Refusal
@@ -189,6 +197,12 @@ services:
       # (Login ueber /auth/login). Ohne diese Infra sind sie nicht erreichbar (404).
       - key: SELF_SERVICE_ENABLED
         value: "false"
+      # Single-Origin (Phase A): Pfad zum apps/web-Astro-Build, das der Gateway statisch
+      # ausliefert (src/server.js, gegated). Leer = Serving aus (byte-identisch). SCHARFER
+      # SCHALTER: nur setzen, wenn der buildCommand oben apps/web/dist erzeugt - sonst
+      # Boot-Refusal (config.js: WEB_DIST_DIR gesetzt aber kein dist/index.html).
+      - key: WEB_DIST_DIR
+        value: "apps/web/dist"
       - key: TWILIO_EDGE
         value: frankfurt
       - key: SEND_SMS_SUMMARY
