@@ -11,7 +11,9 @@ import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+// ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
+// WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
+export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STARTUP_TIMEOUT_MS = 15000;
 
 // Owner-Absendernummer fuer Spawn-Tests: ersetzt den frueheren config-Seed

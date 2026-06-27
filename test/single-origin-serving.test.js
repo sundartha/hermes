@@ -10,7 +10,7 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { startServer, externalIp } from "./helpers.js";
+import { startServer, externalIp, ROOT } from "./helpers.js";
 
 const EXTERNAL_IP = externalIp();
 
@@ -115,6 +115,22 @@ test("WEB_DIST_DIR: /app + Deep-Links liefern die App-Shell (SPA-Fallback)", asy
     const fooBody = await foo.text();
     assert.match(fooBody, /App-Fixture/);
     assert.doesNotMatch(fooBody, /Marketing-Fixture/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// AM3: der bestehende /app/foo-Test nutzt ein ABSOLUTES Fixture und maskiert den
+// Live-Bug. Hier RELATIV (live "apps/web/dist") -> ohne config.path.resolve-Fix wirft
+// res.sendFile "path must be absolute" -> 500. Mit Fix: 200 (App-Shell). Der Child
+// laeuft mit cwd=ROOT (helpers), daher den relativen Pfad gegen ROOT bilden.
+test("WEB_DIST_DIR relativ: /app-Deep-Link liefert die App-Shell (sendFile absolut)", async () => {
+  const relDist = path.relative(ROOT, WEB_DIST);
+  const srv = await startServer({ env: { WEB_DIST_DIR: relDist } });
+  try {
+    const deep = await fetch(`${srv.localUrl}/app/foo`);
+    assert.equal(deep.status, 200, "Deep-Link unter relativem WEB_DIST_DIR -> 200 (war 500)");
+    assert.match(await deep.text(), /App-Fixture/);
   } finally {
     await srv.stop();
   }

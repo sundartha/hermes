@@ -46,11 +46,14 @@ const dashNav = [
        Script die Plan-Kacheln (billing/status, suspended-erreichbar) -> der Tenant
        aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. -->
   <section id="region-pending" class="card" hidden>
-    <h1>Account awaiting activation</h1>
+    <h1 id="pending-title">Account awaiting activation</h1>
     <p id="pending-text">Your account has been created and is awaiting activation.
       Once it's active, your assistant will appear here.</p>
     <div id="pending-tiles" class="plans"></div>
     <p id="pending-msg" class="billing-msg" hidden></p>
+    <!-- AM3: sekundaerer "Maybe later"-Skip, nur im Payment-Aktivierungs-Pfad sichtbar.
+         Rein praesentational - aktiviert NICHTS (kein subscribe/setStatus, /state bleibt 403). -->
+    <button id="pending-skip" class="plan-skip" type="button" hidden>Maybe later</button>
   </section>
 
   <section id="region-error" class="card" hidden>
@@ -107,7 +110,7 @@ const dashNav = [
 
 <script>
   import { AUTH_STATE, AUTH_EVENT, agentInfo, fetchBillingStatus } from "../../lib/api.js";
-  import { planTiles, wireSubscribe } from "../../lib/subscribe.js";
+  import { wireSubscribe, renderPlanChoice, dismissPlanChoice } from "../../lib/subscribe.js";
 
   // Region pro Auth-Zustand. "Laden" ist separat (Default vor dem ersten Event).
   const regions = {
@@ -142,10 +145,16 @@ const dashNav = [
   // (suspended-erreichbar, webAuthPendingMw) und rendert bei PAYMENT_ENABLED dieselben
   // Plan-Kacheln wie der aktive Pfad -> der Tenant aktiviert sich per Abo selbst. Sonst
   // bleibt der uebersetzte Wartetext (literal port von tenant.html renderActivation).
-  const PENDING_SUBSCRIBE_PROMPT = "Subscribe to activate your account.";
   const pendingTextEl = document.getElementById("pending-text");
   const pendingTilesEl = document.getElementById("pending-tiles");
   const pendingMsgEl = document.getElementById("pending-msg");
+  // Element-Buendel fuer die reinen Aktivierungs-Helfer (renderPlanChoice/dismissPlanChoice).
+  const pendingEls = {
+    title: document.getElementById("pending-title"),
+    subtitle: pendingTextEl,
+    tiles: pendingTilesEl,
+    skip: document.getElementById("pending-skip"),
+  };
 
   function showPendingMessage(text) {
     pendingMsgEl.textContent = text;
@@ -159,10 +168,14 @@ const dashNav = [
     } catch {
       return; // 401/Netzfehler -> Wartetext bleibt (kein Leak, kein Crash)
     }
-    if (!status.paymentEnabled) return; // ohne Payment: nur der Wartetext
-    pendingTextEl.textContent = PENDING_SUBSCRIBE_PROMPT;
-    pendingTilesEl.replaceChildren(...planTiles(document));
+    if (!status.paymentEnabled) return; // ohne Payment: byte-identisch (Wartetext, kein Skip)
+    // AM3: Plan-Auswahl ist der prominente Default (H1 "Choose your plan" + Kacheln + Skip).
+    renderPlanChoice(document, pendingEls);
   }
+
+  // "Maybe later": rein praesentational -> Plan-Auswahl ausblenden, Pending-Banner zeigen.
+  // Kein subscribe/setStatus (aktiviert nichts, /state bleibt 403).
+  pendingEls.skip.addEventListener("click", () => dismissPlanChoice(pendingEls));
 
   // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5, kein Binding
   // pro Button). Nach erfolgreicher Buchung wird der Tenant aktiv -> ein Reload zieht

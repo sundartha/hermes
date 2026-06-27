@@ -27,7 +27,7 @@ test("GET /api/plans liefert den Spec-Katalog (oeffentlich, ohne Login)", async 
       plans.map((p) => p.amountCents),
       [499, 999],
     );
-    for (const plan of plans) assert.equal(plan.currency, "eur");
+    for (const plan of plans) assert.equal(plan.currency, "usd");
   } finally {
     await srv.stop();
   }

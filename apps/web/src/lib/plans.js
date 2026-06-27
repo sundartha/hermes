@@ -10,7 +10,7 @@ export const PLAN_CATALOG = Object.freeze([
     slug: "starter",
     name: "Starter",
     amountCents: 499,
-    currency: "eur",
+    currency: "usd",
     cadence: "month",
     includedMinutes: 30,
     numberCount: 1,
@@ -26,7 +26,7 @@ export const PLAN_CATALOG = Object.freeze([
     slug: "business",
     name: "Business",
     amountCents: 999,
-    currency: "eur",
+    currency: "usd",
     cadence: "month",
     includedMinutes: 120,
     numberCount: 1,
@@ -41,10 +41,10 @@ export const PLAN_CATALOG = Object.freeze([
 ]);
 
 const CENTS_PER_MAJOR = 100;
-const CURRENCY_SYMBOLS = Object.freeze({ eur: "€" });
+const CURRENCY_SYMBOLS = Object.freeze({ eur: "€", usd: "$" });
 
-// Formatiert GANZZAHL-Cents als Anzeige (kein Float, G26): 499 -> "€4.99",
-// 99 -> "€0.99". Englische Marketing-Seite -> Punkt-Dezimaltrenner, Symbol
+// Formatiert GANZZAHL-Cents als Anzeige (kein Float, G26): 499 -> "$4.99",
+// 99 -> "$0.99". Englische Marketing-Seite -> Punkt-Dezimaltrenner, Symbol
 // vorangestellt. Unbekannte Waehrung -> ohne Symbol (fail-soft, nie Muell-Glyph).
 export function formatPlanPrice(amountCents, currency) {
   const major = Math.floor(amountCents / CENTS_PER_MAJOR);

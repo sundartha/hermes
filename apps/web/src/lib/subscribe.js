@@ -185,3 +185,35 @@ export function wireSubscribe(container, { onSubscribed, onMessage, navigate = b
     return runSubscribe(btn.dataset[PLAN_ATTR], { onSubscribed, onMessage, navigate });
   });
 }
+
+// ---- Aktivierungs-Default (AM3): Plan-Auswahl als prominenter Default --------
+
+// Copy des Aktivierungs-Pfads. EINE Quelle (G5/G25): Plan-Auswahl-Rahmen UND das
+// Pending-Banner nach "Maybe later". Display-Texte (Englisch).
+export const PLAN_CHOICE_COPY = Object.freeze({
+  title: "Choose your plan",
+  subtitle: "Pick a plan to activate your assistant and get your phone number.",
+  bannerTitle: "Account pending",
+  bannerText: "You can subscribe anytime to activate your assistant.",
+});
+
+// Rahmt die suspended-Region als prominente Plan-Auswahl: aktivierende H1, erklaerender
+// Untertitel, Plan-Kacheln aus dem Build-Spiegel, sichtbarer Skip-Link. REIN DOM (doc + els),
+// kein Netz. els = { title, subtitle, tiles, skip }. NUR bei PAYMENT_ENABLED aufgerufen
+// (Aufrufer-Guard) -> ohne Payment byte-identisch.
+export function renderPlanChoice(doc, els) {
+  els.title.textContent = PLAN_CHOICE_COPY.title;
+  els.subtitle.textContent = PLAN_CHOICE_COPY.subtitle;
+  els.tiles.replaceChildren(...planTiles(doc));
+  els.skip.hidden = false;
+}
+
+// "Maybe later": blendet die Plan-Auswahl aus, zeigt das ruhige Pending-Banner. REIN DOM,
+// ruft KEIN subscribe/setStatus (Invariante AM3: aktiviert nichts, /state bleibt 403).
+// Einbahn (Reload bringt die Auswahl zurueck) - bewusst minimal (YAGNI).
+export function dismissPlanChoice(els) {
+  els.title.textContent = PLAN_CHOICE_COPY.bannerTitle;
+  els.subtitle.textContent = PLAN_CHOICE_COPY.bannerText;
+  els.tiles.replaceChildren();
+  els.skip.hidden = true;
+}
