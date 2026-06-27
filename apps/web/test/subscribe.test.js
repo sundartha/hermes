@@ -173,7 +173,7 @@ test("wireSubscribe: ok -> 'booked' + onSubscribed; postet {plan} an die subscri
 
 test("wireSubscribe: 409 no_card -> gefuehrter Checkout {plan} -> navigate zur Stripe-url", async () => {
   const f = stubFetch((path) => {
-    if (path.includes("/subscribe")) return fakeResponse({ ok: false, status: 409, json: { error: "no_card" } });
+    if (path.includes("/subscribe")) return fakeResponse({ ok: false, status: 409, json: { error: "no_card", next: "setup-checkout", plan: "business" } });
     return fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_test" } });
   });
   try {
@@ -233,12 +233,13 @@ test("wireSubscribe: Klick ohne data-plan-Button macht nichts (kein Fetch)", asy
   }
 });
 
-// ApiError wird mit dem Backend-Code getragen (no_card) -> der no_card-Zweig der
-// Maschine haengt genau daran. Sicherheitsnetz gegen einen stillen Code-Verlust.
-test("ApiError traegt den optionalen Backend-Code", () => {
-  const err = new ApiError(409, "x", "no_card");
+// ApiError traegt code + next aus dem Backend-Body -> der no_card-Funnel-Zweig der
+// Maschine haengt am next. Sicherheitsnetz gegen einen stillen Verlust der Felder.
+test("ApiError traegt code + Funnel-Hinweis (next) aus dem Backend-Body", () => {
+  const err = new ApiError(409, "x", { code: "no_card", next: "setup-checkout" });
   assert.equal(err.status, 409);
   assert.equal(err.code, "no_card");
+  assert.equal(err.next, "setup-checkout");
 });
 
 // ---- Aktivierungs-Default (AM3): renderPlanChoice / dismissPlanChoice ---------

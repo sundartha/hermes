@@ -35,6 +35,12 @@ const CARD_RETURN_ERROR = "/tenant.html?card=error";
 const SUB_RETURN_OK = "/tenant.html?sub=ok";
 const SUB_RETURN_FAILED = "/tenant.html?sub=failed";
 
+// AM4: maschinenlesbarer Funnel-Hinweis im no_card-Response. Der Client (lib/subscribe.js)
+// springt bei next==="setup-checkout" deterministisch in die Karten-Erfassung, statt ein
+// nacktes 409 als Sackgasse zu sehen. Kein Magic-String (G25); spiegelbildlich
+// SETUP_CHECKOUT_NEXT im Frontend (Contract-String ueber die Origin-Grenze, wie die error-Codes).
+const NEXT_SETUP_CHECKOUT = "setup-checkout";
+
 // F2 P6: maskiert die EIGENE private Summary-Nummer fuer die Self-Service-Read-View
 // (Decision #5, H4). Zeigt NUR den Laendercode (erste 3 Zeichen) + die letzten 4 Ziffern,
 // der Rest wird zu "…" - genug, dass der Eingeloggte SEINE Nummer wiedererkennt, ohne die
@@ -314,7 +320,8 @@ export function makeSelfServiceRoutes({
         });
         if (!result.ok) {
           audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-          return res.status(subscribeRejectStatus(result.reason)).json({ error: result.reason });
+          const { status, body } = subscribeReject(result.reason, planSlug);
+          return res.status(status).json(body);
         }
         audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
         res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
@@ -326,12 +333,17 @@ export function makeSelfServiceRoutes({
   return router;
 }
 
-// W4: reason -> HTTP-Code (kein Magic-String/Number, G25). no_card/already_subscribed =
-// Client-Vorbedingung (409, UI leitet auf setup-checkout bzw. zeigt das aktive Abo);
-// plan_unconfigured = Server-Fehlkonfiguration (500, Price-Id fehlt); unknown_plan =
-// Client-Eingabe (400). Default fail-closed 400.
-function subscribeRejectStatus(reason) {
-  if (reason === "no_card" || reason === "already_subscribed") return 409;
-  if (reason === "plan_unconfigured") return 500;
-  return 400;
+// W4/AM4: reason -> { HTTP-Status, JSON-Body } in EINEM Switch (kein Magic-String/Number,
+// G25; keine zwei parallelen reason-Switches, G5/G23). no_card ist KEINE Sackgasse, sondern
+// ein Funnel: der Body traegt next:"setup-checkout" + den (durch die vorgelagerten Gates in
+// createTenantSubscription bereits katalog-validierten) Plan, sodass der Client deterministisch
+// in die Karten-Erfassung springt. already_subscribed = Client-Vorbedingung (409, aktives Abo);
+// plan_unconfigured = Server-Fehlkonfig (500, Price-Id fehlt); unknown_plan/Default = Client-
+// Eingabe (400). Fail-closed: jeder unbekannte reason -> 400.
+function subscribeReject(reason, planSlug) {
+  if (reason === "no_card")
+    return { status: 409, body: { error: reason, next: NEXT_SETUP_CHECKOUT, plan: planSlug } };
+  if (reason === "already_subscribed") return { status: 409, body: { error: reason } };
+  if (reason === "plan_unconfigured") return { status: 500, body: { error: reason } };
+  return { status: 400, body: { error: reason } };
 }
