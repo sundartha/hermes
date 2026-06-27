@@ -1,0 +1,54 @@
+<!-- @dsCard group="MCP" name="list_calls" subtitle="Recent inbound & outbound calls" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Calls</title>
+<style>
+  /* Inline-Tokens: Subset aus design-system/_shared/tokens.css (Werte identisch,
+     self-contained fuer die Iframe-Sandbox - kein externer CSS-Import/Linkback, AC6). */
+  :root {
+    --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
+    --color-white:#fff; --color-green-500:#1faa59;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --radius-md:12px; --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
+  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
+        border-radius:var(--radius-md);padding:var(--space-4);max-width:480px}
+  .head{display:flex;align-items:center;gap:var(--space-2)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--color-green-500)}
+  .title{font-weight:600}
+  .sub{color:var(--color-gray-500);font-size:13px}
+  /* Eine Row je Call (renderRows fuellt sie aus der Objekt-Liste). data-field erlaubt
+     der CSS, einzelne Spalten gezielt zu stylen. */
+  .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-2);
+       margin-top:var(--space-3);padding-top:var(--space-2);
+       border-top:1px solid var(--color-gray-150);font-size:14px}
+  .cell{color:var(--color-ink-900)}
+  .cell[data-field="direction"]{color:var(--color-gray-500);font-size:11px;
+        text-transform:uppercase;letter-spacing:.04em}
+  .cell[data-field="counterparty"]{font-weight:600}
+  .cell[data-field="status"]{color:var(--color-green-500)}
+  .cell[data-field="startedAt"]{color:var(--color-gray-500);margin-left:auto}
+  .cell[data-field="summary"]{flex-basis:100%;color:var(--color-gray-500)}
+  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
+        display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <span class="dot"></span>
+      <span><span class="title">Letzte Anrufe</span><br />
+      <span class="sub">list_calls</span></span>
+    </div>
+    <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
+         W1-Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher). -->
+    <div data-mcp="calls" data-mcp-row="direction,counterparty,status,startedAt,summary"></div>
+    <div class="foot"><span>Hermes</span></div>
+  </div>
+  <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein Button-Element. -->
+</body>
+</html>

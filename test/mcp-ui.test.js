@@ -17,6 +17,12 @@ import {
   WIDGET_AGENT_STATUS,
 } from "../src/ui/adapters/mcp-native.js";
 import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
+// Neue read-only Widget-Ids aus der kanonischen Quelle (widget-catalog.js).
+import {
+  WIDGET_MY_NUMBER,
+  WIDGET_CALLS,
+  WIDGET_CALENDAR,
+} from "../src/ui/widget-catalog.js";
 import {
   UI_MIME,
   CHATGPT_UI_MIME,
@@ -876,4 +882,333 @@ test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding",
   // Erbt W1-Binding: die injizierte Bootstrap-Quelle (run(window)) ist vorhanden.
   assert.ok(html.includes("run(window)"), "injiziertes W1-Binding (run(window)) vorhanden");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_AGENT_STATUS), true, "Adapter kennt agent-status");
+});
+
+// ===== W-batch: drei weitere read-only Widgets ueber den BESTEHENDEN Seam =====
+// get_my_number / list_calls / get_calendar bekommen Stufe 0 (structuredContent +
+// Backward-Compat-Text) + Stufe 1 (Widget) bei faehigem Host; Fallback Stufe-0 bei
+// unfaehigem. Whitelist beweist Nicht-Durchreichung von PII/Secrets/Roh-Transkript/
+// Cross-Tenant-State. Read-only: kein Callback/Button. list_calls/get_calendar liefern
+// Objekt-Listen (Slot-Rendering ueber das generische W1-Binding, data-mcp-row).
+const RICH_STATE_BATCH = {
+  agent: {
+    number: "+18643028341",
+    secretAgentField: "agent-LEAK", // darf NIE durch
+  },
+  calls: [
+    {
+      id: "c1",
+      direction: "outbound",
+      to: "+4917212345678",
+      from: "+18643028341",
+      status: "completed",
+      startedAt: "2026-06-26T09:59:50.000Z",
+      answeredAt: "2026-06-26T10:00:00.000Z",
+      endedAt: "2026-06-26T10:05:00.000Z",
+      summary: "Termin Donnerstag 14:30 gebucht.",
+      // Felder, die NIEMALS nach aussen duerfen:
+      transcript: [{ role: "agent", text: "Guten Tag, hier ist Hermes." }],
+      tenantId: "tenant-XYZ",
+      audioUrl: "https://example.com/rec.wav",
+      apiKey: "sk_live_LEAK",
+    },
+    {
+      id: "c2",
+      direction: "inbound",
+      from: "+49170000000",
+      to: "+18643028341",
+      status: "active", // ohne answeredAt -> mapStatus = dialing
+      startedAt: "2026-06-26T11:00:00.000Z",
+    },
+  ],
+  calendar: [
+    {
+      title: "Zahnarzt",
+      start: "2026-06-28T09:00:00.000Z",
+      end: "2026-06-28T09:30:00.000Z",
+      // Felder, die NIEMALS nach aussen duerfen:
+      location: "Geheim",
+      attendees: ["secret@example.com"],
+      notes: "calendar-LEAK",
+    },
+  ],
+  // Top-Level-Felder, die NIEMALS nach aussen duerfen:
+  email: "secret@example.com",
+  apiKey: "sk_live_LEAK",
+  tenantId: "tenant-XYZ",
+};
+// Sammelliste sensibler Strings (eine Quelle fuer alle Whitelist-Checks der Scheibe).
+const BATCH_LEAKS = [
+  "agent-LEAK",
+  "sk_live_LEAK",
+  "tenant-XYZ",
+  "secret@example.com",
+  "rec.wav",
+  "Guten Tag",
+  "calendar-LEAK",
+  "Geheim",
+];
+const RESOURCE_URI_MY = uiResourceUri(WIDGET_MY_NUMBER); // ui://hermes/my-number
+const RESOURCE_URI_CALLS = uiResourceUri(WIDGET_CALLS); // ui://hermes/calls
+const RESOURCE_URI_CAL = uiResourceUri(WIDGET_CALENDAR); // ui://hermes/calendar
+const myNumberOutput = z.object({ number: z.string().nullable() });
+const callsOutput = z.object({
+  calls: z.array(
+    z.object({
+      id: z.string(),
+      direction: z.string(),
+      counterparty: z.string().nullable(),
+      status: z.string(),
+      startedAt: z.string(),
+      summary: z.string().optional(),
+    }),
+  ),
+});
+const calendarOutput = z.object({
+  calendar: z.array(z.object({ title: z.string().nullable(), start: z.string(), end: z.string() })),
+});
+const CALL_ENTRY_KEYS = ["counterparty", "direction", "id", "startedAt", "status"];
+const CALENDAR_ENTRY_KEYS = ["end", "start", "title"];
+// Fallback-Faelle (fail-closed): kein faehiger Rich-UI-Host -> kein Widget, Stufe 0 bleibt.
+const FALLBACK_CASES = {
+  "stdio (uiHost=null)": null,
+  "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
+  "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
+  "unbekannter Host (fremder mimeType)": {
+    enabled: true,
+    capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
+  },
+};
+// Beweist: Server-seitige Formatierung (fmt) - kein roher ISO-Timestamp im Slot.
+const isFormattedNotIso = (s) => typeof s === "string" && s.length > 0 && !/\dT\d/.test(s);
+
+// ---- get_my_number ----
+test("T-Wb-MY-AC1: Stufe 0 - Backward-Compat-Text {number} + schema-validiertes structuredContent", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("get_my_number");
+    assert.ok(config.outputSchema, "outputSchema am config deklariert");
+    const result = await handler({});
+
+    assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten");
+    assert.deepEqual(JSON.parse(result.content[0].text), { number: "+18643028341" }, "Text byte-identisch");
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), ["number"]);
+    assert.equal(result.structuredContent.number, "+18643028341");
+    assert.doesNotThrow(() => myNumberOutput.parse(result.structuredContent));
+  });
+});
+
+test("T-Wb-MY-AC2: Stufe 1 (faehiger Host) - genau eine my-number-Resource + _meta", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const matching = resources.filter((r) => r.uri === RESOURCE_URI_MY);
+    assert.equal(matching.length, 1, "genau eine my-number-Resource");
+    assert.equal(matching[0].config.mimeType, UI_MIME);
+    assert.equal(tools.get("get_my_number").config._meta.ui.resourceUri, RESOURCE_URI_MY);
+  });
+});
+
+test("T-Wb-MY-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent bleibt", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    for (const [label, uiHost] of Object.entries(FALLBACK_CASES)) {
+      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
+      const { config, handler } = tools.get("get_my_number");
+      assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_MY).length, 0, `${label}: keine Resource`);
+      assert.ok(!config._meta, `${label}: kein _meta`);
+      const result = await handler({});
+      assert.deepEqual(Object.keys(result.structuredContent).sort(), ["number"], `${label}: structuredContent bleibt`);
+    }
+  });
+});
+
+test("T-Wb-MY-AC4: Whitelist - NUR { number }, kein agent-LEAK/PII", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const result = await tools.get("get_my_number").handler({});
+    const serialized = JSON.stringify(result);
+    for (const leak of BATCH_LEAKS) assert.ok(!serialized.includes(leak), `kein Leck von ${leak}`);
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), ["number"]);
+
+    const html = (await resources.find((r) => r.uri === RESOURCE_URI_MY).readCallback()).contents[0].text;
+    for (const leak of BATCH_LEAKS) assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
+  });
+});
+
+test("T-Wb-MY-AC6: my-number.html self-contained + read-only + erbt W1-Binding", async () => {
+  const html = (await readbackResource(mcpNativeRenderer, WIDGET_MY_NUMBER)).contents[0].text;
+  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+  assert.ok(!html.includes("@import"), "kein @import");
+  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
+  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
+  assert.doesNotMatch(html, /<button/, "kein <button> (read-only)");
+  assert.ok(!html.includes("callTool"), "kein callTool (read-only)");
+  assert.ok(html.includes("run(window)"), "injiziertes W1-Binding vorhanden");
+  assert.ok(html.includes('data-mcp="number"'), "Slot data-mcp=number");
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_MY_NUMBER), true, "Adapter kennt my-number");
+});
+
+// ---- list_calls ----
+test("T-Wb-CALLS-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calls:[...] } schema-valid", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("list_calls");
+    assert.ok(config.outputSchema, "outputSchema am config deklariert");
+    const result = await handler({});
+
+    const txt = result.content[0].text;
+    assert.match(txt, /\[c1\] -> \+4917212345678 \| completed \|/, "outbound-Zeile byte-identisch");
+    assert.match(txt, /\[c2\] <- \+49170000000 \| dialing \|/, "inbound-Zeile (dialing via mapStatus)");
+    assert.ok(txt.includes("Termin Donnerstag 14:30 gebucht."), "Summary im Text");
+
+    assert.equal(result.structuredContent.calls.length, 2);
+    assert.deepEqual(Object.keys(result.structuredContent.calls[0]).sort(), [...CALL_ENTRY_KEYS, "summary"].sort(), "c1 inkl. summary");
+    assert.deepEqual(Object.keys(result.structuredContent.calls[1]).sort(), CALL_ENTRY_KEYS, "c2 ohne summary");
+    assert.equal(result.structuredContent.calls[0].counterparty, "+4917212345678", "outbound -> to");
+    assert.equal(result.structuredContent.calls[1].counterparty, "+49170000000", "inbound -> from");
+    assert.equal(result.structuredContent.calls[1].status, "dialing", "mapStatus: active ohne answeredAt");
+    assert.ok(isFormattedNotIso(result.structuredContent.calls[0].startedAt), "startedAt server-formatiert (kein ISO)");
+    assert.doesNotThrow(() => callsOutput.parse(result.structuredContent));
+  });
+});
+
+test("T-Wb-CALLS-AC1b: leere Liste -> 'Noch keine Anrufe.' + structuredContent { calls:[] }", async () => {
+  await withGateway({ calls: [] }, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const result = await tools.get("list_calls").handler({});
+    assert.ok(!result.isError, "leere Liste ist kein Fehler");
+    assert.equal(result.content[0].text, "Noch keine Anrufe.", "Backward-Compat-Text");
+    assert.deepEqual(result.structuredContent, { calls: [] }, "leere Liste schema-konform");
+  });
+});
+
+test("T-Wb-CALLS-AC2: Stufe 1 (faehiger Host) - genau eine calls-Resource + _meta", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const matching = resources.filter((r) => r.uri === RESOURCE_URI_CALLS);
+    assert.equal(matching.length, 1, "genau eine calls-Resource");
+    assert.equal(matching[0].config.mimeType, UI_MIME);
+    assert.equal(tools.get("list_calls").config._meta.ui.resourceUri, RESOURCE_URI_CALLS);
+  });
+});
+
+test("T-Wb-CALLS-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent bleibt", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    for (const [label, uiHost] of Object.entries(FALLBACK_CASES)) {
+      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
+      const { config, handler } = tools.get("list_calls");
+      assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CALLS).length, 0, `${label}: keine Resource`);
+      assert.ok(!config._meta, `${label}: kein _meta`);
+      const result = await handler({});
+      assert.equal(result.structuredContent.calls.length, 2, `${label}: structuredContent bleibt`);
+    }
+  });
+});
+
+test("T-Wb-CALLS-AC4: Whitelist - nur pickCall-Felder, kein Roh-Transkript/PII/Secret", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const result = await tools.get("list_calls").handler({});
+    const serialized = JSON.stringify(result);
+    for (const leak of BATCH_LEAKS) assert.ok(!serialized.includes(leak), `kein Leck von ${leak}`);
+    for (const entry of result.structuredContent.calls) {
+      const keys = Object.keys(entry).sort();
+      assert.ok(
+        keys.every((k) => [...CALL_ENTRY_KEYS, "summary"].includes(k)),
+        `Eintrag-Keys nur Whitelist: ${keys}`,
+      );
+    }
+    const html = (await resources.find((r) => r.uri === RESOURCE_URI_CALLS).readCallback()).contents[0].text;
+    for (const leak of BATCH_LEAKS) assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
+  });
+});
+
+test("T-Wb-CALLS-AC6: calls.html self-contained + read-only + erbt W1 + deklariert data-mcp-row", async () => {
+  const html = (await readbackResource(mcpNativeRenderer, WIDGET_CALLS)).contents[0].text;
+  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+  assert.ok(!html.includes("@import"), "kein @import");
+  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
+  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
+  assert.doesNotMatch(html, /<button/, "kein <button> (read-only)");
+  assert.ok(!html.includes("callTool"), "kein callTool (read-only)");
+  assert.ok(html.includes("run(window)"), "injiziertes W1-Binding vorhanden");
+  assert.ok(html.includes('data-mcp="calls"'), "Listen-Slot data-mcp=calls");
+  assert.ok(html.includes("data-mcp-row="), "deklariert Row-Felder fuer das Objekt-Listen-Rendering");
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALLS), true, "Adapter kennt calls");
+});
+
+// ---- get_calendar ----
+test("T-Wb-CAL-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calendar:[...] } schema-valid", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("get_calendar");
+    assert.ok(config.outputSchema, "outputSchema am config deklariert");
+    const result = await handler({});
+
+    assert.match(result.content[0].text, /^Zahnarzt: .+ bis .+$/, "Text byte-identisch (title: start bis end)");
+    assert.equal(result.structuredContent.calendar.length, 1);
+    assert.deepEqual(Object.keys(result.structuredContent.calendar[0]).sort(), CALENDAR_ENTRY_KEYS);
+    assert.equal(result.structuredContent.calendar[0].title, "Zahnarzt");
+    assert.ok(isFormattedNotIso(result.structuredContent.calendar[0].start), "start server-formatiert (kein ISO)");
+    assert.doesNotThrow(() => calendarOutput.parse(result.structuredContent));
+  });
+});
+
+test("T-Wb-CAL-AC1b: leerer Kalender -> 'Kalender ist leer.' + structuredContent { calendar:[] }", async () => {
+  await withGateway({ calendar: [] }, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const result = await tools.get("get_calendar").handler({});
+    assert.ok(!result.isError, "leerer Kalender ist kein Fehler");
+    assert.equal(result.content[0].text, "Kalender ist leer.", "Backward-Compat-Text");
+    assert.deepEqual(result.structuredContent, { calendar: [] }, "leere Liste schema-konform");
+  });
+});
+
+test("T-Wb-CAL-AC2: Stufe 1 (faehiger Host) - genau eine calendar-Resource + _meta", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const matching = resources.filter((r) => r.uri === RESOURCE_URI_CAL);
+    assert.equal(matching.length, 1, "genau eine calendar-Resource");
+    assert.equal(matching[0].config.mimeType, UI_MIME);
+    assert.equal(tools.get("get_calendar").config._meta.ui.resourceUri, RESOURCE_URI_CAL);
+  });
+});
+
+test("T-Wb-CAL-AC3: Fallback fail-closed - kein _meta/Resource, structuredContent bleibt", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    for (const [label, uiHost] of Object.entries(FALLBACK_CASES)) {
+      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
+      const { config, handler } = tools.get("get_calendar");
+      assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CAL).length, 0, `${label}: keine Resource`);
+      assert.ok(!config._meta, `${label}: kein _meta`);
+      const result = await handler({});
+      assert.equal(result.structuredContent.calendar.length, 1, `${label}: structuredContent bleibt`);
+    }
+  });
+});
+
+test("T-Wb-CAL-AC4: Whitelist - nur title/start/end, kein location/notes/attendees", async () => {
+  await withGateway(RICH_STATE_BATCH, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const result = await tools.get("get_calendar").handler({});
+    const serialized = JSON.stringify(result);
+    for (const leak of BATCH_LEAKS) assert.ok(!serialized.includes(leak), `kein Leck von ${leak}`);
+    assert.deepEqual(Object.keys(result.structuredContent.calendar[0]).sort(), CALENDAR_ENTRY_KEYS);
+
+    const html = (await resources.find((r) => r.uri === RESOURCE_URI_CAL).readCallback()).contents[0].text;
+    for (const leak of BATCH_LEAKS) assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
+  });
+});
+
+test("T-Wb-CAL-AC6: calendar.html self-contained + read-only + erbt W1 + deklariert data-mcp-row", async () => {
+  const html = (await readbackResource(mcpNativeRenderer, WIDGET_CALENDAR)).contents[0].text;
+  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+  assert.ok(!html.includes("@import"), "kein @import");
+  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
+  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
+  assert.doesNotMatch(html, /<button/, "kein <button> (read-only)");
+  assert.ok(!html.includes("callTool"), "kein callTool (read-only)");
+  assert.ok(html.includes("run(window)"), "injiziertes W1-Binding vorhanden");
+  assert.ok(html.includes('data-mcp="calendar"'), "Listen-Slot data-mcp=calendar");
+  assert.ok(html.includes("data-mcp-row="), "deklariert Row-Felder fuer das Objekt-Listen-Rendering");
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALENDAR), true, "Adapter kennt calendar");
 });

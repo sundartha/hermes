@@ -9,6 +9,8 @@ import {
   bind,
   applyField,
   renderLines,
+  renderRows,
+  rowFields,
   readHostData,
   readMessageData,
   run,
@@ -20,6 +22,9 @@ import {
   WIDGET_CALL_RESULT,
   WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
+  WIDGET_MY_NUMBER,
+  WIDGET_CALLS,
+  WIDGET_CALENDAR,
 } from "../src/ui/widget-catalog.js";
 
 const WIDGET_IDS = [
@@ -27,16 +32,21 @@ const WIDGET_IDS = [
   WIDGET_CALL_RESULT,
   WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
+  WIDGET_MY_NUMBER,
+  WIDGET_CALLS,
+  WIDGET_CALENDAR,
 ];
 
 // Minimal-Fake der DOM-Oberflaeche, die widget-bind.js nutzt: querySelectorAll,
 // createElement, textContent (Setter leert Kinder wie echtes DOM), firstChild,
-// appendChild/removeChild. Slots werden ueber data-mcp registriert.
+// appendChild/removeChild, get/setAttribute (fuer data-mcp-row + data-field der
+// Objekt-Listen). Slots werden ueber data-mcp registriert.
 function makeEl() {
   const el = {
     className: "",
     children: [],
     _text: "",
+    _attrs: {},
     get firstChild() {
       return this.children.length ? this.children[0] : null;
     },
@@ -46,6 +56,12 @@ function makeEl() {
     set textContent(v) {
       this._text = v;
       this.children = [];
+    },
+    getAttribute(name) {
+      return name in this._attrs ? this._attrs[name] : null;
+    },
+    setAttribute(name, value) {
+      this._attrs[name] = value;
     },
     appendChild(child) {
       this.children.push(child);
@@ -188,4 +204,95 @@ test("T-W1-AC9: applyField/renderLines direkt - mehrere Slots gleichen Schluesse
   const container = makeEl();
   renderLines(doc, container, ["a", "b", "c"]);
   assert.deepEqual(container.children.map((c) => c.textContent), ["a", "b", "c"]);
+});
+
+// ===== W-batch: generische Objekt-Listen-Bindung (list_calls / get_calendar) =====
+// Ein data-mcp-Slot rendert eine Liste von Objekten als wiederholte Rows. Pure Logik,
+// ohne DOM/Browser (Fake-DOM oben). XSS-Disziplin: nur textContent, nie innerHTML.
+
+test("T-Wb-BIND1: rowFields parst data-mcp-row; fehlend/leer -> []", () => {
+  const el = makeEl();
+  el.setAttribute("data-mcp-row", "direction, counterparty ,status,");
+  assert.deepEqual(rowFields(el), ["direction", "counterparty", "status"], "trim + leere uebersprungen");
+
+  assert.deepEqual(rowFields(makeEl()), [], "kein Attribut -> []");
+  const empty = makeEl();
+  empty.setAttribute("data-mcp-row", "");
+  assert.deepEqual(rowFields(empty), [], "leeres Attribut -> []");
+  assert.deepEqual(rowFields({}), [], "kein getAttribute -> [] (defensiv)");
+});
+
+test("T-Wb-BIND2: renderRows - je Objekt eine Row mit Zellen je Feld; fehlend -> leere Zelle", () => {
+  const doc = { createElement: () => makeEl() };
+  const container = makeEl();
+  const fields = ["counterparty", "status", "summary"];
+  container.setAttribute("data-mcp-row", fields.join(","));
+  renderRows(doc, container, [
+    { counterparty: "+49170", status: "completed", summary: "Termin" },
+    { counterparty: "+49160", status: "dialing" }, // summary fehlt
+  ]);
+
+  assert.equal(container.children.length, 2, "zwei Rows");
+  assert.deepEqual(container.children.map((r) => r.className), ["row", "row"]);
+  const row0 = container.children[0];
+  assert.deepEqual(row0.children.map((c) => c.className), ["cell", "cell", "cell"]);
+  assert.deepEqual(row0.children.map((c) => c.getAttribute("data-field")), fields, "data-field je Zelle");
+  assert.deepEqual(row0.children.map((c) => c.textContent), ["+49170", "completed", "Termin"]);
+  assert.equal(container.children[1].children[2].textContent, "", "fehlendes Feld -> leere Zelle");
+
+  // Erneutes Rendern leert vorher (kein Doppeln) - selbe Disziplin wie renderLines.
+  renderRows(doc, container, [{ counterparty: "+49150", status: "failed" }]);
+  assert.equal(container.children.length, 1, "vorher geleert");
+  assert.deepEqual(container.children[0].children.map((c) => c.getAttribute("data-field")), fields, "Felder weiter aus data-mcp-row");
+});
+
+test("T-Wb-BIND3: renderRows XSS - Feldwert landet als textContent, nie als Markup", () => {
+  const doc = { createElement: () => makeEl() };
+  const container = makeEl();
+  container.setAttribute("data-mcp-row", "summary");
+  const payload = '<img src=x onerror=alert(1)>';
+  renderRows(doc, container, [{ summary: payload }]);
+  const cell = container.children[0].children[0];
+  assert.equal(cell.textContent, payload, "roh als Text");
+  assert.equal(cell.children.length, 0, "kein erzeugtes DOM-Kind (kein Markup-Parsing)");
+});
+
+test("T-Wb-BIND4: applyField-Dispatch - Objekt-Liste (data-mcp-row) -> Rows; Skalar-Array -> turns", () => {
+  // Slot MIT data-mcp-row -> Objekt-Rows.
+  const rowDoc = makeDoc(["calls"]);
+  slot(rowDoc, "calls").setAttribute("data-mcp-row", "counterparty,status");
+  applyField(rowDoc, "calls", [{ counterparty: "+49170", status: "completed" }]);
+  const container = slot(rowDoc, "calls");
+  assert.equal(container.children.length, 1, "eine Row");
+  assert.equal(container.children[0].className, "row");
+  assert.deepEqual(container.children[0].children.map((c) => c.textContent), ["+49170", "completed"]);
+
+  // Slot OHNE data-mcp-row -> Bestand unveraendert: skalare Zeilen als .turn.
+  const lineDoc = makeDoc(["last_transcript_lines"]);
+  applyField(lineDoc, "last_transcript_lines", ["Agent: hi", "Gegenseite: yo"]);
+  const lines = slot(lineDoc, "last_transcript_lines");
+  assert.deepEqual(lines.children.map((c) => c.className), ["turn", "turn"], "Skalar-Array bleibt turn-Zeilen");
+});
+
+test("T-Wb-BIND5: bind end-to-end - { calls: [...] } in den data-mcp=calls-Slot", () => {
+  const doc = makeDoc(["calls"]);
+  slot(doc, "calls").setAttribute("data-mcp-row", "direction,counterparty,status,startedAt,summary");
+  bind(doc, {
+    calls: [
+      { id: "c1", direction: "outbound", counterparty: "+49170", status: "completed", startedAt: "Fr 11:59", summary: "ok" },
+      { id: "c2", direction: "inbound", counterparty: "+49160", status: "dialing", startedAt: "Fr 12:10" },
+    ],
+  });
+  const container = slot(doc, "calls");
+  assert.equal(container.children.length, 2, "zwei Call-Rows");
+  // id ist NICHT als Spalte deklariert -> taucht nicht im DOM auf (View waehlt Felder).
+  assert.deepEqual(container.children[0].children.map((c) => c.getAttribute("data-field")),
+    ["direction", "counterparty", "status", "startedAt", "summary"]);
+  assert.equal(container.children[1].children[4].textContent, "", "c2 ohne summary -> leere Zelle");
+});
+
+test("T-Wb-BIND6: BIND_SCRIPT projiziert rowFields + renderRows (eine Quelle, kein innerHTML)", () => {
+  assert.ok(BIND_SCRIPT.includes("function rowFields"), "rowFields projiziert");
+  assert.ok(BIND_SCRIPT.includes("function renderRows"), "renderRows projiziert");
+  assert.ok(!BIND_SCRIPT.includes("innerHTML"), "kein innerHTML (XSS-Gate, S1)");
 });
