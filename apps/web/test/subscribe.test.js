@@ -17,6 +17,9 @@ import {
   quotaLine,
   wireSubscribe,
   SUBSCRIBE_MESSAGES,
+  PLAN_CHOICE_COPY,
+  renderPlanChoice,
+  dismissPlanChoice,
 } from "../src/lib/subscribe.js";
 
 // ---- Fake-DOM ---------------------------------------------------------------
@@ -63,7 +66,7 @@ test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, 
   const starterTile = tiles[0];
   const text = textOf([starterTile]);
   assert.ok(text.includes("Starter"));
-  assert.ok(text.includes("€4.99"));
+  assert.ok(text.includes("$4.99"));
   assert.ok(text.includes("/month"));
   for (const feature of starter.features) assert.ok(text.includes(feature), `Feature fehlt: ${feature}`);
 
@@ -236,4 +239,34 @@ test("ApiError traegt den optionalen Backend-Code", () => {
   const err = new ApiError(409, "x", "no_card");
   assert.equal(err.status, 409);
   assert.equal(err.code, "no_card");
+});
+
+// ---- Aktivierungs-Default (AM3): renderPlanChoice / dismissPlanChoice ---------
+test("renderPlanChoice: aktivierende H1 + Untertitel + 2 Kacheln + Skip sichtbar", () => {
+  const els = {
+    title: { textContent: "" }, subtitle: { textContent: "" },
+    tiles: { _k: null, replaceChildren(...n) { this._k = n; } }, skip: { hidden: true },
+  };
+  renderPlanChoice(fakeDocument, els);
+  assert.equal(els.title.textContent, PLAN_CHOICE_COPY.title);
+  assert.equal(els.subtitle.textContent, PLAN_CHOICE_COPY.subtitle);
+  assert.equal(els.tiles._k.length, 2);      // eine Kachel je Katalog-Plan
+  assert.equal(els.skip.hidden, false);      // Skip nur im Payment-Pfad sichtbar
+});
+
+test("dismissPlanChoice: Pending-Banner, Kacheln+Skip weg, KEIN subscribe/setStatus", () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: {} }));
+  try {
+    const els = {
+      title: { textContent: "" }, subtitle: { textContent: "" },
+      tiles: { _k: [1, 2], replaceChildren(...n) { this._k = n; } }, skip: { hidden: false },
+    };
+    dismissPlanChoice(els);
+    assert.equal(els.title.textContent, PLAN_CHOICE_COPY.bannerTitle);
+    assert.equal(els.tiles._k.length, 0);    // Kacheln entfernt
+    assert.equal(els.skip.hidden, true);
+    assert.equal(f.calls.length, 0, "Skip darf NICHT aktivieren (kein Backend-Call)");
+  } finally {
+    f.restore();
+  }
 });

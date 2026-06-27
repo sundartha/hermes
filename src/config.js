@@ -377,7 +377,11 @@ export const config = {
   // Leer (Default) = AUS -> heutiges Serving byte-identisch (nur public/, hinter Basic-
   // Auth). Gesetzt -> der Gateway liefert Marketing + App-Shell same-origin (server.js),
   // VOR der Basic-Auth. Pfad-Flag (Muster MULTI_TENANT/PAYMENT_ENABLED, fail-closed).
-  webDistDir: process.env.WEB_DIST_DIR || "",
+  // AM3: zu absolutem Pfad aufloesen (path.resolve, idempotent). Ein RELATIVER WEB_DIST_DIR
+  // (live "apps/web/dist") liess res.sendFile (SPA-Fallback /app/*) mit "path must be
+  // absolute" 500en, waehrend express.static (cwd-relativ) noch griff. Absolut behebt das
+  // an der Quelle und macht boot-guard/static cwd-unabhaengig. Leer bleibt leer (Flag aus).
+  webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
 };
 
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen

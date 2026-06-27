@@ -284,6 +284,20 @@
   align-self: flex-start;
 }
 
+/* AM3: sekundaerer "Maybe later"-Skip. Bewusst KEIN .btn (kein gleichwertiger CTA) -
+   ein ruhiger, untergeordneter Link unter den Kacheln. Nur semantische Tokens. */
+.plan-skip {
+  display: inline-block;
+  margin-top: var(--space-stack);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-muted);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* W5: Settings-Editor (der einzige Schreibpfad). AUSSCHLIESSLICH semantische
    Tokens -- keine festen Werte (Strategie 2.5). Die Toggle-Geometrie ist aus
    den vorhandenen Space-Tokens per calc() komponiert (kein Magic-Pixel). */
