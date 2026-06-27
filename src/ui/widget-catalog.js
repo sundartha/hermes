@@ -10,9 +10,11 @@ import { fileURLToPath } from "node:url";
 // Eintraege (OCP), ohne die Adapter-Logik zu aendern. title = Resource-Metadaten je
 // Widget (statt eines hartkodierten Magic-Strings, G25).
 export const WIDGET_CALL_STATUS = "call-status";
+export const WIDGET_CALL_RESULT = "call-result";
 export const WIDGET_TRANSCRIPT = "transcript";
 const WIDGET_DEFS = {
   [WIDGET_CALL_STATUS]: { file: "call-status.html", title: "Hermes Call Status" },
+  [WIDGET_CALL_RESULT]: { file: "call-result.html", title: "Hermes Call Result" },
   [WIDGET_TRANSCRIPT]: { file: "transcript.html", title: "Hermes Transcript" },
 };
 

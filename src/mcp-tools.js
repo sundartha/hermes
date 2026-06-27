@@ -2,7 +2,7 @@
 // Die Tools sprechen mit der REST-API des Gateways.
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
-import { WIDGET_CALL_STATUS, WIDGET_TRANSCRIPT } from "./ui/adapters/mcp-native.js";
+import { WIDGET_CALL_STATUS, WIDGET_CALL_RESULT, WIDGET_TRANSCRIPT } from "./ui/adapters/mcp-native.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
@@ -210,6 +210,35 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
     },
   );
 
+  // Stufe-0-Sicht (Text + structuredContent) eines Calls nach dem get_call_status-
+  // Datenkontrakt. Geteilt von get_call_status und get_call_result (G5/S2 - EINE Quelle
+  // fuer Fetch + Whitelist-Filter + Antwortform; die beiden Tools unterscheiden sich nur
+  // im angehaengten Widget, nicht in den Daten). Whitelist (pickCallStatus) sitzt VOR
+  // Text + structuredContent. Textblock bleibt die heutige 3-Feld-Sicht (Legacy/stdio
+  // byte-kompatibel); structuredContent ist die SSOT-Obermenge inkl. call_id.
+  const callStatusResult = async (call_id) => {
+    const c = await call("GET", `/api/calls/${call_id}`);
+    requireFields(c, { transcript: "array" });
+    const data = pickCallStatus(call_id, c);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              status: data.status,
+              duration_s: data.duration_s,
+              last_transcript_lines: data.last_transcript_lines,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+      structuredContent: data,
+    };
+  };
+
   // Stufe 1 NUR wenn ein faehiger Renderer das Widget kennt (Capability vorhanden).
   // enableWidgetUi registriert die Resource und liefert das _meta; sonst {} (AC3).
   uiTool(
@@ -221,31 +250,29 @@ export function registerTools(server, { identity = null, allowCalendar = true, u
       outputSchema: CALL_STATUS_OUTPUT,
       ...enableWidgetUi(WIDGET_CALL_STATUS),
     },
-    async ({ call_id }) => {
-      const c = await call("GET", `/api/calls/${call_id}`);
-      requireFields(c, { transcript: "array" });
-      const data = pickCallStatus(call_id, c); // EIN Filter, VOR Text + structuredContent
-      // Textblock bleibt die heutige 3-Feld-Sicht (Legacy/stdio byte-kompatibel, AC8);
-      // structuredContent ist die SSOT-Obermenge inkl. call_id (Whitelist).
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(
-              {
-                status: data.status,
-                duration_s: data.duration_s,
-                last_transcript_lines: data.last_transcript_lines,
-              },
-              null,
-              2,
-            ),
-          },
-        ],
-        structuredContent: data,
-      };
-    },
+    async ({ call_id }) => callStatusResult(call_id),
   );
+
+  // P4 (Schreib-Aktion ueber Widget-Callback): read-only Karte des Calls mit interaktivem
+  // Abbrechen-Control, das cancel_call als NORMALEN, authentisierten MCP-Tool-Call durch
+  // ALLE Safety-Gates + Tenant-Isolation zurueckruft (Q3/Regel 1 - kein Seitenkanal).
+  // Stufe 0 = exakt der get_call_status-Datenkontrakt (geteilter Helper). NUR registrieren,
+  // wenn ein faehiger Renderer das Widget kennt: ohne Rich-UI waere es ein reines Duplikat
+  // von get_call_status -> dann gar nicht anbieten (Flag aus / stdio / incapable =>
+  // Tool-Liste byte-identisch zu heute; kein verwirrendes Doppel-Tool).
+  if (uiRenderer && uiRenderer.hasWidget(WIDGET_CALL_RESULT)) {
+    uiTool(
+      "get_call_result",
+      {
+        description:
+          "Zeigt den aktuellen Stand eines Anrufs als interaktive Karte mit Abbrechen-Control, das cancel_call ausloest. Die Daten entsprechen get_call_status.",
+        inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
+        outputSchema: CALL_STATUS_OUTPUT,
+        ...enableWidgetUi(WIDGET_CALL_RESULT),
+      },
+      async ({ call_id }) => callStatusResult(call_id),
+    );
+  }
 
   uiTool(
     "get_transcript",

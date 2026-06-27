@@ -9,7 +9,12 @@ import http from "node:http";
 import { z } from "zod";
 import { registerTools } from "../src/mcp-tools.js";
 import { uiRendererFor } from "../src/ui/registry.js";
-import { mcpNativeRenderer, WIDGET_CALL_STATUS, WIDGET_TRANSCRIPT } from "../src/ui/adapters/mcp-native.js";
+import {
+  mcpNativeRenderer,
+  WIDGET_CALL_STATUS,
+  WIDGET_CALL_RESULT,
+  WIDGET_TRANSCRIPT,
+} from "../src/ui/adapters/mcp-native.js";
 import { chatgptRenderer } from "../src/ui/adapters/chatgpt.js";
 import {
   UI_MIME,
@@ -67,7 +72,12 @@ const RICH_CALL = {
 };
 
 async function startGatewayMock(body) {
-  const server = http.createServer((_req, res) => {
+  // requests: Mitschnitt der eingehenden Requests (method/url/headers) fuer den
+  // Callback-Beweis (P4-AC5: cancel_call laeuft als authentisierter POST auf den
+  // bestehenden /cancel-Pfad, kein Seitenkanal). Additiv - Bestandsaufrufer ignorieren.
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push({ method: req.method, url: req.url, headers: req.headers });
     res.statusCode = 200;
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify(body));
@@ -75,16 +85,22 @@ async function startGatewayMock(body) {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return {
     url: `http://127.0.0.1:${server.address().port}`,
+    requests,
     close: () => new Promise((r) => server.close(r)),
   };
 }
 
 async function withGateway(body, fn) {
+  return withGatewayCapture(body, () => fn());
+}
+
+// Wie withGateway, reicht aber den Mock an fn (fuer den Request-Mitschnitt, AC5).
+async function withGatewayCapture(body, fn) {
   const mock = await startGatewayMock(body);
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    return await fn();
+    return await fn(mock);
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;
@@ -539,4 +555,150 @@ test("T-P3-AC6: chatgptRenderer-Grenzfaelle + Detektor", () => {
   // Detektoren disjunkt: ein mcp-nativer Host ist KEIN ChatGPT-Host und umgekehrt.
   assert.equal(capabilityDeclaresChatgptUi(CAPABLE_CAPS), false, "mcp-Caps -> kein ChatGPT");
   assert.equal(capabilityDeclaresUi(CHATGPT_CAPS), false, "ChatGPT-Caps -> kein mcp-nativ");
+});
+
+// ===== P4: erstes Callback-Widget (get_call_result + cancel_call, hartes Safety-Gate) =====
+// get_call_result ist read-only und teilt den get_call_status-Datenkontrakt (geteilter
+// Helper); der Widget-Button ruft cancel_call als NORMALEN, authentisierten MCP-Tool-
+// Call zurueck (kein Seitenkanal). Das Tool existiert NUR bei faehigem Rich-UI-Host
+// (sonst byte-identische Tool-Liste). DoD(b) - fremder Tenant kann fremden Call nicht
+// abbrechen - ist serverseitig in test/i6-write-scope.test.js bewiesen (Endpunkt in P4
+// unveraendert) und wird hier bewusst NICHT dupliziert.
+const RESOURCE_URI_RESULT = uiResourceUri(WIDGET_CALL_RESULT); // ui://hermes/call-result
+
+test("T-P4-UI-AC1: Stufe 0 - structuredContent + Text exakt wie get_call_status (geteilter Helper)", async () => {
+  await withGateway(RICH_CALL, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("get_call_result");
+    assert.ok(config.outputSchema, "outputSchema am config deklariert");
+    const result = await handler({ call_id: "call_1" });
+
+    assert.equal(result.content[0].type, "text", "Textblock vorhanden");
+    const textObj = JSON.parse(result.content[0].text);
+    assert.deepEqual(
+      Object.keys(textObj).sort(),
+      ["duration_s", "last_transcript_lines", "status"],
+      "Textblock: dieselbe 3-Feld-Sicht wie get_call_status",
+    );
+
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "call_id",
+      "duration_s",
+      "last_transcript_lines",
+      "status",
+    ]);
+    assert.doesNotThrow(
+      () => callStatusOutput.parse(result.structuredContent),
+      "structuredContent validiert gegen outputSchema",
+    );
+
+    // Beweis des geteilten Helpers: identische Keys wie get_call_status.
+    const statusResult = await tools.get("get_call_status").handler({ call_id: "call_1" });
+    assert.deepEqual(
+      Object.keys(result.structuredContent).sort(),
+      Object.keys(statusResult.structuredContent).sort(),
+      "structuredContent-Keys identisch zu get_call_status",
+    );
+  });
+});
+
+test("T-P4-UI-AC2: Stufe 1 (faehiger Host) - genau eine call-result-Resource + _meta zeigt darauf", async () => {
+  await withGateway(RICH_CALL, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const resultResources = resources.filter((r) => r.uri === RESOURCE_URI_RESULT);
+    assert.equal(resultResources.length, 1, "genau eine call-result-Resource");
+    assert.equal(resultResources[0].config.mimeType, UI_MIME);
+
+    const { config } = tools.get("get_call_result");
+    assert.equal(config._meta.ui.resourceUri, RESOURCE_URI_RESULT, "_meta zeigt auf dieselbe URI");
+  });
+});
+
+test("T-P4-UI-AC3: fail-closed - ohne faehigen Rich-UI-Host existiert get_call_result GAR NICHT", async () => {
+  const cases = {
+    "stdio (uiHost=null)": null,
+    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
+    "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
+    "unbekannter Host (fremder mimeType)": {
+      enabled: true,
+      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
+    },
+  };
+  await withGateway(RICH_CALL, async () => {
+    for (const [label, uiHost] of Object.entries(cases)) {
+      const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
+      assert.equal(tools.has("get_call_result"), false, `${label}: Tool existiert nicht`);
+      assert.equal(
+        resources.filter((r) => r.uri === RESOURCE_URI_RESULT).length,
+        0,
+        `${label}: keine call-result-Resource`,
+      );
+      // get_call_status bleibt unberuehrt verfuegbar (Tool-Liste byte-identisch zu heute).
+      assert.equal(tools.has("get_call_status"), true, `${label}: get_call_status bleibt`);
+    }
+  });
+});
+
+test("T-P4-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Text/Resource", async () => {
+  await withGateway(RICH_CALL, async () => {
+    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_call_result");
+    const result = await handler({ call_id: "call_1" });
+
+    const serialized = JSON.stringify(result);
+    for (const leak of ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "recording.wav"]) {
+      assert.ok(!serialized.includes(leak), `kein Leck von ${leak} im Tool-Result`);
+    }
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "call_id",
+      "duration_s",
+      "last_transcript_lines",
+      "status",
+    ]);
+
+    const resultRes = resources.find((r) => r.uri === RESOURCE_URI_RESULT);
+    const html = (await resultRes.readCallback()).contents[0].text;
+    for (const leak of ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "recording.wav"]) {
+      assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
+    }
+  });
+});
+
+test("T-P4-UI-AC5: Callback = authentisierter cancel_call-Tool-Call auf den gegateten /cancel-Pfad", async () => {
+  await withGatewayCapture(RICH_CALL, async (mock) => {
+    const { tools } = captureUi({ identity: "user@example.com", uiHost: capableHost() });
+    await tools.get("cancel_call").handler({ call_id: "call_1" });
+
+    assert.equal(mock.requests.length, 1, "genau ein Gateway-Request");
+    const req = mock.requests[0];
+    assert.equal(req.method, "POST", "POST (Schreib-Aktion)");
+    assert.equal(req.url, "/api/calls/call_1/cancel", "bestehender, gegateter Abbruch-Pfad");
+    assert.equal(
+      req.headers["x-internal-identity"],
+      "user@example.com",
+      "Identitaets-Header gesetzt -> serverseitig mcpAuth/requestTenant/tenantOwnsCall, kein Seitenkanal",
+    );
+  });
+});
+
+test("T-P4-UI-AC6: call-result.html self-contained + zielt auf das gegatete cancel_call", async () => {
+  const readback = await new Promise((resolve) => {
+    const fakeServer = {
+      registerResource(_name, _uri, _config, readCallback) {
+        resolve(readCallback());
+      },
+    };
+    mcpNativeRenderer.registerResource(fakeServer, WIDGET_CALL_RESULT);
+  });
+  const content = readback.contents[0];
+  assert.equal(content.mimeType, UI_MIME);
+  const html = content.text;
+  assert.ok(html.startsWith("<!-- @dsCard"), "@dsCard-Marker in Zeile 1");
+  assert.ok(!html.includes("@import"), "kein @import");
+  assert.doesNotMatch(html, /<link[\s>]/, "kein <link>-Element");
+  assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
+  // Widget zielt auf das gegatete Tool (kein Seitenkanal) und kennt die call_id-Quelle.
+  assert.ok(html.includes("cancel_call"), "Widget ruft cancel_call");
+  assert.ok(html.includes('data-mcp="call_id"'), "Widget liest call_id aus structuredContent");
+  assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALL_RESULT), true, "Adapter kennt call-result");
 });

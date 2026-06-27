@@ -1,0 +1,72 @@
+<!-- @dsCard group="MCP" name="get_call_result" subtitle="Live call card with cancel control" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Call Result</title>
+<style>
+  /* Inline-Tokens: Subset aus design-system/_shared/tokens.css (Werte identisch,
+     self-contained fuer die Iframe-Sandbox - kein externer CSS-Import/Linkback). */
+  :root {
+    --color-red-600:#e60000; --color-ink-900:#25282b; --color-gray-500:#7e7e7e;
+    --color-gray-150:#ececec; --color-white:#fff; --color-green-500:#1faa59;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --radius-md:12px; --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
+  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
+        border-radius:var(--radius-md);padding:var(--space-4);max-width:420px}
+  .head{display:flex;align-items:center;gap:var(--space-2)}
+  .title{font-weight:600}
+  .sub{color:var(--color-gray-500);font-size:13px}
+  .badge{margin-left:auto;font-size:12px;color:var(--color-green-500)}
+  .line{display:flex;justify-content:space-between;margin-top:var(--space-3);
+        padding-top:var(--space-2);border-top:1px solid var(--color-gray-150)}
+  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
+        display:flex;justify-content:space-between;align-items:center}
+  .cancel{font-family:var(--font-sans);font-size:13px;color:var(--color-white);
+          background:var(--color-red-600);border:0;border-radius:var(--radius-md);
+          padding:var(--space-2) var(--space-3);cursor:pointer}
+  .cancel:disabled{background:var(--color-gray-500);cursor:default}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <span><span class="title">Anruf</span><br />
+      <span class="sub">get_call_result</span></span>
+      <span class="badge" data-mcp="status">—</span>
+    </div>
+    <div class="line"><span>Dauer</span><span data-mcp="duration_s">—</span></div>
+    <div data-mcp="last_transcript_lines"></div>
+    <div class="foot">
+      <span data-mcp="call_id">—</span>
+      <button type="button" class="cancel" data-cancel>Anruf abbrechen</button>
+    </div>
+  </div>
+  <!-- Schreib-Aktion (P4): der Button laesst den HOST cancel_call als NORMALEN,
+       authentisierten MCP-Tool-Call ausloesen (durch ALLE Safety-Gates +
+       Tenant-Isolation, Regel 1/Q3). KEIN privilegierter Seitenkanal - das Widget
+       ruft NUR die vom Host bereitgestellte Tool-Bruecke und uebergibt die call_id
+       aus dem gepushten structuredContent. Exakte Bruecke wird per Smoke bestaetigt
+       (nicht ohne realen Host unit-testbar); die Server-Sicherheit haengt NICHT
+       davon ab (cancel_call laeuft so oder so durch alle Gates). -->
+  <script>
+    (function () {
+      var btn = document.querySelector("[data-cancel]");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        var el = document.querySelector('[data-mcp="call_id"]');
+        var callId = el ? (el.textContent || "").trim() : "";
+        if (!callId || callId === "—") return;
+        btn.disabled = true;
+        // Host-bereitgestellte Tool-Bruecke (kein eigener Endpunkt). Fehlt sie,
+        // passiert nichts (fail-safe no-op) - nie ein Seitenkanal.
+        var bridge = window.openai && window.openai.callTool;
+        if (bridge) bridge("cancel_call", { call_id: callId });
+      });
+    })();
+  </script>
+</body>
+</html>
