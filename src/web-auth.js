@@ -7,8 +7,30 @@ import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
-// Lebensdauer der Login-Flow-Cookies (pkce/state/nonce) in Sekunden.
-const LOGIN_COOKIE_MAX_AGE = 600;
+// Default-Lebensdauer der Login-Flow-Cookies (pkce/state/nonce) in Sekunden, falls deps
+// keinen Wert injiziert (Tests). Produktion reicht config.loginCookieTtlSeconds durch.
+const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
+// Login-Route: eine Quelle (G5) fuer die Route-Registrierung, den Recovery-Redirect und
+// den Link der terminalen Seite.
+const LOGIN_ROUTE = "/auth/login";
+// Query-Param, mit dem die Recovery den Login als zweiten (markierten) Versuch anstoesst.
+const RETRY_PARAM = "retry";
+// Loop-Guard-Marker fuer den OAuth-state. Tilde ist URI-unreserved (RFC 3986) und nicht
+// im base64url-Alphabet des Zufallstokens -> kollisionsfrei anhaengbar/erkennbar. Der
+// Marker reist im state-Query-Param mit (vom IdP verbatim zurueckgespiegelt) und ueberlebt
+// so den Round-Trip auch dann, wenn der Browser gar keine Cookies speichert.
+const STATE_RETRY_MARKER = "~retry";
+const markRetryState = (token) => token + STATE_RETRY_MARKER;
+const isRetryState = (state) => String(state ?? "").endsWith(STATE_RETRY_MARKER);
+// Terminale Recovery-Seite: erscheint NUR, wenn auch der zweite (markierte) Login-Versuch
+// ohne Login-Cookie zurueckkommt (Browser blockiert Cookies) -> bricht den Loop statt
+// Endlos-302. Mintet KEINE Session, setzt KEIN Cookie, leakt nichts.
+const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="de"><head><meta charset="utf-8">
+<title>Sitzung abgelaufen</title></head><body>
+<h1>Sitzung abgelaufen</h1>
+<p>Deine Anmeldesitzung ist abgelaufen oder dein Browser blockiert Cookies. Bitte erlaube Cookies fuer diese Seite und melde dich erneut an.</p>
+<p><a href="${LOGIN_ROUTE}">Erneut anmelden</a></p>
+</body></html>`;
 
 const b64url = (buf) => buf.toString("base64url");
 
@@ -76,6 +98,15 @@ function clearCookies(res, names) {
   }
 }
 
+// Recovery bei FEHLENDEM Login-Flow-Cookie (benign: Drop/Expiry/anderer Tab beim Mail-Link).
+// Erster Versuch -> 302 zurueck auf den Login als markierter retry. Kommt der markierte
+// Versuch erneut ohne Cookie zurueck (Browser blockiert Cookies), bricht der Loop-Guard ab
+// und zeigt die terminale Seite statt eines Endlos-302. Mintet NIE eine Session.
+function recoverLogin(req, res) {
+  if (isRetryState(req.query.state)) return res.status(200).send(SESSION_EXPIRED_PAGE);
+  return res.redirect(302, `${LOGIN_ROUTE}?${RETRY_PARAM}=1`);
+}
+
 // ---- makeWebAuthRoutes -----------------------------------------------
 // Baut einen Express-Router mit GET /auth/login, GET /auth/callback, POST /auth/logout.
 // Alle externen Abhaengigkeiten (oidc, accounts, sessions, audit) per Dependency-
@@ -92,6 +123,10 @@ export function makeWebAuthRoutes(deps) {
   // den pg-Store-Spiegel, BEVOR die Session steht. Sonst faende jede WRITE-Store-Op auf dem
   // Self-Service-Subscribe-Pfad (setTenantStripe etc.) den Tenant nicht und wuerfe fail-closed.
   const ensureTenant = deps.ensureTenant || (async () => {});
+  // Login-Flow-Cookie-TTL (state/pkce/nonce) per DI (Muster ttlSeconds): Produktion reicht
+  // config.loginCookieTtlSeconds durch, Tests fallen auf den Default zurueck. `??` ehrt eine
+  // explizite 0 (min:0 in config).
+  const loginCookieTtlSeconds = deps.loginCookieTtlSeconds ?? DEFAULT_LOGIN_COOKIE_TTL_SECONDS;
   const router = Router();
 
   // EINE Quelle fuer das Session-Minting (G5 - kein paralleler Auth-Pfad): Account-Upsert
@@ -115,9 +150,13 @@ export function makeWebAuthRoutes(deps) {
 
   // GET /auth/login
   // Erzeugt PKCE-Paar + State, signiert beides als Cookies, redirectet zum IdP.
-  router.get("/auth/login", async (req, res) => {
+  router.get(LOGIN_ROUTE, async (req, res) => {
     const { verifier, challenge } = makePkce();
-    const state = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
+    const stateToken = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
+    // Loop-Guard: ein Recovery-Neustart (?retry=1) markiert den state. Nur der state-Param
+    // ueberlebt den IdP-Round-Trip (Cookies evtl. blockiert) -> der Callback erkennt am
+    // Marker den zweiten vergeblichen Versuch und zeigt die terminale Seite statt Endlos-302.
+    const state = req.query[RETRY_PARAM] === "1" ? markRetryState(stateToken) : stateToken;
     // oidc_nonce: zusaetzliche signierte Same-Session-Bindung. WorkOS User Management
     // kennt im authorize-Endpoint keinen nonce-Param und liefert kein id_token -> kein
     // IdP-Round-Trip; der Replay-Schutz liegt bei PKCE (code nur mit code_verifier
@@ -125,9 +164,9 @@ export function makeWebAuthRoutes(deps) {
     // dem Token-Tausch.
     const nonce = crypto.randomBytes(RANDOM_BYTES).toString("base64url");
     setCookies(res, [
-      ["pkce_verifier", signValue(verifier, secret), LOGIN_COOKIE_MAX_AGE],
-      ["oauth_state", signValue(state, secret), LOGIN_COOKIE_MAX_AGE],
-      ["oidc_nonce", signValue(nonce, secret), LOGIN_COOKIE_MAX_AGE],
+      ["pkce_verifier", signValue(verifier, secret), loginCookieTtlSeconds],
+      ["oauth_state", signValue(state, secret), loginCookieTtlSeconds],
+      ["oidc_nonce", signValue(nonce, secret), loginCookieTtlSeconds],
     ]);
     // authorizeUrl baut nur eine URL (kein I/O), bleibt aber awaited + fail-closed: ein
     // unerwarteter Fehler darf den Request nicht bis zum Socket-Timeout haengen lassen
@@ -146,9 +185,14 @@ export function makeWebAuthRoutes(deps) {
   // Validiert State (CSRF) + nonce + PKCE-Verifier + code, tauscht den Code bei WorkOS,
   // upsert Account, setzt Session-Cookie.
   router.get("/auth/callback", async (req, res) => {
-    // CSRF: state-Cookie muss vorhanden und mit Query-Param uebereinstimmen
+    // CSRF + Recovery: ein FEHLENDES state-Cookie (signedState == null) ist benign -
+    // Cookie-Drop/Expiry oder Mail-Link in anderem Tab/Geraet. Statt 400-Sackgasse starten
+    // wir den Flow neu (re-mint pkce/state/nonce ueber /auth/login). Ein VORHANDENES, aber
+    // ungueltig signiertes ODER abweichendes Cookie bleibt strikt 400 (echtes CSRF/Tampering);
+    // der Recovery-Pfad mintet NIE eine Session -> die Sicherung wird nicht aufgeweicht.
     const signedState = readCookie(req, "oauth_state");
-    const stateFromCookie = signedState ? verifyValue(signedState, secret) : null;
+    if (signedState === null) return recoverLogin(req, res);
+    const stateFromCookie = verifyValue(signedState, secret);
     if (!stateFromCookie || stateFromCookie !== req.query.state) {
       return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
     }

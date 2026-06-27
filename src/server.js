@@ -223,6 +223,9 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         secret: config.sessionSecret,
         redirectUri: config.publicUrl + "/auth/callback",
         ttlSeconds: config.sessionTtlSeconds,
+        // Login-Flow-Cookie-TTL (state/pkce/nonce), separat von der Session-TTL: grosszuegig
+        // genug fuer den Mail-Verify-Round-Trip; Ablauf faengt die Callback-Recovery benign ab.
+        loginCookieTtlSeconds: config.loginCookieTtlSeconds,
         oidc,
         accounts,
         sessions,

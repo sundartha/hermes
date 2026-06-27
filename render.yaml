@@ -188,6 +188,9 @@ services:
       # Lebensdauer der Browser-Session in Sekunden (Default 1 h).
       - key: SESSION_TTL_SECONDS
         value: "3600"
+      # Lebensdauer der Login-Flow-Cookies (state/pkce) in Sekunden (Default 30 min).
+      - key: LOGIN_COOKIE_TTL_SECONDS
+        value: "1800"
       # ---- Multi-Tenant + Self-Service (web-session-only) ----
       # MULTI_TENANT: Tenant-Scoping aktivieren (Default aus = Owner byte-identisch).
       - key: MULTI_TENANT

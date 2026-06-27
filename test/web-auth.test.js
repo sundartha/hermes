@@ -276,13 +276,85 @@ test("GET /auth/callback mit FALSCHEM state -> 400, keine Session (CSRF)", async
   }
 });
 
-test("GET /auth/callback ohne state-Cookie -> 400 (kein Bypass)", async () => {
+test("GET /auth/callback ohne state-Cookie -> 302 Recovery (kein Bypass, keine Session)", async () => {
+  // AM2: FEHLENDES state-Cookie ist benign (Drop/Expiry/anderer Tab) -> Flow-Neustart statt
+  // 400-Sackgasse. CSRF-Sicherung bleibt: KEINE Session, KEIN exchange, KEIN Mint.
   const { deps, calls } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
     const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=whatever`);
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 302);
+    assert.match(res.headers.location, /^\/auth\/login\?retry=1$/);
+    assert.equal(calls.create.length, 0, "kein Session-Mint im Recovery-Pfad");
+    assert.equal(calls.upsert.length, 0);
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+  } finally {
+    await srv.close();
+  }
+});
+
+// ---- AM2: Registrierung ohne CSRF-Sackgasse (Auth-Callback-Recovery) ----
+// Ein FEHLENDES state-Cookie ist benign (Cookie-Drop/Expiry/anderer Tab beim Mail-Link)
+// und startet den Flow neu; ein VORHANDENES-aber-ungueltiges Cookie bleibt strikt 400.
+// Loop-Guard ueber einen state-Marker (ueberlebt den IdP-Round-Trip ohne Cookies).
+
+test("AM2: Callback mit kaputt signiertem oauth_state-Cookie -> 400 (fail-closed, kein Recovery)", async () => {
+  const { deps, calls } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue("state-xyz", "wrong-secret"))}`, // falsche Signatur
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=state-xyz`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 400, "vorhandenes-aber-ungueltiges Cookie != absent");
     assert.equal(calls.create.length, 0);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("AM2: Callback ohne Cookie + markierter state -> terminale Seite (Loop-Guard, kein Endlos-302)", async () => {
+  const { deps, calls } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=abc~retry`);
+    assert.equal(res.status, 200);
+    assert.notEqual(res.status, 302);
+    assert.match(res.body, /Sitzung abgelaufen/);
+    assert.match(res.body, /\/auth\/login/);
+    assert.equal(calls.create.length, 0);
+    assert.equal(cookieValue(res.setCookie, "session"), null);
+  } finally {
+    await srv.close();
+  }
+});
+
+test("AM2: GET /auth/login?retry=1 markiert state in Cookie UND authorize-URL", async () => {
+  const { deps } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const res = await rawGet(`${srv.base}/auth/login?retry=1`);
+    assert.equal(res.status, 302);
+    const state = verifyValue(cookieValue(res.setCookie, "oauth_state"), SECRET);
+    assert.ok(state.endsWith("~retry"), "state-Cookie traegt den retry-Marker");
+    const u = new URL(res.headers.location);
+    assert.ok(u.searchParams.get("state").endsWith("~retry"), "derselbe Marker geht an den IdP");
+  } finally {
+    await srv.close();
+  }
+});
+
+test("AM2: GET /auth/login (ohne retry) -> state ohne Marker", async () => {
+  const { deps } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const res = await rawGet(`${srv.base}/auth/login`);
+    const state = verifyValue(cookieValue(res.setCookie, "oauth_state"), SECRET);
+    assert.ok(!state.endsWith("~retry"));
   } finally {
     await srv.close();
   }
