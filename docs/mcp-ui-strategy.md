@@ -1,9 +1,9 @@
-# MCP Rich-UI Strategie (analysis-only)
+# MCP Rich-UI Strategie
 
-Status: **Analyse/Strategie, KEIN Code.** Datum: 2026-06-26.
-Umbrella-Doc fuer die Lean-Kette in `tasks/mcp-ui-chain.md` (verbindliche Scope-Spec pro Phase)
-und `tasks/mcp-ui-p1-spec.md` (erste vertikale Scheibe). Dieses Doc beschreibt das WARUM und das
-Zielbild, die Ketten-Datei ist bei Konflikten autoritativ fuer den Phasen-Scope.
+Status: **Kette P0-P5 implementiert & gemergt (Stand 2026-06-27, lokal `master`).** Aktueller
+Stand + Restarbeit (v.a. die offene Client-Verdrahtung) in `tasks/mcp-ui-chain.md` (autoritativ,
+siehe auch Abschnitt 7). Dieses Doc beschreibt das WARUM und das Zielbild (Architektur/Seam/
+Sicherheits-Kontrakt) als bleibende Referenz.
 
 Bezug zu CLAUDE.md: Hermes will diesen Assistenten Millionen Menschen zugaenglich machen. Rich-UI
 im Chatbot-Host ist ein Distributions-Hebel (der MCP-Connector ist ein erstklassiger Einstieg in
@@ -303,54 +303,29 @@ duerfen** (Whitelist). Alles andere fliegt raus. Leitlinien aus dem Grounding:
 
 ---
 
-## 7. Phasen-Uebersicht
+## 7. Status & Restarbeit (Stand 2026-06-27)
 
-Detail + Reihenfolge/Abhaengigkeiten in `tasks/mcp-ui-chain.md`. Kurz:
+**Kette P0-P5 implementiert & gemergt** (lokal `master`, NICHT origin/upstream/live). Kompakter
+Stand, Phasen-Tabelle, Verdrahtungs-Befund und das Muster zum Hinzufuegen weiterer Widgets stehen
+jetzt in `tasks/mcp-ui-chain.md` (autoritativ). Hier nur das Wesentliche:
 
-- **P0 (Vorklaerung, kein Code):** Q1/Q3/Q4/Q5/Q6 sind vom Owner ENTSCHIEDEN (Abschnitt 8); offen
-  bleibt nur Q2 als empirischer Forschungsauftrag (Host-Erkennung, fail-closed bis belegt).
-  **Hartes P0-Akzeptanzkriterium:**
-  P0 belegt mit Stand 2026 KONKRET (mit Quelle), welcher real existierende Host (Claude MCP Apps
-  und/oder ChatGPT Apps SDK) das gewaehlte `ui://`-Resource-Format (Q5) tatsaechlich rendert, BEVOR
-  P1 startet — sonst wird der Seam um ein Format gebaut, das real kein Host rendert. Stufe 0 traegt
-  immer (gut gehedged), aber der Render-Beleg ist hier Pflicht, nicht "spaeter".
-- **P1 (duenne vertikale Scheibe):** EIN Tool gibt Stufe-0 (`text`+`structuredContent`) UND eine
-  Stufe-1-UI-Resource zurueck; EIN faehiger Host rendert; der `UiRenderer`-Seam beweist sich; der
-  Fallback (nicht-faehiger Host -> Stufe 0) ist getestet. Kandidat-Widget aus den vier Mockups
-  (Vorschlag: `get_call_status`/`call-status.html`, read-only, kein Callback -> minimale
-  Angriffsflaeche). Siehe `tasks/mcp-ui-p1-spec.md`.
-- **P2..Pn (Verbreiterung, je ein Schritt):** weitere Widgets aus `design-system/mcp/`
-  (`call-result`, `transcript`, `agent-status`), dann ggf. ein zweiter Host-Adapter
-  (ChatGPT Apps SDK neben MCP-nativ), dann das erste Widget mit Callback (Re-Validierung aller
-  Safety-Gates). Reihenfolge: read-only vor Callback, ein Host vor zwei Hosts.
+- **Gebaut (Server-Seite, getestet):** Seam `src/ui/` (Port/Registry/2 Adapter mcp-nativ+ChatGPT),
+  Stufe-0/Stufe-1 fuer 3 Tools (`get_call_status`, `get_transcript`, `get_call_result`), fail-closed
+  Fallback, Whitelist-Filter, Callback durch alle Gates (P4), Token-Sync-Gate (P5). Master-Schalter
+  `config.mcpUiEnabled` Default AUS = byte-identisch.
+- **OFFEN — die eigentliche Verdrahtung (gilt fuer ALLE Widgets):** Die Widget-HTML traegt
+  Platzhalter-Slots (`data-mcp-*` = `—`), aber **kein Widget liest das gepushte `structuredContent`
+  und fuellt diese Slots.** In einem echten Host wuerden die Karten heute leer rendern. Restarbeit:
+  **W1** gemeinsames Binding (EINMAL, geteilt) -> **W2** Live-Host-Smoke (Render mit echten Daten
+  beweisen) -> **W3** weitere Tool-Widgets nach Bedarf -> **W4** Design-Feinschliff / optional
+  `place_call`-Callback / origin-Push. Details in `tasks/mcp-ui-chain.md`.
 
-Kein Schritt vor dem ersten sichtbaren Widget baut Infrastruktur "auf Vorrat" (Regel 6, kein BDUF).
+Kein Schritt baut Infrastruktur "auf Vorrat" (Regel 6, kein BDUF).
 
----
+## 8. Owner-Entscheidungen (gepinnt, umgesetzt)
 
-## 8. Owner-Entscheidungen (ENTSCHIEDEN) + P0-Forschungsauftrag
-
-Die folgenden Punkte sind vom Owner entschieden und damit verbindlich. Q2 ist KEINE Owner-Frage,
-sondern ein hartes P0-Forschungs-Akzeptanzkriterium (fail-closed bis empirisch belegt).
-
-- **Q1 (Standard-Konvergenz) = ENTSCHIEDEN:** Zwei Host-Konventionen (MCP-nativ + ChatGPT Apps)
-  werden **dauerhaft akzeptiert**; es wird NICHT auf Protokoll-Konvergenz gewartet. Aufgeloest durch
-  Q5 (der Seam baut genau diese Optionalitaet).
-- **Q2 (Host-Erkennung) = P0-FORSCHUNGSAUFTRAG, fail-closed bis belegt** (keine Owner-Entscheidung):
-  Woran der Server einen Rich-faehigen Host erkennt (Initialize-Handshake-Capability, Client-Info
-  oder Config-Schalter pro Connector), ist empirisch in P0 zu klaeren. P0 muss mit Stand 2026 KONKRET
-  belegen (mit Quelle), welcher real existierende Host das gewaehlte `ui://`-Format (Q5) tatsaechlich
-  rendert — sonst baut P1 den Seam um ein Format ohne realen Renderer (siehe P0-Akzeptanzkriterium,
-  Abschnitt 7). Bis belegt: fail-closed (unbekannt -> Stufe 0).
-- **Q3 (Callback-Eingang) = ENTSCHIEDEN, Architektur-Invariante (greift in P4):** Widget-zu-Tool-
-  Callbacks laufen verbindlich ueber denselben authentisierten `/mcp`+`mcpAuth`-Eingang; KEIN
-  unauthentisierter Postback-Kanal. Die Invariante ist schon jetzt fixiert; die konkrete Bestaetigung
-  per Gate-Test erfolgt in P4. P1 beruehrt das nicht (erstes Widget ist read-only).
-- **Q4 (erstes Widget) = ENTSCHIEDEN:** Das erste Widget (P1) ist **`get_call_status`** (Mockup
-  `design-system/mcp/call-status.html`, read-only, kein Callback -> kleinste Angriffsflaeche).
-- **Q5 (Resource-Format) = ENTSCHIEDEN:** Seam-Kern ist **MCP-nativ** (`ui://`-Resource, Claude MCP
-  Apps); die P1-Referenz-Impl ist MCP-nativ. Der Port ist host-abstrakt; das **ChatGPT Apps SDK**
-  kommt in **P3** als zweiter Renderer/Adapter daneben, nicht als Kern.
-- **Q6 (Token-Pull-Disziplin) = ENTSCHIEDEN:** Token-Sync (`apps/web/src/styles/tokens/` ->
-  `design-system/_shared/tokens.css`) wird ein **verpflichtendes CI-/Review-Gate (in P5 verankert — UMGESETZT: `scripts/check-token-sync.js`, `npm run check:tokens`)**;
-  Drift wird automatisch verhindert.
+Alle in der Kette umgesetzt: Q1 zwei Host-Konventionen dauerhaft akzeptiert; Q2 Host-Erkennung via
+`initialize`-Capability `io.modelcontextprotocol/ui`, fail-closed (P0 belegt, SEP-1865); Q3 Callback
+nur ueber authentisierten `/mcp`, kein offener Postback (P4 bestaetigt); Q4 erstes Widget
+`get_call_status`; Q5 Seam-Kern MCP-nativ + ChatGPT als Adapter (P3); Q6 Token-Pull als CI-/Review-
+Gate (P5: `scripts/check-token-sync.js`, `npm run check:tokens`).
