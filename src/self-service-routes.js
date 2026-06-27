@@ -25,6 +25,9 @@ import { quotaView } from "./billing/meter.js";
 // Die UI (tenant.html) liest den ?card-Parameter und zeigt eine kurze Rueckmeldung.
 const CARD_RETURN_OK = "/tenant.html?card=ok";
 const CARD_RETURN_CANCELED = "/tenant.html?card=canceled";
+// Stripe-/Netzwerkfehler im Karten-Rueckkehr-Pfad: der Browser bekommt eine klare
+// Rueckmeldung statt eines haengenden Requests (s. asyncBilling). UI zeigt einen Fehler.
+const CARD_RETURN_ERROR = "/tenant.html?card=error";
 
 // BK2: Rueckkehr-Ziele bei getragenem Plan (Kachel-Flow). sub=ok: gebucht+aktiviert.
 // sub=failed: Karte gespeichert, Buchung scheiterte (z.B. already_subscribed) -> UI sagt
@@ -87,6 +90,27 @@ async function subscribeAndActivate({ store, billing, config, accounts, provisio
   await activatePaidTenant({ store, accounts, provision, tenant });
   return result;
 }
+
+// Express 4 leitet abgelehnte Promises aus async-Handlern NICHT an die Fehler-Kette ->
+// ein geworfener Stripe-/Netzwerkfehler liesse die Anfrage HAENGEN (nie ein Response,
+// haengende Verbindung = Verfuegbarkeitsrisiko bei Skala). Dieser Wrapper faengt den
+// Fehler, loggt NUR die Fehlermeldung (op+Status, kein Secret - Regel 4) und ruft einen
+// Responder (JSON 502 bzw. Redirect), sodass IMMER geantwortet wird. Erwartete fachliche
+// Ablehnungen (no_card etc.) laufen NICHT hierueber - die behandelt der Handler selbst.
+function asyncBilling(fn, onError) {
+  return async (req, res) => {
+    try {
+      await fn(req, res);
+    } catch (err) {
+      console.error(`self-service billing route failed: ${err.message}`);
+      if (!res.headersSent) onError(res);
+    }
+  };
+}
+
+// Fehler-Responder der JSON-Billing-Routen (setup-checkout/subscribe): 502 Bad Gateway
+// = Upstream Stripe fehlgeschlagen; generische Meldung (kein Secret/Interner, Regel 4).
+const billingUnavailable = (res) => res.status(502).json({ error: "billing_unavailable" });
 
 // config (paymentEnabled/publicUrl) + billing (BillingPort) + accounts (pg-Status-Seam
 // fuer die W4-Aktivierung) werden injiziert (P4/DIP): derselbe Handler in Produktion
@@ -195,62 +219,76 @@ export function makeSelfServiceRoutes({
   // card-setup-Helfer (G5: Customer-Idempotenz + Customer-Match leben einmal).
   // Ohne PAYMENT_ENABLED -> 404 (Muster flush-meters/Pay1, byte-identisch zum Bestand).
   // webAuthPendingMw (P5): suspended muss die Karte hinterlegen koennen (Aktivierungs-Schritt).
-  router.post("/api/self-service/billing/setup-checkout", webAuthPendingMw, async (req, res) => {
-    if (!config.paymentEnabled)
-      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
-    if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
-    const tenant = req.tenant.tenantId;
-    // BK2: optionaler Plan aus dem Kachel-Flow -> successUrl. Bare "Karte hinzufuegen"
-    // (kein Plan) -> null -> reine Karten-successUrl (byte-identisch zum Bestand).
-    const planSlug = knownPlanSlug((req.body || {}).plan);
-    const customerId = await ensureCustomer({ store, billing, tenant });
-    const successUrl = returnSuccessUrl(config.publicUrl, planSlug);
-    const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
-    const { url } = await billing.createSetupCheckoutSession({
-      tenantRef: tenant,
-      customerId,
-      successUrl,
-      cancelUrl,
-    });
-    audit("self_service_setup_checkout", req, `tenant=${tenant}`);
-    res.json({ url });
-  });
+  router.post(
+    "/api/self-service/billing/setup-checkout",
+    webAuthPendingMw,
+    asyncBilling(
+      async (req, res) => {
+        if (!config.paymentEnabled)
+          return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+        if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
+        const tenant = req.tenant.tenantId;
+        // BK2: optionaler Plan aus dem Kachel-Flow -> successUrl. Bare "Karte hinzufuegen"
+        // (kein Plan) -> null -> reine Karten-successUrl (byte-identisch zum Bestand).
+        const planSlug = knownPlanSlug((req.body || {}).plan);
+        const customerId = await ensureCustomer({ store, billing, tenant });
+        const successUrl = returnSuccessUrl(config.publicUrl, planSlug);
+        const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
+        const { url } = await billing.createSetupCheckoutSession({
+          tenantRef: tenant,
+          customerId,
+          successUrl,
+          cancelUrl,
+        });
+        audit("self_service_setup_checkout", req, `tenant=${tenant}`);
+        res.json({ url });
+      },
+      billingUnavailable,
+    ),
+  );
 
   // Stripe-Browser-Redirect-Ziel: GET (same-origin -> webAuthMw sieht das Session-
   // Cookie). Bindet das payment_method fail-closed an den eigenen Customer (Customer-
   // Match im Helfer). Antwortet mit 302 in die UI (Pay3), NICHT JSON.
-  router.get("/api/self-service/billing/return", webAuthPendingMw, async (req, res) => {
-    if (!config.paymentEnabled)
-      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
-    const tenant = req.tenant.tenantId;
-    const sessionId = req.query.session_id;
-    if (!sessionId || typeof sessionId !== "string")
-      return res.status(400).json({ error: "session_id ist Pflicht" });
+  router.get(
+    "/api/self-service/billing/return",
+    webAuthPendingMw,
+    asyncBilling(
+      async (req, res) => {
+        if (!config.paymentEnabled)
+          return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+        const tenant = req.tenant.tenantId;
+        const sessionId = req.query.session_id;
+        if (!sessionId || typeof sessionId !== "string")
+          return res.status(400).json({ error: "session_id ist Pflicht" });
 
-    const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
-    if (!ok) {
-      audit("self_service_card_mismatch", req, `tenant=${tenant}`);
-      return res.status(403).json({ error: "Customer-Mismatch" });
-    }
-    audit("self_service_card_saved", req, `tenant=${tenant}`);
+        const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
+        if (!ok) {
+          audit("self_service_card_mismatch", req, `tenant=${tenant}`);
+          return res.status(403).json({ error: "Customer-Mismatch" });
+        }
+        audit("self_service_card_saved", req, `tenant=${tenant}`);
 
-    // BK2: getragener Plan (Query) -> direkt buchen+aktivieren (gefuehrter Kachel-Flow:
-    // keine Karte -> Checkout -> Rueckkehr -> Plan). Fehlt/unbekannt -> reiner Karten-Flow
-    // (byte-identisch). Slug katalog-validiert (kein Id-Leak). Geld-Gates: PAYMENT_ENABLED
-    // (404 oben) + webAuthPendingMw + createTenantSubscription (fail-closed, idempotent).
-    const carriedPlan = knownPlanSlug(req.query.plan);
-    if (!carriedPlan) return res.redirect(CARD_RETURN_OK); // 302 -> "Karte hinterlegt"
+        // BK2: getragener Plan (Query) -> direkt buchen+aktivieren (gefuehrter Kachel-Flow:
+        // keine Karte -> Checkout -> Rueckkehr -> Plan). Fehlt/unbekannt -> reiner Karten-Flow
+        // (byte-identisch). Slug katalog-validiert (kein Id-Leak). Geld-Gates: PAYMENT_ENABLED
+        // (404 oben) + webAuthPendingMw + createTenantSubscription (fail-closed, idempotent).
+        const carriedPlan = knownPlanSlug(req.query.plan);
+        if (!carriedPlan) return res.redirect(CARD_RETURN_OK); // 302 -> "Karte hinterlegt"
 
-    const result = await subscribeAndActivate({
-      store, billing, config, accounts, provision, tenant, planSlug: carriedPlan,
-    });
-    audit(
-      "self_service_subscribe",
-      req,
-      `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason}`,
-    );
-    res.redirect(result.ok ? SUB_RETURN_OK : SUB_RETURN_FAILED);
-  });
+        const result = await subscribeAndActivate({
+          store, billing, config, accounts, provision, tenant, planSlug: carriedPlan,
+        });
+        audit(
+          "self_service_subscribe",
+          req,
+          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason}`,
+        );
+        res.redirect(result.ok ? SUB_RETURN_OK : SUB_RETURN_FAILED);
+      },
+      (res) => res.redirect(CARD_RETURN_ERROR),
+    ),
+  );
 
   // ---- W4: Abo buchen aus dem Self-Service-Dashboard -----------------------------
   // Identitaet = Web-Session (req.tenant.tenantId). Ohne PAYMENT_ENABLED -> 404 (byte-
@@ -260,23 +298,30 @@ export function makeSelfServiceRoutes({
   // Bei Erfolg Tenant AKTIV ueber accounts.setStatus (DERSELBE pg-Status-Seam wie der
   // Admin-approve, den webAuthMw liest - kein Drift zur Store-Fassade). Die Safety-Gates
   // (Allowlist/Budget/KYC/Disclosure) bleiben unberuehrt: active != outbound-faehig.
-  router.post("/api/self-service/billing/subscribe", webAuthPendingMw, async (req, res) => {
-    if (!config.paymentEnabled)
-      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
-    const tenant = req.tenant.tenantId;
-    const planSlug = (req.body || {}).plan;
-    // BK2: bucht + aktiviert ueber die geteilte Sequenz (subscribeAndActivate) - DIESELBE
-    // Quelle wie der Karten-Checkout-Rueckkehr-Pfad (G5/S2). Verhalten unveraendert.
-    const result = await subscribeAndActivate({
-      store, billing, config, accounts, provision, tenant, planSlug,
-    });
-    if (!result.ok) {
-      audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
-      return res.status(subscribeRejectStatus(result.reason)).json({ error: result.reason });
-    }
-    audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
-    res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
-  });
+  router.post(
+    "/api/self-service/billing/subscribe",
+    webAuthPendingMw,
+    asyncBilling(
+      async (req, res) => {
+        if (!config.paymentEnabled)
+          return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+        const tenant = req.tenant.tenantId;
+        const planSlug = (req.body || {}).plan;
+        // BK2: bucht + aktiviert ueber die geteilte Sequenz (subscribeAndActivate) - DIESELBE
+        // Quelle wie der Karten-Checkout-Rueckkehr-Pfad (G5/S2). Verhalten unveraendert.
+        const result = await subscribeAndActivate({
+          store, billing, config, accounts, provision, tenant, planSlug,
+        });
+        if (!result.ok) {
+          audit("self_service_subscribe_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+          return res.status(subscribeRejectStatus(result.reason)).json({ error: result.reason });
+        }
+        audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
+        res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
+      },
+      billingUnavailable,
+    ),
+  );
 
   return router;
 }

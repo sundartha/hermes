@@ -2,6 +2,9 @@ node_modules/
 /node_modules
 .claude/worktrees/
 .env
+.env.test-payment
+seed-test-payment.mjs
+seed-card-test-payment.mjs
 data/
 .twilio-recovery-code
 render-logs.sh

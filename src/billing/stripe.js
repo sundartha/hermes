@@ -134,6 +134,10 @@ export const stripeBilling = {
     const body = new URLSearchParams({
       mode: CHECKOUT_SETUP_MODE,
       customer: customerId,
+      // Stripe verlangt im setup-Mode ein currency (sonst HTTP 400 parameter_missing).
+      // app-weite config.paymentCurrency (default eur) - dieselbe Waehrung wie der
+      // spaetere Abo-Price, damit Karte und Recurring nicht divergieren.
+      currency: config.paymentCurrency,
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
@@ -185,6 +189,11 @@ export const stripeBilling = {
     const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
     assertOk(res, "createSubscription");
     const json = await res.json().catch(() => ({}));
-    return { subscriptionId: json.id, currentPeriodEnd: json.current_period_end };
+    // Die aktuelle Stripe-API liefert current_period_end NICHT mehr top-level an der
+    // Subscription, sondern pro Item (items.data[0].current_period_end). Fallback auf
+    // top-level fuer aeltere API-Versionen -> kein leeres Perioden-/Quota-Fenster.
+    const item = json.items && json.items.data && json.items.data[0];
+    const currentPeriodEnd = (item && item.current_period_end) ?? json.current_period_end;
+    return { subscriptionId: json.id, currentPeriodEnd };
   },
 };

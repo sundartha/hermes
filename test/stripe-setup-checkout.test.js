@@ -66,6 +66,8 @@ test("createSetupCheckoutSession: POST /v1/checkout/sessions, mode=setup + custo
   assert.equal(captured.opts.body.get("success_url"), "https://agent.test/ok");
   assert.equal(captured.opts.body.get("cancel_url"), "https://agent.test/no");
   assert.equal(captured.opts.body.get("metadata[tenant_ref]"), "tenant_a");
+  // Stripe verlangt im setup-Mode ein currency (sonst HTTP 400) - aus config.paymentCurrency.
+  assert.equal(captured.opts.body.get("currency"), config.paymentCurrency);
   assert.deepEqual(result, { url: "https://stripe.test/c/cs_1", sessionId: "cs_1" });
 });
 
@@ -109,6 +111,42 @@ test("Leak-Guard: Nicht-2xx -> wirft mit HTTP-Status, OHNE Secret-Key (createCus
         },
       ),
   );
+});
+
+test("createSubscription: liest current_period_end aus items.data[0] (aktuelle Stripe-API)", async () => {
+  let captured;
+  const result = await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({ id: "sub_1", items: { data: [{ current_period_end: 1893456000 }] } });
+    },
+    () =>
+      stripeBilling.createSubscription({
+        tenantRef: "tenant_a",
+        customerId: "cus_1",
+        priceId: "price_starter",
+        idempotencyKey: "sub_tenant_a_starter",
+      }),
+  );
+  assert.ok(captured.url.endsWith("/v1/subscriptions"), "URL endet auf /v1/subscriptions");
+  assert.equal(captured.opts.method, "POST");
+  assert.equal(captured.opts.body.get("items[0][price]"), "price_starter");
+  assert.equal(captured.opts.body.get("off_session"), "true");
+  assert.equal(captured.opts.headers["Idempotency-Key"], "sub_tenant_a_starter");
+  assert.deepEqual(result, { subscriptionId: "sub_1", currentPeriodEnd: 1893456000 });
+});
+
+test("createSubscription: Fallback auf top-level current_period_end (aeltere API)", async () => {
+  const result = await withStripeStub(
+    async () => okJson({ id: "sub_2", current_period_end: 1700000000 }),
+    () =>
+      stripeBilling.createSubscription({
+        tenantRef: "tenant_a",
+        customerId: "cus_1",
+        priceId: "price_starter",
+      }),
+  );
+  assert.deepEqual(result, { subscriptionId: "sub_2", currentPeriodEnd: 1700000000 });
 });
 
 test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_session=true, manual capture", async () => {

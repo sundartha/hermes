@@ -33,7 +33,7 @@ function fakeBilling(spy = {}) {
 
 const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
 
-async function setup({ card = true, paymentEnabled = true } = {}) {
+async function setup({ card = true, paymentEnabled = true, billing } = {}) {
   const { store, db } = await makePgTestStore();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -68,7 +68,7 @@ async function setup({ card = true, paymentEnabled = true } = {}) {
       webAuthPendingMw,
       audit: () => {},
       config: cfg,
-      billing: fakeBilling(billingSpy),
+      billing: billing ?? fakeBilling(billingSpy),
       accounts,
       provision: async (t) => provisionSpy.push(t),
     }),
@@ -102,7 +102,7 @@ function request(method, url, { cookie, body } = {}) {
       (res) => {
         let b = "";
         res.on("data", (d) => (b += d));
-        res.on("end", () => resolve({ status: res.statusCode, body: b }));
+        res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: b }));
       },
     );
     req.on("error", reject);
@@ -209,6 +209,59 @@ test("(g) ohne Session-Cookie -> 401, kein Abo", async () => {
       body: { plan: "starter" },
     });
     assert.equal(res.status, 401);
+  } finally {
+    await s.close();
+  }
+});
+
+// asyncBilling-Catch: ein UNERWARTETER Wurf aus dem BillingPort (Stripe/Netz) wird zu
+// sauberem 502/Redirect statt Express-4-Hang; fachliche Ablehnungen (no_card etc.) laufen
+// weiter ueber result.ok (Tests c/d/e). Alle Methoden werfen wie assertOk (kein Secret).
+function throwingBilling() {
+  const boom = (op) => async () => {
+    throw new Error(`Stripe ${op} fehlgeschlagen: HTTP 500`);
+  };
+  return {
+    createCustomer: boom("createCustomer"),
+    createSetupCheckoutSession: boom("createSetupCheckoutSession"),
+    createSubscription: boom("createSubscription"),
+    getCheckoutSessionResult: boom("getCheckoutSessionResult"),
+  };
+}
+
+test("(h) setup-checkout: unerwarteter Stripe-Wurf -> 502 billing_unavailable (kein Hang)", async () => {
+  const s = await setup({ billing: throwingBilling() });
+  try {
+    const res = await request("POST", `${s.base}/api/self-service/billing/setup-checkout`, {
+      cookie: s.cookieB,
+      body: {},
+    });
+    assert.equal(res.status, 502);
+    assert.equal(JSON.parse(res.body).error, "billing_unavailable");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(i) subscribe: unerwarteter Stripe-Wurf -> 502 billing_unavailable (kein Hang)", async () => {
+  const s = await setup({ billing: throwingBilling() });
+  try {
+    const res = await subscribe(s, "starter");
+    assert.equal(res.status, 502);
+    assert.equal(JSON.parse(res.body).error, "billing_unavailable");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(j) billing/return: unerwarteter Stripe-Wurf -> 302 Redirect card=error (kein Hang)", async () => {
+  const s = await setup({ billing: throwingBilling() });
+  try {
+    const res = await request("GET", `${s.base}/api/self-service/billing/return?session_id=cs_x`, {
+      cookie: s.cookieB,
+    });
+    assert.equal(res.status, 302);
+    assert.match(res.headers.location, /card=error/);
   } finally {
     await s.close();
   }
