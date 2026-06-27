@@ -43,3 +43,23 @@ test("Rate-Limiting", { skip: !EXTERNAL_IP && "keine externe Interface-IP" }, as
     await srv.stop();
   }
 });
+
+// AM1-Regression (KEIN externes Interface noetig -> nie geskippt): hinter Render erscheint
+// externer Traffic als Loopback-Socket, traegt aber X-Forwarded-For. Die alte
+// isLocalSocket-Ausnahme haette damit das Rate-Limit fuer den ganzen Internet-Traffic
+// ausgehebelt. isTrustedLocalCaller nimmt nur ECHTES In-Process-Loopback (ohne XFF) aus.
+test("Rate-Limiting: Loopback-Socket mit X-Forwarded-For ist NICHT ausgenommen (Render-Proxy)", async () => {
+  const srv = await startServer({ env: { RATE_LIMIT_PER_MIN: String(LIMIT) } });
+  try {
+    const statuses = [];
+    for (let i = 0; i < LIMIT + 1; i++) {
+      const res = await fetch(`${srv.localUrl}/healthz`, {
+        headers: { "X-Forwarded-For": "203.0.113.50" },
+      });
+      statuses.push(res.status);
+    }
+    assert.deepEqual(statuses, [200, 200, 200, 429]);
+  } finally {
+    await srv.stop();
+  }
+});

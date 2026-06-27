@@ -20,16 +20,38 @@ import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
 // Localhost anhand der echten Socket-Adresse erkennen - req.ip ist hinter trust proxy
 // aus X-Forwarded-For abgeleitet und damit von Clients faelschbar. Reine Funktion ohne
 // Deps: von Middleware UND Resolver genutzt -> EINE Quelle (T4 R1.3), nicht doppeln.
+// ACHTUNG: hinter einem Reverse-Proxy (Render) ist die Socket-Adresse fuer JEDEN von
+// aussen kommenden Request der Loopback-Sidecar -> isLocalSocket allein taugt NICHT als
+// Vertrauensgrenze. Als Auth-/Bypass-Gate NUR ueber isTrustedLocalCaller (s.u.).
 export const isLocalSocket = (req) =>
   ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress);
 
+// Kam der Request ueber einen Reverse-Proxy herein? Render (und Cloudflare davor) setzen
+// bei JEDEM von aussen kommenden Request X-Forwarded-For - der Client kann das nicht
+// unterdruecken, der vertraute Proxy setzt/ueberschreibt den Header. Ein prozess-interner
+// Loopback-Aufruf (MCP-Tools -> eigene /api ueber http://localhost) traegt ihn NICHT.
+// trust proxy laesst die Roh-Header unveraendert, nur req.ip wird daraus abgeleitet.
+const isProxyForwarded = (req) => Boolean(req.headers["x-forwarded-for"]);
+
+// AM1: Vertrauenswuerdiger lokaler In-Process-Aufrufer - die EINE Vertrauensgrenze fuer
+// Auth-/Rate-Limit-Bypaesse. Die Socket-Adresse allein genuegt NICHT: hinter Render
+// erscheint auch externer Traffic als Loopback-Socket (empirisch bestaetigt - GET
+// /api/state lieferte ohne Auth 200 mit Owner-Daten), d.h. isLocalSocket waere fuer JEDEN
+// Internet-Request wahr. Genuin lokal = echter Loopback-Socket UND NICHT ueber den Proxy
+// weitergereicht (kein X-Forwarded-For). So bleibt der In-Process-MCP-Pfad offen (echtes
+// Loopback, kein XFF), waehrend externer Proxy-Traffic (Loopback-Socket + XFF) gesperrt
+// wird. Topologie-basiert, daher in Dev UND Produktion korrekt (kein Env-Schalter noetig).
+export const isTrustedLocalCaller = (req) => isLocalSocket(req) && !isProxyForwarded(req);
+
 // Identitaet eines internen Aufrufers (Rechteprofile, Phase 2). Die MCP-Tools
 // laufen im selben Prozess und rufen die localhost-REST-API mit dem verifizierten
-// X-Internal-Identity-Header (aus req.auth.email im /mcp-Handler). Der Header wird
-// NUR von localhost-Sockets akzeptiert - von extern ist er faelschbar und wird
-// ignoriert (-> Owner). Body-Felder (requestedBy/email) NIE als Identitaet nutzen.
+// X-Internal-Identity-Header (aus req.auth.email im /mcp-Handler). Der Header wird NUR
+// von einem vertrauenswuerdigen lokalen In-Process-Aufrufer akzeptiert
+// (isTrustedLocalCaller: echtes Loopback OHNE Proxy-Weiterleitung) - ueber den
+// Render-Proxy (Loopback-Socket + X-Forwarded-For) ist er faelschbar und wird ignoriert
+// (-> Owner/Bootstrap). Body-Felder (requestedBy/email) NIE als Identitaet nutzen.
 export function internalIdentity(req) {
-  if (!isLocalSocket(req)) return null;
+  if (!isTrustedLocalCaller(req)) return null;
   const id = req.headers["x-internal-identity"];
   return typeof id === "string" && id ? id : null;
 }

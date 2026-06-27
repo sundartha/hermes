@@ -92,6 +92,39 @@ test(
   },
 );
 
+// AM1-Regression (KEIN externes Interface noetig -> nie geskippt): Hinter einem Reverse-
+// Proxy (Render) ist req.socket.remoteAddress fuer JEDEN von aussen kommenden Request der
+// Loopback-Sidecar -> die alte isLocalSocket-Ausnahme hat Dashboard + API fuer das ganze
+// Internet OHNE Passwort geoeffnet (GET /api/state lieferte live 200 mit Owner-Daten). Der
+// Proxy setzt zusaetzlich X-Forwarded-For, ein echter In-Process-Loopback-Aufruf NICHT.
+// localUrl = Loopback-Socket -> simuliert exakt die Proxy->App-Verbindung.
+test("Basic-Auth: Loopback-Socket + X-Forwarded-For umgeht Auth NICHT (Render-Proxy)", async (t) => {
+  const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
+  try {
+    await t.test("Loopback OHNE X-Forwarded-For -> 200 (echter In-Process-MCP-Aufruf)", async () => {
+      const res = await fetch(`${srv.localUrl}/api/state`);
+      assert.equal(res.status, 200);
+    });
+
+    await t.test("Loopback MIT X-Forwarded-For ohne Credentials -> 401 (extern via Proxy)", async () => {
+      const res = await fetch(`${srv.localUrl}/api/state`, {
+        headers: { "X-Forwarded-For": "203.0.113.9" },
+      });
+      assert.equal(res.status, 401);
+    });
+
+    await t.test("Loopback MIT X-Forwarded-For + korrekte Credentials -> 200", async () => {
+      const auth = "Basic " + Buffer.from("admin:test-geheim").toString("base64");
+      const res = await fetch(`${srv.localUrl}/api/state`, {
+        headers: { "X-Forwarded-For": "203.0.113.9", Authorization: auth },
+      });
+      assert.equal(res.status, 200);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
 test(
   "/mcp fail-closed ohne MCP_AUTH_TOKEN",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
