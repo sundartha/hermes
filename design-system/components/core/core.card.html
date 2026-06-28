@@ -1,0 +1,55 @@
+<!-- @dsCard group="Components" name="Core — Buttons, Card, CTA" viewport="700x340" subtitle="Button variants, titled Card, dark PillCTA" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Core — Hermes Design System</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+  .wrap { padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; }
+  .eyebrow { margin: 0 0 10px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--color-muted); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel" data-presets="react">
+  const { Button, Card, PillCTA } = window.HermesDesignSystem_738510;
+  function Demo() {
+    return (
+      <>
+        <div>
+          <p className="eyebrow">Button — variants &amp; sizes</p>
+          <div className="row">
+            <Button variant="primary">Primary action</Button>
+            <Button variant="ghost">Ghost</Button>
+            <Button variant="primary" disabled>Disabled</Button>
+            <Button variant="primary" size="sm">Small</Button>
+            <Button variant="primary" size="lg">Large</Button>
+          </div>
+        </div>
+        <div>
+          <p className="eyebrow">Card</p>
+          <Card title="Agent settings" style={{ maxWidth: 360 }}>
+            <p style={{ margin: 0, color: "var(--color-muted)", fontSize: 14 }}>
+              White surface, hairline border, soft shadow, 18px radius.
+            </p>
+          </Card>
+        </div>
+        <div className="on-dark" style={{ borderRadius: 18, padding: 24, background: "var(--site-bg-gradient)" }}>
+          <p className="eyebrow" style={{ color: "var(--text-on-dark-faint)" }}>PillCTA — on the navy hero</p>
+          <PillCTA href="#">Get started</PillCTA>
+        </div>
+      </>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>
+</body>
+</html>

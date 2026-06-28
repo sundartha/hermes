@@ -1,0 +1,73 @@
+/*
+ * Primitive tokens — raw, design-bound values WITHOUT meaning.
+ * The only place in the system that holds literal colors / sizes.
+ * Source: apps/web/src/styles/tokens/primitives.css
+ */
+:root {
+  /* --- Color (raw) — navy-blue brand + neutrals only --- */
+  --color-ink-900: #25282b;   /* near-black text */
+  --color-gray-500: #7e7e7e;  /* muted text */
+  --color-gray-300: #c4c4c4;
+  --color-gray-200: #e2e2e2;
+  --color-gray-150: #ececec;
+  --color-gray-100: #f3f3f3;
+  --color-gray-75: #f2f2f2;
+  --color-gray-50: #fafafa;   /* page background */
+  --color-white: #ffffff;
+
+  /* --- Brand navy (raw) — the marketing-site identity --- */
+  --color-navy-900: #0a2245;  /* deepest hero navy */
+  --color-navy-800: #0f2d52;  /* primary brand navy */
+  --color-navy-700: #1b4f86;  /* brand action blue */
+  --color-navy-card: #13335c; /* raised navy surface */
+  --color-navy-ink: #10305a;  /* ink on white pills */
+  --color-navy-50: #eef3fa;   /* tinted navy surface */
+
+  /* --- Spacing (raw, 4px base) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* --- Radii (raw) --- */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 18px;
+  --radius-pill: 99px;
+  --radius-circle: 50%;
+
+  /* --- Border / shadow (raw) --- */
+  --border-width-thin: 1px;
+  --shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.07);
+
+  /* --- Typography (raw) --- */
+  --font-display: "Norse", "Norsebold", Georgia, serif;                /* runic display — headings & wordmark */
+  --font-sans: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;     /* body & UI text */
+  --font-size-root: 15px;
+  --line-height-root: 1.5;
+  --letter-spacing-tight: -0.015em;
+  --letter-spacing-label: 0.12em;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-heavy: 800;
+  --font-size-100: 13px;
+  --font-size-200: 14px;
+  --font-size-300: 16px;
+  --font-size-400: 20px;
+  --font-size-500: 26px;
+  --font-size-700: 40px;
+
+  /* --- Motion / layout (raw) --- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* @kind other */
+  --duration-fast: 0.22s; /* @kind other */
+  --duration-pulse: 1.8s; /* @kind other */
+  --measure-page: 1180px;
+}

@@ -1,0 +1,78 @@
+/*
+ * Semantic tokens — meaning-bearing roles that point ONLY at primitives.
+ * Components and layouts read THESE, never the raw values.
+ * Source: apps/web/src/styles/tokens/semantic.css
+ */
+:root {
+  /* --- Color roles (light / app) --- */
+  --color-text: var(--color-ink-900);
+  --color-muted: var(--color-gray-500);
+  --color-surface: var(--color-gray-50);
+  --color-card: var(--color-white);
+  --color-border: var(--color-gray-150);
+  --color-action: var(--color-navy-700);
+  --color-action-hover: var(--color-navy-800);
+  --color-on-action: var(--color-white);
+  --color-accent: var(--color-navy-700);
+  --color-action-surface: var(--color-navy-50);
+  --color-divider: var(--color-gray-100);
+  --color-field-border: var(--color-gray-200);
+  --color-field-border-focus: var(--color-navy-700);
+
+  /* status — monochrome navy + neutral (no red / green) */
+  --color-status-positive: var(--color-navy-700);
+  --color-status-positive-surface: var(--color-navy-50);
+  --color-status-critical: var(--color-ink-900);
+  --color-status-critical-surface: var(--color-gray-150);
+  --color-status-info: var(--color-navy-700);
+  --color-status-info-surface: var(--color-navy-50);
+  --color-status-neutral: var(--color-gray-500);
+  --color-status-neutral-surface: var(--color-gray-75);
+  --color-indicator-live: var(--color-navy-700);
+  --color-indicator-off: var(--color-gray-300);
+
+  /* --- Spacing roles --- */
+  --space-gap: var(--space-5);
+  --space-inline: var(--space-4);
+  --space-stack: var(--space-4);
+  --space-card: var(--space-6);
+  --space-section: var(--space-20);
+  --space-hairline: var(--space-1);
+  --space-tight: var(--space-2);
+  --space-cozy: var(--space-3);
+  --space-loose: var(--space-5);
+  --space-roomy: var(--space-8);
+  --space-block: var(--space-12);
+  --size-icon: var(--space-8);
+
+  /* --- Radius / border / shadow roles --- */
+  --radius-card: var(--radius-lg);
+  --radius-control: var(--radius-sm);
+  --radius-badge: var(--radius-pill);
+  --radius-round: var(--radius-circle);
+  --shadow-card: var(--shadow-soft);
+  --border-width: var(--border-width-thin);
+  --measure-content: var(--measure-page);
+
+  /* --- Typography roles --- */
+  --font-body: var(--font-sans);
+  --font-heading: var(--font-display);
+  --weight-heading: var(--weight-heavy);
+  --weight-emphasis: var(--weight-bold);
+  --weight-label: var(--weight-semibold);
+  --weight-normal: var(--weight-regular);
+  --text-eyebrow: var(--font-size-100);
+  --text-body: var(--font-size-200);
+  --text-lead: var(--font-size-300);
+  --text-subtitle: var(--font-size-400);
+  --text-title: var(--font-size-500);
+  --text-display: var(--font-size-700);
+  --tracking-heading: var(--letter-spacing-tight);
+  --tracking-label: var(--letter-spacing-label);
+
+  /* --- Motion / layout roles --- */
+  --motion-ease: var(--ease-out);
+  --motion-duration: var(--duration-fast);
+  --motion-pulse: var(--duration-pulse);
+  --layout-measure: var(--measure-page);
+}

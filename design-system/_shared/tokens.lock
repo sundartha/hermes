@@ -1,10 +1,12 @@
 {
-  "_comment": "Auto-generiert via scripts/check-token-sync.js --write. Soll-Hashes der Token-Quelle (apps/web/src/styles/tokens/) + kanonischer Kopie (design-system/_shared/tokens.css). Bei legitimer Token-Aenderung: Kopie nachziehen, dann --write, dann committen.",
+  "_comment": "Auto-generiert via scripts/check-token-sync.js --write. Soll-Hashes der Token-Quelle (apps/web/src/styles/tokens/) + gespiegelter Katalog-Kopie (design-system/tokens/). Bei legitimer Token-Aenderung: Kopie nachziehen, dann --write, dann committen.",
   "algo": "sha256",
   "hashes": {
-    "apps/web/src/styles/tokens/primitives.css": "bc322b4b1527d2e9d1887540fd9faef54d163ad3a7f5e4cd03e996f8dd865fc1",
-    "apps/web/src/styles/tokens/semantic.css": "bad9082cc3d17291edbebbb458f4ab45cb53280e8e8a224267ef43fbaf7d42fb",
-    "apps/web/src/styles/tokens/hero.css": "1d3c9e9bc48682be9b3ffe11e4d89c654338f5ee528efdc3fa3e4014436e372f",
-    "design-system/_shared/tokens.css": "64a3abbd03a1198bfe8c81911b60e197095dd2c688e8fcf9aaaa342d40561039"
+    "apps/web/src/styles/tokens/primitives.css": "09aa967c5ffd40dbddc2c1a63b3cfd38d62dbb4d4053934308611ddf426ceb9b",
+    "apps/web/src/styles/tokens/semantic.css": "7a2e272766807917a1676c2a541c7451091a011883df1d79982e98c1ca0b4ab5",
+    "apps/web/src/styles/tokens/hero.css": "3a1e8005add960dc4b642c120cdd64f608970133af6146179a3c7542a778afab",
+    "design-system/tokens/primitives.css": "7ce021d7941251d00ee4f785376dc58dbcc4f354a9ed8bfae4e6e49844839ba7",
+    "design-system/tokens/semantic.css": "c8f18db93c2cca29a86754f6bfe63b2e614167ecf6b11694f68635eb7898d129",
+    "design-system/tokens/dark.css": "5796da10055333b0dc058c242937a6bfc0bd7680606900ff82549f29147a0ee0"
   }
 }

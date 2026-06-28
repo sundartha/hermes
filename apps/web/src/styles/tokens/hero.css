@@ -54,7 +54,9 @@
   --hero-text-muted: rgba(255, 255, 255, 0.82);
   --hero-text-faint: rgba(255, 255, 255, 0.7);
 
-  --font-serif-raw: "Instrument Serif", serif;
+  /* Display/Serif: Norse (runisch); Bruecke auf Instrument Serif, bis die
+   * Norse-Datei in /assets/fonts vorliegt (dann rendert automatisch Norse). */
+  --font-serif-raw: "Norse", "Instrument Serif", serif;
   --font-grotesk-raw: "Space Grotesk", sans-serif;
 
   --hero-radius-pill: 999px;

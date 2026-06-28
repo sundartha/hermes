@@ -4,15 +4,11 @@
  * Semantische Rollen (semantic.css) zeigen ausschliesslich hierauf; Komponenten
  * verwenden NIE Primitives direkt und nie Hex/Magic-Pixel.
  *
- * Werte kanonisiert aus public/tenant.html (Markenrot, Ink, Mute, Schatten,
- * Inter, Easing) — Strategie 2.5.
+ * Werte kanonisiert aus dem Hermes Design System (Navy-Marke, Ink, Mute,
+ * Schatten, Space Grotesk, Norse, Easing) — Rebrand Rot -> Navy.
  */
 :root {
   /* --- Farben (roh) --- */
-  --color-red-600: #e60000; /* Markenrot */
-  --color-red-700: #ac1811; /* Markenrot, tief (Hover) */
-  --color-red-50: #fdeaea; /* Markenrot, sehr hell (Badge-Flaeche) */
-
   --color-ink-900: #25282b; /* Text */
   --color-gray-500: #7e7e7e; /* gedaempfter Text */
   --color-gray-300: #c4c4c4; /* inaktiv (Dot off) */
@@ -23,12 +19,13 @@
   --color-gray-50: #fafafa; /* Seiten-Hintergrund */
   --color-white: #ffffff; /* Karten-/Canvas-Flaeche */
 
-  --color-blue-600: #3860be; /* Signal/Akzent */
-  --color-blue-50: #e9f0fc; /* Signal, hell (Badge-Flaeche) */
-
-  --color-green-700: #177a43; /* Erfolg (Text) */
-  --color-green-50: #e7f6ed; /* Erfolg, hell (Badge-Flaeche) */
-  --color-green-500: #1faa59; /* Live-Indikator */
+  /* --- Marken-Navy (roh) — die eine Aktions-/Akzentfarbe --- */
+  --color-navy-900: #0a2245; /* tiefstes Hero-Navy */
+  --color-navy-800: #0f2d52; /* primaeres Marken-Navy (Hover) */
+  --color-navy-700: #1b4f86; /* Marken-Aktionsblau */
+  --color-navy-card: #13335c; /* aufgehellte Navy-Flaeche */
+  --color-navy-ink: #10305a; /* Ink auf weissen Pills */
+  --color-navy-50: #eef3fa; /* zarte Navy-Tint-Flaeche */
 
   /* --- Abstaende (roh) --- */
   --space-1: 4px;
@@ -56,7 +53,10 @@
   --shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.07);
 
   /* --- Typografie (roh) --- */
-  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  /* Body/UI: Space Grotesk (selbst-gehostet). Display/Headings: Norse (runisch);
+   * bis die Norse-Datei vorliegt rendert die Bruecke Instrument Serif. */
+  --font-sans: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Norse", "Instrument Serif", Georgia, serif;
   --font-size-root: 15px;
   --line-height-root: 1.5;
   --letter-spacing-tight: -0.015em;

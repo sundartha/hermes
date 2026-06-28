@@ -1,0 +1,49 @@
+<!-- @dsCard group="Brand" name="Wing — live states" viewport="760x460" subtitle="The real mesh wing through the MCP call lifecycle" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wing — live states</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-body); background: radial-gradient(130% 120% at 30% 0%, #1b4f86 0%, #0f2d52 58%, #0a2245 100%); color: #fff; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; }
+  .stage { width: 230px; height: 230px; display: grid; place-items: center; }
+  .phase { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,.66); min-height: 14px; }
+  .bar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .bar button { font-family: var(--font-grotesk, sans-serif); font-size: 13px; font-weight: 500; letter-spacing: .03em; padding: 9px 18px; border-radius: 99px; border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.06); color: #fff; cursor: pointer; transition: background .18s, border-color .18s; }
+  .bar button:hover { background: rgba(255,255,255,.14); }
+  .bar button.is-active { background: #fff; color: #0f2d52; border-color: #fff; }
+</style>
+</head>
+<body>
+  <div class="phase" id="phase">working</div>
+  <div class="stage"><div id="host"></div></div>
+  <div class="bar" id="bar">
+    <button data-s="idle">Idle</button>
+    <button data-s="connecting">Connecting</button>
+    <button data-s="working" class="is-active">Working</button>
+    <button data-s="success">Success</button>
+    <button data-s="error">Error</button>
+  </div>
+
+  <script src="../wing-engine.js"></script>
+  <script>
+    (async () => {
+      const ctrl = await HermesWingEngine.mount(document.getElementById("host"), {
+        size: 210, status: "working", textureUrl: "../../assets/logos/hermes-wing.png",
+      });
+      const bar = document.getElementById("bar");
+      const phase = document.getElementById("phase");
+      bar.addEventListener("click", (e) => {
+        const b = e.target.closest("button"); if (!b) return;
+        const s = b.dataset.s;
+        ctrl.setStatus(s);
+        phase.textContent = s;
+        [...bar.children].forEach((x) => x.classList.toggle("is-active", x === b));
+      });
+    })();
+  </script>
+</body>
+</html>

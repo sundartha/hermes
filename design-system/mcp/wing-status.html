@@ -1,0 +1,179 @@
+<!-- @dsCard group="MCP (Mockup)" name="Wing status in chat" viewport="760x760" subtitle="The real mesh wing reacts live as the MCP call runs — connecting → calling → done" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Wing status in chat</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+  .chat { max-width: 680px; margin: 0 auto; padding: 26px 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+  .disclaimer { background: var(--color-status-info-surface); color: var(--color-status-info); border-radius: var(--radius-control); padding: 10px 14px; font-size: var(--text-eyebrow); font-weight: var(--weight-label); }
+
+  .msg { display: flex; gap: 12px; }
+  .avatar { width: 36px; height: 36px; border-radius: var(--radius-round); flex-shrink: 0; display: grid; place-items: center; font-weight: var(--weight-emphasis); font-size: 13px; overflow: hidden; }
+  .avatar--user { background: var(--color-gray-150); color: var(--color-muted); }
+  .avatar--ai { background: radial-gradient(120% 120% at 30% 0%, #1b4f86 0%, #0f2d52 72%); }
+  .avatar--ai img { width: 22px; height: 22px; object-fit: contain; }
+  .msg__body { flex: 1; min-width: 0; padding-top: 6px; }
+  .msg__name { font-size: var(--text-eyebrow); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--color-muted); font-weight: var(--weight-label); margin-bottom: 4px; }
+  .msg__text { font-size: var(--text-lead); line-height: 1.55; }
+  .msg__text p { margin: 0 0 12px; }
+
+  /* The call card — a navy beacon (the live wing) over a light result body */
+  .call { max-width: 460px; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden; background: var(--color-card); }
+  .beacon { position: relative; display: flex; align-items: center; gap: 18px; padding: 20px 22px; background: radial-gradient(130% 130% at 25% 0%, #1b4f86 0%, #0f2d52 58%, #0a2245 100%); color: #fff; min-height: 124px; }
+  .beacon__wing { width: 92px; height: 92px; flex-shrink: 0; display: grid; place-items: center; }
+  .beacon__txt { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .beacon__phase { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: rgba(255,255,255,.6); white-space: nowrap; }
+  .beacon__status { font-size: 18px; font-weight: 600; letter-spacing: .005em; white-space: nowrap; }
+  .beacon__meta { font-size: 12.5px; color: rgba(255,255,255,.72); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .beacon__dots::after { content: ""; animation: dots 1.3s steps(4, end) infinite; }
+  @keyframes dots { 0%{content:""} 25%{content:"·"} 50%{content:"· ·"} 75%{content:"· · ·"} 100%{content:""} }
+  .beacon__badge { position: absolute; top: 16px; right: 18px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.16); color: #fff; }
+
+  .result { padding: 18px 22px; display: flex; flex-direction: column; gap: 11px; }
+  .line { display: flex; gap: 12px; }
+  .line__k { width: 92px; flex-shrink: 0; color: var(--color-muted); font-size: var(--text-body); }
+  .line__v { font-weight: var(--weight-label); white-space: nowrap; }
+  .foot { padding: 11px 22px; border-top: var(--border-width) solid var(--color-divider); display: flex; align-items: center; justify-content: space-between; font-size: var(--text-eyebrow); color: var(--color-muted); }
+
+  .composer { max-width: 680px; margin: 0 auto; padding: 4px 20px 22px; }
+  .composer__box { display: flex; align-items: center; gap: 10px; border: var(--border-width) solid var(--color-field-border); border-radius: var(--radius-card); background: var(--color-card); padding: 12px 16px; box-shadow: var(--shadow-card); }
+  .composer__input { flex: 1; border: 0; outline: 0; font: inherit; color: var(--color-text); background: transparent; }
+  .composer__send { width: 34px; height: 34px; border-radius: var(--radius-round); border: 0; background: var(--color-action); color: var(--color-on-action); cursor: pointer; display: grid; place-items: center; }
+  .replay { align-self: center; border: var(--border-width) solid var(--color-border); background: var(--color-card); color: var(--color-muted); font: inherit; font-size: var(--text-eyebrow); font-weight: var(--weight-label); letter-spacing: .04em; text-transform: uppercase; padding: 7px 16px; border-radius: var(--radius-badge); cursor: pointer; }
+  .replay:hover { color: var(--color-action); border-color: var(--color-action); }
+</style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="../components/brand/wing-engine.js"></script>
+  <script src="../_ds_bundle.js"></script>
+  <script type="text/babel" data-presets="react">
+    const { WingMark } = window.HermesDesignSystem_738510;
+
+    // Use the wing engine directly (robust against bundle recompile timing).
+    function Wing({ size, status, preset }) {
+      const ref = React.useRef(null);
+      const ctrl = React.useRef(null);
+      React.useEffect(() => {
+        let alive = true;
+        window.HermesWingEngine
+          .mount(ref.current, { size, status, preset, textureUrl: "../assets/logos/hermes-wing.png" })
+          .then((c) => { if (!alive) { c.destroy(); return; } ctrl.current = c; })
+          .catch((e) => console.error(e));
+        return () => { alive = false; if (ctrl.current) ctrl.current.destroy(); };
+        // eslint-disable-next-line
+      }, []);
+      React.useEffect(() => { if (ctrl.current) ctrl.current.setStatus(status); }, [status]);
+      return <div ref={ref} style={{ width: size, height: size, display: "inline-block", lineHeight: 0 }} />;
+    }
+
+    // The MCP call lifecycle, as the user watches it unfold in chat.
+    const SEQ = [
+      { status: "connecting", phase: "Placing call", title: "Reaching Salon Bella", meta: "place_call · dialing", badge: "Live", hold: 1900 },
+      { status: "working",    phase: "On the call",  title: "Booking your haircut", meta: "place_call · 00:41 · de-DE", badge: "Live", hold: 3400 },
+      { status: "success",    phase: "Done",         title: "Appointment booked", meta: "Thu 14:30 · 2 min 41 sec", badge: "Completed", hold: 0 },
+    ];
+
+    function Conversation() {
+      const [step, setStep] = React.useState(0);
+      const timers = React.useRef([]);
+
+      const run = React.useCallback(() => {
+        timers.current.forEach(clearTimeout);
+        timers.current = [];
+        setStep(0);
+        let t = 0;
+        for (let i = 0; i < SEQ.length - 1; i++) {
+          t += SEQ[i].hold;
+          const next = i + 1;
+          timers.current.push(setTimeout(() => setStep(next), t));
+        }
+      }, []);
+
+      React.useEffect(() => { run(); return () => timers.current.forEach(clearTimeout); }, [run]);
+
+      const cur = SEQ[Math.min(step, SEQ.length - 1)];
+      const done = cur.status === "success";
+
+      return (
+        <>
+          <div className="chat">
+            <div className="disclaimer">Live preview — the wing mirrors the MCP call state so the user can watch Hermes work, right in the chat.</div>
+
+            <div className="msg">
+              <div className="avatar avatar--user">A</div>
+              <div className="msg__body">
+                <div className="msg__name">You</div>
+                <div className="msg__text"><p style={{ marginBottom: 0 }}>Call Salon Bella and book me a haircut for Thursday afternoon.</p></div>
+              </div>
+            </div>
+
+            <div className="msg">
+              <div className="avatar avatar--ai"><WingMark size={24} status="idle" shadow={false} /></div>
+              <div className="msg__body">
+                <div className="msg__name">Assistant · via Hermes</div>
+                <div className="msg__text">
+                  <p>{done
+                    ? "Done — I called Salon Bella on your behalf and booked it. Here's the summary:"
+                    : "On it — placing the call now."}</p>
+
+                  <div className="call">
+                    <div className="beacon">
+                      <span className="beacon__badge">{cur.badge}</span>
+                      <div className="beacon__wing">
+                        <Wing size={92} status={cur.status} preset="classic" />
+                      </div>
+                      <div className="beacon__txt">
+                        <span className="beacon__phase">{cur.phase}</span>
+                        <span className="beacon__status">{cur.title}{!done && <span className="beacon__dots" />}</span>
+                        <span className="beacon__meta">{cur.meta}</span>
+                      </div>
+                    </div>
+
+                    {done && (
+                      <>
+                        <div className="result">
+                          <div className="line"><span className="line__k">Called</span><span className="line__v">Salon Bella · +49 30 1234567</span></div>
+                          <div className="line"><span className="line__k">Outcome</span><span className="line__v">Haircut booked, Thu 14:30</span></div>
+                          <div className="line"><span className="line__k">Duration</span><span className="line__v">2 min 41 sec</span></div>
+                          <div className="line"><span className="line__k">Language</span><span className="line__v">Deutsch (de-DE)</span></div>
+                        </div>
+                        <div className="foot">
+                          <span>call_mqmpvuzz1079</span>
+                          <span>Disclosure spoken first</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {done && <button className="replay" onClick={run}>↻ Replay the call</button>}
+          </div>
+
+          <div className="composer">
+            <div className="composer__box">
+              <input className="composer__input" placeholder="Message your assistant…" />
+              <button className="composer__send" aria-label="Send">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13" /><path d="M12 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<Conversation />);
+  </script>
+</body>
+</html>

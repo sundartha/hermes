@@ -1,0 +1,46 @@
+<!-- @dsCard group="Brand" name="Wing mark — idle logo" viewport="700x320" subtitle="The Hermes wing, the constant element, in its idle hover" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wing mark — Hermes Design System</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+  .grid { display: grid; grid-template-columns: 1.05fr 1fr; min-height: 320px; }
+  .panel { padding: 32px 36px; display: flex; align-items: center; gap: 22px; }
+  .panel--dark { background: radial-gradient(120% 120% at 30% 0%, #1b4f86 0%, #0f2d52 60%, #0a2245 100%); }
+  .panel--light { background: var(--color-card); border-left: 1px solid var(--color-border); }
+  .lock { display: flex; flex-direction: column; line-height: 1.05; }
+  .name { font-family: var(--font-display, "Norse", serif); font-weight: 600; font-size: 34px; letter-spacing: .16em; color: #fff; }
+  .by { margin-top: 5px; font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.82); }
+  .name--ink { color: var(--color-action); }
+  .by--ink { color: var(--color-muted); }
+  .eyebrow { position: absolute; margin: 0; top: 16px; left: 36px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: rgba(255,255,255,.55); }
+  .panel--dark { position: relative; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="panel panel--dark">
+    <p class="eyebrow">Idle &middot; always alive</p>
+    <div id="mark"></div>
+    <span class="lock"><span class="name">HERMES</span><span class="by">by Sundartha</span></span>
+  </div>
+  <div class="panel panel--light">
+    <div id="mark-ink"></div>
+    <span class="lock"><span class="name name--ink">HERMES</span><span class="by by--ink">by Sundartha</span></span>
+  </div>
+</div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel" data-presets="react">
+  const { WingMark } = window.HermesDesignSystem_738510;
+  ReactDOM.createRoot(document.getElementById("mark")).render(<WingMark size={84} />);
+  ReactDOM.createRoot(document.getElementById("mark-ink")).render(<WingMark size={64} shadow={false} />);
+</script>
+</body>
+</html>

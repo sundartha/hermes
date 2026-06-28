@@ -1,0 +1,269 @@
+<!-- @dsCard group="App / Dashboard" name="Tenant dashboard" viewport="1100x760" subtitle="Login → overview, calls, settings, billing" -->
+<!-- @startingPoint section="App" subtitle="Hermes tenant dashboard — interactive" viewport="1100x760" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Dashboard</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-body); font-size: var(--font-size-root); line-height: var(--line-height-root); color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+
+  /* App header */
+  .app-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-inline); padding: var(--space-gap) clamp(20px, 5vw, 72px); background: var(--color-card); border-bottom: var(--border-width) solid var(--color-border); position: sticky; top: 0; z-index: 5; }
+  .wordmark { font-weight: var(--weight-emphasis); letter-spacing: .22em; color: var(--color-action); text-decoration: none; font-size: 18px; }
+  .account { display: flex; align-items: center; gap: var(--space-gap); }
+
+  .shell { max-width: var(--measure-content); margin: 0 auto; padding: clamp(28px, 5vw, 56px) clamp(20px, 5vw, 24px); display: flex; flex-direction: column; gap: var(--space-gap); }
+  .eyebrow { margin: 0 0 6px; font-size: var(--text-eyebrow); font-weight: var(--weight-label); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--color-muted); }
+  .h1 { margin: 0; font-size: var(--text-title); font-weight: var(--weight-heading); letter-spacing: var(--tracking-heading); }
+  .muted { color: var(--color-muted); }
+
+  .nav { display: flex; flex-wrap: wrap; gap: var(--space-tight); }
+  .nav__link { padding: var(--space-tight) var(--space-cozy); border-radius: var(--radius-badge); background: var(--color-action-surface); color: var(--color-action); font-size: var(--text-body); font-weight: var(--weight-label); border: 0; cursor: pointer; font-family: inherit; transition: background var(--motion-duration) var(--motion-ease), color var(--motion-duration) var(--motion-ease); }
+  .nav__link:hover { background: var(--color-action); color: var(--color-on-action); }
+  .nav__link--active { background: var(--color-action); color: var(--color-on-action); }
+
+  /* Agent chip */
+  .agent { display: flex; align-items: center; gap: var(--space-cozy); }
+  .agent__label { font-size: var(--text-eyebrow); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--color-muted); font-weight: var(--weight-label); }
+  .agent__num { font-weight: var(--weight-emphasis); }
+
+  .grid-2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--space-gap); }
+  @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .list { list-style: none; margin: var(--space-stack) 0 0; padding: 0; }
+  .call { display: flex; align-items: center; gap: var(--space-inline); padding: var(--space-cozy) 0; border-bottom: var(--border-width) solid var(--color-divider); }
+  .call:last-child { border-bottom: 0; }
+  .dir { display: grid; place-items: center; width: var(--size-icon); height: var(--size-icon); border-radius: var(--radius-round); flex-shrink: 0; font-size: 16px; }
+  .dir--in { background: var(--color-status-info-surface); color: var(--color-status-info); }
+  .dir--out { background: var(--color-status-critical-surface); color: var(--color-status-critical); }
+  .call__body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .call__who { font-weight: var(--weight-emphasis); }
+  .call__sub { color: var(--color-muted); font-size: var(--text-eyebrow); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .ai { display: flex; align-items: flex-start; gap: var(--space-tight); padding: var(--space-tight) 0; border-bottom: var(--border-width) solid var(--color-divider); }
+  .ai:last-child { border-bottom: 0; }
+  .ai__text { flex: 1; }
+  .ai--done .ai__text { text-decoration: line-through; color: var(--color-muted); }
+
+  .cal { display: flex; align-items: center; gap: var(--space-cozy); padding: var(--space-tight) 0; border-bottom: var(--border-width) solid var(--color-divider); }
+  .cal:last-child { border-bottom: 0; }
+  .cal__date { background: var(--color-surface); border-radius: var(--radius-control); padding: var(--space-tight) var(--space-cozy); text-align: center; flex-shrink: 0; }
+  .cal__day { display: block; font-weight: var(--weight-emphasis); }
+  .cal__mon { text-transform: uppercase; color: var(--color-muted); font-weight: var(--weight-label); font-size: var(--text-eyebrow); }
+  .cal__when { color: var(--color-muted); font-size: var(--text-eyebrow); }
+
+  .perm { display: flex; align-items: center; gap: var(--space-cozy); padding: var(--space-cozy) 0; border-bottom: var(--border-width) solid var(--color-divider); }
+  .perm:last-child { border-bottom: 0; }
+  .perm__t { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .perm__title { font-weight: var(--weight-label); }
+  .perm__hint { font-size: var(--text-eyebrow); color: var(--color-muted); }
+
+  /* Login */
+  .login { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--color-surface); }
+  .login__card { width: 100%; max-width: 380px; background: var(--color-card); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: var(--space-roomy); }
+  .login__brand { font-weight: var(--weight-emphasis); letter-spacing: .22em; color: var(--color-action); font-size: 20px; }
+  .login__by { font-size: var(--text-eyebrow); letter-spacing: .2em; text-transform: uppercase; color: var(--color-muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../_ds_bundle.js"></script>
+<script type="text/babel" data-presets="react">
+const { Button, Card, StatusBadge, LiveDot, Stat, Field, Switch } = window.HermesDesignSystem_738510;
+
+const CALLS = [
+  { dir: "in",  who: "+49 173 725 2163", sub: "Inbound · message taken",        tone: "completed", label: "Completed" },
+  { dir: "out", who: "Salon Bella",       sub: "Outbound · booking appointment", tone: "active",    label: "Active" },
+  { dir: "out", who: "Dr. Weber",         sub: "Outbound · could not reach",     tone: "failed",    label: "Failed" },
+];
+
+function Overview() {
+  return (
+    <>
+      <div className="agent">
+        <LiveDot live />
+        <span style={{ display: "flex", flexDirection: "column" }}>
+          <span className="agent__label">Your number</span>
+          <span className="agent__num">+1 864 302 8341</span>
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: "var(--space-gap)" }}>
+        <Stat value="3" label="Calls today" />
+        <Stat value="11m" label="Talk time" />
+        <Stat value="2" label="Action items" />
+        <Stat value="1" label="Upcoming" />
+      </div>
+      <Card title="Recent calls">
+        <ul className="list">
+          {CALLS.map((c, i) => (
+            <li className="call" key={i}>
+              <span className={"dir dir--" + c.dir}>{c.dir === "in" ? "↘" : "↗"}</span>
+              <span className="call__body">
+                <span className="call__who">{c.who}</span>
+                <span className="call__sub">{c.sub}</span>
+              </span>
+              <StatusBadge tone={c.tone}>{c.label}</StatusBadge>
+            </li>
+          ))}
+        </ul>
+      </Card>
+      <div className="grid-2">
+        <Card title="Action items">
+          <ul className="list">
+            <li className="ai"><span className="ai__text">Call back Salon Bella before 5pm</span><StatusBadge tone="info">Appt</StatusBadge></li>
+            <li className="ai ai--done"><span className="ai__text">Confirm dentist Tuesday</span></li>
+          </ul>
+        </Card>
+        <Card title="Calendar">
+          <ul className="list">
+            <li className="cal">
+              <span className="cal__date"><span className="cal__day">26</span><span className="cal__mon">Jun</span></span>
+              <span style={{ display: "flex", flexDirection: "column" }}>
+                <span>Haircut — Salon Bella</span>
+                <span className="cal__when">Thu · 14:30</span>
+              </span>
+            </li>
+          </ul>
+        </Card>
+      </div>
+    </>
+  );
+}
+
+function CallsView() {
+  return (
+    <Card title="All calls">
+      <ul className="list">
+        {CALLS.concat(CALLS).map((c, i) => (
+          <li className="call" key={i}>
+            <span className={"dir dir--" + c.dir}>{c.dir === "in" ? "↘" : "↗"}</span>
+            <span className="call__body">
+              <span className="call__who">{c.who}</span>
+              <span className="call__sub">{c.sub}</span>
+            </span>
+            <StatusBadge tone={c.tone}>{c.label}</StatusBadge>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function SettingsView() {
+  const [book, setBook] = React.useState(true);
+  const [followup, setFollowup] = React.useState(true);
+  return (
+    <>
+      <Card title="Agent profile" style={{ maxWidth: 520 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-stack)" }}>
+          <Field label="Display name" defaultValue="Acme GmbH" />
+          <Field label="Forwarding number" type="tel" defaultValue="+49 30 1234 5678" />
+        </div>
+      </Card>
+      <Card title="Permissions" style={{ maxWidth: 520 }}>
+        <div className="perm">
+          <span className="perm__t"><span className="perm__title">Book appointments</span><span className="perm__hint">Let the agent write to your calendar</span></span>
+          <Switch checked={book} onChange={setBook} />
+        </div>
+        <div className="perm">
+          <span className="perm__t"><span className="perm__title">Ask follow-up questions</span><span className="perm__hint">Agent may clarify before acting</span></span>
+          <Switch checked={followup} onChange={setFollowup} />
+        </div>
+        <div className="perm">
+          <span className="perm__t"><span className="perm__title">Take payments</span><span className="perm__hint">Not available on your plan</span></span>
+          <Switch disabled />
+        </div>
+        <div style={{ marginTop: "var(--space-gap)" }}>
+          <Button variant="primary">Save changes</Button>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function BillingView() {
+  const [hasCard, setHasCard] = React.useState(false);
+  return (
+    <Card title="Billing" style={{ maxWidth: 520 }}>
+      <p className="muted" style={{ marginTop: 0 }}>Current plan: <strong style={{ color: "var(--color-text)" }}>Business · €9.99/mo</strong></p>
+      <p style={{ display: "flex", alignItems: "center", gap: "var(--space-tight)" }}>
+        <StatusBadge tone={hasCard ? "completed" : "neutral"}>{hasCard ? "Card on file" : "No card yet"}</StatusBadge>
+      </p>
+      <Button variant={hasCard ? "ghost" : "primary"} onClick={() => setHasCard(true)}>
+        {hasCard ? "Replace card" : "Add payment method"}
+      </Button>
+    </Card>
+  );
+}
+
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "calls", label: "Calls" },
+  { id: "settings", label: "Settings" },
+  { id: "billing", label: "Billing" },
+];
+
+function Dashboard({ onSignOut }) {
+  const [tab, setTab] = React.useState("overview");
+  return (
+    <>
+      <header className="app-header">
+        <a className="wordmark" href="#">HERMES</a>
+        <span className="account">
+          <span className="muted">antonio@sundartha.com</span>
+          <Button variant="ghost" size="sm" onClick={onSignOut}>Sign out</Button>
+        </span>
+      </header>
+      <div className="shell">
+        <div>
+          <p className="eyebrow">Signed in</p>
+          <h1 className="h1">Good afternoon, Antonio</h1>
+        </div>
+        <nav className="nav">
+          {TABS.map((t) => (
+            <button key={t.id} className={"nav__link" + (tab === t.id ? " nav__link--active" : "")} onClick={() => setTab(t.id)}>{t.label}</button>
+          ))}
+        </nav>
+        {tab === "overview" && <Overview />}
+        {tab === "calls" && <CallsView />}
+        {tab === "settings" && <SettingsView />}
+        {tab === "billing" && <BillingView />}
+      </div>
+    </>
+  );
+}
+
+function Login({ onSignIn }) {
+  return (
+    <div className="login">
+      <form className="login__card" onSubmit={(e) => { e.preventDefault(); onSignIn(); }}>
+        <div style={{ marginBottom: "var(--space-roomy)" }}>
+          <div className="login__brand">HERMES</div>
+          <div className="login__by">by Sundartha</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-stack)" }}>
+          <Field label="Email" type="email" defaultValue="antonio@sundartha.com" />
+          <Button variant="primary" onClick={onSignIn} style={{ width: "100%" }}>Sign in</Button>
+          <p className="muted" style={{ margin: 0, fontSize: "var(--text-eyebrow)", textAlign: "center" }}>We'll email you a magic link.</p>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function App() {
+  const [authed, setAuthed] = React.useState(false);
+  return authed ? <Dashboard onSignOut={() => setAuthed(false)} /> : <Login onSignIn={() => setAuthed(true)} />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
