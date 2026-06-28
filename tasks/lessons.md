@@ -53,3 +53,16 @@
   statt rollen-403). Lehre: bei einmaligem Auth-Flake erst `git show --stat HEAD` (src
   beruehrt?) + Re-Runs, bevor man eine Race-Hypothese im Produkt-Code jagt. Falls die Rate
   steigt: node:test-Concurrency fuer die pglite-Suiten senken, nicht den Auth-Pfad anfassen.
+
+## Gespraechsqualitaet (G-Kette, Outbound)
+
+- **Outbound: erster `/voice/turn` hat `SpeechResult=0` BY DESIGN** — nicht als Defekt
+  fehldeuten. Bei Outbound spricht der Agent ZUERST (LLM-frei: Offenlegung + Anliegen via
+  `openingText` im Erst-Gather). Der erste Turn ist also der Agent (`heard=0`, `reply>0`); die
+  ERSTE transkribierte Antwort des Angerufenen (`SpeechResult>0`) kommt erst auf einem
+  SPAETEREN Turn. Das G2-Erfolgssignal ist daher NICHT "erster `SpeechResult>0`" (so im
+  Runbook-Entwurf OWNER-GOLIVE-GESPRAECH.md falsch formuliert, Jonas-Korrektur 2026-06-28),
+  sondern: KEINE Stille vor dem ersten Agenten-Satz UND der Erst-Satz enthaelt hoerbar
+  Offenlegung+Anliegen. Live-Abnahme 2026-06-28: G2 `reply=140`/`heard=0` ohne Loch; G3
+  `SpeechResult:25` = voller Satz ("...Das war alles", NICHT auf das erste Wort gekuerzt);
+  `STT_SPEECH_TIMEOUT_SEC` Default 2 reicht (kein Tuning).

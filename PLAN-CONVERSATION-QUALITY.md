@@ -5,7 +5,38 @@ live). Entstanden aus der Forensik eines realen Anrufs (call_mqntoe280khb, 2026-
 plus einem Multi-Agent-Design-Workflow (4 Design-Panels + adversariale Pre-Mortem-
 Verifikation + Synthese). Jede Phase = ein `phase-impl-lean`-Schnitt, Merge im Lead.
 
-> Status: ENTWURF, noch nicht umgesetzt. Blockierende Owner-Entscheidungen siehe §5.
+> Status: **UMGESETZT (G0-G4 live auf master, Stand 2026-06-27).** Code-seitig fertig +
+> verifiziert; verbleibend nur die bewusst geparkten Live-Gates (Owner). Details unten in
+> Abschnitt 0. Owner-Entscheidungen siehe §5.
+
+---
+
+## 0. Umsetzungs-Status (verifiziert 2026-06-27; G4 gemergt 2026-06-28, master 4c94e9d3)
+
+Die Kette wurde NICHT als eigener `phase-impl-lean`-Lauf gefahren, sondern in den spaeteren
+P0-Identity-/Onboarding-Sessions mitimplementiert. Alle G0-G4-Code-Ziele sind auf master
+gemerged; `npm test` = **1172 pass / 0 fail** (diese Session selbst gefahren, exit 0).
+
+| Phase                     | Status            | Beleg (file:line)                                                                                                                                                                                                          |
+| ------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0 Repro-Harness          | UMGESETZT         | `test/_outbound-harness.js`                                                                                                                                                                                                |
+| G1 Identitaets-Bindung    | UMGESETZT         | `claude.js:101` (disclosure aus `tenantContext().ownerName`), `:52` (Persona=`firstName`), `server.js:1094` (Fail-closed 403 `keine_identitaet`), `mcp-tools.js` (`caller_name` entfernt), `config.js:150-151` (kein OWNER_NAME-Default) |
+| G2 Erst-Turn-Deadlock     | UMGESETZT         | `claude.js:115-121` (`openingText`, Kappe `OPENING_GOAL_MAX_CHARS=160`), `server.js:866` (in `/voice/outbound`), `claude.js:92` (systemPrompt: keine Doppel-Nennung)                                                       |
+| G3 STT-Endpointing        | UMGESETZT         | `telnyx/render.js:81` (Override-Seam, Default `"auto"`), `directives.js:43`, `server.js:663` (`followupTurnDirectives`=`config.sttSpeechTimeoutSec`), `:866` (Erst-Gather bleibt `"auto"`)                                  |
+| G4 Reprompt + Log-Cleanup | UMGESETZT (2026-06-28) | Commit `4c94e9d3`: `[turn-recv]`/`[turn-ok]`-Temp-Logs aus `/voice/turn` entfernt + `noSpeechReprompt` verschlankt (de/fr/en, Apologie-Filler raus). Owner-Override der Plan-Deferral; 1172 Tests gruen                              |
+
+**Divergenz vom §3-G1-Design (bewusst, gleichwertig):** G1 wurde NICHT ueber die geplanten
+Config-Vars `OWNER_FIRST_NAME`/`OWNER_LAST_NAME` + `assertConfig`-Boot-Refusal gebaut, sondern
+ueber den Bootstrap-Tenant/Self-Service (`ownerName`/`firstName` im Store, `scripts/bootstrap-tenant.js`)
+plus Run-time-Gate `server.js:1094`. Fail-closed bleibt erhalten (Boot-Refusal -> place_call-403).
+Owner-Entscheidung §5.2 ("Jonas"-Default raus) ist damit erfuellt; der Config-Pfad ist obsolet.
+
+**Live-Gates BESTANDEN (Owner, 2026-06-28):** G2 — kein 15s-Loch; der Agent spricht
+Offenlegung+Anliegen sofort (Erst-Turn `reply=140`/`heard=0`; bei Outbound spricht der Agent
+zuerst, daher ist `SpeechResult=0` im Erst-Turn BY DESIGN, kein Defekt). G3 — voller Satz erfasst
+(`SpeechResult:25`, nicht auf das erste Wort gekuerzt), `STT_SPEECH_TIMEOUT_SEC` Default 2 reicht.
+**Damit ist die G-Kette code- UND live-fertig.** §6-Folgearbeit (Onboarding-`idp_subject`-Bindung,
+"Consult", `redirectD`) bleibt ausserhalb dieser Kette.
 
 ---
 
@@ -38,7 +69,7 @@ Festgehalten als Geschwister-Regel zur fest verdrahteten Offenlegung (Regel 2):
 
 ---
 
-## 3. Phasenplan G0 → G4 (strikt seriell)
+## 3. Phasenplan G0 → G4 (strikt seriell) — UMGESETZT (Beleg: Abschnitt 0)
 
 Geteilte Hotspot-Dateien `server.js` und `claude.js` werden von mehreren Phasen
 angefasst → **keine parallelen Worktrees**, Reihenfolge fix: **G0 → G1 → G2 → G3 → G4**.
