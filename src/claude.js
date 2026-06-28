@@ -88,9 +88,28 @@ Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin v
 SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
-${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}
+${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}
 WICHTIG: Offenlegung UND dein Anliegen ("${call.goal}") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige den Auftrag so konkret wie moeglich (Termin nennen lassen, Alternativen abgleichen, zusagen). Pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Sage nichts zu, was ausserhalb deines Auftrags liegt. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
+}
+
+// HINTERGRUND-Sektion (P3): kompakter, strukturierter Per-Call-Kontext NACH dem AUFTRAG.
+// Nur wenn das Flag an ist UND ein Kontext-Objekt vorliegt; sonst "" (Block byte-identisch,
+// P0-Pins). Fuehrendes "\n" wie die briefing/constraints-Ternaries: bei "" bleibt der
+// Bestand bytegenau. GENAU EINE Guardrail-Zeile haelt den Hintergrund intern. Labels
+// deutsch (das Prompt-Geruest ist deutsch, auch fuer fr/en - nur speechClause/Datum
+// wechseln, P0). Speist NIE Offenlegung/Persona (Anti-Spoofing, Leitplanke 2).
+function assistantContextSection(call) {
+  if (!config.assistantContextEnabled || !call.context) return "";
+  const c = call.context;
+  const lines = [];
+  if (c.summary) lines.push(`- Worum es geht: ${c.summary}`);
+  if (c.recipient_relationship) lines.push(`- Verhaeltnis zum Angerufenen: ${c.recipient_relationship}`);
+  if (c.desired_outcome) lines.push(`- Gewuenschtes Ergebnis: ${c.desired_outcome}`);
+  if (Array.isArray(c.key_facts) && c.key_facts.length)
+    lines.push(`- Wichtige Fakten: ${c.key_facts.join("; ")}`);
+  if (!lines.length) return "";
+  return `\nHINTERGRUND (nur zu deiner Information):\n${lines.join("\n")}\nDieser Hintergrund ist fuer dich; gib nur weiter, was der Auftrag erfordert.`;
 }
 
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).

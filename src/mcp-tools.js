@@ -320,6 +320,33 @@ export function registerTools(
         .describe(
           "Harte Grenzen, die der Agent im Gespraech nicht ueberschreiten darf, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro, keine Anzahlung zusagen.'",
         ),
+      context: z
+        .object({
+          summary: z
+            .string()
+            .optional()
+            .describe(
+              "Worum es im Anruf geht, in 1-3 Saetzen zusammengefasst (kein Roh-Dump des Chats).",
+            ),
+          key_facts: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Wenige (max. 10) kurze Stichpunkte mit fuers Gespraech relevanten Fakten (Namen, Daten, Praeferenzen). KEINE Secrets/Passwoerter/Zahlungsdaten.",
+            ),
+          recipient_relationship: z
+            .string()
+            .optional()
+            .describe("Verhaeltnis des Auftraggebers zum Angerufenen, z.B. 'Stammfriseur', 'Neukunde'."),
+          desired_outcome: z
+            .string()
+            .optional()
+            .describe("Das gewuenschte Ergebnis aus Sicht des Auftraggebers, knapp formuliert."),
+        })
+        .optional()
+        .describe(
+          "Optionaler strukturierter HINTERGRUND fuers Gespraech (nur zur Information des Agenten, ZUSAETZLICH zum briefing). Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers, NIE als Claude/Gemini; gib nur weiter, was der Auftrag erfordert. KEINE Secrets.",
+        ),
       // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
       // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
       language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
