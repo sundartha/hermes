@@ -591,6 +591,22 @@ function userHourReached(profile, requestedBy) {
   return store.countOutboundCallsSince(hourWindowStart(), { requestedBy }) >= limit;
 }
 
+// Cooldown-Fensterstart fuer den per-(Tenant,Ziel)-Cap (outbound-p1d). Eigenes Fenster
+// (config.perTargetWindowMs) - die Stundenlimits oben nutzen hourWindowStart.
+const perTargetWindowStart = () =>
+  new Date(Date.now() - config.perTargetWindowMs).toISOString();
+// Per-(Tenant,Ziel)-Wiederhol-Cap (outbound-p1d, D4, Belaestigungs-Bremse, Schutz Dritter):
+// wie oft DIESER Tenant DASSELBE Ziel im Cooldown-Fenster schon angerufen hat; ab dem Cap
+// gesperrt. Tenant-isoliert (Filter tenantId) + ziel-isoliert (Filter to). Zaehlt - wie die
+// Stundenlimits - bewusst auch fehlgeschlagene Calls (konservativ). Cap 0 -> jeder Outbound
+// gesperrt (Not-Aus, wie maxCallsPerHour=0).
+function perTargetCapReached(tenantId, to) {
+  return (
+    store.countOutboundCallsSince(perTargetWindowStart(), { tenantId, to }) >=
+    config.perTargetCallCap
+  );
+}
+
 // Allowlist (letztes Gate): mehrere Lockerungspfade, ALLE optional - schlaegt keiner an,
 // gilt die statische ALLOWED_NUMBERS (Test-/Notbremse, Bestand). Reihenfolge load-bearing:
 //   0. Defense-in-depth (W5): suspendierter/geschlossener Tenant -> HART 403, VOR jeder
@@ -648,9 +664,10 @@ function kycGateError(tenantId) {
 // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null. caller =
 // aufgeloeste Aufrufer-Identitaet { profile, requestedBy, tenantId } (F1: die drei reisen
 // zusammen): profile/requestedBy steuern Land-Schnittmenge + pro-Nutzer-Limit, tenantId
-// (Tenant-Achse) die Abo-Kopplung + den Defense-in-depth-Block im Allowlist-Gate.
+// (Tenant-Achse) die Abo-Kopplung, den per-(Tenant,Ziel)-Cap UND den Defense-in-depth-Block
+// im Allowlist-Gate.
 function numberGateError(to, caller) {
-  const { profile, requestedBy } = caller;
+  const { profile, requestedBy, tenantId } = caller;
   if (isDenied(to))
     return {
       status: 403,
@@ -676,6 +693,12 @@ function numberGateError(to, caller) {
       status: 429,
       grund: "stundenlimit_nutzer",
       message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
+    };
+  if (perTargetCapReached(tenantId, to))
+    return {
+      status: 429,
+      grund: "ziel_limit",
+      message: "Wiederhol-Limit fuer dieses Ziel erreicht. Bitte spaeter erneut.",
     };
   return allowlistError(to, caller);
 }

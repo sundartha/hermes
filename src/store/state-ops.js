@@ -287,19 +287,25 @@ export function markSummarySmsSent(s, callId) {
   return { call, changed };
 }
 
-// Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers
-// Pro-Stunde-Gate in server.js). filters (alle optional, kombinierbar als UND):
+// Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers Pro-Stunde-Gate
+// + den per-(Tenant,Ziel)-Cap in server.js). filters (alle optional, kombinierbar als UND):
 //   requestedBy : nur Calls dieses Nutzers (pro-Nutzer-Limit, Bestand)
 //   tenantId    : nur Calls dieses Tenants (pro-Tenant-Achse, P4)
+//   to          : nur Calls an dieses Ziel (per-(Tenant,Ziel)-Cap, outbound-p1d)
 // Ohne Filter: ALLE Outbound-Records (globale Plattform-Bremse, Bestand). Zaehlt
 // bewusst auch fehlgeschlagene - konservative Toll-Fraud-Bremse.
-export function countOutboundCallsSince(s, sinceIso, { requestedBy = null, tenantId = null } = {}) {
+export function countOutboundCallsSince(
+  s,
+  sinceIso,
+  { requestedBy = null, tenantId = null, to = null } = {},
+) {
   return s.calls.filter(
     (c) =>
       c.direction === "outbound" &&
       c.startedAt >= sinceIso &&
       (requestedBy == null || c.requestedBy === requestedBy) &&
-      (tenantId == null || c.tenantId === tenantId),
+      (tenantId == null || c.tenantId === tenantId) &&
+      (to == null || c.to === to),
   ).length;
 }
 

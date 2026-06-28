@@ -13,7 +13,7 @@ Gate scharf bleibt.
 
 `allowlistError()` -> `numberGateError(to)` (`src/server.js`) mit fester
 Pruefreihenfolge **Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit ->
-Allowlist**:
+per-(Tenant,Ziel)-Cap -> Allowlist**:
 
 1. **Notruf-/Premium-Denylist** (hardcoded, kein Env, nicht abschaltbar):
    Kurzwahlen 110/112/911/999 (exakt) + eine globale Best-effort-IRSF-Blockliste der
@@ -25,7 +25,12 @@ Allowlist**:
 2. **Laender-Gate** `ALLOWED_COUNTRY_CODES` (Default `+49`, `*` = alle).
 3. **Pro-Stunde-Limit** `MAX_CALLS_PER_HOUR` (Default 6, eigenes Gleitfenster
    ueber Outbound-Call-Zeitstempel, NICHT der Per-IP-Limiter aus Phase 2.1).
-4. **Allowlist** (Bestand) bleibt das letzte Gate.
+4. **per-(Tenant,Ziel)-Wiederhol-Cap** `PER_TARGET_CALL_CAP` (Default 3) im
+   `PER_TARGET_WINDOW_MS`-Fenster (Default 24 h): wie oft EIN Tenant DASSELBE Ziel
+   anrufen darf; ab dem Cap 429 `grund=ziel_limit`. Tenant- + ziel-isoliert,
+   fail-closed, VOR der Allowlist. Schliesst den einzigen neu eingefuehrten
+   Missbrauchsvektor (Belaestigung Dritter, D4) vor dem Phase-3-Cutover (outbound-p1d).
+5. **Allowlist** (Bestand) bleibt das letzte Gate.
 
 - Erwartet: gesperrte/falsch-Land-/ueber-Limit-Nummer -> 403/429 mit klarer
   Meldung + `audit place_call_denied grund=<gate>`; normale `+49`-Nummer im Limit

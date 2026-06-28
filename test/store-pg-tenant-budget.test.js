@@ -91,6 +91,57 @@ test("P4 Test 4: countOutboundCallsSince pro-Tenant + pro-Nutzer + global", asyn
   assert.equal(ops.countOutboundCallsSince(s, since), 3, "alle Outbound (globale Bremse)");
 });
 
+test("outbound-p1d: countOutboundCallsSince mit to-Filter -> per-(Tenant,Ziel) isoliert", async () => {
+  const { store } = await makePgTestStore();
+  const s = store.load();
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const VICTIM = "+4915112345678";
+  const OTHER = "+4915199999999";
+  for (let i = 0; i < 3; i++)
+    ops.createCall(s, {
+      direction: "outbound",
+      from: "+49",
+      to: VICTIM,
+      tenantId: TENANT_A,
+      requestedBy: "x@a",
+    });
+  ops.createCall(s, {
+    direction: "outbound",
+    from: "+49",
+    to: OTHER,
+    tenantId: TENANT_A,
+    requestedBy: "x@a",
+  });
+  ops.createCall(s, {
+    direction: "outbound",
+    from: "+49",
+    to: VICTIM,
+    tenantId: TENANT_B,
+    requestedBy: "z@b",
+  });
+
+  assert.equal(
+    ops.countOutboundCallsSince(s, since, { tenantId: TENANT_A, to: VICTIM }),
+    3,
+    "A -> Opfer",
+  );
+  assert.equal(
+    ops.countOutboundCallsSince(s, since, { tenantId: TENANT_A, to: OTHER }),
+    1,
+    "A -> anderes Ziel unberuehrt",
+  );
+  assert.equal(
+    ops.countOutboundCallsSince(s, since, { tenantId: TENANT_B, to: VICTIM }),
+    1,
+    "B -> Opfer (A erschoepft B NICHT)",
+  );
+  assert.equal(
+    ops.countOutboundCallsSince(s, since, { to: VICTIM }),
+    4,
+    "to ohne tenantId = alle ans Opfer",
+  );
+});
+
 // Baut den Owner-Store (migriert Schema, seedet Owner-usage), seedet zwei fremde
 // Tenants mit eigenen usage-Zeilen und legt die unprivilegierte Rolle an. Analog
 // store-pg-rls.test.js, hier auf die usage-Tabelle fokussiert.

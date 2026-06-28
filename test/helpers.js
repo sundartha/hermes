@@ -157,6 +157,12 @@ export const BASE_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: "0",
   VOICE_TARIFF_DEFAULT_CENTS: "0",
   DEFAULT_TENANT_BUDGET_CENTS: "0",
+  // outbound-p1d: per-(Tenant,Ziel)-Cap neutral HOCH (Gate feuert in Altbestand-Tests nie,
+  // wie MAX_CALLS_PER_HOUR=100). Ohne diese Zeilen leakt eine lokale .env mit
+  // PER_TARGET_CALL_CAP/PER_TARGET_WINDOW_MS via dotenv in Spawn-Tests -> Baseline-Drift
+  // (Lehre test-base-env-drift). outbound-per-target-cap.test.js setzt den Cap explizit auf 3.
+  PER_TARGET_CALL_CAP: "1000",
+  PER_TARGET_WINDOW_MS: "86400000",
   // ---- MCP-Auth + OAuth + Hosting ----
   // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
   MCP_AUTH: "",

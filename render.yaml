@@ -84,6 +84,11 @@ services:
       # Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, nicht RATE_LIMIT_PER_MIN).
       - key: MAX_CALLS_PER_HOUR
         value: "6"
+      # ---- Per-(Tenant,Ziel)-Cap + Cooldown (outbound-p1d) ----
+      - key: PER_TARGET_CALL_CAP
+        value: "3"
+      - key: PER_TARGET_WINDOW_MS
+        value: "86400000"
       # ---- Onboarding ohne Payment (Kosten-Notbremse statt Stripe) ----
       # Harte Obergrenze provisionierbarer Nummern (jede kostet Geld). 0 = Not-Aus.
       - key: MAX_NUMBERS
