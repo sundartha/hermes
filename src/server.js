@@ -25,6 +25,7 @@ import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
+import { uiServerExtension } from "./ui/contract.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
@@ -1645,7 +1646,15 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   const identity = req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
   const profile = store.resolveProfile(identity);
   try {
-    const server = new McpServer({ name: "hermes", version: "0.2.0" });
+    // Rich-UI: Server deklariert die io.modelcontextprotocol/ui-Extension im initialize-
+    // Response (MCP Apps / SEP-1865 - PFLICHT, sonst rendert der Host das ui://-Widget
+    // NICHT, auch bei korrektem Tool-_meta). Nur bei aktivem Master-Schalter; aus ->
+    // keine Extension -> byte-identisch. Auto-registrierte tools/resources werden vom SDK
+    // dazugemerged (verdraengen die Extension nicht).
+    const serverOptions = config.mcpUiEnabled
+      ? { capabilities: { extensions: uiServerExtension() } }
+      : undefined;
+    const server = new McpServer({ name: "hermes", version: "0.2.0" }, serverOptions);
     // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.mcpUiEnabled
     // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
     // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate

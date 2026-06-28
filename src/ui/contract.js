@@ -22,6 +22,14 @@ export function capabilityDeclaresUi(clientCapabilities) {
   return Array.isArray(mimeTypes) && mimeTypes.includes(UI_MIME);
 }
 
+// Server-Seite (MCP Apps / SEP-1865): der Server MUSS die Extension im initialize-
+// Response deklarieren, sonst rendert der Host (Claude/Copilot/...) das ui://-Widget
+// nicht - auch wenn das Tool-_meta korrekt ist. Inhalt fuer capabilities.extensions,
+// spiegelt UI_CAPABILITY_KEY + UI_MIME (EINE Quelle, symmetrisch zu capabilityDeclaresUi).
+export function uiServerExtension() {
+  return { [UI_CAPABILITY_KEY]: { mimeTypes: [UI_MIME] } };
+}
+
 // ChatGPT Apps SDK (OpenAI "skybridge"), P0-Befund. Zweiter Host neben MCP-nativ.
 // mimeType der UI-Resource in dieser Host-Konvention (disjunkt zu UI_MIME).
 export const CHATGPT_UI_MIME = "text/html+skybridge";

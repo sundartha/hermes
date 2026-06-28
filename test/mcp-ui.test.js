@@ -30,6 +30,7 @@ import {
   capabilityDeclaresUi,
   capabilityDeclaresChatgptUi,
   uiResourceUri,
+  uiServerExtension,
 } from "../src/ui/contract.js";
 
 const RESOURCE_URI = uiResourceUri(WIDGET_CALL_STATUS); // ui://hermes/call-status
@@ -290,6 +291,15 @@ test("T-P1-UI-seam: uiRendererFor Default = mcp-nativ hinter dem Master-Schalter
 
   assert.equal(capabilityDeclaresUi(undefined), false, "Grenzfall: undefined -> false");
   assert.equal(capabilityDeclaresUi({}), false);
+});
+
+test("T-UI-server-cap: Server deklariert io.modelcontextprotocol/ui (Pflicht fuers Host-Rendern)", () => {
+  // Der initialize-Response MUSS die Extension mit UI_MIME tragen, sonst rendert der Host
+  // das ui://-Widget NICHT - auch bei korrektem Tool-_meta (MCP Apps / SEP-1865, apps.mdx).
+  // Symmetrie: die eigene Server-Deklaration erfuellt den Client-Detektor (EINE Quelle).
+  const ext = uiServerExtension();
+  assert.deepEqual(ext, { "io.modelcontextprotocol/ui": { mimeTypes: [UI_MIME] } });
+  assert.equal(capabilityDeclaresUi({ extensions: ext }), true, "Server-Decl erfuellt Client-Detektor");
 });
 
 // ===== P2: get_transcript ueber den BESTEHENDEN Seam (Seam-Wiederverwendung) =====
