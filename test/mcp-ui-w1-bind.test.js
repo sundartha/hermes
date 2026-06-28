@@ -167,6 +167,13 @@ test("T-W1-AC6: MCP-Apps-Handshake - ui/initialize beim Laden, tool-result binde
   assert.equal(root.posted[0].id, 1);
   assert.equal(root.posted[0].params.protocolVersion, "2026-01-26");
 
+  // (1b) PROAKTIV: Hoehe wird sofort gemeldet, OHNE auf eine Host-Antwort zu warten
+  // (sonst bliebe das Iframe 0/leer, wenn der Host nicht exakt wie erwartet antwortet).
+  assert.ok(
+    root.posted.some((m) => m.method === "ui/notifications/size-changed"),
+    "Hoehe proaktiv gemeldet (vor jeder Host-Antwort)",
+  );
+
   // (2) Host antwortet auf initialize -> Widget bestaetigt initialized + meldet Hoehe.
   root.emit({ jsonrpc: "2.0", id: 1, result: { hostContext: {} } });
   assert.ok(root.posted.some((m) => m.method === "ui/notifications/initialized"), "initialized bestaetigt");

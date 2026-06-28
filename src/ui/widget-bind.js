@@ -160,8 +160,14 @@ export function run(root) {
         protocolVersion: UI_PROTOCOL_VERSION,
       },
     });
+    // PROAKTIV: Hoehe sofort melden, NICHT auf eine Host-Antwort warten. Bleibt die
+    // initialize-Antwort aus (Host-Handshake leicht abweichend), bekommt das Iframe so
+    // trotzdem eine Hoehe statt 0/leer zu bleiben - die haeufigste Unsichtbar-Ursache.
+    reportSize(root);
     if (typeof root.addEventListener === "function") {
       root.addEventListener("message", (event) => handleHostMessage(root, doc, event && event.data));
+      // Nach vollstaendigem Layout (Fonts/Bilder) Hoehe nachmelden.
+      root.addEventListener("load", () => reportSize(root));
     }
     if (typeof root.ResizeObserver === "function" && doc.body) {
       new root.ResizeObserver(() => reportSize(root)).observe(doc.body);
