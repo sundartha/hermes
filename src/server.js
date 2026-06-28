@@ -29,7 +29,7 @@ import { uiServerExtension } from "./ui/contract.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
-import { audit, safeEqual, maskNumber, hashEmail } from "./util.js";
+import { audit, safeEqual, hashEmail } from "./util.js";
 import {
   voiceControl,
   messaging,
@@ -513,21 +513,22 @@ function extractSpeakOutcome(req, provider) {
 
 // ---- Nummern-Gates fuer Outbound-Calls (Safety, siehe tasks/todo.md Phase 0+2) ----
 // Feste Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit
-// -> Allowlist (Bestand, LETZTES Gate, bleibt scharf). Die Denylist laeuft BEWUSST
-// vor der Formatpruefung: so erscheint eine Notruf-Kurzwahl (112) als bewusste
-// Sperre (403 denylist) und nicht als Formatfehler (400).
+// -> Verifikations-Gate (Pfad 0-2; statische ALLOWED_NUMBERS abgeschafft, outbound-p3).
+// Die Denylist laeuft BEWUSST vor der Formatpruefung: so erscheint eine Notruf-Kurzwahl
+// (112) als bewusste Sperre (403 denylist) und nicht als Formatfehler (400).
 //
 // Rechteprofile (Phase 2): das Profil kann das Land-Gate NUR weiter einschraenken
 // (Schnittmenge global ∩ profil), das Stundenlimit NUR senken (min global/profil)
-// und die Allowlist lockern (unrestricted/eigene Liste). Denylist, Land-Obergrenze,
+// und das Verifikations-Gate lockern (unrestricted/eigene Liste). Denylist, Land-Obergrenze,
 // globales Stundenlimit, Budget und Max-Dauer bleiben harte globale Obergrenzen.
 //
 // Abo-Kopplung (W5, Tenant-Achse): ein AKTIVER, KYC-verifizierter Subscriber gilt im
-// Allowlist-Gate als unrestricted (das Abo ersetzt die statische ALLOWED_NUMBERS); ein
+// Verifikations-Gate als freigegeben (das Abo IST die Outbound-Freigabe); ein
 // suspendierter/geschlossener Tenant wird dort HART abgewiesen (Defense-in-depth). Beides
-// wirkt NUR innerhalb des Allowlist-Gates und lockert KEIN hartes Gate davor. Der Owner traegt
+// wirkt NUR innerhalb des Verifikations-Gates und lockert KEIN hartes Gate davor. Der Owner traegt
 // seit Phase outbound-p1 ein EXPLIZITES kyc_level (id_verified, via seedBootstrapKyc beim Boot)
-// und gilt als aktiver Subscriber (Pfad 2) - er laeuft NICHT mehr ueber die statische Allowlist.
+// und gilt als aktiver Subscriber (Pfad 2). Eine statische ALLOWED_NUMBERS-Liste gibt es seit
+// outbound-p3 nicht mehr; die globale Notbremse ist OUTBOUND_FROZEN (ganz vorn in POST /api/calls).
 //
 // Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde
 // "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
@@ -627,20 +628,22 @@ function perTargetCapReached(tenantId, to) {
   );
 }
 
-// Allowlist (letztes Gate): mehrere Lockerungspfade, ALLE optional - schlaegt keiner an,
-// gilt die statische ALLOWED_NUMBERS (Test-/Notbremse, Bestand). Reihenfolge load-bearing:
+// Verifikations-Gate (letztes Gate): mehrere Freigabe-Pfade, ALLE optional - schlaegt keiner
+// an, wird fail-closed abgewiesen (outbound-p3: keine statische ALLOWED_NUMBERS mehr).
+// Reihenfolge load-bearing:
 //   0. Defense-in-depth (W5): suspendierter/geschlossener Tenant -> HART 403, VOR jeder
 //      Lockerung (ein gueltiges profile.unrestricted hebt das BEWUSST NICHT auf). Abo
 //      gekuendigt / Zahlung gescheitert -> kein freies Waehlen mehr, unabhaengig von der
 //      Stripe-Webhook-Session-Invalidierung (belt-and-suspenders).
 //   1. Admin-Override (Bestand): profile.unrestricted ODER Ziel in profile.allowedNumbers
-//      (Testaccounts, gezielte Freigabe) -> Allowlist erfuellt.
-//   2. Abo-Kopplung (W5): aktiver, KYC-verifizierter Subscriber -> Allowlist erfuellt (das
-//      Abo ersetzt die statische Liste). Der Owner traegt seit Phase outbound-p1 ein EXPLIZITES
-//      kyc_level (id_verified, Boot-Seed seedBootstrapKyc) und faellt hierunter (Pfad 2); ein
+//      (Testaccounts, gezielte Freigabe) -> freigegeben.
+//   2. Abo-Kopplung (W5): aktiver, KYC-verifizierter Subscriber -> freigegeben (das Abo IST
+//      die Freigabe). Der Owner traegt seit Phase outbound-p1 ein EXPLIZITES kyc_level
+//      (id_verified, Boot-Seed seedBootstrapKyc) und faellt hierunter (Pfad 2); ein
 //      ungeseedeter Fremd-Tenant ohne kyc_level NICHT (tenantActiveSubscriber false).
-//   3. ALLOWED_NUMBERS (reine Test-/Notbremse): leer -> 403, Ziel nicht enthalten -> 403.
-// Hebt NUR die Allowlist auf; alle harten Gates davor (Denylist/Land/Limit) liefen schon.
+//   3. Sonst fail-closed Deny - keine statische Liste mehr (outbound-p3); die globale
+//      Notbremse ist OUTBOUND_FROZEN (ganz vorn in POST /api/calls).
+// Hebt NUR dieses Gate auf; alle harten Gates davor (Denylist/Land/Limit) liefen schon.
 // caller = aufgeloeste Aufrufer-Identitaet (profile = Rechte-Achse, tenantId = Tenant-Achse).
 function allowlistError(to, { profile, tenantId }) {
   if (store.tenantInactive(tenantId))
@@ -652,19 +655,15 @@ function allowlistError(to, { profile, tenantId }) {
   if (profile.unrestricted) return null;
   if (profile.allowedNumbers?.includes(to)) return null;
   if (store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) return null;
-  if (!config.allowedNumbers.length)
-    return {
-      status: 403,
-      grund: "allowlist",
-      message: "Allowlist ist leer (ALLOWED_NUMBERS in .env). Outbound-Anrufe sind gesperrt.",
-    };
-  if (!config.allowedNumbers.includes(to))
-    return {
-      status: 403,
-      grund: "allowlist",
-      message: `Nummer ${to} steht nicht in der Allowlist (ALLOWED_NUMBERS). Anruf verweigert.`,
-    };
-  return null;
+  // Pfad 3 (outbound-p3): reiner fail-closed Deny. Wer Pfad 0-2 nicht passiert (kein
+  // unrestricted-Profil, keine Profil-Nummer, kein aktiv-verifizierter Subscriber), wird
+  // abgewiesen. Die statische ALLOWED_NUMBERS-Permit-/Break-Glass-Liste ist abgeschafft
+  // (D8); die Notbremse ist jetzt OUTBOUND_FROZEN (ganz vorn in POST /api/calls).
+  return {
+    status: 403,
+    grund: "allowlist",
+    message: "Outbound nicht freigegeben: kein aktives Abo / keine Verifikation fuer diesen Tenant.",
+  };
 }
 
 // KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
@@ -1135,6 +1134,16 @@ app.post("/api/calls", async (req, res) => {
   const to = normNum(b.to);
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
+
+  // OUTBOUND_FROZEN (outbound-p3): globaler Kill-Switch, ganz vorn + fail-closed. "true"
+  // friert JEDEN Outbound sofort (403, kein Originate, kein Bypass) - Betriebs-Notbremse +
+  // Sekunden-Rollback fuer den Allowlist-Cutover, ohne Deploy. Default false -> uebersprungen
+  // (Normalbetrieb byte-identisch). VOR der Tenant-Aufloesung, damit auch unbekannte
+  // Identitaeten erfasst sind. Audit ohne requestedBy (Identitaet hier bewusst noch nicht aufgeloest).
+  if (config.outboundFrozen) {
+    audit("place_call_denied", req, `to=${to} grund=frozen`);
+    return res.status(403).json({ error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." });
+  }
 
   // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
   // Profile-Achse (Rechte: resolveProfile/requestedBy) UND Tenant-Achse (requestTenant)
@@ -1872,11 +1881,11 @@ const httpServer = app.listen(config.port, () => {
   );
   console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
   console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
-  // Allowlist maskiert (T-P0-7): das Startup-Banner landet im Render-stdout; die
-  // Owner-Allowlist sind Nummern realer Kontakte (PII at rest). Letzte 4 Ziffern +
-  // Korrelations-Hash genuegen zur Konfig-Sichtpruefung; der Vollwert steht in .env.
+  // Outbound-Freigabe (outbound-p3): keine statische ALLOWED_NUMBERS-Liste mehr - Permit ist
+  // die per-Tenant-Verifikation (Abo+KYC, Pfad 2). OUTBOUND_FROZEN zeigt den globalen
+  // Kill-Switch-Zustand. Kein PII (Nummern) mehr im Banner.
   console.log(
-    `  Allowlist:      ${config.allowedNumbers.map(maskNumber).join(", ") || "(leer -> Outbound gesperrt)"}`,
+    `  Outbound:       ${config.outboundFrozen ? "EINGEFROREN (OUTBOUND_FROZEN=true)" : "aktiv (Verifikation per Tenant: Abo+KYC)"}`,
   );
   console.log(
     `  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,

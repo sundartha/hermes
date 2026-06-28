@@ -144,17 +144,10 @@ test("W5-5a: Owner ist via Boot-Seed Subscriber -> passiert OHNE ALLOWED_NUMBERS
   }
 });
 
-test("W5-5b: Owner/Bestand mit ALLOWED_NUMBERS-Eintrag passiert byte-identisch (500)", async () => {
-  const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seed({}) });
-  try {
-    const res = await placeCall(srv, null);
-    assert.equal(res.status, 500, "Ziel in ALLOWED_NUMBERS -> Legacy-Pfad passiert (bis Originate)");
-    const call = outboundCalls(srv)[0];
-    assert.equal(call.tenantId, BOOTSTRAP_TENANT_ID);
-  } finally {
-    await srv.stop();
-  }
-});
+// W5-5b (Owner via statischem ALLOWED_NUMBERS-Eintrag / Pfad 3) entfaellt seit outbound-p3:
+// die statische Allowlist ist abgeschafft, der Owner passiert ausschliesslich ueber Pfad 2
+// (Abo/Subscriber, durch W5-5a abgedeckt). Ein eigener Test mit gesetztem ALLOWED_NUMBERS
+// waere nur noch ein irrefuehrendes Duplikat von W5-5a (der Wert ist wirkungslos).
 
 // ---- 6. Harte Gates bleiben scharf: die Abo-Lockerung hebt Land/Stundenlimit NICHT auf ----
 test("W5-6a: aktiver Subscriber -> Land-Gate greift weiter (US -> 403 grund=land)", async () => {

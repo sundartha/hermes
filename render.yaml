@@ -75,10 +75,16 @@ services:
       # Provider der Bootstrap-Nummer: twilio | telnyx.
       - key: BOOTSTRAP_PROVIDER
         value: "telnyx"
+      # Globaler Outbound-Kill-Switch (outbound-p3). true = ALLE Outbounds sofort 403.
+      # Default false. Notbremse + Sekunden-Rollback fuer den Allowlist-Cutover.
+      - key: OUTBOUND_FROZEN
+        value: "false"
+      # ALLOWED_NUMBERS: ab outbound-p3 wirkungslos (statische Allowlist abgeschafft);
+      # Permit = per-Tenant-Verifikation. Key bleibt fuer den Owner-Env-Cleanup.
       - key: ALLOWED_NUMBERS
         sync: false
       # Erlaubte Laendervorwahlen (Default +49,+33,+44 = DE/FR/UK). * = alle Laender.
-      # Letztes Gate bleibt ALLOWED_NUMBERS; Land + Stundenlimit greifen davor.
+      # Land + Stundenlimit greifen vor der Verifikation; statische Liste entfaellt (outbound-p3).
       - key: ALLOWED_COUNTRY_CODES
         value: "+49,+33,+44"
       # Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, nicht RATE_LIMIT_PER_MIN).

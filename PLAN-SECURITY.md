@@ -640,3 +640,19 @@ statt Pfad 3 (statische `ALLOWED_NUMBERS`). Die Owner-Reichweite weitet sich dam
 (nicht erst beim Phase-3-Cutover) von den gelisteten Nummern auf jede Nicht-Deny-Nummer in den
 freigeschalteten Laendern. Harte Gates (Denylist, Land `+49/+33/+44`, Stundenlimit, Budget,
 Offenlegungssatz) bleiben unberuehrt und scharf. `ALLOWED_NUMBERS` wird NICHT geleert (= Phase 3).
+
+## Outbound-Allowlist demoten + OUTBOUND_FROZEN (Phase outbound-p3, 2026-06-28)
+
+Owner-genehmigte Kompensation (Strategie §2.1/§3.x, D8, Entscheidung #8): `config.allowedNumbers`
+(allowlistError Pfad 3) wird ERSATZLOS aus dem Code entfernt - kein statischer Permit/Break-Glass
+mehr. Pfad 3 wird ein reiner fail-closed Deny: wer Pfad 0-2 (tenantInactive-Block / unrestricted-
+Profil / aktiv-verifizierter Subscriber) nicht passiert, wird abgewiesen. Regel 1 (keine Sicherung
+ersatzlos schwaechen) ist erfuellt, weil die Liste durch den globalen Kill-Switch OUTBOUND_FROZEN
+ERSETZT wird (fail-closed, ganz vorn in POST /api/calls; "true" sperrt ALLE Outbounds sofort ohne
+Deploy = Notbremse + Sekunden-Rollback). Default false = Normalbetrieb byte-identisch.
+
+Unveraendert + scharf: Denylist, Land-Gate, globales/per-Nutzer-Stundenlimit, per-(Tenant,Ziel)-Cap,
+Vorab-Reservierung (Kosten-Achse, Hauptschutz bei '*'), Budget-Schnittmenge, KYC-Gate, Eigen-Nummer-
+Riegel (R3), Offenlegungssatz, Provider-Signatur. WICHTIG (Cutover-Semantik): da der Code die Liste
+entfernt, IST der Deploy von outbound-p3 der Cutover; das spaetere Leeren von ALLOWED_NUMBERS in
+Render ist nur kosmetischer Env-Cleanup. Deploy erst nach LIVE-Verifikation von 1/1b/1c/1d (D3).

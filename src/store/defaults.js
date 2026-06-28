@@ -242,9 +242,9 @@ export function emptyUsageMap() {
 // Profil-Felder mit erwartetem Typ (Whitelist gegen sanitizeProfile, analog
 // updateSettings). "string[]" = Array aus Strings.
 export const PROFILE_FIELDS = {
-  allowedNumbers: "string[]", // eigene Allowlist (zusaetzlich zur globalen)
+  allowedNumbers: "string[]", // eigene Ziel-Freigabe (Pfad 1: gezielte Nummern ohne Abo/Verifikation)
   allowedCountryCodes: "string[]", // engt das globale Land-Gate weiter ein (nie auf)
-  unrestricted: "boolean", // hebt die GLOBALE Allowlist auf (nur die Allowlist!)
+  unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
   allowCalendar: "boolean", // get_calendar-MCP-Tool
   allowBooking: "boolean", // POST /api/calendar
   maxCallsPerHour: "number", // pro-Nutzer-Stundenlimit (effektiv min(global, profil))
@@ -282,7 +282,7 @@ export function countryAllowed(e164, allowedCodes = ["+49"]) {
 }
 
 // Whitelist gegen PROFILE_FIELDS (Key + Typ). Unbekannte Keys / falsche Typen
-// werden verworfen. allowedNumbers wird wie config.allowedNumbers normalisiert,
+// werden verworfen. allowedNumbers wird wie eine Nummern-Liste normalisiert (normNum-Schema),
 // damit der Gate-Vergleich gegen E.164 trifft; Laendercodes nur getrimmt.
 export function sanitizeProfile(patch) {
   const clean = {};
@@ -306,8 +306,9 @@ export function sanitizeProfile(patch) {
 // Default-Profil: kleines Stundenlimit (fail-closed fuer profillose Nutzer).
 const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 2;
 
-// Owner = localhost/stdio ohne Identitaet: permissiv = heutiges Verhalten. Die
-// globale Allowlist greift weiter (unrestricted=false, leere Profil-Allowlist),
+// Owner = localhost/stdio ohne Identitaet: permissiv = heutiges Verhalten. Das Profil
+// lockert nichts (unrestricted=false, leere Profil-Allowlist) - der Owner passiert das
+// Verifikations-Gate ueber Pfad 2 (aktiver Subscriber via Boot-Seed, outbound-p1/p3),
 // kein Zusatz-Stundenlimit (maxCallsPerHour=null -> effektiv global), Kalender/
 // Booking erlaubt. So bleiben die Phase-0-Tests (localhost = Owner) gruen.
 const OWNER_PROFILE = {

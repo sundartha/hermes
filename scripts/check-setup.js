@@ -47,25 +47,16 @@ config.publicUrl && !config.publicUrl.includes("CHANGE-ME")
       "PUBLIC_URL fehlt oder ist Platzhalter",
       "ngrok http " + config.port + " starten und URL eintragen",
     );
-config.allowedNumbers.length
-  ? ok(`Allowlist: ${config.allowedNumbers.join(", ")}`)
-  : wrn("ALLOWED_NUMBERS ist leer", "Outbound-Anrufe sind damit komplett gesperrt");
-// Laender-Gate + Widerspruch zur Allowlist (Pre-Mortem 0.2): eine Allowlist-Nummer,
-// deren Laendervorwahl nicht erlaubt ist, wuerde VOR der Allowlist am Land-Gate haengen.
+ok("Outbound-Freigabe: per-Tenant-Verifikation (Abo+KYC); keine statische Allowlist mehr");
+// Laender-Gate (Pre-Mortem 0.2): begrenzt teure Ziel-Laender. Die statische Allowlist
+// entfaellt seit outbound-p3 (Permit = per-Tenant-Verifikation), daher kein Nummern-Cross-Check mehr.
 if (config.allowedCountryCodes.includes("*")) {
   wrn(
     "Laender-Gate: alle Laendervorwahlen erlaubt (*)",
-    "Bewusst? Das Land-Gate ist damit aus - nur Allowlist + Stundenlimit bremsen",
+    "Bewusst? Das Land-Gate ist damit aus - nur Denylist + Stundenlimit + Verifikation bremsen",
   );
 } else {
   ok(`Laender-Gate: ${config.allowedCountryCodes.join(", ")}`);
-  for (const n of config.allowedNumbers) {
-    if (!config.allowedCountryCodes.some((c) => norm(n).startsWith(c)))
-      bad(
-        `Allowlist-Nummer ${n} passt zu keiner erlaubten Laendervorwahl`,
-        "ALLOWED_COUNTRY_CODES erweitern oder Nummer entfernen - sonst blockt das Land-Gate sie VOR der Allowlist",
-      );
-  }
 }
 config.maxCallsPerHour > 0
   ? ok(`Max. Outbound-Calls/Stunde: ${config.maxCallsPerHour}`)
@@ -168,19 +159,12 @@ if (config.twilioSid && config.twilioToken) {
         : null;
     }
 
-    // Verified Caller IDs vs. Allowlist/Owner (nur im Trial relevant)
+    // Verified Caller IDs vs. Owner-Nummer (nur im Trial relevant). Die statische Allowlist
+    // entfaellt seit outbound-p3 -> nur noch die Owner-Nummer wird gegen die Verified-Liste geprueft.
     if (trialAccount) {
       const verified = (await client.outgoingCallerIds.list({ limit: 50 })).map((v) =>
         norm(v.phoneNumber),
       );
-      for (const n of config.allowedNumbers) {
-        verified.includes(norm(n))
-          ? ok(`Allowlist-Nummer ${n} ist verifiziert`)
-          : bad(
-              `Allowlist-Nummer ${n} ist NICHT verifiziert`,
-              "Console -> Phone Numbers -> Verified Caller IDs",
-            );
-      }
       if (config.ownerNumber) {
         verified.includes(norm(config.ownerNumber))
           ? ok(`OWNER_NUMBER ist verifiziert (SMS-Summaries moeglich)`)
