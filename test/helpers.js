@@ -65,6 +65,10 @@ export const BASE_ENV = {
   MCP_AUTH_TOKEN: "",
   LOGIN_COOKIE_TTL_SECONDS: "1800", // AM2: neutral gepinnt (sonst leakt lokale .env in Spawn-Tests)
   ALLOWED_NUMBERS: "",
+  // outbound-p3: Outbound-Kill-Switch neutral AUS (fail-closed Default false = nicht gesperrt).
+  // Ohne diese Zeile leakt eine lokale .env mit OUTBOUND_FROZEN=true via dotenv in Spawn-Tests
+  // -> Baseline-Drift (Lehre test-base-env-drift). outbound-frozen.test.js setzt es explizit.
+  OUTBOUND_FROZEN: "false",
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit

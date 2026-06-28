@@ -63,7 +63,6 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
         owner: ctx.ownerName,
         model: config.claudeModel,
         voiceEngine: config.voiceEngine,
-        allowedNumbers: config.allowedNumbers, // globales Safety-Gate, bleibt global
       },
     });
   });

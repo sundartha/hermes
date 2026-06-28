@@ -161,13 +161,9 @@ test("I5 /api/state agent-Block ist tenant-gescoped + fail-closed (Nummer/Owner/
     assert.ok(!("ownerNumber" in b.agent), "ownerNumber-Feld ist entfernt (P4)");
     assert.ok(!("ownerNumber" in owner.agent), "ownerNumber-Feld ist entfernt (P4)");
 
-    // Plattform-Service-Config + globales Safety-Gate bleiben global (kein Daten-Leck)
+    // Plattform-Service-Config bleibt global (kein Daten-Leck). Das frueher hier gepruefte
+    // agent.allowedNumbers entfaellt seit outbound-p3 (Feld aus der Agent-Flaeche entfernt).
     assert.equal(owner.agent.voiceEngine, b.agent.voiceEngine, "voiceEngine bleibt global");
-    assert.deepEqual(
-      owner.agent.allowedNumbers,
-      b.agent.allowedNumbers,
-      "allowedNumbers bleibt global",
-    );
   } finally {
     await srv.stop();
   }

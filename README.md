@@ -30,7 +30,7 @@ Audio läuft **niemals durch MCP**. Realtime nutzt G.711 μ-law 8 kHz **1:1 durc
 
 ## Sicherheits-Gates (fest eingebaut)
 
-- **Allowlist:** Outbound nur an Nummern aus `ALLOWED_NUMBERS`. Leer = Outbound gesperrt.
+- **Outbound-Freigabe:** per-Tenant-Verifikation (aktives Abo + KYC). Globaler Not-Aus: `OUTBOUND_FROZEN`.
 - **Max-Dauer:** `MAX_CALL_DURATION_S` (Default 180 s, Max 300) beendet jeden Call hart (Twilio `timeLimit` + Timer).
 - **Disclosure-Pflicht:** Erster gesprochener Satz bei Outbound ist fest verdrahtet: _„Guten Tag, hier spricht ein KI-Assistent im Auftrag von [Name]. Das Gespräch wird für meinen Auftraggeber zusammengefasst."_
 - **Budget-Guard:** `MAX_BUDGET_EUR` stoppt neue Calls, Verbrauch live im Dashboard.
@@ -125,7 +125,7 @@ Du gehst nicht ran → Agent übernimmt → du bekommst SMS mit Summary + Action
 
 | Tool              | Parameter                                                                                                                                                        | Rückgabe                                                                                                                                                           |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `place_call`      | `to` (E.164, Allowlist!), `objective` (Pflicht), `briefing?`, `constraints?`, `language?` (Default de), `max_duration_s?` (Default 180, Max 300), `caller_name?` | `{call_id, status:"dialing"}`                                                                                                                                      |
+| `place_call`      | `to` (E.164; serverseitige Safety-Gates), `objective` (Pflicht), `briefing?`, `constraints?`, `language?` (Default de), `max_duration_s?` (Default 180, Max 300), `caller_name?` | `{call_id, status:"dialing"}`                                                                                                                                      |
 | `get_call_status` | `call_id`                                                                                                                                                        | `{status: dialing\|in_progress\|completed\|failed\|cancelled, duration_s, last_transcript_lines[]}`                                                                |
 | `get_transcript`  | `call_id`                                                                                                                                                        | `{result_summary, objective_achieved: true\|false\|unclear}` (Roh-Transkript wird nach der Summary geloescht, `transcript[]` daher leer fuer abgeschlossene Calls) |
 | `cancel_call`     | `call_id`                                                                                                                                                        | `{status:"cancelled"}`                                                                                                                                             |

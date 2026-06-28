@@ -76,7 +76,6 @@ function makeConfig(overrides = {}) {
     multiTenant: false,
     claudeModel: "claude-haiku-4-5",
     voiceEngine: "budget",
-    allowedNumbers: ["+49152"],
     maxBudgetEur: 8,
     ...overrides,
   };
@@ -148,7 +147,9 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     assert.ok(!("ownerNumber" in body.agent), "ownerNumber-Feld ist entfernt (P4)");
     assert.equal(body.agent.model, "claude-haiku-4-5");
     assert.equal(body.agent.voiceEngine, "budget");
-    assert.deepEqual(body.agent.allowedNumbers, ["+49152"]);
+    // outbound-p3: allowedNumbers ist aus der Agent-Status-Flaeche entfernt (statische
+    // Allowlist abgeschafft) - das Feld existiert nicht mehr (Symmetrie zu ownerNumber).
+    assert.ok(!("allowedNumbers" in body.agent), "allowedNumbers-Feld ist entfernt (outbound-p3)");
   } finally {
     await srv.stop();
   }

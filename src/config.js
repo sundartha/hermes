@@ -222,14 +222,13 @@ export const config = {
   dailySmsCap: numEnv("DAILY_SMS_CAP", process.env.DAILY_SMS_CAP, { fallback: 20, min: 0 }),
 
   // ---- Safety-Gates ----
-  // Outbound NUR an diese Nummern (kommasepariert, E.164). Leer = alle Outbound-Calls verweigern.
-  // Normalisierung = dasselbe Schema wie store/defaults.js normNum (Whitespace/-/()
-  // strippen); hier BEWUSST lokal gehalten - config ist die Env-Boundary-Schicht und
-  // importiert nichts aus store/ (store -> config ist die etablierte Richtung).
-  allowedNumbers: (process.env.ALLOWED_NUMBERS || "")
-    .split(",")
-    .map((n) => n.replace(/[\s\-()]/g, ""))
-    .filter(Boolean),
+  // Globaler Outbound-Kill-Switch (outbound-p3): "true" friert JEDEN Outbound-Call sofort
+  // ein (403, kein Originate), ohne Deploy = Betriebs-Notbremse + Sekunden-Rollback fuer
+  // den Allowlist-Cutover. Default "false" = NICHT gesperrt -> Normalbetrieb byte-identisch;
+  // nur exakt "true" friert. Ersetzt die fruehere statische ALLOWED_NUMBERS-Notbremse (D8):
+  // Permit ist jetzt die per-Tenant-Verifikation (Abo+KYC, Pfad 2); die immer-scharfen Riegel
+  // (Denylist/Land/Rate/Reserve/Budget/KYC/Eigen-Nummer) bleiben darunter unveraendert.
+  outboundFrozen: (process.env.OUTBOUND_FROZEN || "false") === "true",
   // Erlaubte Laendervorwahlen fuer Outbound (kommasepariert, E.164-Prefix wie +49).
   // Default +49,+33,+44 (Deutschland, Frankreich, UK - F1 Phase 8). BEWUSST nur diese
   // drei, NICHT global ("*"): ein zu weites Gate oeffnet teure Ziele (Pre-Mortem R2).

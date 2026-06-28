@@ -168,7 +168,6 @@ function pickAgentStatus(s) {
     calls: s.usage.calls,
     costEur: s.usage.costEur,
     maxBudgetEur: s.usage.maxBudgetEur,
-    allowedNumbers: s.agent.allowedNumbers || [],
     permissions: permissionsSummary(s.settings),
   };
 }
@@ -183,7 +182,6 @@ const AGENT_STATUS_OUTPUT = {
   calls: z.number(),
   costEur: z.number(),
   maxBudgetEur: z.number(),
-  allowedNumbers: z.array(z.string()),
   permissions: z.string(),
 };
 
@@ -544,7 +542,7 @@ export function registerTools(
   // Stufe 0 (Text byte-identisch zum Bestand, Backward-Compat) + structuredContent
   // (Whitelist) + Stufe 1 (agent-status Widget) NUR bei faehigem Host (enableWidgetUi).
   // Der Textblock liest dieselben gewhitelisteten Daten (data.*) - eine Quelle, keine
-  // Duplizierung der Formatierung (permissions/allowlist).
+  // Duplizierung der Formatierung (permissions).
   uiTool(
     "get_agent_status",
     {
@@ -565,7 +563,6 @@ export function registerTools(
             text:
               `Agent-Nummer: ${data.number}\nBesitzer: ${data.owner}\nVoice-Engine: ${data.voiceEngine}\nModell: ${data.model}\n` +
               `Calls bisher: ${data.calls}\nKI-Kosten: ${data.costEur.toFixed(3)} EUR von max. ${data.maxBudgetEur} EUR\n` +
-              `Allowlist: ${data.allowedNumbers.join(", ") || "(leer - Outbound gesperrt)"}\n` +
               `Berechtigungen: ${data.permissions}`,
           },
         ],
