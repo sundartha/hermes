@@ -39,6 +39,38 @@ const VOICE_PROFILE_EN = "en-female-neural";
 const REALTIME_VOICE_FR = "shimmer";
 const REALTIME_VOICE_EN = "alloy";
 
+// ---- Persona-Stil-Katalog (P2, PLAN-PERSONAL-ASSISTANT.md) ----
+// Kuratiertes NON-PII-Enum (Owner-Entscheidung 6.1): GENAU ZWEI IDs, kein "kurz-direkt".
+// DIE eine Quelle der gueltigen Stil-IDs - updateSettings (state-ops) validiert fail-closed
+// gegen diese Liste, damit Freitext/Impersonation NICHT ins agentStyle-Feld gelangt
+// (Leitplanke 6/H4, Pre-Mortem 1/2). null (Default) ist KEINE ID -> neutrales Bestands-
+// verhalten (Siezen). styleClause faerbt AUSSCHLIESSLICH Ton + Anrede; Laenge (1-2 Saetze),
+// hoechstens eine Frage und end_call bleiben FIX (sie liegen ausserhalb des Katalogs).
+export const PERSONA_STYLE_IDS = Object.freeze(["warm-persoenlich", "formell-professionell"]);
+
+// Neutral-Anrede = die frueher hart in claude.js stehende Siez-Anweisung. EINE Quelle (G5),
+// in JEDER Sprache identisch deutsch, weil das System-Prompt-Geruest deutsch ist (nur
+// speechClause + Datums-Locale wechseln, vgl. SP4/SP5 in der P0-Charakterisierung).
+// styleClause(null|unbekannt) faellt hierauf zurueck -> agentStyle=null byte-identisch.
+const NEUTRAL_ADDRESS_CLAUSE = "Sieze fremde Anrufer.";
+
+// Pro Sprache: Stil-ID -> kuratierte Klausel (Ton + Anrede). Modul-Konstanten analog
+// VOICE_PROFILE_* (Forward-Referenz fuer die Locale-Objekte). FR/EN sind kuratiert/
+// byte-stabil (R8). Ein fehlender Key faellt in styleClause auf NEUTRAL zurueck; der
+// Vollstaendigkeits-Test (persona-style.test.js) faengt Drift gegen PERSONA_STYLE_IDS.
+const STYLE_CLAUSES_DE = Object.freeze({
+  "warm-persoenlich": "Triff einen warmen, persoenlichen Ton und duze den Anrufer.",
+  "formell-professionell": "Triff einen formellen, sachlichen Ton und sieze den Anrufer.",
+});
+const STYLE_CLAUSES_FR = Object.freeze({
+  "warm-persoenlich": "Adopte un ton chaleureux et personnel et tutoie ton interlocuteur.",
+  "formell-professionell": "Adopte un ton formel et neutre et vouvoie ton interlocuteur.",
+});
+const STYLE_CLAUSES_EN = Object.freeze({
+  "warm-persoenlich": "Use a warm, personal tone and address the other person informally.",
+  "formell-professionell": "Use a formal, neutral tone and address the other person politely.",
+});
+
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
 // interpoliert wird (disclosure/bridgePhrase/summarySystem) - der Aufrufer reicht die
 // gebundene Identitaet bzw. das Anliegen herein (keine Identitaets-Logik im Bundle).
@@ -63,6 +95,11 @@ export const LOCALES = Object.freeze({
     },
     // System-Prompt-Sprach-Teil: die Output-Sprach-Regel in Regel 1 (claude.js).
     speechClause: "Nur natuerlich gesprochenes Deutsch.",
+    // Persona-Stil (P2): Stil-ID -> Ton-/Anrede-Klausel, ersetzt die fixe Siez-Anweisung
+    // an Ort und Stelle (claude.js, gleiche Zeile). Unbekannt/null -> NEUTRAL (Siezen) =>
+    // agentStyle=null byte-identisch. KEIN Freitext erreicht je den Prompt (nur Katalog-
+    // Werte oder NEUTRAL) -> Anti-Injection (Pre-Mortem 1), staerker als der typeof-Pfad.
+    styleClause: (styleId) => STYLE_CLAUSES_DE[styleId] || NEUTRAL_ADDRESS_CLAUSE,
     // Outbound-Bruecke (claude.js openingText): nach der Offenlegung gesprochen.
     bridgePhrase: (goal) => `Ich rufe an, weil ${goal}.`,
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
@@ -99,6 +136,7 @@ export const LOCALES = Object.freeze({
       inbound: "L'appelant est en ligne. Salue-le maintenant conformément à tes instructions.",
     },
     speechClause: "Réponds exclusivement en français parlé et naturel.",
+    styleClause: (styleId) => STYLE_CLAUSES_FR[styleId] || NEUTRAL_ADDRESS_CLAUSE,
     bridgePhrase: (goal) => `Je vous appelle car ${goal}.`,
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
@@ -134,6 +172,7 @@ export const LOCALES = Object.freeze({
       inbound: "The caller is on the line. Greet them now according to your instructions.",
     },
     speechClause: "Reply only in natural, spoken English.",
+    styleClause: (styleId) => STYLE_CLAUSES_EN[styleId] || NEUTRAL_ADDRESS_CLAUSE,
     bridgePhrase: (goal) => `I'm calling because ${goal}.`,
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).

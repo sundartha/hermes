@@ -192,6 +192,12 @@ export function defaultSettings() {
     // Im Dashboard umstellbar (updateSettings hat eine eigene language-Validierung gegen
     // SUPPORTED_LANGUAGES, da typeof null === "object" den generischen Typ-Check umgeht).
     language: null,
+    // Stehender Tenant-Stil (P2, Owner-Entscheidung 6.1): kuratierte NON-PII-Enum-ID
+    // (PERSONA_STYLE_IDS, src/i18n/locales.js) ODER null. null = Bestand (neutral, Siezen)
+    // -> agentStyle=null byte-identisch zum heutigen systemPrompt (P0-Pins). Faerbt NUR
+    // Ton + Anrede EINER System-Prompt-Zeile (claude.js styleClause), NIE Offenlegung/
+    // Persona/Telefon-Regeln. Validiert fail-closed in updateSettings (kein Freitext).
+    agentStyle: null,
   };
 }
 

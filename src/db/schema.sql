@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS settings (
   -- F2 P7: Opt-Out fuer die Summary-SMS (Boolean, Muster allow_summaries). DEFAULT TRUE
   -- = Bestandsverhalten; entkoppelt "keine SMS" vom Loeschen der privaten Nummer.
   sms_summary_opt_in  BOOLEAN NOT NULL DEFAULT TRUE,
-  language            TEXT
+  language            TEXT,
+  agent_style         TEXT
 );
 -- F1 Geo-Location: Gespraechssprache pro Tenant als OPTIONALES Override (Entscheidung #8).
 -- Phase 1 legte die Spalte NOT NULL DEFAULT 'de' an; Phase 4 macht sie NULLABLE, weil 'de'
@@ -83,6 +84,12 @@ ALTER TABLE settings ALTER COLUMN language DROP NOT NULL;
 -- F2 P7: Opt-Out fuer die Summary-SMS. NOT NULL DEFAULT TRUE backfillt Bestands-Tenants
 -- mit Opt-In -> kein stiller SMS-Verlust beim Migrate (M1/M5). Muster wie allow_summaries.
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_summary_opt_in BOOLEAN NOT NULL DEFAULT TRUE;
+-- P2 (PLAN-PERSONAL-ASSISTANT.md) - agent_style: stehender Tenant-Stil als kuratierte
+-- NON-PII-Enum-ID (warm-persoenlich|formell-professionell) ODER NULL. NULLABLE, KEIN
+-- Default: NULL = "nicht gesetzt" = neutrales Bestandsverhalten (Siezen) -> agentStyle=null
+-- byte-identisch. Additiv NULLABLE + Code-Fallback in rowToSettings (Muster language/I8);
+-- Bestands-Zeilen bleiben NULL (kein Backfill) -> kein stiller Stil-Wechsel beim Migrate.
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_style TEXT;
 
 -- call: alle heutigen Felder AUSSER transcript[] (-> transcript_segment) + tenant_id.
 -- id = app-generierte TEXT-PK (newId-Format bleibt). seq nur fuer stabile
