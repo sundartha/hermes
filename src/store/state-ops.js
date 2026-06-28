@@ -581,6 +581,18 @@ export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
   applyOwnerIdentity(owner, firstName, lastName);
 }
 
+// Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): nimmt
+// jeden neuen Tenant aus dem geteilten globalen Pool (sonst faellt er in effectiveCapEur
+// auf cfg.maxBudgetEur zurueck). Set-if-absent wie idpSubject: nur wenn ein Default > 0
+// uebergeben wird UND noch keine tenant_budget-Zeile existiert -> setTenantBudget
+// (budget == hard cap == Default). 0/fehlend bzw. schon eine Zeile -> No-Op (Owner/Bestand
+// unveraendert). Config-frei (Default kommt als Arg). Kein Throw, kein IO.
+function seedTenantDefaultBudget(s, tenantId, defaultBudgetCents) {
+  if (!defaultBudgetCents) return; // 0/undefined -> kein Seed (kein 0-Cap-Tenant)
+  if (s.tenantBudgets.find((b) => b.tenantId === tenantId)) return;
+  setTenantBudget(s, tenantId, { budgetCents: defaultBudgetCents, hardCapCents: defaultBudgetCents });
+}
+
 // Idempotent. Set-on-create: legt den Tenant an (status active) und setzt EINMALIG die
 // Identitaet (firstName/lastName -> ownerName, idpSubject = WorkOS sub). idpSubject macht
 // den Record ueber resolveTenant (MCP/REST) auffindbar -> EINE kanonische Identitaet fuer
@@ -589,13 +601,18 @@ export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
 // Werte UND der Status bleiben unveraendert (P0 aktiviert nicht; Aktivierung = P3,
 // Invariante 5). normalizePrivateNumber validiert in BEIDEN Zweigen VOR jeder Mutation
 // (fail-closed; ungueltig/gesperrtes Land -> throw, kein halb gebundener Record).
-export function registerTenant(s, id, { firstName, lastName, privateNumber, idpSubject } = {}) {
+export function registerTenant(
+  s,
+  id,
+  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents } = {},
+) {
   const e164 = normalizePrivateNumber(privateNumber); // validiert VOR jeder Mutation
   const existing = findTenant(s, id);
   if (existing) {
     if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
     if (!existing.ownerName) applyOwnerIdentity(existing, firstName, lastName);
     if (e164 && !existing.privateNumber) existing.privateNumber = e164;
+    seedTenantDefaultBudget(s, id, defaultBudgetCents); // set-if-absent (D5)
     return existing;
   }
   const tenant = { id, status: TENANT_STATUS.ACTIVE };
@@ -603,6 +620,7 @@ export function registerTenant(s, id, { firstName, lastName, privateNumber, idpS
   if (idpSubject) tenant.idpSubject = idpSubject;
   if (e164) tenant.privateNumber = e164;
   s.tenants.push(tenant);
+  seedTenantDefaultBudget(s, id, defaultBudgetCents); // set-if-absent (D5)
   return tenant;
 }
 
@@ -1010,6 +1028,17 @@ export function trackUsage(s, tenantId, inputTokens, outputTokens, cfg) {
   return usage;
 }
 
+// Bucht die IST-Voice-Minutenkosten (GANZZAHL Cents) eines beendeten Outbound-Calls in den
+// LIVE-usage-Bucket des Tenants (outbound-p1c Reconcile, D1). Cent->EUR ueber CENTS_PER_EUR
+// (dieselbe Bruecke wie effectiveCapEur, G5); costEur bleibt JS-Float (Bestand). So sieht
+// der Budget-Gate (budgetExceeded) + die Vorab-Reservierung endlich die Carrier-Minuten.
+// Nebeneffekt im Namen (N7). Reine Mutation, kein IO (Wrapper saved).
+export function addVoiceUsageCostCents(s, tenantId, costCents) {
+  const usage = usageFor(s, tenantId);
+  usage.costEur += costCents / CENTS_PER_EUR;
+  return usage;
+}
+
 // Effektiver pro-Tenant-Cap in EUR: existiert eine tenant_budget-Zeile, gilt deren
 // hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale
 // cfg.maxBudgetEur (Owner/Bestand ohne Zeile -> byte-identisch). EINE Stelle fuer
@@ -1025,6 +1054,15 @@ function effectiveCapEur(s, tenantId, cfg) {
 // neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL.
 export function budgetExceeded(s, tenantId, cfg) {
   return usageFor(s, tenantId).costEur >= effectiveCapEur(s, tenantId, cfg);
+}
+
+// Vorab-Reservierung (outbound-p1c, Kosten-Achse, D1): wuerde der Worst-Case-Minutenpreis
+// (reserveCents, GANZZAHL Cents) den verbleibenden effektiven Tenant-Cap UEBERSTEIGEN?
+// Ist-Verbrauch (costEur) + Reserve > effektiver Cap -> true (402 vor Dial). DIESELBE
+// Cap-Aufloesung (effectiveCapEur) + derselbe usage-Bucket wie budgetExceeded (G5);
+// globalBudgetExceeded bleibt PARALLEL (Schnittmenge, Regel 1). Reine Query, kein IO.
+export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
+  return usageFor(s, tenantId).costEur + reserveCents / CENTS_PER_EUR > effectiveCapEur(s, tenantId, cfg);
 }
 
 // Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId

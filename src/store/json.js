@@ -375,6 +375,18 @@ export function globalBudgetExceeded(cfg) {
   return ops.globalBudgetExceeded(load(), cfg);
 }
 
+// Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
+export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
+  return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg);
+}
+
+// Reconcile (outbound-p1c): Mutation -> save (wie trackUsage).
+export function addVoiceUsageCostCents(tenantId, costCents) {
+  const usage = ops.addVoiceUsageCostCents(load(), tenantId, costCents);
+  save();
+  return usage;
+}
+
 // ---- Per-Tenant-Budget + Metering (P6b3) ----
 export function setTenantBudget(tenantId, amounts) {
   const row = ops.setTenantBudget(load(), tenantId, amounts);
