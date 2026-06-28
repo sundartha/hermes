@@ -4,13 +4,22 @@
 // laeuft. updateSettings wird NICHT aufgeweicht - diese Schicht liegt davor.
 
 import { DEFAULT_GREETING } from "./store/defaults.js";
-import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 
-// Felder, die ein Tenant frei (Typ-gecheckt von updateSettings) setzen darf. language
-// ist seit F1 P4 self-service-aenderbar (Entscheidung #8, "im Dashboard uebersteuerbar"):
-// updateSettings validiert den Wert fail-closed gegen SUPPORTED_LANGUAGES bzw. ""/null
-// (= "automatisch"), kein Freitext - der Tenant kann nur eine bekannte Sprache waehlen.
-export const SELF_SERVICE_FREE_FIELDS = ["agentName", "allowCalendar", "allowBooking", "language"];
+// Felder, die ein Tenant SELBST setzen darf - updateSettings ist die EINE Validierungs-
+// quelle (G5): einfache Felder werden dort typeof-gecheckt, die optionalen Enum-Overrides
+// language UND agentStyle fail-closed gegen ihren Katalog (SUPPORTED_LANGUAGES bzw. das P2-
+// Enum PERSONA_STYLE_IDS) ueber OPTIONAL_ENUM_FIELDS/isOptionalEnumOverride. "" / null setzt
+// das Override zurueck (= "automatisch" bzw. Standardstil), ein Muellwert wird still
+// verworfen - kein Freitext, kein PII/Impersonation im Feld. language ist seit F1 P4
+// uebersteuerbar (Entscheidung #8), agentStyle seit PA P4 nach exakt gleichem Muster (kein
+// eigener Sonderbranch mehr - die Katalog-Pruefung lebt einmal in updateSettings, nicht hier).
+export const SELF_SERVICE_FREE_FIELDS = [
+  "agentName",
+  "allowCalendar",
+  "allowBooking",
+  "language",
+  "agentStyle",
+];
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
 // false->true NEIN - Aktivieren bleibt Plattform-Admin via POST /api/settings).
@@ -36,15 +45,12 @@ export function selfServicePatch(patch, current) {
     if (SELF_SERVICE_FREE_FIELDS.includes(key)) {
       clean[key] = value; // Typ-Check macht updateSettings
     } else if (key === "greeting") {
+      // greeting ist KEIN Enum-Override in updateSettings (dort nur typeof-gecheckt, jeder
+      // String passiert) - die Vorlagen-Pruefung MUSS daher hier stattfinden (G5: kein Dup,
+      // weil updateSettings diese Filterung nicht hat). agentStyle/language dagegen liegen in
+      // SELF_SERVICE_FREE_FIELDS, weil updateSettings sie selbst fail-closed katalog-validiert.
       if (GREETING_TEMPLATES.includes(value)) clean[key] = value;
       else rejected.push(key); // Freitext -> abgelehnt (nur Vorlage)
-    } else if (key === "agentStyle") {
-      // P4: kuratierte NON-PII-Auswahl wie greeting (kein Freitext -> kein PII/
-      // Impersonation im Feld, Regel 2/H4). Gegen das EINE exportierte P2-Enum gefiltert
-      // (G5: PERSONA_STYLE_IDS ist die Quelle, kein zweites ID-Set). "" / null = Standard-
-      // stil zuruecksetzen (dieselbe Reset-Semantik wie updateSettings/isOptionalEnumOverride).
-      if (value === null || value === "" || PERSONA_STYLE_IDS.includes(value)) clean[key] = value;
-      else rejected.push(key); // unbekannt/Freitext -> abgelehnt (nur Katalog)
     } else if (SELF_SERVICE_RESTRICT_ONLY_FIELDS.includes(key)) {
       // Nur restriktiver: true->false ja, false->true NEIN. Hochheben abgelehnt.
       if (value === false || current[key] === true) clean[key] = value;
