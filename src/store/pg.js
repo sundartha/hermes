@@ -52,16 +52,24 @@ export function makePgStore(runner) {
       await setTenant(client, BOOTSTRAP_TENANT_ID);
       await migrate(client, BOOTSTRAP_TENANT_ID);
       state = await hydrate(client);
-      // AM6: Owner-OAuth-Identitaet (OWNER_IDP_SUBJECT) idempotent an den Bootstrap-Tenant
-      // binden. Nur bei echter Mutation (set-if-absent) wird GEZIELT die bootstrap-Zeile
-      // geflusht (flushTenants ist RLS-frei -> unter der init-GUC zulaessig); danach ist
-      // idp_subject persistent -> Folge-Boots sind No-Op/byte-identisch. P2b bleibt sonst:
-      // kein config-derived Daten-Seed (Erst-Setup ueber scripts/bootstrap-tenant.js).
-      if (ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
-        await flushTenants(
+      // Bootstrap-Zeile gezielt flushen (flushTenants ist RLS-frei -> unter der init-GUC
+      // zulaessig). EINE Quelle fuer beide Boot-Seeds (idp_subject + kyc_level), G5.
+      const flushBootstrap = () =>
+        flushTenants(
           client,
           state.tenants.filter((t) => t.id === BOOTSTRAP_TENANT_ID),
         );
+      // AM6: Owner-OAuth-Identitaet (OWNER_IDP_SUBJECT) idempotent an den Bootstrap-Tenant
+      // binden. Nur bei echter Mutation (set-if-absent) wird die bootstrap-Zeile geflusht;
+      // danach ist idp_subject persistent -> Folge-Boots sind No-Op/byte-identisch. P2b bleibt
+      // sonst: kein config-derived Daten-Seed (Erst-Setup ueber scripts/bootstrap-tenant.js).
+      if (ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
+        await flushBootstrap();
+      // Phase outbound-p1: Owner-Tenant idempotent auf id_verified heilen (set-if-absent),
+      // damit er den fail-closed kycReached-Flip ueberlebt. kyc_level round-trippt bereits
+      // (rowToTenant/flushTenants). LIVE ist pg -> heilt den realen Prod-Owner beim naechsten
+      // Boot ohne Shell (Free-Tier hat kein preDeploy).
+      if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) await flushBootstrap();
     });
     return state;
   }

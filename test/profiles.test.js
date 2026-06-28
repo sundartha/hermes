@@ -39,49 +39,61 @@ const postJson = (url, body) =>
 
 // ---- (b) X-Internal-Identity: nur localhost, extern wird ignoriert ----
 test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", async (t) => {
-  // global: leere Allowlist, Land +49. Profil evil@x = unrestricted (lockert die
-  // Allowlist). Greift der Header von extern, wuerde die nicht-gelistete Nummer
-  // durchgehen (500). Wird er ignoriert -> Owner -> leere Allowlist -> 403.
+  // global: leere Allowlist, Land +49. Diskriminator = die ATTRIBUTION (call.requestedBy):
+  // seit Phase outbound-p1 ist der Owner ein verifizierter Subscriber und passiert jedes
+  // (Nicht-Deny-)Ziel (500) - die alte Allowlist-403-Probe ist tot. Statt des Status-Codes
+  // beweist der gespeicherte requestedBy, woher die Identitaet kommt: aus dem localhost-
+  // Header (evil@x) ODER, wenn ignoriert (Body/extern), fail-closed der Owner ("owner").
+  const callByTo = (srv, to) => srv.readStore().calls.find((c) => c.to === to);
+  const TO_HDR = "+4915777777771",
+    TO_BODY = "+4915777777772",
+    TO_EXT = "+4915777777773";
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", ...OFFLINE },
     seed: seedState({ profiles: { "evil@x": { unrestricted: true } } }),
   });
   try {
-    await t.test(
-      "localhost: Header gilt -> unrestricted passiert die Allowlist (500)",
-      async () => {
-        const res = await postCall(srv.localUrl, "+4915777777777", "evil@x");
-        assert.equal(res.status, 500, "localhost-Header muss die Identitaet setzen");
-      },
-    );
+    await t.test("localhost: Header setzt die Identitaet -> requestedBy=evil@x", async () => {
+      const res = await postCall(srv.localUrl, TO_HDR, "evil@x");
+      assert.equal(res.status, 500, "passiert die Gates (bis Originate)");
+      assert.equal(callByTo(srv, TO_HDR).requestedBy, "evil@x", "Identitaet kommt aus dem Header");
+    });
 
     // Laeuft immer (kein externes IP noetig): beweist die andere Haelfte - die
     // Identitaet kommt NIE aus dem Body, auch nicht von localhost.
     await t.test(
-      "localhost: Body-Felder (requestedBy/email) gelten NICHT als Identitaet",
+      "localhost: Body-Felder (requestedBy/email) gelten NICHT als Identitaet -> requestedBy=owner",
       async () => {
         const res = await fetch(`${srv.localUrl}/api/calls`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            to: "+4915777777777",
+            to: TO_BODY,
             objective: "Test",
             requestedBy: "evil@x",
             email: "evil@x",
           }),
         });
-        assert.equal(res.status, 403, "Identitaet darf nie aus dem Body kommen -> Owner -> 403");
-        assert.match((await res.json()).error, /Allowlist/);
+        assert.equal(res.status, 500);
+        assert.equal(
+          callByTo(srv, TO_BODY).requestedBy,
+          "owner",
+          "Identitaet darf nie aus dem Body kommen -> fail-closed Owner",
+        );
       },
     );
 
     await t.test(
-      "extern: Header ignoriert -> Owner -> leere globale Allowlist (403)",
+      "extern: Header ignoriert -> requestedBy=owner (kein Spoof)",
       { skip: !srv.externalUrl && "keine externe Interface-IP" },
       async () => {
-        const res = await postCall(srv.externalUrl, "+4915777777777", "evil@x");
-        assert.equal(res.status, 403, "externer X-Internal-Identity darf NICHT gelten");
-        assert.match((await res.json()).error, /Allowlist/);
+        const res = await postCall(srv.externalUrl, TO_EXT, "evil@x");
+        assert.equal(res.status, 500);
+        assert.equal(
+          callByTo(srv, TO_EXT).requestedBy,
+          "owner",
+          "externer X-Internal-Identity darf NICHT gelten",
+        );
       },
     );
   } finally {
@@ -361,6 +373,12 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       );
     });
 
+    // Kritische Eigenschaft: ein Token OHNE email/sub darf NIE zum Owner fail-open'en -
+    // requestedBy MUSS die echte Identitaet (sub bzw. "anon") tragen, nie "owner". Seit
+    // Phase outbound-p1 ist der Owner-Tenant (MULTI_TENANT aus -> tenantId=owner) ein
+    // verifizierter Subscriber und passiert die leere Allowlist; die Ablehnung wandert
+    // damit von place_call_denied/grund=allowlist auf die place_call-Erfolgs-Audit-Zeile -
+    // die forensische requestedBy-Attribution (der eigentliche Anti-Spoof-Beweis) bleibt.
     await t.test(
       "JWT OHNE email-Claim -> requestedBy=<sub>, NICHT owner (kein fail-open)",
       async () => {
@@ -371,10 +389,9 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
           toolCall("place_call", { to: "+4915123123124", objective: "Termin" }),
         );
         assert.notEqual(res.status, 401);
-        // subonly-9 hat kein Profil -> DEFAULT (restriktiv) -> 403 allowlist, requestedBy=subonly-9
         await waitForLog(
           srv,
-          /\[audit\] place_call_denied ip=\S+ to=\+4915123123124 grund=allowlist requestedBy=subonly-9/,
+          /\[audit\] place_call ip=\S+ to=\+4915123123124 .* requestedBy=subonly-9/,
         );
         assert.ok(
           !/requestedBy=owner/.test(srv.stdout),
@@ -383,7 +400,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       },
     );
 
-    await t.test("JWT OHNE email UND sub -> ANON (DEFAULT), kein fail-open zum Owner", async () => {
+    await t.test("JWT OHNE email UND sub -> ANON, kein fail-open zum Owner", async () => {
       const token = await idp.sign({}, { noSubject: true }); // weder email noch sub
       const res = await mcpPost(
         `${srv.localUrl}/mcp`,
@@ -391,10 +408,9 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
         toolCall("place_call", { to: "+4915123123125", objective: "Termin" }),
       );
       assert.notEqual(res.status, 401);
-      // ANON -> kein Profil -> DEFAULT (restriktiv) -> 403 allowlist, requestedBy=anon (NICHT owner).
       await waitForLog(
         srv,
-        /\[audit\] place_call_denied ip=\S+ to=\+4915123123125 grund=allowlist requestedBy=anon/,
+        /\[audit\] place_call ip=\S+ to=\+4915123123125 .* requestedBy=anon/,
       );
       assert.ok(
         !/requestedBy=owner/.test(srv.stdout),

@@ -46,13 +46,17 @@ const activeNumber = (id, e164, tenantId, status = "active") => ({
 // Zwei aktive Tenants (A, B) mit eigener aktiver Nummer + idpSubject. usage/extraNumbers
 // optional ueberschreibbar. usage wird als MAP geseedet -> json.load erkennt das Nicht-
 // flache Shape und migriert NICHT (jeder Bucket bleibt; migrateUsageToMap).
+// A/B/C sind verifizierte Subscriber (kyc=card): seit dem fail-closed kycReached-Flip
+// (Phase outbound-p1) sperrt das erste Outbound-Gate jeden Tenant OHNE kyc_level. Diese
+// Tests pruefen NICHT das KYC-Gate, sondern Nummer-/Budget-Attribution -> die Tenants
+// muessen es passieren (realistischer Subscriber-Zustand). Der Owner heilt sich beim Boot.
 function seedTenants({ extraNumbers = [], usage } = {}) {
   const s = seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
-      { id: A, status: "active", idpSubject: SUB_A, ownerName: "Alice" },
-      { id: B, status: "active", idpSubject: SUB_B, ownerName: "Bob" },
-      { id: C, status: "active", idpSubject: SUB_C, ownerName: "Carol" },
+      { id: A, status: "active", idpSubject: SUB_A, ownerName: "Alice", kycLevel: "card" },
+      { id: B, status: "active", idpSubject: SUB_B, ownerName: "Bob", kycLevel: "card" },
+      { id: C, status: "active", idpSubject: SUB_C, ownerName: "Carol", kycLevel: "card" },
     ],
     numbers: [activeNumber("num_a", NUM_A, A), activeNumber("num_b", NUM_B, B), ...extraNumbers],
   });

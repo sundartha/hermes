@@ -90,28 +90,31 @@ test("Flag an: Gate-Schnittmenge - kyc<card sperrt, OBWOHL alle anderen Gates fr
   }
 });
 
-test("Flag an: Tenant OHNE kyc_level (Bestand) -> Gate passiert byte-identisch", async () => {
+test("Flag an: Tenant OHNE kyc_level (Nicht-Subscriber, eigene Nummer) -> 403 (Toll-Fraud-Riegel)", async () => {
+  // Der Boot-Seed (seedBootstrapKyc) heilt NUR den Owner, NICHT Tenant A. A traegt damit
+  // weiter kein kyc_level -> der fail-closed kycReached-Flip sperrt am ersten Outbound-Gate.
   const srv = await startServer({ env: FLAG_ON, seed: seedKyc(null) });
   try {
     const res = await placeCall(srv, SUB_A);
-    assert.equal(res.status, 500, "kein kyc_level -> kycReached true -> passiert (kein Regress)");
-    assert.ok(
-      outboundCalls(srv).some((c) => c.tenantId === A),
-      "Call erzeugt",
-    );
+    assert.equal(res.status, 403, "fehlendes kyc_level -> fail-closed am KYC-Gate");
+    assert.match((await res.json()).error, /KYC/i);
+    assert.equal(outboundCalls(srv).length, 0, "Reject VOR createCall -> kein Call");
   } finally {
     await srv.stop();
   }
 });
 
-test("Flag AUS: Owner-Pfad byte-identisch (KYC-Gate inert)", async () => {
+test("Flag AUS: Owner-Pfad passiert via Boot-Seed id_verified (kein Selbst-Aussperren)", async () => {
   const srv = await startServer({ env: { ALLOWED_NUMBERS: TO }, seed: seedKyc("none") }); // MULTI_TENANT default false
   try {
     const res = await placeCall(srv, SUB_A); // Identitaet ignoriert -> Owner
-    assert.equal(res.status, 500, "Flag aus -> tenantId=owner, kein kyc_level -> Gate inert");
+    assert.equal(res.status, 500, "Flag aus -> tenantId=owner, Boot-Seed id_verified -> KYC passiert");
     const call = outboundCalls(srv)[0];
     assert.equal(call.tenantId, BOOTSTRAP_TENANT_ID);
     assert.equal(call.from, OWNER_NUMBER);
+    // Boot-Seed lief + wurde durch createCall->save persistiert: Owner traegt id_verified.
+    const owner = srv.readStore().tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID);
+    assert.equal(owner.kycLevel, "id_verified", "seedBootstrapKyc heilte den Owner beim Boot");
   } finally {
     await srv.stop();
   }
