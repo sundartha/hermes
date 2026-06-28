@@ -245,6 +245,20 @@ export const config = {
     fallback: 6,
     min: 0,
   }),
+  // Per-(Tenant,Ziel)-Wiederhol-Cap + Cooldown (outbound-p1d, D4): schuetzt Dritte vor
+  // Belaestigung, sobald Fremd-Tenants beliebige Nummern waehlen (Phase 3/4). Max. Outbound-
+  // Calls EINES Tenants an DASSELBE Ziel im Cooldown-Fenster; ab dem Cap -> 429 (fail-closed,
+  // kein Originate), tenant- + ziel-isoliert. Greift VOR der Allowlist, NACH den Stundenlimits.
+  // Konservativ; 0 = jeder Outbound gesperrt (Not-Aus, wie MAX_CALLS_PER_HOUR=0).
+  perTargetCallCap: numEnv("PER_TARGET_CALL_CAP", process.env.PER_TARGET_CALL_CAP, {
+    fallback: 3,
+    min: 0,
+  }),
+  // Cooldown-Fenster (Millisekunden) fuer perTargetCallCap. Default 24 h.
+  perTargetWindowMs: numEnv("PER_TARGET_WINDOW_MS", process.env.PER_TARGET_WINDOW_MS, {
+    fallback: 24 * 60 * 60 * 1000,
+    min: 1,
+  }),
   // Notbremse fuer das (zahlungsfreie) Onboarding: harte Obergrenze, wie viele
   // Nummern die Plattform INSGESAMT provisionieren darf. Jede echte Nummer kostet
   // beim Provider Geld -> ohne Cap koennte ein offener Self-Service-Pfad das
