@@ -154,6 +154,20 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
       </div>
     </div>
 
+    <!-- Stil des Assistenten (P4): kuratierte NON-PII-Auswahl. Versteckt, solange der
+         Server keine personaStyleIds liefert (Self-Service-Flag aus -> /state 404 ->
+         Karte bleibt inaktiv, I9-Muster wie billingCard). Optionen + gueltige IDs kommen
+         aus dem Server-Katalog (eine Quelle), kein hartkodiertes ID-Set im Client. -->
+    <div class="card c12" id="styleCard" style="display:none">
+      <h3>Stil deines Assistenten</h3>
+      <div class="hint">Faerbt den Ton aller Anrufe. Die Offenlegung bleibt unveraendert.</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+        <select id="styleSelect"></select>
+        <button class="btn btn-primary" id="saveStyle">Speichern</button>
+        <span class="msg" id="styleMsg"></span>
+      </div>
+    </div>
+
     <!-- Anrufe (read-only Historie) -->
     <div class="card c12">
       <h3>Anrufe</h3>
@@ -262,6 +276,7 @@ async function refresh(){
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
   renderCalls(s.calls);
   renderBilling(s);
+  renderStyle(s);
 }
 
 // Karten-Block nur zeigen, wenn der Server hasCard liefert (PAYMENT_ENABLED an).
@@ -380,6 +395,44 @@ $("subButtons").addEventListener("click", (ev)=>{
   else if(sub==="failed"){ m.textContent="Karte gespeichert, aber das Abo konnte nicht gebucht werden. Bitte erneut versuchen."; m.className="msg err"; }
   history.replaceState(null, "", location.pathname); // Query entfernen (sauberer Reload)
 })();
+
+// P4: Stil-Dropdown. Optionen + gueltige IDs kommen aus dem Server (s.personaStyleIds =
+// das P2-Enum, EINE Quelle), kein hartkodiertes ID-Set im Client (G5/S2). Fehlt das Feld
+// (Self-Service-Flag aus / alter Server), bleibt die Karte versteckt (I9-Muster).
+function renderStyle(s){
+  const card = $("styleCard");
+  if(!Array.isArray(s.personaStyleIds)){ card.style.display="none"; return; }
+  card.style.display="";
+  const current = (s.settings && s.settings.agentStyle) || "";
+  const opts = ['<option value="">Standard</option>']
+    .concat(s.personaStyleIds.map((id)=>`<option value="${esc(id)}">${esc(styleLabel(id))}</option>`));
+  const sel = $("styleSelect");
+  sel.innerHTML = opts.join("");
+  sel.value = current;
+}
+
+// Label aus der ID ableiten (reine Praesentation): Bindestriche -> Leerzeichen, erster
+// Buchstabe gross. Kein zweites Label-Literal -> die Server-ID-Liste bleibt die einzige
+// Quelle der Optionen (G5/S2). DE-Dashboard, IDs sind bereits deutschsprachig.
+function styleLabel(id){
+  return String(id).replace(/-/g," ").replace(/^./,(c)=>c.toUpperCase());
+}
+
+// P4: Stil speichern gegen DIESELBE Self-Service-Naht wie greeting/language. Der Server
+// validiert fail-closed gegen das Enum (selfServicePatch -> updateSettings); "" = Standard
+// (Reset). Kein eigener Validierungspfad im Client.
+$("saveStyle").onclick = async ()=>{
+  const m=$("styleMsg"); m.className="msg";
+  const r = await fetch("/api/self-service/settings", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ agentStyle: $("styleSelect").value || "" }),
+  });
+  if(r.ok){ m.textContent="Stil gespeichert."; m.className="msg ok"; refresh(); }
+  else if(r.status===401){ m.textContent="Sitzung abgelaufen - bitte neu anmelden."; m.className="msg err"; refresh(); }
+  else{ m.textContent="Konnte Stil nicht speichern."; m.className="msg err"; }
+  setTimeout(()=>m.className="msg",2500);
+};
 
 // BK1: Katalog zuerst (Kachel-Daten), dann der Status-Render. loadPlanCatalog ist fail-
 // soft -> ein Fetch-Fehler laesst die Seite laufen (nur Kacheln leer).
