@@ -49,6 +49,7 @@ import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import {
   registerTenant,
+  setTenantIdentityIfAbsent,
   normalizePrivateNumber,
   requestNumber,
   recordProvisioningJob,
@@ -217,6 +218,22 @@ if (config.sessionSecret && config.storeBackend === "pg") {
       accounts,
     });
     const adminMw = adminOnly({ adminEmails: config.adminEmails });
+    // P2b: Vor-/Nachname aus dem verifizierten IdP-Profil set-if-absent in den Gate-Store
+    // schreiben (gleiche Kompositions-Quelle wie /api/onboard: applyOwnerIdentity ueber
+    // setTenantIdentityIfAbsent + Store-Lock, G5). FAIL-OPEN wie ensureTenant: ein Store-
+    // Schluckauf darf den Login NICHT blocken -> Folge ist ein eingeloggter Tenant ohne
+    // ownerName, den das Outbound-Identitaets-Gate fail-CLOSED sperrt (kein Leak). save()
+    // NUR bei echter Mutation (set-if-absent: Folge-Logins = No-Op). Kein Secret im Log.
+    const applyTenantIdentity = async (tenantId, identity) => {
+      try {
+        await store.withStoreLock(() => {
+          const s = store.load();
+          if (setTenantIdentityIfAbsent(s, tenantId, identity)) store.save();
+        });
+      } catch (e) {
+        console.error("[web-auth] applyTenantIdentity fehlgeschlagen:", e.message);
+      }
+    };
     const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
     app.use("/auth", loginRateLimiter);
     app.use(
@@ -249,6 +266,9 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         // frisch angelegten Tenant in den pg-Store-Spiegel, BEVOR der Self-Service-Subscribe-
         // Pfad eine WRITE-Store-Op (setTenantStripe etc.) ausloest, die ihn sonst nicht faende.
         ensureTenant: (tid) => store.ensureTenant(tid),
+        // P2b: Identitaets-Write (Vor-/Nachname aus dem verifizierten IdP-Profil) ueber die
+        // Fassade in den Gate-Store - sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant.
+        applyTenantIdentity,
       }),
     );
 

@@ -574,17 +574,29 @@ export function applyOwnerIdentity(tenant, firstName, lastName) {
   if (full) tenant.ownerName = full;
 }
 
-// Stellt die config-abgeleitete Owner-Identitaet (firstName/lastName -> ownerName)
-// idempotent im Spiegel sicher (Variante a, G1). Wie seedBootstrapNumber: json load()
-// ruft makeDefaultState nicht auf Bestands-Stores, pg hydriert owner_name als NULL.
-// Schuetzt den UNGEGATETEN Inbound-Greeting (server.js) + summarizeCall. Idempotent:
-// traegt der Owner-Tenant bereits ownerName, No-Op (gesetzte Identitaet gewinnt).
-// Fehlender Owner-Tenant (seedState ohne tenants) -> No-Op. Leere Config-Teile ->
-// kein Seed (Boot-Refusal in assertConfig faengt das ab).
+// Schreibt Vor-/Nachname (-> komponierter ownerName via applyOwnerIdentity) set-if-absent
+// auf einen EXISTIERENDEN Tenant. Findet den Tenant; fehlt er ODER traegt er bereits einen
+// ownerName -> No-Op (NIE einen Tenant aus dem Nichts erfinden: sonst aktivierte der Web-
+// Login-Pfad versehentlich einen suspendierten Tenant - Invariante 5). Liefert true NUR,
+// wenn jetzt ein ownerName steht (echte Mutation) -> der Wrapper flusht nur dann. Geteilt
+// von seedBootstrapIdentity (Boot/Owner) UND dem Web-Login-Pfad (P2b). G5: EINE set-if-
+// absent-Identitaets-Quelle, EINE Kompositionsstelle (applyOwnerIdentity).
+export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } = {}) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.ownerName) return false;
+  applyOwnerIdentity(tenant, firstName, lastName);
+  return Boolean(tenant.ownerName);
+}
+
+// Stellt die Owner-Identitaet (firstName/lastName -> ownerName) idempotent im Spiegel
+// sicher (Variante a, G1). Wie seedBootstrapNumber: json load() ruft makeDefaultState nicht
+// auf Bestands-Stores, pg hydriert owner_name als NULL. Schuetzt den UNGEGATETEN Inbound-
+// Greeting (server.js) + summarizeCall. Delegiert an die gemeinsame set-if-absent-Quelle
+// (setTenantIdentityIfAbsent, G5): traegt der Owner-Tenant bereits ownerName ODER fehlt er
+// (seedState ohne tenants) -> No-Op. Leere Config-Teile -> kein Seed (Boot-Refusal in
+// assertConfig faengt das ab). Signatur + Verhalten unveraendert (verhaltens-erhaltend).
 export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
-  const owner = findTenant(s, tenantId);
-  if (!owner || owner.ownerName) return;
-  applyOwnerIdentity(owner, firstName, lastName);
+  setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName });
 }
 
 // Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): nimmt
