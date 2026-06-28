@@ -165,15 +165,13 @@ test("T-P1-UI-AC2: Stufe 1 (faehiger Host) - genau eine ui://-Resource + _meta z
   });
 });
 
-test("T-P1-UI-AC3: Fallback fail-closed - kein _meta, keine Resource, structuredContent voll", async () => {
+test("T-P1-UI-AC3: Stufe-0-only NUR bei Master-Schalter aus / kein hostHint (stdio)", async () => {
+  // Echte Fail-closed-Faelle: ohne Master-Schalter (oder ganz ohne hostHint, z.B. stdio)
+  // haengt kein _meta/Resource an. NICHT mehr fail-closed: ein faehiger Host mit/ohne
+  // deklarierte Capability (das deckt T-UI-stateless ab).
   const cases = {
     "stdio (uiHost=null)": null,
-    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
     "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
-    "unbekannter Host (fremder mimeType)": {
-      enabled: true,
-      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
-    },
   };
   await withGateway(RICH_CALL, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
@@ -184,6 +182,30 @@ test("T-P1-UI-AC3: Fallback fail-closed - kein _meta, keine Resource, structured
       const result = await handler({ call_id: "call_1" });
       assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
       assert.equal(result.structuredContent.call_id, "call_1");
+    }
+  });
+});
+
+test("T-UI-stateless: Master-Schalter an OHNE caps (realer stateless tools/list) haengt Widget trotzdem an", async () => {
+  // Der Live-Bug, festgenagelt: der stateless Transport (sessionIdGenerator=undefined)
+  // fuehrt die initialize-Capabilities NICHT zum tools/list-POST mit, dort ist
+  // uiHost.capabilities leer/undefined. Das Widget-_meta UND die ui://-Resource muessen
+  // trotzdem erscheinen - sonst sieht der Nutzer nie ein Widget (nur Text).
+  const cases = {
+    "enabled, capabilities undefined": { enabled: true },
+    "enabled, capabilities leer": { enabled: true, capabilities: {} },
+  };
+  await withGateway(RICH_CALL, async () => {
+    for (const [label, uiHost] of Object.entries(cases)) {
+      const { tools, resources } = captureUi({ uiHost });
+      const { config, handler } = tools.get("get_call_status");
+      assert.equal(config._meta?.ui?.resourceUri, RESOURCE_URI, `${label}: _meta zeigt auf die URI`);
+      assert.ok(
+        resources.some((r) => r.uri === RESOURCE_URI),
+        `${label}: ui://-Resource registriert`,
+      );
+      const result = await handler({ call_id: "call_1" });
+      assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
     }
   });
 });
@@ -245,18 +267,23 @@ test("T-P1-UI-AC6: Widget self-contained - kein @import/Linkback, @dsCard-Marker
   assert.doesNotMatch(html, /href\s*=/, "kein href-Linkback");
 });
 
-test("T-P1-UI-seam: uiRendererFor + Adapter + capabilityDeclaresUi Grenzfaelle", () => {
+test("T-P1-UI-seam: uiRendererFor Default = mcp-nativ hinter dem Master-Schalter", () => {
+  // Stufe 0 (null) NUR bei Master-Schalter aus / kein hostHint.
   assert.equal(uiRendererFor({ enabled: false, capabilities: CAPABLE_CAPS }), null);
+  assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
+  // Master-Schalter an -> Default mcp-nativ, UNABHAENGIG von der Capability (stateless-
+  // tauglich: caps fehlen auf dem tools/list-POST trotzdem erscheint das Widget).
   assert.equal(uiRendererFor(capableHost()), mcpNativeRenderer);
+  assert.equal(uiRendererFor({ enabled: true }), mcpNativeRenderer, "ohne caps -> mcp-nativ");
+  assert.equal(uiRendererFor({ enabled: true, capabilities: {} }), mcpNativeRenderer, "leere caps -> mcp-nativ");
   assert.equal(
     uiRendererFor({
       enabled: true,
       capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
     }),
-    null,
-    "fremder mimeType -> null",
+    mcpNativeRenderer,
+    "fremder mimeType -> Default mcp-nativ (kein ChatGPT-Marker)",
   );
-  assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
 
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALL_STATUS), true);
   assert.equal(mcpNativeRenderer.hasWidget("unknown"), false);
@@ -335,12 +362,7 @@ test("T-P2-UI-AC2: Stufe 1 (faehiger Host) - genau eine transcript-Resource + _m
 test("T-P2-UI-AC3: Fallback fail-closed - kein _meta, keine transcript-Resource, structuredContent voll", async () => {
   const cases = {
     "stdio (uiHost=null)": null,
-    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
     "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
-    "unbekannter Host (fremder mimeType)": {
-      enabled: true,
-      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
-    },
   };
   await withGateway(RICH_TRANSCRIPT, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
@@ -489,7 +511,7 @@ test("T-P3-AC2: beide Widgets, ChatGPT-Host - eine Resource je Tool + flaches op
   }
 });
 
-test("T-P3-AC3: Registry waehlt GENAU EINEN Adapter pro Host, fail-closed", () => {
+test("T-P3-AC3: Registry waehlt GENAU EINEN Adapter pro Host (ChatGPT explizit, sonst mcp-nativ)", () => {
   assert.equal(uiRendererFor(capableHost()), mcpNativeRenderer, "mcp-nativer Host -> mcp-native");
   assert.equal(uiRendererFor(chatgptHost()), chatgptRenderer, "ChatGPT-Host -> chatgpt");
   assert.equal(
@@ -497,8 +519,8 @@ test("T-P3-AC3: Registry waehlt GENAU EINEN Adapter pro Host, fail-closed", () =
       enabled: true,
       capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
     }),
-    null,
-    "fremder mimeType -> null",
+    mcpNativeRenderer,
+    "fremder mimeType (kein ChatGPT-Marker) -> Default mcp-nativ",
   );
   assert.equal(uiRendererFor({ enabled: false, capabilities: CHATGPT_CAPS }), null, "Master-Schalter aus -> null");
   assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
@@ -624,12 +646,7 @@ test("T-P4-UI-AC2: Stufe 1 (faehiger Host) - genau eine call-result-Resource + _
 test("T-P4-UI-AC3: fail-closed - ohne faehigen Rich-UI-Host existiert get_call_result GAR NICHT", async () => {
   const cases = {
     "stdio (uiHost=null)": null,
-    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
     "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
-    "unbekannter Host (fremder mimeType)": {
-      enabled: true,
-      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
-    },
   };
   await withGateway(RICH_CALL, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
@@ -801,12 +818,7 @@ test("T-W3-AC2: Stufe 1 (faehiger Host) - genau eine agent-status-Resource + _me
 test("T-W3-AC3: Fallback fail-closed - kein _meta, keine agent-status-Resource, Tool bleibt", async () => {
   const cases = {
     "stdio (uiHost=null)": null,
-    "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
     "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
-    "unbekannter Host (fremder mimeType)": {
-      enabled: true,
-      capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
-    },
   };
   await withGateway(RICH_STATE, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
@@ -969,15 +981,12 @@ const calendarOutput = z.object({
 });
 const CALL_ENTRY_KEYS = ["counterparty", "direction", "id", "startedAt", "status"];
 const CALENDAR_ENTRY_KEYS = ["end", "start", "title"];
-// Fallback-Faelle (fail-closed): kein faehiger Rich-UI-Host -> kein Widget, Stufe 0 bleibt.
+// Fallback-Faelle (Stufe 0 bleibt): NUR Master-Schalter aus / kein hostHint (stdio).
+// Ein faehiger Host mit/ohne deklarierte Capability bekommt jetzt das Widget (Default
+// mcp-nativ, stateless-tauglich) - siehe T-UI-stateless.
 const FALLBACK_CASES = {
   "stdio (uiHost=null)": null,
-  "enabled aber Capability fehlt": { enabled: true, capabilities: {} },
   "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
-  "unbekannter Host (fremder mimeType)": {
-    enabled: true,
-    capabilities: { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html"] } } },
-  },
 };
 // Beweist: Server-seitige Formatierung (fmt) - kein roher ISO-Timestamp im Slot.
 const isFormattedNotIso = (s) => typeof s === "string" && s.length > 0 && !/\dT\d/.test(s);

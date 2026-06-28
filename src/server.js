@@ -1646,15 +1646,13 @@ app.post("/mcp", mcpAuth, async (req, res) => {
   const profile = store.resolveProfile(identity);
   try {
     const server = new McpServer({ name: "hermes", version: "0.2.0" });
-    // Rich-UI-Host-Hinweis (P1, fail-closed): Capability aus dem initialize-Body
-    // (params.capabilities), gegated durch den Master-Schalter config.mcpUiEnabled
-    // (Default aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Kein
-    // neuer Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert (AC7).
-    // Stateless-Caveat: bei sessionIdGenerator=undefined traegt nur der
-    // initialize-POST params.capabilities; der spaetere tools/list-POST nicht. Der
-    // fail-closed Kern (Master-Schalter + Capability-Pflicht) greift trotzdem; der
-    // vollstaendige capabilityDeclaresUi-Mechanismus ist im Seam getestet und greift,
-    // sobald der Transport stateful wird (eigener Schritt, nicht P1).
+    // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.mcpUiEnabled
+    // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
+    // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate
+    // mehr, weil der stateless Transport (sessionIdGenerator=undefined) die initialize-
+    // Capabilities nicht zum tools/list-POST mitfuehrt - das Widget-_meta erschien sonst
+    // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
+    // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert.
     const uiHost = { enabled: config.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
     registerTools(server, { identity, scopedTenant, allowCalendar: profile.allowCalendar, uiHost });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
