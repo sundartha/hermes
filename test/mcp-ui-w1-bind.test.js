@@ -166,6 +166,14 @@ test("T-W1-AC6: MCP-Apps-Handshake - ui/initialize beim Laden, tool-result binde
   assert.equal(root.posted[0].method, "ui/initialize", "erste Nachricht = ui/initialize");
   assert.equal(root.posted[0].id, 1);
   assert.equal(root.posted[0].params.protocolVersion, "2026-01-26");
+  // SEP-1865: appInfo ist PFLICHT (McpUiInitializeRequestSchema, non-optional). Der Host
+  // weist eine ui/initialize OHNE appInfo per JSON-RPC-error ab -> kein Render. Frueher
+  // sendete das Widget faelschlich clientInfo -> Handshake scheiterte. Regression-Pin.
+  assert.ok(
+    root.posted[0].params.appInfo && typeof root.posted[0].params.appInfo.name === "string",
+    "ui/initialize traegt appInfo {name,version} (Spec-Pflicht)",
+  );
+  assert.ok(!("clientInfo" in root.posted[0].params), "kein clientInfo (vom Host abgelehnt)");
 
   // (1b) PROAKTIV: Hoehe wird sofort gemeldet, OHNE auf eine Host-Antwort zu warten
   // (sonst bliebe das Iframe 0/leer, wenn der Host nicht exakt wie erwartet antwortet).

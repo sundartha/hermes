@@ -155,8 +155,13 @@ export function run(root) {
       id: INIT_ID,
       method: METHOD_INITIALIZE,
       params: {
+        // appInfo (NICHT clientInfo): SEP-1865 macht appInfo im ui/initialize zur
+        // PFLICHT (McpUiInitializeRequestSchema, non-optional). Der Host validiert die
+        // Anfrage gegen dieses Schema; fehlt appInfo, antwortet er mit JSON-RPC-error
+        // statt result -> das Widget bestaetigt nie initialized -> der Host liefert nie
+        // tool-result -> nichts rendert. Genau das passierte mit dem alten clientInfo.
         appCapabilities: { availableDisplayModes: ["inline"] },
-        clientInfo: { name: "hermes-widget", version: "1.0.0" },
+        appInfo: { name: "hermes-widget", version: "1.0.0" },
         protocolVersion: UI_PROTOCOL_VERSION,
       },
     });
