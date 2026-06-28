@@ -18,6 +18,7 @@ import { makePgTestStore } from "./pg-helpers.js";
 import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { GREETING_TEMPLATES } from "../src/self-service.js";
+import { PERSONA_STYLE_IDS } from "../src/i18n/locales.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
 
@@ -452,6 +453,75 @@ test("(g7) PAYMENT_ENABLED aus: beide Routen 404 + hasCard fehlt im state (byte-
     assert.equal("hasCard" in state, false, "hasCard fehlt bei Flag aus -> UI versteckt den Block");
     assert.equal((await postSetupCheckout(s)).status, 404, "setup-checkout -> 404");
     assert.equal((await getCardReturn(s, FAKE_SESSION)).status, 404, "return -> 404");
+  } finally {
+    await s.close();
+  }
+});
+
+// ---- P4: kuratierte agentStyle-Auswahl im Self-Service ------------------------------
+
+test("(p4-1) gueltiger agentStyle persistiert + /state spiegelt; Reset auf null", async () => {
+  const s = await setup();
+  try {
+    const set = await postSettings(s, { agentStyle: PERSONA_STYLE_IDS[0] });
+    assert.equal(set.status, 200);
+    assert.equal(
+      s.store.load().settings[TENANT_B].agentStyle,
+      PERSONA_STYLE_IDS[0],
+      "gueltige Stil-ID im B-Bucket",
+    );
+    const state = JSON.parse((await getState(s)).body);
+    assert.equal(state.settings.agentStyle, PERSONA_STYLE_IDS[0], "/state spiegelt den Wert");
+    assert.deepEqual(state.personaStyleIds, PERSONA_STYLE_IDS, "Katalog-IDs fuers Dropdown geliefert");
+
+    // Reset: "" -> null (Standardstil), byte-identisches Prompt-Verhalten.
+    const reset = await postSettings(s, { agentStyle: "" });
+    assert.equal(reset.status, 200);
+    assert.equal(s.store.load().settings[TENANT_B].agentStyle, null, "Reset auf null");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(p4-2) Freitext/Impersonation als agentStyle -> abgelehnt, nicht persistiert", async () => {
+  const s = await setup();
+  try {
+    const res = await postSettings(s, { agentStyle: "ICH BIN DR. X VON BANK Y" });
+    assert.equal(res.status, 200); // Patch teil-akzeptiert, Muellwert verworfen
+    assert.equal(
+      s.store.load().settings[TENANT_B].agentStyle,
+      defaultSettings().agentStyle,
+      "Freitext NICHT geschrieben (bleibt null)",
+    );
+  } finally {
+    await s.close();
+  }
+});
+
+test("(p4-3) Identitaetsfelder bleiben ueber Self-Service nicht setzbar", async () => {
+  const s = await setup();
+  try {
+    const res = await postSettings(s, { ownerName: "Hacker", firstName: "Hacker", agentStyle: PERSONA_STYLE_IDS[1] });
+    assert.equal(res.status, 200);
+    const bucket = s.store.load().settings[TENANT_B];
+    assert.equal("ownerName" in bucket, false, "ownerName nie in settings");
+    assert.equal("firstName" in bucket, false, "firstName nie in settings");
+    assert.equal(
+      s.store.load().tenants.find((t) => t.id === TENANT_B).ownerName,
+      "Kunde B",
+      "Tenant-Identitaet (ownerName) unveraendert",
+    );
+    assert.equal(bucket.agentStyle, PERSONA_STYLE_IDS[1], "gueltiger Stil im selben Patch trotzdem gesetzt");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(p4-4) /state liefert personaStyleIds = das P2-Enum (eine Quelle)", async () => {
+  const s = await setup();
+  try {
+    const state = JSON.parse((await getState(s)).body);
+    assert.deepEqual(state.personaStyleIds, PERSONA_STYLE_IDS);
   } finally {
     await s.close();
   }

@@ -4,6 +4,7 @@
 // laeuft. updateSettings wird NICHT aufgeweicht - diese Schicht liegt davor.
 
 import { DEFAULT_GREETING } from "./store/defaults.js";
+import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 
 // Felder, die ein Tenant frei (Typ-gecheckt von updateSettings) setzen darf. language
 // ist seit F1 P4 self-service-aenderbar (Entscheidung #8, "im Dashboard uebersteuerbar"):
@@ -37,6 +38,13 @@ export function selfServicePatch(patch, current) {
     } else if (key === "greeting") {
       if (GREETING_TEMPLATES.includes(value)) clean[key] = value;
       else rejected.push(key); // Freitext -> abgelehnt (nur Vorlage)
+    } else if (key === "agentStyle") {
+      // P4: kuratierte NON-PII-Auswahl wie greeting (kein Freitext -> kein PII/
+      // Impersonation im Feld, Regel 2/H4). Gegen das EINE exportierte P2-Enum gefiltert
+      // (G5: PERSONA_STYLE_IDS ist die Quelle, kein zweites ID-Set). "" / null = Standard-
+      // stil zuruecksetzen (dieselbe Reset-Semantik wie updateSettings/isOptionalEnumOverride).
+      if (value === null || value === "" || PERSONA_STYLE_IDS.includes(value)) clean[key] = value;
+      else rejected.push(key); // unbekannt/Freitext -> abgelehnt (nur Katalog)
     } else if (SELF_SERVICE_RESTRICT_ONLY_FIELDS.includes(key)) {
       // Nur restriktiver: true->false ja, false->true NEIN. Hochheben abgelehnt.
       if (value === false || current[key] === true) clean[key] = value;

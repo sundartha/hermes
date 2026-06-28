@@ -14,6 +14,7 @@
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
 import { Router } from "express";
 import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
+import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { createTenantSubscription } from "./billing/subscribe.js";
 import { activatePaidTenant } from "./billing/activation.js";
@@ -147,6 +148,10 @@ export function makeSelfServiceRoutes({
     res.json({
       settings: ctx.settings,
       greetingTemplates: GREETING_TEMPLATES,
+      // P4: kuratierte Stil-IDs fuers Dropdown (EINE Quelle = das P2-Enum; das Client-
+      // Dropdown haelt KEIN eigenes ID-Set, G5/S2). Fehlt das Feld -> UI versteckt die
+      // Karte (Flag-aus / alter Server) - I9-Muster wie hasCard beim billingCard.
+      personaStyleIds: PERSONA_STYLE_IDS,
       // F2 P6: die EIGENE private Summary-Nummer (maskiert, s. maskPrivateNumber).
       // Dedizierter Record-Reader, Schluessel req.tenant.tenantId (nie fremd, H3) - NIE
       // ueber settings/tenantContext, die ueber /api/state + MCP komplett leaken (H4).
