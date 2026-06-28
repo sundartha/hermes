@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { bootstrapTenant, makeDefaultState, findTenant } from "../src/store/state-ops.js";
 import { hasActiveNumber } from "../src/store/views.js";
-import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, KYC_LEVEL, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { startServer } from "./helpers.js";
 
 const E164 = "+15005550006";
@@ -43,6 +43,25 @@ test("bootstrapTenant: optionale tenantId -> Tenant unter diesem Key", () => {
   const num = s.numbers.find((n) => n.e164 === E164);
   assert.equal(num.tenantId, "custom-id");
   assert.equal(num.provider, PROVIDER.TELNYX);
+});
+
+// ---- (1b) outbound-p1fix #3: KYC-Heal NUR fuer den Bootstrap/Owner ----
+test("bootstrapTenant(owner): Owner wird auf kyc_level=id_verified geheilt", () => {
+  const s = makeDefaultState();
+  s.tenants = [];
+  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO);
+  assert.equal(findTenant(s, BOOTSTRAP_TENANT_ID).kycLevel, KYC_LEVEL.ID_VERIFIED);
+});
+
+test("bootstrapTenant(fremd): Nicht-Owner-tenantId bleibt UNGESEEDET (KYC-Gate sperrt fail-closed)", () => {
+  const s = makeDefaultState();
+  s.tenants = [];
+  bootstrapTenant(s, E164, "user_fremd", PROVIDER.TWILIO);
+  const tenant = findTenant(s, "user_fremd");
+  assert.ok(tenant, "Tenant existiert");
+  assert.equal(tenant.status, "active");
+  assert.ok(s.numbers.some((n) => n.tenantId === "user_fremd"), "aktive Nummer eingetragen");
+  assert.equal(tenant.kycLevel, undefined, "kyc_level NICHT geseedet -> kycReached fail-closed false");
 });
 
 // ---- (2) views hasActiveNumber (Grenzfaelle T5) ----

@@ -505,8 +505,9 @@ function extractSpeakOutcome(req, provider) {
 // Abo-Kopplung (W5, Tenant-Achse): ein AKTIVER, KYC-verifizierter Subscriber gilt im
 // Allowlist-Gate als unrestricted (das Abo ersetzt die statische ALLOWED_NUMBERS); ein
 // suspendierter/geschlossener Tenant wird dort HART abgewiesen (Defense-in-depth). Beides
-// wirkt NUR innerhalb des Allowlist-Gates und lockert KEIN hartes Gate davor. Owner/Bestand
-// (kein explizites kyc_level) bleiben byte-identisch (statische Allowlist).
+// wirkt NUR innerhalb des Allowlist-Gates und lockert KEIN hartes Gate davor. Der Owner traegt
+// seit Phase outbound-p1 ein EXPLIZITES kyc_level (id_verified, via seedBootstrapKyc beim Boot)
+// und gilt als aktiver Subscriber (Pfad 2) - er laeuft NICHT mehr ueber die statische Allowlist.
 //
 // Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde
 // "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
@@ -560,8 +561,9 @@ function userHourReached(profile, requestedBy) {
 //   1. Admin-Override (Bestand): profile.unrestricted ODER Ziel in profile.allowedNumbers
 //      (Testaccounts, gezielte Freigabe) -> Allowlist erfuellt.
 //   2. Abo-Kopplung (W5): aktiver, KYC-verifizierter Subscriber -> Allowlist erfuellt (das
-//      Abo ersetzt die statische Liste). Owner/Bestand ohne explizites kyc_level fallen
-//      NICHT hierunter (tenantActiveSubscriber) -> byte-identisch zum Bestand.
+//      Abo ersetzt die statische Liste). Der Owner traegt seit Phase outbound-p1 ein EXPLIZITES
+//      kyc_level (id_verified, Boot-Seed seedBootstrapKyc) und faellt hierunter (Pfad 2); ein
+//      ungeseedeter Fremd-Tenant ohne kyc_level NICHT (tenantActiveSubscriber false).
 //   3. ALLOWED_NUMBERS (reine Test-/Notbremse): leer -> 403, Ziel nicht enthalten -> 403.
 // Hebt NUR die Allowlist auf; alle harten Gates davor (Denylist/Land/Limit) liefen schon.
 // caller = aufgeloeste Aufrufer-Identitaet (profile = Rechte-Achse, tenantId = Tenant-Achse).
@@ -592,8 +594,9 @@ function allowlistError(to, { profile, tenantId }) {
 
 // KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
 // (card) erreicht haben. fail-closed Schnittmenge - ergaenzt die Outbound-Gate-Kette,
-// lockert NIE ein bestehendes Gate. Owner/Bestand (kein kyc_level) -> store.kycReached
-// liefert true -> byte-identisch. Liefert {status,grund,message} (Gate-Vertrag) oder null.
+// lockert NIE ein bestehendes Gate. Fehlendes kyc_level -> store.kycReached liefert seit Phase
+// outbound-p1 FALSE (fail-closed 403); der Owner passiert, weil seedBootstrapKyc ihn beim Boot
+// auf id_verified heilt. Liefert {status,grund,message} (Gate-Vertrag) oder null.
 function kycGateError(tenantId) {
   if (store.kycReached(tenantId, KYC_OUTBOUND_MIN)) return null;
   return {
@@ -1053,8 +1056,9 @@ app.post("/api/calls", async (req, res) => {
   }
 
   // KYC-Gate (P6b4) als erstes Glied der Outbound-Gate-Kette: Tenant-Reifegrad VOR
-  // den Ziel-Gates (Schnittmenge, fail-closed). Owner/Bestand byte-identisch (kycReached
-  // true bei fehlendem kyc_level). tenantId ist hier bereits aufgeloest + REJECT abgewiesen.
+  // den Ziel-Gates (Schnittmenge, fail-closed). Fehlendes kyc_level -> 403 (seit Phase
+  // outbound-p1); der Owner ist beim Boot auf id_verified geheilt (seedBootstrapKyc) und
+  // passiert. tenantId ist hier bereits aufgeloest + REJECT abgewiesen.
   const kycErr = kycGateError(tenantId);
   if (kycErr) {
     audit(
