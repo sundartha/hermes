@@ -128,14 +128,17 @@ test("W5-4: aktiver Subscriber kyc<card (otp) -> 403 KYC, Lockerung greift NICHT
 });
 
 // ---- 5. Owner/Bestand (kein kyc_level, localhost) byte-identisch ----
-test("W5-5a: Owner/Bestand wird NICHT abo-gelockert -> leere Allowlist sperrt wie heute (403)", async () => {
-  // Kein MULTI_TENANT, keine Identitaet -> Owner (BOOTSTRAP, active, KEIN kyc_level).
-  // ALLOWED_NUMBERS leer (BASE_ENV) -> exakt der Bestands-403 (number-gate.test.js).
+test("W5-5a: Owner ist via Boot-Seed Subscriber -> passiert OHNE ALLOWED_NUMBERS (Pfad 2, 500)", async () => {
+  // Kein MULTI_TENANT, keine Identitaet -> Owner (BOOTSTRAP, active). Seit Phase outbound-p1
+  // heilt der Boot-Seed den Owner auf id_verified -> er ist ein aktiver Subscriber und
+  // passiert die leere Allowlist ueber Pfad 2 (tenantActiveSubscriber), nicht mehr Pfad 3.
+  // Die alte Praemisse "Owner faellt auf die statische Allowlist zurueck (403)" ist tot
+  // (owner-genehmigte, dokumentierte Reichweiten-Weitung, PLAN-SECURITY outbound-p1).
   const srv = await startServer({ seed: seed({}) });
   try {
     const res = await placeCall(srv, null);
-    assert.equal(res.status, 403, "Owner ohne kyc_level faellt auf die statische Allowlist zurueck");
-    assert.match((await res.json()).error, /Allowlist/);
+    assert.equal(res.status, 500, "Owner als Subscriber -> Allowlist-Bypass (Pfad 2), bis Originate");
+    assert.equal(outboundCalls(srv)[0].tenantId, BOOTSTRAP_TENANT_ID);
   } finally {
     await srv.stop();
   }

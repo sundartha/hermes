@@ -30,6 +30,7 @@ import {
   PROVISION_NUMBER_JOB,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
+  KYC_LEVEL,
   KYC_ORDER,
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
@@ -446,6 +447,7 @@ export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
 export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
   if (!findTenant(s, tenantId)) s.tenants.push({ id: tenantId, status: TENANT_STATUS.ACTIVE });
   seedBootstrapNumber(s, e164, tenantId, provider);
+  seedBootstrapKyc(s, tenantId); // Neu-Setup: Erst-Tenant ist verifizierter Betreiber (id_verified)
 }
 
 // Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
@@ -611,14 +613,33 @@ export function setKycLevel(s, tenantId, level) {
   return tenant;
 }
 
-// Gate-Praedikat (P6b4): erreicht der Tenant mindestens die geforderte KYC-Stufe?
-// Bewusste Asymmetrie (Plan-Beschluss, NICHT aufraeumen): fehlendes kycLevel-Feld
-// (Owner/Bestand) gilt als ausreichend -> true (kein Regress, byte-identisch). Ein
-// EXPLIZIT gesetzter Wert wird dagegen rangbasiert verglichen (KYC_ORDER-Index) und
-// sperrt fail-closed unter der Schwelle. Reine Query, kein IO.
+// Heilt den Bootstrap/Owner-Tenant idempotent auf KYC id_verified (Phase outbound-p1).
+// Hintergrund: kycReached gilt seit dem fail-closed-Flip fuer fehlendes kyc_level als
+// UNZUREICHEND -> ohne diesen Seed braeche der live telefonierende Owner sofort am
+// ersten Outbound-Gate (server.js kycGateError). Set-if-absent wie seedBootstrapIdpSubject:
+// nur wenn der Tenant existiert UND kein kyc_level traegt -> setKycLevel(id_verified)
+// (eine Mutations-/Validierquelle, G5). Stufe id_verified (NICHT card): der Betreiber ist
+// out-of-band verifiziert (keine Stripe-Karte) + ueberlebt eine spaetere Anhebung von
+// KYC_OUTBOUND_MIN. Liefert true NUR bei echter Mutation -> der pg-Aufrufer flusht dann
+// gezielt die tenant-Tabelle. Fehlender Tenant / schon gesetzt -> false (kein Seed, kein
+// Throw). Config-frei, kein IO (Muster seedBootstrapIdpSubject).
+export function seedBootstrapKyc(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.kycLevel != null) return false; // fehlt / schon gesetzt -> kein Seed
+  setKycLevel(s, tenantId, KYC_LEVEL.ID_VERIFIED);
+  return true; // mutiert -> pg flusht die tenant-Tabelle
+}
+
+// Gate-Praedikat (P6b4, fail-closed seit Phase outbound-p1): erreicht der Tenant
+// mindestens die geforderte KYC-Stufe? Fehlendes/`null`-kycLevel gilt als UNZUREICHEND
+// -> false (fail-closed; schliesst den frueheren null-Bypass: ein ungeseedeter Tenant mit
+// aktiver Nummer kam sonst am ersten Outbound-Gate vorbei). Der live telefonierende
+// Owner/Bootstrap-Tenant wird beim Boot via seedBootstrapKyc auf id_verified geheilt und
+// passiert damit weiter. Ein EXPLIZIT gesetzter Wert wird rangbasiert verglichen
+// (KYC_ORDER-Index). Reine Query, kein IO.
 export function kycReached(s, tenantId, minLevel) {
   const tenant = findTenant(s, tenantId);
-  if (!tenant || tenant.kycLevel == null) return true; // Bestand/Owner: kein Feld -> Gate passiert
+  if (!tenant || tenant.kycLevel == null) return false; // fail-closed: fehlend -> unzureichend
   return KYC_ORDER.indexOf(tenant.kycLevel) >= KYC_ORDER.indexOf(minLevel);
 }
 

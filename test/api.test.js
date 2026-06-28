@@ -59,10 +59,13 @@ test("Eingabe-Validierung /api/calls", async (t) => {
     });
 
     await t.test(
-      "Nummer wird normalisiert (Spaces/Bindestriche), Allowlist-Gate bleibt",
+      "Nummer wird normalisiert (Spaces/Bindestriche), Gate bleibt (Denylist -> 403)",
       async () => {
-        // gueltiges Format, aber nicht in der Allowlist -> 403 (nicht 400)
-        const res = await call({ to: "+49 151 9999-9999", objective: "Termin" });
+        // Mit Trennzeichen, normalisiert -> +4990012345678 (Premium): gueltiges Format
+        // (kein 400), aber von der Denylist gesperrt -> 403. Denylist statt Allowlist, weil
+        // der Owner seit dem Boot-Seed (id_verified, Phase outbound-p1) das Allowlist-Gate
+        // als Subscriber passiert; die Denylist bleibt das greifende harte Gate.
+        const res = await call({ to: "+49 900 1234-5678", objective: "Termin" });
         assert.equal(res.status, 403);
       },
     );

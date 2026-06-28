@@ -117,13 +117,18 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   // tenant-Identitaet round-trippt (owner_name/idp_subject).
   assert.equal(rs.tenants.find((t) => t.id === TENANT_B).ownerName, "Maria");
   assert.equal(rs.tenants.find((t) => t.id === TENANT_B).idpSubject, "sub-maria");
-  // kyc_level round-trippt (P6b4); Owner ohne Wert behaelt KEIN Feld (nur-nicht-null-Hydrierung, R6).
+  // kyc_level round-trippt (P6b4). Der Owner traegt seit Phase outbound-p1 id_verified:
+  // pg.init() heilt den Bootstrap-Tenant via seedBootstrapKyc (fail-closed kycReached-Flip).
   assert.equal(
     rs.tenants.find((t) => t.id === TENANT_B).kycLevel,
     KYC_LEVEL.CARD,
     "kyc_level round-trippt",
   );
-  assert.equal("kycLevel" in rs.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID), false);
+  assert.equal(
+    rs.tenants.find((t) => t.id === BOOTSTRAP_TENANT_ID).kycLevel,
+    KYC_LEVEL.ID_VERIFIED,
+    "Owner via Boot-Seed auf id_verified geheilt (round-trippt)",
+  );
   // stripe-Referenzen round-trippen (Pay1); Owner ohne Werte behaelt KEINE Felder (nur-nicht-null-Hydrierung, R6).
   assert.deepEqual(
     r.tenantStripe(TENANT_B),

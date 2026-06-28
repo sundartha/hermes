@@ -84,15 +84,19 @@ test("POST /api/calls mit Telnyx-Owner-Nummer im Store -> provider=telnyx, from=
   }
 });
 
-test("Outbound-Gates greifen weiter: nicht erlaubte Nummer -> 403 (kein Telnyx-Call)", async () => {
+// Gesperrtes Ziel -> kein Provider-Originate. Denylist (Premium 0900) statt Allowlist:
+// der Owner ist seit dem Boot-Seed (id_verified, Phase outbound-p1) verifizierter
+// Subscriber und passiert das Allowlist-Gate -> die Denylist ist hier das greifende
+// HARTE Gate, das den Originate fail-closed verhindert.
+test("Outbound-Gates greifen weiter: gesperrtes (Premium-)Ziel -> 403 (kein Telnyx-Call)", async () => {
   const mock = await startTelnyxVoiceMock();
   const srv = await startServer({ env: TELNYX_ENV(mock.url), ownerNumber: TELNYX_OWNER });
   try {
     const res = await postJson(`${srv.localUrl}/api/calls`, {
-      to: "+491110000000",
+      to: "+4990012345678",
       objective: "x",
     });
-    assert.equal(res.status, 403, "nicht in der Allowlist -> abgewiesen");
+    assert.equal(res.status, 403, "Premium/Denylist -> abgewiesen");
     assert.equal(mock.requests.length, 0, "kein Originate bei gesperrtem Ziel");
   } finally {
     await srv.stop();

@@ -9,19 +9,25 @@ import {
   registerTenant,
   setKycLevel,
   kycReached,
+  seedBootstrapKyc,
+  tenantActiveSubscriber,
 } from "../src/store/state-ops.js";
 import { KYC_LEVEL, KYC_OUTBOUND_MIN, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const A = "tenant_a";
 
-test("INV(3): Owner/Bestand ohne kyc_level -> Gate passiert (kycReached true, byte-identisch)", () => {
+test("INV(3): Owner/Bestand ohne kyc_level -> Gate sperrt fail-closed (kycReached false)", () => {
   const s = makeDefaultState();
   assert.equal(
     "kycLevel" in s.tenants[0],
     false,
     "Owner traegt KEIN kycLevel-Feld (kein Default-Seed)",
   );
-  assert.equal(kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), true, "fehlend -> ausreichend");
+  assert.equal(
+    kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN),
+    false,
+    "fehlend -> unzureichend (fail-closed)",
+  );
 });
 
 test("INV(1): explizit < card -> Gate sperrt (none + otp)", () => {
@@ -59,4 +65,40 @@ test("setKycLevel ist idempotent-set (eine kycLevel-Eigenschaft, kein Duplikat)"
   setKycLevel(s, A, KYC_LEVEL.OTP);
   setKycLevel(s, A, KYC_LEVEL.CARD);
   assert.equal(s.tenants.find((t) => t.id === A).kycLevel, KYC_LEVEL.CARD);
+});
+
+// ---- seedBootstrapKyc (Phase outbound-p1): Owner-Heal, set-if-absent ----
+
+test("seedBootstrapKyc: frischer Owner -> id_verified, zweiter Lauf No-Op (idempotent)", () => {
+  const s = makeDefaultState();
+  assert.equal(seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID), true, "erste Heilung mutiert");
+  assert.equal(s.tenants[0].kycLevel, KYC_LEVEL.ID_VERIFIED, "auf id_verified geseedet");
+  assert.equal(seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID), false, "zweiter Lauf = No-Op");
+  assert.equal(s.tenants[0].kycLevel, KYC_LEVEL.ID_VERIFIED, "Wert unveraendert");
+});
+
+test("seedBootstrapKyc: gesetzter Wert gewinnt (kein Override)", () => {
+  const s = makeDefaultState();
+  setKycLevel(s, BOOTSTRAP_TENANT_ID, KYC_LEVEL.CARD);
+  assert.equal(seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID), false, "schon gesetzt -> kein Seed");
+  assert.equal(s.tenants[0].kycLevel, KYC_LEVEL.CARD, "card bleibt (nicht ueberschrieben)");
+});
+
+test("seedBootstrapKyc: fehlender Tenant -> false (kein Throw)", () => {
+  const s = { tenants: [] };
+  assert.equal(seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID), false, "kein Tenant -> No-Op statt Throw");
+});
+
+test("seedBootstrapKyc: heilt BEIDE Praedikate (kycReached + tenantActiveSubscriber)", () => {
+  const s = makeDefaultState();
+  assert.equal(kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), false, "vorher: fail-closed");
+  assert.equal(tenantActiveSubscriber(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), false, "vorher kein Sub");
+  seedBootstrapKyc(s, BOOTSTRAP_TENANT_ID);
+  // Bewusste Doppelwirkung (PLAN-SECURITY outbound-p1): id_verified erfuellt BEIDE Gates.
+  assert.equal(kycReached(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN), true, "nachher: passiert KYC-Gate");
+  assert.equal(
+    tenantActiveSubscriber(s, BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN),
+    true,
+    "nachher: gilt als Subscriber (Allowlist-Pfad-2)",
+  );
 });

@@ -617,3 +617,19 @@ AC4-Unit, 0 Drop); `test/web-auth.test.js` (T-P4-01..05), `test/mcp-tools.test.j
 Handler): AC3 `/auth/login` bei IdP-down -> `500` in 16ms (kein Socket-Hang), Body ohne IdP-Detail;
 AC7 `/api/profiles` Gate-Treffer (200) + Gate-Ablehnung (400 malformed, 404 unbekannt) live
 byte-identisch zum Bestand.
+
+## Outbound-Verifikation: KYC fail-closed + Owner-Seed (Phase outbound-p1, 2026-06-28)
+
+Owner-genehmigte Invariant-Umkehr (Strategie `docs/strategy/outbound-call-anyone-except-denylist.md`
+§3.1/§3.3): `kycReached` wertet fehlendes `kyc_level` jetzt als **unzureichend** (fail-closed)
+statt `true`. Schliesst den null-Bypass am ersten Outbound-Gate (`server.js` `kycGateError`).
+Kompensation, damit der live telefonierende Owner nicht selbst aussperrt: idempotenter,
+config-freier Boot-Seed `seedBootstrapKyc` heilt den Bootstrap/Owner-Tenant beim Boot auf
+`id_verified` (backend-agnostisch json + pg, kein Shell - Free-Tier hat kein preDeploy).
+
+BEWUSSTE NEBENWIRKUNG (Owner-bestaetigt): `id_verified` macht `tenantActiveSubscriber(owner)`
+true -> der Owner passiert das Allowlist-Gate ab Phase outbound-p1 ueber Pfad 2 (Subscriber)
+statt Pfad 3 (statische `ALLOWED_NUMBERS`). Die Owner-Reichweite weitet sich damit bereits hier
+(nicht erst beim Phase-3-Cutover) von den gelisteten Nummern auf jede Nicht-Deny-Nummer in den
+freigeschalteten Laendern. Harte Gates (Denylist, Land `+49/+33/+44`, Stundenlimit, Budget,
+Offenlegungssatz) bleiben unberuehrt und scharf. `ALLOWED_NUMBERS` wird NICHT geleert (= Phase 3).

@@ -36,20 +36,24 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
       );
     });
 
-    await t.test("place_call_denied: Allowlist-Ablehnung wird auditiert", async () => {
+    // Denylist-Ablehnung statt Allowlist: seit dem Owner-Boot-Seed (id_verified, Phase
+    // outbound-p1) passiert der Owner das Allowlist-Gate ueber Pfad 2 (Subscriber) -> der
+    // grund=allowlist-Pfad ist fuer ihn nicht mehr erreichbar. Die Denylist bleibt ein
+    // HARTES Gate -> ein Premium-Ziel wird weiter abgewiesen UND auditiert (eine Zeile).
+    await t.test("place_call_denied: Denylist-Ablehnung wird auditiert", async () => {
       const res = await postJson(`${srv.localUrl}/api/calls`, {
-        to: "+4915199999999",
+        to: "+4990012345678",
         objective: "Termin",
       });
       assert.equal(res.status, 403);
       await waitForLog(
         srv,
-        /\[audit\] place_call_denied ip=\S+ to=\+4915199999999 grund=allowlist/,
+        /\[audit\] place_call_denied ip=\S+ to=\+4990012345678 grund=denylist/,
       );
       assert.equal(
         countMatches(
           srv.stdout,
-          "\\[audit\\] place_call_denied ip=\\S+ to=\\+4915199999999 grund=allowlist",
+          "\\[audit\\] place_call_denied ip=\\S+ to=\\+4990012345678 grund=denylist",
         ),
         1,
       );

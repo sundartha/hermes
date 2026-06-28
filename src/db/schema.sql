@@ -25,10 +25,12 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS idp_subject TEXT;
 -- LLM-Persona-Vorname (G1) additiv NULLABLE. NULL = kein eigener Wert -> firstName
 -- wird aus ownerName abgeleitet im tenantContext (eine Quelle). Muster wie owner_name.
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS first_name TEXT;
--- KYC-Reifegrad (P6b4) additiv NULLABLE. NULL/fehlend = Bestand/Owner -> Gate
--- passiert (kein Regress, kycReached liefert true). Ein gesetzter Wert
--- (none|otp|card|id_verified) wird rangbasiert gegen die Outbound-Schwelle geprueft.
--- KEIN CHECK-Constraint: die Validierung lebt fail-closed in setKycLevel (eine Quelle).
+-- KYC-Reifegrad (P6b4) additiv NULLABLE. NULL/fehlend = UNZUREICHEND -> Outbound-Gate
+-- sperrt fail-closed (Phase outbound-p1: kycReached liefert false bei null, schliesst den
+-- null-Bypass). Der Bootstrap/Owner-Tenant wird beim Boot via seedBootstrapKyc auf
+-- id_verified geheilt. Ein gesetzter Wert (none|otp|card|id_verified) wird rangbasiert
+-- gegen die Outbound-Schwelle geprueft. KEIN CHECK-Constraint: die Validierung lebt
+-- fail-closed in setKycLevel (eine Quelle).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
 -- Stripe-Customer + gespeicherte Karte pro Tenant (Pay1) additiv NULLABLE. NULL =
 -- noch keine Karte erfasst -> Pay2-Provisioning fail-closed (kein placeHold). Opake

@@ -88,6 +88,7 @@ function finishLoad() {
   // Self-Service. Leere OWNER_NUMBER_SEED -> kein Seed -> Boot bleibt fail-closed.
   seedOwnerNumberFromEnv();
   seedOwnerIdpSubjectFromEnv();
+  seedOwnerKyc();
   return state;
 }
 
@@ -208,6 +209,16 @@ function seedOwnerNumberFromEnv() {
 // Bindung -> resolveTenant fail-closed). Loggt KEINE Identitaet.
 function seedOwnerIdpSubjectFromEnv() {
   ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID);
+}
+
+// Phase outbound-p1: den Bootstrap/Owner-Tenant idempotent auf id_verified heilen, damit
+// er den fail-closed kycReached-Flip ueberlebt (sonst 403 am ersten Outbound-Gate).
+// CONFIG-FREI (kein Env, anders als die Number/IdP-Seeds): der Betreiber ist intrinsisch
+// verifiziert. In-memory pro Boot (idempotent, set-if-absent). Render free-tier laeuft auf
+// pg (dort heilt pg.init); dieser Pfad deckt lokale/json-Stores ab. Muster: kein save hier
+// (re-seedet jeden Boot, wie seedOwnerIdpSubjectFromEnv).
+function seedOwnerKyc() {
+  ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID);
 }
 
 export function save() {

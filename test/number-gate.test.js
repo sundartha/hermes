@@ -227,12 +227,20 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
     }
   });
 
-  await t.test("Allowlist bleibt das letzte Gate (leer -> 403 gesperrt)", async () => {
-    const srv = await startServer({ env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" } });
+  // Seit Phase outbound-p1 ist der Owner ein verifizierter Subscriber (Boot-Seed
+  // id_verified) und passiert die LEERE statische Allowlist ueber Pfad 2 (tenantActiveSubscriber)
+  // -> erreicht den Originate (offline 500). Der fail-closed Verifikations-Riegel fuer einen
+  // UNVERIFIZIERTEN Tenant ist jetzt das vorgelagerte KYC-Gate (siehe kyc-gate-outbound.test.js,
+  // null-kyc -> 403). Die harten Ziel-Gates (Denylist/Land) bleiben davor (s.o.).
+  await t.test("verifizierter Owner/Subscriber passiert die leere Allowlist (Pfad 2 -> 500)", async () => {
+    // TWILIO_ACCOUNT_SID "x" (nicht-AC): der Twilio-Client wirft synchron VOR jedem
+    // Netzzugriff -> ein durchgelassener Call endet deterministisch offline als 500.
+    const srv = await startServer({
+      env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", TWILIO_ACCOUNT_SID: "x" },
+    });
     try {
       const res = await postCall(srv.localUrl, ALLOWED);
-      assert.equal(res.status, 403);
-      assert.match((await res.json()).error, /Allowlist/);
+      assert.equal(res.status, 500, "Owner als Subscriber -> Allowlist-Bypass (Pfad 2), bis Originate");
     } finally {
       await srv.stop();
     }
