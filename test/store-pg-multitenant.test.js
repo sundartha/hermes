@@ -150,6 +150,29 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   assert.equal("undefined" in rs.usage, false);
 });
 
+test("P2b: setTenantIdentityIfAbsent persistiert ownerName auf einem bestehenden Tenant (pg-Round-Trip)", async () => {
+  // Web-Login-Sequenz: erst wird der Tenant (ohne ownerName) angelegt + persistiert,
+  // dann schreibt ein spaeterer Login die Identitaet set-if-absent in den Gate-Store.
+  // Beweist die pg-Persistenz des neuen Helpers (json-Seite deckt g1-owner-identity-seed +
+  // der json-Spawn-Gate-Test ab).
+  const { store, db } = await makePgTestStore();
+  ops.registerTenant(store.load(), "t_web", {}); // active, OHNE ownerName
+  await store.save();
+  // Folge-Login: Identitaet aus dem verifizierten IdP-Profil ergaenzen.
+  const changed = ops.setTenantIdentityIfAbsent(store.load(), "t_web", {
+    firstName: "Web",
+    lastName: "User",
+  });
+  assert.equal(changed, true, "echte Mutation -> Flush");
+  await store.save();
+  const r = await reopen(db);
+  assert.equal(
+    r.tenantContext("t_web").ownerName,
+    "Web User",
+    "ownerName round-trippt durch Postgres -> Outbound-Identitaets-Gate passiert",
+  );
+});
+
 test("RLS-WITH-CHECK: Insert mit fremder tenant_id unter gesetzter GUC wird geblockt", async () => {
   // Belegt, dass ein vergessener set_config in der Flush-Schleife einen
   // Fremd-Tenant-Insert NICHT still durchlaesst: unter der App-Rolle (kein

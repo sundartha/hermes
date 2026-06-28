@@ -854,3 +854,112 @@ test("T-P4-05: GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein Hang, kein L
     await srv.close();
   }
 });
+
+// ---- P2b: Web-Login schreibt den IdP-Namen in den Gate-Store ----
+// Der echte Callback uebernimmt Vor-/Nachname aus dem verifizierten IdP-Profil (exchange,
+// server-zu-server -> kein Body-Spoofing) und ruft applyTenantIdentity set-if-absent. Der
+// Dev-Login (Body-Quelle) tut das NIE. claimsFromPayload reicht die Namen additiv durch,
+// exchange traegt die WorkOS-Felder (first_name/last_name) ein.
+
+test("T-P2b-01: Callback schreibt IdP-Namen via applyTenantIdentity (set-if-absent, kein Body-Spoofing)", async () => {
+  const identityCalls = [];
+  const { deps, calls } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => ({
+        claims: { sub: "user-1", email: "neu@kunde.de", firstName: "Erika", lastName: "Muster" },
+      }),
+    },
+    applyTenantIdentity: async (tenantId, identity) => identityCalls.push({ tenantId, identity }),
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 302);
+    // Identitaets-Write genau 1x mit tenantId + getrennten Namen aus dem IdP-Profil.
+    assert.equal(identityCalls.length, 1);
+    assert.deepEqual(identityCalls[0], {
+      tenantId: "t_user-1",
+      identity: { firstName: "Erika", lastName: "Muster" },
+    });
+    // Name NICHT ueber den Account-Upsert (der bekommt weiter nur sub+email).
+    assert.deepEqual(calls.upsert[0], { sub: "user-1", email: "neu@kunde.de" });
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-P2b-02: claimsFromPayload reicht firstName/lastName additiv durch (ohne Namen byte-identisch)", () => {
+  const withNames = claimsFromPayload({
+    sub: "u1",
+    email: "k@firma.de",
+    email_verified: true,
+    firstName: "Erika",
+    lastName: "Muster",
+  });
+  assert.deepEqual(withNames, {
+    sub: "u1",
+    email: "k@firma.de",
+    firstName: "Erika",
+    lastName: "Muster",
+  });
+  // Ohne Namen bleibt die Bestands-Form {sub,email} (kein leerer Key).
+  const withoutNames = claimsFromPayload({ sub: "u2", email: "x@y.de", email_verified: true });
+  assert.deepEqual(withoutNames, { sub: "u2", email: "x@y.de" });
+});
+
+test("T-P2b-03: exchange reicht WorkOS first_name/last_name in die Claims durch", async () => {
+  const { _fetch } = captureFetch({
+    json: {
+      user: {
+        id: "user_01ABC",
+        email: "kunde@firma.de",
+        email_verified: true,
+        first_name: "Erika",
+        last_name: "Muster",
+      },
+    },
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
+  const { claims } = await oidc.exchange({ code: "authcode", verifier: "ver-123" });
+  assert.equal(claims.firstName, "Erika");
+  assert.equal(claims.lastName, "Muster");
+});
+
+test("T-P2b-04: Dev-Login schreibt KEINE Identitaet (kein Body-Spoofing), mintet aber die Session", async () => {
+  // express.json() mountet den Body wirklich -> selbst MIT Namen im Body loest der
+  // Dev-Login-Pfad keinen Identitaets-Write aus (mintSession reicht dort keine Namen durch).
+  const identityCalls = [];
+  const { deps, calls } = fakeDeps({
+    devLoginEnabled: true,
+    applyTenantIdentity: async (tenantId, identity) => identityCalls.push({ tenantId, identity }),
+  });
+  const app = express();
+  app.use(express.json());
+  app.use(makeWebAuthRoutes(deps));
+  const server = await new Promise((r) => {
+    const s = app.listen(0, "127.0.0.1", () => r(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/auth/dev-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sub: "dev-1", email: "dev@x.de", firstName: "X", lastName: "Y" }),
+      redirect: "manual",
+    });
+    assert.equal(res.status, 302);
+    assert.equal(identityCalls.length, 0, "Body-Namen duerfen KEINEN Identitaets-Write ausloesen");
+    assert.equal(calls.create.length, 1, "Session dennoch gemintet");
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});

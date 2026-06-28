@@ -123,6 +123,9 @@ export function makeWebAuthRoutes(deps) {
   // den pg-Store-Spiegel, BEVOR die Session steht. Sonst faende jede WRITE-Store-Op auf dem
   // Self-Service-Subscribe-Pfad (setTenantStripe etc.) den Tenant nicht und wuerfe fail-closed.
   const ensureTenant = deps.ensureTenant || (async () => {});
+  // P2b-Identitaets-Write (DI wie ensureTenant; Default async No-Op -> Bestands-Auth-Tests
+  // ohne diesen Dep bleiben gruen). Schreibt Vor-/Nachname set-if-absent in den Gate-Store.
+  const applyTenantIdentity = deps.applyTenantIdentity || (async () => {});
   // Login-Flow-Cookie-TTL (state/pkce/nonce) per DI (Muster ttlSeconds): Produktion reicht
   // config.loginCookieTtlSeconds durch, Tests fallen auf den Default zurueck. `??` ehrt eine
   // explizite 0 (min:0 in config).
@@ -135,7 +138,7 @@ export function makeWebAuthRoutes(deps) {
   // Session-Rotation/-Binding) an EINER Stelle nachgezogen wird. Setzt NUR das Session-
   // Cookie; Login-Flow-Cookie-Cleanup, audit und redirect bleiben Sache des Aufrufers
   // (Callback auditiert + raeumt die pkce/state/nonce-Cookies, Dev-Login nicht).
-  async function mintSession(res, { sub, email }) {
+  async function mintSession(res, { sub, email, firstName, lastName }) {
     const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
     // Spiegel-Nachzug NACH dem Account-/Tenant-Upsert (die DB-Zeile existiert jetzt), VOR
     // sessions.create. FAIL-OPEN bewusst: die Auth-Entscheidung (account+session) ist
@@ -143,6 +146,12 @@ export function makeWebAuthRoutes(deps) {
     // oeffnet KEIN Gate (fehlt der Spiegel-Tenant, werfen die Setter weiter fail-CLOSED -
     // der alte 502, nie suspended-sieht-aktiv-aus). Deckt Callback UND Dev-Login (G5).
     await ensureTenant(tenantId);
+    // P2b: Vor-/Nachname (aus dem verifizierten IdP-Profil) set-if-absent in den Gate-Store
+    // schreiben, sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant fail-closed. NUR
+    // wenn ein Name vorliegt (Dev-Login/namloses Profil -> kein unnoetiger Store-Lock, kein
+    // Body-Spoofing). Deckt ausschliesslich den echten Callback (mintSession-Aufrufer reicht
+    // Namen nur dort durch).
+    if (firstName || lastName) await applyTenantIdentity(tenantId, { firstName, lastName });
     const { id } = await sessions.create({ sub, tenantId, ttlSeconds });
     res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
     return { tenantId, id };
@@ -226,7 +235,12 @@ export function makeWebAuthRoutes(deps) {
       const { claims } = await oidc.exchange({ code: req.query.code, verifier });
       // Session ueber die gemeinsame Mint-Mechanik (setzt das Session-Cookie). Danach die
       // Login-Flow-Cookies loeschen.
-      const { tenantId } = await mintSession(res, { sub: claims.sub, email: claims.email });
+      const { tenantId } = await mintSession(res, {
+        sub: claims.sub,
+        email: claims.email,
+        firstName: claims.firstName,
+        lastName: claims.lastName,
+      });
       clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
 
       await audit.record({ actorSub: claims.sub, tenantId, action: "login" });
@@ -286,7 +300,15 @@ export function makeWebAuthRoutes(deps) {
 // Allowlist (adminOnly) ist damit nur ueber nachweislich verifizierte Adressen erreichbar.
 export function claimsFromPayload(payload) {
   const email = payload.email_verified === true ? (payload.email ?? null) : null;
-  return { sub: payload.sub, email };
+  const claims = { sub: payload.sub, email };
+  // P2b: Vor-/Nachname additiv aus dem verifizierten IdP-Profil uebernehmen - NUR wenn
+  // vorhanden (Bestands-Claims {sub,email} bleiben byte-identisch, kein leerer Muell).
+  // KEIN email_verified-Gate: der Name ist kein Admin-Allowlist-Schluessel wie email;
+  // die Trim-/Kompositions-Autoritaet bleibt applyOwnerIdentity (G5). Quelle = WorkOS-
+  // user (server-zu-server), nicht der Body -> kein Spoofing.
+  if (typeof payload.firstName === "string" && payload.firstName) claims.firstName = payload.firstName;
+  if (typeof payload.lastName === "string" && payload.lastName) claims.lastName = payload.lastName;
+  return claims;
 }
 
 // ---- makeOidc --------------------------------------------------------
@@ -353,6 +375,9 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
           sub: user.id,
           email: user.email,
           email_verified: user.email_verified,
+          // WorkOS User Management liefert first_name/last_name am verifizierten user-Objekt.
+          firstName: user.first_name,
+          lastName: user.last_name,
         }),
       };
     },
