@@ -306,16 +306,22 @@ export function registerTools(
       objective: z
         .string()
         .describe(
-          "Das Ziel des Anrufs in einem Satz, z.B. 'Vereinbare einen Friseurtermin fuer Samstag vormittag.'",
+          "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Vereinbare einen Friseurtermin fuer Samstag vormittag.' Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
         ),
       briefing: z
         .string()
         .optional()
-        .describe("Kontext fuer den Agenten (Namen, Vorlieben, Hintergrund)."),
+        .describe(
+          "Relevanter Kontext aus dem bisherigen Chat, den der Agent fuers Telefonat braucht: worum es geht, beteiligte Namen, Vorlieben/Praeferenzen, Vorgeschichte sowie gewuenschtes Ergebnis und Ton. ZUSAMMENFASSEN statt roh hineinkopieren - nur was fuers Gespraech zaehlt. KEINE Secrets, Passwoerter oder Zahlungsdaten. Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers (nicht als Claude/Gemini); formuliere den Kontext aus dessen Sicht.",
+        ),
       constraints: z
         .string()
         .optional()
-        .describe("Einschraenkungen, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro.'"),
+        .describe(
+          "Harte Grenzen, die der Agent im Gespraech nicht ueberschreiten darf, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro, keine Anzahlung zusagen.'",
+        ),
+      // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
+      // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
       language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
       max_duration_s: z
         .number()
