@@ -246,3 +246,63 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
     }
   });
 });
+
+// ---- outbound-p1b: globale Best-effort-IRSF-Blockliste (neue Ranges) ----
+// Jeder NEU aufgenommene Premium-/Service-Range muss am DENYLIST-Gate (grund=denylist,
+// vor Format/Land) 403 + /gesperrt/ liefern; gewoehnliche internationale Nummern
+// (DE-Mobil, US, ES) duerfen die Denylist passieren. Land *, Allowlist grosszuegig,
+// TWILIO_ACCOUNT_SID "x" -> ein durchgelassener Call endet offline deterministisch als 500.
+test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound-p1b)", async (t) => {
+  const PASS = ["+4915112345678", "+12025550123", "+34600000000"]; // DE-Mobil, US, ES
+  const srv = await startServer({
+    env: { ALLOWED_NUMBERS: PASS.join(","), ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+  });
+  const blockedByDenylist = async (to) => {
+    const res = await postCall(srv.localUrl, to);
+    assert.equal(res.status, 403, `${to} muss am Denylist-Gate sperren`);
+    assert.match((await res.json()).error, /gesperrt/, `${to} muss grund=denylist sein`);
+  };
+  try {
+    await t.test("UK 118/070/09/084x/087x -> 403 denylist", async () => {
+      for (const to of [
+        "+4411812345678", // 118 Auskunft
+        "+447012345678", // 070 Personal/Follow-me
+        "+449123456789", // 09 Premium
+        "+448431234567",
+        "+448441234567",
+        "+448451234567", // 084x
+        "+448701234567",
+        "+448711234567", // 087x
+      ])
+        await blockedByDenylist(to);
+    });
+
+    await t.test("FR 118/089x/081x/082x -> 403 denylist", async () => {
+      for (const to of [
+        "+3311812345678", // 118 Auskunft
+        "+338991234567",
+        "+338921234567", // 089x audiotel/SVA
+        "+338101234567",
+        "+338201234567", // 081x/082x
+      ])
+        await blockedByDenylist(to);
+    });
+
+    await t.test("DE 0900-lang/0700 -> 403 denylist", async () => {
+      for (const to of ["+49090012345678", "+4970012345678"]) await blockedByDenylist(to);
+    });
+
+    await t.test("gewoehnliche internationale Nummern passieren die Denylist (-> 500)", async () => {
+      // In Allowlist + Land *: ALLE Gates inkl. Denylist passieren -> offline 500 (kein 403).
+      for (const to of PASS) {
+        assert.equal(
+          (await postCall(srv.localUrl, to)).status,
+          500,
+          `${to} darf NICHT von der Denylist geblockt werden`,
+        );
+      }
+    });
+  } finally {
+    await srv.stop();
+  }
+});
