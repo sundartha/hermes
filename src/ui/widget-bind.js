@@ -1,14 +1,14 @@
-// Gemeinsames Daten-Binding fuer ALLE Hermes-Widgets (W1). Fuellt die
-// [data-mcp="<key>"]-Slots der self-contained Iframe-HTML aus dem host-gepushten
-// structuredContent (server-gewhitelistet, SEP-1865). Eine Quelle, EINMAL je Serve
-// in jede Widget-HTML injiziert (siehe widget-catalog.js) - kein Copy-Paste je .html
-// (G5/S2). Der Iframe-Script-Text BIND_SCRIPT ist eine Projektion DERSELBEN Funktionen
-// (Function.prototype.toString), damit die Logik nur einmal existiert und ohne DOM
-// (node:test) pruefbar bleibt.
+// Gemeinsames Daten-Binding + Host-Handshake fuer ALLE Hermes-Widgets. Spricht die
+// MCP-Apps-UI-Bridge (apps.mdx 2026-01-26): JSON-RPC 2.0 ueber postMessage an
+// window.parent. Der Host rendert das Iframe NUR, wenn das Widget den Handshake fuehrt
+// UND seine Hoehe meldet - sonst bleibt es leer (Anthropic-Doku: "Missing app.connect()
+// calls" + "Iframe height issues" als haeufigste Unsichtbar-Ursachen). Genau EINE Quelle,
+// EINMAL je Widget-HTML injiziert (siehe widget-catalog.js); der Iframe-Script-Text
+// BIND_SCRIPT ist eine Projektion DERSELBEN Funktionen (Function.prototype.toString).
 //
-// Host-Bruecke wird per Feature-Detection gelesen (keine Konvention hart verdrahtet);
-// fehlt sie, bleibt die Karte still mit "—" (fail-safe no-op, kein Crash im Host).
-// XSS-Disziplin: Werte landen AUSSCHLIESSLICH ueber textContent im DOM, NIE ueber
+// Reihenfolge im Iframe: ui/initialize -> Host-Antwort -> ui/notifications/initialized
+// + Hoehe melden; Host pusht ui/notifications/tool-result -> structuredContent binden +
+// Hoehe melden. XSS-Disziplin: Werte landen AUSSCHLIESSLICH ueber textContent, NIE ueber
 // innerHTML - host-gepushte Strings werden damit nie als Markup interpretiert.
 
 // CSS-Klasse je gerenderter Transkriptzeile - matcht .turn in den Widget-Styles.
@@ -18,38 +18,24 @@ const LINE_CLASS = "turn";
 // Liste von Objekten als wiederholte Rows. Welche Sub-Felder eine Row zeigt,
 // deklariert der Slot generisch im HTML via data-mcp-row="feld1,feld2,..." - das
 // Binding kennt KEINE konkreten Widget-Felder (OCP, eine Quelle fuer alle Listen).
-// Klassen matchen .row/.cell in den Widget-Styles; data-field erlaubt der CSS, eine
-// einzelne Spalte gezielt zu stylen.
 const ROW_CLASS = "row";
 const CELL_CLASS = "cell";
 const ROW_FIELDS_ATTR = "data-mcp-row";
 const FIELD_ATTR = "data-field";
 const FIELD_SEP = ",";
 
+// MCP-Apps-UI-Bridge: Methodennamen + Protokollversion zentral (keine Magic-Strings,
+// EINE Quelle). INIT_ID = JSON-RPC-id der initialize-Anfrage (1, kein Magic-Wert).
+const UI_PROTOCOL_VERSION = "2026-01-26";
+const METHOD_INITIALIZE = "ui/initialize";
+const METHOD_INITIALIZED = "ui/notifications/initialized";
+const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+const METHOD_SIZE_CHANGED = "ui/notifications/size-changed";
+const INIT_ID = 1;
+
 // true nur fuer ein nicht-null Objekt (geteilte Pruefung, keine Duplizierung G5).
 export function isObject(value) {
   return typeof value === "object" && value !== null;
-}
-
-// Feature-Detection der synchronen Host-Bruecke. Erste vorhandene Konvention gewinnt;
-// keine Bruecke -> null (fail-safe no-op).
-//   (a) ChatGPT/skybridge:  root.openai.toolOutput
-//   (b) MCP-nativ/Claude:   root.mcpToolOutput  (Kandidat, im W2-Smoke zu bestaetigen)
-export function readHostData(root) {
-  if (!isObject(root)) return null;
-  if (isObject(root.openai) && isObject(root.openai.toolOutput)) return root.openai.toolOutput;
-  if (isObject(root.mcpToolOutput)) return root.mcpToolOutput;
-  return null;
-}
-
-// MCP-nativer postMessage-Handshake: zieht das Tool-Output aus einem message-Event.
-//   Kandidaten-Schluessel: event.data.toolOutput | event.data.structuredContent
-export function readMessageData(message) {
-  if (!isObject(message) || !isObject(message.data)) return null;
-  const payload = message.data;
-  if (isObject(payload.toolOutput)) return payload.toolOutput;
-  if (isObject(payload.structuredContent)) return payload.structuredContent;
-  return null;
 }
 
 // Array -> je Zeile ein <div class="turn"> mit textContent (XSS-sicher). Container
@@ -120,27 +106,73 @@ export function bind(doc, data) {
   }
 }
 
-// Bootstrap im Iframe: synchrone Bruecke lesen + binden, dann den message-Listener
-// (postMessage-Handshake) registrieren. Alles fail-safe (kein Crash ohne Bruecke/DOM).
+// Postet eine JSON-RPC-Nachricht an den Host (window.parent). Im sandboxed Iframe hat
+// das Widget einen null-Origin -> targetOrigin "*" (der Host filtert seinerseits).
+// Fehlt der parent (kein Host/Fake-DOM) -> no-op (fail-safe).
+export function postToHost(root, message) {
+  const parent = root && root.parent;
+  if (parent && typeof parent.postMessage === "function") parent.postMessage(message, "*");
+}
+
+// Aktuelle Inhaltshoehe an den Host melden - sonst bleibt das Iframe 0/leer (apps.mdx:
+// der Host MUSS auf ui/notifications/size-changed hoeren und die Iframe-Dimension
+// nachziehen). body fehlt im Fake-DOM -> 0 (kein Crash).
+export function reportSize(root) {
+  const body = root && root.document && root.document.body;
+  const height = body && body.scrollHeight ? body.scrollHeight : 0;
+  const width = body && body.scrollWidth ? body.scrollWidth : 0;
+  postToHost(root, { jsonrpc: "2.0", method: METHOD_SIZE_CHANGED, params: { width, height } });
+}
+
+// Behandelt eine eingehende Host-Nachricht: Antwort auf ui/initialize -> initialized
+// bestaetigen + Hoehe melden; ui/notifications/tool-result -> structuredContent binden +
+// Hoehe melden. Unbekannte Nachrichten -> no-op. Gibt true zurueck, wenn gebunden wurde.
+export function handleHostMessage(root, doc, message) {
+  if (!isObject(message)) return false;
+  if (message.id === INIT_ID && isObject(message.result)) {
+    postToHost(root, { jsonrpc: "2.0", method: METHOD_INITIALIZED, params: {} });
+    reportSize(root);
+    return false;
+  }
+  if (message.method === METHOD_TOOL_RESULT && isObject(message.params)) {
+    const data = message.params.structuredContent;
+    if (isObject(data)) bind(doc, data);
+    reportSize(root);
+    return true;
+  }
+  return false;
+}
+
+// Bootstrap im Iframe: Handshake starten (ui/initialize an den Host), auf Host-Nachrichten
+// lauschen und die Hoehe bei DOM-Aenderungen nachmelden. Alles fail-safe (kein Crash ohne
+// Host/DOM); ohne diesen Handshake + die Hoehenmeldung rendert der Host das Widget nicht.
 export function run(root) {
   try {
     const doc = root && root.document;
     if (!doc) return;
-    const initial = readHostData(root);
-    if (initial) bind(doc, initial);
+    postToHost(root, {
+      jsonrpc: "2.0",
+      id: INIT_ID,
+      method: METHOD_INITIALIZE,
+      params: {
+        appCapabilities: { availableDisplayModes: ["inline"] },
+        clientInfo: { name: "hermes-widget", version: "1.0.0" },
+        protocolVersion: UI_PROTOCOL_VERSION,
+      },
+    });
     if (typeof root.addEventListener === "function") {
-      root.addEventListener("message", (event) => {
-        const data = readMessageData(event);
-        if (data) bind(doc, data);
-      });
+      root.addEventListener("message", (event) => handleHostMessage(root, doc, event && event.data));
+    }
+    if (typeof root.ResizeObserver === "function" && doc.body) {
+      new root.ResizeObserver(() => reportSize(root)).observe(doc.body);
     }
   } catch (e) {
-    // fail-safe no-op: ohne Bruecke/Daten bleibt die Karte mit — (kein Fehler im Host)
+    // fail-safe no-op: ohne Host/DOM bleibt die Karte still (kein Fehler im Host)
   }
 }
 
 // Projiziert dieselben Funktionen als Iframe-Script-Text (eine Quelle, G5/S2). Die
-// Funktionsdeklarationen sind im IIFE gehoistet -> Querverweise + LINE_CLASS im Scope.
+// Funktionsdeklarationen sind im IIFE gehoistet -> Querverweise + Konstanten im Scope.
 function buildBindScript() {
   const body = [
     '"use strict";',
@@ -150,14 +182,21 @@ function buildBindScript() {
     `var ROW_FIELDS_ATTR = ${JSON.stringify(ROW_FIELDS_ATTR)};`,
     `var FIELD_ATTR = ${JSON.stringify(FIELD_ATTR)};`,
     `var FIELD_SEP = ${JSON.stringify(FIELD_SEP)};`,
+    `var UI_PROTOCOL_VERSION = ${JSON.stringify(UI_PROTOCOL_VERSION)};`,
+    `var METHOD_INITIALIZE = ${JSON.stringify(METHOD_INITIALIZE)};`,
+    `var METHOD_INITIALIZED = ${JSON.stringify(METHOD_INITIALIZED)};`,
+    `var METHOD_TOOL_RESULT = ${JSON.stringify(METHOD_TOOL_RESULT)};`,
+    `var METHOD_SIZE_CHANGED = ${JSON.stringify(METHOD_SIZE_CHANGED)};`,
+    `var INIT_ID = ${JSON.stringify(INIT_ID)};`,
     isObject.toString(),
-    readHostData.toString(),
-    readMessageData.toString(),
     renderLines.toString(),
     rowFields.toString(),
     renderRows.toString(),
     applyField.toString(),
     bind.toString(),
+    postToHost.toString(),
+    reportSize.toString(),
+    handleHostMessage.toString(),
     run.toString(),
     "run(window);",
   ].join("\n");

@@ -11,8 +11,6 @@ import {
   renderLines,
   renderRows,
   rowFields,
-  readHostData,
-  readMessageData,
   run,
   isObject,
 } from "../src/ui/widget-bind.js";
@@ -95,6 +93,23 @@ function makeDoc(slotKeys) {
 
 const slot = (doc, key) => doc.slots.get(key)[0];
 
+// Fake-Host: faengt die ans window.parent geposteten JSON-RPC-Nachrichten ab und
+// erlaubt, Host-Nachrichten ueber den message-Listener einzuspielen (emit). Spiegelt
+// die MCP-Apps-UI-Bridge, ohne echtes Browser/postMessage.
+function makeRoot(doc) {
+  let messageHandler = null;
+  const root = {
+    document: doc,
+    parent: { postMessage: (msg) => root.posted.push(msg) },
+    addEventListener: (type, h) => {
+      if (type === "message") messageHandler = h;
+    },
+    posted: [],
+    emit: (data) => messageHandler && messageHandler({ data }),
+  };
+  return root;
+}
+
 test("T-W1-AC1: jede Widget-HTML traegt GENAU EINE Quelle des Binding-Scripts (G5/S2)", () => {
   for (const id of WIDGET_IDS) {
     const html = widgetHtml(id);
@@ -142,32 +157,44 @@ test("T-W1-AC5: unbekannte Schluessel + null/undefined-Werte aendern keinen Slot
   assert.equal(slot(doc, "status").textContent, "", "null-Wert uebersprungen -> Slot unberuehrt");
 });
 
-test("T-W1-AC6: Feature-Detection liest beide Bruecken + message-Event, sonst null", () => {
-  assert.deepEqual(readHostData({ openai: { toolOutput: { status: "x" } } }), { status: "x" });
-  assert.deepEqual(readHostData({ mcpToolOutput: { call_id: "c" } }), { call_id: "c" });
-  assert.equal(readHostData({}), null, "keine Bruecke -> null");
-  assert.equal(readHostData(null), null, "kein root -> null");
+test("T-W1-AC6: MCP-Apps-Handshake - ui/initialize beim Laden, tool-result bindet structuredContent", () => {
+  const doc = makeDoc(["status", "call_id"]);
+  const root = makeRoot(doc);
+  run(root);
 
-  assert.deepEqual(readMessageData({ data: { toolOutput: { a: 1 } } }), { a: 1 });
-  assert.deepEqual(readMessageData({ data: { structuredContent: { b: 2 } } }), { b: 2 });
-  assert.equal(readMessageData({ data: { junk: true } }), null, "kein bekannter Key -> null");
-  assert.equal(readMessageData({}), null, "kein data -> null");
+  // (1) Beim Laden postet das Widget ui/initialize an den Host (sonst rendert er nicht).
+  assert.equal(root.posted[0].method, "ui/initialize", "erste Nachricht = ui/initialize");
+  assert.equal(root.posted[0].id, 1);
+  assert.equal(root.posted[0].params.protocolVersion, "2026-01-26");
+
+  // (2) Host antwortet auf initialize -> Widget bestaetigt initialized + meldet Hoehe.
+  root.emit({ jsonrpc: "2.0", id: 1, result: { hostContext: {} } });
+  assert.ok(root.posted.some((m) => m.method === "ui/notifications/initialized"), "initialized bestaetigt");
+  assert.ok(root.posted.some((m) => m.method === "ui/notifications/size-changed"), "Hoehe gemeldet");
+
+  // (3) Host pusht das Tool-Ergebnis -> structuredContent landet in den Slots.
+  root.emit({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: { structuredContent: { status: "in_progress", call_id: "c1" } },
+  });
+  assert.equal(slot(doc, "status").textContent, "in_progress", "structuredContent gebunden");
+  assert.equal(slot(doc, "call_id").textContent, "c1");
 
   assert.equal(isObject({}), true);
   assert.equal(isObject(null), false);
-  assert.equal(isObject("x"), false);
 });
 
-test("T-W1-AC7: run ist fail-safe ohne DOM/Bruecke und bindet bei vorhandener Bruecke", () => {
+test("T-W1-AC7: run ist fail-safe ohne DOM/Host und ignoriert unbekannte Nachrichten", () => {
   assert.doesNotThrow(() => run({}), "kein document -> no-op");
   assert.doesNotThrow(() => run(null), "kein root -> no-op");
 
   const doc = makeDoc(["status"]);
-  assert.doesNotThrow(() => run({ document: doc }), "ohne Bruecke -> no-op");
-  assert.equal(slot(doc, "status").textContent, "", "ohne Bruecke kein Slot veraendert");
-
-  run({ document: doc, openai: { toolOutput: { status: "in_progress" } } });
-  assert.equal(slot(doc, "status").textContent, "in_progress", "synchrone Bruecke gebunden");
+  const root = makeRoot(doc);
+  run(root);
+  // Unbekannte Host-Nachricht aendert keinen Slot (kein Crash, kein Binding).
+  root.emit({ jsonrpc: "2.0", method: "ui/notifications/irgendwas", params: {} });
+  assert.equal(slot(doc, "status").textContent, "", "unbekannte Methode -> Slot unberuehrt");
 });
 
 test("T-W1-AC8: ein Binding deckt alle Slot-Namen beider Whitelists ab (Kontrakt)", () => {
@@ -291,8 +318,12 @@ test("T-Wb-BIND5: bind end-to-end - { calls: [...] } in den data-mcp=calls-Slot"
   assert.equal(container.children[1].children[4].textContent, "", "c2 ohne summary -> leere Zelle");
 });
 
-test("T-Wb-BIND6: BIND_SCRIPT projiziert rowFields + renderRows (eine Quelle, kein innerHTML)", () => {
+test("T-Wb-BIND6: BIND_SCRIPT projiziert Binding + Handshake (eine Quelle, kein innerHTML)", () => {
   assert.ok(BIND_SCRIPT.includes("function rowFields"), "rowFields projiziert");
   assert.ok(BIND_SCRIPT.includes("function renderRows"), "renderRows projiziert");
+  // Der Host-Handshake MUSS im Iframe-Script landen, sonst rendert der Host nichts.
+  assert.ok(BIND_SCRIPT.includes("ui/initialize"), "ui/initialize-Handshake projiziert");
+  assert.ok(BIND_SCRIPT.includes("ui/notifications/size-changed"), "Hoehen-Reporting projiziert");
+  assert.ok(BIND_SCRIPT.includes("run(window);"), "run(window) am Ende");
   assert.ok(!BIND_SCRIPT.includes("innerHTML"), "kein innerHTML (XSS-Gate, S1)");
 });
