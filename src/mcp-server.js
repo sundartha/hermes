@@ -7,9 +7,19 @@ import "./process-guards.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./mcp-tools.js";
+import { config } from "./config.js";
+import { uiServerExtension } from "./ui/contract.js";
 
-const server = new McpServer({ name: "hermes", version: "0.2.0" });
-registerTools(server);
+// Rich-UI auch ueber stdio (Claude Desktop). Anders als der HTTP-Connector rendert
+// stdio die Widgets zuverlaessig: die HTTP-AppBridge-Doppel-Session ist Claude-seitig
+// kaputt (anthropics/claude-ai-mcp#149), stdio teilt EINE Pipe. Server deklariert die
+// io.modelcontextprotocol/ui-Extension + die Tools tragen das Widget-_meta (uiHost),
+// gegated am Master-Schalter MCP_UI_ENABLED (aus -> byte-identisch).
+const serverOptions = config.mcpUiEnabled
+  ? { capabilities: { extensions: uiServerExtension() } }
+  : undefined;
+const server = new McpServer({ name: "hermes", version: "0.2.0" }, serverOptions);
+registerTools(server, { uiHost: { enabled: config.mcpUiEnabled } });
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
