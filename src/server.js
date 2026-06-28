@@ -513,16 +513,44 @@ function extractSpeakOutcome(req, provider) {
 // "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
 // startsWith. Eng gefasst, damit normale Mobilnummern (+4915...) durchkommen.
 const EMERGENCY_SHORT_CODES = ["110", "112", "911", "999"];
+// Globale Best-effort-IRSF-Blockliste (outbound-p1b): die hoechsten Premium-/Satelliten-/
+// IPRN-Risiko-Ziele weltweit. BEWUSST unvollstaendig - bei weltweiter Reichweite ('*',
+// Phase 4) ist sie Beifang, NICHT der Hauptschutz (Hauptschutz = Kosten-Achse/Pre-Auth,
+// Phase 1c). Strikt SUB-Ranges (Premium/Service/Satellit/IPRN), NIE ganze Laendercodes -
+// eine gewoehnliche US-/ES-/DE-Mobilnummer muss durchkommen. Periodisch gegen eine
+// gepflegte IRSF-Quelle aktualisieren. Quelle/Zweck je Gruppe im Kommentar.
 const PREMIUM_PREFIXES = [
-  "+49900",
-  "+49137",
-  "+49180",
-  "+49118",
+  // Satellit (Inmarsat / globale Mobil-Satellit) - sehr hohe Minutenpreise, IRSF-Liebling
   "+870",
   "+881",
   "+882",
   "+883",
+  // IPRN (International Premium Rate Numbers)
   "+979",
+  // DE Premium/Service: 0900 (Premium, kurz + lang), 0137 (Televoting), 0180 (Shared-Cost),
+  // 0118 (Auskunft), 0700 (persoenliche Rufnummer, Restschuld)
+  "+49900",
+  "+490900",
+  "+49137",
+  "+49180",
+  "+49118",
+  "+49700",
+  // UK Premium/Service: 118 (Directory Enquiries), 070 (Personal/Follow-me), 09 (Premium),
+  // 084x/087x (Service)
+  "+44118",
+  "+4470",
+  "+449",
+  "+44843",
+  "+44844",
+  "+44845",
+  "+44870",
+  "+44871",
+  // FR Premium/Service: 118 (Auskunft), 089x (audiotel/SVA Premium), 081x/082x (Service)
+  "+33118",
+  "+33899",
+  "+33892",
+  "+33810",
+  "+33820",
 ];
 const HOUR_MS = 60 * 60 * 1000;
 

@@ -16,10 +16,12 @@ Pruefreihenfolge **Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit ->
 Allowlist**:
 
 1. **Notruf-/Premium-Denylist** (hardcoded, kein Env, nicht abschaltbar):
-   Kurzwahlen 110/112/911/999 (exakt) + Premium-/Service-Prefixe
-   (`+49900/+49137/+49180/+49118`, `+870/+881/+882/+883/+979`). Laeuft bewusst
-   vor der Formatpruefung, damit Kurzwahlen als 403 `grund=denylist` statt 400
-   erscheinen.
+   Kurzwahlen 110/112/911/999 (exakt) + eine globale Best-effort-IRSF-Blockliste der
+   hoechsten Premium-/Service-/Satelliten-/IPRN-Ranges (u.a. DE 0900/0137/0180/0118/0700,
+   UK 118/070/09/084x/087x, FR 118/089x/081x/082x, Satellit +87x/+88x, IPRN +979; per
+   `startsWith`). Bewusst Best-effort/unvollstaendig (Beifang, nicht Hauptschutz;
+   outbound-p1b). Laeuft bewusst vor der Formatpruefung, damit Kurzwahlen als 403
+   `grund=denylist` statt 400 erscheinen.
 2. **Laender-Gate** `ALLOWED_COUNTRY_CODES` (Default `+49`, `*` = alle).
 3. **Pro-Stunde-Limit** `MAX_CALLS_PER_HOUR` (Default 6, eigenes Gleitfenster
    ueber Outbound-Call-Zeitstempel, NICHT der Per-IP-Limiter aus Phase 2.1).
