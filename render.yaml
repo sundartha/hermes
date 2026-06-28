@@ -95,6 +95,11 @@ services:
         value: "false"
       - key: PROVISIONING_COUNTRY
         value: "DE"
+      # Kauf-Land-Override (ISO-2): alle neuen Nummern werden DORT gekauft, die Sprache
+      # bleibt am erkannten Herkunftsland. "US" = jeder User bekommt eine US-Nummer; leer
+      # = Kauf-Land = erkanntes Land. Geo-/Sprach-Erkennung bleibt aktiv.
+      - key: FORCE_NUMBER_COUNTRY
+        value: "US"
       # ---- Payment/Billing (Stripe Hold/Capture, P6b1) ----
       - key: PAYMENT_ENABLED
         value: "false"

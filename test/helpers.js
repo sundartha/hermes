@@ -109,6 +109,10 @@ export const BASE_ENV = {
   MAX_NUMBERS_PER_TENANT: "1",
   PROVISIONING_ENABLED: "false",
   PROVISIONING_COUNTRY: "DE",
+  // Kauf-Land-Override aus (Default): number.country = Herkunftsland, byte-identisch.
+  // Ohne diese Zeile leakt eine lokale .env mit FORCE_NUMBER_COUNTRY=US via dotenv in
+  // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  FORCE_NUMBER_COUNTRY: "",
   // Geo-Quelle bei der Registrierung aus (F1 Phase 6): Null-Adapter -> DE-Fallback,
   // netzfrei. Ohne diese Zeile leakt eine lokale .env mit GEO_ENABLED=true via dotenv
   // in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).

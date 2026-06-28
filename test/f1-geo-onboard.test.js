@@ -108,3 +108,27 @@ test("Onboard ohne country erbt PROVISIONING_COUNTRY (Fallback-Stufe) -> FR/fr",
     await srv.stop();
   }
 });
+
+// FORCE_NUMBER_COUNTRY=US: das KAUF-Land ist entkoppelt vom Herkunftsland. Ein DE-User
+// bekommt eine US-Nummer (number.country=US), aber die Sprache bleibt am Herkunftsland
+// (de): number.language=de, tenant.country/defaultLanguage=DE/de (Quelle fuer Sprache/
+// Analytics). Beweist: Geo-/Sprach-Erkennung bleibt aktiv, nur die Kauf-Land-Wahl wird
+// neutralisiert. Laufzeit-Sprache liest number.language (resolveCallLanguage) -> de.
+test("FORCE_NUMBER_COUNTRY=US: number.country US, Sprache + tenant am Herkunftsland (DE)", async () => {
+  const srv = await startServer({ env: { FORCE_NUMBER_COUNTRY: "US" } });
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_force", country: "DE" });
+    const json = await res.json();
+    assert.equal(json.country, "DE", "Antwort meldet das Herkunftsland");
+    assert.equal(json.language, "de", "Sprache am Herkunftsland");
+    const store = srv.readStore();
+    const tenant = store.tenants.find((t) => t.id === "t_force");
+    assert.equal(tenant.country, "DE", "tenant.country = Herkunftsland (nicht US)");
+    assert.equal(tenant.defaultLanguage, "de");
+    const num = store.numbers.find((n) => n.id === json.numberId);
+    assert.equal(num.country, "US", "number.country = erzwungenes Kauf-Land");
+    assert.equal(num.language, "de", "number.language bleibt Herkunftssprache");
+  } finally {
+    await srv.stop();
+  }
+});

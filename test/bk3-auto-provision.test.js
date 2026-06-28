@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { applyStripeWebhook, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
-import { makeDefaultState, registerTenant } from "../src/store/state-ops.js";
+import { makeDefaultState, registerTenant, setTenantGeo } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
 const HIGH = 100;
@@ -32,6 +32,25 @@ test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () =>
   const r = requestNumberForPaidTenant(s, { tenantId: "t_us", fallbackCountry: "US", maxNumbers: HIGH, maxNumbersPerTenant: HIGH });
   assert.equal(r.ok, true);
   assert.equal(r.number.country, "US");
+});
+
+// forceNumberCountry entkoppelt das KAUF-Land vom Herkunftsland: Tenant-Geo DE, aber
+// erzwungenes US -> number.country=US, number.language bleibt am Herkunftsland (de).
+// Beweist die Provision-Pfad-Haelfte des Kauf-Land-Overrides (Onboard-Haelfte: f1-geo-onboard).
+test("BK3 forceNumberCountry US ueberschreibt Kauf-Land, Sprache bleibt am Herkunftsland (DE)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_force", {});
+  setTenantGeo(s, "t_force", { country: "DE", defaultLanguage: "de" });
+  const r = requestNumberForPaidTenant(s, {
+    tenantId: "t_force",
+    fallbackCountry: "DE",
+    forceNumberCountry: "US",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.country, "US", "Kauf-Land erzwungen US");
+  assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
 });
 
 // T2: Idempotenz - zweite Aktivierung kauft nicht doppelt.

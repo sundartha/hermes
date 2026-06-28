@@ -9,43 +9,59 @@ Dieses File ist der Arbeits-Scratch fuer die jeweils laufende Phase (siehe
 
 ---
 
-# Bug A — Web-Login: WorkOS UM statt generischem /oauth2/* (fix/web-login-workos-um)
+# Task: Kauf-Land entkoppeln (alle Nummern US, Sprache bleibt Geo-basiert)
 
-## Problem (verifiziert, read-only)
-`authorizeUrl()` nimmt `authorization_endpoint` aus der OIDC-Discovery =
-`.../oauth2/authorize` (WorkOS OAuth-2.1/Connect-Server). Der kennt User-Management-
-Apps NICHT -> `application_not_found`.
+## Ziel
+Geo-Nummernkauf NICHT loeschen, sondern per Config neutralisieren: jeder neue User
+bekommt eine US-Nummer (+1), aber die Sprache wird weiter aus dem erkannten Herkunfts-
+land gesetzt (DE->de, FR->fr, ...). Steuerung ueber Env-Flag `FORCE_NUMBER_COUNTRY`
+(leer = heutiges Verhalten byte-identisch; "US" = jede Nummer US).
 
-Beweis (curl, gleicher client_id):
-- `.../oauth2/authorize?...` -> 302 `/oauth2/error?error=application_not_found` ✓
-- `api.workos.com/user_management/authorize?...&provider=authkit` -> 302 AuthKit-Login (`/bootstrap?...`) ✓
+## Kernidee (Entkopplung)
+- `tenant.country` = ERKANNTES Herkunftsland (Quelle fuer Sprache/Analytics) — unveraendert.
+- `number.country` = KAUF-Land (= forceNumberCountry, sonst Herkunftsland).
+- Laufzeit-Sprache haengt an `number.language` (resolveCallLanguage) — bleibt korrekt.
 
-## Doku-Entscheidung: (b)
-WorkOS `POST /user_management/authenticate` liefert `{ user, access_token, refresh_token, ... }`,
-**KEIN `id_token`**. Das `access_token`-JWT traegt `sub,sid,iss,org_id,role,permissions,exp,iat`
-— **kein `email`, kein `aud`, kein `nonce`**. => Option (a) (jwtVerify mit issuer/audience/nonce)
-nicht anwendbar. => **(b)**: Identitaet aus der verifizierten Back-Channel-Antwort (`user`-Objekt:
-`id`,`email`,`email_verified`). Verifikation = der authenticate-POST selbst (server-zu-server,
-client_secret + TLS, single-use code + PKCE). `user.id` == access_token-`sub` -> Web- und
-MCP-Kanal loesen denselben Tenant auf (idp_subject).
+## Schritte
+1. [x] `src/config.js`: `forceNumberCountry` (FORCE_NUMBER_COUNTRY, Default "" = aus).
+2. [x] `src/server.js` Onboarding: `numberCountry = config.forceNumberCountry || country`,
+       an requestNumber; language + tenant.country unveraendert (Herkunftsland). Doc-Komm.
+3. [x] `src/billing/provision-trigger.js`: neues Arg `forceNumberCountry`;
+       `numberCountry = forceNumberCountry || homeCountry`; language = languageForCountry(homeCountry).
+4. [x] `src/server.js` triggerTenantProvisioning: `forceNumberCountry: config.forceNumberCountry`.
+5. [x] `test/helpers.js` BASE_ENV: `FORCE_NUMBER_COUNTRY: ""` (kein .env-Leak, Lehre test-base-env-drift).
+6. [x] `.env.example`: FORCE_NUMBER_COUNTRY= (dokumentiert, Default leer).
+7. [x] `render.yaml`: FORCE_NUMBER_COUNTRY: "US" (Owner-Wahl: US fuer alle, jetzt).
+8. [x] Tests: f1-geo-onboard (FORCE=US -> number.country US, language de, tenant DE);
+       bk3-auto-provision (forceNumberCountry US -> number.country US, home-language).
 
-## Security-Bindungen (bleiben)
-- **state** = CSRF (signierter Cookie, match gegen Query) — unveraendert.
-- **PKCE S256** = Replay-Bindung (code nur mit code_verifier aus httpOnly-Cookie einloesbar).
-- **oidc_nonce-Cookie** bleibt als signierte Same-Session-Bindung erzwungen (kein IdP-Round-Trip
-  mehr moeglich; Kommentare korrigiert, kein toter Code).
+## Erwartetes Ergebnis (deterministisch)
+- FORCE_NUMBER_COUNTRY leer: `npm test` byte-identisch gruen (kein Verhaltenswechsel).
+- FORCE_NUMBER_COUNTRY=US, User DE: number.country="US", number.language="de",
+  tenant.country="DE", tenant.defaultLanguage="de".
 
-## Plan / Tasks
-1. [ ] RED: `test/web-auth.test.js` auf Zielbild (neue exchange-/authorizeUrl-Tests, F2 angepasst, T-P4 angepasst)
-2. [ ] GREEN: `src/web-auth.js` (`makeOidc` UM-authorize+authenticate, Identitaet aus `user`, Discovery/JWKS/jose/nonceMatches raus; login/callback nonce-Cookie behalten, kein Round-Trip)
-3. [ ] `src/config.js`: `workosApiBase` (Default `https://api.workos.com`) + Kommentar Zeile 301
-4. [ ] `test/web-auth-oidc.test.js` loeschen
-5. [ ] `render.yaml` + `PLAN-SECURITY.md` (.env.example ist read-guard-blockiert -> Report)
-6. [ ] Verifikation: `node --check`, `npm test` gruen, authorizeUrl->curl->AuthKit-Login
-7. [ ] Commit auf `fix/web-login-workos-um` (kein push, kein Deploy)
+## Verifikation
+- `node --check` auf alle geaenderten src-Dateien.
+- `npm test` (alle gruen, inkl. neuer Faelle).
 
-## Erwartetes Ergebnis (deterministisch / Feedback-Loop)
-- `npm test` exit 0.
-- `oidc.authorizeUrl(...)` -> URL beginnt `https://api.workos.com/user_management/authorize` + `provider=authkit`;
-  `curl -sI` -> `location:` = AuthKit-`/bootstrap`, NICHT `/oauth2/error?error=application_not_found`.
-- `exchange()` parst `{user}` -> `{claims:{sub:user.id, email:(email_verified===true?email:null)}}`.
+## Review (/code-review, 3 parallele Finder + Eigenverifikation)
+- Verifikation: node --check alle geaenderten Dateien OK; `npm test` 1233/1233 gruen
+  (inkl. 2 neuer Faelle); byte-identisch bei leerem Flag (Logik + Bestandstests gruen).
+- Cross-File: number.country="US" fliesst sauber in searchParamsForCountry (US in Tabelle)
+  + holdAmountForCountry("US", default)=Default; Outbound-Allowlist prueft ZIEL, nicht
+  Absender -> kein Land-Gate-Umgehen; Signatur/Budget/Caps unberuehrt (Regel 1 ok).
+- pg-Backend: number.country UND number.language getrennte Spalten (pg.js INSERT/SELECT/
+  hydrate) -> entkoppelter US/de-Roundtrip ueberlebt, kein neuer Code-Pfad.
+- 3 Findings, alle bewusst NICHT gefixt (mit Begruendung):
+  1. G5-Dup `forceNumberCountry || X` an 2 Stellen: bare `||`-Operator, kein Domaenen-
+     Code; Helper waere reine Indirektion (Clean-Code Regel 3 Vorrang Lesbarkeit, S4-Risk).
+     provision-trigger ist zudem bewusst config-frei -> kann config nicht teilen. DECLINE.
+  2. Fehlender pg-Roundtrip-Test fuer US/de: deckt denselben generischen Spalten-Pfad ab
+     wie der bestehende FR/fr-pg-Test -> niedrigwertig, kein Bug. OPTIONAL.
+  3. Keine ISO-Validierung von FORCE_NUMBER_COUNTRY: Tippfehler ("USA") -> fail-safe
+     DE-Fallback (kein Leak/Kostenrisiko), konsistent mit unvalidiertem PROVISIONING_
+     COUNTRY; Owner-env, kein User-Input. OPTIONAL-Hardening, out-of-scope. DECLINE.
+- OFFEN (owner/infra-gated, kein Code): Live-Beweis = echte US-Nummer kaufen
+  (PROVISIONING_ENABLED=true + Telnyx-App mit US-DID-Recht) + deutschsprachiger Testanruf
+  auf der +1-Nummer. Plus: FORCE_NUMBER_COUNTRY=US muss in der Render-Env/Blueprint aktiv
+  werden (render.yaml gesetzt; ggf. Dashboard-Sync noetig, Deploy-Repo upstream beachten).

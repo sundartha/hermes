@@ -266,6 +266,14 @@ export const config = {
   devLoginEnabled: process.env.DEV_LOGIN_ENABLED === "true" && !process.env.RENDER_EXTERNAL_URL,
   // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
   provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
+  // Erzwungenes KAUF-Land fuer ALLE neuen Nummern (ISO-2), ENTKOPPELT vom erkannten
+  // Herkunftsland. Leer (Default) -> Kauf-Land = erkanntes Land (heutiges Verhalten
+  // byte-identisch). Gesetzt (z.B. "US") -> jede neue Nummer wird DORT gekauft; die
+  // SPRACHE bleibt am erkannten Herkunftsland (languageForCountry -> number.language /
+  // tenant.defaultLanguage), NICHT am Kauf-Land. Trennt "wo ist der User" (Sprache)
+  // von "welche Nummer kaufen wir". Das Geo-Feature bleibt vollstaendig erhalten -
+  // diese Var neutralisiert nur die Kauf-Land-Wahl, nicht die Land-/Sprach-Erkennung.
+  forceNumberCountry: (process.env.FORCE_NUMBER_COUNTRY || "").trim().toUpperCase(),
   // Geo-Quelle bei der Registrierung (F1, Phase 6). DEFAULT AUS (fail-closed, netzfreie
   // CI): aus -> Null-Adapter (loest IP nie auf -> Land-Fallback DE, Onboard byte-identisch).
   // Erst true -> der lokale maxmind-Adapter (IP->Land-VORSCHLAG; die User-Wahl bleibt

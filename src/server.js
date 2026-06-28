@@ -1403,8 +1403,9 @@ app.post("/api/onboard", async (req, res) => {
   // (req.ip, proxy-aware via 'trust proxy') verlaesst den Prozess NIE - der Lookup ist
   // streng lokal. Eine gespoofte IP aendert nichts Autoritatives: ohne User-Wahl ist sie
   // nur ein Vorschlag, mit User-Wahl wird sie ueberstimmt. language wird aus dem Land
-  // abgeleitet (eine Quelle: languageForCountry). country/language landen auf Tenant-Geo
-  // UND Number-Request (R12). KEIN body.country -> Verhalten byte-identisch (DE/de).
+  // abgeleitet (eine Quelle: languageForCountry). country (Herkunftsland) + language
+  // landen auf Tenant-Geo; das Number-Request traegt das KAUF-Land (numberCountry, s.u.).
+  // KEIN body.country + leeres forceNumberCountry -> Verhalten byte-identisch (DE/de).
   const proposedCountry = config.geoEnabled ? geoLookup(req.ip)?.country : null;
   const country = resolveOnboardCountry({
     userCountry: req.body?.country,
@@ -1412,6 +1413,11 @@ app.post("/api/onboard", async (req, res) => {
     fallbackCountry: config.provisioningCountry,
   });
   const language = languageForCountry(country);
+  // Kauf-Land (number.country) ENTKOPPELT vom Herkunftsland: config.forceNumberCountry
+  // (z.B. "US") ueberschreibt NUR, wo die Nummer gekauft wird - die Sprache bleibt am
+  // erkannten Herkunftsland (language oben). Leer -> Kauf-Land = Herkunftsland (byte-
+  // identisch). tenant.country bleibt das Herkunftsland (Quelle fuer Sprache/Analytics).
+  const numberCountry = config.forceNumberCountry || country;
 
   // Store-Mutation + Persistenz im prozess-lokalen kritischen Abschnitt (OT-3 AC2):
   // load -> registerTenant -> setTenantGeo -> requestNumber -> save, kein fremdes await
@@ -1425,7 +1431,7 @@ app.post("/api/onboard", async (req, res) => {
       const r = requestNumber(s, {
         tenantId,
         provider: PROVIDER.TELNYX,
-        country,
+        country: numberCountry,
         language,
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
@@ -1529,6 +1535,7 @@ async function triggerTenantProvisioning(tenantId) {
       const r = requestNumberForPaidTenant(s, {
         tenantId,
         fallbackCountry: config.provisioningCountry,
+        forceNumberCountry: config.forceNumberCountry,
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
