@@ -590,6 +590,9 @@ function rowToSettings(r) {
     // F1 Phase 4: optionales Override, Spalte NULLABLE. NULL -> null (nicht gesetzt);
     // die Praezedenz (resolveCallLanguage) faellt dann auf number/tenant/'de' durch.
     language: r.language ?? null,
+    // P2: stehender Tenant-Stil, Spalte NULLABLE. NULL/fehlend (Bestands-Zeile vor dem
+    // Migrate) -> null = neutral (Siezen) -> agentStyle=null byte-identisch (Muster language).
+    agentStyle: r.agent_style ?? null,
   };
 }
 
@@ -784,14 +787,15 @@ async function flushSettings(client, tenantId, settings) {
   await client.query(
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
-        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language,
+        agent_style)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      ON CONFLICT (tenant_id) DO UPDATE SET
        agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
        allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
        allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
        allow_bank_data=EXCLUDED.allow_bank_data, sms_summary_opt_in=EXCLUDED.sms_summary_opt_in,
-       language=EXCLUDED.language`,
+       language=EXCLUDED.language, agent_style=EXCLUDED.agent_style`,
     [
       tenantId,
       settings.agentName,
@@ -803,6 +807,7 @@ async function flushSettings(client, tenantId, settings) {
       settings.allowBankData,
       settings.smsSummaryOptIn,
       settings.language,
+      settings.agentStyle ?? null,
     ],
   );
 }

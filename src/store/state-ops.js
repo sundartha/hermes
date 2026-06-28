@@ -33,7 +33,7 @@ import {
   KYC_LEVEL,
   KYC_ORDER,
 } from "./defaults.js";
-import { SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -1177,21 +1177,30 @@ export function settingsFor(s, tenantId) {
   return (s.settings[tenantId] ||= defaultSettings());
 }
 
-// Sprach-Override-Validierung (F1 Phase 4): language ist ein OPTIONALES Override mit
-// Default null - der generische typeof-Vergleich (typeof null === "object") wuerde jeden
-// String-Patch ablehnen, darum eine eigene fail-closed Pruefung. Erlaubt: ein bekannter
-// Sprachcode (SUPPORTED_LANGUAGES) ODER null/"" (= "automatisch", setzt das Override
-// zurueck -> Praezedenz faellt auf number.language/tenant.defaultLanguage). Alles andere
-// (Freitext, unbekannter Code) wird ignoriert (kein Schreiben), wie die uebrige Whitelist.
-function isValidLanguageOverride(value) {
+// Gemeinsame Form fuer optionale Enum-Overrides (language, agentStyle): null/"" setzt das
+// Override zurueck (= nicht gesetzt), sonst MUSS der Wert ein String aus der kuratierten
+// Whitelist sein. EINE Quelle (G5) statt zweier paralleler Sonderpruefungen. Der generische
+// typeof-Vergleich greift hier nicht, weil der Default null ist (typeof null === "object"
+// wuerde jeden gueltigen String-Patch ablehnen). Fail-closed: alles ausserhalb der
+// Whitelist wird verworfen (kein Schreiben) -> kein Freitext/PII/Impersonation im Feld.
+function isOptionalEnumOverride(value, allowedValues) {
   if (value === null || value === "") return true;
-  return typeof value === "string" && SUPPORTED_LANGUAGES.includes(value);
+  return typeof value === "string" && allowedValues.includes(value);
 }
+
+// Optionale Enum-Override-Felder (Default null): eigene fail-closed Katalog-Validierung
+// statt typeof. language gegen SUPPORTED_LANGUAGES, agentStyle (P2) gegen PERSONA_STYLE_IDS
+// (kuratierte Stil-IDs, NON-PII). "" und null = zuruecksetzen auf "nicht gesetzt".
+const OPTIONAL_ENUM_FIELDS = Object.freeze({
+  language: SUPPORTED_LANGUAGES,
+  agentStyle: PERSONA_STYLE_IDS,
+});
 
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
-// so keine fremden Felder in den Store schreiben oder Typen kippen. language hat eine
-// eigene Validierung (optionales Override, siehe isValidLanguageOverride).
+// so keine fremden Felder in den Store schreiben oder Typen kippen. Optionale Enum-
+// Overrides (language, agentStyle) haben eine eigene fail-closed Katalog-Validierung
+// (siehe OPTIONAL_ENUM_FIELDS / isOptionalEnumOverride) statt des typeof-Checks.
 // Liefert auch die uebernommenen Keys (fuers Audit-Log in server.js).
 export function updateSettings(s, tenantId, patch) {
   const allowed = defaultSettings();
@@ -1199,10 +1208,11 @@ export function updateSettings(s, tenantId, patch) {
   const target = settingsFor(s, tenantId);
   for (const [key, value] of Object.entries(patch || {})) {
     if (!(key in allowed)) continue;
-    if (key === "language") {
-      if (!isValidLanguageOverride(value)) continue;
-      // "" (= "automatisch") wird als null gespeichert (eine Form fuer "nicht gesetzt").
-      target.language = value === "" ? null : value;
+    const enumValues = OPTIONAL_ENUM_FIELDS[key];
+    if (enumValues) {
+      if (!isOptionalEnumOverride(value, enumValues)) continue;
+      // "" (= "nicht gesetzt") wird als null gespeichert (eine Form fuer "nicht gesetzt").
+      target[key] = value === "" ? null : value;
       changed.push(key);
     } else if (typeof value === typeof allowed[key]) {
       target[key] = value;
