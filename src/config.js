@@ -252,6 +252,12 @@ export const config = {
   // NUR, wenn er die Capability deklariert; sonst weiter nur Text/structuredContent. Mit
   // MCP_UI_ENABLED=false explizit abschaltbar (Tests pinnen das via BASE_ENV).
   mcpUiEnabled: (process.env.MCP_UI_ENABLED || "true") === "true",
+  // Strukturierter Per-Call-Kontext (PLAN-PERSONAL-ASSISTANT P3): optionales context-
+  // Objekt an place_call -> kompakte HINTERGRUND-Sektion im Outbound-systemPrompt + additiv
+  // persistiertes Feld. DEFAULT AUS (fail-closed): b.context wird ignoriert, der Prompt-
+  // Block + /api/calls bleiben byte-identisch (P0-Pins). Eigenes Flag (nicht null-Default
+  // wie agentStyle), weil P3 einen neuen Persist-/Validierungs-Pfad oeffnet (Owner #5).
+  assistantContextEnabled: (process.env.ASSISTANT_CONTEXT_ENABLED || "false") === "true",
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth

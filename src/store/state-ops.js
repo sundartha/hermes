@@ -101,6 +101,7 @@ export function createCall(
     twilioSid,
     briefing,
     constraints,
+    context,
     language,
     maxDurationS,
     requestedBy,
@@ -126,6 +127,10 @@ export function createCall(
     goal: goal || null,
     briefing: briefing || null,
     constraints: constraints || null,
+    // P3 (PLAN-PERSONAL-ASSISTANT): strukturierter Per-Call-Kontext (additiv NULLABLE).
+    // Nur befuellt, wenn der Server das Flag an hat (sonst null -> Prompt-Block + Persist
+    // byte-identisch). Speist KEINE Identitaetsgroesse; reine Hintergrund-Faerbung.
+    context: context || null,
     // caller_name-Producer entfernt (G1, Identitaets-Bindung): die Offenlegung ist
     // an tenant.ownerName gebunden, NICHT per Call-Parameter setzbar. DB-Spalte
     // bleibt additiv nullable (kein destruktives Migrat) -> Feld bleibt im Record.
