@@ -553,10 +553,21 @@ const PREMIUM_PREFIXES = [
   "+33820",
 ];
 const HOUR_MS = 60 * 60 * 1000;
+const SECONDS_PER_MINUTE = 60;
 
 const isDenied = (to) =>
   EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
+
+// Worst-Case-Minutentarif (GANZZAHL Cents/min) des Ziels (outbound-p1c, Kosten-Achse).
+// EINE Kosten-Quelle (G5): Vorab-Reservierung, Budget-Reconcile UND Stripe-Voice-Meter.
+// Inlands-Vorwahl -> guenstiger Inlandstarif, alles andere -> Worst-Case-Default. to ist an
+// der Aufrufstelle bereits E.164-validiert (numberGateError). Prefix-Match wie matchesPrefix.
+function tariffCentsPerMin(to) {
+  return config.voiceTariffDomesticPrefixes.some((p) => to.startsWith(p))
+    ? config.voiceTariffDomesticCents
+    : config.voiceTariffDefaultCents;
+}
 
 // Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
 // nie ueber die globale Erlaubnis hinaus (Profil "*"/leer = keine Zusatz-Einschraenkung).
@@ -880,27 +891,42 @@ app.post("/voice/outbound", async (req, res) => {
   res.type("text/xml").send(render(turnDirectives(call, opening), call.provider));
 });
 
-// Sekunden pro abgerechneter Voice-Minute (G25). Abgerechnet wird ab answeredAt
-// (vorher klingelt es nur, keine Gespraechszeit) bis endedAt, aufgerundet (Provider-
-// Minutentakt). Ein nie beantworteter Call (kein answeredAt) hat 0 Minuten.
 const MS_PER_MINUTE = 60 * 1000;
 
+// Abgerechnete Voice-Minuten EINES Calls (ceil ab answeredAt bis endedAt, Provider-
+// Minutentakt). Nie beantwortet -> 0. EINE Minuten-Quelle (G5) fuer Stripe-Voice-Meter
+// UND Budget-Reconcile.
+function voiceMinutesOf(call) {
+  if (!call.answeredAt || !call.endedAt) return 0;
+  return Math.ceil((new Date(call.endedAt) - new Date(call.answeredAt)) / MS_PER_MINUTE);
+}
+
 // Voice-Minuten-Meter EINES beendeten Calls (P6b3, Meter 2). NUR im Metering-Pfad
-// (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt (recordUsageEvent) steht
-// im Namen. Nicht beantwortet -> 0 Minuten -> kein Event (kein Null-Beleg). Kosten-
-// Cents aus dem benannten Tarif (config.voiceMinuteCostCents x Minuten). callId
-// verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
+// (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt (recordUsageEvent) im Namen.
+// 0 Minuten -> kein Event (kein Null-Beleg). Kosten-Cents aus dem Ziel-Tarif
+// (tariffCentsPerMin, EINE Kosten-Quelle G5) x Minuten.
 function recordVoiceMinuteMeter(call) {
-  if (!call.answeredAt || !call.endedAt) return;
-  const minutes = Math.ceil((new Date(call.endedAt) - new Date(call.answeredAt)) / MS_PER_MINUTE);
+  const minutes = voiceMinutesOf(call);
   if (minutes <= 0) return;
   store.recordUsageEvent({
     tenantId: call.tenantId,
     callId: call.id,
     kind: USAGE_EVENT_KIND.VOICE_MINUTE,
     quantity: minutes,
-    costCents: minutes * config.voiceMinuteCostCents,
+    costCents: minutes * tariffCentsPerMin(call.to),
   });
+}
+
+// Reconcile (outbound-p1c, Kosten-Achse, D1): bucht die IST-Voice-Minuten eines beendeten
+// OUTBOUND-Calls (Minuten x Ziel-Tarif) in den Budget-Bucket des Tenants - so sieht der
+// Budget-Gate + die Vorab-Reservierung endlich die Carrier-Minuten. IMMER (auch ohne
+// PAYMENT_ENABLED, im owner-only-Interim). Inbound byte-identisch (kein Budget-Abzug).
+// Nie beantwortet -> 0 Minuten -> kein Abzug. Nebeneffekt (Store-Mutation) im Namen (N7).
+function reconcileOutboundVoiceBudget(call) {
+  if (call.direction !== "outbound") return;
+  const minutes = voiceMinutesOf(call);
+  if (minutes <= 0) return;
+  store.addVoiceUsageCostCents(call.tenantId, minutes * tariffCentsPerMin(call.to));
 }
 
 // number_month-Meter EINER neu aktivierten Nummer (P6b3, Meter 1). NUR im Metering-
@@ -928,6 +954,7 @@ async function finishCall(call) {
   // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
   // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
   if (config.paymentEnabled) recordVoiceMinuteMeter(call);
+  reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
   store.save();
 
   if (call.status !== "completed" || !call.transcript.length) {
@@ -1153,6 +1180,17 @@ app.post("/api/calls", async (req, res) => {
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
+  // Vorab-Reservierung (Kosten-Achse, outbound-p1c, D1): Worst-Case-Minutenpreis (Ziel-Tarif
+  // x maximal moegliche Minuten) gegen den verbleibenden effektiven Tenant-Cap. Reserve > Rest
+  // -> 402 VOR dem Dial (kein Originate). Schnittmenge mit dem Budget-Gate oben; globaler
+  // Notaus bleibt PARALLEL (Regel 1).
+  const reserveCents = tariffCentsPerMin(to) * Math.ceil(maxDur / SECONDS_PER_MINUTE);
+  if (store.reserveExceedsBudget(tenantId, reserveCents, config)) {
+    audit("place_call_denied", req, `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`);
+    return res
+      .status(402)
+      .json({ error: "Voraussichtliche Anrufkosten ueberschreiten das verfuegbare Budget." });
+  }
   // Outbound-Gespraechssprache (F1 Phase 8, Owner #8) aus DERSELBEN Praezedenz wie
   // Inbound: settings.language (Owner-Override) -> number.language (Geo-Anker der eigenen
   // aktiven Nummer) -> tenant.defaultLanguage -> "de". EINE Quelle (resolveCallLanguage),
@@ -1459,7 +1497,13 @@ app.post("/api/onboard", async (req, res) => {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      registerTenant(s, tenantId, { firstName, lastName, privateNumber, idpSubject: sub });
+      registerTenant(s, tenantId, {
+        firstName,
+        lastName,
+        privateNumber,
+        idpSubject: sub,
+        defaultBudgetCents: config.defaultTenantBudgetCents,
+      });
       setTenantGeo(s, tenantId, { country, defaultLanguage: language });
       const r = requestNumber(s, {
         tenantId,

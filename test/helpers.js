@@ -150,9 +150,13 @@ export const BASE_ENV = {
   STRIPE_STARTER_PRICE_ID: "",
   STRIPE_BUSINESS_PRICE_ID: "",
   STRIPE_WEBHOOK_SECRET: "",
-  // Voice-Minuten-Meter-Tarif (P6b3) neutral 0: ohne diese Zeile leakt eine lokale
-  // .env mit VOICE_MINUTE_COST_CENTS via dotenv in Spawn-Tests -> Baseline-Drift.
-  VOICE_MINUTE_COST_CENTS: "0",
+  // outbound-p1c: Kosten-Achse neutral auf 0 (sonst leakt eine lokale .env via dotenv in
+  // Spawn-Tests). Tarif 0 -> Reservierung feuert nie + Reconcile/Meter buchen 0 (byte-
+  // identisch zum frueheren VOICE_MINUTE_COST_CENTS=0); Default-Budget 0 -> kein Seed (Onboard
+  // byte-identisch). Die outbound-p1c-Tests setzen die Werte explizit.
+  VOICE_TARIFF_DOMESTIC_CENTS: "0",
+  VOICE_TARIFF_DEFAULT_CENTS: "0",
+  DEFAULT_TENANT_BUDGET_CENTS: "0",
   // ---- MCP-Auth + OAuth + Hosting ----
   // Neutral; oauth.test.js / mcp-Tests setzen Issuer/Audience/Modus explizit.
   MCP_AUTH: "",

@@ -201,3 +201,36 @@ test("P6b3 Test 7: usage_event ist tenant-isoliert (Cross-Tenant-Read = leer, RL
     await db.query(`RESET ROLE`);
   }
 });
+
+// outbound-p1c (Spec-Test 6, "beide Backends"): die neue Vorab-Reservierung + der
+// Budget-Reconcile + der registerTenant-Default-Seed muessen auch ueber die pg-Fassade
+// + Persistenz funktionieren. pglite = kein Netz, keine externe DB (F.I.R.S.T.).
+test("outbound-p1c Test 8 (pg): reserveExceedsBudget + addVoiceUsageCostCents ueber den Wrapper", async () => {
+  const { store } = await makePgTestStore();
+  const s = store.load();
+  ops.setTenantBudget(s, TENANT_A, { budgetCents: 150, hardCapCents: 150 }); // 1.50 EUR Cap
+  assert.equal(store.reserveExceedsBudget(TENANT_A, 1500, PRICES), true, "15 EUR Reserve > 1.50 EUR Cap");
+  assert.equal(store.reserveExceedsBudget(TENANT_A, 60, PRICES), false, "0.60 EUR Reserve < 1.50 EUR Cap");
+  // Reconcile bucht die Ist-Minuten in den Spiegel-Bucket -> hebt budgetExceeded an.
+  store.addVoiceUsageCostCents(TENANT_A, 200); // 2 EUR Ist > 1.50 EUR Cap
+  assert.equal(store.budgetExceeded(TENANT_A, PRICES), true, "Ist-Minuten reissen den Cap");
+});
+
+test("outbound-p1c Test 9 (pg): tenant_budget-Seed + costEur-Reconcile ueberleben save()->reload", async () => {
+  const { store, runner } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, "user_x", { firstName: "Max", defaultBudgetCents: 1000 });
+  ops.addVoiceUsageCostCents(s, "user_x", 250); // 2.50 EUR Carrier-Minuten
+  await store.save();
+
+  // Frischer Store auf DERSELBEN DB -> hydriert aus der DB (kein Spiegel-Reuse).
+  const store2 = makePgStore(runner);
+  await store2.init();
+  const s2 = store2.load();
+  assert.deepEqual(
+    s2.tenantBudgets.find((b) => b.tenantId === "user_x"),
+    { tenantId: "user_x", budgetCents: 1000, hardCapCents: 1000 },
+    "tenant_budget-Default-Seed persistiert (flushTenantBudgets)",
+  );
+  assert.equal(ops.usageFor(s2, "user_x").costEur, 2.5, "Reconcile-costEur persistiert (flushUsage)");
+});

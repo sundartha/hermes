@@ -150,6 +150,13 @@ services:
         value: claude-haiku-4-5
       - key: MAX_BUDGET_EUR
         value: "8"
+      # ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c) ----
+      - key: VOICE_TARIFF_DOMESTIC_CENTS
+        value: "20"
+      - key: VOICE_TARIFF_DEFAULT_CENTS
+        value: "300"
+      - key: DEFAULT_TENANT_BUDGET_CENTS
+        value: "1000"
       # ---- LLM-Resilienz (Budget-Engine, src/llm.js) ----
       - key: LLM_REQUEST_TIMEOUT_MS
         value: "3500"

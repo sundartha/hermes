@@ -90,6 +90,8 @@ export const {
   trackUsage,
   budgetExceeded,
   globalBudgetExceeded,
+  reserveExceedsBudget,
+  addVoiceUsageCostCents,
   usageOf,
   addNotification,
   pruneOldData,

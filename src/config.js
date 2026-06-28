@@ -53,6 +53,11 @@ function detectProduction() {
   return !!process.env.RENDER_EXTERNAL_URL;
 }
 
+// Ziel-Vorwahlen mit Inlands-Tarif (E.164). BEWUSST eigenstaendig, NICHT an das Land-Gate
+// (allowedCountryCodes) gekoppelt: das Gate wird in Phase 4 '*' (weltweit), der Inlands-
+// Tarif bleibt auf diesen Vorwahlen. Alles andere -> voiceTariffDefaultCents (Worst-Case).
+const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
+
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -124,17 +129,33 @@ export const config = {
     min: 0,
   }),
   paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
-  // Voice-Minuten-Tarif fuer den Stripe-Meter (P6b3), GANZZAHL Cents (G26). Nur im
-  // Metering-Pfad (PAYMENT_ENABLED) genutzt; 0 = kein Cost-Cents-Beleg (Meter meldet
-  // dann die Menge ohne Kostenbeleg). Live mit dem Provider-Tarif abgleichen.
-  voiceMinuteCostCents: numEnv("VOICE_MINUTE_COST_CENTS", process.env.VOICE_MINUTE_COST_CENTS, {
-    fallback: 0,
+  // ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c, D1) ----
+  // Voice-Minuten-Tarif (GANZZAHL Cents/min, G26). EINE Kosten-Quelle (G5): speist die
+  // Vorab-Reservierung (Worst-Case vor dem Dial), den Budget-Reconcile (Ist bei Call-Ende)
+  // UND den Stripe-Voice-Meter (recordVoiceMinuteMeter) - loest das fruehere
+  // voiceMinuteCostCents auf. Inland (voiceTariffDomesticPrefixes) guenstig, alles andere
+  // Worst-Case-Default. Konservativ gesetzt; live mit dem Provider-Tarif abgleichen.
+  voiceTariffDomesticCents: numEnv("VOICE_TARIFF_DOMESTIC_CENTS", process.env.VOICE_TARIFF_DOMESTIC_CENTS, {
+    fallback: 20,
+    min: 0,
+  }),
+  voiceTariffDefaultCents: numEnv("VOICE_TARIFF_DEFAULT_CENTS", process.env.VOICE_TARIFF_DEFAULT_CENTS, {
+    fallback: 300,
+    min: 0,
+  }),
+  voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
+  // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26) beim Registrieren (D5): nimmt
+  // jeden neuen Tenant aus dem geteilten globalen Pool (sonst effectiveCapEur = maxBudgetEur).
+  // 0 = kein Default-Seed (Tenant faellt auf den globalen Cap). Globaler Backstop
+  // (maxBudgetEur) bleibt PARALLEL (Schnittmenge, Regel 1) und wird NICHT angehoben.
+  defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
+    fallback: 1000,
     min: 0,
   }),
   // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede
   // erfolgreich gesendete Summary-SMS erzeugt ein USAGE_EVENT_KIND.SMS-Event mit diesem
-  // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg
-  // (wie voiceMinuteCostCents); Live mit dem Provider-SMS-Tarif abgleichen.
+  // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg;
+  // Live mit dem Provider-SMS-Tarif abgleichen.
   smsCostCents: numEnv("SMS_COST_CENTS", process.env.SMS_COST_CENTS, { fallback: 0, min: 0 }),
   // ---- Abo-Buchung (Stripe Recurring, W4) ----
   // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer = Tier nicht buchbar
