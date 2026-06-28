@@ -447,7 +447,12 @@ export function seedBootstrapNumberFromConfig(s, e164, tenantId, provider) {
 export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) {
   if (!findTenant(s, tenantId)) s.tenants.push({ id: tenantId, status: TENANT_STATUS.ACTIVE });
   seedBootstrapNumber(s, e164, tenantId, provider);
-  seedBootstrapKyc(s, tenantId); // Neu-Setup: Erst-Tenant ist verifizierter Betreiber (id_verified)
+  // KYC-Heal NUR fuer den Bootstrap/Owner (Phase outbound-p1fix): ein per CLI off-label mit
+  // Nicht-Owner-tenantId angelegter Tenant darf NICHT auto-id_verified werden (waere KYC-Gate-
+  // Bypass + Call-Anyone-Subscriber). Tenant-/Nummer-Anlage bleibt fuer JEDEN tenantId; nur der
+  // KYC-Heal ist gegated. seedBootstrapKyc bleibt general - der Guard sitzt an der off-label
+  // Eintrittsstelle, NICHT in der Funktion (G2/Least-Astonishment).
+  if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
 }
 
 // Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
