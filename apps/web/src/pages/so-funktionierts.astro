@@ -1,7 +1,10 @@
 ---
 // Marketing: "How it works" (SSG). Statisches HTML, kein Client-Fetch.
-// Drei Schritte vom MCP-Anschluss bis zum laufenden Agenten (Auftrag W1).
+// Drei Schritte vom MCP-Anschluss bis zum laufenden Agenten. Visuell 1:1 zum
+// Claude-Design (How-it-works-Band): Wolken-Band + Glas-Karten (sections.css),
+// eingebettet ins gemeinsame Site-Chrome (Nav mit Fluegel-Logo + Footer).
 import Site from "../layouts/Site.astro";
+import "../styles/sections.css";
 
 const steps = [
   {
@@ -23,39 +26,22 @@ const steps = [
   title="How Hermes works — Sundartha"
   description="Your own phone assistant in three steps: connect via MCP, pick a number and plan, let Hermes make the calls."
 >
-  <section class="hero">
-    <div class="container">
-      <span class="hero__eyebrow">In three steps</span>
-      <h1 class="hero__title">How <span class="highlight">Hermes</span> works</h1>
-      <p class="hero__lead">
+  <section class="band band--center" id="how">
+    <div class="band__inner">
+      <p class="band__eyebrow">In three steps</p>
+      <h1 class="band__title">How <em>Hermes</em> works</h1>
+      <p class="band__lead">
         From the MCP connection to the finished call log — no hardware of your
         own, no waiting.
       </p>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
-      <div class="grid grid--three">
+      <div class="steps">
         {steps.map((step, index) => (
-          <article class="card">
-            <span class="step__index" aria-hidden="true">{index + 1}</span>
-            <h2 class="card__title">{step.title}</h2>
-            <p class="card__text">{step.text}</p>
+          <article class="step">
+            <span class="step__num" aria-hidden="true">{index + 1}</span>
+            <h2 class="step__heading">{step.title}</h2>
+            <p class="step__copy">{step.text}</p>
           </article>
         ))}
-      </div>
-    </div>
-  </section>
-
-  <section class="section section--surface">
-    <div class="container">
-      <div class="section__head">
-        <h2 class="section__title">Ready to try it?</h2>
-      </div>
-      <div class="hero__actions">
-        <a class="button button--primary" href="/registrieren">Get started</a>
-        <a class="button button--action" href="/preise">View pricing</a>
       </div>
     </div>
   </section>

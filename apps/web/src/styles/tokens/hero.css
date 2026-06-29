@@ -97,6 +97,9 @@
   --hero-border-width-thin: 1px;
   --hero-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --hero-duration-fast: 0.22s;
+  --hero-ease-soft: ease-in-out; /* Drift-Animation (sanftes Hin und Her) */
+  --hero-duration-drift: 6.8s; /* Drift-Dauer des Fluegel-Logos */
+  --hero-size-logo: 42px; /* Nav-Fluegel-Logo (groesser als --size-icon) */
 
   /* --- Semantische Hero/Dark-Rollen (zeigen nur auf die Werte oben) --- */
   --font-serif: var(--font-serif-raw);
@@ -167,4 +170,7 @@
   --border-width: var(--hero-border-width-thin);
   --motion-ease: var(--hero-ease-out);
   --motion-duration: var(--hero-duration-fast);
+  --motion-ease-soft: var(--hero-ease-soft);
+  --motion-drift-duration: var(--hero-duration-drift);
+  --size-logo: var(--hero-size-logo);
 }

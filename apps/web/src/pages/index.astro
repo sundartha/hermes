@@ -60,7 +60,7 @@ const pricingHref = "/preise";
       <!-- NAV -->
       <nav class="hero-nav">
         <div class="nav-brand">
-          <img class="nav-logo" src="/assets/sandal_solid.png" alt="Hermes winged sandal" />
+          <img class="nav-logo" src="/assets/hermes-wing.png" alt="Hermes wing" />
           <div class="brand-text">
             <span class="brand-name">HERMES</span>
             <span class="brand-by">by Sundartha</span>
@@ -72,7 +72,7 @@ const pricingHref = "/preise";
         </div>
         <div class="nav-right">
           <a class="nav-link nav-login" href={LOGIN_URL}>Log in</a>
-          <a class="btn btn--nav" href={LOGIN_URL}>Get started
+          <a class="btn btn--nav" href={LOGIN_URL}>Get your wings
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10305a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
           </a>
         </div>
@@ -81,20 +81,12 @@ const pricingHref = "/preise";
       <!-- HERO-CONTENT -->
       <div class="hero-content">
         <div class="hero-inner">
-          <!-- Live-Wing: deformierbarer Pixi-Mesh (src/wing/engine.js), als
-               progressive Enhancement. Bis der Canvas mountet (bzw. bei
-               prefers-reduced-motion / ohne JS) zeigt das statische Wing-PNG.
-               Rein dekorativ (die Marke steht im Text) -> aria-hidden. -->
-          <div class="hero-wing" id="hermesWing" aria-hidden="true">
-            <img class="wing-fallback" src="/assets/hermes-wing.png" alt="" width="500" height="500" />
-          </div>
           <h1 class="hero-title">Give your AI <em>wings</em>.</h1>
-          <p class="hero-sub">The phone line for your AI agents.</p>
-          <a class="btn btn--hero" href={LOGIN_URL}>Get started
+          <p class="hero-sub">The phone number for your AI agents.</p>
+          <a class="btn btn--hero" href={LOGIN_URL}>Get your wings
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10305a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
           </a>
         </div>
-        <div class="hero-foot">Works with Claude &amp; Gemini · Model Context Protocol</div>
       </div>
     </div>
 
@@ -102,23 +94,6 @@ const pricingHref = "/preise";
          Skripts: letzteres wuerde Astro inline einbetten und unter der CSP
          (script-src 'self', kein 'unsafe-inline') blockiert. -->
     <script is:inline src="/assets/hero.js" defer></script>
-
-    <script>
-      // Hero-Wing mounten. Bewusst ein verarbeitetes Astro-Skript (kein
-      // is:inline): Vite buendelt es + emittiert es same-origin, damit es
-      // unter der strikten CSP (script-src 'self') laeuft. pixi/gsap kommen
-      // per dynamischem import() lazy in einen eigenen Chunk.
-      const wingHost = document.getElementById("hermesWing");
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (wingHost && !reduceMotion) {
-        import("../wing/engine.js")
-          .then(({ mountWing }) =>
-            mountWing(wingHost, { size: 460, status: "idle", textureUrl: "/assets/hermes-wing.png" }),
-          )
-          .then(() => wingHost.classList.add("wing-live"))
-          .catch((err) => console.error("Hero-Wing mount fehlgeschlagen", err));
-      }
-    </script>
 
     <style is:global>
       * { box-sizing: border-box; }
@@ -177,8 +152,21 @@ const pricingHref = "/preise";
       }
       .nav-brand { display: flex; align-items: center; gap: 12px; }
       .nav-logo {
-        width: auto; height: 34px; display: block;
+        width: auto; height: 42px; display: block;
         filter: drop-shadow(0 2px 9px rgba(7,18,40,.6));
+        transform-origin: 26% 86%;
+        animation: navWingDrift 6.8s ease-in-out infinite;
+      }
+      /* Sanftes Treiben des Fluegel-Logos (reine CSS-Keyframes, CSP-konform). */
+      @keyframes navWingDrift {
+        0%   { transform: translate(0, 0) rotate(0deg); }
+        22%  { transform: translate(-0.7%, -1.1%) rotate(-1deg); }
+        48%  { transform: translate(0.5%, 0.5%) rotate(0.6deg); }
+        74%  { transform: translate(0.8%, -0.7%) rotate(1.3deg); }
+        100% { transform: translate(0, 0) rotate(0deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .nav-logo { animation: none; }
       }
       .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
       .brand-name {
@@ -239,26 +227,6 @@ const pricingHref = "/preise";
         padding: clamp(118px, 15vh, 190px) 24px 64px;
       }
       .hero-inner { display: flex; flex-direction: column; align-items: center; max-width: 700px; }
-
-      /* Live-Wing-Showpiece: quadratische Box, der Pixi-Canvas bzw. das
-         Fallback-PNG fuellt sie. !important schlaegt die Inline-Pixelgroesse,
-         die Pixi (autoDensity) auf den Canvas setzt. wing-live blendet das
-         statische PNG aus, sobald der Mesh gemountet ist. */
-      .hero-wing {
-        width: clamp(200px, 28vw, 340px);
-        aspect-ratio: 1 / 1;
-        margin: 0 auto 2px;
-        line-height: 0;
-        pointer-events: none;
-      }
-      .hero-wing .wing-fallback,
-      .hero-wing canvas {
-        display: block;
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: contain;
-      }
-      .hero-wing.wing-live .wing-fallback { display: none; }
       .hero-title {
         margin: 0; white-space: nowrap;
         /* Norse (runisch); Bruecke auf Instrument Serif bis die Norse-Datei vorliegt. */
@@ -273,14 +241,6 @@ const pricingHref = "/preise";
         font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5;
         color: rgba(255,255,255,.96); text-shadow: 0 1px 16px rgba(7,16,38,.6);
       }
-      .hero-foot {
-        position: absolute; left: 0; right: 0; bottom: 30px;
-        text-align: center;
-        font-family: "Space Grotesk", sans-serif;
-        font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase;
-        color: rgba(255,255,255,.7); text-shadow: 0 1px 12px rgba(7,16,38,.75);
-      }
-
       /* Kleine Viewports: H1 darf umbrechen, Mittel-Nav weicht */
       @media (max-width: 560px) {
         .hero-title { white-space: normal; }

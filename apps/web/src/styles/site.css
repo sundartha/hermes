@@ -123,8 +123,37 @@ svg {
 
 .nav-logo {
   width: auto;
-  height: var(--size-icon);
+  height: var(--size-logo);
   filter: var(--shadow-logo);
+  transform-origin: 26% 86%;
+  animation: navWingDrift var(--motion-drift-duration) var(--motion-ease-soft)
+    infinite;
+}
+
+/* Sanftes Treiben des Fluegel-Logos (reine CSS-Keyframes, CSP-konform;
+ * Geometrie 1:1 wie der Hero in index.astro). */
+@keyframes navWingDrift {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  22% {
+    transform: translate(-0.7%, -1.1%) rotate(-1deg);
+  }
+  48% {
+    transform: translate(0.5%, 0.5%) rotate(0.6deg);
+  }
+  74% {
+    transform: translate(0.8%, -0.7%) rotate(1.3deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-logo {
+    animation: none;
+  }
 }
 
 .brand-text {

@@ -1,18 +1,13 @@
 ---
-// Marketing: Pricing (SSG). Zwei Tarife als statisches Markup; der CTA funnelt
-// ueber LOGIN_URL in den Login-Einstieg (echter Checkout kommt in BK2). KEINE
-// Stripe-Anbindung, KEIN Client-Fetch hier.
+// Marketing: Pricing (SSG). Zwei Tarife aus dem geteilten Plan-Katalog
+// (lib/plans.js, drift-getestete Backend-SSoT-Kopie) — USD via formatPlanPrice,
+// KEIN Preis-Literal hier. Zur BUILD-Zeit gerendert (zero-JS SSG).
 //
-// BK0: Preise/Leistungen kommen aus dem geteilten Plan-Katalog (lib/plans.js,
-// Marketing-Spiegel der Backend-SSoT src/plans.js, drift-getestet) - kein lokales
-// Preis-Literal mehr. Zur BUILD-Zeit gerendert (zero-JS SSG), NICHT per fetch.
-//
-// EHRLICHER BEFUND (Strategie R1, §2.6): Das Backend kennt die Abo-/Preis-Tiers
-// jetzt (Plan-Katalog), aber der Self-Service bucht noch nicht von hier aus. Die
-// Karte hinterlegst du nach dem Login in deinem Bereich (auth-gated). Echter
-// Checkout von dieser Seite aus ist BK2 und wird hier NICHT vorgetaeuscht (kein
-// Fake-Charge). Der Hinweis-Block unten macht das transparent.
+// Visuell 1:1 zum Claude-Design (Pricing-Band): Wolken-Band + Glas-Karten +
+// Haken-Features (sections.css), eingebettet ins gemeinsame Site-Chrome. Der CTA
+// funnelt ueber LOGIN_URL in den Login-Einstieg (echter Checkout = spaeter).
 import Site from "../layouts/Site.astro";
+import "../styles/sections.css";
 import { LOGIN_URL } from "../lib/routes.js";
 import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
 ---
@@ -21,42 +16,31 @@ import { PLAN_CATALOG, formatPlanPrice } from "../lib/plans.js";
   title="Pricing — Sundartha Hermes"
   description="Two clear plans for Hermes: Starter and Business. Call minutes, phone numbers and support at a glance."
 >
-  <section class="hero">
-    <div class="container">
-      <span class="hero__eyebrow">Plans</span>
-      <h1 class="hero__title">Pricing that <span class="highlight">grows with you</span></h1>
-      <p class="hero__lead">
+  <section class="band band--alt band--center" id="pricing">
+    <div class="band__inner">
+      <p class="band__eyebrow">Plans</p>
+      <h1 class="band__title">Pricing that <em>grows with you</em></h1>
+      <p class="band__lead">
         Start small and unlock more as your assistant takes on more. No hidden
         costs.
       </p>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="container">
-      <div class="pricing">
+      <div class="tiers">
         {PLAN_CATALOG.map((plan) => (
-          <article class={plan.featured ? "plan plan--featured" : "plan"}>
-            {plan.featured && <span class="badge badge--accent">Popular</span>}
-            <h2 class="plan__name">{plan.name}</h2>
-            <p class="plan__price">{formatPlanPrice(plan.amountCents, plan.currency)} <small>per {plan.cadence}</small></p>
-            <ul class="plan__features">
+          <article class={plan.featured ? "tier tier--featured" : "tier"}>
+            {plan.featured && <span class="tier__badge">Popular</span>}
+            <h2 class="tier__name">{plan.name}</h2>
+            <p class="tier__price">
+              {formatPlanPrice(plan.amountCents, plan.currency)}
+              <small>per {plan.cadence}</small>
+            </p>
+            <ul class="tier__features">
               {plan.features.map((feature) => (
-                <li class="plan__feature">{feature}</li>
+                <li class="tier__feature">{feature}</li>
               ))}
             </ul>
-            <a class="button button--primary plan__cta" href={LOGIN_URL}>Choose plan</a>
+            <a class="button button--primary tier__cta" href={LOGIN_URL}>Choose plan</a>
           </article>
         ))}
-      </div>
-
-      <div class="note">
-        <h2 class="note__title">How billing works</h2>
-        <p class="note__text">
-          You start your monthly subscription after signing in. Your card is
-          charged only for the plan you choose; nothing is charged without your
-          consent.
-        </p>
       </div>
     </div>
   </section>

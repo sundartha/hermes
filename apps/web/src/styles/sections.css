@@ -1,0 +1,221 @@
+/*
+ * Marketing-Sektionen (How-it-works + Pricing) — 1:1 aus dem verbindlichen
+ * Claude-Design (Design-System site/index.html) gehoben, analog zum Vollbild-
+ * Hero (pages/index.astro): rohe Werte zur Pixel-Treue, CSP-konform als
+ * externes same-origin Stylesheet (Astro build.inlineStylesheets:"never").
+ *
+ * Eigener Klassen-Namespace (band/steps/tiers): kollidiert bewusst NICHT mit dem
+ * globalen Site-Chrome (site.css: .pricing/.plan/.step__index/.card/.note — von
+ * weiteren Unterseiten genutzt). NUR von so-funktionierts.astro + preise.astro
+ * importiert.
+ *
+ * Schrift bleibt die Site-Verdrahtung (var(--font-serif/--font-grotesk)) — NICHT
+ * die Schrift aus dem Design-Projekt (bewusste Ausnahme laut Auftrag).
+ */
+
+/* --- Gemeinsames dunkles Band mit Wolken-Textur --- */
+.band {
+  position: relative;
+  padding: 96px 24px;
+  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(rgba(8, 26, 54, 0.78), rgba(9, 30, 62, 0.86)),
+    url("/assets/clouds_band.jpg") center / cover no-repeat;
+}
+
+.band--alt {
+  background: linear-gradient(rgba(9, 30, 62, 0.82), rgba(7, 22, 48, 0.9)),
+    url("/assets/clouds_band.jpg") center / cover no-repeat;
+}
+
+.band--center {
+  text-align: center;
+}
+
+.band__inner {
+  position: relative;
+  z-index: 1;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.band__eyebrow {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.band__title {
+  margin: 0 0 14px;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(34px, 4.4vw, 56px);
+  line-height: 1.02;
+  color: #fff;
+}
+
+.band__title em {
+  font-style: italic;
+}
+
+.band__lead {
+  margin: 0 auto;
+  max-width: 620px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* --- How it works: drei Schritte (Glas-Karten) --- */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-top: 54px;
+}
+
+.step {
+  padding: 30px 26px;
+  text-align: left;
+  background: rgba(19, 51, 92, 0.62);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+}
+
+.step__num {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.step__heading {
+  margin: 0 0 10px;
+  font-size: 19px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.step__copy {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+/* --- Pricing: zwei Tarife (Glas-Karten + Haken-Features) --- */
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 360px));
+  gap: 24px;
+  justify-content: center;
+  margin-top: 54px;
+}
+
+.tier {
+  position: relative;
+  padding: 34px 30px;
+  text-align: left;
+  background: rgba(19, 51, 92, 0.62);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+}
+
+.tier--featured {
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.6);
+}
+
+.tier__badge {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  padding: 5px 11px;
+  background: #fff;
+  color: #0a2245;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 999px;
+}
+
+.tier__name {
+  margin: 0 0 8px;
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.tier__price {
+  margin: 0 0 22px;
+  font-size: 46px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tier__price small {
+  font-size: 15px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tier__features {
+  list-style: none;
+  margin: 0 0 26px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tier__feature {
+  position: relative;
+  padding-left: 26px;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* Haken (zwei Raender im 45deg-Winkel) — zeichnungs-intrinsische Geometrie. */
+.tier__feature::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 14px;
+  height: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.9);
+  transform: rotate(-45deg);
+}
+
+/* CTA nutzt die globale weisse Pille (.button button--primary); hier nur die
+ * vom Design vorgegebene Voll-Breite/Groesse ergaenzen. */
+.tier__cta {
+  width: 100%;
+  justify-content: center;
+  font-size: 15px;
+  padding: 14px 24px;
+}
+
+/* --- Responsive (aus dem Design) --- */
+@media (max-width: 880px) {
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .tiers {
+    grid-template-columns: 1fr;
+  }
+}
