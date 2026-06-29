@@ -414,6 +414,12 @@ export function dailySmsCount(tenantId, sinceIso) {
   return ops.dailySmsCount(load(), tenantId, sinceIso);
 }
 
+// Minuten-Kontingent-Gate-Praedikat (B1b): reine Query, kein save (wie budgetExceeded).
+// opts = { includedMinutes, periodStartIso }, fail-closed in state-ops.
+export function planMinutesExceeded(tenantId, opts) {
+  return ops.planMinutesExceeded(load(), tenantId, opts);
+}
+
 export function pendingMeterEvents() {
   return ops.pendingMeterEvents(load());
 }
