@@ -85,12 +85,13 @@ async function withGateway(body, fn) {
   }
 }
 
-const PROBE_KEYS = ["call_id", "duration_s", "last_transcript_lines", "status"];
+const PROBE_KEYS = ["call_id", "duration_s", "failure_reason", "last_transcript_lines", "status"];
 const callStatusOutput = z.object({
   call_id: z.string(),
   status: z.string(),
   duration_s: z.number(),
   last_transcript_lines: z.array(z.string()),
+  failure_reason: z.string().nullable(),
 });
 
 test("T-C5-1: Default (kein uiProbe) -> Probe-Tool/-Resource erscheinen NICHT (byte-identisch)", () => {

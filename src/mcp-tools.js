@@ -113,6 +113,9 @@ function pickCallStatus(callId, c) {
     last_transcript_lines: c.transcript
       .slice(-LAST_TRANSCRIPT_LINES)
       .map((t) => `${t.role === "agent" ? "Agent" : "Gegenseite"}: ${t.text}`),
+    // CDF1: PII-freier Fehlergrund NICHT erfolgreicher Calls. Erfolgreich/aktiv -> null
+    // (Shape stabil; bestehende Felder unveraendert). Reines Whitelist-Feld, kein Roh-Durchstich.
+    failure_reason: c.failureReason ?? null,
   };
 }
 
@@ -123,6 +126,7 @@ const CALL_STATUS_OUTPUT = {
   status: z.string(),
   duration_s: z.number(),
   last_transcript_lines: z.array(z.string()),
+  failure_reason: z.string().nullable(),
 };
 
 // Daten-Kontrakt get_transcript (Strategie Abschnitt 5.1, DSGVO): GENAU diese Felder

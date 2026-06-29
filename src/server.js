@@ -49,6 +49,7 @@ import {
 } from "./telephony/directives.js";
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
+import { callFailureReason } from "./telephony/failure-reason.js";
 import {
   registerTenant,
   setTenantIdentityIfAbsent,
@@ -1120,6 +1121,9 @@ app.post("/voice/status", (req, res) => {
   if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
   if (call.status === "active")
     store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
+  // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose persistieren
+  // (PII-frei). completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
+  store.recordFailureReason(call.id, callFailureReason({ status: callStatus, diagnostics }));
   finishCall(store.getCall(call.id));
 });
 

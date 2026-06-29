@@ -124,6 +124,13 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // CDF1 (Report #2 5.4): persistierter Fehlergrund - Wrapper-Parity zu json.js. Der
+    // Flush schreibt failure_reason am call-Record (INSERT + ON CONFLICT DO UPDATE).
+    recordFailureReason(callId, reason) {
+      const { call, changed } = ops.recordFailureReason(requireState(), callId, reason);
+      if (changed) save();
+      return call;
+    },
     countOutboundCallsSince: (sinceIso, filters = {}) =>
       ops.countOutboundCallsSince(requireState(), sinceIso, filters),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
@@ -644,6 +651,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // ein spaeter /voice/status-Retry sendete eine zweite Summary-SMS. NULL -> null
     // (kein Marker, byte-identisch zur createCall-Initialisierung + json-Hydrierung).
     summarySmsSentAt: r.summary_sms_sent_at ?? null,
+    // CDF1: persistierten Fehlergrund hydrieren (NULL -> null, json-Parity). Ohne diese Zeile
+    // ginge er beim Restart verloren UND der naechste Flush wuerde ihn ueberschreiben.
+    failureReason: r.failure_reason ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -850,13 +860,13 @@ async function flushCalls(client, tenantId, calls) {
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
-          summary_sms_sent_at, context)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          summary_sms_sent_at, context, failure_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
-         summary_sms_sent_at=EXCLUDED.summary_sms_sent_at`,
+         summary_sms_sent_at=EXCLUDED.summary_sms_sent_at, failure_reason=EXCLUDED.failure_reason`,
       [
         c.id,
         tenantId,
@@ -884,6 +894,9 @@ async function flushCalls(client, tenantId, calls) {
         // sonst NULL). NICHT im ON CONFLICT DO UPDATE SET - wie goal/briefing/constraints
         // bei Create gesetzt und danach unveraenderlich.
         c.context ? JSON.stringify(c.context) : null,
+        // CDF1: Fehlergrund-Token ($24). IM ON CONFLICT DO UPDATE SET (anders als context),
+        // weil er NACH dem Create im /voice/status-Callback gesetzt wird.
+        c.failureReason ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);

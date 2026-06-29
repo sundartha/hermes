@@ -140,6 +140,8 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
       calls: [
         seedCall({ id: "st_tnx_hangup", provider: "telnyx", status: "active" }),
         seedCall({ id: "st_tnx_hangup_dirty", provider: "telnyx", status: "active" }),
+        // CDF1: no-answer-Fall (Status gewinnt vor SIP-Cause 487 -> failureReason "no-answer").
+        seedCall({ id: "st_tnx_noanswer", provider: "telnyx", status: "active" }),
       ],
     }),
   });
@@ -185,10 +187,20 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
       `Mehrwort-Freitext darf nicht ins Log: ${srv.stdout}`,
     );
 
+    // CDF1 (Spec a): no-answer + SipHangupCause 487 -> Status gewinnt -> failureReason "no-answer".
+    r = await postStatus(srv, "st_tnx_noanswer", { CallStatus: "no-answer", SipHangupCause: "487" });
+    assert.equal(r.status, 200);
+    await statusEvent(srv, "st_tnx_noanswer");
+
     // Store-Effekt: beide completed/failed -> Call beendet (endedAt gesetzt).
     const calls = Object.fromEntries(srv.readStore().calls.map((c) => [c.id, c]));
     assert.ok(calls.st_tnx_hangup.endedAt, "completed: endedAt muss gesetzt sein");
     assert.ok(calls.st_tnx_hangup_dirty.endedAt, "failed: endedAt muss gesetzt sein");
+    // CDF1 (Spec a+b+d/json): persistierter Fehlergrund am Call-Record.
+    assert.equal(calls.st_tnx_noanswer.failureReason, "no-answer", "no-answer: Status gewinnt");
+    assert.equal(calls.st_tnx_hangup_dirty.failureReason, "failed:603", "failed + SIP -> failed:603");
+    // Spec (b): erfolgreicher Call traegt KEINEN Grund (null/absent).
+    assert.ok(calls.st_tnx_hangup.failureReason == null, "completed: kein failureReason");
   } finally {
     await srv.stop();
   }

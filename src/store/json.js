@@ -298,6 +298,14 @@ export function markSummarySmsSent(callId) {
   return call;
 }
 
+// CDF1 (Report #2 5.4): persistierter Fehlergrund (mapped Token): mutiert -> save bei
+// changed (Muster wie markSummarySmsSent). Der Grund ueberlebt den Prozess-Restart.
+export function recordFailureReason(callId, reason) {
+  const { call, changed } = ops.recordFailureReason(load(), callId, reason);
+  if (changed) save();
+  return call;
+}
+
 export function countOutboundCallsSince(sinceIso, filters = {}) {
   return ops.countOutboundCallsSince(load(), sinceIso, filters);
 }

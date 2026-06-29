@@ -124,7 +124,12 @@ CREATE TABLE IF NOT EXISTS call (
   -- P3 (PLAN-PERSONAL-ASSISTANT): strukturierter Per-Call-Kontext (summary, key_facts[],
   -- recipient_relationship, desired_outcome) als JSONB. Additiv NULLABLE: nur befuellt bei
   -- ASSISTANT_CONTEXT_ENABLED, sonst NULL -> Bestand byte-identisch.
-  context JSONB
+  context JSONB,
+  -- CDF1 (Report #2 5.4): maschinenlesbarer, PII-freier Fehlergrund (mapped Token, z.B.
+  -- no-answer/busy/failed:<sipcause>) NICHT erfolgreicher Calls. Additiv NULLABLE: im
+  -- /voice/status-Callback aus der Provider-Diagnose gesetzt, sonst NULL -> Bestand
+  -- byte-identisch. Speist get_call_status/get_call_result (failure_reason).
+  failure_reason TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -137,6 +142,9 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS summary_sms_sent_at TEXT;
 -- P3: Per-Call-Kontext-Spalte auf Bestands-call-Tabellen nachziehen (Muster wie
 -- provider/summary_sms_sent_at). Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS context JSONB;
+-- CDF1: Fehlergrund-Spalte auf Bestands-call-Tabellen nachziehen (Muster provider/
+-- summary_sms_sent_at/context). Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS failure_reason TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
