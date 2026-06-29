@@ -327,6 +327,9 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   ref.twilioSid = "CA-test-sid";
   ref.summary = "Gespraech zusammengefasst";
   ref.objectiveAchieved = "true";
+  // CDF1 (Spec d/pglite): Fehlergrund am Spiegel setzen -> belegt Flush-Spalte (INSERT +
+  // ON CONFLICT DO UPDATE SET) + rowToCall-Hydrierung der neuen Spalte nach reopen.
+  ref.failureReason = "no-answer";
   store.save();
   await store.save();
   const reopened = await reopen(db);
@@ -334,6 +337,7 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   assert.equal(got.twilioSid, "CA-test-sid");
   assert.equal(got.summary, "Gespraech zusammengefasst");
   assert.equal(got.objectiveAchieved, "true");
+  assert.equal(got.failureReason, "no-answer");
   // getCall findet auch per twilioSid (wie json)
   assert.equal(reopened.getCall("CA-test-sid").id, call.id);
 });

@@ -156,6 +156,10 @@ export function createCall(
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
     summarySmsSentAt: null,
+    // CDF1: maschinenlesbarer Fehlergrund (mapped Token), gesetzt im /voice/status-Callback
+    // bei nicht erfolgreichem Call. Initial null - byte-identisch zur pg-Hydrierung (rowToCall),
+    // kein json<->pg-Shape-Drift.
+    failureReason: null,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -287,6 +291,20 @@ export function markSummarySmsSent(s, callId) {
   let changed = false;
   if (call && !call.summarySmsSentAt) {
     call.summarySmsSentAt = new Date().toISOString();
+    changed = true;
+  }
+  return { call, changed };
+}
+
+// CDF1 (Report #2 5.4): persistiert den maschinenlesbaren Fehlergrund (mapped Token) am
+// Call-Record. Set-once + nur bei truthy reason (Muster markSummarySmsSent): ein spaeter
+// /voice/status-Retry ueberschreibt den ersten Grund nicht; reason=null (completed) -> No-op
+// (changed=false -> kein Save). Wrapper saved bei changed.
+export function recordFailureReason(s, callId, reason) {
+  const call = getCall(s, callId);
+  let changed = false;
+  if (call && reason && !call.failureReason) {
+    call.failureReason = reason;
     changed = true;
   }
   return { call, changed };

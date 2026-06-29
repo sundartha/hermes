@@ -121,6 +121,7 @@ const callStatusOutput = z.object({
   status: z.string(),
   duration_s: z.number(),
   last_transcript_lines: z.array(z.string()),
+  failure_reason: z.string().nullable(),
 });
 
 test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes structuredContent", async () => {
@@ -142,15 +143,48 @@ test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes s
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id",
       "duration_s",
+      "failure_reason",
       "last_transcript_lines",
       "status",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
     assert.equal(result.structuredContent.status, "in_progress");
+    // CDF1 (Spec b): laufender/erfolgreicher Call traegt KEINEN Fehlergrund -> null.
+    assert.equal(result.structuredContent.failure_reason, null, "aktiver Call: failure_reason null");
     assert.doesNotThrow(
       () => callStatusOutput.parse(result.structuredContent),
       "structuredContent validiert gegen outputSchema",
     );
+  });
+});
+
+test("T-CDF1-UI: Fehlergrund (Spec c) - failure_reason erscheint, PII bleibt gestrippt", async () => {
+  // Eigener Mock-Body: fehlgeschlagener Call mit gesetztem failureReason + denselben
+  // PII-Zusatzfeldern wie RICH_CALL. Der Grund wird ueber die Whitelist exponiert; die
+  // PII-Felder duerfen NIE durchschlagen (Whitelist, nicht Blacklist).
+  const FAILED_CALL = {
+    status: "failed",
+    startedAt: "2026-06-26T09:59:50.000Z",
+    endedAt: "2026-06-26T10:00:20.000Z",
+    failureReason: "failed:603",
+    transcript: [],
+    email: "secret@example.com",
+    apiKey: "sk_live_LEAK",
+    tenantId: "tenant-XYZ",
+    audioUrl: "https://example.com/recording.wav",
+  };
+  await withGateway(FAILED_CALL, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_call_status");
+    const result = await handler({ call_id: "call_1" });
+
+    assert.equal(result.structuredContent.failure_reason, "failed:603", "Grund exponiert");
+    assert.doesNotThrow(() => callStatusOutput.parse(result.structuredContent));
+
+    const serialized = JSON.stringify(result);
+    for (const leak of ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "recording.wav"]) {
+      assert.ok(!serialized.includes(leak), `kein Leck von ${leak} im Tool-Result`);
+    }
   });
 });
 
@@ -224,6 +258,7 @@ test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Tex
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id",
       "duration_s",
+      "failure_reason",
       "last_transcript_lines",
       "status",
     ]);
@@ -623,6 +658,7 @@ test("T-P4-UI-AC1: Stufe 0 - structuredContent + Text exakt wie get_call_status 
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id",
       "duration_s",
+      "failure_reason",
       "last_transcript_lines",
       "status",
     ]);
@@ -686,6 +722,7 @@ test("T-P4-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Tex
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id",
       "duration_s",
+      "failure_reason",
       "last_transcript_lines",
       "status",
     ]);
