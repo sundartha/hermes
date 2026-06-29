@@ -72,6 +72,8 @@ SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist d
 DEIN AUFTRAG: Testziel
 
 
+KALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):
+Kalender ist leer, alles frei.
 WICHTIG: Offenlegung UND dein Anliegen ("Testziel") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen Jonass Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 
@@ -94,6 +96,8 @@ SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist d
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
+KALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):
+Kalender ist leer, alles frei.
 WICHTIG: Offenlegung UND dein Anliegen ("Testziel") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen Jonass Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 
@@ -134,6 +138,8 @@ SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist d
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
+KALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):
+Kalender ist leer, alles frei.
 WICHTIG: Offenlegung UND dein Anliegen ("Testziel") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen Jonass Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 
@@ -156,6 +162,8 @@ SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist d
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
+KALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):
+Kalender ist leer, alles frei.
 WICHTIG: Offenlegung UND dein Anliegen ("Testziel") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen Jonass Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 
@@ -178,6 +186,8 @@ SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist d
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
+KALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):
+Kalender ist leer, alles frei.
 WICHTIG: Offenlegung UND dein Anliegen ("Testziel") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen Jonass Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 

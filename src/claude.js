@@ -89,7 +89,7 @@ Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin v
 SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
-${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}
+${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}${outboundCalendarSection(call)}
 WICHTIG: Offenlegung UND dein Anliegen ("${call.goal}") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 }
@@ -113,6 +113,33 @@ function assistantContextSection(call) {
   return `\nHINTERGRUND (nur zu deiner Information):\n${lines.join("\n")}\nDieser Hintergrund ist fuer dich; gib nur weiter, was der Auftrag erfordert.`;
 }
 
+// Formatierter Kalender-Auszug (naechste Termine) des Tenants - EINE Quelle (G5) fuer
+// das get_calendar-Tool UND die Outbound-Prompt-Einbettung (L2). Datums-Locale folgt
+// der Gespraechssprache (wie das Tool-Ergebnis); Wortlaut byte-identisch zur frueheren
+// inline-Formatierung im get_calendar-Case. Reiner Read, kein Nebeneffekt (N7).
+function calendarExcerpt(call) {
+  const dateLocale = localeFor(call.language).dateLocale;
+  const events = store.tenantContext(call.tenantId).calendar.slice(0, CALENDAR_PREVIEW_LIMIT);
+  if (!events.length) return "Kalender ist leer, alles frei.";
+  return (
+    "Naechste Termine:\n" +
+    events
+      .map((e) => `- ${e.title}: ${fmtDate(e.start, dateLocale)} bis ${fmtDate(e.end, dateLocale)}`)
+      .join("\n")
+  );
+}
+
+// Optionaler Kalender-Block fuer den Outbound-Prompt (L2): bettet den Auszug vorab ein,
+// damit das Modell freie Slots kennt und get_calendar im Buchungs-Normalfall nicht erst
+// mid-turn aufrufen muss. Gegated am allowCalendar-Gate (massgeblich, fail-closed: aus ->
+// "" -> Prompt byte-identisch). Fuehrendes "\n" + leeres "" bei aus spiegeln
+// assistantContextSection (G11). KEINE neue Datenexposition: derselbe Inhalt war schon
+// via get_calendar erreichbar - nur der Transportweg aendert sich.
+function outboundCalendarSection(call) {
+  if (!store.tenantContext(call.tenantId).settings.allowCalendar) return "";
+  return `\nKALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):\n${calendarExcerpt(call)}`;
+}
+
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).
 // Identitaets-Bindung (G1, Geschwister-Regel zu Regel 2): der offengelegte
 // Auftraggeber ist die registrierte Identitaet (tenant.ownerName, voll), NICHT per
@@ -127,6 +154,11 @@ export function disclosureSentence(call) {
 // Maximale Zeichenzahl des Anliegens im gesprochenen Erst-Turn (G25). Kappt NUR die
 // TTS-Ausgabe; das goal-Validierungslimit (TEXT_LIMITS.objective) bleibt unberuehrt.
 const OPENING_GOAL_MAX_CHARS = 160;
+
+// Anzahl der naechsten Kalendereintraege im Auszug (G25). EINE Quelle fuer das
+// get_calendar-Tool UND die Outbound-Prompt-Einbettung (L2). Modul-Konstante, kein
+// Tuning-Knopf -> nicht in config.js (Praezedenz OPENING_GOAL_MAX_CHARS).
+const CALENDAR_PREVIEW_LIMIT = 8;
 
 // Erst-Turn-Text fuer den LLM-FREIEN /voice/outbound-Pfad (G2): Offenlegung (Regel 2,
 // erster Satz) + Bruecke + gekapptes Anliegen, in EINEM Gather-Say. Rein synchron,
@@ -211,22 +243,12 @@ export function execTool(call, name, input) {
   // erscheinen in der Gespraechssprache (fr-FR/de-DE), die der LLM weiterspricht.
   const dateLocale = localeFor(call.language).dateLocale;
   switch (name) {
-    case "get_calendar": {
-      // READ ueber den Seam (Identitaets-Konsument): ctx.calendar ist der
-      // pro-Tenant-Kalender (calendarFor). Konsistent zur Schreib-/Konflikt-Seite
-      // (book_appointment: findConflict/addCalendarEvent ueber call.tenantId).
-      const events = store.tenantContext(call.tenantId).calendar.slice(0, 8);
-      if (!events.length) return "Kalender ist leer, alles frei.";
-      return (
-        "Naechste Termine:\n" +
-        events
-          .map(
-            (e) =>
-              `- ${e.title}: ${fmtDate(e.start, dateLocale)} bis ${fmtDate(e.end, dateLocale)}`,
-          )
-          .join("\n")
-      );
-    }
+    // READ ueber den Seam (Identitaets-Konsument): calendarExcerpt liest den
+    // pro-Tenant-Kalender (calendarFor). Konsistent zur Schreib-/Konflikt-Seite
+    // (book_appointment: findConflict/addCalendarEvent ueber call.tenantId). EINE Quelle
+    // (G5) fuer Tool-Ausgabe UND Outbound-Prompt-Einbettung (L2).
+    case "get_calendar":
+      return calendarExcerpt(call);
     case "book_appointment": {
       const start = new Date(input.start);
       if (isNaN(start)) return "FEHLER: Ungueltiges Datum.";
