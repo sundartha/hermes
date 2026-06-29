@@ -90,8 +90,12 @@ function mapStatus(c) {
   if (c.status === "active") return c.answeredAt ? "in_progress" : "dialing";
   return c.status;
 }
+// Vergangene Zeit seit Anrufstart (startedAt), monoton wachsend. Anker fest auf
+// startedAt - KEIN answeredAt-Fallback: bei markAnswered wuerde der Anker sonst
+// vorspringen und die angezeigte Dauer rueckwaerts springen (z.B. 3->2). Reiner
+// Anzeigewert; abgerechnet wird separat ueber voiceMinutesOf (answeredAt..endedAt).
 function durationS(c) {
-  const start = c.answeredAt || c.startedAt;
+  const start = c.startedAt;
   const end = c.endedAt || new Date().toISOString();
   return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
 }

@@ -52,6 +52,22 @@ async function startGatewayMock({ body = null, status = 200 } = {}) {
   return { url, close: () => new Promise((r) => server.close(r)) };
 }
 
+// Gateway-Mock, der pro Request den naechsten Body aus der Liste liefert (letzter
+// bleibt sticky). Erlaubt zwei aufeinanderfolgende get_call_status-Polls mit
+// unterschiedlichem Call-Zustand (dialing -> answered) gegen DENSELBEN Endpunkt.
+async function startGatewayMockSequence(bodies) {
+  let i = 0;
+  const server = http.createServer((req, res) => {
+    const body = bodies[Math.min(i++, bodies.length - 1)];
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify(body));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  return { url, close: () => new Promise((r) => server.close(r)) };
+}
+
 // Ein Tool-Ergebnis gilt als Fehler, wenn isError gesetzt ist ODER der Text eine
 // klare Fehlermeldung traegt. Kein Crash (kein TypeError) ist die Kernbedingung.
 function toolText(result) {
@@ -131,6 +147,66 @@ test("T-P4-07: Handler-Throw (Gateway 500) -> MCP-Fehlerantwort, keine unhandled
     assert.equal(rejections.length, 0, "keine unhandled rejection");
   } finally {
     process.removeListener("unhandledRejection", onRejection);
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+});
+
+test("T-C3-01: duration_s springt bei markAnswered nicht zurueck (Monotonie)", async () => {
+  // Anker-Beweis ueber zwei Polls. Zeitstempel relativ zu 'jetzt', sodass die Dauer
+  // ueber 'end = now' laeuft (genau der Live-Pfad, in dem der Bug auftrat). Die Luecke
+  // 10s (seit Start) vs 1s (seit Antwort) ist um Groessenordnungen groesser als die
+  // Sub-ms-Jitter zwischen den beiden Mock-Requests -> deterministisch.
+  const base = Date.now();
+  const startedAt = new Date(base - 10_000).toISOString();
+  const dialing = { status: "active", startedAt, transcript: [] }; // kein answeredAt
+  const answered = {
+    status: "active",
+    startedAt,
+    answeredAt: new Date(base - 1_000).toISOString(),
+    transcript: [],
+  };
+  const mock = await startGatewayMockSequence([dialing, answered]);
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const poll1 = await handlers.get("get_call_status")({ call_id: "call_1" });
+    const poll2 = await handlers.get("get_call_status")({ call_id: "call_1" });
+    const d1 = poll1.structuredContent.duration_s;
+    const d2 = poll2.structuredContent.duration_s;
+    assert.equal(poll1.structuredContent.status, "dialing");
+    assert.equal(poll2.structuredContent.status, "in_progress");
+    assert.ok(d1 >= 9, `Poll 1 misst seit startedAt (~10s), war ${d1}`);
+    assert.ok(d2 >= d1, `Monotonie verletzt: Poll 2 (${d2}) < Poll 1 (${d1})`);
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+});
+
+test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedAt", async () => {
+  const body = {
+    status: "completed",
+    startedAt: "2026-06-26T10:00:00.000Z",
+    answeredAt: "2026-06-26T10:00:05.000Z", // 5s nach Start
+    endedAt: "2026-06-26T10:01:05.000Z", // 65s nach Start, 60s nach Antwort
+    transcript: [],
+  };
+  const mock = await startGatewayMock({ body });
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const r = await handlers.get("get_call_status")({ call_id: "call_1" });
+    assert.equal(
+      r.structuredContent.duration_s,
+      65,
+      "Anker = startedAt (nicht 60 = answeredAt)",
+    );
+  } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;
     await mock.close();
