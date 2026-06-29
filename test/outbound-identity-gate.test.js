@@ -23,6 +23,11 @@ const activeNumber = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
+// A2/A3-provisioniertes Tier-Profil: maxCallsPerHour=null entkoppelt den aktiven
+// Subscriber vom DEFAULT_PROFILE(0)-User-Hour-Gate (A4 go-live-Haertung). Minimaler
+// Stub - nur das fuer dieses Identitaets-Gate relevante Feld (planProfileFor traegt es real).
+const PROVISIONED_PROFILE = { maxCallsPerHour: null };
+
 // Tenant A: active, idpSubject (auffindbar), eigene aktive Nummer, kyc_level=card
 // (passiert das vorgelagerte KYC-Gate -> erreicht das Identitaets-Gate). ownerName
 // optional: gesetzt -> Gate passiert; fehlt -> Gate sperrt fail-closed.
@@ -39,6 +44,7 @@ function seedIdentity(ownerName) {
       },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
+    profiles: { [SUB_A]: PROVISIONED_PROFILE },
   });
 }
 

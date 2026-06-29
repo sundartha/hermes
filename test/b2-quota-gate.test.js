@@ -56,6 +56,11 @@ const voiceMinuteEvent = (tenantId, quantity, idSuffix = "") => ({
 
 const bucket = (costEur) => ({ inputTokens: 0, outputTokens: 0, costEur, calls: costEur ? 1 : 0 });
 
+// A2/A3-provisioniertes Tier-Profil: maxCallsPerHour=null entkoppelt den aktiven
+// Subscriber vom DEFAULT_PROFILE(0)-User-Hour-Gate (A4 go-live-Haertung). Minimaler
+// Stub - nur das fuer dieses Minuten-Gate relevante Feld (planProfileFor traegt es real).
+const PROVISIONED_PROFILE = { maxCallsPerHour: null };
+
 // Aktiver, KYC-verifizierter (card) Subscriber A mit eigener aktiver Nummer + Abo-Anker.
 // Die uebrigen Outbound-Gates (KYC, Allowlist via tenantActiveSubscriber, Nummer, Budget)
 // muessen passieren, damit der Test GENAU das Minuten-Gate isoliert. usageEvents (Minuten-
@@ -74,6 +79,7 @@ function seedQuota({ subscription = {}, usageEvents = [], usage } = {}) {
       },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
+    profiles: { [SUB_A]: PROVISIONED_PROFILE },
   });
   s.usageEvents = usageEvents;
   if (usage) s.usage = usage;

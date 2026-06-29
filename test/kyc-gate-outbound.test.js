@@ -21,6 +21,11 @@ const activeNumber = (id, e164, tenantId) => ({
   providerNumberId: null,
 });
 
+// A2/A3-provisioniertes Tier-Profil: maxCallsPerHour=null entkoppelt den aktiven
+// Subscriber vom DEFAULT_PROFILE(0)-User-Hour-Gate (A4 go-live-Haertung). Minimaler
+// Stub - nur das fuer dieses KYC-Gate relevante Feld (planProfileFor traegt es real).
+const PROVISIONED_PROFILE = { maxCallsPerHour: null };
+
 // kycLevel optional auf Tenant A. Owner ohne kyc_level (Bestand). A traegt einen
 // ownerName (P2b: das Outbound-Identitaets-Gate verlangt einen registrierten Namen;
 // fehlt er, sperrt es VOR dem KYC-Gate mit 403 - hier wollen wir das KYC-Gate testen).
@@ -31,6 +36,7 @@ function seedKyc(kycLevel) {
       { id: A, status: "active", idpSubject: SUB_A, ownerName: "Alice A", ...(kycLevel ? { kycLevel } : {}) },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
+    profiles: { [SUB_A]: PROVISIONED_PROFILE },
   });
 }
 

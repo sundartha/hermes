@@ -331,8 +331,11 @@ export function sanitizeProfile(patch) {
   return clean;
 }
 
-// Default-Profil: kleines Stundenlimit (fail-closed fuer profillose Nutzer).
-const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 2;
+// Default-Profil: KEIN Outbound (0 = harter Block, fail-closed fuer profillose Nutzer).
+// 0 ist eine echte Schwelle, kein Falsy-"kein Limit": userHourReached rechnet
+// limit=min(global,0)=0, count>=0 ist immer wahr (server.js). Nur ein Plan-Profil
+// (A2/A3, maxCallsPerHour=null) ODER der Owner (OWNER_PROFILE) schaltet Outbound frei.
+const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 0;
 
 // Owner = localhost/stdio ohne Identitaet: permissiv = heutiges Verhalten. Das Profil
 // lockert nichts (unrestricted=false, leere Profil-Allowlist) - der Owner passiert das
@@ -349,7 +352,7 @@ const OWNER_PROFILE = {
 };
 
 // Default = authentifiziert, aber (noch) ohne Profil: fail-closed/restriktiv.
-// Keine Allowlist-Lockerung, kleines Stundenlimit, kein Kalender/Booking.
+// Keine Allowlist-Lockerung, KEIN Outbound (maxCallsPerHour=0), kein Kalender/Booking.
 const DEFAULT_PROFILE = {
   allowedNumbers: [],
   allowedCountryCodes: [],
