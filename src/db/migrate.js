@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { defaultSettings, demoCalendar } from "../store/defaults.js";
+import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "schema.sql");
@@ -20,20 +21,11 @@ export async function applySchema(db) {
   await db.exec(ddl);
 }
 
-// s<->ms-Bruecke (Unix-Sekunden <-> Date-Millis). Lokale Konstante; meter.js fuehrt
-// dieselbe (G25, bewusst nicht geteilt - eine Zeit-Util-Datei fuer EINE Konstante waere
-// Over-Engineering/S4).
-const MS_PER_SECOND = 1000;
-
-// Anker-Ableitung fuer den Bestands-Backfill: Start = Periodenende minus ein Monat
-// (UTC-Kalender, einzige Katalog-Kadenz "month"). Unix-Sekunden rein/raus. Spiegelt die
-// Anzeige-Logik meter.periodStartIso (dort ISO) - bewusste, dokumentierte Mini-Duplizierung
-// ueber die Schicht-/Sprach-Grenze (einmalige Migration vs. Live-Anzeige). Die kanonische
-// Laufzeit-Ableitung des Ankers folgt mit B2; B3 zieht meter.js auf den persistierten Anker.
+// Anker-Ableitung fuer den Bestands-Backfill als Unix-Sekunden (Persistenz-Format).
+// Duenner Wrapper um die geteilte Perioden-Ableitung (billing/period.js); dieselbe
+// Domaenen-Regel wie die Live-Anzeige meter.periodStartIso (dort ISO).
 function periodStartSecFromEnd(endSec) {
-  const start = new Date(endSec * MS_PER_SECOND);
-  start.setUTCMonth(start.getUTCMonth() - 1);
-  return Math.floor(start.getTime() / MS_PER_SECOND);
+  return Math.floor(periodStartFromEnd(endSec).getTime() / MS_PER_SECOND);
 }
 
 // Einmaliger, idempotenter Backfill (B1a): Bestands-Tenants haben die neue Spalte
