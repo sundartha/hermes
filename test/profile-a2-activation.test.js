@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
-import { activatePaidTenant } from "../src/billing/activation.js";
+import { activatePaidTenant, profileAuditDetail } from "../src/billing/activation.js";
 import {
   makeDefaultState,
   registerTenant,
@@ -47,6 +47,13 @@ test("sanitizeProfile haelt maxCallsPerHour=null, droppt Nicht-Zahl", () => {
   assert.deepEqual(sanitizeProfile({ maxCallsPerHour: null }), { maxCallsPerHour: null });
   assert.deepEqual(sanitizeProfile({ maxCallsPerHour: 5 }), { maxCallsPerHour: 5 });
   assert.deepEqual(sanitizeProfile({ maxCallsPerHour: "viele" }), {}); // Bestand bleibt
+});
+
+// --- Audit-Detail-Mapper: alle drei Ausgabe-Zweige (Objekt -> String) ---
+test("profileAuditDetail mappt ok/skip/none auf das Audit-Fragment", () => {
+  assert.equal(profileAuditDetail({ provisioned: true, keys: 6 }), "profile=ok:6");
+  assert.equal(profileAuditDetail({ provisioned: false, reason: "no_plan" }), "profile=skip:no_plan");
+  assert.equal(profileAuditDetail(undefined), "profile=none");
 });
 
 // --- Direkter Pfad: voller Tier-Snapshot inkl. null ---
