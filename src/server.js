@@ -19,6 +19,7 @@ import {
   KYC_OUTBOUND_MIN,
   tenantIdForSubject,
   normNum,
+  hasTrunkZeroAfterCountryCode,
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
@@ -576,6 +577,10 @@ const PREMIUM_PREFIXES = [
 ];
 const HOUR_MS = 60 * 60 * 1000;
 const SECONDS_PER_MINUTE = 60;
+// Einheitliche E.164-Formatfehler-Meldung (G5): genutzt vom Format-Gate in numberGateError
+// UND vom C4-Trunk-0-Reject am Producer (POST /api/calls). Wortlaut byte-identisch zum
+// Bestand (api.test.js pinnt /E\.164/).
+const E164_FORMAT_ERROR = "to muss E.164 sein, z.B. +4917212345678";
 
 const isDenied = (to) =>
   EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
@@ -695,7 +700,7 @@ function numberGateError(to, caller) {
       message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
     };
   if (!E164.test(to))
-    return { status: 400, grund: "format", message: "to muss E.164 sein, z.B. +4917212345678" };
+    return { status: 400, grund: "format", message: E164_FORMAT_ERROR };
   if (!countryGateAllowed(to, profile))
     return {
       status: 403,
@@ -1139,6 +1144,16 @@ app.post("/api/calls", async (req, res) => {
   const to = normNum(b.to);
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
+
+  // C4 (6.6): Trunk-0 nach erlaubter Laendervorwahl (z.B. +4901737... statt +491737...) ist
+  // ein Formatfehler und wird abgewiesen (Owner-#4: REJECT, NICHT kanonisieren - laender-
+  // spezifisches Korruptions-/Falschanruf-Risiko, z.B. +39 IT behaelt die fuehrende 0).
+  // 400 VOR jedem Gate und vor dem Dial; "geprueft == gewaehlt" bleibt trivial (to unveraendert).
+  // !isDenied(to) WAHRT die Denylist-Praezedenz (Regel 1): eine gesperrte Nummer auch in
+  // Trunk-0-Schreibweise (z.B. +490900..., DE-0900-Premium) bleibt 403 denylist (auditiert),
+  // nicht 400. 400 = reiner Eingabefehler -> kein Audit (wie die to/objective-Pruefung oben).
+  if (!isDenied(to) && hasTrunkZeroAfterCountryCode(to))
+    return res.status(400).json({ error: E164_FORMAT_ERROR });
 
   // OUTBOUND_FROZEN (outbound-p3): globaler Kill-Switch, ganz vorn + fail-closed. "true"
   // friert JEDEN Outbound sofort (403, kein Originate, kein Bypass) - Betriebs-Notbremse +
