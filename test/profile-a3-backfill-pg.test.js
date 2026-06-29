@@ -11,27 +11,34 @@ import { makeAccounts } from "../src/web-auth.js";
 import { backfillPlanProfiles, BACKFILL_SKIP } from "../src/billing/backfill-profiles.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 
-// Baut einen Store + Accounts auf EINER pglite-Instanz (geteilte DB). store.init() migriert
-// das volle Schema (inkl. account/session) und hydriert den Bootstrap-Owner.
-async function makeStoreAndAccounts() {
-  const db = new PGlite();
-  const runner = {
+// Query-Runner-Adapter ueber EINER pglite-Instanz - das Schnittstellen-Objekt, das
+// makePgStore und makeAccounts erwarten (withClient -> { query, exec }).
+function makeRunner(db) {
+  return {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
   };
+}
+
+// Oeffnet einen pg-Store auf dem Runner; store.init() migriert das volle Schema
+// (inkl. account/session) und hydriert den Bootstrap-Owner.
+async function openStore(runner) {
   const store = makePgStore(runner);
   await store.init();
+  return store;
+}
+
+// Baut einen Store + Accounts auf EINER pglite-Instanz (geteilte DB ueber denselben Runner).
+async function makeStoreAndAccounts() {
+  const db = new PGlite();
+  const runner = makeRunner(db);
+  const store = await openStore(runner);
   return { db, store, accounts: makeAccounts(runner) };
 }
 
 // Frischer Store auf EINER bestehenden pglite-Instanz (re-hydriert aus der DB) - so wird
 // Persistenz statt nur In-Memory geprueft (Muster owner-p5-profiles-global reopen).
 async function reopen(db) {
-  const runner = {
-    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
-  };
-  const store = makePgStore(runner);
-  await store.init();
-  return store;
+  return openStore(makeRunner(db));
 }
 
 // Legt einen aktiven, CARD-verifizierten Subscriber an (Account + Tenant + KYC + Abo) und
