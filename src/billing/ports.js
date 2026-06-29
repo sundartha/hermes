@@ -42,8 +42,9 @@
 
 /**
  * @typedef {Object} SubscribeResult
- * @property {string} subscriptionId    - opake Stripe-Subscription-Referenz (sub_...); KEIN Stripe-Objekt
- * @property {number} currentPeriodEnd  - Ende der laufenden Abrechnungsperiode (Unix-Sekunden)
+ * @property {string} subscriptionId      - opake Stripe-Subscription-Referenz (sub_...); KEIN Stripe-Objekt
+ * @property {number} currentPeriodEnd     - Ende der laufenden Abrechnungsperiode (Unix-Sekunden)
+ * @property {number} currentPeriodStart   - Beginn der laufenden Abrechnungsperiode (Unix-Sekunden)
  */
 
 /**
@@ -81,7 +82,7 @@
  *   Liest customer + payment_method aus einer abgeschlossenen Setup-Session.
  * @property {(params: SubscribeParams) => Promise<SubscribeResult>} createSubscription
  *   Erstellt ein echtes monatliches Recurring (Stripe POST /v1/subscriptions). Loest
- *   ECHTES Geld aus (Erstzahlung off_session). Nur subscriptionId + currentPeriodEnd
- *   verlassen den Adapter (KEIN Stripe-Objekt).
+ *   ECHTES Geld aus (Erstzahlung off_session). Nur subscriptionId + currentPeriodEnd +
+ *   currentPeriodStart verlassen den Adapter (KEIN Stripe-Objekt).
  */
 export {};

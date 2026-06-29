@@ -89,6 +89,23 @@ test("interpretStripeEvent: subscription.updated -> activate, tenantRef aus meta
   assert.equal(r.currentPeriodEnd, 1893456000);
 });
 
+test("interpretStripeEvent: updated mit current_period_start -> currentPeriodStart im Ergebnis (B1a)", () => {
+  const event = {
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    data: {
+      object: {
+        id: "sub_1",
+        status: "active",
+        current_period_end: 1893456000,
+        current_period_start: 1890864000,
+        metadata: { tenant_ref: "t_a", plan_slug: "starter" },
+      },
+    },
+  };
+  const r = interpretStripeEvent(event);
+  assert.equal(r.currentPeriodStart, 1890864000, "Anker reist top-level wie currentPeriodEnd");
+});
+
 test("interpretStripeEvent: subscription.created -> activate (neuer Subscription-Checkout, P3)", () => {
   const event = {
     type: SUBSCRIPTION_EVENT.CREATED,

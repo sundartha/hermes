@@ -104,6 +104,7 @@ export function interpretStripeEvent(event) {
         subscriptionId: object.id ?? null,
         planSlug: planSlugOf(object),
         currentPeriodEnd: object.current_period_end ?? null,
+        currentPeriodStart: object.current_period_start ?? null,
       };
     case SUBSCRIPTION_EVENT.DELETED:
       return {
@@ -154,7 +155,7 @@ export async function applyStripeWebhook(
   event,
   { store, accounts, sessions, audit, req, provision },
 ) {
-  const { action, tenantRef, subscriptionId, planSlug, currentPeriodEnd } =
+  const { action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart } =
     interpretStripeEvent(event);
   if (action === WEBHOOK_ACTION.IGNORE) return;
   const tenant = tenantRef || store.findTenantBySubscription(subscriptionId)?.id || null;
@@ -164,11 +165,12 @@ export async function applyStripeWebhook(
   }
   if (action === WEBHOOK_ACTION.ACTIVATE) {
     // Nur die wirklich gelieferten Felder nachziehen (selektiver Patch): planSlug/
-    // currentPeriodEnd koennen fehlen -> der gespeicherte Wert bleibt unveraendert.
+    // currentPeriodEnd/currentPeriodStart koennen fehlen -> der gespeicherte Wert bleibt unveraendert.
     const patch = {};
     if (subscriptionId != null) patch.subscriptionId = subscriptionId;
     if (planSlug != null) patch.planSlug = planSlug;
     if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
+    if (currentPeriodStart != null) patch.currentPeriodStart = currentPeriodStart;
     store.setTenantSubscription(tenant, patch);
     // P5: dieselbe 3-Effekt-Aktivierung wie der Subscribe-Handler (KYC=CARD + active +
     // payment-gegatetes, idempotentes Provisioning) - EINE Quelle (activation.js). Die

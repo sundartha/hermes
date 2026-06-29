@@ -78,6 +78,36 @@ test("A(a) updated mit tenant_ref -> Abo + KYC(card) + active + provision genau 
   assert.deepEqual(deps.calls.provision, ["t_a"], "provision genau 1x mit t_a");
 });
 
+test("A(a2) updated mit current_period_start -> Anker im setTenantSubscription-Patch (B1a)", async () => {
+  const deps = fakeDeps();
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: {
+        object: {
+          id: "sub_1",
+          status: "active",
+          current_period_end: 1893456000,
+          current_period_start: 1890864000,
+          metadata: { tenant_ref: "t_a", plan_slug: "starter" },
+        },
+      },
+    },
+    deps,
+  );
+  assert.deepEqual(deps.calls.subscription, [
+    [
+      "t_a",
+      {
+        subscriptionId: "sub_1",
+        planSlug: "starter",
+        currentPeriodEnd: 1893456000,
+        currentPeriodStart: 1890864000,
+      },
+    ],
+  ]);
+});
+
 test("A(b) created aktiviert identisch (deckt das .created-Mapping)", async () => {
   const deps = fakeDeps();
   await applyStripeWebhook(
