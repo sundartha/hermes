@@ -38,18 +38,29 @@ function captureTools(ctx) {
   return handlers;
 }
 
+// Bringt einen HTTP-Server auf 127.0.0.1:<random> hoch und liefert URL + close.
+// Gemeinsamer Bootstrap/Teardown beider Gateway-Mocks; der Request-Handler bleibt
+// je Mock eigen (single body+status vs. sticky-sequence).
+async function listen(server) {
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  return { url, close: () => new Promise((r) => server.close(r)) };
+}
+
+// Schreibt eine JSON-Antwort (gemeinsamer content-type + Status). body=null ->
+// leerer Body (-> api() degradiert via res.json().catch zu `{}`).
+function sendJson(res, { body = null, status = 200 } = {}) {
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json");
+  res.end(body == null ? "" : JSON.stringify(body));
+}
+
 // Startet ein Gateway-Mock, das fuer JEDEN Pfad denselben Body liefert. body=null ->
 // leerer 200-Body (-> api() degradiert via res.json().catch zu `{}`): genau der
 // still-degradierte Pfad, den AC5 absichert.
 async function startGatewayMock({ body = null, status = 200 } = {}) {
-  const server = http.createServer((req, res) => {
-    res.statusCode = status;
-    res.setHeader("content-type", "application/json");
-    res.end(body == null ? "" : JSON.stringify(body));
-  });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const url = `http://127.0.0.1:${server.address().port}`;
-  return { url, close: () => new Promise((r) => server.close(r)) };
+  const server = http.createServer((req, res) => sendJson(res, { body, status }));
+  return listen(server);
 }
 
 // Gateway-Mock, der pro Request den naechsten Body aus der Liste liefert (letzter
@@ -58,14 +69,9 @@ async function startGatewayMock({ body = null, status = 200 } = {}) {
 async function startGatewayMockSequence(bodies) {
   let i = 0;
   const server = http.createServer((req, res) => {
-    const body = bodies[Math.min(i++, bodies.length - 1)];
-    res.statusCode = 200;
-    res.setHeader("content-type", "application/json");
-    res.end(JSON.stringify(body));
+    sendJson(res, { body: bodies[Math.min(i++, bodies.length - 1)] });
   });
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const url = `http://127.0.0.1:${server.address().port}`;
-  return { url, close: () => new Promise((r) => server.close(r)) };
+  return listen(server);
 }
 
 // Ein Tool-Ergebnis gilt als Fehler, wenn isError gesetzt ist ODER der Text eine
