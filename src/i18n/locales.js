@@ -101,7 +101,9 @@ export const LOCALES = Object.freeze({
     // Werte oder NEUTRAL) -> Anti-Injection (Pre-Mortem 1), staerker als der typeof-Pfad.
     styleClause: (styleId) => STYLE_CLAUSES_DE[styleId] || NEUTRAL_ADDRESS_CLAUSE,
     // Outbound-Bruecke (claude.js openingText): nach der Offenlegung gesprochen.
-    bridgePhrase: (goal) => `Ich rufe an, weil ${goal}.`,
+    // Objective-neutral (C2): leitet das Anliegen als eigenstaendige Phrase ein, damit
+    // Imperativ/Infinitiv/Nominalphrase-Auftraege grammatisch sauber lesen.
+    bridgePhrase: (goal) => `Ich rufe an wegen folgendem Anliegen: ${goal}.`,
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar).
     disclosure: (ownerName) =>
@@ -137,7 +139,7 @@ export const LOCALES = Object.freeze({
     },
     speechClause: "Réponds exclusivement en français parlé et naturel.",
     styleClause: (styleId) => STYLE_CLAUSES_FR[styleId] || NEUTRAL_ADDRESS_CLAUSE,
-    bridgePhrase: (goal) => `Je vous appelle car ${goal}.`,
+    bridgePhrase: (goal) => `Je vous appelle au sujet de la demande suivante : ${goal}.`,
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
     disclosure: (ownerName) =>
@@ -173,7 +175,7 @@ export const LOCALES = Object.freeze({
     },
     speechClause: "Reply only in natural, spoken English.",
     styleClause: (styleId) => STYLE_CLAUSES_EN[styleId] || NEUTRAL_ADDRESS_CLAUSE,
-    bridgePhrase: (goal) => `I'm calling because ${goal}.`,
+    bridgePhrase: (goal) => `I'm calling regarding the following: ${goal}.`,
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     disclosure: (ownerName) =>

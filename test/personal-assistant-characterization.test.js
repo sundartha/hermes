@@ -312,7 +312,7 @@ test("D3 disclosureSentence en fester Wortlaut", () => {
 test("O1 openingText de (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Testziel" })),
-    `${DISCLOSURE_DE} Ich rufe an, weil Testziel.`,
+    `${DISCLOSURE_DE} Ich rufe an wegen folgendem Anliegen: Testziel.`,
   );
 });
 test("O2 openingText de (goal leer) = nur Offenlegung", () => {
@@ -321,13 +321,13 @@ test("O2 openingText de (goal leer) = nur Offenlegung", () => {
 test("O3 openingText fr (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "fr", goal: "Testziel" })),
-    `${DISCLOSURE_FR} Je vous appelle car Testziel.`,
+    `${DISCLOSURE_FR} Je vous appelle au sujet de la demande suivante : Testziel.`,
   );
 });
 test("O4 openingText en (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "en", goal: "Testziel" })),
-    `${DISCLOSURE_EN} I'm calling because Testziel.`,
+    `${DISCLOSURE_EN} I'm calling regarding the following: Testziel.`,
   );
 });
 
@@ -336,8 +336,21 @@ test("O4 openingText en (goal vorhanden) = Offenlegung + Bruecke", () => {
 // haengt genau einen Punkt an). Pinnt die Grenzfall-Glaettung (T5).
 const O5_LONG_GOAL =
   "einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das ueberhaupt geht.";
-const EXPECTED_O5 = `${DISCLOSURE_DE} Ich rufe an, weil einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das.`;
+const EXPECTED_O5 = `${DISCLOSURE_DE} Ich rufe an wegen folgendem Anliegen: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das.`;
 
 test("O5 openingText de (goal > 160 Zeichen) = Offenlegung + an Wortgrenze gekappte Bruecke", () => {
   assert.equal(openingText(call({ language: "de", goal: O5_LONG_GOAL })), EXPECTED_O5);
+});
+
+// C2: objective-neutrale Bruecke. openingText bleibt LLM-frei (rein synchron, kein
+// Anthropic-Pfad) und grammatisch sauber fuer einen Imperativ-Auftrag - die fruehere
+// "weil ${goal}"-Subjunktor-Konstruktion ist beseitigt.
+test("C2 openingText: Imperativ-Auftrag LLM-frei + grammatisch sauber (kein 'weil'-Subjunktor)", () => {
+  const imperativeGoal = "Vereinbare einen Friseurtermin fuer Samstag vormittag";
+  const text = openingText(call({ language: "de", goal: imperativeGoal }));
+  assert.equal(typeof text, "string"); // synchron -> LLM-frei (kein await/Promise)
+  assert.ok(text.startsWith(DISCLOSURE_DE), `Offenlegung zuerst: ${text}`);
+  assert.ok(text.endsWith(`${imperativeGoal}.`), `Auftrag am Ende, genau ein Punkt: ${text}`);
+  assert.ok(!/\bweil\b/.test(text), `Subjunktor 'weil' muss weg sein: ${text}`);
+  assert.ok(!/[.!?]{2}/.test(text), `kein doppeltes Satz-Endzeichen: ${text}`);
 });

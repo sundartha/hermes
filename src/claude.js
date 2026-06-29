@@ -136,7 +136,8 @@ export function openingText(call) {
   const disclosure = disclosureSentence(call);
   const goal = trimGoalForSpeech(call.goal);
   if (!goal) return disclosure;
-  // Sprachabhaengige Bruecke aus dem Bundle (de: "Ich rufe an, weil ...", byte-identisch).
+  // Sprachabhaengige, objective-neutrale Bruecke aus dem Bundle (de: "Ich rufe an wegen
+  // folgendem Anliegen: ..."), grammatisch fuer Imperativ/Infinitiv/Nominalphrase-Auftraege.
   return `${disclosure} ${localeFor(call.language).bridgePhrase(goal)}`;
 }
 
