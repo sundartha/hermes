@@ -1,40 +1,56 @@
 #!/usr/bin/env node
-// Token-Pull-Disziplin (MCP-UI P5): erkennt fail-closed Drift zwischen der
-// kanonischen Token-Quelle (apps/web/src/styles/tokens/) und ihrer
-// selbst-tragenden Kopie (design-system/_shared/tokens.css), und prueft die
-// Struktur-Invarianten der iframe-isolierten Widget-/Mockup-HTMLs.
+// Token-Pull-Disziplin: erkennt fail-closed Drift zwischen der kanonischen
+// Token-Quelle (apps/web/src/styles/tokens/) und ihrer gespiegelten Kopie im
+// Design-System-Katalog (design-system/tokens/), und prueft die @dsCard- und
+// @import-Invarianten der iframe-isolierten Mockup-/Widget-HTMLs.
 //
 // Warum Hash-Manifest statt 1:1-Repro: die Kopie ist KEINE deterministische
-// Konkatenation der Quelle (Kommentare entfernt, --hero-*-Alias-Kette
-// teil-inlined, Scope :root -> .on-dark umgeschrieben). Ein Lock-File friert
-// daher die Soll-Hashes BEIDER Seiten ein; der Check meldet die driftende
-// Datei, ohne die manuelle Transformation nachbilden zu muessen. Das faengt
-// Drift auf beiden Seiten (Quelle geaendert ohne Kopie nachzuziehen ODER Kopie
-// hand-editiert). index.css ist bewusst NICHT im Manifest: es traegt keine
-// Token-Werte (nur @import + Reset) und ist nicht Teil der Kopie -- pinnte man
-// es, floesse jede Reset-Aenderung als falscher Drift-Alarm ein.
+// Konkatenation der Quelle (Kommentare uebersetzt, --hero-*-Alias-Kette in
+// dark.css inlined, Scope :root -> .on-dark umgeschrieben). Ein Lock-File friert
+// daher die Soll-Hashes BEIDER Seiten ein; der Check meldet die driftende Datei,
+// ohne die manuelle Transformation nachbilden zu muessen. Das faengt Drift auf
+// beiden Seiten (Quelle geaendert ohne Kopie nachzuziehen ODER Kopie
+// hand-editiert). Nur die wert-tragenden Token-Dateien sind gepinnt; der
+// @import-Einstieg (styles.css, _shared/tokens.css) und fonts.css bewusst nicht
+// -- sie tragen keine Werte, nur Verdrahtung.
+//
+// @import-Verbot: nur die echten Host-Widgets (src/ui/widgets) muessen
+// self-contained sein -- in ihrer Render-Sandbox laedt @import nichts nach
+// (stilloser Inhalt beim Nutzer). Die mcp/-Karten sind ausdruecklich design-only
+// (nicht an den Server verdrahtet) und linken bewusst den @import-Einstieg; bei
+// ihnen wird nur der @dsCard-Marker erzwungen, nicht die Selbst-Tragung.
 //
 // Reine, seiteneffektfreie Pruef-Funktionen; der CLI-Teil (exit/console) sitzt
 // hinter dem main-Guard. Nur Node-Builtins, kein Dependency, kein Build-Step.
 // Aufruf:  node scripts/check-token-sync.js          (prueft, exit 0/1)
 //          node scripts/check-token-sync.js --write   (friert Soll-Hashes neu)
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HASH_ALGO = "sha256";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const LOCK_REL = "design-system/_shared/tokens.lock";
-const CANONICAL_COPY_REL = "design-system/_shared/tokens.css";
 // Quelle der Wahrheit: rohe + semantische Tokens (Light/App) plus Hero (Dark).
-// index.css bewusst nicht (keine Token-Werte, siehe Datei-Header oben).
 const SOURCE_TOKEN_RELS = [
   "apps/web/src/styles/tokens/primitives.css",
   "apps/web/src/styles/tokens/semantic.css",
   "apps/web/src/styles/tokens/hero.css",
 ];
-const HASHED_RELS = [...SOURCE_TOKEN_RELS, CANONICAL_COPY_REL];
+// Gespiegelte Kopie im Katalog (Wert-Pendants; dark.css <-> hero.css).
+const COPY_TOKEN_RELS = [
+  "design-system/tokens/primitives.css",
+  "design-system/tokens/semantic.css",
+  "design-system/tokens/dark.css",
+];
+const HASHED_RELS = [...SOURCE_TOKEN_RELS, ...COPY_TOKEN_RELS];
 const MCP_MOCKUP_DIR = "design-system/mcp";
 const WIDGET_DIR = "src/ui/widgets";
 const HTML_EXT = ".html";
@@ -45,9 +61,9 @@ const WRITE_FLAG = "--write";
 const LOG_PREFIX = "[check-token-sync]";
 const LOCK_COMMENT =
   "Auto-generiert via scripts/check-token-sync.js --write. Soll-Hashes der " +
-  "Token-Quelle (apps/web/src/styles/tokens/) + kanonischer Kopie " +
-  "(design-system/_shared/tokens.css). Bei legitimer Token-Aenderung: Kopie " +
-  "nachziehen, dann --write, dann committen.";
+  "Token-Quelle (apps/web/src/styles/tokens/) + gespiegelter Katalog-Kopie " +
+  "(design-system/tokens/). Bei legitimer Token-Aenderung: Kopie nachziehen, " +
+  "dann --write, dann committen.";
 
 // Roh-Bytes einer Datei hashen. Wirft bei fehlender Datei (ENOENT); jeder
 // Aufrufer faengt das und macht daraus ein fail-closed-Problem.
@@ -153,8 +169,10 @@ export function checkTokens({ rootDir = REPO_ROOT } = {}) {
 
   const mockupRels = listHtmlRels(rootDir, MCP_MOCKUP_DIR, problems);
   const widgetRels = listHtmlRels(rootDir, WIDGET_DIR, problems);
-  const noImportRels = [CANONICAL_COPY_REL, ...mockupRels, ...widgetRels];
-  for (const rel of noImportRels) assertNoImport(rootDir, rel, problems);
+
+  // @import-Verbot nur fuer die echten Host-Widgets (self-contained Pflicht);
+  // mcp/-Karten sind design-only und linken bewusst den @import-Einstieg.
+  for (const rel of widgetRels) assertNoImport(rootDir, rel, problems);
 
   for (const rel of mockupRels) assertDsCardLine1(rootDir, rel, problems);
 
@@ -167,10 +185,11 @@ export function writeTokenLock({ rootDir = REPO_ROOT } = {}) {
   const hashes = {};
   for (const rel of HASHED_RELS) hashes[rel] = hashFile(join(rootDir, rel));
   const lock = { _comment: LOCK_COMMENT, algo: HASH_ALGO, hashes };
-  writeFileSync(
-    join(rootDir, LOCK_REL),
-    JSON.stringify(lock, null, JSON_INDENT) + "\n",
-  );
+  const absLock = join(rootDir, LOCK_REL);
+  // Zielverzeichnis selbst sicherstellen -- nicht darauf verlassen, dass eine
+  // andere gepinnte Datei _shared/ als Nebeneffekt anlegt (Fixtures, frischer Klon).
+  mkdirSync(dirname(absLock), { recursive: true });
+  writeFileSync(absLock, JSON.stringify(lock, null, JSON_INDENT) + "\n");
   return lock;
 }
 

@@ -1,4 +1,4 @@
-// MCP-UI P5: Token-Pull-Disziplin. Prueft das Drift-Gate
+// Token-Pull-Disziplin. Prueft das Drift-Gate
 // (scripts/check-token-sync.js) gegen den echten Repo-Zustand (read-only) UND
 // gegen synthetische Temp-Fixtures (mkdtemp-Muster) fuer die Fehlerfaelle --
 // die echten Repo-Dateien werden nie zerstoerend angefasst. Offline, kein Netz.
@@ -11,14 +11,15 @@ import { afterEach, describe, it } from "node:test";
 import { checkTokens, writeTokenLock } from "../scripts/check-token-sync.js";
 
 const TOKEN_DIR_REL = "apps/web/src/styles/tokens";
+const COPY_DIR_REL = "design-system/tokens";
 const SHARED_DIR_REL = "design-system/_shared";
 const MOCKUP_DIR_REL = "design-system/mcp";
 const WIDGET_DIR_REL = "src/ui/widgets";
-const COPY_REL = `${SHARED_DIR_REL}/tokens.css`;
 const LOCK_REL = `${SHARED_DIR_REL}/tokens.lock`;
 const MOCKUP_REL = `${MOCKUP_DIR_REL}/x.html`;
 const WIDGET_REL = `${WIDGET_DIR_REL}/w.html`;
 const PRIMITIVES_REL = `${TOKEN_DIR_REL}/primitives.css`;
+const COPY_PRIMITIVES_REL = `${COPY_DIR_REL}/primitives.css`;
 
 let tmpDirs = [];
 
@@ -31,12 +32,16 @@ function writeFile(root, rel, content) {
 // Legt die minimale synchrone Struktur an und friert sie via writeTokenLock
 // als konsistenten Soll-Stand ein. Liefert das Wurzelverzeichnis zurueck.
 function makeSyncedFixture() {
-  const root = mkdtempSync(join(tmpdir(), "p5-token-sync-"));
+  const root = mkdtempSync(join(tmpdir(), "token-sync-"));
   tmpDirs.push(root);
+  // Quelle (apps/web): roh -> semantisch -> hero.
   writeFile(root, PRIMITIVES_REL, ":root{--c:#fff;}\n");
   writeFile(root, `${TOKEN_DIR_REL}/semantic.css`, ":root{--a:var(--c);}\n");
   writeFile(root, `${TOKEN_DIR_REL}/hero.css`, ":root{--h:#000;}\n");
-  writeFile(root, COPY_REL, ":root{--c:#fff;--a:#fff;}\n.on-dark{--h:#000;}\n");
+  // Gespiegelte Katalog-Kopie (inlined, .on-dark-Scope): eigene Hashes.
+  writeFile(root, COPY_PRIMITIVES_REL, ":root{--c:#fff;}\n");
+  writeFile(root, `${COPY_DIR_REL}/semantic.css`, ":root{--a:#fff;}\n");
+  writeFile(root, `${COPY_DIR_REL}/dark.css`, ".on-dark{--h:#000;}\n");
   writeFile(root, MOCKUP_REL, "<!-- @dsCard name=\"x\" -->\n<div>x</div>\n");
   writeFile(root, WIDGET_REL, "<style>.w{color:#fff;}</style>\n");
   writeTokenLock({ rootDir: root });
@@ -59,20 +64,26 @@ describe("check-token-sync gate", () => {
     assert.equal(checkTokens({ rootDir: root }).ok, true);
   });
 
-  it("(b) verfaelschte Kopie -> Drift nennt tokens.css", () => {
+  it("(b) verfaelschte Kopie -> Drift nennt die Katalog-Kopie", () => {
     const root = makeSyncedFixture();
-    writeFile(root, COPY_REL, ":root{--c:#fff;--a:#fff;}\n.on-dark{--h:#000;}\nx");
+    writeFile(root, COPY_PRIMITIVES_REL, ":root{--c:#fff;}\nx");
     const { ok, problems } = checkTokens({ rootDir: root });
     assert.equal(ok, false);
-    assert.ok(problems.some((p) => p.includes("tokens.css") && p.includes("driftet")));
+    assert.ok(
+      problems.some(
+        (p) => p.includes(COPY_PRIMITIVES_REL) && p.includes("driftet"),
+      ),
+    );
   });
 
-  it("(b') verfaelschte Quelle -> Drift nennt primitives.css", () => {
+  it("(b') verfaelschte Quelle -> Drift nennt die Quell-Datei", () => {
     const root = makeSyncedFixture();
     writeFile(root, PRIMITIVES_REL, ":root{--c:#000;}\n");
     const { ok, problems } = checkTokens({ rootDir: root });
     assert.equal(ok, false);
-    assert.ok(problems.some((p) => p.includes("primitives.css") && p.includes("driftet")));
+    assert.ok(
+      problems.some((p) => p.includes(PRIMITIVES_REL) && p.includes("driftet")),
+    );
   });
 
   it("(c) @import im Widget -> Problem nennt Datei + @import", () => {
@@ -93,22 +104,24 @@ describe("check-token-sync gate", () => {
 
   it("(d) Pflichtdatei fehlt -> fail-closed", () => {
     const root = makeSyncedFixture();
-    rmSync(join(root, COPY_REL));
-    assert.equal(existsSync(join(root, COPY_REL)), false);
+    rmSync(join(root, COPY_PRIMITIVES_REL));
+    assert.equal(existsSync(join(root, COPY_PRIMITIVES_REL)), false);
     assert.equal(checkTokens({ rootDir: root }).ok, false);
   });
 
-  // Regression: der geteilte fail-closed-Helper (readTextOrProblem /
-  // fileMissingProblem) muss die fehlende kanonische Kopie weiter mit der
-  // einheitlichen "Datei fehlt"-Meldung melden (Struktur-Pruefungs-Pfad).
+  // Regression: eine fehlende gepinnte Kopie-Datei muss ueber den Hash-Pfad
+  // (checkHashDrift -> fileMissingProblem) die einheitliche "Datei fehlt"-
+  // Meldung erzeugen, nicht still durchrutschen.
   it("(d') fehlende Kopie -> einheitliche fail-closed-Meldung", () => {
     const root = makeSyncedFixture();
-    rmSync(join(root, COPY_REL));
+    rmSync(join(root, COPY_PRIMITIVES_REL));
     const { ok, problems } = checkTokens({ rootDir: root });
     assert.equal(ok, false);
     assert.ok(
       problems.some(
-        (p) => p.includes("Datei fehlt (fail-closed)") && p.includes("tokens.css"),
+        (p) =>
+          p.includes("Datei fehlt (fail-closed)") &&
+          p.includes(COPY_PRIMITIVES_REL),
       ),
       `erwartete fail-closed-Meldung fehlt: ${problems.join(" | ")}`,
     );
