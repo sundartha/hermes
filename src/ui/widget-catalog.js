@@ -17,6 +17,9 @@ export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";
 export const WIDGET_CALLS = "calls";
 export const WIDGET_CALENDAR = "calendar";
+// C5 Wegwerf-Spike: Probe-Widget fuer die Host-Tool-Bruecke (In-place-Refresh). Nach C6
+// wieder entfernen (diese Konstante + WIDGET_DEFS-Eintrag + die HTML-Datei + Tool-Block).
+export const WIDGET_PROBE = "probe-call-bridge";
 const WIDGET_DEFS = {
   [WIDGET_CALL_STATUS]: { file: "call-status.html", title: "Hermes Call Status" },
   [WIDGET_CALL_RESULT]: { file: "call-result.html", title: "Hermes Call Result" },
@@ -25,6 +28,7 @@ const WIDGET_DEFS = {
   [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number" },
   [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List" },
   [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar" },
+  [WIDGET_PROBE]: { file: "probe-call-bridge.html", title: "Hermes Widget Bridge Probe" },
 };
 
 // Schliessendes body-Tag - davor wird das gemeinsame Daten-Binding eingefuegt, damit

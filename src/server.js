@@ -1825,7 +1825,14 @@ app.post("/mcp", mcpAuth, async (req, res) => {
     // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
     // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert.
     const uiHost = { enabled: config.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
-    registerTools(server, { identity, scopedTenant, allowCalendar: profile.allowCalendar, uiHost });
+    registerTools(server, {
+      identity,
+      scopedTenant,
+      allowCalendar: profile.allowCalendar,
+      uiHost,
+      // C5 Wegwerf-Spike: nur wirksam, wenn Master-Schalter UND Spike-Flag an sind.
+      uiProbe: config.mcpUiEnabled && config.mcpUiProbe,
+    });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       transport.close();
