@@ -198,6 +198,9 @@ export function makePgStore(runner) {
     // Tages-Cap-Zaehler der gesendeten Summary-SMS (F2 P8): liest den Spiegel
     // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
     dailySmsCount: (tenantId, sinceIso) => ops.dailySmsCount(requireState(), tenantId, sinceIso),
+    // Minuten-Kontingent-Gate-Praedikat (B1b): liest den hydrierten usage_event-Spiegel
+    // (kein DB-Roundtrip, KEINE neue SQL), Wrapper-Parity zu json.js. Reine Query, kein save.
+    planMinutesExceeded: (tenantId, opts) => ops.planMinutesExceeded(requireState(), tenantId, opts),
     pendingMeterEvents: () => ops.pendingMeterEvents(requireState()),
     markMeterEventsSent(eventIds) {
       const n = ops.markMeterEventsSent(requireState(), eventIds);

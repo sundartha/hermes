@@ -1183,6 +1183,25 @@ export function voiceMinutesUsedSince(s, tenantId, sinceIso) {
     .reduce((sum, e) => sum + e.quantity, 0);
 }
 
+// Minuten-Kontingent-Gate-Praedikat (B1b, GAP B): sind die im laufenden Abrechnungs-
+// fenster verbrauchten Voice-Minuten >= dem Plan-Kontingent? Geschwister zu
+// budgetExceeded (reine, IO-freie Query), aber auf der MINUTEN-Quelle
+// (voiceMinutesUsedSince), NICHT auf usageFor/costEur (keine Achsen-Vermischung,
+// kein Doppelzaehlen mit der EUR-Achse, B4). State-ops bleibt katalog-/zeit-frei:
+// der Aufrufer (B2) reicht das aufgeloeste includedMinutes (aus findPlan) und den
+// Periodenanker periodStartIso herein.
+//
+// FAIL-CLOSED (§5.4, bindend): ohne gueltigen Periodenanker ODER ohne bekanntes
+// Kontingent => exceeded=true (blocken). periodStartIso wird NIE als undefined an
+// voiceMinutesUsedSince durchgereicht - "e.occurredAt >= undefined" ist immer false
+// und taeuschte ein stilles used=0 (= volles Kontingent) vor, genau die fail-OPEN-
+// Anzeige-Semantik von quotaView, die ein Geld-Gate NICHT erben darf. includedMinutes=0
+// (kein Kontingent) ist KEIN Fehlwert: used>=0 ist immer wahr -> korrekt exceeded.
+export function planMinutesExceeded(s, tenantId, { includedMinutes, periodStartIso } = {}) {
+  if (!periodStartIso || !Number.isFinite(includedMinutes)) return true;
+  return voiceMinutesUsedSince(s, tenantId, periodStartIso) >= includedMinutes;
+}
+
 // Noch nicht gemeldete Ledger-Eintraege (Flush-Quelle, billing/meter.js). Reine Query.
 export function pendingMeterEvents(s) {
   return s.usageEvents.filter((e) => !e.stripeMeterSent);

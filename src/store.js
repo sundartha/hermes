@@ -113,6 +113,7 @@ export const {
   setTenantBudget,
   recordUsageEvent,
   dailySmsCount,
+  planMinutesExceeded,
   pendingMeterEvents,
   markMeterEventsSent,
   setKycLevel,
