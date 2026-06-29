@@ -9,8 +9,10 @@ import {
   makeDefaultState,
   recordUsageEvent,
   voiceMinutesUsedSince,
+  planMinutesExceeded,
 } from "../src/store/state-ops.js";
 import { quotaView } from "../src/billing/meter.js";
+import { resolvePeriodStartIso } from "../src/billing/period.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
 
 // Fixes Fenster (zeit-frei): currentPeriodEnd = Unix-Sekunden zu 2026-07-15T00:00Z.
@@ -48,21 +50,36 @@ const quotaA = (s, planSlug = "starter", currentPeriodEnd = PERIOD_END_SEC) =>
 
 test("(1) frischer starter ohne Events -> volles Kontingent", () => {
   const s = makeDefaultState();
-  assert.deepEqual(quotaA(s), { includedMinutes: 30, usedMinutes: 0, remainingMinutes: 30 });
+  assert.deepEqual(quotaA(s), {
+    includedMinutes: 30,
+    usedMinutes: 0,
+    remainingMinutes: 30,
+    exhausted: false,
+  });
 });
 
 test("(2) Teilverbrauch summiert die Minuten im Fenster", () => {
   const s = makeDefaultState();
   seedVoice(s, { quantity: 5 });
   seedVoice(s, { quantity: 8 });
-  assert.deepEqual(quotaA(s), { includedMinutes: 30, usedMinutes: 13, remainingMinutes: 17 });
+  assert.deepEqual(quotaA(s), {
+    includedMinutes: 30,
+    usedMinutes: 13,
+    remainingMinutes: 17,
+    exhausted: false,
+  });
 });
 
 test("(3) Ueberverbrauch klemmt remaining auf 0 (nie negativ)", () => {
   const s = makeDefaultState();
   seedVoice(s, { quantity: 20 });
   seedVoice(s, { quantity: 15 });
-  assert.deepEqual(quotaA(s), { includedMinutes: 30, usedMinutes: 35, remainingMinutes: 0 });
+  assert.deepEqual(quotaA(s), {
+    includedMinutes: 30,
+    usedMinutes: 35,
+    remainingMinutes: 0,
+    exhausted: true,
+  });
 });
 
 test("(4) Out-of-window-Events zaehlen nicht (Periode greift)", () => {
@@ -75,7 +92,12 @@ test("(4) Out-of-window-Events zaehlen nicht (Periode greift)", () => {
 test("(5) Tenant-Isolation: fremder Verbrauch beeinflusst das eigene Kontingent nicht", () => {
   const s = makeDefaultState();
   seedVoice(s, { tenantId: TENANT_B, quantity: 50 });
-  assert.deepEqual(quotaA(s), { includedMinutes: 30, usedMinutes: 0, remainingMinutes: 30 });
+  assert.deepEqual(quotaA(s), {
+    includedMinutes: 30,
+    usedMinutes: 0,
+    remainingMinutes: 30,
+    exhausted: false,
+  });
 });
 
 test("(6) kind-Isolation: nur voice_minute zaehlt", () => {
@@ -104,13 +126,16 @@ test("(8) unbekannter/fehlender Plan -> null (Leerzustand)", () => {
   );
 });
 
-test("(9) fehlendes currentPeriodEnd -> used 0, volles Kontingent (transient)", () => {
+test("(9) kein Periodenanker (currentPeriodEnd null) -> fail-closed wie das Gate, Rest 0", () => {
   const s = makeDefaultState();
   seedVoice(s, { quantity: 9 });
+  // Kein Anker -> Gate blockt (planMinutesExceeded true) -> Anzeige zeigt 0 Rest,
+  // used 0 (kein Fenster), exhausted true. NIE mehr fail-OPEN volles Kontingent.
   assert.deepEqual(quotaA(s, "starter", null), {
     includedMinutes: 30,
     usedMinutes: 0,
-    remainingMinutes: 30,
+    remainingMinutes: 0,
+    exhausted: true,
   });
 });
 
@@ -124,4 +149,56 @@ test("(11) voiceMinutesUsedSince summiert ab sinceIso (Raw-Reader)", () => {
   seedVoice(s, { quantity: 4, occurredAt: IN_WINDOW });
   seedVoice(s, { quantity: 6, occurredAt: OUT_OF_WINDOW });
   assert.equal(voiceMinutesUsedSince(s, TENANT_A, "2026-06-01T00:00:00.000Z"), 4);
+});
+
+// (12) B3: persistierter currentPeriodStart hat Vorrang vor der End-Ableitung
+// (== Gate). Start 2026-06-20 (persistiert) liegt NACH der End-Ableitung 2026-06-15;
+// ein Event am 2026-06-17 faellt aus dem Gate-Fenster, NICHT aus dem End-Fenster.
+test("(12) Anzeige ehrt persistierten currentPeriodStart (Fenster == Gate)", () => {
+  const s = makeDefaultState();
+  const START_SEC = Date.UTC(2026, 5, 20) / MS_PER_SECOND; // 2026-06-20T00:00:00Z
+  seedVoice(s, { quantity: 7, occurredAt: "2026-06-17T10:00:00.000Z" }); // vor persist. Start
+  seedVoice(s, { quantity: 4, occurredAt: IN_WINDOW }); // 2026-06-20 im Fenster
+  const view = quotaView(s, {
+    tenantId: TENANT_A,
+    planSlug: "starter",
+    currentPeriodStart: START_SEC,
+    currentPeriodEnd: PERIOD_END_SEC,
+  });
+  // Nur das 06-20-Event zaehlt (persist. Start), das 06-17-Event NICHT.
+  assert.equal(view.usedMinutes, 4);
+  // Gegenprobe: die End-Ableitung (2026-06-15) wuerde BEIDE zaehlen -> Anker wirkt.
+  const endIso = resolvePeriodStartIso({ currentPeriodEnd: PERIOD_END_SEC });
+  assert.equal(voiceMinutesUsedSince(s, TENANT_A, endIso), 11);
+});
+
+// (13) B3: exhausted == das durchgesetzte Gate-Praedikat (single source), inkl.
+// Kein-Anker-fail-closed. Beweist Anzeige == Gate ohne zweitkodierte Regel (G5).
+test("(13) exhausted spiegelt planMinutesExceeded (Gate-Paritaet)", () => {
+  const s = makeDefaultState();
+  seedVoice(s, { quantity: 30 }); // genau am Limit -> >= -> exhausted
+  const withAnchor = quotaView(s, {
+    tenantId: TENANT_A,
+    planSlug: "starter",
+    currentPeriodEnd: PERIOD_END_SEC,
+  });
+  assert.equal(withAnchor.exhausted, true);
+  assert.equal(
+    withAnchor.exhausted,
+    planMinutesExceeded(s, TENANT_A, {
+      includedMinutes: 30,
+      periodStartIso: resolvePeriodStartIso({ currentPeriodEnd: PERIOD_END_SEC }),
+    }),
+  );
+  // Kein Anker -> beide fail-closed true.
+  const noAnchor = quotaView(s, {
+    tenantId: TENANT_A,
+    planSlug: "starter",
+    currentPeriodEnd: null,
+  });
+  assert.equal(noAnchor.exhausted, true);
+  assert.equal(
+    noAnchor.exhausted,
+    planMinutesExceeded(s, TENANT_A, { includedMinutes: 30, periodStartIso: null }),
+  );
 });

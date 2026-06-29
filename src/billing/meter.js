@@ -9,9 +9,10 @@ import {
   pendingMeterEvents,
   markMeterEventsSent,
   voiceMinutesUsedSince,
+  planMinutesExceeded,
 } from "../store/state-ops.js";
 import { findPlan } from "../plans.js";
-import { periodStartFromEnd } from "./period.js";
+import { resolvePeriodStartIso } from "./period.js";
 
 // Aggregiert die NOCH NICHT gesendeten usage_event-Zeilen je (tenantId, kind):
 // summiert quantity + costCents, sammelt die Event-ids (in stabiler Reihenfolge).
@@ -72,27 +73,33 @@ export async function flushMeters(s, { billing }) {
 }
 
 // ---- BK4: Minuten-Kontingent-Lese-Sicht (kein Stripe, kein save, kein IO) ----------
-// Start des laufenden Abrechnungszeitraums als ISO-8601 (direkt vergleichbar mit
-// usage_event.occurredAt). Duenner Wrapper um die geteilte Perioden-Ableitung
-// (billing/period.js); currentPeriodEndSec = Unix-Sekunden.
-function periodStartIso(currentPeriodEndSec) {
-  return periodStartFromEnd(currentPeriodEndSec).toISOString();
-}
-
 // Minuten-Kontingent EINES Tenants (BK4): reiner Read ueber Plan-Katalog
 // (includedMinutes) + usage_event-Ledger (Voice-Minuten im laufenden Zeitraum).
 // tenant-gefiltert (nur die eigene tenantId, kein Cross-Tenant-Leck, H3). subscription
-// = {planSlug,currentPeriodEnd} aus store.tenantSubscription. Kein aktiver/bekannter
-// Plan -> null (UI: neutraler Leerzustand). Fehlt currentPeriodEnd (Abo frisch,
-// Periode noch nicht nachgezogen) -> used=0 (volles Kontingent) statt falsches Fenster.
-// remainingMinutes nie negativ (Math.max 0): Ueberverbrauch zeigt 0. Reine Funktion.
-export function quotaView(s, { tenantId, planSlug, currentPeriodEnd }) {
+// = {planSlug,currentPeriodStart,currentPeriodEnd} aus store.tenantSubscription. Kein
+// aktiver/bekannter Plan -> null (UI: neutraler Leerzustand).
+//
+// B3: DERSELBE Periodenanker (resolvePeriodStartIso, Owner 5.4) UND DASSELBE
+// Erschoepfungs-Praedikat (planMinutesExceeded) wie das Outbound-Gate (server.js
+// planMinutesExhausted) -> Anzeige-Fenster == Gate-Fenster, auch fuer Tenants mit
+// persistiertem current_period_start (sonst "Rest X Min, trotzdem geblockt"). Die
+// fail-closed-Logik (kein Anker -> blocken) lebt EINMAL in der Query (G5), hier NICHT
+// erneut: exhausted == die Gate-Entscheidung. Ohne Anker (frisches Abo, Webhook
+// ausstehend) blockt das Gate -> remaining 0 (NICHT mehr fail-OPEN volles Kontingent).
+// usedMinutes bleibt der ehrlich gemessene Verbrauch (0 ohne Fenster, kein fabrizierter
+// Wert); remaining nie negativ. Reine Funktion.
+//
+// Trade-off (bewusst): bei vorhandenem Anker liest planMinutesExceeded intern
+// voiceMinutesUsedSince ein zweites Mal - zwei identische REINE Array-Filter auf einem
+// Cold-Path (Self-Service-GET), KEINE Logik-Duplizierung. Gewaehlt, weil die fail-closed-
+// Entscheidung NICHT zweitkodiert werden darf (Repo-Invariante, vgl. planMinutesExhausted).
+export function quotaView(s, { tenantId, planSlug, currentPeriodStart, currentPeriodEnd }) {
   const plan = planSlug ? findPlan(planSlug) : null;
   if (!plan) return null;
   const includedMinutes = plan.includedMinutes;
-  const usedMinutes = currentPeriodEnd
-    ? voiceMinutesUsedSince(s, tenantId, periodStartIso(currentPeriodEnd))
-    : 0;
-  const remainingMinutes = Math.max(0, includedMinutes - usedMinutes);
-  return { includedMinutes, usedMinutes, remainingMinutes };
+  const periodStartIso = resolvePeriodStartIso({ currentPeriodStart, currentPeriodEnd });
+  const exhausted = planMinutesExceeded(s, tenantId, { includedMinutes, periodStartIso });
+  const usedMinutes = periodStartIso ? voiceMinutesUsedSince(s, tenantId, periodStartIso) : 0;
+  const remainingMinutes = exhausted ? 0 : Math.max(0, includedMinutes - usedMinutes);
+  return { includedMinutes, usedMinutes, remainingMinutes, exhausted };
 }

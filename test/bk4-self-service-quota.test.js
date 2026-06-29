@@ -110,7 +110,12 @@ test("(a) state liefert das abgeleitete quota (included/used/remaining)", async 
     seedVoice(s.store, TENANT, 6);
     const { status, body } = await getState(s);
     assert.equal(status, 200);
-    assert.deepEqual(body.quota, { includedMinutes: 30, usedMinutes: 10, remainingMinutes: 20 });
+    assert.deepEqual(body.quota, {
+      includedMinutes: 30,
+      usedMinutes: 10,
+      remainingMinutes: 20,
+      exhausted: false,
+    });
   } finally {
     await s.close();
   }
@@ -147,7 +152,55 @@ test("(d) Cross-Tenant: fremder Voice-Verbrauch aendert das eigene quota nicht",
     });
     seedVoice(s.store, "t_someone-else", 50);
     const { body } = await getState(s);
-    assert.deepEqual(body.quota, { includedMinutes: 30, usedMinutes: 0, remainingMinutes: 30 });
+    assert.deepEqual(body.quota, {
+      includedMinutes: 30,
+      usedMinutes: 0,
+      remainingMinutes: 30,
+      exhausted: false,
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test("(e) state ehrt persistierten currentPeriodStart (Anzeige-Fenster == Gate)", async () => {
+  const s = await setup();
+  try {
+    const START_SEC = PERIOD_END_SEC - 5 * SECONDS_PER_DAY; // enger als End-minus-Monat
+    ops.setTenantSubscription(s.store.load(), TENANT, {
+      subscriptionId: "sub_q",
+      planSlug: "starter",
+      currentPeriodStart: START_SEC,
+      currentPeriodEnd: PERIOD_END_SEC,
+    });
+    // Event 10 Tage vor Ende = VOR dem persistierten Start (5 Tage) -> faellt raus.
+    const e = ops.recordUsageEvent(s.store.load(), {
+      tenantId: TENANT,
+      kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+      quantity: 8,
+      costCents: 0,
+    });
+    e.occurredAt = new Date((PERIOD_END_SEC - 10 * SECONDS_PER_DAY) * 1000).toISOString();
+    const { body } = await getState(s);
+    assert.deepEqual(body.quota, {
+      includedMinutes: 30,
+      usedMinutes: 0,
+      remainingMinutes: 30,
+      exhausted: false,
+    });
+  } finally {
+    await s.close();
+  }
+});
+
+test("(f) aktives Abo ohne aufloesbaren Anker -> exhausted true, Rest 0 (== Gate)", async () => {
+  const s = await setup();
+  try {
+    // planSlug gesetzt, aber WEDER Start NOCH End -> frisches Abo, Webhook ausstehend.
+    ops.setTenantSubscription(s.store.load(), TENANT, { subscriptionId: "sub_q", planSlug: "starter" });
+    const { body } = await getState(s);
+    assert.equal(body.quota.exhausted, true);
+    assert.equal(body.quota.remainingMinutes, 0);
   } finally {
     await s.close();
   }
