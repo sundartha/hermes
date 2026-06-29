@@ -363,6 +363,7 @@ test("(6) /state nach Abo zeigt Plan + volles Kontingent, ohne Id-Leak", async (
       includedMinutes: INCLUDED_MIN,
       usedMinutes: 0,
       remainingMinutes: INCLUDED_MIN,
+      exhausted: false,
     });
     assert.equal("subscriptionId" in body.subscription, false, "kein sub_-Id-Leak in der View");
     // Dry-Run-Wahrheit: die Nummer bleibt 'requested' (kein Kauf) -> activeNumberFor liefert ""

@@ -63,14 +63,15 @@ function maskPrivateNumber(e164) {
 // die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
   if (!config.paymentEnabled) return {};
-  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenant);
+  const { planSlug, currentPeriodStart, currentPeriodEnd } = store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd },
-    // BK4: abgeleitetes Minuten-Kontingent des laufenden Zeitraums (includedMinutes -
-    // verbrauchte Voice-Minuten). Kein Abo -> null (UI: Leerzustand). store.load() = der
-    // Ledger-State (Muster activeNumberFor(store.load(), ...) im /state-Handler).
-    quota: quotaView(store.load(), { tenantId: tenant, planSlug, currentPeriodEnd }),
+    // BK4/B3: abgeleitetes Minuten-Kontingent des laufenden Zeitraums. DERSELBE
+    // Periodenanker (currentPeriodStart bevorzugt) + dasselbe Erschoepfungs-Praedikat
+    // wie das Outbound-Gate -> Anzeige == durchgesetztes Gate (kein "Rest X, trotzdem
+    // geblockt"). Kein Abo -> null (UI: Leerzustand). store.load() = der Ledger-State.
+    quota: quotaView(store.load(), { tenantId: tenant, planSlug, currentPeriodStart, currentPeriodEnd }),
   };
 }
 
