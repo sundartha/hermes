@@ -17,7 +17,7 @@ import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-serv
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { createTenantSubscription } from "./billing/subscribe.js";
-import { activatePaidTenant } from "./billing/activation.js";
+import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { quotaView } from "./billing/meter.js";
@@ -94,8 +94,8 @@ function returnSuccessUrl(publicUrl, planSlug) {
 async function subscribeAndActivate({ store, billing, config, accounts, provision, tenant, planSlug }) {
   const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
   if (!result.ok) return result;
-  await activatePaidTenant({ store, accounts, provision, tenant });
-  return result;
+  const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+  return { ...result, profile };
 }
 
 // Express 4 leitet abgelehnte Promises aus async-Handlern NICHT an die Fehler-Kette ->
@@ -300,7 +300,7 @@ export function makeSelfServiceRoutes({
         audit(
           "self_service_subscribe",
           req,
-          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason}`,
+          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ${profileAuditDetail(result.profile)}`,
         );
         res.redirect(result.ok ? SUB_RETURN_OK : SUB_RETURN_FAILED);
       },
@@ -335,7 +335,7 @@ export function makeSelfServiceRoutes({
           const { status, body } = subscribeReject(result.reason, planSlug);
           return res.status(status).json(body);
         }
-        audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug}`);
+        audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)}`);
         res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
       },
       billingUnavailable,

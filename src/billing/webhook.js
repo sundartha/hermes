@@ -3,7 +3,7 @@
 // Krypto vom /voice-Gate trennt). Kein express, kein store - reine Funktionen ->
 // unit-testbar ohne Server. Kein Stripe-SDK (Regel: wenige Deps); node:crypto reicht.
 import crypto from "node:crypto";
-import { activatePaidTenant } from "./activation.js";
+import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -175,8 +175,8 @@ export async function applyStripeWebhook(
     // Seam-Reihenfolge (KYC -> Status -> provision) bleibt unveraendert, nur jetzt geteilt
     // statt inline. Idempotent im provision-Trigger (kein Doppelkauf bei Webhook-Retry/
     // Folge-Events); bei PROVISIONING_ENABLED=false bleibt die Nummer 'requested' (KEIN Kauf).
-    await activatePaidTenant({ store, accounts, provision, tenant });
-    audit("stripe_webhook_activate", req, `tenant=${tenant}`);
+    const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+    audit("stripe_webhook_activate", req, `tenant=${tenant} ${profileAuditDetail(profile)}`);
     return;
   }
   // SUSPEND (Zahlung gescheitert / Abo geloescht): Status + Sessions sperren (gesperrter
