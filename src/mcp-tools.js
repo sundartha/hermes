@@ -308,7 +308,7 @@ export function registerTools(
       objective: z
         .string()
         .describe(
-          "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Vereinbare einen Friseurtermin fuer Samstag vormittag.' Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
+          "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Einen Friseurtermin fuer Samstag vormittag vereinbaren.' Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
         ),
       briefing: z
         .string()
