@@ -14,6 +14,20 @@ import { metrics } from "./metrics.js";
 // (Aufrufer behandelt das in CP4); 4xx/Auth propagieren unveraendert.
 const llm = createLlmClient({ apiKey: config.anthropicApiKey, config, metrics });
 
+// L3: tatsaechlich verarbeitete Input-Token EINES Anthropic-Aufrufs inkl. Cache. Mit
+// Prompt-Caching zaehlt usage.input_tokens nur den UNGECACHTEN Rest; der gecachte
+// Praefix erscheint separat als cache_creation_/cache_read_input_tokens. Summe =
+// voller Umfang -> Budget-Gate (Regel 1) und Stripe-Meter zaehlen weiter den vollen
+// Verbrauch (fail-safe: NIE weniger als ohne Caching). Felder fehlen ohne Cache
+// (summarizeCall ohne Tools, Praefix < Modell-Minimum) -> identisch zu input_tokens.
+function inputTokensOf(usage) {
+  return (
+    usage.input_tokens +
+    (usage.cache_creation_input_tokens || 0) +
+    (usage.cache_read_input_tokens || 0)
+  );
+}
+
 // AI-Token-Meter EINES Anthropic-Aufrufs (P6b3, Meter 3). NUR im Metering-Pfad
 // (PAYMENT_ENABLED) - der Nebeneffekt (recordUsageEvent) steht im Namen. Laeuft
 // PARALLEL zum trackUsage-Live-Gate (getrennte Quellen, kein Doppelzaehlen):
@@ -22,12 +36,13 @@ const llm = createLlmClient({ apiKey: config.anthropicApiKey, config, metrics })
 // verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
 function meterAiTokens(call, usage) {
   if (!config.paymentEnabled) return;
+  const inputTokens = inputTokensOf(usage);
   store.recordUsageEvent({
     tenantId: call.tenantId,
     callId: call.id,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
-    quantity: usage.input_tokens + usage.output_tokens,
-    costCents: aiCostCents(usage.input_tokens, usage.output_tokens, config),
+    quantity: inputTokens + usage.output_tokens,
+    costCents: aiCostCents(inputTokens, usage.output_tokens, config),
   });
 }
 
@@ -239,6 +254,24 @@ export function toolDefs(tenantId) {
   return tools;
 }
 
+// Anthropic Prompt-Caching-Marker (L3): markiert das Ende eines stabilen Praefix-
+// Blocks fuer Caching. "ephemeral" = 5-min-TTL. Eingefroren -> sichere Mehrfach-
+// Referenz (System-Block + letzter Tool-Eintrag), kein gestreuter Magic-String (G25).
+const CACHE_CONTROL_EPHEMERAL = Object.freeze({ type: "ephemeral" });
+
+// L3: markiert NUR den letzten Tool-Eintrag mit cache_control (Render-Reihenfolge
+// tools->system->messages -> ein Breakpoint am letzten Tool cacht den ganzen Tool-
+// Block). REINER Transform ohne Nebeneffekt: liefert eine NEUE Liste und mutiert die
+// toolDefs-Ausgabe NICHT (die auch die Realtime-Bridge ueber realtimeTools konsumiert).
+// Tool-Inhalt byte-identisch (nur das additive cache_control-Feld am letzten Eintrag).
+function toolsWithCacheControl(tools) {
+  if (!tools.length) return tools;
+  const last = tools.length - 1;
+  return tools.map((tool, i) =>
+    i === last ? { ...tool, cache_control: CACHE_CONTROL_EPHEMERAL } : tool,
+  );
+}
+
 export function execTool(call, name, input) {
   // Datums-Locale sprachabhaengig (F1 Phase 2): die im Tool-Ergebnis genannten Termine
   // erscheinen in der Gespraechssprache (fr-FR/de-DE), die der LLM weiterspricht.
@@ -316,12 +349,12 @@ export async function agentTurn(call, callerText) {
     const resp = await llm.complete({
       model: config.claudeModel,
       max_tokens: 300,
-      system: systemPrompt(call),
-      tools: toolDefs(call.tenantId),
+      system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
+      tools: toolsWithCacheControl(toolDefs(call.tenantId)),
       messages,
     });
     roundtrips += 1;
-    store.trackUsage(call.tenantId, resp.usage.input_tokens, resp.usage.output_tokens, config);
+    store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config);
     meterAiTokens(call, resp.usage);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
@@ -399,7 +432,7 @@ export async function summarizeCall(call) {
       },
     ],
   });
-  store.trackUsage(call.tenantId, resp.usage.input_tokens, resp.usage.output_tokens, config);
+  store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config);
   meterAiTokens(call, resp.usage);
 
   let parsed = { summary: "", actionItems: [] };
