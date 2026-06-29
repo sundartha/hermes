@@ -269,6 +269,26 @@ export function normNum(n) {
 // Zyklus (defaults.js importiert nichts). Wert byte-identisch zur frueheren Definition.
 export const E164 = /^\+[1-9]\d{6,14}$/;
 
+// Laendervorwahlen, bei denen eine '0' UNMITTELBAR nach der Vorwahl ein nationaler
+// Trunk-Praefix (Verkehrsausscheidungsziffer) ist, der in E.164 NICHT vorkommen darf
+// (DE/FR/UK lassen die fuehrende 0 im internationalen Format weg). BEWUSST eine eigene,
+// enge Liste - NICHT an config.allowedCountryCodes gekoppelt (G13): Italien (+39) z.B.
+// BEHAELT die fuehrende 0 im NSN; eine an die Anruf-Allowlist gebundene Regel wuerde dort
+// gueltige Nummern faelschlich ablehnen (Pre-Mortem). Telefonie-Tatsache, kein Policy-Gate
+// -> bewusst kein Env-Knopf (fail-safe gegen Fehlkonfiguration).
+const TRUNK_ZERO_COUNTRY_CODES = ["+49", "+33", "+44"];
+const NATIONAL_TRUNK_PREFIX = "0";
+
+// true, wenn die (bereits normNum-normalisierte) Nummer eine Trunk-0 direkt nach einer
+// dieser Laendervorwahlen traegt (z.B. +4901737... statt +491737...). Reines Praedikat
+// (kein Kanonisieren - Owner-Entscheidung #4: REJECT). Nicht-String/leer -> false
+// (fail-closed beim Aufrufer; das allgemeine E.164-Format prueft weiter die E164-Regex
+// bzw. numberGateError). Vertrag bewusst getrennt von normNum (nur kosmetisch) und E164.
+export function hasTrunkZeroAfterCountryCode(e164) {
+  if (typeof e164 !== "string" || !e164) return false;
+  return TRUNK_ZERO_COUNTRY_CODES.some((code) => e164.startsWith(code + NATIONAL_TRUNK_PREFIX));
+}
+
 // Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines
 // Praefix-Praedikat: erlaubt nur Nummern, deren E.164-Praefix in allowedCodes liegt.
 // Default ["+49"] - BEWUSST strenger als das globale Call-Gate (+49,+33,+44): die
