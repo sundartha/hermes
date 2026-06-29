@@ -2,22 +2,23 @@
 // BESTANDS-Subscriber, die VOR A2 (Aktivierung provisioniert das Profil) aktiviert wurden.
 // Testbarer Kern (DIP): reine Orchestrierung ueber injizierte Seams (store/accounts/
 // resolvePlanSlug), importiert KEIN store.js/web-auth.js (sonst nicht pglite-/Fake-testbar),
-// nur die puren Helfer. Spiegelt activation.js: gleiche Skip-Taxonomie (no_plan/no_account/
-// no_email), gleiche EMAIL-FIRST-Profil-Quelle (planProfileFor), gleiche fail-closed SKIPs.
-// Setzt NIE ein permissiveres Recht als das A1-Tier (Merge==Replace raeumt sogar Alt-
-// unrestricted=true ab) -> keine Toll-Fraud-Flaeche. apply=false = reiner Dry-Run.
+// nur die puren Helfer. Teilt die Profil-Aufloesung (planSlug -> Tier -> Account -> email)
+// und die fail-closed Skip-Taxonomie mit der A2-Aktivierung ueber resolveTierForTenant /
+// PROFILE_SKIP (EINE Quelle, G5) - hier kommen NUR Bestands-Enumeration, Reconcile-Vorlauf,
+// Dry-Run/Idempotenz und der Report dazu. Setzt NIE ein permissiveres Recht als das A1-Tier
+// (Merge==Replace raeumt sogar Alt-unrestricted=true ab) -> keine Toll-Fraud-Flaeche.
+// apply=false = reiner Dry-Run.
 import { isDeepStrictEqual } from "node:util";
 import { BOOTSTRAP_TENANT_ID, KYC_OUTBOUND_MIN, sanitizeProfile } from "../store/defaults.js";
-import { planProfileFor } from "../plans.js";
+import { PROFILE_SKIP, resolveTierForTenant } from "./plan-profile-resolver.js";
 
-// Skip-/Aktions-Gruende (kein Magic-String, G25). Taxonomie spiegelt A2
-// (no_plan/no_account/no_email), erweitert um bootstrap/not_subscriber.
+// Skip-/Aktions-Gruende (kein Magic-String, G25). Die Profil-Aufloesungs-Skips
+// (no_plan/no_account/no_email) kommen aus der geteilten PROFILE_SKIP-Quelle (kein zweites
+// Literal, G5); backfill-spezifisch ergaenzt: bootstrap/not_subscriber.
 export const BACKFILL_SKIP = Object.freeze({
   BOOTSTRAP: "bootstrap", // Owner hart ausgenommen (BOOTSTRAP_TENANT_ID)
   NOT_SUBSCRIBER: "not_subscriber", // kein aktiver+CARD Subscriber (Nicht-Zahler)
-  NO_PLAN: "no_plan", // aktiver Subscriber OHNE/unbekanntem planSlug -> NIE raten
-  NO_ACCOUNT: "no_account", // accountByTenant -> null (0 ODER >1 = mehrdeutig, §5.6)
-  NO_EMAIL: "no_email", // leere account.email (Lesepfad ignoriert sie)
+  ...PROFILE_SKIP, // NO_PLAN/NO_ACCOUNT/NO_EMAIL - geteilt mit der A2-Aktivierung
 });
 
 // Idempotente, fail-closed Migration. Enumeriert store.load().tenants (volle Hydrierung
@@ -42,29 +43,21 @@ export async function backfillPlanProfiles({ store, accounts, apply = false, res
       report.skipped.push({ id, reason: BACKFILL_SKIP.NOT_SUBSCRIBER });
       continue;
     }
-    let planSlug = store.tenantSubscription(id).planSlug;
-    // Reconcile-Vorlauf NUR fuer aktive Subscriber OHNE Slug (apply): heilt slug-lose
-    // Bestands-Abos (webhook.js selektiver Patch), sonst stiller DEFAULT_PROFILE (-> A4-Sperre).
-    if (!planSlug && apply && resolvePlanSlug && tenant.stripeSubscriptionId) {
+    // Reconcile-Vorlauf NUR fuer aktive Subscriber OHNE Slug (apply): heilt slug-lose Bestands-
+    // Abos (webhook.js selektiver Patch) VOR der Aufloesung, sonst blieben sie no_plan-Skip
+    // (-> stiller DEFAULT_PROFILE, A4-Sperre). Mutiert den Spiegel; resolveTierForTenant liest ihn.
+    if (apply && resolvePlanSlug && tenant.stripeSubscriptionId && !store.tenantSubscription(id).planSlug) {
       const slug = await resolvePlanSlug(tenant.stripeSubscriptionId); // fail-soft (Aufrufer faengt)
       if (slug) {
         store.setTenantSubscription(id, { planSlug: slug });
-        planSlug = slug;
         report.reconciled.push({ id });
       }
     }
-    const tier = planProfileFor(planSlug); // NIE mit undefined aufrufen -> hier garantiert Slug/null
-    if (!tier) {
-      report.skipped.push({ id, reason: BACKFILL_SKIP.NO_PLAN });
-      continue;
-    }
-    const account = await accounts.accountByTenant(id); // genau-1-sonst-null (A2-Bruecke)
-    if (!account) {
-      report.skipped.push({ id, reason: BACKFILL_SKIP.NO_ACCOUNT });
-      continue;
-    }
-    if (!account.email) {
-      report.skipped.push({ id, reason: BACKFILL_SKIP.NO_EMAIL });
+    // Schreibfreie Profil-Aufloesung, geteilt mit der A2-Aktivierung (G5): planSlug -> Tier,
+    // dann Account (genau-1-sonst-null), dann email. fail-closed Skip statt Wurf/undefined-Profil.
+    const { tier, account, skip } = await resolveTierForTenant({ store, accounts, tenant: id });
+    if (skip) {
+      report.skipped.push({ id, reason: skip });
       continue;
     }
     // Idempotenz: vergleiche gegen die KANONISCHE at-rest-Form (sanitizeProfile == was
