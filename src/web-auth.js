@@ -430,6 +430,22 @@ export function makeAccounts(runner) {
       });
     },
 
+    // A2-Bruecke (Achsen-Bruch A9): die Aktivierung kennt nur tenantId, das Profil keyt
+    // email. Reverse-Query zu upsertOnFirstLogin. Liefert {sub,email} fuer GENAU EINEN
+    // Account des Tenants, sonst null: 0 (Webhook vor Account-Anlage) ODER >1 (mehrdeutig,
+    // §5.6 B2C-1:1 - NICHT raten, fail-closed). account ist RLS-exempt (laeuft vor
+    // app.current_tenant, Muster resolve/setStatus). LIMIT 2 trennt eindeutig/mehrdeutig,
+    // ohne die ganze Liste zu laden.
+    async accountByTenant(tenantId) {
+      return runner.withClient(async (c) => {
+        const { rows } = await c.query(
+          `SELECT sub, email FROM account WHERE tenant_id = $1 LIMIT 2`,
+          [tenantId],
+        );
+        return rows.length === 1 ? rows[0] : null;
+      });
+    },
+
     // Admin: Tenant-Status aendern (active/suspended). Gibt true zurueck, wenn ein
     // Tenant getroffen wurde - sonst false -> der Aufrufer antwortet 404 (kein
     // silent-noop, kein Audit-Eintrag fuer eine nicht-existente Tenant-ID).

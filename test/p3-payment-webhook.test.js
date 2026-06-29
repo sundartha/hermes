@@ -38,8 +38,15 @@ function fakeDeps({ tenantBySub = null } = {}) {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       setKycLevel: (tenant, level) => calls.kyc.push([tenant, level]),
+      // A2: provisionPlanProfile-Seams. planSlug=null -> SKIP no_plan (dieser Test prueft
+      // KYC/Status/provision, NICHT das Profil - das deckt profile-a2-activation.test.js).
+      tenantSubscription: () => ({ planSlug: null }),
+      setProfile: () => ({ profile: {}, changed: [] }),
     },
-    accounts: { setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]) },
+    accounts: {
+      setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]),
+      accountByTenant: async () => null,
+    },
     sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },
     audit: () => {},
     req: {},

@@ -247,7 +247,10 @@ export const PROFILE_FIELDS = {
   unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
   allowCalendar: "boolean", // get_calendar-MCP-Tool
   allowBooking: "boolean", // POST /api/calendar
-  maxCallsPerHour: "number", // pro-Nutzer-Stundenlimit (effektiv min(global, profil))
+  // number ODER null: null = kein pro-Nutzer-Limit (effektiv globaler Cap, server.js
+  // userHourReached). Muss als null erhalten bleiben (PLAN_PROFILE/OWNER_PROFILE) - sonst
+  // faellt das Profil ueber resolveProfileFrom still auf DEFAULT_PROFILE.maxCallsPerHour (A11).
+  maxCallsPerHour: "number?", // pro-Nutzer-Stundenlimit (effektiv min(global, profil))
 };
 
 // E.164-Normalisierung: entfernt Whitespace/Bindestriche/Klammern aus einer
@@ -316,6 +319,11 @@ export function sanitizeProfile(patch) {
             ? value.map(normNum).filter(Boolean)
             : value.map((c) => c.trim()).filter(Boolean);
       }
+    } else if (type === "number?") {
+      // Nullable Zahl: null ist eine VALIDE Belegung (kein pro-Nutzer-Limit -> globaler
+      // Cap), NICHT verwerfen (sonst A11, s. PROFILE_FIELDS). Nicht-Zahl/Nicht-null faellt
+      // wie bisher raus (profiles.test.js "viele" -> verworfen bleibt gruen).
+      if (value === null || typeof value === "number") clean[key] = value;
     } else if (typeof value === type) {
       clean[key] = value;
     }

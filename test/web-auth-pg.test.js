@@ -59,6 +59,19 @@ test("makeAccounts.resolve liefert tenantId/role/status/email", async () => {
   assert.equal(await accounts.resolve("ghost"), null);
 });
 
+test("accountByTenant: genau 1 -> {sub,email}; 0 -> null; >1 (mehrdeutig) -> null", async () => {
+  const { db, accounts } = await setup();
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
+  assert.deepEqual(await accounts.accountByTenant("t_u1"), { sub: "u1", email: "u1@x" });
+  // 0 Accounts (Webhook vor Account-Anlage) -> fail-closed null.
+  assert.equal(await accounts.accountByTenant("t_ghost"), null);
+  // Zweiter Account auf denselben tenant_id (account.tenant_id ist FK, NICHT unique) ->
+  // mehrdeutig -> fail-closed null (§5.6 B2C-1:1, NICHT raten).
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "u2@x" }); // legt t_u2 an
+  await db.query(`UPDATE account SET tenant_id = 't_u1' WHERE sub = 'u2'`);
+  assert.equal(await accounts.accountByTenant("t_u1"), null);
+});
+
 test("makeAccounts.setStatus aktiviert; upsert liest aktuellen Status zurueck (nicht hartkodiert)", async () => {
   const { accounts } = await setup();
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
