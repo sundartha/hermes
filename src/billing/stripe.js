@@ -214,4 +214,19 @@ export const stripeBilling = {
     const currentPeriodEnd = (item && item.current_period_end) ?? json.current_period_end;
     return { subscriptionId: json.id, currentPeriodEnd };
   },
+
+  // A3-Reconcile: liest den Plan-Slug eines bestehenden Abos aus der Subscription-
+  // Metadata (GET /v1/subscriptions/{id}). Heilt slug-lose Bestands-Abos (webhook.js
+  // selektiver Patch). Fehlt der Slug -> null (Aufrufer SKIPt no_plan, NIE raten). Nur
+  // opaker Slug verlaesst den Adapter; Secret nur im Header (nie geloggt). LIVE owner-
+  // smoke (offline ungetestet wie der uebrige Adapter).
+  async retrieveSubscription(subscriptionId) {
+    const res = await fetch(`${url(SUBSCRIPTIONS_PATH)}/${subscriptionId}`, {
+      method: "GET",
+      headers: authHeaders(),
+    });
+    assertOk(res, "retrieveSubscription");
+    const json = await res.json().catch(() => ({}));
+    return { planSlug: (json.metadata && json.metadata.plan_slug) || null };
+  },
 };

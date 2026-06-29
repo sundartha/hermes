@@ -11,21 +11,19 @@
 // denselben Tier-Snapshot -> Subscribe + nachfolgendes Webhook-created provisioniert NIE
 // doppelt (Invariante 4). Nebeneffekt im Namen (N7).
 import { KYC_LEVEL } from "../store/defaults.js";
-import { planProfileFor } from "../plans.js";
+import { resolveTierForTenant } from "./plan-profile-resolver.js";
 
-// Provisioniert das plan-abgeleitete Rechteprofil auf account.email (A2, GAP A). Fail-closed
-// SKIP (NIE Wurf, NIE setProfile(email, undefined)) bei: kein/unbekannter planSlug, fehlender/
-// mehrdeutiger Account, leerer email. Liefert ein reines Ergebnis (provisioned/reason/keys) -
-// der Aufrufer auditiert es (nur Keys/Reason/Tenant, NIE Profil-Werte = PII). Profil keyt
-// EMAIL-FIRST (account.email = exakt der resolveProfile/place_call-Lesepfad, A7), NICHT
-// tenantId/sub (Regel 5) - sonst verfehlt place_call den Eintrag (stiller DEFAULT_PROFILE).
+// Provisioniert das plan-abgeleitete Rechteprofil auf account.email (A2, GAP A). Die
+// schreibfreie Aufloesung (planSlug -> Tier -> Account -> email) + die fail-closed Skip-
+// Taxonomie liegen im geteilten resolveTierForTenant (EINE Quelle mit dem A3-Backfill, G5);
+// hier kommt NUR der Schreibschritt dazu. SKIP wirft NIE (NIE setProfile(email, undefined)) ->
+// der Resolver-Skip wird unveraendert als reason durchgereicht. Liefert ein reines Ergebnis
+// (provisioned/reason/keys) - der Aufrufer auditiert es (nur Keys/Reason/Tenant, NIE Profil-
+// Werte = PII).
 async function provisionPlanProfile({ store, accounts, tenant }) {
-  const tierProfile = planProfileFor(store.tenantSubscription(tenant).planSlug);
-  if (!tierProfile) return { provisioned: false, reason: "no_plan", keys: 0 };
-  const account = await accounts.accountByTenant(tenant);
-  if (!account) return { provisioned: false, reason: "no_account", keys: 0 };
-  if (!account.email) return { provisioned: false, reason: "no_email", keys: 0 };
-  const { changed } = store.setProfile(account.email, tierProfile);
+  const { tier, account, skip } = await resolveTierForTenant({ store, accounts, tenant });
+  if (skip) return { provisioned: false, reason: skip, keys: 0 };
+  const { changed } = store.setProfile(account.email, tier);
   return { provisioned: true, reason: null, keys: changed.length };
 }
 
