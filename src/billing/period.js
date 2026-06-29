@@ -19,3 +19,22 @@ export function periodStartFromEnd(endSec) {
   start.setUTCMonth(start.getUTCMonth() - 1);
   return start;
 }
+
+// Periodenanker als ISO-8601 fuer das Minuten-Gate (B2) - spaeter teilt B3 die Anzeige
+// denselben Anker, damit Gate-Fenster == Anzeige-Fenster ("Rest X Min, trotzdem geblockt"
+// vermeiden). Praezedenz (Owner-Entscheidung 5.4, bindend, fail-closed):
+//   (1) persistierter current_period_start (Stripe-Webhook, Unix-Sekunden) = autoritatives
+//       Fenster.
+//   (2) fehlt er, aber currentPeriodEnd liegt vor (Bestands-Abo vor B1a / Spalte noch NULL)
+//       -> Anker daraus ABLEITEN (Bestands-Fallback) -> verhindert die Massensperrung
+//       zahlender Bestandskunden beim Scharfschalten von PAYMENT_ENABLED.
+//   (3) weder noch (frisches Abo, Webhook ausstehend) -> null.
+// Liefert null bei (3); der Aufrufer reicht null als fehlenden Anker an planMinutesExceeded
+// weiter -> dort fail-closed blocken (KEIN undefined, kein stilles used=0). Reine Funktion,
+// kein IO. sub = store.tenantSubscription(tenantId)-Form ({currentPeriodStart,currentPeriodEnd}).
+export function resolvePeriodStartIso({ currentPeriodStart, currentPeriodEnd } = {}) {
+  if (currentPeriodStart != null)
+    return new Date(currentPeriodStart * MS_PER_SECOND).toISOString();
+  if (currentPeriodEnd != null) return periodStartFromEnd(currentPeriodEnd).toISOString();
+  return null;
+}

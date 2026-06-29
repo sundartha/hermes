@@ -68,13 +68,14 @@ import { requestNumberForPaidTenant } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
+import { resolvePeriodStartIso } from "./billing/period.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { verifyStripeSignature, applyStripeWebhook } from "./billing/webhook.js";
 import { E164, invalidText, validateAssistantContext } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
-import { PLAN_CATALOG } from "./plans.js";
+import { PLAN_CATALOG, findPlan } from "./plans.js";
 import {
   makeWebAuthRoutes,
   makeAdminRoutes,
@@ -687,6 +688,25 @@ function kycGateError(tenantId) {
   };
 }
 
+// Minuten-Kontingent-Gate-Praedikat (B2, GAP B): hat der Request-Tenant die im laufenden
+// Abrechnungsfenster inkludierten Plan-Minuten aufgebraucht? NEUES PARALLELES Glied NEBEN
+// budgetExceeded (Regel 1, Schnittmenge) - NIE ein Ersatz, eigene Achse (Minuten-Ledger,
+// kein Doppelzaehlen mit der EUR-Achse). Reiner Read, kein Nebeneffekt (N7). Owner/Bootstrap
+// haelt keinen Plan und wird vom Aufrufer per tenantId===BOOTSTRAP_TENANT_ID ausgenommen
+// (sonst sperrte findPlan(null)->null den Owner). Fail-closed (5.4, bindend): kein Plan ODER
+// kein aufloesbarer Periodenanker -> planMinutesExceeded liefert true (blocken) - die
+// fail-closed-Logik lebt EINMAL in der Query, hier NICHT erneut (G5). Bestands-Tenant mit
+// NULL current_period_start, aber gueltigem currentPeriodEnd bezieht den abgeleiteten Anker
+// (resolvePeriodStartIso) und blockt NICHT.
+function planMinutesExhausted(tenantId) {
+  const sub = store.tenantSubscription(tenantId);
+  const plan = sub.planSlug ? findPlan(sub.planSlug) : null;
+  return store.planMinutesExceeded(tenantId, {
+    includedMinutes: plan?.includedMinutes,
+    periodStartIso: resolvePeriodStartIso(sub),
+  });
+}
+
 // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null. caller =
 // aufgeloeste Aufrufer-Identitaet { profile, requestedBy, tenantId } (F1: die drei reisen
 // zusammen): profile/requestedBy steuern Land-Schnittmenge + pro-Nutzer-Limit, tenantId
@@ -1266,6 +1286,18 @@ app.post("/api/calls", async (req, res) => {
   if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
     audit("place_call_denied", req, `to=${to} grund=budget tenant=${tenantId}`);
     return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
+  }
+
+  // Minuten-Kontingent-Gate (B2, GAP B): SEPARATES if NEBEN dem Budget-Gate (eigenes audit
+  // grund=minutes), NIE in den Budget-if gefaltet (getrennte Achsen). Hinter
+  // config.paymentEnabled (aus -> No-Op, Ledger leer, byte-identisch). Owner/Bootstrap als
+  // ERSTE Bedingung ausgenommen, VOR der "kein Plan -> blocken"-Regel (5.5). Inbound bleibt
+  // ungated (5.2): die Minuten-Erschoepfung deckelt nur den aktiven, teuren Outbound.
+  if (config.paymentEnabled && tenantId !== BOOTSTRAP_TENANT_ID && planMinutesExhausted(tenantId)) {
+    audit("place_call_denied", req, `to=${to} grund=minutes tenant=${tenantId}`);
+    return res
+      .status(402)
+      .json({ error: "Inkludierte Plan-Minuten aufgebraucht. Bitte Tarif anpassen oder neue Abrechnungsperiode abwarten." });
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
