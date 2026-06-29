@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Widget Bridge Probe</title>
+<style>
+  /* Inline-Tokens: Subset aus design-system (self-contained fuer die Iframe-Sandbox,
+     kein externer CSS-Import/Linkback). Wegwerf-Probe (C5) -> KEIN @dsCard-Marker, soll
+     nicht in den design-system-Katalog wandern. */
+  :root{ --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
+         --color-white:#fff; --color-red-600:#e60000; --color-green-500:#1faa59;
+         --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+         --radius-md:12px; --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
+  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
+        border-radius:var(--radius-md);padding:var(--space-4);max-width:460px}
+  .title{font-weight:600}
+  .sub{color:var(--color-gray-500);font-size:13px}
+  .line{display:flex;justify-content:space-between;margin-top:var(--space-2);font-size:14px}
+  .k{color:var(--color-gray-500)}
+  .probe{margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--color-gray-150)}
+  .gen{font-weight:600;color:var(--color-green-500)}
+  .log{margin-top:var(--space-2);font-size:12px;color:var(--color-gray-500);
+       white-space:pre-wrap;word-break:break-all;max-height:160px;overflow:auto}
+  .btn{margin-top:var(--space-2);font-size:13px;color:var(--color-white);
+       background:var(--color-red-600);border:0;border-radius:var(--radius-md);
+       padding:var(--space-2) var(--space-3);cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div><span class="title">Widget-Bridge-Probe (Wegwerf, C5)</span><br />
+         <span class="sub">probe_call_bridge</span></div>
+    <div class="line"><span class="k">Status</span><span data-mcp="status">—</span></div>
+    <div class="line"><span class="k">Dauer</span><span data-mcp="duration_s">—</span></div>
+    <div class="line"><span class="k">call_id</span><span data-mcp="call_id">—</span></div>
+    <div data-mcp="last_transcript_lines"></div>
+    <div class="probe">
+      <div class="line"><span class="k">tool-result empfangen</span><span class="gen" id="gen">0</span></div>
+      <div class="line"><span class="k">zuletzt</span><span id="lastrx">—</span></div>
+      <div class="line"><span class="k">Bruecken-Oberflaeche</span><span id="bridges">—</span></div>
+      <button type="button" class="btn" data-probe>get_call_status via Host-Bruecke</button>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+  <!-- Wegwerf-Spike (C5): eigenes Inline-Skript, ISOLIERT vom geteilten widget-bind.js.
+       Beantwortet empirisch, ob ein Widget-initiierter Tool-Call das Ergebnis IN-PLACE
+       zurueckbringt (Diskriminator fuer C6). Werte landen NUR ueber textContent, nie als
+       Markup (XSS-Disziplin wie der geteilte Bindecode). Die
+       Methoden-/Limit-Strings sind hier BEWUSST dupliziert (kein Import aus dem geteilten
+       Bindecode), damit der Produktions-Bindepfad unberuehrt bleibt. -->
+  <script>
+  (function () {
+    "use strict";
+    // Dokumentierte Brucken-KANDIDATEN, die der Spike empirisch diskriminiert (keine
+    // Wahrheits-Annahme; benannte Konstanten statt Magic-Strings). postMessage-JSON-RPC
+    // an window.parent + die host-injizierten Globals. Was feuert, zeigt der Live-Host.
+    var TOOL = "get_call_status";
+    var POSTMESSAGE_METHODS = ["ui/tool-call", "tools/call"]; // SEP-1865-Kandidaten
+    var METHOD_TOOL_RESULT = "ui/notifications/tool-result";   // host-Re-Push (= BIND_SCRIPT)
+    var EMDASH = "—";          // em-dash-Platzhalter der data-mcp-Slots
+    var LOG_MAX_CHARS = 300;        // je Log-Zeile gekappt (textContent, kein Markup)
+    var LOG_MAX_LINES = 12;         // Ringpuffer-Obergrenze des Roh-Logs
+    var doc = document;
+    var genEl = doc.getElementById("gen");
+    var lastEl = doc.getElementById("lastrx");
+    var logEl = doc.getElementById("log");
+    var bridgesEl = doc.getElementById("bridges");
+    var generation = 0;
+    var pendingIds = {};   // id -> true: vom Probe gesendete JSON-RPC-Requests
+
+    function callId() {
+      var el = doc.querySelector('[data-mcp="call_id"]');
+      var v = el ? (el.textContent || "").trim() : "";
+      return v && v !== EMDASH ? v : "";
+    }
+    function logLine(textValue) {
+      var div = doc.createElement("div");
+      div.textContent = String(textValue).slice(0, LOG_MAX_CHARS);  // textContent (kein Markup)
+      logEl.appendChild(div);
+      while (logEl.children.length > LOG_MAX_LINES) logEl.removeChild(logEl.firstChild);
+    }
+    function detectBridges() {
+      var found = [];
+      if (window.openai && typeof window.openai.callTool === "function") found.push("window.openai.callTool");
+      if (window.mcp && typeof window.mcp.callTool === "function") found.push("window.mcp.callTool");
+      bridgesEl.textContent = found.length ? found.join(", ") : "(keine Global-Bruecke)";
+      return found;
+    }
+    // EIGENER message-Listener (zusaetzlich zum geteilten BIND_SCRIPT-Listener): zaehlt
+    // jeden frischen tool-result IN-PLACE + jede JSON-RPC-Antwort auf einen Probe-Request.
+    window.addEventListener("message", function (event) {
+      var m = event && event.data;
+      if (!m || typeof m !== "object") return;
+      if (m.method === METHOD_TOOL_RESULT) {
+        generation += 1;
+        genEl.textContent = String(generation);
+        lastEl.textContent = new Date().toISOString();
+        logLine("tool-result #" + generation + " -> in-place gebunden");
+      } else if (m.id != null && pendingIds[m.id]) {
+        logLine("JSON-RPC-Antwort id=" + m.id + " -> " + (m.error ? "error" : "result"));
+      }
+    });
+    // Button: versucht ALLE erkannten Brucken mit der gebundenen call_id; was zurueckkommt
+    // (Re-Push -> gen++ ODER direkte Antwort -> Log) zeigt der Live-Host. Fail-safe.
+    var btn = doc.querySelector("[data-probe]");
+    if (btn) btn.addEventListener("click", function () {
+      var id = callId();
+      if (!id) { logLine("keine call_id gebunden"); return; }
+      if (window.openai && window.openai.callTool) {
+        try { window.openai.callTool(TOOL, { call_id: id }); logLine("versucht: window.openai.callTool"); } catch (e) { logLine("openai-Fehler: " + e); }
+      }
+      for (var i = 0; i < POSTMESSAGE_METHODS.length; i++) {
+        var rpcId = "probe-" + Date.now() + "-" + i;
+        pendingIds[rpcId] = true;
+        try {
+          window.parent.postMessage(
+            { jsonrpc: "2.0", id: rpcId, method: POSTMESSAGE_METHODS[i],
+              params: { name: TOOL, arguments: { call_id: id } } }, "*");
+          logLine("gesendet: " + POSTMESSAGE_METHODS[i] + " (id=" + rpcId + ")");
+        } catch (e) { logLine("postMessage-Fehler: " + e); }
+      }
+    });
+    detectBridges();
+  })();
+  </script>
+</body>
+</html>

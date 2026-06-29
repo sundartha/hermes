@@ -19,7 +19,11 @@ const serverOptions = config.mcpUiEnabled
   ? { capabilities: { extensions: uiServerExtension() } }
   : undefined;
 const server = new McpServer({ name: "hermes", version: "0.2.0" }, serverOptions);
-registerTools(server, { uiHost: { enabled: config.mcpUiEnabled } });
+registerTools(server, {
+  uiHost: { enabled: config.mcpUiEnabled },
+  // C5 Wegwerf-Spike: nur wirksam bei Master-Schalter UND Spike-Flag an.
+  uiProbe: config.mcpUiEnabled && config.mcpUiProbe,
+});
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
