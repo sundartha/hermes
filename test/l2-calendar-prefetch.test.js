@@ -132,11 +132,11 @@ test("5 Roundtrip-Reduktion: ein agentTurn ohne zweiten get_calendar-Roundtrip",
   const call = store.getCall(CALL_ID);
   const before = reqCount;
   await agentTurn(call, "Haben Sie Freitag 14 Uhr frei?");
-  // Deterministisch belegt: die Slots liegen vorab im System-Prompt (lastSystem) und EIN
-  // Roundtrip genuegte (kein mid-turn get_calendar-Tool-Call). Die endgueltige Roundtrip-
+  // Deterministisch belegt: die Slots liegen vorab im System-Block (lastSystem[0].text) und
+  // EIN Roundtrip genuegte (kein mid-turn get_calendar-Tool-Call). Die endgueltige Roundtrip-
   // Ersparnis im Buchungs-Normalfall ist die erwartete Modell-Konsequenz daraus.
   assert.equal(reqCount - before, 1, "es darf nur ein LLM-Roundtrip noetig sein");
-  assert.ok(lastSystem.includes(EVENT_TITLE), "der gesendete System-Prompt fuehrt die Slots");
+  assert.ok(lastSystem[0].text.includes(EVENT_TITLE), "der gesendete System-Prompt fuehrt die Slots");
 });
 
 test("6 Disclosure byte-identisch: die Einbettung beruehrt den Offenlegungssatz nicht", () => {
