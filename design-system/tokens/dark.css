@@ -1,0 +1,57 @@
+/*
+ * Dark / hero tokens — the ONE design reference for the navy hero chrome of the
+ * public marketing pages. Scoped under .on-dark so light (app) and dark (site)
+ * specimens can coexist in one stylesheet without collision. In the real
+ * frontend these live on separate page bundles.
+ * Source: apps/web/src/styles/tokens/hero.css
+ */
+.on-dark {
+  /* --- Navy palette (raw) --- */
+  --hero-navy-900: #0a2245;
+  --hero-navy-800: #0f2d52;
+  --hero-navy-700: #1b4f86;
+  --hero-navy-card: #13335c;
+  --hero-blue-ink: #10305a;
+  --hero-white: #ffffff;
+
+  /* --- Hero backgrounds & scrims --- */
+  --hero-bg-gradient: radial-gradient(120% 90% at 50% 0%, #1b4f86 0%, #0f2d52 55%, #0a2245 100%);
+  --hero-scrim-top: linear-gradient(to bottom, rgba(8, 22, 48, 0.52) 0%, rgba(8, 22, 48, 0.18) 40%, rgba(8, 22, 48, 0) 100%); /* @kind other */
+  --hero-scrim-bottom: linear-gradient(to top, rgba(8, 20, 44, 0.6) 0%, rgba(8, 20, 44, 0.14) 55%, rgba(8, 20, 44, 0) 100%); /* @kind other */
+
+  /* --- Hero shadows / text shadows (legibility over imagery) --- */
+  --hero-text-shadow-title: 0 2px 40px rgba(7, 16, 38, 0.55);
+  --hero-text-shadow-nav: 0 1px 10px rgba(7, 18, 40, 0.6);
+  --hero-shadow-pill: 0 10px 26px -12px rgba(7, 18, 40, 0.7);
+  --hero-shadow-logo: drop-shadow(0 2px 9px rgba(7, 18, 40, 0.6));
+  --hero-text-shadow-brand: 0 1px 12px rgba(7, 18, 40, 0.7);
+  --hero-text-shadow-sub: 0 1px 16px rgba(7, 16, 38, 0.6);
+
+  /* --- Dark typography (runic display + grotesk body) --- */
+  --font-serif: "Norse", serif;
+  --font-grotesk: "Space Grotesk", sans-serif;
+  --hero-title-clamp: clamp(50px, 7.4vw, 98px); /* @kind font */
+
+  /* --- Semantic dark roles --- */
+  --site-bg: var(--hero-navy-800);
+  --site-bg-gradient: var(--hero-bg-gradient);
+  --surface-card-dark: var(--hero-navy-card);
+  --accent-on-dark: var(--hero-navy-700);
+  --text-on-dark: rgba(255, 255, 255, 0.92);
+  --text-on-dark-strong: rgba(255, 255, 255, 0.96);
+  --text-on-dark-muted: rgba(255, 255, 255, 0.82);
+  --text-on-dark-faint: rgba(255, 255, 255, 0.7);
+  --text-on-dark-brand: var(--hero-white);
+  --scrim-top: var(--hero-scrim-top);
+  --scrim-bottom: var(--hero-scrim-bottom);
+  --pill-bg: var(--hero-white);
+  --pill-ink: var(--hero-blue-ink);
+  --radius-pill-cta: 999px;
+  --text-display-hero: var(--hero-title-clamp);
+  --text-shadow-hero: var(--hero-text-shadow-title);
+  --text-shadow-nav: var(--hero-text-shadow-nav);
+  --text-shadow-brand: var(--hero-text-shadow-brand);
+  --text-shadow-sub: var(--hero-text-shadow-sub);
+  --shadow-pill: var(--hero-shadow-pill);
+  --shadow-logo: var(--hero-shadow-logo);
+}

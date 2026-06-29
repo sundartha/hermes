@@ -67,7 +67,7 @@ import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
 import { verifyStripeSignature, applyStripeWebhook } from "./billing/webhook.js";
-import { E164, invalidText } from "./routes/_validation.js";
+import { E164, invalidText, validateAssistantContext } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
@@ -1209,6 +1209,19 @@ app.post("/api/calls", async (req, res) => {
     invalidText("constraints", b.constraints);
   if (textErr) return res.status(400).json({ error: textErr });
 
+  // P3 (PLAN-PERSONAL-ASSISTANT): optionaler strukturierter Per-Call-Kontext, DIESELBE
+  // Naht wie die objective/briefing-Validierung (NACH allen Gates). Hinter dem Flag
+  // (Default aus -> b.context ignoriert, /api/calls byte-identisch). Validierung +
+  // Normalisierung in EINER Quelle (_validation.js); Teilfeld/Array ueber Limit -> 400.
+  // Der Kontext speist KEINE Identitaetsgroesse (Anti-Spoofing): er landet nur als
+  // HINTERGRUND-Sektion im systemPrompt, nie in Offenlegung/Persona.
+  let context = null;
+  if (config.assistantContextEnabled) {
+    const ctxResult = validateAssistantContext(b.context);
+    if (ctxResult.error) return res.status(400).json({ error: ctxResult.error });
+    context = ctxResult.value;
+  }
+
   // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): JEDER Tenant - auch
   // der Owner (Tenant Null) - telefoniert nur unter EIGENER aktiver Store-Nummer; keine
   // -> Reject, NIE die Nummer eines anderen Tenants als Fallback.
@@ -1259,6 +1272,7 @@ app.post("/api/calls", async (req, res) => {
     goal: objective,
     briefing: b.briefing,
     constraints: b.constraints,
+    context,
     language,
     maxDurationS: maxDur,
     requestedBy,

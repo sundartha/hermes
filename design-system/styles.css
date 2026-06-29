@@ -1,0 +1,11 @@
+/*
+ * Hermes Design System — global CSS entry point.
+ * Consumers link THIS one file. It only @imports; no rules live here.
+ *
+ * Source of truth: apps/web/src/styles/tokens/{primitives,semantic,hero}.css
+ * (mirrored here so every preview renders self-contained).
+ */
+@import "./tokens/fonts.css";
+@import "./tokens/primitives.css";
+@import "./tokens/semantic.css";
+@import "./tokens/dark.css";

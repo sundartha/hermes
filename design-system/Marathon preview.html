@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Marathon — Vorschau</title>
+<style>
+  @font-face{ font-family:"Marathon"; src:url("font-previews/Marathon.ttf") format("truetype"); font-display:swap; }
+  @font-face{ font-family:"Marathon II"; src:url("font-previews/Marathon2.ttf") format("truetype"); font-display:swap; }
+  :root{ --navy-900:#0a2245; --navy-800:#0f2d52; --navy-700:#1b4f86; --navy-50:#eef3fa; --ink:#25282b; --muted:#7e7e7e; --border:#ececec; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#fafafa;color:var(--ink);font-family:"Space Grotesk","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .page{max-width:1000px;margin:0 auto;padding:48px 26px 90px;}
+  .lede{margin:0 0 6px;font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--navy-700);}
+  h1.t{margin:0 0 10px;font-family:"Marathon",serif;font-weight:400;font-size:40px;color:var(--navy-900);letter-spacing:.02em;}
+  .intro{margin:0 0 34px;max-width:640px;font-size:16px;line-height:1.6;color:var(--muted);}
+
+  .block{background:#fff;border:1px solid var(--border);border-radius:18px;overflow:hidden;margin-bottom:24px;box-shadow:0 6px 18px rgba(10,34,69,.05);}
+  .bar{padding:14px 24px;background:var(--navy-50);border-bottom:1px solid var(--border);font-size:13px;color:var(--navy-900);font-weight:600;}
+  .bar span{color:var(--muted);font-weight:400;}
+  .grid{display:grid;grid-template-columns:320px 1fr;}
+  @media(max-width:740px){.grid{grid-template-columns:1fr;}}
+  .mark{background:radial-gradient(120% 120% at 30% 0%,#1b4f86 0%,#0f2d52 60%,#0a2245 100%);padding:34px 26px;display:flex;flex-direction:column;gap:8px;justify-content:center;}
+  .mark .word{font-family:var(--disp,"Marathon");font-size:46px;letter-spacing:.06em;color:#fff;line-height:1;}
+  .mark .by{font-family:"Space Grotesk",sans-serif;font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:rgba(255,255,255,.8);}
+  .spec{padding:28px 30px;}
+  .spec h2{margin:0 0 8px;font-family:var(--disp,"Marathon");font-weight:400;font-size:38px;line-height:1.05;color:var(--navy-900);letter-spacing:.02em;}
+  .spec .sub{margin:0 0 16px;font-family:var(--disp,"Marathon");font-size:22px;color:var(--navy-700);letter-spacing:.03em;}
+  .spec p{margin:0 0 18px;font-size:16px;line-height:1.65;max-width:60ch;color:var(--ink);}
+  .ui{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+  .btn{background:var(--navy-700);color:#fff;border:0;border-radius:14px;padding:11px 20px;font-size:15px;font-weight:700;font-family:"Space Grotesk",sans-serif;cursor:pointer;}
+  .btn.g{background:#f2f2f2;color:var(--ink);}
+  .badge{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:4px 11px;border-radius:99px;font-family:"Space Grotesk",sans-serif;}
+  .badge.a{background:var(--navy-700);color:#fff;} .badge.s{background:var(--navy-50);color:var(--navy-700);} .badge.m{background:#f2f2f2;color:var(--muted);}
+  .alpha{padding:22px 30px;border-top:1px solid var(--border);font-family:var(--disp,"Marathon");font-size:30px;letter-spacing:.08em;color:var(--navy-800);word-break:break-word;}
+  .note{margin:6px 0 0;font-size:13px;color:var(--muted);font-family:"Space Grotesk",sans-serif;}
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="lede">Hermes · Vorschau</p>
+  <h1 class="t">Marathon — wie wirkt's?</h1>
+  <p class="intro">Nur eine Vorschau, noch nicht im System übernommen. Marathon ist eine Display-Schrift (griechischer Look) — ideal für Wordmark + Überschriften; Fließtext bleibt in Space Grotesk lesbar. Sag mir, ob's passt, dann setze ich's sauber überall um (und ersetze die Wikinger-Schrift).</p>
+
+  <div class="block" style="--disp:'Marathon';">
+    <div class="bar">Marathon <span>· Display für Wordmark &amp; Headlines, Space Grotesk für Text</span></div>
+    <div class="grid">
+      <div class="mark"><span class="word">HERMES</span><span class="by">by Sundartha</span></div>
+      <div class="spec">
+        <h2>Give your AI wings.</h2>
+        <p class="sub">Dashboard-Überschrift</p>
+        <p>Die Telefonleitung für deine KI-Agenten. Verbinde deinen Assistenten per MCP und lass ihn Anrufe annehmen und führen.</p>
+        <div class="ui"><button class="btn">Get started</button><button class="btn g">Ghost</button><span class="badge a">Active</span><span class="badge s">Completed</span><span class="badge m">Idle</span></div>
+      </div>
+    </div>
+    <div class="alpha">ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789</div>
+  </div>
+
+  <div class="block" style="--disp:'Marathon II';">
+    <div class="bar">Marathon II <span>· Variante mit „antikerem" Gefühl (Punkt-Leerzeichen, alternative Buchstaben)</span></div>
+    <div class="grid">
+      <div class="mark"><span class="word">HERMES</span><span class="by">by Sundartha</span></div>
+      <div class="spec">
+        <h2>Give your AI wings.</h2>
+        <p class="sub">Dashboard-Überschrift</p>
+        <p>Die Telefonleitung für deine KI-Agenten. Verbinde deinen Assistenten per MCP und lass ihn Anrufe annehmen und führen.</p>
+        <div class="ui"><button class="btn">Get started</button><button class="btn g">Ghost</button><span class="badge a">Active</span><span class="badge s">Completed</span><span class="badge m">Idle</span></div>
+      </div>
+    </div>
+    <div class="alpha">ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789</div>
+  </div>
+
+  <p class="note">Hinweis zur Lizenz: Marathon ist frei für nicht-kommerzielle Nutzung. Falls Hermes kommerziell läuft, vorher kurz beim Autor (Iconian Fonts) anfragen.</p>
+</div>
+</body>
+</html>

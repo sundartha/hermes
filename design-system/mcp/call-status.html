@@ -13,7 +13,7 @@
   <p class="ds-note"><strong>Mockup.</strong> Design proposal for a rich MCP status card.</p>
   <div class="mcp-card">
     <div class="mcp-card__head">
-      <span class="mcp-card__icon"><span class="live-dot"></span></span>
+      <span class="mcp-card__icon" id="wing-icon" style="width:52px;height:52px;overflow:hidden;background:radial-gradient(120% 120% at 30% 0%,#1b4f86 0%,#0f2d52 72%)"></span>
       <span class="mcp-card__head-body">
         <span class="mcp-card__title">Call in progress</span>
         <span class="mcp-card__sub">get_call_status · Salon Bella</span>
@@ -29,5 +29,12 @@
     <div class="mcp-card__foot"><span>call_mqmpvuzz1079</span><span>de-DE</span></div>
   </div>
 </div>
+<script src="../components/brand/wing-engine.js"></script>
+<script>
+  // get_call_status · Active -> the wing is on the call (working)
+  HermesWingEngine.mount(document.getElementById("wing-icon"), {
+    size: 52, status: "working", textureUrl: "../assets/logos/hermes-wing.png",
+  });
+</script>
 </body>
 </html>

@@ -623,6 +623,10 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     goal: r.goal,
     briefing: r.briefing,
     constraints: r.constraints,
+    // P3: Per-Call-Kontext mit-hydrieren. Ohne diese Zeile ginge context beim Restart
+    // verloren UND der naechste Flush wuerde ihn ueberschreiben (JSONB auto-geparst zu
+    // Objekt|null, Muster summary_sms_sent_at/I8). NULL -> null (json-Parity).
+    context: r.context ?? null,
     callerName: r.caller_name,
     language: r.language,
     maxDurationS: r.max_duration_s,
@@ -846,8 +850,8 @@ async function flushCalls(client, tenantId, calls) {
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
-          summary_sms_sent_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+          summary_sms_sent_at, context)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -876,6 +880,10 @@ async function flushCalls(client, tenantId, calls) {
         serializeObjective(c.objectiveAchieved),
         c.provider || DEFAULT_PROVIDER,
         c.summarySmsSentAt ?? null,
+        // P3: Per-Call-Kontext als JSONB (Muster profile.data: Objekt -> JSON.stringify,
+        // sonst NULL). NICHT im ON CONFLICT DO UPDATE SET - wie goal/briefing/constraints
+        // bei Create gesetzt und danach unveraenderlich.
+        c.context ? JSON.stringify(c.context) : null,
       ],
     );
     await flushTranscript(client, tenantId, c);

@@ -1,0 +1,55 @@
+<!-- @dsCard group="Components" name="Forms — Field, Switch" viewport="700x280" subtitle="Labelled inputs and the brand toggle" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Forms — Hermes Design System</title>
+<link rel="stylesheet" href="../../styles.css" />
+<style>
+  body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+  .wrap { padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; max-width: 520px; }
+  .eyebrow { margin: 0 0 10px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--color-muted); }
+  .perm { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-divider); }
+  .perm:last-child { border-bottom: 0; }
+  .perm__t { flex: 1; }
+  .perm__title { font-weight: 600; }
+  .perm__hint { font-size: 13px; color: var(--color-muted); }
+</style>
+</head>
+<body>
+<div id="root" class="wrap"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script type="text/babel" data-presets="react">
+  const { Field, Switch } = window.HermesDesignSystem_738510;
+  function Demo() {
+    return (
+      <>
+        <div>
+          <p className="eyebrow">Field</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <Field label="Display name" defaultValue="Acme GmbH" />
+            <Field label="Forwarding number" type="tel" placeholder="+49 …" />
+          </div>
+        </div>
+        <div>
+          <p className="eyebrow">Switch — permission rows</p>
+          <div className="perm">
+            <span className="perm__t"><div className="perm__title">Book appointments</div><div className="perm__hint">Let the agent write to your calendar</div></span>
+            <Switch defaultChecked />
+          </div>
+          <div className="perm">
+            <span className="perm__t"><div className="perm__title">Take payments</div><div className="perm__hint">Currently disabled for this tenant</div></span>
+            <Switch />
+          </div>
+        </div>
+      </>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Demo />);
+</script>
+</body>
+</html>

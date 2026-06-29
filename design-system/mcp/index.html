@@ -1,0 +1,108 @@
+<!-- @dsCard group="MCP (Mockup)" name="MCP card in chat" viewport="760x720" subtitle="How a Hermes result card renders inside a chatbot — DESIGN ONLY" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes MCP card — in chat</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-surface); -webkit-font-smoothing: antialiased; }
+  .chat { max-width: 680px; margin: 0 auto; padding: 28px 20px 56px; display: flex; flex-direction: column; gap: 18px; }
+  .disclaimer { background: var(--color-status-info-surface); color: var(--color-status-info); border-radius: var(--radius-control); padding: 10px 14px; font-size: var(--text-eyebrow); font-weight: var(--weight-label); }
+
+  .msg { display: flex; gap: 12px; }
+  .msg__avatar { width: 32px; height: 32px; border-radius: var(--radius-round); flex-shrink: 0; display: grid; place-items: center; font-weight: var(--weight-emphasis); font-size: 13px; }
+  .msg__avatar--user { background: var(--color-gray-150); color: var(--color-muted); }
+  .msg__avatar--ai { background: radial-gradient(120% 120% at 30% 0%, #1b4f86 0%, #0f2d52 72%); overflow: hidden; }
+  .msg__avatar--ai img { width: 22px; height: 22px; object-fit: contain; transform-origin: 26% 86%; animation: aiWingDrift 6.8s ease-in-out infinite; }
+  @keyframes aiWingDrift { 0%{transform:translate(0,0) rotate(0)} 22%{transform:translate(-0.7%,-1.1%) rotate(-1deg)} 48%{transform:translate(0.5%,0.5%) rotate(0.6deg)} 74%{transform:translate(0.8%,-0.7%) rotate(1.3deg)} 100%{transform:translate(0,0) rotate(0)} }
+  @media (prefers-reduced-motion: reduce){ .msg__avatar--ai img{animation:none} }
+  .msg__body { flex: 1; min-width: 0; padding-top: 5px; }
+  .msg__name { font-size: var(--text-eyebrow); text-transform: uppercase; letter-spacing: var(--tracking-label); color: var(--color-muted); font-weight: var(--weight-label); margin-bottom: 4px; }
+  .msg__text { font-size: var(--text-lead); line-height: 1.55; }
+  .msg__text p { margin: 0 0 10px; }
+  .msg__text p:last-child { margin-bottom: 0; }
+
+  /* MCP result card (tool result rendered inline) */
+  .mcp-card { margin-top: 12px; max-width: 440px; background: var(--color-card); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden; }
+  .mcp-card__head { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: var(--border-width) solid var(--color-divider); }
+  .mcp-card__icon { width: 48px; height: 48px; border-radius: var(--radius-round); overflow: hidden; display: grid; place-items: center; flex-shrink: 0; background: radial-gradient(120% 120% at 30% 0%, #1b4f86 0%, #0f2d52 72%); }
+  .mcp-card__hb { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .mcp-card__title { font-weight: var(--weight-emphasis); }
+  .mcp-card__sub { font-size: var(--text-eyebrow); color: var(--color-muted); }
+  .mcp-card__body { padding: 18px 20px; display: flex; flex-direction: column; gap: 11px; }
+  .line { display: flex; gap: 12px; }
+  .line__k { width: 110px; flex-shrink: 0; color: var(--color-muted); font-size: var(--text-body); }
+  .line__v { font-weight: var(--weight-label); }
+  .mcp-card__foot { padding: 11px 20px; border-top: var(--border-width) solid var(--color-divider); display: flex; align-items: center; justify-content: space-between; font-size: var(--text-eyebrow); color: var(--color-muted); }
+  .status-badge { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: var(--radius-badge); font-size: var(--text-eyebrow); font-weight: var(--weight-label); text-transform: uppercase; letter-spacing: var(--tracking-label); white-space: nowrap; }
+  .status-badge--positive { background: var(--color-status-positive-surface); color: var(--color-status-positive); }
+
+  .composer { max-width: 680px; margin: 0 auto; padding: 0 20px; }
+  .composer__box { display: flex; align-items: center; gap: 10px; border: var(--border-width) solid var(--color-field-border); border-radius: var(--radius-card); background: var(--color-card); padding: 12px 16px; box-shadow: var(--shadow-card); }
+  .composer__input { flex: 1; border: 0; outline: 0; font: inherit; color: var(--color-text); background: transparent; }
+  .composer__send { width: 34px; height: 34px; border-radius: var(--radius-round); border: 0; background: var(--color-action); color: var(--color-on-action); cursor: pointer; display: grid; place-items: center; }
+</style>
+</head>
+<body>
+  <div class="chat">
+    <div class="disclaimer">Design mockup — the live MCP returns plain text today. This shows how a rich Hermes result card could render inside a chatbot.</div>
+
+    <div class="msg">
+      <div class="msg__avatar msg__avatar--user">A</div>
+      <div class="msg__body">
+        <div class="msg__name">You</div>
+        <div class="msg__text"><p>Call Salon Bella and book me a haircut for Thursday afternoon.</p></div>
+      </div>
+    </div>
+
+    <div class="msg">
+      <div class="msg__avatar msg__avatar--ai"><img src="../assets/logos/hermes-wing.png" alt="Hermes" /></div>
+      <div class="msg__body">
+        <div class="msg__name">Assistant · via Hermes</div>
+        <div class="msg__text">
+          <p>Done — I called Salon Bella on your behalf and booked it. Here's the summary:</p>
+          <div class="mcp-card">
+            <div class="mcp-card__head">
+              <span class="mcp-card__icon" id="booked-wing"></span>
+              <span class="mcp-card__hb">
+                <span class="mcp-card__title">Appointment booked</span>
+                <span class="mcp-card__sub">place_call · Hermes</span>
+              </span>
+              <span class="status-badge status-badge--positive">Completed</span>
+            </div>
+            <div class="mcp-card__body">
+              <div class="line"><span class="line__k">Called</span><span class="line__v">Salon Bella · +49 30 1234567</span></div>
+              <div class="line"><span class="line__k">Outcome</span><span class="line__v">Haircut booked, Thu 14:30</span></div>
+              <div class="line"><span class="line__k">Duration</span><span class="line__v">2 min 41 sec</span></div>
+              <div class="line"><span class="line__k">Language</span><span class="line__v">Deutsch (de-DE)</span></div>
+            </div>
+            <div class="mcp-card__foot">
+              <span>call_mqmpvuzz1079</span>
+              <span>Disclosure spoken first</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="composer">
+    <div class="composer__box">
+      <input class="composer__input" placeholder="Message your assistant…" />
+      <button class="composer__send" aria-label="Send">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
+      </button>
+    </div>
+  </div>
+<script src="../components/brand/wing-engine.js"></script>
+<script>
+  // Booked result -> the wing snaps up in success, then settles
+  HermesWingEngine.mount(document.getElementById("booked-wing"), {
+    size: 48, status: "success", textureUrl: "../assets/logos/hermes-wing.png",
+  });
+</script>
+</body>
+</html>

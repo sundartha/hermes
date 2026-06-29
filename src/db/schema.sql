@@ -120,7 +120,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit). Additiv NULLABLE:
   -- gesetzt NACH erfolgreichem SMS-Send, sonst NULL. Ueberlebt - anders als das
   -- In-Memory-Flag _finished - den Prozess-Restart -> genau eine Summary-SMS pro Call.
-  summary_sms_sent_at TEXT
+  summary_sms_sent_at TEXT,
+  -- P3 (PLAN-PERSONAL-ASSISTANT): strukturierter Per-Call-Kontext (summary, key_facts[],
+  -- recipient_relationship, desired_outcome) als JSONB. Additiv NULLABLE: nur befuellt bei
+  -- ASSISTANT_CONTEXT_ENABLED, sonst NULL -> Bestand byte-identisch.
+  context JSONB
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -130,6 +134,9 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS provider TEXT;
 -- F2 P9: Summary-SMS-Dedup-Marker auf Bestands-call-Tabellen nachziehen (Muster wie
 -- provider). Idempotent; frische DB = No-op (CREATE TABLE oben hat die Spalte schon).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS summary_sms_sent_at TEXT;
+-- P3: Per-Call-Kontext-Spalte auf Bestands-call-Tabellen nachziehen (Muster wie
+-- provider/summary_sms_sent_at). Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS context JSONB;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

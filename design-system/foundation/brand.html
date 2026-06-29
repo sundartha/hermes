@@ -1,0 +1,35 @@
+<!-- @dsCard group="Foundation" name="Brand & logo" viewport="700x230" subtitle="Winged-sandal mark, HERMES by Sundartha lockup" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Brand — Hermes Design System</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+  body { margin: 0; font-family: var(--font-grotesk, "Space Grotesk", sans-serif); }
+  .grid { display: grid; grid-template-columns: 1fr; }
+  .panel { padding: 28px 32px; display: flex; align-items: center; gap: 18px; min-height: 150px; }
+  .panel--dark { background: radial-gradient(120% 120% at 30% 0%, #1b4f86 0%, #0f2d52 60%, #0a2245 100%); }
+  .panel--light { background: var(--color-card); border-left: 1px solid var(--color-border); }
+  .logo { height: 52px; width: auto; filter: drop-shadow(0 2px 9px rgba(7,18,40,.5)); transform-origin: 26% 86%; animation: brandWingDrift 6.8s ease-in-out infinite; }
+  @keyframes brandWingDrift { 0%{transform:translate(0,0) rotate(0)} 22%{transform:translate(-0.7%,-1.1%) rotate(-1deg)} 48%{transform:translate(0.5%,0.5%) rotate(0.6deg)} 74%{transform:translate(0.8%,-0.7%) rotate(1.3deg)} 100%{transform:translate(0,0) rotate(0)} }
+  @media (prefers-reduced-motion: reduce){ .logo{animation:none} }
+  .lock { display: flex; flex-direction: column; line-height: 1.05; }
+  .name { font-family: var(--font-display, "Norse", serif); font-weight: 600; font-size: 32px; letter-spacing: .16em; color: #fff; }
+  .by { margin-top: 4px; font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.82); }
+  .name--ink { color: var(--color-action); }
+  .by--ink { color: var(--color-muted); }
+  .mark-tile { width: 48px; height: 48px; border-radius: 12px; background: var(--color-action); display: grid; place-items: center; }
+  .mark-tile img { width: 30px; height: 30px; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="panel panel--dark">
+    <img class="logo" src="../assets/logos/hermes-wing.png" alt="Hermes wing" />
+    <span class="lock"><span class="name">HERMES</span><span class="by">by Sundartha</span></span>
+  </div>
+</div>
+</body>
+</html>

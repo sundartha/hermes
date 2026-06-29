@@ -1,51 +1,237 @@
 # Hermes Design System
 
-Visuelle Komponenten-Bibliothek fuer **Hermes** (Produkt) / **Sundartha** (Firma).
-Quelle der Wahrheit im Repo; gespiegelt nach `claude.ai/design` via DesignSync.
+Visual design system for **Hermes** — an autonomous phone line for AI agents,
+built by **Sundartha**. Hermes attaches to an AI assistant over the **Model
+Context Protocol (MCP)** and answers/places real phone calls on the user's
+behalf, always disclosing up front that an assistant is speaking.
 
-## Aufbau
+The brand voice: *"Give your AI wings."* A deep-navy, Mount-Olympus hero in
+Instrument Serif sells the marketing site; a calm, light Inter app runs the
+tenant dashboard; brand red `#e60000` is the single action color across both.
 
-```
-design-system/
-  _shared/
-    tokens.css     Kanonische Design-Tokens (Light = App, Dark = Hero/Site)
-    preview.css    Karten-Rahmen + Komponenten-Klassen (spiegelt apps/web/src/styles/app.css)
-  foundation/      Tokens als sichtbare Spezimen (Farben, Typo, Spacing/Radien/Schatten)
-  components/      Bausteine (Buttons, Forms, Karten, Badges/Status, Daten-Zeilen)
-  app/             Eingeloggtes Dashboard (Inseln: Stats, Calls, Settings, Billing)
-  site/            Oeffentliches Site-Chrome (Hero dunkel, Unterseite, Pricing)
-  mcp/             MCP-Chatbot-UI — MOCKUPS (heute gibt der MCP nur Text zurueck)
-  tenant/          Tenant-Self-Service-Dashboard, an den Hermes-Brand angeglichen
-```
+## Products / surfaces
 
-## Token-Provenienz (WICHTIG — Drift vermeiden)
+1. **Marketing website** — public, dark navy hero chrome (`site/`). Full-bleed
+   Olympus photo + drifting-cloud video, Instrument Serif display, white pill
+   CTAs. Pages: hero, *How it works* (3 steps), *Pricing* (Starter €4.99 /
+   Business €9.99).
+2. **Tenant web app / dashboard** — logged-in light UI (`app/`). Overview KPIs,
+   call history, agent permissions (the one write path), billing. Inter, white
+   cards, brand-red actions.
+3. **MCP result cards** — rich cards a Hermes tool *could* render inside a host
+   chatbot (`mcp/`). **Design mockups** — the live MCP returns plain text today
+   (`src/mcp-tools.js`, `{type:"text"}`); these are not wired to the server.
 
-`_shared/tokens.css` ist eine **selbst-tragende Kopie** der kanonischen Tokens aus
-`apps/web/src/styles/tokens/` (`primitives.css` + `semantic.css` = Light/App,
-`hero.css` = Dark/Site). Der Grund: claude.ai/design rendert jede Preview isoliert,
-braucht also self-contained CSS und kann nicht in `apps/web/` hineinlinken.
+## Sources
 
-Wenn sich die Tokens in `apps/web/src/styles/tokens/` aendern, **muss
-`_shared/tokens.css` nachgezogen werden** (akzeptiertes Risiko, da die Marken-Tokens
-stabil sind). `_shared/preview.css` spiegelt analog `apps/web/src/styles/app.css`.
+- **Codebase:** `web/` (Astro SSG + islands frontend). Canonical tokens live in
+  `web/src/styles/tokens/{primitives,semantic,hero}.css`; component styles in
+  `web/src/styles/{app,site}.css`; the hero is `web/src/pages/index.astro`;
+  marketing copy in `web/src/pages/*.astro` + `web/src/lib/plans.js`; app islands
+  in `web/src/components/app/*.astro`. Fonts in `web/public/assets/fonts/`.
+- All tokens, copy, pricing, and the hero composition in this system are lifted
+  verbatim from that codebase. Where this system mirrors a codebase file, the
+  source path is named in a comment at the top of the file.
 
-## Karten-Index (@dsCard)
+## Token provenance (avoid drift)
 
-Jede Preview-HTML traegt in der ERSTEN Zeile einen Marker, aus dem das
-Design-System-Pane die Karte indiziert:
+The token tree under `tokens/` is the canonical copy of
+`web/src/styles/tokens/`. Light/app roles live on `:root`
+(`tokens/primitives.css` + `tokens/semantic.css`); the dark/hero roles live under
+`.on-dark` (`tokens/dark.css`) so light and dark specimens coexist in one
+stylesheet. `_shared/tokens.css` now just `@import`s the root `styles.css`, so
+there is a single source of truth. If the codebase tokens change, update
+`tokens/`.
 
-```html
-<!-- @dsCard group="Components" name="Buttons" subtitle="Primary / Ghost / CTA" -->
-```
+---
 
-## Sync nach claude.ai/design
+## CONTENT FUNDAMENTALS
 
-Wird ueber das `DesignSync`-Tool gepusht (Lese -> finalize_plan -> write_files),
-`localDir` = dieses Verzeichnis. Inkrementell, eine Komponente nach der anderen.
+**Voice.** Confident, plain, a little mythic. The hero is a three-word
+imperative — *"Give your AI wings."* — set against the sky; everything else is
+direct and unembellished. Marketing leans on one poetic line, then immediately
+gets concrete ("The phone line for your AI agents").
 
-## Status MCP-UI
+**Person.** Second person, addressing the tenant directly — *"You decide what
+your agent may do"*, *"Pick a number and plan"*. The product speaks about itself
+in the third person — *"Hermes answers incoming calls…"*, *"Hermes makes the
+calls"*. The agent's spoken disclosure is a first-person promise the UI surfaces
+as *"Disclosure spoken first."*
 
-Der MCP gibt heute ausschliesslich Text/JSON zurueck (`src/mcp-tools.js`,
-`{type:"text"}`). Die Karten unter `mcp/` sind **Design-Entwuerfe**, wie eine
-Rich-UI im Chatbot aussehen koennte — sie sind NICHT mit dem Server verdrahtet.
-Die echte Implementierung (MCP-Resources/HTML) ist als separater Task vorgemerkt.
+**Casing.** Sentence case for all body copy, leads, and step text. The wordmark
+`HERMES` is all-caps with wide tracking (`.22em`–`.3em`); the descriptor `by
+Sundartha` is uppercase, smaller, wider still. UI eyebrows/labels and status
+badges are UPPERCASE with `.12em` tracking. Headings are sentence case.
+
+**Honesty as a value.** The copy refuses to overstate. Pricing notes that
+self-service checkout *"is not faked here"*; MCP cards are explicitly labelled
+*"Design mockup."* Billing reassures: *"nothing is charged without your
+consent."* When the agent can't do something it says so ("could not reach").
+
+**Tone examples (verbatim).**
+- Hero: "Give your AI *wings*." / "The phone line for your AI agents."
+- Footer chip: "Works with Claude & Gemini · Model Context Protocol"
+- Step: "Hermes answers incoming calls and places outgoing ones on your behalf —
+  and clearly states up front that an assistant is speaking."
+- Billing: "You start your monthly subscription after signing in. Your card is
+  charged only for the plan you choose."
+
+**Punctuation.** Spaced middot ` · ` separates metadata (`Inbound · message
+taken`, `Thu · 14:30`). Em dashes for asides. No exclamation points. Numbers and
+currency use a leading symbol and a dot decimal (`€4.99`). Phone numbers shown
+with country code.
+
+**Emoji.** None. The brand uses no emoji anywhere — not in marketing, app, or
+MCP cards. Iconography is the winged-sandal logo, a few stroke arrow glyphs, and
+tinted status badges.
+
+---
+
+## VISUAL FOUNDATIONS
+
+**Two worlds, one accent.** The system is deliberately bimodal:
+- **Dark (marketing / `.on-dark`)** — navy gradient `radial-gradient(120% 90% at
+  50% 0%, #1b4f86, #0f2d52 55%, #0a2245)`, Instrument Serif display + Space
+  Grotesk UI, white pill CTAs, full-bleed Olympus imagery.
+- **Light (app)** — `#fafafa` page, white cards, Inter throughout, brand-red
+  actions, near-black `#25282b` text.
+- **Brand red `#e60000`** is the one action/critical color in both worlds.
+
+**Color.** Raw primitives → semantic roles only (components never touch hex).
+Status pairs are tinted-surface + saturated-text: positive `#177a43`/`#e7f6ed`,
+critical/red `#e60000`/`#fdeaea`, info/blue `#3860be`/`#e9f0fc`, neutral
+`#7e7e7e`/`#f2f2f2`. A live indicator green `#1faa59` vs idle gray `#c4c4c4`.
+
+**Type.** Three families. *Instrument Serif* (400 + italic) — display only, the
+hero headline at `clamp(50px, 7.4vw, 98px)`, italic for the emphasized word.
+*Space Grotesk* (400–700) — dark-site UI, nav, prices. *Inter* (400–800) — the
+entire light app and all body copy. Heading weight is heavy (800) in the app;
+tight `-0.015em` tracking on headings, wide `.12em` on labels.
+
+**Spacing.** 4px base scale (`--space-1`..`--space-20`) aliased to intent
+(`--space-card: 24px`, `--space-section: 80px`, `--space-gap: 20px`). Page
+measure caps at 1180px.
+
+**Corners & cards.** Generous radii: cards 18px (`--radius-card`), controls/
+inputs 12px, badges/pills 99px, CTAs fully round (999px). A card is a *white
+surface + 1px `#ececec` hairline border + soft shadow `0 6px 18px rgba(0,0,0,
+.07)` + 24px padding*. No heavy borders, no colored left-accent stripes.
+
+**Shadows.** Light world: one soft ambient card shadow. Dark world: layered,
+cooler, navy-tinted shadows for pills (`0 10px 26px -12px rgba(7,18,40,.7)`) and
+a `drop-shadow` on the logo — depth comes from elevation over imagery, not lines.
+
+**Backgrounds & imagery.** Marketing is image-forward: a real Mount-Olympus
+photograph (`olymp_3.jpg`) with a slow drifting-cloud video (`hermes_olymp.mp4`)
+layered over a navy gradient fallback. Cool, atmospheric, blue-hour palette.
+Legibility comes from **scrims** — a top band and bottom scrim
+(`linear-gradient` of `rgba(8,22,48,…)`) plus per-element text-shadows — never
+from a flat overlay. The app uses no photography; it's flat `#fafafa`/white.
+
+**Motion.** Restrained. One easing — `cubic-bezier(0.22, 1, 0.36, 1)` — and one
+duration, `0.22s`. Buttons/pills lift 1–2px on hover with a deepening shadow;
+the switch knob slides; nav pills cross-fade background+text. A live dot can
+pulse (`1.8s`). No bounces, no springy or decorative looping animation on
+content.
+
+**Hover / press.** Hover = darker fill (red `#e60000`→`#ac1811`), lighter ghost
+(gray-75→gray-100), or `opacity .7` on dark nav links; pill CTAs translate up.
+Active nav pill inverts to a solid red fill. Inputs turn their border brand-red
+on focus. No shrink-on-press.
+
+**Transparency & blur.** Reserved for the dark world: white text at 70–96%
+opacity for hierarchy; nav/brand text-shadows; scrims in low-alpha navy. No
+backdrop blur. The light app is fully opaque.
+
+**Layout rules.** Marketing nav is absolutely positioned and transparent over
+the hero (left brand lockup, center links, right log-in + pill). The app header
+is sticky white with a hairline. Dashboards are a centered 1180px column; KPI
+tiles in a 4-up grid; secondary panels in a 2-up grid that collapses to one
+column under 720px.
+
+---
+
+## ICONOGRAPHY
+
+Hermes is **icon-light by design** — there is no icon font and almost no icon set
+in the codebase.
+
+- **Wing mark (the constant element).** The single feathered wing of Hermes,
+  after the winged messenger — the system's recurring brand element. Two forms:
+  - **WingMark** (`components/brand/`, `assets/logos/hermes-wing.png`, embedded
+    as a data URI for portability) — a lightweight, CSS-only wing for static
+    logo spots (nav, lockup, avatars). Default IDLE state is a perpetual,
+    low-amplitude hover. Also takes `status` for cheap CSS approximations.
+  - **LiveWing** (`components/brand/`, driven by `wing-engine.js`) — the REAL
+    lab animation: a deformable Pixi mesh (16×24) ported verbatim from
+    `apps/hermes-animation-lab` (`deform.ts` / `HermesWing.ts` / `status.ts` /
+    `presets.ts`). Articulates every feather — flap, bend, tip-lag, lift —
+    through the MCP call lifecycle: `idle` · `connecting` (two cautious beats) ·
+    `working` (carried flight) · `success` (elastic upward snap) · `error`
+    (stutter, then droop). `wing-engine.js` lazy-loads pixi.js v8 + GSAP from a
+    CDN. Use LiveWing where the motion is the point — the chat status beacon —
+    not for tiny logos. Both honour `prefers-reduced-motion`.
+- **Logo / brand mark.** The winged sandal of Hermes, a white PNG
+  (`assets/logos/sandal_solid.png`) used on the dark hero with a soft
+  drop-shadow. The Sundartha company mark is a small red rounded-square SVG
+  (`assets/logos/favicon.svg`).
+- **Arrows.** The only repeated UI icon is a stroked right-arrow
+  (`M5 12h13 / M12 5l7 7-7 7`, 2.4–2.5px stroke, round caps) inside "Get
+  started" CTAs and the chat composer send button. Inline SVG, `currentColor` or
+  `#10305a` on white pills.
+- **Call direction.** Unicode arrow glyphs — `↘` inbound (info-blue tint), `↗`
+  outbound (red tint) — set in tinted round chips, mirroring the codebase's
+  `render.js`.
+- **Status.** Conveyed by tinted **StatusBadge** pills + a checkmark, not icons.
+- **Emoji.** Never used.
+
+**Substitution note:** no third-party icon library (Lucide/Heroicons/etc.) is
+used in the source, so this system ships none. If a future surface needs a
+broader icon set, add one and document it here — do not hand-roll one-off SVGs.
+
+---
+
+## INDEX / MANIFEST
+
+Root:
+- `styles.css` — global entry; `@import`s the token tree only. **Consumers link
+  this.**
+- `tokens/` — `fonts.css` (@font-face: Instrument Serif, Space Grotesk;
+  @import Inter), `primitives.css` (`:root` raw), `semantic.css` (`:root` roles),
+  `dark.css` (`.on-dark` hero roles).
+- `assets/` — `logos/` (winged sandal PNG, Sundartha SVG), `imagery/`
+  (Olympus photo + cloud video), `fonts/` (self-hosted woff2).
+- `_shared/` — `preview.css` (specimen + mirrored component classes for the HTML
+  cards); `tokens.css` (re-exports `styles.css`, kept for back-compat).
+- `SKILL.md` — Agent-Skills front matter for download into Claude Code.
+
+Components (`window.HermesDesignSystem_738510.*`):
+- `components/brand/` — **WingMark** (CSS idle wing, the constant brand element)
+  and **LiveWing** (the real Pixi mesh-deform wing; needs `wing-engine.js`).
+- `components/core/` — **Button** (primary/ghost, sizes), **Card** (titled
+  surface), **PillCTA** (white CTA, on dark).
+- `components/feedback/` — **StatusBadge** (6 tones), **LiveDot**, **Stat** (KPI
+  tile).
+- `components/forms/` — **Field** (labelled input, red focus), **Switch** (brand
+  toggle).
+  Each has `<Name>.jsx` + `<Name>.d.ts` + `<Name>.prompt.md`, with one
+  bundle-mounting `@dsCard` per directory.
+
+Brand cards (`components/brand/`): `brand.card.html` — the idle WingMark + the
+HERMES by Sundartha lockup; `live.card.html` — the LiveWing through all five
+call states, on demand.
+
+Foundation cards (`foundation/`): `colors.html`, `typography.html`,
+`spacing-radii-shadows.html`, `brand.html`.
+
+UI kits:
+- `site/index.html` — interactive marketing site (hero → how-it-works →
+  pricing). Starting point.
+- `app/index.html` — interactive tenant dashboard (login → overview / calls /
+  settings / billing), composing the bundle components. Starting point.
+- `mcp/` — `index.html` (result card in a chatbot), `wing-status.html` (the
+  LiveWing reacting through a live MCP call — connecting → calling → booked) +
+  four mockup specimen cards (`call-result`, `call-status`, `agent-status`,
+  `transcript`). **Design only.**
+
+The Design System tab renders every `@dsCard`-tagged HTML, grouped by `group`.
