@@ -50,6 +50,9 @@ export const BASE_ENV = {
   LLM_BREAKER_THRESHOLD: "5",
   LLM_BREAKER_WINDOW_MS: "10000",
   LLM_BREAKER_COOLDOWN_MS: "30000",
+  // L0-Instrumentierung in Spawn-Tests AUS (deterministisch, kein Log-Rauschen; sonst
+  // leakt lokales .env via dotenv -> Baseline-Drift, Lehre test-base-env-drift).
+  METRICS_ENABLED: "false",
   TWILIO_ACCOUNT_SID: "ACtest00000000000000000000000000",
   TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
   // Absendernummern sind keine Env-Var mehr: die Owner-Nummer kommt ueber

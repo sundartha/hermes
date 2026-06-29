@@ -23,6 +23,7 @@ import {
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
+import { metrics } from "./metrics.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
@@ -872,10 +873,13 @@ app.post("/voice/turn", async (req, res) => {
   if (!call || call.status !== "active") {
     return res.type("text/xml").send(render([hangupD()]));
   }
+  // L0: Luecke seit dem Render des vorigen Folge-Gathers ~ STT-Finalisierungs-Totzeit.
+  metrics.logTurnGap(call.id);
 
   const heard = extractSpeech(req, call.provider);
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
+      metrics.recordTurnRendered(call.id); // L0: Folge-Gather offen -> Render-Zeitpunkt
       return res
         .type("text/xml")
         .send(
@@ -889,6 +893,7 @@ app.post("/voice/turn", async (req, res) => {
     const directives = endCall
       ? [sayInCallVoice(call, speech), hangupD()]
       : followupTurnDirectives(call, speech);
+    if (!endCall) metrics.recordTurnRendered(call.id); // L0: nur wenn ein Folge-Turn folgt
     res.type("text/xml").send(render(directives, call.provider));
   } catch (err) {
     console.error("[turn]", err.message);

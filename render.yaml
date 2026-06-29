@@ -181,6 +181,10 @@ services:
         value: "10000"
       - key: LLM_BREAKER_COOLDOWN_MS
         value: "30000"
+      # L0-Instrumentierung: PII-freie Latenz-/STT-Gap-Logs. Default aus = byte-identisch.
+      # Fuer eine Live-Messung (L1-Datengrundlage) im Dashboard auf "true" setzen.
+      - key: METRICS_ENABLED
+        value: "false"
       - key: MAX_CALL_DURATION_S
         value: "180"
       - key: RATE_LIMIT_PER_MIN
