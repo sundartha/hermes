@@ -292,6 +292,12 @@ services:
       - path: /*
         name: X-Frame-Options
         value: DENY
+      # script-src 'unsafe-eval': der Hero-Live-Wing (pixi.js v8, WebGL) generiert
+      # zur Laufzeit per new Function() optimierten Uniform-/Shader-Code -> ohne
+      # 'unsafe-eval' haengt die WebGL-Init (verifiziert). BEWUSST eng gescopt:
+      # NUR auf dieser rein-statischen Marketing-Site (kein Auth/Secret/User-Input,
+      # keine /api), default-src bleibt 'self' (img/connect/style/frame dicht). Die
+      # Gateway-/App-CSP (vodafone-agent) ist davon NICHT betroffen.
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+        value: "default-src 'self'; script-src 'self' 'unsafe-eval'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"

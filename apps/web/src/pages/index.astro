@@ -81,6 +81,13 @@ const pricingHref = "/preise";
       <!-- HERO-CONTENT -->
       <div class="hero-content">
         <div class="hero-inner">
+          <!-- Live-Wing: deformierbarer Pixi-Mesh (src/wing/engine.js), als
+               progressive Enhancement. Bis der Canvas mountet (bzw. bei
+               prefers-reduced-motion / ohne JS) zeigt das statische Wing-PNG.
+               Rein dekorativ (die Marke steht im Text) -> aria-hidden. -->
+          <div class="hero-wing" id="hermesWing" aria-hidden="true">
+            <img class="wing-fallback" src="/assets/hermes-wing.png" alt="" width="500" height="500" />
+          </div>
           <h1 class="hero-title">Give your AI <em>wings</em>.</h1>
           <p class="hero-sub">The phone line for your AI agents.</p>
           <a class="btn btn--hero" href={LOGIN_URL}>Get started
@@ -95,6 +102,23 @@ const pricingHref = "/preise";
          Skripts: letzteres wuerde Astro inline einbetten und unter der CSP
          (script-src 'self', kein 'unsafe-inline') blockiert. -->
     <script is:inline src="/assets/hero.js" defer></script>
+
+    <script>
+      // Hero-Wing mounten. Bewusst ein verarbeitetes Astro-Skript (kein
+      // is:inline): Vite buendelt es + emittiert es same-origin, damit es
+      // unter der strikten CSP (script-src 'self') laeuft. pixi/gsap kommen
+      // per dynamischem import() lazy in einen eigenen Chunk.
+      const wingHost = document.getElementById("hermesWing");
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (wingHost && !reduceMotion) {
+        import("../wing/engine.js")
+          .then(({ mountWing }) =>
+            mountWing(wingHost, { size: 460, status: "idle", textureUrl: "/assets/hermes-wing.png" }),
+          )
+          .then(() => wingHost.classList.add("wing-live"))
+          .catch((err) => console.error("Hero-Wing mount fehlgeschlagen", err));
+      }
+    </script>
 
     <style is:global>
       * { box-sizing: border-box; }
@@ -215,6 +239,26 @@ const pricingHref = "/preise";
         padding: clamp(118px, 15vh, 190px) 24px 64px;
       }
       .hero-inner { display: flex; flex-direction: column; align-items: center; max-width: 700px; }
+
+      /* Live-Wing-Showpiece: quadratische Box, der Pixi-Canvas bzw. das
+         Fallback-PNG fuellt sie. !important schlaegt die Inline-Pixelgroesse,
+         die Pixi (autoDensity) auf den Canvas setzt. wing-live blendet das
+         statische PNG aus, sobald der Mesh gemountet ist. */
+      .hero-wing {
+        width: clamp(200px, 28vw, 340px);
+        aspect-ratio: 1 / 1;
+        margin: 0 auto 2px;
+        line-height: 0;
+        pointer-events: none;
+      }
+      .hero-wing .wing-fallback,
+      .hero-wing canvas {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain;
+      }
+      .hero-wing.wing-live .wing-fallback { display: none; }
       .hero-title {
         margin: 0; white-space: nowrap;
         /* Norse (runisch); Bruecke auf Instrument Serif bis die Norse-Datei vorliegt. */
