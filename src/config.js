@@ -96,6 +96,13 @@ export const config = {
     min: 1,
   }),
 
+  // ---- Mess-Instrumentierung (L0, src/metrics.js) ----
+  // Master-Schalter fuer PII-freie Latenz-/Loop-/STT-Gap-Logs. DEFAULT AUS
+  // (byte-identisch, auch stdout): Konsumenten no-oppen. Zum Live-Messen (Datengrundlage
+  // fuer L1) am Host auf "true" setzen - reine Diagnose, beruehrt KEINE Safety-Gates,
+  // KEINE Disclosure, KEINE Resilienz-Werte. Tests pinnen das via BASE_ENV.
+  metricsEnabled: (process.env.METRICS_ENABLED || "false") === "true",
+
   twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
   // Absendernummern (Twilio/Telnyx) kommen NICHT mehr aus der config: der Owner ist

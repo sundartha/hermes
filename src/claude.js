@@ -6,12 +6,13 @@ import * as store from "./store.js";
 import { USAGE_EVENT_KIND } from "./store/defaults.js";
 import { aiCostCents } from "./store/state-ops.js";
 import { localeFor } from "./i18n/locales.js";
+import { metrics } from "./metrics.js";
 
 // Resilienter LLM-Seam (P3b-R Schicht 2, src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top (P15), Fachcode ruft nur
 // llm.complete(...). Wirft bei Breaker-open/Retries-erschoepft LlmUnavailableError
 // (Aufrufer behandelt das in CP4); 4xx/Auth propagieren unveraendert.
-const llm = createLlmClient({ apiKey: config.anthropicApiKey, config });
+const llm = createLlmClient({ apiKey: config.anthropicApiKey, config, metrics });
 
 // AI-Token-Meter EINES Anthropic-Aufrufs (P6b3, Meter 3). NUR im Metering-Pfad
 // (PAYMENT_ENABLED) - der Nebeneffekt (recordUsageEvent) steht im Namen. Laeuft
@@ -284,6 +285,8 @@ export async function agentTurn(call, callerText) {
   let endCall = false;
   let suppressedEndCall = false;
   let speech = "";
+  let roundtrips = 0; // L0: Anzahl llm.complete-Roundtrips dieses Turns
+  const firedTools = []; // L0: vom Modell angeforderte Tool-NAMEN dieses Turns (PII-frei)
 
   // Tool-Loop (max. 4 Runden pro Turn)
   for (let i = 0; i < 4; i++) {
@@ -294,6 +297,7 @@ export async function agentTurn(call, callerText) {
       tools: toolDefs(call.tenantId),
       messages,
     });
+    roundtrips += 1;
     store.trackUsage(call.tenantId, resp.usage.input_tokens, resp.usage.output_tokens, config);
     meterAiTokens(call, resp.usage);
 
@@ -301,6 +305,7 @@ export async function agentTurn(call, callerText) {
     if (textParts.length) speech = textParts.join(" ").trim();
 
     const toolUses = resp.content.filter((b) => b.type === "tool_use");
+    firedTools.push(...toolUses.map((tu) => tu.name)); // L0: Tools dieses Roundtrips
     if (!toolUses.length) break;
 
     messages = [
@@ -333,6 +338,13 @@ export async function agentTurn(call, callerText) {
     // damit das Modell nach end_call doch noch eine kurze Antwort liefern kann.
     if ((endCall || suppressedEndCall) && speech) break;
   }
+
+  metrics.logTurn({
+    callId: call.id,
+    direction: call.direction,
+    roundtrips,
+    tools: firedTools,
+  });
 
   if (!speech) speech = "Alles klar, vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!";
   store.addTranscript(call.id, "agent", speech);
