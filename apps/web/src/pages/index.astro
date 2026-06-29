@@ -185,9 +185,13 @@ const pricingHref = "/preise";
         color: rgba(255,255,255,.94); text-shadow: 0 1px 10px rgba(7,18,40,.6);
       }
       .nav-right { display: flex; gap: 20px; align-items: center; }
-      .nav-login {
+      /* Doppel-Selektor (.nav-login.nav-login) wie im Design: hoehere Spezifitaet
+         als .nav-link { color: inherit }, das sonst (gleiche Spezifitaet, spaeter
+         im Stylesheet) gewinnt -> "Log in" wuerde sonst Default-Schwarz erben
+         (.nav-right setzt keine Farbe, anders als .nav-center). */
+      .nav-login.nav-login {
         font-size: 15px; font-weight: 500;
-        color: rgba(255,255,255,.94);
+        color: #ffffff;
         text-shadow: 0 1px 10px rgba(7,18,40,.6);
       }
       .nav-link {
