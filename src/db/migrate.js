@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { defaultSettings, demoCalendar } from "../store/defaults.js";
+import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCHEMA_FILE = path.join(__dirname, "schema.sql");
@@ -18,6 +19,34 @@ const SCHEMA_FILE = path.join(__dirname, "schema.sql");
 export async function applySchema(db) {
   const ddl = fs.readFileSync(SCHEMA_FILE, "utf8");
   await db.exec(ddl);
+}
+
+// Anker-Ableitung fuer den Bestands-Backfill als Unix-Sekunden (Persistenz-Format).
+// Duenner Wrapper um die geteilte Perioden-Ableitung (billing/period.js); dieselbe
+// Domaenen-Regel wie die Live-Anzeige meter.periodStartIso (dort ISO).
+function periodStartSecFromEnd(endSec) {
+  return Math.floor(periodStartFromEnd(endSec).getTime() / MS_PER_SECOND);
+}
+
+// Einmaliger, idempotenter Backfill (B1a): Bestands-Tenants haben die neue Spalte
+// stripe_current_period_start NULL. Fuer jede Zeile mit gespeichertem Ende aber leerem
+// Start wird der Anker aus dem Ende abgeleitet und persistiert - sonst saehe das spaetere
+// Minuten-Gate (B2) fuer Bestandskunden keinen Anker. Nach dem ersten Lauf 0 Treffer
+// (Idempotenz). tenant-Tabelle hat keine RLS -> keine GUC noetig. PAYMENT_ENABLED=false ->
+// keine Zeile traegt ein Ende -> 0 Updates (byte-identische Wirkung).
+export async function backfillPeriodStart(db) {
+  const rows = (
+    await db.query(
+      `SELECT id, stripe_current_period_end AS end_sec FROM tenant
+        WHERE stripe_current_period_start IS NULL AND stripe_current_period_end IS NOT NULL`,
+    )
+  ).rows;
+  for (const r of rows) {
+    await db.query(`UPDATE tenant SET stripe_current_period_start = $1 WHERE id = $2`, [
+      periodStartSecFromEnd(Number(r.end_sec)),
+      r.id,
+    ]);
+  }
 }
 
 // Seedet die Owner-Zeilen (tenant, settings, usage, Demo-Kalender) aus den
@@ -80,5 +109,6 @@ export async function seedDefaults(db, tenantId) {
 // Eine oeffentliche Einstiegsfunktion: Schema anwenden, dann Owner-Defaults seeden.
 export async function migrate(db, tenantId) {
   await applySchema(db);
+  await backfillPeriodStart(db);
   await seedDefaults(db, tenantId);
 }

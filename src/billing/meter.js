@@ -11,6 +11,7 @@ import {
   voiceMinutesUsedSince,
 } from "../store/state-ops.js";
 import { findPlan } from "../plans.js";
+import { periodStartFromEnd } from "./period.js";
 
 // Aggregiert die NOCH NICHT gesendeten usage_event-Zeilen je (tenantId, kind):
 // summiert quantity + costCents, sammelt die Event-ids (in stabiler Reihenfolge).
@@ -71,21 +72,11 @@ export async function flushMeters(s, { billing }) {
 }
 
 // ---- BK4: Minuten-Kontingent-Lese-Sicht (kein Stripe, kein save, kein IO) ----------
-// s->ms-Bruecke: currentPeriodEnd kommt als Unix-Sekunden (Stripe), Date erwartet
-// Millis. Benannte Konstante statt Magic 1000 (G25).
-const MS_PER_SECOND = 1000;
-
-// Start des laufenden Abrechnungszeitraums = Perioden-ENDE minus EINEM Monat (die
-// einzige Katalog-Kadenz ist "month"). currentPeriodEndSec = Unix-Sekunden; liefert
-// ISO-8601 (direkt vergleichbar mit usage_event.occurredAt). BEWUSSTE VEREINFACHUNG
-// (BK4): der exakte Stripe-Anker current_period_start wird nicht gespeichert; fuer die
-// reine Anzeige genuegt das Monatsfenster. Folge-Ticket: current_period_start
-// persistieren (Echtzeit-Metering, PLAN-Abschnitt 10). Monatsletzten-Ueberlauf
-// verschiebt das Fenster um wenige Tage - akzeptiert (Anzeige, kein Gate).
+// Start des laufenden Abrechnungszeitraums als ISO-8601 (direkt vergleichbar mit
+// usage_event.occurredAt). Duenner Wrapper um die geteilte Perioden-Ableitung
+// (billing/period.js); currentPeriodEndSec = Unix-Sekunden.
 function periodStartIso(currentPeriodEndSec) {
-  const start = new Date(currentPeriodEndSec * MS_PER_SECOND);
-  start.setUTCMonth(start.getUTCMonth() - 1);
-  return start.toISOString();
+  return periodStartFromEnd(currentPeriodEndSec).toISOString();
 }
 
 // Minuten-Kontingent EINES Tenants (BK4): reiner Read ueber Plan-Katalog

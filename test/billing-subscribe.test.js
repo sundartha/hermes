@@ -31,7 +31,7 @@ function fakeBilling(spy = {}) {
   return {
     createSubscription: async (params) => {
       spy.params = params;
-      return { subscriptionId: "sub_new", currentPeriodEnd: 1893456000 };
+      return { subscriptionId: "sub_new", currentPeriodEnd: 1893456000, currentPeriodStart: 1890864000 };
     },
   };
 }
@@ -97,6 +97,8 @@ test("createTenantSubscription: Happy-Pfad persistiert Abo-Felder + reicht Idemp
   assert.equal(store.state.subscription.subscriptionId, "sub_new");
   assert.equal(store.state.subscription.planSlug, "business");
   assert.equal(store.state.subscription.currentPeriodEnd, 1893456000);
+  // B1a: der Periodenanker (currentPeriodStart) wird mit in den Store gefaedelt.
+  assert.equal(store.state.subscription.currentPeriodStart, 1890864000);
 });
 
 test("createTenantSubscription: andere Karte -> anderer Idempotenz-Key (kein Param-Konflikt nach Karten-Neuwahl), gleiche Karte dedupt", async () => {

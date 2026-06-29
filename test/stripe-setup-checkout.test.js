@@ -118,7 +118,10 @@ test("createSubscription: liest current_period_end aus items.data[0] (aktuelle S
   const result = await withStripeStub(
     async (url, opts) => {
       captured = { url, opts };
-      return okJson({ id: "sub_1", items: { data: [{ current_period_end: 1893456000 }] } });
+      return okJson({
+        id: "sub_1",
+        items: { data: [{ current_period_end: 1893456000, current_period_start: 1890864000 }] },
+      });
     },
     () =>
       stripeBilling.createSubscription({
@@ -137,12 +140,17 @@ test("createSubscription: liest current_period_end aus items.data[0] (aktuelle S
   assert.equal(captured.opts.body.get("default_payment_method"), "pm_1");
   assert.equal(captured.opts.body.get("off_session"), "true");
   assert.equal(captured.opts.headers["Idempotency-Key"], "sub_tenant_a_starter");
-  assert.deepEqual(result, { subscriptionId: "sub_1", currentPeriodEnd: 1893456000 });
+  assert.deepEqual(result, {
+    subscriptionId: "sub_1",
+    currentPeriodEnd: 1893456000,
+    currentPeriodStart: 1890864000,
+  });
 });
 
-test("createSubscription: Fallback auf top-level current_period_end (aeltere API)", async () => {
+test("createSubscription: Fallback auf top-level current_period_end/start (aeltere API)", async () => {
   const result = await withStripeStub(
-    async () => okJson({ id: "sub_2", current_period_end: 1700000000 }),
+    async () =>
+      okJson({ id: "sub_2", current_period_end: 1700000000, current_period_start: 1697408000 }),
     () =>
       stripeBilling.createSubscription({
         tenantRef: "tenant_a",
@@ -150,7 +158,11 @@ test("createSubscription: Fallback auf top-level current_period_end (aeltere API
         priceId: "price_starter",
       }),
   );
-  assert.deepEqual(result, { subscriptionId: "sub_2", currentPeriodEnd: 1700000000 });
+  assert.deepEqual(result, {
+    subscriptionId: "sub_2",
+    currentPeriodEnd: 1700000000,
+    currentPeriodStart: 1697408000,
+  });
 });
 
 test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_session=true, manual capture", async () => {

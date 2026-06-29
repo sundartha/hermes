@@ -176,7 +176,8 @@ export const stripeBilling = {
   // (fail-closed, kein "Abo ohne Zahlung"). Idempotency-Key (tenant+plan): Retry legt
   // nie zwei Abos an. tenant_ref + plan_slug als metadata reisen in die Subscription-
   // Webhook-Events zurueck (Tenant-/Plan-Aufloesung; Audit, KEINE Secrets). Nur
-  // subscriptionId + current_period_end (Unix-s) verlassen den Adapter (KEIN Stripe-Objekt).
+  // subscriptionId + current_period_end + current_period_start (Unix-s) verlassen den
+  // Adapter (KEIN Stripe-Objekt).
   async createSubscription({ tenantRef, customerId, priceId, paymentMethodId, idempotencyKey }) {
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     const body = new URLSearchParams({
@@ -212,7 +213,8 @@ export const stripeBilling = {
     // top-level fuer aeltere API-Versionen -> kein leeres Perioden-/Quota-Fenster.
     const item = json.items && json.items.data && json.items.data[0];
     const currentPeriodEnd = (item && item.current_period_end) ?? json.current_period_end;
-    return { subscriptionId: json.id, currentPeriodEnd };
+    const currentPeriodStart = (item && item.current_period_start) ?? json.current_period_start;
+    return { subscriptionId: json.id, currentPeriodEnd, currentPeriodStart };
   },
 
   // A3-Reconcile: liest den Plan-Slug eines bestehenden Abos aus der Subscription-

@@ -415,7 +415,7 @@ async function hydrateProfiles(client) {
 const TENANT_COLUMNS =
   "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
   "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
-  "stripe_current_period_end, country, default_language, private_number";
+  "stripe_current_period_end, stripe_current_period_start, country, default_language, private_number";
 
 // Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
 // owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
@@ -438,6 +438,8 @@ function rowToTenant(r) {
   // BIGINT kommt als String aus pg -> zurueck zur Zahl (Unix-Sekunden, kein Float-Geld).
   if (r.stripe_current_period_end != null)
     tenant.stripeCurrentPeriodEnd = Number(r.stripe_current_period_end);
+  if (r.stripe_current_period_start != null)
+    tenant.stripeCurrentPeriodStart = Number(r.stripe_current_period_start);
   if (r.country != null) tenant.country = r.country;
   if (r.default_language != null) tenant.defaultLanguage = r.default_language;
   if (r.private_number != null) tenant.privateNumber = r.private_number;
@@ -749,8 +751,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, country, default_language, private_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, country, default_language, private_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -760,6 +762,7 @@ async function flushTenants(client, tenants) {
          stripe_subscription_id=EXCLUDED.stripe_subscription_id,
          stripe_plan_slug=EXCLUDED.stripe_plan_slug,
          stripe_current_period_end=EXCLUDED.stripe_current_period_end,
+         stripe_current_period_start=EXCLUDED.stripe_current_period_start,
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
          private_number=EXCLUDED.private_number`,
       [
@@ -774,6 +777,7 @@ async function flushTenants(client, tenants) {
         t.stripeSubscriptionId ?? null,
         t.stripePlanSlug ?? null,
         t.stripeCurrentPeriodEnd ?? null,
+        t.stripeCurrentPeriodStart ?? null,
         t.country ?? null,
         t.defaultLanguage ?? null,
         t.privateNumber ?? null,

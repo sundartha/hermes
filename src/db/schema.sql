@@ -43,6 +43,11 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_subscription_id    TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_plan_slug          TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_current_period_end BIGINT;
+-- B1a: Beginn der laufenden Abrechnungsperiode (Unix-s) als Geld-Gate-Anker fuer die
+-- Minuten-Quota (GAP B). Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL; der einmalige,
+-- idempotente Backfill (db/migrate.js backfillPeriodStart) leitet ihn fuer Bestands-Abos
+-- aus stripe_current_period_end ab. Muster wie stripe_* (BIGINT, kein CHECK).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_current_period_start BIGINT;
 -- F1 Geo-Location (Phase 1): Tenant-Default-Land + -Sprache, die die Registrierung
 -- (IP-Geo-Vorschlag bzw. explizite User-Wahl) schreibt - Fallback fuer neue Nummern
 -- dieses Tenants. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, Code-Fallback

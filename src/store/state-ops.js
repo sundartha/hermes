@@ -767,21 +767,22 @@ export function tenantStripe(s, tenantId) {
 
 // ---- Abo-Referenzen pro Tenant (W4) ----
 // Setzt die Stripe-Abo-Referenzen eines Tenants. Reine Mutation, kein IO (Wrapper saved).
-// patch = { subscriptionId?, planSlug?, currentPeriodEnd? }: NUR uebergebene Keys werden
-// gesetzt (selektiver Patch via !== undefined, Muster wie setTenantStripe) - so kann der
-// Webhook currentPeriodEnd nachziehen, ohne subscriptionId/planSlug zu beruehren.
-// Fehlender Tenant wirft (kein stilles No-Op, Muster setTenantStripe). Opake Referenzen
-// (sub_/price-slug/Unix-s), KEINE Secrets. Liefert den Tenant.
+// patch = { subscriptionId?, planSlug?, currentPeriodEnd?, currentPeriodStart? }: NUR
+// uebergebene Keys werden gesetzt (selektiver Patch via !== undefined, Muster wie
+// setTenantStripe) - so kann der Webhook currentPeriodEnd/Start nachziehen, ohne
+// subscriptionId/planSlug zu beruehren. Fehlender Tenant wirft (kein stilles No-Op, Muster
+// setTenantStripe). Opake Referenzen (sub_/price-slug/Unix-s), KEINE Secrets. Liefert den Tenant.
 export function setTenantSubscription(
   s,
   tenantId,
-  { subscriptionId, planSlug, currentPeriodEnd } = {},
+  { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart } = {},
 ) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
   if (subscriptionId !== undefined) tenant.stripeSubscriptionId = subscriptionId;
   if (planSlug !== undefined) tenant.stripePlanSlug = planSlug;
   if (currentPeriodEnd !== undefined) tenant.stripeCurrentPeriodEnd = currentPeriodEnd;
+  if (currentPeriodStart !== undefined) tenant.stripeCurrentPeriodStart = currentPeriodStart;
   return tenant;
 }
 
@@ -794,6 +795,7 @@ export function tenantSubscription(s, tenantId) {
     subscriptionId: tenant?.stripeSubscriptionId ?? null,
     planSlug: tenant?.stripePlanSlug ?? null,
     currentPeriodEnd: tenant?.stripeCurrentPeriodEnd ?? null,
+    currentPeriodStart: tenant?.stripeCurrentPeriodStart ?? null,
   };
 }
 

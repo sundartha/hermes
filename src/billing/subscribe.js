@@ -64,7 +64,7 @@ export async function createTenantSubscription({ store, billing, config, tenant,
     return { ok: false, reason: "already_subscribed" };
   const stripe = store.tenantStripe(tenant);
   if (!hasCardOnFile(stripe)) return { ok: false, reason: "no_card" };
-  const { subscriptionId, currentPeriodEnd } = await billing.createSubscription({
+  const { subscriptionId, currentPeriodEnd, currentPeriodStart } = await billing.createSubscription({
     tenantRef: tenant,
     customerId: stripe.customerId,
     // Die on-file-Karte als Default-Zahlungsmittel des Abos (sonst kann Stripe die erste
@@ -73,6 +73,6 @@ export async function createTenantSubscription({ store, billing, config, tenant,
     priceId,
     idempotencyKey: subscribeIdempotencyKey(tenant, planSlug, stripe.paymentMethodId),
   });
-  store.setTenantSubscription(tenant, { subscriptionId, planSlug, currentPeriodEnd });
+  store.setTenantSubscription(tenant, { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart });
   return { ok: true, subscriptionId, planSlug, currentPeriodEnd };
 }
