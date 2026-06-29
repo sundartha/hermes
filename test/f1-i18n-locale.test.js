@@ -195,9 +195,9 @@ test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Rege
   assert.ok(prompt.includes(DE_SPEECH_CLAUSE), `DE-Sprach-Regel fehlt: ${prompt}`);
 });
 
-test("DE byte-identisch: openingText(de) == Offenlegung + 'Ich rufe an, weil <goal>.'", () => {
+test("DE byte-identisch: openingText(de) == Offenlegung + 'Ich rufe an wegen folgendem Anliegen: <goal>.'", () => {
   const text = openingText(deCall({ direction: "outbound", goal: "Testziel" }));
-  assert.equal(text, `${DE_DISCLOSURE} Ich rufe an, weil Testziel.`);
+  assert.equal(text, `${DE_DISCLOSURE} Ich rufe an wegen folgendem Anliegen: Testziel.`);
 });
 
 test("FR: disclosureSentence(fr) liefert die kuratierte FR-Variante (mit ownerName, NICHT die DE-Variante)", () => {
@@ -227,7 +227,7 @@ test("FR: systemPrompt(fr) traegt die FR-Sprach-Regel und NICHT die deutsche (ke
 test("FR: openingText(fr) nutzt die franzoesische Bruecke + FR-Offenlegung", () => {
   const text = openingText(frCall({ direction: "outbound", goal: "Testziel" }));
   assert.equal(text, `${LOCALES.fr.disclosure(OWNER_NAME)} ${LOCALES.fr.bridgePhrase("Testziel")}`);
-  assert.ok(!text.includes("Ich rufe an, weil"), `FR darf keine DE-Bruecke tragen: ${text}`);
+  assert.ok(!text.includes("Ich rufe an wegen"), `FR darf keine DE-Bruecke tragen: ${text}`);
 });
 
 test("Gegenprobe: ein FR-Call faerbt einen parallelen DE-Call nicht ab (Resolver ist call-lokal)", () => {

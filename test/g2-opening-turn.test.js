@@ -14,11 +14,11 @@ import { runOutbound, GATHER_OPEN, HANGUP_TAG, DISCLOSURE_JONAS } from "./_outbo
 // beobachtbare Kapp-Verhalten (Wortgrenze, kein Satzzeichen-Salat), nicht die Zahl.
 const OPENING_GOAL_MAX_CHARS = 160;
 
-let systemPrompt, openingText;
+let systemPrompt, openingText, disclosureSentence;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
   await import("../src/config.js");
-  ({ systemPrompt, openingText } = await import("../src/claude.js"));
+  ({ systemPrompt, openingText, disclosureSentence } = await import("../src/claude.js"));
 });
 
 for (const provider of ["twilio", "telnyx"]) {
@@ -72,15 +72,13 @@ test("G2: ueberlanges Anliegen wird im Erst-Turn gekappt (Wortgrenze, kein Satzz
   assert.ok(!/[.!?]\.<\/Say>/.test(body), `Satzzeichen-Salat am Anliegen-Ende: ${body}`);
 });
 
-// (3b) Grenzfall leeres Anliegen: nur Offenlegung, kein "weil ."-Artefakt.
-test("G2: leeres Anliegen -> nur Offenlegung, kein 'weil .'-Artefakt", () => {
-  const text = openingText(
-    seedCall({ direction: "outbound", goal: "", tenantId: BOOTSTRAP_TENANT_ID }),
-  );
+// (3b) Grenzfall leeres Anliegen: nur Offenlegung, kein Bruecken-Artefakt.
+test("G2: leeres Anliegen -> nur Offenlegung, kein Bruecken-Artefakt", () => {
+  const emptyGoalCall = seedCall({ direction: "outbound", goal: "", tenantId: BOOTSTRAP_TENANT_ID });
+  const text = openingText(emptyGoalCall);
   assert.ok(text.includes("Guten Tag"), `Offenlegung fehlt: ${text}`);
-  // Bei leerem Anliegen wird die Bruecke ("Ich rufe an, weil ...") komplett weggelassen
-  // -> kein "weil ."-Artefakt.
-  assert.ok(!text.includes("weil"), `leeres Anliegen darf keine Bruecke rendern: ${text}`);
+  // Bei leerem Anliegen wird die Bruecke komplett weggelassen -> Opener == reine Offenlegung.
+  assert.equal(text, disclosureSentence(emptyGoalCall), `leeres Anliegen darf keine Bruecke rendern: ${text}`);
 });
 
 // (4) Kein Doppel-Anliegen: der Outbound-systemPrompt weist den LLM an, die LLM-frei
