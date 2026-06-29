@@ -4,7 +4,7 @@
   "hashes": {
     "apps/web/src/styles/tokens/primitives.css": "09aa967c5ffd40dbddc2c1a63b3cfd38d62dbb4d4053934308611ddf426ceb9b",
     "apps/web/src/styles/tokens/semantic.css": "7a2e272766807917a1676c2a541c7451091a011883df1d79982e98c1ca0b4ab5",
-    "apps/web/src/styles/tokens/hero.css": "3a1e8005add960dc4b642c120cdd64f608970133af6146179a3c7542a778afab",
+    "apps/web/src/styles/tokens/hero.css": "715125c95de15588f80f173d734916a98c3c9b0e3c4712c8425b54932f0ee5ae",
     "design-system/tokens/primitives.css": "7ce021d7941251d00ee4f785376dc58dbcc4f354a9ed8bfae4e6e49844839ba7",
     "design-system/tokens/semantic.css": "c8f18db93c2cca29a86754f6bfe63b2e614167ecf6b11694f68635eb7898d129",
     "design-system/tokens/dark.css": "5796da10055333b0dc058c242937a6bfc0bd7680606900ff82549f29147a0ee0"
