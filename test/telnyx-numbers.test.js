@@ -27,6 +27,9 @@ function stubFetch(response) {
       ok: r.ok ?? true,
       status: r.status ?? 200,
       json: async () => r.json ?? {},
+      // assertOk liest im Fehlerfall res.text() (single-use Stream). Ohne explizites
+      // text faellt der Stub auf den JSON-Body zurueck -> Bestandstests unveraendert.
+      text: async () => r.text ?? JSON.stringify(r.json ?? {}),
     };
   };
   return calls;
@@ -122,4 +125,52 @@ test("registry.numberProvisioning: telnyx -> Adapter, unbekannt -> wirft (fail-c
   assert.equal(numberProvisioning(PROVIDER.TELNYX), prov);
   assert.equal(numberProvisioning(), prov, "Default telnyx");
   assert.throws(() => numberProvisioning(PROVIDER.TWILIO), /nicht unterstuetzt/);
+});
+
+const PAYMENT_402_BODY = JSON.stringify({
+  errors: [{ code: "10015", title: "Payment required", detail: "Account balance too low" }],
+});
+
+test("orderNumber 402: Telnyx errors[].code/title/detail landen in der Meldung (Diagnose)", async () => {
+  stubFetch({ ok: false, status: 402, text: PAYMENT_402_BODY });
+  await assert.rejects(
+    () => prov.orderNumber({ e164: "+4915112340001", connectionId: "conn_1" }),
+    (err) => {
+      assert.match(err.message, /HTTP 402/);
+      assert.match(err.message, /10015/);
+      assert.match(err.message, /Payment required/);
+      assert.match(err.message, /Account balance too low/);
+      return true;
+    },
+  );
+});
+
+test("orderNumber 402: weder API-Key noch Telefonnummer (PII) in der Meldung (Regel 4)", async () => {
+  stubFetch({ ok: false, status: 402, text: PAYMENT_402_BODY });
+  await assert.rejects(
+    () => prov.orderNumber({ e164: "+4915112340001", connectionId: "conn_1" }),
+    (err) => {
+      assert.ok(!err.message.includes(API_KEY), "API-Key darf nicht leaken");
+      assert.ok(!err.message.includes("+4915112340001"), "Telefonnummer (PII) darf nicht leaken");
+      return true;
+    },
+  );
+});
+
+test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw bleibt", async () => {
+  stubFetch({ ok: false, status: 402, text: "<html>upstream error</html>" });
+  await assert.rejects(
+    () => prov.orderNumber({ e164: "+4915112340001" }),
+    (err) => {
+      assert.match(err.message, /Telnyx orderNumber fehlgeschlagen: HTTP 402/);
+      assert.ok(!err.message.includes("["), "kein Detail-Block bei unparsbarem Body");
+      assert.ok(!err.message.includes("upstream error"), "kein Rohtext-Dump (Leak-Schutz)");
+      return true;
+    },
+  );
+  stubFetch({ ok: false, status: 402, text: "" });
+  await assert.rejects(
+    () => prov.orderNumber({ e164: "+4915112340001" }),
+    /Telnyx orderNumber fehlgeschlagen: HTTP 402$/,
+  );
 });

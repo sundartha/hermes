@@ -17,6 +17,10 @@ const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
 const NUMBERS_PATH = "/v2/phone_numbers";
 const DEFAULT_SEARCH_LIMIT = 1;
+// Max-Laenge je Telnyx-detail-Feld in der Fehlermeldung: begrenzt das Log-Volumen eines
+// unerwartet grossen detail-Strings (kein Raw-Body-Dump). Interner Log-Hygiene-Bound, kein
+// Operator-Tuning-Knopf -> modul-lokale Konstante wie die Poll-Konstanten, nicht config.js.
+const ERROR_DETAIL_MAX_LEN = 200;
 
 // Telnyx-number_orders ist async (status pending): die phone_number-Ressource erscheint
 // erst Sekunden nach der Bestellung. Kurzer, gedeckelter Poll, bis die Ressource (mit id)
@@ -36,8 +40,41 @@ function authHeaders(extra = {}) {
   };
 }
 
-function assertOk(res, op) {
-  if (!res.ok) throw new Error(`Telnyx ${op} fehlgeschlagen: HTTP ${res.status}`);
+// Liest den Telnyx-Fehler-Envelope NON-DESTRUKTIV (nur im !ok-Zweig; der Erfolgspfad liest
+// weiter res.json()) und extrahiert STRIKT allowlisted code/title/detail. Raw-Body und
+// unbekannte Felder werden NIE durchgereicht (Regel 4: kein Key-/PII-Dump); detail wird auf
+// ERROR_DETAIL_MAX_LEN gekuerzt. Fehlt/kaputt der Body -> "" (assertOk faellt auf status-only
+// zurueck, der throw passiert immer).
+async function telnyxErrorDetail(res) {
+  let raw;
+  try {
+    raw = await res.text();
+  } catch {
+    return "";
+  }
+  if (!raw) return "";
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return ""; // kein JSON -> kein Rohtext-Dump (Leak-Schutz)
+  }
+  const errors = Array.isArray(body && body.errors) ? body.errors : [];
+  return errors
+    .map((e) => {
+      if (!e) return "";
+      const head = [e.code != null ? String(e.code) : "", e.title].filter(Boolean).join(" ");
+      const detail = e.detail ? String(e.detail).slice(0, ERROR_DETAIL_MAX_LEN) : "";
+      return [head, detail].filter(Boolean).join(": ");
+    })
+    .filter(Boolean)
+    .join("; ");
+}
+
+async function assertOk(res, op) {
+  if (res.ok) return;
+  const detail = await telnyxErrorDetail(res);
+  throw new Error(`Telnyx ${op} fehlgeschlagen: HTTP ${res.status}${detail ? ` [${detail}]` : ""}`);
 }
 
 const url = (path) => config.telnyxApiBase + path;
@@ -50,7 +87,7 @@ async function resolveNumberId(e164) {
     const q = new URLSearchParams();
     q.set("filter[phone_number]", e164);
     const res = await fetch(`${url(NUMBERS_PATH)}?${q}`, { headers: authHeaders() });
-    assertOk(res, "resolveNumberId");
+    await assertOk(res, "resolveNumberId");
     const json = await res.json().catch(() => ({}));
     const data = json.data || [];
     const id = (data.find((d) => d.phone_number === e164) || data[0] || {}).id;
@@ -69,7 +106,7 @@ export const telnyxNumberProvisioning = {
     q.set("filter[limit]", String(limit));
     if (type) q.set("filter[phone_number_type]", type);
     const res = await fetch(`${url(AVAILABLE_PATH)}?${q}`, { headers: authHeaders() });
-    assertOk(res, "searchNumbers");
+    await assertOk(res, "searchNumbers");
     const json = await res.json().catch(() => ({}));
     return (json.data || []).map((d) => ({ e164: d.phone_number }));
   },
@@ -84,7 +121,7 @@ export const telnyxNumberProvisioning = {
     const body = { phone_numbers: [{ phone_number: e164 }] };
     if (connectionId) body.connection_id = connectionId;
     const res = await fetch(url(ORDERS_PATH), { method: "POST", headers, body: JSON.stringify(body) });
-    assertOk(res, "orderNumber");
+    await assertOk(res, "orderNumber");
     const json = await res.json().catch(() => ({}));
     const orderedE164 = (json.data?.phone_numbers || [])[0]?.phone_number || e164;
     const providerNumberId = await resolveNumberId(orderedE164);
@@ -96,6 +133,6 @@ export const telnyxNumberProvisioning = {
       method: "DELETE",
       headers: authHeaders(),
     });
-    assertOk(res, "releaseNumber");
+    await assertOk(res, "releaseNumber");
   },
 };
