@@ -683,3 +683,25 @@ Bestands-Profile per `account`-Join (gleiche DB) auf die tenantId, idempotent + 
 `load()` remappt Legacy-email-Keys NICHT; sie werden harmlose Orphans (der Read-Pfad fragt sie nie
 ab, da eine tenantId nie eine email ist). `PROFILES_JSON`-Seeds stellt der Operator auf tenantId-Keys
 um. Live laeuft pg (die reale Heilung), json ist Owner/Dev.
+
+## Telnyx-Fehler-Envelope: einheitlicher Parser + akzeptiertes detail-Restrisiko (Phase telnyx-402-log)
+
+Telnyx liefert bei Fehlern `{errors:[{code,title,detail}]}`. Beide Telnyx-v2-Adapter teilen jetzt
+EINEN Parser `assertTelnyxOk` (`src/telephony/adapters/telnyx/errors.js`) statt zweier
+gegensaetzlicher Inline-Implementierungen (G5). STRIKT allowlisted: NUR `code`/`title` (+ `detail`,
+wenn der Aufrufer es per `includeDetail` anfordert); Raw-Body und unbekannte Felder werden NIE
+durchgereicht, der API-Key leakt NIE (Regel 4/5).
+
+- **voice.js** (`originateCall`/`endCall`): `includeDetail=false` -> NUR code+title. `detail` koennte
+  Auth-/Nummern-Fragmente tragen und ist dort fuer die Diagnose unnoetig -> bleibt ausgeschlossen.
+- **numbers.js** (`searchNumbers`/`orderNumber`/`resolveNumberId`/`releaseNumber`):
+  `includeDetail=true` -> **bewusst akzeptiertes, dokumentiertes Restrisiko.** Die 402-Diagnose
+  braucht `detail` ("Account balance too low" steht im `detail`, nicht im `title`). Preis: ein
+  nicht-402-Fehler (z.B. 422 Nummern-Validierung) kann die Telnyx-Inventarnummer ins **Server-Log**
+  (nicht in API-/MCP-Antworten) echoen. Eingegrenzt durch: Felder-Allowlist (kein Raw-Body/Key),
+  Truncation auf 200 Zeichen, nur Server-Log. Betroffen ist die zu provisionierende Telnyx-Nummer
+  im eigenen Operator-Log - kein Dritt-PII, kein Secret. Akzeptiert fuer die Betriebsdiagnose.
+
+Verifikation: `test/telnyx-errors.test.js` (Allowlist/Truncation/attachStatus/Leak-Schutz an einer
+Stelle) + `test/telnyx-numbers.test.js` (402-detail sichtbar, Key+PII-frei) + `test/telnyx-voice.test.js`
+(detail bleibt ausgeschlossen).

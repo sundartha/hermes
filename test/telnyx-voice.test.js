@@ -45,6 +45,10 @@ function stubFetch(response) {
       ok: response.ok ?? true,
       status: response.status ?? 200,
       json: async () => response.json ?? {},
+      // assertTelnyxOk liest im Fehlerfall res.text() (robuster Pfad, gemeinsamer Helper).
+      // Faithful Response-Double: echtes fetch hat immer text(); ohne explizites text faellt
+      // der Stub auf den JSON-Body zurueck -> Bestandstests unveraendert.
+      text: async () => response.text ?? JSON.stringify(response.json ?? {}),
     };
   };
   return calls;
