@@ -1,13 +1,15 @@
 # PLAN — MCP-Profil-Identitaet (Outbound-Call-Block am Go-live)
 
-**Stand:** 2026-06-30 · **Status:** Strategie S IMPLEMENTIERT + verifiziert + lokal nach master gemergt (`71e252f`, unpushed). Phase 2 (Number-Re-Trigger) + Telnyx-Funding offen.
+**Stand:** 2026-06-30 · **Status:** Phase 1 (Strategie S) LIVE deployt (`7816d17`, Migration `+5 -2` lief). Phase 2 (Number-Re-Trigger `/api/onboard/retry`) IMPLEMENTIERT + getestet + lokal gemergt (`eb86fff`, unpushed). Offen: Push(deploy) + Owner triggert + Telnyx-Kauf-Verifikation.
 **Methodik:** Adversariale Verifikation (7 Agents, Run `wf_3cef2801-5ad`) + 5-Why + Pre-Mortem; Umsetzung Plan->Worktree-Impl->Review (Run `wf_0069ad90-ba7`), Review/Verifikation im Main-Thread nachgeholt (Review-Agents am Spend-Limit gestorben).
 
 ## STATUS-UPDATE (2026-06-30, nach Umsetzung)
 
 Strategie S umgesetzt (Commit `8e30feb`, gemergt `71e252f`): Profil-Achse keyt jetzt auf `tenantId` (AM6-autoritativ) statt email/sub. `resolveProfile(tenantId)` in place_call (nach TENANT_REJECT, vor numberGateError), /mcp-Gateway (scopedTenant), Booking-Gate (tenant). `resolveProfileFrom`: `tenantId===BOOTSTRAP_TENANT_ID -> OWNER_PROFILE` (R2 hart gepinnt), sonst stored-or-DEFAULT (Sec1, kein Falsy-Kollaps). pg: `email`-PK -> `tenant_id`-PK + idempotente non-destruktive `rekeyProfilesToTenant`-Migration (account-Join) — heilt Bestands-Profile beim Deploy. Resolver synchron (kein Account-/email-Lookup mehr). **Verifiziert:** npm test 1449/1449 grün (beide Backends, eigener Lauf), Smoke bestaetigt sub-only -> Profil-Gate passiert (NICHT stundenlimit_nutzer), kein Safety-Gate aufgeweicht, Diff selbst safety-reviewed.
 
-**Naechste Schritte:** (1) **Push** -> Render deployt -> Migration heilt die haengenden Test-Tenants. (2) **Telnyx aufladen** (Balance $1.92 -> 402). (3) **Phase 2** Number-Re-Trigger (Code, nach Funding verifizierbar).
+**Phase 2 (implementiert, `eb86fff`):** Operator-Endpoint `POST /api/onboard/retry` {tenantId} — re-provisioniert eine Nummer fuer einen aktiven+CARD-Subscriber, dessen Kauf scheiterte (`provisionNumber` faellt bei Order-Fehler/402 auf `failed` -> `tenantHasLiveNumber` wieder offen -> frische `requested` -> Worker kauft). Owner-gated (Basic-Auth/trusted-localhost, Regel 3), Geld-Safety nur fuer Subscriber (Regel 1), reuse `triggerTenantProvisioning` (alle Gates). 4 Tests gruen, Suite 1453/1453. `triggerTenantProvisioning` gibt jetzt ein Ergebnis zurueck (Webhook ignoriert es).
+
+**Naechste Schritte:** (1) **Push** -> Render deployt Phase 2. (2) Owner triggert pro haengendem Tenant: `curl -u admin:$DASHBOARD_PASSWORD -X POST https://app.sundartha.com/api/onboard/retry -H 'content-type: application/json' -d '{"tenantId":"t_user_01KWBRXGE6QAN0EYZV8JHK8GTF"}'`. (3) Server-Logs verifizieren: Nummer `active` (Erfolg) ODER exakter Grund (402=Funds / regulatory). Telnyx-MCP-Token ist abgelaufen (mein Direkt-Read tot) — Verifikation nur ueber Server-Logs.
 
 > **TL;DR:** Der Abo-Kauf funktioniert. Das Paid-Profil wird korrekt geschrieben. Der MCP-`place_call` findet es nur nicht, weil das WorkOS-Access-Token keine `email`-Claim traegt und der Lese-Pfad dann auf die `sub` (user-id) zurueckfaellt, waehrend das Profil unter `account.email` liegt. Read-Key != Write-Key → `DEFAULT_PROFILE` (`maxCallsPerHour=0`) → harter Block. Die A4-Haertung (`2→0`) hat den latenten Mismatch sichtbar gemacht. **Separat:** der Telnyx-402 (kein Guthaben) hinterliess keine aktive Nummer — das ist das *naechste* Gate nach dem Profil-Fix.
 
