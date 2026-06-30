@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // A3: Backfill plan-abgeleiteter Rechteprofile fuer Bestands-Subscriber (vor A2 aktiviert).
-// Idempotent, fail-closed, Dry-Run als Default. NUR pg (Accounts existieren nur dort);
-// json = sauberer No-Op (keine account-Tabelle, Profile owner-only). §5.7.
+// Idempotent, fail-closed, Dry-Run als Default. NUR pg (reale Subscriber leben dort);
+// json = sauberer No-Op (lokal/dev gibt es nichts zu backfillen). §5.7.
 // Aufruf: node scripts/backfill-plan-profiles.js [--apply] [--reconcile]
 //   (ohne Flags = Dry-Run; --apply schreibt; --reconcile heilt slug-lose Abos via Stripe)
 import { config } from "../src/config.js";
@@ -13,17 +13,16 @@ const reconcile = process.argv.includes("--reconcile");
 // json = No-Op (kein Fehler, kein Exit 1 - legitimer Migrations-No-Op, NICHT grant-admins
 // harter Refusal). Beweist §5.7 (Prod=pg; json=Owner/Dev) ohne Wurf.
 if (config.storeBackend !== "pg") {
-  console.log("[backfill] json-Backend: No-Op (keine account-Tabelle; Profile sind owner-only).");
+  console.log("[backfill] json-Backend: No-Op (keine Bestands-Subscriber lokal).");
   process.exit(0);
 }
 
-// Lazy import erst im pg-Pfad (keine pg/web-auth-Deps im json-No-Op-Pfad).
+// Lazy import erst im pg-Pfad (keine pg-Deps im json-No-Op-Pfad). accounts wird seit
+// Phase S nicht mehr gebraucht (Profil keyt direkt auf die tenantId).
 const { createPortalRunner } = await import("../src/portal-pool.js");
-const { makeAccounts } = await import("../src/web-auth.js");
 const { backfillPlanProfiles } = await import("../src/billing/backfill-profiles.js");
 
 const runner = await createPortalRunner();
-const accounts = makeAccounts(runner);
 
 // Reconcile-Resolver NUR bei --reconcile + vorhandenem Secret; fail-SOFT (Stripe-Fehler ->
 // null = no_plan-Skip, NIE Abbruch des ganzen Laufs). Secret nie loggen/leaken (Regel 4).
@@ -40,16 +39,16 @@ if (reconcile && config.stripeSecretKey) {
   };
 }
 
-const r = await backfillPlanProfiles({ store, accounts, apply, resolvePlanSlug });
+const r = await backfillPlanProfiles({ store, apply, resolvePlanSlug });
 if (apply) await store.save(); // PFLICHT: pg-Flush abwarten (Muster bootstrap-tenant)
 
-// Operator-Report: email/tenant/Keys/Reason erlaubt, NIE Profil-Werte (PII, §5/Pre-Mortem c).
+// Operator-Report: tenant/Keys/Reason erlaubt, NIE Profil-Werte (PII, §5/Pre-Mortem c).
 console.log(
   `[backfill] mode=${apply ? "APPLY" : "DRY-RUN"} scanned=${r.scanned} ` +
     `changes=${r.changes.length} unchanged=${r.unchanged.length} reconciled=${r.reconciled.length}`,
 );
-for (const c of r.changes) console.log(`  ${c.hadExisting ? "replace" : "set"} ${c.id} <- ${c.email}`);
-// Nur handlungsrelevante Skips (no_plan/no_account/no_email); bootstrap/not_subscriber sind Rauschen.
+for (const c of r.changes) console.log(`  ${c.hadExisting ? "replace" : "set"} ${c.id}`);
+// Nur handlungsrelevante Skips (no_plan); bootstrap/not_subscriber sind Rauschen.
 for (const sk of r.skipped)
   if (sk.reason !== "not_subscriber" && sk.reason !== "bootstrap")
     console.log(`  skip ${sk.id} (${sk.reason})`);

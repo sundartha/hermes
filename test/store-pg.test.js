@@ -250,8 +250,8 @@ test("updateSettings Whitelist (unbekannte Keys/Typen ignoriert) + persistiert (
 
 test("Profile: resolveProfile Owner/Default + setProfile/deleteProfile/listProfiles", async () => {
   const { store, db } = await makePgTestStore();
-  // leere email -> Owner (permissiv), unbekannt -> Default (restriktiv)
-  assert.equal(store.resolveProfile("").allowCalendar, true);
+  // Phase S: BOOTSTRAP -> Owner (permissiv), unbekannte tenantId -> Default (restriktiv)
+  assert.equal(store.resolveProfile(BOOTSTRAP_TENANT_ID).allowCalendar, true);
   assert.equal(store.resolveProfile("unbekannt@x").allowCalendar, false);
   store.setProfile("a@x", { unrestricted: true, maxCallsPerHour: 6, fremd: 1 });
   assert.equal(store.resolveProfile("a@x").unrestricted, true);

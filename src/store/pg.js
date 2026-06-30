@@ -303,7 +303,7 @@ export function makePgStore(runner) {
       return result;
     },
 
-    resolveProfile: (email) => ops.resolveProfile(requireState(), email),
+    resolveProfile: (tenantId) => ops.resolveProfile(requireState(), tenantId),
     // Tenant-Aufloesung (I4): liest den hydrierten Spiegel (Wrapper-Parity zu json.js).
     resolveTenant: (idpSubject) => ops.resolveTenant(requireState(), idpSubject),
 
@@ -364,13 +364,13 @@ export function makePgStore(runner) {
       }
     },
     listProfiles: () => ops.listProfiles(requireState()),
-    setProfile(email, patch) {
-      const result = ops.setProfile(requireState(), email, patch);
+    setProfile(tenantId, patch) {
+      const result = ops.setProfile(requireState(), tenantId, patch);
       save();
       return result;
     },
-    deleteProfile(email) {
-      const ok = ops.deleteProfile(requireState(), email);
+    deleteProfile(tenantId) {
+      const ok = ops.deleteProfile(requireState(), tenantId);
       if (ok) save();
       return ok;
     },
@@ -388,7 +388,7 @@ async function setTenant(client, tenantId) {
 // pro Tenant unter dessen RLS-GUC die tenant-scoped Zeilen in die Buckets/Listen.
 // makeDefaultState() EINMAL (Owner-Buckets vorbelegt); pro Tenant werden Buckets
 // gefuellt (settings/calendar/usage) bzw. Listen angehaengt (calls/actionItems/
-// notifications/numbers). profiles sind global keyed-by-email (Owner-Removal P5)
+// notifications/numbers). profiles sind global keyed-by-tenantId (Phase S; vormals email)
 // und werden in EINEM tenant-unabhaengigen Schritt nach der Tenant-Schleife geladen.
 async function hydrate(client) {
   const state = ops.makeDefaultState();
@@ -404,11 +404,11 @@ async function hydrate(client) {
   return state;
 }
 
-// Liest die globale profile-Tabelle (email-PK) in die flache {email: data}-Map des
-// Spiegels. Tenant-unabhaengig (Owner-Removal P5).
+// Liest die globale profile-Tabelle (tenant_id-PK, Phase S) in die flache {tenantId: data}-
+// Map des Spiegels. Tenant-unabhaengig (global, kein RLS-Filter).
 async function hydrateProfiles(client) {
-  const rows = (await client.query(`SELECT email, data FROM profile`)).rows;
-  return Object.fromEntries(rows.map((r) => [r.email, r.data]));
+  const rows = (await client.query(`SELECT tenant_id, data FROM profile`)).rows;
+  return Object.fromEntries(rows.map((r) => [r.tenant_id, r.data]));
 }
 
 // Spalten der tenant-Tabelle, geteilt von hydrateTenants (Boot-Hydrierung) UND
@@ -991,30 +991,30 @@ async function flushNotifications(client, tenantId, notifications) {
   }
 }
 
-// Profile-Flush (Owner-Removal P5): global, an KEINEN Tenant gebunden. profile.email
-// ist jetzt PK allein (schema.sql); deleteMissingProfiles raeumt entfernte Profile ab,
-// ohne tenant_id-Filter. Policy profile_global schuetzt die Tabelle (kein Tenant-Filter
-// mehr, also auch kein Cross-Tenant-Leak).
+// Profile-Flush (global, an KEINEN Tenant gebunden): profile.tenant_id ist PK allein
+// (schema.sql, Phase S - die Spalte haelt tenantIds); deleteMissingProfiles raeumt entfernte
+// Profile ab, ohne RLS-Tenant-Filter. Policy profile_global schuetzt die Tabelle (kein
+// Tenant-Filter, global lesbar/schreibbar - die Zugriffskontrolle liegt eine Schicht hoeher).
 async function flushProfiles(client, profiles) {
-  const emails = Object.keys(profiles);
-  await deleteMissingProfiles(client, emails);
-  for (const [email, data] of Object.entries(profiles)) {
+  const tenantIds = Object.keys(profiles);
+  await deleteMissingProfiles(client, tenantIds);
+  for (const [tenantId, data] of Object.entries(profiles)) {
     await client.query(
-      `INSERT INTO profile (email, data) VALUES ($1,$2)
-       ON CONFLICT (email) DO UPDATE SET data=EXCLUDED.data`,
-      [email, JSON.stringify(data)],
+      `INSERT INTO profile (tenant_id, data) VALUES ($1,$2)
+       ON CONFLICT (tenant_id) DO UPDATE SET data=EXCLUDED.data`,
+      [tenantId, JSON.stringify(data)],
     );
   }
 }
 
-// Loescht Profile-Zeilen, deren email nicht mehr im Spiegel steht (global, kein
-// tenant_id-Filter). Leere keep-Liste -> alle Profile weg (Parity zu deleteMissing).
-async function deleteMissingProfiles(client, keepEmails) {
-  if (keepEmails.length === 0) {
+// Loescht Profile-Zeilen, deren tenant_id nicht mehr im Spiegel steht (global, kein
+// RLS-Tenant-Filter). Leere keep-Liste -> alle Profile weg (Parity zu deleteMissing).
+async function deleteMissingProfiles(client, keepTenantIds) {
+  if (keepTenantIds.length === 0) {
     await client.query(`DELETE FROM profile`);
     return;
   }
-  await client.query(`DELETE FROM profile WHERE email <> ALL($1::text[])`, [keepEmails]);
+  await client.query(`DELETE FROM profile WHERE tenant_id <> ALL($1::text[])`, [keepTenantIds]);
 }
 
 // number-Flush (Onboarding-Lifecycle): id-PK-Upsert mit allen Lifecycle-Feldern

@@ -337,11 +337,13 @@ export function sanitizeProfile(patch) {
 // (A2/A3, maxCallsPerHour=null) ODER der Owner (OWNER_PROFILE) schaltet Outbound frei.
 const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 0;
 
-// Owner = localhost/stdio ohne Identitaet: permissiv = heutiges Verhalten. Das Profil
-// lockert nichts (unrestricted=false, leere Profil-Allowlist) - der Owner passiert das
-// Verifikations-Gate ueber Pfad 2 (aktiver Subscriber via Boot-Seed, outbound-p1/p3),
-// kein Zusatz-Stundenlimit (maxCallsPerHour=null -> effektiv global), Kalender/
-// Booking erlaubt. So bleiben die Phase-0-Tests (localhost = Owner) gruen.
+// Owner-Profil: gilt fuer den Bootstrap-Tenant (resolveProfileFrom matcht tenantId ===
+// BOOTSTRAP_TENANT_ID). Das Profil lockert nichts (unrestricted=false, leere Profil-
+// Allowlist) - der Owner passiert das Verifikations-Gate ueber Pfad 2 (aktiver Subscriber
+// via Boot-Seed, outbound-p1/p3), kein Zusatz-Stundenlimit (maxCallsPerHour=null ->
+// effektiv global), Kalender/Booking erlaubt. So wird der Owner NIE per Stundenlimit
+// gesperrt (R2) - hart auf OWNER_PROFILE gepinnt; ein etwaiges s.profiles[BOOTSTRAP] wird
+// bewusst ignoriert.
 const OWNER_PROFILE = {
   allowedNumbers: [],
   allowedCountryCodes: [],
@@ -362,12 +364,13 @@ const DEFAULT_PROFILE = {
   maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
 };
 
-// Effektives Profil aus einer Identitaet + dem gespeicherten Profil (oder
-// undefined). null/leere email (localhost/stdio ohne JWT) -> Owner. Bekannte
-// Identitaet -> gespeichertes Profil ueber DEFAULT gemerged (fehlende Felder
-// fallen restriktiv zurueck). Unbekannt -> DEFAULT. Reine Merge-Logik, vom
-// Storage entkoppelt: der Aufrufer reicht den gespeicherten Datensatz herein.
-export function resolveProfileFrom(email, storedProfile) {
-  if (!email) return { ...OWNER_PROFILE };
+// Effektives Profil aus einer tenantId + dem gespeicherten Profil (oder undefined).
+// tenantId === BOOTSTRAP_TENANT_ID -> Owner (hart auf OWNER_PROFILE gepinnt, nie gesperrt,
+// R2). Andere tenantId mit gespeichertem Profil -> ueber DEFAULT gemerged (fehlende Felder
+// fallen restriktiv zurueck). tenantId ohne Profil ODER leer/null/"reject" -> DEFAULT (kein
+// Falsy-Kollaps auf Owner mehr - exakte BOOTSTRAP-Gleichheit statt !tenantId, Sec1). Reine
+// Merge-Logik, vom Storage entkoppelt: der Aufrufer reicht den gespeicherten Datensatz herein.
+export function resolveProfileFrom(tenantId, storedProfile) {
+  if (tenantId === BOOTSTRAP_TENANT_ID) return { ...OWNER_PROFILE }; // R2: Owner nie gesperrt
   return storedProfile ? { ...DEFAULT_PROFILE, ...storedProfile } : { ...DEFAULT_PROFILE };
 }

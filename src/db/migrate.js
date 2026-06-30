@@ -49,6 +49,34 @@ export async function backfillPeriodStart(db) {
   }
 }
 
+// Phase S: re-keyt die globale profile-Tabelle von email- auf tenantId-Schluessel (die
+// reale Live-Heilung, LIVE=pg). applySchema hat die Spalte da schon von email auf tenant_id
+// umbenannt; die DATEN-Schluessel (email-Werte) hebt diese Migration ueber den account-Join
+// (gleiche DB, account ist RLS-exempt, profile_global erlaubt den Write) auf die zugehoerige
+// tenantId. Idempotent: 2. Lauf - die Schluessel sind tenantIds != account.email -> INSERT/
+// DELETE treffen 0. Non-destruktiv: Orphan-Schluessel ohne passenden Account bleiben (kein
+// Datenverlust). Fail-safe: leere account-Tabelle -> No-Op (dann heilt der Backfill). Loggt
+// nur Counts (kein PII). Die tenant-keyed Zeile gewinnt (ON CONFLICT DO NOTHING).
+export async function rekeyProfilesToTenant(db) {
+  const inserted = (
+    await db.query(
+      `INSERT INTO profile (tenant_id, data)
+         SELECT a.tenant_id, p.data FROM profile p JOIN account a ON a.email = p.tenant_id
+         ON CONFLICT (tenant_id) DO NOTHING
+       RETURNING tenant_id`,
+    )
+  ).rows.length;
+  const deleted = (
+    await db.query(
+      `DELETE FROM profile
+        WHERE tenant_id IN (SELECT email FROM account WHERE email IS NOT NULL)
+       RETURNING tenant_id`,
+    )
+  ).rows.length;
+  if (inserted || deleted)
+    console.log(`[migrate] profile rekey email->tenant_id: +${inserted} -${deleted}`);
+}
+
 // Seedet die Owner-Zeilen (tenant, settings, usage, Demo-Kalender) aus den
 // CODE-Defaults (defaults.js) - identisch zum frischen json-Zustand. Leere
 // calls/actionItems/notifications/profiles brauchen keinen Insert.
@@ -106,9 +134,12 @@ export async function seedDefaults(db, tenantId) {
   }
 }
 
-// Eine oeffentliche Einstiegsfunktion: Schema anwenden, dann Owner-Defaults seeden.
+// Eine oeffentliche Einstiegsfunktion: Schema anwenden, Bestands-Backfills laufen lassen,
+// dann Owner-Defaults seeden. rekeyProfilesToTenant laeuft NACH applySchema (Spalte ist dann
+// schon tenant_id) und VOR seedDefaults (haengt nicht an den Owner-Seeds).
 export async function migrate(db, tenantId) {
   await applySchema(db);
   await backfillPeriodStart(db);
+  await rekeyProfilesToTenant(db);
   await seedDefaults(db, tenantId);
 }
