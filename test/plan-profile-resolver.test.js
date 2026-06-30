@@ -1,7 +1,7 @@
-// Geteilter, schreibfreier Profil-Resolver (S2-1 Fix Runde 2): EINE Quelle fuer die
-// Aufloesungs-Kette planProfileFor -> accountByTenant -> email UND die Skip-Taxonomie, die
-// A2 (activation.js) und A3 (backfill-profiles.js) gemeinsam nutzen. Pinnt Vertrag +
-// Schreibfreiheit + Single-Source, damit die frueher doppelte Logik nicht erneut driftet.
+// Geteilter, schreibfreier Profil-Resolver. EINE Quelle fuer die Aufloesung planProfileFor
+// UND die Skip-Taxonomie, die A2 (activation.js) und A3 (backfill-profiles.js) gemeinsam
+// nutzen. Pinnt Vertrag + Schreibfreiheit + Single-Source. Phase S: das Profil keyt auf die
+// tenantId, also kein Account-/email-Lookup mehr (synchron, nur planProfileFor).
 // Backend-agnostisch ueber state-ops, offline, F.I.R.S.T.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -20,64 +20,29 @@ import { BACKFILL_SKIP } from "../src/billing/backfill-profiles.js";
 function storeOn(s) {
   return { tenantSubscription: (t) => tenantSubscription(s, t) };
 }
-function fakeAccounts(account) {
-  return { accountByTenant: async () => account };
-}
 
-test("Erfolg: liefert Tier-Profil + Account, ohne zu schreiben", async () => {
+test("Erfolg: liefert das Tier-Profil, ohne zu schreiben", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
   setTenantSubscription(s, "t_a", { planSlug: "starter" });
-  const r = await resolveTierForTenant({
-    store: storeOn(s),
-    accounts: fakeAccounts({ sub: "u1", email: "u1@x" }),
-    tenant: "t_a",
-  });
+  const r = resolveTierForTenant({ store: storeOn(s), tenant: "t_a" });
   assert.equal(r.skip, undefined);
   assert.deepEqual(r.tier, planProfileFor("starter"));
-  assert.equal(r.account.email, "u1@x");
   assert.equal(Object.keys(s.profiles).length, 0); // schreibfrei (P6/N7)
 });
 
-test("kein/unbekannter planSlug -> skip no_plan (nie planProfileFor(undefined))", async () => {
+test("kein/unbekannter planSlug -> skip no_plan (nie planProfileFor(undefined))", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {}); // keine Subscription -> planSlug null
-  const r = await resolveTierForTenant({
-    store: storeOn(s),
-    accounts: fakeAccounts({ sub: "u1", email: "u1@x" }),
-    tenant: "t_a",
-  });
+  const r = resolveTierForTenant({ store: storeOn(s), tenant: "t_a" });
   assert.equal(r.skip, PROFILE_SKIP.NO_PLAN);
   assert.equal(r.tier, undefined);
 });
 
-test("Account abwesend/mehrdeutig -> skip no_account", async () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_a", {});
-  setTenantSubscription(s, "t_a", { planSlug: "starter" });
-  const r = await resolveTierForTenant({
-    store: storeOn(s),
-    accounts: fakeAccounts(null), // 0 ODER >1 -> null (genau-1-sonst-null)
-    tenant: "t_a",
-  });
-  assert.equal(r.skip, PROFILE_SKIP.NO_ACCOUNT);
-});
-
-test("leere account.email -> skip no_email", async () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_a", {});
-  setTenantSubscription(s, "t_a", { planSlug: "starter" });
-  const r = await resolveTierForTenant({
-    store: storeOn(s),
-    accounts: fakeAccounts({ sub: "u1", email: "" }),
-    tenant: "t_a",
-  });
-  assert.equal(r.skip, PROFILE_SKIP.NO_EMAIL);
-});
-
-// Single-Source-Guard: A3 erbt die Skip-Strings aus PROFILE_SKIP (kein zweites Literal, G5).
-test("BACKFILL_SKIP erbt die geteilten Reason-Strings (kein Drift)", () => {
+// Single-Source-Guard: A3 erbt den Skip-String aus PROFILE_SKIP (kein zweites Literal, G5).
+// Phase S: nur noch NO_PLAN (NO_ACCOUNT/NO_EMAIL entfallen - kein Account-Lookup mehr).
+test("BACKFILL_SKIP erbt den geteilten no_plan-Reason (kein Drift)", () => {
   assert.equal(BACKFILL_SKIP.NO_PLAN, PROFILE_SKIP.NO_PLAN);
-  assert.equal(BACKFILL_SKIP.NO_ACCOUNT, PROFILE_SKIP.NO_ACCOUNT);
-  assert.equal(BACKFILL_SKIP.NO_EMAIL, PROFILE_SKIP.NO_EMAIL);
+  assert.equal(PROFILE_SKIP.NO_ACCOUNT, undefined, "NO_ACCOUNT ist Phase S entfernt");
+  assert.equal(PROFILE_SKIP.NO_EMAIL, undefined, "NO_EMAIL ist Phase S entfernt");
 });

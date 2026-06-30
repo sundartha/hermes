@@ -23,13 +23,13 @@ const LAST_TRANSCRIPT_LINES = 6;
 // Zur Aufrufzeit lesen (server.js setzt GATEWAY_URL ggf. erst beim Start)
 const GATEWAY = () => (process.env.GATEWAY_URL || "http://localhost:3000").replace(/\/$/, "");
 
-// identity (optional): wird als interner X-Internal-Identity-Header an die
-// localhost-REST-API gereicht (Rechteprofile, Phase 2). Das Gateway akzeptiert
-// den Header nur von localhost-Sockets. Ohne identity -> Owner-Verhalten.
+// identity (optional): wird als interner X-Internal-Identity-Header an die localhost-
+// REST-API gereicht und dient seit Phase S nur noch Audit/requestedBy (Forensik), NICHT
+// mehr dem Rechteprofil. Das Gateway akzeptiert den Header nur von localhost-Sockets.
 // scopedTenant (optional, AM6): am /mcp-Gateway aufgeloester Request-Tenant, als
-// X-Internal-Tenant gereicht (ebenfalls nur localhost akzeptiert). Tenant-Achse
-// getrennt von der email-first Profile-Achse (X-Internal-Identity). Ohne
-// scopedTenant -> Owner/Bootstrap.
+// X-Internal-Tenant gereicht (ebenfalls nur localhost akzeptiert). Das Rechteprofil laeuft
+// seit Phase S ueber diese Tenant-Achse (resolveProfile(scopedTenant)). Ohne scopedTenant
+// -> Owner/Bootstrap.
 async function api(method, path, body, identity, scopedTenant) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;

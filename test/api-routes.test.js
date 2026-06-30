@@ -34,42 +34,42 @@ test("T-P4-08: /api/profiles Route-Gruppe - Paritaet (Treffer + Ablehnung)", asy
     });
 
     await t.test(
-      "POST /api/profiles ohne gueltige email/identity -> 400 (Gate-Ablehnung)",
+      "POST /api/profiles ohne gueltige tenantId -> 400 (Gate-Ablehnung)",
       async () => {
         // validIdentity-Gate: leer, mit Whitespace, > Maxlen werden abgewiesen.
-        for (const email of ["", "mit leer", "x".repeat(255)]) {
-          const res = await postJson(`${srv.localUrl}/api/profiles`, { email });
-          assert.equal(res.status, 400, `email='${email.slice(0, 12)}...' muss 400 sein`);
-          assert.match((await res.json()).error, /email\/identity/);
+        for (const tenantId of ["", "mit leer", "x".repeat(255)]) {
+          const res = await postJson(`${srv.localUrl}/api/profiles`, { tenantId });
+          assert.equal(res.status, 400, `tenantId='${tenantId.slice(0, 12)}...' muss 400 sein`);
+          assert.match((await res.json()).error, /tenantId/);
         }
       },
     );
 
     await t.test(
-      "POST /api/profiles mit gueltiger identity -> 200, { email, profile } (Gate-Treffer)",
+      "POST /api/profiles mit gueltiger tenantId -> 200, { tenantId, profile } (Gate-Treffer)",
       async () => {
         const res = await postJson(`${srv.localUrl}/api/profiles`, {
-          email: "tester@kunde.de",
+          tenantId: "t_kunde",
           allowCalendar: false,
         });
         assert.equal(res.status, 200);
         const body = await res.json();
-        assert.equal(body.email, "tester@kunde.de");
+        assert.equal(body.tenantId, "t_kunde");
         assert.equal(typeof body.profile, "object");
         // Persistenz-Beleg: das Profil taucht in listProfiles auf
         const list = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
-        assert.ok("tester@kunde.de" in list, "neues Profil in der Liste");
+        assert.ok("t_kunde" in list, "neues Profil in der Liste");
       },
     );
 
     await t.test(
-      "DELETE /api/profiles/:email - unbekannt -> 404, bekannt -> 200 {ok:true}",
+      "DELETE /api/profiles/:tenantId - unbekannt -> 404, bekannt -> 200 {ok:true}",
       async () => {
-        const miss = await fetch(`${srv.localUrl}/api/profiles/nicht-da@x.de`, {
+        const miss = await fetch(`${srv.localUrl}/api/profiles/t_nicht_da`, {
           method: "DELETE",
         });
         assert.equal(miss.status, 404);
-        const hit = await fetch(`${srv.localUrl}/api/profiles/tester@kunde.de`, {
+        const hit = await fetch(`${srv.localUrl}/api/profiles/t_kunde`, {
           method: "DELETE",
         });
         assert.equal(hit.status, 200);

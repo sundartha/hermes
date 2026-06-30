@@ -61,7 +61,7 @@ export function findPlan(slug) {
 
 // ---- Plan -> Rechteprofil (GAP A, Phase A1; reines Datenmodul, KEIN Konsument) ----
 // Bildet einen buchbaren Plan-Slug auf das VOLLSTAENDIGE Rechteprofil ab, das die
-// Aktivierung (A2) spaeter via setProfile auf account.email setzt. Traegt JEDES
+// Aktivierung (A2) spaeter via setProfile auf die tenantId setzt (Phase S). Traegt JEDES
 // PROFILE_FIELDS-Feld EXPLIZIT - ein fehlendes Feld fiele in resolveProfileFrom still
 // auf den restriktiven DEFAULT_PROFILE-Wert zurueck (A11) und unterliefe das Tier-Recht.
 //
@@ -105,7 +105,7 @@ export const PLAN_PROFILE = Object.freeze({
 
 // Tier-Profil nach Slug (Geschwister zu findPlan, gleiche ?? null-Konvention, G11).
 // Unbekannter/leerer Slug -> null: der Aufrufer (A2-Aktivierung) SKIPt fail-closed
-// statt setProfile(email, undefined) zu schreiben (symmetrisch zu B2 "kein Plan -> blocken").
+// statt setProfile(tenantId, undefined) zu schreiben (symmetrisch zu B2 "kein Plan -> blocken").
 export function planProfileFor(slug) {
   return PLAN_PROFILE[slug] ?? null;
 }

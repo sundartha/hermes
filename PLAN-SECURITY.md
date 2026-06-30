@@ -656,3 +656,30 @@ Vorab-Reservierung (Kosten-Achse, Hauptschutz bei '*'), Budget-Schnittmenge, KYC
 Riegel (R3), Offenlegungssatz, Provider-Signatur. WICHTIG (Cutover-Semantik): da der Code die Liste
 entfernt, IST der Deploy von outbound-p3 der Cutover; das spaetere Leeren von ALLOWED_NUMBERS in
 Render ist nur kosmetischer Env-Cleanup. Deploy erst nach LIVE-Verifikation von 1/1b/1c/1d (D3).
+
+## Profil-Rechte-Achse: email-keyed -> tenantId-keyed (Phase S) ✅ (umgesetzt)
+
+Go-live-Fix: Das Rechteprofil (`resolveProfile`) keyte bisher auf die email-/sub-Identitaet
+(`X-Internal-Identity`), die Tenant-Achse aber auf den JWT-`sub`. Unter MULTI_TENANT=true (Production)
+landete ein Subscriber-Token OHNE email-Claim (nur `sub`) am email-keyed `DEFAULT_PROFILE`
+(`maxCallsPerHour=0`, A4-Haertung) -> 429 stundenlimit_nutzer, obwohl der Tenant ein gueltiges
+Tier-Profil hatte. Phase S keyt das Profil auf die **tenantId**: `resolveProfile(tenantId)` in
+`place_call`, im `/mcp`-Gateway (`scopedTenant`) und im Booking-Gate (`POST /api/calendar`).
+`resolveProfileFrom` entscheidet Owner per **exakter** `tenantId === BOOTSTRAP_TENANT_ID`-Gleichheit
+(KEIN Falsy-Kollaps `!tenantId` mehr) -> der Owner ist hart auf `OWNER_PROFILE` gepinnt (nie per
+Stundenlimit gesperrt, R2), jede andere tenantId ohne Profil faellt restriktiv auf `DEFAULT_PROFILE`
+(0 Calls -> fail-closed, kein Leck). `identity`/`requestedBy` bleiben fuer Audit/Forensik entkoppelt.
+
+Kein Safety-Gate-Aufweichen: X-Internal-Identity wird nur von trusted-localhost akzeptiert; der Owner
+ist boot-geseedeter aktiver+verifizierter Subscriber; Denylist/Land/Global-Hour/Budget/KYC/Subscriber/
+Minuten unveraendert. Unter MULTI_TENANT=false kollabiert die Profil-Achse bewusst auf `OWNER_PROFILE`
+(per-Identity-Profile wirken nur unter echten Tenants) - das ist der Single-Operator-Kanal.
+
+Persistenz: Die globale `profile`-Tabelle (pg) traegt jetzt `tenant_id` als PK (Spalten-Rename
+`email -> tenant_id` idempotent in `schema.sql`); `db/migrate.js rekeyProfilesToTenant` hebt
+Bestands-Profile per `account`-Join (gleiche DB) auf die tenantId, idempotent + non-destruktiv
+(Orphans ohne Account bleiben, leere account-Tabelle -> No-Op, dann heilt der Backfill).
+**json-Migrationsgrenze (akzeptierte Vereinfachung):** json hat keine `account`-Tabelle ->
+`load()` remappt Legacy-email-Keys NICHT; sie werden harmlose Orphans (der Read-Pfad fragt sie nie
+ab, da eine tenantId nie eine email ist). `PROFILES_JSON`-Seeds stellt der Operator auf tenantId-Keys
+um. Live laeuft pg (die reale Heilung), json ist Owner/Dev.

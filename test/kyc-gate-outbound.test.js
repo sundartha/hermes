@@ -36,7 +36,7 @@ function seedKyc(kycLevel) {
       { id: A, status: "active", idpSubject: SUB_A, ownerName: "Alice A", ...(kycLevel ? { kycLevel } : {}) },
     ],
     numbers: [activeNumber("num_a", NUM_A, A)],
-    profiles: { [SUB_A]: PROVISIONED_PROFILE },
+    profiles: { [A]: PROVISIONED_PROFILE }, // Phase S: Profil keyt auf die tenantId
   });
 }
 

@@ -156,9 +156,10 @@ test("I6 Flag AN: POST /api/calendar booked in den Tenant-Bucket; REJECT -> 403 
     env: { MULTI_TENANT: "true" },
     seed: seedState({
       tenants: [tenantB()],
-      // Beide Identitaeten mit Buchungsrecht: so ist der EINZIGE 403-Grund fuer
-      // SUB_UNKNOWN der Tenant-Reject, nicht booking_denied (sauberer Negativ-Vektor).
-      profiles: { [SUB_B]: { allowBooking: true }, [SUB_UNKNOWN]: { allowBooking: true } },
+      // Phase S: das Booking-Recht keyt auf die tenantId (TENANT_B). SUB_UNKNOWN braucht
+      // KEIN Profil mehr - requireTenant weist es schon mit 403 (Tenant-Reject) ab, BEVOR
+      // das Booking-Recht geprueft wird (sauberer Negativ-Vektor, nicht booking_denied).
+      profiles: { [TENANT_B]: { allowBooking: true } },
     }),
   });
   const ev = { title: "B-Termin", start: "2026-07-01T10:00:00Z", end: "2026-07-01T11:00:00Z" };

@@ -1,7 +1,7 @@
-// A2 - Aktivierung provisioniert das plan-basierte Rechteprofil (GAP A). Backend-agnostisch
-// ueber die geteilte state-ops-Schicht (deckt json + pglite-Logik; die pg-Persistenz +
-// accountByTenant-SQL liegen separat in web-auth-pg.test.js). Muster wie
-// p3-payment-webhook.test.js: Fake-Seams, offline, F.I.R.S.T.
+// A2 - Aktivierung provisioniert das plan-basierte Rechteprofil (GAP A). Phase S: das Profil
+// keyt auf die tenantId (vormals account.email). Backend-agnostisch ueber die geteilte
+// state-ops-Schicht (deckt json + pglite-Logik). Muster wie p3-payment-webhook.test.js:
+// Fake-Seams, offline, F.I.R.S.T.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
@@ -20,25 +20,25 @@ import { planProfileFor } from "../src/plans.js";
 
 // Duenner Store-Seam auf einem ECHTEN state-Objekt -> s.profiles ist assertbar (ein
 // Fake-Recorder haette keine .profiles-Map). Genau die von activatePaidTenant + dem
-// Webhook-Pfad genutzten Methoden, jede gegen die echte state-ops-Mutation.
+// Webhook-Pfad genutzten Methoden, jede gegen die echte state-ops-Mutation. setProfile
+// keyt key-agnostisch (Phase S: der Aufrufer reicht die tenantId).
 function storeOn(s) {
   return {
     setKycLevel: (t, l) => setKycLevel(s, t, l),
     tenantSubscription: (t) => tenantSubscription(s, t),
-    setProfile: (email, patch) => setProfile(s, email, patch),
+    setProfile: (key, patch) => setProfile(s, key, patch),
     findTenantBySubscription: () => null,
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
   };
 }
 
-// account = {sub,email} | null. Zeichnet setStatus auf (wie die Webhook-Fakes), liefert
-// den Account ueber accountByTenant (die A2-Bruecke tenantId -> email).
-function fakeAccounts(account) {
+// Zeichnet setStatus auf (wie die Webhook-Fakes). accountByTenant wird seit Phase S NICHT
+// mehr gebraucht (Profil keyt auf die tenantId), nur noch setStatus.
+function fakeAccounts() {
   const calls = { setStatus: [] };
   return {
     calls,
     setStatus: async (t, st) => calls.setStatus.push([t, st]),
-    accountByTenant: async () => account,
   };
 }
 
@@ -56,12 +56,12 @@ test("profileAuditDetail mappt ok/skip/none auf das Audit-Fragment", () => {
   assert.equal(profileAuditDetail(undefined), "profile=none");
 });
 
-// --- Direkter Pfad: voller Tier-Snapshot inkl. null ---
-test("activatePaidTenant provisioniert das Tier-Profil auf account.email (alle 6 Felder)", async () => {
+// --- Direkter Pfad: voller Tier-Snapshot inkl. null, auf die tenantId ---
+test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 6 Felder)", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
   setTenantSubscription(s, "t_a", { planSlug: "starter" });
-  const acc = fakeAccounts({ sub: "u1", email: "u1@x" });
+  const acc = fakeAccounts();
   const r = await activatePaidTenant({
     store: storeOn(s),
     accounts: acc,
@@ -69,8 +69,8 @@ test("activatePaidTenant provisioniert das Tier-Profil auf account.email (alle 6
     tenant: "t_a",
   });
 
-  assert.deepEqual(s.profiles["u1@x"], planProfileFor("starter")); // inkl. maxCallsPerHour:null
-  assert.equal(s.profiles["u1@x"].maxCallsPerHour, null);
+  assert.deepEqual(s.profiles["t_a"], planProfileFor("starter")); // inkl. maxCallsPerHour:null
+  assert.equal(s.profiles["t_a"].maxCallsPerHour, null);
   assert.deepEqual(r.profile, { provisioned: true, reason: null, keys: 6 });
   assert.deepEqual(acc.calls.setStatus, [["t_a", "active"]]);
   assert.equal(kycReached(s, "t_a", KYC_OUTBOUND_MIN), true);
@@ -81,57 +81,25 @@ test("vorbestehendes unrestricted=true + allowedNumbers -> nach Aktivierung fals
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
   setTenantSubscription(s, "t_a", { planSlug: "business" });
-  s.profiles["u1@x"] = { unrestricted: true, allowedNumbers: ["+491701234567"], maxCallsPerHour: 99 };
+  s.profiles["t_a"] = { unrestricted: true, allowedNumbers: ["+491701234567"], maxCallsPerHour: 99 };
   await activatePaidTenant({
     store: storeOn(s),
-    accounts: fakeAccounts({ sub: "u1", email: "u1@x" }),
+    accounts: fakeAccounts(),
     provision: async () => {},
     tenant: "t_a",
   });
-  assert.equal(s.profiles["u1@x"].unrestricted, false);
-  assert.deepEqual(s.profiles["u1@x"].allowedNumbers, []);
-  assert.equal(s.profiles["u1@x"].maxCallsPerHour, null);
+  assert.equal(s.profiles["t_a"].unrestricted, false);
+  assert.deepEqual(s.profiles["t_a"].allowedNumbers, []);
+  assert.equal(s.profiles["t_a"].maxCallsPerHour, null);
 });
 
-// --- SKIP-Faelle: KYC/Status bleiben, kein Wurf, kein Profil-Eintrag ---
-test("fehlender Account -> SKIP no_account, Status/KYC trotzdem gesetzt", async () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_a", {});
-  setTenantSubscription(s, "t_a", { planSlug: "starter" });
-  const acc = fakeAccounts(null);
-  const r = await activatePaidTenant({
-    store: storeOn(s),
-    accounts: acc,
-    provision: async () => {},
-    tenant: "t_a",
-  });
-  assert.equal(r.profile.provisioned, false);
-  assert.equal(r.profile.reason, "no_account");
-  assert.equal("u1@x" in s.profiles, false);
-  assert.equal(kycReached(s, "t_a", KYC_OUTBOUND_MIN), true);
-  assert.deepEqual(acc.calls.setStatus, [["t_a", "active"]]);
-});
-
-test("leere account.email -> SKIP no_email, kein Wurf/Eintrag", async () => {
-  const s = makeDefaultState();
-  registerTenant(s, "t_a", {});
-  setTenantSubscription(s, "t_a", { planSlug: "starter" });
-  const r = await activatePaidTenant({
-    store: storeOn(s),
-    accounts: fakeAccounts({ sub: "u1", email: "" }),
-    provision: async () => {},
-    tenant: "t_a",
-  });
-  assert.equal(r.profile.reason, "no_email");
-  assert.equal(Object.keys(s.profiles).length, 0);
-});
-
+// --- SKIP no_plan: KYC/Status bleiben, kein Wurf, kein Profil-Eintrag ---
 test("kein/unbekannter planSlug -> SKIP no_plan, kein undefined-Profil", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {}); // keine setTenantSubscription -> planSlug null
   const r = await activatePaidTenant({
     store: storeOn(s),
-    accounts: fakeAccounts({ sub: "u1", email: "u1@x" }),
+    accounts: fakeAccounts(),
     provision: async () => {},
     tenant: "t_a",
   });
@@ -140,10 +108,10 @@ test("kein/unbekannter planSlug -> SKIP no_plan, kein undefined-Profil", async (
 });
 
 // --- Webhook-Pfad == direkter Pfad ---
-test("Webhook-ACTIVATE mit plan_slug provisioniert identisch", async () => {
+test("Webhook-ACTIVATE mit plan_slug provisioniert identisch (auf die tenantId)", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
-  const acc = fakeAccounts({ sub: "u1", email: "u1@x" });
+  const acc = fakeAccounts();
   await applyStripeWebhook(
     {
       type: SUBSCRIPTION_EVENT.UPDATED,
@@ -164,13 +132,13 @@ test("Webhook-ACTIVATE mit plan_slug provisioniert identisch", async () => {
       provision: async () => {},
     },
   );
-  assert.deepEqual(s.profiles["u1@x"], planProfileFor("business"));
+  assert.deepEqual(s.profiles["t_a"], planProfileFor("business"));
 });
 
 test("planSlug-loser Webhook (frischer Tenant) -> SKIP, kein Profil, KYC/Status gesetzt", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {}); // kein gespeicherter Slug, metadata ohne plan_slug
-  const acc = fakeAccounts({ sub: "u1", email: "u1@x" });
+  const acc = fakeAccounts();
   await applyStripeWebhook(
     {
       type: SUBSCRIPTION_EVENT.UPDATED,

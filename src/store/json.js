@@ -147,9 +147,11 @@ function migrateCalendarToMap(calendar) {
 
 // Profile aus config.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
 // Render (free plan) hat ein fluechtiges Dateisystem -> ohne diesen Seed waeren
-// Profile nach jedem Neustart weg. Bereits im Store vorhandene (per-API) Eintraege
-// gewinnen pro Schluessel; jeder Seed wird wie ueber die API sanitisiert (Whitelist).
-// Kaputtes JSON crasht den Start NICHT (wird geloggt und ignoriert - fail-safe).
+// Profile nach jedem Neustart weg. Schluessel sind seit Phase S tenantIds (vormals
+// emails) - der Operator stellt PROFILES_JSON auf tenantId-Keys um (.env.example).
+// Bereits im Store vorhandene (per-API) Eintraege gewinnen pro Schluessel; jeder Seed
+// wird wie ueber die API sanitisiert (Whitelist). Kaputtes JSON crasht den Start NICHT
+// (wird geloggt und ignoriert - fail-safe).
 function seedProfilesFromEnv() {
   if (!config.profilesSeed) return;
   let parsed;
@@ -160,7 +162,7 @@ function seedProfilesFromEnv() {
     return;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    console.error("[profiles] PROFILES_JSON muss ein Objekt {identity: {...}} sein - ignoriert");
+    console.error("[profiles] PROFILES_JSON muss ein Objekt {tenantId: {...}} sein - ignoriert");
     return;
   }
   const seeded = {};
@@ -546,9 +548,9 @@ export function updateSettings(tenantId, patch) {
   return result;
 }
 
-// ---- Rechteprofile pro Nutzer (Phase 2) ----
-export function resolveProfile(email) {
-  return ops.resolveProfile(load(), email);
+// ---- Rechteprofile pro Tenant (Phase 2, Phase S re-keyed) ----
+export function resolveProfile(tenantId) {
+  return ops.resolveProfile(load(), tenantId);
 }
 
 // Tenant-Aufloesung (I4): reine Query, kein save (analog resolveProfile).
@@ -569,14 +571,14 @@ export function listProfiles() {
   return ops.listProfiles(load());
 }
 
-export function setProfile(email, patch) {
-  const result = ops.setProfile(load(), email, patch);
+export function setProfile(tenantId, patch) {
+  const result = ops.setProfile(load(), tenantId, patch);
   save();
   return result;
 }
 
-export function deleteProfile(email) {
-  const ok = ops.deleteProfile(load(), email);
+export function deleteProfile(tenantId) {
+  const ok = ops.deleteProfile(load(), tenantId);
   if (ok) save();
   return ok;
 }

@@ -34,7 +34,7 @@ const activeNumber = (id, e164, tenantId) => ({
 // kycLevel/status/extraCalls/profiles optional ueberschreibbar. Default-Profil fuer SUB_A
 // traegt maxCallsPerHour=null (A4 go-live-Haertung): der aktive Subscriber ist damit vom
 // DEFAULT_PROFILE(0)-User-Hour-Gate entkoppelt (sonst 429 VOR dem getesteten Allowlist-Gate).
-function seed({ kycLevel, status = "active", calls = [], profiles = { [SUB_A]: { maxCallsPerHour: null } } } = {}) {
+function seed({ kycLevel, status = "active", calls = [], profiles = { [A]: { maxCallsPerHour: null } } } = {}) {
   return seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
@@ -106,7 +106,7 @@ test("W5-3: suspendierter Tenant -> 403 (Defense-in-depth), auch mit unrestricte
     // der Hard-Block VOR der Profil-Lockerung greift (Abo gekuendigt -> kein freies Waehlen).
     // maxCallsPerHour=null haelt das Profil am User-Hour-Gate vorbei (A4), damit der suspended-
     // Block im Allowlist-Gate (403) und nicht das DEFAULT(0)-Stundenlimit (429) die Aussage traegt.
-    seed: seed({ kycLevel: "card", status: "suspended", profiles: { [SUB_A]: { unrestricted: true, maxCallsPerHour: null } } }),
+    seed: seed({ kycLevel: "card", status: "suspended", profiles: { [A]: { unrestricted: true, maxCallsPerHour: null } } }),
   });
   try {
     const res = await placeCall(srv, SUB_A);

@@ -46,6 +46,7 @@ const activeNumber = (id, e164, tenantId, status = "active") => ({
 // A2/A3-provisioniertes Tier-Profil: maxCallsPerHour=null entkoppelt den aktiven
 // Subscriber vom DEFAULT_PROFILE(0)-User-Hour-Gate (A4 go-live-Haertung). Minimaler
 // Stub - nur das fuer diese Gate-Tests relevante Feld (planProfileFor traegt es real).
+// Phase S: das Profil keyt auf die tenantId (A/B/C), nicht mehr auf den idpSubject.
 const PROVISIONED_PROFILE = { maxCallsPerHour: null };
 
 // Zwei aktive Tenants (A, B) mit eigener aktiver Nummer + idpSubject. usage/extraNumbers
@@ -64,7 +65,7 @@ function seedTenants({ extraNumbers = [], usage } = {}) {
       { id: C, status: "active", idpSubject: SUB_C, ownerName: "Carol", kycLevel: "card" },
     ],
     numbers: [activeNumber("num_a", NUM_A, A), activeNumber("num_b", NUM_B, B), ...extraNumbers],
-    profiles: { [SUB_A]: PROVISIONED_PROFILE, [SUB_B]: PROVISIONED_PROFILE, [SUB_C]: PROVISIONED_PROFILE },
+    profiles: { [A]: PROVISIONED_PROFILE, [B]: PROVISIONED_PROFILE, [C]: PROVISIONED_PROFILE },
   });
   if (usage) s.usage = usage;
   return s;

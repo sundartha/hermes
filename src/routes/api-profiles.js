@@ -7,13 +7,14 @@
 //
 // Hinter Basic-Auth (server.js deckt /api/* ab). OAuth-MCP-Nutzer erreichen nur
 // /mcp, nie /api/* -> kein Self-Service. Es gibt bewusst KEIN MCP-Tool dafuer.
-// Der Profil-Schluessel ist die serverseitige Identitaet: req.auth.email, wenn der
-// IdP eine email im Token liefert, SONST req.auth.sub (z.B. WorkOS "user_01...").
-// Deshalb KEINE strikte Email-Form erzwingen - nur ein sauberer, nicht-leerer
-// String ohne Whitespace.
+// Der Profil-Schluessel ist seit Phase S die tenantId (vormals die email-/sub-Identitaet);
+// resolveProfile/place_call lesen unter genau diesem Schluessel. validIdentity prueft nur
+// die identitaets-foermige Gestalt (nicht-leerer String ohne Whitespace, <=254) - eine
+// tenantId (z.B. "t_user_01...") erfuellt sie; KEINE strikte Email-Form. Derselbe Validator
+// gilt im Onboard-Pfad fuer idpSubject/tenantId (server.js), daher generisch benannt.
 import { Router } from "express";
 
-export const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub)
+export const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub/tenantId)
 export const validIdentity = (e) =>
   typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
 
@@ -25,21 +26,19 @@ export function makeProfileRoutes({ store, audit }) {
   router.get("/api/profiles", (_req, res) => res.json(store.listProfiles()));
 
   router.post("/api/profiles", (req, res) => {
-    const { email, ...fields } = req.body || {};
-    if (!validIdentity(email))
-      return res
-        .status(400)
-        .json({ error: "email/identity (req.auth.email ODER IdP-sub) ist Pflicht" });
-    const { profile, changed } = store.setProfile(email, fields);
-    // Nur email + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
-    audit("profile_update", req, `email=${email} keys=${changed.join(",") || "-"}`);
-    res.json({ email, profile });
+    const { tenantId, ...fields } = req.body || {};
+    if (!validIdentity(tenantId))
+      return res.status(400).json({ error: "tenantId (Profil-Schluessel) ist Pflicht" });
+    const { profile, changed } = store.setProfile(tenantId, fields);
+    // Nur tenantId + Keys loggen - Profil-Werte (z.B. Nummern) gehoeren nicht ins Log.
+    audit("profile_update", req, `tenantId=${tenantId} keys=${changed.join(",") || "-"}`);
+    res.json({ tenantId, profile });
   });
 
-  router.delete("/api/profiles/:email", (req, res) => {
-    const { email } = req.params;
-    if (!store.deleteProfile(email)) return res.status(404).json({ error: "not found" });
-    audit("profile_delete", req, `email=${email}`);
+  router.delete("/api/profiles/:tenantId", (req, res) => {
+    const { tenantId } = req.params;
+    if (!store.deleteProfile(tenantId)) return res.status(404).json({ error: "not found" });
+    audit("profile_delete", req, `tenantId=${tenantId}`);
     res.json({ ok: true });
   });
 

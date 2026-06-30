@@ -195,26 +195,30 @@ CREATE TABLE IF NOT EXISTS usage (
   calls         BIGINT NOT NULL DEFAULT 0
 );
 
--- profile: Owner-Removal P5 - GLOBAL, keine Tenant-Bindung mehr (Rechteprofile sind
--- betreiber-/admin-weit, nicht pro Telefon-Workspace). email ist alleiniger PK.
--- Sanitisiertes Profil-Objekt als JSONB (Whitelist bleibt im Code).
+-- profile: GLOBAL, keine Tenant-Bindung (Rechteprofile sind betreiber-/admin-weit, nicht pro
+-- Telefon-Workspace). Phase S: die Profil-Rechte-Achse keyt auf die tenantId (vormals email).
+-- tenant_id ist alleiniger PK (honest naming - die Spalte haelt jetzt tenantIds). Sanitisiertes
+-- Profil-Objekt als JSONB (Whitelist bleibt im Code). Tabelle bleibt global (kein Tenant-FK/
+-- RLS-Filter; Policy profile_global, RLS-Sektion) -> Blast-Radius klein.
 CREATE TABLE IF NOT EXISTS profile (
-  email TEXT PRIMARY KEY,
-  data  JSONB NOT NULL
+  tenant_id TEXT PRIMARY KEY,
+  data      JSONB NOT NULL
 );
--- Forward-compat fuer eine bestehende (owner-tenant-scoped) profile-Tabelle:
--- tenant_id aus dem PK loesen, dann die Spalte droppen (idempotent). Bestehende
--- owner-keyed Profile (email/data) bleiben erreichbar (R6, kein Datenverlust).
--- Die alte tenant_isolation-Policy referenziert tenant_id und blockt sonst den
--- Column-Drop auf einer Bestands-DB (Postgres: "cannot drop column tenant_id ...
--- because other objects depend on it"). Erst die Policy loesen, dann migrieren;
--- die globale profile_global-Policy wird weiter unten (RLS-Sektion) gesetzt.
+-- Forward-compat: die alte (owner-tenant-scoped) tenant_isolation-Policy referenziert eine
+-- tenant_id-Spalte und blockt sonst spaetere Column-Operationen -> zuerst loesen (idempotent;
+-- die globale profile_global-Policy wird in der RLS-Sektion gesetzt).
 DROP POLICY IF EXISTS tenant_isolation ON profile;
-ALTER TABLE profile DROP CONSTRAINT IF EXISTS profile_pkey;
-ALTER TABLE profile DROP COLUMN IF EXISTS tenant_id;
+-- Phase S Re-Key: eine P5-era Tabelle traegt email als PK-Spalte. email -> tenant_id umbenennen
+-- (der PK folgt dem Spalten-Rename automatisch). NUR wenn email noch existiert UND tenant_id
+-- fehlt (idempotent: 2. Lauf trifft nichts). Der DATENwert (email als Schluessel) wird beim
+-- Boot/Deploy von db/migrate.js rekeyProfilesToTenant ueber den account-Join auf die tenantId
+-- gehoben - dieser Rename benennt nur die Spalte/PK um (kein Datenverlust, R6).
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profile_pkey') THEN
-    ALTER TABLE profile ADD PRIMARY KEY (email);
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'profile' AND column_name = 'email')
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'profile' AND column_name = 'tenant_id') THEN
+    ALTER TABLE profile RENAME COLUMN email TO tenant_id;
   END IF;
 END $$;
 

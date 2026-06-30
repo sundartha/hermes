@@ -45,8 +45,8 @@ export function makeDefaultState() {
     calendar: calendarMap(),
     usage: emptyUsageMap(),
     notifications: [], // {id, title, body, at, callId}
-    // Rechteprofile pro Nutzer (Phase 2): { "<email>": {<Profil-Felder>} }. Eigener
-    // Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
+    // Rechteprofile pro Tenant (Phase 2, Phase S re-keyed): { "<tenantId>": {<Profil-Felder>} }.
+    // Eigener Top-Level-Key - updateSettings faesst ihn bewusst NICHT an.
     profiles: {},
     // Bootstrap-Tenant als Code-Default (status active), konsistent zu den
     // [BOOTSTRAP_TENANT_ID]-Buckets in settings/calendar/usage. Identitaet (ownerName)
@@ -1322,22 +1322,23 @@ export function updateSettings(s, tenantId, patch) {
   return { settings: target, changed };
 }
 
-// ---- Rechteprofile pro Nutzer (Phase 2) ----
-// Effektives Profil fuer eine Identitaet. null/leer (localhost/stdio ohne JWT)
-// -> Owner. Bekannte Identitaet -> gespeichertes Profil ueber DEFAULT gemerged
-// (fehlende Felder fallen restriktiv zurueck). Unbekannt -> DEFAULT.
-export function resolveProfile(s, email) {
-  return resolveProfileFrom(email, email ? s.profiles[email] : undefined);
+// ---- Rechteprofile pro Tenant (Phase 2, Phase S re-keyed) ----
+// Effektives Profil fuer eine tenantId. tenantId === BOOTSTRAP_TENANT_ID -> Owner
+// (resolveProfileFrom pinnt). Andere tenantId mit gespeichertem Profil -> ueber DEFAULT
+// gemerged (fehlende Felder fallen restriktiv zurueck). tenantId ohne Profil / leer ->
+// DEFAULT. profiles ist key-agnostisch (eine Map key -> Profil); der Schluessel ist seit
+// Phase S die tenantId (vormals email), s. resolveProfileFrom (defaults.js).
+export function resolveProfile(s, tenantId) {
+  return resolveProfileFrom(tenantId, tenantId ? s.profiles[tenantId] : undefined);
 }
 
 // ---- Tenant-Aufloesung (Auth-Achse, I4) ----
-// Geschwister zu resolveProfile, ABER mit umgekehrter Fail-Semantik. resolveProfile
-// faellt bei leerer Identitaet bewusst fail-OPEN auf Owner (resolveProfileFrom(!email)
-// -> OWNER_PROFILE in defaults.js): das vergibt RECHTE konservativ an den Owner.
-// resolveTenant DARF diese Semantik NIEMALS erben: leere/null/unbekannte Identitaet
-// -> null (Reject), NIE BOOTSTRAP_TENANT_ID. Ein Default-Tenant hier wuerde den ganzen
-// Tenant-Scope (I5/I6/I7) umgehbar machen - still, weil Owner-only-Tests gruen blieben.
-// 1:1 (#2): liefert genau eine tenantId ODER null, keine Liste. Keyt auf idpSubject (#1).
+// Geschwister zu resolveProfile: BEIDE keyen jetzt auf die Auth-/Tenant-Achse (Phase S).
+// resolveProfile mappt nur BOOTSTRAP_TENANT_ID -> OWNER_PROFILE (Owner hart gepinnt), sonst
+// stored-or-DEFAULT (fail-closed/restriktiv). resolveTenant liefert die tenantId einer
+// Identitaet ODER null: leere/null/unbekannte Identitaet -> null (Reject), NIE
+// BOOTSTRAP_TENANT_ID. Ein Default-Tenant hier wuerde den ganzen Tenant-Scope (I5/I6/I7)
+// umgehbar machen. 1:1 (#2): genau eine tenantId ODER null, keine Liste. Keyt auf idpSubject (#1).
 export function resolveTenant(s, idpSubject) {
   if (!idpSubject) return null; // leer/null NICHT iterieren -> kein versehentlicher Owner-Fallback
   const tenant = tenantsOf(s).find((t) => t.idpSubject === idpSubject);
@@ -1350,14 +1351,15 @@ export function listProfiles(s) {
 
 // Legt ein Profil an oder ergaenzt es (Merge der sanitisierten Felder). Liefert
 // das gespeicherte Profil + die uebernommenen Keys (fuers Audit-Log, ohne Werte).
-export function setProfile(s, email, patch) {
+// Schluessel ist die tenantId (Phase S; key-agnostische Map).
+export function setProfile(s, tenantId, patch) {
   const clean = sanitizeProfile(patch);
-  s.profiles[email] = { ...(s.profiles[email] || {}), ...clean };
-  return { profile: s.profiles[email], changed: Object.keys(clean) };
+  s.profiles[tenantId] = { ...(s.profiles[tenantId] || {}), ...clean };
+  return { profile: s.profiles[tenantId], changed: Object.keys(clean) };
 }
 
-export function deleteProfile(s, email) {
-  if (!(email in s.profiles)) return false;
-  delete s.profiles[email];
+export function deleteProfile(s, tenantId) {
+  if (!(tenantId in s.profiles)) return false;
+  delete s.profiles[tenantId];
   return true;
 }

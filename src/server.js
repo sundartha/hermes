@@ -1190,11 +1190,11 @@ app.post("/api/calls", async (req, res) => {
   }
 
   // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
-  // Profile-Achse (Rechte: resolveProfile/requestedBy) UND Tenant-Achse (requestTenant)
-  // PARALLEL aus derselben Identitaet (L4). Flag aus -> requestTenant === BOOTSTRAP_TENANT_ID
-  // (byte-identisch).
+  // requestedBy bleibt die Identitaet (Audit/Forensik, entkoppelt). Das Rechteprofil keyt
+  // seit Phase S auf die tenantId (resolveProfile NACH der REJECT-Pruefung, s.u.) - NICHT
+  // mehr auf die email-/sub-Identitaet. Flag aus -> requestTenant === BOOTSTRAP_TENANT_ID
+  // (Profil kollabiert dann auf OWNER_PROFILE; per-Identity-Profile wirken nur MULTI_TENANT).
   const identity = internalIdentity(req);
-  const profile = store.resolveProfile(identity);
   const requestedBy = identity || OWNER_ID;
   const tenantId = requestTenant(req);
 
@@ -1237,6 +1237,11 @@ app.post("/api/calls", async (req, res) => {
       .status(403)
       .json({ error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." });
   }
+
+  // Rechteprofil tenant-gekeyt (Phase S): aufgeloest NACH dem TENANT_REJECT-Check, direkt
+  // vor dem ersten Gebrauch (numberGateError, G10). tenantId === BOOTSTRAP -> OWNER_PROFILE,
+  // sonst stored-or-DEFAULT (fail-closed). identity/requestedBy bleiben fuer Audit entkoppelt.
+  const profile = store.resolveProfile(tenantId);
 
   // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
   const gateErr = numberGateError(to, { profile, requestedBy, tenantId });
@@ -1447,10 +1452,11 @@ app.post("/api/action-items/:id/toggle", (req, res) => {
 app.post("/api/calendar", (req, res) => {
   const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403 (vor dem Booking-Recht)
   if (!tenant) return;
-  // Booking-Recht (Phase 2): Owner/null erlaubt, restriktives Profil (allowBooking
-  // false) wird abgewiesen. Identitaet nur vom localhost-Header, nie aus dem Body.
+  // Booking-Recht (Phase 2, Phase S tenant-gekeyt): BOOTSTRAP/Owner erlaubt, restriktives
+  // Profil (allowBooking false) wird abgewiesen. Das Recht keyt auf den schon aufgeloesten
+  // tenant; identity bleibt nur fuer das Audit (requestedBy), nie aus dem Body.
   const identity = internalIdentity(req);
-  if (!store.resolveProfile(identity).allowBooking) {
+  if (!store.resolveProfile(tenant).allowBooking) {
     audit("booking_denied", req, `requestedBy=${identity || OWNER_ID}`);
     return res.status(403).json({ error: "Kein Recht, Termine zu buchen (allowBooking=false)." });
   }
@@ -1836,13 +1842,14 @@ app.post("/mcp", mcpAuth, async (req, res) => {
       `tenant=${scopedTenant}`,
       req.body?.method || "",
     );
-  // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub
-  // (Fail-closed: ein authentifizierter Nutzer OHNE email-Claim wird NICHT zum
-  // Owner, sondern bekommt das restriktive DEFAULT_PROFILE). Selbst ohne email UND
-  // sub bleibt es restriktiv (ANON_IDENTITY-Sentinel statt null/Owner). Kein
-  // req.auth (Legacy/localhost/stdio) -> null -> Owner.
+  // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub. Sie wird
+  // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
+  // mehr fuer das Rechteprofil. Kein req.auth (Legacy/localhost/stdio) -> null.
   const identity = req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
-  const profile = store.resolveProfile(identity);
+  // Rechteprofil keyt seit Phase S auf den am Gateway aufgeloesten Tenant (scopedTenant),
+  // nicht auf die email-/sub-Identitaet. BOOTSTRAP -> OWNER_PROFILE, sonst stored-or-DEFAULT
+  // (fail-closed: ein authentifizierter Nutzer ohne Tenant-Profil bekommt DEFAULT_PROFILE).
+  const profile = store.resolveProfile(scopedTenant);
   try {
     // Rich-UI: Server deklariert die io.modelcontextprotocol/ui-Extension im initialize-
     // Response (MCP Apps / SEP-1865 - PFLICHT, sonst rendert der Host das ui://-Widget
