@@ -13,13 +13,14 @@
 
 **H3 (Kauf-Land/Regulatory) als 402-Ursache ENTKRAEFTET:** Kauf-Land = DE default (`config.js:321` PROVISIONING_COUNTRY||DE, `config.js:329` FORCE_NUMBER_COUNTRY leer, `server.js:1623` numberCountry=forceNumberCountry||country). `orderNumber` sendet **kein** `regulatory_requirement_id` — ein fehlendes DE-Bundle waere **422/Order-`failure`**, NICHT `402`. → 402 = reines Funding/Billing, **H1/H2 fuehren**. (Live-Render-Override `FORCE_NUMBER_COUNTRY` bleibt ungeprueft → Jonas-Dashboard.)
 
-**Telnyx-MCP-Token weiterhin EXPIRED:** `tools/call` gibt weiter `401 code 10009 expired/revoked` (nur public discovery geht). **Schritt 5.1 (Balance/Orders/Billing direkt lesen) bleibt blockiert** → §6.1 Jonas-Aktion offen.
+**ROOT CAUSE BESTAETIGT (direkter Telnyx-Read mit neuem v2-Key):** `balance = $1.92`, `credit_limit = $0`, `available_credit = $1.92`. DE-Nummer kostet erste Monatsrate **$2.00** (`upfront $1 + monthly $1`). `$1.92 < $2.00` → **402 Payment Required**. Order-Historie: 06-27/28/29 gekauft+released (drainte das Guthaben), 06-30 reicht es nicht mehr → H1 bestaetigt, H2/H3 raus.
 
-**Naechste Session — TODO (priorisiert):**
-1. **Jonas:** Telnyx-MCP-Token erneuern (§6.1) **und/oder** Telnyx-Dashboard: Balance + Payment-Method + Auto-Recharge + Account-Status pruefen (§6.2). Das ist der eigentliche Hebel (H1/H2).
-2. **Jonas:** master pushen (Render Frankfurt auto-deploy) → Diagnose-Logging wird live.
-3. Nach Deploy: pro haengendem Tenant `POST /api/onboard/retry` (§5.4) → Log zeigt exakten 402-Grund → gezielt fixen.
-4. Optional Cleanup: 4 Workflow-Worktrees `git worktree remove .claude/worktrees/wf_a083e24c-0ba-{2,3,4,5,6}` + Branches `phase/telnyx-402-log*`, `review-telnyx-402-log*` (Arbeit ist in master).
+**Status nach Session 2:** Diagnose-Logging gepusht (master == origin, `1b1bc6b`, Render-Frankfurt deployt). 32 stale Workflow-Worktrees + merged Branches aufgeraeumt (uebrig: 2 uralte diverged Branches `phase/p3-payment-chain`, `review-g4` — bewusst behalten).
+
+**Offen — NUR noch Jonas (kein Code):**
+1. **Telnyx-Guthaben aufladen** (≥ Order-Kosten, sinnvoll Auto-Recharge + kleines `credit_limit`). DAS behebt den 402.
+2. Danach pro haengendem Tenant `POST /api/onboard/retry` (§5.4) → erwartet `active` statt 402. Das jetzt live deployte Logging zeigt bei erneutem Fehler den exakten Telnyx-Grund.
+3. Optional: Telnyx-MCP-Connector-Token erneuern (`10009`) — fuer kuenftige MCP-Reads; fuer Diagnose nicht noetig (curl mit v2-Key reicht).
 
 ---
 
