@@ -11,40 +11,23 @@
 //   endCall:   POST {base}/v2/texml/Accounts/{account_sid}/Calls/{call_sid}
 //              (form, Status=completed) -> beendet den Call (Twilio-kompatibel).
 import { config } from "../../../config.js";
+import { assertTelnyxOk } from "./errors.js";
 
 const TEXML_BASE = "/v2/texml";
 const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
 
+// HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
+// damit der echte Ablehnungsgrund (z.B. Caller-ID nicht zugewiesen, Land im Voice-Profil
+// gesperrt) im Log steht statt nacktem "HTTP 403". STRIKT allowlisted: NUR errors[].code +
+// errors[].title; NIE der rohe Body/detail (koennte Auth-/Nummern-Fragmente tragen, daher
+// includeDetail=false), NIE der API-Key (Regel 4/5). attachStatus haengt err.providerStatus
+// an, damit der Aufrufer (server.js) die Ablehnung kategorisieren kann. Gemeinsamer Parser
+// in ./errors.js (G5) - eine konsistente Telnyx-Envelope-Entscheidung im Provider-Package.
+const ATTACH_STATUS = { attachStatus: true };
+
 // Bearer-Header + Form-Content-Type. Eine Stelle (G5) statt zweimal inline.
 function headers() {
   return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": FORM_HEADERS_TYPE };
-}
-
-// HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-
-// Fehlercode/-titel, damit der echte Ablehnungsgrund (z.B. Caller-ID nicht
-// zugewiesen, Land im Voice-Profil gesperrt) im Log steht statt nacktem
-// "HTTP 403". STRIKT allowlisted: NUR errors[].code + errors[].title; NIE der
-// rohe Body/detail (koennte Auth-/Nummern-Fragmente tragen), NIE der API-Key
-// (Regel 4/5). Status wird strukturiert als err.providerStatus mitgegeben, damit
-// der Aufrufer (server.js) die Ablehnung kategorisieren kann.
-async function assertOk(res, op) {
-  if (res.ok) return;
-  let detail = "";
-  try {
-    const body = await res.json();
-    const errs = Array.isArray(body && body.errors) ? body.errors : [];
-    detail = errs
-      .map((e) => [e && e.code, e && e.title].filter(Boolean).join(" "))
-      .filter(Boolean)
-      .join("; ");
-  } catch {
-    // Body nicht lesbar/kein JSON -> nur der Status, kein Rohtext (Leak-Schutz).
-  }
-  const err = new Error(
-    `Telnyx ${op} fehlgeschlagen: HTTP ${res.status}${detail ? ` (${detail})` : ""}`,
-  );
-  err.providerStatus = res.status;
-  throw err;
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -74,7 +57,7 @@ export const telnyxVoice = {
         body: form,
       },
     );
-    await assertOk(res, "originateCall");
+    await assertTelnyxOk(res, "originateCall", ATTACH_STATUS);
     // Twilio-kompatible Call-Resource. Telnyx-v2 wrappt manche Antworten in {data};
     // beide Formen abdecken. sid = CallSid (Fallback call_sid).
     const json = await res.json().catch(() => ({}));
@@ -93,6 +76,6 @@ export const telnyxVoice = {
       `${config.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telnyxAccountSid}/Calls/${callSid}`,
       { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) },
     );
-    await assertOk(res, "endCall");
+    await assertTelnyxOk(res, "endCall", ATTACH_STATUS);
   },
 };

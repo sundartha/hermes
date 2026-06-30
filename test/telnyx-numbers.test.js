@@ -163,7 +163,7 @@ test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw 
     () => prov.orderNumber({ e164: "+4915112340001" }),
     (err) => {
       assert.match(err.message, /Telnyx orderNumber fehlgeschlagen: HTTP 402/);
-      assert.ok(!err.message.includes("["), "kein Detail-Block bei unparsbarem Body");
+      assert.ok(!err.message.includes("("), "kein Detail-Block bei unparsbarem Body");
       assert.ok(!err.message.includes("upstream error"), "kein Rohtext-Dump (Leak-Schutz)");
       return true;
     },
