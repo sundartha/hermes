@@ -384,9 +384,7 @@ if (config.webDistDir) {
   // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
   app.use(express.static(config.webDistDir, { extensions: ["html"] }));
   // SPA-Fallback: Unterpfade unter /app liefern die App-Shell (Client-seitiges Routing).
-  app.get("/app/*", (_req, res) =>
-    res.sendFile(path.join(config.webDistDir, "app", "index.html")),
-  );
+  app.get("/app/*", (_req, res) => res.sendFile(path.join(config.webDistDir, "app", "index.html")));
 }
 
 app.use((req, res, next) => {
@@ -622,8 +620,7 @@ function userHourReached(profile, requestedBy) {
 
 // Cooldown-Fensterstart fuer den per-(Tenant,Ziel)-Cap (outbound-p1d). Eigenes Fenster
 // (config.perTargetWindowMs) - die Stundenlimits oben nutzen hourWindowStart.
-const perTargetWindowStart = () =>
-  new Date(Date.now() - config.perTargetWindowMs).toISOString();
+const perTargetWindowStart = () => new Date(Date.now() - config.perTargetWindowMs).toISOString();
 // Per-(Tenant,Ziel)-Wiederhol-Cap (outbound-p1d, D4, Belaestigungs-Bremse, Schutz Dritter):
 // wie oft DIESER Tenant DASSELBE Ziel im Cooldown-Fenster schon angerufen hat; ab dem Cap
 // gesperrt. Tenant-isoliert (Filter tenantId) + ziel-isoliert (Filter to). Zaehlt - wie die
@@ -670,7 +667,8 @@ function allowlistError(to, { profile, tenantId }) {
   return {
     status: 403,
     grund: "allowlist",
-    message: "Outbound nicht freigegeben: kein aktives Abo / keine Verifikation fuer diesen Tenant.",
+    message:
+      "Outbound nicht freigegeben: kein aktives Abo / keine Verifikation fuer diesen Tenant.",
   };
 }
 
@@ -720,8 +718,7 @@ function numberGateError(to, caller) {
       grund: "denylist",
       message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
     };
-  if (!E164.test(to))
-    return { status: 400, grund: "format", message: E164_FORMAT_ERROR };
+  if (!E164.test(to)) return { status: 400, grund: "format", message: E164_FORMAT_ERROR };
   if (!countryGateAllowed(to, profile))
     return {
       status: 403,
@@ -1186,7 +1183,9 @@ app.post("/api/calls", async (req, res) => {
   // Identitaeten erfasst sind. Audit ohne requestedBy (Identitaet hier bewusst noch nicht aufgeloest).
   if (config.outboundFrozen) {
     audit("place_call_denied", req, `to=${to} grund=frozen`);
-    return res.status(403).json({ error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." });
+    return res
+      .status(403)
+      .json({ error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." });
   }
 
   // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
@@ -1300,9 +1299,10 @@ app.post("/api/calls", async (req, res) => {
   // ungated (5.2): die Minuten-Erschoepfung deckelt nur den aktiven, teuren Outbound.
   if (config.paymentEnabled && tenantId !== BOOTSTRAP_TENANT_ID && planMinutesExhausted(tenantId)) {
     audit("place_call_denied", req, `to=${to} grund=minutes tenant=${tenantId}`);
-    return res
-      .status(402)
-      .json({ error: "Inkludierte Plan-Minuten aufgebraucht. Bitte Tarif anpassen oder neue Abrechnungsperiode abwarten." });
+    return res.status(402).json({
+      error:
+        "Inkludierte Plan-Minuten aufgebraucht. Bitte Tarif anpassen oder neue Abrechnungsperiode abwarten.",
+    });
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
@@ -1312,7 +1312,11 @@ app.post("/api/calls", async (req, res) => {
   // Notaus bleibt PARALLEL (Regel 1).
   const reserveCents = tariffCentsPerMin(to) * Math.ceil(maxDur / SECONDS_PER_MINUTE);
   if (store.reserveExceedsBudget(tenantId, reserveCents, config)) {
-    audit("place_call_denied", req, `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`);
+    audit(
+      "place_call_denied",
+      req,
+      `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`,
+    );
     return res
       .status(402)
       .json({ error: "Voraussichtliche Anrufkosten ueberschreiten das verfuegbare Budget." });
@@ -1696,6 +1700,44 @@ app.post("/api/onboard", async (req, res) => {
   void runProvisioningDrain();
 });
 
+// Operator-Re-Trigger (P2): provisioniert eine NEUE Nummer fuer einen aktiven, bezahlten
+// Subscriber, dessen vorheriger Nummernkauf scheiterte (provisionNumber faellt bei Order-/
+// Hold-Fehler auf 'failed' -> tenantHasLiveNumber wird wieder offen -> frische 'requested'
+// -> Worker kauft). Hinter der globalen Basic-Auth (Owner) ODER trusted-localhost wie alle
+// /api/* (Regel 3). Geld-Safety (Regel 1): NUR fuer einen active + KYC>=CARD Subscriber
+// (das Abo IST die Freigabe, dieselbe Semantik wie das Outbound-Allowlist-Gate) - kein
+// Nummernkauf fuer Nicht-Zahler/suspendierte/fremde Tenants. Reuse triggerTenantProvisioning
+// (alle Gates: PROVISIONING_ENABLED, Caps, tenantHasLiveNumber, Hold/Capture) - keine zweite
+// Kauflogik (G5). 'already_provisioned' = Tenant hat schon eine lebende Nummer (idempotent).
+const RETRY_REASON_STATUS = {
+  already_provisioned: 409,
+  tenant_cap: 409,
+  global_cap: 429,
+  persist_error: 503,
+};
+app.post("/api/onboard/retry", async (req, res) => {
+  const { tenantId } = req.body || {};
+  if (!validIdentity(tenantId))
+    return res
+      .status(400)
+      .json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+  // Geld-Safety (Regel 1): nur ein aktiver, KYC-verifizierter Subscriber - verhindert, dass
+  // der Owner versehentlich Geld fuer einen Fremd-/suspendierten/Nicht-Zahler-Tenant ausgibt.
+  if (!store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) {
+    audit("onboard_retry_denied", req, `tenant=${tenantId} grund=kein_aktiver_subscriber`);
+    return res
+      .status(403)
+      .json({ error: "Kein aktiver, verifizierter Subscriber - kein Nummernkauf." });
+  }
+  const result = await triggerTenantProvisioning(tenantId);
+  audit("onboard_retry", req, `tenant=${tenantId} ok=${result.ok} grund=${result.reason}`);
+  if (!result.ok)
+    return res
+      .status(RETRY_REASON_STATUS[result.reason] || 400)
+      .json({ error: `Re-Provisioning abgelehnt (${result.reason})` });
+  res.json({ tenantId, numberId: result.numberId, reason: result.reason, jobId: result.jobId });
+});
+
 // Provisioning-Job einreihen + Job-Spur persistieren (geteilt von /api/onboard UND dem
 // Webhook-Aktivierungs-Trigger, G5). Enqueue ist idempotent ueber den number-id-Key;
 // recordProvisioningJob dedupt die Spur. Liefert {ok, jobId} | {ok:false}. Der Aufrufer
@@ -1725,6 +1767,10 @@ async function queueProvisioning(numberId, tenantId) {
 // (Cap/persist_error) landet PII-frei (tenantId/Grund) im Audit-Trail (BK3); der Trigger
 // hat keinen req-Kanal, daher req=null (audit markiert die Quelle als "system").
 async function triggerTenantProvisioning(tenantId) {
+  // Liefert {ok, reason, numberId?, jobId?}: der Stripe-Webhook (provision-Seam) ignoriert
+  // das Ergebnis, der Operator-Re-Trigger POST /api/onboard/retry (P2) nutzt es fuer die
+  // HTTP-Antwort. reason: already_provisioned | tenant_cap | global_cap | persist_error |
+  // dry_run | queued.
   // Spiegel-Nachzug VOR der Provisionierung: activatePaidTenant aktiviert den Tenant nur in
   // der DB (accounts.setStatus) - der Store-Spiegel traegt noch den suspended-Login-Wert.
   // requestNumber liest den Spiegel-status; ohne Nachzug -> tenant_inactive -> kein Kauf
@@ -1760,12 +1806,15 @@ async function triggerTenantProvisioning(tenantId) {
     // Trigger). Nur die tenantId + Grund-Code, kein Secret/PII (H4).
     if (reqRes.reason !== "already_provisioned")
       audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${reqRes.reason}`);
-    return;
+    return { ok: false, reason: reqRes.reason };
   }
   // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf.
-  if (!config.provisioningEnabled) return;
+  if (!config.provisioningEnabled)
+    return { ok: true, reason: "dry_run", numberId: reqRes.number.id };
   const jobRes = await queueProvisioning(reqRes.number.id, tenantId);
-  if (jobRes.ok) void runProvisioningDrain();
+  if (!jobRes.ok) return { ok: false, reason: "persist_error" };
+  void runProvisioningDrain();
+  return { ok: true, reason: "queued", numberId: reqRes.number.id, jobId: jobRes.jobId };
 }
 
 // Verarbeitet wartende provision_number-Jobs deterministisch (In-Memory-Drain).
