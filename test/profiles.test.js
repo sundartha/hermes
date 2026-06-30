@@ -50,7 +50,9 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
     TO_EXT = "+4915777777773";
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", ...OFFLINE },
-    seed: seedState({ profiles: { "evil@x": { unrestricted: true } } }),
+    // unrestricted-Profil + maxCallsPerHour:null (A4): vom DEFAULT_PROFILE(0)-User-Hour-Gate
+    // entkoppelt, sonst blockt der profil-getriebene 429 VOR der hier getesteten Attribution.
+    seed: seedState({ profiles: { "evil@x": { unrestricted: true, maxCallsPerHour: null } } }),
   });
   try {
     await t.test("localhost: Header setzt die Identitaet -> requestedBy=evil@x", async () => {
@@ -106,7 +108,8 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
   const srv = await startServer({
     env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", ...OFFLINE },
     seed: seedState({
-      profiles: { "alice@team.test": { unrestricted: true, allowedCountryCodes: ["*"] } },
+      // maxCallsPerHour:null (A4): provisioniertes Profil, vom DEFAULT(0)-User-Hour-Gate entkoppelt.
+      profiles: { "alice@team.test": { unrestricted: true, allowedCountryCodes: ["*"], maxCallsPerHour: null } },
     }),
   });
   try {
@@ -300,7 +303,9 @@ test("Profil-Verwaltung: POST/GET/DELETE + Audit ohne Werte", async (t) => {
 test("PROFILES_JSON seedet Profile beim Start", async (t) => {
   const srv = await startServer({
     env: {
-      PROFILES_JSON: JSON.stringify({ user_01PERSIST: { unrestricted: true, evil: "x" } }),
+      // maxCallsPerHour:null (A4): sanitizeProfile haelt null -> das geseedete Profil bleibt
+      // vom DEFAULT(0)-User-Hour-Gate entkoppelt; evil faellt weiter raus (Sanitizer-Assertion gruen).
+      PROFILES_JSON: JSON.stringify({ user_01PERSIST: { unrestricted: true, maxCallsPerHour: null, evil: "x" } }),
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
       ...OFFLINE,
@@ -345,9 +350,11 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       ...OFFLINE,
     },
     seed: seedState({
+      // maxCallsPerHour:null (A4): beide Profile sind provisioniert -> vom DEFAULT(0)-User-Hour-
+      // Gate entkoppelt, der place_call (nicht denied) traegt die requestedBy-Attribution.
       profiles: {
-        "alice@team.test": { unrestricted: true },
-        user_01PROD: { unrestricted: true }, // IdP-sub-Schluessel (Token ohne email)
+        "alice@team.test": { unrestricted: true, maxCallsPerHour: null },
+        user_01PROD: { unrestricted: true, maxCallsPerHour: null }, // IdP-sub-Schluessel (Token ohne email)
       },
     }),
   });
@@ -374,11 +381,11 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
     });
 
     // Kritische Eigenschaft: ein Token OHNE email/sub darf NIE zum Owner fail-open'en -
-    // requestedBy MUSS die echte Identitaet (sub bzw. "anon") tragen, nie "owner". Seit
-    // Phase outbound-p1 ist der Owner-Tenant (MULTI_TENANT aus -> tenantId=owner) ein
-    // verifizierter Subscriber und passiert die leere Allowlist; die Ablehnung wandert
-    // damit von place_call_denied/grund=allowlist auf die place_call-Erfolgs-Audit-Zeile -
-    // die forensische requestedBy-Attribution (der eigentliche Anti-Spoof-Beweis) bleibt.
+    // requestedBy MUSS die echte Identitaet (sub bzw. "anon") tragen, nie "owner". Der
+    // nicht-provisionierte Caller (kein Profil -> DEFAULT_PROFILE) wird seit A4
+    // (maxCallsPerHour=0) am User-Hour-Gate hart geblockt; die Ablehnung steht auf
+    // place_call_denied/grund=stundenlimit_nutzer - die forensische requestedBy-Attribution
+    // (der eigentliche Anti-Spoof-Beweis) bleibt unveraendert daran haengen.
     await t.test(
       "JWT OHNE email-Claim -> requestedBy=<sub>, NICHT owner (kein fail-open)",
       async () => {
@@ -391,7 +398,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
         assert.notEqual(res.status, 401);
         await waitForLog(
           srv,
-          /\[audit\] place_call ip=\S+ to=\+4915123123124 .* requestedBy=subonly-9/,
+          /\[audit\] place_call_denied ip=\S+ to=\+4915123123124 grund=stundenlimit_nutzer requestedBy=subonly-9/,
         );
         assert.ok(
           !/requestedBy=owner/.test(srv.stdout),
@@ -410,7 +417,7 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       assert.notEqual(res.status, 401);
       await waitForLog(
         srv,
-        /\[audit\] place_call ip=\S+ to=\+4915123123125 .* requestedBy=anon/,
+        /\[audit\] place_call_denied ip=\S+ to=\+4915123123125 grund=stundenlimit_nutzer requestedBy=anon/,
       );
       assert.ok(
         !/requestedBy=owner/.test(srv.stdout),

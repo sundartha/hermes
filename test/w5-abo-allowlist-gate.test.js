@@ -31,8 +31,10 @@ const activeNumber = (id, e164, tenantId) => ({
 
 // Seed: Owner-Tenant (active) + Tenant A mit eigener aktiver Nummer + idpSubject + ownerName
 // (P2b: das Outbound-Identitaets-Gate verlangt einen registrierten Namen VOR dem KYC-Gate).
-// kycLevel/status/extraCalls/profiles optional ueberschreibbar.
-function seed({ kycLevel, status = "active", calls = [], profiles = {} } = {}) {
+// kycLevel/status/extraCalls/profiles optional ueberschreibbar. Default-Profil fuer SUB_A
+// traegt maxCallsPerHour=null (A4 go-live-Haertung): der aktive Subscriber ist damit vom
+// DEFAULT_PROFILE(0)-User-Hour-Gate entkoppelt (sonst 429 VOR dem getesteten Allowlist-Gate).
+function seed({ kycLevel, status = "active", calls = [], profiles = { [SUB_A]: { maxCallsPerHour: null } } } = {}) {
   return seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
@@ -102,7 +104,9 @@ test("W5-3: suspendierter Tenant -> 403 (Defense-in-depth), auch mit unrestricte
     env: MT,
     // Selber Account suspendiert + ein unrestricted-Profil auf der Identitaet: beweist, dass
     // der Hard-Block VOR der Profil-Lockerung greift (Abo gekuendigt -> kein freies Waehlen).
-    seed: seed({ kycLevel: "card", status: "suspended", profiles: { [SUB_A]: { unrestricted: true } } }),
+    // maxCallsPerHour=null haelt das Profil am User-Hour-Gate vorbei (A4), damit der suspended-
+    // Block im Allowlist-Gate (403) und nicht das DEFAULT(0)-Stundenlimit (429) die Aussage traegt.
+    seed: seed({ kycLevel: "card", status: "suspended", profiles: { [SUB_A]: { unrestricted: true, maxCallsPerHour: null } } }),
   });
   try {
     const res = await placeCall(srv, SUB_A);
