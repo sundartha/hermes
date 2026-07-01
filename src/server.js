@@ -29,6 +29,7 @@ import { metrics } from "./metrics.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
+import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
@@ -1912,7 +1913,7 @@ app.post("/mcp", mcpAuth, async (req, res) => {
     const serverOptions = config.mcpUiEnabled
       ? { capabilities: { extensions: uiServerExtension() } }
       : undefined;
-    const server = new McpServer({ name: "hermes", version: "0.2.0" }, serverOptions);
+    const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
     // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.mcpUiEnabled
     // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
     // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate
