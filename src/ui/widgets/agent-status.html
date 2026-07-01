@@ -6,19 +6,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Agent Status</title>
 <style>
-  /* Inline-Tokens: Subset aus design-system/_shared/tokens.css (Werte identisch,
-     self-contained fuer die Iframe-Sandbox - kein externer CSS-Import/Linkback, AC6). */
+  /* Inline-Tokens: 1:1 aus apps/web/src/styles/tokens/primitives.css + semantic.css
+     (kanonische Quelle), self-contained fuer die Iframe-Sandbox - kein externer
+     CSS-Import/Linkback, AC6. */
   :root {
     --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
-    --color-white:#fff; --color-green-500:#1faa59;
+    --color-white:#fff; --color-navy-700:#1b4f86;
     --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
-    --radius-md:12px; --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --radius-card:18px;
+    --shadow-card:0 6px 18px rgba(0,0,0,.07);
+    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
   }
   body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
   .card{background:var(--color-white);border:1px solid var(--color-gray-150);
-        border-radius:var(--radius-md);padding:var(--space-4);max-width:420px}
+        border-radius:var(--radius-card);box-shadow:var(--shadow-card);
+        padding:var(--space-4);max-width:420px}
   .head{display:flex;align-items:center;gap:var(--space-2)}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--color-green-500)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--color-navy-700)}
   .title{font-weight:600}
   .sub{color:var(--color-gray-500);font-size:13px}
   .line{display:flex;justify-content:space-between;margin-top:var(--space-3);
