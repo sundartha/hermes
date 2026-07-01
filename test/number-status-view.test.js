@@ -65,3 +65,29 @@ test("numberStatusFor: fremde aktive Nummer -> 'none' (fail-closed, kein Leck)",
   assert.equal(numberStatusFor(s, "t_stranger"), "none");
   assert.equal(activeNumberFor(s, "t_stranger"), "");
 });
+
+test("numberStatusFor: globaler Cap-Skip -> 'blocked' (Fix B)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  requestNumber(s, { tenantId: "a", ...caps });
+  requestNumber(s, { tenantId: "b", ...caps }); // blockiert -> Skip-Marker gesetzt
+  assert.equal(numberStatusFor(s, "b"), "blocked");
+});
+
+test("numberStatusFor: eine spaeter aktive Nummer ueberlagert den Skip-Marker (Invariante 3)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const tight = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  requestNumber(s, { tenantId: "a", ...tight });
+  requestNumber(s, { tenantId: "b", ...tight }); // blockiert -> Skip-Marker gesetzt
+  assert.equal(numberStatusFor(s, "b"), "blocked");
+  // Cap oeffnet sich (Release der fremden Nummer), b bekommt seine eigene Nummer -> die
+  // reale Nummer schlaegt IMMER den Skip-Marker (Prioritaet ACTIVE > ... > BLOCKED).
+  const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164: "+4915799990003", providerNumberId: "num_b" });
+  assert.equal(numberStatusFor(s, "b"), "active");
+});

@@ -16,11 +16,14 @@ import {
   PROVISIONING_JOB_STATUS,
   USAGE_EVENT_KIND,
   TENANT_STATUS,
+  GLOBAL_CAP_REASON,
 } from "../src/store/defaults.js";
 import {
   transitionNumber,
   recordProvisioningJob,
   markProvisioningJob,
+  registerTenant,
+  requestNumber,
 } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
@@ -418,6 +421,30 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
       "suspended -> fail-closed, kein Routing",
     );
   }
+});
+
+test("numberProvisionSkipReason/-At ueberleben store.save() + Re-Hydrierung (Fix B, pg)", async () => {
+  const { store, runner } = await makePgTestStore();
+  const s = store.load();
+  registerTenant(s, "t_cap_skip", {});
+  const r = requestNumber(s, {
+    tenantId: "t_cap_skip",
+    maxNumbers: 0,
+    maxNumbersPerTenant: 1,
+  });
+  assert.equal(r.reason, GLOBAL_CAP_REASON);
+  await store.save();
+
+  // Frischer Store auf DERSELBEN DB -> hydriert aus der DB (kein Spiegel-Reuse).
+  const store2 = makePgStore(runner);
+  await store2.init();
+  const tenant = store2.load().tenants.find((t) => t.id === "t_cap_skip");
+  assert.equal(
+    tenant.numberProvisionSkipReason,
+    GLOBAL_CAP_REASON,
+    "Skip-Grund persistiert (flushTenants + rowToTenant)",
+  );
+  assert.ok(tenant.numberProvisionSkipAt, "Zeitstempel persistiert");
 });
 
 test("provisioning_job ueberlebt Flush+Re-Hydrierung; markProvisioningJob -> done persistiert (P6b2)", async () => {

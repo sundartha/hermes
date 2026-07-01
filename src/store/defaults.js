@@ -78,6 +78,12 @@ export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.RELEASED]: [],
 });
 
+// Skip-Grund, den requestNumber sichtbar am Tenant hinterlaesst (Fix B, PLAN-
+// PROVISIONING-CAP.md Phase A). Bewusst NUR dieser eine Grund: tenant_cap/tenant_inactive
+// sind fachlich andere Faelle (Tenant hat schon eine Nummer bzw. ist nicht aktiv) und
+// nicht Teil dieser Phase.
+export const GLOBAL_CAP_REASON = "global_cap";
+
 // ---- Provisioning-Jobs (async Worker, P6b2) ----
 // Status eines enqueued Jobs. EINE Quelle (G5/G13): der In-Memory-Queue-Adapter
 // (queue/adapters/memory) UND die persistente Job-Spur im Store-Spiegel (state-ops

@@ -20,6 +20,7 @@ import {
   tenantIdForSubject,
   normNum,
   hasTrunkZeroAfterCountryCode,
+  GLOBAL_CAP_REASON,
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
@@ -1645,7 +1646,10 @@ app.post("/api/onboard", async (req, res) => {
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
-      if (r.ok) store.save(); // 'requested' persistieren (auch im Dry-Run)
+      // Fix B: der global_cap-Skip wird IMMER persistiert (reine Observability, kein
+      // Trigger) - jeder andere Skip-Grund (tenant_cap/tenant_inactive) bleibt wie bisher
+      // ungespeichert (ausserhalb des Scopes dieser Phase).
+      if (r.ok || r.reason === GLOBAL_CAP_REASON) store.save(); // 'requested' persistieren (auch im Dry-Run)
       return r;
     })
     .catch((e) => {
@@ -1790,7 +1794,7 @@ async function triggerTenantProvisioning(tenantId) {
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
-      if (r.ok) store.save();
+      if (r.ok || r.reason === GLOBAL_CAP_REASON) store.save();
       return r;
     })
     .catch((e) => {

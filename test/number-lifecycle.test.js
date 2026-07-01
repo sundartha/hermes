@@ -17,9 +17,15 @@ import {
   transitionNumber,
   canTransitionNumber,
   findNumber,
+  findTenant,
   findTenantByNumber,
 } from "../src/store/state-ops.js";
-import { NUMBER_STATUS, TENANT_STATUS, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import {
+  NUMBER_STATUS,
+  TENANT_STATUS,
+  BOOTSTRAP_TENANT_ID,
+  GLOBAL_CAP_REASON,
+} from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
 const seedTenant = (s, id = "t_user1") => registerTenant(s, id);
@@ -128,6 +134,56 @@ test("requestNumber: unbekannter/inaktiver Tenant blockt (fail-closed)", () => {
   const t = registerTenant(s, "susp");
   t.status = TENANT_STATUS.SUSPENDED;
   assert.equal(requestNumber(s, { tenantId: "susp", ...CAPS }).reason, "tenant_inactive");
+});
+
+// ---- Phase A: Cap-Zaehlung robust (Regressions-Lock, kein neues Verhalten) ----
+test("liveNumbers/requestNumber: RELEASED/FAILED belegen keine Kapazitaet - Cap greift erst bei echter Auslastung", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "dead1");
+  registerTenant(s, "dead2");
+  registerTenant(s, "live1");
+  const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  const dead1 = requestNumber(s, { tenantId: "dead1", ...caps }).number;
+  failNumber(s, dead1.id); // requested -> failed (terminal)
+  const dead2 = requestNumber(s, { tenantId: "dead2", ...caps }).number; // Slot war durch failed wieder frei
+  beginProvisioning(s, dead2.id);
+  activateNumber(s, dead2.id, { e164: "+4915799990002", providerNumberId: "num_dead2" });
+  releaseNumber(s, dead2.id); // terminal
+  const live = requestNumber(s, { tenantId: "live1", ...caps });
+  assert.equal(live.ok, true, "Cap greift NICHT vorzeitig durch terminale Nummern");
+});
+
+// ---- Phase A: Skip sichtbar machen (Fix B) ----
+test("requestNumber: global_cap hinterlaesst Skip-Marker am Tenant (reine Observability)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  requestNumber(s, { tenantId: "a", ...caps });
+  const blocked = requestNumber(s, { tenantId: "b", ...caps });
+  assert.equal(blocked.reason, GLOBAL_CAP_REASON);
+  const tenantB = findTenant(s, "b");
+  assert.equal(tenantB.numberProvisionSkipReason, GLOBAL_CAP_REASON);
+  assert.ok(tenantB.numberProvisionSkipAt, "Zeitstempel gesetzt");
+});
+
+test("requestNumber: Skip-Marker verschwindet bei erfolgreichem Folge-Request (Invariante 3)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const tight = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  requestNumber(s, { tenantId: "a", ...tight });
+  const blocked = requestNumber(s, { tenantId: "b", ...tight });
+  assert.equal(blocked.reason, GLOBAL_CAP_REASON);
+  assert.equal(findTenant(s, "b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
+  // Cap oeffnet sich -> erfolgreicher Folge-Request loescht den Marker wieder (kein
+  // dauerhaft haengender "blocked"-Chip nach erfolgreichem Retry).
+  const loose = { maxNumbers: 5, maxNumbersPerTenant: 1 };
+  const retry = requestNumber(s, { tenantId: "b", ...loose });
+  assert.equal(retry.ok, true);
+  const tenantB = findTenant(s, "b");
+  assert.equal(tenantB.numberProvisionSkipReason, null);
+  assert.equal(tenantB.numberProvisionSkipAt, null);
 });
 
 // ---- Voller Lebenszyklus ----

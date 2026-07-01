@@ -3,7 +3,8 @@
 // das globale store-Modul importiert): so teilen server.js (globales Backend) UND
 // die in-process getestete Self-Service-Factory (injizierter pglite-Store) EINE
 // Quelle (G5/DIP) - kein Mismatch zwischen Test- und Produktions-Store.
-import { NUMBER_STATUS } from "./defaults.js";
+import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
+import { findTenant } from "./state-ops.js";
 
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
 // und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
@@ -50,6 +51,7 @@ export const NUMBER_DISPLAY_STATUS = Object.freeze({
   ACTIVE: "active",
   PROVISIONING: "provisioning",
   REQUESTED: "requested",
+  BLOCKED: "blocked", // Abo aktiv, Provisioning aber am globalen Cap gescheitert (Fix B)
   NONE: "none",
 });
 
@@ -59,6 +61,8 @@ export function numberStatusFor(s, tenantId) {
   if (own.some((n) => n.status === NUMBER_STATUS.PROVISIONING || n.status === NUMBER_STATUS.CAPTURING))
     return NUMBER_DISPLAY_STATUS.PROVISIONING;
   if (own.some((n) => n.status === NUMBER_STATUS.REQUESTED)) return NUMBER_DISPLAY_STATUS.REQUESTED;
+  if (findTenant(s, tenantId)?.numberProvisionSkipReason === GLOBAL_CAP_REASON)
+    return NUMBER_DISPLAY_STATUS.BLOCKED;
   return NUMBER_DISPLAY_STATUS.NONE;
 }
 
