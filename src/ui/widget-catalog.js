@@ -10,32 +10,21 @@ import { BIND_SCRIPT } from "./widget-bind.js";
 // Bekannte Widgets. widgetId -> { file, title }. Neue Widgets sind reine Daten-
 // Eintraege (OCP), ohne die Adapter-Logik zu aendern. title = Resource-Metadaten je
 // Widget (statt eines hartkodierten Magic-Strings, G25).
-export const WIDGET_CALL_STATUS = "call-status";
-export const WIDGET_CALL_RESULT = "call-result";
-export const WIDGET_TRANSCRIPT = "transcript";
 export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";
 export const WIDGET_CALLS = "calls";
 export const WIDGET_CALENDAR = "calendar";
 // W1 (MCP-UI-Live-Widget): vereintes Call-Widget fuer den gesamten Anruf-Lebenszyklus
-// (dialing -> in_progress -> completed/failed/cancelled). Subsumiert perspektivisch
-// call-status/call-result/transcript (deren Entfernung folgt in W3, NACH dem
-// Tool-Rewiring in W2 - noch NICHT an ein Tool verdrahtet, siehe
-// tasks/mcp-ui-live-widget-chain.md Abschnitt W1/W2).
+// (dialing -> in_progress -> completed/failed/cancelled), seit W2 an place_call
+// verdrahtet. Subsumiert die frueheren Einzel-Widgets (Status/Cancel/Transkript-
+// Zusammenfassung), die in W3 entfernt wurden.
 export const WIDGET_CALL = "call";
-// C5 Wegwerf-Spike: Probe-Widget fuer die Host-Tool-Bruecke (In-place-Refresh). Nach C6
-// wieder entfernen (diese Konstante + WIDGET_DEFS-Eintrag + die HTML-Datei + Tool-Block).
-export const WIDGET_PROBE = "probe-call-bridge";
 const WIDGET_DEFS = {
-  [WIDGET_CALL_STATUS]: { file: "call-status.html", title: "Hermes Call Status" },
-  [WIDGET_CALL_RESULT]: { file: "call-result.html", title: "Hermes Call Result" },
-  [WIDGET_TRANSCRIPT]: { file: "transcript.html", title: "Hermes Transcript" },
   [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status" },
   [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number" },
   [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List" },
   [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar" },
   [WIDGET_CALL]: { file: "call.html", title: "Hermes Call" },
-  [WIDGET_PROBE]: { file: "probe-call-bridge.html", title: "Hermes Widget Bridge Probe" },
 };
 
 // Schliessendes body-Tag - davor wird das gemeinsame Daten-Binding eingefuegt, damit

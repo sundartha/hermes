@@ -2,19 +2,13 @@
 // Die Tools sprechen mit der REST-API des Gateways.
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
-import {
-  WIDGET_CALL_RESULT,
-  WIDGET_AGENT_STATUS,
-} from "./ui/adapters/mcp-native.js";
+import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
 // Neue Widgets aus der kanonischen Quelle (widget-catalog.js); der mcp-native-Re-Export
-// oben ist historisch (siehe Datei-Kommentar dort). WIDGET_CALL_STATUS/WIDGET_TRANSCRIPT
-// sind hier NICHT mehr importiert (W2): get_call_status/get_transcript haengen kein
-// Widget mehr an, die Konstanten blieben sonst ungenutzt (G12).
+// oben ist historisch (siehe Datei-Kommentar dort).
 import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
   WIDGET_CALENDAR,
-  WIDGET_PROBE,
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
 
@@ -267,7 +261,7 @@ const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 // ohne ctx -> identity/scopedTenant null (Owner), allowCalendar true.
 export function registerTools(
   server,
-  { identity = null, scopedTenant = null, allowCalendar = true, uiHost = null, uiProbe = false } = {},
+  { identity = null, scopedTenant = null, allowCalendar = true, uiHost = null } = {},
 ) {
   const call = (method, path, body) => api(method, path, body, identity, scopedTenant);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
@@ -408,11 +402,9 @@ export function registerTools(
   );
 
   // Stufe-0-Sicht (Text + structuredContent) eines Calls nach dem get_call_status-
-  // Datenkontrakt. Geteilt von get_call_status und get_call_result (G5/S2 - EINE Quelle
-  // fuer Fetch + Whitelist-Filter + Antwortform; die beiden Tools unterscheiden sich nur
-  // im angehaengten Widget, nicht in den Daten). Whitelist (pickCallStatus) sitzt VOR
-  // Text + structuredContent. Textblock bleibt die heutige 3-Feld-Sicht (Legacy/stdio
-  // byte-kompatibel); structuredContent ist die SSOT-Obermenge inkl. call_id.
+  // Datenkontrakt. Whitelist (pickCallStatus) sitzt VOR Text + structuredContent.
+  // Textblock bleibt die heutige 3-Feld-Sicht (Legacy/stdio byte-kompatibel);
+  // structuredContent ist die SSOT-Obermenge inkl. call_id.
   const callStatusResult = async (call_id) => {
     const c = await call("GET", `/api/calls/${call_id}`);
     requireFields(c, { transcript: "array" });
@@ -451,48 +443,6 @@ export function registerTools(
     },
     async ({ call_id }) => callStatusResult(call_id),
   );
-
-  // P4 (Schreib-Aktion ueber Widget-Callback): read-only Karte des Calls mit interaktivem
-  // Abbrechen-Control, das cancel_call als NORMALEN, authentisierten MCP-Tool-Call durch
-  // ALLE Safety-Gates + Tenant-Isolation zurueckruft (Q3/Regel 1 - kein Seitenkanal).
-  // Stufe 0 = exakt der get_call_status-Datenkontrakt (geteilter Helper). NUR registrieren,
-  // wenn ein faehiger Renderer das Widget kennt: ohne Rich-UI waere es ein reines Duplikat
-  // von get_call_status -> dann gar nicht anbieten (Flag aus / stdio / incapable =>
-  // Tool-Liste byte-identisch zu heute; kein verwirrendes Doppel-Tool).
-  if (uiRenderer && uiRenderer.hasWidget(WIDGET_CALL_RESULT)) {
-    uiTool(
-      "get_call_result",
-      {
-        description:
-          "Zeigt den aktuellen Stand eines Anrufs als interaktive Karte mit Abbrechen-Control, das cancel_call ausloest. Die Daten entsprechen get_call_status.",
-        inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
-        outputSchema: CALL_STATUS_OUTPUT,
-        ...enableWidgetUi(WIDGET_CALL_RESULT),
-      },
-      async ({ call_id }) => callStatusResult(call_id),
-    );
-  }
-
-  // C5 Wegwerf-Spike (Widget-Host-Bruecke, hinter MCP_UI_PROBE): EIN throwaway Tool, das
-  // die get_call_status-Daten ueber den GETEILTEN callStatusResult-Helper liefert (dieselbe
-  // Whitelist -> KEINE neue Datenflaeche, Regel 5) und ein Probe-Widget anhaengt. Das Widget
-  // versucht am Live-Host, get_call_status ueber die Host-Bruecke ERNEUT aufzurufen und das
-  // Ergebnis IN-PLACE zurueckzubekommen (Diskriminator fuer C6). Nur wenn der Spike-Flag an
-  // UND ein faehiger Renderer das Widget kennt -> sonst gar nicht angeboten (fail-closed;
-  // ohne Flag Tool-Liste byte-identisch). Nach C6 entfernen.
-  if (uiProbe && uiRenderer && uiRenderer.hasWidget(WIDGET_PROBE)) {
-    uiTool(
-      "probe_call_bridge",
-      {
-        description:
-          "TEMPORAERES Diagnose-Tool (Widget-Host-Bruecken-Spike): zeigt den Anruf-Status als Probe-Karte, die versucht, sich selbst ueber die Host-Tool-Bruecke zu aktualisieren. Nur fuer den internen Spike, kein Produktiv-Tool.",
-        inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
-        outputSchema: CALL_STATUS_OUTPUT,
-        ...enableWidgetUi(WIDGET_PROBE),
-      },
-      async ({ call_id }) => callStatusResult(call_id),
-    );
-  }
 
   // Reines Stufe-0-Tool (W2): kein Widget-Anhang mehr - der Abschluss (Summary/Ziel-
   // Status) erscheint jetzt in der vereinten place_call-Karte (WIDGET_CALL), die

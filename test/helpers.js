@@ -143,10 +143,6 @@ export const BASE_ENV = {
   // structuredContent). Ohne diese Zeile leakt eine lokale .env mit MCP_UI_ENABLED=true
   // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   MCP_UI_ENABLED: "false",
-  // C5 Wegwerf-Spike-Flag neutral AUS: sonst leakt eine lokale .env mit MCP_UI_PROBE=true
-  // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Das Probe-Tool
-  // darf in der Bestandssuite nie auftauchen (Tool-Liste byte-identisch).
-  MCP_UI_PROBE: "false",
   // Per-Call-Kontext (PLAN-PERSONAL-ASSISTANT P3) default AUS (fail-closed): Bestandssuite
   // byte-identisch (context ignoriert). Ohne diese Zeile leakt eine lokale .env mit
   // ASSISTANT_CONTEXT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift

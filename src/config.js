@@ -293,12 +293,6 @@ export const config = {
   // NUR, wenn er die Capability deklariert; sonst weiter nur Text/structuredContent. Mit
   // MCP_UI_ENABLED=false explizit abschaltbar (Tests pinnen das via BASE_ENV).
   mcpUiEnabled: (process.env.MCP_UI_ENABLED || "true") === "true",
-  // C5 Wegwerf-Spike (Widget-Host-Bruecke): schaltet EIN throwaway Probe-Tool/-Widget
-  // frei, das am Live-Host empirisch belegt, ob ein Widget ein Tool aufrufen und das
-  // Ergebnis IN-PLACE zurueckbekommt (entscheidet C6: Host-Bruecke vs Fetch-Fallback).
-  // DEFAULT AUS (fail-closed); nur wirksam bei mcpUiEnabled=true (Server ANDet beide) ->
-  // aus = Tool-Liste byte-identisch. Nach dem Spike (C6) wieder entfernen.
-  mcpUiProbe: (process.env.MCP_UI_PROBE || "false") === "true",
   // Strukturierter Per-Call-Kontext (PLAN-PERSONAL-ASSISTANT P3): optionales context-
   // Objekt an place_call -> kompakte HINTERGRUND-Sektion im Outbound-systemPrompt + additiv
   // persistiertes Feld. DEFAULT AUS (fail-closed): b.context wird ignoriert, der Prompt-
