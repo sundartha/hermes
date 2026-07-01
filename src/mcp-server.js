@@ -9,6 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerTools } from "./mcp-tools.js";
 import { config } from "./config.js";
 import { uiServerExtension } from "./ui/contract.js";
+import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
 
 // Rich-UI auch ueber stdio (Claude Desktop). Anders als der HTTP-Connector rendert
 // stdio die Widgets zuverlaessig: die HTTP-AppBridge-Doppel-Session ist Claude-seitig
@@ -18,7 +19,7 @@ import { uiServerExtension } from "./ui/contract.js";
 const serverOptions = config.mcpUiEnabled
   ? { capabilities: { extensions: uiServerExtension() } }
   : undefined;
-const server = new McpServer({ name: "hermes", version: "0.2.0" }, serverOptions);
+const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
 registerTools(server, {
   uiHost: { enabled: config.mcpUiEnabled },
 });
