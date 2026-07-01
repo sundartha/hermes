@@ -1,0 +1,350 @@
+<!-- @dsCard group="MCP" name="place_call" subtitle="Unified live call card: dialing -> status -> result, self-polling + cancel" -->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hermes — Call</title>
+<style>
+  /* Inline-Tokens: Subset aus design-system/_shared/tokens.css (Werte identisch,
+     self-contained fuer die Iframe-Sandbox - kein externer CSS-Import/Linkback). */
+  :root {
+    --color-red-600:#e60000; --color-ink-900:#25282b; --color-gray-500:#7e7e7e;
+    --color-gray-150:#ececec; --color-white:#fff; --color-green-500:#1faa59;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --radius-md:12px; --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
+  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
+        border-radius:var(--radius-md);padding:var(--space-4);max-width:420px}
+  .head{display:flex;align-items:center;gap:var(--space-2)}
+  .title{font-weight:600}
+  .sub{color:var(--color-gray-500);font-size:13px}
+  .badge{margin-left:auto;font-size:12px;color:var(--color-green-500)}
+  .line{display:flex;justify-content:space-between;margin-top:var(--space-3);
+        padding-top:var(--space-2);border-top:1px solid var(--color-gray-150)}
+  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
+        display:flex;justify-content:space-between;align-items:center}
+  .cancel{font-family:var(--font-sans);font-size:13px;color:var(--color-white);
+          background:var(--color-red-600);border:0;border-radius:var(--radius-md);
+          padding:var(--space-2) var(--space-3);cursor:pointer}
+  .cancel:disabled{background:var(--color-gray-500);cursor:default}
+  .diag{margin-top:var(--space-2);font-size:11px;color:var(--color-gray-500);
+        display:flex;justify-content:space-between}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <span><span class="title">Anruf</span><br />
+      <span class="sub">Hermes ruft fuer dich an</span></span>
+      <span class="badge" data-mcp="status">—</span>
+    </div>
+    <div class="line"><span>Dauer</span><span data-mcp="duration_s">—</span></div>
+    <div class="line" data-row="lines" data-mcp="last_transcript_lines"></div>
+    <div class="line" data-row="failure" style="display:none">
+      <span>Grund</span><span data-mcp="failure_reason">—</span>
+    </div>
+    <div class="line" data-row="summary" style="display:none">
+      <span>Ergebnis</span><span data-mcp="result_summary">—</span>
+    </div>
+    <div class="line" data-row="objective" style="display:none">
+      <span>Ziel erreicht</span><span data-mcp="objective_achieved">—</span>
+    </div>
+    <div class="foot">
+      <span data-mcp="call_id">—</span>
+      <button type="button" class="cancel" data-cancel>Anruf abbrechen</button>
+    </div>
+    <div class="diag">
+      <span data-mcp="bridge_format">—</span>
+      <span data-mcp="last_update">—</span>
+    </div>
+  </div>
+  <!-- Vereintes Widget (W1): EIN Iframe fuer den gesamten Anruf-Lebenszyklus
+       (dialing -> in_progress -> completed/failed/cancelled). Der initiale call_id/
+       status-Push von place_call laeuft ueber den GETEILTEN, bereits bewiesenen
+       Empfangspfad (widget-bind.js, von der Katalog-Ladefunktion unten injiziert).
+       Alles danach - Self-Poll, die ausgehende Host-Bruecke, Terminal-Erkennung,
+       get_transcript, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
+       Entscheidung #3, PLAN-MCP-UI-LIVE-WIDGET.md Abschnitt 5): kein neues
+       widget-bridge.js-Modul, keine Katalog-Aenderung, exakt das etablierte Muster
+       von call-result.html (Cancel) und probe-call-bridge.html (Bruecken-Kandidaten).
+       Eine minimale eigene Slot-Fuell-Funktion statt Import aus widget-bind.js ist
+       bewusst dupliziert - ein self-contained Iframe-Script kann keinen ES-Import
+       ziehen (siehe probe-call-bridge.html-Kommentar, derselbe Kompromiss).
+       XSS-Disziplin unveraendert: Werte landen NUR ueber textContent, nie als
+       geparstes Markup. -->
+  <script>
+  (function () {
+    "use strict";
+
+    // Self-Poll-Takt (Plan 6.1 Punkt 2) + Kein-Live-Update-Grenze (Plan 6.3).
+    var POLL_INTERVAL_MS = 8000;
+    var FALLBACK_TIMEOUT_MS = 15000;
+
+    // Tool-Namen wie server-seitig registriert (src/mcp-tools.js).
+    var TOOL_GET_STATUS = "get_call_status";
+    var TOOL_GET_TRANSCRIPT = "get_transcript";
+    var TOOL_CANCEL = "cancel_call";
+
+    // Bruecken-Kandidaten (Plan 6.2, dieselben drei wie im probe-call-bridge.html-
+    // Spike). METHOD_TOOL_RESULT = Kanal A (Host-Re-Push, den der geteilte
+    // BIND_SCRIPT bereits automatisch bindet - wir werten ihn zusaetzlich selbst aus).
+    var METHOD_TOOLS_CALL = "tools/call";
+    var METHOD_UI_TOOL_CALL = "ui/tool-call";
+    var METHOD_TOOL_RESULT = "ui/notifications/tool-result";
+    var FORMAT_OPENAI = "window.openai.callTool";
+
+    var TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
+    var EMDASH = "—";
+    var NO_BRIDGE_LABEL = "kein Live-Update";
+
+    var doc = document;
+    var pollTimerId = null;
+    var fallbackTimerId = null;
+    var confirmedFormat = null; // FORMAT_OPENAI | METHOD_TOOLS_CALL | METHOD_UI_TOOL_CALL | METHOD_TOOL_RESULT
+    var anyResponseReceived = false;
+    var transcriptFetched = false;
+    var pendingRequests = {}; // rpcId -> { format, tool }
+    var rpcCounter = 0;
+
+    function isRecord(value) {
+      return typeof value === "object" && value !== null;
+    }
+
+    function isTerminalStatus(status) {
+      return TERMINAL_STATUSES.indexOf(status) !== -1;
+    }
+
+    function slot(name) {
+      return doc.querySelector('[data-mcp="' + name + '"]');
+    }
+
+    function setSlotText(name, value) {
+      var el = slot(name);
+      if (!el) return;
+      el.textContent = value === null || value === undefined ? EMDASH : String(value);
+    }
+
+    function setRowVisible(rowKey, visible) {
+      var el = doc.querySelector('[data-row="' + rowKey + '"]');
+      if (el) el.style.display = visible ? "" : "none";
+    }
+
+    function setCancelDisabled(disabled) {
+      var btn = doc.querySelector("[data-cancel]");
+      if (!btn) return;
+      btn.disabled = disabled;
+      btn.style.display = disabled ? "none" : "";
+    }
+
+    // Zeilenweise wie widget-bind.js renderLines (dieselbe .turn-Klasse, dieselbe
+    // XSS-Disziplin) - hier dupliziert, da dieses Skript self-contained bleibt (s.
+    // Datei-Kommentar oben).
+    function renderTranscriptLines(lines) {
+      var container = slot("last_transcript_lines");
+      if (!container) return;
+      while (container.firstChild) container.removeChild(container.firstChild);
+      for (var i = 0; i < lines.length; i++) {
+        var div = doc.createElement("div");
+        div.className = "turn";
+        div.textContent = String(lines[i]);
+        container.appendChild(div);
+      }
+    }
+
+    // Terminal-Folgen (Plan 6.1 Punkt 3): Sichtbarkeit je Status, Cancel deaktivieren,
+    // Polling stoppen, bei completed EINMAL get_transcript nachladen.
+    function updateForStatus(status) {
+      var terminal = isTerminalStatus(status);
+      setRowVisible("lines", !terminal);
+      setRowVisible("failure", status === "failed");
+      setRowVisible("summary", status === "completed");
+      setRowVisible("objective", status === "completed");
+      setCancelDisabled(terminal);
+      if (terminal) stopPolling();
+      if (status === "completed") fetchTranscriptOnce();
+    }
+
+    // Wendet die get_call_status-Whitelist (pickCallStatus, src/mcp-tools.js) an.
+    function applyCallStatus(data) {
+      if (!isRecord(data)) return;
+      if (data.call_id) setSlotText("call_id", data.call_id);
+      if (typeof data.duration_s === "number") setSlotText("duration_s", data.duration_s);
+      if (Array.isArray(data.last_transcript_lines)) renderTranscriptLines(data.last_transcript_lines);
+      if ("failure_reason" in data) setSlotText("failure_reason", data.failure_reason);
+      if (data.status) {
+        setSlotText("status", data.status);
+        updateForStatus(data.status);
+      }
+    }
+
+    // Wendet die get_transcript-Whitelist (pickTranscript) an.
+    function applyTranscript(data) {
+      if (!isRecord(data)) return;
+      if (data.call_id) setSlotText("call_id", data.call_id);
+      if ("result_summary" in data) setSlotText("result_summary", data.result_summary);
+      if ("objective_achieved" in data) setSlotText("objective_achieved", data.objective_achieved);
+    }
+
+    function stopPolling() {
+      if (pollTimerId !== null) {
+        clearInterval(pollTimerId);
+        pollTimerId = null;
+      }
+      if (fallbackTimerId !== null) {
+        clearTimeout(fallbackTimerId);
+        fallbackTimerId = null;
+      }
+    }
+
+    function currentCallId() {
+      var el = slot("call_id");
+      var v = el ? (el.textContent || "").trim() : "";
+      return v && v !== EMDASH ? v : "";
+    }
+
+    function nextRpcId() {
+      rpcCounter += 1;
+      return "call-widget-" + rpcCounter;
+    }
+
+    function setDiagnostic(format) {
+      setSlotText("bridge_format", format);
+      setSlotText("last_update", new Date().toISOString());
+    }
+
+    // Erste Antwort (gleich welcher Kanal/Format) gewinnt die Diagnose-Zeile
+    // dauerhaft (Plan 6.2: "Folge-Ticks nutzen nur dieses Format").
+    function markResponse(format, data, applyFn) {
+      anyResponseReceived = true;
+      if (!confirmedFormat) confirmedFormat = format;
+      setDiagnostic(confirmedFormat);
+      applyFn(data);
+    }
+
+    function dispatchFor(tool) {
+      return tool === TOOL_GET_TRANSCRIPT ? applyTranscript : applyCallStatus;
+    }
+
+    // Kandidat 1: window.openai.callTool (Promise-basiert, kein postMessage noetig).
+    function sendViaOpenai(tool, args) {
+      if (!(window.openai && typeof window.openai.callTool === "function")) return;
+      try {
+        var result = window.openai.callTool(tool, args);
+        if (result && typeof result.then === "function") {
+          result.then(
+            function (r) {
+              markResponse(FORMAT_OPENAI, r && r.structuredContent, dispatchFor(tool));
+            },
+            function () {
+              /* Fehlgeschlagener Kandidat: andere Kandidaten/Kanal A bleiben moeglich */
+            },
+          );
+        }
+      } catch (e) {
+        /* fail-safe: Kandidat nicht verfuegbar, andere bleiben moeglich */
+      }
+    }
+
+    // Kandidat 2/3: postMessage-JSON-RPC an den Host, id-gematcht (Kanal B, s. handleMessage).
+    function sendViaPostMessage(method, tool, args) {
+      var parent = window.parent;
+      if (!parent || typeof parent.postMessage !== "function") return;
+      var id = nextRpcId();
+      pendingRequests[id] = { format: method, tool: tool };
+      parent.postMessage(
+        { jsonrpc: "2.0", id: id, method: method, params: { name: tool, arguments: args } },
+        "*",
+      );
+    }
+
+    function sendToolCall(tool, args) {
+      if (confirmedFormat === FORMAT_OPENAI) {
+        sendViaOpenai(tool, args);
+        return;
+      }
+      if (confirmedFormat === METHOD_TOOLS_CALL) {
+        sendViaPostMessage(METHOD_TOOLS_CALL, tool, args);
+        return;
+      }
+      if (confirmedFormat === METHOD_UI_TOOL_CALL) {
+        sendViaPostMessage(METHOD_UI_TOOL_CALL, tool, args);
+        return;
+      }
+      // Kein spezifisches ausgehendes Format bestaetigt (auch wenn confirmedFormat evtl.
+      // METHOD_TOOL_RESULT ist - das ist ein reiner Empfangskanal, kein Sendeweg): alle
+      // drei Kandidaten parallel versuchen (Plan 6.2). Kein Spam, da ein Widget-Tool-Call
+      // keine neue Chat-Karte erzeugt (Plan Abschnitt 3).
+      sendViaOpenai(tool, args);
+      sendViaPostMessage(METHOD_TOOLS_CALL, tool, args);
+      sendViaPostMessage(METHOD_UI_TOOL_CALL, tool, args);
+    }
+
+    function fetchTranscriptOnce() {
+      if (transcriptFetched) return;
+      transcriptFetched = true;
+      var callId = currentCallId();
+      if (callId) sendToolCall(TOOL_GET_TRANSCRIPT, { call_id: callId });
+    }
+
+    function pollTick() {
+      var callId = currentCallId();
+      if (!callId) return; // initialer call_id-Push noch nicht angekommen - naechster Tick
+      sendToolCall(TOOL_GET_STATUS, { call_id: callId });
+    }
+
+    function onCancelClick() {
+      var callId = currentCallId();
+      if (!callId) return;
+      setCancelDisabled(true);
+      sendToolCall(TOOL_CANCEL, { call_id: callId }); // gefaltet aus call-result.html
+    }
+
+    function onFallbackTimeout() {
+      fallbackTimerId = null;
+      if (anyResponseReceived) return; // schon eine Antwort da - kein Abbruch noetig
+      if (pollTimerId !== null) {
+        clearInterval(pollTimerId);
+        pollTimerId = null;
+      }
+      setSlotText("bridge_format", NO_BRIDGE_LABEL);
+    }
+
+    // Kanal A: Host-Notification (dieselbe Form wie der initiale place_call-Push; der
+    // geteilte BIND_SCRIPT bindet sie ohnehin schon in die ueberlappenden Slots - wir
+    // werten sie zusaetzlich selbst aus, um Terminal-Status + Diagnose zu erkennen).
+    // Kanal B: direkte JSON-RPC-Antwort auf einen unserer eigenen Requests (id-gematcht).
+    function handleMessage(event) {
+      var m = event && event.data;
+      if (!isRecord(m)) return;
+
+      if (m.method === METHOD_TOOL_RESULT && isRecord(m.params) && isRecord(m.params.structuredContent)) {
+        var pushed = m.params.structuredContent;
+        var pushedFn = "result_summary" in pushed ? applyTranscript : applyCallStatus;
+        markResponse(METHOD_TOOL_RESULT, pushed, pushedFn);
+        return;
+      }
+
+      var pending = m.id != null ? pendingRequests[m.id] : null;
+      if (!pending) return;
+      delete pendingRequests[m.id];
+      if (m.error) return; // fehlgeschlagener Kandidat: andere bleiben moeglich
+      var data = isRecord(m.result) ? m.result.structuredContent : undefined;
+      markResponse(pending.format, data, dispatchFor(pending.tool));
+    }
+
+    function init() {
+      var btn = doc.querySelector("[data-cancel]");
+      if (btn) btn.addEventListener("click", onCancelClick);
+      window.addEventListener("message", handleMessage);
+      pollTick();
+      pollTimerId = setInterval(pollTick, POLL_INTERVAL_MS);
+      fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

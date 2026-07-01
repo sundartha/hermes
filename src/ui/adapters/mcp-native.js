@@ -4,6 +4,7 @@ import {
   WIDGET_CALL_RESULT,
   WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
+  WIDGET_CALL,
   hasWidget,
   widgetHtml,
   widgetTitle,
@@ -11,7 +12,7 @@ import {
 
 // Re-Export der Widget-Ids: mcp-tools.js + Tests beziehen sie historisch ueber diesen
 // Adapter. Reiner Durchreich aus dem host-agnostischen Katalog (keine zweite Quelle).
-export { WIDGET_CALL_STATUS, WIDGET_CALL_RESULT, WIDGET_TRANSCRIPT, WIDGET_AGENT_STATUS };
+export { WIDGET_CALL_STATUS, WIDGET_CALL_RESULT, WIDGET_TRANSCRIPT, WIDGET_AGENT_STATUS, WIDGET_CALL };
 
 /** @type {import("../ports.js").UiRenderer} */
 export const mcpNativeRenderer = {

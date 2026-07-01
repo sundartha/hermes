@@ -23,6 +23,7 @@ import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
   WIDGET_CALENDAR,
+  WIDGET_CALL,
 } from "../src/ui/widget-catalog.js";
 
 const WIDGET_IDS = [
@@ -33,6 +34,7 @@ const WIDGET_IDS = [
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
   WIDGET_CALENDAR,
+  WIDGET_CALL,
 ];
 
 // Minimal-Fake der DOM-Oberflaeche, die widget-bind.js nutzt: querySelectorAll,

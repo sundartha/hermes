@@ -17,6 +17,12 @@ export const WIDGET_AGENT_STATUS = "agent-status";
 export const WIDGET_MY_NUMBER = "my-number";
 export const WIDGET_CALLS = "calls";
 export const WIDGET_CALENDAR = "calendar";
+// W1 (MCP-UI-Live-Widget): vereintes Call-Widget fuer den gesamten Anruf-Lebenszyklus
+// (dialing -> in_progress -> completed/failed/cancelled). Subsumiert perspektivisch
+// call-status/call-result/transcript (deren Entfernung folgt in W3, NACH dem
+// Tool-Rewiring in W2 - noch NICHT an ein Tool verdrahtet, siehe
+// tasks/mcp-ui-live-widget-chain.md Abschnitt W1/W2).
+export const WIDGET_CALL = "call";
 // C5 Wegwerf-Spike: Probe-Widget fuer die Host-Tool-Bruecke (In-place-Refresh). Nach C6
 // wieder entfernen (diese Konstante + WIDGET_DEFS-Eintrag + die HTML-Datei + Tool-Block).
 export const WIDGET_PROBE = "probe-call-bridge";
@@ -28,6 +34,7 @@ const WIDGET_DEFS = {
   [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number" },
   [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List" },
   [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar" },
+  [WIDGET_CALL]: { file: "call.html", title: "Hermes Call" },
   [WIDGET_PROBE]: { file: "probe-call-bridge.html", title: "Hermes Widget Bridge Probe" },
 };
 
