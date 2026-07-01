@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { hasWidget, widgetTitle, widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
 import { BIND_SCRIPT } from "../src/ui/widget-bind.js";
+import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
 const SLOT_NAMES = [
   "status",
@@ -30,6 +31,7 @@ function makeFakeElement() {
   const listeners = {};
   return {
     _text: "",
+    className: "",
     children: [],
     style: {},
     disabled: false,
@@ -70,12 +72,14 @@ function makeFakeDocument() {
   for (const name of SLOT_NAMES) bySelector.set(`[data-mcp="${name}"]`, makeFakeElement());
   for (const name of ROW_NAMES) bySelector.set(`[data-row="${name}"]`, makeFakeElement());
   bySelector.set("[data-cancel]", makeFakeElement());
+  bySelector.set("[data-wing]", makeFakeElement());
   return {
     querySelector: (sel) => bySelector.get(sel) || null,
     createElement: () => makeFakeElement(),
     slot: (name) => bySelector.get(`[data-mcp="${name}"]`),
     row: (name) => bySelector.get(`[data-row="${name}"]`),
     cancelButton: () => bySelector.get("[data-cancel]"),
+    wing: () => bySelector.get("[data-wing]"),
   };
 }
 
@@ -364,4 +368,42 @@ test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber dieselbe Bruecke,
   const cancelReqs = env.posted.filter((m) => m.params && m.params.name === "cancel_call");
   assert.equal(cancelReqs.length, 2, "beide Kandidaten versucht (noch kein Format bestaetigt)");
   assert.deepEqual(crossRealmPlain(cancelReqs[0].params.arguments), { call_id: "call_1" });
+});
+
+test("T-W1-call-AC-wing-static: alle 6 Wing-Keyframes + reduced-motion + idle-Default + byte-identisches WING_PNG", () => {
+  const html = widgetHtml("call");
+  const keyframes = [
+    "hermesWingDrift", "hermesWingBob", "hermesWingConnect",
+    "hermesWingFlap", "hermesWingSuccess", "hermesWingError",
+  ];
+  for (const name of keyframes) {
+    assert.match(html, new RegExp("@keyframes\\s+" + name + "\\s*\\{"), `Keyframe ${name} vorhanden`);
+  }
+  assert.match(html, /prefers-reduced-motion/, "reduced-motion-Regel vorhanden");
+  assert.match(html, /class="wing wing--idle"[^>]*data-wing/, "Wing-Wrapper startet idle, ueber data-wing markiert");
+  assert.ok(html.includes(WING_PNG), "WING_PNG byte-identisch aus wing-image.js eingebettet (kein Transkriptionsfehler)");
+});
+
+test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als Klassenwechsel auf dem Wing-Wrapper (WingMark 5 States, cancelled->error)", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  doc.slot("call_id").textContent = "call_1";
+
+  const statusToWingClass = [
+    ["dialing", "wing wing--connecting"],
+    ["in_progress", "wing wing--working"],
+    ["completed", "wing wing--success"],
+    ["failed", "wing wing--error"],
+    ["cancelled", "wing wing--error"],
+  ];
+  for (const [status, expectedClass] of statusToWingClass) {
+    env.emit({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: {
+        structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null },
+      },
+    });
+    assert.equal(doc.wing().className, expectedClass, `Status ${status} -> ${expectedClass}`);
+  }
 });
