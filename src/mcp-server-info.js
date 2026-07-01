@@ -9,14 +9,15 @@
 // icons macht dem MCP-Host im initialize-Handshake ein Hermes-Marken-Icon bekannt
 // (ImplementationSchema.icons, SDK bereits installiert, kein Versions-Bump). Ohne
 // icons zeigt der Host einen generischen Platzhalter (verifiziert gegen
-// claude.ai/customize/connectors).
+// claude.ai/customize/connectors). Ob ein Host das Icon in Produktion tatsaechlich
+// laden kann (DASHBOARD_PASSWORD sperrt public/ per Basic-Auth), ist NICHT Teil
+// dieser Phase - eine Auslieferungs-Ausnahme dafuer braucht eine eigene, separat
+// gepruefte Aenderung an server.js.
 import { config } from "./config.js";
 
-// Pfad-Praefix fuer selbst gehostete Marken-Assets unter public/ (kein Magic-String,
-// G25) - server.js braucht denselben Wert fuer die Basic-Auth-Ausnahme: ein MCP-Host
-// laedt icons[0].src ohne Dashboard-Credentials.
-export const BRAND_ASSETS_PREFIX = "/brand/";
-
+// Pfad-Praefix + Dateiname fuer das selbst gehostete Marken-Asset unter public/
+// (kein Magic-String, G25) - nur innerhalb dieses Moduls gebraucht.
+const BRAND_ASSETS_PREFIX = "/brand/";
 const HERMES_ICON_FILENAME = "hermes-icon.png";
 
 export const HERMES_SERVER_INFO = {
