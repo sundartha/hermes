@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS call (
   -- CDF1 (Report #2 5.4): maschinenlesbarer, PII-freier Fehlergrund (mapped Token, z.B.
   -- no-answer/busy/failed:<sipcause>) NICHT erfolgreicher Calls. Additiv NULLABLE: im
   -- /voice/status-Callback aus der Provider-Diagnose gesetzt, sonst NULL -> Bestand
-  -- byte-identisch. Speist get_call_status/get_call_result (failure_reason).
+  -- byte-identisch. Speist get_call_status (failure_reason).
   failure_reason TEXT
 );
 

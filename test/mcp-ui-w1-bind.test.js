@@ -16,9 +16,6 @@ import {
 } from "../src/ui/widget-bind.js";
 import {
   widgetHtml,
-  WIDGET_CALL_STATUS,
-  WIDGET_CALL_RESULT,
-  WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
@@ -27,9 +24,6 @@ import {
 } from "../src/ui/widget-catalog.js";
 
 const WIDGET_IDS = [
-  WIDGET_CALL_STATUS,
-  WIDGET_CALL_RESULT,
-  WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,

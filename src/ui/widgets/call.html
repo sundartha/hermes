@@ -68,10 +68,11 @@
        get_transcript, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
        Entscheidung #3, PLAN-MCP-UI-LIVE-WIDGET.md Abschnitt 5): kein neues
        widget-bridge.js-Modul, keine Katalog-Aenderung, exakt das etablierte Muster
-       von call-result.html (Cancel) und probe-call-bridge.html (Bruecken-Kandidaten).
+       der mittlerweile entfernten Vorlaeufer-Widgets (Cancel-Callback bzw.
+       Bruecken-Kandidaten-Spike, W3-Aufraeumen).
        Eine minimale eigene Slot-Fuell-Funktion statt Import aus widget-bind.js ist
        bewusst dupliziert - ein self-contained Iframe-Script kann keinen ES-Import
-       ziehen (siehe probe-call-bridge.html-Kommentar, derselbe Kompromiss).
+       ziehen (derselbe Kompromiss wie im inzwischen entfernten Bruecken-Spike).
        XSS-Disziplin unveraendert: Werte landen NUR ueber textContent, nie als
        geparstes Markup. -->
   <script>
@@ -87,8 +88,8 @@
     var TOOL_GET_TRANSCRIPT = "get_transcript";
     var TOOL_CANCEL = "cancel_call";
 
-    // Bruecken-Kandidaten (Plan 6.2, dieselben drei wie im probe-call-bridge.html-
-    // Spike). METHOD_TOOL_RESULT = Kanal A (Host-Re-Push, den der geteilte
+    // Bruecken-Kandidaten (Plan 6.2, dieselben drei wie im inzwischen entfernten
+    // Bruecken-Spike). METHOD_TOOL_RESULT = Kanal A (Host-Re-Push, den der geteilte
     // BIND_SCRIPT bereits automatisch bindet - wir werten ihn zusaetzlich selbst aus).
     var METHOD_TOOLS_CALL = "tools/call";
     var METHOD_UI_TOOL_CALL = "ui/tool-call";
@@ -298,7 +299,7 @@
       var callId = currentCallId();
       if (!callId) return;
       setCancelDisabled(true);
-      sendToolCall(TOOL_CANCEL, { call_id: callId }); // gefaltet aus call-result.html
+      sendToolCall(TOOL_CANCEL, { call_id: callId }); // Cancel-Callback (Muster des inzwischen entfernten Einzel-Widgets)
     }
 
     function onFallbackTimeout() {
