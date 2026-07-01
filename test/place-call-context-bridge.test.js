@@ -9,20 +9,25 @@
 // personal-assistant-characterization.test.js decken das Laufzeitverhalten ab).
 //
 // Seam wie mcp-tools.test.js / mcp-ui.test.js: ein fakeServer faengt die per
-// server.tool registrierten Schemas ein (Position 3), ohne echten MCP-Transport.
+// server.tool ODER server.registerTool registrierten Schemas ein, ohne echten
+// MCP-Transport. place_call laeuft seit W2 ueber registerTool (uiTool) statt
+// server.tool (Bestands-API) - deshalb faengt dieser Helper BEIDE Registrierungswege
+// in dieselbe Map (schema = die reine Zod-Feldmenge, bei registerTool aus
+// config.inputSchema). registerResource ist ein No-Op (die UI-Tools brauchen wir
+// hier nicht).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerTools } from "../src/mcp-tools.js";
 
-// Faengt server.tool(name, desc, schema, handler) -> Map name -> schema. registerTool/
-// registerResource sind No-Ops (die UI-Tools brauchen wir hier nicht).
 function captureSchemas() {
   const schemas = new Map();
   const fakeServer = {
     tool(name, _desc, schema, _handler) {
       schemas.set(name, schema);
     },
-    registerTool() {},
+    registerTool(name, config, _handler) {
+      schemas.set(name, config.inputSchema);
+    },
     registerResource() {},
   };
   registerTools(fakeServer, {});
