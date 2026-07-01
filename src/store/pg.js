@@ -418,7 +418,8 @@ async function hydrateProfiles(client) {
 const TENANT_COLUMNS =
   "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
   "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
-  "stripe_current_period_end, stripe_current_period_start, country, default_language, private_number";
+  "stripe_current_period_end, stripe_current_period_start, country, default_language, " +
+  "private_number, number_provision_skip_reason, number_provision_skip_at";
 
 // Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
 // owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
@@ -446,6 +447,9 @@ function rowToTenant(r) {
   if (r.country != null) tenant.country = r.country;
   if (r.default_language != null) tenant.defaultLanguage = r.default_language;
   if (r.private_number != null) tenant.privateNumber = r.private_number;
+  if (r.number_provision_skip_reason != null)
+    tenant.numberProvisionSkipReason = r.number_provision_skip_reason;
+  if (r.number_provision_skip_at != null) tenant.numberProvisionSkipAt = r.number_provision_skip_at;
   return tenant;
 }
 
@@ -754,8 +758,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, country, default_language, private_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -767,7 +771,9 @@ async function flushTenants(client, tenants) {
          stripe_current_period_end=EXCLUDED.stripe_current_period_end,
          stripe_current_period_start=EXCLUDED.stripe_current_period_start,
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
-         private_number=EXCLUDED.private_number`,
+         private_number=EXCLUDED.private_number,
+         number_provision_skip_reason=EXCLUDED.number_provision_skip_reason,
+         number_provision_skip_at=EXCLUDED.number_provision_skip_at`,
       [
         t.id,
         t.status,
@@ -784,6 +790,8 @@ async function flushTenants(client, tenants) {
         t.country ?? null,
         t.defaultLanguage ?? null,
         t.privateNumber ?? null,
+        t.numberProvisionSkipReason ?? null,
+        t.numberProvisionSkipAt ?? null,
       ],
     );
   }

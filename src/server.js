@@ -20,6 +20,7 @@ import {
   tenantIdForSubject,
   normNum,
   hasTrunkZeroAfterCountryCode,
+  shouldPersistProvisionResult,
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
@@ -1645,7 +1646,9 @@ app.post("/api/onboard", async (req, res) => {
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
-      if (r.ok) store.save(); // 'requested' persistieren (auch im Dry-Run)
+      // Fix B (G5/S2): Persistenz-Entscheidung geteilt mit triggerTenantProvisioning
+      // (shouldPersistProvisionResult, EINE Quelle statt woertlicher Duplizierung).
+      if (shouldPersistProvisionResult(r)) store.save(); // 'requested' persistieren (auch im Dry-Run)
       return r;
     })
     .catch((e) => {
@@ -1790,7 +1793,8 @@ async function triggerTenantProvisioning(tenantId) {
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
-      if (r.ok) store.save();
+      // Fix B (G5/S2): dieselbe Persistenz-Entscheidung wie POST /api/onboard.
+      if (shouldPersistProvisionResult(r)) store.save();
       return r;
     })
     .catch((e) => {

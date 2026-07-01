@@ -8,8 +8,8 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { applyStripeWebhook, verifyStripeSignature, SUBSCRIPTION_EVENT } from "../src/billing/webhook.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
-import { makeDefaultState, registerTenant, setTenantGeo } from "../src/store/state-ops.js";
-import { NUMBER_STATUS } from "../src/store/defaults.js";
+import { makeDefaultState, registerTenant, setTenantGeo, findTenant } from "../src/store/state-ops.js";
+import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "../src/store/defaults.js";
 
 const HIGH = 100;
 const SECRET = "whsec_bk3_test";
@@ -83,6 +83,9 @@ test("BK3-T3b global cap -> global_cap, keine Nummer", () => {
   const r = requestNumberForPaidTenant(s, { tenantId: "t3b", fallbackCountry: "DE", maxNumbers: 0, maxNumbersPerTenant: HIGH });
   assert.equal(r.reason, "global_cap");
   assert.equal(s.numbers.length, 0);
+  // Fix B (Webhook-Pfad): der Skip ist auch ueber requestNumberForPaidTenant sichtbar,
+  // da beide Aufrufer denselben requestNumber teilen (G5).
+  assert.equal(findTenant(s, "t3b").numberProvisionSkipReason, GLOBAL_CAP_REASON);
 });
 
 // T4: signierter End-to-End-Webhook -> Nummer im Store, idempotent. provision-Seam

@@ -61,6 +61,12 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS default_language TEXT;
 -- nullable, KEIN CHECK; Normalisierung + E.164-/Land-Validierung lebt fail-closed in
 -- state-ops.setPrivateNumber - EINE Quelle). PII -> nie in Logs/MCP (eigene Spalte).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number TEXT;
+-- Fix B (PLAN-PROVISIONING-CAP.md Phase A): letzter beobachteter global_cap-Skip pro
+-- Tenant, reine Observability (kein Aktor). Additiv NULLABLE: kein Skip -> beide NULL,
+-- numberStatusFor faellt auf "none" zurueck (byte-identisch zum Bestand). Muster wie
+-- kyc_level/stripe_*/geo/private_number (ALTER-only, kein CHECK).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_provision_skip_reason TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_provision_skip_at    TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

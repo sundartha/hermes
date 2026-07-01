@@ -25,6 +25,7 @@ import {
   countryAllowed,
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
+  GLOBAL_CAP_REASON,
   TENANT_STATUS,
   PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
@@ -876,15 +877,18 @@ export function tenantGeo(s, tenantId) {
   return { country: tenant?.country ?? null, defaultLanguage: tenant?.defaultLanguage ?? null };
 }
 
+// Terminale Zustaende (released/failed) belegen keine Kapazitaet mehr - jeder andere
+// Zustand ist entweder ein laufender Kaufversuch oder eine real gemietete, kostenpflichtige
+// Nummer und zaehlt (Kosten-Notbremse, Invariante "im Zweifel mitzaehlen",
+// PLAN-PROVISIONING-CAP.md). Benannt statt doppelter Negation inline (G28/G29).
+function occupiesCapacity(number) {
+  return number.status !== NUMBER_STATUS.RELEASED && number.status !== NUMBER_STATUS.FAILED;
+}
+
 // Nicht-terminale Nummern (requested/provisioning/active/suspended) belegen
 // Kosten/Plaetze; released/failed zaehlen nicht. Basis fuer die Cap-Pruefung.
 function liveNumbers(s, tenantId = null) {
-  return s.numbers.filter(
-    (n) =>
-      n.status !== NUMBER_STATUS.RELEASED &&
-      n.status !== NUMBER_STATUS.FAILED &&
-      (tenantId == null || n.tenantId === tenantId),
-  );
+  return s.numbers.filter((n) => occupiesCapacity(n) && (tenantId == null || n.tenantId === tenantId));
 }
 
 // Hat der Tenant mindestens eine NICHT-terminale Nummer? Idempotenz-Praedikat fuer den
@@ -893,6 +897,23 @@ function liveNumbers(s, tenantId = null) {
 // Reine Query, kein IO. Nutzt liveNumbers (eine Quelle, G5).
 export function tenantHasLiveNumber(s, tenantId) {
   return liveNumbers(s, tenantId).length > 0;
+}
+
+// Merkt EINEN global_cap-Skip auf dem Tenant (Fix B, reine Observability: KEIN Trigger,
+// KEIN Retry, KEIN Cap-Bypass - Invariante 2 PLAN-PROVISIONING-CAP.md). requestNumber ist
+// die EINE Quelle (G5) fuer /api/onboard UND den Webhook-Pfad (requestNumberForPaidTenant)
+// - beide profitieren automatisch, ohne den Skip-Zustand selbst durchzureichen.
+function markNumberProvisionSkipped(tenant, reason) {
+  tenant.numberProvisionSkipReason = reason;
+  tenant.numberProvisionSkipAt = new Date().toISOString();
+}
+
+// Loescht ein zuvor gemerktes Skip-Signal, sobald requestNumber fuer denselben Tenant
+// wieder erfolgreich eine Nummer anfragt (Invariante 3: recoverabler Status, kein
+// dauerhaft haengender "blocked"-Chip nach erfolgreichem Retry).
+function clearNumberProvisionSkip(tenant) {
+  tenant.numberProvisionSkipReason = null;
+  tenant.numberProvisionSkipAt = null;
 }
 
 // Fragt eine neue Nummer fuer einen Tenant an (Onboarding, ZAHLUNGSFREI). Die
@@ -918,7 +939,10 @@ export function requestNumber(
   const tenant = findTenant(s, tenantId);
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE)
     return { ok: false, reason: "tenant_inactive" };
-  if (liveNumbers(s).length >= maxNumbers) return { ok: false, reason: "global_cap" };
+  if (liveNumbers(s).length >= maxNumbers) {
+    markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
+    return { ok: false, reason: GLOBAL_CAP_REASON };
+  }
   if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant)
     return { ok: false, reason: "tenant_cap" };
   const number = {
@@ -933,6 +957,7 @@ export function requestNumber(
     paymentIntentId: null,
   };
   s.numbers.push(number);
+  clearNumberProvisionSkip(tenant);
   return { ok: true, number };
 }
 
