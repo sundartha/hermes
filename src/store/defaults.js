@@ -58,7 +58,7 @@ export const NUMBER_STATUS = Object.freeze({
   CAPTURING: "capturing",
   ACTIVE: "active", // gekauft + konfiguriert + dem Tenant zugewiesen, routet
   FAILED: "failed", // Kauf/Konfig fehlgeschlagen -> Rollback/Release
-  SUSPENDED: "suspended", // Abuse/Budget/manuell stillgelegt (routet nicht)
+  SUSPENDED: "suspended", // Abuse/Budget/manuell ODER Stripe-Kuendigung/Zahlungsausfall (P1) - routet nicht; suspendReason (Number-Record) unterscheidet den Grund
   RELEASED: "released", // freigegeben (terminal)
 });
 
@@ -83,6 +83,17 @@ export const NUMBER_TRANSITIONS = Object.freeze({
 // sind fachlich andere Faelle (Tenant hat schon eine Nummer bzw. ist nicht aktiv) und
 // nicht Teil dieser Phase.
 export const GLOBAL_CAP_REASON = "global_cap";
+
+// Marker auf einer SUSPENDED-Nummer (P1, PLAN-STRIPE-CANCEL-NUMBER-LEAK.md/tasks/
+// p1-cancel-cap-spec.md): Stripe hat das Abo gekuendigt ODER die Zahlung ist gescheitert
+// (SUBSCRIPTION_EVENT.DELETED/PAYMENT_FAILED - BEIDE loesen denselben Store-Effekt aus,
+// billing/webhook.js applyStripeWebhook). Unterscheidet diesen Fall von der bestehenden
+// Abuse/Budget-SUSPENDED OHNE Marker (state-ops.js occupiesCapacity zaehlt sie bewusst
+// weiter - Kosten-Notbremse "im Zweifel mitzaehlen"). Benannte Konstante (G25) statt
+// verstreutem Magic-String - EINE Quelle (G5) fuer Setter (markTenantNumbersCancelled),
+// Loescher (reactivateTenantCancelledNumbers) UND die globale Cap-Zaehlung
+// (globalCapCountedNumbers, state-ops.js).
+export const SUBSCRIPTION_CANCELLED_REASON = "subscription_cancelled";
 
 // Persistenz-Entscheidung fuer ein requestNumber()-Ergebnis (Fix B, PLAN-PROVISIONING-
 // CAP.md Phase A). Erfolg wird IMMER persistiert ('requested' auch im Dry-Run); der

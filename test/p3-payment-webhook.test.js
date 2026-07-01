@@ -31,13 +31,26 @@ const CAPS = { maxNumbers: HIGH_CAP, maxNumbersPerTenant: HIGH_CAP };
 // Aufzeichnende Seams: store loest den Tenant ggf. ueber subscriptionId auf und
 // protokolliert Abo-/KYC-Schreibung; accounts/sessions/provision protokollieren ihre Wirkung.
 function fakeDeps({ tenantBySub = null } = {}) {
-  const calls = { setStatus: [], invalidate: [], subscription: [], kyc: [], provision: [] };
+  const calls = {
+    setStatus: [],
+    invalidate: [],
+    subscription: [],
+    kyc: [],
+    provision: [],
+    cancelNumbers: [],
+    reactivateNumbers: [],
+  };
   return {
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       setKycLevel: (tenant, level) => calls.kyc.push([tenant, level]),
+      // Fix P1 (PLAN-STRIPE-CANCEL-NUMBER-LEAK.md): Recorder-Seams fuer SUSPEND (markTenant...)
+      // UND ACTIVATE (reactivateTenant...). Ohne sie wuerfe applyStripeWebhook/activatePaidTenant
+      // einen TypeError (echte Fassade-Funktionen, hier gefaked).
+      markTenantNumbersCancelled: (tenant) => calls.cancelNumbers.push(tenant),
+      reactivateTenantCancelledNumbers: (tenant) => calls.reactivateNumbers.push(tenant),
       // A2: provisionPlanProfile-Seams. planSlug=null -> SKIP no_plan (dieser Test prueft
       // KYC/Status/provision, NICHT das Profil - das deckt profile-a2-activation.test.js).
       tenantSubscription: () => ({ planSlug: null }),
@@ -134,21 +147,50 @@ test("A(c) ohne tenant_ref: Tenant via findTenantBySubscription, dieselben Effek
 });
 
 test("A(d) Suspend (deleted/payment_failed) ruft provision NIE (Suspend kauft nicht)", async () => {
-  for (const event of [
+  for (const { event, resolvedTenant } of [
     {
-      type: SUBSCRIPTION_EVENT.DELETED,
-      data: { object: { id: "sub_d", metadata: { tenant_ref: "t_d" } } },
+      event: {
+        type: SUBSCRIPTION_EVENT.DELETED,
+        data: { object: { id: "sub_d", metadata: { tenant_ref: "t_d" } } },
+      },
+      resolvedTenant: "t_d", // tenant_ref gewinnt
     },
     {
-      type: SUBSCRIPTION_EVENT.PAYMENT_FAILED,
-      data: { object: { subscription: "sub_e", metadata: {} } },
+      event: {
+        type: SUBSCRIPTION_EVENT.PAYMENT_FAILED,
+        data: { object: { subscription: "sub_e", metadata: {} } },
+      },
+      resolvedTenant: "t_e", // kein tenant_ref -> Fallback ueber findTenantBySubscription
     },
   ]) {
     const deps = fakeDeps({ tenantBySub: "t_e" });
     await applyStripeWebhook(event, deps);
     assert.deepEqual(deps.calls.provision, [], "provision nie bei Suspend");
     assert.deepEqual(deps.calls.kyc, [], "kein KYC-Set bei Suspend");
+    assert.deepEqual(
+      deps.calls.cancelNumbers,
+      [resolvedTenant],
+      "Fix P1: Nummer(n) store-seitig als gekuendigt markiert",
+    );
   }
+});
+
+test("A(f) ACTIVATE reaktiviert eine zuvor gekuendigte Nummer genau 1x (Fix P1, VOR provision)", async () => {
+  const deps = fakeDeps();
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: {
+        object: { id: "sub_f", status: "active", metadata: { tenant_ref: "t_f" } },
+      },
+    },
+    deps,
+  );
+  assert.deepEqual(
+    deps.calls.reactivateNumbers,
+    ["t_f"],
+    "reactivateTenantCancelledNumbers genau 1x mit der aufgeloesten tenantId",
+  );
 });
 
 test("A(e) updated mit Dunning-Status (past_due) -> ignore: kein KYC/active/provision", async () => {

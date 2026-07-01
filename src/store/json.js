@@ -487,6 +487,21 @@ export function findTenantBySubscription(subscriptionId) {
   return ops.findTenantBySubscription(load(), subscriptionId);
 }
 
+// ---- Stripe-Cancel-Nummer-Leak Fix (P1) ----
+// markTenantNumbersCancelled/reactivateTenantCancelledNumbers mutieren -> save (Muster
+// wie setKycLevel).
+export function markTenantNumbersCancelled(tenantId) {
+  const numbers = ops.markTenantNumbersCancelled(load(), tenantId);
+  save();
+  return numbers;
+}
+
+export function reactivateTenantCancelledNumbers(tenantId) {
+  const numbers = ops.reactivateTenantCancelledNumbers(load(), tenantId);
+  save();
+  return numbers;
+}
+
 // ---- Private Summary-Nummer pro Tenant (F2) ----
 // setPrivateNumber mutiert -> save (Muster wie setTenantStripe); tenantPrivateNumber
 // ist reine Query (kein save, analog tenantStripe). PII: der Wert wird hier nie geloggt.

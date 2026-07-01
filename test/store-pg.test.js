@@ -17,6 +17,7 @@ import {
   USAGE_EVENT_KIND,
   TENANT_STATUS,
   GLOBAL_CAP_REASON,
+  SUBSCRIPTION_CANCELLED_REASON,
 } from "../src/store/defaults.js";
 import {
   transitionNumber,
@@ -421,6 +422,46 @@ test("number-Lifecycle (status/provider_number_id/e164=null) ueberlebt Flush+Re-
       "suspended -> fail-closed, kein Routing",
     );
   }
+});
+
+test("markTenantNumbersCancelled/reactivateTenantCancelledNumbers (Fix P1): suspend_reason ueberlebt Flush+Re-Hydrierung", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  s.numbers.push({
+    id: "num_cancel",
+    e164: "+4915700000099",
+    tenantId: BOOTSTRAP_TENANT_ID,
+    provider: PROVIDER.TELNYX,
+    status: "active",
+    providerNumberId: "ext_cancel",
+  });
+  await store.save();
+
+  // markTenantNumbersCancelled ueber die ECHTE Fassade -> save (sequenzielle flushChain
+  // garantiert, dass suspend_reason in der DB liegt, bevor der zweite Store hydriert).
+  const cancelled = store.markTenantNumbersCancelled(BOOTSTRAP_TENANT_ID);
+  assert.equal(cancelled.length, 1);
+  await store.save();
+
+  const r1 = await reopen(db);
+  const suspended = r1.load().numbers.find((n) => n.id === "num_cancel");
+  assert.equal(suspended.status, "suspended");
+  assert.equal(
+    suspended.suspendReason,
+    SUBSCRIPTION_CANCELLED_REASON,
+    "suspend_reason ueberlebt Flush+Hydrate (Regressionsrisiko: Spalte in flushNumbers/hydrateTenantInto vergessen)",
+  );
+  assert.equal(r1.findTenantByNumber("+4915700000099"), null, "gekuendigt -> nicht mehr routbar");
+
+  const reactivated = r1.reactivateTenantCancelledNumbers(BOOTSTRAP_TENANT_ID);
+  assert.equal(reactivated.length, 1);
+  await r1.save();
+
+  const r2 = await reopen(db);
+  const active = r2.load().numbers.find((n) => n.id === "num_cancel");
+  assert.equal(active.status, "active");
+  assert.equal(active.suspendReason, null, "Marker geloescht");
+  assert.equal(r2.findTenantByNumber("+4915700000099"), BOOTSTRAP_TENANT_ID, "routet wieder");
 });
 
 test("numberProvisionSkipReason/-At ueberleben store.save() + Re-Hydrierung (Fix B, pg)", async () => {

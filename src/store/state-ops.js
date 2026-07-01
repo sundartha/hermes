@@ -26,6 +26,7 @@ import {
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   GLOBAL_CAP_REASON,
+  SUBSCRIPTION_CANCELLED_REASON,
   TENANT_STATUS,
   PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
@@ -891,12 +892,68 @@ function liveNumbers(s, tenantId = null) {
   return s.numbers.filter((n) => occupiesCapacity(n) && (tenantId == null || n.tenantId === tenantId));
 }
 
+// GLOBALE Cap-Zaehlung OHNE Stripe-gekuendigte Nummern (Fix P1). BEWUSST getrennt von
+// liveNumbers/tenantHasLiveNumber (Design-Warnung tasks/p1-cancel-cap-spec.md): die PER-
+// TENANT-Sicht (Idempotenz-Guard des Provisioning-Triggers, Invariante 4) MUSS die
+// gekuendigte Nummer weiter als vorhanden sehen, sonst fragt requestNumberForPaidTenant
+// bei Re-Subscribe faelschlich eine ZWEITE Nummer an (Orphan bei Telnyx - schlimmerer
+// Leak als der Ausgangsbug). NUR fuer requestNumber's GLOBALEN maxNumbers-Vergleich.
+function globalCapCountedNumbers(s) {
+  return liveNumbers(s).filter((n) => n.suspendReason !== SUBSCRIPTION_CANCELLED_REASON);
+}
+
 // Hat der Tenant mindestens eine NICHT-terminale Nummer? Idempotenz-Praedikat fuer den
 // Webhook-Provisioning-Trigger (P3, Invariante 4): GENAU eine Nummer pro bezahltem Abo -
 // ein Webhook-Retry/Folge-'updated' findet die bestehende und fragt keine zweite an.
 // Reine Query, kein IO. Nutzt liveNumbers (eine Quelle, G5).
 export function tenantHasLiveNumber(s, tenantId) {
   return liveNumbers(s, tenantId).length > 0;
+}
+
+// Transitioniert jede AKTUELL AKTIVE Nummer des Tenants nach SUSPENDED und setzt den
+// Cancelled-Marker (Fix P1: Stripe-SUSPEND - Abo gekuendigt ODER Zahlung gescheitert -
+// haelt die Nummer store-seitig fest, OHNE Telnyx anzufassen; Phase 2/releaseNumber
+// bleibt separat). Status ehrlich abgebildet: eine gekuendigte Nummer routet nicht mehr
+// (findTenantByNumber/numberRecordByE164 pruefen bereits status===ACTIVE) UND faellt aus
+// der GLOBALEN Cap-Zaehlung (globalCapCountedNumbers). Bereits SUSPENDED-Nummern (Abuse/
+// Budget, KEIN Marker) werden bewusst NICHT angefasst - nur status===ACTIVE ist Kandidat
+// (Kosten-Notbremse "im Zweifel mitzaehlen" bleibt intakt, ein Billing-Event darf eine
+// manuelle Ops-Sperre nie ueberschreiben). In-Flight-Nummern (requested/provisioning/
+// capturing) bleiben unangetastet - NUMBER_TRANSITIONS erlaubt fuer sie keinen SUSPENDED-
+// Sprung; sie laufen wie heute zu Ende (active oder failed), ausserhalb dieses schmalen
+// Fixes. Reine Mutation, kein IO (Wrapper save). Liefert die betroffenen Nummern (meist
+// 0 oder 1, Invariante 4 - defensiv plural).
+export function markTenantNumbersCancelled(s, tenantId) {
+  const activeNumbers = s.numbers.filter(
+    (n) => n.tenantId === tenantId && n.status === NUMBER_STATUS.ACTIVE,
+  );
+  for (const number of activeNumbers) {
+    transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED);
+    number.suspendReason = SUBSCRIPTION_CANCELLED_REASON;
+  }
+  return activeNumbers;
+}
+
+// Kehrseite von markTenantNumbersCancelled (Fix P1): Re-Subscribe nach Kuendigung
+// reaktiviert DIESELBE Nummer statt eine neue anzufragen (bessere UX + haelt Invariante 4 -
+// tenantHasLiveNumber zaehlte sie die ganze Zeit weiter, der Provisioning-Trigger fragt
+// deshalb KEINE zweite an). NUR Nummern MIT unserem eigenen Cancelled-Marker - eine manuell
+// (Abuse/Budget) suspendierte Nummer OHNE Marker bleibt unangetastet (ein Billing-Event
+// darf eine Ops-Sperre NIE aufheben). transitionNumber SUSPENDED->ACTIVE ist bereits
+// erlaubt (KEINE NUMBER_TRANSITIONS-Aenderung). Analogie zu clearNumberProvisionSkip (kein
+// dauerhaft haengender Zustand nach erfolgreicher Reaktivierung). Reine Mutation, kein IO.
+export function reactivateTenantCancelledNumbers(s, tenantId) {
+  const cancelledNumbers = s.numbers.filter(
+    (n) =>
+      n.tenantId === tenantId &&
+      n.status === NUMBER_STATUS.SUSPENDED &&
+      n.suspendReason === SUBSCRIPTION_CANCELLED_REASON,
+  );
+  for (const number of cancelledNumbers) {
+    transitionNumber(s, number.id, NUMBER_STATUS.ACTIVE);
+    number.suspendReason = null;
+  }
+  return cancelledNumbers;
 }
 
 // Merkt EINEN global_cap-Skip auf dem Tenant (Fix B, reine Observability: KEIN Trigger,
@@ -939,7 +996,7 @@ export function requestNumber(
   const tenant = findTenant(s, tenantId);
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE)
     return { ok: false, reason: "tenant_inactive" };
-  if (liveNumbers(s).length >= maxNumbers) {
+  if (globalCapCountedNumbers(s).length >= maxNumbers) {
     markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
     return { ok: false, reason: GLOBAL_CAP_REASON };
   }

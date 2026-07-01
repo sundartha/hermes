@@ -14,6 +14,7 @@ import {
   tenantSubscription,
   setKycLevel,
   kycReached,
+  reactivateTenantCancelledNumbers,
 } from "../src/store/state-ops.js";
 import { sanitizeProfile, KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
@@ -29,6 +30,7 @@ function storeOn(s) {
     setProfile: (key, patch) => setProfile(s, key, patch),
     findTenantBySubscription: () => null,
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
+    reactivateTenantCancelledNumbers: (t) => reactivateTenantCancelledNumbers(s, t),
   };
 }
 

@@ -19,12 +19,16 @@ import {
   findNumber,
   findTenant,
   findTenantByNumber,
+  markTenantNumbersCancelled,
+  reactivateTenantCancelledNumbers,
+  tenantHasLiveNumber,
 } from "../src/store/state-ops.js";
 import {
   NUMBER_STATUS,
   TENANT_STATUS,
   BOOTSTRAP_TENANT_ID,
   GLOBAL_CAP_REASON,
+  SUBSCRIPTION_CANCELLED_REASON,
   shouldPersistProvisionResult,
 } from "../src/store/defaults.js";
 
@@ -194,6 +198,98 @@ test("shouldPersistProvisionResult: Erfolg UND global_cap persistieren, jeder an
   assert.equal(shouldPersistProvisionResult({ ok: false, reason: GLOBAL_CAP_REASON }), true);
   assert.equal(shouldPersistProvisionResult({ ok: false, reason: "tenant_cap" }), false);
   assert.equal(shouldPersistProvisionResult({ ok: false, reason: "tenant_inactive" }), false);
+});
+
+// ---- Fix P1: Stripe-Cancel-Nummer-Leak (PLAN-STRIPE-CANCEL-NUMBER-LEAK.md) ----
+test("markTenantNumbersCancelled: ACTIVE -> SUSPENDED+Marker, faellt aus dem globalen Cap, tenantHasLiveNumber bleibt true (Invariante 4)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  const { number } = requestNumber(s, { tenantId: "a", ...caps });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164: "+4915711110001", providerNumberId: "num_a" });
+  // Baseline (Ausgangs-Leak): Cap=1 voll -> Tenant B kann noch nicht provisionieren.
+  assert.equal(requestNumber(s, { tenantId: "b", ...caps }).ok, false, "Cap voll vor Kuendigung");
+
+  const cancelled = markTenantNumbersCancelled(s, "a");
+
+  assert.equal(cancelled.length, 1);
+  assert.equal(cancelled[0].id, number.id);
+  const stored = findNumber(s, number.id);
+  assert.equal(stored.status, NUMBER_STATUS.SUSPENDED);
+  assert.equal(stored.suspendReason, SUBSCRIPTION_CANCELLED_REASON);
+  // Invariante 4: die PER-TENANT-Sicht sieht die Nummer WEITER (Provisioning-Trigger fragt
+  // bei Re-Subscribe keine zweite an).
+  assert.equal(tenantHasLiveNumber(s, "a"), true);
+  // Smoke aus der Spec: Tenant A kuendigt -> Tenant B kann jetzt provisionieren (der Fix).
+  assert.equal(
+    requestNumber(s, { tenantId: "b", ...caps }).ok,
+    true,
+    "Cap-Slot durch Kuendigung frei",
+  );
+});
+
+test("markTenantNumbersCancelled: Regression - Abuse/Budget-SUSPENDED (kein eigener Marker) bleibt unangetastet und zaehlt weiter gegen den globalen Cap", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const caps = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+  const { number } = requestNumber(s, { tenantId: "a", ...caps });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164: "+4915711110002", providerNumberId: "num_b" });
+  transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED); // Abuse/Budget-Sperre, KEIN Marker
+
+  const cancelled = markTenantNumbersCancelled(s, "a");
+
+  assert.equal(cancelled.length, 0, "bereits SUSPENDED ist kein ACTIVE-Kandidat");
+  assert.equal(findNumber(s, number.id).suspendReason, undefined, "kein Marker gesetzt");
+  assert.equal(
+    requestNumber(s, { tenantId: "b", ...caps }).reason,
+    GLOBAL_CAP_REASON,
+    "zaehlt weiter gegen den Cap",
+  );
+});
+
+test("reactivateTenantCancelledNumbers: SUSPENDED+Marker -> ACTIVE, Marker geloescht, findTenantByNumber routet wieder", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164: "+4915711110003", providerNumberId: "num_c" });
+  markTenantNumbersCancelled(s, "t_user1");
+  assert.equal(findTenantByNumber(s, "+4915711110003"), null, "gekuendigt -> nicht mehr routbar");
+
+  const reactivated = reactivateTenantCancelledNumbers(s, "t_user1");
+
+  assert.equal(reactivated.length, 1);
+  const stored = findNumber(s, number.id);
+  assert.equal(stored.status, NUMBER_STATUS.ACTIVE);
+  assert.equal(stored.suspendReason, null);
+  assert.equal(findTenantByNumber(s, "+4915711110003"), "t_user1", "routet wieder");
+});
+
+test("reactivateTenantCancelledNumbers: Safety - reaktiviert NIE eine Abuse/Budget-SUSPENDED-Nummer ohne eigenen Marker", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
+  beginProvisioning(s, number.id);
+  activateNumber(s, number.id, { e164: "+4915711110004", providerNumberId: "num_d" });
+  transitionNumber(s, number.id, NUMBER_STATUS.SUSPENDED); // Ops-Sperre, KEIN Marker
+
+  const reactivated = reactivateTenantCancelledNumbers(s, "t_user1");
+
+  assert.equal(reactivated.length, 0, "ein Billing-Event darf eine Ops-Sperre NIE aufheben");
+  assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.SUSPENDED, "bleibt gesperrt");
+});
+
+test("markTenantNumbersCancelled/reactivateTenantCancelledNumbers: Grenzfall - Tenant ohne passende Nummer -> No-Op, kein Wurf", () => {
+  const s = makeDefaultState();
+  seedTenant(s);
+  assert.deepEqual(markTenantNumbersCancelled(s, "t_user1"), []);
+  assert.deepEqual(reactivateTenantCancelledNumbers(s, "t_user1"), []);
+  assert.deepEqual(markTenantNumbersCancelled(s, "unbekannt"), []);
+  assert.deepEqual(reactivateTenantCancelledNumbers(s, "unbekannt"), []);
 });
 
 // ---- Voller Lebenszyklus ----

@@ -5,11 +5,14 @@
 // abgeleitete Rechteprofil auf die tenantId provisionieren (Phase S: tenant-gekeyt). Genutzt
 // vom Stripe-Webhook (applyStripeWebhook, Backup-Pfad) UND vom Self-Service-Subscribe-Handler
 // (direkter Pfad) - identische Wirkung, keine zweite Kopie. Reihenfolge fix
-// KYC->Status->provision->Profil (haelt die Invariante "aktiv+verifiziert, bevor eine Nummer
-// entsteht" sichtbar; provision liest weder KYC noch Status). Idempotent: provision hat den
-// tenantHasLiveNumber-Guard, setKycLevel/setStatus sind idempotente Setter, setProfile schreibt
-// deterministisch denselben Tier-Snapshot -> Subscribe + nachfolgendes Webhook-created
-// provisioniert NIE doppelt (Invariante 4). Nebeneffekt im Namen (N7).
+// KYC->Reaktivierung->Status->provision->Profil (haelt die Invariante "aktiv+verifiziert,
+// bevor eine Nummer entsteht" sichtbar; provision liest weder KYC noch Status). Reaktivierung
+// (Fix P1, PLAN-STRIPE-CANCEL-NUMBER-LEAK.md) hebt eine zuvor Stripe-gekuendigte Nummer
+// desselben Tenants wieder auf ACTIVE, BEVOR provision laeuft. Idempotent: provision hat den
+// tenantHasLiveNumber-Guard, setKycLevel/setStatus/reactivateTenantCancelledNumbers sind
+// idempotente Setter, setProfile schreibt deterministisch denselben Tier-Snapshot -> Subscribe
+// + nachfolgendes Webhook-created provisioniert NIE doppelt (Invariante 4). Nebeneffekt im
+// Namen (N7).
 import { KYC_LEVEL } from "../store/defaults.js";
 import { resolveTierForTenant } from "./plan-profile-resolver.js";
 
@@ -38,6 +41,14 @@ export function profileAuditDetail(profile) {
 
 export async function activatePaidTenant({ store, accounts, provision, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
+  // Fix P1 (PLAN-STRIPE-CANCEL-NUMBER-LEAK.md): eine zuvor Stripe-gekuendigte Nummer
+  // dieses Tenants (SUSPENDED + subscription_cancelled-Marker) wird HIER reaktiviert -
+  // Status zurueck auf ACTIVE (routet wieder) + Marker geloescht - BEVOR provision()
+  // laeuft. tenantHasLiveNumber zaehlt die SUSPENDED-Nummer ohnehin die ganze Zeit mit
+  // (Invariante 4) -> der Trigger fragt so oder so keine zweite Nummer an; OHNE diese
+  // Reaktivierung bliebe ein Re-Subscriber aber DAUERHAFT ohne routende Nummer. No-Op fuer
+  // Erst-Subscriber (kein Cancelled-Marker vorhanden).
+  store.reactivateTenantCancelledNumbers(tenant);
   await accounts.setStatus(tenant, "active");
   await provision(tenant);
   // A2: zusaetzlicher idempotenter Effekt NACH der unveraenderten KYC->Status->provision-

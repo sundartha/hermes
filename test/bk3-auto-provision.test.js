@@ -105,6 +105,7 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
   const deps = {
     store: {
       findTenantBySubscription: () => null, setTenantSubscription: () => {}, setKycLevel: () => {},
+      reactivateTenantCancelledNumbers: () => {},
       tenantSubscription: () => ({ planSlug: null }), setProfile: () => ({ changed: [] }),
     },
     accounts: { setStatus: async () => {}, accountByTenant: async () => null },

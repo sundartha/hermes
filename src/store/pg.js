@@ -239,6 +239,18 @@ export function makePgStore(runner) {
     findTenantBySubscription: (subscriptionId) =>
       ops.findTenantBySubscription(requireState(), subscriptionId),
 
+    // ---- Stripe-Cancel-Nummer-Leak Fix (P1): Wrapper-Parity zu json.js ----
+    markTenantNumbersCancelled(tenantId) {
+      const numbers = ops.markTenantNumbersCancelled(requireState(), tenantId);
+      save();
+      return numbers;
+    },
+    reactivateTenantCancelledNumbers(tenantId) {
+      const numbers = ops.reactivateTenantCancelledNumbers(requireState(), tenantId);
+      save();
+      return numbers;
+    },
+
     // ---- Private Summary-Nummer pro Tenant (F2): Wrapper-Parity zu json.js ----
     setPrivateNumber(tenantId, raw) {
       const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
@@ -496,7 +508,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, suspend_reason FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -543,6 +555,7 @@ async function hydrateTenantInto(client, state, tenantId) {
       // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
       country: r.country ?? null,
       language: r.language ?? null,
+      suspendReason: r.suspend_reason ?? null,
     })),
   );
   state.provisioningJobs.push(
@@ -1040,13 +1053,14 @@ async function flushNumbers(client, tenantId, numbers) {
   );
   for (const n of own) {
     await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, suspend_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (id) DO UPDATE SET
          e164=EXCLUDED.e164, provider=EXCLUDED.provider,
          status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
          payment_intent_id=EXCLUDED.payment_intent_id,
-         country=EXCLUDED.country, language=EXCLUDED.language`,
+         country=EXCLUDED.country, language=EXCLUDED.language,
+         suspend_reason=EXCLUDED.suspend_reason`,
       [
         n.id,
         tenantId,
@@ -1057,6 +1071,7 @@ async function flushNumbers(client, tenantId, numbers) {
         n.paymentIntentId ?? null,
         n.country ?? null,
         n.language ?? null,
+        n.suspendReason ?? null,
       ],
     );
   }

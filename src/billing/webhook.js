@@ -149,7 +149,8 @@ function planSlugOf(object) {
 // nach bestaetigter Zahlung) und ueber accounts.setStatus aktivieren (DERSELBE Status-Seam
 // wie webAuthMw/Admin-approve - eine Schreibquelle, kein Drift); danach stoesst der injizierte
 // provision-Seam das (idempotente, payment-gegatete) Nummern-Provisioning an. suspend setzt
-// suspended + invalidiert alle Sessions des Tenants und ruft provision NIE. ignore = No-Op.
+// suspended + invalidiert alle Sessions des Tenants und ruft provision NIE + markiert
+// dessen Nummer(n) store-seitig als gekuendigt (Fix P1, KEIN Telnyx-Call). ignore = No-Op.
 // Nebeneffekt (Status-/Abo-/KYC-Schreibung + Provisioning) im Namen.
 export async function applyStripeWebhook(
   event,
@@ -182,7 +183,11 @@ export async function applyStripeWebhook(
     return;
   }
   // SUSPEND (Zahlung gescheitert / Abo geloescht): Status + Sessions sperren (gesperrter
-  // Kunde kann nicht bis Cookie-Expiry weiterlesen).
+  // Kunde kann nicht bis Cookie-Expiry weiterlesen) UND die zugehoerige(n) Nummer(n) store-
+  // seitig als gekuendigt markieren (Fix P1, PLAN-STRIPE-CANCEL-NUMBER-LEAK.md): faellt aus
+  // der GLOBALEN Cap-Zaehlung UND stoppt das Routing (Status ehrlich abgebildet) - OHNE
+  // Telnyx anzufassen (Phase 2, separat, Owner-Entscheidung zu Grace-Period).
+  store.markTenantNumbersCancelled(tenant);
   await accounts.setStatus(tenant, "suspended");
   await sessions.invalidateByTenant(tenant);
   audit("stripe_webhook_suspend", req, `tenant=${tenant}`);

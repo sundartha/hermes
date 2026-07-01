@@ -269,6 +269,11 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS payment_intent_id TEXT;
 -- payment_intent_id (ALTER-only, nullable).
 ALTER TABLE number ADD COLUMN IF NOT EXISTS country  TEXT;
 ALTER TABLE number ADD COLUMN IF NOT EXISTS language TEXT;
+-- Fix P1 (PLAN-STRIPE-CANCEL-NUMBER-LEAK.md): Marker, WARUM eine Nummer SUSPENDED ist -
+-- 'subscription_cancelled' (Stripe-Kuendigung/Zahlungsausfall, aus der globalen Cap-
+-- Zaehlung ausgenommen) vs. NULL (Abuse/Budget/manuell, zaehlt weiter). Additiv NULLABLE
+-- (Bestands-Nummer ohne Wert -> NULL, Muster wie country/language/payment_intent_id).
+ALTER TABLE number ADD COLUMN IF NOT EXISTS suspend_reason TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht

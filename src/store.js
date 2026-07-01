@@ -133,6 +133,13 @@ export const {
   setTenantSubscription,
   tenantSubscription,
   findTenantBySubscription,
+  // P1 (Stripe-Cancel-Nummer-Leak-Fix, PLAN-STRIPE-CANCEL-NUMBER-LEAK.md): Setter fuer
+  // SUSPEND (Webhook) + dessen Kehrseite fuer ACTIVATE (Webhook + Self-Service-Subscribe,
+  // activatePaidTenant). Muster wie setTenantSubscription. OHNE diese Re-Exports sind sie
+  // auf der Fassade undefined -> applyStripeWebhook UND activatePaidTenant werfen zur
+  // Laufzeit einen TypeError.
+  markTenantNumbersCancelled,
+  reactivateTenantCancelledNumbers,
   // F2: private Summary-Nummer - Setter (Onboard/Self-Service P4/P5) + Reader (finishCall
   // P7 via planSummarySms). Muster wie setTenantStripe/tenantStripe. OHNE diese Re-Exports
   // sind sie auf der Fassade undefined -> self-service-routes UND planSummarySms werfen zur

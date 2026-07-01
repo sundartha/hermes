@@ -11,12 +11,13 @@ import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.j
 // Aufzeichnende Fake-Seams: store loest den Tenant ueber subscriptionId auf (Webhook-Pfad
 // ohne tenant_ref), accounts/sessions protokollieren die Wirkungen.
 function fakeDeps({ tenantBySub = null } = {}) {
-  const calls = { setStatus: [], invalidate: [], subscription: [] };
+  const calls = { setStatus: [], invalidate: [], subscription: [], cancelNumbers: [] };
   return {
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
+      markTenantNumbersCancelled: (tenant) => calls.cancelNumbers.push(tenant),
     },
     accounts: { setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]) },
     sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },
@@ -34,6 +35,7 @@ test("Phase 2: customer.subscription.deleted -> setStatus(suspended) + Sessions 
   );
   assert.deepEqual(deps.calls.setStatus, [["t_a", "suspended"]], "Tenant suspendiert");
   assert.deepEqual(deps.calls.invalidate, ["t_a"], "Sessions des Tenants invalidiert");
+  assert.deepEqual(deps.calls.cancelNumbers, ["t_a"], "Nummer(n) store-seitig als gekuendigt markiert (Fix P1)");
 });
 
 test("Phase 2: invoice.payment_failed -> Tenant ueber subscriptionId aufgeloest + suspendiert", async () => {
@@ -45,6 +47,7 @@ test("Phase 2: invoice.payment_failed -> Tenant ueber subscriptionId aufgeloest 
   );
   assert.deepEqual(deps.calls.setStatus, [["t_b", "suspended"]], "Tenant suspendiert");
   assert.deepEqual(deps.calls.invalidate, ["t_b"], "Sessions des Tenants invalidiert");
+  assert.deepEqual(deps.calls.cancelNumbers, ["t_b"], "Nummer(n) store-seitig als gekuendigt markiert (Fix P1)");
 });
 
 test("Phase 2: payment_failed ohne aufloesbaren Tenant -> No-Op (kein Cross-Tenant-Suspend)", async () => {
@@ -55,4 +58,5 @@ test("Phase 2: payment_failed ohne aufloesbaren Tenant -> No-Op (kein Cross-Tena
   );
   assert.deepEqual(deps.calls.setStatus, [], "kein Suspend ohne Tenant");
   assert.deepEqual(deps.calls.invalidate, [], "keine Session-Invalidierung ohne Tenant");
+  assert.deepEqual(deps.calls.cancelNumbers, [], "keine Nummer markiert ohne Tenant");
 });
