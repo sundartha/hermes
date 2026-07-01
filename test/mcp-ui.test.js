@@ -22,6 +22,7 @@ import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
   WIDGET_CALENDAR,
+  WIDGET_CALL,
 } from "../src/ui/widget-catalog.js";
 import {
   UI_MIME,
@@ -35,6 +36,18 @@ import {
 
 const RESOURCE_URI = uiResourceUri(WIDGET_CALL_STATUS); // ui://hermes/call-status
 const RESOURCE_URI_TRANSCRIPT = uiResourceUri(WIDGET_TRANSCRIPT); // ui://hermes/transcript
+const RESOURCE_URI_CALL = uiResourceUri(WIDGET_CALL); // ui://hermes/call
+
+// Abwesenheits-Pin (Kritik N1): KEINE feste Zahl ("~10") vorschreiben, sondern generisch
+// jede "alle N Sekunden"-Polling-Anweisung verbieten - robuster als ein Positiv-String-Pin.
+const NO_POLLING_CADENCE = /alle ~?\d+\s*Sekunden/;
+
+// Minimal gueltige place_call-Aufruf-Form fuer die Tests dieser Datei (EINE Quelle,
+// G5/S2): Argumente UND der dazu passende Gateway-Mock-Body. place_call postet an
+// POST /api/calls und liest nur r.callId - anders als get_call_status/get_transcript,
+// die GET /api/calls/:id lesen und ein RICH_CALL/RICH_TRANSCRIPT-Call-Objekt erwarten.
+const PLACE_CALL_ARGS = { to: "+4917212345678", objective: "Testanruf" };
+const PLACE_CALL_MOCK = { callId: "call_1" };
 
 // Faehiger Host: deklariert die UI-Capability mit UI_MIME (SEP-1865 initialize).
 const CAPABLE_CAPS = {
@@ -124,6 +137,15 @@ const callStatusOutput = z.object({
   failure_reason: z.string().nullable(),
 });
 
+// callOutput (place_call, W2): Obermenge aus callStatusOutput per Spread (G5/S2, keine
+// erneute Feld-Duplizierung) plus den beiden Abschluss-Feldern aus dem get_transcript-
+// Kontrakt (nullable, der Anruf hat gerade erst begonnen).
+const callOutput = z.object({
+  ...callStatusOutput.shape,
+  result_summary: z.string().nullable(),
+  objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
+});
+
 test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes structuredContent", async () => {
   await withGateway(RICH_CALL, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
@@ -188,40 +210,61 @@ test("T-CDF1-UI: Fehlergrund (Spec c) - failure_reason erscheint, PII bleibt ges
   });
 });
 
-test("T-P1-UI-AC2: Stufe 1 (faehiger Host) - genau eine ui://-Resource + _meta zeigt darauf", async () => {
+test("T-P1-UI-AC2: place_call traegt jetzt die vereinte Live-Karte (_meta); get_call_status verliert ihr eigenes _meta (W2)", async () => {
   await withGateway(RICH_CALL, async () => {
     const { tools, resources } = captureUi({ uiHost: capableHost() });
-    const callStatusResources = resources.filter((r) => r.uri === RESOURCE_URI);
-    assert.equal(callStatusResources.length, 1, "genau eine Resource-Registrierung");
-    assert.equal(callStatusResources[0].config.mimeType, UI_MIME);
 
-    const { config } = tools.get("get_call_status");
-    assert.equal(config._meta.ui.resourceUri, RESOURCE_URI, "_meta zeigt auf dieselbe URI");
+    const callResources = resources.filter((r) => r.uri === RESOURCE_URI_CALL);
+    assert.equal(callResources.length, 1, "genau eine call-Resource (place_call)");
+    assert.equal(callResources[0].config.mimeType, UI_MIME);
+    assert.equal(
+      tools.get("place_call").config._meta.ui.resourceUri,
+      RESOURCE_URI_CALL,
+      "place_call: _meta zeigt auf die vereinte Karte",
+    );
+
+    assert.equal(
+      resources.filter((r) => r.uri === RESOURCE_URI).length,
+      0,
+      "get_call_status registriert keine eigene Resource mehr (W2)",
+    );
+    assert.equal(tools.get("get_call_status").config._meta, undefined, "get_call_status: kein _meta mehr");
   });
 });
 
-test("T-P1-UI-AC3: Stufe-0-only NUR bei Master-Schalter aus / kein hostHint (stdio)", async () => {
-  // Echte Fail-closed-Faelle: ohne Master-Schalter (oder ganz ohne hostHint, z.B. stdio)
-  // haengt kein _meta/Resource an. NICHT mehr fail-closed: ein faehiger Host mit/ohne
-  // deklarierte Capability (das deckt T-UI-stateless ab).
+test("T-P1-UI-AC3: place_call Stufe-0-only bei Master-Schalter aus / kein hostHint (stdio); get_call_status bleibt ueberall ohne _meta", async () => {
   const cases = {
     "stdio (uiHost=null)": null,
     "Master-Schalter aus trotz Capability": { enabled: false, capabilities: CAPABLE_CAPS },
   };
-  await withGateway(RICH_CALL, async () => {
+  await withGateway(PLACE_CALL_MOCK, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
       const { tools, resources } = captureUi(uiHost === null ? undefined : { uiHost });
-      const { config, handler } = tools.get("get_call_status");
-      assert.equal(resources.length, 0, `${label}: keine Resource`);
-      assert.ok(!config._meta, `${label}: kein _meta`);
-      const result = await handler({ call_id: "call_1" });
-      assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
+      const { config, handler } = tools.get("place_call");
+      assert.equal(resources.filter((r) => r.uri === RESOURCE_URI_CALL).length, 0, `${label}: keine call-Resource`);
+      assert.ok(!config._meta, `${label}: place_call kein _meta`);
+
+      const result = await handler(PLACE_CALL_ARGS);
+      assert.equal(result.content[0].type, "text", `${label}: Text-Fallback bleibt nutzbar (AC8)`);
+      assert.deepEqual(
+        JSON.parse(result.content[0].text),
+        { call_id: "call_1", status: "dialing" },
+        `${label}: Text-Block byte-identisch zum Bestand`,
+      );
+      assert.ok(result.structuredContent, `${label}: structuredContent bleibt (Byte-Invariante 6.4)`);
       assert.equal(result.structuredContent.call_id, "call_1");
+      assert.equal(result.structuredContent.status, "dialing");
+
+      assert.equal(
+        tools.get("get_call_status").config._meta,
+        undefined,
+        `${label}: get_call_status bleibt ohne _meta`,
+      );
     }
   });
 });
 
-test("T-UI-stateless: Master-Schalter an OHNE caps (realer stateless tools/list) haengt Widget trotzdem an", async () => {
+test("T-UI-stateless: Master-Schalter an OHNE caps (realer stateless tools/list) haengt Widget bei place_call trotzdem an", async () => {
   // Der Live-Bug, festgenagelt: der stateless Transport (sessionIdGenerator=undefined)
   // fuehrt die initialize-Capabilities NICHT zum tools/list-POST mit, dort ist
   // uiHost.capabilities leer/undefined. Das Widget-_meta UND die ui://-Resource muessen
@@ -230,24 +273,25 @@ test("T-UI-stateless: Master-Schalter an OHNE caps (realer stateless tools/list)
     "enabled, capabilities undefined": { enabled: true },
     "enabled, capabilities leer": { enabled: true, capabilities: {} },
   };
-  await withGateway(RICH_CALL, async () => {
+  await withGateway(PLACE_CALL_MOCK, async () => {
     for (const [label, uiHost] of Object.entries(cases)) {
       const { tools, resources } = captureUi({ uiHost });
-      const { config, handler } = tools.get("get_call_status");
-      assert.equal(config._meta?.ui?.resourceUri, RESOURCE_URI, `${label}: _meta zeigt auf die URI`);
-      assert.ok(
-        resources.some((r) => r.uri === RESOURCE_URI),
-        `${label}: ui://-Resource registriert`,
-      );
-      const result = await handler({ call_id: "call_1" });
-      assert.ok(result.structuredContent, `${label}: structuredContent bleibt`);
+
+      const place = tools.get("place_call");
+      assert.equal(place.config._meta?.ui?.resourceUri, RESOURCE_URI_CALL, `${label}: place_call _meta zeigt auf die URI`);
+      assert.ok(resources.some((r) => r.uri === RESOURCE_URI_CALL), `${label}: ui://-Resource registriert`);
+      const placeResult = await place.handler(PLACE_CALL_ARGS);
+      assert.ok(placeResult.structuredContent, `${label}: place_call structuredContent bleibt`);
+
+      const status = tools.get("get_call_status");
+      assert.equal(status.config._meta, undefined, `${label}: get_call_status bleibt ohne _meta (W2)`);
     }
   });
 });
 
-test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Text/Resource", async () => {
+test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Text (get_call_status)", async () => {
   await withGateway(RICH_CALL, async () => {
-    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_call_status");
     const result = await handler({ call_id: "call_1" });
 
@@ -262,13 +306,9 @@ test("T-P1-UI-AC4: Whitelist - keine fremden/PII-Felder in structuredContent/Tex
       "last_transcript_lines",
       "status",
     ]);
-
-    // Resource-HTML ist statisch -> enthaelt per Konstruktion keine Call-Daten.
-    const readback = await resources[0].readCallback();
-    const html = readback.contents[0].text;
-    for (const leak of ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "recording.wav"]) {
-      assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
-    }
+    // Resource-HTML-Check entfaellt (W2): get_call_status registriert seit W2 keine
+    // eigene Resource mehr (siehe T-P1-UI-AC2); die statische Leak-Freiheit von
+    // call-status.html bleibt separat durch T-P1-UI-AC6 abgedeckt.
   });
 });
 
@@ -392,15 +432,14 @@ test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiert
   });
 });
 
-test("T-P2-UI-AC2: Stufe 1 (faehiger Host) - genau eine transcript-Resource + _meta zeigt darauf", async () => {
+test("T-P2-UI-AC2: get_transcript verliert ihr _meta (W2) - keine eigene Resource mehr ueber registerTools", async () => {
   await withGateway(RICH_TRANSCRIPT, async () => {
     const { tools, resources } = captureUi({ uiHost: capableHost() });
     const transcriptResources = resources.filter((r) => r.uri === RESOURCE_URI_TRANSCRIPT);
-    assert.equal(transcriptResources.length, 1, "genau eine transcript-Resource");
-    assert.equal(transcriptResources[0].config.mimeType, UI_MIME);
+    assert.equal(transcriptResources.length, 0, "get_transcript registriert keine eigene Resource mehr (W2)");
 
     const { config } = tools.get("get_transcript");
-    assert.equal(config._meta.ui.resourceUri, RESOURCE_URI_TRANSCRIPT, "_meta zeigt auf dieselbe URI");
+    assert.equal(config._meta, undefined, "get_transcript: kein _meta mehr");
   });
 });
 
@@ -426,9 +465,9 @@ test("T-P2-UI-AC3: Fallback fail-closed - kein _meta, keine transcript-Resource,
   });
 });
 
-test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/Text/Resource", async () => {
+test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/Text (get_transcript)", async () => {
   await withGateway(RICH_TRANSCRIPT, async () => {
-    const { tools, resources } = captureUi({ uiHost: capableHost() });
+    const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_transcript");
     const result = await handler({ call_id: "call_1" });
 
@@ -450,13 +489,9 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
       "objective_achieved",
       "result_summary",
     ]);
-
-    // Resource-HTML ist statisch -> enthaelt per Konstruktion keine Call-Daten.
-    const transcriptRes = resources.find((r) => r.uri === RESOURCE_URI_TRANSCRIPT);
-    const html = (await transcriptRes.readCallback()).contents[0].text;
-    for (const leak of ["Donnerstag 14:30", "secret@example.com", "sk_live_LEAK", "tenant-XYZ"]) {
-      assert.ok(!html.includes(leak), `Resource-HTML statisch, kein ${leak}`);
-    }
+    // Resource-HTML-Check entfaellt (W2): get_transcript registriert seit W2 keine eigene
+    // Resource mehr (siehe T-P2-UI-AC2); die statische Leak-Freiheit von transcript.html
+    // bleibt separat durch T-P2-UI-AC6 abgedeckt.
   });
 });
 
@@ -513,12 +548,20 @@ function readbackResource(renderer, widgetId) {
   });
 }
 
+// Nach W2 traegt ausschliesslich place_call ein Widget-_meta (WIDGET_CALL, vereinte
+// Live-Karte) - get_call_status/get_transcript verlieren ihr _meta. P3_WIDGETS spiegelt
+// genau diese tatsaechlich verdrahtete Menge; place_call hat eine andere Aufruf-Form
+// (to/objective statt call_id) und einen POST- statt GET-Mock-Body, daher args separat.
 const P3_WIDGETS = [
-  { tool: "get_call_status", widgetId: WIDGET_CALL_STATUS, body: RICH_CALL },
-  { tool: "get_transcript", widgetId: WIDGET_TRANSCRIPT, body: RICH_TRANSCRIPT },
+  {
+    tool: "place_call",
+    widgetId: WIDGET_CALL,
+    body: { ...PLACE_CALL_MOCK, email: "secret@example.com", apiKey: "sk_live_LEAK", tenantId: "tenant-XYZ" },
+    args: PLACE_CALL_ARGS,
+  },
 ];
 
-test("T-P3-AC1: beide Widgets, mcp-nativer Host - eine Resource je Tool + _meta.ui.resourceUri", async () => {
+test("T-P3-AC1: place_call (einziges _meta-tragendes Tool nach W2), mcp-nativer Host - eine Resource + _meta.ui.resourceUri", async () => {
   for (const { tool, widgetId, body } of P3_WIDGETS) {
     await withGateway(body, async () => {
       const { tools, resources } = captureUi({ uiHost: capableHost() });
@@ -531,8 +574,8 @@ test("T-P3-AC1: beide Widgets, mcp-nativer Host - eine Resource je Tool + _meta.
   }
 });
 
-test("T-P3-AC2: beide Widgets, ChatGPT-Host - eine Resource je Tool + flaches openai/outputTemplate", async () => {
-  for (const { tool, widgetId, body } of P3_WIDGETS) {
+test("T-P3-AC2: place_call, ChatGPT-Host - eine Resource + flaches openai/outputTemplate", async () => {
+  for (const { tool, widgetId, body, args } of P3_WIDGETS) {
     await withGateway(body, async () => {
       const capable = captureUi({ uiHost: capableHost() });
       const chat = captureUi({ uiHost: chatgptHost() });
@@ -544,9 +587,8 @@ test("T-P3-AC2: beide Widgets, ChatGPT-Host - eine Resource je Tool + flaches op
       assert.equal(meta[CHATGPT_META_KEY], uri, `${tool}: flacher String unter openai/outputTemplate`);
       assert.ok(!meta.ui, `${tool}: kein verschachteltes _meta.ui (das ist mcp-nativ)`);
 
-      // Stufe 0 (structuredContent) ist host-UNabhaengig -> identische Keys.
-      const a = await capable.tools.get(tool).handler({ call_id: "call_1" });
-      const b = await chat.tools.get(tool).handler({ call_id: "call_1" });
+      const a = await capable.tools.get(tool).handler(args);
+      const b = await chat.tools.get(tool).handler(args);
       assert.deepEqual(
         Object.keys(b.structuredContent).sort(),
         Object.keys(a.structuredContent).sort(),
@@ -571,25 +613,16 @@ test("T-P3-AC3: Registry waehlt GENAU EINEN Adapter pro Host (ChatGPT explizit, 
   assert.equal(uiRendererFor(null), null, "kein hostHint -> null");
 });
 
-test("T-P3-AC4: Whitelist unveraendert auch im ChatGPT-Pfad (kein PII-/Audio-Leck)", async () => {
+test("T-P3-AC4: Whitelist unveraendert auch im ChatGPT-Pfad (place_call, kein PII-Leck aus dem Gateway-Body)", async () => {
   const leaks = {
-    get_call_status: ["secret@example.com", "sk_live_LEAK", "tenant-XYZ", "recording.wav"],
-    get_transcript: [
-      "Donnerstag 14:30 koennen wir machen.",
-      "ich rufe im Auftrag von Antonio an",
-      "callee",
-      "secret@example.com",
-      "sk_live_LEAK",
-      "tenant-XYZ",
-      "recording.wav",
-    ],
+    place_call: ["secret@example.com", "sk_live_LEAK", "tenant-XYZ"],
   };
-  for (const { tool, body } of P3_WIDGETS) {
+  for (const { tool, body, args } of P3_WIDGETS) {
     await withGateway(body, async () => {
       const capable = captureUi({ uiHost: capableHost() });
       const chat = captureUi({ uiHost: chatgptHost() });
-      const a = await capable.tools.get(tool).handler({ call_id: "call_1" });
-      const b = await chat.tools.get(tool).handler({ call_id: "call_1" });
+      const a = await capable.tools.get(tool).handler(args);
+      const b = await chat.tools.get(tool).handler(args);
       const serialized = JSON.stringify(b);
       for (const leak of leaks[tool]) {
         assert.ok(!serialized.includes(leak), `${tool}: kein Leck von "${leak}" im ChatGPT-Result`);
@@ -1266,37 +1299,56 @@ test("T-Wb-CAL-AC6: calendar.html self-contained + read-only + erbt W1 + deklari
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALENDAR), true, "Adapter kennt calendar");
 });
 
-// ===== W0: Charakterisierungs-Baseline (Spam-Zustand vor dem Live-Widget-Umbau) =====
-// Pinnt den HEUTIGEN Zustand in Asserts, bevor W2 ihn umkehrt (siehe
-// tasks/mcp-ui-live-widget-chain.md, Abschnitt W0). Reiner Test-Code, kein
-// Produktionscode beruehrt - place_call laeuft heute ueber das positionsbasierte
-// server.tool (Bestands-API), NICHT ueber registerTool/uiTool.
+// ===== W2: Tool-Rewiring - Spam-Wurzel beseitigt (vormals W0-Charakterisierungs-Baseline) =====
+// Die drei folgenden Tests pinnten in W0 den HEUTIGEN (Spam-)Zustand vor dem Umbau; W2
+// kehrt ihn um (siehe tasks/mcp-ui-live-widget-chain.md, Abschnitt W2). place_call laeuft
+// jetzt ueber uiTool/registerTool (nicht mehr server.tool) und traegt WIDGET_CALL als
+// EINZIGE Karte; get_call_status verliert sein eigenes _meta (siehe P1-Tests oben).
 
-test("T-W0-place-shape: place_call (heute via server.tool) traegt kein _meta, Handler liefert reinen Text", async () => {
-  await withGateway({ callId: "call_w0_1" }, async () => {
+test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta + volles structuredContent (W0-Baseline invertiert)", async () => {
+  await withGateway(PLACE_CALL_MOCK, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
     const { config, handler } = tools.get("place_call");
-    assert.equal(config, null, "place_call laeuft ueber server.tool (positional API), kein config/_meta-Objekt");
-    const result = await handler({ to: "+4917212345678", objective: "Testanruf" });
-    assert.equal(result.content[0].type, "text", "Handler liefert reinen Textblock");
-    assert.equal(result.structuredContent, undefined, "kein structuredContent - Spam-Baseline vor W2");
+    assert.ok(config, "place_call laeuft jetzt ueber registerTool (config-Objekt vorhanden, W0 kannte config===null)");
+    assert.equal(config._meta.ui.resourceUri, RESOURCE_URI_CALL, "place_call: _meta zeigt auf die vereinte Karte");
+
+    const result = await handler(PLACE_CALL_ARGS);
+    assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten (Fallback)");
+    assert.ok(result.structuredContent, "structuredContent jetzt vorhanden (W0 kannte undefined)");
+    assert.deepEqual(Object.keys(result.structuredContent).sort(), [
+      "call_id", "duration_s", "failure_reason", "last_transcript_lines",
+      "objective_achieved", "result_summary", "status",
+    ]);
+    assert.equal(result.structuredContent.call_id, "call_1");
+    assert.equal(result.structuredContent.status, "dialing");
+    assert.equal(result.structuredContent.duration_s, 0);
+    assert.deepEqual(result.structuredContent.last_transcript_lines, []);
+    assert.equal(result.structuredContent.failure_reason, null);
+    assert.equal(result.structuredContent.result_summary, null);
+    assert.equal(result.structuredContent.objective_achieved, null);
+    assert.doesNotThrow(
+      () => callOutput.parse(result.structuredContent),
+      "structuredContent validiert gegen outputSchema",
+    );
   });
 });
 
-test("T-W0-place-desc: place_call-Beschreibung weist das Modell zum Polling an (Spam-Ursache 1)", () => {
+test("T-W2-place-desc: place_call-Beschreibung pollt das Modell nicht mehr an (W0-Baseline invertiert)", () => {
   const { tools } = captureUi({ uiHost: capableHost() });
-  const { desc } = tools.get("place_call");
-  assert.ok(
-    desc.includes("alle ~10 Sekunden get_call_status"),
-    "Baseline: Polling-Anweisung noch im Beschreibungstext (W2 entfernt sie)",
+  const { config } = tools.get("place_call");
+  assert.doesNotMatch(
+    config.description,
+    NO_POLLING_CADENCE,
+    "Polling-Anweisung entfernt (Spam-Wurzel beseitigt, W2)",
   );
 });
 
-test("T-W0-get-status-desc: get_call_status-Beschreibung weist ebenfalls zum Polling an (Spam-Ursache 1)", () => {
+test("T-W2-get-status-desc: get_call_status-Beschreibung pollt das Modell nicht mehr an (W0-Baseline invertiert)", () => {
   const { tools } = captureUi({ uiHost: capableHost() });
   const { config } = tools.get("get_call_status");
-  assert.ok(
-    config.description.includes("alle ~10 Sekunden"),
-    "Baseline: Polling-Anweisung noch in der Beschreibung (W2 entfernt sie)",
+  assert.doesNotMatch(
+    config.description,
+    NO_POLLING_CADENCE,
+    "Polling-Anweisung entfernt (Spam-Wurzel beseitigt, W2)",
   );
 });

@@ -3,18 +3,19 @@
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
 import {
-  WIDGET_CALL_STATUS,
   WIDGET_CALL_RESULT,
-  WIDGET_TRANSCRIPT,
   WIDGET_AGENT_STATUS,
 } from "./ui/adapters/mcp-native.js";
-// Neue read-only Widgets aus der kanonischen Quelle (widget-catalog.js); der
-// mcp-native-Re-Export oben ist historisch (siehe Datei-Kommentar dort).
+// Neue Widgets aus der kanonischen Quelle (widget-catalog.js); der mcp-native-Re-Export
+// oben ist historisch (siehe Datei-Kommentar dort). WIDGET_CALL_STATUS/WIDGET_TRANSCRIPT
+// sind hier NICHT mehr importiert (W2): get_call_status/get_transcript haengen kein
+// Widget mehr an, die Konstanten blieben sonst ungenutzt (G12).
 import {
   WIDGET_MY_NUMBER,
   WIDGET_CALLS,
   WIDGET_CALENDAR,
   WIDGET_PROBE,
+  WIDGET_CALL,
 } from "./ui/widget-catalog.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -150,6 +151,17 @@ const TRANSCRIPT_OUTPUT = {
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
+};
+
+// outputSchema fuer place_call (W2, vereinte Live-Karte WIDGET_CALL): Obermenge aus
+// CALL_STATUS_OUTPUT (dialing/in_progress/...-Felder) plus den beiden Abschluss-Feldern
+// aus dem get_transcript-Kontrakt (result_summary/objective_achieved), hier initial NULL
+// (der Anruf hat gerade erst begonnen - das Widget pollt Status/Ergebnis selbst nach).
+// Modul-Konstante bei den anderen *_OUTPUT (G35), EIN Spread statt Redefinition (G5/S2).
+const CALL_OUTPUT = {
+  ...CALL_STATUS_OUTPUT,
+  result_summary: z.string().nullable(),
+  objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
 };
 
 // Berechtigungen als EIN flacher String (passt in genau einen data-mcp-Slot, W1-Binding
@@ -301,71 +313,97 @@ export function registerTools(
   const uiTool = (name, config, handler) =>
     server.registerTool(name, config, wrapHandler(handler));
 
-  tool(
+  // place_call: EINZIGE Karte fuer den gesamten Anruf-Lebenszyklus (W2, Spam-Wurzel
+  // beseitigt). uiTool statt tool(): initiales structuredContent (dialing, alle Felder
+  // auf Start-Werte) + Widget-Anhang (WIDGET_CALL) NUR bei faehigem Host - das Widget
+  // pollt sich selbst (get_call_status/get_transcript ueber die Host-Bruecke), das
+  // Modell NICHT mehr (kein Karten-Spam). Safety-Gates (Allowlist/Denylist/Land/Budget/
+  // Signatur) sitzen UNVERAENDERT in src/server.js /api/calls - hier aendern sich NUR
+  // Widget-Anhang, Beschreibung und Rueckgabeform.
+  uiTool(
     "place_call",
-    "Startet einen echten Telefonanruf des KI-Agenten an eine Telefonnummer und verfolgt dabei das angegebene Ziel. Welche Ziele erlaubt sind, entscheidet der Server ueber seine Safety-Gates (Rechteprofil/Allowlist, Denylist, Land, Limits) - einfach aufrufen; unerlaubte Ziele weist der Server mit einer klaren Meldung ab. Gibt sofort eine call_id zurueck. WICHTIG: Danach alle ~10 Sekunden get_call_status aufrufen, bis status=completed, und erst dann mit get_transcript das Ergebnis holen.",
     {
-      to: z
-        .string()
-        .describe(
-          "Zielrufnummer in E.164, z.B. +4917212345678. Wird serverseitig durch die Safety-Gates geprueft (Rechteprofil/Allowlist, Denylist, Land).",
-        ),
-      objective: z
-        .string()
-        .describe(
-          "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Einen Friseurtermin fuer Samstag vormittag vereinbaren.' Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
-        ),
-      briefing: z
-        .string()
-        .optional()
-        .describe(
-          "Relevanter Kontext aus dem bisherigen Chat, den der Agent fuers Telefonat braucht: worum es geht, beteiligte Namen, Vorlieben/Praeferenzen, Vorgeschichte sowie gewuenschtes Ergebnis und Ton. ZUSAMMENFASSEN statt roh hineinkopieren - nur was fuers Gespraech zaehlt. KEINE Secrets, Passwoerter oder Zahlungsdaten. Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers (nicht als Claude/Gemini); formuliere den Kontext aus dessen Sicht.",
-        ),
-      constraints: z
-        .string()
-        .optional()
-        .describe(
-          "Harte Grenzen, die der Agent im Gespraech nicht ueberschreiten darf, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro, keine Anzahlung zusagen.'",
-        ),
-      context: z
-        .object({
-          summary: z
-            .string()
-            .optional()
-            .describe(
-              "Worum es im Anruf geht, in 1-3 Saetzen zusammengefasst (kein Roh-Dump des Chats).",
-            ),
-          key_facts: z
-            .array(z.string())
-            .optional()
-            .describe(
-              "Wenige (max. 10) kurze Stichpunkte mit fuers Gespraech relevanten Fakten (Namen, Daten, Praeferenzen). KEINE Secrets/Passwoerter/Zahlungsdaten.",
-            ),
-          recipient_relationship: z
-            .string()
-            .optional()
-            .describe("Verhaeltnis des Auftraggebers zum Angerufenen, z.B. 'Stammfriseur', 'Neukunde'."),
-          desired_outcome: z
-            .string()
-            .optional()
-            .describe("Das gewuenschte Ergebnis aus Sicht des Auftraggebers, knapp formuliert."),
-        })
-        .optional()
-        .describe(
-          "Optionaler strukturierter HINTERGRUND fuers Gespraech (nur zur Information des Agenten, ZUSAETZLICH zum briefing). Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers, NIE als Claude/Gemini; gib nur weiter, was der Auftrag erfordert. KEINE Secrets.",
-        ),
-      // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
-      // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
-      language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
-      max_duration_s: z
-        .number()
-        .optional()
-        .describe("Maximale Gespraechsdauer in Sekunden (Default 180, Max 300)."),
+      description:
+        "Startet einen echten Telefonanruf des KI-Agenten an eine Telefonnummer und verfolgt dabei das angegebene Ziel. Welche Ziele erlaubt sind, entscheidet der Server ueber seine Safety-Gates (Rechteprofil/Allowlist, Denylist, Land, Limits) - einfach aufrufen; unerlaubte Ziele weist der Server mit einer klaren Meldung ab. Gibt sofort eine call_id zurueck und zeigt eine Live-Karte, die sich selbst aktualisiert (Status, Dauer, Transkript, Ergebnis). Du musst NICHT pollen - falls keine Live-Aktualisierung ankommt, bleibt get_call_status als Fallback verfuegbar.",
+      inputSchema: {
+        to: z
+          .string()
+          .describe(
+            "Zielrufnummer in E.164, z.B. +4917212345678. Wird serverseitig durch die Safety-Gates geprueft (Rechteprofil/Allowlist, Denylist, Land).",
+          ),
+        objective: z
+          .string()
+          .describe(
+            "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Einen Friseurtermin fuer Samstag vormittag vereinbaren.' Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
+          ),
+        briefing: z
+          .string()
+          .optional()
+          .describe(
+            "Relevanter Kontext aus dem bisherigen Chat, den der Agent fuers Telefonat braucht: worum es geht, beteiligte Namen, Vorlieben/Praeferenzen, Vorgeschichte sowie gewuenschtes Ergebnis und Ton. ZUSAMMENFASSEN statt roh hineinkopieren - nur was fuers Gespraech zaehlt. KEINE Secrets, Passwoerter oder Zahlungsdaten. Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers (nicht als Claude/Gemini); formuliere den Kontext aus dessen Sicht.",
+          ),
+        constraints: z
+          .string()
+          .optional()
+          .describe(
+            "Harte Grenzen, die der Agent im Gespraech nicht ueberschreiten darf, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro, keine Anzahlung zusagen.'",
+          ),
+        context: z
+          .object({
+            summary: z
+              .string()
+              .optional()
+              .describe(
+                "Worum es im Anruf geht, in 1-3 Saetzen zusammengefasst (kein Roh-Dump des Chats).",
+              ),
+            key_facts: z
+              .array(z.string())
+              .optional()
+              .describe(
+                "Wenige (max. 10) kurze Stichpunkte mit fuers Gespraech relevanten Fakten (Namen, Daten, Praeferenzen). KEINE Secrets/Passwoerter/Zahlungsdaten.",
+              ),
+            recipient_relationship: z
+              .string()
+              .optional()
+              .describe("Verhaeltnis des Auftraggebers zum Angerufenen, z.B. 'Stammfriseur', 'Neukunde'."),
+            desired_outcome: z
+              .string()
+              .optional()
+              .describe("Das gewuenschte Ergebnis aus Sicht des Auftraggebers, knapp formuliert."),
+          })
+          .optional()
+          .describe(
+            "Optionaler strukturierter HINTERGRUND fuers Gespraech (nur zur Information des Agenten, ZUSAETZLICH zum briefing). Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers, NIE als Claude/Gemini; gib nur weiter, was der Auftrag erfordert. KEINE Secrets.",
+          ),
+        // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
+        // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
+        language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
+        max_duration_s: z
+          .number()
+          .optional()
+          .describe("Maximale Gespraechsdauer in Sekunden (Default 180, Max 300)."),
+      },
+      outputSchema: CALL_OUTPUT,
+      ...enableWidgetUi(WIDGET_CALL),
     },
     async (args) => {
       const r = await call("POST", "/api/calls", args);
       requireFields(r, { callId: "string" });
-      return text({ call_id: r.callId, status: "dialing" });
+      const data = {
+        call_id: r.callId,
+        status: "dialing",
+        duration_s: 0,
+        last_transcript_lines: [],
+        failure_reason: null,
+        result_summary: null,
+        objective_achieved: null,
+      };
+      return {
+        content: [
+          { type: "text", text: JSON.stringify({ call_id: data.call_id, status: data.status }, null, 2) },
+        ],
+        structuredContent: data,
+      };
     },
   );
 
@@ -398,16 +436,18 @@ export function registerTools(
     };
   };
 
-  // Stufe 1 NUR wenn ein faehiger Renderer das Widget kennt (Capability vorhanden).
-  // enableWidgetUi registriert die Resource und liefert das _meta; sonst {} (AC3).
+  // Reines Stufe-0-Tool (W2): traegt in JEDEM Fall (faehiger Host oder nicht) KEIN _meta
+  // mehr - das Widget lebt jetzt einzig an place_call (WIDGET_CALL, vereinte Live-Karte
+  // mit Selbst-Poll). get_call_status bleibt aber MODELL-SICHTBAR als Text-Tool: falls
+  // die Widget-Bruecke nicht antwortet, kann das Modell weiterhin manuell pollen und so
+  // den Abschluss lernen (Fallback-Vertrag).
   uiTool(
     "get_call_status",
     {
       description:
-        "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Waehrend eines laufenden Anrufs alle ~10 Sekunden aufrufen.",
+        "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Die Live-Karte von place_call aktualisiert sich normalerweise von selbst; dieses Tool bleibt als manueller Fallback verfuegbar, falls keine Live-Aktualisierung ankommt.",
       inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
       outputSchema: CALL_STATUS_OUTPUT,
-      ...enableWidgetUi(WIDGET_CALL_STATUS),
     },
     async ({ call_id }) => callStatusResult(call_id),
   );
@@ -454,6 +494,11 @@ export function registerTools(
     );
   }
 
+  // Reines Stufe-0-Tool (W2): kein Widget-Anhang mehr - der Abschluss (Summary/Ziel-
+  // Status) erscheint jetzt in der vereinten place_call-Karte (WIDGET_CALL), die
+  // get_transcript beim Terminal-Status "completed" selbst ueber ihre Host-Bruecke
+  // aufruft. Bleibt als Text-Tool erhalten (Fallback, falls die Widget-Bruecke nicht
+  // antwortet). Handler/Whitelist (pickTranscript) unveraendert.
   uiTool(
     "get_transcript",
     {
@@ -461,7 +506,6 @@ export function registerTools(
         "Liefert nach Gespraechsende die Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Aus Datenschutzgruenden wird das Roh-Transkript nach der Zusammenfassung nicht aufbewahrt (Datenminimierung) und NICHT zurueckgegeben - nur Zusammenfassung und Ziel-Status. Erst aufrufen, wenn get_call_status status=completed meldet.",
       inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
       outputSchema: TRANSCRIPT_OUTPUT,
-      ...enableWidgetUi(WIDGET_TRANSCRIPT),
     },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);
