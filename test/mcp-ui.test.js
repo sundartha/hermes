@@ -45,11 +45,11 @@ const capableHost = () => ({ enabled: true, capabilities: CAPABLE_CAPS });
 // Faengt registerTool(name, config, handler) + registerResource(name, uri, config,
 // readCb) ein. tool() (Bestand) faengt es ueber server.tool ab (hier ungenutzt).
 function captureUi(ctx) {
-  const tools = new Map(); // name -> { config, handler }
+  const tools = new Map(); // name -> { config, desc, handler }
   const resources = []; // { name, uri, config, readCallback }
   const fakeServer = {
-    tool(name, _desc, _schema, handler) {
-      tools.set(name, { config: null, handler });
+    tool(name, desc, _schema, handler) {
+      tools.set(name, { config: null, desc, handler });
     },
     registerTool(name, config, handler) {
       tools.set(name, { config, handler });
@@ -1264,4 +1264,39 @@ test("T-Wb-CAL-AC6: calendar.html self-contained + read-only + erbt W1 + deklari
   assert.ok(html.includes('data-mcp="calendar"'), "Listen-Slot data-mcp=calendar");
   assert.ok(html.includes("data-mcp-row="), "deklariert Row-Felder fuer das Objekt-Listen-Rendering");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_CALENDAR), true, "Adapter kennt calendar");
+});
+
+// ===== W0: Charakterisierungs-Baseline (Spam-Zustand vor dem Live-Widget-Umbau) =====
+// Pinnt den HEUTIGEN Zustand in Asserts, bevor W2 ihn umkehrt (siehe
+// tasks/mcp-ui-live-widget-chain.md, Abschnitt W0). Reiner Test-Code, kein
+// Produktionscode beruehrt - place_call laeuft heute ueber das positionsbasierte
+// server.tool (Bestands-API), NICHT ueber registerTool/uiTool.
+
+test("T-W0-place-shape: place_call (heute via server.tool) traegt kein _meta, Handler liefert reinen Text", async () => {
+  await withGateway({ callId: "call_w0_1" }, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { config, handler } = tools.get("place_call");
+    assert.equal(config, null, "place_call laeuft ueber server.tool (positional API), kein config/_meta-Objekt");
+    const result = await handler({ to: "+4917212345678", objective: "Testanruf" });
+    assert.equal(result.content[0].type, "text", "Handler liefert reinen Textblock");
+    assert.equal(result.structuredContent, undefined, "kein structuredContent - Spam-Baseline vor W2");
+  });
+});
+
+test("T-W0-place-desc: place_call-Beschreibung weist das Modell zum Polling an (Spam-Ursache 1)", () => {
+  const { tools } = captureUi({ uiHost: capableHost() });
+  const { desc } = tools.get("place_call");
+  assert.ok(
+    desc.includes("alle ~10 Sekunden get_call_status"),
+    "Baseline: Polling-Anweisung noch im Beschreibungstext (W2 entfernt sie)",
+  );
+});
+
+test("T-W0-get-status-desc: get_call_status-Beschreibung weist ebenfalls zum Polling an (Spam-Ursache 1)", () => {
+  const { tools } = captureUi({ uiHost: capableHost() });
+  const { config } = tools.get("get_call_status");
+  assert.ok(
+    config.description.includes("alle ~10 Sekunden"),
+    "Baseline: Polling-Anweisung noch in der Beschreibung (W2 entfernt sie)",
+  );
 });
