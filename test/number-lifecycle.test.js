@@ -25,6 +25,7 @@ import {
   TENANT_STATUS,
   BOOTSTRAP_TENANT_ID,
   GLOBAL_CAP_REASON,
+  shouldPersistProvisionResult,
 } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
@@ -184,6 +185,15 @@ test("requestNumber: Skip-Marker verschwindet bei erfolgreichem Folge-Request (I
   const tenantB = findTenant(s, "b");
   assert.equal(tenantB.numberProvisionSkipReason, null);
   assert.equal(tenantB.numberProvisionSkipAt, null);
+});
+
+// ---- Review-Fix (Runde 1): shouldPersistProvisionResult (G5, geteilt von POST
+// /api/onboard UND triggerTenantProvisioning, vorher woertlich dupliziert) ----
+test("shouldPersistProvisionResult: Erfolg UND global_cap persistieren, jeder andere Skip nicht", () => {
+  assert.equal(shouldPersistProvisionResult({ ok: true }), true);
+  assert.equal(shouldPersistProvisionResult({ ok: false, reason: GLOBAL_CAP_REASON }), true);
+  assert.equal(shouldPersistProvisionResult({ ok: false, reason: "tenant_cap" }), false);
+  assert.equal(shouldPersistProvisionResult({ ok: false, reason: "tenant_inactive" }), false);
 });
 
 // ---- Voller Lebenszyklus ----

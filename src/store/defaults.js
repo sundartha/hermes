@@ -84,6 +84,16 @@ export const NUMBER_TRANSITIONS = Object.freeze({
 // nicht Teil dieser Phase.
 export const GLOBAL_CAP_REASON = "global_cap";
 
+// Persistenz-Entscheidung fuer ein requestNumber()-Ergebnis (Fix B, PLAN-PROVISIONING-
+// CAP.md Phase A). Erfolg wird IMMER persistiert ('requested' auch im Dry-Run); der
+// global_cap-Skip wird IMMER persistiert (reine Observability, kein Trigger); jeder
+// andere Skip-Grund (tenant_cap/tenant_inactive) bleibt ungespeichert (ausserhalb des
+// Scopes dieser Phase). EINE Quelle fuer BEIDE Call-Sites (POST /api/onboard UND
+// triggerTenantProvisioning, G5/S2 - vorher woertlich dupliziert).
+export function shouldPersistProvisionResult(r) {
+  return r.ok || r.reason === GLOBAL_CAP_REASON;
+}
+
 // ---- Provisioning-Jobs (async Worker, P6b2) ----
 // Status eines enqueued Jobs. EINE Quelle (G5/G13): der In-Memory-Queue-Adapter
 // (queue/adapters/memory) UND die persistente Job-Spur im Store-Spiegel (state-ops
