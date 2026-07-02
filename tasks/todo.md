@@ -5,63 +5,103 @@ Dieses File ist der Arbeits-Scratch fuer die jeweils laufende Phase (siehe
 
 - Dauerhafter Ueberblick ueber offene Punkte: **`STATUS.md`**
 - Lehren aus abgeschlossenen Aufgaben: **`tasks/lessons.md`**
-- Rebrand-Task im Detail: **`tasks/rebrand-sundartha.md`**
 
 ---
 
-# Task: Kauf-Land entkoppeln (alle Nummern US, Sprache bleibt Geo-basiert)
+# Task: Widget-Politur (Icon + i18n + Design-Cleanup) — 2026-07-02
 
-## Ziel
-Geo-Nummernkauf NICHT loeschen, sondern per Config neutralisieren: jeder neue User
-bekommt eine US-Nummer (+1), aber die Sprache wird weiter aus dem erkannten Herkunfts-
-land gesetzt (DE->de, FR->fr, ...). Steuerung ueber Env-Flag `FORCE_NUMBER_COUNTRY`
-(leer = heutiges Verhalten byte-identisch; "US" = jede Nummer US).
+Owner-Auftrag (3 Punkte, Chat-Widget bei MCP-Aufruf):
 
-## Kernidee (Entkopplung)
-- `tenant.country` = ERKANNTES Herkunftsland (Quelle fuer Sprache/Analytics) — unveraendert.
-- `number.country` = KAUF-Land (= forceNumberCountry, sonst Herkunftsland).
-- Laufzeit-Sprache haengt an `number.language` (resolveCallLanguage) — bleibt korrekt.
+1. Chat-Header-Icon zeigt Default-Wuerfel statt Fluegel.
+2. Widgets sind hart deutsch — international machen (en/de/fr, EN-Default).
+3. Design eleganter (Hermes/griechisch), Debug-Infos im Fuss entfernen
+   (call_id/FAILED/ui-notifications-Zeile/Timestamp), Fluegel+Animation bleiben.
 
-## Schritte
-1. [x] `src/config.js`: `forceNumberCountry` (FORCE_NUMBER_COUNTRY, Default "" = aus).
-2. [x] `src/server.js` Onboarding: `numberCountry = config.forceNumberCountry || country`,
-       an requestNumber; language + tenant.country unveraendert (Herkunftsland). Doc-Komm.
-3. [x] `src/billing/provision-trigger.js`: neues Arg `forceNumberCountry`;
-       `numberCountry = forceNumberCountry || homeCountry`; language = languageForCountry(homeCountry).
-4. [x] `src/server.js` triggerTenantProvisioning: `forceNumberCountry: config.forceNumberCountry`.
-5. [x] `test/helpers.js` BASE_ENV: `FORCE_NUMBER_COUNTRY: ""` (kein .env-Leak, Lehre test-base-env-drift).
-6. [x] `.env.example`: FORCE_NUMBER_COUNTRY= (dokumentiert, Default leer).
-7. [x] `render.yaml`: FORCE_NUMBER_COUNTRY: "US" (Owner-Wahl: US fuer alle, jetzt).
-8. [x] Tests: f1-geo-onboard (FORCE=US -> number.country US, language de, tenant DE);
-       bk3-auto-provision (forceNumberCountry US -> number.country US, home-language).
+Verifizierte Vorab-Befunde (Lead, empirisch):
 
-## Erwartetes Ergebnis (deterministisch)
-- FORCE_NUMBER_COUNTRY leer: `npm test` byte-identisch gruen (kein Verhaltenswechsel).
-- FORCE_NUMBER_COUNTRY=US, User DE: number.country="US", number.language="de",
-  tenant.country="DE", tenant.defaultLanguage="de".
+- Connector-URL ist `https://app.sundartha.com/mcp`; `serverInfo.icons[0].src`
+  zeigt via PUBLic_URL auf `vodafone-agent.onrender.com` -> Cross-Origin-Icon,
+  claude.ai verwirft es (Higgsfield=Custom-Connector MIT Icon beweist Machbarkeit).
+  Icon-PNG zudem 592KB/1024px. Beide Origins liefern das PNG mit 200.
+- Alle 5 Widget-Templates (src/ui/widgets) tragen deutsche Labels; call.html
+  zusaetzlich STATUS_VIEW-Labels im Inline-Skript + sichtbare Diag-/ID-Zeilen.
+- BIND_SCRIPT schreibt raw-Werte in [data-mcp]-Slots und laeuft NACH dem
+  Inline-Skript -> sichtbare formatierte Dauer braucht eigenes Display-Element
+  ohne data-mcp; call_id-Slot bleibt verstecktes Funktions-Slot (currentCallId).
+- Token-Gate (scripts/check-token-sync.js) prueft Widgets nur auf @import-Verbot;
+  keine neuen Hex-Token einfuehren, bestehende Tokens/rgba nutzen.
+- design-system/mcp/call.html = manuell gepflegtes Specimen (DESIGN ONLY) ->
+  nach Aenderung nachziehen.
 
-## Verifikation
-- `node --check` auf alle geaenderten src-Dateien.
-- `npm test` (alle gruen, inkl. neuer Faelle).
+## Todos (erwartetes Ergebnis + Verifikation, workflow.md Regel 7)
 
-## Review (/code-review, 3 parallele Finder + Eigenverifikation)
-- Verifikation: node --check alle geaenderten Dateien OK; `npm test` 1233/1233 gruen
-  (inkl. 2 neuer Faelle); byte-identisch bei leerem Flag (Logik + Bestandstests gruen).
-- Cross-File: number.country="US" fliesst sauber in searchParamsForCountry (US in Tabelle)
-  + holdAmountForCountry("US", default)=Default; Outbound-Allowlist prueft ZIEL, nicht
-  Absender -> kein Land-Gate-Umgehen; Signatur/Budget/Caps unberuehrt (Regel 1 ok).
-- pg-Backend: number.country UND number.language getrennte Spalten (pg.js INSERT/SELECT/
-  hydrate) -> entkoppelter US/de-Roundtrip ueberlebt, kein neuer Code-Pfad.
-- 3 Findings, alle bewusst NICHT gefixt (mit Begruendung):
-  1. G5-Dup `forceNumberCountry || X` an 2 Stellen: bare `||`-Operator, kein Domaenen-
-     Code; Helper waere reine Indirektion (Clean-Code Regel 3 Vorrang Lesbarkeit, S4-Risk).
-     provision-trigger ist zudem bewusst config-frei -> kann config nicht teilen. DECLINE.
-  2. Fehlender pg-Roundtrip-Test fuer US/de: deckt denselben generischen Spalten-Pfad ab
-     wie der bestehende FR/fr-pg-Test -> niedrigwertig, kein Bug. OPTIONAL.
-  3. Keine ISO-Validierung von FORCE_NUMBER_COUNTRY: Tippfehler ("USA") -> fail-safe
-     DE-Fallback (kein Leak/Kostenrisiko), konsistent mit unvalidiertem PROVISIONING_
-     COUNTRY; Owner-env, kein User-Input. OPTIONAL-Hardening, out-of-scope. DECLINE.
-- OFFEN (owner/infra-gated, kein Code): Live-Beweis = echte US-Nummer kaufen
-  (PROVISIONING_ENABLED=true + Telnyx-App mit US-DID-Recht) + deutschsprachiger Testanruf
-  auf der +1-Nummer. Plus: FORCE_NUMBER_COUNTRY=US muss in der Render-Env/Blueprint aktiv
-  werden (render.yaml gesetzt; ggf. Dashboard-Sync noetig, Deploy-Repo upstream beachten).
+- [ ] 1. Icon als data-URI: kleines optimiertes PNG (<=256px) als
+      `icons[0]` (data:) + bestehende https-URL als `icons[1]` in
+      HERMES_SERVER_INFO. Erwartet: icons[0].src beginnt mit
+      `data:image/png;base64,`, decodiert mit PNG-Magic, < 150KB.
+      Verifikation: neuer Test in test/ + `npm test`.
+- [ ] 2. `src/ui/widget-i18n.js`: DICT en/de/fr + I18N_SCRIPT
+      (window.HermesI18n.t, [data-i18n]-Swap bei DOMContentLoaded,
+      html.lang setzen; Locale: window.openai.locale || navigator.language,
+      Fallback en). Erwartet: Key-Paritaet aller Locales, t()-Fallback en.
+      Verifikation: neuer Test test/mcp-ui-widget-i18n.test.js.
+- [ ] 3. widget-catalog: I18N-Platzhalter-Injektion in <head> aller 5 Widgets.
+      Erwartet: widgetHtml(id) enthaelt HermesI18n fuer alle 5, kein
+      Platzhalter-Leak. Verifikation: Test + npm test.
+- [ ] 4. 5 Widget-Templates: EN-Default-Texte + data-i18n-Keys; call.html
+      Inline-Skript nutzt t() fuer STATUS_VIEW/Button; failure_reason-Map
+      (no-answer/busy/...) lokalisiert; objective_achieved bool->Yes/No
+      lokalisiert. Erwartet: keine deutschen Hardcodes mehr in den Templates.
+      Verifikation: grep + angepasste W1-Tests.
+- [ ] 5. call.html Design: .diag-Zeile weg (setDiagnostic nur noch interner
+      Zustand, Fallback-Timeout-Verhalten bleibt), id-Block versteckt
+      (funktional), Dauer als m:ss via Display-Element, Footer als
+      HERMES-Inschrift + dezenter Maeander-Akzent (nur bestehende
+      Farb-Tokens/rgba-Weiss). Erwartet: kein sichtbares call_id/FAILED/
+      ui-notifications/Timestamp mehr. Verifikation: W1-Tests angepasst +
+      visueller Harness.
+- [ ] 6. design-system/mcp/call.html Specimens nachziehen (EN + neuer Fuss).
+      Verifikation: npm test (Sync-/Token-Gates gruen).
+- [ ] 7. Visueller Loop lokal: Harness in Scratchpad (kompiliertes Widget-HTML
+      + postMessage-Simulation dialing/in_progress/completed/failed ×
+      en/de/fr) via Chrome-Screenshots. Erwartet: EN/DE/FR korrekt, kein
+      Debug-Fuss, Fluegel+Ring unveraendert.
+- [ ] 8. `node --check` alle geaenderten Dateien + `npm test` komplett gruen.
+- [ ] 9. Commit + push origin UND upstream (Render autodeploy), healthz +
+      [boot]-Banner pruefen.
+- [ ] 10. Live-Verifikation claude.ai (Chrome): neuer Chat, read-only Tool
+      (get_my_number o.ae.) triggern -> Widget EN/DE pruefen; Connector-Seite:
+      Fluegel-Icon statt Wuerfel (ggf. Cache/Reconnect-Hinweis an Owner).
+
+## Bewusste Abgrenzungen
+
+- Tool-Result-TEXTE (content[0].text, z.B. "Noch keine Anrufe.") bleiben
+  deutsch — Claude uebersetzt im Chat selbst; separater Task falls gewuenscht.
+- Listen-Widgets (calls/calendar): keine Datums-/Feld-Formatierung in diesem
+  Task (nur Labels/i18n).
+- PUBLIC_URL/Origin-Cutover (Track B) unangetastet.
+
+# Task: Deterministische Wahl-Ziel-Normalisierung (Wurzelfix LLM-Ziffern-Regeneration)
+
+RCA call_mr3upd4uz8p3 (02.07. 18:41): Chat-Client (LLM) formte "01737252163" in
+E.164 um und erfand dabei eine Ziffer (+4917237252163, 32s Klingeln bei Fremdem).
+Wurzelfix: Server normalisiert deterministisch, Tool-Description verbietet dem
+Modell das Umformen (Option 1, Owner-entschieden: Telefon-Konvention).
+
+- [ ] 1. defaults.js: homeCountryCode(candidates) + normalizeDialTarget(num, home).
+      Erwartet: ("01737252163","+49")->"+491737252163"; ("0049...",*)->"+49...";
+      ("+...",*)->unveraendert; ohne home->unveraendert. Verifikation: Unit-Tests
+      in test/dial-target-normalization.test.js.
+- [ ] 2. server.js POST /api/calls: to nach TENANT_REJECT-Check normalisieren
+      (Heimatland: privateNumber -> aktive DID), C4-Trunk-0-Praedikat auf dem
+      Ergebnis wiederholen. Erwartet: Gates+Dial sehen NUR die normalisierte
+      Nummer; kein Heimatland -> 400 E.164 (fail-closed). Verifikation:
+      HTTP-Tests (400/500-Diskriminator wie e164-trunk-zero-reject.test.js).
+- [ ] 3. mcp-tools.js place_call: to-Description umdrehen (zeichengenau
+      uebernehmen, NIE umformen; Auslands-National-Format -> nachfragen).
+      Erwartet: reiner Text-Diff. Verifikation: node --check + npm test.
+- [ ] 4. node --check (3 Dateien) + npm test komplett gruen; Smoke:
+      PORT=3999 lokal + curl /api/calls mit "01737252163" (mit DE-privateNumber
+      geseedet -> passiert Format-Gate; ohne -> 400).
+- [ ] 5. Clean-Code-Review (Sonnet-Subagent, .claude/refs/clean-code.md);
+      S1/S2 fixen bis PASS.
