@@ -1,0 +1,44 @@
+<!-- @dsCard group="MCP" name="get_my_number" subtitle="The agent's own phone number — Olympus HUD, mirrors src/ui/widgets/my-number.html — DESIGN ONLY" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP get_my_number — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/preview.css" />
+<link rel="stylesheet" href="../_shared/hud-card.css" />
+<style>
+  /* Kartenchrome (Tokens/.card/.eyebrow/.hero/.wing-wrap/.phase/.hero-title-
+     Default/.foot) kommt aus ../_shared/hud-card.css (EINE Quelle statt 4x
+     Kopie, G5/S2-Fix) - 1:1 aus src/ui/hud-card-css.js. Einziger lokaler
+     Override: .hero-title groesser als der geteilte Default, damit die
+     Nummer als Kernaussage der Karte traegt (1:1 aus dem echten
+     my-number.html-Widget, das seinen HUD_CARD_CSS-Default genauso lokal
+     ueberschreibt). */
+  .hero-title{font-size:21px;font-weight:600;color:rgba(255,255,255,.94);
+    letter-spacing:.01em;word-break:break-word}
+</style>
+</head>
+<body class="ds">
+<div class="ds-frame ds-frame--narrow">
+  <p class="ds-note">Mockup. Mirrors src/ui/widgets/my-number.html — the agent's own number, nothing else.</p>
+  <div class="card">
+    <div class="eyebrow">Hermes · Agent number</div>
+    <div class="hero">
+      <div class="wing-wrap">
+        <span class="wing-mount" data-wing data-status="idle"></span>
+      </div>
+      <span class="phase">get_my_number</span>
+      <span class="hero-title">+1 864 302 8341</span>
+    </div>
+    <div class="foot"><span>+1 864 302 8341</span><span>Hermes</span></div>
+  </div>
+</div>
+<script src="../components/brand/wing-engine.js"></script>
+<script>
+  HermesWingEngine.mount(document.querySelector("[data-wing]"), {
+    size: 86, status: "idle", textureUrl: "../assets/logos/hermes-wing.png",
+  });
+</script>
+</body>
+</html>

@@ -20,9 +20,10 @@ both.
 2. **Tenant web app / dashboard** — logged-in light UI (`app/`). Overview KPIs,
    call history, agent permissions (the one write path), billing. Space
    Grotesk, white cards, brand-navy actions.
-3. **MCP result cards** — rich cards a Hermes tool *could* render inside a host
-   chatbot (`mcp/`). **Design mockups** — the live MCP returns plain text today
-   (`src/mcp-tools.js`, `{type:"text"}`); these are not wired to the server.
+3. **MCP result cards** — rich cards a Hermes tool renders inside a host
+   chatbot (`mcp/`). The live widgets (`src/ui/widgets/*`) are wired via
+   MCP-UI (see `src/mcp-tools.js`); these design-system copies are static
+   mockups for browsing the visual language, not the served markup.
 
 ## Sources
 
@@ -228,7 +229,10 @@ Root:
 - `assets/` — `logos/` (winged sandal PNG, Sundartha SVG), `imagery/`
   (Olympus photo + cloud video), `fonts/` (self-hosted woff2).
 - `_shared/` — `preview.css` (specimen + mirrored component classes for the HTML
-  cards); `tokens.css` (re-exports `styles.css`, kept for back-compat).
+  cards); `hud-card.css` (the shared Olympus-HUD card chrome for the 4
+  read-only MCP kit cards below, mirrors `src/ui/hud-card-css.js` — one
+  source instead of 4x the same block); `tokens.css` (re-exports
+  `styles.css`, kept for back-compat).
 - `SKILL.md` — Agent-Skills front matter for download into Claude Code.
 
 Components (`window.HermesDesignSystem_738510.*`):
@@ -257,9 +261,10 @@ UI kits:
   pricing). Starting point.
 - `app/index.html` — interactive tenant dashboard (login → overview / calls /
   settings / billing), composing the bundle components. Starting point.
-- `mcp/` — `index.html` (result card in a chatbot), `wing-status.html` (the
-  LiveWing reacting through a live MCP call — connecting → calling → booked) +
-  four mockup specimen cards (`call-result`, `call-status`, `agent-status`,
-  `transcript`). **Design only.**
+- `mcp/` — `index.html` (result card in a chatbot), `wing-status.html`
+  (concept showcase, Pixi/CDN — not the production path), `call.html` (unified
+  call card across its 5 lifecycle states, mirrors `src/ui/widgets/call.html`),
+  `agent-status.html`, `my-number.html`, `calls.html`, `calendar.html` (the 4
+  read-only cards, mirror `src/ui/widgets/*`). **Design only.**
 
 The Design System tab renders every `@dsCard`-tagged HTML, grouped by `group`.

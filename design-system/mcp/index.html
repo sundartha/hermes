@@ -1,4 +1,4 @@
-<!-- @dsCard group="MCP (Mockup)" name="MCP card in chat" viewport="760x720" subtitle="How a Hermes result card renders inside a chatbot — DESIGN ONLY" -->
+<!-- @dsCard group="MCP" name="MCP card in chat" viewport="760x760" subtitle="How a Hermes result card renders inside a chatbot — DESIGN ONLY" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,20 +25,38 @@
   .msg__text p { margin: 0 0 10px; }
   .msg__text p:last-child { margin-bottom: 0; }
 
-  /* MCP result card (tool result rendered inline) */
-  .mcp-card { margin-top: 12px; max-width: 440px; background: var(--color-card); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden; }
-  .mcp-card__head { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: var(--border-width) solid var(--color-divider); }
-  .mcp-card__icon { width: 48px; height: 48px; border-radius: var(--radius-round); overflow: hidden; display: grid; place-items: center; flex-shrink: 0; background: radial-gradient(120% 120% at 30% 0%, #1b4f86 0%, #0f2d52 72%); }
-  .mcp-card__hb { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-  .mcp-card__title { font-weight: var(--weight-emphasis); }
-  .mcp-card__sub { font-size: var(--text-eyebrow); color: var(--color-muted); }
-  .mcp-card__body { padding: 18px 20px; display: flex; flex-direction: column; gap: 11px; }
-  .line { display: flex; gap: 12px; }
-  .line__k { width: 110px; flex-shrink: 0; color: var(--color-muted); font-size: var(--text-body); }
-  .line__v { font-weight: var(--weight-label); }
-  .mcp-card__foot { padding: 11px 20px; border-top: var(--border-width) solid var(--color-divider); display: flex; align-items: center; justify-content: space-between; font-size: var(--text-eyebrow); color: var(--color-muted); }
-  .status-badge { display: inline-block; flex-shrink: 0; padding: 2px 10px; border-radius: var(--radius-badge); font-size: var(--text-eyebrow); font-weight: var(--weight-label); text-transform: uppercase; letter-spacing: var(--tracking-label); white-space: nowrap; }
-  .status-badge--positive { background: var(--color-status-positive-surface); color: var(--color-status-positive); }
+  /* MCP result card (tool result rendered inline) - Olympus HUD (H5), 1:1
+     aus der neuen call.html-Kit-Karte (Single-State "completed") uebernommen,
+     aber auf einer eigenen Klasse .hermes-result-card gescoped statt :root -
+     die restliche Chat-Seite bleibt beim hellen Token-Set (../styles.css),
+     die Karte selbst bleibt dunkel (kein Kollisions-Risiko mit --color-*). */
+  .hermes-result-card {
+    --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
+    --radius-card-hud:22px; --radius-pill-hud:99px;
+    --color-accent-light:#5ea1e0; --color-accent-light-strong:#8ec2ee;
+    --color-accent-light-rgb:94,161,224;
+    --color-accent-light-glow:rgba(var(--color-accent-light-rgb),.5);
+    position: relative; margin-top: 12px; max-width: 440px; overflow: hidden;
+    border-radius: var(--radius-card-hud);
+    padding: 22px 24px 18px;
+    font-family: var(--font-body); color: #fff;
+    background:
+      radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.16) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
+      linear-gradient(165deg, var(--color-navy-card) 0%, var(--color-navy-800) 42%, var(--color-navy-900) 100%);
+    border: 1px solid rgba(var(--color-accent-light-rgb),.28);
+    box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 22px 44px -20px rgba(3,10,24,.7), 0 0 48px -18px var(--color-accent-light-glow);
+  }
+  .hermes-result-card__head { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; }
+  .hermes-result-card__eyebrow { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: rgba(255,255,255,.55); font-weight: 600; }
+  .hermes-result-card__pill { display: inline-flex; align-items: center; border-radius: var(--radius-pill-hud); padding: 5px 13px; font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #dfeaf7; border: 1px solid rgba(var(--color-accent-light-rgb),.35); background: rgba(var(--color-accent-light-rgb),.14); }
+  .hermes-result-card__wing { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0 18px; }
+  .hermes-result-card__title { font-size: 16px; font-weight: 600; color: rgba(255,255,255,.94); }
+  .hermes-result-card__rows { position: relative; z-index: 1; display: flex; flex-direction: column; }
+  .hermes-result-card__row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 10px 2px; border-top: 1px solid rgba(255,255,255,.09); }
+  .hermes-result-card__row:first-child { border-top: 1px solid rgba(255,255,255,.16); }
+  .hermes-result-card__row-k { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.5); white-space: nowrap; flex-shrink: 0; }
+  .hermes-result-card__row-v { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.94); text-align: right; }
+  .hermes-result-card__foot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.12); font-size: 11px; color: rgba(255,255,255,.4); }
 
   .composer { max-width: 680px; margin: 0 auto; padding: 0 20px; }
   .composer__box { display: flex; align-items: center; gap: 10px; border: var(--border-width) solid var(--color-field-border); border-radius: var(--radius-card); background: var(--color-card); padding: 12px 16px; box-shadow: var(--shadow-card); }
@@ -48,7 +66,7 @@
 </head>
 <body>
   <div class="chat">
-    <div class="disclaimer">Design mockup — the live MCP returns plain text today. This shows how a rich Hermes result card could render inside a chatbot.</div>
+    <div class="disclaimer">Design mockup — an illustrative chat scenario, not a byte-for-byte mirror of the live call.html widget's field set. The card chrome (colors/radii/wing) matches the real widget; the story fields below (Called, Language) are illustrative, not part of its data contract.</div>
 
     <div class="msg">
       <div class="msg__avatar msg__avatar--user">A</div>
@@ -64,22 +82,22 @@
         <div class="msg__name">Assistant · via Hermes</div>
         <div class="msg__text">
           <p>Done — I called Salon Bella on your behalf and booked it. Here's the summary:</p>
-          <div class="mcp-card">
-            <div class="mcp-card__head">
-              <span class="mcp-card__icon" id="booked-wing"></span>
-              <span class="mcp-card__hb">
-                <span class="mcp-card__title">Appointment booked</span>
-                <span class="mcp-card__sub">place_call · Hermes</span>
-              </span>
-              <span class="status-badge status-badge--positive">Completed</span>
+          <div class="hermes-result-card">
+            <div class="hermes-result-card__head">
+              <span class="hermes-result-card__eyebrow">Hermes · Call</span>
+              <span class="hermes-result-card__pill">Completed</span>
             </div>
-            <div class="mcp-card__body">
-              <div class="line"><span class="line__k">Called</span><span class="line__v">Salon Bella · +49 30 1234567</span></div>
-              <div class="line"><span class="line__k">Outcome</span><span class="line__v">Haircut booked, Thu 14:30</span></div>
-              <div class="line"><span class="line__k">Duration</span><span class="line__v">2 min 41 sec</span></div>
-              <div class="line"><span class="line__k">Language</span><span class="line__v">Deutsch (de-DE)</span></div>
+            <div class="hermes-result-card__wing">
+              <span id="booked-wing"></span>
+              <span class="hermes-result-card__title">Appointment booked</span>
             </div>
-            <div class="mcp-card__foot">
+            <div class="hermes-result-card__rows">
+              <div class="hermes-result-card__row"><span class="hermes-result-card__row-k">Called</span><span class="hermes-result-card__row-v">Salon Bella · +49 30 1234567</span></div>
+              <div class="hermes-result-card__row"><span class="hermes-result-card__row-k">Outcome</span><span class="hermes-result-card__row-v">Haircut booked, Thu 14:30</span></div>
+              <div class="hermes-result-card__row"><span class="hermes-result-card__row-k">Duration</span><span class="hermes-result-card__row-v">2 min 41 sec</span></div>
+              <div class="hermes-result-card__row"><span class="hermes-result-card__row-k">Language</span><span class="hermes-result-card__row-v">Deutsch (de-DE)</span></div>
+            </div>
+            <div class="hermes-result-card__foot">
               <span>call_mqmpvuzz1079</span>
               <span>Disclosure spoken first</span>
             </div>
@@ -101,7 +119,7 @@
 <script>
   // Booked result -> the wing snaps up in success, then settles
   HermesWingEngine.mount(document.getElementById("booked-wing"), {
-    size: 48, status: "success", textureUrl: "../assets/logos/hermes-wing.png",
+    size: 112, status: "success", textureUrl: "../assets/logos/hermes-wing.png",
   });
 </script>
 </body>
