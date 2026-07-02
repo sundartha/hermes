@@ -14,8 +14,8 @@ If the user invokes this skill without any other guidance, ask them what they wa
 
 - `styles.css` — link this one file to get every token + webfont.
 - `tokens/` — `primitives.css` (raw), `semantic.css` (`:root` light/app roles),
-  `dark.css` (`.on-dark` navy hero roles), `fonts.css` (Instrument Serif + Space
-  Grotesk self-hosted; Inter via Google Fonts).
+  `dark.css` (`.on-dark` navy hero roles), `fonts.css` (@font-face: Norse +
+  Norse Bold, Space Grotesk, both self-hosted).
 - `assets/` — `logos/` (winged-sandal PNG, Sundartha SVG), `imagery/` (Mount
   Olympus photo + drifting-cloud video), `fonts/` (woff2).
 - `components/{core,feedback,forms}/` — React primitives. Bundle global is
@@ -24,10 +24,10 @@ If the user invokes this skill without any other guidance, ask them what they wa
 
 ## The 30-second brand
 
-- Two worlds: **dark navy marketing** (Instrument Serif display, Space Grotesk,
-  white pill CTAs, full-bleed Olympus imagery, scrims for legibility) and **light
-  app** (Inter, white cards, `#fafafa` page). **Brand red `#e60000`** is the one
-  action color in both.
+- Two worlds: **dark navy marketing** (Norse display, Space Grotesk, white
+  pill CTAs, full-bleed Olympus imagery, scrims for legibility) and **light
+  app** (Space Grotesk, white cards, `#fafafa` page). **Brand navy
+  `#1b4f86`** is the one action color in both.
 - Cards: white, 1px `#ececec` hairline, 18px radius, soft `0 6px 18px
   rgba(0,0,0,.07)` shadow, 24px padding. Pills/badges fully rounded.
 - Voice: confident, plain, honest; second person to the user, third person about

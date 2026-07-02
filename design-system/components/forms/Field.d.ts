@@ -13,7 +13,7 @@ export interface FieldProps {
 }
 
 /**
- * Labelled text input — focus turns the border brand-red.
+ * Labelled text input — focus turns the border brand-navy.
  *
  * @startingPoint section="Forms" subtitle="Labelled text input" viewport="700x150"
  */
