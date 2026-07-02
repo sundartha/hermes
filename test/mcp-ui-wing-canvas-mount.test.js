@@ -27,6 +27,20 @@ const GOLD_ENABLED_LINE_PATCHED = "  var GOLD_ENABLED = true; // Owner-Gate auf 
 assert.ok(ENGINE_SOURCE.includes(GOLD_ENABLED_LINE), "GOLD_ENABLED-Zeile nicht gefunden - Datei umstrukturiert?");
 const ENGINE_SOURCE_GOLD_ENABLED = ENGINE_SOURCE.replace(GOLD_ENABLED_LINE, GOLD_ENABLED_LINE_PATCHED);
 
+// H2-S1 (Review-Blocker Runde 3, T1): applyStatus()s Preset-Switch (tl = preset ===
+// "olympian" ? olympianCycle : classicCycle) laeuft komplett innerhalb der mount()-
+// Closure - der zurueckgegebene Handle exponiert nur setStatus/destroy, kein Zugriff
+// auf den internen state. Gleiche Patch-Technik wie GOLD_ENABLED_LINE oben: NUR die
+// eigene In-Memory-Kopie der Quelle haengt eine __debugState-Referenz an den
+// mount()-Rueckgabewert, die produktiv ausgelieferte Datei bleibt unveraendert. state
+// ist eine einzige, nie neu zugewiesene Objekt-Referenz pro Instanz (siehe
+// "var state = restState()" in mount()) - die Timeline mutiert sie in place,
+// __debugState.beat liest also live mit.
+const RETURN_HANDLE_LINE = "      setStatus: requestStatus,";
+const RETURN_HANDLE_LINE_PATCHED = "      setStatus: requestStatus, __debugState: state, // Test-Patch (H2-S1 Runde 3)";
+assert.ok(ENGINE_SOURCE.includes(RETURN_HANDLE_LINE), "setStatus-Return-Zeile nicht gefunden - Datei umstrukturiert?");
+const ENGINE_SOURCE_DEBUG_STATE = ENGINE_SOURCE.replace(RETURN_HANDLE_LINE, RETURN_HANDLE_LINE_PATCHED);
+
 // rAF/cAF-Fake: die Engine haelt zu jedem Zeitpunkt hoechstens EINE ausstehende
 // Anfrage (frame() plant sich entweder selbst neu oder stoppt) - ein einzelner
 // Pending-Slot reicht, kein Queue-Modell noetig.
@@ -137,7 +151,13 @@ function makeIntersectionObserverHarness() {
 // gepatchte Engine-Quelle (siehe ENGINE_SOURCE_GOLD_ENABLED); gold wird 1:1 als
 // opts.gold an mount() durchgereicht. Rueckgabe buendelt alle Spies/Handles, die
 // die Tests fuer Build-Operate-Check brauchen (P13).
-function mountInSandbox({ reduce = false, status = "idle", source = ENGINE_SOURCE, gold = false } = {}) {
+// preset/size/grid/fpsCap: 1:1 an opts.* durchgereicht (undefined -> Engine-Default
+// greift, wie bei opts.size||DEFAULT_SIZE_PX etc.). dpr steuert sandbox.devicePixelRatio
+// separat von reduce/status (H2-S1 Runde 3, T1: fuer die Nicht-Default-Options-Tests).
+function mountInSandbox({
+  reduce = false, status = "idle", source = ENGINE_SOURCE, gold = false,
+  preset, size, grid, fpsCap, dpr = 1,
+} = {}) {
   const raf = makeRafHarness();
   const ctx2d = makeCtx2dSpy();
   const canvas = makeFakeCanvas(ctx2d);
@@ -150,7 +170,7 @@ function mountInSandbox({ reduce = false, status = "idle", source = ENGINE_SOURC
   sandbox.window = sandbox;
   sandbox.document = doc;
   sandbox.performance = { now: () => clockRef.value };
-  sandbox.devicePixelRatio = 1;
+  sandbox.devicePixelRatio = dpr;
   sandbox.matchMedia = () => ({ matches: reduce });
   sandbox.Image = makeFakeImage();
   sandbox.IntersectionObserver = io.FakeIntersectionObserver;
@@ -160,7 +180,9 @@ function mountInSandbox({ reduce = false, status = "idle", source = ENGINE_SOURC
   vm.createContext(sandbox);
   vm.runInContext(source, sandbox);
 
-  const handle = sandbox.window.HermesWingCanvas.mount(host, { src: "data:image/png;base64,x", status, gold });
+  const handle = sandbox.window.HermesWingCanvas.mount(host, {
+    src: "data:image/png;base64,x", status, gold, preset, size, grid, fpsCap,
+  });
 
   return { handle, raf, ctx2d, canvas, doc, host, io, clockRef };
 }
@@ -274,4 +296,85 @@ test("T-wing-mount-gold-gated: GOLD_ENABLED=false (Produktions-Default) ignorier
   clockRef.value += FRAME_BUDGET_MS + 5;
   raf.fire(clockRef.value);
   assert.equal(ctx2d.calls.fillRect, 0, "Owner-Gate auf Quell-Ebene sperrt applyGoldTint(), unabhaengig von opts.gold");
+});
+
+// H2-S1 (Review-Blocker Runde 3, T1): der Preset-Switch in applyStatus() -
+// tl = (preset === "olympian" ? olympianCycle : classicCycle)(state, ...) - war ueber
+// die public API unverifiziert. Beobachtungspunkt: state.beat wird von KEINEM Tween in
+// classicCycle je angefasst (nur die initiale .set(..., {beat:0,...})); olympianCycle
+// dagegen tweent beat schon im allerersten Schritt (0 -> -1.0 ueber 0.18s). Ein
+// vertauschtes Ternary wuerde also GENAU in dem Preset, das eigentlich olympian laeuft,
+// beat auf 0 halten (bzw. umgekehrt bei classic beat!=0 liefern) - beide Tests unten
+// werden dann ROT.
+test("T-wing-mount-preset-olympian: preset='olympian' fuehrt olympianCycle aus (beat-Kanal wird animiert)", () => {
+  const { handle, raf, clockRef } = mountInSandbox({
+    source: ENGINE_SOURCE_DEBUG_STATE, preset: "olympian", status: "working",
+  });
+  assert.equal(raf.pendingCount(), 1, "working-Loop laeuft");
+
+  clockRef.value += 100; // ein Frame reicht: olympianCycle tweent beat schon im ersten Schritt
+  raf.fire(clockRef.value);
+
+  assert.notEqual(
+    handle.__debugState.beat, 0,
+    "olympianCycle ist der einzige Zyklus, der den beat-Kanal ueberhaupt tweent",
+  );
+});
+
+test("T-wing-mount-preset-classic: preset='classic' fuehrt classicCycle aus (beat-Kanal bleibt 0)", () => {
+  const { handle, raf, clockRef } = mountInSandbox({
+    source: ENGINE_SOURCE_DEBUG_STATE, preset: "classic", status: "working",
+  });
+  assert.equal(raf.pendingCount(), 1, "working-Loop laeuft");
+
+  clockRef.value += 100;
+  raf.fire(clockRef.value);
+
+  assert.equal(
+    handle.__debugState.beat, 0,
+    "classicCycle setzt beat nur per .set() auf 0 zurueck, tweent es nie",
+  );
+});
+
+test("T-wing-mount-terminal-error: status='error' stoppt die Schleife, sobald die Timeline fertig ist", () => {
+  const { raf, clockRef } = mountInSandbox({ status: "error" });
+  assert.equal(raf.pendingCount(), 1, "Loop startet fuer den error-Status");
+
+  // buildError dauert 0.45s (4x 0.05s Zittern + 0.25s Rueckfeder); dt ist pro Frame auf
+  // TAB_SWITCH_DT_CAP_SEC=0.1s gekappt, mehrere 100ms-Schritte reichen zum Abschluss.
+  let iterations = 0;
+  while (raf.pendingCount() > 0 && iterations < 20) {
+    clockRef.value += 100;
+    raf.fire(clockRef.value);
+    iterations += 1;
+  }
+  assert.equal(raf.pendingCount(), 0, "Terminal-Stop: keine weitere rAF-Anfrage nach Timeline-Ende");
+  assert.ok(iterations < 20, "Timeline ist tatsaechlich fertig geworden, nicht die Schleifen-Grenze erreicht");
+});
+
+test("T-wing-mount-options: Nicht-Default size/grid/fpsCap werden uebernommen (H2-S1 Runde 3, T1c)", () => {
+  const grid = { x: 2, y: 3 }; // bewusst grob abweichend von beiden Defaults (8x12 grob / 16x24 fein)
+  const { canvas, ctx2d, raf, clockRef } = mountInSandbox({ size: 200, grid, fpsCap: 5, dpr: 3 });
+
+  // Canvas-Dimension: size * min(devicePixelRatio, DPR_CAP=2) -> 200*2=400, NICHT 200*3=600.
+  assert.equal(canvas.width, 400, "DPR wird bei DPR_CAP=2 gekappt statt die volle devicePixelRatio(3) zu uebernehmen");
+  assert.equal(canvas.height, 400);
+  assert.equal(canvas.style.width, "200px", "CSS-Groesse folgt der logischen size, nicht der physischen Canvas-Dimension");
+
+  assert.equal(raf.pendingCount(), 1, "Loop laeuft (idle-Status, kein reduced motion)");
+
+  // fpsCap=5 -> Budget 200ms; TAB_SWITCH_DT_CAP_SEC kappt jeden einzelnen Schritt auf
+  // 100ms, ein einzelner Schritt kann das Budget also gar nicht erreichen (anders als der
+  // Default-Cap 30 mit 33ms-Budget, der schon nach einem 100ms-Schritt rendern wuerde) -
+  // das unterscheidet den konfigurierten Cap sauber vom (ignorierten) Default.
+  clockRef.value += 100;
+  raf.fire(clockRef.value);
+  assert.equal(ctx2d.calls.clearRect, 0, "1. Schritt (100ms) < konfiguriertes Budget (200ms) -> kein Render");
+
+  clockRef.value += 100;
+  raf.fire(clockRef.value);
+  assert.equal(ctx2d.calls.clearRect, 1, "kumuliert 200ms >= konfiguriertes Budget -> jetzt wird gezeichnet");
+
+  // Gitter: grid.x=2 * grid.y=3 Zellen * 2 Dreiecke/Zelle = 12 drawImage-Aufrufe.
+  assert.equal(ctx2d.calls.drawImage, 12, "explizites Gitter wurde uebernommen, nicht defaultGrid(size=200)=GRID_FINE(16x24)");
 });
