@@ -150,3 +150,20 @@ Eroeffnung (hoert der Owner sofort), (b) bessere goals via objective-Description
    toetet auch ein Deploy auf paid-Plan laufende Calls -> FT1).
 3. Telnyx TeXML "hang-up on timeout" im Portal pruefen (weiter offen).
 4. Push origin+upstream nach Owner-Ok (Merge ist lokal).
+
+## Lehren (Runde 2; gehoeren nach tasks/lessons.md, sobald die Datei frei ist -
+## sie traegt gerade uncommittete WIP einer parallelen Session)
+
+- Stil-AUFFORDERUNGEN ("variiere die Formulierung", "Alltagssprache") erzeugen bei
+  Haiku Register-Entropie: Duz-Drift + reaktivierte Thema-Frage - Spiegelbild der
+  Runde-1-Lehre zu breiten Verboten. Auch enge Zusatzregeln nur behalten, wenn die
+  Bench einen Gewinn zeigt (v3 zeigte keinen -> Ablation).
+- BEIDE Owner-Symptome waren Infra/Timing (Deploy-Kollision, alter Deploy) - Log-
+  Forensik VOR dem Coden hat verhindert, am Prompt zu kurieren, was nicht am Prompt
+  lag (CLAUDE.md Regel 7).
+- Bench-Reports tragen meta.git_rev: alte Laeufe sind als Baseline-Pool
+  wiederverwendbar (git diff auf den Voice-Pfad als Legitimation) - spart einen
+  vollen Baseline-Sweep.
+- Vor einem Merge in master aus einem Worktree: `git status` im HAUPT-Checkout
+  UNGEKUERZT lesen (head schnitt die tasks/-WIP ab) und die eigene Branch-Flaeche
+  von fremder WIP freihalten, statt zu stashen.
