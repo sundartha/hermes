@@ -229,7 +229,10 @@ Root:
 - `assets/` — `logos/` (winged sandal PNG, Sundartha SVG), `imagery/`
   (Olympus photo + cloud video), `fonts/` (self-hosted woff2).
 - `_shared/` — `preview.css` (specimen + mirrored component classes for the HTML
-  cards); `tokens.css` (re-exports `styles.css`, kept for back-compat).
+  cards); `hud-card.css` (the shared Olympus-HUD card chrome for the 4
+  read-only MCP kit cards below, mirrors `src/ui/hud-card-css.js` — one
+  source instead of 4x the same block); `tokens.css` (re-exports
+  `styles.css`, kept for back-compat).
 - `SKILL.md` — Agent-Skills front matter for download into Claude Code.
 
 Components (`window.HermesDesignSystem_738510.*`):

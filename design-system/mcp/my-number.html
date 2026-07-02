@@ -6,57 +6,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MCP get_my_number — Hermes Design System</title>
 <link rel="stylesheet" href="../_shared/preview.css" />
+<link rel="stylesheet" href="../_shared/hud-card.css" />
 <style>
-  /* Kartenchrome 1:1 aus src/ui/hud-card-css.js - siehe agent-status.html
-     fuer die ausfuehrliche Begruendung. */
-  :root {
-    --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
-    --color-white:#fff;
-    --radius-card:22px; --radius-pill:99px;
-    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
-    --ease:cubic-bezier(0.22,1,0.36,1);
-    --wing-size:86px;
-    --color-accent-light:#5ea1e0;
-    --color-accent-light-strong:#8ec2ee;
-    --color-accent-light-rgb:94,161,224;
-    --color-accent-light-glow:rgba(var(--color-accent-light-rgb),.5);
-    --wing-glow-filter:drop-shadow(0 0 16px var(--color-accent-light-glow)) drop-shadow(0 2px 8px rgba(3,10,24,.6));
-  }
-  .card{
-    position:relative;max-width:min(480px,100%);padding:22px 24px 18px;
-    border-radius:var(--radius-card);overflow:hidden;
-    background:
-      radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.14) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
-      linear-gradient(165deg, var(--color-navy-card) 0%, var(--color-navy-800) 42%, var(--color-navy-900) 100%);
-    border:1px solid rgba(var(--color-accent-light-rgb),.26);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,.06) inset,
-      0 22px 44px -20px rgba(3,10,24,.7),
-      0 0 48px -18px var(--color-accent-light-glow);
-    font-family:var(--font-sans);color:var(--color-white);
-  }
-  .card::after{
-    content:"";position:absolute;inset:0 0 auto 0;height:150px;
-    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 3px);
-    pointer-events:none;
-    mask-image:linear-gradient(to bottom, rgba(0,0,0,.8), transparent);
-  }
-  .eyebrow{position:relative;z-index:1;font-size:10.5px;letter-spacing:.2em;
-    text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:600}
-  .hero{position:relative;z-index:1;display:flex;flex-direction:column;
-    align-items:center;gap:8px;padding:14px 0 18px;text-align:center}
-  .wing-wrap{position:relative;width:var(--wing-size);height:var(--wing-size);
-    display:grid;place-items:center;flex-shrink:0}
-  .wing-mount{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-  .wing-mount canvas{filter:var(--wing-glow-filter)}
-  .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5)}
-  /* Einziger Datenpunkt dieses Widgets - groesser als der Default, damit
-     die Nummer als Kernaussage der Karte traegt (1:1 my-number.html). */
+  /* Kartenchrome (Tokens/.card/.eyebrow/.hero/.wing-wrap/.phase/.hero-title-
+     Default/.foot) kommt aus ../_shared/hud-card.css (EINE Quelle statt 4x
+     Kopie, G5/S2-Fix) - 1:1 aus src/ui/hud-card-css.js. Einziger lokaler
+     Override: .hero-title groesser als der geteilte Default, damit die
+     Nummer als Kernaussage der Karte traegt (1:1 aus dem echten
+     my-number.html-Widget, das seinen HUD_CARD_CSS-Default genauso lokal
+     ueberschreibt). */
   .hero-title{font-size:21px;font-weight:600;color:rgba(255,255,255,.94);
     letter-spacing:.01em;word-break:break-word}
-  .foot{position:relative;z-index:1;display:flex;align-items:center;
-    justify-content:space-between;margin-top:14px;padding-top:12px;
-    border-top:1px solid rgba(255,255,255,.12);font-size:11px;color:rgba(255,255,255,.4)}
 </style>
 </head>
 <body class="ds">
