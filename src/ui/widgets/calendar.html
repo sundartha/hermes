@@ -7,14 +7,14 @@
 <title>Hermes — Calendar</title>
 <style>
   /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4) - siehe agent-status.html fuer
-     die ausfuehrliche Begruendung. */
+     die ausfuehrliche Begruendung. Der .list-Wrapper UND die Basis-Regeln
+     .list .row/.list .row:first-child/.list .cell kommen ebenfalls aus
+     HUD_CARD_CSS (geteilt, weil sowohl calls.html als auch calendar.html
+     eine wortgleiche Objekt-Liste zeigen, s. hud-card-css.js). */
   /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  /* Row/Cell-Layout fuer die Kalender-Liste - eigene Felder, deshalb lokal. */
-  .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
-    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
-  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
-  .cell{color:rgba(255,255,255,.85)}
+  /* Nur die feldspezifischen Overrides fuer die Kalender-Liste - eigene
+     Felder, deshalb lokal statt geteilt. */
   .cell[data-field="title"]{font-weight:600;flex-basis:100%;color:rgba(255,255,255,.94)}
   .cell[data-field="start"]{color:rgba(255,255,255,.5);font-size:12px;font-variant-numeric:tabular-nums}
   .cell[data-field="end"]{margin-left:auto;color:rgba(255,255,255,.5);font-size:12px;font-variant-numeric:tabular-nums}

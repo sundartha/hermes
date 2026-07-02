@@ -10,9 +10,13 @@
 //
 // Bewusst NICHT geteilt (bleibt lokal in den einzelnen Widget-Dateien):
 // - .rows/.row-k/.row-v (Schluessel/Wert-Zeilen) - nur agent-status.html
-//   braucht sie, kein zweiter Konsument.
-// - .row/.cell[data-field=...] (Listen-Zellen) - calls.html/calendar.html
-//   haben unterschiedliche Felder/Farben, keine wortgleiche Kopie.
+//   braucht sie, kein zweiter Konsument. Kollidiert NICHT mit .list .row
+//   unten (dort per .list-Scope auf die Listen-Widgets begrenzt, agent-
+//   status.html hat keinen .list-Container).
+// - .cell[data-field=...] (feldspezifische Farben/Formatierung) -
+//   calls.html/calendar.html haben unterschiedliche Felder/Farben, keine
+//   wortgleiche Kopie. Die Basis-Regeln .list .row/.list .cell SIND dagegen
+//   wortgleich und leben deshalb hier (analog .list, s.u.).
 // Werte (Farben/Radien/Ease) sind ABSICHTLICH identisch zu call.html gewaehlt
 // (Produkt-weite Konsistenz), die Wing-Groesse (86px) ist H4-spezifisch
 // (call.html bleibt bei 112px).
@@ -69,10 +73,19 @@ export const HUD_CARD_CSS = `
   .wing-canvas-mount canvas{filter:var(--wing-glow-filter)}
   .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5)}
   .hero-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.94)}
-  /* Objekt-Listen-Wrapper (calls.html/calendar.html) - reiner Styling-Hook
-     ueber der Scanline, die eigentlichen .row/.cell-Regeln bleiben lokal
-     (Felder/Farben unterscheiden sich je Widget). */
+  /* Objekt-Listen-Wrapper (calls.html/calendar.html) + Basis-Regeln fuer die
+     von renderRows() erzeugten Kind-Elemente (widget-bind.js: ROW_CLASS=row,
+     CELL_CLASS=cell, DOM ist .list > .row > .cell) - wortgleich zwischen
+     calls.html und calendar.html, deshalb hier EINE Quelle statt 2x Kopie
+     (G5/S2). Mit .list gescoped, damit diese Basis-Regeln NICHT mit dem
+     andersartigen .row in agent-status.html kollidieren (dort .rows > .row-k/
+     .row-v, kein .list-Container - s. Kommentar oben). Die feldspezifischen
+     [data-field=...]-Overrides bleiben lokal in calls.html/calendar.html. */
   .list{position:relative;z-index:1;display:flex;flex-direction:column}
+  .list .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
+    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .list .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .list .cell{color:rgba(255,255,255,.85)}
   .foot{position:relative;z-index:1;display:flex;align-items:center;
     justify-content:space-between;margin-top:14px;padding-top:12px;
     border-top:1px solid rgba(255,255,255,.12);font-size:11px;color:rgba(255,255,255,.4)}

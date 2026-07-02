@@ -7,18 +7,17 @@
 <title>Hermes — Calls</title>
 <style>
   /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4) - siehe agent-status.html fuer
-     die ausfuehrliche Begruendung (inkl. .list-Wrapper: geteilt, weil sowohl
-     calls.html als auch calendar.html eine Objekt-Liste zeigen). */
+     die ausfuehrliche Begruendung. Der .list-Wrapper UND die Basis-Regeln
+     .list .row/.list .row:first-child/.list .cell kommen ebenfalls aus
+     HUD_CARD_CSS (geteilt, weil sowohl calls.html als auch calendar.html
+     eine wortgleiche Objekt-Liste zeigen, s. hud-card-css.js). */
   /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  /* Row/Cell-Layout fuer die Anruf-Liste - inhaltlich eigen (Felder/Farben
-     unterscheiden sich von calendar.html), deshalb lokal statt geteilt.
-     .row/.cell sind die von widget-bind.js (renderRows) FEST vergebenen
-     Klassennamen (ROW_CLASS/CELL_CLASS) - hier nur restyled, nicht erzeugt. */
-  .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
-    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
-  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
-  .cell{color:rgba(255,255,255,.85)}
+  /* Nur die feldspezifischen Overrides fuer die Anruf-Liste - Felder/Farben
+     unterscheiden sich von calendar.html, deshalb lokal statt geteilt.
+     [data-field=...] haengt an den von widget-bind.js (renderRows) FEST
+     vergebenen .cell-Elementen (ROW_CLASS/CELL_CLASS) - hier nur restyled,
+     nicht erzeugt. */
   .cell[data-field="direction"]{font-size:10px;letter-spacing:.12em;text-transform:uppercase;
     color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.22);
     border-radius:var(--radius-pill);padding:2px 9px}
