@@ -12,7 +12,7 @@ const RANDOM_BYTES = 16;
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
 // Login-Route: eine Quelle (G5) fuer die Route-Registrierung, den Recovery-Redirect und
 // den Link der terminalen Seite.
-const LOGIN_ROUTE = "/auth/login";
+export const LOGIN_ROUTE = "/auth/login";
 // Query-Param, mit dem die Recovery den Login als zweiten (markierten) Versuch anstoesst.
 const RETRY_PARAM = "retry";
 // Loop-Guard-Marker fuer den OAuth-state. Tilde ist URI-unreserved (RFC 3986) und nicht
@@ -118,6 +118,11 @@ export function makeWebAuthRoutes(deps) {
   // Basic-Auth landet (rohe 403-/Auth-Sackgasse), sondern auf der "Choose your plan"-Shell.
   const { secret, redirectUri, ttlSeconds, oidc, accounts, sessions, audit } = deps;
   const postLoginPath = deps.postLoginPath || "/";
+  // Absolute Rueckkehr-URL fuer den WorkOS-Sign-out-Redirect (return_to). Muss absolut sein
+  // (anders als postLoginPath) und im WorkOS-Dashboard als Sign-out-Redirect-URL registriert
+  // sein (Phase 3, Jonas manuell). Optional: fehlt sie, laesst sessionLogoutUrl return_to weg
+  // -> WorkOS beendet die Session trotzdem, nur ohne automatischen Rueck-Redirect.
+  const postLogoutUrl = deps.postLogoutUrl;
   // Optionaler Signup-Spiegel-Nachzug (Default async No-Op -> Bestands-Auth-Tests
   // unveraendert): zieht den frisch per accounts.upsertOnFirstLogin angelegten Tenant in
   // den pg-Store-Spiegel, BEVOR die Session steht. Sonst faende jede WRITE-Store-Op auf dem
@@ -138,7 +143,7 @@ export function makeWebAuthRoutes(deps) {
   // Session-Rotation/-Binding) an EINER Stelle nachgezogen wird. Setzt NUR das Session-
   // Cookie; Login-Flow-Cookie-Cleanup, audit und redirect bleiben Sache des Aufrufers
   // (Callback auditiert + raeumt die pkce/state/nonce-Cookies, Dev-Login nicht).
-  async function mintSession(res, { sub, email, firstName, lastName }) {
+  async function mintSession(res, { sub, email, firstName, lastName, workosSessionId }) {
     const { tenantId } = await accounts.upsertOnFirstLogin({ sub, email });
     // Spiegel-Nachzug NACH dem Account-/Tenant-Upsert (die DB-Zeile existiert jetzt), VOR
     // sessions.create. FAIL-OPEN bewusst: die Auth-Entscheidung (account+session) ist
@@ -152,7 +157,10 @@ export function makeWebAuthRoutes(deps) {
     // Body-Spoofing). Deckt ausschliesslich den echten Callback (mintSession-Aufrufer reicht
     // Namen nur dort durch).
     if (firstName || lastName) await applyTenantIdentity(tenantId, { firstName, lastName });
-    const { id } = await sessions.create({ sub, tenantId, ttlSeconds });
+    // workosSessionId (sid-Klaim, aus exchange()) wird mitgespeichert -> Grundlage fuer den
+    // WorkOS-Sign-out-Redirect bei /auth/logout. Dev-Login reicht sie nie durch (undefined ->
+    // sessions.create() defaultet auf null, kein Verhaltenswechsel fuer den Dev-Pfad).
+    const { id } = await sessions.create({ sub, tenantId, ttlSeconds, workosSessionId });
     res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
     return { tenantId, id };
   }
@@ -232,7 +240,7 @@ export function makeWebAuthRoutes(deps) {
     }
 
     try {
-      const { claims } = await oidc.exchange({ code: req.query.code, verifier });
+      const { claims, workosSessionId } = await oidc.exchange({ code: req.query.code, verifier });
       // Session ueber die gemeinsame Mint-Mechanik (setzt das Session-Cookie). Danach die
       // Login-Flow-Cookies loeschen.
       const { tenantId } = await mintSession(res, {
@@ -240,6 +248,7 @@ export function makeWebAuthRoutes(deps) {
         email: claims.email,
         firstName: claims.firstName,
         lastName: claims.lastName,
+        workosSessionId,
       });
       clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
 
@@ -253,15 +262,27 @@ export function makeWebAuthRoutes(deps) {
   });
 
   // POST /auth/logout
-  // Invalidiert die Session (wenn Cookie vorhanden), loescht Cookie. Idempotent -> immer 204.
+  // Invalidiert die lokale Session (wenn Cookie vorhanden), loescht das Cookie. Traegt die
+  // Session eine WorkOS-Session-ID (sid-Klaim, seit dem Login mitgespeichert), liefert die
+  // Antwort zusaetzlich { logoutUrl }: WorkOS' eigener Sign-out-Endpunkt, zu dem der Browser
+  // TOP-LEVEL navigieren muss (Frontend), damit WorkOS die eigene AuthKit-SSO-Session beendet
+  // -- sonst bleibt sie aktiv und der naechste Login-Redirect authentifiziert still durch (kein
+  // Formular). Alt-Sessions/Dev-Login OHNE workos_session_id -> weiterhin 204 ohne Body
+  // (rein lokal, byte-identisch zum Bestand).
   router.post("/auth/logout", async (req, res) => {
     const signedSession = readCookie(req, "session");
     const sessionId = signedSession ? verifyValue(signedSession, secret) : null;
+    let workosSessionId = null;
     if (sessionId) {
+      const row = await sessions.get(sessionId);
+      workosSessionId = row ? row.workosSessionId : null;
       await sessions.invalidateById(sessionId);
     }
     clearCookies(res, ["session"]);
-    res.status(204).end();
+    if (!workosSessionId) return res.status(204).end();
+    res
+      .status(200)
+      .json({ logoutUrl: oidc.sessionLogoutUrl({ workosSessionId, returnTo: postLogoutUrl }) });
   });
 
   // POST /auth/dev-login (NUR lokal, hinter deps.devLoginEnabled - config ist doppelt
@@ -278,8 +299,7 @@ export function makeWebAuthRoutes(deps) {
       try {
         const body = req.body || {};
         const sub = typeof body.sub === "string" && body.sub ? body.sub : "dev-user";
-        const email =
-          typeof body.email === "string" && body.email ? body.email : "dev@local.test";
+        const email = typeof body.email === "string" && body.email ? body.email : "dev@local.test";
         // Dieselbe Mint-Quelle wie der echte Callback (mintSession) - kein paralleler Pfad.
         await mintSession(res, { sub, email });
         res.redirect(302, postLoginPath);
@@ -306,9 +326,28 @@ export function claimsFromPayload(payload) {
   // KEIN email_verified-Gate: der Name ist kein Admin-Allowlist-Schluessel wie email;
   // die Trim-/Kompositions-Autoritaet bleibt applyOwnerIdentity (G5). Quelle = WorkOS-
   // user (server-zu-server), nicht der Body -> kein Spoofing.
-  if (typeof payload.firstName === "string" && payload.firstName) claims.firstName = payload.firstName;
+  if (typeof payload.firstName === "string" && payload.firstName)
+    claims.firstName = payload.firstName;
   if (typeof payload.lastName === "string" && payload.lastName) claims.lastName = payload.lastName;
   return claims;
+}
+
+// Extrahiert die "sid"-Klaim (WorkOS-Session-ID) aus dem JWT-Payload-Segment eines
+// Access-Tokens, OHNE Signatur-Pruefung: die Antwort kommt server-zu-server ueber TLS
+// (gleiche Vertrauensstufe wie das user-Objekt in exchange, kein JWKS-Verify noetig, kein
+// neuer Dependency). Fehlt/ist das Token nicht dekodierbar -> null, fail-OPEN (der Login
+// bleibt unberuehrt; /auth/logout faellt dann auf rein lokal zurueck). Niemals das Token
+// selbst loggen/zurueckgeben - nur die extrahierte sid.
+function sidFromAccessToken(accessToken) {
+  if (typeof accessToken !== "string" || !accessToken) return null;
+  const parts = accessToken.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return typeof payload.sid === "string" && payload.sid ? payload.sid : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---- makeOidc --------------------------------------------------------
@@ -379,7 +418,20 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
           firstName: user.first_name,
           lastName: user.last_name,
         }),
+        // sid-Klaim aus dem Access-Token (fuer den spaeteren WorkOS-Sign-out-Redirect).
+        workosSessionId: sidFromAccessToken(data.access_token),
       };
+    },
+
+    // sessionLogoutUrl baut die WorkOS-UM-Session-Logout-URL (reine URL-Konstruktion wie
+    // authorizeUrl, kein I/O -> synchron, kein try/catch im Router noetig). session_id ist
+    // Pflicht (API-Referenz), return_to optional -- WorkOS leitet den Browser danach dorthin
+    // zurueck und beendet zugleich die eigene AuthKit-SSO-Session (workos.com/docs/authkit/
+    // sessions, "Signing Out").
+    sessionLogoutUrl({ workosSessionId, returnTo }) {
+      const params = new URLSearchParams({ session_id: workosSessionId });
+      if (returnTo) params.set("return_to", returnTo);
+      return `${config.workosApiBase}/user_management/sessions/logout?${params}`;
     },
   };
 }
@@ -635,13 +687,13 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw 
 // Session-Lebenszyklus: anlegen, lesen, invalidieren (by id oder by tenant).
 export function makeSessions(runner) {
   return {
-    async create({ sub, tenantId, ttlSeconds }) {
+    async create({ sub, tenantId, ttlSeconds, workosSessionId = null }) {
       const id = crypto.randomUUID();
       await runner.withClient((c) =>
         c.query(
-          `INSERT INTO session (id, sub, tenant_id, expires_at)
-           VALUES ($1, $2, $3, now() + ($4 || ' seconds')::interval)`,
-          [id, sub, tenantId, String(ttlSeconds)],
+          `INSERT INTO session (id, sub, tenant_id, expires_at, workos_session_id)
+           VALUES ($1, $2, $3, now() + ($4 || ' seconds')::interval, $5)`,
+          [id, sub, tenantId, String(ttlSeconds), workosSessionId],
         ),
       );
       return { id };
@@ -652,7 +704,8 @@ export function makeSessions(runner) {
     async get(id) {
       return runner.withClient(async (c) => {
         const { rows } = await c.query(
-          `SELECT id, sub, tenant_id AS "tenantId", expires_at, invalidated_at
+          `SELECT id, sub, tenant_id AS "tenantId", expires_at, invalidated_at,
+                  workos_session_id AS "workosSessionId"
            FROM session WHERE id = $1`,
           [id],
         );

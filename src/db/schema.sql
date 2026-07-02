@@ -348,6 +348,10 @@ CREATE TABLE IF NOT EXISTS session (
   invalidated_at TIMESTAMPTZ
 );
 
+-- P1 WorkOS-Logout: optionale WorkOS-Session-ID (sid-Klaim) fuer den Sign-out-Redirect.
+-- Additiv/idempotent, NULL fuer Bestandssessions (heilen sich beim naechsten Login selbst).
+ALTER TABLE session ADD COLUMN IF NOT EXISTS workos_session_id TEXT;
+
 -- audit_log: immutable append-only. tenant_id BEWUSST KEIN FK (muss Tenant-
 -- Loeschung ueberdauern, Compliance Art. 15). Keine RLS (privilegierter Insert-Pfad).
 -- WARNUNG: audit_log NIE ueber portalStore/Kunden-Reads exponieren - ohne RLS gibt

@@ -97,6 +97,28 @@ test("logout schickt POST /auth/logout same-origin und liefert null bei 204", as
   }
 });
 
+test("logout schickt POST /auth/logout same-origin und liefert logoutUrl bei 200+WorkOS-Session", async () => {
+  const f = stubFetch(() =>
+    fakeResponse({
+      ok: true,
+      status: 200,
+      json: {
+        logoutUrl: "https://api.workos.com/user_management/sessions/logout?session_id=sess_abc",
+      },
+    }),
+  );
+  try {
+    const url = await logout();
+    assert.equal(url, "https://api.workos.com/user_management/sessions/logout?session_id=sess_abc");
+    const { path, options } = f.calls[0];
+    assert.equal(path, "/auth/logout");
+    assert.equal(options.method, "POST");
+    assert.equal(options.credentials, "same-origin");
+  } finally {
+    f.restore();
+  }
+});
+
 test("loadAuthState -> AUTHENTICATED mit Daten bei 200", async () => {
   const payload = { agent: { number: "+49123", owner: "Alex" } };
   const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: payload }));
@@ -167,11 +189,14 @@ test("agentInfo faengt leere/null-Felder als leere Strings ab", () => {
 });
 
 test("agentInfo reicht befuellte Felder unveraendert durch (inkl. numberStatus)", () => {
-  assert.deepEqual(agentInfo({ agent: { number: "+49123", owner: "Alex", numberStatus: "active" } }), {
-    number: "+49123",
-    owner: "Alex",
-    numberStatus: "active",
-  });
+  assert.deepEqual(
+    agentInfo({ agent: { number: "+49123", owner: "Alex", numberStatus: "active" } }),
+    {
+      number: "+49123",
+      owner: "Alex",
+      numberStatus: "active",
+    },
+  );
 });
 
 // isNumberProvisioning: der Chip zeigt "Setting up..." nur waehrend requested/provisioning
