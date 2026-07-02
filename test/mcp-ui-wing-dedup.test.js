@@ -59,10 +59,10 @@ for (const [, id] of STATIC_WIDGETS) {
   });
 }
 
-test("T-wing-dedup-output-call: injiziertes CSS/Markup ist exakt WING_CSS_LIVE/WING_MARKUP_LIVE", () => {
+test("T-wing-dedup-output-call: injiziertes CSS/Markup ist exakt WING_CSS_DARK_LIVE/WING_MARKUP_DARK_LIVE (H3: Olympus-HUD ist volldunkel)", () => {
   const html = widgetHtml(WIDGET_CALL);
-  assert.ok(html.includes(WING_CSS_LIVE), "WING_CSS_LIVE vollstaendig eingefuegt");
-  assert.ok(html.includes(WING_MARKUP_LIVE), "WING_MARKUP_LIVE vollstaendig eingefuegt");
+  assert.ok(html.includes(WING_CSS_DARK_LIVE), "WING_CSS_DARK_LIVE vollstaendig eingefuegt");
+  assert.ok(html.includes(WING_MARKUP_DARK_LIVE), "WING_MARKUP_DARK_LIVE vollstaendig eingefuegt");
 });
 
 test("T-wing-dedup-variants: STATIC ist eine echte Teilmenge von LIVE (eine Quelle, keine zweite Kopie der Basis-Regeln)", () => {
