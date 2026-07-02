@@ -184,8 +184,13 @@
        ziehen (derselbe Kompromiss wie im inzwischen entfernten Bruecken-Spike).
        XSS-Disziplin unveraendert: Werte landen NUR ueber textContent, nie als
        geparstes Markup.
-       H3 (Olympus-HUD): die Wing-Canvas-Engine wird per <!--__WING_ENGINE__--> in
-       <head> injiziert - VOR diesem Skript. window.HermesWingCanvas ist beim
+       H3 (Olympus-HUD): die Wing-Canvas-Engine wird ueber den WING_ENGINE-
+       Platzhalter (siehe head, widget-catalog.js withWingEngine) injiziert -
+       VOR diesem Skript. Der Platzhalter darf hier NICHT woertlich stehen:
+       HTML-Kommentare nesten nicht, sein "Ende" wuerde diesen Kommentar
+       schliessen und den Rest als sichtbaren Text leaken (in H6-QA gefunden);
+       ausserdem ersetzt widget-catalog nur das ERSTE Vorkommen.
+       window.HermesWingCanvas ist beim
        Ausfuehren dieses Skripts deshalb bereits synchron verfuegbar (kein
        DOMContentLoaded-Umweg noetig). Autorenregel: DIESER Inline-Skript-Block
        bleibt IMMER der letzte im Dokument (Test-Helfer ownScriptSource() verlaesst

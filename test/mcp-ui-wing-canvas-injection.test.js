@@ -27,3 +27,15 @@ test("T-wing-canvas-inject-no-network: injizierter Block ist self-contained", ()
   assert.doesNotMatch(out, /https?:\/\//, "kein http(s)://");
   assert.doesNotMatch(out, /@import/, "kein @import");
 });
+
+// H6-QA-Regression: der Platzhalter-Name darf im SERVIERTEN Widget nirgends
+// mehr auftauchen - weder als unersetzter Platzhalter (replace trifft nur das
+// ERSTE Vorkommen) noch woertlich in einem HTML-Kommentar (Kommentare nesten
+// nicht; das Platzhalter-Ende wuerde den Kommentar schliessen und den Rest als
+// sichtbaren Text leaken - genau so in call.html gefunden).
+test("T-wing-canvas-inject-no-leak: kein __WING_ENGINE__-Rest im Serve-Output aller Widgets", async () => {
+  const { widgetHtml } = await import("../src/ui/widget-catalog.js");
+  for (const id of ["call", "agent-status", "my-number", "calls", "calendar"]) {
+    assert.ok(!widgetHtml(id).includes("__WING_ENGINE__"), `${id}: kein Platzhalter-Leak`);
+  }
+});
