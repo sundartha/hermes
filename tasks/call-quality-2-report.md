@@ -67,14 +67,11 @@ sogar als Beispiel vorgab.
    unveraendert. Damit ist der Deploy-Kollisions-Fall kuenftig in den Render-
    Logs sichtbar (CLAUDE.md Regel 7). /voice/status bleibt bewusst still
    (Rauschen, Bestandsentscheidung).
-4. **S-C Natuerlichkeits-Feinschliff (eng, am Entscheidungspunkt)**: Judge-
-   Rationales der Runde-1-Laeufe gemint; Hauptmuster "formelhaft/mechanisch"
-   (gleichfoermige Floskel-Anfaenge). Zwei enge Aenderungen:
-   - Quittierungs-Bullet: Variation gefordert, "beginne nie zwei Antworten
-     hintereinander mit derselben Floskel" (+ drittes Beispiel "Verstehe,").
-   - speechClause de: "... - Alltagssprache wie am Telefon, keine
-     Schriftsprache." (fr/en bewusst unveraendert - die Bench misst nur DE;
-     Angleichung erst nach eigenem FR/EN-Beleg.)
+4. **S-C Natuerlichkeits-Feinschliff: versucht und ABLADIERT.** Judge-
+   Rationales der Runde-1-Laeufe gemint (Hauptmuster "formelhaft/mechanisch"),
+   drei Prompt-Iterationen durch die Bench gefahren (Historie unten) - keine
+   verdiente ihren Platz. Der gemergte System-Prompt ist byte-identisch zu v6;
+   S-C wird real durch die neue Eroeffnung (1) und bessere goals (2) getragen.
 
 ## Bench-Beleg (A/B gepoolt, Judge claude-sonnet-5 + deterministische Checks)
 
