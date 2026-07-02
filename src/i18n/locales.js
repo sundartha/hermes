@@ -101,9 +101,12 @@ export const LOCALES = Object.freeze({
     // Werte oder NEUTRAL) -> Anti-Injection (Pre-Mortem 1), staerker als der typeof-Pfad.
     styleClause: (styleId) => STYLE_CLAUSES_DE[styleId] || NEUTRAL_ADDRESS_CLAUSE,
     // Outbound-Bruecke (claude.js openingText): nach der Offenlegung gesprochen.
-    // Objective-neutral (C2): leitet das Anliegen als eigenstaendige Phrase ein, damit
-    // Imperativ/Infinitiv/Nominalphrase-Auftraege grammatisch sauber lesen.
-    bridgePhrase: (goal) => `Ich rufe an wegen folgendem Anliegen: ${goal}.`,
+    // Ich-Satz-Passthrough (Runde 2, S-B): ein bereits sprechbarer Ich-Satz (neue
+    // place_call-objective-Description) wird woertlich gesprochen - keine Bruecke.
+    // Sonst objective-neutrale Bruecke (C2), grammatisch sicher fuer Imperativ/
+    // Infinitiv/Nominalphrase-Auftraege; "wegen folgendem Anliegen" war Amtsdeutsch.
+    bridgePhrase: (goal) =>
+      /^ich\b/i.test(goal) ? `${goal}.` : `Es geht um Folgendes: ${goal}.`,
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar).
     disclosure: (ownerName) =>
@@ -149,7 +152,9 @@ export const LOCALES = Object.freeze({
     },
     speechClause: "Réponds exclusivement en français parlé et naturel.",
     styleClause: (styleId) => STYLE_CLAUSES_FR[styleId] || NEUTRAL_ADDRESS_CLAUSE,
-    bridgePhrase: (goal) => `Je vous appelle au sujet de la demande suivante : ${goal}.`,
+    // Ich-Satz-Passthrough wie DE (je/j'); sonst kuratierte, natuerlichere Bruecke.
+    bridgePhrase: (goal) =>
+      /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
     disclosure: (ownerName) =>
@@ -191,7 +196,9 @@ export const LOCALES = Object.freeze({
     },
     speechClause: "Reply only in natural, spoken English.",
     styleClause: (styleId) => STYLE_CLAUSES_EN[styleId] || NEUTRAL_ADDRESS_CLAUSE,
-    bridgePhrase: (goal) => `I'm calling regarding the following: ${goal}.`,
+    // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.
+    bridgePhrase: (goal) =>
+      /^i\b|^i'/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     disclosure: (ownerName) =>
