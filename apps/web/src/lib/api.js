@@ -11,6 +11,7 @@
 // erkennen, ohne den Magic-Wert zu duplizieren.
 export const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
+const HTTP_NO_CONTENT = 204;
 // 409 = Vorbedingung verletzt beim Abo-Buchen (no_card / already_subscribed).
 // Exportiert, damit die Subscribe-Verdrahtung (lib/subscribe.js) den gefuehrten
 // Karten-Flow vom "bereits aboniert"-Hinweis trennt, ohne den Magic-Wert zu doppeln.
@@ -65,9 +66,12 @@ async function readErrorInfo(res) {
 
 // Ein einzelner same-origin-Request. Wirft ApiError bei non-2xx (fail-closed:
 // die UI behandelt jeden Nicht-Erfolg als "nicht eingeloggt"/Fehler, nie als
-// Teil-Erfolg). parseJson:false fuer Endpunkte ohne Body (logout -> 204). body
-// (Objekt) -> als JSON gesendet mit Content-Type:application/json (Schreibpfad
-// settings/billing); fehlt body, geht kein Body und kein Content-Type raus.
+// Teil-Erfolg). parseJson:false erzwingt null (fuer Endpunkte, die niemals
+// einen Body senden). 204-Antworten liefern IMMER null, unabhaengig von
+// parseJson -- res.json() wuerde auf leerem Body werfen (z.B. logout: 204 ODER
+// 200+JSON, je nachdem ob eine WorkOS-Session-ID vorlag). body (Objekt) -> als
+// JSON gesendet mit Content-Type:application/json (Schreibpfad settings/billing);
+// fehlt body, geht kein Body und kein Content-Type raus.
 async function apiRequest(path, { method = "GET", parseJson = true, body } = {}) {
   const headers = { Accept: "application/json" };
   const options = { method, credentials: "same-origin", headers };
@@ -80,7 +84,8 @@ async function apiRequest(path, { method = "GET", parseJson = true, body } = {})
     const info = await readErrorInfo(res);
     throw new ApiError(res.status, `${method} ${path} -> ${res.status}`, info);
   }
-  return parseJson ? res.json() : null;
+  if (!parseJson) return null;
+  return res.status === HTTP_NO_CONTENT ? null : res.json();
 }
 
 // Tenant-gefilterte Lese-Sicht (settings, calls, calendar, agent ...). Das
@@ -89,10 +94,14 @@ export function fetchTenantState() {
   return apiRequest("/api/self-service/state");
 }
 
-// Session invalidieren. POST /auth/logout ist idempotent und liefert 204 ohne
-// Body -- darum parseJson:false.
-export function logout() {
-  return apiRequest("/auth/logout", { method: "POST", parseJson: false });
+// Session invalidieren, same-origin. Antwort: 204 ohne Body (Alt-Session/Dev-Login ohne
+// WorkOS-Session-ID -- rein lokal) ODER 200 JSON {logoutUrl} (WorkOS-Session-ID vorhanden).
+// Gibt logoutUrl zurueck (oder null bei 204) -- der Aufrufer MUSS bei einer logoutUrl den
+// Browser TOP-LEVEL dorthin navigieren, sonst bleibt WorkOS' eigene AuthKit-SSO-Session
+// aktiv (siehe PLAN-WORKOS-LOGOUT.md).
+export async function logout() {
+  const result = await apiRequest("/auth/logout", { method: "POST" });
+  return result && typeof result.logoutUrl === "string" ? result.logoutUrl : null;
 }
 
 // Startet die Stripe-Checkout-Session (setup-mode) zum Hinterlegen einer Karte.
@@ -331,7 +340,15 @@ export function callStats(data, now = new Date()) {
   const calls = callsFrom(data);
   const refMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
   const ref = new Date(refMs);
-  const stats = { total: 0, thisWeek: 0, thisMonth: 0, inbound: 0, outbound: 0, withSummary: 0, durationSec: 0 };
+  const stats = {
+    total: 0,
+    thisWeek: 0,
+    thisMonth: 0,
+    inbound: 0,
+    outbound: 0,
+    withSummary: 0,
+    durationSec: 0,
+  };
   for (const call of calls) {
     stats.total += 1;
     if (call && call.direction === CALL_DIRECTION.OUTBOUND) stats.outbound += 1;

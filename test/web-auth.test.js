@@ -102,7 +102,7 @@ function rawPost(url, headers = {}) {
 
 // Standard-Fakes; einzelne Tests ueberschreiben Felder gezielt.
 function fakeDeps(overrides = {}) {
-  const calls = { upsert: [], create: [], audit: [], invalidate: [] };
+  const calls = { upsert: [], create: [], audit: [], invalidate: [], get: [] };
   const deps = {
     secret: SECRET,
     redirectUri: "https://agent.test/auth/callback",
@@ -113,6 +113,11 @@ function fakeDeps(overrides = {}) {
       exchange: async ({ code }) => {
         calls.exchange = code;
         return { claims: { sub: "user-1", email: "neu@kunde.de" } };
+      },
+      sessionLogoutUrl: ({ workosSessionId, returnTo }) => {
+        const params = new URLSearchParams({ session_id: workosSessionId });
+        if (returnTo) params.set("return_to", returnTo);
+        return `https://idp.test/user_management/sessions/logout?${params}`;
       },
     },
     accounts: {
@@ -125,6 +130,10 @@ function fakeDeps(overrides = {}) {
       create: async (arg) => {
         calls.create.push(arg);
         return { id: "sess-abc-123" };
+      },
+      get: async (id) => {
+        calls.get.push(id);
+        return { workosSessionId: null };
       },
       invalidateById: async (id) => {
         calls.invalidate.push(id);
@@ -820,6 +829,142 @@ test("T-AC2-05: exchange bei authenticate-HTTP-Fehler -> Throw ohne Body-Leak", 
       return true;
     },
   );
+});
+
+// ---- P1: sid-Klaim-Extraktion aus dem Access-Token (WorkOS-Sign-out-Grundlage) ----
+// exchange() liest die "sid"-Klaim aus dem JWT-Payload-Segment des access_token, OHNE
+// Signatur-Pruefung (server-zu-server-Antwort, gleiche Vertrauensstufe wie user).
+// fakeAccessToken baut ein ungueltig-signiertes, aber strukturell echtes JWT (Header.
+// Payload.Signatur, base64url) -- die Extraktion prueft nur die Payload-Dekodierung.
+function fakeAccessToken(payload) {
+  const b64 = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url");
+  return `${b64({ alg: "RS256", typ: "JWT" })}.${b64(payload)}.dummy-signature`;
+}
+
+test("T-AC2-06: exchange liest die sid-Klaim aus einem gueltig geformten access_token", async () => {
+  const { _fetch } = captureFetch({
+    json: {
+      user: { id: "user_01ABC", email: "kunde@firma.de", email_verified: true },
+      access_token: fakeAccessToken({ sid: "session_01ABC" }),
+    },
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
+  const { workosSessionId } = await oidc.exchange({ code: "c", verifier: "v" });
+  assert.equal(workosSessionId, "session_01ABC");
+});
+
+test("T-AC2-07: exchange mit fehlendem/kaputtem access_token -> workosSessionId: null, kein Throw", async () => {
+  const cases = [
+    { label: "fehlend", access_token: undefined },
+    { label: "kein Punkt", access_token: "keinpunkt" },
+    { label: "nur 2 Segmente", access_token: "aaa.bbb" },
+  ];
+  for (const { label, access_token } of cases) {
+    const { _fetch } = captureFetch({
+      json: {
+        user: { id: "user_01ABC", email: "kunde@firma.de", email_verified: true },
+        access_token,
+      },
+    });
+    const oidc = makeOidc(OIDC_CFG, { _fetch });
+    const { workosSessionId } = await oidc.exchange({ code: "c", verifier: "v" });
+    assert.equal(workosSessionId, null, label);
+  }
+});
+
+test("T-AC2-08: access_token mit nicht-JSON Payload-Segment -> workosSessionId: null, kein Crash", async () => {
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const badPayload = Buffer.from("not-json").toString("base64url");
+  const { _fetch } = captureFetch({
+    json: {
+      user: { id: "user_01ABC", email: "kunde@firma.de", email_verified: true },
+      access_token: `${header}.${badPayload}.dummy-signature`,
+    },
+  });
+  const oidc = makeOidc(OIDC_CFG, { _fetch });
+  const { workosSessionId } = await oidc.exchange({ code: "c", verifier: "v" });
+  assert.equal(workosSessionId, null);
+});
+
+// ---- P1: sessionLogoutUrl (WorkOS-UM-Session-Logout-URL) ----
+
+test("T-SL-01: sessionLogoutUrl baut die WorkOS-Sign-out-URL mit session_id + return_to", () => {
+  const oidc = makeOidc(OIDC_CFG);
+  const url = oidc.sessionLogoutUrl({
+    workosSessionId: "session_01ABC",
+    returnTo: "https://agent.test/auth/login",
+  });
+  const u = new URL(url);
+  assert.equal(u.origin + u.pathname, `${WORKOS_BASE}/user_management/sessions/logout`);
+  assert.equal(u.searchParams.get("session_id"), "session_01ABC");
+  assert.equal(u.searchParams.get("return_to"), "https://agent.test/auth/login");
+});
+
+test("T-SL-02: sessionLogoutUrl ohne returnTo -> return_to fehlt, session_id vorhanden", () => {
+  const oidc = makeOidc(OIDC_CFG);
+  const url = oidc.sessionLogoutUrl({ workosSessionId: "session_01ABC" });
+  const u = new URL(url);
+  assert.equal(u.searchParams.get("session_id"), "session_01ABC");
+  assert.equal(u.searchParams.get("return_to"), null);
+});
+
+// ---- P1: Router-Integration Login -> Logout mit WorkOS-Session-ID ----
+
+test("T-SL-03: Login mit workosSessionId, POST /auth/logout liefert 200 {logoutUrl} und invalidiert die Session", async () => {
+  const sessionStore = new Map();
+  let nextId = 1;
+  const { deps } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => ({
+        claims: { sub: "user-1", email: "neu@kunde.de" },
+        workosSessionId: "workos_sess_xyz",
+      }),
+    },
+    sessions: {
+      create: async ({ sub, tenantId, workosSessionId = null }) => {
+        const id = `sess-${nextId++}`;
+        sessionStore.set(id, { sub, tenantId, workosSessionId, invalidated: false });
+        return { id };
+      },
+      get: async (id) => {
+        const row = sessionStore.get(id);
+        return row ? { workosSessionId: row.workosSessionId } : null;
+      },
+      invalidateById: async (id) => {
+        const row = sessionStore.get(id);
+        if (row) row.invalidated = true;
+      },
+    },
+    postLogoutUrl: "https://agent.test/auth/login",
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const loginCookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const loginRes = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: loginCookies,
+    });
+    assert.equal(loginRes.status, 302);
+    const sessionCookieHeader = cookieHeaderFrom(loginRes.setCookie);
+
+    const logoutRes = await rawPost(`${srv.base}/auth/logout`, { Cookie: sessionCookieHeader });
+    assert.equal(logoutRes.status, 200);
+    const body = JSON.parse(logoutRes.body);
+    const u = new URL(body.logoutUrl);
+    assert.equal(u.searchParams.get("session_id"), "workos_sess_xyz");
+    assert.equal(u.searchParams.get("return_to"), "https://agent.test/auth/login");
+
+    assert.equal(sessionStore.size, 1);
+    const [row] = sessionStore.values();
+    assert.equal(row.invalidated, true, "Session muss tatsaechlich invalidiert sein");
+  } finally {
+    await srv.close();
+  }
 });
 
 // ---- P4 / AC3: GET /auth/login fail-closed ----

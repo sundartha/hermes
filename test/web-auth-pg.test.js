@@ -92,6 +92,25 @@ test("makeSessions.create+get gegen echtes Schema (invalidated_at NULL)", async 
   assert.equal(row.invalidated_at, null);
 });
 
+test("makeSessions.create+get roundtrips workos_session_id (WorkOS-Sign-out, P1)", async () => {
+  const { accounts, sessions } = await setup();
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
+  const { id } = await sessions.create({
+    sub: "u1",
+    tenantId: "t_u1",
+    ttlSeconds: 3600,
+    workosSessionId: "workos_sess_abc",
+  });
+  assert.equal((await sessions.get(id)).workosSessionId, "workos_sess_abc");
+});
+
+test("makeSessions.create ohne workosSessionId -> NULL (Dev-Login/Alt-Pfad)", async () => {
+  const { accounts, sessions } = await setup();
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });
+  const { id } = await sessions.create({ sub: "u1", tenantId: "t_u1", ttlSeconds: 3600 });
+  assert.equal((await sessions.get(id)).workosSessionId, null);
+});
+
 test("makeSessions.invalidateById setzt invalidated_at (Soft-Invalidierung)", async () => {
   const { accounts, sessions } = await setup();
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "u1@x" });

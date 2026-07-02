@@ -87,6 +87,7 @@ import {
   webAuth,
   webAuthAllowPending,
   adminOnly,
+  LOGIN_ROUTE,
 } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
@@ -265,6 +266,9 @@ if (config.sessionSecret && config.storeBackend === "pg") {
           : config.selfServiceEnabled && config.multiTenant
             ? CUSTOMER_PORTAL_PATH
             : undefined,
+        // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben.
+        // Muss im WorkOS-Dashboard als Sign-out-Redirect-URL registriert sein (Phase 3).
+        postLogoutUrl: config.publicUrl + LOGIN_ROUTE,
         // Lokaler Dev-Login-Shim (NUR mit config.devLoginEnabled, fail-closed): mintet
         // dieselbe Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
         devLoginEnabled: config.devLoginEnabled,
