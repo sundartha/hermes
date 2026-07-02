@@ -5,63 +5,64 @@ Dieses File ist der Arbeits-Scratch fuer die jeweils laufende Phase (siehe
 
 - Dauerhafter Ueberblick ueber offene Punkte: **`STATUS.md`**
 - Lehren aus abgeschlossenen Aufgaben: **`tasks/lessons.md`**
-- Rebrand-Task im Detail: **`tasks/rebrand-sundartha.md`**
 
 ---
 
-# Task: Kauf-Land entkoppeln (alle Nummern US, Sprache bleibt Geo-basiert)
+# Task: Anrufqualitaet Runde 2 (Branch call-quality-2, Basis lokaler master 2c6c4e2)
 
-## Ziel
-Geo-Nummernkauf NICHT loeschen, sondern per Config neutralisieren: jeder neue User
-bekommt eine US-Nummer (+1), aber die Sprache wird weiter aus dem erkannten Herkunfts-
-land gesetzt (DE->de, FR->fr, ...). Steuerung ueber Env-Flag `FORCE_NUMBER_COUNTRY`
-(leer = heutiges Verhalten byte-identisch; "US" = jede Nummer US).
+Auftrag: NEXT-SESSION-CALL-QUALITY-2.md. Symptome S-A (Auflegen), S-B (hoelzerne
+Eroeffnung), S-C (Natuerlichkeit). Constraints: kein Modellwechsel, Safety-Gates/
+Offenlegung unantastbar, /voice/outbound LLM-frei, keine neuen Dependencies.
 
-## Kernidee (Entkopplung)
-- `tenant.country` = ERKANNTES Herkunftsland (Quelle fuer Sprache/Analytics) — unveraendert.
-- `number.country` = KAUF-Land (= forceNumberCountry, sonst Herkunftsland).
-- Laufzeit-Sprache haengt an `number.language` (resolveCallLanguage) — bleibt korrekt.
+## Diagnose (abgeschlossen, Beleg: Render-Logs + Code)
 
-## Schritte
-1. [x] `src/config.js`: `forceNumberCountry` (FORCE_NUMBER_COUNTRY, Default "" = aus).
-2. [x] `src/server.js` Onboarding: `numberCountry = config.forceNumberCountry || country`,
-       an requestNumber; language + tenant.country unveraendert (Herkunftsland). Doc-Komm.
-3. [x] `src/billing/provision-trigger.js`: neues Arg `forceNumberCountry`;
-       `numberCountry = forceNumberCountry || homeCountry`; language = languageForCountry(homeCountry).
-4. [x] `src/server.js` triggerTenantProvisioning: `forceNumberCountry: config.forceNumberCountry`.
-5. [x] `test/helpers.js` BASE_ENV: `FORCE_NUMBER_COUNTRY: ""` (kein .env-Leak, Lehre test-base-env-drift).
-6. [x] `.env.example`: FORCE_NUMBER_COUNTRY= (dokumentiert, Default leer).
-7. [x] `render.yaml`: FORCE_NUMBER_COUNTRY: "US" (Owner-Wahl: US fuer alle, jetzt).
-8. [x] Tests: f1-geo-onboard (FORCE=US -> number.country US, language de, tenant DE);
-       bk3-auto-provision (forceNumberCountry US -> number.country US, home-language).
+- [x] D0 Deploy-Timing: Testanruf 1 (call_mr3dz9t9u5jm, 10:53:32Z) lief auf Commit
+  0dca7ce (ALTER Stand, [boot]-Banner 09:34Z); c12c546 ging erst 14:01:42Z live.
+  Testanruf 2 (call_mr3lg2g7t9zg, 14:22:33Z) lief auf c12c546, kollidierte aber mit
+  dem manuellen Deploy dep-d9377ui (gestartet 14:21:46, Traffic-Switch 14:22:46).
+  -> Owner hat die neue Gespraechsfuehrung nie vollstaendig gehoert.
+- [x] D1 S-A-Wurzel: KEIN LLM-Fehler ([metrics] llm alle success, attempts=1,
+  ~1.4s, breaker closed; kein [turn]-Error, kein end_call). Wurzel = Instanzwechsel
+  mitten im Call: neue Instanz kennt den in-memory-Call nicht -> /voice/turn
+  (server.js:906) antwortet still mit <Hangup/>. Verschaerfung: Reconcile-Flush der
+  neuen Instanz loescht den Call aus pg (deleteMissing) -> Call fehlt in list_calls.
+- [x] D2 Nebenbefund 10:53-Call: stt_gap 16172ms (Owner-Sprechpause/STT-Endpointing);
+  hangupSource=callee (Gegenseite legte auf, kein Agent-Hangup).
 
-## Erwartetes Ergebnis (deterministisch)
-- FORCE_NUMBER_COUNTRY leer: `npm test` byte-identisch gruen (kein Verhaltenswechsel).
-- FORCE_NUMBER_COUNTRY=US, User DE: number.country="US", number.language="de",
-  tenant.country="DE", tenant.defaultLanguage="de".
+## Umsetzung (jede Aenderung mit Erwartung + Verifikation)
 
-## Verifikation
-- `node --check` auf alle geaenderten src-Dateien.
-- `npm test` (alle gruen, inkl. neuer Faelle).
+- [ ] T1 S-B(a) bridgePhrase natuerlicher (de/fr/en) + Ich-Satz-Passthrough:
+  Erwartet: openingText("Den naechsten freien Termin erfragen") ==
+  "<disclosure> Es geht um Folgendes: den naechsten freien Termin erfragen." und
+  openingText("Ich moechte ... erfragen") == "<disclosure> Ich moechte ... erfragen."
+  (kein Brueckentext). disclosure byte-identisch davor (Regel 2).
+  Verifikation: neue Unit-Tests in test/f1-i18n-locale.test.js (DE-Pin bewusst
+  justiert) + npm test gruen.
+- [ ] T2 S-B(b) place_call objective-Description: sprechbarer Ich-Satz gefordert
+  (Beispiel im Text), Thema-Pflicht bleibt. Erwartet: Description enthaelt
+  "Ich-Satz"-Anweisung; Token-Sync-Test (mcp-tools) bleibt gruen.
+  Verifikation: npm test + grep.
+- [ ] T3 S-A Diagnose-Logging: /voice/turn + /voice/outbound loggen bei unbekanntem
+  Call bevor sie fail-closed auflegen. Erwartet: Logzeile mit callId; Verhalten
+  (Hangup-TeXML) unveraendert. Verifikation: neuer Test (unbekannte callId ->
+  Hangup + Logzeile) + npm test.
+- [ ] T4 S-C Bench-getriebener Natuerlichkeits-Feinschliff: erst Judge-Rationales
+  der Runde-1-Laeufe minen (data/convo-bench/candidate-v6-fv u.a.), dann ENGE
+  Aenderungen. Erwartet: gepoolt (n>=5/Seite) naturalness >= Baseline, kein
+  deterministischer Check schlechter, Gesamt-Judge nicht signifikant schlechter.
+  Verifikation: npm run convo-bench A/B (Baseline c12c546-Worktree, Candidate hier),
+  compare + poolen.
+- [ ] T5 Abschluss: npm test gruen (ganze Suite), Report
+  tasks/call-quality-2-report.md, Memory-Update, Merge nach master NUR mit
+  Bench-Beleg; KEIN Push (Owner-Ok steht aus).
 
-## Review (/code-review, 3 parallele Finder + Eigenverifikation)
-- Verifikation: node --check alle geaenderten Dateien OK; `npm test` 1233/1233 gruen
-  (inkl. 2 neuer Faelle); byte-identisch bei leerem Flag (Logik + Bestandstests gruen).
-- Cross-File: number.country="US" fliesst sauber in searchParamsForCountry (US in Tabelle)
-  + holdAmountForCountry("US", default)=Default; Outbound-Allowlist prueft ZIEL, nicht
-  Absender -> kein Land-Gate-Umgehen; Signatur/Budget/Caps unberuehrt (Regel 1 ok).
-- pg-Backend: number.country UND number.language getrennte Spalten (pg.js INSERT/SELECT/
-  hydrate) -> entkoppelter US/de-Roundtrip ueberlebt, kein neuer Code-Pfad.
-- 3 Findings, alle bewusst NICHT gefixt (mit Begruendung):
-  1. G5-Dup `forceNumberCountry || X` an 2 Stellen: bare `||`-Operator, kein Domaenen-
-     Code; Helper waere reine Indirektion (Clean-Code Regel 3 Vorrang Lesbarkeit, S4-Risk).
-     provision-trigger ist zudem bewusst config-frei -> kann config nicht teilen. DECLINE.
-  2. Fehlender pg-Roundtrip-Test fuer US/de: deckt denselben generischen Spalten-Pfad ab
-     wie der bestehende FR/fr-pg-Test -> niedrigwertig, kein Bug. OPTIONAL.
-  3. Keine ISO-Validierung von FORCE_NUMBER_COUNTRY: Tippfehler ("USA") -> fail-safe
-     DE-Fallback (kein Leak/Kostenrisiko), konsistent mit unvalidiertem PROVISIONING_
-     COUNTRY; Owner-env, kein User-Input. OPTIONAL-Hardening, out-of-scope. DECLINE.
-- OFFEN (owner/infra-gated, kein Code): Live-Beweis = echte US-Nummer kaufen
-  (PROVISIONING_ENABLED=true + Telnyx-App mit US-DID-Recht) + deutschsprachiger Testanruf
-  auf der +1-Nummer. Plus: FORCE_NUMBER_COUNTRY=US muss in der Render-Env/Blueprint aktiv
-  werden (render.yaml gesetzt; ggf. Dashboard-Sync noetig, Deploy-Repo upstream beachten).
+## Folge-Tickets / Owner-only (nicht dieser Schnitt)
+
+- FT1 (S1, strukturell): Call-State ueberlebt Instanzwechsel nicht (Zero-Downtime-
+  Deploy toetet laufende Calls + pg-Reconcile loescht den Call-Row). Fix = eigener
+  Store-Schnitt (read-through-Rehydrate im Webhook-Pfad + Reconcile-Schutz fuer
+  aktive Calls) mit eigenem Review. NICHT im Gespraechsqualitaets-Scope.
+- FT2 STT-Endpointing (16s-Gap): env-tunebar (speechTimeout), Owner-Live-Gate.
+- Owner: nicht waehrend eines Render-Deploys testen; claude.ai cacht Tool-
+  Descriptions pro Chat -> neue objective-Description erst in FRISCHEM Chat wirksam;
+  Render always-on weiter offen.

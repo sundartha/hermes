@@ -70,15 +70,18 @@ test("P1-02: place_call-Schema bleibt strukturell unveraendert (gleiche Felder +
   }
 });
 
-// I9 (call-quality Impl-1): die objective-Beschreibung macht dem aufrufenden Chat-LLM
-// drei Dinge klar - (1) der Satz wird nach der Offenlegung WOERTLICH vorgelesen, bevor
-// der Angerufene antwortet; (2) IMMER konkretes Thema/Anlass nennen, wenn bekannt;
-// (3) bei unbekanntem Thema erst kurz beim Nutzer nachfragen statt vage anzurufen.
-// Regex-Pins statt Woertlich-Pin (wie P1-01: advisory-Metadaten, kein Byte-Vertrag).
-test("I9-01: place_call-objective-Beschreibung verlangt konkretes Thema + warnt vor woertlichem Vorlesen", () => {
+// I9 (call-quality Impl-1) + Runde 2 (S-B): die objective-Beschreibung macht dem
+// aufrufenden Chat-LLM vier Dinge klar - (1) der Satz wird nach der Offenlegung
+// WOERTLICH vorgesprochen, bevor der Angerufene antwortet; (2) er ist ein sprechbarer
+// Ich-Satz, KEIN Infinitiv-Stummel; (3) IMMER konkretes Thema/Anlass nennen, wenn
+// bekannt; (4) bei unbekanntem Thema erst kurz beim Nutzer nachfragen statt vage
+// anzurufen. Regex-Pins statt Woertlich-Pin (wie P1-01: advisory-Metadaten).
+test("I9-01: place_call-objective-Beschreibung verlangt Ich-Satz + konkretes Thema + warnt vor woertlichem Vorsprechen", () => {
   const schema = captureSchemas().get("place_call");
   const objective = schema.objective.description || "";
-  assert.match(objective, /woertlich vorgelesen/i, "nennt das woertliche Vorlesen");
+  assert.match(objective, /woertlich vorgesprochen/i, "nennt das woertliche Vorsprechen");
+  assert.match(objective, /ich-satz/i, "verlangt einen sprechbaren Ich-Satz");
+  assert.match(objective, /kein infinitiv-stummel/i, "untersagt Infinitiv-Stummel");
   assert.match(objective, /offenlegung/i, "verortet es nach der Offenlegung");
   assert.match(objective, /konkretes thema/i, "verlangt konkretes Thema/Anlass");
   assert.match(objective, /frage zuerst kurz beim nutzer nach/i, "verlangt Rueckfrage statt vagem Auftrag");

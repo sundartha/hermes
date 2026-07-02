@@ -357,7 +357,7 @@ export function registerTools(
         objective: z
           .string()
           .describe(
-            "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Einen Friseurtermin fuer Samstag vormittag vereinbaren.' WICHTIG: Dieser Satz wird dem Angerufenen direkt nach der Offenlegung WOERTLICH vorgelesen, BEVOR er antwortet - nenne daher IMMER ein konkretes Thema/Anlass, wenn es bekannt ist. Ist Thema oder Praeferenz noch unbekannt, frage ZUERST kurz beim Nutzer nach, statt einen vagen Auftrag abzusetzen. Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
+            "Das Ziel des Anrufs als EIN sprechbarer Ich-Satz aus Sicht des anrufenden Assistenten - er wird dem Angerufenen direkt nach der Offenlegung WOERTLICH vorgesprochen, BEVOR er antwortet. Formuliere ihn so, wie ein Mensch am Telefon sein Anliegen nennt, z.B. 'Ich moechte fuer Max einen Herrenhaarschnitt am Samstagvormittag vereinbaren.' KEIN Infinitiv-Stummel wie 'Termin vereinbaren'. Nenne IMMER ein konkretes Thema/Anlass, wenn es bekannt ist; ist Thema oder Praeferenz noch unbekannt, frage ZUERST kurz beim Nutzer nach, statt einen vagen Auftrag abzusetzen. Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
           ),
         briefing: z
           .string()

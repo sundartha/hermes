@@ -908,6 +908,15 @@ app.post("/voice/incoming", (req, res) => {
 app.post("/voice/turn", async (req, res) => {
   const call = store.getCall(req.query.callId);
   if (!call || call.status !== "active") {
+    // Fail-closed Hangup wie im Bestand, aber NICHT mehr still (Runde 2, S-A):
+    // dieses Muster entsteht real, wenn ein Deploy-Instanzwechsel den in-memory-
+    // Call verliert (Testanruf call_mr3lg2g7t9zg) - ohne Logzeile ist der Vorfall
+    // in den Render-Logs unsichtbar (CLAUDE.md Regel 7). callId ist server-
+    // generiert, kein PII. Anders als /voice/status (Rauschen) ist ein Turn-
+    // Webhook ohne aktiven Call IMMER ein totes Live-Gespraech.
+    console.warn(
+      `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
+    );
     return res.type("text/xml").send(render([hangupD()]));
   }
   // L0: Luecke seit dem Render des vorigen Folge-Gathers ~ STT-Finalisierungs-Totzeit.
@@ -952,6 +961,8 @@ app.post("/voice/turn", async (req, res) => {
 app.post("/voice/outbound", async (req, res) => {
   const call = store.getCall(req.query.callId);
   if (!call) {
+    // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
+    console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
     return res.type("text/xml").send(render([hangupD()]));
   }
   call.twilioSid = req.body.CallSid || call.twilioSid;
