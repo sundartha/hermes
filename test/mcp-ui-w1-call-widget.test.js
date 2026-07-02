@@ -113,6 +113,16 @@ function makeFakeDocument() {
   };
 }
 
+// Ueberschreibt querySelector eines Fake-Dokuments so, dass GENAU ein Selektor
+// null liefert (fehlendes DOM-Element) - alle anderen Selektoren bleiben wie
+// gewohnt bedient. Fuer die mountWingEngine-Fail-Safe-Tests (H3-S1-1): host-
+// oder wingImg-Selektor fehlt, der Rest des Fake-DOM bleibt unveraendert.
+function withMissingSelector(doc, missingSelector) {
+  const original = doc.querySelector;
+  doc.querySelector = (sel) => (sel === missingSelector ? null : original(sel));
+  return doc;
+}
+
 // Objekte, die IM vm-Sandbox-Skript entstehen (z.B. die geposteten JSON-RPC-params),
 // leben in einer eigenen Realm mit eigenem Object.prototype. node:assert/strict
 // vergleicht bei deepEqual zusaetzlich den Prototyp und wirft sonst "same structure
@@ -464,6 +474,66 @@ test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als CSS-Klassenwechsel (Fal
     "Engine-Pfad: setStatus() erhaelt dieselbe WingMark-Zuordnung wie der CSS-Klassenwechsel (cancelled->error)");
 });
 
+test("T-W1-call-AC-wing-mount-throws: HermesWingCanvas.mount() wirft -> engineHandle bleibt null, CSS-Fallback-Wing bleibt sichtbar (Fail-Safe, Absolute Regel 3)", () => {
+  const doc = makeFakeDocument();
+  const fakeMountCalls = [];
+  const env = runOwnScript(doc, {
+    hermesWingCanvas: {
+      mount: (host, opts) => {
+        fakeMountCalls.push({ host, opts });
+        throw new Error("mount kaputt");
+      },
+    },
+  });
+  doc.slot("call_id").textContent = "call_1";
+
+  assert.equal(fakeMountCalls.length, 1, "Mount wurde versucht");
+  assert.notEqual(doc.wing().style.display, "none",
+    "CSS-WingMark bleibt sichtbar nach fehlgeschlagenem Mount - kein leeres Loch statt Marke");
+
+  // Beweis, dass engineHandle null blieb (catch-Zweig): ein Statuswechsel darf
+  // NICHT auf einen toten Engine-Handle zugreifen (engineHandle.setStatus wuerde
+  // sonst crashen) - der Fallback-Klassenwechsel bleibt der einzige Effekt.
+  assert.doesNotThrow(() => {
+    env.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+      params: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
+  }, "kein Crash beim Statuswechsel - engineHandle blieb null statt eines kaputten Handles");
+  assert.equal(doc.wing().className, "wing wing--dark wing--working", "CSS-Klassenwechsel funktioniert weiterhin");
+  assert.notEqual(doc.wing().style.display, "none", "CSS-WingMark bleibt auch nach Statuswechsel sichtbar");
+});
+
+test("T-W1-call-AC-wing-mount-missing-dom: fehlender Host- oder Wing-Img-Selektor -> frueher Return, kein mount-Aufruf, CSS-Fallback-Wing bleibt sichtbar", () => {
+  const fakeMountCallsHost = [];
+  const docNoHost = withMissingSelector(makeFakeDocument(), "[data-wing-canvas]");
+  runOwnScript(docNoHost, {
+    hermesWingCanvas: { mount: (host, opts) => (fakeMountCallsHost.push({ host, opts }), { setStatus: () => {} }) },
+  });
+  assert.equal(fakeMountCallsHost.length, 0, "kein mount-Aufruf ohne Host-Element ([data-wing-canvas] fehlt)");
+  assert.notEqual(docNoHost.wing().style.display, "none", "CSS-WingMark bleibt sichtbar ohne Host-Element");
+
+  const fakeMountCallsImg = [];
+  const docNoImg = withMissingSelector(makeFakeDocument(), "[data-wing] img");
+  runOwnScript(docNoImg, {
+    hermesWingCanvas: { mount: (host, opts) => (fakeMountCallsImg.push({ host, opts }), { setStatus: () => {} }) },
+  });
+  assert.equal(fakeMountCallsImg.length, 0, "kein mount-Aufruf ohne wingImg-Element ([data-wing] img fehlt)");
+  assert.notEqual(docNoImg.wing().style.display, "none", "CSS-WingMark bleibt sichtbar ohne wingImg-Element");
+});
+
+test("T-W1-call-AC-wing-mount-src: mount() erhaelt die src des ausgelieferten [data-wing] img-Elements (Verdrahtungs-Beweis, nicht nur Groesse)", () => {
+  const doc = makeFakeDocument();
+  const fakeMountCalls = [];
+  const fakeHandle = { setStatus: () => {} };
+  runOwnScript(doc, {
+    hermesWingCanvas: { mount: (host, opts) => (fakeMountCalls.push({ host, opts }), fakeHandle) },
+  });
+  const wingImg = doc.querySelector("[data-wing] img");
+
+  assert.equal(fakeMountCalls.length, 1, "Engine wird beim Init genau einmal montiert");
+  assert.equal(fakeMountCalls[0].opts.size, 112, "Mount-Groesse = 112px-Fluegel-Held");
+  assert.equal(fakeMountCalls[0].opts.src, wingImg.src, "mount() erhaelt src des tatsaechlichen [data-wing] img-Elements");
+});
+
 test("T-W1-call-AC-status-pill: deutsche Status-Pill-Uebersetzung ueber alle 5 Status", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
@@ -483,7 +553,7 @@ test("T-W1-call-AC-status-pill: deutsche Status-Pill-Uebersetzung ueber alle 5 S
   }
 });
 
-test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (HUD_PHASE_LABEL) + Status -> Ring-Erscheinung (RING_PRESET_BY_CALL_STATUS: Klasse+dasharray) ueber alle 5 Status", () => {
+test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + Status -> Ring-Erscheinung (STATUS_VIEW.ringPreset: Klasse+dasharray) ueber alle 5 Status", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";

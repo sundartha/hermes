@@ -215,28 +215,85 @@
     var EMDASH = "—";
     var NO_BRIDGE_LABEL = "kein Live-Update";
 
-    // Wing-Status-Mapping (PLAN-MCP-WIDGET-BRANDING.md Abschnitt 3 + Kette T2): die 5
-    // WingMark-Zustaende sind fix vorgegeben - kein sechster erfunden. cancelled faellt
-    // bewusst auf error (Abschnitt 6, kein eigener Cancelled-State im Animation-Lab).
+    // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (dialing/in_progress/
+    // completed/failed/cancelled) statt vormals sechs paralleler Lookup-Maps ueber
+    // demselben Diskriminator (WING_STATUS_BY_CALL_STATUS, STATUS_PILL_LABEL,
+    // STATUS_PILL_CLASS, STATUS_PILL_DOT_STATUSES, HUD_PHASE_LABEL,
+    // RING_PRESET_BY_CALL_STATUS - H3-S2-1-Fix). One-Switch-Regel: ein neuer
+    // Call-Status braucht GENAU EINE neue STATUS_VIEW-Zeile, nicht sechs verstreute
+    // Map-Eintraege. Alle Werte 1:1 aus den vormaligen Maps uebernommen, nichts
+    // umbenannt/erfunden. Die 5 WingMark-Zustaende sind weiterhin fix vorgegeben
+    // (PLAN-MCP-WIDGET-BRANDING.md Abschnitt 3 + Kette T2) - kein sechster
+    // erfunden; cancelled faellt bewusst auf denselben wingStatus wie failed
+    // (Abschnitt 6, kein eigener Cancelled-State im Animation-Lab).
     var WING_STATUS_IDLE = "idle";
-    var WING_STATUS_BY_CALL_STATUS = {
-      dialing: "connecting",
-      in_progress: "working",
-      completed: "success",
-      failed: "error",
-      cancelled: "error",
+
+    // Ring-Geometrie (Olympus-HUD): rein dekorativ, kein echter Fortschritts-
+    // Prozentsatz in den Slots verfuegbar - kurzer/wandernder Bogen bei
+    // dialing/in_progress (CSS-Rotation via ring--spin), geschlossener Ring bei
+    // completed, unterbrochener gedaempfter Ring bei failed/cancelled. Muss VOR
+    // STATUS_VIEW stehen, da dessen ringPreset-Eintraege darauf aufbauen.
+    var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup, s. T-W1-call-AC-hud-ring-sync
+    var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
+    var RING_ARC_DIALING_PX = 110;
+    var RING_ARC_IN_PROGRESS_PX = 270;
+    var RING_ARC_INTERRUPTED_DASH_PX = 37;
+    var RING_ARC_INTERRUPTED_GAP_PX = 23;
+    var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
+
+    var STATUS_VIEW = {
+      dialing: {
+        wingStatus: "connecting",
+        pillLabel: "Verbindung",
+        pillClass: "pill pill--active",
+        dot: true,
+        hudPhase: "Anruf wird platziert",
+        ringPreset: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
+      },
+      in_progress: {
+        wingStatus: "working",
+        pillLabel: "Live",
+        pillClass: "pill pill--active",
+        dot: true,
+        hudPhase: "Im Gespraech",
+        ringPreset: { cls: "ring ring--spin ring--accent-strong", dash: RING_ARC_IN_PROGRESS_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX) },
+      },
+      completed: {
+        wingStatus: "success",
+        pillLabel: "Abgeschlossen",
+        pillClass: "pill pill--done",
+        dot: false,
+        hudPhase: "Anruf beendet",
+        ringPreset: { cls: "ring ring--accent-solid", dash: RING_CIRCUMFERENCE + " 0" },
+      },
+      failed: {
+        wingStatus: "error",
+        pillLabel: "Fehlgeschlagen",
+        pillClass: "pill pill--muted",
+        dot: false,
+        hudPhase: "Anruf beendet",
+        ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
+      },
+      cancelled: {
+        wingStatus: "error",
+        pillLabel: "Abgebrochen",
+        pillClass: "pill pill--muted",
+        dot: false,
+        hudPhase: "Anruf beendet",
+        ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
+      },
     };
 
     // Alle moeglichen Wing-Status-Modifier-Klassen ("wing--idle", "wing--connecting",
-    // ...), aus WING_STATUS_IDLE + WING_STATUS_BY_CALL_STATUS abgeleitet statt ein
-    // zweites Mal hartcodiert - dedupliziert, da mehrere Call-Status auf denselben
+    // ...), aus WING_STATUS_IDLE + STATUS_VIEW abgeleitet statt ein zweites Mal
+    // hartcodiert - dedupliziert, da mehrere Call-Status auf denselben
     // Wing-Status faellen (cancelled -> error, s.o.). updateWingForStatus nutzt diese
     // Liste, um NUR den Status-Teil der Klasse zu wechseln (s. dort).
     var WING_MODIFIER_CLASSES = (function collectWingModifierClasses() {
       var seen = {};
       var classes = [];
       var values = [WING_STATUS_IDLE];
-      for (var key in WING_STATUS_BY_CALL_STATUS) values.push(WING_STATUS_BY_CALL_STATUS[key]);
+      for (var key in STATUS_VIEW) values.push(STATUS_VIEW[key].wingStatus);
       for (var i = 0; i < values.length; i++) {
         var cls = "wing--" + values[i];
         if (!seen[cls]) {
@@ -308,7 +365,8 @@
 
     // Reine Status-Uebersetzung, keine DOM-Beruehrung (Command-Query-Trennung, P5).
     function wingStatusFor(status) {
-      return WING_STATUS_BY_CALL_STATUS[status] || WING_STATUS_IDLE;
+      var view = STATUS_VIEW[status];
+      return view ? view.wingStatus : WING_STATUS_IDLE;
     }
 
     // Spiegelt den Call-Status auf den Wing-Zustand: EIN Klassenwechsel auf dem
@@ -334,57 +392,27 @@
     // Deutsche Anzeige-Uebersetzung der Status-Pill (PLAN 6.2) - reine
     // Darstellung; der rohe Status bleibt unveraendert im [data-mcp="status"]-Slot
     // (structuredContent-Vertrag unangetastet, siehe applyCallStatus/setSlotText).
-    var STATUS_PILL_LABEL = {
-      dialing: "Verbindung", in_progress: "Live", completed: "Abgeschlossen",
-      failed: "Fehlgeschlagen", cancelled: "Abgebrochen",
-    };
-    var STATUS_PILL_CLASS = {
-      dialing: "pill pill--active", in_progress: "pill pill--active",
-      completed: "pill pill--done", failed: "pill pill--muted", cancelled: "pill pill--muted",
-    };
-    var STATUS_PILL_DOT_STATUSES = { dialing: true, in_progress: true };
-
     function updateStatusPill(status) {
+      var view = STATUS_VIEW[status];
       var pill = doc.querySelector("[data-status-pill]");
       var dot = doc.querySelector("[data-status-dot]");
       var label = doc.querySelector("[data-status-label]");
-      if (pill) pill.className = STATUS_PILL_CLASS[status] || "pill pill--muted";
-      if (dot) dot.style.display = STATUS_PILL_DOT_STATUSES[status] ? "" : "none";
-      if (label) label.textContent = STATUS_PILL_LABEL[status] || EMDASH;
+      if (pill) pill.className = view ? view.pillClass : "pill pill--muted";
+      if (dot) dot.style.display = view && view.dot ? "" : "none";
+      if (label) label.textContent = view ? view.pillLabel : EMDASH;
     }
 
     // Status-abgeleitete HUD-Unterzeile - wie die Status-Pill eine reine
     // Anzeige-Uebersetzung, keine neue Datenquelle.
-    var HUD_PHASE_LABEL = {
-      dialing: "Anruf wird platziert", in_progress: "Im Gespraech",
-      completed: "Anruf beendet", failed: "Anruf beendet", cancelled: "Anruf beendet",
-    };
     function updateHudPhase(status) {
+      var view = STATUS_VIEW[status];
       var el = doc.querySelector("[data-hud-phase]");
-      if (el) el.textContent = HUD_PHASE_LABEL[status] || EMDASH;
+      if (el) el.textContent = view ? view.hudPhase : EMDASH;
     }
 
-    // Ring-Erscheinung je Call-Status (Olympus-HUD): rein dekorativ, kein echter
-    // Fortschritts-Prozentsatz in den Slots verfuegbar - kurzer/wandernder Bogen
-    // bei dialing/in_progress (CSS-Rotation via ring--spin), geschlossener Ring
-    // bei completed, unterbrochener gedaempfter Ring bei failed/cancelled.
-    var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup, s. T-W1-call-AC-hud-ring-sync
-    var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
-    var RING_ARC_DIALING_PX = 110;
-    var RING_ARC_IN_PROGRESS_PX = 270;
-    var RING_ARC_INTERRUPTED_DASH_PX = 37;
-    var RING_ARC_INTERRUPTED_GAP_PX = 23;
-    var RING_PRESET_BY_CALL_STATUS = {
-      dialing: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
-      in_progress: { cls: "ring ring--spin ring--accent-strong", dash: RING_ARC_IN_PROGRESS_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX) },
-      completed: { cls: "ring ring--accent-solid", dash: RING_CIRCUMFERENCE + " 0" },
-      failed: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
-      cancelled: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
-    };
-    var RING_PRESET_DEFAULT = { cls: "ring", dash: RING_CIRCUMFERENCE + " 0" };
-
     function updateRingForStatus(status) {
-      var preset = RING_PRESET_BY_CALL_STATUS[status] || RING_PRESET_DEFAULT;
+      var view = STATUS_VIEW[status];
+      var preset = view ? view.ringPreset : RING_PRESET_DEFAULT;
       var svg = doc.querySelector("[data-ring]");
       var arc = doc.querySelector("[data-ring-arc]");
       if (svg) svg.setAttribute("class", preset.cls); // SVG: .className ist SVGAnimatedString, setAttribute noetig
