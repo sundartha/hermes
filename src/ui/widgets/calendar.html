@@ -1,6 +1,6 @@
 <!-- @dsCard group="MCP" name="get_calendar" subtitle="The owner's next calendar entries" -->
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -19,18 +19,21 @@
   .cell[data-field="start"]{color:rgba(255,255,255,.5);font-size:12px;font-variant-numeric:tabular-nums}
   .cell[data-field="end"]{margin-left:auto;color:rgba(255,255,255,.5);font-size:12px;font-variant-numeric:tabular-nums}
 </style>
+<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): Markup-
+     Texte stehen auf Englisch (fail-safe Default) und tragen data-i18n. -->
+<!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
-    <div class="eyebrow">Hermes · Kalender</div>
+    <div class="eyebrow" data-i18n="Hermes · Calendar">Hermes · Calendar</div>
     <div class="hero">
       <div class="wing-wrap">
         <!--__WING_MARKUP__-->
         <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
       </div>
       <span class="phase">get_calendar</span>
-      <span class="hero-title">Kalender</span>
+      <span class="hero-title" data-i18n="Calendar">Calendar</span>
     </div>
     <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
          W1-Binding (widget-bind.js) rendert je Termin eine Row (textContent, XSS-sicher). -->

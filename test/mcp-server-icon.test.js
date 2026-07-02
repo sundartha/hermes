@@ -43,19 +43,38 @@ test("T-T3-AC2: src/mcp-server.js (stdio/Claude-Desktop) verdrahtet HERMES_SERVE
   assert.doesNotMatch(src, /name:\s*"hermes"/, "kein dupliziertes {name,version}-Literal mehr (G5/S2)");
 });
 
-test("T-T3-AC3: echter initialize-Request ueber POST /mcp (Live-Connector-Pfad) traegt serverInfo.icons", async () => {
+// Obergrenze fuer das eingebettete Icon: haelt die initialize-Antwort klein
+// (Ziel ~23KB base64; 64KB laesst Luft fuer ein kuenftig groesseres Bild, ohne
+// dass die Antwort unbemerkt auf Megabyte anwaechst).
+const DATA_URI_PREFIX = "data:image/png;base64,";
+const MAX_DATA_URI_CHARS = 64_000;
+
+test("T-T3-AC3: echter initialize-Request ueber POST /mcp (Live-Connector-Pfad) traegt serverInfo.icons (data-URI zuerst, https-Fallback)", async () => {
   const srv = await startServer();
   try {
     const res = await mcpPost(`${srv.localUrl}/mcp`, null, INITIALIZE_BODY);
     assert.equal(res.status, 200);
     const result = await readToolResult(res);
+    const [embedded, hosted] = result.serverInfo.icons;
+    // icons[0]: origin-unabhaengiger data-URI (Cross-Origin-Icons verwirft der
+    // Host - Befund 2026-07-02, Connector-Origin app.sundartha.com vs PUBLIC_URL).
+    assert.ok(embedded.src.startsWith(DATA_URI_PREFIX), "icons[0] ist ein PNG-data-URI");
+    const decoded = Buffer.from(embedded.src.slice(DATA_URI_PREFIX.length), "base64");
+    assert.ok(decoded.subarray(0, 8).equals(PNG_SIGNATURE), "data-URI decodiert zu einem validen PNG");
+    assert.ok(
+      embedded.src.length < MAX_DATA_URI_CHARS,
+      `data-URI bleibt klein (<${MAX_DATA_URI_CHARS} Zeichen), sonst blaeht jede initialize-Antwort auf`,
+    );
+    assert.equal(embedded.mimeType, "image/png");
+    assert.deepEqual(embedded.sizes, ["128x128"]);
+    // icons[1]: adressierbare https-Variante fuer Hosts, die grosse Icons laden.
     assert.equal(
-      result.serverInfo.icons[0].src,
+      hosted.src,
       `${BASE_ENV.PUBLIC_URL}/brand/hermes-icon.png`,
       "src kommt aus config.publicUrl, kein hartkodierter Hostname",
     );
-    assert.equal(result.serverInfo.icons[0].mimeType, "image/png");
-    assert.deepEqual(result.serverInfo.icons[0].sizes, ["1024x1024"]);
+    assert.equal(hosted.mimeType, "image/png");
+    assert.deepEqual(hosted.sizes, ["1024x1024"]);
   } finally {
     await srv.stop();
   }

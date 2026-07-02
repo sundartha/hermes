@@ -1,6 +1,6 @@
 <!-- @dsCard group="MCP" name="get_agent_status" subtitle="Agent number, engine, usage & permissions" -->
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -26,27 +26,30 @@
   .row-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
     color:rgba(255,255,255,.94);text-align:right}
 </style>
+<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): Markup-
+     Texte stehen auf Englisch (fail-safe Default) und tragen data-i18n. -->
+<!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
-    <div class="eyebrow">Hermes · Agent-Status</div>
+    <div class="eyebrow" data-i18n="Hermes · Agent Status">Hermes · Agent Status</div>
     <div class="hero">
       <div class="wing-wrap">
         <!--__WING_MARKUP__-->
         <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
       </div>
-      <span class="phase">Dein KI-Telefonassistent</span>
+      <span class="phase" data-i18n="Your AI phone assistant">Your AI phone assistant</span>
       <span class="hero-title" data-mcp="owner">—</span>
     </div>
     <div class="rows">
-      <div class="row"><span class="row-k">Nummer</span><span class="row-v" data-mcp="number">—</span></div>
-      <div class="row"><span class="row-k">Voice-Engine</span><span class="row-v" data-mcp="voiceEngine">—</span></div>
-      <div class="row"><span class="row-k">Modell</span><span class="row-v" data-mcp="model">—</span></div>
-      <div class="row"><span class="row-k">Calls</span><span class="row-v" data-mcp="calls">—</span></div>
-      <div class="row"><span class="row-k">KI-Kosten (EUR)</span><span class="row-v" data-mcp="costEur">—</span></div>
-      <div class="row"><span class="row-k">Budget max. (EUR)</span><span class="row-v" data-mcp="maxBudgetEur">—</span></div>
-      <div class="row"><span class="row-k">Berechtigungen</span><span class="row-v" data-mcp="permissions">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Number">Number</span><span class="row-v" data-mcp="number">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Voice engine">Voice engine</span><span class="row-v" data-mcp="voiceEngine">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Model">Model</span><span class="row-v" data-mcp="model">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Calls">Calls</span><span class="row-v" data-mcp="calls">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="AI cost (EUR)">AI cost (EUR)</span><span class="row-v" data-mcp="costEur">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Max budget (EUR)">Max budget (EUR)</span><span class="row-v" data-mcp="maxBudgetEur">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Permissions">Permissions</span><span class="row-v" data-mcp="permissions">—</span></div>
     </div>
     <div class="foot"><span data-mcp="number">—</span><span>Hermes</span></div>
   </div>

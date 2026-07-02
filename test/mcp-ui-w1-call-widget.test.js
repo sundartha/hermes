@@ -11,17 +11,23 @@ import { hasWidget, widgetTitle, widgetHtml, WIDGET_CALL } from "../src/ui/widge
 import { BIND_SCRIPT } from "../src/ui/widget-bind.js";
 import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
+// data-mcp-Slots nach dem Design-Cleanup 2026-07-02: duration_s/failure_reason/
+// objective_achieved sind KEINE Slots mehr, sondern Anzeige-Elemente ohne
+// data-mcp ([data-duration-display] usw.) - das geteilte BIND_SCRIPT laeuft
+// nach dem Inline-Skript und wuerde formatierte Werte sonst mit Rohwerten
+// ueberschreiben. bridge_format/last_update (Diagnose-Zeile) sind ersatzlos raus.
 const SLOT_NAMES = [
   "status",
-  "duration_s",
   "last_transcript_lines",
   "call_id",
-  "failure_reason",
   "result_summary",
-  "objective_achieved",
-  "bridge_format",
-  "last_update",
 ];
+const DISPLAY_SELECTORS = [
+  "[data-duration-display]",
+  "[data-failure-display]",
+  "[data-objective-display]",
+];
+const REMOVED_SLOT_NAMES = ["duration_s", "failure_reason", "objective_achieved", "bridge_format", "last_update"];
 const ROW_NAMES = ["lines", "failure", "summary", "objective"];
 
 // Minimal-Fake eines DOM-Elements: textContent (Setter leert Kinder wie echtes DOM),
@@ -70,6 +76,7 @@ function makeFakeElement() {
 function makeFakeDocument() {
   const bySelector = new Map();
   for (const name of SLOT_NAMES) bySelector.set(`[data-mcp="${name}"]`, makeFakeElement());
+  for (const sel of DISPLAY_SELECTORS) bySelector.set(sel, makeFakeElement());
   for (const name of ROW_NAMES) bySelector.set(`[data-row="${name}"]`, makeFakeElement());
   bySelector.set("[data-cancel]", makeFakeElement());
   const wingEl = makeFakeElement();
@@ -211,11 +218,24 @@ test('T-W1-call-AC2: BIND_SCRIPT genau einmal in widgetHtml("call")', () => {
   assert.ok(html.lastIndexOf(BIND_SCRIPT) < html.lastIndexOf("</body>"), "BIND_SCRIPT vor </body>");
 });
 
-test("T-W1-call-AC3: alle 9 data-mcp-Slots vorhanden", () => {
+test("T-W1-call-AC3: data-mcp-Slots + Anzeige-Elemente vorhanden, Debug-Slots restlos raus", () => {
   const html = widgetHtml("call");
   for (const name of SLOT_NAMES) {
     assert.match(html, new RegExp(`data-mcp="${name}"`), `Slot ${name} vorhanden`);
   }
+  for (const sel of DISPLAY_SELECTORS) {
+    const attr = sel.slice(1, -1);
+    assert.ok(html.includes(attr), `Anzeige-Element ${attr} vorhanden`);
+  }
+  for (const name of REMOVED_SLOT_NAMES) {
+    assert.ok(!html.includes(`data-mcp="${name}"`), `kein data-mcp-Slot mehr fuer ${name}`);
+  }
+  // Owner-Entscheidung 2026-07-02: keine sichtbare Debug-/ID-Zeile mehr; der
+  // Fuss ist eine Inschrift (Wortmarke + Maeander-Fries).
+  assert.ok(!html.includes("id-block"), "ID-Block (call_id/Status roh) entfernt");
+  assert.ok(!html.includes('class="diag"'), "Diagnose-Zeile entfernt");
+  assert.ok(html.includes('class="foot-mark"'), "Fuss-Wortmarke vorhanden");
+  assert.ok(html.includes('class="meander"'), "Maeander-Fries vorhanden");
 });
 
 test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-/Bruecken-Strings", () => {
@@ -284,7 +304,11 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   });
 
   assert.equal(doc.slot("status").textContent, "completed");
-  assert.equal(doc.slot("duration_s").textContent, "42");
+  assert.equal(
+    doc.querySelector("[data-duration-display]").textContent,
+    "0:42",
+    "Dauer formatiert als m:ss (nicht mehr roher Sekundenwert)",
+  );
   assert.equal(env.intervalFns.size, 0, "clearInterval erreicht - kein weiterer Poll (AC7)");
   assert.equal(env.timeoutFns.size, 0, "auch der 15s-Fallback-Timer wird gestoppt");
   assert.equal(doc.cancelButton().disabled, true, "Cancel deaktiviert bei Terminal-Status (AC5)");
@@ -304,7 +328,10 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
     result: { structuredContent: { call_id: "call_1", result_summary: "Termin gebucht.", objective_achieved: true } },
   });
   assert.equal(doc.slot("result_summary").textContent, "Termin gebucht.");
-  assert.equal(doc.slot("objective_achieved").textContent, "true");
+  // objective_achieved=true -> lokalisiertes Label; in der vm-Sandbox gibt es
+  // kein injiziertes I18N_SCRIPT -> t() degradiert auf die Keys = englische
+  // Texte (genau der dokumentierte Fail-Safe-Pfad von call.html).
+  assert.equal(doc.querySelector("[data-objective-display]").textContent, "Yes");
   assert.equal(doc.row("summary").style.display, "", "Ergebnis-Zeile sichtbar nach completed");
 
   // Erneutes Terminal-Signal darf get_transcript NICHT erneut ausloesen (Guard).
@@ -351,7 +378,6 @@ test("T-W1-call-AC7c: sobald ein Format bestaetigt ist, nutzen Folge-Ticks nur n
     id: toolsCallReq.id,
     result: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 10, last_transcript_lines: [], failure_reason: null } },
   });
-  assert.equal(doc.slot("bridge_format").textContent, "tools/call", "bestaetigtes Format in der Diagnose-Zeile");
 
   env.posted.length = 0;
   env.fireInterval(); // naechster Tick NACH Bestaetigung
@@ -359,7 +385,7 @@ test("T-W1-call-AC7c: sobald ein Format bestaetigt ist, nutzen Folge-Ticks nur n
   assert.equal(env.posted[0].method, "tools/call");
 });
 
-test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, Diagnose 'kein Live-Update', initialer Zustand bleibt", () => {
+test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, initialer Zustand bleibt (keine sichtbare Diagnose mehr)", () => {
   const doc = makeFakeDocument();
   doc.slot("status").textContent = "dialing";
   const env = runOwnScript(doc);
@@ -368,11 +394,10 @@ test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, Diagn
   env.fireTimeout(); // simuliert Ablauf von FALLBACK_TIMEOUT_MS ohne jede Host-Antwort
 
   assert.equal(env.intervalFns.size, 0, "Polling gestoppt");
-  assert.equal(doc.slot("bridge_format").textContent, "kein Live-Update");
   assert.equal(doc.slot("status").textContent, "dialing", "initialer Status bleibt sichtbar (nie leer)");
 });
 
-test("T-W1-call-AC7e: failed-Status zeigt failure_reason, holt KEIN get_transcript", () => {
+test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEIN get_transcript", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
@@ -386,16 +411,29 @@ test("T-W1-call-AC7e: failed-Status zeigt failure_reason, holt KEIN get_transcri
         status: "failed",
         duration_s: 12,
         last_transcript_lines: [],
-        failure_reason: "Keine Antwort",
+        failure_reason: "no-answer",
       },
     },
   });
 
-  assert.equal(doc.slot("failure_reason").textContent, "Keine Antwort");
+  // Bekannter Reason-Token -> Anzeige-Label (EN-Fail-Safe der Sandbox, s.o.).
+  assert.equal(doc.querySelector("[data-failure-display]").textContent, "No answer");
   assert.equal(doc.row("failure").style.display, "", "Grund-Zeile sichtbar bei failed");
   assert.equal(doc.row("summary").style.display, "none", "Ergebnis-Zeile bleibt versteckt bei failed");
   assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
   assert.equal(doc.cancelButton().disabled, true);
+
+  // Unbekannter Token bleibt roh sichtbar (Diagnosewert), "failed:<sipcause>"
+  // faellt auf das failed-Label.
+  const doc2 = makeFakeDocument();
+  const env2 = runOwnScript(doc2);
+  doc2.slot("call_id").textContent = "call_2";
+  env2.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+    params: { structuredContent: { call_id: "call_2", status: "failed", duration_s: 1, last_transcript_lines: [], failure_reason: "failed:487" } } });
+  assert.equal(doc2.querySelector("[data-failure-display]").textContent, "Failed");
+  env2.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+    params: { structuredContent: { call_id: "call_2", status: "failed", duration_s: 1, last_transcript_lines: [], failure_reason: "sonderfall-token" } } });
+  assert.equal(doc2.querySelector("[data-failure-display]").textContent, "sonderfall-token");
 });
 
 test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber dieselbe Bruecke, no-op ohne gebundene call_id", () => {
@@ -534,17 +572,17 @@ test("T-W1-call-AC-wing-mount-src: mount() erhaelt die src des ausgelieferten [d
   assert.equal(fakeMountCalls[0].opts.src, wingImg.src, "mount() erhaelt src des tatsaechlichen [data-wing] img-Elements");
 });
 
-test("T-W1-call-AC-status-pill: deutsche Status-Pill-Uebersetzung ueber alle 5 Status", () => {
+test("T-W1-call-AC-status-pill: Status-Pill-Labels ueber alle 5 Status (EN-Keys; Uebersetzung via HermesI18n, s. mcp-ui-widget-i18n)", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
 
   const statusToLabel = [
-    ["dialing", "Verbindung"],
+    ["dialing", "Connecting"],
     ["in_progress", "Live"],
-    ["completed", "Abgeschlossen"],
-    ["failed", "Fehlgeschlagen"],
-    ["cancelled", "Abgebrochen"],
+    ["completed", "Completed"],
+    ["failed", "Failed"],
+    ["cancelled", "Cancelled"],
   ];
   for (const [status, expectedLabel] of statusToLabel) {
     env.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
@@ -569,13 +607,13 @@ test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (STATUS_VIEW.hudPhase) + S
   const RING_ARC_INTERRUPTED_GAP_PX = 23;
 
   const statusToExpectation = [
-    ["dialing", "Anruf wird platziert", "ring ring--spin ring--accent",
+    ["dialing", "Placing call", "ring ring--spin ring--accent",
       `${RING_ARC_DIALING_PX} ${RING_CIRCUMFERENCE - RING_ARC_DIALING_PX}`],
-    ["in_progress", "Im Gespraech", "ring ring--spin ring--accent-strong",
+    ["in_progress", "In call", "ring ring--spin ring--accent-strong",
       `${RING_ARC_IN_PROGRESS_PX} ${RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX}`],
-    ["completed", "Anruf beendet", "ring ring--accent-solid", `${RING_CIRCUMFERENCE} 0`],
-    ["failed", "Anruf beendet", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
-    ["cancelled", "Anruf beendet", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
+    ["completed", "Call ended", "ring ring--accent-solid", `${RING_CIRCUMFERENCE} 0`],
+    ["failed", "Call ended", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
+    ["cancelled", "Call ended", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
   ];
 
   for (const [status, expectedPhase, expectedRingClass, expectedDash] of statusToExpectation) {

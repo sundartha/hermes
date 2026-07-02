@@ -1,6 +1,6 @@
 <!-- @dsCard group="MCP" name="place_call" subtitle="Unified live call card: dialing -> status -> result, self-polling + cancel" -->
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -101,30 +101,44 @@
     border-radius:var(--radius-pill);padding:4px 12px;font-size:12.5px}
   .lines{flex-direction:column;align-items:stretch;gap:6px}
   .lines .turn{font-size:12.5px;color:rgba(255,255,255,.7);line-height:1.5}
-  .foot{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
+  /* Fuss als klassische Inschrift (Hermes/Olympus statt Debug-Zeile): Wortmarke
+     + Maeander-Fries (griechisches Schluesselband, inline-SVG-data-URI - kein
+     externer Request, Muster WING_PNG) + Cancel solange der Anruf laeuft. Die
+     frueheren Diagnose-/ID-Zeilen (call_id/roh-Status/bridge_format/Timestamp)
+     sind bewusst NICHT mehr sichtbar (Owner-Entscheidung 2026-07-02). */
+  .foot{position:relative;z-index:1;display:flex;align-items:center;gap:16px;
     margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)}
-  .id-block{display:flex;align-items:baseline;gap:var(--space-2);font-variant-numeric:tabular-nums}
-  .id-block [data-mcp="call_id"]{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:.02em}
-  .id-block [data-mcp="status"]{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.06em;text-transform:uppercase}
+  .foot-mark{font-size:10px;font-weight:600;letter-spacing:.42em;text-transform:uppercase;
+    color:rgba(255,255,255,.42);white-space:nowrap;padding-left:2px}
+  .meander{flex:1;height:10px;opacity:.26;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='10' viewBox='0 0 22 10'%3E%3Cpath d='M1,9H21V1H9V5H15' fill='none' stroke='%23ffffff' stroke-width='1.2'/%3E%3C/svg%3E") left center repeat-x;
+    background-size:22px 10px}
+  /* Funktionale Slots ohne Sichtflaeche: call_id ist die Datenquelle fuer
+     Poll/Cancel (currentCallId), status der rohe Vertragswert - beide werden
+     weiter vom geteilten BIND_SCRIPT befuellt, nur nicht mehr angezeigt. */
+  .slot-hidden{display:none}
   .hud-cancel{font-family:var(--font-sans);font-size:12.5px;font-weight:700;letter-spacing:.05em;
     color:rgba(255,255,255,.85);background:transparent;border:1px solid rgba(255,255,255,.25);
     border-radius:var(--radius-pill);padding:8px 16px;cursor:pointer;transition:all .22s var(--ease)}
   .hud-cancel:hover{border-color:var(--color-accent-light-strong);color:#fff;
     box-shadow:0 0 18px -4px var(--color-accent-light-glow);background:rgba(var(--color-accent-light-rgb),.08)}
   .hud-cancel:disabled{opacity:.6;cursor:default}
-  .diag{position:relative;z-index:1;margin-top:var(--space-2);font-size:10.5px;color:rgba(255,255,255,.3);
-    display:flex;justify-content:space-between}
   @media (prefers-reduced-motion: reduce) {
     .ring--spin{animation:none}
     .pill--active .dot{animation:none}
   }
 </style>
+<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): MUSS vor
+     dem Inline-Skript unten stehen (window.HermesI18n synchron fuer
+     STATUS_VIEW). Markup-Texte stehen auf Englisch (fail-safe Default) und
+     tragen data-i18n. -->
+<!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
     <div class="eyebrow">
-      <span>Hermes · Anruf</span>
+      <span data-i18n="Hermes · Call">Hermes · Call</span>
       <span class="pill pill--muted" data-status-pill>
         <span class="dot" data-status-dot style="display:none"></span>
         <span data-status-label>—</span>
@@ -143,31 +157,34 @@
       <span class="phase" data-hud-phase>—</span>
     </div>
 
+    <!-- Dauer/Grund/Ziel sind reine Anzeige-Elemente OHNE data-mcp: das geteilte
+         BIND_SCRIPT laeuft NACH dem Inline-Skript und wuerde formatierte Werte
+         sonst wieder mit Rohwerten (Sekundenzahl, roher Reason-Token,
+         true/false) ueberschreiben. Das Inline-Skript befuellt sie formatiert/
+         lokalisiert aus denselben Pushes (applyCallStatus/applyTranscript). -->
     <div class="rows">
-      <div class="row"><span class="row-k">Dauer</span><span class="row-v" data-mcp="duration_s">—</span></div>
+      <div class="row"><span class="row-k" data-i18n="Duration">Duration</span><span class="row-v" data-duration-display>—</span></div>
       <div class="row lines" data-row="lines" data-mcp="last_transcript_lines"></div>
       <div class="row" data-row="failure" style="display:none">
-        <span class="row-k">Grund</span><span class="row-v pill-value" data-mcp="failure_reason">—</span>
+        <span class="row-k" data-i18n="Reason">Reason</span><span class="row-v pill-value" data-failure-display>—</span>
       </div>
       <div class="row" data-row="summary" style="display:none">
-        <span class="row-k">Ergebnis</span><span class="row-v pill-value" data-mcp="result_summary">—</span>
+        <span class="row-k" data-i18n="Result">Result</span><span class="row-v pill-value" data-mcp="result_summary">—</span>
       </div>
       <div class="row" data-row="objective" style="display:none">
-        <span class="row-k">Ziel erreicht</span><span class="row-v pill-value" data-mcp="objective_achieved">—</span>
+        <span class="row-k" data-i18n="Objective met">Objective met</span><span class="row-v pill-value" data-objective-display>—</span>
       </div>
     </div>
 
     <div class="foot">
-      <span class="id-block">
-        <span data-mcp="call_id">—</span>
-        <span data-mcp="status">—</span>
-      </span>
-      <button type="button" class="hud-cancel" data-cancel>Anruf abbrechen</button>
+      <span class="foot-mark" aria-hidden="true">Hermes</span>
+      <span class="meander" aria-hidden="true"></span>
+      <button type="button" class="hud-cancel" data-cancel data-i18n="Cancel call">Cancel call</button>
     </div>
-    <div class="diag">
-      <span data-mcp="bridge_format">—</span>
-      <span data-mcp="last_update">—</span>
-    </div>
+    <!-- Funktionale Slots (unsichtbar, s. .slot-hidden im CSS): weiterhin Teil
+         des structuredContent-Vertrags und vom BIND_SCRIPT befuellt. -->
+    <span class="slot-hidden" data-mcp="call_id">—</span>
+    <span class="slot-hidden" data-mcp="status">—</span>
   </div>
   <!-- Vereintes Widget (W1): EIN Iframe fuer den gesamten Anruf-Lebenszyklus
        (dialing -> in_progress -> completed/failed/cancelled). Der initiale call_id/
@@ -218,7 +235,23 @@
 
     var TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
     var EMDASH = "—";
-    var NO_BRIDGE_LABEL = "kein Live-Update";
+
+    // Lokalisierung: window.HermesI18n kommt aus dem im <head> injizierten
+    // I18N_SCRIPT (widget-i18n.js) und ist hier synchron verfuegbar. Faellt es
+    // aus, degradiert t() auf die Keys - die SIND englische Texte (fail-safe).
+    var t = window.HermesI18n && typeof window.HermesI18n.t === "function"
+      ? window.HermesI18n.t
+      : function (key) { return key; };
+
+    // Anzeige-Labels fuer die failure_reason-Tokens aus
+    // src/telephony/failure-reason.js ("no-answer" | "busy" | "canceled" |
+    // "failed[:<sipcause>]"); unbekannte Tokens erscheinen roh (Diagnosewert).
+    var FAILURE_REASON_LABELS = {
+      "no-answer": "No answer",
+      "busy": "Busy",
+      "canceled": "Cancelled",
+      "failed": "Failed",
+    };
 
     // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (dialing/in_progress/
     // completed/failed/cancelled) statt vormals sechs paralleler Lookup-Maps ueber
@@ -249,42 +282,42 @@
     var STATUS_VIEW = {
       dialing: {
         wingStatus: "connecting",
-        pillLabel: "Verbindung",
+        pillLabel: t("Connecting"),
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: "Anruf wird platziert",
+        hudPhase: t("Placing call"),
         ringPreset: { cls: "ring ring--spin ring--accent", dash: RING_ARC_DIALING_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_DIALING_PX) },
       },
       in_progress: {
         wingStatus: "working",
-        pillLabel: "Live",
+        pillLabel: t("Live"),
         pillClass: "pill pill--active",
         dot: true,
-        hudPhase: "Im Gespraech",
+        hudPhase: t("In call"),
         ringPreset: { cls: "ring ring--spin ring--accent-strong", dash: RING_ARC_IN_PROGRESS_PX + " " + (RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX) },
       },
       completed: {
         wingStatus: "success",
-        pillLabel: "Abgeschlossen",
+        pillLabel: t("Completed"),
         pillClass: "pill pill--done",
         dot: false,
-        hudPhase: "Anruf beendet",
+        hudPhase: t("Call ended"),
         ringPreset: { cls: "ring ring--accent-solid", dash: RING_CIRCUMFERENCE + " 0" },
       },
       failed: {
         wingStatus: "error",
-        pillLabel: "Fehlgeschlagen",
+        pillLabel: t("Failed"),
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: "Anruf beendet",
+        hudPhase: t("Call ended"),
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
       cancelled: {
         wingStatus: "error",
-        pillLabel: "Abgebrochen",
+        pillLabel: t("Cancelled"),
         pillClass: "pill pill--muted",
         dot: false,
-        hudPhase: "Anruf beendet",
+        hudPhase: t("Call ended"),
         ringPreset: { cls: "ring ring--muted", dash: RING_ARC_INTERRUPTED_DASH_PX + " " + RING_ARC_INTERRUPTED_GAP_PX },
       },
     };
@@ -340,6 +373,39 @@
       var el = slot(name);
       if (!el) return;
       el.textContent = value === null || value === undefined ? EMDASH : String(value);
+    }
+
+    // Anzeige-Elemente ohne data-mcp (s. Markup-Kommentar bei .rows): werden
+    // NUR von diesem Skript beschrieben, nie vom geteilten BIND_SCRIPT.
+    function setDisplayText(selector, value) {
+      var el = doc.querySelector(selector);
+      if (!el) return;
+      el.textContent = value === null || value === undefined ? EMDASH : String(value);
+    }
+
+    // Sekunden -> "m:ss" (sprachneutral, tabular-nums im CSS). Anrufe sind
+    // durch die Max-Dauer-Sicherung kurz; Stundenformat braucht es nicht.
+    function formatDuration(totalSeconds) {
+      var s = Math.max(0, Math.floor(totalSeconds));
+      var rest = s % 60;
+      return Math.floor(s / 60) + ":" + (rest < 10 ? "0" + rest : rest);
+    }
+
+    // "failed:487" -> Label von "failed"; unbekannter Token bleibt roh sichtbar.
+    function failureReasonLabel(raw) {
+      if (raw === null || raw === undefined) return raw;
+      var token = String(raw);
+      var mapped = FAILURE_REASON_LABELS[token.split(":")[0]];
+      return mapped ? t(mapped) : token;
+    }
+
+    // objective_achieved ist bool ODER String (get_transcript-Kontrakt,
+    // src/mcp-tools.js) - bool/"unclear" lokalisiert, andere Strings roh.
+    function objectiveLabel(value) {
+      if (value === true) return t("Yes");
+      if (value === false) return t("No");
+      if (value === "unclear") return t("Unclear");
+      return value;
     }
 
     function setRowVisible(rowKey, visible) {
@@ -460,9 +526,9 @@
     function applyCallStatus(data) {
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
-      if (typeof data.duration_s === "number") setSlotText("duration_s", data.duration_s);
+      if (typeof data.duration_s === "number") setDisplayText("[data-duration-display]", formatDuration(data.duration_s));
       if (Array.isArray(data.last_transcript_lines)) renderTranscriptLines(data.last_transcript_lines);
-      if ("failure_reason" in data) setSlotText("failure_reason", data.failure_reason);
+      if ("failure_reason" in data) setDisplayText("[data-failure-display]", failureReasonLabel(data.failure_reason));
       if (data.status) {
         setSlotText("status", data.status);
         updateForStatus(data.status);
@@ -474,7 +540,7 @@
       if (!isRecord(data)) return;
       if (data.call_id) setSlotText("call_id", data.call_id);
       if ("result_summary" in data) setSlotText("result_summary", data.result_summary);
-      if ("objective_achieved" in data) setSlotText("objective_achieved", data.objective_achieved);
+      if ("objective_achieved" in data) setDisplayText("[data-objective-display]", objectiveLabel(data.objective_achieved));
     }
 
     function stopPolling() {
@@ -499,17 +565,14 @@
       return "call-widget-" + rpcCounter;
     }
 
-    function setDiagnostic(format) {
-      setSlotText("bridge_format", format);
-      setSlotText("last_update", new Date().toISOString());
-    }
-
-    // Erste Antwort (gleich welcher Kanal/Format) gewinnt die Diagnose-Zeile
+    // Erste Antwort (gleich welcher Kanal/Format) bestimmt das Sende-Format
     // dauerhaft (Plan 6.2: "Folge-Ticks nutzen nur dieses Format").
+    // confirmedFormat ist reiner interner Zustand - die fruehere sichtbare
+    // Diagnose-Zeile (bridge_format/last_update) ist bewusst entfernt
+    // (Owner-Entscheidung 2026-07-02: keine Debug-Infos auf der Karte).
     function markResponse(format, data, applyFn) {
       anyResponseReceived = true;
       if (!confirmedFormat) confirmedFormat = format;
-      setDiagnostic(confirmedFormat);
       applyFn(data);
     }
 
@@ -591,6 +654,9 @@
       sendToolCall(TOOL_CANCEL, { call_id: callId }); // Cancel-Callback (Muster des inzwischen entfernten Einzel-Widgets)
     }
 
+    // Keine Host-Bruecke innerhalb der Frist -> Polling einstellen (Plan 6.3);
+    // die Karte zeigt dann still den zuletzt gepushten Stand (kein sichtbares
+    // Diagnose-Label mehr, s. markResponse-Kommentar).
     function onFallbackTimeout() {
       fallbackTimerId = null;
       if (anyResponseReceived) return; // schon eine Antwort da - kein Abbruch noetig
@@ -598,7 +664,6 @@
         clearInterval(pollTimerId);
         pollTimerId = null;
       }
-      setSlotText("bridge_format", NO_BRIDGE_LABEL);
     }
 
     // Kanal A: Host-Notification (dieselbe Form wie der initiale place_call-Push; der

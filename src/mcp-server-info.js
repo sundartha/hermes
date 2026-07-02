@@ -8,12 +8,20 @@
 //
 // icons macht dem MCP-Host im initialize-Handshake ein Hermes-Marken-Icon bekannt
 // (ImplementationSchema.icons, SDK bereits installiert, kein Versions-Bump). Ohne
-// icons zeigt der Host einen generischen Platzhalter (verifiziert gegen
-// claude.ai/customize/connectors). Ein MCP-Host laedt icons[0].src OHNE Dashboard-
-// Credentials - server.js braucht dafuer eine eng begruendete Basic-Auth-Ausnahme
-// fuer BRAND_ASSETS_PREFIX (siehe dort), sonst waere dieses Feld in Produktion
+// icons zeigt der Host einen generischen Platzhalter. icons[0] ist ein data-URI
+// (brand-icon-data.js): Hosts validieren http(s)-Icon-URLs gegen den
+// Connector-Origin, und der Dienst laeuft unter mehreren Origins (onrender.com +
+// app.sundartha.com) - empirischer Befund 2026-07-02: der Connector laeuft ueber
+// app.sundartha.com, die http(s)-Icon-URL zeigte via PUBLIC_URL auf onrender.com,
+// claude.ai zeigte den Default-Wuerfel. Die eingebettete Ressource ist
+// origin-unabhaengig und funktioniert auch im stdio-Transport (Claude Desktop).
+// Die https-Variante bleibt als icons[1] fuer Hosts, die adressierbare/grosse
+// Icons bevorzugen; ein MCP-Host laedt sie OHNE Dashboard-Credentials -
+// server.js braucht dafuer die eng begruendete Basic-Auth-Ausnahme fuer
+// BRAND_ASSETS_PREFIX (siehe dort), sonst waere sie in Produktion
 // (DASHBOARD_PASSWORD gesetzt) wirkungslos.
 import { config } from "./config.js";
+import { HERMES_ICON_DATA_URI, HERMES_ICON_SIZE } from "./brand-icon-data.js";
 
 // Pfad-Praefix fuer selbst gehostete Marken-Assets unter public/ (kein Magic-String,
 // G25) - server.js braucht denselben Wert fuer die Basic-Auth-Ausnahme.
@@ -24,6 +32,11 @@ export const HERMES_SERVER_INFO = {
   name: "hermes",
   version: "0.2.0",
   icons: [
+    {
+      src: HERMES_ICON_DATA_URI,
+      mimeType: "image/png",
+      sizes: [HERMES_ICON_SIZE],
+    },
     {
       src: `${config.publicUrl}${BRAND_ASSETS_PREFIX}${HERMES_ICON_FILENAME}`,
       mimeType: "image/png",

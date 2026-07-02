@@ -1,6 +1,6 @@
 <!-- @dsCard group="MCP" name="list_calls" subtitle="Recent inbound & outbound calls" -->
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -27,18 +27,21 @@
     font-size:11.5px;font-variant-numeric:tabular-nums}
   .cell[data-field="summary"]{flex-basis:100%;color:rgba(255,255,255,.55);font-size:12.5px}
 </style>
+<!-- Lokalisierung (widget-i18n.js, injiziert von widget-catalog.js): Markup-
+     Texte stehen auf Englisch (fail-safe Default) und tragen data-i18n. -->
+<!--__I18N__-->
 <!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
-    <div class="eyebrow">Hermes · Letzte Anrufe</div>
+    <div class="eyebrow" data-i18n="Hermes · Recent Calls">Hermes · Recent Calls</div>
     <div class="hero">
       <div class="wing-wrap">
         <!--__WING_MARKUP__-->
         <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
       </div>
       <span class="phase">list_calls</span>
-      <span class="hero-title">Letzte Anrufe</span>
+      <span class="hero-title" data-i18n="Recent calls">Recent calls</span>
     </div>
     <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
          W1-Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher).

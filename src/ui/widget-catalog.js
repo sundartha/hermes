@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BIND_SCRIPT } from "./widget-bind.js";
+import { I18N_SCRIPT } from "./widget-i18n.js";
 import {
   WING_CSS_DARK_STATIC, WING_MARKUP_DARK_STATIC,
   WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
@@ -77,6 +78,17 @@ export function withWingCanvasMount(html) {
   return html.replace(WING_CANVAS_MOUNT_PLACEHOLDER, WING_CANVAS_MOUNT_SCRIPT);
 }
 
+// Lokalisierung (widget-i18n.js): im <head> JEDES Widgets, damit
+// window.HermesI18n fuer die Inline-Skripte (call.html STATUS_VIEW) synchron
+// verfuegbar ist. Muster wie withWingEngine; dass der Platzhalter in allen
+// Widget-Quellen steht, sichert der Injektions-Test (mcp-ui-widget-i18n).
+const I18N_PLACEHOLDER = "<!--__I18N__-->";
+
+export function withI18nScript(html) {
+  if (!html.includes(I18N_PLACEHOLDER)) return html;
+  return html.replace(I18N_PLACEHOLDER, I18N_SCRIPT);
+}
+
 // Gemeinsamer Olympus-HUD-Kartenrahmen (H4): eine Quelle (hud-card-css.js)
 // statt 4x derselben ~35 CSS-Zeilen (G5/S2, s. dortiger Kopfkommentar).
 const HUD_CARD_CSS_PLACEHOLDER = "/*__HUD_CARD_CSS__*/";
@@ -130,7 +142,8 @@ const WIDGET_HTML = Object.fromEntries(
     const raw = readFileSync(widgetDir + def.file, "utf8");
     const withCss = withHudCardCss(raw);
     const withAssets = withWingAssets(withCss, def);
-    const withEngine = withWingEngine(withAssets);
+    const withI18n = withI18nScript(withAssets);
+    const withEngine = withWingEngine(withI18n);
     const withMount = withWingCanvasMount(withEngine);
     return [id, withBindScript(withMount)];
   }),
