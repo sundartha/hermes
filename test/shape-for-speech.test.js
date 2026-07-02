@@ -41,6 +41,10 @@ const CASES = [
   ["- **Freitag** um 14 Uhr - das passt gut", "Freitag um 14 Uhr, das passt gut."],
   // Rand-Whitespace wird getrimmt.
   ["  Alles klar.  ", "Alles klar."],
+  // Haengendes Komma am Ende (z.B. Rest eines abgebrochenen Gedankenstrich-Satzes)
+  // wird abgeraeumt, BEVOR der Schlusspunkt ergaenzt wird (nie ",.").
+  ["Ich buche den Termin - ", "Ich buche den Termin."],
+  ["Alles klar,", "Alles klar."],
 ];
 
 test("I8: shapeForSpeech normalisiert Input/Output-Paare deterministisch", () => {
