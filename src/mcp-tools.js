@@ -352,7 +352,7 @@ export function registerTools(
         to: z
           .string()
           .describe(
-            "Zielrufnummer in E.164, z.B. +4917212345678. Wird serverseitig durch die Safety-Gates geprueft (Rechteprofil/Allowlist, Denylist, Land).",
+            "Zielrufnummer EXAKT so uebernehmen, wie der Nutzer sie angegeben hat - Ziffern zeichengenau kopieren, NIEMALS umrechnen oder in E.164 umformen (beim Umformen entstehen Ziffernfehler; der Server normalisiert deterministisch). Nationale Schreibweise mit fuehrender 0 loest der Server ueber das Heimatland des Nutzers auf; Auslandsziele brauchen +XX/00XX - wirkt eine Nummer wie ein auslaendisches nationales Format, frage den Nutzer nach der internationalen Schreibweise statt zu raten. Wird serverseitig durch die Safety-Gates geprueft (Rechteprofil/Allowlist, Denylist, Land).",
           ),
         objective: z
           .string()

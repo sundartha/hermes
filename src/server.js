@@ -20,6 +20,8 @@ import {
   tenantIdForSubject,
   normNum,
   hasTrunkZeroAfterCountryCode,
+  homeCountryCode,
+  normalizeDialTarget,
   shouldPersistProvisionResult,
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
@@ -421,7 +423,14 @@ app.use((req, res, next) => {
     // (DASHBOARD_PASSWORD gesetzt) 401 statt des Icons, der T3-Fix waere live
     // wirkungslos (empirisch geprueft, exakt wie die STRIPE_WEBHOOK_PATH-Begruendung
     // oben: eng auf ein Praefix begrenzt, kein Blanket-Bypass).
-    req.path.startsWith(BRAND_ASSETS_PREFIX)
+    req.path.startsWith(BRAND_ASSETS_PREFIX) ||
+    // Favicon-Konvention: Icon-Fetcher (Browser-Tabs, Connector-UIs wie
+    // claude.ai) ziehen /favicon.ico OHNE Credentials von der Wurzel - hinter
+    // Basic-Auth antwortete die Route in Produktion 401 (empirisch 2026-07-02),
+    // der Host fiel auf einen generischen Platzhalter zurueck. Dieselbe enge
+    // Ein-Pfad-Begruendung wie BRAND_ASSETS_PREFIX: ein statisches, oeffentliches
+    // Marken-Asset, keine Nutzdaten.
+    req.path === "/favicon.ico"
   )
     return next();
   // Genuiner lokaler In-Process-Aufrufer (MCP-Tools rufen die eigene /api ueber
@@ -1199,22 +1208,27 @@ function contextReceivedMeta(context) {
   };
 }
 
+// C4-Formfehler: Trunk-0 nach erlaubter Laendervorwahl (z.B. +4901737... statt
+// +491737...) wird abgewiesen (Owner-#4: REJECT, NICHT kanonisieren - laender-
+// spezifisches Korruptions-/Falschanruf-Risiko, z.B. +39 IT behaelt die fuehrende 0).
+// !isDenied(to) WAHRT die Denylist-Praezedenz (Regel 1): eine gesperrte Nummer auch in
+// Trunk-0-Schreibweise (z.B. +490900..., DE-0900-Premium) bleibt 403 denylist
+// (auditiert), kein Kippen auf 400. EIN Praedikat fuer BEIDE Pruefpunkte im
+// /api/calls-Handler (Roh-Eingabe + normalisiertes Ergebnis der 00->+-Regel, s.u.).
+const isTrunkZeroFormatError = (to) => !isDenied(to) && hasTrunkZeroAfterCountryCode(to);
+
 // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
 app.post("/api/calls", async (req, res) => {
   const b = req.body || {};
-  const to = normNum(b.to);
+  // let statt const: to wird nach der Tenant-Aufloesung EINMAL deterministisch
+  // normalisiert (normalizeDialTarget, s.u.) - danach unveraendert bis zum Dial.
+  let to = normNum(b.to);
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
 
-  // C4 (6.6): Trunk-0 nach erlaubter Laendervorwahl (z.B. +4901737... statt +491737...) ist
-  // ein Formatfehler und wird abgewiesen (Owner-#4: REJECT, NICHT kanonisieren - laender-
-  // spezifisches Korruptions-/Falschanruf-Risiko, z.B. +39 IT behaelt die fuehrende 0).
-  // 400 VOR jedem Gate und vor dem Dial; "geprueft == gewaehlt" bleibt trivial (to unveraendert).
-  // !isDenied(to) WAHRT die Denylist-Praezedenz (Regel 1): eine gesperrte Nummer auch in
-  // Trunk-0-Schreibweise (z.B. +490900..., DE-0900-Premium) bleibt 403 denylist (auditiert),
-  // nicht 400. 400 = reiner Eingabefehler -> kein Audit (wie die to/objective-Pruefung oben).
-  if (!isDenied(to) && hasTrunkZeroAfterCountryCode(to))
-    return res.status(400).json({ error: E164_FORMAT_ERROR });
+  // C4 (6.6): 400 VOR jedem Gate und vor dem Dial; 400 = reiner Eingabefehler ->
+  // kein Audit (wie die to/objective-Pruefung oben).
+  if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
 
   // OUTBOUND_FROZEN (outbound-p3): globaler Kill-Switch, ganz vorn + fail-closed. "true"
   // friert JEDEN Outbound sofort (403, kein Originate, kein Bypass) - Betriebs-Notbremse +
@@ -1244,6 +1258,23 @@ app.post("/api/calls", async (req, res) => {
     audit("place_call_denied", req, `to=${to} grund=tenant_unbekannt requestedBy=${requestedBy}`);
     return res.status(403).json({ error: "Kein Tenant fuer diese Identitaet." });
   }
+
+  // Wurzelfix LLM-Ziffern-Regeneration (RCA call_mr3upd4uz8p3): nationale Schreibweise
+  // wird HIER deterministisch aufgeloest, NICHT im MCP-Client - das Chat-Modell reicht
+  // die Nutzer-Eingabe zeichengenau durch (jede LLM-Umformung kann Ziffern erfinden).
+  // Telefon-Konvention: fuehrende 0 = Heimatland des Tenants (private Mobilnummer als
+  // "SIM" vor eigener DID - die DID kann in einem anderen Land liegen); "00" -> "+";
+  // "+" unveraendert. Kein ableitbares Heimatland -> unveraendert -> numberGateError
+  // liefert den E.164-400 (ablehnen statt raten). Ab hier sehen ALLE Gates, Audits und
+  // der Dial dieselbe normalisierte Nummer ("geprueft == gewaehlt").
+  const homeCountry = homeCountryCode([
+    store.tenantPrivateNumber(tenantId),
+    findActiveNumber(store.load(), tenantId)?.e164,
+  ]);
+  to = normalizeDialTarget(to, homeCountry);
+  // Die 00->+-Regel kann Trunk-0-Formfehler neu materialisieren ("00490173..." ->
+  // "+490173...") - dasselbe C4-Praedikat wie oben, auf dem NORMALISIERTEN Ergebnis.
+  if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
 
   // KYC-Gate (P6b4) als erstes Glied der Outbound-Gate-Kette: Tenant-Reifegrad VOR
   // den Ziel-Gates (Schnittmenge, fail-closed). Fehlendes kyc_level -> 403 (seit Phase

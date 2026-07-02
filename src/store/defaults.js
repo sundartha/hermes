@@ -308,6 +308,41 @@ export function hasTrunkZeroAfterCountryCode(e164) {
   return TRUNK_ZERO_COUNTRY_CODES.some((code) => e164.startsWith(code + NATIONAL_TRUNK_PREFIX));
 }
 
+// Heimat-Laendervorwahl eines Tenants fuer die Interpretation nationaler Rufnummern
+// (fuehrende 0): die erste Kandidaten-Nummer (bereits E.164 im Store), deren Vorwahl in
+// TRUNK_ZERO_COUNTRY_CODES liegt - NUR dort ist "0 weglassen, Vorwahl davor" korrekt
+// (Gegenbeispiel +39 IT, s.o.). Kandidaten in Praezedenz beim Aufrufer (private
+// Mobilnummer = die "SIM" des Nutzers vor eigener DID - die DID kann in einem anderen
+// Land liegen als der Nutzer, z.B. US-DID eines DE-Tenants). Kein Treffer/leer -> null
+// (Aufrufer normalisiert dann NICHT, das E164-Gate lehnt ab - ablehnen statt raten).
+export function homeCountryCode(candidateNumbers) {
+  for (const num of candidateNumbers) {
+    if (typeof num !== "string") continue;
+    const code = TRUNK_ZERO_COUNTRY_CODES.find((c) => num.startsWith(c));
+    if (code) return code;
+  }
+  return null;
+}
+
+// Internationale Verkehrsausscheidungsziffern "00" (ITU-Standard in allen
+// TRUNK_ZERO_COUNTRY_CODES-Laendern): "0049..." ist die Wahl-Schreibweise von "+49...".
+const INTERNATIONAL_CALL_PREFIX = "00";
+
+// Deterministische Normalisierung eines Wahl-Ziels nach Telefon-Konvention (Wurzelfix
+// LLM-Ziffern-Regeneration: der MCP-Client reicht die Nutzer-Eingabe zeichengenau durch,
+// JEDE Umformung passiert hier in Code statt im Modell). Erwartet normNum-Form:
+// "+..." unveraendert; "00..." -> "+..."; fuehrende einzelne 0 -> homeCountry + Rest
+// (nur mit ableitbarem Heimatland, s. homeCountryCode). Alles andere unveraendert -
+// KEINE Validierung hier: das nachgelagerte E164-/Trunk-0-Gate lehnt ab (fail-closed).
+export function normalizeDialTarget(num, homeCountry) {
+  if (typeof num !== "string") return "";
+  if (num.startsWith(INTERNATIONAL_CALL_PREFIX))
+    return "+" + num.slice(INTERNATIONAL_CALL_PREFIX.length);
+  if (num.startsWith(NATIONAL_TRUNK_PREFIX) && homeCountry)
+    return homeCountry + num.slice(NATIONAL_TRUNK_PREFIX.length);
+  return num;
+}
+
 // Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines
 // Praefix-Praedikat: erlaubt nur Nummern, deren E.164-Praefix in allowedCodes liegt.
 // Default ["+49"] - BEWUSST strenger als das globale Call-Gate (+49,+33,+44): die

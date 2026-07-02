@@ -35,39 +35,39 @@ Verifizierte Vorab-Befunde (Lead, empirisch):
 
 ## Todos (erwartetes Ergebnis + Verifikation, workflow.md Regel 7)
 
-- [ ] 1. Icon als data-URI: kleines optimiertes PNG (<=256px) als
+- [x] 1. Icon als data-URI: kleines optimiertes PNG (<=256px) als
       `icons[0]` (data:) + bestehende https-URL als `icons[1]` in
       HERMES_SERVER_INFO. Erwartet: icons[0].src beginnt mit
       `data:image/png;base64,`, decodiert mit PNG-Magic, < 150KB.
       Verifikation: neuer Test in test/ + `npm test`.
-- [ ] 2. `src/ui/widget-i18n.js`: DICT en/de/fr + I18N_SCRIPT
+- [x] 2. `src/ui/widget-i18n.js`: DICT en/de/fr + I18N_SCRIPT
       (window.HermesI18n.t, [data-i18n]-Swap bei DOMContentLoaded,
       html.lang setzen; Locale: window.openai.locale || navigator.language,
       Fallback en). Erwartet: Key-Paritaet aller Locales, t()-Fallback en.
       Verifikation: neuer Test test/mcp-ui-widget-i18n.test.js.
-- [ ] 3. widget-catalog: I18N-Platzhalter-Injektion in <head> aller 5 Widgets.
+- [x] 3. widget-catalog: I18N-Platzhalter-Injektion in <head> aller 5 Widgets.
       Erwartet: widgetHtml(id) enthaelt HermesI18n fuer alle 5, kein
       Platzhalter-Leak. Verifikation: Test + npm test.
-- [ ] 4. 5 Widget-Templates: EN-Default-Texte + data-i18n-Keys; call.html
+- [x] 4. 5 Widget-Templates: EN-Default-Texte + data-i18n-Keys; call.html
       Inline-Skript nutzt t() fuer STATUS_VIEW/Button; failure_reason-Map
       (no-answer/busy/...) lokalisiert; objective_achieved bool->Yes/No
       lokalisiert. Erwartet: keine deutschen Hardcodes mehr in den Templates.
       Verifikation: grep + angepasste W1-Tests.
-- [ ] 5. call.html Design: .diag-Zeile weg (setDiagnostic nur noch interner
+- [x] 5. call.html Design: .diag-Zeile weg (setDiagnostic nur noch interner
       Zustand, Fallback-Timeout-Verhalten bleibt), id-Block versteckt
       (funktional), Dauer als m:ss via Display-Element, Footer als
       HERMES-Inschrift + dezenter Maeander-Akzent (nur bestehende
       Farb-Tokens/rgba-Weiss). Erwartet: kein sichtbares call_id/FAILED/
       ui-notifications/Timestamp mehr. Verifikation: W1-Tests angepasst +
       visueller Harness.
-- [ ] 6. design-system/mcp/call.html Specimens nachziehen (EN + neuer Fuss).
+- [x] 6. design-system/mcp/call.html Specimens nachziehen (EN + neuer Fuss).
       Verifikation: npm test (Sync-/Token-Gates gruen).
-- [ ] 7. Visueller Loop lokal: Harness in Scratchpad (kompiliertes Widget-HTML
+- [x] 7. Visueller Loop lokal: Harness in Scratchpad (kompiliertes Widget-HTML
       + postMessage-Simulation dialing/in_progress/completed/failed ×
       en/de/fr) via Chrome-Screenshots. Erwartet: EN/DE/FR korrekt, kein
       Debug-Fuss, Fluegel+Ring unveraendert.
-- [ ] 8. `node --check` alle geaenderten Dateien + `npm test` komplett gruen.
-- [ ] 9. Commit + push origin UND upstream (Render autodeploy), healthz +
+- [x] 8. `node --check` alle geaenderten Dateien + `npm test` komplett gruen.
+- [x] 9. Commit + push origin UND upstream (Render autodeploy), healthz +
       [boot]-Banner pruefen.
 - [ ] 10. Live-Verifikation claude.ai (Chrome): neuer Chat, read-only Tool
       (get_my_number o.ae.) triggern -> Widget EN/DE pruefen; Connector-Seite:
@@ -88,23 +88,36 @@ E.164 um und erfand dabei eine Ziffer (+4917237252163, 32s Klingeln bei Fremdem)
 Wurzelfix: Server normalisiert deterministisch, Tool-Description verbietet dem
 Modell das Umformen (Option 1, Owner-entschieden: Telefon-Konvention).
 
-- [ ] 1. defaults.js: homeCountryCode(candidates) + normalizeDialTarget(num, home).
+- [x] 1. defaults.js: homeCountryCode(candidates) + normalizeDialTarget(num, home).
       Erwartet: ("01737252163","+49")->"+491737252163"; ("0049...",*)->"+49...";
       ("+...",*)->unveraendert; ohne home->unveraendert. Verifikation: Unit-Tests
       in test/dial-target-normalization.test.js.
-- [ ] 2. server.js POST /api/calls: to nach TENANT_REJECT-Check normalisieren
+- [x] 2. server.js POST /api/calls: to nach TENANT_REJECT-Check normalisieren
       (Heimatland: privateNumber -> aktive DID), C4-Trunk-0-Praedikat auf dem
       Ergebnis wiederholen. Erwartet: Gates+Dial sehen NUR die normalisierte
       Nummer; kein Heimatland -> 400 E.164 (fail-closed). Verifikation:
       HTTP-Tests (400/500-Diskriminator wie e164-trunk-zero-reject.test.js).
-- [ ] 3. mcp-tools.js place_call: to-Description umdrehen (zeichengenau
+- [x] 3. mcp-tools.js place_call: to-Description umdrehen (zeichengenau
       uebernehmen, NIE umformen; Auslands-National-Format -> nachfragen).
       Erwartet: reiner Text-Diff. Verifikation: node --check + npm test.
-- [ ] 4. node --check (3 Dateien) + npm test komplett gruen; Smoke:
+- [x] 4. node --check (3 Dateien) + npm test komplett gruen; Smoke:
       PORT=3999 lokal + curl /api/calls mit "01737252163" (mit DE-privateNumber
       geseedet -> passiert Format-Gate; ohne -> 400).
-- [ ] 5. Clean-Code-Review (Sonnet-Subagent, .claude/refs/clean-code.md);
+- [x] 5. Clean-Code-Review (Sonnet-Subagent, .claude/refs/clean-code.md);
       S1/S2 fixen bis PASS.
+
+## Review (02.07.2026)
+
+- Verifikation 1-3: test/dial-target-normalization.test.js 16/16 gruen
+  (Unit-Sektion + HTTP-400/500-Diskriminator, inkl. privateNumber-vor-DID,
+  DID-Fallback, fail-closed ohne Heimatland, Trunk-0-Wiederholungspruefung).
+- Verifikation 4: node --check ok, npm test 1620/1620 gruen (Smoke =
+  HTTP-Sektion: echter Server-Spawn + curl-aequivalente fetch-Requests).
+- Verifikation 5: Sonnet-Audit S1:0 S2:1 S3:1 -> beide gefixt
+  (isTrunkZeroFormatError-Praedikat statt dupliziertem Guard; benannte
+  homeCountry-Zwischenvariable); Suite danach erneut 1620/1620.
+- Gate-Reihenfolge vom Auditor explizit als PASS bestaetigt (Normalisierung
+  nach Tenant-Aufloesung, vor allen Ziel-Gates; Denylist-Praezedenz gewahrt).
 ---
 
 # Task: ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme)
