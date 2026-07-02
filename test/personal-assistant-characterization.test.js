@@ -78,7 +78,7 @@ REGELN FUERS TELEFONIEREN:
 - Du darfst Jonass Kalender einsehen (get_calendar).
 - Du darfst Termine direkt in Jonass Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).
 
-SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: Testziel
 
 
@@ -108,7 +108,7 @@ REGELN FUERS TELEFONIEREN:
 - Du darfst Jonass Kalender einsehen (get_calendar).
 - Du darfst Termine direkt in Jonass Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).
 
-SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
@@ -166,7 +166,7 @@ REGELN FUERS TELEFONIEREN:
 - Du darfst Jonass Kalender einsehen (get_calendar).
 - Du darfst Termine direkt in Jonass Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).
 
-SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
@@ -196,7 +196,7 @@ REGELN FUERS TELEFONIEREN:
 - Du darfst Jonass Kalender einsehen (get_calendar).
 - Du darfst Termine direkt in Jonass Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).
 
-SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
@@ -226,7 +226,7 @@ REGELN FUERS TELEFONIEREN:
 - Du darfst Jonass Kalender einsehen (get_calendar).
 - Du darfst Termine direkt in Jonass Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).
 
-SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
@@ -256,7 +256,7 @@ REGELN FUERS TELEFONIEREN:
 - Du hast KEINEN Kalenderzugriff. Bei Terminwuenschen nimmst du nur eine Nachricht auf.
 - Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.
 
-SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von Jonas bei +4915112345678 an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: Testziel
 BRIEFING/KONTEXT: Kontext X
 EINSCHRAENKUNGEN: Nur vormittags
