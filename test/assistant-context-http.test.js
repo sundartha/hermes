@@ -4,8 +4,12 @@
 // und wird normalisiert persistiert; (2) Teilfeld-/Typ-Verstoesse -> 400 VOR der
 // Telefonie; (3) unbekannte Keys fallen weg (Storage-Deckel); (4) Flag aus = context
 // ignoriert (null). Der Owner heilt KYC beim Boot + traegt Nummer/Identitaet (helpers).
+// I10 (call-quality Impl-1, HC7-HC9): die /api/calls-ERFOLGSantwort traegt additiv
+// context_received (bool/count-Meta, nie der Inhalt); Erfolgspfad ueber den lokalen
+// Telnyx-Voice-Mock (gleiches Muster wie onboarding-outbound.test.js).
 import test from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 import { startServer } from "./helpers.js";
 
 const TO = "+4915112345678"; // erlaubtes Ziel (steht in ALLOWED_NUMBERS), kein Premium/Notruf
@@ -19,7 +23,9 @@ const CTX = {
 };
 
 const FLAG_ON = { ASSISTANT_CONTEXT_ENABLED: "true", ALLOWED_NUMBERS: TO };
-const FLAG_OFF = { ALLOWED_NUMBERS: TO }; // ASSISTANT_CONTEXT_ENABLED default false
+// I12 drehte den config-DEFAULT auf true; BASE_ENV (helpers.js) pinnt das Flag in
+// Spawn-Tests weiter EXPLIZIT auf "false" -> FLAG_OFF bleibt deterministisch aus.
+const FLAG_OFF = { ALLOWED_NUMBERS: TO };
 
 function placeCall(srv, body = {}) {
   return fetch(`${srv.localUrl}/api/calls`, {
@@ -104,5 +110,104 @@ test("HC6 Flag AUS: b.context wird ignoriert -> context null (byte-identisch)", 
     assert.equal(calls[0].context, null, "Flag aus -> context ignoriert (null)");
   } finally {
     await srv.stop();
+  }
+});
+
+// ---- I10 (call-quality Impl-1): context_received in der Erfolgsantwort ----
+// Lokaler Mock der Telnyx-TeXML-Voice-API (Originate liefert {sid}) - der
+// deterministische Weg zu einem 200 ohne echten Anruf (Muster onboarding-outbound).
+async function startVoiceMock() {
+  const server = http.createServer((req, res) => {
+    req.on("data", () => {});
+    req.on("end", () => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ sid: "tnx_ctx_mock_1" }));
+    });
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((r) => server.close(r)),
+  };
+}
+
+const TELNYX_OWNER = { e164: "+13125550100", provider: "telnyx" };
+const telnyxEnv = (mockUrl, extra = {}) => ({
+  TELNYX_API_KEY: "KEYtest-secret",
+  TELNYX_CONNECTION_ID: "conn_test",
+  TELNYX_ACCOUNT_SID: "acct_test",
+  TELNYX_API_BASE: mockUrl,
+  ALLOWED_NUMBERS: TO,
+  ...extra,
+});
+
+test("HC7 (I10) Flag an, voller context: Erfolgsantwort traegt context_received mit Feld-Flags + key_facts_count", async () => {
+  const mock = await startVoiceMock();
+  const srv = await startServer({
+    env: telnyxEnv(mock.url, { ASSISTANT_CONTEXT_ENABLED: "true" }),
+    ownerNumber: TELNYX_OWNER,
+  });
+  try {
+    const res = await placeCall(srv, { context: CTX });
+    assert.equal(res.status, 200, "Originate ueber den Voice-Mock erfolgreich");
+    const json = await res.json();
+    assert.deepEqual(
+      json.context_received,
+      {
+        active: true,
+        summary: true,
+        key_facts_count: 2,
+        recipient_relationship: true,
+        desired_outcome: true,
+      },
+      "context_received meldet exakt die angekommenen Teilfelder (nur bool/count)",
+    );
+  } finally {
+    await srv.stop();
+    await mock.close();
+  }
+});
+
+test("HC8 (I10) Flag an, OHNE context: context_received meldet active, aber leere Felder", async () => {
+  const mock = await startVoiceMock();
+  const srv = await startServer({
+    env: telnyxEnv(mock.url, { ASSISTANT_CONTEXT_ENABLED: "true" }),
+    ownerNumber: TELNYX_OWNER,
+  });
+  try {
+    const res = await placeCall(srv);
+    assert.equal(res.status, 200);
+    assert.deepEqual((await res.json()).context_received, {
+      active: true,
+      summary: false,
+      key_facts_count: 0,
+      recipient_relationship: false,
+      desired_outcome: false,
+    });
+  } finally {
+    await srv.stop();
+    await mock.close();
+  }
+});
+
+test("HC9 (I10) Flag AUS: context_received.active=false, alle Felder leer (context wurde ignoriert)", async () => {
+  const mock = await startVoiceMock();
+  const srv = await startServer({
+    env: telnyxEnv(mock.url), // BASE_ENV pinnt ASSISTANT_CONTEXT_ENABLED=false
+    ownerNumber: TELNYX_OWNER,
+  });
+  try {
+    const res = await placeCall(srv, { context: CTX });
+    assert.equal(res.status, 200);
+    assert.deepEqual((await res.json()).context_received, {
+      active: false,
+      summary: false,
+      key_facts_count: 0,
+      recipient_relationship: false,
+      desired_outcome: false,
+    });
+  } finally {
+    await srv.stop();
+    await mock.close();
   }
 });

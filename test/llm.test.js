@@ -218,6 +218,61 @@ test("T-CP2-12: complete propagiert nicht-transienten Fehler (400) unveraendert 
   );
 });
 
+test("T-I13-1: complete streift callId vor dem SDK-Call ab (kein unbekanntes Feld im Provider-Request)", async () => {
+  let received;
+  const { client } = clientWith({
+    create: (params) => {
+      received = params;
+      return Promise.resolve({ id: "x" });
+    },
+  });
+  await client.complete({ callId: "call_42", model: "m", max_tokens: 10 });
+  assert.deepEqual(received, { model: "m", max_tokens: 10 }, "callId darf das SDK nie erreichen");
+});
+
+test("T-I13-2: Metrik traegt bei Erfolg callId + Cache-Zaehler aus resp.usage (additiv)", async () => {
+  const { client, metricCalls } = clientWith({
+    create: () =>
+      Promise.resolve({
+        id: "x",
+        usage: {
+          input_tokens: 5,
+          output_tokens: 7,
+          cache_creation_input_tokens: 20,
+          cache_read_input_tokens: 100,
+        },
+      }),
+  });
+  await client.complete({ callId: "call_42" });
+  assert.equal(metricCalls.length, 1);
+  const m = metricCalls[0];
+  assert.equal(m.callId, "call_42");
+  assert.equal(m.cache_creation_input_tokens, 20);
+  assert.equal(m.cache_read_input_tokens, 100);
+  assert.equal(m.outcome, "success");
+});
+
+test("T-I13-3: ohne callId/Cache-Felder bleibt die Metrik-Form byte-identisch (nur die vier Basis-Felder)", async () => {
+  const { client, metricCalls } = clientWith({ create: () => Promise.resolve({ id: "x" }) });
+  await client.complete({});
+  assert.deepEqual(Object.keys(metricCalls[0]).sort(), [
+    "attempts",
+    "breakerState",
+    "latencyMs",
+    "outcome",
+  ]);
+});
+
+test("T-I13-4: Fehlerpfad traegt callId, aber KEINE Cache-Zaehler (keine Response vorhanden)", async () => {
+  const { client, metricCalls } = clientWith({ create: () => Promise.reject(apiError(401)) });
+  await assert.rejects(() => client.complete({ callId: "call_42" }));
+  const m = metricCalls[0];
+  assert.equal(m.callId, "call_42");
+  assert.equal(m.outcome, "non-transient");
+  assert.ok(!("cache_creation_input_tokens" in m));
+  assert.ok(!("cache_read_input_tokens" in m));
+});
+
 test("T-CP2-13: Metrik-Stub wird je Outcome einmal mit der fixierten Form gerufen (kein PII)", async () => {
   // Erfolg
   const ok = clientWith({ create: () => Promise.resolve({ id: "x" }) });

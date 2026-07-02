@@ -1,11 +1,13 @@
-// Phase L2 (Kalender-Prefetch): der Outbound-System-Prompt bettet den Kalender-Auszug
-// des Auftraggebers vorab ein (gegated am allowCalendar-Gate), damit das Modell freie
-// Slots vor dem ersten Wort kennt und get_calendar im Buchungs-Normalfall nicht erst
-// mid-turn aufrufen muss. get_calendar bleibt als Fallback registriert. Geprueft werden
-// (1) das Prompt-Grounding, (2) die G5-Single-Source-Konsistenz Tool<->Prompt (TZ-robust),
-// (3) der Inbound-Skip, (4) das fail-closed Gate (allowCalendar=false -> kein Block, kein
-// Tool), (5) die Roundtrip-Reduktion (Slots liegen vorab im System-Prompt, EIN Roundtrip
-// ohne get_calendar) und (6) die Unversehrtheit des Offenlegungssatzes.
+// Phase L2 (Kalender-Prefetch): der System-Prompt bettet den Kalender-Auszug des
+// Auftraggebers vorab ein (gegated am allowCalendar-Gate), damit das Modell freie Slots
+// vor dem ersten Wort kennt und get_calendar im Buchungs-/Terminwunsch-Normalfall nicht
+// erst mid-turn aufrufen muss. get_calendar bleibt als Fallback registriert. Geprueft
+// werden (1) das Prompt-Grounding, (2) die G5-Single-Source-Konsistenz Tool<->Prompt
+// (TZ-robust), (3) dass I6 (call-quality Impl-1) den Block jetzt AUCH inbound eintraegt
+// (richtungsneutrales calendarSection, gleiches Gate - kein Inbound-Skip mehr), (4) das
+// fail-closed Gate (allowCalendar=false -> kein Block, kein Tool) fuer BEIDE Richtungen,
+// (5) die Roundtrip-Reduktion (Slots liegen vorab im System-Prompt, EIN Roundtrip ohne
+// get_calendar) und (6) die Unversehrtheit des Offenlegungssatzes.
 //
 // Beide Engines konsumieren dasselbe systemPrompt/toolDefs: die Realtime-Bridge ruft
 // instructions()->systemPrompt(call) und realtimeTools()->toolDefs(tenantId), ohne
@@ -114,18 +116,24 @@ test("2 G5 Single-Source: exakt die get_calendar-Ausgabe ist eingebettet (TZ-rob
   assert.ok(systemPrompt(call).includes(excerpt), "Prompt enthaelt die Tool-Ausgabe nicht 1:1");
 });
 
-test("3 Scope: Inbound-Prompt traegt den Kalender-Header NICHT", () => {
+test("3 I6: Inbound-Prompt traegt jetzt ebenfalls den Kalender-Header (richtungsneutral, gleiches Gate)", () => {
   const prompt = systemPrompt(ownerCall({ direction: "inbound" }));
-  assert.ok(!prompt.includes(HEADER), "Inbound-Prompt darf keinen Kalender-Block tragen");
+  assert.ok(prompt.includes(HEADER), "Inbound-Prompt muss den Kalender-Block jetzt tragen (I6)");
+  assert.ok(prompt.includes(EVENT_TITLE), "geseedeter Event-Titel fehlt im Inbound-Prompt");
 });
 
-test("4 Gate fail-closed: allowCalendar=false -> kein Block + kein get_calendar-Tool", () => {
+test("4 Gate fail-closed (outbound): allowCalendar=false -> kein Block + kein get_calendar-Tool", () => {
   const prompt = systemPrompt(seedCall({ tenantId: T_NOCAL, direction: "outbound" }));
   assert.ok(!prompt.includes(HEADER), "ohne Kalenderzugriff darf kein Block eingebettet sein");
   assert.ok(
     !toolDefs(T_NOCAL).some((t) => t.name === "get_calendar"),
     "ohne Kalenderzugriff darf get_calendar nicht registriert sein",
   );
+});
+
+test("4b I6 Gate fail-closed (inbound): allowCalendar=false -> kein Block im Inbound-Prompt", () => {
+  const prompt = systemPrompt(seedCall({ tenantId: T_NOCAL, direction: "inbound" }));
+  assert.ok(!prompt.includes(HEADER), "ohne Kalenderzugriff darf kein Block im Inbound-Prompt stehen");
 });
 
 test("5 Roundtrip-Reduktion: ein agentTurn ohne zweiten get_calendar-Roundtrip", async () => {

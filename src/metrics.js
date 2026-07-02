@@ -25,10 +25,30 @@ export function createMetrics({
   const lastRenderAt = new Map();
 
   // Metrik-Hook fuer den LLM-Seam (llm.js ruft .llmCall mit der fixierten Form).
-  // Whitelist der vier Felder -> selbst wenn der Seam je mehr mitgaebe, leakt nichts.
-  function llmCall({ outcome, attempts, latencyMs, breakerState }) {
+  // Whitelist der Basis-Felder -> selbst wenn der Seam je mehr mitgaebe, leakt nichts.
+  // I13 (call-quality Impl-1): callId + die beiden Cache-Zaehler sind ADDITIV und NUR
+  // im Payload, wenn der Seam sie tatsaechlich mitgibt (kein Rauschen im Breaker-open-/
+  // Fehlerpfad, der weder Response noch immer einen callId hat) - deshalb kein simples
+  // Passthrough-Feld, sondern ein bedingtes Anhaengen. callId ist PII-frei (wie bei
+  // logTurn); die Cache-Zaehler kommen 1:1 aus resp.usage und dienen NUR der Bench-/
+  // Latenz-Auswertung (L1), NIE dem Budget-Gate.
+  function llmCall({
+    outcome,
+    attempts,
+    latencyMs,
+    breakerState,
+    callId,
+    cache_creation_input_tokens,
+    cache_read_input_tokens,
+  }) {
     if (!enabled) return;
-    log("llm", { outcome, attempts, latencyMs, breakerState });
+    const payload = { outcome, attempts, latencyMs, breakerState };
+    if (callId !== undefined) payload.callId = callId;
+    if (cache_creation_input_tokens !== undefined)
+      payload.cache_creation_input_tokens = cache_creation_input_tokens;
+    if (cache_read_input_tokens !== undefined)
+      payload.cache_read_input_tokens = cache_read_input_tokens;
+    log("llm", payload);
   }
 
   // Roundtrips + vom Modell angeforderte Tool-NAMEN eines agentTurn (Budget-Engine).

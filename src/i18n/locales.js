@@ -111,7 +111,7 @@ export const LOCALES = Object.freeze({
     // Zusammenfassungs-Prompt-Sprach-Teil (claude.js summarizeCall). Die JSON-Keys
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
-      `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
+      `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. Nenne in der summary konkrete Ergebnisse (vereinbartes Datum/Uhrzeit, Preis, Name der Kontaktperson), sofern im Transkript vorhanden, statt allgemeiner Umschreibungen. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
     // Statische Server-Texte (F1 Phase 4): reine Strings (keine Identitaets-Bindung).
     // Quelle: zuvor hart in server.js (Reprompt/Fehler/Hangup) bzw. defaults.js
     // (greetingDefault). DE-Werte BYTE-IDENTISCH zum Bestand uebernommen - ein FR/EN-Pfad
@@ -123,6 +123,16 @@ export const LOCALES = Object.freeze({
     noSpeechReprompt: "Koennen Sie das bitte wiederholen?",
     budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
     greetingDefault: DEFAULT_GREETING,
+    // I2 (call-quality Impl-1): Turn-Fallback-Satz (claude.js agentTurn), falls das
+    // Modell in allen 4 Tool-Loop-Runden KEINEN Text liefert. Vorher hart deutsch +
+    // richtungsverkehrt (die Inbound-Formulierung "vielen Dank fuer Ihren Anruf" ging
+    // faelschlich auch bei Outbound-Calls raus). JETZT richtungsabhaengig UND
+    // sprachabhaengig. DE-inbound BYTE-IDENTISCH zum Vorgaenger-String (Regressionsschutz,
+    // siehe personal-assistant-characterization/turn-fallback-locale-Tests).
+    turnFallbackSpeech: {
+      inbound: "Alles klar, vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!",
+      outbound: "Alles klar, vielen Dank fuer Ihre Zeit. Auf Wiederhoeren!",
+    },
   }),
   fr: Object.freeze({
     language: "fr",
@@ -145,7 +155,7 @@ export const LOCALES = Object.freeze({
     disclosure: (ownerName) =>
       `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. Cette conversation sera résumée pour mon mandant.`,
     summarySystem: (owner) =>
-      `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item.`,
+      `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. Mentionne dans le résumé des résultats concrets (date/heure convenue, prix, nom de la personne de contact), si le transcript les contient, plutôt que des formulations générales. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item.`,
     // Statische Server-Texte FR (kuratiert, mit Akzenten fuer korrekte TTS-Aussprache).
     llmDegradedSpeech:
       "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
@@ -156,6 +166,12 @@ export const LOCALES = Object.freeze({
     // relevant; der Bestands-/Owner-Tenant traegt weiter den DE-Seed (kein Backfill).
     greetingDefault:
       "Bonjour, vous êtes en relation avec l'assistant IA de {owner}. {owner} n'est pas disponible pour le moment. Je peux prendre un message ou convenir d'un rendez-vous. Comment puis-je vous aider ?",
+    // I2: FR-Fallback (kuratiert, R8) - Anrede-neutral formuliert (kein tu/vous-Zwang),
+    // richtungsabhaengig wie DE/EN.
+    turnFallbackSpeech: {
+      inbound: "Très bien, merci pour votre appel. Au revoir !",
+      outbound: "Très bien, merci pour votre temps. Au revoir !",
+    },
   }),
   // EN-Bundle (F1 Phase 4, Owner-Entscheidung #1: DE+FR+EN). GB/IE -> en. Voice/STT
   // fail-closed (R9/R10): unbekanntes Profil wirft, kein stiller DE/FR-Fallback. Live-
@@ -181,7 +197,7 @@ export const LOCALES = Object.freeze({
     disclosure: (ownerName) =>
       `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
     summarySystem: (owner) =>
-      `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item.`,
+      `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. State concrete outcomes in the summary (agreed date/time, price, contact person's name) if present in the transcript, instead of vague descriptions. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item.`,
     llmDegradedSpeech:
       "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
     turnErrorSpeech: "Sorry, a technical problem occurred. Please try again later.",
@@ -189,6 +205,11 @@ export const LOCALES = Object.freeze({
     budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",
     greetingDefault:
       "Hi, this is the AI assistant of {owner}. {owner} can't take the call right now. I can take a message or arrange an appointment. How can I help?",
+    // I2: EN-Fallback (kuratiert, R8), richtungsabhaengig wie DE/FR.
+    turnFallbackSpeech: {
+      inbound: "Alright, thank you for calling. Goodbye!",
+      outbound: "Alright, thank you for your time. Goodbye!",
+    },
   }),
 });
 
