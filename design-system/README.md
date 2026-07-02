@@ -6,8 +6,10 @@ Context Protocol (MCP)** and answers/places real phone calls on the user's
 behalf, always disclosing up front that an assistant is speaking.
 
 The brand voice: *"Give your AI wings."* A deep-navy, Mount-Olympus hero in
-Instrument Serif sells the marketing site; a calm, light Inter app runs the
-tenant dashboard; brand red `#e60000` is the single action color across both.
+Norse display type (falls back to Instrument Serif until the self-hosted Norse
+webfont loads) sells the marketing site; a calm, light Space Grotesk app runs
+the tenant dashboard; brand navy `#1b4f86` is the single action color across
+both.
 
 ## Products / surfaces
 
@@ -16,8 +18,8 @@ tenant dashboard; brand red `#e60000` is the single action color across both.
    CTAs. Pages: hero, *How it works* (3 steps), *Pricing* (Starter €4.99 /
    Business €9.99).
 2. **Tenant web app / dashboard** — logged-in light UI (`app/`). Overview KPIs,
-   call history, agent permissions (the one write path), billing. Inter, white
-   cards, brand-red actions.
+   call history, agent permissions (the one write path), billing. Space
+   Grotesk, white cards, brand-navy actions.
 3. **MCP result cards** — rich cards a Hermes tool *could* render inside a host
    chatbot (`mcp/`). **Design mockups** — the live MCP returns plain text today
    (`src/mcp-tools.js`, `{type:"text"}`); these are not wired to the server.
@@ -91,22 +93,27 @@ tinted status badges.
 
 **Two worlds, one accent.** The system is deliberately bimodal:
 - **Dark (marketing / `.on-dark`)** — navy gradient `radial-gradient(120% 90% at
-  50% 0%, #1b4f86, #0f2d52 55%, #0a2245)`, Instrument Serif display + Space
-  Grotesk UI, white pill CTAs, full-bleed Olympus imagery.
-- **Light (app)** — `#fafafa` page, white cards, Inter throughout, brand-red
-  actions, near-black `#25282b` text.
-- **Brand red `#e60000`** is the one action/critical color in both worlds.
+  50% 0%, #1b4f86, #0f2d52 55%, #0a2245)`, Norse display (Instrument Serif
+  fallback) + Space Grotesk UI, white pill CTAs, full-bleed Olympus imagery.
+- **Light (app)** — `#fafafa` page, white cards, Space Grotesk throughout,
+  brand-navy actions, near-black `#25282b` text.
+- **Brand navy `#1b4f86`** is the one accent color across both worlds; status
+  stays monochrome (navy for positive/info, ink for critical, gray for
+  neutral — no red or green).
 
 **Color.** Raw primitives → semantic roles only (components never touch hex).
-Status pairs are tinted-surface + saturated-text: positive `#177a43`/`#e7f6ed`,
-critical/red `#e60000`/`#fdeaea`, info/blue `#3860be`/`#e9f0fc`, neutral
-`#7e7e7e`/`#f2f2f2`. A live indicator green `#1faa59` vs idle gray `#c4c4c4`.
+Status pairs are tinted-surface + ink-text, deliberately monochrome (no red or
+green): positive `#1b4f86`/`#eef3fa`, critical `#25282b`/`#ececec`, info
+`#1b4f86`/`#eef3fa`, neutral `#7e7e7e`/`#f2f2f2`. A live indicator navy
+`#1b4f86` vs idle gray `#c4c4c4`.
 
-**Type.** Three families. *Instrument Serif* (400 + italic) — display only, the
-hero headline at `clamp(50px, 7.4vw, 98px)`, italic for the emphasized word.
-*Space Grotesk* (400–700) — dark-site UI, nav, prices. *Inter* (400–800) — the
-entire light app and all body copy. Heading weight is heavy (800) in the app;
-tight `-0.015em` tracking on headings, wide `.12em` on labels.
+**Type.** Two families. *Norse* (400 + 700) — the runic display face for
+headings and the wordmark; falls back to *Instrument Serif* (which alone
+carries the italic cut used for emphasis) until the self-hosted Norse webfont
+loads. Hero headline at `clamp(50px, 7.4vw, 98px)`. *Space Grotesk* (400–700)
+— dark-site UI, nav, prices, and the entire light app plus all body copy.
+Heading weight is heavy (800) in the app; tight `-0.015em` tracking on
+headings, wide `.12em` on labels.
 
 **Spacing.** 4px base scale (`--space-1`..`--space-20`) aliased to intent
 (`--space-card: 24px`, `--space-section: 80px`, `--space-gap: 20px`). Page
@@ -134,10 +141,10 @@ the switch knob slides; nav pills cross-fade background+text. A live dot can
 pulse (`1.8s`). No bounces, no springy or decorative looping animation on
 content.
 
-**Hover / press.** Hover = darker fill (red `#e60000`→`#ac1811`), lighter ghost
-(gray-75→gray-100), or `opacity .7` on dark nav links; pill CTAs translate up.
-Active nav pill inverts to a solid red fill. Inputs turn their border brand-red
-on focus. No shrink-on-press.
+**Hover / press.** Hover = darker fill (navy `#1b4f86`→`#0f2d52`), lighter
+ghost (gray-75→gray-100), or `opacity .7` on dark nav links; pill CTAs
+translate up. Active nav pill inverts to a solid navy fill. Inputs turn their
+border navy on focus. No shrink-on-press.
 
 **Transparency & blur.** Reserved for the dark world: white text at 70–96%
 opacity for hierarchy; nav/brand text-shadows; scrims in low-alpha navy. No
@@ -180,8 +187,8 @@ in the codebase.
   started" CTAs and the chat composer send button. Inline SVG, `currentColor` or
   `#10305a` on white pills.
 - **Call direction.** Unicode arrow glyphs — `↘` inbound (info-blue tint), `↗`
-  outbound (red tint) — set in tinted round chips, mirroring the codebase's
-  `render.js`.
+  outbound (critical/ink tint) — set in tinted round chips, mirroring the
+  codebase's `render.js`.
 - **Status.** Conveyed by tinted **StatusBadge** pills + a checkmark, not icons.
 - **Emoji.** Never used.
 
@@ -196,8 +203,8 @@ broader icon set, add one and document it here — do not hand-roll one-off SVGs
 Root:
 - `styles.css` — global entry; `@import`s the token tree only. **Consumers link
   this.**
-- `tokens/` — `fonts.css` (@font-face: Instrument Serif, Space Grotesk;
-  @import Inter), `primitives.css` (`:root` raw), `semantic.css` (`:root` roles),
+- `tokens/` — `fonts.css` (@font-face: Norse + Norse Bold, Space Grotesk, both
+  self-hosted), `primitives.css` (`:root` raw), `semantic.css` (`:root` roles),
   `dark.css` (`.on-dark` hero roles).
 - `assets/` — `logos/` (winged sandal PNG, Sundartha SVG), `imagery/`
   (Olympus photo + cloud video), `fonts/` (self-hosted woff2).
@@ -212,7 +219,7 @@ Components (`window.HermesDesignSystem_738510.*`):
   surface), **PillCTA** (white CTA, on dark).
 - `components/feedback/` — **StatusBadge** (6 tones), **LiveDot**, **Stat** (KPI
   tile).
-- `components/forms/` — **Field** (labelled input, red focus), **Switch** (brand
+- `components/forms/` — **Field** (labelled input, navy focus), **Switch** (brand
   toggle).
   Each has `<Name>.jsx` + `<Name>.d.ts` + `<Name>.prompt.md`, with one
   bundle-mounting `@dsCard` per directory.

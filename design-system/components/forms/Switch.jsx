@@ -1,7 +1,7 @@
 import React from "react";
 
 /**
- * Switch — accessible on/off toggle. Track turns brand-red and the knob slides
+ * Switch — accessible on/off toggle. Track turns brand-navy and the knob slides
  * when checked. Mirrors `.switch` from app.css.
  */
 export function Switch({ checked, defaultChecked, onChange, disabled = false, style, ...rest }) {

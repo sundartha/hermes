@@ -135,7 +135,7 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 
 ## Demo-Drehbuch (5 Minuten)
 
-1. **Dashboard** (localhost:3000): Agent-Nummer + „Vodafone Verified"-Badge, Permission-Toggles, Budget-Anzeige.
+1. **Dashboard** (localhost:3000): Agent-Nummer + Live-Status, Permission-Toggles, Budget-Anzeige.
 2. **Outbound aus Claude:** Custom Connector zeigen, dann „Ruf +49… an und vereinbare einen Testtermin Samstag vormittag." → Handy klingelt in ~15 s, Disclosure-Satz, Agent verhandelt. Im Dashboard läuft das Live-Transkript.
 3. Claude pollt den Status im Chat und präsentiert am Ende die Zusammenfassung + Ergebnis (Roh-Transkript wird aus Datenschutzgründen nicht aufbewahrt).
 4. **Inbound:** Kollege ruft deine Handynummer an, du gehst nicht ran → Umleitung → Agent bucht den Termin gegen deinen Kalender. Danach: **SMS mit Summary + Action Items**.
@@ -169,6 +169,6 @@ src/mcp-tools.js   MCP-Tool-Definitionen (gemeinsam fuer HTTP- und stdio-Transpo
 src/mcp-server.js  MCP stdio-Einstieg fuer Claude Desktop
 src/store.js       JSON-Persistenz: Calls, Transkripte, Action Items, Kalender, Budget
 src/config.js      .env-Konfiguration + Validierung
-public/index.html  Dashboard (Vodafone-Design, Live-Polling)
+public/tenant.html Dashboard (Navy-Design, Live-Polling)
 scripts/check-setup.js  Setup-Checker: npm run check
 ```

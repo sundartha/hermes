@@ -2,7 +2,7 @@ import React from "react";
 
 /**
  * Field — labelled text input. Uppercase eyebrow label over a bordered input
- * that turns brand-red on focus. Mirrors `.field-label` / `.field-input`.
+ * that turns brand-navy on focus. Mirrors `.field-label` / `.field-input`.
  */
 export function Field({ label, id, value, defaultValue, placeholder, type = "text", onChange, style, ...rest }) {
   const [focus, setFocus] = React.useState(false);

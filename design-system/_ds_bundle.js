@@ -1089,7 +1089,7 @@ try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 /**
  * Field — labelled text input. Uppercase eyebrow label over a bordered input
- * that turns brand-red on focus. Mirrors `.field-label` / `.field-input`.
+ * that turns brand-navy on focus. Mirrors `.field-label` / `.field-input`.
  */
 function Field({
   label,
@@ -1149,7 +1149,7 @@ Object.assign(__ds_scope, { Field });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 /**
- * Switch — accessible on/off toggle. Track turns brand-red and the knob slides
+ * Switch — accessible on/off toggle. Track turns brand-navy and the knob slides
  * when checked. Mirrors `.switch` from app.css.
  */
 function Switch({

@@ -9,5 +9,5 @@ export interface SwitchProps {
   style?: React.CSSProperties;
 }
 
-/** Brand-red on/off toggle for permission rows and settings. */
+/** Brand-navy on/off toggle for permission rows and settings. */
 export function Switch(props: SwitchProps): JSX.Element;

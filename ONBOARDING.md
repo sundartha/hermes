@@ -43,7 +43,7 @@ src/mcp-tools.js   MCP-Tool-Definitionen (place_call, get_call_status, get_trans
 src/mcp-server.js  MCP stdio-Variante für Claude Desktop
 src/store.js       JSON-Persistenz (auf Render ephemer - reset bei jedem Deploy)
 src/config.js      Konfiguration aus Env-Vars
-public/index.html  Dashboard (Vodafone-Design, Polling auf /api/state)
+public/tenant.html Dashboard (Navy-Design, Polling auf /api/state)
 scripts/           check-setup.js (npm run check), set-webhooks.js
 ```
 
