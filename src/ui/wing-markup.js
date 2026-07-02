@@ -87,18 +87,38 @@ const WING_REDUCED_MOTION_CSS = `
     .wing, .wing * { animation: none !important; }
   }`;
 
+// Dunkle Auspraegung (H2, Olympus-HUD-Karte): weisser Wing OHNE navy Rundmarke.
+// Der navy Rundungs-Grund in WING_BASE_CSS ist Sichtbarkeits-Mittel fuer HELLE
+// Karten (s.o.) - auf der volldunklen Karte waere er navy-auf-navy unsichtbar
+// (Regression von Commit 0dca7ce). Alles andere (Groesse, Transform-Origin,
+// Keyframes) bleibt identisch - nur der Hintergrund entfaellt.
+const WING_DARK_OVERRIDE_CSS = `
+  .wing--dark{background:none}`;
+
 export const WING_CSS_STATIC = WING_BASE_CSS + WING_IDLE_KEYFRAMES + WING_REDUCED_MOTION_CSS;
 export const WING_CSS_LIVE =
   WING_BASE_CSS + WING_STATE_CSS + WING_IDLE_KEYFRAMES + WING_STATE_KEYFRAMES + WING_REDUCED_MOTION_CSS;
+export const WING_CSS_DARK_STATIC =
+  WING_BASE_CSS + WING_DARK_OVERRIDE_CSS + WING_IDLE_KEYFRAMES + WING_REDUCED_MOTION_CSS;
+export const WING_CSS_DARK_LIVE =
+  WING_BASE_CSS + WING_DARK_OVERRIDE_CSS + WING_STATE_CSS + WING_IDLE_KEYFRAMES +
+  WING_STATE_KEYFRAMES + WING_REDUCED_MOTION_CSS;
 
-// Zwei verschachtelte Wrapper + ein statisches <img> (kein innerHTML - Absolute
-// Regel 3). LIVE traegt zusaetzlich data-wing, den Hook, ueber den call.html
-// den Status per Klassenwechsel spiegelt (updateWingForStatus).
-function wingSpan(extraAttr) {
+// Ein <span> mit zwei verschachtelten Wrappern + statischem <img> (kein
+// innerHTML - Absolute Regel 3). `live` haengt data-wing an (Hook fuer
+// call.html/updateWingForStatus). `dark` haengt die Modifier-Klasse wing--dark
+// an (zieht WING_DARK_OVERRIDE_CSS). Unabhaengige Datenpunkte statt ein
+// boolesches Verzweigungs-Flag-Argument (G15) - die vier Kombinationen sind
+// vier benannte Exporte, kein Aufrufparameter im Widget-Code.
+function wingSpan({ dark = false, live = false } = {}) {
+  const cls = "wing" + (dark ? " wing--dark" : "") + " wing--idle";
+  const attr = live ? " data-wing" : "";
   return (
-    `<span class="wing wing--idle"${extraAttr} aria-hidden="true">` +
+    `<span class="${cls}"${attr} aria-hidden="true">` +
     `<span class="wing-inner"><img src="${WING_PNG}" alt="" /></span></span>`
   );
 }
-export const WING_MARKUP_STATIC = wingSpan("");
-export const WING_MARKUP_LIVE = wingSpan(" data-wing");
+export const WING_MARKUP_STATIC = wingSpan();
+export const WING_MARKUP_LIVE = wingSpan({ live: true });
+export const WING_MARKUP_DARK_STATIC = wingSpan({ dark: true });
+export const WING_MARKUP_DARK_LIVE = wingSpan({ dark: true, live: true });
