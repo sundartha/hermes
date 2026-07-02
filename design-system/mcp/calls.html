@@ -1,15 +1,15 @@
-<!-- @dsCard group="MCP" name="get_agent_status" subtitle="Number, engine, usage & budget — Olympus HUD, mirrors src/ui/widgets/agent-status.html — DESIGN ONLY" -->
+<!-- @dsCard group="MCP" name="list_calls" subtitle="Recent inbound & outbound calls — Olympus HUD, mirrors src/ui/widgets/calls.html — DESIGN ONLY" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MCP get_agent_status — Hermes Design System</title>
+<title>MCP list_calls — Hermes Design System</title>
 <link rel="stylesheet" href="../_shared/preview.css" />
 <style>
-  /* Kartenchrome 1:1 aus src/ui/hud-card-css.js (H4, geteilte Basis der 4
-     Read-only-Widgets) - self-contained wie das echte Widget, kein @import
-     auf eine fremde Quelle. */
+  /* Kartenchrome + .list-Basis 1:1 aus src/ui/hud-card-css.js - siehe
+     agent-status.html fuer die ausfuehrliche Begruendung. Feldspezifische
+     Overrides ([data-field=...]) 1:1 aus src/ui/widgets/calls.html. */
   :root {
     --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
     --color-white:#fff;
@@ -52,14 +52,19 @@
   .wing-mount canvas{filter:var(--wing-glow-filter)}
   .phase{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.5)}
   .hero-title{font-size:16px;font-weight:600;color:rgba(255,255,255,.94)}
-  .rows{position:relative;z-index:1;display:flex;flex-direction:column}
-  .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
-    padding:10px 2px;border-top:1px solid rgba(255,255,255,.09)}
-  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
-  .row-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-    color:rgba(255,255,255,.5);white-space:nowrap;flex-shrink:0}
-  .row-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
-    color:rgba(255,255,255,.94);text-align:right}
+  .list{position:relative;z-index:1;display:flex;flex-direction:column}
+  .list .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
+    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .list .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .list .cell{color:rgba(255,255,255,.85)}
+  .cell[data-field="direction"]{font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.22);
+    border-radius:var(--radius-pill);padding:2px 9px}
+  .cell[data-field="counterparty"]{font-weight:600;color:rgba(255,255,255,.94)}
+  .cell[data-field="status"]{color:var(--color-accent-light-strong);font-size:12px}
+  .cell[data-field="startedAt"]{margin-left:auto;color:rgba(255,255,255,.45);
+    font-size:11.5px;font-variant-numeric:tabular-nums}
+  .cell[data-field="summary"]{flex-basis:100%;color:rgba(255,255,255,.55);font-size:12.5px}
   .foot{position:relative;z-index:1;display:flex;align-items:center;
     justify-content:space-between;margin-top:14px;padding-top:12px;
     border-top:1px solid rgba(255,255,255,.12);font-size:11px;color:rgba(255,255,255,.4)}
@@ -67,26 +72,33 @@
 </head>
 <body class="ds">
 <div class="ds-frame ds-frame--narrow">
-  <p class="ds-note">Mockup. Mirrors src/ui/widgets/agent-status.html — same fields, same order.</p>
+  <p class="ds-note">Mockup. Mirrors src/ui/widgets/calls.html — same field order/colors per row.</p>
   <div class="card">
-    <div class="eyebrow">Hermes · Agent status</div>
+    <div class="eyebrow">Hermes · Recent calls</div>
     <div class="hero">
       <div class="wing-wrap">
         <span class="wing-mount" data-wing data-status="idle"></span>
       </div>
-      <span class="phase">Your AI phone agent</span>
-      <span class="hero-title">Hermes</span>
+      <span class="phase">list_calls</span>
+      <span class="hero-title">Recent calls</span>
     </div>
-    <div class="rows">
-      <div class="row"><span class="row-k">Number</span><span class="row-v">+1 864 302 8341 · Telnyx</span></div>
-      <div class="row"><span class="row-k">Voice engine</span><span class="row-v">Budget (Gather/STT)</span></div>
-      <div class="row"><span class="row-k">Model</span><span class="row-v">claude-haiku-4-5</span></div>
-      <div class="row"><span class="row-k">Calls</span><span class="row-v">3</span></div>
-      <div class="row"><span class="row-k">AI cost (EUR)</span><span class="row-v">€2.10</span></div>
-      <div class="row"><span class="row-k">Max budget (EUR)</span><span class="row-v">€10.00</span></div>
-      <div class="row"><span class="row-k">Permissions</span><span class="row-v">Outbound: allowed · KYC: card</span></div>
+    <div class="list">
+      <div class="row">
+        <span class="cell" data-field="direction">Outbound</span>
+        <span class="cell" data-field="counterparty">Salon Bella</span>
+        <span class="cell" data-field="status">Completed</span>
+        <span class="cell" data-field="startedAt">Thu 14:28</span>
+        <span class="cell" data-field="summary">Haircut booked, Thu 14:30</span>
+      </div>
+      <div class="row">
+        <span class="cell" data-field="direction">Inbound</span>
+        <span class="cell" data-field="counterparty">+49 30 55512345</span>
+        <span class="cell" data-field="status">Completed</span>
+        <span class="cell" data-field="startedAt">Wed 09:14</span>
+        <span class="cell" data-field="summary">Message taken for the owner</span>
+      </div>
     </div>
-    <div class="foot"><span>+1 864 302 8341</span><span>Hermes</span></div>
+    <div class="foot"><span>Hermes</span></div>
   </div>
 </div>
 <script src="../components/brand/wing-engine.js"></script>
