@@ -52,10 +52,10 @@ for (const [file] of ALL_WIDGETS) {
 }
 
 for (const [, id] of STATIC_WIDGETS) {
-  test(`T-wing-dedup-output-static-${id}: injiziertes CSS/Markup ist exakt WING_CSS_STATIC/WING_MARKUP_STATIC`, () => {
+  test(`T-wing-dedup-output-static-${id}: injiziertes CSS/Markup ist exakt WING_CSS_DARK_STATIC/WING_MARKUP_DARK_STATIC (H4: Olympus-HUD ist volldunkel)`, () => {
     const html = widgetHtml(id);
-    assert.ok(html.includes(WING_CSS_STATIC), "WING_CSS_STATIC vollstaendig eingefuegt");
-    assert.ok(html.includes(WING_MARKUP_STATIC), "WING_MARKUP_STATIC vollstaendig eingefuegt");
+    assert.ok(html.includes(WING_CSS_DARK_STATIC), "WING_CSS_DARK_STATIC vollstaendig eingefuegt");
+    assert.ok(html.includes(WING_MARKUP_DARK_STATIC), "WING_MARKUP_DARK_STATIC vollstaendig eingefuegt");
   });
 }
 
