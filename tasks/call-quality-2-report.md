@@ -82,7 +82,46 @@ Baseline = v6-Pool aus Runde 1 (candidate-final-sweep + candidate-v6-fv, 20
 Laeufe, git_rev 2930127 = identischer Voice-Pfad wie c12c546/2c6c4e2 - per
 git diff verifiziert, nur Auth/Widget-Diffs dazwischen).
 
-<!-- BENCH-ERGEBNISSE: wird nach den Candidate-Sweeps befuellt -->
+### Iterations-Historie S-C (der Loop hat wieder eine Regression VOR dem Merge gefangen)
+
+| It. | Aenderung | Bench-Befund |
+|---|---|---|
+| v1 | "variiere die Formulierung" + speechClause "Alltagssprache" | REGRESSION: Duz-Drift 2/3 termin-duenn ("danke dir", "Passt dir"), Thema-Frage reaktiviert. Positive Stil-AUFFORDERUNGEN erzeugen Register-Entropie - Spiegelbild der Runde-1-Lehre zu breiten Verboten. |
+| v2 | Anrede-Bindung in der Klausel, speechClause zurueck | besser (1/5 Duzen, Leak in der Verabschiedung), friseur 4.80 |
+| v3 | nur enges Verbot "nie zwei Antworten hintereinander mit derselben Floskel" | targeted sauber (0/8), aber gepoolt (38 Laeufe): "formelhaft"-Beschwerden UNVERAENDERT (39% vs 40%), naturalness flach -> Regel verdient ihren Platz nicht |
+| final | v3-Regel ABLADIERT: System-Prompt byte-identisch zu v6 | Scheibe traegt nur S-A/S-B/objective-Description |
+
+### Finaler A/B (gepoolt, Baseline n=20 vs Candidate n=30)
+
+| Szenario | Baseline | Final | Delta |
+|---|---|---|---|
+| friseur-voll (n=8/6) | 4.58 | 4.70 | +0.12 |
+| inbound-nachricht (n=3/6) | 4.33 | 4.07 | -0.26 (SE 0.31; Inbound nutzt openingText NICHT - Code identisch, reines Judge-Rauschen) |
+| partner-knapp (n=3/6) | 4.27 | 4.73 | +0.46 |
+| stt-noise (n=3/6) | 4.80 | 4.43 | -0.37 (SE 0.20; Baseline-SE 0.00 bei n=3 war Glueckslos) |
+| termin-duenn (n=3/6) | 3.60 | 4.00 | +0.40 |
+| **GESAMT** | **4.38 (SE 0.13)** | **4.39 (SE 0.10)** | **+0.01** |
+| naturalness | 3.70 (SE 0.11) | 3.83 (SE 0.10) | +0.13 |
+| determ. Checks | 83/85 | **120/120** | besser |
+
+Ehrlicher Restbefund: in termin-duenn zeigen 2/6 Laeufe Duzen und 1/6 die
+Titel-Interview-Frage - unter BYTE-IDENTISCHEM v6-Prompt. Das ist ein
+vorbestehender v6-Rest des pathologischen Duenn-Szenarios (Baseline-n=3 war zu
+klein, ihn zu sehen; Runde 1 selbst mass 5% Themen-Verhoer im Final), KEINE
+Regression dieser Scheibe. Der Quell-Fix ist genau die neue objective-
+Description (konkreter Ich-Satz statt duennem Auftrag) + I12-Kontextkanal.
+
+MERGE-ENTSCHEIDUNG: JA - Eroeffnung deterministisch besser (Owner-Symptom S-B
+direkt), Judge-Paritaet, Checks perfekt, naturalness nominal +0.13; Prompt
+gegenueber dem bewaehrten v6 unangetastet.
+
+### Grenze der Prompt-Schraube (S-C)
+
+Drei Iterationen zeigen: jede zusaetzliche Stil-Anweisung an Haiku kostet
+Register-Stabilitaet, ohne die "formelhaft"-Wahrnehmung messbar zu senken. Die
+verbleibenden S-C-Hebel liegen NICHT im Prompt: (a) die jetzt natuerliche
+Eroeffnung (hoert der Owner sofort), (b) bessere goals via objective-Description,
+(c) Katja-Prosodie/SSML (Owner-Live-Gate, O4/O6 aus Runde 1).
 
 ## Entscheidungen / bewusst NICHT gemacht
 

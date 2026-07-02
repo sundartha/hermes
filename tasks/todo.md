@@ -31,22 +31,24 @@ Offenlegung unantastbar, /voice/outbound LLM-frei, keine neuen Dependencies.
 
 ## Umsetzung (jede Aenderung mit Erwartung + Verifikation)
 
-- [ ] T1 S-B(a) bridgePhrase natuerlicher (de/fr/en) + Ich-Satz-Passthrough:
+- [x] T1 S-B(a) bridgePhrase natuerlicher (de/fr/en) + Ich-Satz-Passthrough:
   Erwartet: openingText("Den naechsten freien Termin erfragen") ==
   "<disclosure> Es geht um Folgendes: den naechsten freien Termin erfragen." und
   openingText("Ich moechte ... erfragen") == "<disclosure> Ich moechte ... erfragen."
   (kein Brueckentext). disclosure byte-identisch davor (Regel 2).
   Verifikation: neue Unit-Tests in test/f1-i18n-locale.test.js (DE-Pin bewusst
   justiert) + npm test gruen.
-- [ ] T2 S-B(b) place_call objective-Description: sprechbarer Ich-Satz gefordert
+- [x] T2 S-B(b) place_call objective-Description: sprechbarer Ich-Satz gefordert
   (Beispiel im Text), Thema-Pflicht bleibt. Erwartet: Description enthaelt
   "Ich-Satz"-Anweisung; Token-Sync-Test (mcp-tools) bleibt gruen.
   Verifikation: npm test + grep.
-- [ ] T3 S-A Diagnose-Logging: /voice/turn + /voice/outbound loggen bei unbekanntem
+- [x] T3 S-A Diagnose-Logging: /voice/turn + /voice/outbound loggen bei unbekanntem
   Call bevor sie fail-closed auflegen. Erwartet: Logzeile mit callId; Verhalten
   (Hangup-TeXML) unveraendert. Verifikation: neuer Test (unbekannte callId ->
   Hangup + Logzeile) + npm test.
-- [ ] T4 S-C Bench-getriebener Natuerlichkeits-Feinschliff: erst Judge-Rationales
+- [x] T4 S-C Bench-getrieben iteriert (v1 Regression -> v2 -> v3 -> ABLATION, Prompt
+  byte-identisch v6; final: judge 4.39/4.38 Paritaet, nat 3.83>=3.70, Checks 120/120;
+  Ergebnis + Iterations-Historie in tasks/call-quality-2-report.md). Urspruenglich:
   der Runde-1-Laeufe minen (data/convo-bench/candidate-v6-fv u.a.), dann ENGE
   Aenderungen. Erwartet: gepoolt (n>=5/Seite) naturalness >= Baseline, kein
   deterministischer Check schlechter, Gesamt-Judge nicht signifikant schlechter.
