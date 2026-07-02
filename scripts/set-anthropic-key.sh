@@ -43,10 +43,20 @@ else
   echo
 fi
 NEW_KEY=$(printf '%s' "$NEW_KEY" | tr -d '[:space:]')
+# Tolerant gegen "ganze Zeile kopiert": fuehrendes ANTHROPIC_API_KEY= und
+# umgebende Anfuehrungszeichen abstreifen.
+NEW_KEY=${NEW_KEY#ANTHROPIC_API_KEY=}
+NEW_KEY=${NEW_KEY#\"}; NEW_KEY=${NEW_KEY%\"}
+NEW_KEY=${NEW_KEY#\'}; NEW_KEY=${NEW_KEY%\'}
 
 case "$NEW_KEY" in
   sk-ant-*) ;;
-  *) echo "FEHLER: Key beginnt nicht mit sk-ant- (Laenge ${#NEW_KEY}). Abbruch, nichts geschrieben." >&2; exit 1 ;;
+  *)
+    # 6-Zeichen-Vorschau als Diagnose (bewusst minimal, kein Key-Leak):
+    # sk-pro... = OpenAI-Key erwischt, ey.../Jh... = irgendein anderer Wert.
+    echo "FEHLER: Das ist kein Anthropic-Key (beginnt mit '${NEW_KEY:0:6}...', Laenge ${#NEW_KEY}; erwartet sk-ant-...). Abbruch, nichts geschrieben." >&2
+    exit 1
+    ;;
 esac
 
 # Live-Pruefung VOR dem Schreiben: ungueltige Keys kommen gar nicht erst in die .env.

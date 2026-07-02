@@ -11,7 +11,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 export const JUDGE_MODEL_DEFAULT = "claude-sonnet-5";
-const JUDGE_MAX_TOKENS = 800;
+// 800 war zu knapp: fuenf deutsche Rationale-Saetze + Scores sprengten das Limit,
+// das JSON wurde mid-string gekappt -> judge_parse_failed (Sanity-Lauf 2026-07-02).
+const JUDGE_MAX_TOKENS = 2000;
 
 const CRITERIA = ["role_fidelity", "coherence", "task_progress", "naturalness", "efficiency"];
 const SCORE_MIN = 1;
@@ -37,7 +39,7 @@ function clampScore(n) {
 function judgeSystemPrompt(judgeFocus) {
   const schemaHint =
     '{"scores":{"role_fidelity":1-5,"coherence":1-5,"task_progress":1-5,"naturalness":1-5,"efficiency":1-5},' +
-    '"rationale":{"role_fidelity":"1 Satz","coherence":"1 Satz","task_progress":"1 Satz","naturalness":"1 Satz","efficiency":"1 Satz"},' +
+    '"rationale":{"role_fidelity":"1 kurzer Satz (max 15 Woerter)","coherence":"1 kurzer Satz","task_progress":"1 kurzer Satz","naturalness":"1 kurzer Satz","efficiency":"1 kurzer Satz"},' +
     '"overall_flag":"pass"|"concern"|"fail"}';
   return [
     "Du bist ein strenger, unabhaengiger Qualitaets-Judge fuer ein simuliertes Telefon-KI-Gespraech.",
