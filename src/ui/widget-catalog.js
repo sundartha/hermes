@@ -6,7 +6,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BIND_SCRIPT } from "./widget-bind.js";
-import { WING_CSS_STATIC, WING_CSS_LIVE, WING_MARKUP_STATIC, WING_MARKUP_LIVE } from "./wing-markup.js";
+import {
+  WING_CSS_STATIC, WING_MARKUP_STATIC,
+  WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
+} from "./wing-markup.js";
 
 // Bekannte Widgets. widgetId -> { file, title }. Neue Widgets sind reine Daten-
 // Eintraege (OCP), ohne die Adapter-Logik zu aendern. title = Resource-Metadaten je
@@ -26,10 +29,15 @@ export const WIDGET_CALL = "call";
 // wechsel per Klassenwechsel). Datenzuordnung statt Bool-Flag-Argument (G15) -
 // neue Widgets waehlen ihre Auspraegung als reinen Daten-Eintrag (OCP).
 const WING_STATIC = "static";
-const WING_LIVE = "live";
+// H3: call.html ist die einzige LIVE-Auspraegung und ist jetzt die Olympus-
+// HUD-Karte (volldunkel) - WING_LIVE (helle Live-Variante) hat damit keinen
+// Konsumenten mehr und entfaellt hier (toter Code sonst). WING_CSS_LIVE/
+// WING_MARKUP_LIVE bleiben in wing-markup.js exportiert (dort weiterhin
+// eigenstaendig getestet, s. mcp-ui-wing-dedup.test.js).
+const WING_DARK_LIVE = "dark-live";
 const WING_ASSETS_BY_VARIANT = {
   [WING_STATIC]: { css: WING_CSS_STATIC, markup: WING_MARKUP_STATIC },
-  [WING_LIVE]: { css: WING_CSS_LIVE, markup: WING_MARKUP_LIVE },
+  [WING_DARK_LIVE]: { css: WING_CSS_DARK_LIVE, markup: WING_MARKUP_DARK_LIVE },
 };
 
 // Wing-Canvas-Engine (H2): self-contained IIFE, EINE Quelle in
@@ -61,7 +69,7 @@ const WIDGET_DEFS = {
   [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number", wing: WING_STATIC },
   [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List", wing: WING_STATIC },
   [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar", wing: WING_STATIC },
-  [WIDGET_CALL]: { file: "call.html", title: "Hermes Call", wing: WING_LIVE },
+  [WIDGET_CALL]: { file: "call.html", title: "Hermes Call", wing: WING_DARK_LIVE },
 };
 
 // Schliessendes body-Tag - davor wird das gemeinsame Daten-Binding eingefuegt, damit

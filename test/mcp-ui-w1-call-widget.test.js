@@ -73,6 +73,27 @@ function makeFakeDocument() {
   for (const name of ROW_NAMES) bySelector.set(`[data-row="${name}"]`, makeFakeElement());
   bySelector.set("[data-cancel]", makeFakeElement());
   bySelector.set("[data-wing]", makeFakeElement());
+  // H3 (Olympus-HUD): Wing-Canvas-Mount-Container + das <img> innerhalb der
+  // CSS-WingMark (mountWingEngine liest dessen .src als Engine-Bildquelle).
+  // Wirkungslos fuer alle Bestandstests, da diese nie window.HermesWingCanvas
+  // setzen -> mountWingEngine() kehrt fruehzeitig zurueck, ohne diese
+  // Selektoren je abzufragen.
+  bySelector.set("[data-wing-canvas]", makeFakeElement());
+  const wingImg = makeFakeElement();
+  wingImg.src = "data:image/png;base64,FAKE";
+  bySelector.set("[data-wing] img", wingImg);
+  // H3: rein dekorative HUD-Hooks (Status-Pill/Phase/Ring) - kein data-mcp-Slot,
+  // aber von updateStatusPill/updateHudPhase/updateRingForStatus abgefragt.
+  bySelector.set("[data-status-pill]", makeFakeElement());
+  bySelector.set("[data-status-dot]", makeFakeElement());
+  bySelector.set("[data-status-label]", makeFakeElement());
+  bySelector.set("[data-hud-phase]", makeFakeElement());
+  const ringSvg = makeFakeElement();
+  ringSvg.setAttribute = function (attr, value) { if (attr === "class") this.className = value; };
+  bySelector.set("[data-ring]", ringSvg);
+  const ringArc = makeFakeElement();
+  ringArc.setAttribute = function () {};
+  bySelector.set("[data-ring-arc]", ringArc);
   return {
     querySelector: (sel) => bySelector.get(sel) || null,
     createElement: () => makeFakeElement(),
@@ -94,11 +115,15 @@ function crossRealmPlain(value) {
 
 // Extrahiert NUR das eigene Inline-Skript von call.html (ohne das angehaengte
 // BIND_SCRIPT, das die Katalog-Ladefunktion injiziert - widget-catalog.js:withBindScript).
+// H3: die Wing-Canvas-Engine wird per <!--__WING_ENGINE__--> in <head> injiziert,
+// also VOR diesem Skript - der erste <script>-Block ist deshalb nicht mehr
+// automatisch das eigene Skript. Nach Autorenregel (siehe call.html-Kopfkommentar)
+// bleibt das eigene Skript IMMER das LETZTE <script>-Element im Dokument.
 function ownScriptSource() {
   const html = widgetHtml(WIDGET_CALL).replace(BIND_SCRIPT, "");
-  const match = html.match(/<script>([\s\S]*?)<\/script>/);
-  assert.ok(match, "eigenes Inline-Skript in call.html gefunden");
-  return match[1];
+  const matches = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.ok(matches.length >= 1, "eigenes Inline-Skript in call.html gefunden");
+  return matches[matches.length - 1][1];
 }
 
 // Fuehrt das eigene Inline-Skript in einer frischen vm-Sandbox aus (window === die
@@ -109,6 +134,7 @@ function runOwnScript(doc, options) {
   sandbox.document = doc;
   sandbox.window = sandbox;
   sandbox.openai = options && options.openai;
+  sandbox.HermesWingCanvas = options && options.hermesWingCanvas; // H3: optionaler Engine-Fake
   sandbox._posted = [];
   sandbox.parent = { postMessage: (msg) => sandbox._posted.push(msg) };
   const listeners = {};
@@ -370,7 +396,7 @@ test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber dieselbe Bruecke,
   assert.deepEqual(crossRealmPlain(cancelReqs[0].params.arguments), { call_id: "call_1" });
 });
 
-test("T-W1-call-AC-wing-static: alle 6 Wing-Keyframes + reduced-motion + idle-Default + byte-identisches WING_PNG", () => {
+test("T-W1-call-AC-wing-static: alle 6 Wing-Keyframes + reduced-motion + dunkle idle-Auspraegung + byte-identisches WING_PNG (H3)", () => {
   const html = widgetHtml("call");
   const keyframes = [
     "hermesWingDrift", "hermesWingBob", "hermesWingConnect",
@@ -380,30 +406,74 @@ test("T-W1-call-AC-wing-static: alle 6 Wing-Keyframes + reduced-motion + idle-De
     assert.match(html, new RegExp("@keyframes\\s+" + name + "\\s*\\{"), `Keyframe ${name} vorhanden`);
   }
   assert.match(html, /prefers-reduced-motion/, "reduced-motion-Regel vorhanden");
-  assert.match(html, /class="wing wing--idle"[^>]*data-wing/, "Wing-Wrapper startet idle, ueber data-wing markiert");
-  assert.ok(html.includes(WING_PNG), "WING_PNG byte-identisch aus wing-image.js eingebettet (kein Transkriptionsfehler)");
+  assert.match(html, /class="wing wing--dark wing--idle"[^>]*data-wing/, "Wing-Wrapper startet dunkel+idle, ueber data-wing markiert");
+  assert.match(html, /\.wing--dark\{background:none\}/, "dunkle Auspraegung: navy Rundmarke neutralisiert (0dca7ce-Regression sonst)");
+  assert.match(html, /data-ring[^-]/, "Status-Ring-Hook vorhanden");
+  assert.ok(html.includes(WING_PNG), "WING_PNG byte-identisch aus wing-image.js eingebettet");
 });
 
-test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als Klassenwechsel auf dem Wing-Wrapper (WingMark 5 States, cancelled->error)", () => {
+test("T-W1-call-AC-wing: Statuswechsel spiegelt sich als CSS-Klassenwechsel (Fallback) UND als Engine-setStatus-Aufruf (Canvas-Pfad, H3)", () => {
+  const statusToWingClass = [
+    ["dialing", "wing wing--dark wing--connecting"],
+    ["in_progress", "wing wing--dark wing--working"],
+    ["completed", "wing wing--dark wing--success"],
+    ["failed", "wing wing--dark wing--error"],
+    ["cancelled", "wing wing--dark wing--error"],
+  ];
+
+  // Pfad A: keine Engine injiziert - reiner CSS-Fallback, kein Crash.
+  const docA = makeFakeDocument();
+  const envA = runOwnScript(docA);
+  docA.slot("call_id").textContent = "call_1";
+  for (const [status, expectedClass] of statusToWingClass) {
+    envA.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+      params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
+    assert.equal(docA.wing().className, expectedClass, `Fallback-Pfad: ${status} -> ${expectedClass}`);
+  }
+  assert.notEqual(docA.wing().style.display, "none", "ohne Engine bleibt die CSS-WingMark sichtbar");
+
+  // Pfad B: Engine erfolgreich injiziert.
+  const docB = makeFakeDocument();
+  const setStatusCalls = [];
+  const fakeHandle = { setStatus: (s) => setStatusCalls.push(s) };
+  const fakeMountCalls = [];
+  const envB = runOwnScript(docB, {
+    hermesWingCanvas: { mount: (host, opts) => (fakeMountCalls.push({ host, opts }), fakeHandle) },
+  });
+  docB.slot("call_id").textContent = "call_1";
+
+  assert.equal(fakeMountCalls.length, 1, "Engine wird beim Init genau einmal montiert");
+  assert.equal(fakeMountCalls[0].opts.size, 112, "Mount-Groesse = 112px-Fluegel-Held");
+  assert.equal(docB.wing().style.display, "none", "CSS-Wing wird nach erfolgreichem Mount versteckt");
+
+  for (const [status, expectedClass] of statusToWingClass) {
+    envB.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+      params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
+    assert.equal(docB.wing().className, expectedClass, `CSS-Klassenwechsel bleibt aktiv (Fallback-Kompatibilitaet): ${status}`);
+  }
+  assert.deepEqual(setStatusCalls, ["connecting", "working", "success", "error", "error"],
+    "Engine-Pfad: setStatus() erhaelt dieselbe WingMark-Zuordnung wie der CSS-Klassenwechsel (cancelled->error)");
+});
+
+test("T-W1-call-AC-status-pill: deutsche Status-Pill-Uebersetzung ueber alle 5 Status", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
 
-  const statusToWingClass = [
-    ["dialing", "wing wing--connecting"],
-    ["in_progress", "wing wing--working"],
-    ["completed", "wing wing--success"],
-    ["failed", "wing wing--error"],
-    ["cancelled", "wing wing--error"],
+  const statusToLabel = [
+    ["dialing", "Verbindung"],
+    ["in_progress", "Live"],
+    ["completed", "Abgeschlossen"],
+    ["failed", "Fehlgeschlagen"],
+    ["cancelled", "Abgebrochen"],
   ];
-  for (const [status, expectedClass] of statusToWingClass) {
-    env.emit({
-      jsonrpc: "2.0",
-      method: "ui/notifications/tool-result",
-      params: {
-        structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null },
-      },
-    });
-    assert.equal(doc.wing().className, expectedClass, `Status ${status} -> ${expectedClass}`);
+  for (const [status, expectedLabel] of statusToLabel) {
+    env.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+      params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
+    assert.equal(doc.querySelector("[data-status-label]").textContent, expectedLabel, `Status ${status} -> ${expectedLabel}`);
   }
+});
+
+test("T-W1-call-AC-size: ausgeliefertes call.html bleibt unter dem 260KB-Budget", () => {
+  assert.ok(Buffer.byteLength(widgetHtml("call"), "utf8") < 260 * 1024, "call.html unter 260KB (Olympus-HUD + Wing-Engine)");
 });
