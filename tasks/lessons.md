@@ -66,3 +66,19 @@
   Offenlegung+Anliegen. Live-Abnahme 2026-06-28: G2 `reply=140`/`heard=0` ohne Loch; G3
   `SpeechResult:25` = voller Satz ("...Das war alles", NICHT auf das erste Wort gekuerzt);
   `STT_SPEECH_TIMEOUT_SEC` Default 2 reicht (kein Tuning).
+
+## 2026-07-02 (Runde 2 Anrufqualitaet): Stil-Aufforderungen erzeugen Register-Entropie
+
+- "Variiere die Formulierung" / "Alltagssprache" im Haiku-Prompt kippten SOFORT in
+  Duz-Drift (2/3 Laeufe) und reaktivierten die unterdrueckte Thema-Frage - obwohl
+  eigene Anrede-Regeln danebenstehen. Positive Stil-AUFFORDERUNGEN wirken wie breite
+  Verbote (Runde-1-Lehre, gespiegelt): sie erhoehen die Entropie ueber das Ziel
+  hinaus. Wirksam blieb nur das enge, pruefbare VERBOT ("beginne nie zwei Antworten
+  hintereinander mit derselben Floskel").
+- Diagnose-Reihenfolge hat sich doppelt ausgezahlt: BEIDE Owner-Symptome (Auflegen,
+  "kaum Unterschied") waren Infra/Timing (Deploy-Kollision toetet in-memory-Call;
+  Testanruf lief gegen alten Deploy) - ohne Log-Forensik VOR dem Coden waere am
+  Prompt kuriert worden, was nicht am Prompt lag.
+- Bench-Reports tragen meta.git_rev: damit lassen sich alte Laeufe als Baseline-Pool
+  wiederverwenden (git diff auf den Voice-Pfad als Legitimation), statt teuer neu zu
+  benchen.
