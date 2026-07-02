@@ -12,6 +12,10 @@
 // wie im Spike; zusaetzlich Frame-Cap, Visibility-Gating, Terminal-Stop,
 // reduced-motion-Fallback und ein optionaler Gold-Post-Tint (Default aus, siehe
 // GOLD_ENABLED).
+//
+// Physik (Konstanten, smoothstep/buildWeights/deform, restState, classicCycle/
+// olympianCycle, Status-Timelines) dupliziert aus wing-engine.js (bewusst,
+// self-contained-Zwang) - Begruendung/Sync-Pflicht: README.md ICONOGRAPHY.
 (function () {
   "use strict";
   if (window.HermesWingCanvas) return; // Idempotenz falls das Skript zweimal injiziert wird (Muster wing-engine.js)

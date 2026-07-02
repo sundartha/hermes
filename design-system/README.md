@@ -178,6 +178,25 @@ in the codebase.
     (stutter, then droop). `wing-engine.js` lazy-loads pixi.js v8 + GSAP from a
     CDN. Use LiveWing where the motion is the point — the chat status beacon —
     not for tiny logos. Both honour `prefers-reduced-motion`.
+  - **`wing-canvas-engine.js`** (`components/brand/`, mirrored byte-identically
+    to `src/ui/wing-canvas-engine.js`) — the same feather physics/choreography
+    as LiveWing, ported to a self-contained Canvas2D triangle mesh instead of
+    Pixi. Built so it can be injected as ONE `<script>` into an MCP widget
+    iframe with zero network access (no CDN, no `@import`, no second file) —
+    the constraint that ruled out `wing-engine.js`/Pixi for widgets in the
+    first place (widget iframes cannot reliably load a third-party CDN
+    script). The two engines therefore intentionally duplicate the
+    media-independent core (geometry/gain constants, `smoothstep`/
+    `buildWeights`/`deform`, `restState`, the preset and status
+    choreographies) rather than sharing a module — there is no ESM/build step
+    either engine can lean on without breaking its single-script contract.
+    `wing-engine.js` keeps serving the higher-fidelity Pixi previews in
+    `design-system/mcp/*` and `live.card.html`; `wing-canvas-engine.js` is the
+    CDN-free variant meant for real widget consumption once H3/H4 wires it
+    into `src/ui/widgets/*.html`. **Whoever changes the shared physics/
+    choreography in one file must mirror the change in the other** (no
+    automated sync test covers this subset, only the byte-identity test
+    between the two `wing-canvas-engine.js` copies).
 - **Logo / brand mark.** The winged sandal of Hermes, a white PNG
   (`assets/logos/sandal_solid.png`) used on the dark hero with a soft
   drop-shadow. The Sundartha company mark is a small red rounded-square SVG
@@ -213,8 +232,10 @@ Root:
 - `SKILL.md` — Agent-Skills front matter for download into Claude Code.
 
 Components (`window.HermesDesignSystem_738510.*`):
-- `components/brand/` — **WingMark** (CSS idle wing, the constant brand element)
-  and **LiveWing** (the real Pixi mesh-deform wing; needs `wing-engine.js`).
+- `components/brand/` — **WingMark** (CSS idle wing, the constant brand element),
+  **LiveWing** (the real Pixi mesh-deform wing; needs `wing-engine.js`) and
+  `wing-canvas-engine.js` (the CDN-free Canvas2D twin for widget iframes, see
+  ICONOGRAPHY above).
 - `components/core/` — **Button** (primary/ghost, sizes), **Card** (titled
   surface), **PillCTA** (white CTA, on dark).
 - `components/feedback/` — **StatusBadge** (6 tones), **LiveDot**, **Stat** (KPI

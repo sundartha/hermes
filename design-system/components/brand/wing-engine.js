@@ -7,6 +7,16 @@
  *
  * Globals required: PIXI (pixi.js v8 UMD) and gsap (v3 UMD). ensure() injects
  * them from a CDN on first use. Exposes window.HermesWingEngine.
+ *
+ * Physics overlap with wing-canvas-engine.js (same directory): the geometry/
+ * gain constants, smoothstep/buildWeights/deform, restState and the preset/
+ * status choreographies are intentionally duplicated there, NOT shared - that
+ * file must stay a single self-contained injectable script for widget iframes
+ * (no CDN, no extra file load), while this file needs Pixi/GSAP from a CDN and
+ * stays the engine for design-system/mcp previews (see README.md ICONOGRAPHY
+ * for the full rationale). Change the physics/choreography here -> mirror it
+ * in wing-canvas-engine.js too (and vice versa); no automated sync test for
+ * this subset.
  */
 (function () {
   if (window.HermesWingEngine) return;
