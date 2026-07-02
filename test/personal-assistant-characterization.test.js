@@ -369,10 +369,12 @@ test("D3 disclosureSentence en fester Wortlaut", () => {
 });
 
 // ---------- openingText (keine Uhr) ----------
+// Bruecken-Pins bewusst justiert (Runde 2, S-B): natuerlicherer Wortlaut; die
+// Struktur (Offenlegung zuerst, genau ein Punkt, LLM-frei) bleibt gepinnt.
 test("O1 openingText de (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "de", goal: "Testziel" })),
-    `${DISCLOSURE_DE} Ich rufe an wegen folgendem Anliegen: Testziel.`,
+    `${DISCLOSURE_DE} Es geht um Folgendes: Testziel.`,
   );
 });
 test("O2 openingText de (goal leer) = nur Offenlegung", () => {
@@ -381,13 +383,42 @@ test("O2 openingText de (goal leer) = nur Offenlegung", () => {
 test("O3 openingText fr (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "fr", goal: "Testziel" })),
-    `${DISCLOSURE_FR} Je vous appelle au sujet de la demande suivante : Testziel.`,
+    `${DISCLOSURE_FR} Voici l'objet de mon appel : Testziel.`,
   );
 });
 test("O4 openingText en (goal vorhanden) = Offenlegung + Bruecke", () => {
   assert.equal(
     openingText(call({ language: "en", goal: "Testziel" })),
-    `${DISCLOSURE_EN} I'm calling regarding the following: Testziel.`,
+    `${DISCLOSURE_EN} Here's what I'm calling about: Testziel.`,
+  );
+});
+// O6-O8: Ich-Satz-Passthrough (Runde 2, S-B). Ein bereits sprechbarer Ich-Satz
+// (neue place_call-objective-Description) wird OHNE Bruecke woertlich gesprochen;
+// trimGoalForSpeech normalisiert das Satz-Endzeichen auf genau einen Punkt.
+test("O6 openingText de: Ich-Satz-goal wird ohne Bruecke gesprochen", () => {
+  assert.equal(
+    openingText(call({ language: "de", goal: "Ich moechte den naechsten freien Termin erfragen." })),
+    `${DISCLOSURE_DE} Ich moechte den naechsten freien Termin erfragen.`,
+  );
+});
+test("O7 openingText fr: Je-/J'-goal wird ohne Bruecke gesprochen", () => {
+  assert.equal(
+    openingText(call({ language: "fr", goal: "J'aimerais prendre un rendez-vous" })),
+    `${DISCLOSURE_FR} J'aimerais prendre un rendez-vous.`,
+  );
+});
+test("O8 openingText en: I-goal wird ohne Bruecke gesprochen", () => {
+  assert.equal(
+    openingText(call({ language: "en", goal: "I'd like to book an appointment" })),
+    `${DISCLOSURE_EN} I'd like to book an appointment.`,
+  );
+});
+// O9: Woerter, die nur mit "Ich"/"I" BEGINNEN (z.B. "Informiere"), sind KEIN
+// Ich-Satz -> Bruecke bleibt (Wortgrenzen-Regex, kein Praefix-Match).
+test("O9 openingText de: 'Informiere...'-Imperativ bekommt weiter die Bruecke", () => {
+  assert.equal(
+    openingText(call({ language: "de", goal: "Informiere ueber die Oeffnungszeiten" })),
+    `${DISCLOSURE_DE} Es geht um Folgendes: Informiere ueber die Oeffnungszeiten.`,
   );
 });
 
@@ -396,7 +427,7 @@ test("O4 openingText en (goal vorhanden) = Offenlegung + Bruecke", () => {
 // haengt genau einen Punkt an). Pinnt die Grenzfall-Glaettung (T5).
 const O5_LONG_GOAL =
   "einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das ueberhaupt geht.";
-const EXPECTED_O5 = `${DISCLOSURE_DE} Ich rufe an wegen folgendem Anliegen: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das.`;
+const EXPECTED_O5 = `${DISCLOSURE_DE} Es geht um Folgendes: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das.`;
 
 test("O5 openingText de (goal > 160 Zeichen) = Offenlegung + an Wortgrenze gekappte Bruecke", () => {
   assert.equal(openingText(call({ language: "de", goal: O5_LONG_GOAL })), EXPECTED_O5);

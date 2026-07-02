@@ -6,7 +6,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BIND_SCRIPT } from "./widget-bind.js";
-import { WING_CSS_STATIC, WING_CSS_LIVE, WING_MARKUP_STATIC, WING_MARKUP_LIVE } from "./wing-markup.js";
+import {
+  WING_CSS_DARK_STATIC, WING_MARKUP_DARK_STATIC,
+  WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
+} from "./wing-markup.js";
+import { HUD_CARD_CSS } from "./hud-card-css.js";
 
 // Bekannte Widgets. widgetId -> { file, title }. Neue Widgets sind reine Daten-
 // Eintraege (OCP), ohne die Adapter-Logik zu aendern. title = Resource-Metadaten je
@@ -21,15 +25,17 @@ export const WIDGET_CALENDAR = "calendar";
 // Zusammenfassung), die in W3 entfernt wurden.
 export const WIDGET_CALL = "call";
 
-// Wing-Marke (Kette T2): "static" = nur idle (die 4 Read-only-Widgets, kein
-// Anruf-Lebenszyklus), "live" = alle 5 WingMark-Zustaende (call.html, Status-
-// wechsel per Klassenwechsel). Datenzuordnung statt Bool-Flag-Argument (G15) -
-// neue Widgets waehlen ihre Auspraegung als reinen Daten-Eintrag (OCP).
-const WING_STATIC = "static";
-const WING_LIVE = "live";
+// H4: alle 4 Read-only-Widgets sind jetzt Olympus-HUD-Karten (volldunkel,
+// PLAN-WIDGET-HERMES-REDESIGN.md Abschnitt 6.3) - WING_STATIC (helle
+// Auspraegung) hat damit keinen Konsumenten mehr und entfaellt hier (toter
+// Code sonst, Muster wie WING_LIVE in H3). WING_CSS_STATIC/WING_MARKUP_STATIC
+// bleiben in wing-markup.js exportiert (dort weiterhin eigenstaendig getestet,
+// s. mcp-ui-wing-dedup.test.js T-wing-dedup-variants).
+const WING_DARK_STATIC = "dark-static";
+const WING_DARK_LIVE = "dark-live";
 const WING_ASSETS_BY_VARIANT = {
-  [WING_STATIC]: { css: WING_CSS_STATIC, markup: WING_MARKUP_STATIC },
-  [WING_LIVE]: { css: WING_CSS_LIVE, markup: WING_MARKUP_LIVE },
+  [WING_DARK_STATIC]: { css: WING_CSS_DARK_STATIC, markup: WING_MARKUP_DARK_STATIC },
+  [WING_DARK_LIVE]: { css: WING_CSS_DARK_LIVE, markup: WING_MARKUP_DARK_LIVE },
 };
 
 // Wing-Canvas-Engine (H2): self-contained IIFE, EINE Quelle in
@@ -56,12 +62,36 @@ export function withWingEngine(html) {
   return html.replace(WING_ENGINE_PLACEHOLDER, WING_ENGINE_SCRIPT);
 }
 
+// Wing-Canvas-Mount-Idle (H4): generisches, self-contained Mount-Skript fuer die
+// 4 Read-only-Widgets - identisch fuer alle vier (nie ein Statuswechsel), EINE
+// Quelle statt 4x derselben ~15 Zeilen (G5/S2). Muster wie WING_ENGINE_SCRIPT.
+const WING_CANVAS_MOUNT_IDLE_JS = readFileSync(
+  fileURLToPath(new URL("./wing-canvas-mount-idle.js", import.meta.url)),
+  "utf8",
+);
+const WING_CANVAS_MOUNT_PLACEHOLDER = "<!--__WING_CANVAS_MOUNT__-->";
+const WING_CANVAS_MOUNT_SCRIPT = `<script>\n${WING_CANVAS_MOUNT_IDLE_JS}\n</script>`;
+
+export function withWingCanvasMount(html) {
+  if (!html.includes(WING_CANVAS_MOUNT_PLACEHOLDER)) return html;
+  return html.replace(WING_CANVAS_MOUNT_PLACEHOLDER, WING_CANVAS_MOUNT_SCRIPT);
+}
+
+// Gemeinsamer Olympus-HUD-Kartenrahmen (H4): eine Quelle (hud-card-css.js)
+// statt 4x derselben ~35 CSS-Zeilen (G5/S2, s. dortiger Kopfkommentar).
+const HUD_CARD_CSS_PLACEHOLDER = "/*__HUD_CARD_CSS__*/";
+
+export function withHudCardCss(html) {
+  if (!html.includes(HUD_CARD_CSS_PLACEHOLDER)) return html;
+  return html.replace(HUD_CARD_CSS_PLACEHOLDER, HUD_CARD_CSS);
+}
+
 const WIDGET_DEFS = {
-  [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status", wing: WING_STATIC },
-  [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number", wing: WING_STATIC },
-  [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List", wing: WING_STATIC },
-  [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar", wing: WING_STATIC },
-  [WIDGET_CALL]: { file: "call.html", title: "Hermes Call", wing: WING_LIVE },
+  [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status", wing: WING_DARK_STATIC },
+  [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number", wing: WING_DARK_STATIC },
+  [WIDGET_CALLS]: { file: "calls.html", title: "Hermes Call List", wing: WING_DARK_STATIC },
+  [WIDGET_CALENDAR]: { file: "calendar.html", title: "Hermes Calendar", wing: WING_DARK_STATIC },
+  [WIDGET_CALL]: { file: "call.html", title: "Hermes Call", wing: WING_DARK_LIVE },
 };
 
 // Schliessendes body-Tag - davor wird das gemeinsame Daten-Binding eingefuegt, damit
@@ -96,10 +126,14 @@ function withWingAssets(html, def) {
 // @import/Linkback (Token inline, siehe Datei).
 const widgetDir = fileURLToPath(new URL("./widgets/", import.meta.url));
 const WIDGET_HTML = Object.fromEntries(
-  Object.entries(WIDGET_DEFS).map(([id, def]) => [
-    id,
-    withBindScript(withWingEngine(withWingAssets(readFileSync(widgetDir + def.file, "utf8"), def))),
-  ]),
+  Object.entries(WIDGET_DEFS).map(([id, def]) => {
+    const raw = readFileSync(widgetDir + def.file, "utf8");
+    const withCss = withHudCardCss(raw);
+    const withAssets = withWingAssets(withCss, def);
+    const withEngine = withWingEngine(withAssets);
+    const withMount = withWingCanvasMount(withEngine);
+    return [id, withBindScript(withMount)];
+  }),
 );
 
 export const hasWidget = (widgetId) =>

@@ -124,6 +124,14 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
 6. **A2 - `server.js`-Decomposition (TD-4)** - **IN ARBEIT.** ~1130 -> 1059 LOC; extrahiert:
    `routes/api-profiles.js`, `routes/api-read.js`, `routes/_tenant.js`, `routes/_validation.js`.
    Weitere `/api`-Gruppen koennen inkrementell folgen (verhaltens-erhaltend).
+7. **A6 - Call-State ueberlebt Instanzwechsel nicht (S1, 2026-07-02, Runde 2 Anrufqualitaet)** -
+   **OFFEN.** Zero-Downtime-Deploy toetet laufende Calls: neue Instanz kennt den in-memory-Call
+   nicht -> `/voice/turn` legt fail-closed auf (seit Runde 2 wenigstens GELOGGT statt still),
+   und der Reconcile-Flush der neuen Instanz LOESCHT den Call-Row aus pg (deleteMissing) -
+   nachgewiesen am Owner-Testanruf `call_mr3lg2g7t9zg` (14:22:33Z, Deploy dep-d9377ui).
+   Fix = eigener Store-Schnitt: read-through-Rehydrate im Webhook-Pfad + Reconcile-Schutz fuer
+   aktive Calls + Deploy-Draining. Bei Skala PFLICHT (jeder Deploy trifft laufende Calls).
+   Details: `tasks/call-quality-2-report.md` (Diagnose S-A).
 
 ## 3. Bewusst vertagt (nur Tracking, kein akuter Task)
 
