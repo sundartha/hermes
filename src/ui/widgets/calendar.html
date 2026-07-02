@@ -6,52 +6,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Calendar</title>
 <style>
-  /* Inline-Tokens: 1:1 aus apps/web/src/styles/tokens/primitives.css + semantic.css
-     (kanonische Quelle), self-contained fuer die Iframe-Sandbox - kein externer
-     CSS-Import/Linkback, AC6. */
-  :root {
-    --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
-    --color-white:#fff; --color-navy-700:#1b4f86; --color-navy-800:#0f2d52;
-    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
-    --radius-card:18px;
-    --shadow-card:0 6px 18px rgba(0,0,0,.07);
-    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
-    --wing-size:28px;
-  }
-  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
-  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
-        border-radius:var(--radius-card);box-shadow:var(--shadow-card);
-        padding:var(--space-4);max-width:480px}
-  .head{display:flex;align-items:center;gap:var(--space-2)}
-  /* Wing-Marke: CSS aus wing-markup.js injiziert (G5/S2 - eine Quelle statt
-     Copy-Paste in 5 Dateien, siehe widget-catalog.js withWingAssets). */
+  /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4) - siehe agent-status.html fuer
+     die ausfuehrliche Begruendung. */
+  /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  .title{font-weight:600}
-  .sub{color:var(--color-gray-500);font-size:13px}
-  /* Eine Row je Kalendereintrag (renderRows fuellt sie aus der Objekt-Liste). */
-  .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-2);
-       margin-top:var(--space-3);padding-top:var(--space-2);
-       border-top:1px solid var(--color-gray-150);font-size:14px}
-  .cell{color:var(--color-ink-900)}
-  .cell[data-field="title"]{font-weight:600;flex-basis:100%}
-  .cell[data-field="start"]{color:var(--color-gray-500)}
-  .cell[data-field="end"]{color:var(--color-gray-500);margin-left:auto}
-  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
-        display:flex;justify-content:space-between}
+  /* Row/Cell-Layout fuer die Kalender-Liste - eigene Felder, deshalb lokal. */
+  .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
+    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .cell{color:rgba(255,255,255,.85)}
+  .cell[data-field="title"]{font-weight:600;flex-basis:100%;color:rgba(255,255,255,.94)}
+  .cell[data-field="start"]{color:rgba(255,255,255,.5);font-size:12px;font-variant-numeric:tabular-nums}
+  .cell[data-field="end"]{margin-left:auto;color:rgba(255,255,255,.5);font-size:12px;font-variant-numeric:tabular-nums}
 </style>
+<!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
-    <div class="head">
-      <!--__WING_MARKUP__-->
-      <span><span class="title">Kalender</span><br />
-      <span class="sub">get_calendar</span></span>
+    <div class="eyebrow">Hermes · Kalender</div>
+    <div class="hero">
+      <div class="wing-wrap">
+        <!--__WING_MARKUP__-->
+        <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
+      </div>
+      <span class="phase">get_calendar</span>
+      <span class="hero-title">Kalender</span>
     </div>
     <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
          W1-Binding (widget-bind.js) rendert je Termin eine Row (textContent, XSS-sicher). -->
-    <div data-mcp="calendar" data-mcp-row="title,start,end"></div>
+    <div class="list" data-mcp="calendar" data-mcp-row="title,start,end"></div>
     <div class="foot"><span>Hermes</span></div>
   </div>
   <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein Button-Element. -->
+  <!--__WING_CANVAS_MOUNT__-->
 </body>
 </html>
