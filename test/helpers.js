@@ -103,6 +103,11 @@ export const BASE_ENV = {
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
   TELNYX_ACCOUNT_SID: "",
+  // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
+  // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
+  TELNYX_ELEVENLABS_API_KEY_REF: "",
+  TELNYX_ELEVENLABS_VOICE_ID: "",
+  TELNYX_ELEVENLABS_MODEL: "",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.

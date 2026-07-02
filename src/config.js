@@ -121,6 +121,20 @@ export const config = {
   // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
+  // ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme, optional). Gate im
+  // Telnyx-Renderer (via Registry injiziert): ElevenLabs-Say NUR wenn apiKeyRef
+  // UND voiceId gesetzt sind - sonst Azure-Bestand byte-identisch. apiKeyRef =
+  // IDENTIFIER des Telnyx-Integration-Secrets, das den ElevenLabs-API-Key haelt
+  // (der Key selbst liegt NUR bei Telnyx, nie hier). Bewusste Vereinfachung:
+  // EIN Plattform-Key - TTS-Zeichen aller Tenants laufen ohne per-Tenant-
+  // Metering aufs Owner-ElevenLabs-Konto (Paid-Plan noetig).
+  telnyxElevenLabs: {
+    apiKeyRef: process.env.TELNYX_ELEVENLABS_API_KEY_REF || "",
+    voiceId: process.env.TELNYX_ELEVENLABS_VOICE_ID || "",
+    // Model-Slot in ElevenLabs.<Model>.<VoiceId> (Telnyx dokumentiert "Default"
+    // und "v3"; andere Slugs nur nach Live-Probe nutzen).
+    model: process.env.TELNYX_ELEVENLABS_MODEL || "Default",
+  },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
