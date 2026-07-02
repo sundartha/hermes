@@ -18,10 +18,15 @@ import { WING_PNG } from "./wing-image-data.js";
 // Basis-Layout + idle-Animation - in JEDER Auspraegung gleich. Kein Fuehrungs-
 // Leerzeichen auf der ersten Zeile: der Aufrufer (withWingAssets) ersetzt
 // einen bereits eingerueckten Platzhalter, die erste Zeile erbt dessen
-// Einrueckung.
-const WING_BASE_CSS = `.wing{display:inline-block;width:var(--wing-size);height:var(--wing-size);
+// Einrueckung. Der navy Rundungs-Grund ist notwendig, nicht dekorativ: WING_PNG
+// ist ein weisser Wing auf transparentem Grund (fuer den dunklen Hero gedacht,
+// design-system/README.md "Logo/brand mark") - ohne dunklen Untergrund waere er
+// auf der hellen Widget-Karte fast unsichtbar (empirisch im Browser gefunden).
+const WING_BASE_CSS = `.wing{display:inline-flex;align-items:center;justify-content:center;
+        width:var(--wing-size);height:var(--wing-size);border-radius:50%;
+        background:radial-gradient(120% 120% at 30% 0%,var(--color-navy-700) 0%,var(--color-navy-800) 72%);
         transform-origin:26% 86%;flex-shrink:0}
-  .wing-inner{display:block;width:100%;height:100%;transform-origin:26% 86%}
+  .wing-inner{display:block;width:62%;height:62%;transform-origin:26% 86%}
   .wing-inner img{display:block;width:100%;height:100%;object-fit:contain;user-select:none}
   .wing--idle{animation:hermesWingDrift 6.8s ease-in-out infinite}
   .wing--idle .wing-inner{animation:hermesWingBob 3.9s ease-in-out infinite}`;
