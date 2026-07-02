@@ -69,9 +69,12 @@ Verifizierte Vorab-Befunde (Lead, empirisch):
 - [x] 8. `node --check` alle geaenderten Dateien + `npm test` komplett gruen.
 - [x] 9. Commit + push origin UND upstream (Render autodeploy), healthz +
       [boot]-Banner pruefen.
-- [ ] 10. Live-Verifikation claude.ai (Chrome): neuer Chat, read-only Tool
-      (get_my_number o.ae.) triggern -> Widget EN/DE pruefen; Connector-Seite:
-      Fluegel-Icon statt Wuerfel (ggf. Cache/Reconnect-Hinweis an Owner).
+- [x] 10. Live-Verifikation claude.ai (Chrome): Widget DE live bestaetigt
+      (get_my_number-Karte "HERMES · AGENT-NUMMER"). Icon: Server liefert
+      alle Kandidaten (data-URI/websiteUrl/favicon 200 auf beiden Origins),
+      claude.ai friert das Connector-Icon aber beim Verbinden ein — Tool-
+      Listen-Refresh + Hard-Reload aendern es nicht. OFFEN (Owner): Connector
+      einmal trennen + neu verbinden, dann sollte der Fluegel erscheinen.
 
 ## Bewusste Abgrenzungen
 

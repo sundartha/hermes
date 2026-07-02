@@ -66,3 +66,64 @@
   Offenlegung+Anliegen. Live-Abnahme 2026-06-28: G2 `reply=140`/`heard=0` ohne Loch; G3
   `SpeechResult:25` = voller Satz ("...Das war alles", NICHT auf das erste Wort gekuerzt);
   `STT_SPEECH_TIMEOUT_SEC` Default 2 reicht (kein Tuning).
+
+## Prozess: Feature-Umbau = Strategie-Doc ZUERST, nicht inline bauen
+
+- **Bei einem groesseren Feature/Umbau NICHT direkt implementieren** (Owner-Korrektur
+  2026-07-01, MCP-UI-Live-Widget). Der etablierte Ablauf in diesem Repo (siehe die vielen
+  `*-chain`-Memories + `PLAN-*.md`): (1) ein Agent-Team / dynamischer Workflow entwirft ein
+  STRATEGIE-DOC mit MEHREREN Phasen (nur Analyse, kein Code); (2) eine FRISCHE Claude-Session
+  mit dem Lean-Template geht dann jede Phase sequenziell ueber `phase-impl-lean.js` durch
+  (dualer Review als Gate, Merge im Lead). Der Lead selbst schreibt/finalisiert nur das Doc +
+  merged - er baut nicht das Feature in der Planungs-Session. Symptom des Fehltritts: ich fing
+  nach der Forensik an, `mcp-tools.js`/Widgets direkt zu editieren, statt die Phasen-Kette zu
+  entwerfen. Lehre: nach abgeschlossener Untersuchung IMMER erst fragen "Strategie-Doc + Kette
+  oder direkt bauen?" - Default fuer nicht-triviale Features = Doc + Kette.
+- **Orchestrierungs-Rollen: alle Subagenten (Draft/Impl/Review) laufen auf SONNET, nur der
+  Lead auf Opus.** Beim `Agent`-Tool `model:'sonnet'` setzen, im `Workflow`-Skript auf JEDEM
+  `agent()`-Call `model:'sonnet'` (sonst erben sie das Lead-Modell Opus). Gilt auch fuer die
+  phase-impl-lean-Laeufe der Umsetzungs-Session.
+
+## Widget-Redesign (H-Kette, 2026-07-02)
+
+- **HTML-Kommentare duerfen Injektions-Platzhalter NIE woertlich nennen.** Ein
+  Doku-Kommentar in call.html enthielt `<!--__WING_ENGINE__-->` als Text INNERHALB
+  eines Kommentars: Kommentare nesten nicht, das Platzhalter-Ende schloss den
+  Kommentar, der Rest leakte als sichtbarer Text — UND String.replace ersetzt nur
+  das ERSTE Vorkommen. Alle Tests waren gruen; gefunden NUR im visuellen Harness-
+  Check. Lehren: (1) Serve-Regressionstest "Platzhalter-Name kommt im Output nicht
+  vor" (existiert jetzt: T-wing-canvas-inject-no-leak); (2) visueller Smoke gehoert
+  in JEDE Widget-Phase, nicht erst ans Ketten-Ende.
+- **rAF-Messungen im gesteuerten Chrome sind ohne Fenster-Sichtbarkeit wertlos.**
+  Chrome drosselt requestAnimationFrame bei verdecktem Fenster auf ~30fps bzw. 0
+  (hidden) — die "konstanten 36fps" des Spikes waren Occlusion-Throttling, kein
+  Engine-Bottleneck. Perf IMMER zusaetzlich synchron messen (performance.now um
+  render(), funktioniert auch im versteckten Tab): echte Kosten 0.4ms/Frame.
+  document.visibilityState VOR jeder Browser-Messung pruefen.
+- **Lead-Fix-Runde 3 nach Workflow-BLOCKED funktioniert gut:** wenn nach
+  maxFixRounds genau benannte, enge Blocker uebrig sind (Test-Luecke, Specimen-
+  Drift), ist ein gezielter Einzel-Agent + Lead-Verifikation (inkl. Mutations-
+  Nachweis: Bug einbauen -> Test muss rot werden) billiger als ein neuer
+  Workflow-Lauf — Gate-Disziplin bleibt gewahrt, weil die Blocker-Liste des
+  Reviews abgearbeitet und einzeln verifiziert wird.
+
+## 2026-07-02 — Widget-Politur (Icon/i18n/Design) — Parallel-Session + Harness
+
+- **Parallel-Sessions im selben Working Tree: verifizierte Arbeit SOFORT
+  committen.** Eine parallel laufende Session hat mit `git stash` (Reflog:
+  "reset: moving to HEAD") alle uncommitteten tracked Edits weggeraeumt und
+  Minuten spaeter zurueckgepoppt — untracked Dateien ueberlebten, tracked
+  Edits waren zwischenzeitlich weg. Kein Schaden nur, weil zufaellig nichts
+  dazwischen editiert wurde. Regel: nach jedem gruenen Verifikationsschritt
+  committen (Commits sind stash-fest), fremde WIP-Dateien nie mit-stagen.
+- **requestAnimationFrame feuert in unsichtbaren Tabs GAR NICHT** (empirisch:
+  0 Ticks/400ms bei visibilityState=hidden). Die Wing-Canvas-Engine zeichnet
+  ihr erstes Frame im RAF-Loop -> in automatisierten Chrome-Screenshots
+  (Fenster im Hintergrund) bleibt der Canvas leer, obwohl live alles rendert.
+  Visuelle Canvas-Verifikation braucht ein sichtbares Fenster ODER den
+  Vergleich gegen eine Baseline im selben (hidden) Kontext.
+- **claude.ai-Connector-Icon**: "Tool-Liste aktualisieren" refresht nur die
+  Tools, NICHT das Connector-Icon; auch Hard-Reload nicht. Icon-Kandidaten
+  serverseitig alle bedient (icons data-URI + https, websiteUrl, favicon.ico
+  auf beiden Origins inkl. enger Basic-Auth-Ausnahme). Letzter Hebel, falls
+  der Wuerfel bleibt: Connector trennen + neu verbinden (Owner, OAuth).
