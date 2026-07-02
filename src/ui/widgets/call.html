@@ -17,12 +17,18 @@
     --radius-card:18px; --radius-pill:99px;
     --shadow-card:0 6px 18px rgba(0,0,0,.07);
     --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
+    --wing-size:28px;
   }
   body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
   .card{background:var(--color-white);border:1px solid var(--color-gray-150);
         border-radius:var(--radius-card);box-shadow:var(--shadow-card);
         padding:var(--space-4);max-width:420px}
   .head{display:flex;align-items:center;gap:var(--space-2)}
+  /* Wing-Marke: CSS aus wing-markup.js injiziert (G5/S2 - eine Quelle statt
+     Copy-Paste, siehe widget-catalog.js withWingAssets). Statuswechsel = ein
+     Klassenwechsel auf .wing (wing--<status>) in updateWingForStatus, kein
+     HTML-Ersetzen (AC6-Invariante der Katalog-Tests). */
+  /*__WING_CSS__*/
   .title{font-weight:600}
   .sub{color:var(--color-gray-500);font-size:13px}
   .badge{margin-left:auto;font-size:12px;font-weight:600;color:var(--color-navy-700);
@@ -53,6 +59,7 @@
 <body>
   <div class="card">
     <div class="head">
+      <!--__WING_MARKUP__-->
       <span><span class="title">Anruf</span><br />
       <span class="sub">Hermes ruft fuer dich an</span></span>
       <span class="badge" data-mcp="status">—</span>
@@ -117,6 +124,18 @@
     var EMDASH = "—";
     var NO_BRIDGE_LABEL = "kein Live-Update";
 
+    // Wing-Status-Mapping (PLAN-MCP-WIDGET-BRANDING.md Abschnitt 3 + Kette T2): die 5
+    // WingMark-Zustaende sind fix vorgegeben - kein sechster erfunden. cancelled faellt
+    // bewusst auf error (Abschnitt 6, kein eigener Cancelled-State im Animation-Lab).
+    var WING_STATUS_IDLE = "idle";
+    var WING_STATUS_BY_CALL_STATUS = {
+      dialing: "connecting",
+      in_progress: "working",
+      completed: "success",
+      failed: "error",
+      cancelled: "error",
+    };
+
     var doc = document;
     var pollTimerId = null;
     var fallbackTimerId = null;
@@ -156,6 +175,19 @@
       btn.style.display = disabled ? "none" : "";
     }
 
+    // Reine Status-Uebersetzung, keine DOM-Beruehrung (Command-Query-Trennung, P5).
+    function wingStatusFor(status) {
+      return WING_STATUS_BY_CALL_STATUS[status] || WING_STATUS_IDLE;
+    }
+
+    // Spiegelt den Call-Status auf den Wing-Zustand: EIN Klassenwechsel auf dem
+    // Wrapper, kein HTML-Ersetzen (Absolute Regel 3 / Kette-Invariante T2).
+    function updateWingForStatus(status) {
+      var wing = doc.querySelector("[data-wing]");
+      if (!wing) return;
+      wing.className = "wing wing--" + wingStatusFor(status);
+    }
+
     // Zeilenweise wie widget-bind.js renderLines (dieselbe .turn-Klasse, dieselbe
     // XSS-Disziplin) - hier dupliziert, da dieses Skript self-contained bleibt (s.
     // Datei-Kommentar oben).
@@ -175,6 +207,7 @@
     // Polling stoppen, bei completed EINMAL get_transcript nachladen.
     function updateForStatus(status) {
       var terminal = isTerminalStatus(status);
+      updateWingForStatus(status);
       setRowVisible("lines", !terminal);
       setRowVisible("failure", status === "failed");
       setRowVisible("summary", status === "completed");

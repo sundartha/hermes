@@ -16,13 +16,16 @@
     --radius-card:18px;
     --shadow-card:0 6px 18px rgba(0,0,0,.07);
     --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
+    --wing-size:28px;
   }
   body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
   .card{background:var(--color-white);border:1px solid var(--color-gray-150);
         border-radius:var(--radius-card);box-shadow:var(--shadow-card);
         padding:var(--space-4);max-width:480px}
   .head{display:flex;align-items:center;gap:var(--space-2)}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--color-navy-700)}
+  /* Wing-Marke: CSS aus wing-markup.js injiziert (G5/S2 - eine Quelle statt
+     Copy-Paste in 5 Dateien, siehe widget-catalog.js withWingAssets). */
+  /*__WING_CSS__*/
   .title{font-weight:600}
   .sub{color:var(--color-gray-500);font-size:13px}
   /* Eine Row je Call (renderRows fuellt sie aus der Objekt-Liste). data-field erlaubt
@@ -44,7 +47,7 @@
 <body>
   <div class="card">
     <div class="head">
-      <span class="dot"></span>
+      <!--__WING_MARKUP__-->
       <span><span class="title">Letzte Anrufe</span><br />
       <span class="sub">list_calls</span></span>
     </div>
