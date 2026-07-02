@@ -347,7 +347,14 @@ async function startCardSetup(msgEl, plan){
 }
 
 $("logoutBtn").onclick = async ()=>{
-  await fetch("/auth/logout", { method:"POST" }); // invalidiert Session + loescht Cookie
+  const r = await fetch("/auth/logout", { method:"POST" }); // invalidiert Session + loescht Cookie
+  // 200 JSON {logoutUrl}: die Session trug eine WorkOS-Session-ID -> Browser muss TOP-LEVEL
+  // dorthin navigieren, sonst bleibt WorkOS' eigene AuthKit-SSO-Session aktiv (naechster
+  // Login-Klick loggt sonst still wieder ein). 204 (Alt-Session/Dev-Login) -> wie bisher.
+  if(r.status===200){
+    const { logoutUrl } = await r.json();
+    if(logoutUrl){ window.location.href = logoutUrl; return; }
+  }
   location.reload();
 };
 

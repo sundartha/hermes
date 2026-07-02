@@ -55,10 +55,17 @@ import { LOGIN_URL } from "../../lib/routes.js";
 
   logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = true;
+    let logoutUrl = null;
     try {
-      await logout();
+      logoutUrl = await logout();
     } finally {
       logoutBtn.disabled = false;
+    }
+    // WorkOS-Session-ID vorhanden -> Browser muss TOP-LEVEL zu WorkOS' Sign-out-Endpunkt
+    // navigieren, sonst bleibt die AuthKit-SSO-Session aktiv (siehe PLAN-WORKOS-LOGOUT.md).
+    if (logoutUrl) {
+      window.location.href = logoutUrl;
+      return;
     }
     await refresh(); // nach Logout neu bewerten -> faellt auf "anonym" zurueck
   });
