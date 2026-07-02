@@ -4,14 +4,26 @@
 # Umgebungsvariable statt Argument). Prueft den Key vor dem Schreiben live gegen
 # die Anthropic-API (Minimal-Request, ~0 Kosten) und legt ein Backup der .env an.
 #
-# Aufruf:  bash scripts/set-anthropic-key.sh [pfad/zur/.env]
+# Aufruf:  bash scripts/set-anthropic-key.sh [--from-clipboard] [pfad/zur/.env]
+#   --from-clipboard: Key aus der macOS-Zwischenablage (pbpaste) statt Tastatur-
+#   Eingabe lesen - noetig, wenn kein TTY da ist (z.B. Ausfuehrung aus einer
+#   Claude-Code-Session), und generell bequemer: Key kopieren, Skript starten.
 # Default-Ziel: .env im HAUPT-Repo (auch wenn das Skript aus einem Worktree laeuft).
 set -euo pipefail
 
+FROM_CLIPBOARD=0
+ENV_ARG=""
+for arg in "$@"; do
+  case "$arg" in
+    --from-clipboard) FROM_CLIPBOARD=1 ;;
+    *) ENV_ARG="$arg" ;;
+  esac
+done
+
 # Ziel-.env aufloesen: Argument > Haupt-Repo-Wurzel (git-common-dir zeigt auch aus
 # einem Worktree heraus auf das .git des Haupt-Checkouts) > ./ .env
-if [ -n "${1:-}" ]; then
-  ENV_FILE="$1"
+if [ -n "$ENV_ARG" ]; then
+  ENV_FILE="$ENV_ARG"
 elif COMMON_DIR=$(git rev-parse --git-common-dir 2>/dev/null); then
   ENV_FILE="$(cd "$(dirname "$COMMON_DIR")" && pwd)/.env"
 else
@@ -20,9 +32,16 @@ fi
 [ -f "$ENV_FILE" ] || { echo "FEHLER: $ENV_FILE existiert nicht." >&2; exit 1; }
 echo "Ziel: $ENV_FILE"
 
-# Key verdeckt einlesen (landet nicht im Terminal, nicht in der History).
-read -r -s -p "Neuen ANTHROPIC_API_KEY einfuegen (Eingabe bleibt unsichtbar): " NEW_KEY
-echo
+# Key beziehen: Zwischenablage (--from-clipboard) oder verdeckte Tastatur-Eingabe.
+# Beides landet nie im Terminal, nie in der History, nie in der Prozessliste.
+if [ "$FROM_CLIPBOARD" = "1" ]; then
+  NEW_KEY=$(pbpaste)
+  echo "Key aus der Zwischenablage gelesen."
+else
+  [ -t 0 ] || { echo "FEHLER: kein TTY fuer verdeckte Eingabe - nutze --from-clipboard (Key vorher kopieren)." >&2; exit 1; }
+  read -r -s -p "Neuen ANTHROPIC_API_KEY einfuegen (Eingabe bleibt unsichtbar): " NEW_KEY
+  echo
+fi
 NEW_KEY=$(printf '%s' "$NEW_KEY" | tr -d '[:space:]')
 
 case "$NEW_KEY" in
