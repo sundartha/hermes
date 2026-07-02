@@ -21,6 +21,7 @@ import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { twilioMedia } from "./adapters/twilio/media.js";
 import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { PROVIDER } from "../store/defaults.js";
+import { config } from "../config.js";
 
 /** @returns {import("./ports.js").VoiceControl} */
 export const voiceControl = (provider = PROVIDER.TWILIO) =>
@@ -45,10 +46,15 @@ export const numberProvisioning = (provider = PROVIDER.TELNYX) => {
   throw new Error(`NumberProvisioning fuer Provider '${provider}' nicht unterstuetzt`);
 };
 
+// Telnyx bekommt die ElevenLabs-TTS-Konfiguration (globale Plattform-Stimme)
+// HIER injiziert - der Renderer selbst bleibt config-frei/pur (Snapshot-Tests
+// ohne Env), die Verdrahtung lebt an der Kompositions-Stelle (P15). Gate liegt
+// im Renderer (apiKeyRef+voiceId leer -> Azure byte-identisch). Twilio-Zweig
+// unveraendert (kein ElevenLabs ueber Twilio-Say).
 /** @returns {import("./ports.js").VoiceRenderer} */
 export const voiceRenderer = (provider = PROVIDER.TWILIO) =>
   provider === PROVIDER.TELNYX
-    ? { renderDirectives: telnyxRenderDirectives }
+    ? { renderDirectives: (d) => telnyxRenderDirectives(d, { elevenLabs: config.telnyxElevenLabs }) }
     : { renderDirectives: twilioRenderDirectives };
 
 // Header -> Provider (rein, IO-frei). EINZIGE Stelle, die Inbound-Signatur-Header

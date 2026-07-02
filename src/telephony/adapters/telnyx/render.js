@@ -47,8 +47,33 @@ function attrString(obj) {
     .join("");
 }
 
-function renderSay(d) {
-  return `<Say${attrString(voiceAttrs(d.voiceProfile))}>${escapeXml(d.text)}</Say>`;
+// ElevenLabs-TTS (globale Plattform-Stimme): Telnyx relayt
+// <Say voice="ElevenLabs.<Model>.<VoiceId>" api_key_ref="..."> an die ElevenLabs-
+// API; der ElevenLabs-API-Key liegt als Telnyx-Integration-Secret und wird ueber
+// den api_key_ref-IDENTIFIER referenziert. opts.elevenLabs injiziert die Registry
+// aus config.telnyxElevenLabs - der Renderer bleibt config-frei und pur. KEIN
+// language-Attribut am ElevenLabs-Say: die Voice ist multilingual, die gesprochene
+// Sprache folgt dem Text (Telnyx-Doku-Beispiel traegt keins). Gate fail-safe statt
+// fail-closed: ElevenLabs NUR wenn apiKeyRef UND voiceId gesetzt, sonst Azure-
+// Bestand byte-identisch - ein halbes/leeres Env ist ein Betriebszustand, kein
+// Programmierfehler, und darf kein laufendes Gespraech toeten (anders als das
+// werfende voiceAttrs beim Code-Enum voiceProfile). STT bleibt UNBERUEHRT
+// (gatherAttrs unten - Telnyx unterstuetzt ElevenLabs nur fuer TTS). Risiken im
+// Live-Smoke-Gate (tasks/todo.md): Telnyx-Verhalten bei leerem ElevenLabs-Guthaben/
+// ungueltigem Key ist undokumentiert (kein Auto-Fallback); die TTS-Zeichen aller
+// Tenants laufen ohne per-Tenant-Metering aufs Owner-ElevenLabs-Konto.
+function sayVoiceAttrs(d, opts) {
+  const el = opts.elevenLabs || {};
+  if (el.apiKeyRef && el.voiceId)
+    return {
+      voice: `ElevenLabs.${el.model || "Default"}.${el.voiceId}`,
+      api_key_ref: el.apiKeyRef,
+    };
+  return voiceAttrs(d.voiceProfile);
+}
+
+function renderSay(d, opts) {
+  return `<Say${attrString(sayVoiceAttrs(d, opts))}>${escapeXml(d.text)}</Say>`;
 }
 
 // Telnyx-TeXML-Gather-Attribute (Spracherkennung). transcriptionEngine ist PFLICHT,
@@ -82,10 +107,10 @@ function gatherAttrs(d) {
   };
 }
 
-function renderGather(d) {
+function renderGather(d, opts) {
   const open = `<Gather${attrString(gatherAttrs(d))} action="${escapeXml(d.action)}" method="POST">`;
   if (!d.promptText) return open.replace(/>$/, "/>");
-  return `${open}${renderSay({ text: d.promptText, voiceProfile: d.voiceProfile })}</Gather>`;
+  return `${open}${renderSay({ text: d.promptText, voiceProfile: d.voiceProfile }, opts)}</Gather>`;
 }
 
 // Realtime-Media-Stream als TeXML <Connect><Stream> mit <Parameter>-Kindern.
@@ -99,12 +124,12 @@ function renderStream(d) {
 }
 
 // Eine Direktive in TeXML uebersetzen (eine Abstraktionsebene, G34).
-function renderDirective(d) {
+function renderDirective(d, opts) {
   switch (d.kind) {
     case DIRECTIVE.SAY:
-      return renderSay(d);
+      return renderSay(d, opts);
     case DIRECTIVE.GATHER:
-      return renderGather(d);
+      return renderGather(d, opts);
     case DIRECTIVE.REDIRECT:
       return `<Redirect method="POST">${escapeXml(d.url)}</Redirect>`;
     case DIRECTIVE.HANGUP:
@@ -116,7 +141,10 @@ function renderDirective(d) {
   }
 }
 
+// opts (optional, Telnyx-eigene Erweiterung ueber den Port hinaus): { elevenLabs }
+// - die Registry injiziert config.telnyxElevenLabs, Aufrufe ohne opts bleiben
+// byte-identisch zum Bestand (Azure).
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
-export function renderDirectives(directives) {
-  return XML_DECL + "<Response>" + directives.map(renderDirective).join("") + "</Response>";
+export function renderDirectives(directives, opts = {}) {
+  return XML_DECL + "<Response>" + directives.map((d) => renderDirective(d, opts)).join("") + "</Response>";
 }

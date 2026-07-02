@@ -66,6 +66,15 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
+      # ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme). Nur aktiv, wenn
+      # REF + VOICE_ID gesetzt sind; leer = Azure-Bestand. Erst NACH gruenem
+      # Live-Smoke setzen (Plan/tasks/todo.md).
+      - key: TELNYX_ELEVENLABS_API_KEY_REF
+        sync: false
+      - key: TELNYX_ELEVENLABS_VOICE_ID
+        sync: false
+      - key: TELNYX_ELEVENLABS_MODEL
+        value: "Default"
       # ---- Bootstrap (Owner-Removal P2b, vom preDeployCommand oben genutzt) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
