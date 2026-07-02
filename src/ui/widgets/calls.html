@@ -6,56 +6,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Calls</title>
 <style>
-  /* Inline-Tokens: 1:1 aus apps/web/src/styles/tokens/primitives.css + semantic.css
-     (kanonische Quelle), self-contained fuer die Iframe-Sandbox - kein externer
-     CSS-Import/Linkback, AC6. */
-  :root {
-    --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
-    --color-white:#fff; --color-navy-700:#1b4f86; --color-navy-800:#0f2d52;
-    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
-    --radius-card:18px;
-    --shadow-card:0 6px 18px rgba(0,0,0,.07);
-    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
-    --wing-size:28px;
-  }
-  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
-  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
-        border-radius:var(--radius-card);box-shadow:var(--shadow-card);
-        padding:var(--space-4);max-width:480px}
-  .head{display:flex;align-items:center;gap:var(--space-2)}
-  /* Wing-Marke: CSS aus wing-markup.js injiziert (G5/S2 - eine Quelle statt
-     Copy-Paste in 5 Dateien, siehe widget-catalog.js withWingAssets). */
+  /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4) - siehe agent-status.html fuer
+     die ausfuehrliche Begruendung. Der .list-Wrapper UND die Basis-Regeln
+     .list .row/.list .row:first-child/.list .cell kommen ebenfalls aus
+     HUD_CARD_CSS (geteilt, weil sowohl calls.html als auch calendar.html
+     eine wortgleiche Objekt-Liste zeigen, s. hud-card-css.js). */
+  /*__HUD_CARD_CSS__*/
   /*__WING_CSS__*/
-  .title{font-weight:600}
-  .sub{color:var(--color-gray-500);font-size:13px}
-  /* Eine Row je Call (renderRows fuellt sie aus der Objekt-Liste). data-field erlaubt
-     der CSS, einzelne Spalten gezielt zu stylen. */
-  .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-2);
-       margin-top:var(--space-3);padding-top:var(--space-2);
-       border-top:1px solid var(--color-gray-150);font-size:14px}
-  .cell{color:var(--color-ink-900)}
-  .cell[data-field="direction"]{color:var(--color-gray-500);font-size:11px;
-        text-transform:uppercase;letter-spacing:.04em}
-  .cell[data-field="counterparty"]{font-weight:600}
-  .cell[data-field="status"]{color:var(--color-navy-700)}
-  .cell[data-field="startedAt"]{color:var(--color-gray-500);margin-left:auto}
-  .cell[data-field="summary"]{flex-basis:100%;color:var(--color-gray-500)}
-  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
-        display:flex;justify-content:space-between}
+  /* Nur die feldspezifischen Overrides fuer die Anruf-Liste - Felder/Farben
+     unterscheiden sich von calendar.html, deshalb lokal statt geteilt.
+     [data-field=...] haengt an den von widget-bind.js (renderRows) FEST
+     vergebenen .cell-Elementen (ROW_CLASS/CELL_CLASS) - hier nur restyled,
+     nicht erzeugt. */
+  .cell[data-field="direction"]{font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.22);
+    border-radius:var(--radius-pill);padding:2px 9px}
+  .cell[data-field="counterparty"]{font-weight:600;color:rgba(255,255,255,.94)}
+  .cell[data-field="status"]{color:var(--color-accent-light-strong);font-size:12px}
+  .cell[data-field="startedAt"]{margin-left:auto;color:rgba(255,255,255,.45);
+    font-size:11.5px;font-variant-numeric:tabular-nums}
+  .cell[data-field="summary"]{flex-basis:100%;color:rgba(255,255,255,.55);font-size:12.5px}
 </style>
+<!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
-    <div class="head">
-      <!--__WING_MARKUP__-->
-      <span><span class="title">Letzte Anrufe</span><br />
-      <span class="sub">list_calls</span></span>
+    <div class="eyebrow">Hermes · Letzte Anrufe</div>
+    <div class="hero">
+      <div class="wing-wrap">
+        <!--__WING_MARKUP__-->
+        <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
+      </div>
+      <span class="phase">list_calls</span>
+      <span class="hero-title">Letzte Anrufe</span>
     </div>
     <!-- Objekt-Listen-Slot: data-mcp-row deklariert die Sub-Felder je Eintrag; das
-         W1-Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher). -->
-    <div data-mcp="calls" data-mcp-row="direction,counterparty,status,startedAt,summary"></div>
+         W1-Binding (widget-bind.js) rendert je Call eine Row (textContent, XSS-sicher).
+         class="list" ist ein reiner Styling-Hook (position/z-index gegen das
+         Scanline-Overlay) - data-mcp/data-mcp-row bleiben unveraendert. -->
+    <div class="list" data-mcp="calls" data-mcp-row="direction,counterparty,status,startedAt,summary"></div>
     <div class="foot"><span>Hermes</span></div>
   </div>
   <!-- Read-only Widget: kein Callback, kein Tool-Trigger, kein Button-Element. -->
+  <!--__WING_CANVAS_MOUNT__-->
 </body>
 </html>

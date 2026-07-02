@@ -1,7 +1,9 @@
 // T2 (tasks/mcp-widget-branding-chain.md): statische idle-Wing-Marke in den 4
 // Read-only-Widgets (kein Anruf-Lebenszyklus, deshalb kein Skript-Diff dort - nur
 // Markup + der idle-Keyframe-Block). Byte-Identitaet zur Quelle (wing-image.js)
-// verhindert stillen Drift zwischen den 5 self-contained Kopien.
+// verhindert stillen Drift zwischen den 5 self-contained Kopien. H4: die 4
+// Read-only-Widgets sind jetzt Olympus-HUD-Karten (volldunkel) - die Wing-Marke
+// traegt seitdem die dunkle Auspraegung (wing--dark, navy Rundmarke neutralisiert).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -19,12 +21,13 @@ const STATE_KEYFRAMES_NOT_EXPECTED = [
 ];
 
 for (const id of STATIC_WIDGET_IDS) {
-  test(`T-wing-static-${id}: idle-Wing vorhanden, byte-identisches PNG, keine ungenutzten State-Keyframes, .dot abgeloest`, () => {
+  test(`T-wing-static-${id}: idle-Wing vorhanden (H4, dunkle Auspraegung), byte-identisches PNG, keine ungenutzten State-Keyframes, .dot abgeloest`, () => {
     const html = widgetHtml(id);
     assert.match(html, /@keyframes\s+hermesWingDrift\s*\{/, "Drift-Keyframe vorhanden");
     assert.match(html, /@keyframes\s+hermesWingBob\s*\{/, "Bob-Keyframe vorhanden");
     assert.match(html, /prefers-reduced-motion/, "reduced-motion-Regel vorhanden");
-    assert.match(html, /class="wing wing--idle"/, "idle-Wing-Marke im Markup");
+    assert.match(html, /class="wing wing--dark wing--idle"/, "dunkle idle-Wing-Marke im Markup (H4)");
+    assert.match(html, /\.wing--dark\{background:none\}/, "dunkle Auspraegung: navy Rundmarke neutralisiert (0dca7ce-Regression sonst)");
     assert.ok(html.includes(WING_PNG), "WING_PNG byte-identisch aus wing-image.js eingebettet");
     assert.ok(!html.includes("innerHTML"), "kein innerHTML (XSS-Gate, S1)");
     assert.doesNotMatch(html, /class="dot"/, "anonymer .dot-Indikator durch die Wing-Marke abgeloest");

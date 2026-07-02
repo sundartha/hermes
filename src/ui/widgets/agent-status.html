@@ -6,52 +6,56 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Hermes — Agent Status</title>
 <style>
-  /* Inline-Tokens: 1:1 aus apps/web/src/styles/tokens/primitives.css + semantic.css
-     (kanonische Quelle), self-contained fuer die Iframe-Sandbox - kein externer
-     CSS-Import/Linkback, AC6. */
-  :root {
-    --color-ink-900:#25282b; --color-gray-500:#7e7e7e; --color-gray-150:#ececec;
-    --color-white:#fff; --color-navy-700:#1b4f86; --color-navy-800:#0f2d52;
-    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
-    --radius-card:18px;
-    --shadow-card:0 6px 18px rgba(0,0,0,.07);
-    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
-    --wing-size:28px;
-  }
-  body{margin:0;font-family:var(--font-sans);color:var(--color-ink-900);background:transparent}
-  .card{background:var(--color-white);border:1px solid var(--color-gray-150);
-        border-radius:var(--radius-card);box-shadow:var(--shadow-card);
-        padding:var(--space-4);max-width:420px}
-  .head{display:flex;align-items:center;gap:var(--space-2)}
-  /* Wing-Marke: CSS aus wing-markup.js injiziert (G5/S2 - eine Quelle statt
-     Copy-Paste in 5 Dateien, siehe widget-catalog.js withWingAssets). */
+  /* Gemeinsamer Olympus-HUD-Kartenrahmen (H4, Muster call.html/H3): Tokens,
+     Karten-Chrome, Wing-Mount-Bereich und Fuss kommen aus EINER Quelle
+     (hud-card-css.js), injiziert von widget-catalog.js (withHudCardCss) - G5/S2,
+     dieselben ~35 Zeilen sonst 4x wortgleich in den Read-only-Widgets kopiert. */
+  /*__HUD_CARD_CSS__*/
+  /* Wing-Marke: CSS aus wing-markup.js injiziert (dunkle idle-Auspraegung, H4 -
+     siehe widget-catalog.js WIDGET_DEFS.agent-status.wing). */
   /*__WING_CSS__*/
-  .title{font-weight:600}
-  .sub{color:var(--color-gray-500);font-size:13px}
-  .line{display:flex;justify-content:space-between;margin-top:var(--space-3);
-        padding-top:var(--space-2);border-top:1px solid var(--color-gray-150)}
-  .foot{margin-top:var(--space-3);color:var(--color-gray-500);font-size:12px;
-        display:flex;justify-content:space-between}
+  /* Statische HUD-Zeilen (Schluessel/Wert) - nur dieses Widget braucht sie
+     (kein zweiter Konsument, deshalb lokal statt geteilt, s. hud-card-css.js
+     Kopfkommentar). */
+  .rows{position:relative;z-index:1;display:flex;flex-direction:column}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+    padding:10px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .row-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);white-space:nowrap;flex-shrink:0}
+  .row-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
+    color:rgba(255,255,255,.94);text-align:right}
 </style>
+<!--__WING_ENGINE__-->
 </head>
 <body>
   <div class="card">
-    <div class="head">
-      <!--__WING_MARKUP__-->
-      <span><span class="title" data-mcp="owner">—</span><br />
-      <span class="sub">get_agent_status</span></span>
+    <div class="eyebrow">Hermes · Agent-Status</div>
+    <div class="hero">
+      <div class="wing-wrap">
+        <!--__WING_MARKUP__-->
+        <span class="wing-canvas-mount" data-wing-canvas aria-hidden="true"></span>
+      </div>
+      <span class="phase">Dein KI-Telefonassistent</span>
+      <span class="hero-title" data-mcp="owner">—</span>
     </div>
-    <div class="line"><span>Nummer</span><span data-mcp="number">—</span></div>
-    <div class="line"><span>Voice-Engine</span><span data-mcp="voiceEngine">—</span></div>
-    <div class="line"><span>Modell</span><span data-mcp="model">—</span></div>
-    <div class="line"><span>Calls</span><span data-mcp="calls">—</span></div>
-    <div class="line"><span>KI-Kosten (EUR)</span><span data-mcp="costEur">—</span></div>
-    <div class="line"><span>Budget max. (EUR)</span><span data-mcp="maxBudgetEur">—</span></div>
-    <div class="line"><span>Berechtigungen</span><span data-mcp="permissions">—</span></div>
+    <div class="rows">
+      <div class="row"><span class="row-k">Nummer</span><span class="row-v" data-mcp="number">—</span></div>
+      <div class="row"><span class="row-k">Voice-Engine</span><span class="row-v" data-mcp="voiceEngine">—</span></div>
+      <div class="row"><span class="row-k">Modell</span><span class="row-v" data-mcp="model">—</span></div>
+      <div class="row"><span class="row-k">Calls</span><span class="row-v" data-mcp="calls">—</span></div>
+      <div class="row"><span class="row-k">KI-Kosten (EUR)</span><span class="row-v" data-mcp="costEur">—</span></div>
+      <div class="row"><span class="row-k">Budget max. (EUR)</span><span class="row-v" data-mcp="maxBudgetEur">—</span></div>
+      <div class="row"><span class="row-k">Berechtigungen</span><span class="row-v" data-mcp="permissions">—</span></div>
+    </div>
     <div class="foot"><span data-mcp="number">—</span><span>Hermes</span></div>
   </div>
-  <!-- Read-only Widget (W3): kein Callback, kein Tool-Trigger, kein Button-Element.
-       Das eingefuegte Binding-Script (widget-bind.js, W1) fuellt data-mcp-* aus dem
-       host-gepushten structuredContent (SEP-1865). -->
+  <!-- Read-only Widget (W3/H4): kein Callback, kein Tool-Trigger, kein
+       Button-Element. Das eingefuegte Binding-Script (widget-bind.js, W1)
+       fuellt data-mcp-* aus dem host-gepushten structuredContent (SEP-1865).
+       Der Wing-Canvas-Mount direkt darunter montiert die Engine ruhig im
+       idle-Zustand (H4, H0-Freigabe) - scheitert das, bleibt die CSS-WingMark
+       oben im Markup sichtbar (Fail-Safe, Absolute Regel 3). -->
+  <!--__WING_CANVAS_MOUNT__-->
 </body>
 </html>

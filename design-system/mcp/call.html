@@ -1,0 +1,248 @@
+<!-- @dsCard group="MCP" name="place_call — all 5 states" viewport="1180x1040" subtitle="Unified live call card across its full lifecycle — Olympus HUD, mirrors src/ui/widgets/call.html — DESIGN ONLY" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP place_call — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/preview.css" />
+<style>
+  /* Inline-Tokens + Kartenchrome: 1:1 aus src/ui/widgets/call.html (H3,
+     Olympus-HUD) uebernommen - nicht via @import, die echte Karte ist
+     self-contained und diese Mockup-Kopie spiegelt genau das (kein neuer
+     Wert, keine Duplizierungs-Drift). Fuenf statische Specimens statt einer
+     Self-Poll-Simulation - Kit-Karten zeigen die Zustaende, binden nicht an
+     widget-bind.js (Entscheidung a, H5-Plan). */
+  :root {
+    --color-navy-800:#0f2d52; --color-navy-900:#0a2245; --color-navy-card:#13335c;
+    --color-white:#fff;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --radius-card:22px; --radius-pill:99px;
+    --font-sans:"Space Grotesk","Helvetica Neue",Arial,sans-serif;
+    --ease:cubic-bezier(0.22,1,0.36,1);
+    --wing-size:112px;
+    --color-accent-light:#5ea1e0;
+    --color-accent-light-strong:#8ec2ee;
+    --color-accent-light-rgb:94,161,224;
+    --color-accent-light-glow:rgba(var(--color-accent-light-rgb),.5);
+    --wing-glow-filter:drop-shadow(0 0 22px var(--color-accent-light-glow)) drop-shadow(0 2px 10px rgba(3,10,24,.6));
+  }
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
+  .card{
+    position:relative;max-width:min(540px,100%);padding:26px 28px 22px;
+    border-radius:var(--radius-card);overflow:hidden;
+    background:
+      radial-gradient(120% 90% at 50% -10%, rgba(var(--color-accent-light-rgb),.16) 0%, rgba(var(--color-accent-light-rgb),0) 55%),
+      linear-gradient(165deg, var(--color-navy-card) 0%, var(--color-navy-800) 42%, var(--color-navy-900) 100%);
+    border:1px solid rgba(var(--color-accent-light-rgb),.28);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.06) inset,
+      0 30px 60px -24px rgba(3,10,24,.75),
+      0 0 70px -22px var(--color-accent-light-glow);
+    font-family:var(--font-sans);color:var(--color-white);
+  }
+  .card::after{
+    content:"";position:absolute;inset:0 0 auto 0;height:200px;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 1px, transparent 3px);
+    pointer-events:none;
+    mask-image:linear-gradient(to bottom, rgba(0,0,0,.8), transparent);
+  }
+  .eyebrow{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
+    font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:600}
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-pill);
+    padding:5px 13px;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    border:1px solid rgba(255,255,255,.22)}
+  .pill--active{color:var(--color-accent-light-strong);border-color:rgba(var(--color-accent-light-rgb),.5);
+    background:rgba(var(--color-accent-light-rgb),.1);box-shadow:0 0 18px -6px var(--color-accent-light-glow)}
+  .pill--active .dot{width:6px;height:6px;border-radius:50%;background:var(--color-accent-light-strong);
+    box-shadow:0 0 8px 1px var(--color-accent-light-glow);animation:hermesPillPulse 1.8s var(--ease) infinite}
+  .pill--done{color:#dfeaf7;border-color:rgba(var(--color-accent-light-rgb),.35);background:rgba(var(--color-accent-light-rgb),.14)}
+  .pill--muted{color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.04)}
+  @keyframes hermesPillPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
+  .hero{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 0 24px}
+  .ring-wrap{position:relative;width:168px;height:168px;display:grid;place-items:center}
+  .ring{position:absolute;inset:0;transform:rotate(-90deg)}
+  .ring-track{fill:none;stroke:#fff;stroke-width:1.5;opacity:.14}
+  .ring-arc{fill:none;stroke-width:2.5;stroke-linecap:round}
+  .ring--accent .ring-arc{stroke:var(--color-accent-light)}
+  .ring--accent-strong .ring-arc{stroke:var(--color-accent-light-strong);filter:drop-shadow(0 0 6px var(--color-accent-light-glow))}
+  .ring--accent-solid .ring-arc{stroke:var(--color-accent-light-strong);filter:drop-shadow(0 0 8px var(--color-accent-light-glow))}
+  .ring--muted .ring-arc{stroke:rgba(255,255,255,.4)}
+  .ring--spin{animation:hermesRingSpin 3.4s linear infinite}
+  @keyframes hermesRingSpin{to{transform:rotate(270deg)}}
+  .wing-mount{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  .wing-mount canvas{filter:var(--wing-glow-filter)}
+  .phase{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+  .rows{position:relative;z-index:1;display:flex;flex-direction:column}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+    padding:12px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .row-k{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.5);white-space:nowrap;flex-shrink:0}
+  .row-v{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.94);text-align:right}
+  .row-v.pill-value{background:rgba(var(--color-accent-light-rgb),.14);border:1px solid rgba(var(--color-accent-light-rgb),.3);
+    border-radius:var(--radius-pill);padding:4px 12px;font-size:12.5px}
+  .lines{flex-direction:column;align-items:stretch;gap:6px}
+  .lines .turn{font-size:12.5px;color:rgba(255,255,255,.7);line-height:1.5}
+  .foot{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
+    margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.12)}
+  .id-block{display:flex;align-items:baseline;gap:var(--space-2);font-variant-numeric:tabular-nums}
+  .id-block .call-id{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:.02em}
+  .id-block .status{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.06em;text-transform:uppercase}
+  .hud-cancel{font-family:var(--font-sans);font-size:12.5px;font-weight:700;letter-spacing:.05em;
+    color:rgba(255,255,255,.85);background:transparent;border:1px solid rgba(255,255,255,.25);
+    border-radius:var(--radius-pill);padding:8px 16px}
+  @media (prefers-reduced-motion: reduce) {
+    .ring--spin{animation:none}
+    .pill--active .dot{animation:none}
+  }
+</style>
+</head>
+<body class="ds">
+<div class="ds-frame">
+  <p class="ds-note">Mockup. Mirrors the live call.html widget in all 5 lifecycle states — colors/radii/typography copied verbatim.</p>
+  <div class="grid">
+
+    <!-- dialing -->
+    <div class="card">
+      <div class="eyebrow">
+        <span>Hermes · Call</span>
+        <span class="pill pill--active"><span class="dot"></span><span>Connecting</span></span>
+      </div>
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg class="ring ring--spin ring--accent" width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
+            <circle class="ring-track" cx="84" cy="84" r="74" />
+            <circle class="ring-arc" cx="84" cy="84" r="74" stroke-dasharray="110 355" />
+          </svg>
+          <span class="wing-mount" data-wing data-status="connecting"></span>
+        </div>
+        <span class="phase">Placing the call</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="row-k">Duration</span><span class="row-v">00:03</span></div>
+      </div>
+      <div class="foot">
+        <span class="id-block"><span class="call-id">call_mqmpvuzz1079</span><span class="status">dialing</span></span>
+        <button type="button" class="hud-cancel">Cancel call</button>
+      </div>
+    </div>
+
+    <!-- in_progress -->
+    <div class="card">
+      <div class="eyebrow">
+        <span>Hermes · Call</span>
+        <span class="pill pill--active"><span class="dot"></span><span>Live</span></span>
+      </div>
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg class="ring ring--spin ring--accent-strong" width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
+            <circle class="ring-track" cx="84" cy="84" r="74" />
+            <circle class="ring-arc" cx="84" cy="84" r="74" stroke-dasharray="270 195" />
+          </svg>
+          <span class="wing-mount" data-wing data-status="working"></span>
+        </div>
+        <span class="phase">On the call</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="row-k">Duration</span><span class="row-v">00:41</span></div>
+        <div class="row lines">
+          <div class="turn">Salon Bella, guten Tag.</div>
+          <div class="turn">Ich haette gern einen Termin am Donnerstagnachmittag.</div>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="id-block"><span class="call-id">call_mqmpvuzz1079</span><span class="status">in_progress</span></span>
+        <button type="button" class="hud-cancel">Cancel call</button>
+      </div>
+    </div>
+
+    <!-- completed -->
+    <div class="card">
+      <div class="eyebrow">
+        <span>Hermes · Call</span>
+        <span class="pill pill--done">Completed</span>
+      </div>
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg class="ring ring--accent-solid" width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
+            <circle class="ring-track" cx="84" cy="84" r="74" />
+            <circle class="ring-arc" cx="84" cy="84" r="74" stroke-dasharray="465 0" />
+          </svg>
+          <span class="wing-mount" data-wing data-status="success"></span>
+        </div>
+        <span class="phase">Call ended</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="row-k">Duration</span><span class="row-v">02:41</span></div>
+        <div class="row"><span class="row-k">Result</span><span class="row-v pill-value">Haircut booked, Thu 14:30</span></div>
+        <div class="row"><span class="row-k">Objective achieved</span><span class="row-v pill-value">Yes</span></div>
+      </div>
+      <div class="foot">
+        <span class="id-block"><span class="call-id">call_mqmpvuzz1079</span><span class="status">completed</span></span>
+      </div>
+    </div>
+
+    <!-- failed -->
+    <div class="card">
+      <div class="eyebrow">
+        <span>Hermes · Call</span>
+        <span class="pill pill--muted">Failed</span>
+      </div>
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg class="ring ring--muted" width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
+            <circle class="ring-track" cx="84" cy="84" r="74" />
+            <circle class="ring-arc" cx="84" cy="84" r="74" stroke-dasharray="37 23" />
+          </svg>
+          <span class="wing-mount" data-wing data-status="error"></span>
+        </div>
+        <span class="phase">Call ended</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="row-k">Duration</span><span class="row-v">00:12</span></div>
+        <div class="row"><span class="row-k">Reason</span><span class="row-v pill-value">Number busy</span></div>
+      </div>
+      <div class="foot">
+        <span class="id-block"><span class="call-id">call_mqmpvuzz1080</span><span class="status">failed</span></span>
+      </div>
+    </div>
+
+    <!-- cancelled -->
+    <div class="card">
+      <div class="eyebrow">
+        <span>Hermes · Call</span>
+        <span class="pill pill--muted">Cancelled</span>
+      </div>
+      <div class="hero">
+        <div class="ring-wrap">
+          <svg class="ring ring--muted" width="168" height="168" viewBox="0 0 168 168" aria-hidden="true">
+            <circle class="ring-track" cx="84" cy="84" r="74" />
+            <circle class="ring-arc" cx="84" cy="84" r="74" stroke-dasharray="37 23" />
+          </svg>
+          <span class="wing-mount" data-wing data-status="error"></span>
+        </div>
+        <span class="phase">Call ended</span>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="row-k">Duration</span><span class="row-v">00:05</span></div>
+      </div>
+      <div class="foot">
+        <span class="id-block"><span class="call-id">call_mqmpvuzz1081</span><span class="status">cancelled</span></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script src="../components/brand/wing-engine.js"></script>
+<script>
+  // Statische Specimens (kein Self-Poll/keine Terminal-Erkennung, Entscheidung a
+  // des H5-Plans) - jede Karte wird einmalig mit ihrem festen Status gemountet.
+  // Statuswerte 1:1 aus STATUS_VIEW.wingStatus (src/ui/widgets/call.html).
+  Array.prototype.forEach.call(document.querySelectorAll("[data-wing]"), function (el) {
+    HermesWingEngine.mount(el, {
+      size: 112, status: el.getAttribute("data-status"), textureUrl: "../assets/logos/hermes-wing.png",
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!-- @dsCard group="MCP" name="list_calls" subtitle="Recent inbound & outbound calls — Olympus HUD, mirrors src/ui/widgets/calls.html — DESIGN ONLY" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP list_calls — Hermes Design System</title>
+<link rel="stylesheet" href="../_shared/preview.css" />
+<link rel="stylesheet" href="../_shared/hud-card.css" />
+<style>
+  /* Kartenchrome (Tokens/.card/.eyebrow/.hero/.wing-wrap/.phase/.hero-title/
+     .foot) kommt aus ../_shared/hud-card.css (EINE Quelle statt 4x Kopie,
+     G5/S2-Fix) - 1:1 aus src/ui/hud-card-css.js. Hier nur die .list-Basis +
+     feldspezifischen Overrides ([data-field=...]) 1:1 aus
+     src/ui/widgets/calls.html. */
+  .list{position:relative;z-index:1;display:flex;flex-direction:column}
+  .list .row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;
+    padding:11px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .list .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .list .cell{color:rgba(255,255,255,.85)}
+  .cell[data-field="direction"]{font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.22);
+    border-radius:var(--radius-pill);padding:2px 9px}
+  .cell[data-field="counterparty"]{font-weight:600;color:rgba(255,255,255,.94)}
+  .cell[data-field="status"]{color:var(--color-accent-light-strong);font-size:12px}
+  .cell[data-field="startedAt"]{margin-left:auto;color:rgba(255,255,255,.45);
+    font-size:11.5px;font-variant-numeric:tabular-nums}
+  .cell[data-field="summary"]{flex-basis:100%;color:rgba(255,255,255,.55);font-size:12.5px}
+</style>
+</head>
+<body class="ds">
+<div class="ds-frame ds-frame--narrow">
+  <p class="ds-note">Mockup. Mirrors src/ui/widgets/calls.html — same field order/colors per row.</p>
+  <div class="card">
+    <div class="eyebrow">Hermes · Recent calls</div>
+    <div class="hero">
+      <div class="wing-wrap">
+        <span class="wing-mount" data-wing data-status="idle"></span>
+      </div>
+      <span class="phase">list_calls</span>
+      <span class="hero-title">Recent calls</span>
+    </div>
+    <div class="list">
+      <div class="row">
+        <span class="cell" data-field="direction">Outbound</span>
+        <span class="cell" data-field="counterparty">Salon Bella</span>
+        <span class="cell" data-field="status">Completed</span>
+        <span class="cell" data-field="startedAt">Thu 14:28</span>
+        <span class="cell" data-field="summary">Haircut booked, Thu 14:30</span>
+      </div>
+      <div class="row">
+        <span class="cell" data-field="direction">Inbound</span>
+        <span class="cell" data-field="counterparty">+49 30 55512345</span>
+        <span class="cell" data-field="status">Completed</span>
+        <span class="cell" data-field="startedAt">Wed 09:14</span>
+        <span class="cell" data-field="summary">Message taken for the owner</span>
+      </div>
+    </div>
+    <div class="foot"><span>Hermes</span></div>
+  </div>
+</div>
+<script src="../components/brand/wing-engine.js"></script>
+<script>
+  HermesWingEngine.mount(document.querySelector("[data-wing]"), {
+    size: 86, status: "idle", textureUrl: "../assets/logos/hermes-wing.png",
+  });
+</script>
+</body>
+</html>

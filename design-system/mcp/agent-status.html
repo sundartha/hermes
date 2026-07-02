@@ -1,39 +1,55 @@
-<!-- @dsCard group="MCP (Mockup)" name="get_agent_status" subtitle="Number, engine, usage & budget — DESIGN ONLY" -->
+<!-- @dsCard group="MCP" name="get_agent_status" subtitle="Number, engine, usage & budget — Olympus HUD, mirrors src/ui/widgets/agent-status.html — DESIGN ONLY" -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>MCP get_agent_status — Hermes Design System</title>
-<link rel="stylesheet" href="../_shared/tokens.css" />
 <link rel="stylesheet" href="../_shared/preview.css" />
+<link rel="stylesheet" href="../_shared/hud-card.css" />
+<style>
+  /* Kartenchrome (Tokens/.card/.eyebrow/.hero/.wing-wrap/.phase/.hero-title/
+     .foot) kommt aus ../_shared/hud-card.css (EINE Quelle statt 4x Kopie,
+     G5/S2-Fix) - 1:1 aus src/ui/hud-card-css.js. Hier nur die fuer diese
+     Karte lokalen Schluessel/Wert-Zeilen (kein zweiter Konsument). */
+  .rows{position:relative;z-index:1;display:flex;flex-direction:column}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
+    padding:10px 2px;border-top:1px solid rgba(255,255,255,.09)}
+  .row:first-child{border-top:1px solid rgba(255,255,255,.16)}
+  .row-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);white-space:nowrap;flex-shrink:0}
+  .row-v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
+    color:rgba(255,255,255,.94);text-align:right}
+</style>
 </head>
 <body class="ds">
 <div class="ds-frame ds-frame--narrow">
-  <p class="ds-note"><strong>Mockup.</strong> Design proposal for the agent overview card.</p>
-  <div class="mcp-card">
-    <div class="mcp-card__head">
-      <span class="mcp-card__icon" id="wing-icon" style="width:52px;height:52px;overflow:hidden;background:radial-gradient(120% 120% at 30% 0%,#1b4f86 0%,#0f2d52 72%)"></span>
-      <span class="mcp-card__head-body">
-        <span class="mcp-card__title">Hermes</span>
-        <span class="mcp-card__sub">get_agent_status</span>
-      </span>
-      <span class="ds-row" style="gap: var(--space-tight); font-size: var(--text-eyebrow); color: var(--color-status-positive)"><span class="live-dot"></span> Online</span>
+  <p class="ds-note">Mockup. Mirrors src/ui/widgets/agent-status.html — same fields, same order.</p>
+  <div class="card">
+    <div class="eyebrow">Hermes · Agent status</div>
+    <div class="hero">
+      <div class="wing-wrap">
+        <span class="wing-mount" data-wing data-status="idle"></span>
+      </div>
+      <span class="phase">Your AI phone agent</span>
+      <span class="hero-title">Hermes</span>
     </div>
-    <div class="mcp-card__body">
-      <div class="mcp-line"><span class="mcp-line__key">Number</span><span class="mcp-line__val">+1 864 302 8341 · Telnyx</span></div>
-      <div class="mcp-line"><span class="mcp-line__key">Engine</span><span class="mcp-line__val">Budget (Gather/STT)</span></div>
-      <div class="mcp-line"><span class="mcp-line__key">Today</span><span class="mcp-line__val">3 calls · 11 min</span></div>
-      <div class="mcp-line"><span class="mcp-line__key">Budget</span><span class="mcp-line__val">€2.10 / €10.00</span></div>
+    <div class="rows">
+      <div class="row"><span class="row-k">Number</span><span class="row-v">+1 864 302 8341</span></div>
+      <div class="row"><span class="row-k">Voice engine</span><span class="row-v">Budget (Gather/STT)</span></div>
+      <div class="row"><span class="row-k">Model</span><span class="row-v">claude-haiku-4-5</span></div>
+      <div class="row"><span class="row-k">Calls</span><span class="row-v">3</span></div>
+      <div class="row"><span class="row-k">AI cost (EUR)</span><span class="row-v">€2.10</span></div>
+      <div class="row"><span class="row-k">Max budget (EUR)</span><span class="row-v">€10.00</span></div>
+      <div class="row"><span class="row-k">Permissions</span><span class="row-v">Kalender=true, Buchen=true, Summaries=true, PersoenlicheDaten=false, Bankdaten=false</span></div>
     </div>
-    <div class="mcp-card__foot"><span>Outbound: allowed</span><span>KYC: card</span></div>
+    <div class="foot"><span>+1 864 302 8341</span><span>Hermes</span></div>
   </div>
 </div>
 <script src="../components/brand/wing-engine.js"></script>
 <script>
-  // get_agent_status · Online -> the wing hovers, quietly alive (idle)
-  HermesWingEngine.mount(document.getElementById("wing-icon"), {
-    size: 52, status: "idle", textureUrl: "../assets/logos/hermes-wing.png",
+  HermesWingEngine.mount(document.querySelector("[data-wing]"), {
+    size: 86, status: "idle", textureUrl: "../assets/logos/hermes-wing.png",
   });
 </script>
 </body>
