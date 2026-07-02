@@ -72,7 +72,13 @@ function makeFakeDocument() {
   for (const name of SLOT_NAMES) bySelector.set(`[data-mcp="${name}"]`, makeFakeElement());
   for (const name of ROW_NAMES) bySelector.set(`[data-row="${name}"]`, makeFakeElement());
   bySelector.set("[data-cancel]", makeFakeElement());
-  bySelector.set("[data-wing]", makeFakeElement());
+  const wingEl = makeFakeElement();
+  // Reales Markup (wingSpan(), src/ui/wing-markup.js) startet dunkel+idle -
+  // updateWingForStatus haengt nur noch den Status-Modifier-Token um statt die
+  // komplette Klasse zu ueberschreiben (H3-Fix), die Fake muss deshalb densel-
+  // ben Startzustand wie das echte DOM abbilden (s. T-W1-call-AC-wing-static).
+  wingEl.className = "wing wing--dark wing--idle";
+  bySelector.set("[data-wing]", wingEl);
   // H3 (Olympus-HUD): Wing-Canvas-Mount-Container + das <img> innerhalb der
   // CSS-WingMark (mountWingEngine liest dessen .src als Engine-Bildquelle).
   // Wirkungslos fuer alle Bestandstests, da diese nie window.HermesWingCanvas
@@ -92,7 +98,7 @@ function makeFakeDocument() {
   ringSvg.setAttribute = function (attr, value) { if (attr === "class") this.className = value; };
   bySelector.set("[data-ring]", ringSvg);
   const ringArc = makeFakeElement();
-  ringArc.setAttribute = function () {};
+  ringArc.setAttribute = function (attr, value) { if (attr === "stroke-dasharray") this.strokeDasharray = value; };
   bySelector.set("[data-ring-arc]", ringArc);
   return {
     querySelector: (sel) => bySelector.get(sel) || null,
@@ -101,6 +107,9 @@ function makeFakeDocument() {
     row: (name) => bySelector.get(`[data-row="${name}"]`),
     cancelButton: () => bySelector.get("[data-cancel]"),
     wing: () => bySelector.get("[data-wing]"),
+    hudPhase: () => bySelector.get("[data-hud-phase]"),
+    ring: () => bySelector.get("[data-ring]"),
+    ringArc: () => bySelector.get("[data-ring-arc]"),
   };
 }
 
@@ -472,6 +481,54 @@ test("T-W1-call-AC-status-pill: deutsche Status-Pill-Uebersetzung ueber alle 5 S
       params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
     assert.equal(doc.querySelector("[data-status-label]").textContent, expectedLabel, `Status ${status} -> ${expectedLabel}`);
   }
+});
+
+test("T-W1-call-AC-hud-ring: Status -> HUD-Phasentext (HUD_PHASE_LABEL) + Status -> Ring-Erscheinung (RING_PRESET_BY_CALL_STATUS: Klasse+dasharray) ueber alle 5 Status", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  doc.slot("call_id").textContent = "call_1";
+
+  // Spiegelbild der Konstanten aus call.html (RING_RADIUS_PX/RING_ARC_*_PX) -
+  // Kreuzpruefung von RING_RADIUS_PX gegen das ausgelieferte SVG-Markup siehe
+  // T-W1-call-AC-hud-ring-sync (kein stiller Drift zwischen JS und SVG).
+  const RING_RADIUS_PX = 74;
+  const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
+  const RING_ARC_DIALING_PX = 110;
+  const RING_ARC_IN_PROGRESS_PX = 270;
+  const RING_ARC_INTERRUPTED_DASH_PX = 37;
+  const RING_ARC_INTERRUPTED_GAP_PX = 23;
+
+  const statusToExpectation = [
+    ["dialing", "Anruf wird platziert", "ring ring--spin ring--accent",
+      `${RING_ARC_DIALING_PX} ${RING_CIRCUMFERENCE - RING_ARC_DIALING_PX}`],
+    ["in_progress", "Im Gespraech", "ring ring--spin ring--accent-strong",
+      `${RING_ARC_IN_PROGRESS_PX} ${RING_CIRCUMFERENCE - RING_ARC_IN_PROGRESS_PX}`],
+    ["completed", "Anruf beendet", "ring ring--accent-solid", `${RING_CIRCUMFERENCE} 0`],
+    ["failed", "Anruf beendet", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
+    ["cancelled", "Anruf beendet", "ring ring--muted", `${RING_ARC_INTERRUPTED_DASH_PX} ${RING_ARC_INTERRUPTED_GAP_PX}`],
+  ];
+
+  for (const [status, expectedPhase, expectedRingClass, expectedDash] of statusToExpectation) {
+    env.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
+      params: { structuredContent: { call_id: "call_1", status, duration_s: 1, last_transcript_lines: [], failure_reason: null } } });
+    assert.equal(doc.hudPhase().textContent, expectedPhase, `HUD-Phase bei ${status}`);
+    assert.equal(doc.ring().className, expectedRingClass, `Ring-Klasse bei ${status}`);
+    assert.equal(doc.ringArc().strokeDasharray, expectedDash, `Ring-dasharray bei ${status}`);
+  }
+});
+
+test("T-W1-call-AC-hud-ring-sync: JS-Konstanten (WING_CANVAS_SIZE_PX, RING_RADIUS_PX) decken sich mit CSS/SVG (kein stiller Drift zwischen den Sprachschichten)", () => {
+  const html = widgetHtml("call");
+
+  const cssWingSize = Number((html.match(/--wing-size:(\d+)px/) || [])[1]);
+  const jsWingSize = Number((html.match(/WING_CANVAS_SIZE_PX\s*=\s*(\d+)/) || [])[1]);
+  assert.ok(cssWingSize > 0 && jsWingSize > 0, "beide Werte im ausgelieferten HTML gefunden");
+  assert.equal(jsWingSize, cssWingSize, "Canvas-Mount-Groesse (JS WING_CANVAS_SIZE_PX) = --wing-size (CSS)");
+
+  const svgRadii = [...html.matchAll(/<circle[^>]*\br="(\d+)"/g)].map((m) => Number(m[1]));
+  const jsRingRadius = Number((html.match(/RING_RADIUS_PX\s*=\s*(\d+)/) || [])[1]);
+  assert.equal(svgRadii.length, 2, "beide SVG-Kreise (Track+Arc) gefunden");
+  assert.ok(svgRadii.every((r) => r === jsRingRadius), "SVG r-Attribut (beide Kreise) = RING_RADIUS_PX (JS)");
 });
 
 test("T-W1-call-AC-size: ausgeliefertes call.html bleibt unter dem 260KB-Budget", () => {

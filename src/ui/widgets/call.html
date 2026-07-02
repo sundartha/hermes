@@ -26,6 +26,10 @@
     --color-accent-light:#5ea1e0;
     --color-accent-light-strong:#8ec2ee;
     --color-accent-light-glow:rgba(94,161,224,.5);
+    /* Ein Glow-Filter fuer beide Wing-Darstellungspfade (CSS-Fallback +
+       Canvas-Engine-Mount) - EINE Quelle statt wortgleicher Duplizierung
+       (G5/S2), s. [data-wing] und .wing-canvas-mount canvas unten. */
+    --wing-glow-filter:drop-shadow(0 0 22px var(--color-accent-light-glow)) drop-shadow(0 2px 10px rgba(3,10,24,.6));
   }
   body{margin:0;font-family:var(--font-sans);color:var(--color-white);background:transparent}
   .card{
@@ -78,9 +82,9 @@
      widget-catalog.js WIDGET_DEFS.call.wing). Statuswechsel bleibt ein
      Klassenwechsel (Fallback), Canvas-Engine ersetzt sie progressiv (s. Skript). */
   /*__WING_CSS__*/
-  [data-wing]{filter:drop-shadow(0 0 22px var(--color-accent-light-glow)) drop-shadow(0 2px 10px rgba(3,10,24,.6));position:relative;z-index:2}
+  [data-wing]{filter:var(--wing-glow-filter);position:relative;z-index:2}
   .wing-canvas-mount{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-  .wing-canvas-mount canvas{filter:drop-shadow(0 0 22px var(--color-accent-light-glow)) drop-shadow(0 2px 10px rgba(3,10,24,.6))}
+  .wing-canvas-mount canvas{filter:var(--wing-glow-filter)}
   .phase{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.55)}
   .rows{position:relative;z-index:1;display:flex;flex-direction:column}
   .row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
@@ -218,8 +222,29 @@
       cancelled: "error",
     };
 
+    // Alle moeglichen Wing-Status-Modifier-Klassen ("wing--idle", "wing--connecting",
+    // ...), aus WING_STATUS_IDLE + WING_STATUS_BY_CALL_STATUS abgeleitet statt ein
+    // zweites Mal hartcodiert - dedupliziert, da mehrere Call-Status auf denselben
+    // Wing-Status faellen (cancelled -> error, s.o.). updateWingForStatus nutzt diese
+    // Liste, um NUR den Status-Teil der Klasse zu wechseln (s. dort).
+    var WING_MODIFIER_CLASSES = (function collectWingModifierClasses() {
+      var seen = {};
+      var classes = [];
+      var values = [WING_STATUS_IDLE];
+      for (var key in WING_STATUS_BY_CALL_STATUS) values.push(WING_STATUS_BY_CALL_STATUS[key]);
+      for (var i = 0; i < values.length; i++) {
+        var cls = "wing--" + values[i];
+        if (!seen[cls]) {
+          seen[cls] = true;
+          classes.push(cls);
+        }
+      }
+      return classes;
+    })();
+
     // Fluegel-Held (Olympus-HUD, H3): Mount-Groesse der Canvas-Engine, deckt sich
-    // mit --wing-size im CSS oben.
+    // mit --wing-size im CSS oben - Kreuzpruefung gegen Drift siehe Test
+    // T-W1-call-AC-hud-ring-sync (test/mcp-ui-w1-call-widget.test.js).
     var WING_CANVAS_SIZE_PX = 112;
 
     var doc = document;
@@ -262,6 +287,20 @@
       btn.style.display = disabled ? "none" : "";
     }
 
+    // className-Token-Helfer (kein DOM-classList-Zwang - funktioniert mit jedem
+    // Element, das nur .className als String kennt). Ersetzen GENAU ein Token,
+    // ruehren den Rest der Klasse nicht an (s. updateWingForStatus).
+    function removeClassToken(el, token) {
+      var classes = (el.className || "").split(/\s+/).filter(function (c) { return c && c !== token; });
+      el.className = classes.join(" ");
+    }
+
+    function addClassToken(el, token) {
+      var classes = (el.className || "").split(/\s+/).filter(Boolean);
+      if (classes.indexOf(token) === -1) classes.push(token);
+      el.className = classes.join(" ");
+    }
+
     // Reine Status-Uebersetzung, keine DOM-Beruehrung (Command-Query-Trennung, P5).
     function wingStatusFor(status) {
       return WING_STATUS_BY_CALL_STATUS[status] || WING_STATUS_IDLE;
@@ -271,13 +310,19 @@
     // CSS-Wrapper (Fallback-Pfad, Absolute Regel 3/Kette-Invariante T2) UND,
     // falls die Canvas-Engine erfolgreich montiert wurde, ZUSAETZLICH
     // engineHandle.setStatus() (H3, PLAN 6.2) - beide Pfade laufen immer
-    // parallel, kein Entweder-Oder. wing--dark bleibt fest Teil der Klasse: die
-    // Olympus-HUD-Karte ist immer dunkel, ohne den Modifier kaeme die navy
-    // Rundmarke bei jedem Statuswechsel zurueck (Regression von Commit 0dca7ce).
+    // parallel, kein Entweder-Oder. Wechselt NUR den Status-Modifier-Token
+    // (remove alter/add neuer wing--<status>-Klasse) statt den kompletten
+    // className zu ueberschreiben - die von wingSpan() gesetzte "wing--dark"-
+    // Klasse (Olympus-HUD-Karte ist immer dunkel) bleibt dadurch unangetastet
+    // und muss hier nicht ein zweites Mal hartcodiert werden (sonst Regression
+    // von Commit 0dca7ce bei jeder Aenderung an wing-markup.js).
     function updateWingForStatus(status) {
       var mapped = wingStatusFor(status);
       var wing = doc.querySelector("[data-wing]");
-      if (wing) wing.className = "wing wing--dark wing--" + mapped;
+      if (wing) {
+        for (var i = 0; i < WING_MODIFIER_CLASSES.length; i++) removeClassToken(wing, WING_MODIFIER_CLASSES[i]);
+        addClassToken(wing, "wing--" + mapped);
+      }
       if (engineHandle) engineHandle.setStatus(mapped);
     }
 
@@ -318,7 +363,7 @@
     // Fortschritts-Prozentsatz in den Slots verfuegbar - kurzer/wandernder Bogen
     // bei dialing/in_progress (CSS-Rotation via ring--spin), geschlossener Ring
     // bei completed, unterbrochener gedaempfter Ring bei failed/cancelled.
-    var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup
+    var RING_RADIUS_PX = 74; // deckt sich mit r="74" im SVG-Markup, s. T-W1-call-AC-hud-ring-sync
     var RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS_PX;
     var RING_ARC_DIALING_PX = 110;
     var RING_ARC_IN_PROGRESS_PX = 270;
