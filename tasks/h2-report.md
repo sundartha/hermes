@@ -1,56 +1,94 @@
-# H2 — Wing-Canvas-Engine produktisieren — Report
+# Phase H2 — Wing-Canvas-Engine produktisieren
 
-## Ergebnis
+**Ziel:** self-contained Mesh-Wing-Engine (Canvas2D) fuer MCP-UI-Widgets produktionsreif machen, ohne bestehende Widgets/Server-Verhalten anzufassen.
 
-Gate: implementiert exakt gemaess Plan, 2 dokumentierte Abweichungen (siehe unten), 1501/1501 Tests gruen (1493 Baseline + 8 neu: 3 Sync/No-Network/Size + 3 Injektion + 2 Dark-Dedup).
+- **Gate:** BLOCKED
+- **finalBranch:** `phase/h2-wing-canvas-engine-fix2`
+- **headCommit:** `3bca4067ab457035093256da6ecf3c609b4de604`
 
-## Umgesetzt
+## Plan (gekuerzt)
 
-1. **`design-system/components/brand/wing-canvas-engine.js`** (neu, 25294 Bytes = ~24,7KB, unter dem 25KB-Budget mit ~306 Bytes Marge): Portierung des H0-Spikes (`h0-engine.js`, 20153 Bytes) zu einer Canvas2D-Dreiecksnetz-Engine. Ported 1:1: Geometrie/Gains-Konstanten, `smoothstep`/`buildWeights`/`deform`, `restState`/`REST_CHANNELS`, Easings (`powerEase`/`sineEase`/`elasticOut`/`parseEase`), Mini-Timeline-Runtime (`Timeline` + Prototyp, `timeline()`), Presets (`classicCycle`/`olympianCycle`), Status-Timelines (`buildIdle`/`buildConnecting`/`buildSuccess`/`buildError`), Triangle-Mapping (`pushOut`/`drawTriangle`). NICHT portiert (kein Aufrufer, G9): `renderOnce`, `onFps`, `setPreset`, `status`-Getter — Handle-API ist exakt `{setStatus, destroy}`.
-   - Neue H2-Produktionskonstanten: `HERMES_GOLD`, `GOLD_ENABLED=false`, `GOLD_STRENGTH`, `GOLD_PULSE_GAIN`, `GOLD_RGB` (berechnet via `hexToRgb`, kein Literal), `FPS_CAP_DEFAULT=30`, `GRID_FINE={16,24}`, `GRID_COARSE={8,12}`, `COARSE_MAX_SIZE_PX=96`, `DPR_CAP=2`, `DEFAULT_SIZE_PX=112`, `DEFAULT_STATUS`, `DEFAULT_PRESET`, `WORKING_LOOP_PAUSE_SEC=0.12`, `TAB_SWITCH_DT_CAP_SEC=0.1`, `INTERSECTION_THRESHOLD=0.02`, `TERMINAL_WING_STATUSES`.
-   - Neue Funktionen: `hexToRgb`, `defaultGrid(size)`, `buildDeformContext(img, grid)` (ausgelagert aus `mount()`, G30/G34), `goldTintAlpha(state)`.
-   - `mount(host, opts)`: sofortige Canvas-Dimensionierung (kein Jank vor Bild-Load), Bild-Load-Wiring (`img.onload` baut `dctx`), Frame-Cap-Akkumulator (`frameBudgetSec`), Terminal-Stop bei success/error (`TERMINAL_WING_STATUSES`), Visibility-Gating (`IntersectionObserver` + `visibilitychange`), reduced-motion-Fallback (statische Ruhepose, KEINE rAF-Schleife), optionaler Gold-Post-Tint (`applyGoldTint`, `source-atop`-Compositing, ein `fillRect` nach den Dreiecken).
-   - `opts.preset` (`"classic"`|`"olympian"`, Default `classic`) macht `olympianCycle` erreichbar, ohne dass H2 selbst einen Konsumenten braucht (Plan §0).
-   - `opts.gold` (Instanz-Ebene) mit `effectiveGold = GOLD_ENABLED && !!opts.gold` — solange `GOLD_ENABLED=false` (Owner-Gate, Quell-Ebene), wirkungslos, also fail-closed/Default-AUS.
-2. **`src/ui/wing-canvas-engine.js`** (neu): exakte Byte-Kopie (`cp`), Sync-Test verifiziert.
-3. **`src/ui/wing-markup.js`**: 4 neue Exporte `WING_CSS_DARK_STATIC`/`WING_CSS_DARK_LIVE`/`WING_MARKUP_DARK_STATIC`/`WING_MARKUP_DARK_LIVE` additiv; `wingSpan` auf Options-Objekt (`{dark, live}`) refaktoriert, bestehende 4 Exporte byte-identisch (per Test verifiziert, `T-wing-dedup-output-*`/`T-wing-dedup-variants` weiterhin gruen).
-4. **`src/ui/widget-catalog.js`**: `withWingEngine(html)` (exportiert) fuegt die Engine an ihrem Platzhalter (`<!--__WING_ENGINE__-->`) ein, defensiv NICHT angehaengt falls fehlend (heute alle 5 Widgets — H3/H4 fuehren den Platzhalter erst ein). `WIDGET_DEFS` unveraendert (kein neues Widget, keine geaenderten `wing`-Zuordnungen).
-5. Tests: `test/mcp-ui-wing-canvas-sync.test.js` (neu, 3 Tests: Byte-Sync, No-Network, Groessenbudget), `test/mcp-ui-wing-canvas-injection.test.js` (neu, 3 Tests: Injektion via synthetisches Fixture, P13), `test/mcp-ui-wing-dedup.test.js` (additiv, +2 Tests fuer die dark-Varianten).
+Portierung des H0-Spikes (Geometrie/Gains, Mini-Timeline-Runtime, Presets `classic`/`olympian`, Status-Timelines) aus dem Hermes Animation Lab in eine self-contained Canvas2D-Engine, die direkt in MCP-UI-Widgets eingebettet werden kann (kein externes Laden, kein Netzwerkzugriff, kein Framework-Dep). Zwei byte-identische Kopien:
 
-## Verifikation (Kommandos aus Plan §6)
+- `design-system/components/brand/wing-canvas-engine.js` (Authoring-Quelle)
+- `src/ui/wing-canvas-engine.js` (Laufzeit-Kopie, von den Widgets tatsaechlich geladen)
 
-- `node --check` auf allen 7 betroffenen/neuen Dateien: alle OK.
-- `grep -nE "https?://"` + `grep -n "@import"` auf beiden Engine-Kopien: leer (kein Match) — self-contained bestaetigt.
-- `diff design-system/.../wing-canvas-engine.js src/ui/wing-canvas-engine.js`: leer (byte-identisch).
-- `wc -c design-system/.../wing-canvas-engine.js`: 25294 Bytes (<= 25600 Budget).
-- `git diff master -- src/ui/widget-bind.js`: leer (bindByteIdentical bestaetigt).
-- `npm test`: **1501/1501 gruen, 0 fail** (1493 Baseline + 8 neu).
-- Verboten laut Auftrag geblieben unangetastet: `src/server.js`, `src/mcp-tools.js`, `src/claude.js`, `src/bridge.js`, `src/ui/widgets/*.html`, `apps/hermes-animation-lab/` — `git diff --stat master` auf diesen Pfaden ist leer.
+Produktionsverhalten obendrauf gegenueber dem Spike: Frame-Cap (`FPS_CAP_DEFAULT=30`), Visibility-Gating (IntersectionObserver + `visibilitychange`), Terminal-Stop bei `success`/`error`, `prefers-reduced-motion`-Fallback (keine rAF-Schleife, ein statisches Render), optionaler Gold-Post-Tint hinter einem Owner-Gate (`GOLD_ENABLED=false`, fail-closed). Groessenbudget der Engine-Datei: 25 KB (im Review als `25*1024`-Bytes interpretiert). Additiv in `src/ui/wing-markup.js`: vier neue dunkle Wing-Varianten fuer eine kommende Olympus-HUD-Karte, ohne die vier bestehenden hellen Exporte zu veraendern. Additiv in `src/ui/widget-catalog.js`: eine neue `withWingEngine()`-Injektionsfunktion nach dem etablierten Platzhalter-Muster (`withBindScript`/`withWingAssets`), die H2 selbst noch in keinem der 5 echten Widgets verdrahtet (das ist H3/H4). Vorgabe bei Ueberschreiten des Groessenbudgets: Kommentare straffen, nicht Logik kuerzen. Harte Nebenbedingung: `src/ui/widget-bind.js` bleibt byte-identisch zu `master`, keine Aenderung an bestehenden Widgets/Server/Claude-Logik/Bridge/Animation-Lab.
 
-## H0-Bezug (Perf, Report-Pflicht laut Chain)
+## Impl + Abweichungen
 
-H0-Messwerte (aus Spike-Benchmark, kein neues Live-Profiling in H2 noetig — H2 fuegt keinen gerenderten Aufrufer hinzu):
-- 112px / Grid 16x24: median 0,40ms/Frame → `GRID_FINE = {x:16, y:24}`.
-- 86px / Grid 8x12: median 0,10ms/Frame → `GRID_COARSE = {x:8, y:12}`.
-- Schwelle 86px ≤ 96px → coarse, 112px > 96px → fine → `COARSE_MAX_SIZE_PX = 96`.
-- 5 gleichzeitige Wings: ~0,8ms/Frame gesamt → `FPS_CAP_DEFAULT = 30` traegt bequem.
-Die H2-Konstanten entsprechen den H0-Entscheidungsregeln 1:1 (keine Abweichung).
+- **Tests:** 1501/1501 gruen (1493 Baseline + 8 neu) zum Zeitpunkt des Erst-Commits; `node --check` auf allen 7 betroffenen Dateien ok.
+- **Engine-Groesse:** 25294 Bytes (unter dem 25 KB-Budget), im spaeteren Fix-r2 auf 25529 Bytes gewachsen (siehe Fix-Runden).
+- **Bind-Byte-Identitaet:** `src/ui/widget-bind.js` byte-identisch zu `master` bestaetigt.
+- **Neue Dateien:**
+  - `design-system/components/brand/wing-canvas-engine.js`
+  - `src/ui/wing-canvas-engine.js`
+  - `test/mcp-ui-wing-canvas-sync.test.js`
+  - `test/mcp-ui-wing-canvas-injection.test.js`
+  - `tasks/h2-report.md` (im Worktree; dieser Bericht hier ist die Version fuer das Haupt-Repo)
+- **Editierte Dateien:**
+  - `src/ui/wing-markup.js` (additiv: 4 neue dunkle Wing-Varianten)
+  - `src/ui/widget-catalog.js` (additiv: `withWingEngine()`)
+  - `test/mcp-ui-wing-dedup.test.js` (additive Ergaenzung, 8 neue Tests insgesamt in dieser Datei)
 
-## Abweichungen vom woertlichen Plan-Text (dokumentiert)
+**Dokumentierte Abweichungen vom Plan:**
 
-1. **Kopf-Kommentar-Dichte gestrafft (§1.7-Budget):** Die im Plan §1.2 vorgeschlagenen H0-Herkunftskommentare je Konstante (z. B. `// H0: 112px/16×24 median 0.40ms`) wurden verdichtet (z. B. `// 112px median 0.40ms`, Verweis auf `tasks/h0-report.md` entfernt, Sektions-Divider von `----...----` auf ein festes kurzes `---- Titel ----` gekuerzt), um unter dem 25KB-Budget zu bleiben (25738 Bytes vor dem Straffen, 25294 danach). Der Plan selbst erwartet das ausdruecklich ("Falls über Budget: Kommentare straffen, nicht Logik kürzen") — keine Logik-Aenderung, nur Kommentar-Kuerzung.
-2. **`test/mcp-ui-wing-dedup.test.js`, `T-wing-dedup-dark-variants` (S3, selbst gefunden vor Merge):** Der Plan-Text (§5.3) sieht `assert.doesNotMatch(WING_CSS_DARK_STATIC, /--color-navy-700/...)` vor. Das ist mit der Plan-eigenen Implementierung (§3: `WING_CSS_DARK_STATIC = WING_BASE_CSS + WING_DARK_OVERRIDE_CSS + ...`) strukturell unerfuellbar: `WING_BASE_CSS` bleibt (bewusst, wegen der geforderten Byte-Identitaet der 4 bestehenden Exporte) unveraendert und enthaelt die `--color-navy-700`-Deklaration weiterhin woertlich; `WING_DARK_OVERRIDE_CSS` haengt lediglich eine spaeter deklarierte, gleich-spezifische `.wing--dark{background:none}`-Regel an, die sie per CSS-Kaskade (Quellreihenfolge entscheidet bei gleicher Spezifitaet) zur Laufzeit ausser Kraft setzt, ohne die Zeichenkette zu entfernen. Der Test in der Plan-Fassung haette also IMMER fehlgeschlagen, unabhaengig von der Implementierung. Fix: Assertion auf das tatsaechlich pruefbare Verhalten umgestellt — Vorhandensein der Override-Regel `.wing--dark{background:none}` in beiden dark-Exporten, mit Kommentar, der den Kaskaden-Mechanismus erklaert. Visuelle Wirkung (keine navy Rundmarke auf der dunklen Karte) bleibt wie geplant erhalten, nur der String-Test wurde korrigiert.
+1. **Kommentar-Straffung wegen 25 KB-Budget:** Engine war initial 25738 Bytes (ueber Budget), auf 25294 Bytes gekuerzt durch Verdichten der Sektions-Divider und Herkunftskommentare (keine Logik-Aenderung) — vom Plan selbst als Vorgehen fuer diesen Fall vorgesehen.
+2. **Test-Assertion-Korrektur in `T-wing-dedup-dark-variants`:** Die im Plan woertlich vorgegebene Assertion (`assert.doesNotMatch(WING_CSS_DARK_STATIC, /--color-navy-700/...)`) war mit der ebenfalls plan-vorgegebenen Implementierung strukturell unerfuellbar — `WING_BASE_CSS` bleibt fuer Byte-Identitaet unveraendert, `WING_DARK_OVERRIDE_CSS` haengt nur eine spaeter deklarierte, gleich-spezifische CSS-Regel an. Die Zeichenkette `--color-navy-700` bleibt in `WING_BASE_CSS` also immer vorhanden; nur die CSS-Kaskade neutralisiert sie visuell zur Laufzeit. Assertion wurde auf das tatsaechlich pruefbare Verhalten umgestellt (Vorhandensein der Override-Regel `.wing--dark{background:none}`), mit erklaerendem Kommentar. Visuelle Wirkung entspricht weiterhin dem Plan.
 
-## Betroffene/neue Dateien
+## Safety-Urteil
 
-- `design-system/components/brand/wing-canvas-engine.js` (neu)
-- `src/ui/wing-canvas-engine.js` (neu, byte-Kopie)
-- `src/ui/wing-markup.js` (additiv)
-- `src/ui/widget-catalog.js` (additiv + eine Pipeline-Zeile geaendert)
-- `test/mcp-ui-wing-canvas-sync.test.js` (neu)
-- `test/mcp-ui-wing-canvas-injection.test.js` (neu)
-- `test/mcp-ui-wing-dedup.test.js` (additiv, 1 Assertion-Fix gegenueber Plan-Text)
+**approved: true** — APPROVE nach Pruefung von `review-h2-r2` (Branch `phase/h2-wing-canvas-engine-fix2`, frischer Worktree).
 
-## Naechste Schritte
+- `npm test` lokal gruen: **1530/1530**, 0 fail.
+- **Scope respektiert:** `git diff master..branch` zeigt keine Aenderung an `src/ui/widgets/*.html`, `src/server.js`, `src/mcp-tools.js`, `src/claude.js`, `src/bridge.js`, `apps/hermes-animation-lab/`.
+- `src/ui/widget-bind.js` byte-identisch zu master (Diff leer).
+- Beide Engine-Kopien via `cmp` byte-identisch bestaetigt (je 25529 Bytes), zusaetzlich per Sync-Test (`T-wing-canvas-sync`) als Drift-Gate abgesichert.
+- **Self-contained bestaetigt:** Grep auf `http(s)://`, `@import`, `fetch`, `XMLHttpRequest`, `localStorage`/`sessionStorage`/`indexedDB`/`WebSocket` sowie `eval`/`new Function` liefert in beiden Engine-Dateien 0 Treffer.
+- **Perf-Konstanten** decken sich exakt mit H0-Ergebnis/Auftragsvorgabe: `FPS_CAP_DEFAULT=30`, `GRID_COARSE`/`COARSE_MAX_SIZE_PX=96`, `DPR_CAP=2`, `GOLD_ENABLED=false` (Owner-Gate).
+- **reduced-motion-Pfad** klar nachvollziehbar (kein rAF, kein IntersectionObserver-Setup, ein statisches `render()`), end-to-end verifiziert durch `T-wing-mount-reduced-motion` (Fake-DOM/rAF-Harness, `raf.pendingCount()===0` vor/nach `setStatus`).
+- **Terminal-Stop** implementiert (`isTerminalDone()` prueft `TERMINAL_WING_STATUSES` success/error + Timeline-Ende, `frame()` stoppt danach ohne erneuten `requestAnimationFrame`-Aufruf), getestet via `T-wing-mount-terminal`.
+- **Visibility-Gating** vollstaendig (IntersectionObserver + `visibilitychange`-Listener), je eigener Test in beide Richtungen (Start/Stop).
+- **Canvas-Dimensionierung** synchron in `mount()` vor dem Bild-Load (kein reportSize-Jank), verifiziert per `T-wing-mount-canvas`.
+- `withWingEngine()`-Injektion defensiv No-Op fuer alle 5 heutigen Widgets (kein Platzhalter vorhanden -> HTML byte-unveraendert, per grep bestaetigt); `wing-markup.js` fuegt die neuen Dark-Varianten rein additiv hinzu (per Dedup-Test verifiziert).
+- Keine neuen npm-Dependencies (`package.json`/`package-lock.json` unveraendert). Kein `console.*`, kein toter/auskommentierter Code.
 
-H3/H4 (Widget-Redesign): echte Widgets tragen den `<!--__WING_ENGINE__-->`-Platzhalter erst dort ein und werden zu Konsumenten von `mount()`/`opts.preset`/`opts.gold`. Groessenbudget-Marge (~306 Bytes) im Auge behalten, falls die Engine dort noch waechst.
+**Concerns (kein Blocker):**
+
+1. 25 KB-Budget wird als `25*1024=25600` Bytes interpretiert (nicht dezimal 25000); aktuelle Engine-Groesse 25529 Bytes (~71 Bytes Marge zu 25600, aber ueber dem dezimalen 25000-Wert). Konsistent dokumentiert und im Test (`T-wing-canvas-size: bytes <= 25*1024`) hart verankert — im Auge behalten bei weiterem Wachstum (H3/H4).
+2. `tasks/h2-report.md` (Worktree-Version) war nach Fix-Runde 1+2 nicht nachgezogen (nannte noch 25294 Bytes / 1501 Tests statt aktuell 25529 Bytes / 1530 Tests); korrekte Werte standen in den `fix(h2)`-Commit-Messages. Reine Doku-Staleness, kein funktionaler Mangel.
+
+## Clean-Code-Audit
+
+**blocker: true — Gate BLOCKED**
+
+### S1 (1 Fund, Blocker)
+
+**T1 — `src/ui/wing-canvas-engine.js:513`** (identisch `design-system/components/brand/wing-canvas-engine.js:513`): Der Preset-Switch in `applyStatus()` — `tl = (preset === "olympian" ? olympianCycle : classicCycle)(state, WORKING_LOOP_PAUSE_SEC)` — ist eine neue, produktionsreife Verzweigung (`opts.preset` wird in `mount()` Zeile 399 aus der Public API entgegengenommen; `window.HermesWingCanvas.mount(host, {preset:'olympian', status:'working'})` ist bereits heute aufrufbar). Kein Test in `test/mcp-ui-wing-canvas-mount.test.js` ruft `mount()` jemals mit `preset: 'olympian'` auf; `test/mcp-ui-wing-canvas-physics.test.js` prueft `classicCycle`/`olympianCycle` nur als isolierte reine Funktionen, nicht die Verdrahtung ueber `opts.preset`. Ein vertauschtes `===`, ein Tippfehler im String `'olympian'` oder ein umgedrehter Ternary wuerde von keinem Test bemerkt. Verwandte, kleinere Luecken im selben Muster (nicht separat gezaehlt, gleiche Fix-Runde): `status='error'` wird im Terminal-Stop-Pfad von `mount()` nie getestet (nur `'success'`); `opts.grid`/`opts.size`/`opts.fpsCap` werden in keinem Mount-Test mit Nicht-Default-Werten belegt.
+
+Fix-Empfehlung: mindestens einen Mount-Test ergaenzen, der `preset:'olympian', status:'working'` setzt und ueber einen Beobachtungspunkt (z. B. `state.beat !== 0` nach einem Tween-Schritt, oder denselben `__internal`-vm-Patch-Trick wie in `mcp-ui-wing-canvas-physics.test.js`) verifiziert, dass tatsaechlich `olympianCycle` statt `classicCycle` lief; optional denselben Terminal-Stop-Test wie fuer `'success'` auch fuer `'error'` duplizieren.
+
+### S2
+
+Keine Funde.
+
+### S3 (2, nicht blockierend)
+
+1. **G25 (Buendel)** — `design-system/components/brand/wing-canvas-engine.js:27,30,32-34` (identisch `src/ui/wing-canvas-engine.js`): Die physikalischen Gain-/Divisor-Konstanten (`/0.92` in `WING_FIT`, `AMBIENT_ROT`-Faktoren 0.9/1.7/1.3/0.6 in `computeScreen()`, `BEAT_GAIN`/`FLAP_GAIN`/`BEND_GAIN`/...) tragen nur einen Gruppen-Kommentar (`---- Geometrie / Gains (aus HermesWing.ts + deform.ts) ----`), keinen Kommentar pro Konstante. Kein neuer Verstoss der Phase — identisches Muster existiert bereits unveraendert in `design-system/components/brand/wing-engine.js` (master, unangetastet); Duplizierung ist bewusst und dokumentiert (Sync-Test). Optionaler Fix: falls je angefasst, Herkunfts-Kommentar pro Konstante ergaenzen.
+2. **P15/YAGNI (Beobachtung)** — `src/ui/wing-markup.js:101-124`: `WING_CSS_DARK_STATIC`/`WING_CSS_DARK_LIVE`/`WING_MARKUP_DARK_STATIC`/`WING_MARKUP_DARK_LIVE` sowie `opts.preset`/`opts.gold` in `wing-canvas-engine.js` sind exportierte, aber noch von keinem echten Widget konsumierte Seams (H3/H4 sollen sie verdrahten). Entspricht dem im Projekt etablierten Muster vorbereitender Seams vor dem ersten Konsumenten (vgl. I0-Phase); nur der Vollstaendigkeit halber notiert, kein Verstoss.
+
+### S4
+
+Keine Funde.
+
+### Gesamturteil Clean-Code
+
+BLOCKED wegen des 1 S1-Fundes (fehlende Testabdeckung fuer den `preset`-Ternary in `applyStatus()`/`mount()`). Alles Uebrige sauber: 48 neue Tests, 1530/1530 Gesamtsuite gruen, `node --check` ok auf allen betroffenen Dateien, Magic Numbers in den H2-eigenen Produktionskonstanten (`GOLD_*`, `FPS_CAP_DEFAULT`, `GRID_FINE`/`COARSE`, `COARSE_MAX_SIZE_PX`, `DPR_CAP`, `WORKING_LOOP_PAUSE_SEC`, `TAB_SWITCH_DT_CAP_SEC`, `INTERSECTION_THRESHOLD`) durchgehend benannt und mit Herkunfts-/Begruendungskommentar versehen. Duplizierung Engine vs. `wing-engine.js` (Canvas vs. Pixi, unterschiedliche Medien) explizit dokumentiert und durch Byte-Sync-Test abgesichert. Status-Namen/Mappings pro Datei genau einmal definiert (kein G23-Verstoss), keine toten Funktionen/kein auskommentierter Code/keine abgeschalteten Sicherungen. Testqualitaet insgesamt hoch (Build-Operate-Check, Grenzfalltests, vm-Sandbox-Technik statt Reimplementierung der Engine-Logik) — die eine Luecke betrifft gezielt den neu eingefuehrten `preset`-Branch, der trotz vollstaendiger Test-Suite fuer status/gold/visibility/frame-cap/terminal-stop nirgends end-to-end durchlaufen wird. Empfehlung: Mount-Test fuer `preset='olympian'` ergaenzen, danach PASS.
+
+## Fix-Runden
+
+**r1** — Branch `phase/h2-wing-canvas-engine-fix1` (von `phase/h2-wing-canvas-engine`), Commit `d9c448e`. Fixed H2 review blockers. H2-S1: 27 neue `node:test`-Behavior-Tests ergaenzt (`test/mcp-ui-wing-canvas-physics.test.js`: 20 Tests auf reinen Funktionen via test-lokalem `__internal`-Source-Patch, keine Aenderung an der ausgelieferten Engine).
+
+**r2** — H2 Review-Blocker Runde 2 behoben. `applyGoldTint()` (Canvas2D `source-atop`-Gold-Tint in `src/ui/wing-canvas-engine.js:459-471` bzw. `design-system/components/brand/wing-canvas-engine.js`) war ueber `mount()` ungetestet, weil `GOLD_ENABLED` hart auf `false` steht. Fix ausschliesslich in `test/mcp-ui-wing-canvas-m...` (Quelltext an dieser Stelle abgeschnitten übergeben).
+
+Nach r1+r2 stand die Suite bei 1530/1530 (laut Safety-Review), finalBranch `phase/h2-wing-canvas-engine-fix2`. Trotz zweier Fix-Runden bleibt das Gate laut vorliegendem Clean-Code-Audit **BLOCKED** — der dort benannte S1-Fund (Testabdeckung fuer `preset='olympian'` in `mount()`/`applyStatus()`) ist gemaess dieser Quelle nicht Teil der in r1/r2 behobenen Punkte und muss vor Merge noch geschlossen werden.
