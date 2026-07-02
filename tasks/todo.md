@@ -61,8 +61,20 @@ Twilio + Realtime unberuehrt. KEINE Store-/UI-/server.js-Aenderung.
   byte-identisch (Deepgram/nova-3/de-DE/auto); Twilio-Inbound unveraendert
   Polly.Vicki-Neural (beobachteter TeXML-Output).
 
-## Offen (owner/infra-gated, kein Code - Live-Smoke-Gate laut Plan)
+## Live-Schaltung (2026-07-02, Owner-genehmigt, autonom ausgefuehrt)
 
-- Voice-ID in ElevenLabs waehlen (Paid-Account da), Integration Secret bei
-  Telnyx anlegen, Render-Env setzen, Testanrufe DE+EN, Latenz-Check,
-  Rollback-Probe. Erst danach Feature live.
+- [x] Merge origin/master (cc5ed53) + Push origin/upstream master; Deploy live,
+      [boot] deployed commit=cc5ed53 (19:25 UTC), healthz 200.
+- [x] ElevenLabs: Voice "Ela - Empathetic & Warm" (SJJe86Va82zRzg6zi2dX, Library-
+      Voice fuer Customer-Support/AI-Agents) in My Voices; API-Key "telnyx-tts"
+      restriktiert (TTS Access, Voices Read, Models Access, User Read).
+- [x] Telnyx: Integration Secret identifier=elevenlabs_prod (per API, Key nur
+      via Clipboard, nie geloggt).
+- [x] Render-Env: TELNYX_ELEVENLABS_API_KEY_REF=elevenlabs_prod,
+      TELNYX_ELEVENLABS_VOICE_ID=SJJe86Va82zRzg6zi2dX, _MODEL=Default.
+
+## Offen (nur Owner, echtes Telefon)
+
+- Testanruf DE + EN auf die Telnyx-Nummer: spricht der Gather-innere Say
+  ElevenLabs? STT weiter ok? Latenz vs. Azure akzeptabel?
+- Rollback jederzeit: die zwei Env-Vars in Render leeren (ein Restart).
