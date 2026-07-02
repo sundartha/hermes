@@ -85,26 +85,30 @@ REGELN FUERS TELEFONIEREN:
 - Antworte KURZ: 1-2 gesprochene Saetze pro Antwort. Kein Markdown, keine Listen, keine Emojis. ${loc.speechClause}
 - Sei freundlich, professionell und effizient. ${loc.styleClause(s.agentStyle)}
 - Stelle pro Antwort hoechstens eine Frage.
+- Reagiere zuerst kurz und natuerlich auf das zuletzt Gesagte (z.B. "Alles klar," / "Gut,"), bevor du weitersprichst.
+- Beziehe kurze oder unklare Aeusserungen des Gegenuebers auf deine letzte Frage, statt das Thema zu wechseln.
+- Sprich Datum und Uhrzeit natuerlich aus (z.B. "Donnerstag um 17 Uhr"), nie rohe Tool-Formate; keine Klammern, Anfuehrungszeichen oder Gedankenstriche.
+- Nenne das Ergebnis eines Tool-Aufrufs in deiner naechsten gesprochenen Antwort - der Gespraechsverlauf ist deine einzige Erinnerung daran.
 - Wenn das Anliegen erledigt ist oder das Gespraech zu Ende geht, verabschiede dich und rufe danach das Tool end_call auf.
 - Erfinde nichts. Was du nicht weisst, sagst du ehrlich und nimmst stattdessen eine Nachricht auf (take_message).
 ${s.allowPersonalData ? "" : `- Du darfst KEINE persoenlichen Daten von ${owner} herausgeben (Adresse, E-Mail, private Nummer etc.).`}
 ${s.allowBankData ? "" : `- Du darfst NIEMALS Bank- oder Zahlungsdaten nennen oder Zahlungen zusagen.`}
 ${s.allowCalendar ? `- Du darfst ${owner}s Kalender einsehen (get_calendar).` : `- Du hast KEINEN Kalenderzugriff. Bei Terminwuenschen nimmst du nur eine Nachricht auf.`}
-${s.allowBooking && s.allowCalendar ? `- Du darfst Termine direkt in ${owner}s Kalender buchen (book_appointment), wenn der Slot frei ist.` : `- Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.`}`;
+${s.allowBooking && s.allowCalendar ? `- Du darfst Termine direkt in ${owner}s Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).` : `- Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.`}`;
 
   if (call.direction === "inbound") {
     return `${base}
 
 SITUATION: Jemand hat ${owner} angerufen, ${owner} konnte nicht rangehen, der Anruf wurde an dich weitergeleitet. Anrufernummer: ${call.from}.
-Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin vereinbaren), sonst Nachricht aufnehmen. ${owner} erhaelt danach automatisch eine Zusammenfassung.`;
+Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin vereinbaren), sonst Nachricht aufnehmen. Bei einem Terminwunsch bietest du konkrete freie Zeiten aus ${owner}s Kalender an, statt offen nach einer Wunschzeit zu fragen. ${owner} erhaelt danach automatisch eine Zusammenfassung.${calendarSection(call)}`;
   }
 
   return `${base}
 
-SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer.
+SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer: frage nie nach Informationen, die du als Anrufer selbst wissen muesstest oder die bereits in deinem AUFTRAG/BRIEFING stehen.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
-${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}${outboundCalendarSection(call)}
+${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}${calendarSection(call)}
 WICHTIG: Offenlegung UND dein Anliegen ("${call.goal}") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
 Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 }
@@ -144,13 +148,16 @@ function calendarExcerpt(call) {
   );
 }
 
-// Optionaler Kalender-Block fuer den Outbound-Prompt (L2): bettet den Auszug vorab ein,
-// damit das Modell freie Slots kennt und get_calendar im Buchungs-Normalfall nicht erst
-// mid-turn aufrufen muss. Gegated am allowCalendar-Gate (massgeblich, fail-closed: aus ->
-// "" -> Prompt byte-identisch). Fuehrendes "\n" + leeres "" bei aus spiegeln
-// assistantContextSection (G11). KEINE neue Datenexposition: derselbe Inhalt war schon
-// via get_calendar erreichbar - nur der Transportweg aendert sich.
-function outboundCalendarSection(call) {
+// Optionaler Kalender-Block fuer den System-Prompt (I6, vormals NUR Outbound/L2):
+// bettet den Auszug vorab ein, damit das Modell freie Slots kennt und get_calendar im
+// Buchungs-/Terminwunsch-Normalfall nicht erst mid-turn aufrufen muss. Gegated am
+// allowCalendar-Gate (massgeblich, fail-closed: aus -> "" -> Prompt byte-identisch).
+// Fuehrendes "\n" + leeres "" bei aus spiegeln assistantContextSection (G11).
+// Richtungsneutral: outbound bettete den Block schon vorher ein, I6 haengt ihn genauso
+// in den Inbound-Zweig (gleiches Gate, EINE Quelle statt zweier Kopien, G5). KEINE neue
+// Datenexposition: derselbe Inhalt war schon via get_calendar erreichbar - nur der
+// Transportweg aendert sich.
+function calendarSection(call) {
   if (!store.tenantContext(call.tenantId).settings.allowCalendar) return "";
   return `\nKALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):\n${calendarExcerpt(call)}`;
 }
@@ -310,6 +317,36 @@ export function execTool(call, name, input) {
 }
 
 // ---------- Gespraechs-Turn ----------
+
+// I8 (call-quality Impl-1): deterministisches Text-Shaping der Modell-Antwort VOR dem
+// Fallback/addTranscript - eine defensive Schicht, falls das Modell trotz "Kein
+// Markdown, keine Listen" (Regel oben) doch Markdown/Aufzaehlungen/Gedankenstriche
+// liefert (TTS liest Sonderzeichen sonst woertlich vor, S1-tts). Pure Funktion (kein
+// Nebeneffekt, kein Store-/Netz-Zugriff). VORSICHT bewusst eingehalten: nur
+// GEDANKENSTRICHE MIT umgebendem Leerzeichen werden zu Komma normalisiert - Wort-
+// Bindestriche ohne Leerzeichen ("E-Mail", "Kuendigungs-Service") bleiben unangetastet.
+export function shapeForSpeech(text) {
+  if (!text) return text;
+  let out = text
+    // Aufzaehlungs-Marker (-, *, +) am Zeilenanfang entfernen, BEVOR die generische
+    // Markdown-Bereinigung greift (sonst zerfaellt "- " zu einer bedeutungslosen Luecke).
+    .replace(/^[ \t]*[-*+]\s+/gm, "")
+    // Verbliebene Markdown-Reste (Betonung/Code/Ueberschrift-Marker).
+    .replace(/[*_#`]/g, "")
+    // " - "-Gedankenstriche (Leerzeichen auf BEIDEN Seiten) -> Komma; trifft NICHT
+    // Wort-Bindestriche ohne umgebendes Leerzeichen.
+    .replace(/\s+-\s+/g, ", ")
+    // Whitespace/Zeilenumbrueche normalisieren (EIN Leerzeichen), dann trimmen.
+    .replace(/\s+/g, " ")
+    .trim()
+    // Haengendes Komma/Semikolon/Doppelpunkt am Ende (z.B. Rest eines abgebrochenen
+    // Gedankenstrich-Satzes) abraeumen, BEVOR das Satzende ergaenzt wird (sonst ",.").
+    .replace(/[,;:]+$/, "");
+  // Satzende sicherstellen - TTS liest einen abrupt endenden Satz sonst unnatuerlich.
+  if (out && !/[.!?]$/.test(out)) out += ".";
+  return out;
+}
+
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
 export async function agentTurn(call, callerText) {
   if (callerText) store.addTranscript(call.id, "caller", callerText);
@@ -352,6 +389,7 @@ export async function agentTurn(call, callerText) {
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
       tools: toolsWithCacheControl(toolDefs(call.tenantId)),
       messages,
+      callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     });
     roundtrips += 1;
     store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config);
@@ -402,7 +440,11 @@ export async function agentTurn(call, callerText) {
     tools: firedTools,
   });
 
-  if (!speech) speech = "Alles klar, vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!";
+  // I8: Modell-Text shapen, BEVOR ueber den Fallback entschieden wird (reiner Text-
+  // Shaper, aendert eine leere Antwort nicht). I2: Fallback ist richtungsabhaengig +
+  // sprachabhaengig (Locale-Bundle) - DE-inbound bleibt byte-identisch zum Vorgaenger.
+  speech = shapeForSpeech(speech);
+  if (!speech) speech = localeFor(call.language).turnFallbackSpeech[call.direction];
   store.addTranscript(call.id, "agent", speech);
   return { speech, endCall };
 }
@@ -431,6 +473,7 @@ export async function summarizeCall(call) {
         content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}`,
       },
     ],
+    callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
   });
   store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config);
   meterAiTokens(call, resp.usage);

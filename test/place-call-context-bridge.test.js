@@ -70,6 +70,20 @@ test("P1-02: place_call-Schema bleibt strukturell unveraendert (gleiche Felder +
   }
 });
 
+// I9 (call-quality Impl-1): die objective-Beschreibung macht dem aufrufenden Chat-LLM
+// drei Dinge klar - (1) der Satz wird nach der Offenlegung WOERTLICH vorgelesen, bevor
+// der Angerufene antwortet; (2) IMMER konkretes Thema/Anlass nennen, wenn bekannt;
+// (3) bei unbekanntem Thema erst kurz beim Nutzer nachfragen statt vage anzurufen.
+// Regex-Pins statt Woertlich-Pin (wie P1-01: advisory-Metadaten, kein Byte-Vertrag).
+test("I9-01: place_call-objective-Beschreibung verlangt konkretes Thema + warnt vor woertlichem Vorlesen", () => {
+  const schema = captureSchemas().get("place_call");
+  const objective = schema.objective.description || "";
+  assert.match(objective, /woertlich vorgelesen/i, "nennt das woertliche Vorlesen");
+  assert.match(objective, /offenlegung/i, "verortet es nach der Offenlegung");
+  assert.match(objective, /konkretes thema/i, "verlangt konkretes Thema/Anlass");
+  assert.match(objective, /frage zuerst kurz beim nutzer nach/i, "verlangt Rueckfrage statt vagem Auftrag");
+});
+
 // P3 (PLAN-PERSONAL-ASSISTANT): das context-Feld ist OPTIONAL (advisory) und seine
 // Beschreibung haelt den Anti-Spoofing-/Secret-Vertrag - genau wie briefing in P1-01.
 // Das Schema wird immer annonciert; der Server (Flag) entscheidet ueber die Wirkung.

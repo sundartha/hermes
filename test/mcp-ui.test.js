@@ -134,11 +134,20 @@ const callStatusOutput = z.object({
 
 // callOutput (place_call, W2): Obermenge aus callStatusOutput per Spread (G5/S2, keine
 // erneute Feld-Duplizierung) plus den beiden Abschluss-Feldern aus dem get_transcript-
-// Kontrakt (nullable, der Anruf hat gerade erst begonnen).
+// Kontrakt (nullable, der Anruf hat gerade erst begonnen) plus dem additiven
+// context_received-Meta (I10, call-quality Impl-1).
+const contextReceivedOutput = z.object({
+  active: z.boolean(),
+  summary: z.boolean(),
+  key_facts_count: z.number(),
+  recipient_relationship: z.boolean(),
+  desired_outcome: z.boolean(),
+});
 const callOutput = z.object({
   ...callStatusOutput.shape,
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
+  context_received: contextReceivedOutput,
 });
 
 test("T-P1-UI-AC1: Stufe 0 additiv - Textblock (3 Felder) + schema-validiertes structuredContent", async () => {
@@ -1111,8 +1120,12 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     const result = await handler(PLACE_CALL_ARGS);
     assert.equal(result.content[0].type, "text", "Textblock bleibt erhalten (Fallback)");
     assert.ok(result.structuredContent, "structuredContent jetzt vorhanden (W0 kannte undefined)");
+    // I10 (call-quality Impl-1): context_received ist additiv dazugekommen. PLACE_CALL_MOCK
+    // ({callId:"call_1"}) traegt das Feld selbst NICHT -> der Handler normalisiert
+    // defensiv auf "kein Kontext angekommen" (fail-closed, kein Crash bei einem aelteren
+    // Gateway-Mock).
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
-      "call_id", "duration_s", "failure_reason", "last_transcript_lines",
+      "call_id", "context_received", "duration_s", "failure_reason", "last_transcript_lines",
       "objective_achieved", "result_summary", "status",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
@@ -1122,10 +1135,36 @@ test("T-W2-place-shape: place_call laeuft jetzt ueber registerTool, traegt _meta
     assert.equal(result.structuredContent.failure_reason, null);
     assert.equal(result.structuredContent.result_summary, null);
     assert.equal(result.structuredContent.objective_achieved, null);
+    assert.deepEqual(result.structuredContent.context_received, {
+      active: false,
+      summary: false,
+      key_facts_count: 0,
+      recipient_relationship: false,
+      desired_outcome: false,
+    });
     assert.doesNotThrow(
       () => callOutput.parse(result.structuredContent),
       "structuredContent validiert gegen outputSchema",
     );
+  });
+});
+
+test("T-I10-context-received: place_call reicht das context_received-Meta der Gateway-Antwort 1:1 durch", async () => {
+  // I10 (call-quality Impl-1): traegt der Gateway-Body das additive Meta, erscheint es
+  // unveraendert im structuredContent (Selbstauskunft ans Chat-LLM, nur bool/count).
+  const CONTEXT_RECEIVED = {
+    active: true,
+    summary: true,
+    key_facts_count: 3,
+    recipient_relationship: false,
+    desired_outcome: true,
+  };
+  await withGateway({ ...PLACE_CALL_MOCK, context_received: CONTEXT_RECEIVED }, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("place_call");
+    const result = await handler(PLACE_CALL_ARGS);
+    assert.deepEqual(result.structuredContent.context_received, CONTEXT_RECEIVED);
+    assert.doesNotThrow(() => callOutput.parse(result.structuredContent));
   });
 });
 

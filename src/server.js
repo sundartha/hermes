@@ -1169,6 +1169,21 @@ function outboundFrom(s, tenantId) {
   return own ? { fromNumber: own.e164, provider: own.provider, numberRecord: own } : null;
 }
 
+// I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
+// aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
+// NUR bool/count, NIE der Kontext-Inhalt selbst (kein zweiter Transportweg fuer
+// HINTERGRUND-Daten). active=false, wenn der Kanal komplett abgeschaltet ist
+// (config.assistantContextEnabled aus - context ist dann IMMER null, s.o.).
+function contextReceivedMeta(context) {
+  return {
+    active: config.assistantContextEnabled,
+    summary: !!context?.summary,
+    key_facts_count: Array.isArray(context?.key_facts) ? context.key_facts.length : 0,
+    recipient_relationship: !!context?.recipient_relationship,
+    desired_outcome: !!context?.desired_outcome,
+  };
+}
+
 // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
 app.post("/api/calls", async (req, res) => {
   const b = req.body || {};
@@ -1376,7 +1391,13 @@ app.post("/api/calls", async (req, res) => {
     // timeLimit-Param, fuer Telnyx der einzige verlaessliche Cap. Erst NACH
     // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
     if (config.voiceEngine !== "realtime") armMaxDurationTimer(call, tw.sid);
-    res.json({ ok: true, callId: call.id, twilioSid: tw.sid, status: "dialing" });
+    res.json({
+      ok: true,
+      callId: call.id,
+      twilioSid: tw.sid,
+      status: "dialing",
+      context_received: contextReceivedMeta(context), // I10
+    });
   } catch (err) {
     store.endCallRecord(call.id, "failed");
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):

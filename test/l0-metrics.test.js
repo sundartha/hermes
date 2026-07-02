@@ -38,6 +38,37 @@ test("T-L0-1: llmCall ist PII-frei (nur die vier Whitelist-Felder)", () => {
   assert.ok(!("secret" in entries[0].payload));
 });
 
+test("T-L0-1b (I13): llmCall traegt callId + Cache-Zaehler additiv, NUR wenn mitgegeben; fremde Felder bleiben draussen", () => {
+  const { log, entries } = collector();
+  const m = createMetrics({ enabled: true, log });
+
+  m.llmCall({
+    outcome: "success",
+    attempts: 1,
+    latencyMs: 5,
+    breakerState: "closed",
+    callId: "c1",
+    cache_creation_input_tokens: 20,
+    cache_read_input_tokens: 100,
+    secret: "leak", // Whitelist-Gegenprobe: unbekanntes Feld darf NIE durch
+  });
+
+  assert.equal(entries.length, 1);
+  assert.deepEqual(Object.keys(entries[0].payload).sort(), [
+    "attempts",
+    "breakerState",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "callId",
+    "latencyMs",
+    "outcome",
+  ]);
+  assert.equal(entries[0].payload.callId, "c1");
+  assert.equal(entries[0].payload.cache_creation_input_tokens, 20);
+  assert.equal(entries[0].payload.cache_read_input_tokens, 100);
+  assert.ok(!("secret" in entries[0].payload));
+});
+
 test("T-L0-2: Master-Schalter aus -> keine der vier Funktionen loggt (byte-identisch)", () => {
   const { log, entries } = collector();
   const m = createMetrics({ enabled: false, log });

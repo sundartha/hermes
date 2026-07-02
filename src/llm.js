@@ -142,6 +142,22 @@ export async function withRetry(fn, { max, baseMs, jitter, retryable, sleep, ran
 const noopMetrics = { llmCall() {} };
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// I13 (call-quality Impl-1): additive Metrik-Felder, NUR wenn tatsaechlich vorhanden -
+// kein Rauschen im Breaker-open-/Fehlerpfad (dort gibt es weder eine Response noch
+// immer einen callId). callId korreliert den Anthropic-Request mit dem Call (PII-frei,
+// wie metrics.logTurn schon callId traegt); die Cache-Zaehler kommen 1:1 aus resp.usage
+// (dieselbe Quelle wie claude.js inputTokensOf) und dienen NUR der Bench-/Latenz-
+// Auswertung (L1) - NIE dem Budget-Gate (das bleibt unveraendert an trackUsage haengen).
+function metricsExtra(callId, usage) {
+  const extra = {};
+  if (callId !== undefined) extra.callId = callId;
+  if (usage?.cache_creation_input_tokens !== undefined)
+    extra.cache_creation_input_tokens = usage.cache_creation_input_tokens;
+  if (usage?.cache_read_input_tokens !== undefined)
+    extra.cache_read_input_tokens = usage.cache_read_input_tokens;
+  return extra;
+}
+
 // Factory (P15: Konstruktion/Verdrahtung getrennt vom Fachcode). <=4 benannte Felder
 // in EINEM Optionsobjekt (F1). messagesCreate ist ein optionaler Test-Seam (DIP):
 // gesetzt -> ersetzt sdk.messages.create; sonst = der echte Prod-Pfad (kein toter Code).
@@ -166,9 +182,17 @@ export function createLlmClient({
     },
     Date.now,
   );
-  async function complete(params) {
+  // I13: callId ist ein additiver Bench-/Metrik-Begleiter, KEIN Anthropic-Request-Feld -
+  // er wird hier abgestreift (Rest-Destrukturierung), bevor params an create()/das SDK
+  // geht (kein Leak eines unbekannten Feldes in den Provider-Request-Body).
+  async function complete({ callId, ...params } = {}) {
     if (breaker.isOpen()) {
-      metrics.llmCall({ outcome: "breaker-open", attempts: 0, breakerState: "open" });
+      metrics.llmCall({
+        outcome: "breaker-open",
+        attempts: 0,
+        breakerState: "open",
+        ...metricsExtra(callId),
+      });
       throw new LlmUnavailableError("circuit-open");
     }
     const startedAt = Date.now();
@@ -194,6 +218,7 @@ export function createLlmClient({
         attempts,
         latencyMs: Date.now() - startedAt,
         breakerState: breaker.state(),
+        ...metricsExtra(callId, resp.usage),
       });
       return resp;
     } catch (err) {
@@ -203,6 +228,7 @@ export function createLlmClient({
         attempts,
         latencyMs: Date.now() - startedAt,
         breakerState: breaker.state(),
+        ...metricsExtra(callId),
       });
       if (exhausted) throw new LlmUnavailableError("retries-exhausted");
       throw err; // nicht-transient (4xx/Auth) unveraendert nach oben

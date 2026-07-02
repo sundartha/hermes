@@ -147,16 +147,45 @@ const TRANSCRIPT_OUTPUT = {
   objective_achieved: z.union([z.boolean(), z.string()]),
 };
 
+// I10 (call-quality Impl-1): additives Meta, WAS vom optionalen place_call-context
+// tatsaechlich beim Gateway ankam - NUR bool/count, NIE der Kontext-Inhalt selbst
+// (kein zweiter Transportweg fuer HINTERGRUND-Daten). Hilft dem aufrufenden Chat-LLM,
+// einen stillschweigend ignorierten Kontext zu erkennen (S2 aus
+// tasks/call-quality-findings.md: place_call meldete nie, was ankam).
+const CONTEXT_RECEIVED_OUTPUT = z.object({
+  active: z.boolean(),
+  summary: z.boolean(),
+  key_facts_count: z.number(),
+  recipient_relationship: z.boolean(),
+  desired_outcome: z.boolean(),
+});
+
 // outputSchema fuer place_call (W2, vereinte Live-Karte WIDGET_CALL): Obermenge aus
 // CALL_STATUS_OUTPUT (dialing/in_progress/...-Felder) plus den beiden Abschluss-Feldern
 // aus dem get_transcript-Kontrakt (result_summary/objective_achieved), hier initial NULL
-// (der Anruf hat gerade erst begonnen - das Widget pollt Status/Ergebnis selbst nach).
-// Modul-Konstante bei den anderen *_OUTPUT (G35), EIN Spread statt Redefinition (G5/S2).
+// (der Anruf hat gerade erst begonnen - das Widget pollt Status/Ergebnis selbst nach),
+// plus dem additiven context_received-Meta (I10). Modul-Konstante bei den anderen
+// *_OUTPUT (G35), EIN Spread statt Redefinition (G5/S2).
 const CALL_OUTPUT = {
   ...CALL_STATUS_OUTPUT,
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
+  context_received: CONTEXT_RECEIVED_OUTPUT,
 };
+
+// I10: defensive Normalisierung des context_received-Metas aus der Gateway-Antwort
+// (Result-Guard-Geist wie requireFields, aber NICHT werfend): ein Gateway-Body ohne das
+// additive Feld (z.B. ein aelterer Mock in Tests) darf den Handler NICHT crashen lassen -
+// fail-closed auf "kein Kontext angekommen" (alles false/0), NIE auf Verdacht "aktiv".
+function normalizeContextReceived(cr) {
+  return {
+    active: !!cr?.active,
+    summary: !!cr?.summary,
+    key_facts_count: typeof cr?.key_facts_count === "number" ? cr.key_facts_count : 0,
+    recipient_relationship: !!cr?.recipient_relationship,
+    desired_outcome: !!cr?.desired_outcome,
+  };
+}
 
 // Berechtigungen als EIN flacher String (passt in genau einen data-mcp-Slot, W1-Binding
 // rendert Nicht-Arrays via textContent). EINE Quelle - auch der Stufe-0-Textblock liest
@@ -328,7 +357,7 @@ export function registerTools(
         objective: z
           .string()
           .describe(
-            "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Einen Friseurtermin fuer Samstag vormittag vereinbaren.' Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
+            "Das Ziel des Anrufs in EINEM Satz - das konkrete Ergebnis, das erreicht werden soll, z.B. 'Einen Friseurtermin fuer Samstag vormittag vereinbaren.' WICHTIG: Dieser Satz wird dem Angerufenen direkt nach der Offenlegung WOERTLICH vorgelesen, BEVOR er antwortet - nenne daher IMMER ein konkretes Thema/Anlass, wenn es bekannt ist. Ist Thema oder Praeferenz noch unbekannt, frage ZUERST kurz beim Nutzer nach, statt einen vagen Auftrag abzusetzen. Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
           ),
         briefing: z
           .string()
@@ -391,6 +420,7 @@ export function registerTools(
         failure_reason: null,
         result_summary: null,
         objective_achieved: null,
+        context_received: normalizeContextReceived(r.context_received), // I10
       };
       return {
         content: [
