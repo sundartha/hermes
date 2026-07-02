@@ -17,6 +17,16 @@ const ENGINE_SOURCE = readFileSync(enginePath, "utf8");
 const FPS_CAP_DEFAULT = 30;
 const FRAME_BUDGET_MS = 1000 / FPS_CAP_DEFAULT; // ~33.3ms, wie im Engine-Default
 
+// H2-S1 (Review-Blocker Runde 2): applyGoldTint() ist ueber mount() nur erreichbar,
+// wenn GOLD_ENABLED im Quelltext true ist (Owner-Gate). Dieselbe Patch-Technik wie
+// mcp-ui-wing-canvas-physics.test.js (EXPORT_LINE) - hier wird NUR die eigene
+// In-Memory-Kopie der Quelle fuer diesen einen Test umgeschaltet, die produktiv
+// ausgelieferte Datei bleibt unveraendert.
+const GOLD_ENABLED_LINE = "  var GOLD_ENABLED = false; // Owner-Gate auf Quell-Ebene";
+const GOLD_ENABLED_LINE_PATCHED = "  var GOLD_ENABLED = true; // Owner-Gate auf Quell-Ebene (Test-Patch)";
+assert.ok(ENGINE_SOURCE.includes(GOLD_ENABLED_LINE), "GOLD_ENABLED-Zeile nicht gefunden - Datei umstrukturiert?");
+const ENGINE_SOURCE_GOLD_ENABLED = ENGINE_SOURCE.replace(GOLD_ENABLED_LINE, GOLD_ENABLED_LINE_PATCHED);
+
 // rAF/cAF-Fake: die Engine haelt zu jedem Zeitpunkt hoechstens EINE ausstehende
 // Anfrage (frame() plant sich entweder selbst neu oder stoppt) - ein einzelner
 // Pending-Slot reicht, kein Queue-Modell noetig.
@@ -47,14 +57,22 @@ function makeRafHarness() {
 }
 
 function makeCtx2dSpy() {
-  const calls = { clearRect: 0, drawImage: 0, fillRect: 0 };
+  // fillRectFillStyle/fillRectComposite: Momentaufnahme von fillStyle/
+  // globalCompositeOperation ZUM ZEITPUNKT des fillRect()-Aufrufs (nicht der
+  // Endzustand danach) - noetig, um applyGoldTint()s source-atop-Compositing zu
+  // pruefen, das die Engine direkt nach dem Fill wieder auf source-over zuruecksetzt.
+  const calls = { clearRect: 0, drawImage: 0, fillRect: 0, fillRectFillStyle: null, fillRectComposite: null };
   return {
     calls,
     save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, clip() {},
     setTransform() {},
     clearRect() { calls.clearRect += 1; },
     drawImage() { calls.drawImage += 1; },
-    fillRect() { calls.fillRect += 1; },
+    fillRect() {
+      calls.fillRect += 1;
+      calls.fillRectFillStyle = this.fillStyle;
+      calls.fillRectComposite = this.globalCompositeOperation;
+    },
     fillStyle: "",
     globalCompositeOperation: "",
   };
@@ -115,9 +133,11 @@ function makeIntersectionObserverHarness() {
 }
 
 // Baut eine frische Sandbox + fuehrt die Engine aus. clockRef.value steuert
-// performance.now(); reduce steuert prefers-reduced-motion. Rueckgabe buendelt alle
-// Spies/Handles, die die Tests fuer Build-Operate-Check brauchen (P13).
-function mountInSandbox({ reduce = false, status = "idle" } = {}) {
+// performance.now(); reduce steuert prefers-reduced-motion; source erlaubt eine
+// gepatchte Engine-Quelle (siehe ENGINE_SOURCE_GOLD_ENABLED); gold wird 1:1 als
+// opts.gold an mount() durchgereicht. Rueckgabe buendelt alle Spies/Handles, die
+// die Tests fuer Build-Operate-Check brauchen (P13).
+function mountInSandbox({ reduce = false, status = "idle", source = ENGINE_SOURCE, gold = false } = {}) {
   const raf = makeRafHarness();
   const ctx2d = makeCtx2dSpy();
   const canvas = makeFakeCanvas(ctx2d);
@@ -138,9 +158,9 @@ function mountInSandbox({ reduce = false, status = "idle" } = {}) {
   sandbox.cancelAnimationFrame = raf.cancelAnimationFrame;
 
   vm.createContext(sandbox);
-  vm.runInContext(ENGINE_SOURCE, sandbox);
+  vm.runInContext(source, sandbox);
 
-  const handle = sandbox.window.HermesWingCanvas.mount(host, { src: "data:image/png;base64,x", status });
+  const handle = sandbox.window.HermesWingCanvas.mount(host, { src: "data:image/png;base64,x", status, gold });
 
   return { handle, raf, ctx2d, canvas, doc, host, io, clockRef };
 }
@@ -229,4 +249,29 @@ test("T-wing-mount-destroy: raeumt Loop, Observer und Canvas auf", () => {
   assert.equal(raf.pendingCount(), 0, "destroy() stoppt eine laufende Schleife");
   assert.equal(io.store.disconnected, true, "IntersectionObserver wird disconnected");
   assert.equal(host.children.includes(canvas), false, "Canvas wird aus dem Host entfernt");
+});
+
+test("T-wing-mount-gold: GOLD_ENABLED(Quell-Patch)+opts.gold=true zeichnet genau einen Gold-Tint-Layer (H2-S1)", () => {
+  const { raf, ctx2d, clockRef } = mountInSandbox({ source: ENGINE_SOURCE_GOLD_ENABLED, gold: true });
+  assert.equal(raf.pendingCount(), 1, "Loop laeuft (idle-Status, kein reduced motion)");
+
+  // Klar ueber dem Frame-Budget (~33.3ms), Sicherheitsmarge wie im framecap-Test oben.
+  clockRef.value += FRAME_BUDGET_MS + 5;
+  raf.fire(clockRef.value);
+
+  assert.equal(ctx2d.calls.fillRect, 1, "applyGoldTint() zeichnet genau einen Fill-Layer pro Render");
+  assert.equal(
+    ctx2d.calls.fillRectFillStyle,
+    "rgba(230,190,92,0.350)",
+    "fillStyle = HERMES_GOLD als rgb-Tripel + goldTintAlpha (idle-Settle-Phase: flap/lift=0 -> Basis-Alpha GOLD_STRENGTH)",
+  );
+  assert.equal(ctx2d.calls.fillRectComposite, "source-atop", "der Fill laeuft mit source-atop, faerbt also nur bereits gezeichnete Wing-Pixel");
+  assert.equal(ctx2d.globalCompositeOperation, "source-over", "Composite-Mode wird nach dem Tint wieder zurueckgesetzt");
+});
+
+test("T-wing-mount-gold-gated: GOLD_ENABLED=false (Produktions-Default) ignoriert opts.gold=true", () => {
+  const { raf, ctx2d, clockRef } = mountInSandbox({ gold: true }); // ungepatchte Quelle, GOLD_ENABLED bleibt false
+  clockRef.value += FRAME_BUDGET_MS + 5;
+  raf.fire(clockRef.value);
+  assert.equal(ctx2d.calls.fillRect, 0, "Owner-Gate auf Quell-Ebene sperrt applyGoldTint(), unabhaengig von opts.gold");
 });
