@@ -6,7 +6,7 @@ Context Protocol (MCP)** and answers/places real phone calls on the user's
 behalf, always disclosing up front that an assistant is speaking.
 
 The brand voice: *"Give your AI wings."* A deep-navy, Mount-Olympus hero in
-Norse display type (falls back to Instrument Serif until the self-hosted Norse
+Norse display type (falls back to a generic serif until the self-hosted Norse
 webfont loads) sells the marketing site; a calm, light Space Grotesk app runs
 the tenant dashboard; brand navy `#1b4f86` is the single action color across
 both.
@@ -14,7 +14,7 @@ both.
 ## Products / surfaces
 
 1. **Marketing website** — public, dark navy hero chrome (`site/`). Full-bleed
-   Olympus photo + drifting-cloud video, Instrument Serif display, white pill
+   Olympus photo + drifting-cloud video, Norse display, white pill
    CTAs. Pages: hero, *How it works* (3 steps), *Pricing* (Starter €4.99 /
    Business €9.99).
 2. **Tenant web app / dashboard** — logged-in light UI (`app/`). Overview KPIs,
@@ -93,8 +93,8 @@ tinted status badges.
 
 **Two worlds, one accent.** The system is deliberately bimodal:
 - **Dark (marketing / `.on-dark`)** — navy gradient `radial-gradient(120% 90% at
-  50% 0%, #1b4f86, #0f2d52 55%, #0a2245)`, Norse display (Instrument Serif
-  fallback) + Space Grotesk UI, white pill CTAs, full-bleed Olympus imagery.
+  50% 0%, #1b4f86, #0f2d52 55%, #0a2245)`, Norse display + Space Grotesk UI,
+  white pill CTAs, full-bleed Olympus imagery.
 - **Light (app)** — `#fafafa` page, white cards, Space Grotesk throughout,
   brand-navy actions, near-black `#25282b` text.
 - **Brand navy `#1b4f86`** is the one accent color across both worlds; status
@@ -108,12 +108,12 @@ green): positive `#1b4f86`/`#eef3fa`, critical `#25282b`/`#ececec`, info
 `#1b4f86` vs idle gray `#c4c4c4`.
 
 **Type.** Two families. *Norse* (400 + 700) — the runic display face for
-headings and the wordmark; falls back to *Instrument Serif* (which alone
-carries the italic cut used for emphasis) until the self-hosted Norse webfont
-loads. Hero headline at `clamp(50px, 7.4vw, 98px)`. *Space Grotesk* (400–700)
-— dark-site UI, nav, prices, and the entire light app plus all body copy.
-Heading weight is heavy (800) in the app; tight `-0.015em` tracking on
-headings, wide `.12em` on labels.
+headings and the wordmark; falls back to a generic serif until the
+self-hosted Norse webfont loads, with `font-style: italic` applied directly to
+whichever face is active for emphasis. Hero headline at `clamp(50px, 7.4vw,
+98px)`. *Space Grotesk* (400–700) — dark-site UI, nav, prices, and the entire
+light app plus all body copy. Heading weight is heavy (800) in the app; tight
+`-0.015em` tracking on headings, wide `.12em` on labels.
 
 **Spacing.** 4px base scale (`--space-1`..`--space-20`) aliased to intent
 (`--space-card: 24px`, `--space-section: 80px`, `--space-gap: 20px`). Page
