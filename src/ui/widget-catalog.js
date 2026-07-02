@@ -32,6 +32,30 @@ const WING_ASSETS_BY_VARIANT = {
   [WING_LIVE]: { css: WING_CSS_LIVE, markup: WING_MARKUP_LIVE },
 };
 
+// Wing-Canvas-Engine (H2): self-contained IIFE, EINE Quelle in
+// src/ui/wing-canvas-engine.js (byte-identische Kopie der Design-System-
+// Authoring-Quelle, siehe deren Kopfkommentar). Als reiner Text geladen wie
+// WING_PNG/BIND_SCRIPT (kein ESM-Import - die Engine laeuft im Browser als
+// eigenstaendiges Skript, nicht als Node-Modul).
+const WING_ENGINE_JS = readFileSync(
+  fileURLToPath(new URL("./wing-canvas-engine.js", import.meta.url)),
+  "utf8",
+);
+const WING_ENGINE_PLACEHOLDER = "<!--__WING_ENGINE__-->";
+const WING_ENGINE_SCRIPT = `<script>\n${WING_ENGINE_JS}\n</script>`;
+
+// Fuegt die Wing-Canvas-Engine an ihrem Platzhalter ein - Muster wie
+// withBindScript/withWingAssets, aber OHNE deren defensives Anhaengen: fehlt
+// der Platzhalter (heute alle 5 Widgets - H3/H4 fuehren ihn erst ein), bleibt
+// das HTML byte-unveraendert. Exportiert (anders als withBindScript/
+// withWingAssets, die ueber echte Widget-Dateien indirekt getestet werden):
+// in H2 traegt noch kein echtes Widget den Platzhalter, die Injektion wird
+// deshalb ueber ein synthetisches Fixture direkt getestet (P13).
+export function withWingEngine(html) {
+  if (!html.includes(WING_ENGINE_PLACEHOLDER)) return html;
+  return html.replace(WING_ENGINE_PLACEHOLDER, WING_ENGINE_SCRIPT);
+}
+
 const WIDGET_DEFS = {
   [WIDGET_AGENT_STATUS]: { file: "agent-status.html", title: "Hermes Agent Status", wing: WING_STATIC },
   [WIDGET_MY_NUMBER]: { file: "my-number.html", title: "Hermes Agent Number", wing: WING_STATIC },
@@ -74,7 +98,7 @@ const widgetDir = fileURLToPath(new URL("./widgets/", import.meta.url));
 const WIDGET_HTML = Object.fromEntries(
   Object.entries(WIDGET_DEFS).map(([id, def]) => [
     id,
-    withBindScript(withWingAssets(readFileSync(widgetDir + def.file, "utf8"), def)),
+    withBindScript(withWingEngine(withWingAssets(readFileSync(widgetDir + def.file, "utf8"), def))),
   ]),
 );
 
