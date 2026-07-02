@@ -75,6 +75,9 @@ test("T-T3-AC3: echter initialize-Request ueber POST /mcp (Live-Connector-Pfad) 
     );
     assert.equal(hosted.mimeType, "image/png");
     assert.deepEqual(hosted.sizes, ["1024x1024"]);
+    // websiteUrl: Marken-Homepage fuer Hosts, die ihr Connector-Branding von
+    // der Website-Domain ableiten (dort liegt zusaetzlich ein favicon.ico).
+    assert.equal(result.serverInfo.websiteUrl, "https://sundartha.com");
   } finally {
     await srv.stop();
   }
@@ -100,6 +103,11 @@ test(
       const res = await fetch(`${srv.externalUrl}/brand/hermes-icon.png`);
       assert.equal(res.status, 200, "Basic-Auth darf das Icon nicht sperren, sonst laedt kein Host es");
       assert.equal(res.headers.get("content-type"), "image/png");
+      // Favicon-Konvention: Icon-Fetcher (Browser, Connector-UIs) ziehen
+      // /favicon.ico ohne Credentials von der Wurzel - vor der Ausnahme
+      // antwortete Produktion 401 (empirisch 2026-07-02, Wuerfel in claude.ai).
+      const favicon = await fetch(`${srv.externalUrl}/favicon.ico`);
+      assert.equal(favicon.status, 200, "favicon.ico muss ohne Basic-Auth erreichbar sein");
       // Gegenprobe: die Ausnahme ist eng - eine andere Route bleibt weiter gesperrt.
       const guarded = await fetch(`${srv.externalUrl}/tenant.html`);
       assert.equal(guarded.status, 401, "Basic-Auth bleibt fuer andere Routen scharf");

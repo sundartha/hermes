@@ -31,6 +31,10 @@ const HERMES_ICON_FILENAME = "hermes-icon.png";
 export const HERMES_SERVER_INFO = {
   name: "hermes",
   version: "0.2.0",
+  // Marken-Homepage (Implementation.websiteUrl): manche Hosts leiten ihr
+  // Connector-Branding (Icon/Link) von der Website-Domain ab statt aus icons -
+  // deshalb liegt dort zusaetzlich ein favicon.ico (apps/web/public).
+  websiteUrl: "https://sundartha.com",
   icons: [
     {
       src: HERMES_ICON_DATA_URI,
