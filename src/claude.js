@@ -107,7 +107,7 @@ Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin v
 
   return `${base}
 
-SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer: frage nie nach Informationen, die du als Anrufer selbst wissen muesstest oder die bereits in deinem AUFTRAG/BRIEFING stehen - insbesondere NIE nach Thema, Anlass oder Grund deines eigenen Anliegens. Kurze Abstimmungsfragen an das Gegenueber (welcher Slot, eine Bestaetigung vor einer Buchung) sind dagegen richtig. Bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht oder vereinbart bezeichnest.
+SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht; bekommst du mehrere Terminoptionen angeboten, waehle eine und hole eine kurze Bestaetigung ein, bevor du sie als gebucht bezeichnest.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
 ${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}${calendarSection(call)}
