@@ -23,6 +23,17 @@
   v.addEventListener("loadedmetadata", apply);
   v.addEventListener("play", apply);
   v.addEventListener("pause", function () { if (onScreen) setTimeout(play, 140); });
+  // Nahtloser Loop: kurz vor Clip-Ende auf den Keyframe bei t=0 springen,
+  // statt den nativen loop-Restart-Hitch am Dateiende abzuwarten. Das native
+  // loop-Attribut (oben) bleibt als Fallback fuer gedrosselte Hintergrund-Tabs,
+  // in denen timeupdate nicht zuverlaessig feuert.
+  var LOOP_EDGE_S = 0.3;
+  v.addEventListener("timeupdate", function () {
+    if (isFinite(v.duration) && v.duration > LOOP_EDGE_S &&
+        v.currentTime >= v.duration - LOOP_EDGE_S) {
+      v.currentTime = 0;
+    }
+  });
   document.addEventListener("visibilitychange", play);
   try {
     var io = new IntersectionObserver(function (es) {

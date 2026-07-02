@@ -300,13 +300,14 @@ services:
       - path: /*
         name: Content-Security-Policy
         value: "default-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
-      # Hero-Video (Bug: Stocken/"Reload"-Optik nach laengerer Session, siehe
-      # PLAN-HERO-VIDEO.md): ohne eigene Regel greift nur der Render-Default
-      # (public, max-age=0, s-maxage=300) -> jeder Frisch-Load revalidiert.
-      # Datei ist unversioniert (kein Content-Hash im Namen) -> bei kuenftiger
-      # Video-Aenderung MUSS der Dateiname mitwandern (sonst liefert der Browser
-      # bis zu 1 Jahr die alte Datei aus dem Disk-Cache). Behebt NUR den Cache-
-      # Gap, NICHT die Kern-Ursache (Single-GOP-Encoding) - siehe Plan-Doku.
-      - path: /assets/hermes_olymp.mp4
+      # Hero-Video (Bug: Stocken/"Reload"-Optik nach laengerer Session; Root
+      # Cause Single-GOP-Encoding behoben durch Re-Encode mit kurzem GOP + JS-
+      # Seamless-Loop, siehe PLAN-HERO-VIDEO.md und SPEC-HERO-VIDEO-FIX.md):
+      # ohne eigene Regel greift nur der Render-Default (public, max-age=0,
+      # s-maxage=300) -> jeder Frisch-Load revalidiert. Datei ist versioniert
+      # (_v2-Suffix statt Content-Hash) -> bei jeder kuenftigen Video-Aenderung
+      # MUSS das Suffix inkrementieren UND dieser Pfad mitziehen (sonst liefert
+      # der Browser bis zu 1 Jahr die alte Datei aus dem Disk-Cache).
+      - path: /assets/hermes_olymp_v2.mp4
         name: Cache-Control
         value: "public, max-age=31536000, immutable"
