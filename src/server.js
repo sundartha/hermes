@@ -94,7 +94,7 @@ import {
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
 import { createPortalRunner } from "./portal-pool.js";
-import { guardedBoot } from "./boot-guard.js";
+import { guardedBoot, fakeOriginateBootBlocked } from "./boot-guard.js";
 import {
   makeRequestTenant,
   isTrustedLocalCaller,
@@ -839,8 +839,14 @@ const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 // (call.provider, P6a) - sonst wuerde ein Telnyx-Call ueber Twilio-endCall
 // beendet (kein Effekt). Fuer Telnyx-Outbound ist dieser Timer der EINZIGE harte
 // Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer.
+// Gemeinsame Call-Max-Dauer in ms (G5): armMaxDurationTimer UND der Reserve-Backstop-Timer
+// teilen diese Rechnung (call-eigenes Limit vor globalem Default).
+function callMaxDurationMs(call) {
+  return (call.maxDurationS || config.maxCallDurationS) * 1000;
+}
+
 function armMaxDurationTimer(call, providerCallSid) {
-  const limit = (call.maxDurationS || config.maxCallDurationS) * 1000;
+  const limit = callMaxDurationMs(call);
   setTimeout(() => {
     const c = store.getCall(call.id);
     if (c?.status === "active" && providerCallSid)
@@ -848,6 +854,26 @@ function armMaxDurationTimer(call, providerCallSid) {
         .endCall(providerCallSid)
         .catch(() => {});
   }, limit);
+}
+
+// OUT-05 (F2): Worst-Case-Reserve eines Calls freigeben (idempotent ueber call.reserveReleased,
+// state-ops). FEHLER-SCHLUCKEND: KEIN Freigabepfad (catch/finishCall/Backstop) darf je einen
+// unhandled reject werfen; ein IO-Fehler ist secret-frei geloggt (err.message) und sonst
+// folgenlos (die Reserve ist ephemer, faellt spaetestens beim Boot auf 0). Liefert ein Promise.
+function releaseReserve(call) {
+  return store
+    .withStoreLock(() => store.releaseOutboundReserve(call))
+    .catch((e) => console.error("[reserve] release:", e.message));
+}
+
+// OUT-05 (F2): Reserve-Release-Backstop. Unabhaengig vom Provider-completed-Callback gibt dieser
+// Timer die Reserve nach maxDur + Grace frei (schliesst den "Originate 200, Callback verloren"-
+// Fall). BEIDE Engines (KEIN realtime-Guard), NUR nach erfolgreichem Originate armiert. Idempotent
+// ueber call.reserveReleased -> ein frueherer finishCall macht den Timer zum No-op; kein Timer-
+// Handle-Tracking noetig (Stil wie armMaxDurationTimer). Liest den Call beim Feuern frisch.
+function armReserveReleaseTimer(call) {
+  const delay = callMaxDurationMs(call) + config.reserveReleaseGraceMs;
+  setTimeout(() => releaseReserve(store.getCall(call.id) || call), delay);
 }
 
 // ---------------- INBOUND ----------------
@@ -1059,6 +1085,7 @@ async function finishCall(call) {
   // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
   if (config.paymentEnabled) recordVoiceMinuteMeter(call);
   reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
+  await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costEur
   store.save();
 
   if (call.status !== "completed" || !call.transcript.length) {
@@ -1377,17 +1404,24 @@ app.post("/api/calls", async (req, res) => {
   }
 
   const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
-  // Vorab-Reservierung (Kosten-Achse, outbound-p1c, D1): Worst-Case-Minutenpreis (Ziel-Tarif
-  // x maximal moegliche Minuten) gegen den verbleibenden effektiven Tenant-Cap. Reserve > Rest
-  // -> 402 VOR dem Dial (kein Originate). Schnittmenge mit dem Budget-Gate oben; globaler
-  // Notaus bleibt PARALLEL (Regel 1).
   const reserveCents = tariffCentsPerMin(to) * Math.ceil(maxDur / SECONDS_PER_MINUTE);
-  if (store.reserveExceedsBudget(tenantId, reserveCents, config)) {
-    audit(
-      "place_call_denied",
-      req,
-      `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`,
+  // OUT-05 (F2): Check+Reserve ATOMAR unter store.withStoreLock (Schnittmenge Tenant+global,
+  // Regel 1) VOR dem Dial. INVARIANTE (MINOR 6): der Lock-Body ist REIN SYNCHRON - NIE ein
+  // Netz-await hier hinein (die store.js-HARD-RULE nennt nur Re-Entrancy). fail-closed: JEDER
+  // Body-Throw (z.B. json-IO) gilt als Denial (402), NIE als reserviert, und darf keinen
+  // unhandled reject erzeugen.
+  let reserved;
+  try {
+    reserved = await store.withStoreLock(() =>
+      store.tryReserveOutboundBudget(tenantId, reserveCents, config),
     );
+  } catch (e) {
+    console.error(`[place_call] reserve fehlgeschlagen tenant=${tenantId}:`, e.message); // secret-frei
+    audit("place_call_denied", req, `to=${to} grund=reserve_error tenant=${tenantId}`);
+    return res.status(402).json({ error: "Reservierung fehlgeschlagen. Bitte erneut versuchen." });
+  }
+  if (!reserved) {
+    audit("place_call_denied", req, `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`);
     return res
       .status(402)
       .json({ error: "Voraussichtliche Anrufkosten ueberschreiten das verfuegbare Budget." });
@@ -1414,6 +1448,7 @@ app.post("/api/calls", async (req, res) => {
     requestedBy,
     tenantId,
     provider: outboundProvider,
+    reserveCents, // OUT-05 (F2)
   });
   audit(
     "place_call",
@@ -1437,6 +1472,7 @@ app.post("/api/calls", async (req, res) => {
     // timeLimit-Param, fuer Telnyx der einzige verlaessliche Cap. Erst NACH
     // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
     if (config.voiceEngine !== "realtime") armMaxDurationTimer(call, tw.sid);
+    armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Engines, nach erfolgreichem Originate
     res.json({
       ok: true,
       callId: call.id,
@@ -1445,6 +1481,7 @@ app.post("/api/calls", async (req, res) => {
       context_received: contextReceivedMeta(context), // I10
     });
   } catch (err) {
+    await releaseReserve(call); // OUT-05 (F2): kein Dial = keine Kosten = volle Freigabe, VOR endCallRecord
     store.endCallRecord(call.id, "failed");
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
     // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
@@ -2055,6 +2092,16 @@ const ok = assertConfig();
 // (R4 Toll-Fraud). Die actionable Diagnose hat assertConfig() bereits ausgegeben.
 if (!ok) {
   console.error("[boot] Start abgebrochen: Safety-/Pflicht-Konfiguration ungueltig (siehe oben).");
+  process.exit(1);
+}
+
+// Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE nur mit geskippter Signaturpruefung zulaessig ->
+// in Prod (Signatur fail-closed AN, Regel 1) Boot-Refusal statt stillem Nicht-Waehlen.
+if (fakeOriginateBootBlocked(config)) {
+  console.error(
+    "[boot] Start abgebrochen: FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true " +
+      "zulaessig (Test-Seam, in Produktion unzulaessig).",
+  );
   process.exit(1);
 }
 

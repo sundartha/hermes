@@ -113,6 +113,7 @@ export function createCall(
     requestedBy,
     tenantId,
     provider,
+    reserveCents,
   },
 ) {
   const call = {
@@ -166,6 +167,13 @@ export function createCall(
     // bei nicht erfolgreichem Call. Initial null - byte-identisch zur pg-Hydrierung (rowToCall),
     // kein json<->pg-Shape-Drift.
     failureReason: null,
+    // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
+    // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
+    // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist
+    // strukturell ephemer. Inbound/Legacy ohne Reserve -> 0/false (No-op-Freigabe). KEINE
+    // pg-Spalte (bewusst nicht persistiert): nach Boot ist die Reserve ohnehin 0 (ephemer).
+    reserveCents: reserveCents || 0,
+    reserveReleased: false,
     actionItemIds: [],
   };
   s.calls.unshift(call);

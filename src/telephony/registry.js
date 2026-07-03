@@ -22,10 +22,26 @@ import { twilioMedia } from "./adapters/twilio/media.js";
 import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
+import crypto from "node:crypto";
+
+// OUT-05 (F2): Test-Seam. fakeVoice ersetzt den Provider-Transport, wenn config.fakeOriginate
+// gesetzt ist (boot-gehaertet, boot-guard.js) - EIN zentraler Registry-Gate, server.js bleibt
+// davon unberuehrt. originateCall liefert einen synthetischen, netzfreien Erfolg; endCall ist
+// ein No-op. Alle Sicherheits-Gates (Budget/Denylist/Land/Stundenlimit/Offenlegung/Signatur)
+// laufen unveraendert VOR voiceControl.
+/** @type {import("./ports.js").VoiceControl} */
+const fakeVoice = {
+  async originateCall() {
+    return { sid: `fake_${crypto.randomBytes(8).toString("hex")}` };
+  },
+  async endCall() {},
+};
 
 /** @returns {import("./ports.js").VoiceControl} */
-export const voiceControl = (provider = PROVIDER.TWILIO) =>
-  provider === PROVIDER.TELNYX ? telnyxVoice : twilioVoice;
+export const voiceControl = (provider = PROVIDER.TWILIO) => {
+  if (config.fakeOriginate) return fakeVoice;
+  return provider === PROVIDER.TELNYX ? telnyxVoice : twilioVoice;
+};
 
 /** @returns {import("./ports.js").Messaging} */
 export const messaging = (provider = PROVIDER.TWILIO) =>
