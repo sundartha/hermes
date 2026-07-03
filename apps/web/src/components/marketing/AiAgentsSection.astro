@@ -40,6 +40,32 @@ const cards = [
 ---
 
 <section class="band band--alt agents" id="works-with">
+  <!-- V5 (Jonas-Feedback, fuenfte Runde): Hintergrund soll die Hero-Sektion direkt
+       darueber optisch fortsetzen (hell, blau, Nebel-Atmosphaere), nicht eine neue,
+       abstrakte Higgsfield-Textur sein. Ergebnis nach Live-Analyse des gerenderten
+       Hero (Foto + Video + Scrims im Zusammenspiel): dieselben zwei Assets wie im
+       Hero (`olymp_3.jpg` + `hermes_olymp_v2.mp4`) werden hier wiederverwendet, aber
+       auf den unteren, wolkenreicheren Bildausschnitt positioniert (statt den oberen,
+       himmelslastigen Ausschnitt den der Hero zeigt) -- garantiert echte fotografische
+       Kontinuitaet statt eine neu generierte Naeherung. Die Scrims bleiben bewusst
+       leicht (wie im Hero, ca. 0.5 max) statt der alten, fast deckenden 0.82/0.9
+       Verdunklung von .band--alt -- die vorherige Version wirkte dadurch flach/dunkel
+       statt hell/luftig wie der Hero. -->
+  <div class="agents__bg" aria-hidden="true"></div>
+  <video
+    class="agents__sky"
+    autoplay
+    muted
+    loop
+    playsinline
+    preload="none"
+    poster="/assets/olymp_3.jpg"
+    aria-hidden="true"
+  >
+    <source src="/assets/hermes_olymp_v2.mp4" type="video/mp4" />
+  </video>
+  <div class="agents__scrim agents__scrim--top" aria-hidden="true"></div>
+  <div class="agents__scrim agents__scrim--bottom" aria-hidden="true"></div>
   <div class="agents__glow" aria-hidden="true"></div>
   <div class="band__inner">
     <p class="band__eyebrow reveal">Works with</p>
@@ -166,6 +192,81 @@ const cards = [
     padding-top: clamp(72px, 10vw, 128px);
     padding-bottom: clamp(88px, 11vw, 140px);
     overflow: hidden;
+    /* Ersetzt die geerbte .band--alt-Textur (clouds_band.jpg + 0.82/0.9 Navy-
+       Verdunklung aus sections.css) komplett -- diese Regel gewinnt durch Astros
+       Scoping (hoehere Selektor-Spezifitaet) automatisch gegen die globale Regel.
+       Feste Navy-Fallbackfarbe, identisch zum Hero-Fallback, falls Bild/Video
+       (noch) nicht geladen sind. */
+    background: #0f2d52;
+  }
+
+  /* Hero-Fortsetzung: dieselben Assets wie .hero-bg/.hero-sky (siehe pages/index.astro),
+     aber auf den unteren, wolkigeren Bildausschnitt positioniert -- nicht den oberen,
+     himmelslastigen Ausschnitt, den der Hero direkt darueber bereits zeigt. */
+  .agents__bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      url("/assets/olymp_3.jpg") center 92% / cover no-repeat,
+      radial-gradient(120% 90% at 50% 0%, #1b4f86 0%, #0f2d52 55%, #0a2245 100%);
+  }
+  .agents__sky {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 92%;
+    z-index: 0;
+    opacity: 1;
+  }
+
+  /* Leichte Scrims wie im Hero -- aber der obere Scrim startet bewusst so
+     dunkel wie der Bottom-Scrim des Hero endet (rgba(8,20,44,.6) bei 0%),
+     damit die Naht zwischen den beiden Sektionen nicht als harter Farbsprung
+     (dunkler Hero-Boden -> heller Himmel) auffaellt, sondern weich ineinander
+     uebergeht. Danach faellt er schnell auf einen leichten Wert ab, der nur
+     noch fuer Text-Kontrast sorgt (nicht die flaechendeckende 0.82/0.9-
+     Verdunklung der alten .band--alt-Version). */
+  .agents__scrim {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .agents__scrim--top {
+    top: 0;
+    height: 42%;
+    background: linear-gradient(to bottom, rgba(8, 20, 44, 0.62) 0%, rgba(8, 20, 44, 0.24) 32%, rgba(8, 20, 44, 0) 100%);
+  }
+  .agents__scrim--bottom {
+    bottom: 0;
+    height: 34%;
+    background: linear-gradient(to top, rgba(8, 20, 44, 0.5) 0%, rgba(8, 20, 44, 0.12) 60%, rgba(8, 20, 44, 0) 100%);
+  }
+
+  /* Ueber den neuen Foto/Video-Layern: band__inner (Text/Karten) muss sicher
+     oben liegen, wie hero-content (z-index 2) ueber den Hero-Scrims (z-index 1). */
+  .band__inner {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Text-Schatten wie im Hero (hero-title/hero-sub): sections.css definiert
+     Eyebrow/Titel/Lead ohne Schatten, weil sie urspruenglich auf einem fast
+     deckend abgedunkelten Hintergrund standen. Gegen den jetzt hellen Foto-
+     Hintergrund brauchen sie dieselbe Absicherung wie der Hero-Text. */
+  .band__eyebrow {
+    text-shadow: 0 1px 14px rgba(7, 16, 38, 0.7);
+  }
+  .band__title {
+    text-shadow: 0 2px 40px rgba(7, 16, 38, 0.6), 0 1px 4px rgba(7, 16, 38, 0.5);
+  }
+  .band__lead {
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 16px rgba(7, 16, 38, 0.7), 0 1px 3px rgba(7, 16, 38, 0.6);
   }
 
   .agents__glow {
@@ -218,9 +319,13 @@ const cards = [
     gap: var(--space-tight);
     padding: 8px 16px 8px 8px;
     border-radius: var(--radius-badge);
-    background: rgba(255, 255, 255, 0.08);
-    border: var(--border-width) solid rgba(255, 255, 255, 0.14);
-    color: var(--text-on-dark-muted);
+    /* Undurchsichtiger dunkler Chip statt des fast unsichtbaren 0.08-weiss-
+       Glases von vorher -- gleiches, bereits bewaehrtes Muster wie .model-chip
+       in Szene 1, das schon gegen helle Hintergruende lesbar ist. */
+    background: rgba(10, 26, 54, 0.72);
+    border: var(--border-width) solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5);
+    color: #fff;
     font-family: var(--font-grotesk);
     font-size: 13.5px;
     font-weight: var(--weight-medium);
@@ -231,7 +336,7 @@ const cards = [
     width: 26px;
     height: 26px;
     border-radius: var(--radius-round);
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.16);
     color: #fff;
     font-family: var(--font-grotesk);
     font-size: 12px;
