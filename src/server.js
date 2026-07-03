@@ -70,7 +70,7 @@ import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provis
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
-import { requestNumberForPaidTenant } from "./billing/provision-trigger.js";
+import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
@@ -1831,7 +1831,17 @@ const RETRY_REASON_STATUS = {
   already_provisioned: 409,
   tenant_cap: 409,
   global_cap: 429,
+  needs_manual_reconcile: 409,
   persist_error: 503,
+};
+// Runbook-Hinweis fuer needs_manual_reconcile (PROV-01/F7): ein zu alter / alters-unbekannter
+// stuck-Job liegt evtl. AUSSERHALB des Anbieter-Idempotenz-Fensters (Doppelkauf-Gefahr) -> KEIN
+// Auto-Retry. Der Owner muss den Provider-/Stripe-Zustand manuell abgleichen. Andere Gruende
+// nutzen den generischen Template-Text (EINE Quelle, Fallback unten).
+const RETRY_REASON_MESSAGE = {
+  needs_manual_reconcile:
+    "Haengender Nummernkauf ausserhalb des sicheren Nachfuehr-Fensters - " +
+    "bitte Provider-/Stripe-Zustand manuell abgleichen (Runbook PROV-01), kein Auto-Retry.",
 };
 app.post("/api/onboard/retry", async (req, res) => {
   const { tenantId } = req.body || {};
@@ -1852,7 +1862,9 @@ app.post("/api/onboard/retry", async (req, res) => {
   if (!result.ok)
     return res
       .status(RETRY_REASON_STATUS[result.reason] || 400)
-      .json({ error: `Re-Provisioning abgelehnt (${result.reason})` });
+      .json({
+        error: RETRY_REASON_MESSAGE[result.reason] || `Re-Provisioning abgelehnt (${result.reason})`,
+      });
   res.json({ tenantId, numberId: result.numberId, reason: result.reason, jobId: result.jobId });
 });
 
@@ -1899,16 +1911,20 @@ async function triggerTenantProvisioning(tenantId) {
   const reqRes = await store
     .withStoreLock(() => {
       const s = store.load();
-      // Decision-Core (Guard + requestNumber) liegt jetzt in provision-trigger.js -
-      // EINE Quelle fuer Produktion und Test (G5). save bleibt hier (IO, P15).
-      const r = requestNumberForPaidTenant(s, {
+      // PROV-01/F7: Decision-Core prueft zuerst einen stuck-requested+queued (Crash-Recovery)
+      // und faellt sonst unveraendert auf requestNumberForPaidTenant zurueck (G5, EINE Quelle).
+      // save bleibt hier (IO, P15). nowMs/maxAgeMs config-frei hineingereicht.
+      const r = resolveProvisionRetry(s, {
         tenantId,
+        nowMs: Date.now(),
+        maxAgeMs: config.provisioningRedriveMaxAgeMs,
         fallbackCountry: config.provisioningCountry,
         forceNumberCountry: config.forceNumberCountry,
         maxNumbers: config.maxNumbers,
         maxNumbersPerTenant: config.maxNumbersPerTenant,
       });
-      // Fix B (G5/S2): dieselbe Persistenz-Entscheidung wie POST /api/onboard.
+      // Fix B (G5/S2): dieselbe Persistenz-Entscheidung wie POST /api/onboard. Fuer redrive/
+      // needs_manual_reconcile mutiert der Core NICHT; nur der fresh-Pfad (requestNumber) schreibt.
       if (shouldPersistProvisionResult(r)) store.save();
       return r;
     })
@@ -1919,21 +1935,29 @@ async function triggerTenantProvisioning(tenantId) {
   if (!reqRes.ok) {
     // already_provisioned ist ein erwarteter idempotenter No-op (Webhook-Retry/Folge-
     // event) - kein Audit-Wert. Jeder andere Grund (tenant_cap/global_cap = Kosten-
-    // Notbremse, persist_error) ist forensisch relevant: kein Kauf trotz bezahltem Abo
-    // -> in den Audit-Trail (Spec BK3: "Limit ueberschritten -> kein Kauf, Audit-Eintrag").
-    // req=null -> audit-util markiert die Quelle als "system" (kein HTTP-Kontext im Webhook-
-    // Trigger). Nur die tenantId + Grund-Code, kein Secret/PII (H4).
+    // Notbremse, persist_error, needs_manual_reconcile) ist forensisch relevant: kein Kauf
+    // trotz bezahltem Abo -> in den Audit-Trail (Spec BK3: "Limit ueberschritten -> kein Kauf,
+    // Audit-Eintrag"). req=null -> audit-util markiert die Quelle als "system" (kein HTTP-
+    // Kontext im Webhook-Trigger). Nur die tenantId + Grund-Code, kein Secret/PII (H4).
     if (reqRes.reason !== "already_provisioned")
       audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${reqRes.reason}`);
     return { ok: false, reason: reqRes.reason };
   }
-  // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf.
-  if (!config.provisioningEnabled)
-    return { ok: true, reason: "dry_run", numberId: reqRes.number.id };
-  const jobRes = await queueProvisioning(reqRes.number.id, tenantId);
+  // Beide ok-Faelle liefern eine numberId (redrive: reqRes.numberId; fresh: reqRes.number.id).
+  const numberId = reqRes.reason === "redrive" ? reqRes.numberId : reqRes.number.id;
+  // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf/
+  // Re-Drive - EINE Stelle fuer beide Pfade (G5, kein doppelter Gate).
+  if (!config.provisioningEnabled) return { ok: true, reason: "dry_run", numberId };
+  // Redrive: KEINE neue Nummer/Job (queueProvisioning), sondern den bestehenden stuck-Job in
+  // den single-flight-Drain zurueckgeben (dieselbe numberId/idempotencyKey -> kein Doppelkauf).
+  if (reqRes.reason === "redrive") {
+    redriveProvisioningJobs([reqRes.job]);
+    return { ok: true, reason: "redrive", numberId, jobId: reqRes.jobId };
+  }
+  const jobRes = await queueProvisioning(numberId, tenantId);
   if (!jobRes.ok) return { ok: false, reason: "persist_error" };
   void runProvisioningDrainExclusive();
-  return { ok: true, reason: "queued", numberId: reqRes.number.id, jobId: jobRes.jobId };
+  return { ok: true, reason: "queued", numberId, jobId: jobRes.jobId };
 }
 
 // Verarbeitet wartende provision_number-Jobs deterministisch (In-Memory-Drain).

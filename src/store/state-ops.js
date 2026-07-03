@@ -1072,6 +1072,19 @@ const PROVISION_CLOSE_NUMBER_STATUS = new Set([
   NUMBER_STATUS.SUSPENDED,
 ]);
 
+// Alters-Gate fuer den geld-sicheren Re-Drive - EINE Quelle (G5) fuer den Boot-Sweep-
+// Klassifikator (classifyQueuedProvisioningJobs) UND den Retry-Lever (resolveProvisionRetry,
+// F7). Liefert den hold-/block-Grund oder null, wenn der Job jung genug ist (innerhalb des
+// Anbieter-Idempotenz-Fensters -> re-drive-sicher). "unknown_age": createdAt fehlt/unparsebar
+// (fail-closed, Alter unbekannt); "too_old": aelter als maxAgeMs. maxAgeMs===0 (Observe-Only)
+// -> jeder reale Job ist "too_old". Ein zweiter Ort duerfte NICHT driften (Doppelkauf-Risiko).
+export function redriveAgeHoldReason(job, nowMs, maxAgeMs) {
+  const createdMs = Date.parse(job.createdAt ?? "");
+  if (!job.createdAt || Number.isNaN(createdMs)) return "unknown_age";
+  if (nowMs - createdMs > maxAgeMs) return "too_old";
+  return null;
+}
+
 // ---- PROV-01 Crash-Recovery: reiner Klassifikator (F4) ----
 // Triagiert ALLE QUEUED-Provisioning-Jobs in drei DISJUNKTE Koerbe. REIN und IO-frei
 // (mutiert s NICHT, kein Date.now, kein save): nowMs/maxAgeMs/kycMinLevel kommen als
@@ -1102,13 +1115,9 @@ export function classifyQueuedProvisioningJobs(s, { nowMs, maxAgeMs, kycMinLevel
       buckets.hold.push({ job, reason: "no_active_subscriber" });
       continue;
     }
-    const createdMs = Date.parse(job.createdAt ?? "");
-    if (!job.createdAt || Number.isNaN(createdMs)) {
-      buckets.hold.push({ job, reason: "unknown_age" });
-      continue;
-    }
-    if (nowMs - createdMs > maxAgeMs) {
-      buckets.hold.push({ job, reason: "too_old" });
+    const ageHoldReason = redriveAgeHoldReason(job, nowMs, maxAgeMs);
+    if (ageHoldReason) {
+      buckets.hold.push({ job, reason: ageHoldReason });
       continue;
     }
     buckets.redrive.push(job);
