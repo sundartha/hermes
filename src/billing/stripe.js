@@ -26,6 +26,13 @@ const OFF_SESSION = "true"; // Karte ohne Kunden-Interaktion belasten (kein 3DS-
 // (fail-closed, kein "Abo ohne Zahlung"). Kein Magic-String (G25).
 const SUBSCRIPTION_FAILCLOSED_BEHAVIOR = "error_if_incomplete";
 
+// PROV-01/F6: Stripe lehnt einen zweiten Capture desselben PaymentIntent mit diesem
+// Fehlercode ab und meldet den PI-Status 'succeeded' (Geld bereits eingezogen). NUR diese
+// Kombination gilt als idempotenter Erfolg (kein Magic-String, G25). Dokumentierte Stripe-
+// Form, live im Owner-Smoke bestaetigen (wie der uebrige Adapter, live UNBESTAETIGT).
+const PI_UNEXPECTED_STATE_CODE = "payment_intent_unexpected_state";
+const PI_STATUS_SUCCEEDED = "succeeded";
+
 // Logischer kind -> Stripe-Meter-event_name (Provider-Spezifik adapter-intern, G25).
 // Live mit dem Owner gegen die echten Stripe-Meter abgleichen (geparkt, wie P6b1):
 // die Customer-Bindung (stripe_customer_id pro Tenant) ist NICHT in P6b3-Scope ->
@@ -49,6 +56,20 @@ function authHeaders(extra = {}) {
 
 function assertOk(res, op) {
   if (!res.ok) throw new Error(`Stripe ${op} fehlgeschlagen: HTTP ${res.status}`);
+}
+
+// Praezise Diskriminierung des idempotenten "bereits captured"-Falls (PROV-01/F6): NUR
+// Fehlercode payment_intent_unexpected_state UND PI-Status 'succeeded' gelten als Erfolg
+// (das Geld ist eingezogen). Jeder andere Fehler (anderer code, anderer PI-Status wie
+// 'canceled') bleibt ein echter Fehler. Erwartet den geparsten Stripe-Fehlerkoerper.
+function isAlreadyCapturedError(errorBody) {
+  const err = errorBody && errorBody.error;
+  return Boolean(
+    err &&
+      err.code === PI_UNEXPECTED_STATE_CODE &&
+      err.payment_intent &&
+      err.payment_intent.status === PI_STATUS_SUCCEEDED,
+  );
 }
 
 const url = (path) => config.stripeApiBase + path;
@@ -91,7 +112,13 @@ export const stripeBilling = {
       headers: authHeaders(),
       body,
     });
-    assertOk(res, "captureHold");
+    if (res.ok) return;
+    // Idempotenz (PROV-01/F6): ein zweiter Capture desselben PI (Boot-Sweep-Re-Drive nach
+    // Crash zwischen Capture und store.save()) darf KEINE bezahlte Nummer freigeben. Stripe
+    // lehnt ihn mit 'already captured' ab -> als Erfolg behandeln. Jeder andere Fehler wirft.
+    const errorBody = await res.json().catch(() => ({}));
+    if (isAlreadyCapturedError(errorBody)) return;
+    assertOk(res, "captureHold"); // res.ok ist false -> wirft mit einheitlichem Stripe-Fehlertext
   },
 
   async cancelHold(paymentIntentId) {
