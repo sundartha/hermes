@@ -863,9 +863,8 @@ async function flushUsage(client, tenantId, usage) {
 }
 
 async function flushCalls(client, tenantId, calls) {
-  await deleteMissing(
+  await deleteMissingCallsKeepActive(
     client,
-    "call",
     tenantId,
     calls.map((c) => c.id),
   );
@@ -1154,4 +1153,27 @@ async function deleteMissingByText(client, table, column, tenantId, keepValues) 
     tenantId,
     keepValues,
   ]);
+}
+
+// Reconcile-Prune fuer die call-Tabelle (A6/DEPLOY-04): entfernt Retention-Zeilen
+// des Tenants wie deleteMissing, schuetzt aber jedes laufende Gespraech - eine
+// DB-Zeile mit status=CALL_STATUS_ACTIVE, die der (divergente) Spiegel NICHT kennt,
+// wird NIE geloescht. Der eigene aktive Call steht ohnehin in keepIds (Upsert) ->
+// geschuetzt sind nur FREMDE aktive Zeilen eines Overlap-/Restart-Prozesses.
+// Bewusst call-lokal, NICHT im generischen deleteMissing (8 Tabellen): status=active
+// heisst nur bei call "laufendes Gespraech"; bei number waere es eine aktive DID ->
+// genereller Schutz verhinderte legitimes Prunen.
+const CALL_STATUS_ACTIVE = "active";
+async function deleteMissingCallsKeepActive(client, tenantId, keepIds) {
+  if (keepIds.length === 0) {
+    await client.query(`DELETE FROM call WHERE tenant_id=$1 AND status <> $2`, [
+      tenantId,
+      CALL_STATUS_ACTIVE,
+    ]);
+    return;
+  }
+  await client.query(
+    `DELETE FROM call WHERE tenant_id=$1 AND status <> $2 AND id <> ALL($3::text[])`,
+    [tenantId, CALL_STATUS_ACTIVE, keepIds],
+  );
 }
