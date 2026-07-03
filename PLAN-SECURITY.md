@@ -32,7 +32,15 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > statt als Fehler (kein Release einer bezahlten Nummer) - ein Re-Drive nach einem Crash
 > zwischen erfolgreichem Capture und `store.save()` loest damit KEIN `rollbackAfterOrder`
 > mehr aus. Praezise Diskriminierung: NUR diese Kombination gilt als Erfolg, jeder andere
-> Stripe-Fehler wirft weiter. HARTER Launch-Gate: Scharfschaltung (maxAge>0) mit
+> Stripe-Fehler wirft weiter. Der on-demand Operator-Re-Trigger (`POST /api/onboard/retry` ->
+> `triggerTenantProvisioning`) nutzt seit F7 dieselbe alters-gegatete Entscheidung
+> (`resolveProvisionRetry`, geteiltes Alters-Gate `redriveAgeHoldReason`): ein junger stuck
+> `requested`+`queued` wird ueber den single-flight-Drain geld-sicher nachgefuehrt (dieselbe
+> numberId/idempotencyKey, KEIN Doppelkauf); ein zu alter / alters-unbekannter stuck-Job liefert
+> `needs_manual_reconcile` (HTTP 409 mit Runbook-Hinweis) statt eines Auto-Kaufs. Das Abo/KYC-Gate
+> der Route (`tenantActiveSubscriber`, Regel 1) bleibt VOR dem Trigger unveraendert; eine aktive
+> Nummer bleibt `already_provisioned` (409), ein terminal `failed` fragt weiter eine frische
+> Nummer an. HARTER Launch-Gate: Scharfschaltung (maxAge>0) mit
 > PAYMENT_ENABLED erst nach gruenem Owner-Smoke der Telnyx-Idempotenz auf `/v2/number_orders`
 > (zweimal derselbe Key -> eine Order); F6 (captureHold-Idempotenz) ist gemergt. Bis dahin
 > Observe-Only. Bewusst akzeptierte Restrisiken: (1) Multi-Instance-Sweep braucht
