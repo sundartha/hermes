@@ -37,6 +37,7 @@ import {
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MS_PER_SECOND = 1000;
 
 export function makeDefaultState() {
   return {
@@ -167,6 +168,11 @@ export function createCall(
     // bei nicht erfolgreichem Call. Initial null - byte-identisch zur pg-Hydrierung (rowToCall),
     // kein json<->pg-Shape-Drift.
     failureReason: null,
+    // F9 (A6): persistierter Bucht-Marker (ISO nach erfolgreicher Abrechnung in finishCall,
+    // sonst null). Ueberlebt - anders als das In-Memory-Flag _finished - den Restart und macht
+    // die Voice-Minuten-Buchung prozessuebergreifend genau-einmal. NULL -> null (pg-Parity via
+    // rowToCall). Muster summarySmsSentAt.
+    billedAt: null,
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist
@@ -287,16 +293,25 @@ export function markAnswered(s, callId) {
   return { call, changed };
 }
 
-export function endCallRecord(s, callId, status = "completed") {
+// Setzt Terminal-Status + EXPLIZITEN endedAt-Anker (F9). Idempotent: nur aus 'active'
+// (Muster endCallRecord). Der explizite Anker (statt new Date()) ist die Grundlage fuer die
+// gekappte Zombie-/Timer-Terminalisierung in F10/F12 (nie Boot-Zeit). Nebeneffekt im Namen (N7).
+export function setCallEndedAt(s, callId, status, endedAtIso) {
   const call = getCall(s, callId);
   if (!call) return { call: null, changed: false };
   let changed = false;
   if (call.status === "active") {
     call.status = status;
-    call.endedAt = new Date().toISOString();
+    call.endedAt = endedAtIso;
     changed = true;
   }
   return { call, changed };
+}
+
+// Live-Pfade (cancel / /voice/status): now-basierter Terminalisierer, verhaltens-identisch
+// zum Bestand (endedAt = jetzt). Delegiert an setCallEndedAt (kein Duplikat, G5).
+export function endCallRecord(s, callId, status = "completed") {
+  return setCallEndedAt(s, callId, status, new Date().toISOString());
 }
 
 // Persistierter Dedup-Marker fuer die Summary-SMS (F2 P9, M2): setzt summarySmsSentAt
@@ -312,6 +327,48 @@ export function markSummarySmsSent(s, callId) {
     changed = true;
   }
   return { call, changed };
+}
+
+// F9 (A6): persistierter Bucht-Marker. Set-once (gesetzter gewinnt, Muster markSummarySmsSent):
+// ein verspaeteter /voice/status-Retry NACH einem Restart findet den Marker und bucht die
+// Voice-Minuten NICHT erneut. Wrapper saved bei changed.
+export function markBilled(s, callId) {
+  const call = getCall(s, callId);
+  let changed = false;
+  if (call && !call.billedAt) {
+    call.billedAt = new Date().toISOString();
+    changed = true;
+  }
+  return { call, changed };
+}
+
+// Anker der Max-Dauer-Rechnung: der ECHTE Call-Start (answeredAt bevorzugt, sonst startedAt),
+// NIE der Boot-Zeitpunkt. Fehlt beides -> NaN (Aufrufer clampen auf 0).
+function callStartAnchorMs(call) {
+  return Date.parse(call.answeredAt ?? call.startedAt ?? "");
+}
+
+// Hartes Max-Dauer-Limit dieses Calls in ms (call-eigenes maxDurationS vor injiziertem Default).
+// config-frei: defaultMaxDurationS reicht der Aufrufer (server.js: config.maxCallDurationS) herein.
+function callLimitMs(call, defaultMaxDurationS) {
+  return (call.maxDurationS || defaultMaxDurationS) * MS_PER_SECOND;
+}
+
+// Verbleibende Max-Dauer eines Calls ab jetzt (ms), verankert am echten Start (F9). Zombie /
+// fehlender Anker -> 0. Speist den Boot-Re-Arm (F10) + Re-Attach (F12): remaining>0 = weiter,
+// remaining<=0 = terminalisieren.
+export function remainingMaxDurationMs(call, nowMs, defaultMaxDurationS) {
+  const anchor = callStartAnchorMs(call);
+  if (Number.isNaN(anchor)) return 0;
+  return Math.max(0, callLimitMs(call, defaultMaxDurationS) - (nowMs - anchor));
+}
+
+// Deterministischer, gekappter Ende-Zeitpunkt (ms) fuer JEDE Timer-/Re-Arm-Terminalisierung
+// (F10/F12): Zombie -> anchor+limit (nie Boot-Abstand), Live-Cap -> ~now. Fehlender Anker -> 0.
+export function cappedEndedAtMs(call, nowMs, defaultMaxDurationS) {
+  const anchor = callStartAnchorMs(call);
+  if (Number.isNaN(anchor)) return 0;
+  return Math.min(nowMs, anchor + callLimitMs(call, defaultMaxDurationS));
 }
 
 // CDF1 (Report #2 5.4): persistiert den maschinenlesbaren Fehlergrund (mapped Token) am

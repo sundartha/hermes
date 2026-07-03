@@ -122,10 +122,22 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // F9 (A6): Terminalisierung mit explizitem Anker (F10/F12-Seam). Wrapper-Parity zu json.js.
+    setCallEndedAt(callId, status, endedAtIso) {
+      const { call, changed } = ops.setCallEndedAt(requireState(), callId, status, endedAtIso);
+      if (changed) save();
+      return call;
+    },
     // Persistierter Summary-SMS-Dedup-Marker (F2 P9): Wrapper-Parity zu json.js. Der
     // Flush schreibt summary_sms_sent_at am call-Record -> ueberlebt den Restart (M2).
     markSummarySmsSent(callId) {
       const { call, changed } = ops.markSummarySmsSent(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
+    // F9 (A6): persistierter Bucht-Marker - Flush schreibt billed_at (INSERT + ON CONFLICT).
+    markBilled(callId) {
+      const { call, changed } = ops.markBilled(requireState(), callId);
       if (changed) save();
       return call;
     },
@@ -691,6 +703,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // CDF1: persistierten Fehlergrund hydrieren (NULL -> null, json-Parity). Ohne diese Zeile
     // ginge er beim Restart verloren UND der naechste Flush wuerde ihn ueberschreiben.
     failureReason: r.failure_reason ?? null,
+    // F9 (A6): persistierten Bucht-Marker hydrieren (NULL -> null, json-Parity). Ohne diese Zeile
+    // ginge er beim Restart verloren -> Doppelbuchung; UND der naechste Flush ueberschriebe ihn.
+    billedAt: r.billed_at ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -897,13 +912,14 @@ async function flushCalls(client, tenantId, calls) {
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
-          summary_sms_sent_at, context, failure_reason)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          summary_sms_sent_at, context, failure_reason, billed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
-         summary_sms_sent_at=EXCLUDED.summary_sms_sent_at, failure_reason=EXCLUDED.failure_reason`,
+         summary_sms_sent_at=EXCLUDED.summary_sms_sent_at, failure_reason=EXCLUDED.failure_reason,
+         billed_at=EXCLUDED.billed_at`,
       [
         c.id,
         tenantId,
@@ -934,6 +950,9 @@ async function flushCalls(client, tenantId, calls) {
         // CDF1: Fehlergrund-Token ($24). IM ON CONFLICT DO UPDATE SET (anders als context),
         // weil er NACH dem Create im /voice/status-Callback gesetzt wird.
         c.failureReason ?? null,
+        // F9 (A6): Bucht-Marker ($25). IM ON CONFLICT DO UPDATE SET (Muster failure_reason),
+        // weil er NACH dem Create in finishCall gesetzt wird.
+        c.billedAt ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);

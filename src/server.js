@@ -1083,10 +1083,16 @@ function recordNumberMonthMeter(number) {
 async function finishCall(call) {
   if (!call || call._finished) return;
   call._finished = true;
-  // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
-  // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
-  if (config.paymentEnabled) recordVoiceMinuteMeter(call);
-  reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
+  // F9 (A6): Abrechnung genau EINMAL ueber Prozessgrenzen. Der persistierte billedAt-Marker
+  // (ueberlebt Restart, anders als _finished) gated NUR den Abrechnungsblock; Summary/
+  // Notification bleiben retry-bar, SMS bleibt ueber summarySmsSentAt idempotent (R-8.5).
+  if (!call.billedAt) {
+    // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
+    // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
+    if (config.paymentEnabled) recordVoiceMinuteMeter(call);
+    reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
+    store.markBilled(call.id); // -> billed_at persistiert, ueberlebt Restart (F9)
+  }
   await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costEur
   store.save();
 

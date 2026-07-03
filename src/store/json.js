@@ -240,7 +240,13 @@ export function save() {
     // prozessweit weiter korrekt, nur die PLATTE ist per Konstruktion reserve-frei. Die
     // reservations-Bindung existiert allein zum Weglassen (idiomatisches rest-omit, kein Muell).
     const { reservations, ...persisted } = state;
-    fs.writeFileSync(fd, JSON.stringify(persisted, null, 2));
+    // F9 (A6): _finished ist ein transienter In-Prozess-Dedup-Marker von finishCall
+    // (server.js) - NIE auf Platte, wie reservations. Ein persistiertes _finished wuerde nach
+    // einem Restart die (idempotente) Abrechnung ueberspringen (Unter-Zaehlung). Der persistierte
+    // billedAt-Marker ist der prozessuebergreifende Idempotenz-Weg; _finished bleibt strikt ephemer
+    // (pg persistiert es ohnehin nie -> Backend-Parity). Der In-Prozess-state bleibt unberuehrt.
+    const stripEphemeral = (key, value) => (key === "_finished" ? undefined : value);
+    fs.writeFileSync(fd, JSON.stringify(persisted, stripEphemeral, 2));
     fs.fsyncSync(fd); // Daten muessen auf der Platte sein, BEVOR der Rename committet
   } finally {
     fs.closeSync(fd);
@@ -299,10 +305,24 @@ export function endCallRecord(callId, status = "completed") {
   return call;
 }
 
+// F9 (A6): Terminalisierung mit explizitem Anker (F10/F12-Seam). Muster endCallRecord.
+export function setCallEndedAt(callId, status, endedAtIso) {
+  const { call, changed } = ops.setCallEndedAt(load(), callId, status, endedAtIso);
+  if (changed) save();
+  return call;
+}
+
 // Persistierter Summary-SMS-Dedup-Marker (F2 P9): mutiert -> save bei changed (Muster
 // wie markAnswered). Der Marker ueberlebt den Prozess-Restart (M2).
 export function markSummarySmsSent(callId) {
   const { call, changed } = ops.markSummarySmsSent(load(), callId);
+  if (changed) save();
+  return call;
+}
+
+// F9 (A6): persistierter Bucht-Marker - mutiert -> save bei changed (Muster markSummarySmsSent).
+export function markBilled(callId) {
+  const { call, changed } = ops.markBilled(load(), callId);
   if (changed) save();
   return call;
 }
