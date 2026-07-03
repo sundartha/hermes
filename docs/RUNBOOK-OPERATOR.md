@@ -247,15 +247,14 @@ mit `openssl rand -hex 32` (gilt fuer `MCP_AUTH_TOKEN`, `SESSION_SECRET`, `DASHB
 | `TELNYX_PUBLIC_KEY`  | Telnyx Portal                   | **KEIN Secret** (Ed25519-Verify), aber falsch = Inbound bricht | Verfuegbarkeit (kein Leak)                       |
 | `OPENAI_API_KEY`     | platform.openai.com             | Realtime-API (nur `VOICE_ENGINE=realtime`)                     | Kosten                                           |
 | `STRIPE_SECRET_KEY`  | Stripe Dashboard                | Hold/Capture, Charges (**echtes Geld** bei `sk_live`)          | Geld + Kundendaten                               |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard | Faelschung von Webhook-Events (Fake-Subscription-Aktivierung) | Unautorisierte Plan-Aktivierung/Provisioning |
 | `MCP_AUTH_TOKEN`     | selbst (`openssl rand -hex 32`) | `/mcp`-Zugang (Legacy-Bearer); bei `MCP_AUTH=oauth` ungenutzt  | Voller MCP-Tool-Zugriff                          |
 | `SESSION_SECRET`     | selbst (`openssl rand -hex 32`) | Faelschung von Browser-Session-Cookies                         | Account-Uebernahme im Portal                     |
 | `OIDC_CLIENT_SECRET` | WorkOS AuthKit                  | OIDC-Auth-Code-Tausch (Browser-Login)                          | Login-Flow-Kompromittierung                      |
 | `DASHBOARD_PASSWORD` | selbst gesetzt                  | Owner-Dashboard (Basic-Auth)                                   | Voller Owner-Dashboard-Zugriff                   |
 | `DATABASE_URL`       | Render Postgres                 | DB-Passwort (in der URL)                                       | Voller DB-Zugriff (alle Tenants)                 |
 
-> Es gibt **kein** `STRIPE_WEBHOOK_SECRET` (Stripe-Integration ist reines Outbound-`fetch`,
-> kein verifizierter Inbound-Webhook) und **keinen** separaten WorkOS-API-Key (nur OIDC-Client +
-> AuthKit-Issuer). Stand bei Aenderung der Billing-/IdP-Integration neu pruefen.
+> Update 2026-07-03: `STRIPE_WEBHOOK_SECRET` existiert jetzt (seit W4). Es gibt einen fail-closed, HMAC-verifizierten Inbound-Webhook (`src/billing/webhook.js`, Route `/webhooks/stripe`, Events siehe Zeile 250 oben). Separaten WorkOS-API-Key gibt es weiterhin **keinen** (nur OIDC-Client + AuthKit-Issuer). Stand bei Aenderung der Billing-/IdP-Integration neu pruefen.
 
 ### 7.2 Token-Rotation — Standard-Prozedur (Ueberlappung = Zero-Downtime)
 
