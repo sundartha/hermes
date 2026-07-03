@@ -43,7 +43,7 @@
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 18px;
-  --radius-pill: 99px;
+  --radius-pill: 999px; /* echte Pille — Wert vereinheitlicht mit --hero-radius-pill (hero.css) */
   --radius-circle: 50%;
 
   /* --- Rahmen (roh) --- */
@@ -59,6 +59,7 @@
   --font-display: "Norse", "Instrument Serif", Georgia, serif;
   --font-size-root: 15px;
   --line-height-root: 1.5;
+  --line-height-lockup: 1.05; /* kompakte Zeilenhoehe des Brand-Lockups (wie site.css .brand-text) */
   --letter-spacing-tight: -0.015em;
   --letter-spacing-label: 0.12em;
 

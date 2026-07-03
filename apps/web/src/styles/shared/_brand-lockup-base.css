@@ -1,0 +1,37 @@
+/*
+ * Gemeinsame Brand-Lockup-Struktur (Marke + "by Sundartha"-Zeile): von app.css
+ * (.app-brand__*, helle App-Flaeche) UND site.css (.brand-*, dunkle Hero-
+ * Flaeche) importiert (G5-Fix, Review Runde 1). Nur Layout/Spacing/Typo-Skala,
+ * die in beiden Bundles identisch ist, lebt hier. Farbrollen, Font-Family,
+ * Text-Shadow und die Lockup-Zeilenhoehe bleiben ABSICHTLICH lokal -- App- und
+ * Hero-Token-Baum sind bewusst getrennt (siehe Kopf-Kommentar site.css).
+ */
+.app-brand,
+.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-cozy);
+  text-decoration: none;
+}
+
+.app-brand__text,
+.brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-brand__name,
+.brand-name {
+  font-size: var(--text-subtitle);
+  font-weight: var(--weight-label);
+  letter-spacing: var(--tracking-label);
+}
+
+.app-brand__by,
+.brand-by {
+  margin-top: var(--space-hairline);
+  font-size: var(--text-eyebrow);
+  font-weight: var(--weight-normal);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}

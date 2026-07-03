@@ -21,7 +21,15 @@ const { title = "Hermes" } = Astro.props;
   </head>
   <body>
     <header class="app-header">
-      <a class="app-brand" href="/">Hermes</a>
+      <a class="app-brand" href="/" aria-label="Hermes — Startseite">
+        <span class="app-brand__mark" aria-hidden="true">
+          <img class="app-brand__wing" src="/assets/hermes-wing.png" alt="" />
+        </span>
+        <span class="app-brand__text">
+          <span class="app-brand__name">HERMES</span>
+          <span class="app-brand__by">by Sundartha</span>
+        </span>
+      </a>
       <slot name="auth" />
     </header>
     <main class="app-main">

@@ -91,7 +91,6 @@
 
   --hero-radius-sm: 12px;
   --hero-radius-lg: 18px;
-  --hero-radius-pill-badge: 99px;
   --hero-radius-circle: 50%;
 
   --hero-border-width-thin: 1px;
@@ -164,7 +163,7 @@
 
   --radius-control: var(--hero-radius-sm);
   --radius-card: var(--hero-radius-lg);
-  --radius-badge: var(--hero-radius-pill-badge);
+  --radius-badge: var(--hero-radius-pill);
   --radius-round: var(--hero-radius-circle);
 
   --border-width: var(--hero-border-width-thin);

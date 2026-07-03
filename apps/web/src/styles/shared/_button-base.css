@@ -1,0 +1,23 @@
+/*
+ * Gemeinsame Pillen-Form + Typo-Skala der primaeren CTA-Buttons: von app.css
+ * (.btn, helle App-Flaeche) UND site.css (.btn/.button, dunkle Hero-Flaeche)
+ * importiert (G5-Fix, Review Runde 1). Nur Eigenschaften, deren WERT in beiden
+ * Bundles identisch ist, leben hier. Radius, Rand, Farbrollen, Font-Family,
+ * Schatten/Uebergaenge und Zustaende (:hover/:disabled) bleiben ABSICHTLICH
+ * lokal in app.css/site.css -- App- und Hero-Token-Baum sind bewusst getrennt
+ * (siehe Kopf-Kommentar site.css), daher unterscheiden sich die konkreten
+ * Tokens fuer diese Rollen pro Bundle.
+ */
+.btn,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-tight);
+  padding-block: var(--space-cozy);
+  padding-inline: var(--space-loose);
+  font-size: var(--text-lead);
+  font-weight: var(--weight-label);
+  text-decoration: none;
+  cursor: pointer;
+}

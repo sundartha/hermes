@@ -58,6 +58,8 @@
 
   /* --- Groessen-Rollen (Marketing, additiv) --- */
   --size-icon: var(--space-8); /* runde Marken-/Schritt-Glyphen */
+  --size-brand: var(--space-12); /* Navy-Kachel des Fluegel-Logos im App-Header (DS foundation/brand.html .mark-tile) */
+  --leading-brand: var(--line-height-lockup);
 
   /* --- Form-Rollen [W2-Pflicht] --- */
   --radius-card: var(--radius-lg);
@@ -67,6 +69,7 @@
   /* --- Form-Rollen (von W2-app.css zusaetzlich konsumiert; additiv erhalten) --- */
   --border-width: var(--border-width-thin);
   --measure-content: var(--measure-page);
+  --radius-action: var(--radius-pill); /* Pillen-Radius der Aktions-Buttons (.btn) — Form-Angleich an den Marketing-CTA */
 
   /* --- Form-Rollen (Marketing, additiv) --- */
   --radius-control: var(--radius-sm);

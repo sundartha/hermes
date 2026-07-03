@@ -44,10 +44,13 @@
   --space-roomy: var(--space-8);
   --space-block: var(--space-12);
   --size-icon: var(--space-8);
+  --size-brand: var(--space-12); /* navy tile behind the wing logo in the app header (DS foundation/brand.html .mark-tile) */
+  --leading-brand: var(--line-height-lockup);
 
   /* --- Radius / border / shadow roles --- */
   --radius-card: var(--radius-lg);
   --radius-control: var(--radius-sm);
+  --radius-action: var(--radius-pill); /* pill radius for the app's primary action button (.btn) */
   --radius-badge: var(--radius-pill);
   --radius-round: var(--radius-circle);
   --shadow-card: var(--shadow-soft);

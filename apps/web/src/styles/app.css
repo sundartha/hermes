@@ -2,6 +2,11 @@
    AUSSCHLIESSLICH ueber semantische Tokens -- keine festen Werte (Strategie 2.5).
    Global eingebunden vom App-Layout; W3/W4-Inseln setzen darauf auf. */
 
+/* Geteilte Basis-Regelsaetze (Form/Spacing/Typo) fuer Button + Brand-Lockup --
+   auch von site.css importiert, siehe dortiger Kopf-Kommentar (G5-Fix). */
+@import "./shared/_button-base.css";
+@import "./shared/_brand-lockup-base.css";
+
 /* Lokale App-Konstante: gedaempfte Deckkraft fuer deaktivierte Controls. Bewusst
    KEIN W1-Token -- die Semantik-Schicht (tokens/, NUR-Lese) kennt keine Opacity-
    Rolle, und ein Disabled-State ist kein brand-/layout-relevanter Wert, der beim
@@ -27,9 +32,36 @@
 }
 
 .app-brand {
-  font-weight: var(--weight-emphasis);
   color: var(--color-action);
-  text-decoration: none;
+}
+
+/* Hell-Flaechen-Variante des Fluegels (DS brand.html .mark-tile): weisser
+   Fluegel braucht Navy-Grund — direkt auf weissem Header waere er unsichtbar. */
+.app-brand__mark {
+  display: grid;
+  place-items: center;
+  width: var(--size-brand);
+  height: var(--size-brand);
+  border-radius: var(--radius-control);
+  background: var(--color-action);
+  flex-shrink: 0;
+}
+
+.app-brand__wing {
+  width: var(--size-icon);
+  height: auto;
+}
+
+/* Struktur/Typo-Skala kommen aus shared/_brand-lockup-base.css (G5-Fix). Nur
+   die App-eigene Zeilenhoehe (Token statt Site-Literal) und die Muted-Farbe
+   der "by"-Zeile bleiben lokal -- .app-brand__name braucht keine eigene
+   Deklaration mehr, die Farbe erbt von .app-brand (color: var(--color-action)). */
+.app-brand__text {
+  line-height: var(--leading-brand);
+}
+
+.app-brand__by {
+  color: var(--color-muted);
 }
 
 .app-main {
@@ -60,8 +92,9 @@
 
 .dash-head__title {
   margin-top: var(--space-tight);
+  font-family: var(--font-heading);
   font-size: var(--text-title);
-  font-weight: var(--weight-heading);
+  font-weight: var(--weight-normal);
   letter-spacing: var(--tracking-heading);
   color: var(--color-text);
 }
@@ -137,16 +170,17 @@
   font-size: var(--text-eyebrow);
 }
 
+/* Form/Spacing/Typo-Skala kommen aus shared/_button-base.css (G5-Fix). Rand,
+   Radius und Farbrollen bleiben lokal (App-Token-Baum). "font-family: inherit"
+   ueberschreibt nur die Browser-Default-Schriftfamilie von <button> -- anders
+   als das Shorthand "font: inherit" clobbert das nicht font-size/font-weight
+   aus dem Shared-Partial, daher ist keine Restore-Zeile noetig. */
 .btn {
-  display: inline-block;
-  padding: var(--space-gap) var(--space-inline);
   border: 0;
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-action);
   background: var(--color-action);
   color: var(--color-on-action);
-  font: inherit;
-  cursor: pointer;
-  text-decoration: none;
+  font-family: inherit;
 }
 
 .btn:hover {

@@ -20,6 +20,10 @@
  * Werte sind Tokens.
  */
 @import "./tokens/hero.css";
+/* Geteilte Basis-Regelsaetze (Form/Spacing/Typo) fuer Button + Brand-Lockup --
+   auch von app.css importiert, siehe dortiger Kopf-Kommentar (G5-Fix). */
+@import "./shared/_button-base.css";
+@import "./shared/_brand-lockup-base.css";
 
 /* --- Dunkel-Reset (einmalig; ersetzt den hellen Reset aus tokens/index.css) --- */
 *,
@@ -114,13 +118,6 @@ svg {
   margin-inline: auto;
 }
 
-.nav-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-cozy);
-  text-decoration: none;
-}
-
 .nav-logo {
   width: auto;
   height: var(--size-logo);
@@ -156,27 +153,21 @@ svg {
   }
 }
 
+/* Struktur/Typo-Skala kommen aus shared/_brand-lockup-base.css (G5-Fix). Nur
+   die Hero-eigene Zeilenhoehe (Literal, da site.css bewusst KEINEN App-Token
+   importiert -- siehe Datei-Kopf) sowie Font-Family/Farbe/Text-Shadow der
+   dunklen Flaeche bleiben lokal. */
 .brand-text {
-  display: flex;
-  flex-direction: column;
   line-height: 1.05;
 }
 
 .brand-name {
   font-family: var(--font-grotesk);
-  font-weight: var(--weight-label);
-  font-size: var(--text-subtitle);
-  letter-spacing: var(--tracking-label);
   color: var(--text-on-dark-brand);
   text-shadow: var(--text-shadow-brand);
 }
 
 .brand-by {
-  margin-top: var(--space-hairline);
-  font-size: var(--text-eyebrow);
-  font-weight: var(--weight-normal);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   color: var(--text-on-dark-muted);
 }
 
@@ -223,22 +214,15 @@ svg {
   background: var(--text-on-dark-brand);
 }
 
-/* --- Buttons (weisse Pille = Hero-CTA) --- */
+/* --- Buttons (weisse Pille = Hero-CTA) ---
+   Form/Spacing/Typo-Skala kommen aus shared/_button-base.css (G5-Fix). Rand,
+   Radius, Font-Family, Farbrollen, Schatten und Uebergang bleiben lokal
+   (Hero-Token-Baum). */
 .btn,
 .button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-tight);
   border: var(--border-width) solid transparent;
   border-radius: var(--radius-pill-cta);
-  padding-block: var(--space-cozy);
-  padding-inline: var(--space-loose);
   font-family: var(--font-grotesk);
-  font-weight: var(--weight-label);
-  font-size: var(--text-lead);
-  text-decoration: none;
-  cursor: pointer;
   color: var(--pill-ink);
   background: var(--pill-bg);
   box-shadow: var(--shadow-pill);

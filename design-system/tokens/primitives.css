@@ -39,7 +39,7 @@
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 18px;
-  --radius-pill: 99px;
+  --radius-pill: 999px;
   --radius-circle: 50%;
 
   /* --- Border / shadow (raw) --- */
@@ -51,6 +51,7 @@
   --font-sans: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;     /* body & UI text */
   --font-size-root: 15px;
   --line-height-root: 1.5;
+  --line-height-lockup: 1.05; /* compact line-height of the brand lockup (mirrors apps/web) */
   --letter-spacing-tight: -0.015em;
   --letter-spacing-label: 0.12em;
   --weight-regular: 400;
