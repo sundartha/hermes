@@ -71,6 +71,9 @@ if (config.storeBackend === "pg") {
 export const {
   load,
   save,
+  // F11 (Review-Blocker Runde 1, S1-B): siehe store/pg.js - draint die tatsaechlich
+  // aktuelle Flush-Kette (nicht nur die frueh zurueckgegebene Referenz von save()).
+  drainFlushes,
   newId,
   createCall,
   getCall,

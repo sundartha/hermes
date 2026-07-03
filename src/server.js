@@ -2327,15 +2327,30 @@ attachMediaBridge(httpServer, finishCall);
 // entscheidend: kein Handler darf NACH dem finalen save() noch eine Mutation anhaengen.
 // Watchdog kappt einen haengenden Drain hart mit exit(0). shuttingDown schuetzt gegen
 // Wiedereintritt (zweites Signal / SIGTERM+SIGINT). Secret-frei (nur Signalname).
+//
+// Review-Blocker Runde 1 (F11):
+// S1-A: closeIdleConnections() MUSS unmittelbar NEBEN dem close(resolve)-Aufruf stehen,
+// NICHT erst nach dessen await. server.close() loest seinen Callback erst auf, wenn die
+// Verbindungszaehlung auf 0 steht - inklusive idler Keep-Alive-Sockets, die Node sonst
+// erst nach keepAliveTimeout von selbst schliesst. Haelt z.B. ein Health-Checker eine
+// staendig erneuerte Keep-Alive-Verbindung offen, wuerde "await close()" NIE von selbst
+// aufloesen, wenn closeIdleConnections() erst danach kaeme (Aufruf ohne Wirkung).
+// S1-B: store.save() haengt beim pg-Backend seinen DB-Write an eine asynchrone
+// flushChain und gibt nur EINE fruehe Referenz zurueck. Ein waehrend des Await feuernder
+// Hintergrund-Timer (Max-Dauer-Cap/Reserve-Release, unabhaengig von HTTP-Verbindungen)
+// kann seinen eigenen Flush HINTER dieser Referenz anhaengen - store.drainFlushes()
+// loopt, bis die Kette nachweislich stabil ist, bevor process.exit(0) faellt.
 let shuttingDown = false;
 async function gracefulShutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
   const watchdog = setTimeout(() => process.exit(0), config.shutdownDrainTimeoutMs).unref();
-  await new Promise((resolve) => httpServer.close(resolve));
+  const closed = new Promise((resolve) => httpServer.close(resolve));
   if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
+  await closed;
   await store.save();
+  await store.drainFlushes();
   clearTimeout(watchdog);
   process.exit(0);
 }
