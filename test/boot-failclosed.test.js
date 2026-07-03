@@ -41,3 +41,12 @@ test("T-P2-08: vollstaendige Config bootet -> GET /healthz 200 (kein Fehl-Refusa
     await srv.stop();
   }
 });
+
+test("OUT-05 F2: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK -> Boot verweigert (exit 1)", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { FAKE_ORIGINATE: "true", SKIP_TWILIO_SIGNATURE_CHECK: "false" },
+  });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /FAKE_ORIGINATE/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});

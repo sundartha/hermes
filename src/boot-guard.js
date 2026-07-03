@@ -19,3 +19,14 @@ export async function guardedBoot(label, fn) {
     return false;
   }
 }
+
+// Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE ersetzt den Provider-Transport durch einen
+// Test-Fake (kein echter Dial) und DARF nur greifen, wo die Signaturpruefung ohnehin
+// geskippt ist (beweisbar nicht-produktiv). In Prod ist die Signaturpruefung fail-closed AN
+// (Regel 1) -> ein versehentliches FAKE_ORIGINATE=true fuehrt zum Boot-Refusal statt zu
+// stillem Nicht-Waehlen. Reine Entscheidung (arg-injiziert, config-frei, testbar):
+// true = Start verweigern. Praezedenz: SKIP_TWILIO_SIGNATURE_CHECK (die Test-Suite nutzt es
+// prozessweit).
+export function fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck }) {
+  return fakeOriginate === true && skipTwilioSignatureCheck !== true;
+}

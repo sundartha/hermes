@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { guardedBoot } from "../src/boot-guard.js";
+import { guardedBoot, fakeOriginateBootBlocked } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 
 // Erreichbarer Fake-Pool, dessen Rolle Superuser ist -> assertNoBypassRls wirft den
@@ -86,4 +86,12 @@ test("T-P0-05: Portal-Fault -> /healthz 200, /auth/login 404, Server lebt", asyn
   } finally {
     srv.close();
   }
+});
+
+// OUT-05 (F2): reine Wahrheitstabelle des Boot-Refusal-Praedikats (kein Spawn noetig).
+test("OUT-05 F2: fakeOriginateBootBlocked-Wahrheitstabelle", () => {
+  assert.equal(fakeOriginateBootBlocked({ fakeOriginate: true, skipTwilioSignatureCheck: false }), true);
+  assert.equal(fakeOriginateBootBlocked({ fakeOriginate: true, skipTwilioSignatureCheck: true }), false);
+  assert.equal(fakeOriginateBootBlocked({ fakeOriginate: false, skipTwilioSignatureCheck: false }), false);
+  assert.equal(fakeOriginateBootBlocked({ fakeOriginate: false, skipTwilioSignatureCheck: true }), false);
 });

@@ -357,6 +357,14 @@ export const config = {
     min: 1,
     max: 300,
   }),
+  // OUT-05 (F2): Puffer ueber der Call-Max-Dauer, bis die Worst-Case-Reserve UNABHAENGIG vom
+  // Provider-completed-Callback via Backstop-Timer freigegeben wird (Hangup-/Callback-Latenz).
+  // Groesser = sicherer gegen fruehe Freigabe eines noch laufenden Calls, aber laengere
+  // Orphan-Lebensdauer im Verlustfall. Min 0.
+  reserveReleaseGraceMs: numEnv("RESERVE_RELEASE_GRACE_MS", process.env.RESERVE_RELEASE_GRACE_MS, {
+    fallback: 15000,
+    min: 0,
+  }),
   // STT-Endpointing fuer Folge-Gathers (/voice/turn, Budget-Engine): fester
   // speechTimeout in Sekunden statt "auto". "auto" finalisiert auf der ERSTEN
   // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,
@@ -375,6 +383,13 @@ export const config = {
   }),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
   skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
+  // OUT-05 (F2): Test-Seam. true -> voiceControl liefert den fakeVoice-Adapter (synthetischer
+  // Originate-Erfolg, endCall No-op), damit der Reserve-Atomaritaets-/Freigabepfad OFFLINE
+  // testbar ist (der echte Twilio-Client wirft synchron ohne AC-SID). BOOT-GEHAERTET
+  // (boot-guard.js): nur zulaessig mit SKIP_TWILIO_SIGNATURE_CHECK=true -> in Prod (Signatur-
+  // pruefung fail-closed AN, Regel 1) fuehrt es zum Boot-Refusal, NIE zu stillem Nicht-Waehlen.
+  // KEINE abgeschaltete Sicherung: alle Gates laufen unveraendert VOR voiceControl.
+  fakeOriginate: (process.env.FAKE_ORIGINATE || "false") === "true",
 
   // ---- Datenschutz ----
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS

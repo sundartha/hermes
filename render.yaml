@@ -196,6 +196,13 @@ services:
         value: "false"
       - key: MAX_CALL_DURATION_S
         value: "180"
+      # OUT-05: Reserve-Backstop-Puffer (ms) ueber der Call-Max-Dauer.
+      - key: RESERVE_RELEASE_GRACE_MS
+        value: "15000"
+      # OUT-05: Test-Seam - in Produktion IMMER false (der Boot verweigert true ohnehin,
+      # da SKIP_TWILIO_SIGNATURE_CHECK dort false ist). Explizit gepinnt gegen Foot-Gun.
+      - key: FAKE_ORIGINATE
+        value: "false"
       - key: RATE_LIMIT_PER_MIN
         value: "120"
       - key: RETENTION_DAYS
