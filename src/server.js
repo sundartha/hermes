@@ -55,6 +55,7 @@ import {
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
+import { terminateAndBillCall } from "./telephony/call-termination.js";
 import {
   registerTenant,
   setTenantIdentityIfAbsent,
@@ -65,6 +66,8 @@ import {
   classifyQueuedProvisioningJobs,
   setTenantGeo,
   findNumber,
+  remainingMaxDurationMs,
+  cappedEndedAtMs,
 } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
@@ -836,26 +839,56 @@ function streamDirectives(call) {
 // Request-Tenant den Call besitzt.
 const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 
-// Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge).
-// Provider-aware: beendet ueber denselben Provider, ueber den der Call laeuft
-// (call.provider, P6a) - sonst wuerde ein Telnyx-Call ueber Twilio-endCall
-// beendet (kein Effekt). Fuer Telnyx-Outbound ist dieser Timer der EINZIGE harte
-// Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer.
 // Gemeinsame Call-Max-Dauer in ms (G5): armMaxDurationTimer UND der Reserve-Backstop-Timer
 // teilen diese Rechnung (call-eigenes Limit vor globalem Default).
 function callMaxDurationMs(call) {
   return (call.maxDurationS || config.maxCallDurationS) * 1000;
 }
 
+// F10 (A6): der EINZIGE Terminalisierungspfad des Max-Dauer-Caps - kein zweiter Bucht-freier
+// Weg (K1/K2). Provider-aware ueber call.provider (P6a): ein Telnyx-Call wird ueber Telnyx
+// beendet, nicht ueber Twilio. Fuer Telnyx-Outbound ist dieser Cap der EINZIGE harte
+// Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer. Setzt den
+// gekappten End-Anker (cappedEndedAtMs, nie Boot-Zeit), beendet den Provider-Leg ZUERST
+// (awaited) und bucht die Voice-Minuten idempotent ERST DANACH ueber finishCall (billedAt-
+// Guard, F9) - via terminateAndBillCall (F10 Runde 2, G5: derselbe Helper wie cancel_call).
+// Waere die Reihenfolge umgekehrt, bliebe der Anruf beim Provider technisch live, waehrend
+// die Buchungskette (LLM-Roundtrip + SMS) laeuft - Verstoss gegen die Max-Dauer-Regel.
+// status: "completed" (Timer-Ablauf) oder "failed" (Boot-Zombie). Idempotent: nur aus
+// 'active' (ein zwischenzeitlich beendeter Call -> No-op). Self-swallowing (Muster
+// releaseReserve): ein Store-/IO-Fehler ist secret-frei geloggt (err.message), nie eine
+// unhandled rejection. Nebeneffekt (Terminalisierung + Buchung) im Namen (N7).
+async function terminateCappedCall(callId, providerCallSid, status) {
+  try {
+    const call = store.getCall(callId);
+    if (call?.status !== "active") return;
+    const endedAtIso = new Date(
+      cappedEndedAtMs(call, Date.now(), config.maxCallDurationS),
+    ).toISOString();
+    await terminateAndBillCall({
+      persistEnd: () => store.setCallEndedAt(callId, status, endedAtIso),
+      hangUp: providerCallSid
+        ? () => voiceControl(call.provider).endCall(providerCallSid)
+        : null,
+      bill: () => finishCall(store.getCall(callId)), // bucht genau EINMAL (billedAt, F9), gekappt
+    });
+  } catch (e) {
+    console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
+  }
+}
+
+// F10 (A6): armiert den Max-Dauer-Cap. Nach ms feuert der EINE Terminalisierungspfad
+// (status "completed"). Liest den Call beim Feuern frisch (Guard in terminateCappedCall);
+// ein frueher beendeter Call -> No-op. terminateCappedCall schluckt eigene Fehler -> void.
+function scheduleMaxDurationEnd(call, providerCallSid, ms) {
+  setTimeout(() => void terminateCappedCall(call.id, providerCallSid, "completed"), ms);
+}
+
+// Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge). Duenner Wrapper
+// um scheduleMaxDurationEnd (F10) mit dem vollen call-Limit; alle Aufrufer (/voice/incoming,
+// place_call) bleiben byte-identisch verdrahtet.
 function armMaxDurationTimer(call, providerCallSid) {
-  const limit = callMaxDurationMs(call);
-  setTimeout(() => {
-    const c = store.getCall(call.id);
-    if (c?.status === "active" && providerCallSid)
-      voiceControl(c.provider)
-        .endCall(providerCallSid)
-        .catch(() => {});
-  }, limit);
+  scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
 }
 
 // OUT-05 (F2): Worst-Case-Reserve eines Calls freigeben (idempotent ueber call.reserveReleased,
@@ -1529,17 +1562,15 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   if (call.status !== "active") return res.json({ status: call.status });
   const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
   audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
-  store.endCallRecord(call.id, "cancelled");
-  if (call.twilioSid) {
-    try {
-      // Provider-aware: ueber denselben Provider beenden, ueber den der Call
-      // laeuft (call.provider) - sonst Twilio-endCall auf einem Telnyx-Call.
-      await voiceControl(call.provider).endCall(call.twilioSid);
-    } catch (e) {
-      console.error("[cancel]", e.message);
-    }
-  }
-  finishCall(store.getCall(call.id));
+  // F10 Runde 2 (G5): derselbe Terminierungspfad wie der Max-Dauer-Cap - erst auflegen
+  // (awaited, provider-aware ueber call.provider - sonst Twilio-endCall auf einem
+  // Telnyx-Call), dann buchen (fire-and-forget).
+  await terminateAndBillCall({
+    persistEnd: () => store.endCallRecord(call.id, "cancelled"),
+    hangUp: call.twilioSid ? () => voiceControl(call.provider).endCall(call.twilioSid) : null,
+    bill: () => finishCall(store.getCall(call.id)),
+    onHangUpError: (e) => console.error("[cancel]", e.message),
+  });
   res.json({ status: "cancelled" });
 });
 
@@ -2178,6 +2209,34 @@ function runRetention() {
 runRetention();
 setInterval(runRetention, RETENTION_SWEEP_INTERVAL_MS).unref();
 
+// F10 (A6): Boot-Re-Arm der Max-Dauer-Timer. Ein Deploy/Restart toetet sonst den
+// In-Prozess-setTimeout jedes laufenden Calls -> der harte Max-Dauer-Cap (Absolute
+// Regel 1) waere nach jedem Boot weg. NUR Budget-Engine (realtime cappt in der
+// Bridge). Aktive Calls mit Restzeit -> Timer relativ zum ECHTEN Call-Start (nie
+// Boot-Zeit); Zombies (Restzeit<=0, Downtime > Max-Dauer) -> sofort ueber den EINEN
+// Terminalisierungspfad beenden (gekappt+gebucht, kein Phantom-active, K2/K3). Die
+// Zombie-Buchung laeuft async (finishCall) und blockiert den Boot nicht.
+function rearmActiveCallTimers() {
+  if (config.voiceEngine === "realtime") return;
+  const nowMs = Date.now();
+  let reArmed = 0;
+  let terminalized = 0;
+  for (const call of store.load().calls.filter((c) => c.status === "active")) {
+    const remaining = remainingMaxDurationMs(call, nowMs, config.maxCallDurationS);
+    if (remaining > 0) {
+      scheduleMaxDurationEnd(call, call.twilioSid, remaining);
+      reArmed++;
+    } else {
+      void terminateCappedCall(call.id, call.twilioSid, "failed");
+      terminalized++;
+    }
+  }
+  if (reArmed || terminalized)
+    console.log(
+      `[rearm] aktive Calls beim Boot: ${reArmed} re-armed, ${terminalized} terminalisiert (Zombie)`,
+    );
+}
+
 const ok = assertConfig();
 // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
 // GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp, keine Audio-Bridge.
@@ -2212,6 +2271,17 @@ if (!hasActiveNumber(store.load())) {
   );
   process.exit(1);
 }
+
+// F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
+// allen Boot-Gates (assertConfig/fakeOriginateBootBlocked/hasActiveNumber), unmittelbar
+// VOR app.listen. Vorher (VOR assertConfig) haette ein Zombie-Call bereits
+// store.setCallEndedAt() + den synchronen Teil von finishCall (Buchung/markBilled)
+// ausgeloest, BEVOR ein scheiterndes assertConfig() im selben Tick process.exit(1)
+// feuert - der async-Rest von finishCall (releaseReserve/store.save/Notification/SMS)
+// liefe dann NIE mehr, der Call bliebe teilgebucht+Reserve-nie-freigegeben auf Platte
+// stehen. Das widerspraeche dem Boot-Gate-Versprechen "GAR NICHT gestartet" (Regel 1/
+// OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
+rearmActiveCallTimers();
 
 const httpServer = app.listen(config.port, () => {
   // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
