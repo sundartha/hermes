@@ -60,6 +60,38 @@ const countWhereTenant = async (db, table, tenantId) =>
     (await db.query(`SELECT count(*) AS n FROM ${table} WHERE tenant_id=$1`, [tenantId])).rows[0].n,
   );
 
+// F8-Interaktion (A6): der Reconcile-Schutz (deleteMissingCallsKeepActive) schuetzt
+// aktive Call-Zeilen vor FREMDEN/unbekannten Overlap-Prozessen. eraseTenantData muss
+// diesen Schutz fuer die EIGENEN, per Erase erfassten Zeilen des Tenants durchbrechen -
+// sonst ueberlebt ein zum Erase-Zeitpunkt noch laufendes (status=active) Gespraech des
+// Tenants in der DB und das CASCADE auf transcript_segment feuert nie (PII bleibt).
+test("F8-Interaktion: eraseTenantData loescht auch den EIGENEN, noch aktiven Call", async () => {
+  const { store, db } = await setup();
+  const active = store.createCall({
+    direction: "inbound",
+    from: "+49",
+    to: "+49",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
+  store.addTranscript(active.id, "caller", "Owner-Geheim-noch-aktiv");
+  await store.save();
+  assert.equal(
+    (await db.query(`SELECT status FROM call WHERE id=$1`, [active.id])).rows[0].status,
+    "active",
+    "Vorbedingung: Call ist beim Erase noch aktiv",
+  );
+
+  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  await store.save();
+
+  assert.equal(await countWhereTenant(db, "call", BOOTSTRAP_TENANT_ID), 0, "aktiver Call weg");
+  assert.equal(
+    await countWhereTenant(db, "transcript_segment", BOOTSTRAP_TENANT_ID),
+    0,
+    "Transkript per CASCADE weg",
+  );
+});
+
 test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant bleibt unberuehrt", async () => {
   const { store, db } = await setup();
   // Owner-Call-Satz ueber die Store-API anlegen (call + Transkript + Action Item + Notification).

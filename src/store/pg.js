@@ -79,10 +79,19 @@ export function makePgStore(runner) {
   // heutige json-Verhalten (kompletter Datei-Rewrite pro save) und macht jeden
   // mutate-then-save()-Pfad korrekt. save() wird synchron gerufen; der DB-Write
   // haengt an flushChain, damit Flushes nicht ineinander laufen.
-  function save() {
+  // preFlush (optional): eine zusaetzliche Aktion auf DEMSELBEN Client, VOR dem
+  // Flush, noch in derselben flushChain-Reihenfolge (aktuell nur eraseTenantData -
+  // Hard-Delete der erfassten Call-Zeilen, siehe dort). Ohne Argument identisch
+  // zum bisherigen save().
+  function save(preFlush) {
     const snapshot = requireState();
     flushChain = flushChain
-      .then(() => runner.withClient((client) => flush(client, snapshot)))
+      .then(() =>
+        runner.withClient(async (client) => {
+          if (preFlush) await preFlush(client);
+          await flush(client, snapshot);
+        }),
+      )
       .catch((err) => {
         console.error("[pg] Flush fehlgeschlagen:", err.message);
       });
@@ -284,15 +293,25 @@ export function makePgStore(runner) {
     },
 
     // Per-Tenant-DSGVO-Loeschung (Art. 17): mutiert den Spiegel (call-verknuepfte
-    // Daten des Tenants raus), der bestehende Flush reconciled die DB tenant-scoped
-    // (deleteMissing mit leerer keep-Liste -> DELETE WHERE tenant_id; transcript_
-    // segment per ON DELETE CASCADE). KEIN eigenes DELETE noetig.
+    // Daten des Tenants raus). actionItems/notifications reconciled der normale Flush
+    // weiterhin ueber deleteMissing mit leerer keep-Liste (DELETE WHERE tenant_id) - die
+    // beiden Tabellen sind vom F8-Reconcile-Schutz nicht betroffen. Die call-Zeilen
+    // selbst NICHT mehr: deleteMissingCallsKeepActive (F8/A6) schuetzt seit F8 jede
+    // status=active-Zeile bei leerer keep-Liste - das schuetzte sonst faelschlich den
+    // EIGENEN aktiven Call des Tenants vor der Loeschung (Recht auf Loeschung MUSS
+    // diesen Schutz durchbrechen; der Schutz gilt nur FREMDEN/unbekannten Zeilen eines
+    // Overlap-Prozesses). Deshalb: die betroffenen Call-IDs VOR der Mutation sichern
+    // (dieselbe Scope-Quelle wie exportTenantData, ops.tenantCallScope - kein zweiter
+    // Filter mit derselben Regel) und per preFlush unconditional hart loeschen, BEVOR
+    // der normale Flush laeuft (transcript_segment faellt per ON DELETE CASCADE mit).
     eraseTenantData(tenantId) {
-      const removed = ops.eraseTenantData(requireState(), tenantId);
+      const state = requireState();
+      const eraseCallIds = ops.tenantCallScope(state, tenantId).calls.map((c) => c.id);
+      const removed = ops.eraseTenantData(state, tenantId);
       // F2 P10: auch eine geloeschte privateNumber (PII) muss persistieren - sonst kaeme sie
       // bei einem Tenant ganz ohne Calls nach dem Restart zurueck (flushTenants schreibt NULL).
       if (removed.calls || removed.actionItems || removed.notifications || removed.privateNumber)
-        save();
+        save((client) => hardDeleteCalls(client, tenantId, eraseCallIds));
       return removed;
     },
     exportTenantData: (tenantId) => ops.exportTenantData(requireState(), tenantId),
@@ -1176,4 +1195,20 @@ async function deleteMissingCallsKeepActive(client, tenantId, keepIds) {
     `DELETE FROM call WHERE tenant_id=$1 AND status <> $2 AND id <> ALL($3::text[])`,
     [tenantId, CALL_STATUS_ACTIVE, keepIds],
   );
+}
+
+// DSGVO-Art.-17-Hard-Delete (Gegenstueck zu deleteMissingCallsKeepActive): loescht
+// GENAU die uebergebenen Call-IDs, UNABHAENGIG vom status. Der Reconcile-Schutz oben
+// gilt nur FREMDEN/unbekannten Zeilen eines Overlap-Prozesses - beim Erase sind es
+// die EIGENEN, per tenantCallScope erfassten Zeilen des Tenants, deren Loeschung
+// der Nutzer aktiv verlangt hat (Recht auf Loeschung sticht den Reconcile-Schutz).
+// Setzt die RLS-GUC selbst (session-weit, wie hydrate()) - laeuft als preFlush VOR
+// dem transaktionalen Flush, der sie pro Tenant erneut (transaktionslokal) setzt.
+async function hardDeleteCalls(client, tenantId, callIds) {
+  if (callIds.length === 0) return;
+  await setTenant(client, tenantId);
+  await client.query(`DELETE FROM call WHERE tenant_id=$1 AND id = ANY($2::text[])`, [
+    tenantId,
+    callIds,
+  ]);
 }

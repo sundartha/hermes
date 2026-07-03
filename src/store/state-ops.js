@@ -197,7 +197,10 @@ export function purgeTranscript(s, callId) {
 // die das Erase loescht, oder umgekehrt (R3-Drift). Die Scoping-Regel
 // (call.tenantId === tenantId) existiert genau hier. actionItems/notifications
 // tragen KEIN eigenes tenantId -> sie werden ueber callId in callIds gescoped.
-function tenantCallScope(s, tenantId) {
+// Exportiert (statt file-privat), weil pg.js denselben Scope VOR der Erase-Mutation
+// braucht (Hard-Delete-Pfad fuer eraseTenantData, F8/A6-Fix) - EINE Quelle statt
+// eines zweiten Filters mit derselben Regel (G5).
+export function tenantCallScope(s, tenantId) {
   const calls = s.calls.filter((c) => c.tenantId === tenantId);
   return { calls, callIds: new Set(calls.map((c) => c.id)) };
 }
