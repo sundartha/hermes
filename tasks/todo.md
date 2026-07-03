@@ -8,187 +8,82 @@ Dieses File ist der Arbeits-Scratch fuer die jeweils laufende Phase (siehe
 
 ---
 
-# Task: Widget-Politur (Icon + i18n + Design-Cleanup) — 2026-07-02
+# Task: Launch-Testlauf 1 (auto + lokal) — 2026-07-03
 
-Owner-Auftrag (3 Punkte, Chat-Widget bei MCP-Aufruf):
+Auftrag: `NEXT-SESSION-LAUNCH-TESTRUN.md` — alle auto- und lokal-Tests aus
+`PLAN-LAUNCH-TESTS.md` ausfuehren und protokollieren. Reine TEST-Session:
+KEINE Aenderung an `src/`, `public/`, `apps/` (Ausnahme: keiner — auch kein
+Fix roter Produkt-Befunde). Rote Tests sind Resultate, keine Fix-Auftraege.
+Branch: `test/launch-run-1`, NICHTS pushen (weder origin noch upstream).
 
-1. Chat-Header-Icon zeigt Default-Wuerfel statt Fluegel.
-2. Widgets sind hart deutsch — international machen (en/de/fr, EN-Default).
-3. Design eleganter (Hermes/griechisch), Debug-Infos im Fuss entfernen
-   (call_id/FAILED/ui-notifications-Zeile/Timestamp), Fluegel+Animation bleiben.
+## Erwartetes Ergebnis (deterministisch pruefbar) + Verifikation
 
-Verifizierte Vorab-Befunde (Lead, empirisch):
+- [ ] **Schritt 0 Baseline:** `npm test` komplett gelaufen; Erwartung gruen
+      (~1591 Tests, Stand master 9f3391a). Verifikation: exit code +
+      pass/fail-Zaehler im Protokoll. Rot => erst BASE_ENV-Drift pruefen
+      (`test/helpers.js`), dokumentieren, weiter.
+- [ ] **Schritt 1 auto (existierende Suiten):** je Test-ID gebuendelt
+      `npm test -- test/<datei> ...` gelaufen. IDs: OUT-01/02/03/06/08/13,
+      IN-01/02/04/05/06, SMS-03(Bestandsteil), MCP-02/03/04, UI-01, CFG-01,
+      AUTH-01/02/03/05/06, BILL-02/03/07, PROV-04, STORE-03, WEB-03(Build),
+      WEB-04(auto), DASH-01, OBS-02, CFG-04(grep), DEPLOY-10(auto-grep).
+      Verifikation: Protokollzeile je ID mit exaktem Kommando + Zaehler.
+- [ ] **Schritt 2 auto (neu zu schreiben):** OUT-05*, IN-03, IN-08, MCP-06,
+      MCP-07, MCP-08, UI-02, DASH-02 (OHNE jsdom — kein neues Dep, Adaption
+      dokumentieren), SMS-02, CFG-03, PROV-06*, BILL-04-Erweiterung,
+      OUT-07/10/11-Ergaenzungen, AUTH-07-auto, OUT-12-auto-Teil.
+      (* = erwartet ROT: OUT-05, PROV-06 — nur dokumentieren, kein Produktfix.)
+      Konventionen: node:test, PORT=0 + DATA_DIR-Temp, BASE_ENV aus
+      test/helpers.js, pglite und Server-Spawn NIE mischen, keine neuen Deps.
+      Verifikation: jede neue Datei laeuft einzeln (`npm test -- test/<datei>`),
+      Ergebnis im Protokoll.
+- [ ] **Schritt 3 lokal:** OUT-04, OUT-09, IN-07, SMS-01, OBS-01, CFG-02,
+      PROV-01 (NUR Repro + Zustandsbeschreibung), PROV-05, DEP-01, DEP-02
+      (frischer Worktree), OUT-12-auto-Teil falls offen. Serverstart IMMER
+      fail-safe mit Dummy-Provider-Keys: `PORT=3999
+      SKIP_TWILIO_SIGNATURE_CHECK=true TELNYX_API_KEY=invalid
+      TWILIO_ACCOUNT_SID=ACinvalid TWILIO_AUTH_TOKEN=invalid
+      PROVISIONING_ENABLED=false PAYMENT_ENABLED=false npm start`.
+      `.env` NIE aendern, `data/store.json` NIE anfassen.
+      Verifikation: curl-Sequenz + beobachtete HTTP-Antwort je ID im Protokoll.
+- [ ] **Schritt 4 live markieren:** alle live-Zeilen als
+      "uebersprungen (live, Owner-Session)" im Protokoll.
+- [ ] **Protokoll** `tasks/launch-test-run-1.md`: pro Test-ID genau eine
+      Zeile (GRUEN/ROT/UEBERSPRUNGEN-live/BLOCKIERT, Kommando, 1-Zeilen-Beleg,
+      bei ROT Kurz-Diagnose max 3 Saetze).
+- [ ] **Checkboxen** in `PLAN-LAUNCH-TESTS.md` NUR bei GRUEN auf `[x]`.
+- [ ] **Git:** alles auf `test/launch-run-1` committet; master unberuehrt;
+      kein Push. Fremde uncommittete Aenderungen (apps/hermes-animation-lab,
+      apps/hermes-studio, PLAN-MCP-UI-*, PLAN-WIDGET-*) NIE stagen.
+      Verifikation: `git log --oneline master..test/launch-run-1` +
+      `git diff master --stat -- src public apps` leer.
 
-- Connector-URL ist `https://app.sundartha.com/mcp`; `serverInfo.icons[0].src`
-  zeigt via PUBLic_URL auf `vodafone-agent.onrender.com` -> Cross-Origin-Icon,
-  claude.ai verwirft es (Higgsfield=Custom-Connector MIT Icon beweist Machbarkeit).
-  Icon-PNG zudem 592KB/1024px. Beide Origins liefern das PNG mit 200.
-- Alle 5 Widget-Templates (src/ui/widgets) tragen deutsche Labels; call.html
-  zusaetzlich STATUS_VIEW-Labels im Inline-Skript + sichtbare Diag-/ID-Zeilen.
-- BIND_SCRIPT schreibt raw-Werte in [data-mcp]-Slots und laeuft NACH dem
-  Inline-Skript -> sichtbare formatierte Dauer braucht eigenes Display-Element
-  ohne data-mcp; call_id-Slot bleibt verstecktes Funktions-Slot (currentCallId).
-- Token-Gate (scripts/check-token-sync.js) prueft Widgets nur auf @import-Verbot;
-  keine neuen Hex-Token einfuehren, bestehende Tokens/rgba nutzen.
-- design-system/mcp/call.html = manuell gepflegtes Specimen (DESIGN ONLY) ->
-  nach Aenderung nachziehen.
+## Review (wird am Ende befuellt)
 
-## Todos (erwartetes Ergebnis + Verifikation, workflow.md Regel 7)
+- (offen)
 
-- [x] 1. Icon als data-URI: kleines optimiertes PNG (<=256px) als
-      `icons[0]` (data:) + bestehende https-URL als `icons[1]` in
-      HERMES_SERVER_INFO. Erwartet: icons[0].src beginnt mit
-      `data:image/png;base64,`, decodiert mit PNG-Magic, < 150KB.
-      Verifikation: neuer Test in test/ + `npm test`.
-- [x] 2. `src/ui/widget-i18n.js`: DICT en/de/fr + I18N_SCRIPT
-      (window.HermesI18n.t, [data-i18n]-Swap bei DOMContentLoaded,
-      html.lang setzen; Locale: window.openai.locale || navigator.language,
-      Fallback en). Erwartet: Key-Paritaet aller Locales, t()-Fallback en.
-      Verifikation: neuer Test test/mcp-ui-widget-i18n.test.js.
-- [x] 3. widget-catalog: I18N-Platzhalter-Injektion in <head> aller 5 Widgets.
-      Erwartet: widgetHtml(id) enthaelt HermesI18n fuer alle 5, kein
-      Platzhalter-Leak. Verifikation: Test + npm test.
-- [x] 4. 5 Widget-Templates: EN-Default-Texte + data-i18n-Keys; call.html
-      Inline-Skript nutzt t() fuer STATUS_VIEW/Button; failure_reason-Map
-      (no-answer/busy/...) lokalisiert; objective_achieved bool->Yes/No
-      lokalisiert. Erwartet: keine deutschen Hardcodes mehr in den Templates.
-      Verifikation: grep + angepasste W1-Tests.
-- [x] 5. call.html Design: .diag-Zeile weg (setDiagnostic nur noch interner
-      Zustand, Fallback-Timeout-Verhalten bleibt), id-Block versteckt
-      (funktional), Dauer als m:ss via Display-Element, Footer als
-      HERMES-Inschrift + dezenter Maeander-Akzent (nur bestehende
-      Farb-Tokens/rgba-Weiss). Erwartet: kein sichtbares call_id/FAILED/
-      ui-notifications/Timestamp mehr. Verifikation: W1-Tests angepasst +
-      visueller Harness.
-- [x] 6. design-system/mcp/call.html Specimens nachziehen (EN + neuer Fuss).
-      Verifikation: npm test (Sync-/Token-Gates gruen).
-- [x] 7. Visueller Loop lokal: Harness in Scratchpad (kompiliertes Widget-HTML
-      + postMessage-Simulation dialing/in_progress/completed/failed ×
-      en/de/fr) via Chrome-Screenshots. Erwartet: EN/DE/FR korrekt, kein
-      Debug-Fuss, Fluegel+Ring unveraendert.
-- [x] 8. `node --check` alle geaenderten Dateien + `npm test` komplett gruen.
-- [x] 9. Commit + push origin UND upstream (Render autodeploy), healthz +
-      [boot]-Banner pruefen.
-- [x] 10. Live-Verifikation claude.ai (Chrome): Widget DE live bestaetigt
-      (get_my_number-Karte "HERMES · AGENT-NUMMER"). Icon: Server liefert
-      alle Kandidaten (data-URI/websiteUrl/favicon 200 auf beiden Origins),
-      claude.ai friert das Connector-Icon aber beim Verbinden ein — Tool-
-      Listen-Refresh + Hard-Reload aendern es nicht. OFFEN (Owner): Connector
-      einmal trennen + neu verbinden, dann sollte der Fluegel erscheinen.
+## Task: claude.ai-Connector-Icon zeigt Default-Wuerfel statt Hermes-Logo (2026-07-03)
 
-## Bewusste Abgrenzungen
+Befund (empirisch, Chrome-DOM + curl):
+- claude.ai rendert Custom-Connector-Icons NICHT aus MCP serverInfo.icons,
+  sondern via Google-Favicon-Dienst (`google.com/s2/favicons?domain=<connector-domain>`).
+- Connector-Domain = app.sundartha.com; Google liefert dafuer 404 (Fallback
+  -> Default-Wuerfel). Fuer sundartha.com liefert Google bereits 200.
+- Wurzel: Startseite (apps/web/src/pages/index.astro, Standalone-Head ohne
+  Layout) deklariert KEIN `<link rel="icon">`; Subdomain ist fuer Googles
+  Favicon-Crawler noch unbekannt.
 
-- Tool-Result-TEXTE (content[0].text, z.B. "Noch keine Anrufe.") bleiben
-  deutsch — Claude uebersetzt im Chat selbst; separater Task falls gewuenscht.
-- Listen-Widgets (calls/calendar): keine Datums-/Feld-Formatierung in diesem
-  Task (nur Labels/i18n).
-- PUBLIC_URL/Origin-Cutover (Track B) unangetastet.
+- [ ] index.astro-Head: favicon.svg + favicon.ico Links ergaenzen.
+      Erwartet: lokaler Build `apps/web/dist/index.html` enthaelt `rel="icon"`.
+      Verifikation: `npm --prefix apps/web run build` + grep.
+- [ ] Deploy upstream (master==upstream, nur dieser Commit faehrt mit).
+      Erwartet: `curl -s https://app.sundartha.com/ | grep rel="icon"` trifft.
+      Verifikation: curl nach Render-Deploy (render-MCP Deploy-Status).
+- [ ] Google-Favicon-Cache + claude.ai-Anzeige re-checken (Chrome).
+      ACHTUNG: Google-Cache-Refresh ist extern, nicht erzwingbar — falls
+      weiterhin 404, als Warte-Punkt dokumentieren + Alternative (Connector
+      unter sundartha.com/mcp, single-origin) dem Owner vorlegen.
 
-# Task: Deterministische Wahl-Ziel-Normalisierung (Wurzelfix LLM-Ziffern-Regeneration)
+### Review
 
-RCA call_mr3upd4uz8p3 (02.07. 18:41): Chat-Client (LLM) formte "01737252163" in
-E.164 um und erfand dabei eine Ziffer (+4917237252163, 32s Klingeln bei Fremdem).
-Wurzelfix: Server normalisiert deterministisch, Tool-Description verbietet dem
-Modell das Umformen (Option 1, Owner-entschieden: Telefon-Konvention).
-
-- [x] 1. defaults.js: homeCountryCode(candidates) + normalizeDialTarget(num, home).
-      Erwartet: ("01737252163","+49")->"+491737252163"; ("0049...",*)->"+49...";
-      ("+...",*)->unveraendert; ohne home->unveraendert. Verifikation: Unit-Tests
-      in test/dial-target-normalization.test.js.
-- [x] 2. server.js POST /api/calls: to nach TENANT_REJECT-Check normalisieren
-      (Heimatland: privateNumber -> aktive DID), C4-Trunk-0-Praedikat auf dem
-      Ergebnis wiederholen. Erwartet: Gates+Dial sehen NUR die normalisierte
-      Nummer; kein Heimatland -> 400 E.164 (fail-closed). Verifikation:
-      HTTP-Tests (400/500-Diskriminator wie e164-trunk-zero-reject.test.js).
-- [x] 3. mcp-tools.js place_call: to-Description umdrehen (zeichengenau
-      uebernehmen, NIE umformen; Auslands-National-Format -> nachfragen).
-      Erwartet: reiner Text-Diff. Verifikation: node --check + npm test.
-- [x] 4. node --check (3 Dateien) + npm test komplett gruen; Smoke:
-      PORT=3999 lokal + curl /api/calls mit "01737252163" (mit DE-privateNumber
-      geseedet -> passiert Format-Gate; ohne -> 400).
-- [x] 5. Clean-Code-Review (Sonnet-Subagent, .claude/refs/clean-code.md);
-      S1/S2 fixen bis PASS.
-
-## Review (02.07.2026)
-
-- Verifikation 1-3: test/dial-target-normalization.test.js 16/16 gruen
-  (Unit-Sektion + HTTP-400/500-Diskriminator, inkl. privateNumber-vor-DID,
-  DID-Fallback, fail-closed ohne Heimatland, Trunk-0-Wiederholungspruefung).
-- Verifikation 4: node --check ok, npm test 1620/1620 gruen (Smoke =
-  HTTP-Sektion: echter Server-Spawn + curl-aequivalente fetch-Requests).
-- Verifikation 5: Sonnet-Audit S1:0 S2:1 S3:1 -> beide gefixt
-  (isTrunkZeroFormatError-Praedikat statt dupliziertem Guard; benannte
-  homeCountry-Zwischenvariable); Suite danach erneut 1620/1620.
-- Gate-Reihenfolge vom Auditor explizit als PASS bestaetigt (Normalisierung
-  nach Tenant-Aufloesung, vor allen Ziel-Gates; Denylist-Praezedenz gewahrt).
----
-
-# Task: ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme)
-
-Plan: /Users/antonio/.claude/plans/woolly-mapping-parrot.md (Owner-approved).
-Kern: Telnyx rendert `<Say voice="ElevenLabs.<Model>.<VoiceId>" api_key_ref="...">`,
-wenn config.telnyxElevenLabs (apiKeyRef+voiceId) gesetzt ist - sonst Azure
-byte-identisch. STT bleibt Deepgram (Telnyx kann ElevenLabs nur fuer TTS).
-Twilio + Realtime unberuehrt. KEINE Store-/UI-/server.js-Aenderung.
-
-## Schritte
-
-1. [x] `src/config.js`: `telnyxElevenLabs` {apiKeyRef, voiceId, model="Default"}
-       aus TELNYX_ELEVENLABS_API_KEY_REF / _VOICE_ID / _MODEL.
-2. [x] `.env.example`: 3 Vars dokumentiert (inkl. bewusster Vereinfachung:
-       EIN Plattform-Key, kein per-Tenant-TTS-Metering).
-3. [x] `render.yaml`: 3 Env-Eintraege (REF/VOICE_ID sync:false, MODEL value Default).
-4. [x] `test/helpers.js` BASE_ENV: alle 3 mit "" (Lehre test-base-env-drift).
-5. [x] `src/telephony/adapters/telnyx/render.js`: opts-Durchreichung
-       (renderDirectives(directives, opts={})) + sayVoiceAttrs(d, opts):
-       ElevenLabs-Zweig NUR wenn apiKeyRef UND voiceId (fail-safe, kein Wurf),
-       OHNE language-Attribut; gatherAttrs byte-unveraendert; innerer
-       Gather-Say erbt opts.
-6. [x] `src/telephony/registry.js`: Telnyx-voiceRenderer injiziert
-       { elevenLabs: config.telnyxElevenLabs }; Twilio unveraendert.
-7. [x] Neu `test/telnyx-elevenlabs-render.test.js`: Snapshots (Say/Gather DE,
-       FR/EN-STT-Locale, Gate halb/aus -> Azure, Model-Override v3).
-8. [x] Integrationstest `test/telnyx-elevenlabs-inbound.test.js`: Spawn mit
-       Env-Vars + Telnyx-Inbound -> ElevenLabs. + api_key_ref +
-       transcriptionEngine="Deepgram"; Gegenproben: ohne Env -> Azure,
-       Twilio-Inbound -> ElevenLabs-frei.
-
-## Erwartetes Ergebnis (deterministisch)
-
-- Env leer (Default): `npm test` komplett gruen, telnyx-render.test.js
-  byte-identisch (kein Verhaltenswechsel).
-- opts {apiKeyRef:"elevenlabs_prod", voiceId:"abc123", model:"Default"}:
-  `<Say voice="ElevenLabs.Default.abc123" api_key_ref="elevenlabs_prod">` ohne
-  language-Attribut; Gather-Attribute byte-identisch zum Azure-Bestand.
-- Spawn-Test mit Env: /voice/incoming-Response matcht /ElevenLabs\./ und
-  /api_key_ref="elevenlabs_prod"/ und /transcriptionEngine="Deepgram"/.
-
-## Verifikation (gelaufen in dieser Session, alles gruen)
-
-- `node --check` auf alle geaenderten src-/test-Dateien: OK.
-- `npm test`: 1581/1581 gruen (inkl. 7 neuer Tests); Bestands-Snapshots
-  telnyx-render/directive-render/g3-speech-timeout unveraendert gruen
-  (Default aus = byte-identisch belegt).
-- Lokaler curl-Smoke (PORT=3999, SKIP_TWILIO_SIGNATURE_CHECK=true, REF+VOICE_ID
-  gesetzt): Telnyx-Inbound rendert `<Say voice="ElevenLabs.Default.abc123"
-  api_key_ref="elevenlabs_prod">` im Gather OHNE language-Attribut, Gather-STT
-  byte-identisch (Deepgram/nova-3/de-DE/auto); Twilio-Inbound unveraendert
-  Polly.Vicki-Neural (beobachteter TeXML-Output).
-
-## Live-Schaltung (2026-07-02, Owner-genehmigt, autonom ausgefuehrt)
-
-- [x] Merge origin/master (cc5ed53) + Push origin/upstream master; Deploy live,
-      [boot] deployed commit=cc5ed53 (19:25 UTC), healthz 200.
-- [x] ElevenLabs: Voice "Ela - Empathetic & Warm" (SJJe86Va82zRzg6zi2dX, Library-
-      Voice fuer Customer-Support/AI-Agents) in My Voices; API-Key "telnyx-tts"
-      restriktiert (TTS Access, Voices Read, Models Access, User Read).
-- [x] Telnyx: Integration Secret identifier=elevenlabs_prod (per API, Key nur
-      via Clipboard, nie geloggt).
-- [x] Render-Env: TELNYX_ELEVENLABS_API_KEY_REF=elevenlabs_prod,
-      TELNYX_ELEVENLABS_VOICE_ID=SJJe86Va82zRzg6zi2dX, _MODEL=Default.
-
-## Offen (nur Owner, echtes Telefon)
-
-- Testanruf DE + EN auf die Telnyx-Nummer: spricht der Gather-innere Say
-  ElevenLabs? STT weiter ok? Latenz vs. Azure akzeptabel?
-- Rollback jederzeit: die zwei Env-Vars in Render leeren (ein Restart).
+- (offen)

@@ -32,6 +32,13 @@ const pricingHref = "/preise";
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={Astro.url.pathname} />
+    <!-- Favicon explizit deklarieren: Standalone-Head OHNE Layout (Site.astro
+         traegt den Link bereits selbst). Ohne den Link findet Googles
+         Favicon-Crawler kein Icon fuer die Domain - und dessen Cache speist
+         u.a. das Connector-Icon in claude.ai (app.sundartha.com serviert
+         dieselbe Seite als Gateway-Wurzel). -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
   </head>
   <body>
     <div class="hero-root">
