@@ -62,6 +62,7 @@ import {
   requestNumber,
   recordProvisioningJob,
   markProvisioningJob,
+  classifyQueuedProvisioningJobs,
   setTenantGeo,
   findNumber,
 } from "./store/state-ops.js";
@@ -1996,6 +1997,58 @@ async function runProvisioningDrain() {
 // sehen den Modul-const zur Laufzeit initialisiert.
 const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
 
+// PROV-01/F5: die geld-sicher nachfuehrbare Teilmenge (classify -> redrive) erneut in die
+// Queue geben und den single-flight-Drain anstossen. Reihenfolge/Idempotenz wie
+// queueProvisioning (derselbe number-id-Key -> KEINE neue Nummer, KEIN Doppelkauf, nur
+// innerhalb des Anbieter-Idempotenz-Fensters ueber das Alters-Gate in classify). Geteilt mit
+// dem Retry-Lever (F7).
+function redriveProvisioningJobs(jobs) {
+  for (const j of jobs)
+    provisioningQueue.enqueue({
+      kind: PROVISION_NUMBER_JOB,
+      payload: { numberId: j.numberId },
+      idempotencyKey: j.idempotencyKey,
+    });
+  if (jobs.length) void runProvisioningDrainExclusive();
+}
+
+// close-Korb (Nummer aktiv/terminal/fehlt): den gegenstandslosen QUEUED-Job terminal auf DONE
+// setzen - KEIN Kauf, die Recovery-Tuer fuer mid-flight bleibt zu (nur close). Kurzer
+// Schreibabschnitt unter withStoreLock (kein Netz-await). Fehler fail-closed geloggt
+// (secret-/PII-frei), NIE als unhandled rejection (Muster releaseReserve/queueProvisioning).
+function closeSettledProvisioningJobs(jobs) {
+  if (!jobs.length) return;
+  store
+    .withStoreLock(() => {
+      const s = store.load();
+      for (const j of jobs) markProvisioningJob(s, j.id, PROVISIONING_JOB_STATUS.DONE);
+      store.save();
+    })
+    .catch((e) => console.error("[provision-reconcile] close:", e.message));
+}
+
+// PROV-01/F5: Boot-Sweep-Reconciler. Klassifiziert die persistierten QUEUED-Job-Spuren (Crash
+// zwischen Enqueue und Drain, store.save NUR am Job-Ende) und handelt pro Korb: close -> Job
+// schliessen; hold -> Owner-Reconcile-Runbook (nur Log, KEIN Auto-Kauf); redrive -> geld-sicher
+// nachfuehren. fail-closed auf PROVISIONING_ENABLED (Dry-Run kauft nichts nach). maxAge=0
+// (Default) = Observe-Only -> jeder requested-Job faellt in hold. Aufruf fire-and-forget im
+// app.listen-Callback (blockiert weder listen noch Healthcheck). Log PII-/Secret-frei (nur
+// interne job/number/tenant-IDs + Grund, kein e164/PaymentIntent/Key, Regel 4).
+function reconcileOrphanedProvisioning() {
+  if (!config.provisioningEnabled) return;
+  const buckets = classifyQueuedProvisioningJobs(store.load(), {
+    nowMs: Date.now(),
+    maxAgeMs: config.provisioningRedriveMaxAgeMs,
+    kycMinLevel: KYC_OUTBOUND_MIN,
+  });
+  closeSettledProvisioningJobs(buckets.close);
+  for (const { job, reason } of buckets.hold)
+    console.warn(
+      `[provision-reconcile] hold job=${job.id} number=${job.numberId} tenant=${job.tenantId} grund=${reason}`,
+    );
+  redriveProvisioningJobs(buckets.redrive);
+}
+
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
 // Auth via mcpAuth-Middleware (src/auth.js): Legacy-Bearer-Token, statisches
@@ -2158,6 +2211,10 @@ const httpServer = app.listen(config.port, () => {
   console.log(
     `  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
   );
+  // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
+  // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
+  // lief bereits davor. Gated auf PROVISIONING_ENABLED, Default Observe-Only (maxAge=0).
+  void reconcileOrphanedProvisioning();
 });
 
 // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
