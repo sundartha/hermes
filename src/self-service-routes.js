@@ -348,6 +348,21 @@ export function makeSelfServiceRoutes({
           audit("self_service_card_mismatch", req, `tenant=${tenant} reason=${result.reason}`);
           return res.status(403).json({ error: "Customer-Mismatch" });
         }
+        if (result.reason === "subscription_conflict") {
+          // Review-Blocker Runde 2 (Cross-Plan-Race): eine ECHTE, bei Stripe bereits
+          // abgerechnete Zweit-Subscription (anderer Plan, zweite Session) bliebe bei
+          // already_subscribed/sub=ok stumm unverwaltet. Eigener, lauter Audit-Event-
+          // Typ (durchsuchbar/alarmierbar fuer Ops, NICHT im Rauschen von
+          // self_service_subscribe) traegt die verwaiste subscriptionId, damit sie
+          // manuell bei Stripe storniert werden kann. Ehrlicher Fehlerzustand
+          // (sub=failed) statt einer falschen Erfolgsmeldung.
+          audit(
+            "self_service_subscription_conflict",
+            req,
+            `tenant=${tenant} plan=${carriedPlan} orphanedSubscriptionId=${result.subscriptionId}`,
+          );
+          return res.redirect(SUB_RETURN_FAILED);
+        }
         audit(
           "self_service_subscribe",
           req,

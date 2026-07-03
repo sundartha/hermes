@@ -107,8 +107,17 @@ export async function createTenantSubscription({ store, billing, config, tenant,
 //   2. Plan-Match - der zurueckgetragene Query-Plan muss dem tatsaechlich bezahlten
 //      Plan der Session (subscription_data-Metadata) entsprechen, sonst buchte ein
 //      manipulierter return-Aufruf ein teureres Kontingent zum falschen Preis.
-//   3. already_subscribed - Doppel-Redirect/Reload aktiviert nie doppelt (der Route-
-//      Layer wertet das als idempotenten Erfolg; darum MUESSEN 1+2 davor stehen).
+//   3. already_subscribed/subscription_conflict - ein bereits gespeichertes Abo
+//      aktiviert nie ein zweites Mal. Review-Blocker Runde 2 (Cross-Plan-Race):
+//      zwei nahezu gleichzeitige setup-checkout-Aufrufe fuer VERSCHIEDENE Plaene
+//      (verschiedene Idempotency-Keys, s. checkoutSessionIdempotencyKey) koennen
+//      BEIDE bei Stripe real abgerechnet werden, bevor je ein /return laeuft. Die
+//      erste Rueckkehr persistiert normal; die zweite traegt eine ANDERE, ebenfalls
+//      real bezahlte outcome.subscriptionId. Nur eine IDENTISCHE subscriptionId ist
+//      ein harmloser Doppel-Redirect derselben Session (already_subscribed, idempotent-
+//      erfolgreich). Eine ABWEICHENDE subscriptionId ist eine verwaiste, unverwaltete
+//      Zweit-Subscription -> eigener reason (subscription_conflict), NIE als Erfolg
+//      werten (der Route-Layer darf das NIE auf sub=ok mappen).
 // Nebeneffekt (Persistenz + Aktivierung) im Namen (N7).
 export async function activateSubscriptionFromCheckoutSession({
   store,
@@ -125,7 +134,15 @@ export async function activateSubscriptionFromCheckoutSession({
     return { ok: false, reason: "customer_mismatch" };
   if (!outcome.planSlug || outcome.planSlug !== expectedPlanSlug)
     return { ok: false, reason: "plan_mismatch" };
-  if (hasActiveSubscription(store, tenant)) return { ok: false, reason: "already_subscribed" };
+  if (hasActiveSubscription(store, tenant)) {
+    const existing = store.tenantSubscription(tenant);
+    if (existing.subscriptionId === outcome.subscriptionId)
+      return { ok: false, reason: "already_subscribed" };
+    // Verwaiste, real bei Stripe abgerechnete Zweit-Subscription (s. Kommentar oben).
+    // subscriptionId bleibt im Ergebnis (opake Referenz, KEIN Secret - wie ueberall
+    // sonst in diesem Modul), damit Ops sie ueber den Audit-Log manuell stornieren kann.
+    return { ok: false, reason: "subscription_conflict", subscriptionId: outcome.subscriptionId };
+  }
   store.setTenantStripe(tenant, {
     customerId: outcome.customerId,
     paymentMethodId: outcome.paymentMethodId,

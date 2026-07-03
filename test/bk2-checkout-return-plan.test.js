@@ -261,8 +261,10 @@ test("(6) return ?plan=gold (unbekannt) -> 302 card=ok, kein subscribe (Muell ve
   }
 });
 
-test("(7) return ?plan=starter bei bereits aboniertem Tenant -> 302 sub=ok (idempotent-erfolgreich), kein Provisioning, altes Abo unveraendert", async () => {
-  const s = await setup({ subscribed: true });
+test("(7) return ?plan=starter bei bereits aboniertem Tenant, IDENTISCHE subscriptionId (Doppel-Redirect derselben Session) -> 302 sub=ok (idempotent-erfolgreich), kein Provisioning, altes Abo unveraendert", async () => {
+  // subscriptionId der Session == bereits gespeicherte Id: der reale Doppel-Redirect-
+  // Fall (Test 13 deckt denselben Sachverhalt ueber den echten Session-Roundtrip ab).
+  const s = await setup({ subscribed: true, checkoutOutcome: { subscriptionId: "sub_old" } });
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
@@ -376,6 +378,39 @@ test("(14) TOCTOU-Regression: zwei setup-checkout-Aufrufe (Doppelklick/zwei Tabs
     assert.equal(second.status, 200, "der Vor-Check erlaubt beide Aufrufe (das ist die Luecke)");
     const secondKey = s.billingSpy.subCheckoutParams.idempotencyKey;
     assert.equal(secondKey, firstKey, "gleicher Tenant+Plan -> gleicher Key, Stripe dedupt die zweite Session");
+  } finally {
+    await s.close();
+  }
+});
+
+// Review-Blocker Runde 2 (Cross-Plan-Race, P16/G3): zwei nahezu gleichzeitige
+// setup-checkout-Aufrufe fuer VERSCHIEDENE Plaene (verschiedene Idempotency-Keys,
+// Test 14 deckt nur denselben Plan ab) erzeugen zwei ECHTE, real abgerechnete
+// Stripe-Subscriptions. Simuliert hier die zweite Rueckkehr: der Tenant hat bereits
+// ein Abo (starter, sub_old aus einer ERSTEN, abgeschlossenen Session), die ZWEITE
+// Session (business) traegt eine ANDERE, ebenfalls real bezahlte subscriptionId.
+// Das darf NIE als Erfolg (sub=ok) gemeldet werden - der Kunde wuerde sonst denken,
+// der Business-Plan sei aktiv, waehrend der Store weiter starter zeigt und die
+// echte Business-Subscription bei Stripe unverwaltet weiterlaeuft.
+test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEICHENDE subscriptionId (Cross-Plan-Race) -> 302 sub=failed, KEIN falscher Erfolg, altes Abo unveraendert, kein Provisioning", async () => {
+  const s = await setup({
+    subscribed: true, // sub_old/starter bereits gespeichert (aus einer ersten, abgeschlossenen Session)
+    checkoutOutcome: { planSlug: "business", subscriptionId: "sub_business_real" },
+  });
+  try {
+    const ret = await billingReturn(s, `session_id=${SESSION}&plan=business`);
+    assert.equal(ret.status, 302);
+    assert.equal(
+      ret.location,
+      "/tenant.html?sub=failed",
+      "abweichende subscriptionId ist NIE ein idempotenter Erfolg (kein falsches sub=ok)",
+    );
+    assert.deepEqual(s.provisionSpy, [], "kein Provisioning der verwaisten Subscription");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripeSubscriptionId, "sub_old", "das bestehende (starter-)Abo bleibt unveraendert");
+    assert.equal(t.stripePlanSlug, "starter", "kein stiller Plan-Wechsel auf business");
+    const acct = await s.accounts.resolve(SUB);
+    assert.equal(acct.status, "suspended", "keine Aktivierung ueber die verwaiste Subscription");
   } finally {
     await s.close();
   }

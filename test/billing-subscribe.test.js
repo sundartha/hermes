@@ -248,14 +248,36 @@ test("activateSubscriptionFromCheckoutSession: fehlender plan_slug -> plan_misma
   assert.deepEqual(result, { ok: false, reason: "plan_mismatch" });
 });
 
-test("activateSubscriptionFromCheckoutSession: bereits abonniert -> already_subscribed, nichts ueberschrieben", async () => {
-  const store = fakeStore({ card: true, sub: "sub_old" });
+test("activateSubscriptionFromCheckoutSession: bereits abonniert, IDENTISCHE subscriptionId (Doppel-Redirect derselben Session) -> already_subscribed, nichts ueberschrieben", async () => {
+  const store = fakeStore({ card: true, sub: "sub_checkout" }); // == CHECKOUT_OUTCOME.subscriptionId
   store.state.subscription.planSlug = "starter";
   store.state.subscription.currentPeriodEnd = 1700000000;
   const { result } = await runActivate({ store, billing: fakeCheckoutBilling() });
   assert.deepEqual(result, { ok: false, reason: "already_subscribed" });
-  assert.equal(store.state.subscription.subscriptionId, "sub_old", "altes Abo bleibt unveraendert");
+  assert.equal(store.state.subscription.subscriptionId, "sub_checkout", "altes Abo bleibt unveraendert");
   assert.equal(store.state.subscription.currentPeriodEnd, 1700000000);
+});
+
+// Review-Blocker Runde 2 (P16/G3, Cross-Plan-Race): zwei nahezu gleichzeitige
+// setup-checkout-Aufrufe fuer VERSCHIEDENE Plaene erzeugen zwei ECHTE, real
+// abgerechnete Stripe-Subscriptions (verschiedene Idempotency-Keys). Die zweite
+// Rueckkehr traegt eine ANDERE outcome.subscriptionId als die bereits gespeicherte -
+// das ist KEIN harmloser Doppel-Redirect, sondern eine verwaiste Zweit-Subscription.
+// Muss NIE als already_subscribed/Erfolg gewertet werden.
+test("activateSubscriptionFromCheckoutSession: bereits abonniert, ABWEICHENDE subscriptionId (Cross-Plan-Race) -> subscription_conflict, nichts ueberschrieben", async () => {
+  const store = fakeStore({ card: true, sub: "sub_old" }); // != CHECKOUT_OUTCOME.subscriptionId ("sub_checkout")
+  store.state.subscription.planSlug = "starter";
+  store.state.subscription.currentPeriodEnd = 1700000000;
+  const { result, calls } = await runActivate({ store, billing: fakeCheckoutBilling() });
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "subscription_conflict",
+    subscriptionId: "sub_checkout",
+  });
+  assert.equal(store.state.subscription.subscriptionId, "sub_old", "das bestehende Abo bleibt unveraendert");
+  assert.equal(store.state.subscription.currentPeriodEnd, 1700000000);
+  assert.equal(calls.status.length, 0, "keine Aktivierung der verwaisten Subscription");
+  assert.equal(calls.provisioned.length, 0, "kein Provisioning der verwaisten Subscription");
 });
 
 test("activateSubscriptionFromCheckoutSession: Happy-Pfad persistiert Karte+Abo und aktiviert vollstaendig", async () => {
