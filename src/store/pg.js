@@ -79,19 +79,15 @@ export function makePgStore(runner) {
   // heutige json-Verhalten (kompletter Datei-Rewrite pro save) und macht jeden
   // mutate-then-save()-Pfad korrekt. save() wird synchron gerufen; der DB-Write
   // haengt an flushChain, damit Flushes nicht ineinander laufen.
-  // preFlush (optional): eine zusaetzliche Aktion auf DEMSELBEN Client, VOR dem
-  // Flush, noch in derselben flushChain-Reihenfolge (aktuell nur eraseTenantData -
-  // Hard-Delete der erfassten Call-Zeilen, siehe dort). Ohne Argument identisch
-  // zum bisherigen save().
+  // preFlush (optional): eine zusaetzliche Aktion auf DEMSELBEN Client, INNERHALB
+  // derselben Transaktion wie der Flush (P16/G26: aktuell nur eraseTenantData -
+  // Hard-Delete der erfassten Call-Zeilen, siehe dort). Ein Rollback des Flush
+  // (z.B. transienter DB-Fehler) rollt damit auch den preFlush zurueck - keine
+  // teilweise DSGVO-Loeschung. Ohne Argument identisch zum bisherigen save().
   function save(preFlush) {
     const snapshot = requireState();
     flushChain = flushChain
-      .then(() =>
-        runner.withClient(async (client) => {
-          if (preFlush) await preFlush(client);
-          await flush(client, snapshot);
-        }),
-      )
+      .then(() => runner.withClient((client) => flush(client, snapshot, preFlush)))
       .catch((err) => {
         console.error("[pg] Flush fehlgeschlagen:", err.message);
       });
@@ -302,8 +298,10 @@ export function makePgStore(runner) {
     // diesen Schutz durchbrechen; der Schutz gilt nur FREMDEN/unbekannten Zeilen eines
     // Overlap-Prozesses). Deshalb: die betroffenen Call-IDs VOR der Mutation sichern
     // (dieselbe Scope-Quelle wie exportTenantData, ops.tenantCallScope - kein zweiter
-    // Filter mit derselben Regel) und per preFlush unconditional hart loeschen, BEVOR
-    // der normale Flush laeuft (transcript_segment faellt per ON DELETE CASCADE mit).
+    // Filter mit derselben Regel) und per preFlush unconditional hart loeschen - INNERHALB
+    // derselben Transaktion wie der normale Flush (P16/G26), direkt nach BEGIN. Ein
+    // Rollback des Flush rollt damit auch den Hard-Delete zurueck statt eine teilweise
+    // DSGVO-Loeschung zu hinterlassen (transcript_segment faellt per ON DELETE CASCADE mit).
     eraseTenantData(tenantId) {
       const state = requireState();
       const eraseCallIds = ops.tenantCallScope(state, tenantId).calls.map((c) => c.id);
@@ -645,7 +643,7 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
   return {
     id: r.id,
     // tenantId hydrieren (I8): der Flush partitioniert state.calls per call.tenantId
-    // (flushTenantScope/scopeOf). Ohne dieses Feld faende der Owner-Filter nach der
+    // (flushTenantScope/ops.tenantCallScope). Ohne dieses Feld faende der Owner-Filter nach der
     // Re-Hydrierung keinen einzigen Call (undefined !== "owner") und loeschte beim
     // naechsten Flush alle Calls des Tenants. createCall setzt tenantId bereits im
     // Spiegel (json-Parity) - hier wird es aus der DB-Spalte rekonstruiert.
@@ -715,14 +713,18 @@ function rowToNotification(r) {
 }
 
 // ---- Flush: Spiegel -> DB (multi-tenant, I8). Eine Transaktion ueber den ganzen
-// Spiegel. Die tenant-Tabelle wird zuerst geschrieben (kein RLS, kein GUC noetig;
-// die FK-Ziele muessen vor den tenant-scoped Inserts existieren). Danach pro Tenant
-// die RLS-GUC setzen und NUR dessen Scheibe flushen - exakt das owner-pinned
-// Verhalten von frueher, nur N-fach. Bei genau einem Tenant identisch zu vorher.
+// Spiegel. preFlush (optional, siehe save()) laeuft ALS ERSTES nach BEGIN, damit ein
+// Rollback des restlichen Flush ihn mit zurueckrollt (P16/G26 - Atomaritaet: sonst
+// bliebe ein Hard-Delete bestehen, obwohl der Flush selbst fehlschlug). Danach wird
+// die tenant-Tabelle geschrieben (kein RLS, kein GUC noetig; die FK-Ziele muessen vor
+// den tenant-scoped Inserts existieren), dann pro Tenant die RLS-GUC setzen und NUR
+// dessen Scheibe flushen - exakt das owner-pinned Verhalten von frueher, nur N-fach.
+// Bei genau einem Tenant und ohne preFlush identisch zu vorher.
 // client = die von withClient gebundene Verbindung.
-async function flush(client, state) {
+async function flush(client, state, preFlush) {
   await client.query("BEGIN");
   try {
+    if (preFlush) await preFlush(client);
     await flushTenants(client, state.tenants);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
@@ -741,13 +743,14 @@ async function flush(client, state) {
 
 // Flusht die tenant-scoped Scheibe EINES Tenants (RLS-GUC ist gesetzt). Die
 // call-verknuepften Entitaeten (calls + ihre actionItems/notifications) werden ueber
-// scopeOf partitioniert (dieselbe Regel wie ops.tenantCallScope: call.tenantId ===
-// tenantId) - sonst blockte die RLS-WITH-CHECK den Insert einer Call-Zeile mit
-// fremder tenant_id unter dieser GUC. settings/calendar/usage/numbers ueber die
-// bestehenden pro-Tenant-Accessoren bzw. den numbers-Filter. profiles sind NICHT
-// tenant-scoped (Owner-Removal P5) -> eigener globaler Flush in flush().
+// ops.tenantCallScope partitioniert - dieselbe Quelle wie eraseTenantData/
+// exportTenantData (EIN Filter mit derselben Regel, G5) - sonst blockte die
+// RLS-WITH-CHECK den Insert einer Call-Zeile mit fremder tenant_id unter dieser GUC.
+// settings/calendar/usage/numbers ueber die bestehenden pro-Tenant-Accessoren bzw.
+// den numbers-Filter. profiles sind NICHT tenant-scoped (Owner-Removal P5) -> eigener
+// globaler Flush in flush().
 async function flushTenantScope(client, tenantId, state) {
-  const { calls, callIds } = scopeOf(state, tenantId);
+  const { calls, callIds } = ops.tenantCallScope(state, tenantId);
   await flushCalls(client, tenantId, calls);
   await flushActionItems(
     client,
@@ -814,16 +817,6 @@ async function flushTenants(client, tenants) {
       ],
     );
   }
-}
-
-// Die call-verknuepfte Tenant-Partition fuer den Flush: die Calls eines Tenants + ihre
-// callIds (EIN Filter-Pass, dieselbe Regel wie ops.tenantCallScope: call.tenantId ===
-// tenantId). actionItems/notifications tragen kein eigenes tenantId und werden ueber
-// callId zugeordnet. Lokal gehalten, damit state-ops.js (Store-Fachlogik) unveraendert bleibt.
-function scopeOf(state, tenantId) {
-  const calls = state.calls.filter((c) => c.tenantId === tenantId);
-  const callIds = new Set(calls.map((c) => c.id));
-  return { calls, callIds };
 }
 
 // Notifications eines Tenants: call-verknuepfte ueber callIds; manuelle (callId=null)
@@ -1202,11 +1195,14 @@ async function deleteMissingCallsKeepActive(client, tenantId, keepIds) {
 // gilt nur FREMDEN/unbekannten Zeilen eines Overlap-Prozesses - beim Erase sind es
 // die EIGENEN, per tenantCallScope erfassten Zeilen des Tenants, deren Loeschung
 // der Nutzer aktiv verlangt hat (Recht auf Loeschung sticht den Reconcile-Schutz).
-// Setzt die RLS-GUC selbst (session-weit, wie hydrate()) - laeuft als preFlush VOR
-// dem transaktionalen Flush, der sie pro Tenant erneut (transaktionslokal) setzt.
+// Laeuft als preFlush INNERHALB derselben Transaktion wie der Flush (P16/G26,
+// direkt nach BEGIN) - deshalb GUC TRANSAKTIONSLOKAL setzen (dritter Parameter true),
+// genau wie der per-Tenant-Flush danach. Ein Rollback des restlichen Flush (z.B.
+// transienter DB-Fehler in einer Folge-Tabelle) rollt diesen Delete mit zurueck,
+// statt eine teilweise DSGVO-Loeschung zu hinterlassen.
 async function hardDeleteCalls(client, tenantId, callIds) {
   if (callIds.length === 0) return;
-  await setTenant(client, tenantId);
+  await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId]);
   await client.query(`DELETE FROM call WHERE tenant_id=$1 AND id = ANY($2::text[])`, [
     tenantId,
     callIds,

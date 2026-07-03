@@ -137,6 +137,64 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
   assert.equal(text, "GEHEIM fremder Tenant", "fremder Transkript-Text intakt");
 });
 
+// P16/G26 (Atomaritaet): der Hard-Delete (preFlush) MUSS in DERSELBEN Transaktion
+// laufen wie der restliche Flush - sonst ueberlebt bei einem nachfolgenden Flush-
+// Fehler (ROLLBACK) ein TEIL der DSGVO-Loeschung (call/transcript_segment bereits
+// geloescht, obwohl die Transaktion insgesamt fehlschlug). Simuliert einen Flush-
+// Fehler NACH dem preFlush-Delete (INSERT INTO tenant schlaegt fehl) und prueft,
+// dass der Call-Datensatz danach UNVERAENDERT in der DB steht (Rollback traf beides).
+test("Atomaritaet (P16/G26): Flush-Fehler nach dem Hard-Delete rollt auch den Hard-Delete zurueck", async () => {
+  const db = new PGlite();
+  let failNextTenantInsert = false;
+  const runner = {
+    withClient: (fn) =>
+      fn({
+        query: (text, params) => {
+          if (failNextTenantInsert && text.startsWith("INSERT INTO tenant")) {
+            throw new Error("simulierter Flush-Fehler (Test)");
+          }
+          return db.query(text, params);
+        },
+        exec: (sql) => db.exec(sql),
+      }),
+  };
+  const store = makePgStore(runner);
+  await store.init();
+
+  const c = store.createCall({
+    direction: "outbound",
+    from: "+49",
+    to: "+49",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
+  store.addTranscript(c.id, "agent", "bleibt-bei-rollback");
+  await store.save();
+
+  failNextTenantInsert = true;
+  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  // store.save() haengt sich HINTEN an dieselbe (FIFO-serialisierte) flushChain an
+  // und wartet damit, bis der preFlush-ausloesende Versuch tatsaechlich gelaufen UND
+  // zurueckgerollt ist (failNextTenantInsert bleibt hier bewusst noch true, sonst
+  // koennte dieser Aufruf VOR dem Erase-Flush-Versuch zurueckgesetzt werden - reine
+  // Zuweisungen sind synchron, der eigentliche Flush laeuft aber asynchron).
+  await store.save();
+  failNextTenantInsert = false;
+
+  assert.equal(
+    Number((await db.query(`SELECT count(*) AS n FROM call WHERE id=$1`, [c.id])).rows[0].n),
+    1,
+    "Call ueberlebt den fehlgeschlagenen Flush - Hard-Delete wurde mit zurueckgerollt",
+  );
+  assert.equal(
+    Number(
+      (await db.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [c.id]))
+        .rows[0].n,
+    ),
+    1,
+    "Transkript-Segment ueberlebt ebenfalls (keine Teil-Loeschung)",
+  );
+});
+
 test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberleben", async () => {
   const { store, db } = await setup();
   // Service/Identitaet/Budget-Gate vorab setzen, damit ihr Ueberleben pruefbar ist.
