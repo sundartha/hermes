@@ -77,6 +77,11 @@ export const {
   newId,
   createCall,
   getCall,
+  // F12 (A6): dem Prozess unbekannten, aber in der DB aktiven Call RLS-sauber nachladen
+  // (Deploy-Instanzwechsel). pg = Tenant-Loop; json = getCall. OHNE diesen Re-Export waere
+  // store.attachActiveCall undefined -> der /voice-Re-Attach-Pfad wuerfe zur Laufzeit einen
+  // TypeError. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle.
+  attachActiveCall,
   addTranscript,
   purgeTranscript,
   markAnswered,

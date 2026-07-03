@@ -974,20 +974,61 @@ app.post("/voice/incoming", (req, res) => {
   res.type("text/xml").send(render(turnDirectives(call, greeting), provider));
 });
 
+// F12 (A6): Ein Deploy-/Instanzwechsel kann einen laufenden Call aus dem Prozess-Spiegel
+// verlieren -> der Folge-/voice-Webhook (turn/outbound) saehe einen unbekannten Call und
+// legte fail-closed auf (real: Testanruf call_mr3lg2g7t9zg, 2026-07-02). Dieser Helfer holt
+// eine DB-bestaetigte status='active'-Zeile RLS-sauber zurueck in den Spiegel
+// (store.attachActiveCall) und klassifiziert sie EINMAL fuer BEIDE Handler (G5). Vertraut
+// NUR der DB (nie dem Request-Body); sitzt strukturell HINTER app.use("/voice") (Provider-
+// Signatur, Regel 1). Unter STORE_BACKEND=json ist attachActiveCall == getCall -> im fail-
+// closed Zweig immer null/nicht-aktiv -> { logUnknown:true } (byte-identisch zum Bestand).
+// Nebeneffekt (Spiegel-Mutation + evtl. Terminalisierung/Cap-Rearm) im Namen (N7). Rueckgabe:
+//   { call }                        -> aktiver Call im Zeitfenster, normal fortfahren.
+//   { call:null, logUnknown:true }  -> wirklich unbekannt -> fail-closed Hangup + Warn-Log.
+//   { call:null, logUnknown:false } -> aktiv, aber Max-Dauer erreicht -> terminalisiert+
+//                                       gebucht (kein agentTurn, keine LLM-Kosten), stiller Hangup.
+async function reattachActiveCall(callId) {
+  const call = await store.attachActiveCall(callId);
+  // status-Guard traegt fuer json (getCall liefert dort auch nicht-aktive Calls); fuer pg
+  // ist er redundant (Query filtert status='active') aber harmlos.
+  if (!call || call.status !== "active") return { call: null, logUnknown: true };
+  const remaining = remainingMaxDurationMs(call, Date.now(), config.maxCallDurationS);
+  if (remaining <= 0) {
+    // Ueber-Zeit-Leg NICHT reanimieren: derselbe EINE Terminalisierungspfad wie der Boot-
+    // Re-Arm-Zombie (F10) - gekappt buchen (billedAt-idempotent) + Leg auflegen (awaited).
+    await terminateCappedCall(call.id, call.twilioSid, "failed");
+    return { call: null, logUnknown: false };
+  }
+  // Aktiv im Zeitfenster: den beim Boot-Re-Arm (F10) verpassten Max-Dauer-Cap EINZELN
+  // nachziehen (der Call war beim Boot noch nicht im Spiegel), dann normal fortfahren.
+  scheduleMaxDurationEnd(call, call.twilioSid, remaining);
+  return { call };
+}
+
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
 app.post("/voice/turn", async (req, res) => {
-  const call = store.getCall(req.query.callId);
+  let call = store.getCall(req.query.callId);
   if (!call || call.status !== "active") {
-    // Fail-closed Hangup wie im Bestand, aber NICHT mehr still (Runde 2, S-A):
-    // dieses Muster entsteht real, wenn ein Deploy-Instanzwechsel den in-memory-
-    // Call verliert (Testanruf call_mr3lg2g7t9zg) - ohne Logzeile ist der Vorfall
-    // in den Render-Logs unsichtbar (CLAUDE.md Regel 7). callId ist server-
-    // generiert, kein PII. Anders als /voice/status (Rauschen) ist ein Turn-
-    // Webhook ohne aktiven Call IMMER ein totes Live-Gespraech.
-    console.warn(
-      `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
-    );
-    return res.type("text/xml").send(render([hangupD()]));
+    // F12 (A6): dem Prozess unbekannter, aber in der DB aktiver Call (Deploy-Instanz-
+    // wechsel)? Erst RLS-sauber re-attachen+klassifizieren, DANN erst fail-closed auflegen.
+    const reattached = await reattachActiveCall(req.query.callId);
+    if (reattached.call) {
+      call = reattached.call; // aktiver Call, Cap re-armiert -> normal fortfahren
+    } else {
+      // Fail-closed Hangup wie im Bestand, aber NICHT mehr still (Runde 2, S-A):
+      // dieses Muster entsteht real, wenn ein Deploy-Instanzwechsel den in-memory-
+      // Call verliert (Testanruf call_mr3lg2g7t9zg) - ohne Logzeile ist der Vorfall
+      // in den Render-Logs unsichtbar (CLAUDE.md Regel 7). callId ist server-
+      // generiert, kein PII. Anders als /voice/status (Rauschen) ist ein Turn-
+      // Webhook ohne aktiven Call IMMER ein totes Live-Gespraech.
+      // Warn-Log NUR bei echt unbekanntem Call - ein terminalisiertes Ueber-Zeit-Leg
+      // (logUnknown:false) WAR aktiv, "kein aktiver Call" waere dort irrefuehrend (G2).
+      if (reattached.logUnknown)
+        console.warn(
+          `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
+        );
+      return res.type("text/xml").send(render([hangupD()]));
+    }
   }
   // L0: Luecke seit dem Render des vorigen Folge-Gathers ~ STT-Finalisierungs-Totzeit.
   metrics.logTurnGap(call.id);
@@ -1029,11 +1070,18 @@ app.post("/voice/turn", async (req, res) => {
 
 // ---------------- OUTBOUND: Angerufener nimmt ab ----------------
 app.post("/voice/outbound", async (req, res) => {
-  const call = store.getCall(req.query.callId);
+  let call = store.getCall(req.query.callId);
   if (!call) {
-    // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
-    console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
-    return res.type("text/xml").send(render([hangupD()]));
+    // F12 (A6): siehe /voice/turn - erst re-attachen+klassifizieren, dann fail-closed.
+    const reattached = await reattachActiveCall(req.query.callId);
+    if (reattached.call) {
+      call = reattached.call;
+    } else {
+      // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
+      if (reattached.logUnknown)
+        console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
+      return res.type("text/xml").send(render([hangupD()]));
+    }
   }
   call.twilioSid = req.body.CallSid || call.twilioSid;
   store.markAnswered(call.id);
@@ -1204,10 +1252,17 @@ async function finishCall(call) {
   }
 }
 
-app.post("/voice/status", (req, res) => {
+app.post("/voice/status", async (req, res) => {
   res.sendStatus(200);
-  const call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
-  if (!call) return; // Unbekannter Call: kein Status-Effekt UND kein Log (kein PII/Debug-Rauschen).
+  let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
+  if (!call) {
+    // F12 (A6): das Call-Ende-Signal einer dem Prozess unbekannten, aber in der DB aktiven
+    // Zeile retten (Deploy-Instanzwechsel), damit der Lifecycle-Zweig unten (markAnswered
+    // bzw. endCallRecord+finishCall) die Minuten bucht statt sie spurlos zu verlieren.
+    // RLS-scoped, nur DB-bestaetigt (nie der Body). callId = interne id aus der Callback-URL.
+    call = await store.attachActiveCall(req.query.callId || "");
+    if (!call) return; // weiterhin still (kein PII/Debug-Rauschen), Bestand unveraendert.
+  }
   const provider = call.provider || DEFAULT_PROVIDER;
 
   // TTS-Stoerung sichtbar machen (graceful degradation): Telnyx meldet ein
