@@ -2206,15 +2206,13 @@ function runRetention() {
 runRetention();
 setInterval(runRetention, RETENTION_SWEEP_INTERVAL_MS).unref();
 
-// F10 (A6): Boot-Re-Arm der Max-Dauer-Timer NACH store.load() (neben runRetention). Ein
-// Deploy/Restart toetet sonst den In-Prozess-setTimeout jedes laufenden Calls -> der harte
-// Max-Dauer-Cap (Absolute Regel 1) waere nach jedem Boot weg. Laeuft am Modul-Eval VOR
-// app.listen, damit die Caps armiert sind, bevor der erste /voice/*-Webhook eintrifft; der
-// pg-Spiegel ist dank top-level-await in store.js bereits hydriert. NUR Budget-Engine
-// (realtime cappt in der Bridge). Aktive Calls mit Restzeit -> Timer relativ zum ECHTEN
-// Call-Start (nie Boot-Zeit); Zombies (Restzeit<=0, Downtime > Max-Dauer) -> sofort ueber
-// den EINEN Terminalisierungspfad beenden (gekappt+gebucht, kein Phantom-active, K2/K3).
-// Die Zombie-Buchung laeuft async (finishCall) und blockiert den Boot nicht.
+// F10 (A6): Boot-Re-Arm der Max-Dauer-Timer. Ein Deploy/Restart toetet sonst den
+// In-Prozess-setTimeout jedes laufenden Calls -> der harte Max-Dauer-Cap (Absolute
+// Regel 1) waere nach jedem Boot weg. NUR Budget-Engine (realtime cappt in der
+// Bridge). Aktive Calls mit Restzeit -> Timer relativ zum ECHTEN Call-Start (nie
+// Boot-Zeit); Zombies (Restzeit<=0, Downtime > Max-Dauer) -> sofort ueber den EINEN
+// Terminalisierungspfad beenden (gekappt+gebucht, kein Phantom-active, K2/K3). Die
+// Zombie-Buchung laeuft async (finishCall) und blockiert den Boot nicht.
 function rearmActiveCallTimers() {
   if (config.voiceEngine === "realtime") return;
   const nowMs = Date.now();
@@ -2235,7 +2233,6 @@ function rearmActiveCallTimers() {
       `[rearm] aktive Calls beim Boot: ${reArmed} re-armed, ${terminalized} terminalisiert (Zombie)`,
     );
 }
-rearmActiveCallTimers();
 
 const ok = assertConfig();
 // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -2271,6 +2268,17 @@ if (!hasActiveNumber(store.load())) {
   );
   process.exit(1);
 }
+
+// F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
+// allen Boot-Gates (assertConfig/fakeOriginateBootBlocked/hasActiveNumber), unmittelbar
+// VOR app.listen. Vorher (VOR assertConfig) haette ein Zombie-Call bereits
+// store.setCallEndedAt() + den synchronen Teil von finishCall (Buchung/markBilled)
+// ausgeloest, BEVOR ein scheiterndes assertConfig() im selben Tick process.exit(1)
+// feuert - der async-Rest von finishCall (releaseReserve/store.save/Notification/SMS)
+// liefe dann NIE mehr, der Call bliebe teilgebucht+Reserve-nie-freigegeben auf Platte
+// stehen. Das widerspraeche dem Boot-Gate-Versprechen "GAR NICHT gestartet" (Regel 1/
+// OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
+rearmActiveCallTimers();
 
 const httpServer = app.listen(config.port, () => {
   // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port

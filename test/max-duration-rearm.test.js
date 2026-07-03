@@ -18,7 +18,7 @@
 // (kein Anthropic-Mock). twilioSid=null (seedCall-Default) -> kein Provider-endCall.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
+import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, CENTS_PER_EUR } from "../src/store/defaults.js";
 
 // Tarif so, dass die gebuchte Zombie-Minute eine sichtbare Summe ergibt (G25, Muster
@@ -40,18 +40,6 @@ const ZOMBIE_ENDED_AT = new Date(
 ).toISOString();
 const ZOMBIE_MINUTES = 1; // ceil(60s / 60s)
 
-// Store pollen, bis das Praedikat greift (die Zombie-Terminalisierung laeuft async:
-// setCallEndedAt + finishCall + save). waitForLog deckt nur stdout ab.
-async function waitForStore(srv, predicate, timeoutMs = 4000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate(srv.readStore())) {
-    if (Date.now() > deadline)
-      throw new Error(`Store-Zustand nicht erreicht:\n${JSON.stringify(srv.readStore().calls)}`);
-    await new Promise((r) => setTimeout(r, 20));
-  }
-  return srv.readStore();
-}
-
 test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)", async () => {
   const srv = await startServer({
     env: TARIFF_ENV,
@@ -71,7 +59,10 @@ test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)"
     }),
   });
   try {
-    const s = await waitForStore(srv, (st) => st.calls.find((c) => c.id === "zombie")?.billedAt);
+    const s = await waitForStoreState(
+      srv,
+      (st) => st.calls.find((c) => c.id === "zombie")?.billedAt,
+    );
     const zombie = s.calls.find((c) => c.id === "zombie");
     assert.equal(zombie.status, "failed", "Zombie ist terminal (nicht mehr active)");
     assert.equal(

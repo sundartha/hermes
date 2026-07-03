@@ -336,6 +336,20 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
   }
 }
 
+// Wartet, bis der auf Platte persistierte Store ein Praedikat erfuellt (G5: geteilt von
+// max-duration-rearm.test.js + max-duration-live-cap.test.js). Fuer Terminalisierungs-
+// Pfade noetig, die ASYNC laufen (setCallEndedAt + finishCall + save) - waitForLog deckt
+// nur stdout ab, nicht den Store-Zustand selbst.
+export async function waitForStoreState(srv, predicate, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate(srv.readStore())) {
+    if (Date.now() > deadline)
+      throw new Error(`Store-Zustand nicht erreicht:\n${JSON.stringify(srv.readStore().calls)}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  return srv.readStore();
+}
+
 // Mock der Telnyx-PROVISIONING-API: routet nach Pfad (search/order/resolve/release).
 // Liefert e164 +4915799990001. Geteilt von onboarding-route + onboarding-identity
 // (G5: eine Definition statt zweier Kopien). Name explizit "...ProvisioningMock",
