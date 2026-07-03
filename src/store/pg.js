@@ -184,6 +184,15 @@ export function makePgStore(runner) {
     // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
     usageOf: (tenantId) => ops.usageOf(requireState(), tenantId),
 
+    // ---- Reserve-Ledger (OUT-05): Wrapper-Parity zu json.js ----
+    // Reine In-Memory-Mutation auf dem Spiegel (kein save/Flush): reservations wird von
+    // flush() NIE geschrieben (keine Spalte) -> strukturell ephemer, wie im json-Backend.
+    // reservationOf ist reine Query (analog usageOf).
+    tryReserveOutboundBudget: (tenantId, reserveCents, cfg) =>
+      ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg),
+    releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call),
+    reservationOf: (tenantId) => ops.reservationFor(requireState(), tenantId),
+
     // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);

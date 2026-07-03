@@ -93,6 +93,11 @@ export const {
   globalBudgetExceeded,
   reserveExceedsBudget,
   addVoiceUsageCostCents,
+  // Reserve-Ledger (OUT-05): OHNE diese Re-Exports sind sie auf der Fassade undefined -> die
+  // server.js-Verdrahtung (F2) wuerfe zur Laufzeit einen TypeError. Muster wie reserveExceedsBudget.
+  tryReserveOutboundBudget,
+  releaseOutboundReserve,
+  reservationOf,
   usageOf,
   addNotification,
   pruneOldData,
