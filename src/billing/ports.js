@@ -34,12 +34,14 @@
 
 /**
  * @typedef {Object} SubscriptionCheckoutParams
- * @property {string} tenantRef    - Tenant, fuer den Karte+Abo erfasst werden (Audit/Metadata)
- * @property {string} customerId   - opake Stripe-Customer-Referenz (cus_...)
- * @property {string} priceId      - opake recurring Stripe-Price-Referenz (price_...)
- * @property {string} planSlug     - Katalog-Slug; reist als subscription_data-Metadata in die Subscription
- * @property {string} successUrl   - Redirect nach erfolgreichem Abschluss
- * @property {string} cancelUrl    - Redirect bei Abbruch
+ * @property {string} tenantRef       - Tenant, fuer den Karte+Abo erfasst werden (Audit/Metadata)
+ * @property {string} customerId      - opake Stripe-Customer-Referenz (cus_...)
+ * @property {string} priceId         - opake recurring Stripe-Price-Referenz (price_...)
+ * @property {string} planSlug        - Katalog-Slug; reist als subscription_data-Metadata in die Subscription
+ * @property {string} successUrl      - Redirect nach erfolgreichem Abschluss
+ * @property {string} cancelUrl       - Redirect bei Abbruch
+ * @property {string} idempotencyKey  - tenant+plan-basiert ('subcs_'+tenant+'_'+plan): ein Doppelklick/
+ *   zwei Tabs bekommen DIESELBE Session, nie zwei echte Stripe-Abos (TOCTOU-Schutz)
  */
 
 /**

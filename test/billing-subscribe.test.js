@@ -8,6 +8,8 @@ import {
   createTenantSubscription,
   priceIdForPlan,
   activateSubscriptionFromCheckoutSession,
+  hasActiveSubscription,
+  checkoutSessionIdempotencyKey,
 } from "../src/billing/subscribe.js";
 
 const TENANT = "t_x";
@@ -126,6 +128,31 @@ test("createTenantSubscription: andere Karte -> anderer Idempotenz-Key (kein Par
   assert.equal(a.params.idempotencyKey, again.params.idempotencyKey, "gleiche Karte -> selber Key (Doppelklick dedupt)");
   assert.ok(a.params.idempotencyKey.startsWith("sub_t_x_starter_"), "Tenant+Plan bleiben stabil im Key");
   assert.ok(a.params.idempotencyKey.endsWith("pm_first"), "nur das PM-Suffix, nie ein anderer Wert");
+});
+
+// ---- Review-Blocker Runde 1: checkoutSessionIdempotencyKey + hasActiveSubscription --
+
+test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan (kein Zufall), unterscheidet Plaene, KEIN PM-Suffix", () => {
+  assert.equal(
+    checkoutSessionIdempotencyKey("t_x", "starter"),
+    checkoutSessionIdempotencyKey("t_x", "starter"),
+    "gleicher Tenant+Plan -> gleicher Key (Doppelklick/zwei Tabs bekommen dieselbe Session)",
+  );
+  assert.notEqual(
+    checkoutSessionIdempotencyKey("t_x", "starter"),
+    checkoutSessionIdempotencyKey("t_x", "business"),
+    "anderer Plan -> anderer Key",
+  );
+  assert.notEqual(
+    checkoutSessionIdempotencyKey("t_x", "starter"),
+    checkoutSessionIdempotencyKey("t_y", "starter"),
+    "anderer Tenant -> anderer Key",
+  );
+});
+
+test("hasActiveSubscription: gemeinsames Praedikat spiegelt store.tenantSubscription(tenant).subscriptionId", () => {
+  assert.equal(hasActiveSubscription(fakeStore(), TENANT), false, "kein Abo -> false");
+  assert.equal(hasActiveSubscription(fakeStore({ sub: "sub_old" }), TENANT), true, "Abo vorhanden -> true");
 });
 
 // ---- BK-Discount: activateSubscriptionFromCheckoutSession (Sicherheits-Gates) -------

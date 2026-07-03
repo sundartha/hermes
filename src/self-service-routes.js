@@ -20,6 +20,8 @@ import {
   createTenantSubscription,
   priceIdForPlan,
   activateSubscriptionFromCheckoutSession,
+  hasActiveSubscription,
+  checkoutSessionIdempotencyKey,
 } from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
@@ -110,6 +112,10 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
     planSlug,
     successUrl,
     cancelUrl,
+    // TOCTOU-Fix1: derselbe Key fuer zwei nahezu gleichzeitige Aufrufe (Doppelklick/zwei
+    // Tabs) desselben Tenant+Plan -> Stripe liefert dieselbe Session zurueck statt einer
+    // zweiten (s. subscribe.js checkoutSessionIdempotencyKey).
+    idempotencyKey: checkoutSessionIdempotencyKey(tenant, planSlug),
   });
 }
 
@@ -276,12 +282,13 @@ export function makeSelfServiceRoutes({
         const planSlug = knownPlanSlug((req.body || {}).plan);
         // BK-Discount-Gates VOR jedem Stripe-Call (fail-closed, keine Session mit Muell):
         // fehlender Price = Server-Fehlkonfig (500, wie subscribeReject); bestehendes Abo
-        // = 409, weil der subscription-Mode-Checkout bei Abschluss ein ZWEITES echtes
-        // Stripe-Abo anlegen wuerde (Kostenleck) - der already_subscribed-Guard in
-        // /return verhindert nur die lokale Doppel-Aktivierung, nicht das Stripe-Abo.
+        // = 409 (schnelle Client-Rueckmeldung fuer den Normalfall). Dieser Vor-Check ist
+        // ein TOCTOU (zwei nahezu gleichzeitige Aufrufe bestehen BEIDE ihn) - der eigentliche
+        // Schutz gegen ein zweites echtes Stripe-Abo ist der Idempotency-Key in
+        // createCheckoutSession (s. dort): beide Aufrufe landen auf DERSELBEN Session.
         const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
         if (planSlug && !priceId) return res.status(500).json({ error: "plan_unconfigured" });
-        if (planSlug && store.tenantSubscription(tenant).subscriptionId)
+        if (planSlug && hasActiveSubscription(store, tenant))
           return res.status(409).json({ error: "already_subscribed" });
         const customerId = await ensureCustomer({ store, billing, tenant });
         const { url } = await createCheckoutSession({

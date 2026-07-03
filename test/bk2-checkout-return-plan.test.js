@@ -352,3 +352,31 @@ test("(13) doppelter return derselben Session -> beide sub=ok, Provisioning gena
     await s.close();
   }
 });
+
+// Review-Blocker S1 (Runde 1): Test (13) deckt nur die BEREITS abgesicherte Variante ab
+// (zwei /return-Aufrufe MIT DERSELBEN session_id). Der eigentliche Race liegt VOR /return:
+// zwei nahezu gleichzeitige setup-checkout-Aufrufe (Doppelklick/zwei Tabs) fuer denselben
+// Tenant+Plan bestehen BEIDE den already_subscribed-Vor-Check (store.tenantSubscription
+// ist bei beiden noch leer, keine Session ist abgeschlossen) - ohne Idempotency-Key haette
+// jeder Aufruf eine EIGENE Stripe-Checkout-Session erzeugt, beide abschliessbar -> zwei
+// echte, real abgerechnete Stripe-Abos (Kostenleck). Diese Regression prueft, dass beide
+// Aufrufe DENSELBEN Idempotency-Key an Stripe reichen - der eigentliche Schutz (Stripe
+// liefert dann dieselbe Session zurueck, nur EINE ist abschliessbar).
+test("(14) TOCTOU-Regression: zwei setup-checkout-Aufrufe (Doppelklick/zwei Tabs, VOR jeder abgeschlossenen Session) erhalten DENSELBEN Idempotency-Key", async () => {
+  const s = await setup();
+  try {
+    const first = await setupCheckout(s, "starter");
+    assert.equal(first.status, 200);
+    const firstKey = s.billingSpy.subCheckoutParams.idempotencyKey;
+    assert.ok(firstKey, "Idempotency-Key wird gesetzt");
+
+    // Der Vor-Check (store.tenantSubscription) ist zwischen beiden Aufrufen weiterhin leer
+    // (kein /return dazwischen) - simuliert exakt den TOCTOU-Zeitpunkt aus dem Finding.
+    const second = await setupCheckout(s, "starter");
+    assert.equal(second.status, 200, "der Vor-Check erlaubt beide Aufrufe (das ist die Luecke)");
+    const secondKey = s.billingSpy.subCheckoutParams.idempotencyKey;
+    assert.equal(secondKey, firstKey, "gleicher Tenant+Plan -> gleicher Key, Stripe dedupt die zweite Session");
+  } finally {
+    await s.close();
+  }
+});

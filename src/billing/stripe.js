@@ -186,6 +186,10 @@ export const stripeBilling = {
   // tenant_ref/plan_slug werden explizit gespiegelt, damit die Webhook-Tenant-Aufloesung
   // (webhook.js tenantRefOf/planSlugOf) und A3-Reconcile (retrieveSubscription) fuer
   // Checkout-erzeugte Abos genauso funktionieren wie fuer createSubscription-Abos.
+  // Idempotency-Key (tenant+plan-basiert, subscribe.js checkoutSessionIdempotencyKey):
+  // ein Doppelklick/zwei Tabs erhaelt DIESELBE Session zurueck statt einer zweiten -
+  // schliesst die TOCTOU-Luecke zwischen dem already_subscribed-Vor-Check und dem
+  // tatsaechlichen Checkout-Abschluss (Muster wie placeHold/createSubscription).
   // Nur opake url/sessionId verlassen den Adapter.
   async createSubscriptionCheckoutSession({
     tenantRef,
@@ -194,7 +198,9 @@ export const stripeBilling = {
     planSlug,
     successUrl,
     cancelUrl,
+    idempotencyKey,
   }) {
+    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     const body = new URLSearchParams({
       mode: CHECKOUT_SUBSCRIPTION_MODE,
       customer: customerId,
@@ -207,11 +213,7 @@ export const stripeBilling = {
     body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
     body.set("subscription_data[metadata][tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][plan_slug]", planSlug);
-    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), {
-      method: "POST",
-      headers: authHeaders(),
-      body,
-    });
+    const res = await fetch(url(CHECKOUT_SESSIONS_PATH), { method: "POST", headers, body });
     assertOk(res, "createSubscriptionCheckoutSession");
     const json = await res.json().catch(() => ({}));
     return { url: json.url, sessionId: json.id };

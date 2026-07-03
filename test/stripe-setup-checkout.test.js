@@ -165,7 +165,7 @@ test("createSubscription: Fallback auf top-level current_period_end/start (aelte
   });
 });
 
-test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_promotion_codes + subscription_data-Metadata", async () => {
+test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_promotion_codes + subscription_data-Metadata + Idempotency-Key-Header", async () => {
   let captured;
   const result = await withStripeStub(
     async (url, opts) => {
@@ -180,12 +180,16 @@ test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_
         planSlug: "starter",
         successUrl: "https://agent.test/ok",
         cancelUrl: "https://agent.test/no",
+        idempotencyKey: "subcs_tenant_a_starter",
       }),
   );
   assert.ok(captured.url.endsWith("/v1/checkout/sessions"));
   assert.equal(captured.opts.method, "POST");
   assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
   assert.equal(captured.opts.headers["Content-Type"], "application/x-www-form-urlencoded");
+  // Regression (Review-Blocker S1): OHNE Idempotency-Key liefert ein Doppelklick/zwei Tabs
+  // ZWEI echte Stripe-Checkout-Sessions -> zwei echte, real abgerechnete Abos (Kostenleck).
+  assert.equal(captured.opts.headers["Idempotency-Key"], "subcs_tenant_a_starter");
   assert.equal(captured.opts.body.get("mode"), "subscription");
   assert.equal(captured.opts.body.get("customer"), "cus_new1");
   assert.equal(captured.opts.body.get("line_items[0][price]"), "price_starter");
@@ -198,6 +202,26 @@ test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_
   assert.equal(captured.opts.body.get("subscription_data[metadata][plan_slug]"), "starter");
   assert.equal(captured.opts.body.get("currency"), null, "subscription-Mode: Price bestimmt Waehrung");
   assert.deepEqual(result, { url: "https://stripe.test/c/cs_sub_1", sessionId: "cs_sub_1" });
+});
+
+test("createSubscriptionCheckoutSession: ohne idempotencyKey -> KEIN Idempotency-Key-Header (optionaler Param, Bestand)", async () => {
+  let captured;
+  await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({ id: "cs_sub_1", url: "https://stripe.test/c/cs_sub_1" });
+    },
+    () =>
+      stripeBilling.createSubscriptionCheckoutSession({
+        tenantRef: "tenant_a",
+        customerId: "cus_new1",
+        priceId: "price_starter",
+        planSlug: "starter",
+        successUrl: "https://agent.test/ok",
+        cancelUrl: "https://agent.test/no",
+      }),
+  );
+  assert.equal("Idempotency-Key" in captured.opts.headers, false);
 });
 
 test("createSubscriptionCheckoutSession: Nicht-2xx -> wirft HTTP-Status, OHNE Secret-Key", async () => {
