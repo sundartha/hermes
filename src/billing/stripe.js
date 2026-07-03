@@ -52,6 +52,21 @@ function assertOk(res, op) {
   if (!res.ok) throw new Error(`Stripe ${op} fehlgeschlagen: HTTP ${res.status}`);
 }
 
+// Wie assertOk, aber liest den Stripe-Fehlerbody mit (error.message/code) fuer
+// bessere Diagnose bei den Geld-kritischen Subscription-Calls (Regel 4: Body
+// enthaelt KEINE Secrets, nur Provider-Fehlertext - sk_/Bearer liegen nur im
+// Request-Header). Body nicht lesbar -> nur Status melden (wie assertOk).
+async function assertOkWithDetail(res, op) {
+  if (res.ok) return;
+  let detail = "";
+  try {
+    detail = await res.text();
+  } catch {
+    /* Body nicht lesbar -> nur Status melden */
+  }
+  throw new Error(`Stripe ${op} fehlgeschlagen: HTTP ${res.status} ${detail}`.trim());
+}
+
 const url = (path) => config.stripeApiBase + path;
 
 // default_payment_method kommt expandiert als Objekt (id) oder unexpandiert als
@@ -227,7 +242,7 @@ export const stripeBilling = {
     body.set("subscription_data[metadata][tenant_ref]", tenantRef);
     body.set("subscription_data[metadata][plan_slug]", planSlug);
     const res = await fetch(url(CHECKOUT_SESSIONS_PATH), { method: "POST", headers, body });
-    assertOk(res, "createSubscriptionCheckoutSession");
+    await assertOkWithDetail(res, "createSubscriptionCheckoutSession");
     const json = await res.json().catch(() => ({}));
     return { url: json.url, sessionId: json.id };
   },
@@ -289,20 +304,7 @@ export const stripeBilling = {
     });
     body.set("metadata[tenant_ref]", tenantRef);
     const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
-    // Diagnose: bei Fehler den Stripe-Fehlerbody (error.message/code) mitgeben. Der Body
-    // enthaelt KEINE Secrets (sk_/Bearer liegen nur in den Request-Headern). Best-effort:
-    // ist der Body nicht lesbar, bleibt es beim Status (wie assertOk).
-    if (!res.ok) {
-      let detail = "";
-      try {
-        detail = await res.text();
-      } catch {
-        /* Body nicht lesbar -> nur Status melden */
-      }
-      throw new Error(
-        `Stripe createSubscription fehlgeschlagen: HTTP ${res.status} ${detail}`.trim(),
-      );
-    }
+    await assertOkWithDetail(res, "createSubscription");
     const json = await res.json().catch(() => ({}));
     return { subscriptionId: json.id, ...periodFieldsOf(json) };
   },
