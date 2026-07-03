@@ -62,6 +62,19 @@ function paymentMethodIdOf(defaultPaymentMethod) {
   return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
 }
 
+// Die aktuelle Stripe-API liefert current_period_end/-start NICHT mehr top-level
+// an der Subscription, sondern pro Item (items.data[0]). Fallback auf top-level
+// fuer aeltere API-Versionen -> kein leeres Perioden-/Quota-Fenster. Gemeinsam
+// fuer createSubscription UND getSubscriptionCheckoutResult (G5: eine Quelle,
+// beide lesen dieselbe Subscription-Form).
+function periodFieldsOf(subLike) {
+  const item = subLike.items && subLike.items.data && subLike.items.data[0];
+  return {
+    currentPeriodStart: (item && item.current_period_start) ?? subLike.current_period_start,
+    currentPeriodEnd: (item && item.current_period_end) ?? subLike.current_period_end,
+  };
+}
+
 /** @type {import("./ports.js").BillingPort} */
 export const stripeBilling = {
   async placeHold({
@@ -244,13 +257,11 @@ export const stripeBilling = {
       throw new Error(
         "Stripe getSubscriptionCheckoutResult: kein payment_method (Karte nicht gespeichert)",
       );
-    const item = sub.items && sub.items.data && sub.items.data[0];
     return {
       customerId: json.customer,
       paymentMethodId,
       subscriptionId: sub.id,
-      currentPeriodStart: (item && item.current_period_start) ?? sub.current_period_start,
-      currentPeriodEnd: (item && item.current_period_end) ?? sub.current_period_end,
+      ...periodFieldsOf(sub),
       planSlug: (sub.metadata && sub.metadata.plan_slug) || null,
     };
   },
@@ -293,13 +304,7 @@ export const stripeBilling = {
       );
     }
     const json = await res.json().catch(() => ({}));
-    // Die aktuelle Stripe-API liefert current_period_end NICHT mehr top-level an der
-    // Subscription, sondern pro Item (items.data[0].current_period_end). Fallback auf
-    // top-level fuer aeltere API-Versionen -> kein leeres Perioden-/Quota-Fenster.
-    const item = json.items && json.items.data && json.items.data[0];
-    const currentPeriodEnd = (item && item.current_period_end) ?? json.current_period_end;
-    const currentPeriodStart = (item && item.current_period_start) ?? json.current_period_start;
-    return { subscriptionId: json.id, currentPeriodEnd, currentPeriodStart };
+    return { subscriptionId: json.id, ...periodFieldsOf(json) };
   },
 
   // A3-Reconcile: liest den Plan-Slug eines bestehenden Abos aus der Subscription-
