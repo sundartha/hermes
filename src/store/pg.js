@@ -511,7 +511,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const jobRows = (
     await client.query(
-      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error
+      `SELECT id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at
        FROM provisioning_job WHERE tenant_id = $1`,
       [tenantId],
     )
@@ -564,6 +564,8 @@ async function hydrateTenantInto(client, state, tenantId) {
       idempotencyKey: r.idempotency_key,
       attempts: r.attempts,
       lastError: r.last_error ?? null,
+      // TIMESTAMPTZ -> ISO-String (Parity zum json-Backend, das ISO haelt).
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
     })),
   );
   state.tenantBudgets.push(
@@ -1074,7 +1076,8 @@ async function flushNumbers(client, tenantId, numbers) {
 // provisioning_job-Flush (async Worker, P6b2): id-PK-Upsert der Job-Spur. own-Filter
 // + deleteMissing pro Tenant unter dessen RLS-GUC (zweite Linie, Muster wie
 // flushNumbers). status/attempts/last_error koennen sich aendern (Worker-Lauf), der
-// Rest (number_id/kind/idempotency_key) bleibt nach dem Insert stabil.
+// Rest (number_id/kind/idempotency_key) bleibt nach dem Insert stabil. created_at ist
+// application-provided (F4, gegen DB-now()-Skew) und bleibt nach dem Insert immutable.
 async function flushProvisioningJobs(client, tenantId, jobs) {
   const own = jobs.filter((j) => j.tenantId === tenantId);
   await deleteMissing(
@@ -1085,8 +1088,8 @@ async function flushProvisioningJobs(client, tenantId, jobs) {
   );
   for (const j of own) {
     await client.query(
-      `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (id) DO UPDATE SET
          status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
       [
@@ -1098,6 +1101,7 @@ async function flushProvisioningJobs(client, tenantId, jobs) {
         j.idempotencyKey,
         j.attempts,
         j.lastError ?? null,
+        j.createdAt,
       ],
     );
   }

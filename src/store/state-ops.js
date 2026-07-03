@@ -1033,6 +1033,8 @@ export function releaseNumber(s, numberId) {
 // Persistente Job-Spur (Audit + pg-Roundtrip + RLS), parallel zur Laufzeit-Queue im
 // Adapter. recordProvisioningJob ist idempotent ueber idempotencyKey (kein Doppel-
 // Record bei Retry). markProvisioningJob setzt den Endstatus (done|failed) + lastError.
+// createdAt = ISO-Aufnahmezeit, Grundlage der Staleness-Triage (F4); bei Idempotenz-
+// Treffer bleibt der Erst-Zeitstempel erhalten (kein Ueberschreiben durch den Retry).
 export function recordProvisioningJob(s, { numberId, tenantId, idempotencyKey }) {
   const existing = s.provisioningJobs.find((j) => j.idempotencyKey === idempotencyKey);
   if (existing) return existing;
@@ -1045,6 +1047,7 @@ export function recordProvisioningJob(s, { numberId, tenantId, idempotencyKey })
     idempotencyKey,
     attempts: 0,
     lastError: null,
+    createdAt: new Date().toISOString(),
   };
   s.provisioningJobs.push(job);
   return job;
@@ -1057,6 +1060,60 @@ export function markProvisioningJob(s, jobId, status, lastError = null) {
   job.attempts += 1;
   if (lastError) job.lastError = lastError;
   return job;
+}
+
+// Nummer-Zustaende, in denen ein noch QUEUED-Provisioning-Job gegenstandslos ist:
+// aktiv/terminal (ACTIVE = Kauf fertig; FAILED/RELEASED = beendet) oder stillgelegt
+// (SUSPENDED). -> Job schliessen, NIE nachkaufen.
+const PROVISION_CLOSE_NUMBER_STATUS = new Set([
+  NUMBER_STATUS.ACTIVE,
+  NUMBER_STATUS.FAILED,
+  NUMBER_STATUS.RELEASED,
+  NUMBER_STATUS.SUSPENDED,
+]);
+
+// ---- PROV-01 Crash-Recovery: reiner Klassifikator (F4) ----
+// Triagiert ALLE QUEUED-Provisioning-Jobs in drei DISJUNKTE Koerbe. REIN und IO-frei
+// (mutiert s NICHT, kein Date.now, kein save): nowMs/maxAgeMs/kycMinLevel kommen als
+// Argument -> testbar/repeatable (F.I.R.S.T.) und config-frei (state-ops-Invariante).
+// Backend-agnostisch (json + pg liefern denselben Shape). Ein Boot-Reconciler (F5,
+// NICHT Teil dieser Phase) fuehrt spaeter NUR den geld-sicheren redrive-Korb nach.
+//   close   : Nummer fehlt oder aktiv/terminal/suspended -> Job schliessen (Job[]).
+//   hold    : mid-flight (provisioning/capturing) ODER kein aktiver KYC-Subscriber ODER
+//             Alter unbekannt/zu alt -> Owner-Reconcile, KEIN Auto-Kauf ([{job,reason}]).
+//   redrive : REQUESTED + aktiver KYC-Subscriber + jung -> geld-sicher nachfuehrbar (Job[]).
+// maxAgeMs === 0 (Default = Observe-Only) -> jeder reale requested-Job ist "zu alt"
+// (ageMs > 0, createdAt liegt in der Vergangenheit) und faellt in hold. Legacy-Job ohne
+// createdAt -> Alter unbekannt -> fail-closed hold (nie auto-re-driven).
+export function classifyQueuedProvisioningJobs(s, { nowMs, maxAgeMs, kycMinLevel }) {
+  const buckets = { close: [], hold: [], redrive: [] };
+  for (const job of s.provisioningJobs) {
+    if (job.status !== PROVISIONING_JOB_STATUS.QUEUED) continue;
+    const number = findNumber(s, job.numberId);
+    if (!number || PROVISION_CLOSE_NUMBER_STATUS.has(number.status)) {
+      buckets.close.push(job);
+      continue;
+    }
+    if (number.status !== NUMBER_STATUS.REQUESTED) {
+      buckets.hold.push({ job, reason: `mid_flight_${number.status}` });
+      continue;
+    }
+    if (!tenantActiveSubscriber(s, job.tenantId, kycMinLevel)) {
+      buckets.hold.push({ job, reason: "no_active_subscriber" });
+      continue;
+    }
+    const createdMs = Date.parse(job.createdAt ?? "");
+    if (!job.createdAt || Number.isNaN(createdMs)) {
+      buckets.hold.push({ job, reason: "unknown_age" });
+      continue;
+    }
+    if (nowMs - createdMs > maxAgeMs) {
+      buckets.hold.push({ job, reason: "too_old" });
+      continue;
+    }
+    buckets.redrive.push(job);
+  }
+  return buckets;
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----

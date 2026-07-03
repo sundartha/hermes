@@ -296,6 +296,17 @@ export const config = {
   // maxNumbers). Bewusst global statt pro-Order: Blast-Radius ist durch die Caps
   // + Auth + Allowlist bereits winzig (Owner-Phase). NIE per Default an.
   provisioningEnabled: (process.env.PROVISIONING_ENABLED || "false") === "true",
+  // PROV-01 Crash-Recovery (F4/F5): maximales Job-Alter (ms), bis zu dem der Boot-
+  // Reconciler eine in 'requested' haengende Nummer AUTOMATISCH nachfuehren darf.
+  // 0 (Default) = Observe-Only fail-closed: KEIN Auto-Nachkauf, haengende Jobs werden
+  // nur sichtbar gemacht. MUSS strikt KLEINER bleiben als das kleinste Anbieter-
+  // Idempotenz-Fenster (Stripe-Hold = 24h), sonst droht Doppelkauf; scharf empfohlen
+  // 3600000 (1h). Erst nach gruenem Telnyx-Idempotenz-Smoke > 0 scharfschalten.
+  provisioningRedriveMaxAgeMs: numEnv(
+    "PROVISIONING_REDRIVE_MAX_AGE_MS",
+    process.env.PROVISIONING_REDRIVE_MAX_AGE_MS,
+    { fallback: 0, min: 0 },
+  ),
   // Multi-Tenant-Identitaets-/Laufzeit-Schicht (I4-I7). DEFAULT AUS (fail-closed):
   // requestTenant === BOOTSTRAP_TENANT_ID -> Owner byte-identisch, kein Tenant-Scoping.
   // Erst true (nach allen dichten Scope-Gates I5/I6/I7) loest die Auth-Achse den
