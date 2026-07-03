@@ -1957,7 +1957,13 @@ async function runProvisioningDrain() {
 // store.withStoreLock): der lange Drain-await darf die kurze Store-Schreib-Serialisierung
 // nicht blockieren. Definiert direkt am Drain (G10); die zwei Aufrufer oben (Request-Zeit)
 // sehen den Modul-const zur Laufzeit initialisiert.
-const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
+//
+// watchdogMs aus config (P16 Review-Fix): jeder einzelne Telnyx-/Stripe-Call darin ist
+// jetzt selbst per fetchWithTimeout gedeckelt (config.providerCallTimeoutMs) - der Watchdog
+// ist die zweite, unabhaengige Sicherung, die einen auffaellig langen Lauf ins Log meldet.
+const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain, {
+  watchdogMs: config.provisioningDrainWatchdogMs,
+});
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).

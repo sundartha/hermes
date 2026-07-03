@@ -296,6 +296,24 @@ export const config = {
   // maxNumbers). Bewusst global statt pro-Order: Blast-Radius ist durch die Caps
   // + Auth + Allowlist bereits winzig (Owner-Phase). NIE per Default an.
   provisioningEnabled: (process.env.PROVISIONING_ENABLED || "false") === "true",
+  // ---- Provisioning-Drain: Provider-Call-Timeout + Watchdog (P16 Review-Fix PROV-01/F3) ----
+  // Harter Deckel je einzelnem Telnyx-/Stripe-fetch() im Provisioning-Pfad (numbers.js/
+  // stripe.js): ohne ihn wuerde ein haengender Request (Netzwerk-Partition/TLS-Hang) NIE
+  // settlen und die Single-Flight-Kette um den Drain (single-flight.js) fuer immer
+  // blockieren. 15-30s Empfehlung aus dem Review; Default 20s.
+  providerCallTimeoutMs: numEnv("PROVIDER_CALL_TIMEOUT_MS", process.env.PROVIDER_CALL_TIMEOUT_MS, {
+    fallback: 20000,
+    min: 1,
+  }),
+  // Alarmfrist des Drain-Watchdogs (single-flight.js): meldet (console.warn), wenn EIN
+  // Drain-Lauf laenger als diese Frist nicht fertig ist - zusaetzliches Signal fuers
+  // Betriebs-Log, auch wenn jeder Provider-Call selbst schon gedeckelt ist (mehrere
+  // Jobs/Retries koennen sich hintereinander summieren). Default 60s.
+  provisioningDrainWatchdogMs: numEnv(
+    "PROVISIONING_DRAIN_WATCHDOG_MS",
+    process.env.PROVISIONING_DRAIN_WATCHDOG_MS,
+    { fallback: 60000, min: 1 },
+  ),
   // Multi-Tenant-Identitaets-/Laufzeit-Schicht (I4-I7). DEFAULT AUS (fail-closed):
   // requestTenant === BOOTSTRAP_TENANT_ID -> Owner byte-identisch, kein Tenant-Scoping.
   // Erst true (nach allen dichten Scope-Gates I5/I6/I7) loest die Auth-Achse den

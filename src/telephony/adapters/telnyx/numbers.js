@@ -13,6 +13,7 @@
 //   release:   DELETE /v2/phone_numbers/{id}
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
+import { fetchWithTimeout } from "../../../fetch-with-timeout.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
@@ -44,6 +45,13 @@ function authHeaders(extra = {}) {
 
 const url = (path) => config.telnyxApiBase + path;
 
+// P16 Review-Fix (PROV-01/F3): JEDER Telnyx-Call in diesem Adapter haengt am Provisioning-
+// Drain (searchNumbers/orderNumber/resolveNumberId direkt, releaseNumber ueber den Rollback-
+// Pfad in onboarding.js) - ein haengender Request wuerde sonst die Single-Flight-Kette um
+// den Drain fuer immer blockieren (kein signal/Timeout vorher). Ein kurzer Label-Helfer statt
+// die timeoutMs/label-Optionen an jeder Stelle auszuschreiben (G5).
+const timeoutOpts = (label) => ({ timeoutMs: config.providerCallTimeoutMs, label: `Telnyx ${label}` });
+
 // Loest die phone_number-Ressourcen-id (release/voice) per gedeckeltem Poll auf, da
 // die Order async-pending ist (s.o.). Liefert die id oder wirft MIT Kontext (kein
 // PII-/Key-Leak, Regel 4).
@@ -51,7 +59,11 @@ async function resolveNumberId(e164) {
   for (let attempt = 0; attempt < RESOURCE_POLL_ATTEMPTS; attempt++) {
     const q = new URLSearchParams();
     q.set("filter[phone_number]", e164);
-    const res = await fetch(`${url(NUMBERS_PATH)}?${q}`, { headers: authHeaders() });
+    const res = await fetchWithTimeout(
+      `${url(NUMBERS_PATH)}?${q}`,
+      { headers: authHeaders() },
+      timeoutOpts("resolveNumberId"),
+    );
     await assertTelnyxOk(res, "resolveNumberId", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     const data = json.data || [];
@@ -70,7 +82,11 @@ export const telnyxNumberProvisioning = {
     q.append("filter[features][]", "voice");
     q.set("filter[limit]", String(limit));
     if (type) q.set("filter[phone_number_type]", type);
-    const res = await fetch(`${url(AVAILABLE_PATH)}?${q}`, { headers: authHeaders() });
+    const res = await fetchWithTimeout(
+      `${url(AVAILABLE_PATH)}?${q}`,
+      { headers: authHeaders() },
+      timeoutOpts("searchNumbers"),
+    );
     await assertTelnyxOk(res, "searchNumbers", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     return (json.data || []).map((d) => ({ e164: d.phone_number }));
@@ -85,7 +101,11 @@ export const telnyxNumberProvisioning = {
     const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
     const body = { phone_numbers: [{ phone_number: e164 }] };
     if (connectionId) body.connection_id = connectionId;
-    const res = await fetch(url(ORDERS_PATH), { method: "POST", headers, body: JSON.stringify(body) });
+    const res = await fetchWithTimeout(
+      url(ORDERS_PATH),
+      { method: "POST", headers, body: JSON.stringify(body) },
+      timeoutOpts("orderNumber"),
+    );
     await assertTelnyxOk(res, "orderNumber", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
     const orderedE164 = (json.data?.phone_numbers || [])[0]?.phone_number || e164;
@@ -94,10 +114,11 @@ export const telnyxNumberProvisioning = {
   },
 
   async releaseNumber(providerNumberId) {
-    const res = await fetch(`${url(NUMBERS_PATH)}/${providerNumberId}`, {
-      method: "DELETE",
-      headers: authHeaders(),
-    });
+    const res = await fetchWithTimeout(
+      `${url(NUMBERS_PATH)}/${providerNumberId}`,
+      { method: "DELETE", headers: authHeaders() },
+      timeoutOpts("releaseNumber"),
+    );
     await assertTelnyxOk(res, "releaseNumber", INCLUDE_TELNYX_DETAIL);
   },
 };

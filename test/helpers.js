@@ -121,6 +121,11 @@ export const BASE_ENV = {
   MAX_NUMBERS_PER_TENANT: "1",
   PROVISIONING_ENABLED: "false",
   PROVISIONING_COUNTRY: "DE",
+  // P16 Review-Fix (PROV-01/F3): kurz + deterministisch, damit Spawn-Tests, die den
+  // Drain-Pfad beruehren, nicht unnoetig lang laufen. Ohne diese Zeilen leakt eine
+  // lokale .env via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  PROVIDER_CALL_TIMEOUT_MS: "5000",
+  PROVISIONING_DRAIN_WATCHDOG_MS: "5000",
   // Kauf-Land-Override aus (Default): number.country = Herkunftsland, byte-identisch.
   // Ohne diese Zeile leakt eine lokale .env mit FORCE_NUMBER_COUNTRY=US via dotenv in
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
