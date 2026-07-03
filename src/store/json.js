@@ -276,6 +276,13 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
+// F12 (A6): Der EINE json-Prozess hat keinen divergenten Spiegel - er kennt jeden Call.
+// Re-Attach ist daher identisch zu getCall (unbekannte id -> null). Der server.js-Re-
+// Attach-Pfad bleibt unter STORE_BACKEND=json byte-identisch zum Bestand: im fail-closed
+// Zweig hat getCall bereits null/nicht-aktiv geliefert -> attachActiveCall ebenso ->
+// logUnknown-Hangup wie zuvor (voice-unknown-call-log.test.js bleibt gruen).
+export const attachActiveCall = getCall;
+
 export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
 }

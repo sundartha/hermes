@@ -363,6 +363,17 @@ export function remainingMaxDurationMs(call, nowMs, defaultMaxDurationS) {
   return Math.max(0, callLimitMs(call, defaultMaxDurationS) - (nowMs - anchor));
 }
 
+// G5 (Review-Blocker Runde 2): eine gemeinsame reine Entscheidung fuer die zwei Aufrufer, die
+// bisher denselben Restzeit-Branch dupliziert hatten (Boot-Re-Arm F10 in server.js UND
+// Re-Attach F12 in telephony/reattach.js: beide berechneten remainingMaxDurationMs und
+// verzweigten identisch remaining<=0 -> terminalisieren, sonst -> Timer armieren). Liefert
+// nur die Klassifikation zurueck - die Ausfuehrung (sync/await terminieren vs. Timer armieren,
+// Zaehler vs. Rueckgabeobjekt) bleibt bewusst bei jedem Aufrufer selbst.
+export function classifyCallTime(call, nowMs, defaultMaxDurationS) {
+  const remaining = remainingMaxDurationMs(call, nowMs, defaultMaxDurationS);
+  return { remaining, expired: remaining <= 0 };
+}
+
 // Deterministischer, gekappter Ende-Zeitpunkt (ms) fuer JEDE Timer-/Re-Arm-Terminalisierung
 // (F10/F12): Zombie -> anchor+limit (nie Boot-Abstand), Live-Cap -> ~now. Fehlender Anker -> 0.
 export function cappedEndedAtMs(call, nowMs, defaultMaxDurationS) {

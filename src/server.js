@@ -56,6 +56,7 @@ import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
 import { terminateAndBillCall } from "./telephony/call-termination.js";
+import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import {
   registerTenant,
   setTenantIdentityIfAbsent,
@@ -66,7 +67,7 @@ import {
   classifyQueuedProvisioningJobs,
   setTenantGeo,
   findNumber,
-  remainingMaxDurationMs,
+  classifyCallTime,
   cappedEndedAtMs,
 } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
@@ -974,20 +975,49 @@ app.post("/voice/incoming", (req, res) => {
   res.type("text/xml").send(render(turnDirectives(call, greeting), provider));
 });
 
+// F12 (A6): Ein Deploy-/Instanzwechsel kann einen laufenden Call aus dem Prozess-Spiegel
+// verlieren -> der Folge-/voice-Webhook (turn/outbound/status) saehe einen unbekannten Call
+// und legte fail-closed auf (real: Testanruf call_mr3lg2g7t9zg, 2026-07-02). Duenner Wrapper
+// um den ausgelagerten Re-Attach-Kern (telephony/reattach.js, volle Doku + Rueckgabe-Vertrag
+// dort): bindet store/config/terminateCappedCall/scheduleMaxDurationEnd EINMAL fuer ALLE DREI
+// /voice/*-Handler IDENTISCH (G5) - genau diese gemeinsame Bindung fehlte /voice/status bisher
+// (Runde 2, S1-1): es rief store.attachActiveCall DIREKT auf und reanimierte so ein Ueber-
+// Zeit-Leg OHNE Restzeit-Pruefung/Timer-Rearm. Vertraut NUR der DB (nie dem Request-Body);
+// sitzt strukturell HINTER app.use("/voice") (Provider-Signatur, Regel 1). Nebeneffekt
+// (Spiegel-Mutation + evtl. Terminalisierung/Cap-Rearm) im Namen (N7).
+function reattachActiveCall(callId) {
+  return reattachActiveCallCore(callId, {
+    attachActiveCall: store.attachActiveCall,
+    maxCallDurationS: config.maxCallDurationS,
+    terminateCappedCall,
+    scheduleMaxDurationEnd,
+  });
+}
+
 // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
 app.post("/voice/turn", async (req, res) => {
-  const call = store.getCall(req.query.callId);
+  let call = store.getCall(req.query.callId);
   if (!call || call.status !== "active") {
-    // Fail-closed Hangup wie im Bestand, aber NICHT mehr still (Runde 2, S-A):
-    // dieses Muster entsteht real, wenn ein Deploy-Instanzwechsel den in-memory-
-    // Call verliert (Testanruf call_mr3lg2g7t9zg) - ohne Logzeile ist der Vorfall
-    // in den Render-Logs unsichtbar (CLAUDE.md Regel 7). callId ist server-
-    // generiert, kein PII. Anders als /voice/status (Rauschen) ist ein Turn-
-    // Webhook ohne aktiven Call IMMER ein totes Live-Gespraech.
-    console.warn(
-      `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
-    );
-    return res.type("text/xml").send(render([hangupD()]));
+    // F12 (A6): dem Prozess unbekannter, aber in der DB aktiver Call (Deploy-Instanz-
+    // wechsel)? Erst RLS-sauber re-attachen+klassifizieren, DANN erst fail-closed auflegen.
+    const reattached = await reattachActiveCall(req.query.callId);
+    if (reattached.call) {
+      call = reattached.call; // aktiver Call, Cap re-armiert -> normal fortfahren
+    } else {
+      // Fail-closed Hangup wie im Bestand, aber NICHT mehr still (Runde 2, S-A):
+      // dieses Muster entsteht real, wenn ein Deploy-Instanzwechsel den in-memory-
+      // Call verliert (Testanruf call_mr3lg2g7t9zg) - ohne Logzeile ist der Vorfall
+      // in den Render-Logs unsichtbar (CLAUDE.md Regel 7). callId ist server-
+      // generiert, kein PII. Anders als /voice/status (Rauschen) ist ein Turn-
+      // Webhook ohne aktiven Call IMMER ein totes Live-Gespraech.
+      // Warn-Log NUR bei echt unbekanntem Call - ein terminalisiertes Ueber-Zeit-Leg
+      // (logUnknown:false) WAR aktiv, "kein aktiver Call" waere dort irrefuehrend (G2).
+      if (reattached.logUnknown)
+        console.warn(
+          `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
+        );
+      return res.type("text/xml").send(render([hangupD()]));
+    }
   }
   // L0: Luecke seit dem Render des vorigen Folge-Gathers ~ STT-Finalisierungs-Totzeit.
   metrics.logTurnGap(call.id);
@@ -1029,11 +1059,18 @@ app.post("/voice/turn", async (req, res) => {
 
 // ---------------- OUTBOUND: Angerufener nimmt ab ----------------
 app.post("/voice/outbound", async (req, res) => {
-  const call = store.getCall(req.query.callId);
+  let call = store.getCall(req.query.callId);
   if (!call) {
-    // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
-    console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
-    return res.type("text/xml").send(render([hangupD()]));
+    // F12 (A6): siehe /voice/turn - erst re-attachen+klassifizieren, dann fail-closed.
+    const reattached = await reattachActiveCall(req.query.callId);
+    if (reattached.call) {
+      call = reattached.call;
+    } else {
+      // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
+      if (reattached.logUnknown)
+        console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
+      return res.type("text/xml").send(render([hangupD()]));
+    }
   }
   call.twilioSid = req.body.CallSid || call.twilioSid;
   store.markAnswered(call.id);
@@ -1204,10 +1241,24 @@ async function finishCall(call) {
   }
 }
 
-app.post("/voice/status", (req, res) => {
+app.post("/voice/status", async (req, res) => {
   res.sendStatus(200);
-  const call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
-  if (!call) return; // Unbekannter Call: kein Status-Effekt UND kein Log (kein PII/Debug-Rauschen).
+  let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
+  if (!call) {
+    // F12 (A6) Runde 2 (S1-1): denselben reattachActiveCall()-Pfad wie /voice/turn und
+    // /voice/outbound nutzen - NICHT store.attachActiveCall direkt. Ein direkter Aufruf
+    // wuerde ein Ueber-Zeit-Leg (Deploy-Instanzwechsel liefert answered/completed verspaetet)
+    // OHNE Restzeit-Pruefung und OHNE Timer-Rearm als aktiv in den Spiegel zurueckholen -
+    // der Call liefe danach fuer den Rest seiner Lebensdauer OHNE Max-Dauer-Cap (Regel 1),
+    // weil ein folgendes /voice/turn ihn dann schon aktiv im Spiegel findet und
+    // reattachActiveCall nie wieder aufruft. RLS-scoped, nur DB-bestaetigt (nie der Body).
+    const reattached = await reattachActiveCall(req.query.callId || "");
+    // Beide null-Faelle bleiben still (Bestand: kein PII/Debug-Rauschen): logUnknown=true
+    // -> wirklich unbekannt; logUnknown=false -> Ueber-Zeit-Leg wurde bereits terminalisiert
+    // + gebucht (terminateCappedCall), hier ist nichts mehr zu tun.
+    if (!reattached.call) return;
+    call = reattached.call;
+  }
   const provider = call.provider || DEFAULT_PROVIDER;
 
   // TTS-Stoerung sichtbar machen (graceful degradation): Telnyx meldet ein
@@ -2222,13 +2273,15 @@ function rearmActiveCallTimers() {
   let reArmed = 0;
   let terminalized = 0;
   for (const call of store.load().calls.filter((c) => c.status === "active")) {
-    const remaining = remainingMaxDurationMs(call, nowMs, config.maxCallDurationS);
-    if (remaining > 0) {
-      scheduleMaxDurationEnd(call, call.twilioSid, remaining);
-      reArmed++;
-    } else {
+    // G5 (Review-Blocker Runde 2): dieselbe Klassifikation wie reattachActiveCall() (F12) -
+    // ausgelagert nach state-ops.js, um die Restzeit-Verzweigung nicht zweimal zu pflegen.
+    const { remaining, expired } = classifyCallTime(call, nowMs, config.maxCallDurationS);
+    if (expired) {
       void terminateCappedCall(call.id, call.twilioSid, "failed");
       terminalized++;
+    } else {
+      scheduleMaxDurationEnd(call, call.twilioSid, remaining);
+      reArmed++;
     }
   }
   if (reArmed || terminalized)

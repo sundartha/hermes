@@ -127,6 +127,56 @@ export function makePgStore(runner) {
       return call;
     },
     getCall: (id) => ops.getCall(requireState(), id),
+    // F12 (A6): einen dem Spiegel unbekannten, aber in der DB aktiven Call RLS-sauber
+    // nachladen. Ein Deploy-/Instanzwechsel legt eine aktive Zeile NACH unserer init()-
+    // Hydrierung an -> getCall() findet sie nicht -> der /voice-Webhook legte sonst fail-
+    // closed auf (Testanruf call_mr3lg2g7t9zg, 2026-07-02). Iteriert die hydrierten
+    // state.tenants, setzt pro Tenant die RLS-GUC (setTenant) und sucht die aktive Zeile -
+    // KEIN RLS-Bypass (Alt 6 verworfen), kein Cross-Tenant-Leck. Erster Treffer: Call
+    // (+ Transkript + ActionItem-IDs derselben Zeile) ueber rowToCall bauen und idempotent
+    // in den Spiegel pushen; RACE-GUARD (Muster ensureTenant): SYNCHRON unmittelbar vor dem
+    // push erneut ops.getCall pruefen (kein await dazwischen), damit ein paralleler
+    // Re-Attach-/Webhook-Pfad den Call nicht doppelt einlegt. Kein Treffer -> null.
+    // FAIL-SAFE wie ensureTenant: ein DB-Schluckauf wird secret-frei geloggt und als null
+    // behandelt -> der Handler legt fail-closed auf, NIE eine Rejection.
+    async attachActiveCall(callId) {
+      try {
+        const state = requireState();
+        return await runner.withClient(async (client) => {
+          for (const tenant of state.tenants) {
+            await setTenant(client, tenant.id);
+            const rows = (
+              await client.query(`SELECT * FROM call WHERE id = $1 AND status = $2`, [
+                callId,
+                CALL_STATUS_ACTIVE,
+              ])
+            ).rows;
+            if (rows.length === 0) continue;
+            const segRows = (
+              await client.query(
+                `SELECT * FROM transcript_segment WHERE call_id = $1 ORDER BY id ASC`,
+                [callId],
+              )
+            ).rows;
+            const itemRows = (
+              await client.query(
+                `SELECT * FROM action_item WHERE call_id = $1 ORDER BY seq DESC`,
+                [callId],
+              )
+            ).rows;
+            const call = rowToCall(rows[0], groupTranscripts(segRows), groupActionItemIds(itemRows));
+            const raced = ops.getCall(state, callId);
+            if (raced) return raced;
+            state.calls.push(call);
+            return call;
+          }
+          return null;
+        });
+      } catch (e) {
+        console.error("[pg] attachActiveCall fehlgeschlagen:", e.message);
+        return null;
+      }
+    },
     addTranscript(callId, role, text) {
       if (ops.addTranscript(requireState(), callId, role, text)) save();
     },

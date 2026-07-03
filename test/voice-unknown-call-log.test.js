@@ -9,6 +9,10 @@
 //   d) Logzeilen sind PII-frei (keine Telefonnummern; callId ist server-generiert)
 // Rein offline (helpers.startServer-Kindprozess), kein LLM-Pfad: beide Handler
 // early-returnen VOR extractSpeech/agentTurn.
+// F12 (A6): Nach dem Re-Attach-Umbau haengt der fail-closed Hangup + Warn-Log am
+// json-Pfad (attachActiveCall == getCall -> im fail-closed Zweig immer logUnknown:true).
+// Dieser Test pinnt, dass das Bestandsverhalten (Hangup + PII-freies Log) unter
+// STORE_BACKEND=json byte-identisch bleibt. Assertions bewusst UNVERAENDERT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
