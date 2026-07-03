@@ -121,6 +121,7 @@ export const BASE_ENV = {
   MAX_NUMBERS_PER_TENANT: "1",
   PROVISIONING_ENABLED: "false",
   PROVISIONING_COUNTRY: "DE",
+  PROVISIONING_REDRIVE_MAX_AGE_MS: "0",
   // Kauf-Land-Override aus (Default): number.country = Herkunftsland, byte-identisch.
   // Ohne diese Zeile leakt eine lokale .env mit FORCE_NUMBER_COUNTRY=US via dotenv in
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).

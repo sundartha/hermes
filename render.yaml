@@ -115,6 +115,12 @@ services:
         value: "false"
       - key: PROVISIONING_COUNTRY
         value: "DE"
+      # PROV-01 (F4/F5): Auto-Redrive-Fenster (ms) fuer haengende Provisioning-Jobs.
+      # 0 = Observe-Only (fail-closed, kein Auto-Nachkauf). Muss < kleinstem Anbieter-
+      # Idempotenz-Fenster bleiben (Stripe 24h); scharf empfohlen 3600000. Erst nach
+      # gruenem Telnyx-Idempotenz-Smoke scharfschalten.
+      - key: PROVISIONING_REDRIVE_MAX_AGE_MS
+        value: "0"
       # Kauf-Land-Override (ISO-2): alle neuen Nummern werden DORT gekauft, die Sprache
       # bleibt am erkannten Herkunftsland. "US" = jeder User bekommt eine US-Nummer; leer
       # = Kauf-Land = erkanntes Land. Geo-/Sprach-Erkennung bleibt aktiv.
