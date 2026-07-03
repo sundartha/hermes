@@ -14,7 +14,6 @@
 //   cancel:  POST /v1/payment_intents/{id}/cancel
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
 import { config } from "../config.js";
-import { fetchWithTimeout } from "../fetch-with-timeout.js";
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -54,18 +53,6 @@ function assertOk(res, op) {
 
 const url = (path) => config.stripeApiBase + path;
 
-// P16 Review-Fix (PROV-01/F3): placeHold/captureHold/cancelHold haengen am Provisioning-
-// Drain (provisionNumber in onboarding.js, ueber deps.billing) - ein haengender Stripe-
-// Request wuerde sonst die Single-Flight-Kette um den Drain (single-flight.js) fuer immer
-// blockieren (kein signal/Timeout vorher). Label-Helfer statt die timeoutMs/label-Optionen
-// an jeder Stelle auszuschreiben (G5). Die uebrigen Stripe-Calls (Checkout/Subscription/
-// Meter) haengen NICHT am Drain - sie laufen im normalen Request/Response-Zyklus (eigener
-// Scope, hier bewusst unangetastet).
-const drainTimeoutOpts = (label) => ({
-  timeoutMs: config.providerCallTimeoutMs,
-  label: `Stripe ${label}`,
-});
-
 /** @type {import("./ports.js").BillingPort} */
 export const stripeBilling = {
   async placeHold({
@@ -91,11 +78,7 @@ export const stripeBilling = {
       off_session: OFF_SESSION,
     });
     body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
-    const res = await fetchWithTimeout(
-      url(PAYMENT_INTENTS_PATH),
-      { method: "POST", headers, body },
-      drainTimeoutOpts("placeHold"),
-    );
+    const res = await fetch(url(PAYMENT_INTENTS_PATH), { method: "POST", headers, body });
     assertOk(res, "placeHold");
     const json = await res.json().catch(() => ({}));
     return { paymentIntentId: json.id };
@@ -103,20 +86,19 @@ export const stripeBilling = {
 
   async captureHold(paymentIntentId, amountCents) {
     const body = new URLSearchParams({ amount_to_capture: String(amountCents) });
-    const res = await fetchWithTimeout(
-      `${url(PAYMENT_INTENTS_PATH)}/${paymentIntentId}/capture`,
-      { method: "POST", headers: authHeaders(), body },
-      drainTimeoutOpts("captureHold"),
-    );
+    const res = await fetch(`${url(PAYMENT_INTENTS_PATH)}/${paymentIntentId}/capture`, {
+      method: "POST",
+      headers: authHeaders(),
+      body,
+    });
     assertOk(res, "captureHold");
   },
 
   async cancelHold(paymentIntentId) {
-    const res = await fetchWithTimeout(
-      `${url(PAYMENT_INTENTS_PATH)}/${paymentIntentId}/cancel`,
-      { method: "POST", headers: authHeaders() },
-      drainTimeoutOpts("cancelHold"),
-    );
+    const res = await fetch(`${url(PAYMENT_INTENTS_PATH)}/${paymentIntentId}/cancel`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
     assertOk(res, "cancelHold");
   },
 

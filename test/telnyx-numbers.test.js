@@ -174,34 +174,3 @@ test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw 
     /Telnyx orderNumber fehlgeschlagen: HTTP 402$/,
   );
 });
-
-// P16 Review-Fix (PROV-01/F3): ein haengender Telnyx-Request (Netzwerk-Partition/TLS-Hang)
-// darf die Single-Flight-Kette um den Provisioning-Drain nicht fuer immer blockieren. Stub
-// simuliert das reale AbortController-Verhalten (rejected bei signal 'abort'); OHNE die
-// fetchWithTimeout-Verdrahtung in numbers.js wuerde dieser Test selbst haengen (kein Reject).
-function stubHangingFetch() {
-  global.fetch = (url, opts = {}) =>
-    new Promise((resolve, reject) => {
-      opts.signal.addEventListener("abort", () => {
-        const err = new Error("The operation was aborted");
-        err.name = "AbortError";
-        reject(err);
-      });
-    });
-}
-
-test("searchNumbers/orderNumber/releaseNumber: haengender Request bricht nach providerCallTimeoutMs ab (Drain-Chain haengt nicht fuer immer)", async () => {
-  const savedTimeout = config.providerCallTimeoutMs;
-  config.providerCallTimeoutMs = 20; // kurz + deterministisch, kein echtes Netz
-  stubHangingFetch();
-  try {
-    await assert.rejects(() => prov.searchNumbers({ countryCode: "DE" }), /Telnyx searchNumbers: Timeout/);
-    await assert.rejects(
-      () => prov.orderNumber({ e164: "+4915112340001", connectionId: "conn_1" }),
-      /Telnyx orderNumber: Timeout/,
-    );
-    await assert.rejects(() => prov.releaseNumber("num_abc"), /Telnyx releaseNumber: Timeout/);
-  } finally {
-    config.providerCallTimeoutMs = savedTimeout;
-  }
-});

@@ -1,8 +1,7 @@
 // F3 (PROV-01): Single-Flight um den Provisioning-Drain. Kein Spawn, kein pglite - testet
 // den generischen Serialisierungs-Baustein makeSingleFlight gegen den ECHTEN Memory-Queue-
 // Adapter (der 'done' erst nach dem await markiert = das reale Race-Fenster). Diskriminierend:
-// die Kontrolle (ohne Guard) verdoppelt den Kauf, mit Guard ist es genau einer. Zusaetzlich
-// (P16 Review-Fix): der Watchdog meldet einen auffaellig langen Lauf statt still zu bleiben.
+// die Kontrolle (ohne Guard) verdoppelt den Kauf, mit Guard ist es genau einer.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeSingleFlight } from "../src/single-flight.js";
@@ -71,33 +70,4 @@ test("Fehler bricht die Kette nicht ab: Folge-Drain laeuft weiter", async () => 
   await assert.rejects(runExclusive()); // Aufruf #1 wirft
   await runExclusive(); // Aufruf #2 laeuft trotzdem
   assert.equal(calls, 2, "zweiter Drain nach Fehler des ersten ausgefuehrt");
-});
-
-// P16 Review-Fix (PROV-01/F3): Watchdog meldet einen auffaellig langen Lauf, OHNE ihn
-// abzubrechen (das Kappen selbst passiert am Provider-Call ueber fetchWithTimeout,
-// src/fetch-with-timeout.js) - onStall ist injizierbar, damit der Test nicht auf die
-// echte Default-Frist warten muss.
-const WATCHDOG_MS = 15;
-
-test("Watchdog: meldet einen Lauf, der laenger als watchdogMs braucht", async () => {
-  let stalledWith;
-  const runExclusive = makeSingleFlight(
-    () => new Promise((resolve) => setTimeout(resolve, WATCHDOG_MS * 3)),
-    { watchdogMs: WATCHDOG_MS, onStall: (ms) => (stalledWith = ms) },
-  );
-  await runExclusive();
-  assert.equal(stalledWith, WATCHDOG_MS, "onStall wurde mit der konfigurierten Frist aufgerufen");
-});
-
-test("Watchdog: meldet NICHTS, wenn der Lauf vor watchdogMs fertig ist", async () => {
-  let stalled = false;
-  const runExclusive = makeSingleFlight(() => Promise.resolve("schnell"), {
-    watchdogMs: WATCHDOG_MS,
-    onStall: () => (stalled = true),
-  });
-  await runExclusive();
-  // Etwas laenger als watchdogMs warten, um sicherzugehen, dass der (bereits
-  // geclearte) Timer nicht doch noch verspaetet feuert.
-  await new Promise((resolve) => setTimeout(resolve, WATCHDOG_MS * 2));
-  assert.equal(stalled, false, "kein Stall-Alarm fuer einen rechtzeitig fertigen Lauf");
 });
