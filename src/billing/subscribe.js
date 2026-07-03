@@ -11,6 +11,7 @@
 import { hasCardOnFile } from "../self-service.js";
 import { CATALOG_SLUGS } from "../plans.js";
 import { activatePaidTenant } from "./activation.js";
+import { customerMatches } from "./card-setup.js";
 
 // Buchbare Plan-Slugs = die EINE Quelle aus dem Plan-Katalog (src/plans.js, SSoT).
 // Kein zweites Slug-Literal hier (G5/S2): der Katalog definiert die Tiers, diese
@@ -102,7 +103,8 @@ export async function createTenantSubscription({ store, billing, config, tenant,
 // und aktiviert (kein zweiter Geld-Call). Spiegelt subscribeAndActivate; die Abo-Daten
 // kommen aus der Session statt aus createSubscription. Gates fail-closed in FESTER
 // Reihenfolge (sicherheitsrelevant, nicht umsortieren):
-//   1. Customer-Match - dieselbe R4-Invariante wie bindCardFromSession: eine fremde
+//   1. Customer-Match - ueber customerMatches (card-setup.js, G5/S2): dieselbe
+//      R4-Invariante wie bindCardFromSession, EINE Stelle statt Kopie. Eine fremde
 //      session_id darf NIE fremde Karte/Abo an diesen Tenant binden.
 //   2. Plan-Match - der zurueckgetragene Query-Plan muss dem tatsaechlich bezahlten
 //      Plan der Session (subscription_data-Metadata) entsprechen, sonst buchte ein
@@ -129,8 +131,7 @@ export async function activateSubscriptionFromCheckoutSession({
   expectedPlanSlug,
 }) {
   const outcome = await billing.getSubscriptionCheckoutResult(sessionId);
-  const { customerId: stored } = store.tenantStripe(tenant);
-  if (!stored || stored !== outcome.customerId)
+  if (!customerMatches(store, tenant, outcome.customerId))
     return { ok: false, reason: "customer_mismatch" };
   if (!outcome.planSlug || outcome.planSlug !== expectedPlanSlug)
     return { ok: false, reason: "plan_mismatch" };
