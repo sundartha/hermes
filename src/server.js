@@ -2319,3 +2319,25 @@ const httpServer = app.listen(config.port, () => {
 
 // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
 attachMediaBridge(httpServer, finishCall);
+
+// F11 (A6): Graceful Shutdown. Ein Deploy/Restart schickt SIGTERM (Render), Ctrl+C SIGINT.
+// OHNE Handler killt Node den Prozess sofort -> ein in-flight /voice/turn stirbt mitten im
+// LLM-await (Agent-Transkript nie persistiert, keine TwiML-Antwort). Der Drain laesst laufende
+// Requests fertig laufen (await close) und flusht ERST DANACH den Store. Das ORDERING ist
+// entscheidend: kein Handler darf NACH dem finalen save() noch eine Mutation anhaengen.
+// Watchdog kappt einen haengenden Drain hart mit exit(0). shuttingDown schuetzt gegen
+// Wiedereintritt (zweites Signal / SIGTERM+SIGINT). Secret-frei (nur Signalname).
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
+  const watchdog = setTimeout(() => process.exit(0), config.shutdownDrainTimeoutMs).unref();
+  await new Promise((resolve) => httpServer.close(resolve));
+  if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
+  await store.save();
+  clearTimeout(watchdog);
+  process.exit(0);
+}
+process.once("SIGTERM", gracefulShutdown);
+process.once("SIGINT", gracefulShutdown);
