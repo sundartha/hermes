@@ -99,3 +99,11 @@ Befund (empirisch, Chrome-DOM + curl):
   Google Search Console (Owner-Google-Account).
 - Memory: [claude-connector-icon-mechanism] angelegt, Re-Connect-Hypothese
   in [widget-i18n-icon-polish] widerlegt.
+- Nachtrag (Owner-Auftrag, via Chrome): Google Search Console Property
+  https://sundartha.com angelegt + per HTML-Datei bestaetigt
+  (apps/web/public/googleb431b04eee6fa345.html, deployt — Datei NICHT
+  loeschen, sonst verfaellt die Bestaetigung), Startseiten-Indexierung
+  beantragt (bevorzugte Crawling-Warteschlange), sitemap.xml eingereicht
+  ("Konnte nicht abgerufen werden" = bekannter Anzeige-Quirk direkt nach
+  Submit; Datei live 200/application/xml verifiziert). Damit ist der
+  Google-Recrawl angestossen; Favicon-Cache-Update folgt daraus.
