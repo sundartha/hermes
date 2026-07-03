@@ -78,7 +78,9 @@ export const {
   purgeTranscript,
   markAnswered,
   endCallRecord,
+  setCallEndedAt, // F9 (A6): Seam fuer F10/F12 (expliziter End-Anker)
   markSummarySmsSent,
+  markBilled, // F9 (A6): Bucht-Idempotenz-Marker
   recordFailureReason,
   countOutboundCallsSince,
   findTenantByNumber,

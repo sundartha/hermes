@@ -140,7 +140,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- no-answer/busy/failed:<sipcause>) NICHT erfolgreicher Calls. Additiv NULLABLE: im
   -- /voice/status-Callback aus der Provider-Diagnose gesetzt, sonst NULL -> Bestand
   -- byte-identisch. Speist get_call_status (failure_reason).
-  failure_reason TEXT
+  failure_reason TEXT,
+  -- F9 (A6): persistierter Bucht-Marker (ISO). Additiv NULLABLE: gesetzt NACH erfolgreicher
+  -- Abrechnung in finishCall, sonst NULL -> Bestand byte-identisch. Ueberlebt - anders als das
+  -- In-Memory-Flag _finished - den Restart -> Voice-Minuten genau einmal gebucht.
+  billed_at TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -156,6 +160,9 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS context JSONB;
 -- CDF1: Fehlergrund-Spalte auf Bestands-call-Tabellen nachziehen (Muster provider/
 -- summary_sms_sent_at/context). Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS failure_reason TEXT;
+-- F9 (A6): Bucht-Marker-Spalte auf Bestands-call-Tabellen nachziehen. Idempotent; frische DB
+-- = No-op (CREATE TABLE oben hat die Spalte schon). Nullable, kein Backfill (NULL = ungebucht).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS billed_at TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

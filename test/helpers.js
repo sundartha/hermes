@@ -550,10 +550,19 @@ export async function startServerExpectExit({
 
 // Startet src/server.js als Kindprozess und liefert Port, gesammeltes stdout
 // und einen stop()-Handle. Wirft bei Startproblemen mit dem bisherigen Output.
-export async function startServer({ env = {}, seed, rawStore, ownerNumber } = {}) {
-  // rawStore (Korruptions-Pfad) bleibt verbatim; sonst Owner-Nummer sicherstellen,
-  // sonst greift der Boot-Guard (kein Owner-Outbound -> Exit).
-  const dataDir = tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
+export async function startServer({
+  env = {},
+  seed,
+  rawStore,
+  ownerNumber,
+  dataDir: reuseDataDir,
+} = {}) {
+  // rawStore (Korruptions-Pfad) bleibt verbatim; sonst Owner-Nummer sicherstellen, sonst greift
+  // der Boot-Guard (kein Owner-Outbound -> Exit). reuseDataDir (A6/F9-Restart-Tests) laeuft auf dem
+  // Store EINES vorherigen Laufs weiter (Prozess-Neustart-Simulation) - kein frisches tempDataDir,
+  // kein Seed-Overwrite; die auf Platte persistierte Owner-Nummer traegt den Boot-Guard.
+  const dataDir =
+    reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
