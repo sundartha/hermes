@@ -172,6 +172,16 @@ async function pollNumberStatus(srv, id, status, timeoutMs = 4000) {
   }
 }
 
+async function pollJobStatus(srv, id, status, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const job = srv.readStore().provisioningJobs.find((j) => j.id === id);
+    if (job && job.status === status) return job;
+    if (Date.now() > deadline) return job;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
 const settle = () => new Promise((r) => setTimeout(r, 400)); // fire-and-forget Sweep abwarten
 
 test("scharf (maxAge=1h, PAYMENT): junger stuck-requested -> active, GENAU EINE effektive Order + EIN captured PI trotz Vor-Order", async () => {
@@ -247,6 +257,34 @@ test("createdAt zu alt (> maxAge): stuck bleibt 'requested', hold-Log, KEIN Kauf
     assert.equal(telnyx.orderPosts.length, 0);
     assert.equal(stripe.captured.size, 0);
     assert.match(srv.stdout, /\[provision-reconcile\] hold .*grund=too_old/);
+  } finally {
+    await srv.stop();
+    await telnyx.close();
+    await stripe.close();
+  }
+});
+
+test("close-Korb: Nummer bereits 'active' -> Job wird 'done', KEIN Provider-Call", async () => {
+  const telnyx = await startTelnyxOrderIdempotentMock();
+  const stripe = await startStripeHoldCaptureMock();
+  const seed = seedStuck();
+  seed.numbers[0].status = NUMBER_STATUS.ACTIVE; // gegenstandslos: Nummer laengst durch
+  seed.numbers[0].e164 = ORDERED_E164; // (z.B. manuelle Owner-Recovery vor dem Boot-Sweep)
+  const srv = await startServer({
+    seed,
+    env: {
+      ...PAY_ENV,
+      PROVISIONING_REDRIVE_MAX_AGE_MS: String(ONE_HOUR_MS),
+      TELNYX_API_BASE: telnyx.url,
+      STRIPE_API_BASE: stripe.url,
+    },
+  });
+  try {
+    const job = await pollJobStatus(srv, "job_x", "done");
+    assert.equal(job.status, "done", "gegenstandsloser Job wird geschlossen statt nachgekauft");
+    assert.equal(srv.readStore().numbers.find((n) => n.id === NUMBER_ID).status, "active");
+    assert.equal(telnyx.orderPosts.length, 0, "kein Nachkauf fuer eine bereits aktive Nummer");
+    assert.equal(stripe.captured.size, 0, "kein Doppel-Capture fuer eine bereits aktive Nummer");
   } finally {
     await srv.stop();
     await telnyx.close();
