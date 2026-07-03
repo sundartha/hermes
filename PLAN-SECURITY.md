@@ -17,3 +17,27 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > (d) Ist-Kosten koennen die Reserve um <= 1 Minutentakt (Rundung/Hangup-Latenz) uebersteigen,
 > fail-forward. `FAKE_ORIGINATE` ist ein boot-gehaerteter Test-Seam (nur zulaessig wenn
 > Signaturpruefung geskippt -> in Prod unmoeglich), keine abgeschaltete Sicherung.
+
+## PROV-01 — Provisioning-Crash-Recovery (klassifizierender Boot-Sweep) (nach F5, ergaenzt nach F6/F7)
+
+> Provisioning-Crash-Recovery (PROV-01, klassifizierender Boot-Sweep): Nach einem Prozess-Crash
+> zwischen Enqueue und Drain klassifiziert ein fire-and-forget Boot-Sweep
+> (`reconcileOrphanedProvisioning`, gated auf `PROVISIONING_ENABLED`) die persistierten
+> `queued`-Jobs in drei Koerbe: redrive (nur `requested` + aktiver KYC-Subscriber + Job juenger als
+> `PROVISIONING_REDRIVE_MAX_AGE_MS`, Default 0 = Observe-Only) ueber den idempotenten,
+> single-flight-serialisierten Worker; hold (zu alt / unbekanntes Alter / gate-faellt / Nummer
+> mid-flight) -> Owner-Reconcile-Runbook, KEIN Auto-Kauf; close (Nummer aktiv/terminal/fehlt) ->
+> Job schliessen. Stand F5: `captureHold` hat WEDER Idempotency-Key NOCH eine "already
+> captured"-Sonderbehandlung (`billing/stripe.js`) - ein Re-Drive nach einem Crash zwischen
+> erfolgreichem Capture und `store.save()` kann eine bereits bezahlte Nummer beim Provider
+> freigeben (`rollbackAfterOrder`). F6 wird das schliessen (`captureHold` behandelt "already
+> captured" als No-op-Erfolg statt Fehler, kein Release einer bezahlten Nummer) - siehe offener
+> BEFUND-4 in PLAN-LAUNCH-FIXES.md. HARTER Launch-Gate: Scharfschaltung (maxAge>0) mit
+> PAYMENT_ENABLED erst nach BEIDEM: (a) gruenem Owner-Smoke der Telnyx-Idempotenz auf
+> `/v2/number_orders` (zweimal derselbe Key -> eine Order) UND (b) F6 gemergt. Bis dahin
+> Observe-Only. Bewusst akzeptierte Restrisiken: (1) Multi-Instance-Sweep braucht
+> vor Skalierung auf >1 Instanz einen pg-Advisory-Lock pro numberId; Launch ist Single-Instance.
+> (2) Cap-Re-Validierung: der Re-Drive verbraucht keine neue Kapazitaet, eine seither verschaerfte
+> MAX_NUMBERS-Bremse wird fuer sie nicht neu geprueft. (3) `runProvisioningDrain` haelt keinen
+> `withStoreLock` ueber die Drain-Schleife (pre-existierend); der Single-Flight-Guard schliesst den
+> Doppel-Drain, der Whole-Mirror-Flush-Race bleibt an das Single-Instance-Gate gekoppelt.
