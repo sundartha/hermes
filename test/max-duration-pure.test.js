@@ -15,6 +15,7 @@ import {
   setCallEndedAt,
   remainingMaxDurationMs,
   cappedEndedAtMs,
+  classifyCallTime,
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
@@ -92,6 +93,21 @@ test("cappedEndedAtMs: now == anchor+limit -> beide Grenzen gleich, deterministi
 test("cappedEndedAtMs: kein Anker (answeredAt+startedAt null) -> 0, kein Throw/NaN-Leak", () => {
   const c = call({ answeredAt: null, startedAt: null, maxDurationS: 180 });
   assert.equal(cappedEndedAtMs(c, ANCHOR + SECONDS_60 * MS_PER_S, DEFAULT_MAX_S), 0);
+});
+
+// ---- classifyCallTime (G5, Review-Blocker Runde 2: gemeinsame Entscheidung fuer Boot-Re-Arm
+// F10 und Re-Attach F12 - vorher an beiden Stellen dupliziert) ----
+
+test("classifyCallTime: aktiv im Zeitfenster -> expired=false, remaining wie remainingMaxDurationMs", () => {
+  const c = call({ answeredAt: new Date(ANCHOR).toISOString(), maxDurationS: 180 });
+  const nowMs = ANCHOR + SECONDS_60 * MS_PER_S;
+  assert.deepEqual(classifyCallTime(c, nowMs, DEFAULT_MAX_S), { remaining: 120000, expired: false });
+});
+
+test("classifyCallTime: ueberzogen (remaining=0) -> expired=true", () => {
+  const c = call({ answeredAt: new Date(ANCHOR).toISOString(), maxDurationS: 180 });
+  const nowMs = ANCHOR + SECONDS_400 * MS_PER_S;
+  assert.deepEqual(classifyCallTime(c, nowMs, DEFAULT_MAX_S), { remaining: 0, expired: true });
 });
 
 // ---- setCallEndedAt (expliziter Anker, F10/F12-Seam) ----

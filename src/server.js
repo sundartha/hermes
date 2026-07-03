@@ -67,7 +67,7 @@ import {
   classifyQueuedProvisioningJobs,
   setTenantGeo,
   findNumber,
-  remainingMaxDurationMs,
+  classifyCallTime,
   cappedEndedAtMs,
 } from "./store/state-ops.js";
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
@@ -2273,13 +2273,15 @@ function rearmActiveCallTimers() {
   let reArmed = 0;
   let terminalized = 0;
   for (const call of store.load().calls.filter((c) => c.status === "active")) {
-    const remaining = remainingMaxDurationMs(call, nowMs, config.maxCallDurationS);
-    if (remaining > 0) {
-      scheduleMaxDurationEnd(call, call.twilioSid, remaining);
-      reArmed++;
-    } else {
+    // G5 (Review-Blocker Runde 2): dieselbe Klassifikation wie reattachActiveCall() (F12) -
+    // ausgelagert nach state-ops.js, um die Restzeit-Verzweigung nicht zweimal zu pflegen.
+    const { remaining, expired } = classifyCallTime(call, nowMs, config.maxCallDurationS);
+    if (expired) {
       void terminateCappedCall(call.id, call.twilioSid, "failed");
       terminalized++;
+    } else {
+      scheduleMaxDurationEnd(call, call.twilioSid, remaining);
+      reArmed++;
     }
   }
   if (reArmed || terminalized)
