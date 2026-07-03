@@ -10,6 +10,7 @@
 
 import { hasCardOnFile } from "../self-service.js";
 import { CATALOG_SLUGS } from "../plans.js";
+import { activatePaidTenant } from "./activation.js";
 
 // Buchbare Plan-Slugs = die EINE Quelle aus dem Plan-Katalog (src/plans.js, SSoT).
 // Kein zweites Slug-Literal hier (G5/S2): der Katalog definiert die Tiers, diese
@@ -75,4 +76,54 @@ export async function createTenantSubscription({ store, billing, config, tenant,
   });
   store.setTenantSubscription(tenant, { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart });
   return { ok: true, subscriptionId, planSlug, currentPeriodEnd };
+}
+
+// BK-Discount: Aktivierung aus einer abgeschlossenen subscription-Checkout-Session.
+// Stripe hat Karte + Abo dort BEREITS angelegt - hier wird NUR verifiziert, persistiert
+// und aktiviert (kein zweiter Geld-Call). Spiegelt subscribeAndActivate; die Abo-Daten
+// kommen aus der Session statt aus createSubscription. Gates fail-closed in FESTER
+// Reihenfolge (sicherheitsrelevant, nicht umsortieren):
+//   1. Customer-Match - dieselbe R4-Invariante wie bindCardFromSession: eine fremde
+//      session_id darf NIE fremde Karte/Abo an diesen Tenant binden.
+//   2. Plan-Match - der zurueckgetragene Query-Plan muss dem tatsaechlich bezahlten
+//      Plan der Session (subscription_data-Metadata) entsprechen, sonst buchte ein
+//      manipulierter return-Aufruf ein teureres Kontingent zum falschen Preis.
+//   3. already_subscribed - Doppel-Redirect/Reload aktiviert nie doppelt (der Route-
+//      Layer wertet das als idempotenten Erfolg; darum MUESSEN 1+2 davor stehen).
+// Nebeneffekt (Persistenz + Aktivierung) im Namen (N7).
+export async function activateSubscriptionFromCheckoutSession({
+  store,
+  billing,
+  accounts,
+  provision,
+  tenant,
+  sessionId,
+  expectedPlanSlug,
+}) {
+  const outcome = await billing.getSubscriptionCheckoutResult(sessionId);
+  const { customerId: stored } = store.tenantStripe(tenant);
+  if (!stored || stored !== outcome.customerId)
+    return { ok: false, reason: "customer_mismatch" };
+  if (!outcome.planSlug || outcome.planSlug !== expectedPlanSlug)
+    return { ok: false, reason: "plan_mismatch" };
+  if (store.tenantSubscription(tenant).subscriptionId)
+    return { ok: false, reason: "already_subscribed" };
+  store.setTenantStripe(tenant, {
+    customerId: outcome.customerId,
+    paymentMethodId: outcome.paymentMethodId,
+  });
+  store.setTenantSubscription(tenant, {
+    subscriptionId: outcome.subscriptionId,
+    planSlug: outcome.planSlug,
+    currentPeriodEnd: outcome.currentPeriodEnd,
+    currentPeriodStart: outcome.currentPeriodStart,
+  });
+  const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+  return {
+    ok: true,
+    subscriptionId: outcome.subscriptionId,
+    planSlug: outcome.planSlug,
+    currentPeriodEnd: outcome.currentPeriodEnd,
+    profile,
+  };
 }

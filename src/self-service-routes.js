@@ -16,7 +16,11 @@ import { Router } from "express";
 import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
-import { createTenantSubscription } from "./billing/subscribe.js";
+import {
+  createTenantSubscription,
+  priceIdForPlan,
+  activateSubscriptionFromCheckoutSession,
+} from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
 import { CATALOG_SLUGS } from "./plans.js";
@@ -87,6 +91,26 @@ function knownPlanSlug(raw) {
 function returnSuccessUrl(publicUrl, planSlug) {
   const base = `${publicUrl}/api/self-service/billing/return?session_id={CHECKOUT_SESSION_ID}`;
   return planSlug ? `${base}&plan=${planSlug}` : base;
+}
+
+// BK-Discount: erzeugt die zur Plan-Lage passende Stripe-Checkout-Session (G30, eine
+// Aufgabe). Mit Plan -> subscription-Mode: Karte + Abo in EINEM gehosteten Schritt,
+// Stripe zeigt das native Rabattcode-Feld (allow_promotion_codes). Ohne Plan ->
+// setup-Mode (nur Karte speichern, byte-identisch zum Bestand). priceId ist bei
+// planSlug != null vom Aufrufer bereits aufgeloest (plan_unconfigured-Gate davor).
+function createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }) {
+  const successUrl = returnSuccessUrl(config.publicUrl, planSlug);
+  const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
+  if (!planSlug)
+    return billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
+  return billing.createSubscriptionCheckoutSession({
+    tenantRef: tenant,
+    customerId,
+    priceId,
+    planSlug,
+    successUrl,
+    cancelUrl,
+  });
 }
 
 // BK2: Geteilte Buchungs-Sequenz hinter BEIDEN Eingaengen (G5/S2). Bucht fail-closed
@@ -247,19 +271,32 @@ export function makeSelfServiceRoutes({
           return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
         if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
         const tenant = req.tenant.tenantId;
-        // BK2: optionaler Plan aus dem Kachel-Flow -> successUrl. Bare "Karte hinzufuegen"
-        // (kein Plan) -> null -> reine Karten-successUrl (byte-identisch zum Bestand).
+        // BK2: optionaler Plan aus dem Kachel-Flow. Bare "Karte hinzufuegen" (kein Plan)
+        // -> setup-Mode-successUrl ohne &plan= (byte-identisch zum Bestand).
         const planSlug = knownPlanSlug((req.body || {}).plan);
+        // BK-Discount-Gates VOR jedem Stripe-Call (fail-closed, keine Session mit Muell):
+        // fehlender Price = Server-Fehlkonfig (500, wie subscribeReject); bestehendes Abo
+        // = 409, weil der subscription-Mode-Checkout bei Abschluss ein ZWEITES echtes
+        // Stripe-Abo anlegen wuerde (Kostenleck) - der already_subscribed-Guard in
+        // /return verhindert nur die lokale Doppel-Aktivierung, nicht das Stripe-Abo.
+        const priceId = planSlug ? priceIdForPlan(planSlug, config) : null;
+        if (planSlug && !priceId) return res.status(500).json({ error: "plan_unconfigured" });
+        if (planSlug && store.tenantSubscription(tenant).subscriptionId)
+          return res.status(409).json({ error: "already_subscribed" });
         const customerId = await ensureCustomer({ store, billing, tenant });
-        const successUrl = returnSuccessUrl(config.publicUrl, planSlug);
-        const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
-        const { url } = await billing.createSetupCheckoutSession({
-          tenantRef: tenant,
+        const { url } = await createCheckoutSession({
+          billing,
+          config,
+          tenant,
           customerId,
-          successUrl,
-          cancelUrl,
+          planSlug,
+          priceId,
         });
-        audit("self_service_setup_checkout", req, `tenant=${tenant}`);
+        audit(
+          "self_service_setup_checkout",
+          req,
+          `tenant=${tenant}${planSlug ? ` plan=${planSlug} mode=subscription` : ""}`,
+        );
         res.json({ url });
       },
       billingUnavailable,
@@ -281,29 +318,38 @@ export function makeSelfServiceRoutes({
         if (!sessionId || typeof sessionId !== "string")
           return res.status(400).json({ error: "session_id ist Pflicht" });
 
-        const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
-        if (!ok) {
-          audit("self_service_card_mismatch", req, `tenant=${tenant}`);
+        // BK2/BK-Discount: getragener Plan (Query) -> die Session lief im subscription-
+        // Mode (Stripe hat Karte + Abo schon angelegt) -> verifizieren + persistieren +
+        // aktivieren. Fehlt/unbekannt -> reiner Karten-Flow (setup-Mode, byte-identisch).
+        const carriedPlan = knownPlanSlug(req.query.plan);
+        if (!carriedPlan) {
+          const { ok } = await bindCardFromSession({ store, billing, tenant, sessionId });
+          if (!ok) {
+            audit("self_service_card_mismatch", req, `tenant=${tenant}`);
+            return res.status(403).json({ error: "Customer-Mismatch" });
+          }
+          audit("self_service_card_saved", req, `tenant=${tenant}`);
+          return res.redirect(CARD_RETURN_OK); // 302 -> "Karte hinterlegt"
+        }
+
+        const result = await activateSubscriptionFromCheckoutSession({
+          store, billing, accounts, provision, tenant, sessionId, expectedPlanSlug: carriedPlan,
+        });
+        if (result.reason === "customer_mismatch" || result.reason === "plan_mismatch") {
+          // Dieselbe R4-fail-closed-Antwort wie der Karten-Flow (403, kein Redirect):
+          // eine fremde ODER verfaelschte session_id bindet NIE Karte oder Abo.
+          audit("self_service_card_mismatch", req, `tenant=${tenant} reason=${result.reason}`);
           return res.status(403).json({ error: "Customer-Mismatch" });
         }
-        audit("self_service_card_saved", req, `tenant=${tenant}`);
-
-        // BK2: getragener Plan (Query) -> direkt buchen+aktivieren (gefuehrter Kachel-Flow:
-        // keine Karte -> Checkout -> Rueckkehr -> Plan). Fehlt/unbekannt -> reiner Karten-Flow
-        // (byte-identisch). Slug katalog-validiert (kein Id-Leak). Geld-Gates: PAYMENT_ENABLED
-        // (404 oben) + webAuthPendingMw + createTenantSubscription (fail-closed, idempotent).
-        const carriedPlan = knownPlanSlug(req.query.plan);
-        if (!carriedPlan) return res.redirect(CARD_RETURN_OK); // 302 -> "Karte hinterlegt"
-
-        const result = await subscribeAndActivate({
-          store, billing, config, accounts, provision, tenant, planSlug: carriedPlan,
-        });
         audit(
           "self_service_subscribe",
           req,
           `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ${profileAuditDetail(result.profile)}`,
         );
-        res.redirect(result.ok ? SUB_RETURN_OK : SUB_RETURN_FAILED);
+        // already_subscribed = idempotent-erfolgreich (Doppel-Redirect/Reload derselben
+        // Session, Abo ist aktiv) -> sub=ok. Jeder andere/kuenftige reason -> sub=failed.
+        const succeeded = result.ok || result.reason === "already_subscribed";
+        res.redirect(succeeded ? SUB_RETURN_OK : SUB_RETURN_FAILED);
       },
       (res) => res.redirect(CARD_RETURN_ERROR),
     ),

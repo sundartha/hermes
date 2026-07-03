@@ -49,6 +49,7 @@ const PAYMENT_METHOD = "pm_bk5";
 const SESSION = "cs_bk5"; // Stripe-Checkout-Session-Id
 const WEBHOOK_SUB_ID = "sub_bk5_wh"; // Subscription-Id im Webhook-Event
 const PERIOD_END = 1893456000; // Unix-Sek (fix, P12/R: kein Date.now) = 2030-01-01Z
+const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fix, P12/R)
 const NOW_S = 1_700_000_000; // Webhook-Uhr (Aufrufer kontrolliert die Zeit)
 const PLAN = "starter";
 const INCLUDED_MIN = 30; // = PLAN_CATALOG starter.includedMinutes
@@ -81,10 +82,26 @@ function fakeBilling(spy = {}) {
       spy.successUrl = p.successUrl;
       return { url: "https://stripe.test/c/cs_bk5", sessionId: SESSION };
     },
+    createSubscriptionCheckoutSession: async (p) => {
+      spy.subCheckoutParams = p;
+      spy.successUrl = p.successUrl;
+      return { url: "https://stripe.test/c/cs_bk5", sessionId: SESSION };
+    },
     getCheckoutSessionResult: async () => ({
       customerId: CUSTOMER,
       paymentMethodId: PAYMENT_METHOD,
     }),
+    getSubscriptionCheckoutResult: async (sessionId) => {
+      spy.resultSessionId = sessionId;
+      return {
+        customerId: CUSTOMER,
+        paymentMethodId: PAYMENT_METHOD,
+        subscriptionId: "sub_new",
+        currentPeriodStart: PERIOD_START,
+        currentPeriodEnd: PERIOD_END,
+        planSlug: PLAN,
+      };
+    },
     createSubscription: async (p) => {
       spy.subParams = p;
       return { subscriptionId: "sub_new", currentPeriodEnd: PERIOD_END };
@@ -275,13 +292,15 @@ test("(2) /state vor Abo -> kein Plan, kein quota, keine Nummer, keine Karte", a
   }
 });
 
-// (3) Plan waehlen -> der Checkout traegt den Plan an die Stripe-successUrl.
-test("(3) setup-checkout {plan:starter} -> successUrl traegt &plan=starter", async () => {
+// (3) Plan waehlen -> der Checkout traegt den Plan an die Stripe-successUrl, Price im
+// subscription-Mode-Checkout (Rabattcode-Feature).
+test("(3) setup-checkout {plan:starter} -> successUrl traegt &plan=starter, Price im Checkout", async () => {
   const s = await setup();
   try {
     const res = await setupCheckout(s, PLAN);
     assert.equal(res.status, 200);
     assert.equal(s.billingSpy.successUrl.includes(`&plan=${PLAN}`), true);
+    assert.equal(s.billingSpy.subCheckoutParams.priceId, "price_starter");
   } finally {
     await s.close();
   }
@@ -300,7 +319,7 @@ test("(4) Rueckkehr bucht+aktiviert+provisioniert genau eine Dry-Run-Nummer", as
     assert.equal(tenant.kycLevel, "card", "KYC auf CARD gehoben");
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "active", "Tenant ueber accounts.setStatus aktiviert");
-    assert.equal(s.billingSpy.subParams.priceId, "price_starter", "richtiger Stripe-Price");
+    assert.equal("subParams" in s.billingSpy, false, "kein zweiter Geld-Call (createSubscription)");
     assert.equal(requestedNumbersFor(s.store, TENANT).length, 1, "genau eine Dry-Run-Nummer");
   } finally {
     await s.close();

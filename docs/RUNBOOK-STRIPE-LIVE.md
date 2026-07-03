@@ -134,3 +134,35 @@ kein Hold/Capture, kein Kauf). Kein Stripe-Rueckbau noetig.
 4. **Preis-Drift:** Stripe-Live-Preis vs. `PLAN_CATALOG` gleicht niemand
    automatisch ab. Bei jeder Preisaenderung BEIDE Stellen pflegen (+ Spiegel
    `apps/web/src/lib/plans.js`).
+
+## 10. Rabattcode fuer den Owner-Smoke (Coupon + Promotion Code)
+
+Seit dem Discount-Umbau laeuft der Erst-Abschluss (Kachel-Flow MIT Plan) ueber
+Stripe-Checkout im **subscription-Mode**: Karte + Abo entstehen in EINEM gehosteten
+Schritt, und Stripe zeigt dort ein natives Rabattcode-Feld. Damit laesst sich
+Schritt 7 ohne echte Belastung fahren. Alles Folgende ist NUR Stripe-Dashboard
+(Live-Modus), kein Code:
+
+1. Dashboard -> Produktkatalog -> **Coupons** -> "+ Neuer Coupon":
+   - Typ: Prozentrabatt, **100 %**
+   - Dauer (duration): **Einmalig (once)** — rabattiert NUR die erste Rechnung.
+     Das Abo verlaengert sich danach zum vollen Preis (fuer den Smoke egal:
+     Abo wird in Schritt 7.7 sowieso gekuendigt).
+2. Im Coupon -> **"Promotion Code hinzufuegen"**:
+   - Code: z.B. `OWNER100`
+   - **Maximale Einloesungen: 1** (oder den Code an den eigenen Stripe-Customer
+     binden), optional Ablaufdatum (z.B. +7 Tage).
+3. Smoke (Schritt 7): im Stripe-Checkout unter dem Kartenformular
+   "Gutscheincode hinzufuegen" -> `OWNER100` -> erste Rechnung 0,00 EUR;
+   Karte wird trotzdem gespeichert, Abo + Webhook-Events laufen normal.
+4. Restriktion lebt KOMPLETT in Stripe (Design-Entscheidung 2026-07-03,
+   `docs/superpowers/specs/2026-07-03-stripe-discount-code-checkout-design.md`):
+   die App validiert keine Codes. Leakt ein Code, begrenzen NUR
+   max_redemptions/Ablauf/Customer-Bindung den Schaden -> Codes knapp halten.
+
+Hinweis zu 7.1/7.2: mit getragenem Plan speichert der Checkout die Karte UND legt
+das Abo direkt an (subscription-Mode) — Schritt 7.2 ("Abo buchen") passiert also
+schon im Checkout selbst. Der reine "Karte hinzufuegen"-Flow ohne Plan bleibt
+setup-Mode wie beschrieben. Das SCA/3DS-Risiko aus 9.1 ist damit NUR fuer den
+Erst-Abschluss geloest (Checkout ist on-session); fuer den Plan-Wechsel ueber
+`/subscribe` (Karte on-file) bleibt es offen.

@@ -28,6 +28,15 @@ const TENANT = "t_sub-bk2";
 const CUSTOMER = "cus_b";
 const SESSION = "cs_b";
 const PERIOD_END = 1893456000;
+const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fix, P12/R)
+const CHECKOUT_OUTCOME = Object.freeze({
+  customerId: CUSTOMER,
+  paymentMethodId: "pm_b",
+  subscriptionId: "sub_new",
+  currentPeriodStart: PERIOD_START,
+  currentPeriodEnd: PERIOD_END,
+  planSlug: "starter",
+});
 const CONFIG = {
   paymentEnabled: true,
   publicUrl: "https://test.local",
@@ -39,14 +48,24 @@ const CONFIG = {
 // successUrl (BK2-Plan-Carry); spy.subParams faengt die createSubscription-Parameter
 // (priceId). getCheckoutSessionResult liefert IMMER den vorgeseedeten Customer -> die
 // Karte bindet im return-Flow (Customer-Match in card-setup.js).
-function fakeBilling(spy = {}) {
+function fakeBilling(spy = {}, checkoutOutcome = {}) {
   return {
     createCustomer: async () => ({ customerId: CUSTOMER }),
     createSetupCheckoutSession: async (p) => {
+      spy.setupParams = p;
+      spy.successUrl = p.successUrl;
+      return { url: "https://stripe.test/c/cs_b", sessionId: SESSION };
+    },
+    createSubscriptionCheckoutSession: async (p) => {
+      spy.subCheckoutParams = p;
       spy.successUrl = p.successUrl;
       return { url: "https://stripe.test/c/cs_b", sessionId: SESSION };
     },
     getCheckoutSessionResult: async () => ({ customerId: CUSTOMER, paymentMethodId: "pm_b" }),
+    getSubscriptionCheckoutResult: async (sessionId) => {
+      spy.resultSessionId = sessionId;
+      return { ...CHECKOUT_OUTCOME, ...checkoutOutcome };
+    },
     createSubscription: async (p) => {
       spy.subParams = p;
       return { subscriptionId: "sub_new", currentPeriodEnd: PERIOD_END };
@@ -59,7 +78,12 @@ const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`
 // Harness wie w4-setup(): Store + Identitaets-Schicht + Self-Service-Routen auf einer
 // Wegwerf-App. Zusaetzlich Customer cus_b vorgeseedet (ohne payment_method - die Karte
 // wird erst im return-Flow gebunden). subscribed -> ein bestehendes Abo vorseeden (Case 7).
-async function setup({ paymentEnabled = true, subscribed = false } = {}) {
+async function setup({
+  paymentEnabled = true,
+  subscribed = false,
+  configPatch = {},
+  checkoutOutcome = {},
+} = {}) {
   const { store, db } = await makePgTestStore();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -96,8 +120,8 @@ async function setup({ paymentEnabled = true, subscribed = false } = {}) {
       webAuthMw,
       webAuthPendingMw,
       audit: () => {},
-      config: { ...CONFIG, paymentEnabled },
-      billing: fakeBilling(billingSpy),
+      config: { ...CONFIG, paymentEnabled, ...configPatch },
+      billing: fakeBilling(billingSpy, checkoutOutcome),
       accounts,
       provision: async (t) => provisionSpy.push(t),
     }),
@@ -154,16 +178,15 @@ const setupCheckout = (s, plan) =>
 const billingReturn = (s, query) =>
   request("GET", `${s.base}/api/self-service/billing/return?${query}`, { cookie: s.cookie });
 
-test("(1) setup-checkout {plan:starter} -> successUrl traegt &plan=starter", async () => {
+test("(1) setup-checkout {plan:starter} -> subscription-Mode-Session, successUrl traegt &plan=starter", async () => {
   const s = await setup();
   try {
     const res = await setupCheckout(s, "starter");
     assert.equal(res.status, 200);
-    assert.equal(
-      s.billingSpy.successUrl.includes("&plan=starter"),
-      true,
-      "Plan an die successUrl gehaengt",
-    );
+    assert.equal(s.billingSpy.successUrl.includes("&plan=starter"), true);
+    assert.equal(s.billingSpy.subCheckoutParams.priceId, "price_starter");
+    assert.equal(s.billingSpy.subCheckoutParams.planSlug, "starter");
+    assert.equal("setupParams" in s.billingSpy, false, "KEIN setup-Mode bei getragenem Plan");
   } finally {
     await s.close();
   }
@@ -190,12 +213,14 @@ test("(3) setup-checkout {plan:gold} (unbekannt) -> kein &plan= (Muell verworfen
   }
 });
 
-test("(4) return ?plan=starter -> 302 sub=ok, Abo persistiert + Tenant voll aktiviert", async () => {
+test("(4) return ?plan=starter -> 302 sub=ok, Abo aus der Session aktiviert (KEIN zweiter Geld-Call)", async () => {
   const s = await setup();
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
     assert.equal(ret.location, "/tenant.html?sub=ok", "Redirect ins Abo-gebucht-Ziel");
+    assert.equal(s.billingSpy.resultSessionId, SESSION, "liest die abgeschlossene Session");
+    assert.equal("subParams" in s.billingSpy, false, "kein zweiter Geld-Call (createSubscription)");
     // Abo-Referenzen im Mirror.
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripeSubscriptionId, "sub_new", "Abo persistiert");
@@ -204,9 +229,8 @@ test("(4) return ?plan=starter -> 302 sub=ok, Abo persistiert + Tenant voll akti
     // Status-Flip ueber den pg-Status-Seam (war suspended).
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "active", "Tenant ueber accounts.setStatus aktiviert");
-    // Provisioning genau 1x mit dem eigenen Tenant + richtiger Stripe-Price.
+    // Provisioning genau 1x mit dem eigenen Tenant.
     assert.deepEqual(s.provisionSpy, [TENANT], "Provisioning genau 1x");
-    assert.equal(s.billingSpy.subParams.priceId, "price_starter", "richtiger Price gebucht");
   } finally {
     await s.close();
   }
@@ -237,13 +261,15 @@ test("(6) return ?plan=gold (unbekannt) -> 302 card=ok, kein subscribe (Muell ve
   }
 });
 
-test("(7) return ?plan=starter bei bereits aboniertem Tenant -> 302 sub=failed, kein Provisioning", async () => {
+test("(7) return ?plan=starter bei bereits aboniertem Tenant -> 302 sub=ok (idempotent-erfolgreich), kein Provisioning, altes Abo unveraendert", async () => {
   const s = await setup({ subscribed: true });
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?sub=failed", "Buchung scheiterte (already_subscribed)");
-    assert.deepEqual(s.provisionSpy, [], "kein Provisioning bei gescheiterter Buchung");
+    assert.equal(ret.location, "/tenant.html?sub=ok", "already_subscribed ist idempotent-erfolgreich");
+    assert.deepEqual(s.provisionSpy, [], "kein zweites Provisioning");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripeSubscriptionId, "sub_old", "bestehendes Abo bleibt unveraendert");
   } finally {
     await s.close();
   }
@@ -254,6 +280,74 @@ test("(8) return ?plan=starter bei PAYMENT_ENABLED aus -> 404 (Geld-Gate auf der
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 404);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(9) setup-checkout {plan:starter} ohne Price-Konfig -> 500 plan_unconfigured VOR jedem Stripe-Call", async () => {
+  const s = await setup({ configPatch: { stripeStarterPriceId: "" } });
+  try {
+    const res = await setupCheckout(s, "starter");
+    assert.equal(res.status, 500);
+    assert.equal(JSON.parse(res.body).error, "plan_unconfigured");
+    assert.equal("subCheckoutParams" in s.billingSpy, false);
+    assert.equal("setupParams" in s.billingSpy, false);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(10) setup-checkout {plan:starter} bei bestehendem Abo -> 409, KEINE Session (kein zweites Stripe-Abo)", async () => {
+  const s = await setup({ subscribed: true });
+  try {
+    const res = await setupCheckout(s, "starter");
+    assert.equal(res.status, 409);
+    assert.equal(JSON.parse(res.body).error, "already_subscribed");
+    assert.equal("subCheckoutParams" in s.billingSpy, false);
+  } finally {
+    await s.close();
+  }
+});
+
+test("(11) return ?plan=starter mit fremder Session (Customer-Mismatch) -> 403, nichts persistiert (R4)", async () => {
+  const s = await setup({ checkoutOutcome: { customerId: "cus_fremd" } });
+  try {
+    const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    assert.equal(ret.status, 403);
+    assert.equal(JSON.parse(ret.body).error, "Customer-Mismatch");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripeSubscriptionId ?? null, null, "kein Abo persistiert");
+    assert.deepEqual(s.provisionSpy, [], "kein Provisioning");
+    const acct = await s.accounts.resolve(SUB);
+    assert.equal(acct.status, "suspended", "keine Aktivierung");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(12) return ?plan=business bei einer starter-Session (Plan-Tamper) -> 403, nichts persistiert", async () => {
+  const s = await setup();
+  try {
+    const ret = await billingReturn(s, `session_id=${SESSION}&plan=business`);
+    assert.equal(ret.status, 403);
+    assert.equal(JSON.parse(ret.body).error, "Customer-Mismatch");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripeSubscriptionId ?? null, null, "kein Abo persistiert (teureres Kontingent verhindert)");
+  } finally {
+    await s.close();
+  }
+});
+
+test("(13) doppelter return derselben Session -> beide sub=ok, Provisioning genau 1x", async () => {
+  const s = await setup();
+  try {
+    const first = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    assert.equal(first.location, "/tenant.html?sub=ok");
+    const second = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    assert.equal(second.status, 302);
+    assert.equal(second.location, "/tenant.html?sub=ok", "Doppel-Redirect idempotent-erfolgreich");
+    assert.deepEqual(s.provisionSpy, [TENANT], "Provisioning bleibt bei genau 1x");
   } finally {
     await s.close();
   }
