@@ -60,6 +60,38 @@ const countWhereTenant = async (db, table, tenantId) =>
     (await db.query(`SELECT count(*) AS n FROM ${table} WHERE tenant_id=$1`, [tenantId])).rows[0].n,
   );
 
+// F8-Interaktion (A6): der Reconcile-Schutz (deleteMissingCallsKeepActive) schuetzt
+// aktive Call-Zeilen vor FREMDEN/unbekannten Overlap-Prozessen. eraseTenantData muss
+// diesen Schutz fuer die EIGENEN, per Erase erfassten Zeilen des Tenants durchbrechen -
+// sonst ueberlebt ein zum Erase-Zeitpunkt noch laufendes (status=active) Gespraech des
+// Tenants in der DB und das CASCADE auf transcript_segment feuert nie (PII bleibt).
+test("F8-Interaktion: eraseTenantData loescht auch den EIGENEN, noch aktiven Call", async () => {
+  const { store, db } = await setup();
+  const active = store.createCall({
+    direction: "inbound",
+    from: "+49",
+    to: "+49",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
+  store.addTranscript(active.id, "caller", "Owner-Geheim-noch-aktiv");
+  await store.save();
+  assert.equal(
+    (await db.query(`SELECT status FROM call WHERE id=$1`, [active.id])).rows[0].status,
+    "active",
+    "Vorbedingung: Call ist beim Erase noch aktiv",
+  );
+
+  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  await store.save();
+
+  assert.equal(await countWhereTenant(db, "call", BOOTSTRAP_TENANT_ID), 0, "aktiver Call weg");
+  assert.equal(
+    await countWhereTenant(db, "transcript_segment", BOOTSTRAP_TENANT_ID),
+    0,
+    "Transkript per CASCADE weg",
+  );
+});
+
 test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant bleibt unberuehrt", async () => {
   const { store, db } = await setup();
   // Owner-Call-Satz ueber die Store-API anlegen (call + Transkript + Action Item + Notification).
@@ -103,6 +135,64 @@ test("R3-Kern: eraseTenantData(owner) loescht alle Owner-Zeilen; fremder Tenant 
   const text = (await db.query(`SELECT text FROM transcript_segment WHERE tenant_id=$1`, [OTHER]))
     .rows[0].text;
   assert.equal(text, "GEHEIM fremder Tenant", "fremder Transkript-Text intakt");
+});
+
+// P16/G26 (Atomaritaet): der Hard-Delete (preFlush) MUSS in DERSELBEN Transaktion
+// laufen wie der restliche Flush - sonst ueberlebt bei einem nachfolgenden Flush-
+// Fehler (ROLLBACK) ein TEIL der DSGVO-Loeschung (call/transcript_segment bereits
+// geloescht, obwohl die Transaktion insgesamt fehlschlug). Simuliert einen Flush-
+// Fehler NACH dem preFlush-Delete (INSERT INTO tenant schlaegt fehl) und prueft,
+// dass der Call-Datensatz danach UNVERAENDERT in der DB steht (Rollback traf beides).
+test("Atomaritaet (P16/G26): Flush-Fehler nach dem Hard-Delete rollt auch den Hard-Delete zurueck", async () => {
+  const db = new PGlite();
+  let failNextTenantInsert = false;
+  const runner = {
+    withClient: (fn) =>
+      fn({
+        query: (text, params) => {
+          if (failNextTenantInsert && text.startsWith("INSERT INTO tenant")) {
+            throw new Error("simulierter Flush-Fehler (Test)");
+          }
+          return db.query(text, params);
+        },
+        exec: (sql) => db.exec(sql),
+      }),
+  };
+  const store = makePgStore(runner);
+  await store.init();
+
+  const c = store.createCall({
+    direction: "outbound",
+    from: "+49",
+    to: "+49",
+    tenantId: BOOTSTRAP_TENANT_ID,
+  });
+  store.addTranscript(c.id, "agent", "bleibt-bei-rollback");
+  await store.save();
+
+  failNextTenantInsert = true;
+  store.eraseTenantData(BOOTSTRAP_TENANT_ID);
+  // store.save() haengt sich HINTEN an dieselbe (FIFO-serialisierte) flushChain an
+  // und wartet damit, bis der preFlush-ausloesende Versuch tatsaechlich gelaufen UND
+  // zurueckgerollt ist (failNextTenantInsert bleibt hier bewusst noch true, sonst
+  // koennte dieser Aufruf VOR dem Erase-Flush-Versuch zurueckgesetzt werden - reine
+  // Zuweisungen sind synchron, der eigentliche Flush laeuft aber asynchron).
+  await store.save();
+  failNextTenantInsert = false;
+
+  assert.equal(
+    Number((await db.query(`SELECT count(*) AS n FROM call WHERE id=$1`, [c.id])).rows[0].n),
+    1,
+    "Call ueberlebt den fehlgeschlagenen Flush - Hard-Delete wurde mit zurueckgerollt",
+  );
+  assert.equal(
+    Number(
+      (await db.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [c.id]))
+        .rows[0].n,
+    ),
+    1,
+    "Transkript-Segment ueberlebt ebenfalls (keine Teil-Loeschung)",
+  );
 });
 
 test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberleben", async () => {
