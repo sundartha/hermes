@@ -12,6 +12,7 @@
 // eigener, transparent ueberlagerter Navigation.
 import "../styles/fonts.css";
 import { LOGIN_URL } from "../lib/routes.js";
+import AiAgentsSection from "../components/marketing/AiAgentsSection.astro";
 
 const title = "Hermes — The phone line for your AI agents";
 const description = "Give your AI wings. The phone line for your AI agents — works with Claude & Gemini via the Model Context Protocol.";
@@ -101,6 +102,9 @@ const pricingHref = "/preise";
          Skripts: letzteres wuerde Astro inline einbetten und unter der CSP
          (script-src 'self', kein 'unsafe-inline') blockiert. -->
     <script is:inline src="/assets/hero.js" defer></script>
+
+    <!-- Neue Sektion unter dem Vollbild-Hero (Referenz-Analyse heycall-e.com): Mini-Motion-Karten + KI-Modell-Badges + GSAP-Scroll-Reveal, siehe Komponenten-Kopfkommentar. -->
+    <AiAgentsSection></AiAgentsSection>
 
     <style is:global>
       * { box-sizing: border-box; }

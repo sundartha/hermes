@@ -1,0 +1,369 @@
+---
+// "Works with any AI agent" — Sektion fuer die Startseite, direkt unter dem
+// Vollbild-Hero. Referenz-Analyse (heycall-e.com) ergab: deren "3D-Look" ist
+// kein WebGL, sondern kleine autoplay-Loop-.webm-Videos in Feature-Karten +
+// GSAP-Scroll-Reveals. Hier bewusst NICHT als Video gebacken (Asset-Pipeline,
+// Lizenz, Performance), sondern als leichte DOM/CSS-Loops (dauerhaft "lebendig"
+// via CSS-Keyframes) + GSAP nur fuer das einmalige Scroll-Reveal beim
+// Reinscrollen. Mechanik uebernommen, Technik eigenstaendig/leichter.
+//
+// Wiederverwendet die bestehende Marketing-Tonalitaet (tokens/hero.css +
+// sections.css .band/.steps) statt neue Token/Farben zu erfinden — bleibt
+// damit automatisch im Hermes-Navy/Weiss-Look, kein neues Farbschema.
+import "../../styles/tokens/hero.css";
+import "../../styles/sections.css";
+
+const agents = [
+  { code: "C", label: "Claude" },
+  { code: "G", label: "Gemini" },
+  { code: "+", label: "Any MCP agent" },
+];
+
+const cards = [
+  {
+    stage: "connect",
+    heading: "Any agent, one number",
+    copy: "Attach Hermes as an MCP server to Claude, Gemini or your own stack — the phone line just works.",
+  },
+  {
+    stage: "call",
+    heading: "Give it a goal, it calls",
+    copy: "Tell your agent what needs doing on the phone. Hermes dials, talks and follows up — then reports back.",
+  },
+  {
+    stage: "voice",
+    heading: "Sounds human, every time",
+    copy: "Natural pacing and graceful interruptions — callers hear a conversation, not a script.",
+  },
+] as const;
+---
+
+<section class="band band--alt agents" id="works-with">
+  <div class="band__inner">
+    <p class="band__eyebrow reveal">Works with</p>
+    <h2 class="band__title reveal">One phone line. <em>Any</em> AI agent.</h2>
+    <p class="band__lead reveal">
+      Hermes speaks Model Context Protocol — connect Claude, Gemini or your
+      own agent stack. No telephony build of your own required.
+    </p>
+
+    <div class="agent-badges reveal">
+      {agents.map((a) => (
+        <span class="agent-badge">
+          <span class="agent-badge__glyph" aria-hidden="true">{a.code}</span>
+          {a.label}
+        </span>
+      ))}
+    </div>
+
+    <div class="steps agents__steps">
+      {cards.map((card) => (
+        <article class="step reveal">
+          <div class={`step__stage step__stage--${card.stage}`} aria-hidden="true">
+            {card.stage === "connect" && (
+              <svg class="stage-connect" viewBox="0 0 160 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path class="link link--a" d="M20 20 C 80 20, 90 50, 130 50" />
+                <path class="link link--b" d="M20 50 L 130 50" />
+                <path class="link link--c" d="M20 80 C 80 80, 90 50, 130 50" />
+                <circle class="node" cx="20" cy="20" r="6" />
+                <circle class="node" cx="20" cy="50" r="6" />
+                <circle class="node" cx="20" cy="80" r="6" />
+                <circle class="node node--hub" cx="130" cy="50" r="12" />
+              </svg>
+            )}
+            {card.stage === "call" && (
+              <div class="stage-call">
+                <span class="call-line call-line--a">Dialing…</span>
+                <span class="call-line call-line--b">Connected</span>
+                <span class="call-line call-line--c">Goal reached ✓</span>
+              </div>
+            )}
+            {card.stage === "voice" && (
+              <div class="stage-voice">
+                <div class="voice-bars">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <span class="voice-bubble">"Calling on your behalf…"</span>
+              </div>
+            )}
+          </div>
+          <h3 class="step__heading">{card.heading}</h3>
+          <p class="step__copy">{card.copy}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  // Hoisted Module-Script (kein is:inline): Astro/Vite buendeln das inkl.
+  // gsap als externes same-origin JS -> CSP-konform (script-src 'self'),
+  // kein CDN-Load zur Laufzeit (siehe astro.config.mjs Kommentar).
+  import { gsap } from "gsap";
+  import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+  const prefersReduced = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
+  const section = document.getElementById("works-with");
+
+  // Ohne JS oder bei reduzierter Bewegung bleibt der Inhalt einfach sichtbar
+  // (kein FOUC, kein Hidden-Content) — progressive enhancement.
+  if (section && !prefersReduced) {
+    gsap.registerPlugin(ScrollTrigger);
+    const targets = Array.from(section.querySelectorAll(".reveal"));
+    gsap.set(targets, { opacity: 0, y: 22 });
+    ScrollTrigger.batch(targets, {
+      start: "top 88%",
+      once: true,
+      onEnter: (batch) =>
+        gsap.to(batch, {
+          opacity: 1,
+          y: 0,
+          duration: 0.7,
+          ease: "power2.out",
+          stagger: 0.12,
+        }),
+    });
+  }
+</script>
+
+<style>
+  .agents {
+    padding-top: clamp(64px, 9vw, 112px);
+  }
+
+  .agent-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-tight);
+    margin: var(--space-roomy) 0 0;
+  }
+  .agent-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-tight);
+    padding: 8px 16px 8px 8px;
+    border-radius: var(--radius-badge);
+    background: rgba(255, 255, 255, 0.08);
+    border: var(--border-width) solid rgba(255, 255, 255, 0.14);
+    color: var(--text-on-dark-muted);
+    font-family: var(--font-grotesk);
+    font-size: 13.5px;
+    font-weight: var(--weight-medium);
+  }
+  .agent-badge__glyph {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-round);
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-family: var(--font-grotesk);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .agents__steps {
+    margin-top: var(--space-block);
+  }
+</style>
+
+<style>
+  /* --- Mini-Motion-Karten: gebuehnte Animations-Flaeche pro Step --- */
+  .step__stage {
+    position: relative;
+    height: 108px;
+    margin-bottom: var(--space-card);
+    border-radius: var(--radius-control);
+    background: rgba(8, 22, 48, 0.4);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Karte 1 — MCP-Verbindung: Linien zeichnen sich zum Hub, in Serie */
+  .stage-connect {
+    width: 78%;
+    height: 78%;
+  }
+  .stage-connect .node {
+    fill: rgba(255, 255, 255, 0.85);
+  }
+  .stage-connect .node--hub {
+    fill: #fff;
+  }
+  .stage-connect .link {
+    stroke: rgba(255, 255, 255, 0.55);
+    stroke-width: 1.6;
+    fill: none;
+    stroke-dasharray: 140;
+    stroke-dashoffset: 140;
+    animation: draw-link 3.6s ease-in-out infinite;
+  }
+  .stage-connect .link--b {
+    animation-delay: 0.3s;
+  }
+  .stage-connect .link--c {
+    animation-delay: 0.6s;
+  }
+  @keyframes draw-link {
+    0% {
+      stroke-dashoffset: 140;
+      opacity: 1;
+    }
+    35% {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+    75% {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+    100% {
+      stroke-dashoffset: 0;
+      opacity: 0.3;
+    }
+  }
+</style>
+
+<style>
+  /* Karte 2 — Call-Fortschritt: drei Zeilen blenden nacheinander ein/aus */
+  .stage-call {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-grotesk);
+    font-size: 13px;
+    color: var(--text-on-dark-muted);
+  }
+  .call-line {
+    opacity: 0;
+    animation: call-step 4.8s ease-in-out infinite;
+  }
+  .call-line--a {
+    animation-delay: 0s;
+  }
+  .call-line--b {
+    animation-delay: 1.5s;
+  }
+  .call-line--c {
+    animation-delay: 3s;
+    color: #fff;
+    font-weight: 600;
+  }
+  @keyframes call-step {
+    0%,
+    100% {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    8%,
+    28% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    38% {
+      opacity: 0;
+    }
+  }
+
+  /* Karte 3 — Stimme: Waveform-Balken pulsieren + Sprechblase */
+  .stage-voice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .voice-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 34px;
+  }
+  .voice-bars span {
+    display: block;
+    width: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.8);
+    animation: voice-pulse 1.2s ease-in-out infinite;
+  }
+  .voice-bars span:nth-child(1) {
+    height: 40%;
+    animation-delay: 0s;
+  }
+  .voice-bars span:nth-child(2) {
+    height: 70%;
+    animation-delay: 0.1s;
+  }
+  .voice-bars span:nth-child(3) {
+    height: 100%;
+    animation-delay: 0.2s;
+  }
+  .voice-bars span:nth-child(4) {
+    height: 55%;
+    animation-delay: 0.3s;
+  }
+  .voice-bars span:nth-child(5) {
+    height: 85%;
+    animation-delay: 0.4s;
+  }
+  .voice-bars span:nth-child(6) {
+    height: 45%;
+    animation-delay: 0.5s;
+  }
+  .voice-bars span:nth-child(7) {
+    height: 65%;
+    animation-delay: 0.6s;
+  }
+  @keyframes voice-pulse {
+    0%,
+    100% {
+      transform: scaleY(0.4);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+  .voice-bubble {
+    font-family: var(--font-grotesk);
+    font-size: 11.5px;
+    color: var(--text-on-dark-faint);
+    font-style: italic;
+  }
+</style>
+
+<style>
+  /* Barrierefreiheit: Scroll-Hijacking/starke Bewegung ist fuer empfindliche
+   * Nutzer real unangenehm — alle Loops abschalten, Endzustand statisch. */
+  @media (prefers-reduced-motion: reduce) {
+    .stage-connect .link,
+    .call-line,
+    .voice-bars span {
+      animation: none !important;
+    }
+    .stage-connect .link {
+      stroke-dashoffset: 0;
+      opacity: 0.6;
+    }
+    .call-line {
+      opacity: 1;
+    }
+    .voice-bars span {
+      transform: scaleY(0.7);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .agent-badges {
+      gap: 8px;
+    }
+    .agent-badge {
+      font-size: 12.5px;
+    }
+  }
+</style>
