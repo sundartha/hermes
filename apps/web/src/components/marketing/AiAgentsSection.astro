@@ -91,9 +91,9 @@ const cards = [
             {card.stage === "connect" && (
               <div class="scene-connect">
                 <div class="scene-connect__chips">
-                  <span class="model-chip model-chip--a"><span class="model-orb" aria-hidden="true"><span class="model-orb__face"></span><span class="model-orb__face model-orb__face--back"></span></span>Claude</span>
-                  <span class="model-chip model-chip--b"><span class="model-orb" aria-hidden="true"><span class="model-orb__face"></span><span class="model-orb__face model-orb__face--back"></span></span>Gemini</span>
-                  <span class="model-chip model-chip--c"><span class="model-orb" aria-hidden="true"><span class="model-orb__face"></span><span class="model-orb__face model-orb__face--back"></span></span>Your agent</span>
+                  <span class="model-chip model-chip--a"><span class="model-orb" aria-hidden="true"></span>Claude</span>
+                  <span class="model-chip model-chip--b"><span class="model-orb" aria-hidden="true"></span>Gemini</span>
+                  <span class="model-chip model-chip--c"><span class="model-orb" aria-hidden="true"></span>Your agent</span>
                 </div>
                 <svg class="scene-connect__lines" viewBox="0 0 220 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
                   <path class="flow flow--a" d="M40 34 C 120 34, 150 80, 190 80" />
@@ -503,55 +503,50 @@ const cards = [
     animation: chip-breathe 3.6s ease-in-out infinite;
   }
 
-  /* V7 (Jonas-Feedback, siebte Runde): "3D-Animationen sind nicht gut" + Wunsch
-   * nach animierten 3D-Marken fuer die KI-Modelle. Keine Higgsfield-Generierung
-   * mehr moeglich (Guthaben aufgebraucht) -- deshalb echtes 3D per CSS statt
-   * eines vorgerenderten Clips: ein kleiner Wuerfel-Chip mit zwei Flaechen
-   * (preserve-3d + rotateY), der sich dauerhaft dreht und dabei sichtbar
-   * zwischen zwei Facetten wechselt. Kostet kein zusaetzliches JS/Bundle, ist
-   * CSP-konform (keine externen Assets), und ist echtes 3D (nicht nur eine
-   * flache 2D-Animation wie die alten SVG-Linien). Bewusst markenneutral
-   * (Navy/Blau/Weiss-Glasoptik, keine echten Claude-/Gemini-Logos -- die sind
-   * Markenrechte von Anthropic/Google) -- unterscheidet die drei Modelle nur
-   * über Rotationsgeschwindigkeit/-versatz, nicht über Farbe/Form-Kopie.
-   */
+  /* V7 (Jonas-Feedback, siebte/achte Runde): "3D-Animationen sind nicht gut"
+   * + Wunsch nach animierten 3D-Marken fuer die KI-Modelle. Keine Higgsfield-
+   * Generierung mehr moeglich (Guthaben aufgebraucht) -- deshalb echtes 3D
+   * per CSS statt eines vorgerenderten Clips.
+   *
+   * Erster Versuch (verworfen): zwei flache Kreis-Flaechen mit rotateY(360deg)
+   * "flip card". Bug: ein flacher Kreis OHNE echte Kugelform kollabiert bei
+   * 90°/270° auf eine Linie (Nullbreite) -- sah wie ein kaputter Rendering-
+   * Fehler aus statt wie eine rotierende Kugel, weil eine echte Kugel beim
+   * Drehen ihre Silhouette gar nicht veraendert (nur die Lichtreflexion
+   * wandert). Deshalb jetzt: EIN Element, Silhouette bleibt immer rund
+   * (Wobble-Bereich bewusst eng: max. ±22°, cos(22°) ≈ 0.93 -- nie nahe an
+   * der Kante), 3D-Tiefe kommt aus einer wandernden Glanzreflexion
+   * (radial-gradient-Position) + leichtem rotateX/rotateY-Kippen, wie eine
+   * Glasmurmel, die im Licht leicht hin- und herwiegt. */
   .model-orb {
     position: relative;
     display: inline-block;
     width: 18px;
     height: 18px;
     flex: none;
-    perspective: 120px;
-  }
-  .model-orb__face {
-    position: absolute;
-    inset: 0;
     border-radius: 50%;
-    backface-visibility: hidden;
     background:
-      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.25) 34%, rgba(157, 195, 245, 0.35) 62%, rgba(255, 255, 255, 0.05) 100%);
-    box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.35);
-    animation: orb-spin 5.2s linear infinite;
-    transform-style: preserve-3d;
+      radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.3) 28%, rgba(157, 195, 245, 0.4) 58%, rgba(255, 255, 255, 0.08) 100%);
+    box-shadow:
+      inset -2px -2px 4px rgba(6, 16, 36, 0.5),
+      inset 1px 1px 2px rgba(255, 255, 255, 0.5),
+      0 0 6px rgba(157, 195, 245, 0.35);
+    animation: orb-wobble 4.6s ease-in-out infinite;
   }
-  .model-orb__face--back {
-    transform: rotateY(180deg);
-    background:
-      radial-gradient(circle at 68% 30%, rgba(157, 195, 245, 0.9) 0%, rgba(157, 195, 245, 0.3) 36%, rgba(255, 255, 255, 0.15) 64%, rgba(255, 255, 255, 0.02) 100%);
-  }
-  .model-chip--b .model-orb__face {
-    animation-duration: 4.4s;
+  .model-chip--b .model-orb {
+    animation-duration: 3.8s;
     animation-direction: reverse;
   }
-  .model-chip--c .model-orb__face {
-    animation-duration: 6.4s;
+  .model-chip--c .model-orb {
+    animation-duration: 5.6s;
   }
-  @keyframes orb-spin {
-    from {
-      transform: rotateY(0deg);
+  @keyframes orb-wobble {
+    0%,
+    100% {
+      transform: perspective(60px) rotateY(-22deg) rotateX(7deg);
     }
-    to {
-      transform: rotateY(360deg);
+    50% {
+      transform: perspective(60px) rotateY(22deg) rotateX(-7deg);
     }
   }
   .model-chip--b {
@@ -900,7 +895,7 @@ const cards = [
 <style>
   @media (prefers-reduced-motion: reduce) {
     .model-chip,
-    .model-orb__face,
+    .model-orb,
     .flow,
     .hub-pulse,
     .ring-pulse,
@@ -919,11 +914,11 @@ const cards = [
     .scene-voice__wave span {
       transform: scaleY(0.7);
     }
-    /* Statischer Endzustand statt Dauerdrehung/-kippung: Orb zeigt seine
-       Vorderseite, Ring/Waveform bleiben in ihrer 3D-Neigung stehen, ohne
-       zu rotieren -- Tiefe bleibt sichtbar, Bewegung faellt weg. */
-    .model-orb__face--back {
-      display: none;
+    /* Statischer Endzustand statt Dauerwiegen/-kippung: Orb/Ring/Waveform
+       bleiben in ihrer 3D-Neigung stehen, ohne zu wackeln/rotieren -- Tiefe
+       bleibt sichtbar, Bewegung faellt weg. */
+    .model-orb {
+      transform: perspective(60px) rotateY(0deg) rotateX(4deg);
     }
     .ring-pulse {
       transform: rotateX(62deg) scale(1.1);
