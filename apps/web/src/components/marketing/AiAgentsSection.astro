@@ -91,9 +91,9 @@ const cards = [
             {card.stage === "connect" && (
               <div class="scene-connect">
                 <div class="scene-connect__chips">
-                  <span class="model-chip model-chip--a">Claude</span>
-                  <span class="model-chip model-chip--b">Gemini</span>
-                  <span class="model-chip model-chip--c">Your agent</span>
+                  <span class="model-chip model-chip--a"><span class="model-orb" aria-hidden="true"><span class="model-orb__face"></span><span class="model-orb__face model-orb__face--back"></span></span>Claude</span>
+                  <span class="model-chip model-chip--b"><span class="model-orb" aria-hidden="true"><span class="model-orb__face"></span><span class="model-orb__face model-orb__face--back"></span></span>Gemini</span>
+                  <span class="model-chip model-chip--c"><span class="model-orb" aria-hidden="true"><span class="model-orb__face"></span><span class="model-orb__face model-orb__face--back"></span></span>Your agent</span>
                 </div>
                 <svg class="scene-connect__lines" viewBox="0 0 220 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
                   <path class="flow flow--a" d="M40 34 C 120 34, 150 80, 190 80" />
@@ -130,10 +130,12 @@ const cards = [
             )}
             {card.stage === "voice" && (
               <div class="scene-voice">
-                <div class="scene-voice__wave">
-                  <span></span><span></span><span></span><span></span><span></span>
-                  <span></span><span></span><span></span><span></span><span></span>
-                  <span></span><span></span>
+                <div class="scene-voice__wave3d">
+                  <div class="scene-voice__wave">
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span>
+                  </div>
                 </div>
                 <div class="scene-voice__bubble">
                   <span class="voice-bubble__label">Hermes</span>
@@ -165,11 +167,41 @@ const cards = [
   // Ohne JS oder bei reduzierter Bewegung bleibt der Inhalt einfach sichtbar
   // (kein FOUC, kein Hidden-Content) — progressive enhancement. Die
   // dauerhaften Szenen-Loops laufen unabhaengig davon rein per CSS.
+  //
+  // V6 (Jonas-Feedback, sechste Runde): "Texte sehen nicht so geil aus" --
+  // simples opacity+y-Fade ersetzt durch Blur-Reveal (typo-effects.md,
+  // Muster 3): Elemente kommen unscharf/leicht verkleinert rein und werden
+  // beim Reinscrollen scharf -- deutlich hochwertigerer Eindruck als ein
+  // reines Fade. filter:blur() ist GPU-teuer, deshalb nur auf die Text-
+  // Elemente/Badges angewendet, NICHT auf die Karten (die haben ihre eigene,
+  // schwerere Video-Buehne -- doppelte Blur-Animation waere zu viel).
   if (section && !prefersReduced) {
     gsap.registerPlugin(ScrollTrigger);
-    const targets = Array.from(section.querySelectorAll(".reveal"));
-    gsap.set(targets, { opacity: 0, y: 22 });
-    ScrollTrigger.batch(targets, {
+    const textTargets = Array.from(
+      section.querySelectorAll(".reveal:not(.step)")
+    );
+    const cardTargets = Array.from(section.querySelectorAll(".step.reveal"));
+
+    gsap.set(textTargets, { opacity: 0, y: 22, scale: 0.97, filter: "blur(10px)" });
+    ScrollTrigger.batch(textTargets, {
+      start: "top 88%",
+      once: true,
+      onEnter: (batch) =>
+        gsap.to(batch, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          filter: "blur(0px)",
+          duration: 0.9,
+          ease: "power2.out",
+          stagger: 0.1,
+        }),
+    });
+
+    // Karten bleiben beim einfacheren Fade+Y (kein Blur) -- lesbarer neben
+    // dem bereits bewegten Video-Hintergrund der Buehne.
+    gsap.set(cardTargets, { opacity: 0, y: 22 });
+    ScrollTrigger.batch(cardTargets, {
       start: "top 88%",
       once: true,
       onEnter: (batch) =>
@@ -243,8 +275,21 @@ const cards = [
   }
   .agents__scrim--bottom {
     bottom: 0;
-    height: 34%;
-    background: linear-gradient(to top, rgba(8, 20, 44, 0.5) 0%, rgba(8, 20, 44, 0.12) 60%, rgba(8, 20, 44, 0) 100%);
+    /* V6-Fix ("Hintergrund bricht super schnell ab"): die Seite endet
+       strukturell direkt nach den drei Karten (kein Footer, keine weitere
+       Section, siehe hermes-lab-live.md-Analyse -- Gesamtseite ist nur
+       Hero + diese Section). Ohne Footer braeuchte es einen bewussten
+       Seiten-Abschluss statt eines harten Kante: der Scrim reicht jetzt bis
+       auf fast volle Deckkraft (0.94 statt vorher 0.5) am allerletzten
+       Pixel und ist grosszuegiger (58% statt 34% Hoehe) ausgezogen, damit
+       das Foto weich zur Navy-Grundfarbe der Seite (#0f2d52, siehe .agents-
+       Fallback) ausklingt statt abrupt am Viewport-Rand aufzuhoeren. */
+    height: 58%;
+    background: linear-gradient(to top,
+      rgba(8, 20, 44, 0.94) 0%,
+      rgba(8, 20, 44, 0.55) 28%,
+      rgba(8, 20, 44, 0.18) 62%,
+      rgba(8, 20, 44, 0) 100%);
   }
 
   /* Ueber den neuen Foto/Video-Layern: band__inner (Text/Karten) muss sicher
@@ -260,13 +305,27 @@ const cards = [
      Hintergrund brauchen sie dieselbe Absicherung wie der Hero-Text. */
   .band__eyebrow {
     text-shadow: 0 1px 14px rgba(7, 16, 38, 0.7);
+    /* Klarere Distanz zum Titel im Squint-Test: kleiner, luftiger getrackt,
+       gedaempfter -- das Auge soll eindeutig beim Titel landen, nicht bei
+       zwei gleich lauten Elementen haengen bleiben. */
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.68);
   }
   .band__title {
     text-shadow: 0 2px 40px rgba(7, 16, 38, 0.6), 0 1px 4px rgba(7, 16, 38, 0.5);
+    /* Etwas groesser + straffer als die geerbte Basis, damit der Titel im
+       Squint-Test unangefochten das dominante Element der Section bleibt. */
+    font-size: clamp(40px, 5.4vw, 68px);
+    letter-spacing: -0.005em;
   }
   .band__lead {
     color: rgba(255, 255, 255, 0.92);
     text-shadow: 0 1px 16px rgba(7, 16, 38, 0.7), 0 1px 3px rgba(7, 16, 38, 0.6);
+    /* Lesbare Zeilenlaenge (45-75 Zeichen) statt der geerbten 620px, die bei
+       den zwei kurzen Saetzen hier eher zufaellig als bewusst wirkte. */
+    max-width: 54ch;
   }
 
   .agents__glow {
@@ -431,6 +490,7 @@ const cards = [
   .model-chip {
     display: inline-flex;
     align-items: center;
+    gap: 8px;
     padding: 6px 12px;
     border-radius: var(--radius-badge);
     background: rgba(10, 26, 54, 0.72);
@@ -441,6 +501,58 @@ const cards = [
     font-size: 12.5px;
     font-weight: var(--weight-medium);
     animation: chip-breathe 3.6s ease-in-out infinite;
+  }
+
+  /* V7 (Jonas-Feedback, siebte Runde): "3D-Animationen sind nicht gut" + Wunsch
+   * nach animierten 3D-Marken fuer die KI-Modelle. Keine Higgsfield-Generierung
+   * mehr moeglich (Guthaben aufgebraucht) -- deshalb echtes 3D per CSS statt
+   * eines vorgerenderten Clips: ein kleiner Wuerfel-Chip mit zwei Flaechen
+   * (preserve-3d + rotateY), der sich dauerhaft dreht und dabei sichtbar
+   * zwischen zwei Facetten wechselt. Kostet kein zusaetzliches JS/Bundle, ist
+   * CSP-konform (keine externen Assets), und ist echtes 3D (nicht nur eine
+   * flache 2D-Animation wie die alten SVG-Linien). Bewusst markenneutral
+   * (Navy/Blau/Weiss-Glasoptik, keine echten Claude-/Gemini-Logos -- die sind
+   * Markenrechte von Anthropic/Google) -- unterscheidet die drei Modelle nur
+   * über Rotationsgeschwindigkeit/-versatz, nicht über Farbe/Form-Kopie.
+   */
+  .model-orb {
+    position: relative;
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    flex: none;
+    perspective: 120px;
+  }
+  .model-orb__face {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    backface-visibility: hidden;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.25) 34%, rgba(157, 195, 245, 0.35) 62%, rgba(255, 255, 255, 0.05) 100%);
+    box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.35);
+    animation: orb-spin 5.2s linear infinite;
+    transform-style: preserve-3d;
+  }
+  .model-orb__face--back {
+    transform: rotateY(180deg);
+    background:
+      radial-gradient(circle at 68% 30%, rgba(157, 195, 245, 0.9) 0%, rgba(157, 195, 245, 0.3) 36%, rgba(255, 255, 255, 0.15) 64%, rgba(255, 255, 255, 0.02) 100%);
+  }
+  .model-chip--b .model-orb__face {
+    animation-duration: 4.4s;
+    animation-direction: reverse;
+  }
+  .model-chip--c .model-orb__face {
+    animation-duration: 6.4s;
+  }
+  @keyframes orb-spin {
+    from {
+      transform: rotateY(0deg);
+    }
+    to {
+      transform: rotateY(360deg);
+    }
   }
   .model-chip--b {
     animation-delay: 0.6s;
@@ -547,12 +659,19 @@ const cards = [
     place-items: center;
     width: 68px;
     height: 68px;
+    /* V7: echte 3D-Tiefe statt flacher Kreise -- die Ringe kippen in den Raum
+       (perspective + rotateX), wie eine Radar-Schuessel von schraeg oben,
+       und drehen sich dabei langsam weiter (rotateZ). Rein CSS, kein neues
+       JS/Bundle. */
+    perspective: 260px;
   }
   .ring-pulse {
     position: absolute;
     inset: 0;
     border-radius: 50%;
     border: 1.5px solid rgba(255, 255, 255, 0.4);
+    transform: rotateX(62deg);
+    transform-style: preserve-3d;
     animation: ring-out 2.6s ease-out infinite;
   }
   .ring-pulse--b {
@@ -560,11 +679,11 @@ const cards = [
   }
   @keyframes ring-out {
     0% {
-      transform: scale(0.6);
+      transform: rotateX(62deg) rotateZ(0deg) scale(0.6);
       opacity: 0.8;
     }
     100% {
-      transform: scale(1.6);
+      transform: rotateX(62deg) rotateZ(140deg) scale(1.8);
       opacity: 0;
     }
   }
@@ -664,17 +783,27 @@ const cards = [
     height: 100%;
     padding: 0 20px;
   }
+  /* V7: 3D-Buehne fuer die Waveform statt flacher Balken -- perspective auf
+     dem Wrapper, die Reihe selbst um die X-Achse gekippt ("3D-Equalizer von
+     schraeg oben"), jeder Balken zusaetzlich leicht in Z versetzt fuer echte
+     Tiefenstaffelung statt einer nur gedrehten flachen Ebene. */
+  .scene-voice__wave3d {
+    perspective: 340px;
+  }
   .scene-voice__wave {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 5px;
     height: 46px;
+    transform: rotateX(38deg);
+    transform-style: preserve-3d;
   }
   .scene-voice__wave span {
     display: block;
     width: 4px;
     border-radius: 2px;
     background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 10px rgba(157, 195, 245, 0.55);
     animation: wave-pulse 1.3s ease-in-out infinite;
   }
   .scene-voice__wave span:nth-child(1) { height: 30%; animation-delay: 0s; }
@@ -689,6 +818,47 @@ const cards = [
   .scene-voice__wave span:nth-child(10) { height: 35%; animation-delay: 0.72s; }
   .scene-voice__wave span:nth-child(11) { height: 58%; animation-delay: 0.8s; }
   .scene-voice__wave span:nth-child(12) { height: 28%; animation-delay: 0.88s; }
+  /* Z-Staffelung ueber transform-origin + Skalierung im Keyframe kombiniert
+     (scaleY UND translateZ leben in derselben transform-Eigenschaft -- als
+     zwei getrennte Regeln wuerde die Animation die statische Z-Position
+     ueberschreiben). Jeder Balken kriegt daher seine eigene Keyframe-Regel
+     mit fest einprogrammiertem Z-Versatz. */
+  .scene-voice__wave span:nth-child(1) { animation-name: wave-pulse-1; }
+  .scene-voice__wave span:nth-child(2) { animation-name: wave-pulse-2; }
+  .scene-voice__wave span:nth-child(3) { animation-name: wave-pulse-3; }
+  .scene-voice__wave span:nth-child(4) { animation-name: wave-pulse-4; }
+  .scene-voice__wave span:nth-child(5) { animation-name: wave-pulse-5; }
+  .scene-voice__wave span:nth-child(6) { animation-name: wave-pulse-6; }
+  .scene-voice__wave span:nth-child(7) { animation-name: wave-pulse-5; }
+  .scene-voice__wave span:nth-child(8) { animation-name: wave-pulse-4; }
+  .scene-voice__wave span:nth-child(9) { animation-name: wave-pulse-3; }
+  .scene-voice__wave span:nth-child(10) { animation-name: wave-pulse-2; }
+  .scene-voice__wave span:nth-child(11) { animation-name: wave-pulse-1; }
+  .scene-voice__wave span:nth-child(12) { animation-name: wave-pulse-1; }
+  @keyframes wave-pulse-1 {
+    0%, 100% { transform: translateZ(-14px) scaleY(0.45); }
+    50% { transform: translateZ(-14px) scaleY(1); }
+  }
+  @keyframes wave-pulse-2 {
+    0%, 100% { transform: translateZ(-8px) scaleY(0.45); }
+    50% { transform: translateZ(-8px) scaleY(1); }
+  }
+  @keyframes wave-pulse-3 {
+    0%, 100% { transform: translateZ(-2px) scaleY(0.45); }
+    50% { transform: translateZ(-2px) scaleY(1); }
+  }
+  @keyframes wave-pulse-4 {
+    0%, 100% { transform: translateZ(4px) scaleY(0.45); }
+    50% { transform: translateZ(4px) scaleY(1); }
+  }
+  @keyframes wave-pulse-5 {
+    0%, 100% { transform: translateZ(10px) scaleY(0.45); }
+    50% { transform: translateZ(10px) scaleY(1); }
+  }
+  @keyframes wave-pulse-6 {
+    0%, 100% { transform: translateZ(16px) scaleY(0.45); }
+    50% { transform: translateZ(16px) scaleY(1); }
+  }
   @keyframes wave-pulse {
     0%,
     100% {
@@ -730,6 +900,7 @@ const cards = [
 <style>
   @media (prefers-reduced-motion: reduce) {
     .model-chip,
+    .model-orb__face,
     .flow,
     .hub-pulse,
     .ring-pulse,
@@ -747,6 +918,16 @@ const cards = [
     }
     .scene-voice__wave span {
       transform: scaleY(0.7);
+    }
+    /* Statischer Endzustand statt Dauerdrehung/-kippung: Orb zeigt seine
+       Vorderseite, Ring/Waveform bleiben in ihrer 3D-Neigung stehen, ohne
+       zu rotieren -- Tiefe bleibt sichtbar, Bewegung faellt weg. */
+    .model-orb__face--back {
+      display: none;
+    }
+    .ring-pulse {
+      transform: rotateX(62deg) scale(1.1);
+      opacity: 0.35;
     }
   }
 </style>
