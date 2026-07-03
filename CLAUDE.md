@@ -125,3 +125,10 @@ Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js
 - `ONBOARDING.md` — Einstieg fuer Mitarbeiter
 - `.env.example` — alle Env-Variablen mit Erklaerung
 - `render.yaml` — Render-Deployment (Blueprint)
+
+## Marketing-Website (`apps/web`): Lab -> Live
+
+Design-/Content-Aenderungen an der Website laufen ueber den `staging`-Branch
+und den Render-Service `hermes-web-staging` (Labor: Auto-Deploy, noindex,
+gespiegelte Live-CSP). Live geht es NUR ueber Merge auf `master` + manuellen
+Deploy von `hermes-web`. Vor Website-Arbeit `docs/RUNBOOK-LAB-LIVE.md` lesen.
