@@ -36,6 +36,7 @@ import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual, hashEmail } from "./util.js";
+import { makeSingleFlight } from "./single-flight.js";
 import {
   voiceControl,
   messaging,
@@ -1813,7 +1814,7 @@ app.post("/api/onboard", async (req, res) => {
   // Drain NACH der Response (fire-and-forget): kein echtes Hintergrund-Subsystem
   // (pg-boss ist deferred nach P8), aber HTTP endet vor dem Provider-Kauf. Tests
   // rufen den Drain deterministisch ueber die Queue-Instanz; hier wird er nur angestossen.
-  void runProvisioningDrain();
+  void runProvisioningDrainExclusive();
 });
 
 // Operator-Re-Trigger (P2): provisioniert eine NEUE Nummer fuer einen aktiven, bezahlten
@@ -1930,7 +1931,7 @@ async function triggerTenantProvisioning(tenantId) {
     return { ok: true, reason: "dry_run", numberId: reqRes.number.id };
   const jobRes = await queueProvisioning(reqRes.number.id, tenantId);
   if (!jobRes.ok) return { ok: false, reason: "persist_error" };
-  void runProvisioningDrain();
+  void runProvisioningDrainExclusive();
   return { ok: true, reason: "queued", numberId: reqRes.number.id, jobId: jobRes.jobId };
 }
 
@@ -1985,6 +1986,15 @@ async function runProvisioningDrain() {
     }
   });
 }
+
+// Single-Flight um den Drain (PROV-01/F3): prozessweit laeuft nie mehr als EIN Drain
+// gleichzeitig. Zwei fast-gleichzeitige Ausloeser (POST /api/onboard + Webhook-/Retry-Trigger)
+// wuerden sonst denselben QUEUED-Job doppelt verarbeiten - der Adapter-drain markiert 'done'
+// erst NACH dem langen Provider-await -> Doppel-Order/Doppel-Capture. EIGENE Kette (nicht
+// store.withStoreLock): der lange Drain-await darf die kurze Store-Schreib-Serialisierung
+// nicht blockieren. Definiert direkt am Drain (G10); die zwei Aufrufer oben (Request-Zeit)
+// sehen den Modul-const zur Laufzeit initialisiert.
+const runProvisioningDrainExclusive = makeSingleFlight(runProvisioningDrain);
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
 // Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).

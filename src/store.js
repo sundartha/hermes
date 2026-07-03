@@ -9,6 +9,7 @@
 // die Fachlogik in store/pg.js kennt keine Pool-Konstruktion (DIP, P15).
 import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
+import { makeChainMutex } from "./chain-mutex.js";
 
 async function createPgBackend() {
   // Lazy import: pg wird nur im pg-Pfad geladen, der json-Default zieht keine
@@ -167,11 +168,11 @@ export const {
 // HARD-RULE (Re-Entrancy): ein withStoreLock(fn)-Body darf NIE erneut withStoreLock
 // aufrufen (die Kette wartet sonst auf sich selbst -> Deadlock). Kritische Abschnitte
 // kurz halten: load() -> mutiere -> save(), kein fremdes await dazwischen.
-let _writeChain = Promise.resolve();
+//
+// Ketten-Mechanik ausgelagert nach chain-mutex.js (G5, geteilt mit makeSingleFlight in
+// src/single-flight.js) - EIGENE Chain-Instanz hier (runStoreExclusive), der lange
+// Provisioning-Drain-Await darf diese kurze Store-Schreib-Serialisierung nicht blockieren.
+const runStoreExclusive = makeChainMutex();
 export function withStoreLock(fn) {
-  const run = () => fn();
-  // .then(run, run): ein Fehler im Body bricht die Kette NICHT ab - ein fehlgeschlagener
-  // Write darf nicht alle folgenden Writes blockieren.
-  _writeChain = _writeChain.then(run, run);
-  return _writeChain;
+  return runStoreExclusive(fn);
 }
