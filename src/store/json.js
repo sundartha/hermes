@@ -53,6 +53,7 @@ export function load() {
     state.provisioningJobs ||= []; // P6b2: Job-Spur in bestehenden Stores nachziehen
     state.tenantBudgets ||= []; // P6b3: per-Tenant-Kostendecke nachziehen
     state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
+    state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3):
     // erst forensisch nach .corrupt-<ts> sichern, LAUT loggen, dann mit Defaults weiter
@@ -233,7 +234,13 @@ export function save() {
   const tmp = `${FILE}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
   const fd = fs.openSync(tmp, "w");
   try {
-    fs.writeFileSync(fd, JSON.stringify(state, null, 2));
+    // OUT-05: s.reservations ist STRUKTURELL EPHEMER - nie auf Platte. Die Rest-
+    // Destrukturierung schliesst genau diesen Key aus JEDEM save() aus (kein fragiler
+    // load()-Reset, Pre-Mortem MAJOR 3); der In-Prozess-state.reservations akkumuliert
+    // prozessweit weiter korrekt, nur die PLATTE ist per Konstruktion reserve-frei. Die
+    // reservations-Bindung existiert allein zum Weglassen (idiomatisches rest-omit, kein Muell).
+    const { reservations, ...persisted } = state;
+    fs.writeFileSync(fd, JSON.stringify(persisted, null, 2));
     fs.fsyncSync(fd); // Daten muessen auf der Platte sein, BEVOR der Rename committet
   } finally {
     fs.closeSync(fd);
@@ -395,6 +402,23 @@ export function addVoiceUsageCostCents(tenantId, costCents) {
   const usage = ops.addVoiceUsageCostCents(load(), tenantId, costCents);
   save();
   return usage;
+}
+
+// ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
+// KEIN save(): reservations ist strukturell ephemer (nie auf Platte). Der Wrapper mutiert
+// NUR den In-Prozess-state (load() liefert das eine Singleton); die Serialisierung im
+// server.js-Aufrufpfad (F2) uebernimmt store.withStoreLock. reservationOf ist reine Query
+// (Fassaden-Name analog usageOf zu usageFor, G11).
+export function tryReserveOutboundBudget(tenantId, reserveCents, cfg) {
+  return ops.tryReserveOutboundBudget(load(), tenantId, reserveCents, cfg);
+}
+
+export function releaseOutboundReserve(call) {
+  return ops.releaseOutboundReserve(load(), call);
+}
+
+export function reservationOf(tenantId) {
+  return ops.reservationFor(load(), tenantId);
 }
 
 // ---- Per-Tenant-Budget + Metering (P6b3) ----

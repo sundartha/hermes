@@ -74,6 +74,11 @@ export function makeDefaultState() {
     // quantity, costCents, occurredAt, stripeMeterSent }]. Eintraege werden NIE
     // mutiert, nur stripeMeterSent flippt beim Flush.
     usageEvents: [],
+    // In-Flight-Reserven (OUT-05): tenantId -> GANZZAHL Cents noch nicht abgerechneter
+    // Worst-Case-Kosten laufender Outbound-Calls. STRUKTURELL EPHEMER: nie auf Platte
+    // (json.save schliesst es aus), nie in pg (kein Flush) -> ein Neustart startet bei 0
+    // (korrekt: ein Boot toetet in-flight Calls, A6). Money at rest = Ganzzahl Cents (G26).
+    reservations: {},
   };
 }
 
@@ -1129,8 +1134,14 @@ export function budgetExceeded(s, tenantId, cfg) {
 // Ist-Verbrauch (costEur) + Reserve > effektiver Cap -> true (402 vor Dial). DIESELBE
 // Cap-Aufloesung (effectiveCapEur) + derselbe usage-Bucket wie budgetExceeded (G5);
 // globalBudgetExceeded bleibt PARALLEL (Schnittmenge, Regel 1). Reine Query, kein IO.
+// Neu (OUT-05): die bereits gebuchte In-Flight-Reserve des Tenants (reservationFor)
+// zaehlt kumulativ mit -> N kurz aufeinanderfolgende Calls koennen den Cap nicht mehr
+// gemeinsam ueberschreiten. Bei LEERER Reserve byte-identisch zum Bestand.
 export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
-  return usageFor(s, tenantId).costEur + reserveCents / CENTS_PER_EUR > effectiveCapEur(s, tenantId, cfg);
+  return (
+    usageFor(s, tenantId).costEur + (reservationFor(s, tenantId) + reserveCents) / CENTS_PER_EUR >
+    effectiveCapEur(s, tenantId, cfg)
+  );
 }
 
 // Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId
@@ -1252,6 +1263,62 @@ export function markMeterEventsSent(s, eventIds) {
 // Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt.
 export function globalBudgetExceeded(s, cfg) {
   return globalUsageTotals(s).costEur >= cfg.maxBudgetEur;
+}
+
+// ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
+// s.reservations (tenantId -> GANZZAHL Cents) haelt die noch nicht abgerechneten
+// Worst-Case-Kosten laufender Outbound-Calls, damit der Budget-Gate (Tenant UND global,
+// Schnittmenge, Regel 1) auch WAEHREND eines Calls den kumulierten Verbrauch sieht. Der
+// settled-Bucket (usageFor.costEur, gefuellt erst bei Call-Ende) bleibt UNVERAENDERT und
+// PARALLEL. Strukturell ephemer (nie persistiert/hydriert).
+
+// Reserve EINES Tenants (reine Query). Fehlender Eintrag -> 0.
+export function reservationFor(s, tenantId) {
+  return s.reservations[tenantId] || 0;
+}
+
+// Plattform-Summe aller In-Flight-Reserven (globale Achse, reine Query).
+export function reservationsTotal(s) {
+  return Object.values(s.reservations).reduce((sum, cents) => sum + cents, 0);
+}
+
+// Globaler Reserve-Notaus (R2, reserve-bewusst): wuerde reserveCents zusaetzlich zur
+// settled Plattform-Summe + ALLEN In-Flight-Reserven den globalen Cap ueberschreiten?
+// Schliesst die reserve-blinde Luecke in globalBudgetExceeded (das nur settled prueft).
+// Reine Query, kein IO.
+export function globalReserveExceedsBudget(s, reserveCents, cfg) {
+  return (
+    globalUsageTotals(s).costEur + (reservationsTotal(s) + reserveCents) / CENTS_PER_EUR >
+    cfg.maxBudgetEur
+  );
+}
+
+// Atomare Check+Reserve (Schnittmenge Tenant UND global, Regel 1). REIN SYNCHRON, KEIN
+// await zwischen Check und Increment -> unter store.withStoreLock (server.js, F2) echt
+// atomar (keine TOCTOU). Bucht reserveCents auf s.reservations[tenantId], wenn WEDER die
+// pro-Tenant- NOCH die globale reserve-bewusste Decke reisst; eine abgelehnte Reserve
+// hinterlaesst KEINEN Schreibeffekt. Nebeneffekt im Namen (N7). Liefert true=reserviert
+// (Dial erlaubt) / false=abgelehnt (402 vor Dial).
+export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg) {
+  if (
+    reserveExceedsBudget(s, tenantId, reserveCents, cfg) ||
+    globalReserveExceedsBudget(s, reserveCents, cfg)
+  )
+    return false;
+  s.reservations[tenantId] = reservationFor(s, tenantId) + reserveCents;
+  return true;
+}
+
+// Gibt die Worst-Case-Reserve eines Calls frei (idempotent). No-op ohne reservierte Cents
+// ODER bei bereits freigegebener Reserve (call.reserveReleased). Clamp >= 0 (G26, kein
+// negativer Ledger, selbst bei Ueber-Freigabe). Setzt call.reserveReleased = true
+// (Idempotenz-Schloss, das jeder Freigabepfad in F2 teilt: catch/finishCall/Backstop-Timer).
+// Nebeneffekt im Namen (N7). Liefert true, wenn tatsaechlich freigegeben wurde.
+export function releaseOutboundReserve(s, call) {
+  if (!call || !call.reserveCents || call.reserveReleased) return false;
+  s.reservations[call.tenantId] = Math.max(0, reservationFor(s, call.tenantId) - call.reserveCents);
+  call.reserveReleased = true;
+  return true;
 }
 
 // ---- Notifications ----
