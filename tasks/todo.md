@@ -8,59 +8,75 @@ Dieses File ist der Arbeits-Scratch fuer die jeweils laufende Phase (siehe
 
 ---
 
-# Task: Launch-Testlauf 1 (auto + lokal) — 2026-07-03
+# Task: Strategie Launch-Fixes (OUT-05, PROV-01, A6) — 2026-07-03
 
-Auftrag: `NEXT-SESSION-LAUNCH-TESTRUN.md` — alle auto- und lokal-Tests aus
-`PLAN-LAUNCH-TESTS.md` ausfuehren und protokollieren. Reine TEST-Session:
-KEINE Aenderung an `src/`, `public/`, `apps/` (Ausnahme: keiner — auch kein
-Fix roter Produkt-Befunde). Rote Tests sind Resultate, keine Fix-Auftraege.
-Branch: `test/launch-run-1`, NICHTS pushen (weder origin noch upstream).
+Auftrag: `NEXT-SESSION-LAUNCH-FIXES-STRATEGY.md`. Reine STRATEGIE-Session:
+Analyse, Design, Phasenschnitt, Prompts. KEINE Implementierung, Code strikt
+read-only. Alles entsteht in DIESEM Worktree auf `docs/launch-fixes-strategy`,
+KEIN Merge nach master, NICHTS pushen, KEIN `git stash`.
 
-## Erwartetes Ergebnis (deterministisch pruefbar) + Verifikation
+- [x] 1. Eigenes Worktree, allererster Schritt
+  - Erwartet: Session arbeitet in `.claude/worktrees/launch-fixes-strategy`
+    auf Branch `docs/launch-fixes-strategy`, Basis = lokaler `master` (361e55b)
+  - Verifikation: `git worktree list` + `git log --oneline -1`
+  - Ergebnis: erledigt — EnterWorktree, Branch umbenannt
+    (`worktree-launch-fixes-strategy` -> `docs/launch-fixes-strategy`),
+    `reset --hard 361e55b` (HEAD bestaetigt)
 
-- [ ] **Schritt 0 Baseline:** `npm test` komplett gelaufen; Erwartung gruen
-      (~1591 Tests, Stand master 9f3391a). Verifikation: exit code +
-      pass/fail-Zaehler im Protokoll. Rot => erst BASE_ENV-Drift pruefen
-      (`test/helpers.js`), dokumentieren, weiter.
-- [ ] **Schritt 1 auto (existierende Suiten):** je Test-ID gebuendelt
-      `npm test -- test/<datei> ...` gelaufen. IDs: OUT-01/02/03/06/08/13,
-      IN-01/02/04/05/06, SMS-03(Bestandsteil), MCP-02/03/04, UI-01, CFG-01,
-      AUTH-01/02/03/05/06, BILL-02/03/07, PROV-04, STORE-03, WEB-03(Build),
-      WEB-04(auto), DASH-01, OBS-02, CFG-04(grep), DEPLOY-10(auto-grep).
-      Verifikation: Protokollzeile je ID mit exaktem Kommando + Zaehler.
-- [ ] **Schritt 2 auto (neu zu schreiben):** OUT-05*, IN-03, IN-08, MCP-06,
-      MCP-07, MCP-08, UI-02, DASH-02 (OHNE jsdom — kein neues Dep, Adaption
-      dokumentieren), SMS-02, CFG-03, PROV-06*, BILL-04-Erweiterung,
-      OUT-07/10/11-Ergaenzungen, AUTH-07-auto, OUT-12-auto-Teil.
-      (* = erwartet ROT: OUT-05, PROV-06 — nur dokumentieren, kein Produktfix.)
-      Konventionen: node:test, PORT=0 + DATA_DIR-Temp, BASE_ENV aus
-      test/helpers.js, pglite und Server-Spawn NIE mischen, keine neuen Deps.
-      Verifikation: jede neue Datei laeuft einzeln (`npm test -- test/<datei>`),
-      Ergebnis im Protokoll.
-- [ ] **Schritt 3 lokal:** OUT-04, OUT-09, IN-07, SMS-01, OBS-01, CFG-02,
-      PROV-01 (NUR Repro + Zustandsbeschreibung), PROV-05, DEP-01, DEP-02
-      (frischer Worktree), OUT-12-auto-Teil falls offen. Serverstart IMMER
-      fail-safe mit Dummy-Provider-Keys: `PORT=3999
-      SKIP_TWILIO_SIGNATURE_CHECK=true TELNYX_API_KEY=invalid
-      TWILIO_ACCOUNT_SID=ACinvalid TWILIO_AUTH_TOKEN=invalid
-      PROVISIONING_ENABLED=false PAYMENT_ENABLED=false npm start`.
-      `.env` NIE aendern, `data/store.json` NIE anfassen.
-      Verifikation: curl-Sequenz + beobachtete HTTP-Antwort je ID im Protokoll.
-- [ ] **Schritt 4 live markieren:** alle live-Zeilen als
-      "uebersprungen (live, Owner-Session)" im Protokoll.
-- [ ] **Protokoll** `tasks/launch-test-run-1.md`: pro Test-ID genau eine
-      Zeile (GRUEN/ROT/UEBERSPRUNGEN-live/BLOCKIERT, Kommando, 1-Zeilen-Beleg,
-      bei ROT Kurz-Diagnose max 3 Saetze).
-- [ ] **Checkboxen** in `PLAN-LAUNCH-TESTS.md` NUR bei GRUEN auf `[x]`.
-- [ ] **Git:** alles auf `test/launch-run-1` committet; master unberuehrt;
-      kein Push. Fremde uncommittete Aenderungen (apps/hermes-animation-lab,
-      apps/hermes-studio, PLAN-MCP-UI-*, PLAN-WIDGET-*) NIE stagen.
-      Verifikation: `git log --oneline master..test/launch-run-1` +
-      `git diff master --stat -- src public apps` leer.
+- [x] 2. Dynamic Workflow: Map (3x Sonnet, read-only) -> Design (3x Opus) ->
+  Pre-Mortem (3x Opus, adversarial) -> Revision (1 Runde) -> Synthese
+  - Erwartet: `PLAN-LAUNCH-FIXES.md` existiert im Worktree-Root und enthaelt
+    pro Defekt: verifizierte Wurzelanalyse (Dateipfade), Fix-Design,
+    verworfene Alternativen mit Grund, betroffene Absolute Regeln,
+    Test-first-Definition, Rollback-Plan, Pre-Mortem-Restrisiken; dazu
+    Phasenschnitt F1..Fn (je Phase deterministisches erwartetes Ergebnis +
+    exaktes Verifikationskommando + Abhaengigkeiten), empfohlene Reihenfolge
+    mit Begruendung, PLAN-SECURITY.md-Vermerk, offene Owner-Fragen
+  - Verifikation: Datei lesen und Punkt fuer Punkt gegen den Abschnitt
+    "Anforderungen an PLAN-LAUNCH-FIXES.md" der Auftragsdatei pruefen
+  - Ergebnis: erledigt — Workflow `wf_2c4a33ed-720`, 13/13 Agenten ohne
+    Fehler; Datei komplett gelesen (1123 Zeilen), ALLE Pflicht-Abschnitte
+    vorhanden: Kap. 1-3 je Defekt (Wurzel mit Datei:Zeile, Design,
+    Alternativen, Regel-Nachweis, Test-first, Rollback, Restrisiken),
+    Kap. 4 Phasen F1-F12 (je Ergebnis+Kommando+Abhaengigkeiten+Groesse),
+    Kap. 5 Reihenfolge begruendet (Owner-Vorgabe uebernommen), Kap. 6
+    PLAN-SECURITY-Eintraege, Kap. 7 sechs Owner-Fragen. A6 = 5 Phasen,
+    Reconcile-Schutz zuerst (F8), Drill separat — wie gefordert
 
-## Review (wird am Ende befuellt)
+- [x] 3. `NEXT-SESSION-LAUNCH-FIXES-IMPL.md` (Lean-Lead-Prompt) schreiben
+  - Erwartet: enthaelt Lead-Regeln (liest NIE Code, <100k, mergt selbst),
+    Phase-Pinning im per-run Skript + Git-Stand-Check vor Phasenstart,
+    Branch-Schema `fix/<phase>`, Push-Verbot ohne Owner-Freigabe +
+    Deploy-Freeze-Hinweis, Merge-Koordination mit Test-Session
+    (`git worktree list` + `git status` im Haupt-Checkout), Test-Konventionen
+    (node:test, PORT=0, DATA_DIR-Temp, BASE_ENV, pglite/Spawn-Trennung),
+    kein `git stash`, npm test gruen + Report-Datei pro Phase
+  - Verifikation: `grep -c` auf die Pflicht-Stichworte (fix/, BASE_ENV,
+    git stash, worktree list, <100k, Owner-Freigabe) — jeweils >= 1 Treffer
+  - Ergebnis: erledigt — alle 10 geprueften Stichworte >= 1 Treffer
+    (fix/<phase>, BASE_ENV, git stash, git worktree list, <100k,
+    Owner-Freigabe, hart gepinnt, PORT=0, pglite, Report-Datei)
+  - Nachtrag (Owner-Review): Abschnitt "Effizienz-Regeln" ergaenzt —
+    Self-Fix-Deckel (2 erfolglose Runden -> Eskalation an den Lead,
+    Konvergenz-Definition), S-Phasen ohne breite Exploration (F3/F6/F8),
+    unabhaengige Phasen F1/F3/F4/F8 parallel implementieren bei strikt
+    sequenziellen Merges (F9 nicht parallel zu offenem F2 wegen finishCall)
 
-- (offen)
+- [x] 4. Commit auf `docs/launch-fixes-strategy`
+  - Erwartet: genau die drei Session-Dateien (`PLAN-LAUNCH-FIXES.md`,
+    `NEXT-SESSION-LAUNCH-FIXES-IMPL.md`, `tasks/todo.md`) committet,
+    `git status` danach clean, Haupt-Checkout unberuehrt
+  - Verifikation: `git log -1 --stat` + `git status --short`
+  - Ergebnis: erledigt — Commit `5475d45` (amended: Todo-Abschluss), 3 Dateien,
+    status clean; Workflow-Zwischendokumente (map/design/premortem je Defekt)
+    lagen im Worktree-Root und wurden ins Session-Scratchpad verschoben
+    (nicht committet, gehoeren nicht ins Repo)
+
+- [x] 5. Abschluss-Report als letzte Nachricht
+  - Erwartet: Kernentscheidung je Defekt (3-5 Saetze), Phasenliste mit
+    Groesse+Reihenfolge, offene Owner-Fragen, Pfade beider Deliverables,
+    Branch-Name + Worktree-Pfad
+  - Verifikation: Abgleich gegen Abschnitt "Abschluss-Report" der Auftragsdatei
 
 ## Task: claude.ai-Connector-Icon zeigt Default-Wuerfel statt Hermes-Logo (2026-07-03)
 
