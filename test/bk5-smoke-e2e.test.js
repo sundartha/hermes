@@ -251,7 +251,7 @@ test("(1) GET /api/plans (pre-Auth) liefert den Katalog ohne PII", async () => {
       [499, 999],
     );
     assert.equal(
-      plans.every((p) => p.currency === "usd"),
+      plans.every((p) => p.currency === "eur"), // EUR-Cutover (Stripe live, 2026-07-03)
       true,
     );
   } finally {

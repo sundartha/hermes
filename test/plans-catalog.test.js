@@ -17,13 +17,15 @@ test("Katalog hat genau die zwei Spec-Tiers in Reihenfolge", () => {
   assert.deepEqual([...CATALOG_SLUGS], EXPECTED_SLUGS);
 });
 
-test("jeder Plan: Ganzzahl-Cents > 0, usd, ganzzahlige Mengen > 0", () => {
+test("jeder Plan: Ganzzahl-Cents > 0, eur, ganzzahlige Mengen > 0", () => {
   for (const plan of PLAN_CATALOG) {
     assert.ok(
       Number.isInteger(plan.amountCents) && plan.amountCents > 0,
       `${plan.slug}: amountCents keine positive Ganzzahl`,
     );
-    assert.equal(plan.currency, "usd", `${plan.slug}: currency != usd`);
+    // EUR-Cutover (Stripe live, 2026-07-03): Abrechnung + Anzeige in EUR — passt zur
+    // internen Kosten-Achse (costEur) und zu PAYMENT_CURRENCY=eur (render.yaml).
+    assert.equal(plan.currency, "eur", `${plan.slug}: currency != eur`);
     assert.ok(
       Number.isInteger(plan.includedMinutes) && plan.includedMinutes > 0,
       `${plan.slug}: includedMinutes keine positive Ganzzahl`,
