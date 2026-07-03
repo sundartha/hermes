@@ -55,6 +55,7 @@ import {
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
+import { terminateAndBillCall } from "./telephony/call-termination.js";
 import {
   registerTenant,
   setTenantIdentityIfAbsent,
@@ -848,12 +849,15 @@ function callMaxDurationMs(call) {
 // Weg (K1/K2). Provider-aware ueber call.provider (P6a): ein Telnyx-Call wird ueber Telnyx
 // beendet, nicht ueber Twilio. Fuer Telnyx-Outbound ist dieser Cap der EINZIGE harte
 // Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer. Setzt den
-// gekappten End-Anker (cappedEndedAtMs, nie Boot-Zeit), bucht die Voice-Minuten idempotent
-// ueber finishCall (billedAt-Guard, F9) und beendet den Provider-Leg best-effort. status:
-// "completed" (Timer-Ablauf) oder "failed" (Boot-Zombie). Idempotent: nur aus 'active' (ein
-// zwischenzeitlich beendeter Call -> No-op). Self-swallowing (Muster releaseReserve): ein
-// Store-/IO-Fehler ist secret-frei geloggt (err.message), nie eine unhandled rejection.
-// Nebeneffekt (Terminalisierung + Buchung) im Namen (N7).
+// gekappten End-Anker (cappedEndedAtMs, nie Boot-Zeit), beendet den Provider-Leg ZUERST
+// (awaited) und bucht die Voice-Minuten idempotent ERST DANACH ueber finishCall (billedAt-
+// Guard, F9) - via terminateAndBillCall (F10 Runde 2, G5: derselbe Helper wie cancel_call).
+// Waere die Reihenfolge umgekehrt, bliebe der Anruf beim Provider technisch live, waehrend
+// die Buchungskette (LLM-Roundtrip + SMS) laeuft - Verstoss gegen die Max-Dauer-Regel.
+// status: "completed" (Timer-Ablauf) oder "failed" (Boot-Zombie). Idempotent: nur aus
+// 'active' (ein zwischenzeitlich beendeter Call -> No-op). Self-swallowing (Muster
+// releaseReserve): ein Store-/IO-Fehler ist secret-frei geloggt (err.message), nie eine
+// unhandled rejection. Nebeneffekt (Terminalisierung + Buchung) im Namen (N7).
 async function terminateCappedCall(callId, providerCallSid, status) {
   try {
     const call = store.getCall(callId);
@@ -861,12 +865,13 @@ async function terminateCappedCall(callId, providerCallSid, status) {
     const endedAtIso = new Date(
       cappedEndedAtMs(call, Date.now(), config.maxCallDurationS),
     ).toISOString();
-    store.setCallEndedAt(callId, status, endedAtIso);
-    await finishCall(store.getCall(callId)); // bucht genau EINMAL (billedAt, F9), gekappt
-    if (providerCallSid)
-      voiceControl(call.provider)
-        .endCall(providerCallSid)
-        .catch(() => {});
+    await terminateAndBillCall({
+      persistEnd: () => store.setCallEndedAt(callId, status, endedAtIso),
+      hangUp: providerCallSid
+        ? () => voiceControl(call.provider).endCall(providerCallSid)
+        : null,
+      bill: () => finishCall(store.getCall(callId)), // bucht genau EINMAL (billedAt, F9), gekappt
+    });
   } catch (e) {
     console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
   }
@@ -1557,17 +1562,15 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   if (call.status !== "active") return res.json({ status: call.status });
   const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
   audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
-  store.endCallRecord(call.id, "cancelled");
-  if (call.twilioSid) {
-    try {
-      // Provider-aware: ueber denselben Provider beenden, ueber den der Call
-      // laeuft (call.provider) - sonst Twilio-endCall auf einem Telnyx-Call.
-      await voiceControl(call.provider).endCall(call.twilioSid);
-    } catch (e) {
-      console.error("[cancel]", e.message);
-    }
-  }
-  finishCall(store.getCall(call.id));
+  // F10 Runde 2 (G5): derselbe Terminierungspfad wie der Max-Dauer-Cap - erst auflegen
+  // (awaited, provider-aware ueber call.provider - sonst Twilio-endCall auf einem
+  // Telnyx-Call), dann buchen (fire-and-forget).
+  await terminateAndBillCall({
+    persistEnd: () => store.endCallRecord(call.id, "cancelled"),
+    hangUp: call.twilioSid ? () => voiceControl(call.provider).endCall(call.twilioSid) : null,
+    bill: () => finishCall(store.getCall(call.id)),
+    onHangUpError: (e) => console.error("[cancel]", e.message),
+  });
   res.json({ status: "cancelled" });
 });
 
