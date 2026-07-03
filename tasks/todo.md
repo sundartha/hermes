@@ -73,17 +73,29 @@ Befund (empirisch, Chrome-DOM + curl):
   Layout) deklariert KEIN `<link rel="icon">`; Subdomain ist fuer Googles
   Favicon-Crawler noch unbekannt.
 
-- [ ] index.astro-Head: favicon.svg + favicon.ico Links ergaenzen.
-      Erwartet: lokaler Build `apps/web/dist/index.html` enthaelt `rel="icon"`.
-      Verifikation: `npm --prefix apps/web run build` + grep.
-- [ ] Deploy upstream (master==upstream, nur dieser Commit faehrt mit).
-      Erwartet: `curl -s https://app.sundartha.com/ | grep rel="icon"` trifft.
-      Verifikation: curl nach Render-Deploy (render-MCP Deploy-Status).
-- [ ] Google-Favicon-Cache + claude.ai-Anzeige re-checken (Chrome).
-      ACHTUNG: Google-Cache-Refresh ist extern, nicht erzwingbar — falls
-      weiterhin 404, als Warte-Punkt dokumentieren + Alternative (Connector
-      unter sundartha.com/mcp, single-origin) dem Owner vorlegen.
+- [x] index.astro-Head: favicon.svg + favicon.ico Links ergaenzt; zusaetzlich
+      favicon.svg (war generisches Indigo-Zeichen!) durch Fluegel-Marke ersetzt
+      (SVG-Wrapper um 128px-Brand-PNG aus src/brand-icon-data.js).
+      Verifiziert: Build gruen, beide Links in dist/index.html, SVG-Thumbnail
+      zeigt Fluegel.
+- [x] Deploy: Commit 361e55b origin+upstream; beide Render-Deploys live
+      (hermes-web 07:34Z, vodafone-agent 07:35Z), healthz {"ok":true},
+      /mcp weiter 401 fail-closed. Verifiziert: beide Origins liefern die
+      neuen Head-Links + Fluegel-SVG (curl).
+- [x] Re-Check: google s2 sundartha.com liefert weiter den ALTEN Wuerfel
+      (559B, Stale-Cache), claude.ai zeigt entsprechend noch Wuerfel.
 
 ### Review
 
-- (offen)
+- Mechanismus empirisch belegt (Chrome-DOM): claude.ai-Connector-Icon =
+  `google.com/s2/favicons?domain=sundartha.com&sz=32` (registrierbare Domain,
+  Subdomain gestrippt) — serverInfo.icons wird dort NICHT benutzt, Re-Connect
+  aendert nichts. Der Wuerfel ist Googles gecachtes Render-DEFAULT-Favicon
+  von vor dem favicon.ico-Deploy (2026-07-02).
+- Alles Kontrollierbare ist gefixt+live; verbleibt NUR der externe
+  Google-Cache-Refresh (Stunden bis Tage). Check-Kommando:
+  `curl -sL 'https://www.google.com/s2/favicons?domain=sundartha.com&sz=64'`
+  (559B=alt/Wuerfel; anderes Ergebnis=Fluegel). Beschleuniger waere nur
+  Google Search Console (Owner-Google-Account).
+- Memory: [claude-connector-icon-mechanism] angelegt, Re-Connect-Hypothese
+  in [widget-i18n-icon-polish] widerlegt.
