@@ -254,6 +254,15 @@ export function save() {
   fs.renameSync(tmp, FILE);
 }
 
+// F11 (Review-Blocker Runde 1, S1-B): Backend-Parity zu store/pg.js. Dort haengt
+// save() den DB-Write an eine asynchrone flushChain, die waehrend eines await
+// von einem Hintergrund-Timer verlaengert werden kann - drainFlushes() loopt dort,
+// bis die Kette stabil ist. Das json-Backend schreibt in save() vollstaendig
+// synchron (writeFileSync+fsyncSync laufen ab, BEVOR save() zurueckkehrt) - es
+// gibt keinen Flush-Nachlauf, der noch abzuwarten waere. No-Op, nur damit
+// store.drainFlushes() bei STORE_BACKEND=json nicht undefined ist (siehe store.js).
+export async function drainFlushes() {}
+
 export const newId = ops.newId;
 
 // ---- Calls ----

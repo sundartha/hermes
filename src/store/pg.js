@@ -94,10 +94,31 @@ export function makePgStore(runner) {
     return flushChain;
   }
 
+  // F11 (Review-Blocker Runde 1, S1-B): save() gibt genau EINE flushChain-Referenz
+  // zurueck. Feuert waehrend eines await auf diese Referenz ein unabhaengiger
+  // Hintergrund-Timer (Max-Dauer-Cap/Reserve-Release, server.js) und ruft selbst
+  // save() auf, haengt sich dessen Flush HINTER der bereits zurueckgegebenen
+  // Referenz ein - wer nur diese fruehe Referenz awaitet, sieht den spaeteren
+  // Flush nie fertig. drainFlushes() loopt stattdessen: erst die aktuelle Kette
+  // abwarten, dann pruefen, ob waehrenddessen eine NEUERE Kette angehaengt wurde
+  // (weiterer save()-Aufruf) - und falls ja, auch diese abwarten. Stabil erst,
+  // wenn sich flushChain zwischen await und Pruefung nicht mehr veraendert hat.
+  // Fuer den finalen Shutdown-Flush (Regel 1: keine gekillte Transaktion mitten
+  // in Budget/Billing) ist das die einzige korrekte Garantie.
+  async function drainFlushes() {
+    let ref = flushChain;
+    for (;;) {
+      await ref;
+      if (flushChain === ref) return;
+      ref = flushChain;
+    }
+  }
+
   return {
     init,
     load: () => requireState(),
     save,
+    drainFlushes,
     newId: ops.newId,
 
     createCall(input) {

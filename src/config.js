@@ -376,6 +376,15 @@ export const config = {
     fallback: 15000,
     min: 0,
   }),
+  // A6 (F11): Watchdog-Obergrenze (ms) fuer den SIGTERM/SIGINT-Graceful-Shutdown. Der Drain
+  // laesst in-flight Requests fertig und flusht dann den Store; laeuft er laenger, kappt der
+  // Watchdog hart mit exit(0). Default 8000 (Render sendet nach SIGTERM erst nach ~30s SIGKILL
+  // -> Puffer, ohne den Deploy merklich zu bremsen). Max 30000 (< Render-SIGKILL). Min 0.
+  shutdownDrainTimeoutMs: numEnv("SHUTDOWN_DRAIN_TIMEOUT_MS", process.env.SHUTDOWN_DRAIN_TIMEOUT_MS, {
+    fallback: 8000,
+    min: 0,
+    max: 30000,
+  }),
   // STT-Endpointing fuer Folge-Gathers (/voice/turn, Budget-Engine): fester
   // speechTimeout in Sekunden statt "auto". "auto" finalisiert auf der ERSTEN
   // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,
