@@ -113,9 +113,10 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
     successUrl,
     cancelUrl,
     // TOCTOU-Fix1: derselbe Key fuer zwei nahezu gleichzeitige Aufrufe (Doppelklick/zwei
-    // Tabs) desselben Tenant+Plan -> Stripe liefert dieselbe Session zurueck statt einer
-    // zweiten (s. subscribe.js checkoutSessionIdempotencyKey).
-    idempotencyKey: checkoutSessionIdempotencyKey(tenant, planSlug),
+    // Tabs) desselben Tenant+Plan+Price -> Stripe liefert dieselbe Session zurueck statt
+    // einer zweiten. Ein geaenderter Stripe-Price erzeugt einen NEUEN Key (kein
+    // idempotency_error nach Preis-Update, s. subscribe.js checkoutSessionIdempotencyKey).
+    idempotencyKey: checkoutSessionIdempotencyKey(tenant, planSlug, priceId),
   });
 }
 

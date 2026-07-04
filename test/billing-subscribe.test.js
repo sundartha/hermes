@@ -132,20 +132,25 @@ test("createTenantSubscription: andere Karte -> anderer Idempotenz-Key (kein Par
 
 // ---- Review-Blocker Runde 1: checkoutSessionIdempotencyKey + hasActiveSubscription --
 
-test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan (kein Zufall), unterscheidet Plaene, KEIN PM-Suffix", () => {
+test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan+Price (kein Zufall), unterscheidet Plaene/Prices/Tenants, KEIN PM-Suffix", () => {
   assert.equal(
-    checkoutSessionIdempotencyKey("t_x", "starter"),
-    checkoutSessionIdempotencyKey("t_x", "starter"),
-    "gleicher Tenant+Plan -> gleicher Key (Doppelklick/zwei Tabs bekommen dieselbe Session)",
+    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
+    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
+    "gleicher Tenant+Plan+Price -> gleicher Key (Doppelklick/zwei Tabs bekommen dieselbe Session)",
   );
   assert.notEqual(
-    checkoutSessionIdempotencyKey("t_x", "starter"),
-    checkoutSessionIdempotencyKey("t_x", "business"),
+    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
+    checkoutSessionIdempotencyKey("t_x", "starter", "price_b"),
+    "anderer Price (Preis-Update) -> anderer Key (kein idempotency_error/24h-Lockout)",
+  );
+  assert.notEqual(
+    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
+    checkoutSessionIdempotencyKey("t_x", "business", "price_a"),
     "anderer Plan -> anderer Key",
   );
   assert.notEqual(
-    checkoutSessionIdempotencyKey("t_x", "starter"),
-    checkoutSessionIdempotencyKey("t_y", "starter"),
+    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
+    checkoutSessionIdempotencyKey("t_y", "starter", "price_a"),
     "anderer Tenant -> anderer Key",
   );
 });

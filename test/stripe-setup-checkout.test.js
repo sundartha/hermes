@@ -180,7 +180,7 @@ test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_
         planSlug: "starter",
         successUrl: "https://agent.test/ok",
         cancelUrl: "https://agent.test/no",
-        idempotencyKey: "subcs_tenant_a_starter",
+        idempotencyKey: "subcs_tenant_a_starter_price_starter",
       }),
   );
   assert.ok(captured.url.endsWith("/v1/checkout/sessions"));
@@ -189,7 +189,7 @@ test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_
   assert.equal(captured.opts.headers["Content-Type"], "application/x-www-form-urlencoded");
   // Regression (Review-Blocker S1): OHNE Idempotency-Key liefert ein Doppelklick/zwei Tabs
   // ZWEI echte Stripe-Checkout-Sessions -> zwei echte, real abgerechnete Abos (Kostenleck).
-  assert.equal(captured.opts.headers["Idempotency-Key"], "subcs_tenant_a_starter");
+  assert.equal(captured.opts.headers["Idempotency-Key"], "subcs_tenant_a_starter_price_starter");
   assert.equal(captured.opts.body.get("mode"), "subscription");
   assert.equal(captured.opts.body.get("customer"), "cus_new1");
   assert.equal(captured.opts.body.get("line_items[0][price]"), "price_starter");

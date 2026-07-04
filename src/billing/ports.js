@@ -40,8 +40,9 @@
  * @property {string} planSlug        - Katalog-Slug; reist als subscription_data-Metadata in die Subscription
  * @property {string} successUrl      - Redirect nach erfolgreichem Abschluss
  * @property {string} cancelUrl       - Redirect bei Abbruch
- * @property {string} idempotencyKey  - tenant+plan-basiert ('subcs_'+tenant+'_'+plan): ein Doppelklick/
- *   zwei Tabs bekommen DIESELBE Session, nie zwei echte Stripe-Abos (TOCTOU-Schutz)
+ * @property {string} idempotencyKey  - tenant+plan+price-basiert ('subcs_'+tenant+'_'+plan+'_'+price):
+ *   ein Doppelklick/zwei Tabs bekommen DIESELBE Session, nie zwei echte Stripe-Abos (TOCTOU-
+ *   Schutz); ein geaenderter Stripe-Price erzeugt einen NEUEN Key (kein idempotency_error)
  */
 
 /**

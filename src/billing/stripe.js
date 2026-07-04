@@ -241,7 +241,7 @@ export const stripeBilling = {
   // tenant_ref/plan_slug werden explizit gespiegelt, damit die Webhook-Tenant-Aufloesung
   // (webhook.js tenantRefOf/planSlugOf) und A3-Reconcile (retrieveSubscription) fuer
   // Checkout-erzeugte Abos genauso funktionieren wie fuer createSubscription-Abos.
-  // Idempotency-Key (tenant+plan-basiert, subscribe.js checkoutSessionIdempotencyKey):
+  // Idempotency-Key (tenant+plan+price-basiert, subscribe.js checkoutSessionIdempotencyKey):
   // ein Doppelklick/zwei Tabs erhaelt DIESELBE Session zurueck statt einer zweiten -
   // schliesst die TOCTOU-Luecke zwischen dem already_subscribed-Vor-Check und dem
   // tatsaechlichen Checkout-Abschluss (Muster wie placeHold/createSubscription).

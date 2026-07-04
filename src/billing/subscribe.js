@@ -49,17 +49,24 @@ function subscribeIdempotencyKey(tenant, slug, paymentMethodId) {
   return `sub_${tenant}_${slug}_${paymentMethodId.slice(-PM_KEY_SUFFIX_LEN)}`;
 }
 
-// BK-Discount-Fix1: Idempotenz-Key der subscription-Mode-Checkout-Session (tenant+plan,
+// BK-Discount-Fix1: Idempotenz-Key der subscription-Mode-Checkout-Session (tenant+plan+price,
 // OHNE PM-Suffix - beim Session-Aufbau existiert noch keine gespeicherte Karte, die
 // Karte entsteht bei Stripe erst WAEHREND des gehosteten Checkouts). Schliesst die TOCTOU-
 // Luecke des Vor-Checks (hasActiveSubscription): zwei nahezu gleichzeitige setup-checkout-
-// Aufrufe fuer denselben Tenant+Plan (Doppelklick/zwei Tabs) bestehen BEIDE den Vor-Check,
-// weil noch keine Session abgeschlossen ist - mit demselben Key liefert Stripe beiden
-// Aufrufen dieselbe Checkout-Session zurueck, sodass nur EINE Session abschliessbar ist
-// (Stripe verwehrt ein zweites Payment auf einer bereits abgeschlossenen Session) statt
+// Aufrufe fuer denselben Tenant+Plan+Price (Doppelklick/zwei Tabs) bestehen BEIDE den
+// Vor-Check, weil noch keine Session abgeschlossen ist - mit demselben Key liefert Stripe
+// beiden Aufrufen dieselbe Checkout-Session zurueck, sodass nur EINE Session abschliessbar
+// ist (Stripe verwehrt ein zweites Payment auf einer bereits abgeschlossenen Session) statt
 // zweier echter, real abgerechneter Stripe-Abos.
-export function checkoutSessionIdempotencyKey(tenant, planSlug) {
-  return `subcs_${tenant}_${planSlug}`;
+// IDEMP-KEY-FIX: priceId ist Teil des Keys, weil Stripe einen Key 24h an die ERSTEN
+// Request-Params bindet. Ein legitimer Preis-Wechsel (neue Stripe-Price-Id fuer denselben
+// Plan) aenderte sonst line_items[0][price] unter dem ALTEN Key -> HTTP 400
+// idempotency_error, 24h Checkout-Lockout fuer jeden Tenant mit juengstem Versuch.
+// priceId ist ein oeffentlicher Stripe-Identifier (kein Secret) -> voller Wert im Key;
+// das Suffix-Truncation-Pattern oben (PM_KEY_SUFFIX_LEN) gilt der Invariante AM4 fuer
+// Payment-Method-Ids und greift hier nicht.
+export function checkoutSessionIdempotencyKey(tenant, planSlug, priceId) {
+  return `subcs_${tenant}_${planSlug}_${priceId}`;
 }
 
 // G5/S2: das gemeinsame Praedikat "Tenant hat bereits ein aktives Abo" - stand vorher
