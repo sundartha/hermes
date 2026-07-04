@@ -10,6 +10,8 @@
 
 import { hasCardOnFile } from "../self-service.js";
 import { CATALOG_SLUGS } from "../plans.js";
+import { activatePaidTenant } from "./activation.js";
+import { customerMatches } from "./card-setup.js";
 
 // Buchbare Plan-Slugs = die EINE Quelle aus dem Plan-Katalog (src/plans.js, SSoT).
 // Kein zweites Slug-Literal hier (G5/S2): der Katalog definiert die Tiers, diese
@@ -47,6 +49,26 @@ function subscribeIdempotencyKey(tenant, slug, paymentMethodId) {
   return `sub_${tenant}_${slug}_${paymentMethodId.slice(-PM_KEY_SUFFIX_LEN)}`;
 }
 
+// BK-Discount-Fix1: Idempotenz-Key der subscription-Mode-Checkout-Session (tenant+plan,
+// OHNE PM-Suffix - beim Session-Aufbau existiert noch keine gespeicherte Karte, die
+// Karte entsteht bei Stripe erst WAEHREND des gehosteten Checkouts). Schliesst die TOCTOU-
+// Luecke des Vor-Checks (hasActiveSubscription): zwei nahezu gleichzeitige setup-checkout-
+// Aufrufe fuer denselben Tenant+Plan (Doppelklick/zwei Tabs) bestehen BEIDE den Vor-Check,
+// weil noch keine Session abgeschlossen ist - mit demselben Key liefert Stripe beiden
+// Aufrufen dieselbe Checkout-Session zurueck, sodass nur EINE Session abschliessbar ist
+// (Stripe verwehrt ein zweites Payment auf einer bereits abgeschlossenen Session) statt
+// zweier echter, real abgerechneter Stripe-Abos.
+export function checkoutSessionIdempotencyKey(tenant, planSlug) {
+  return `subcs_${tenant}_${planSlug}`;
+}
+
+// G5/S2: das gemeinsame Praedikat "Tenant hat bereits ein aktives Abo" - stand vorher
+// wortgleich dreifach dupliziert (hier zweimal + im Route-Layer). Eine Aenderungsstelle,
+// falls sich die Bedingung je erweitert (z.B. Status statt nur Id).
+export function hasActiveSubscription(store, tenant) {
+  return !!store.tenantSubscription(tenant).subscriptionId;
+}
+
 // Erstellt das Abo fail-closed und persistiert seine Referenzen am Tenant.
 // Reihenfolge der Gates (M3, alle fail-closed): unbekannter Plan -> unkonfigurierter
 // Price -> bereits aktives Abo (Doppelabbuchungs-Schutz) -> Karte-on-file Pflicht.
@@ -60,8 +82,7 @@ export async function createTenantSubscription({ store, billing, config, tenant,
   // Doppelabbuchungs-Schutz: ein Tenant mit bereits gespeichertem Abo bucht nicht
   // erneut (der Idempotency-Key schuetzt nur den identischen Retry, nicht einen
   // zweiten Plan). Vorhandenes Abo -> 409 im Route-Layer.
-  if (store.tenantSubscription(tenant).subscriptionId)
-    return { ok: false, reason: "already_subscribed" };
+  if (hasActiveSubscription(store, tenant)) return { ok: false, reason: "already_subscribed" };
   const stripe = store.tenantStripe(tenant);
   if (!hasCardOnFile(stripe)) return { ok: false, reason: "no_card" };
   const { subscriptionId, currentPeriodEnd, currentPeriodStart } = await billing.createSubscription({
@@ -75,4 +96,70 @@ export async function createTenantSubscription({ store, billing, config, tenant,
   });
   store.setTenantSubscription(tenant, { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart });
   return { ok: true, subscriptionId, planSlug, currentPeriodEnd };
+}
+
+// BK-Discount: Aktivierung aus einer abgeschlossenen subscription-Checkout-Session.
+// Stripe hat Karte + Abo dort BEREITS angelegt - hier wird NUR verifiziert, persistiert
+// und aktiviert (kein zweiter Geld-Call). Spiegelt subscribeAndActivate; die Abo-Daten
+// kommen aus der Session statt aus createSubscription. Gates fail-closed in FESTER
+// Reihenfolge (sicherheitsrelevant, nicht umsortieren):
+//   1. Customer-Match - ueber customerMatches (card-setup.js, G5/S2): dieselbe
+//      R4-Invariante wie bindCardFromSession, EINE Stelle statt Kopie. Eine fremde
+//      session_id darf NIE fremde Karte/Abo an diesen Tenant binden.
+//   2. Plan-Match - der zurueckgetragene Query-Plan muss dem tatsaechlich bezahlten
+//      Plan der Session (subscription_data-Metadata) entsprechen, sonst buchte ein
+//      manipulierter return-Aufruf ein teureres Kontingent zum falschen Preis.
+//   3. already_subscribed/subscription_conflict - ein bereits gespeichertes Abo
+//      aktiviert nie ein zweites Mal. Review-Blocker Runde 2 (Cross-Plan-Race):
+//      zwei nahezu gleichzeitige setup-checkout-Aufrufe fuer VERSCHIEDENE Plaene
+//      (verschiedene Idempotency-Keys, s. checkoutSessionIdempotencyKey) koennen
+//      BEIDE bei Stripe real abgerechnet werden, bevor je ein /return laeuft. Die
+//      erste Rueckkehr persistiert normal; die zweite traegt eine ANDERE, ebenfalls
+//      real bezahlte outcome.subscriptionId. Nur eine IDENTISCHE subscriptionId ist
+//      ein harmloser Doppel-Redirect derselben Session (already_subscribed, idempotent-
+//      erfolgreich). Eine ABWEICHENDE subscriptionId ist eine verwaiste, unverwaltete
+//      Zweit-Subscription -> eigener reason (subscription_conflict), NIE als Erfolg
+//      werten (der Route-Layer darf das NIE auf sub=ok mappen).
+// Nebeneffekt (Persistenz + Aktivierung) im Namen (N7).
+export async function activateSubscriptionFromCheckoutSession({
+  store,
+  billing,
+  accounts,
+  provision,
+  tenant,
+  sessionId,
+  expectedPlanSlug,
+}) {
+  const outcome = await billing.getSubscriptionCheckoutResult(sessionId);
+  if (!customerMatches(store, tenant, outcome.customerId))
+    return { ok: false, reason: "customer_mismatch" };
+  if (!outcome.planSlug || outcome.planSlug !== expectedPlanSlug)
+    return { ok: false, reason: "plan_mismatch" };
+  if (hasActiveSubscription(store, tenant)) {
+    const existing = store.tenantSubscription(tenant);
+    if (existing.subscriptionId === outcome.subscriptionId)
+      return { ok: false, reason: "already_subscribed" };
+    // Verwaiste, real bei Stripe abgerechnete Zweit-Subscription (s. Kommentar oben).
+    // subscriptionId bleibt im Ergebnis (opake Referenz, KEIN Secret - wie ueberall
+    // sonst in diesem Modul), damit Ops sie ueber den Audit-Log manuell stornieren kann.
+    return { ok: false, reason: "subscription_conflict", subscriptionId: outcome.subscriptionId };
+  }
+  store.setTenantStripe(tenant, {
+    customerId: outcome.customerId,
+    paymentMethodId: outcome.paymentMethodId,
+  });
+  store.setTenantSubscription(tenant, {
+    subscriptionId: outcome.subscriptionId,
+    planSlug: outcome.planSlug,
+    currentPeriodEnd: outcome.currentPeriodEnd,
+    currentPeriodStart: outcome.currentPeriodStart,
+  });
+  const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+  return {
+    ok: true,
+    subscriptionId: outcome.subscriptionId,
+    planSlug: outcome.planSlug,
+    currentPeriodEnd: outcome.currentPeriodEnd,
+    profile,
+  };
 }

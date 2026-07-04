@@ -90,10 +90,10 @@ test("Marketing-Seiten sind englisch (lang=en), Legal-Seiten deutsch (lang=de)",
   }
 });
 
-test("Pricing rendert USD aus dem Katalog (beide Tarife)", () => {
-  // BK0/AM3: Preise kommen aus lib/plans.js (Spiegel der Backend-SSoT), jetzt USD.
-  // Das gebaute preise/index.html rendert nun "$4.99"/"$9.99" (currency: usd).
+test("Pricing rendert EUR aus dem Katalog (beide Tarife)", () => {
+  // BK0/AM3: Preise kommen aus lib/plans.js (Spiegel der Backend-SSoT), seit dem
+  // Stripe-Live-Cutover EUR. Das gebaute preise/index.html rendert "€4.99"/"€9.99".
   const html = readDist("preise/index.html");
-  assert.ok(html.includes("$4.99") && html.includes("$9.99"), "USD-Katalog-Preise fehlen");
+  assert.ok(html.includes("€4.99") && html.includes("€9.99"), "EUR-Katalog-Preise fehlen");
   assert.ok(html.includes("Starter") && html.includes("Business"), "Tarifnamen fehlen");
 });

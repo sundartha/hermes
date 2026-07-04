@@ -36,6 +36,7 @@ const CUSTOMER = "cus_mirror";
 const PAYMENT_METHOD = "pm_mirror";
 const SESSION = "cs_mirror"; // Stripe-Checkout-Session-Id
 const PERIOD_END = 1893456000; // Unix-Sek (fix, kein Date.now) = 2030-01-01Z
+const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fix)
 const PLAN = "starter";
 const HIGH_CAP = 100; // Caps weit offen: kein Cap-Block im Happy-Funnel
 const SESSION_TTL_S = 3600;
@@ -57,9 +58,21 @@ function fakeBilling() {
       url: "https://stripe.test/c/cs_mirror",
       sessionId: SESSION,
     }),
+    createSubscriptionCheckoutSession: async () => ({
+      url: "https://stripe.test/c/cs_mirror",
+      sessionId: SESSION,
+    }),
     getCheckoutSessionResult: async () => ({
       customerId: CUSTOMER,
       paymentMethodId: PAYMENT_METHOD,
+    }),
+    getSubscriptionCheckoutResult: async () => ({
+      customerId: CUSTOMER,
+      paymentMethodId: PAYMENT_METHOD,
+      subscriptionId: "sub_new",
+      currentPeriodStart: PERIOD_START,
+      currentPeriodEnd: PERIOD_END,
+      planSlug: PLAN,
     }),
     createSubscription: async () => ({ subscriptionId: "sub_new", currentPeriodEnd: PERIOD_END }),
   };

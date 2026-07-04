@@ -66,7 +66,7 @@ test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, 
   const starterTile = tiles[0];
   const text = textOf([starterTile]);
   assert.ok(text.includes("Starter"));
-  assert.ok(text.includes("$4.99"));
+  assert.ok(text.includes("€4.99")); // EUR-Cutover (Stripe live, 2026-07-03)
   assert.ok(text.includes("/month"));
   for (const feature of starter.features) assert.ok(text.includes(feature), `Feature fehlt: ${feature}`);
 

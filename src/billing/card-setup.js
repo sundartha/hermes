@@ -22,16 +22,23 @@ export async function ensureCustomer({ store, billing, tenant }) {
   return customerId;
 }
 
+// G5/S2 (Review-Blocker Runde 3): die Customer-Match-Sicherheitsinvariante (R4) an
+// EINER Stelle statt wortgleich in bindCardFromSession UND activateSubscriptionFrom-
+// CheckoutSession (src/billing/subscribe.js) dupliziert. Fail-closed: ohne gespeicherten
+// Customer ODER bei Abweichung ist es NIE ein Match - eine fremde session_id darf NIE
+// fremde Karte/Abo an diesen Tenant binden.
+export function customerMatches(store, tenant, customerId) {
+  const { customerId: stored } = store.tenantStripe(tenant);
+  return !!stored && stored === customerId;
+}
+
 // Bindet das in einer abgeschlossenen Checkout-Session erfasste payment_method an
-// den Tenant - fail-closed: der von Stripe gelieferte Customer MUSS dem gespeicherten
-// Customer DIESES Tenants entsprechen, sonst koennte eine fremde session_id ein
-// fremdes payment_method binden (Geld-Sicherheit, R4). Bei Mismatch wird NICHTS
+// den Tenant - fail-closed ueber customerMatches (R4). Bei Mismatch wird NICHTS
 // gespeichert und { ok: false } geliefert; der Aufrufer uebersetzt das in seine
 // Antwortform + Audit. Bei Erfolg ist die Karte hinterlegt (Nebeneffekt im Namen, N7).
 export async function bindCardFromSession({ store, billing, tenant, sessionId }) {
   const { customerId, paymentMethodId } = await billing.getCheckoutSessionResult(sessionId);
-  const { customerId: stored } = store.tenantStripe(tenant);
-  if (!stored || stored !== customerId) return { ok: false };
+  if (!customerMatches(store, tenant, customerId)) return { ok: false };
   store.setTenantStripe(tenant, { customerId, paymentMethodId });
   return { ok: true };
 }

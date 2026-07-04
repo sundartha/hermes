@@ -33,6 +33,34 @@
  */
 
 /**
+ * @typedef {Object} SubscriptionCheckoutParams
+ * @property {string} tenantRef       - Tenant, fuer den Karte+Abo erfasst werden (Audit/Metadata)
+ * @property {string} customerId      - opake Stripe-Customer-Referenz (cus_...)
+ * @property {string} priceId         - opake recurring Stripe-Price-Referenz (price_...)
+ * @property {string} planSlug        - Katalog-Slug; reist als subscription_data-Metadata in die Subscription
+ * @property {string} successUrl      - Redirect nach erfolgreichem Abschluss
+ * @property {string} cancelUrl       - Redirect bei Abbruch
+ * @property {string} idempotencyKey  - tenant+plan-basiert ('subcs_'+tenant+'_'+plan): ein Doppelklick/
+ *   zwei Tabs bekommen DIESELBE Session, nie zwei echte Stripe-Abos (TOCTOU-Schutz)
+ */
+
+/**
+ * @typedef {Object} SubscriptionCheckoutResult
+ * @property {string} url        - Stripe-gehostete Checkout-URL (Redirect-Ziel); KEIN Stripe-Objekt
+ * @property {string} sessionId  - opake Checkout-Session-Referenz (cs_...)
+ */
+
+/**
+ * @typedef {Object} SubscriptionCheckoutOutcome
+ * @property {string} customerId          - opake Stripe-Customer-Referenz (cus_...)
+ * @property {string} paymentMethodId     - opake payment_method-Referenz (pm_...)
+ * @property {string} subscriptionId      - opake Stripe-Subscription-Referenz (sub_...)
+ * @property {number} currentPeriodStart  - Beginn der laufenden Abrechnungsperiode (Unix-Sekunden)
+ * @property {number} currentPeriodEnd    - Ende der laufenden Abrechnungsperiode (Unix-Sekunden)
+ * @property {string|null} planSlug       - Katalog-Slug aus der Subscription-Metadata (fehlt -> null)
+ */
+
+/**
  * @typedef {Object} SubscribeParams
  * @property {string} tenantRef       - Tenant, fuer den das Abo erstellt wird (Audit/Metadata)
  * @property {string} customerId      - opake Stripe-Customer-Referenz (cus_...): traegt die Karte
@@ -80,6 +108,14 @@
  *   Erzeugt eine Stripe-Checkout-Session im setup-Mode (Karte speichern OHNE Abbuchung).
  * @property {(sessionId: string) => Promise<CheckoutResult>} getCheckoutSessionResult
  *   Liest customer + payment_method aus einer abgeschlossenen Setup-Session.
+ * @property {(params: SubscriptionCheckoutParams) => Promise<SubscriptionCheckoutResult>} createSubscriptionCheckoutSession
+ *   Erzeugt eine Stripe-Checkout-Session im subscription-Mode: Karte + Abo in EINEM
+ *   gehosteten Schritt, inkl. nativem Rabattcode-Feld (allow_promotion_codes). Loest
+ *   bei Abschluss ECHTES Geld aus (Stripe legt das Abo an) - nur payment-gegated rufen.
+ * @property {(sessionId: string) => Promise<SubscriptionCheckoutOutcome>} getSubscriptionCheckoutResult
+ *   Liest customer + payment_method + Abo-Referenzen aus einer ABGESCHLOSSENEN
+ *   subscription-Session. Fehlt die Subscription oder das payment_method -> wirft
+ *   (fail-closed, Muster getCheckoutSessionResult). KEIN Stripe-Objekt verlaesst den Adapter.
  * @property {(params: SubscribeParams) => Promise<SubscribeResult>} createSubscription
  *   Erstellt ein echtes monatliches Recurring (Stripe POST /v1/subscriptions). Loest
  *   ECHTES Geld aus (Erstzahlung off_session). Nur subscriptionId + currentPeriodEnd +

@@ -165,6 +165,170 @@ test("createSubscription: Fallback auf top-level current_period_end/start (aelte
   });
 });
 
+test("createSubscriptionCheckoutSession: mode=subscription + line_items + allow_promotion_codes + subscription_data-Metadata + Idempotency-Key-Header", async () => {
+  let captured;
+  const result = await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({ id: "cs_sub_1", url: "https://stripe.test/c/cs_sub_1" });
+    },
+    () =>
+      stripeBilling.createSubscriptionCheckoutSession({
+        tenantRef: "tenant_a",
+        customerId: "cus_new1",
+        priceId: "price_starter",
+        planSlug: "starter",
+        successUrl: "https://agent.test/ok",
+        cancelUrl: "https://agent.test/no",
+        idempotencyKey: "subcs_tenant_a_starter",
+      }),
+  );
+  assert.ok(captured.url.endsWith("/v1/checkout/sessions"));
+  assert.equal(captured.opts.method, "POST");
+  assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
+  assert.equal(captured.opts.headers["Content-Type"], "application/x-www-form-urlencoded");
+  // Regression (Review-Blocker S1): OHNE Idempotency-Key liefert ein Doppelklick/zwei Tabs
+  // ZWEI echte Stripe-Checkout-Sessions -> zwei echte, real abgerechnete Abos (Kostenleck).
+  assert.equal(captured.opts.headers["Idempotency-Key"], "subcs_tenant_a_starter");
+  assert.equal(captured.opts.body.get("mode"), "subscription");
+  assert.equal(captured.opts.body.get("customer"), "cus_new1");
+  assert.equal(captured.opts.body.get("line_items[0][price]"), "price_starter");
+  assert.equal(captured.opts.body.get("line_items[0][quantity]"), "1");
+  assert.equal(captured.opts.body.get("allow_promotion_codes"), "true");
+  assert.equal(captured.opts.body.get("success_url"), "https://agent.test/ok");
+  assert.equal(captured.opts.body.get("cancel_url"), "https://agent.test/no");
+  assert.equal(captured.opts.body.get("metadata[tenant_ref]"), "tenant_a");
+  assert.equal(captured.opts.body.get("subscription_data[metadata][tenant_ref]"), "tenant_a");
+  assert.equal(captured.opts.body.get("subscription_data[metadata][plan_slug]"), "starter");
+  assert.equal(captured.opts.body.get("currency"), null, "subscription-Mode: Price bestimmt Waehrung");
+  assert.deepEqual(result, { url: "https://stripe.test/c/cs_sub_1", sessionId: "cs_sub_1" });
+});
+
+test("createSubscriptionCheckoutSession: ohne idempotencyKey -> KEIN Idempotency-Key-Header (optionaler Param, Bestand)", async () => {
+  let captured;
+  await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({ id: "cs_sub_1", url: "https://stripe.test/c/cs_sub_1" });
+    },
+    () =>
+      stripeBilling.createSubscriptionCheckoutSession({
+        tenantRef: "tenant_a",
+        customerId: "cus_new1",
+        priceId: "price_starter",
+        planSlug: "starter",
+        successUrl: "https://agent.test/ok",
+        cancelUrl: "https://agent.test/no",
+      }),
+  );
+  assert.equal("Idempotency-Key" in captured.opts.headers, false);
+});
+
+test("createSubscriptionCheckoutSession: Nicht-2xx -> wirft HTTP-Status, OHNE Secret-Key", async () => {
+  await withStripeStub(
+    async () => ({ ok: false, status: 402, json: async () => ({}) }),
+    () =>
+      assert.rejects(
+        () =>
+          stripeBilling.createSubscriptionCheckoutSession({
+            tenantRef: "tenant_a",
+            customerId: "cus_new1",
+            priceId: "price_starter",
+            planSlug: "starter",
+            successUrl: "https://agent.test/ok",
+            cancelUrl: "https://agent.test/no",
+          }),
+        (err) => {
+          assert.match(err.message, /HTTP 402/);
+          assert.doesNotMatch(err.message, /sk_test|Bearer/);
+          return true;
+        },
+      ),
+  );
+});
+
+test("getSubscriptionCheckoutResult: GET /v1/checkout/sessions/<id>?expand[]=subscription+default_payment_method, parst alle Felder", async () => {
+  let captured;
+  const result = await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({
+        customer: "cus_new1",
+        subscription: {
+          id: "sub_new",
+          default_payment_method: { id: "pm_b" },
+          items: { data: [{ current_period_start: 1890864000, current_period_end: 1893456000 }] },
+          metadata: { plan_slug: "starter" },
+        },
+      });
+    },
+    () => stripeBilling.getSubscriptionCheckoutResult("cs_sub_1"),
+  );
+  assert.ok(captured.url.includes("/v1/checkout/sessions/cs_sub_1"));
+  assert.ok(captured.url.includes("expand[]=subscription"));
+  assert.ok(captured.url.includes("expand[]=subscription.default_payment_method"));
+  assert.equal(captured.opts.method, "GET");
+  assert.deepEqual(result, {
+    customerId: "cus_new1",
+    paymentMethodId: "pm_b",
+    subscriptionId: "sub_new",
+    currentPeriodStart: 1890864000,
+    currentPeriodEnd: 1893456000,
+    planSlug: "starter",
+  });
+});
+
+test("getSubscriptionCheckoutResult: fehlende Subscription -> wirft (Session nicht abgeschlossen)", async () => {
+  await withStripeStub(
+    async () => okJson({ customer: "cus_new1", subscription: null }),
+    () =>
+      assert.rejects(
+        () => stripeBilling.getSubscriptionCheckoutResult("cs_sub_1"),
+        /Session nicht abgeschlossen/,
+      ),
+  );
+});
+
+test("getSubscriptionCheckoutResult: fehlendes default_payment_method -> wirft (Karte nicht gespeichert)", async () => {
+  await withStripeStub(
+    async () =>
+      okJson({
+        customer: "cus_new1",
+        subscription: { id: "sub_new", default_payment_method: null, items: { data: [] } },
+      }),
+    () =>
+      assert.rejects(
+        () => stripeBilling.getSubscriptionCheckoutResult("cs_sub_1"),
+        /Karte nicht gespeichert/,
+      ),
+  );
+});
+
+test("getSubscriptionCheckoutResult: unexpandiertes pm-String + top-level-Perioden-Fallback + fehlender plan_slug -> null", async () => {
+  const result = await withStripeStub(
+    async () =>
+      okJson({
+        customer: "cus_new1",
+        subscription: {
+          id: "sub_new",
+          default_payment_method: "pm_string",
+          current_period_start: 1600000000,
+          current_period_end: 1602592000,
+          items: { data: [] },
+        },
+      }),
+    () => stripeBilling.getSubscriptionCheckoutResult("cs_sub_1"),
+  );
+  assert.deepEqual(result, {
+    customerId: "cus_new1",
+    paymentMethodId: "pm_string",
+    subscriptionId: "sub_new",
+    currentPeriodStart: 1600000000,
+    currentPeriodEnd: 1602592000,
+    planSlug: null,
+  });
+});
+
 test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_session=true, manual capture", async () => {
   let captured;
   const result = await withStripeStub(
