@@ -14,12 +14,6 @@
 import "../../styles/tokens/hero.css";
 import "../../styles/sections.css";
 
-const agents = [
-  { code: "C", label: "Claude" },
-  { code: "G", label: "Gemini" },
-  { code: "+", label: "Any MCP agent" },
-];
-
 const cards = [
   {
     stage: "connect",
@@ -39,7 +33,7 @@ const cards = [
 ] as const;
 ---
 
-<section class="band band--alt agents" id="works-with">
+<section class="band band--alt agents band--center" id="works-with">
   <!-- V5 (Jonas-Feedback, fuenfte Runde): Hintergrund soll die Hero-Sektion direkt
        darueber optisch fortsetzen (hell, blau, Nebel-Atmosphaere), nicht eine neue,
        abstrakte Higgsfield-Textur sein. Ergebnis nach Live-Analyse des gerenderten
@@ -75,15 +69,6 @@ const cards = [
       own agent stack. No telephony build of your own required.
     </p>
 
-    <div class="agent-badges reveal">
-      {agents.map((a) => (
-        <span class="agent-badge">
-          <span class="agent-badge__glyph" aria-hidden="true">{a.code}</span>
-          {a.label}
-        </span>
-      ))}
-    </div>
-
     <div class="steps agents__steps">
       {cards.map((card) => (
         <article class="step reveal">
@@ -101,6 +86,7 @@ const cards = [
                   <path class="flow flow--c" d="M40 126 C 120 126, 150 80, 190 80" />
                 </svg>
                 <div class="scene-connect__hub">
+                  <span class="hub-aura" aria-hidden="true"></span>
                   <span class="hub-pulse"></span>
                   <span class="hub-pulse hub-pulse--b"></span>
                   <img class="hub-wing" src="/assets/hermes-wing.png" alt="" />
@@ -110,6 +96,7 @@ const cards = [
             {card.stage === "call" && (
               <div class="scene-call">
                 <div class="scene-call__ring">
+                  <span class="ring-sweep" aria-hidden="true"></span>
                   <span class="ring-pulse"></span>
                   <span class="ring-pulse ring-pulse--b"></span>
                   <svg class="scene-call__glyph" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -365,43 +352,6 @@ const cards = [
 </style>
 
 <style>
-  .agent-badges {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-tight);
-    margin: var(--space-roomy) 0 0;
-  }
-  .agent-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-tight);
-    padding: 8px 16px 8px 8px;
-    border-radius: var(--radius-badge);
-    /* Undurchsichtiger dunkler Chip statt des fast unsichtbaren 0.08-weiss-
-       Glases von vorher -- gleiches, bereits bewaehrtes Muster wie .model-chip
-       in Szene 1, das schon gegen helle Hintergruende lesbar ist. */
-    background: rgba(10, 26, 54, 0.72);
-    border: var(--border-width) solid rgba(255, 255, 255, 0.16);
-    box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.5);
-    color: #fff;
-    font-family: var(--font-grotesk);
-    font-size: 13.5px;
-    font-weight: var(--weight-medium);
-  }
-  .agent-badge__glyph {
-    display: inline-grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: var(--radius-round);
-    background: rgba(255, 255, 255, 0.16);
-    color: #fff;
-    font-family: var(--font-grotesk);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
   /* --- Buehne: Glasoptik mit echter Tiefe statt flacher Box --- */
   .step__stage {
     position: relative;
@@ -457,12 +407,6 @@ const cards = [
   }
 
   @media (max-width: 560px) {
-    .agent-badges {
-      gap: 8px;
-    }
-    .agent-badge {
-      font-size: 12.5px;
-    }
     .step__stage {
       height: 240px;
     }
@@ -521,23 +465,50 @@ const cards = [
   .model-orb {
     position: relative;
     display: inline-block;
-    width: 18px;
-    height: 18px;
+    width: 26px;
+    height: 26px;
     flex: none;
     border-radius: 50%;
+    /* V8 (Jonas-Feedback: "3D-Animation kann noch viel geiler sein"): groessere
+       Kugel, zweite Ambient-Occlusion-Ebene unten-rechts fuer echte Rundung im
+       Stand-Frame (nicht nur beim Wackeln sichtbar), plus staerkerer Aussen-Glow. */
     background:
-      radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.3) 28%, rgba(157, 195, 245, 0.4) 58%, rgba(255, 255, 255, 0.08) 100%);
+      radial-gradient(circle at 64% 72%, rgba(8, 20, 44, 0.55) 0%, rgba(8, 20, 44, 0) 55%),
+      radial-gradient(circle at 40% 36%, rgba(157, 195, 245, 0.9) 0%, rgba(46, 98, 163, 0.95) 48%, rgba(8, 20, 44, 0.98) 100%);
     box-shadow:
-      inset -2px -2px 4px rgba(6, 16, 36, 0.5),
-      inset 1px 1px 2px rgba(255, 255, 255, 0.5),
-      0 0 6px rgba(157, 195, 245, 0.35);
+      inset -5px -6px 9px rgba(4, 10, 26, 0.7),
+      inset 2px 3px 5px rgba(255, 255, 255, 0.3),
+      0 8px 16px -6px rgba(4, 12, 28, 0.6),
+      0 0 16px rgba(157, 195, 245, 0.4);
     animation: orb-wobble 4.6s ease-in-out infinite;
+  }
+  /* Wandernde Glanzreflexion, unabhaengig von der Wobble-Rotation -- macht aus
+     der Kugel eine Glasmurmel, auf der das Licht ueber die Oberflaeche laeuft,
+     statt einer starr aufgemalten Reflexion, die nur mitkippt. */
+  .model-orb::after {
+    content: "";
+    position: absolute;
+    top: 8%;
+    left: 14%;
+    width: 44%;
+    height: 44%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 70%);
+    mix-blend-mode: screen;
+    animation: orb-glint 4.6s ease-in-out infinite;
   }
   .model-chip--b .model-orb {
     animation-duration: 3.8s;
     animation-direction: reverse;
   }
+  .model-chip--b .model-orb::after {
+    animation-duration: 3.8s;
+    animation-direction: reverse;
+  }
   .model-chip--c .model-orb {
+    animation-duration: 5.6s;
+  }
+  .model-chip--c .model-orb::after {
     animation-duration: 5.6s;
   }
   @keyframes orb-wobble {
@@ -547,6 +518,19 @@ const cards = [
     }
     50% {
       transform: perspective(60px) rotateY(22deg) rotateX(-7deg);
+    }
+  }
+  @keyframes orb-glint {
+    0%,
+    100% {
+      top: 8%;
+      left: 14%;
+      opacity: 0.95;
+    }
+    50% {
+      top: 42%;
+      left: 46%;
+      opacity: 0.5;
     }
   }
   .model-chip--b {
@@ -604,6 +588,29 @@ const cards = [
     width: 74px;
     height: 74px;
   }
+  /* Rotierende Aura hinter dem Fluegel -- gibt dem Hub ein staendiges
+     "Energiefeld" statt nur der beiden auslaufenden Ping-Kreise, macht die
+     Szene insgesamt praesenter/hochwertiger. */
+  .hub-aura {
+    position: absolute;
+    inset: -22px;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 0deg,
+      rgba(157, 195, 245, 0) 0%,
+      rgba(157, 195, 245, 0.45) 22%,
+      rgba(157, 195, 245, 0) 48%,
+      rgba(255, 255, 255, 0.3) 74%,
+      rgba(157, 195, 245, 0) 100%
+    );
+    filter: blur(9px);
+    animation: hub-aura-spin 7s linear infinite;
+  }
+  @keyframes hub-aura-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
   .hub-pulse {
     position: absolute;
     inset: 0;
@@ -659,6 +666,30 @@ const cards = [
        und drehen sich dabei langsam weiter (rotateZ). Rein CSS, kein neues
        JS/Bundle. */
     perspective: 260px;
+  }
+  /* Rotierender Radar-Sweep unter den auslaufenden Ping-Ringen -- ein
+     Leuchtkeil, der sich kontinuierlich um die gekippte Flaeche dreht, statt
+     nur zwei sich weitenden Kreisen. Macht die "Radar von schraeg oben"-
+     Metapher aus dem V7-Kommentar tatsaechlich sichtbar/lebendig statt nur
+     angedeutet. */
+  .ring-sweep {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 0deg,
+      rgba(157, 195, 245, 0.6) 0%,
+      rgba(157, 195, 245, 0) 26%
+    );
+    transform: rotateX(62deg) rotateZ(0deg);
+    transform-style: preserve-3d;
+    mix-blend-mode: screen;
+    animation: ring-sweep-spin 2.6s linear infinite;
+  }
+  @keyframes ring-sweep-spin {
+    to {
+      transform: rotateX(62deg) rotateZ(360deg);
+    }
   }
   .ring-pulse {
     position: absolute;
@@ -797,8 +828,16 @@ const cards = [
     display: block;
     width: 4px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow: 0 0 10px rgba(157, 195, 245, 0.55);
+    /* V8: Glas-Gradient statt Flachweiss -- jeder Balken hat jetzt eine helle
+       Kuppe und einen dunkleren Fuss, wie ein beleuchteter Glasstab statt ein
+       plattes Rechteck. */
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(157, 195, 245, 0.85) 55%,
+      rgba(70, 120, 190, 0.65) 100%
+    );
+    box-shadow: 0 0 12px rgba(157, 195, 245, 0.6), 0 0 3px rgba(255, 255, 255, 0.7);
     animation: wave-pulse 1.3s ease-in-out infinite;
   }
   .scene-voice__wave span:nth-child(1) { height: 30%; animation-delay: 0s; }
@@ -896,14 +935,21 @@ const cards = [
   @media (prefers-reduced-motion: reduce) {
     .model-chip,
     .model-orb,
+    .model-orb::after,
     .flow,
+    .hub-aura,
     .hub-pulse,
+    .ring-sweep,
     .ring-pulse,
     .scene-call__glyph,
     .call-line,
     .scene-voice__wave span,
     .agents__glow {
       animation: none !important;
+    }
+    .hub-aura,
+    .ring-sweep {
+      opacity: 0.3;
     }
     .flow {
       stroke-dasharray: none;
