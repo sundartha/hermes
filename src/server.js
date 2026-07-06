@@ -855,7 +855,13 @@ async function synthToServeUrl(text, cfg) {
     outputFormat: cfg.outputFormat,
     timeoutMs: cfg.synthTimeoutMs,
   });
-  if (!result.ok) return null;
+  if (!result.ok) {
+    // Beobachtbarkeit: stille Degradation auf Azure sichtbar machen (Betriebs-Symptom
+    // "Call verbindet, aber Azure statt ElevenLabs"). reason ist ein grober Code
+    // (http_<status>/timeout/error), NIE der Key/Secret.
+    console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}) -> Azure-Fallback`);
+    return null;
+  }
   const token = ttsStore.put(result.bytes, result.contentType);
   return `${config.publicUrl}/voice/tts/${token}`;
 }
