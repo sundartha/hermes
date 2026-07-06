@@ -87,3 +87,23 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > + idempotente Aktivierung (`tenantHasLiveNumber`-Guard verhindert Doppelkauf); MIT Karte
 > bleibt `already_subscribed` ein reiner No-op, `subscription_conflict` unveraendert.
 > Geld-Invarianten unangetastet: Hold-vor-Order, Caps, KYC-Gate, PAYMENT_ENABLED.
+
+## PLAY-TTS — PII-Audio-Serve-Surface (ElevenLabs-Stimme via `<Play>`)
+
+> `GET /voice/tts/:token` ist auth-frei (VOR der `/voice`-Signaturpruefung registriert),
+> weil Telnyx diese URL SERVERSEITIG fetcht (kein Provider-Signatur-Header moeglich).
+> Absicherung: 256-bit-Token (`crypto.randomBytes(32)`, base64url), kurze TTL (Default
+> 60 s, `ELEVENLABS_TTS_TOKEN_TTL_MS`), EINMALIGER Abruf (`takeOnce` loescht sofort).
+> Der Store ist eine In-Memory-Seam (Port); **Multi-Replica ist ein bewusst akzeptiertes
+> Restrisiko** (heute Single-Instance; ein zweiter Prozess ohne den Token faellt auf
+> Stille statt Absturz zurueck, weil der Player-Abruf einfach 404 liefert — kein Call-
+> Kill). Der Port ist spaeter gegen einen Objekt-Store/CDN tauschbar, sobald mehrere
+> Replicas laufen. Kein Call/keine SMS/keine Kosten ueber diesen Endpunkt ausloesbar
+> (Regel 1 unberuehrt).
+>
+> Korrigierter Befund (A/B-belegt 2026-07-06): der fruehere ElevenLabs-**Relay**-Pfad
+> (`telnyxElevenLabs`, `<Say voice="ElevenLabs...">`) unterdrueckt den Inbound-Track —
+> Deepgram-STT liefert dabei LEER (Agent hoert den Angerufenen nicht). Der frühere
+> Code-Kommentar "STT bleibt UNBERUEHRT" war falsch und ist korrigiert. Der neue
+> Play-TTS-Pfad (server-seitige Vorab-Synthese + natives `<Play>` einer statischen
+> Datei) umgeht dieses Problem, weil Telnyx keinen Live-Relay-Stream aufbaut.

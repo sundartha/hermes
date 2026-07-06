@@ -25,10 +25,14 @@ export const DIRECTIVE = Object.freeze({
 // --- Builder (intentions-ausdrueckende Namen, <=3 Args via Objekt-Param) ---
 
 // Gesprochener Satz. voiceProfile ist ein VOICE_PROFILE-Wert.
-export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL) => ({
+// audioUrl (optional): vorab synthetisierte Audiodatei (Play-TTS-Seam, server.js).
+// Gesetzt -> der Renderer gibt <Play>url</Play> statt <Say>text</Say> aus. Weglassen
+// -> byte-identisch zum <Say>-Bestand.
+export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, audioUrl) => ({
   kind: DIRECTIVE.SAY,
   text,
   voiceProfile,
+  audioUrl,
 });
 
 // Sprach-Turn: optionaler Prompt (say im Gather) + Action-URL fuers Ergebnis.
@@ -36,12 +40,22 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL) => ({
 // speechTimeoutSec (optional, Sekunden): festes STT-Endpointing statt provider-Default
 // "auto" - gesetzt nur fuer Folge-Gathers (/voice/turn), nicht fuer den Erst-Gather.
 // Weglassen -> Renderer bleibt byte-identisch beim "auto"-Bestand.
+// promptAudioUrl (optional): wie audioUrl bei say, aber fuer den inneren Gather-Prompt
+// (<Play> statt innerem <Say>). Weglassen -> byte-identisch (Muster speechTimeoutSec).
 export const gather = ({
   promptText,
   action,
   voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL,
   speechTimeoutSec,
-}) => ({ kind: DIRECTIVE.GATHER, promptText, action, voiceProfile, speechTimeoutSec });
+  promptAudioUrl,
+}) => ({
+  kind: DIRECTIVE.GATHER,
+  promptText,
+  action,
+  voiceProfile,
+  speechTimeoutSec,
+  promptAudioUrl,
+});
 
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
 

@@ -136,6 +136,30 @@ export const config = {
     model: process.env.TELNYX_ELEVENLABS_MODEL || "Default",
   },
 
+  // Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT vom
+  // Relay-Block telnyxElevenLabs oben: dort baut Telnyx einen Live-Relay-Stream (der den
+  // Inbound-Track unterdrueckt -> STT leer, A/B-belegt); HIER synthetisiert unser Server
+  // die mp3 vorab und Telnyx spielt eine STATISCHE Datei -> Inbound-Track lebt. Gate
+  // Default AUS (Muster PAYMENT_ENABLED) -> Azure-<Say> byte-identisch. apiKey ist SECRET.
+  elevenLabsPlayTts: {
+    enabled: (process.env.ELEVENLABS_PLAY_TTS_ENABLED || "false") === "true",
+    apiKey: process.env.ELEVENLABS_API_KEY || "", // SECRET, nie loggen/leaken
+    voiceId: process.env.ELEVENLABS_VOICE_ID || "",
+    model: process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5", // Latenz-optimiert
+    apiBase: (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").replace(/\/$/, ""),
+    outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128", // Owner-Wahl mp3
+    synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
+      fallback: 4000,
+      min: 500,
+      max: 10000,
+    }),
+    tokenTtlMs: numEnv("ELEVENLABS_TTS_TOKEN_TTL_MS", process.env.ELEVENLABS_TTS_TOKEN_TTL_MS, {
+      fallback: 60000,
+      min: 5000,
+      max: 600000,
+    }),
+  },
+
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
   // DEFAULT AUS (fail-closed): die Onboard-Route reicht KEINEN Billing-Client herein
@@ -156,23 +180,35 @@ export const config = {
   // UND den Stripe-Voice-Meter (recordVoiceMinuteMeter) - loest das fruehere
   // voiceMinuteCostCents auf. Inland (voiceTariffDomesticPrefixes) guenstig, alles andere
   // Worst-Case-Default. Konservativ gesetzt; live mit dem Provider-Tarif abgleichen.
-  voiceTariffDomesticCents: numEnv("VOICE_TARIFF_DOMESTIC_CENTS", process.env.VOICE_TARIFF_DOMESTIC_CENTS, {
-    fallback: 20,
-    min: 0,
-  }),
-  voiceTariffDefaultCents: numEnv("VOICE_TARIFF_DEFAULT_CENTS", process.env.VOICE_TARIFF_DEFAULT_CENTS, {
-    fallback: 300,
-    min: 0,
-  }),
+  voiceTariffDomesticCents: numEnv(
+    "VOICE_TARIFF_DOMESTIC_CENTS",
+    process.env.VOICE_TARIFF_DOMESTIC_CENTS,
+    {
+      fallback: 20,
+      min: 0,
+    },
+  ),
+  voiceTariffDefaultCents: numEnv(
+    "VOICE_TARIFF_DEFAULT_CENTS",
+    process.env.VOICE_TARIFF_DEFAULT_CENTS,
+    {
+      fallback: 300,
+      min: 0,
+    },
+  ),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26) beim Registrieren (D5): nimmt
   // jeden neuen Tenant aus dem geteilten globalen Pool (sonst effectiveCapEur = maxBudgetEur).
   // 0 = kein Default-Seed (Tenant faellt auf den globalen Cap). Globaler Backstop
   // (maxBudgetEur) bleibt PARALLEL (Schnittmenge, Regel 1) und wird NICHT angehoben.
-  defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
-    fallback: 1000,
-    min: 0,
-  }),
+  defaultTenantBudgetCents: numEnv(
+    "DEFAULT_TENANT_BUDGET_CENTS",
+    process.env.DEFAULT_TENANT_BUDGET_CENTS,
+    {
+      fallback: 1000,
+      min: 0,
+    },
+  ),
   // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede
   // erfolgreich gesendete Summary-SMS erzeugt ein USAGE_EVENT_KIND.SMS-Event mit diesem
   // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg;
@@ -380,11 +416,15 @@ export const config = {
   // laesst in-flight Requests fertig und flusht dann den Store; laeuft er laenger, kappt der
   // Watchdog hart mit exit(0). Default 8000 (Render sendet nach SIGTERM erst nach ~30s SIGKILL
   // -> Puffer, ohne den Deploy merklich zu bremsen). Max 30000 (< Render-SIGKILL). Min 0.
-  shutdownDrainTimeoutMs: numEnv("SHUTDOWN_DRAIN_TIMEOUT_MS", process.env.SHUTDOWN_DRAIN_TIMEOUT_MS, {
-    fallback: 8000,
-    min: 0,
-    max: 30000,
-  }),
+  shutdownDrainTimeoutMs: numEnv(
+    "SHUTDOWN_DRAIN_TIMEOUT_MS",
+    process.env.SHUTDOWN_DRAIN_TIMEOUT_MS,
+    {
+      fallback: 8000,
+      min: 0,
+      max: 30000,
+    },
+  ),
   // STT-Endpointing fuer Folge-Gathers (/voice/turn, Budget-Engine): fester
   // speechTimeout in Sekunden statt "auto". "auto" finalisiert auf der ERSTEN
   // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,

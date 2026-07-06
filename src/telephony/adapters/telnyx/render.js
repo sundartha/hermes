@@ -57,11 +57,15 @@ function attrString(obj) {
 // fail-closed: ElevenLabs NUR wenn apiKeyRef UND voiceId gesetzt, sonst Azure-
 // Bestand byte-identisch - ein halbes/leeres Env ist ein Betriebszustand, kein
 // Programmierfehler, und darf kein laufendes Gespraech toeten (anders als das
-// werfende voiceAttrs beim Code-Enum voiceProfile). STT bleibt UNBERUEHRT
-// (gatherAttrs unten - Telnyx unterstuetzt ElevenLabs nur fuer TTS). Risiken im
-// Live-Smoke-Gate (tasks/todo.md): Telnyx-Verhalten bei leerem ElevenLabs-Guthaben/
-// ungueltigem Key ist undokumentiert (kein Auto-Fallback); die TTS-Zeichen aller
-// Tenants laufen ohne per-Tenant-Metering aufs Owner-ElevenLabs-Konto.
+// werfende voiceAttrs beim Code-Enum voiceProfile). KORRIGIERT (A/B-belegt
+// 2026-07-06): Der ElevenLabs-LIVE-RELAY unterdrueckt den Inbound-Track ->
+// Deepgram-STT liefert LEER (Agent hoert den Angerufenen NICHT). Die Relay-
+// Attribute bleiben als Referenz erhalten, sind aber NICHT der Sprech-Pfad der
+// Wahl. Native Wiedergabe einer vorab synthetisierten Datei via <Play> (audioUrl,
+// server.js Play-TTS-Seam) laesst den Inbound-Track leben - das ist der aktive Weg.
+// Risiken im Live-Smoke-Gate (tasks/todo.md): Telnyx-Verhalten bei leerem
+// ElevenLabs-Guthaben/ungueltigem Key ist undokumentiert (kein Auto-Fallback); die
+// TTS-Zeichen aller Tenants laufen ohne per-Tenant-Metering aufs Owner-ElevenLabs-Konto.
 function sayVoiceAttrs(d, opts) {
   const el = opts.elevenLabs || {};
   if (el.apiKeyRef && el.voiceId)
@@ -72,7 +76,14 @@ function sayVoiceAttrs(d, opts) {
   return voiceAttrs(d.voiceProfile);
 }
 
+// <Play> einer vorab synthetisierten Audiodatei (native Telnyx-Wiedergabe, KEIN Relay).
+// Gemeinsam von renderSay und renderGather genutzt (eine Quelle, G5).
+function renderPlay(url) {
+  return `<Play>${escapeXml(url)}</Play>`;
+}
+
 function renderSay(d, opts) {
+  if (d.audioUrl) return renderPlay(d.audioUrl);
   return `<Say${attrString(sayVoiceAttrs(d, opts))}>${escapeXml(d.text)}</Say>`;
 }
 
@@ -109,8 +120,17 @@ function gatherAttrs(d) {
 
 function renderGather(d, opts) {
   const open = `<Gather${attrString(gatherAttrs(d))} action="${escapeXml(d.action)}" method="POST">`;
-  if (!d.promptText) return open.replace(/>$/, "/>");
-  return `${open}${renderSay({ text: d.promptText, voiceProfile: d.voiceProfile }, opts)}</Gather>`;
+  const prompt = gatherPrompt(d, opts);
+  if (!prompt) return open.replace(/>$/, "/>");
+  return `${open}${prompt}</Gather>`;
+}
+
+// Prompt-Inhalt des Gathers: vorab synthetisiertes Audio (promptAudioUrl) -> <Play>,
+// sonst der bestehende innere <Say> (byte-identisch), leer -> "" (self-closing oben).
+function gatherPrompt(d, opts) {
+  if (d.promptAudioUrl) return renderPlay(d.promptAudioUrl);
+  if (d.promptText) return renderSay({ text: d.promptText, voiceProfile: d.voiceProfile }, opts);
+  return "";
 }
 
 // Realtime-Media-Stream als TeXML <Connect><Stream> mit <Parameter>-Kindern.
@@ -146,5 +166,10 @@ function renderDirective(d, opts) {
 // byte-identisch zum Bestand (Azure).
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
 export function renderDirectives(directives, opts = {}) {
-  return XML_DECL + "<Response>" + directives.map((d) => renderDirective(d, opts)).join("") + "</Response>";
+  return (
+    XML_DECL +
+    "<Response>" +
+    directives.map((d) => renderDirective(d, opts)).join("") +
+    "</Response>"
+  );
 }
