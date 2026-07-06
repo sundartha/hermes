@@ -287,3 +287,32 @@ test("B(h) Idempotenz: zweiter Trigger-Kern kauft nicht doppelt (genau eine Numm
     "genau eine Nummer pro bezahltem Abo",
   );
 });
+
+test("A(k) Perioden-Anker aus items.data[0] landet im setTenantSubscription-Patch (Quota-Fenster-Fix)", async () => {
+  const deps = fakeDeps();
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: {
+        object: {
+          id: "sub_q",
+          status: "active",
+          items: { data: [{ current_period_start: 1890864000, current_period_end: 1893456000 }] },
+          metadata: { tenant_ref: "t_q", plan_slug: "business" },
+        },
+      },
+    },
+    deps,
+  );
+  assert.deepEqual(deps.calls.subscription, [
+    [
+      "t_q",
+      {
+        subscriptionId: "sub_q",
+        planSlug: "business",
+        currentPeriodEnd: 1893456000,
+        currentPeriodStart: 1890864000,
+      },
+    ],
+  ], "Anker aus dem Item persistiert (kein leeres Quota-Fenster)");
+});

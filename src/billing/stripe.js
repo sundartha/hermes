@@ -14,7 +14,7 @@
 //   cancel:  POST /v1/payment_intents/{id}/cancel
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
 import { config } from "../config.js";
-import { paymentMethodIdOf } from "./webhook.js"; // G5: EINE default_payment_method-Normalisierung
+import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -90,19 +90,6 @@ async function assertOkWithDetail(res, op) {
 }
 
 const url = (path) => config.stripeApiBase + path;
-
-// Die aktuelle Stripe-API liefert current_period_end/-start NICHT mehr top-level
-// an der Subscription, sondern pro Item (items.data[0]). Fallback auf top-level
-// fuer aeltere API-Versionen -> kein leeres Perioden-/Quota-Fenster. Gemeinsam
-// fuer createSubscription UND getSubscriptionCheckoutResult (G5: eine Quelle,
-// beide lesen dieselbe Subscription-Form).
-function periodFieldsOf(subLike) {
-  const item = subLike.items && subLike.items.data && subLike.items.data[0];
-  return {
-    currentPeriodStart: (item && item.current_period_start) ?? subLike.current_period_start,
-    currentPeriodEnd: (item && item.current_period_end) ?? subLike.current_period_end,
-  };
-}
 
 /** @type {import("./ports.js").BillingPort} */
 export const stripeBilling = {

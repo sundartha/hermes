@@ -191,3 +191,19 @@ test("interpretStripeEvent: activate traegt customerId + paymentMethodId (String
   assert.equal(missing.customerId, null, "fehlt -> null (Bestandsform bleibt wirkungslos)");
   assert.equal(missing.paymentMethodId, null);
 });
+
+test("interpretStripeEvent: Perioden-Anker aus items.data[0] (aktuelle API-Form, kein top-level current_period_*)", () => {
+  const r = interpretStripeEvent({
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    data: {
+      object: {
+        id: "sub_1",
+        status: "active",
+        items: { data: [{ current_period_start: 1890864000, current_period_end: 1893456000 }] },
+        metadata: { tenant_ref: "t_a" },
+      },
+    },
+  });
+  assert.equal(r.currentPeriodStart, 1890864000, "Anker aus dem Item (Fallback-Quelle)");
+  assert.equal(r.currentPeriodEnd, 1893456000);
+});

@@ -443,6 +443,8 @@ test("(16) return ?plan=starter nach Webhook-gewonnenem Rennen (Abo gespeichert,
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripePaymentMethodId, "pm_b", "Karte aus der verifizierten Session gebunden");
     assert.equal(t.stripeSubscriptionId, "sub_old", "bestehendes Abo bleibt unveraendert");
+    assert.equal(t.stripeCurrentPeriodStart, PERIOD_START, "Perioden-Anker aus der Session nachgezogen (Quota-Fenster)");
+    assert.equal(t.stripeCurrentPeriodEnd, PERIOD_END);
     assert.deepEqual(s.provisionSpy, [TENANT], "Heilung stoesst das idempotente Provisioning an");
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "active", "Aktivierung laeuft wie im ok-Pfad");

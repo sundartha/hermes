@@ -92,7 +92,7 @@ export function interpretStripeEvent(event) {
   const object = (event && event.data && event.data.object) || {};
   switch (event && event.type) {
     case SUBSCRIPTION_EVENT.CREATED:
-    case SUBSCRIPTION_EVENT.UPDATED:
+    case SUBSCRIPTION_EVENT.UPDATED: {
       // Nur eine bestaetigte Subscription (status active/trialing) oeffnet Gate +
       // Provisioning. incomplete/past_due/unpaid/... -> ignore: kein faelschliches
       // Gate-Open fuer eine unbezahlte Subscription, keine Re-Aktivierung eines gerade
@@ -100,19 +100,24 @@ export function interpretStripeEvent(event) {
       if (!CONFIRMED_SUBSCRIPTION_STATUS.has(object.status)) {
         return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
       }
+      // Perioden-Anker ueber periodFieldsOf (items.data[0]-Fallback): aktuelle
+      // API-Versionen tragen die Felder NUR am Item - ohne Fallback bliebe der
+      // Quota-/Gate-Anker leer (fail-closed 0 Minuten).
+      const period = periodFieldsOf(object);
       return {
         action: WEBHOOK_ACTION.ACTIVATE,
         tenantRef: tenantRefOf(object),
         subscriptionId: object.id ?? null,
         planSlug: planSlugOf(object),
-        currentPeriodEnd: object.current_period_end ?? null,
-        currentPeriodStart: object.current_period_start ?? null,
+        currentPeriodEnd: period.currentPeriodEnd ?? null,
+        currentPeriodStart: period.currentPeriodStart ?? null,
         // Race-Fix: das Event traegt customer + default_payment_method (signatur-
         // verifiziert) - damit kann der Webhook-Pfad die Karte selbst binden, statt
         // auf den Browser-Return zu warten (s. applyStripeWebhook).
         customerId: object.customer ?? null,
         paymentMethodId: paymentMethodIdOf(object.default_payment_method),
       };
+    }
     case SUBSCRIPTION_EVENT.DELETED:
       return {
         action: WEBHOOK_ACTION.SUSPEND,
@@ -141,6 +146,20 @@ export function interpretStripeEvent(event) {
 export function paymentMethodIdOf(defaultPaymentMethod) {
   if (typeof defaultPaymentMethod === "string") return defaultPaymentMethod;
   return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
+}
+
+// Die aktuelle Stripe-API liefert current_period_end/-start NICHT mehr top-level an
+// der Subscription, sondern pro Item (items.data[0]); Fallback auf top-level fuer
+// aeltere API-Versionen. Ohne diesen Fallback persistierte der Webhook-Pfad ein Abo
+// OHNE Perioden-Anker -> quotaView/planMinutesExceeded fail-closed = "0 von X min"
+// trotz frischem Abo (Live-Befund 2026-07-06). EINE Quelle (G5) wie paymentMethodIdOf:
+// stripe.js (createSubscription/getSubscriptionCheckoutResult) importiert von hier.
+export function periodFieldsOf(subLike) {
+  const item = subLike.items && subLike.items.data && subLike.items.data[0];
+  return {
+    currentPeriodStart: (item && item.current_period_start) ?? subLike.current_period_start,
+    currentPeriodEnd: (item && item.current_period_end) ?? subLike.current_period_end,
+  };
 }
 
 // tenant_ref aus der Event-Metadata (createSubscription gibt es mit). Fehlt -> null

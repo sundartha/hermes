@@ -160,6 +160,17 @@ export async function activateSubscriptionFromCheckoutSession({
         customerId: outcome.customerId,
         paymentMethodId: outcome.paymentMethodId,
       });
+      // Heilung komplett machen: auch die Abo-Referenzen aus der Session persistieren
+      // (identische subscriptionId -> idempotent). Fuellt insbesondere den Perioden-
+      // Anker (currentPeriodStart/End), falls der Webhook-Write ihn nicht trug -
+      // ohne Anker zeigte quotaView fail-closed 0 Minuten und das Plan-Minuten-Gate
+      // blockte Outbound trotz frischem Abo.
+      store.setTenantSubscription(tenant, {
+        subscriptionId: outcome.subscriptionId,
+        planSlug: outcome.planSlug,
+        currentPeriodEnd: outcome.currentPeriodEnd,
+        currentPeriodStart: outcome.currentPeriodStart,
+      });
       const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
       return { ok: false, reason: "already_subscribed", profile };
     }
