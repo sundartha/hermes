@@ -136,6 +136,30 @@ export const config = {
     model: process.env.TELNYX_ELEVENLABS_MODEL || "Default",
   },
 
+  // Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT vom
+  // Relay-Block telnyxElevenLabs oben: dort baut Telnyx einen Live-Relay-Stream (der den
+  // Inbound-Track unterdrueckt -> STT leer, A/B-belegt); HIER synthetisiert unser Server
+  // die mp3 vorab und Telnyx spielt eine STATISCHE Datei -> Inbound-Track lebt. Gate
+  // Default AUS (Muster PAYMENT_ENABLED) -> Azure-<Say> byte-identisch. apiKey ist SECRET.
+  elevenLabsPlayTts: {
+    enabled: (process.env.ELEVENLABS_PLAY_TTS_ENABLED || "false") === "true",
+    apiKey: process.env.ELEVENLABS_API_KEY || "", // SECRET, nie loggen/leaken
+    voiceId: process.env.ELEVENLABS_VOICE_ID || "",
+    model: process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5", // Latenz-optimiert
+    apiBase: (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").replace(/\/$/, ""),
+    outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128", // Owner-Wahl mp3
+    synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
+      fallback: 4000,
+      min: 500,
+      max: 10000,
+    }),
+    tokenTtlMs: numEnv("ELEVENLABS_TTS_TOKEN_TTL_MS", process.env.ELEVENLABS_TTS_TOKEN_TTL_MS, {
+      fallback: 60000,
+      min: 5000,
+      max: 600000,
+    }),
+  },
+
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
   // DEFAULT AUS (fail-closed): die Onboard-Route reicht KEINEN Billing-Client herein

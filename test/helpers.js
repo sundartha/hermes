@@ -111,6 +111,16 @@ export const BASE_ENV = {
   TELNYX_ELEVENLABS_API_KEY_REF: "",
   TELNYX_ELEVENLABS_VOICE_ID: "",
   TELNYX_ELEVENLABS_MODEL: "",
+  // Play-TTS neutral aus (Gate = ELEVENLABS_PLAY_TTS_ENABLED=false -> Azure-Bestand).
+  // Ohne diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
+  ELEVENLABS_PLAY_TTS_ENABLED: "false",
+  ELEVENLABS_API_KEY: "",
+  ELEVENLABS_VOICE_ID: "",
+  ELEVENLABS_MODEL: "",
+  ELEVENLABS_API_BASE: "",
+  ELEVENLABS_OUTPUT_FORMAT: "",
+  ELEVENLABS_SYNTH_TIMEOUT_MS: "4000",
+  ELEVENLABS_TTS_TOKEN_TTL_MS: "60000",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.

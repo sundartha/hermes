@@ -33,6 +33,8 @@ import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO, BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
+import { synthesizeSpeech } from "./tts/synth.js";
+import { createTtsStore } from "./tts/store.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual, hashEmail } from "./util.js";
@@ -46,6 +48,7 @@ import {
   numberProvisioning,
 } from "./telephony/registry.js";
 import {
+  DIRECTIVE,
   say as sayD,
   gather as gatherD,
   hangup as hangupD,
@@ -453,6 +456,21 @@ app.use((req, res, next) => {
 });
 app.use(express.static(config.publicDir));
 
+// Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII).
+const ttsStore = createTtsStore({ ttlMs: config.elevenLabsPlayTts.tokenTtlMs });
+
+// AUTH-AUSNAHME (Regel 3, begruendet): oeffentlich erreichbar, weil Telnyx diese URL
+// SERVERSEITIG fetcht (kein Provider-Signatur-Header) - deshalb bewusst VOR der
+// /voice-Signaturpruefung registriert (sonst 403). Loest KEINEN Call/keine SMS/keine
+// Kosten aus (Regel 1 unberuehrt); die einzige Absicherung der PII-Audio ist der
+// kryptografisch unratbare Token + kurze TTL + EINMALIGER Abruf (takeOnce). Kein Log
+// von Token/Bytes (kein PII/Secret-Leak, Regel 4).
+app.get("/voice/tts/:token", (req, res) => {
+  const audio = ttsStore.takeOnce(req.params.token);
+  if (!audio) return res.status(404).end();
+  res.type(audio.contentType).send(audio.bytes);
+});
+
 // ---- Inbound-Signaturpruefung fuer alle /voice-Webhooks (fail-closed) ----
 // Der Provider signiert jeden Request. Ohne diese Pruefung kann jeder, der die URL
 // kennt, Anrufe/Transkripte faelschen und Claude-Turns (=Kosten) ausloesen. Die
@@ -805,6 +823,43 @@ function followupTurnDirectives(call, text) {
   return turnDirectives(call, text, { speechTimeoutSec: config.sttSpeechTimeoutSec });
 }
 
+// Play-TTS-Einwebung (fail-safe): synthetisiert die gesprochenen Texte einer Direktiven-
+// Liste zur Webhook-Zeit (hartes Timeout in synthesizeSpeech), legt die Bytes in den
+// ttsStore und webt die Serve-URL als audioUrl/promptAudioUrl ein -> der Telnyx-Renderer
+// gibt <Play> statt <Say>. Flag AUS oder Nicht-Telnyx oder Synth-Fehler/Timeout -> Liste
+// UNVERAENDERT zurueck -> Azure-<Say> byte-identisch (NIE den Call toeten). Genau EIN
+// sprechender Text pro Turn -> genau ein Synth-Call pro Webhook.
+async function synthesizeDirectiveAudio(call, directives) {
+  const cfg = config.elevenLabsPlayTts;
+  if (!cfg.enabled || call.provider !== PROVIDER.TELNYX) return directives;
+  const out = [];
+  for (const d of directives) out.push(await withPlayAudio(d, cfg));
+  return out;
+}
+
+async function withPlayAudio(d, cfg) {
+  const text = d.kind === DIRECTIVE.GATHER ? d.promptText : d.kind === DIRECTIVE.SAY ? d.text : "";
+  if (!text) return d;
+  const url = await synthToServeUrl(text, cfg);
+  if (!url) return d; // fail-safe -> Azure-<Say>
+  return d.kind === DIRECTIVE.GATHER ? { ...d, promptAudioUrl: url } : { ...d, audioUrl: url };
+}
+
+async function synthToServeUrl(text, cfg) {
+  const result = await synthesizeSpeech(text, {
+    fetchImpl: fetch,
+    apiKey: cfg.apiKey,
+    voiceId: cfg.voiceId,
+    model: cfg.model,
+    apiBase: cfg.apiBase,
+    outputFormat: cfg.outputFormat,
+    timeoutMs: cfg.synthTimeoutMs,
+  });
+  if (!result.ok) return null;
+  const token = ttsStore.put(result.bytes, result.contentType);
+  return `${config.publicUrl}/voice/tts/${token}`;
+}
+
 // Gesprochene Degradations-/Reprompt-Texte fuer den /voice/turn-Fehlerpfad leben seit
 // F1 P4 sprachabhaengig im Locale-Bundle (i18n/locales.js, eine Quelle pro Sprache):
 //   llmDegradedSpeech  - wuerdevolles Ende bei anhaltender LLM-Nichtverfuegbarkeit
@@ -919,60 +974,84 @@ function armReserveReleaseTimer(call) {
 // vor der Signatur waere Tenant-Spoofing). Unbekannte/fehlende To -> hoeflicher
 // Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet
 // nichts).
-app.post("/voice/incoming", (req, res) => {
+app.post("/voice/incoming", async (req, res) => {
   // Provider EINMAL aus dem (bereits fail-closed signatur-geprueften) Header
   // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> Default
   // twilio -> byte-identisch zum Bestand. Quelle ist der Signatur-Header, nicht
   // To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
   const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
-  const to = normNum(req.body.To);
-  // EIN Lookup liefert tenantId UND number.language (F1 P4, §0-A: die angerufene Nummer
-  // ist der Geo-Anker). null = unbekannte/nicht-aktive Nummer -> fail-closed Hangup.
-  const numberRecord = store.numberRecordByE164(to);
-  if (!numberRecord) {
-    audit("inbound_unrouted", req, `to=${to || "-"}`);
-    // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
-    // (byte-identisch zum Bestand, nicht ueber-engineeren).
-    return res
+  // S1-1: kompletter Handler-Body in try/catch. Seit await synthesizeDirectiveAudio
+  // ist dieser Handler async - Express 4 faengt Promise-Rejections aus async-Handlern
+  // NICHT ab, eine Exception ohne try/catch wuerde zur stillen unhandledRejection statt
+  // einer Antwort, der eingehende Anruf haenge bis zum Provider-Timeout. call bleibt
+  // ausserhalb sichtbar (let statt const), damit der Fehlerpfad - falls die Exception
+  // erst NACH der Call-Erzeugung auftritt - dieselbe Sprache wie der Erfolgspfad
+  // spricht; vor der Erzeugung faellt localeFor(undefined) fail-safe auf DE zurueck
+  // (wie der Unrouted-Pfad unten).
+  let call;
+  try {
+    const to = normNum(req.body.To);
+    // EIN Lookup liefert tenantId UND number.language (F1 P4, §0-A: die angerufene Nummer
+    // ist der Geo-Anker). null = unbekannte/nicht-aktive Nummer -> fail-closed Hangup.
+    const numberRecord = store.numberRecordByE164(to);
+    if (!numberRecord) {
+      audit("inbound_unrouted", req, `to=${to || "-"}`);
+      // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
+      // (byte-identisch zum Bestand, nicht ueber-engineeren).
+      return res
+        .type("text/xml")
+        .send(
+          render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
+        );
+    }
+    const tenantId = numberRecord.tenantId;
+    // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
+    // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
+    const language = store.resolveCallLanguage({ tenantId, numberRecord });
+    const locale = localeFor(language);
+
+    // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
+    // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
+    if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
+      return res
+        .type("text/xml")
+        .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
+    }
+
+    call = store.createCall({
+      direction: "inbound",
+      from: req.body.From || "unbekannt",
+      to,
+      twilioSid: req.body.CallSid,
+      tenantId,
+      provider,
+      language,
+    });
+    store.markAnswered(call.id);
+    armMaxDurationTimer(call, req.body.CallSid);
+
+    if (config.voiceEngine === "realtime") {
+      return res.type("text/xml").send(render(streamDirectives(call), provider));
+    }
+
+    const ctx = store.tenantContext(call.tenantId);
+    const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
+    store.addTranscript(call.id, "agent", greeting);
+    res
       .type("text/xml")
-      .send(
-        render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
-      );
+      .send(render(await synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
+  } catch (err) {
+    console.error("[incoming]", err.message);
+    // S1-1: gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt /voice/turn,
+    // Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
+    // turnErrorSpeech (kein llmDegradedSpeech-Fall wie bei /voice/turn). Vor der Call-
+    // Erzeugung gibt es noch kein call.provider fuer synthesizeDirectiveAudio (der Guard
+    // dort wuerde selbst werfen) -> reines Azure-<Say> wie der Unrouted-Pfad oben.
+    const locale = localeFor(call?.language);
+    const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
+    const outDirectives = call ? await synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
+    res.type("text/xml").send(render(outDirectives, provider));
   }
-  const tenantId = numberRecord.tenantId;
-  // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
-  // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
-  const language = store.resolveCallLanguage({ tenantId, numberRecord });
-  const locale = localeFor(language);
-
-  // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
-  // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
-  if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
-    return res
-      .type("text/xml")
-      .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
-  }
-
-  const call = store.createCall({
-    direction: "inbound",
-    from: req.body.From || "unbekannt",
-    to,
-    twilioSid: req.body.CallSid,
-    tenantId,
-    provider,
-    language,
-  });
-  store.markAnswered(call.id);
-  armMaxDurationTimer(call, req.body.CallSid);
-
-  if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(render(streamDirectives(call), provider));
-  }
-
-  const ctx = store.tenantContext(call.tenantId);
-  const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
-  store.addTranscript(call.id, "agent", greeting);
-  res.type("text/xml").send(render(turnDirectives(call, greeting), provider));
 });
 
 // F12 (A6): Ein Deploy-/Instanzwechsel kann einen laufenden Call aus dem Prozess-Spiegel
@@ -1026,21 +1105,19 @@ app.post("/voice/turn", async (req, res) => {
   try {
     if (!heard && call.transcript.some((t) => t.role === "caller")) {
       metrics.recordTurnRendered(call.id); // L0: Folge-Gather offen -> Render-Zeitpunkt
+      const reprompt = followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt);
       return res
         .type("text/xml")
-        .send(
-          render(
-            followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt),
-            call.provider,
-          ),
-        );
+        .send(render(await synthesizeDirectiveAudio(call, reprompt), call.provider));
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
     const directives = endCall
       ? [sayInCallVoice(call, speech), hangupD()]
       : followupTurnDirectives(call, speech);
     if (!endCall) metrics.recordTurnRendered(call.id); // L0: nur wenn ein Folge-Turn folgt
-    res.type("text/xml").send(render(directives, call.provider));
+    res
+      .type("text/xml")
+      .send(render(await synthesizeDirectiveAudio(call, directives), call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
     // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit
@@ -1053,7 +1130,10 @@ app.post("/voice/turn", async (req, res) => {
     const locale = localeFor(call.language);
     const speech =
       err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
-    res.type("text/xml").send(render([sayInCallVoice(call, speech), hangupD()], call.provider));
+    const errorDirectives = [sayInCallVoice(call, speech), hangupD()];
+    res
+      .type("text/xml")
+      .send(render(await synthesizeDirectiveAudio(call, errorDirectives), call.provider));
   }
 });
 
@@ -1090,7 +1170,11 @@ app.post("/voice/outbound", async (req, res) => {
   // erste LLM-Turn (/voice/turn) wiederholt es nicht (systemPrompt-Hinweis).
   const opening = openingText(call);
   store.addTranscript(call.id, "agent", opening);
-  res.type("text/xml").send(render(turnDirectives(call, opening), call.provider));
+  res
+    .type("text/xml")
+    .send(
+      render(await synthesizeDirectiveAudio(call, turnDirectives(call, opening)), call.provider),
+    );
 });
 
 const MS_PER_MINUTE = 60 * 1000;
