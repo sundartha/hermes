@@ -26,7 +26,12 @@ export async function synthesizeSpeech(text, opts) {
       body: JSON.stringify({ text, model_id: model }),
       signal: controller.signal,
     });
-    if (!res.ok) return { ok: false, reason: `http_${res.status}` };
+    if (!res.ok) {
+      // ElevenLabs-Fehlerdetail (JSON mit status/message, KEIN gesprochener Text/Secret)
+      // fuer die Diagnose mitgeben, gekappt. res.text kann im Test fehlen -> defensiv.
+      const detail = typeof res.text === "function" ? (await res.text().catch(() => "")).slice(0, 300) : "";
+      return { ok: false, reason: `http_${res.status}`, detail };
+    }
     const bytes = Buffer.from(await res.arrayBuffer());
     return { ok: true, bytes, contentType: res.headers.get("content-type") || "audio/mpeg" };
   } catch (err) {

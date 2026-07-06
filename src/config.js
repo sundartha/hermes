@@ -143,11 +143,15 @@ export const config = {
   // Default AUS (Muster PAYMENT_ENABLED) -> Azure-<Say> byte-identisch. apiKey ist SECRET.
   elevenLabsPlayTts: {
     enabled: (process.env.ELEVENLABS_PLAY_TTS_ENABLED || "false") === "true",
-    apiKey: process.env.ELEVENLABS_API_KEY || "", // SECRET, nie loggen/leaken
-    voiceId: process.env.ELEVENLABS_VOICE_ID || "",
-    model: process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5", // Latenz-optimiert
-    apiBase: (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").replace(/\/$/, ""),
-    outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128", // Owner-Wahl mp3
+    // .trim() gegen manuell eingegebenen Whitespace: ein Trailing-Space in voiceId/model/
+    // outputFormat wird von encodeURIComponent zu %20 -> ElevenLabs lehnt mit HTTP 400 ab
+    // (live belegt). apiKey getrimmt gegen pasted Newline. Solche Werte tragen NIE legitim
+    // umgebenden Whitespace, das Trimmen ist reine Haertung.
+    apiKey: (process.env.ELEVENLABS_API_KEY || "").trim(), // SECRET, nie loggen/leaken
+    voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
+    model: (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim(), // Latenz-optimiert
+    apiBase: (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim().replace(/\/$/, ""),
+    outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(), // Owner-Wahl mp3
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
       fallback: 4000,
       min: 500,

@@ -43,10 +43,16 @@ test("Erfolg -> {ok:true, bytes, contentType}; Body traegt model_id, URL traegt 
   assert.equal(seenHeaders["xi-api-key"], SECRET_KEY, "Key geht NUR als Header raus");
 });
 
-test("HTTP-Fehler (4xx/5xx) -> {ok:false, reason:'http_<status>'}, kein Wurf", async () => {
-  const fetchImpl = async () => ({ ok: false, status: 500 });
+test("HTTP-Fehler (4xx/5xx) -> {ok:false, reason:'http_<status>', detail}, kein Wurf", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 500, text: async () => "boom detail" });
   const result = await synthesizeSpeech("x", { ...baseOpts(), fetchImpl });
-  assert.deepEqual(result, { ok: false, reason: "http_500" });
+  assert.deepEqual(result, { ok: false, reason: "http_500", detail: "boom detail" });
+});
+
+test("HTTP-Fehler ohne res.text (defensiv) -> detail:'' , kein Wurf", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 400 });
+  const result = await synthesizeSpeech("x", { ...baseOpts(), fetchImpl });
+  assert.deepEqual(result, { ok: false, reason: "http_400", detail: "" });
 });
 
 test("Abbruch/Timeout -> {ok:false, reason:'timeout'}, kein Wurf, kein haengender Call", async () => {

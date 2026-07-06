@@ -859,7 +859,8 @@ async function synthToServeUrl(text, cfg) {
     // Beobachtbarkeit: stille Degradation auf Azure sichtbar machen (Betriebs-Symptom
     // "Call verbindet, aber Azure statt ElevenLabs"). reason ist ein grober Code
     // (http_<status>/timeout/error), NIE der Key/Secret.
-    console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}) -> Azure-Fallback`);
+    const detail = result.detail ? `: ${result.detail}` : "";
+    console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}${detail}) -> Azure-Fallback`);
     return null;
   }
   const token = ttsStore.put(result.bytes, result.contentType);
