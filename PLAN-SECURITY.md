@@ -103,7 +103,7 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 >
 > Korrigierter Befund (A/B-belegt 2026-07-06): der fruehere ElevenLabs-**Relay**-Pfad
 > (`telnyxElevenLabs`, `<Say voice="ElevenLabs...">`) unterdrueckt den Inbound-Track —
-> Deepgram-STT liefert dabei LEER (Agent hoert den Angerufenen nicht). Der frühere
+> Deepgram-STT liefert dabei LEER (Agent hoert den Angerufenen nicht). Der fruehere
 > Code-Kommentar "STT bleibt UNBERUEHRT" war falsch und ist korrigiert. Der neue
 > Play-TTS-Pfad (server-seitige Vorab-Synthese + natives `<Play>` einer statischen
 > Datei) umgeht dieses Problem, weil Telnyx keinen Live-Relay-Stream aufbaut.

@@ -39,11 +39,12 @@ const DEFAULT_CALL_ID = "call_harness1";
 // Provider-Webhooks erwarten eine CallSid im Body (Test-Fixture, wie im Bestand).
 const CALL_SID = "CAtest";
 
-// Faehrt /voice/outbound (LLM-frei) lokal und liefert den gerenderten Provider-Body
-// (TwiML/TeXML) samt Status/Content-Type/stdout. Der Server wird intern geschlossen
-// (kein srv-Handle nach aussen -> keine vom Aufrufer zu wahrende Stop-Reihenfolge,
-// G31). call-Overrides ergaenzen den seedCall; seed-Overrides ergaenzen den Store.
-export async function runOutbound({ provider = "twilio", call = {}, seed = {}, env = {} } = {}) {
+// Server + Seed fuer einen /voice/outbound-Testaufruf starten (G5: EINE Spawn-Quelle
+// fuer runOutbound UND runOutboundKeepOpen, statt der frueheren Kopie in
+// voice-play-tts.test.js, S2). call-Overrides ergaenzen den seedCall; seed-Overrides
+// ergaenzen den Store. Liefert das srv-Handle + die fuer den Fetch noetige id;
+// Schliessen des Servers ist Sache der Aufrufer unten.
+async function startOutboundServer({ provider = "twilio", call = {}, seed = {}, env = {} } = {}) {
   const id = call.id || DEFAULT_CALL_ID;
   const srv = await startServer({
     env,
@@ -52,21 +53,43 @@ export async function runOutbound({ provider = "twilio", call = {}, seed = {}, e
       ...seed,
     }),
   });
+  return { srv, id };
+}
+
+// Faehrt /voice/outbound auf einem bereits gestarteten Server und liefert den
+// gerenderten Provider-Body (TwiML/TeXML) samt Status/Content-Type.
+async function fetchOutbound(srv, id) {
+  const res = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
+    method: "POST",
+    body: new URLSearchParams({ CallSid: CALL_SID }),
+  });
+  const body = await res.text();
+  return { body, status: res.status, contentType: res.headers.get("content-type") };
+}
+
+// Faehrt /voice/outbound (LLM-frei) lokal und liefert den gerenderten Provider-Body
+// (TwiML/TeXML) samt Status/Content-Type/stdout. Der Server wird intern geschlossen
+// (kein srv-Handle nach aussen -> keine vom Aufrufer zu wahrende Stop-Reihenfolge,
+// G31). call-Overrides ergaenzen den seedCall; seed-Overrides ergaenzen den Store.
+export async function runOutbound(opts = {}) {
+  const { srv, id } = await startOutboundServer(opts);
   try {
-    const res = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
-      method: "POST",
-      body: new URLSearchParams({ CallSid: CALL_SID }),
-    });
-    const body = await res.text();
-    return {
-      body,
-      status: res.status,
-      contentType: res.headers.get("content-type"),
-      stdout: srv.stdout,
-    };
+    const result = await fetchOutbound(srv, id);
+    return { ...result, stdout: srv.stdout };
   } finally {
     await srv.stop();
   }
+}
+
+// Wie runOutbound, laesst das srv-Handle aber OFFEN (kein Boolean-Selektor-Arg,
+// eigener Name statt Flag, G15/F3 - Konvention aus followupTurnDirectives). Fuer
+// Tests, die NACH dem Turn noch etwas am laufenden Server pruefen muessen (z.B. den
+// ElevenLabs-Token-Abruf ueber /voice/tts/:token, voice-play-tts.test.js). Das
+// Schliessen (srv.stop()) liegt beim Aufrufer.
+export async function runOutboundKeepOpen(opts = {}) {
+  const { srv, id } = await startOutboundServer(opts);
+  const result = await fetchOutbound(srv, id);
+  return { ...result, srv };
 }
 
 // Zwei-Schritt-Kette: /voice/outbound (LLM-frei) -> /voice/turn (LLM-getrieben).

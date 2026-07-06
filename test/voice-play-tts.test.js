@@ -7,8 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { runOutbound } from "./_outbound-harness.js";
-import { startServer, seedState, seedCall } from "./helpers.js";
+import { runOutbound, runOutboundKeepOpen } from "./_outbound-harness.js";
 
 const FAKE_MP3_BYTES = Buffer.from([0x49, 0x44, 0x33, 0x01, 0x02, 0x03]); // Fake-"ID3"-Praefix
 
@@ -40,7 +39,8 @@ const PLAY_TTS_ENV_BASE = {
 test("Flag AN: /voice/outbound (Telnyx) rendert <Play> statt <Say>; Token liefert die Bytes GENAU EINMAL", async () => {
   const origin = await startFakeElevenLabsOrigin();
   try {
-    const { body, srv } = await runOutboundWithServer({
+    const { body, srv } = await runOutboundKeepOpen({
+      provider: "telnyx",
       env: {
         ...PLAY_TTS_ENV_BASE,
         ELEVENLABS_PLAY_TTS_ENABLED: "true",
@@ -76,21 +76,26 @@ test("Flag AUS: /voice/outbound (Telnyx) bleibt byte-identisch auf dem Azure-<Sa
   assert.doesNotMatch(body, /<Play>/, "Gate aus -> kein Play-Zweig");
 });
 
-// runOutbound (Harness) schliesst den Server intern - fuer den Token-Abruf danach
-// brauchen wir das srv-Handle offen. Duenner lokaler Wrapper (G5: identische
-// Server-/Seed-Verdrahtung wie runOutbound, nur ohne das interne stop()).
-async function runOutboundWithServer({ env }) {
-  const id = "call_play_tts";
-  const srv = await startServer({
-    env,
-    seed: seedState({
-      calls: [seedCall({ id, provider: "telnyx", status: "active", direction: "outbound" })],
-    }),
-  });
-  const res = await fetch(`${srv.localUrl}/voice/outbound?callId=${id}`, {
-    method: "POST",
-    body: new URLSearchParams({ CallSid: "CAtest" }),
-  });
-  const body = await res.text();
-  return { body, srv };
-}
+// S1-2: das Provider-Gate in synthesizeDirectiveAudio (call.provider !== PROVIDER.TELNYX
+// -> kein ElevenLabs-Call) war bislang ungetestet. Flag AN, aber provider=twilio: der
+// Twilio-Renderer bleibt byte-identisch auf Polly-<Say> (Twilio hat gar kein Azure/
+// ElevenLabs-Voice-Profil), UND am Fake-ElevenLabs-Origin darf KEIN Request ankommen -
+// das Gate darf niemals Twilio-Calls an ElevenLabs synthetisieren lassen (Kosten/Scope).
+test("Flag AN + provider=twilio: Renderer-Bestand unveraendert, KEIN Request an ElevenLabs (Twilio-Gate)", async () => {
+  const origin = await startFakeElevenLabsOrigin();
+  try {
+    const { body } = await runOutbound({
+      provider: "twilio",
+      env: {
+        ...PLAY_TTS_ENV_BASE,
+        ELEVENLABS_PLAY_TTS_ENABLED: "true",
+        ELEVENLABS_API_BASE: origin.url,
+      },
+    });
+    assert.match(body, /<Say voice="Polly\.Vicki-Neural"/, "Twilio-Bestand unveraendert (kein Azure/ElevenLabs)");
+    assert.doesNotMatch(body, /<Play>/, "Twilio-Gate: kein Play-Zweig, auch bei Flag AN");
+    assert.equal(origin.requests.length, 0, "Twilio-Gate: KEIN Synth-Request an ElevenLabs ausgeloest");
+  } finally {
+    await origin.close();
+  }
+});

@@ -980,56 +980,78 @@ app.post("/voice/incoming", async (req, res) => {
   // twilio -> byte-identisch zum Bestand. Quelle ist der Signatur-Header, nicht
   // To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
   const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
-  const to = normNum(req.body.To);
-  // EIN Lookup liefert tenantId UND number.language (F1 P4, §0-A: die angerufene Nummer
-  // ist der Geo-Anker). null = unbekannte/nicht-aktive Nummer -> fail-closed Hangup.
-  const numberRecord = store.numberRecordByE164(to);
-  if (!numberRecord) {
-    audit("inbound_unrouted", req, `to=${to || "-"}`);
-    // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
-    // (byte-identisch zum Bestand, nicht ueber-engineeren).
-    return res
+  // S1-1: kompletter Handler-Body in try/catch. Seit await synthesizeDirectiveAudio
+  // ist dieser Handler async - Express 4 faengt Promise-Rejections aus async-Handlern
+  // NICHT ab, eine Exception ohne try/catch wuerde zur stillen unhandledRejection statt
+  // einer Antwort, der eingehende Anruf haenge bis zum Provider-Timeout. call bleibt
+  // ausserhalb sichtbar (let statt const), damit der Fehlerpfad - falls die Exception
+  // erst NACH der Call-Erzeugung auftritt - dieselbe Sprache wie der Erfolgspfad
+  // spricht; vor der Erzeugung faellt localeFor(undefined) fail-safe auf DE zurueck
+  // (wie der Unrouted-Pfad unten).
+  let call;
+  try {
+    const to = normNum(req.body.To);
+    // EIN Lookup liefert tenantId UND number.language (F1 P4, §0-A: die angerufene Nummer
+    // ist der Geo-Anker). null = unbekannte/nicht-aktive Nummer -> fail-closed Hangup.
+    const numberRecord = store.numberRecordByE164(to);
+    if (!numberRecord) {
+      audit("inbound_unrouted", req, `to=${to || "-"}`);
+      // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
+      // (byte-identisch zum Bestand, nicht ueber-engineeren).
+      return res
+        .type("text/xml")
+        .send(
+          render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
+        );
+    }
+    const tenantId = numberRecord.tenantId;
+    // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
+    // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
+    const language = store.resolveCallLanguage({ tenantId, numberRecord });
+    const locale = localeFor(language);
+
+    // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
+    // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
+    if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
+      return res
+        .type("text/xml")
+        .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
+    }
+
+    call = store.createCall({
+      direction: "inbound",
+      from: req.body.From || "unbekannt",
+      to,
+      twilioSid: req.body.CallSid,
+      tenantId,
+      provider,
+      language,
+    });
+    store.markAnswered(call.id);
+    armMaxDurationTimer(call, req.body.CallSid);
+
+    if (config.voiceEngine === "realtime") {
+      return res.type("text/xml").send(render(streamDirectives(call), provider));
+    }
+
+    const ctx = store.tenantContext(call.tenantId);
+    const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
+    store.addTranscript(call.id, "agent", greeting);
+    res
       .type("text/xml")
-      .send(
-        render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
-      );
+      .send(render(await synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
+  } catch (err) {
+    console.error("[incoming]", err.message);
+    // S1-1: gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt /voice/turn,
+    // Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
+    // turnErrorSpeech (kein llmDegradedSpeech-Fall wie bei /voice/turn). Vor der Call-
+    // Erzeugung gibt es noch kein call.provider fuer synthesizeDirectiveAudio (der Guard
+    // dort wuerde selbst werfen) -> reines Azure-<Say> wie der Unrouted-Pfad oben.
+    const locale = localeFor(call?.language);
+    const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
+    const outDirectives = call ? await synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
+    res.type("text/xml").send(render(outDirectives, provider));
   }
-  const tenantId = numberRecord.tenantId;
-  // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
-  // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
-  const language = store.resolveCallLanguage({ tenantId, numberRecord });
-  const locale = localeFor(language);
-
-  // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
-  // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
-  if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
-    return res
-      .type("text/xml")
-      .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
-  }
-
-  const call = store.createCall({
-    direction: "inbound",
-    from: req.body.From || "unbekannt",
-    to,
-    twilioSid: req.body.CallSid,
-    tenantId,
-    provider,
-    language,
-  });
-  store.markAnswered(call.id);
-  armMaxDurationTimer(call, req.body.CallSid);
-
-  if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(render(streamDirectives(call), provider));
-  }
-
-  const ctx = store.tenantContext(call.tenantId);
-  const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
-  store.addTranscript(call.id, "agent", greeting);
-  res
-    .type("text/xml")
-    .send(render(await synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
 });
 
 // F12 (A6): Ein Deploy-/Instanzwechsel kann einen laufenden Call aus dem Prozess-Spiegel
