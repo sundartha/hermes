@@ -81,6 +81,7 @@ const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`
 async function setup({
   paymentEnabled = true,
   subscribed = false,
+  cardOnFile = false,
   configPatch = {},
   checkoutOutcome = {},
 } = {}) {
@@ -92,9 +93,14 @@ async function setup({
   const sessions = makeSessions(runner);
 
   // Store-Mirror: Tenant (status=ACTIVE per registerTenant-Default) + Customer ohne pm.
+  // cardOnFile -> zusaetzlich ein gebundenes payment_method (Zustand NACH einem
+  // abgeschlossenen ersten Return; unterscheidet Doppel-Redirect vom Webhook-Race).
   const s = store.load();
   ops.registerTenant(s, TENANT, { firstName: "Kunde", lastName: "BK2", idpSubject: SUB });
-  ops.setTenantStripe(s, TENANT, { customerId: CUSTOMER });
+  ops.setTenantStripe(s, TENANT, {
+    customerId: CUSTOMER,
+    ...(cardOnFile ? { paymentMethodId: "pm_old" } : {}),
+  });
   if (subscribed) {
     ops.setTenantSubscription(s, TENANT, {
       subscriptionId: "sub_old",
@@ -261,10 +267,16 @@ test("(6) return ?plan=gold (unbekannt) -> 302 card=ok, kein subscribe (Muell ve
   }
 });
 
-test("(7) return ?plan=starter bei bereits aboniertem Tenant, IDENTISCHE subscriptionId (Doppel-Redirect derselben Session) -> 302 sub=ok (idempotent-erfolgreich), kein Provisioning, altes Abo unveraendert", async () => {
-  // subscriptionId der Session == bereits gespeicherte Id: der reale Doppel-Redirect-
-  // Fall (Test 13 deckt denselben Sachverhalt ueber den echten Session-Roundtrip ab).
-  const s = await setup({ subscribed: true, checkoutOutcome: { subscriptionId: "sub_old" } });
+test("(7) return ?plan=starter bei bereits aboniertem Tenant MIT Karte, IDENTISCHE subscriptionId (Doppel-Redirect derselben Session) -> 302 sub=ok (idempotent-erfolgreich), kein Provisioning, altes Abo unveraendert", async () => {
+  // subscriptionId der Session == bereits gespeicherte Id UND Karte-on-file: der reale
+  // Doppel-Redirect-Fall (der erste Return hat die Karte gebunden; Test 13 deckt den-
+  // selben Sachverhalt ueber den echten Session-Roundtrip ab). OHNE Karte ist derselbe
+  // Zustand das Webhook-gewonnene Rennen -> Heilungspfad, siehe Test 16.
+  const s = await setup({
+    subscribed: true,
+    cardOnFile: true,
+    checkoutOutcome: { subscriptionId: "sub_old" },
+  });
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
@@ -411,6 +423,29 @@ test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEIC
     assert.equal(t.stripePlanSlug, "starter", "kein stiller Plan-Wechsel auf business");
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "suspended", "keine Aktivierung ueber die verwaiste Subscription");
+  } finally {
+    await s.close();
+  }
+});
+
+// Wurzelfix "Abo ohne Nummer" (Live-Befund 2026-07-06): der Stripe-Webhook gewinnt das
+// Rennen gegen diesen Return regelmaessig (Zustellung in ms vs. Browser-Redirect in
+// Sekunden), speichert das Abo und stoesst Provisioning an - band aber keine Karte.
+// Der Return brach danach bei already_subscribed VOR setTenantStripe ab: Tenant
+// dauerhaft abonniert-aber-kartenlos, jedes Provisioning fail-closed tot.
+test("(16) return ?plan=starter nach Webhook-gewonnenem Rennen (Abo gespeichert, KEINE Karte) -> Karte gebunden, Aktivierung + Provisioning genau 1x, 302 sub=ok", async () => {
+  // subscribed OHNE cardOnFile = exakt der Zustand, den der schnellere Webhook hinterlaesst.
+  const s = await setup({ subscribed: true, checkoutOutcome: { subscriptionId: "sub_old" } });
+  try {
+    const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
+    assert.equal(ret.status, 302);
+    assert.equal(ret.location, "/tenant.html?sub=ok", "Heilung ist idempotent-erfolgreich");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripePaymentMethodId, "pm_b", "Karte aus der verifizierten Session gebunden");
+    assert.equal(t.stripeSubscriptionId, "sub_old", "bestehendes Abo bleibt unveraendert");
+    assert.deepEqual(s.provisionSpy, [TENANT], "Heilung stoesst das idempotente Provisioning an");
+    const acct = await s.accounts.resolve(SUB);
+    assert.equal(acct.status, "active", "Aktivierung laeuft wie im ok-Pfad");
   } finally {
     await s.close();
   }

@@ -4,6 +4,8 @@
 // unit-testbar ohne Server. Kein Stripe-SDK (Regel: wenige Deps); node:crypto reicht.
 import crypto from "node:crypto";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
+import { customerMatches } from "./card-setup.js";
+import { hasCardOnFile } from "../self-service.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -105,6 +107,11 @@ export function interpretStripeEvent(event) {
         planSlug: planSlugOf(object),
         currentPeriodEnd: object.current_period_end ?? null,
         currentPeriodStart: object.current_period_start ?? null,
+        // Race-Fix: das Event traegt customer + default_payment_method (signatur-
+        // verifiziert) - damit kann der Webhook-Pfad die Karte selbst binden, statt
+        // auf den Browser-Return zu warten (s. applyStripeWebhook).
+        customerId: object.customer ?? null,
+        paymentMethodId: paymentMethodIdOf(object.default_payment_method),
       };
     case SUBSCRIPTION_EVENT.DELETED:
       return {
@@ -124,6 +131,16 @@ export function interpretStripeEvent(event) {
     default:
       return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
   }
+}
+
+// default_payment_method kommt expandiert als Objekt (id) oder unexpandiert als
+// String (Webhook-Events sind IMMER unexpandiert) - beide Formen auf die opake
+// pm_-Referenz reduzieren; fehlt beides -> null. EINE Quelle (G5): der Stripe-
+// Adapter (stripe.js, getSubscriptionCheckoutResult) importiert sie von hier
+// (Abhaengigkeitsrichtung Adapter -> pures Modul).
+export function paymentMethodIdOf(defaultPaymentMethod) {
+  if (typeof defaultPaymentMethod === "string") return defaultPaymentMethod;
+  return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
 }
 
 // tenant_ref aus der Event-Metadata (createSubscription gibt es mit). Fehlt -> null
@@ -155,8 +172,10 @@ export async function applyStripeWebhook(
   event,
   { store, accounts, sessions, audit, req, provision },
 ) {
-  const { action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart } =
-    interpretStripeEvent(event);
+  const {
+    action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
+    customerId, paymentMethodId,
+  } = interpretStripeEvent(event);
   if (action === WEBHOOK_ACTION.IGNORE) return;
   const tenant = tenantRef || store.findTenantBySubscription(subscriptionId)?.id || null;
   if (!tenant) {
@@ -172,6 +191,20 @@ export async function applyStripeWebhook(
     if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
     if (currentPeriodStart != null) patch.currentPeriodStart = currentPeriodStart;
     store.setTenantSubscription(tenant, patch);
+    // Race-Fix (Abo-ohne-Nummer): der Webhook gewinnt das Rennen gegen den Checkout-
+    // Return regelmaessig (Stripe stellt in ms zu, der Browser-Redirect braucht
+    // Sekunden). Ohne Karte am Tenant liefe das folgende Provisioning fail-closed ins
+    // Leere (provisionNumber: kein Zahlungsmittel -> Nummer failed). Das Event traegt
+    // customer + default_payment_method signatur-verifiziert -> NUR die Luecke fuellen:
+    // NIE eine vorhandene Karte ueberschreiben (eine bewusst neu erfasste bleibt) und
+    // NUR bei Customer-Match (R4: nie ein fremdes payment_method an den Tenant binden).
+    if (
+      customerId && paymentMethodId &&
+      !hasCardOnFile(store.tenantStripe(tenant)) &&
+      customerMatches(store, tenant, customerId)
+    ) {
+      store.setTenantStripe(tenant, { paymentMethodId });
+    }
     // P5: dieselbe 3-Effekt-Aktivierung wie der Subscribe-Handler (KYC=CARD + active +
     // payment-gegatetes, idempotentes Provisioning) - EINE Quelle (activation.js). Die
     // Seam-Reihenfolge (KYC -> Status -> provision) bleibt unveraendert, nur jetzt geteilt

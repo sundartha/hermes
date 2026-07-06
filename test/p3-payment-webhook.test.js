@@ -29,15 +29,18 @@ const CAPS = { maxNumbers: HIGH_CAP, maxNumbersPerTenant: HIGH_CAP };
 // ---- Teil A: applyStripeWebhook ACTIVATE (Unit, Fake-Seams) ----
 
 // Aufzeichnende Seams: store loest den Tenant ggf. ueber subscriptionId auf und
-// protokolliert Abo-/KYC-Schreibung; accounts/sessions/provision protokollieren ihre Wirkung.
-function fakeDeps({ tenantBySub = null } = {}) {
-  const calls = { setStatus: [], invalidate: [], subscription: [], kyc: [], provision: [] };
+// protokolliert Abo-/KYC-/Karten-Schreibung; accounts/sessions/provision protokollieren
+// ihre Wirkung. stripeOnFile = der am Tenant gespeicherte Stripe-Zustand (Race-Fix-Tests).
+function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, paymentMethodId: null } } = {}) {
+  const calls = { setStatus: [], invalidate: [], subscription: [], kyc: [], provision: [], stripe: [] };
   return {
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       setKycLevel: (tenant, level) => calls.kyc.push([tenant, level]),
+      tenantStripe: () => stripeOnFile,
+      setTenantStripe: (tenant, patch) => calls.stripe.push([tenant, patch]),
       // A2: provisionPlanProfile-Seams. planSlug=null -> SKIP no_plan (dieser Test prueft
       // KYC/Status/provision, NICHT das Profil - das deckt profile-a2-activation.test.js).
       tenantSubscription: () => ({ planSlug: null }),
@@ -163,6 +166,63 @@ test("A(e) updated mit Dunning-Status (past_due) -> ignore: kein KYC/active/prov
   assert.deepEqual(deps.calls.provision, [], "unbezahlt -> kein provision (Invariante 1/2)");
   assert.deepEqual(deps.calls.kyc, [], "unbezahlt -> kein KYC=CARD");
   assert.deepEqual(deps.calls.setStatus, [], "unbezahlt -> kein active (Outbound-Gate bleibt zu)");
+});
+
+// Race-Fix "Abo ohne Nummer" (Live-Befund 2026-07-06): der Webhook gewinnt das Rennen
+// gegen den Checkout-Return und stoesst Provisioning an, BEVOR der Return die Karte
+// gebunden hat -> provisionNumber fail-closed (kein Zahlungsmittel), Nummer failed.
+// Das Event traegt customer + default_payment_method signatur-verifiziert; der
+// ACTIVATE-Pfad fuellt damit NUR die Luecke (nie ueberschreiben, nur bei Customer-Match).
+const RACE_EVENT = (defaultPaymentMethod) => ({
+  type: SUBSCRIPTION_EVENT.UPDATED,
+  data: {
+    object: {
+      id: "sub_r",
+      status: "active",
+      customer: "cus_r",
+      default_payment_method: defaultPaymentMethod,
+      metadata: { tenant_ref: "t_r" },
+    },
+  },
+});
+
+test("A(f) activate mit customer+default_payment_method, Tenant OHNE Karte + Customer-Match -> Karte gebunden (Luecke gefuellt), provision laeuft", async () => {
+  const deps = fakeDeps({ stripeOnFile: { customerId: "cus_r", paymentMethodId: null } });
+  await applyStripeWebhook(RACE_EVENT("pm_r"), deps);
+  assert.deepEqual(deps.calls.stripe, [["t_r", { paymentMethodId: "pm_r" }]], "Karte aus dem Event gebunden");
+  assert.deepEqual(deps.calls.provision, ["t_r"], "Provisioning laeuft mit hinterlegter Karte");
+});
+
+test("A(g) default_payment_method als expandiertes Objekt ({id}) -> dieselbe Bindung", async () => {
+  const deps = fakeDeps({ stripeOnFile: { customerId: "cus_r", paymentMethodId: null } });
+  await applyStripeWebhook(RACE_EVENT({ id: "pm_r" }), deps);
+  assert.deepEqual(deps.calls.stripe, [["t_r", { paymentMethodId: "pm_r" }]]);
+});
+
+test("A(h) Tenant MIT Karte-on-file -> KEIN Ueberschreiben (bewusst neu erfasste Karte bleibt)", async () => {
+  const deps = fakeDeps({ stripeOnFile: { customerId: "cus_r", paymentMethodId: "pm_bestand" } });
+  await applyStripeWebhook(RACE_EVENT("pm_r"), deps);
+  assert.deepEqual(deps.calls.stripe, [], "vorhandene Karte bleibt unangetastet");
+  assert.deepEqual(deps.calls.provision, ["t_r"], "Aktivierung/Provisioning unveraendert");
+});
+
+test("A(i) Customer-Mismatch -> KEINE Bindung (R4: nie fremdes payment_method an den Tenant)", async () => {
+  const deps = fakeDeps({ stripeOnFile: { customerId: "cus_ANDERS", paymentMethodId: null } });
+  await applyStripeWebhook(RACE_EVENT("pm_r"), deps);
+  assert.deepEqual(deps.calls.stripe, [], "Mismatch bindet fail-closed nichts");
+});
+
+test("A(j) Event ohne customer/default_payment_method (Bestandsform) -> keine Stripe-Schreibung, Effekte wie A(a)", async () => {
+  const deps = fakeDeps();
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: { object: { id: "sub_1", status: "active", metadata: { tenant_ref: "t_a" } } },
+    },
+    deps,
+  );
+  assert.deepEqual(deps.calls.stripe, [], "ohne Event-Felder keine Karten-Schreibung");
+  assert.deepEqual(deps.calls.provision, ["t_a"]);
 });
 
 // ---- Teil B: state-ops-Ebene (Unit, makeDefaultState) ----

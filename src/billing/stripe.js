@@ -14,6 +14,7 @@
 //   cancel:  POST /v1/payment_intents/{id}/cancel
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
 import { config } from "../config.js";
+import { paymentMethodIdOf } from "./webhook.js"; // G5: EINE default_payment_method-Normalisierung
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -89,14 +90,6 @@ async function assertOkWithDetail(res, op) {
 }
 
 const url = (path) => config.stripeApiBase + path;
-
-// default_payment_method kommt expandiert als Objekt (id) oder unexpandiert als
-// String - beide Formen auf die opake pm_-Referenz reduzieren; fehlt beides -> null
-// (der Aufrufer wirft fail-closed, G26: kein null ungeprueft weiterreichen).
-function paymentMethodIdOf(defaultPaymentMethod) {
-  if (typeof defaultPaymentMethod === "string") return defaultPaymentMethod;
-  return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
-}
 
 // Die aktuelle Stripe-API liefert current_period_end/-start NICHT mehr top-level
 // an der Subscription, sondern pro Item (items.data[0]). Fallback auf top-level

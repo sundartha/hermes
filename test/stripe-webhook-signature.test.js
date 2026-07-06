@@ -162,3 +162,32 @@ test("interpretStripeEvent: unbekannter Typ -> ignore (idempotent, kein Fehler)"
   const r = interpretStripeEvent({ type: "charge.succeeded", data: { object: {} } });
   assert.equal(r.action, WEBHOOK_ACTION.IGNORE);
 });
+
+test("interpretStripeEvent: activate traegt customerId + paymentMethodId (String und expandiertes Objekt) fuer den Race-Fix", () => {
+  const base = {
+    type: SUBSCRIPTION_EVENT.UPDATED,
+    data: {
+      object: {
+        id: "sub_1",
+        status: "active",
+        customer: "cus_1",
+        default_payment_method: "pm_1",
+        metadata: { tenant_ref: "t_a" },
+      },
+    },
+  };
+  const r = interpretStripeEvent(base);
+  assert.equal(r.customerId, "cus_1");
+  assert.equal(r.paymentMethodId, "pm_1", "unexpandierter String (Webhook-Normalform)");
+  const expanded = interpretStripeEvent({
+    ...base,
+    data: { object: { ...base.data.object, default_payment_method: { id: "pm_1" } } },
+  });
+  assert.equal(expanded.paymentMethodId, "pm_1", "expandierte Objekt-Form");
+  const missing = interpretStripeEvent({
+    ...base,
+    data: { object: { id: "sub_1", status: "active", metadata: { tenant_ref: "t_a" } } },
+  });
+  assert.equal(missing.customerId, null, "fehlt -> null (Bestandsform bleibt wirkungslos)");
+  assert.equal(missing.paymentMethodId, null);
+});

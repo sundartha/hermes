@@ -144,8 +144,25 @@ export async function activateSubscriptionFromCheckoutSession({
     return { ok: false, reason: "plan_mismatch" };
   if (hasActiveSubscription(store, tenant)) {
     const existing = store.tenantSubscription(tenant);
-    if (existing.subscriptionId === outcome.subscriptionId)
-      return { ok: false, reason: "already_subscribed" };
+    if (existing.subscriptionId === outcome.subscriptionId) {
+      // MIT Karte-on-file: echter Doppel-Redirect/Reload derselben Session -> reiner
+      // No-op (idempotent-erfolgreich, wie bisher).
+      if (hasCardOnFile(store.tenantStripe(tenant)))
+        return { ok: false, reason: "already_subscribed" };
+      // OHNE Karte: der Stripe-Webhook hat das Rennen gegen diesen Return gewonnen
+      // (Abo bereits gespeichert), kann aber im Fehlerfall die Karte nicht gebunden
+      // haben -> ohne Heilung bliebe der Tenant dauerhaft abonniert-aber-kartenlos
+      // und jedes Provisioning schluege fail-closed fehl (Abo-ohne-Nummer-Bug).
+      // Session ist oben customer- + plan-verifiziert -> Karte binden + dieselbe
+      // idempotente Aktivierung wie der ok-Pfad (tenantHasLiveNumber-Guard: kein
+      // Doppelkauf, falls der Webhook-Pfad die Nummer schon beschafft hat).
+      store.setTenantStripe(tenant, {
+        customerId: outcome.customerId,
+        paymentMethodId: outcome.paymentMethodId,
+      });
+      const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+      return { ok: false, reason: "already_subscribed", profile };
+    }
     // Verwaiste, real bei Stripe abgerechnete Zweit-Subscription (s. Kommentar oben).
     // subscriptionId bleibt im Ergebnis (opake Referenz, KEIN Secret - wie ueberall
     // sonst in diesem Modul), damit Ops sie ueber den Audit-Log manuell stornieren kann.

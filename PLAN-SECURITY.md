@@ -67,3 +67,23 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > schliessen (Pflicht-Gate des paid-Umstiegs); bis dahin bewusst deferiert. Boot-Gap auf Render
 > Free (kein Overlap/preDeploy) ist eine Infra-Grenze, kein Store-Bug — durch Deploy-Freeze bei
 > aktivem Traffic oder bezahlten zero-downtime-Tier zu adressieren.
+
+## BILL-RACE — Webhook-gewonnenes Checkout-Rennen band keine Karte (Fix 2026-07-06)
+
+> Befund (Live-Logs): der Stripe-Webhook (`customer.subscription.updated`, status=active)
+> gewinnt das Rennen gegen den Browser-Checkout-Return regelmaessig (Zustellung in ms vs.
+> Redirect in Sekunden), speicherte das Abo und stiess Provisioning an — band aber KEIN
+> payment_method. Der Return brach danach bei `already_subscribed` VOR `setTenantStripe`
+> ab: Tenant dauerhaft abonniert-aber-kartenlos, jedes Provisioning fail-closed tot
+> (`provisionNumber: kein hinterlegtes Zahlungsmittel`, Nummer -> failed). Sichtbar erst
+> seit der Webhook-Secret-Reparatur (vorher verlor der Webhook immer per signature-reject).
+> Fix zweischichtig, beide Pfade fail-closed: (1) `applyStripeWebhook` bindet das
+> signatur-verifizierte `customer`+`default_payment_method` aus dem Event — NUR als
+> Luecken-Fueller (nie eine vorhandene Karte ueberschreiben) und NUR bei Customer-Match
+> (R4: nie ein fremdes payment_method an den Tenant); der Webhook-Pfad provisioniert damit
+> selbststaendig, der Browser-Return ist nicht mehr zustandskritisch. (2)
+> `activateSubscriptionFromCheckoutSession` heilt den Rennen-Zustand (identische
+> subscriptionId + KEINE Karte): Karte aus der customer-+plan-verifizierten Session binden
+> + idempotente Aktivierung (`tenantHasLiveNumber`-Guard verhindert Doppelkauf); MIT Karte
+> bleibt `already_subscribed` ein reiner No-op, `subscription_conflict` unveraendert.
+> Geld-Invarianten unangetastet: Hold-vor-Order, Caps, KYC-Gate, PAYMENT_ENABLED.
