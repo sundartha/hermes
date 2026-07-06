@@ -180,35 +180,23 @@ export const config = {
   // UND den Stripe-Voice-Meter (recordVoiceMinuteMeter) - loest das fruehere
   // voiceMinuteCostCents auf. Inland (voiceTariffDomesticPrefixes) guenstig, alles andere
   // Worst-Case-Default. Konservativ gesetzt; live mit dem Provider-Tarif abgleichen.
-  voiceTariffDomesticCents: numEnv(
-    "VOICE_TARIFF_DOMESTIC_CENTS",
-    process.env.VOICE_TARIFF_DOMESTIC_CENTS,
-    {
-      fallback: 20,
-      min: 0,
-    },
-  ),
-  voiceTariffDefaultCents: numEnv(
-    "VOICE_TARIFF_DEFAULT_CENTS",
-    process.env.VOICE_TARIFF_DEFAULT_CENTS,
-    {
-      fallback: 300,
-      min: 0,
-    },
-  ),
+  voiceTariffDomesticCents: numEnv("VOICE_TARIFF_DOMESTIC_CENTS", process.env.VOICE_TARIFF_DOMESTIC_CENTS, {
+    fallback: 20,
+    min: 0,
+  }),
+  voiceTariffDefaultCents: numEnv("VOICE_TARIFF_DEFAULT_CENTS", process.env.VOICE_TARIFF_DEFAULT_CENTS, {
+    fallback: 300,
+    min: 0,
+  }),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26) beim Registrieren (D5): nimmt
   // jeden neuen Tenant aus dem geteilten globalen Pool (sonst effectiveCapEur = maxBudgetEur).
   // 0 = kein Default-Seed (Tenant faellt auf den globalen Cap). Globaler Backstop
   // (maxBudgetEur) bleibt PARALLEL (Schnittmenge, Regel 1) und wird NICHT angehoben.
-  defaultTenantBudgetCents: numEnv(
-    "DEFAULT_TENANT_BUDGET_CENTS",
-    process.env.DEFAULT_TENANT_BUDGET_CENTS,
-    {
-      fallback: 1000,
-      min: 0,
-    },
-  ),
+  defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
+    fallback: 1000,
+    min: 0,
+  }),
   // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede
   // erfolgreich gesendete Summary-SMS erzeugt ein USAGE_EVENT_KIND.SMS-Event mit diesem
   // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg;
@@ -416,15 +404,11 @@ export const config = {
   // laesst in-flight Requests fertig und flusht dann den Store; laeuft er laenger, kappt der
   // Watchdog hart mit exit(0). Default 8000 (Render sendet nach SIGTERM erst nach ~30s SIGKILL
   // -> Puffer, ohne den Deploy merklich zu bremsen). Max 30000 (< Render-SIGKILL). Min 0.
-  shutdownDrainTimeoutMs: numEnv(
-    "SHUTDOWN_DRAIN_TIMEOUT_MS",
-    process.env.SHUTDOWN_DRAIN_TIMEOUT_MS,
-    {
-      fallback: 8000,
-      min: 0,
-      max: 30000,
-    },
-  ),
+  shutdownDrainTimeoutMs: numEnv("SHUTDOWN_DRAIN_TIMEOUT_MS", process.env.SHUTDOWN_DRAIN_TIMEOUT_MS, {
+    fallback: 8000,
+    min: 0,
+    max: 30000,
+  }),
   // STT-Endpointing fuer Folge-Gathers (/voice/turn, Budget-Engine): fester
   // speechTimeout in Sekunden statt "auto". "auto" finalisiert auf der ERSTEN
   // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,

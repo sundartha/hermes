@@ -923,7 +923,9 @@ async function terminateCappedCall(callId, providerCallSid, status) {
     ).toISOString();
     await terminateAndBillCall({
       persistEnd: () => store.setCallEndedAt(callId, status, endedAtIso),
-      hangUp: providerCallSid ? () => voiceControl(call.provider).endCall(providerCallSid) : null,
+      hangUp: providerCallSid
+        ? () => voiceControl(call.provider).endCall(providerCallSid)
+        : null,
       bill: () => finishCall(store.getCall(callId)), // bucht genau EINMAL (billedAt, F9), gekappt
     });
   } catch (e) {
@@ -1124,9 +1126,7 @@ app.post("/voice/outbound", async (req, res) => {
     } else {
       // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
       if (reattached.logUnknown)
-        console.warn(
-          `[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`,
-        );
+        console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
       return res.type("text/xml").send(render([hangupD()]));
     }
   }
@@ -1575,11 +1575,7 @@ app.post("/api/calls", async (req, res) => {
     return res.status(402).json({ error: "Reservierung fehlgeschlagen. Bitte erneut versuchen." });
   }
   if (!reserved) {
-    audit(
-      "place_call_denied",
-      req,
-      `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`,
-    );
+    audit("place_call_denied", req, `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`);
     return res
       .status(402)
       .json({ error: "Voraussichtliche Anrufkosten ueberschreiten das verfuegbare Budget." });
@@ -2014,9 +2010,11 @@ app.post("/api/onboard/retry", async (req, res) => {
   const result = await triggerTenantProvisioning(tenantId);
   audit("onboard_retry", req, `tenant=${tenantId} ok=${result.ok} grund=${result.reason}`);
   if (!result.ok)
-    return res.status(RETRY_REASON_STATUS[result.reason] || 400).json({
-      error: RETRY_REASON_MESSAGE[result.reason] || `Re-Provisioning abgelehnt (${result.reason})`,
-    });
+    return res
+      .status(RETRY_REASON_STATUS[result.reason] || 400)
+      .json({
+        error: RETRY_REASON_MESSAGE[result.reason] || `Re-Provisioning abgelehnt (${result.reason})`,
+      });
   res.json({ tenantId, numberId: result.numberId, reason: result.reason, jobId: result.jobId });
 });
 

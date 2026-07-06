@@ -166,10 +166,5 @@ function renderDirective(d, opts) {
 // byte-identisch zum Bestand (Azure).
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
 export function renderDirectives(directives, opts = {}) {
-  return (
-    XML_DECL +
-    "<Response>" +
-    directives.map((d) => renderDirective(d, opts)).join("") +
-    "</Response>"
-  );
+  return XML_DECL + "<Response>" + directives.map((d) => renderDirective(d, opts)).join("") + "</Response>";
 }
