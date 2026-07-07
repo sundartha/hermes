@@ -39,6 +39,19 @@ function headers(contentType = FORM_HEADERS_TYPE) {
   return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": contentType };
 }
 
+// Gemeinsames Fetch-Skelett fuer Call-Control-Actions (G5): endCallViaCallControl und
+// startAssistant posten beide auf {base}/v2/calls/{callControlId}/actions/{action} mit
+// JSON-Body und pruefen ueber denselben assertTelnyxOk-Helper. action/body/op als EIN
+// Optionsobjekt (F1, sonst 4 lose Argumente). originateViaCallControl bleibt separat -
+// andere URL-Form (kein callControlId/actions-Pfad) und eigenes Response-Parsing.
+async function postCallControlAction(callControlId, { action, body, op }) {
+  const res = await fetch(
+    `${config.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${action}`,
+    { method: "POST", headers: headers(JSON_HEADERS_TYPE), body: JSON.stringify(body) },
+  );
+  await assertTelnyxOk(res, op, ATTACH_STATUS);
+}
+
 /** @type {import("../../ports.js").VoiceControl} */
 export const telnyxVoice = {
   // Outbound-Call starten. connection_id (TeXML-Application) haelt die Voice-URL
@@ -124,11 +137,11 @@ export const telnyxVoice = {
   async endCallViaCallControl(callControlId) {
     if (!config.telnyxApiKey) throw new Error("Telnyx endCallViaCallControl: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx endCallViaCallControl: callControlId fehlt");
-    const res = await fetch(
-      `${config.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${HANGUP_ACTION}`,
-      { method: "POST", headers: headers(JSON_HEADERS_TYPE), body: JSON.stringify({}) },
-    );
-    await assertTelnyxOk(res, "endCallViaCallControl", ATTACH_STATUS);
+    await postCallControlAction(callControlId, {
+      action: HANGUP_ACTION,
+      body: {},
+      op: "endCallViaCallControl",
+    });
   },
 
   // Telnyx-AI-Assistant an den laufenden Call-Control-Call anhaengen (ai_assistant_start).
@@ -139,14 +152,10 @@ export const telnyxVoice = {
     if (!config.telnyxApiKey) throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx startAssistant: callControlId fehlt");
     if (!assistantId) throw new Error("Telnyx startAssistant: assistantId fehlt");
-    const res = await fetch(
-      `${config.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${ASSISTANT_START_ACTION}`,
-      {
-        method: "POST",
-        headers: headers(JSON_HEADERS_TYPE),
-        body: JSON.stringify({ assistant: { id: assistantId } }),
-      },
-    );
-    await assertTelnyxOk(res, "startAssistant", ATTACH_STATUS);
+    await postCallControlAction(callControlId, {
+      action: ASSISTANT_START_ACTION,
+      body: { assistant: { id: assistantId } },
+      op: "startAssistant",
+    });
   },
 };
