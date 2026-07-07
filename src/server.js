@@ -27,6 +27,7 @@ import {
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
+import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { metrics } from "./metrics.js";
 import { LlmUnavailableError } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
@@ -197,6 +198,17 @@ app.get("/healthz", (_req, res) => res.json({ ok: true }));
 app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
 
 registerWellKnown(app);
+
+// ---- Telnyx AI Assistant Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1) ----------------
+// AUTH-AUSNAHME (Regel 3, begruendet): Telnyx BYO-LLM ruft diesen /v1/chat/completions-
+// kompatiblen Endpunkt SERVERSEITIG (kein Basic-Auth-Header moeglich) -> bewusst VOR der
+// Basic-Auth registriert (analog /voice/tts/:token), mit EIGENER fail-closed Absicherung:
+// 404 bei TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag), per-Call-Token
+// gegen den Store-Call-Record (403 sonst, timing-sicher), Budget-Gate pro Turn (kein
+// Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
+// bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
+// fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
+app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor }));
 
 // P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
 // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der

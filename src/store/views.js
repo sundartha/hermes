@@ -9,7 +9,9 @@ import { findTenant } from "./state-ops.js";
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
 // und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
 // rein interner persistierter Dedup-Marker -> wie _finished gestrippt (kein API-Leak).
-export function publicCall({ streamToken, _finished, summarySmsSentAt, ...rest }) {
+// aiAssistantToken (Telnyx-P1) ist das per-Call-Secret des Brain-Shims -> wie streamToken
+// strippen, damit es NIE ueber /api/state oder /api/calls/:id leakt (Regel 4).
+export function publicCall({ streamToken, _finished, summarySmsSentAt, aiAssistantToken, ...rest }) {
   return rest;
 }
 

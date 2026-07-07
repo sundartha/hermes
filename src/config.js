@@ -164,6 +164,14 @@ export const config = {
     }),
   },
 
+  // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
+  // Master-Flag fuer den in-house Custom-LLM-Shim (/v1/chat/completions). DEFAULT AUS
+  // (fail-closed, Muster PAYMENT_ENABLED): der Endpunkt antwortet 404 bis zum Cutover
+  // (Existenz hinter dem Flag -> keine monatelang offene Angriffsflaeche zwischen Merge
+  // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
+  // identisch. Volle 4-Orte-Doku (.env.example/render.yaml/assertConfig) folgt in P10.
+  telnyxAiAssistantEnabled: (process.env.TELNYX_AI_ASSISTANT_ENABLED || "false") === "true",
+
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
   // DEFAULT AUS (fail-closed): die Onboard-Route reicht KEINEN Billing-Client herein

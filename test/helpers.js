@@ -106,6 +106,12 @@ export const BASE_ENV = {
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
   TELNYX_ACCOUNT_SID: "",
+  // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
+  // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese
+  // Zeile leakt eine lokale .env mit TELNYX_AI_ASSISTANT_ENABLED=true via dotenv in
+  // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Der Shim-HTTP-Test setzt
+  // sie explizit auf "true".
+  TELNYX_AI_ASSISTANT_ENABLED: "false",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",
