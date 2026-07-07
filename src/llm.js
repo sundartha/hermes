@@ -51,6 +51,16 @@ export class LlmUnavailableError extends Error {
   }
 }
 
+// Zwei-Klassen-Degradation fuer einen gescheiterten agentTurn-Aufruf: EINE Quelle
+// fuer die Klassifikation, von /voice/turn (server.js) UND dem Telnyx-Brain-Shim
+// gleichermassen genutzt (G5 - vorher an beiden Stellen byte-identisch dupliziert).
+// LlmUnavailableError (Breaker offen ODER Retries erschoepft) -> wuerdevolles Ende
+// (llmDegradedSpeech); jeder ANDERE Fehler (nicht-transient, z.B. 4xx/Auth) ->
+// generisches technisches Ende (turnErrorSpeech).
+export function degradedSpeechFor(err, locale) {
+  return err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+}
+
 // Klassifiziert, ob ein Fehler transient (retrybar) ist. PURE Funktion, exportiert
 // fuer den Unit-Test. Transient: Premature-close-FetchError, APIConnectionError,
 // ECONNRESET & Co., HTTP 408/409/429/>=500. NICHT transient: 4xx (ausser 408/409/429),

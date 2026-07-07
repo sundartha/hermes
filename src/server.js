@@ -29,7 +29,7 @@ import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText } from "./claude.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { metrics } from "./metrics.js";
-import { LlmUnavailableError } from "./llm.js";
+import { degradedSpeechFor } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO, BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
@@ -1147,8 +1147,7 @@ app.post("/voice/turn", async (req, res) => {
     // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
     // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
     const locale = localeFor(call.language);
-    const speech =
-      err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+    const speech = degradedSpeechFor(err, locale);
     const errorDirectives = [sayInCallVoice(call, speech), hangupD()];
     res
       .type("text/xml")

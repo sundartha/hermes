@@ -382,6 +382,36 @@ test("D11: nicht-DE Sprache (en) -> englischer Degradations-String (localeFor(ca
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("en").turnErrorSpeech);
 });
 
+// === T1: writeFakeStream wirft NACH einem Teil-Write (headersSent bereits true) ===
+
+// Wie fakeRes(), aber der ZWEITE write()-Aufruf wirft (der erste - der eigentliche
+// SSE-Chunk - schlaegt durch und kippt headersSent wie im echten Express). Bildet
+// einen Socket nach, der mitten im Happy-Path-writeFakeStream wegbricht (zwischen
+// dem Daten-Chunk und "data: [DONE]").
+function fakeResFailingOnSecondWrite() {
+  const res = fakeRes();
+  const originalWrite = res.write.bind(res);
+  let writeCalls = 0;
+  res.write = (s) => {
+    writeCalls += 1;
+    if (writeCalls === 1) return originalWrite(s);
+    throw new Error("socket kaputt");
+  };
+  return res;
+}
+
+test("T1: writeFakeStream wirft nach dem ersten Write -> Fehlerpfad ruft nur end() (kein zweiter Fake-Stream-Versuch)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handler = makeHandler({ store, agentTurn });
+  const res = fakeResFailingOnSecondWrite();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.equal(res.chunks.length, 1, "nur der erste (fehlgeschlagene) Chunk steht - kein Retry-Chunk");
+  assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeFakeStream aufzurufen");
+});
+
 test("D8b: Fehler-Log traegt NUR err.name, kein Secret", async () => {
   const store = fakeStore({ call: makeCall() });
   async function throwingAgentTurn() {

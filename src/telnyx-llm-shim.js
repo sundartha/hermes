@@ -6,7 +6,7 @@
 // toolDefs (agentTurn ruft sie in-house auf -> S2-Anti-Duplizierung).
 import { randomUUID } from "node:crypto";
 import { safeEqual } from "./util.js";
-import { LlmUnavailableError } from "./llm.js";
+import { degradedSpeechFor } from "./llm.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk";
@@ -91,14 +91,21 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor }) {
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
       // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie
-      // der /voice/turn-Catch (server.js): transient-erschoepft (LlmUnavailableError -
+      // der /voice/turn-Catch (server.js) - degradedSpeechFor (llm.js, G5: EINE Quelle
+      // statt zweifach dupliziertem Ternary): transient-erschoepft (LlmUnavailableError -
       // Breaker offen ODER Retries erschoepft) -> llmDegradedSpeech; jeder ANDERE Fehler
       // (nicht-transient, z.B. 4xx/Auth) -> turnErrorSpeech. Der Fehler wird weiter
       // geloggt (nur err.name, secret-frei), nur die Antwort ist eine gueltige Completion.
       // KEIN Retry hier (der llm.js-Seam hat bereits begrenzt+selektiv retried).
       console.error("[telnyx-shim] agentTurn fehlgeschlagen:", err && err.name); // secret-frei
-      const content =
-        err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+      const content = degradedSpeechFor(err, locale);
+      // Dieser Catch faengt AUCH Fehler aus writeFakeStream selbst (kein eigener
+      // try/catch dort): wirft der Happy-Path-writeFakeStream NACH einem Teil-Write
+      // (z.B. Socket bricht zwischen den beiden res.write-Aufrufen weg), ist
+      // headersSent bereits true - ein zweiter writeFakeStream-Versuch wuerde erneut
+      // in denselben kaputten Stream schreiben. Stattdessen nur end() (bestmoegliches
+      // Aufraeumen); der Client sieht einen abgebrochenen Stream statt einer zweiten,
+      // ueberlappenden Antwort. Regressionstest: T1 in telnyx-llm-shim.test.js.
       if (!res.headersSent) writeFakeStream(res, { model, content });
       else res.end();
     }
