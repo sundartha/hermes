@@ -36,8 +36,10 @@
 
 /**
  * @typedef {Object} StartAssistantParams
- * @property {string} callControlId - Ziel-Call (aus originateViaCallControl)
- * @property {string} assistantId   - Telnyx-AI-Assistant-Referenz (Caller/P5/P7 liefert sie)
+ * @property {string} callControlId    - Ziel-Call (aus originateViaCallControl)
+ * @property {string} assistantId      - Telnyx-AI-Assistant-Referenz (Caller/P5/P7 liefert sie)
+ * @property {string} [customLlmAuth]  - per-Call-Bearer (P5, "callId:secret") als Custom-LLM-
+ *   Auth, damit Telnyx ihn beim Shim-Aufruf als Authorization sendet (live UNBESTAETIGT)
  */
 
 /**

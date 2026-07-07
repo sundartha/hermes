@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { safeEqual } from "./util.js";
 import { degradedSpeechFor } from "./llm.js";
+import { makeFixedWindowCounter } from "./middleware.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk";
@@ -18,6 +19,18 @@ const TOKEN_SEP = ":";
 const MS_PER_SECOND = 1000;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+// P5: per-callId-Fenster fuer den Shim-Turn-Rate-Limiter, unabhaengig vom globalen
+// Per-IP-Fenster (middleware.js RATE_WINDOW_MS) - eigene Achse, eigenes Sweep-Intervall.
+const SHIM_RATE_WINDOW_MS = 60_000;
+const SHIM_RATE_SWEEP_MS = 5 * 60_000;
+
+// Baut den per-Call-Bearer-WERT (ohne "Bearer "-Praefix), den die Call-Control-Ingest
+// (P4.5 onSpeakEnded) als Custom-LLM-Auth an ai_assistant_start reicht - Telnyx sendet ihn
+// beim Shim-Aufruf als Authorization-Header, parseCallToken zerlegt ihn wieder. EINE Quelle
+// (G5) fuer das callId:secret-Format, keine zweite ":"-Konstruktion an der Ingest-Stelle.
+export function formatCallBearerToken(callId, secret) {
+  return `${callId}${TOKEN_SEP}${secret}`;
+}
 
 // Letzte User-Aeusserung aus dem OpenAI-messages-Array (nur STRING-Content, sonst "").
 // Der Shim nutzt NUR die neueste Aeusserung als callerText; die Gespraechs-Historie
@@ -62,6 +75,15 @@ function writeFakeStream(res, { model, content }) {
 }
 
 export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl }) {
+  // P5 (Scope 4, Carryover aus P4): per-callId-Fixed-Window - Toll-/Token-Fraud-Bremse
+  // VOR agentTurn, zusaetzlich zum globalen Per-IP-Limiter + Budget-Cap. EINE Quelle
+  // (makeFixedWindowCounter, G5) statt einer zweiten Zaehler-Implementierung hier.
+  const shimRateHit = makeFixedWindowCounter({
+    windowMs: SHIM_RATE_WINDOW_MS,
+    limit: config.telnyxShimMaxTurnsPerMin,
+    sweepMs: SHIM_RATE_SWEEP_MS,
+  });
+
   // P3a (Regel 1 / Befund 6): end_call MUSS den Call REAL beenden. Anders als in der
   // Budget-Engine (dort rendert der Server hangupD aus {speech,endCall}) gibt es bei
   // C-Telnyx keinen Text-Rueckkanal "leg auf" - ohne echten Hangup laeuft der Call plus
@@ -105,12 +127,19 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
     const model =
       typeof req.body?.model === "string" && req.body.model ? req.body.model : config.claudeModel;
 
-    // 3) Budget-Gate (Invariante 3 / Regel 1): kein agentTurn-Aufruf bei Cap-Ueberschreitung
+    // 3) Rate-Gate (P5, Scope 4): N+1 Turns fuer denselben callId im Fenster -> definierte
+    // Ablehnung OHNE agentTurn-Aufruf (kein Token-Burn). Gueltige Degradations-Completion
+    // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
+    // callId kommt aus dem TOKEN (Schritt 2), nicht aus dem spoofbaren Body.
+    if (!shimRateHit(parsed.callId).allowed)
+      return writeFakeStream(res, { model, content: locale.llmDegradedSpeech });
+
+    // 4) Budget-Gate (Invariante 3 / Regel 1): kein agentTurn-Aufruf bei Cap-Ueberschreitung
     // (kein Token-Burn). Hangup-Aktion (Call-Control) erst P6.
     if (store.budgetExceeded(call.tenantId, config) || store.globalBudgetExceeded(config))
       return writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
 
-    // 4) Kern: agentTurn (in-house Tool-Loop) gegen die TOKEN-gebundene, frische call-Referenz.
+    // 5) Kern: agentTurn (in-house Tool-Loop) gegen die TOKEN-gebundene, frische call-Referenz.
     let endCall = false;
     try {
       const turn = await agentTurn(call, lastUserText(req.body));
@@ -138,13 +167,13 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
       else res.end();
       // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
       // endCall=true geliefert haben - der Fehler stammt dann aus writeFakeStream selbst
-      // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 5 unten muss den
+      // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 6 unten muss den
       // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
       // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
-      // bleibt endCall auf dem Default false - Schritt 5 ist dann ein No-op.
+      // bleibt endCall auf dem Default false - Schritt 6 ist dann ein No-op.
     }
 
-    // 5) end_call (P3a, Regel 1): der Abschiedssatz ist raus (oder bestmoeglich degradiert);
+    // 6) end_call (P3a, Regel 1): der Abschiedssatz ist raus (oder bestmoeglich degradiert);
     // jetzt den Call out-of-band REAL beenden, falls agentTurn end_call lieferte - unabhaengig
     // davon, ob der nachfolgende Response-Write selbst noch erfolgreich war (siehe Kommentar
     // oben). Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob

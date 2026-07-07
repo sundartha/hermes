@@ -77,8 +77,13 @@ function agentTurnSpy(result = { speech: "Hallo Welt", endCall: false }) {
   return agentTurn;
 }
 
-function fakeConfig({ enabled = true, claudeModel = "claude-haiku-4-5" } = {}) {
-  return { telnyxAiAssistantEnabled: enabled, claudeModel };
+// telnyxShimMaxTurnsPerMin (P5): grosszuegiger Fixed-Default, damit der neue per-callId-
+// Rate-Limiter im Shim diese Einzel-Turn-Tests nicht bricht (reine Fixture-Ergaenzung,
+// kein Verhaltens-Assert geaendert - der Rate-Limiter selbst hat einen eigenen Testfall
+// weiter unten). Bewusst != config.js-Default (30): der hoehere Wert macht den Test
+// robust gegen eine spaetere Aenderung des Produktions-Defaults.
+function fakeConfig({ enabled = true, claudeModel = "claude-haiku-4-5", telnyxShimMaxTurnsPerMin = 100 } = {}) {
+  return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
 }
 
 // Minimaler Call-Fixture: aiAssistantToken ist das per-Call-Secret (P4-Scope, hier
@@ -298,6 +303,47 @@ test("C5: gespoofter callId/tenantId im Body wird ignoriert - Token bindet den C
   assert.equal(agentTurn.calls[0].call.id, "call_A", "Token bindet den Call, nicht der Body");
   assert.equal(agentTurn.calls[0].call.tenantId, "t_A");
   assert.equal(agentTurn.calls[0].callerText, "Ich bin der Angerufene");
+});
+
+// === P5: per-callId-Rate-Limiter (Scope 4, Toll-/Token-Fraud-Bremse) =============
+
+test("P5-Rate: N+1-ter Turn fuer denselben callId im Fenster -> Degradations-Completion OHNE agentTurn-Aufruf", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy();
+  const config = fakeConfig({ telnyxShimMaxTurnsPerMin: 2 });
+  const handler = makeHandler({ store, config, agentTurn });
+
+  for (let i = 1; i <= 2; i++) {
+    const res = fakeRes();
+    await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+    assert.equal(agentTurn.calls.length, i, `Turn ${i} innerhalb des Limits ruft agentTurn`);
+  }
+
+  const res3 = fakeRes();
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res3);
+  assert.equal(agentTurn.calls.length, 2, "3. Turn (N+1) ruft agentTurn NICHT (kein Token-Burn)");
+  assert.equal(
+    firstChunkJson(res3).choices[0].delta.content,
+    localeFor("de").llmDegradedSpeech,
+    "gueltige Degradations-Completion statt roher Ablehnung",
+  );
+});
+
+test("P5-Rate: zwei verschiedene callIds teilen sich das Fenster NICHT", async () => {
+  const callA = makeCall({ id: "call_A", aiAssistantToken: "sec-A" });
+  const callB = makeCall({ id: "call_B", aiAssistantToken: "sec-B" });
+  const store = {
+    getCall: (id) => [callA, callB].find((c) => c.id === id) || null,
+    budgetExceeded: () => false,
+    globalBudgetExceeded: () => false,
+  };
+  const agentTurn = agentTurnSpy();
+  const config = fakeConfig({ telnyxShimMaxTurnsPerMin: 1 });
+  const handler = makeHandler({ store, config, agentTurn });
+
+  await handler(reqWith({ auth: "Bearer call_A:sec-A" }), fakeRes());
+  await handler(reqWith({ auth: "Bearer call_B:sec-B" }), fakeRes());
+  assert.equal(agentTurn.calls.length, 2, "call_A und call_B haben je einen eigenen Zaehler");
 });
 
 // === lastUserText: Grenzfaelle (G3/T5) ===========================================

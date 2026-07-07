@@ -27,27 +27,49 @@ export function securityHeaders(req, res, next) {
 const RATE_WINDOW_MS = 60_000;
 const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 
-// Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,
-// /voice mit eigener Twilio-Signaturpruefung) entscheidet der Aufrufer in server.js.
-export function createRateLimiter(limitPerMin) {
-  const windows = new Map(); // ip -> { count, startedAt }
+// Generischer Fixed-Window-Zaehler pro Schluessel (G5): EINE Quelle fuer den Per-IP-
+// Rate-Limiter (unten) UND den per-callId-Turn-Limiter im Telnyx-Shim (P5). windowMs/
+// limit/sweepMs als EIN Optionsobjekt (F1). Liefert eine hit(key)-Funktion, die den
+// Zaehler fuer key erhoeht und {allowed, retryAfterS} zurueckgibt - reine Query+Zaehl-
+// Logik, kein HTTP-Wissen (der Express-Adapter bleibt beim Aufrufer).
+export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
+  const windows = new Map(); // key -> { count, startedAt }
 
   // Abgelaufene Fenster regelmaessig raeumen, damit die Map nicht unbegrenzt waechst.
   // unref(): der Timer darf den Prozess (z.B. Tests) nicht am Beenden hindern.
   setInterval(() => {
     const now = Date.now();
-    for (const [ip, w] of windows) if (now - w.startedAt >= RATE_WINDOW_MS) windows.delete(ip);
-  }, RATE_SWEEP_INTERVAL_MS).unref();
+    for (const [key, w] of windows) if (now - w.startedAt >= windowMs) windows.delete(key);
+  }, sweepMs).unref();
+
+  return function hit(key) {
+    const now = Date.now();
+    let w = windows.get(key);
+    if (!w || now - w.startedAt >= windowMs) {
+      w = { count: 0, startedAt: now };
+      windows.set(key, w);
+    }
+    w.count++;
+    return {
+      allowed: w.count <= limit,
+      retryAfterS: Math.ceil((w.startedAt + windowMs - now) / 1000),
+    };
+  };
+}
+
+// Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,
+// /voice mit eigener Twilio-Signaturpruefung) entscheidet der Aufrufer in server.js.
+export function createRateLimiter(limitPerMin) {
+  const rateHit = makeFixedWindowCounter({
+    windowMs: RATE_WINDOW_MS,
+    limit: limitPerMin,
+    sweepMs: RATE_SWEEP_INTERVAL_MS,
+  });
 
   return (req, res, next) => {
-    const now = Date.now();
-    let w = windows.get(req.ip);
-    if (!w || now - w.startedAt >= RATE_WINDOW_MS) {
-      w = { count: 0, startedAt: now };
-      windows.set(req.ip, w);
-    }
-    if (++w.count > limitPerMin) {
-      res.set("Retry-After", String(Math.ceil((w.startedAt + RATE_WINDOW_MS - now) / 1000)));
+    const { allowed, retryAfterS } = rateHit(req.ip);
+    if (!allowed) {
+      res.set("Retry-After", String(retryAfterS));
       return res.status(429).json({ error: "Zu viele Anfragen. Bitte spaeter erneut versuchen." });
     }
     next();

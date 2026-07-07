@@ -777,6 +777,12 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // F9 (A6): persistierten Bucht-Marker hydrieren (NULL -> null, json-Parity). Ohne diese Zeile
     // ginge er beim Restart verloren -> Doppelbuchung; UND der naechste Flush ueberschriebe ihn.
     billedAt: r.billed_at ?? null,
+    // P5 (C-Telnyx): per-Call-Bearer + Call-Control-Handles hydrieren. Ohne diese Zeilen
+    // ginge das Token beim Restart verloren UND der naechste Flush ueberschriebe es mit
+    // NULL (Lehre i8-design-decisions). NULL -> null (json-Parity).
+    aiAssistantToken: r.ai_assistant_token ?? null,
+    callControlId: r.call_control_id ?? null,
+    assistantId: r.assistant_id ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -983,14 +989,16 @@ async function flushCalls(client, tenantId, calls) {
          (id, tenant_id, stream_token, twilio_sid, direction, from_e164, to_e164, goal,
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
-          summary_sms_sent_at, context, failure_reason, billed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+          summary_sms_sent_at, context, failure_reason, billed_at, ai_assistant_token,
+          call_control_id, assistant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
          summary_sms_sent_at=EXCLUDED.summary_sms_sent_at, failure_reason=EXCLUDED.failure_reason,
-         billed_at=EXCLUDED.billed_at`,
+         billed_at=EXCLUDED.billed_at, ai_assistant_token=EXCLUDED.ai_assistant_token,
+         call_control_id=EXCLUDED.call_control_id, assistant_id=EXCLUDED.assistant_id`,
       [
         c.id,
         tenantId,
@@ -1024,6 +1032,12 @@ async function flushCalls(client, tenantId, calls) {
         // F9 (A6): Bucht-Marker ($25). IM ON CONFLICT DO UPDATE SET (Muster failure_reason),
         // weil er NACH dem Create in finishCall gesetzt wird.
         c.billedAt ?? null,
+        // P5 (C-Telnyx): per-Call-Bearer + Call-Control-Handles ($26-$28). IM ON CONFLICT
+        // DO UPDATE SET (Muster twilio_sid) - sie werden NACH dem Create bei erfolgreicher
+        // Call-Control-Origination gesetzt, nicht beim initialen createCall.
+        c.aiAssistantToken ?? null,
+        c.callControlId ?? null,
+        c.assistantId ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);

@@ -29,6 +29,7 @@ import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall, openingText, disclosureSentence } from "./claude.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { makeCallControlIngest } from "./telnyx-call-control-ingest.js";
+import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { metrics } from "./metrics.js";
 import { degradedSpeechFor } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
@@ -1662,26 +1663,39 @@ app.post("/api/calls", async (req, res) => {
   );
 
   try {
-    const tw = await voiceControl(outboundProvider).originateCall({
-      from: fromNumber,
-      to,
-      url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
-      statusCallback: `${config.publicUrl}/voice/status?callId=${call.id}`,
-      statusCallbackEvent: ["answered", "completed"],
-      method: "POST",
-      timeLimit: maxDur,
-    });
-    call.twilioSid = tw.sid;
-    store.save();
-    // Max-Dauer hart durchsetzen (Budget-Engine). Fuer Twilio redundant zum
-    // timeLimit-Param, fuer Telnyx der einzige verlaessliche Cap. Erst NACH
-    // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
-    if (config.voiceEngine !== "realtime") armMaxDurationTimer(call, tw.sid);
-    armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Engines, nach erfolgreichem Originate
+    // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
+    // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
+    // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
+    if (config.telnyxAiAssistantEnabled && outboundProvider === PROVIDER.TELNYX) {
+      await originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur });
+      // P6-Luecke (bewusst, dokumentiert - NICHT in Scope dieser Phase): der Call-Control-
+      // Max-Dauer-Timer (callControlId-korrekt) wird erst in P6 verdrahtet. armMaxDurationTimer
+      // hier NICHT rufen (es wuerde einen TeXML-Hangup mit leerem twilioSid feuern = kaputt).
+      // KEIN Live-Risiko: das Flag bleibt in Prod aus bis P11 (nach P6); der provider-seitige
+      // time_limit_secs-Cap (voice.js) UND der Reserve-Backstop (armReserveReleaseTimer, unten)
+      // greifen daneben.
+    } else {
+      const tw = await voiceControl(outboundProvider).originateCall({
+        from: fromNumber,
+        to,
+        url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
+        statusCallback: `${config.publicUrl}/voice/status?callId=${call.id}`,
+        statusCallbackEvent: ["answered", "completed"],
+        method: "POST",
+        timeLimit: maxDur,
+      });
+      call.twilioSid = tw.sid;
+      store.save();
+      // Max-Dauer hart durchsetzen (Budget-Engine). Fuer Twilio redundant zum
+      // timeLimit-Param, fuer Telnyx (TeXML-Pfad) der einzige verlaessliche Cap. Erst NACH
+      // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
+      if (config.voiceEngine !== "realtime") armMaxDurationTimer(call, tw.sid);
+    }
+    armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
     res.json({
       ok: true,
       callId: call.id,
-      twilioSid: tw.sid,
+      twilioSid: call.twilioSid,
       status: "dialing",
       context_received: contextReceivedMeta(context), // I10
     });

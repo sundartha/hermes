@@ -173,6 +173,13 @@ export function createCall(
     // die Voice-Minuten-Buchung prozessuebergreifend genau-einmal. NULL -> null (pg-Parity via
     // rowToCall). Muster summarySmsSentAt.
     billedAt: null,
+    // P5 (C-Telnyx, PLAN-TELNYX-AI-ASSISTANT.md): per-Call-Bearer-Secret (Shim-Auth) +
+    // Call-Control-Handles. Initial null, erst bei erfolgreicher Call-Control-Origination
+    // gesetzt (telnyx-origination.js) - byte-identisch zur pg-Hydrierung (rowToCall), kein
+    // json<->pg-Shape-Drift. aiAssistantToken NIE nach aussen (publicCall strippt es).
+    aiAssistantToken: null,
+    callControlId: null,
+    assistantId: null,
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist

@@ -112,6 +112,11 @@ export const BASE_ENV = {
   // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Der Shim-HTTP-Test setzt
   // sie explizit auf "true".
   TELNYX_AI_ASSISTANT_ENABLED: "false",
+  // P5: neutrale Defaults, sonst leakt eine lokale .env mit TELNYX_ASSISTANT_ID/
+  // TELNYX_SHIM_MAX_TURNS_PER_MIN via dotenv in Spawn-Tests -> Baseline-Drift (Lehre
+  // test-base-env-drift). Leere assistantId -> P4.5 onSpeakEnded skippt fail-safe.
+  TELNYX_ASSISTANT_ID: "",
+  TELNYX_SHIM_MAX_TURNS_PER_MIN: "30",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",

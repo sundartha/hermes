@@ -90,8 +90,11 @@ function agentTurnSpy(result = { speech: "Hallo Welt", endCall: false }) {
   return agentTurn;
 }
 
-function fakeConfig({ enabled = true, claudeModel = "claude-haiku-4-5" } = {}) {
-  return { telnyxAiAssistantEnabled: enabled, claudeModel };
+// telnyxShimMaxTurnsPerMin (P5): grosszuegiger Fixed-Default, damit der neue
+// per-callId-Rate-Limiter im Shim diese Einzel-Turn-Tests nicht bricht (reine Fixture-
+// Ergaenzung, kein Verhaltens-Assert geaendert - Spec-Reiner-Refactor-Hinweis).
+function fakeConfig({ enabled = true, claudeModel = "claude-haiku-4-5", telnyxShimMaxTurnsPerMin = 100 } = {}) {
+  return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
 }
 
 function makeCall(overrides = {}) {

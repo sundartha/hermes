@@ -171,6 +171,18 @@ export const config = {
   // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
   // identisch. Volle 4-Orte-Doku (.env.example/render.yaml/assertConfig) folgt in P10.
   telnyxAiAssistantEnabled: (process.env.TELNYX_AI_ASSISTANT_ENABLED || "false") === "true",
+  // P5: ID des in P7 provisionierten Telnyx-AI-Assistants (ai_assistant_start). Leer ->
+  // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
+  // Volle 4-Orte-Doku + assertConfig-Pflichtfeld folgt in P10.
+  telnyxAssistantId: process.env.TELNYX_ASSISTANT_ID || "",
+  // P5: max. Shim-Turns pro callId und Minute (Toll-/Token-Fraud-Bremse VOR agentTurn,
+  // zusaetzlich zum IP-Limiter aus rateLimitPerMin + dem Budget-Cap). Das Zeitfenster
+  // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS).
+  telnyxShimMaxTurnsPerMin: numEnv(
+    "TELNYX_SHIM_MAX_TURNS_PER_MIN",
+    process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
+    { fallback: 30, min: 1 },
+  ),
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.

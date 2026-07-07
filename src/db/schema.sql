@@ -144,7 +144,13 @@ CREATE TABLE IF NOT EXISTS call (
   -- F9 (A6): persistierter Bucht-Marker (ISO). Additiv NULLABLE: gesetzt NACH erfolgreicher
   -- Abrechnung in finishCall, sonst NULL -> Bestand byte-identisch. Ueberlebt - anders als das
   -- In-Memory-Flag _finished - den Restart -> Voice-Minuten genau einmal gebucht.
-  billed_at TEXT
+  billed_at TEXT,
+  -- P5 (C-Telnyx): per-Call-Bearer-Secret (Shim-Auth) + Call-Control-Handles. Additiv
+  -- NULLABLE: nur befuellt bei erfolgreicher Call-Control-Origination, sonst NULL ->
+  -- Bestand byte-identisch (TeXML-Pfad setzt diese Felder nie).
+  ai_assistant_token TEXT,
+  call_control_id    TEXT,
+  assistant_id       TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -163,6 +169,12 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS failure_reason TEXT;
 -- F9 (A6): Bucht-Marker-Spalte auf Bestands-call-Tabellen nachziehen. Idempotent; frische DB
 -- = No-op (CREATE TABLE oben hat die Spalte schon). Nullable, kein Backfill (NULL = ungebucht).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS billed_at TEXT;
+-- P5 (C-Telnyx): per-Call-Bearer + Call-Control-Handles auf einer schon existierenden
+-- call-Tabelle nachziehen. Idempotent; frische DB = No-op (CREATE TABLE oben hat die
+-- Spalten schon).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS ai_assistant_token TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS call_control_id TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS assistant_id TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
