@@ -14,7 +14,14 @@ import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 
 const TEXML_BASE = "/v2/texml";
+// Call-Control-Basis (P4, AI-Assistant-Pfad): Origination/Hangup/ai_assistant_start laufen
+// ueber /v2/calls + Action-Endpunkte, NICHT ueber TeXML. Der TeXML-Pfad bleibt daneben unveraendert.
+const CALL_CONTROL_BASE = "/v2/calls";
 const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
+const JSON_HEADERS_TYPE = "application/json";
+// Call-Control-Action-Slugs (Teil des URL-Vertrags, benannt gegen Tippfehler; G25).
+const HANGUP_ACTION = "hangup";
+const ASSISTANT_START_ACTION = "ai_assistant_start";
 
 // HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
 // damit der echte Ablehnungsgrund (z.B. Caller-ID nicht zugewiesen, Land im Voice-Profil
@@ -25,9 +32,11 @@ const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
 // in ./errors.js (G5) - eine konsistente Telnyx-Envelope-Entscheidung im Provider-Package.
 const ATTACH_STATUS = { attachStatus: true };
 
-// Bearer-Header + Form-Content-Type. Eine Stelle (G5) statt zweimal inline.
-function headers() {
-  return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": FORM_HEADERS_TYPE };
+// Bearer-Header + Content-Type. Eine Stelle (G5) = EINE Quelle fuer den geheimen Bearer-Key.
+// Default form-urlencoded haelt die TeXML-Bestandsaufrufer byte-identisch; die Call-Control-
+// Methoden reichen JSON durch (contentType ist ein Wert-Parameter, KEIN Verhaltens-Flag).
+function headers(contentType = FORM_HEADERS_TYPE) {
+  return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": contentType };
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -77,5 +86,67 @@ export const telnyxVoice = {
       { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) },
     );
     await assertTelnyxOk(res, "endCall", ATTACH_STATUS);
+  },
+
+  // --- Call-Control-Variante (P4, AI-Assistant-Pfad) ---
+  // Verifiziert gegen die Telnyx-Call-Control-Doku, live UNBESTAETIGT (erste Call-Control-
+  // Verdrahtung -> mit dem Owner in P5/P7 live fixen, falls die API abweicht). Feldnamen
+  // und die ai_assistant_start-Body-Form sind Doku-Stand, kein Live-Beweis.
+
+  // Outbound-Call ueber Call Control originieren (statt TeXML). Liefert die call_control_id
+  // als EIGENES Feld (callControlId) - NICHT sid ueberladen: die Boot-Recovery (P6) adressiert
+  // den Hangup ueber genau diese ID-Form. KEINE Store-Persistenz hier (Caller/P5 persistiert).
+  async originateViaCallControl({ from, to, webhookUrl, method, timeLimit }) {
+    if (!config.telnyxApiKey) throw new Error("Telnyx originateViaCallControl: TELNYX_API_KEY fehlt");
+    if (!config.telnyxConnectionId)
+      throw new Error("Telnyx originateViaCallControl: TELNYX_CONNECTION_ID fehlt");
+    const payload = { connection_id: config.telnyxConnectionId, to, from };
+    if (webhookUrl) payload.webhook_url = webhookUrl;
+    if (method) payload.webhook_url_method = method;
+    // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-
+    // Timer (Absolute Regel). time_limit_secs greift zusaetzlich, falls Telnyx es honoriert.
+    if (timeLimit) payload.time_limit_secs = timeLimit;
+    const res = await fetch(`${config.telnyxApiBase}${CALL_CONTROL_BASE}`, {
+      method: "POST",
+      headers: headers(JSON_HEADERS_TYPE),
+      body: JSON.stringify(payload),
+    });
+    await assertTelnyxOk(res, "originateViaCallControl", ATTACH_STATUS);
+    const json = await res.json().catch(() => ({}));
+    const data = json.data || json;
+    return { callControlId: data.call_control_id };
+  },
+
+  // Laufenden Call-Control-Call beenden: POST /v2/calls/{callControlId}/actions/hangup.
+  // GETRENNTE Methode neben der TeXML-endCall(callSid) - die bleibt byte-identisch fuer den
+  // Budget-/TeXML-Hangup-Pfad. Adressiert den call_control_id-Endpunkt, NICHT TeXML
+  // (Regel 1/Befund c: falscher Endpunkt/ID = Kostenexplosion). Leere ID -> fail-closed.
+  async endCallViaCallControl(callControlId) {
+    if (!config.telnyxApiKey) throw new Error("Telnyx endCallViaCallControl: TELNYX_API_KEY fehlt");
+    if (!callControlId) throw new Error("Telnyx endCallViaCallControl: callControlId fehlt");
+    const res = await fetch(
+      `${config.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${HANGUP_ACTION}`,
+      { method: "POST", headers: headers(JSON_HEADERS_TYPE), body: JSON.stringify({}) },
+    );
+    await assertTelnyxOk(res, "endCallViaCallControl", ATTACH_STATUS);
+  },
+
+  // Telnyx-AI-Assistant an den laufenden Call-Control-Call anhaengen (ai_assistant_start).
+  // Provider-neutraler Transport: assistantId liefert der Caller (P5/P7); der Adapter erzeugt/
+  // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
+  // Assistant-Config (P7), NICHT hier.
+  async startAssistant({ callControlId, assistantId }) {
+    if (!config.telnyxApiKey) throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
+    if (!callControlId) throw new Error("Telnyx startAssistant: callControlId fehlt");
+    if (!assistantId) throw new Error("Telnyx startAssistant: assistantId fehlt");
+    const res = await fetch(
+      `${config.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${ASSISTANT_START_ACTION}`,
+      {
+        method: "POST",
+        headers: headers(JSON_HEADERS_TYPE),
+        body: JSON.stringify({ assistant: { id: assistantId } }),
+      },
+    );
+    await assertTelnyxOk(res, "startAssistant", ATTACH_STATUS);
   },
 };

@@ -35,6 +35,14 @@ const fakeVoice = {
     return { sid: `fake_${crypto.randomBytes(8).toString("hex")}` };
   },
   async endCall() {},
+  // Call-Control-Variante (P4): netzfreie Aequivalente, damit ein fakeOriginate-Testpfad,
+  // der die neuen Methoden ruft (ab P5), nicht crasht. fakeVoice bleibt vollstaendiger
+  // VoiceControl-Ersatz (G11 - keine Teil-Implementierung des Ports).
+  async originateViaCallControl() {
+    return { callControlId: `fake_cc_${crypto.randomBytes(8).toString("hex")}` };
+  },
+  async endCallViaCallControl() {},
+  async startAssistant() {},
 };
 
 /** @returns {import("./ports.js").VoiceControl} */

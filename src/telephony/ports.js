@@ -18,6 +18,29 @@
  */
 
 /**
+ * @typedef {Object} CallControlOriginateParams
+ *   Origination ueber Telnyx Call Control (AI-Assistant-Pfad, P4) statt TeXML. Call Control
+ *   buendelt die Event-Webhooks in EINER webhook_url (kein getrenntes url/statusCallback).
+ * @property {string} from         - Absender-Nummer (E.164), aktive Store-Nummer des Tenants
+ * @property {string} to           - Zielnummer (E.164, bereits gegated)
+ * @property {string} [webhookUrl] - Call-Control-Event-Webhook (call.answered/speak.ended/hangup, P4.5)
+ * @property {string} [method]     - HTTP-Methode fuer den Webhook ("POST")
+ * @property {number} [timeLimit]  - Max-Gespraechsdauer in Sek. (Defense-in-Depth; harter Timer bleibt server.js)
+ */
+
+/**
+ * @typedef {Object} CallControlResult
+ * @property {string} callControlId - Call-Control-ID (data.call_control_id). EIGENES Feld,
+ *   NICHT sid ueberladen: Boot-Recovery (P6) adressiert den Hangup ueber diese ID-Form.
+ */
+
+/**
+ * @typedef {Object} StartAssistantParams
+ * @property {string} callControlId - Ziel-Call (aus originateViaCallControl)
+ * @property {string} assistantId   - Telnyx-AI-Assistant-Referenz (Caller/P5/P7 liefert sie)
+ */
+
+/**
  * @typedef {Object} InboundRequest
  * @property {Object<string,string>} headers - Request-Header (lowercase keys, z.B. x-twilio-signature)
  * @property {Buffer} rawBody  - unveraenderter Roh-Body; fuer Twilio-HMAC ungenutzt,
@@ -41,9 +64,17 @@
 /**
  * @typedef {Object} VoiceControl
  * @property {(params: OriginateParams) => Promise<OriginateResult>} originateCall
- *   Startet einen Outbound-Call. Heute: calls.create(...).
+ *   Startet einen Outbound-Call (TeXML). Heute: calls.create(...).
  * @property {(providerCallSid: string) => Promise<void>} endCall
- *   Beendet einen laufenden Call. Heute: calls(sid).update({status:"completed"}).
+ *   Beendet einen laufenden Call (TeXML). Heute: calls(sid).update({status:"completed"}).
+ * @property {(params: CallControlOriginateParams) => Promise<CallControlResult>} [originateViaCallControl]
+ *   Call-Control-Variante der Origination (AI-Assistant-Pfad, P4). Aktuell NUR Telnyx
+ *   implementiert (wie NumberProvisioning); Twilio hat kein Call-Control-Pendant. Liefert callControlId.
+ * @property {(callControlId: string) => Promise<void>} [endCallViaCallControl]
+ *   Call-Control-Hangup (POST /v2/calls/{id}/actions/hangup). ZUSAETZLICH zu endCall (TeXML,
+ *   unveraendert). Telnyx-only.
+ * @property {(params: StartAssistantParams) => Promise<void>} [startAssistant]
+ *   Haengt den Telnyx-AI-Assistant an den Call-Control-Call an (ai_assistant_start). Telnyx-only.
  */
 
 /**
