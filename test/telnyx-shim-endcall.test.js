@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
+import { fakeTelnyxShimConfig } from "./helpers.js";
 
 const SSE_DATA_PREFIX = "data: ";
 
@@ -90,13 +91,6 @@ function agentTurnSpy(result = { speech: "Hallo Welt", endCall: false }) {
   return agentTurn;
 }
 
-// telnyxShimMaxTurnsPerMin (P5): grosszuegiger Fixed-Default, damit der neue
-// per-callId-Rate-Limiter im Shim diese Einzel-Turn-Tests nicht bricht (reine Fixture-
-// Ergaenzung, kein Verhaltens-Assert geaendert - Spec-Reiner-Refactor-Hinweis).
-function fakeConfig({ enabled = true, claudeModel = "claude-haiku-4-5", telnyxShimMaxTurnsPerMin = 100 } = {}) {
-  return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
-}
-
 function makeCall(overrides = {}) {
   return {
     id: "call_x",
@@ -109,7 +103,7 @@ function makeCall(overrides = {}) {
   };
 }
 
-function makeHandler({ store, config = fakeConfig(), agentTurn, voiceControl }) {
+function makeHandler({ store, config = fakeTelnyxShimConfig(), agentTurn, voiceControl }) {
   return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl });
 }
 

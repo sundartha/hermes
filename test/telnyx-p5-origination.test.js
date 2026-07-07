@@ -128,6 +128,40 @@ test("Flag an + Telnyx: aiAssistantToken verlaesst GET /api/calls/:id nie", asyn
   }
 });
 
+// === D: Fehlerpfad - originateViaCallControl schlaegt fehl (gemeinsamer catch-Block) ==
+// Blocker S1-1: originateAiAssistantCall setzt call.aiAssistantToken/assistantId auf dem
+// LEBENDEN Call VOR dem await auf originateViaCallControl. Schlaegt der Aufruf fehl, muss
+// derselbe try/catch wie der TeXML-Zweig greifen (releaseReserve + endCallRecord('failed')),
+// NICHT nur der bereits getestete Erfolgsfall (A) oder die 14 Gate-Denies (gate-proof, die
+// alle VOR der Origination greifen). KEIN FAKE_ORIGINATE hier: der echte Telnyx-Adapter
+// wirft synchron+netzfrei bei fehlendem TELNYX_API_KEY (BASE_ENV-Default leer) - deterministisch,
+// ohne Netz oder Mock-Server (F.I.R.S.T.).
+test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, Reserve freigegeben", async () => {
+  const srv = await startServer({
+    env: {
+      TELNYX_AI_ASSISTANT_ENABLED: "true",
+      VOICE_TARIFF_DOMESTIC_CENTS: "20", // reserveCents muss > 0 sein, sonst ist releaseOutboundReserve ein No-op
+    },
+    ownerNumber: TELNYX_OWNER_NUMBER,
+  });
+  try {
+    const res = await placeCall(srv);
+    assert.equal(res.status, 500, "kein providerStatus (Fehler VOR jedem Netz-Call) -> generischer 500");
+    const body = await res.json();
+    assert.equal(body.error, "Anruf konnte nicht gestartet werden.");
+    assert.ok(!JSON.stringify(body).includes("TELNYX_API_KEY"), "keine Provider-/Config-Details an den Client");
+
+    const calls = srv.readStore().calls;
+    assert.equal(calls.length, 1, "genau EIN Call-Record (kein Retry/Doppel-Create)");
+    const stored = calls[0];
+    assert.equal(stored.status, "failed", "gemeinsamer catch-Block terminiert wie der TeXML-Zweig");
+    assert.equal(stored.reserveReleased, true, "releaseReserve lief VOR endCallRecord (OUT-05)");
+    assert.equal(stored.callControlId, null, "kein callControlId, da originateViaCallControl vor der Rueckgabe warf");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // === C: publicCall-Unit (Token-Schutz an der Quelle) ================================
 
 test("publicCall: aiAssistantToken NIE in der Ausgabe (Muster streamToken)", () => {

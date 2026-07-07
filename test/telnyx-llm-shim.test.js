@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { LlmUnavailableError } from "../src/llm.js";
+import { fakeTelnyxShimConfig } from "./helpers.js";
 
 const SSE_DATA_PREFIX = "data: ";
 
@@ -77,15 +78,6 @@ function agentTurnSpy(result = { speech: "Hallo Welt", endCall: false }) {
   return agentTurn;
 }
 
-// telnyxShimMaxTurnsPerMin (P5): grosszuegiger Fixed-Default, damit der neue per-callId-
-// Rate-Limiter im Shim diese Einzel-Turn-Tests nicht bricht (reine Fixture-Ergaenzung,
-// kein Verhaltens-Assert geaendert - der Rate-Limiter selbst hat einen eigenen Testfall
-// weiter unten). Bewusst != config.js-Default (30): der hoehere Wert macht den Test
-// robust gegen eine spaetere Aenderung des Produktions-Defaults.
-function fakeConfig({ enabled = true, claudeModel = "claude-haiku-4-5", telnyxShimMaxTurnsPerMin = 100 } = {}) {
-  return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
-}
-
 // Minimaler Call-Fixture: aiAssistantToken ist das per-Call-Secret (P4-Scope, hier
 // nur gelesen/validiert). tenantId/language decken die von agentTurn/localeFor
 // gelesenen Felder ab.
@@ -101,7 +93,7 @@ function makeCall(overrides = {}) {
 
 // Baut Request + Handler in einem Rutsch (Build-Schritt, P13) - reduziert die
 // Wiederholung ueber die C1-D8-Tabelle.
-function makeHandler({ store, config = fakeConfig(), agentTurn = agentTurnSpy(), localeFor: lf = localeFor } = {}) {
+function makeHandler({ store, config = fakeTelnyxShimConfig(), agentTurn = agentTurnSpy(), localeFor: lf = localeFor } = {}) {
   return makeTelnyxLlmShim({ store, config, agentTurn, localeFor: lf });
 }
 
@@ -120,7 +112,7 @@ function firstChunkJson(res) {
 test("C1: Flag aus -> 404, kein agentTurn-Aufruf, kein Store-Zugriff", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, config: fakeConfig({ enabled: false }), agentTurn });
+  const handler = makeHandler({ store, config: fakeTelnyxShimConfig({ enabled: false }), agentTurn });
   const res = fakeRes();
 
   await handler(reqWith(), res);
@@ -244,7 +236,7 @@ test("C3: gueltiges Token -> agentTurn 1x mit dem token-gebundenen Call, Fake-St
 test("C3b: kein req.body.model -> Fallback auf config.claudeModel", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, config: fakeConfig({ claudeModel: "claude-haiku-4-5" }), agentTurn });
+  const handler = makeHandler({ store, config: fakeTelnyxShimConfig({ claudeModel: "claude-haiku-4-5" }), agentTurn });
   const res = fakeRes();
 
   await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
@@ -310,7 +302,7 @@ test("C5: gespoofter callId/tenantId im Body wird ignoriert - Token bindet den C
 test("P5-Rate: N+1-ter Turn fuer denselben callId im Fenster -> Degradations-Completion OHNE agentTurn-Aufruf", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
-  const config = fakeConfig({ telnyxShimMaxTurnsPerMin: 2 });
+  const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 2 });
   const handler = makeHandler({ store, config, agentTurn });
 
   for (let i = 1; i <= 2; i++) {
@@ -338,7 +330,7 @@ test("P5-Rate: zwei verschiedene callIds teilen sich das Fenster NICHT", async (
     globalBudgetExceeded: () => false,
   };
   const agentTurn = agentTurnSpy();
-  const config = fakeConfig({ telnyxShimMaxTurnsPerMin: 1 });
+  const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 1 });
   const handler = makeHandler({ store, config, agentTurn });
 
   await handler(reqWith({ auth: "Bearer call_A:sec-A" }), fakeRes());

@@ -461,6 +461,19 @@ export function fakeProvisioner(overrides = {}) {
   return { log, orderCalls, ...base, ...overrides };
 }
 
+// Fake-Config fuer den Telnyx Brain-Shim (makeTelnyxLlmShim): EINE Quelle (G5/S2) statt
+// der frueher in telnyx-llm-shim.test.js + telnyx-shim-endcall.test.js byte-identisch
+// kopierten Definition. telnyxShimMaxTurnsPerMin=100 bewusst grosszuegig (!= config.js-
+// Default 30): einzelne Turn-Tests sollen vom per-callId-Rate-Limiter unberuehrt bleiben,
+// der einen eigenen Testfall mit engerem Limit bekommt.
+export function fakeTelnyxShimConfig({
+  enabled = true,
+  claudeModel = "claude-haiku-4-5",
+  telnyxShimMaxTurnsPerMin = 100,
+} = {}) {
+  return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
+}
+
 // ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----
 // = PUBLIC_URL/mcp aus BASE_ENV (kanonische Audience).
 export const MCP_AUDIENCE = "https://agent.test/mcp";
