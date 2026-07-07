@@ -6,6 +6,7 @@
 // toolDefs (agentTurn ruft sie in-house auf -> S2-Anti-Duplizierung).
 import { randomUUID } from "node:crypto";
 import { safeEqual } from "./util.js";
+import { LlmUnavailableError } from "./llm.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk";
@@ -17,7 +18,6 @@ const TOKEN_SEP = ":";
 const MS_PER_SECOND = 1000;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
-const HTTP_BAD_GATEWAY = 502;
 
 // Letzte User-Aeusserung aus dem OpenAI-messages-Array (nur STRING-Content, sonst "").
 // Der Shim nutzt NUR die neueste Aeusserung als callerText; die Gespraechs-Historie
@@ -89,9 +89,18 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor }) {
       const { speech } = await agentTurn(call, lastUserText(req.body));
       return writeFakeStream(res, { model, content: speech });
     } catch (err) {
-      // P1: hart durchreichen ohne Leak/Hang (D8); wuerdevolle Degradation = P2.
+      // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
+      // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie
+      // der /voice/turn-Catch (server.js): transient-erschoepft (LlmUnavailableError -
+      // Breaker offen ODER Retries erschoepft) -> llmDegradedSpeech; jeder ANDERE Fehler
+      // (nicht-transient, z.B. 4xx/Auth) -> turnErrorSpeech. Der Fehler wird weiter
+      // geloggt (nur err.name, secret-frei), nur die Antwort ist eine gueltige Completion.
+      // KEIN Retry hier (der llm.js-Seam hat bereits begrenzt+selektiv retried).
       console.error("[telnyx-shim] agentTurn fehlgeschlagen:", err && err.name); // secret-frei
-      if (!res.headersSent) res.status(HTTP_BAD_GATEWAY).json({ error: "upstream_error" });
+      const content =
+        err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+      if (!res.headersSent) writeFakeStream(res, { model, content });
+      else res.end();
     }
   };
 }

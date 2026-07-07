@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
+import { LlmUnavailableError } from "../src/llm.js";
 
 const SSE_DATA_PREFIX = "data: ";
 
@@ -312,9 +313,9 @@ test("lastUserText: kein messages-Array / kein user-Eintrag mit String-Content -
   assert.equal(agentTurn.calls[0].callerText, "");
 });
 
-// === D8: agentTurn-Fehler hart durchreichen ohne Leak/Hang =======================
+// === D8-D11: agentTurn-Fehler -> wuerdevolle Degradation (P2) ====================
 
-test("D8: agentTurn wirft -> 502 {error:\"upstream_error\"}, kein Secret im Body", async () => {
+test("D8: agentTurn wirft generischen Error -> gueltige Completion mit turnErrorSpeech, KEIN 502", async () => {
   const store = fakeStore({ call: makeCall() });
   async function throwingAgentTurn() {
     throw new Error("llm kaputt");
@@ -324,8 +325,61 @@ test("D8: agentTurn wirft -> 502 {error:\"upstream_error\"}, kein Secret im Body
 
   await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
 
-  assert.equal(res.statusCode, 502);
-  assert.deepEqual(res.body, { error: "upstream_error" });
+  assert.notEqual(res.statusCode, 502, "kein roher 5xx im Fehlerpfad");
+  assert.equal(res.body, null, "kein JSON-Error-Body");
+  assert.equal(res.headers["Content-Type"], "text/event-stream");
+  assert.equal(res.chunks.length, 2, "genau EIN SSE-Chunk + data: [DONE]");
+  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").turnErrorSpeech);
+  assert.equal(res.chunks[1], "data: [DONE]\n\n");
+  assert.equal(res.ended, true);
+});
+
+test("D9: agentTurn wirft LlmUnavailableError -> gueltige Completion mit llmDegradedSpeech (nicht turnErrorSpeech)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  async function throwingAgentTurn() {
+    throw new LlmUnavailableError("circuit-open");
+  }
+  const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.notEqual(res.statusCode, 502);
+  assert.equal(res.body, null);
+  assert.equal(res.headers["Content-Type"], "text/event-stream");
+  assert.equal(res.ended, true);
+  const content = firstChunkJson(res).choices[0].delta.content;
+  assert.equal(content, localeFor("de").llmDegradedSpeech);
+  assert.notEqual(content, localeFor("de").turnErrorSpeech, "transiente Klasse != generischer Fehler");
+});
+
+test("D10: Degradations-Body enthaelt kein Secret - content ist exakt der Locale-String", async () => {
+  const store = fakeStore({ call: makeCall({ aiAssistantToken: "sec-per-call" }) });
+  async function throwingAgentTurn() {
+    throw new LlmUnavailableError("retries-exhausted");
+  }
+  const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  const raw = res.chunks.join("");
+  assert.ok(!raw.includes("sec-per-call"), "kein per-Call-Secret im Degradations-Body");
+  assert.ok(!raw.includes("Bearer"), "kein Bearer-Anteil im Degradations-Body");
+  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").llmDegradedSpeech);
+});
+
+test("D11: nicht-DE Sprache (en) -> englischer Degradations-String (localeFor(call.language) greift)", async () => {
+  const store = fakeStore({ call: makeCall({ language: "en" }) });
+  async function throwingAgentTurn() {
+    throw new Error("boom");
+  }
+  const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("en").turnErrorSpeech);
 });
 
 test("D8b: Fehler-Log traegt NUR err.name, kein Secret", async () => {
