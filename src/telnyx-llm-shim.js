@@ -136,11 +136,18 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
       // ueberlappenden Antwort. Regressionstest: T1 in telnyx-llm-shim.test.js.
       if (!res.headersSent) writeFakeStream(res, { model, content });
       else res.end();
-      return; // Fehlerpfad: kein end_call-Hangup (agentTurn lieferte kein verwertbares Ergebnis)
+      // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
+      // endCall=true geliefert haben - der Fehler stammt dann aus writeFakeStream selbst
+      // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 5 unten muss den
+      // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
+      // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
+      // bleibt endCall auf dem Default false - Schritt 5 ist dann ein No-op.
     }
 
-    // 5) end_call (P3a, Regel 1): der Abschiedssatz ist raus; jetzt den Call out-of-band REAL
-    // beenden. Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob
+    // 5) end_call (P3a, Regel 1): der Abschiedssatz ist raus (oder bestmoeglich degradiert);
+    // jetzt den Call out-of-band REAL beenden, falls agentTurn end_call lieferte - unabhaengig
+    // davon, ob der nachfolgende Response-Write selbst noch erfolgreich war (siehe Kommentar
+    // oben). Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob
     // der Call-Control-Hangup gepuffertes TTS abschneidet, ist live UNBESTAETIGT, wie P4/P4.5).
     if (endCall) await terminateViaCallControl(call);
   };

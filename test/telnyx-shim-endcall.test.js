@@ -120,6 +120,22 @@ function firstChunkJson(res) {
   return JSON.parse(res.chunks[0].slice(SSE_DATA_PREFIX.length).trim());
 }
 
+// Wie fakeRes(), aber der ZWEITE write()-Aufruf wirft (der erste - der eigentliche SSE-
+// Chunk - schlaegt durch, headersSent kippt wie im echten Express). Bildet einen Socket
+// nach, der mitten im Happy-Path-writeFakeStream wegbricht (zwischen dem Daten-Chunk und
+// "data: [DONE]") - Muster identisch zu T1 in telnyx-llm-shim.test.js.
+function fakeResFailingOnSecondWrite() {
+  const res = fakeRes();
+  const originalWrite = res.write.bind(res);
+  let writeCalls = 0;
+  res.write = (s) => {
+    writeCalls += 1;
+    if (writeCalls === 1) return originalWrite(s);
+    throw new Error("socket kaputt");
+  };
+  return res;
+}
+
 // === E1: end_call feuert Hangup, speech geht ZUERST raus ========================
 
 test("E1: end_call=true + vorhandene callControlId -> speech zuerst, dann echter Call-Control-Hangup", async () => {
@@ -209,4 +225,44 @@ test("E5: Call-Control-Hangup wirft -> Handler resolved trotzdem, Response berei
   assert.equal(res.chunks.length, 2, "Response wurde vor dem Hangup-Versuch bereits vollstaendig geschrieben");
   assert.equal(res.ended, true);
   assert.equal(voiceControl.calls.length, 1, "Hangup wurde versucht");
+});
+
+// === T5: end_call=true + writeFakeStream wirft (Teil-Write, Catch-Pfad) -> Hangup TROTZDEM ===
+// Review-Blocker G3/T5 (+ C2): agentTurn liefert erfolgreich endCall=true, aber der
+// direkt anschliessende writeFakeStream-Aufruf wirft mitten im SSE-Write (identisches
+// Muster zu T1 in telnyx-llm-shim.test.js). Der Code landet im Catch-Block - dort darf
+// der Call-Control-Hangup NICHT ausbleiben, denn agentTurn HAT bereits ein verwertbares
+// Ergebnis (endCall=true) geliefert; nur der Response-Write ist gescheitert.
+
+test("T5: end_call=true, writeFakeStream wirft nach dem ersten Write -> Hangup wird trotzdem versucht", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const agentTurn = agentTurnSpy({ speech: "Auf Wiederhoeren", endCall: true });
+  const voiceControl = voiceControlSpy();
+  const handler = makeHandler({ store, agentTurn, voiceControl });
+  const res = fakeResFailingOnSecondWrite();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.equal(res.chunks.length, 1, "nur der erste (fehlgeschlagene) Chunk steht - kein Retry-Chunk");
+  assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeFakeStream aufzurufen");
+  assert.deepEqual(
+    voiceControl.calls,
+    [{ provider: "telnyx", callControlId: "cc_1" }],
+    "endCall=true bleibt aus dem agentTurn-Erfolg bestehen - Hangup trotz Write-Fehler",
+  );
+});
+
+test("T5b: endCall=false + writeFakeStream wirft -> Gegenprobe: weiterhin KEIN Hangup", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const agentTurn = agentTurnSpy({ speech: "Bis dann", endCall: false });
+  const voiceControl = voiceControlSpy();
+  const handler = makeHandler({ store, agentTurn, voiceControl });
+  const res = fakeResFailingOnSecondWrite();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.equal(res.ended, true);
+  assert.equal(voiceControl.calls.length, 0, "kein Hangup, wenn agentTurn kein end_call lieferte");
 });
