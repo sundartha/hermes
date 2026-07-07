@@ -12,6 +12,7 @@
 //              (form, Status=completed) -> beendet den Call (Twilio-kompatibel).
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
+import { voiceAttrs } from "./render.js";
 
 const TEXML_BASE = "/v2/texml";
 // Call-Control-Basis (P4, AI-Assistant-Pfad): Origination/Hangup/ai_assistant_start laufen
@@ -22,6 +23,7 @@ const JSON_HEADERS_TYPE = "application/json";
 // Call-Control-Action-Slugs (Teil des URL-Vertrags, benannt gegen Tippfehler; G25).
 const HANGUP_ACTION = "hangup";
 const ASSISTANT_START_ACTION = "ai_assistant_start";
+const SPEAK_ACTION = "speak";
 
 // HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
 // damit der echte Ablehnungsgrund (z.B. Caller-ID nicht zugewiesen, Land im Voice-Profil
@@ -156,6 +158,23 @@ export const telnyxVoice = {
       action: ASSISTANT_START_ACTION,
       body: { assistant: { id: assistantId } },
       op: "startAssistant",
+    });
+  },
+
+  // Deterministischer Call-Control-Speak-Node (P4.5): server-seitiges TTS EINES Textes
+  // VOR ai_assistant_start (Pflicht-Offenlegung, Regel 2). voiceProfile -> Telnyx-Voice/
+  // Language ueber dieselbe Map wie der TeXML-Renderer (voiceAttrs, G5); Azure-Neural, nicht
+  // der ElevenLabs-Relay (der den Inbound-Track unterdrueckt). Body-Feldform live UNBESTAETIGT
+  // (wie P4) -> mit Owner in P5/P11 fixen. Leere ID/Text -> fail-closed.
+  async speak({ callControlId, text, voiceProfile }) {
+    if (!config.telnyxApiKey) throw new Error("Telnyx speak: TELNYX_API_KEY fehlt");
+    if (!callControlId) throw new Error("Telnyx speak: callControlId fehlt");
+    if (!text) throw new Error("Telnyx speak: text fehlt");
+    const { voice, language } = voiceAttrs(voiceProfile);
+    await postCallControlAction(callControlId, {
+      action: SPEAK_ACTION,
+      body: { payload: text, voice, language },
+      op: "speak",
     });
   },
 };

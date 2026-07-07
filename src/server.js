@@ -26,8 +26,9 @@ import {
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
-import { agentTurn, summarizeCall, openingText } from "./claude.js";
+import { agentTurn, summarizeCall, openingText, disclosureSentence } from "./claude.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
+import { makeCallControlIngest } from "./telnyx-call-control-ingest.js";
 import { metrics } from "./metrics.js";
 import { degradedSpeechFor } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
@@ -1398,6 +1399,16 @@ app.post("/voice/status", async (req, res) => {
   store.recordFailureReason(call.id, callFailureReason({ status: callStatus, diagnostics }));
   finishCall(store.getCall(call.id));
 });
+
+// Call-Control-Event-Ingest (P4.5): additiv, liegt UNTER app.use("/voice") -> Ed25519
+// fail-closed (Regel 3). Faehrt die event-getriebene Zustandsmaschine (answered->
+// Disclosure-Speak; speak.ended->ai_assistant_start; hangup->Settlement finishCall).
+// Korrelation ueber ?callId (Muster /voice/status), KEIN Store-Sekundaerindex. Der
+// bestehende Budget/TeXML-Pfad (/voice/status|turn|outbound) bleibt byte-identisch.
+app.post(
+  "/voice/call-control",
+  makeCallControlIngest({ store, voiceControl, finishCall, disclosureSentence, localeFor }),
+);
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
 

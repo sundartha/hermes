@@ -34,7 +34,9 @@ function escapeXml(s) {
     .replace(/'/g, "&apos;");
 }
 
-function voiceAttrs(profile) {
+// Exportiert (P4.5, G5): der Call-Control-speak-Adapter (voice.js) nutzt dieselbe
+// Voice-Map statt eine zweite Telnyx-Voice-Namens-Quelle zu fuehren.
+export function voiceAttrs(profile) {
   const attrs = TELNYX_VOICE[profile];
   if (!attrs) throw new Error(`unbekanntes voiceProfile: ${profile}`);
   return attrs;

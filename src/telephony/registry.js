@@ -43,6 +43,7 @@ const fakeVoice = {
   },
   async endCallViaCallControl() {},
   async startAssistant() {},
+  async speak() {},
 };
 
 /** @returns {import("./ports.js").VoiceControl} */

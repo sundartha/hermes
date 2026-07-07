@@ -206,7 +206,60 @@ test("fakeVoice: Call-Control-Methoden sind netzfrei", async () => {
     assert.match(r.callControlId, /^fake_cc_/);
     await v.endCallViaCallControl("cc_1"); // resolve, kein throw, kein Netz
     await v.startAssistant({ callControlId: "cc_1", assistantId: "a" });
+    await v.speak({ callControlId: "cc_1", text: "Hallo", voiceProfile: "de-female-neural" });
   } finally {
     config.fakeOriginate = saved;
   }
+});
+
+// 12) speak (P4.5): /v2/calls/<id>/actions/speak, POST, JSON-Header, Bearer, Body {payload,voice,language}
+test("speak: /v2/calls/<id>/actions/speak, Body aus voiceAttrs(voiceProfile)", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.speak({
+    callControlId: "cc_1",
+    text: "Hallo, hier ist der KI-Assistent.",
+    voiceProfile: "de-female-neural",
+  });
+  assert.equal(calls[0].url, `${API_BASE}/v2/calls/cc_1/actions/speak`);
+  assert.equal(calls[0].opts.method, "POST");
+  assert.equal(calls[0].opts.headers.Authorization, `Bearer ${API_KEY}`);
+  assert.equal(calls[0].opts.headers["Content-Type"], "application/json");
+  const body = JSON.parse(calls[0].body);
+  assert.equal(body.payload, "Hallo, hier ist der KI-Assistent.");
+  assert.equal(body.voice, "Azure.de-DE-KatjaNeural");
+  assert.equal(body.language, "de-DE");
+});
+
+// 13) speak Fehlerpfad ohne Key-Leak
+test("speak: HTTP-Fehler ohne Key-Leak", async () => {
+  stubFetch({ ok: false, status: 500 });
+  await assert.rejects(
+    () =>
+      telnyxVoice.speak({ callControlId: "cc_1", text: "Hallo", voiceProfile: "de-female-neural" }),
+    (err) => {
+      assert.match(err.message, /HTTP 500/);
+      assert.ok(!err.message.includes(API_KEY));
+      return true;
+    },
+  );
+});
+
+// 14) speak fail-closed: API_KEY / callControlId / text
+test("speak: fail-closed ohne API_KEY / callControlId / text", async () => {
+  stubFetch({ json: {} });
+  await withBlankedConfig("telnyxApiKey", () =>
+    assert.rejects(
+      () =>
+        telnyxVoice.speak({ callControlId: "cc_1", text: "Hallo", voiceProfile: "de-female-neural" }),
+      /TELNYX_API_KEY fehlt/,
+    ),
+  );
+  await assert.rejects(
+    () => telnyxVoice.speak({ callControlId: "", text: "Hallo", voiceProfile: "de-female-neural" }),
+    /callControlId fehlt/,
+  );
+  await assert.rejects(
+    () => telnyxVoice.speak({ callControlId: "cc_1", text: "", voiceProfile: "de-female-neural" }),
+    /text fehlt/,
+  );
 });

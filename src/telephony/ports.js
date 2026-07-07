@@ -75,6 +75,8 @@
  *   unveraendert). Telnyx-only.
  * @property {(params: StartAssistantParams) => Promise<void>} [startAssistant]
  *   Haengt den Telnyx-AI-Assistant an den Call-Control-Call an (ai_assistant_start). Telnyx-only.
+ * @property {(params: {callControlId: string, text: string, voiceProfile: string}) => Promise<void>} [speak]
+ *   Deterministischer Call-Control-Speak-Node (Disclosure vor ai_assistant_start, P4.5). Telnyx-only.
  */
 
 /**

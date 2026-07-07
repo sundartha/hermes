@@ -36,7 +36,9 @@ const REASON_UNKNOWN = "unknown";
 
 // Telnyx-v2 wrappt Events in {data:{event_type,payload}}; manche Pfade liefern flach.
 // Hebt die Huelle ab und liefert das Event-Objekt oder null (kein Event erkennbar).
-function eventEnvelope(body) {
+// Exportiert (P4.5, G5): call-control-events.js nutzt dieselbe Huellen-Abhebung
+// statt sie zu duplizieren (EINE Quelle fuer das Telnyx-v2-Envelope-Format).
+export function eventEnvelope(body) {
   if (!body || typeof body !== "object") return null;
   const ev = body.data && typeof body.data === "object" ? body.data : body;
   return ev.event_type ? ev : null;
