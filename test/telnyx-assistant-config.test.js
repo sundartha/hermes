@@ -1,10 +1,10 @@
 // P7: Offline-Unit-Test der reinen Telnyx-Assistant-Config-Bau-Funktion.
-// Importiert NUR buildAssistantConfig - kein Netz, kein Secret, kein process.exit
-// (der isMain-Guard im Skript verhindert main() beim Import; Praezedenz
+// Importiert NUR buildAssistantConfig/missingRequired - kein Netz, kein Secret, kein
+// process.exit (der isMain-Guard im Skript verhindert main() beim Import; Praezedenz
 // test/pay4-smoke-guard.test.js importiert isTestKey aus smoke-stripe-payment.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildAssistantConfig } from "../scripts/telnyx-assistant-provision.mjs";
+import { buildAssistantConfig, missingRequired } from "../scripts/telnyx-assistant-provision.mjs";
 
 const ARGS = {
   publicUrl: "https://hermes.example",
@@ -45,4 +45,24 @@ test("buildAssistantConfig: kein freies Prompt-Feld, keine Disclosure/kein Klart
 
 test("buildAssistantConfig: deterministisch (gleiche Args -> byte-identische Config)", () => {
   assert.deepEqual(buildAssistantConfig(ARGS), buildAssistantConfig(ARGS));
+});
+
+// T1/P11: der fail-closed-Gate aus main() (REQUIRED-Filter) als eigene Pruef-Funktion
+// getestet - genau die Logik, die das RUNBOOK als "smokePass=false ... fail-closed, nie
+// faelschlich gruen" bewirbt.
+test("missingRequired: alle Pflichtwerte gesetzt -> leere Liste", () => {
+  const required = [
+    ["TELNYX_API_KEY", "key_abc"],
+    ["PUBLIC_URL", "https://hermes.example"],
+  ];
+  assert.deepEqual(missingRequired(required), []);
+});
+
+test("missingRequired: genau ein Pflichtwert fehlt -> dessen Name in der Liste", () => {
+  const required = [
+    ["TELNYX_API_KEY", "key_abc"],
+    ["PUBLIC_URL", ""],
+    ["TELNYX_ELEVENLABS_VOICE_ID", "voice_xyz"],
+  ];
+  assert.deepEqual(missingRequired(required), ["PUBLIC_URL"]);
 });

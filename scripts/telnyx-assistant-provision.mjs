@@ -25,7 +25,10 @@ import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
 // Shim-Route: dieselbe wie die Registrierung in server.js (POST /v1/chat/completions).
 // Ein Literal an zwei Orten ueber Dateigrenzen hinweg; ein geteiltes Route-Symbol
 // wuerde src/ anfassen (ausserhalb P7-Scope), daher hier eigene benannte Konstante.
-const SHIM_ROUTE = "/v1/chat/completions";
+// Exportiert, damit test/telnyx-assistant-route-drift.test.js sie gegen die echte
+// Registrierung in src/server.js abgleichen kann (Drift faellt beim Testlauf auf,
+// nicht erst beim naechsten Live-Provisioning-Versuch).
+export const SHIM_ROUTE = "/v1/chat/completions";
 // Voice-Slot-Praefix im Telnyx-Assistant (spec-autoritativ "ElevenLabs.<model>.<voiceId>").
 // Exakte Gross-/Kleinschreibung ist live UNBESTAETIGT -> beim Live-Lauf mit Owner verifizieren.
 const ELEVENLABS_VOICE_PREFIX = "ElevenLabs";
@@ -75,6 +78,13 @@ const REQUIRED = Object.freeze([
   ["TELNYX_ELEVENLABS_API_KEY_REF", config.telnyxElevenLabs.apiKeyRef],
 ]);
 
+// Reine Pruef-Funktion (P11 testbar, Muster smoke-stripe-payment.mjs isTestKey): liefert
+// die NAMEN der fehlenden Pflichtwerte (leer bei allen gesetzt). KEIN IO, kein Secret im
+// Rueckgabewert (nur Namen, nie die Werte selbst - Regel 4/5).
+export function missingRequired(required) {
+  return required.filter(([, v]) => !v).map(([n]) => n);
+}
+
 function report(smokePass, reason) {
   console.log(`smokePass=${smokePass}`);
   console.log(`Grund: ${reason}`);
@@ -99,7 +109,7 @@ async function sendAssistantConfig(assistantConfig, existingId) {
 }
 
 async function main() {
-  const missing = REQUIRED.filter(([, v]) => !v).map(([n]) => n);
+  const missing = missingRequired(REQUIRED);
   if (missing.length) {
     report(false, `kein Telnyx-Live-Zugang im Worktree (fehlt: ${missing.join(", ")})`);
   }
