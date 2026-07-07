@@ -26,6 +26,12 @@ export function makeCallControlIngest({ store, voiceControl, finishCall, disclos
     }
     await voiceControl(call.provider).startAssistant({ callControlId, assistantId: call.assistantId });
   }
+  // Regel 2: die Pflicht-Offenlegung ist (Azure-NTTS-Stoerung) fehlgeschlagen -> ai_assistant_start
+  // bleibt fail-safe aus, sonst spricht die KI, ohne dass die Offenlegung je zu hoeren war.
+  // Kein Crash/Orphan: Settlement bei hangup laeuft unabhaengig weiter (wie oben).
+  function onSpeakFailed(call) {
+    console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> kein Assistant-Start`);
+  }
   // Regel 1: Terminal-Settlement (Ist-Minuten buchen + Reserve freigeben), idempotent
   // ueber billedAt/reserveReleased. Spiegelt den /voice/status-completed-Pfad; finishCall
   // ruft releaseReserve intern. Kein Timer-Handle-Clear noetig (billedAt/status!=active
@@ -43,6 +49,7 @@ export function makeCallControlIngest({ store, voiceControl, finishCall, disclos
       const { eventType, callControlId } = parseCallControlEvent(req.body);
       if (eventType === CALL_CONTROL_EVENT.ANSWERED) return void (await onAnswered(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.SPEAK_ENDED) return void (await onSpeakEnded(call, callControlId));
+      if (eventType === CALL_CONTROL_EVENT.SPEAK_FAILED) return void onSpeakFailed(call);
       if (eventType === CALL_CONTROL_EVENT.HANGUP) return void (await onHangup(call));
       // unbekannt/sonstiges -> keine Wirkung (200 bereits gesendet)
     } catch (err) {

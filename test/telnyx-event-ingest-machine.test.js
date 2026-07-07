@@ -67,6 +67,9 @@ function answeredBody(callControlId) {
 function speakEndedBody(callControlId) {
   return { data: { event_type: "call.speak.ended", payload: { call_control_id: callControlId } } };
 }
+function speakFailedBody(callControlId) {
+  return { data: { event_type: "call.speak.ended", payload: { call_control_id: callControlId, status: "failed" } } };
+}
 function hangupBody(callControlId) {
   return { data: { event_type: "call.hangup", payload: { call_control_id: callControlId } } };
 }
@@ -137,6 +140,28 @@ test("speak.ended OHNE call.assistantId -> fail-safe skip, kein startAssistant, 
 
   assert.equal(res.statusSent, 200);
   assert.equal(vc.startAssistantCalls.length, 0);
+});
+
+// Regressionstest (Regel 2): eine fehlgeschlagene Offenlegung (Azure-NTTS-Stoerung,
+// payload.status="failed") darf ai_assistant_start NIE ausloesen - selbst wenn
+// call.assistantId GESETZT ist. Ohne diesen Fix haette die Zustandsmaschine hier
+// startAssistant gefeuert, obwohl die Pflicht-Offenlegung nie zu hoeren war.
+test("speak.ended MIT status='failed' UND gesetzter assistantId -> startAssistant bleibt aus (fail-safe skip)", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const res = fakeRes();
+  await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, res);
+
+  assert.equal(res.statusSent, 200);
+  assert.equal(vc.startAssistantCalls.length, 0, "kein Assistant-Start ohne gehoerte Offenlegung");
 });
 
 test("hangup: finishCall gerufen, endCallRecord nur bei status active; zweites hangup NICHT erneut endCallRecord (Idempotenz-Beitrag der Maschine)", async () => {

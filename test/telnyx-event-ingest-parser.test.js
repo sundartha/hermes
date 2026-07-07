@@ -24,6 +24,27 @@ test("call.speak.ended -> SPEAK_ENDED + callControlId", () => {
   });
 });
 
+// Regressionstest: call.speak.ended MIT payload.status="failed" (Azure-NTTS-Stoerung,
+// siehe speak-events.js-Header) darf NIE als SPEAK_ENDED gewertet werden, sonst startet
+// die Zustandsmaschine ai_assistant_start ohne je gehoerte Pflicht-Offenlegung (Regel 2).
+test("call.speak.ended MIT status='failed' -> SPEAK_FAILED, NICHT SPEAK_ENDED", () => {
+  const body = {
+    data: { event_type: "call.speak.ended", payload: { call_control_id: "cc_2b", status: "failed" } },
+  };
+  assert.deepEqual(parseCallControlEvent(body), {
+    eventType: CALL_CONTROL_EVENT.SPEAK_FAILED,
+    callControlId: "cc_2b",
+  });
+});
+
+test("call.speak.failed (eigener Event-Typ) -> SPEAK_FAILED + callControlId", () => {
+  const body = { data: { event_type: "call.speak.failed", payload: { call_control_id: "cc_2c", status: "failed" } } };
+  assert.deepEqual(parseCallControlEvent(body), {
+    eventType: CALL_CONTROL_EVENT.SPEAK_FAILED,
+    callControlId: "cc_2c",
+  });
+});
+
 test("call.hangup -> HANGUP + callControlId", () => {
   const body = { data: { event_type: "call.hangup", payload: { call_control_id: "cc_3" } } };
   assert.deepEqual(parseCallControlEvent(body), {
