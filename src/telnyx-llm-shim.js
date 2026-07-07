@@ -61,7 +61,33 @@ function writeFakeStream(res, { model, content }) {
   res.end();
 }
 
-export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor }) {
+export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl }) {
+  // P3a (Regel 1 / Befund 6): end_call MUSS den Call REAL beenden. Anders als in der
+  // Budget-Engine (dort rendert der Server hangupD aus {speech,endCall}) gibt es bei
+  // C-Telnyx keinen Text-Rueckkanal "leg auf" - ohne echten Hangup laeuft der Call plus
+  // Tokenkosten weiter. Terminierung out-of-band ueber Call-Control; KEIN zweiter Store-
+  // Write (Settlement kommt ueber den call.hangup-Event -> P4.5 onHangup, EIN idempotenter
+  // Pfad ueber billedAt/reserveReleased).
+  async function terminateViaCallControl(call) {
+    // Frischer Store-Stand (Pre-Mortem): callControlId kann waehrend des Turns gesetzt
+    // worden sein - nicht auf den Turn-Anfang-Stand vertrauen (Muster P4.5 onHangup).
+    const fresh = store.getCall(call.id);
+    const callControlId = fresh && fresh.callControlId;
+    if (!callControlId) {
+      // fail-safe: callControlId persistiert erst P5 (Origination). Fehlt sie -> Skip + Log,
+      // KEIN Crash/Orphan (die Response ist bereits raus), Muster P4.5 assistantId-Handling.
+      console.warn(`[telnyx-shim] end_call ohne callControlId (call=${call.id}) -> kein Hangup`);
+      return;
+    }
+    try {
+      // Eigener try/catch: ein Hangup-Fehler darf die BEREITS gesendete Response nicht
+      // nachtraeglich zerstoeren; nur secret-frei loggen (err.name, Muster P4.5 onHangup).
+      await voiceControl(call.provider).endCallViaCallControl(callControlId);
+    } catch (err) {
+      console.error("[telnyx-shim] Call-Control-Hangup fehlgeschlagen:", err && err.name);
+    }
+  }
+
   return async function handleChatCompletion(req, res) {
     // 1) Existenz-Gate (Invariante 1): Flag aus -> 404, VOR jeder Arbeit/Parsing.
     if (!config.telnyxAiAssistantEnabled) return res.status(HTTP_NOT_FOUND).end();
@@ -85,9 +111,11 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor }) {
       return writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
 
     // 4) Kern: agentTurn (in-house Tool-Loop) gegen die TOKEN-gebundene, frische call-Referenz.
+    let endCall = false;
     try {
-      const { speech } = await agentTurn(call, lastUserText(req.body));
-      return writeFakeStream(res, { model, content: speech });
+      const turn = await agentTurn(call, lastUserText(req.body));
+      endCall = turn.endCall === true;
+      writeFakeStream(res, { model, content: turn.speech }); // Abschiedssatz geht ZUERST raus
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
       // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie
@@ -108,6 +136,12 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor }) {
       // ueberlappenden Antwort. Regressionstest: T1 in telnyx-llm-shim.test.js.
       if (!res.headersSent) writeFakeStream(res, { model, content });
       else res.end();
+      return; // Fehlerpfad: kein end_call-Hangup (agentTurn lieferte kein verwertbares Ergebnis)
     }
+
+    // 5) end_call (P3a, Regel 1): der Abschiedssatz ist raus; jetzt den Call out-of-band REAL
+    // beenden. Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob
+    // der Call-Control-Hangup gepuffertes TTS abschneidet, ist live UNBESTAETIGT, wie P4/P4.5).
+    if (endCall) await terminateViaCallControl(call);
   };
 }

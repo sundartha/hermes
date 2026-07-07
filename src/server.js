@@ -209,7 +209,7 @@ registerWellKnown(app);
 // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
 // bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
 // fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
-app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor }));
+app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl }));
 
 // P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
 // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
