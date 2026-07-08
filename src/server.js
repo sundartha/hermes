@@ -30,6 +30,7 @@ import { agentTurn, summarizeCall, openingText, disclosureSentence } from "./cla
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { makeCallControlIngest } from "./telnyx-call-control-ingest.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
+import { startInboundAiAssistant, inboundCallControlId } from "./telnyx-inbound.js";
 import { metrics } from "./metrics.js";
 import { degradedSpeechFor } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
@@ -990,6 +991,31 @@ function armReserveReleaseTimer(call) {
   setTimeout(() => releaseReserve(store.getCall(call.id) || call), delay);
 }
 
+// P8: TeXML-Handoff-Antwort auf /voice/incoming, wenn der Call-Control-Assistant den Leg
+// uebernimmt. Leere Direktivenliste (renderDirectives([]) -> <Response></Response>) als
+// Platzhalter; die exakte Telnyx-Handoff-Direktive ist live unbestaetigt (P0/P11). Zentral
+// benannt statt inline-[] gestreut.
+const INBOUND_ASSISTANT_HANDOFF = [];
+
+// C-Telnyx-Inbound (P8, Befund 8): startet - falls einschlaegig - den Call-Control-Assistant
+// fuer einen Inbound-Leg und liefert die Handoff-TeXML; sonst null (Aufrufer faellt fail-safe
+// auf den bestehenden TeXML-Gather-Pfad zurueck). ERBT Signatur (app.use "/voice"), Tenant-
+// Resolve (numberRecordByE164) UND Budget-Gate vom Aufrufer - KEIN neuer Gate, dieser Helper
+// fuegt keinen hinzu. Nur bei aktivem Flag + signatur-authentifiziertem Telnyx-Provider
+// (Anti-Spoof: provider stammt aus dem Signatur-Header, nicht aus To/Body). callControlId
+// fehlt (Twilio ODER TeXML-Feld absent) -> null, kein kaputter Assistant-Pfad. Der Max-Dauer-
+// Timer ist beim Aufrufer BEREITS armiert; terminateCappedCall liest den Call frisch und
+// trifft via hangUpAction(callControlId) den Call-Control-Hangup, sobald callControlId
+// persistiert ist (P6) - KEIN Re-Arm (zweiter Timer = Leak). Exakte Handoff-Direktive live
+// unbestaetigt (wie P4-Adapter-Body-Form) - mit dem Owner in P0/P11 fixen.
+async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
+  if (!(config.telnyxAiAssistantEnabled && provider === PROVIDER.TELNYX)) return null;
+  const callControlId = inboundCallControlId(body);
+  if (!callControlId) return null;
+  await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });
+  return render(INBOUND_ASSISTANT_HANDOFF, provider);
+}
+
 // ---------------- INBOUND ----------------
 // Twilio-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
 // Die Twilio-Signatur ist hier bereits fail-closed geprueft (app.use("/voice")).
@@ -1059,6 +1085,18 @@ app.post("/voice/incoming", async (req, res) => {
 
     const ctx = store.tenantContext(call.tenantId);
     const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
+
+    // P8: Handoff an den Call-Control-Assistant, falls einschlaegig; sonst (null) faellt
+    // der Aufrufer fail-safe auf den bestehenden TeXML-Gather-Pfad zurueck (byte-identisch).
+    const handoffXml = await inboundAssistantHandoffXml({
+      call,
+      provider,
+      body: req.body,
+      greeting,
+      voiceProfile: locale.voiceProfile,
+    });
+    if (handoffXml) return res.type("text/xml").send(handoffXml);
+
     store.addTranscript(call.id, "agent", greeting);
     res
       .type("text/xml")

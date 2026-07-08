@@ -10,12 +10,19 @@ import { randomBytes } from "node:crypto";
 // Bearer wird von Telnyx an einen internet-erreichbaren Endpunkt (Shim) gereicht (Regel 3).
 const AI_ASSISTANT_TOKEN_BYTES = 32;
 
-export async function originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur }) {
-  // Regel 3: per-Call-Secret (Krypto-Zufall), an genau diesen callId gebunden. NIE geloggt,
-  // NIE in publicCall/Portal-Projektion. Der Shim validiert es gegen call.aiAssistantToken.
+// Regel 3 / G5: EINE Quelle fuer den per-Call-Bearer-Mint + assistantId-Bindung, geteilt von
+// Outbound-Origination (hier) UND Inbound-Answer (telnyx-inbound.js). Mutiert den LEBENDEN
+// Call; der Aufrufer persistiert nach dem Origination-/Answer-Schritt (store.save). Bearer:
+// per-Call-Secret (Krypto-Zufall), an genau diesen callId gebunden, NIE geloggt/projiziert
+// (publicCall strippt es); der Shim validiert gegen call.aiAssistantToken. assistantId aus
+// P7-Provisioning (leer -> P4.5 onSpeakEnded/startAssistant fail-safe, nicht-secret).
+export function bindAssistantToCall(call, config) {
   call.aiAssistantToken = randomBytes(AI_ASSISTANT_TOKEN_BYTES).toString("hex");
-  // In P7 provisionierter Assistant (leer -> P4.5 onSpeakEnded skippt fail-safe). Nicht-secret.
   call.assistantId = config.telnyxAssistantId;
+}
+
+export async function originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur }) {
+  bindAssistantToCall(call, config);
   const { callControlId } = await voiceControl(call.provider).originateViaCallControl({
     from: fromNumber,
     to,
