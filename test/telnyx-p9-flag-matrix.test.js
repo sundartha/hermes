@@ -1,0 +1,176 @@
+// Phase telnyx-p9 (PLAN-TELNYX-AI-ASSISTANT.md P9): ORTHOGONALITAETS-MATRIX.
+// Pinnt Flag x Provider -> Pfad ueber ALLE DREI Origination-Oberflaechen
+// (Outbound /api/calls, Inbound /voice/incoming, Shim /v1/chat/completions) auf
+// EINEM laufenden Server je Flag-Zustand. Assertiert bewusst NUR den groben Pfad-
+// Diskriminator; die per-Oberflaeche-TIEFE (exakte URL/Token/Budget/Billing) ist
+// Eigentum von telnyx-p5-origination / telnyx-p8-inbound / telnyx-shim-route.
+// Der Befund-1-Boot-Re-Arm/hangUp-ID-Beweis (callControlId gewinnt, endCall NIE)
+// ist Eigentum von telnyx-p6-cap-callcontrol (T1/T2/T5) + telnyx-p6-boot-rearm
+// (R1/R2, beide flag-aus zur Boot-Zeit) - hier nur per Quelltext-Wiring-Guard
+// gegen Drift gesichert. Netto-neu: die zwei Orthogonalitaets-Zellen flag-an +
+// NICHT-Telnyx -> Bestand (Outbound & Inbound). Spawn/Fake, kein Netz.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { startServer, seedState } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const HTTP_NOT_FOUND = 404; // Flag aus -> Shim existiert nicht
+const HTTP_FORBIDDEN = 403; // Flag an, kein per-Call-Token -> Shim erreichbar, fail-closed
+const TELNYX_OWNER = Object.freeze({ e164: "+4915005551234", provider: "telnyx" });
+const OUTBOUND_TO = "+4915112345678";
+const INBOUND_NUMBER = "+4915255555555";
+const SHIM_ROUTE = "/v1/chat/completions";
+const TELNYX_HDR = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
+
+// --- Oberflaechen-Helper (je Oberflaeche EINE Quelle, G5) ---------------------
+
+async function placeOutbound(srv) {
+  const res = await fetch(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: OUTBOUND_TO, objective: "Test" }),
+  });
+  return res.json(); // { callId, ... }
+}
+
+function outboundCall(srv, callId) {
+  return srv.readStore().calls.find((c) => c.id === callId);
+}
+
+// telnyx (bool): Ed25519-Header setzen (Anti-Spoof-Provider-Klassifikation faellt sonst
+// auf Twilio/DEFAULT_PROVIDER zurueck - genau das braucht NEU-2). callControlId
+// (optional): Telnyx-TeXML-Feld im Body.
+async function postIncoming(srv, { telnyx, callControlId } = {}) {
+  const body = { CallSid: "CAtest", From: OUTBOUND_TO, To: INBOUND_NUMBER };
+  if (callControlId !== undefined) body.CallControlId = callControlId;
+  const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    method: "POST",
+    headers: telnyx ? TELNYX_HDR : {},
+    body: new URLSearchParams(body),
+  });
+  return res.text(); // TeXML/TwiML
+}
+
+async function probeShim(srv) {
+  const res = await fetch(`${srv.localUrl}${SHIM_ROUTE}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  return res.status;
+}
+
+// Inbound braucht EINE aktive Telnyx-Nummer am Owner-Tenant (Muster P8
+// seedWithTelnyxNumber); der Inbound-Provider wird HEADER-getrieben (Anti-Spoof),
+// daher exerziert dieselbe Nummer beide Provider-Zellen ueber den Signatur-Header.
+function seedTelnyxInbound() {
+  return seedState({
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas" }],
+    numbers: [
+      {
+        id: "num_telnyx",
+        e164: INBOUND_NUMBER,
+        tenantId: BOOTSTRAP_TENANT_ID,
+        provider: "telnyx",
+        status: "active",
+        providerNumberId: null,
+      },
+    ],
+  });
+}
+
+test("Flag AUS + Telnyx: Outbound=TeXML, Inbound=Gather, Shim=404 (Bestand, byte-identisch)", async () => {
+  const srv = await startServer({
+    env: { FAKE_ORIGINATE: "true" }, // TELNYX_AI_ASSISTANT_ENABLED bleibt BASE_ENV-Default (false)
+    ownerNumber: TELNYX_OWNER,
+    seed: seedTelnyxInbound(),
+  });
+  try {
+    const { callId } = await placeOutbound(srv);
+    const c = outboundCall(srv, callId);
+    assert.match(c.twilioSid, /^fake_/, "TeXML-Fake-Praefix (nicht fake_cc_)");
+    assert.doesNotMatch(c.twilioSid, /^fake_cc_/);
+    assert.equal(c.callControlId, null);
+
+    const xml = await postIncoming(srv, { telnyx: true, callControlId: "cc_x" });
+    assert.match(xml, /<Gather/, "Bestand-Inbound (Flag aus)");
+
+    assert.equal(await probeShim(srv), HTTP_NOT_FOUND, "Shim dunkel");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(NICHT-Telnyx)=Gather, Shim=403", async () => {
+  const srv = await startServer({
+    env: {
+      FAKE_ORIGINATE: "true",
+      TELNYX_AI_ASSISTANT_ENABLED: "true",
+      TELNYX_ASSISTANT_ID: "asst_x",
+    },
+    ownerNumber: TELNYX_OWNER,
+    seed: seedTelnyxInbound(),
+  });
+  try {
+    const { callId } = await placeOutbound(srv);
+    const c = outboundCall(srv, callId);
+    assert.match(c.callControlId, /^fake_cc_/, "Call-Control-Praefix beweist den Call-Control-Pfad");
+    assert.equal(c.twilioSid, null);
+
+    const handoff = await postIncoming(srv, { telnyx: true, callControlId: "cc_in" });
+    assert.doesNotMatch(handoff, /<Gather/, "Assistant uebernimmt den Leg (kein TeXML-Gather)");
+
+    // NEU-2 (Orthogonalitaet): kein Telnyx-Header -> providerFromHeaders faellt auf
+    // DEFAULT_PROVIDER (Twilio) zurueck, obwohl das Flag an ist.
+    const fallback = await postIncoming(srv, {});
+    assert.match(fallback, /<Gather/, "NICHT-Telnyx faellt trotz Flag AN auf den Bestandspfad zurueck");
+
+    assert.equal(await probeShim(srv), HTTP_FORBIDDEN, "Shim erreichbar (fail-closed, kein per-Call-Token)");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Flag AN + NICHT-Telnyx (Twilio-Owner): Outbound faellt auf TeXML/Bestand zurueck (Orthogonalitaet)", async () => {
+  const srv = await startServer({
+    env: {
+      FAKE_ORIGINATE: "true",
+      TELNYX_AI_ASSISTANT_ENABLED: "true",
+      TELNYX_ASSISTANT_ID: "asst_x",
+    },
+    // kein ownerNumber -> Default OWNER_TEST_NUMBER (Twilio) -> outboundProvider=twilio
+  });
+  try {
+    const { callId } = await placeOutbound(srv);
+    const c = outboundCall(srv, callId);
+    assert.match(c.twilioSid, /^fake_/, "TeXML trotz Flag AN (Provider entscheidet, nicht das Flag allein)");
+    assert.doesNotMatch(c.twilioSid, /^fake_cc_/);
+    assert.equal(c.callControlId, null);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// ---- Regressions-Lock (Quelltext-Wiring, Muster T6/T8 telnyx-p6-cap-callcontrol) ----
+// Kein Klon der P6-Runtime-Tests: sichert nur, dass rearmActiveCallTimers die
+// Hangup-Endpunktwahl weiterhin an hangUpAction delegiert (Befund 1) statt sie
+// inline nach voiceEngine zu verzweigen.
+const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
+
+test("Wiring: rearmActiveCallTimers terminalisiert C-Telnyx ausschliesslich ueber terminateCappedCall/scheduleMaxDurationEnd (kein direkter voiceEngine-getriebener endCall)", () => {
+  const marker = "function rearmActiveCallTimers()";
+  const block = serverSrc.slice(serverSrc.indexOf(marker), serverSrc.indexOf(marker) + 1200);
+  // Der realtime-Guard bleibt (Budget-only), aber KEIN C-Telnyx-Sonderpfad ueber voiceEngine:
+  assert.match(block, /config\.voiceEngine === "realtime"\) return/);
+  assert.match(block, /terminateCappedCall\(call\.id, call\.twilioSid/);
+  assert.match(block, /scheduleMaxDurationEnd\(call, call\.twilioSid/);
+  assert.doesNotMatch(
+    block,
+    /endCallViaCallControl|\.endCall\(/,
+    "Hangup-Endpunktwahl bleibt in hangUpAction (Befund 1), NIE inline in rearm",
+  );
+});
