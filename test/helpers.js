@@ -474,6 +474,74 @@ export function fakeTelnyxShimConfig({
   return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
 }
 
+// ---- Telnyx-Origination/-Inbound-Rohstoffe (Nummern/Header/Seed/POST-Helper) ----
+// EINE Quelle (G5/S2) statt der frueher in telnyx-p5-origination + telnyx-p8-inbound +
+// telnyx-p9-flag-matrix dreifach kopierten Konstanten und Helper-Funktionen.
+// TELNYX_TEST_PEER_NUMBER spielt zwei Rollen (Outbound-Ziel UND Inbound-Anrufer-From) -
+// beide Test-Dateien riefen bereits wortwoertlich dieselbe Nummer auf.
+export const TELNYX_TEST_OWNER_NUMBER = Object.freeze({
+  e164: "+4915005551234",
+  provider: "telnyx",
+});
+export const TELNYX_TEST_PEER_NUMBER = "+4915112345678";
+export const TELNYX_TEST_TENANT_NUMBER = "+4915255555555";
+export const TELNYX_TEST_SIGNATURE_HEADERS = Object.freeze({
+  "telnyx-signature-ed25519": "sig",
+  "telnyx-timestamp": "1",
+});
+
+// POST /api/calls (Outbound-Origination-Trigger). Liefert die rohe fetch-Response
+// (Caller entscheidet, ob nur der Status oder auch der JSON-Body gebraucht wird).
+export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
+  return fetch(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, objective: "Test" }),
+  });
+}
+
+// POST /voice/incoming (Inbound-Webhook-Trigger). telnyx (bool, Default true): Ed25519-
+// Signatur-Header setzen - ohne sie faellt providerFromHeaders auf Twilio/DEFAULT_PROVIDER
+// zurueck (Anti-Spoof-Provider-Klassifikation). callControlId (optional): Telnyx-TeXML-Feld
+// im Body, nur gesetzt wenn explizit uebergeben. Liefert die rohe fetch-Response.
+export function postTelnyxIncoming(
+  srv,
+  {
+    telnyx = true,
+    callControlId,
+    callSid = "CAtest",
+    from = TELNYX_TEST_PEER_NUMBER,
+    to = TELNYX_TEST_TENANT_NUMBER,
+  } = {},
+) {
+  const body = { CallSid: callSid, From: from, To: to };
+  if (callControlId !== undefined) body.CallControlId = callControlId;
+  return fetch(`${srv.localUrl}/voice/incoming`, {
+    method: "POST",
+    headers: telnyx ? TELNYX_TEST_SIGNATURE_HEADERS : {},
+    body: new URLSearchParams(body),
+  });
+}
+
+// Seedet EINE aktive Telnyx-Nummer (TELNYX_TEST_TENANT_NUMBER) am Owner-Tenant - Inbound-
+// Routing (/voice/incoming) braucht eine passende aktive Nummer im Store, sonst greift das
+// To-Routing nicht.
+export function seedWithTelnyxNumber() {
+  return seedState({
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas" }],
+    numbers: [
+      {
+        id: "num_telnyx",
+        e164: TELNYX_TEST_TENANT_NUMBER,
+        tenantId: BOOTSTRAP_TENANT_ID,
+        provider: "telnyx",
+        status: "active",
+        providerNumberId: null,
+      },
+    ],
+  });
+}
+
 // ---- OAuth-Mini-IdP (offline) fuer MCP_AUTH=oauth-Tests ----
 // = PUBLIC_URL/mcp aus BASE_ENV (kanonische Audience).
 export const MCP_AUDIENCE = "https://agent.test/mcp";

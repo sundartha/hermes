@@ -7,13 +7,9 @@
 // callControlId im Body bleiben byte-identisch auf dem TeXML-Gather-Pfad.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState } from "./helpers.js";
+import { startServer, postTelnyxIncoming, seedWithTelnyxNumber } from "./helpers.js";
 import { startInboundAiAssistant, inboundCallControlId } from "../src/telnyx-inbound.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-
-const TELNYX_HEADERS = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
-const TELNYX_NUMBER = "+4915255555555";
-const FROM = "+4915112345678";
 
 // === A: startInboundAiAssistant + inboundCallControlId (DI, offline) ==================
 
@@ -100,32 +96,6 @@ test("inboundCallControlId: Feld gesetzt -> Wert; fehlend/leer/nicht-string -> n
 
 // === B: Spawn - Pfadwahl ueber /voice/incoming =========================================
 
-function seedWithTelnyxNumber() {
-  return seedState({
-    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas" }],
-    numbers: [
-      {
-        id: "num_telnyx",
-        e164: TELNYX_NUMBER,
-        tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "telnyx",
-        status: "active",
-        providerNumberId: null,
-      },
-    ],
-  });
-}
-
-async function postIncoming(srv, { telnyx = true, callControlId, callSid = "CAtest" } = {}) {
-  const body = { CallSid: callSid, From: FROM, To: TELNYX_NUMBER };
-  if (callControlId !== undefined) body.CallControlId = callControlId;
-  return fetch(`${srv.localUrl}/voice/incoming`, {
-    method: "POST",
-    headers: telnyx ? TELNYX_HEADERS : {},
-    body: new URLSearchParams(body),
-  });
-}
-
 test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-Control-Felder persistiert", async () => {
   const srv = await startServer({
     env: {
@@ -136,13 +106,17 @@ test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-C
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.doesNotMatch(xml, /<Gather/, "kein TeXML-Gather - der Assistant uebernimmt den Leg");
 
     const call = srv.readStore().calls[0];
-    assert.equal(call.callControlId, "cc_inbound_9", "aus dem Body, kein fake_cc_-Praefix (Inbound != Outbound)");
+    assert.equal(
+      call.callControlId,
+      "cc_inbound_9",
+      "aus dem Body, kein fake_cc_-Praefix (Inbound != Outbound)",
+    );
     assert.equal(call.assistantId, "asst_x");
     assert.match(call.aiAssistantToken, /^[0-9a-f]{64}$/);
     assert.equal(call.direction, "inbound");
@@ -162,17 +136,23 @@ test("Flag an + Telnyx + ueber Budget -> Hangup, kein Call-Record, startAssistan
     },
     seed: (() => {
       const s = seedWithTelnyxNumber();
-      s.usage = { [BOOTSTRAP_TENANT_ID]: { inputTokens: 0, outputTokens: 0, costEur: 99, calls: 1 } };
+      s.usage = {
+        [BOOTSTRAP_TENANT_ID]: { inputTokens: 0, outputTokens: 0, costEur: 99, calls: 1 },
+      };
       return s;
     })(),
   });
   try {
-    const res = await postIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.match(xml, /<Hangup/, "Budget-Gate greift VOR dem Assistant-Branch");
 
-    assert.equal(srv.readStore().calls.length, 0, "kein Call-Record - das Gate returnt vor createCall");
+    assert.equal(
+      srv.readStore().calls.length,
+      0,
+      "kein Call-Record - das Gate returnt vor createCall",
+    );
   } finally {
     await srv.stop();
   }
@@ -194,7 +174,7 @@ test("Flag an + Telnyx + bogus Ed25519-Signatur -> 403, kein Routing/Call-Record
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
     assert.equal(res.status, 403, "ohne gueltige Signatur kein Zugriff aufs Routing");
     assert.equal(srv.readStore().calls.length, 0);
   } finally {
@@ -208,7 +188,7 @@ test("Flag aus (byte-identisch): TeXML-Gather-Pfad auch bei Telnyx-Provider, kei
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.match(xml, /<Gather/, "Flag aus -> Bestandspfad unveraendert");
@@ -232,10 +212,14 @@ test("Flag an + Telnyx + callControlId ABWESEND -> fail-safe TeXML-Gather-Pfad, 
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postIncoming(srv); // kein callControlId im Body
+    const res = await postTelnyxIncoming(srv); // kein callControlId im Body
     assert.equal(res.status, 200);
     const xml = await res.text();
-    assert.match(xml, /<Gather/, "fehlendes CallControlId-Feld -> Bestandspfad, kein kaputter Assistant-Pfad");
+    assert.match(
+      xml,
+      /<Gather/,
+      "fehlendes CallControlId-Feld -> Bestandspfad, kein kaputter Assistant-Pfad",
+    );
 
     const call = srv.readStore().calls[0];
     assert.equal(call.callControlId, null);

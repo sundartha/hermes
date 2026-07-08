@@ -6,12 +6,14 @@
 // (C) publicCall-Unit: aiAssistantToken verlaesst den Server nie (Muster streamToken).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
+import {
+  startServer,
+  placeCall,
+  TELNYX_TEST_OWNER_NUMBER,
+  TELNYX_TEST_PEER_NUMBER,
+} from "./helpers.js";
 import { originateAiAssistantCall } from "../src/telnyx-origination.js";
 import { publicCall } from "../src/store/views.js";
-
-const TELNYX_OWNER_NUMBER = { e164: "+4915005551234", provider: "telnyx" };
-const TO = "+4915112345678";
 
 // === A: originateAiAssistantCall (DI, offline) ===================================
 
@@ -44,7 +46,7 @@ test("originateAiAssistantCall: exakte webhookUrl + Token-Mint (64-hex) + Persis
     config,
     call,
     fromNumber: "+4930000000",
-    to: TO,
+    to: TELNYX_TEST_PEER_NUMBER,
     maxDur: 180,
   });
 
@@ -52,7 +54,7 @@ test("originateAiAssistantCall: exakte webhookUrl + Token-Mint (64-hex) + Persis
   assert.equal(voiceControl.calls[0].provider, "telnyx", "voiceControl(call.provider)");
   assert.deepEqual(voiceControl.calls[0].params, {
     from: "+4930000000",
-    to: TO,
+    to: TELNYX_TEST_PEER_NUMBER,
     webhookUrl: "https://agent.test/voice/call-control?callId=call_abc",
     method: "POST",
     timeLimit: 180,
@@ -65,18 +67,10 @@ test("originateAiAssistantCall: exakte webhookUrl + Token-Mint (64-hex) + Persis
 
 // === B: Spawn - Pfadwahl ueber server.js /api/calls ================================
 
-async function placeCall(srv, to = TO) {
-  return fetch(`${srv.localUrl}/api/calls`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, objective: "Test" }),
-  });
-}
-
 test("Flag aus (byte-identisch): TeXML-Pfad auch bei Telnyx-Provider, kein Call-Control", async () => {
   const srv = await startServer({
     env: { FAKE_ORIGINATE: "true" }, // TELNYX_AI_ASSISTANT_ENABLED bleibt BASE_ENV-Default (false)
-    ownerNumber: TELNYX_OWNER_NUMBER,
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
     const res = await placeCall(srv);
@@ -96,19 +90,35 @@ test("Flag aus (byte-identisch): TeXML-Pfad auch bei Telnyx-Provider, kein Call-
 test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid null, originateCall NICHT gerufen", async () => {
   const srv = await startServer({
     env: { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true" },
-    ownerNumber: TELNYX_OWNER_NUMBER,
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
     const res = await placeCall(srv);
     assert.equal(res.status, 200);
     const { callId, twilioSid } = await res.json();
-    assert.equal(twilioSid, null, "Response spiegelt call.twilioSid (im Call-Control-Pfad nie gesetzt)");
+    assert.equal(
+      twilioSid,
+      null,
+      "Response spiegelt call.twilioSid (im Call-Control-Pfad nie gesetzt)",
+    );
 
     const stored = srv.readStore().calls.find((c) => c.id === callId);
-    assert.match(stored.callControlId, /^fake_cc_/, "fakeVoice-Praefix beweist den Call-Control-Pfad");
-    assert.equal(stored.twilioSid, null, "kein TeXML-Originate gerufen (kein fake_-Praefix ohne _cc_)");
+    assert.match(
+      stored.callControlId,
+      /^fake_cc_/,
+      "fakeVoice-Praefix beweist den Call-Control-Pfad",
+    );
+    assert.equal(
+      stored.twilioSid,
+      null,
+      "kein TeXML-Originate gerufen (kein fake_-Praefix ohne _cc_)",
+    );
     assert.match(stored.aiAssistantToken, /^[0-9a-f]{64}$/);
-    assert.equal(stored.assistantId, "", "TELNYX_ASSISTANT_ID neutral leer (BASE_ENV) -> leerer assistantId");
+    assert.equal(
+      stored.assistantId,
+      "",
+      "TELNYX_ASSISTANT_ID neutral leer (BASE_ENV) -> leerer assistantId",
+    );
   } finally {
     await srv.stop();
   }
@@ -117,12 +127,15 @@ test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid nul
 test("Flag an + Telnyx: aiAssistantToken verlaesst GET /api/calls/:id nie", async () => {
   const srv = await startServer({
     env: { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true" },
-    ownerNumber: TELNYX_OWNER_NUMBER,
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
     const { callId } = await (await placeCall(srv)).json();
     const apiCall = await (await fetch(`${srv.localUrl}/api/calls/${callId}`)).json();
-    assert.ok(!("aiAssistantToken" in apiCall), "Secret nie ueber /api/calls/:id (publicCall-Strip)");
+    assert.ok(
+      !("aiAssistantToken" in apiCall),
+      "Secret nie ueber /api/calls/:id (publicCall-Strip)",
+    );
   } finally {
     await srv.stop();
   }
@@ -142,21 +155,32 @@ test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, 
       TELNYX_AI_ASSISTANT_ENABLED: "true",
       VOICE_TARIFF_DOMESTIC_CENTS: "20", // reserveCents muss > 0 sein, sonst ist releaseOutboundReserve ein No-op
     },
-    ownerNumber: TELNYX_OWNER_NUMBER,
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
     const res = await placeCall(srv);
-    assert.equal(res.status, 500, "kein providerStatus (Fehler VOR jedem Netz-Call) -> generischer 500");
+    assert.equal(
+      res.status,
+      500,
+      "kein providerStatus (Fehler VOR jedem Netz-Call) -> generischer 500",
+    );
     const body = await res.json();
     assert.equal(body.error, "Anruf konnte nicht gestartet werden.");
-    assert.ok(!JSON.stringify(body).includes("TELNYX_API_KEY"), "keine Provider-/Config-Details an den Client");
+    assert.ok(
+      !JSON.stringify(body).includes("TELNYX_API_KEY"),
+      "keine Provider-/Config-Details an den Client",
+    );
 
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1, "genau EIN Call-Record (kein Retry/Doppel-Create)");
     const stored = calls[0];
     assert.equal(stored.status, "failed", "gemeinsamer catch-Block terminiert wie der TeXML-Zweig");
     assert.equal(stored.reserveReleased, true, "releaseReserve lief VOR endCallRecord (OUT-05)");
-    assert.equal(stored.callControlId, null, "kein callControlId, da originateViaCallControl vor der Rueckgabe warf");
+    assert.equal(
+      stored.callControlId,
+      null,
+      "kein callControlId, da originateViaCallControl vor der Rueckgabe warf",
+    );
   } finally {
     await srv.stop();
   }

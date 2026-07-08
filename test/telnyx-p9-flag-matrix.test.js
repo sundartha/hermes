@@ -14,45 +14,24 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { startServer, seedState } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import {
+  startServer,
+  placeCall,
+  postTelnyxIncoming,
+  seedWithTelnyxNumber,
+  TELNYX_TEST_OWNER_NUMBER,
+} from "./helpers.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HTTP_NOT_FOUND = 404; // Flag aus -> Shim existiert nicht
 const HTTP_FORBIDDEN = 403; // Flag an, kein per-Call-Token -> Shim erreichbar, fail-closed
-const TELNYX_OWNER = Object.freeze({ e164: "+4915005551234", provider: "telnyx" });
-const OUTBOUND_TO = "+4915112345678";
-const INBOUND_NUMBER = "+4915255555555";
 const SHIM_ROUTE = "/v1/chat/completions";
-const TELNYX_HDR = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
 
-// --- Oberflaechen-Helper (je Oberflaeche EINE Quelle, G5) ---------------------
-
-async function placeOutbound(srv) {
-  const res = await fetch(`${srv.localUrl}/api/calls`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to: OUTBOUND_TO, objective: "Test" }),
-  });
-  return res.json(); // { callId, ... }
-}
+// --- Oberflaechen-Helper, die NUR diese Datei braucht (Rohstoffe/POST-Primitive
+// teilt test/helpers.js: placeCall, postTelnyxIncoming, seedWithTelnyxNumber, G5) ---
 
 function outboundCall(srv, callId) {
   return srv.readStore().calls.find((c) => c.id === callId);
-}
-
-// telnyx (bool): Ed25519-Header setzen (Anti-Spoof-Provider-Klassifikation faellt sonst
-// auf Twilio/DEFAULT_PROVIDER zurueck - genau das braucht NEU-2). callControlId
-// (optional): Telnyx-TeXML-Feld im Body.
-async function postIncoming(srv, { telnyx, callControlId } = {}) {
-  const body = { CallSid: "CAtest", From: OUTBOUND_TO, To: INBOUND_NUMBER };
-  if (callControlId !== undefined) body.CallControlId = callControlId;
-  const res = await fetch(`${srv.localUrl}/voice/incoming`, {
-    method: "POST",
-    headers: telnyx ? TELNYX_HDR : {},
-    body: new URLSearchParams(body),
-  });
-  return res.text(); // TeXML/TwiML
 }
 
 async function probeShim(srv) {
@@ -64,39 +43,20 @@ async function probeShim(srv) {
   return res.status;
 }
 
-// Inbound braucht EINE aktive Telnyx-Nummer am Owner-Tenant (Muster P8
-// seedWithTelnyxNumber); der Inbound-Provider wird HEADER-getrieben (Anti-Spoof),
-// daher exerziert dieselbe Nummer beide Provider-Zellen ueber den Signatur-Header.
-function seedTelnyxInbound() {
-  return seedState({
-    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas" }],
-    numbers: [
-      {
-        id: "num_telnyx",
-        e164: INBOUND_NUMBER,
-        tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "telnyx",
-        status: "active",
-        providerNumberId: null,
-      },
-    ],
-  });
-}
-
 test("Flag AUS + Telnyx: Outbound=TeXML, Inbound=Gather, Shim=404 (Bestand, byte-identisch)", async () => {
   const srv = await startServer({
     env: { FAKE_ORIGINATE: "true" }, // TELNYX_AI_ASSISTANT_ENABLED bleibt BASE_ENV-Default (false)
-    ownerNumber: TELNYX_OWNER,
-    seed: seedTelnyxInbound(),
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    seed: seedWithTelnyxNumber(),
   });
   try {
-    const { callId } = await placeOutbound(srv);
+    const { callId } = await (await placeCall(srv)).json();
     const c = outboundCall(srv, callId);
     assert.match(c.twilioSid, /^fake_/, "TeXML-Fake-Praefix (nicht fake_cc_)");
     assert.doesNotMatch(c.twilioSid, /^fake_cc_/);
     assert.equal(c.callControlId, null);
 
-    const xml = await postIncoming(srv, { telnyx: true, callControlId: "cc_x" });
+    const xml = await (await postTelnyxIncoming(srv, { callControlId: "cc_x" })).text();
     assert.match(xml, /<Gather/, "Bestand-Inbound (Flag aus)");
 
     assert.equal(await probeShim(srv), HTTP_NOT_FOUND, "Shim dunkel");
@@ -112,24 +72,36 @@ test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(
       TELNYX_AI_ASSISTANT_ENABLED: "true",
       TELNYX_ASSISTANT_ID: "asst_x",
     },
-    ownerNumber: TELNYX_OWNER,
-    seed: seedTelnyxInbound(),
+    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    seed: seedWithTelnyxNumber(),
   });
   try {
-    const { callId } = await placeOutbound(srv);
+    const { callId } = await (await placeCall(srv)).json();
     const c = outboundCall(srv, callId);
-    assert.match(c.callControlId, /^fake_cc_/, "Call-Control-Praefix beweist den Call-Control-Pfad");
+    assert.match(
+      c.callControlId,
+      /^fake_cc_/,
+      "Call-Control-Praefix beweist den Call-Control-Pfad",
+    );
     assert.equal(c.twilioSid, null);
 
-    const handoff = await postIncoming(srv, { telnyx: true, callControlId: "cc_in" });
+    const handoff = await (await postTelnyxIncoming(srv, { callControlId: "cc_in" })).text();
     assert.doesNotMatch(handoff, /<Gather/, "Assistant uebernimmt den Leg (kein TeXML-Gather)");
 
     // NEU-2 (Orthogonalitaet): kein Telnyx-Header -> providerFromHeaders faellt auf
     // DEFAULT_PROVIDER (Twilio) zurueck, obwohl das Flag an ist.
-    const fallback = await postIncoming(srv, {});
-    assert.match(fallback, /<Gather/, "NICHT-Telnyx faellt trotz Flag AN auf den Bestandspfad zurueck");
+    const fallback = await (await postTelnyxIncoming(srv, { telnyx: false })).text();
+    assert.match(
+      fallback,
+      /<Gather/,
+      "NICHT-Telnyx faellt trotz Flag AN auf den Bestandspfad zurueck",
+    );
 
-    assert.equal(await probeShim(srv), HTTP_FORBIDDEN, "Shim erreichbar (fail-closed, kein per-Call-Token)");
+    assert.equal(
+      await probeShim(srv),
+      HTTP_FORBIDDEN,
+      "Shim erreichbar (fail-closed, kein per-Call-Token)",
+    );
   } finally {
     await srv.stop();
   }
@@ -145,9 +117,13 @@ test("Flag AN + NICHT-Telnyx (Twilio-Owner): Outbound faellt auf TeXML/Bestand z
     // kein ownerNumber -> Default OWNER_TEST_NUMBER (Twilio) -> outboundProvider=twilio
   });
   try {
-    const { callId } = await placeOutbound(srv);
+    const { callId } = await (await placeCall(srv)).json();
     const c = outboundCall(srv, callId);
-    assert.match(c.twilioSid, /^fake_/, "TeXML trotz Flag AN (Provider entscheidet, nicht das Flag allein)");
+    assert.match(
+      c.twilioSid,
+      /^fake_/,
+      "TeXML trotz Flag AN (Provider entscheidet, nicht das Flag allein)",
+    );
     assert.doesNotMatch(c.twilioSid, /^fake_cc_/);
     assert.equal(c.callControlId, null);
   } finally {
