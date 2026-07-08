@@ -4,118 +4,21 @@
 // lief technisch weiter, Tokenkosten liefen mit jedem weiteren Turn mit. Diese Tests
 // pinnen: bei Cap-Ueberschreitung geht die Abschluss-Ansage ZUERST raus, DANACH wird
 // der Call REAL ueber Call-Control aufgelegt (terminateViaCallControl, derselbe fail-
-// safe Helper wie der end_call-Hangup, G5). Eigenstaendige Fake-Harness (kein Netz/
-// Spawn), Muster identisch zu telnyx-shim-endcall.test.js.
+// safe Helper wie der end_call-Hangup, G5). Fake-Harness (kein Netz/Spawn) aus
+// telnyx-shim-harness.js (G5, geteilt mit telnyx-shim-endcall.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
-import { fakeTelnyxShimConfig } from "./helpers.js";
-
-const SSE_DATA_PREFIX = "data: ";
-
-function fakeRes() {
-  return {
-    statusCode: null,
-    headers: {},
-    chunks: [],
-    ended: false,
-    headersSent: false,
-    status(c) {
-      this.statusCode = c;
-      return this;
-    },
-    setHeader(k, v) {
-      this.headers[k] = v;
-    },
-    write(s) {
-      this.headersSent = true;
-      this.chunks.push(s);
-    },
-    end() {
-      this.headersSent = true;
-      this.ended = true;
-      return this;
-    },
-  };
-}
-
-// Fake-Store: getCall matcht nur den geseedeten Call (Fresh-Fetch-Nachweis via
-// getCallIds). finishCall/endCallRecord sind No-op-Spies - Negativ-Beweis, dass der
-// Mid-Call-Kill KEIN Settlement selbst ausloest (bleibt P4.5 onHangup, Regel 1).
-function fakeStore({ call, budgetExceeded = false, globalBudgetExceeded = false } = {}) {
-  const getCallIds = [];
-  const settlementCalls = [];
-  return {
-    getCallIds,
-    settlementCalls,
-    getCall(id) {
-      getCallIds.push(id);
-      return call && call.id === id ? call : null;
-    },
-    budgetExceeded() {
-      return budgetExceeded;
-    },
-    globalBudgetExceeded() {
-      return globalBudgetExceeded;
-    },
-    finishCall(c) {
-      settlementCalls.push({ op: "finishCall", call: c });
-    },
-    endCallRecord(id, status) {
-      settlementCalls.push({ op: "endCallRecord", id, status });
-    },
-  };
-}
-
-function voiceControlSpy() {
-  const calls = [];
-  function voiceControl(provider) {
-    return {
-      async endCallViaCallControl(callControlId) {
-        calls.push({ provider, callControlId });
-      },
-    };
-  }
-  voiceControl.calls = calls;
-  return voiceControl;
-}
-
-function agentTurnSpy(result = { speech: "Hallo Welt", endCall: false }) {
-  const calls = [];
-  async function agentTurn(call, callerText) {
-    calls.push({ call, callerText });
-    return result;
-  }
-  agentTurn.calls = calls;
-  return agentTurn;
-}
-
-function makeCall(overrides = {}) {
-  return {
-    id: "call_x",
-    tenantId: "t_test",
-    language: "de",
-    provider: "telnyx",
-    aiAssistantToken: "sec-per-call",
-    callControlId: "cc_1",
-    ...overrides,
-  };
-}
-
-function makeHandler({ store, config = fakeTelnyxShimConfig(), agentTurn, voiceControl }) {
-  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl });
-}
-
-function reqWith({ auth, body = {} } = {}) {
-  const headers = {};
-  if (auth !== undefined) headers.authorization = auth;
-  return { headers, body };
-}
-
-function firstChunkJson(res) {
-  return JSON.parse(res.chunks[0].slice(SSE_DATA_PREFIX.length).trim());
-}
+import {
+  fakeRes,
+  fakeStore,
+  voiceControlSpy,
+  agentTurnSpy,
+  makeCall,
+  makeHandler,
+  reqWith,
+  firstChunkJson,
+} from "./telnyx-shim-harness.js";
 
 // === B1: tenant-Budget ueberschritten + callControlId -> Ansage, DANN echter Hangup ===
 
