@@ -164,6 +164,26 @@ test("startAssistant: /v2/calls/<id>/actions/ai_assistant_start mit assistant id
   assert.equal(JSON.parse(calls[0].body).assistant.id, "assistant-77");
 });
 
+// 8b) startAssistant: per-Call-Bearer (P5, offene Frage #2) landet als assistant.llm_api_key
+// im Body; OHNE customLlmAuth bleibt das Feld ganz weg (Vor-P5-Aufrufer byte-identisch).
+// Pinnt die reale Adapter-Body-Uebersetzung (nicht nur das Durchreichen an einen Spy).
+test("startAssistant: customLlmAuth -> assistant.llm_api_key, ohne -> Feld fehlt", async () => {
+  const withCalls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({
+    callControlId: "cc_1",
+    assistantId: "assistant-77",
+    customLlmAuth: "call_x:deadbeefsecret",
+  });
+  const withAuth = JSON.parse(withCalls[0].body).assistant;
+  assert.equal(withAuth.llm_api_key, "call_x:deadbeefsecret");
+  assert.equal(withAuth.id, "assistant-77");
+
+  const withoutCalls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "assistant-77" });
+  const noAuth = JSON.parse(withoutCalls[0].body).assistant;
+  assert.ok(!("llm_api_key" in noAuth), "ohne customLlmAuth kein llm_api_key-Feld im Body");
+});
+
 // 9) startAssistant Fehlerpfad ohne Key-Leak
 test("startAssistant: HTTP-Fehler ohne Key-Leak", async () => {
   stubFetch({ ok: false, status: 422 });
