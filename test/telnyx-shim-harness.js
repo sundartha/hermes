@@ -40,7 +40,8 @@ export function fakeRes() {
   };
 }
 
-// Fake-Store: getCall matcht nur den geseedeten Call (Fresh-Fetch-Nachweis via
+// Fake-Store: getCallByControlId loest den Call ueber die ccid auf (E1-Korrelation);
+// getCall bleibt fuer den Fresh-Fetch in terminateViaCallControl (Nachweis via
 // getCallIds). finishCall/endCallRecord sind No-op-Spies - Negativ-Beweis, dass
 // weder end_call noch der Mid-Call-Budget-Kill selbst ein Settlement ausloesen
 // (bleibt P4.5 onHangup, EINE Quelle, Regel 1).
@@ -50,6 +51,9 @@ export function fakeStore({ call, budgetExceeded = false, globalBudgetExceeded =
   return {
     getCallIds,
     settlementCalls,
+    getCallByControlId(ccid) {
+      return call && call.callControlId === ccid ? call : null;
+    },
     getCall(id) {
       getCallIds.push(id);
       return call && call.id === id ? call : null;
@@ -102,8 +106,8 @@ export function makeCall(overrides = {}) {
     tenantId: "t_test",
     language: "de",
     provider: "telnyx",
-    aiAssistantToken: "sec-per-call",
     callControlId: "cc_1",
+    status: "active",
     ...overrides,
   };
 }
@@ -116,6 +120,18 @@ export function reqWith({ auth, body = {} } = {}) {
   const headers = {};
   if (auth !== undefined) headers.authorization = auth;
   return { headers, body };
+}
+
+// Statischer Shim-Bearer (E2), matcht fakeTelnyxShimConfig()-Default (helpers.js).
+export const SHIM_SHARED_SECRET = "shim-secret";
+
+// Gueltiger Request fuer einen gegebenen Call: Bearer + ccid im forward_metadata-Body
+// (E1). EINE Konstruktionsstelle (G5) statt an jeder Teststelle wiederholt.
+export function validReq(call, extra = {}) {
+  return reqWith({
+    auth: `Bearer ${SHIM_SHARED_SECRET}`,
+    body: { metadata: { call_control_id: call.callControlId }, ...extra },
+  });
 }
 
 export function firstChunkJson(res) {

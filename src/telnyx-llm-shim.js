@@ -1,7 +1,8 @@
 // Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, Phase P1): in-house /v1/chat/completions-
 // kompatibler Endpunkt. Kapselt agentTurn (claude.js) und framt die Antwort als
 // Fake-Stream (1 SSE-Chunk + data: [DONE]). Bei C-Telnyx UND C-ElevenLabs identisch.
-// Existenz + Auth fail-closed hinter TELNYX_AI_ASSISTANT_ENABLED (404 bis Cutover).
+// Existenz fail-closed hinter TELNYX_AI_ASSISTANT_ENABLED (404 bis Cutover); Auth ueber
+// ein statisches Telnyx-Integration-Secret (E2) + call_control_id-Korrelation (E1).
 // KEINE Safety-Gate-Umgehung, KEINE llm.js-Aenderung, KEIN Direktimport von execTool/
 // toolDefs (agentTurn ruft sie in-house auf -> S2-Anti-Duplizierung).
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,6 @@ const CHAT_COMPLETION_ID_PREFIX = "chatcmpl-";
 const FINISH_STOP = "stop";
 const SSE_DONE = "data: [DONE]\n\n";
 const BEARER_PREFIX = "Bearer ";
-const TOKEN_SEP = ":";
 const MS_PER_SECOND = 1000;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
@@ -25,12 +25,24 @@ const HTTP_NOT_FOUND = 404;
 const SHIM_RATE_WINDOW_MS = 60_000;
 const SHIM_RATE_SWEEP_MS = 5 * 60_000;
 
-// Baut den per-Call-Bearer-WERT (ohne "Bearer "-Praefix), den die Call-Control-Ingest
-// (P4.5 onSpeakEnded) als Custom-LLM-Auth an ai_assistant_start reicht - Telnyx sendet ihn
-// beim Shim-Aufruf als Authorization-Header, parseCallToken zerlegt ihn wieder. EINE Quelle
-// (G5) fuer das callId:secret-Format, keine zweite ":"-Konstruktion an der Ingest-Stelle.
-export function formatCallBearerToken(callId, secret) {
-  return `${callId}${TOKEN_SEP}${secret}`;
+// Statischer Bearer-Wert (ohne "Bearer "-Praefix) aus dem Authorization-Header;
+// fail-closed "" (kein Header/kein Praefix). EINE Quelle (G5) fuer den Slice.
+function bearerFrom(authHeader) {
+  return typeof authHeader === "string" && authHeader.startsWith(BEARER_PREFIX)
+    ? authHeader.slice(BEARER_PREFIX.length)
+    : "";
+}
+
+// E1: extrahiert die Telnyx-eigene call_control_id aus dem forward_metadata-BODY des
+// Shim-Requests. LIVE UNBESTAETIGT (wie der gesamte P4-Adapter, voice.js Z. 6-12): die
+// exakte JSON-Position ist der EINZIGE offene Live-Verify-Knopf dieser Phase. Best-Guess:
+// forward_metadata:true legt Call-Metadaten unter `metadata` ab (primaer), Top-Level als
+// Fallback. Fail-closed -> null (kein resolvebarer Call -> 403, KEIN Turn/Token-Burn).
+// Beim ersten Live-Testanruf gegen den echten Body fixieren = eine Zeile.
+export function callControlIdFromForwardedMetadata(body) {
+  const meta = body && typeof body.metadata === "object" && body.metadata ? body.metadata : {};
+  const candidate = meta.call_control_id ?? (body && body.call_control_id);
+  return typeof candidate === "string" && candidate ? candidate : null;
 }
 
 // Letzte User-Aeusserung aus dem OpenAI-messages-Array (nur STRING-Content, sonst "").
@@ -44,19 +56,6 @@ function lastUserText(body) {
     if (m && m.role === "user" && typeof m.content === "string") return m.content;
   }
   return "";
-}
-
-// Zerlegt "Bearer <callId>:<secret>" -> { callId, secret } | null (fail-closed).
-// Split am ERSTEN ":" (callId enthaelt nie ":", state-ops.js:newId); secret ist der
-// gesamte Rest (kann selbst ":" enthalten, wird nicht weiter zerlegt).
-function parseCallToken(authHeader) {
-  if (typeof authHeader !== "string" || !authHeader.startsWith(BEARER_PREFIX)) return null;
-  const token = authHeader.slice(BEARER_PREFIX.length);
-  const sepIdx = token.indexOf(TOKEN_SEP);
-  if (sepIdx < 0) return null;
-  const callId = token.slice(0, sepIdx);
-  if (!callId) return null;
-  return { callId, secret: token.slice(sepIdx + 1) };
 }
 
 // Framt EINEN OpenAI chat.completion.chunk + data:[DONE] (G5: EINE Quelle fuer
@@ -123,32 +122,39 @@ export function makeTelnyxLlmShim({
     // 1) Existenz-Gate (Invariante 1): Flag aus -> 404, VOR jeder Arbeit/Parsing.
     if (!config.telnyxAiAssistantEnabled) return res.status(HTTP_NOT_FOUND).end();
 
-    // 2) Per-Call-Token (Invariante 2 + D3): callId NUR aus dem Token, nie aus dem
-    // spoofbaren OpenAI-Body (Invariante 5/Anti-Spoofing).
-    const parsed = parseCallToken(req.headers.authorization || "");
-    if (!parsed || !parsed.secret) return res.status(HTTP_FORBIDDEN).end();
-    const call = store.getCall(parsed.callId); // lebende Store-Referenz, kein DTO
-    const stored = call && call.aiAssistantToken;
-    // D3: leeres/fehlendes Token-Feld darf NIE autorisieren (safeEqual("","")===true).
-    if (!stored || !safeEqual(parsed.secret, stored)) return res.status(HTTP_FORBIDDEN).end();
+    // 2) Statischer Bearer (Befund 2, E2): Telnyx sendet das Integration-Secret als
+    // Authorization: Bearer <secret>, pro Turn identisch. Leerer config-Wert -> 403
+    // (Empty-Secret-Trap, safeEqual("","")===true waere sonst die Falle, wie D3).
+    const secret = config.telnyxShimSharedSecret;
+    if (!secret || !safeEqual(bearerFrom(req.headers.authorization || ""), secret))
+      return res.status(HTTP_FORBIDDEN).end();
+
+    // 3) Korrelation (E1): Call aus der forward_metadata-call_control_id, NICHT aus dem
+    // spoofbaren OpenAI-Body-callId. Kein Wert -> 403 (fail-closed, kein Token-Burn).
+    const ccid = callControlIdFromForwardedMetadata(req.body);
+    if (!ccid) return res.status(HTTP_FORBIDDEN).end();
+
+    // 4) Call-Resolve (lebende Store-Referenz, kein DTO): unbekannter oder nicht-aktiver
+    // Call -> 403 (ein aufgelegter Call darf keine weiteren Token-Turns ausloesen).
+    const call = store.getCallByControlId(ccid);
+    if (!call || call.status !== "active") return res.status(HTTP_FORBIDDEN).end();
 
     const locale = localeFor(call.language);
     const model =
       typeof req.body?.model === "string" && req.body.model ? req.body.model : config.claudeModel;
 
-    // 3) Rate-Gate (P5, Scope 4): N+1 Turns fuer denselben callId im Fenster -> definierte
+    // 5) Rate-Gate (P5, Scope 4): N+1 Turns fuer denselben Call im Fenster -> definierte
     // Ablehnung OHNE agentTurn-Aufruf (kein Token-Burn). Gueltige Degradations-Completion
     // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
-    // callId kommt aus dem TOKEN (Schritt 2), nicht aus dem spoofbaren Body.
-    if (!shimRateHit(parsed.callId).allowed)
+    if (!shimRateHit(call.id).allowed)
       return writeFakeStream(res, { model, content: locale.llmDegradedSpeech });
 
-    // 4) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
+    // 6) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
     // Cap-Ueberschreitung (kein Token-Burn). P6 (Weg iii): Abschluss-Ansage ZUERST, DANN den
     // Call REAL auflegen - sonst deckt der Cap nur die Ansage, die Tokenkosten liefen weiter
     // (Regel 1 verlangt BEIDE Achsen). terminateViaCallControl ist fail-safe (kein
     // callControlId -> Skip + Log, eigener try/catch, secret-frei) - identisches Muster wie der
-    // end_call-Hangup (Schritt 6, G5: EIN Helper). Settlement bleibt P4.5 onHangup (EIN
+    // end_call-Hangup (Schritt 8, G5: EIN Helper). Settlement bleibt P4.5 onHangup (EIN
     // idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
     if (store.budgetExceeded(call.tenantId, config) || store.globalBudgetExceeded(config)) {
       writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
@@ -156,7 +162,8 @@ export function makeTelnyxLlmShim({
       return;
     }
 
-    // 5) Kern: agentTurn (in-house Tool-Loop) gegen die TOKEN-gebundene, frische call-Referenz.
+    // 7) Kern: agentTurn (in-house Tool-Loop) gegen die per Call-Control-ID gebundene,
+    // frische call-Referenz.
     let endCall = false;
     try {
       const startedAt = Date.now();
@@ -187,13 +194,13 @@ export function makeTelnyxLlmShim({
       else res.end();
       // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
       // endCall=true geliefert haben - der Fehler stammt dann aus writeFakeStream selbst
-      // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 6 unten muss den
+      // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 8 unten muss den
       // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
       // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
-      // bleibt endCall auf dem Default false - Schritt 6 ist dann ein No-op.
+      // bleibt endCall auf dem Default false - Schritt 8 ist dann ein No-op.
     }
 
-    // 6) end_call (P3a, Regel 1): der Abschiedssatz ist raus (oder bestmoeglich degradiert);
+    // 8) end_call (P3a, Regel 1): der Abschiedssatz ist raus (oder bestmoeglich degradiert);
     // jetzt den Call out-of-band REAL beenden, falls agentTurn end_call lieferte - unabhaengig
     // davon, ob der nachfolgende Response-Write selbst noch erfolgreich war (siehe Kommentar
     // oben). Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob

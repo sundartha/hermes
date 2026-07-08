@@ -119,12 +119,19 @@ byte-identisch. Neue Angriffsflaechen + Mitigationen:
   der pro Turn Claude-Tokens verbrennt und Transkript-Fragmente empfaengt. Bewusst VOR der
   Basic-Auth registriert (Telnyx BYO-LLM kann keinen Basic-Header setzen) mit EIGENER
   fail-closed-Absicherung: (1) 404 bei Flag aus (Existenz hinter dem Flag - keine monatelang
-  offene Flaeche); (2) per-Call kurzlebiges Token, gegen den Store-Call-Record validiert
-  (403 sonst, timing-sicher via `safeEqual`) - KEIN globales Shared-Secret, das fremde
-  callIds adressieren koennte (Cross-Tenant-/Enumerations-Schutz); (3) per-callId-Rate-Limiter
+  offene Flaeche); (2) statisches Telnyx-Integration-Secret als Bearer, timing-sicher
+  (`safeEqual`) gegen `config.telnyxShimSharedSecret`; Empty-Secret-Trap explizit abgelehnt.
+  Korrelation ueber die Telnyx-eigene `call_control_id` aus dem `forward_metadata`-Body
+  (`getCallByControlId`), nicht ueber die spoofbare Body-callId; (3) per-callId-Rate-Limiter
   (`TELNYX_SHIM_MAX_TURNS_PER_MIN`, Default 30) + Budget-Gate pro Turn (`budgetExceeded` -
-  kein Token-Burn ueber dem Cap). callId kommt NUR aus dem Token, nie aus dem spoofbaren
-  OpenAI-Body.
+  kein Token-Burn ueber dem Cap).
+  Akzeptiertes Restrisiko (Single-Secret statt per-Call-Token): EIN Bearer-Wert gilt fuer
+  ALLE Calls dieser Instanz statt eines je Call rotierenden Secrets - schwaecher als das
+  P1-Design, aber das Modell jeder OpenAI-kompatiblen Custom-LLM-Integration. Kompensierende
+  Kontrollen: das Secret liegt nur im Telnyx-Integration-Secret-Store + Render-Env (nie
+  geloggt/projiziert); `getCallByControlId` muss einen EXISTIERENDEN, `status==='active'`
+  Call treffen (kein Enumerations-Freifahrschein); der per-callId-Rate-Limiter + das
+  Budget-Gate bleiben unveraendert bestehen. Bewusst akzeptiert.
 - **Call-Control-Origination HINTER der Gate-Kette:** der neue Pfad haengt an genau der
   Stelle, an der heute `originateCall()` sitzt (server.js), NACH der vollstaendigen
   Pre-Dial-Kette (OUTBOUND_FROZEN, Tenant/KYC, Denylist/Land/Rate/Cooldown, Verifikation,
@@ -149,5 +156,5 @@ byte-identisch. Neue Angriffsflaechen + Mitigationen:
 - **Secrets:** `.env.example`/`render.yaml` tragen keine echten Werte (`sync:false`/Default);
   Fehler nur ueber `assertTelnyxOk` geparst (nie Raw-Body/Key geloggt).
 - **Boot fail-closed (P10):** Flag an ohne `TELNYX_ASSISTANT_ID`/`TELNYX_API_KEY`/
-  `TELNYX_CONNECTION_ID` -> `assertConfig` verweigert den Start; ein absurd hoher
-  `TELNYX_SHIM_MAX_TURNS_PER_MIN` im Hosting -> `productionFootguns` fatal.
+  `TELNYX_CONNECTION_ID`/`TELNYX_SHIM_SHARED_SECRET` -> `assertConfig` verweigert den Start;
+  ein absurd hoher `TELNYX_SHIM_MAX_TURNS_PER_MIN` im Hosting -> `productionFootguns` fatal.

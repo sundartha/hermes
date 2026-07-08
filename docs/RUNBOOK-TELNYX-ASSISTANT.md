@@ -26,6 +26,8 @@ Dieser Lauf braucht echten Telnyx-Zugang und ist deshalb **Owner-gated**:
 | `TELNYX_ELEVENLABS_VOICE_ID` | Render-Env / lokale `.env` |
 | `TELNYX_ELEVENLABS_API_KEY_REF` | `elevenlabs_prod` (Referenz auf das Telnyx-Secret oben) |
 | `TELNYX_ELEVENLABS_MODEL` | optional, Default `"Default"` |
+| `TELNYX_SHIM_API_KEY_REF` | NAME eines zweiten Telnyx-Integration-Secrets fuer `external_llm.llm_api_key_ref` — **WERT-gleich** mit `TELNYX_SHIM_SHARED_SECRET` (Server-Bearer-Pruefung) |
+| `TELNYX_SHIM_SHARED_SECRET` | Render-Env / lokale `.env` — vom Server als Bearer geprueft (SECRET, Boot-Pflicht bei aktivem Flag) |
 
 Ohne diese Werte bricht das Skript sofort ab: `smokePass=false` + Grund
 (nur die **Namen** der fehlenden Werte, nie ein Wert).
@@ -103,3 +105,37 @@ Diese offenen Fragen blockieren weder den Code-Merge noch die anderen
 Phasen — die offline geprüften Invarianten (Greeting leer, Custom-LLM-URL,
 Voice-Referenz, Barge-in) bleiben unabhängig vom exakten Schema testbar
 (siehe `test/telnyx-assistant-config.test.js`).
+
+## 8. Custom-LLM-Schema + Shim-Auth (Phase telnyx-fix-live-schema-auth)
+
+Die `external_llm`-Config folgt jetzt dem realen Telnyx-Schema:
+
+```json
+{
+  "model": "<config.claudeModel>",
+  "external_llm": {
+    "base_url": "<PUBLIC_URL>/v1",
+    "model": "<config.claudeModel>",
+    "llm_api_key_ref": "<TELNYX_SHIM_API_KEY_REF>",
+    "forward_metadata": true
+  }
+}
+```
+
+Telnyx hängt `/chat/completions` selbst an `base_url` an; `forward_metadata: true`
+legt die `call_control_id` in den Request-Body des Shim-Aufrufs (Feld noch **live
+unbestätigt**, siehe `callControlIdFromForwardedMetadata` in
+`src/telnyx-llm-shim.js`). Auth des Shims: **statisches Telnyx-Integration-Secret**
+als `Authorization: Bearer <TELNYX_SHIM_SHARED_SECRET>` (nicht mehr per-Call) —
+der Server korreliert den Call ausschließlich über die `call_control_id`.
+
+Cutover-Reihenfolge:
+
+1. Diese Fixes deployen.
+2. Render-Env setzen: `TELNYX_AI_ASSISTANT_ENABLED=true` + `TELNYX_ASSISTANT_ID=<Platzhalter>`
+   + `TELNYX_SHIM_SHARED_SECRET` + `TELNYX_SHIM_API_KEY_REF` — Boot muss grün bleiben,
+   der Shim ist ab hier erreichbar (404 fällt weg).
+3. Provisioning-Skript ausführen (Abschnitt 3).
+4. Die ausgegebene `assistant_id` in `TELNYX_ASSISTANT_ID` übernehmen (Abschnitt 4).
+5. Live-Testanruf (P11).
+6. Rollback = `TELNYX_AI_ASSISTANT_ENABLED=false` (sofortiger 404, Budget-Engine bleibt Live-Default).

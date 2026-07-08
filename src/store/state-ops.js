@@ -173,11 +173,9 @@ export function createCall(
     // die Voice-Minuten-Buchung prozessuebergreifend genau-einmal. NULL -> null (pg-Parity via
     // rowToCall). Muster summarySmsSentAt.
     billedAt: null,
-    // P5 (C-Telnyx, PLAN-TELNYX-AI-ASSISTANT.md): per-Call-Bearer-Secret (Shim-Auth) +
-    // Call-Control-Handles. Initial null, erst bei erfolgreicher Call-Control-Origination
-    // gesetzt (telnyx-origination.js) - byte-identisch zur pg-Hydrierung (rowToCall), kein
-    // json<->pg-Shape-Drift. aiAssistantToken NIE nach aussen (publicCall strippt es).
-    aiAssistantToken: null,
+    // P5 (C-Telnyx, PLAN-TELNYX-AI-ASSISTANT.md): Call-Control-Handles. Initial null, erst
+    // bei erfolgreicher Call-Control-Origination gesetzt (telnyx-origination.js) - byte-
+    // identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     callControlId: null,
     assistantId: null,
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
@@ -196,6 +194,13 @@ export function createCall(
 
 export function getCall(s, id) {
   return s.calls.find((c) => c.id === id || c.twilioSid === id) || null;
+}
+
+// Korrelation ueber die Telnyx-eigene call_control_id (Brain-Shim, E1). Fail-closed:
+// leere/unbekannte ID -> null (ein Call ohne callControlId ist per Definition kein Treffer).
+export function getCallByControlId(s, callControlId) {
+  if (!callControlId) return null;
+  return s.calls.find((c) => c.callControlId === callControlId) || null;
 }
 
 export function addTranscript(s, callId, role, text) {

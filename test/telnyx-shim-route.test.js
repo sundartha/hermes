@@ -1,7 +1,8 @@
 // Spawn/Wiring-Tests fuer den Telnyx Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1):
 // beweisen die Route-Registrierung in src/server.js (Mount VOR der Basic-Auth,
-// Body-Parsing, lebende store.getCall-Referenz end-to-end). Unit-Verhalten (C1-C5,
-// D3, D8) steht in test/telnyx-llm-shim.test.js - hier nur der HTTP-/Wiring-Beweis.
+// Body-Parsing, lebende store.getCallByControlId-Referenz end-to-end). Unit-Verhalten
+// (Auth/Korrelation/Budget/Fehler) steht in test/telnyx-llm-shim.test.js - hier nur
+// der HTTP-/Wiring-Beweis.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -46,16 +47,17 @@ test("Basic-Auth-Exemption: Flag an, DASHBOARD_PASSWORD gesetzt, kein Authorizat
   }
 });
 
-test("C3 end-to-end: gueltiges per-Call-Token -> 200 SSE mit agentTurn-Ergebnis", async () => {
+test("C3 end-to-end: gueltiger Shim-Bearer + ccid -> 200 SSE mit agentTurn-Ergebnis", async () => {
   const mock = await startCountingAnthropicMock({ failFirst: 0 });
   const callId = "call_shim1";
+  const callControlId = "cc_route1";
   const srv = await startServer({
     env: { TELNYX_AI_ASSISTANT_ENABLED: "true", ANTHROPIC_BASE_URL: mock.url, ...TELNYX_ASSISTANT_BOOT_ENV },
     seed: seedState({
       calls: [
         seedCall({
           id: callId,
-          aiAssistantToken: "sec-per-call",
+          callControlId,
           direction: "outbound",
           status: "active",
         }),
@@ -67,11 +69,12 @@ test("C3 end-to-end: gueltiges per-Call-Token -> 200 SSE mit agentTurn-Ergebnis"
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${callId}:sec-per-call`,
+        authorization: `Bearer ${TELNYX_ASSISTANT_BOOT_ENV.TELNYX_SHIM_SHARED_SECRET}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: "Hallo" }],
+        metadata: { call_control_id: callControlId },
       }),
     });
     const body = await res.text();

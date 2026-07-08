@@ -5,7 +5,6 @@
 // verhindert Reserve-Leak/gesperrtes Tenant-Budget). Factory+DI wie makeTelnyxLlmShim:
 // alle Seiteneffekt-Deps injiziert -> Zustandsmaschine offline mit Spies testbar.
 import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/telnyx/call-control-events.js";
-import { formatCallBearerToken } from "./telnyx-llm-shim.js";
 
 export function makeCallControlIngest({ store, voiceControl, finishCall, disclosureSentence, localeFor }) {
   // Regel 2: Pflicht-Offenlegung als deterministischer Speak-Node ZUERST.
@@ -25,14 +24,9 @@ export function makeCallControlIngest({ store, voiceControl, finishCall, disclos
       console.warn(`[voice/call-control] speak.ended ohne assistantId (call=${call.id}) -> kein Assistant-Start`);
       return;
     }
-    // Regel 3: per-Call-Bearer (callId:secret) als Custom-LLM-Auth mitgeben, damit Telnyx
-    // ihn beim Shim-Aufruf sendet und der Shim ihn gegen call.aiAssistantToken validiert
-    // (P1-Kette geschlossen). Fehlt das Token (z.B. Altbestand ohne P5-Origination) -> Feld
-    // ganz weglassen statt undefined mitzugeben (byte-identisch zum Vor-P5-Aufruf); der Shim
-    // faellt dann fail-closed auf 403 (kein Crash). Format aus EINER Quelle (G5).
-    const params = { callControlId, assistantId: call.assistantId };
-    if (call.aiAssistantToken) params.customLlmAuth = formatCallBearerToken(call.id, call.aiAssistantToken);
-    await voiceControl(call.provider).startAssistant(params);
+    // Auth des Shims laeuft ueber das statische Telnyx-Integration-Secret (E2); ai_assistant_start
+    // braucht keinen per-Call-Auth-Param (Korrelation laeuft ueber call_control_id, E1).
+    await voiceControl(call.provider).startAssistant({ callControlId, assistantId: call.assistantId });
   }
   // Regel 2: die Pflicht-Offenlegung ist (Azure-NTTS-Stoerung) fehlgeschlagen -> ai_assistant_start
   // bleibt fail-safe aus, sonst spricht die KI, ohne dass die Offenlegung je zu hoeren war.

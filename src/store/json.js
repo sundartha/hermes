@@ -276,6 +276,10 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
+export function getCallByControlId(callControlId) {
+  return ops.getCallByControlId(load(), callControlId);
+}
+
 // F12 (A6): Der EINE json-Prozess hat keinen divergenten Spiegel - er kennt jeden Call.
 // Re-Attach ist daher identisch zu getCall (unbekannte id -> null). Der server.js-Re-
 // Attach-Pfad bleibt unter STORE_BACKEND=json byte-identisch zum Bestand: im fail-closed

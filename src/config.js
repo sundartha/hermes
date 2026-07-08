@@ -184,6 +184,14 @@ export const config = {
     process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
     { fallback: 30, min: 1 },
   ),
+  // E2: statisches Telnyx-Integration-Secret, das der Shim als Bearer erwartet (Server
+  // liest es zur Bearer-Pruefung). SECRET - nie loggen/leaken. Bei aktivem Flag Boot-
+  // Pflicht (assertConfig), sonst kann der Shim NIE authentifizieren (fail-closed).
+  telnyxShimSharedSecret: process.env.TELNYX_SHIM_SHARED_SECRET || "",
+  // E3: NAME des Telnyx-Integration-Secrets, das denselben WERT haelt (external_llm.
+  // llm_api_key_ref). NUR das Provisioning-Skript liest ihn; der Server nie -> KEIN
+  // assertConfig-Check (nur REQUIRED-Gate im Skript). Analog telnyxElevenLabs.apiKeyRef.
+  telnyxShimApiKeyRef: process.env.TELNYX_SHIM_API_KEY_REF || "",
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
@@ -657,6 +665,8 @@ export function assertConfig() {
       missing.push("TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
     if (!config.telnyxConnectionId)
       missing.push("TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
+    if (!config.telnyxShimSharedSecret)
+      missing.push("TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
   }
   // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
   //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.

@@ -1,7 +1,9 @@
-// P10 (Observability + Doku): fail-closed Boot-Check fuer den C-Telnyx-AI-Assistant.
-// Deckt zwei neue Verhaltensweisen ab, die P10 in config.js einfuehrt:
+// P10 (Observability + Doku) + Phase telnyx-fix-live-schema-auth (E2): fail-closed
+// Boot-Check fuer den C-Telnyx-AI-Assistant. Deckt Verhaltensweisen ab, die config.js
+// einfuehrt:
 //  (1) assertConfig() verweigert den Boot, wenn TELNYX_AI_ASSISTANT_ENABLED an ist,
-//      aber TELNYX_ASSISTANT_ID/TELNYX_API_KEY/TELNYX_CONNECTION_ID fehlen.
+//      aber TELNYX_ASSISTANT_ID/TELNYX_API_KEY/TELNYX_CONNECTION_ID/
+//      TELNYX_SHIM_SHARED_SECRET fehlen.
 //  (2) productionFootguns() sperrt einen absurd hohen TELNYX_SHIM_MAX_TURNS_PER_MIN
 //      im Hosting bei aktivem Flag (die per-callId-Fraud-Bremse waere sonst inert).
 // Muster: config-payment-guard.test.js (withConfig-Singleton-Mutation, kein Spawn)
@@ -50,6 +52,7 @@ const REQUIRED_OK = {
   telnyxApiKey: "key-1",
   telnyxConnectionId: "conn-1",
   telnyxShimMaxTurnsPerMin: 30,
+  telnyxShimSharedSecret: "shim-secret",
 };
 
 test("assertConfig: Flag an + TELNYX_ASSISTANT_ID leer -> fail-closed (false)", () => {
@@ -70,13 +73,30 @@ test("assertConfig: Flag an + TELNYX_CONNECTION_ID leer -> fail-closed (false)",
   });
 });
 
-test("assertConfig: Flag an + alle drei gesetzt -> Boot ok (true, Gegenprobe)", () => {
+test("assertConfig: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> fail-closed (false)", () => {
+  withConfig({ ...REQUIRED_OK, telnyxShimSharedSecret: "" }, () => {
+    assert.equal(assertConfig(), false);
+  });
+});
+
+test("assertConfig im Hosting: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> Boot-Refusal + nennt die Var", () => {
+  withConfig({ ...REQUIRED_OK, telnyxShimSharedSecret: "" }, () => {
+    const lines = captureConsoleError(() => {
+      assert.equal(assertConfig(), false);
+    });
+    const out = lines.join("\n");
+    assert.match(out, /Boot wird verweigert/);
+    assert.match(out, /TELNYX_SHIM_SHARED_SECRET/);
+  });
+});
+
+test("assertConfig: Flag an + alle vier gesetzt -> Boot ok (true, Gegenprobe)", () => {
   withConfig(REQUIRED_OK, () => {
     assert.equal(assertConfig(), true);
   });
 });
 
-test("assertConfig: Flag aus (alle drei leer) -> Boot ok (true, byte-identische Invariante)", () => {
+test("assertConfig: Flag aus (alle vier leer) -> Boot ok (true, byte-identische Invariante)", () => {
   withConfig(
     {
       ...REQUIRED_OK,
@@ -84,6 +104,7 @@ test("assertConfig: Flag aus (alle drei leer) -> Boot ok (true, byte-identische 
       telnyxAssistantId: "",
       telnyxApiKey: "",
       telnyxConnectionId: "",
+      telnyxShimSharedSecret: "",
     },
     () => {
       assert.equal(assertConfig(), true);

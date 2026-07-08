@@ -4,13 +4,15 @@
 // test/pay4-smoke-guard.test.js importiert isTestKey aus smoke-stripe-payment.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildAssistantConfig, missingRequired } from "../scripts/telnyx-assistant-provision.mjs";
+import { buildAssistantConfig, missingRequired, SHIM_ROUTE } from "../scripts/telnyx-assistant-provision.mjs";
 
 const ARGS = {
   publicUrl: "https://hermes.example",
   voiceId: "voice_xyz",
   voiceModel: "Default",
   apiKeyRef: "elevenlabs_prod",
+  model: "claude-haiku-4-5",
+  llmApiKeyRef: "shim_secret_ref",
 };
 
 test("buildAssistantConfig: greeting ist leer (Assistant spricht nie zuerst)", () => {
@@ -18,9 +20,19 @@ test("buildAssistantConfig: greeting ist leer (Assistant spricht nie zuerst)", (
   assert.equal(cfg.greeting, "");
 });
 
-test("buildAssistantConfig: Custom-LLM-URL zeigt auf den Shim ohne Doppel-Slash", () => {
+test("buildAssistantConfig: reales Custom-LLM-Schema (base_url/model/llm_api_key_ref/forward_metadata)", () => {
   const cfg = buildAssistantConfig(ARGS);
-  assert.equal(cfg.external_llm.api_base, "https://hermes.example/v1/chat/completions");
+  assert.equal(cfg.external_llm.base_url, "https://hermes.example/v1");
+  assert.equal("api_base" in cfg.external_llm, false, "kein Doku-Stand-Feld aus dem Vor-Fix");
+  assert.equal(cfg.external_llm.model, "claude-haiku-4-5");
+  assert.equal(cfg.external_llm.llm_api_key_ref, "shim_secret_ref");
+  assert.equal(cfg.external_llm.forward_metadata, true);
+  assert.equal(cfg.model, "claude-haiku-4-5", "Top-level model = Telnyx-Pflichtfeld");
+});
+
+test("buildAssistantConfig: base_url + SHIM_ROUTE-Suffix == SHIM_ROUTE (Drift-Test-Invariante)", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.equal(cfg.external_llm.base_url + "/chat/completions", "https://hermes.example" + SHIM_ROUTE);
 });
 
 test("buildAssistantConfig: Ela-Voice-Referenz aus voiceModel + voiceId, apiKeyRef durchgereicht", () => {

@@ -5,7 +5,6 @@
 // P6-Mid-Call-Token-Kill sind die drei Deckel). Reine DI-Funktion (offline mit Spies
 // testbar), Schwester von originateAiAssistantCall.
 import { bindAssistantToCall } from "./telnyx-origination.js";
-import { formatCallBearerToken } from "./telnyx-llm-shim.js";
 
 // Telnyx-TeXML-Inbound-Body-Feld mit der call_control_id des Inbound-Legs. Doku-Stand,
 // live unbestaetigt (wie der ganze P4-Adapter) - mit dem Owner in P0/P11 fixen. Fehlt es
@@ -18,11 +17,11 @@ export function inboundCallControlId(body) {
   return typeof v === "string" && v ? v : null;
 }
 
-// Startet den AI-Assistant fuer einen Inbound-Leg: (1) per-Call-Bearer minten + assistantId
-// + callControlId binden, persistieren (eigenes Feld -> P6-Boot-Recovery adressiert den
-// Hangup hierueber); (2) deterministisches Greeting als Call-Control-Speak-Node (Regel 2,
-// nie Modell-Ermessen), Owner-Name schon eingesetzt vom Aufrufer; (3) ai_assistant_start
-// mit dem per-Call-Bearer als Custom-LLM-Auth (Regel 3, Shim validiert callId->Store).
+// Startet den AI-Assistant fuer einen Inbound-Leg: (1) assistantId + callControlId binden,
+// persistieren (eigenes Feld -> P6-Boot-Recovery adressiert den Hangup hierueber);
+// (2) deterministisches Greeting als Call-Control-Speak-Node (Regel 2, nie Modell-
+// Ermessen), Owner-Name schon eingesetzt vom Aufrufer; (3) ai_assistant_start (Regel 3,
+// Shim authentifiziert per statischem Shared-Secret, korreliert ueber call_control_id).
 // Greeting VOR Start (await) - die Assistant-eigene Greeting ist P7-deaktiviert, die KI
 // schweigt bis zum ersten Anrufer-Turn, also kein Ueberlagern (Regel 2).
 export async function startInboundAiAssistant({
@@ -39,9 +38,5 @@ export async function startInboundAiAssistant({
   store.save();
   const vc = voiceControl(call.provider);
   await vc.speak({ callControlId, text: greeting, voiceProfile });
-  await vc.startAssistant({
-    callControlId,
-    assistantId: call.assistantId,
-    customLlmAuth: formatCallBearerToken(call.id, call.aiAssistantToken),
-  });
+  await vc.startAssistant({ callControlId, assistantId: call.assistantId });
 }

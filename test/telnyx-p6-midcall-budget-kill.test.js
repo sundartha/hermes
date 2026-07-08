@@ -17,6 +17,8 @@ import {
   makeCall,
   makeHandler,
   reqWith,
+  validReq,
+  SHIM_SHARED_SECRET,
   firstChunkJson,
 } from "./telnyx-shim-harness.js";
 
@@ -30,7 +32,7 @@ test("B1: tenant-Budget ueberschritten -> Wind-Down-Completion UND Call-Control-
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(agentTurn.calls.length, 0, "kein Token-Burn bei ueberschrittenem Budget");
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
@@ -49,7 +51,7 @@ test("B2: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion UND Call
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(agentTurn.calls.length, 0);
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
@@ -57,9 +59,13 @@ test("B2: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion UND Call
   assert.deepEqual(store.settlementCalls, []);
 });
 
-// === B3: Budget ueberschritten OHNE callControlId -> fail-safe Skip, kein Throw ======
+// === B3: unaufloesbare ccid -> 403 VOR dem Budget-Gate, kein Hangup-Versuch, kein Crash ===
+// Vorher (P1): ein Call OHNE callControlId erreichte via per-Call-Token trotzdem das
+// Budget-Gate, der Hangup war lediglich fail-safe uebersprungen. Seit der Korrelation ueber
+// call_control_id (E1) ist ein Call ohne callControlId gar nicht mehr aufloesbar - das
+// Budget-Gate wird dann nie erreicht (403 kommt vorher, kein Turn/Token-Burn, kein Crash).
 
-test("B3: Budget ueberschritten OHNE callControlId -> Degradations-Completion, KEIN Hangup-Versuch, kein Crash", async () => {
+test("B3: unaufloesbare ccid -> 403 vor dem Budget-Gate, KEIN Hangup-Versuch, kein Crash", async () => {
   const call = makeCall({ callControlId: undefined });
   const store = fakeStore({ call, budgetExceeded: true });
   const agentTurn = agentTurnSpy();
@@ -67,11 +73,10 @@ test("B3: Budget ueberschritten OHNE callControlId -> Degradations-Completion, K
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: `Bearer ${SHIM_SHARED_SECRET}`, body: { metadata: { call_control_id: "cc_unresolvable" } } }), res);
 
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
-  assert.equal(res.ended, true);
-  assert.equal(voiceControl.calls.length, 0, "fail-safe Skip ohne callControlId, kein Crash");
+  assert.equal(res.statusCode, 403);
+  assert.equal(voiceControl.calls.length, 0, "fail-safe Skip ohne aufgeloesten Call, kein Crash");
 });
 
 // === B4: Gegenprobe - Budget OK -> kein Budget-Kill-Hangup, agentTurn laeuft normal ===
@@ -84,7 +89,7 @@ test("B4: Budget OK -> kein Budget-Kill-Hangup, agentTurn wird normal aufgerufen
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(agentTurn.calls.length, 1);
   assert.equal(voiceControl.calls.length, 0, "kein Hangup, wenn kein Cap ueberschritten ist");

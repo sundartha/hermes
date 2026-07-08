@@ -150,21 +150,13 @@ export const telnyxVoice = {
   // Provider-neutraler Transport: assistantId liefert der Caller (P5/P7); der Adapter erzeugt/
   // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
   // Assistant-Config (P7), NICHT hier.
-  async startAssistant({ callControlId, assistantId, customLlmAuth }) {
+  async startAssistant({ callControlId, assistantId }) {
     if (!config.telnyxApiKey) throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx startAssistant: callControlId fehlt");
     if (!assistantId) throw new Error("Telnyx startAssistant: assistantId fehlt");
-    const body = { assistant: { id: assistantId } };
-    // P5 (offene Frage #2, live UNBESTAETIGT wie der uebrige P4-Adapter): der per-Call-
-    // Bearer wird als Custom-LLM-Auth mitgegeben, damit Telnyx ihn beim Shim-Aufruf als
-    // Authorization sendet. Feldname ist Doku-Stand -> mit dem Owner live fixen, falls die
-    // API abweicht. Der Shim-seitige callId->Store-Abgleich (P1) bleibt unabhaengig davon
-    // die harte Absicherung. Nur bei gesetztem Wert anhaengen, damit bestehende
-    // startAssistant-Aufrufer (ohne customLlmAuth) byte-identisch bleiben.
-    if (customLlmAuth) body.assistant.llm_api_key = customLlmAuth;
     await postCallControlAction(callControlId, {
       action: ASSISTANT_START_ACTION,
-      body,
+      body: { assistant: { id: assistantId } },
       op: "startAssistant",
     });
   },

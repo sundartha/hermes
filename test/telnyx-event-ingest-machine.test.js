@@ -124,40 +124,6 @@ test("speak.ended MIT call.assistantId -> startAssistant gefeuert mit callContro
   assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77" });
 });
 
-// P5 (Regel 3): der per-Call-Bearer (call.aiAssistantToken) wird als Custom-LLM-Auth
-// mitgegeben, damit Telnyx ihn beim Shim-Aufruf sendet und der Shim ihn gegen
-// call.aiAssistantToken validiert (P1-Kette geschlossen). Format aus derselben Quelle
-// wie der Shim (formatCallBearerToken).
-test("speak.ended MIT aiAssistantToken -> startAssistant.customLlmAuth = callId:secret", async () => {
-  const call = {
-    id: "call_1",
-    status: "active",
-    provider: "telnyx",
-    language: "de",
-    assistantId: "asst_77",
-    aiAssistantToken: "sec-per-call",
-  };
-  const store = fakeStore(call);
-  const vc = fakeVoiceControl();
-  const handler = makeCallControlIngest({
-    store,
-    voiceControl: vc.voiceControl,
-    finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
-    localeFor: () => ({ voiceProfile: "de_female_neural" }),
-  });
-  const res = fakeRes();
-  await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, res);
-
-  assert.equal(res.statusSent, 200);
-  assert.equal(vc.startAssistantCalls.length, 1);
-  assert.deepEqual(vc.startAssistantCalls[0], {
-    callControlId: "cc_1",
-    assistantId: "asst_77",
-    customLlmAuth: "call_1:sec-per-call",
-  });
-});
-
 test("speak.ended OHNE call.assistantId -> fail-safe skip, kein startAssistant, kein Crash", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" }; // keine assistantId
   const store = fakeStore(call);

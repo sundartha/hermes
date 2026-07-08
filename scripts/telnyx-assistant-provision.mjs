@@ -17,7 +17,9 @@
 // Ehrlichkeits-Hinweis (Muster src/telephony/adapters/telnyx/voice.js Z. 6-12):
 // der exakte Telnyx-AI-Assistant-REST-Schema-Slot (Endpunkt, external_llm-Sub-
 // Feld, Voice-Slot-Casing) ist live UNBESTAETIGT und wird beim ersten echten
-// Lauf mit dem Owner an der echten API fixiert.
+// Lauf mit dem Owner an der echten API fixiert. base_url endet bewusst auf "/v1"
+// (Telnyx haengt "/chat/completions" selbst an, forward_metadata legt die
+// call_control_id in den Request-Body).
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
 import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
@@ -29,6 +31,10 @@ import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
 // Registrierung in src/server.js abgleichen kann (Drift faellt beim Testlauf auf,
 // nicht erst beim naechsten Live-Provisioning-Versuch).
 export const SHIM_ROUTE = "/v1/chat/completions";
+// Telnyx haengt diesen Suffix selbst an base_url an -> SHIM_BASE_ROUTE + CHAT_COMPLETIONS_SUFFIX
+// === SHIM_ROUTE (Drift-Test-Invariante). base_url endet damit auf "/v1".
+const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
+const SHIM_BASE_ROUTE = SHIM_ROUTE.slice(0, -CHAT_COMPLETIONS_SUFFIX.length);
 // Voice-Slot-Praefix im Telnyx-Assistant (spec-autoritativ "ElevenLabs.<model>.<voiceId>").
 // Exakte Gross-/Kleinschreibung ist live UNBESTAETIGT -> beim Live-Lauf mit Owner verifizieren.
 const ELEVENLABS_VOICE_PREFIX = "ElevenLabs";
@@ -40,7 +46,7 @@ const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-D
 
 /**
  * Baut die Telnyx-Assistant-Config DETERMINISTISCH (kein IO, keine Zeit/Zufall).
- * Ein Objekt-Argument (F1: 4 zusammengehoerige Werte -> Objekt statt Positionsliste).
+ * Ein Objekt-Argument (F1: mehrere zusammengehoerige Werte -> Objekt statt Positionsliste).
  * apiKeyRef ist die REFERENZ auf das in Telnyx liegende Integration-Secret (KEIN
  * Klartext-Key, Regel 4/5). KEINE Disclosure im Prompt/Greeting (Regel 2): greeting=""
  * plus KEIN freies Prompt-Feld -> der Disclosure-Speak-Node (P4.5/P5) spricht zuerst.
@@ -48,10 +54,18 @@ const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-D
  * (agentTurn/claude.js), nicht in dieser statischen Config - die disclosureSentence
  * ist ohnehin ein per-Call, tenant- und sprachgebundener Laufzeitwert.
  */
-export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef }) {
+export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef, model, llmApiKeyRef }) {
   return {
     name: ASSISTANT_NAME,
-    external_llm: { api_base: `${publicUrl}${SHIM_ROUTE}` },
+    // Top-level model = Telnyx-Pflichtfeld; Semantik bei gesetztem external_llm live
+    // UNBESTAETIGT -> = external_llm.model (das bleibt der autoritative BYO-Wert).
+    model,
+    external_llm: {
+      base_url: `${publicUrl}${SHIM_BASE_ROUTE}`, // Praefix; Telnyx haengt /chat/completions an
+      model, // config.claudeModel (BYO-autoritativ)
+      llm_api_key_ref: llmApiKeyRef, // NAME des Telnyx-Integration-Secrets
+      forward_metadata: true, // legt call_control_id in den Body (E1)
+    },
     voice_settings: {
       voice: `${ELEVENLABS_VOICE_PREFIX}.${voiceModel}.${voiceId}`,
       api_key_ref: apiKeyRef,
@@ -76,6 +90,7 @@ const REQUIRED = Object.freeze([
   ["PUBLIC_URL", config.publicUrl],
   ["TELNYX_ELEVENLABS_VOICE_ID", config.telnyxElevenLabs.voiceId],
   ["TELNYX_ELEVENLABS_API_KEY_REF", config.telnyxElevenLabs.apiKeyRef],
+  ["TELNYX_SHIM_API_KEY_REF", config.telnyxShimApiKeyRef],
 ]);
 
 // Reine Pruef-Funktion (P11 testbar, Muster smoke-stripe-payment.mjs isTestKey): liefert
@@ -119,6 +134,8 @@ async function main() {
     voiceId: config.telnyxElevenLabs.voiceId,
     voiceModel: config.telnyxElevenLabs.model,
     apiKeyRef: config.telnyxElevenLabs.apiKeyRef,
+    model: config.claudeModel,
+    llmApiKeyRef: config.telnyxShimApiKeyRef,
   });
   const id = await sendAssistantConfig(assistantConfig, process.env[ASSISTANT_ID_ENV] || "");
   // NUR die opake assistant_id ausgeben (kein Key/Secret, Regel 4/5). Owner uebernimmt

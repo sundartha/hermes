@@ -1,9 +1,8 @@
 // P5 (PLAN-TELNYX-AI-ASSISTANT.md, Origination-Integration): deckt tasks/telnyx-p5-spec.md
 // Checks 2/3/5(i). (A) Unit gegen originateAiAssistantCall mit Spy-Store/-VoiceControl
-// (kein Netz, offline, F.I.R.S.T.) - exakte webhookUrl + Token-Mint + Persistenz. (B) Spawn:
-// Flag aus bleibt TeXML byte-identisch (auch bei Telnyx-Provider), Flag an + Telnyx nimmt den
+// (kein Netz, offline, F.I.R.S.T.) - exakte webhookUrl + Persistenz. (B) Spawn: Flag aus
+// bleibt TeXML byte-identisch (auch bei Telnyx-Provider), Flag an + Telnyx nimmt den
 // Call-Control-Pfad (fakeVoice-Praefixe als Pfad-Diskriminator, Muster [[i8-design-decisions]]).
-// (C) publicCall-Unit: aiAssistantToken verlaesst den Server nie (Muster streamToken).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -14,7 +13,6 @@ import {
   TELNYX_ASSISTANT_BOOT_ENV,
 } from "./helpers.js";
 import { originateAiAssistantCall } from "../src/telnyx-origination.js";
-import { publicCall } from "../src/store/views.js";
 
 // === A: originateAiAssistantCall (DI, offline) ===================================
 
@@ -35,7 +33,7 @@ function spyVoiceControl(callControlId = "cc_spy_1") {
   return voiceControl;
 }
 
-test("originateAiAssistantCall: exakte webhookUrl + Token-Mint (64-hex) + Persistenz, EIN Aufruf", async () => {
+test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", async () => {
   const store = spyStore();
   const voiceControl = spyVoiceControl("cc_1");
   const call = { id: "call_abc", provider: "telnyx" };
@@ -60,7 +58,6 @@ test("originateAiAssistantCall: exakte webhookUrl + Token-Mint (64-hex) + Persis
     method: "POST",
     timeLimit: 180,
   });
-  assert.match(call.aiAssistantToken, /^[0-9a-f]{64}$/, "64-hex per-Call-Secret (32 Byte)");
   assert.equal(call.assistantId, "asst_9", "aus config.telnyxAssistantId");
   assert.equal(call.callControlId, "cc_1", "aus der originateViaCallControl-Rueckgabe");
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
@@ -82,7 +79,6 @@ test("Flag aus (byte-identisch): TeXML-Pfad auch bei Telnyx-Provider, kein Call-
     assert.match(call.twilioSid, /^fake_/, "TeXML-Fake-Praefix (nicht fake_cc_)");
     assert.equal(call.callControlId, null);
     assert.equal(call.assistantId, null);
-    assert.equal(call.aiAssistantToken, null);
   } finally {
     await srv.stop();
   }
@@ -118,7 +114,6 @@ test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid nul
       null,
       "kein TeXML-Originate gerufen (kein fake_-Praefix ohne _cc_)",
     );
-    assert.match(stored.aiAssistantToken, /^[0-9a-f]{64}$/);
     // P10: TELNYX_ASSISTANT_ID ist bei aktivem Flag jetzt Boot-Pflicht (assertConfig) -
     // "neutral leer" ist seitdem kein erreichbarer Zustand eines LAUFENDEN Servers mehr.
     // stored.assistantId spiegelt einfach den injizierten config-Wert (bindAssistantToCall).
@@ -132,30 +127,9 @@ test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid nul
   }
 });
 
-test("Flag an + Telnyx: aiAssistantToken verlaesst GET /api/calls/:id nie", async () => {
-  const srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      TELNYX_AI_ASSISTANT_ENABLED: "true",
-      ...TELNYX_ASSISTANT_BOOT_ENV,
-    },
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-  });
-  try {
-    const { callId } = await (await placeCall(srv)).json();
-    const apiCall = await (await fetch(`${srv.localUrl}/api/calls/${callId}`)).json();
-    assert.ok(
-      !("aiAssistantToken" in apiCall),
-      "Secret nie ueber /api/calls/:id (publicCall-Strip)",
-    );
-  } finally {
-    await srv.stop();
-  }
-});
-
 // === D: Fehlerpfad - originateViaCallControl schlaegt fehl (gemeinsamer catch-Block) ==
-// Blocker S1-1: originateAiAssistantCall setzt call.aiAssistantToken/assistantId auf dem
-// LEBENDEN Call VOR dem await auf originateViaCallControl. Schlaegt der Aufruf fehl, muss
+// Blocker S1-1: originateAiAssistantCall setzt call.assistantId auf dem LEBENDEN Call
+// VOR dem await auf originateViaCallControl. Schlaegt der Aufruf fehl, muss
 // derselbe try/catch wie der TeXML-Zweig greifen (releaseReserve + endCallRecord('failed')),
 // NICHT nur der bereits getestete Erfolgsfall (A) oder die 14 Gate-Denies (gate-proof, die
 // alle VOR der Origination greifen). KEIN FAKE_ORIGINATE hier: der echte Telnyx-Adapter soll
@@ -202,13 +176,4 @@ test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, 
   } finally {
     await srv.stop();
   }
-});
-
-// === C: publicCall-Unit (Token-Schutz an der Quelle) ================================
-
-test("publicCall: aiAssistantToken NIE in der Ausgabe (Muster streamToken)", () => {
-  const call = { id: "c1", aiAssistantToken: "super-secret", streamToken: "x", summary: "s" };
-  const out = publicCall(call);
-  assert.ok(!("aiAssistantToken" in out));
-  assert.equal(out.summary, "s");
 });

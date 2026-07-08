@@ -1,7 +1,8 @@
-// Unit-Tests fuer den Telnyx Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, Phase P1):
-// reine Fake-basierte Tests (kein Netz/Spawn) gegen makeTelnyxLlmShim. Deckt die
-// R1-Invarianten C1-C5 + D3 (Empty-Token-Falle) + D8 (Fehler-Durchreichung) aus
-// tasks/p1-spec.md. Muster fuer fakeRes vgl. request-tenant-unit.test.js.
+// Unit-Tests fuer den Telnyx Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, Phase P1;
+// Auth-Rework Phase telnyx-fix-live-schema-auth): reine Fake-basierte Tests (kein
+// Netz/Spawn) gegen makeTelnyxLlmShim. Deckt die Invarianten C1-C4 + Empty-Secret-
+// Trap + Korrelation (E1) + D8 (Fehler-Durchreichung) ab. Muster fuer fakeRes vgl.
+// request-tenant-unit.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
@@ -10,6 +11,7 @@ import { LlmUnavailableError } from "../src/llm.js";
 import { fakeTelnyxShimConfig } from "./helpers.js";
 
 const SSE_DATA_PREFIX = "data: ";
+const VALID_AUTH = "Bearer shim-secret"; // matcht fakeTelnyxShimConfig()-Default
 
 // Minimaler Express-res-Fake: erfasst Status, gesetzte Header, geschriebene SSE-
 // Chunks und einen etwaigen JSON-Fehler-Body. headersSent kippt erst bei einem
@@ -46,15 +48,20 @@ function fakeRes() {
   };
 }
 
-// Fake-Store: nur die drei vom Shim genutzten Fassaden-Funktionen. getCall matcht
-// NUR die per Token adressierte call.id (sonst null) - so beweisen Tests, dass ein
-// unbekannter/fremder callId NICHT zufaellig auf den geseedeten Call trifft.
+// Fake-Store: nur die vom Shim genutzten Fassaden-Funktionen. getCallByControlId matcht
+// NUR den per callControlId adressierte Call (sonst null) - so beweisen Tests, dass eine
+// unbekannte/fremde ccid NICHT zufaellig auf den geseedeten Call trifft. getCall wird vom
+// Budget-Kill-Pfad (terminateViaCallControl-Fresh-Fetch) gebraucht, auch wenn diese Tests
+// selbst keinen voiceControl-Hangup-Pfad injizieren (der Fresh-Fetch laeuft trotzdem).
 function fakeStore({ call = null, budgetExceeded = false, globalBudgetExceeded = false } = {}) {
-  const getCallCalls = [];
+  const getCallByControlIdCalls = [];
   return {
-    getCallCalls,
+    getCallByControlIdCalls,
+    getCallByControlId(ccid) {
+      getCallByControlIdCalls.push(ccid);
+      return call && call.callControlId === ccid ? call : null;
+    },
     getCall(id) {
-      getCallCalls.push(id);
       return call && call.id === id ? call : null;
     },
     budgetExceeded() {
@@ -78,29 +85,40 @@ function agentTurnSpy(result = { speech: "Hallo Welt", endCall: false }) {
   return agentTurn;
 }
 
-// Minimaler Call-Fixture: aiAssistantToken ist das per-Call-Secret (P4-Scope, hier
-// nur gelesen/validiert). tenantId/language decken die von agentTurn/localeFor
-// gelesenen Felder ab.
+// Minimaler Call-Fixture: callControlId ist der Korrelations-Schluessel (E1), status
+// muss 'active' sein. tenantId/language decken die von agentTurn/localeFor gelesenen
+// Felder ab.
 function makeCall(overrides = {}) {
   return {
     id: "call_x",
     tenantId: "t_test",
     language: "de",
-    aiAssistantToken: "sec-per-call",
+    callControlId: "cc_x",
+    status: "active",
     ...overrides,
   };
 }
 
+// No-op-VoiceControl-Stub: dieser Testfile deckt den Hangup-Pfad selbst NICHT ab
+// (das macht telnyx-shim-harness.js / telnyx-p6-midcall-budget-kill.test.js mit einem
+// echten Spy) - der Budget-Kill-Zweig ruft terminateViaCallControl trotzdem auf, sobald
+// der Call eine callControlId traegt, darum braucht jeder Handler hier eine erreichbare
+// (aber unbeobachtete) Implementierung.
+function noopVoiceControl() {
+  return { endCallViaCallControl: async () => {} };
+}
+
 // Baut Request + Handler in einem Rutsch (Build-Schritt, P13) - reduziert die
-// Wiederholung ueber die C1-D8-Tabelle.
+// Wiederholung ueber die Test-Tabelle.
 function makeHandler({
   store,
   config = fakeTelnyxShimConfig(),
   agentTurn = agentTurnSpy(),
   localeFor: lf = localeFor,
   metrics,
+  voiceControl = noopVoiceControl,
 } = {}) {
-  const args = { store, config, agentTurn, localeFor: lf };
+  const args = { store, config, agentTurn, localeFor: lf, voiceControl };
   if (metrics !== undefined) args.metrics = metrics;
   return makeTelnyxLlmShim(args);
 }
@@ -120,10 +138,14 @@ function metricsSpy() {
   };
 }
 
-function reqWith({ auth, body = {} } = {}) {
+// reqWith: baut Headers + Body in einem Rutsch. ccid (falls uebergeben) landet unter
+// body.metadata.call_control_id (Best-Guess-Pfad des forward_metadata-Bodys, E1) -
+// EINE Konstruktionsstelle statt an jeder Teststelle wiederholt.
+function reqWith({ auth, ccid, body = {} } = {}) {
   const headers = {};
   if (auth !== undefined) headers.authorization = auth;
-  return { headers, body };
+  const fullBody = ccid !== undefined ? { ...body, metadata: { call_control_id: ccid } } : body;
+  return { headers, body: fullBody };
 }
 
 function firstChunkJson(res) {
@@ -142,10 +164,10 @@ test("C1: Flag aus -> 404, kein agentTurn-Aufruf, kein Store-Zugriff", async () 
 
   assert.equal(res.statusCode, 404);
   assert.equal(agentTurn.calls.length, 0);
-  assert.deepEqual(store.getCallCalls, [], "Flag-aus-Pfad darf store.getCall nie aufrufen");
+  assert.deepEqual(store.getCallByControlIdCalls, [], "Flag-aus-Pfad darf store.getCallByControlId nie aufrufen");
 });
 
-// === C2: Flag an, kein/fremdes Token -> 403 ======================================
+// === Auth: kein/falscher Bearer -> 403 ===========================================
 
 test("C2a: Flag an, kein Authorization-Header -> 403, kein agentTurn", async () => {
   const store = fakeStore({ call: makeCall() });
@@ -153,79 +175,80 @@ test("C2a: Flag an, kein Authorization-Header -> 403, kein agentTurn", async () 
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith(), res);
+  await handler(reqWith({ ccid: "cc_x" }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(agentTurn.calls.length, 0);
 });
 
-test("C2b: gueltiges Token-Format, unbekannter callId (store.getCall -> null) -> 403", async () => {
-  const store = fakeStore({ call: null });
-  const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, agentTurn });
-  const res = fakeRes();
-
-  await handler(reqWith({ auth: "Bearer call_unknown:sec" }), res);
-
-  assert.equal(res.statusCode, 403);
-  assert.equal(agentTurn.calls.length, 0);
-});
-
-test("C2c: bekannter callId, falsches Secret -> 403 (safeEqual false), kein agentTurn", async () => {
-  const store = fakeStore({ call: makeCall({ aiAssistantToken: "richtiges-secret" }) });
-  const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, agentTurn });
-  const res = fakeRes();
-
-  await handler(reqWith({ auth: "Bearer call_x:falsches-secret" }), res);
-
-  assert.equal(res.statusCode, 403);
-  assert.equal(agentTurn.calls.length, 0);
-});
-
-// === D3: Empty-Token-Falle explizit geschlossen ==================================
-
-test("D3a: leeres Secret im Token (\"Bearer call_x:\") -> 403, kein agentTurn", async () => {
+test("C2c: falsches Bearer-Secret -> 403 (safeEqual false), kein agentTurn", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:" }), res);
+  await handler(reqWith({ auth: "Bearer falsches-secret", ccid: "cc_x" }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(agentTurn.calls.length, 0);
 });
 
-test("D3b: Call OHNE aiAssistantToken, Secret literal \"undefined\" -> 403 (Empty-Token-Guard)", async () => {
-  // safeEqual(String(undefined), ...) wuerde sonst gegen den Literal-String "undefined"
-  // vergleichen - der Guard "!stored" muss VOR safeEqual greifen.
-  const store = fakeStore({ call: makeCall({ aiAssistantToken: undefined }) });
+// === Empty-Secret-Trap: leeres config-Secret darf NIE autorisieren ===============
+
+test("Empty-Secret-Trap: config.telnyxShimSharedSecret=\"\" + Bearer \"\" -> 403 (safeEqual(\"\",\"\")===true waere sonst die Falle)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy();
+  const config = fakeTelnyxShimConfig({ telnyxShimSharedSecret: "" });
+  const handler = makeHandler({ store, config, agentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: "Bearer ", ccid: "cc_x" }), res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(agentTurn.calls.length, 0);
+});
+
+// === Korrelation (E1): ccid fehlt/unbekannt/inaktiv -> 403 =======================
+
+test("Korrelation: ccid fehlt im Body -> 403, kein agentTurn", async () => {
+  const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:undefined" }), res);
+  await handler(reqWith({ auth: VALID_AUTH }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(agentTurn.calls.length, 0);
 });
 
-test("D3c: Call mit aiAssistantToken=\"\" (leerer String), Secret \"\" -> 403 (safeEqual(\"\",\"\")===true waere sonst die Falle)", async () => {
-  const store = fakeStore({ call: makeCall({ aiAssistantToken: "" }) });
+test("Korrelation: ccid vorhanden, aber getCallByControlId findet keinen Call -> 403", async () => {
+  const store = fakeStore({ call: null });
   const agentTurn = agentTurnSpy();
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_unbekannt" }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(agentTurn.calls.length, 0);
 });
 
-// === C3: gueltiges Token -> OpenAI-Fake-Stream-Shape =============================
+test("Korrelation: ccid vorhanden, Call status!=='active' -> 403 (aufgelegter Call darf keinen Turn mehr ausloesen)", async () => {
+  const store = fakeStore({ call: makeCall({ status: "completed" }) });
+  const agentTurn = agentTurnSpy();
+  const handler = makeHandler({ store, agentTurn });
+  const res = fakeRes();
 
-test("C3: gueltiges Token -> agentTurn 1x mit dem token-gebundenen Call, Fake-Stream-Shape", async () => {
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(agentTurn.calls.length, 0);
+});
+
+// === C3: gueltiger Bearer + ccid -> OpenAI-Fake-Stream-Shape =====================
+
+test("C3: gueltiger Bearer + ccid -> agentTurn 1x mit dem ccid-gebundenen Call, Fake-Stream-Shape", async () => {
   const call = makeCall();
   const store = fakeStore({ call });
   const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
@@ -234,7 +257,8 @@ test("C3: gueltiges Token -> agentTurn 1x mit dem token-gebundenen Call, Fake-St
 
   await handler(
     reqWith({
-      auth: "Bearer call_x:sec-per-call",
+      auth: VALID_AUTH,
+      ccid: "cc_x",
       body: { model: "gpt-4o-mini", messages: [{ role: "user", content: "Hallo" }] },
     }),
     res,
@@ -253,16 +277,20 @@ test("C3: gueltiges Token -> agentTurn 1x mit dem token-gebundenen Call, Fake-St
   assert.equal(chunk.choices[0].finish_reason, "stop");
   assert.equal(res.chunks[1], "data: [DONE]\n\n");
   assert.equal(res.ended, true);
-  assert.ok(!res.chunks.join("").includes("sec-per-call"), "kein Token im SSE-Body");
+  assert.ok(!res.chunks.join("").includes("shim-secret"), "kein Secret im SSE-Body");
 });
 
 test("C3b: kein req.body.model -> Fallback auf config.claudeModel", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, config: fakeTelnyxShimConfig({ claudeModel: "claude-haiku-4-5" }), agentTurn });
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig({ claudeModel: "claude-haiku-4-5" }),
+    agentTurn,
+  });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(firstChunkJson(res).model, "claude-haiku-4-5");
 });
@@ -275,7 +303,7 @@ test("C4a: tenant-Budget ueberschritten -> Wind-Down-Completion, KEIN agentTurn-
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(agentTurn.calls.length, 0, "kein Token-Burn bei ueberschrittenem Budget");
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
@@ -287,16 +315,16 @@ test("C4b: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion, KEIN a
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(agentTurn.calls.length, 0);
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
 });
 
-// === C5: callId aus Token, nicht Body ============================================
+// === Anti-Spoof: die ccid bindet den Call, NICHT der spoofbare Body-callId ========
 
-test("C5: gespoofter callId/tenantId im Body wird ignoriert - Token bindet den Call", async () => {
-  const callA = makeCall({ id: "call_A", tenantId: "t_A", aiAssistantToken: "sec-A" });
+test("Anti-Spoof: gespoofter callId/tenantId im Body wird ignoriert - die ccid bindet den Call", async () => {
+  const callA = makeCall({ id: "call_A", tenantId: "t_A", callControlId: "cc_A" });
   const store = fakeStore({ call: callA });
   const agentTurn = agentTurnSpy();
   const handler = makeHandler({ store, agentTurn });
@@ -304,7 +332,8 @@ test("C5: gespoofter callId/tenantId im Body wird ignoriert - Token bindet den C
 
   await handler(
     reqWith({
-      auth: "Bearer call_A:sec-A",
+      auth: VALID_AUTH,
+      ccid: "cc_A",
       body: {
         callId: "call_B", // gespoofter Body-Wert, MUSS ignoriert werden
         tenantId: "t_B",
@@ -315,14 +344,14 @@ test("C5: gespoofter callId/tenantId im Body wird ignoriert - Token bindet den C
   );
 
   assert.equal(agentTurn.calls.length, 1);
-  assert.equal(agentTurn.calls[0].call.id, "call_A", "Token bindet den Call, nicht der Body");
+  assert.equal(agentTurn.calls[0].call.id, "call_A", "ccid bindet den Call, nicht der Body");
   assert.equal(agentTurn.calls[0].call.tenantId, "t_A");
   assert.equal(agentTurn.calls[0].callerText, "Ich bin der Angerufene");
 });
 
 // === P5: per-callId-Rate-Limiter (Scope 4, Toll-/Token-Fraud-Bremse) =============
 
-test("P5-Rate: N+1-ter Turn fuer denselben callId im Fenster -> Degradations-Completion OHNE agentTurn-Aufruf", async () => {
+test("P5-Rate: N+1-ter Turn fuer denselben Call im Fenster -> Degradations-Completion OHNE agentTurn-Aufruf", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
   const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 2 });
@@ -330,12 +359,12 @@ test("P5-Rate: N+1-ter Turn fuer denselben callId im Fenster -> Degradations-Com
 
   for (let i = 1; i <= 2; i++) {
     const res = fakeRes();
-    await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+    await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
     assert.equal(agentTurn.calls.length, i, `Turn ${i} innerhalb des Limits ruft agentTurn`);
   }
 
   const res3 = fakeRes();
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res3);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res3);
   assert.equal(agentTurn.calls.length, 2, "3. Turn (N+1) ruft agentTurn NICHT (kein Token-Burn)");
   assert.equal(
     firstChunkJson(res3).choices[0].delta.content,
@@ -344,11 +373,11 @@ test("P5-Rate: N+1-ter Turn fuer denselben callId im Fenster -> Degradations-Com
   );
 });
 
-test("P5-Rate: zwei verschiedene callIds teilen sich das Fenster NICHT", async () => {
-  const callA = makeCall({ id: "call_A", aiAssistantToken: "sec-A" });
-  const callB = makeCall({ id: "call_B", aiAssistantToken: "sec-B" });
+test("P5-Rate: zwei verschiedene Calls (ccids) teilen sich das Fenster NICHT", async () => {
+  const callA = makeCall({ id: "call_A", callControlId: "cc_A" });
+  const callB = makeCall({ id: "call_B", callControlId: "cc_B" });
   const store = {
-    getCall: (id) => [callA, callB].find((c) => c.id === id) || null,
+    getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
     budgetExceeded: () => false,
     globalBudgetExceeded: () => false,
   };
@@ -356,8 +385,8 @@ test("P5-Rate: zwei verschiedene callIds teilen sich das Fenster NICHT", async (
   const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 1 });
   const handler = makeHandler({ store, config, agentTurn });
 
-  await handler(reqWith({ auth: "Bearer call_A:sec-A" }), fakeRes());
-  await handler(reqWith({ auth: "Bearer call_B:sec-B" }), fakeRes());
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_A" }), fakeRes());
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_B" }), fakeRes());
   assert.equal(agentTurn.calls.length, 2, "call_A und call_B haben je einen eigenen Zaehler");
 });
 
@@ -369,7 +398,7 @@ test("lastUserText: kein messages-Array / kein user-Eintrag mit String-Content -
   const handler = makeHandler({ store, agentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call", body: {} }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body: {} }), res);
 
   assert.equal(agentTurn.calls[0].callerText, "");
 });
@@ -384,7 +413,7 @@ test("D8: agentTurn wirft generischen Error -> gueltige Completion mit turnError
   const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.notEqual(res.statusCode, 502, "kein roher 5xx im Fehlerpfad");
   assert.equal(res.body, null, "kein JSON-Error-Body");
@@ -403,7 +432,7 @@ test("D9: agentTurn wirft LlmUnavailableError -> gueltige Completion mit llmDegr
   const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.notEqual(res.statusCode, 502);
   assert.equal(res.body, null);
@@ -415,17 +444,17 @@ test("D9: agentTurn wirft LlmUnavailableError -> gueltige Completion mit llmDegr
 });
 
 test("D10: Degradations-Body enthaelt kein Secret - content ist exakt der Locale-String", async () => {
-  const store = fakeStore({ call: makeCall({ aiAssistantToken: "sec-per-call" }) });
+  const store = fakeStore({ call: makeCall() });
   async function throwingAgentTurn() {
     throw new LlmUnavailableError("retries-exhausted");
   }
   const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   const raw = res.chunks.join("");
-  assert.ok(!raw.includes("sec-per-call"), "kein per-Call-Secret im Degradations-Body");
+  assert.ok(!raw.includes("shim-secret"), "kein Shared-Secret im Degradations-Body");
   assert.ok(!raw.includes("Bearer"), "kein Bearer-Anteil im Degradations-Body");
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").llmDegradedSpeech);
 });
@@ -438,7 +467,7 @@ test("D11: nicht-DE Sprache (en) -> englischer Degradations-String (localeFor(ca
   const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("en").turnErrorSpeech);
 });
@@ -467,7 +496,7 @@ test("T1: writeFakeStream wirft nach dem ersten Write -> Fehlerpfad ruft nur end
   const handler = makeHandler({ store, agentTurn });
   const res = fakeResFailingOnSecondWrite();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(res.chunks.length, 1, "nur der erste (fehlgeschlagene) Chunk steht - kein Retry-Chunk");
   assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeFakeStream aufzurufen");
@@ -483,7 +512,7 @@ test("P10-Metrik: erfolgreicher Turn -> genau 1 logShimTurn mit callId + numeris
   const handler = makeHandler({ store, agentTurn, metrics });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(metrics.shimTurnCalls.length, 1);
   assert.equal(metrics.shimTurnCalls[0].callId, call.id);
@@ -509,14 +538,14 @@ test("P10-Metrik: Flag aus (404) -> agentTurn nie erreicht -> kein logShimTurn",
   assert.equal(metrics.shimTurnCalls.length, 0);
 });
 
-test("P10-Metrik: fehlendes Token (403) -> agentTurn nie erreicht -> kein logShimTurn", async () => {
+test("P10-Metrik: fehlende Korrelation (403) -> agentTurn nie erreicht -> kein logShimTurn", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy();
   const metrics = metricsSpy();
   const handler = makeHandler({ store, agentTurn, metrics });
   const res = fakeRes();
 
-  await handler(reqWith(), res);
+  await handler(reqWith({ auth: VALID_AUTH }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(metrics.shimTurnCalls.length, 0);
@@ -529,7 +558,7 @@ test("P10-Metrik: Budget-Gate ueberschritten -> agentTurn nie erreicht -> kein l
   const handler = makeHandler({ store, agentTurn, metrics });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(metrics.shimTurnCalls.length, 0);
 });
@@ -546,11 +575,11 @@ test("D8b: Fehler-Log traegt NUR err.name, kein Secret", async () => {
   const logged = [];
   console.error = (...args) => logged.push(args.map(String).join(" "));
   try {
-    await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+    await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
   } finally {
     console.error = originalError;
   }
 
   assert.ok(logged.some((l) => l.includes("[telnyx-shim]")));
-  assert.ok(!logged.join("\n").includes("sec-per-call"), "Log darf das Secret nie enthalten");
+  assert.ok(!logged.join("\n").includes("shim-secret"), "Log darf das Secret nie enthalten");
 });

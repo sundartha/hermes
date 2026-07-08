@@ -77,6 +77,10 @@ export const {
   newId,
   createCall,
   getCall,
+  // Brain-Shim-Korrelation (E1): beide Backends exportieren die Query, Fassade = EINE
+  // Quelle. Ohne diesen Re-Export waere store.getCallByControlId undefined -> der Shim
+  // wuerfe zur Laufzeit einen TypeError.
+  getCallByControlId,
   // F12 (A6): dem Prozess unbekannten, aber in der DB aktiven Call RLS-sauber nachladen
   // (Deploy-Instanzwechsel). pg = Tenant-Loop; json = getCall. OHNE diesen Re-Export waere
   // store.attachActiveCall undefined -> der /voice-Re-Attach-Pfad wuerfe zur Laufzeit einen

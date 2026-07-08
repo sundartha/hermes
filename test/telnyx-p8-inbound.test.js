@@ -37,7 +37,7 @@ function spyVoiceControl() {
   return voiceControl;
 }
 
-test("startInboundAiAssistant: Token-Mint (64-hex) + assistantId + callControlId + EIN store.save()", async () => {
+test("startInboundAiAssistant: assistantId + callControlId + EIN store.save()", async () => {
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in1", provider: "telnyx" };
@@ -53,7 +53,6 @@ test("startInboundAiAssistant: Token-Mint (64-hex) + assistantId + callControlId
     voiceProfile: "de-DE-KatjaNeural",
   });
 
-  assert.match(call.aiAssistantToken, /^[0-9a-f]{64}$/, "64-hex per-Call-Secret (32 Byte)");
   assert.equal(call.assistantId, "asst_x", "aus config.telnyxAssistantId");
   assert.equal(call.callControlId, "cc_inbound_9");
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
@@ -83,11 +82,10 @@ test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge 
     voiceProfile: "de-DE-KatjaNeural",
   });
   assert.equal(voiceControl.order[1].op, "startAssistant");
-  assert.equal(voiceControl.order[1].params.callControlId, "cc_inbound_9");
-  assert.equal(voiceControl.order[1].params.assistantId, "asst_x");
-  assert.ok(
-    voiceControl.order[1].params.customLlmAuth.startsWith(`${call.id}:`),
-    "customLlmAuth ist der per-Call-Bearer im callId:secret-Format",
+  assert.deepEqual(
+    voiceControl.order[1].params,
+    { callControlId: "cc_inbound_9", assistantId: "asst_x" },
+    "startAssistant traegt KEIN Auth-Feld (Shim authentifiziert per statischem Shared-Secret)",
   );
 });
 
@@ -123,7 +121,6 @@ test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-C
       "aus dem Body, kein fake_cc_-Praefix (Inbound != Outbound)",
     );
     assert.equal(call.assistantId, "asst_x");
-    assert.match(call.aiAssistantToken, /^[0-9a-f]{64}$/);
     assert.equal(call.direction, "inbound");
     assert.equal(call.status, "active");
   } finally {
@@ -201,7 +198,6 @@ test("Flag aus (byte-identisch): TeXML-Gather-Pfad auch bei Telnyx-Provider, kei
     const call = srv.readStore().calls[0];
     assert.equal(call.callControlId, null);
     assert.equal(call.assistantId, null);
-    assert.equal(call.aiAssistantToken, null);
   } finally {
     await srv.stop();
   }

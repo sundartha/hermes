@@ -117,6 +117,11 @@ export const BASE_ENV = {
   // test-base-env-drift). Leere assistantId -> P4.5 onSpeakEnded skippt fail-safe.
   TELNYX_ASSISTANT_ID: "",
   TELNYX_SHIM_MAX_TURNS_PER_MIN: "30",
+  // Shim-Auth (E2/E3) neutral leer, sonst leakt eine lokale .env via dotenv in Spawn-Tests
+  // -> Baseline-Drift (Lehre test-base-env-drift). Flag-an-Spawn-Tests brauchen das Secret
+  // fuer den Boot (TELNYX_ASSISTANT_BOOT_ENV traegt es explizit).
+  TELNYX_SHIM_SHARED_SECRET: "",
+  TELNYX_SHIM_API_KEY_REF: "",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",
@@ -470,8 +475,14 @@ export function fakeTelnyxShimConfig({
   enabled = true,
   claudeModel = "claude-haiku-4-5",
   telnyxShimMaxTurnsPerMin = 100,
+  telnyxShimSharedSecret = "shim-secret",
 } = {}) {
-  return { telnyxAiAssistantEnabled: enabled, claudeModel, telnyxShimMaxTurnsPerMin };
+  return {
+    telnyxAiAssistantEnabled: enabled,
+    claudeModel,
+    telnyxShimMaxTurnsPerMin,
+    telnyxShimSharedSecret,
+  };
 }
 
 // ---- Telnyx-Origination/-Inbound-Rohstoffe (Nummern/Header/Seed/POST-Helper) ----
@@ -500,6 +511,7 @@ export const TELNYX_ASSISTANT_BOOT_ENV = Object.freeze({
   TELNYX_ASSISTANT_ID: "asst_x",
   TELNYX_API_KEY: "key_x",
   TELNYX_CONNECTION_ID: "conn_x",
+  TELNYX_SHIM_SHARED_SECRET: "shim_secret_x",
 });
 
 // POST /api/calls (Outbound-Origination-Trigger). Liefert die rohe fetch-Response

@@ -5,7 +5,6 @@
 // telnyx-p6-midcall-budget-kill.test.js - beide brauchen den voiceControl-Hangup-Pfad).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { localeFor } from "../src/i18n/locales.js";
 import {
   fakeRes,
   fakeStore,
@@ -14,6 +13,8 @@ import {
   makeCall,
   makeHandler,
   reqWith,
+  validReq,
+  SHIM_SHARED_SECRET,
   firstChunkJson,
 } from "./telnyx-shim-harness.js";
 
@@ -43,7 +44,7 @@ test("E1: end_call=true + vorhandene callControlId -> speech zuerst, dann echter
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(res.chunks.length, 2, "genau EIN SSE-Chunk + data: [DONE]");
   assert.equal(firstChunkJson(res).choices[0].delta.content, "Auf Wiederhoeren");
@@ -52,8 +53,8 @@ test("E1: end_call=true + vorhandene callControlId -> speech zuerst, dann echter
   assert.deepEqual(voiceControl.calls, [{ provider: "telnyx", callControlId: "cc_1" }]);
   assert.deepEqual(
     store.getCallIds,
-    ["call_x", "call_x"],
-    "Token-Auth-Fetch + frischer Store-Stand vor dem Hangup",
+    ["call_x"],
+    "frischer Store-Stand vor dem Hangup (terminateViaCallControl-Fresh-Fetch)",
   );
 });
 
@@ -67,15 +68,20 @@ test("E2: end_call ruft KEIN finishCall/endCallRecord auf - genau EIN Hangup-Cal
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(voiceControl.calls.length, 1);
   assert.deepEqual(store.settlementCalls, [], "Settlement bleibt allein bei P4.5 onHangup");
 });
 
-// === E3: fail-safe ohne callControlId (persistiert erst P5) =====================
+// === E3: unaufloesbare ccid -> 403, kein agentTurn, kein Hangup =================
+// Vorher (P1): ein Call OHNE callControlId loeste ueber das per-Call-Token trotzdem auf
+// (Token = callId), der Hangup war lediglich fail-safe uebersprungen. Seit der Korrelation
+// ueber call_control_id (E1) IST callControlId der Aufloesungs-Schluessel selbst - ein Call
+// ohne callControlId ist damit gar nicht mehr erreichbar. Das neue korrekte Gate ist ein
+// 403 VOR agentTurn (kein Turn/Token-Burn, kein Hangup-Versuch).
 
-test("E3: end_call=true OHNE callControlId -> kein Hangup, kein Throw, speech normal", async () => {
+test("E3: unaufloesbare ccid (kein Call traegt diese callControlId) -> 403, kein agentTurn, kein Hangup", async () => {
   const call = makeCall({ callControlId: undefined });
   const store = fakeStore({ call });
   const agentTurn = agentTurnSpy({ speech: "Tschuess", endCall: true });
@@ -83,11 +89,11 @@ test("E3: end_call=true OHNE callControlId -> kein Hangup, kein Throw, speech no
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(reqWith({ auth: `Bearer ${SHIM_SHARED_SECRET}`, body: { metadata: { call_control_id: "cc_unresolvable" } } }), res);
 
-  assert.equal(voiceControl.calls.length, 0, "fail-safe Skip ohne callControlId");
-  assert.equal(res.chunks.length, 2, "speech geht trotzdem normal raus");
-  assert.equal(res.ended, true);
+  assert.equal(res.statusCode, 403);
+  assert.equal(agentTurn.calls.length, 0, "kein Token-Burn ohne aufgeloesten Call");
+  assert.equal(voiceControl.calls.length, 0, "kein Hangup-Versuch ohne aufgeloesten Call");
 });
 
 // === E4: endCall=false Gegenprobe (kein Fresh-Fetch, kein Hangup) ===============
@@ -100,10 +106,10 @@ test("E4: endCall=false -> kein Hangup-Aufruf, kein Fresh-Fetch nach dem Turn", 
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(voiceControl.calls.length, 0);
-  assert.deepEqual(store.getCallIds, ["call_x"], "kein zweiter getCall ohne end_call");
+  assert.deepEqual(store.getCallIds, [], "kein getCall-Fresh-Fetch ohne end_call");
   assert.equal(firstChunkJson(res).choices[0].delta.content, "Bis dann");
 });
 
@@ -117,7 +123,7 @@ test("E5: Call-Control-Hangup wirft -> Handler resolved trotzdem, Response berei
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(res.chunks.length, 2, "Response wurde vor dem Hangup-Versuch bereits vollstaendig geschrieben");
   assert.equal(res.ended, true);
@@ -139,7 +145,7 @@ test("T5: end_call=true, writeFakeStream wirft nach dem ersten Write -> Hangup w
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeResFailingOnSecondWrite();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(res.chunks.length, 1, "nur der erste (fehlgeschlagene) Chunk steht - kein Retry-Chunk");
   assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeFakeStream aufzurufen");
@@ -158,7 +164,7 @@ test("T5b: endCall=false + writeFakeStream wirft -> Gegenprobe: weiterhin KEIN H
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeResFailingOnSecondWrite();
 
-  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+  await handler(validReq(call), res);
 
   assert.equal(res.ended, true);
   assert.equal(voiceControl.calls.length, 0, "kein Hangup, wenn agentTurn kein end_call lieferte");
