@@ -89,7 +89,8 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
   // C-Telnyx keinen Text-Rueckkanal "leg auf" - ohne echten Hangup laeuft der Call plus
   // Tokenkosten weiter. Terminierung out-of-band ueber Call-Control; KEIN zweiter Store-
   // Write (Settlement kommt ueber den call.hangup-Event -> P4.5 onHangup, EIN idempotenter
-  // Pfad ueber billedAt/reserveReleased).
+  // Pfad ueber billedAt/reserveReleased). P6 nutzt denselben Helper fuer den Mid-Call-
+  // Budget-Kill (zweiter Aufrufer, G5).
   async function terminateViaCallControl(call) {
     // Frischer Store-Stand (Pre-Mortem): callControlId kann waehrend des Turns gesetzt
     // worden sein - nicht auf den Turn-Anfang-Stand vertrauen (Muster P4.5 onHangup).
@@ -98,7 +99,7 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
     if (!callControlId) {
       // fail-safe: callControlId persistiert erst P5 (Origination). Fehlt sie -> Skip + Log,
       // KEIN Crash/Orphan (die Response ist bereits raus), Muster P4.5 assistantId-Handling.
-      console.warn(`[telnyx-shim] end_call ohne callControlId (call=${call.id}) -> kein Hangup`);
+      console.warn(`[telnyx-shim] Hangup ohne callControlId (call=${call.id}) -> kein Hangup`);
       return;
     }
     try {
@@ -134,10 +135,18 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
     if (!shimRateHit(parsed.callId).allowed)
       return writeFakeStream(res, { model, content: locale.llmDegradedSpeech });
 
-    // 4) Budget-Gate (Invariante 3 / Regel 1): kein agentTurn-Aufruf bei Cap-Ueberschreitung
-    // (kein Token-Burn). Hangup-Aktion (Call-Control) erst P6.
-    if (store.budgetExceeded(call.tenantId, config) || store.globalBudgetExceeded(config))
-      return writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
+    // 4) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
+    // Cap-Ueberschreitung (kein Token-Burn). P6 (Weg iii): Abschluss-Ansage ZUERST, DANN den
+    // Call REAL auflegen - sonst deckt der Cap nur die Ansage, die Tokenkosten liefen weiter
+    // (Regel 1 verlangt BEIDE Achsen). terminateViaCallControl ist fail-safe (kein
+    // callControlId -> Skip + Log, eigener try/catch, secret-frei) - identisches Muster wie der
+    // end_call-Hangup (Schritt 6, G5: EIN Helper). Settlement bleibt P4.5 onHangup (EIN
+    // idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
+    if (store.budgetExceeded(call.tenantId, config) || store.globalBudgetExceeded(config)) {
+      writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
+      await terminateViaCallControl(call);
+      return;
+    }
 
     // 5) Kern: agentTurn (in-house Tool-Loop) gegen die TOKEN-gebundene, frische call-Referenz.
     let endCall = false;

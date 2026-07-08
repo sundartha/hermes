@@ -61,7 +61,7 @@ import {
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
-import { terminateAndBillCall } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction } from "./telephony/call-termination.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import {
   registerTenant,
@@ -944,9 +944,11 @@ async function terminateCappedCall(callId, providerCallSid, status) {
     ).toISOString();
     await terminateAndBillCall({
       persistEnd: () => store.setCallEndedAt(callId, status, endedAtIso),
-      hangUp: providerCallSid
-        ? () => voiceControl(call.provider).endCall(providerCallSid)
-        : null,
+      // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Call (callControlId
+      // gesetzt) wird via endCallViaCallControl beendet, TeXML/Twilio byte-identisch ueber
+      // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
+      // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
+      hangUp: hangUpAction(voiceControl, call, providerCallSid),
       bill: () => finishCall(store.getCall(callId)), // bucht genau EINMAL (billedAt, F9), gekappt
     });
   } catch (e) {
@@ -1668,12 +1670,14 @@ app.post("/api/calls", async (req, res) => {
     // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
     if (config.telnyxAiAssistantEnabled && outboundProvider === PROVIDER.TELNYX) {
       await originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur });
-      // P6-Luecke (bewusst, dokumentiert - NICHT in Scope dieser Phase): der Call-Control-
-      // Max-Dauer-Timer (callControlId-korrekt) wird erst in P6 verdrahtet. armMaxDurationTimer
-      // hier NICHT rufen (es wuerde einen TeXML-Hangup mit leerem twilioSid feuern = kaputt).
-      // KEIN Live-Risiko: das Flag bleibt in Prod aus bis P11 (nach P6); der provider-seitige
-      // time_limit_secs-Cap (voice.js) UND der Reserve-Backstop (armReserveReleaseTimer, unten)
-      // greifen daneben.
+      // P6 (Regel 1, Minuten-Achse): harter Max-Dauer-Cap AUCH fuer C-Telnyx. originateAiAssistantCall
+      // hat call.callControlId persistiert+gespeichert; terminateCappedCall liest sie beim Feuern
+      // frisch und waehlt via hangUpAction den Call-Control-Hangup (endCallViaCallControl), NICHT
+      // TeXML-endCall. providerCallSid=null ist Absicht (es gibt keinen twilioSid; die ID kommt
+      // aus callControlId). KEIN realtime-Guard: ein C-Telnyx-Call laeuft NICHT ueber die
+      // Realtime-Bridge (kein Media-Stream) -> dieser Timer ist neben time_limit_secs der
+      // EINZIGE in-Prozess-Cap (fail-closed, Regel 1).
+      armMaxDurationTimer(call, null);
     } else {
       const tw = await voiceControl(outboundProvider).originateCall({
         from: fromNumber,
@@ -1745,7 +1749,9 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
   // Telnyx-Call), dann buchen (fire-and-forget).
   await terminateAndBillCall({
     persistEnd: () => store.endCallRecord(call.id, "cancelled"),
-    hangUp: call.twilioSid ? () => voiceControl(call.provider).endCall(call.twilioSid) : null,
+    // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
+    // EINE Quelle) - cancel_call eines C-Telnyx-Calls trifft den Call-Control-Hangup.
+    hangUp: hangUpAction(voiceControl, call, call.twilioSid),
     bill: () => finishCall(store.getCall(call.id)),
     onHangUpError: (e) => console.error("[cancel]", e.message),
   });

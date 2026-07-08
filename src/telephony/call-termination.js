@@ -27,3 +27,23 @@ export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpE
   }
   void bill();
 }
+
+// P6 (Regel 1 / Befund 1): waehlt Hangup-Endpunkt+ID anhand der Call-FORM, NICHT der
+// voiceEngine. Ein Call-Control-Call (callControlId gesetzt, C-Telnyx) wird ueber
+// endCallViaCallControl(callControlId) beendet; ein TeXML/Twilio-Call ueber endCall(
+// providerCallSid) - byte-identisch zum Bestand. EINE Quelle (G5) fuer terminateCappedCall
+// UND cancel_call, damit die ID-/Endpunkt-Entscheidung nicht an zwei Stellen driftet.
+// Rein (DI: voiceControl kommt herein) -> offline mit Spy-voiceControl unit-testbar.
+//
+// Verzweigt an callControlId-PRAESENZ (nicht voiceEngine): ein TeXML-Hangup gegen einen
+// Call-Control-Call schluege still fehl -> Cap orphant nach jedem Deploy, Kostenexplosion
+// (Befund 1). Fehlen BEIDE IDs (z.B. Originate-Fehler vor sid) -> null: terminateAndBillCall
+// ueberspringt den Hangup fail-safe (persistiert+bucht trotzdem). providerCallSid wird
+// bewusst UEBERGEBEN (nicht aus call.twilioSid abgeleitet): der Inbound-Pfad armt mit
+// req.body.CallSid, das nicht zwingend call.twilioSid entspricht -> Bestandsverhalten wahren.
+export function hangUpAction(voiceControl, call, providerCallSid) {
+  if (call.callControlId)
+    return () => voiceControl(call.provider).endCallViaCallControl(call.callControlId);
+  if (providerCallSid) return () => voiceControl(call.provider).endCall(providerCallSid);
+  return null;
+}
