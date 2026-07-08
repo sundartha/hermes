@@ -28,6 +28,17 @@ Angerufenes Handy ◄──Mobilfunknetz──► Twilio ◄──┬── Budg
 
 Audio läuft **niemals durch MCP**. Realtime nutzt G.711 μ-law 8 kHz **1:1 durchgereicht** (kein Transcoding). Call-Records liegen in `data/store.json` (bewusst ohne Datenbank).
 
+## C-Telnyx — AI-Assistant-Engine (Barge-in, optional)
+
+Dritte Voice-Variante (PLAN-TELNYX-AI-ASSISTANT.md): der Telnyx AI Assistant fuehrt die
+Turns voll-duplex (STT/VAD/TTS/Barge-in) und ruft pro Turn unseren in-house Custom-LLM-Shim
+(`/v1/chat/completions`); Claude-Brain, Ela-Stimme, Offenlegungssatz und die komplette
+Safety-Gate-Kette bleiben in-house. Geschaltet ueber `TELNYX_AI_ASSISTANT_ENABLED`
+(Default AUS -> Budget-Engine byte-identisch, Shim antwortet 404). Der Assistant wird
+reproduzierbar via `scripts/telnyx-assistant-provision.mjs` angelegt (Runbook:
+`docs/RUNBOOK-TELNYX-ASSISTANT.md`); der Live-Cutover ist Owner-gated (Flag im Dashboard
+NACH verifiziertem Deploy, Rollback = Flag aus).
+
 ## Sicherheits-Gates (fest eingebaut)
 
 - **Outbound-Freigabe:** per-Tenant-Verifikation (aktives Abo + KYC). Globaler Not-Aus: `OUTBOUND_FROZEN`.

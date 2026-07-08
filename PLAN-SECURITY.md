@@ -107,3 +107,47 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > Code-Kommentar "STT bleibt UNBERUEHRT" war falsch und ist korrigiert. Der neue
 > Play-TTS-Pfad (server-seitige Vorab-Synthese + natives `<Play>` einer statischen
 > Datei) umgeht dieses Problem, weil Telnyx keinen Live-Relay-Stream aufbaut.
+
+## C-TELNYX — AI-Assistant-Engine (Barge-in, Custom-LLM-Shim, Call-Control)
+
+C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P1-P11) migriert die Live-Voice-Schicht auf den
+Telnyx AI Assistant (voll-duplex, Sprach-Barge-in). Master-Flag `TELNYX_AI_ASSISTANT_ENABLED`
+(Default AUS): der gesamte Pfad ist bis zum Owner-Cutover (P11) inaktiv, der Live-CALL-Pfad
+byte-identisch. Neue Angriffsflaechen + Mitigationen:
+
+- **Custom-LLM-Shim (`/v1/chat/completions`, `src/telnyx-llm-shim.js`):** neuer Endpunkt,
+  der pro Turn Claude-Tokens verbrennt und Transkript-Fragmente empfaengt. Bewusst VOR der
+  Basic-Auth registriert (Telnyx BYO-LLM kann keinen Basic-Header setzen) mit EIGENER
+  fail-closed-Absicherung: (1) 404 bei Flag aus (Existenz hinter dem Flag - keine monatelang
+  offene Flaeche); (2) per-Call kurzlebiges Token, gegen den Store-Call-Record validiert
+  (403 sonst, timing-sicher via `safeEqual`) - KEIN globales Shared-Secret, das fremde
+  callIds adressieren koennte (Cross-Tenant-/Enumerations-Schutz); (3) per-callId-Rate-Limiter
+  (`TELNYX_SHIM_MAX_TURNS_PER_MIN`, Default 30) + Budget-Gate pro Turn (`budgetExceeded` -
+  kein Token-Burn ueber dem Cap). callId kommt NUR aus dem Token, nie aus dem spoofbaren
+  OpenAI-Body.
+- **Call-Control-Origination HINTER der Gate-Kette:** der neue Pfad haengt an genau der
+  Stelle, an der heute `originateCall()` sitzt (server.js), NACH der vollstaendigen
+  Pre-Dial-Kette (OUTBOUND_FROZEN, Tenant/KYC, Denylist/Land/Rate/Cooldown, Verifikation,
+  Budget global n Tenant, Minuten-Kontingent, atomare Reserve). KEIN zweiter Origination-
+  Einstieg.
+- **Call-Control-Event-Ingest (P4.5):** eingehende `call.answered`/`speak.ended`/`call.hangup`-
+  Webhooks sind Ed25519-signiert und fail-closed geprueft (kein implizites Wegfallen der
+  Signatur; ungueltige Signatur -> 403). Der Handler mappt auf `finishCall`/`releaseReserve`/
+  Timer (verhindert Reserve-Leak) und gatet die Disclosure->Assistant-Sequenz.
+- **Inbound-Budget-Gate (Befund 8):** Inbound laeuft NICHT durch die Origination-Kette und
+  hat keine Vorab-Reserve -> beim Answer expliziter globaler n Tenant-Budget-Check
+  (`budgetExceeded`), Ablehnung bei Ueberschreitung (Toll-Fraud-Vektor: wiederholte Anrufe,
+  KI redet unbegrenzt).
+- **Mid-Call-Kill (beide Kosten-Achsen):** die Vorab-Reserve deckt nur Minuten; Tokenkosten
+  laufen mid-call ueber den Shim. Deshalb pro Shim-Turn ein `budgetExceeded`-Check
+  (Abschluss-Ansage + realer Call-Control-Hangup bei Ueberschreitung). Der Max-Dauer-Timer
+  bleibt der out-of-band Zeit-Deckel.
+- **Boot-Re-Arm (callControlId):** die `call_control_id` liegt als eigenes persistiertes
+  Feld (NICHT `twilioSid` ueberladen), damit Boot-Recovery (`rearmActiveCallTimers`/
+  `reattachActiveCall`) nach Deploy den korrekten Call-Control-Hangup trifft statt eines
+  orphanten TeXML-Caps.
+- **Secrets:** `.env.example`/`render.yaml` tragen keine echten Werte (`sync:false`/Default);
+  Fehler nur ueber `assertTelnyxOk` geparst (nie Raw-Body/Key geloggt).
+- **Boot fail-closed (P10):** Flag an ohne `TELNYX_ASSISTANT_ID`/`TELNYX_API_KEY`/
+  `TELNYX_CONNECTION_ID` -> `assertConfig` verweigert den Start; ein absurd hoher
+  `TELNYX_SHIM_MAX_TURNS_PER_MIN` im Hosting -> `productionFootguns` fatal.

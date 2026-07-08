@@ -15,6 +15,15 @@ import {
 import { originateAiAssistantCall } from "../src/telnyx-origination.js";
 import { publicCall } from "../src/store/views.js";
 
+// P10: assertConfig verlangt bei aktivem Flag ASSISTANT_ID/API_KEY/CONNECTION_ID
+// (fail-closed Boot) - die Flag-an-Spawn-Tests unten brauchen die drei Werte NUR
+// damit der Server ueberhaupt startet, nicht fuer ihre eigentliche Aussage.
+const TELNYX_ASSISTANT_BOOT_ENV = {
+  TELNYX_ASSISTANT_ID: "asst_x",
+  TELNYX_API_KEY: "key_x",
+  TELNYX_CONNECTION_ID: "conn_x",
+};
+
 // === A: originateAiAssistantCall (DI, offline) ===================================
 
 function spyStore() {
@@ -89,7 +98,11 @@ test("Flag aus (byte-identisch): TeXML-Pfad auch bei Telnyx-Provider, kein Call-
 
 test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid null, originateCall NICHT gerufen", async () => {
   const srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true" },
+    env: {
+      FAKE_ORIGINATE: "true",
+      TELNYX_AI_ASSISTANT_ENABLED: "true",
+      ...TELNYX_ASSISTANT_BOOT_ENV,
+    },
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
@@ -114,10 +127,13 @@ test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid nul
       "kein TeXML-Originate gerufen (kein fake_-Praefix ohne _cc_)",
     );
     assert.match(stored.aiAssistantToken, /^[0-9a-f]{64}$/);
+    // P10: TELNYX_ASSISTANT_ID ist bei aktivem Flag jetzt Boot-Pflicht (assertConfig) -
+    // "neutral leer" ist seitdem kein erreichbarer Zustand eines LAUFENDEN Servers mehr.
+    // stored.assistantId spiegelt einfach den injizierten config-Wert (bindAssistantToCall).
     assert.equal(
       stored.assistantId,
-      "",
-      "TELNYX_ASSISTANT_ID neutral leer (BASE_ENV) -> leerer assistantId",
+      TELNYX_ASSISTANT_BOOT_ENV.TELNYX_ASSISTANT_ID,
+      "assistantId kommt aus config.telnyxAssistantId (bindAssistantToCall)",
     );
   } finally {
     await srv.stop();
@@ -126,7 +142,11 @@ test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid nul
 
 test("Flag an + Telnyx: aiAssistantToken verlaesst GET /api/calls/:id nie", async () => {
   const srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true" },
+    env: {
+      FAKE_ORIGINATE: "true",
+      TELNYX_AI_ASSISTANT_ENABLED: "true",
+      ...TELNYX_ASSISTANT_BOOT_ENV,
+    },
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
@@ -146,14 +166,20 @@ test("Flag an + Telnyx: aiAssistantToken verlaesst GET /api/calls/:id nie", asyn
 // LEBENDEN Call VOR dem await auf originateViaCallControl. Schlaegt der Aufruf fehl, muss
 // derselbe try/catch wie der TeXML-Zweig greifen (releaseReserve + endCallRecord('failed')),
 // NICHT nur der bereits getestete Erfolgsfall (A) oder die 14 Gate-Denies (gate-proof, die
-// alle VOR der Origination greifen). KEIN FAKE_ORIGINATE hier: der echte Telnyx-Adapter
-// wirft synchron+netzfrei bei fehlendem TELNYX_API_KEY (BASE_ENV-Default leer) - deterministisch,
-// ohne Netz oder Mock-Server (F.I.R.S.T.).
+// alle VOR der Origination greifen). KEIN FAKE_ORIGINATE hier: der echte Telnyx-Adapter soll
+// wirklich (asynchron) scheitern. P10: TELNYX_API_KEY/CONNECTION_ID sind bei aktivem Flag
+// jetzt Boot-Pflicht (assertConfig), der frueher hier genutzte "synchron+netzfrei wegen
+// fehlendem TELNYX_API_KEY"-Trigger ist seitdem kein erreichbarer Zustand mehr. Stattdessen
+// zeigt TELNYX_API_BASE auf einen lokalen, garantiert verweigerten Port (127.0.0.1:1) -
+// fetch() schlaegt binnen Millisekunden mit ECONNREFUSED fehl, weiterhin ohne echtes Netz
+// oder Mock-Server (F.I.R.S.T.), aber jetzt NACH einem gueltigen Boot.
 test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, Reserve freigegeben", async () => {
   const srv = await startServer({
     env: {
       TELNYX_AI_ASSISTANT_ENABLED: "true",
       VOICE_TARIFF_DOMESTIC_CENTS: "20", // reserveCents muss > 0 sein, sonst ist releaseOutboundReserve ein No-op
+      ...TELNYX_ASSISTANT_BOOT_ENV,
+      TELNYX_API_BASE: "http://127.0.0.1:1", // reservierter, garantiert verweigerter Port
     },
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
@@ -162,7 +188,7 @@ test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, 
     assert.equal(
       res.status,
       500,
-      "kein providerStatus (Fehler VOR jedem Netz-Call) -> generischer 500",
+      "ECONNREFUSED traegt kein providerStatus (nur eine echte Provider-HTTP-Antwort tut das) -> generischer 500",
     );
     const body = await res.json();
     assert.equal(body.error, "Anruf konnte nicht gestartet werden.");

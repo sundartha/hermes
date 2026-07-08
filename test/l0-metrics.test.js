@@ -69,7 +69,7 @@ test("T-L0-1b (I13): llmCall traegt callId + Cache-Zaehler additiv, NUR wenn mit
   assert.ok(!("secret" in entries[0].payload));
 });
 
-test("T-L0-2: Master-Schalter aus -> keine der vier Funktionen loggt (byte-identisch)", () => {
+test("T-L0-2: Master-Schalter aus -> keine der fuenf Funktionen loggt (byte-identisch)", () => {
   const { log, entries } = collector();
   const m = createMetrics({ enabled: false, log });
 
@@ -77,6 +77,7 @@ test("T-L0-2: Master-Schalter aus -> keine der vier Funktionen loggt (byte-ident
   m.logTurn({ callId: "c1", direction: "inbound", roundtrips: 1, tools: [] });
   m.recordTurnRendered("c1");
   m.logTurnGap("c1");
+  m.logShimTurn({ callId: "c1", latencyMs: 42 });
 
   assert.equal(entries.length, 0);
 });
@@ -113,6 +114,20 @@ test("T-L0-4: STT-Gap = JETZT - voriger Render; Erst-Turn ohne Vorgaenger loggt 
   assert.equal(entries.length, 1);
   assert.equal(entries[0].kind, "stt_gap");
   assert.deepEqual(entries[0].payload, { callId: "c1", gapMs: 700 });
+});
+
+test("T-L0-6 (P10): logShimTurn ist PII-frei (nur callId + latencyMs)", () => {
+  const { log, entries } = collector();
+  const m = createMetrics({ enabled: true, log });
+
+  m.logShimTurn({ callId: "c1", latencyMs: 250, secret: "leak" });
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, "shim_turn");
+  assert.deepEqual(Object.keys(entries[0].payload).sort(), ["callId", "latencyMs"]);
+  assert.equal(entries[0].payload.callId, "c1");
+  assert.equal(entries[0].payload.latencyMs, 250);
+  assert.ok(!("secret" in entries[0].payload));
 });
 
 test("T-L0-5: beschraenkte Map verdraengt den aeltesten Eintrag (Leak-Schutz)", () => {

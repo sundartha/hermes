@@ -79,9 +79,18 @@ export function createMetrics({
     log("stt_gap", { callId, gapMs: now() - prev });
   }
 
-  return { llmCall, logTurn, recordTurnRendered, logTurnGap };
+  // Wanduhr-Dauer eines agentTurn IM SHIM (C-Telnyx, P10). PII-frei: callId + Millisekunden.
+  // ACHTUNG: das ist die GESAMT-Turn-Dauer (Fake-Stream), NICHT Time-to-first-Token -
+  // echtes TTFT braucht P3b-Streaming bzw. Telnyx-Live-Telemetrie (end_user_perceived_latency_ms).
+  function logShimTurn({ callId, latencyMs }) {
+    if (!enabled) return;
+    log("shim_turn", { callId, latencyMs });
+  }
+
+  return { llmCall, logTurn, recordTurnRendered, logTurnGap, logShimTurn };
 }
 
 // Prozessweiter Singleton (P15). Konsumenten: claude.js (llmCall via createLlmClient,
-// logTurn) + server.js (recordTurnRendered/logTurnGap im /voice/turn).
+// logTurn) + server.js (recordTurnRendered/logTurnGap im /voice/turn) + telnyx-llm-shim.js
+// (logShimTurn im Custom-LLM-Shim, C-Telnyx P10).
 export const metrics = createMetrics();

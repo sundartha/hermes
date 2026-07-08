@@ -93,8 +93,31 @@ function makeCall(overrides = {}) {
 
 // Baut Request + Handler in einem Rutsch (Build-Schritt, P13) - reduziert die
 // Wiederholung ueber die C1-D8-Tabelle.
-function makeHandler({ store, config = fakeTelnyxShimConfig(), agentTurn = agentTurnSpy(), localeFor: lf = localeFor } = {}) {
-  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor: lf });
+function makeHandler({
+  store,
+  config = fakeTelnyxShimConfig(),
+  agentTurn = agentTurnSpy(),
+  localeFor: lf = localeFor,
+  metrics,
+} = {}) {
+  const args = { store, config, agentTurn, localeFor: lf };
+  if (metrics !== undefined) args.metrics = metrics;
+  return makeTelnyxLlmShim(args);
+}
+
+// Spy-metrics (P10): erfasst nur logShimTurn-Aufrufe (die einzige vom Shim genutzte
+// Metrik-Funktion). Die anderen drei bleiben No-op-Stubs, damit ein injizierter Spy
+// als Drop-in fuer den echten metrics-Singleton dient.
+function metricsSpy() {
+  const shimTurnCalls = [];
+  return {
+    shimTurnCalls,
+    logShimTurn: (payload) => shimTurnCalls.push(payload),
+    llmCall() {},
+    logTurn() {},
+    recordTurnRendered() {},
+    logTurnGap() {},
+  };
 }
 
 function reqWith({ auth, body = {} } = {}) {
@@ -448,6 +471,67 @@ test("T1: writeFakeStream wirft nach dem ersten Write -> Fehlerpfad ruft nur end
 
   assert.equal(res.chunks.length, 1, "nur der erste (fehlgeschlagene) Chunk steht - kein Retry-Chunk");
   assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeFakeStream aufzurufen");
+});
+
+// === P10: Shim-Turn-Latenz-Metrik (Observability, agentTurn-Wanduhr-Dauer) =========
+
+test("P10-Metrik: erfolgreicher Turn -> genau 1 logShimTurn mit callId + numerischer latencyMs", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const metrics = metricsSpy();
+  const handler = makeHandler({ store, agentTurn, metrics });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.equal(metrics.shimTurnCalls.length, 1);
+  assert.equal(metrics.shimTurnCalls[0].callId, call.id);
+  assert.equal(typeof metrics.shimTurnCalls[0].latencyMs, "number");
+  assert.ok(metrics.shimTurnCalls[0].latencyMs >= 0);
+});
+
+test("P10-Metrik: Flag aus (404) -> agentTurn nie erreicht -> kein logShimTurn", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy();
+  const metrics = metricsSpy();
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig({ enabled: false }),
+    agentTurn,
+    metrics,
+  });
+  const res = fakeRes();
+
+  await handler(reqWith(), res);
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(metrics.shimTurnCalls.length, 0);
+});
+
+test("P10-Metrik: fehlendes Token (403) -> agentTurn nie erreicht -> kein logShimTurn", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy();
+  const metrics = metricsSpy();
+  const handler = makeHandler({ store, agentTurn, metrics });
+  const res = fakeRes();
+
+  await handler(reqWith(), res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(metrics.shimTurnCalls.length, 0);
+});
+
+test("P10-Metrik: Budget-Gate ueberschritten -> agentTurn nie erreicht -> kein logShimTurn", async () => {
+  const store = fakeStore({ call: makeCall(), budgetExceeded: true });
+  const agentTurn = agentTurnSpy();
+  const metrics = metricsSpy();
+  const handler = makeHandler({ store, agentTurn, metrics });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: "Bearer call_x:sec-per-call" }), res);
+
+  assert.equal(metrics.shimTurnCalls.length, 0);
 });
 
 test("D8b: Fehler-Log traegt NUR err.name, kein Secret", async () => {

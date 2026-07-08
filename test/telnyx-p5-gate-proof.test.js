@@ -12,7 +12,17 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
 
-const FLAG_ON = { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true" };
+// P10: assertConfig verlangt bei aktivem Flag ASSISTANT_ID/API_KEY/CONNECTION_ID
+// (fail-closed Boot) - alle 14 Gate-Tests booten den Server mit FLAG_ON, brauchen die
+// drei Werte also NUR damit der Server ueberhaupt startet (FAKE_ORIGINATE macht den
+// eigentlichen Origination-Call ohnehin fake, die Werte selbst sind hier bedeutungslos).
+const FLAG_ON = {
+  FAKE_ORIGINATE: "true",
+  TELNYX_AI_ASSISTANT_ENABLED: "true",
+  TELNYX_ASSISTANT_ID: "asst_x",
+  TELNYX_API_KEY: "key_x",
+  TELNYX_CONNECTION_ID: "conn_x",
+};
 const TELNYX_OWNER_NUMBER = { e164: "+4915005559001", provider: "telnyx" };
 const TO = "+4915112345678"; // normales DE-Ziel, kein Premium/Notruf
 const A = "tenant-a",

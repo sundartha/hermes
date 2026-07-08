@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { safeEqual } from "./util.js";
 import { degradedSpeechFor } from "./llm.js";
 import { makeFixedWindowCounter } from "./middleware.js";
+import { metrics as defaultMetrics } from "./metrics.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk";
@@ -74,7 +75,14 @@ function writeFakeStream(res, { model, content }) {
   res.end();
 }
 
-export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl }) {
+export function makeTelnyxLlmShim({
+  store,
+  config,
+  agentTurn,
+  localeFor,
+  voiceControl,
+  metrics = defaultMetrics,
+}) {
   // P5 (Scope 4, Carryover aus P4): per-callId-Fixed-Window - Toll-/Token-Fraud-Bremse
   // VOR agentTurn, zusaetzlich zum globalen Per-IP-Limiter + Budget-Cap. EINE Quelle
   // (makeFixedWindowCounter, G5) statt einer zweiten Zaehler-Implementierung hier.
@@ -151,7 +159,10 @@ export function makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceCo
     // 5) Kern: agentTurn (in-house Tool-Loop) gegen die TOKEN-gebundene, frische call-Referenz.
     let endCall = false;
     try {
+      const startedAt = Date.now();
       const turn = await agentTurn(call, lastUserText(req.body));
+      // P10: Gesamt-Turn-Dauer (NICHT TTFT, siehe metrics.logShimTurn). No-op wenn metricsEnabled aus.
+      metrics.logShimTurn({ callId: call.id, latencyMs: Date.now() - startedAt });
       endCall = turn.endCall === true;
       writeFakeStream(res, { model, content: turn.speech }); // Abschiedssatz geht ZUERST raus
     } catch (err) {

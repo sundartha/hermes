@@ -26,6 +26,10 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HTTP_NOT_FOUND = 404; // Flag aus -> Shim existiert nicht
 const HTTP_FORBIDDEN = 403; // Flag an, kein per-Call-Token -> Shim erreichbar, fail-closed
 const SHIM_ROUTE = "/v1/chat/completions";
+// P10: assertConfig verlangt bei aktivem Flag zusaetzlich API_KEY/CONNECTION_ID
+// (fail-closed Boot) - die beiden Flag-an-Tests unten brauchen sie NUR damit der
+// Server ueberhaupt startet (FAKE_ORIGINATE macht den Origination-Call ohnehin fake).
+const TELNYX_ASSISTANT_BOOT_ENV = { TELNYX_API_KEY: "key_x", TELNYX_CONNECTION_ID: "conn_x" };
 
 // --- Oberflaechen-Helper, die NUR diese Datei braucht (Rohstoffe/POST-Primitive
 // teilt test/helpers.js: placeCall, postTelnyxIncoming, seedWithTelnyxNumber, G5) ---
@@ -71,6 +75,7 @@ test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(
       FAKE_ORIGINATE: "true",
       TELNYX_AI_ASSISTANT_ENABLED: "true",
       TELNYX_ASSISTANT_ID: "asst_x",
+      ...TELNYX_ASSISTANT_BOOT_ENV,
     },
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
     seed: seedWithTelnyxNumber(),
@@ -113,6 +118,7 @@ test("Flag AN + NICHT-Telnyx (Twilio-Owner): Outbound faellt auf TeXML/Bestand z
       FAKE_ORIGINATE: "true",
       TELNYX_AI_ASSISTANT_ENABLED: "true",
       TELNYX_ASSISTANT_ID: "asst_x",
+      ...TELNYX_ASSISTANT_BOOT_ENV,
     },
     // kein ownerNumber -> Default OWNER_TEST_NUMBER (Twilio) -> outboundProvider=twilio
   });

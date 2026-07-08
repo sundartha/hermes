@@ -169,15 +169,16 @@ export const config = {
   // (fail-closed, Muster PAYMENT_ENABLED): der Endpunkt antwortet 404 bis zum Cutover
   // (Existenz hinter dem Flag -> keine monatelang offene Angriffsflaeche zwischen Merge
   // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
-  // identisch. Volle 4-Orte-Doku (.env.example/render.yaml/assertConfig) folgt in P10.
+  // identisch. Volle 4-Orte-Doku + assertConfig/Footgun-Pflichtcheck: P10.
   telnyxAiAssistantEnabled: (process.env.TELNYX_AI_ASSISTANT_ENABLED || "false") === "true",
   // P5: ID des in P7 provisionierten Telnyx-AI-Assistants (ai_assistant_start). Leer ->
   // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
-  // Volle 4-Orte-Doku + assertConfig-Pflichtfeld folgt in P10.
+  // Bei aktivem Flag ist die ID Boot-Pflicht (assertConfig, P10).
   telnyxAssistantId: process.env.TELNYX_ASSISTANT_ID || "",
   // P5: max. Shim-Turns pro callId und Minute (Toll-/Token-Fraud-Bremse VOR agentTurn,
   // zusaetzlich zum IP-Limiter aus rateLimitPerMin + dem Budget-Cap). Das Zeitfenster
-  // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS).
+  // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS). Ein zu
+  // hoher Wert im Hosting bei aktivem Flag ist ein Footgun (productionFootguns, P10).
   telnyxShimMaxTurnsPerMin: numEnv(
     "TELNYX_SHIM_MAX_TURNS_PER_MIN",
     process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
@@ -556,6 +557,14 @@ function isInsecureHttpIssuer(issuerUrl) {
   );
 }
 
+// C-Telnyx-Backstop (PLAN-TELNYX-AI-ASSISTANT.md, P10): Obergrenze fuer die per-callId-
+// Shim-Turn-Rate. telnyxShimMaxTurnsPerMin ist die Token-/Toll-Fraud-Bremse VOR agentTurn
+// (Regel 1); numEnv erzwingt nur min:1, keine Obergrenze. Ein absurd hoher Wert im Hosting
+// bei aktivem Assistant setzt die Bremse praktisch ausser Kraft -> fail-closed. Backstop,
+// KEIN Tuning-Knopf (Muster metrics.js MAX_TRACKED_CALLS) -> Modul-Konstante, keine Env-Var.
+// 120 = grosszuegig (4x Default 30, 2 Turns/s), aber weit unter fraud-relevanten Werten.
+const TELNYX_SHIM_MAX_TURNS_CEILING = 120;
+
 // Produktions-Footguns (H1): Konfigurationen, die im oeffentlichen Hosting (Render
 // setzt RENDER_EXTERNAL_URL) das Dashboard/API oeffentlich oeffnen ODER ein Safety-
 // Gate lautlos abschalten. Eine vergessene/verkehrte Env darf NICHT als blosse
@@ -589,6 +598,12 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   // DEV_LOGIN_ENABLED=true den Boot verweigert statt still ignoriert zu werden (Regel 3).
   if (process.env.DEV_LOGIN_ENABLED === "true")
     errors.push("DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).");
+  // C-Telnyx: aktiver Assistant + entwaffnete Shim-Rate-Bremse (Regel 1). Nur wenn das
+  // Flag an ist (Flag aus -> Shim 404, Bremse inert -> kein Footgun).
+  if (cfg.telnyxAiAssistantEnabled && cfg.telnyxShimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING)
+    errors.push(
+      "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
+    );
   return errors;
 }
 
@@ -630,6 +645,19 @@ export function assertConfig() {
     missing.push(
       "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
     );
+  // C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P10): der AI-Assistant-Pfad braucht bei aktivem
+  // Flag die volle Origination-/Shim-Config, sonst bootet der Dienst in einen "Flag an, aber
+  // Assistant/Shim unkonfiguriert"-Zustand (Regel 1/3, fail-closed). publicUrl ist bereits
+  // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/connectionId tragen
+  // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7).
+  if (config.telnyxAiAssistantEnabled) {
+    if (!config.telnyxAssistantId)
+      missing.push("TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
+    if (!config.telnyxApiKey)
+      missing.push("TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
+    if (!config.telnyxConnectionId)
+      missing.push("TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
+  }
   // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
   //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
   //  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete
