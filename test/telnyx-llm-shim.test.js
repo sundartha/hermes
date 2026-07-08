@@ -5,7 +5,7 @@
 // request-tenant-unit.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
+import { makeTelnyxLlmShim, callControlIdFromForwardedMetadata } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { LlmUnavailableError } from "../src/llm.js";
 import { fakeTelnyxShimConfig } from "./helpers.js";
@@ -151,6 +151,45 @@ function reqWith({ auth, ccid, body = {} } = {}) {
 function firstChunkJson(res) {
   return JSON.parse(res.chunks[0].slice(SSE_DATA_PREFIX.length).trim());
 }
+
+// === callControlIdFromForwardedMetadata: primaer-/Fallback-Zweig + Praezedenz ====
+// Review-Blocker T1/P11: bislang konstruierte KEIN Test einen Body ohne
+// metadata-Wrapper (reqWith/validReq legen die ccid immer unter body.metadata
+// ab) - der Top-Level-Fallback-Zweig (body.call_control_id) war damit
+// ungetestet. Direkt gegen die exportierte Funktion, ohne Handler-Umweg.
+
+test("callControlId: primaerer Zweig - body.metadata.call_control_id gesetzt, kein Top-Level -> liefert ihn", () => {
+  const result = callControlIdFromForwardedMetadata({ metadata: { call_control_id: "cc_meta" } });
+  assert.equal(result, "cc_meta");
+});
+
+test("callControlId: Fallback-Zweig - kein metadata-Objekt, nur Top-Level body.call_control_id -> liefert ihn", () => {
+  const result = callControlIdFromForwardedMetadata({ call_control_id: "cc_top" });
+  assert.equal(result, "cc_top");
+});
+
+test("callControlId: Fallback-Zweig - metadata ist kein Objekt (z.B. String) -> faellt auf Top-Level zurueck", () => {
+  const result = callControlIdFromForwardedMetadata({ metadata: "kaputt", call_control_id: "cc_top" });
+  assert.equal(result, "cc_top");
+});
+
+test("callControlId: Fallback-Zweig - metadata-Objekt vorhanden, aber ohne call_control_id -> faellt auf Top-Level zurueck", () => {
+  const result = callControlIdFromForwardedMetadata({ metadata: {}, call_control_id: "cc_top" });
+  assert.equal(result, "cc_top");
+});
+
+test("callControlId: Praezedenzfall - beide gesetzt -> der primaere metadata-Zweig gewinnt", () => {
+  const result = callControlIdFromForwardedMetadata({
+    metadata: { call_control_id: "cc_meta" },
+    call_control_id: "cc_top",
+  });
+  assert.equal(result, "cc_meta");
+});
+
+test("callControlId: weder metadata noch Top-Level gesetzt -> null (fail-closed)", () => {
+  assert.equal(callControlIdFromForwardedMetadata({}), null);
+  assert.equal(callControlIdFromForwardedMetadata(null), null);
+});
 
 // === C1: Flag aus -> 404 =========================================================
 
