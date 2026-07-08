@@ -11,18 +11,10 @@ import {
   placeCall,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_TEST_PEER_NUMBER,
+  TELNYX_ASSISTANT_BOOT_ENV,
 } from "./helpers.js";
 import { originateAiAssistantCall } from "../src/telnyx-origination.js";
 import { publicCall } from "../src/store/views.js";
-
-// P10: assertConfig verlangt bei aktivem Flag ASSISTANT_ID/API_KEY/CONNECTION_ID
-// (fail-closed Boot) - die Flag-an-Spawn-Tests unten brauchen die drei Werte NUR
-// damit der Server ueberhaupt startet, nicht fuer ihre eigentliche Aussage.
-const TELNYX_ASSISTANT_BOOT_ENV = {
-  TELNYX_ASSISTANT_ID: "asst_x",
-  TELNYX_API_KEY: "key_x",
-  TELNYX_CONNECTION_ID: "conn_x",
-};
 
 // === A: originateAiAssistantCall (DI, offline) ===================================
 

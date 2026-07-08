@@ -7,7 +7,12 @@
 // callControlId im Body bleiben byte-identisch auf dem TeXML-Gather-Pfad.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, postTelnyxIncoming, seedWithTelnyxNumber } from "./helpers.js";
+import {
+  startServer,
+  postTelnyxIncoming,
+  seedWithTelnyxNumber,
+  TELNYX_ASSISTANT_BOOT_ENV,
+} from "./helpers.js";
 import { startInboundAiAssistant, inboundCallControlId } from "../src/telnyx-inbound.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
@@ -94,11 +99,6 @@ test("inboundCallControlId: Feld gesetzt -> Wert; fehlend/leer/nicht-string -> n
   assert.equal(inboundCallControlId(null), null, "body null");
 });
 
-// P10: assertConfig verlangt bei aktivem Flag zusaetzlich API_KEY/CONNECTION_ID
-// (fail-closed Boot) - die Flag-an-Tests unten brauchen sie NUR damit der Server
-// ueberhaupt startet, nicht fuer ihre eigentliche Aussage ueber den Inbound-Pfad.
-const TELNYX_ASSISTANT_BOOT_ENV = { TELNYX_API_KEY: "key_x", TELNYX_CONNECTION_ID: "conn_x" };
-
 // === B: Spawn - Pfadwahl ueber /voice/incoming =========================================
 
 test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-Control-Felder persistiert", async () => {
@@ -106,7 +106,6 @@ test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-C
     env: {
       FAKE_ORIGINATE: "true",
       TELNYX_AI_ASSISTANT_ENABLED: "true",
-      TELNYX_ASSISTANT_ID: "asst_x",
       ...TELNYX_ASSISTANT_BOOT_ENV,
     },
     seed: seedWithTelnyxNumber(),
@@ -137,7 +136,6 @@ test("Flag an + Telnyx + ueber Budget -> Hangup, kein Call-Record, startAssistan
     env: {
       FAKE_ORIGINATE: "true",
       TELNYX_AI_ASSISTANT_ENABLED: "true",
-      TELNYX_ASSISTANT_ID: "asst_x",
       MAX_BUDGET_EUR: "8",
       ...TELNYX_ASSISTANT_BOOT_ENV,
     },
@@ -173,7 +171,6 @@ test("Flag an + Telnyx + bogus Ed25519-Signatur -> 403, kein Routing/Call-Record
       // Request scheitert ohnehin an der Signatur, lange bevor ein Origination-Call faellig
       // waere - kein Netzzugriff in diesem Testfall.
       TELNYX_AI_ASSISTANT_ENABLED: "true",
-      TELNYX_ASSISTANT_ID: "asst_x",
       SKIP_TWILIO_SIGNATURE_CHECK: "false",
       // TELNYX_PUBLIC_KEY bleibt BASE_ENV-Default leer -> verifyInboundSignature liefert
       // immer false (fail-closed, siehe telnyx-signature.test.js "fehlender Public-Key").
@@ -215,7 +212,6 @@ test("Flag an + Telnyx + callControlId ABWESEND -> fail-safe TeXML-Gather-Pfad, 
     env: {
       FAKE_ORIGINATE: "true",
       TELNYX_AI_ASSISTANT_ENABLED: "true",
-      TELNYX_ASSISTANT_ID: "asst_x",
       ...TELNYX_ASSISTANT_BOOT_ENV,
     },
     seed: seedWithTelnyxNumber(),

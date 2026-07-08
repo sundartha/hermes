@@ -4,18 +4,15 @@
 // D3, D8) steht in test/telnyx-llm-shim.test.js - hier nur der HTTP-/Wiring-Beweis.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  TELNYX_ASSISTANT_BOOT_ENV,
+} from "./helpers.js";
 import { startCountingAnthropicMock, AGENT_SPEECH } from "./_outbound-harness.js";
 
 const ROUTE = "/v1/chat/completions";
-// P10: assertConfig verlangt bei aktivem Flag ASSISTANT_ID/API_KEY/CONNECTION_ID
-// (fail-closed Boot) - beide Flag-an-Tests unten brauchen die drei Werte NUR damit der
-// Server ueberhaupt startet, nicht fuer ihre eigentliche Aussage.
-const TELNYX_ASSISTANT_BOOT_ENV = {
-  TELNYX_ASSISTANT_ID: "asst_x",
-  TELNYX_API_KEY: "key_x",
-  TELNYX_CONNECTION_ID: "conn_x",
-};
 
 test("Flag aus (BASE_ENV-Default) -> 404 (beweist Mount + Route existiert, Flag-Gate greift HTTP-seitig)", async () => {
   const srv = await startServer({});

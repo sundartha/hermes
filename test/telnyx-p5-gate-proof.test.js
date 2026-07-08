@@ -8,7 +8,7 @@
 // Reiner Spawn (startServer + seedState), KEIN pglite (Lehre p6a-Stall).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall } from "./helpers.js";
+import { startServer, seedState, seedCall, TELNYX_ASSISTANT_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
 
@@ -19,9 +19,7 @@ import { findPlan } from "../src/plans.js";
 const FLAG_ON = {
   FAKE_ORIGINATE: "true",
   TELNYX_AI_ASSISTANT_ENABLED: "true",
-  TELNYX_ASSISTANT_ID: "asst_x",
-  TELNYX_API_KEY: "key_x",
-  TELNYX_CONNECTION_ID: "conn_x",
+  ...TELNYX_ASSISTANT_BOOT_ENV,
 };
 const TELNYX_OWNER_NUMBER = { e164: "+4915005559001", provider: "telnyx" };
 const TO = "+4915112345678"; // normales DE-Ziel, kein Premium/Notruf

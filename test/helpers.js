@@ -490,6 +490,18 @@ export const TELNYX_TEST_SIGNATURE_HEADERS = Object.freeze({
   "telnyx-timestamp": "1",
 });
 
+// P10: assertConfig verlangt bei aktivem TELNYX_AI_ASSISTANT_ENABLED-Flag zusaetzlich
+// ASSISTANT_ID/API_KEY/CONNECTION_ID (fail-closed Boot) - Flag-an-Spawn-Tests brauchen
+// die drei Werte oft NUR, damit der Server ueberhaupt startet, nicht fuer ihre
+// eigentliche Aussage. EINE Quelle (G5/S2) statt der frueher in telnyx-p5-gate-proof +
+// telnyx-p5-origination + telnyx-p8-inbound + telnyx-p9-flag-matrix + telnyx-shim-route
+// fuenffach (teils voll, teils als 2-Key-Teilsatz) kopierten Fixture.
+export const TELNYX_ASSISTANT_BOOT_ENV = Object.freeze({
+  TELNYX_ASSISTANT_ID: "asst_x",
+  TELNYX_API_KEY: "key_x",
+  TELNYX_CONNECTION_ID: "conn_x",
+});
+
 // POST /api/calls (Outbound-Origination-Trigger). Liefert die rohe fetch-Response
 // (Caller entscheidet, ob nur der Status oder auch der JSON-Body gebraucht wird).
 export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
