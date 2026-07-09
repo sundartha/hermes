@@ -6,8 +6,14 @@ vom Auto-Mode-Classifier geblockt — kein expliziter Jonas-Auftrag fuer Prod-DB
 Status: **Diagnose abgeschlossen.** Fix C (FAILED/BLOCKED-Sichtbarkeit) und Fix A
 (Einrichtungsgebuehr vor Checkout im UI) sind implementiert, review-t und auf master gemergt
 (2026-07-09, `729131c` bzw. `ce478a9` — Reports: `tasks/c-report.md`,
-`tasks/voucher-fee-a-report.md`). Fix B (Voucher-Tenants vom `placeHold` befreien) ist NICHT
-implementiert — Jonas-Entscheidung noch offen, siehe §6.
+`tasks/voucher-fee-a-report.md`). Fix B (Voucher-Tenants vom `placeHold` befreien) ist auf
+Branch `fix/voucher-setup-fee-gap-b` implementiert (`e625989`) und die Review-Blocker der
+ersten Runde sind auf `fix/voucher-setup-fee-gap-b-fix1` behoben — **aber NICHT auf master
+gemergt.** Die Produktentscheidung "Voucher-Tenants zahlen wirklich 0 EUR, auch fuer die
+Nummer-Gebuehr" wurde technisch vorweggenommen, ohne dass eine explizite Jonas-Freigabe im
+Artefakt-Trail dieses Repos steht (kein Report, kein Commit-Verweis auf ein Jonas-Go). Diese
+Freigabe UND die Bestaetigung der Stripe-seitigen Redemption-Begrenzung (§6, Punkt 3) sind
+Voraussetzung fuer den Merge auf master — siehe §6.
 
 **Nicht verwechseln mit `HANDOVER-TELNYX-402.md`:** das war ein **Telnyx-Account-Funding-402**
 (Telnyx `orderNumber`, Telnyx-Guthaben zu niedrig). Dieser Bug hier ist ein **Stripe-seitiger
@@ -89,28 +95,28 @@ Autorisierung (Bank zeigt das oft trotzdem kurz an). Der Tenant bleibt aber "akt
 CARD, aber keine funktionierende Nummer" — nur ueber `POST /api/onboard/retry` (Owner-only) oder
 den Boot-Sweep-Reconciler wiederholbar, kein Self-Service-Ausweg fuer den Tenant selbst.
 
-## 5. Fix-Optionen (Entscheidung noetig, nichts hiervon ist umgesetzt)
+## 5. Fix-Optionen
 
-| # | Massnahme | Umfang | Loest |
+| # | Massnahme | Umfang | Status |
 |---|---|---|---|
-| **C** | `FAILED`/`BLOCKED`-Zweig in `numberStatusFor` + Frontend-Mapping ergaenzen: sichtbarer Fehler + Retry-Hinweis statt stillem "keine Nummer" | klein | Bug B — unabhaengig von A/B unten ohnehin ein Korrektheits-Bug, sollte so oder so gefixt werden |
-| **A** | Einrichtungsgebuehr VOR Checkout im UI ausweisen ("+X € einmalige Einrichtung fuer deine Rufnummer") | klein-mittel | Problem A fuer ALLE zahlenden Kunden — verhindert ueberraschende Zweit-Abbuchung |
-| **B** | Voucher/100%-off-Tenants auch vom `placeHold` befreien (z.B. Coupon-Metadata oder App-Flag lesen, `placeHold` konditional skippen — Muster analog `BOOTSTRAP_TENANT_ID`, aber im Self-Service-Pfad) | mittel-gross | Jonas' eigentliche Erwartung ("Voucher = wirklich nichts zahlen") — **braucht Owner-Entscheidung**, ob das Produkt-Verhalten so sein soll |
-| D | Sofort-Workaround fuer Jonas' Tenant: Karte aufladen ODER Gebuehr manuell in Stripe erlassen, dann `POST /api/onboard/retry` | keine Code-Aenderung | entsperrt Jonas selbst, ohne auf A-C zu warten |
+| **C** | `FAILED`/`BLOCKED`-Zweig in `numberStatusFor` + Frontend-Mapping ergaenzen: sichtbarer Fehler + Retry-Hinweis statt stillem "keine Nummer" | klein | **umgesetzt + gemergt** (`729131c`) |
+| **A** | Einrichtungsgebuehr VOR Checkout im UI ausweisen ("+X € einmalige Einrichtung fuer deine Rufnummer") | klein-mittel | **umgesetzt + gemergt** (`ce478a9`) |
+| **B** | Voucher/100%-off-Tenants auch vom `placeHold` befreien (0-EUR-Checkout generisch ueber `billing.retrieveSubscription`, siehe `src/billing/activation.js`) | mittel-gross | **code-fertig auf `fix/voucher-setup-fee-gap-b-fix1`** (`e625989` + Review-Fixes) — **NICHT gemergt**, siehe §6 Punkt 3+4 fuer die offenen Merge-Voraussetzungen |
+| D | Sofort-Workaround fuer Jonas' Tenant: Karte aufladen ODER Gebuehr manuell in Stripe erlassen, dann `POST /api/onboard/retry` | keine Code-Aenderung | Alternative zu B, falls B nicht gemerged werden soll |
 
-**Empfehlung:** C zuerst (reiner Bugfix, kein Streitpunkt), A direkt danach (schliesst die
-Ueberraschungs-Luecke fuer echte Kunden, unabhaengig von der Voucher-Frage). B ist eine
-Produktentscheidung, keine technische Notwendigkeit — braucht Jonas' explizites Ja/Nein, siehe §6.
-
-## Pre-Mortem (falls B umgesetzt wird, ohne es zu Ende zu denken)
+## Pre-Mortem (B ist umgesetzt — hier steht, was VOR dem Merge noch zu Ende gedacht werden muss)
 
 Ein Jahr weiter, Voucher-Tenants sind vom Hold befreit — was ging schief? Ein geleakter/erratener
 Code (Pre-Mortem-Risiko aus dem Original-Design, akzeptiert) befreit jetzt nicht nur die
 Subscription, sondern auch die Nummer-Gebuehr — potenziell mehr echte Kosten pro Missbrauchsfall
-(Telnyx-Nummernkauf ist ein realer Fremdkosten-Posten, keine reine Software-Grenze). Mitigation:
-dieselbe Stripe-seitige Redemption-Begrenzung (`max_redemptions`, Ablaufdatum, Customer-Bindung)
-muss VOR B beschlossen sein, sonst wird aus "Owner testet kostenlos" ein "jeder mit dem Code
-bekommt eine kostenlose Telnyx-Nummer".
+(Telnyx-Nummernkauf ist ein realer Fremdkosten-Posten, keine reine Software-Grenze). Der Code
+prueft absichtlich generisch "Rechnung war 0 EUR" (`src/billing/stripe.js:retrieveSubscription`)
+und NICHT einen konkreten Coupon-Namen — jede Konstellation, die Stripe auf 0 EUR bringt, loest
+die Befreiung aus. Die komplette Restriktion gegen Missbrauch liegt damit ausserhalb der App, in
+Stripe: dieselbe Redemption-Begrenzung (`max_redemptions`, Ablaufdatum, Customer-Bindung) auf dem
+`OWNER100`-Coupon, die `docs/RUNBOOK-STRIPE-LIVE.md` §10 bereits empfiehlt. **Diese Begrenzung
+konnte in diesem Review-Fix-Durchlauf NICHT verifiziert werden** — dieser Sandbox-Worktree hat
+keinen Stripe-Dashboard-/API-Zugriff (kein `.env`, kein Stripe-MCP-Tool). Siehe §6 Punkt 3.
 
 ## 6. Offene Punkte / Jonas-Aktion
 
@@ -122,4 +128,14 @@ bekommt eine kostenlose Telnyx-Nummer".
    geben, um Tenant-IDs aus den Logs auf Accounts/Nummern-Status zu mappen und das zu verifizieren.
 2. **Exakter `NUMBER_SETUP_FEE_CENTS`-Wert** ist nicht im Repo (nur Render-ENV) — falls fuer die
    Fix-Entscheidung relevant, im Render-Dashboard nachsehen oder Freigabe fuer einen Env-Read geben.
-3. **B ja/nein?** — siehe Pre-Mortem oben, das ist der zentrale Entscheidungspunkt dieses Dokuments.
+3. **Stripe-seitige Redemption-Begrenzung auf `OWNER100` bestaetigen (Merge-Voraussetzung).**
+   Im Stripe-Dashboard (Live-Modus) pruefen, dass der Promotion Code `max_redemptions: 1` (oder
+   Customer-Bindung) und idealerweise ein Ablaufdatum hat — Anleitung bereits in
+   `docs/RUNBOOK-STRIPE-LIVE.md` §10. Ohne diese Begrenzung befreit jeder $0-Checkout ueber
+   `allow_promotion_codes` generisch von der Nummer-Setup-Gebuehr (realer Telnyx-Fremdkosten-Posten
+   pro Missbrauchsfall) — kein Code-Fix kann das ersetzen, weil die App bewusst keinen Coupon-Namen
+   prueft (§ Pre-Mortem oben). Konnte von diesem Subagent nicht selbst verifiziert werden.
+4. **Explizite Jonas-Freigabe fuer Fix B fehlt im Artefakt-Trail.** B ist bereits implementiert
+   (`e625989`, Review-Fixes auf `fix/voucher-setup-fee-gap-b-fix1`), ohne dass ein Report oder
+   Commit-Verweis eine explizite Jonas-Entscheidung "B soll so ins Produkt" dokumentiert. Vor dem
+   Merge auf master: Freigabe einholen und hier (Punkt 4) mit Datum/Referenz vermerken.
