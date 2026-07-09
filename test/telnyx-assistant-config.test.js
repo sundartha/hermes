@@ -27,7 +27,8 @@ test("buildAssistantConfig: reales Custom-LLM-Schema (base_url/model/llm_api_key
   assert.equal(cfg.external_llm.model, "claude-haiku-4-5");
   assert.equal(cfg.external_llm.llm_api_key_ref, "shim_secret_ref");
   assert.equal(cfg.external_llm.forward_metadata, true);
-  assert.equal(cfg.model, "claude-haiku-4-5", "Top-level model = Telnyx-Pflichtfeld");
+  // KEIN top-level model neben external_llm (Telnyx 10015 "Cannot provide both").
+  assert.equal("model" in cfg, false, "kein top-level model neben external_llm");
 });
 
 test("buildAssistantConfig: base_url + SHIM_ROUTE-Suffix == SHIM_ROUTE (Drift-Test-Invariante)", () => {
@@ -46,12 +47,15 @@ test("buildAssistantConfig: Barge-in (interruption_settings) ist an", () => {
   assert.equal(cfg.interruption_settings.enable, true);
 });
 
-test("buildAssistantConfig: kein freies Prompt-Feld, keine Disclosure/kein Klartext-Key in der Config", () => {
+test("buildAssistantConfig: instructions gesetzt (Telnyx-Pflichtfeld), aber ohne Disclosure/Klartext-Key (Regel 2)", () => {
   const cfg = buildAssistantConfig(ARGS);
-  assert.equal("instructions" in cfg, false);
+  // Telnyx verlangt non-empty instructions (HTTP 400 10004 sonst); im BYO-Betrieb inert.
+  assert.equal(typeof cfg.instructions, "string");
+  assert.ok(cfg.instructions.length > 0, "Telnyx-Pflichtfeld muss non-empty sein");
   assert.equal("system_prompt" in cfg, false);
   const serialized = JSON.stringify(cfg);
-  assert.equal(serialized.includes("Auftrag"), false); // kein Disclosure-Textfragment
+  // Regel 2: die Offenlegung darf NICHT statisch in der Config stehen (kein Disclosure-Fragment).
+  assert.equal(serialized.includes("Auftrag"), false);
   assert.equal(serialized.includes("sk_"), false); // kein Klartext-Key-Muster
 });
 

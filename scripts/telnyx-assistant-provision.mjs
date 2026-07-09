@@ -41,6 +41,16 @@ const ELEVENLABS_VOICE_PREFIX = "ElevenLabs";
 // Telnyx-AI-Assistant-REST-Basis (live UNBESTAETIGT, mit Owner fixen; Muster voice.js).
 const AI_ASSISTANTS_PATH = "/v2/ai/assistants";
 const ASSISTANT_NAME = "Hermes"; // Telnyx-Pflicht-Scaffold, kein Verhaltensfeld
+// Telnyx verlangt `instructions` als Pflichtfeld (sonst HTTP 400 10004 /body/instructions).
+// Im BYO-Custom-LLM-Betrieb ist es INERT: der Shim (agentTurn/claude.js) baut Systemprompt +
+// Kontext selbst und ignoriert die von Telnyx gespiegelten messages/system - dieser Text erreicht
+// claude.js nie. Regel 2 bleibt unberuehrt (greeting="" + Disclosure-Speak-Node spricht zuerst);
+// bewusst KEINE Offenlegung und KEINE Greeting-Anweisung hier (die Offenlegung ist ein per-Call/
+// tenant/sprach-Laufzeitwert, kein statischer Config-Wert).
+const ASSISTANT_INSTRUCTIONS =
+  "Die Gespraechslogik, Sprache und Pflicht-Offenlegung steuert ausschliesslich das externe LLM " +
+  "(Hermes Brain-Shim via external_llm). Dieses von Telnyx verlangte Pflichtfeld wird im BYO-Betrieb " +
+  "nicht als Prompt verwendet.";
 const JSON_HEADERS_TYPE = "application/json";
 const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-Doku = P10)
 
@@ -48,18 +58,21 @@ const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-D
  * Baut die Telnyx-Assistant-Config DETERMINISTISCH (kein IO, keine Zeit/Zufall).
  * Ein Objekt-Argument (F1: mehrere zusammengehoerige Werte -> Objekt statt Positionsliste).
  * apiKeyRef ist die REFERENZ auf das in Telnyx liegende Integration-Secret (KEIN
- * Klartext-Key, Regel 4/5). KEINE Disclosure im Prompt/Greeting (Regel 2): greeting=""
- * plus KEIN freies Prompt-Feld -> der Disclosure-Speak-Node (P4.5/P5) spricht zuerst.
- * Kein freies instructions/system_prompt-Feld: das Gespraechs-Gehirn lebt im Shim
- * (agentTurn/claude.js), nicht in dieser statischen Config - die disclosureSentence
- * ist ohnehin ein per-Call, tenant- und sprachgebundener Laufzeitwert.
+ * Klartext-Key, Regel 4/5). KEINE Disclosure im Greeting (Regel 2): greeting="" -> der
+ * Disclosure-Speak-Node (P4.5/P5) spricht zuerst. Das Telnyx-Pflichtfeld `instructions`
+ * (ASSISTANT_INSTRUCTIONS) traegt bewusst KEINE Offenlegung/Greeting-Anweisung und ist im
+ * BYO-Betrieb inert (der Shim ignoriert Provider-messages/system) - das Gespraechs-Gehirn
+ * lebt im Shim (agentTurn/claude.js); die disclosureSentence ist ein per-Call/tenant/
+ * sprachgebundener Laufzeitwert.
  */
 export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef, model, llmApiKeyRef }) {
   return {
     name: ASSISTANT_NAME,
-    // Top-level model = Telnyx-Pflichtfeld; Semantik bei gesetztem external_llm live
-    // UNBESTAETIGT -> = external_llm.model (das bleibt der autoritative BYO-Wert).
-    model,
+    // KEIN top-level `model`: bei gesetztem external_llm lehnt Telnyx beides zusammen ab
+    // (HTTP 400 10015 "Cannot provide both 'model' and 'external_llm'"). external_llm.model
+    // ist der autoritative BYO-Wert (live verifiziert 2026-07-09).
+    // instructions = Telnyx-Pflichtfeld (10004 sonst); INERT im BYO-Betrieb (s. ASSISTANT_INSTRUCTIONS).
+    instructions: ASSISTANT_INSTRUCTIONS,
     external_llm: {
       base_url: `${publicUrl}${SHIM_BASE_ROUTE}`, // Praefix; Telnyx haengt /chat/completions an
       model, // config.claudeModel (BYO-autoritativ)
