@@ -157,6 +157,8 @@ export const NUMBER_STATUS = Object.freeze({
   ACTIVE: "active",
   PROVISIONING: "provisioning",
   REQUESTED: "requested",
+  FAILED: "failed",
+  BLOCKED: "blocked",
   NONE: "none",
 });
 
@@ -165,6 +167,26 @@ export const NUMBER_STATUS = Object.freeze({
 export function isNumberProvisioning(data) {
   const { numberStatus } = agentInfo(data);
   return numberStatus === NUMBER_STATUS.PROVISIONING || numberStatus === NUMBER_STATUS.REQUESTED;
+}
+
+// Chip-Platzhaltertexte (Fix C, PLAN-VOUCHER-SETUP-FEE-GAP.md) - EINE Quelle (G5) statt
+// einer zweiten Kopie im Astro-Script. Wortlaut ist ein Vorschlag (siehe Plan §6).
+const NUMBER_TEXT_NO_NUMBER = "No number assigned yet";
+const NUMBER_TEXT_SETTING_UP = "Setting up your number…";
+const NUMBER_TEXT_SETUP_FAILED = "Number setup failed";
+const NUMBER_TEXT_SETUP_BLOCKED = "Number setup delayed — capacity limit reached";
+
+// Platzhaltertext fuer eine NICHT-aktive Nummer: failed/blocked bekommen jetzt einen
+// eigenen Hinweis statt im generischen "No number assigned yet" zu verschwinden (Bug B -
+// der Tenant sah bisher keinen Unterschied zu "noch nicht bestellt"). Rein (kein DOM) ->
+// mit node:test unit-testbar, anders als die DOM-Verdrahtung in AgentChip.astro. Aktive
+// Nummer kommt hier nie an (der Aufrufer zeigt dann die echte e164 statt eines Platzhalters).
+export function numberPlaceholderText(data) {
+  if (isNumberProvisioning(data)) return NUMBER_TEXT_SETTING_UP;
+  const { numberStatus } = agentInfo(data);
+  if (numberStatus === NUMBER_STATUS.FAILED) return NUMBER_TEXT_SETUP_FAILED;
+  if (numberStatus === NUMBER_STATUS.BLOCKED) return NUMBER_TEXT_SETUP_BLOCKED;
+  return NUMBER_TEXT_NO_NUMBER;
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das

@@ -51,6 +51,7 @@ export const NUMBER_DISPLAY_STATUS = Object.freeze({
   ACTIVE: "active",
   PROVISIONING: "provisioning",
   REQUESTED: "requested",
+  FAILED: "failed", // Nummer-Kauf/-Gebuehr gescheitert (z.B. placeHold 402) -> Retry noetig (Fix C)
   BLOCKED: "blocked", // Abo aktiv, Provisioning aber am globalen Cap gescheitert (Fix B)
   NONE: "none",
 });
@@ -61,6 +62,11 @@ export function numberStatusFor(s, tenantId) {
   if (own.some((n) => n.status === NUMBER_STATUS.PROVISIONING || n.status === NUMBER_STATUS.CAPTURING))
     return NUMBER_DISPLAY_STATUS.PROVISIONING;
   if (own.some((n) => n.status === NUMBER_STATUS.REQUESTED)) return NUMBER_DISPLAY_STATUS.REQUESTED;
+  // Reale (wenn auch gescheiterte) Nummer schlaegt IMMER den globalen Skip-Marker unten
+  // (gleiche Prioritaet wie ACTIVE/PROVISIONING/REQUESTED oben, Invariante 3 Fix B): ein
+  // Retry legt eine FRISCHE Nummer an statt die alte 'failed' wiederzubeleben (own faellt
+  // nie leer) - die frische gewinnt bereits ueber die Checks oben.
+  if (own.some((n) => n.status === NUMBER_STATUS.FAILED)) return NUMBER_DISPLAY_STATUS.FAILED;
   if (findTenant(s, tenantId)?.numberProvisionSkipReason === GLOBAL_CAP_REASON)
     return NUMBER_DISPLAY_STATUS.BLOCKED;
   return NUMBER_DISPLAY_STATUS.NONE;

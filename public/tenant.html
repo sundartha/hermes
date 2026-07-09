@@ -264,6 +264,17 @@ function renderCalls(calls){
   }).join("");
 }
 
+// Chip-Text fuer eine NICHT-aktive Nummer (Fix C, PLAN-VOUCHER-SETUP-FEE-GAP.md): failed/
+// blocked bekommen einen eigenen Hinweis statt im generischen "nicht konfiguriert"
+// unterzugehen. requested/provisioning bleiben unveraendert im Fallback (kein Scope-
+// Wechsel dieser Phase - apps/web deckt "wird eingerichtet" bereits eigenstaendig ab).
+function agentNumberText(agent){
+  if(agent.number) return agent.number;
+  if(agent.numberStatus==="failed") return "Einrichtung fehlgeschlagen.";
+  if(agent.numberStatus==="blocked") return "Einrichtung verzoegert (Kapazitaetsgrenze erreicht).";
+  return "nicht konfiguriert";
+}
+
 async function refresh(){
   const r = await fetch("/api/self-service/state");
   // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
@@ -272,7 +283,7 @@ async function refresh(){
   if(!r.ok){ $("liveDot").classList.add("off"); showAuth("Voruebergehend nicht erreichbar.", false, true); return; }
   showAuth("Angemeldet.", false, true);
   const s = await r.json();
-  $("agentNum").textContent = s.agent.number || "nicht konfiguriert";
+  $("agentNum").textContent = agentNumberText(s.agent);
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
   renderCalls(s.calls);
   renderBilling(s);

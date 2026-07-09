@@ -15,6 +15,7 @@ import {
   logout,
   loadAuthState,
   NUMBER_STATUS,
+  numberPlaceholderText,
   startBillingSetupCheckout,
 } from "../src/lib/api.js";
 // Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
@@ -208,6 +209,19 @@ test("isNumberProvisioning: true fuer requested/provisioning, false fuer active/
   assert.equal(isNumberProvisioning({ agent: { numberStatus: "none" } }), false);
   assert.equal(isNumberProvisioning(undefined), false);
   assert.equal(isNumberProvisioning({}), false);
+});
+
+test("numberPlaceholderText: eigener Text je numberStatus (Fix C: failed/blocked sichtbar)", () => {
+  assert.equal(numberPlaceholderText({ agent: { numberStatus: "provisioning" } }), "Setting up your number…");
+  assert.equal(numberPlaceholderText({ agent: { numberStatus: "requested" } }), "Setting up your number…");
+  assert.equal(numberPlaceholderText({ agent: { numberStatus: "failed" } }), "Number setup failed");
+  assert.equal(
+    numberPlaceholderText({ agent: { numberStatus: "blocked" } }),
+    "Number setup delayed — capacity limit reached",
+  );
+  assert.equal(numberPlaceholderText({ agent: { numberStatus: "active" } }), "No number assigned yet");
+  assert.equal(numberPlaceholderText({ agent: { numberStatus: "none" } }), "No number assigned yet");
+  assert.equal(numberPlaceholderText(undefined), "No number assigned yet"); // fail-closed
 });
 
 // Drift-Guard (G22): der Frontend-Spiegel muss exakt dem Backend-Enum entsprechen --

@@ -11,6 +11,7 @@ import {
   beginProvisioning,
   beginCapturing,
   activateNumber,
+  failNumber,
 } from "../src/store/state-ops.js";
 import { numberStatusFor, activeNumberFor } from "../src/store/views.js";
 
@@ -90,4 +91,33 @@ test("numberStatusFor: eine spaeter aktive Nummer ueberlagert den Skip-Marker (I
   beginProvisioning(s, number.id);
   activateNumber(s, number.id, { e164: "+4915799990003", providerNumberId: "num_b" });
   assert.equal(numberStatusFor(s, "b"), "active");
+});
+
+test("numberStatusFor: failed -> 'failed' (Fix C, statt stillem Rueckfall auf 'none')", () => {
+  const { s, numberId } = seedRequested();
+  beginProvisioning(s, numberId);
+  failNumber(s, numberId);
+  assert.equal(numberStatusFor(s, TENANT), "failed");
+});
+
+test("numberStatusFor: Retry nach 'failed' legt eine frische Nummer an, die 'failed' ueberdeckt", () => {
+  const { s, numberId } = seedRequested();
+  beginProvisioning(s, numberId);
+  failNumber(s, numberId); // alte Nummer bleibt terminal 'failed' liegen (Bestandsschutz)
+  requestNumber(s, { tenantId: TENANT, ...CAPS }); // Retry: dieselbe requestNumber-Quelle, G5
+  assert.equal(numberStatusFor(s, TENANT), "requested");
+});
+
+test("numberStatusFor: 'failed' hat Vorrang vor gleichzeitigem globalem Cap-Skip (reale Nummer schlaegt den Skip-Marker)", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "a");
+  registerTenant(s, "b");
+  const { number } = requestNumber(s, { tenantId: "b", maxNumbers: 5, maxNumbersPerTenant: 1 });
+  beginProvisioning(s, number.id);
+  failNumber(s, number.id); // own(b) traegt genau eine 'failed'-Nummer
+  requestNumber(s, { tenantId: "a", maxNumbers: 1, maxNumbersPerTenant: 1 }); // belegt den einzigen Slot
+  const retry = requestNumber(s, { tenantId: "b", maxNumbers: 1, maxNumbersPerTenant: 1 });
+  assert.equal(retry.ok, false);
+  assert.equal(retry.reason, "global_cap"); // Skip-Marker gesetzt, KEINE neue Nummer
+  assert.equal(numberStatusFor(s, "b"), "failed");
 });
