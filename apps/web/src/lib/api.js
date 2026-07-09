@@ -225,6 +225,17 @@ export function quotaFrom(data) {
   return { includedMinutes: quota.includedMinutes, remainingMinutes: quota.remainingMinutes };
 }
 
+// Liest die Einrichtungsgebuehr aus der state-/billing-status-Antwort (Phase A,
+// PLAN-VOUCHER-SETUP-FEE-GAP.md) -- die EINE Stelle, an der das Frontend die Form
+// `data.numberSetupFeeCents`/`data.currency` annimmt (Contract-Grenze, R5). Fehlendes/
+// nicht-numerisches/<=0-Feld (PAYMENT_ENABLED aus, altes Backend, Fee=0 konfiguriert)
+// -> null (die Kachel zeigt dann keine Gebuehren-Zeile, byte-identisch zum Bestand).
+export function numberSetupFeeFrom(data) {
+  const cents = data && data.numberSetupFeeCents;
+  if (typeof cents !== "number" || !Number.isFinite(cents) || cents <= 0) return null;
+  return { amountCents: cents, currency: (data && data.currency) || "eur" };
+}
+
 // ---- W4: read-only Datensicht (Calls / ActionItems / Kalender) ----------------
 // Reine, DOM-freie Helfer fuer die Render-Logik. Sie tragen die Contract-Grenze
 // zur API (welche Felder die state-Antwort hat, R5) UND die Beschriftungs-/

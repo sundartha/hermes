@@ -20,6 +20,7 @@ import {
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
+import { holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
 
 const SECRET = "p5-onboarding-secret-0123456789";
 const SUB = "sub-p5";
@@ -30,6 +31,8 @@ const CONFIG = {
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
   stripeBusinessPriceId: "price_business",
+  numberSetupFeeCents: 500,
+  paymentCurrency: "eur",
 };
 
 // Fake-Billing: nur die zwei Seams, die die Aktivierungs-Routen ziehen (createSubscription
@@ -43,7 +46,7 @@ function fakeBilling() {
 
 const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
 
-async function setup({ card = true } = {}) {
+async function setup({ card = true, configOverride = {} } = {}) {
   const { store, db } = await makePgTestStore();
   const runner = {
     withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
@@ -72,7 +75,7 @@ async function setup({ card = true } = {}) {
       webAuthMw,
       webAuthPendingMw,
       audit: () => {},
-      config: CONFIG,
+      config: { ...CONFIG, ...configOverride },
       billing: fakeBilling(),
       accounts,
       provision: async (t) => provisionSpy.push(t),
@@ -193,6 +196,8 @@ test("(5) suspended -> GET /billing/status 200 mit den Lifecycle-Flags (kein PII
       hasCard: false,
       planSlug: null,
       status: "suspended",
+      numberSetupFeeCents: 500,
+      currency: "eur",
     });
   } finally {
     await s.close();
@@ -219,6 +224,51 @@ test("(7) idempotent: zweiter subscribe -> 409 already_subscribed, provision ble
     assert.equal(second.status, 409);
     assert.equal(JSON.parse(second.body).error, "already_subscribed");
     assert.deepEqual(s.provisionSpy, [TENANT], "kein zweites Provisioning (Invariante 4)");
+  } finally {
+    await s.close();
+  }
+});
+
+// (8) Konsistenz: /state (aktiv, nach subscribe) und /billing/status (vor jedem weiteren
+// Schritt bereits gecheckt) duerfen NIE driften - dieselbe Formel, zwei Routen (G5).
+test("(8) numberSetupFeeCents/currency drift-frei zwischen /state und /billing/status", async () => {
+  const s = await setup();
+  try {
+    assert.equal((await subscribe(s, "starter")).status, 200);
+    const stateRes = await request("GET", `${s.base}/api/self-service/state`, { cookie: s.cookie });
+    const state = JSON.parse(stateRes.body);
+    assert.equal(state.numberSetupFeeCents, 500);
+    assert.equal(state.currency, "eur");
+  } finally {
+    await s.close();
+  }
+});
+
+// (9) Land-Override-Delegation (P9): die Route MUSS holdAmountForCountry mit dem
+// tatsaechlichen Tenant-Land aufrufen - gepinnt gegen den Funktionswert, nicht gegen
+// eine hartcodierte Zahl (haelt auch dann noch stimmig, wenn spaeter ein echter
+// Laender-Tarif in COUNTRY_SEARCH_PARAMS eingetragen wird).
+test("(9) numberSetupFeeCents folgt tenant.country (Delegation an holdAmountForCountry)", async () => {
+  const s = await setup({ card: false });
+  try {
+    const state = s.store.load();
+    ops.setTenantGeo(state, TENANT, { country: "FR" });
+    const res = await request("GET", `${s.base}/api/self-service/billing/status`, { cookie: s.cookie });
+    const expected = holdAmountForCountry("FR", CONFIG.numberSetupFeeCents);
+    assert.equal(JSON.parse(res.body).numberSetupFeeCents, expected);
+  } finally {
+    await s.close();
+  }
+});
+
+// (10) PAYMENT_ENABLED aus -> 0, kein irrefuehrender Betrag (die UI blendet den ganzen
+// Billing-Block ohnehin aus, s. numberSetupFeeCentsFor-Kommentar).
+test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
+  const s = await setup({ configOverride: { paymentEnabled: false } });
+  try {
+    const res = await request("GET", `${s.base}/api/self-service/billing/status`, { cookie: s.cookie });
+    assert.equal(JSON.parse(res.body).paymentEnabled, false);
+    assert.equal(JSON.parse(res.body).numberSetupFeeCents, 0);
   } finally {
     await s.close();
   }

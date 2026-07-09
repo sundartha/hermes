@@ -92,6 +92,7 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
 .plan-features{list-style:none;display:flex;flex-direction:column;gap:7px;margin:2px 0 4px}
 .plan-feature{font-size:13px;color:var(--text-soft);padding-left:18px;position:relative}
 .plan-feature::before{content:"\2713";position:absolute;left:0;color:var(--ok);font-weight:700}
+.plan-fee{font-size:12.5px;color:var(--text-muted)}
 .plan-cta{align-self:flex-start;margin-top:auto}
 </style>
 </head>
@@ -220,20 +221,24 @@ function planName(slug){
 
 // Eine Kachel aus einem Katalog-Plan. Einheitlich escaped wie renderCalls (G11); featured
 // -> "Popular"-Badge (Parity zu preise.astro). Reine Praesentation, keine Logik.
-function planCard(plan){
+function planCard(plan, fee){
   const price = formatPlanPrice(plan.amountCents, plan.currency);
   const badge = plan.featured ? '<span class="plan-badge">Popular</span>' : "";
   const features = plan.features.map((f)=>`<li class="plan-feature">${esc(f)}</li>`).join("");
+  const feeLine = fee
+    ? `<div class="plan-fee">+ ${esc(formatPlanPrice(fee.amountCents, fee.currency))} einmalige Einrichtungsgebuehr fuer deine Rufnummer</div>`
+    : "";
   return `<div class="plan${plan.featured?" plan--featured":""}">${badge}
     <div class="plan-name">${esc(plan.name)}</div>
     <div class="plan-price">${esc(price)}<span class="plan-per"> / Monat</span></div>
     <ul class="plan-features">${features}</ul>
+    ${feeLine}
     <button class="btn btn-primary plan-cta" data-plan="${esc(plan.slug)}">Abonnieren</button>
   </div>`;
 }
 
-function renderPlanCards(plans){
-  $("subButtons").innerHTML = plans.map(planCard).join("");
+function renderPlanCards(plans, fee){
+  $("subButtons").innerHTML = plans.map((p)=>planCard(p, fee)).join("");
 }
 
 // Web-Session-only (Konvergenz #3): das Session-Cookie (HttpOnly, same-origin) wird
@@ -273,6 +278,14 @@ function agentNumberText(agent){
   if(agent.numberStatus==="failed") return "Einrichtung fehlgeschlagen.";
   if(agent.numberStatus==="blocked") return "Einrichtung verzoegert (Kapazitaetsgrenze erreicht).";
   return "nicht konfiguriert";
+}
+
+// Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): Einrichtungsgebuehr aus /state bzw.
+// /billing/status. Fehlendes/nicht-numerisches/<=0-Feld -> null (keine Zeile).
+function numberSetupFeeFrom(s){
+  const cents = s && s.numberSetupFeeCents;
+  if(typeof cents!=="number" || !Number.isFinite(cents) || cents<=0) return null;
+  return { amountCents: cents, currency: (s && s.currency) || "eur" };
 }
 
 async function refresh(){
@@ -315,7 +328,7 @@ function renderSubscription(s){
   } else {
     $("subStatus").textContent = "Kein aktives Abo. Waehle einen Plan.";
     renderQuota(null);
-    renderPlanCards(planCatalog || []);
+    renderPlanCards(planCatalog || [], numberSetupFeeFrom(s));
     $("subButtons").style.display="";
   }
 }
@@ -340,7 +353,12 @@ async function renderActivation(){
   if(!r.ok) return; // 401 -> refresh() hat den Login-Hinweis bereits gesetzt
   const st = await r.json();
   if(!st.paymentEnabled){ $("billingCard").style.display="none"; return; }
-  renderBilling({ hasCard: st.hasCard, subscription: { planSlug: st.planSlug } });
+  renderBilling({
+    hasCard: st.hasCard,
+    subscription: { planSlug: st.planSlug },
+    numberSetupFeeCents: st.numberSetupFeeCents,
+    currency: st.currency,
+  });
 }
 
 // P5: Checkout-Start, geteilt vom "Karte hinzufuegen"-Button UND vom gefuehrten no_card-

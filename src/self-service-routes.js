@@ -25,6 +25,8 @@ import {
 } from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
+import { tenantGeo } from "./store/state-ops.js";
+import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { quotaView } from "./billing/meter.js";
 
@@ -79,6 +81,19 @@ function paymentView(store, config, tenant) {
     // geblockt"). Kein Abo -> null (UI: Leerzustand). store.load() = der Ledger-State.
     quota: quotaView(store.load(), { tenantId: tenant, planSlug, currentPeriodStart, currentPeriodEnd }),
   };
+}
+
+// Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): der Land-abhaengige Setup-Tarif (P9-Hold,
+// provisioning-geo.js) - GENAU dieselbe Formel, die runProvisioningDrain (server.js) beim
+// ECHTEN Kauf anwendet (EINE Quelle, kein Drift zwischen Anzeige und tatsaechlichem Hold-
+// Betrag). tenantGeo liest das Land, das /api/onboard bereits gesetzt hat; noch kein
+// Onboard (kein country) -> holdAmountForCountry faellt auf den globalen Default. Nur bei
+// PAYMENT_ENABLED relevant (sonst haelt provisionNumber gar keinen Hold) -> 0 sonst (kein
+// irrefuehrender Betrag; die aufrufende UI blendet den Billing-Block dann ohnehin aus).
+function numberSetupFeeCentsFor(s, config, tenant) {
+  if (!config.paymentEnabled) return 0;
+  const { country } = tenantGeo(s, tenant);
+  return holdAmountForCountry(country, config.numberSetupFeeCents);
 }
 
 // BK2: Reiner Selektor (N7, kein Nebeneffekt): untrusted Input (Body ODER zurueckgetragene
@@ -193,6 +208,11 @@ export function makeSelfServiceRoutes({
       // Plan/Periode. Bei PAYMENT_ENABLED aus: Felder fehlen -> UI versteckt den Block,
       // Lese-View byte-identisch zum Bestand. (s. paymentView, eine Quelle).
       ...paymentView(store, config, tenant),
+      // Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): der Land-abhaengige Setup-Tarif, VOR dem
+      // Subscribe-Klick sichtbar (die Plan-Kacheln lesen genau dieses Feld). currency
+      // ungegated (nicht geheim, wie PLAN_CATALOG.currency immer gesetzt).
+      numberSetupFeeCents: numberSetupFeeCentsFor(agentState, config, tenant),
+      currency: config.paymentCurrency,
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
       calendar: upcomingCalendar(store, tenant),
@@ -254,11 +274,16 @@ export function makeSelfServiceRoutes({
   // Lifecycle-Flags, keine Secrets/PII (kein cus_/sub_/pm_). Read-only -> kein Audit (wie /state).
   router.get("/api/self-service/billing/status", webAuthPendingMw, (req, res) => {
     const tenant = req.tenant.tenantId;
+    const s = store.load();
     res.json({
       paymentEnabled: !!config.paymentEnabled,
       hasCard: hasCardOnFile(store.tenantStripe(tenant)),
       planSlug: store.tenantSubscription(tenant).planSlug,
       status: req.tenant.status,
+      // Phase A: identisch zur /state-Route (numberSetupFeeCentsFor, EINE Quelle) - dieser
+      // Endpunkt ist der einzige, den ein SUSPENDIERTER Tenant vor dem Checkout sieht.
+      numberSetupFeeCents: numberSetupFeeCentsFor(s, config, tenant),
+      currency: config.paymentCurrency,
     });
   });
 

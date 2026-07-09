@@ -45,6 +45,7 @@
     cardStatus,
     subscriptionFrom,
     quotaFrom,
+    numberSetupFeeFrom,
     fetchTenantState,
     startBillingSetupCheckout,
   } from "../../lib/api.js";
@@ -97,7 +98,7 @@
     } else {
       subStatusEl.textContent = NO_SUB_PROMPT;
       renderQuota(null);
-      subTilesEl.replaceChildren(...planTiles(document));
+      subTilesEl.replaceChildren(...planTiles(document, numberSetupFeeFrom(data)));
       subTilesEl.hidden = false;
     }
   }

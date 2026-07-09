@@ -16,6 +16,7 @@ import {
   loadAuthState,
   NUMBER_STATUS,
   numberPlaceholderText,
+  numberSetupFeeFrom,
   startBillingSetupCheckout,
 } from "../src/lib/api.js";
 // Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
@@ -297,4 +298,20 @@ test("startBillingSetupCheckout wirft bei 200 ohne url-Feld", async () => {
   } finally {
     f.restore();
   }
+});
+
+test("numberSetupFeeFrom: gueltige Cents -> {amountCents, currency}, Default-Waehrung eur", () => {
+  assert.deepEqual(numberSetupFeeFrom({ numberSetupFeeCents: 500, currency: "eur" }), {
+    amountCents: 500,
+    currency: "eur",
+  });
+  assert.deepEqual(numberSetupFeeFrom({ numberSetupFeeCents: 500 }), { amountCents: 500, currency: "eur" });
+});
+
+test("numberSetupFeeFrom: fehlend/0/negativ/nicht-numerisch -> null", () => {
+  assert.equal(numberSetupFeeFrom(undefined), null);
+  assert.equal(numberSetupFeeFrom({}), null);
+  assert.equal(numberSetupFeeFrom({ numberSetupFeeCents: 0 }), null);
+  assert.equal(numberSetupFeeFrom({ numberSetupFeeCents: -5 }), null);
+  assert.equal(numberSetupFeeFrom({ numberSetupFeeCents: "500" }), null);
 });
