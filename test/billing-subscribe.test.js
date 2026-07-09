@@ -302,3 +302,26 @@ test("activateSubscriptionFromCheckoutSession: Happy-Pfad persistiert Karte+Abo 
   assert.deepEqual(calls.provisioned, [TENANT]);
   assert.equal(result.profile.provisioned, true);
 });
+
+// Fix B (Plumbing-Regressionsnetz): activateSubscriptionFromCheckoutSession reicht sein
+// eigenes billing tatsaechlich an activatePaidTenant durch (statt es zu vergessen/ein
+// anderes zu bauen). Beweis indirekt ueber die Wirkung: NUR wenn dasselbe billing-Objekt
+// ankommt, kann syncNumberSetupFeeExemption ueberhaupt retrieveSubscription aufrufen und
+// das Flag am Store setzen.
+test("activateSubscriptionFromCheckoutSession reicht sein billing tatsaechlich an activatePaidTenant durch", async () => {
+  const store = fakeStore({ card: true });
+  const billing = {
+    ...fakeCheckoutBilling(),
+    async retrieveSubscription(subscriptionId) {
+      assert.equal(subscriptionId, "sub_checkout");
+      return { planSlug: "starter", numberSetupFeeExempt: true };
+    },
+  };
+  const { result } = await runActivate({ store, billing });
+  assert.equal(result.ok, true);
+  assert.equal(
+    store.state.subscription.numberSetupFeeExempt,
+    true,
+    "activatePaidTenant hat DASSELBE billing-Objekt bekommen (syncNumberSetupFeeExemption griff)",
+  );
+});

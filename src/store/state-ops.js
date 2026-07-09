@@ -873,7 +873,7 @@ export function tenantStripe(s, tenantId) {
 export function setTenantSubscription(
   s,
   tenantId,
-  { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart } = {},
+  { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart, numberSetupFeeExempt } = {},
 ) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
@@ -881,6 +881,11 @@ export function setTenantSubscription(
   if (planSlug !== undefined) tenant.stripePlanSlug = planSlug;
   if (currentPeriodEnd !== undefined) tenant.stripeCurrentPeriodEnd = currentPeriodEnd;
   if (currentPeriodStart !== undefined) tenant.stripeCurrentPeriodStart = currentPeriodStart;
+  // Fix B (0-EUR-Checkout generisch): true NUR wenn activation.js ueber
+  // billing.retrieveSubscription nachgewiesen hat, dass die Subscription mit 0 EUR
+  // abgerechnet wurde - befreit provisionNumber vom placeHold. Selektiver Patch wie
+  // die uebrigen Felder oben.
+  if (numberSetupFeeExempt !== undefined) tenant.stripeNumberSetupFeeExempt = numberSetupFeeExempt;
   return tenant;
 }
 
@@ -894,6 +899,9 @@ export function tenantSubscription(s, tenantId) {
     planSlug: tenant?.stripePlanSlug ?? null,
     currentPeriodEnd: tenant?.stripeCurrentPeriodEnd ?? null,
     currentPeriodStart: tenant?.stripeCurrentPeriodStart ?? null,
+    // Fail-closed Default false (nie undefined): unbekannt/nicht geprueft -> placeHold
+    // laeuft normal (kein stiller Kosten-Bypass).
+    numberSetupFeeExempt: tenant?.stripeNumberSetupFeeExempt ?? false,
   };
 }
 

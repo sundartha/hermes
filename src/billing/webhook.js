@@ -189,7 +189,7 @@ function planSlugOf(object) {
 // Nebeneffekt (Status-/Abo-/KYC-Schreibung + Provisioning) im Namen.
 export async function applyStripeWebhook(
   event,
-  { store, accounts, sessions, audit, req, provision },
+  { store, accounts, sessions, audit, req, provision, billing },
 ) {
   const {
     action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
@@ -229,7 +229,7 @@ export async function applyStripeWebhook(
     // Seam-Reihenfolge (KYC -> Status -> provision) bleibt unveraendert, nur jetzt geteilt
     // statt inline. Idempotent im provision-Trigger (kein Doppelkauf bei Webhook-Retry/
     // Folge-Events); bei PROVISIONING_ENABLED=false bleibt die Nummer 'requested' (KEIN Kauf).
-    const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+    const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
     audit("stripe_webhook_activate", req, `tenant=${tenant} ${profileAuditDetail(profile)}`);
     return;
   }

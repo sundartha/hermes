@@ -48,6 +48,13 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_current_period_end BIGINT;
 -- idempotente Backfill (db/migrate.js backfillPeriodStart) leitet ihn fuer Bestands-Abos
 -- aus stripe_current_period_end ab. Muster wie stripe_* (BIGINT, kein CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_current_period_start BIGINT;
+-- Fix B (PLAN-VOUCHER-SETUP-FEE-GAP.md, 0-EUR-Checkout generisch): true, wenn die
+-- aktuelle Subscription bei Aktivierung nachweislich mit 0 EUR abgerechnet wurde
+-- (activation.js liest es per billing.retrieveSubscription) - befreit provisionNumber
+-- vom placeHold. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, tenantSubscription()
+-- faellt fail-closed auf false zurueck. Muster wie stripe_*/geo (ALTER-only, nullable,
+-- KEIN CHECK).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_number_setup_fee_exempt BOOLEAN;
 -- F1 Geo-Location (Phase 1): Tenant-Default-Land + -Sprache, die die Registrierung
 -- (IP-Geo-Vorschlag bzw. explizite User-Wahl) schreibt - Fallback fuer neue Nummern
 -- dieses Tenants. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, Code-Fallback

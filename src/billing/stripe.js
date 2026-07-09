@@ -316,18 +316,26 @@ export const stripeBilling = {
     return { subscriptionId: json.id, ...periodFieldsOf(json) };
   },
 
-  // A3-Reconcile: liest den Plan-Slug eines bestehenden Abos aus der Subscription-
-  // Metadata (GET /v1/subscriptions/{id}). Heilt slug-lose Bestands-Abos (webhook.js
-  // selektiver Patch). Fehlt der Slug -> null (Aufrufer SKIPt no_plan, NIE raten). Nur
-  // opaker Slug verlaesst den Adapter; Secret nur im Header (nie geloggt). LIVE owner-
-  // smoke (offline ungetestet wie der uebrige Adapter).
+  // A3-Reconcile + Fix B (0-EUR-Checkout generisch): liest Plan-Slug UND ob die
+  // aktuelle Abrechnungsperiode mit 0 EUR abgerechnet wurde (expand[]=latest_invoice).
+  // numberSetupFeeExempt=true NUR wenn das Invoice-total ein exaktes 0 ist (typeof-
+  // Check: fehlt/kein number -> false, fail-closed, nie raten - G26). Genutzt von
+  // activation.js (syncNumberSetupFeeExemption) als EINE Quelle fuer Checkout-Return-
+  // UND Webhook-Pfad (s. Design-Begruendung), UND vom bestehenden A3-Backfill-Resolver
+  // (liest nur .planSlug, das zusaetzliche Feld ist fuer ihn folgenlos). Nur opake
+  // Werte verlassen den Adapter; Secret nur im Header. LIVE owner-smoke (offline
+  // ungetestet wie der uebrige Adapter).
   async retrieveSubscription(subscriptionId) {
-    const res = await fetch(`${url(SUBSCRIPTIONS_PATH)}/${subscriptionId}`, {
+    const res = await fetch(`${url(SUBSCRIPTIONS_PATH)}/${subscriptionId}?expand[]=latest_invoice`, {
       method: "GET",
       headers: authHeaders(),
     });
     assertOk(res, "retrieveSubscription");
     const json = await res.json().catch(() => ({}));
-    return { planSlug: (json.metadata && json.metadata.plan_slug) || null };
+    const invoiceTotal = json.latest_invoice && json.latest_invoice.total;
+    return {
+      planSlug: (json.metadata && json.metadata.plan_slug) || null,
+      numberSetupFeeExempt: typeof invoiceTotal === "number" ? invoiceTotal === 0 : false,
+    };
   },
 };

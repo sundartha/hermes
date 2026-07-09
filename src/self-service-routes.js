@@ -148,7 +148,7 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
 async function subscribeAndActivate({ store, billing, config, accounts, provision, tenant, planSlug }) {
   const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
   if (!result.ok) return result;
-  const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+  const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
   return { ...result, profile };
 }
 

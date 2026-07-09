@@ -171,7 +171,7 @@ export async function activateSubscriptionFromCheckoutSession({
         currentPeriodEnd: outcome.currentPeriodEnd,
         currentPeriodStart: outcome.currentPeriodStart,
       });
-      const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+      const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
       return { ok: false, reason: "already_subscribed", profile };
     }
     // Verwaiste, real bei Stripe abgerechnete Zweit-Subscription (s. Kommentar oben).
@@ -189,7 +189,7 @@ export async function activateSubscriptionFromCheckoutSession({
     currentPeriodEnd: outcome.currentPeriodEnd,
     currentPeriodStart: outcome.currentPeriodStart,
   });
-  const { profile } = await activatePaidTenant({ store, accounts, provision, tenant });
+  const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
   return {
     ok: true,
     subscriptionId: outcome.subscriptionId,

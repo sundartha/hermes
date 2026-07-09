@@ -36,9 +36,35 @@ export function profileAuditDetail(profile) {
   return profile.provisioned ? `profile=ok:${profile.keys}` : `profile=skip:${profile.reason}`;
 }
 
-export async function activatePaidTenant({ store, accounts, provision, tenant }) {
+// Fix B (0-EUR-Checkout generisch): prueft best-effort, ob die gerade persistierte
+// Subscription mit 0 EUR abgerechnet wurde (billing.retrieveSubscription) und
+// persistiert das Ergebnis am Tenant. EIN Ort statt zwei (G5): Checkout-Return UND
+// Webhook rufen BEIDE activatePaidTenant - hier lebt die Pruefung genau einmal,
+// unabhaengig davon, welcher der beiden das Aktivierungs-Rennen gewinnt (webhook.js:
+// der Webhook gewinnt es REGELMAESSIG - eine Pruefung nur im Checkout-Return-Pfad
+// haette den Bug fuer den Regelfall nicht behoben). billing fehlt/kein subscriptionId/
+// Stripe wirft -> Flag bleibt unberuehrt (fail-closed: provisionNumber sieht dann
+// "nicht befreit", Bestandsverhalten - ein Stripe-Hakler darf KYC/Status/Provisioning
+// nie blockieren, P8).
+async function syncNumberSetupFeeExemption({ store, billing, tenant }) {
+  if (!billing || typeof billing.retrieveSubscription !== "function") return;
+  const { subscriptionId } = store.tenantSubscription(tenant);
+  if (!subscriptionId) return;
+  try {
+    const { numberSetupFeeExempt } = await billing.retrieveSubscription(subscriptionId);
+    store.setTenantSubscription(tenant, { numberSetupFeeExempt });
+  } catch (e) {
+    console.error(`[activation] numberSetupFeeExempt-Check fehlgeschlagen (tenant=${tenant}):`, e.message);
+  }
+}
+
+export async function activatePaidTenant({ store, accounts, provision, billing, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
   await accounts.setStatus(tenant, "active");
+  // VOR provision(tenant): das ausgeloeste, idempotente Nummern-Provisioning kann
+  // asynchron sehr schnell in den echten placeHold laufen (Provisioning-Drain,
+  // single-flight) - die Befreiung muss vorher am Tenant stehen (Race-Schutz).
+  await syncNumberSetupFeeExemption({ store, billing, tenant });
   await provision(tenant);
   // A2: zusaetzlicher idempotenter Effekt NACH der unveraenderten KYC->Status->provision-
   // Reihenfolge - plan-abgeleitetes Rechteprofil auf die tenantId. SKIP wirft NICHT, damit

@@ -384,6 +384,7 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         audit,
         req,
         provision: triggerTenantProvisioning,
+        billing: stripeBilling,
       });
       res.json({ received: true });
     });

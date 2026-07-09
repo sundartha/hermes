@@ -77,6 +77,12 @@
  */
 
 /**
+ * @typedef {Object} SubscriptionAmountCheck
+ * @property {string|null} planSlug         - Katalog-Slug aus der Subscription-Metadata (fehlt -> null)
+ * @property {boolean} numberSetupFeeExempt - true NUR wenn das aktuelle Invoice-total nachweislich 0 ist (unbekannt -> false, fail-closed)
+ */
+
+/**
  * @typedef {Object} CheckoutResult
  * @property {string} customerId       - opake Stripe-Customer-Referenz (cus_...)
  * @property {string} paymentMethodId  - opake payment_method-Referenz (pm_...)
@@ -121,5 +127,8 @@
  *   Erstellt ein echtes monatliches Recurring (Stripe POST /v1/subscriptions). Loest
  *   ECHTES Geld aus (Erstzahlung off_session). Nur subscriptionId + currentPeriodEnd +
  *   currentPeriodStart verlassen den Adapter (KEIN Stripe-Objekt).
+ * @property {(subscriptionId: string) => Promise<SubscriptionAmountCheck>} retrieveSubscription
+ *   Liest Plan-Slug + Fix-B-Hold-Befreiung eines BESTEHENDEN Abos (GET, expand latest_invoice).
+ *   Genutzt vom A3-Reconcile-Backfill UND von activation.js (syncNumberSetupFeeExemption).
  */
 export {};

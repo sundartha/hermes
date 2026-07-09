@@ -329,6 +329,50 @@ test("getSubscriptionCheckoutResult: unexpandiertes pm-String + top-level-Period
   });
 });
 
+test("retrieveSubscription: GET /v1/subscriptions/<id>?expand[]=latest_invoice, latest_invoice.total===0 -> numberSetupFeeExempt:true", async () => {
+  let captured;
+  const result = await withStripeStub(
+    async (url, opts) => {
+      captured = { url, opts };
+      return okJson({
+        metadata: { plan_slug: "starter" },
+        latest_invoice: { total: 0 },
+      });
+    },
+    () => stripeBilling.retrieveSubscription("sub_1"),
+  );
+  assert.ok(captured.url.includes("/v1/subscriptions/sub_1"), "URL traegt die subscription_id");
+  assert.ok(captured.url.includes("expand[]=latest_invoice"), "latest_invoice wird expandiert");
+  assert.equal(captured.opts.method, "GET");
+  assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
+  assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: true });
+});
+
+test("retrieveSubscription: latest_invoice.total>0 -> numberSetupFeeExempt:false", async () => {
+  const result = await withStripeStub(
+    async () =>
+      okJson({ metadata: { plan_slug: "business" }, latest_invoice: { total: 2900 } }),
+    () => stripeBilling.retrieveSubscription("sub_2"),
+  );
+  assert.deepEqual(result, { planSlug: "business", numberSetupFeeExempt: false });
+});
+
+test("retrieveSubscription: fehlendes latest_invoice -> numberSetupFeeExempt:false (fail-closed, nie raten)", async () => {
+  const result = await withStripeStub(
+    async () => okJson({ metadata: { plan_slug: "starter" } }),
+    () => stripeBilling.retrieveSubscription("sub_3"),
+  );
+  assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: false });
+});
+
+test("retrieveSubscription: fehlender plan_slug -> planSlug:null (Bestand unveraendert)", async () => {
+  const result = await withStripeStub(
+    async () => okJson({ latest_invoice: { total: 0 } }),
+    () => stripeBilling.retrieveSubscription("sub_4"),
+  );
+  assert.deepEqual(result, { planSlug: null, numberSetupFeeExempt: true });
+});
+
 test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_session=true, manual capture", async () => {
   let captured;
   const result = await withStripeStub(

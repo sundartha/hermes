@@ -15,6 +15,7 @@ import {
   requestNumber,
   findNumber,
   setTenantStripe,
+  setTenantSubscription,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
@@ -199,4 +200,31 @@ test("Pay2 durchreichen: billing + Tenant MIT Karte -> placeHold bekommt custome
   const [, holdArgs] = billing.log[0]; // ["placeHold", args]
   assert.equal(holdArgs.customerId, "cus_1");
   assert.equal(holdArgs.paymentMethodId, "pm_1");
+});
+
+// ---- Fix B (0-EUR-Checkout generisch): numberSetupFeeExempt ueberspringt Hold/Capture ----
+
+test("Fix B: numberSetupFeeExempt=true -> KEIN placeHold/captureHold, paymentIntentId===null, direkt ACTIVE", async () => {
+  const { s, numberId } = seedRequested();
+  setTenantSubscription(s, "t_user1", { numberSetupFeeExempt: true });
+  const prov = fakeProvisioner();
+  const billing = fakeBilling();
+  const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
+
+  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
+  assert.equal(result.paymentIntentId, null, "kein PI ohne Hold");
+  assert.deepEqual(methodsOf(billing), [], "kein placeHold/captureHold fuer einen befreiten Tenant");
+  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
+});
+
+test("Fix B: numberSetupFeeExempt=true + KEIN Zahlungsmittel -> trotzdem ACTIVE (Karten-Pflicht gilt nur fuer den bezahlten Pfad)", async () => {
+  const { s, numberId } = seedRequested({ cardless: true });
+  setTenantSubscription(s, "t_user1", { numberSetupFeeExempt: true });
+  const prov = fakeProvisioner();
+  const billing = fakeBilling();
+  const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
+
+  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
+  assert.equal(result.paymentIntentId, null);
+  assert.deepEqual(methodsOf(billing), [], "kein Zahlungsmittel-Gate fuer einen befreiten Tenant");
 });

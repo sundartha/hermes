@@ -27,6 +27,7 @@ import {
   releaseNumber,
   findNumber,
   tenantStripe,
+  tenantSubscription,
 } from "./store/state-ops.js";
 
 // R5 (Phase P7): statt limit:1 mehrere Kandidaten holen und den ersten verfuegbaren
@@ -54,32 +55,12 @@ export async function provisionNumber(
   // Provider-Call, KEIN cancelHold (es wurde nichts gehalten).
   let paymentIntentId = null;
   if (billing) {
-    // Money-Safety (R4, fail-closed): ohne hinterlegte Karte KEIN placeHold und KEIN
-    // Provider-Call. Die Karte ist am Tenant gespeichert (Pay1: setup-Checkout).
-    // off_session-Hold braucht customer + payment_method - fehlt eines, ist die Nummer
-    // nicht bezahlbar -> failNumber + Throw (kein bezahlter Orphan, kein 400 von Stripe).
-    const { customerId, paymentMethodId } = tenantStripe(s, number.tenantId);
-    if (!customerId || !paymentMethodId) {
-      failNumber(s, numberId); // requested -> failed (nichts gehalten, nichts gekauft)
-      throw new Error(
-        `provisionNumber: Tenant ${number.tenantId} hat kein hinterlegtes Zahlungsmittel`,
-      );
-    }
-    try {
-      const hold = await billing.placeHold({
-        tenantRef: number.tenantId,
-        amountCents: holdAmountCents,
-        currency,
-        customerId,
-        paymentMethodId,
-        idempotencyKey: `hold_${numberId}`,
-      });
-      paymentIntentId = hold.paymentIntentId;
-    } catch (holdErr) {
-      failNumber(s, numberId); // requested -> failed (kein Hold, kein Provider-Call)
-      throw holdErr;
-    }
-    beginProvisioning(s, numberId, paymentIntentId); // requested -> provisioning + PI hinterlegen
+    paymentIntentId = await placeHoldUnlessExempt(s, numberId, {
+      tenantId: number.tenantId,
+      billing,
+      holdAmountCents,
+      currency,
+    });
   } else {
     beginProvisioning(s, numberId); // payment-off: 2-arg, byte-identisch
   }
@@ -107,7 +88,9 @@ export async function provisionNumber(
     throw err;
   }
 
-  if (billing) {
+  // Kein Hold -> nichts zu erfassen (Fix B: exempt = billing gesetzt, aber
+  // paymentIntentId bleibt null).
+  if (billing && paymentIntentId) {
     beginCapturing(s, numberId); // provisioning -> capturing (Geld-Einzug laeuft)
     try {
       await billing.captureHold(paymentIntentId, holdAmountCents);
@@ -140,6 +123,43 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
   } catch {
     /* Best-Effort-Rollback: Cancel-Fehler nicht ueber den Aufrufer-Fehler legen */
   }
+}
+
+// Reserviert das Geld fuer die Einrichtungsgebuehr, AUSSER der Tenant ist befreit (Fix B:
+// numberSetupFeeExempt, gesetzt in activation.js/syncNumberSetupFeeExemption - EINE
+// Quelle fuer Checkout-Return- UND Webhook-Pfad). Befreit -> beginProvisioning wie
+// payment-off (kein PI zu vermerken), Rueckgabe null (Aufrufer ueberspringt captureHold).
+// Sonst: Money-Safety wie bisher (Karte-Pflicht, Hold, dann beginProvisioning mit PI).
+// EIN Rueckgabewert statt Output-Argument (F2).
+async function placeHoldUnlessExempt(s, numberId, { tenantId, billing, holdAmountCents, currency }) {
+  if (tenantSubscription(s, tenantId).numberSetupFeeExempt) {
+    beginProvisioning(s, numberId);
+    return null;
+  }
+  // Money-Safety (R4, fail-closed): ohne hinterlegte Karte KEIN placeHold und KEIN
+  // Provider-Call. off_session-Hold braucht customer + payment_method.
+  const { customerId, paymentMethodId } = tenantStripe(s, tenantId);
+  if (!customerId || !paymentMethodId) {
+    failNumber(s, numberId);
+    throw new Error(`provisionNumber: Tenant ${tenantId} hat kein hinterlegtes Zahlungsmittel`);
+  }
+  let paymentIntentId;
+  try {
+    const hold = await billing.placeHold({
+      tenantRef: tenantId,
+      amountCents: holdAmountCents,
+      currency,
+      customerId,
+      paymentMethodId,
+      idempotencyKey: `hold_${numberId}`,
+    });
+    paymentIntentId = hold.paymentIntentId;
+  } catch (holdErr) {
+    failNumber(s, numberId);
+    throw holdErr;
+  }
+  beginProvisioning(s, numberId, paymentIntentId);
+  return paymentIntentId;
 }
 
 // Rollback NACH erfolgreichem Order (capture-Fehler, Payment-Pfad): Zustand failed,

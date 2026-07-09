@@ -159,3 +159,108 @@ test("planSlug-loser Webhook (frischer Tenant) -> SKIP, kein Profil, KYC/Status 
   assert.deepEqual(acc.calls.setStatus, [["t_a", "active"]]);
   assert.equal(kycReached(s, "t_a", KYC_OUTBOUND_MIN), true);
 });
+
+// --- Fix B (0-EUR-Checkout generisch): syncNumberSetupFeeExemption in activatePaidTenant.
+// Kernbeweis der Race-Fix-Korrektheit (s. PLAN-VOUCHER-SETUP-FEE-GAP.md Fix B): die
+// Pruefung "ist diese Subscription 0 EUR" lebt EINMAL in activation.js, damit BEIDE
+// Race-Teilnehmer (Checkout-Return UND Webhook, die beide activatePaidTenant rufen)
+// garantiert denselben Code treffen - unabhaengig davon, wer das Aktivierungs-Rennen
+// gewinnt (webhook.js: der Webhook gewinnt es REGELMAESSIG). ---
+function fakeExemptBilling({ exempt = true, throwErr = null } = {}) {
+  const log = [];
+  return {
+    log,
+    async retrieveSubscription(subscriptionId) {
+      log.push(subscriptionId);
+      if (throwErr) throw throwErr;
+      return { planSlug: null, numberSetupFeeExempt: exempt };
+    },
+  };
+}
+
+test("activatePaidTenant: billing.retrieveSubscription liefert exempt:true -> VOR provision() persistiert (Race-Schutz)", async () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_a", {});
+  setTenantSubscription(s, "t_a", { subscriptionId: "sub_free" });
+  const billing = fakeExemptBilling({ exempt: true });
+  await activatePaidTenant({
+    store: storeOn(s),
+    accounts: fakeAccounts(),
+    billing,
+    provision: async () => {
+      // Zum Zeitpunkt von provision() MUSS das Flag bereits gesetzt sein: das
+      // ausgeloeste, idempotente Nummern-Provisioning kann sehr schnell in den
+      // echten placeHold laufen (Provisioning-Drain, single-flight).
+      assert.equal(
+        tenantSubscription(s, "t_a").numberSetupFeeExempt,
+        true,
+        "Flag VOR provision() gesetzt",
+      );
+    },
+    tenant: "t_a",
+  });
+  assert.deepEqual(billing.log, ["sub_free"]);
+  assert.equal(tenantSubscription(s, "t_a").numberSetupFeeExempt, true);
+});
+
+test("activatePaidTenant: billing.retrieveSubscription wirft -> Flag bleibt false, KYC/Status/Provisioning laufen trotzdem durch (fail-soft)", async () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_a", {});
+  setTenantSubscription(s, "t_a", { subscriptionId: "sub_broken" });
+  const billing = fakeExemptBilling({ throwErr: new Error("Stripe HTTP 500") });
+  const acc = fakeAccounts();
+  const provisioned = [];
+  const r = await activatePaidTenant({
+    store: storeOn(s),
+    accounts: acc,
+    billing,
+    provision: async (t) => provisioned.push(t),
+    tenant: "t_a",
+  });
+  assert.equal(
+    tenantSubscription(s, "t_a").numberSetupFeeExempt,
+    false,
+    "Flag bleibt unberuehrt (fail-closed Default) - ein Stripe-Hakler darf keinen stillen Bypass ausloesen",
+  );
+  assert.deepEqual(acc.calls.setStatus, [["t_a", "active"]], "Status-Flip laeuft trotz Stripe-Fehler");
+  assert.deepEqual(
+    provisioned,
+    ["t_a"],
+    "Provisioning laeuft trotz Stripe-Fehler (P8: ein Stripe-Hakler blockt nie KYC/Status/Provisioning)",
+  );
+  assert.equal(r.profile.reason, "no_plan");
+});
+
+test("Webhook-ACTIVATE mit billing setzt numberSetupFeeExempt IDENTISCH zum direkten Pfad (beide Race-Teilnehmer treffen denselben Code)", async () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_a", {});
+  const billing = fakeExemptBilling({ exempt: true });
+  const acc = fakeAccounts();
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: {
+        object: {
+          id: "sub_webhook_free",
+          status: "active",
+          metadata: { tenant_ref: "t_a", plan_slug: "business" },
+        },
+      },
+    },
+    {
+      store: storeOn(s),
+      accounts: acc,
+      billing,
+      sessions: { invalidateByTenant: async () => {} },
+      audit: () => {},
+      req: {},
+      provision: async () => {},
+    },
+  );
+  assert.equal(
+    tenantSubscription(s, "t_a").numberSetupFeeExempt,
+    true,
+    "Webhook-Pfad setzt das Flag ueber dieselbe activation.js-Logik wie der direkte Pfad",
+  );
+  assert.deepEqual(billing.log, ["sub_webhook_free"]);
+});
