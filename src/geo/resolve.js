@@ -23,3 +23,15 @@ export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCo
     normCountry(userCountry) || normCountry(proposedCountry) || fallbackCountry || DEFAULT_COUNTRY
   );
 }
+
+// Kauf-Land-Praezedenz (Runde 1, PLAN-VOUCHER-SETUP-FEE-GAP.md Phase A): das Land, in dem
+// eine Nummer TATSAECHLICH gekauft wird, kann vom Herkunftsland (homeCountry, s.o.)
+// abweichen - config.forceNumberCountry (z.B. "US") ueberschreibt NUR den Kauf, nie
+// Sprache/Analytics (die bleiben am Herkunftsland). Leer/undefined -> Kauf-Land =
+// Herkunftsland (byte-identisch). EIN Ort fuer diese Kombination (G5): requestNumberFor-
+// PaidTenant (provision-trigger.js, der tatsaechliche Kauf) UND numberSetupFeeCentsFor
+// (self-service-routes.js, die Anzeige-Formel VOR dem Kauf) rufen dieselbe Funktion - keine
+// dritte, abweichende Inline-Kopie der "welches Land kauft?"-Logik.
+export function resolveNumberCountry(homeCountry, forceNumberCountry) {
+  return forceNumberCountry || homeCountry;
+}

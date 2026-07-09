@@ -16,6 +16,10 @@ import {
 } from "../store/state-ops.js";
 import { languageForCountry } from "../i18n/locales.js";
 import { PROVIDER, NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../store/defaults.js";
+// Fix A1 (Runde 1, G5): Kauf-Land-Override-Kombination (forceNumberCountry || homeCountry)
+// lebt EINMAL in geo/resolve.js - dieselbe Funktion nutzt numberSetupFeeCentsFor
+// (self-service-routes.js), keine zweite Inline-Kopie der "wer gewinnt"-Logik hier.
+import { resolveNumberCountry } from "../geo/resolve.js";
 
 // Ein Options-Objekt (F1): tenantId + die config-abgeleiteten Werte reisen zusammen.
 export function requestNumberForPaidTenant(
@@ -30,7 +34,7 @@ export function requestNumberForPaidTenant(
   // Country (z.B. "US") trennt beide: leer/undefined -> Kauf-Land = Herkunftsland
   // (byte-identisch). Die Sprache bleibt IMMER am Herkunftsland (homeCountry).
   const homeCountry = tenantGeo(s, tenantId).country || fallbackCountry;
-  const numberCountry = forceNumberCountry || homeCountry;
+  const numberCountry = resolveNumberCountry(homeCountry, forceNumberCountry);
   return requestNumber(s, {
     tenantId,
     provider: PROVIDER.TELNYX,

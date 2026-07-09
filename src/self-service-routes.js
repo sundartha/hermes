@@ -27,6 +27,9 @@ import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js"
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
+// Fix A1 (Runde 1, G5): dieselbe Kauf-Land-Override-Kombination wie requestNumberForPaid-
+// Tenant (provision-trigger.js) - EIN Ort statt einer dritten, abweichenden Inline-Kopie.
+import { resolveNumberCountry } from "./geo/resolve.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { quotaView } from "./billing/meter.js";
 
@@ -86,13 +89,17 @@ function paymentView(store, config, tenant) {
 // Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): der Land-abhaengige Setup-Tarif (P9-Hold,
 // provisioning-geo.js) - GENAU dieselbe Formel, die runProvisioningDrain (server.js) beim
 // ECHTEN Kauf anwendet (EINE Quelle, kein Drift zwischen Anzeige und tatsaechlichem Hold-
-// Betrag). tenantGeo liest das Land, das /api/onboard bereits gesetzt hat; noch kein
-// Onboard (kein country) -> holdAmountForCountry faellt auf den globalen Default. Nur bei
-// PAYMENT_ENABLED relevant (sonst haelt provisionNumber gar keinen Hold) -> 0 sonst (kein
-// irrefuehrender Betrag; die aufrufende UI blendet den Billing-Block dann ohnehin aus).
+// Betrag). tenantGeo liest das HERKUNFTSland, das /api/onboard bereits gesetzt hat; das
+// tatsaechliche KAUF-Land kann davon abweichen (config.forceNumberCountry, z.B. US -
+// dieselbe Override-Kombination wie requestNumberForPaidTenant in provision-trigger.js,
+// via resolveNumberCountry, G5). Noch kein Onboard (kein country, kein Override) ->
+// holdAmountForCountry faellt auf den globalen Default. Nur bei PAYMENT_ENABLED relevant
+// (sonst haelt provisionNumber gar keinen Hold) -> 0 sonst (kein irrefuehrender Betrag;
+// die aufrufende UI blendet den Billing-Block dann ohnehin aus).
 function numberSetupFeeCentsFor(s, config, tenant) {
   if (!config.paymentEnabled) return 0;
-  const { country } = tenantGeo(s, tenant);
+  const { country: homeCountry } = tenantGeo(s, tenant);
+  const country = resolveNumberCountry(homeCountry, config.forceNumberCountry);
   return holdAmountForCountry(country, config.numberSetupFeeCents);
 }
 

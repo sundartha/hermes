@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeStubGeoLookup, nullGeoLookup } from "../src/geo/stub.js";
 import { makeMaxmindGeoLookup } from "../src/geo/maxmind.js";
-import { normCountry, resolveOnboardCountry } from "../src/geo/resolve.js";
+import { normCountry, resolveOnboardCountry, resolveNumberCountry } from "../src/geo/resolve.js";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY } from "../src/i18n/locales.js";
 import { DEFAULT_LANGUAGE, DEFAULT_COUNTRY } from "../src/store/defaults.js";
 
@@ -120,4 +120,19 @@ test("resolveOnboardCountry: ungueltige Eingaben fallen fail-safe durch (kein Sc
     resolveOnboardCountry({ userCountry: "xx!", proposedCountry: "12", fallbackCountry: "FR" }),
     "FR",
   );
+});
+
+// ---- resolveNumberCountry: Kauf-Land-Override (Runde 1, PLAN-VOUCHER-SETUP-FEE-GAP.md) ----
+// Regressionstest fuer den Review-Blocker FEE-COUNTRY-DRIFT: numberSetupFeeCentsFor
+// (self-service-routes.js) und requestNumberForPaidTenant (provision-trigger.js) muessen
+// dieselbe Kombination anwenden - forceNumberCountry gewinnt IMMER gegen das Herkunftsland.
+test("resolveNumberCountry: forceNumberCountry gewinnt gegen das Herkunftsland", () => {
+  assert.equal(resolveNumberCountry("DE", "US"), "US", "Override ueberschreibt Herkunftsland");
+  assert.equal(resolveNumberCountry("FR", "US"), "US", "Override gilt unabhaengig vom Herkunftsland");
+});
+
+test("resolveNumberCountry: leerer/undefined Override -> Herkunftsland unveraendert (byte-identisch)", () => {
+  assert.equal(resolveNumberCountry("DE", ""), "DE");
+  assert.equal(resolveNumberCountry("DE", undefined), "DE");
+  assert.equal(resolveNumberCountry(null, ""), null, "kein Herkunftsland + kein Override -> null");
 });

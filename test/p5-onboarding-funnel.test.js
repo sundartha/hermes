@@ -21,6 +21,7 @@ import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 import { holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
+import { resolveNumberCountry } from "../src/geo/resolve.js";
 
 const SECRET = "p5-onboarding-secret-0123456789";
 const SUB = "sub-p5";
@@ -269,6 +270,30 @@ test("(10) PAYMENT_ENABLED aus -> numberSetupFeeCents 0", async () => {
     const res = await request("GET", `${s.base}/api/self-service/billing/status`, { cookie: s.cookie });
     assert.equal(JSON.parse(res.body).paymentEnabled, false);
     assert.equal(JSON.parse(res.body).numberSetupFeeCents, 0);
+  } finally {
+    await s.close();
+  }
+});
+
+// (11) Review-Blocker FEE-COUNTRY-DRIFT (Runde 1): FORCE_NUMBER_COUNTRY (config.
+// forceNumberCountry) ueberschreibt das Kauf-Land VOR dem Checkout genauso wie beim
+// echten Kauf (requestNumberForPaidTenant, provision-trigger.js) - die Anzeige darf NICHT
+// beim Herkunftsland (tenant.country) stehenbleiben, wenn tatsaechlich in einem anderen
+// Land gekauft wird (Invariante "Anzeige == Charge"). Herkunftsland (FR) und Kauf-Land-
+// Override (US) sind bewusst verschieden gewaehlt, damit ein Regressions-Test wieder auf
+// die (falsche) tenant.country-Formel zurueckfaellt, sobald ein Land einen eigenen Tarif
+// bekommt (P9, COUNTRY_SEARCH_PARAMS) - gepinnt gegen resolveNumberCountry, nicht gegen
+// eine hartcodierte Zahl.
+test("(11) numberSetupFeeCents folgt forceNumberCountry, nicht dem Herkunftsland (FEE-COUNTRY-DRIFT)", async () => {
+  const s = await setup({ card: false, configOverride: { forceNumberCountry: "US" } });
+  try {
+    const state = s.store.load();
+    ops.setTenantGeo(state, TENANT, { country: "FR" });
+    const res = await request("GET", `${s.base}/api/self-service/billing/status`, { cookie: s.cookie });
+    const purchaseCountry = resolveNumberCountry("FR", "US");
+    assert.equal(purchaseCountry, "US", "Testannahme: Override gewinnt");
+    const expected = holdAmountForCountry(purchaseCountry, CONFIG.numberSetupFeeCents);
+    assert.equal(JSON.parse(res.body).numberSetupFeeCents, expected);
   } finally {
     await s.close();
   }
