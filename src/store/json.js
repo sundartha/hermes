@@ -523,6 +523,25 @@ export function tenantInactive(tenantId) {
   return ops.tenantInactive(load(), tenantId);
 }
 
+// ---- suspended_at Grace-Anker (tenant-prolif-c) ----
+// setSuspendedAtIfAbsent/clearSuspendedAt mutieren -> save bei changed (Muster markBilled);
+// tenantSuspendedAt ist reine Query (kein save, analog tenantStripe). now an der IO-Grenze erzeugt
+// (ops bleibt zeit-injiziert + testbar). json persistiert den Tenant-Record als Ganzes -> kein
+// Spalten-Mapping noetig (das Feld reist im save() automatisch mit).
+export function setSuspendedAtIfAbsent(tenantId) {
+  const { changed } = ops.setSuspendedAtIfAbsent(load(), tenantId, new Date().toISOString());
+  if (changed) save();
+}
+
+export function clearSuspendedAt(tenantId) {
+  const { changed } = ops.clearSuspendedAt(load(), tenantId);
+  if (changed) save();
+}
+
+export function tenantSuspendedAt(tenantId) {
+  return ops.tenantSuspendedAt(load(), tenantId);
+}
+
 // ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
 // setTenantStripe mutiert -> save (Muster wie setKycLevel); tenantStripe ist reine
 // Query (kein save, analog kycReached).

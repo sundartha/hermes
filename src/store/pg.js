@@ -321,6 +321,19 @@ export function makePgStore(runner) {
       ops.tenantActiveSubscriber(requireState(), tenantId, minLevel),
     tenantInactive: (tenantId) => ops.tenantInactive(requireState(), tenantId),
 
+    // ---- suspended_at Grace-Anker (tenant-prolif-c): Wrapper-Parity zu json.js ----
+    // now an der IO-Grenze erzeugt (ops bleibt zeit-injiziert + rein/testbar). Save nur bei
+    // changed (Muster markBilled) - kein needless Flush bei bereits gesetztem/fehlendem Anker.
+    setSuspendedAtIfAbsent(tenantId) {
+      const { changed } = ops.setSuspendedAtIfAbsent(requireState(), tenantId, new Date().toISOString());
+      if (changed) save();
+    },
+    clearSuspendedAt(tenantId) {
+      const { changed } = ops.clearSuspendedAt(requireState(), tenantId);
+      if (changed) save();
+    },
+    tenantSuspendedAt: (tenantId) => ops.tenantSuspendedAt(requireState(), tenantId),
+
     // ---- Stripe-Customer/Karte pro Tenant (Pay1): Wrapper-Parity zu json.js ----
     setTenantStripe(tenantId, patch) {
       const tenant = ops.setTenantStripe(requireState(), tenantId, patch);
@@ -547,7 +560,8 @@ const TENANT_COLUMNS =
   "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
   "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
   "stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, " +
-  "country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at";
+  "country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at, " +
+  "suspended_at";
 
 // Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
 // owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
@@ -580,6 +594,7 @@ function rowToTenant(r) {
   if (r.number_provision_skip_reason != null)
     tenant.numberProvisionSkipReason = r.number_provision_skip_reason;
   if (r.number_provision_skip_at != null) tenant.numberProvisionSkipAt = r.number_provision_skip_at;
+  if (r.suspended_at != null) tenant.suspendedAt = r.suspended_at;
   return tenant;
 }
 
@@ -903,8 +918,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -919,7 +934,8 @@ async function flushTenants(client, tenants) {
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
          private_number=EXCLUDED.private_number,
          number_provision_skip_reason=EXCLUDED.number_provision_skip_reason,
-         number_provision_skip_at=EXCLUDED.number_provision_skip_at`,
+         number_provision_skip_at=EXCLUDED.number_provision_skip_at,
+         suspended_at=EXCLUDED.suspended_at`,
       [
         t.id,
         t.status,
@@ -939,6 +955,7 @@ async function flushTenants(client, tenants) {
         t.privateNumber ?? null,
         t.numberProvisionSkipReason ?? null,
         t.numberProvisionSkipAt ?? null,
+        t.suspendedAt ?? null,
       ],
     );
   }

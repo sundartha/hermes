@@ -148,6 +148,13 @@ export const {
   // zur Laufzeit einen TypeError. Muster wie kycReached (reine Queries).
   tenantActiveSubscriber,
   tenantInactive,
+  // tenant-prolif-c: Grace-Anker suspended_at (Webhook-Suspend stempelt set-if-absent,
+  // activatePaidTenant loescht). Beide Backends exportieren die Fn -> die Fassade ist die EINE
+  // Quelle; ohne diese Re-Exports waeren store.setSuspendedAtIfAbsent/clearSuspendedAt/
+  // tenantSuspendedAt je nach Backend undefined -> Webhook/Activation wuerfen zur Laufzeit TypeError.
+  setSuspendedAtIfAbsent,
+  clearSuspendedAt,
+  tenantSuspendedAt,
   setTenantStripe,
   tenantStripe,
   // W4: Abo-Referenzen - Setter (Subscribe + Webhook) + Reader (Self-Service-View) +

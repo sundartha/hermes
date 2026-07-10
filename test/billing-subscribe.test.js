@@ -38,6 +38,8 @@ function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
       state.kycLevel = level;
     },
     setProfile: () => ({ changed: ["maxNumbers"] }),
+    // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
+    clearSuspendedAt: () => {},
   };
 }
 

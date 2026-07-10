@@ -61,6 +61,10 @@ async function syncNumberSetupFeeExemption({ store, billing, tenant }) {
 export async function activatePaidTenant({ store, accounts, provision, billing, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
   await accounts.setStatus(tenant, "active");
+  // tenant-prolif-c (Invariante 2): der Tenant ist wieder active -> den Grace-Anker loeschen, die
+  // Suspend-Uhr ist zurueckgesetzt (kein Release-Kandidat mehr). EINE Reaktivierungsquelle (G5) fuer
+  // Webhook-Activate UND Self-Service-Subscribe. Idempotent (No-Op ohne gesetzten Anker).
+  store.clearSuspendedAt(tenant);
   // VOR provision(tenant): das ausgeloeste, idempotente Nummern-Provisioning kann
   // asynchron sehr schnell in den echten placeHold laufen (Provisioning-Drain,
   // single-flight) - die Befreiung muss vorher am Tenant stehen (Race-Schutz).

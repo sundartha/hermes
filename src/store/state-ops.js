@@ -840,6 +840,41 @@ export function tenantInactive(s, tenantId) {
   return !!tenant && tenant.status !== TENANT_STATUS.ACTIVE;
 }
 
+// ---- suspended_at Grace-Anker (tenant-prolif-c) ----
+// Stempelt den Zeitpunkt der ERSTEN Suspendierung als Grace-Anker fuer den spaeteren DID-Release
+// (Phase D). SET-IF-ABSENT (Invariante 1): ein Dunning-Retry (weiteres invoice.payment_failed)
+// findet den Stempel bereits gesetzt und laesst ihn unveraendert - sonst schoebe jeder Retry die
+// Grace nach hinten und verlaengerte sie endlos. nowIso wird injiziert (P12/R: der Test beweist
+// set-if-absent mit ZWEI verschiedenen Werten ohne new Date; der Facade-Wrapper reicht
+// new Date().toISOString() herein). Fehlender Tenant -> No-Op, KEIN throw (best-effort Anker: der
+// Suspend-Pfad darf am fehlenden Spiegel-Tenant nicht scheitern - der DB-Status via
+// accounts.setStatus ist davon unabhaengig gesetzt). Reine Mutation, kein IO (Wrapper saved bei
+// changed). Nebeneffekt im Namen (N7).
+export function setSuspendedAtIfAbsent(s, tenantId, nowIso) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || tenant.suspendedAt) return { tenant, changed: false };
+  tenant.suspendedAt = nowIso;
+  return { tenant, changed: true };
+}
+
+// Loescht den Grace-Anker bei Reaktivierung (Invariante 2): activatePaidTenant ruft es, sobald der
+// Tenant wieder active ist -> die Uhr ist zurueckgesetzt, der Tenant ist kein Release-Kandidat mehr.
+// Idempotent: kein Anker gesetzt/fehlender Tenant -> No-Op (changed:false, kein needless save).
+// Reine Mutation, kein IO (Wrapper saved bei changed).
+export function clearSuspendedAt(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || !tenant.suspendedAt) return { tenant, changed: false };
+  tenant.suspendedAt = null;
+  return { tenant, changed: true };
+}
+
+// Lese-Query des Grace-Ankers (ISO oder null). Reine Query, kein IO. Fehlender Tenant/kein Anker
+// -> null (nie undefined), Muster tenantPrivateNumber. Speist die Reaktivierungs-/Roundtrip-Tests
+// (und den Phase-D-Klassifizierer) - EINE Quelle der Feld-Kenntnis (G5).
+export function tenantSuspendedAt(s, tenantId) {
+  return findTenant(s, tenantId)?.suspendedAt ?? null;
+}
+
 // ---- Stripe-Customer/Karte pro Tenant (Pay1) ----
 // Setzt die Stripe-Referenzen eines Tenants. Reine Mutation, kein IO (Wrapper saved).
 // patch = { customerId?, paymentMethodId? }: NUR uebergebene Keys werden gesetzt

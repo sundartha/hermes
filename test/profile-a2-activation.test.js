@@ -14,6 +14,7 @@ import {
   tenantSubscription,
   setKycLevel,
   kycReached,
+  clearSuspendedAt,
 } from "../src/store/state-ops.js";
 import { sanitizeProfile, KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
@@ -29,6 +30,8 @@ function storeOn(s) {
     setProfile: (key, patch) => setProfile(s, key, patch),
     findTenantBySubscription: () => null,
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
+    // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
+    clearSuspendedAt: (t) => clearSuspendedAt(s, t),
   };
 }
 

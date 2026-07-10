@@ -236,6 +236,11 @@ export async function applyStripeWebhook(
   // SUSPEND (Zahlung gescheitert / Abo geloescht): Status + Sessions sperren (gesperrter
   // Kunde kann nicht bis Cookie-Expiry weiterlesen).
   await accounts.setStatus(tenant, "suspended");
+  // tenant-prolif-c: Grace-Anker fuer den spaeteren DID-Release (Phase D). SET-IF-ABSENT stempelt
+  // den Zeitpunkt der ERSTEN Suspendierung; ein Dunning-Retry (weiteres invoice.payment_failed)
+  // bewegt ihn NICHT (die Set-if-absent-Regel lebt in state-ops). Best-effort (kein throw): der
+  // DB-Status via accounts.setStatus oben ist davon unabhaengig gesetzt.
+  store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
   audit("stripe_webhook_suspend", req, `tenant=${tenant}`);
 }

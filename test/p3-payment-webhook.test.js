@@ -32,7 +32,16 @@ const CAPS = { maxNumbers: HIGH_CAP, maxNumbersPerTenant: HIGH_CAP };
 // protokolliert Abo-/KYC-/Karten-Schreibung; accounts/sessions/provision protokollieren
 // ihre Wirkung. stripeOnFile = der am Tenant gespeicherte Stripe-Zustand (Race-Fix-Tests).
 function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, paymentMethodId: null } } = {}) {
-  const calls = { setStatus: [], invalidate: [], subscription: [], kyc: [], provision: [], stripe: [] };
+  const calls = {
+    setStatus: [],
+    invalidate: [],
+    subscription: [],
+    kyc: [],
+    provision: [],
+    stripe: [],
+    suspend: [],
+    clearSuspend: [],
+  };
   return {
     calls,
     store: {
@@ -45,6 +54,9 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
       // KYC/Status/provision, NICHT das Profil - das deckt profile-a2-activation.test.js).
       tenantSubscription: () => ({ planSlug: null }),
       setProfile: () => ({ profile: {}, changed: [] }),
+      // tenant-prolif-c: Grace-Anker-Seams (Suspend stempelt, Activate loescht).
+      setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),
+      clearSuspendedAt: (tenant) => calls.clearSuspend.push(tenant),
     },
     accounts: {
       setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]),
@@ -315,4 +327,27 @@ test("A(k) Perioden-Anker aus items.data[0] landet im setTenantSubscription-Patc
       },
     ],
   ], "Anker aus dem Item persistiert (kein leeres Quota-Fenster)");
+});
+
+test("A(l) Suspend stempelt suspended_at (setSuspendedAtIfAbsent), Activate loescht ihn", async () => {
+  // Suspend (deleted): stempelt, loescht NICHT.
+  const sup = fakeDeps({ tenantBySub: "t_l" });
+  await applyStripeWebhook(
+    { type: SUBSCRIPTION_EVENT.DELETED, data: { object: { id: "sub_l", metadata: { tenant_ref: "t_l" } } } },
+    sup,
+  );
+  assert.deepEqual(sup.calls.suspend, ["t_l"], "Suspend stempelt den Grace-Anker");
+  assert.deepEqual(sup.calls.clearSuspend, [], "Suspend loescht nicht");
+
+  // Activate (updated, active): loescht den Anker (Reaktivierung), stempelt NICHT.
+  const act = fakeDeps();
+  await applyStripeWebhook(
+    {
+      type: SUBSCRIPTION_EVENT.UPDATED,
+      data: { object: { id: "sub_l", status: "active", metadata: { tenant_ref: "t_l" } } },
+    },
+    act,
+  );
+  assert.deepEqual(act.calls.clearSuspend, ["t_l"], "Reaktivierung loescht den Grace-Anker");
+  assert.deepEqual(act.calls.suspend, [], "Activate stempelt nicht");
 });

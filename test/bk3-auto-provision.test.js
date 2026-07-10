@@ -106,6 +106,8 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
     store: {
       findTenantBySubscription: () => null, setTenantSubscription: () => {}, setKycLevel: () => {},
       tenantSubscription: () => ({ planSlug: null }), setProfile: () => ({ changed: [] }),
+      // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
+      clearSuspendedAt: () => {},
     },
     accounts: { setStatus: async () => {}, accountByTenant: async () => null },
     sessions: { invalidateByTenant: async () => {} },

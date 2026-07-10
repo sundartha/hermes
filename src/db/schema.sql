@@ -74,6 +74,13 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number TEXT;
 -- kyc_level/stripe_*/geo/private_number (ALTER-only, kein CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_provision_skip_reason TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_provision_skip_at    TEXT;
+-- tenant-prolif-c (PLAN-TENANT-PROLIFERATION.md, Fix 2): Zeitpunkt der ERSTEN Suspendierung
+-- (ISO) als Grace-Anker fuer den spaeteren, grace-gegateten DID-Release (Phase D). Additiv
+-- NULLABLE: Owner/Bestand ohne Wert -> NULL, tenantSuspendedAt faellt auf null zurueck (kein
+-- Release-Kandidat, byte-identisch zum Bestand). SET-IF-ABSENT im Code (state-ops), KEIN
+-- Backfill (ein Bestands-Tenant war vor diesem Feld nie ueber diesen Pfad markiert). Muster wie
+-- stripe_number_setup_fee_exempt/number_provision_skip_at (ALTER-only, nullable, KEIN CHECK).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS suspended_at TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

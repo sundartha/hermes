@@ -11,12 +11,14 @@ import { applyStripeWebhook, SUBSCRIPTION_EVENT } from "../src/billing/webhook.j
 // Aufzeichnende Fake-Seams: store loest den Tenant ueber subscriptionId auf (Webhook-Pfad
 // ohne tenant_ref), accounts/sessions protokollieren die Wirkungen.
 function fakeDeps({ tenantBySub = null } = {}) {
-  const calls = { setStatus: [], invalidate: [], subscription: [] };
+  const calls = { setStatus: [], invalidate: [], subscription: [], suspend: [] };
   return {
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
+      // tenant-prolif-c: Suspend stempelt den Grace-Anker.
+      setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),
     },
     accounts: { setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]) },
     sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },
