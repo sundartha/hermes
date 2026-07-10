@@ -249,7 +249,7 @@ test("Review-Blocker Runde 1 (P16/G26): resolveOrCreateTenant serialisiert ueber
   await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
 
   const lockIdx = calls.findIndex((c) => c.text.includes("pg_advisory_xact_lock"));
-  const selectIdx = calls.findIndex((c) => c.text.includes("SELECT tenant_id FROM account"));
+  const selectIdx = calls.findIndex((c) => c.text.includes("SELECT a.tenant_id FROM account"));
   assert.ok(lockIdx >= 0, "Advisory-Lock-Statement fehlt");
   assert.ok(selectIdx >= 0, "Dedup-SELECT fehlt");
   assert.ok(
@@ -312,4 +312,45 @@ test("Review-Blocker Runde 2 (G26): backfillAccountEmailCase normalisiert Bestan
     (await db.query(`SELECT email FROM account WHERE sub = 'legacy'`)).rows[0].email,
     "legacy@x.de",
   );
+});
+
+// ---- Review-Blocker Runde 3 -------------------------------------------
+
+test("Review-Blocker Runde 3 (G3/S1): aeltester Alt-Account ist closed -> neuer Tenant statt Merge-Falle", async () => {
+  const { db, accounts } = await setup();
+  // u1 zuerst -> aeltester Account fuer diese Email; sein Tenant wird danach hart
+  // geschlossen (status=closed passiert heute nur per Admin-/DB-Aktion, kein automatisierter
+  // Pfad existiert im src - direktes UPDATE simuliert genau das).
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
+  await db.query(`UPDATE tenant SET status = 'closed' WHERE id = 't_u1'`);
+
+  // Neuer sub, gleiche Email: der Dedup-SELECT darf t_u1 NICHT treffen (sonst haengt u2
+  // dauerhaft auf einem toten Tenant und bekommt nach jedem Login 403 ohne Ausweg) -> faellt
+  // in den Kein-Treffer-Pfad und bekommt einen frischen, eigenen Tenant.
+  const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@x" });
+  assert.equal(r2.tenantId, "t_u2", "closed-Tenant darf kein Merge-Ziel sein");
+  assert.equal(r2.status, "suspended", "frischer Tenant startet suspended, nicht closed");
+  assert.equal((await accounts.resolve("u2")).tenantId, "t_u2");
+  assert.equal(
+    (await db.query(`SELECT idp_subject FROM tenant WHERE id='t_u2'`)).rows[0].idp_subject,
+    "u2",
+  );
+});
+
+test("Review-Blocker Runde 3 (G3/S1): closed-Alt-Account wird uebersprungen, juengerer nicht-closed Alt-Account bleibt Merge-Ziel", async () => {
+  const { db, accounts } = await setup();
+  // Drei Accounts derselben Email, aeltester zuerst: u1 (wird closed), u2 (bleibt suspended -
+  // das erwartete Merge-Ziel), u3 (neuer Login).
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "other@x" });
+  await db.query(`UPDATE account SET email = 'shared@x' WHERE sub = 'u2'`);
+  await db.query(`UPDATE tenant SET status = 'closed' WHERE id = 't_u1'`);
+
+  const r3 = await accounts.upsertOnFirstLogin({ sub: "u3", email: "shared@x" });
+  assert.equal(
+    r3.tenantId,
+    "t_u2",
+    "Dedup muss den aeltesten NICHT-closed Alt-Account treffen, nicht den closed und nicht neu anlegen",
+  );
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 2);
 });

@@ -449,16 +449,25 @@ function normalizeEmail(email) {
 }
 
 // ---- resolveOrCreateTenant (Phase tenant-prolif-a: Email-Dedup) ------
-// Dedup-Kern am Web-Login: gehoert die (verifizierte) Email schon einem Account, gewinnt
-// dessen Tenant - aeltester zuerst (created_at ASC), deterministisch + transitiv -> KEIN
-// neuer Tenant, KEIN spaeterer DID-Kauf. Der Aufrufer schreibt den neuen sub dann nur als
-// zusaetzliche account-Zeile auf diese tenant_id (account.tenant_id ist nicht-unique). Kein
-// Treffer -> heutiges Verhalten: neuer Tenant t_<sub> mit idp_subject=sub (idempotenter
-// Upsert, ON CONFLICT aktualisiert NUR idp_subject, nie den evtl. schon aktivierten status).
-// Laeuft auf dem uebergebenen Transaktions-Client c. Die 1-Tenant-pro-Email-Invariante
-// garantiert DIESE Logik, nicht der (rein beschleunigende) account_email_idx. email kommt
-// vom Aufrufer BEREITS normalisiert (normalizeEmail, s.o.) - diese Funktion normalisiert
-// nicht selbst, sonst gaebe es zwei Normalisierungsstellen (G5).
+// Dedup-Kern am Web-Login: gehoert die (verifizierte) Email schon einem Account MIT NICHT
+// GESCHLOSSENEM Tenant, gewinnt dessen Tenant - aeltester zuerst (created_at ASC),
+// deterministisch + transitiv -> KEIN neuer Tenant, KEIN spaeterer DID-Kauf. Der Aufrufer
+// schreibt den neuen sub dann nur als zusaetzliche account-Zeile auf diese tenant_id
+// (account.tenant_id ist nicht-unique). Kein Treffer -> heutiges Verhalten: neuer Tenant
+// t_<sub> mit idp_subject=sub (idempotenter Upsert, ON CONFLICT aktualisiert NUR
+// idp_subject, nie den evtl. schon aktivierten status). Laeuft auf dem uebergebenen
+// Transaktions-Client c. Die 1-Tenant-pro-Email-Invariante garantiert DIESE Logik, nicht
+// der (rein beschleunigende) account_email_idx. email kommt vom Aufrufer BEREITS
+// normalisiert (normalizeEmail, s.o.) - diese Funktion normalisiert nicht selbst, sonst
+// gaebe es zwei Normalisierungsstellen (G5).
+//
+// Closed-Tenants sind KEIN Merge-Ziel (Review-Blocker Runde 3, G3/S1): status=closed ist
+// laut webAuthAllowPending "hart gesperrt, kein Reaktivieren". Wuerde der Dedup-SELECT einen
+// closed-Alt-Account treffen, landet ein brandneuer sub dauerhaft auf einem toten Tenant und
+// bekommt nach jedem Login 403 ohne Ausweg. Der JOIN+Status-Filter schliesst closed-Zeilen
+// aus der Kandidatenmenge aus; bleiben fuer die Email NUR closed-Alt-Accounts uebrig, liefert
+// die Query 0 Treffer und der Aufrufer faellt in den regulaeren Kein-Treffer-Pfad (neuer
+// Tenant) statt in die Merge-Falle.
 //
 // Race-Schutz (Review-Blocker Runde 1, P16/G26): ohne Lock sehen zwei simultane Erst-Logins
 // derselben brandneuen Email unter READ COMMITTED beide "kein Treffer" (keiner der beiden
@@ -471,8 +480,9 @@ function normalizeEmail(email) {
 async function resolveOrCreateTenant(c, sub, email) {
   await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [email]);
   const existing = await c.query(
-    `SELECT tenant_id FROM account WHERE email = $1 ORDER BY created_at ASC LIMIT 1`,
-    [email],
+    `SELECT a.tenant_id FROM account a JOIN tenant t ON t.id = a.tenant_id
+     WHERE a.email = $1 AND t.status <> $2 ORDER BY a.created_at ASC LIMIT 1`,
+    [email, TENANT_STATUS.CLOSED],
   );
   if (existing.rows.length > 0) return existing.rows[0].tenant_id;
   const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
