@@ -1108,3 +1108,75 @@ test("T-P2b-04: Dev-Login schreibt KEINE Identitaet (kein Body-Spoofing), mintet
     await new Promise((r) => server.close(r));
   }
 });
+
+// ---- tenant-prolif-b: mintSession bindet den (evtl. gemergten) sub in den MCP/REST-
+// Resolver-Index -----------------------------------------------------------------
+// mintSession ist die GEMEINSAME Session-Mint-Mechanik fuer Callback UND Dev-Login (G5).
+// deps.bindSub wird NACH ensureTenant aufgerufen, UNCONDITIONAL (anders als
+// applyTenantIdentity, das nur bei vorhandenem Namen schreibt) - ohne diese Verdrahtung
+// bliebe ein per Email-Merge (Phase A) gebundener Zweit-sub bis zum naechsten Boot
+// "eingefroren" (resolveTenant faende ihn nicht). Store-seitiger Beweis der Merge-
+// Aufloesung selbst: test/tenant-prolif-b.test.js.
+
+test("T-tpb-01: Callback bindet den sub via bindSub(sub, tenantId) (mintSession)", async () => {
+  const bindCalls = [];
+  const { deps } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => ({ claims: { sub: "user-1", email: "neu@kunde.de" } }),
+    },
+    bindSub: async (sub, tenantId) => bindCalls.push({ sub, tenantId }),
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 302);
+    assert.equal(bindCalls.length, 1, "bindSub genau 1x aufgerufen");
+    assert.deepEqual(bindCalls[0], { sub: "user-1", tenantId: "t_user-1" });
+  } finally {
+    await srv.close();
+  }
+});
+
+test("T-tpb-02: Dev-Login bindet den sub ebenfalls (bindSub ist UNCONDITIONAL, anders als applyTenantIdentity)", async () => {
+  const bindCalls = [];
+  const { deps } = fakeDeps({
+    devLoginEnabled: true,
+    accounts: {
+      upsertOnFirstLogin: async ({ sub }) => ({
+        tenantId: `t_${sub}`,
+        status: "suspended",
+        role: "member",
+      }),
+    },
+    bindSub: async (sub, tenantId) => bindCalls.push({ sub, tenantId }),
+  });
+  const app = express();
+  app.use(express.json());
+  app.use(makeWebAuthRoutes(deps));
+  const server = await new Promise((r) => {
+    const s = app.listen(0, "127.0.0.1", () => r(s));
+  });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/auth/dev-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sub: "dev-1", email: "dev@x.de" }),
+      redirect: "manual",
+    });
+    assert.equal(res.status, 302);
+    assert.equal(bindCalls.length, 1, "bindSub auch auf dem Dev-Login-Pfad (mintSession geteilt)");
+    assert.deepEqual(bindCalls[0], { sub: "dev-1", tenantId: "t_dev-1" });
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
+});

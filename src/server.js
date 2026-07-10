@@ -80,6 +80,7 @@ import {
 import { searchParamsForCountry, holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { geoLookupAdapter } from "./geo/registry.js";
 import { resolveOnboardCountry } from "./geo/resolve.js";
+import { checkSubAlreadyMerged } from "./onboard-guard.js";
 import { handleProvisionJob } from "./worker/provisioning.js";
 import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
@@ -1968,18 +1969,19 @@ app.post("/api/onboard", async (req, res) => {
       .status(400)
       .json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
 
-  // Onboard-Guard (tenant-prolif-b): ist der sub bereits (per Email-Merge, Phase A) an einen
-  // ANDEREN als den t_<sub>-Tenant gebunden, wuerde registerTenant einen Zweit-Tenant anlegen
-  // -> Tenant-/Nummern-Proliferation (die Wurzel dieser Kette). Fail-closed: 409, kein zweiter
-  // Tenant, kein Nummer-Request. Nur bei gesetztem sub (Operator-Pfad ohne idpSubject bleibt
-  // byte-identisch). PII-frei (kein sub im Body/Log). resolveTenant ist ein reiner Lese-Check
-  // (kein Store-Lock noetig; Operator-only, geringe Nebenlaeufigkeit).
-  if (sub) {
-    const canonical = store.resolveTenant(sub);
-    if (canonical && canonical !== tenantId) {
-      audit("onboard_denied", req, `tenant=${tenantId} grund=sub_already_merged`);
-      return res.status(409).json({ error: "Dieser Account ist bereits einem Tenant zugeordnet." });
-    }
+  // Onboard-Guard (tenant-prolif-b): reine Bedingungspruefung in onboard-guard.js
+  // (isoliert unit-testbar), hier nur die IO-Verdrahtung (audit + Response). Fail-closed:
+  // 409, kein zweiter Tenant, kein Nummer-Request. PII-frei (kein sub im Body/Log).
+  // resolveTenant ist ein reiner Lese-Check (kein Store-Lock noetig; Operator-only,
+  // geringe Nebenlaeufigkeit).
+  const onboardGuardHit = checkSubAlreadyMerged({
+    sub,
+    tenantId,
+    resolveTenant: store.resolveTenant,
+  });
+  if (onboardGuardHit) {
+    audit("onboard_denied", req, `tenant=${tenantId} grund=sub_already_merged`);
+    return res.status(onboardGuardHit.status).json({ error: onboardGuardHit.error });
   }
 
   // F2: private Summary-Nummer ist OPTIONAL. VOR dem Store-Lock gegen DIESELBE Quelle

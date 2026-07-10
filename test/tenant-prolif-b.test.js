@@ -10,6 +10,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { makePgStore } from "../src/store/pg.js";
 import { makeAccounts } from "../src/web-auth.js";
 import { tenantIdForSubject } from "../src/store/defaults.js";
+import { checkSubAlreadyMerged, SUB_ALREADY_MERGED_ERROR } from "../src/onboard-guard.js";
 
 // pglite ist ein-verbindig: withClient reicht die Instanz als Client durch (Muster
 // store-pg-idp-seed.test.js).
@@ -74,4 +75,64 @@ test("tenant-prolif-b: Onboard-Guard-Bedingung - resolveTenant(gemergt) != tenan
     tenantIdForSubject(SUB_2),
     "u2 wuerde sonst t_u2 als Zweit-Tenant erzeugen",
   );
+});
+
+// ---- checkSubAlreadyMerged (der eigentliche Onboard-Guard aus server.js, extrahiert
+// nach src/onboard-guard.js) - direkt gegen den echten pglite-hydrierten resolveTenant
+// getrieben, statt nur die Vorbedingung zu pruefen. Beweist Bedingung UND Status/Error-
+// Shape der 409-Antwort in einem Rutsch.
+test("checkSubAlreadyMerged: gemergter Zweit-sub -> 409 + Fehlertext (blockt den Zweit-Tenant-Kauf)", async () => {
+  const db = new PGlite();
+  const boot = makePgStore(runnerFor(db));
+  await boot.init();
+  const accounts = makeAccounts(runnerFor(db));
+  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
+  await accounts.upsertOnFirstLogin({ sub: SUB_2, email: SHARED_EMAIL }); // Phase-A-Merge
+  const reborn = makePgStore(runnerFor(db));
+  await reborn.init();
+  // server.js berechnet tenantId = tenantIdForSubject(sub) VOR dem Guard-Aufruf (t_u2) -
+  // exakt die Eingabe, die ein onboard-Request mit idpSubject=u2 erzeugen wuerde.
+  const result = checkSubAlreadyMerged({
+    sub: SUB_2,
+    tenantId: tenantIdForSubject(SUB_2),
+    resolveTenant: reborn.resolveTenant,
+  });
+  assert.deepEqual(result, { status: 409, error: SUB_ALREADY_MERGED_ERROR });
+});
+
+test("checkSubAlreadyMerged: Primaer-sub (canonical === tenantId) -> null (kein falscher 409)", async () => {
+  const db = new PGlite();
+  const boot = makePgStore(runnerFor(db));
+  await boot.init();
+  const accounts = makeAccounts(runnerFor(db));
+  await accounts.upsertOnFirstLogin({ sub: SUB_1, email: SHARED_EMAIL });
+  const reborn = makePgStore(runnerFor(db));
+  await reborn.init();
+  // sub1 loest auf seinen EIGENEN Tenant auf (canonical === tenantId) -> kein Merge-Fall,
+  // der Guard darf einen regulaeren Erst-/Wieder-Login nicht blocken.
+  const result = checkSubAlreadyMerged({
+    sub: SUB_1,
+    tenantId: tenantIdForSubject(SUB_1),
+    resolveTenant: reborn.resolveTenant,
+  });
+  assert.equal(result, null);
+});
+
+test("checkSubAlreadyMerged: isoliert ohne Store - unbekannter sub -> null, sub-los (Operator-Pfad) -> null", () => {
+  // Rein, kein pglite/Store noetig: resolveTenant als simpler Fake.
+  const noMatch = checkSubAlreadyMerged({
+    sub: "unbekannt",
+    tenantId: "t_unbekannt",
+    resolveTenant: () => null,
+  });
+  assert.equal(noMatch, null, "resolveTenant liefert null -> kein Treffer, kein 409");
+
+  const noSub = checkSubAlreadyMerged({
+    sub: null,
+    tenantId: "t_operator",
+    resolveTenant: () => {
+      throw new Error("resolveTenant darf ohne sub nie aufgerufen werden");
+    },
+  });
+  assert.equal(noSub, null, "Operator-Pfad ohne idpSubject bleibt byte-identisch (kein Guard)");
 });

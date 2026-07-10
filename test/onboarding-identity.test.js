@@ -8,7 +8,8 @@
 // (Store-Polling), bevor er die aktiv gewordene Nummer fuer den Inbound nutzt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startTelnyxProvisioningMock } from "./helpers.js";
+import { startServer, startTelnyxProvisioningMock, seedState } from "./helpers.js";
+import { tenantIdForSubject } from "../src/store/defaults.js";
 
 const postJson = (url, body) =>
   fetch(url, {
@@ -87,6 +88,46 @@ test("onboard mit Whitespace-idpSubject -> 400", async () => {
   try {
     const res = await postJson(`${srv.localUrl}/api/onboard`, { idpSubject: "  " });
     assert.equal(res.status, 400);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// (2d) tenant-prolif-b: onboard MIT einem BEREITS (per Email-Merge, Phase A) gemergten
+// idpSubject -> 409, KEIN Zweit-Tenant, KEIN Nummer-Request (die Wurzel dieser Kette,
+// end-to-end gegen die echte Route statt nur die Vorbedingung). Der Merge-Zustand wird
+// hier direkt geseedet (tenant.idpSubject auf einem FREMDEN Tenant-Record) - derselbe
+// resolveTenant-Fallback-Pfad (1:1-idpSubject-Scan), den auch der subIndex-Merge-Fall
+// (test/tenant-prolif-b.test.js) ueber den anderen Pfad (subIndex) trifft; beide muenden
+// im selben Guard (checkSubAlreadyMerged, src/onboard-guard.js).
+const MERGED_SUB = "sub-merged-owner";
+const CANONICAL_TENANT_ID = "t_canonical_owner"; // != tenantIdForSubject(MERGED_SUB)
+const mergedSubSeed = seedState({
+  tenants: [{ id: CANONICAL_TENANT_ID, status: "active", idpSubject: MERGED_SUB }],
+});
+
+test("onboard mit gemergtem idpSubject -> 409, kein Zweit-Tenant, keine Zweit-Nummer", async () => {
+  const srv = await startServer({ seed: mergedSubSeed });
+  try {
+    const before = srv.readStore().tenants.length;
+    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+      idpSubject: MERGED_SUB,
+      firstName: "Zweit",
+    });
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.match(body.error, /bereits einem Tenant zugeordnet/);
+    const after = srv.readStore();
+    assert.equal(after.tenants.length, before, "kein Zweit-Tenant angelegt");
+    assert.ok(
+      !after.tenants.some((t) => t.id === tenantIdForSubject(MERGED_SUB)),
+      "t_sub-merged-owner (Zweit-Tenant) wurde NICHT erzeugt",
+    );
+    assert.equal(
+      after.numbers.filter((n) => n.tenantId === tenantIdForSubject(MERGED_SUB)).length,
+      0,
+      "kein Nummer-Request fuer den verhinderten Zweit-Tenant (kein Telnyx-DID-Kauf)",
+    );
   } finally {
     await srv.stop();
   }
