@@ -190,3 +190,75 @@ test("Phase tenant-prolif-a: Fehler beim Account-INSERT rollt den neuen Tenant z
     0,
   );
 });
+
+// ---- Review-Blocker Runde 1 ------------------------------------------
+
+test("Review-Blocker Runde 1 (behaviorAsIntended): Rueckgabe-tenantId nach Repeat-Login MUSS accounts.resolve() (Autorisierung) entsprechen, auch bei Alt-Duplikat", async () => {
+  const { db, accounts } = await setup();
+  // Alt-Duplikat-Population simulieren (die eigentliche Zielgruppe der Phase, laut RCA
+  // schon in Prod vorhanden): zwei Accounts mit unterschiedlichen Tenants existieren
+  // BEREITS, bevor ihre Emails identisch werden. u1 zuerst -> aeltester Account, gewinnt
+  // spaeter den Dedup-SELECT (ORDER BY created_at ASC).
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" }); // legt t_u1 an (aelter)
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "other@x" }); // legt t_u2 an (eigener Tenant)
+  // u2s Email wird nachtraeglich identisch zu u1s (z.B. IdP-Merge) - u2 hat bereits einen
+  // EIGENEN Tenant (t_u2), lange bevor die Dedup-Logik das erste Mal fuer diese Email laeuft.
+  await db.query(`UPDATE account SET email = 'shared@x' WHERE sub = 'u2'`);
+
+  // Repeat-Login von u2 (post-fix): resolveOrCreateTenant findet u1 (aelter) als Dedup-
+  // Gewinner, ABER der ON-CONFLICT-Account-Upsert kippt u2s tenant_id NICHT (Invariante
+  // "ein Repeat-Login darf die Tenant-Bindung nicht kippen", Kommentar bei INSERT INTO
+  // account oben) - u2 bleibt auf t_u2. Die Rueckgabe von upsertOnFirstLogin MUSS exakt das
+  // treffen, was accounts.resolve() (= req.tenant, die Autorisierungsquelle in webAuth)
+  // danach liest - sonst bindet mintSession Session/ensureTenant/applyTenantIdentity an
+  // einen ANDEREN Tenant als die Autorisierung.
+  const repeat = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@x" });
+  const authz = await accounts.resolve("u2");
+
+  assert.equal(
+    repeat.tenantId,
+    authz.tenantId,
+    "Rueckgabe von upsertOnFirstLogin muss der Autorisierungsquelle (accounts.resolve) entsprechen",
+  );
+  assert.equal(repeat.tenantId, "t_u2", "Repeat-Login kippt die bestehende Tenant-Bindung NICHT");
+});
+
+test("Review-Blocker Runde 1 (P16/G26): resolveOrCreateTenant serialisiert ueber pg_advisory_xact_lock VOR dem Dedup-SELECT", async () => {
+  // Zwei echte simultane Postgres-Sessions lassen sich mit dem Single-Session-Test-Runner
+  // dieser Datei (EINE PGlite-Instanz) nicht herstellen (PGlite kennt nur eine Session -
+  // ein zweites BEGIN auf derselben Verbindung startet KEINE unabhaengige Transaktion,
+  // das Lock-Statement wuerde also nie tatsaechlich blockieren und ein Race nicht sichtbar
+  // machen). Dieser Test beweist stattdessen den VERTRAG, der das Race in echtem Postgres
+  // schliesst: der Advisory-Lock auf der Email wird VOR dem Dedup-SELECT innerhalb derselben
+  // Transaktion angefordert - pg_advisory_xact_lock() ist dokumentiertes, battle-getestetes
+  // Postgres-Verhalten (blockiert konkurrierende Sessions mit demselben Schluessel bis
+  // COMMIT/ROLLBACK), das hier nicht neu zu verifizieren ist.
+  const db = new PGlite();
+  await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
+  const calls = [];
+  const runner = {
+    withClient: (fn) =>
+      fn({
+        query: (text, params) => {
+          calls.push({ text, params });
+          return db.query(text, params);
+        },
+      }),
+  };
+  const accounts = makeAccounts(runner);
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
+
+  const lockIdx = calls.findIndex((c) => c.text.includes("pg_advisory_xact_lock"));
+  const selectIdx = calls.findIndex((c) => c.text.includes("SELECT tenant_id FROM account"));
+  assert.ok(lockIdx >= 0, "Advisory-Lock-Statement fehlt");
+  assert.ok(selectIdx >= 0, "Dedup-SELECT fehlt");
+  assert.ok(
+    lockIdx < selectIdx,
+    "Lock muss VOR dem Dedup-SELECT laufen, sonst bleibt das Race-Fenster offen",
+  );
+  assert.deepEqual(
+    calls[lockIdx].params,
+    ["shared@x"],
+    "Lock muss auf der EMAIL liegen (nicht sub/global), sonst ueber-/unterserialisiert er",
+  );
+});

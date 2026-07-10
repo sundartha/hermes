@@ -445,7 +445,17 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
 // Upsert, ON CONFLICT aktualisiert NUR idp_subject, nie den evtl. schon aktivierten status).
 // Laeuft auf dem uebergebenen Transaktions-Client c. Die 1-Tenant-pro-Email-Invariante
 // garantiert DIESE Logik, nicht der (rein beschleunigende) account_email_idx.
+//
+// Race-Schutz (Review-Blocker Runde 1, P16/G26): ohne Lock sehen zwei simultane Erst-Logins
+// derselben brandneuen Email unter READ COMMITTED beide "kein Treffer" (keiner der beiden
+// INSERTs des jeweils anderen ist zu diesem Zeitpunkt committet) und legen ZWEI Tenants an -
+// exakt die Tenant-Vermehrung, die diese Phase beheben soll. pg_advisory_xact_lock serialisiert
+// konkurrierende Logins DERSELBEN Email (haelt bis COMMIT/ROLLBACK der Transaktion c), ohne
+// andere Emails zu blockieren. hashtext() ist reine Streuung fuer den Lock-Schluessel (kein
+// Sicherheitsmerkmal) - eine seltene Kollision serialisiert hoechstens zwei UNTERSCHIEDLICHE
+// Emails unnoetig mit, aendert aber nie das Ergebnis.
 async function resolveOrCreateTenant(c, sub, email) {
+  await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [email]);
   const existing = await c.query(
     `SELECT tenant_id FROM account WHERE email = $1 ORDER BY created_at ASC LIMIT 1`,
     [email],
@@ -493,12 +503,20 @@ export function makeAccounts(runner) {
             [sub, tenantId, email],
           );
           const { rows } = await c.query(
-            `SELECT a.role, t.status FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
+            `SELECT a.tenant_id AS "tenantId", a.role, t.status
+             FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
             [sub],
           );
           await c.query("COMMIT");
-          const row = rows[0] || { role: "member", status: "suspended" };
-          return { tenantId, status: row.status, role: row.role };
+          // Zurueckgegeben wird die TATSAECHLICH gespeicherte account.tenant_id (row.tenantId),
+          // NICHT das lokal aufgeloeste Dedup-Ergebnis: bei einem bereits VORHANDENEN Account
+          // mit abweichender tenant_id (Alt-Duplikat aus der Zeit vor diesem Fix) aendert der
+          // ON-CONFLICT-UPDATE oben die Bindung NICHT. accounts.resolve() (= req.tenant, die
+          // Autorisierungsquelle in webAuth) liest danach denselben Wert - sonst binden
+          // mintSession/ensureTenant/applyTenantIdentity/session an einen ANDEREN Tenant als
+          // die Autorisierung (Review-Blocker Runde 1: Rueckgabe-vs-Autorisierung-Divergenz).
+          const row = rows[0] || { tenantId, role: "member", status: "suspended" };
+          return { tenantId: row.tenantId, status: row.status, role: row.role };
         } catch (err) {
           await c.query("ROLLBACK");
           throw err;
