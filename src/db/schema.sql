@@ -364,6 +364,14 @@ CREATE TABLE IF NOT EXISTS account (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Lookup-Index fuer die Email-Dedup am Web-Login (Phase tenant-prolif-a): der Resolver
+-- SELECT tenant_id FROM account WHERE email=$1 findet den kanonischen Tenant. BEWUSST NICHT
+-- unique - mehrere subs/Accounts pro (verifizierter) Email teilen sich denselben Tenant
+-- (Merge/B2B); ein Unique-Index wuerde genau diese Dedup brechen. Nur Beschleunigung: die
+-- 1-Tenant-pro-Email-Invariante garantiert die Dedup-Logik in web-auth.js, NICHT der Index.
+-- Idempotent (frische wie bestehende DB heilt sich beim Boot).
+CREATE INDEX IF NOT EXISTS account_email_idx ON account (email);
+
 -- session: serverseitige Sessions fuer Invalidierung (Suspend killt Session sofort).
 CREATE TABLE IF NOT EXISTS session (
   id             TEXT PRIMARY KEY,

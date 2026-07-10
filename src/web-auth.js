@@ -436,37 +436,73 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
   };
 }
 
+// ---- resolveOrCreateTenant (Phase tenant-prolif-a: Email-Dedup) ------
+// Dedup-Kern am Web-Login: gehoert die (verifizierte) Email schon einem Account, gewinnt
+// dessen Tenant - aeltester zuerst (created_at ASC), deterministisch + transitiv -> KEIN
+// neuer Tenant, KEIN spaeterer DID-Kauf. Der Aufrufer schreibt den neuen sub dann nur als
+// zusaetzliche account-Zeile auf diese tenant_id (account.tenant_id ist nicht-unique). Kein
+// Treffer -> heutiges Verhalten: neuer Tenant t_<sub> mit idp_subject=sub (idempotenter
+// Upsert, ON CONFLICT aktualisiert NUR idp_subject, nie den evtl. schon aktivierten status).
+// Laeuft auf dem uebergebenen Transaktions-Client c. Die 1-Tenant-pro-Email-Invariante
+// garantiert DIESE Logik, nicht der (rein beschleunigende) account_email_idx.
+async function resolveOrCreateTenant(c, sub, email) {
+  const existing = await c.query(
+    `SELECT tenant_id FROM account WHERE email = $1 ORDER BY created_at ASC LIMIT 1`,
+    [email],
+  );
+  if (existing.rows.length > 0) return existing.rows[0].tenant_id;
+  const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
+  await c.query(
+    `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)
+     ON CONFLICT (id) DO UPDATE SET idp_subject = EXCLUDED.idp_subject`,
+    [tenantId, sub],
+  );
+  return tenantId;
+}
+
 // ---- makeAccounts ----------------------------------------------------
 // Tenant + Account upsert beim ersten Login; Lesepfade fuer Middleware.
 export function makeAccounts(runner) {
   return {
-    // Erster Login: Tenant anlegen (suspended), Account anlegen/aktualisieren.
-    // Gibt {tenantId, status, role} zurueck.
+    // Erster Login: Tenant aufloesen (Email-Dedup) oder anlegen (suspended), Account
+    // anlegen/aktualisieren. Gibt {tenantId, status, role} zurueck.
     async upsertOnFirstLogin({ sub, email }) {
+      // email_verified-Gate (claimsFromPayload) liefert bei unverifizierter Email null. Ohne
+      // verifizierte Email KEIN Tenant/Account: definierter, geloggter Reject statt eines
+      // unbeabsichtigten NOT-NULL-Crashs (account.email NOT NULL), der heute erst NACH dem
+      // committeten Tenant-INSERT feuert und einen Orphan-Tenant hinterlaesst. PII-frei: nur
+      // der Grund, nie Email/sub loggen. Nutzer-Verhalten unveraendert (unverifiziert kann
+      // schon heute nicht einloggen), nur sauber + orphan-frei. Callback faengt -> 401.
+      if (!email) {
+        console.warn("[web-auth] Login abgelehnt: Email nicht verifiziert");
+        throw new Error("login rejected: verified email required");
+      }
+      // Tenant-Aufloesung (Dedup) + Account-Anlage in EINER Transaktion (Atomaritaet, Muster
+      // flush() in store/pg.js): schlaegt der Account-INSERT fehl, rollt der evtl. neue Tenant
+      // mit zurueck -> kein halb-committeter Orphan-Tenant.
       return runner.withClient(async (c) => {
-        const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
-        // Tenant anlegen falls nicht vorhanden (idempotent). idp_subject = sub macht
-        // den Tenant ueber i9 resolveTenant (MCP/REST-Kanal) auffindbar -> EINE
-        // Identitaetsquelle fuer beide Kanaele (Web-Login B + MCP i9). ON CONFLICT
-        // aktualisiert NUR idp_subject, nie den (evtl. schon aktivierten) status.
-        await c.query(
-          `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)
-           ON CONFLICT (id) DO UPDATE SET idp_subject = EXCLUDED.idp_subject`,
-          [tenantId, sub],
-        );
-        // Account anlegen/aktualisieren
-        await c.query(
-          `INSERT INTO account (sub, tenant_id, email, role)
-           VALUES ($1, $2, $3, 'member')
-           ON CONFLICT (sub) DO UPDATE SET email = EXCLUDED.email`,
-          [sub, tenantId, email],
-        );
-        const { rows } = await c.query(
-          `SELECT a.role, t.status FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
-          [sub],
-        );
-        const row = rows[0] || { role: "member", status: "suspended" };
-        return { tenantId, status: row.status, role: row.role };
+        await c.query("BEGIN");
+        try {
+          const tenantId = await resolveOrCreateTenant(c, sub, email);
+          // Account anlegen/aktualisieren. tenant_id bleibt bei ON CONFLICT stabil (nur email
+          // refresht) - ein Repeat-Login darf die (evtl. gemergte) Tenant-Bindung nicht kippen.
+          await c.query(
+            `INSERT INTO account (sub, tenant_id, email, role)
+             VALUES ($1, $2, $3, 'member')
+             ON CONFLICT (sub) DO UPDATE SET email = EXCLUDED.email`,
+            [sub, tenantId, email],
+          );
+          const { rows } = await c.query(
+            `SELECT a.role, t.status FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
+            [sub],
+          );
+          await c.query("COMMIT");
+          const row = rows[0] || { role: "member", status: "suspended" };
+          return { tenantId, status: row.status, role: row.role };
+        } catch (err) {
+          await c.query("ROLLBACK");
+          throw err;
+        }
       });
     },
 

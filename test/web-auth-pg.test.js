@@ -128,3 +128,65 @@ test("makeSessions.invalidateByTenant invalidiert alle aktiven Sessions des Tena
   assert.notEqual((await sessions.get(a.id)).invalidated_at, null);
   assert.notEqual((await sessions.get(b.id)).invalidated_at, null);
 });
+
+test("Phase tenant-prolif-a: zweiter verifizierter Login mit gleicher Email mergt auf denselben (aelteren) Tenant", async () => {
+  const { db, accounts } = await setup();
+  const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "shared@x" });
+  const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@x" });
+  assert.equal(r1.tenantId, "t_u1");
+  assert.equal(r2.tenantId, "t_u1"); // sub2 erbt sub1s Tenant, NICHT t_u2
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 1);
+  assert.equal(
+    (await db.query(`SELECT count(*)::int AS n FROM tenant WHERE id='t_u2'`)).rows[0].n,
+    0,
+  );
+  assert.equal(
+    (await db.query(`SELECT count(*)::int AS n FROM account WHERE email='shared@x'`)).rows[0].n,
+    2,
+  );
+  assert.equal((await accounts.resolve("u1")).tenantId, "t_u1");
+  assert.equal((await accounts.resolve("u2")).tenantId, "t_u1");
+});
+
+test("Phase tenant-prolif-a: neue verifizierte Email legt neuen Tenant an (Kein-Treffer, heutiges Verhalten)", async () => {
+  const { db, accounts } = await setup();
+  const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "a@x" });
+  const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "b@x" }); // andere Email
+  assert.equal(r1.tenantId, "t_u1");
+  assert.equal(r2.tenantId, "t_u2"); // kein Merge
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 2);
+  assert.equal(
+    (await db.query(`SELECT idp_subject FROM tenant WHERE id='t_u2'`)).rows[0].idp_subject,
+    "u2",
+  );
+});
+
+test("Phase tenant-prolif-a: unverifizierte/leere Email -> Reject, KEIN Tenant/Account (kein Orphan)", async () => {
+  const { db, accounts } = await setup();
+  await assert.rejects(() => accounts.upsertOnFirstLogin({ sub: "u1", email: null }));
+  await assert.rejects(() => accounts.upsertOnFirstLogin({ sub: "u1", email: "" }));
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 0);
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM account`)).rows[0].n, 0);
+});
+
+test("Phase tenant-prolif-a: Fehler beim Account-INSERT rollt den neuen Tenant zurueck (Transaktion, kein Orphan)", async () => {
+  const { db } = await setup();
+  // Fault-Injector: laesst BEGIN + Dedup-SELECT + Tenant-INSERT durch, wirft aber beim
+  // account-INSERT -> upsertOnFirstLogin MUSS ROLLBACK fahren und den Tenant mit zuruecknehmen.
+  const failingRunner = {
+    withClient: (fn) =>
+      fn({
+        query: (t, p) => {
+          if (typeof t === "string" && t.includes("INSERT INTO account"))
+            throw new Error("injizierter Fehler");
+          return db.query(t, p);
+        },
+      }),
+  };
+  const accounts = makeAccounts(failingRunner);
+  await assert.rejects(() => accounts.upsertOnFirstLogin({ sub: "u1", email: "a@x" }));
+  assert.equal(
+    (await db.query(`SELECT count(*)::int AS n FROM tenant WHERE id='t_u1'`)).rows[0].n,
+    0,
+  );
+});
