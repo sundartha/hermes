@@ -302,6 +302,10 @@ if (config.sessionSecret && config.storeBackend === "pg") {
         // frisch angelegten Tenant in den pg-Store-Spiegel, BEVOR der Self-Service-Subscribe-
         // Pfad eine WRITE-Store-Op (setTenantStripe etc.) ausloest, die ihn sonst nicht faende.
         ensureTenant: (tid) => store.ensureTenant(tid),
+        // tenant-prolif-b: nach dem Login den (evtl. gemergten) sub in den Resolver-Index
+        // spiegeln (mintSession), damit der MCP/REST-Kanal den kanonischen Tenant ohne Neustart
+        // aufloest. Fassade store.bindSubToTenant (beide Backends).
+        bindSub: (sub, tid) => store.bindSubToTenant(sub, tid),
         // P2b: Identitaets-Write (Vor-/Nachname aus dem verifizierten IdP-Profil) ueber die
         // Fassade in den Gate-Store - sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant.
         applyTenantIdentity,
@@ -1963,6 +1967,20 @@ app.post("/api/onboard", async (req, res) => {
     return res
       .status(400)
       .json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+
+  // Onboard-Guard (tenant-prolif-b): ist der sub bereits (per Email-Merge, Phase A) an einen
+  // ANDEREN als den t_<sub>-Tenant gebunden, wuerde registerTenant einen Zweit-Tenant anlegen
+  // -> Tenant-/Nummern-Proliferation (die Wurzel dieser Kette). Fail-closed: 409, kein zweiter
+  // Tenant, kein Nummer-Request. Nur bei gesetztem sub (Operator-Pfad ohne idpSubject bleibt
+  // byte-identisch). PII-frei (kein sub im Body/Log). resolveTenant ist ein reiner Lese-Check
+  // (kein Store-Lock noetig; Operator-only, geringe Nebenlaeufigkeit).
+  if (sub) {
+    const canonical = store.resolveTenant(sub);
+    if (canonical && canonical !== tenantId) {
+      audit("onboard_denied", req, `tenant=${tenantId} grund=sub_already_merged`);
+      return res.status(409).json({ error: "Dieser Account ist bereits einem Tenant zugeordnet." });
+    }
+  }
 
   // F2: private Summary-Nummer ist OPTIONAL. VOR dem Store-Lock gegen DIESELBE Quelle
   // pruefen (normalizePrivateNumber, G5), damit ungueltige Eingaben als 400 statt 503

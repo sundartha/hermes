@@ -80,6 +80,11 @@ export function makeDefaultState() {
     // (json.save schliesst es aus), nie in pg (kein Flush) -> ein Neustart startet bei 0
     // (korrekt: ein Boot toetet in-flight Calls, A6). Money at rest = Ganzzahl Cents (G26).
     reservations: {},
+    // sub -> tenantId Resolver-Index (tenant-prolif-b). MERGE-OVERLAY fuer resolveTenant:
+    // traegt die per Email-Merge (Phase A) an einen FREMDEN Tenant gebundenen Zweit-subs,
+    // die NICHT als tenant.idpSubject gespiegelt sind. pg fuellt ihn bei init() aus account
+    // + beim Nach-Boot-Login; strukturell EPHEMER (nie auf Platte, jeden Boot neu -> kein Drift).
+    subIndex: {},
   };
 }
 
@@ -1597,8 +1602,27 @@ export function resolveProfile(s, tenantId) {
 // Identitaet ODER null: leere/null/unbekannte Identitaet -> null (Reject), NIE
 // BOOTSTRAP_TENANT_ID. Ein Default-Tenant hier wuerde den ganzen Tenant-Scope (I5/I6/I7)
 // umgehbar machen. 1:1 (#2): genau eine tenantId ODER null, keine Liste. Keyt auf idpSubject (#1).
+// Defensiver In-Memory-Index-Accessor (Muster tenantsOf): seedState-/Legacy-Stores ohne
+// subIndex -> leeres Objekt, kein Crash.
+const subIndexOf = (s) => s.subIndex || {};
+
+// Bindet einen OIDC-sub im Resolver-Index an seinen (kanonischen) Tenant (tenant-prolif-b).
+// Nebeneffekt im Namen (N7). Rein In-Memory, KEIN IO/Flush: account persistiert der Web-
+// Login-Pfad selbst, der Index wird jeden Boot aus account neu aufgebaut. Leerer sub/tenantId
+// -> No-Op (fail-closed, kein Muell-Key). Defensiv (subIndex ||=).
+export function bindSubToTenant(s, sub, tenantId) {
+  if (!sub || !tenantId) return;
+  (s.subIndex ||= {})[sub] = tenantId;
+}
+
 export function resolveTenant(s, idpSubject) {
   if (!idpSubject) return null; // leer/null NICHT iterieren -> kein versehentlicher Owner-Fallback
+  // Der sub->tenantId-Index hat VORRANG (Invariante tenant-prolif-b: "Index Vorrang oder
+  // idp_subject reine Anzeigespalte"): er traegt die per Email-Merge (Phase A) gebundenen
+  // Zweit-subs, die NICHT als tenant.idpSubject gespiegelt sind. Index-Miss -> Fallback auf
+  // den 1:1-idpSubject-Scan (Owner-Seed/Onboarding/Primaer-Login; unter json der einzige Pfad).
+  const merged = subIndexOf(s)[idpSubject];
+  if (merged) return merged;
   const tenant = tenantsOf(s).find((t) => t.idpSubject === idpSubject);
   return tenant ? tenant.id : null;
 }

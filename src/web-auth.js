@@ -131,6 +131,9 @@ export function makeWebAuthRoutes(deps) {
   // P2b-Identitaets-Write (DI wie ensureTenant; Default async No-Op -> Bestands-Auth-Tests
   // ohne diesen Dep bleiben gruen). Schreibt Vor-/Nachname set-if-absent in den Gate-Store.
   const applyTenantIdentity = deps.applyTenantIdentity || (async () => {});
+  // tenant-prolif-b: Spiegel-Bindung des (evtl. per Email-Merge gebundenen) sub in den
+  // Resolver-Index (DI wie ensureTenant; Default No-Op -> Bestands-Auth-Tests unveraendert).
+  const bindSub = deps.bindSub || (async () => {});
   // Login-Flow-Cookie-TTL (state/pkce/nonce) per DI (Muster ttlSeconds): Produktion reicht
   // config.loginCookieTtlSeconds durch, Tests fallen auf den Default zurueck. `??` ehrt eine
   // explizite 0 (min:0 in config).
@@ -151,6 +154,11 @@ export function makeWebAuthRoutes(deps) {
     // oeffnet KEIN Gate (fehlt der Spiegel-Tenant, werfen die Setter weiter fail-CLOSED -
     // der alte 502, nie suspended-sieht-aktiv-aus). Deckt Callback UND Dev-Login (G5).
     await ensureTenant(tenantId);
+    // tenant-prolif-b: den (evtl. per Email-Merge auf einen FREMDEN Tenant gebundenen) sub in
+    // den MCP/REST-Resolver-Index spiegeln, damit resolveTenant den kanonischen Tenant OHNE
+    // Neustart auffindet (schliesst die "idp_subject eingefroren"-Landmine). NACH ensureTenant
+    // (Tenant ist jetzt im Spiegel); FAIL-OPEN wie ensureTenant (reiner Betriebs-Cache).
+    await bindSub(sub, tenantId);
     // P2b: Vor-/Nachname (aus dem verifizierten IdP-Profil) set-if-absent in den Gate-Store
     // schreiben, sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant fail-closed. NUR
     // wenn ein Name vorliegt (Dev-Login/namloses Profil -> kein unnoetiger Store-Lock, kein

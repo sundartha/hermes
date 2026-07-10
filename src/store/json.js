@@ -54,6 +54,7 @@ export function load() {
     state.tenantBudgets ||= []; // P6b3: per-Tenant-Kostendecke nachziehen
     state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
+    state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3):
     // erst forensisch nach .corrupt-<ts> sichern, LAUT loggen, dann mit Defaults weiter
@@ -238,8 +239,9 @@ export function save() {
     // Destrukturierung schliesst genau diesen Key aus JEDEM save() aus (kein fragiler
     // load()-Reset, Pre-Mortem MAJOR 3); der In-Prozess-state.reservations akkumuliert
     // prozessweit weiter korrekt, nur die PLATTE ist per Konstruktion reserve-frei. Die
-    // reservations-Bindung existiert allein zum Weglassen (idiomatisches rest-omit, kein Muell).
-    const { reservations, ...persisted } = state;
+    // reservations UND subIndex sind strukturell ephemer (nie auf Platte): idiomatisches
+    // rest-omit (tenant-prolif-b: der Index wird jeden Boot neu aufgebaut, kein Persist-Drift).
+    const { reservations, subIndex, ...persisted } = state;
     // F9 (A6): _finished ist ein transienter In-Prozess-Dedup-Marker von finishCall
     // (server.js) - NIE auf Platte, wie reservations. Ein persistiertes _finished wuerde nach
     // einem Restart die (idempotente) Abrechnung ueberspringen (Unter-Zaehlung). Der persistierte
@@ -620,6 +622,15 @@ export function resolveProfile(tenantId) {
 // Tenant-Aufloesung (I4): reine Query, kein save (analog resolveProfile).
 export function resolveTenant(idpSubject) {
   return ops.resolveTenant(load(), idpSubject);
+}
+
+// tenant-prolif-b: Fassaden-Parity (store.js re-exportiert fuer BEIDE Backends; ohne diesen
+// Export waere store.bindSubToTenant undefined -> TypeError beim mintSession-DI-Aufruf).
+// Unter json gibt es keinen Email-Merge (kein account/Web-Login) -> der idpSubject-Fallback in
+// resolveTenant deckt 1:1 bereits ab; diese Mutation haelt den Index nur konsistent. KEIN save
+// (Index ist ephemer, save() schliesst subIndex ohnehin aus).
+export function bindSubToTenant(sub, tenantId) {
+  ops.bindSubToTenant(load(), sub, tenantId);
 }
 
 // Nach-Boot-Spiegel-Nachzug eines Tenants (Signup-Hydrierung): No-Op im json-Backend.

@@ -13,13 +13,14 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { resolveTenant } from "../src/store/state-ops.js";
+import { resolveTenant, bindSubToTenant } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Konstanten statt Magic-Strings (G25).
 const TENANT_B = "B";
 const SUB_B = "sub-b";
 const UNKNOWN_SUB = "sub-unbekannt";
+const MERGED_SUB = "sub-merged"; // tenant-prolif-b: per Email-Merge an TENANT_B gebundener Zweit-sub
 
 let jsonBackend;
 let makePgTestStore;
@@ -63,6 +64,22 @@ test("resolveTenant: bekannter idpSubject -> dessen tenantId", () => {
 test("resolveTenant: 1:1 -> genau ein Treffer (Einzelwert, keine Liste)", () => {
   const id = resolveTenant(seedWithTenantB(), SUB_B);
   assert.equal(typeof id, "string"); // Einzelwert, kein Array (#2)
+});
+
+// --- tenant-prolif-b: subIndex-Vorrang + defensiver bindSubToTenant ---
+test("resolveTenant: subIndex hat Vorrang (Merge-Overlay ueberlagert idpSubject-Fallback)", () => {
+  const s = seedWithTenantB();
+  bindSubToTenant(s, MERGED_SUB, TENANT_B); // Zweit-sub via Index auf TENANT_B gebunden
+  assert.equal(resolveTenant(s, MERGED_SUB), TENANT_B, "nur ueber den Index aufloesbar");
+  assert.equal(resolveTenant(s, SUB_B), TENANT_B, "Fallback (idpSubject) bleibt unveraendert");
+});
+
+test("bindSubToTenant: leerer sub/tenantId -> No-Op (fail-closed, kein Muell-Key)", () => {
+  const s = seedState({});
+  bindSubToTenant(s, "", "t");
+  bindSubToTenant(s, "s", "");
+  assert.equal(resolveTenant(s, ""), null);
+  assert.equal(resolveTenant(s, "s"), null);
 });
 
 // --- Re-Export-Parity (R6): zahlfrei, jeder erwartete Name typeof function ---

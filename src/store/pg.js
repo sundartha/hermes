@@ -418,6 +418,12 @@ export function makePgStore(runner) {
     resolveProfile: (tenantId) => ops.resolveProfile(requireState(), tenantId),
     // Tenant-Aufloesung (I4): liest den hydrierten Spiegel (Wrapper-Parity zu json.js).
     resolveTenant: (idpSubject) => ops.resolveTenant(requireState(), idpSubject),
+    // tenant-prolif-b: Nach-Boot-Bindung eines sub in den In-Memory-Merge-Index (reine
+    // Spiegel-Mutation, KEIN save/DB-Write: account persistiert der Web-Login-Pfad, der Index
+    // wird jeden Boot aus account neu gebaut). mintSession ruft das nach dem Account-Upsert,
+    // damit ein frisch (Phase A) gemergter Zweit-sub OHNE Neustart aufloest (Landmine "idp_subject
+    // eingefroren"). ops.bindSubToTenant kann post-init nicht werfen -> kein try/catch noetig.
+    bindSubToTenant: (sub, tenantId) => ops.bindSubToTenant(requireState(), sub, tenantId),
 
     // Nach-Boot-Spiegel-Nachzug eines einzelnen Tenants (Signup-Hydrierung). Der OIDC-
     // Web-Login (accounts.upsertOnFirstLogin) legt die tenant-Zeile NACH dem Boot in der
@@ -513,6 +519,7 @@ async function hydrate(client) {
   // haengt nicht mehr an app.current_tenant (Policy profile_global, USING(true)) - die
   // gesetzte GUC ist fuer diesen Read irrelevant. EIN Read, nicht pro Tenant.
   state.profiles = await hydrateProfiles(client);
+  await hydrateSubIndex(client, state); // tenant-prolif-b: Merge-Overlay aus account
   return state;
 }
 
@@ -521,6 +528,15 @@ async function hydrate(client) {
 async function hydrateProfiles(client) {
   const rows = (await client.query(`SELECT tenant_id, data FROM profile`)).rows;
   return Object.fromEntries(rows.map((r) => [r.tenant_id, r.data]));
+}
+
+// tenant-prolif-b: den sub->tenantId-Resolver-Index aus der account-Tabelle fuellen. account
+// ist RLS-EXEMPT (Resolver-Pfad laeuft VOR app.current_tenant) -> EIN globaler Read ohne
+// GUC/Tenant-Filter (Muster hydrateProfiles). Jede Zeile - auch die per Email-Merge auf einen
+// fremden Tenant gebundenen Zweit-subs - ueber die EINE Index-Mutation (bindSubToTenant, G5).
+async function hydrateSubIndex(client, state) {
+  const rows = (await client.query(`SELECT sub, tenant_id FROM account`)).rows;
+  for (const r of rows) ops.bindSubToTenant(state, r.sub, r.tenant_id);
 }
 
 // Spalten der tenant-Tabelle, geteilt von hydrateTenants (Boot-Hydrierung) UND

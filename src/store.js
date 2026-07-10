@@ -125,6 +125,10 @@ export const {
   deleteProfile,
   tenantContext,
   resolveTenant,
+  // tenant-prolif-b: Nach-Boot-Bindung eines (evtl. gemergten) sub in den Resolver-Index.
+  // Beide Backends exportieren die Fn -> die Fassade ist die EINE Quelle; ohne diesen Re-Export
+  // waere store.bindSubToTenant undefined -> mintSession (web-auth) wuerfe zur Laufzeit TypeError.
+  bindSubToTenant,
   // Signup-Spiegel-Nachzug: pg zieht einen nach Boot per Web-Login angelegten Tenant in den
   // Spiegel (sonst werfen die WRITE-Setter auf dem Subscribe-Pfad fail-closed); json = No-Op.
   // OHNE diesen Re-Export waere store.ensureTenant undefined -> mintSession (web-auth) UND
