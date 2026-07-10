@@ -49,6 +49,20 @@ export async function backfillPeriodStart(db) {
   }
 }
 
+// Einmaliger, idempotenter Backfill (Review-Blocker Runde 2, Phase tenant-prolif-a, G26):
+// Bestandszeilen aus der Zeit VOR der Email-Normalisierung (trim+lowercase, web-auth.js
+// normalizeEmail) koennen abweichende Gross-/Kleinschreibung tragen. Ohne Backfill vergliche
+// der Dedup-SELECT einen normalisierten Neu-Login gegen eine unnormalisiert gespeicherte
+// Bestandszeile derselben Adresse und faende sie nicht -> genau die Tenant-Vermehrung, die
+// diese Phase schliessen soll. Nach dem ersten Lauf 0 Treffer (Idempotenz). account hat
+// keine RLS -> keine GUC noetig (Muster wie backfillPeriodStart). Laeuft NACH
+// rekeyProfilesToTenant: die dortige Join-Bedingung (a.email = p.tenant_id) bleibt so exakt
+// wie vor diesem Fix, unabhaengig davon, welche Schreibweise historische profile.tenant_id-
+// Schluessel tragen.
+export async function backfillAccountEmailCase(db) {
+  await db.query(`UPDATE account SET email = lower(trim(email)) WHERE email <> lower(trim(email))`);
+}
+
 // Phase S: re-keyt die globale profile-Tabelle von email- auf tenantId-Schluessel (die
 // reale Live-Heilung, LIVE=pg). applySchema hat die Spalte da schon von email auf tenant_id
 // umbenannt; die DATEN-Schluessel (email-Werte) hebt diese Migration ueber den account-Join
@@ -141,5 +155,6 @@ export async function migrate(db, tenantId) {
   await applySchema(db);
   await backfillPeriodStart(db);
   await rekeyProfilesToTenant(db);
+  await backfillAccountEmailCase(db);
   await seedDefaults(db, tenantId);
 }

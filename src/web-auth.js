@@ -436,6 +436,18 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
   };
 }
 
+// Normalisiert eine Email fuer Speicherung UND Vergleich (Review-Blocker Runde 2, G26):
+// trim+lowercase EINMAL an der Login-Grenze (upsertOnFirstLogin), BEVOR der normalisierte
+// Wert an den Dedup-SELECT, den Advisory-Lock-Key (beide in resolveOrCreateTenant) und den
+// account.email-Schreibpfad weitergereicht wird - Speicherform und Vergleichsform muessen
+// uebereinstimmen. Ohne das matchen zwei Schreibweisen derselben Adresse (z.B. Autofill-
+// Varianten wie "User@X" vs "user@x") den Dedup-SELECT nicht und legen weiterhin zwei
+// Tenants an - exakt das Symptom, das diese Phase schliessen soll. Kein String (null/
+// undefined) bleibt unveraendert; der Aufrufer prueft den Wahrheitswert danach.
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : email;
+}
+
 // ---- resolveOrCreateTenant (Phase tenant-prolif-a: Email-Dedup) ------
 // Dedup-Kern am Web-Login: gehoert die (verifizierte) Email schon einem Account, gewinnt
 // dessen Tenant - aeltester zuerst (created_at ASC), deterministisch + transitiv -> KEIN
@@ -444,7 +456,9 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
 // Treffer -> heutiges Verhalten: neuer Tenant t_<sub> mit idp_subject=sub (idempotenter
 // Upsert, ON CONFLICT aktualisiert NUR idp_subject, nie den evtl. schon aktivierten status).
 // Laeuft auf dem uebergebenen Transaktions-Client c. Die 1-Tenant-pro-Email-Invariante
-// garantiert DIESE Logik, nicht der (rein beschleunigende) account_email_idx.
+// garantiert DIESE Logik, nicht der (rein beschleunigende) account_email_idx. email kommt
+// vom Aufrufer BEREITS normalisiert (normalizeEmail, s.o.) - diese Funktion normalisiert
+// nicht selbst, sonst gaebe es zwei Normalisierungsstellen (G5).
 //
 // Race-Schutz (Review-Blocker Runde 1, P16/G26): ohne Lock sehen zwei simultane Erst-Logins
 // derselben brandneuen Email unter READ COMMITTED beide "kein Treffer" (keiner der beiden
@@ -470,6 +484,22 @@ async function resolveOrCreateTenant(c, sub, email) {
   return tenantId;
 }
 
+// Gemeinsamer Lese-Baustein (Review-Blocker Runde 2, G5): EIN JOIN/WHERE fuer Account+
+// Tenant-Status ueber sub. Zwei Aufrufer teilen sich das: resolve() (Autorisierungs-
+// Lesepfad der Middleware) und der Post-Commit-Readback in upsertOnFirstLogin (liest die
+// soeben geschriebene Zeile INNERHALB derselben Transaktion, VOR dem COMMIT - deshalb der
+// durchgereichte Client c statt runner.withClient). Vorher fast identische Queries an zwei
+// Stellen (eine Obermenge der anderen um a.sub/a.email) - ein kuenftiger Spalten-/Join-
+// Wechsel musste an beiden nachgezogen werden. Liefert null, wenn kein Account existiert.
+async function selectAccountAuth(c, sub) {
+  const { rows } = await c.query(
+    `SELECT a.sub, a.email, a.role, a.tenant_id AS "tenantId", t.status
+     FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
+    [sub],
+  );
+  return rows[0] || null;
+}
+
 // ---- makeAccounts ----------------------------------------------------
 // Tenant + Account upsert beim ersten Login; Lesepfade fuer Middleware.
 export function makeAccounts(runner) {
@@ -477,13 +507,20 @@ export function makeAccounts(runner) {
     // Erster Login: Tenant aufloesen (Email-Dedup) oder anlegen (suspended), Account
     // anlegen/aktualisieren. Gibt {tenantId, status, role} zurueck.
     async upsertOnFirstLogin({ sub, email }) {
+      // Email einmal zentral normalisieren (normalizeEmail, s.o.) - VOR dem email_verified-
+      // Reject-Gate, damit eine reine Whitespace-Email (nach Trim leer) denselben Reject
+      // ausloest wie eine fehlende. Der normalisierte Wert reist danach unveraendert weiter
+      // an resolveOrCreateTenant (Dedup-SELECT + Advisory-Lock-Key) UND den account.email-
+      // Schreibpfad unten - EINE Normalisierungsstelle, Speicher- und Vergleichsform
+      // stimmen damit garantiert ueberein.
+      const normalizedEmail = normalizeEmail(email);
       // email_verified-Gate (claimsFromPayload) liefert bei unverifizierter Email null. Ohne
       // verifizierte Email KEIN Tenant/Account: definierter, geloggter Reject statt eines
       // unbeabsichtigten NOT-NULL-Crashs (account.email NOT NULL), der heute erst NACH dem
       // committeten Tenant-INSERT feuert und einen Orphan-Tenant hinterlaesst. PII-frei: nur
       // der Grund, nie Email/sub loggen. Nutzer-Verhalten unveraendert (unverifiziert kann
       // schon heute nicht einloggen), nur sauber + orphan-frei. Callback faengt -> 401.
-      if (!email) {
+      if (!normalizedEmail) {
         console.warn("[web-auth] Login abgelehnt: Email nicht verifiziert");
         throw new Error("login rejected: verified email required");
       }
@@ -493,20 +530,16 @@ export function makeAccounts(runner) {
       return runner.withClient(async (c) => {
         await c.query("BEGIN");
         try {
-          const tenantId = await resolveOrCreateTenant(c, sub, email);
+          const tenantId = await resolveOrCreateTenant(c, sub, normalizedEmail);
           // Account anlegen/aktualisieren. tenant_id bleibt bei ON CONFLICT stabil (nur email
           // refresht) - ein Repeat-Login darf die (evtl. gemergte) Tenant-Bindung nicht kippen.
           await c.query(
             `INSERT INTO account (sub, tenant_id, email, role)
              VALUES ($1, $2, $3, 'member')
              ON CONFLICT (sub) DO UPDATE SET email = EXCLUDED.email`,
-            [sub, tenantId, email],
+            [sub, tenantId, normalizedEmail],
           );
-          const { rows } = await c.query(
-            `SELECT a.tenant_id AS "tenantId", a.role, t.status
-             FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
-            [sub],
-          );
+          const row = await selectAccountAuth(c, sub);
           await c.query("COMMIT");
           // Zurueckgegeben wird die TATSAECHLICH gespeicherte account.tenant_id (row.tenantId),
           // NICHT das lokal aufgeloeste Dedup-Ergebnis: bei einem bereits VORHANDENEN Account
@@ -515,8 +548,8 @@ export function makeAccounts(runner) {
           // Autorisierungsquelle in webAuth) liest danach denselben Wert - sonst binden
           // mintSession/ensureTenant/applyTenantIdentity/session an einen ANDEREN Tenant als
           // die Autorisierung (Review-Blocker Runde 1: Rueckgabe-vs-Autorisierung-Divergenz).
-          const row = rows[0] || { tenantId, role: "member", status: "suspended" };
-          return { tenantId: row.tenantId, status: row.status, role: row.role };
+          const result = row || { tenantId, role: "member", status: "suspended" };
+          return { tenantId: result.tenantId, status: result.status, role: result.role };
         } catch (err) {
           await c.query("ROLLBACK");
           throw err;
@@ -526,14 +559,7 @@ export function makeAccounts(runner) {
 
     // Liest Account + Tenant fuer die Session-Middleware.
     async resolve(sub) {
-      return runner.withClient(async (c) => {
-        const { rows } = await c.query(
-          `SELECT a.sub, a.email, a.role, a.tenant_id AS "tenantId", t.status
-           FROM account a JOIN tenant t ON t.id = a.tenant_id WHERE a.sub = $1`,
-          [sub],
-        );
-        return rows[0] || null;
-      });
+      return runner.withClient((c) => selectAccountAuth(c, sub));
     },
 
     // A2-Bruecke (Achsen-Bruch A9): die Aktivierung kennt nur tenantId, das Profil keyt

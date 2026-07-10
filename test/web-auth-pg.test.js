@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { applySchema } from "../src/db/migrate.js";
+import { applySchema, backfillAccountEmailCase } from "../src/db/migrate.js";
 import { makeAccounts, makeSessions } from "../src/web-auth.js";
 
 async function setup() {
@@ -260,5 +260,56 @@ test("Review-Blocker Runde 1 (P16/G26): resolveOrCreateTenant serialisiert ueber
     calls[lockIdx].params,
     ["shared@x"],
     "Lock muss auf der EMAIL liegen (nicht sub/global), sonst ueber-/unterserialisiert er",
+  );
+});
+
+// ---- Review-Blocker Runde 2 -------------------------------------------
+
+test("Review-Blocker Runde 2 (G26): case-abweichende Schreibweise derselben Email dedupt trotzdem auf denselben (aeltesten) Tenant", async () => {
+  const { db, accounts } = await setup();
+  // Autofill-/Copy-Paste-Varianten derselben realen Adresse - VOR dem Fix matchte der
+  // case-sensitive Dedup-SELECT das nicht und legte einen zweiten Tenant an.
+  const r1 = await accounts.upsertOnFirstLogin({ sub: "u1", email: "Shared@Example.com" });
+  const r2 = await accounts.upsertOnFirstLogin({ sub: "u2", email: "shared@example.com" });
+  assert.equal(r1.tenantId, "t_u1");
+  assert.equal(r2.tenantId, "t_u1", "Gross-/Kleinschreibung darf nicht als andere Email zaehlen");
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 1);
+  assert.equal((await accounts.resolve("u2")).tenantId, "t_u1");
+});
+
+test("Review-Blocker Runde 2 (G26): account.email wird trim+lowercase persistiert (Speicherform = Vergleichsform)", async () => {
+  const { db, accounts } = await setup();
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "  User@X.De  " });
+  const row = await db.query(`SELECT email FROM account WHERE sub = 'u1'`);
+  assert.equal(row.rows[0].email, "user@x.de");
+});
+
+test("Review-Blocker Runde 2 (G26): reine Whitespace-Email wird wie eine fehlende Email abgelehnt (kein Orphan-Tenant)", async () => {
+  const { db, accounts } = await setup();
+  await assert.rejects(() => accounts.upsertOnFirstLogin({ sub: "u1", email: "   " }));
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM tenant`)).rows[0].n, 0);
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM account`)).rows[0].n, 0);
+});
+
+test("Review-Blocker Runde 2 (G26): backfillAccountEmailCase normalisiert Bestandszeilen idempotent (Migrations-Backfill)", async () => {
+  const db = new PGlite();
+  await applySchema({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) });
+  // Bestandszeile aus der Zeit VOR der Normalisierung: direkt eingefuegt (nicht ueber
+  // upsertOnFirstLogin, das schon normalisiert) - simuliert uneinheitliche Prod-Altdaten.
+  await db.query(`INSERT INTO tenant (id, status) VALUES ('t_legacy', 'suspended')`);
+  await db.query(
+    `INSERT INTO account (sub, tenant_id, email, role) VALUES ('legacy', 't_legacy', 'Legacy@X.De', 'member')`,
+  );
+  const migrateDb = { query: (t, p) => db.query(t, p) };
+  await backfillAccountEmailCase(migrateDb);
+  assert.equal(
+    (await db.query(`SELECT email FROM account WHERE sub = 'legacy'`)).rows[0].email,
+    "legacy@x.de",
+  );
+  // Zweiter Lauf: WHERE-Filter trifft 0 Zeilen -> kein Drift (Idempotenz, Muster backfillPeriodStart).
+  await backfillAccountEmailCase(migrateDb);
+  assert.equal(
+    (await db.query(`SELECT email FROM account WHERE sub = 'legacy'`)).rows[0].email,
+    "legacy@x.de",
   );
 });
