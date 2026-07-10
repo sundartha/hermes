@@ -2,12 +2,14 @@
 // invalidateByTenant/audit. Baut die server.js-Routen auf einer Wegwerf-App nach
 // (in-process pglite). Beweist: Nicht-Admin -> 403; Admin approve -> active +
 // Audit; Admin suspend -> suspended + ALLE Sessions des Tenants invalidiert + Audit.
+// store kommt aus makePgTestStore (pg-helpers, G5: gleicher Helper wie die anderen
+// pg-Tests) - accounts/sessions/audit teilen sich DESSEN runner/db, damit approve
+// UND der pg-Store-Spiegel (suspended_at-Anchor) auf derselben Instanz laufen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { PGlite } from "@electric-sql/pglite";
-import { applySchema } from "../src/db/migrate.js";
+import { makePgTestStore } from "./pg-helpers.js";
 import {
   webAuth,
   adminOnly,
@@ -22,9 +24,7 @@ const SECRET = "admin-test-secret-0123456789";
 const ADMIN_EMAILS = ["admin@x"];
 
 async function setup() {
-  const db = new PGlite();
-  await applySchema({ query: (t, p) => db.query(t, p), exec: (s) => db.exec(s) });
-  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) };
+  const { store, db, runner } = await makePgTestStore();
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
   const auditStore = makeAuditStore(runner);
@@ -46,13 +46,14 @@ async function setup() {
   const app = express();
   // Produktions-Router (server.js nutzt dieselbe Factory) -> der Test prueft den
   // echten Handler, keine handkopierte Replik.
-  app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
+  app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
   const server = await new Promise((r) => {
     const s = app.listen(0, "127.0.0.1", () => r(s));
   });
   return {
     base: `http://127.0.0.1:${server.address().port}`,
     db,
+    store,
     accounts,
     sessions,
     adminSession,
@@ -105,6 +106,35 @@ test("Admin approve -> Tenant active + Audit", async () => {
     const rows = (await s.db.query(`SELECT action FROM audit_log WHERE tenant_id='t_target1'`))
       .rows;
     assert.ok(rows.some((r) => r.action === "tenant_approve"));
+  } finally {
+    await s.close();
+  }
+});
+
+// Review-Blocker G3 (tenant-prolif-c, Invariante 2): Admin-approve ist der DRITTE
+// Reaktivierungspfad neben Webhook-Activate/Self-Service-Subscribe (activatePaidTenant)
+// und lief bisher NICHT ueber store.clearSuspendedAt - ein per Stripe suspendierter,
+// manuell reaktivierter Tenant behielt einen stale Grace-Anker. store.ensureTenant zieht
+// den Tenant in den pg-Spiegel (Muster: Web-Login mintSession macht das VOR jeder
+// Billing-Aktion in Produktion), danach stempelt setSuspendedAtIfAbsent den Anchor wie
+// die echte Stripe-Suspendierung (billing/webhook.js SUSPEND).
+test("Admin approve nach Stripe-Suspendierung -> Grace-Anker geloescht (G3-Fix)", async () => {
+  const s = await setup();
+  try {
+    await s.accounts.upsertOnFirstLogin({ sub: "target1", email: "t@x" });
+    await s.accounts.setStatus("t_target1", "active");
+    await s.store.ensureTenant("t_target1");
+    s.store.setSuspendedAtIfAbsent("t_target1");
+    assert.notEqual(s.store.tenantSuspendedAt("t_target1"), null, "Vorbedingung: Anker gesetzt");
+
+    const res = await post(`${s.base}/api/admin/tenants/t_target1/approve`, s.adminSession);
+    assert.equal(res.status, 200);
+    assert.equal((await s.accounts.resolve("target1")).status, "active");
+    assert.equal(
+      s.store.tenantSuspendedAt("t_target1"),
+      null,
+      "Grace-Anker nach Admin-approve geloescht (kein stale Release-Kandidat)",
+    );
   } finally {
     await s.close();
   }

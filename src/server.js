@@ -330,8 +330,9 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
     // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben
     // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
-    // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404.
-    app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw }));
+    // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404. store: approve
+    // loescht den suspended_at-Grace-Anker (tenant-prolif-c Invariante 2, G3-Fix).
+    app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
 
     // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
     // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am

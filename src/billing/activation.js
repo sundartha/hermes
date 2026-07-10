@@ -62,8 +62,10 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
   await accounts.setStatus(tenant, "active");
   // tenant-prolif-c (Invariante 2): der Tenant ist wieder active -> den Grace-Anker loeschen, die
-  // Suspend-Uhr ist zurueckgesetzt (kein Release-Kandidat mehr). EINE Reaktivierungsquelle (G5) fuer
-  // Webhook-Activate UND Self-Service-Subscribe. Idempotent (No-Op ohne gesetzten Anker).
+  // Suspend-Uhr ist zurueckgesetzt (kein Release-Kandidat mehr). Ruft denselben Store-Primitiv
+  // (store.clearSuspendedAt, G5) wie der dritte Reaktivierungspfad Admin-approve (web-auth.js) -
+  // der laeuft NICHT hier durch (kein Zahlungsereignis), muss aber dieselbe Invariante wahren.
+  // Idempotent (No-Op ohne gesetzten Anker).
   store.clearSuspendedAt(tenant);
   // VOR provision(tenant): das ausgeloeste, idempotente Nummern-Provisioning kann
   // asynchron sehr schnell in den echten placeHold laufen (Provisioning-Drain,

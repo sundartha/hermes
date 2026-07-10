@@ -736,8 +736,16 @@ export function adminOnly(deps) {
 // Test denselben Handler nutzen (keine handkopierte Route-Replik, G5). suspend
 // invalidiert sofort alle Sessions des Tenants (gesperrter Kunde kann nicht bis
 // Cookie-Expiry weiterlesen). Jede Aktion auditiert; nicht-existenter Tenant ->
-// 404 (kein silent-noop, kein Audit-Eintrag fuer eine Phantom-Tenant-ID).
-export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw }) {
+// 404 (kein silent-noop, kein Audit-Eintrag fuer eine Phantom-Tenant-ID). approve
+// ist der DRITTE Reaktivierungspfad neben Webhook-Activate und Self-Service-
+// Subscribe (billing/activation.js) - er laeuft NICHT durch activatePaidTenant
+// (kein Zahlungsereignis, kein KYC/Provisioning), muss aber dieselbe Invariante 2
+// wahren: ein Stripe-suspendierter Tenant, der manuell freigegeben wird, darf
+// keinen stehenden suspended_at-Anchor behalten (sonst haelt ihn der spaetere
+// DID-Release-Klassifizierer faelschlich fuer einen Kandidaten). Ruft dafuer
+// denselben Store-Primitiv (store.clearSuspendedAt, G5) wie activatePaidTenant -
+// KEIN Umweg ueber die Zahlungs-Komposition, die hier fachlich nicht passt.
+export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw, store }) {
   const router = Router();
   router.get("/api/admin/tenants", webAuthMw, adminMw, async (req, res) => {
     try {
@@ -751,6 +759,10 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw 
     try {
       const ok = await accounts.setStatus(req.params.id, "active");
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
+      // tenant-prolif-c (Invariante 2, G3-Fix): Grace-Anker loeschen, sonst bleibt ein
+      // manuell reaktivierter, zahlender Tenant mit stale suspended_at aktiv (siehe
+      // Kommentar oben). Idempotent (No-Op ohne gesetzten Anker).
+      store.clearSuspendedAt(req.params.id);
       await audit.record({
         actorSub: req.tenant.sub,
         tenantId: req.params.id,
