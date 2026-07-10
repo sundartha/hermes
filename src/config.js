@@ -117,6 +117,9 @@ export const config = {
   // TeXML-Application/Connection-ID: haelt die Voice-URL beim Provider, Pflicht fuer
   // Telnyx-Outbound (originateCall POST /v2/texml/calls/{connection_id}). Leer ->
   // Telnyx-Outbound wirft (fail-closed), Twilio-Outbound unberuehrt.
+  // NICHT verwechseln mit telnyxCallControlAppId (s.u.): Telnyx kennt ZWEI getrennte
+  // Objekttypen (TeXML-Application vs. Call-Control-Application) mit eigenen IDs. Die
+  // TeXML-ID hier traegt zusaetzlich das Voice-Routing gekaufter Nummern (provisioning-geo).
   telnyxConnectionId: process.env.TELNYX_CONNECTION_ID || "",
   // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
@@ -175,6 +178,12 @@ export const config = {
   // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
   // Bei aktivem Flag ist die ID Boot-Pflicht (assertConfig, P10).
   telnyxAssistantId: process.env.TELNYX_ASSISTANT_ID || "",
+  // ID der Call-Control-Application, ueber die originateViaCallControl (POST /v2/calls)
+  // waehlt. EIGENE Var, weil Telnyx hier einen ANDEREN Objekttyp erwartet als TeXML:
+  // wird die TeXML-ID (telnyxConnectionId) gesendet, lehnt Telnyx deterministisch ab mit
+  // HTTP 422 "10015 Invalid value for connection_id (Call Control App ID)" - der Live-Bug
+  // vom 2026-07-10 (RCA: tasks/rca-place-call-422.md). Bei aktivem Flag Boot-Pflicht.
+  telnyxCallControlAppId: process.env.TELNYX_CALL_CONTROL_APP_ID || "",
   // P5: max. Shim-Turns pro callId und Minute (Toll-/Token-Fraud-Bremse VOR agentTurn,
   // zusaetzlich zum IP-Limiter aus rateLimitPerMin + dem Budget-Cap). Das Zeitfenster
   // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS). Ein zu
@@ -656,8 +665,9 @@ export function assertConfig() {
   // C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P10): der AI-Assistant-Pfad braucht bei aktivem
   // Flag die volle Origination-/Shim-Config, sonst bootet der Dienst in einen "Flag an, aber
   // Assistant/Shim unkonfiguriert"-Zustand (Regel 1/3, fail-closed). publicUrl ist bereits
-  // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/connectionId tragen
-  // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7).
+  // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/callControlAppId tragen
+  // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7);
+  // connectionId (TeXML) bleibt Pflicht, weil der Inbound-/Nummern-Pfad weiter darueber laeuft.
   if (config.telnyxAiAssistantEnabled) {
     if (!config.telnyxAssistantId)
       missing.push("TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
@@ -665,6 +675,8 @@ export function assertConfig() {
       missing.push("TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
     if (!config.telnyxConnectionId)
       missing.push("TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
+    if (!config.telnyxCallControlAppId)
+      missing.push("TELNYX_CALL_CONTROL_APP_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
     if (!config.telnyxShimSharedSecret)
       missing.push("TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
   }

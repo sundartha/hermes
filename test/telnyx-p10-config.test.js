@@ -51,6 +51,7 @@ const REQUIRED_OK = {
   telnyxAssistantId: "assistant-1",
   telnyxApiKey: "key-1",
   telnyxConnectionId: "conn-1",
+  telnyxCallControlAppId: "ccapp-1",
   telnyxShimMaxTurnsPerMin: 30,
   telnyxShimSharedSecret: "shim-secret",
 };
@@ -73,6 +74,23 @@ test("assertConfig: Flag an + TELNYX_CONNECTION_ID leer -> fail-closed (false)",
   });
 });
 
+// Ohne Call-Control-App-ID kann originateViaCallControl nur den 422/10015 produzieren
+// (Live-Bug 2026-07-10) - der Boot muss vorher fail-closed verweigern statt still zu starten.
+test("assertConfig: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> fail-closed (false)", () => {
+  withConfig({ ...REQUIRED_OK, telnyxCallControlAppId: "" }, () => {
+    assert.equal(assertConfig(), false);
+  });
+});
+
+test("assertConfig im Hosting: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> Boot-Refusal nennt die Var", () => {
+  withConfig({ ...REQUIRED_OK, telnyxCallControlAppId: "" }, () => {
+    const lines = captureConsoleError(() => {
+      assert.equal(assertConfig(), false);
+    });
+    assert.match(lines.join("\n"), /TELNYX_CALL_CONTROL_APP_ID/);
+  });
+});
+
 test("assertConfig: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> fail-closed (false)", () => {
   withConfig({ ...REQUIRED_OK, telnyxShimSharedSecret: "" }, () => {
     assert.equal(assertConfig(), false);
@@ -90,13 +108,13 @@ test("assertConfig im Hosting: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> Boot-
   });
 });
 
-test("assertConfig: Flag an + alle vier gesetzt -> Boot ok (true, Gegenprobe)", () => {
+test("assertConfig: Flag an + alle fuenf gesetzt -> Boot ok (true, Gegenprobe)", () => {
   withConfig(REQUIRED_OK, () => {
     assert.equal(assertConfig(), true);
   });
 });
 
-test("assertConfig: Flag aus (alle vier leer) -> Boot ok (true, byte-identische Invariante)", () => {
+test("assertConfig: Flag aus (alle fuenf leer) -> Boot ok (true, byte-identische Invariante)", () => {
   withConfig(
     {
       ...REQUIRED_OK,
@@ -104,6 +122,7 @@ test("assertConfig: Flag aus (alle vier leer) -> Boot ok (true, byte-identische 
       telnyxAssistantId: "",
       telnyxApiKey: "",
       telnyxConnectionId: "",
+      telnyxCallControlAppId: "",
       telnyxShimSharedSecret: "",
     },
     () => {

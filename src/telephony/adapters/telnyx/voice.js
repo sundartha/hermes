@@ -111,11 +111,17 @@ export const telnyxVoice = {
   // Outbound-Call ueber Call Control originieren (statt TeXML). Liefert die call_control_id
   // als EIGENES Feld (callControlId) - NICHT sid ueberladen: die Boot-Recovery (P6) adressiert
   // den Hangup ueber genau diese ID-Form. KEINE Store-Persistenz hier (Caller/P5 persistiert).
+  //
+  // connection_id ist hier die ID einer Call-Control-Application, NICHT die TeXML-Application
+  // aus telnyxConnectionId - Telnyx fuehrt beide als getrennte Objekttypen. Die TeXML-ID zu
+  // senden lehnt Telnyx deterministisch ab: HTTP 422 "10015 Invalid value for connection_id
+  // (Call Control App ID)" (Live-Bug 2026-07-10, tasks/rca-place-call-422.md). Der TeXML-Pfad
+  // (originateCall, Nummern-Routing) benutzt weiterhin telnyxConnectionId.
   async originateViaCallControl({ from, to, webhookUrl, method, timeLimit }) {
     if (!config.telnyxApiKey) throw new Error("Telnyx originateViaCallControl: TELNYX_API_KEY fehlt");
-    if (!config.telnyxConnectionId)
-      throw new Error("Telnyx originateViaCallControl: TELNYX_CONNECTION_ID fehlt");
-    const payload = { connection_id: config.telnyxConnectionId, to, from };
+    if (!config.telnyxCallControlAppId)
+      throw new Error("Telnyx originateViaCallControl: TELNYX_CALL_CONTROL_APP_ID fehlt");
+    const payload = { connection_id: config.telnyxCallControlAppId, to, from };
     if (webhookUrl) payload.webhook_url = webhookUrl;
     if (method) payload.webhook_url_method = method;
     // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-

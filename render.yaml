@@ -97,11 +97,15 @@ services:
       # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
       # Master-Flag: 404 bis Cutover. Erst NACH verifiziertem Deploy im Dashboard auf
       # "true" (Owner-Cutover P11). Flag an -> Boot verlangt ASSISTANT_ID + API_KEY +
-      # CONNECTION_ID (assertConfig fail-closed).
+      # CONNECTION_ID + CALL_CONTROL_APP_ID (assertConfig fail-closed).
       - key: TELNYX_AI_ASSISTANT_ENABLED
         value: "false"
       # Opake Assistant-ID (KEIN Secret, aber deployment-spezifisch) -> Dashboard.
       - key: TELNYX_ASSISTANT_ID
+        sync: false
+      # Call-Control-App-ID (Outbound ueber /v2/calls). ANDERER Objekttyp als
+      # TELNYX_CONNECTION_ID (TeXML) - Verwechslung = HTTP 422 bei jedem Outbound.
+      - key: TELNYX_CALL_CONTROL_APP_ID
         sync: false
       - key: TELNYX_SHIM_MAX_TURNS_PER_MIN
         value: "30"

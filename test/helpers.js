@@ -105,6 +105,7 @@ export const BASE_ENV = {
   TELNYX_PUBLIC_KEY: "",
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
+  TELNYX_CALL_CONTROL_APP_ID: "",
   TELNYX_ACCOUNT_SID: "",
   // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
   // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese
@@ -511,6 +512,7 @@ export const TELNYX_ASSISTANT_BOOT_ENV = Object.freeze({
   TELNYX_ASSISTANT_ID: "asst_x",
   TELNYX_API_KEY: "key_x",
   TELNYX_CONNECTION_ID: "conn_x",
+  TELNYX_CALL_CONTROL_APP_ID: "ccapp_x",
   TELNYX_SHIM_SHARED_SECRET: "shim_secret_x",
 });
 

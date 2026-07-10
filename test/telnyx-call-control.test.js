@@ -7,10 +7,15 @@ import assert from "node:assert/strict";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
-const CONNECTION_ID = "conn_abc123";
+// BEWUSST verschiedene Werte: Telnyx fuehrt TeXML-Application und Call-Control-Application
+// als getrennte Objekttypen. Nur so faellt auf, wenn der Call-Control-Pfad versehentlich die
+// TeXML-ID sendet (Live-Bug 2026-07-10: HTTP 422 "10015 Invalid value for connection_id").
+const CONNECTION_ID = "conn_texml_abc123";
+const CALL_CONTROL_APP_ID = "ccapp_xyz789";
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
+process.env.TELNYX_CALL_CONTROL_APP_ID = CALL_CONTROL_APP_ID;
 
 // Dynamischer Import NACH dem Env-Setzen (config liest process.env beim Eval).
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
@@ -67,12 +72,37 @@ test("originateViaCallControl: /v2/calls, JSON-Body-Felder, Bearer, returns call
   assert.equal(c.opts.headers.Authorization, `Bearer ${API_KEY}`);
   assert.equal(c.opts.headers["Content-Type"], "application/json");
   const body = JSON.parse(c.body);
-  assert.equal(body.connection_id, CONNECTION_ID);
+  assert.equal(body.connection_id, CALL_CONTROL_APP_ID);
   assert.equal(body.to, CC_ORIGINATE.to);
   assert.equal(body.from, CC_ORIGINATE.from);
   assert.equal(body.webhook_url, CC_ORIGINATE.webhookUrl);
   assert.equal(body.webhook_url_method, "POST");
   assert.equal(body.time_limit_secs, 180);
+});
+
+// 1b) Regression (Live-Bug 2026-07-10): /v2/calls bekommt die Call-Control-App-ID, NIE die
+// TeXML-ID. Der Vorgaenger-Code sendete telnyxConnectionId -> Telnyx lehnte JEDEN Outbound
+// deterministisch ab (HTTP 422, 10015). Eigener Test, weil die Verwechslung nur auffaellt,
+// wenn beide IDs verschieden sind (in 1) mitgeprueft, hier als benannte Invariante fixiert).
+test("originateViaCallControl: sendet NIE die TeXML-connection_id (422/10015-Regression)", async () => {
+  const calls = stubFetch({ json: { data: { call_control_id: "cc_1" } } });
+  await telnyxVoice.originateViaCallControl(CC_ORIGINATE);
+  const body = JSON.parse(calls[0].body);
+  assert.notEqual(body.connection_id, CONNECTION_ID);
+  assert.equal(body.connection_id, CALL_CONTROL_APP_ID);
+});
+
+// 1c) Der TeXML-Pfad bleibt an telnyxConnectionId gebunden (Gegenprobe: die neue Var darf
+// den Bestands-Outbound NICHT umlenken - beide Pfade koexistieren, Regel 1).
+test("originateCall (TeXML): nutzt weiterhin die TeXML-connection_id in der URL", async () => {
+  const calls = stubFetch({ json: { data: { sid: "CA1" } } });
+  await telnyxVoice.originateCall({
+    from: CC_ORIGINATE.from,
+    to: CC_ORIGINATE.to,
+    url: "https://agent.test/voice/outbound?callId=call_1",
+  });
+  assert.equal(calls[0].url, `${API_BASE}/v2/texml/calls/${CONNECTION_ID}`);
+  assert.ok(!calls[0].url.includes(CALL_CONTROL_APP_ID));
 });
 
 // 2) Robustheit: unwrapped {call_control_id} wird auch erkannt (Parity zu originateCall)
@@ -110,16 +140,16 @@ test("originateViaCallControl: 403 errors[] -> code+title+status, kein Key/detai
   );
 });
 
-// 4) fail-closed: fehlender API_KEY / CONNECTION_ID
-test("originateViaCallControl: fail-closed ohne API_KEY / CONNECTION_ID", async () => {
+// 4) fail-closed: fehlender API_KEY / CALL_CONTROL_APP_ID
+test("originateViaCallControl: fail-closed ohne API_KEY / CALL_CONTROL_APP_ID", async () => {
   stubFetch({ json: { data: { call_control_id: "x" } } });
   await withBlankedConfig("telnyxApiKey", () =>
     assert.rejects(() => telnyxVoice.originateViaCallControl(CC_ORIGINATE), /TELNYX_API_KEY fehlt/),
   );
-  await withBlankedConfig("telnyxConnectionId", () =>
+  await withBlankedConfig("telnyxCallControlAppId", () =>
     assert.rejects(
       () => telnyxVoice.originateViaCallControl(CC_ORIGINATE),
-      /TELNYX_CONNECTION_ID fehlt/,
+      /TELNYX_CALL_CONTROL_APP_ID fehlt/,
     ),
   );
 });
