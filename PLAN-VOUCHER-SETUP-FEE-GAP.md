@@ -3,17 +3,12 @@
 **Stand:** 2026-07-09, Agent-Team-Analyse (2 parallele Read-only-Subagents: Frontend-UX-Trace +
 adversariale Root-Cause-Verifikation; ein dritter Subagent fuer Produktions-DB-Lesezugriff wurde
 vom Auto-Mode-Classifier geblockt — kein expliziter Jonas-Auftrag fuer Prod-DB-Reads, siehe §6).
-Status: **Diagnose abgeschlossen.** Fix C (FAILED/BLOCKED-Sichtbarkeit) und Fix A
-(Einrichtungsgebuehr vor Checkout im UI) sind implementiert, review-t und auf master gemergt
-(2026-07-09, `729131c` bzw. `ce478a9` — Reports: `tasks/c-report.md`,
-`tasks/voucher-fee-a-report.md`). Fix B (Voucher-Tenants vom `placeHold` befreien) ist auf
-Branch `fix/voucher-setup-fee-gap-b` implementiert (`e625989`) und die Review-Blocker der
-ersten Runde sind auf `fix/voucher-setup-fee-gap-b-fix1` behoben — **aber NICHT auf master
-gemergt.** Die Produktentscheidung "Voucher-Tenants zahlen wirklich 0 EUR, auch fuer die
-Nummer-Gebuehr" wurde technisch vorweggenommen, ohne dass eine explizite Jonas-Freigabe im
-Artefakt-Trail dieses Repos steht (kein Report, kein Commit-Verweis auf ein Jonas-Go). Diese
-Freigabe UND die Bestaetigung der Stripe-seitigen Redemption-Begrenzung (§6, Punkt 3) sind
-Voraussetzung fuer den Merge auf master — siehe §6.
+Status: **Alle drei Fixes (C, A, B) sind implementiert und auf master gemergt.** C: 2026-07-09
+`729131c`. A: 2026-07-09 `ce478a9`. B: 2026-07-10 `234a066` (Reports: `tasks/c-report.md`,
+`tasks/voucher-fee-a-report.md`, `tasks/voucher-fee-b-report.md`). Fix B wurde von Jonas
+explizit freigegeben (Design-Entscheidung "0-EUR-Checkout generisch" + Merge trotz offenem
+Coupon, 2026-07-10) — **das Stripe-seitige Redemption-Limit auf dem Voucher-Coupon ist
+bewusst NICHT gesetzt, siehe §6 Punkt 3 fuer den aktuellen Live-Stand.**
 
 **Nicht verwechseln mit `HANDOVER-TELNYX-402.md`:** das war ein **Telnyx-Account-Funding-402**
 (Telnyx `orderNumber`, Telnyx-Guthaben zu niedrig). Dieser Bug hier ist ein **Stripe-seitiger
@@ -101,8 +96,8 @@ den Boot-Sweep-Reconciler wiederholbar, kein Self-Service-Ausweg fuer den Tenant
 |---|---|---|---|
 | **C** | `FAILED`/`BLOCKED`-Zweig in `numberStatusFor` + Frontend-Mapping ergaenzen: sichtbarer Fehler + Retry-Hinweis statt stillem "keine Nummer" | klein | **umgesetzt + gemergt** (`729131c`) |
 | **A** | Einrichtungsgebuehr VOR Checkout im UI ausweisen ("+X € einmalige Einrichtung fuer deine Rufnummer") | klein-mittel | **umgesetzt + gemergt** (`ce478a9`) |
-| **B** | Voucher/100%-off-Tenants auch vom `placeHold` befreien (0-EUR-Checkout generisch ueber `billing.retrieveSubscription`, siehe `src/billing/activation.js`) | mittel-gross | **code-fertig auf `fix/voucher-setup-fee-gap-b-fix1`** (`e625989` + Review-Fixes) — **NICHT gemergt**, siehe §6 Punkt 3+4 fuer die offenen Merge-Voraussetzungen |
-| D | Sofort-Workaround fuer Jonas' Tenant: Karte aufladen ODER Gebuehr manuell in Stripe erlassen, dann `POST /api/onboard/retry` | keine Code-Aenderung | Alternative zu B, falls B nicht gemerged werden soll |
+| **B** | Voucher/100%-off-Tenants auch vom `placeHold` befreien (0-EUR-Checkout generisch ueber `billing.retrieveSubscription`, siehe `src/billing/activation.js`) | mittel-gross | **umgesetzt + gemergt** (`234a066`, 2026-07-10) — Stripe-Guard bewusst offen gelassen, siehe §6 Punkt 3 |
+| D | Sofort-Workaround fuer Jonas' Tenant: Karte aufladen ODER Gebuehr manuell in Stripe erlassen, dann `POST /api/onboard/retry` | keine Code-Aenderung | obsolet (B gemergt) |
 
 ## Pre-Mortem (B ist umgesetzt — hier steht, was VOR dem Merge noch zu Ende gedacht werden muss)
 
@@ -128,14 +123,23 @@ keinen Stripe-Dashboard-/API-Zugriff (kein `.env`, kein Stripe-MCP-Tool). Siehe 
    geben, um Tenant-IDs aus den Logs auf Accounts/Nummern-Status zu mappen und das zu verifizieren.
 2. **Exakter `NUMBER_SETUP_FEE_CENTS`-Wert** ist nicht im Repo (nur Render-ENV) — falls fuer die
    Fix-Entscheidung relevant, im Render-Dashboard nachsehen oder Freigabe fuer einen Env-Read geben.
-3. **Stripe-seitige Redemption-Begrenzung auf `OWNER100` bestaetigen (Merge-Voraussetzung).**
-   Im Stripe-Dashboard (Live-Modus) pruefen, dass der Promotion Code `max_redemptions: 1` (oder
-   Customer-Bindung) und idealerweise ein Ablaufdatum hat — Anleitung bereits in
-   `docs/RUNBOOK-STRIPE-LIVE.md` §10. Ohne diese Begrenzung befreit jeder $0-Checkout ueber
-   `allow_promotion_codes` generisch von der Nummer-Setup-Gebuehr (realer Telnyx-Fremdkosten-Posten
-   pro Missbrauchsfall) — kein Code-Fix kann das ersetzen, weil die App bewusst keinen Coupon-Namen
-   prueft (§ Pre-Mortem oben). Konnte von diesem Subagent nicht selbst verifiziert werden.
-4. **Explizite Jonas-Freigabe fuer Fix B fehlt im Artefakt-Trail.** B ist bereits implementiert
-   (`e625989`, Review-Fixes auf `fix/voucher-setup-fee-gap-b-fix1`), ohne dass ein Report oder
-   Commit-Verweis eine explizite Jonas-Entscheidung "B soll so ins Produkt" dokumentiert. Vor dem
-   Merge auf master: Freigabe einholen und hier (Punkt 4) mit Datum/Referenz vermerken.
+3. **Stripe-seitige Redemption-Begrenzung — GEPRUEFT 2026-07-10, bewusst offen gelassen.**
+   Jonas hat den Coupon im Stripe-Dashboard nachgeschaut: Promotion Code heisst tatsaechlich
+   `SDA-OWNER-94KX7Q` (nicht `OWNER100` — das war nur der Name im urspruenglichen Design-Doc/
+   Audit-Log-Kontext). Befund: **kein `max_redemptions`, kein Ablaufdatum, Coupon-Dauer
+   "unbegrenzt/wiederkehrend"** (nicht "einmalig" wie in `docs/RUNBOOK-STRIPE-LIVE.md` §10
+   vorgesehen). Bereits 4 Einloesungen durch 2 Kunden (antonio.fotiadis.francisco@gmail.com 3x,
+   jonas@kroh-willich.de 1x). Jonas hat sich entschieden, Fix B trotzdem zu mergen (Risiko
+   akzeptiert) — der Code ist technisch weiterhin offen: jeder mit `SDA-OWNER-94KX7Q` bekommt
+   Subscription UND Nummer-Gebuehr umsonst. Absichern (max_redemptions/Ablauf setzen oder Code
+   deaktivieren) bleibt eine reine Stripe-Dashboard-Aktion, kein Code-Fix moeglich (§ Pre-Mortem).
+4. **Explizite Jonas-Freigabe fuer Fix B — ERTEILT 2026-07-09/10.** Design-Entscheidung
+   "0-EUR-Checkout generisch" (statt Tenant-Allowlist) sowie der Merge trotz offenem Coupon
+   (Punkt 3) wurden von Jonas explizit bestaetigt. B ist auf master (`234a066`).
+5. **NEU (2026-07-10, separat von Fix B): Coupon-Dauer "wiederkehrend" statt "einmalig".**
+   `SDA-OWNER-94KX7Q` ist als 100%-Rabatt MIT WIEDERKEHRENDER Dauer konfiguriert, nicht als
+   Einmal-Rabatt fuer den Owner-Smoke-Test. Das heisst: Antonio und Jonas bekommen ihre gesamte
+   Subscription **jeden Abrechnungszeitraum** umsonst, nicht nur einmalig — ein bestehender
+   Revenue-Leak, unabhaengig von der Nummer-Gebuehr aus diesem Plan-Dokument. Kein Code-Fix
+   moeglich/noetig (reine Stripe-Konfiguration); Entscheidung liegt bei Jonas (Coupon-Dauer auf
+   "once" umstellen oder bewusst so belassen).
