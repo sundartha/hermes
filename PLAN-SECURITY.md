@@ -158,3 +158,49 @@ byte-identisch. Neue Angriffsflaechen + Mitigationen:
 - **Boot fail-closed (P10):** Flag an ohne `TELNYX_ASSISTANT_ID`/`TELNYX_API_KEY`/
   `TELNYX_CONNECTION_ID`/`TELNYX_SHIM_SHARED_SECRET` -> `assertConfig` verweigert den Start;
   ein absurd hoher `TELNYX_SHIM_MAX_TURNS_PER_MIN` im Hosting -> `productionFootguns` fatal.
+
+## TENANT-IDENTITY — Email-verifizierte Dedup + synchroner sub->Tenant-Resolver (Fix 1, A+B)
+
+Wurzel (RCA `tasks/rca-tenant-number-proliferation.md`): die Tenant-Identitaet hing roh am
+OIDC-`sub` (`t_<sub>`), es gab keine Email-Dedup -> jeder neue WorkOS-`sub` desselben Menschen
+erzeugte einen frischen Tenant, der beim Abo eine neue echte Telnyx-DID kaufte. Fix 1 dedupliziert
+verifizierte Identitaeten. NUR pg (Web-Login/`account` existieren nur bei `STORE_BACKEND=pg`);
+json-Backend byte-identisch. Kein Safety-Gate beruehrt, keine neue Dependency, Schema additiv/
+idempotent. Neue Angriffsflaechen + Mitigationen:
+
+- **Account-Takeover ueber Email-Merge (Phase A):** `upsertOnFirstLogin` mappt einen neuen sub
+  per `SELECT tenant_id FROM account WHERE email=$1` auf einen bestehenden Tenant. Eine
+  ungeprueft akzeptierte Email wuerde fremde Konten (Anrufhistorie, aktive DID, laufendes Abo,
+  Outbound-Berechtigung) uebernehmbar machen. **Mitigation, nicht verhandelbar:** Merge NUR bei
+  `email_verified===true` — das bestehende `claimsFromPayload`-Gate (`web-auth.js`) wird
+  wiederverwendet, NICHT aufgeweicht. Fehlende/unverifizierte Email -> expliziter, geloggter
+  Reject (Email selbst NICHT geloggt), KEIN Tenant + KEIN account angelegt (vorher lief das in
+  einen unbeabsichtigten NOT-NULL-Crash mit generischem 401).
+- **Merge auf hart-geschlossenen/suspendierten Tenant (Phase A, Review-Fund R3):** der Dedup-
+  SELECT joint gegen `tenant.status` — ein brandneuer sub wird NIE auf einen geschlossenen/
+  suspendierten Tenant gemergt (sonst koennte ein Angreifer ueber eine recycelte Mailbox einen
+  stillgelegten Tenant samt DID wiederbeleben).
+- **Determinismus (Phase A):** Merge-Regel "aeltester Tenant gewinnt" (`ORDER BY created_at ASC
+  LIMIT 1`), transitiv -> zwei subs mergen nie in verschiedene Richtungen, bestehende
+  MCP-Tokens mit altem sub treffen weiter denselben kanonischen Tenant.
+- **Orphan-Tenant-Fenster geschlossen (Phase A):** Tenant-Aufloesung + account-INSERT laufen in
+  EINER Transaktion (BEGIN/COMMIT/ROLLBACK). Vorher konnte bei null-Email der Tenant-INSERT
+  committen und der account-INSERT crashen -> tenantloser/accountloser Halbzustand.
+- **Index (Phase A):** `account_email_idx` ist NICHT-unique (mehrere subs pro Email teilen sich
+  einen Tenant; ein Unique-Index wuerde die Dedup brechen). Reine Lookup-Beschleunigung; die
+  1-Tenant-pro-Email-Invariante garantiert die Dedup-Logik, nicht der Index.
+- **MCP/REST-Resolver bleibt fail-closed + synchron (Phase B):** `resolveTenant` (nicht-awaiteter
+  Hot-Path) konsultiert einen In-Memory `subIndex` (sub->tenantId) mit Vorrang vor dem
+  `idpSubject`-Fallback; unbekannter sub -> kein Tenant (Ablehnungsverhalten unveraendert). Kein
+  invasiver async-Umbau. Der Index wird pg-seitig bei `init()` aus der RLS-exempten `account`-
+  Tabelle hydriert (`hydrateSubIndex`) und beim Nach-Boot-Login via `mintSession`
+  (`bindSubToTenant`) gebunden — das schliesst die "idp_subject nach Boot eingefroren"-Landmine
+  (ein per Email gemergter sub war sonst im MCP-Kanal abgelehnt). json-Backend: `subIndex`
+  defensiv-ephemer, Parity-Test gruen.
+- **Onboard-Guard (Phase B):** `POST /api/onboard` (operator-only) prueft vor `registerTenant`
+  per `checkOnboardMerge` (reine Funktion `src/onboard-guard.js`) und liefert `409
+  sub_already_merged` statt einen Zweit-Tenant fuer einen bereits gemergten sub anzulegen.
+- **Bewusst praeventiv, nicht retroaktiv:** die 4 bestehenden Tenants/DIDs bleiben unangetastet
+  (separate Phase F, per-Nummer Owner-Freigabe). Wirksamkeit haengt an der Live-DB-Annahme, dass
+  die subs desselben Menschen dieselbe verifizierte Email tragen — vor jedem retroaktiven Schritt
+  an der DB gegengeprueft.
