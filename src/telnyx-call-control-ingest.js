@@ -31,7 +31,14 @@ function logEventReceived(callId, body) {
   );
 }
 
-export function makeCallControlIngest({ store, voiceControl, finishCall, disclosureSentence, localeFor }) {
+export function makeCallControlIngest({
+  store,
+  voiceControl,
+  finishCall,
+  disclosureSentence,
+  localeFor,
+  reattachActiveCall,
+}) {
   // Regel 2: Pflicht-Offenlegung als deterministischer Speak-Node ZUERST.
   async function onAnswered(call, callControlId) {
     store.markAnswered(call.id); // answeredAt -> voiceMinutesOf (Abrechnung), Muster /voice/outbound
@@ -71,10 +78,26 @@ export function makeCallControlIngest({ store, voiceControl, finishCall, disclos
     console.log(`[voice/call-control] hangup (call=${call.id}) -> Settlement finishCall`);
   }
 
+  // A6 (stab-p10): Read-through-Rehydrate. Kennt der Prozess-Spiegel den Call nicht
+  // (Deploy-/Instanzwechsel liess die aktive DB-Zeile aus diesem Spiegel fallen), wird er
+  // RLS-sauber aus dem Store nachgeladen - inkl. tenantId (I8) und aller vom Turn-/Gate-Fluss
+  // benoetigten Felder (rowToCall) - statt das Live-Gespraech zu verwerfen. EXAKT derselbe
+  // reattachActiveCall-Seam wie /voice/turn|outbound|status (S2/G5): auch hier Restzeit-
+  // Klassifikation + Max-Dauer-Cap-Rearm (Regel 1). Normalfall (Call auf derselben Instanz):
+  // getCall trifft -> reattach wird NIE gerufen -> byte-identisch zum Bestand.
+  // null-Rueckgabe = wirklich unbekannt ODER Ueber-Zeit bereits terminalisiert+gebucht
+  // -> der Aufrufer ignoriert fail-closed (kein Reanimieren).
+  async function resolveActiveCall(callId) {
+    const known = store.getCall(callId);
+    if (known) return known;
+    const { call } = await reattachActiveCall(callId);
+    return call;
+  }
+
   return async function handleCallControlEvent(req, res) {
     res.sendStatus(200); // sofort ack (Telnyx retryt bei non-2xx); Actions/Settlement danach
     try {
-      const call = store.getCall(req.query.callId || "");
+      const call = await resolveActiveCall(req.query.callId || "");
       if (!call) {
         // unbekannter/fremder callId -> still 200, kein Existenz-Leck (Muster /voice/status).
         // Regel 4: nur der Grund-Token, NIE der rohe (Caller-kontrollierte) Query-Wert.

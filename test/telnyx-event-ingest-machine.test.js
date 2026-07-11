@@ -32,6 +32,31 @@ function fakeStore(call) {
   };
 }
 
+// stab-p10: Spiegel kennt den Call zunaechst NICHT (Instanzwechsel); reattachActiveCall
+// "laedt" ihn nach - modelliert den Deploy-Instanzwechsel-Rehydrate-Pfad exakt, ohne
+// echten Store. getCall bleibt bis zum Nachladen ein Miss (call.id !== known.id).
+function fakeStoreRehydrate(call) {
+  let known = null;
+  const endCallRecordCalls = [];
+  const markAnsweredCalls = [];
+  const store = {
+    endCallRecordCalls,
+    markAnsweredCalls,
+    getCall: (id) => (known && known.id === id ? known : null),
+    markAnswered: (id) => markAnsweredCalls.push(id),
+    endCallRecord: (id, status) => {
+      endCallRecordCalls.push({ id, status });
+      if (known?.id === id) known.status = status;
+    },
+  };
+  const reattachActiveCall = async (id) => {
+    if (id !== call.id) return { call: null, logUnknown: true };
+    known = call; // Instanzwechsel-Rehydrate: der Call landet jetzt im Spiegel
+    return { call, logUnknown: false };
+  };
+  return { store, reattachActiveCall };
+}
+
 function fakeRes() {
   return {
     statusSent: null,
@@ -204,6 +229,7 @@ test("unbekannter callId -> 200 ohne Wirkung, kein Crash", async () => {
     finishCall: async (c) => finishCallCalls.push(c),
     disclosureSentence: () => DISCLOSURE_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    reattachActiveCall: async () => ({ call: null, logUnknown: true }),
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_unknown" }, body: hangupBody("cc_1") }, res);
@@ -303,6 +329,7 @@ test("OBS-2: unbekannter callId -> Log traegt reason=unknown_call, NIE den rohen
     finishCall: async () => {},
     disclosureSentence: () => DISCLOSURE_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    reattachActiveCall: async () => ({ call: null, logUnknown: true }),
   });
   const leakyCallId = "callId_leaky_9999";
   const lines = await captureConsole(() =>
@@ -391,4 +418,87 @@ test("Review-Blocker: event_type/status ueber 64 Zeichen -> Roh-Log-Token bei 64
   assert.ok(rawLine.endsWith(`status=${longStatus.slice(0, 64)}`), "status-Token nicht bei 64 gekappt");
   assert.ok(!rawLine.includes(longEventType), "event_type darf nicht ungekuerzt im Log stehen");
   assert.ok(!rawLine.includes(longStatus), "status darf nicht ungekuerzt im Log stehen");
+});
+
+// stab-p10 (A6 Baustein 1): hangup nach Deploy-/Instanzwechsel. Der Prozess-Spiegel kennt
+// den Call nicht (getCall-Miss), reattachActiveCall laedt ihn nach - Settlement (finishCall)
+// laeuft trotzdem, statt das Live-Gespraech zu verwerfen (Reserve-Leak/gesperrtes Budget).
+test("stab-p10: hangup nach Instanzwechsel - getCall-Miss -> reattachActiveCall laedt -> Settlement laeuft", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const { store, reattachActiveCall } = fakeStoreRehydrate(call);
+  const vc = fakeVoiceControl();
+  const finishCallCalls = [];
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async (c) => finishCallCalls.push(c),
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    reattachActiveCall,
+  });
+  const res = fakeRes();
+  await handler({ query: { callId: "call_1" }, body: hangupBody("cc_1") }, res);
+
+  assert.equal(res.statusSent, 200);
+  assert.equal(store.endCallRecordCalls.length, 1);
+  assert.deepEqual(store.endCallRecordCalls[0], { id: "call_1", status: "completed" });
+  assert.equal(finishCallCalls.length, 1, "Settlement laeuft trotz getCall-Miss");
+  assert.equal(finishCallCalls[0], call, "finishCall bekommt den nachgeladenen Call");
+});
+
+// stab-p10 (A6 Baustein 1): answered nach Instanzwechsel - der Turn-Fluss (Disclosure-Speak)
+// laeuft auf dem nachgeladenen Call unveraendert weiter.
+test("stab-p10: answered nach Instanzwechsel - Disclosure-Speak auf dem nachgeladenen Call", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const { store, reattachActiveCall } = fakeStoreRehydrate(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    reattachActiveCall,
+  });
+  const res = fakeRes();
+  await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
+
+  assert.equal(res.statusSent, 200);
+  assert.equal(vc.speakCalls.length, 1);
+  assert.deepEqual(vc.speakCalls[0], {
+    callControlId: "cc_1",
+    text: DISCLOSURE_TEXT,
+    voiceProfile: "de_female_neural",
+  });
+  assert.deepEqual(store.markAnsweredCalls, ["call_1"]);
+});
+
+// stab-p10 (A6 Baustein 1, Regel 4/OBS-2-Paritaet): reattachActiveCall selbst liefert einen
+// echten Miss (Ueber-Zeit-Leg bereits terminalisiert ODER wirklich unbekannt) -> 200 ohne
+// Wirkung, genau eine reason=unknown_call-Zeile, NIE der rohe Query-Wert.
+test("stab-p10: Rehydrate-Miss (reattachActiveCall -> call:null) -> 200, keine Wirkung, genau eine unknown_call-Zeile", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const { reattachActiveCall } = fakeStoreRehydrate(call); // call.id passt NIE zur angefragten callId
+  const store = fakeStore(null); // Spiegel selbst kennt ebenfalls nichts
+  const vc = fakeVoiceControl();
+  const finishCallCalls = [];
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async (c) => finishCallCalls.push(c),
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    reattachActiveCall,
+  });
+  const leakyCallId = "callId_leaky_9999";
+  const lines = await captureConsole(() =>
+    handler({ query: { callId: leakyCallId }, body: hangupBody("cc_1") }, fakeRes()),
+  );
+
+  assert.equal(vc.speakCalls.length, 0);
+  assert.equal(vc.startAssistantCalls.length, 0);
+  assert.equal(finishCallCalls.length, 0);
+  assert.equal(lines.length, 1, "genau eine Log-Zeile bei Rehydrate-Miss");
+  assert.match(lines[0], /reason=unknown_call/);
+  assert.ok(!lines[0].includes(leakyCallId), "roher Query-Wert darf NICHT im Log stehen");
 });
