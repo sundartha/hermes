@@ -324,6 +324,36 @@ export function execTool(call, name, input) {
 
 // ---------- Gespraechs-Turn ----------
 
+// stab-p7 (c): Erst-Turn-Bootstrap-Marker. Feuern NUR im echten Erst-Turn-Zustand (noch
+// KEINE agent-Zeile) und weisen das Modell an, das Gespraech zu eroeffnen/zu begruessen.
+// Byte-identisch zum bisherigen Inline-Text (nur extrahiert, G25/G5).
+const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das Gespraech.]";
+const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ihn.]";
+// stab-p7 (c): Stiller-Folge-Turn-Marker. Sobald der Agent schon gesprochen hat und der
+// Anrufer nichts Substanzielles beitrug, haelt dieser neutrale Marker die Anthropic-messages-
+// Kette gueltig (Abschluss mit user-Turn), OHNE dem Modell erneut "beginne/begruesse" zu
+// signalisieren (behebt R4). Richtungsneutral - die konkrete Reaktion steuert der systemPrompt.
+const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
+
+// stab-p7 (a/b): EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
+// config.callerSubstanceMinLen). Einzige Quelle (S2) fuer das Transkript-Record-Gate UND
+// den content-basierten suppressEndCall. Rein, kein Nebeneffekt (N7).
+function isSubstantialCallerText(text) {
+  return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
+}
+
+// stab-p7 (a): konsekutive agent-Zeilen am Transkript-Ende = "wie oft hat der Agent in Folge
+// gesprochen, ohne eine substanzielle Antwort zu erhalten". Da nicht-substanzielle Eingaben
+// nicht ins Transkript wandern (Record-Gate), ist das der Leer-Turn-Zaehler. Rein (N7).
+function unansweredAgentTurns(transcript) {
+  let count = 0;
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    if (transcript[i].role !== "agent") break;
+    count += 1;
+  }
+  return count;
+}
+
 // I8 (call-quality Impl-1): deterministisches Text-Shaping der Modell-Antwort VOR dem
 // Fallback/addTranscript - eine defensive Schicht, falls das Modell trotz "Kein
 // Markdown, keine Listen" (Regel oben) doch Markdown/Aufzaehlungen/Gedankenstriche
@@ -355,30 +385,45 @@ export function shapeForSpeech(text) {
 
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
 export async function agentTurn(call, callerText) {
-  if (callerText) store.addTranscript(call.id, "caller", callerText);
+  // stab-p7 (b): nur SUBSTANZIELLE Anrufer-Aeusserungen ins Transkript (Echo-/Rausch-/Leer-
+  // Fragmente NICHT) - haelt den Verlauf sauber UND macht unansweredAgentTurns korrekt.
+  if (isSubstantialCallerText(callerText)) store.addTranscript(call.id, "caller", callerText);
 
   // Verlauf -> Messages (Transkript kompakt halten: letzte 24 Beitraege)
   const history = call.transcript.slice(-24).map((t) => ({
     role: t.role === "agent" ? "assistant" : "user",
     content: t.text,
   }));
+  // stab-p7 (c): Die Anthropic-messages-Kette MUSS mit einem user-Turn enden (sonst kein
+  // frischer Assistant-Turn). Der INHALT haengt am Erst-Turn-Zustand: existiert noch KEINE
+  // agent-Zeile, ist es der echte Gespraechsbeginn -> Eroeffnungs-Bootstrap. Hat der Agent
+  // schon gesprochen (Leer-/Stille-Folge-Turn), NUR ein neutraler Marker - kein erneutes
+  // "beginne"-Signal (R4). Beide Faelle halten die Kette gueltig.
   if (!history.length || history[history.length - 1].role !== "user") {
+    const hasAgentLine = call.transcript.some((t) => t.role === "agent");
     history.push({
       role: "user",
-      content:
-        call.direction === "outbound"
-          ? "[Der Angerufene hat abgenommen. Beginne das Gespraech.]"
-          : "[Der Anrufer ist in der Leitung. Begruesse ihn.]",
+      content: hasAgentLine
+        ? SILENT_TURN_MARKER
+        : call.direction === "outbound"
+          ? OUTBOUND_OPENING_BOOTSTRAP
+          : INBOUND_OPENING_BOOTSTRAP,
     });
   }
 
-  // T1-Sicherungsboden (docs/strategy/call-debug.md 3.2): Im ersten Outbound-Turn -
-  // bevor der Angerufene ueberhaupt etwas gesagt hat - darf der Agent nicht auflegen.
-  // Solange keine role:caller-Zeile existiert, wird ein end_call unterdrueckt; der
-  // Webhook rendert dann ein <Gather> (STT bleibt scharf) statt eines stummen Hangups.
-  // Nur Outbound - Inbound bleibt unveraendert.
+  // T1-Sicherungsboden + stab-p7 (a)+(b): Im Outbound-Pfad wird ein end_call unterdrueckt,
+  // SOLANGE (i) noch keine SUBSTANZIELLE Anrufer-Aeusserung vorliegt (content-basiert statt
+  // "Zeile existiert" - eine Echo-/Rausch-Zeile deaktiviert den Schutz nicht mehr, R2/E3) UND
+  // (ii) die Zahl konsekutiver Leer-Turns die Schwelle noch nicht erreicht hat. Erst wenn das
+  // Gegenueber substanziell spricht ODER nach maxEmptyTurns unbeantworteten Agent-Turns gibt
+  // der Guard end_call frei (er erzwingt es NIE - das Modell entscheidet). Nur Outbound;
+  // Inbound bleibt byte-identisch (immer false). Zeitliches Notaus bleibt maxCallDurationS.
+  const substantialCallerSeen = call.transcript.some(
+    (t) => t.role === "caller" && isSubstantialCallerText(t.text),
+  );
+  const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.maxEmptyTurns;
   const suppressEndCall =
-    call.direction === "outbound" && !call.transcript.some((t) => t.role === "caller");
+    call.direction === "outbound" && !substantialCallerSeen && !emptyTurnsReached;
 
   let messages = history;
   let endCall = false;
