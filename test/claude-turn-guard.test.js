@@ -145,6 +145,12 @@ before(async () => {
         // TG-REC-1 (Review-Blocker Runde 1 zu stab-p7-turn-guard-fix3): Inbound-Analogtest
         // zu TG-1 - frisches Transkript, damit agentTurn den echten Record-Gate-Pfad durchlaeuft.
         seedCall({ id: "call_tg_rec1_inbound", direction: "inbound" }),
+        // TG-REC-1 (Review-Blocker Runde 2): Grenzbedingungs-Analogtest zu TG-1 (b) -
+        // dieselben vier spurious/leeren Werte, aber inbound. Je ein frischer Call.
+        seedCall({ id: "call_tg_rec1_inbound_empty", direction: "inbound" }),
+        seedCall({ id: "call_tg_rec1_inbound_ws", direction: "inbound" }),
+        seedCall({ id: "call_tg_rec1_inbound_dot", direction: "inbound" }),
+        seedCall({ id: "call_tg_rec1_inbound_null", direction: "inbound" }),
       ],
     }),
   );
@@ -358,3 +364,25 @@ test("TG-REC-1 Inbound-Regression: echte Kurz-Aeusserung landet unveraendert im 
   assert.equal(callerLines.length, 1);
   assert.equal(callerLines[0].text, "5");
 });
+
+// TG-REC-1 (Review-Blocker Runde 2): Grenzbedingungs-Analogtest zu TG-1 (b) - dieselben
+// vier spurious/leeren Werte wie EMPTY_CALLER_CASES oben, diesmal inbound. Das Record-Gate
+// ist fuer Inbound Boolean(callerText) (byte-identisch zu 41ce40b) statt
+// isSubstantialCallerText - deshalb landen "." und Whitespace hier (anders als outbound)
+// im Transkript, waehrend leerer String/null wie ueberall unveraendert aussen vor bleiben.
+const INBOUND_RECORD_GATE_CASES = [
+  { label: "leerer String (Shim)", value: "", callId: "call_tg_rec1_inbound_empty", recorded: false },
+  { label: "nur Whitespace", value: "   ", callId: "call_tg_rec1_inbound_ws", recorded: true },
+  { label: "Kurz-Fragment", value: ".", callId: "call_tg_rec1_inbound_dot", recorded: true },
+  { label: "null (Budget-Engine)", value: null, callId: "call_tg_rec1_inbound_null", recorded: false },
+];
+
+for (const { label, value, callId, recorded } of INBOUND_RECORD_GATE_CASES) {
+  test(`TG-REC-1 Inbound-Grenzfall "${label}": Record-Gate folgt Boolean(callerText), nicht dem Outbound-Substanz-Filter`, async () => {
+    nextResponse = textMessage("Alles klar.");
+    const call = store.getCall(callId);
+    await agentTurn(call, value);
+    const callerLines = store.getCall(callId).transcript.filter((t) => t.role === "caller");
+    assert.equal(callerLines.length, recorded ? 1 : 0);
+  });
+}
