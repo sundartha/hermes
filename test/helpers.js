@@ -123,6 +123,9 @@ export const BASE_ENV = {
   // fuer den Boot (TELNYX_ASSISTANT_BOOT_ENV traegt es explizit).
   TELNYX_SHIM_SHARED_SECRET: "",
   TELNYX_SHIM_API_KEY_REF: "",
+  // OBS-FLAG neutral AUS, sonst leakt eine lokale .env mit TELNYX_SHIM_DEBUG_SHAPE=true
+  // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  TELNYX_SHIM_DEBUG_SHAPE: "false",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",
@@ -478,12 +481,14 @@ export function fakeTelnyxShimConfig({
   claudeModel = "claude-haiku-4-5",
   telnyxShimMaxTurnsPerMin = 100,
   telnyxShimSharedSecret = "shim-secret",
+  telnyxShimDebugShape = false,
 } = {}) {
   return {
     telnyxAiAssistantEnabled: enabled,
     claudeModel,
     telnyxShimMaxTurnsPerMin,
     telnyxShimSharedSecret,
+    telnyxShimDebugShape,
   };
 }
 

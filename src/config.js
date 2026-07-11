@@ -205,6 +205,12 @@ export const config = {
   // llm_api_key_ref). NUR das Provisioning-Skript liest ihn; der Server nie -> KEIN
   // assertConfig-Check (nur REQUIRED-Gate im Skript). Analog telnyxElevenLabs.apiKeyRef.
   telnyxShimApiKeyRef: process.env.TELNYX_SHIM_API_KEY_REF || "",
+  // OBS-FLAG (Diagnose): einmaliger, default-off Shape-Dump im Shim. Flag AN -> der Shim
+  // loggt pro authentifiziertem Turn EINE keys-only-Zeile (Top-Level-Feldnamen des
+  // forward_metadata-Body + zwei Booleans, WELCHE Position die call_control_id traegt),
+  // NIE Werte. Nur fuer den EINEN ueberwachten Diagnose-Call; danach wieder AUS. Neutraler
+  // Default, NICHT boot-required (kein assertConfig/Footgun), keine Verhaltensaenderung am Gate.
+  telnyxShimDebugShape: (process.env.TELNYX_SHIM_DEBUG_SHAPE || "false") === "true",
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.

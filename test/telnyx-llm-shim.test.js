@@ -873,3 +873,74 @@ test("OBS-1 Regel-4 Master: kein Gate-Log leakt Secret/Transkript ueber die Gate
   assert.ok(!joined.includes(SENTINEL_TRANSCRIPT), "Transkript-Wert darf in keiner Gate-Zeile auftauchen");
   assert.ok(!joined.includes(SENTINEL_PHONE), "Telefonnummer darf in keiner Gate-Zeile auftauchen");
 });
+
+// === OBS-FLAG: default-off Shape-Debug-Dump (keys-only, keine Gate-Aenderung) =======
+const SHAPE_LINE_MARKER = "[telnyx-shim] shape";
+const shapeLines = (lines) => lines.filter((l) => l.includes(SHAPE_LINE_MARKER));
+
+test("OBS-FLAG an: authentifizierter Turn -> genau 1 shape-Zeile {ccidInMetadata:true,ccidTopLevel:false} + Top-Level-bodyKeys, KEINE Werte/Innenfeldnamen", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const handler = makeHandler({ store, config, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+  const body = {
+    messages: [{ role: "user", content: "GEHEIM_TRANSCRIPT_42" }],
+    metadata: { call_control_id: "cc_x", caller_number: "+491700000000" },
+  };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, body }), res));
+
+  const shapes = shapeLines(lines);
+  assert.equal(shapes.length, 1);
+  assert.ok(shapes[0].includes('"ccidInMetadata":true'));
+  assert.ok(shapes[0].includes('"ccidTopLevel":false'));
+  assert.ok(shapes[0].includes("messages"), "Top-Level-Feldname (bodyKeys)");
+  assert.ok(shapes[0].includes("metadata"), "Top-Level-Feldname (bodyKeys)");
+  assert.ok(!shapes[0].includes("GEHEIM_TRANSCRIPT_42"), "kein Transkript-Wert");
+  assert.ok(!shapes[0].includes("+491700000000"), "keine Telefonnummer");
+  assert.ok(!shapes[0].includes("caller_number"), "keine metadata-Innenfeldnamen (nur Top-Level)");
+});
+
+test("OBS-FLAG default aus: KEINE shape-Zeile (byte-identisch), Turn laeuft normal durch", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() }); // Default -> telnyxShimDebugShape false
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  assert.equal(shapeLines(lines).length, 0, "Default-off emittiert keine shape-Zeile");
+  assert.equal(res.chunks.length, 2, "Turn unveraendert (EIN Chunk + [DONE])");
+});
+
+test("OBS-FLAG an + fehlende ccid: shape-Zeile {ccidInMetadata:false,ccidTopLevel:false} NEBEN dem no_ccid-Gate; Gate-Verhalten byte-identisch (403)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const handler = makeHandler({ store, config, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() =>
+    handler(reqWith({ auth: VALID_AUTH, body: { messages: [] } }), res),
+  );
+
+  assert.equal(res.statusCode, 403, "fehlende ccid -> weiterhin 403 (keine Gate-Aenderung)");
+  const shapes = shapeLines(lines);
+  assert.equal(shapes.length, 1);
+  assert.ok(shapes[0].includes('"ccidInMetadata":false'));
+  assert.ok(shapes[0].includes('"ccidTopLevel":false'));
+  assert.equal(gateLines(lines).length, 1, "das no_ccid-Gate feuert unveraendert");
+});
+
+test("OBS-FLAG an + falsches Bearer: KEINE shape-Zeile (Dump erst nach der Auth), nur das auth-Gate", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const handler = makeHandler({ store, config, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() =>
+    handler(reqWith({ auth: "Bearer falsch", ccid: "cc_x" }), res),
+  );
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(shapeLines(lines).length, 0, "Shape-Dump laeuft erst NACH dem Bearer-Gate");
+  assert.equal(gateLines(lines).length, 1, "nur das auth-Gate");
+});
