@@ -107,6 +107,7 @@ import {
 } from "./web-auth.js";
 import { makePortalStore } from "./store/portal.js";
 import { makeAuditStore } from "./audit-store.js";
+import { runReleaseReconcile } from "./release-reconcile.js";
 import { createPortalRunner } from "./portal-pool.js";
 import { guardedBoot, fakeOriginateBootBlocked } from "./boot-guard.js";
 import {
@@ -225,6 +226,27 @@ if (!config.webDistDir) {
   app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
 }
 
+// tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers. Wie RETENTION_SWEEP_INTERVAL_MS
+// eine interne Kadenz (kein Operator-Knopf) -> Modul-Konstante, nicht config.js; der
+// eigentliche Sicherheits-Knopf ist das Grace-Fenster (RELEASE_GRACE_DAYS, config).
+const RELEASE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// Boot-Lauf + periodischer Sweep des DID-Release-Reconcilers. fire-and-forget (blockiert
+// weder guardedBoot/listen noch den Healthcheck); nowMs pro Lauf injiziert -> der reine
+// Klassifizierer/Executor bleibt Date.now-frei. Wird aus dem guardedBoot-Block gerufen,
+// weil der durable Audit (auditStore) den privilegierten portalRunner braucht - denselben
+// Runner wie der suspended_at-stempelnde Billing-Webhook (EINE pg-Wiring-Quelle, G5).
+// Free-Tier-Vorbehalt: Render-Free kann schlafen -> der Boot-Lauf deckt den Deploy-Fall;
+// eine Render-Cron ist das spaetere Upgrade (fuer den Launch nicht noetig, Observe-Only-Default).
+function scheduleReleaseReconcile(deps) {
+  const run = () =>
+    void runReleaseReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
+      console.error("[did-release]", e.message),
+    );
+  run();
+  setInterval(run, RELEASE_RECONCILE_INTERVAL_MS).unref();
+}
+
 // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
 // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
 // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
@@ -242,6 +264,15 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     const accounts = makeAccounts(portalRunner);
     const sessions = makeSessions(portalRunner);
     const auditStore = makeAuditStore(portalRunner);
+    // tenant-prolif-d: DID-Release-Reconcile scharfschalten (Boot-Lauf + Sweep). Der
+    // Provider laeuft ueber den bestehenden NumberProvisioning-Port (nur Telnyx). graceMs=0
+    // (Default) = Observe-Only -> loggt nur Kandidaten, gibt nichts frei.
+    scheduleReleaseReconcile({
+      store,
+      provisioner: numberProvisioning(PROVIDER.TELNYX),
+      audit: auditStore,
+      graceMs: config.releaseGraceMs,
+    });
     const portalStore = makePortalStore(portalRunner);
     const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
     // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst

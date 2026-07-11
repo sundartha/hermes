@@ -98,6 +98,9 @@ export const telnyxNumberProvisioning = {
       method: "DELETE",
       headers: authHeaders(),
     });
-    await assertTelnyxOk(res, "releaseNumber", INCLUDE_TELNYX_DETAIL);
+    // attachStatus: der tenant-prolif-d-Release-Reconciler unterscheidet 404 (Nummer bei
+    // Telnyx bereits weg -> als Erfolg werten, Idempotenz/Konvergenz) von echten Fehlern.
+    // Additiv fuer die Onboarding-Rollback-Callsite (deren catch ignoriert providerStatus).
+    await assertTelnyxOk(res, "releaseNumber", { ...INCLUDE_TELNYX_DETAIL, attachStatus: true });
   },
 };

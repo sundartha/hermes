@@ -161,6 +161,10 @@ services:
       # gruenem Telnyx-Idempotenz-Smoke scharfschalten.
       - key: PROVISIONING_REDRIVE_MAX_AGE_MS
         value: "0"
+      # tenant-prolif-d: Grace (TAGE) bis zum Auto-DID-Release suspendierter Tenants.
+      # 0 = Observe-Only (fail-closed, kein DELETE). Erst > 0 gibt echte DIDs frei.
+      - key: RELEASE_GRACE_DAYS
+        value: "0"
       # Kauf-Land-Override (ISO-2): alle neuen Nummern werden DORT gekauft, die Sprache
       # bleibt am erkannten Herkunftsland. "US" = jeder User bekommt eine US-Nummer; leer
       # = Kauf-Land = erkanntes Land. Geo-/Sprach-Erkennung bleibt aktiv.

@@ -58,6 +58,10 @@ function detectProduction() {
 // Tarif bleibt auf diesen Vorwahlen. Alles andere -> voiceTariffDefaultCents (Worst-Case).
 const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
 
+// tenant-prolif-d: Tag->ms-Bruecke fuer RELEASE_GRACE_DAYS (G25/G35: benannte Konstante,
+// eine Quelle). 0 Tage -> 0 ms, damit der Observe-Only-Sentinel erhalten bleibt.
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -373,6 +377,15 @@ export const config = {
     process.env.PROVISIONING_REDRIVE_MAX_AGE_MS,
     { fallback: 0, min: 0 },
   ),
+  // tenant-prolif-d: Grace-Periode (TAGE) bis zum automatischen DID-Release eines
+  // suspendierten Tenants. 0 (Default) = Observe-Only fail-closed: der Reconcile gibt
+  // NICHTS frei, loggt nur Kandidaten. Erst > 0 schaltet echte Telnyx-DELETEs scharf
+  // (Analogie PROVISIONING_REDRIVE_MAX_AGE_MS=0). Ein Fehl-Release ist Rufnummern-Verlust
+  // fuer einen zahlenden Kunden -> konservativ (mehrere Tage) waehlen. Intern in ms
+  // (MS_PER_DAY); Klassifizierer/Executor arbeiten zeit-injiziert in ms.
+  releaseGraceMs:
+    numEnv("RELEASE_GRACE_DAYS", process.env.RELEASE_GRACE_DAYS, { fallback: 0, min: 0 }) *
+    MS_PER_DAY,
   // Multi-Tenant-Identitaets-/Laufzeit-Schicht (I4-I7). DEFAULT AUS (fail-closed):
   // requestTenant === BOOTSTRAP_TENANT_ID -> Owner byte-identisch, kein Tenant-Scoping.
   // Erst true (nach allen dichten Scope-Gates I5/I6/I7) loest die Auth-Achse den

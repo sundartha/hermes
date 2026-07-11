@@ -1257,6 +1257,48 @@ export function classifyQueuedProvisioningJobs(s, { nowMs, maxAgeMs, kycMinLevel
   return buckets;
 }
 
+// ---- tenant-prolif-d: DID-Release-Klassifizierer (reiner Kern) ----
+// Verdikt-Werte (G25). release/hold/skip sind DISJUNKT.
+export const RELEASE_VERDICT = Object.freeze({ RELEASE: "release", HOLD: "hold", SKIP: "skip" });
+
+// Reiner, IO-freier, zeit-injizierter Verdict PRO Nummer (Vorbild redriveAgeHoldReason).
+// Kein Date.now/Math.random. EINE Regel-Quelle (G5) fuer den Bucket-Klassifizierer UND
+// den Live-Recheck im Reconcile-Executor. Regel (Invariante 1):
+//   release: Nummer active + Tenant suspendiert (suspended_at gesetzt) +
+//            nowMs - suspendedAt > graceMs + provider==="telnyx".
+//   hold   : dieselbe Release-Reife, aber provider!=="telnyx" (manuell - kein Twilio-Release).
+//   skip   : nicht active / nicht suspendiert / Grace nicht erreicht / suspended_at
+//            unparsebar (fail-closed - NIE auf Muell releasen).
+export function numberReleaseVerdict(s, number, { nowMs, graceMs }) {
+  if (number.status !== NUMBER_STATUS.ACTIVE)
+    return { action: RELEASE_VERDICT.SKIP, reason: `not_active_${number.status}` };
+  const suspendedAt = tenantSuspendedAt(s, number.tenantId);
+  if (!suspendedAt) return { action: RELEASE_VERDICT.SKIP, reason: "tenant_not_suspended" };
+  const suspendedMs = Date.parse(suspendedAt);
+  if (Number.isNaN(suspendedMs))
+    return { action: RELEASE_VERDICT.SKIP, reason: "suspended_at_unparsebar" };
+  if (nowMs - suspendedMs <= graceMs)
+    return { action: RELEASE_VERDICT.SKIP, reason: "grace_not_reached" };
+  if (number.provider !== PROVIDER.TELNYX)
+    return { action: RELEASE_VERDICT.HOLD, reason: "non_telnyx_manual" };
+  return { action: RELEASE_VERDICT.RELEASE, reason: null };
+}
+
+// Bucket-Klassifizierer (Vorbild classifyQueuedProvisioningJobs): mappt ALLE Nummern auf
+// drei disjunkte Koerbe. REIN + IO-frei (mutiert s NICHT, kein Date.now). release=Number[]
+// (der Executor braucht id + providerNumberId); hold/skip=[{number,reason}] fuer die
+// Observability. Nutzt numberReleaseVerdict (EINE Regel-Quelle, G5).
+export function classifyNumbersForRelease(s, { nowMs, graceMs }) {
+  const buckets = { release: [], hold: [], skip: [] };
+  for (const number of s.numbers) {
+    const { action, reason } = numberReleaseVerdict(s, number, { nowMs, graceMs });
+    if (action === RELEASE_VERDICT.RELEASE) buckets.release.push(number);
+    else if (action === RELEASE_VERDICT.HOLD) buckets.hold.push({ number, reason });
+    else buckets.skip.push({ number, reason });
+  }
+  return buckets;
+}
+
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
 // Liefert den Usage-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
 // im Kommentar; der Aufrufer reicht stets eine konkrete tenantId). So lebt der
