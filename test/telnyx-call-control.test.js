@@ -4,6 +4,7 @@
 // (Key-Leak-Schutz). Kein pglite/Server-Spawn (eigene Datei).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { captureConsole } from "./helpers.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -51,20 +52,6 @@ async function withBlankedConfig(key, fn) {
   } finally {
     config[key] = saved;
   }
-}
-
-// OBS-2: console.log fuer die Dauer eines async-Callbacks abfangen (nur log noetig, da
-// Erfolgspfad; orig sichern, ersetzen, im finally restaurieren - F.I.R.S.T.).
-async function captureConsole(fn) {
-  const lines = [];
-  const orig = console.log;
-  console.log = (...a) => lines.push(a.map(String).join(" "));
-  try {
-    await fn();
-  } finally {
-    console.log = orig;
-  }
-  return lines;
 }
 
 const CC_ORIGINATE = {

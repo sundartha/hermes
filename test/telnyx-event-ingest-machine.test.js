@@ -8,6 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
+import { captureConsole } from "./helpers.js";
 
 // Fake-Store: haelt GENAU einen Call (oder keinen), zeichnet markAnswered/endCallRecord
 // auf und spiegelt deren Effekt auf das Fixture-Objekt (wie state-ops.js: dieselbe
@@ -75,23 +76,6 @@ function hangupBody(callControlId) {
 }
 
 const DISCLOSURE_TEXT = "Guten Tag, hier spricht der KI-Assistent von Jonas Beispiel.";
-
-// OBS-2: console.log+warn fuer die Dauer eines async-Callbacks abfangen (orig sichern,
-// ersetzen, im finally restaurieren - F.I.R.S.T., Reihenfolge-unabhaengig). Liefert die Zeilen.
-async function captureConsole(fn) {
-  const lines = [];
-  const origLog = console.log;
-  const origWarn = console.warn;
-  console.log = (...a) => lines.push(a.map(String).join(" "));
-  console.warn = (...a) => lines.push(a.map(String).join(" "));
-  try {
-    await fn();
-  } finally {
-    console.log = origLog;
-    console.warn = origWarn;
-  }
-  return lines;
-}
 
 test("answered: Disclosure-Speak gefeuert (Text=disclosureSentence, voiceProfile aus localeFor), startAssistant NICHT (Reihenfolge), markAnswered gerufen", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
