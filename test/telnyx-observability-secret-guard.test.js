@@ -78,6 +78,31 @@ function skipString(source, start, quote) {
   return n;
 }
 
+// Gemeinsamer Kommentar-/String-Ueberspring-Schritt fuer matchingParen() und
+// extractConsoleCallArgs() (G5: vorher wortgleich in beiden dupliziert, mit
+// bereits eingetretener Drift beim unterminierten //-Kommentar am Dateiende).
+// Beginnt an source[i] ein // - oder /* */ -Kommentar oder ein '/"/`-String,
+// liefert die Funktion den naechsten zu scannenden Index (bei unterminiertem
+// Token: source.length, sodass die aufrufende Schleife regulaer ueber die
+// Abbruchbedingung i < n endet). Beginnt an i weder Kommentar noch String,
+// liefert sie null - der Aufrufer scannt i selbst regulaer weiter.
+function skipCommentOrString(source, i) {
+  const n = source.length;
+  const c = source[i];
+  if (c === "/" && source[i + 1] === "/") {
+    const nextNewline = source.indexOf("\n", i);
+    return nextNewline === -1 ? n : nextNewline;
+  }
+  if (c === "/" && source[i + 1] === "*") {
+    const end = source.indexOf("*/", i + 2);
+    return end === -1 ? n : end + 2;
+  }
+  if (c === '"' || c === "'" || c === "`") {
+    return skipString(source, i, c);
+  }
+  return null;
+}
+
 // Index der zu open (Position eines "(") gehoerenden, balancierten ")".
 // Strings/Kommentare zwischen den Klammern werden beim Zaehlen ausgespart,
 // damit eine ")" oder "(" im Log-Text die Klammer-Balance nicht verfaelscht.
@@ -86,22 +111,12 @@ function matchingParen(source, open) {
   let i = open;
   const n = source.length;
   while (i < n) {
+    const skipTo = skipCommentOrString(source, i);
+    if (skipTo !== null) {
+      i = skipTo;
+      continue;
+    }
     const c = source[i];
-    if (c === "/" && source[i + 1] === "/") {
-      const nextNewline = source.indexOf("\n", i);
-      if (nextNewline === -1) return n;
-      i = nextNewline;
-      continue;
-    }
-    if (c === "/" && source[i + 1] === "*") {
-      const end = source.indexOf("*/", i + 2);
-      i = end === -1 ? n : end + 2;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === "`") {
-      i = skipString(source, i, c);
-      continue;
-    }
     if (c === "(") depth++;
     else if (c === ")") {
       depth--;
@@ -121,20 +136,9 @@ function extractConsoleCallArgs(source) {
   let i = 0;
   const n = source.length;
   while (i < n) {
-    const c = source[i];
-    if (c === "/" && source[i + 1] === "/") {
-      const nextNewline = source.indexOf("\n", i);
-      if (nextNewline === -1) break;
-      i = nextNewline;
-      continue;
-    }
-    if (c === "/" && source[i + 1] === "*") {
-      const end = source.indexOf("*/", i + 2);
-      i = end === -1 ? n : end + 2;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === "`") {
-      i = skipString(source, i, c);
+    const skipTo = skipCommentOrString(source, i);
+    if (skipTo !== null) {
+      i = skipTo;
       continue;
     }
     CONSOLE_CALL_START.lastIndex = i;
@@ -212,4 +216,23 @@ test("Detektor faengt einen synthetischen Leak (Positiv-Kontrolle)", () => {
   const argTexts = extractConsoleCallArgs(synthetic);
   assert.equal(argTexts.length, 3, "Scanner muss die 3 synthetischen console-Aufrufe finden");
   assert.ok(findLeaks(argTexts).length >= 3, "Detektor muss die 3 synthetischen Leaks fangen");
+});
+
+// T1/G3: gezielter Grenzfall fuer den Escape-Zweig in skipString() (c === "\\").
+// Ein escapetes Anfuehrungszeichen (\") gefolgt von einer schliessenden Klammer
+// STEHT INNERHALB des Strings. Ohne die Escape-Behandlung wuerde skipString()
+// den String bereits am escapeten Zeichen fuer beendet halten - die danach
+// folgende ")" waere dann keine String-, sondern eine echte Klammer und wuerde
+// matchingParen() vorzeitig schliessen, BEVOR das Secret im Argument ueberhaupt
+// gescannt wird. Genau der False-Negative-Pfad, den G3 (Grenzfaelle testen)
+// hier verlangt.
+test("Detektor findet Leak trotz escapetem Anfuehrungszeichen im String (Grenzfall skipString)", () => {
+  const synthetic = 'console.warn("bad\\")" + config.telnyxApiKey);';
+  const argTexts = extractConsoleCallArgs(synthetic);
+  assert.equal(argTexts.length, 1, "Scanner muss den einen console-Aufruf trotz Escape-Grenzfall finden");
+  const leaks = findLeaks(argTexts);
+  assert.ok(
+    leaks.some((leak) => leak.pattern === String(/config\.telnyxApiKey/)),
+    "Detektor muss das Secret nach dem escapeten Anfuehrungszeichen finden",
+  );
 });
