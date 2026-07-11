@@ -336,6 +336,17 @@ test("OBS-2: originateViaCallControl ok-Log traegt status+ccid=true, NIE die cci
   assert.ok(!line.includes("cc_resp_secret"));
 });
 
+// OBS-2 Test 6b (T5 Grenzbedingung): 2xx-Antwort OHNE call_control_id -> ccid=false.
+// Deckt den bislang ungetesteten ccidPresent=false-Zweig ab (Runde 3, Review-Blocker).
+test("OBS-2: originateViaCallControl ok-Log traegt ccid=false, wenn die Antwort keine call_control_id hat", async () => {
+  stubFetch({ status: 200, json: { data: {} } });
+  const lines = await captureConsole(() => telnyxVoice.originateViaCallControl(CC_ORIGINATE));
+  const line = lines.find((l) => l.includes("[telnyx/voice] originateViaCallControl ok"));
+  assert.ok(line, "originateViaCallControl-Erfolgs-Log fehlt");
+  assert.match(line, /status=200/);
+  assert.match(line, /ccid=false/);
+});
+
 // OBS-2 Test 7: kein Erfolgs-Log auf dem Fehlerpfad (assertTelnyxOk wirft VOR dem Log).
 test("OBS-2: kein [telnyx/voice]-Log auf dem Fehlerpfad (assertTelnyxOk wirft vorher)", async () => {
   stubFetch({
