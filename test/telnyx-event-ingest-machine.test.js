@@ -76,6 +76,23 @@ function hangupBody(callControlId) {
 
 const DISCLOSURE_TEXT = "Guten Tag, hier spricht der KI-Assistent von Jonas Beispiel.";
 
+// OBS-2: console.log+warn fuer die Dauer eines async-Callbacks abfangen (orig sichern,
+// ersetzen, im finally restaurieren - F.I.R.S.T., Reihenfolge-unabhaengig). Liefert die Zeilen.
+async function captureConsole(fn) {
+  const lines = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  console.log = (...a) => lines.push(a.map(String).join(" "));
+  console.warn = (...a) => lines.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+  }
+  return lines;
+}
+
 test("answered: Disclosure-Speak gefeuert (Text=disclosureSentence, voiceProfile aus localeFor), startAssistant NICHT (Reihenfolge), markAnswered gerufen", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
   const store = fakeStore(call);
@@ -234,4 +251,108 @@ test("unbekanntes Event (z.B. call.speak.started) -> 200 ohne Wirkung, kein Cras
   assert.equal(vc.speakCalls.length, 0);
   assert.equal(vc.startAssistantCalls.length, 0);
   assert.equal(finishCallCalls.length, 0);
+});
+
+// OBS-2 Test 1 (DoD-Kern, Anti-Klemme): call.speak.ended mit status="succeeded" (NICHT
+// "completed") klassifiziert trotzdem zu SPEAK_ENDED (siehe call-control-events.js: der
+// Status wird fuer die Ended-Klassifikation nicht geprueft) und feuert startAssistant. Der
+// Roh-Log darf den echten Status NICHT auf eine completed/failed-Allowlist klemmen - sonst
+// verschluckt die Beobachtung genau den Token, den P1a-FIX braucht.
+test("OBS-2: call.speak.ended mit status=succeeded -> Roh-Log zeigt event_type+status UNGEKLEMMT", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const body = {
+    data: { event_type: "call.speak.ended", payload: { call_control_id: "cc_1", status: "succeeded" } },
+  };
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  assert.equal(vc.startAssistantCalls.length, 1, "SPEAK_ENDED klassifiziert trotz Nicht-completed-Status");
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.ok(rawLine, "Roh-Log-Zeile fehlt");
+  assert.match(rawLine, /event_type=call\.speak\.ended/);
+  assert.match(rawLine, /status=succeeded/);
+});
+
+// OBS-2 Test 2: unbekanntes Event (call.playback.ended) -> Roh-Log zeigt den echten
+// event_type+status, keine Aktion wird ausgeloest (byte-identisches Klassifikationsverhalten).
+test("OBS-2: unbekanntes Event call.playback.ended -> Roh-Log zeigt Token, keine Aktion", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const body = {
+    data: { event_type: "call.playback.ended", payload: { call_control_id: "cc_1", status: "finished" } },
+  };
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  assert.equal(vc.speakCalls.length, 0);
+  assert.equal(vc.startAssistantCalls.length, 0);
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.ok(rawLine, "Roh-Log-Zeile fehlt");
+  assert.match(rawLine, /event_type=call\.playback\.ended/);
+  assert.match(rawLine, /status=finished/);
+});
+
+// OBS-2 Test 3 (unknown_call, PII): der rohe (Caller-kontrollierte) Query-Wert darf NIE
+// im Log landen (Regel 4) - nur der Grund-Token. Genau eine Zeile (kein zusaetzlicher
+// Roh-Log, da der Dispatch bei unbekanntem callId vorher returnt).
+test("OBS-2: unbekannter callId -> Log traegt reason=unknown_call, NIE den rohen Query-Wert", async () => {
+  const store = fakeStore(null);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const leakyCallId = "callId_leaky_9999";
+  const lines = await captureConsole(() =>
+    handler({ query: { callId: leakyCallId }, body: hangupBody("cc_1") }, fakeRes()),
+  );
+
+  assert.equal(lines.length, 1, "genau eine Log-Zeile bei unbekanntem callId");
+  assert.match(lines[0], /reason=unknown_call/);
+  assert.ok(!lines[0].includes(leakyCallId), "roher Query-Wert darf NICHT im Log stehen");
+});
+
+// OBS-2 Test 4 (Kette + PII): answered -> speak.ended -> hangup erzeugt drei Erfolgs-Logs
+// mit der internen call.id; die ccid ("cc_secret") darf in KEINER Ingest-Log-Zeile stehen
+// (Regel 4 - Ingest-Logs tragen call.id, nicht die ccid).
+test("OBS-2: answered->speak.ended->hangup -> drei Erfolgs-Logs, ccid-Wert nirgends geloggt", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const ccid = "cc_secret";
+  const lines = await captureConsole(async () => {
+    await handler({ query: { callId: "call_1" }, body: answeredBody(ccid) }, fakeRes());
+    await handler({ query: { callId: "call_1" }, body: speakEndedBody(ccid) }, fakeRes());
+    await handler({ query: { callId: "call_1" }, body: hangupBody(ccid) }, fakeRes());
+  });
+
+  assert.ok(lines.some((l) => l.includes("answered (call=call_1) -> Disclosure-Speak")));
+  assert.ok(lines.some((l) => l.includes("speak.ended (call=call_1) -> ai_assistant_start")));
+  assert.ok(lines.some((l) => l.includes("hangup (call=call_1) -> Settlement")));
+  assert.ok(!lines.some((l) => l.includes(ccid)), "ccid-Wert darf in keiner Ingest-Log-Zeile stehen");
 });
