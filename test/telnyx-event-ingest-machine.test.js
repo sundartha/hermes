@@ -340,3 +340,55 @@ test("OBS-2: answered->speak.ended->hangup -> drei Erfolgs-Logs, ccid-Wert nirge
   assert.ok(lines.some((l) => l.includes("hangup (call=call_1) -> Settlement")));
   assert.ok(!lines.some((l) => l.includes(ccid)), "ccid-Wert darf in keiner Ingest-Log-Zeile stehen");
 });
+
+// Review-Blocker Runde 2 (T1/T5, rawToken): Event-Body OHNE data.event_type (env=null,
+// eventEnvelope liefert null wenn event_type fehlt) -> logEventReceived darf nicht crashen
+// und muss beide Token als "none" loggen (null/undefined-Zweig von rawToken).
+test("Review-Blocker: Event-Body ohne data.event_type -> Roh-Log zeigt event_type=none status=none", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const body = { data: { payload: { call_control_id: "cc_1" } } }; // kein event_type
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  assert.equal(vc.speakCalls.length, 0);
+  assert.equal(vc.startAssistantCalls.length, 0);
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.ok(rawLine, "Roh-Log-Zeile fehlt");
+  assert.match(rawLine, /event_type=none status=none/);
+});
+
+// Review-Blocker Runde 2 (T1/T5, rawToken): event_type/status laenger als EVENT_TOKEN_MAX_LEN
+// (64) -> Log-Zeile ist bei 64 Zeichen gekappt (Trunkierungs-Zweig von rawToken).
+test("Review-Blocker: event_type/status ueber 64 Zeichen -> Roh-Log-Token bei 64 Zeichen gekappt", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    disclosureSentence: () => DISCLOSURE_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+  });
+  const longEventType = "call.speak.ended" + "x".repeat(64); // 80 Zeichen, kein Mapping-Treffer
+  const longStatus = "y".repeat(80); // 80 Zeichen
+  const body = { data: { event_type: longEventType, payload: { call_control_id: "cc_1", status: longStatus } } };
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  assert.equal(vc.speakCalls.length, 0);
+  assert.equal(vc.startAssistantCalls.length, 0);
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.ok(rawLine, "Roh-Log-Zeile fehlt");
+  assert.ok(rawLine.includes(`event_type=${longEventType.slice(0, 64)} `), "event_type-Token nicht bei 64 gekappt");
+  assert.ok(rawLine.endsWith(`status=${longStatus.slice(0, 64)}`), "status-Token nicht bei 64 gekappt");
+  assert.ok(!rawLine.includes(longEventType), "event_type darf nicht ungekuerzt im Log stehen");
+  assert.ok(!rawLine.includes(longStatus), "status darf nicht ungekuerzt im Log stehen");
+});
