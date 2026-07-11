@@ -1032,3 +1032,145 @@ test("OBS-FLAG an + falsches Bearer: KEINE shape-Zeile (Dump erst nach der Auth)
   assert.equal(shapeLines(lines).length, 0, "Shape-Dump laeuft erst NACH dem Bearer-Gate");
   assert.equal(gateLines(lines).length, 1, "nur das auth-Gate");
 });
+
+// === P5: messages-Shape + speechEmpty-Diskriminator (default-off, hinter Bearer) =====
+// Eigenes distinktes Feld (speechEmpty) trennt diese Zeile von forwardMetadataShape (die
+// ebenfalls kind="shape" traegt, aber kein speechEmpty hat) - siehe shapeLines oben.
+const turnShapeLines = (lines) => lines.filter((l) => l.includes('"speechEmpty"'));
+
+test("P5-1: erfolgreicher Turn -> genau 1 turn-shape-Zeile mit exakten Feldern, KEIN Nachrichtentext (PII)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const agentTurn = agentTurnSpy({ speech: "Antwort", endCall: false });
+  const handler = makeHandler({ store, config, agentTurn });
+  const res = fakeRes();
+  const body = {
+    messages: [
+      { role: "system", content: "Systemprompt" },
+      { role: "user", content: "erste" },
+      { role: "assistant", content: "Zwischenantwort" },
+      { role: "user", content: "Zweite Frage" },
+    ],
+  };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body }), res));
+
+  const turnShapes = turnShapeLines(lines);
+  assert.equal(turnShapes.length, 1);
+  const line = turnShapes[0];
+  assert.ok(line.includes('"messagesCount":4'));
+  assert.ok(line.includes('"system":1'));
+  assert.ok(line.includes('"user":2'));
+  assert.ok(line.includes('"assistant":1'));
+  assert.ok(line.includes('"other":0'));
+  assert.ok(line.includes('"lastUserContentType":"string"'));
+  assert.ok(line.includes('"lastUserLength":12'));
+  assert.ok(line.includes('"lastUserTextPresent":true'));
+  assert.ok(line.includes('"speechEmpty":false'));
+  assert.ok(!line.includes("Zweite Frage"), "kein Nachrichtentext (PII)");
+  assert.ok(!line.includes("erste"), "kein Nachrichtentext (PII)");
+  assert.ok(!line.includes("Antwort"), "kein Turn-Speech-Inhalt (PII)");
+});
+
+test("P5-2: agentTurn liefert leeren Speech (Anomalie) -> speechEmpty:true", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const agentTurn = agentTurnSpy({ speech: "", endCall: false });
+  const handler = makeHandler({ store, config, agentTurn });
+  const res = fakeRes();
+  const body = { messages: [{ role: "user", content: "Hallo" }] };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body }), res));
+
+  const line = turnShapeLines(lines)[0];
+  assert.ok(line, "turn-shape-Zeile muss existieren");
+  assert.ok(line.includes('"speechEmpty":true'));
+});
+
+test("P5-3: Array-Content bei der letzten user-Message -> contentType=array, lastUserTextPresent=false, KEIN Value-Leak", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const agentTurn = agentTurnSpy({ speech: "Antwort", endCall: false });
+  const handler = makeHandler({ store, config, agentTurn });
+  const res = fakeRes();
+  const body = {
+    messages: [
+      { role: "system", content: "Systemprompt" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "GEHEIM" },
+          { type: "text", text: "noch mehr" },
+        ],
+      },
+    ],
+  };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body }), res));
+
+  const line = turnShapeLines(lines)[0];
+  assert.ok(line);
+  assert.ok(line.includes('"lastUserContentType":"array"'));
+  assert.ok(line.includes('"lastUserLength":2'));
+  assert.ok(line.includes('"lastUserTextPresent":false'));
+  assert.ok(!line.includes("GEHEIM"), "kein Array-Content-Wert (PII)");
+});
+
+test("P5-4: keine user-Message im Payload -> contentType=missing, lastUserLength=0, lastUserTextPresent=false", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const agentTurn = agentTurnSpy({ speech: "Antwort", endCall: false });
+  const handler = makeHandler({ store, config, agentTurn });
+  const res = fakeRes();
+  const body = { messages: [{ role: "system", content: "Systemprompt" }] };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body }), res));
+
+  const line = turnShapeLines(lines)[0];
+  assert.ok(line);
+  assert.ok(line.includes('"messagesCount":1'));
+  assert.ok(line.includes('"lastUserContentType":"missing"'));
+  assert.ok(line.includes('"lastUserLength":0'));
+  assert.ok(line.includes('"lastUserTextPresent":false'));
+});
+
+test("P5-5: Flag aus -> KEINE turn-shape-Zeile, Turn unveraendert (byte-identisch)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy({ speech: "Antwort", endCall: false });
+  const handler = makeHandler({ store, agentTurn }); // Default-Config -> telnyxShimDebugShape false
+  const res = fakeRes();
+  const body = { messages: [{ role: "user", content: "Hallo" }] };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body }), res));
+
+  assert.equal(turnShapeLines(lines).length, 0, "Default-off emittiert keine turn-shape-Zeile");
+  assert.equal(res.chunks.length, 2, "Turn unveraendert (EIN Chunk + [DONE])");
+});
+
+test("P5-6 (SAFE-1 dynamische Erweiterung): Sentinel-Transkript/E.164/Secret landen NICHT in der turn-shape-Zeile", async () => {
+  const SENTINEL_SECRET = "SENTINEL_SECRET_p5_9f3391a";
+  const SENTINEL_TRANSCRIPT = "SENTINEL_TRANSCRIPT_p5_ich-bin-privat";
+  const SENTINEL_PHONE = "+491700000099";
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true, telnyxShimSharedSecret: SENTINEL_SECRET });
+  const agentTurn = agentTurnSpy({ speech: "Antwort", endCall: false });
+  const handler = makeHandler({ store, config, agentTurn });
+  const res = fakeRes();
+  const body = {
+    messages: [
+      { role: "user", content: SENTINEL_TRANSCRIPT },
+      { role: "user", content: `${SENTINEL_TRANSCRIPT} ${SENTINEL_PHONE}` },
+    ],
+  };
+
+  const lines = await withConsoleCapture(() =>
+    handler(reqWith({ auth: `Bearer ${SENTINEL_SECRET}`, ccid: "cc_x", body }), res),
+  );
+
+  const turnShapes = turnShapeLines(lines);
+  assert.equal(turnShapes.length, 1, "turn-shape-Zeile existiert (nicht vacuous)");
+  const line = turnShapes[0];
+  assert.ok(!line.includes(SENTINEL_TRANSCRIPT), "kein Transkript-Wert");
+  assert.ok(!line.includes(SENTINEL_PHONE), "keine E.164");
+  assert.ok(!line.includes(SENTINEL_SECRET), "kein Secret");
+});
