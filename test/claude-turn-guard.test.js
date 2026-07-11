@@ -26,6 +26,7 @@ const OWNER = "Jonas Beispiel";
 // reine Turn-Steuerung, kein oeffentlicher API-Vertrag). Byte-identischer Erwartungswert,
 // analog zum EPHEMERAL-Literal in l3-prompt-caching.test.js.
 const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das Gespraech.]";
+const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ihn.]";
 const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 
 // per Test/Turn gesetzte Mock-Antwort.
@@ -72,12 +73,13 @@ function lastMessageOf(body) {
   return body.messages[body.messages.length - 1];
 }
 
-// zaehlt, in wie vielen erfassten Requests der Bootstrap-Text ueberhaupt vorkommt
-// (TG-3a: Re-Injektions-Check - genau einmal; TG-3b: darf nie erscheinen).
-function countBootstrapOccurrences(capturedBodies) {
-  return capturedBodies.filter((body) =>
-    body.messages.some((m) => m.content === OUTBOUND_OPENING_BOOTSTRAP),
-  ).length;
+// zaehlt, in wie vielen erfassten Requests ein bestimmter Bootstrap-Text vorkommt
+// (TG-3a/TG-3c: Re-Injektions-Check - genau einmal; TG-3b/TG-3d: darf nie erscheinen).
+// Ueber den Bootstrap-Text parametrisiert (S2/DRY) - eine Funktion fuer Outbound- UND
+// Inbound-Variante statt einer Kopie mit vertauschter Konstante.
+function countBootstrapOccurrences(capturedBodies, bootstrapText) {
+  return capturedBodies.filter((body) => body.messages.some((m) => m.content === bootstrapText))
+    .length;
 }
 
 let server;
@@ -126,6 +128,17 @@ before(async () => {
         seedCall({
           id: "call_tg3_budget",
           direction: "outbound",
+          transcript: [{ role: "agent", text: "Guten Tag, hier ist der Assistent von Jonas." }],
+        }),
+        // TG-3c: Telnyx-LLM-Shim-Erstkontakt fuer INBOUND (Review-Blocker Runde 3) - dort
+        // schreibt niemand eine agent-Zeile ins Transkript (analog zu call_tg3, nur inbound).
+        seedCall({ id: "call_tg3_inbound", direction: "inbound" }),
+        // TG-3d: Budget-Engine-Erstkontakt fuer INBOUND (analog zu call_tg3_budget) -
+        // server.js schreibt die Greeting-Zeile bei /voice/incoming IMMER synchron per
+        // addTranscript(), BEVOR der erste /voice/turn -> agentTurn-Aufruf stattfindet.
+        seedCall({
+          id: "call_tg3_inbound_budget",
+          direction: "inbound",
           transcript: [{ role: "agent", text: "Guten Tag, hier ist der Assistent von Jonas." }],
         }),
         seedCall({ id: "call_tg4", direction: "outbound" }),
@@ -199,6 +212,10 @@ test("TG-2 (a) einzelner Leer-Turn kein end_call vor der Schwelle; ab maxEmptyTu
 //   Zeile IMMER synchron per addTranscript(), BEVOR /voice/turn -> agentTurn ueberhaupt zum
 //   ersten Mal aufgerufen wird -> das Transkript enthaelt ab dem allerersten Aufruf schon
 //   eine agent-Zeile, der Bootstrap darf hier NIE erscheinen.
+// Die hasAgentLine-Weiche in src/claude.js prueft NUR, ob schon eine agent-Zeile existiert -
+// NICHT die Richtung. TG-3c/TG-3d (weiter unten) spiegeln TG-3a/TG-3b deshalb 1:1 fuer
+// direction:"inbound", weil derselbe Shim-Erstkontakt auch inbound auftritt
+// (telnyx-llm-shim.js loest Calls nur ueber call_control_id auf, nie ueber direction).
 // ---------------------------------------------------------------------------------------
 
 test("TG-3a (c) Shim-Erstkontakt (Transkript startet leer): Bootstrap feuert einmalig; stille Folge-Turns nutzen SILENT_TURN_MARKER, Kette bleibt gueltig", async () => {
@@ -227,7 +244,7 @@ test("TG-3a (c) Shim-Erstkontakt (Transkript startet leer): Bootstrap feuert ein
   }
 
   // Der Bootstrap-Text erscheint ueber ALLE Requests genau einmal (keine Re-Injektion).
-  assert.equal(countBootstrapOccurrences(capturedBodies), 1);
+  assert.equal(countBootstrapOccurrences(capturedBodies, OUTBOUND_OPENING_BOOTSTRAP), 1);
 });
 
 test("TG-3b (c) Budget-Engine-Erstkontakt (agent-Zeile bereits vorbesetzt): Bootstrap feuert NIE, bereits der erste stille Turn nutzt SILENT_TURN_MARKER", async () => {
@@ -250,7 +267,59 @@ test("TG-3b (c) Budget-Engine-Erstkontakt (agent-Zeile bereits vorbesetzt): Boot
     assert.equal(lastMessageOf(body).content, SILENT_TURN_MARKER);
   }
 
-  assert.equal(countBootstrapOccurrences(capturedBodies), 0);
+  assert.equal(countBootstrapOccurrences(capturedBodies, OUTBOUND_OPENING_BOOTSTRAP), 0);
+});
+
+test("TG-3c (c) Shim-Erstkontakt Inbound (Transkript startet leer): Bootstrap feuert einmalig; stille Folge-Turns nutzen SILENT_TURN_MARKER, Kette bleibt gueltig", async () => {
+  const callId = "call_tg3_inbound";
+  requests = [];
+  const capturedBodies = [];
+  for (let turn = 0; turn < 3; turn++) {
+    const call = store.getCall(callId);
+    nextResponse = textMessage("Ich warte kurz.");
+    const before = requests.length;
+    await agentTurn(call, "");
+    capturedBodies.push(requests[before]);
+  }
+
+  assert.equal(lastMessageOf(capturedBodies[0]).role, "user");
+  assert.equal(lastMessageOf(capturedBodies[0]).content, INBOUND_OPENING_BOOTSTRAP);
+
+  for (const body of [capturedBodies[1], capturedBodies[2]]) {
+    assert.equal(lastMessageOf(body).role, "user");
+    assert.equal(lastMessageOf(body).content, SILENT_TURN_MARKER);
+  }
+
+  // Contract-Invariante: JEDES erfasste messages-Array endet mit role:user (API-Gueltigkeit).
+  for (const body of capturedBodies) {
+    assert.equal(lastMessageOf(body).role, "user");
+  }
+
+  // Der Bootstrap-Text erscheint ueber ALLE Requests genau einmal (keine Re-Injektion).
+  assert.equal(countBootstrapOccurrences(capturedBodies, INBOUND_OPENING_BOOTSTRAP), 1);
+});
+
+test("TG-3d (c) Budget-Engine-Erstkontakt Inbound (agent-Zeile bereits vorbesetzt): Bootstrap feuert NIE, bereits der erste stille Turn nutzt SILENT_TURN_MARKER", async () => {
+  const callId = "call_tg3_inbound_budget";
+  requests = [];
+  const capturedBodies = [];
+  for (let turn = 0; turn < 2; turn++) {
+    const call = store.getCall(callId);
+    nextResponse = textMessage("Ich warte kurz.");
+    const before = requests.length;
+    await agentTurn(call, "");
+    capturedBodies.push(requests[before]);
+  }
+
+  // Schon der ALLERERSTE Turn (Index 0) nutzt den neutralen Marker, nicht den Bootstrap -
+  // server.js schreibt die Greeting-Zeile fuer inbound IMMER synchron per addTranscript()
+  // (/voice/incoming), BEVOR der erste /voice/turn -> agentTurn-Aufruf stattfindet.
+  for (const body of capturedBodies) {
+    assert.equal(lastMessageOf(body).role, "user");
+    assert.equal(lastMessageOf(body).content, SILENT_TURN_MARKER);
+  }
+
+  assert.equal(countBootstrapOccurrences(capturedBodies, INBOUND_OPENING_BOOTSTRAP), 0);
 });
 
 // ---------- TG-4: Regression fuer substanzielle Aeusserungen (beide Aufrufer) ----------
