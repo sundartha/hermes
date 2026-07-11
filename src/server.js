@@ -208,8 +208,9 @@ registerWellKnown(app);
 // AUTH-AUSNAHME (Regel 3, begruendet): Telnyx BYO-LLM ruft diesen /v1/chat/completions-
 // kompatiblen Endpunkt SERVERSEITIG (kein Basic-Auth-Header moeglich) -> bewusst VOR der
 // Basic-Auth registriert (analog /voice/tts/:token), mit EIGENER fail-closed Absicherung:
-// 404 bei TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag), per-Call-Token
-// gegen den Store-Call-Record (403 sonst, timing-sicher), Budget-Gate pro Turn (kein
+// 404 bei TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag); statisches Bearer-
+// Integration-Secret (E2) timing-sicher via safeEqual + call_control_id-Korrelation aus
+// forward_metadata (E1) gegen den Store-Call-Record (403 sonst); Budget-Gate pro Turn (kein
 // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
 // bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
 // fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).

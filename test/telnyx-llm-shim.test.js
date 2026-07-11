@@ -622,3 +622,254 @@ test("D8b: Fehler-Log traegt NUR err.name, kein Secret", async () => {
   assert.ok(logged.some((l) => l.includes("[telnyx-shim]")));
   assert.ok(!logged.join("\n").includes("shim-secret"), "Log darf das Secret nie enthalten");
 });
+
+// === OBS-1: Observability Shim-Gates (unconditional, PII-freie Diagnose-Zeilen) ===
+// Jede stumme 403-/Degradations-Flaeche im Shim hinterlaesst jetzt eine strukturierte
+// Log-Zeile mit distinktem Grund-Token (reason), NUR Booleans/Zaehler/interne IDs/
+// Feld-NAMEN - nie Header-/Secret-/Transkript-WERTE. Erfasst alle drei Console-Kanaele,
+// restauriert immer (F.I.R.S.T.).
+async function withConsoleCapture(run) {
+  const lines = [];
+  const orig = { warn: console.warn, log: console.log, error: console.error };
+  const grab = (...a) => lines.push(a.map(String).join(" "));
+  console.warn = grab;
+  console.log = grab;
+  console.error = grab;
+  try {
+    await run();
+  } finally {
+    Object.assign(console, orig);
+  }
+  return lines;
+}
+
+const GATE_LINE_MARKER = "[telnyx-shim] gate";
+const TURN_OK_LINE_MARKER = "[telnyx-shim] turn_ok";
+const gateLines = (lines) => lines.filter((l) => l.includes(GATE_LINE_MARKER));
+const turnOkLines = (lines) => lines.filter((l) => l.includes(TURN_OK_LINE_MARKER));
+
+test("OBS-1 auth: fehlender Header -> genau 1 gate reason=auth {hasHeader:false,secretConfigured:true}, weiter 403", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ ccid: "cc_x" }), res));
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"auth"'));
+  assert.ok(gates[0].includes('"hasHeader":false'));
+  assert.ok(gates[0].includes('"secretConfigured":true'));
+});
+
+test("OBS-1 auth: falsches Secret -> gate reason=auth {hasHeader:true}, Secret-Wert NICHT im Log", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() =>
+    handler(reqWith({ auth: "Bearer falsches-geheim-XYZ", ccid: "cc_x" }), res),
+  );
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"auth"'));
+  assert.ok(gates[0].includes('"hasHeader":true'));
+  const joined = lines.join("\n");
+  assert.ok(!joined.includes("shim-secret"), "config-Default-Secret darf nie im Log auftauchen");
+  assert.ok(!joined.includes("falsches-geheim-XYZ"), "gesendeter Bearer-Wert darf nie im Log auftauchen");
+});
+
+test("OBS-1 auth: leeres config-Secret -> gate {secretConfigured:false}", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimSharedSecret: "" });
+  const handler = makeHandler({ store, config, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: "Bearer ", ccid: "cc_x" }), res));
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"auth"'));
+  assert.ok(gates[0].includes('"secretConfigured":false'));
+});
+
+test("OBS-1 no_ccid: gate reason=no_ccid traegt bodyKeys+metadataKeys, aber KEINE Werte", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+  const body = {
+    messages: [{ role: "user", content: "GEHEIM_TRANSCRIPT_42" }],
+    metadata: { some_secret_field: "SECRET_VALUE_XYZ" },
+  };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, body }), res));
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"no_ccid"'));
+  assert.ok(gates[0].includes("messages"), "Feld-NAME messages muss auftauchen (bodyKeys)");
+  assert.ok(gates[0].includes("metadata"), "Feld-NAME metadata muss auftauchen (bodyKeys)");
+  assert.ok(gates[0].includes("some_secret_field"), "Feld-NAME muss auftauchen (metadataKeys)");
+  assert.ok(!gates[0].includes("GEHEIM_TRANSCRIPT_42"), "Transkript-WERT darf nie im Log auftauchen");
+  assert.ok(!gates[0].includes("SECRET_VALUE_XYZ"), "Metadata-WERT darf nie im Log auftauchen");
+});
+
+test("OBS-1 call_unresolved: unbekannte ccid -> gate {found:false,status:null}", async () => {
+  const store = fakeStore({ call: null });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() =>
+    handler(reqWith({ auth: VALID_AUTH, ccid: "cc_unbekannt" }), res),
+  );
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"call_unresolved"'));
+  assert.ok(gates[0].includes('"found":false'));
+  assert.ok(gates[0].includes('"status":null'));
+});
+
+test("OBS-1 call_unresolved: inaktiver Call -> gate {found:true,status:\"completed\"}, ccid nicht im Log", async () => {
+  const store = fakeStore({ call: makeCall({ status: "completed" }) });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"call_unresolved"'));
+  assert.ok(gates[0].includes('"found":true'));
+  assert.ok(gates[0].includes('"status":"completed"'));
+  assert.ok(!gates[0].includes("cc_x"), "die ccid selbst darf nicht im Log auftauchen");
+});
+
+test("OBS-1 rate_limited: N+1-Turn -> gate reason=rate_limited {callId}", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 1 });
+  const handler = makeHandler({ store, config, agentTurn: agentTurnSpy() });
+
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), fakeRes()); // 1. Turn verbraucht das Fenster
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), fakeRes()));
+
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"rate_limited"'));
+  assert.ok(gates[0].includes('"callId":"call_x"'));
+});
+
+test("OBS-1 budget_tenant: tenant-Cap -> gate reason=budget_tenant {callId,tenantId}", async () => {
+  const store = fakeStore({ call: makeCall(), budgetExceeded: true });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1, "kein Hangup-Log daneben, da callControlId gesetzt ist");
+  assert.ok(gates[0].includes('"reason":"budget_tenant"'));
+  assert.ok(gates[0].includes('"callId":"call_x"'));
+  assert.ok(gates[0].includes('"tenantId":"t_test"'));
+});
+
+test("OBS-1 budget_global: nur globaler Notaus -> gate reason=budget_global", async () => {
+  const store = fakeStore({ call: makeCall(), globalBudgetExceeded: true });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"budget_global"'));
+});
+
+test("OBS-1 turn_ok: Erfolg loggt unconditional (kein injizierter metrics-Spy) genau 1 turn_ok mit callId+numerischer latencyMs", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handler = makeHandler({ store, agentTurn }); // KEIN metrics-Arg -> defaultMetrics (metricsEnabled aus)
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  const turnOk = turnOkLines(lines);
+  assert.equal(turnOk.length, 1);
+  assert.ok(turnOk[0].includes('"callId":"call_x"'));
+  assert.match(turnOk[0], /"latencyMs":\d/);
+  assert.ok(!turnOk[0].includes("Hallo Welt"), "der Turn-Speech-Inhalt gehoert nie in die turn_ok-Zeile");
+});
+
+test("OBS-1 turn_ok feuert NICHT im Fehler-/Gate-Pfad", async () => {
+  const store = fakeStore({ call: makeCall() });
+  async function throwingAgentTurn() {
+    throw new Error("llm kaputt");
+  }
+  const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  assert.equal(turnOkLines(lines).length, 0);
+});
+
+test("OBS-1 vendor_402: agentTurn wirft err mit status 402 -> gate reason=vendor_402 {callId}, PII-frei, weiter gueltige Degradation", async () => {
+  const store = fakeStore({ call: makeCall() });
+  async function throwingAgentTurn() {
+    throw Object.assign(new Error("payment required"), { status: 402 });
+  }
+  const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
+  const res = fakeRes();
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
+
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"vendor_402"'));
+  assert.ok(gates[0].includes('"callId":"call_x"'));
+  assert.equal(res.chunks.length, 2, "trotz Vendor-402 eine gueltige Degradations-Completion (kein Abbruch)");
+  assert.ok(!lines.join("\n").includes("shim-secret"), "kein Secret im Log");
+});
+
+test("OBS-1 Regel-4 Master: kein Gate-Log leakt Secret/Transkript ueber die Gate-Matrix (auth/no_ccid/budget)", async () => {
+  const SENTINEL_SECRET = "SENTINEL_SECRET_9f3391a";
+  const SENTINEL_TRANSCRIPT = "SENTINEL_TRANSCRIPT_ich-bin-privat";
+  const SENTINEL_PHONE = "+491700000000";
+  const sentinelAuth = `Bearer ${SENTINEL_SECRET}`;
+  const config = fakeTelnyxShimConfig({ telnyxShimSharedSecret: SENTINEL_SECRET });
+  const sentinelBody = {
+    messages: [{ role: "user", content: SENTINEL_TRANSCRIPT }],
+    metadata: { caller_number: SENTINEL_PHONE },
+  };
+  const scenarios = [
+    {
+      store: fakeStore({ call: makeCall() }),
+      req: reqWith({ auth: "Bearer falsches-secret", ccid: "cc_x", body: sentinelBody }),
+    },
+    { store: fakeStore({ call: makeCall() }), req: reqWith({ auth: sentinelAuth, body: sentinelBody }) },
+    {
+      store: fakeStore({ call: makeCall(), budgetExceeded: true }),
+      req: reqWith({ auth: sentinelAuth, ccid: "cc_x", body: sentinelBody }),
+    },
+  ];
+
+  const allLines = [];
+  for (const scenario of scenarios) {
+    const handler = makeHandler({ store: scenario.store, config, agentTurn: agentTurnSpy() });
+    const lines = await withConsoleCapture(() => handler(scenario.req, fakeRes()));
+    allLines.push(...lines);
+  }
+
+  const joined = allLines.join("\n");
+  assert.ok(!joined.includes(SENTINEL_SECRET), "Secret darf in keiner Gate-Zeile der Matrix auftauchen");
+  assert.ok(!joined.includes(SENTINEL_TRANSCRIPT), "Transkript-Wert darf in keiner Gate-Zeile auftauchen");
+  assert.ok(!joined.includes(SENTINEL_PHONE), "Telefonnummer darf in keiner Gate-Zeile auftauchen");
+});

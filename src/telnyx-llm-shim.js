@@ -20,6 +20,7 @@ const BEARER_PREFIX = "Bearer ";
 const MS_PER_SECOND = 1000;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+const HTTP_PAYMENT_REQUIRED = 402;
 // P5: per-callId-Fenster fuer den Shim-Turn-Rate-Limiter, unabhaengig vom globalen
 // Per-IP-Fenster (middleware.js RATE_WINDOW_MS) - eigene Achse, eigenes Sweep-Intervall.
 const SHIM_RATE_WINDOW_MS = 60_000;
@@ -74,6 +75,42 @@ function writeFakeStream(res, { model, content }) {
   res.end();
 }
 
+// OBS-1 (Observability Shim-Gates): EINE Quelle (G5) fuer die strukturierte, PII-/secret-
+// freie Diagnose-Zeile jeder stummen 403-/Degradations-Flaeche. Format wie metrics.js:
+// Prefix + kind + JSON(payload). Der Payload traegt NUR Grund-Token/Booleans/interne
+// call.id/tenantId/Status - NIE Header-/Secret-/Transkript-Werte, NIE den rohen Body
+// (objectKeys statt Werte, kein Rekursions-Dump). SAFE-1 sichert das dauerhaft ab.
+const SHIM_LOG_PREFIX = "[telnyx-shim]";
+
+function formatShimLine(kind, payload) {
+  return `${SHIM_LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`;
+}
+
+// Ein greifendes Gate / eine Degradation / ein Vendor-Fehler wird LAUT statt stumm 403.
+function logShimGate(payload) {
+  console.warn(formatShimLine("gate", payload));
+}
+
+// Erfolgreicher Turn - UNCONDITIONAL (unabhaengig von metricsEnabled). Im Vorfall war
+// metricsEnabled AUS = Null-Turn-Signal; genau diese Luecke schliesst turn_ok. Nur
+// call.id + latencyMs (PII-frei), separater Kanal/Prefix als der opt-in metrics-Seam.
+function logShimTurnOk(payload) {
+  console.log(formatShimLine("turn_ok", payload));
+}
+
+// Nur die Feld-NAMEN eines erwarteten Objekts (nie Werte, kein Rekursions-Dump) - legt am
+// no_ccid-Gate die reale forward_metadata-Form offen, ohne PII/Secrets zu leaken.
+function objectKeys(value) {
+  return value && typeof value === "object" ? Object.keys(value) : [];
+}
+
+// Vendor-HTTP-Status eines gefangenen Fehlers (Anthropic err.status ODER Telnyx
+// err.providerStatus), sonst null - fuer das 402-Watched-Token (stiller Guthaben-Killer).
+function vendorStatusOf(err) {
+  const status = err && (err.providerStatus ?? err.status);
+  return typeof status === "number" ? status : null;
+}
+
 export function makeTelnyxLlmShim({
   store,
   config,
@@ -106,7 +143,7 @@ export function makeTelnyxLlmShim({
     if (!callControlId) {
       // fail-safe: callControlId persistiert erst P5 (Origination). Fehlt sie -> Skip + Log,
       // KEIN Crash/Orphan (die Response ist bereits raus), Muster P4.5 assistantId-Handling.
-      console.warn(`[telnyx-shim] Hangup ohne callControlId (call=${call.id}) -> kein Hangup`);
+      console.warn(`${SHIM_LOG_PREFIX} Hangup ohne callControlId (call=${call.id}) -> kein Hangup`);
       return;
     }
     try {
@@ -114,7 +151,7 @@ export function makeTelnyxLlmShim({
       // nachtraeglich zerstoeren; nur secret-frei loggen (err.name, Muster P4.5 onHangup).
       await voiceControl(call.provider).endCallViaCallControl(callControlId);
     } catch (err) {
-      console.error("[telnyx-shim] Call-Control-Hangup fehlgeschlagen:", err && err.name);
+      console.error(`${SHIM_LOG_PREFIX} Call-Control-Hangup fehlgeschlagen:`, err && err.name);
     }
   }
 
@@ -126,18 +163,35 @@ export function makeTelnyxLlmShim({
     // Authorization: Bearer <secret>, pro Turn identisch. Leerer config-Wert -> 403
     // (Empty-Secret-Trap, safeEqual("","")===true waere sonst die Falle, wie D3).
     const secret = config.telnyxShimSharedSecret;
-    if (!secret || !safeEqual(bearerFrom(req.headers.authorization || ""), secret))
+    const bearer = bearerFrom(req.headers.authorization || "");
+    if (!secret || !safeEqual(bearer, secret)) {
+      logShimGate({
+        reason: "auth",
+        hasHeader: Boolean(req.headers.authorization),
+        secretConfigured: Boolean(secret),
+      });
       return res.status(HTTP_FORBIDDEN).end();
+    }
 
     // 3) Korrelation (E1): Call aus der forward_metadata-call_control_id, NICHT aus dem
     // spoofbaren OpenAI-Body-callId. Kein Wert -> 403 (fail-closed, kein Token-Burn).
     const ccid = callControlIdFromForwardedMetadata(req.body);
-    if (!ccid) return res.status(HTTP_FORBIDDEN).end();
+    if (!ccid) {
+      logShimGate({
+        reason: "no_ccid",
+        bodyKeys: objectKeys(req.body),
+        metadataKeys: objectKeys(req.body && req.body.metadata),
+      });
+      return res.status(HTTP_FORBIDDEN).end();
+    }
 
     // 4) Call-Resolve (lebende Store-Referenz, kein DTO): unbekannter oder nicht-aktiver
     // Call -> 403 (ein aufgelegter Call darf keine weiteren Token-Turns ausloesen).
     const call = store.getCallByControlId(ccid);
-    if (!call || call.status !== "active") return res.status(HTTP_FORBIDDEN).end();
+    if (!call || call.status !== "active") {
+      logShimGate({ reason: "call_unresolved", found: Boolean(call), status: call ? call.status : null });
+      return res.status(HTTP_FORBIDDEN).end();
+    }
 
     const locale = localeFor(call.language);
     const model =
@@ -146,8 +200,10 @@ export function makeTelnyxLlmShim({
     // 5) Rate-Gate (P5, Scope 4): N+1 Turns fuer denselben Call im Fenster -> definierte
     // Ablehnung OHNE agentTurn-Aufruf (kein Token-Burn). Gueltige Degradations-Completion
     // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
-    if (!shimRateHit(call.id).allowed)
+    if (!shimRateHit(call.id).allowed) {
+      logShimGate({ reason: "rate_limited", callId: call.id });
       return writeFakeStream(res, { model, content: locale.llmDegradedSpeech });
+    }
 
     // 6) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
     // Cap-Ueberschreitung (kein Token-Burn). P6 (Weg iii): Abschluss-Ansage ZUERST, DANN den
@@ -156,7 +212,14 @@ export function makeTelnyxLlmShim({
     // callControlId -> Skip + Log, eigener try/catch, secret-frei) - identisches Muster wie der
     // end_call-Hangup (Schritt 8, G5: EIN Helper). Settlement bleibt P4.5 onHangup (EIN
     // idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
-    if (store.budgetExceeded(call.tenantId, config) || store.globalBudgetExceeded(config)) {
+    const tenantBudgetOver = store.budgetExceeded(call.tenantId, config);
+    const globalBudgetOver = !tenantBudgetOver && store.globalBudgetExceeded(config);
+    if (tenantBudgetOver || globalBudgetOver) {
+      logShimGate({
+        reason: tenantBudgetOver ? "budget_tenant" : "budget_global",
+        callId: call.id,
+        tenantId: call.tenantId,
+      });
       writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
       await terminateViaCallControl(call);
       return;
@@ -168,8 +231,12 @@ export function makeTelnyxLlmShim({
     try {
       const startedAt = Date.now();
       const turn = await agentTurn(call, lastUserText(req.body));
-      // P10: Gesamt-Turn-Dauer (NICHT TTFT, siehe metrics.logShimTurn). No-op wenn metricsEnabled aus.
-      metrics.logShimTurn({ callId: call.id, latencyMs: Date.now() - startedAt });
+      const latencyMs = Date.now() - startedAt;
+      // EIN latencyMs-Wert, zwei Senken: der opt-in metrics-Seam (P10, hinter metricsEnabled,
+      // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
+      // war metricsEnabled AUS = kein Lebenszeichen). Bewusst getrennte Kanaele/Prefixe.
+      metrics.logShimTurn({ callId: call.id, latencyMs });
+      logShimTurnOk({ callId: call.id, latencyMs });
       endCall = turn.endCall === true;
       writeFakeStream(res, { model, content: turn.speech }); // Abschiedssatz geht ZUERST raus
     } catch (err) {
@@ -181,7 +248,9 @@ export function makeTelnyxLlmShim({
       // (nicht-transient, z.B. 4xx/Auth) -> turnErrorSpeech. Der Fehler wird weiter
       // geloggt (nur err.name, secret-frei), nur die Antwort ist eine gueltige Completion.
       // KEIN Retry hier (der llm.js-Seam hat bereits begrenzt+selektiv retried).
-      console.error("[telnyx-shim] agentTurn fehlgeschlagen:", err && err.name); // secret-frei
+      console.error(`${SHIM_LOG_PREFIX} agentTurn fehlgeschlagen:`, err && err.name); // secret-frei
+      if (vendorStatusOf(err) === HTTP_PAYMENT_REQUIRED)
+        logShimGate({ reason: "vendor_402", callId: call.id });
       const content = degradedSpeechFor(err, locale);
       // Dieser Catch faengt AUCH Fehler aus writeFakeStream selbst (kein eigener
       // try/catch dort): wirft der Happy-Path-writeFakeStream NACH einem Teil-Write
