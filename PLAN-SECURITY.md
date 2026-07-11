@@ -204,3 +204,43 @@ idempotent. Neue Angriffsflaechen + Mitigationen:
   (separate Phase F, per-Nummer Owner-Freigabe). Wirksamkeit haengt an der Live-DB-Annahme, dass
   die subs desselben Menschen dieselbe verifizierte Email tragen — vor jedem retroaktiven Schritt
   an der DB gegengeprueft.
+
+## DID-LIFECYCLE — kontrollierter Nummern-Release (Fix 2, C+D+E)
+
+Neue **destruktive Faehigkeit**: der Reconcile-Pfad kann echte Telefonnummern bei Telnyx loeschen
+(DELETE /v2/phone_numbers) — ein Fehl-Release ist Geld- UND Rufnummern-Verlust (Telnyx gibt eine
+released DID nicht garantiert zurueck). Deshalb mehrschichtig fail-closed. Neues Env
+`RELEASE_GRACE_DAYS` an 4 Orten (`config.js` numEnv Default 0, `.env.example`, `render.yaml` "0",
+`test/helpers.js` BASE_ENV "0" — kein `.env`-Leak in Spawn-Tests). Kein Safety-Gate beruehrt,
+keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitigationen:
+
+- **Observe-Only ist der Default UND ein harter Sentinel (Phase D):** `RELEASE_GRACE_DAYS=0`
+  (ausgeliefert) -> `runReleaseReconcile` (`src/release-reconcile.js`) returnt bei `graceMs===0`
+  VOR jedem DELETE-Pfad und loggt nur die Kandidaten. Der Release-Code ist strukturell nur bei
+  `graceMs>0` erreichbar. Analogie `PROVISIONING_REDRIVE_MAX_AGE_MS=0`. Nichts aendert sich, bis
+  der Owner die Grace bewusst > 0 setzt.
+- **Grace-Anker set-if-absent (Phase C):** `tenant.suspended_at` wird bei der ERSTEN Suspendierung
+  gestempelt (nicht bei jedem Dunning-Retry -> Grace verlaengert sich nie ungewollt) und an ALLEN
+  drei Reaktivierungspfaden geloescht (Webhook-Activate, Self-Service-Subscribe, Admin-Approve —
+  der dritte war ein Review-Fund). pg: `rowToTenant` hydriert das Feld (i8-Landmine), sonst
+  Verlust beim Flush.
+- **Nur Telnyx (Phase D/E):** der Release gilt ausschliesslich `provider==="telnyx"`; alles andere
+  -> `hold` (manuell). Es gibt keinen `adapters/twilio/numbers.js`, also nie einen Twilio-Release-
+  Versuch. Der Release laeuft ueber den bestehenden NumberProvisioning-Port (registry-Dispatch),
+  kein neuer Provider-Einstieg.
+- **Live-Recheck vor JEDEM DELETE (Phase D):** unmittelbar vor dem Provider-DELETE wird der Tenant
+  frisch geladen und das Release-Verdikt neu berechnet (`numberReleaseVerdict`); reaktivierte der
+  Kunde zwischenzeitlich -> Abbruch. Schliesst den Reaktivierungs-Race.
+- **Idempotenz gegen den nicht-idempotenten Telnyx-DELETE (Phase D):** Store-Status-Check
+  (`ACTIVE` -> sonst skip) schuetzt Doppel-Laeufe; ein Provider-404 zaehlt als Konvergenz
+  (`providerStatus` via `attachStatus`), kein Fehler-Abbruch. Reihenfolge Provider-DELETE ->
+  Store-Mutation -> Audit; ein Crash dazwischen konvergiert beim naechsten Lauf (kein
+  Store-Divergenz-Orphan).
+- **Durabler Audit (Phase D/E):** jede Release-Aktion ueber `makeAuditStore`/`audit_log`
+  (actor = Reconcile-System), nicht nur `console`.
+- **Scheduling (Phase D):** Boot-Lauf + `setInterval(...).unref()` (Retention-Pattern).
+  Free-Tier-Liveness-Vorbehalt im Code dokumentiert; Render-Cron ist das spaetere Upgrade.
+- **DSGVO-Erase (Phase E):** `eraseTenantData` (Art. 17) gibt die Nummern grace-frei frei (Tenant
+  ist weg), aber weiterhin Telnyx-only + idempotent + auditiert (gemeinsamer Kern
+  `performNumberRelease`). Noch KEIN Live-Aufrufer von `eraseTenantData` — latent vorverdrahtet,
+  damit eine kuenftige Erase-Route keine DID leakt.
