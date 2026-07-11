@@ -901,6 +901,21 @@ test("OBS-FLAG an: authentifizierter Turn -> genau 1 shape-Zeile {ccidInMetadata
   assert.ok(!shapes[0].includes("caller_number"), "keine metadata-Innenfeldnamen (nur Top-Level)");
 });
 
+test("OBS-FLAG an: ccid NUR top-level (kein metadata-Wrapper) -> shape-Zeile {ccidInMetadata:false,ccidTopLevel:true} (Review-Blocker T5/G3)", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const handler = makeHandler({ store, config, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+  const body = { call_control_id: "cc_x", messages: [{ role: "user", content: "Hallo" }] };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, body }), res));
+
+  const shapes = shapeLines(lines);
+  assert.equal(shapes.length, 1);
+  assert.ok(shapes[0].includes('"ccidInMetadata":false'));
+  assert.ok(shapes[0].includes('"ccidTopLevel":true'));
+});
+
 test("OBS-FLAG default aus: KEINE shape-Zeile (byte-identisch), Turn laeuft normal durch", async () => {
   const store = fakeStore({ call: makeCall() });
   const handler = makeHandler({ store, agentTurn: agentTurnSpy() }); // Default -> telnyxShimDebugShape false

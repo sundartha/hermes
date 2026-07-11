@@ -34,6 +34,16 @@ function bearerFrom(authHeader) {
     : "";
 }
 
+// Rohe ccid-Kandidaten aus den zwei moeglichen forward_metadata-Positionen (EINE Quelle,
+// G5, statt zweimal denselben Feldzugriff zu schreiben): body.metadata.call_control_id
+// (primaer) und body.call_control_id (Top-Level-Fallback). Reine Extraktion ohne
+// Aggregation - die zwei Aufrufer beantworten unterschiedliche Fragen daraus (siehe
+// callControlIdFromForwardedMetadata vs. forwardMetadataShape unten).
+function ccidCandidates(body) {
+  const meta = body && typeof body.metadata === "object" && body.metadata ? body.metadata : null;
+  return { metaCcid: meta && meta.call_control_id, topCcid: body && body.call_control_id };
+}
+
 // E1: extrahiert die Telnyx-eigene call_control_id aus dem forward_metadata-BODY des
 // Shim-Requests. LIVE UNBESTAETIGT (wie der gesamte P4-Adapter, voice.js Z. 6-12): die
 // exakte JSON-Position ist der EINZIGE offene Live-Verify-Knopf dieser Phase. Best-Guess:
@@ -41,8 +51,8 @@ function bearerFrom(authHeader) {
 // Fallback. Fail-closed -> null (kein resolvebarer Call -> 403, KEIN Turn/Token-Burn).
 // Beim ersten Live-Testanruf gegen den echten Body fixieren = eine Zeile.
 export function callControlIdFromForwardedMetadata(body) {
-  const meta = body && typeof body.metadata === "object" && body.metadata ? body.metadata : {};
-  const candidate = meta.call_control_id ?? (body && body.call_control_id);
+  const { metaCcid, topCcid } = ccidCandidates(body);
+  const candidate = metaCcid ?? topCcid;
   return typeof candidate === "string" && candidate ? candidate : null;
 }
 
@@ -113,14 +123,14 @@ function objectKeys(value) {
 
 // OBS-FLAG: reine Shape-Fakten des forward_metadata-Body - Top-Level-Feldnamen (keys-only)
 // plus zwei Praesenz-Booleans, WELCHE Position die call_control_id traegt (metadata vs
-// top-level). Beantwortet bewusst eine ANDERE Frage als callControlIdFromForwardedMetadata
-// (die per ?? beide Positionen zu EINEM Wert kollabiert) - keine gemeinsame Naht. Nie Werte,
-// kein Rekursions-Dump, keine metadata-Innenfeldnamen (Regel 4). Legt die reale ccid-Position
-// AUCH auf dem Erfolgspfad offen, den OBS-1s no_ccid-Gate nie sieht (Input fuer P1b-FIX).
+// top-level). Beantwortet bewusst eine ANDERE Frage als callControlIdFromForwardedMetadata:
+// der rohe Feldzugriff kommt aus derselben Quelle (ccidCandidates, G5), aber hier bleiben
+// die zwei Positionen als getrennte Booleans stehen statt per ?? zu EINEM Wert zu
+// kollabieren. Nie Werte, kein Rekursions-Dump, keine metadata-Innenfeldnamen (Regel 4).
+// Legt die reale ccid-Position AUCH auf dem Erfolgspfad offen, den OBS-1s no_ccid-Gate nie
+// sieht (Input fuer P1b-FIX).
 function forwardMetadataShape(body) {
-  const meta = body && typeof body.metadata === "object" ? body.metadata : null;
-  const metaCcid = meta && meta.call_control_id;
-  const topCcid = body && body.call_control_id;
+  const { metaCcid, topCcid } = ccidCandidates(body);
   return {
     bodyKeys: objectKeys(body),
     ccidInMetadata: typeof metaCcid === "string" && Boolean(metaCcid),
