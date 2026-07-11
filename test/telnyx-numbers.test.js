@@ -96,6 +96,35 @@ test("releaseNumber: DELETE /v2/phone_numbers/{id}", async () => {
   assert.equal(calls[0].url, `${API_BASE}/v2/phone_numbers/num_abc`);
 });
 
+// tenant-prolif-d release-reconcile unterscheidet 404 (Nummer bei Telnyx bereits weg ->
+// Konvergenz/Erfolg) von echten Fehlern NUR ueber err.providerStatus. Ohne diesen Test
+// kann ein kaputter attachStatus-Spread in numbers.js unbemerkt bleiben (siehe
+// release-reconcile.js providerReleaseOrGone) - Kunden-DID-Verlust-Risiko bei falscher
+// Klassifikation.
+test("releaseNumber 404: err.providerStatus=404 (Reconciler wertet als Konvergenz)", async () => {
+  stubFetch({ ok: false, status: 404 });
+  await assert.rejects(
+    () => prov.releaseNumber("num_abc"),
+    (err) => {
+      assert.equal(err.providerStatus, 404);
+      assert.match(err.message, /HTTP 404/);
+      return true;
+    },
+  );
+});
+
+test("releaseNumber 500: err.providerStatus=500 (Reconciler wertet als echten Fehler, Retry)", async () => {
+  stubFetch({ ok: false, status: 500 });
+  await assert.rejects(
+    () => prov.releaseNumber("num_abc"),
+    (err) => {
+      assert.equal(err.providerStatus, 500);
+      assert.match(err.message, /HTTP 500/);
+      return true;
+    },
+  );
+});
+
 test("orderNumber: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", async () => {
   stubFetch({ ok: false, status: 402 });
   await assert.rejects(
