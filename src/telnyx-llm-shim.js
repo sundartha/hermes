@@ -34,6 +34,12 @@ function bearerFrom(authHeader) {
     : "";
 }
 
+// Non-Null-Objekt-Guard (G5: EINE Quelle statt verstreuter Inline-Checks) - liefert
+// candidate zurueck, wenn es ein nicht-null Objekt ist, sonst fail-closed null.
+function asObject(candidate) {
+  return candidate && typeof candidate === "object" ? candidate : null;
+}
+
 // ccid-Praesenz an den zwei LEGACY-forward_metadata-Positionen: body.metadata.
 // call_control_id und body.call_control_id (Top-Level). Diese Positionen tragen die ccid
 // seit P2 NICHT (metadata leer; die ccid steht in extra_metadata) - die Korrelation liest
@@ -41,7 +47,7 @@ function bearerFrom(authHeader) {
 // der als Drift-Detektor meldet, falls Telnyx die ccid je wieder in eine Legacy-Position
 // legt. Reine Extraktion, keine Aggregation.
 function ccidCandidates(body) {
-  const meta = body && typeof body.metadata === "object" && body.metadata ? body.metadata : null;
+  const meta = asObject(body?.metadata);
   return { metaCcid: meta && meta.call_control_id, topCcid: body && body.call_control_id };
 }
 
@@ -53,8 +59,7 @@ function ccidCandidates(body) {
 // Top-Level-callId darf NIE einen fremden aktiven Call adressieren (Anti-Spoofing).
 // Fail-closed -> null (kein resolvebarer Call -> 403, KEIN Turn/Token-Burn).
 export function callControlIdFromForwardedMetadata(body) {
-  const extra =
-    body && typeof body.extra_metadata === "object" && body.extra_metadata ? body.extra_metadata : null;
+  const extra = asObject(body?.extra_metadata);
   const candidate = extra && extra.call_control_id;
   return typeof candidate === "string" && candidate ? candidate : null;
 }
