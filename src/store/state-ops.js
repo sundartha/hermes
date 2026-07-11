@@ -1299,6 +1299,24 @@ export function classifyNumbersForRelease(s, { nowMs, graceMs }) {
   return buckets;
 }
 
+// ---- tenant-prolif-e: Erase-Release-Selektor (reiner Kern) ----
+// Liefert die Nummern EINES Tenants, die eine Art.-17-Loeschung freigeben darf: status
+// active + provider telnyx. GRACE-FREI - anders als numberReleaseVerdict, das den Suspend-
+// Grace prueft: bei Loeschung existiert der Tenant nicht mehr, es gibt keine Reaktivierung.
+// Weiterhin Telnyx-only (Twilio hat keinen releaseNumber-Pfad -> non-telnyx bleibt
+// unangetastet) und active-only. Der active-Filter IST die Idempotenz-Garantie: ein zweiter
+// Erase-Lauf findet die schon released-en Nummern NICHT mehr -> kein zweiter Provider-DELETE.
+// REIN + IO-frei (mutiert s NICHT, kein Date.now): der eigentliche Release (Provider-DELETE +
+// Store-Mutation + Audit) laeuft im Orchestrator (release-reconcile.js), NICHT hier.
+export function tenantNumbersForErase(s, tenantId) {
+  return s.numbers.filter(
+    (n) =>
+      n.tenantId === tenantId &&
+      n.status === NUMBER_STATUS.ACTIVE &&
+      n.provider === PROVIDER.TELNYX,
+  );
+}
+
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
 // Liefert den Usage-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
 // im Kommentar; der Aufrufer reicht stets eine konkrete tenantId). So lebt der
