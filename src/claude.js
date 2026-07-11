@@ -467,9 +467,12 @@ export async function agentTurn(call, callerText) {
   // Gegenueber substanziell spricht ODER nach maxEmptyTurns unbeantworteten Agent-Turns gibt
   // der Guard end_call frei (er erzwingt es NIE - das Modell entscheidet). Nur Outbound;
   // Inbound bleibt byte-identisch (immer false). Zeitliches Notaus bleibt maxCallDurationS.
-  const substantialCallerSeen = call.transcript.some(
-    (t) => t.role === "caller" && isSubstantialCallerText(t.text),
-  );
+  // G5-Fix (Review zu phase/stab-p7-fix-g326-r2): statt das Substanz-Praedikat hier erneut
+  // aufzuschreiben, den bestehenden Helper callerHasSpoken() nutzen - fuer Outbound liefert
+  // er exakt denselben some()-Ausdruck (siehe Kommentar/Impl. oben). Verhindert Auseinander-
+  // driften von suppressEndCall und dem /voice/turn-Kurzschluss bei kuenftigen Aenderungen
+  // der Substanz-Definition.
+  const substantialCallerSeen = callerHasSpoken(call);
   const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.maxEmptyTurns;
   const suppressEndCall =
     call.direction === "outbound" && !substantialCallerSeen && !emptyTurnsReached;
