@@ -538,7 +538,22 @@ app.use("/voice", (req, res, next) => {
     url: config.publicUrl + req.originalUrl,
     params: req.body || {},
   });
-  if (!ok) return res.status(403).send("invalid inbound signature");
+  if (!ok) {
+    // OBS-3: Ein fehlgeschlagener Provider-Signatur-Check war bisher stumm (nur 403) -
+    // gedrehte Keys, ein falsch signierender Client oder gestoerte Zustellung blieben in
+    // den Render-Logs unsichtbar (Regel 7). Genau EINE PII-/secret-freie Zeile: der
+    // query-freie Pfad (kein PII) + die Provider-HERKUNFT als Enum-Token aus
+    // providerFromHeaders (der EINZIGEN Header->Provider-Karte, G5) - NIE Header-Werte,
+    // rawBody oder Timestamps (Regel 4). req.baseUrl+req.path statt nacktem req.path:
+    // innerhalb von app.use("/voice", ...) ist req.path MOUNT-RELATIV (Express strippt
+    // den "/voice"-Praefix), req.baseUrl liefert genau diesen Praefix zurueck - beide
+    // zusammen ergeben den vollen, weiterhin query-freien Routen-Pfad. Additiv VOR dem
+    // unveraenderten fail-closed-403.
+    console.warn(
+      `[voice-signature] ungueltige Inbound-Signatur -> 403 (path=${req.baseUrl}${req.path} provider=${providerFromHeaders(req.headers) || "unknown"})`,
+    );
+    return res.status(403).send("invalid inbound signature");
+  }
   next();
 });
 
