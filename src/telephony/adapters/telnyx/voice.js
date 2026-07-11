@@ -41,6 +41,14 @@ function headers(contentType = FORM_HEADERS_TYPE) {
   return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": contentType };
 }
 
+// OBS-2: PII-freie Erfolgs-Spur pro Call-Control-Op (Op-Name + HTTP-Status + call_control_id-
+// PRAESENZ als Boolean). NIE der callControlId-WERT, NIE der API-Key (Regel 4). Eine Stelle (G5)
+// als EINZIGE Quelle des Erfolgs-Log-Formats, von den Action-Posts (postCallControlAction) und der
+// Origination geteilt. Nur auf dem Erfolgspfad erreichbar (assertTelnyxOk wirft vorher).
+function logCallControlOk(op, status, ccidPresent) {
+  console.log(`[telnyx/voice] ${op} ok status=${status} ccid=${ccidPresent}`);
+}
+
 // Gemeinsames Fetch-Skelett fuer Call-Control-Actions (G5): endCallViaCallControl und
 // startAssistant posten beide auf {base}/v2/calls/{callControlId}/actions/{action} mit
 // JSON-Body und pruefen ueber denselben assertTelnyxOk-Helper. action/body/op als EIN
@@ -52,6 +60,7 @@ async function postCallControlAction(callControlId, { action, body, op }) {
     { method: "POST", headers: headers(JSON_HEADERS_TYPE), body: JSON.stringify(body) },
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
+  logCallControlOk(op, res.status, Boolean(callControlId));
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -135,6 +144,8 @@ export const telnyxVoice = {
     await assertTelnyxOk(res, "originateViaCallControl", ATTACH_STATUS);
     const json = await res.json().catch(() => ({}));
     const data = json.data || json;
+    // OBS-2: ccid-PRAESENZ hier = ob die Antwort eine call_control_id trug (nie der Wert).
+    logCallControlOk("originateViaCallControl", res.status, Boolean(data.call_control_id));
     return { callControlId: data.call_control_id };
   },
 

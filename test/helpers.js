@@ -419,6 +419,25 @@ export async function startTelnyxProvisioningMock() {
   };
 }
 
+// OBS-2: console.log+warn fuer die Dauer eines async-Callbacks abfangen (orig sichern,
+// ersetzen, im finally restaurieren - F.I.R.S.T., Reihenfolge-unabhaengig). Liefert die
+// Zeilen. Eine Quelle (G5/S2) statt der zuvor in telnyx-call-control.test.js und
+// telnyx-event-ingest-machine.test.js getrennt definierten Kopien.
+export async function captureConsole(fn) {
+  const lines = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  console.log = (...a) => lines.push(a.map(String).join(" "));
+  console.warn = (...a) => lines.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+  }
+  return lines;
+}
+
 // Fake-Billing-Adapter (P6b1): aufzeichnend + per-Override werfbar, analog dem
 // Fake-Provisioner. Lebt in test/helpers.js (NICHT in src/) - reines Test-Double
 // fuer provisionNumber. log haelt [methode, ...args] in Aufrufreihenfolge.

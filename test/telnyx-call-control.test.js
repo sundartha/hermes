@@ -4,6 +4,7 @@
 // (Key-Leak-Schutz). Kein pglite/Server-Spawn (eigene Datei).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { captureConsole } from "./helpers.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -302,4 +303,74 @@ test("speak: fail-closed ohne API_KEY / callControlId / text", async () => {
     () => telnyxVoice.speak({ callControlId: "cc_1", text: "", voiceProfile: "de-female-neural" }),
     /text fehlt/,
   );
+});
+
+// OBS-2 Test 5 (speak, PII): Erfolgs-Log traegt Op+Status+ccid-Praesenz, NIE den
+// callControlId-Wert und NIE den API-Key (Regel 4).
+test("OBS-2: speak ok-Log traegt status+ccid=true, NIE den callControlId-Wert/Key", async () => {
+  stubFetch({ status: 200, json: {} });
+  const lines = await captureConsole(() =>
+    telnyxVoice.speak({
+      callControlId: "cc_secret_value",
+      text: "Hallo",
+      voiceProfile: "de-female-neural",
+    }),
+  );
+  const line = lines.find((l) => l.includes("[telnyx/voice] speak ok"));
+  assert.ok(line, "speak-Erfolgs-Log fehlt");
+  assert.match(line, /status=200/);
+  assert.match(line, /ccid=true/);
+  assert.ok(!line.includes("cc_secret_value"));
+  assert.ok(!line.includes(API_KEY));
+});
+
+// OBS-2 Test 6 (originate, Praesenz aus Response): ccid=true kommt hier aus der Antwort
+// (data.call_control_id), NIE der Wert selbst.
+test("OBS-2: originateViaCallControl ok-Log traegt status+ccid=true, NIE die ccid aus der Response", async () => {
+  stubFetch({ status: 201, json: { data: { call_control_id: "cc_resp_secret" } } });
+  const lines = await captureConsole(() => telnyxVoice.originateViaCallControl(CC_ORIGINATE));
+  const line = lines.find((l) => l.includes("[telnyx/voice] originateViaCallControl ok"));
+  assert.ok(line, "originateViaCallControl-Erfolgs-Log fehlt");
+  assert.match(line, /status=201/);
+  assert.match(line, /ccid=true/);
+  assert.ok(!line.includes("cc_resp_secret"));
+});
+
+// OBS-2 Test 6b (T5 Grenzbedingung): 2xx-Antwort OHNE call_control_id -> ccid=false.
+// Deckt den bislang ungetesteten ccidPresent=false-Zweig ab (Runde 3, Review-Blocker).
+test("OBS-2: originateViaCallControl ok-Log traegt ccid=false, wenn die Antwort keine call_control_id hat", async () => {
+  stubFetch({ status: 200, json: { data: {} } });
+  const lines = await captureConsole(() => telnyxVoice.originateViaCallControl(CC_ORIGINATE));
+  const line = lines.find((l) => l.includes("[telnyx/voice] originateViaCallControl ok"));
+  assert.ok(line, "originateViaCallControl-Erfolgs-Log fehlt");
+  assert.match(line, /status=200/);
+  assert.match(line, /ccid=false/);
+});
+
+// OBS-2 Test 7: kein Erfolgs-Log auf dem Fehlerpfad (assertTelnyxOk wirft VOR dem Log).
+test("OBS-2: kein [telnyx/voice]-Log auf dem Fehlerpfad (assertTelnyxOk wirft vorher)", async () => {
+  stubFetch({
+    ok: false,
+    status: 403,
+    json: { errors: [{ code: "10015", title: "nope" }] },
+  });
+  const lines = await captureConsole(() =>
+    assert.rejects(() =>
+      telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a" }),
+    ),
+  );
+  assert.ok(!lines.some((l) => l.includes("[telnyx/voice]")), "kein Erfolgs-Log bei HTTP-Fehler");
+});
+
+// OBS-2 Test 8: endCallViaCallControl + startAssistant loggen unter ihrem jeweiligen Op-Namen.
+test("OBS-2: endCallViaCallControl/startAssistant loggen unter ihrem Op-Namen", async () => {
+  stubFetch({ status: 200, json: {} });
+  const endLines = await captureConsole(() => telnyxVoice.endCallViaCallControl("cc_1"));
+  assert.ok(endLines.some((l) => l === "[telnyx/voice] endCallViaCallControl ok status=200 ccid=true"));
+
+  stubFetch({ status: 200, json: {} });
+  const startLines = await captureConsole(() =>
+    telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "assistant-77" }),
+  );
+  assert.ok(startLines.some((l) => l === "[telnyx/voice] startAssistant ok status=200 ccid=true"));
 });
