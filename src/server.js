@@ -1502,7 +1502,7 @@ app.post("/voice/status", async (req, res) => {
 // bestehende Budget/TeXML-Pfad (/voice/status|turn|outbound) bleibt byte-identisch.
 app.post(
   "/voice/call-control",
-  makeCallControlIngest({ store, voiceControl, finishCall, disclosureSentence, localeFor }),
+  makeCallControlIngest({ store, voiceControl, finishCall, disclosureSentence, localeFor, reattachActiveCall }),
 );
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
