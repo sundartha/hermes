@@ -64,17 +64,74 @@ export function callControlIdFromForwardedMetadata(body) {
   return typeof candidate === "string" && candidate ? candidate : null;
 }
 
+// Sicheres OpenAI-messages-Array (nur echte Arrays, sonst leer) - EINE Quelle (G5) fuer
+// lastUserText UND die P5-Shape-Diagnose, statt den Array-Guard zweimal inline zu wiederholen.
+function messagesArray(body) {
+  return Array.isArray(body?.messages) ? body.messages : [];
+}
+
 // Letzte User-Aeusserung aus dem OpenAI-messages-Array (nur STRING-Content, sonst "").
 // Der Shim nutzt NUR die neueste Aeusserung als callerText; die Gespraechs-Historie
 // lebt im Store (call.transcript, agentTurn baut sie frisch) - kein Vertrauen in die
 // vom Provider gespiegelte messages-Kette (Spoofing-/Drift-Schutz, Invariante 5).
 function lastUserText(body) {
-  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const messages = messagesArray(body);
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m && m.role === "user" && typeof m.content === "string") return m.content;
   }
   return "";
+}
+
+// P5 (Diskriminator R6/§2.2): PII-freie Form-Fakten des eingehenden messages-Payloads
+// verknuepft mit dem Turn-Ergebnis. NUR Counts/Typ-Namen/Laengen/Booleans - NIE
+// Nachrichtentext, keine E.164, kein Secret.
+
+// Nachrichten je bekannter Rolle; unbekannte/fehlende Rollen -> "other" (bounded, damit
+// kein angreiferkontrollierter Rollen-String in den Log geraet).
+function roleCounts(messages) {
+  const counts = { system: 0, user: 0, assistant: 0, other: 0 };
+  for (const m of messages) {
+    const role = m && m.role;
+    if (role === "system" || role === "user" || role === "assistant") counts[role] += 1;
+    else counts.other += 1;
+  }
+  return counts;
+}
+
+// Roh-Content-Form der LETZTEN user-Message: Typ-Name + Laenge (Zahl), nie der Wert.
+// contentType "missing" (keine user-Message) | "string" | "array" | "other";
+// length = String-Zeichen bzw. Array-Elemente, sonst 0. Deckt den Array-Content-Drop auf
+// (lastUserText liefert nur String-Content als callerText).
+function lastUserContentShape(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === "user") {
+      const content = m.content;
+      if (typeof content === "string") return { contentType: "string", length: content.length };
+      if (Array.isArray(content)) return { contentType: "array", length: content.length };
+      return { contentType: "other", length: 0 };
+    }
+  }
+  return { contentType: "missing", length: 0 };
+}
+
+// Verknuepft den eingehenden messages-Payload mit dem erzeugten Turn-Ergebnis zu EINER
+// PII-freien Diagnose-Zeile. speechEmpty ist der §2.2-Diskriminator: agentTurn.speech hat
+// einen Fallback (nie leer) - ist es hier doch leer, ist das eine Anomalie UNSERES Formats;
+// ist es nicht-leer und der Anrufer hoert nichts, liegt es am Vendor/TTS.
+function messagesTurnShape(body, turn) {
+  const messages = messagesArray(body);
+  const { contentType, length } = lastUserContentShape(messages);
+  const speech = turn && typeof turn.speech === "string" ? turn.speech : "";
+  return {
+    messagesCount: messages.length,
+    roleCounts: roleCounts(messages),
+    lastUserContentType: contentType,
+    lastUserLength: length,
+    lastUserTextPresent: lastUserText(body).trim().length > 0,
+    speechEmpty: speech.length === 0,
+  };
 }
 
 // Framt EINEN OpenAI chat.completion.chunk + data:[DONE] (G5: EINE Quelle fuer
@@ -282,6 +339,13 @@ export function makeTelnyxLlmShim({
       // war metricsEnabled AUS = kein Lebenszeichen). Bewusst getrennte Kanaele/Prefixe.
       metrics.logShimTurn({ callId: call.id, latencyMs });
       logShimTurnOk({ callId: call.id, latencyMs });
+      // P5 (OBS/R6): unter demselben default-off TELNYX_SHIM_DEBUG_SHAPE-Flag und demselben
+      // shape-Kanal (logShimShape) eine PII-freie Zeile, die den eingehenden messages-Payload
+      // mit speechEmpty verknuepft - trennt "Brain lieferte leeren Text" von "Vendor sprach
+      // nicht" (§2.2). Nur auf dem Erfolgspfad (es gibt ein Turn-Ergebnis); reine Diagnose,
+      // messagesTurnShape ist wurf-frei und darf die bereits erfolgreiche Turn-Response nicht
+      // in den Catch reissen.
+      if (config.telnyxShimDebugShape) logShimShape(messagesTurnShape(req.body, turn));
       endCall = turn.endCall === true;
       writeFakeStream(res, { model, content: turn.speech }); // Abschiedssatz geht ZUERST raus
     } catch (err) {
