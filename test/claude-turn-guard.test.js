@@ -8,6 +8,12 @@
 // Engine-Erstkontakt hat bereits eine vorbesetzte agent-Zeile und sieht den Bootstrap nie
 // (TG-3b).
 //
+// G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): das Transkript-Record-Gate (agentTurn)
+// ist RICHTUNGSLOS - JEDE nicht-leere Anrufer-Aeusserung landet im Transkript, unabhaengig
+// von isSubstantialCallerText. Der Substanz-Filter gated NUR NOCH die Turn-Steuerung
+// (suppressEndCall + unansweredAgentTurns), nicht mehr das Recording (TG-REC-1, TG-1,
+// TG-2b unten).
+//
 // Eigene Datei (ueberschneidet keine parallele Phase). Rein in-process (l3-Muster wie
 // l3-prompt-caching/turn-fallback-locale): ANTHROPIC_BASE_URL + DATA_DIR vor dem ersten
 // config-Import, dann dynamischer Import. Der lokale HTTP-Mock erfasst JEDEN Request-Body
@@ -145,12 +151,19 @@ before(async () => {
         // TG-REC-1 (Review-Blocker Runde 1 zu stab-p7-turn-guard-fix3): Inbound-Analogtest
         // zu TG-1 - frisches Transkript, damit agentTurn den echten Record-Gate-Pfad durchlaeuft.
         seedCall({ id: "call_tg_rec1_inbound", direction: "inbound" }),
+        // G3/G26-Fix: Outbound-Analog zu call_tg_rec1_inbound - beweist, dass eine echte,
+        // aber kurze Antwort ("5") jetzt AUCH outbound aufgezeichnet wird und ans Modell geht.
+        seedCall({ id: "call_tg_rec1_outbound", direction: "outbound" }),
         // TG-REC-1 (Review-Blocker Runde 2): Grenzbedingungs-Analogtest zu TG-1 (b) -
         // dieselben vier spurious/leeren Werte, aber inbound. Je ein frischer Call.
         seedCall({ id: "call_tg_rec1_inbound_empty", direction: "inbound" }),
         seedCall({ id: "call_tg_rec1_inbound_ws", direction: "inbound" }),
         seedCall({ id: "call_tg_rec1_inbound_dot", direction: "inbound" }),
         seedCall({ id: "call_tg_rec1_inbound_null", direction: "inbound" }),
+        // G3/G26-Fix: Empty-Turn-Guard-Analogtest - beweist, dass N aufgezeichnete
+        // Rausch-Turns ('.') den R4-Deadlock-Schutz weiterhin ausloesen (Zaehlung entkoppelt
+        // vom jetzt vollstaendigen Recording).
+        seedCall({ id: "call_tg2_noise", direction: "outbound" }),
       ],
     }),
   );
@@ -165,21 +178,27 @@ after(async () => {
 
 // ---------- TG-1 (b): spurious/leere Anrufer-Werte heben den Schutz NICHT auf ----------
 
-const EMPTY_CALLER_CASES = [
-  { label: "leerer String (Shim)", value: "", callId: "call_tg1_0" },
-  { label: "nur Whitespace", value: "   ", callId: "call_tg1_1" },
-  { label: "Kurz-Fragment", value: ".", callId: "call_tg1_2" },
-  { label: "null (Budget-Engine)", value: null, callId: "call_tg1_3" },
+// G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): das Record-Gate ist jetzt RICHTUNGSLOS
+// Boolean(callerText) (siehe Kommentar an agentTurn in src/claude.js) - ob ein Wert ins
+// Transkript wandert, folgt seiner Wahrheit (truthy/falsy), nicht mehr seiner Substanz. Die
+// Turn-STEUERUNG (end_call-Freigabe) bleibt weiterhin am Substanz-Filter
+// (isSubstantialCallerText) haengen - ein Rausch-/Echo-Fragment gibt end_call also weiterhin
+// NICHT frei, obwohl es jetzt (anders als vor diesem Fix) im Transkript steht.
+const SPURIOUS_CALLER_CASES = [
+  { label: "leerer String (Shim)", value: "", callId: "call_tg1_0", recorded: false },
+  { label: "nur Whitespace", value: "   ", callId: "call_tg1_1", recorded: true },
+  { label: "Kurz-Fragment (Rauschen)", value: ".", callId: "call_tg1_2", recorded: true },
+  { label: "null (Budget-Engine)", value: null, callId: "call_tg1_3", recorded: false },
 ];
 
-for (const { label, value, callId } of EMPTY_CALLER_CASES) {
-  test(`TG-1 (b) spurious caller-Wert "${label}" gibt end_call nicht frei und landet nicht im Transkript`, async () => {
+for (const { label, value, callId, recorded } of SPURIOUS_CALLER_CASES) {
+  test(`TG-1 (b) spurious caller-Wert "${label}" gibt end_call nicht frei; Recording folgt Boolean(callerText)`, async () => {
     const call = store.getCall(callId);
     nextResponse = endCallMessage("Ich lege jetzt auf.");
     const result = await agentTurn(call, value);
-    assert.equal(result.endCall, false);
+    assert.equal(result.endCall, false, "nicht-substanzieller Wert darf end_call nicht freigeben");
     const callerLines = store.getCall(callId).transcript.filter((t) => t.role === "caller");
-    assert.equal(callerLines.length, 0, "spurious Wert darf nicht ins Transkript wandern");
+    assert.equal(callerLines.length, recorded ? 1 : 0);
   });
 }
 
@@ -209,6 +228,29 @@ test("TG-2 (a) einzelner Leer-Turn kein end_call vor der Schwelle; ab maxEmptyTu
     endCalls.push(result.endCall);
   }
   assert.deepEqual(endCalls, [false, false, true]);
+});
+
+// G3/G26-Fix: Analogtest zu TG-2, aber mit einer aufgezeichneten Rausch-Zeile (".") statt
+// einer truthy-leeren. Beweist die Entkopplung: unansweredAgentTurns() ueberspringt die
+// nicht-substanzielle caller-Zeile beim Rueckwaertslauf (zaehlt weiter als "unbeantwortet"),
+// obwohl sie jetzt (anders als vor diesem Fix) im Transkript steht - der R4-Deadlock-Schutz
+// bleibt intakt UND das Transkript vollstaendig.
+test("TG-2b (Empty-Turn-Guard) aufgezeichnete Rausch-Zeilen setzen den Empty-Turn-Zaehler nicht zurueck", async () => {
+  const callId = "call_tg2_noise";
+  const endCalls = [];
+  for (let turn = 0; turn < 3; turn++) {
+    const call = store.getCall(callId);
+    nextResponse = endCallMessage("Ich lege jetzt auf.");
+    const result = await agentTurn(call, ".");
+    endCalls.push(result.endCall);
+  }
+  assert.deepEqual(
+    endCalls,
+    [false, false, true],
+    "R4-Deadlock-Schutz muss trotz aufgezeichneter Rausch-Zeilen greifen",
+  );
+  const callerLines = store.getCall(callId).transcript.filter((t) => t.role === "caller");
+  assert.equal(callerLines.length, 3, "die Rausch-Zeilen muessen jetzt im Transkript stehen");
 });
 
 // ---------- TG-3 (c): gebundener Bootstrap - beide agentTurn-Aufrufer haben einen
@@ -343,20 +385,18 @@ test("TG-4 Regression: substanzielle caller-Aeusserung verhaelt sich wie vor sta
   assert.equal(callerLines[0].text, "Ja, Donnerstag passt");
 });
 
-// ---------- TG-REC-1: Inbound-Record-Gate bleibt richtungslos aussen vor (Review Runde 1
-// zu phase/stab-p7-turn-guard-fix3) - Inbound-Analogtest zu TG-1. Das Record-Gate in
-// agentTurn ist RICHTUNGSABHAENGIG: Outbound filtert weiterhin ueber isSubstantialCallerText
-// (TG-1 bleibt gruen), Inbound zeichnet JEDE nicht-leere Aeusserung auf - byte-identisch zum
-// Master-Stand vor stab-p7 (41ce40b: "if (callerText) store.addTranscript(...)"), weil
-// call.transcript direkt vom Dashboard-Live-Transkript, DSGVO-Export (exportTenantData) und
-// summarizeCall gelesen wird. ----------
+// ---------- TG-REC-1: Record-Gate ist RICHTUNGSLOS (G3/G26-Fix, Review zu
+// phase/stab-p7-fix-rec1-r2). Byte-identisch zum Master-Stand vor stab-p7 (41ce40b:
+// "if (callerText) store.addTranscript(...)") fuer BEIDE Richtungen: JEDE nicht-leere
+// Aeusserung landet im Transkript, weil call.transcript direkt vom Dashboard-Live-Transkript,
+// DSGVO-Export (exportTenantData) und summarizeCall gelesen wird. Der vormals outbound-only
+// Substanz-Filter (isSubstantialCallerText) gatet nur noch die Turn-STEUERUNG (suppressEndCall
+// + unansweredAgentTurns), nicht mehr das Recording. ----------
 
-test("TG-REC-1 Inbound-Regression: echte Kurz-Aeusserung landet unveraendert im Transkript (Record-Gate richtungsabhaengig)", async () => {
+test("TG-REC-1 Inbound-Regression: echte Kurz-Aeusserung landet unveraendert im Transkript", async () => {
   const callId = "call_tg_rec1_inbound";
   // "5" ist kuerzer als CALLER_SUBSTANCE_MIN_LEN=2 (siehe before()) - eine echte, kurze
   // Antwort (z.B. auf "wie viele Gaeste?"), kein Echo-/Rausch-Fragment wie das "." aus TG-1.
-  // Wuerde das Inbound-Record-Gate faelschlich ueber isSubstantialCallerText filtern (wie vor
-  // diesem Fix), landete sie NICHT im Transkript.
   nextResponse = textMessage("Alles klar.");
   const call = store.getCall(callId);
   await agentTurn(call, "5");
@@ -365,11 +405,32 @@ test("TG-REC-1 Inbound-Regression: echte Kurz-Aeusserung landet unveraendert im 
   assert.equal(callerLines[0].text, "5");
 });
 
+// G3/G26-Fix: Outbound-Analog zu TG-REC-1 - vor diesem Fix wurde exakt dieser Fall (echte,
+// kurze Antwort unter CALLER_SUBSTANCE_MIN_LEN) outbound verworfen (Datenverlust, weder im
+// Transkript noch in den ans Modell gesendeten messages). Jetzt landet "5" im Transkript UND
+// geht als echter caller-Turn ans Modell (NICHT als SILENT_TURN_MARKER).
+test("TG-REC-1 Outbound-Regression (G3/G26): echte Kurz-Aeusserung landet im Transkript UND geht als caller-Turn ans Modell", async () => {
+  const callId = "call_tg_rec1_outbound";
+  requests = [];
+  nextResponse = textMessage("Alles klar.");
+  const call = store.getCall(callId);
+  const before = requests.length;
+  await agentTurn(call, "5");
+
+  const callerLines = store.getCall(callId).transcript.filter((t) => t.role === "caller");
+  assert.equal(callerLines.length, 1);
+  assert.equal(callerLines[0].text, "5");
+
+  const sentMessage = lastMessageOf(requests[before]);
+  assert.equal(sentMessage.role, "user");
+  assert.equal(sentMessage.content, "5", "muss der echte caller-Turn sein, nicht SILENT_TURN_MARKER");
+});
+
 // TG-REC-1 (Review-Blocker Runde 2): Grenzbedingungs-Analogtest zu TG-1 (b) - dieselben
-// vier spurious/leeren Werte wie EMPTY_CALLER_CASES oben, diesmal inbound. Das Record-Gate
-// ist fuer Inbound Boolean(callerText) (byte-identisch zu 41ce40b) statt
-// isSubstantialCallerText - deshalb landen "." und Whitespace hier (anders als outbound)
-// im Transkript, waehrend leerer String/null wie ueberall unveraendert aussen vor bleiben.
+// vier spurious/leeren Werte wie SPURIOUS_CALLER_CASES oben, diesmal inbound. Das Record-Gate
+// ist RICHTUNGSLOS Boolean(callerText) (byte-identisch zu 41ce40b, G3/G26-Fix) - "." und
+// Whitespace landen im Transkript (wie mittlerweile auch outbound, siehe SPURIOUS_CALLER_CASES),
+// waehrend leerer String/null wie ueberall unveraendert aussen vor bleiben.
 const INBOUND_RECORD_GATE_CASES = [
   { label: "leerer String (Shim)", value: "", callId: "call_tg_rec1_inbound_empty", recorded: false },
   { label: "nur Whitespace", value: "   ", callId: "call_tg_rec1_inbound_ws", recorded: true },
@@ -378,7 +439,7 @@ const INBOUND_RECORD_GATE_CASES = [
 ];
 
 for (const { label, value, callId, recorded } of INBOUND_RECORD_GATE_CASES) {
-  test(`TG-REC-1 Inbound-Grenzfall "${label}": Record-Gate folgt Boolean(callerText), nicht dem Outbound-Substanz-Filter`, async () => {
+  test(`TG-REC-1 Inbound-Grenzfall "${label}": Record-Gate folgt richtungslos Boolean(callerText)`, async () => {
     nextResponse = textMessage("Alles klar.");
     const call = store.getCall(callId);
     await agentTurn(call, value);

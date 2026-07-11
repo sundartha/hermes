@@ -346,23 +346,32 @@ const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 // stab-p7 (a/b): EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
 // config.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
 // Richtungen werten call.transcript darueber aus, wirksam aber nur bei Outbound - siehe
-// Kommentar an suppressEndCall unten) UND fuer den Outbound-Zweig des Transkript-Record-
-// Gates in agentTurn (TG-REC-1: Inbound bleibt bewusst aussen vor). Rein, kein
-// Nebeneffekt (N7).
+// Kommentar an suppressEndCall unten) UND fuer die Empty-Turn-Zaehlung in
+// unansweredAgentTurns unten (G3/G26-Fix). Steuert NICHT mehr, ob eine Anrufer-Zeile
+// ueberhaupt im Transkript landet - das Recording ist davon entkoppelt (siehe agentTurn).
+// Rein, kein Nebeneffekt (N7).
 function isSubstantialCallerText(text) {
   return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
 }
 
-// stab-p7 (a): konsekutive agent-Zeilen am Transkript-Ende = "wie oft hat der Agent in Folge
-// gesprochen, ohne eine substanzielle Antwort zu erhalten" (relevant nur fuer den
-// Outbound-Guard, siehe suppressEndCall unten). Bei Outbound landen nicht-substanzielle
-// Eingaben nicht im Transkript (Record-Gate), bei Inbound schon (TG-REC-1) - dort wertet
-// aber niemand diesen Zaehler aus. Rein (N7).
+// stab-p7 (a) + G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): "wie oft hat der Agent in
+// Folge gesprochen, ohne eine SUBSTANZIELLE Antwort zu erhalten" (relevant nur fuer den
+// Outbound-Guard, siehe suppressEndCall unten). Seit dem Record-Gate-Fix landet JEDE
+// nicht-leere Anrufer-Aeusserung im Transkript (auch Rausch-/Echo-Fragmente wie ".") - ein
+// Rueckwaertslauf, der an JEDER caller-Zeile abbricht, wuerde den Zaehler dadurch faelschlich
+// bei jedem Turn auf 0 zuruecksetzen und den R4-Deadlock-Schutz aushebeln. Deshalb ueberspringt
+// der Rueckwaertslauf nicht-substanzielle caller-Zeilen (sie zaehlen NICHT als Antwort, bleiben
+// aber sichtbar im Transkript) und bricht nur bei einer substanziellen caller-Zeile ab. Rein
+// (N7).
 function unansweredAgentTurns(transcript) {
   let count = 0;
   for (let i = transcript.length - 1; i >= 0; i--) {
-    if (transcript[i].role !== "agent") break;
-    count += 1;
+    const entry = transcript[i];
+    if (entry.role === "agent") {
+      count += 1;
+      continue;
+    }
+    if (isSubstantialCallerText(entry.text)) break;
   }
   return count;
 }
@@ -398,18 +407,16 @@ export function shapeForSpeech(text) {
 
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
 export async function agentTurn(call, callerText) {
-  // TG-REC-1 (Review Runde 1 zu stab-p7-turn-guard-fix3): das Transkript-Record-Gate ist
-  // RICHTUNGSABHAENGIG. Outbound behaelt den Substanz-Filter aus stab-p7 (b) - haelt den
-  // Verlauf sauber UND macht unansweredAgentTurns fuer den Outbound-Guard korrekt (Echo-/
-  // Rausch-Fragmente wie "." duerfen den Fruehauflege-Schutz nicht durch Aufnahme ins
-  // Transkript aushebeln, TG-1). Inbound bleibt BYTE-IDENTISCH zum Master-Stand vor stab-p7
-  // (41ce40b: "if (callerText) store.addTranscript(...)") - das Inbound-Transkript speist
-  // das Dashboard-Live-Transkript, den DSGVO-Export (exportTenantData) und summarizeCall,
-  // die alle call.transcript direkt lesen; der Substanz-Filter darf dieses Lesen nicht
-  // veraendern, nur die (bisher inbound ohnehin inaktive) Outbound-Turn-Steuerung.
-  const recordCallerLine =
-    call.direction === "outbound" ? isSubstantialCallerText(callerText) : Boolean(callerText);
-  if (recordCallerLine) store.addTranscript(call.id, "caller", callerText);
+  // G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): das Transkript-Record-Gate ist
+  // RICHTUNGSLOS und byte-identisch zum Master-Stand vor stab-p7 (41ce40b:
+  // "if (callerText) store.addTranscript(...)"). JEDE nicht-leere Anrufer-Aeusserung landet
+  // im Transkript - auch eine echte, aber kurze Antwort (z.B. STT-Ziffer "5"), die vorher
+  // outbound am Substanz-Filter (isSubstantialCallerText) scheiterte und dadurch weder im
+  // Dashboard-Live-Transkript noch im DSGVO-Export (exportTenantData) noch in
+  // summarizeCall noch in den ans Modell gesendeten messages auftauchte (Datenverlust). Der
+  // Substanz-Filter gated NICHT mehr das Recording, sondern nur noch die Turn-STEUERUNG
+  // (suppressEndCall unten + die Empty-Turn-Zaehlung in unansweredAgentTurns).
+  if (callerText) store.addTranscript(call.id, "caller", callerText);
 
   // Verlauf -> Messages (Transkript kompakt halten: letzte 24 Beitraege)
   const history = call.transcript.slice(-24).map((t) => ({
