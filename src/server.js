@@ -26,7 +26,13 @@ import {
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
-import { agentTurn, summarizeCall, openingText, disclosureSentence } from "./claude.js";
+import {
+  agentTurn,
+  summarizeCall,
+  openingText,
+  disclosureSentence,
+  callerHasSpoken,
+} from "./claude.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { makeCallControlIngest } from "./telnyx-call-control-ingest.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
@@ -1218,7 +1224,12 @@ app.post("/voice/turn", async (req, res) => {
 
   const heard = extractSpeech(req, call.provider);
   try {
-    if (!heard && call.transcript.some((t) => t.role === "caller")) {
+    // G3/G26-Fix (Runde 2): callerHasSpoken (claude.js) statt blosser Zeilen-Existenz -
+    // sonst haette outbound schon ein einzelnes aufgezeichnetes Rausch-/Echo-Fragment
+    // diesen Kurzschluss fuer den Rest des Calls vor agentTurn gestellt und den R4-Empty-
+    // Turn-Zaehler (unansweredAgentTurns, nur bei echtem agentTurn-Aufruf neu ausgewertet)
+    // dauerhaft eingefroren (siehe Kommentar an callerHasSpoken).
+    if (!heard && callerHasSpoken(call)) {
       metrics.recordTurnRendered(call.id); // L0: Folge-Gather offen -> Render-Zeitpunkt
       const reprompt = followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt);
       return res

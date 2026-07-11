@@ -354,6 +354,24 @@ function isSubstantialCallerText(text) {
   return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
 }
 
+// G3/G26-Fix (Runde 2, Review zu phase/stab-p7-fix-g326-r1): server.js's No-Speech-
+// Kurzschluss in /voice/turn (kein Speech gehoert -> nur ein statischer Reprompt, agentTurn
+// wird uebersprungen) darf outbound NICHT mehr an "irgendeine caller-Zeile existiert" haengen.
+// Seit der Record-Gate-Entkopplung oben landet naemlich JEDE nicht-leere Aeusserung im
+// Transkript, auch ein einzelnes Rausch-/Echo-Fragment wie "." - ein Kurzschluss auf blosser
+// Zeilen-Existenz wuerde also schon nach dem ERSTEN Rausch-Blip fuer den Rest des Calls
+// Vorrang vor agentTurn behalten und damit den R4-Empty-Turn-Zaehler (unansweredAgentTurns
+// unten, der nur beim tatsaechlichen agentTurn-Aufruf neu ausgewertet wird) dauerhaft
+// einfrieren - der Deadlock-Schutz waere faktisch unerreichbar (Wurzel dieses Blockers).
+// Outbound bewertet den Kurzschluss deshalb ueber isSubstantialCallerText. Inbound bleibt
+// byte-identisch zum Bestand (jede Zeile zaehlt als "hat gesprochen") - dort gibt es keinen
+// Empty-Turn-Zaehler, den ein verfruehter Kurzschluss aushebeln koennte. Rein (N7).
+export function callerHasSpoken(call) {
+  return call.direction === "outbound"
+    ? call.transcript.some((t) => t.role === "caller" && isSubstantialCallerText(t.text))
+    : call.transcript.some((t) => t.role === "caller");
+}
+
 // stab-p7 (a) + G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): "wie oft hat der Agent in
 // Folge gesprochen, ohne eine SUBSTANZIELLE Antwort zu erhalten" (relevant nur fuer den
 // Outbound-Guard, siehe suppressEndCall unten). Seit dem Record-Gate-Fix landet JEDE
