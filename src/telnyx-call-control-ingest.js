@@ -1,9 +1,10 @@
 // Call-Control-Event-Ingest (PLAN-TELNYX-AI-ASSISTANT.md, P4.5): signaturgeprueft
 // (Ed25519 via /voice-Mount) laeuft hier die event-getriebene Zustandsmaschine.
-// answered -> deterministischer Disclosure-Speak-Node (Regel 2); dessen speak.ended
-// -> ai_assistant_start (Regel 2, NIE davor); hangup -> Settlement finishCall (Regel 1,
-// verhindert Reserve-Leak/gesperrtes Tenant-Budget). Factory+DI wie makeTelnyxLlmShim:
-// alle Seiteneffekt-Deps injiziert -> Zustandsmaschine offline mit Spies testbar.
+// answered -> deterministischer Opening-Speak-Node (Offenlegung + Anliegen, Regel 2/R5);
+// dessen speak.ended -> ai_assistant_start (Regel 2, NIE davor); hangup -> Settlement
+// finishCall (Regel 1, verhindert Reserve-Leak/gesperrtes Tenant-Budget). Factory+DI wie
+// makeTelnyxLlmShim: alle Seiteneffekt-Deps injiziert -> Zustandsmaschine offline mit
+// Spies testbar.
 import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/telnyx/call-control-events.js";
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 
@@ -35,19 +36,24 @@ export function makeCallControlIngest({
   store,
   voiceControl,
   finishCall,
-  disclosureSentence,
+  openingText,
   localeFor,
   reattachActiveCall,
 }) {
-  // Regel 2: Pflicht-Offenlegung als deterministischer Speak-Node ZUERST.
+  // Regel 2 + R5 (stab-p8): der deterministische Erst-Speak spricht den vollen Opening-Text
+  // (openingText = Offenlegung ZUERST + Anliegens-Bruecke) - DIESELBE eine Quelle wie der
+  // Budget-Pfad (/voice/outbound). So deckt sich das Gesprochene mit der systemPrompt-Annahme
+  // ("Anliegen wurde bereits gesagt"); der Assistant erbt kein ungesprochenes Anliegen mehr.
   async function onAnswered(call, callControlId) {
     store.markAnswered(call.id); // answeredAt -> voiceMinutesOf (Abrechnung), Muster /voice/outbound
     await voiceControl(call.provider).speak({
       callControlId,
-      text: disclosureSentence(call), // fest verdrahtet (Regel 2), NIE Modell-Ermessen
+      // Offenlegung bleibt byte-identisch der erste Satz (openingText praefixt sie), NIE
+      // Modell-Ermessen; das Anliegen folgt LLM-frei (leeres goal -> reine Offenlegung).
+      text: openingText(call),
       voiceProfile: localeFor(call.language).voiceProfile,
     });
-    console.log(`[voice/call-control] answered (call=${call.id}) -> Disclosure-Speak abgesetzt`);
+    console.log(`[voice/call-control] answered (call=${call.id}) -> Opening-Speak abgesetzt`);
   }
   // Regel 2: ai_assistant_start NUR als Reaktion auf das speak.ended des Disclosure-Nodes.
   async function onSpeakEnded(call, callControlId) {
