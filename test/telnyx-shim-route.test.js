@@ -74,7 +74,7 @@ test("C3 end-to-end: gueltiger Shim-Bearer + ccid -> 200 SSE mit agentTurn-Ergeb
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: "Hallo" }],
-        metadata: { call_control_id: callControlId },
+        extra_metadata: { call_control_id: callControlId },
       }),
     });
     const body = await res.text();

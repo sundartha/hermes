@@ -123,11 +123,12 @@ Die `external_llm`-Config folgt jetzt dem realen Telnyx-Schema:
 ```
 
 Telnyx hängt `/chat/completions` selbst an `base_url` an; `forward_metadata: true`
-legt die `call_control_id` in den Request-Body des Shim-Aufrufs (Feld noch **live
-unbestätigt**, siehe `callControlIdFromForwardedMetadata` in
-`src/telnyx-llm-shim.js`). Auth des Shims: **statisches Telnyx-Integration-Secret**
-als `Authorization: Bearer <TELNYX_SHIM_SHARED_SECRET>` (nicht mehr per-Call) —
-der Server korreliert den Call ausschließlich über die `call_control_id`.
+legt die `call_control_id` im **`extra_metadata`-Objekt** des Shim-Request-Bodys ab
+(LIVE bestätigt 2026-07-11, P2 `call_mrgj8trkypk8` — getrennt von OpenAIs `metadata`,
+das leer bleibt; siehe `callControlIdFromForwardedMetadata` in
+`src/telnyx-llm-shim.js`). Der Server korreliert ausschließlich darüber, ohne
+spoofbaren Top-Level-Fallback. Auth des Shims: **statisches Telnyx-Integration-Secret**
+als `Authorization: Bearer <TELNYX_SHIM_SHARED_SECRET>` (nicht mehr per-Call).
 
 Cutover-Reihenfolge:
 

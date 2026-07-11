@@ -126,11 +126,11 @@ export function reqWith({ auth, body = {} } = {}) {
 export const SHIM_SHARED_SECRET = "shim-secret";
 
 // Gueltiger Request fuer einen gegebenen Call: Bearer + ccid im forward_metadata-Body
-// (E1). EINE Konstruktionsstelle (G5) statt an jeder Teststelle wiederholt.
+// unter extra_metadata (E1, P2-bestaetigt). EINE Konstruktionsstelle (G5).
 export function validReq(call, extra = {}) {
   return reqWith({
     auth: `Bearer ${SHIM_SHARED_SECRET}`,
-    body: { metadata: { call_control_id: call.callControlId }, ...extra },
+    body: { extra_metadata: { call_control_id: call.callControlId }, ...extra },
   });
 }
 

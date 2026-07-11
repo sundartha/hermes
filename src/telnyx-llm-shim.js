@@ -34,25 +34,28 @@ function bearerFrom(authHeader) {
     : "";
 }
 
-// Rohe ccid-Kandidaten aus den zwei moeglichen forward_metadata-Positionen (EINE Quelle,
-// G5, statt zweimal denselben Feldzugriff zu schreiben): body.metadata.call_control_id
-// (primaer) und body.call_control_id (Top-Level-Fallback). Reine Extraktion ohne
-// Aggregation - die zwei Aufrufer beantworten unterschiedliche Fragen daraus (siehe
-// callControlIdFromForwardedMetadata vs. forwardMetadataShape unten).
+// ccid-Praesenz an den zwei LEGACY-forward_metadata-Positionen: body.metadata.
+// call_control_id und body.call_control_id (Top-Level). Diese Positionen tragen die ccid
+// seit P2 NICHT (metadata leer; die ccid steht in extra_metadata) - die Korrelation liest
+// sie daher NICHT. Einziger Aufrufer ist der OBS-FLAG-Shape-Dump (forwardMetadataShape),
+// der als Drift-Detektor meldet, falls Telnyx die ccid je wieder in eine Legacy-Position
+// legt. Reine Extraktion, keine Aggregation.
 function ccidCandidates(body) {
   const meta = body && typeof body.metadata === "object" && body.metadata ? body.metadata : null;
   return { metaCcid: meta && meta.call_control_id, topCcid: body && body.call_control_id };
 }
 
 // E1: extrahiert die Telnyx-eigene call_control_id aus dem forward_metadata-BODY des
-// Shim-Requests. LIVE UNBESTAETIGT (wie der gesamte P4-Adapter, voice.js Z. 6-12): die
-// exakte JSON-Position ist der EINZIGE offene Live-Verify-Knopf dieser Phase. Best-Guess:
-// forward_metadata:true legt Call-Metadaten unter `metadata` ab (primaer), Top-Level als
-// Fallback. Fail-closed -> null (kein resolvebarer Call -> 403, KEIN Turn/Token-Burn).
-// Beim ersten Live-Testanruf gegen den echten Body fixieren = eine Zeile.
+// Shim-Requests. LIVE BESTAETIGT [2026-07-11, P2 call_mrgj8trkypk8, Feld=extra_metadata]:
+// Telnyx legt die Call-Daten unter `extra_metadata` ab (getrennt von OpenAIs nativem
+// `metadata`, das leer bleibt). SINGLE TRUSTED SOURCE - KEIN `metadata`- und KEIN
+// spoofbarer Top-Level-`call_control_id`-Fallback: eine geleakte, angreiferkontrollierte
+// Top-Level-callId darf NIE einen fremden aktiven Call adressieren (Anti-Spoofing).
+// Fail-closed -> null (kein resolvebarer Call -> 403, KEIN Turn/Token-Burn).
 export function callControlIdFromForwardedMetadata(body) {
-  const { metaCcid, topCcid } = ccidCandidates(body);
-  const candidate = metaCcid ?? topCcid;
+  const extra =
+    body && typeof body.extra_metadata === "object" && body.extra_metadata ? body.extra_metadata : null;
+  const candidate = extra && extra.call_control_id;
   return typeof candidate === "string" && candidate ? candidate : null;
 }
 
@@ -122,13 +125,10 @@ function objectKeys(value) {
 }
 
 // OBS-FLAG: reine Shape-Fakten des forward_metadata-Body - Top-Level-Feldnamen (keys-only)
-// plus zwei Praesenz-Booleans, WELCHE Position die call_control_id traegt (metadata vs
-// top-level). Beantwortet bewusst eine ANDERE Frage als callControlIdFromForwardedMetadata:
-// der rohe Feldzugriff kommt aus derselben Quelle (ccidCandidates, G5), aber hier bleiben
-// die zwei Positionen als getrennte Booleans stehen statt per ?? zu EINEM Wert zu
-// kollabieren. Nie Werte, kein Rekursions-Dump, keine metadata-Innenfeldnamen (Regel 4).
-// Legt die reale ccid-Position AUCH auf dem Erfolgspfad offen, den OBS-1s no_ccid-Gate nie
-// sieht (Input fuer P1b-FIX).
+// plus zwei Praesenz-Booleans fuer die zwei LEGACY-Positionen der call_control_id (metadata
+// vs top-level). Seit P1b-FIX korreliert der Shim ueber extra_metadata; diese Booleans sind
+// damit ein Drift-Detektor, waehrend bodyKeys weiter zeigt, dass extra_metadata praesent
+// ist. Nie Werte, kein Rekursions-Dump, keine Innenfeldnamen (Regel 4).
 function forwardMetadataShape(body) {
   const { metaCcid, topCcid } = ccidCandidates(body);
   return {
@@ -210,16 +210,17 @@ export function makeTelnyxLlmShim({
     // 3) Korrelation (E1): Call aus der forward_metadata-call_control_id, NICHT aus dem
     // spoofbaren OpenAI-Body-callId. Kein Wert -> 403 (fail-closed, kein Token-Burn).
     const ccid = callControlIdFromForwardedMetadata(req.body);
-    // OBS-FLAG (default aus): einmaliger keys-only Shape-Dump - feuert AUCH auf dem
-    // Erfolgspfad (ccid aufgeloest), den OBS-1s no_ccid-Gate nie sieht, und legt so die
-    // reale ccid-Position (metadata vs top-level) fuer P1b-FIX offen. Erst NACH dem Bearer-
-    // Gate (kein Dump unauthentifizierter Bodies). Rein additiv, keine Gate-Aenderung.
+    // OBS-FLAG (default aus): einmaliger keys-only Shape-Dump der Legacy-Positionen - seit
+    // P1b-FIX ein Drift-Detektor (die Korrelation laeuft ueber extra_metadata). Feuert AUCH
+    // auf dem Erfolgspfad. Erst NACH dem Bearer-Gate (kein Dump unauthentifizierter Bodies).
+    // Rein additiv, keine Gate-Aenderung.
     if (config.telnyxShimDebugShape) logShimShape(forwardMetadataShape(req.body));
     if (!ccid) {
       logShimGate({
         reason: "no_ccid",
         bodyKeys: objectKeys(req.body),
         metadataKeys: objectKeys(req.body && req.body.metadata),
+        extraMetadataKeys: objectKeys(req.body && req.body.extra_metadata),
       });
       return res.status(HTTP_FORBIDDEN).end();
     }

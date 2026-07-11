@@ -89,7 +89,7 @@ test("E3: unaufloesbare ccid (kein Call traegt diese callControlId) -> 403, kein
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: `Bearer ${SHIM_SHARED_SECRET}`, body: { metadata: { call_control_id: "cc_unresolvable" } } }), res);
+  await handler(reqWith({ auth: `Bearer ${SHIM_SHARED_SECRET}`, body: { extra_metadata: { call_control_id: "cc_unresolvable" } } }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(agentTurn.calls.length, 0, "kein Token-Burn ohne aufgeloesten Call");

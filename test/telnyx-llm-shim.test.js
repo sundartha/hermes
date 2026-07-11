@@ -139,12 +139,12 @@ function metricsSpy() {
 }
 
 // reqWith: baut Headers + Body in einem Rutsch. ccid (falls uebergeben) landet unter
-// body.metadata.call_control_id (Best-Guess-Pfad des forward_metadata-Bodys, E1) -
-// EINE Konstruktionsstelle statt an jeder Teststelle wiederholt.
+// body.extra_metadata.call_control_id (E1, P2-bestaetigt) - EINE Konstruktionsstelle
+// statt an jeder Teststelle wiederholt.
 function reqWith({ auth, ccid, body = {} } = {}) {
   const headers = {};
   if (auth !== undefined) headers.authorization = auth;
-  const fullBody = ccid !== undefined ? { ...body, metadata: { call_control_id: ccid } } : body;
+  const fullBody = ccid !== undefined ? { ...body, extra_metadata: { call_control_id: ccid } } : body;
   return { headers, body: fullBody };
 }
 
@@ -152,41 +152,42 @@ function firstChunkJson(res) {
   return JSON.parse(res.chunks[0].slice(SSE_DATA_PREFIX.length).trim());
 }
 
-// === callControlIdFromForwardedMetadata: primaer-/Fallback-Zweig + Praezedenz ====
-// Review-Blocker T1/P11: bislang konstruierte KEIN Test einen Body ohne
-// metadata-Wrapper (reqWith/validReq legen die ccid immer unter body.metadata
-// ab) - der Top-Level-Fallback-Zweig (body.call_control_id) war damit
-// ungetestet. Direkt gegen die exportierte Funktion, ohne Handler-Umweg.
+// === callControlIdFromForwardedMetadata: extra_metadata Single-Trusted-Source =====
+// P1b-FIX: die ccid steht LIVE unter body.extra_metadata.call_control_id (P2-bestaetigt,
+// call_mrgj8trkypk8). Kein metadata- und kein spoofbarer Top-Level-Fallback mehr
+// (Anti-Spoofing). Direkt gegen die exportierte Funktion, ohne Handler-Umweg.
 
-test("callControlId: primaerer Zweig - body.metadata.call_control_id gesetzt, kein Top-Level -> liefert ihn", () => {
-  const result = callControlIdFromForwardedMetadata({ metadata: { call_control_id: "cc_meta" } });
-  assert.equal(result, "cc_meta");
+test("callControlId: extra_metadata.call_control_id gesetzt -> liefert ihn", () => {
+  const result = callControlIdFromForwardedMetadata({ extra_metadata: { call_control_id: "cc_x" } });
+  assert.equal(result, "cc_x");
 });
 
-test("callControlId: Fallback-Zweig - kein metadata-Objekt, nur Top-Level body.call_control_id -> liefert ihn", () => {
+test("callControlId: extra_metadata fehlt -> null", () => {
+  const result = callControlIdFromForwardedMetadata({ messages: [] });
+  assert.equal(result, null);
+});
+
+test("callControlId: extra_metadata vorhanden, aber ohne call_control_id -> null", () => {
+  const result = callControlIdFromForwardedMetadata({ extra_metadata: { customer_name: "Max" } });
+  assert.equal(result, null);
+});
+
+test("callControlId: extra_metadata ist kein Objekt (z.B. String) -> null", () => {
+  const result = callControlIdFromForwardedMetadata({ extra_metadata: "kaputt" });
+  assert.equal(result, null);
+});
+
+test("Anti-Spoof: nur Top-Level body.call_control_id (kein extra_metadata) -> null, kein spoofbarer Fallback", () => {
   const result = callControlIdFromForwardedMetadata({ call_control_id: "cc_top" });
-  assert.equal(result, "cc_top");
+  assert.equal(result, null);
 });
 
-test("callControlId: Fallback-Zweig - metadata ist kein Objekt (z.B. String) -> faellt auf Top-Level zurueck", () => {
-  const result = callControlIdFromForwardedMetadata({ metadata: "kaputt", call_control_id: "cc_top" });
-  assert.equal(result, "cc_top");
+test("Alt-Feld tot: nur body.metadata.call_control_id (Legacy-Position) -> null, wird nicht mehr gelesen", () => {
+  const result = callControlIdFromForwardedMetadata({ metadata: { call_control_id: "cc_meta" } });
+  assert.equal(result, null);
 });
 
-test("callControlId: Fallback-Zweig - metadata-Objekt vorhanden, aber ohne call_control_id -> faellt auf Top-Level zurueck", () => {
-  const result = callControlIdFromForwardedMetadata({ metadata: {}, call_control_id: "cc_top" });
-  assert.equal(result, "cc_top");
-});
-
-test("callControlId: Praezedenzfall - beide gesetzt -> der primaere metadata-Zweig gewinnt", () => {
-  const result = callControlIdFromForwardedMetadata({
-    metadata: { call_control_id: "cc_meta" },
-    call_control_id: "cc_top",
-  });
-  assert.equal(result, "cc_meta");
-});
-
-test("callControlId: weder metadata noch Top-Level gesetzt -> null (fail-closed)", () => {
+test("callControlId: null/{} -> null (fail-closed)", () => {
   assert.equal(callControlIdFromForwardedMetadata({}), null);
   assert.equal(callControlIdFromForwardedMetadata(null), null);
 });
@@ -334,6 +335,34 @@ test("C3b: kein req.body.model -> Fallback auf config.claudeModel", async () => 
   assert.equal(firstChunkJson(res).model, "claude-haiku-4-5");
 });
 
+test("Realer Body-Shape (P2-bestaetigt): extra_metadata unter den echten bodyKeys -> Korrelation greift end-to-end", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handler = makeHandler({ store, agentTurn });
+  const res = fakeRes();
+
+  await handler(
+    reqWith({
+      auth: VALID_AUTH,
+      body: {
+        messages: [{ role: "user", content: "Hallo?" }],
+        model: "gpt-4o-mini",
+        stream: true,
+        stream_options: {},
+        temperature: 0.7,
+        extra_metadata: { call_control_id: "cc_x", customer_name: "Testkunde" },
+      },
+    }),
+    res,
+  );
+
+  assert.equal(agentTurn.calls.length, 1);
+  assert.equal(res.headers["Content-Type"], "text/event-stream");
+  assert.equal(res.chunks.length, 2, "genau EIN SSE-Chunk + data: [DONE]");
+  assert.equal(firstChunkJson(res).choices[0].delta.content, "Hallo Welt");
+});
+
 // === C4: Budget ueberschritten -> kein Token-Burn ================================
 
 test("C4a: tenant-Budget ueberschritten -> Wind-Down-Completion, KEIN agentTurn-Aufruf", async () => {
@@ -386,6 +415,30 @@ test("Anti-Spoof: gespoofter callId/tenantId im Body wird ignoriert - die ccid b
   assert.equal(agentTurn.calls[0].call.id, "call_A", "ccid bindet den Call, nicht der Body");
   assert.equal(agentTurn.calls[0].call.tenantId, "t_A");
   assert.equal(agentTurn.calls[0].callerText, "Ich bin der Angerufene");
+});
+
+test("Anti-Spoof (Handler): passende Top-Level-ccid OHNE extra_metadata resolved NICHT -> 403, kein agentTurn", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy();
+  const handler = makeHandler({ store, agentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: VALID_AUTH, body: { call_control_id: "cc_x" } }), res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(agentTurn.calls.length, 0, "selbst eine passende Top-Level-ccid darf nicht resolven");
+});
+
+test("Alt-Feld tot (Handler): ccid nur unter body.metadata (Legacy-Position) -> 403, kein agentTurn", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy();
+  const handler = makeHandler({ store, agentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: VALID_AUTH, body: { metadata: { call_control_id: "cc_x" } } }), res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(agentTurn.calls.length, 0, "die Legacy-Position metadata resolved nicht mehr");
 });
 
 // === P5: per-callId-Rate-Limiter (Scope 4, Toll-/Token-Fraud-Bremse) =============
@@ -717,6 +770,26 @@ test("OBS-1 no_ccid: gate reason=no_ccid traegt bodyKeys+metadataKeys, aber KEIN
   assert.ok(gates[0].includes("some_secret_field"), "Feld-NAME muss auftauchen (metadataKeys)");
   assert.ok(!gates[0].includes("GEHEIM_TRANSCRIPT_42"), "Transkript-WERT darf nie im Log auftauchen");
   assert.ok(!gates[0].includes("SECRET_VALUE_XYZ"), "Metadata-WERT darf nie im Log auftauchen");
+});
+
+test("OBS-1 no_ccid mit extra_metadata: gate traegt extraMetadataKeys (Feld-NAMEN), NIE die E.164-WERTE", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
+  const res = fakeRes();
+  const body = {
+    extra_metadata: { customer_name: "Max", telnyx_end_user_target: "+491700000000" },
+  };
+
+  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, body }), res));
+
+  assert.equal(res.statusCode, 403);
+  const gates = gateLines(lines);
+  assert.equal(gates.length, 1);
+  assert.ok(gates[0].includes('"reason":"no_ccid"'));
+  assert.ok(gates[0].includes("customer_name"), "Feld-NAME muss auftauchen (extraMetadataKeys)");
+  assert.ok(gates[0].includes("telnyx_end_user_target"), "Feld-NAME muss auftauchen (extraMetadataKeys)");
+  assert.ok(!gates[0].includes("+491700000000"), "E.164-WERT darf nie im Log auftauchen");
+  assert.ok(!gates[0].includes("Max"), "Namens-WERT darf nie im Log auftauchen");
 });
 
 test("OBS-1 call_unresolved: unbekannte ccid -> gate {found:false,status:null}", async () => {

@@ -73,7 +73,7 @@ test("B3: unaufloesbare ccid -> 403 vor dem Budget-Gate, KEIN Hangup-Versuch, ke
   const handler = makeHandler({ store, agentTurn, voiceControl });
   const res = fakeRes();
 
-  await handler(reqWith({ auth: `Bearer ${SHIM_SHARED_SECRET}`, body: { metadata: { call_control_id: "cc_unresolvable" } } }), res);
+  await handler(reqWith({ auth: `Bearer ${SHIM_SHARED_SECRET}`, body: { extra_metadata: { call_control_id: "cc_unresolvable" } } }), res);
 
   assert.equal(res.statusCode, 403);
   assert.equal(voiceControl.calls.length, 0, "fail-safe Skip ohne aufgeloesten Call, kein Crash");
