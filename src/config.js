@@ -488,9 +488,12 @@ export const config = {
   maxEmptyTurns: numEnv("MAX_EMPTY_TURNS", process.env.MAX_EMPTY_TURNS, { fallback: 3, min: 2 }),
   // stab-p7 (b): Mindest-Zeichenlaenge (getrimmt) einer als SUBSTANZIELL gewerteten Anrufer-
   // Aeusserung. Kuerzere/leere Transkripte (Deepgram-Echo-/Rausch-Fragmente) sind nicht
-  // substanziell -> heben den Fruehauflege-Schutz NICHT und landen nicht im Transkript.
-  // Default 2 (eine echte Antwort wie "Ja"/"Ok" ist >= 2 Zeichen). Min 1 (0 wuerde leere
-  // Eingaben als substanziell werten und den Schutz aushebeln).
+  // substanziell -> heben den Fruehauflege-Schutz NICHT. Gilt fuer das Transkript-Record-Gate
+  // NUR im Outbound-Pfad (dort landen sie folglich auch nicht im Transkript); Inbound bleibt
+  // TG-REC-1-bedingt byte-identisch zum Master-Stand (jede nicht-leere Aeusserung landet im
+  // Transkript, siehe Kommentar an agentTurn in claude.js). Default 2 (eine echte Antwort wie
+  // "Ja"/"Ok" ist >= 2 Zeichen). Min 1 (0 wuerde leere Eingaben als substanziell werten und
+  // den Schutz aushebeln).
   callerSubstanceMinLen: numEnv("CALLER_SUBSTANCE_MIN_LEN", process.env.CALLER_SUBSTANCE_MIN_LEN, {
     fallback: 2,
     min: 1,

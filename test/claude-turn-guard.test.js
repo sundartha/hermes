@@ -142,6 +142,9 @@ before(async () => {
           transcript: [{ role: "agent", text: "Guten Tag, hier ist der Assistent von Jonas." }],
         }),
         seedCall({ id: "call_tg4", direction: "outbound" }),
+        // TG-REC-1 (Review-Blocker Runde 1 zu stab-p7-turn-guard-fix3): Inbound-Analogtest
+        // zu TG-1 - frisches Transkript, damit agentTurn den echten Record-Gate-Pfad durchlaeuft.
+        seedCall({ id: "call_tg_rec1_inbound", direction: "inbound" }),
       ],
     }),
   );
@@ -332,4 +335,26 @@ test("TG-4 Regression: substanzielle caller-Aeusserung verhaelt sich wie vor sta
   const callerLines = store.getCall("call_tg4").transcript.filter((t) => t.role === "caller");
   assert.equal(callerLines.length, 1);
   assert.equal(callerLines[0].text, "Ja, Donnerstag passt");
+});
+
+// ---------- TG-REC-1: Inbound-Record-Gate bleibt richtungslos aussen vor (Review Runde 1
+// zu phase/stab-p7-turn-guard-fix3) - Inbound-Analogtest zu TG-1. Das Record-Gate in
+// agentTurn ist RICHTUNGSABHAENGIG: Outbound filtert weiterhin ueber isSubstantialCallerText
+// (TG-1 bleibt gruen), Inbound zeichnet JEDE nicht-leere Aeusserung auf - byte-identisch zum
+// Master-Stand vor stab-p7 (41ce40b: "if (callerText) store.addTranscript(...)"), weil
+// call.transcript direkt vom Dashboard-Live-Transkript, DSGVO-Export (exportTenantData) und
+// summarizeCall gelesen wird. ----------
+
+test("TG-REC-1 Inbound-Regression: echte Kurz-Aeusserung landet unveraendert im Transkript (Record-Gate richtungsabhaengig)", async () => {
+  const callId = "call_tg_rec1_inbound";
+  // "5" ist kuerzer als CALLER_SUBSTANCE_MIN_LEN=2 (siehe before()) - eine echte, kurze
+  // Antwort (z.B. auf "wie viele Gaeste?"), kein Echo-/Rausch-Fragment wie das "." aus TG-1.
+  // Wuerde das Inbound-Record-Gate faelschlich ueber isSubstantialCallerText filtern (wie vor
+  // diesem Fix), landete sie NICHT im Transkript.
+  nextResponse = textMessage("Alles klar.");
+  const call = store.getCall(callId);
+  await agentTurn(call, "5");
+  const callerLines = store.getCall(callId).transcript.filter((t) => t.role === "caller");
+  assert.equal(callerLines.length, 1);
+  assert.equal(callerLines[0].text, "5");
 });

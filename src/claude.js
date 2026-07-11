@@ -344,15 +344,20 @@ const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ih
 const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 
 // stab-p7 (a/b): EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
-// config.callerSubstanceMinLen). Einzige Quelle (S2) fuer das Transkript-Record-Gate UND
-// den content-basierten suppressEndCall. Rein, kein Nebeneffekt (N7).
+// config.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
+// Richtungen werten call.transcript darueber aus, wirksam aber nur bei Outbound - siehe
+// Kommentar an suppressEndCall unten) UND fuer den Outbound-Zweig des Transkript-Record-
+// Gates in agentTurn (TG-REC-1: Inbound bleibt bewusst aussen vor). Rein, kein
+// Nebeneffekt (N7).
 function isSubstantialCallerText(text) {
   return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
 }
 
 // stab-p7 (a): konsekutive agent-Zeilen am Transkript-Ende = "wie oft hat der Agent in Folge
-// gesprochen, ohne eine substanzielle Antwort zu erhalten". Da nicht-substanzielle Eingaben
-// nicht ins Transkript wandern (Record-Gate), ist das der Leer-Turn-Zaehler. Rein (N7).
+// gesprochen, ohne eine substanzielle Antwort zu erhalten" (relevant nur fuer den
+// Outbound-Guard, siehe suppressEndCall unten). Bei Outbound landen nicht-substanzielle
+// Eingaben nicht im Transkript (Record-Gate), bei Inbound schon (TG-REC-1) - dort wertet
+// aber niemand diesen Zaehler aus. Rein (N7).
 function unansweredAgentTurns(transcript) {
   let count = 0;
   for (let i = transcript.length - 1; i >= 0; i--) {
@@ -393,9 +398,18 @@ export function shapeForSpeech(text) {
 
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
 export async function agentTurn(call, callerText) {
-  // stab-p7 (b): nur SUBSTANZIELLE Anrufer-Aeusserungen ins Transkript (Echo-/Rausch-/Leer-
-  // Fragmente NICHT) - haelt den Verlauf sauber UND macht unansweredAgentTurns korrekt.
-  if (isSubstantialCallerText(callerText)) store.addTranscript(call.id, "caller", callerText);
+  // TG-REC-1 (Review Runde 1 zu stab-p7-turn-guard-fix3): das Transkript-Record-Gate ist
+  // RICHTUNGSABHAENGIG. Outbound behaelt den Substanz-Filter aus stab-p7 (b) - haelt den
+  // Verlauf sauber UND macht unansweredAgentTurns fuer den Outbound-Guard korrekt (Echo-/
+  // Rausch-Fragmente wie "." duerfen den Fruehauflege-Schutz nicht durch Aufnahme ins
+  // Transkript aushebeln, TG-1). Inbound bleibt BYTE-IDENTISCH zum Master-Stand vor stab-p7
+  // (41ce40b: "if (callerText) store.addTranscript(...)") - das Inbound-Transkript speist
+  // das Dashboard-Live-Transkript, den DSGVO-Export (exportTenantData) und summarizeCall,
+  // die alle call.transcript direkt lesen; der Substanz-Filter darf dieses Lesen nicht
+  // veraendern, nur die (bisher inbound ohnehin inaktive) Outbound-Turn-Steuerung.
+  const recordCallerLine =
+    call.direction === "outbound" ? isSubstantialCallerText(callerText) : Boolean(callerText);
+  if (recordCallerLine) store.addTranscript(call.id, "caller", callerText);
 
   // Verlauf -> Messages (Transkript kompakt halten: letzte 24 Beitraege)
   const history = call.transcript.slice(-24).map((t) => ({
