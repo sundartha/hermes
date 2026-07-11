@@ -324,9 +324,17 @@ export function execTool(call, name, input) {
 
 // ---------- Gespraechs-Turn ----------
 
-// stab-p7 (c): Erst-Turn-Bootstrap-Marker. Feuern NUR im echten Erst-Turn-Zustand (noch
-// KEINE agent-Zeile) und weisen das Modell an, das Gespraech zu eroeffnen/zu begruessen.
-// Byte-identisch zum bisherigen Inline-Text (nur extrahiert, G25/G5).
+// stab-p7 (c): Erst-Turn-Bootstrap-Marker. Feuert NUR, wenn das Transkript beim Eintritt in
+// agentTurn noch KEINE agent-Zeile enthaelt, und weist das Modell an, das Gespraech zu
+// eroeffnen/zu begruessen. agentTurn hat ZWEI Aufrufer mit unterschiedlichem Vorzustand
+// (siehe stab-p7-spec.md): ueber die Budget-Engine (server.js /voice/turn) ist dieser
+// Zustand NICHT erreichbar, weil server.js die Greeting-/Opening-Zeile synchron per
+// addTranscript() IN /voice/incoming BZW. /voice/outbound eintraegt, BEVOR der erste
+// agentTurn-Aufruf ueberhaupt stattfindet. Erreichbar ist der Zustand ueber den zweiten
+// Aufrufer, den Telnyx-LLM-Shim (telnyx-llm-shim.js): dort spricht ein Call-Control-
+// Speak-Node die Disclosure/Greeting, OHNE sie ins Transkript zu schreiben - der erste
+// agentTurn-Aufruf trifft dort auf ein tatsaechlich leeres Transkript. Byte-identisch
+// zum bisherigen Inline-Text (nur extrahiert, G25/G5).
 const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das Gespraech.]";
 const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ihn.]";
 // stab-p7 (c): Stiller-Folge-Turn-Marker. Sobald der Agent schon gesprochen hat und der
@@ -395,10 +403,12 @@ export async function agentTurn(call, callerText) {
     content: t.text,
   }));
   // stab-p7 (c): Die Anthropic-messages-Kette MUSS mit einem user-Turn enden (sonst kein
-  // frischer Assistant-Turn). Der INHALT haengt am Erst-Turn-Zustand: existiert noch KEINE
-  // agent-Zeile, ist es der echte Gespraechsbeginn -> Eroeffnungs-Bootstrap. Hat der Agent
-  // schon gesprochen (Leer-/Stille-Folge-Turn), NUR ein neutraler Marker - kein erneutes
-  // "beginne"-Signal (R4). Beide Faelle halten die Kette gueltig.
+  // frischer Assistant-Turn). Der INHALT haengt davon ab, ob im Transkript bereits eine
+  // agent-Zeile steht: existiert noch KEINE (Shim-Erstkontakt, siehe Kommentar an den
+  // Bootstrap-Konstanten oben), ist es der echte Gespraechsbeginn -> Eroeffnungs-Bootstrap.
+  // Existiert schon eine (Budget-Engine-Erstkontakt ODER ein spaeterer Leer-/Stille-Turn),
+  // NUR ein neutraler Marker - kein erneutes "beginne"-Signal (R4). Beide Faelle halten die
+  // Kette gueltig.
   if (!history.length || history[history.length - 1].role !== "user") {
     const hasAgentLine = call.transcript.some((t) => t.role === "agent");
     history.push({

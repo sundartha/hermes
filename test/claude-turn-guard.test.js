@@ -3,7 +3,10 @@
 // Anrufer-Aeusserung freigegeben werden (R2-Regression), aber nach maxEmptyTurns unbeantworteten
 // Agent-Turns MUSS der Guard end_call freigeben (R4-Deadlock-Schutz). Dabei bleibt die
 // Anthropic-messages-Kette bei jedem Leer-Turn gueltig (endet mit einem role:user-Eintrag) -
-// der Erst-Turn-Bootstrap feuert genau EINMAL, stille Folge-Turns nutzen einen neutralen Marker.
+// der Erst-Turn-Bootstrap feuert hoechstens EINMAL (nur beim Shim-Erstkontakt mit wirklich
+// leerem Transkript, TG-3a), stille Folge-Turns nutzen einen neutralen Marker. Der Budget-
+// Engine-Erstkontakt hat bereits eine vorbesetzte agent-Zeile und sieht den Bootstrap nie
+// (TG-3b).
 //
 // Eigene Datei (ueberschneidet keine parallele Phase). Rein in-process (l3-Muster wie
 // l3-prompt-caching/turn-fallback-locale): ANTHROPIC_BASE_URL + DATA_DIR vor dem ersten
@@ -103,6 +106,14 @@ before(async () => {
         }),
         seedCall({ id: "call_tg2", direction: "outbound" }),
         seedCall({ id: "call_tg3", direction: "outbound" }),
+        // TG-3b: Budget-Engine-Erstkontakt - server.js schreibt die Opening-Zeile IMMER
+        // synchron per addTranscript() (/voice/outbound), BEVOR der erste /voice/turn ->
+        // agentTurn-Aufruf stattfindet. Diese vorbesetzte agent-Zeile bildet genau das ab.
+        seedCall({
+          id: "call_tg3_budget",
+          direction: "outbound",
+          transcript: [{ role: "agent", text: "Guten Tag, hier ist der Assistent von Jonas." }],
+        }),
         seedCall({ id: "call_tg4", direction: "outbound" }),
       ],
     }),
@@ -164,9 +175,19 @@ test("TG-2 (a) einzelner Leer-Turn kein end_call vor der Schwelle; ab maxEmptyTu
   assert.deepEqual(endCalls, [false, false, true]);
 });
 
-// ---------- TG-3 (c): Bootstrap genau einmal, Folge-Leer-Turns nutzen den neutralen Marker ----------
+// ---------- TG-3 (c): gebundener Bootstrap - beide agentTurn-Aufrufer haben einen
+// unterschiedlichen Vorzustand (siehe stab-p7-spec.md "Beide Aufrufer... grounden" +
+// Kommentar an OUTBOUND_OPENING_BOOTSTRAP in src/claude.js):
+// - TG-3a spiegelt den Telnyx-LLM-Shim-Erstkontakt: dort schreibt niemand eine agent-Zeile
+//   ins Transkript (die Disclosure/Greeting laeuft ueber einen Call-Control-Speak-Node), der
+//   erste agentTurn-Aufruf trifft also auf ein WIRKLICH leeres Transkript -> Bootstrap feuert.
+// - TG-3b spiegelt den Budget-Engine-Erstkontakt: server.js schreibt die Greeting-/Opening-
+//   Zeile IMMER synchron per addTranscript(), BEVOR /voice/turn -> agentTurn ueberhaupt zum
+//   ersten Mal aufgerufen wird -> das Transkript enthaelt ab dem allerersten Aufruf schon
+//   eine agent-Zeile, der Bootstrap darf hier NIE erscheinen.
+// ---------------------------------------------------------------------------------------
 
-test("TG-3 (c) Bootstrap feuert einmalig; stille Folge-Turns nutzen SILENT_TURN_MARKER, Kette bleibt gueltig", async () => {
+test("TG-3a (c) Shim-Erstkontakt (Transkript startet leer): Bootstrap feuert einmalig; stille Folge-Turns nutzen SILENT_TURN_MARKER, Kette bleibt gueltig", async () => {
   const callId = "call_tg3";
   requests = [];
   const capturedBodies = [];
@@ -198,6 +219,34 @@ test("TG-3 (c) Bootstrap feuert einmalig; stille Folge-Turns nutzen SILENT_TURN_
     body.messages.some((m) => m.content === OUTBOUND_OPENING_BOOTSTRAP),
   ).length;
   assert.equal(bootstrapOccurrences, 1);
+});
+
+test("TG-3b (c) Budget-Engine-Erstkontakt (agent-Zeile bereits vorbesetzt): Bootstrap feuert NIE, bereits der erste stille Turn nutzt SILENT_TURN_MARKER", async () => {
+  const callId = "call_tg3_budget";
+  requests = [];
+  const capturedBodies = [];
+  for (let turn = 0; turn < 2; turn++) {
+    const call = store.getCall(callId);
+    nextResponse = textMessage("Ich warte kurz.");
+    const before = requests.length;
+    await agentTurn(call, "");
+    capturedBodies.push(requests[before]);
+  }
+
+  const lastMessageOf = (body) => body.messages[body.messages.length - 1];
+
+  // Schon der ALLERERSTE Turn (Index 0) nutzt den neutralen Marker, nicht den Bootstrap -
+  // genau das widerlegt die urspruengliche TG-3-Annahme, der Bootstrap sei ueber die
+  // Budget-Engine im echten Erst-Turn erreichbar.
+  for (const body of capturedBodies) {
+    assert.equal(lastMessageOf(body).role, "user");
+    assert.equal(lastMessageOf(body).content, SILENT_TURN_MARKER);
+  }
+
+  const bootstrapOccurrences = capturedBodies.filter((body) =>
+    body.messages.some((m) => m.content === OUTBOUND_OPENING_BOOTSTRAP),
+  ).length;
+  assert.equal(bootstrapOccurrences, 0);
 });
 
 // ---------- TG-4: Regression fuer substanzielle Aeusserungen (beide Aufrufer) ----------
