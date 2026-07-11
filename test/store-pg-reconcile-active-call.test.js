@@ -70,7 +70,7 @@ test("F8: fremde aktive Zeile ueberlebt Flush mit leerem Call-Spiegel", async ()
 // transcript_segment (FK ON DELETE CASCADE auf call) darf beim divergenten Flush NICHT
 // mitgeloescht werden, UND ein spaeteres attachActiveCall (Rehydrate, F12/A6) muss die
 // tenantId korrekt hydrieren (I8) - sonst faende der Owner-Filter nach dem Flush keinen
-// Call mehr und loeschte beim naechsten Zyklus fälschlich alles.
+// Call mehr und loeschte beim naechsten Zyklus faelschlich alles.
 test("stab-p10 (I8-CASCADE-Schutz): aktiver Call + transcript_segment ueberleben divergenten Flush; Rehydrat traegt tenantId", async () => {
   const { db, runner } = await sharedDb();
   const store1 = makePgStore(runner);
