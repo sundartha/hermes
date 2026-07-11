@@ -66,6 +66,20 @@ function endCallMessage(speech) {
   };
 }
 
+// letzte Nachricht eines erfassten Request-Bodys (TG-3a/TG-3b: Contract-Invariante
+// role:user am Kettenende, siehe Kommentar oben an der Datei).
+function lastMessageOf(body) {
+  return body.messages[body.messages.length - 1];
+}
+
+// zaehlt, in wie vielen erfassten Requests der Bootstrap-Text ueberhaupt vorkommt
+// (TG-3a: Re-Injektions-Check - genau einmal; TG-3b: darf nie erscheinen).
+function countBootstrapOccurrences(capturedBodies) {
+  return capturedBodies.filter((body) =>
+    body.messages.some((m) => m.content === OUTBOUND_OPENING_BOOTSTRAP),
+  ).length;
+}
+
 let server;
 let store, agentTurn;
 
@@ -199,8 +213,6 @@ test("TG-3a (c) Shim-Erstkontakt (Transkript startet leer): Bootstrap feuert ein
     capturedBodies.push(requests[before]);
   }
 
-  const lastMessageOf = (body) => body.messages[body.messages.length - 1];
-
   assert.equal(lastMessageOf(capturedBodies[0]).role, "user");
   assert.equal(lastMessageOf(capturedBodies[0]).content, OUTBOUND_OPENING_BOOTSTRAP);
 
@@ -215,10 +227,7 @@ test("TG-3a (c) Shim-Erstkontakt (Transkript startet leer): Bootstrap feuert ein
   }
 
   // Der Bootstrap-Text erscheint ueber ALLE Requests genau einmal (keine Re-Injektion).
-  const bootstrapOccurrences = capturedBodies.filter((body) =>
-    body.messages.some((m) => m.content === OUTBOUND_OPENING_BOOTSTRAP),
-  ).length;
-  assert.equal(bootstrapOccurrences, 1);
+  assert.equal(countBootstrapOccurrences(capturedBodies), 1);
 });
 
 test("TG-3b (c) Budget-Engine-Erstkontakt (agent-Zeile bereits vorbesetzt): Bootstrap feuert NIE, bereits der erste stille Turn nutzt SILENT_TURN_MARKER", async () => {
@@ -233,8 +242,6 @@ test("TG-3b (c) Budget-Engine-Erstkontakt (agent-Zeile bereits vorbesetzt): Boot
     capturedBodies.push(requests[before]);
   }
 
-  const lastMessageOf = (body) => body.messages[body.messages.length - 1];
-
   // Schon der ALLERERSTE Turn (Index 0) nutzt den neutralen Marker, nicht den Bootstrap -
   // genau das widerlegt die urspruengliche TG-3-Annahme, der Bootstrap sei ueber die
   // Budget-Engine im echten Erst-Turn erreichbar.
@@ -243,10 +250,7 @@ test("TG-3b (c) Budget-Engine-Erstkontakt (agent-Zeile bereits vorbesetzt): Boot
     assert.equal(lastMessageOf(body).content, SILENT_TURN_MARKER);
   }
 
-  const bootstrapOccurrences = capturedBodies.filter((body) =>
-    body.messages.some((m) => m.content === OUTBOUND_OPENING_BOOTSTRAP),
-  ).length;
-  assert.equal(bootstrapOccurrences, 0);
+  assert.equal(countBootstrapOccurrences(capturedBodies), 0);
 });
 
 // ---------- TG-4: Regression fuer substanzielle Aeusserungen (beide Aufrufer) ----------
