@@ -55,6 +55,20 @@ Grund: assistant_id=assistant_xyz (in TELNYX_ASSISTANT_ID uebernehmen)
 Das Skript gibt **ausschließlich** die opake `assistant_id` aus — nie einen
 Key, nie einen Roh-Response-Body.
 
+**Update-Sicherheitscheck (afix-p1):** Bei einem Update (bestehende
+`TELNYX_ASSISTANT_ID`) sendet das Skript **nur** `telephony_settings.
+user_idle_reply_secs` — ob der Telnyx-Update-POST das restliche
+Assistant-Objekt dabei feldweise mergt oder ersetzt, ist live
+**unbestätigt** (Abschnitt 7). Das Skript verlässt sich deshalb nicht
+blind darauf: Es liest den Assistant **vor und nach** dem Update per GET
+und vergleicht `time_limit_secs`, `recording_settings`,
+`default_texml_app_id`, `transcription` (`PRESERVED_SAFETY_FIELDS`,
+`time_limit_secs` ist der assistant-seitige Sicherheits-Cap, Absolute
+Regel 1). Ist danach ein Feld verschwunden oder verändert, bricht das
+Skript mit `smokePass=false` ab (Feldname in der Meldung, nie ein Wert)
+— dann die Assistant-Config im Telnyx-Portal prüfen und ggf. manuell
+wiederherstellen, statt den Lauf zu wiederholen.
+
 ## 4. `assistant_id` in die Env übernehmen
 
 Die ausgegebene `assistant_id` in `TELNYX_ASSISTANT_ID` übernehmen (Render-Env
@@ -100,6 +114,11 @@ Z. 6-12, dieselbe Ehrlichkeits-Konvention):
 - `interruption_settings.start_speaking_plan.wait_seconds`-Feintuning ist
   bewusst **nicht** Teil dieser Phase (keine neue Env-Var, kein Tuning-Knopf
   in P7) — Telnyx-Default bleibt stehen, Feintuning ist P10/Owner-Sache.
+- Ob der Update-POST das Assistant-Objekt feldweise mergt oder als Ganzes
+  ersetzt (relevant für den Teil-Update von `telephony_settings.
+  user_idle_reply_secs`, s. Abschnitt 3), ist ebenfalls live unbestätigt —
+  dagegen abgesichert durch den GET-Vorher/Nachher-Vergleich im Skript
+  (`PRESERVED_SAFETY_FIELDS`), nicht durch eine ungeprüfte Annahme.
 
 Diese offenen Fragen blockieren weder den Code-Merge noch die anderen
 Phasen — die offline geprüften Invarianten (Greeting leer, Custom-LLM-URL,

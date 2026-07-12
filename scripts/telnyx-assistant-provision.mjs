@@ -57,6 +57,20 @@ const ASSISTANT_INSTRUCTIONS =
 const JSON_HEADERS_TYPE = "application/json";
 const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-Doku = P10)
 
+// Sicherheits-/Konfigurationsfelder, die woanders verwaltet werden (Telnyx-Portal bzw.
+// andere Provisioning-Schritte) und beim Teil-Update dieses Skripts (NUR
+// telephony_settings.user_idle_reply_secs) nicht verloren gehen duerfen - time_limit_secs
+// ist der assistant-seitige Sicherheits-Cap (Absolute Regel 1), die anderen sind
+// Betriebsverhalten. sendAssistantConfig verifiziert diese Liste aktiv per GET vor/nach
+// jedem Update (afix-p1), statt der - live UNBESTAETIGTEN - Deep-Merge-Annahme blind zu
+// vertrauen (Muster Kopf-Docstring Z. 17-22).
+const PRESERVED_SAFETY_FIELDS = Object.freeze([
+  "time_limit_secs",
+  "recording_settings",
+  "default_texml_app_id",
+  "transcription",
+]);
+
 /**
  * Baut die Telnyx-Assistant-Config DETERMINISTISCH (kein IO, keine Zeit/Zufall).
  * Ein Objekt-Argument (F1: mehrere zusammengehoerige Werte -> Objekt statt Positionsliste).
@@ -90,8 +104,10 @@ export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef
     },
     greeting: "", // Regel 2: der Assistant spricht NIE zuerst
     interruption_settings: { enable: true }, // Barge-in an (Launch-Pflicht)
-    // Der Update-POST ist ein DEEP-MERGE: NUR dieses eine Feld senden - time_limit_secs,
-    // recording_settings, default_texml_app_id, transcription ueberleben unveraendert.
+    // NUR dieses eine Feld senden - die Annahme, dass der Update-POST ein Deep-Merge ist und
+    // PRESERVED_SAFETY_FIELDS (time_limit_secs etc.) dabei unveraendert ueberleben, ist live
+    // UNBESTAETIGT (wie der Rest des REST-Schemas, Kopf-Docstring Z. 17-22). sendAssistantConfig
+    // verifiziert das deshalb aktiv per GET vor/nach dem Update statt blind darauf zu vertrauen.
     telephony_settings: { user_idle_reply_secs: USER_IDLE_REPLY_SECS },
   };
 }
@@ -137,17 +153,69 @@ export function assistantRequest(existingId) {
   return { method: "POST", url: existingId ? `${base}/${existingId}` : base };
 }
 
+// GET des aktuellen Assistant-Zustands - NUR fuer den Merge-Sicherheits-Check in
+// sendAssistantConfig gebraucht (kein genereller Read-Pfad). Gleiche Fehler-/Envelope-
+// Konvention wie sendAssistantConfig (assertTelnyxOk, {data}-Wrapper Muster voice.js).
+async function fetchAssistant(id) {
+  const res = await fetch(`${config.telnyxApiBase}${AI_ASSISTANTS_PATH}/${id}`, {
+    method: "GET",
+    headers: headers(),
+  });
+  await assertTelnyxOk(res, "fetchAssistant", { attachStatus: true });
+  const json = await res.json().catch(() => ({}));
+  return json.data || json;
+}
+
+// Snapshot NUR der PRESERVED_SAFETY_FIELDS, die im Assistant tatsaechlich gesetzt sind
+// (fehlende Felder werden uebersprungen - nichts zu verlieren, kein falsch-positiver
+// "verloren"-Befund fuer Felder, die nie konfiguriert waren).
+function preservedFieldSnapshot(assistant) {
+  const snapshot = {};
+  for (const field of PRESERVED_SAFETY_FIELDS) {
+    if (assistant && assistant[field] !== undefined) snapshot[field] = assistant[field];
+  }
+  return snapshot;
+}
+
+// Reiner Vorher/Nachher-Vergleich (P11 testbar, kein IO): liefert die NAMEN der Felder, die
+// nach dem Update fehlen oder sich veraendert haben (leer = Merge-Annahme bestaetigt).
+export function fieldsLostOnUpdate(before, after) {
+  return Object.keys(before).filter(
+    (field) => JSON.stringify(before[field]) !== JSON.stringify(after[field]),
+  );
+}
+
 // Versendet die gebaute Config an die Telnyx-Assistant-API. Create (POST auf die Collection)
 // wenn keine bestehende ID uebergeben, sonst Update (POST /{id}, s. assistantRequest).
 // assertTelnyxOk = EINE Fehler-Parse-Stelle (G5), allowlisted, kein Roh-Body/Key-Leak
 // (Regel 4/5). Gibt die assistant_id zurueck.
-async function sendAssistantConfig(assistantConfig, existingId) {
+//
+// Beim Update (existingId gesetzt) wird PRESERVED_SAFETY_FIELDS aktiv per GET vor UND nach
+// dem Update verglichen (afix-p1) - die Deep-Merge-Annahme ist live UNBESTAETIGT (s. Kommentar
+// bei telephony_settings in buildAssistantConfig), ein Teil-Update darf den assistant-seitigen
+// Sicherheits-Cap (time_limit_secs, Absolute Regel 1) nie stillschweigend loeschen. Weicht der
+// Nachher-Zustand ab, wirft dieser Aufruf statt eine falsch-gruene assistant_id zurueckzugeben
+// (fail-closed, main().catch() meldet smokePass=false). Exportiert, damit der Offline-Test
+// (global.fetch gestubbt) den GET-vor/POST/GET-nach-Ablauf ohne echtes Netz durchspielen kann.
+export async function sendAssistantConfig(assistantConfig, existingId) {
+  const before = existingId ? preservedFieldSnapshot(await fetchAssistant(existingId)) : {};
   const { method, url } = assistantRequest(existingId);
   const res = await fetch(url, { method, headers: headers(), body: JSON.stringify(assistantConfig) });
   await assertTelnyxOk(res, "provisionAssistant", { attachStatus: true });
   const json = await res.json().catch(() => ({}));
   const data = json.data || json; // Telnyx-v2 wrappt teils in {data} (Muster voice.js)
-  return data.id || data.assistant_id;
+  const id = data.id || data.assistant_id || existingId;
+  if (existingId) {
+    const after = preservedFieldSnapshot(await fetchAssistant(id));
+    const lost = fieldsLostOnUpdate(before, after);
+    if (lost.length) {
+      throw new Error(
+        `Merge-Annahme widerlegt: Update hat folgende Felder veraendert/geloescht: ${lost.join(", ")} ` +
+          "(Telnyx-Assistant-Config im Portal pruefen, ggf. manuell wiederherstellen)",
+      );
+    }
+  }
+  return id;
 }
 
 async function main() {
@@ -173,7 +241,8 @@ async function main() {
   );
 }
 
-// Nur als Skript ausfuehren, NICHT beim Import (der Offline-Test importiert nur
-// buildAssistantConfig - main() darf dabei keinen Netz-Call/process.exit ausloesen).
+// Nur als Skript ausfuehren, NICHT beim Import (die Offline-Tests importieren nur einzelne
+// Funktionen und stubben bei Bedarf global.fetch - main() darf beim Import KEINEN echten
+// Netz-Call/process.exit ausloesen).
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) main().catch((err) => report(false, `Provisioning fehlgeschlagen: ${err.message}`));
