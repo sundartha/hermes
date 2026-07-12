@@ -524,7 +524,14 @@ export function fakeTelnyxShimConfig({
 // pruefen - haelt sie byte-identisch (observeTurn NIE loopExceeded, arm/clear wirkungslos).
 // Die stab-p9-Tests injizieren stattdessen den echten Watchdog bzw. einen Spy.
 export function noopWatchdog() {
-  return { arm() {}, observeTurn: () => ({ loopExceeded: false }), clear() {} };
+  return {
+    arm() {},
+    observeTurn: () => ({ loopExceeded: false }),
+    clear() {},
+    // afix-p3: No-op = kein Farewell-Hangup. Tests, die den realen Hangup pruefen, injizieren
+    // den echten Watchdog (makeTestWatchdog, telnyx-shim-harness.js).
+    scheduleFarewellHangup: () => ({ delayMs: 0 }),
+  };
 }
 
 // afix-p1 (Review-Blocker Runde 2, G5): Fabrik fuer withConfig/withBlankedConfig, gebunden per

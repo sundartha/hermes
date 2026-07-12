@@ -158,6 +158,23 @@ byte-identisch. Neue Angriffsflaechen + Mitigationen:
 - **Boot fail-closed (P10):** Flag an ohne `TELNYX_ASSISTANT_ID`/`TELNYX_API_KEY`/
   `TELNYX_CONNECTION_ID`/`TELNYX_SHIM_SHARED_SECRET` -> `assertConfig` verweigert den Start;
   ein absurd hoher `TELNYX_SHIM_MAX_TURNS_PER_MIN` im Hosting -> `productionFootguns` fatal.
+- **Verzoegerter Hangup nach `end_call` (afix-p3, bewusste Abweichung):** der Shim terminiert bei
+  `end_call` NICHT mehr sofort, sondern uebergibt an den Conversation-Watchdog
+  (`scheduleFarewellHangup`), der den Call-Control-Hangup um die geschaetzte Sprechdauer des
+  Abschiedssatzes verzoegert (`clamp(1500 ms + Zeichen * 70 ms, 3000 ms, 12000 ms)`). Grund: der
+  sofortige Hangup schnitt den Abschied ab (RCA 2026-07-12, Wurzel R4: Hangup 81 ms nach der
+  Completion). Kosten-Effekt: bis zu 12 s zusaetzliche Gespraechsminuten pro per `end_call`
+  beendetem Anruf — HART gedeckelt (`FAREWELL_MAX_MS`), kein konfigurierbarer Wert, keine neue
+  Env-Var. Mitigationen/Backstops unveraendert: (1) der Farewell-Timer terminiert selbst (er ist
+  kein Aufschub ins Offene); (2) waehrend der Verzoegerung ist die Dead-Air-Achse SUSPENDIERT,
+  damit sie nicht praeemptiv terminiert — sie lebt beim naechsten Turn wieder auf; (3) ein
+  externer `call.hangup` (`watchdog.clear`) gewinnt immer, genau EIN Terminate pro Call;
+  (4) Telnyx `time_limit_secs=1800`, der out-of-band Max-Dauer-Cap und die Budget-Gates
+  (global n Tenant, pro Shim-Turn) bleiben unangetastet. Die NOTAUS-Pfade (Loop-Guard,
+  Mid-Call-Budget-Kill) terminieren weiterhin SOFORT — kein Abschied, kein Aufschub (Regel 1).
+  Akzeptiertes Restrisiko: ein Prozess-Restart mid-Delay verliert den Timer; der Call laeuft
+  dann bis zum naechsten Backstop (Dead-Air-Re-Arm beim naechsten Turn, Max-Dauer,
+  `time_limit_secs`, Budget-Cap) — bewusst akzeptiert, kein Persistenz-Timer.
 
 ## TENANT-IDENTITY — Email-verifizierte Dedup + synchroner sub->Tenant-Resolver (Fix 1, A+B)
 

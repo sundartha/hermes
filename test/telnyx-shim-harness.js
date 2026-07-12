@@ -8,6 +8,8 @@
 import { fakeTelnyxShimConfig, noopWatchdog } from "./helpers.js";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
+import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
+import { makeCallControlTerminator } from "../src/telnyx-call-terminate.js";
 
 const SSE_DATA_PREFIX = "data: ";
 
@@ -185,4 +187,54 @@ export function sseEndsWithDone(res) {
 // stream:false-Antwort: das an res.json uebergebene chat.completion-Objekt.
 export function jsonCompletion(res) {
   return res.body;
+}
+
+// afix-p3 (G5/S2): Watchdog-Test-Rohstoffe, vorher lokal in telnyx-stab-p9-watchdog.test.js -
+// jetzt EINE Quelle fuer drei Testdateien (telnyx-stab-p9-watchdog, telnyx-afix-p3-farewell,
+// telnyx-shim-endcall brauchen alle einen echten Watchdog + Fake-Timer statt noopWatchdog).
+
+// Kompaktes N/M fuer schnelle, lesbare Tests (config.js-Defaults 45s/8 waeren nur langsamer
+// zu lesen, nicht anders zu pruefen - die Watchdog-Logik ist schwellenwert-agnostisch).
+export const WATCHDOG_TEST_CONFIG = { telnyxDeadAirTimeoutS: 30, telnyxLoopGuardMaxEmptyTurns: 3 };
+export const DEAD_AIR_TEST_MS = 30_000; // = telnyxDeadAirTimeoutS * 1000
+
+// Deterministischer Fake-Timer (P12 Fast/Repeatable): setTimer/clearTimer injiziert statt
+// echter Wartezeit. fireAll() feuert alle noch ausstehenden Callbacks synchron.
+export function fakeTimers() {
+  const pending = [];
+  let nextId = 1;
+  const cleared = [];
+  return {
+    setTimer(fn, ms) {
+      const id = nextId++;
+      pending.push({ id, fn, ms });
+      return id;
+    },
+    clearTimer(id) {
+      cleared.push(id);
+      const i = pending.findIndex((p) => p.id === id);
+      if (i >= 0) pending.splice(i, 1);
+    },
+    fireAll() {
+      pending.splice(0).forEach((p) => p.fn());
+    },
+    pendingCount: () => pending.length,
+    clearedCount: () => cleared.length,
+    // afix-p3: ms-Werte der noch offenen Timer (Reihenfolge = Stell-Reihenfolge). Erst damit
+    // ist "Dead-Air suspendiert" beweisbar - die reine Hangup-Zaehlung kann es NICHT zeigen
+    // (der one-shot-State-Delete verschluckt ein zweites Feuern still).
+    pendingDelays: () => pending.map((p) => p.ms),
+  };
+}
+
+// Baut Watchdog + geteiltes Terminierungs-Primitiv aus den ECHTEN Factories (kein Mock der
+// Kern-Logik) gegen einen gegebenen Fake-Store/-VoiceControl/-Timer (Build-Schritt, P13).
+export function makeTestWatchdog({ store, voiceControl, timers, config = WATCHDOG_TEST_CONFIG }) {
+  const terminate = makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX });
+  return makeConversationWatchdog({
+    config,
+    terminate,
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+  });
 }
