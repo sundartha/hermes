@@ -114,3 +114,40 @@ Offen (Owner-Gate): E4.1 (convo-bench) BLOCKIERT — lokaler ANTHROPIC_API_KEY l
 - [ ] Deploy im No-Call-Fenster (push origin + upstream, manueller Render-Deploy, [boot]-Banner pruefen).
 - [ ] EIN gebuendelter Testanruf (Skript i-v inkl. Overlap-Probe = R1-Gate <=5s) -> jede E*-Erwartung
       einzeln PASS/FAIL in tasks/-Report.
+
+---
+
+# Gespraechsqualitaet optimieren (PLAN-CONVERSATION-OPTIMIZATION.md, 2026-07-12)
+
+Strategiedokument fertig, 6 Recherche-Spuren + 2 adversariale Opus-Pruefungen. Wartet auf
+Owner-Freigabe. Kernbefund: Telnyx hat zwei Features gegen unsere zwei groessten Probleme —
+beide sind bei uns per Default AUS.
+
+- [ ] K0 Messgrundlage: Metadaten-Auswerteskript (Telnyx `metadata` je Message liefert
+      `end_user_perceived_latency_ms`, `llm_first_token_duration_ms` u.a.) + Shim-Request-Zaehler
+      pro Call + `count_tokens`-Messung. Kein Anruf noetig. Vorbedingung fuer K5/K6/K8.
+- [ ] K1 `interrupt_prediction_threshold` 0.0 -> 0.4 (Provisioner-Zeile). Filtert "mhm"/"ja" aus
+      der Unterbrechungs-Erkennung -> direkter Schlag gegen S1 (Verwerf-Fenster).
+      HARTES GATE E1.2: echtes Barge-in muss weiter sofort stoppen, sonst Rollback auf 0.0.
+- [ ] K2 `background_audio` `silence` -> `office` (volume 0.3). Beweist zugleich, ob es im
+      `ai_assistant_start`-Pfad ueberhaupt greift (unbelegt).
+- [ ] K3 Farewell-Konstanten aus den vorhandenen Aufnahmen kalibrieren (70ms/Zeichen ueberschaetzt
+      ElevenLabs -> 12s-Cap wird immer ausgeschoepft). Kein TTS-Ende-Event existiert (doppelt bewiesen).
+- [ ] G1 GATE-EXPERIMENT: Konsumiert Telnyx unsere SSE-Chunks inkrementell? Wegwerf-Assistant +
+      kuenstlich verzoegerte Chunks + 1 Testanruf. ROT => K5 und K6 gestrichen.
+- [ ] K5 Sentence-Streaming im Shim (NUR bei G1 gruen) — phase-impl-lean PFLICHT (geteilter
+      agentTurn-Seam, llm.js hat heute KEIN Streaming, Text-vor-Tool ist NICHT garantiert).
+- [ ] K6 Filler/Soft-Timeout nach ElevenLabs-Vorbild (nur nach K5) — phase-impl-lean.
+- [ ] K4 `keyterm` auf flux (per Call, wie der language-Hint) gegen den STT-Restfehler.
+- [ ] K8 Eager-EOT einschalten — OWNER-KOSTENENTSCHEIDUNG: +50-70% LLM-Calls (Deepgram-Zahl),
+      spekulative Turns sind fuer uns UNSICHTBAR. K0-Zaehler ist harte Vorbedingung.
+- [ ] K9 Bench (E4.1) — weiterhin BLOCKIERT: lokaler ANTHROPIC_API_KEY liefert 401 (07-12 geprueft).
+
+## Verworfen (mit Beleg, nicht aus Bequemlichkeit)
+- Prompt-Caching-Phase: Haiku 4.5 braucht 4096 Token Mindest-Praefix, unser Praefix ~1200-1700
+  -> Caching ist HEUTE inert und waere ohnehin ein Kosten-, kein Latenz-Hebel.
+- STT-Modellwechsel: Interruption Prediction (= K1) ist flux-exklusiv. Wechsel wuerde den besten
+  Fix gegen S1 opfern, um einen seltenen Transkriptions-Fetzen zu reparieren.
+- `start_speaking_plan`-Tuning: greift bei flux laut Spec nicht.
+- Hangup-Fix via `send_conversation_message_events`: null Spec, null Doku, GitHub-weit 1 fremdes
+  Repo, das das Flag setzt und nie ausliest.
