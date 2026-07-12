@@ -61,15 +61,28 @@ const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-D
 // andere Provisioning-Schritte) und beim Teil-Update dieses Skripts (NUR
 // telephony_settings.user_idle_reply_secs) nicht verloren gehen duerfen - time_limit_secs
 // ist der assistant-seitige Sicherheits-Cap (Absolute Regel 1), die anderen sind
-// Betriebsverhalten. sendAssistantConfig verifiziert diese Liste aktiv per GET vor/nach
+// Betriebsverhalten. Jeder Eintrag ist der PFAD zum Feld im Assistant-Objekt, NICHT nur der
+// Feldname: live per GET verifiziert (tasks/assistant-fix-spec.md, Bestandsaufnahme) liegen
+// time_limit_secs, recording_settings und default_texml_app_id VERSCHACHTELT unter
+// telephony_settings, NUR transcription liegt top-level. Ein Snapshot ueber den blossen
+// Feldnamen (assistant[field]) waere fuer die drei verschachtelten Felder IMMER leer und der
+// Guard koennte nie feuern (Review-Blocker Runde 2) - preservedFieldSnapshot() liest deshalb
+// ueber den vollen Pfad. sendAssistantConfig verifiziert diese Liste aktiv per GET vor/nach
 // jedem Update (afix-p1), statt der - live UNBESTAETIGTEN - Deep-Merge-Annahme blind zu
 // vertrauen (Muster Kopf-Docstring Z. 17-22).
-const PRESERVED_SAFETY_FIELDS = Object.freeze([
-  "time_limit_secs",
-  "recording_settings",
-  "default_texml_app_id",
-  "transcription",
-]);
+const PRESERVED_SAFETY_FIELDS = Object.freeze({
+  time_limit_secs: ["telephony_settings", "time_limit_secs"],
+  recording_settings: ["telephony_settings", "recording_settings"],
+  default_texml_app_id: ["telephony_settings", "default_texml_app_id"],
+  transcription: ["transcription"],
+});
+
+// Liest einen Wert ueber eine Pfad-Segmentliste (kein IO, keine Ausnahme bei fehlenden
+// Zwischenknoten - liefert dann undefined, wie ein einfacher Feldzugriff auf ein fehlendes
+// Feld). Eine Stelle (G5) statt wiederholter optional-chaining-Ketten pro Feld.
+function readByPath(obj, path) {
+  return path.reduce((node, segment) => (node == null ? undefined : node[segment]), obj);
+}
 
 /**
  * Baut die Telnyx-Assistant-Config DETERMINISTISCH (kein IO, keine Zeit/Zufall).
@@ -168,11 +181,14 @@ async function fetchAssistant(id) {
 
 // Snapshot NUR der PRESERVED_SAFETY_FIELDS, die im Assistant tatsaechlich gesetzt sind
 // (fehlende Felder werden uebersprungen - nichts zu verlieren, kein falsch-positiver
-// "verloren"-Befund fuer Felder, die nie konfiguriert waren).
-function preservedFieldSnapshot(assistant) {
+// "verloren"-Befund fuer Felder, die nie konfiguriert waren). Liest ueber den vollen Pfad
+// (readByPath), NICHT ueber assistant[field] top-level - die meisten dieser Felder liegen
+// verschachtelt (s. Kommentar bei PRESERVED_SAFETY_FIELDS).
+export function preservedFieldSnapshot(assistant) {
   const snapshot = {};
-  for (const field of PRESERVED_SAFETY_FIELDS) {
-    if (assistant && assistant[field] !== undefined) snapshot[field] = assistant[field];
+  for (const [field, path] of Object.entries(PRESERVED_SAFETY_FIELDS)) {
+    const value = readByPath(assistant, path);
+    if (value !== undefined) snapshot[field] = value;
   }
   return snapshot;
 }

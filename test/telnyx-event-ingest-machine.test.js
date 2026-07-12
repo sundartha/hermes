@@ -8,20 +8,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
-import { captureConsole, noopWatchdog } from "./helpers.js";
+import { captureConsole, noopWatchdog, makeConfigOverrides } from "./helpers.js";
 import { config } from "../src/config.js";
 
-// afix-p1: config.telnyxElevenLabs fuer die Dauer eines Tests setzen/restaurieren (Muster
-// withBlankedConfig in telnyx-call-control.test.js) - deterministisch statt env-abhaengig
-// (eine lokale .env darf die Observability-Tests nicht beeinflussen).
-async function withElevenLabsConfig(value, fn) {
-  const saved = config.telnyxElevenLabs;
-  config.telnyxElevenLabs = value;
-  try {
-    await fn();
-  } finally {
-    config.telnyxElevenLabs = saved;
-  }
+// afix-p1: config.telnyxElevenLabs fuer die Dauer eines Tests setzen/restaurieren -
+// deterministisch statt env-abhaengig (eine lokale .env darf die Observability-Tests nicht
+// beeinflussen). Gemeinsame Implementierung mit telnyx-call-control.test.js in
+// test/helpers.js (G5, Review-Blocker Runde 2) statt eigener fast wortgleicher Kopie.
+const { withConfig } = makeConfigOverrides(config);
+function withElevenLabsConfig(value, fn) {
+  return withConfig("telnyxElevenLabs", value, fn);
 }
 const FULL_ELEVENLABS_CONFIG = { voiceId: "voice_el_123", apiKeyRef: "elevenlabs_prod", model: "eleven_flash_v2_5" };
 const EMPTY_ELEVENLABS_CONFIG = { voiceId: "", apiKeyRef: "", model: "Default" };

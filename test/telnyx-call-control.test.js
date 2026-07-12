@@ -4,7 +4,7 @@
 // (Key-Leak-Schutz). Kein pglite/Server-Spawn (eigene Datei).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { captureConsole } from "./helpers.js";
+import { captureConsole, makeConfigOverrides } from "./helpers.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -50,23 +50,12 @@ function stubFetch(response) {
 }
 
 // Config fuer die Dauer eines Tests auf einen Wert setzen (Adapter liest config bei jedem
-// Aufruf), danach restaurieren. fetch wird dabei gestubbt, damit ein durchrutschender Call
-// NICHT die echte API trifft (er soll ohnehin vorher fail-closed werfen).
-async function withConfig(key, value, fn) {
-  const saved = config[key];
-  config[key] = value;
-  try {
-    await fn();
-  } finally {
-    config[key] = saved;
-  }
-}
-
-// Fehlende Config simulieren: dieselbe Mechanik mit dem Leerwert (Bestands-Aufrufer bleiben
-// unveraendert).
-function withBlankedConfig(key, fn) {
-  return withConfig(key, "", fn);
-}
+// Aufruf), danach restaurieren; withBlankedConfig simuliert fehlende Config mit dem Leerwert.
+// fetch wird dabei gestubbt, damit ein durchrutschender Call NICHT die echte API trifft (er
+// soll ohnehin vorher fail-closed werfen). Gemeinsame Implementierung in test/helpers.js (G5,
+// Review-Blocker Runde 2) statt eigener Kopie - hier per Closure an das dynamisch importierte
+// config-Objekt gebunden (s. Kommentar bei makeConfigOverrides).
+const { withConfig, withBlankedConfig } = makeConfigOverrides(config);
 
 const CC_ORIGINATE = {
   from: "+13125550100",

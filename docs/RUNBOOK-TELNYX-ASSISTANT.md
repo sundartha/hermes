@@ -64,9 +64,14 @@ blind darauf: Es liest den Assistant **vor und nach** dem Update per GET
 und vergleicht `time_limit_secs`, `recording_settings`,
 `default_texml_app_id`, `transcription` (`PRESERVED_SAFETY_FIELDS`,
 `time_limit_secs` ist der assistant-seitige Sicherheits-Cap, Absolute
-Regel 1). Ist danach ein Feld verschwunden oder verändert, bricht das
-Skript mit `smokePass=false` ab (Feldname in der Meldung, nie ein Wert)
-— dann die Assistant-Config im Telnyx-Portal prüfen und ggf. manuell
+Regel 1). Drei dieser vier Felder liegen live per GET verifiziert
+**verschachtelt unter `telephony_settings`** (nur `transcription` liegt
+top-level) — der Vergleich liest deshalb über den vollen Pfad, nicht nur
+`assistant.<feld>`, sonst würde er für die verschachtelten Felder nie
+etwas verlieren *sehen*, egal was der Update-POST tatsächlich tut. Ist
+danach ein Feld verschwunden oder verändert, bricht das Skript mit
+`smokePass=false` ab (Feldname in der Meldung, nie ein Wert) — dann die
+Assistant-Config im Telnyx-Portal prüfen und ggf. manuell
 wiederherstellen, statt den Lauf zu wiederholen.
 
 ## 4. `assistant_id` in die Env übernehmen
