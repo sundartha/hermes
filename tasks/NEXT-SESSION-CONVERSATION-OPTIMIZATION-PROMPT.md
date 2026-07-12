@@ -32,12 +32,29 @@ Das Dokument muss enthalten:
   (Haiku-Lehre: enge Verbote am Tool-Entscheidungspunkt, breite Stil-Regeln kippen in
   Ueberkorrektur), `telnyx-assistant-live-api-findings`.
 
+## LEITPLANKE: Der Telnyx-AI-Assistant-Pfad BLEIBT (Owner-Entscheidung 2026-07-12)
+
+Der Wechsel auf Telnyx wurde bewusst gemacht, damit **Hard-Barge-in** funktioniert (Launch-
+Pflicht) — und es funktioniert live (Owner konnte der KI ins Wort fallen). Diese Session
+stellt die Architektur NICHT in Frage und schlaegt KEINEN Stack-Wechsel vor. Optimiert wird
+INNERHALB des Telnyx-Pfads plus in unserem eigenen Shim.
+
+Nur falls eine konkrete Phase beweisbar an einer Telnyx-Grenze scheitert (Doku + empirischer
+Gegenbeweis, nicht Vermutung), wird das als benannte Grenze im Dokument festgehalten — als
+Owner-Entscheidung fuer spaeter, nicht als Empfehlung dieser Session.
+
 ## Die Probleme, die geloest werden sollen
 
-**P-A (wichtigstes): Verworfene Antworten (R1).** Telnyx verwirft eine bereits generierte
-Antwort, wenn der Nutzer im Latenzfenster weiterspricht — im letzten Testanruf 1 von 4 Turns
-(25%), ausgeloest durch eine ganz normale Sprechpause. Fuer den Anrufer wirkt die KI dann
-stumm; fuer uns sind es bezahlte LLM- + TTS-Tokens ohne Gegenwert. Das ist der Kern.
+**P-A (wichtigstes): Das Verwerf-Fenster verkleinern.** Wenn der Nutzer weiterspricht,
+waehrend eine Antwort generiert wird, verwirft Telnyx sie und startet einen neuen Turn — das
+ist der PREIS von Barge-in und voellig normal, kein Bug (im Testanruf: 1 von 4 Turns, danach
+Erholung in ~2s, hoerbare Antwort nach 1.99s/2.27s). Der Hebel ist also NICHT, das Verwerfen
+abzuschalten, sondern das FENSTER zu verkleinern, in dem es passieren kann: heute liegen ~2s
+zwischen Nutzer-Satzende und erstem Ton (LLM 1.2-2.0s, `agentTurn` ist NON-streaming). Je
+kleiner das Fenster, desto seltener wird verworfen — und desto weniger bezahlte LLM-/TTS-
+Arbeit verpufft. Konkret zu pruefen: Sentence-Streaming im Shim (erste Saetze als SSE-Chunks),
+Prompt-Caching, kuerzerer Systemprompt, EOT-Parameter (`eot_timeout_ms: 5000`,
+`eot_threshold: 0.8`), damit eine normale Sprechpause nicht vorschnell als Turn-Ende gilt.
 
 **P-B: Stille waehrend das LLM denkt.** Nach jeder Nutzer-Aeusserung ~2s Funkstille
 (Median-TTFA 2.13s), Totzeit-Anteil im Gespraech 24-37%. Owner will hier Fuellwoerter /
@@ -67,11 +84,13 @@ statt es neu zu erfinden. Belege JEDE technische Behauptung im Strategiedokument
 Quelle (URL + Datum) und markiere klar, was Doku-Aussage und was eigene Messung ist.
 
 Themen:
-- **Turn-Taking / Interruption-Handling**: Wie loesen LiveKit Agents, Pipecat, Vapi, Retell,
-  Bland, ElevenLabs Agents und OpenAI Realtime das Verwerfen von Antworten bei
-  Nutzer-Zwischenrede? Stichworte: endpointing, semantic VAD, "interruption grace period",
-  utterance stitching, response cancellation vs. queueing, "user speaking while agent
-  thinking".
+- **Turn-Taking / Interruption-Handling**: Wie gehen LiveKit Agents, Pipecat, Vapi, Retell,
+  Bland, ElevenLabs Agents und OpenAI Realtime mit Nutzer-Zwischenrede um? Stichworte:
+  endpointing, semantic VAD, "interruption grace period", utterance stitching, response
+  cancellation vs. queueing, "user speaking while agent thinking". ZWECK dieser Recherche:
+  Ideen fuer TUNING und fuer unseren Shim gewinnen — NICHT, um einen Stack-Wechsel zu
+  begruenden (siehe Leitplanke). Interessant ist vor allem, welche dieser Techniken sich mit
+  Telnyx-Parametern oder shim-seitig nachbauen laesst.
 - **Telnyx-spezifisch**: Was bietet die Telnyx-AI-Assistant-API konkret an
   (`interrupt_prediction_threshold`, `eot_timeout_ms`, `eot_threshold`,
   `eager_eot_threshold`, `start_speaking_plan`, `send_conversation_message_events`,
@@ -90,22 +109,26 @@ Themen:
 - **STT**: Alternativen/Parameter bei Telnyx (andere Modelle, `keyterm`, `smart_format`);
   Trade-off beachten: flux ist laut Doku das einzige Telnyx-Modell mit Turn-Taking-Features.
 
-## Strategische Weiche, die das Dokument klar beantworten muss
+## Wo unsere Hebel liegen (Arbeitsraum der Phasen)
 
-Wir sitzen im **Telnyx-AI-Assistant-Pfad**: Turn-Taking, Barge-in, EOT und TTS-Playback
-gehoeren Telnyx, wir liefern nur das Gehirn (external LLM). Alle Probleme P-A/P-B/P-C liegen
-genau in dem Teil, den wir NICHT kontrollieren.
+Im Telnyx-AI-Assistant-Pfad gehoeren Turn-Taking, Barge-in, EOT und TTS-Playback Telnyx; wir
+liefern das Gehirn (external LLM ueber unseren Shim). Der Arbeitsraum dieser Session sind
+genau die drei Stellen, an denen wir trotzdem etwas zu sagen haben:
 
-Das Dokument muss ehrlich abwaegen:
-- **Weg 1 — im Telnyx-Pfad bleiben** und mit den vorhandenen Stellschrauben + Prompt- und
-  Shim-Tricks so weit kommen wie moeglich. Billig, schnell, aber die Decke ist Telnyx' Verhalten.
-- **Weg 2 — eigener Streaming-Stack** (Memory `voice-stack-strategy`: RealtimeBackend-Port,
-  ElevenLabs STT/TTS + Claude, `bridge.js` ist heute OpenAI-fest). Volle Kontrolle ueber
-  Turn-Taking/Barge-in/Filler, aber 6-12 Wochen und ein neuer Betriebspfad.
-- Gibt es einen **Zwischenweg** (z.B. Telnyx-Media-Streaming statt AI-Assistant, also
-  Turn-Taking selbst machen, Telefonie bei Telnyx lassen)? Pruefen und bewerten.
+1. **Assistant-Parameter** (via Provisioner, `scripts/telnyx-assistant-provision.mjs` =
+   Single Source of Truth): `eot_timeout_ms`, `eot_threshold`, `eager_eot_threshold`,
+   `interrupt_prediction_threshold`, `user_idle_reply_secs`, `voice_settings.*`
+   (inkl. `background_audio`), `transcription.*`. Jede Aenderung ist eine Zeile + ein
+   Provisioner-Lauf — billig und schnell reversibel.
+2. **Unser Shim** (`src/telnyx-llm-shim.js`, `src/claude.js`): Sentence-Streaming statt
+   non-streaming, Prompt-Caching, kuerzerer Systemprompt, sofortige Acknowledgement-/
+   Filler-Ausgabe als erster SSE-Chunk, waehrend die eigentliche Antwort noch entsteht.
+   Hier haben wir volle Kontrolle — und hier liegt vermutlich der groesste Gewinn.
+3. **Call-Control-Kommandos** (`src/telephony/adapters/telnyx/voice.js`): was koennen wir
+   waehrend eines laufenden Assistant-Gespraechs zusaetzlich senden (z.B. `speak`,
+   Playback), ohne den Assistant zu stoeren? Empirisch pruefen.
 
-Kriterium fuer die Empfehlung: Was macht das Gespraech fuer den Angerufenen am schnellsten
+Kriterium fuer die Priorisierung: Was macht das Gespraech fuer den Angerufenen am schnellsten
 spuerbar besser, ohne Regel 1 (Safety-Gates) oder Regel 2 (Offenlegung als erster Satz,
 per-Call zugestellt) anzutasten?
 

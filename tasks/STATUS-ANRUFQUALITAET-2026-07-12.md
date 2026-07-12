@@ -44,7 +44,7 @@ bleibt vorerst vertagt.
 
 ## Die verbleibenden Schwachstellen (belegt, nicht vermutet)
 
-### S1 — R1 ist NICHT behoben, nur maskiert (groesstes Risiko)
+### S1 — Das Verwerf-Fenster (R1): normaler Barge-in-Preis, aber zu gross
 
 In Call 2 wurde **1 von 4 generierten Antworten komplett verworfen**: `turn_ok #2`
 (17:37:24.704, LLM 1843ms) erzeugte Text, der NIE gespielt und von Telnyx nie als Message
@@ -52,11 +52,16 @@ registriert wurde. Ausgeloest hat das keine bewusste Unterbrechung, sondern eine
 Sprechpause** des Owners: Telnyx erkannte ein Turn-Ende, startete die Generierung, der Owner
 sprach weiter -> die laufende Antwort wurde obsolet.
 
-Das R1-Gate (naechste hoerbare Antwort <= 5s nach Aeusserungsende) ist mit **1.99s / 2.27s
-numerisch PASS** — aber nur, weil der Recovery-Turn zufaellig schnell war. Der
-Verwerf-Mechanismus selbst ist strukturell ungeloest und liegt in Telnyx' Turn-Taking, nicht
-bei uns. Bei einem Anrufer, der langsamer/stockender spricht, kann daraus wieder das
-Ur-Symptom "die KI ist stumm" werden.
+EINORDNUNG (wichtig, nicht dramatisieren): Das Verwerfen IST der Preis von Barge-in — jedes
+Barge-in-faehige System muss eine noch nicht gespielte Antwort fallen lassen, wenn der Nutzer
+weiterspricht, sonst redet die KI drueber. Telnyx hat sich korrekt erholt: 1.37s spaeter lief
+ein neuer Turn, die Antwort war nach 1.99s / 2.27s hoerbar -> R1-Gate PASS. Der Telnyx-Pfad
+ist damit NICHT in Frage gestellt (Barge-in war der Grund fuer den Wechsel und funktioniert).
+
+Der Hebel ist das LATENZFENSTER, nicht der Mechanismus: Solange ~2s zwischen Satzende und
+erstem Ton liegen (LLM non-streaming), ist das Fenster gross, in dem verworfen werden kann.
+Kleineres Fenster = seltener verworfen = weniger verpuffte LLM-/TTS-Kosten und weniger
+Stille-Eindruck. Genau das ist Phase P-A der Optimierungs-Session.
 
 Kosten-Nebenwirkung: jede verworfene Antwort ist bezahlte LLM- + TTS-Arbeit (25% Verschnitt
 in diesem Call).
