@@ -612,6 +612,24 @@ test("T-P3-AC6: chatgptRenderer-Grenzfaelle + Detektor", () => {
   assert.equal(capabilityDeclaresUi(CHATGPT_CAPS), false, "ChatGPT-Caps -> kein mcp-nativ");
 });
 
+// Regressions-Pin fuer die in src/ui/registry.js dokumentierte, bewusst offene Luecke:
+// der ChatGPT-Adapter liefert dasselbe Widget-HTML wie mcp-nativ (T-P3-AC5), das seit
+// widget-wire NUR NOCH tools/call-postMessage spricht - keine ChatGPT-eigene
+// window.openai-Bruecke mehr. Ein echter ChatGPT-Host bekommt damit den Erst-Aufruf
+// (Text+structuredContent) wie gewohnt, aber KEINE live-aktualisierende Karte (Self-Poll/
+// Cancel/get_transcript bleiben dort stumm). Faellt dieser Test um, weil das HTML wieder
+// window.openai enthaelt ODER tools/call nicht mehr der einzige Sendeweg ist, muss die
+// Entscheidung in src/ui/registry.js neu getroffen und dort dokumentiert werden - nicht
+// stillschweigend hier vorbeigehen.
+test("T-P3-AC7: bekannte Luecke gepinnt - ChatGPT-ausgeliefertes Widget-HTML spricht nur tools/call, keine window.openai-Bruecke", async () => {
+  for (const { widgetId } of P3_WIDGETS) {
+    const chatBack = await readbackResource(chatgptRenderer, widgetId);
+    const chatHtml = chatBack.contents[0].text;
+    assert.ok(!chatHtml.includes("window.openai"), `${widgetId}: kein window.openai im ChatGPT-Pfad`);
+    assert.ok(chatHtml.includes('"tools/call"'), `${widgetId}: einziger Sendeweg bleibt tools/call`);
+  }
+});
+
 // ===== W3: drittes read-only Widget (get_agent_status) ueber den BESTEHENDEN Seam =====
 // Stufe 0 (structuredContent + Backward-Compat-Text) + Stufe 1 (agent-status Widget) bei
 // faehigem Host; Fallback Stufe-0 bei unfaehigem. Whitelist beweist Nicht-Durchreichung

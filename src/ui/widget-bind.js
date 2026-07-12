@@ -10,6 +10,11 @@
 // + Hoehe melden; Host pusht ui/notifications/tool-result -> structuredContent binden +
 // Hoehe melden. XSS-Disziplin: Werte landen AUSSCHLIESSLICH ueber textContent, NIE ueber
 // innerHTML - host-gepushte Strings werden damit nie als Markup interpretiert.
+//
+// Nach der Host-Antwort wird zusaetzlich GENAU EINMAL "ui ready" signalisiert (Flag +
+// CustomEvent, siehe signalUiReady). Erst danach darf ein Widget eigene tools/call
+// senden (Konsument: das Inline-Skript von widgets/call.html) - vor dem Handshake
+// beantwortet der Host keinen Tool-Call.
 
 // CSS-Klasse je gerenderter Transkriptzeile - matcht .turn in den Widget-Styles.
 const LINE_CLASS = "turn";
@@ -32,6 +37,12 @@ const METHOD_INITIALIZED = "ui/notifications/initialized";
 const METHOD_TOOL_RESULT = "ui/notifications/tool-result";
 const METHOD_SIZE_CHANGED = "ui/notifications/size-changed";
 const INIT_ID = 1;
+
+// Ready-Signal (Handshake beantwortet). Konsument ist das self-contained Inline-Skript
+// von call.html, das nicht importieren kann - diese beiden Namen sind deshalb DER
+// Vertrag zwischen beiden Skripten (exportiert, damit ein Sync-Test sie zusammenhaelt).
+export const UI_READY_FLAG = "__hermesUiReady";
+export const UI_READY_EVENT = "hermes:ui-ready";
 
 // true nur fuer ein nicht-null Objekt (geteilte Pruefung, keine Duplizierung G5).
 export function isObject(value) {
@@ -124,6 +135,18 @@ export function reportSize(root) {
   postToHost(root, { jsonrpc: "2.0", method: METHOD_SIZE_CHANGED, params: { width, height } });
 }
 
+// Signalisiert GENAU EINMAL, dass der Host-Handshake beantwortet ist: Flag am window
+// (late-safe fuer Skripte, die SPAETER laufen - das BIND_SCRIPT wird nach dem Inline-
+// Skript injiziert) UND ein CustomEvent (fuer Skripte, die frueher liefen und warten).
+// Ohne CustomEvent/dispatchEvent (kein Browser) bleibt das Flag die einzige Wirkung
+// (fail-safe, kein Crash).
+export function signalUiReady(root) {
+  if (!root || root[UI_READY_FLAG]) return;
+  root[UI_READY_FLAG] = true;
+  if (typeof root.CustomEvent !== "function" || typeof root.dispatchEvent !== "function") return;
+  root.dispatchEvent(new root.CustomEvent(UI_READY_EVENT));
+}
+
 // Behandelt eine eingehende Host-Nachricht: Antwort auf ui/initialize -> initialized
 // bestaetigen + Hoehe melden; ui/notifications/tool-result -> structuredContent binden +
 // Hoehe melden. Unbekannte Nachrichten -> no-op. Gibt true zurueck, wenn gebunden wurde.
@@ -132,6 +155,7 @@ export function handleHostMessage(root, doc, message) {
   if (message.id === INIT_ID && isObject(message.result)) {
     postToHost(root, { jsonrpc: "2.0", method: METHOD_INITIALIZED, params: {} });
     reportSize(root);
+    signalUiReady(root); // erst NACH bestaetigtem initialized duerfen Tool-Calls raus
     return false;
   }
   if (message.method === METHOD_TOOL_RESULT && isObject(message.params)) {
@@ -199,6 +223,8 @@ function buildBindScript() {
     `var METHOD_TOOL_RESULT = ${JSON.stringify(METHOD_TOOL_RESULT)};`,
     `var METHOD_SIZE_CHANGED = ${JSON.stringify(METHOD_SIZE_CHANGED)};`,
     `var INIT_ID = ${JSON.stringify(INIT_ID)};`,
+    `var UI_READY_FLAG = ${JSON.stringify(UI_READY_FLAG)};`,
+    `var UI_READY_EVENT = ${JSON.stringify(UI_READY_EVENT)};`,
     isObject.toString(),
     renderLines.toString(),
     rowFields.toString(),
@@ -207,6 +233,7 @@ function buildBindScript() {
     bind.toString(),
     postToHost.toString(),
     reportSize.toString(),
+    signalUiReady.toString(),
     handleHostMessage.toString(),
     run.toString(),
     "run(window);",

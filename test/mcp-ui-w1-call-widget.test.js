@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { hasWidget, widgetTitle, widgetHtml, WIDGET_CALL } from "../src/ui/widget-catalog.js";
-import { BIND_SCRIPT } from "../src/ui/widget-bind.js";
+import { BIND_SCRIPT, signalUiReady, UI_READY_FLAG, UI_READY_EVENT } from "../src/ui/widget-bind.js";
 import { WING_PNG } from "../design-system/components/brand/wing-image.js";
 
 // data-mcp-Slots nach dem Design-Cleanup 2026-07-02: duration_s/failure_reason/
@@ -159,7 +159,6 @@ function runOwnScript(doc, options) {
   const sandbox = {};
   sandbox.document = doc;
   sandbox.window = sandbox;
-  sandbox.openai = options && options.openai;
   sandbox.HermesWingCanvas = options && options.hermesWingCanvas; // H3: optionaler Engine-Fake
   sandbox._posted = [];
   sandbox.parent = { postMessage: (msg) => sandbox._posted.push(msg) };
@@ -167,6 +166,12 @@ function runOwnScript(doc, options) {
   sandbox.addEventListener = (type, handler) => {
     listeners[type] = listeners[type] || [];
     listeners[type].push(handler);
+  };
+  // CustomEvent/dispatchEvent-Oberflaeche, damit der ECHTE signalUiReady (widget-bind.js)
+  // in dieser Sandbox dispatchen kann - kein Test-Attrappen-Signalpfad (s. env.uiReady).
+  sandbox.CustomEvent = function CustomEvent(type) { this.type = type; };
+  sandbox.dispatchEvent = (event) => {
+    for (const h of listeners[event.type] || []) h(event);
   };
 
   const intervalFns = new Map();
@@ -187,6 +192,9 @@ function runOwnScript(doc, options) {
   };
   sandbox.clearTimeout = (id) => timeoutFns.delete(id);
 
+  // Late-safe-Pfad (F2): Flag schon gesetzt, BEVOR das Inline-Skript ueberhaupt laeuft.
+  if (options && options.readyBeforeScript) sandbox[UI_READY_FLAG] = true;
+
   vm.createContext(sandbox);
   vm.runInContext(ownScriptSource(), sandbox);
 
@@ -203,6 +211,9 @@ function runOwnScript(doc, options) {
     fireTimeout: () => {
       for (const fn of timeoutFns.values()) fn();
     },
+    // Faehrt den ECHTEN Handshake-Signalpfad aus widget-bind.js (Flag setzen + Event
+    // dispatchen), nicht eine Test-Attrappe - beweist die Verdrahtung, nicht nur die Form.
+    uiReady: () => signalUiReady(sandbox),
   };
 }
 
@@ -238,16 +249,14 @@ test("T-W1-call-AC3: data-mcp-Slots + Anzeige-Elemente vorhanden, Debug-Slots re
   assert.ok(html.includes('class="meander"'), "Maeander-Fries vorhanden");
 });
 
-test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-/Bruecken-Strings", () => {
+test("T-W1-call-AC4: Inline-Skript enthaelt Poll-Konstante + alle Tool-Namen + den Sendeweg", () => {
   const html = widgetHtml("call");
   assert.match(html, /setInterval/);
   assert.match(html, /POLL_INTERVAL_MS\s*=\s*8000/);
   assert.match(html, /"get_call_status"/);
   assert.match(html, /"get_transcript"/);
   assert.match(html, /"cancel_call"/);
-  assert.match(html, /window\.openai/);
   assert.match(html, /"tools\/call"/);
-  assert.match(html, /"ui\/tool-call"/);
 });
 
 test("T-W1-call-AC6: kein innerHTML/@import/<link/href= im Widget", () => {
@@ -261,6 +270,7 @@ test("T-W1-call-AC6: kein innerHTML/@import/<link/href= im Widget", () => {
 test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deaktiviert Cancel, erreicht clearInterval, holt get_transcript GENAU EINMAL", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
+  env.uiReady(); // Handshake beantwortet - Polling/Sendeweg ist ab hier offen (F2)
 
   // Simuliert den bereits bewiesenen Empfangspfad (widget-bind.js bindet call_id aus
   // dem initialen place_call-Push, BEVOR unser eigenes Skript pollt).
@@ -316,8 +326,8 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(doc.row("lines").style.display, "none", "Transkriptzeilen ausgeblendet nach Terminal");
   assert.equal(
     env.posted.filter((m) => m.params && m.params.name === "get_transcript").length,
-    2,
-    "get_transcript NUR im Terminal-Zweig (completed) versucht - beide Kandidaten, da noch kein Format bestaetigt",
+    1,
+    "get_transcript NUR im Terminal-Zweig (completed) versucht - genau EIN Versuch (tools/call)",
   );
 
   // Get-transcript-Antwort einspielen -> result_summary/objective_achieved gefuellt.
@@ -340,55 +350,145 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
     method: "ui/notifications/tool-result",
     params: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 43, last_transcript_lines: [], failure_reason: null } },
   });
-  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 2, "get_transcript bleibt einmalig");
+  assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 1, "get_transcript bleibt einmalig");
 });
 
-test("T-W1-call-AC7b: alle drei Bruecken-Kandidaten werden auf einem Tick versucht (window.openai + beide postMessage-Methoden)", () => {
-  const openaiCalls = [];
-  const doc = makeFakeDocument();
-  const env = runOwnScript(doc, {
-    openai: { callTool: (name, args) => (openaiCalls.push({ name, args }), new Promise(() => {})) },
-  });
-  doc.slot("call_id").textContent = "call_1";
-
-  env.fireInterval(); // simuliert den naechsten 8s-Tick
-
-  assert.equal(openaiCalls.length >= 1, true, "window.openai.callTool versucht");
-  assert.equal(openaiCalls[0].name, "get_call_status");
-  const methods = env.posted.map((m) => m.method);
-  assert.ok(methods.includes("tools/call"), "tools/call versucht");
-  assert.ok(methods.includes("ui/tool-call"), "ui/tool-call versucht");
-  for (const m of env.posted) {
-    assert.equal(m.params.name, "get_call_status");
-    assert.deepEqual(crossRealmPlain(m.params.arguments), { call_id: "call_1" });
-  }
-});
-
-test("T-W1-call-AC7c: sobald ein Format bestaetigt ist, nutzen Folge-Ticks nur noch dieses (Kanal B, id-gematcht)", () => {
+test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert get_transcript nicht dauerhaft - der Poll-Tick nach dem Handshake holt ihn nach", () => {
   const doc = makeFakeDocument();
   const env = runOwnScript(doc);
-  doc.slot("call_id").textContent = "call_1";
 
-  env.fireInterval(); // 2 Kandidaten unterwegs (kein window.openai in diesem Test)
-  const toolsCallReq = env.posted.find((m) => m.method === "tools/call");
-  assert.ok(toolsCallReq, "tools/call-Versuch vorhanden");
-
+  // Kanal A (Host-Push) ist NICHT ready-gegated, nur der ausgehende sendToolCall() ist es
+  // (s. Datei-Kommentar bei METHOD_TOOL_RESULT) - die Notification trifft hier VOR dem
+  // Handshake ein, call_id UND status=completed werden trotzdem sofort gebunden.
   env.emit({
     jsonrpc: "2.0",
-    id: toolsCallReq.id,
-    result: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 10, last_transcript_lines: [], failure_reason: null } },
+    method: "ui/notifications/tool-result",
+    params: {
+      structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null },
+    },
+  });
+  assert.equal(env.posted.length, 0, "get_transcript-Versuch scheitert am ready-Gate - noch kein Versand");
+
+  env.uiReady(); // Handshake beantwortet - init() startet ueber whenUiReady(startPolling) sofort einen Poll-Tick
+
+  assert.equal(env.posted.length, 1, "erster Versand nach dem Handshake ist der Poll-Tick, nicht der nachgeholte Transcript-Fetch");
+  assert.equal(env.posted[0].params.name, "get_call_status");
+
+  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchTranscriptOnce()
+  // laeuft ein zweites Mal, diesmal mit ready=true - der Fetch ist NICHT verloren.
+  env.emit({
+    jsonrpc: "2.0",
+    id: env.posted[0].id,
+    result: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null } },
   });
 
+  const transcriptReqs = env.posted.filter((m) => m.params && m.params.name === "get_transcript");
+  assert.equal(transcriptReqs.length, 1, "get_transcript wird nach dem Handshake nachgeholt");
+});
+
+test("T-W1-call-F1: das ausgelieferte Widget kennt nur noch tools/call - keine Schrotflinte", () => {
+  const html = widgetHtml("call");
+  assert.ok(!html.includes("ui/tool-call"), "erfundene Methode ui/tool-call restlos raus");
+  assert.ok(!html.includes("window.openai"), "ChatGPT-Pfad window.openai restlos raus (auch i18n-Bootstrap)");
+  assert.ok(!html.includes("callTool"), "kein openai.callTool-Rest");
+  assert.ok(!html.includes("confirmedFormat"), "tote Format-Auswahl entfernt");
+  assert.match(html, /"tools\/call"/, "der spec-konforme Sendeweg bleibt");
+});
+
+test("T-W1-call-F1-tick: ein Poll-Tick postet GENAU EINE Nachricht, Methode tools/call", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  env.uiReady();
+  doc.slot("call_id").textContent = "call_1";
+
   env.posted.length = 0;
-  env.fireInterval(); // naechster Tick NACH Bestaetigung
-  assert.equal(env.posted.length, 1, "nur noch EIN Versuch, nicht mehr drei");
+  env.fireInterval(); // simuliert den naechsten 8s-Tick
+
+  assert.equal(env.posted.length, 1, "genau ein Versuch pro Tick");
   assert.equal(env.posted[0].method, "tools/call");
+  assert.equal(env.posted[0].params.name, "get_call_status");
+  assert.deepEqual(crossRealmPlain(env.posted[0].params.arguments), { call_id: "call_1" });
+});
+
+test("T-W1-call-F2: kein tools/call vor dem Handshake - erst das ready-Signal startet das Polling", () => {
+  const doc = makeFakeDocument();
+  doc.slot("call_id").textContent = "call_1"; // call_id VOR runOwnScript gebunden
+  const env = runOwnScript(doc);
+
+  assert.equal(env.posted.length, 0, "kein tools/call vor dem Handshake");
+  assert.equal(env.intervalFns.size, 0, "kein Polling-Timer vor dem Handshake");
+
+  env.uiReady(); // echtes signalUiReady aus widget-bind.js
+
+  assert.equal(env.posted.length, 1, "sofort ein tools/call nach dem Handshake");
+  assert.equal(env.posted[0].method, "tools/call");
+  assert.equal(env.intervalFns.size, 1, "Poll-Timer laeuft ab dem Handshake");
+});
+
+test("T-W1-call-F2-late-safe: Flag schon gesetzt, bevor das Inline-Skript laeuft -> Sofortstart", () => {
+  const doc = makeFakeDocument();
+  doc.slot("call_id").textContent = "call_1";
+  const env = runOwnScript(doc, { readyBeforeScript: true });
+
+  assert.equal(env.posted.length, 1, "sofortiger tools/call-Versuch (Remount-/Reihenfolge-Fall)");
+  assert.equal(env.posted[0].method, "tools/call");
+  assert.equal(env.intervalFns.size, 1, "Poll-Timer laeuft sofort");
+});
+
+test("T-W1-call-F2-contract: Flag-/Event-Name in call.html == UI_READY_FLAG/UI_READY_EVENT aus widget-bind.js", () => {
+  const html = widgetHtml("call");
+  assert.ok(html.includes(JSON.stringify(UI_READY_FLAG)), "call.html kennt den Flag-Namen woertlich");
+  assert.ok(BIND_SCRIPT.includes(JSON.stringify(UI_READY_FLAG)), "BIND_SCRIPT kennt den Flag-Namen woertlich");
+  assert.ok(html.includes(JSON.stringify(UI_READY_EVENT)), "call.html kennt den Event-Namen woertlich");
+  assert.ok(BIND_SCRIPT.includes(JSON.stringify(UI_READY_EVENT)), "BIND_SCRIPT kennt den Event-Namen woertlich");
+});
+
+test("T-W1-call-F3: 3 aufeinanderfolgende JSON-RPC-Fehler stoppen das Polling; ein Erfolg setzt zurueck; Karte behaelt letzten Stand", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  env.uiReady();
+  doc.slot("call_id").textContent = "call_1";
+  doc.slot("status").textContent = "in_progress";
+
+  function respondWithError() {
+    const req = env.posted[env.posted.length - 1];
+    env.emit({ jsonrpc: "2.0", id: req.id, error: { code: -32000, message: "denied" } });
+  }
+  function respondWithSuccess() {
+    const req = env.posted[env.posted.length - 1];
+    env.emit({
+      jsonrpc: "2.0",
+      id: req.id,
+      result: { structuredContent: { call_id: "call_1", status: "in_progress", duration_s: 1, last_transcript_lines: [], failure_reason: null } },
+    });
+  }
+
+  env.fireInterval();
+  respondWithError();
+  env.fireInterval();
+  respondWithError();
+  assert.equal(env.intervalFns.size, 1, "2 Fehler in Folge - Polling laeuft weiter");
+
+  env.fireInterval();
+  respondWithSuccess(); // Erfolg setzt den Fehlerzaehler zurueck
+
+  env.fireInterval();
+  respondWithError();
+  env.fireInterval();
+  respondWithError();
+  assert.equal(env.intervalFns.size, 1, "nach dem Erfolg wieder bei 2 Fehlern - Polling laeuft noch");
+
+  env.fireInterval();
+  respondWithError(); // 3. Fehler in Folge seit dem letzten Erfolg
+  assert.equal(env.intervalFns.size, 0, "3 aufeinanderfolgende Fehler - Polling gestoppt");
+  assert.equal(doc.slot("status").textContent, "in_progress", "kein Blanking, letzter Stand bleibt sichtbar");
 });
 
 test("T-W1-call-AC7d: Fallback nach 15s ohne jede Antwort - clearInterval, initialer Zustand bleibt (keine sichtbare Diagnose mehr)", () => {
   const doc = makeFakeDocument();
   doc.slot("status").textContent = "dialing";
   const env = runOwnScript(doc);
+  env.uiReady();
   doc.slot("call_id").textContent = "call_1";
 
   env.fireTimeout(); // simuliert Ablauf von FALLBACK_TIMEOUT_MS ohne jede Host-Antwort
@@ -436,9 +536,10 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(doc2.querySelector("[data-failure-display]").textContent, "sonderfall-token");
 });
 
-test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber dieselbe Bruecke, no-op ohne gebundene call_id", () => {
+test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber tools/call, no-op ohne gebundene call_id UND vor dem Handshake", () => {
   const docNoCallId = makeFakeDocument();
   const envNoCallId = runOwnScript(docNoCallId);
+  envNoCallId.uiReady();
   docNoCallId.cancelButton().click();
   assert.equal(envNoCallId.posted.length, 0, "kein Aufruf ohne call_id (fail-safe)");
 
@@ -446,11 +547,34 @@ test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber dieselbe Bruecke,
   const env = runOwnScript(doc);
   doc.slot("call_id").textContent = "call_1";
   doc.cancelButton().click();
+  assert.equal(env.posted.length, 0, "kein Aufruf vor dem Handshake - das ready-Gate traegt auch den Cancel-Pfad (F2)");
+
+  env.uiReady();
+  doc.cancelButton().click();
 
   assert.equal(doc.cancelButton().disabled, true, "Button deaktiviert sich optimistisch");
   const cancelReqs = env.posted.filter((m) => m.params && m.params.name === "cancel_call");
-  assert.equal(cancelReqs.length, 2, "beide Kandidaten versucht (noch kein Format bestaetigt)");
+  assert.equal(cancelReqs.length, 1, "genau EIN Versuch (tools/call)");
   assert.deepEqual(crossRealmPlain(cancelReqs[0].params.arguments), { call_id: "call_1" });
+});
+
+test("T-W1-call-G2: Cancel-Klick vor dem Handshake deaktiviert den Button NICHT optisch - kein vorgetaeuschter Abbruch ohne tatsaechlichen Versand", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  doc.slot("call_id").textContent = "call_1";
+
+  doc.cancelButton().click(); // Klick VOR dem Handshake (call_id kann frueher gebunden sein als Ready, s. T-W1-call-F5-transcript-race)
+
+  assert.equal(env.posted.length, 0, "kein cancel_call vor dem Handshake");
+  assert.equal(doc.cancelButton().disabled, false, "Button bleibt aktiv - sendToolCall() lief ins Leere, keine optische Luege ueber einen nie gesendeten Abbruch");
+  assert.notEqual(doc.cancelButton().style.display, "none", "Button bleibt sichtbar");
+
+  env.uiReady();
+  doc.cancelButton().click(); // erneuter Klick NACH dem Handshake - jetzt gelingt der Versand
+
+  assert.equal(doc.cancelButton().disabled, true, "Button deaktiviert sich erst nach bestaetigtem Versand");
+  const cancelReqs = env.posted.filter((m) => m.params && m.params.name === "cancel_call");
+  assert.equal(cancelReqs.length, 1, "genau EIN tatsaechlicher Versand");
 });
 
 test("T-W1-call-AC-wing-static: alle 6 Wing-Keyframes + reduced-motion + dunkle idle-Auspraegung + byte-identisches WING_PNG (H3)", () => {

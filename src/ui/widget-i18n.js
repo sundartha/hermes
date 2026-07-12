@@ -1,6 +1,6 @@
 // Gemeinsame Lokalisierung fuer ALLE Hermes-Widgets. Der MCP ist international -
 // das Widget zeigt seine Oberflaeche in der Sprache des Betrachters (Browser-
-// Locale bzw. window.openai.locale im ChatGPT-Host), NICHT hart deutsch.
+// Locale), NICHT hart deutsch.
 //
 // Mechanik (Muster widget-bind.js): dieselben Funktionen laufen in Node-Tests
 // UND - via Function.prototype.toString projiziert - als self-contained
@@ -102,7 +102,7 @@ export function primaryLanguage(tag) {
   return String(tag || "").toLowerCase().split(/[-_]/)[0];
 }
 
-// Erster Kandidat (z.B. [openai-Locale, navigator.language]), dessen Sprache
+// Erster Kandidat (z.B. [navigator.language]), dessen Sprache
 // unterstuetzt wird; nichts passt -> DEFAULT_LOCALE (fail-safe englisch).
 export function resolveLocale(candidates, dict) {
   for (const candidate of candidates) {
@@ -143,7 +143,16 @@ function buildI18nScript() {
     resolveLocale.toString(),
     translate.toString(),
     localizeStaticLabels.toString(),
-    'var locale = resolveLocale([window.openai && window.openai.locale, navigator.language], WIDGET_DICT);',
+    // Nur die Browser-Locale: der frueher zusaetzlich abgefragte ChatGPT-Host-Kandidat
+    // (window.openai.locale) ist entfallen - das ausgelieferte Widget-HTML darf seit
+    // widget-wire kein window.openai mehr enthalten, denn der EINZIGE erlaubte Sendeweg
+    // ist jetzt tools/call-postMessage (Wire-Vertrag, siehe widgets/call.html). Der
+    // server-seitige ChatGPT-Adapter (src/ui/adapters/chatgpt.js) bleibt dabei verdrahtet
+    // und liefert dasselbe HTML weiter aus - die volle Entscheidung samt bekannter
+    // Interaktivitaets-Luecke bei einem echten ChatGPT-Host steht in src/ui/registry.js.
+    // Die Kandidaten-Liste hier bleibt (naechste Locale-Quelle = ein Eintrag mehr, sonst
+    // nichts).
+    'var locale = resolveLocale([navigator.language], WIDGET_DICT);',
     "function t(key) { return translate(WIDGET_DICT, locale, key); }",
     "function localizeDocument() {",
     "  document.documentElement.lang = locale;",
