@@ -34,7 +34,13 @@ export const HERMES_SERVER_INFO = {
   // Marken-Homepage (Implementation.websiteUrl): manche Hosts leiten ihr
   // Connector-Branding (Icon/Link) von der Website-Domain ab statt aus icons -
   // deshalb liegt dort zusaetzlich ein favicon.ico (apps/web/public).
-  websiteUrl: "https://sundartha.com",
+  //
+  // Bewusst die www-Variante: claude.ai rendert Connector-Icons ueber
+  // google.com/s2/favicons?domain=<domain>, und Google fuehrt seinen Cache pro
+  // Host. Der Schluessel der Apex-Domain haelt ein veraltetes Icon fest (der
+  // graue Wuerfel), der www-Schluessel liefert bereits die Fluegel-Marke. www
+  // ist ein 301 auf den Apex - dieselbe Site, nur ein anderer Cache-Schluessel.
+  websiteUrl: "https://www.sundartha.com",
   icons: [
     {
       src: HERMES_ICON_DATA_URI,
