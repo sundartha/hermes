@@ -19,6 +19,7 @@ export function fakeRes() {
     statusCode: null,
     headers: {},
     chunks: [],
+    body: null,
     ended: false,
     headersSent: false,
     status(c) {
@@ -35,6 +36,13 @@ export function fakeRes() {
     end() {
       this.headersSent = true;
       this.ended = true;
+      return this;
+    },
+    json(b) {
+      this.headersSent = true;
+      this.ended = true;
+      this.headers["Content-Type"] = "application/json";
+      this.body = b;
       return this;
     },
   };
@@ -119,7 +127,8 @@ export function makeHandler({ store, config = fakeTelnyxShimConfig(), agentTurn,
 export function reqWith({ auth, body = {} } = {}) {
   const headers = {};
   if (auth !== undefined) headers.authorization = auth;
-  return { headers, body };
+  // Live-Telnyx sendet stream:true; body.stream (falls im Override gesetzt) gewinnt.
+  return { headers, body: { stream: true, ...body } };
 }
 
 // Statischer Shim-Bearer (E2), matcht fakeTelnyxShimConfig()-Default (helpers.js).
@@ -134,6 +143,40 @@ export function validReq(call, extra = {}) {
   });
 }
 
-export function firstChunkJson(res) {
-  return JSON.parse(res.chunks[0].slice(SSE_DATA_PREFIX.length).trim());
+const SSE_DONE_LINE = "data: [DONE]\n\n";
+
+// Alle SSE-data-Events (ohne [DONE]-Sentinel) als Objekte.
+export function sseChunks(res) {
+  return res.chunks
+    .filter((c) => c !== SSE_DONE_LINE)
+    .map((c) => JSON.parse(c.slice(SSE_DATA_PREFIX.length).trim()));
+}
+
+// Gesprochener Text: alle delta.content-Fragmente konkateniert (Chunk-Layout-agnostisch).
+export function sseContent(res) {
+  return sseChunks(res)
+    .map((c) => c.choices[0].delta.content)
+    .filter((t) => typeof t === "string")
+    .join("");
+}
+
+// finish_reason aus dem separaten Abschluss-Chunk (einziger mit non-null finish_reason).
+export function sseFinishReason(res) {
+  const finish = sseChunks(res).find((c) => c.choices[0].finish_reason !== null);
+  return finish ? finish.choices[0].finish_reason : null;
+}
+
+// role aus dem ersten Delta-Chunk (OpenAI: role-Delta zuerst).
+export function sseRole(res) {
+  const first = sseChunks(res)[0];
+  return first ? first.choices[0].delta.role : undefined;
+}
+
+export function sseEndsWithDone(res) {
+  return res.chunks[res.chunks.length - 1] === SSE_DONE_LINE;
+}
+
+// stream:false-Antwort: das an res.json uebergebene chat.completion-Objekt.
+export function jsonCompletion(res) {
+  return res.body;
 }

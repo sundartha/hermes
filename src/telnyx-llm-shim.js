@@ -1,6 +1,8 @@
 // Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, Phase P1): in-house /v1/chat/completions-
-// kompatibler Endpunkt. Kapselt agentTurn (claude.js) und framt die Antwort als
-// Fake-Stream (1 SSE-Chunk + data: [DONE]). Bei C-Telnyx UND C-ElevenLabs identisch.
+// kompatibler Endpunkt. Kapselt agentTurn (claude.js) und framt die Antwort OpenAI-spec-
+// konform (stab-p6): stream:true -> SSE-Delta-Sequenz (role-Chunk, content-Chunk, separater
+// finish-Chunk, data:[DONE]); stream:false/fehlend -> plain chat.completion-JSON. Modus
+// wird per-Request aus req.body.stream ausgehandelt. Bei C-Telnyx UND C-ElevenLabs identisch.
 // Existenz fail-closed hinter TELNYX_AI_ASSISTANT_ENABLED (404 bis Cutover); Auth ueber
 // ein statisches Telnyx-Integration-Secret (E2) + call_control_id-Korrelation (E1).
 // KEINE Safety-Gate-Umgehung, KEINE llm.js-Aenderung, KEIN Direktimport von execTool/
@@ -12,9 +14,12 @@ import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
-const OPENAI_CHUNK_OBJECT = "chat.completion.chunk";
+const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
+const OPENAI_COMPLETION_OBJECT = "chat.completion"; // stream:false (plain JSON)
 const CHAT_COMPLETION_ID_PREFIX = "chatcmpl-";
 const FINISH_STOP = "stop";
+const ASSISTANT_ROLE = "assistant";
+const SSE_CONTENT_TYPE = "text/event-stream";
 const SSE_DONE = "data: [DONE]\n\n";
 const BEARER_PREFIX = "Bearer ";
 const MS_PER_SECOND = 1000;
@@ -134,20 +139,62 @@ function messagesTurnShape(body, turn) {
   };
 }
 
-// Framt EINEN OpenAI chat.completion.chunk + data:[DONE] (G5: EINE Quelle fuer
-// Budget-Wind-Down UND agentTurn-Ergebnis). Setzt Content-Type text/event-stream.
-function writeFakeStream(res, { model, content }) {
-  res.setHeader("Content-Type", "text/event-stream");
-  const chunk = {
+// Gemeinsame OpenAI-Completion-Huelle (id/created/model) - EINMAL je Response gebaut und
+// von beiden Modi (JSON + SSE-Chunks) geteilt (S2). id/created bleiben ueber alle SSE-
+// Chunks EINER Antwort stabil (OpenAI-Verhalten).
+function completionEnvelope(model) {
+  return {
     id: CHAT_COMPLETION_ID_PREFIX + randomUUID(),
-    object: OPENAI_CHUNK_OBJECT,
     created: Math.floor(Date.now() / MS_PER_SECOND),
     model,
-    choices: [{ index: 0, delta: { content }, finish_reason: FINISH_STOP }],
   };
-  res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+}
+
+// Serialisiert EIN SSE-data-Event (G5: EINE Quelle fuer das Draht-Framing).
+function writeSseEvent(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+// Ein chat.completion.chunk mit gegebenem delta + finish_reason (G5: alle drei SSE-Chunks
+// teilen dieselbe Bau-Logik, nur delta/finish_reason variieren).
+function streamChunk(envelope, delta, finishReason) {
+  return {
+    ...envelope,
+    object: OPENAI_CHUNK_OBJECT,
+    choices: [{ index: 0, delta, finish_reason: finishReason }],
+  };
+}
+
+// stream:true -> OpenAI-spec-konforme SSE-Sequenz: role-Delta-Chunk, dann content-Delta-
+// Chunk, dann SEPARATER finish_reason-Chunk (delta:{}), dann data:[DONE]. Der Turn-TEXT
+// bleibt unveraendert - nur die Draht-Repraesentation wird spec-konform.
+function writeStreamingCompletion(res, { model, content }) {
+  res.setHeader("Content-Type", SSE_CONTENT_TYPE);
+  const envelope = completionEnvelope(model);
+  writeSseEvent(res, streamChunk(envelope, { role: ASSISTANT_ROLE }, null));
+  writeSseEvent(res, streamChunk(envelope, { content }, null));
+  writeSseEvent(res, streamChunk(envelope, {}, FINISH_STOP));
   res.write(SSE_DONE);
   res.end();
+}
+
+// stream:false (oder fehlend) -> plain chat.completion-JSON mit message.role/.content +
+// finish_reason (kein SSE-Framing). res.json setzt Content-Type application/json + beendet.
+function writeJsonCompletion(res, { model, content }) {
+  res.json({
+    ...completionEnvelope(model),
+    object: OPENAI_COMPLETION_OBJECT,
+    choices: [{ index: 0, message: { role: ASSISTANT_ROLE, content }, finish_reason: FINISH_STOP }],
+  });
+}
+
+// EIN Dispatch-Punkt (G23 One-Switch) fuer beide Modi - honoriert req.body.stream. Die vier
+// Aufrufer (rate/budget/happy/degradation) uebergeben denselben ausgehandelten stream-Modus,
+// damit die Modus-Weiche NICHT an vier Stellen dupliziert wird (S2). stream ist ein
+// Protokoll-Parameter, der mit dem Request reist - kein Verhaltens-Selektor des Aufrufers.
+function writeCompletion(res, { model, content, stream }) {
+  if (stream) writeStreamingCompletion(res, { model, content });
+  else writeJsonCompletion(res, { model, content });
 }
 
 // OBS-1 (Observability Shim-Gates): EINE Quelle (G5) fuer die strukturierte, PII-/secret-
@@ -298,13 +345,16 @@ export function makeTelnyxLlmShim({
     const locale = localeFor(call.language);
     const model =
       typeof req.body?.model === "string" && req.body.model ? req.body.model : config.claudeModel;
+    // OpenAI-spec-Modus (stab-p6): strikt stream===true -> SSE-Delta-Sequenz; sonst (false/
+    // fehlend/nicht-boolean) -> plain chat.completion-JSON. Telnyx sendet live stream:true.
+    const wantsStream = req.body?.stream === true;
 
     // 5) Rate-Gate (P5, Scope 4): N+1 Turns fuer denselben Call im Fenster -> definierte
     // Ablehnung OHNE agentTurn-Aufruf (kein Token-Burn). Gueltige Degradations-Completion
     // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
     if (!shimRateHit(call.id).allowed) {
       logShimGate({ reason: "rate_limited", callId: call.id });
-      return writeFakeStream(res, { model, content: locale.llmDegradedSpeech });
+      return writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
     }
 
     // 6) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
@@ -322,7 +372,7 @@ export function makeTelnyxLlmShim({
         callId: call.id,
         tenantId: call.tenantId,
       });
-      writeFakeStream(res, { model, content: locale.budgetExhaustedHangup });
+      writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
       await terminateViaCallControl(call);
       return;
     }
@@ -347,7 +397,7 @@ export function makeTelnyxLlmShim({
       // in den Catch reissen.
       if (config.telnyxShimDebugShape) logShimShape(messagesTurnShape(req.body, turn));
       endCall = turn.endCall === true;
-      writeFakeStream(res, { model, content: turn.speech }); // Abschiedssatz geht ZUERST raus
+      writeCompletion(res, { model, content: turn.speech, stream: wantsStream }); // Abschiedssatz geht ZUERST raus
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
       // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie
@@ -361,17 +411,17 @@ export function makeTelnyxLlmShim({
       if (vendorStatusOf(err) === HTTP_PAYMENT_REQUIRED)
         logShimGate({ reason: "vendor_402", callId: call.id });
       const content = degradedSpeechFor(err, locale);
-      // Dieser Catch faengt AUCH Fehler aus writeFakeStream selbst (kein eigener
-      // try/catch dort): wirft der Happy-Path-writeFakeStream NACH einem Teil-Write
-      // (z.B. Socket bricht zwischen den beiden res.write-Aufrufen weg), ist
-      // headersSent bereits true - ein zweiter writeFakeStream-Versuch wuerde erneut
+      // Dieser Catch faengt AUCH Fehler aus writeCompletion selbst (kein eigener
+      // try/catch dort): wirft der Happy-Path-writeCompletion NACH einem Teil-Write
+      // (z.B. Socket bricht zwischen den SSE-res.write-Aufrufen weg), ist
+      // headersSent bereits true - ein zweiter writeCompletion-Versuch wuerde erneut
       // in denselben kaputten Stream schreiben. Stattdessen nur end() (bestmoegliches
       // Aufraeumen); der Client sieht einen abgebrochenen Stream statt einer zweiten,
       // ueberlappenden Antwort. Regressionstest: T1 in telnyx-llm-shim.test.js.
-      if (!res.headersSent) writeFakeStream(res, { model, content });
+      if (!res.headersSent) writeCompletion(res, { model, content, stream: wantsStream });
       else res.end();
       // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
-      // endCall=true geliefert haben - der Fehler stammt dann aus writeFakeStream selbst
+      // endCall=true geliefert haben - der Fehler stammt dann aus writeCompletion selbst
       // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 8 unten muss den
       // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
       // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
