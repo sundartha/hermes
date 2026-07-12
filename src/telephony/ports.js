@@ -38,6 +38,11 @@
  * @typedef {Object} StartAssistantParams
  * @property {string} callControlId    - Ziel-Call (aus originateViaCallControl)
  * @property {string} assistantId      - Telnyx-AI-Assistant-Referenz (Caller/P5/P7 liefert sie)
+ * @property {string} [language]       - NEUTRALE Gespraechssprache (call.language: "de"|"fr"|"en",
+ *   Werte aus src/i18n/locales.js) - KEIN Provider-String. Der Adapter mappt sie intern auf den
+ *   STT-Sprach-Hint (afix-p2/R2). Fehlt der Wert, sendet der Adapter KEIN transcription-Feld ->
+ *   Body byte-identisch zum Bestand. Nur der Ingest-Pfad reicht call.language durch; der
+ *   Inbound-Pfad bleibt in dieser Phase BYTE-IDENTISCH (STT-Sprach-Hint dort folgt in P6).
  */
 
 /**
