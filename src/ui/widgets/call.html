@@ -190,8 +190,8 @@
        (dialing -> in_progress -> completed/failed/cancelled). Der initiale call_id/
        status-Push von place_call laeuft ueber den GETEILTEN, bereits bewiesenen
        Empfangspfad (widget-bind.js, von der Katalog-Ladefunktion unten injiziert).
-       Alles danach - Self-Poll, die ausgehende Host-Bruecke, Terminal-Erkennung,
-       get_transcript, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
+       Alles danach - Self-Poll, der ausgehende tools/call an den Host, Terminal-
+       Erkennung, get_transcript, Cancel - lebt in DIESEM eigenen Inline-Skript (Owner-
        Entscheidung #3, PLAN-MCP-UI-LIVE-WIDGET.md Abschnitt 5): kein neues
        widget-bridge.js-Modul, keine Katalog-Aenderung, exakt das etablierte Muster
        der mittlerweile entfernten Vorlaeufer-Widgets (Cancel-Callback bzw.
@@ -225,13 +225,31 @@
     var TOOL_GET_TRANSCRIPT = "get_transcript";
     var TOOL_CANCEL = "cancel_call";
 
-    // Bruecken-Kandidaten (Plan 6.2, dieselben drei wie im inzwischen entfernten
-    // Bruecken-Spike). METHOD_TOOL_RESULT = Kanal A (Host-Re-Push, den der geteilte
-    // BIND_SCRIPT bereits automatisch bindet - wir werten ihn zusaetzlich selbst aus).
+    // Wire-Formate der MCP-Apps-Spec (SEP-1865 / ext-apps 2026-01-26). METHOD_TOOLS_CALL
+    // ist der EINZIGE erlaubte App->Host-Sendeweg fuer Tool-Calls. Frueher feuerte das
+    // Widget zusaetzlich den ChatGPT-Adapter-Pfad (frueherer Konstantenname FORMAT_OPENAI,
+    // in claude.ai nicht vorhanden) und eine selbst erfundene Notification-Methode
+    // (frueherer Konstantenname METHOD_UI_TOOL_CALL): der Host beantwortete die unbekannte
+    // Methode mit einem JSON-RPC-Fehler, den er im Chat sichtbar machte. Diese Datei darf
+    // die frueheren Wire-Strings deshalb nirgends mehr woertlich enthalten (Spec-Gate,
+    // s. Test T-W1-call-F1).
+    // METHOD_TOOL_RESULT = Kanal A (Host-Push, den der geteilte BIND_SCRIPT ohnehin
+    // bindet - wir werten ihn zusaetzlich selbst aus, um Terminal-Status zu erkennen).
     var METHOD_TOOLS_CALL = "tools/call";
-    var METHOD_UI_TOOL_CALL = "ui/tool-call";
     var METHOD_TOOL_RESULT = "ui/notifications/tool-result";
-    var FORMAT_OPENAI = "window.openai.callTool";
+
+    // Ready-Signal des geteilten BIND_SCRIPT (src/ui/widget-bind.js: UI_READY_FLAG /
+    // UI_READY_EVENT) - gesetzt, sobald der Host die ui/initialize-Anfrage beantwortet
+    // hat. Ein self-contained Iframe-Skript kann nicht importieren, die Namen sind hier
+    // deshalb woertlich dupliziert; der Sync-Test T-W1-call-F2-contract haelt beide
+    // Quellen zusammen (kein stiller Drift).
+    var UI_READY_FLAG = "__hermesUiReady";
+    var UI_READY_EVENT = "hermes:ui-ready";
+
+    // Aufeinanderfolgende JSON-RPC-Fehlerantworten, nach denen Weiter-Pollen sinnlos ist
+    // (haeufigster Fall: die Tool-Berechtigung im Connector steht auf "Fragen" - eine
+    // Rueckfrage kann ein Widget nicht beantworten). Ein Erfolg setzt den Zaehler zurueck.
+    var MAX_CONSECUTIVE_RPC_ERRORS = 3;
 
     var TERMINAL_STATUSES = ["completed", "failed", "cancelled"];
     var EMDASH = "—";
@@ -350,10 +368,10 @@
     var doc = document;
     var pollTimerId = null;
     var fallbackTimerId = null;
-    var confirmedFormat = null; // FORMAT_OPENAI | METHOD_TOOLS_CALL | METHOD_UI_TOOL_CALL | METHOD_TOOL_RESULT
     var anyResponseReceived = false;
     var transcriptFetched = false;
-    var pendingRequests = {}; // rpcId -> { format, tool }
+    var pendingRequests = {}; // rpcId -> Tool-Name (Antwort-Zuordnung, s. handleMessage)
+    var consecutiveRpcErrors = 0;
     var rpcCounter = 0;
     var engineHandle = null; // Wing-Canvas-Engine-Handle nach erfolgreichem mount() (H3); null = reiner CSS-Fallback
 
@@ -565,14 +583,11 @@
       return "call-widget-" + rpcCounter;
     }
 
-    // Erste Antwort (gleich welcher Kanal/Format) bestimmt das Sende-Format
-    // dauerhaft (Plan 6.2: "Folge-Ticks nutzen nur dieses Format").
-    // confirmedFormat ist reiner interner Zustand - die fruehere sichtbare
-    // Diagnose-Zeile (bridge_format/last_update) ist bewusst entfernt
-    // (Owner-Entscheidung 2026-07-02: keine Debug-Infos auf der Karte).
-    function markResponse(format, data, applyFn) {
+    // Erste Antwort (gleich welcher Kanal) - danach greift der 15s-Fallback nicht mehr.
+    // Die frueher hier gefuehrte Sendeformat-Auswahl (eine vormalige interne Zustands-
+    // variable) ist entfallen: es gibt nur noch EIN Sende-Format (METHOD_TOOLS_CALL).
+    function markResponse(data, applyFn) {
       anyResponseReceived = true;
-      if (!confirmedFormat) confirmedFormat = format;
       applyFn(data);
     }
 
@@ -580,58 +595,20 @@
       return tool === TOOL_GET_TRANSCRIPT ? applyTranscript : applyCallStatus;
     }
 
-    // Kandidat 1: window.openai.callTool (Promise-basiert, kein postMessage noetig).
-    function sendViaOpenai(tool, args) {
-      if (!(window.openai && typeof window.openai.callTool === "function")) return;
-      try {
-        var result = window.openai.callTool(tool, args);
-        if (result && typeof result.then === "function") {
-          result.then(
-            function (r) {
-              markResponse(FORMAT_OPENAI, r && r.structuredContent, dispatchFor(tool));
-            },
-            function () {
-              /* Fehlgeschlagener Kandidat: andere Kandidaten/Kanal A bleiben moeglich */
-            },
-          );
-        }
-      } catch (e) {
-        /* fail-safe: Kandidat nicht verfuegbar, andere bleiben moeglich */
-      }
-    }
-
-    // Kandidat 2/3: postMessage-JSON-RPC an den Host, id-gematcht (Kanal B, s. handleMessage).
-    function sendViaPostMessage(method, tool, args) {
+    // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call" an den Host, id-
+    // gematcht (Antwort siehe handleMessage, Kanal B). Das ready-Gate steht hier - an
+    // EINER Stelle fuer ALLE Aufrufer (Poll-Tick, get_transcript, Cancel-Klick): vor dem
+    // Handshake beantwortet der Host keinen Tool-Call.
+    function sendToolCall(tool, args) {
+      if (!window[UI_READY_FLAG]) return;
       var parent = window.parent;
       if (!parent || typeof parent.postMessage !== "function") return;
       var id = nextRpcId();
-      pendingRequests[id] = { format: method, tool: tool };
+      pendingRequests[id] = tool;
       parent.postMessage(
-        { jsonrpc: "2.0", id: id, method: method, params: { name: tool, arguments: args } },
+        { jsonrpc: "2.0", id: id, method: METHOD_TOOLS_CALL, params: { name: tool, arguments: args } },
         "*",
       );
-    }
-
-    function sendToolCall(tool, args) {
-      if (confirmedFormat === FORMAT_OPENAI) {
-        sendViaOpenai(tool, args);
-        return;
-      }
-      if (confirmedFormat === METHOD_TOOLS_CALL) {
-        sendViaPostMessage(METHOD_TOOLS_CALL, tool, args);
-        return;
-      }
-      if (confirmedFormat === METHOD_UI_TOOL_CALL) {
-        sendViaPostMessage(METHOD_UI_TOOL_CALL, tool, args);
-        return;
-      }
-      // Kein spezifisches ausgehendes Format bestaetigt (auch wenn confirmedFormat evtl.
-      // METHOD_TOOL_RESULT ist - das ist ein reiner Empfangskanal, kein Sendeweg): alle
-      // drei Kandidaten parallel versuchen (Plan 6.2). Kein Spam, da ein Widget-Tool-Call
-      // keine neue Chat-Karte erzeugt (Plan Abschnitt 3).
-      sendViaOpenai(tool, args);
-      sendViaPostMessage(METHOD_TOOLS_CALL, tool, args);
-      sendViaPostMessage(METHOD_UI_TOOL_CALL, tool, args);
     }
 
     function fetchTranscriptOnce() {
@@ -677,16 +654,25 @@
       if (m.method === METHOD_TOOL_RESULT && isRecord(m.params) && isRecord(m.params.structuredContent)) {
         var pushed = m.params.structuredContent;
         var pushedFn = "result_summary" in pushed ? applyTranscript : applyCallStatus;
-        markResponse(METHOD_TOOL_RESULT, pushed, pushedFn);
+        markResponse(pushed, pushedFn);
         return;
       }
 
-      var pending = m.id != null ? pendingRequests[m.id] : null;
-      if (!pending) return;
+      var pendingTool = m.id != null ? pendingRequests[m.id] : null;
+      if (!pendingTool) return;
       delete pendingRequests[m.id];
-      if (m.error) return; // fehlgeschlagener Kandidat: andere bleiben moeglich
+      // JSON-RPC-Fehlerantwort: NICHT mehr still verschlucken. Transiente Fehler duerfen
+      // nicht stoppen (ein Erfolg setzt den Zaehler zurueck), aber ein dauerhaft
+      // ablehnender Host wird nicht endlos weitergefragt. Die Karte behaelt dabei ihren
+      // letzten Stand - kein Blanking, kein erfundener Fehlertext.
+      if (m.error) {
+        consecutiveRpcErrors += 1;
+        if (consecutiveRpcErrors >= MAX_CONSECUTIVE_RPC_ERRORS) stopPolling();
+        return;
+      }
+      consecutiveRpcErrors = 0;
       var data = isRecord(m.result) ? m.result.structuredContent : undefined;
-      markResponse(pending.format, data, dispatchFor(pending.tool));
+      markResponse(data, dispatchFor(pendingTool));
     }
 
     // Montiert die Wing-Canvas-Engine progressiv (PLAN 6.1/6.2). widget-catalog.js
@@ -709,14 +695,33 @@
       }
     }
 
+    // Sofort-Tick + 8s-Takt + 15s-Fallback-Frist. Laeuft NUR nach dem Host-Handshake
+    // (whenUiReady) - vorher startet auch die Fallback-Uhr nicht.
+    function startPolling() {
+      pollTick();
+      pollTimerId = setInterval(pollTick, POLL_INTERVAL_MS);
+      fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
+    }
+
+    // Late-safe: Signal schon gefeuert (BIND_SCRIPT lief frueher, oder Remount) -> sofort
+    // starten; sonst genau einmal auf das Event warten. Damit haengt die Reihenfolge NICHT
+    // an der Injektions-Position des BIND_SCRIPT (widget-catalog.js haengt es NACH diesem
+    // Skript ein). Kein Timeout-Fallback: ein Host, der den Handshake nicht beantwortet,
+    // beantwortet auch keinen tools/call.
+    function whenUiReady(startFn) {
+      if (window[UI_READY_FLAG]) {
+        startFn();
+        return;
+      }
+      window.addEventListener(UI_READY_EVENT, startFn, { once: true });
+    }
+
     function init() {
       var btn = doc.querySelector("[data-cancel]");
       if (btn) btn.addEventListener("click", onCancelClick);
       mountWingEngine();
       window.addEventListener("message", handleMessage);
-      pollTick();
-      pollTimerId = setInterval(pollTick, POLL_INTERVAL_MS);
-      fallbackTimerId = setTimeout(onFallbackTimeout, FALLBACK_TIMEOUT_MS);
+      whenUiReady(startPolling);
     }
 
     init();
