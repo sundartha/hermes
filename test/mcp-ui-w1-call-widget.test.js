@@ -353,6 +353,39 @@ test("T-W1-call-AC5/AC7a: Terminal-Notification (completed) fuellt Slots, deakti
   assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 1, "get_transcript bleibt einmalig");
 });
 
+test("T-W1-call-G3: Terminal-Notification (completed) VOR dem Handshake verliert get_transcript nicht dauerhaft - der Poll-Tick nach dem Handshake holt ihn nach", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+
+  // Kanal A (Host-Push) ist NICHT ready-gegated, nur der ausgehende sendToolCall() ist es
+  // (s. Datei-Kommentar bei METHOD_TOOL_RESULT) - die Notification trifft hier VOR dem
+  // Handshake ein, call_id UND status=completed werden trotzdem sofort gebunden.
+  env.emit({
+    jsonrpc: "2.0",
+    method: "ui/notifications/tool-result",
+    params: {
+      structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null },
+    },
+  });
+  assert.equal(env.posted.length, 0, "get_transcript-Versuch scheitert am ready-Gate - noch kein Versand");
+
+  env.uiReady(); // Handshake beantwortet - init() startet ueber whenUiReady(startPolling) sofort einen Poll-Tick
+
+  assert.equal(env.posted.length, 1, "erster Versand nach dem Handshake ist der Poll-Tick, nicht der nachgeholte Transcript-Fetch");
+  assert.equal(env.posted[0].params.name, "get_call_status");
+
+  // Antwort auf den Poll-Tick: Call ist weiterhin completed -> fetchTranscriptOnce()
+  // laeuft ein zweites Mal, diesmal mit ready=true - der Fetch ist NICHT verloren.
+  env.emit({
+    jsonrpc: "2.0",
+    id: env.posted[0].id,
+    result: { structuredContent: { call_id: "call_1", status: "completed", duration_s: 42, last_transcript_lines: [], failure_reason: null } },
+  });
+
+  const transcriptReqs = env.posted.filter((m) => m.params && m.params.name === "get_transcript");
+  assert.equal(transcriptReqs.length, 1, "get_transcript wird nach dem Handshake nachgeholt");
+});
+
 test("T-W1-call-F1: das ausgelieferte Widget kennt nur noch tools/call - keine Schrotflinte", () => {
   const html = widgetHtml("call");
   assert.ok(!html.includes("ui/tool-call"), "erfundene Methode ui/tool-call restlos raus");
@@ -523,6 +556,25 @@ test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber tools/call, no-op
   const cancelReqs = env.posted.filter((m) => m.params && m.params.name === "cancel_call");
   assert.equal(cancelReqs.length, 1, "genau EIN Versuch (tools/call)");
   assert.deepEqual(crossRealmPlain(cancelReqs[0].params.arguments), { call_id: "call_1" });
+});
+
+test("T-W1-call-G2: Cancel-Klick vor dem Handshake deaktiviert den Button NICHT optisch - kein vorgetaeuschter Abbruch ohne tatsaechlichen Versand", () => {
+  const doc = makeFakeDocument();
+  const env = runOwnScript(doc);
+  doc.slot("call_id").textContent = "call_1";
+
+  doc.cancelButton().click(); // Klick VOR dem Handshake (call_id kann frueher gebunden sein als Ready, s. T-W1-call-F5-transcript-race)
+
+  assert.equal(env.posted.length, 0, "kein cancel_call vor dem Handshake");
+  assert.equal(doc.cancelButton().disabled, false, "Button bleibt aktiv - sendToolCall() lief ins Leere, keine optische Luege ueber einen nie gesendeten Abbruch");
+  assert.notEqual(doc.cancelButton().style.display, "none", "Button bleibt sichtbar");
+
+  env.uiReady();
+  doc.cancelButton().click(); // erneuter Klick NACH dem Handshake - jetzt gelingt der Versand
+
+  assert.equal(doc.cancelButton().disabled, true, "Button deaktiviert sich erst nach bestaetigtem Versand");
+  const cancelReqs = env.posted.filter((m) => m.params && m.params.name === "cancel_call");
+  assert.equal(cancelReqs.length, 1, "genau EIN tatsaechlicher Versand");
 });
 
 test("T-W1-call-AC-wing-static: alle 6 Wing-Keyframes + reduced-motion + dunkle idle-Auspraegung + byte-identisches WING_PNG (H3)", () => {

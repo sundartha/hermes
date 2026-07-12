@@ -598,24 +598,34 @@
     // Der EINZIGE ausgehende Weg: JSON-RPC-postMessage "tools/call" an den Host, id-
     // gematcht (Antwort siehe handleMessage, Kanal B). Das ready-Gate steht hier - an
     // EINER Stelle fuer ALLE Aufrufer (Poll-Tick, get_transcript, Cancel-Klick): vor dem
-    // Handshake beantwortet der Host keinen Tool-Call.
+    // Handshake beantwortet der Host keinen Tool-Call. Rueckgabewert (true = tatsaechlich
+    // gesendet) ist Pflicht fuer jeden Aufrufer, der einen einmaligen Effekt (Fetch-Guard,
+    // optische Deaktivierung) an den Versand knuepft - sonst faellt der Effekt auf einen
+    // Aufruf, der der Host nie gesehen hat (s. fetchTranscriptOnce/onCancelClick).
     function sendToolCall(tool, args) {
-      if (!window[UI_READY_FLAG]) return;
+      if (!window[UI_READY_FLAG]) return false;
       var parent = window.parent;
-      if (!parent || typeof parent.postMessage !== "function") return;
+      if (!parent || typeof parent.postMessage !== "function") return false;
       var id = nextRpcId();
       pendingRequests[id] = tool;
       parent.postMessage(
         { jsonrpc: "2.0", id: id, method: METHOD_TOOLS_CALL, params: { name: tool, arguments: args } },
         "*",
       );
+      return true;
     }
 
+    // transcriptFetched wird NUR bei tatsaechlichem Versand gesetzt (Rueckgabewert von
+    // sendToolCall). Trifft die completed-Notification VOR dem Handshake ein (Kanal A ist
+    // nicht ready-gegated, s. Kommentar bei METHOD_TOOL_RESULT), schlaegt der Versand fehl
+    // und der Guard bleibt offen - verloren geht dadurch nichts: init() startet ueber
+    // whenUiReady(startPolling) so oder so einen Poll-Tick, sobald der Handshake steht;
+    // dessen Antwort ruft bei weiterhin completed erneut updateForStatus/fetchTranscriptOnce
+    // auf, und dieser zweite Versuch trifft auf ready=true.
     function fetchTranscriptOnce() {
       if (transcriptFetched) return;
-      transcriptFetched = true;
       var callId = currentCallId();
-      if (callId) sendToolCall(TOOL_GET_TRANSCRIPT, { call_id: callId });
+      if (callId && sendToolCall(TOOL_GET_TRANSCRIPT, { call_id: callId })) transcriptFetched = true;
     }
 
     function pollTick() {
@@ -624,11 +634,15 @@
       sendToolCall(TOOL_GET_STATUS, { call_id: callId });
     }
 
+    // Optische Deaktivierung (Button verschwindet) NUR nach bestaetigtem Versand - klickt
+    // der Nutzer, bevor der Handshake steht, gibt sendToolCall() false zurueck und der
+    // Button bleibt unveraendert sichtbar/aktiv statt einen nie gesendeten Abbruch
+    // vorzutaeuschen (kein stiller Klickverlust ohne Feedback).
     function onCancelClick() {
       var callId = currentCallId();
       if (!callId) return;
-      setCancelDisabled(true);
-      sendToolCall(TOOL_CANCEL, { call_id: callId }); // Cancel-Callback (Muster des inzwischen entfernten Einzel-Widgets)
+      // Cancel-Callback (Muster des inzwischen entfernten Einzel-Widgets)
+      if (sendToolCall(TOOL_CANCEL, { call_id: callId })) setCancelDisabled(true);
     }
 
     // Keine Host-Bruecke innerhalb der Frist -> Polling einstellen (Plan 6.3);
