@@ -100,9 +100,9 @@ function hangupBody(callControlId) {
   return { data: { event_type: "call.hangup", payload: { call_control_id: callControlId } } };
 }
 
-const DISCLOSURE_TEXT = "Guten Tag, hier spricht der KI-Assistent von Jonas Beispiel.";
+const OPENING_TEXT = "Guten Tag, hier spricht der KI-Assistent von Jonas Beispiel. Es geht um Folgendes: Testanliegen.";
 
-test("answered: Disclosure-Speak gefeuert (Text=disclosureSentence, voiceProfile aus localeFor), startAssistant NICHT (Reihenfolge), markAnswered gerufen", async () => {
+test("answered: Opening-Speak gefeuert (Text=openingText, voiceProfile aus localeFor), startAssistant NICHT (Reihenfolge), markAnswered gerufen", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
   const store = fakeStore(call);
   const vc = fakeVoiceControl();
@@ -111,7 +111,7 @@ test("answered: Disclosure-Speak gefeuert (Text=disclosureSentence, voiceProfile
     store,
     voiceControl: vc.voiceControl,
     finishCall: async (c) => finishCallCalls.push(c),
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const res = fakeRes();
@@ -122,7 +122,7 @@ test("answered: Disclosure-Speak gefeuert (Text=disclosureSentence, voiceProfile
   assert.equal(vc.speakCalls.length, 1);
   assert.deepEqual(vc.speakCalls[0], {
     callControlId: "cc_1",
-    text: DISCLOSURE_TEXT,
+    text: OPENING_TEXT,
     voiceProfile: "de_female_neural",
   });
   assert.equal(vc.startAssistantCalls.length, 0, "ai_assistant_start NIE auf answered direkt");
@@ -138,7 +138,7 @@ test("speak.ended MIT call.assistantId -> startAssistant gefeuert mit callContro
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const res = fakeRes();
@@ -158,7 +158,7 @@ test("speak.ended OHNE call.assistantId -> fail-safe skip, kein startAssistant, 
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const res = fakeRes();
@@ -180,7 +180,7 @@ test("speak.ended MIT status='failed' UND gesetzter assistantId -> startAssistan
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const res = fakeRes();
@@ -199,7 +199,7 @@ test("hangup: finishCall gerufen, endCallRecord nur bei status active; zweites h
     store,
     voiceControl: vc.voiceControl,
     finishCall: async (c) => finishCallCalls.push(c),
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
 
@@ -227,7 +227,7 @@ test("unbekannter callId -> 200 ohne Wirkung, kein Crash", async () => {
     store,
     voiceControl: vc.voiceControl,
     finishCall: async (c) => finishCallCalls.push(c),
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     reattachActiveCall: async () => ({ call: null, logUnknown: true }),
   });
@@ -250,7 +250,7 @@ test("unbekanntes Event (z.B. call.speak.started) -> 200 ohne Wirkung, kein Cras
     store,
     voiceControl: vc.voiceControl,
     finishCall: async (c) => finishCallCalls.push(c),
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const res = fakeRes();
@@ -276,7 +276,7 @@ test("OBS-2: call.speak.ended mit status=succeeded -> Roh-Log zeigt event_type+s
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const body = {
@@ -301,7 +301,7 @@ test("OBS-2: unbekanntes Event call.playback.ended -> Roh-Log zeigt Token, keine
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const body = {
@@ -327,7 +327,7 @@ test("OBS-2: unbekannter callId -> Log traegt reason=unknown_call, NIE den rohen
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     reattachActiveCall: async () => ({ call: null, logUnknown: true }),
   });
@@ -352,7 +352,7 @@ test("OBS-2: answered->speak.ended->hangup -> drei Erfolgs-Logs, ccid-Wert nirge
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const ccid = "cc_secret";
@@ -362,7 +362,7 @@ test("OBS-2: answered->speak.ended->hangup -> drei Erfolgs-Logs, ccid-Wert nirge
     await handler({ query: { callId: "call_1" }, body: hangupBody(ccid) }, fakeRes());
   });
 
-  assert.ok(lines.some((l) => l.includes("answered (call=call_1) -> Disclosure-Speak")));
+  assert.ok(lines.some((l) => l.includes("answered (call=call_1) -> Opening-Speak")));
   assert.ok(lines.some((l) => l.includes("speak.ended (call=call_1) -> ai_assistant_start")));
   assert.ok(lines.some((l) => l.includes("hangup (call=call_1) -> Settlement")));
   assert.ok(!lines.some((l) => l.includes(ccid)), "ccid-Wert darf in keiner Ingest-Log-Zeile stehen");
@@ -379,7 +379,7 @@ test("Review-Blocker: Event-Body ohne data.event_type -> Roh-Log zeigt event_typ
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const body = { data: { payload: { call_control_id: "cc_1" } } }; // kein event_type
@@ -402,7 +402,7 @@ test("Review-Blocker: event_type/status ueber 64 Zeichen -> Roh-Log-Token bei 64
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
   });
   const longEventType = "call.speak.ended" + "x".repeat(64); // 80 Zeichen, kein Mapping-Treffer
@@ -432,7 +432,7 @@ test("stab-p10: hangup nach Instanzwechsel - getCall-Miss -> reattachActiveCall 
     store,
     voiceControl: vc.voiceControl,
     finishCall: async (c) => finishCallCalls.push(c),
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     reattachActiveCall,
   });
@@ -446,9 +446,9 @@ test("stab-p10: hangup nach Instanzwechsel - getCall-Miss -> reattachActiveCall 
   assert.equal(finishCallCalls[0], call, "finishCall bekommt den nachgeladenen Call");
 });
 
-// stab-p10 (A6 Baustein 1): answered nach Instanzwechsel - der Turn-Fluss (Disclosure-Speak)
+// stab-p10 (A6 Baustein 1): answered nach Instanzwechsel - der Turn-Fluss (Opening-Speak)
 // laeuft auf dem nachgeladenen Call unveraendert weiter.
-test("stab-p10: answered nach Instanzwechsel - Disclosure-Speak auf dem nachgeladenen Call", async () => {
+test("stab-p10: answered nach Instanzwechsel - Opening-Speak auf dem nachgeladenen Call", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
   const { store, reattachActiveCall } = fakeStoreRehydrate(call);
   const vc = fakeVoiceControl();
@@ -456,7 +456,7 @@ test("stab-p10: answered nach Instanzwechsel - Disclosure-Speak auf dem nachgela
     store,
     voiceControl: vc.voiceControl,
     finishCall: async () => {},
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     reattachActiveCall,
   });
@@ -467,7 +467,7 @@ test("stab-p10: answered nach Instanzwechsel - Disclosure-Speak auf dem nachgela
   assert.equal(vc.speakCalls.length, 1);
   assert.deepEqual(vc.speakCalls[0], {
     callControlId: "cc_1",
-    text: DISCLOSURE_TEXT,
+    text: OPENING_TEXT,
     voiceProfile: "de_female_neural",
   });
   assert.deepEqual(store.markAnsweredCalls, ["call_1"]);
@@ -486,7 +486,7 @@ test("stab-p10: Rehydrate-Miss (reattachActiveCall -> call:null) -> 200, keine W
     store,
     voiceControl: vc.voiceControl,
     finishCall: async (c) => finishCallCalls.push(c),
-    disclosureSentence: () => DISCLOSURE_TEXT,
+    openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     reattachActiveCall,
   });
