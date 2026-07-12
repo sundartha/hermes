@@ -7,7 +7,14 @@
 // (Test-Orakel; ein Import der SUT-Konstanten wuerde einen falschen Wert mit-durchwinken).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fakeStore, makeCall, voiceControlSpy, fakeTimers, makeTestWatchdog } from "./telnyx-shim-harness.js";
+import {
+  fakeStore,
+  makeCall,
+  voiceControlSpy,
+  fakeTimers,
+  makeTestWatchdog,
+  DEAD_AIR_TEST_MS,
+} from "./telnyx-shim-harness.js";
 import { captureConsole } from "./helpers.js";
 
 // Voller Satz statt Kuerzel: robust gegen eine lokal geleakte CALLER_SUBSTANCE_MIN_LEN
@@ -38,7 +45,7 @@ test("F2: Dead-Air ist waehrend des Delays suspendiert (Timer ersetzt, kein dead
   const { call, timers, watchdog } = setup();
 
   watchdog.arm(call.id);
-  assert.deepEqual(timers.pendingDelays(), [30_000], "Dead-Air-Timer initial gestellt");
+  assert.deepEqual(timers.pendingDelays(), [DEAD_AIR_TEST_MS], "Dead-Air-Timer initial gestellt");
 
   const { delayMs } = watchdog.scheduleFarewellHangup(call.id, 20);
   assert.deepEqual(timers.pendingDelays(), [delayMs], "Dead-Air-Timer durch Farewell-Timer ersetzt");
@@ -57,7 +64,7 @@ test("F3: observeTurn waehrend des Delays cancelt den Farewell (Dead-Air lebt wi
   watchdog.scheduleFarewellHangup(call.id, 20);
   watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
 
-  assert.deepEqual(timers.pendingDelays(), [30_000], "Farewell weg, Dead-Air wieder scharf");
+  assert.deepEqual(timers.pendingDelays(), [DEAD_AIR_TEST_MS], "Farewell weg, Dead-Air wieder scharf");
 
   watchdog.clear(call.id);
   timers.fireAll();

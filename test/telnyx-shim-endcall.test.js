@@ -23,6 +23,7 @@ import {
   sseEndsWithDone,
   fakeTimers,
   makeTestWatchdog,
+  DEAD_AIR_TEST_MS,
 } from "./telnyx-shim-harness.js";
 import { captureConsole } from "./helpers.js";
 
@@ -154,7 +155,7 @@ test("E4: endCall=false -> kein Hangup-Aufruf, kein Fresh-Fetch nach dem Turn, n
   assert.equal(voiceControl.calls.length, 0);
   assert.deepEqual(store.getCallIds, [], "kein getCall-Fresh-Fetch ohne end_call");
   assert.equal(sseContent(res), "Bis dann");
-  assert.deepEqual(timers.pendingDelays(), [30_000], "Dead-Air aus observeTurn, kein Farewell-Timer");
+  assert.deepEqual(timers.pendingDelays(), [DEAD_AIR_TEST_MS], "Dead-Air aus observeTurn, kein Farewell-Timer");
 });
 
 // === E5: Hangup wirft -> Response bleibt intakt (eigener try/catch, Regel-1-Robustheit) ===
@@ -219,6 +220,6 @@ test("T5b: endCall=false + writeCompletion wirft -> Gegenprobe: weiterhin KEIN F
   await handler(validReq(call), res);
 
   assert.equal(res.ended, true);
-  assert.deepEqual(timers.pendingDelays(), [30_000], "nur der Dead-Air-Timer aus observeTurn, kein Farewell-Timer");
+  assert.deepEqual(timers.pendingDelays(), [DEAD_AIR_TEST_MS], "nur der Dead-Air-Timer aus observeTurn, kein Farewell-Timer");
   assert.equal(voiceControl.calls.length, 0, "kein Hangup, wenn agentTurn kein end_call lieferte");
 });
