@@ -64,27 +64,35 @@ export function makeConversationWatchdog({
     }
     return s;
   }
-  function clearDeadAirTimer(s) {
-    if (!s.deadAirTimer) return;
-    clearTimer(s.deadAirTimer);
-    s.deadAirTimer = null;
-  }
-  function clearFarewellTimer(s) {
-    if (!s.farewellTimer) return;
-    clearTimer(s.farewellTimer);
-    s.farewellTimer = null;
+  // Generischer Timer-Clear ueber den Feldnamen ("deadAirTimer"/"farewellTimer") - beide
+  // Timer-Arten raeumen sich identisch ab (nur das Feld unterscheidet sich, G5/S2).
+  function clearNamedTimer(s, timerField) {
+    if (!s[timerField]) return;
+    clearTimer(s[timerField]);
+    s[timerField] = null;
   }
   function restartDeadAirTimer(callId, s) {
-    clearDeadAirTimer(s); // Fuettern = Lebenszeichen gesehen
+    clearNamedTimer(s, "deadAirTimer"); // Fuettern = Lebenszeichen gesehen
     s.deadAirTimer = setTimer(() => onDeadAir(callId), deadAirMs);
   }
-  function onDeadAir(callId) {
+  // Gemeinsamer Kern von onDeadAir/onFarewellDue (G5/S2): genau EIN terminate, State vorher
+  // weg (one-shot, kein Leak; Re-Arm nur ueber arm/observeTurn bzw. scheduleFarewellHangup).
+  // Ein spaeter eintreffender call.hangup laeuft in clear() ins Leere, ein zweites Feuern
+  // desselben Timers findet keinen State mehr. onBeforeTerminate haengt optionale
+  // Achsen-spezifische Effekte (z.B. das Dead-Air-Log) vor dem terminate ein.
+  function terminateOnce(callId, timerField, { onBeforeTerminate } = {}) {
     const s = states.get(callId);
     if (!s) return; // bereits terminal geraeumt (clear bei hangup)
-    s.deadAirTimer = null;
-    states.delete(callId); // one-shot, kein Leak; Re-Arm nur ueber arm/observeTurn
-    console.warn(`${WATCHDOG_LOG_PREFIX} dead_air ${JSON.stringify({ callId })}`); // PII-frei
+    s[timerField] = null;
+    states.delete(callId);
+    if (onBeforeTerminate) onBeforeTerminate();
     Promise.resolve(terminate(callId)).catch(() => {}); // Timer-Callback -> keine unhandled rejection
+  }
+  function onDeadAir(callId) {
+    terminateOnce(callId, "deadAirTimer", {
+      onBeforeTerminate: () =>
+        console.warn(`${WATCHDOG_LOG_PREFIX} dead_air ${JSON.stringify({ callId })}`), // PII-frei
+    });
   }
   function arm(callId) {
     // ai_assistant_start ist raus (Ingest). Idempotent.
@@ -95,7 +103,7 @@ export function makeConversationWatchdog({
     // afix-p3: ein neuer Turn waehrend des Farewell-Delays heisst, das Gespraech laeuft doch
     // weiter (der Abschied war verfrueht) -> Terminierung abblasen; beendet wird am naechsten
     // end_call-Turn. Damit endet zugleich die Dead-Air-Suspendierung (restart unten).
-    clearFarewellTimer(s);
+    clearNamedTimer(s, "farewellTimer");
     restartDeadAirTimer(callId, s); // Turn = Lebenszeichen -> Dead-Air zuruecksetzen
     if (isSubstantialCallerText(callerText)) {
       s.emptyStreak = 0;
@@ -117,21 +125,14 @@ export function makeConversationWatchdog({
   // PII-frei loggen kann, ohne die Clamp-Konstanten zu duplizieren (S2).
   function scheduleFarewellHangup(callId, speechChars) {
     const s = ensureState(callId);
-    clearDeadAirTimer(s);
-    clearFarewellTimer(s);
+    clearNamedTimer(s, "deadAirTimer");
+    clearNamedTimer(s, "farewellTimer");
     const delayMs = farewellDelayMs(speechChars);
     s.farewellTimer = setTimer(() => onFarewellDue(callId), delayMs);
     return { delayMs };
   }
-  // Der Abschied ist (geschaetzt) zu Ende gesprochen -> genau EIN terminate, State davor weg
-  // (one-shot, Muster onDeadAir): ein spaeter eintreffender call.hangup laeuft in clear() ins
-  // Leere, ein zweites Feuern findet keinen State mehr.
   function onFarewellDue(callId) {
-    const s = states.get(callId);
-    if (!s) return; // bereits terminal geraeumt (clear bei hangup)
-    s.farewellTimer = null;
-    states.delete(callId);
-    Promise.resolve(terminate(callId)).catch(() => {}); // Timer-Callback -> keine unhandled rejection
+    terminateOnce(callId, "farewellTimer");
   }
   function clear(callId) {
     // Call terminal (jeder Grund) -> Wache stoppen. Externer Hangup gewinnt IMMER: auch ein
@@ -139,8 +140,8 @@ export function makeConversationWatchdog({
     // beendeten Call).
     const s = states.get(callId);
     if (s) {
-      clearDeadAirTimer(s);
-      clearFarewellTimer(s);
+      clearNamedTimer(s, "deadAirTimer");
+      clearNamedTimer(s, "farewellTimer");
     }
     states.delete(callId);
   }
