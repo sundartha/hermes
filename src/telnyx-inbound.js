@@ -38,9 +38,5 @@ export async function startInboundAiAssistant({
   store.save();
   const vc = voiceControl(call.provider);
   await vc.speak({ callControlId, text: greeting, voiceProfile });
-  // afix-p2 (R2): STT-Sprach-Hint pro Call reicht auch der Inbound-Pfad durch - call.language
-  // ist an dieser Stelle bereits aufgeloest (store.resolveCallLanguage, server.js, VOR dem
-  // Handoff-Aufruf). Derselbe Defekt (STT ohne Hint = "multi" -> Kauderwelsch) ist hier genauso
-  // erreichbar wie im Ingest-Pfad (telnyx-call-control-ingest.js) - beide reichen ihn durch.
-  await vc.startAssistant({ callControlId, assistantId: call.assistantId, language: call.language });
+  await vc.startAssistant({ callControlId, assistantId: call.assistantId });
 }
