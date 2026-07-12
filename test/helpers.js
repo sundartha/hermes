@@ -526,7 +526,11 @@ export function fakeTelnyxShimConfig({
 export function noopWatchdog() {
   return {
     arm() {},
-    observeTurn: () => ({ loopExceeded: false }),
+    // MINOR-2-Fix: der Kontrakt von observeTurn traegt seit K0 zusaetzlich turnSeq (der
+    // echte Watchdog erhoeht+liefert ihn bei jedem Aufruf) - das No-op-Double bildete das
+    // nicht mehr ab. 0 ist ein neutraler Platzhalter (dieses Double zaehlt nicht wirklich),
+    // klar von der 1-basierten Zaehlung des echten Watchdogs unterscheidbar.
+    observeTurn: () => ({ loopExceeded: false, turnSeq: 0 }),
     clear() {},
     // afix-p3: No-op = kein Farewell-Hangup. Tests, die den realen Hangup pruefen, injizieren
     // den echten Watchdog (makeTestWatchdog, telnyx-shim-harness.js).

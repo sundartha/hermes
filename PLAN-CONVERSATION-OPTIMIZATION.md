@@ -1,7 +1,28 @@
 # PLAN: Gespraechsqualitaet optimieren (Telnyx-AI-Assistant-Pfad)
 
-Stand 2026-07-12. Strategiedokument, kein Impl-Auftrag. Owner entscheidet ueber Umsetzung
-und Reihenfolge.
+Stand 2026-07-12.
+
+## UMSETZUNGSSTAND (Nachtrag, gleiche Session)
+
+**K0, K1, K2, K3 sind IMPLEMENTIERT** (Branch `worktree-convo-optimization-plan`), Suite
+2168/2168 gruen, dualer Review (Opus) bestanden nach ZWEI Fix-Runden — der erste Wurf hatte
+einen echten R4-Rueckfall fuer en/fr eingebaut (siehe K3).
+
+**NICHT ausgerollt.** Zwei Dinge kann nur der Owner tun:
+1. **Provisioner-Lauf** (`node scripts/telnyx-assistant-provision.mjs`) — erst dadurch werden
+   K1 (`interrupt_prediction_threshold: 0.4`) und K2 (`background_audio: office`) am
+   Live-Assistant scharf. Der Provisioner prueft jetzt selbst per GET nach, ob Telnyx die
+   beiden Felder wirklich uebernommen hat, und wirft sonst (fail-closed) — ein gruener Lauf
+   beweist also, dass sie live sind.
+2. **EIN gebuendelter Testanruf** — inkl. der Overlap-Probe. **E1.2 ist der harte Gate:**
+   Faellt der Owner der KI mit einem echten SATZ ins Wort, muss sie weiterhin SOFORT stoppen.
+   Tut sie das nicht, geht `interrupt_prediction_threshold` sofort zurueck auf 0.0.
+
+Offen bleiben: G1 (Gate-Experiment Streaming), K5, K6, K4, K8, K9 — unveraendert wie unten.
+
+---
+
+Strategiedokument. Owner entscheidet ueber Umsetzung und Reihenfolge.
 
 Ausgangslage: `tasks/STATUS-ANRUFQUALITAET-2026-07-12.md` (Schwachstellen S1-S5),
 `tasks/rca-2026-07-12-assistant-dead-call.md` (Wurzeln R1-R5),
@@ -258,11 +279,44 @@ statt weiter zu hoffen.
 ueberschaetzen ElevenLabs systematisch, deshalb wird der 12s-Cap in **beiden** Calls
 ausgeschoepft. Die echte Sprechrate ist aus den **vorhandenen Aufnahmen** messbar
 (Agent-Kanal: gesprochene Zeichen / Segmentdauer). Ergebnis: neue, benannte Konstanten.
-Zusaetzlich: Cap von 12s auf einen Wert senken, der zur gemessenen Rate passt.
+**Korrektur (Umsetzung):** Der Cap wurde NICHT gesenkt, sondern auf 15000ms **angehoben** —
+die urspruengliche Absicht hier ("auf einen Wert senken, der zur gemessenen Rate passt") ist
+mit der gemessenen Rate nicht vereinbar: der laengste gemessene Abschiedssatz (206 Zeichen)
+braucht real 11,694s, ein gesenkter Cap haette genau diesen Fall selbst abgeschnitten (R4).
+Ein hoeherer Cap wandelt "abgeschnitten" (Bug) in "etwas laenger Stille" (haesslich, aber
+harmlos) um — das ist die richtige Richtung (s. Pre-Mortem unten).
+**Sprach-Einschraenkung:** Die neuen Konstanten sind NUR fuer `de` gemessen und werden auch
+NUR fuer `de` angewandt (`src/telnyx-conversation-watchdog.js`, sprachabhaengige
+Kalibrierungs-Tabelle). `en`/`fr`/unbekannte Sprache behalten unveraendert die alten
+Konstanten (1500ms + 70ms/Zeichen) — Englisch hat bei aehnlichem Sprechtempo kuerzere Woerter
+und damit weniger Zeichen/s als Deutsch; die de-Kalibrierung wuerde englische Abschiedssaetze
+zu knapp schaetzen (R4). **Ein englischsprachiger Testanruf ist noetig, bevor die
+de-Kalibrierung auf en/fr ausgeweitet wird.**
+
+**Gemessene Werte (Forensik an beiden echten Testanrufen, Kanaltrennung + silencedetect,
+Abgleich mit den Telnyx-Message-Texten, 2026-07-12 — damit die naechste Session sie nicht neu
+erheben muss):**
+- ElevenLabs-Sprechrate ueber 4 sauber zuordenbare Passagen: 17.30 / 19.90 / 20.34 / 17.62
+  Zeichen/s → Median **18.76**, LANGSAMSTES **Minimum 17.30** (= 57.8 ms/Zeichen).
+- TTS-Anlauf (Telnyx `audio_first_token_duration_ms`, Zeit von unserer Completion bis Audio
+  bereit): 108-139 ms → Median **119 ms**, Maximum **139 ms**.
+- Laengster gemessener Abschiedssatz: 206 Zeichen → **11,694 s** echte Sprechdauer
+  (`tasks/afix-testcall2-report.md`, Turn-3-Audiofenster 17:37:34.393-17:37:46.087).
+- Neue Konstanten: `FAREWELL_BASE_MS` 500 (Anlauf-Maximum + Puffer), `FAREWELL_MS_PER_CHAR` 65
+  (langsamste Rate + ~12% Aufschlag, bewusst NICHT der Median), `FAREWELL_MIN_MS` 1500,
+  `FAREWELL_MAX_MS` 15000 (deckt bei der langsamsten Rate ~220 Zeichen ab, statt den 206-Zeichen-
+  Fall selbst abzuschneiden).
 
 **Falsifizierbare Erwartung:**
-- E3.1: Hangup erfolgt **>= Ende des letzten Agent-Sprachsegments** und **<= Segment-Ende + 1,5s**
-  (heute: bis zu 4,5s Stille).
+- E3.1 (**korrigiert — die urspruengliche Fassung war mit reiner Zeichen-Heuristik nicht
+  haltbar**): Ursprünglich verlangt: Hangup **>= Ende des letzten Agent-Sprachsegments** und
+  **<= Segment-Ende + 1,5s**. Das ist ohne ein echtes TTS-Ende-Event (F9, existiert bei Telnyx
+  nicht) nicht erreichbar: die gemessene Sprechrate streut zwischen 17,3 und 20,3 Zeichen/s
+  (~15%). Wer auf die langsamste Rate kalibriert (um Abschneiden sicher zu vermeiden,
+  E3.2 hat Vorrang vor E3.1), ueberschaetzt bei schnell gesprochenen Saetzen zwangslaeufig um
+  diese Streuung. Realistisch erreichbar ist deshalb **Hangup <= Segment-Ende + ~3s** (heute:
+  bis 4,5s UND permanenter Cap-Hit bei jedem Call). Ein besserer Wert braucht ein echtes
+  TTS-Ende-Event — und das existiert bei Telnyx nicht.
 - E3.2: Kein abgeschnittener Abschiedssatz — das ist der Regressions-Trigger. R4 (verschluckter
   Abschied) darf NICHT zurueckkommen. Lieber 1s zu lang als 200ms zu kurz.
 - E3.3: Bestehende Watchdog-Tests (Fake-Timer-Seam existiert) bleiben gruen.

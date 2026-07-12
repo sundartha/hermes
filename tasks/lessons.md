@@ -220,3 +220,24 @@ partial update -> get -> delete) hat in wenigen Minuten sowohl den Bug als auch 
 Deep-Merge-Semantik bewiesen (nicht gesendete Felder wie `time_limit_secs` und
 `recording_settings` ueberleben). Ohne diesen Test waere der als "harmlos" geplante
 Provisioner-Lauf entweder gescheitert oder haette Safety-Felder zurueckgesetzt.
+
+## Eine Messung an EINER Sprache darf nie global angewandt werden (2026-07-12, K3)
+
+Wir haben die Sprechrate von ElevenLabs forensisch aus zwei echten Anrufen gemessen
+(17.3-20.3 Zeichen/s) und daraus die Farewell-Hangup-Heuristik neu kalibriert — sauber
+hergeleitet, konservativ auf die LANGSAMSTE Rate gerechnet, mit Tests. Der Safety-Review
+fand trotzdem einen Rueckfall: Beide Testanrufe waren DEUTSCH. Das System faehrt de/fr/en
+mit einer multilingualen Stimme. Englisch hat bei gleichem Sprechtempo deutlich WENIGER
+Zeichen pro Sekunde (kuerzere Woerter) — der kalibrierte Wert haette englische
+Abschiedssaetze ABGESCHNITTEN. Das waere R4 gewesen, der Bug, den die Vorgaenger-Phase
+gerade behoben hatte.
+
+Verschaerfend: Die erste Korrektur (Sprach-Tabelle) war AUCH noch falsch, weil ein GLOBAL
+gebliebener `minMs` die deutsche Kalibrierung durch die Hintertuer wieder in die
+ungemessenen Sprachen trug (kurze en-Abschiede bekamen 2060ms statt 3000ms).
+
+Regel: Eine Messung gilt genau fuer die Konfiguration, in der sie erhoben wurde. Der Default
+fuer alles Ungemessene ist **Bestandsverhalten behalten**, nicht "der neue Wert passt schon".
+Und: die Invariante als Test festnageln ("der Fallback ist fuer KEINE Eingabe kuerzer als die
+alte Formel") — sonst wandert der Fehler beim naechsten Refactoring nur in eine andere
+Konstante. Frag bei jeder Kalibrierung: **Woran genau habe ich gemessen, und wo wende ich es an?**

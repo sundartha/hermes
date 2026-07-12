@@ -44,6 +44,20 @@ const ASSISTANT_NAME = "Hermes"; // Telnyx-Pflicht-Scaffold, kein Verhaltensfeld
 // erzeugte 12.4s Totzeit im Live-Call (RCA 2026-07-12); 4s = spuerbarer Anlauf, ohne dem
 // Angerufenen ins Wort zu fallen. Telnyx-Spec: telephony_settings.user_idle_reply_secs, integer >= 0.
 const USER_IDLE_REPLY_SECS = 4;
+// K1 (PLAN-CONVERSATION-OPTIMIZATION.md): Range 0.0-1.0, Default 0.0 (=aus). HOEHER = STRIKTER,
+// d.h. WENIGER Unterbrechungen - filtert kurze Backchannels ("ja"/"mhm"/"okay") aus der
+// Unterbrechungs-Erkennung, echtes Ins-Wort-Fallen loest weiterhin aus. 0.4 ist Telnyx' eigener
+// empfohlener Startwert (Release-Note 2026-07-06), nur mit deepgram/flux verfuegbar. Das Feld
+// fehlt in der oeffentlichen OpenAPI-Spec, existiert aber real am Live-Objekt (kein Tippfehler,
+// per GET verifiziert - Doku-Drift ist bei Telnyx systematisch, s. PLAN-CONVERSATION-OPTIMIZATION.md §9.6).
+const INTERRUPT_PREDICTION_THRESHOLD = 0.4;
+// K2 (PLAN-CONVERSATION-OPTIMIZATION.md): leises Raum-Ambiente statt digitaler Stille waehrend
+// Antwortpausen, gegen das Totzeit-Empfinden. "silence" ist der Default und bedeutet laut Spec
+// woertlich "disables background audio" - keine bewusste Wahl, nur nie umgestellt. predefined_media
+// kennt genau zwei Presets: "silence" | "office". volume 0.1-1.0 in 0.1-Schritten, bewusst niedrig.
+const BACKGROUND_AUDIO_TYPE = "predefined_media";
+const BACKGROUND_AUDIO_VALUE = "office";
+const BACKGROUND_AUDIO_VOLUME = 0.3;
 // Telnyx verlangt `instructions` als Pflichtfeld (sonst HTTP 400 10004 /body/instructions).
 // Im BYO-Custom-LLM-Betrieb ist es INERT: der Shim (agentTurn/claude.js) baut Systemprompt +
 // Kontext selbst und ignoriert die von Telnyx gespiegelten messages/system - dieser Text erreicht
@@ -77,11 +91,64 @@ const PRESERVED_SAFETY_FIELDS = Object.freeze({
   transcription: ["transcription"],
 });
 
+// S3-5 (Review-Befund, PLAN-CONVERSATION-OPTIMIZATION.md K1/K2): ANDERE Semantik als
+// PRESERVED_SAFETY_FIELDS oben - dort ist "vorher == nachher" der Erfolgsbeweis (ein Feld,
+// das WIR nicht anfassen, darf sich nicht aendern), hier ist "gesendet == live" der
+// Erfolgsbeweis (ein Feld, das WIR aktiv setzen, muss auch wirklich ankommen).
+// interrupt_prediction_threshold fehlt in der OEFFENTLICHEN Telnyx-OpenAPI-Spec (s. Kommentar
+// bei INTERRUPT_PREDICTION_THRESHOLD oben - live per GET verifiziert, aber nicht dokumentiert).
+// Der wahrscheinlichste Fehlermodus eines undokumentierten Feldes ist NICHT ein Fehler-Status,
+// sondern ein stiller Drop beim Schreiben (POST bleibt 200, das Feld verschwindet einfach) -
+// ohne aktive Gegenpruefung wuerde das Skript in diesem Fall smokePass=true melden, obwohl
+// K1 (Barge-in-Tuning) live NICHT wirkt. background_audio ist zwar dokumentiert, wird aber aus
+// Konsistenzgruenden (beide sind neue, bislang unverifizierte Felder derselben Aenderung)
+// in denselben Beweis-Schritt aufgenommen.
+//
+// MAJOR-3-Fix (2. Review-Runde): NUR SKALARE BLAETTER eintragen, NICHT das verschachtelte
+// background_audio-Objekt als Ganzes. fieldsNotApplied verglich vorher das Objekt per
+// JSON.stringify GEGEN das GET-Ergebnis - anders als fieldsLostOnUpdate oben (das GET-vorher
+// gegen GET-nachher vergleicht, ALSO BEIDE SEITEN von Telnyx, konsistente Shape) vergleicht
+// dieser Check UNSER gesendetes Objekt gegen Telnyx' Antwort, ZWEI VERSCHIEDENE Erzeuger.
+// JSON.stringify ist key-reihenfolge-sensitiv und intolerant gegen Zusatzfelder (z.B. koennte
+// Telnyx media_url:null aus der oneOf-Union ergaenzen) - ein Deep-Equal-Vergleich haette dann
+// bei JEDEM Lauf geworfen, obwohl der POST erfolgreich war (schlimmer als kein Guard, weil er
+// einen echten Fehler vortaeuscht). Jeder Eintrag hier ist deshalb ein PFAD BIS ZUM SKALAR
+// (Zahl/String), den fieldsNotApplied mit === vergleicht - reihenfolge-unabhaengig und tolerant
+// gegen Zusatzfelder, die Telnyx an anderer Stelle im selben Objekt ergaenzt.
+const APPLIED_FIELDS_TO_VERIFY = Object.freeze({
+  interrupt_prediction_threshold: ["interruption_settings", "interrupt_prediction_threshold"],
+  background_audio_value: ["voice_settings", "background_audio", "value"],
+  background_audio_volume: ["voice_settings", "background_audio", "volume"],
+});
+
 // Liest einen Wert ueber eine Pfad-Segmentliste (kein IO, keine Ausnahme bei fehlenden
 // Zwischenknoten - liefert dann undefined, wie ein einfacher Feldzugriff auf ein fehlendes
 // Feld). Eine Stelle (G5) statt wiederholter optional-chaining-Ketten pro Feld.
 function readByPath(obj, path) {
   return path.reduce((node, segment) => (node == null ? undefined : node[segment]), obj);
+}
+
+// Snapshot der APPLIED_FIELDS_TO_VERIFY-Werte aus einem beliebigen Objekt (Muster
+// preservedFieldSnapshot, aber ueber eine ANDERE Feldliste - s. Kommentar oben). Dient sowohl
+// fuer die GESENDETE Config (assistantConfig selbst) als auch fuer den LIVE-Zustand nach dem
+// Update (GET-Antwort) - derselbe Pfad-Zugriff fuer beide Seiten des Vergleichs (G5).
+export function appliedFieldSnapshot(source) {
+  const snapshot = {};
+  for (const [field, path] of Object.entries(APPLIED_FIELDS_TO_VERIFY)) {
+    snapshot[field] = readByPath(source, path);
+  }
+  return snapshot;
+}
+
+// Vergleich GESENDET vs. LIVE (P11 testbar, kein IO): liefert die NAMEN der Felder, deren
+// Live-Wert vom gesendeten Wert abweicht (leer = alle Blaetter aus APPLIED_FIELDS_TO_VERIFY
+// sind nachweislich live). Eigene Funktion statt fieldsLostOnUpdate (dort ist "unveraendert"
+// der Erfolg, hier ist "wie gesendet" der Erfolg - aehnliche Form, andere Semantik, s.
+// Kommentar bei APPLIED_FIELDS_TO_VERIFY). MAJOR-3-Fix: strikter Skalarvergleich (===) statt
+// JSON.stringify-Deep-Equal - sent/live sind hier IMMER appliedFieldSnapshot()-Ergebnisse,
+// also Blaetter (Zahl/String), kein verschachteltes Objekt mehr.
+export function fieldsNotApplied(sent, live) {
+  return Object.keys(sent).filter((field) => sent[field] !== live[field]);
 }
 
 /**
@@ -112,11 +179,22 @@ export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef
     voice_settings: {
       voice: elevenLabsVoiceName({ model: voiceModel, voiceId }), // eine Format-Quelle (G5)
       api_key_ref: apiKeyRef,
-      // KEIN `type`: das ASSISTANT-voice_settings ist flach (Telnyx-Spec: required ["voice"]);
-      // nur der Call-Control-speak nutzt die per `type` diskriminierte Union.
+      // KEIN `type` auf dieser Ebene: das ASSISTANT-voice_settings ist flach (Telnyx-Spec:
+      // required ["voice"]); nur der Call-Control-speak nutzt die per `type` diskriminierte
+      // Union. background_audio darunter IST so eine `type`-diskriminierte Union (oneOf
+      // predefined_media | media_url | media_name) - das ist deren eigenes Sub-Schema, kein
+      // Widerspruch zum Kommentar oben.
+      background_audio: {
+        type: BACKGROUND_AUDIO_TYPE,
+        value: BACKGROUND_AUDIO_VALUE,
+        volume: BACKGROUND_AUDIO_VOLUME,
+      },
     },
     greeting: "", // Regel 2: der Assistant spricht NIE zuerst
-    interruption_settings: { enable: true }, // Barge-in an (Launch-Pflicht)
+    interruption_settings: {
+      enable: true, // Barge-in an (Launch-Pflicht) - bleibt UNVERAENDERT an, K1 ist reines Tuning
+      interrupt_prediction_threshold: INTERRUPT_PREDICTION_THRESHOLD,
+    },
     // NUR dieses eine Feld senden - die Annahme, dass der Update-POST ein Deep-Merge ist und
     // PRESERVED_SAFETY_FIELDS (time_limit_secs etc.) dabei unveraendert ueberleben, ist live
     // UNBESTAETIGT (wie der Rest des REST-Schemas, Kopf-Docstring Z. 17-22). sendAssistantConfig
@@ -211,8 +289,20 @@ export function fieldsLostOnUpdate(before, after) {
 // bei telephony_settings in buildAssistantConfig), ein Teil-Update darf den assistant-seitigen
 // Sicherheits-Cap (time_limit_secs, Absolute Regel 1) nie stillschweigend loeschen. Weicht der
 // Nachher-Zustand ab, wirft dieser Aufruf statt eine falsch-gruene assistant_id zurueckzugeben
-// (fail-closed, main().catch() meldet smokePass=false). Exportiert, damit der Offline-Test
-// (global.fetch gestubbt) den GET-vor/POST/GET-nach-Ablauf ohne echtes Netz durchspielen kann.
+// (fail-closed, main().catch() meldet smokePass=false). Dieser Vergleich braucht ein "Vorher"
+// und ist deshalb NUR beim Update sinnvoll (beim Create gibt es nichts zu verlieren).
+//
+// MAJOR-2-Fix (2. Review-Runde): der GET-nach-Update/-Create gegen APPLIED_FIELDS_TO_VERIFY
+// (S3-5, K1/K2-Felder) laeuft dagegen IMMER, auch beim Create - ob die gesendeten Felder live
+// ankamen, ist unabhaengig davon, ob vorher schon ein Assistant existierte. Vorher stand dieser
+// Check ausschliesslich im existingId-Zweig: ein frischer Lauf ohne TELNYX_ASSISTANT_ID (z.B.
+// Disaster-Recovery/Neuanlage) meldete damit faelschlich smokePass=true, OHNE K1/K2 je
+// gegengeprueft zu haben. Die beiden K1/K2-Felder muessen im LIVE-Zustand exakt dem gesendeten
+// Wert entsprechen, sonst wirft dieser Aufruf (fail-closed, gleiches Muster wie
+// fieldsLostOnUpdate) - ein gruener Skript-Lauf beweist damit wirklich, dass K1/K2 live sind
+// (fuer BEIDE Pfade), statt nur, dass der POST kein Fehler war.
+// Exportiert, damit der Offline-Test (global.fetch gestubbt) den GET-vor/POST/GET-nach-Ablauf
+// ohne echtes Netz durchspielen kann.
 export async function sendAssistantConfig(assistantConfig, existingId) {
   const before = existingId ? preservedFieldSnapshot(await fetchAssistant(existingId)) : {};
   const { method, url } = assistantRequest(existingId);
@@ -221,8 +311,14 @@ export async function sendAssistantConfig(assistantConfig, existingId) {
   const json = await res.json().catch(() => ({}));
   const data = json.data || json; // Telnyx-v2 wrappt teils in {data} (Muster voice.js)
   const id = data.id || data.assistant_id || existingId;
+
+  // GET-nach-Update/-Create: EIN Fetch deckt beide Pruefungen unten ab (kein zweiter Netz-
+  // Call). Bei Create ist "before" leer ({}), der fieldsLostOnUpdate-Zweig greift also nicht -
+  // fieldsNotApplied (MAJOR-2) laeuft trotzdem, weil sie NICHT von "before"/existingId abhaengt.
+  const liveAfter = await fetchAssistant(id);
+
   if (existingId) {
-    const after = preservedFieldSnapshot(await fetchAssistant(id));
+    const after = preservedFieldSnapshot(liveAfter);
     const lost = fieldsLostOnUpdate(before, after);
     if (lost.length) {
       throw new Error(
@@ -231,6 +327,16 @@ export async function sendAssistantConfig(assistantConfig, existingId) {
       );
     }
   }
+
+  const notApplied = fieldsNotApplied(appliedFieldSnapshot(assistantConfig), appliedFieldSnapshot(liveAfter));
+  if (notApplied.length) {
+    throw new Error(
+      `K1/K2-Verifikation fehlgeschlagen: Telnyx hat folgende Felder NICHT wie gesendet uebernommen ` +
+        `(vermutlich stillschweigend verworfen, da nicht in der oeffentlichen OpenAPI-Spec dokumentiert): ` +
+        `${notApplied.join(", ")} (Telnyx-Assistant-Config im Portal pruefen)`,
+    );
+  }
+
   return id;
 }
 

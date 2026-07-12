@@ -157,7 +157,14 @@ test("T3: Dead-Air feuert nach N Sekunden (echter Ingest + echter Watchdog, Fake
   assert.equal(hangupCalls[0].callControlId, call.callControlId);
   assert.ok(
     lines.some((l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("dead_air") && l.includes(call.id)),
-    "dead_air-Log (PII-frei, nur callId) fehlt",
+    "dead_air-Log (PII-frei, callId+turnSeq) fehlt",
+  );
+  // MINOR-2 (2. Review-Runde): dead_air trug bisher nur callId - turnSeq fehlte, obwohl der
+  // State es an dieser Stelle bereits kannte. Hier arm() ohne vorherigen observeTurn -> turnSeq
+  // steht noch auf dem Initialwert 0.
+  assert.ok(
+    lines.some((l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("dead_air") && l.includes('"turnSeq":0')),
+    "dead_air-Log traegt kein turnSeq",
   );
 });
 
@@ -330,7 +337,7 @@ test("T10: end_call plant den Hangup verzoegert (afix-p3) - Dead-Air suspendiert
   assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 0, "kein sofortiger Hangup");
   assert.deepEqual(
     timers.pendingDelays(),
-    [3000],
+    [1605], // K3: 500ms Basis + 17 Zeichen ("Auf Wiederhoeren.") * 65ms/Zeichen
     "Dead-Air-Timer durch den Farewell-Timer ersetzt (suspendiert), nicht daneben gestellt",
   );
 
