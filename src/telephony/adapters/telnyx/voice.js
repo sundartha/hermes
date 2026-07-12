@@ -13,6 +13,7 @@
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { voiceAttrs } from "./render.js";
+import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 
 const TEXML_BASE = "/v2/texml";
 // Call-Control-Basis (P4, AI-Assistant-Pfad): Origination/Hangup/ai_assistant_start laufen
@@ -24,6 +25,10 @@ const JSON_HEADERS_TYPE = "application/json";
 const HANGUP_ACTION = "hangup";
 const ASSISTANT_START_ACTION = "ai_assistant_start";
 const SPEAK_ACTION = "speak";
+// SpeakRequest.voice_settings ist laut Telnyx-OpenAPI eine per `type` diskriminierte Union;
+// ElevenLabsVoiceSettings verlangt type="elevenlabs" (das ASSISTANT-Objekt dagegen hat ein
+// flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
+const ELEVENLABS_VOICE_SETTINGS_TYPE = "elevenlabs";
 
 // HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
 // damit der echte Ablehnungsgrund (z.B. Caller-ID nicht zugewiesen, Land im Voice-Profil
@@ -61,6 +66,28 @@ async function postCallControlAction(callControlId, { action, body, op }) {
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
   logCallControlOk(op, res.status, Boolean(callControlId));
+}
+
+// Voice-Felder des speak-Bodys (eine Aufgabe, eine Abstraktionsebene: G30/G34).
+// ElevenLabs-Zweig = dieselbe Stimme, die der AI-Assistant danach spricht (afix-p1/R5:
+// EINE Stimme im ganzen Call). KEIN `language`: im SpeakRequest optional (required =
+// payload+voice), es steuert die Azure-/Telnyx-TTS-Sprache; ElevenLabs-Modelle sind
+// multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
+// Fail-SAFE (Fallback a): unvollstaendige ElevenLabs-Config -> Azure-Bestand byte-identisch.
+function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
+  const el = config.telnyxElevenLabs;
+  if (useAssistantVoice && hasElevenLabsVoice(el))
+    return {
+      voice: elevenLabsVoiceName(el),
+      voice_settings: { type: ELEVENLABS_VOICE_SETTINGS_TYPE, api_key_ref: el.apiKeyRef },
+    };
+  return voiceAttrs(voiceProfile); // { voice, language } - Bestand
+}
+
+// afix-p1 Observability: EINE Quelle fuer "ist die Assistant-Stimme ueberhaupt konfiguriert?"
+// - der Ingest-Log-Marker kann damit nie von dem abweichen, was speak wirklich sendet (G5).
+export function assistantVoiceConfigured() {
+  return hasElevenLabsVoice(config.telnyxElevenLabs);
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -180,17 +207,21 @@ export const telnyxVoice = {
 
   // Deterministischer Call-Control-Speak-Node (P4.5): server-seitiges TTS EINES Textes
   // VOR ai_assistant_start (Pflicht-Offenlegung, Regel 2). voiceProfile -> Telnyx-Voice/
-  // Language ueber dieselbe Map wie der TeXML-Renderer (voiceAttrs, G5); Azure-Neural, nicht
-  // der ElevenLabs-Relay (der den Inbound-Track unterdrueckt). Body-Feldform live UNBESTAETIGT
-  // (wie P4) -> mit Owner in P5/P11 fixen. Leere ID/Text -> fail-closed.
-  async speak({ callControlId, text, voiceProfile }) {
+  // Language ueber dieselbe Map wie der TeXML-Renderer (voiceAttrs, G5), sofern useAssistantVoice
+  // fehlt/false ODER die ElevenLabs-Config unvollstaendig ist (Azure-Neural, byte-identisch zum
+  // Bestand). useAssistantVoice=true + vollstaendige Config -> dieselbe ElevenLabs-Stimme, die
+  // der AI-Assistant danach spricht (afix-p1/R5, speakVoiceFields). Der fruehere ElevenLabs-
+  // LIVE-RELAY-Befund (unterdrueckt den Inbound-Track) gilt fuer den TeXML-Gather-Pfad
+  // (Inbound-Track, render.js), NICHT fuer diesen Call-Control-speak: hier folgt kein Gather,
+  // sondern ai_assistant_start - es gibt keinen Inbound-Track zu unterdruecken. Body-Feldform
+  // live UNBESTAETIGT (wie P4) -> mit Owner in P5/P11 fixen. Leere ID/Text -> fail-closed.
+  async speak({ callControlId, text, voiceProfile, useAssistantVoice = false }) {
     if (!config.telnyxApiKey) throw new Error("Telnyx speak: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx speak: callControlId fehlt");
     if (!text) throw new Error("Telnyx speak: text fehlt");
-    const { voice, language } = voiceAttrs(voiceProfile);
     await postCallControlAction(callControlId, {
       action: SPEAK_ACTION,
-      body: { payload: text, voice, language },
+      body: { payload: text, ...speakVoiceFields({ voiceProfile, useAssistantVoice }) },
       op: "speak",
     });
   },

@@ -4,7 +4,12 @@
 // test/pay4-smoke-guard.test.js importiert isTestKey aus smoke-stripe-payment.mjs).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildAssistantConfig, missingRequired, SHIM_ROUTE } from "../scripts/telnyx-assistant-provision.mjs";
+import {
+  buildAssistantConfig,
+  missingRequired,
+  SHIM_ROUTE,
+  assistantRequest,
+} from "../scripts/telnyx-assistant-provision.mjs";
 
 const ARGS = {
   publicUrl: "https://hermes.example",
@@ -40,6 +45,18 @@ test("buildAssistantConfig: Ela-Voice-Referenz aus voiceModel + voiceId, apiKeyR
   const cfg = buildAssistantConfig(ARGS);
   assert.equal(cfg.voice_settings.voice, "ElevenLabs.Default.voice_xyz");
   assert.equal(cfg.voice_settings.api_key_ref, "elevenlabs_prod");
+  // afix-p1 Kontrast: das ASSISTANT-voice_settings ist FLACH (Telnyx-Spec: required
+  // ["voice"], kein type) - anders als die per `type` diskriminierte Union im Call-
+  // Control-speak-Body (voice.js/speakVoiceFields).
+  assert.equal("type" in cfg.voice_settings, false);
+});
+
+// afix-p1 (T-neu 11): Idle-Nudge-Provisioning. GENAU EIN Feld im telephony_settings-Objekt
+// (Deep-Merge-Absicht festgenagelt) - time_limit_secs/recording_settings/etc. sollen den
+// Update-POST unberuehrt ueberleben.
+test("afix-p1 (T-neu 11): telephony_settings traegt GENAU user_idle_reply_secs=4", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.deepEqual(cfg.telephony_settings, { user_idle_reply_secs: 4 });
 });
 
 test("buildAssistantConfig: Barge-in (interruption_settings) ist an", () => {
@@ -81,4 +98,18 @@ test("missingRequired: genau ein Pflichtwert fehlt -> dessen Name in der Liste",
     ["TELNYX_ELEVENLABS_VOICE_ID", "voice_xyz"],
   ];
   assert.deepEqual(missingRequired(required), ["PUBLIC_URL"]);
+});
+
+// afix-p1 (T-neu 12, BUGFIX-Regression): der Update-Request ist POST, NIE PUT - ein PUT
+// existiert unter /v2/ai/assistants/{id} laut Telnyx-OpenAPI-Spec nicht (HTTP 404). Ohne
+// diesen Fix war das Re-Provisioning (bestehende assistant_id) strukturell tot.
+test("afix-p1 (T-neu 12): assistantRequest ist IMMER POST (Update-PUT existiert nicht, HTTP 404)", () => {
+  const update = assistantRequest("asst_1");
+  assert.equal(update.method, "POST");
+  assert.notEqual(update.method, "PUT");
+  assert.ok(update.url.endsWith("/v2/ai/assistants/asst_1"));
+
+  const create = assistantRequest("");
+  assert.equal(create.method, "POST");
+  assert.ok(create.url.endsWith("/v2/ai/assistants"));
 });

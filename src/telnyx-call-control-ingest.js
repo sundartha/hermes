@@ -7,6 +7,7 @@
 // Spies testbar.
 import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/telnyx/call-control-events.js";
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
+import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
 
 // OBS-2: Log-Hygiene-Bound fuer rohe Telnyx-Protokoll-Token (event_type/status). Interner
 // Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (wie errors.js ERROR_DETAIL_MAX_LEN),
@@ -41,19 +42,64 @@ export function makeCallControlIngest({
   reattachActiveCall,
   watchdog,
 }) {
-  // Regel 2 + R5 (stab-p8): der deterministische Erst-Speak spricht den vollen Opening-Text
-  // (openingText = Offenlegung ZUERST + Anliegens-Bruecke) - DIESELBE eine Quelle wie der
-  // Budget-Pfad (/voice/outbound). So deckt sich das Gesprochene mit der systemPrompt-Annahme
-  // ("Anliegen wurde bereits gesagt"); der Assistant erbt kein ungesprochenes Anliegen mehr.
-  async function onAnswered(call, callControlId) {
-    store.markAnswered(call.id); // answeredAt -> voiceMinutesOf (Abrechnung), Muster /voice/outbound
+  // afix-p1 (Fallback-Kette, Regel 2 - das Opening darf NIE ausfallen): pro Call genau EIN
+  // Retry mit der Bestands-Stimme (Azure), wenn der Opening-Speak mit der Assistant-Stimme
+  // scheitert - synchron (Adapter wirft, z.B. HTTP 400) ODER per Event (call.speak.failed).
+  // Ephemerer In-Memory-State im Closure (Muster: Watchdog-Map), aufgeraeumt in onHangup.
+  // Endlosschleife speak.failed -> retry -> speak.failed ist damit ausgeschlossen.
+  // BEWUSST: Prozess-Restart mid-Call verliert den Merker -> hoechstens EIN weiterer Retry,
+  // im schlimmsten Fall heutiges Verhalten (kein Retry). Kein Sweep noetig (onHangup raeumt).
+  const openingRetryUsed = new Set();
+
+  // Verbraucht das eine Retry-Token des Calls (Nebeneffekt im Namen, N7): true = Retry darf
+  // laufen, false = bereits verbraucht -> Fail-Safe (d).
+  function consumeOpeningRetry(callId) {
+    if (openingRetryUsed.has(callId)) return false;
+    openingRetryUsed.add(callId);
+    return true;
+  }
+
+  // Observability (PFLICHT): ohne diesen Marker ist "Azure statt ElevenLabs" im Live-Betrieb
+  // unsichtbar. PII-frei (interne call.id, nie ccid/Secrets/Text).
+  function logOpeningVoice(call, useAssistantVoice) {
+    if (useAssistantVoice && assistantVoiceConfigured()) {
+      console.log(`[voice/call-control] opening_voice=elevenlabs (call=${call.id})`);
+      return;
+    }
+    const reason = useAssistantVoice ? "config_missing" : "retry_after_failure";
+    console.log(`[voice/call-control] opening_voice=azure reason=${reason} (call=${call.id})`);
+  }
+
+  // Der EINE Opening-Speak (kein zweiter Aufrufpfad, G5): Text/Stimme/Provider identisch,
+  // nur die Stimmen-Wahl variiert.
+  async function sendOpeningSpeak({ call, callControlId, useAssistantVoice }) {
+    logOpeningVoice(call, useAssistantVoice);
     await voiceControl(call.provider).speak({
       callControlId,
       // Offenlegung bleibt byte-identisch der erste Satz (openingText praefixt sie), NIE
       // Modell-Ermessen; das Anliegen folgt LLM-frei (leeres goal -> reine Offenlegung).
       text: openingText(call),
       voiceProfile: localeFor(call.language).voiceProfile,
+      useAssistantVoice,
     });
+  }
+
+  // Regel 2 + R5 (stab-p8): der deterministische Erst-Speak spricht den vollen Opening-Text
+  // (openingText = Offenlegung ZUERST + Anliegens-Bruecke) - DIESELBE eine Quelle wie der
+  // Budget-Pfad (/voice/outbound). So deckt sich das Gesprochene mit der systemPrompt-Annahme
+  // ("Anliegen wurde bereits gesagt"); der Assistant erbt kein ungesprochenes Anliegen mehr.
+  async function onAnswered(call, callControlId) {
+    store.markAnswered(call.id); // answeredAt -> voiceMinutesOf (Abrechnung), Muster /voice/outbound
+    try {
+      await sendOpeningSpeak({ call, callControlId, useAssistantVoice: true });
+    } catch (err) {
+      // (b) Synchroner Fehler (z.B. 400 auf die ElevenLabs-Voice) -> genau EIN Retry mit der
+      // Bestands-Stimme. Ist das Token schon verbraucht, faellt der Fehler an den
+      // Handler-Catch durch (kein startAssistant, heutiger Fail-Safe = (d)).
+      if (!consumeOpeningRetry(call.id)) throw err;
+      console.warn(`[voice/call-control] Opening-Speak fehlgeschlagen (call=${call.id}) reason=speak_error -> Retry mit Bestands-Stimme`);
+      await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
+    }
     console.log(`[voice/call-control] answered (call=${call.id}) -> Opening-Speak abgesetzt`);
   }
   // Regel 2: ai_assistant_start NUR als Reaktion auf das speak.ended des Disclosure-Nodes.
@@ -70,10 +116,17 @@ export function makeCallControlIngest({
     console.log(`[voice/call-control] speak.ended (call=${call.id}) -> ai_assistant_start abgesetzt`);
     watchdog.arm(call.id); // stab-p9: Dead-Air-Wache starten (ai_assistant_start ist raus)
   }
-  // Regel 2: die Pflicht-Offenlegung ist (Azure-NTTS-Stoerung) fehlgeschlagen -> ai_assistant_start
-  // bleibt fail-safe aus, sonst spricht die KI, ohne dass die Offenlegung je zu hoeren war.
-  // Kein Crash/Orphan: Settlement bei hangup laeuft unabhaengig weiter (wie oben).
-  function onSpeakFailed(call) {
+  // (c) Die Offenlegung ist per EVENT gescheitert -> genau EIN Retry mit der Bestands-Stimme.
+  // (d) Ist das Retry-Token verbraucht (oder fehlt die callControlId), greift der HEUTIGE
+  // Fail-Safe unveraendert: ai_assistant_start bleibt aus, sonst spraeche die KI, ohne dass
+  // die Offenlegung je zu hoeren war (Regel 2). Kein Crash/Orphan: das Settlement bei hangup
+  // laeuft unabhaengig weiter.
+  async function onSpeakFailed(call, callControlId) {
+    if (callControlId && consumeOpeningRetry(call.id)) {
+      console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> Retry mit Bestands-Stimme`);
+      await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
+      return;
+    }
     console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> kein Assistant-Start`);
   }
   // Regel 1: Terminal-Settlement (Ist-Minuten buchen + Reserve freigeben), idempotent
@@ -81,6 +134,7 @@ export function makeCallControlIngest({
   // ruft releaseReserve intern. Kein Timer-Handle-Clear noetig (billedAt/status!=active
   // machen ausstehende Max-Dauer-/Reserve-Timer zum No-op, Bestandsmuster).
   async function onHangup(call) {
+    openingRetryUsed.delete(call.id); // afix-p1: Retry-Token freigeben (Call terminal)
     watchdog.clear(call.id); // stab-p9: Wache stoppen (Call terminal, egal welcher Grund)
     if (call.status === "active") store.endCallRecord(call.id, "completed");
     await finishCall(store.getCall(call.id));
@@ -117,7 +171,7 @@ export function makeCallControlIngest({
       logEventReceived(call.id, req.body); // OBS-2: roher event_type+status pro Event (PII-frei)
       if (eventType === CALL_CONTROL_EVENT.ANSWERED) return void (await onAnswered(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.SPEAK_ENDED) return void (await onSpeakEnded(call, callControlId));
-      if (eventType === CALL_CONTROL_EVENT.SPEAK_FAILED) return void onSpeakFailed(call);
+      if (eventType === CALL_CONTROL_EVENT.SPEAK_FAILED) return void (await onSpeakFailed(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.HANGUP) return void (await onHangup(call));
       // unbekannt/sonstiges -> keine Wirkung (200 bereits gesendet)
     } catch (err) {

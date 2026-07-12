@@ -23,6 +23,7 @@
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
 import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
+import { elevenLabsVoiceName } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 
 // Shim-Route: dieselbe wie die Registrierung in server.js (POST /v1/chat/completions).
 // Ein Literal an zwei Orten ueber Dateigrenzen hinweg; ein geteiltes Route-Symbol
@@ -35,12 +36,14 @@ export const SHIM_ROUTE = "/v1/chat/completions";
 // === SHIM_ROUTE (Drift-Test-Invariante). base_url endet damit auf "/v1".
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const SHIM_BASE_ROUTE = SHIM_ROUTE.slice(0, -CHAT_COMPLETIONS_SUFFIX.length);
-// Voice-Slot-Praefix im Telnyx-Assistant (spec-autoritativ "ElevenLabs.<model>.<voiceId>").
-// Exakte Gross-/Kleinschreibung ist live UNBESTAETIGT -> beim Live-Lauf mit Owner verifizieren.
-const ELEVENLABS_VOICE_PREFIX = "ElevenLabs";
 // Telnyx-AI-Assistant-REST-Basis (live UNBESTAETIGT, mit Owner fixen; Muster voice.js).
 const AI_ASSISTANTS_PATH = "/v2/ai/assistants";
 const ASSISTANT_NAME = "Hermes"; // Telnyx-Pflicht-Scaffold, kein Verhaltensfeld
+// R5: Telnyx wartet nach dem Opening-Speak diese Stille ab, bevor es den Assistant mit einer
+// "[long silence]"-System-Message anstoesst (Assistant-Greeting ist leer, Regel 2). Default 10
+// erzeugte 12.4s Totzeit im Live-Call (RCA 2026-07-12); 4s = spuerbarer Anlauf, ohne dem
+// Angerufenen ins Wort zu fallen. Telnyx-Spec: telephony_settings.user_idle_reply_secs, integer >= 0.
+const USER_IDLE_REPLY_SECS = 4;
 // Telnyx verlangt `instructions` als Pflichtfeld (sonst HTTP 400 10004 /body/instructions).
 // Im BYO-Custom-LLM-Betrieb ist es INERT: der Shim (agentTurn/claude.js) baut Systemprompt +
 // Kontext selbst und ignoriert die von Telnyx gespiegelten messages/system - dieser Text erreicht
@@ -80,11 +83,16 @@ export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef
       forward_metadata: true, // legt call_control_id in den Body (E1)
     },
     voice_settings: {
-      voice: `${ELEVENLABS_VOICE_PREFIX}.${voiceModel}.${voiceId}`,
+      voice: elevenLabsVoiceName({ model: voiceModel, voiceId }), // eine Format-Quelle (G5)
       api_key_ref: apiKeyRef,
+      // KEIN `type`: das ASSISTANT-voice_settings ist flach (Telnyx-Spec: required ["voice"]);
+      // nur der Call-Control-speak nutzt die per `type` diskriminierte Union.
     },
     greeting: "", // Regel 2: der Assistant spricht NIE zuerst
     interruption_settings: { enable: true }, // Barge-in an (Launch-Pflicht)
+    // Der Update-POST ist ein DEEP-MERGE: NUR dieses eine Feld senden - time_limit_secs,
+    // recording_settings, default_texml_app_id, transcription ueberleben unveraendert.
+    telephony_settings: { user_idle_reply_secs: USER_IDLE_REPLY_SECS },
   };
 }
 
@@ -119,17 +127,23 @@ function report(smokePass, reason) {
   process.exit(smokePass ? 0 : 1);
 }
 
-// Versendet die gebaute Config an die Telnyx-Assistant-API. Create (POST) wenn keine
-// bestehende ID uebergeben, sonst Update (PUT /{id}). assertTelnyxOk = EINE Fehler-Parse-
-// Stelle (G5), allowlisted, kein Roh-Body/Key-Leak (Regel 4/5). Gibt die assistant_id zurueck.
-async function sendAssistantConfig(assistantConfig, existingId) {
+// BUGFIX afix-p1: Der Update ist POST /v2/ai/assistants/{id} - ein PUT existiert NICHT
+// (HTTP 404; die Telnyx-OpenAPI-Spec kennt unter /ai/assistants/{assistant_id} nur
+// GET/POST/DELETE). Das Re-Provisioning war damit nie funktionsfaehig. Create bleibt
+// POST auf die Collection. Exportiert, damit der Offline-Test die Methode/URL ohne Netz
+// festnagelt (P11).
+export function assistantRequest(existingId) {
   const base = `${config.telnyxApiBase}${AI_ASSISTANTS_PATH}`;
-  const url = existingId ? `${base}/${existingId}` : base;
-  const res = await fetch(url, {
-    method: existingId ? "PUT" : "POST",
-    headers: headers(),
-    body: JSON.stringify(assistantConfig),
-  });
+  return { method: "POST", url: existingId ? `${base}/${existingId}` : base };
+}
+
+// Versendet die gebaute Config an die Telnyx-Assistant-API. Create (POST auf die Collection)
+// wenn keine bestehende ID uebergeben, sonst Update (POST /{id}, s. assistantRequest).
+// assertTelnyxOk = EINE Fehler-Parse-Stelle (G5), allowlisted, kein Roh-Body/Key-Leak
+// (Regel 4/5). Gibt die assistant_id zurueck.
+async function sendAssistantConfig(assistantConfig, existingId) {
+  const { method, url } = assistantRequest(existingId);
+  const res = await fetch(url, { method, headers: headers(), body: JSON.stringify(assistantConfig) });
   await assertTelnyxOk(res, "provisionAssistant", { attachStatus: true });
   const json = await res.json().catch(() => ({}));
   const data = json.data || json; // Telnyx-v2 wrappt teils in {data} (Muster voice.js)
