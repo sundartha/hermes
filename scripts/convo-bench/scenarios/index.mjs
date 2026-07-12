@@ -5,6 +5,7 @@ import terminDuenn from "./termin-duenn.mjs";
 import partnerKnapp from "./partner-knapp.mjs";
 import sttNoise from "./stt-noise.mjs";
 import inboundNachricht from "./inbound-nachricht.mjs";
+import kauderwelschErstantwort from "./kauderwelsch-erstantwort.mjs";
 
 export const SCENARIOS = Object.freeze({
   [friseurVoll.id]: friseurVoll,
@@ -12,6 +13,7 @@ export const SCENARIOS = Object.freeze({
   [partnerKnapp.id]: partnerKnapp,
   [sttNoise.id]: sttNoise,
   [inboundNachricht.id]: inboundNachricht,
+  [kauderwelschErstantwort.id]: kauderwelschErstantwort,
 });
 
 export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));
