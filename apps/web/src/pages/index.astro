@@ -36,9 +36,18 @@ const pricingHref = "/preise";
          traegt den Link bereits selbst). Ohne den Link findet Googles
          Favicon-Crawler kein Icon fuer die Domain - und dessen Cache speist
          u.a. das Connector-Icon in claude.ai (app.sundartha.com serviert
-         dieselbe Seite als Gateway-Wurzel). -->
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+         dieselbe Seite als Gateway-Wurzel).
+
+         Reihenfolge ist Absicht: ICO zuerst, SVG danach. Googles
+         Favicon-Crawler nimmt das erste verwertbare Icon; er verarbeitet SVG
+         nicht zuverlaessig - stand SVG vorn, konnte er ohne Icon abziehen.
+         apple-touch-icon deckt die Rasterfall-Heuristik (Bitmap statt ICO)
+         mit ab. Das aendert den heutigen (vergifteten) Cache-Eintrag nicht,
+         sorgt aber dafuer, dass ein spaeterer Recrawl garantiert die
+         Fluegel-Marke aufnimmt. -->
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   </head>
   <body>
     <div class="hero-root">
