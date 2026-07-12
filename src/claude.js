@@ -215,10 +215,19 @@ function trimGoalForSpeech(goal) {
 export function toolDefs(tenantId) {
   const s = store.tenantContext(tenantId).settings;
   const tools = [
+    // afix-p4 (RCA-Wurzel R3): Das Modell schloss aus STT-Kauderwelsch, das Ziel sei
+    // erreicht, und rief end_call. Das enge Verbot sitzt deshalb GENAU HIER, am Tool-
+    // Entscheidungspunkt (Lehre call-quality-chain: breite Stil-/Meta-Regeln im Prompt-
+    // Rumpf kippen bei Haiku in Ueberkorrektur, Verbote an der Tool-Description wirken).
+    // Der letzte Satz ist der Ausstieg: er verhindert, dass der Agent aus Vorsicht GAR
+    // nicht mehr auflegt. Keine Sprach-Variante noetig - toolDefs ist locale-frei.
     {
       name: "end_call",
       description:
-        "Beendet das Telefonat. IMMER erst aufrufen, NACHDEM du dich verabschiedet hast.",
+        "Beendet das Telefonat. IMMER erst aufrufen, NACHDEM du dich verabschiedet hast. " +
+        "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenuebers verstanden hast. " +
+        "War er unverstaendlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
+        "bleibt die Antwort danach unverstaendlich, verabschiede dich und rufe end_call auf.",
       input_schema: {
         type: "object",
         properties: { reason: { type: "string", description: "Kurzer Grund" } },

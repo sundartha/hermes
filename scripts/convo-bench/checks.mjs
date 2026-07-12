@@ -131,6 +131,25 @@ function checkMessageTaken(runResult) {
   return { id, pass, detail: pass ? "ok" : "keine actionItems im Store" };
 }
 
+// afix-p4 (RCA R3): Der Agent darf nach einer unverstaendlichen Aeusserung nicht SOFORT
+// auflegen - genau der Live-Defekt. texmlSamples[0] ist das Opening, texmlSamples[1] die
+// erste Reaktion auf die Aeusserung des Gegenuebers; ein agent_hangup mit turnCount <= 2
+// heisst also "aufgelegt statt nachgefragt" (G25: benannte Konstante statt nackter 2/3).
+const MIN_TEXML_TURNS_BEFORE_AGENT_HANGUP = 3;
+
+function checkNoHangupOnUnintelligibleReply(runResult) {
+  const id = "no_hangup_on_unintelligible_reply";
+  if (runResult.endedVia !== "agent_hangup") return { id, pass: true, detail: "n/a (kein Agent-Hangup)" };
+  const pass = runResult.turnCount >= MIN_TEXML_TURNS_BEFORE_AGENT_HANGUP;
+  return {
+    id,
+    pass,
+    detail: pass
+      ? `Hangup erst nach ${runResult.turnCount} Agenten-Turns`
+      : `Agent legte direkt nach der unverstaendlichen Aeusserung auf (${runResult.turnCount} Agenten-Turns)`,
+  };
+}
+
 // EIN Registry-Objekt statt verstreuter switch/if-Ketten (G23) - jede Check-Funktion
 // entscheidet selbst per n/a-Pass, ob sie fuer Richtung/Szenario ueberhaupt zutrifft.
 const CHECKS = {
@@ -144,6 +163,7 @@ const CHECKS = {
   no_tool_loop_exhaustion: checkNoToolLoopExhaustion,
   inbound_no_disclosure_leak: checkInboundNoDisclosureLeak,
   message_taken: checkMessageTaken,
+  no_hangup_on_unintelligible_reply: checkNoHangupOnUnintelligibleReply,
 };
 
 // Nur die vom Szenario deklarierten Check-IDs laufen lassen (scenario.checks: string[]).
