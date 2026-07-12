@@ -8,15 +8,19 @@ Stand 2026-07-12.
 2168/2168 gruen, dualer Review (Opus) bestanden nach ZWEI Fix-Runden — der erste Wurf hatte
 einen echten R4-Rueckfall fuer en/fr eingebaut (siehe K3).
 
-**NICHT ausgerollt.** Zwei Dinge kann nur der Owner tun:
-1. **Provisioner-Lauf** (`node scripts/telnyx-assistant-provision.mjs`) — erst dadurch werden
-   K1 (`interrupt_prediction_threshold: 0.4`) und K2 (`background_audio: office`) am
-   Live-Assistant scharf. Der Provisioner prueft jetzt selbst per GET nach, ob Telnyx die
-   beiden Felder wirklich uebernommen hat, und wirft sonst (fail-closed) — ein gruener Lauf
-   beweist also, dass sie live sind.
-2. **EIN gebuendelter Testanruf** — inkl. der Overlap-Probe. **E1.2 ist der harte Gate:**
-   Faellt der Owner der KI mit einem echten SATZ ins Wort, muss sie weiterhin SOFORT stoppen.
-   Tut sie das nicht, geht `interrupt_prediction_threshold` sofort zurueck auf 0.0.
+**K1 + K2 sind LIVE** (Provisioner-Lauf 2026-07-12, `smokePass=true`, unabhaengig per GET
+gegengeprueft): `interrupt_prediction_threshold: 0.4`, `background_audio: office/0.3`,
+`interruption_settings.enable: true` (Barge-in intakt). Safety-Felder haben den Deep-Merge
+ueberlebt (time_limit_secs 1800, recording, deepgram/flux, `greeting: ""`). Assistant-Anzahl
+unveraendert 4 -> kein versehentlicher Create.
+
+**K0 + K3 sind NICHT deployt** (Code liegt nur auf dem Branch). Sie wirken erst nach
+Merge + Render-Deploy.
+
+**Offenes Owner-Gate: EIN Testanruf** — inkl. Overlap-Probe. **E1.2 ist das harte Gate:**
+Faellt der Owner der KI mit einem echten SATZ ins Wort, muss sie weiterhin SOFORT stoppen.
+Tut sie das nicht, geht `interrupt_prediction_threshold` sofort zurueck auf 0.0
+(Barge-in ist Launch-Pflicht).
 
 Offen bleiben: G1 (Gate-Experiment Streaming), K5, K6, K4, K8, K9 — unveraendert wie unten.
 
