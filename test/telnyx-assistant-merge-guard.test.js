@@ -14,6 +14,17 @@
 // koennen: preservedFieldSnapshot() haette fuer die drei verschachtelten Felder immer ein
 // leeres Snapshot geliefert und fieldsLostOnUpdate() waere immer leer geblieben, ganz gleich
 // was der Code tut (falscher gruener Test, Lehre rca-lessons-timezone-and-fixtures).
+//
+// 2. Review-Runde (MAJOR-2/MAJOR-3, PLAN-CONVERSATION-OPTIMIZATION.md):
+// - MAJOR-2: die K1/K2-Verifikation (fieldsNotApplied) stand komplett im existingId-Zweig -
+//   ein Create-Lauf (kein existingId) meldete smokePass=true, OHNE K1/K2 je gegengeprueft zu
+//   haben. sendAssistantConfig macht jetzt IMMER einen GET-nach-Update/-Create; nur der
+//   fieldsLostOnUpdate-Merge-Check bleibt Update-only (er braucht ein "Vorher").
+// - MAJOR-3: APPLIED_FIELDS_TO_VERIFY trug bisher background_audio als GANZES Objekt,
+//   fieldsNotApplied verglich per JSON.stringify - reihenfolge-sensitiv und intolerant gegen
+//   Zusatzfelder, die Telnyx an anderer Stelle im selben Objekt ergaenzen koennte (z.B.
+//   media_url:null aus der oneOf-Union). Jetzt werden nur noch die SKALAREN Blaetter
+//   (background_audio_value, background_audio_volume) mit === verglichen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -21,6 +32,8 @@ import {
   sendAssistantConfig,
   fieldsLostOnUpdate,
   preservedFieldSnapshot,
+  fieldsNotApplied,
+  appliedFieldSnapshot,
 } from "../scripts/telnyx-assistant-provision.mjs";
 
 const MINIMAL_CONFIG = { telephony_settings: { user_idle_reply_secs: 4 } };
@@ -91,15 +104,26 @@ test("preservedFieldSnapshot: fehlendes telephony_settings-Objekt -> kein Crash,
   assert.deepEqual(preservedFieldSnapshot(undefined), {});
 });
 
-test("sendAssistantConfig: Create (kein existingId) macht GENAU EINEN POST, KEIN Merge-Check", async () => {
+// MAJOR-2-Fix (2. Review-Runde): Create macht KEINEN Vorher-GET (kein existingId, nichts zu
+// verlieren -> KEIN Merge-Check), aber SEHR WOHL einen Nachher-GET - die K1/K2-Verifikation
+// (fieldsNotApplied) laeuft jetzt auch beim Create. calls.length ist deshalb 2 (POST+GET),
+// nicht mehr 1 (Bestand vor MAJOR-2 - s. die beiden dedizierten Tests unten).
+test("sendAssistantConfig: Create (kein existingId) macht POST + Nachher-GET, KEIN Merge-Check", async () => {
   config.telnyxApiBase = "https://telnyx.test";
   config.telnyxApiKey = "test-key";
-  await withQueuedFetch([{ json: { data: { id: "asst_new" } } }], async (calls) => {
-    const id = await sendAssistantConfig(MINIMAL_CONFIG, "");
-    assert.equal(id, "asst_new");
-    assert.equal(calls.length, 1, "Create braucht keinen Vorher/Nachher-GET (nichts zu verlieren)");
-    assert.equal(calls[0].method, "POST");
-  });
+  await withQueuedFetch(
+    [{ json: { data: { id: "asst_new" } } }],
+    async (calls) => {
+      const id = await sendAssistantConfig(MINIMAL_CONFIG, "");
+      assert.equal(id, "asst_new");
+      assert.deepEqual(
+        calls.map((c) => c.method),
+        ["POST", "GET"],
+        "Create macht keinen Vorher-GET (nichts zu verlieren), aber einen Nachher-GET (K1/K2)",
+      );
+      assert.ok(calls[1].url.endsWith("/v2/ai/assistants/asst_new"), "Nachher-GET zielt auf die frische ID");
+    },
+  );
 });
 
 test("sendAssistantConfig: Update, Sicherheitsfelder unveraendert -> GET/POST/GET, id kommt durch", async () => {
@@ -170,4 +194,152 @@ test("sendAssistantConfig: Update ersetzt telephony_settings als Ganzes -> wirft
       );
     },
   );
+});
+
+// S3-5 (Review-Befund, PLAN-CONVERSATION-OPTIMIZATION.md K1/K2): interrupt_prediction_threshold
+// fehlt in der oeffentlichen Telnyx-OpenAPI-Spec - der wahrscheinlichste Fehlermodus ist ein
+// STILLER Drop beim Schreiben (POST bleibt 200, das Feld verschwindet einfach). Diese Tests
+// bilden genau dieses Risiko nach: derselbe GET-nach-Update-Ablauf wie oben, jetzt zusaetzlich
+// gegen die gesendeten K1/K2-Werte geprueft.
+const K_CONFIG = {
+  telephony_settings: { user_idle_reply_secs: 4 },
+  interruption_settings: { enable: true, interrupt_prediction_threshold: 0.4 },
+  voice_settings: {
+    voice: "ElevenLabs.Default.voice_xyz",
+    background_audio: { type: "predefined_media", value: "office", volume: 0.3 },
+  },
+};
+
+// MAJOR-3-Fix (2. Review-Runde): background_audio ist jetzt als ZWEI SKALARE Blaetter
+// eingetragen (background_audio_value/-_volume), nicht mehr als verschachteltes Objekt -
+// appliedFieldSnapshot liest ueber readByPath weiterhin generisch, liefert fuer die tieferen
+// Pfade jetzt aber Zahl/String statt eines Objekts.
+test("appliedFieldSnapshot: liest interrupt_prediction_threshold + background_audio_value/-_volume ueber den vollen Pfad", () => {
+  const snapshot = appliedFieldSnapshot(K_CONFIG);
+  assert.deepEqual(snapshot, {
+    interrupt_prediction_threshold: 0.4,
+    background_audio_value: "office",
+    background_audio_volume: 0.3,
+  });
+});
+
+test("fieldsNotApplied: abweichender/fehlender Wert -> im Ergebnis; identisch -> leer", () => {
+  assert.deepEqual(
+    fieldsNotApplied({ interrupt_prediction_threshold: 0.4 }, { interrupt_prediction_threshold: undefined }),
+    ["interrupt_prediction_threshold"],
+  );
+  assert.deepEqual(
+    fieldsNotApplied({ interrupt_prediction_threshold: 0.4 }, { interrupt_prediction_threshold: 0.4 }),
+    [],
+  );
+});
+
+// MAJOR-3 (2. Review-Runde, der eigentliche Regressionsschutz): beweist, dass der Guard NICHT
+// wirft, wenn Telnyx' GET-Antwort zusaetzliche Felder enthaelt (media_url:null aus der
+// oneOf-Union, die WIR nicht gesendet haben) oder die Keys in ANDERER Reihenfolge liefert als
+// K_CONFIG (dort: type, value, volume - hier: media_url, volume, value, type). Der alte
+// JSON.stringify-Deep-Equal (Bestand vor MAJOR-3) haette in genau diesem, realistischen Fall
+// GEWORFEN, obwohl der POST erfolgreich war.
+test("MAJOR-3: fieldsNotApplied/appliedFieldSnapshot tolerieren Telnyx-Zusatzfelder und andere Key-Reihenfolge in background_audio", () => {
+  const sentSnapshot = appliedFieldSnapshot(K_CONFIG);
+  const liveWithExtraFieldAndReorderedKeys = {
+    interruption_settings: { interrupt_prediction_threshold: 0.4 },
+    voice_settings: {
+      background_audio: {
+        media_url: null, // Zusatzfeld aus der oneOf-Union, das WIR nicht gesendet haben
+        volume: 0.3,
+        value: "office", // andere Reihenfolge als K_CONFIG (dort: type, value, volume)
+        type: "predefined_media",
+      },
+    },
+  };
+  const liveSnapshot = appliedFieldSnapshot(liveWithExtraFieldAndReorderedKeys);
+  assert.deepEqual(fieldsNotApplied(sentSnapshot, liveSnapshot), []);
+});
+
+test("sendAssistantConfig: K1/K2-Felder live bestaetigt (GET-nachher matcht den gesendeten Wert) -> kein Fehler", async () => {
+  config.telnyxApiBase = "https://telnyx.test";
+  config.telnyxApiKey = "test-key";
+  const before = { data: assistantWithSafetyFields() };
+  const after = {
+    data: assistantWithSafetyFields({
+      interruption_settings: { enable: true, interrupt_prediction_threshold: 0.4 },
+      voice_settings: { background_audio: { type: "predefined_media", value: "office", volume: 0.3 } },
+    }),
+  };
+  await withQueuedFetch(
+    [{ json: before }, { json: { data: { id: "asst_1" } } }, { json: after }],
+    async (calls) => {
+      const id = await sendAssistantConfig(K_CONFIG, "asst_1");
+      assert.equal(id, "asst_1");
+      assert.equal(calls.length, 3, "kein zusaetzlicher GET - derselbe GET-nachher deckt beide Pruefungen ab");
+    },
+  );
+});
+
+test("sendAssistantConfig: Telnyx verwirft interrupt_prediction_threshold still (GET-nachher fehlt das Feld) -> wirft, K1 NICHT live", async () => {
+  config.telnyxApiBase = "https://telnyx.test";
+  config.telnyxApiKey = "test-key";
+  const before = { data: assistantWithSafetyFields() };
+  const after = {
+    data: assistantWithSafetyFields({
+      // interrupt_prediction_threshold fehlt (still verworfen), enable bleibt allein uebrig;
+      // background_audio kam korrekt an - nur EIN Feld darf im Fehler genannt werden.
+      interruption_settings: { enable: true },
+      voice_settings: { background_audio: { type: "predefined_media", value: "office", volume: 0.3 } },
+    }),
+  };
+  await withQueuedFetch(
+    [{ json: before }, { json: { data: { id: "asst_1" } } }, { json: after }],
+    async () => {
+      await assert.rejects(
+        () => sendAssistantConfig(K_CONFIG, "asst_1"),
+        (err) => {
+          assert.match(err.message, /K1\/K2-Verifikation fehlgeschlagen/);
+          assert.match(err.message, /interrupt_prediction_threshold/);
+          assert.ok(!/background_audio/.test(err.message), "background_audio kam korrekt an -> kein Verlust");
+          return true;
+        },
+      );
+    },
+  );
+});
+
+// MAJOR-2 (2. Review-Runde, der eigentliche Regressionsschutz): VORHER stand die K1/K2-
+// Verifikation komplett im existingId-Zweig - ein Create-Lauf (keine TELNYX_ASSISTANT_ID, z.B.
+// Disaster-Recovery/Neuanlage) meldete smokePass=true, OHNE je gegengeprueft zu haben, ob
+// Telnyx die gesendeten Felder wirklich uebernommen hat. Diese beiden Tests beweisen, dass die
+// Verifikation jetzt AUCH ohne existingId aktiv ist (Erfolg UND Fehlschlag) - spiegelbildlich
+// zu den beiden K1/K2-Update-Tests oben, nur mit existingId="".
+test("sendAssistantConfig: Create, K1/K2-Felder live bestaetigt -> kein Fehler (MAJOR-2)", async () => {
+  config.telnyxApiBase = "https://telnyx.test";
+  config.telnyxApiKey = "test-key";
+  const after = { data: { id: "asst_new", ...K_CONFIG } };
+  await withQueuedFetch([{ json: { data: { id: "asst_new" } } }, { json: after }], async (calls) => {
+    const id = await sendAssistantConfig(K_CONFIG, "");
+    assert.equal(id, "asst_new");
+    assert.equal(calls.length, 2, "POST + genau ein Nachher-GET, kein Vorher-GET (kein existingId)");
+  });
+});
+
+test("sendAssistantConfig: Create, Telnyx verwirft interrupt_prediction_threshold still -> wirft AUCH ohne existingId (MAJOR-2)", async () => {
+  config.telnyxApiBase = "https://telnyx.test";
+  config.telnyxApiKey = "test-key";
+  const after = {
+    data: {
+      id: "asst_new",
+      interruption_settings: { enable: true }, // interrupt_prediction_threshold fehlt (still verworfen)
+      voice_settings: { background_audio: { type: "predefined_media", value: "office", volume: 0.3 } },
+    },
+  };
+  await withQueuedFetch([{ json: { data: { id: "asst_new" } } }, { json: after }], async () => {
+    await assert.rejects(
+      () => sendAssistantConfig(K_CONFIG, ""),
+      (err) => {
+        assert.match(err.message, /K1\/K2-Verifikation fehlgeschlagen/);
+        assert.match(err.message, /interrupt_prediction_threshold/);
+        return true;
+      },
+    );
+  });
 });

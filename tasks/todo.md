@@ -114,3 +114,60 @@ Offen (Owner-Gate): E4.1 (convo-bench) BLOCKIERT — lokaler ANTHROPIC_API_KEY l
 - [ ] Deploy im No-Call-Fenster (push origin + upstream, manueller Render-Deploy, [boot]-Banner pruefen).
 - [ ] EIN gebuendelter Testanruf (Skript i-v inkl. Overlap-Probe = R1-Gate <=5s) -> jede E*-Erwartung
       einzeln PASS/FAIL in tasks/-Report.
+
+---
+
+# Gespraechsqualitaet optimieren (PLAN-CONVERSATION-OPTIMIZATION.md, 2026-07-12)
+
+Strategiedokument fertig, 6 Recherche-Spuren + 2 adversariale Opus-Pruefungen. Wartet auf
+Owner-Freigabe. Kernbefund: Telnyx hat zwei Features gegen unsere zwei groessten Probleme —
+beide sind bei uns per Default AUS.
+
+- [x] K0 Messgrundlage (IMPL, Suite gruen; Owner-Gate: count_tokens braucht gueltigen Key): Metadaten-Auswerteskript (Telnyx `metadata` je Message liefert
+      `end_user_perceived_latency_ms`, `llm_first_token_duration_ms` u.a.) + Shim-Request-Zaehler
+      pro Call + `count_tokens`-Messung. Kein Anruf noetig. Vorbedingung fuer K5/K6/K8.
+- [x] K1 `interrupt_prediction_threshold` 0.0 -> 0.4 (IMPL; NICHT ausgerollt -> Provisioner-Lauf = Owner-Gate) (Provisioner-Zeile). Filtert "mhm"/"ja" aus
+      der Unterbrechungs-Erkennung -> direkter Schlag gegen S1 (Verwerf-Fenster).
+      HARTES GATE E1.2: echtes Barge-in muss weiter sofort stoppen, sonst Rollback auf 0.0.
+- [x] K2 `background_audio` `silence` -> `office` (IMPL; NICHT ausgerollt -> Provisioner-Lauf = Owner-Gate) (volume 0.3). Beweist zugleich, ob es im
+      `ai_assistant_start`-Pfad ueberhaupt greift (unbelegt).
+- [x] K3 Farewell-Konstanten (IMPL, NUR fuer `de` - en/fr behalten das Bestandsverhalten, bis gemessen) aus den vorhandenen Aufnahmen kalibrieren (70ms/Zeichen ueberschaetzt
+      ElevenLabs -> 12s-Cap wird immer ausgeschoepft). Kein TTS-Ende-Event existiert (doppelt bewiesen).
+- [ ] G1 GATE-EXPERIMENT: Konsumiert Telnyx unsere SSE-Chunks inkrementell? Wegwerf-Assistant +
+      kuenstlich verzoegerte Chunks + 1 Testanruf. ROT => K5 und K6 gestrichen.
+- [ ] K5 Sentence-Streaming im Shim (NUR bei G1 gruen) — phase-impl-lean PFLICHT (geteilter
+      agentTurn-Seam, llm.js hat heute KEIN Streaming, Text-vor-Tool ist NICHT garantiert).
+- [ ] K6 Filler/Soft-Timeout nach ElevenLabs-Vorbild (nur nach K5) — phase-impl-lean.
+- [ ] K4 `keyterm` auf flux (per Call, wie der language-Hint) gegen den STT-Restfehler.
+- [ ] K8 Eager-EOT einschalten — OWNER-KOSTENENTSCHEIDUNG: +50-70% LLM-Calls (Deepgram-Zahl),
+      spekulative Turns sind fuer uns UNSICHTBAR. K0-Zaehler ist harte Vorbedingung.
+- [ ] K9 Bench (E4.1) — weiterhin BLOCKIERT: lokaler ANTHROPIC_API_KEY liefert 401 (07-12 geprueft).
+
+## Verworfen (mit Beleg, nicht aus Bequemlichkeit)
+- Prompt-Caching-Phase: Haiku 4.5 braucht 4096 Token Mindest-Praefix, unser Praefix ~1200-1700
+  -> Caching ist HEUTE inert und waere ohnehin ein Kosten-, kein Latenz-Hebel.
+- STT-Modellwechsel: Interruption Prediction (= K1) ist flux-exklusiv. Wechsel wuerde den besten
+  Fix gegen S1 opfern, um einen seltenen Transkriptions-Fetzen zu reparieren.
+- `start_speaking_plan`-Tuning: greift bei flux laut Spec nicht.
+- Hangup-Fix via `send_conversation_message_events`: null Spec, null Doku, GitHub-weit 1 fremdes
+  Repo, das das Flag setzt und nie ausliest.
+
+## Review-Ergebnis K0-K3 (2026-07-12, dualer Opus-Review, ZWEI Fix-Runden)
+
+Suite 2168/2168 gruen. Clean-Code: PASS (0x S1, 0x S2). Safety: PASS erst nach Runde 2.
+
+Der Safety-Reviewer hat einen echten Rueckfall gefunden, den ich sonst deployt haette:
+Die Farewell-Kalibrierung wurde an AUSSCHLIESSLICH deutschen Sprachpassagen gemessen
+(17.3-20.3 Zeichen/s), aber global angewandt. Englisch hat bei gleichem Sprechtempo
+deutlich WENIGER Zeichen/s (kuerzere Woerter) -> ein englischer Abschiedssatz waere
+ABGESCHNITTEN worden = R4 zurueck, der Bug, den P3 gerade behoben hat.
+Auch die erste Korrektur war noch falsch (der globale minMs trug die de-Kalibrierung
+weiter in die ungemessenen Sprachen).
+
+Endstand: `minMs` lebt IN jedem Kalibrierungs-Eintrag. Nur `de` bekommt die gemessenen
+Werte; jede andere/unbekannte Sprache behaelt das exakte Bestandsverhalten. Test F12 nagelt
+die Invariante fest: der Fallback-Delay liegt fuer KEINE Zeichenzahl unter der alten Formel.
+
+LEHRE (in lessons.md): Eine Messung an EINER Sprache/Konfiguration darf nie global
+angewandt werden. Der Default fuer alles Ungemessene ist "Bestandsverhalten behalten",
+nicht "der neue Wert wird schon passen".

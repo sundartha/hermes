@@ -83,8 +83,10 @@ test("E1: end_call=true + vorhandene callControlId -> speech zuerst, kein sofort
 });
 
 // afix-p3 (P14, eigener Test): der farewell_scheduled-Log ist die einzige Live-Unterscheidung
-// zwischen "Hangup geplant" und "end_call kam gar nicht" - PII-frei (nur callId + delayMs).
-test("E1b: end_call=true loggt farewell_scheduled mit callId und delayMs (PII-frei)", async () => {
+// zwischen "Hangup geplant" und "end_call kam gar nicht" - PII-frei (callId + delayMs +
+// turnSeq). turnSeq ergaenzt seit MINOR-1 (2. Review-Runde): dokumentiert, nach wie vielen
+// Turns der Call den Abschied ausgeloest hat - der erste (und einzige) Turn dieses Tests -> 1.
+test("E1b: end_call=true loggt farewell_scheduled mit callId, delayMs und turnSeq (PII-frei)", async () => {
   const call = makeCall();
   const store = fakeStore({ call });
   const agentTurn = agentTurnSpy({ speech: "Auf Wiederhoeren", endCall: true });
@@ -95,8 +97,14 @@ test("E1b: end_call=true loggt farewell_scheduled mit callId und delayMs (PII-fr
   const lines = await captureConsole(() => handler(validReq(call), res));
 
   assert.ok(
-    lines.some((l) => l.includes("[telnyx-shim] farewell_scheduled") && l.includes('"callId":"call_x"') && l.includes('"delayMs"')),
-    "farewell_scheduled-Log mit callId+delayMs fehlt",
+    lines.some(
+      (l) =>
+        l.includes("[telnyx-shim] farewell_scheduled") &&
+        l.includes('"callId":"call_x"') &&
+        l.includes('"delayMs"') &&
+        l.includes('"turnSeq":1'),
+    ),
+    "farewell_scheduled-Log mit callId+delayMs+turnSeq fehlt",
   );
 });
 

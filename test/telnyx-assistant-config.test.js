@@ -64,6 +64,25 @@ test("buildAssistantConfig: Barge-in (interruption_settings) ist an", () => {
   assert.equal(cfg.interruption_settings.enable, true);
 });
 
+// K1 (PLAN-CONVERSATION-OPTIMIZATION.md): Regressionsbremse gegen versehentliches Abschalten
+// von Barge-in. enable MUSS true bleiben, unabhaengig vom Threshold-Tuning-Wert daneben.
+test("K1: interruption_settings.enable bleibt true UND interrupt_prediction_threshold=0.4", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.equal(cfg.interruption_settings.enable, true, "Barge-in ist Launch-Pflicht, darf nie aus sein");
+  assert.equal(cfg.interruption_settings.interrupt_prediction_threshold, 0.4);
+});
+
+// K2 (PLAN-CONVERSATION-OPTIMIZATION.md): background_audio traegt genau die drei Felder der
+// predefined_media-Variante mit den geplanten Werten (office statt silence, gedaempftes volume).
+test("K2: voice_settings.background_audio ist predefined_media/office/0.3", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.deepEqual(cfg.voice_settings.background_audio, {
+    type: "predefined_media",
+    value: "office",
+    volume: 0.3,
+  });
+});
+
 test("buildAssistantConfig: instructions gesetzt (Telnyx-Pflichtfeld), aber ohne Disclosure/Klartext-Key (Regel 2)", () => {
   const cfg = buildAssistantConfig(ARGS);
   // Telnyx verlangt non-empty instructions (HTTP 400 10004 sonst); im BYO-Betrieb inert.

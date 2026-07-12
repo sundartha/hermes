@@ -223,13 +223,21 @@ function logShimGate(payload) {
 
 // Erfolgreicher Turn - UNCONDITIONAL (unabhaengig von metricsEnabled). Im Vorfall war
 // metricsEnabled AUS = Null-Turn-Signal; genau diese Luecke schliesst turn_ok. Nur
-// call.id + latencyMs (PII-frei), separater Kanal/Prefix als der opt-in metrics-Seam.
+// call.id + latencyMs + turnSeq (PII-frei), separater Kanal/Prefix als der opt-in
+// metrics-Seam. turnSeq (K0, PLAN-CONVERSATION-OPTIMIZATION.md) ist der laufende
+// Shim-Request-Zaehler dieses Calls (watchdog.observeTurn) - zaehlt NUR Requests, die die
+// vorgelagerten Gates (Existenz-Flag, Auth, ccid-Korrelation, Call-aktiv) bereits passiert
+// haben, NICHT jeden Telnyx-Aufruf des Shims. Macht ueber mehrere Zeilen (turn_ok UND die
+// Gate-/Fehler-Zeilen unten, S3-4/MINOR-1) sichtbar, wie viele Turns dieser Call bereits
+// verbraucht hat - Vorbedingung fuer die spaetere Eager-EOT-Kostensichtbarkeit (K8).
 function logShimTurnOk(payload) {
   console.log(formatShimLine("turn_ok", payload));
 }
 
 // afix-p3: der Hangup ist geplant, nicht ausgefuehrt - ohne diese Zeile waere im Live-Log
-// nicht unterscheidbar, ob end_call gefallen ist. Nur callId + delayMs (PII-frei, kein Text).
+// nicht unterscheidbar, ob end_call gefallen ist. callId + delayMs + turnSeq (MINOR-1-Fix, 2.
+// Review-Runde: turnSeq dokumentiert, nach wie vielen Turns der Call den Abschied ausgeloest
+// hat - PII-frei, kein Text).
 function logShimFarewell(payload) {
   console.log(formatShimLine("farewell_scheduled", payload));
 }
@@ -363,9 +371,18 @@ export function makeTelnyxLlmShim({
     // Leer-Turn-Streak fort. M konsekutive nicht-substanzielle Turns -> kontrollierte
     // Terminierung, VOR agentTurn (kein Token-Burn): Abschiedssatz ZUERST, dann realer
     // Hangup (Muster Budget-Gate, Schritt 6). Substanz = EINE Quelle mit stab-p7.
+    // K0: observeTurn liefert zusaetzlich turnSeq (Shim-Request-Nummer dieses Calls) - rein
+    // additiv, veraendert weder diese noch die nachfolgenden Gates (Rate-/Budget-Gate) an
+    // Reihenfolge oder Verhalten. MINOR-1-Fix: turnSeq wird JETZT in JEDE Gate-Log-Zeile ab
+    // hier (loop_guard/rate_limited/budget_*) UND in die agentTurn-Fehlerzeile durchgereicht,
+    // nicht mehr nur in die turn_ok-Zeile - genau diese Terminierungspfade (Loop-Guard/Budget)
+    // beenden den Call, ohne dass turn_ok je feuert; ohne die Ergaenzung ging der finale
+    // Zaehlerstand fuer sie verloren (K0 ist die harte Vorbedingung fuer die spaetere Eager-
+    // EOT-Kostensichtbarkeit, K8).
     const callerText = lastUserText(req.body);
-    if (watchdog.observeTurn(call.id, callerText).loopExceeded) {
-      logShimGate({ reason: "loop_guard", callId: call.id });
+    const { loopExceeded, turnSeq } = watchdog.observeTurn(call.id, callerText);
+    if (loopExceeded) {
+      logShimGate({ reason: "loop_guard", callId: call.id, turnSeq });
       writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
       await terminateCall(call.id);
       return;
@@ -375,7 +392,7 @@ export function makeTelnyxLlmShim({
     // Ablehnung OHNE agentTurn-Aufruf (kein Token-Burn). Gueltige Degradations-Completion
     // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
     if (!shimRateHit(call.id).allowed) {
-      logShimGate({ reason: "rate_limited", callId: call.id });
+      logShimGate({ reason: "rate_limited", callId: call.id, turnSeq });
       return writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
     }
 
@@ -393,6 +410,7 @@ export function makeTelnyxLlmShim({
         reason: tenantBudgetOver ? "budget_tenant" : "budget_global",
         callId: call.id,
         tenantId: call.tenantId,
+        turnSeq,
       });
       writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
       await terminateCall(call.id);
@@ -411,7 +429,7 @@ export function makeTelnyxLlmShim({
       // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
       // war metricsEnabled AUS = kein Lebenszeichen). Bewusst getrennte Kanaele/Prefixe.
       metrics.logShimTurn({ callId: call.id, latencyMs });
-      logShimTurnOk({ callId: call.id, latencyMs });
+      logShimTurnOk({ callId: call.id, latencyMs, turnSeq });
       // P5 (OBS/R6): unter demselben default-off TELNYX_SHIM_DEBUG_SHAPE-Flag und demselben
       // shape-Kanal (logShimShape) eine PII-freie Zeile, die den eingehenden messages-Payload
       // mit speechEmpty verknuepft - trennt "Brain lieferte leeren Text" von "Vendor sprach
@@ -431,9 +449,9 @@ export function makeTelnyxLlmShim({
       // (nicht-transient, z.B. 4xx/Auth) -> turnErrorSpeech. Der Fehler wird weiter
       // geloggt (nur err.name, secret-frei), nur die Antwort ist eine gueltige Completion.
       // KEIN Retry hier (der llm.js-Seam hat bereits begrenzt+selektiv retried).
-      console.error(`${SHIM_LOG_PREFIX} agentTurn fehlgeschlagen:`, err && err.name); // secret-frei
+      console.error(`${SHIM_LOG_PREFIX} agentTurn fehlgeschlagen (turnSeq=${turnSeq}):`, err && err.name); // secret-frei
       if (vendorStatusOf(err) === HTTP_PAYMENT_REQUIRED)
-        logShimGate({ reason: "vendor_402", callId: call.id });
+        logShimGate({ reason: "vendor_402", callId: call.id, turnSeq });
       const content = degradedSpeechFor(err, locale);
       // Dieser Catch faengt AUCH Fehler aus writeCompletion selbst (kein eigener
       // try/catch dort): wirft der Happy-Path-writeCompletion NACH einem Teil-Write
@@ -462,8 +480,15 @@ export function makeTelnyxLlmShim({
     // Schritt 4.6, Budget-Kill Schritt 6) bleiben SOFORTIG: dort gibt es keinen Abschied zu
     // schuetzen, nur Kosten zu stoppen (Regel 1).
     if (endCall) {
-      const { delayMs } = watchdog.scheduleFarewellHangup(call.id, farewellChars);
-      logShimFarewell({ callId: call.id, delayMs });
+      // MAJOR-1-Fix (K3, PLAN-CONVERSATION-OPTIMIZATION.md): call.language reicht die
+      // sprachabhaengige Farewell-Kalibrierung durch (watchdog-Tabelle: NUR 'de' vermessen,
+      // sonst Fallback = altes Verhalten). Ohne dieses Feld haette JEDER Call die de-
+      // Kalibrierung bekommen - fuer en/fr zu knapp geschaetzt, genau R4.
+      const { delayMs } = watchdog.scheduleFarewellHangup(call.id, {
+        speechChars: farewellChars,
+        language: call.language,
+      });
+      logShimFarewell({ callId: call.id, delayMs, turnSeq });
     }
   };
 }
