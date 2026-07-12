@@ -1,9 +1,12 @@
 // Phase afix-p4 (end_call-Disziplin, RCA-Wurzel R3): Das enge Verbot sitzt am Tool-
 // Entscheidungspunkt - in der description des end_call-Tools (Lehre call-quality-chain).
-// Geprueft wird (i) dass die Regel bis in den TATSAECHLICH gesendeten Anthropic-Request
-// durchschlaegt (Wire-Ebene, nicht String-in-String) und (ii) dass genau der Fall, den sie
-// adressiert (substanzielles, aber unverstaendliches Kauderwelsch), vom bestehenden
-// suppressEndCall-Seam NICHT gedeckt ist - die Prompt-Regel ist dort der einzige Schutz.
+// Ob die Formulierung das Modell tatsaechlich zur richtigen Entscheidung bewegt, ist per
+// Unit-Test nicht zeigbar (kein echter Modell-Aufruf hier, nur ein statischer Mock) - dafuer
+// gibt es das Bench-Szenario "kauderwelsch-erstantwort" (Check no_hangup_on_unintelligible_
+// reply, scripts/convo-bench/), das den echten Live-Defekt gegen ein Modell nachstellt.
+// Dieser Test prueft stattdessen die Abgrenzung zum bestehenden JS-Seam: genau der Fall,
+// den die Prompt-Regel adressiert (substanzielles, aber unverstaendliches Kauderwelsch),
+// wird von suppressEndCall NICHT gedeckt - die Prompt-Regel ist dort der einzige Schutz.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -18,7 +21,6 @@ const CALL_STILL = "call_afix_p4_still";
 const KAUDERWELSCH = "zonne dat wel eh nietig zo maar";
 
 let nextResponse;
-let requests = [];
 let agentTurn, store;
 
 function message(content) {
@@ -33,17 +35,16 @@ function message(content) {
     usage: { input_tokens: 10, output_tokens: 5 },
   };
 }
-const textOnly = (text) => message([{ type: "text", text }]);
 const textPlusEndCall = (text) =>
   message([{ type: "text", text }, { type: "tool_use", id: "tu_end", name: "end_call", input: {} }]);
 
 let server;
 before(async () => {
   server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (d) => (body += d));
+    // Request-Body wird nicht ausgewertet (kein Test liest ihn) - nur konsumieren, damit
+    // "end" feuert, und die per Test gesetzte nextResponse liefern.
+    req.on("data", () => {});
     req.on("end", () => {
-      requests.push(JSON.parse(body));
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify(nextResponse));
     });
@@ -80,31 +81,10 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-// T-P4-1: Wire-Ebene - die Disziplin-Regel erreicht das Modell im echten Turn-Request.
-test("T-P4-1 end_call-Tool-Description traegt Verabschiedung UND Verstaendnis-Bedingung und geht so ans Modell", async () => {
-  requests = [];
-  nextResponse = textOnly("Alles klar.");
-  await agentTurn(store.getCall(CALL_KAUDERWELSCH), "Guten Tag, worum geht es?");
-  const endCallTool = requests[0].tools.find((t) => t.name === "end_call");
-  assert.ok(endCallTool, "end_call-Tool fehlt im gesendeten Request");
-  assert.match(
-    endCallTool.description,
-    /NACHDEM du dich verabschiedet hast/,
-    "(a) Verabschiedung-vor-end_call fehlt",
-  );
-  assert.match(
-    endCallTool.description,
-    /verstanden hast/,
-    "(b) Verstaendnis-Bedingung fehlt am Tool-Entscheidungspunkt",
-  );
-  assert.match(endCallTool.description, /GENAU EINMAL nach/, "(b) EINE Nachfrage statt Auflegen fehlt");
-});
-
 // T-P4-2: Abgrenzung zum Seam - Kauderwelsch ist substanziell, suppressEndCall greift NICHT
 // (die Prompt-Regel ist dort der einzige Schutz); an seiner echten Grenze (keine Aeusserung)
 // greift der Seam unveraendert weiter.
 test("T-P4-2 Kauderwelsch passiert suppressEndCall (Positiv), Stille wird weiter unterdrueckt (Negativ)", async () => {
-  requests = [];
   nextResponse = textPlusEndCall("Auf Wiederhoeren.");
   const withGibberish = await agentTurn(store.getCall(CALL_KAUDERWELSCH), KAUDERWELSCH);
   assert.equal(
