@@ -8,107 +8,109 @@ Dieses File ist der Arbeits-Scratch fuer die jeweils laufende Phase (siehe
 
 ---
 
-# Task: Abo-ohne-Nummer Wurzelfix (Webhook-Race) — 2026-07-06
+# Task: C-Telnyx-Remediation (PLAN-TELNYX-ASSISTANT-REMEDIATION.md) — Start 2026-07-11
 
-## Befund (Live-Logs 2026-07-06 07:05-07:06 UTC, verifiziert)
+Lean-Lead. Wahrheitsquelle = PLAN-TELNYX-ASSISTANT-REMEDIATION.md. Bug BEWIESEN (§0):
+jeder external-LLM-Turn an den Shim -> 403. Strategie: SEHEN vor FIXEN.
 
-Tenant `t_user_01KWSDW4JZ12WF02NGPYW0BA4V`, Plan business:
+## FERTIG — Observability-Batch (Code-Track, lokal master `4accb6d`, NICHT deployt)
+- [x] OBS-1 Shim-Gate-Logs (PII-frei) — PASS, `59b8e28`
+- [x] OBS-2 Event-Ingest (roh) + voice.js-Erfolgspfade — PASS (3 Fix-Runden)
+- [x] OBS-3 /voice-Signatur-403 Provider-Herkunft — PASS, `b4795e7`
+- [x] OBS-FLAG `TELNYX_SHIM_DEBUG_SHAPE` (4-Orte, default-off) — PASS (1 Fix-Runde)
+- [x] SAFE-1 Secret/PII-Leak-Regressionsguard (test-only) — PASS (2 Fix-Runden)
+- [x] Voll-Suite 2041/2041 (Baseline 2004). Suite-Flake p5-gate-proof = VORBESTEHEND
+      (nicht OBS, isoliert 15/15 gruen) -> Gate-Protokoll: rot nur echt wenn isoliert rot.
 
-1. 07:05:51 `self_service_subscribe_rejected reason=no_card` -> `setup_checkout mode=subscription` (korrekt)
-2. 07:06:23 `stripe_webhook_activate profile=ok:6` — der Webhook GEWINNT das Rennen
-   gegen den Browser-Return, speichert Abo, stoesst Provisioning an
-3. 07:06:23 `[provision-worker] ... hat kein hinterlegtes Zahlungsmittel` — Nummer
-   -> failed. Der Webhook-Pfad speichert NIE customerId/paymentMethodId
-4. 07:06:25 `self_service_subscribe outcome=already_subscribed profile=none` — der
-   Return-Pfad bricht in `activateSubscriptionFromCheckoutSession` (subscribe.js:145-148)
-   VOR `setTenantStripe` (Z.154) ab -> Karte wird NIE gebunden -> Provisioning dauerhaft tot
+## ERLEDIGT — P2 + P2.5 (2026-07-11, DEPLOYT 4accb6d, Owner-Call call_mrgj8trkypk8)
+- [x] P2: Observability deployt (`[boot]=4accb6d`), curl-403-Log-Beweis, EIN Owner-Testanruf.
+- [x] P2.5: **Zweig B, Gate 2 (no_ccid).** Wurzel BEWIESEN: Telnyx sendet ccid in `extra_metadata`,
+      Shim liest `metadata` -> null -> 403 jeder Turn. NICHT Bearer/Event-Kette/STT.
+      Doku: "must explicitly read extra_metadata, separate from native metadata."
 
-Warum "hat schon mal funktioniert": vor dem Stripe-Live-Cutover war der Webhook-Secret
-tot (alle Webhooks signature-rejected) -> der Return gewann immer und band die Karte.
-MAX_NUMBERS war ein Fehlschluss der letzten Session (failed-Nummern zaehlen NICHT gegen
-die Caps, state-ops.js liveNumbers schliesst FAILED aus; Worker-Log nennt die Wurzel klar).
+## LAEUFT — P1b-FIX (Spec tasks/telnyx-p1b-fix-spec.md, self-diagnosing)
+- [~] Shim liest ccid aus `extra_metadata.call_control_id` (single trusted source, Top-Level-Fallback raus,
+      Anti-Spoof); ccid-null-Log um `extraMetadataKeys` erweitert -> Verify-Call funktioniert ODER pinnt Sub-Key.
 
-## Fix (2 Schichten, beide fail-closed)
+## OFFEN — Owner-Gate (async)
+- [ ] INFRA-0: hermes-db FREE laeuft 2026-07-24 ab (Paid+Backup, DRINGEND); ElevenLabs Paid; Telnyx-Guthaben.
+      (Render autoDeploy bleibt AN = mein Deploy-Hebel, da render-MCP keinen manuellen Deploy-Trigger hat.)
+- [ ] Flag-Posture: TELNYX_AI_ASSISTANT_ENABLED ist LIVE AN -> real callers mute bis P1b-FIX deployt.
+- [ ] Verify-Call nach P1b-FIX-Deploy.
 
-- [x] 1. `src/billing/webhook.js`: ACTIVATE-Event traegt `customer` + `default_payment_method`
-      (signatur-verifiziert). Fehlt die Karte am Tenant UND matcht der Customer
-      (customerMatches, R4), Karte VOR activatePaidTenant binden -> Webhook-Pfad
-      provisioniert selbststaendig (Browser-Return wird optional, wie es sein muss).
-      NIE eine vorhandene Karte ueberschreiben (nur Luecke fuellen).
-  - Erwartet: neuer Test p3-payment-webhook: Event mit customer+default_payment_method
-    + Tenant ohne Karte -> setTenantStripe({paymentMethodId}) genau 1x vor provision;
-    mit Karte -> kein Bind; Customer-Mismatch -> kein Bind
-  - Verifikation: `node --test test/p3-payment-webhook.test.js` gruen
-- [x] 2. `src/billing/subscribe.js` (`activateSubscriptionFromCheckoutSession`):
-      already_subscribed mit IDENTISCHER subscriptionId + Tenant OHNE Karte =
-      Webhook-gewonnenes Rennen -> heilen (setTenantStripe + activatePaidTenant,
-      beides idempotent). MIT Karte = echter Doppel-Redirect -> No-op wie bisher.
-  - Erwartet: bk2-Test (7) mit Karte-Seed unveraendert gruen; neuer Test (16):
-    subscribed ohne Karte -> 302 sub=ok, pm gebunden, provision genau 1x
-  - Verifikation: `node --test test/bk2-checkout-return-plan.test.js` gruen
-- [x] 3. `paymentMethodIdOf` von stripe.js nach webhook.js verschoben (G5)
-  - Ergebnis: node --check ok, Stripe-Tests gruen
-- [x] 4. Volle Suite + Syntax
-  - Ergebnis: `npm test` 1752/1752 gruen (2026-07-06)
-- [x] 5. Commit 0d3d110 gepusht (origin + upstream, Owner-Freigabe); Render-Deploy
-      dep-d95msqs2m8qs73c5puo0 live 09:00:46 UTC
-  - Ergebnis: `[boot] deployed commit=0d3d110...` im Log, /healthz 200
-- [x] 6. Live-Reparatur Tenant `t_user_01KWSDW4JZ12WF02NGPYW0BA4V`: Event
-      `evt_1Tq6bi3d0y9L6EpqDuxTbvab` per Stripe-Workbench-Resend erneut zugestellt
-      (09:08:39 UTC)
-  - Ergebnis: `stripe_webhook_activate profile=ok:6` OHNE Zahlungsmittel-Fehler,
-    KEINE [provision-worker]-Fehlerzeile; Nummer +15597576128 ACTIVE, end-to-end
-    per MCP get_my_number/get_agent_status bestaetigt
+## Downstream (nach P1b-Verify)
+- [ ] PROV-1 -> PROV-2 (single-writer provision.mjs); P4 (Ela-Disclosure fail-SAFE, merge nach P1b)
+- [ ] WATCHDOG (Dead-Air-Kill); GATE-MATRIX (E2E test-only); SEC-DOC
+- [ ] P5 Owner-Live (Hard-Barge-in=Launch-Pflicht); P6 Mid-Call-Kill-Drill
 
-## Offene Nebenbefunde (nicht Teil dieses Fixes)
+## Merge-Topologie (erledigt)
+fad95dd -> OBS-1(FF) -> OBS-3(FF) -> OBS-2(3-way) -> OBS-FLAG(3-way, helpers.js auto-clean) -> SAFE-1(FF) = 4accb6d
 
-- `stripe_webhook_rejected signature` weiterhin sporadisch (04:58, 07:06:22, 07:06:39)
-  NEBEN erfolgreichen Zustellungen -> vermutlich zweiter/alter Webhook-Endpoint im
-  Stripe-Dashboard mit totem Secret. Ops: alten Endpoint loeschen.
-- MAX_NUMBERS-Erhoehung der letzten Session war wirkungslos (kein Schaden, kann bleiben).
+## 2026-07-12 RCA: Assistant-Call tot nach Offenlegung+Anlass (Diagnose-only)
+- [ ] Bruchstelle des 07-12-Testanrufs benennen, belegt durch BEIDE Sichten (Render-Logs + Telnyx-API), keine Annahmen
+  - Erwartet: exakte Stelle der Kette (User-Turn->STT->Shim->LLM->TTS) an der es bricht, mit Log-Zeilen/API-Response als Beweis
+  - Verifikation: Log-Timeline + Telnyx-Conversation-Record stimmen ueberein; falls Shim-seitig: lokale curl-Repro
+  - Stand 07-12: Beide Sichten + Aufnahme + call_events + Kosten-Falsifikation erhoben. BELEGT: 2 Shim-Turns ok, 0 assistant-Messages bei Telnyx, 0 TTS-Audio (Agent-Kanal digital still, einziger 89ms-Blip=Klick-Artefakt), STT-Kauderwelsch (flux/multi erkannte DE als NL), LLM schloss aus Kauderwelsch "Ziel erreicht"+end_call, Owner legte selbst auf (hangup VOR unserem endCall). Fuehrende Hypothese: eager-EOT/TurnResumed-Discard (dokumentiert: "Cancel the in-progress response") + Hangup-Race bei Turn 2; TTS-Kosten-Delta ($0.006240 vs. flat $0.003216 bei allen 4 textlosen Calls) deutet auf Synthese-ohne-Wiedergabe. Finaler Diskriminator: 1 kontrollierter Stille-Testanruf.
+  - [x] RCA abgeschlossen+verifiziert (Kontrollanruf call_mrhj23qvru6c als Diskriminator): tasks/rca-2026-07-12-assistant-dead-call.md — R1-R5, Pipeline entlastet
+  - [x] Fix-Plan geschrieben: PLAN-ASSISTANT-CONVERSATION-FIX.md, Rev. 2 nach Opus-Review (PASS-mit-Auflagen -> alle BLOCKER/MAJOR eingearbeitet, Greeting-Migration verworfen)
+  - [ ] Re-Review Rev. 2 (laeuft) -> danach Owner-Freigabe vor Impl
+  - [x] Re-Review Rev. 2 -> PASS-eng; alle Punkte eingearbeitet -> Rev. 3 FINAL
+  - [ ] NAECHSTE SESSION: Owner-Freigabe PLAN-ASSISTANT-CONVERSATION-FIX.md -> Impl P1-P4 -> Provisioner -> Deploy -> gebuendelter Testanruf (Skript i-v)
+  - [x] Owner-Feedback eingearbeitet: P4.2 gestrichen, E2.4 Sprachwechsel-Observable, Whisper-Cross-Modell-Beweis (flux Hint-los schwach) in RCA+Plan
+  - [x] Kickoff-Datei fuer Impl-Session: tasks/NEXT-SESSION-ASSISTANT-FIX-IMPL-PROMPT.md
 
----
+# Task: Assistant-Conversation-Fix P1-P4 umsetzen — Start 2026-07-12
 
-## Fix: place_call HTTP 422 (10015) — Call-Control-App-ID entkoppeln (2026-07-10)
+Spec (autoritativ): `tasks/assistant-fix-spec.md`. Umbrella: PLAN-ASSISTANT-CONVERSATION-FIX.md (Rev. 3,
+owner-freigegeben). Lean-Lead: Phasen ueber phase-impl-lean (Impl/Report=Sonnet, Safety-Review=Opus),
+Merge im Lead, Basis master `bed694e` (= Live-Commit).
 
-Wurzel (RCA: `tasks/rca-place-call-422.md`): `TELNYX_AI_ASSISTANT_ENABLED=true` ist live
-gesetzt, daher laeuft Outbound ueber `originateViaCallControl` (POST /v2/calls). Der Adapter
-sendete dort `config.telnyxConnectionId` — das ist aber eine **TeXML**-Application-ID.
-Telnyx verlangt an dieser Stelle eine **Call-Control**-Application-ID und lehnt deterministisch
-ab: `HTTP 422 (10015 Invalid value for connection_id (Call Control App ID))`.
-Auf dem Account existierte GAR KEINE Call-Control-App (`GET /v2/call_control_applications` leer).
+## Vorab-Befunde (2026-07-12, empirisch, VOR der Impl)
+- Live-Assistant per GET gelesen: `transcription.language=multi` (= R2-Wurzel), `user_idle_reply_secs=10`,
+  `time_limit_secs=1800`, `recording_settings.enabled=true`, `interruption_settings.enable=true`.
+- **`PUT /v2/ai/assistants/{id}` existiert nicht (404)** -> Provisioner-Update-Pfad war nie funktionsfaehig.
+  Update = `POST /v2/ai/assistants/{id}`. Bugfix ist Teil von P1.3.
+- POST-Update = **Deep-Merge** (an Wegwerf-Assistant bewiesen, danach geloescht): nicht gesendete Felder
+  (auch Geschwister in `telephony_settings`) ueberleben -> `buildAssistantConfig` muss nur
+  `user_idle_reply_secs` ergaenzen, Safety-Felder (time_limit_secs, recording) gehen NICHT verloren.
+- Render `vodafone-agent`: autoDeploy=**no** -> Deploy ist manuell (kein Auto-Deploy-Unfall).
 
-- [x] 1. Neue Env-Var `TELNYX_CALL_CONTROL_APP_ID` in `src/config.js` (+ Boot-Pflicht bei aktivem Flag)
-  - Erwartet: `assertConfig()===false`, wenn Flag an und Var leer; Boot-Refusal nennt die Var
-  - Verifikation: `node --test test/telnyx-p10-config.test.js` -> gruen (30/30)
-- [x] 2. `originateViaCallControl` nutzt `telnyxCallControlAppId` statt `telnyxConnectionId`
-      (`src/telephony/adapters/telnyx/voice.js`); TeXML-Pfad + Nummern-Routing unveraendert
-  - Erwartet: `body.connection_id === CALL_CONTROL_APP_ID` und `!== CONNECTION_ID`
-  - Verifikation: `node --test test/telnyx-call-control.test.js` -> gruen (17/17)
-- [x] 3. Regressionstest, der den Live-Bug faengt (beide IDs bewusst verschieden)
-  - Erwartet: Test ist ROT gegen den alten Code
-  - Verifikation: Zeile temporaer zurueckgerollt -> 2 Tests rot (inkl. Regression),
-    TeXML-Gegentest blieb gruen; Fix zurueckgespielt
-- [x] 4. 4-Orte-Doku: `.env.example`, `render.yaml`, `test/helpers.js` (BASE_ENV +
-      TELNYX_ASSISTANT_BOOT_ENV) nachgezogen
-  - Verifikation: `npm test` -> 1949/1949 gruen
-- [ ] 5. Telnyx: Call-Control-Application anlegen, Outbound-Voice-Profil **"MCP"**
-      (`2982782444253480209`, whitelisted US/CA/**DE**) zuweisen — NICHT "Default" (nur US/CA)
-  - Verifikation: `GET /v2/call_control_applications` liefert die App mit korrektem Profil
-- [ ] 6. Render-Env `TELNYX_CALL_CONTROL_APP_ID` setzen — **VOR** dem Deploy
-  - KRITISCH: `server.js:2470` macht `process.exit(1)`, wenn die Var bei aktivem Flag fehlt.
-    Deploy ohne gesetzte Var = Live-Dienst startet nicht (Inbound/Dashboard/MCP tot).
-- [ ] 7. Deploy + Live-Testanruf (Owner). Nicht blind vertrauen.
-  - Verifikation: `[boot] deployed commit=...` im Log, dann `place_call` -> `status=completed`
+## STAND 2026-07-12: P1-P4 gemerged auf lokalem master (NICHT gepusht, NICHT deployt)
+Merge-Topologie: bed694e -> P1 `960afe5` -> P2 `bc1861a` -> P3 `577cf9d` -> P4 (HEAD).
+Kombinierte Vollsuite im Haupt-Repo: **2133/2133 gruen** (Baseline vor der Kette: 2041),
+`node --check` auf allen geaenderten Dateien sauber. Jede Phase hat den dualen Review-Gate
+(Safety=Opus, Clean-Code) mit PASS bestanden; Berichte: tasks/afix-p{1,2,3,4}-report.md.
 
-## Offene Nebenbefunde aus dieser Session
+Offen (Owner-Gate): E4.1 (convo-bench) BLOCKIERT — lokaler ANTHROPIC_API_KEY liefert 401
+(invalid x-api-key), 0 erfolgreiche LLM-Calls. Der Lauf sah wie ein inhaltliches FAIL aus
+(5/5 agent_hangup), war aber die Fehlerbehandlung -> siehe tasks/lessons.md.
 
-- `+49173XXXXXXX` in nationaler Schreibweise (`0173...`) wird korrekt fail-closed abgelehnt:
-  Tenant hat keine `privateNumber`, einzige DID ist US -> `homeCountryCode()` = null.
-  `src/mcp-tools.js:355` verspricht die Aufloesung aber bedingungslos -> Doku-Bug.
-  NIEMALS `homeCountry` auf `+49` defaulten (Falschanruf-Risiko fuer Nicht-DE-Tenants).
-- Tenant-/Nummern-Vermehrung: 4 aktive Telnyx-DIDs, mehrere Tenants desselben Menschen
-  (`t_user_01KWKXZ3...`, `t_user_01KX5TCC...`, `t_user_01KX600834...`, `user_01KWSDW4...`).
-  Eigener RCA-Durchgang laeuft.
-- `src/ui/widgets/call.html`: 8s-Poll ohne Terminal-Guard beim Re-Mount (Client-Hygiene,
-  kein Serverload — kein `get_call_status` in den Logs).
+## Phasen (jede: Erwartung + Verifikation)
+- [x] P1 Opening-Stimme (ElevenLabs via `useAssistantVoice`-Port-Param + Fallback-Kette) + Provisioner
+      (`user_idle_reply_secs=4`, PUT->POST-Fix)
+  - Erwartet: Adapter-Body traegt `voice=ElevenLabs.<model>.<voiceId>` + `voice_settings.api_key_ref`;
+    ohne Param/ohne Config -> Azure-Body byte-identisch; Sync-Fehler UND `speak.failed` -> genau EIN
+    Azure-Retry, danach heutiger Fail-Safe (kein startAssistant).
+  - Verifikation: `npm test` (neue Adapter-/Ingest-Tests), `node --check`.
+- [x] P2 STT-Sprach-Hint pro Call (`startAssistant({..., language})` -> adapter-intern
+      `transcription={model:deepgram/flux, language:<hint|auto>}`, NIE "multi")
+  - Erwartet: `de`->`de`, `tr`->`auto`, kein language -> KEIN transcription-Feld (Inbound unveraendert).
+  - Verifikation: `npm test` (neue Adapter-/Ingest-Tests).
+- [x] P3 Farewell-Hangup im Watchdog (`scheduleFarewellHangup`, clamp 3000..12000ms, Dead-Air-Suspend,
+      Cancel bei neuem Turn, ein Terminate)
+  - Erwartet: Fake-Timer-Tests gruen; Shim ruft bei end_call `scheduleFarewellHangup` statt sofortigem
+    Terminate; Notaus-Pfade (Loop-Guard/Budget) bleiben sofortig.
+  - Verifikation: `npm test` (Watchdog-Fake-Timer + Shim-Tests).
+- [x] P4 end_call-Disziplin (Prompt-Regel am Tool-Entscheidungspunkt) + Bench-Szenario
+  - Erwartet: Prompt-Assertion-Test gruen; `npm run convo-bench --repeat>=5`: Szenario
+    "kauderwelsch-erstantwort" endet mit EINER Nachfrage statt Auflegen, keine Regression.
+  - Verifikation: `npm test` (gruen, Revert-Pin auf die Regel) + Bench-Report.
+  - [ ] E4.1 OFFEN/BLOCKIERT: Bench braucht einen gueltigen ANTHROPIC_API_KEY (lokal 401).
+
+## Owner-Gates (danach)
+- [ ] Render-Env pruefen/setzen: `TELNYX_ELEVENLABS_VOICE_ID`, `_MODEL`, `_API_KEY_REF` (sonst faellt P1
+      still auf Azure zurueck; Log-Marker `opening_voice=` macht es sichtbar).
+- [ ] Provisioner-Lauf gegen den Live-Assistant (user_idle_reply_secs=4).
+- [ ] Deploy im No-Call-Fenster (push origin + upstream, manueller Render-Deploy, [boot]-Banner pruefen).
+- [ ] EIN gebuendelter Testanruf (Skript i-v inkl. Overlap-Probe = R1-Gate <=5s) -> jede E*-Erwartung
+      einzeln PASS/FAIL in tasks/-Report.

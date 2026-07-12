@@ -127,3 +127,96 @@
   serverseitig alle bedient (icons data-URI + https, websiteUrl, favicon.ico
   auf beiden Origins inkl. enger Basic-Auth-Ausnahme). Letzter Hebel, falls
   der Wuerfel bleibt: Connector trennen + neu verbinden (Owner, OAuth).
+
+## 2026-07-07 — C-Telnyx-Chain: Lean-Orchestrator-Setup (gilt fuer JEDE Phase P0-P11)
+
+- **`tasks/wf-phase-impl-lean.js` REPO-Pfad ist NICHT portabel.** Die im Repo liegende
+  Kopie war eine "Linux-korrigierte" Variante mit `REPO=/srv/openclaw/...`, die auf dem
+  macOS-Host NICHT existiert — jeder Subagent waere an `ln -s "$REPO/node_modules"`
+  gescheitert. Owner-Bestaetigung 2026-07-07: die Kette laeuft LOKAL in diesem Repo.
+  Vor JEDEM Phasen-Lauf pruefen, dass `REPO="/Users/antonio/Mein Unternehmen/MCP/vodafone-agent"`
+  (mit Space — bleibt korrekt, weil im Skript ueberall in `"..."` gequotet).
+- **phaseId MUSS namespaced sein (`telnyx-p<N>`), sonst Review-Branch-Kollision.** Der Driver
+  leitet Review-Branches als `review-<phaseId>[-rN]` ab. `phaseId:"p1"` kollidiert mit den
+  bereits existierenden `review-p1`/`review-p1-r1/2` aus der alten Launch-Fixes-Phase
+  `phase/p1-cancel-cap-fix` -> `git checkout -b review-p1` schlaegt fehl. Vor jedem Lauf
+  `git branch -a | grep -i "<phaseId>"` = leer pruefen. Konvention fuer diese Kette:
+  phaseId `telnyx-p<N>`, branch `phase/telnyx-p<N>-...`.
+- **Modell-Pins waren im Skript NICHT gesetzt.** §5.2 verlangt Opus=Plan+Safety-Review,
+  Sonnet=Impl/Clean-Code-Audit/Self-Fix/Report; die Repo-Kopie hatte auf KEINEM `agent()`-Call
+  ein `model`. Ohne Pin erben alle das Lead-Modell. Pro Lauf sicherstellen, dass die 6
+  `model:`-Pins gesetzt sind (plan=opus, impl=sonnet, safety=opus, cleancode=sonnet,
+  fix=sonnet, report=sonnet).
+- **R1-Phasen (P1/P3a/P4/P4.5/P5/P6/P8/P9/P11): `gate=PASS` allein reicht NICHT zum Merge.**
+  §5.5: Lead liest den Safety-Review-Abschnitt des Reports ODER faehrt einen zweiten
+  Safety-Pass mit der Checklist (alle Gates 0-13 auch fuer C-Telnyx? rearm/reattach kennen
+  `call_control_id` statt `twilioSid`? keine Verzweigung an `voiceEngine`? Shim 404-bei-Flag-aus
+  + per-Call-gebunden + Budget-gegatet? `call.hangup`->releaseReserve+finishCall? Inbound-Budget-Gate?).
+- **Worktree-Muell:** ~180 Worktrees + hunderte Branches aus alten Ketten liegen unter
+  `.claude/worktrees/` (2 locked). Blockiert den Start nicht, frisst aber Disk — irgendwann
+  `git worktree prune` + Branch-Cleanup (Owner-Entscheidung, nicht Teil eines Phasen-Laufs).
+- **Session-Limit mid-run = dieselbe BLOCKED/phantom-Signatur wie Mac-Sleep (P4.5-Lauf 2026-07-07).**
+  Wird das Nutzungs-Limit erreicht, waehrend ein phase-impl-lean-Lauf laeuft, sterben die gerade
+  aktiven Agenten mit *"You've hit your session limit · resets HH:MMpm"* (steht im `<failures>`-Block
+  der task-notification). Folge-Kaskade im Driver: (1) der Self-Fix-Gate `gateOk(safety,cc)` behandelt
+  ein NULL-Review (toter Agent) als "nicht approved" → **spurious naechste Fix-Runde** wird getriggert,
+  obwohl der reviewte Branch evtl. schon sauber war; (2) der Fix-Agent der neuen Runde stirbt auch →
+  der `-fixN`-Branch wird NIE erzeugt → `finalBranch` im Postage-Stamp ist **phantom** (rev-parse
+  schlaegt fehl). Recovery = P1-Muster: echten Git-Stand pruefen (`git branch -a | grep <phaseId>`),
+  den HOECHSTEN existierenden Fix-Branch als "substanziell reviewt+gefixt" identifizieren, `git
+  merge-base --is-ancestor master <branch>` (enthaelt er die Vorphasen?), Tests + §5.5 in einem
+  detached Wegwerf-Worktree (`git worktree add --detach`) SELBST nachziehen, dann mergen. Der
+  diagnostizierende Review-Agent verweigert korrekt fail-closed (kein Rubber-Stamp auf den phantom-
+  Branch, kein stiller fix1-Fallback) — die Blocker sind "nicht verifizierbar", KEINE echten Verstoesse.
+  Praevention: Wecker (ScheduleWakeup ~48min) setzen, wenn der Owner ein nahes Limit meldet, + `caffeinate`.
+
+## 2026-07-10 — RCA place_call 422
+
+**Zeitzonen-Annahme erfand eine Log-Luecke.** Ein Client-Report nannte "12:31 Uhr". Ich rechnete
+das als Berlin-Zeit (= 10:31Z) und fand im Fenster 09:58-11:10Z keine `place_call`-Zeilen —
+und schloss auf eine kaputte Log-Pipeline oder einen anderen Origin. Die Events lagen bei
+**12:31:49Z**. Regel: Uhrzeiten aus fremden Berichten sind zeitzonenlos. Erst an einem
+BEKANNTEN Event kalibrieren (Deploy-Timestamp, Nummernkauf, Boot-Banner), dann das Fenster
+eng ziehen. Im Zweifel +/- 3h abfragen, bevor man eine Anomalie behauptet.
+
+**Ein Bestandstest kann den Bug festschreiben.** `test/telnyx-call-control.test.js` prueft seit
+P4 `assert.equal(body.connection_id, CONNECTION_ID)` — genau den falschen Wert. Der Test war
+gruen, weil TeXML-ID und Call-Control-App-ID im Fixture DIESELBE Variable waren. Regel: Wenn
+zwei semantisch VERSCHIEDENE IDs im Test denselben Wert tragen, testet der Test nichts. Fixtures
+fuer verschiedene Objekttypen bekommen verschieden aussehende Werte (`conn_texml_*` vs `ccapp_*`).
+
+**Generierte Reports vor dem Commit auf PII scannen.** Die RCA-Subagenten zogen Kunden-Emails,
+Stripe-Customer-IDs und eine private Mobilnummer aus Live-APIs in die Markdown-Reports. Der
+Commit lag schon, der Push wurde (zu Recht) geblockt. Regel: Bevor ein von Agenten erzeugtes
+Dokument ins Repo geht, `grep -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+'` + Nummern-/ID-Scan. Und:
+`git commit --amend` ist nur solange folgenlos, wie NICHTS gepusht ist — das vorher belegen
+(`git branch -r --contains <sha>`).
+
+**Der echte Provider-Fehler steht nur im Server-Log.** `server.js:1762-1766` gibt dem Client
+bewusst nur "HTTP <status>" (Regel 4/5). Die Ursache (`10015 Invalid value for connection_id`)
+stand die ganze Zeit im Render-Log. Bei Provider-Ablehnungen IMMER zuerst das Server-Log lesen
+(CLAUDE.md Regel 7), nicht die Client-Fehlermeldung interpretieren.
+
+## 2026-07-12 RCA-Korrektur (Owner)
+- Owner-beobachtbares Verhalten (wer legte auf, was war hoerbar, welche Stimme) ZUERST beim Owner erfragen, bevor es aus Logs "erschlossen" wird. Fehldeutung "System legte auf via end_call" — die Log-Reihenfolge (hangup-Event 33.264 VOR endCallViaCallControl 33.282) belegte das Gegenteil und der Owner hatte selbst aufgelegt.
+- Timestamps auf Millisekunden-Ebene vergleichen, bevor Kausalitaet behauptet wird.
+
+## 2026-07-12 Assistant-Fix-Kette (P1-P4)
+
+**Ein 401 tarnt sich im convo-bench als inhaltliches FAIL.** Der Bench meldete 5/5 Laeufe
+`ended_via=agent_hangup` + `no_hangup_on_unintelligible_reply: false` — sah exakt aus wie
+"die P4-Prompt-Regel wirkt nicht". Tatsaechlich war der `ANTHROPIC_API_KEY` im lokalen `.env`
+ungueltig (401 invalid x-api-key): `agentTurn` warf, die Fehlerbehandlung sprach
+`turnErrorSpeech` und beendete den Call. Verraeterisch waren `cost_estimate_usd: 0.0000`,
+`judge: n/a` und `llm_calls[].outcome: "non-transient"`. Regel: Bei einem roten Bench ZUERST
+`meta`/`metrics.llm_calls`/`cost_estimate_usd` im Report-JSON pruefen — ein Lauf mit null
+erfolgreichen LLM-Calls beweist NICHTS ueber den Prompt. (Haertungs-Kandidat: Der Bench sollte
+bei 0 erfolgreichen LLM-Calls hart abbrechen statt Checks auszuwerten.)
+
+**Doku-Annahmen ueber Provider-APIs vor dem Bauen empirisch pruefen.** Der Plan nahm an, der
+Provisioner koenne per `PUT /v2/ai/assistants/{id}` aktualisieren — die Route existiert bei
+Telnyx nicht (404), Update ist `POST /v2/ai/assistants/{id}`. Ein Wegwerf-Assistant (create ->
+partial update -> get -> delete) hat in wenigen Minuten sowohl den Bug als auch die
+Deep-Merge-Semantik bewiesen (nicht gesendete Felder wie `time_limit_secs` und
+`recording_settings` ueberleben). Ohne diesen Test waere der als "harmlos" geplante
+Provisioner-Lauf entweder gescheitert oder haette Safety-Felder zurueckgesetzt.
