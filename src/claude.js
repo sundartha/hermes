@@ -348,9 +348,10 @@ const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 // Richtungen werten call.transcript darueber aus, wirksam aber nur bei Outbound - siehe
 // Kommentar an suppressEndCall unten) UND fuer die Empty-Turn-Zaehlung in
 // unansweredAgentTurns unten (G3/G26-Fix). Steuert NICHT mehr, ob eine Anrufer-Zeile
-// ueberhaupt im Transkript landet - das Recording ist davon entkoppelt (siehe agentTurn).
+// ueberhaupt im Transkript landet - das Recording ist davon entkoppelt (siehe agentTurn)
+// UND (stab-p9) fuer den Loop-Guard im Conversation-Watchdog (EINE Quelle, S2).
 // Rein, kein Nebeneffekt (N7).
-function isSubstantialCallerText(text) {
+export function isSubstantialCallerText(text) {
   return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
 }
 

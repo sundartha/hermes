@@ -8,7 +8,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
-import { captureConsole } from "./helpers.js";
+import { captureConsole, noopWatchdog } from "./helpers.js";
+
+// stab-p9: Pflicht-Dependency der Zustandsmaschine (arm/clear werden jetzt aus onSpeakEnded/
+// onHangup gerufen); diese Suite prueft die Kosten-Notaus-Achse selbst NICHT (das deckt
+// test/telnyx-stab-p9-watchdog.test.js gegen die ECHTEN Module ab) - EIN No-op-Spy statt
+// 16x wortgleicher Inline-Definition (G5).
+const NOOP_WATCHDOG = noopWatchdog();
 
 // Fake-Store: haelt GENAU einen Call (oder keinen), zeichnet markAnswered/endCallRecord
 // auf und spiegelt deren Effekt auf das Fixture-Objekt (wie state-ops.js: dieselbe
@@ -113,6 +119,7 @@ test("answered: Opening-Speak gefeuert (Text=openingText, voiceProfile aus local
     finishCall: async (c) => finishCallCalls.push(c),
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
@@ -140,6 +147,7 @@ test("speak.ended MIT call.assistantId -> startAssistant gefeuert mit callContro
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, res);
@@ -160,6 +168,7 @@ test("speak.ended OHNE call.assistantId -> fail-safe skip, kein startAssistant, 
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, res);
@@ -182,6 +191,7 @@ test("speak.ended MIT status='failed' UND gesetzter assistantId -> startAssistan
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, res);
@@ -201,6 +211,7 @@ test("hangup: finishCall gerufen, endCallRecord nur bei status active; zweites h
     finishCall: async (c) => finishCallCalls.push(c),
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
 
   const res1 = fakeRes();
@@ -229,6 +240,7 @@ test("unbekannter callId -> 200 ohne Wirkung, kein Crash", async () => {
     finishCall: async (c) => finishCallCalls.push(c),
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
     reattachActiveCall: async () => ({ call: null, logUnknown: true }),
   });
   const res = fakeRes();
@@ -252,6 +264,7 @@ test("unbekanntes Event (z.B. call.speak.started) -> 200 ohne Wirkung, kein Cras
     finishCall: async (c) => finishCallCalls.push(c),
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const res = fakeRes();
   const body = { data: { event_type: "call.speak.started", payload: { call_control_id: "cc_1" } } };
@@ -278,6 +291,7 @@ test("OBS-2: call.speak.ended mit status=succeeded -> Roh-Log zeigt event_type+s
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const body = {
     data: { event_type: "call.speak.ended", payload: { call_control_id: "cc_1", status: "succeeded" } },
@@ -303,6 +317,7 @@ test("OBS-2: unbekanntes Event call.playback.ended -> Roh-Log zeigt Token, keine
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const body = {
     data: { event_type: "call.playback.ended", payload: { call_control_id: "cc_1", status: "finished" } },
@@ -329,6 +344,7 @@ test("OBS-2: unbekannter callId -> Log traegt reason=unknown_call, NIE den rohen
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
     reattachActiveCall: async () => ({ call: null, logUnknown: true }),
   });
   const leakyCallId = "callId_leaky_9999";
@@ -354,6 +370,7 @@ test("OBS-2: answered->speak.ended->hangup -> drei Erfolgs-Logs, ccid-Wert nirge
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const ccid = "cc_secret";
   const lines = await captureConsole(async () => {
@@ -381,6 +398,7 @@ test("Review-Blocker: Event-Body ohne data.event_type -> Roh-Log zeigt event_typ
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const body = { data: { payload: { call_control_id: "cc_1" } } }; // kein event_type
   const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
@@ -404,6 +422,7 @@ test("Review-Blocker: event_type/status ueber 64 Zeichen -> Roh-Log-Token bei 64
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
   });
   const longEventType = "call.speak.ended" + "x".repeat(64); // 80 Zeichen, kein Mapping-Treffer
   const longStatus = "y".repeat(80); // 80 Zeichen
@@ -434,6 +453,7 @@ test("stab-p10: hangup nach Instanzwechsel - getCall-Miss -> reattachActiveCall 
     finishCall: async (c) => finishCallCalls.push(c),
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
     reattachActiveCall,
   });
   const res = fakeRes();
@@ -458,6 +478,7 @@ test("stab-p10: answered nach Instanzwechsel - Opening-Speak auf dem nachgeladen
     finishCall: async () => {},
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
     reattachActiveCall,
   });
   const res = fakeRes();
@@ -488,6 +509,7 @@ test("stab-p10: Rehydrate-Miss (reattachActiveCall -> call:null) -> 200, keine W
     finishCall: async (c) => finishCallCalls.push(c),
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
     reattachActiveCall,
   });
   const leakyCallId = "callId_leaky_9999";

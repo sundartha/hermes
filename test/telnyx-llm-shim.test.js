@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { makeTelnyxLlmShim, callControlIdFromForwardedMetadata } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { LlmUnavailableError } from "../src/llm.js";
-import { fakeTelnyxShimConfig } from "./helpers.js";
+import { fakeTelnyxShimConfig, noopWatchdog } from "./helpers.js";
 import {
   sseChunks,
   sseContent,
@@ -126,8 +126,9 @@ function makeHandler({
   localeFor: lf = localeFor,
   metrics,
   voiceControl = noopVoiceControl,
+  watchdog = noopWatchdog(),
 } = {}) {
-  const args = { store, config, agentTurn, localeFor: lf, voiceControl };
+  const args = { store, config, agentTurn, localeFor: lf, voiceControl, watchdog };
   if (metrics !== undefined) args.metrics = metrics;
   return makeTelnyxLlmShim(args);
 }
