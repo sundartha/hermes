@@ -275,9 +275,22 @@ export function makeTelnyxLlmShim({
 
   // stab-p9 (S2/G5): fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (auch der
   // Dead-Air-Watchdog nutzt es). Byte-identisches Verhalten/Log wie zuvor (SHIM_LOG_PREFIX).
-  // Genutzt vom Loop-Guard (Schritt 4.6), Mid-Call-Budget-Kill (Schritt 6, P6) und
-  // end_call (Schritt 8, P3a). KEIN Store-Write - Settlement bleibt P4.5 onHangup.
-  const terminateCall = makeCallControlTerminator({ store, voiceControl, logPrefix: SHIM_LOG_PREFIX });
+  const terminateViaCallControl = makeCallControlTerminator({ store, voiceControl, logPrefix: SHIM_LOG_PREFIX });
+
+  // stab-p9-FIX (Review-Blocker P9-WD1): jede shim-getriebene Terminierung MUSS den
+  // Dead-Air-Timer SOFORT loeschen. observeTurn (Schritt 4.6) armiert den Timer auf JEDEM
+  // Turn VOR allen drei Gates - im Moment der Terminierung ist er also immer frisch
+  // gestellt. Das Loeschen passiert sonst NUR verzoegert ueber den spaeter eintreffenden
+  // call.hangup-Webhook (onHangup ruft dort watchdog.clear); bleibt dieser aus oder kommt
+  // er zu spaet, feuert der Timer fuer einen bereits (aus anderem Grund) beendeten Call
+  // erneut: zweiter Hangup-Versuch PLUS ein irrefuehrendes dead_air-Log. Ein Aufruf
+  // erledigt Hangup+Clear zusammen (G5) - kein Aufrufer kann das Clear vergessen. Genutzt
+  // vom Loop-Guard (Schritt 4.6), Mid-Call-Budget-Kill (Schritt 6, P6) und end_call
+  // (Schritt 8, P3a). KEIN Store-Write - Settlement bleibt P4.5 onHangup.
+  async function terminateCall(callId) {
+    await terminateViaCallControl(callId);
+    watchdog.clear(callId);
+  }
 
   return async function handleChatCompletion(req, res) {
     // 1) Existenz-Gate (Invariante 1): Flag aus -> 404, VOR jeder Arbeit/Parsing.

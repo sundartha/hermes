@@ -273,3 +273,96 @@ test("T7: arm ist idempotent (zweimal armieren => genau ein Timer); Feuern raeum
   timers.fireAll(); // nichts mehr pending -> No-op
   assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "kein Doppel-Terminate");
 });
+
+// T8-T10 (Review-Blocker P9-WD1): observeTurn (Schritt 4.6) armiert den Dead-Air-Timer auf
+// JEDEM Turn VOR den drei shim-getriebenen Terminierungspfaden - im Moment der Terminierung
+// ist der Timer also immer frisch gestellt. Ohne watchdog.clear() direkt an der
+// Terminierungsstelle wuerde dieser Timer ueberleben und spaeter ein ZWEITES Mal feuern
+// (zweiter Hangup-Versuch + irrefuehrendes dead_air-Log fuer einen bereits anders beendeten
+// Call). Jeder Test prueft: nach der Terminierung ist kein Dead-Air-Timer mehr pending, UND
+// ein nachtraegliches fireAll() loest KEINEN zweiten Hangup aus.
+test("T8: Loop-Guard-Terminierung raeumt den Dead-Air-Timer (kein spurioses zweites Feuern)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const agentTurn = agentTurnSpy();
+  const timers = fakeTimers();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers });
+  const handler = makeTelnyxLlmShim({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn,
+    localeFor,
+    voiceControl,
+    watchdog,
+  });
+  const emptyReq = () => validReq(call, { messages: [{ role: "user", content: "" }] });
+
+  await handler(emptyReq(), fakeRes());
+  await handler(emptyReq(), fakeRes());
+  await handler(emptyReq(), fakeRes()); // dritter Leer-Turn -> Loop-Guard feuert (M=3)
+
+  assert.equal(timers.pendingCount(), 0, "Dead-Air-Timer nach Loop-Guard-Terminierung geraeumt");
+  timers.fireAll(); // No-op, falls die Wache sauber geraeumt ist
+  assert.equal(
+    voiceControl.calls.filter((c) => c.op === "hangup").length,
+    1,
+    "kein zweiter (spurioser) Hangup nach dem Loop-Guard-Hangup",
+  );
+});
+
+test("T9: Budget-Gate-Terminierung raeumt den Dead-Air-Timer (kein spurioses zweites Feuern)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call, budgetExceeded: true });
+  const voiceControl = fakeVoiceControl();
+  const agentTurn = agentTurnSpy();
+  const timers = fakeTimers();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers });
+  const handler = makeTelnyxLlmShim({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn,
+    localeFor,
+    voiceControl,
+    watchdog,
+  });
+
+  await handler(validReq(call, { messages: [{ role: "user", content: SUBSTANTIAL_TEXT }] }), fakeRes());
+
+  assert.equal(agentTurn.calls.length, 0, "Budget-Gate griff VOR dem Kern - kein Token-Burn");
+  assert.equal(timers.pendingCount(), 0, "Dead-Air-Timer nach Budget-Terminierung geraeumt");
+  timers.fireAll();
+  assert.equal(
+    voiceControl.calls.filter((c) => c.op === "hangup").length,
+    1,
+    "kein zweiter (spurioser) Hangup nach dem Budget-Hangup",
+  );
+});
+
+test("T10: end_call-Terminierung raeumt den Dead-Air-Timer (kein spurioses zweites Feuern)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const agentTurn = agentTurnSpy({ speech: "Auf Wiederhoeren.", endCall: true });
+  const timers = fakeTimers();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers });
+  const handler = makeTelnyxLlmShim({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn,
+    localeFor,
+    voiceControl,
+    watchdog,
+  });
+
+  await handler(validReq(call, { messages: [{ role: "user", content: SUBSTANTIAL_TEXT }] }), fakeRes());
+
+  assert.equal(agentTurn.calls.length, 1);
+  assert.equal(timers.pendingCount(), 0, "Dead-Air-Timer nach end_call-Terminierung geraeumt");
+  timers.fireAll();
+  assert.equal(
+    voiceControl.calls.filter((c) => c.op === "hangup").length,
+    1,
+    "kein zweiter (spurioser) Hangup nach dem end_call-Hangup",
+  );
+});
