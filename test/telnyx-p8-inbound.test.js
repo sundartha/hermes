@@ -58,10 +58,11 @@ test("startInboundAiAssistant: assistantId + callControlId + EIN store.save()", 
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
 });
 
-test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge speak -> startAssistant", async () => {
+test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge speak -> startAssistant, STT-Sprach-Hint (afix-p2/R2) reicht durch", async () => {
   const store = spyStore();
   const voiceControl = spyVoiceControl();
-  const call = { id: "call_in2", provider: "telnyx" };
+  // language="fr" (nicht der Default "de") - beweist echten Passthrough statt zufaelligen Treffer.
+  const call = { id: "call_in2", provider: "telnyx", language: "fr" };
   const config = { telnyxAssistantId: "asst_x" };
 
   await startInboundAiAssistant({
@@ -84,8 +85,8 @@ test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge 
   assert.equal(voiceControl.order[1].op, "startAssistant");
   assert.deepEqual(
     voiceControl.order[1].params,
-    { callControlId: "cc_inbound_9", assistantId: "asst_x" },
-    "startAssistant traegt KEIN Auth-Feld (Shim authentifiziert per statischem Shared-Secret)",
+    { callControlId: "cc_inbound_9", assistantId: "asst_x", language: "fr" },
+    "startAssistant traegt call.language durch (afix-p2/R2, wie der Ingest-Pfad) und KEIN Auth-Feld (Shim authentifiziert per statischem Shared-Secret)",
   );
 });
 
