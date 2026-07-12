@@ -213,11 +213,14 @@ export const config = {
   // per-Minute-Rate-Limiter (telnyxShimMaxTurnsPerMin) und zum Budget-Cap. Substanz = dieselbe
   // Definition wie stab-p7 (callerSubstanceMinLen). Ein substanzieller Turn setzt den Zaehler
   // zurueck -> Normalfluss loest NIE aus. Hoeher als maxEmptyTurns (der weichere end_call-Guard),
-  // damit die weicheren Mechanismen zuerst greifen. Min 3.
+  // damit die weicheren Mechanismen zuerst greifen. Min 3, max 50 (Muster telnyxDeadAirTimeoutS):
+  // ohne Obergrenze wuerde ein im Hosting versehentlich absurd hoher Wert (z.B. 999999) diesen
+  // Kosten-Notaus lautlos inert schalten (Review-Befund P9-CFG1) - der Clamp verhindert das
+  // unabhaengig vom gesetzten Wert, ganz ohne eigenen Footgun-Boot-Check.
   telnyxLoopGuardMaxEmptyTurns: numEnv(
     "TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS",
     process.env.TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS,
-    { fallback: 8, min: 3 },
+    { fallback: 8, min: 3, max: 50 },
   ),
   // E2: statisches Telnyx-Integration-Secret, das der Shim als Bearer erwartet (Server
   // liest es zur Bearer-Pruefung). SECRET - nie loggen/leaken. Bei aktivem Flag Boot-

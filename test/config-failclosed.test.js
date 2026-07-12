@@ -102,3 +102,22 @@ test("T-P2-05: assertConfig faellt bei numerischem Fatal und nennt die Var", () 
     );
   });
 });
+
+// P9-CFG1 (Review-Blocker): TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS bekam urspruenglich nur
+// {fallback, min}, KEIN max - ein absurd hoher Hosting-Wert (z.B. 999999) haette den
+// Kosten-Notaus lautlos inert geschaltet. Symmetrisch zu T-P2-04 (MAX_CALL_DURATION_S):
+// max ist ein bewusster Clamp, KEIN Fatal.
+test("T-P2-06: TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS absurd hoch -> auf max 50 geklemmt (kein Fatal)", () => {
+  const before = configFatalErrors().length;
+  const clamped = numEnv("TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS", "999999", {
+    fallback: 8,
+    min: 3,
+    max: 50,
+  });
+  assert.equal(
+    clamped,
+    50,
+    "Wert ueber der Obergrenze wird geklemmt statt den Loop-Guard stillzulegen",
+  );
+  assert.equal(configFatalErrors().length, before, "Clamp ist kein Fatal");
+});
