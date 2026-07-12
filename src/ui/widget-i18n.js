@@ -144,10 +144,14 @@ function buildI18nScript() {
     translate.toString(),
     localizeStaticLabels.toString(),
     // Nur die Browser-Locale: der frueher zusaetzlich abgefragte ChatGPT-Host-Kandidat
-    // (window.openai.locale) ist entfallen - der ChatGPT-Adapter ist nicht live, und das
-    // ausgelieferte Widget-HTML darf kein window.openai mehr enthalten (Wire-Vertrag,
-    // siehe widgets/call.html). Die Kandidaten-Liste bleibt (naechste Locale-Quelle =
-    // ein Eintrag mehr, sonst nichts).
+    // (window.openai.locale) ist entfallen - das ausgelieferte Widget-HTML darf seit
+    // widget-wire kein window.openai mehr enthalten, denn der EINZIGE erlaubte Sendeweg
+    // ist jetzt tools/call-postMessage (Wire-Vertrag, siehe widgets/call.html). Der
+    // server-seitige ChatGPT-Adapter (src/ui/adapters/chatgpt.js) bleibt dabei verdrahtet
+    // und liefert dasselbe HTML weiter aus - die volle Entscheidung samt bekannter
+    // Interaktivitaets-Luecke bei einem echten ChatGPT-Host steht in src/ui/registry.js.
+    // Die Kandidaten-Liste hier bleibt (naechste Locale-Quelle = ein Eintrag mehr, sonst
+    // nichts).
     'var locale = resolveLocale([navigator.language], WIDGET_DICT);',
     "function t(key) { return translate(WIDGET_DICT, locale, key); }",
     "function localizeDocument() {",
