@@ -16,7 +16,9 @@ export const meta = {
   ],
 }
 
-const REPO = "/srv/openclaw/projects/vodafone-agent-wt/antonio20045-github"
+// MACOS-LOKAL: dieser Lauf faehrt in DIESEM Repo (Owner-Bestaetigung 2026-07-07).
+// Original war eine Linux-Server-Kopie (/srv/openclaw/...), die hier nicht existiert.
+const REPO = "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent"
 const NODE_MODULES = `${REPO}/node_modules`
 
 // FAIL-CLOSED: Phase-Konfig wird hier DIREKT baked. Grund: dieses Harness liefert den
@@ -25,13 +27,13 @@ const NODE_MODULES = `${REPO}/node_modules`
 // Workflow neu aufgerufen. Fehlt phaseId -> sofortiger Abbruch (kein Default-Phase-Bau).
 // ===== PHASE_CONFIG (pro Phase editieren) =====
 const PHASE_CONFIG = {
-  phaseId: "f1-p1",
-  phaseTitle: "Store-Schema Geo-Felder + Migration",
-  branch: "phase/f1-p1-geo-schema",
+  phaseId: "widget-wire",
+  phaseTitle: "Live-Karte: nur noch tools/call, hinter dem ui/initialize-Handshake gegatet (F1/F2/F3/F5)",
+  branch: "phase/widget-wire-tools-call-gate",
   baseBranch: "master",
-  planDoc: "docs/strategy/f1-geo-location.md",
-  specFile: "tasks/f1-block-a-spec.md",
-  maxFixRounds: 2,
+  planDoc: "PLAN-MCP-ICON-WIDGET-FIX.md",
+  specFile: "tasks/widget-icon-fix-spec.md",
+  maxFixRounds: 3,
 }
 // ===== ENDE PHASE_CONFIG =====
 const A = (PHASE_CONFIG && PHASE_CONFIG.phaseId) ? PHASE_CONFIG : null
@@ -71,7 +73,7 @@ const plan = await agent(
 ${CLEAN_CODE_REQ}
 ${ABS_RULES}
 LIEFERE: (1) neue Dateien inkl. Funktionssignaturen + Inhalts-Skizze; (2) pro bestehender Datei die exakten Edits (Vorher/Nachher); (3) neue/angepasste Tests (oder Begruendung, warum die Bestandssuite reicht); (4) das deterministisch pruefbare Ergebnis (Befehl + erwartete Ausgabe). Kleiner Blast-Radius. Deine Rueckgabe IST der Plan.`,
-  { label: `${PHASE}-plan`, phase: 'Plan' }
+  { label: `${PHASE}-plan`, phase: 'Plan', model: 'opus' }
 )
 
 // ---------- Phase 2: Implementieren (Worktree) ----------
@@ -111,7 +113,7 @@ VORGEHEN:
 7. node_modules-Symlink NICHT committen. git add (nur die betroffenen src/test/config/doc-Dateien) && git commit. headCommit = git rev-parse HEAD.
 ${ABS_RULES}
 EHRLICH fuellen. Tests nicht gruen / blockiert -> testsPass=false + deviations, nicht schoenen.`,
-  { label: `${PHASE}-implement`, phase: 'Implementieren', schema: IMPL_SCHEMA, isolation: 'worktree' }
+  { label: `${PHASE}-implement`, phase: 'Implementieren', schema: IMPL_SCHEMA, isolation: 'worktree', model: 'sonnet' }
 )
 
 // ---------- Phase 3: Dualer Review (parallel, wiederholbar) ----------
@@ -159,7 +161,7 @@ async function runReview(target, suffix) {
 PRUEFE: scopeRespected (nur ${PHASE}, keine Extras, kein ungefragter npm-Dep), safetyGatesIntact, disclosureIntact (claude.js+bridge.js), authFailClosedIntact, noSecretsLeaked, behaviorAsIntended (flag-off byte-identisch, Invarianten wie in der Spec).
 ${ABS_RULES}
 approved=true NUR wenn alles erfuellt UND deine Tests gruen. Im Zweifel blockieren. Rueckgabe IST das Urteil.`,
-      { label: `${PHASE}-review-safety${suffix}`, phase: 'Review', schema: SAFETY_SCHEMA, isolation: 'worktree' }
+      { label: `${PHASE}-review-safety${suffix}`, phase: 'Review', schema: SAFETY_SCHEMA, isolation: 'worktree', model: 'opus' }
     ),
     () => agent(
       `CLEAN-CODE-AUDITOR. Pruefe den Diff der Phase ${PHASE} (Branch "${target}", Basis "${BASE}") streng gegen den Katalog.
@@ -167,7 +169,7 @@ approved=true NUR wenn alles erfuellt UND deine Tests gruen. Im Zweifel blockier
 2. git diff ${BASE} ${target} ; neue Dateien per git show ${target}:<pfad>.
 3. Kategorie fuer Kategorie. Pro FLAG: "ID · Datei · Verstoss · Fix" + Schweregrad (S1 Tests/Sicherheit/Korrektheit, S2 Duplizierung, S3 Ausdrucksstaerke, S4 Struktur/Anzahl). S3/S4 gebuendelt.
 blocker=true wenn s1 ODER s2 nicht leer. passNotes: was sauber ist. topTodos: 1-3 wichtigste. Erfinde nichts.`,
-      { label: `${PHASE}-review-cleancode${suffix}`, phase: 'Review', schema: CC_SCHEMA, isolation: 'worktree' }
+      { label: `${PHASE}-review-cleancode${suffix}`, phase: 'Review', schema: CC_SCHEMA, isolation: 'worktree', model: 'sonnet' }
     ),
   ])
 }
@@ -215,7 +217,7 @@ ${CLEAN_CODE_REQ}
 ${ABS_RULES}
 4. node --check + npm test (beide Backends) gruen. node_modules NICHT committen. git add (betroffene Dateien) && git commit -m "fix(${String(PHASE).toLowerCase()}): Review-Blocker beheben (Runde ${round})". headCommit = git rev-parse HEAD.
 EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
-    { label: `${PHASE}-fix-r${round}`, phase: 'Self-Fix', schema: FIX_SCHEMA, isolation: 'worktree' }
+    { label: `${PHASE}-fix-r${round}`, phase: 'Self-Fix', schema: FIX_SCHEMA, isolation: 'worktree', model: 'sonnet' }
   )
   fixSummaries.push(`r${round}: ${(fix && fix.summary) ? fix.summary.slice(0, 300) : '(kein Ergebnis)'}`)
   reviewTarget = fixBranch
@@ -242,7 +244,7 @@ ${JSON.stringify(cc, null, 1)}
 === FIXES ===
 ${fixSummaries.join('\n')}
 Antworte NUR mit dem geschriebenen Dateipfad.`,
-    { label: `${PHASE}-report`, phase: 'Report' }
+    { label: `${PHASE}-report`, phase: 'Report', model: 'sonnet' }
   )
   reportPath = (reportAgent || '').toString().trim().slice(0, 300) || REPORT_PATH
 } catch {
