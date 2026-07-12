@@ -208,6 +208,58 @@ test("startAssistant: Body = { assistant: { id } }, KEIN llm_api_key-Feld", asyn
   assert.ok(!("llm_api_key" in body.assistant), "kein llm_api_key-Feld im Body");
 });
 
+// afix-p2 (P2-T1): STT-Sprach-Hint pro Call - Kernfall. model MUSS mitgesendet werden
+// (TranscriptionConfig.model-Default ist englisch-only, s. Plan-Beleg); assistant.id ueberlebt.
+test("startAssistant: transcription={model,language} bei bekannter Sprache (de)", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "de" });
+  const body = JSON.parse(calls[0].body);
+  assert.deepEqual(body.transcription, { model: "deepgram/flux", language: "de" });
+  assert.equal(body.assistant.id, "a");
+});
+
+// afix-p2 (P2-T2): Sprache ausserhalb der flux-Hint-Liste -> "auto" (Telnyx-Detection statt
+// Hint-los), Modell bleibt deepgram/flux.
+test("startAssistant: unbekannte Sprache -> transcription.language=auto", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "tr" });
+  const body = JSON.parse(calls[0].body);
+  assert.equal(body.transcription.language, "auto");
+  assert.equal(body.transcription.model, "deepgram/flux");
+});
+
+// afix-p2 (P2-T3): Invariante der Phase - "multi" bedeutet laut Telnyx-Doku woertlich
+// "no language hint" (R2-Live-Defekt) und darf NIE durchgereicht werden, auch nicht ueber
+// einen durchgereichten Store-Wert.
+test("startAssistant: language=multi -> NIE durchgereicht, wird zu auto", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "multi" });
+  const body = JSON.parse(calls[0].body);
+  assert.equal(body.transcription.language, "auto");
+});
+
+// afix-p2 (P2-T4): Regression Inbound-Pfad - ohne language bleibt der Body byte-identisch
+// zum Bestand (telnyx-inbound.js reicht language nie durch, P6 bleibt unangetastet).
+test("startAssistant: ohne language -> kein transcription-Feld (Inbound-Regression)", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "assistant-77" });
+  const body = JSON.parse(calls[0].body);
+  assert.deepEqual(body, { assistant: { id: "assistant-77" } });
+  assert.ok(!("transcription" in body));
+});
+
+// afix-p2 (P2-T5): Grenzfaelle - leerer/nulliger Store-Wert darf nie zu
+// transcription:{model,language:""} werden (Telnyx wuerde das ablehnen).
+test("startAssistant: language='' oder null -> kein transcription-Feld", async () => {
+  const callsEmpty = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "" });
+  assert.ok(!("transcription" in JSON.parse(callsEmpty[0].body)));
+
+  const callsNull = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: null });
+  assert.ok(!("transcription" in JSON.parse(callsNull[0].body)));
+});
+
 // 9) startAssistant Fehlerpfad ohne Key-Leak
 test("startAssistant: HTTP-Fehler ohne Key-Leak", async () => {
   stubFetch({ ok: false, status: 422 });

@@ -124,7 +124,13 @@ export function makeCallControlIngest({
     }
     // Auth des Shims laeuft ueber das statische Telnyx-Integration-Secret (E2); ai_assistant_start
     // braucht keinen per-Call-Auth-Param (Korrelation laeuft ueber call_control_id, E1).
-    await voiceControl(call.provider).startAssistant({ callControlId, assistantId: call.assistantId });
+    await voiceControl(call.provider).startAssistant({
+      callControlId,
+      assistantId: call.assistantId,
+      // afix-p2 (R2): der per-Call-STT-Sprach-Hint gewinnt ueber das Assistant-Objekt (dort steht
+      // "multi" = KEIN Hint). Neutrale Sprache rein, Mapping auf den Provider-Hint im Adapter.
+      language: call.language,
+    });
     console.log(`[voice/call-control] speak.ended (call=${call.id}) -> ai_assistant_start abgesetzt`);
     watchdog.arm(call.id); // stab-p9: Dead-Air-Wache starten (ai_assistant_start ist raus)
   }

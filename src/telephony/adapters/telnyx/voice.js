@@ -30,6 +30,17 @@ const SPEAK_ACTION = "speak";
 // flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
 const ELEVENLABS_VOICE_SETTINGS_TYPE = "elevenlabs";
 
+// afix-p2 (R2): STT-Sprach-Hint pro Call. Modell MUSS mitgesendet werden - TranscriptionConfig.model
+// hat laut Telnyx-OpenAPI den Default "distil-whisper/distil-large-v2" (ENGLISCH-ONLY, non-streaming);
+// ein transcription-Block ohne model koennte die STT still auf Englisch kippen. Der Wert spiegelt das
+// STT-Modell des Assistant-Objekts (deepgram/flux = das einzige Telnyx-Modell mit Turn-Taking-Features).
+const STT_MODEL = "deepgram/flux";
+// Von deepgram/flux unterstuetzte Sprach-Hints (Telnyx-OpenAPI, TranscriptionConfig.language).
+// "auto" = Telnyx-Spracherkennung setzt den Hint. "multi" bedeutet dort woertlich "no language hint"
+// und ist der LIVE-DEFEKT (R2: Deutsch kam als NL/EN-Kauderwelsch an) - dieser Adapter sendet es NIE.
+const STT_FLUX_HINTS = Object.freeze(["en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"]);
+const STT_LANGUAGE_AUTO = "auto";
+
 // HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
 // damit der echte Ablehnungsgrund (z.B. Caller-ID nicht zugewiesen, Land im Voice-Profil
 // gesperrt) im Log steht statt nacktem "HTTP 403". STRIKT allowlisted: NUR errors[].code +
@@ -88,6 +99,16 @@ function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
 // - der Ingest-Log-Marker kann damit nie von dem abweichen, was speak wirklich sendet (G5).
 export function assistantVoiceConfigured() {
   return hasElevenLabsVoice(config.telnyxElevenLabs);
+}
+
+// Neutrale Gespraechssprache (call.language: de|fr|en) -> Telnyx-transcription-Felder. Das Mapping
+// lebt ADAPTER-INTERN (kein Provider-String durch den Port). Ohne language -> KEIN transcription-Feld
+// => Body byte-identisch zum Bestand (Inbound-Pfad, telnyx-inbound.js, reicht das Feld nie durch).
+// Sprache ausserhalb der flux-Hint-Liste (auch "multi") -> "auto": Telnyx-Detection statt Hint-los.
+function transcriptionFields(language) {
+  if (!language) return {};
+  const hint = STT_FLUX_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
+  return { transcription: { model: STT_MODEL, language: hint } };
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -193,14 +214,16 @@ export const telnyxVoice = {
   // Telnyx-AI-Assistant an den laufenden Call-Control-Call anhaengen (ai_assistant_start).
   // Provider-neutraler Transport: assistantId liefert der Caller (P5/P7); der Adapter erzeugt/
   // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
-  // Assistant-Config (P7), NICHT hier.
-  async startAssistant({ callControlId, assistantId }) {
+  // Assistant-Config (P7), NICHT hier. Der per-Call-transcription-Block (afix-p2) gewinnt laut
+  // Telnyx-OpenAPI ueber das Assistant-Objekt; language ist OPTIONAL - fehlt sie (Inbound-Pfad,
+  // telnyx-inbound.js), sendet der Adapter KEIN transcription-Feld und der Body bleibt Bestand.
+  async startAssistant({ callControlId, assistantId, language }) {
     if (!config.telnyxApiKey) throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx startAssistant: callControlId fehlt");
     if (!assistantId) throw new Error("Telnyx startAssistant: assistantId fehlt");
     await postCallControlAction(callControlId, {
       action: ASSISTANT_START_ACTION,
-      body: { assistant: { id: assistantId } },
+      body: { assistant: { id: assistantId }, ...transcriptionFields(language) },
       op: "startAssistant",
     });
   },

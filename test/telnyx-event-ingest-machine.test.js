@@ -259,7 +259,7 @@ test("afix-p1 (c->ended): Retry per speak.failed, danach speak.ended -> genau ei
     await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, fakeRes());
 
     assert.equal(vc.startAssistantCalls.length, 1);
-    assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77" });
+    assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77", language: "de" });
   });
 });
 
@@ -427,7 +427,30 @@ test("speak.ended MIT call.assistantId -> startAssistant gefeuert mit callContro
   assert.equal(res.statusSent, 200);
   assert.equal(vc.speakCalls.length, 0, "speak.ended loest kein erneutes Speak aus");
   assert.equal(vc.startAssistantCalls.length, 1);
-  assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77" });
+  assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77", language: "de" });
+});
+
+// afix-p2 (P2-T6): zweiter Sprachwert (fr, NICHT de wie die anderen Fixtures) beweist den
+// Durchreiche-Pfad call.language -> Port - ein einzelner de-Fixture koennte auch eine
+// Hardcodierung passieren lassen (RCA-Lehre "gleiche Fixture-Werte testen nichts").
+test("speak.ended MIT call.language=fr -> startAssistant traegt language=fr", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "fr", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    openingText: () => OPENING_TEXT,
+    localeFor: () => ({ voiceProfile: "fr_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
+  });
+  const res = fakeRes();
+  await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, res);
+
+  assert.equal(res.statusSent, 200);
+  assert.equal(vc.startAssistantCalls.length, 1);
+  assert.equal(vc.startAssistantCalls[0].language, "fr");
 });
 
 test("speak.ended OHNE call.assistantId -> fail-safe skip, kein startAssistant, kein Crash", async () => {
