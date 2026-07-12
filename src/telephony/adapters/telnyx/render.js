@@ -4,6 +4,7 @@
 // Fail-closed wie der Twilio-Renderer (unbekanntes voiceProfile -> wirft). STREAM
 // rendert seit P7 echtes <Connect><Stream> (Telnyx-Realtime ueber Port 4).
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
+import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -69,12 +70,9 @@ function attrString(obj) {
 // ElevenLabs-Guthaben/ungueltigem Key ist undokumentiert (kein Auto-Fallback); die
 // TTS-Zeichen aller Tenants laufen ohne per-Tenant-Metering aufs Owner-ElevenLabs-Konto.
 function sayVoiceAttrs(d, opts) {
-  const el = opts.elevenLabs || {};
-  if (el.apiKeyRef && el.voiceId)
-    return {
-      voice: `ElevenLabs.${el.model || "Default"}.${el.voiceId}`,
-      api_key_ref: el.apiKeyRef,
-    };
+  const el = opts.elevenLabs;
+  if (hasElevenLabsVoice(el))
+    return { voice: elevenLabsVoiceName(el), api_key_ref: el.apiKeyRef };
   return voiceAttrs(d.voiceProfile);
 }
 

@@ -527,6 +527,31 @@ export function noopWatchdog() {
   return { arm() {}, observeTurn: () => ({ loopExceeded: false }), clear() {} };
 }
 
+// afix-p1 (Review-Blocker Runde 2, G5): Fabrik fuer withConfig/withBlankedConfig, gebunden per
+// Closure an EIN gegebenes config-Objekt - EINE Implementierung statt der frueher in
+// telnyx-call-control.test.js und telnyx-event-ingest-machine.test.js fast wortgleich
+// kopierten Save-Set-Restore-Logik. Nimmt configObj bewusst als Parameter der Fabrik entgegen
+// statt config.js selbst zu importieren: manche Aufrufer muessen config ERST NACH dem Setzen
+// von process.env dynamisch importieren (Muster telnyx-call-control.test.js: ein statischer
+// Import hier wuerde diese Reihenfolge unterlaufen und eine lokale .env leaken lassen, siehe
+// Lehre test-base-env-drift). Die zurueckgegebenen Funktionen bleiben bei <=3 Argumenten (F1),
+// weil configObj per Closure gebunden ist statt bei jedem Aufruf mitgereicht zu werden.
+export function makeConfigOverrides(configObj) {
+  async function withConfig(key, value, fn) {
+    const saved = configObj[key];
+    configObj[key] = value;
+    try {
+      await fn();
+    } finally {
+      configObj[key] = saved;
+    }
+  }
+  function withBlankedConfig(key, fn) {
+    return withConfig(key, "", fn);
+  }
+  return { withConfig, withBlankedConfig };
+}
+
 // ---- Telnyx-Origination/-Inbound-Rohstoffe (Nummern/Header/Seed/POST-Helper) ----
 // EINE Quelle (G5/S2) statt der frueher in telnyx-p5-origination + telnyx-p8-inbound +
 // telnyx-p9-flag-matrix dreifach kopierten Konstanten und Helper-Funktionen.

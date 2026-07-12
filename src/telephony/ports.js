@@ -75,8 +75,12 @@
  *   unveraendert). Telnyx-only.
  * @property {(params: StartAssistantParams) => Promise<void>} [startAssistant]
  *   Haengt den Telnyx-AI-Assistant an den Call-Control-Call an (ai_assistant_start). Telnyx-only.
- * @property {(params: {callControlId: string, text: string, voiceProfile: string}) => Promise<void>} [speak]
+ * @property {(params: {callControlId: string, text: string, voiceProfile: string, useAssistantVoice?: boolean}) => Promise<void>} [speak]
  *   Deterministischer Call-Control-Speak-Node (Disclosure vor ai_assistant_start, P4.5). Telnyx-only.
+ *   useAssistantVoice (optional, Default false): SEMANTISCHER Wunsch "sprich mit derselben
+ *   Stimme, die der AI-Assistant danach benutzt, sofern der Adapter sie kennt" - KEIN
+ *   Provider-String; das Mapping auf die Provider-Payload lebt adapter-intern. Fehlt der
+ *   Parameter (Inbound-Pfad), ist das Verhalten byte-identisch zum Bestand.
  */
 
 /**

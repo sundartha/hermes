@@ -4,7 +4,7 @@
 // (Key-Leak-Schutz). Kein pglite/Server-Spawn (eigene Datei).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { captureConsole } from "./helpers.js";
+import { captureConsole, makeConfigOverrides } from "./helpers.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -17,6 +17,14 @@ process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
 process.env.TELNYX_CALL_CONTROL_APP_ID = CALL_CONTROL_APP_ID;
+// afix-p1: volle ElevenLabs-Assistant-Stimmen-Config als Baseline (kein neues Env-Feld -
+// bestehende config.telnyxElevenLabs-Keys). Einzelne Tests blenden sie ueber withConfig aus.
+const EL_VOICE_ID = "voice_el_123";
+const EL_API_KEY_REF = "elevenlabs_prod";
+const EL_MODEL = "eleven_flash_v2_5";
+process.env.TELNYX_ELEVENLABS_VOICE_ID = EL_VOICE_ID;
+process.env.TELNYX_ELEVENLABS_API_KEY_REF = EL_API_KEY_REF;
+process.env.TELNYX_ELEVENLABS_MODEL = EL_MODEL;
 
 // Dynamischer Import NACH dem Env-Setzen (config liest process.env beim Eval).
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
@@ -41,18 +49,13 @@ function stubFetch(response) {
   return calls;
 }
 
-// Fehlende Config simulieren (Adapter liest config bei jedem Aufruf): Wert leeren,
-// Aufruf, Wert restaurieren. fetch wird dabei gestubbt, damit ein durchrutschender
-// Call NICHT die echte API trifft (er soll ohnehin vorher fail-closed werfen).
-async function withBlankedConfig(key, fn) {
-  const saved = config[key];
-  config[key] = "";
-  try {
-    await fn();
-  } finally {
-    config[key] = saved;
-  }
-}
+// Config fuer die Dauer eines Tests auf einen Wert setzen (Adapter liest config bei jedem
+// Aufruf), danach restaurieren; withBlankedConfig simuliert fehlende Config mit dem Leerwert.
+// fetch wird dabei gestubbt, damit ein durchrutschender Call NICHT die echte API trifft (er
+// soll ohnehin vorher fail-closed werfen). Gemeinsame Implementierung in test/helpers.js (G5,
+// Review-Blocker Runde 2) statt eigener Kopie - hier per Closure an das dynamisch importierte
+// config-Objekt gebunden (s. Kommentar bei makeConfigOverrides).
+const { withConfig, withBlankedConfig } = makeConfigOverrides(config);
 
 const CC_ORIGINATE = {
   from: "+13125550100",
@@ -269,6 +272,9 @@ test("speak: /v2/calls/<id>/actions/speak, Body aus voiceAttrs(voiceProfile)", a
   assert.equal(body.payload, "Hallo, hier ist der KI-Assistent.");
   assert.equal(body.voice, "Azure.de-DE-KatjaNeural");
   assert.equal(body.language, "de-DE");
+  // afix-p1 (T-neu 4, Regression Inbound): ohne useAssistantVoice bleibt der Body Azure-
+  // Bestand, auch bei voller ElevenLabs-Config (EL_VOICE_ID/EL_API_KEY_REF oben gesetzt).
+  assert.ok(!("voice_settings" in body), "kein voice_settings-Feld ohne useAssistantVoice");
 });
 
 // 13) speak Fehlerpfad ohne Key-Leak
@@ -303,6 +309,86 @@ test("speak: fail-closed ohne API_KEY / callControlId / text", async () => {
     () => telnyxVoice.speak({ callControlId: "cc_1", text: "", voiceProfile: "de-female-neural" }),
     /text fehlt/,
   );
+});
+
+// ---- afix-p1: speak mit useAssistantVoice (ElevenLabs-Zweig im Call-Control-speak) ----
+
+// T-neu 1: useAssistantVoice=true + vollstaendige ElevenLabs-Config -> ElevenLabs-Voice/
+// voice_settings (type+api_key_ref), KEIN language-Feld (Plan-Entscheidung B).
+test("afix-p1 (T-neu 1): speak useAssistantVoice=true + volle Config -> ElevenLabs-Voice, voice_settings, KEIN language", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.speak({
+    callControlId: "cc_1",
+    text: "Hallo, hier ist der KI-Assistent.",
+    voiceProfile: "de-female-neural",
+    useAssistantVoice: true,
+  });
+  const body = JSON.parse(calls[0].body);
+  assert.equal(body.voice, `ElevenLabs.${EL_MODEL}.${EL_VOICE_ID}`);
+  assert.deepEqual(body.voice_settings, { type: "elevenlabs", api_key_ref: EL_API_KEY_REF });
+  assert.ok(!("language" in body), "kein language-Feld bei ElevenLabs-Voice");
+});
+
+// T-neu 2 (Fallback a): useAssistantVoice=true, aber die ElevenLabs-Config ist LEER ->
+// Azure-Bestand byte-identisch, kein voice_settings-Feld.
+test("afix-p1 (T-neu 2, Fallback a): useAssistantVoice=true + leere Config -> Azure-Bestand byte-identisch", async () => {
+  await withConfig("telnyxElevenLabs", { voiceId: "", apiKeyRef: "", model: "Default" }, async () => {
+    const calls = stubFetch({ json: {} });
+    await telnyxVoice.speak({
+      callControlId: "cc_1",
+      text: "Hallo, hier ist der KI-Assistent.",
+      voiceProfile: "de-female-neural",
+      useAssistantVoice: true,
+    });
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.voice, "Azure.de-DE-KatjaNeural");
+    assert.equal(body.language, "de-DE");
+    assert.ok(!("voice_settings" in body));
+  });
+});
+
+// T-neu 3 (T5-Grenzfall): halbe ElevenLabs-Config (nur voiceId ODER nur apiKeyRef gesetzt)
+// -> Azure-Bestand (hasElevenLabsVoice verlangt BEIDE Teile).
+test("afix-p1 (T-neu 3, Grenzfall): halbe ElevenLabs-Config (nur voiceId bzw. nur apiKeyRef) -> Azure-Bestand", async () => {
+  await withConfig("telnyxElevenLabs", { voiceId: EL_VOICE_ID, apiKeyRef: "", model: EL_MODEL }, async () => {
+    const calls = stubFetch({ json: {} });
+    await telnyxVoice.speak({
+      callControlId: "cc_1",
+      text: "Hallo",
+      voiceProfile: "de-female-neural",
+      useAssistantVoice: true,
+    });
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.voice, "Azure.de-DE-KatjaNeural");
+    assert.ok(!("voice_settings" in body));
+  });
+  await withConfig("telnyxElevenLabs", { voiceId: "", apiKeyRef: EL_API_KEY_REF, model: EL_MODEL }, async () => {
+    const calls = stubFetch({ json: {} });
+    await telnyxVoice.speak({
+      callControlId: "cc_1",
+      text: "Hallo",
+      voiceProfile: "de-female-neural",
+      useAssistantVoice: true,
+    });
+    const body = JSON.parse(calls[0].body);
+    assert.equal(body.voice, "Azure.de-DE-KatjaNeural");
+    assert.ok(!("voice_settings" in body));
+  });
+});
+
+// T-neu 4 (Regression Inbound): OHNE useAssistantVoice bleibt der Body Azure-Bestand, auch
+// bei voller ElevenLabs-Config - der Inbound-Pfad (telnyx-inbound.js) reicht das Feld nie durch.
+test("afix-p1 (T-neu 4, Regression Inbound): speak OHNE useAssistantVoice -> Azure-Bestand trotz voller Config", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.speak({
+    callControlId: "cc_1",
+    text: "Hallo",
+    voiceProfile: "de-female-neural",
+  });
+  const body = JSON.parse(calls[0].body);
+  assert.equal(body.voice, "Azure.de-DE-KatjaNeural");
+  assert.equal(body.language, "de-DE");
+  assert.ok(!("voice_settings" in body));
 });
 
 // OBS-2 Test 5 (speak, PII): Erfolgs-Log traegt Op+Status+ccid-Praesenz, NIE den
