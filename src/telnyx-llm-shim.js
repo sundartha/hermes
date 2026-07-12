@@ -126,10 +126,17 @@ function lastUserContentShape(messages) {
 // PII-freien Diagnose-Zeile. speechEmpty ist der §2.2-Diskriminator: agentTurn.speech hat
 // einen Fallback (nie leer) - ist es hier doch leer, ist das eine Anomalie UNSERES Formats;
 // ist es nicht-leer und der Anrufer hoert nichts, liegt es am Vendor/TTS.
+// EINE Quelle (G5) fuer den gesprochenen Turn-Text: nur echter String-Content, sonst "".
+// Genutzt von der PII-freien Shape-Diagnose (speechEmpty) UND als Basis der afix-p3-
+// Sprechdauer-Schaetzung - vorher stand dieser Guard inline in messagesTurnShape.
+function speechTextOf(turn) {
+  return turn && typeof turn.speech === "string" ? turn.speech : "";
+}
+
 function messagesTurnShape(body, turn) {
   const messages = messagesArray(body);
   const { contentType, length } = lastUserContentShape(messages);
-  const speech = turn && typeof turn.speech === "string" ? turn.speech : "";
+  const speech = speechTextOf(turn);
   return {
     messagesCount: messages.length,
     roleCounts: roleCounts(messages),
@@ -221,6 +228,12 @@ function logShimTurnOk(payload) {
   console.log(formatShimLine("turn_ok", payload));
 }
 
+// afix-p3: der Hangup ist geplant, nicht ausgefuehrt - ohne diese Zeile waere im Live-Log
+// nicht unterscheidbar, ob end_call gefallen ist. Nur callId + delayMs (PII-frei, kein Text).
+function logShimFarewell(payload) {
+  console.log(formatShimLine("farewell_scheduled", payload));
+}
+
 // OBS-FLAG (TELNYX_SHIM_DEBUG_SHAPE, default aus): Shape-Dump als eigenes Watched-Token
 // (kind="shape"), in den Logs vom gate-Token unterscheidbar. Wie logShimGate console.warn,
 // keys-only Payload (Regel 4).
@@ -285,8 +298,10 @@ export function makeTelnyxLlmShim({
   // er zu spaet, feuert der Timer fuer einen bereits (aus anderem Grund) beendeten Call
   // erneut: zweiter Hangup-Versuch PLUS ein irrefuehrendes dead_air-Log. Ein Aufruf
   // erledigt Hangup+Clear zusammen (G5) - kein Aufrufer kann das Clear vergessen. Genutzt
-  // vom Loop-Guard (Schritt 4.6), Mid-Call-Budget-Kill (Schritt 6, P6) und end_call
-  // (Schritt 8, P3a). KEIN Store-Write - Settlement bleibt P4.5 onHangup.
+  // vom Loop-Guard (Schritt 4.6) und Mid-Call-Budget-Kill (Schritt 6, P6) - beides Notaus-
+  // Pfade, die SOFORT terminieren. end_call (Schritt 8) terminiert seit afix-p3 NICHT mehr
+  // hierueber, sondern verzoegert ueber watchdog.scheduleFarewellHangup (Schutz des
+  // Abschiedssatzes, R4). KEIN Store-Write - Settlement bleibt P4.5 onHangup.
   async function terminateCall(callId) {
     await terminateViaCallControl(callId);
     watchdog.clear(callId);
@@ -387,6 +402,7 @@ export function makeTelnyxLlmShim({
     // 7) Kern: agentTurn (in-house Tool-Loop) gegen die per Call-Control-ID gebundene,
     // frische call-Referenz.
     let endCall = false;
+    let farewellChars = 0; // afix-p3: Basis der Sprechdauer-Schaetzung (Schritt 8)
     try {
       const startedAt = Date.now();
       const turn = await agentTurn(call, callerText);
@@ -404,6 +420,7 @@ export function makeTelnyxLlmShim({
       // in den Catch reissen.
       if (config.telnyxShimDebugShape) logShimShape(messagesTurnShape(req.body, turn));
       endCall = turn.endCall === true;
+      farewellChars = speechTextOf(turn).length;
       writeCompletion(res, { model, content: turn.speech, stream: wantsStream }); // Abschiedssatz geht ZUERST raus
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
@@ -435,11 +452,18 @@ export function makeTelnyxLlmShim({
       // bleibt endCall auf dem Default false - Schritt 8 ist dann ein No-op.
     }
 
-    // 8) end_call (P3a, Regel 1): der Abschiedssatz ist raus (oder bestmoeglich degradiert);
-    // jetzt den Call out-of-band REAL beenden, falls agentTurn end_call lieferte - unabhaengig
-    // davon, ob der nachfolgende Response-Write selbst noch erfolgreich war (siehe Kommentar
-    // oben). Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob
-    // der Call-Control-Hangup gepuffertes TTS abschneidet, ist live UNBESTAETIGT, wie P4/P4.5).
-    if (endCall) await terminateCall(call.id);
+    // 8) end_call (afix-p3, Wurzel R4): der Abschiedssatz ist als Completion raus - die TTS-
+    // Synthese/Wiedergabe laeuft aber erst an. Frueher terminierte der Shim hier SOFORT (Live
+    // gemessen: Hangup 81 ms nach der Completion) und schnitt den Abschied ab. Jetzt uebergibt er
+    // die Terminierung an den Watchdog, der ALLE Timer dieses Calls besitzt: er verzoegert um die
+    // geschaetzte Sprechdauer (gedeckelt) und suspendiert waehrenddessen seine Dead-Air-Achse.
+    // Ein externer call.hangup (onHangup -> watchdog.clear) oder ein neuer Turn (observeTurn)
+    // blasen die Terminierung ab -> genau EIN Terminate pro Call. Die Notaus-Pfade (Loop-Guard
+    // Schritt 4.6, Budget-Kill Schritt 6) bleiben SOFORTIG: dort gibt es keinen Abschied zu
+    // schuetzen, nur Kosten zu stoppen (Regel 1).
+    if (endCall) {
+      const { delayMs } = watchdog.scheduleFarewellHangup(call.id, farewellChars);
+      logShimFarewell({ callId: call.id, delayMs });
+    }
   };
 }

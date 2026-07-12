@@ -9,44 +9,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
-import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
-import { makeCallControlTerminator } from "../src/telnyx-call-terminate.js";
+import { WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
 import { localeFor } from "../src/i18n/locales.js";
-import { fakeStore, makeCall, validReq, fakeRes, sseContent, agentTurnSpy } from "./telnyx-shim-harness.js";
+import {
+  fakeStore,
+  makeCall,
+  validReq,
+  fakeRes,
+  sseContent,
+  agentTurnSpy,
+  fakeTimers,
+  makeTestWatchdog,
+} from "./telnyx-shim-harness.js";
 import { fakeTelnyxShimConfig, captureConsole } from "./helpers.js";
 
-// Kompaktes N/M fuer schnelle, lesbare Tests (config.js-Defaults 45s/8 waeren nur langsamer
-// zu lesen, nicht anders zu pruefen - die Watchdog-Logik ist schwellenwert-agnostisch).
-const WATCHDOG_CONFIG = { telnyxDeadAirTimeoutS: 30, telnyxLoopGuardMaxEmptyTurns: 3 };
-
 // Voller Satz statt Kuerzel: robust gegen eine lokal geleakte CALLER_SUBSTANCE_MIN_LEN
-// (isSubstantialCallerText liest den echten config.js-Singleton, nicht WATCHDOG_CONFIG).
+// (isSubstantialCallerText liest den echten config.js-Singleton, nicht WATCHDOG_TEST_CONFIG).
 const SUBSTANTIAL_TEXT = "Ja, das passt mir gut, vielen Dank fuer den Rueckruf naechste Woche.";
-
-// Deterministischer Fake-Timer (P12 Fast/Repeatable): setTimer/clearTimer injiziert statt
-// echter Wartezeit. fireAll() feuert alle noch ausstehenden Callbacks synchron.
-function fakeTimers() {
-  const pending = [];
-  let nextId = 1;
-  const cleared = [];
-  return {
-    setTimer(fn) {
-      const id = nextId++;
-      pending.push({ id, fn });
-      return id;
-    },
-    clearTimer(id) {
-      cleared.push(id);
-      const i = pending.findIndex((p) => p.id === id);
-      if (i >= 0) pending.splice(i, 1);
-    },
-    fireAll() {
-      pending.splice(0).forEach((p) => p.fn());
-    },
-    pendingCount: () => pending.length,
-    clearedCount: () => cleared.length,
-  };
-}
 
 // Kombinierter voiceControl-Spy: deckt speak (Ingest onAnswered) + startAssistant (Ingest
 // onSpeakEnded) + endCallViaCallControl (Watchdog-Terminierung + Shim-Hangup) unter EINEM
@@ -92,18 +71,6 @@ function speakFailedBody(callControlId) {
 }
 function hangupBody(callControlId) {
   return { data: { event_type: "call.hangup", payload: { call_control_id: callControlId } } };
-}
-
-// Baut Watchdog + geteiltes Terminierungs-Primitiv aus den ECHTEN Factories (kein Mock der
-// Kern-Logik) gegen einen gegebenen Fake-Store/-VoiceControl/-Timer (Build-Schritt, P13).
-function makeTestWatchdog({ store, voiceControl, timers }) {
-  const terminate = makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX });
-  return makeConversationWatchdog({
-    config: WATCHDOG_CONFIG,
-    terminate,
-    setTimer: timers.setTimer,
-    clearTimer: timers.clearTimer,
-  });
 }
 
 test("T1: Loop-Guard feuert bei M=3 konsekutiven Leer-Turns - kein Token-Burn auf dem Kill-Turn, realer Hangup", async () => {
@@ -274,13 +241,15 @@ test("T7: arm ist idempotent (zweimal armieren => genau ein Timer); Feuern raeum
   assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "kein Doppel-Terminate");
 });
 
-// T8-T10 (Review-Blocker P9-WD1): observeTurn (Schritt 4.6) armiert den Dead-Air-Timer auf
-// JEDEM Turn VOR den drei shim-getriebenen Terminierungspfaden - im Moment der Terminierung
-// ist der Timer also immer frisch gestellt. Ohne watchdog.clear() direkt an der
-// Terminierungsstelle wuerde dieser Timer ueberleben und spaeter ein ZWEITES Mal feuern
-// (zweiter Hangup-Versuch + irrefuehrendes dead_air-Log fuer einen bereits anders beendeten
-// Call). Jeder Test prueft: nach der Terminierung ist kein Dead-Air-Timer mehr pending, UND
-// ein nachtraegliches fireAll() loest KEINEN zweiten Hangup aus.
+// T8-T10 (Review-Blocker P9-WD1, T10 seit afix-p3 angepasst): observeTurn (Schritt 4.6)
+// armiert den Dead-Air-Timer auf JEDEM Turn VOR den drei shim-getriebenen Terminierungspfaden -
+// im Moment der Terminierung ist der Timer also immer frisch gestellt. Ohne ein Loeschen/
+// Ersetzen direkt an der Terminierungsstelle wuerde dieser Timer ueberleben und spaeter ein
+// ZWEITES Mal feuern (zweiter Hangup-Versuch + irrefuehrendes dead_air-Log fuer einen bereits
+// anders beendeten Call). T8/T9 (Notaus, sofortiges terminate+clear): kein Timer mehr pending.
+// T10 (end_call, verzoegertes terminate): der Dead-Air-Timer wird durch den Farewell-Timer
+// ERSETZT (Suspendierung, afix-p3) statt geloescht - trotzdem loest ein nachtraegliches
+// fireAll() in keinem der drei Faelle einen zweiten Hangup aus.
 test("T8: Loop-Guard-Terminierung raeumt den Dead-Air-Timer (kein spurioses zweites Feuern)", async () => {
   const call = makeCall();
   const store = fakeStore({ call });
@@ -339,7 +308,7 @@ test("T9: Budget-Gate-Terminierung raeumt den Dead-Air-Timer (kein spurioses zwe
   );
 });
 
-test("T10: end_call-Terminierung raeumt den Dead-Air-Timer (kein spurioses zweites Feuern)", async () => {
+test("T10: end_call plant den Hangup verzoegert (afix-p3) - Dead-Air suspendiert, kein Doppel-Hangup", async () => {
   const call = makeCall();
   const store = fakeStore({ call });
   const voiceControl = fakeVoiceControl();
@@ -358,8 +327,17 @@ test("T10: end_call-Terminierung raeumt den Dead-Air-Timer (kein spurioses zweit
   await handler(validReq(call, { messages: [{ role: "user", content: SUBSTANTIAL_TEXT }] }), fakeRes());
 
   assert.equal(agentTurn.calls.length, 1);
-  assert.equal(timers.pendingCount(), 0, "Dead-Air-Timer nach end_call-Terminierung geraeumt");
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 0, "kein sofortiger Hangup");
+  assert.deepEqual(
+    timers.pendingDelays(),
+    [3000],
+    "Dead-Air-Timer durch den Farewell-Timer ersetzt (suspendiert), nicht daneben gestellt",
+  );
+
   timers.fireAll();
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "Farewell-Timer terminiert");
+
+  timers.fireAll(); // nichts mehr pending -> No-op
   assert.equal(
     voiceControl.calls.filter((c) => c.op === "hangup").length,
     1,
