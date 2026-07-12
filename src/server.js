@@ -34,6 +34,8 @@ import {
 } from "./claude.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { makeCallControlIngest } from "./telnyx-call-control-ingest.js";
+import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
+import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { startInboundAiAssistant, inboundCallControlId } from "./telnyx-inbound.js";
 import { metrics } from "./metrics.js";
@@ -219,7 +221,15 @@ registerWellKnown(app);
 // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
 // bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
 // fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
-app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl }));
+// stab-p9 (Kosten-Notaus): EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
+// Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
+// stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
+// der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2).
+const conversationWatchdog = makeConversationWatchdog({
+  config,
+  terminate: makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX }),
+});
+app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog: conversationWatchdog }));
 
 // P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
 // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
@@ -1512,7 +1522,15 @@ app.post("/voice/status", async (req, res) => {
 // Der bestehende Budget/TeXML-Pfad (/voice/status|turn|outbound) bleibt byte-identisch.
 app.post(
   "/voice/call-control",
-  makeCallControlIngest({ store, voiceControl, finishCall, openingText, localeFor, reattachActiveCall }),
+  makeCallControlIngest({
+    store,
+    voiceControl,
+    finishCall,
+    openingText,
+    localeFor,
+    reattachActiveCall,
+    watchdog: conversationWatchdog,
+  }),
 );
 
 // ================= REST-API (Dashboard + MCP-Tools) =================

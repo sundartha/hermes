@@ -122,6 +122,11 @@ export const BASE_ENV = {
   // test-base-env-drift). Leere assistantId -> P4.5 onSpeakEnded skippt fail-safe.
   TELNYX_ASSISTANT_ID: "",
   TELNYX_SHIM_MAX_TURNS_PER_MIN: "30",
+  // stab-p9: neutrale Defaults (= config.js-Fallback), sonst leakt eine lokale .env mit
+  // TELNYX_DEAD_AIR_TIMEOUT_S/TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS via dotenv in Spawn-Tests
+  // -> Baseline-Drift (Lehre test-base-env-drift).
+  TELNYX_DEAD_AIR_TIMEOUT_S: "45",
+  TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS: "8",
   // Shim-Auth (E2/E3) neutral leer, sonst leakt eine lokale .env via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift). Flag-an-Spawn-Tests brauchen das Secret
   // fuer den Boot (TELNYX_ASSISTANT_BOOT_ENV traegt es explizit).
@@ -513,6 +518,13 @@ export function fakeTelnyxShimConfig({
     telnyxShimSharedSecret,
     telnyxShimDebugShape,
   };
+}
+
+// stab-p9: No-op-ConversationWatchdog fuer Bestandstests, die die Kosten-Notaus-Achse nicht
+// pruefen - haelt sie byte-identisch (observeTurn NIE loopExceeded, arm/clear wirkungslos).
+// Die stab-p9-Tests injizieren stattdessen den echten Watchdog bzw. einen Spy.
+export function noopWatchdog() {
+  return { arm() {}, observeTurn: () => ({ loopExceeded: false }), clear() {} };
 }
 
 // ---- Telnyx-Origination/-Inbound-Rohstoffe (Nummern/Header/Seed/POST-Helper) ----

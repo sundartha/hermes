@@ -197,6 +197,31 @@ export const config = {
     process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
     { fallback: 30, min: 1 },
   ),
+  // stab-p9 (Kosten-Notaus, PLAN-STABILIZE-LAUNCH.md P9): Dead-Air-Watchdog. Sekunden OHNE
+  // weiteres Lebenszeichen (Shim-Turn) nach ai_assistant_start, ab denen der Call als stille
+  // TTS-Fehlfunktion gilt und KONTROLLIERT beendet wird. KONSERVATIV: deutlich ueber einer
+  // normalen Denk-/Sprechpause -> Normalfluss terminiert NIE (scharfe Kalibrierung aus P4/P5).
+  // Sinnvoll nur < maxCallDurationS, sonst greift ohnehin erst der harte Dauer-Cap. Nur im
+  // Assistant-Pfad wirksam (Flag aus -> nie armiert). Min 5, max 300 (= Cap-Ceiling).
+  telnyxDeadAirTimeoutS: numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", process.env.TELNYX_DEAD_AIR_TIMEOUT_S, {
+    fallback: 45,
+    min: 5,
+    max: 300,
+  }),
+  // stab-p9 (Kosten-Notaus): Per-Conversation-Loop-Guard. Max. KONSEKUTIVE nicht-substanzielle
+  // (leere/Echo-)Shim-Turns, bevor der Call kontrolliert beendet wird - ZUSAETZLICH zum
+  // per-Minute-Rate-Limiter (telnyxShimMaxTurnsPerMin) und zum Budget-Cap. Substanz = dieselbe
+  // Definition wie stab-p7 (callerSubstanceMinLen). Ein substanzieller Turn setzt den Zaehler
+  // zurueck -> Normalfluss loest NIE aus. Hoeher als maxEmptyTurns (der weichere end_call-Guard),
+  // damit die weicheren Mechanismen zuerst greifen. Min 3, max 50 (Muster telnyxDeadAirTimeoutS):
+  // ohne Obergrenze wuerde ein im Hosting versehentlich absurd hoher Wert (z.B. 999999) diesen
+  // Kosten-Notaus lautlos inert schalten (Review-Befund P9-CFG1) - der Clamp verhindert das
+  // unabhaengig vom gesetzten Wert, ganz ohne eigenen Footgun-Boot-Check.
+  telnyxLoopGuardMaxEmptyTurns: numEnv(
+    "TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS",
+    process.env.TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS,
+    { fallback: 8, min: 3, max: 50 },
+  ),
   // E2: statisches Telnyx-Integration-Secret, das der Shim als Bearer erwartet (Server
   // liest es zur Bearer-Pruefung). SECRET - nie loggen/leaken. Bei aktivem Flag Boot-
   // Pflicht (assertConfig), sonst kann der Shim NIE authentifizieren (fail-closed).

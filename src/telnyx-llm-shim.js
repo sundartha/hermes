@@ -12,6 +12,7 @@ import { safeEqual } from "./util.js";
 import { degradedSpeechFor } from "./llm.js";
 import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
+import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -260,6 +261,7 @@ export function makeTelnyxLlmShim({
   agentTurn,
   localeFor,
   voiceControl,
+  watchdog,
   metrics = defaultMetrics,
 }) {
   // P5 (Scope 4, Carryover aus P4): per-callId-Fixed-Window - Toll-/Token-Fraud-Bremse
@@ -271,31 +273,23 @@ export function makeTelnyxLlmShim({
     sweepMs: SHIM_RATE_SWEEP_MS,
   });
 
-  // P3a (Regel 1 / Befund 6): end_call MUSS den Call REAL beenden. Anders als in der
-  // Budget-Engine (dort rendert der Server hangupD aus {speech,endCall}) gibt es bei
-  // C-Telnyx keinen Text-Rueckkanal "leg auf" - ohne echten Hangup laeuft der Call plus
-  // Tokenkosten weiter. Terminierung out-of-band ueber Call-Control; KEIN zweiter Store-
-  // Write (Settlement kommt ueber den call.hangup-Event -> P4.5 onHangup, EIN idempotenter
-  // Pfad ueber billedAt/reserveReleased). P6 nutzt denselben Helper fuer den Mid-Call-
-  // Budget-Kill (zweiter Aufrufer, G5).
-  async function terminateViaCallControl(call) {
-    // Frischer Store-Stand (Pre-Mortem): callControlId kann waehrend des Turns gesetzt
-    // worden sein - nicht auf den Turn-Anfang-Stand vertrauen (Muster P4.5 onHangup).
-    const fresh = store.getCall(call.id);
-    const callControlId = fresh && fresh.callControlId;
-    if (!callControlId) {
-      // fail-safe: callControlId persistiert erst P5 (Origination). Fehlt sie -> Skip + Log,
-      // KEIN Crash/Orphan (die Response ist bereits raus), Muster P4.5 assistantId-Handling.
-      console.warn(`${SHIM_LOG_PREFIX} Hangup ohne callControlId (call=${call.id}) -> kein Hangup`);
-      return;
-    }
-    try {
-      // Eigener try/catch: ein Hangup-Fehler darf die BEREITS gesendete Response nicht
-      // nachtraeglich zerstoeren; nur secret-frei loggen (err.name, Muster P4.5 onHangup).
-      await voiceControl(call.provider).endCallViaCallControl(callControlId);
-    } catch (err) {
-      console.error(`${SHIM_LOG_PREFIX} Call-Control-Hangup fehlgeschlagen:`, err && err.name);
-    }
+  // stab-p9 (S2/G5): fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (auch der
+  // Dead-Air-Watchdog nutzt es). Byte-identisches Verhalten/Log wie zuvor (SHIM_LOG_PREFIX).
+  const terminateViaCallControl = makeCallControlTerminator({ store, voiceControl, logPrefix: SHIM_LOG_PREFIX });
+
+  // stab-p9-FIX (Review-Blocker P9-WD1): jede shim-getriebene Terminierung MUSS den
+  // Dead-Air-Timer SOFORT loeschen. observeTurn (Schritt 4.6) armiert den Timer auf JEDEM
+  // Turn VOR allen drei Gates - im Moment der Terminierung ist er also immer frisch
+  // gestellt. Das Loeschen passiert sonst NUR verzoegert ueber den spaeter eintreffenden
+  // call.hangup-Webhook (onHangup ruft dort watchdog.clear); bleibt dieser aus oder kommt
+  // er zu spaet, feuert der Timer fuer einen bereits (aus anderem Grund) beendeten Call
+  // erneut: zweiter Hangup-Versuch PLUS ein irrefuehrendes dead_air-Log. Ein Aufruf
+  // erledigt Hangup+Clear zusammen (G5) - kein Aufrufer kann das Clear vergessen. Genutzt
+  // vom Loop-Guard (Schritt 4.6), Mid-Call-Budget-Kill (Schritt 6, P6) und end_call
+  // (Schritt 8, P3a). KEIN Store-Write - Settlement bleibt P4.5 onHangup.
+  async function terminateCall(callId) {
+    await terminateViaCallControl(callId);
+    watchdog.clear(callId);
   }
 
   return async function handleChatCompletion(req, res) {
@@ -349,6 +343,19 @@ export function makeTelnyxLlmShim({
     // fehlend/nicht-boolean) -> plain chat.completion-JSON. Telnyx sendet live stream:true.
     const wantsStream = req.body?.stream === true;
 
+    // 4.6) stab-p9 Loop-Guard + Dead-Air-Feed (Kosten-Notaus, ZUSAETZLICH zum Rate-Limiter):
+    // Jeder aufgeloeste Turn fuettert den Dead-Air-Timer (Lebenszeichen) und fuehrt den
+    // Leer-Turn-Streak fort. M konsekutive nicht-substanzielle Turns -> kontrollierte
+    // Terminierung, VOR agentTurn (kein Token-Burn): Abschiedssatz ZUERST, dann realer
+    // Hangup (Muster Budget-Gate, Schritt 6). Substanz = EINE Quelle mit stab-p7.
+    const callerText = lastUserText(req.body);
+    if (watchdog.observeTurn(call.id, callerText).loopExceeded) {
+      logShimGate({ reason: "loop_guard", callId: call.id });
+      writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
+      await terminateCall(call.id);
+      return;
+    }
+
     // 5) Rate-Gate (P5, Scope 4): N+1 Turns fuer denselben Call im Fenster -> definierte
     // Ablehnung OHNE agentTurn-Aufruf (kein Token-Burn). Gueltige Degradations-Completion
     // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
@@ -360,10 +367,10 @@ export function makeTelnyxLlmShim({
     // 6) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
     // Cap-Ueberschreitung (kein Token-Burn). P6 (Weg iii): Abschluss-Ansage ZUERST, DANN den
     // Call REAL auflegen - sonst deckt der Cap nur die Ansage, die Tokenkosten liefen weiter
-    // (Regel 1 verlangt BEIDE Achsen). terminateViaCallControl ist fail-safe (kein
-    // callControlId -> Skip + Log, eigener try/catch, secret-frei) - identisches Muster wie der
-    // end_call-Hangup (Schritt 8, G5: EIN Helper). Settlement bleibt P4.5 onHangup (EIN
-    // idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
+    // (Regel 1 verlangt BEIDE Achsen). terminateCall ist fail-safe (kein callControlId ->
+    // Skip + Log, eigener try/catch, secret-frei) - dasselbe GETEILTE Primitiv wie der
+    // Loop-Guard (Schritt 4.6) und der end_call-Hangup (Schritt 8, G5). Settlement bleibt
+    // P4.5 onHangup (EIN idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
     const tenantBudgetOver = store.budgetExceeded(call.tenantId, config);
     const globalBudgetOver = !tenantBudgetOver && store.globalBudgetExceeded(config);
     if (tenantBudgetOver || globalBudgetOver) {
@@ -373,7 +380,7 @@ export function makeTelnyxLlmShim({
         tenantId: call.tenantId,
       });
       writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
-      await terminateViaCallControl(call);
+      await terminateCall(call.id);
       return;
     }
 
@@ -382,7 +389,7 @@ export function makeTelnyxLlmShim({
     let endCall = false;
     try {
       const startedAt = Date.now();
-      const turn = await agentTurn(call, lastUserText(req.body));
+      const turn = await agentTurn(call, callerText);
       const latencyMs = Date.now() - startedAt;
       // EIN latencyMs-Wert, zwei Senken: der opt-in metrics-Seam (P10, hinter metricsEnabled,
       // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
@@ -433,6 +440,6 @@ export function makeTelnyxLlmShim({
     // davon, ob der nachfolgende Response-Write selbst noch erfolgreich war (siehe Kommentar
     // oben). Reihenfolge ist Absicht - speech ZUERST, Hangup danach (P11-Live-Kriterium: ob
     // der Call-Control-Hangup gepuffertes TTS abschneidet, ist live UNBESTAETIGT, wie P4/P4.5).
-    if (endCall) await terminateViaCallControl(call);
+    if (endCall) await terminateCall(call.id);
   };
 }

@@ -5,7 +5,7 @@
 // haette eine dritte Kopie hinzugefuegt. telnyx-llm-shim.test.js deckt den
 // Basis-Shim OHNE voiceControl/callControlId ab und bleibt bewusst eigenstaendig
 // (andere fakeStore-/fakeRes-Form, kein Hangup-Pfad in seinen Fixtures).
-import { fakeTelnyxShimConfig } from "./helpers.js";
+import { fakeTelnyxShimConfig, noopWatchdog } from "./helpers.js";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 
@@ -120,8 +120,14 @@ export function makeCall(overrides = {}) {
   };
 }
 
-export function makeHandler({ store, config = fakeTelnyxShimConfig(), agentTurn, voiceControl }) {
-  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl });
+export function makeHandler({
+  store,
+  config = fakeTelnyxShimConfig(),
+  agentTurn,
+  voiceControl,
+  watchdog = noopWatchdog(),
+}) {
+  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog });
 }
 
 export function reqWith({ auth, body = {} } = {}) {

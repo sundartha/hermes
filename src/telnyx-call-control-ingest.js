@@ -39,6 +39,7 @@ export function makeCallControlIngest({
   openingText,
   localeFor,
   reattachActiveCall,
+  watchdog,
 }) {
   // Regel 2 + R5 (stab-p8): der deterministische Erst-Speak spricht den vollen Opening-Text
   // (openingText = Offenlegung ZUERST + Anliegens-Bruecke) - DIESELBE eine Quelle wie der
@@ -67,6 +68,7 @@ export function makeCallControlIngest({
     // braucht keinen per-Call-Auth-Param (Korrelation laeuft ueber call_control_id, E1).
     await voiceControl(call.provider).startAssistant({ callControlId, assistantId: call.assistantId });
     console.log(`[voice/call-control] speak.ended (call=${call.id}) -> ai_assistant_start abgesetzt`);
+    watchdog.arm(call.id); // stab-p9: Dead-Air-Wache starten (ai_assistant_start ist raus)
   }
   // Regel 2: die Pflicht-Offenlegung ist (Azure-NTTS-Stoerung) fehlgeschlagen -> ai_assistant_start
   // bleibt fail-safe aus, sonst spricht die KI, ohne dass die Offenlegung je zu hoeren war.
@@ -79,6 +81,7 @@ export function makeCallControlIngest({
   // ruft releaseReserve intern. Kein Timer-Handle-Clear noetig (billedAt/status!=active
   // machen ausstehende Max-Dauer-/Reserve-Timer zum No-op, Bestandsmuster).
   async function onHangup(call) {
+    watchdog.clear(call.id); // stab-p9: Wache stoppen (Call terminal, egal welcher Grund)
     if (call.status === "active") store.endCallRecord(call.id, "completed");
     await finishCall(store.getCall(call.id));
     console.log(`[voice/call-control] hangup (call=${call.id}) -> Settlement finishCall`);
