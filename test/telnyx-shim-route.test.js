@@ -47,7 +47,7 @@ test("Basic-Auth-Exemption: Flag an, DASHBOARD_PASSWORD gesetzt, kein Authorizat
   }
 });
 
-test("C3 end-to-end: gueltiger Shim-Bearer + ccid -> 200 SSE mit agentTurn-Ergebnis", async () => {
+test("C3 end-to-end: gueltiger Shim-Bearer + ccid + stream:true -> 200 SSE mit agentTurn-Ergebnis", async () => {
   const mock = await startCountingAnthropicMock({ failFirst: 0 });
   const callId = "call_shim1";
   const callControlId = "cc_route1";
@@ -73,6 +73,7 @@ test("C3 end-to-end: gueltiger Shim-Bearer + ccid -> 200 SSE mit agentTurn-Ergeb
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
+        stream: true,
         messages: [{ role: "user", content: "Hallo" }],
         extra_metadata: { call_control_id: callControlId },
       }),
@@ -82,7 +83,54 @@ test("C3 end-to-end: gueltiger Shim-Bearer + ccid -> 200 SSE mit agentTurn-Ergeb
     assert.equal(res.status, 200);
     assert.ok(res.headers.get("content-type").includes("text/event-stream"));
     assert.ok(body.includes(AGENT_SPEECH), `Body muss agentTurn-Text enthalten:\n${body}`);
+    assert.ok(body.includes("chat.completion.chunk"), `Body muss SSE-Chunk-Shape enthalten:\n${body}`);
+    assert.ok(body.includes("delta"), `Body muss delta-Framing enthalten:\n${body}`);
     assert.ok(body.includes("data: [DONE]"), `Body muss [DONE] enthalten:\n${body}`);
+  } finally {
+    await srv.stop();
+    await mock.close();
+  }
+});
+
+test("stab-p6 JSON end-to-end: gueltiger Shim-Bearer + ccid + stream:false -> 200 plain chat.completion-JSON", async () => {
+  const mock = await startCountingAnthropicMock({ failFirst: 0 });
+  const callId = "call_shim2";
+  const callControlId = "cc_route2";
+  const srv = await startServer({
+    env: { TELNYX_AI_ASSISTANT_ENABLED: "true", ANTHROPIC_BASE_URL: mock.url, ...TELNYX_ASSISTANT_BOOT_ENV },
+    seed: seedState({
+      calls: [
+        seedCall({
+          id: callId,
+          callControlId,
+          direction: "outbound",
+          status: "active",
+        }),
+      ],
+    }),
+  });
+  try {
+    const res = await fetch(`${srv.localUrl}${ROUTE}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${TELNYX_ASSISTANT_BOOT_ENV.TELNYX_SHIM_SHARED_SECRET}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        stream: false,
+        messages: [{ role: "user", content: "Hallo" }],
+        extra_metadata: { call_control_id: callControlId },
+      }),
+    });
+    const body = await res.text();
+
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-type").includes("application/json"));
+    const parsed = JSON.parse(body);
+    assert.equal(parsed.object, "chat.completion");
+    assert.ok(parsed.choices[0].message.content.includes(AGENT_SPEECH), `message.content muss agentTurn-Text enthalten:\n${body}`);
+    assert.ok(!body.includes("data: [DONE]"), `JSON-Modus darf kein SSE-Framing enthalten:\n${body}`);
   } finally {
     await srv.stop();
     await mock.close();

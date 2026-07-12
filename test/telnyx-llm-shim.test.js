@@ -9,8 +9,15 @@ import { makeTelnyxLlmShim, callControlIdFromForwardedMetadata } from "../src/te
 import { localeFor } from "../src/i18n/locales.js";
 import { LlmUnavailableError } from "../src/llm.js";
 import { fakeTelnyxShimConfig } from "./helpers.js";
+import {
+  sseChunks,
+  sseContent,
+  sseFinishReason,
+  sseRole,
+  sseEndsWithDone,
+  jsonCompletion,
+} from "./telnyx-shim-harness.js";
 
-const SSE_DATA_PREFIX = "data: ";
 const VALID_AUTH = "Bearer shim-secret"; // matcht fakeTelnyxShimConfig()-Default
 
 // Minimaler Express-res-Fake: erfasst Status, gesetzte Header, geschriebene SSE-
@@ -42,6 +49,8 @@ function fakeRes() {
     },
     json(b) {
       this.headersSent = true;
+      this.ended = true;
+      this.headers["Content-Type"] = "application/json";
       this.body = b;
       return this;
     },
@@ -140,16 +149,14 @@ function metricsSpy() {
 
 // reqWith: baut Headers + Body in einem Rutsch. ccid (falls uebergeben) landet unter
 // body.extra_metadata.call_control_id (E1, P2-bestaetigt) - EINE Konstruktionsstelle
-// statt an jeder Teststelle wiederholt.
+// statt an jeder Teststelle wiederholt. Live-Telnyx sendet stream:true; body.stream
+// (falls im Override gesetzt) gewinnt.
 function reqWith({ auth, ccid, body = {} } = {}) {
   const headers = {};
   if (auth !== undefined) headers.authorization = auth;
-  const fullBody = ccid !== undefined ? { ...body, extra_metadata: { call_control_id: ccid } } : body;
+  const streamed = { stream: true, ...body };
+  const fullBody = ccid !== undefined ? { ...streamed, extra_metadata: { call_control_id: ccid } } : streamed;
   return { headers, body: fullBody };
-}
-
-function firstChunkJson(res) {
-  return JSON.parse(res.chunks[0].slice(SSE_DATA_PREFIX.length).trim());
 }
 
 // === callControlIdFromForwardedMetadata: extra_metadata Single-Trusted-Source =====
@@ -286,9 +293,9 @@ test("Korrelation: ccid vorhanden, Call status!=='active' -> 403 (aufgelegter Ca
   assert.equal(agentTurn.calls.length, 0);
 });
 
-// === C3: gueltiger Bearer + ccid -> OpenAI-Fake-Stream-Shape =====================
+// === C3: gueltiger Bearer + ccid -> OpenAI-spec-konforme SSE-Sequenz (stab-p6) ====
 
-test("C3: gueltiger Bearer + ccid -> agentTurn 1x mit dem ccid-gebundenen Call, Fake-Stream-Shape", async () => {
+test("C3: gueltiger Bearer + ccid -> agentTurn 1x mit dem ccid-gebundenen Call, spec-konforme SSE-Sequenz", async () => {
   const call = makeCall();
   const store = fakeStore({ call });
   const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
@@ -309,13 +316,16 @@ test("C3: gueltiger Bearer + ccid -> agentTurn 1x mit dem ccid-gebundenen Call, 
   assert.equal(agentTurn.calls[0].callerText, "Hallo");
 
   assert.equal(res.headers["Content-Type"], "text/event-stream");
-  assert.equal(res.chunks.length, 2, "genau EIN SSE-Chunk + data: [DONE]");
-  const chunk = firstChunkJson(res);
-  assert.equal(chunk.object, "chat.completion.chunk");
-  assert.equal(chunk.model, "gpt-4o-mini");
-  assert.equal(chunk.choices[0].delta.content, "Hallo Welt");
-  assert.equal(chunk.choices[0].finish_reason, "stop");
-  assert.equal(res.chunks[1], "data: [DONE]\n\n");
+  const chunks = sseChunks(res);
+  assert.equal(chunks.length, 3, "role-Chunk, content-Chunk, finish-Chunk");
+  assert.equal(sseRole(res), "assistant"); // role-Delta ZUERST
+  assert.equal(chunks[0].choices[0].finish_reason, null);
+  assert.equal(sseContent(res), "Hallo Welt"); // Turn-Text unveraendert
+  assert.equal(sseFinishReason(res), "stop"); // SEPARATER finish-Chunk
+  assert.deepEqual(chunks[2].choices[0].delta, {});
+  assert.equal(chunks[0].object, "chat.completion.chunk");
+  assert.equal(chunks[0].model, "gpt-4o-mini");
+  assert.ok(sseEndsWithDone(res));
   assert.equal(res.ended, true);
   assert.ok(!res.chunks.join("").includes("shim-secret"), "kein Secret im SSE-Body");
 });
@@ -332,7 +342,7 @@ test("C3b: kein req.body.model -> Fallback auf config.claudeModel", async () => 
 
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
-  assert.equal(firstChunkJson(res).model, "claude-haiku-4-5");
+  assert.equal(sseChunks(res)[0].model, "claude-haiku-4-5");
 });
 
 test("Realer Body-Shape (P2-bestaetigt): extra_metadata unter den echten bodyKeys -> Korrelation greift end-to-end", async () => {
@@ -359,8 +369,8 @@ test("Realer Body-Shape (P2-bestaetigt): extra_metadata unter den echten bodyKey
 
   assert.equal(agentTurn.calls.length, 1);
   assert.equal(res.headers["Content-Type"], "text/event-stream");
-  assert.equal(res.chunks.length, 2, "genau EIN SSE-Chunk + data: [DONE]");
-  assert.equal(firstChunkJson(res).choices[0].delta.content, "Hallo Welt");
+  assert.ok(sseEndsWithDone(res));
+  assert.equal(sseContent(res), "Hallo Welt");
 });
 
 // === C4: Budget ueberschritten -> kein Token-Burn ================================
@@ -374,7 +384,7 @@ test("C4a: tenant-Budget ueberschritten -> Wind-Down-Completion, KEIN agentTurn-
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(agentTurn.calls.length, 0, "kein Token-Burn bei ueberschrittenem Budget");
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
+  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
 });
 
 test("C4b: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion, KEIN agentTurn-Aufruf", async () => {
@@ -386,7 +396,7 @@ test("C4b: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion, KEIN a
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.equal(agentTurn.calls.length, 0);
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
+  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
 });
 
 // === Anti-Spoof: die ccid bindet den Call, NICHT der spoofbare Body-callId ========
@@ -459,7 +469,7 @@ test("P5-Rate: N+1-ter Turn fuer denselben Call im Fenster -> Degradations-Compl
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res3);
   assert.equal(agentTurn.calls.length, 2, "3. Turn (N+1) ruft agentTurn NICHT (kein Token-Burn)");
   assert.equal(
-    firstChunkJson(res3).choices[0].delta.content,
+    sseContent(res3),
     localeFor("de").llmDegradedSpeech,
     "gueltige Degradations-Completion statt roher Ablehnung",
   );
@@ -508,11 +518,10 @@ test("D8: agentTurn wirft generischen Error -> gueltige Completion mit turnError
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
   assert.notEqual(res.statusCode, 502, "kein roher 5xx im Fehlerpfad");
-  assert.equal(res.body, null, "kein JSON-Error-Body");
+  assert.equal(res.body, null, "kein JSON-Error-Body (SSE-Modus faellt nicht auf JSON zurueck)");
   assert.equal(res.headers["Content-Type"], "text/event-stream");
-  assert.equal(res.chunks.length, 2, "genau EIN SSE-Chunk + data: [DONE]");
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").turnErrorSpeech);
-  assert.equal(res.chunks[1], "data: [DONE]\n\n");
+  assert.ok(sseEndsWithDone(res));
+  assert.equal(sseContent(res), localeFor("de").turnErrorSpeech);
   assert.equal(res.ended, true);
 });
 
@@ -530,7 +539,7 @@ test("D9: agentTurn wirft LlmUnavailableError -> gueltige Completion mit llmDegr
   assert.equal(res.body, null);
   assert.equal(res.headers["Content-Type"], "text/event-stream");
   assert.equal(res.ended, true);
-  const content = firstChunkJson(res).choices[0].delta.content;
+  const content = sseContent(res);
   assert.equal(content, localeFor("de").llmDegradedSpeech);
   assert.notEqual(content, localeFor("de").turnErrorSpeech, "transiente Klasse != generischer Fehler");
 });
@@ -548,7 +557,7 @@ test("D10: Degradations-Body enthaelt kein Secret - content ist exakt der Locale
   const raw = res.chunks.join("");
   assert.ok(!raw.includes("shim-secret"), "kein Shared-Secret im Degradations-Body");
   assert.ok(!raw.includes("Bearer"), "kein Bearer-Anteil im Degradations-Body");
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").llmDegradedSpeech);
+  assert.equal(sseContent(res), localeFor("de").llmDegradedSpeech);
 });
 
 test("D11: nicht-DE Sprache (en) -> englischer Degradations-String (localeFor(call.language) greift)", async () => {
@@ -561,15 +570,15 @@ test("D11: nicht-DE Sprache (en) -> englischer Degradations-String (localeFor(ca
 
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("en").turnErrorSpeech);
+  assert.equal(sseContent(res), localeFor("en").turnErrorSpeech);
 });
 
-// === T1: writeFakeStream wirft NACH einem Teil-Write (headersSent bereits true) ===
+// === T1: writeCompletion wirft NACH einem Teil-Write (headersSent bereits true) ===
 
-// Wie fakeRes(), aber der ZWEITE write()-Aufruf wirft (der erste - der eigentliche
-// SSE-Chunk - schlaegt durch und kippt headersSent wie im echten Express). Bildet
-// einen Socket nach, der mitten im Happy-Path-writeFakeStream wegbricht (zwischen
-// dem Daten-Chunk und "data: [DONE]").
+// Wie fakeRes(), aber der ZWEITE write()-Aufruf wirft (der erste - der role-Delta-
+// Chunk - schlaegt durch und kippt headersSent wie im echten Express). Bildet einen
+// Socket nach, der mitten im Happy-Path-writeCompletion wegbricht (zwischen dem
+// role-Chunk und dem content-Chunk).
 function fakeResFailingOnSecondWrite() {
   const res = fakeRes();
   const originalWrite = res.write.bind(res);
@@ -582,7 +591,7 @@ function fakeResFailingOnSecondWrite() {
   return res;
 }
 
-test("T1: writeFakeStream wirft nach dem ersten Write -> Fehlerpfad ruft nur end() (kein zweiter Fake-Stream-Versuch)", async () => {
+test("T1: writeCompletion wirft nach dem ersten Write -> Fehlerpfad ruft nur end() (kein zweiter Completion-Versuch)", async () => {
   const store = fakeStore({ call: makeCall() });
   const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
   const handler = makeHandler({ store, agentTurn });
@@ -590,8 +599,8 @@ test("T1: writeFakeStream wirft nach dem ersten Write -> Fehlerpfad ruft nur end
 
   await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
 
-  assert.equal(res.chunks.length, 1, "nur der erste (fehlgeschlagene) Chunk steht - kein Retry-Chunk");
-  assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeFakeStream aufzurufen");
+  assert.equal(res.chunks.length, 1, "nur der role-Chunk steht - der content-Chunk-Write hat geworfen, kein Retry");
+  assert.equal(res.ended, true, "Fehlerpfad ruft end() statt erneut writeCompletion aufzurufen");
 });
 
 // === P10: Shim-Turn-Latenz-Metrik (Observability, agentTurn-Wanduhr-Dauer) =========
@@ -908,7 +917,7 @@ test("OBS-1 vendor_402: agentTurn wirft err mit status 402 -> gate reason=vendor
   assert.equal(gates.length, 1);
   assert.ok(gates[0].includes('"reason":"vendor_402"'));
   assert.ok(gates[0].includes('"callId":"call_x"'));
-  assert.equal(res.chunks.length, 2, "trotz Vendor-402 eine gueltige Degradations-Completion (kein Abbruch)");
+  assert.ok(sseEndsWithDone(res), "trotz Vendor-402 eine gueltige Degradations-Completion (kein Abbruch)");
   assert.ok(!lines.join("\n").includes("shim-secret"), "kein Secret im Log");
 });
 
@@ -997,7 +1006,7 @@ test("OBS-FLAG default aus: KEINE shape-Zeile (byte-identisch), Turn laeuft norm
   const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
 
   assert.equal(shapeLines(lines).length, 0, "Default-off emittiert keine shape-Zeile");
-  assert.equal(res.chunks.length, 2, "Turn unveraendert (EIN Chunk + [DONE])");
+  assert.ok(sseEndsWithDone(res), "Turn unveraendert (spec-konforme SSE-Sequenz)");
 });
 
 test("OBS-FLAG an + fehlende ccid: shape-Zeile {ccidInMetadata:false,ccidTopLevel:false} NEBEN dem no_ccid-Gate; Gate-Verhalten byte-identisch (403)", async () => {
@@ -1144,7 +1153,7 @@ test("P5-5: Flag aus -> KEINE turn-shape-Zeile, Turn unveraendert (byte-identisc
   const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body }), res));
 
   assert.equal(turnShapeLines(lines).length, 0, "Default-off emittiert keine turn-shape-Zeile");
-  assert.equal(res.chunks.length, 2, "Turn unveraendert (EIN Chunk + [DONE])");
+  assert.ok(sseEndsWithDone(res), "Turn unveraendert (spec-konforme SSE-Sequenz)");
 });
 
 test("P5-6 (SAFE-1 dynamische Erweiterung): Sentinel-Transkript/E.164/Secret landen NICHT in der turn-shape-Zeile", async () => {
@@ -1173,4 +1182,83 @@ test("P5-6 (SAFE-1 dynamische Erweiterung): Sentinel-Transkript/E.164/Secret lan
   assert.ok(!line.includes(SENTINEL_TRANSCRIPT), "kein Transkript-Wert");
   assert.ok(!line.includes(SENTINEL_PHONE), "keine E.164");
   assert.ok(!line.includes(SENTINEL_SECRET), "kein Secret");
+});
+
+// === stab-p6: OpenAI-spec-konformer Stream-Modus (stream:true SSE vs. stream:false/
+// fehlend JSON), req.body.stream negoziert PER REQUEST - kein neuer Env-/Config-Wert ===
+
+test("stab-p6 JSON-Branch: stream:false -> plain chat.completion-JSON, kein SSE-Framing", async () => {
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handler = makeHandler({ store, agentTurn });
+  const res = fakeRes();
+
+  await handler(
+    reqWith({
+      auth: VALID_AUTH,
+      ccid: "cc_x",
+      body: { stream: false, messages: [{ role: "user", content: "Hallo" }] },
+    }),
+    res,
+  );
+
+  const c = jsonCompletion(res);
+  assert.equal(res.headers["Content-Type"], "application/json");
+  assert.equal(c.object, "chat.completion");
+  assert.equal(c.choices[0].message.role, "assistant");
+  assert.equal(c.choices[0].message.content, "Hallo Welt");
+  assert.equal(c.choices[0].finish_reason, "stop");
+  assert.equal(res.chunks.length, 0, "kein SSE-Framing im JSON-Modus");
+  assert.equal(res.ended, true);
+});
+
+test("stab-p6 Absent-stream -> JSON-Default (fehlendes stream == non-streaming)", async () => {
+  const res = fakeRes();
+  const req = {
+    headers: { authorization: VALID_AUTH },
+    body: {
+      extra_metadata: { call_control_id: "cc_x" },
+      messages: [{ role: "user", content: "Hi" }],
+    },
+  };
+  const store = fakeStore({ call: makeCall() });
+  const agentTurn = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handler = makeHandler({ store, agentTurn });
+
+  await handler(req, res);
+
+  assert.equal(jsonCompletion(res).object, "chat.completion", "fehlend == non-streaming");
+  assert.equal(res.chunks.length, 0);
+});
+
+test("stab-p6: Turn-Text ist in beiden Modi identisch (nur das Framing unterscheidet sich)", async () => {
+  const storeStream = fakeStore({ call: makeCall() });
+  const agentTurnStream = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handlerStream = makeHandler({ store: storeStream, agentTurn: agentTurnStream });
+  const resStream = fakeRes();
+  await handlerStream(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body: { stream: true } }), resStream);
+
+  const storeJson = fakeStore({ call: makeCall() });
+  const agentTurnJson = agentTurnSpy({ speech: "Hallo Welt", endCall: false });
+  const handlerJson = makeHandler({ store: storeJson, agentTurn: agentTurnJson });
+  const resJson = fakeRes();
+  await handlerJson(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body: { stream: false } }), resJson);
+
+  assert.equal(sseContent(resStream), jsonCompletion(resJson).choices[0].message.content);
+  assert.equal(sseContent(resStream), "Hallo Welt");
+  assert.equal(jsonCompletion(resJson).choices[0].message.content, "Hallo Welt");
+});
+
+test("stab-p6 JSON-Degradation: stream:false + werfender agentTurn -> gueltige JSON-Completion, kein SSE-Framing", async () => {
+  const store = fakeStore({ call: makeCall({ language: "de" }) });
+  async function throwingAgentTurn() {
+    throw new Error("llm kaputt");
+  }
+  const handler = makeHandler({ store, agentTurn: throwingAgentTurn });
+  const res = fakeRes();
+
+  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x", body: { stream: false } }), res);
+
+  assert.equal(jsonCompletion(res).choices[0].message.content, localeFor("de").turnErrorSpeech);
+  assert.equal(res.chunks.length, 0, "Modus-Treue des Catch: bleibt JSON, kein SSE-Fallback");
 });

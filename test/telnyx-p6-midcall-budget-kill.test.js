@@ -19,7 +19,7 @@ import {
   reqWith,
   validReq,
   SHIM_SHARED_SECRET,
-  firstChunkJson,
+  sseContent,
 } from "./telnyx-shim-harness.js";
 
 // === B1: tenant-Budget ueberschritten + callControlId -> Ansage, DANN echter Hangup ===
@@ -35,7 +35,7 @@ test("B1: tenant-Budget ueberschritten -> Wind-Down-Completion UND Call-Control-
   await handler(validReq(call), res);
 
   assert.equal(agentTurn.calls.length, 0, "kein Token-Burn bei ueberschrittenem Budget");
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
+  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
   assert.equal(res.ended, true);
   assert.deepEqual(voiceControl.calls, [{ provider: "telnyx", callControlId: "cc_1" }]);
   assert.deepEqual(store.settlementCalls, [], "Settlement bleibt allein bei P4.5 onHangup");
@@ -54,7 +54,7 @@ test("B2: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion UND Call
   await handler(validReq(call), res);
 
   assert.equal(agentTurn.calls.length, 0);
-  assert.equal(firstChunkJson(res).choices[0].delta.content, localeFor("de").budgetExhaustedHangup);
+  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
   assert.deepEqual(voiceControl.calls, [{ provider: "telnyx", callControlId: "cc_1" }]);
   assert.deepEqual(store.settlementCalls, []);
 });
@@ -93,5 +93,5 @@ test("B4: Budget OK -> kein Budget-Kill-Hangup, agentTurn wird normal aufgerufen
 
   assert.equal(agentTurn.calls.length, 1);
   assert.equal(voiceControl.calls.length, 0, "kein Hangup, wenn kein Cap ueberschritten ist");
-  assert.equal(firstChunkJson(res).choices[0].delta.content, "Hallo");
+  assert.equal(sseContent(res), "Hallo");
 });
