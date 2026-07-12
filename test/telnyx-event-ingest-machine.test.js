@@ -157,6 +157,9 @@ test("answered: Opening-Speak gefeuert (Text=openingText, voiceProfile aus local
 
 // T-neu 5 (Fallback b): der Opening-Speak mit der Assistant-Stimme wirft synchron (z.B.
 // HTTP 400) -> genau EIN Retry mit der Bestands-Stimme, kein startAssistant, kein Crash.
+// Config MUSS gesetzt sein (withElevenLabsConfig): sonst hat der erste Versuch mangels
+// Config bereits Azure gesprochen (kein "Assistant-Stimme ist gescheitert"-Fall, Review-
+// Blocker Runde 3 (d) - siehe die eigenen "Config fehlt"-Tests weiter unten).
 test("afix-p1 (b): Opening-Speak mit Assistant-Stimme wirft -> genau ein Retry mit useAssistantVoice=false", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
   const store = fakeStore(call);
@@ -169,14 +172,16 @@ test("afix-p1 (b): Opening-Speak mit Assistant-Stimme wirft -> genau ein Retry m
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
   });
-  const res = fakeRes();
-  await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    const res = fakeRes();
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
 
-  assert.equal(res.statusSent, 200);
-  assert.equal(vc.speakCalls.length, 2);
-  assert.equal(vc.speakCalls[0].useAssistantVoice, true);
-  assert.equal(vc.speakCalls[1].useAssistantVoice, false);
-  assert.equal(vc.startAssistantCalls.length, 0);
+    assert.equal(res.statusSent, 200);
+    assert.equal(vc.speakCalls.length, 2);
+    assert.equal(vc.speakCalls[0].useAssistantVoice, true);
+    assert.equal(vc.speakCalls[1].useAssistantVoice, false);
+    assert.equal(vc.startAssistantCalls.length, 0);
+  });
 });
 
 // T-neu 6 (b+d): auch der Azure-Retry scheitert -> Token bereits verbraucht, kein dritter
@@ -193,12 +198,14 @@ test("afix-p1 (b+d): auch der Retry mit der Bestands-Stimme scheitert -> kein dr
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
   });
-  const res = fakeRes();
-  await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    const res = fakeRes();
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
 
-  assert.equal(res.statusSent, 200, "200 ist bereits vor dem Fehler raus");
-  assert.equal(vc.speakCalls.length, 2, "kein dritter Speak-Versuch (Retry-Token verbraucht)");
-  assert.equal(vc.startAssistantCalls.length, 0);
+    assert.equal(res.statusSent, 200, "200 ist bereits vor dem Fehler raus");
+    assert.equal(vc.speakCalls.length, 2, "kein dritter Speak-Versuch (Retry-Token verbraucht)");
+    assert.equal(vc.startAssistantCalls.length, 0);
+  });
 });
 
 // T-neu 7 (c): die Offenlegung scheitert per Event (call.speak.ended status=failed) -> genau
@@ -217,17 +224,19 @@ test("afix-p1 (c): speak.failed-Event -> genau ein Retry; zweites speak.failed -
     watchdog: NOOP_WATCHDOG,
   });
 
-  await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
-  assert.equal(vc.speakCalls.length, 1);
-  assert.equal(vc.speakCalls[0].useAssistantVoice, false);
-  assert.equal(vc.startAssistantCalls.length, 0);
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
+    assert.equal(vc.speakCalls.length, 1);
+    assert.equal(vc.speakCalls[0].useAssistantVoice, false);
+    assert.equal(vc.startAssistantCalls.length, 0);
 
-  const lines = await captureConsole(() =>
-    handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes()),
-  );
-  assert.equal(vc.speakCalls.length, 1, "kein weiterer Retry (Token bereits verbraucht)");
-  assert.equal(vc.startAssistantCalls.length, 0);
-  assert.ok(lines.some((l) => l.includes("kein Assistant-Start")), "Fail-Safe-Log fehlt");
+    const lines = await captureConsole(() =>
+      handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes()),
+    );
+    assert.equal(vc.speakCalls.length, 1, "kein weiterer Retry (Token bereits verbraucht)");
+    assert.equal(vc.startAssistantCalls.length, 0);
+    assert.ok(lines.some((l) => l.includes("kein Assistant-Start")), "Fail-Safe-Log fehlt");
+  });
 });
 
 // T-neu 8 (c->ended): nach dem Retry per speak.failed feuert ein nachfolgendes speak.ended
@@ -245,11 +254,13 @@ test("afix-p1 (c->ended): Retry per speak.failed, danach speak.ended -> genau ei
     watchdog: NOOP_WATCHDOG,
   });
 
-  await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
-  await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, fakeRes());
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
+    await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, fakeRes());
 
-  assert.equal(vc.startAssistantCalls.length, 1);
-  assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77" });
+    assert.equal(vc.startAssistantCalls.length, 1);
+    assert.deepEqual(vc.startAssistantCalls[0], { callControlId: "cc_1", assistantId: "asst_77" });
+  });
 });
 
 // T-neu 9 (State-Cleanup): onHangup raeumt den Retry-Merker - ein verbrauchtes Token wird
@@ -267,13 +278,72 @@ test("afix-p1: onHangup raeumt das Retry-Token - danach ist wieder genau ein Ret
     watchdog: NOOP_WATCHDOG,
   });
 
-  await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
-  assert.equal(vc.speakCalls.length, 1, "erster Retry verbraucht");
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
+    assert.equal(vc.speakCalls.length, 1, "erster Retry verbraucht");
 
-  await handler({ query: { callId: "call_1" }, body: hangupBody("cc_1") }, fakeRes());
-  await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
+    await handler({ query: { callId: "call_1" }, body: hangupBody("cc_1") }, fakeRes());
+    await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
 
-  assert.equal(vc.speakCalls.length, 2, "nach hangup wieder ein frisches Retry-Token");
+    assert.equal(vc.speakCalls.length, 2, "nach hangup wieder ein frisches Retry-Token");
+  });
+});
+
+// ---- Review-Blocker Runde 3 (d): Config-Aus MUSS byte-identisch zum Bestand bleiben ----
+// Der Ingest reicht useAssistantVoice:true immer durch; OHNE ElevenLabs-Config faellt der
+// Adapter intern bereits auf Azure zurueck (speakVoiceFields). Ein Speak-Fehler DANACH darf
+// deshalb KEIN Retry mehr verbrauchen - sonst spraeche ein zweiter, redundanter Azure-Versuch,
+// den es vor afix-p1 nie gab (Spec (a): "Config unvollstaendig -> direkt Azure, kein Retry").
+
+// Sync-Pfad (onAnswered-Catch): der (Azure-)Speak wirft synchron (z.B. Netzfehler) OHNE
+// Config -> kein Retry, der Fehler wird unveraendert an den Handler-Catch durchgereicht
+// (identisch zum Verhalten VOR afix-p1: ein einziger Speak-Versuch, kein zweiter).
+test("afix-p1 (d, Blocker Runde 3): Config fehlt UND Opening-Speak wirft synchron -> KEIN Retry (byte-identisch zum Bestand)", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl({ failSpeak: () => true });
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    openingText: () => OPENING_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
+  });
+
+  await withElevenLabsConfig(EMPTY_ELEVENLABS_CONFIG, async () => {
+    const res = fakeRes();
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
+
+    assert.equal(res.statusSent, 200, "200 ist bereits vor dem Fehler raus");
+    assert.equal(vc.speakCalls.length, 1, "genau EIN Speak-Versuch - kein Retry ohne Config");
+    assert.equal(vc.startAssistantCalls.length, 0);
+  });
+});
+
+// Event-Pfad (onSpeakFailed): call.speak.failed OHNE Config -> kein Retry, direkt der
+// heutige Fail-Safe-Log ("kein Assistant-Start"), kein zweiter Speak-Versuch.
+test("afix-p1 (d, Blocker Runde 3): Config fehlt UND speak.failed-Event -> KEIN Retry, sofort Fail-Safe (byte-identisch zum Bestand)", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    openingText: () => OPENING_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
+  });
+
+  await withElevenLabsConfig(EMPTY_ELEVENLABS_CONFIG, async () => {
+    const lines = await captureConsole(() =>
+      handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes()),
+    );
+    assert.equal(vc.speakCalls.length, 0, "kein Retry-Speak ohne Config");
+    assert.equal(vc.startAssistantCalls.length, 0);
+    assert.ok(lines.some((l) => l.includes("kein Assistant-Start")), "Fail-Safe-Log fehlt");
+  });
 });
 
 // T-neu 10 (Observability): opening_voice-Marker fuer alle drei Zweige - elevenlabs (volle
@@ -329,10 +399,14 @@ test("afix-p1 (Observability): opening_voice-Marker fuer elevenlabs/config_missi
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
   });
-  const retryLines = await captureConsole(() =>
-    handlerRetry({ query: { callId: "call_3" }, body: speakFailedBody("cc_3") }, fakeRes()),
-  );
-  assert.ok(retryLines.some((l) => l.includes("opening_voice=azure reason=retry_after_failure (call=call_3)")));
+  // Retry braucht volle Config (Review-Blocker Runde 3 (d)): ohne Config gaetet
+  // consumeOpeningRetry auf false, der Retry-Pfad wuerde nie erreicht.
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    const retryLines = await captureConsole(() =>
+      handlerRetry({ query: { callId: "call_3" }, body: speakFailedBody("cc_3") }, fakeRes()),
+    );
+    assert.ok(retryLines.some((l) => l.includes("opening_voice=azure reason=retry_after_failure (call=call_3)")));
+  });
 });
 
 test("speak.ended MIT call.assistantId -> startAssistant gefeuert mit callControlId+assistantId", async () => {

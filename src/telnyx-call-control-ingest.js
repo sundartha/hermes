@@ -51,9 +51,21 @@ export function makeCallControlIngest({
   // im schlimmsten Fall heutiges Verhalten (kein Retry). Kein Sweep noetig (onHangup raeumt).
   const openingRetryUsed = new Set();
 
+  // Review-Blocker Runde 3 (d): der Ingest reicht useAssistantVoice:true IMMER an sendOpeningSpeak
+  // durch - die Fallback-Entscheidung "Config fehlt -> Azure" faellt erst im Adapter
+  // (speakVoiceFields). Ohne dieses Gate wuerde ein Speak-Fehler auch OHNE ElevenLabs-Config
+  // ein Retry verbrauchen, obwohl der erste Versuch mangels Config bereits Azure gesprochen
+  // hat - ein zweiter Azure-Speak waere KEIN heutiges Verhalten mehr (Spec (a): "Config
+  // unvollstaendig -> direkt Azure, kein Retry noetig"). assistantVoiceConfigured() ist eine
+  // reine Funktion von config (kein IO, kein Mid-Call-Wechsel moeglich) - direktes Gaten statt
+  // eines zusaetzlichen pro-Call-Merkers haelt den State minimal (kein weiterer Cleanup-Pfad
+  // in onHangup noetig).
+  //
   // Verbraucht das eine Retry-Token des Calls (Nebeneffekt im Namen, N7): true = Retry darf
-  // laufen, false = bereits verbraucht -> Fail-Safe (d).
+  // laufen, false = Config fehlt ODER Token bereits verbraucht -> Fail-Safe (d), byte-identisch
+  // zum Bestand ohne Assistant-Stimme.
   function consumeOpeningRetry(callId) {
+    if (!assistantVoiceConfigured()) return false;
     if (openingRetryUsed.has(callId)) return false;
     openingRetryUsed.add(callId);
     return true;
