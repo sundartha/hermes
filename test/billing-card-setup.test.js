@@ -4,7 +4,13 @@
 // Routen-Tests gedeckt). Reine Orchestrierung ueber Fake-Store + Fake-Billing, kein IO.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { customerMatches, bindCardFromSession, ensureCustomer } from "../src/billing/card-setup.js";
+import {
+  customerMatches,
+  bindCardFromSession,
+  ensureCustomer,
+  startCheckoutWithStaleCustomerHeal,
+} from "../src/billing/card-setup.js";
+import { CustomerMissingError } from "../src/billing/errors.js";
 
 const TENANT = "t_x";
 
@@ -70,4 +76,120 @@ test("ensureCustomer: kein Customer -> legt ihn an und persistiert", async () =>
   const customerId = await ensureCustomer({ store, billing, tenant: TENANT });
   assert.equal(customerId, "cus_new");
   assert.equal(store.state.stripe.customerId, "cus_new");
+});
+
+// ---- startCheckoutWithStaleCustomerHeal (Self-Heal, Fix B, PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md) ----
+
+test("startCheckoutWithStaleCustomerHeal: Happy-Path - Checkout gelingt sofort -> healed:false, kein createCustomer-Zusatzaufruf, kein sleep", async () => {
+  const store = fakeStore({ customerId: "cus_x" });
+  const sleeps = [];
+  const billing = { createCustomer: async () => assert.fail("kein createCustomer erwartet") };
+  const startCheckout = async (customerId) => ({ url: `https://stripe.test/${customerId}` });
+  const result = await startCheckoutWithStaleCustomerHeal(
+    { store, billing, tenant: TENANT, retryDelayMs: 1500, sleep: async (ms) => sleeps.push(ms) },
+    startCheckout,
+  );
+  assert.deepEqual(result, { session: { url: "https://stripe.test/cus_x" }, healed: false });
+  assert.deepEqual(sleeps, [], "kein Retry -> kein Warten");
+  assert.equal(store.state.stripe.customerId, "cus_x", "Store unveraendert");
+});
+
+test("startCheckoutWithStaleCustomerHeal: gespeicherter Customer stale (CustomerMissingError) -> heilt, EIN Retry mit frischem Customer, PM mit geloescht, sleep mit retryDelayMs", async () => {
+  const store = fakeStore({ customerId: "cus_stale", paymentMethodId: "pm_stale" });
+  const billing = { createCustomer: async () => ({ customerId: "cus_fresh" }) };
+  const calls = [];
+  const sleeps = [];
+  const startCheckout = async (customerId) => {
+    calls.push(customerId);
+    if (customerId === "cus_stale")
+      throw new CustomerMissingError("Stripe createSetupCheckoutSession fehlgeschlagen: HTTP 400 resource_missing");
+    return { url: "https://stripe.test/ok" };
+  };
+  const result = await startCheckoutWithStaleCustomerHeal(
+    { store, billing, tenant: TENANT, retryDelayMs: 1500, sleep: async (ms) => sleeps.push(ms) },
+    startCheckout,
+  );
+  assert.deepEqual(result, { session: { url: "https://stripe.test/ok" }, healed: true });
+  assert.deepEqual(calls, ["cus_stale", "cus_fresh"], "Retry mit dem frisch angelegten Customer");
+  assert.equal(store.state.stripe.customerId, "cus_fresh");
+  assert.equal(store.state.stripe.paymentMethodId, null, "tote paymentMethodId wird mitgeloescht (haengt am toten Customer)");
+  assert.deepEqual(sleeps, [1500], "Wartezeit vor dem Retry");
+});
+
+test("startCheckoutWithStaleCustomerHeal: auch ein FRISCH angelegter Customer kann CustomerMissing treffen (Nachtrag 3, Sichtbarkeits-Verzoegerung) -> heilt trotzdem, 2 createCustomer-Calls", async () => {
+  const store = fakeStore(); // kein Customer gespeichert
+  let customerCallCount = 0;
+  const billing = {
+    createCustomer: async () => {
+      customerCallCount += 1;
+      return { customerId: customerCallCount === 1 ? "cus_1" : "cus_2" };
+    },
+  };
+  const calls = [];
+  const startCheckout = async (customerId) => {
+    calls.push(customerId);
+    if (customerId === "cus_1")
+      throw new CustomerMissingError("Stripe createSetupCheckoutSession fehlgeschlagen: HTTP 400 resource_missing");
+    return { url: "https://stripe.test/ok" };
+  };
+  const result = await startCheckoutWithStaleCustomerHeal(
+    { store, billing, tenant: TENANT, retryDelayMs: 0 },
+    startCheckout,
+  );
+  assert.equal(result.healed, true);
+  assert.equal(customerCallCount, 2, "ensureCustomer legt zweimal an (initial + Heal)");
+  assert.deepEqual(calls, ["cus_1", "cus_2"]);
+});
+
+test("startCheckoutWithStaleCustomerHeal: zweiter Fehlschlag propagiert unveraendert (kein Loop)", async () => {
+  const store = fakeStore({ customerId: "cus_stale" });
+  const billing = { createCustomer: async () => ({ customerId: "cus_fresh" }) };
+  let checkoutCallCount = 0;
+  const startCheckout = async (customerId) => {
+    checkoutCallCount += 1;
+    throw new CustomerMissingError(`Stripe x fehlgeschlagen: HTTP 400 resource_missing (${customerId})`);
+  };
+  await assert.rejects(
+    () =>
+      startCheckoutWithStaleCustomerHeal({ store, billing, tenant: TENANT, retryDelayMs: 0 }, startCheckout),
+    CustomerMissingError,
+  );
+  assert.equal(checkoutCallCount, 2, "genau EIN Retry (kein Loop, kein dritter Versuch)");
+});
+
+test("startCheckoutWithStaleCustomerHeal: fremder Fehler propagiert sofort, kein Heal-Versuch, Store unveraendert", async () => {
+  const store = fakeStore({ customerId: "cus_x", paymentMethodId: "pm_x" });
+  const billing = { createCustomer: async () => assert.fail("kein Heal bei fremdem Fehler erwartet") };
+  const sleeps = [];
+  const startCheckout = async () => {
+    throw new Error("irgendein anderer Stripe-Fehler");
+  };
+  await assert.rejects(
+    () =>
+      startCheckoutWithStaleCustomerHeal(
+        { store, billing, tenant: TENANT, retryDelayMs: 1500, sleep: async (ms) => sleeps.push(ms) },
+        startCheckout,
+      ),
+    /irgendein anderer Stripe-Fehler/,
+  );
+  assert.equal(store.state.stripe.customerId, "cus_x", "Store unveraendert");
+  assert.equal(store.state.stripe.paymentMethodId, "pm_x");
+  assert.deepEqual(sleeps, [], "kein Heal -> kein Warten");
+});
+
+test("startCheckoutWithStaleCustomerHeal: retryDelayMs 0 -> Heal laeuft, sleep wird NICHT gerufen (T5-Grenzfall)", async () => {
+  const store = fakeStore({ customerId: "cus_stale" });
+  const billing = { createCustomer: async () => ({ customerId: "cus_fresh" }) };
+  const sleeps = [];
+  const startCheckout = async (customerId) => {
+    if (customerId === "cus_stale")
+      throw new CustomerMissingError("Stripe createSetupCheckoutSession fehlgeschlagen: HTTP 400 resource_missing");
+    return { url: "ok" };
+  };
+  const result = await startCheckoutWithStaleCustomerHeal(
+    { store, billing, tenant: TENANT, retryDelayMs: 0, sleep: async (ms) => sleeps.push(ms) },
+    startCheckout,
+  );
+  assert.equal(result.healed, true);
+  assert.deepEqual(sleeps, [], "0 = sofortiger Retry, kein sleep-Aufruf");
 });

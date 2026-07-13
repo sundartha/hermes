@@ -15,7 +15,7 @@
 import { Router } from "express";
 import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
-import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
+import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import {
   createTenantSubscription,
   priceIdForPlan,
@@ -138,7 +138,7 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
     // Tabs) desselben Tenant+Plan+Price -> Stripe liefert dieselbe Session zurueck statt
     // einer zweiten. Ein geaenderter Stripe-Price erzeugt einen NEUEN Key (kein
     // idempotency_error nach Preis-Update, s. subscribe.js checkoutSessionIdempotencyKey).
-    idempotencyKey: checkoutSessionIdempotencyKey(tenant, planSlug, priceId),
+    idempotencyKey: checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, customerId }),
   });
 }
 
@@ -323,21 +323,23 @@ export function makeSelfServiceRoutes({
         if (planSlug && !priceId) return res.status(500).json({ error: "plan_unconfigured" });
         if (planSlug && hasActiveSubscription(store, tenant))
           return res.status(409).json({ error: "already_subscribed" });
-        const customerId = await ensureCustomer({ store, billing, tenant });
-        const { url } = await createCheckoutSession({
-          billing,
-          config,
-          tenant,
-          customerId,
-          planSlug,
-          priceId,
-        });
+        // Fix B (PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md): Customer-Ermittlung + Checkout-
+        // Start ueber den Self-Heal-Wrapper - eine tote customerId (Stripe resource_missing)
+        // fuehrt zu EINEM automatischen Neuanlauf mit frischem Customer statt zu 502.
+        const { session, healed } = await startCheckoutWithStaleCustomerHeal(
+          { store, billing, tenant, retryDelayMs: config.stripeCustomerRetryDelayMs },
+          (customerId) =>
+            createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }),
+        );
+        // Eigener, alarmierbarer Event-Typ (Muster self_service_subscription_conflict):
+        // gehaeufte Heals = Stripe-Account-Problem, darf nie stumm bleiben.
+        if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
         audit(
           "self_service_setup_checkout",
           req,
           `tenant=${tenant}${planSlug ? ` plan=${planSlug} mode=subscription` : ""}`,
         );
-        res.json({ url });
+        res.json({ url: session.url });
       },
       billingUnavailable,
     ),

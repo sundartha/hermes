@@ -15,6 +15,7 @@
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
 import { config } from "../config.js";
 import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
+import { CustomerMissingError } from "./errors.js";
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -34,6 +35,23 @@ const SUBSCRIPTION_FAILCLOSED_BEHAVIOR = "error_if_incomplete";
 // Form, live im Owner-Smoke bestaetigen (wie der uebrige Adapter, live UNBESTAETIGT).
 const PI_UNEXPECTED_STATE_CODE = "payment_intent_unexpected_state";
 const PI_STATUS_SUCCEEDED = "succeeded";
+
+// Self-Heal (PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md, Fix B): Stripes Fehlerform fuer
+// eine tote/unsichtbare Customer-Referenz. NUR diese Code+Param-Kombination wird als
+// CustomerMissing klassifiziert (kein Magic-String, G25; Muster PI_UNEXPECTED_STATE_CODE).
+const RESOURCE_MISSING_CODE = "resource_missing";
+const CUSTOMER_PARAM = "customer";
+
+// Erwartet den ROHEN Fehlerbody-Text. Defensiv: kein/kaputtes JSON -> kein Match
+// (dann bleibt es der generische Fehlerpfad, nie raten - G26).
+function isMissingCustomerDetail(detail) {
+  try {
+    const err = JSON.parse(detail).error;
+    return Boolean(err && err.code === RESOURCE_MISSING_CODE && err.param === CUSTOMER_PARAM);
+  } catch {
+    return false;
+  }
+}
 
 // Logischer kind -> Stripe-Meter-event_name (Provider-Spezifik adapter-intern, G25).
 // Live mit dem Owner gegen die echten Stripe-Meter abgleichen (geparkt, wie P6b1):
@@ -86,7 +104,12 @@ async function assertOkWithDetail(res, op) {
   } catch {
     /* Body nicht lesbar -> nur Status melden */
   }
-  throw new Error(`Stripe ${op} fehlgeschlagen: HTTP ${res.status} ${detail}`.trim());
+  const message = `Stripe ${op} fehlgeschlagen: HTTP ${res.status} ${detail}`.trim();
+  // Tote/unsichtbare Customer-Referenz als eigener Typ (P9): die Checkout-Orchestrierung
+  // (card-setup.js) heilt GENAU diesen Fall; alles andere bleibt generisch. Message
+  // identisch zum generischen Pfad -> Log-Output unveraendert.
+  if (isMissingCustomerDetail(detail)) throw new CustomerMissingError(message);
+  throw new Error(message);
 }
 
 const url = (path) => config.stripeApiBase + path;
@@ -191,7 +214,7 @@ export const stripeBilling = {
       headers: authHeaders(),
       body,
     });
-    assertOk(res, "createSetupCheckoutSession");
+    await assertOkWithDetail(res, "createSetupCheckoutSession"); // Self-Heal braucht code/param
     const json = await res.json().catch(() => ({}));
     return { url: json.url, sessionId: json.id };
   },

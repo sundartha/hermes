@@ -21,6 +21,7 @@ import {
 } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
+import { CustomerMissingError } from "../src/billing/errors.js";
 
 const SECRET = "bk2-checkout-secret-0123456789";
 const SUB = "sub-bk2";
@@ -42,23 +43,33 @@ const CONFIG = {
   publicUrl: "https://test.local",
   stripeStarterPriceId: "price_starter",
   stripeBusinessPriceId: "price_business",
+  stripeCustomerRetryDelayMs: 0, // Self-Heal-Tests warten nie echt (P12/T9)
 };
 
 // Fake-Billing (in-process, KEIN Netz). spy.successUrl faengt die an Stripe uebergebene
 // successUrl (BK2-Plan-Carry); spy.subParams faengt die createSubscription-Parameter
 // (priceId). getCheckoutSessionResult liefert IMMER den vorgeseedeten Customer -> die
-// Karte bindet im return-Flow (Customer-Match in card-setup.js).
-function fakeBilling(spy = {}, checkoutOutcome = {}) {
+// Karte bindet im return-Flow (Customer-Match in card-setup.js). staleCustomerHeal (Fix B):
+// der ERSTE createSubscriptionCheckoutSession-Call wirft CustomerMissingError (stale
+// gespeicherter Customer), der Heal-Retry (mit dem frisch angelegten Customer) gelingt.
+function fakeBilling(spy = {}, checkoutOutcome = {}, { staleCustomerHeal = false } = {}) {
+  let subCheckoutCallCount = 0;
   return {
-    createCustomer: async () => ({ customerId: CUSTOMER }),
+    createCustomer: async () => ({ customerId: "cus_fresh" }),
     createSetupCheckoutSession: async (p) => {
       spy.setupParams = p;
       spy.successUrl = p.successUrl;
       return { url: "https://stripe.test/c/cs_b", sessionId: SESSION };
     },
     createSubscriptionCheckoutSession: async (p) => {
+      subCheckoutCallCount += 1;
       spy.subCheckoutParams = p;
       spy.successUrl = p.successUrl;
+      if (staleCustomerHeal && subCheckoutCallCount === 1) {
+        throw new CustomerMissingError(
+          "Stripe createSubscriptionCheckoutSession fehlgeschlagen: HTTP 400 resource_missing",
+        );
+      }
       return { url: "https://stripe.test/c/cs_b", sessionId: SESSION };
     },
     getCheckoutSessionResult: async () => ({ customerId: CUSTOMER, paymentMethodId: "pm_b" }),
@@ -84,6 +95,7 @@ async function setup({
   cardOnFile = false,
   configPatch = {},
   checkoutOutcome = {},
+  staleCustomerHeal = false,
 } = {}) {
   const { store, db } = await makePgTestStore();
   const runner = {
@@ -118,6 +130,9 @@ async function setup({
   const webAuthPendingMw = webAuthAllowPending({ secret: SECRET, sessions, accounts });
   const billingSpy = {};
   const provisionSpy = [];
+  // Self-Heal (Fix B): faengt audit-Aufrufe (Muster billingSpy) - so ist der alarmierbare
+  // stripe_customer_self_heal-Event pruefbar, ohne echtes audit-Backend.
+  const auditCalls = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -125,9 +140,9 @@ async function setup({
       store,
       webAuthMw,
       webAuthPendingMw,
-      audit: () => {},
+      audit: (event, _req, detail) => auditCalls.push({ event, detail }),
       config: { ...CONFIG, paymentEnabled, ...configPatch },
-      billing: fakeBilling(billingSpy, checkoutOutcome),
+      billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
       accounts,
       provision: async (t) => provisionSpy.push(t),
     }),
@@ -141,6 +156,7 @@ async function setup({
     accounts,
     billingSpy,
     provisionSpy,
+    auditCalls,
     cookie: cookieFor(sessionId),
     close: () => new Promise((r) => server.close(r)),
   };
@@ -448,6 +464,28 @@ test("(16) return ?plan=starter nach Webhook-gewonnenem Rennen (Abo gespeichert,
     assert.deepEqual(s.provisionSpy, [TENANT], "Heilung stoesst das idempotente Provisioning an");
     const acct = await s.accounts.resolve(SUB);
     assert.equal(acct.status, "active", "Aktivierung laeuft wie im ok-Pfad");
+  } finally {
+    await s.close();
+  }
+});
+
+// Fix B (PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md): stale customerId bei Stripe (z.B. Test/
+// Live-Wechsel, Dashboard-Cleanup) fuehrte VORHER zu 502 billing_unavailable ("Couldn't
+// start checkout."). Der Self-Heal-Wrapper verwirft die stale Referenz, legt EINEN
+// frischen Customer an und wiederholt den Checkout-Start genau einmal (retryDelayMs:0
+// in der Test-Config, kein echtes Warten).
+test("(17) setup-checkout {plan:starter} bei stale Stripe-Customer (resource_missing) -> Self-Heal: 200 + url, frischer Customer persistiert, Audit stripe_customer_self_heal", async () => {
+  const s = await setup({ staleCustomerHeal: true });
+  try {
+    const res = await setupCheckout(s, "starter");
+    assert.equal(res.status, 200, "Self-Heal liefert die Checkout-URL statt 502");
+    assert.equal(JSON.parse(res.body).url, "https://stripe.test/c/cs_b");
+    const t = s.store.load().tenants.find((x) => x.id === TENANT);
+    assert.equal(t.stripeCustomerId, "cus_fresh", "stale Customer verworfen, frischer persistiert");
+    assert.ok(
+      s.auditCalls.some((c) => c.event === "stripe_customer_self_heal" && c.detail === `tenant=${TENANT}`),
+      "alarmierbarer Audit-Event fuer den Heal",
+    );
   } finally {
     await s.close();
   }

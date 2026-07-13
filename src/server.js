@@ -94,7 +94,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { resolvePeriodStartIso } from "./billing/period.js";
-import { ensureCustomer, bindCardFromSession } from "./billing/card-setup.js";
+import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { verifyStripeSignature, applyStripeWebhook } from "./billing/webhook.js";
 import { E164, invalidText, validateAssistantContext } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
@@ -1975,18 +1975,17 @@ app.post("/api/billing/setup-checkout", async (req, res) => {
   const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
   if (!tenant) return;
 
-  // Customer idempotent anlegen (geteilte Logik, G5: identisch zum Self-Service-Pfad).
-  const customerId = await ensureCustomer({ store, billing: stripeBilling, tenant });
   const successUrl = `${config.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${config.publicUrl}/tenant.html?card=canceled`;
-  const { url } = await stripeBilling.createSetupCheckoutSession({
-    tenantRef: tenant,
-    customerId,
-    successUrl,
-    cancelUrl,
-  });
+  // Fix B: derselbe Self-Heal wie der Pay3-Pfad (geteilte Logik, G5 - s. card-setup.js).
+  const { session, healed } = await startCheckoutWithStaleCustomerHeal(
+    { store, billing: stripeBilling, tenant, retryDelayMs: config.stripeCustomerRetryDelayMs },
+    (customerId) =>
+      stripeBilling.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl }),
+  );
+  if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
   audit("billing_setup_checkout", req, `tenant=${tenant}`);
-  res.json({ url });
+  res.json({ url: session.url });
 });
 
 app.get("/api/billing/checkout-return", async (req, res) => {
