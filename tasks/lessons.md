@@ -241,3 +241,26 @@ fuer alles Ungemessene ist **Bestandsverhalten behalten**, nicht "der neue Wert 
 Und: die Invariante als Test festnageln ("der Fallback ist fuer KEINE Eingabe kuerzer als die
 alte Formel") — sonst wandert der Fehler beim naechsten Refactoring nur in eine andere
 Konstante. Frag bei jeder Kalibrierung: **Woran genau habe ich gemessen, und wo wende ich es an?**
+
+## `git add -A` ist in diesem Repo eine Falle (2026-07-13)
+
+Ich wollte zwei Doku-Dateien committen und habe `git add -A` benutzt. Das Repo hat dutzende
+untracked-Dateien (WIP-Apps, Build-Artefakte, eingebettete Git-Repos) — der Commit hatte
+**201 Dateien**, darunter `scratchpad_customers_verify.json`: einen **Stripe-Kundendump**.
+Gepusht auf beide Remotes (beide privat, kein oeffentliches Leck, aber trotzdem falsch).
+
+Was die Reparatur teuer gemacht hat: In der Zwischenzeit hatte eine PARALLELE Session ihren
+Commit auf meinen Muell-Commit obendrauf gepusht. Ein blindes `git push --force` haette ihre
+Arbeit geloescht. Gerettet hat es `--force-with-lease=master:<erwartete-spitze>` — das brach
+mit "stale info" ab und zwang mich hinzuschauen. Erst deren Commit per cherry-pick auf die
+saubere History uebernehmen, DANN force-pushen.
+
+Regeln ab sofort:
+1. **NIE `git add -A` / `git add .` in diesem Repo.** Immer Pfade explizit nennen:
+   `git add PLAN-X.md tasks/todo.md`.
+2. Vor JEDEM Commit `git diff --cached --name-only` lesen. Wenn dort mehr steht, als du
+   erwartest: stoppen.
+3. Force-Push IMMER mit `--force-with-lease=<branch>:<sha-den-du-gesehen-hast>`, nie mit
+   nacktem `--force` — dieses Repo hat parallele Sessions, die auf denselben Remote pushen.
+4. Beim Loeschen untracked-Dateien: erst Archiv-Commit (dann ist es reversibel), dann `git rm`.
+   Untracked = nicht in der History = ein `rm` ist endgueltig.
