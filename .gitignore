@@ -26,3 +26,8 @@ build/
 _cacache/
 _logs/
 _update-notifier-last-checked
+
+# Scratchpad-/Verifikations-Dumps (koennen Kundendaten enthalten - NIE committen)
+scratchpad_*.json
+# Build-Artefakte aus Test-Builds
+apps/web/dist-clean-test/
