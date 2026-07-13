@@ -171,3 +171,18 @@ die Invariante fest: der Fallback-Delay liegt fuer KEINE Zeichenzahl unter der a
 LEHRE (in lessons.md): Eine Messung an EINER Sprache/Konfiguration darf nie global
 angewandt werden. Der Default fuer alles Ungemessene ist "Bestandsverhalten behalten",
 nicht "der neue Wert wird schon passen".
+
+## ROLLOUT-STAND 2026-07-13
+
+- K1 + K2: **LIVE am Assistant** (Provisioner-Lauf 07-12, per GET verifiziert:
+  interrupt_prediction_threshold=0.4, background_audio=office/0.3, enable=true,
+  Safety-Felder intakt, Assistant-Anzahl unveraendert 4).
+- K0 + K3: **DEPLOYT** (master 3ad5342, Render 07-13 07:04 UTC,
+  `[boot] deployed commit=3ad534216e...`, /healthz 200, Suite 2175/2175).
+- OFFEN, braucht einen Menschen: **EIN Testanruf**.
+  - HARTES GATE E1.2: echtes Ins-Wort-Fallen (ganzer Satz) MUSS die KI sofort stoppen.
+    Wenn nicht -> interrupt_prediction_threshold zurueck auf 0.0 (Barge-in = Launch-Pflicht).
+  - GEGENPROBE E1.1: waehrend die KI spricht nur "mhm" sagen -> sie MUSS weiterreden.
+  - E2.1: Agent-Kanal traegt jetzt einen Grundpegel (Ambiente) statt digitaler Null.
+  - E3.1: Hangup <= Segment-Ende + ~3s, Abschied NIE abgeschnitten.
+- DANACH: G1 (Gate-Experiment Streaming) entscheidet ueber K5/K6.

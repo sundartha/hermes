@@ -14,8 +14,8 @@ gegengeprueft): `interrupt_prediction_threshold: 0.4`, `background_audio: office
 ueberlebt (time_limit_secs 1800, recording, deepgram/flux, `greeting: ""`). Assistant-Anzahl
 unveraendert 4 -> kein versehentlicher Create.
 
-**K0 + K3 sind NICHT deployt** (Code liegt nur auf dem Branch). Sie wirken erst nach
-Merge + Render-Deploy.
+**K0 + K3 sind DEPLOYT** (master 3ad5342, Render-Deploy 2026-07-13 07:04 UTC,
+`[boot] deployed commit=3ad534216e...` verifiziert, /healthz 200). Suite 2175/2175.
 
 **Offenes Owner-Gate: EIN Testanruf** — inkl. Overlap-Probe. **E1.2 ist das harte Gate:**
 Faellt der Owner der KI mit einem echten SATZ ins Wort, muss sie weiterhin SOFORT stoppen.
