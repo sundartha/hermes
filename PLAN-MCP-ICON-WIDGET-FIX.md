@@ -18,13 +18,19 @@ Erster Tool-Call 8,2 s NACH dem Handshake (F2 greift), ausschliesslich `tools/ca
 **kein roter Pfeil mehr**. Render-Logs decken sich exakt: 1x `place_call` + 3x Widget-Poll.
 F4 (243-KB-Payload) bewusst offen gelassen.
 
-**Bug 1 (Icon): E1 ausgefuehrt, Ergebnis noch NICHT konklusiv.** `serverInfo.websiteUrl` steht live
-auf `https://www.sundartha.com`; claude.ai fragt im DOM (auch nach Reload) weiterhin
-`domain=sundartha.com`. Der Host liest `serverInfo` aber nur beim Verbinden — erst ein
-Trennen+Neu-Verbinden entscheidet zwischen "kommt aus websiteUrl" und "kommt aus der
-Connector-URL". Gegenargument, das dem Owner gehoert: beim Reconnect koennen die
-Tool-Berechtigungen ("Zulassen" fuer `get_call_status`) zurueckfallen — dann pollt die Live-Karte
-nicht mehr. Head-Haertung (ICO vor SVG + `apple-touch-icon`) ist live.
+**Bug 1 (Icon): E1 ist BEANTWORTET — negativ. `websiteUrl` ist KEIN Hebel.** `serverInfo.websiteUrl`
+steht live auf `https://www.sundartha.com`; der Connector wurde getrennt und **neu verbunden**
+(serverInfo also frisch gelesen), danach fragt claude.ai im DOM unveraendert
+`google.com/s2/favicons?domain=sundartha.com`. Der Host leitet die Icon-Domain also aus der
+**Connector-URL** (`app.sundartha.com/mcp` → eTLD+1) ab. Damit ist Option E1 tot; es bleiben
+Option A (andere registrierbare Domain — vom Owner an den Infra-Cutover gekoppelt, nicht solo)
+und Option B (warten). Head-Haertung (ICO vor SVG + `apple-touch-icon`) ist live und sorgt dafuer,
+dass ein spaeterer Google-Recrawl richtig landet.
+
+Nebenbefund, der eine Annahme kippt: `get_call_status` stand beim Verifikations-Anruf auf
+**"Fragen"**, nicht auf "Zulassen" — die Live-Karte hat trotzdem gepollt. Widget-initiierte
+Tool-Calls unterliegen der Rueckfrage-Regel offenbar nicht; W4 war nie die Ursache des roten
+Pfeils. Der Reconnect hat die Berechtigungen NICHT zurueckgesetzt.
 
 Methodik: Live-Forensik im echten claude.ai (Chrome-Extension, DOM + postMessage-Mitschnitt),
 Render-Logs, Google-Favicon-Endpunkte per curl, plus ein 24-Agenten-Fan-out mit adversarischer
