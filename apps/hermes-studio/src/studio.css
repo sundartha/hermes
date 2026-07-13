@@ -1,0 +1,148 @@
+:root {
+  --gold: #c9a227;
+  --gold-soft: #e6c868;
+  --deep: #0b1b2b;
+  --ink: #0a0a0a;
+  --paper: #faf7ef;
+  --line: #e4ddca;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.45;
+}
+
+.studio-header {
+  padding: 28px 32px 8px;
+  border-bottom: 3px solid var(--gold);
+}
+.studio-header h1 { margin: 0; font-weight: 800; letter-spacing: -0.02em; }
+.studio-sub { margin: 6px 0 0; max-width: 60ch; color: #45433b; }
+.studio-sub em { color: var(--gold); font-style: normal; font-weight: 700; }
+
+.studio-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px 1fr;
+  gap: 20px;
+  padding: 24px 32px 48px;
+  align-items: start;
+}
+@media (max-width: 1100px) { .studio-grid { grid-template-columns: 1fr; } }
+
+.panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+.panel h2 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6b6857; margin: 18px 0 10px; }
+.panel h2:first-child { margin-top: 0; }
+.muted { color: #9a9684; font-weight: 500; }
+
+.btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-group button {
+  font: inherit;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.btn-group button.is-active { background: var(--deep); color: var(--paper); border-color: var(--deep); }
+.btn-group button:hover { border-color: var(--gold); }
+
+.format-desc { color: #45433b; min-height: 1.4em; margin: 10px 2px 0; }
+
+.field { display: block; margin: 8px 0; font-size: 0.85rem; color: #6b6857; }
+.field input {
+  display: block; width: 100%; margin-top: 4px;
+  font: inherit; color: var(--ink);
+  padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px;
+}
+.field input:focus { outline: 2px solid var(--gold-soft); border-color: var(--gold); }
+.hint { font-size: 0.8rem; color: #9a9684; margin: 4px 0 8px; }
+
+.actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.actions button {
+  font: inherit; padding: 9px 16px; border-radius: 9px; cursor: pointer;
+  background: var(--gold); color: var(--ink); border: 1px solid var(--gold);
+  font-weight: 700;
+}
+.actions button:hover { background: var(--gold-soft); }
+.feedback { font-size: 0.85rem; color: var(--gold); }
+
+/* Vorschau: echtes 9:16-Reel */
+.preview-panel { display: flex; flex-direction: column; align-items: center; }
+.reel-frame {
+  position: relative;
+  width: 270px; height: 480px;
+  border-radius: 18px; overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(11,27,43,0.18);
+}
+.reel-frame video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--deep); }
+.wing-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.wing-overlay canvas { filter: drop-shadow(0 0 18px rgba(201,162,39,0.55)); }
+.caption {
+  position: absolute; left: 0; right: 0; bottom: 56px;
+  text-align: center; padding: 0 18px;
+  color: var(--paper); font-weight: 800; font-size: 1.05rem;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.6);
+}
+.reel-frame + .btn-group { margin-top: 14px; justify-content: center; }
+
+.json-readout {
+  margin-top: 12px; max-height: 460px; overflow: auto;
+  background: var(--deep); color: #d9e2ec;
+  padding: 14px; border-radius: 10px;
+  font-size: 0.72rem; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+.boot-error { margin: 16px; padding: 14px; background: #fff0f0; color: #a00; border-radius: 8px; }
+
+/* Statusleiste (Higgsfield-Verbindung) */
+.status-bar {
+  margin: 12px 0 0;
+  display: inline-block;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #efe9d6;
+  color: #6b6857;
+  border: 1px solid var(--line);
+}
+.status-bar[data-state="ok"] { background: #e7f4e9; color: #1d6b32; border-color: #b7e0c0; }
+.status-bar[data-state="warn"] { background: #fff5e0; color: #8a5a00; border-color: #f0d79a; }
+.status-bar[data-state="off"] { background: #fdecec; color: #a01919; border-color: #f0bcbc; }
+
+/* Primaerer Aktionsknopf (Video generieren) */
+.actions button.primary {
+  background: var(--deep);
+  color: var(--paper);
+  border-color: var(--deep);
+}
+.actions button.primary:hover { background: #122c44; }
+.actions button.primary:disabled { opacity: 0.55; cursor: progress; }
+
+
+/* Download-Link fuers fertige Reel (Phase 3). */
+.reel-download {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--gold, #c9a227);
+  color: #0b1b2b;
+  font-weight: 700;
+  text-decoration: none;
+}
+.reel-download[hidden] { display: none; }
+.reel-download:hover { filter: brightness(1.06); }

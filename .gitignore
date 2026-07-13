@@ -1,6 +1,9 @@
 node_modules/
 /node_modules
 .claude/worktrees/
+# Lokal installierte Claude-Skills (kein Projektcode, kommen aus dem Marketplace)
+.claude/skills/
+.claude/scheduled_tasks.lock
 .env
 .env.bak*
 .env.test-payment

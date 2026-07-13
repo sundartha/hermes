@@ -1,0 +1,30 @@
+{
+  "name": "hermes-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes Studio — lokales Film-Studio: Higgsfield (Kamera, via lokalem Bridge-Server + CLI-Login) + Hermes-Fluegel-Overlay (PixiJS/GSAP, wiederverwendet aus hermes-animation-lab) + Render-Plan fuer Remotion/FFmpeg.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "bridge": "node server.mjs",
+    "start": "concurrently -n studio,bridge -c cyan,magenta \"vite\" \"node server.mjs\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "gsap": "^3.12.5",
+    "pixi.js": "^8.6.0"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.484",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "concurrently": "^9.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.484",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
+  }
+}

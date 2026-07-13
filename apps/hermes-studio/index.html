@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes Studio</title>
+  </head>
+  <body>
+    <header class="studio-header">
+      <h1>Hermes Studio</h1>
+      <p class="studio-sub">
+        Higgsfield ist die Kamera. Hier wird der Clip zu <em>deiner</em> Marke:
+        Format wählen → generieren → Flügel veredelt → Reel.
+      </p>
+      <p class="status-bar" id="status-bar">Higgsfield-Status wird geprüft …</p>
+    </header>
+
+    <main class="studio-grid">
+      <!-- Links: Steuerung -->
+      <section class="panel">
+        <h2>1 · Format</h2>
+        <div class="btn-group" id="format-group"><!-- per JS --></div>
+        <p class="format-desc" id="format-desc"></p>
+
+        <h2>2 · Inhalt</h2>
+        <label class="field">Hook (Pflicht)
+          <input type="text" id="in-hook" placeholder="Dein Agent ruft für dich an." />
+        </label>
+        <label class="field">Kernaussage
+          <input type="text" id="in-message" placeholder="Termine, Rückrufe, Warteschleifen — erledigt." />
+        </label>
+        <label class="field">Call-to-Action
+          <input type="text" id="in-cta" placeholder="Jetzt testen." />
+        </label>
+
+        <h2>3 · Video erzeugen</h2>
+        <div class="actions">
+          <button type="button" id="btn-generate" class="primary">Video generieren (live)</button>
+          <span class="feedback" id="gen-feedback" aria-live="polite"></span>
+        </div>
+        <p class="hint">Erzeugt einen echten Clip mit deinem Higgsfield-Account (über den lokalen Bridge-Server). Dauert je nach Modell 1–5 Min.</p>
+        <label class="field">Clip-URL (wird automatisch gefüllt, oder manuell)
+          <input type="text" id="in-clip" placeholder="https://… Higgsfield-Clip" />
+        </label>
+        <div class="actions">
+          <button type="button" id="btn-cli">Stattdessen CLI-Befehl kopieren</button>
+          <span class="feedback" id="cli-feedback" aria-live="polite"></span>
+        </div>
+
+        <h2>4 · Fertiges Reel (MP4)</h2>
+        <div class="actions">
+          <button type="button" id="btn-render" class="primary">Fertiges Reel rendern (MP4)</button>
+          <span class="feedback" id="render-feedback" aria-live="polite"></span>
+        </div>
+        <p class="hint">Legt den Hermes-Flügel und die Untertitel auf den Clip und rendert ein fertiges, geschnittenes 9:16-MP4. Braucht einen erzeugten Clip. Dauert ~1–3 Min.</p>
+        <a id="reel-download" class="reel-download" href="#" download hidden>⬇︎ Fertiges Reel herunterladen</a>
+      </section>
+
+      <!-- Mitte: Live-Vorschau (9:16) -->
+      <section class="panel preview-panel">
+        <h2>Vorschau <span class="muted" id="status-label">(idle)</span></h2>
+        <div class="reel-frame" id="reel-frame">
+          <video id="clip-video" playsinline muted loop></video>
+          <div class="wing-overlay" id="wing-overlay"></div>
+          <div class="caption" id="caption"></div>
+        </div>
+        <div class="btn-group" id="arc-group">
+          <button type="button" data-act="play-arc">Story abspielen</button>
+          <button type="button" data-act="idle">idle</button>
+          <button type="button" data-act="connecting">connecting</button>
+          <button type="button" data-act="working">working</button>
+          <button type="button" data-act="success">success</button>
+        </div>
+      </section>
+
+      <!-- Rechts: Produktionsauftrag -->
+      <section class="panel">
+        <h2>Produktionsauftrag</h2>
+        <p class="hint">Dieses JSON ist die Schnittstelle zu Phase 3 (Remotion).</p>
+        <div class="actions">
+          <button type="button" id="btn-plan">Render-Plan als JSON kopieren</button>
+          <span class="feedback" id="plan-feedback" aria-live="polite"></span>
+        </div>
+        <pre class="json-readout" id="plan-readout" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
