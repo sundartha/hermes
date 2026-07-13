@@ -10,6 +10,12 @@
 // kein direkter Stripe-/IO-Zugriff hier. Geld wird NICHT bewegt (setup-Mode, keine
 // Abbuchung) - die Karte wird nur am Customer gespeichert.
 
+import { CustomerMissingError } from "./errors.js";
+
+// Injizierbarer Sleep (Muster defaultSleep in llm.js): Tests reichen einen Spy,
+// die Suite wartet nie echt (F.I.R.S.T./T9).
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Legt den Stripe-Customer eines Tenants idempotent an: existiert er bereits, wird
 // er wiederverwendet (kein Doppel-Customer bei wiederholtem Klick). Liefert die
 // customerId. Nebeneffekt (Anlegen + Speichern) ist im Namen sichtbar (N7).
@@ -20,6 +26,37 @@ export async function ensureCustomer({ store, billing, tenant }) {
     store.setTenantStripe(tenant, { customerId });
   }
   return customerId;
+}
+
+// Self-Heal fuer tote Customer-Referenzen (PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md, Fix B):
+// ermittelt den Customer idempotent (ensureCustomer) und startet den Checkout. Meldet der
+// Provider CustomerMissing (gespeicherte ODER frisch angelegte Id existiert dort nicht -
+// Test/Live-Wechsel, Dashboard-Cleanup, Sichtbarkeits-Verzoegerung), werden die stale
+// Referenzen verworfen (paymentMethodId haengt am toten Customer und ist ohne ihn wertlos),
+// EIN frischer Customer angelegt und der Checkout nach retryDelayMs GENAU EINMAL wiederholt.
+// Ein zweiter Fehlschlag propagiert unveraendert (kein Loop; Route -> 502 wie bisher).
+// healed=true signalisiert dem Route-Layer den alarmierbaren Audit-Event (gehaeufte Heals
+// deuten auf ein Stripe-Account-Problem - Heal darf das nie stumm maskieren). startCheckout
+// ist ein reiner Callback (customerId) => Promise<session>; die Mode-Wahl (setup/
+// subscription) bleibt beim Aufrufer. Kein HTTP/Audit hier (G34, Muster subscribeAndActivate).
+export async function startCheckoutWithStaleCustomerHeal(
+  { store, billing, tenant, retryDelayMs, sleep = defaultSleep },
+  startCheckout,
+) {
+  const customerId = await ensureCustomer({ store, billing, tenant });
+  try {
+    return { session: await startCheckout(customerId), healed: false };
+  } catch (err) {
+    if (!(err instanceof CustomerMissingError)) throw err;
+    // Erst nullen, DANN neu anlegen: schlaegt createCustomer fehl, bleibt ein sauberer
+    // leerer Zustand (naechster Klick startet frisch) statt der stalen Referenz.
+    store.setTenantStripe(tenant, { customerId: null, paymentMethodId: null });
+    const freshCustomerId = await ensureCustomer({ store, billing, tenant });
+    // Wartezeit vor dem Retry: ueberbrueckt die live beobachtete Stripe-Sichtbarkeits-
+    // Verzoegerung zwischen createCustomer und dem naechsten API-Call (Nachtrag 3).
+    if (retryDelayMs > 0) await sleep(retryDelayMs);
+    return { session: await startCheckout(freshCustomerId), healed: true };
+  }
 }
 
 // G5/S2 (Review-Blocker Runde 3): die Customer-Match-Sicherheitsinvariante (R4) an

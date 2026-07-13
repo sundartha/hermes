@@ -134,26 +134,38 @@ test("createTenantSubscription: andere Karte -> anderer Idempotenz-Key (kein Par
 
 // ---- Review-Blocker Runde 1: checkoutSessionIdempotencyKey + hasActiveSubscription --
 
-test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan+Price (kein Zufall), unterscheidet Plaene/Prices/Tenants, KEIN PM-Suffix", () => {
+// Objekt-Signatur (Self-Heal, Fix B): customerId ist Teil des Keys, damit der Heal-
+// Retry (anderer customer-Param) nie unter dem Key des vorherigen Versuchs kollidiert.
+const idemKey = (tenant, planSlug, priceId, customerId = "cus_a") =>
+  checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, customerId });
+
+test("checkoutSessionIdempotencyKey: deterministisch aus Tenant+Plan+Price+Customer (kein Zufall), unterscheidet Plaene/Prices/Tenants/Customer, KEIN PM-Suffix", () => {
   assert.equal(
-    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
-    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
-    "gleicher Tenant+Plan+Price -> gleicher Key (Doppelklick/zwei Tabs bekommen dieselbe Session)",
+    idemKey("t_x", "starter", "price_a"),
+    idemKey("t_x", "starter", "price_a"),
+    "gleicher Tenant+Plan+Price+Customer -> gleicher Key (Doppelklick/zwei Tabs bekommen dieselbe Session)",
   );
   assert.notEqual(
-    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
-    checkoutSessionIdempotencyKey("t_x", "starter", "price_b"),
+    idemKey("t_x", "starter", "price_a"),
+    idemKey("t_x", "starter", "price_b"),
     "anderer Price (Preis-Update) -> anderer Key (kein idempotency_error/24h-Lockout)",
   );
   assert.notEqual(
-    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
-    checkoutSessionIdempotencyKey("t_x", "business", "price_a"),
+    idemKey("t_x", "starter", "price_a"),
+    idemKey("t_x", "business", "price_a"),
     "anderer Plan -> anderer Key",
   );
   assert.notEqual(
-    checkoutSessionIdempotencyKey("t_x", "starter", "price_a"),
-    checkoutSessionIdempotencyKey("t_y", "starter", "price_a"),
+    idemKey("t_x", "starter", "price_a"),
+    idemKey("t_y", "starter", "price_a"),
     "anderer Tenant -> anderer Key",
+  );
+  // Self-Heal (Fix B): der Heal-Retry wiederholt denselben Tenant+Plan+Price mit einem
+  // FRISCHEN customer-Param - das darf NIE mit dem Key des Alt-Versuchs kollidieren.
+  assert.notEqual(
+    idemKey("t_x", "starter", "price_a", "cus_stale"),
+    idemKey("t_x", "starter", "price_a", "cus_fresh"),
+    "andere customerId (Heal-Retry) -> anderer Key",
   );
 });
 

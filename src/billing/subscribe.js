@@ -65,8 +65,15 @@ function subscribeIdempotencyKey(tenant, slug, paymentMethodId) {
 // priceId ist ein oeffentlicher Stripe-Identifier (kein Secret) -> voller Wert im Key;
 // das Suffix-Truncation-Pattern oben (PM_KEY_SUFFIX_LEN) gilt der Invariante AM4 fuer
 // Payment-Method-Ids und greift hier nicht.
-export function checkoutSessionIdempotencyKey(tenant, planSlug, priceId) {
-  return `subcs_${tenant}_${planSlug}_${priceId}`;
+// SELF-HEAL (Fix B): customerId ist Teil des Keys, weil der Heal-Retry denselben
+// Tenant+Plan+Price mit einem FRISCHEN customer-Param wiederholt - unter dem ALTEN
+// Key waeren das geaenderte Request-Params -> HTTP 400 idempotency_error (dieselbe
+// 24h-Lockout-Falle wie der Preis-Wechsel oben, IDEMP-KEY-FIX). Doppelklick/zwei
+// Tabs lesen denselben gespeicherten Customer -> derselbe Key, der TOCTOU-Schutz
+// bleibt. customerId ist eine opake oeffentliche Referenz (kein Secret) -> voller
+// Wert im Key (wie priceId).
+export function checkoutSessionIdempotencyKey({ tenant, planSlug, priceId, customerId }) {
+  return `subcs_${tenant}_${planSlug}_${priceId}_${customerId}`;
 }
 
 // G5/S2: das gemeinsame Praedikat "Tenant hat bereits ein aktives Abo" - stand vorher

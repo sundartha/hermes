@@ -288,6 +288,15 @@ export const config = {
   // Stripe-Webhook-Signing-Secret (whsec_...). SECRET - nie loggen/leaken. Leer +
   // PAYMENT_ENABLED -> assertConfig Boot-Refusal (Webhook fail-closed unverifizierbar).
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  // Self-Heal (Fix B, PLAN-CHECKOUT-STALE-STRIPE-CUSTOMER.md): Wartezeit (ms) vor dem
+  // EINEN Checkout-Retry nach Stripe resource_missing auf den Customer - ueberbrueckt
+  // die live beobachtete Sichtbarkeits-Verzoegerung zwischen createCustomer und dem
+  // naechsten API-Call (Nachtrag 3). 0 = sofortiger Retry.
+  stripeCustomerRetryDelayMs: numEnv(
+    "STRIPE_CUSTOMER_RETRY_DELAY_MS",
+    process.env.STRIPE_CUSTOMER_RETRY_DELAY_MS,
+    { fallback: 2000, min: 0 },
+  ),
 
   // Owner-Identitaet kommt NICHT mehr aus der Env (P2b): der erste Tenant wird einmalig
   // per scripts/bootstrap-tenant.js angelegt und lebt im Store; ownerName/privateNumber

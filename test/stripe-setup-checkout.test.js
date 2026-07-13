@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { stripeBilling } from "../src/billing/stripe.js";
+import { CustomerMissingError } from "../src/billing/errors.js";
 
 const SECRET = "sk_test_geheim_leak_probe";
 
@@ -26,6 +27,16 @@ function withStripeStub(impl, fn) {
 }
 
 const okJson = (body) => ({ ok: true, status: 200, json: async () => body });
+
+// Self-Heal (Fix B): der Adapter muss den ROHEN Fehlerbody-Text lesen koennen
+// (assertOkWithDetail), um code/param zu klassifizieren - die bestehenden Fehler-
+// Stubs oben haben KEIN .text() und bleiben deshalb unveraendert im generischen Pfad.
+const errJson = (status, body) => ({
+  ok: false,
+  status,
+  json: async () => body,
+  text: async () => JSON.stringify(body),
+});
 
 test("createCustomer: POST /v1/customers, Bearer + form-urlencoded, metadata[tenant_ref], parst customerId", async () => {
   let captured;
@@ -241,6 +252,81 @@ test("createSubscriptionCheckoutSession: Nicht-2xx -> wirft HTTP-Status, OHNE Se
         (err) => {
           assert.match(err.message, /HTTP 402/);
           assert.doesNotMatch(err.message, /sk_test|Bearer/);
+          return true;
+        },
+      ),
+  );
+});
+
+// ---- Self-Heal (Fix B): CustomerMissingError-Klassifikation (resource_missing/customer) ----
+
+test("createSubscriptionCheckoutSession: Stripe resource_missing/customer -> CustomerMissingError, Message wie generisch, kein Secret-Leak", async () => {
+  await withStripeStub(
+    async () =>
+      errJson(400, {
+        error: { code: "resource_missing", param: "customer", message: "No such customer: 'cus_x'" },
+      }),
+    () =>
+      assert.rejects(
+        () =>
+          stripeBilling.createSubscriptionCheckoutSession({
+            tenantRef: "tenant_a",
+            customerId: "cus_x",
+            priceId: "price_starter",
+            planSlug: "starter",
+            successUrl: "https://agent.test/ok",
+            cancelUrl: "https://agent.test/no",
+          }),
+        (err) => {
+          assert.ok(err instanceof CustomerMissingError);
+          assert.match(err.message, /HTTP 400/);
+          assert.doesNotMatch(err.message, /sk_test|Bearer/, "Secret-Key/Bearer darf nicht leaken");
+          return true;
+        },
+      ),
+  );
+});
+
+test("createSetupCheckoutSession: Stripe resource_missing/customer -> ebenfalls CustomerMissingError (beweist den assertOk->assertOkWithDetail-Switch)", async () => {
+  await withStripeStub(
+    async () =>
+      errJson(400, {
+        error: { code: "resource_missing", param: "customer", message: "No such customer: 'cus_x'" },
+      }),
+    () =>
+      assert.rejects(
+        () =>
+          stripeBilling.createSetupCheckoutSession({
+            tenantRef: "tenant_a",
+            customerId: "cus_x",
+            successUrl: "https://agent.test/ok",
+            cancelUrl: "https://agent.test/no",
+          }),
+        (err) => {
+          assert.ok(err instanceof CustomerMissingError);
+          return true;
+        },
+      ),
+  );
+});
+
+test("createSubscriptionCheckoutSession: resource_missing auf einem ANDEREN param (price) -> generischer Error, NICHT CustomerMissingError (Praezisions-Guard)", async () => {
+  await withStripeStub(
+    async () => errJson(400, { error: { code: "resource_missing", param: "price" } }),
+    () =>
+      assert.rejects(
+        () =>
+          stripeBilling.createSubscriptionCheckoutSession({
+            tenantRef: "tenant_a",
+            customerId: "cus_x",
+            priceId: "price_gone",
+            planSlug: "starter",
+            successUrl: "https://agent.test/ok",
+            cancelUrl: "https://agent.test/no",
+          }),
+        (err) => {
+          assert.equal(err instanceof CustomerMissingError, false, "nur code+param=customer heilt");
+          assert.match(err.message, /HTTP 400/);
           return true;
         },
       ),
