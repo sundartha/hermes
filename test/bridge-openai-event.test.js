@@ -385,18 +385,20 @@ test("Transkript Anrufer: nur Whitespace -> kein addTranscript", async () => {
   }
 });
 
-test("Transkript Agent: response.audio_transcript.done + output-Variante -> addTranscript(agent)", async () => {
+test("Transkript Agent: response.audio_transcript.done + output-Variante -> addTranscript(agent, geshaped)", async () => {
   const { call, fake, sends, cleanup } = await setupCall();
   try {
     feed(fake, { type: "response.audio_transcript.done", transcript: "Guten Tag" });
     feed(fake, { type: "response.output_audio_transcript.done", transcript: "Auf Wiederhoeren" });
     assert.deepStrictEqual(sends, []);
     const t = store.getCall(call.id).transcript;
+    // P7 (C7): I8-Paritaet - der Agent-Text laeuft jetzt durch denselben shapeForSpeech
+    // wie die Budget-Engine (haengt ein Satzende an, wenn keins vorhanden ist).
     assert.deepEqual(
       t.map((x) => ({ role: x.role, text: x.text })),
       [
-        { role: "agent", text: "Guten Tag" },
-        { role: "agent", text: "Auf Wiederhoeren" },
+        { role: "agent", text: "Guten Tag." },
+        { role: "agent", text: "Auf Wiederhoeren." },
       ],
     );
   } finally {
@@ -499,6 +501,15 @@ test("end_call: response.done(end_call) plant hangup nach 2500ms, kein execTool/
   // wurde vor dem Mock gesetzt und muss in finalize() echt geleert werden koennen).
   t.mock.timers.enable({ apis: ["setTimeout"] });
   try {
+    // P7 (C7): Guard-Paritaet zur Budget-Engine (shouldSuppressEndCall) unterdrueckt
+    // end_call bei Outbound VOR der ersten substanziellen Anrufer-Antwort - dieser Test
+    // prueft den Hangup-Puffer-Mechanismus selbst, nicht den Guard (dafuer siehe
+    // bridge-event-unit.test.js), darum erst eine substanzielle Antwort einspeisen.
+    feed(fake, {
+      type: "conversation.item.input_audio_transcription.completed",
+      transcript: "Ja, das passt mir gut",
+    });
+    sends.length = 0;
     feed(fake, {
       type: "response.done",
       response: {

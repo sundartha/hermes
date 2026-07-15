@@ -28,6 +28,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { handleOpenAiEvent } from "../src/bridge.js";
+import { shapeForSpeech, END_CALL_WAIT_INSTRUCTION } from "../src/claude.js";
 
 // Fake-Socket: zeichnet jeden .send(...)-Aufruf als Nutzlast-String auf; readyState
 // steuert canSend(ws) (=== WebSocket.OPEN). Default OPEN, damit ein versehentlicher
@@ -168,4 +169,68 @@ test("kaputtes function_call.arguments wirft nicht (In-Handler-Guard -> args = {
   assert.deepEqual(ctx.calls.scheduleHangup, ["end_call von KI"]);
   // ... und response.done hat activeResponse zurueckgesetzt.
   assert.equal(ctx.state.activeResponse, false);
+});
+
+// ---- P7 (C7): Guard-Paritaet zur Budget-Engine (shouldSuppressEndCall, EINE Quelle) ----
+// Ein Outbound-Call darf NICHT vor der ersten substanziellen Antwort per end_call beendet
+// werden. Unterdrueckt -> Wait-Instruktion als function_call_output + response.create
+// (ueber den gemeinsamen sendFunctionOutput-Helfer, wie der generische Tool-Pfad); sonst
+// (d) HANGUP_MS-Puffer wie bisher.
+
+test("end_call bei Outbound ohne substanzielle Antwort: unterdrueckt, kein scheduleHangup", () => {
+  const ctx = makeCtx({
+    call: {
+      id: "c1",
+      tenantId: "t1",
+      direction: "outbound",
+      transcript: [{ role: "agent", text: "Guten Tag." }],
+    },
+  });
+  handleOpenAiEvent(
+    {
+      type: "response.done",
+      response: {
+        output: [{ type: "function_call", name: "end_call", call_id: "c1", arguments: "{}" }],
+      },
+    },
+    ctx,
+  );
+  assert.equal(ctx.calls.scheduleHangup.length, 0, "kein Hangup-Puffer bei unterdruecktem end_call");
+  assert.deepStrictEqual(ctx.openaiWs.sent, [
+    JSON.stringify({
+      type: "conversation.item.create",
+      item: { type: "function_call_output", call_id: "c1", output: END_CALL_WAIT_INSTRUCTION },
+    }),
+    JSON.stringify({ type: "response.create" }),
+  ]);
+});
+
+test("end_call nach substanzieller Antwort: terminiert wie bisher (scheduleHangup)", () => {
+  const ctx = makeCtx({
+    call: {
+      id: "c1",
+      tenantId: "t1",
+      direction: "outbound",
+      transcript: [{ role: "caller", text: "Ja, Donnerstag passt" }],
+    },
+  });
+  handleOpenAiEvent(
+    {
+      type: "response.done",
+      response: {
+        output: [{ type: "function_call", name: "end_call", call_id: "c1", arguments: "{}" }],
+      },
+    },
+    ctx,
+  );
+  assert.deepEqual(ctx.calls.scheduleHangup, ["end_call von KI"]);
+  assert.equal(ctx.openaiWs.sent.length, 0, "kein function_call_output beim echten end_call");
+});
+
+// ---- P7 (C7): Agent-Transkript wird geshaped (I8-Paritaet zur Budget-Engine) ----
+test("response.audio_transcript.done: Agent-Text wird vor addTranscript geshaped (shapeForSpeech)", () => {
+  const ctx = makeCtx();
+  const raw = "- Punkt eins\n- Punkt zwei";
+  handleOpenAiEvent({ type: "response.audio_transcript.done", transcript: raw }, ctx);
+  assert.deepEqual(ctx.calls.addTranscript, [[ctx.call.id, "agent", shapeForSpeech(raw)]]);
 });

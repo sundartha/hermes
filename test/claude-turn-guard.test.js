@@ -89,7 +89,7 @@ function countBootstrapOccurrences(capturedBodies, bootstrapText) {
 }
 
 let server;
-let store, agentTurn;
+let store, agentTurn, shouldSuppressEndCall;
 
 before(async () => {
   server = http.createServer((req, res) => {
@@ -169,7 +169,7 @@ before(async () => {
   );
   await import("../src/config.js");
   store = await import("../src/store.js");
-  ({ agentTurn } = await import("../src/claude.js"));
+  ({ agentTurn, shouldSuppressEndCall } = await import("../src/claude.js"));
 });
 
 after(async () => {
@@ -447,3 +447,41 @@ for (const { label, value, callId, recorded } of INBOUND_RECORD_GATE_CASES) {
     assert.equal(callerLines.length, recorded ? 1 : 0);
   });
 }
+
+// ---------- P7 (C7): shouldSuppressEndCall direkt (Plain-Object, kein Store) ----------
+// EINE Quelle fuer den Fruehauflege-Schutz, jetzt von Budget-agentTurn UND Realtime-
+// bridge.js genutzt (G27). Diese Unit prueft das Praedikat isoliert, offline, ohne
+// Store/HTTP-Mock - Plain-Object-Calls reichen (rein, kein Nebeneffekt). Nutzt dieselbe
+// MAX_EMPTY_TURNS=2/CALLER_SUBSTANCE_MIN_LEN=2-Schwelle aus before() oben.
+
+test("shouldSuppressEndCall: inbound liefert immer false (Direction-Kurzschluss, auch ohne substanzielle Zeile)", () => {
+  const call = { direction: "inbound", transcript: [] };
+  assert.equal(shouldSuppressEndCall(call), false);
+});
+
+test("shouldSuppressEndCall: outbound ohne substanzielle Antwort, unter der Leer-Turn-Schwelle -> true", () => {
+  const call = {
+    direction: "outbound",
+    transcript: [{ role: "agent", text: "Guten Tag." }],
+  };
+  assert.equal(shouldSuppressEndCall(call), true);
+});
+
+test("shouldSuppressEndCall: outbound MIT substanzieller Anrufer-Antwort -> false", () => {
+  const call = {
+    direction: "outbound",
+    transcript: [{ role: "caller", text: "Ja bitte" }],
+  };
+  assert.equal(shouldSuppressEndCall(call), false);
+});
+
+test("shouldSuppressEndCall: outbound bei maxEmptyTurns unbeantworteten Agent-Turns -> false (Deadlock-Freigabe)", () => {
+  const call = {
+    direction: "outbound",
+    transcript: [
+      { role: "agent", text: "Hallo?" },
+      { role: "agent", text: "Sind Sie noch dran?" },
+    ],
+  };
+  assert.equal(shouldSuppressEndCall(call), false);
+});
