@@ -118,7 +118,18 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > sehr alte Stripe-Redelivery koennte in einem sehr kleinen Fenster direkt nach Neustart
 > einmalig durchrutschen. Bewusst akzeptiert wie das bestehende OT-3-Restrisiko
 > (Single-Instance, Render Free = 1 Instanz); eine persistente, backend-uebergreifende
-> Loesung waere eine eigene Folge-Phase. Test: `test/stripe-webhook-race.test.js`.
+> Loesung waere eine eigene Folge-Phase. Zweites, bewusst separates Restrisiko: die Map
+> waechst NIE geloescht ueber die gesamte Prozesslaufzeit (ein Eintrag pro je gesehenem
+> Korrelationsschluessel, nicht nur pro aktuell aktivem) - bei sehr langer Uptime UND
+> Millionen-Skala (ein Schluessel pro Stripe-Subscription) ist unbeschraenktes Wachstum
+> theoretisch moeglich. Bewusst KEINE TTL/Cap in P1 (Scope: nur der Gleichstand-Fix
+> AUDIT-1) - Groessenordnung/Notwendigkeit einer Grenze ist eine eigene Folge-Phase,
+> sobald reale Uptime-/Subscription-Zahlen vorliegen.
+> Tie-Break (AUDIT-1, Nachtrag): `event.created`-Gleichstand (verschiedene `event.id`,
+> z.B. `customer.subscription.updated`->active UND `invoice.payment_failed` in derselben
+> Sekunde) wird NICHT laenger pauschal als "stale" verworfen - ein gate-schliessendes
+> SUSPEND gewinnt bei Gleichstand immer gegen ein gate-oeffnendes ACTIVATE, unabhaengig
+> von der Lock-Ankunftsreihenfolge (fail-closed). Test: `test/stripe-webhook-race.test.js`.
 
 ## PLAY-TTS — PII-Audio-Serve-Surface (ElevenLabs-Stimme via `<Play>`)
 

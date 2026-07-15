@@ -260,21 +260,42 @@ export async function applyStripeWebhook(
 const webhookLock = makeKeyedChainMutex();
 
 // Letztes je erfolgreich angewendetes Event pro Korrelationsschluessel (Ordnungswache).
-// key -> { eventId, createdAt }. NIE geloescht (Dedup muss ueber die gesamte Prozesslaufzeit
-// gelten) - im Unterschied zum self-cleaning webhookLock (siehe chain-mutex.js).
+// key -> { eventId, createdAt, action }. action = WEBHOOK_ACTION.ACTIVATE|SUSPEND, gebraucht
+// fuer den Gleichstand-Tie-Break in isStaleEvent (AUDIT-1). NIE geloescht (Dedup muss ueber
+// die gesamte Prozesslaufzeit gelten) - im Unterschied zum self-cleaning webhookLock (siehe
+// chain-mutex.js).
 const lastAppliedByKey = new Map();
 
-// Ist `event` gegenueber dem zuletzt fuer `key` angewendeten Event veraltet? Zwei Faelle:
-// (a) exakte Stripe-Redelivery (gleiche event.id), (b) aelteres/gleich altes Event nach
-// event.created. Fehlt event.created oder ist der gespeicherte Anker unbekannt (NaN) -> NIE
-// stale ueber Fall (b) (Bestandsverhalten: kein Event wird verworfen, das sich zeitlich nicht
-// einordnen laesst). Reine Funktion, kein Seiteneffekt.
-function isStaleEvent(lastApplied, event) {
+// Baut den Vergleichs-Anker fuer ein Event (gleiche Form wie der gespeicherte lastApplied-
+// Eintrag in lastAppliedByKey) - EINE Quelle (G5) statt Duplizierung zwischen dem
+// isStaleEvent-Aufruf und dem lastAppliedByKey.set() danach.
+function eventAnchorOf(event, action) {
+  return { eventId: event.id ?? null, createdAt: Number(event.created), action };
+}
+
+// Ist `candidate` gegenueber dem zuletzt fuer den Schluessel angewendeten Event (`lastApplied`)
+// veraltet? Faelle: (a) exakte Stripe-Redelivery (gleiche event.id) -> immer stale (Dedup).
+// (b) event.created fehlt/nicht auswertbar (NaN) -> NIE stale (Bestandsverhalten: kein Event
+// wird verworfen, das sich zeitlich nicht einordnen laesst). (c) event.created echt aelter ->
+// stale, echt neuer -> nicht stale. (d) GLEICHSTAND (identisches event.created, andere
+// event.id, AUDIT-1): fail-closed Tie-Break statt Ankunfts-/Lock-Reihenfolge - ein SUSPEND
+// (gate-schliessend) darf ein zeitgleiches ACTIVATE (gate-oeffnend) NIE als stale verwerfen;
+// umgekehrt bleibt ein zeitgleiches ACTIVATE gegenueber einem bereits angewendeten SUSPEND
+// weiterhin stale (das Gate bleibt zu). Gleichstand mit identischer Wirkung (z.B. zwei SUSPEND-
+// Events derselben Sekunde) bleibt ebenfalls stale - kein redundantes Re-Apply. Reine Funktion,
+// kein Seiteneffekt.
+function isStaleEvent(lastApplied, candidate) {
   if (!lastApplied) return false;
-  if (event.id != null && event.id === lastApplied.eventId) return true;
-  const createdAt = Number(event.created);
-  if (!Number.isFinite(createdAt)) return false;
-  return createdAt <= lastApplied.createdAt;
+  if (candidate.eventId != null && candidate.eventId === lastApplied.eventId) return true;
+  if (!Number.isFinite(candidate.createdAt)) return false;
+  if (candidate.createdAt < lastApplied.createdAt) return true;
+  if (candidate.createdAt > lastApplied.createdAt) return false;
+  // Gleichstand: nur ein gate-oeffnendes ACTIVATE nach einem bereits angewendeten SUSPEND
+  // bleibt stale - jede andere Kombination (insbesondere SUSPEND nach ACTIVATE) wird angewendet.
+  if (candidate.action === WEBHOOK_ACTION.SUSPEND && lastApplied.action !== WEBHOOK_ACTION.SUSPEND) {
+    return false;
+  }
+  return true;
 }
 
 // Serialisiert applyStripeWebhook (unveraendert, s.o.) pro Korrelationsschluessel + verwirft
@@ -291,11 +312,12 @@ export async function applyStripeWebhookSerialized(event, deps) {
   if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
   const key = interpreted.subscriptionId || interpreted.tenantRef;
   if (!key) return applyStripeWebhook(event, deps);
+  const candidate = eventAnchorOf(event, interpreted.action);
   return webhookLock(key, async () => {
-    if (isStaleEvent(lastAppliedByKey.get(key), event)) return;
+    if (isStaleEvent(lastAppliedByKey.get(key), candidate)) return;
     await applyStripeWebhook(event, deps);
     // Anker ERST nach erfolgreichem Aufruf setzen: ein werfender Aufruf darf einen
     // legitimen Stripe-Retry desselben Events nicht faelschlich als "stale" blockieren.
-    lastAppliedByKey.set(key, { eventId: event.id ?? null, createdAt: Number(event.created) });
+    lastAppliedByKey.set(key, candidate);
   });
 }

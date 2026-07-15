@@ -149,6 +149,50 @@ test("Ordnungswache: aelteres Event (anderes event.id) NACH einem bereits verarb
   assert.deepEqual(deps.calls.kyc, [], "kein KYC=CARD durch das veraltete Event");
 });
 
+// ---- (3b) Gleichstand bei identischem event.created (AUDIT-1 Tie-Break) -------------
+// Zwei VERSCHIEDENE echte Stripe-Events fuer denselben Korrelationsschluessel koennen
+// dasselbe event.created tragen (z.B. ein customer.subscription.updated->active UND ein
+// invoice.payment_failed in derselben Sekunde). Die Ordnungswache darf in diesem Fall NICHT
+// die Ankunfts-/Lock-Reihenfolge entscheiden lassen, ob das gate-schliessende SUSPEND
+// ueberlebt - sonst bleibt ein Tenant faelschlich active+CARD (Outbound-Gate faelschlich
+// offen).
+
+test("Gleichstand: ACTIVATE zuerst verarbeitet, dann SUSPEND (andere event.id, gleiches event.created) -> SUSPEND gewinnt", async () => {
+  const subId = "sub_race_tie_activate_then_suspend";
+  const deps = fakeDeps();
+  await applyStripeWebhookSerialized(activateEvent({ id: "evt_tie_a1", created: EARLIER_CREATED, subId }), deps);
+  await applyStripeWebhookSerialized(suspendEvent({ id: "evt_tie_s1", created: EARLIER_CREATED, subId }), deps);
+  assert.deepEqual(
+    deps.calls.setStatus.at(-1),
+    [TENANT, "suspended"],
+    "das SUSPEND darf bei gleichem event.created nicht als 'stale' gegenueber dem vorherigen ACTIVATE verworfen werden",
+  );
+  assert.deepEqual(deps.calls.suspend, [TENANT], "der Suspend-Grace-Anker beweist: SUSPEND wurde tatsaechlich angewendet, nicht verworfen");
+});
+
+test("Gleichstand: SUSPEND zuerst verarbeitet, dann ACTIVATE (andere event.id, gleiches event.created) -> Gate bleibt zu (fail-closed)", async () => {
+  const subId = "sub_race_tie_suspend_then_activate";
+  const deps = fakeDeps();
+  await applyStripeWebhookSerialized(suspendEvent({ id: "evt_tie_s2", created: EARLIER_CREATED, subId }), deps);
+  await applyStripeWebhookSerialized(activateEvent({ id: "evt_tie_a2", created: EARLIER_CREATED, subId }), deps);
+  assert.deepEqual(
+    deps.calls.setStatus,
+    [[TENANT, "suspended"]],
+    "das zeitgleiche ACTIVATE darf den bereits angewendeten SUSPEND nicht aufheben",
+  );
+  assert.deepEqual(deps.calls.kyc, [], "kein KYC=CARD durch das gate-oeffnende Tie-Event");
+});
+
+test("Gleichstand + gleiche event.id (Retry desselben SUSPEND-Events derselben Sekunde) bleibt ein No-op", async () => {
+  const subId = "sub_race_tie_dedup_suspend";
+  const deps = fakeDeps();
+  const evt = suspendEvent({ id: "evt_tie_dup", created: EARLIER_CREATED, subId });
+  await applyStripeWebhookSerialized(evt, deps);
+  await applyStripeWebhookSerialized(evt, deps);
+  assert.equal(deps.calls.setStatus.length, 1, "SUSPEND nur einmal angewendet - der Retry ist ein No-op");
+  assert.equal(deps.calls.suspend.length, 1);
+});
+
 // ---- (4) Verschiedene Korrelationsschluessel serialisieren NICHT gegeneinander ------
 
 test("Verschiedene Korrelationsschluessel serialisieren NICHT gegeneinander (gekeyt statt global)", async () => {
