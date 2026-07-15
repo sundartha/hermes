@@ -56,7 +56,7 @@ register("data:text/javascript," + encodeURIComponent(loaderSrc), import.meta.ur
 // config.js wuerde mit falschem Env eingefroren).
 const { attachMediaBridge } = await import("../src/bridge.js");
 const store = await import("../src/store.js");
-const { disclosureSentence } = await import("../src/claude.js");
+const { disclosureSentence, END_CALL_WAIT_INSTRUCTION } = await import("../src/claude.js");
 const {
   openAiSockets,
   resetOpenAiSockets,
@@ -543,6 +543,55 @@ test("response.done setzt activeResponse=false (danach kein Barge-in-cancel)", a
     sends.length = 0;
     feed(fake, { type: "input_audio_buffer.speech_started" });
     assert.deepStrictEqual(sends, [
+      ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
+    ]);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ---- P7 (C7) Pre-Mortem: response.create-Roundtrip im unterdrueckten end_call-Zweig
+// gegen den Barge-in-Guard (HEIKLE STELLE 1) ----
+// Sorge aus PLAN-FRAGILITY-REMEDIATION.md P7: der zusaetzliche conversation.item.create +
+// response.create in sendFunctionOutput (unterdrueckter end_call) koennte activeResponse
+// in einen falschen Zustand bringen und den Barge-in-Guard aushebeln. End-zu-Ende ueber
+// dieselbe echte Bridge-Strecke wie die Barge-in-Tests oben (echter HTTP-Server, echter
+// Provider-Client, nur der auswaertige OpenAI-Socket ist das Shim): nach dem unterdrueckten
+// end_call setzt das folgende response.created (Beginn der Wait-Instruktion-Antwort)
+// activeResponse korrekt neu, und ein Barge-in waehrend dieser Antwort loest response.cancel
+// aus wie bei jeder anderen Antwort - keine Sonderbehandlung, keine Kollision, kein
+// haengengebliebener Zustand.
+test("unterdrueckter end_call: response.create-Roundtrip + folgender Barge-in kollidieren nicht", async () => {
+  const { fake, sends, cleanup } = await setupCall(); // outbound, kein Transkript -> unterdrueckt
+  try {
+    feed(fake, {
+      type: "response.done",
+      response: {
+        output: [{ type: "function_call", name: "end_call", arguments: "{}", call_id: "e1" }],
+      },
+    });
+    // unterdrueckt: Wait-Instruktion als function_call_output + response.create (kein
+    // scheduleHangup, siehe bridge-event-unit.test.js fuer den Guard selbst).
+    assert.deepStrictEqual(sends, [
+      [
+        "openai",
+        JSON.stringify({
+          type: "conversation.item.create",
+          item: { type: "function_call_output", call_id: "e1", output: END_CALL_WAIT_INSTRUCTION },
+        }),
+      ],
+      ["openai", JSON.stringify({ type: "response.create" })],
+    ]);
+    sends.length = 0;
+
+    // OpenAI beginnt, die Wait-Instruktion auszuspielen -> activeResponse wird neu gesetzt.
+    feed(fake, { type: "response.created" });
+    sends.length = 0;
+
+    // Der Angerufene faellt der KI waehrend der Wait-Instruktion ins Wort (Barge-in).
+    feed(fake, { type: "input_audio_buffer.speech_started" });
+    assert.deepStrictEqual(sends, [
+      ["openai", JSON.stringify({ type: "response.cancel" })],
       ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
     ]);
   } finally {
