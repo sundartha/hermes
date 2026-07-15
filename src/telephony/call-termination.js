@@ -1,11 +1,12 @@
-// F10 Runde 2 (S1/G5): der EINE Terminierungspfad, den JEDER Beender eines aktiven
-// Calls durchlaeuft (Max-Dauer-Cap-Timer UND cancel_call in server.js) - Reihenfolge
-// fest: erst persistieren, dann den Provider-Leg auflegen (awaited), ERST DANACH
-// billing/summary/SMS anstossen (fire-and-forget). Die umgekehrte Reihenfolge hielte
-// den Anruf beim Provider technisch live, waehrend die Buchungskette (echter
-// LLM-Roundtrip in summarizeCall ueber src/llm.js, Retry-Budget bis ~12s, danach der
-// SMS-Versand) laeuft - Verstoss gegen den harten Max-Dauer-Cap (Absolute Regel 1,
-// CLAUDE.md). Reine Ablauf-Orchestrierung: alle I/O-Effekte kommen als bereits
+// F10 Runde 2 (S1/G5), C5 (Struct-4) erweitert auf alle 5 Terminierungspfade: der EINE
+// Terminierungspfad, den JEDER Beender eines aktiven Calls durchlaeuft (Max-Dauer-Cap-Timer,
+// cancel_call, /voice/status, Telnyx onHangup, place_call-Dial-Fehlschlag - server.js UND
+// telnyx-call-control-ingest.js) - Reihenfolge fest: erst persistieren, dann den Provider-
+// Leg auflegen (awaited), ERST DANACH billing/summary/SMS anstossen (fire-and-forget). Die
+// umgekehrte Reihenfolge hielte den Anruf beim Provider technisch live, waehrend die
+// Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js, Retry-Budget bis
+// ~12s, danach der SMS-Versand) laeuft - Verstoss gegen den harten Max-Dauer-Cap (Absolute
+// Regel 1, CLAUDE.md). Reine Ablauf-Orchestrierung: alle I/O-Effekte kommen als bereits
 // gebundene Thunks rein (persistEnd/hangUp/bill), keine Abhaengigkeit auf store/
 // voiceControl/finishCall aus server.js -> offline ohne Server/Store/Netz unit-
 // testbar (Muster sms-summary.js).
@@ -16,7 +17,30 @@
 // geloggt wird (Bestandsverhalten bleibt je Aufrufer erhalten - der Cap-Timer schluckt
 // bisher still, cancel_call loggt "[cancel]"). bill wird NICHT awaited (fire-and-
 // forget): der Aufrufer wartet nicht auf Buchung/Summary/SMS, nur auf den Hangup.
-export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpError }) {
+//
+// C5 (Struct-4, G31/G27): bill (Settlement) ist Pflicht - erzwingt strukturell, dass JEDER
+// Terminierungspfad die volle Buchungs-/Notification-/SMS-Kette durchlaeuft, statt sie an
+// einer neuen Call-Site zu vergessen (der urspruengliche C5-Bug: der place_call-catch rief
+// finishCall nie). Wirft VOR jedem Seiteneffekt (fail-fast, kein halb-terminierter Call).
+//
+// P8 (Review-Blocker S1, Beobachtbarkeit): bill() bleibt bewusst fire-and-forget (Regel 1 -
+// der Max-Dauer-Cap-Timer darf NICHT auf die Buchungskette warten). Ohne eigenes .catch
+// landete eine Rejection (z.B. store.markBilled/store.save schlaegt bei einem PG-IO-Fehler
+// fehl) NUR noch im generischen globalen onUnhandledRejection-Handler (process-guards.js) -
+// dort fehlen callId-Bezug und das aufrufer-eigene Log-Praefix, der Fehler ist im Stoerfall
+// schwerer zu korrelieren. .catch faengt die Rejection HIER ab (bleibt async, KEIN await -
+// das fire-and-forget-Timing bleibt erhalten) und loggt secret-frei: nur ein stabiles
+// Praefix + optionale callId (Korrelation, keine PII) + e.message - NIE das ganze Error-
+// Objekt/den Stack/Request/Token. callId ist optional, damit bestehende Aufrufer ohne
+// Anpassung weiterlaufen; alle 5 realen Terminierungspfade reichen sie mit.
+// Promise.resolve(bill()) statt bill().catch(...) direkt: bill() laeuft unveraendert
+// SYNCHRON genau jetzt (identisches Timing zum vorherigen void bill()), aber das
+// Ergebnis wird sicher in ein Promise gehoben - auch ein synchroner Nicht-Promise-
+// Rueckgabewert (z.B. in Tests) hat dann ein .catch, statt terminateAndBillCall selbst
+// zum Werfen zu bringen.
+export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpError, callId }) {
+  if (typeof bill !== "function")
+    throw new TypeError("terminateAndBillCall: bill (Settlement) ist Pflicht - kein Function uebergeben");
   persistEnd();
   if (hangUp) {
     try {
@@ -25,7 +49,19 @@ export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpE
       onHangUpError?.(e);
     }
   }
-  void bill();
+  Promise.resolve(bill()).catch((e) => {
+    console.error(`[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId ?? "unbekannt"}):`, e?.message);
+  });
+}
+
+// G5 (Review-Blocker Runde 2): der bill-Thunk war an allen 5 Terminierungspfaden
+// woertlich (bzw. bis auf den Parameternamen) identisch dupliziert - EINE Quelle statt
+// fuenffacher Wiederholung. Liest den Call bewusst FRISCH aus dem Store (nicht das evtl.
+// veraltete call-Objekt des Aufrufers), da finishCall auf dem aktuellen persistierten
+// Stand (Guards billedAt/reserveReleased) buchen muss. Rein (kein eigener I/O) -> DI-Muster
+// wie hangUpAction: finishCall/store kommen injiziert herein, offline mit Spies testbar.
+export function billThunk(finishCall, store, callId) {
+  return () => finishCall(store.getCall(callId));
 }
 
 // P6 (Regel 1 / Befund 1): waehlt Hangup-Endpunkt+ID anhand der Call-FORM, NICHT der

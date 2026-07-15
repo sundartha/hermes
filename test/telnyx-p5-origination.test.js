@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   startServer,
   placeCall,
+  waitForStoreState,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_TEST_PEER_NUMBER,
   TELNYX_ASSISTANT_BOOT_ENV,
@@ -163,16 +164,34 @@ test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, 
       "keine Provider-/Config-Details an den Client",
     );
 
-    const calls = srv.readStore().calls;
+    let calls = srv.readStore().calls;
     assert.equal(calls.length, 1, "genau EIN Call-Record (kein Retry/Doppel-Create)");
-    const stored = calls[0];
-    assert.equal(stored.status, "failed", "gemeinsamer catch-Block terminiert wie der TeXML-Zweig");
-    assert.equal(stored.reserveReleased, true, "releaseReserve lief VOR endCallRecord (OUT-05)");
+    assert.equal(calls[0].status, "failed", "gemeinsamer catch-Block terminiert wie der TeXML-Zweig");
+    // C5 (Struct-4): der catch-Block laeuft jetzt ueber terminateAndBillCall - bill (Settlement,
+    // ruft releaseReserve intern) ist fire-and-forget (dieselbe Reihenfolge wie bei den anderen
+    // 4 Terminierungspfaden), lief also NICHT mehr zwingend VOR der HTTP-Response ab. Muster
+    // waitForStoreState wie max-duration-live-cap.test.js/telnyx-event-ingest-route.test.js.
+    const s = await waitForStoreState(srv, (st) => st.calls[0]?.reserveReleased === true);
+    calls = s.calls;
+    assert.equal(calls[0].reserveReleased, true, "releaseReserve laeuft (async) ueber finishCall (OUT-05)");
     assert.equal(
-      stored.callControlId,
+      calls[0].callControlId,
       null,
       "kein callControlId, da originateViaCallControl vor der Rueckgabe warf",
     );
+    // S1-1 (Review-Blocker Runde 1): der explizit beworbene C5-Fix-Zweck ("Notification fehlte
+    // komplett bei Dial-Fehlschlag") war bisher ungetestet - nur reserveReleased/status wurden
+    // geprueft. finishCall() legt bei einem nicht-completed Call (hier status=failed) genau EINE
+    // Notification an (state-ops.js addNotification); s ist derselbe bereits gewartete Store-
+    // Zustand wie oben (reserveReleased===true laeuft im selben finishCall-Aufruf VOR der
+    // Notification, also steht sie zu diesem Zeitpunkt bereits fest).
+    assert.equal(s.notifications.length, 1, "genau eine neue Notification (kein Doppel-Feuer)");
+    assert.equal(
+      s.notifications[0].title,
+      "Anruf nicht zustande gekommen",
+      "der C5-Fix erzeugt jetzt die Notification, die vor dem Umbau bei einem Dial-Fehlschlag fehlte",
+    );
+    assert.equal(s.notifications[0].callId, calls[0].id, "Notification haengt am fehlgeschlagenen Call");
   } finally {
     await srv.stop();
   }

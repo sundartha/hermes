@@ -70,7 +70,7 @@ import {
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
-import { terminateAndBillCall, hangUpAction } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import {
   registerTenant,
@@ -1022,7 +1022,8 @@ async function terminateCappedCall(callId, providerCallSid, status) {
       // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
       // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
       hangUp: hangUpAction(voiceControl, call, providerCallSid),
-      bill: () => finishCall(store.getCall(callId)), // bucht genau EINMAL (billedAt, F9), gekappt
+      bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
+      callId, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
   } catch (e) {
     console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
@@ -1510,12 +1511,23 @@ app.post("/voice/status", async (req, res) => {
   if (callStatus === "in-progress" || callStatus === "answered")
     return void store.markAnswered(call.id);
   if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
-  if (call.status === "active")
-    store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
   // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose persistieren
   // (PII-frei). completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
   store.recordFailureReason(call.id, callFailureReason({ status: callStatus, diagnostics }));
-  finishCall(store.getCall(call.id));
+  // C5 (Struct-4): Settlement-Gateway statt manuellem endCallRecord+finishCall-Paar - bill
+  // (Settlement) ist bei terminateAndBillCall ein strukturell erzwungenes Pflichtfeld (Fail-
+  // Fast-Guard, verhindert die C5-Bugklasse: ein neuer Terminierungspfad vergisst finishCall).
+  // hangUp:null: der Provider hat den Call bereits beendet (dieses Event IST der Hangup), kein
+  // eigener Hangup-Versuch noetig (bereits getesteter Zweig, call-termination-order.test.js).
+  await terminateAndBillCall({
+    persistEnd: () => {
+      if (call.status === "active")
+        store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
+    },
+    hangUp: null,
+    bill: billThunk(finishCall, store, call.id),
+    callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
+  });
 });
 
 // Call-Control-Event-Ingest (P4.5): additiv, liegt UNTER app.use("/voice") -> Ed25519
@@ -1830,8 +1842,17 @@ app.post("/api/calls", async (req, res) => {
       context_received: contextReceivedMeta(context), // I10
     });
   } catch (err) {
-    await releaseReserve(call); // OUT-05 (F2): kein Dial = keine Kosten = volle Freigabe, VOR endCallRecord
-    store.endCallRecord(call.id, "failed");
+    // C5 (Struct-4): die eigentliche Luecke - bisher lief hier NIE finishCall (Settlement/
+    // Notification fehlten komplett bei einem Dial-Fehlschlag), und releaseReserve wurde
+    // manuell dupliziert obwohl finishCall es bereits idempotent selbst aufruft (S2,
+    // reserveReleased-Guard in state-ops.js). Jetzt derselbe Gateway wie die anderen 4
+    // Terminierungspfade; hangUp:null (kein Dial = kein Provider-Leg zum Auflegen).
+    await terminateAndBillCall({
+      persistEnd: () => store.endCallRecord(call.id, "failed"),
+      hangUp: null,
+      bill: billThunk(finishCall, store, call.id),
+      callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
+    });
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
     // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
     // secret-frei loggen (wie die P0-Guards: err.message, nie config), dem Aufrufer
@@ -1878,8 +1899,9 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
     // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
     // EINE Quelle) - cancel_call eines C-Telnyx-Calls trifft den Call-Control-Hangup.
     hangUp: hangUpAction(voiceControl, call, call.twilioSid),
-    bill: () => finishCall(store.getCall(call.id)),
+    bill: billThunk(finishCall, store, call.id),
     onHangUpError: (e) => console.error("[cancel]", e.message),
+    callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
   });
   res.json({ status: "cancelled" });
 });

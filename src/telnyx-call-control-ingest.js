@@ -9,6 +9,7 @@ import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
+import { terminateAndBillCall, billThunk } from "./telephony/call-termination.js";
 
 // OBS-2: Log-Hygiene-Bound fuer rohe Telnyx-Protokoll-Token (event_type/status). Interner
 // Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (wie errors.js ERROR_DETAIL_MAX_LEN),
@@ -222,8 +223,17 @@ export function makeCallControlIngest({
     openingRetryUsed.delete(call.id); // afix-p1: Retry-Token freigeben (Call terminal)
     clearOpeningSpeakTimer(call.id); // afix-timeout: Opening-Speak-Watchdog stoppen (Call terminal)
     watchdog.clear(call.id); // stab-p9: Wache stoppen (Call terminal, egal welcher Grund)
-    if (call.status === "active") store.endCallRecord(call.id, "completed");
-    await finishCall(store.getCall(call.id));
+    // C5 (Struct-4): Settlement-Gateway statt manuellem endCallRecord+finishCall-Paar (G5, eine
+    // Quelle mit /voice/status + place_call-catch). hangUp:null: Telnyx hat den Call bereits
+    // beendet (dieses Event IST der Hangup).
+    await terminateAndBillCall({
+      persistEnd: () => {
+        if (call.status === "active") store.endCallRecord(call.id, "completed");
+      },
+      hangUp: null,
+      bill: billThunk(finishCall, store, call.id),
+      callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
+    });
     console.log(`[voice/call-control] hangup (call=${call.id}) -> Settlement finishCall`);
   }
 
