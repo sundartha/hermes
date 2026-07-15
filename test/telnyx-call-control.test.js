@@ -150,11 +150,14 @@ test("originateViaCallControl: fail-closed ohne API_KEY / CALL_CONTROL_APP_ID", 
   await withBlankedConfig("telnyxApiKey", () =>
     assert.rejects(() => telnyxVoice.originateViaCallControl(CC_ORIGINATE), /TELNYX_API_KEY fehlt/),
   );
-  await withBlankedConfig("telnyxCallControlAppId", () =>
-    assert.rejects(
-      () => telnyxVoice.originateViaCallControl(CC_ORIGINATE),
-      /TELNYX_CALL_CONTROL_APP_ID fehlt/,
-    ),
+  await withConfig(
+    "telnyxAssistant",
+    { ...config.telnyxAssistant, callControlAppId: "" },
+    () =>
+      assert.rejects(
+        () => telnyxVoice.originateViaCallControl(CC_ORIGINATE),
+        /TELNYX_CALL_CONTROL_APP_ID fehlt/,
+      ),
   );
 });
 

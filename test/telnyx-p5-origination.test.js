@@ -38,7 +38,7 @@ test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", asy
   const store = spyStore();
   const voiceControl = spyVoiceControl("cc_1");
   const call = { id: "call_abc", provider: "telnyx" };
-  const config = { publicUrl: "https://agent.test", telnyxAssistantId: "asst_9" };
+  const config = { publicUrl: "https://agent.test", telnyxAssistant: { assistantId: "asst_9" } };
 
   await originateAiAssistantCall({
     store,
@@ -59,7 +59,7 @@ test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", asy
     method: "POST",
     timeLimit: 180,
   });
-  assert.equal(call.assistantId, "asst_9", "aus config.telnyxAssistantId");
+  assert.equal(call.assistantId, "asst_9", "aus config.telnyxAssistant.assistantId");
   assert.equal(call.callControlId, "cc_1", "aus der originateViaCallControl-Rueckgabe");
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
 });
@@ -121,7 +121,7 @@ test("Flag an + Telnyx: Call-Control-Pfad - callControlId gesetzt, twilioSid nul
     assert.equal(
       stored.assistantId,
       TELNYX_ASSISTANT_BOOT_ENV.TELNYX_ASSISTANT_ID,
-      "assistantId kommt aus config.telnyxAssistantId (bindAssistantToCall)",
+      "assistantId kommt aus config.telnyxAssistant.assistantId (bindAssistantToCall)",
     );
   } finally {
     await srv.stop();

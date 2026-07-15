@@ -36,9 +36,6 @@ const REQUIRED_OK = {
   anthropicApiKey: "x",
   twilioSid: "x",
   twilioToken: "x",
-  twilioNumber: "+49123",
-  ownerFirstName: "Max",
-  ownerLastName: "Mustermann", // G1: Boot-Pflicht
   publicUrl: "https://example.test",
   mcpAuth: "",
   storeBackend: "json",

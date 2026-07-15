@@ -104,8 +104,8 @@ export function makeConversationWatchdog({
   setTimer = defaultSetTimer,
   clearTimer = clearTimeout,
 }) {
-  const deadAirMs = config.telnyxDeadAirTimeoutS * MS_PER_SECOND;
-  const maxEmptyTurns = config.telnyxLoopGuardMaxEmptyTurns;
+  const deadAirMs = config.telnyxAssistant.deadAirTimeoutS * MS_PER_SECOND;
+  const maxEmptyTurns = config.telnyxAssistant.loopGuardMaxEmptyTurns;
   // EIN Timer je aktivem Call (beim Fuettern ersetzt, beim Feuern/Clear entfernt) ->
   // beschraenkt durch die Zahl paralleler Assistant-Calls, kein Sweep noetig (der Timer
   // raeumt sich selbst ab).

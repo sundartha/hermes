@@ -67,7 +67,7 @@ function ingestRes() {
 // Pflicht-Dependency (kein Default, anders als setTimer/clearTimer mit defaultSetTimer/
 // clearTimeout) - ohne diese Deps wuerde ein spaeter hier reichender assistantVoiceConfigured()
 // = true-Pfad (Retry-Zweig in onSpeakFailed) armOpeningSpeakTimeout() mit einem TypeError auf
-// config.telnyxOpeningSpeakTimeoutS crashen lassen, den der Handler-catch (handleCallControlEvent)
+// config.telnyxAssistant.openingSpeakTimeoutS crashen lassen, den der Handler-catch (handleCallControlEvent)
 // nur still nach console.error verschluckt - diese Testdatei haette das NIE bemerkt.
 // G5-TEST-DUP (Review-Blocker Runde 3): ingestTimeoutDeps() jetzt zentral in
 // telnyx-shim-harness.js (Import oben), statt hier byte-identisch zu

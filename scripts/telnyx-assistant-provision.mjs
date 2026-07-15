@@ -218,7 +218,7 @@ const REQUIRED = Object.freeze([
   ["PUBLIC_URL", config.publicUrl],
   ["TELNYX_ELEVENLABS_VOICE_ID", config.telnyxElevenLabs.voiceId],
   ["TELNYX_ELEVENLABS_API_KEY_REF", config.telnyxElevenLabs.apiKeyRef],
-  ["TELNYX_SHIM_API_KEY_REF", config.telnyxShimApiKeyRef],
+  ["TELNYX_SHIM_API_KEY_REF", config.telnyxAssistant.shimApiKeyRef],
 ]);
 
 // Reine Pruef-Funktion (P11 testbar, Muster smoke-stripe-payment.mjs isTestKey): liefert
@@ -352,7 +352,7 @@ async function main() {
     voiceModel: config.telnyxElevenLabs.model,
     apiKeyRef: config.telnyxElevenLabs.apiKeyRef,
     model: config.claudeModel,
-    llmApiKeyRef: config.telnyxShimApiKeyRef,
+    llmApiKeyRef: config.telnyxAssistant.shimApiKeyRef,
   });
   const id = await sendAssistantConfig(assistantConfig, process.env[ASSISTANT_ID_ENV] || "");
   // NUR die opake assistant_id ausgeben (kein Key/Secret, Regel 4/5). Owner uebernimmt

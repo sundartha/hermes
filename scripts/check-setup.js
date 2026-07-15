@@ -64,9 +64,6 @@ config.maxCallsPerHour > 0
       `MAX_CALLS_PER_HOUR ist ${config.maxCallsPerHour}`,
       "0 oder ungueltig -> jeder Outbound-Call wird gesperrt (Not-Aus)",
     );
-config.ownerNumber
-  ? ok(`OWNER_NUMBER: ${config.ownerNumber}`)
-  : wrn("OWNER_NUMBER fehlt", "Keine SMS-Summaries moeglich");
 if (config.voiceEngine === "realtime") {
   config.openaiApiKey
     ? ok("Voice-Engine: realtime, OPENAI_API_KEY gesetzt")
@@ -157,22 +154,6 @@ if (config.twilioSid && config.twilioToken) {
       mine.capabilities?.sms === false && config.sendSmsSummary
         ? wrn("Nummer kann kein SMS", "SEND_SMS_SUMMARY=false setzen oder SMS-faehige Nummer holen")
         : null;
-    }
-
-    // Verified Caller IDs vs. Owner-Nummer (nur im Trial relevant). Die statische Allowlist
-    // entfaellt seit outbound-p3 -> nur noch die Owner-Nummer wird gegen die Verified-Liste geprueft.
-    if (trialAccount) {
-      const verified = (await client.outgoingCallerIds.list({ limit: 50 })).map((v) =>
-        norm(v.phoneNumber),
-      );
-      if (config.ownerNumber) {
-        verified.includes(norm(config.ownerNumber))
-          ? ok(`OWNER_NUMBER ist verifiziert (SMS-Summaries moeglich)`)
-          : bad(
-              `OWNER_NUMBER ${config.ownerNumber} ist NICHT verifiziert`,
-              "Sonst kommen keine SMS-Summaries an",
-            );
-      }
     }
   } catch (e) {
     bad("Twilio-Credentials abgelehnt oder API nicht erreichbar: " + e.message);

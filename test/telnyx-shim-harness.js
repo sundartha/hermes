@@ -196,7 +196,9 @@ export function jsonCompletion(res) {
 
 // Kompaktes N/M fuer schnelle, lesbare Tests (config.js-Defaults 45s/8 waeren nur langsamer
 // zu lesen, nicht anders zu pruefen - die Watchdog-Logik ist schwellenwert-agnostisch).
-export const WATCHDOG_TEST_CONFIG = { telnyxDeadAirTimeoutS: 30, telnyxLoopGuardMaxEmptyTurns: 3 };
+export const WATCHDOG_TEST_CONFIG = {
+  telnyxAssistant: { deadAirTimeoutS: 30, loopGuardMaxEmptyTurns: 3 },
+};
 export const DEAD_AIR_TEST_MS = 30_000; // = telnyxDeadAirTimeoutS * 1000
 
 // Deterministischer Fake-Timer (P12 Fast/Repeatable): setTimer/clearTimer injiziert statt

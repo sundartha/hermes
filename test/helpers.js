@@ -513,11 +513,13 @@ export function fakeTelnyxShimConfig({
   telnyxShimDebugShape = false,
 } = {}) {
   return {
-    telnyxAiAssistantEnabled: enabled,
     claudeModel,
-    telnyxShimMaxTurnsPerMin,
-    telnyxShimSharedSecret,
-    telnyxShimDebugShape,
+    telnyxAssistant: {
+      enabled,
+      shimMaxTurnsPerMin: telnyxShimMaxTurnsPerMin,
+      shimSharedSecret: telnyxShimSharedSecret,
+      shimDebugShape: telnyxShimDebugShape,
+    },
   };
 }
 

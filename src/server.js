@@ -1026,7 +1026,7 @@ const INBOUND_ASSISTANT_HANDOFF = [];
 // persistiert ist (P6) - KEIN Re-Arm (zweiter Timer = Leak). Exakte Handoff-Direktive live
 // unbestaetigt (wie P4-Adapter-Body-Form) - mit dem Owner in P0/P11 fixen.
 async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
-  if (!(config.telnyxAiAssistantEnabled && provider === PROVIDER.TELNYX)) return null;
+  if (!(config.telnyxAssistant.enabled && provider === PROVIDER.TELNYX)) return null;
   const callControlId = inboundCallControlId(body);
   if (!callControlId) return null;
   await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });
@@ -1750,7 +1750,7 @@ app.post("/api/calls", async (req, res) => {
     // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
     // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
     // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-    if (config.telnyxAiAssistantEnabled && outboundProvider === PROVIDER.TELNYX) {
+    if (config.telnyxAssistant.enabled && outboundProvider === PROVIDER.TELNYX) {
       await originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur });
       // P6 (Regel 1, Minuten-Achse): harter Max-Dauer-Cap AUCH fuer C-Telnyx. originateAiAssistantCall
       // hat call.callControlId persistiert+gespeichert; terminateCappedCall liest sie beim Feuern

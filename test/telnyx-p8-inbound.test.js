@@ -41,7 +41,7 @@ test("startInboundAiAssistant: assistantId + callControlId + EIN store.save()", 
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in1", provider: "telnyx" };
-  const config = { telnyxAssistantId: "asst_x" };
+  const config = { telnyxAssistant: { assistantId: "asst_x" } };
 
   await startInboundAiAssistant({
     store,
@@ -53,7 +53,7 @@ test("startInboundAiAssistant: assistantId + callControlId + EIN store.save()", 
     voiceProfile: "de-DE-KatjaNeural",
   });
 
-  assert.equal(call.assistantId, "asst_x", "aus config.telnyxAssistantId");
+  assert.equal(call.assistantId, "asst_x", "aus config.telnyxAssistant.assistantId");
   assert.equal(call.callControlId, "cc_inbound_9");
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
 });
@@ -62,7 +62,7 @@ test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge 
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in2", provider: "telnyx" };
-  const config = { telnyxAssistantId: "asst_x" };
+  const config = { telnyxAssistant: { assistantId: "asst_x" } };
 
   await startInboundAiAssistant({
     store,
@@ -98,7 +98,7 @@ test("startInboundAiAssistant: call.language gesetzt -> startAssistant OHNE lang
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in2b", provider: "telnyx", language: "fr" };
-  const config = { telnyxAssistantId: "asst_x" };
+  const config = { telnyxAssistant: { assistantId: "asst_x" } };
 
   await startInboundAiAssistant({
     store,

@@ -77,9 +77,9 @@ export function makeCallControlIngest({
   }
 
   // Nach abgesetztem Opening-Speak den Watchdog armieren: kommt binnen
-  // config.telnyxOpeningSpeakTimeoutS Sekunden KEIN speak.ended/speak.failed, wird onSpeakFailed
-  // wie bei einem echten Fehler ausgeloest (G5, kein zweiter Fehlerpfad). Vorher ein evtl.
-  // laufender Timer geloescht (nie zwei Timer je Call, Muster restartDeadAirTimer). Der
+  // config.telnyxAssistant.openingSpeakTimeoutS Sekunden KEIN speak.ended/speak.failed, wird
+  // onSpeakFailed wie bei einem echten Fehler ausgeloest (G5, kein zweiter Fehlerpfad). Vorher
+  // ein evtl. laufender Timer geloescht (nie zwei Timer je Call, Muster restartDeadAirTimer). Der
   // Timer-Callback laeuft ausserhalb des Handler-try/catch -> Rejection secret-frei abfangen
   // (keine unhandled rejection, Muster terminateOnce).
   function armOpeningSpeakTimeout(call, callControlId) {
@@ -88,7 +88,7 @@ export function makeCallControlIngest({
       Promise.resolve(onSpeakFailed(call, callControlId)).catch((err) =>
         console.error("[voice/call-control]", err.message),
       );
-    }, config.telnyxOpeningSpeakTimeoutS * MS_PER_SECOND);
+    }, config.telnyxAssistant.openingSpeakTimeoutS * MS_PER_SECOND);
     openingSpeakTimers.set(call.id, timer);
   }
 
