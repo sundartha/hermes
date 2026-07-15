@@ -30,6 +30,40 @@ test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.ins
   assert.equal(config[Symbol.for("nichts")], undefined);
 });
 
+// Review-Blocker S1-1: JSON.stringify prueft intern value.toJSON, await/Promise pruefen
+// value.then - beides normale property-Reads, die der Guard sonst als unbekannten Key
+// missversteht und einen TypeError wirft statt zu serialisieren/aufzuloesen.
+test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duck-Typing)", () => {
+  assert.doesNotThrow(() => JSON.stringify(config.telnyxAssistant));
+  assert.deepEqual(JSON.parse(JSON.stringify(config.telnyxAssistant)), {
+    enabled: false,
+    assistantId: "",
+    callControlAppId: "",
+    shimMaxTurnsPerMin: 30,
+    deadAirTimeoutS: 45,
+    openingSpeakTimeoutS: 45,
+    loopGuardMaxEmptyTurns: 8,
+    shimSharedSecret: "",
+    shimApiKeyRef: "",
+    shimDebugShape: false,
+  });
+});
+
+test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-Duck-Typing)", () => {
+  assert.doesNotThrow(() => JSON.stringify(config));
+});
+
+test("Proxy-Guard: await/Promise.resolve auf eine Config-Gruppe wirft nicht (then-Duck-Typing)", async () => {
+  const awaited = await config.telnyxAssistant;
+  assert.equal(awaited.shimMaxTurnsPerMin, 30); // Objekt kommt unveraendert/lesbar durch
+  const resolved = await Promise.resolve(config.telnyxAssistant);
+  assert.equal(resolved.shimMaxTurnsPerMin, 30);
+});
+
+test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewacht", () => {
+  assert.throws(() => config.telnyxAssistant.doesNotExistNested, TypeError);
+});
+
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
 test("telnyxAssistant: alle 10 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
   assert.equal(config.telnyxAssistant.enabled, false);

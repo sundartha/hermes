@@ -665,6 +665,16 @@ const rawConfig = {
   webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
 };
 
+// Duck-Typing-Protokoll-Properties, die JS-Laufzeit UND Standardbibliothek von sich aus
+// abfragen (JSON.stringify prueft value.toJSON, await/Promise.resolve prueft value.then) -
+// beides sind normale property-get-Zugriffe, die der Proxy-Guard sonst als unbekannten
+// Config-Key missversteht. Ohne diese Ausnahme wirft ein simples JSON.stringify(config...)
+// oder ein versehentliches await auf eine Config-Gruppe statt zu helfen (Review-Blocker
+// S1-1, PLAN-FRAGILITY-REMEDIATION.md P5). Symbole sind bereits generell ausgenommen
+// (Iterator-Protokoll etc.) - dies erweitert dieselbe Ausnahme auf die zwei String-
+// Properties, die die Plattform selbst abfragt. Modul-Konstante (keine Config-Flaeche).
+const SAFE_DUCK_TYPING_PROPS = new Set(["then", "toJSON"]);
+
 // Struct-3 (C6a, PLAN-FRAGILITY-REMEDIATION.md P5): rekursiver Proxy-Guard - ein
 // verschobener/getippter Config-Key liefert nicht mehr lautlos undefined, sondern wirft
 // SOFORT beim ersten Lesezugriff (G27: Struktur statt Konvention/Grep-Vigilanz). Arrays
@@ -682,6 +692,7 @@ function guardedConfig(target, path = "config") {
         const isNestedGroup = value && typeof value === "object" && !Array.isArray(value);
         return isNestedGroup ? guardedConfig(value, `${path}.${String(prop)}`) : value;
       }
+      if (SAFE_DUCK_TYPING_PROPS.has(prop)) return undefined;
       throw new TypeError(
         `${path}.${String(prop)} existiert nicht (verschobener/entfernter Config-Key? ` +
           "Gruppierung in src/config.js pruefen).",
