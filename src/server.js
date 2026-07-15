@@ -1023,6 +1023,7 @@ async function terminateCappedCall(callId, providerCallSid, status) {
       // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
       hangUp: hangUpAction(voiceControl, call, providerCallSid),
       bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
+      callId, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
   } catch (e) {
     console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
@@ -1525,6 +1526,7 @@ app.post("/voice/status", async (req, res) => {
     },
     hangUp: null,
     bill: billThunk(finishCall, store, call.id),
+    callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
   });
 });
 
@@ -1849,6 +1851,7 @@ app.post("/api/calls", async (req, res) => {
       persistEnd: () => store.endCallRecord(call.id, "failed"),
       hangUp: null,
       bill: billThunk(finishCall, store, call.id),
+      callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
     // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
@@ -1898,6 +1901,7 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
     hangUp: hangUpAction(voiceControl, call, call.twilioSid),
     bill: billThunk(finishCall, store, call.id),
     onHangUpError: (e) => console.error("[cancel]", e.message),
+    callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
   });
   res.json({ status: "cancelled" });
 });

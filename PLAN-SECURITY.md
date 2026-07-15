@@ -333,3 +333,9 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > (dieselbe Fire-and-forget-Semantik, `call-termination-order.test.js`) aufbrechen und ein
 > Selektor-Argument in `terminateAndBillCall` erzwingen (Clean-Code G15/F3), fuer einen Nutzen,
 > der bereits durch OUT-05s Reserve-Release-Backstop-Timer bounded ist.
+>
+> P8 (Review-Blocker S1, Beobachtbarkeit, behoben): `bill()` bleibt fire-and-forget, aber
+> `terminateAndBillCall` haengt ein `.catch` an statt die Rejection nur an den generischen
+> globalen `onUnhandledRejection`-Handler (`process-guards.js`) durchzureichen - der Log-
+> Eintrag traegt ein stabiles `[terminateAndBillCall]`-Praefix + `callId` (Korrelation, keine
+> PII) + `e.message`, secret-frei. Alle 5 Terminierungspfade reichen `callId` mit.

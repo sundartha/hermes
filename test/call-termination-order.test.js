@@ -49,6 +49,43 @@ test("bill wird NICHT awaited (fire-and-forget): terminateAndBillCall loest auf,
   assert.deepEqual(order, ["hangUp", "bill-start"]);
 });
 
+// P8 (Review-Blocker S1, Beobachtbarkeit): eine bill-Rejection (z.B. store.markBilled
+// schlaegt bei einem PG-IO-Fehler fehl) darf terminateAndBillCall NICHT crashen/rejekten
+// lassen (fire-and-forget-Timing bleibt erhalten, persistEnd/hangUp liefen bereits) - UND
+// darf NICHT unbeobachtet als generische unhandledRejection verschwinden, sondern wird
+// HIER mit stabilem Praefix + callId-Korrelation secret-frei geloggt (nur e.message, nie
+// das ganze Error-Objekt). Ohne das interne .catch in terminateAndBillCall wuerde dieser
+// Test selbst eine unhandled rejection auf bill() erzeugen (Testabsicherung ohne Fix).
+test("bill-Rejection wird abgefangen (kein Crash) und secret-frei mit callId-Kontext geloggt", async () => {
+  const order = [];
+  const logs = [];
+  const origError = console.error;
+  console.error = (...args) => logs.push(args.map(String).join(" "));
+  try {
+    await terminateAndBillCall({
+      persistEnd: () => order.push("persistEnd"),
+      hangUp: async () => order.push("hangUp"),
+      bill: async () => {
+        throw new Error("store.markBilled fehlgeschlagen (PG-IO-Fehler)");
+      },
+      callId: "call-obs-1",
+    });
+    // terminateAndBillCall darf trotz der bill-Rejection nicht werfen - persistEnd/hangUp
+    // sind bereits vollstaendig gelaufen (Reihenfolge unveraendert, Fix betrifft nur bill).
+    assert.deepEqual(order, ["persistEnd", "hangUp"]);
+    // Der interne .catch laeuft als Microtask NACH der Rueckkehr von terminateAndBillCall
+    // (fire-and-forget) - ein Tick Puffer stellt sicher, dass er bereits gefeuert hat.
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    console.error = origError;
+  }
+  assert.equal(logs.length, 1, "Settlement-Fehler wird genau einmal geloggt (kein Doppel-Log)");
+  assert.match(logs[0], /\[terminateAndBillCall\]/, "stabiles, greifbares Log-Praefix statt nur des generischen Guards");
+  assert.match(logs[0], /call-obs-1/, "callId-Korrelation bleibt erhalten");
+  assert.match(logs[0], /store\.markBilled fehlgeschlagen \(PG-IO-Fehler\)/, "e.message wird geloggt");
+  assert.doesNotMatch(logs[0], /Error:\s*Error/, "kein rohes Error-Objekt/Stack im Log (secret-frei)");
+});
+
 test("hangUp-Fehler wird geschluckt (onHangUpError statt Exception) - bill laeuft trotzdem", async () => {
   const order = [];
   const errors = [];

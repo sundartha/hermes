@@ -22,7 +22,23 @@
 // Terminierungspfad die volle Buchungs-/Notification-/SMS-Kette durchlaeuft, statt sie an
 // einer neuen Call-Site zu vergessen (der urspruengliche C5-Bug: der place_call-catch rief
 // finishCall nie). Wirft VOR jedem Seiteneffekt (fail-fast, kein halb-terminierter Call).
-export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpError }) {
+//
+// P8 (Review-Blocker S1, Beobachtbarkeit): bill() bleibt bewusst fire-and-forget (Regel 1 -
+// der Max-Dauer-Cap-Timer darf NICHT auf die Buchungskette warten). Ohne eigenes .catch
+// landete eine Rejection (z.B. store.markBilled/store.save schlaegt bei einem PG-IO-Fehler
+// fehl) NUR noch im generischen globalen onUnhandledRejection-Handler (process-guards.js) -
+// dort fehlen callId-Bezug und das aufrufer-eigene Log-Praefix, der Fehler ist im Stoerfall
+// schwerer zu korrelieren. .catch faengt die Rejection HIER ab (bleibt async, KEIN await -
+// das fire-and-forget-Timing bleibt erhalten) und loggt secret-frei: nur ein stabiles
+// Praefix + optionale callId (Korrelation, keine PII) + e.message - NIE das ganze Error-
+// Objekt/den Stack/Request/Token. callId ist optional, damit bestehende Aufrufer ohne
+// Anpassung weiterlaufen; alle 5 realen Terminierungspfade reichen sie mit.
+// Promise.resolve(bill()) statt bill().catch(...) direkt: bill() laeuft unveraendert
+// SYNCHRON genau jetzt (identisches Timing zum vorherigen void bill()), aber das
+// Ergebnis wird sicher in ein Promise gehoben - auch ein synchroner Nicht-Promise-
+// Rueckgabewert (z.B. in Tests) hat dann ein .catch, statt terminateAndBillCall selbst
+// zum Werfen zu bringen.
+export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpError, callId }) {
   if (typeof bill !== "function")
     throw new TypeError("terminateAndBillCall: bill (Settlement) ist Pflicht - kein Function uebergeben");
   persistEnd();
@@ -33,7 +49,9 @@ export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpE
       onHangUpError?.(e);
     }
   }
-  void bill();
+  Promise.resolve(bill()).catch((e) => {
+    console.error(`[terminateAndBillCall] Settlement fehlgeschlagen (call=${callId ?? "unbekannt"}):`, e?.message);
+  });
 }
 
 // G5 (Review-Blocker Runde 2): der bill-Thunk war an allen 5 Terminierungspfaden

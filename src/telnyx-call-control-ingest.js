@@ -232,6 +232,7 @@ export function makeCallControlIngest({
       },
       hangUp: null,
       bill: billThunk(finishCall, store, call.id),
+      callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
     console.log(`[voice/call-control] hangup (call=${call.id}) -> Settlement finishCall`);
   }
