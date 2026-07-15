@@ -63,15 +63,23 @@ const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
 // eine Quelle). 0 Tage -> 0 ms, damit der Observe-Only-Sentinel erhalten bleibt.
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
+// Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
+// 0.29 * 100 === 28.999999999999996 in JS (node -e verifiziert) - ohne Math.round
+// wuerde maxBudgetCents lautlos knapp UNTER dem konfigurierten Cap liegen und der
+// Test braeuchte sonst den vollen Boot-Spawn-Pfad (P12 F.I.R.S.T: fast/independent).
+export function eurToCents(eur) {
+  return Math.round(eur * CENTS_PER_EUR);
+}
+
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
   // Ganzzahl-Cents (G26: Geld nie als Fliesskomma) - Env-Name bleibt MAX_BUDGET_EUR
   // (Operator gibt weiter EUR ein), interne Einheit ist Cents wie defaultTenantBudgetCents/
   // hardCapCents (Gate-Schnittmenge, Regel 1 - einheitlicher Typ verhindert Einheiten-Mix).
-  maxBudgetCents: Math.round(
-    numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }) *
-      CENTS_PER_EUR,
+  maxBudgetCents: eurToCents(
+    numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }),
   ),
 
   // ---- LLM-Resilienz-Seam (P3b-R Schicht 2, src/llm.js) ----

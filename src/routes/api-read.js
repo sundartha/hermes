@@ -11,7 +11,7 @@
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
-import { CENTS_PER_EUR } from "../store/defaults.js";
+import { globalCapEur } from "../store/defaults.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -52,7 +52,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
       actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
       calendar: upcomingCalendar(store, tenantId).slice(0, STATE_CALENDAR),
-      usage: { ...store.usageOf(tenantId), maxBudgetEur: config.maxBudgetCents / CENTS_PER_EUR },
+      usage: { ...store.usageOf(tenantId), maxBudgetEur: globalCapEur(config) },
       notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
       agent: {
         // Anzeige-Nummer = aktive Store-Nummer des Request-Tenants (auch der Owner ist

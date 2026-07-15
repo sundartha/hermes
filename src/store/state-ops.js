@@ -31,6 +31,7 @@ import {
   PROVISION_NUMBER_JOB,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
+  globalCapEur,
   KYC_LEVEL,
   KYC_ORDER,
 } from "./defaults.js";
@@ -1379,12 +1380,13 @@ export function addVoiceUsageCostCents(s, tenantId, costCents) {
 }
 
 // Effektiver pro-Tenant-Cap in EUR: existiert eine tenant_budget-Zeile, gilt deren
-// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale
-// cfg.maxBudgetCents (Owner/Bestand ohne Zeile -> byte-identisch). EINE Divisionsstelle
-// statt zwei uneinheitlichen Zweigen (G5), von budgetExceeded genutzt.
+// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale Cap
+// (globalCapEur, G5 - dieselbe Divisionsstelle wie globalBudgetExceeded/
+// globalReserveExceedsBudget, Owner/Bestand ohne Zeile -> byte-identisch), von
+// budgetExceeded genutzt.
 function effectiveCapEur(s, tenantId, cfg) {
   const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
-  return (budget ? budget.hardCapCents : cfg.maxBudgetCents) / CENTS_PER_EUR;
+  return budget ? budget.hardCapCents / CENTS_PER_EUR : globalCapEur(cfg);
 }
 
 // Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
@@ -1528,7 +1530,7 @@ export function markMeterEventsSent(s, eventIds) {
 // (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
 // Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt.
 export function globalBudgetExceeded(s, cfg) {
-  return globalUsageTotals(s).costEur >= cfg.maxBudgetCents / CENTS_PER_EUR;
+  return globalUsageTotals(s).costEur >= globalCapEur(cfg);
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
@@ -1555,7 +1557,7 @@ export function reservationsTotal(s) {
 export function globalReserveExceedsBudget(s, reserveCents, cfg) {
   return (
     globalUsageTotals(s).costEur + (reservationsTotal(s) + reserveCents) / CENTS_PER_EUR >
-    cfg.maxBudgetCents / CENTS_PER_EUR
+    globalCapEur(cfg)
   );
 }
 
