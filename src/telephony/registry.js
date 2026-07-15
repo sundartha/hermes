@@ -20,6 +20,8 @@ import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signat
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { twilioMedia } from "./adapters/twilio/media.js";
 import { telnyxMedia } from "./adapters/telnyx/media.js";
+import { twilioWebhookEvents } from "./adapters/twilio/webhook-events.js";
+import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
 import { PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
 import crypto from "node:crypto";
@@ -61,6 +63,16 @@ export const messaging = (provider = PROVIDER.TWILIO) =>
 /** @returns {import("./ports.js").MediaTransport} */
 export const mediaTransport = (provider = PROVIDER.TWILIO) =>
   provider === PROVIDER.TELNYX ? telnyxMedia : twilioMedia;
+
+// WebhookEvents (Port 5, reines Parsing VOR den Safety-Gates). Provider-aware wie
+// mediaTransport: Default twilio -> bestehende Call-Sites (server.js) byte-identisch.
+// Dispatch bewusst per provider-Param (NICHT header-basiert wie inboundSignatureVerifier):
+// alle 3 Call-Sites kennen provider bereits vertrauenswuerdig aus dem Store bzw. aus
+// providerFromHeaders+erfolgreicher Signaturpruefung weiter oben im Request-Pfad -
+// header-basiert waere hier unnoetige Spoof-Flaeche (Provider-Wahl VOR Signatur-Trust).
+/** @returns {import("./ports.js").WebhookEvents} */
+export const webhookEvents = (provider = PROVIDER.TWILIO) =>
+  provider === PROVIDER.TELNYX ? telnyxWebhookEvents : twilioWebhookEvents;
 
 // NumberProvisioning (Port 3, Onboarding/Geld-Pfad): nur Telnyx implementiert
 // (Twilio-Provisioning ist nicht im Scope dieser Phase). Fail-closed: ein nicht
