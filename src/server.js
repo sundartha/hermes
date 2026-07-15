@@ -9,7 +9,6 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import {
-  BOOTSTRAP_TENANT_ID,
   DEFAULT_PROVIDER,
   PROVIDER,
   NUMBER_STATUS,
@@ -19,13 +18,9 @@ import {
   KYC_OUTBOUND_MIN,
   tenantIdForSubject,
   normNum,
-  hasTrunkZeroAfterCountryCode,
-  homeCountryCode,
-  normalizeDialTarget,
   shouldPersistProvisionResult,
-  globalCapEur,
 } from "./store/defaults.js";
-import { findActiveNumber, hasActiveNumber } from "./store/views.js";
+import { hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
 import {
   agentTurn,
@@ -72,6 +67,12 @@ import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
+import {
+  makeOutboundGates,
+  tariffCentsPerMin,
+  E164_FORMAT_ERROR,
+  isTrunkZeroFormatError,
+} from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import {
   registerTenant,
@@ -95,14 +96,13 @@ import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
-import { resolvePeriodStartIso } from "./billing/period.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "./billing/webhook.js";
-import { E164, invalidText, validateAssistantContext } from "./routes/_validation.js";
+import { invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
-import { PLAN_CATALOG, findPlan } from "./plans.js";
+import { PLAN_CATALOG } from "./plans.js";
 import {
   makeWebAuthRoutes,
   makeAdminRoutes,
@@ -148,6 +148,19 @@ const provisioningQueue = createQueue();
 // internalIdentity sowie OWNER_ID/ANON_IDENTITY/TENANT_REJECT kommen aus demselben
 // Modul (oben importiert).
 const { requestTenant, requireTenant } = makeRequestTenant(store);
+
+// Outbound-Gate-Kette EINMAL beim Boot verdrahtet (Modul-Scope wie provisioningQueue,
+// P15): geordnetes Array, Reihenfolge per test/outbound-gates-order.test.js festgenagelt.
+// requestTenant/internalIdentity/OWNER_ID/TENANT_REJECT werden durchgereicht (EINE Quelle,
+// kein zweiter Tenant-Resolver, G5/DIP).
+const { gates: outboundGates } = makeOutboundGates({
+  store,
+  config,
+  requestTenant,
+  internalIdentity,
+  OWNER_ID,
+  TENANT_REJECT,
+});
 
 app.use(securityHeaders);
 
@@ -590,239 +603,6 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 
 // ---- Eingabe-Validierung fuer API-Routen ----
 // E164, TEXT_LIMITS, invalidText: extrahiert nach src/routes/_validation.js (T4 Phase 2).
-
-// ---- Nummern-Gates fuer Outbound-Calls (Safety, siehe tasks/todo.md Phase 0+2) ----
-// Feste Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit
-// -> Verifikations-Gate (Pfad 0-2; statische ALLOWED_NUMBERS abgeschafft, outbound-p3).
-// Die Denylist laeuft BEWUSST vor der Formatpruefung: so erscheint eine Notruf-Kurzwahl
-// (112) als bewusste Sperre (403 denylist) und nicht als Formatfehler (400).
-//
-// Rechteprofile (Phase 2): das Profil kann das Land-Gate NUR weiter einschraenken
-// (Schnittmenge global ∩ profil), das Stundenlimit NUR senken (min global/profil)
-// und das Verifikations-Gate lockern (unrestricted/eigene Liste). Denylist, Land-Obergrenze,
-// globales Stundenlimit, Budget und Max-Dauer bleiben harte globale Obergrenzen.
-//
-// Abo-Kopplung (W5, Tenant-Achse): ein AKTIVER, KYC-verifizierter Subscriber gilt im
-// Verifikations-Gate als freigegeben (das Abo IST die Outbound-Freigabe); ein
-// suspendierter/geschlossener Tenant wird dort HART abgewiesen (Defense-in-depth). Beides
-// wirkt NUR innerhalb des Verifikations-Gates und lockert KEIN hartes Gate davor. Der Owner traegt
-// seit Phase outbound-p1 ein EXPLIZITES kyc_level (id_verified, via seedBootstrapKyc beim Boot)
-// und gilt als aktiver Subscriber (Pfad 2). Eine statische ALLOWED_NUMBERS-Liste gibt es seit
-// outbound-p3 nicht mehr; die globale Notbremse ist OUTBOUND_FROZEN (ganz vorn in POST /api/calls).
-//
-// Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde
-// "112" auch legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per
-// startsWith. Eng gefasst, damit normale Mobilnummern (+4915...) durchkommen.
-const EMERGENCY_SHORT_CODES = ["110", "112", "911", "999"];
-// Globale Best-effort-IRSF-Blockliste (outbound-p1b): die hoechsten Premium-/Satelliten-/
-// IPRN-Risiko-Ziele weltweit. BEWUSST unvollstaendig - bei weltweiter Reichweite ('*',
-// Phase 4) ist sie Beifang, NICHT der Hauptschutz (Hauptschutz = Kosten-Achse/Pre-Auth,
-// Phase 1c). Strikt SUB-Ranges (Premium/Service/Satellit/IPRN), NIE ganze Laendercodes -
-// eine gewoehnliche US-/ES-/DE-Mobilnummer muss durchkommen. Periodisch gegen eine
-// gepflegte IRSF-Quelle aktualisieren. Quelle/Zweck je Gruppe im Kommentar.
-const PREMIUM_PREFIXES = [
-  // Satellit (Inmarsat / globale Mobil-Satellit) - sehr hohe Minutenpreise, IRSF-Liebling
-  "+870",
-  "+881",
-  "+882",
-  "+883",
-  // IPRN (International Premium Rate Numbers)
-  "+979",
-  // DE Premium/Service: 0900 (Premium, kurz + lang), 0137 (Televoting), 0180 (Shared-Cost),
-  // 0118 (Auskunft), 0700 (persoenliche Rufnummer, Restschuld)
-  "+49900",
-  "+490900",
-  "+49137",
-  "+49180",
-  "+49118",
-  "+49700",
-  // UK Premium/Service: 118 (Directory Enquiries), 070 (Personal/Follow-me), 09 (Premium),
-  // 084x/087x (Service)
-  "+44118",
-  "+4470",
-  "+449",
-  "+44843",
-  "+44844",
-  "+44845",
-  "+44870",
-  "+44871",
-  // FR Premium/Service: 118 (Auskunft), 089x (audiotel/SVA Premium), 081x/082x (Service)
-  "+33118",
-  "+33899",
-  "+33892",
-  "+33810",
-  "+33820",
-];
-const HOUR_MS = 60 * 60 * 1000;
-const SECONDS_PER_MINUTE = 60;
-// Einheitliche E.164-Formatfehler-Meldung (G5): genutzt vom Format-Gate in numberGateError
-// UND vom C4-Trunk-0-Reject am Producer (POST /api/calls). Wortlaut byte-identisch zum
-// Bestand (api.test.js pinnt /E\.164/).
-const E164_FORMAT_ERROR = "to muss E.164 sein, z.B. +4917212345678";
-
-const isDenied = (to) =>
-  EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
-const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
-
-// Worst-Case-Minutentarif (GANZZAHL Cents/min) des Ziels (outbound-p1c, Kosten-Achse).
-// EINE Kosten-Quelle (G5): Vorab-Reservierung, Budget-Reconcile UND Stripe-Voice-Meter.
-// Inlands-Vorwahl -> guenstiger Inlandstarif, alles andere -> Worst-Case-Default. to ist an
-// der Aufrufstelle bereits E.164-validiert (numberGateError). Prefix-Match wie matchesPrefix.
-function tariffCentsPerMin(to) {
-  return config.voiceTariffDomesticPrefixes.some((p) => to.startsWith(p))
-    ? config.voiceTariffDomesticCents
-    : config.voiceTariffDefaultCents;
-}
-
-// Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
-// nie ueber die globale Erlaubnis hinaus (Profil "*"/leer = keine Zusatz-Einschraenkung).
-function countryGateAllowed(to, profile) {
-  if (!matchesPrefix(to, config.allowedCountryCodes)) return false;
-  const p = profile.allowedCountryCodes;
-  return !p || !p.length || matchesPrefix(to, p);
-}
-
-const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
-// Globales Stundenlimit ueber ALLE Outbound-Calls (Plattform-Notbremse, Bestand,
-// wird nie entfernt). Tenant-unabhaengig (ohne Filter = alle Calls).
-const globalHourReached = () =>
-  store.countOutboundCallsSince(hourWindowStart()) >= config.maxCallsPerHour;
-// Pro-Nutzer-Stundenlimit: effektiv min(global, profil) - ein Profil kann nur senken.
-function userHourReached(profile, requestedBy) {
-  const limit =
-    profile.maxCallsPerHour == null
-      ? config.maxCallsPerHour
-      : Math.min(config.maxCallsPerHour, profile.maxCallsPerHour);
-  return store.countOutboundCallsSince(hourWindowStart(), { requestedBy }) >= limit;
-}
-
-// Cooldown-Fensterstart fuer den per-(Tenant,Ziel)-Cap (outbound-p1d). Eigenes Fenster
-// (config.perTargetWindowMs) - die Stundenlimits oben nutzen hourWindowStart.
-const perTargetWindowStart = () => new Date(Date.now() - config.perTargetWindowMs).toISOString();
-// Per-(Tenant,Ziel)-Wiederhol-Cap (outbound-p1d, D4, Belaestigungs-Bremse, Schutz Dritter):
-// wie oft DIESER Tenant DASSELBE Ziel im Cooldown-Fenster schon angerufen hat; ab dem Cap
-// gesperrt. Tenant-isoliert (Filter tenantId) + ziel-isoliert (Filter to). Zaehlt - wie die
-// Stundenlimits - bewusst auch fehlgeschlagene Calls (konservativ). Cap 0 -> jeder Outbound
-// gesperrt (Not-Aus, wie maxCallsPerHour=0).
-function perTargetCapReached(tenantId, to) {
-  return (
-    store.countOutboundCallsSince(perTargetWindowStart(), { tenantId, to }) >=
-    config.perTargetCallCap
-  );
-}
-
-// Verifikations-Gate (letztes Gate): mehrere Freigabe-Pfade, ALLE optional - schlaegt keiner
-// an, wird fail-closed abgewiesen (outbound-p3: keine statische ALLOWED_NUMBERS mehr).
-// Reihenfolge load-bearing:
-//   0. Defense-in-depth (W5): suspendierter/geschlossener Tenant -> HART 403, VOR jeder
-//      Lockerung (ein gueltiges profile.unrestricted hebt das BEWUSST NICHT auf). Abo
-//      gekuendigt / Zahlung gescheitert -> kein freies Waehlen mehr, unabhaengig von der
-//      Stripe-Webhook-Session-Invalidierung (belt-and-suspenders).
-//   1. Admin-Override (Bestand): profile.unrestricted ODER Ziel in profile.allowedNumbers
-//      (Testaccounts, gezielte Freigabe) -> freigegeben.
-//   2. Abo-Kopplung (W5): aktiver, KYC-verifizierter Subscriber -> freigegeben (das Abo IST
-//      die Freigabe). Der Owner traegt seit Phase outbound-p1 ein EXPLIZITES kyc_level
-//      (id_verified, Boot-Seed seedBootstrapKyc) und faellt hierunter (Pfad 2); ein
-//      ungeseedeter Fremd-Tenant ohne kyc_level NICHT (tenantActiveSubscriber false).
-//   3. Sonst fail-closed Deny - keine statische Liste mehr (outbound-p3); die globale
-//      Notbremse ist OUTBOUND_FROZEN (ganz vorn in POST /api/calls).
-// Hebt NUR dieses Gate auf; alle harten Gates davor (Denylist/Land/Limit) liefen schon.
-// caller = aufgeloeste Aufrufer-Identitaet (profile = Rechte-Achse, tenantId = Tenant-Achse).
-function allowlistError(to, { profile, tenantId }) {
-  if (store.tenantInactive(tenantId))
-    return {
-      status: 403,
-      grund: "abo",
-      message: "Abo inaktiv (Tenant gesperrt). Outbound-Anrufe sind gesperrt.",
-    };
-  if (profile.unrestricted) return null;
-  if (profile.allowedNumbers?.includes(to)) return null;
-  if (store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) return null;
-  // Pfad 3 (outbound-p3): reiner fail-closed Deny. Wer Pfad 0-2 nicht passiert (kein
-  // unrestricted-Profil, keine Profil-Nummer, kein aktiv-verifizierter Subscriber), wird
-  // abgewiesen. Die statische ALLOWED_NUMBERS-Permit-/Break-Glass-Liste ist abgeschafft
-  // (D8); die Notbremse ist jetzt OUTBOUND_FROZEN (ganz vorn in POST /api/calls).
-  return {
-    status: 403,
-    grund: "allowlist",
-    message:
-      "Outbound nicht freigegeben: kein aktives Abo / keine Verifikation fuer diesen Tenant.",
-  };
-}
-
-// KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
-// (card) erreicht haben. fail-closed Schnittmenge - ergaenzt die Outbound-Gate-Kette,
-// lockert NIE ein bestehendes Gate. Fehlendes kyc_level -> store.kycReached liefert seit Phase
-// outbound-p1 FALSE (fail-closed 403); der Owner passiert, weil seedBootstrapKyc ihn beim Boot
-// auf id_verified heilt. Liefert {status,grund,message} (Gate-Vertrag) oder null.
-function kycGateError(tenantId) {
-  if (store.kycReached(tenantId, KYC_OUTBOUND_MIN)) return null;
-  return {
-    status: 403,
-    grund: "kyc",
-    message: "Verifikation unzureichend (KYC) fuer Outbound-Anrufe. Bitte Identitaet bestaetigen.",
-  };
-}
-
-// Minuten-Kontingent-Gate-Praedikat (B2, GAP B): hat der Request-Tenant die im laufenden
-// Abrechnungsfenster inkludierten Plan-Minuten aufgebraucht? NEUES PARALLELES Glied NEBEN
-// budgetExceeded (Regel 1, Schnittmenge) - NIE ein Ersatz, eigene Achse (Minuten-Ledger,
-// kein Doppelzaehlen mit der EUR-Achse). Reiner Read, kein Nebeneffekt (N7). Owner/Bootstrap
-// haelt keinen Plan und wird vom Aufrufer per tenantId===BOOTSTRAP_TENANT_ID ausgenommen
-// (sonst sperrte findPlan(null)->null den Owner). Fail-closed (5.4, bindend): kein Plan ODER
-// kein aufloesbarer Periodenanker -> planMinutesExceeded liefert true (blocken) - die
-// fail-closed-Logik lebt EINMAL in der Query, hier NICHT erneut (G5). Bestands-Tenant mit
-// NULL current_period_start, aber gueltigem currentPeriodEnd bezieht den abgeleiteten Anker
-// (resolvePeriodStartIso) und blockt NICHT.
-function planMinutesExhausted(tenantId) {
-  const sub = store.tenantSubscription(tenantId);
-  const plan = sub.planSlug ? findPlan(sub.planSlug) : null;
-  return store.planMinutesExceeded(tenantId, {
-    includedMinutes: plan?.includedMinutes,
-    periodStartIso: resolvePeriodStartIso(sub),
-  });
-}
-
-// Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null. caller =
-// aufgeloeste Aufrufer-Identitaet { profile, requestedBy, tenantId } (F1: die drei reisen
-// zusammen): profile/requestedBy steuern Land-Schnittmenge + pro-Nutzer-Limit, tenantId
-// (Tenant-Achse) die Abo-Kopplung, den per-(Tenant,Ziel)-Cap UND den Defense-in-depth-Block
-// im Allowlist-Gate.
-function numberGateError(to, caller) {
-  const { profile, requestedBy, tenantId } = caller;
-  if (isDenied(to))
-    return {
-      status: 403,
-      grund: "denylist",
-      message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
-    };
-  if (!E164.test(to)) return { status: 400, grund: "format", message: E164_FORMAT_ERROR };
-  if (!countryGateAllowed(to, profile))
-    return {
-      status: 403,
-      grund: "land",
-      message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.`,
-    };
-  if (globalHourReached())
-    return {
-      status: 429,
-      grund: "stundenlimit",
-      message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.`,
-    };
-  if (userHourReached(profile, requestedBy))
-    return {
-      status: 429,
-      grund: "stundenlimit_nutzer",
-      message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
-    };
-  if (perTargetCapReached(tenantId, to))
-    return {
-      status: 429,
-      grund: "ziel_limit",
-      message: "Wiederhol-Limit fuer dieses Ziel erreicht. Bitte spaeter erneut.",
-    };
-  return allowlistError(to, caller);
-}
 
 // Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem Prompt +
 // Redirect-Fallback auf dieselbe Turn-URL. speechTimeoutSec (optional) setzt festes
@@ -1495,19 +1275,6 @@ app.post(
 
 // ================= REST-API (Dashboard + MCP-Tools) =================
 
-// Absendernummer + Provider fuer den Outbound EINES Tenants (I7, L4). JEDER Tenant -
-// auch der Owner (Tenant Null) - telefoniert NUR unter EIGENER aktiver Nummer (e164 +
-// provider aus s.numbers); kein config-Sonderzweig mehr. Keine aktive eigene Nummer
-// -> null -> Reject, NIE die Nummer eines anderen Tenants als Fallback (Toll-Fraud-
-// Riegel, Pre-Mortem R3).
-// numberRecord wird mitgegeben (nicht weggeworfen): der Geo-Anker der eigenen aktiven
-// Nummer (F1 Phase 8) ist die Quelle der Outbound-Gespraechssprache (number.language)
-// in der Praezedenz-Aufloesung. Kein neuer Absender-Pfad - nur ein zusaetzliches Feld.
-function outboundFrom(s, tenantId) {
-  const own = findActiveNumber(s, tenantId);
-  return own ? { fromNumber: own.e164, provider: own.provider, numberRecord: own } : null;
-}
-
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
 // NUR bool/count, NIE der Kontext-Inhalt selbst (kein zweiter Transportweg fuer
@@ -1523,235 +1290,69 @@ function contextReceivedMeta(context) {
   };
 }
 
-// C4-Formfehler: Trunk-0 nach erlaubter Laendervorwahl (z.B. +4901737... statt
-// +491737...) wird abgewiesen (Owner-#4: REJECT, NICHT kanonisieren - laender-
-// spezifisches Korruptions-/Falschanruf-Risiko, z.B. +39 IT behaelt die fuehrende 0).
-// !isDenied(to) WAHRT die Denylist-Praezedenz (Regel 1): eine gesperrte Nummer auch in
-// Trunk-0-Schreibweise (z.B. +490900..., DE-0900-Premium) bleibt 403 denylist
-// (auditiert), kein Kippen auf 400. EIN Praedikat fuer BEIDE Pruefpunkte im
-// /api/calls-Handler (Roh-Eingabe + normalisiertes Ergebnis der 00->+-Regel, s.u.).
-const isTrunkZeroFormatError = (to) => !isDenied(to) && hasTrunkZeroAfterCountryCode(to);
-
 // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
 app.post("/api/calls", async (req, res) => {
   const b = req.body || {};
-  // let statt const: to wird nach der Tenant-Aufloesung EINMAL deterministisch
-  // normalisiert (normalizeDialTarget, s.u.) - danach unveraendert bis zum Dial.
   let to = normNum(b.to);
   const objective = b.objective || b.goal;
   if (!to || !objective) return res.status(400).json({ error: "to und objective sind Pflicht" });
-
-  // C4 (6.6): 400 VOR jedem Gate und vor dem Dial; 400 = reiner Eingabefehler ->
-  // kein Audit (wie die to/objective-Pruefung oben).
+  // C4 (6.6): 400 VOR jedem Gate und vor dem Dial; 400 = reiner Eingabefehler -> kein Audit
+  // (wie die to/objective-Pruefung oben).
   if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
 
-  // OUTBOUND_FROZEN (outbound-p3): globaler Kill-Switch, ganz vorn + fail-closed. "true"
-  // friert JEDEN Outbound sofort (403, kein Originate, kein Bypass) - Betriebs-Notbremse +
-  // Sekunden-Rollback fuer den Allowlist-Cutover, ohne Deploy. Default false -> uebersprungen
-  // (Normalbetrieb byte-identisch). VOR der Tenant-Aufloesung, damit auch unbekannte
-  // Identitaeten erfasst sind. Audit ohne requestedBy (Identitaet hier bewusst noch nicht aufgeloest).
-  if (config.outboundFrozen) {
-    audit("place_call_denied", req, `to=${to} grund=frozen`);
-    return res
-      .status(403)
-      .json({ error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." });
+  // Geordnete Safety-/Geld-Gate-Kette (EINE Schleife, EIN Array, Struct-1 P6). ctx
+  // transportiert Derivationen (normalisiertes to, tenantId, Absendernummer, Reserve)
+  // zwischen den Gates; volle Reihenfolge + Rationale in telephony/outbound-gates.js.
+  const ctx = { req, to, objective, b };
+  for (const gate of outboundGates) {
+    const denial = await gate.run(ctx);
+    if (denial) {
+      if (denial.audit) audit(denial.audit.event, req, denial.audit.detail);
+      return res.status(denial.status).json(denial.body);
+    }
   }
 
-  // Identitaet serverseitig (nur localhost-Header), nie aus dem Body. null = Owner.
-  // requestedBy bleibt die Identitaet (Audit/Forensik, entkoppelt). Das Rechteprofil keyt
-  // seit Phase S auf die tenantId (resolveProfile NACH der REJECT-Pruefung, s.u.) - NICHT
-  // mehr auf die email-/sub-Identitaet. Flag aus -> requestTenant === BOOTSTRAP_TENANT_ID
-  // (Profil kollabiert dann auf OWNER_PROFILE; per-Identity-Profile wirken nur MULTI_TENANT).
-  const identity = internalIdentity(req);
-  const requestedBy = identity || OWNER_ID;
-  const tenantId = requestTenant(req);
-
-  // Tenant-Achse fail-closed: VORHANDENE, aber unbekannte Identitaet -> Reject, NIE
-  // Owner (Asymmetrie zu resolveProfile). Ohne gueltigen Tenant darf gar kein
-  // Outbound entstehen.
-  if (tenantId === TENANT_REJECT) {
-    audit("place_call_denied", req, `to=${to} grund=tenant_unbekannt requestedBy=${requestedBy}`);
-    return res.status(403).json({ error: "Kein Tenant fuer diese Identitaet." });
-  }
-
-  // Wurzelfix LLM-Ziffern-Regeneration (RCA call_mr3upd4uz8p3): nationale Schreibweise
-  // wird HIER deterministisch aufgeloest, NICHT im MCP-Client - das Chat-Modell reicht
-  // die Nutzer-Eingabe zeichengenau durch (jede LLM-Umformung kann Ziffern erfinden).
-  // Telefon-Konvention: fuehrende 0 = Heimatland des Tenants (private Mobilnummer als
-  // "SIM" vor eigener DID - die DID kann in einem anderen Land liegen); "00" -> "+";
-  // "+" unveraendert. Kein ableitbares Heimatland -> unveraendert -> numberGateError
-  // liefert den E.164-400 (ablehnen statt raten). Ab hier sehen ALLE Gates, Audits und
-  // der Dial dieselbe normalisierte Nummer ("geprueft == gewaehlt").
-  const homeCountry = homeCountryCode([
-    store.tenantPrivateNumber(tenantId),
-    findActiveNumber(store.load(), tenantId)?.e164,
-  ]);
-  to = normalizeDialTarget(to, homeCountry);
-  // Die 00->+-Regel kann Trunk-0-Formfehler neu materialisieren ("00490173..." ->
-  // "+490173...") - dasselbe C4-Praedikat wie oben, auf dem NORMALISIERTEN Ergebnis.
-  if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
-
-  // KYC-Gate (P6b4) als erstes Glied der Outbound-Gate-Kette: Tenant-Reifegrad VOR
-  // den Ziel-Gates (Schnittmenge, fail-closed). Fehlendes kyc_level -> 403 (seit Phase
-  // outbound-p1); der Owner ist beim Boot auf id_verified geheilt (seedBootstrapKyc) und
-  // passiert. tenantId ist hier bereits aufgeloest + REJECT abgewiesen.
-  const kycErr = kycGateError(tenantId);
-  if (kycErr) {
-    audit(
-      "place_call_denied",
-      req,
-      `to=${to} grund=${kycErr.grund} tenant=${tenantId} requestedBy=${requestedBy}`,
-    );
-    return res.status(kycErr.status).json({ error: kycErr.message });
-  }
-
-  // Identitaets-Gate (G1, Geschwister-Regel zu Regel 2): ohne registrierten
-  // Auftraggeber-Namen KEIN Outbound (sonst renderte die Offenlegung "...von .").
-  // Fail-closed, NIE in /voice/outbound (Premature-close-Schutz) - hier am Producer.
-  // tenantContext zieht ownerName aus dem Tenant (P2b: kein config-Fallback mehr, leerer
-  // Default "") -> leer, solange der Tenant keinen ownerName im Store gesetzt hat. Genau
-  // dann sperrt dieses Gate Outbound fail-closed (kein "...von ."-Leak in der Offenlegung).
-  const ownerName = store.tenantContext(tenantId).ownerName;
-  if (!ownerName) {
-    audit(
-      "place_call_denied",
-      req,
-      `to=${to} grund=keine_identitaet tenant=${tenantId} requestedBy=${requestedBy}`,
-    );
-    return res
-      .status(403)
-      .json({ error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." });
-  }
-
-  // Rechteprofil tenant-gekeyt (Phase S): aufgeloest NACH dem TENANT_REJECT-Check, direkt
-  // vor dem ersten Gebrauch (numberGateError, G10). tenantId === BOOTSTRAP -> OWNER_PROFILE,
-  // sonst stored-or-DEFAULT (fail-closed). identity/requestedBy bleiben fuer Audit entkoppelt.
-  const profile = store.resolveProfile(tenantId);
-
-  // Nummern-Gates VOR der Freitext-Validierung: gesperrte/ungueltige Ziele zuerst abweisen.
-  const gateErr = numberGateError(to, { profile, requestedBy, tenantId });
-  if (gateErr) {
-    // 400 = Eingabe-/Formatfehler, keine Sicherheits-Ablehnung -> nicht auditieren.
-    if (gateErr.status !== 400)
-      audit("place_call_denied", req, `to=${to} grund=${gateErr.grund} requestedBy=${requestedBy}`);
-    return res.status(gateErr.status).json({ error: gateErr.message });
-  }
-
-  const textErr =
-    invalidText("objective", objective) ||
-    invalidText("briefing", b.briefing) ||
-    invalidText("constraints", b.constraints);
-  if (textErr) return res.status(400).json({ error: textErr });
-
-  // P3 (PLAN-PERSONAL-ASSISTANT): optionaler strukturierter Per-Call-Kontext, DIESELBE
-  // Naht wie die objective/briefing-Validierung (NACH allen Gates). Hinter dem Flag
-  // (Default aus -> b.context ignoriert, /api/calls byte-identisch). Validierung +
-  // Normalisierung in EINER Quelle (_validation.js); Teilfeld/Array ueber Limit -> 400.
-  // Der Kontext speist KEINE Identitaetsgroesse (Anti-Spoofing): er landet nur als
-  // HINTERGRUND-Sektion im systemPrompt, nie in Offenlegung/Persona.
-  let context = null;
-  if (config.assistantContextEnabled) {
-    const ctxResult = validateAssistantContext(b.context);
-    if (ctxResult.error) return res.status(400).json({ error: ctxResult.error });
-    context = ctxResult.value;
-  }
-
-  // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): JEDER Tenant - auch
-  // der Owner (Tenant Null) - telefoniert nur unter EIGENER aktiver Store-Nummer; keine
-  // -> Reject, NIE die Nummer eines anderen Tenants als Fallback.
-  const outbound = outboundFrom(store.load(), tenantId);
-  if (!outbound) {
-    audit(
-      "place_call_denied",
-      req,
-      `to=${to} grund=keine_tenant_nummer tenant=${tenantId} requestedBy=${requestedBy}`,
-    );
-    return res.status(403).json({ error: "Kein aktive Absendernummer fuer diesen Tenant." });
-  }
-  const { fromNumber, provider: outboundProvider, numberRecord } = outbound;
-
-  // Budget-Schnittmenge (R2): pro-Tenant-Budget (requestTenant) UND globaler Notaus
-  // (Summe ueber alle Buckets) PARALLEL, beide fail-closed. Der globale Notaus wird
-  // NIE entfernt; pro-Tenant schraenkt nur zusaetzlich ein. Owner-only byte-identisch.
-  if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
-    audit("place_call_denied", req, `to=${to} grund=budget tenant=${tenantId}`);
-    return res
-      .status(402)
-      .json({ error: `Budget-Limit von ${globalCapEur(config)} EUR erreicht.` });
-  }
-
-  // Minuten-Kontingent-Gate (B2, GAP B): SEPARATES if NEBEN dem Budget-Gate (eigenes audit
-  // grund=minutes), NIE in den Budget-if gefaltet (getrennte Achsen). Hinter
-  // config.paymentEnabled (aus -> No-Op, Ledger leer, byte-identisch). Owner/Bootstrap als
-  // ERSTE Bedingung ausgenommen, VOR der "kein Plan -> blocken"-Regel (5.5). Inbound bleibt
-  // ungated (5.2): die Minuten-Erschoepfung deckelt nur den aktiven, teuren Outbound.
-  if (config.paymentEnabled && tenantId !== BOOTSTRAP_TENANT_ID && planMinutesExhausted(tenantId)) {
-    audit("place_call_denied", req, `to=${to} grund=minutes tenant=${tenantId}`);
-    return res.status(402).json({
-      error:
-        "Inkludierte Plan-Minuten aufgebraucht. Bitte Tarif anpassen oder neue Abrechnungsperiode abwarten.",
-    });
-  }
-
-  const maxDur = Math.min(parseInt(b.max_duration_s || config.maxCallDurationS, 10) || 180, 300);
-  const reserveCents = tariffCentsPerMin(to) * Math.ceil(maxDur / SECONDS_PER_MINUTE);
-  // OUT-05 (F2): Check+Reserve ATOMAR unter store.withStoreLock (Schnittmenge Tenant+global,
-  // Regel 1) VOR dem Dial. INVARIANTE (MINOR 6): der Lock-Body ist REIN SYNCHRON - NIE ein
-  // Netz-await hier hinein (die store.js-HARD-RULE nennt nur Re-Entrancy). fail-closed: JEDER
-  // Body-Throw (z.B. json-IO) gilt als Denial (402), NIE als reserviert, und darf keinen
-  // unhandled reject erzeugen.
-  let reserved;
-  try {
-    reserved = await store.withStoreLock(() =>
-      store.tryReserveOutboundBudget(tenantId, reserveCents, config),
-    );
-  } catch (e) {
-    console.error(`[place_call] reserve fehlgeschlagen tenant=${tenantId}:`, e.message); // secret-frei
-    audit("place_call_denied", req, `to=${to} grund=reserve_error tenant=${tenantId}`);
-    return res.status(402).json({ error: "Reservierung fehlgeschlagen. Bitte erneut versuchen." });
-  }
-  if (!reserved) {
-    audit("place_call_denied", req, `to=${to} grund=reserve tenant=${tenantId} requestedBy=${requestedBy}`);
-    return res
-      .status(402)
-      .json({ error: "Voraussichtliche Anrufkosten ueberschreiten das verfuegbare Budget." });
-  }
-  // Outbound-Gespraechssprache (F1 Phase 8, Owner #8) aus DERSELBEN Praezedenz wie
-  // Inbound: settings.language (Owner-Override) -> number.language (Geo-Anker der eigenen
-  // aktiven Nummer) -> tenant.defaultLanguage -> "de". EINE Quelle (resolveCallLanguage),
-  // damit ein API-/MCP-Aufrufer die kuratierte Sprachzuordnung NICHT per Call-Body
-  // umgeht (b.language wird bewusst nicht mehr beruecksichtigt). DE byte-identisch:
-  // Nummer ohne language + ohne settings.language -> "de" wie zuvor.
-  const language = store.resolveCallLanguage({ tenantId, numberRecord });
+  // Ab hier ist ctx vollstaendig durch die Gate-Kette befuellt. KRITISCH: ctx.to ist die von
+  // normalize_target aufgeloeste Nummer - die lokale `to` bleibt roh und wird ab hier NICHT
+  // mehr gelesen.
+  const language = store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
   // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
   // statt TwiML.
   const call = store.createCall({
     direction: "outbound",
-    from: fromNumber,
-    to,
-    goal: objective,
+    from: ctx.fromNumber,
+    to: ctx.to,
+    goal: ctx.objective,
     briefing: b.briefing,
     constraints: b.constraints,
-    context,
+    context: ctx.context,
     language,
-    maxDurationS: maxDur,
-    requestedBy,
-    tenantId,
-    provider: outboundProvider,
-    reserveCents, // OUT-05 (F2)
+    maxDurationS: ctx.maxDur,
+    requestedBy: ctx.requestedBy,
+    tenantId: ctx.tenantId,
+    provider: ctx.outboundProvider,
+    reserveCents: ctx.reserveCents, // OUT-05 (F2)
   });
   audit(
     "place_call",
     req,
-    `to=${to} call=${call.id} provider=${outboundProvider} requestedBy=${requestedBy}`,
+    `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
   );
 
   try {
     // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
     // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
     // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-    if (config.telnyxAssistant.enabled && outboundProvider === PROVIDER.TELNYX) {
-      await originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur });
+    if (config.telnyxAssistant.enabled && ctx.outboundProvider === PROVIDER.TELNYX) {
+      await originateAiAssistantCall({
+        store,
+        voiceControl,
+        config,
+        call,
+        fromNumber: ctx.fromNumber,
+        to: ctx.to,
+        maxDur: ctx.maxDur,
+      });
       // P6 (Regel 1, Minuten-Achse): harter Max-Dauer-Cap AUCH fuer C-Telnyx. originateAiAssistantCall
       // hat call.callControlId persistiert+gespeichert; terminateCappedCall liest sie beim Feuern
       // frisch und waehlt via hangUpAction den Call-Control-Hangup (endCallViaCallControl), NICHT
@@ -1761,14 +1362,14 @@ app.post("/api/calls", async (req, res) => {
       // EINZIGE in-Prozess-Cap (fail-closed, Regel 1).
       armMaxDurationTimer(call, null);
     } else {
-      const tw = await voiceControl(outboundProvider).originateCall({
-        from: fromNumber,
-        to,
+      const tw = await voiceControl(ctx.outboundProvider).originateCall({
+        from: ctx.fromNumber,
+        to: ctx.to,
         url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
         statusCallback: `${config.publicUrl}/voice/status?callId=${call.id}`,
         statusCallbackEvent: ["answered", "completed"],
         method: "POST",
-        timeLimit: maxDur,
+        timeLimit: ctx.maxDur,
       });
       call.twilioSid = tw.sid;
       store.save();
@@ -1783,7 +1384,7 @@ app.post("/api/calls", async (req, res) => {
       callId: call.id,
       twilioSid: call.twilioSid,
       status: "dialing",
-      context_received: contextReceivedMeta(context), // I10
+      context_received: contextReceivedMeta(ctx.context), // I10
     });
   } catch (err) {
     // C5 (Struct-4): die eigentliche Luecke - bisher lief hier NIE finishCall (Settlement/
@@ -1816,7 +1417,7 @@ app.post("/api/calls", async (req, res) => {
           error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,
         }
       : { error: "Anruf konnte nicht gestartet werden." };
-    if (outboundProvider === "twilio") {
+    if (ctx.outboundProvider === "twilio") {
       body.hint = "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.";
     }
     res.status(providerStatus ? 502 : 500).json(body);
