@@ -21,8 +21,8 @@
 // vorhandenen per-callId-Zustand dieser Datei: er wird damit automatisch beim naechsten
 // clear()/terminateOnce() mit entsorgt (kein separates Aufraeumen, kein Leck).
 import { isSubstantialCallerText } from "./claude.js";
+import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
 
-const MS_PER_SECOND = 1000;
 export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
 
 // afix-p3 (R4): Sprechdauer-Schaetzung fuer den Abschiedssatz. Synthese-/Playback-Latenz vor
@@ -84,14 +84,6 @@ const FAREWELL_FALLBACK_CALIBRATION = { baseMs: 1500, msPerChar: 70, minMs: 3000
 const FAREWELL_CALIBRATION_BY_LANGUAGE = Object.freeze({
   de: { baseMs: 500, msPerChar: 65, minMs: 1500 },
 });
-
-// Timer, der den Event-Loop NICHT am Leben haelt (der HTTP-Server tut das) - Muster
-// middleware.js makeFixedWindowCounter (.unref()). Injizierbar fuer deterministische Tests.
-function defaultSetTimer(fn, ms) {
-  const handle = setTimeout(fn, ms);
-  if (handle && typeof handle.unref === "function") handle.unref();
-  return handle;
-}
 
 // Geschaetzte Sprechdauer -> Hangup-Delay, hart geklammert. language waehlt die Kalibrierung
 // INKLUSIVE ihres minMs (s. Tabellenkommentar oben, MAJOR-1) - unbekannt/fehlend ->

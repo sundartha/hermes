@@ -10,11 +10,11 @@ import assert from "node:assert/strict";
 import { tempDataDir, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
+import { ingestTimeoutDeps } from "./telnyx-shim-harness.js";
 
 let openingText, disclosureSentence, localeFor;
 before(async () => {
   process.env.DATA_DIR = tempDataDir(seedState({ calls: [] }));
-  await import("../src/config.js");
   ({ openingText, disclosureSentence } = await import("../src/claude.js"));
   ({ localeFor } = await import("../src/i18n/locales.js"));
 });
@@ -24,6 +24,10 @@ before(async () => {
 //  hat einen anderen Fokus: reale openingText-Ausgabe am Speak-Node, nicht Maschinen-Ordering.)
 async function driveAnswered(call) {
   const speakCalls = [];
+  // G5-TEST-DUP (Review-Blocker Runde 4): dieselbe config+Fake-Timer-Kombination wie
+  // telnyx-event-ingest-machine.test.js/telnyx-stab-p9-watchdog.test.js - zentral aus
+  // ingestTimeoutDeps() statt ein drittes Mal von Hand nachgebaut (armierter
+  // Opening-Speak-Timer bleibt Fake, nie gefeuert).
   const handler = makeCallControlIngest({
     store: { getCall: (id) => (id === call.id ? call : null), markAnswered() {} },
     voiceControl: () => ({
@@ -35,6 +39,7 @@ async function driveAnswered(call) {
     finishCall: async () => {},
     openingText, // <-- ECHTE Funktion (neuer DI-Name, Edit 1)
     localeFor,
+    ...ingestTimeoutDeps(),
   });
   const body = { data: { event_type: "call.answered", payload: { call_control_id: "cc_1" } } };
   await handler({ query: { callId: call.id }, body }, { sendStatus() {} });

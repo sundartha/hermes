@@ -126,6 +126,7 @@ export const BASE_ENV = {
   // TELNYX_DEAD_AIR_TIMEOUT_S/TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift).
   TELNYX_DEAD_AIR_TIMEOUT_S: "45",
+  TELNYX_OPENING_SPEAK_TIMEOUT_S: "45",
   TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS: "8",
   // Shim-Auth (E2/E3) neutral leer, sonst leakt eine lokale .env via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift). Flag-an-Spawn-Tests brauchen das Secret

@@ -1530,6 +1530,7 @@ app.post(
     localeFor,
     reattachActiveCall,
     watchdog: conversationWatchdog,
+    config,
   }),
 );
 

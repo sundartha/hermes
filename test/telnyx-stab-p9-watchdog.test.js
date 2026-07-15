@@ -11,6 +11,7 @@ import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
 import { WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
 import { localeFor } from "../src/i18n/locales.js";
+import { config } from "../src/config.js";
 import {
   fakeStore,
   makeCall,
@@ -20,8 +21,9 @@ import {
   agentTurnSpy,
   fakeTimers,
   makeTestWatchdog,
+  ingestTimeoutDeps,
 } from "./telnyx-shim-harness.js";
-import { fakeTelnyxShimConfig, captureConsole } from "./helpers.js";
+import { fakeTelnyxShimConfig, captureConsole, makeConfigOverrides } from "./helpers.js";
 
 // Voller Satz statt Kuerzel: robust gegen eine lokal geleakte CALLER_SUBSTANCE_MIN_LEN
 // (isSubstantialCallerText liest den echten config.js-Singleton, nicht WATCHDOG_TEST_CONFIG).
@@ -60,6 +62,16 @@ function ingestRes() {
     },
   };
 }
+
+// afix-timeout-caller-gap (Review-Blocker Runde 2): makeCallControlIngest macht config zur
+// Pflicht-Dependency (kein Default, anders als setTimer/clearTimer mit defaultSetTimer/
+// clearTimeout) - ohne diese Deps wuerde ein spaeter hier reichender assistantVoiceConfigured()
+// = true-Pfad (Retry-Zweig in onSpeakFailed) armOpeningSpeakTimeout() mit einem TypeError auf
+// config.telnyxOpeningSpeakTimeoutS crashen lassen, den der Handler-catch (handleCallControlEvent)
+// nur still nach console.error verschluckt - diese Testdatei haette das NIE bemerkt.
+// G5-TEST-DUP (Review-Blocker Runde 3): ingestTimeoutDeps() jetzt zentral in
+// telnyx-shim-harness.js (Import oben), statt hier byte-identisch zu
+// telnyx-event-ingest-machine.test.js dupliziert zu sein.
 
 function speakEndedBody(callControlId) {
   return { data: { event_type: "call.speak.ended", payload: { call_control_id: callControlId } } };
@@ -142,6 +154,7 @@ test("T3: Dead-Air feuert nach N Sekunden (echter Ingest + echter Watchdog, Fake
     openingText: () => "Opening",
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog,
+    ...ingestTimeoutDeps(),
   });
 
   await ingest({ query: { callId: call.id }, body: speakEndedBody(call.callControlId) }, ingestRes());
@@ -181,6 +194,7 @@ test("T4: kein Arm ohne gehoerte Offenlegung (Regel-2-Paritaet, speak.ended stat
     openingText: () => "Opening",
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog,
+    ...ingestTimeoutDeps(),
   });
 
   await ingest({ query: { callId: call.id }, body: speakFailedBody(call.callControlId) }, ingestRes());
@@ -217,6 +231,7 @@ test("T6: clear bei hangup stoppt die Wache (kein spurioser Dead-Air-Hangup nach
     openingText: () => "Opening",
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog,
+    ...ingestTimeoutDeps(),
   });
 
   watchdog.arm(call.id);
@@ -349,5 +364,44 @@ test("T10: end_call plant den Hangup verzoegert (afix-p3) - Dead-Air suspendiert
     voiceControl.calls.filter((c) => c.op === "hangup").length,
     1,
     "kein zweiter (spurioser) Hangup nach dem end_call-Hangup",
+  );
+});
+
+// T11 (Review-Blocker Runde 2, afix-timeout-caller-gap): diese Datei liefert assistantVoiceConfigured()
+// sonst IMMER false (ElevenLabs-Env in BASE_ENV leer) - der Retry-Zweig in onSpeakFailed, der
+// armOpeningSpeakTimeout() erreicht, wurde hier also nie durchlaufen und ein fehlendes config
+// waere nie aufgefallen (TypeError landet nur still im Handler-catch). Dieser Test schaltet
+// ElevenLabs bewusst per withConfig auf konfiguriert um und beweist, dass der Retry-Pfad den
+// Opening-Speak-Timer erfolgreich (ohne TypeError) armiert, WEIL config jetzt injiziert ist.
+test("T11: Retry-Pfad mit konfigurierter Assistant-Stimme armiert den Opening-Speak-Timer (kein stiller TypeError aus fehlendem config)", async () => {
+  const call = makeCall({ assistantId: "asst_1" });
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers });
+  const openingTimers = fakeTimers();
+  const ingest = makeCallControlIngest({
+    store,
+    voiceControl,
+    finishCall: async () => {},
+    openingText: () => "Opening",
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog,
+    config,
+    setTimer: openingTimers.setTimer,
+    clearTimer: openingTimers.clearTimer,
+  });
+  const { withConfig } = makeConfigOverrides(config);
+  const elevenLabsConfigured = { voiceId: "voice_el_1", apiKeyRef: "elevenlabs_ref" };
+
+  await withConfig("telnyxElevenLabs", elevenLabsConfigured, () =>
+    ingest({ query: { callId: call.id }, body: speakFailedBody(call.callControlId) }, ingestRes()),
+  );
+
+  assert.equal(voiceControl.calls.filter((c) => c.op === "speak").length, 1, "Retry-Speak wurde abgesetzt");
+  assert.equal(
+    openingTimers.pendingCount(),
+    1,
+    "Opening-Speak-Timer nach dem Retry armiert - ohne config wuerde dieser Aufruf VOR setTimer werfen und der Timer bliebe unarmiert",
   );
 });
