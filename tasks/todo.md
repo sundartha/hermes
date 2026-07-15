@@ -117,6 +117,35 @@ Offen (Owner-Gate): E4.1 (convo-bench) BLOCKIERT — lokaler ANTHROPIC_API_KEY l
 
 ---
 
+# Task: Telnyx AI-Assistant Opening-Speak-Timeout-Guard — Start 2026-07-15
+
+Quelle: PLAN-TELNYX-AI-ASSISTANT-NO-AUDIO.md (Jonas' Live-Testanruf 2026-07-14, 3 Calls ohne
+Audio). Root Cause per Telnyx-`list_call_events` + Render-`list_deploys` API verifiziert (kein
+neuer Testanruf noetig, siehe "API-Verifikation 2026-07-15" im Plan-Dokument):
+
+- Befund 1 (Call 1, Media-Bridging-Defekt): App-/Control-Plane-Ebene zu 100% fehlerfrei
+  bestaetigt — bleibt Owner-Gate (Telnyx-Support, `call_control_id` bekannt), KEIN Code-Fix
+  moeglich in dieser Session.
+- Befund 2 (Call 2/3, Speak stallt ohne jedes Lifecycle-Event): urspruengliche Hypothese
+  "Webhook-Zustellung an app.sundartha.com haengt" WIDERLEGT (Telnyx' eigenes Ledger zeigt: Event
+  wurde nie generiert). Echter Gap: `telnyx-call-control-ingest.js` hat keinen Timeout fuer
+  "Speak-Command raus, aber weder speak.ended noch speak.failed kommt je" — Call haengt bis zum
+  manuellen Hangup in Stille.
+
+Erwartetes Ergebnis (deterministisch): neuer `telnyxOpeningSpeakTimeoutS`-Config-Wert +
+Timer-Guard in `onAnswered`/`onSpeakEnded`/`onSpeakFailed`/`onHangup`, der ein ausbleibendes
+speak.ended/speak.failed nach N Sekunden wie ein echtes `speak.failed` behandelt (bestehender
+Azure-Retry-Fallback greift, keine Duplizierung). Verifikation: `npm test` gruen (neue
+Fake-Timer-Tests + Bestandssuite unveraendert), `node --check`.
+
+- [ ] Phase `telnyx-opening-speak-timeout` (Spec: `tasks/telnyx-opening-speak-timeout-spec.md`)
+      via `phase-impl-lean`-Workflow (`tasks/wf-phase-impl-lean.js`, REPO-Pfad auf diesen Rechner
+      korrigiert — war noch auf Antonios Mac-Pfad gebaked).
+- [ ] Bei Gate=PASS: Merge nach master (Lead), Report lesen, Owner-Punkte (Befund 1) im
+      Plan-Dokument als offen markiert lassen.
+
+---
+
 # Gespraechsqualitaet optimieren (PLAN-CONVERSATION-OPTIMIZATION.md, 2026-07-12)
 
 Strategiedokument fertig, 6 Recherche-Spuren + 2 adversariale Opus-Pruefungen. Wartet auf
