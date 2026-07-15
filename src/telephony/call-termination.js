@@ -1,11 +1,12 @@
-// F10 Runde 2 (S1/G5): der EINE Terminierungspfad, den JEDER Beender eines aktiven
-// Calls durchlaeuft (Max-Dauer-Cap-Timer UND cancel_call in server.js) - Reihenfolge
-// fest: erst persistieren, dann den Provider-Leg auflegen (awaited), ERST DANACH
-// billing/summary/SMS anstossen (fire-and-forget). Die umgekehrte Reihenfolge hielte
-// den Anruf beim Provider technisch live, waehrend die Buchungskette (echter
-// LLM-Roundtrip in summarizeCall ueber src/llm.js, Retry-Budget bis ~12s, danach der
-// SMS-Versand) laeuft - Verstoss gegen den harten Max-Dauer-Cap (Absolute Regel 1,
-// CLAUDE.md). Reine Ablauf-Orchestrierung: alle I/O-Effekte kommen als bereits
+// F10 Runde 2 (S1/G5), C5 (Struct-4) erweitert auf alle 5 Terminierungspfade: der EINE
+// Terminierungspfad, den JEDER Beender eines aktiven Calls durchlaeuft (Max-Dauer-Cap-Timer,
+// cancel_call, /voice/status, Telnyx onHangup, place_call-Dial-Fehlschlag - server.js UND
+// telnyx-call-control-ingest.js) - Reihenfolge fest: erst persistieren, dann den Provider-
+// Leg auflegen (awaited), ERST DANACH billing/summary/SMS anstossen (fire-and-forget). Die
+// umgekehrte Reihenfolge hielte den Anruf beim Provider technisch live, waehrend die
+// Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js, Retry-Budget bis
+// ~12s, danach der SMS-Versand) laeuft - Verstoss gegen den harten Max-Dauer-Cap (Absolute
+// Regel 1, CLAUDE.md). Reine Ablauf-Orchestrierung: alle I/O-Effekte kommen als bereits
 // gebundene Thunks rein (persistEnd/hangUp/bill), keine Abhaengigkeit auf store/
 // voiceControl/finishCall aus server.js -> offline ohne Server/Store/Netz unit-
 // testbar (Muster sms-summary.js).
@@ -16,7 +17,14 @@
 // geloggt wird (Bestandsverhalten bleibt je Aufrufer erhalten - der Cap-Timer schluckt
 // bisher still, cancel_call loggt "[cancel]"). bill wird NICHT awaited (fire-and-
 // forget): der Aufrufer wartet nicht auf Buchung/Summary/SMS, nur auf den Hangup.
+//
+// C5 (Struct-4, G31/G27): bill (Settlement) ist Pflicht - erzwingt strukturell, dass JEDER
+// Terminierungspfad die volle Buchungs-/Notification-/SMS-Kette durchlaeuft, statt sie an
+// einer neuen Call-Site zu vergessen (der urspruengliche C5-Bug: der place_call-catch rief
+// finishCall nie). Wirft VOR jedem Seiteneffekt (fail-fast, kein halb-terminierter Call).
 export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpError }) {
+  if (typeof bill !== "function")
+    throw new TypeError("terminateAndBillCall: bill (Settlement) ist Pflicht - kein Function uebergeben");
   persistEnd();
   if (hangUp) {
     try {

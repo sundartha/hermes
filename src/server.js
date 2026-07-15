@@ -1510,12 +1510,22 @@ app.post("/voice/status", async (req, res) => {
   if (callStatus === "in-progress" || callStatus === "answered")
     return void store.markAnswered(call.id);
   if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
-  if (call.status === "active")
-    store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
   // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose persistieren
   // (PII-frei). completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
   store.recordFailureReason(call.id, callFailureReason({ status: callStatus, diagnostics }));
-  finishCall(store.getCall(call.id));
+  // C5 (Struct-4): Settlement-Gateway statt manuellem endCallRecord+finishCall-Paar - bill
+  // (Settlement) ist bei terminateAndBillCall ein strukturell erzwungenes Pflichtfeld (Fail-
+  // Fast-Guard, verhindert die C5-Bugklasse: ein neuer Terminierungspfad vergisst finishCall).
+  // hangUp:null: der Provider hat den Call bereits beendet (dieses Event IST der Hangup), kein
+  // eigener Hangup-Versuch noetig (bereits getesteter Zweig, call-termination-order.test.js).
+  await terminateAndBillCall({
+    persistEnd: () => {
+      if (call.status === "active")
+        store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
+    },
+    hangUp: null,
+    bill: () => finishCall(store.getCall(call.id)),
+  });
 });
 
 // Call-Control-Event-Ingest (P4.5): additiv, liegt UNTER app.use("/voice") -> Ed25519
@@ -1830,8 +1840,16 @@ app.post("/api/calls", async (req, res) => {
       context_received: contextReceivedMeta(context), // I10
     });
   } catch (err) {
-    await releaseReserve(call); // OUT-05 (F2): kein Dial = keine Kosten = volle Freigabe, VOR endCallRecord
-    store.endCallRecord(call.id, "failed");
+    // C5 (Struct-4): die eigentliche Luecke - bisher lief hier NIE finishCall (Settlement/
+    // Notification fehlten komplett bei einem Dial-Fehlschlag), und releaseReserve wurde
+    // manuell dupliziert obwohl finishCall es bereits idempotent selbst aufruft (S2,
+    // reserveReleased-Guard in state-ops.js). Jetzt derselbe Gateway wie die anderen 4
+    // Terminierungspfade; hangUp:null (kein Dial = kein Provider-Leg zum Auflegen).
+    await terminateAndBillCall({
+      persistEnd: () => store.endCallRecord(call.id, "failed"),
+      hangUp: null,
+      bill: () => finishCall(store.getCall(call.id)),
+    });
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
     // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
     // secret-frei loggen (wie die P0-Guards: err.message, nie config), dem Aufrufer

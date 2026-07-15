@@ -304,3 +304,14 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
   ist weg), aber weiterhin Telnyx-only + idempotent + auditiert (gemeinsamer Kern
   `performNumberRelease`). Noch KEIN Live-Aufrufer von `eraseTenantData` — latent vorverdrahtet,
   damit eine kuenftige Erase-Route keine DID leakt.
+
+## C5 — finishCall-Settlement strukturell erzwingen (Struct-4, nach P3)
+
+> `terminateAndBillCall` (`src/telephony/call-termination.js`) ist der EINE Terminierungspfad
+> fuer alle 5 Wege, auf denen ein aktiver Call die Budget-Engine verlaesst (Max-Dauer-Cap,
+> `cancel_call`, `/voice/status`, Telnyx `onHangup`, `place_call`-Dial-Fehlschlag). `bill`
+> (Settlement/`finishCall`) ist ein strukturell erzwungenes Pflichtfeld (Fail-Fast-`TypeError`
+> bei Fehlen) statt einer Konvention "denk dran, finishCall aufzurufen" - genau das liess den
+> place_call-Dial-Fehlschlag zuvor ohne Settlement/Notification/Reserve-Freigabe stehen.
+> `bridge.js` (Realtime-Engine, 6. Pfad, andere Topologie) bleibt bewusst ausserhalb (siehe
+> `PLAN-FRAGILITY-REMEDIATION.md` P7-Restrisiko).
