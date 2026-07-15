@@ -88,6 +88,38 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > bleibt `already_subscribed` ein reiner No-op, `subscription_conflict` unveraendert.
 > Geld-Invarianten unangetastet: Hold-vor-Order, Caps, KYC-Gate, PAYMENT_ENABLED.
 
+## STRIPE-RACE — Webhook-Events pro Korrelationsschluessel serialisiert (P1, Fix 2026-07-15)
+
+> Befund (Clean-Code-Audit 2026-07-15, S1-1/C1, `tasks/clean-code-audit-2026-07.md` +
+> `PLAN-FRAGILITY-REMEDIATION.md`): `applyStripeWebhook` lief ohne jede Serialisierung.
+> Stripe liefert Events at-least-once, ohne Ordnungsgarantie; zwei konkurrierende Events
+> (z.B. `customer.subscription.updated`->active UND ein zeitnahes `invoice.payment_failed`)
+> konnten je nach zufaelligem Promise-Timing in FALSCHER Reihenfolge abschliessen - ein
+> Tenant konnte `active`+KYC=CARD bleiben, obwohl die Zahlung zwischenzeitlich scheiterte
+> (Outbound-Gate faelschlich offen). Fix: `applyStripeWebhookSerialized`
+> (`src/billing/webhook.js`) serialisiert pro Stripe-Korrelationsschluessel
+> (`subscriptionId`, Fallback `tenantRef`) ueber einen gekeyten Chain-Mutex
+> (`makeKeyedChainMutex`, `src/chain-mutex.js`, additiv neben dem bestehenden
+> `makeChainMutex`) UND verwirft veraltete/doppelte Events (Ordnungswache: exakte
+> Event-ID-Redelivery ODER `event.created` nicht neuer als das zuletzt angewendete Event
+> fuer denselben Schluessel). Der Route-Handler (`server.js`, `POST /webhooks/stripe`)
+> ruft ab jetzt `applyStripeWebhookSerialized`; `applyStripeWebhook` selbst bleibt
+> unveraendert (direkt getestet in `test/p3-payment-webhook.test.js`).
+>
+> Bewusst KEIN `store.withStoreLock`: der ACTIVATE-Zweig laeuft ueber `activatePaidTenant`
+> in einen verschachtelten `provision()`-Aufruf, der seinerseits `store.withStoreLock`
+> nutzt - ein `withStoreLock`-Body darf laut HARD-RULE (`store.js`) NIE erneut
+> `withStoreLock` aufrufen (Deadlock). Die neue Sperre ist eine voellig eigenstaendige
+> Chain-Instanz, getrennt von `store.withStoreLock` UND vom Provisioning-Drain-Mutex
+> (`single-flight.js`).
+>
+> **Akzeptiertes Restrisiko:** Dedup-Zustand (`lastAppliedByKey`) ist In-Process (kein
+> persistentes Ledger) - bei einem Prozess-Neustart (Render-Deploy) leert er sich; eine
+> sehr alte Stripe-Redelivery koennte in einem sehr kleinen Fenster direkt nach Neustart
+> einmalig durchrutschen. Bewusst akzeptiert wie das bestehende OT-3-Restrisiko
+> (Single-Instance, Render Free = 1 Instanz); eine persistente, backend-uebergreifende
+> Loesung waere eine eigene Folge-Phase. Test: `test/stripe-webhook-race.test.js`.
+
 ## PLAY-TTS — PII-Audio-Serve-Surface (ElevenLabs-Stimme via `<Play>`)
 
 > `GET /voice/tts/:token` ist auth-frei (VOR der `/voice`-Signaturpruefung registriert),

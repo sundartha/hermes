@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { customerMatches } from "./card-setup.js";
 import { hasCardOnFile } from "../self-service.js";
+import { makeKeyedChainMutex } from "../chain-mutex.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -243,4 +244,58 @@ export async function applyStripeWebhook(
   store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
   audit("stripe_webhook_suspend", req, `tenant=${tenant}`);
+}
+
+// ---- P1 (C1 Stripe-Webhook-Race, S1-1): Serialisierter Entry-Point -----------------
+// Pro Stripe-Korrelationsschluessel (subscriptionId, Fallback tenantRef) darf hoechstens
+// EIN applyStripeWebhook-Effekt gleichzeitig laufen, und nur das nach event.created
+// NEUESTE Event darf den Tenant-Zustand noch veraendern (G31: Invariante strukturell
+// erzwungen statt per Konvention/Zufall der Event-Reihenfolge). EIGENE Chain-Instanz,
+// bewusst NICHT store.withStoreLock (HARD-RULE store.js: ein withStoreLock-Body darf
+// NICHT erneut withStoreLock aufrufen - der ACTIVATE-Zweig laeuft ueber activatePaidTenant
+// -> provision -> triggerTenantProvisioning in einen verschachtelten withStoreLock-Aufruf;
+// wuerde applyStripeWebhook selbst in withStoreLock liegen, deadlockt das). In-Process
+// (kein persistentes Ledger) - akzeptiertes Restrisiko bei Prozess-Neustart, siehe
+// PLAN-SECURITY.md.
+const webhookLock = makeKeyedChainMutex();
+
+// Letztes je erfolgreich angewendetes Event pro Korrelationsschluessel (Ordnungswache).
+// key -> { eventId, createdAt }. NIE geloescht (Dedup muss ueber die gesamte Prozesslaufzeit
+// gelten) - im Unterschied zum self-cleaning webhookLock (siehe chain-mutex.js).
+const lastAppliedByKey = new Map();
+
+// Ist `event` gegenueber dem zuletzt fuer `key` angewendeten Event veraltet? Zwei Faelle:
+// (a) exakte Stripe-Redelivery (gleiche event.id), (b) aelteres/gleich altes Event nach
+// event.created. Fehlt event.created oder ist der gespeicherte Anker unbekannt (NaN) -> NIE
+// stale ueber Fall (b) (Bestandsverhalten: kein Event wird verworfen, das sich zeitlich nicht
+// einordnen laesst). Reine Funktion, kein Seiteneffekt.
+function isStaleEvent(lastApplied, event) {
+  if (!lastApplied) return false;
+  if (event.id != null && event.id === lastApplied.eventId) return true;
+  const createdAt = Number(event.created);
+  if (!Number.isFinite(createdAt)) return false;
+  return createdAt <= lastApplied.createdAt;
+}
+
+// Serialisiert applyStripeWebhook (unveraendert, s.o.) pro Korrelationsschluessel + verwirft
+// veraltete/doppelte Events. Das ist der Entry-Point, den die Route ab jetzt ruft (s.
+// server.js) - applyStripeWebhook bleibt daneben direkt exportiert/aufrufbar fuer
+// test/p3-payment-webhook.test.js (Signatur/Verhalten unveraendert). Ohne Korrelations-
+// schluessel (Event traegt weder subscriptionId noch tenantRef, seltener Malformed-Fall) ->
+// direkter Passthrough OHNE Lock; applyStripeWebhook's bestehendes no_tenant-Ignore greift
+// dann fail-closed. IGNORE-Events brauchen keinen Lock (kein Seiteneffekt moeglich, reine
+// interpretStripeEvent-Pruefung reicht). Nebeneffekt (Tenant-Zustandsschreibung, oder No-op
+// bei Stale/Ignore) im Namen (N7).
+export async function applyStripeWebhookSerialized(event, deps) {
+  const interpreted = interpretStripeEvent(event);
+  if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
+  const key = interpreted.subscriptionId || interpreted.tenantRef;
+  if (!key) return applyStripeWebhook(event, deps);
+  return webhookLock(key, async () => {
+    if (isStaleEvent(lastAppliedByKey.get(key), event)) return;
+    await applyStripeWebhook(event, deps);
+    // Anker ERST nach erfolgreichem Aufruf setzen: ein werfender Aufruf darf einen
+    // legitimen Stripe-Retry desselben Events nicht faelschlich als "stale" blockieren.
+    lastAppliedByKey.set(key, { eventId: event.id ?? null, createdAt: Number(event.created) });
+  });
 }

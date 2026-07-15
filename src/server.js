@@ -95,7 +95,7 @@ import { stripeBilling } from "./billing/stripe.js";
 import { flushMeters } from "./billing/meter.js";
 import { resolvePeriodStartIso } from "./billing/period.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
-import { verifyStripeSignature, applyStripeWebhook } from "./billing/webhook.js";
+import { verifyStripeSignature, applyStripeWebhookSerialized } from "./billing/webhook.js";
 import { E164, invalidText, validateAssistantContext } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
@@ -408,9 +408,11 @@ if (config.sessionSecret && config.storeBackend === "pg") {
     // KEINE Basic-Auth (Stripe kann keine Credentials senden) - die Sicherung ist die
     // HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed, eigener Begruendungs-
     // Kommentar wie /voice, Regel 3). Ohne PAYMENT_ENABLED -> 404 (byte-identisch).
-    // Liegt im guardedBoot-Block, weil applyStripeWebhook accounts.setStatus +
-    // sessions.invalidateByTenant braucht (nur hier konstruiert). Idempotent: jeder
-    // Event wirkt nur als Vorwaerts-Zustand; Wiederholung aendert nichts.
+    // Liegt im guardedBoot-Block, weil applyStripeWebhookSerialized (P1) accounts.setStatus +
+    // sessions.invalidateByTenant braucht (nur hier konstruiert). Serialisiert pro Stripe-
+    // Korrelationsschluessel (subscriptionId, Fallback tenantRef) + verwirft veraltete/doppelte
+    // Events (Ordnungswache) - Details in billing/webhook.js. Idempotent: jeder Event wirkt nur
+    // als Vorwaerts-Zustand; Wiederholung aendert nichts.
     app.post(STRIPE_WEBHOOK_PATH, async (req, res) => {
       if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled" });
       const ok = verifyStripeSignature({
@@ -430,7 +432,7 @@ if (config.sessionSecret && config.storeBackend === "pg") {
       } catch {
         return res.status(400).json({ error: "bad payload" });
       }
-      await applyStripeWebhook(event, {
+      await applyStripeWebhookSerialized(event, {
         store,
         accounts,
         sessions,

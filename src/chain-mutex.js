@@ -20,3 +20,38 @@ export function makeChainMutex() {
     return chain;
   };
 }
+
+// Gekeytes Pendant zu makeChainMutex (G5, additiv - macht KEINEN bestehenden Aufrufer an,
+// makeChainMutex bleibt unveraendert). Serialisiert Aufrufe von `fn` NUR fuer denselben
+// Schluessel; verschiedene Schluessel laufen unabhaengig/parallel (kein globaler Flaschenhals
+// wie bei makeSingleFlight). Pro Schluessel eine eigene makeChainMutex()-Instanz, lazy angelegt
+// beim ersten Aufruf. `inFlight` zaehlt laufende+wartende Aufrufe fuer den Schluessel; erreicht
+// er 0 (letzter Aufruf fuer den Schluessel abgeschlossen, egal ob erfuellt oder abgelehnt), wird
+// der Map-Eintrag geloescht - die Map waechst nur mit der Zahl GERADE aktiver Schluessel, nicht
+// mit der Gesamtzahl je gesehener Schluessel (Millionen-Skala-vertraeglich, z.B. ein Schluessel
+// pro Stripe-Subscription mit aktuell laufendem Webhook).
+export function makeKeyedChainMutex() {
+  const chainsByKey = new Map(); // key -> { runExclusive, inFlight }
+  return function runExclusiveForKey(key, fn) {
+    let entry = chainsByKey.get(key);
+    if (!entry) {
+      entry = { runExclusive: makeChainMutex(), inFlight: 0 };
+      chainsByKey.set(key, entry);
+    }
+    entry.inFlight += 1;
+    const release = () => {
+      entry.inFlight -= 1;
+      if (entry.inFlight === 0) chainsByKey.delete(key);
+    };
+    return entry.runExclusive(fn).then(
+      (value) => {
+        release();
+        return value;
+      },
+      (err) => {
+        release();
+        throw err;
+      },
+    );
+  };
+}
