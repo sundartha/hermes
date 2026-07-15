@@ -23,6 +23,7 @@ import {
   homeCountryCode,
   normalizeDialTarget,
   shouldPersistProvisionResult,
+  CENTS_PER_EUR,
 } from "./store/defaults.js";
 import { findActiveNumber, hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
@@ -1718,7 +1719,9 @@ app.post("/api/calls", async (req, res) => {
   // NIE entfernt; pro-Tenant schraenkt nur zusaetzlich ein. Owner-only byte-identisch.
   if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
     audit("place_call_denied", req, `to=${to} grund=budget tenant=${tenantId}`);
-    return res.status(402).json({ error: `Budget-Limit von ${config.maxBudgetEur} EUR erreicht.` });
+    return res
+      .status(402)
+      .json({ error: `Budget-Limit von ${config.maxBudgetCents / CENTS_PER_EUR} EUR erreicht.` });
   }
 
   // Minuten-Kontingent-Gate (B2, GAP B): SEPARATES if NEBEN dem Budget-Gate (eigenes audit

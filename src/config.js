@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { CENTS_PER_EUR } from "./store/defaults.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
@@ -65,11 +66,13 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
-  maxBudgetEur: numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, {
-    fallback: 8,
-    min: 0,
-    integer: false,
-  }),
+  // Ganzzahl-Cents (G26: Geld nie als Fliesskomma) - Env-Name bleibt MAX_BUDGET_EUR
+  // (Operator gibt weiter EUR ein), interne Einheit ist Cents wie defaultTenantBudgetCents/
+  // hardCapCents (Gate-Schnittmenge, Regel 1 - einheitlicher Typ verhindert Einheiten-Mix).
+  maxBudgetCents: Math.round(
+    numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }) *
+      CENTS_PER_EUR,
+  ),
 
   // ---- LLM-Resilienz-Seam (P3b-R Schicht 2, src/llm.js) ----
   // Per-Request-Timeout je Anthropic-Versuch (SDK-Default 10 min ist webhook-toedlich:
@@ -281,9 +284,9 @@ export const config = {
   }),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26) beim Registrieren (D5): nimmt
-  // jeden neuen Tenant aus dem geteilten globalen Pool (sonst effectiveCapEur = maxBudgetEur).
+  // jeden neuen Tenant aus dem geteilten globalen Pool (sonst effectiveCapEur = maxBudgetCents).
   // 0 = kein Default-Seed (Tenant faellt auf den globalen Cap). Globaler Backstop
-  // (maxBudgetEur) bleibt PARALLEL (Schnittmenge, Regel 1) und wird NICHT angehoben.
+  // (maxBudgetCents) bleibt PARALLEL (Schnittmenge, Regel 1) und wird NICHT angehoben.
   defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
     fallback: 1000,
     min: 0,

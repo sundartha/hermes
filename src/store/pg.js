@@ -801,7 +801,7 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     endedAt: r.ended_at,
     transcript: segmentsByCall.get(r.id) || [],
     summary: r.summary,
-    objectiveAchieved: r.objective_achieved,
+    objectiveAchieved: deserializeObjective(r.objective_achieved),
     // F2 P9 (M2): persistierten Summary-SMS-Dedup-Marker hydrieren. Ohne dieses Feld
     // ginge der Marker beim Prozess-Restart verloren (Spalte da, aber nie gelesen) und
     // ein spaeter /voice/status-Retry sendete eine zweite Summary-SMS. NULL -> null
@@ -1303,6 +1303,17 @@ async function flushUsageEvents(client, tenantId, events) {
 function serializeObjective(value) {
   if (value === null || value === undefined) return null;
   return typeof value === "string" ? value : String(value);
+}
+
+// Rueck-Coercion zu serializeObjective (S1-3): die TEXT-Spalte liefert IMMER einen
+// String oder null. "true"/"false" sind ausschliesslich Serialisierungen eines
+// Booleans (claude.js setzt nie den Literal-String "true"/"false" als Fachwert) ->
+// zurueck zu Boolean. Jeder andere String (z.B. "unclear") bleibt unveraendert.
+// null bleibt null.
+function deserializeObjective(value) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
 }
 
 // Loescht Zeilen des Tenants, deren TEXT-PK nicht mehr im Spiegel steht (Retention

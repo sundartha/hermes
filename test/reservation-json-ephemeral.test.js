@@ -31,7 +31,7 @@ test("Migration: Legacy-Store ohne reservations-Key wirft nicht, Reserve liest 0
 
 test("Ephemeralitaet: save() waehrend gebuchter Reserve schreibt reservations NIE auf die Platte", async () => {
   const granted = await store.withStoreLock(() =>
-    store.tryReserveOutboundBudget(TENANT, 60, { maxBudgetEur: 100 }),
+    store.tryReserveOutboundBudget(TENANT, 60, { maxBudgetCents: 10000 }),
   );
   assert.equal(granted, true, "Reserve wird gebucht (weit unter dem 100-EUR-Cap)");
 

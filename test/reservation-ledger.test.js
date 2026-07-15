@@ -16,7 +16,7 @@ import {
   addVoiceUsageCostCents,
 } from "../src/store/state-ops.js";
 
-const CFG = { maxBudgetEur: 1 }; // 1 EUR Cap (global + Owner-Fallback ohne tenant_budget-Zeile)
+const CFG = { maxBudgetCents: 100 }; // 1 EUR Cap (global + Owner-Fallback ohne tenant_budget-Zeile)
 const T1 = "tenant_ledger_1";
 const T2 = "tenant_ledger_2";
 

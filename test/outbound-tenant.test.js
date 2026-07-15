@@ -9,7 +9,7 @@
 // gueltigen Aufloesungs-Schluessel von requestTenant/resolveTenant.
 //
 // EHRLICH dokumentiert: pro-Tenant-Budget UND globaler Notaus nutzen BEIDE
-// config.maxBudgetEur und global = Summe >= jeder Einzel-Bucket. Damit sind die
+// config.maxBudgetCents und global = Summe >= jeder Einzel-Bucket. Damit sind die
 // beiden Gates am HTTP-Level NICHT voneinander isolierbar (jeder erschoepfte Bucket
 // reisst auch die Summe). Die pro-Tenant-KORREKTHEIT wird darum ueber ATTRIBUTION
 // bewiesen (call.tenantId + call.from -> daran haengt trackUsage); die reine

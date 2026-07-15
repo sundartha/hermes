@@ -1,6 +1,6 @@
 // outbound-p1c (D5): registerTenant seedt EINMALIG die per-Tenant-Default-Kostendecke
 // (tenant_budget), damit ein neuer Tenant aus dem geteilten globalen Pool genommen wird
-// (sonst faellt er in effectiveCapEur auf cfg.maxBudgetEur). Prueft: (1) Seed legt die
+// (sonst faellt er in effectiveCapEur auf cfg.maxBudgetCents). Prueft: (1) Seed legt die
 // Zeile budget == hard cap == Default an + hebt budgetExceeded auf den Default-Cap, (2)
 // set-if-absent (zweiter registerTenant ueberschreibt NICHT), (3) defaultBudgetCents 0
 // oder weggelassen -> KEINE Zeile (Owner/Bestand byte-identisch). Rein ueber state-ops.
@@ -13,7 +13,7 @@ import {
   budgetExceeded,
 } from "../src/store/state-ops.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 const DEFAULT_BUDGET_CENTS = 1000; // 10 EUR
 const TOKENS_PER_EUR = 1_000_000 / 0.93;
 

@@ -15,19 +15,19 @@ import {
   setTenantBudget,
 } from "../src/store/state-ops.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 
 // Token-Mengen unter PRICES (Input 1 USD/MTok * 0.93 = 0.93 EUR/MTok).
 const TOKENS_PER_EUR = 1_000_000 / 0.93; // ~1.075M Input-Tokens = 1 EUR
 
-test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.maxBudgetEur (byte-identisch)", () => {
+test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.maxBudgetCents (byte-identisch)", () => {
   const s = makeDefaultState();
   // knapp unter dem Cap -> frei
   trackUsage(s, TENANT_A, Math.floor(TOKENS_PER_EUR * 7.9), 0, PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "unter 8 EUR -> frei");
-  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costEur >= maxBudgetEur)
+  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costEur >= maxBudgetCents)
   trackUsage(s, TENANT_A, Math.ceil(TOKENS_PER_EUR * 0.2), 0, PRICES);
   assert.equal(
     budgetExceeded(s, TENANT_A, PRICES),
@@ -44,7 +44,7 @@ test("INV(1): pro-Tenant-Cap blockt A, B ohne Zeile telefoniert weiter", () => {
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "A ueber seinem pro-Tenant-Cap");
   // B: 4 EUR, keine eigene Zeile -> faellt auf den globalen 8-EUR-Cap -> frei
   trackUsage(s, TENANT_B, Math.floor(TOKENS_PER_EUR * 4), 0, PRICES);
-  assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B faellt auf maxBudgetEur, frei");
+  assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B faellt auf maxBudgetCents, frei");
 });
 
 test("INV(2): Schnittmenge - globaler Notaus greift, waehrend jeder unter SEINEM Cap bleibt", () => {
