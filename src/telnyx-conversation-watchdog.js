@@ -21,9 +21,8 @@
 // vorhandenen per-callId-Zustand dieser Datei: er wird damit automatisch beim naechsten
 // clear()/terminateOnce() mit entsorgt (kein separates Aufraeumen, kein Leck).
 import { isSubstantialCallerText } from "./claude.js";
-import { defaultSetTimer } from "./utils/timer.js";
+import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
 
-const MS_PER_SECOND = 1000;
 export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
 
 // afix-p3 (R4): Sprechdauer-Schaetzung fuer den Abschiedssatz. Synthese-/Playback-Latenz vor

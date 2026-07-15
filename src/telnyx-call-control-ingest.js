@@ -8,7 +8,7 @@
 import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/telnyx/call-control-events.js";
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
-import { defaultSetTimer } from "./utils/timer.js";
+import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
 
 // OBS-2: Log-Hygiene-Bound fuer rohe Telnyx-Protokoll-Token (event_type/status). Interner
 // Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (wie errors.js ERROR_DETAIL_MAX_LEN),
@@ -33,10 +33,6 @@ function logEventReceived(callId, body) {
     `[voice/call-control] event empfangen (call=${callId}) event_type=${rawToken(env?.event_type)} status=${rawToken(env?.payload?.status)}`,
   );
 }
-
-// afix-timeout (Befund 2): Sekunden->ms fuer den Opening-Speak-Timer (G25, benannte Konstante
-// wie telnyx-conversation-watchdog.js MS_PER_SECOND).
-const MS_PER_SECOND = 1000;
 
 export function makeCallControlIngest({
   store,
@@ -209,7 +205,11 @@ export function makeCallControlIngest({
       // harten maxCallDurationS-Cap. consumeOpeningRetry() ist bereits verbraucht (oben), ein
       // zweites Feuern dieses Timers laeuft in onSpeakFailed also direkt in den Fail-Safe-Zweig
       // (kein Endlos-Retry).
-      armOpeningSpeakTimeout(call, callControlId);
+      // AFIX-TIMEOUT-RETRY-RACE (Review-Blocker Runde 4): der await oben kann von einem
+      // parallelen Hangup (echtes Telnyx-Webhook, /api/calls/:id/cancel, maxCallDurationS-Cap)
+      // ueberholt werden - derselbe frische Status-Check wie am Funktionsanfang, sonst wird ein
+      // Timer fuer einen inzwischen beendeten Call neu armiert.
+      if (store.getCall(call.id)?.status === "active") armOpeningSpeakTimeout(call, callControlId);
       return;
     }
     console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> kein Assistant-Start`);
