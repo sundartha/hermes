@@ -70,7 +70,7 @@ import {
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
-import { terminateAndBillCall, hangUpAction } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import {
   registerTenant,
@@ -1022,7 +1022,7 @@ async function terminateCappedCall(callId, providerCallSid, status) {
       // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
       // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
       hangUp: hangUpAction(voiceControl, call, providerCallSid),
-      bill: () => finishCall(store.getCall(callId)), // bucht genau EINMAL (billedAt, F9), gekappt
+      bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
     });
   } catch (e) {
     console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
@@ -1524,7 +1524,7 @@ app.post("/voice/status", async (req, res) => {
         store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
     },
     hangUp: null,
-    bill: () => finishCall(store.getCall(call.id)),
+    bill: billThunk(finishCall, store, call.id),
   });
 });
 
@@ -1848,7 +1848,7 @@ app.post("/api/calls", async (req, res) => {
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(call.id, "failed"),
       hangUp: null,
-      bill: () => finishCall(store.getCall(call.id)),
+      bill: billThunk(finishCall, store, call.id),
     });
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
     // Provider-SDK-Fehler koennen URL-/Auth-/Nummern-Fragmente tragen. Serverseitig
@@ -1896,7 +1896,7 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
     // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
     // EINE Quelle) - cancel_call eines C-Telnyx-Calls trifft den Call-Control-Hangup.
     hangUp: hangUpAction(voiceControl, call, call.twilioSid),
-    bill: () => finishCall(store.getCall(call.id)),
+    bill: billThunk(finishCall, store, call.id),
     onHangUpError: (e) => console.error("[cancel]", e.message),
   });
   res.json({ status: "cancelled" });

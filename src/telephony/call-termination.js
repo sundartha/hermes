@@ -36,6 +36,16 @@ export async function terminateAndBillCall({ persistEnd, hangUp, bill, onHangUpE
   void bill();
 }
 
+// G5 (Review-Blocker Runde 2): der bill-Thunk war an allen 5 Terminierungspfaden
+// woertlich (bzw. bis auf den Parameternamen) identisch dupliziert - EINE Quelle statt
+// fuenffacher Wiederholung. Liest den Call bewusst FRISCH aus dem Store (nicht das evtl.
+// veraltete call-Objekt des Aufrufers), da finishCall auf dem aktuellen persistierten
+// Stand (Guards billedAt/reserveReleased) buchen muss. Rein (kein eigener I/O) -> DI-Muster
+// wie hangUpAction: finishCall/store kommen injiziert herein, offline mit Spies testbar.
+export function billThunk(finishCall, store, callId) {
+  return () => finishCall(store.getCall(callId));
+}
+
 // P6 (Regel 1 / Befund 1): waehlt Hangup-Endpunkt+ID anhand der Call-FORM, NICHT der
 // voiceEngine. Ein Call-Control-Call (callControlId gesetzt, C-Telnyx) wird ueber
 // endCallViaCallControl(callControlId) beendet; ein TeXML/Twilio-Call ueber endCall(

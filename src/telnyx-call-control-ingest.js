@@ -9,7 +9,7 @@ import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
-import { terminateAndBillCall } from "./telephony/call-termination.js";
+import { terminateAndBillCall, billThunk } from "./telephony/call-termination.js";
 
 // OBS-2: Log-Hygiene-Bound fuer rohe Telnyx-Protokoll-Token (event_type/status). Interner
 // Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (wie errors.js ERROR_DETAIL_MAX_LEN),
@@ -231,7 +231,7 @@ export function makeCallControlIngest({
         if (call.status === "active") store.endCallRecord(call.id, "completed");
       },
       hangUp: null,
-      bill: () => finishCall(store.getCall(call.id)),
+      bill: billThunk(finishCall, store, call.id),
     });
     console.log(`[voice/call-control] hangup (call=${call.id}) -> Settlement finishCall`);
   }

@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { terminateAndBillCall } from "../src/telephony/call-termination.js";
+import { terminateAndBillCall, billThunk } from "../src/telephony/call-termination.js";
 
 test("hangUp wird VOLLSTAENDIG abgewartet, BEVOR bill (Buchung/Summary/SMS) angestossen wird", async () => {
   const order = [];
@@ -119,6 +119,39 @@ test("doppelte Terminierung ueber terminateAndBillCall ist idempotent (kein Dopp
   assert.equal(reserveReleaseCount, 1, "Reserve wird genau einmal freigegeben");
 });
 
+// ---- G5 (Review-Blocker Runde 2): billThunk - EINE Quelle statt fuenffacher Wiederholung ----
+
+test("billThunk liefert einen Thunk, der finishCall mit dem frisch aus dem Store gelesenen Call aufruft", async () => {
+  // Build: Spy-store liefert bei jedem getCall(callId) den AKTUELLEN Eintrag (frischer Stand,
+  // nicht ein evtl. veraltetes Call-Objekt des Aufrufers).
+  const calls = { "call-1": { id: "call-1", status: "active" } };
+  const store = { getCall: (callId) => calls[callId] };
+  const finishCallArgs = [];
+  const finishCall = (call) => finishCallArgs.push(call);
+
+  // Operate
+  const thunk = billThunk(finishCall, store, "call-1");
+  thunk();
+
+  // Check
+  assert.equal(finishCallArgs.length, 1, "finishCall laeuft genau einmal");
+  assert.equal(finishCallArgs[0], calls["call-1"], "finishCall bekommt den frisch aus dem Store gelesenen Call");
+});
+
+test("billThunk liest den Call bei JEDEM Aufruf des Thunks frisch (nicht einmalig beim Erzeugen)", () => {
+  const calls = { "call-1": { id: "call-1", status: "active" } };
+  const store = { getCall: (callId) => calls[callId] };
+  const finishCallArgs = [];
+  const thunk = billThunk((call) => finishCallArgs.push(call), store, "call-1");
+  calls["call-1"] = { id: "call-1", status: "completed", billedAt: "2026-07-15T00:00:00.000Z" };
+  thunk();
+  assert.equal(
+    finishCallArgs[0],
+    calls["call-1"],
+    "der Thunk kapselt store.getCall(callId), nicht einen bereits gelesenen Call-Snapshot",
+  );
+});
+
 // ---- C5: Quelltext-Wiring-Guards (Muster telnyx-p6-cap-callcontrol.test.js T6/T7) ----
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -133,7 +166,7 @@ function sliceBetween(src, startMarker, endMarker, fromIndex = 0) {
   return src.slice(start, end);
 }
 
-test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: finishCall) statt dem alten manuellen Paar", () => {
+test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) statt dem alten manuellen Paar", () => {
   const block = sliceBetween(
     serverSrc,
     'app.post("/voice/status", async (req, res) => {',
@@ -141,7 +174,7 @@ test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: finishCall) stat
   );
   assert.match(block, /terminateAndBillCall\(\{/);
   assert.match(block, /hangUp:\s*null/);
-  assert.match(block, /bill:\s*\(\)\s*=>\s*finishCall\(store\.getCall\(call\.id\)\)/);
+  assert.match(block, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     block,
     /^\s*finishCall\(store\.getCall\(call\.id\)\);\s*$/m,
@@ -158,7 +191,7 @@ test("Quelltext: place_call-catch nutzt terminateAndBillCall (die geschlossene C
   const catchBlock = sliceBetween(routeBlock, "} catch (err) {", "res.status(providerStatus");
   assert.match(catchBlock, /terminateAndBillCall\(\{/);
   assert.match(catchBlock, /hangUp:\s*null/);
-  assert.match(catchBlock, /bill:\s*\(\)\s*=>\s*finishCall\(store\.getCall\(call\.id\)\)/);
+  assert.match(catchBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     catchBlock,
     /await releaseReserve\(call\)/,
@@ -175,10 +208,24 @@ test("Quelltext: Telnyx onHangup nutzt terminateAndBillCall statt dem alten awai
   assert.match(ingestSrc, /from "\.\/telephony\/call-termination\.js"/, "terminateAndBillCall-Import fehlt");
   assert.match(block, /terminateAndBillCall\(\{/);
   assert.match(block, /hangUp:\s*null/);
-  assert.match(block, /bill:\s*\(\)\s*=>\s*finishCall\(store\.getCall\(call\.id\)\)/);
+  assert.match(block, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     block,
     /^\s*await finishCall\(store\.getCall\(call\.id\)\);\s*$/m,
     "der alte direkt awaitete finishCall-Aufruf darf nicht mehr da sein",
   );
+});
+
+// G5 (Review-Blocker Runde 2): jetzt alle 5 Terminierungspfade (nicht nur die 3 aus dem
+// urspruenglichen Befund) - haelt fest, dass terminateCappedCall/cancel_call NACH dem
+// Refactor denselben billThunk-Helper nutzen wie die 3 anderen Pfade (EINE Quelle, G5).
+test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk (alle 5 Pfade EINE Quelle)", () => {
+  assert.match(
+    serverSrc,
+    /import \{ terminateAndBillCall, hangUpAction, billThunk \} from "\.\/telephony\/call-termination\.js";/,
+  );
+  const cappedBlock = sliceBetween(serverSrc, "async function terminateCappedCall(", "\n}\n");
+  assert.match(cappedBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*callId\)/);
+  const cancelBlock = sliceBetween(serverSrc, 'app.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
+  assert.match(cancelBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
 });
