@@ -160,4 +160,21 @@
  *   Barge-in: Provider-WS-Objekt, das die gepufferte Wiedergabe verwirft
  *   ({event:"clear"} bei beiden Providern; Twilio mit streamSid, Telnyx ohne).
  */
+
+/**
+ * @typedef {Object} WebhookEvents
+ *   Port 5 (Webhook-Parsing, VOR den Safety-Gates - reines Parsing, keine Gate-Logik).
+ *   Kapselt das provider-spezifische Auslesen von Turn-/Status-/Speak-Webhook-Bodies;
+ *   server.js bleibt provider-agnostisch. Reine Funktionen (kein IO, kein State) -
+ *   unit-testbar.
+ * @property {(body: object) => string} parseSpeechResult
+ *   Erkanntes Speech-Ergebnis aus dem /voice/turn-Body (getrimmt). Kein Treffer -> "".
+ * @property {(body: object) => {status: string, diagnostics: object}} parseLifecycleEvent
+ *   Call-Lifecycle-Status aus dem /voice/status-Body. diagnostics ist PII-frei (nur
+ *   Zahlen + sanitisierte Tokens); leer ({}) wenn der Provider keine liefert.
+ * @property {(body: object) => {outcome: string, reason: string|null}} parseSpeakOutcome
+ *   Erkennt ein server-seitiges TTS-Speak-Command-Event (SPEAK_OUTCOME-Enum aus
+ *   telephony/adapters/telnyx/speak-events.js, EINE Quelle des Enums). NONE, wenn der
+ *   Provider solche Events nicht kennt oder der Body keins ist.
+ */
 export {};

@@ -55,6 +55,7 @@ import {
   voiceControl,
   messaging,
   voiceRenderer,
+  webhookEvents,
   inboundSignatureVerifier,
   providerFromHeaders,
   numberProvisioning,
@@ -68,7 +69,7 @@ import {
   stream as streamD,
 } from "./telephony/directives.js";
 import { localeFor, languageForCountry } from "./i18n/locales.js";
-import { parseSpeakEvent, SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
+import { SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
@@ -583,66 +584,9 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
 
-// Provider-bewusstes Auslesen des Speech-Ergebnisses aus dem Webhook-Body.
-// Twilio sendet `SpeechResult`. Telnyx: laut TeXML-Doku `Transcript`, real zeigen die
-// Turn-Posts (Live-Beleg 2026-06-20) aber `SpeechResult` (und KEIN `Transcript`) -
-// daher defensiv BEIDE lesen, damit der Agent den erkannten Text nutzt, egal in welchem
-// Feld Telnyx ihn liefert (sonst hoert der Agent trotz korrekter STT nichts -> Stille).
-function extractSpeech(req, provider) {
-  if (provider === "telnyx") return (req.body.Transcript || req.body.SpeechResult || "").trim();
-  return (req.body.SpeechResult || "").trim();
-}
-
-// PII-freie Sanitisierung eines Telnyx-Hangup-Tokens fuers Log (defensiv, analog
-// safeReason in adapters/telnyx/speak-events.js). HangupCause ("normal_clearing"),
-// HangupSource ("caller"/"callee") und SipHangupCause (SIP-Code, z.B. "486") sind
-// kurze Enums/Codes, NIE Telefonnummern/Namen. Trotzdem nie ungefiltert ins Log:
-// nur ein kurzes Token aus einer Zeichen-Allowlist (alnum, _ . : -) bis 48 Zeichen
-// wird uebernommen; alles andere (Freitext, E.164-Nummern mit "+", zu lang)
-// -> undefined -> kein Diagnose-Feld. BEWUSST OHNE Space: Telnyx liefert diese
-// Felder als snake_case-Enum, festes Token oder numerischen SIP-Code (nie mit
-// Leerzeichen), also weist die Allowlist Mehrwort-Freitext (theoretischer ASCII-
-// Klarname) zusaetzlich ab. So bleibt das Log byte-knapp und PII-frei.
-const SAFE_CAUSE_TOKEN = /^[A-Za-z0-9_.:-]{1,48}$/;
-function safeCauseToken(value) {
-  if (typeof value !== "string") return undefined;
-  const token = value.trim();
-  return SAFE_CAUSE_TOKEN.test(token) ? token : undefined;
-}
-
-// Provider-bewusstes Auslesen des Call-Lifecycle-Status aus dem StatusCallback-Body
-// (analog extractSpeech). Beide Provider senden PascalCase-Felder (CallStatus,
-// CallDuration) als form-encoded POST. Telnyx liefert zusaetzlich Diagnose-Felder:
-// CallDuration (Sekunden) und beim "Call Completed"-Callback die Hangup-Ursache
-// (HangupCause/HangupSource/SipHangupCause - Feldnamen aus der Telnyx-OpenAPI-Spec
-// texml/calls.yml, TexmlCallCompletedWebhookSchema). Twilio sendet diese nicht ->
-// diagnostics bleibt fuer Twilio leer (byte-identisch zum Bestand). diagnostics ist
-// bewusst PII-frei (nur Zahlen + sanitisierte Tokens, NIE From/To/Nummern). Garbage/
-// fehlende Felder -> kein Diagnose-Feld (kein NaN, kein leeres/unsauberes Token).
-function extractLifecycleEvent(req, provider) {
-  const status = req.body.CallStatus;
-  if (provider !== PROVIDER.TELNYX) return { status, diagnostics: {} };
-  const durationS = parseInt(req.body.CallDuration, 10);
-  const diagnostics = {};
-  if (Number.isFinite(durationS)) diagnostics.callDurationS = durationS;
-  const hangupCause = safeCauseToken(req.body.HangupCause);
-  const hangupSource = safeCauseToken(req.body.HangupSource);
-  const sipHangupCause = safeCauseToken(req.body.SipHangupCause);
-  if (hangupCause) diagnostics.hangupCause = hangupCause;
-  if (hangupSource) diagnostics.hangupSource = hangupSource;
-  if (sipHangupCause) diagnostics.sipHangupCause = sipHangupCause;
-  return { status, diagnostics };
-}
-
-// Provider-bewusstes Erkennen eines Telnyx-"Speak"-Command-Events (server-seitiges TTS
-// via TeXML-<Say> ueber Azure-NTTS) im Webhook-Body (analog extractSpeech/extract-
-// LifecycleEvent). Twilio kennt diese Events nicht -> immer NONE (Hot-Path byte-
-// identisch). Die Telnyx-Event-Namen + die PII-freie Klassifikation leben im Adapter
-// (parseSpeakEvent, rein/testbar); hier nur der Provider-Dispatch.
-function extractSpeakOutcome(req, provider) {
-  if (provider !== PROVIDER.TELNYX) return { outcome: SPEAK_OUTCOME.NONE, reason: null };
-  return parseSpeakEvent(req.body);
-}
+// Webhook-Parsing (Speech-Ergebnis/Lifecycle-Status/Speak-Outcome) lebt hinter dem
+// WebhookEvents-Port (Port 5): webhookEvents(provider) aus telephony/registry.js,
+// Implementierung je Provider in telephony/adapters/<provider>/webhook-events.js.
 
 // ---- Eingabe-Validierung fuer API-Routen ----
 // E164, TEXT_LIMITS, invalidText: extrahiert nach src/routes/_validation.js (T4 Phase 2).
@@ -1235,7 +1179,7 @@ app.post("/voice/turn", async (req, res) => {
   // L0: Luecke seit dem Render des vorigen Folge-Gathers ~ STT-Finalisierungs-Totzeit.
   metrics.logTurnGap(call.id);
 
-  const heard = extractSpeech(req, call.provider);
+  const heard = webhookEvents(call.provider).parseSpeechResult(req.body);
   try {
     // G3/G26-Fix (Runde 2): callerHasSpoken (claude.js) statt blosser Zeilen-Existenz -
     // sonst haette outbound schon ein einzelnes aufgezeichnetes Rausch-/Echo-Fragment
@@ -1489,7 +1433,7 @@ app.post("/voice/status", async (req, res) => {
   // sonst wuerde es mit status=undefined faelschlich als Lifecycle-Event geloggt. Nur
   // der Fehlschlag wird geloggt (OK-Speak waere Rauschen) und macht die sporadische
   // Azure-Stoerung zum diagnostizierbaren, PII-freien Signal (reason = Telnyx-Token).
-  const speak = extractSpeakOutcome(req, provider);
+  const speak = webhookEvents(provider).parseSpeakOutcome(req.body);
   if (speak.outcome !== SPEAK_OUTCOME.NONE) {
     if (speak.outcome === SPEAK_OUTCOME.FAILED)
       console.error(
@@ -1499,7 +1443,7 @@ app.post("/voice/status", async (req, res) => {
     return;
   }
 
-  const { status: callStatus, diagnostics } = extractLifecycleEvent(req, provider);
+  const { status: callStatus, diagnostics } = webhookEvents(provider).parseLifecycleEvent(req.body);
   // PII-frei (Pre-Mortem): nur callId/Status/Provider/Diagnose ins Log, NIE
   // From/To/Telefonnummern. Macht Telnyx-Lifecycle-Events + CallDuration + die
   // Hangup-Ursache (HangupCause/HangupSource/SipHangupCause) sichtbar - sonst ist
