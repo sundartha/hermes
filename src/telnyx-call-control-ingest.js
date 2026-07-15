@@ -8,6 +8,7 @@
 import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/telnyx/call-control-events.js";
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
+import { defaultSetTimer } from "./utils/timer.js";
 
 // OBS-2: Log-Hygiene-Bound fuer rohe Telnyx-Protokoll-Token (event_type/status). Interner
 // Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (wie errors.js ERROR_DETAIL_MAX_LEN),
@@ -36,15 +37,6 @@ function logEventReceived(callId, body) {
 // afix-timeout (Befund 2): Sekunden->ms fuer den Opening-Speak-Timer (G25, benannte Konstante
 // wie telnyx-conversation-watchdog.js MS_PER_SECOND).
 const MS_PER_SECOND = 1000;
-
-// Timer, der den Event-Loop NICHT am Leben haelt (der HTTP-Server tut das) - lokales Idiom wie
-// telnyx-conversation-watchdog.js defaultSetTimer / middleware.js (.unref()). Injizierbar fuer
-// deterministische Fake-Timer-Tests.
-function defaultSetTimer(fn, ms) {
-  const handle = setTimeout(fn, ms);
-  if (handle && typeof handle.unref === "function") handle.unref();
-  return handle;
-}
 
 export function makeCallControlIngest({
   store,
@@ -198,6 +190,13 @@ export function makeCallControlIngest({
     if (callControlId && consumeOpeningRetry(call.id)) {
       console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> Retry mit Bestands-Stimme`);
       await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
+      // afix-timeout (Review-Blocker Runde 1): auch der Retry-Leg kann verstummen, OHNE je ein
+      // Terminal-Event zu senden (identisches Symptom wie der Erst-Speak) - ohne erneutes
+      // Armieren haengt der Call dann wieder unbegrenzt in Stille, diesmal ungeschuetzt bis zum
+      // harten maxCallDurationS-Cap. consumeOpeningRetry() ist bereits verbraucht (oben), ein
+      // zweites Feuern dieses Timers laeuft in onSpeakFailed also direkt in den Fail-Safe-Zweig
+      // (kein Endlos-Retry).
+      armOpeningSpeakTimeout(call, callControlId);
       return;
     }
     console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> kein Assistant-Start`);

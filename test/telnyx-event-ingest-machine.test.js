@@ -875,7 +875,66 @@ test("afix-timeout: kein speak.ended/failed -> Timer feuert -> genau EIN Azure-R
     assert.equal(vc.speakCalls.length, 2, "Timeout loest genau EINEN Azure-Retry aus");
     assert.equal(vc.speakCalls[1].useAssistantVoice, false, "Retry mit Bestands-Stimme");
     assert.equal(vc.startAssistantCalls.length, 0, "kein Assistant-Start (Offenlegung nicht bestaetigt)");
-    assert.equal(timers.pendingCount(), 0, "Timer nach Feuern geraeumt (kein Leak)");
+    // Review-Blocker Runde 1: der Retry-Leg armiert einen NEUEN Watchdog (statt ungeschuetzt zu
+    // haengen) - der alte Erst-Timer ist geraeumt, aber genau ein frischer Retry-Timer laeuft.
+    assert.equal(timers.pendingCount(), 1, "Retry-Leg armiert einen neuen Watchdog-Timer (kein Leak, kein ungeschuetzter Retry)");
+  });
+});
+
+// Review-Blocker Runde 1 (S1, Korrektheit): der Retry-Leg des Timeout-Watchdogs armiert VOR
+// diesem Fix KEINEN neuen Timer - genau das Symptom, das afix-timeout beheben soll (Telnyx'
+// Speak-Command verstummt OHNE Terminal-Event), kann identisch auf dem Retry-Leg auftreten.
+// Dieser Test beweist das erneute Armieren (pendingCount()===1 NACH dem Retry-Speak).
+test("afix-timeout (Review-Blocker Runde 1): Retry-Leg armiert erneut einen Watchdog-Timer", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+    assert.equal(timers.pendingCount(), 1, "Erst-Speak-Watchdog armiert");
+
+    timers.fireAll(); // Erst-Timeout -> onSpeakFailed -> Azure-Retry
+    await new Promise((r) => setImmediate(r));
+
+    assert.equal(vc.speakCalls.length, 2, "Azure-Retry abgesetzt");
+    assert.equal(timers.pendingCount(), 1, "Retry-Leg hat einen NEUEN Watchdog-Timer armiert (kein ungeschuetzter Retry)");
+  });
+});
+
+// Fortsetzung: feuert auch dieser zweite Watchdog (Retry verstummt identisch zum Erstversuch),
+// ist das Retry-Token bereits verbraucht -> Fail-Safe, KEIN dritter Speak-Versuch, KEIN
+// Endlos-Retry, und kein herrenloser Timer (kein Leak).
+test("afix-timeout (Review-Blocker Runde 1): Retry-Watchdog feuert erneut -> Fail-Safe statt Endlos-Retry", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+    timers.fireAll(); // Erst-Timeout -> Azure-Retry + neuer Watchdog
+    await new Promise((r) => setImmediate(r));
+    assert.equal(vc.speakCalls.length, 2);
+
+    const lines = await captureConsole(async () => {
+      timers.fireAll(); // Retry-Watchdog feuert - Retry-Token bereits verbraucht
+      await new Promise((r) => setImmediate(r));
+    });
+
+    assert.equal(vc.speakCalls.length, 2, "kein dritter Speak-Versuch - Retry-Token verbraucht");
+    assert.equal(vc.startAssistantCalls.length, 0, "kein Assistant-Start ohne bestaetigte Offenlegung");
+    assert.equal(timers.pendingCount(), 0, "kein weiterer Timer nach dem terminalen Fail-Safe (kein Leak)");
+    assert.ok(lines.some((l) => l.includes("kein Assistant-Start")), "Fail-Safe-Log fehlt");
   });
 });
 
