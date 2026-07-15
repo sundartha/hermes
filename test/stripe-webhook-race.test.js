@@ -193,6 +193,34 @@ test("Gleichstand + gleiche event.id (Retry desselben SUSPEND-Events derselben S
   assert.equal(deps.calls.suspend.length, 1);
 });
 
+// ---- (3c) lastApplied.createdAt selbst NaN (Review-Blocker S1, symmetrischer Guard) ----
+// Landet (z.B. durch ein Stripe-Event ohne event.created) ein Anker mit nicht auswertbarem
+// createdAt in lastAppliedByKey, darf die Ordnungswache dadurch nicht vergiftet werden:
+// `candidate.createdAt < NaN` und `> NaN` sind beide false, ohne den symmetrischen Guard
+// faellt der Vergleich faelschlich in die Gleichstand-/Tie-Break-Logik und ein spaeteres,
+// gueltiges ACTIVATE wuerde faelschlich als stale verworfen (der zahlende Tenant bliebe
+// dauerhaft unreaktivierbar).
+
+test("lastApplied.createdAt ist NaN (event.created fehlt): ein spaeteres gueltiges ACTIVATE wird trotzdem angewendet", async () => {
+  const subId = "sub_race_poisoned_anchor";
+  const deps = fakeDeps();
+  // Erstes Event fuer den Schluessel traegt KEIN auswertbares event.created - lastApplied
+  // ist beim ersten Aufruf null, isStaleEvent liefert dann unabhaengig vom createdAt immer
+  // false, also wird angewendet und der (NaN-)Anker in lastAppliedByKey abgelegt.
+  await applyStripeWebhookSerialized(suspendEvent({ id: "evt_poison", created: undefined, subId }), deps);
+  assert.deepEqual(deps.calls.setStatus, [[TENANT, "suspended"]], "Vorbedingung: das erste Event wurde angewendet");
+  // Zweites Event: normales ACTIVATE mit gueltigem, spaeterem event.created fuer denselben
+  // Schluessel. OHNE den symmetrischen Guard ist der Vergleich mit dem NaN-Anker
+  // unentscheidbar und faellt in den Tie-Break -> die Aktivierung bliebe faelschlich aus.
+  await applyStripeWebhookSerialized(activateEvent({ id: "evt_reactivate", created: LATER_CREATED, subId }), deps);
+  assert.deepEqual(
+    deps.calls.setStatus.at(-1),
+    [TENANT, "active"],
+    "das ACTIVATE darf gegenueber einem unvergleichbaren (NaN) Anker nicht als stale verworfen werden",
+  );
+  assert.equal(deps.calls.kyc.length, 1, "KYC=CARD wurde tatsaechlich gesetzt - keine faelschlich verworfene Aktivierung");
+});
+
 // ---- (4) Verschiedene Korrelationsschluessel serialisieren NICHT gegeneinander ------
 
 test("Verschiedene Korrelationsschluessel serialisieren NICHT gegeneinander (gekeyt statt global)", async () => {

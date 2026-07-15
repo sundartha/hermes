@@ -287,6 +287,13 @@ function eventAnchorOf(event, action) {
 function isStaleEvent(lastApplied, candidate) {
   if (!lastApplied) return false;
   if (candidate.eventId != null && candidate.eventId === lastApplied.eventId) return true;
+  // Symmetrischer Guard zum candidate-Check darunter (Review-Blocker S1, defensive
+  // Asymmetrie): ohne diesen Check waere bei einem nicht auswertbaren (NaN) lastApplied.
+  // createdAt sowohl `candidate.createdAt < NaN` als auch `> NaN` false, und der Ablauf
+  // faellt faelschlich in die Gleichstand-/Tie-Break-Logik weiter unten, obwohl gar kein
+  // echter Gleichstand vorliegt - ein spaeteres gueltiges ACTIVATE wuerde dauerhaft als
+  // stale verworfen.
+  if (!Number.isFinite(lastApplied.createdAt)) return false; // Anker selbst unvergleichbar -> Bestandsverhalten (nie stale), Ordnungswache wird nicht vergiftet
   if (!Number.isFinite(candidate.createdAt)) return false;
   if (candidate.createdAt < lastApplied.createdAt) return true;
   if (candidate.createdAt > lastApplied.createdAt) return false;
