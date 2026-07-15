@@ -31,6 +31,7 @@ import {
   PROVISION_NUMBER_JOB,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
+  globalCapEur,
   KYC_LEVEL,
   KYC_ORDER,
 } from "./defaults.js";
@@ -67,7 +68,7 @@ export function makeDefaultState() {
     // (RLS-fest, hydrierbar). [{ id, numberId, tenantId, kind, status, idempotencyKey, attempts, lastError }]
     provisioningJobs: [],
     // Per-Tenant-Kostendecke (P6b3): [{ tenantId, budgetCents, hardCapCents }].
-    // KEINE Owner-Vorbelegung -> Owner ohne Zeile faellt auf cfg.maxBudgetEur
+    // KEINE Owner-Vorbelegung -> Owner ohne Zeile faellt auf cfg.maxBudgetCents
     // (budgetExceeded), byte-identisch zum Bestand.
     tenantBudgets: [],
     // Append-only Usage-Ledger (P6b3): Quelle fuer das Stripe-Metering (NICHT fuers
@@ -727,7 +728,7 @@ export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
 
 // Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): nimmt
 // jeden neuen Tenant aus dem geteilten globalen Pool (sonst faellt er in effectiveCapEur
-// auf cfg.maxBudgetEur zurueck). Set-if-absent wie idpSubject: nur wenn ein Default > 0
+// auf cfg.maxBudgetCents zurueck). Set-if-absent wie idpSubject: nur wenn ein Default > 0
 // uebergeben wird UND noch keine tenant_budget-Zeile existiert -> setTenantBudget
 // (budget == hard cap == Default). 0/fehlend bzw. schon eine Zeile -> No-Op (Owner/Bestand
 // unveraendert). Config-frei (Default kommt als Arg). Kein Throw, kein IO.
@@ -1379,16 +1380,17 @@ export function addVoiceUsageCostCents(s, tenantId, costCents) {
 }
 
 // Effektiver pro-Tenant-Cap in EUR: existiert eine tenant_budget-Zeile, gilt deren
-// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale
-// cfg.maxBudgetEur (Owner/Bestand ohne Zeile -> byte-identisch). EINE Stelle fuer
-// die Cap-Aufloesung (G5), von budgetExceeded genutzt.
+// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale Cap
+// (globalCapEur, G5 - dieselbe Divisionsstelle wie globalBudgetExceeded/
+// globalReserveExceedsBudget, Owner/Bestand ohne Zeile -> byte-identisch), von
+// budgetExceeded genutzt.
 function effectiveCapEur(s, tenantId, cfg) {
   const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
-  return budget ? budget.hardCapCents / CENTS_PER_EUR : cfg.maxBudgetEur;
+  return budget ? budget.hardCapCents / CENTS_PER_EUR : globalCapEur(cfg);
 }
 
 // Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
-// Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetEur). Verbrauchsquelle
+// Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetCents). Verbrauchsquelle
 // bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
 // neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL.
 export function budgetExceeded(s, tenantId, cfg) {
@@ -1524,11 +1526,11 @@ export function markMeterEventsSent(s, eventIds) {
 }
 
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
-// gegen config.maxBudgetEur. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
+// gegen config.maxBudgetCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
 // (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
 // Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt.
 export function globalBudgetExceeded(s, cfg) {
-  return globalUsageTotals(s).costEur >= cfg.maxBudgetEur;
+  return globalUsageTotals(s).costEur >= globalCapEur(cfg);
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
@@ -1555,7 +1557,7 @@ export function reservationsTotal(s) {
 export function globalReserveExceedsBudget(s, reserveCents, cfg) {
   return (
     globalUsageTotals(s).costEur + (reservationsTotal(s) + reserveCents) / CENTS_PER_EUR >
-    cfg.maxBudgetEur
+    globalCapEur(cfg)
   );
 }
 

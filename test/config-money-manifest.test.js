@@ -16,7 +16,7 @@ import { config } from "../src/config.js";
 
 // EINE Liste aller Geld-Felder in config.js (G26: Cents-Ganzzahlen bzw. EUR/USD-Preise).
 const MONEY_CONFIG_KEYS = Object.freeze([
-  "maxBudgetEur",
+  "maxBudgetCents",
   "numberSetupFeeCents",
   "voiceTariffDomesticCents",
   "voiceTariffDefaultCents",

@@ -125,6 +125,15 @@ export const USAGE_EVENT_KIND = Object.freeze({
 // Money at rest) -> EUR-Vergleich gegen den bestehenden costEur-Live-Bucket.
 export const CENTS_PER_EUR = 100;
 
+// Globaler Notaus-Cap in EUR (Cents->EUR-Ruecklesung von cfg.maxBudgetCents, G5:
+// EINE Divisionsstelle statt vier duplizierten `cfg.maxBudgetCents / CENTS_PER_EUR`-
+// Stellen in server.js/api-read.js/state-ops.js). Reine Funktion von cfg, keine
+// State-Abhaengigkeit - state-ops.js effectiveCapEur nutzt sie als Fallback-Zweig,
+// wenn kein pro-Tenant-Budget existiert.
+export function globalCapEur(cfg) {
+  return cfg.maxBudgetCents / CENTS_PER_EUR;
+}
+
 // Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
 // Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
 export const TENANT_STATUS = Object.freeze({

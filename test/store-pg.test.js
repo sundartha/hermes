@@ -27,7 +27,7 @@ import {
 } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert
 // den Spiegel aus der DB) - so wird Persistenz statt nur In-Memory geprueft.
@@ -329,7 +329,7 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   const ref = store.getCall(call.id);
   ref.twilioSid = "CA-test-sid";
   ref.summary = "Gespraech zusammengefasst";
-  ref.objectiveAchieved = "true";
+  ref.objectiveAchieved = true;
   // CDF1 (Spec d/pglite): Fehlergrund am Spiegel setzen -> belegt Flush-Spalte (INSERT +
   // ON CONFLICT DO UPDATE SET) + rowToCall-Hydrierung der neuen Spalte nach reopen.
   ref.failureReason = "no-answer";
@@ -339,7 +339,7 @@ test("mutate-then-save()-Vertrag: getCall-Referenz mutieren + save persistiert",
   const got = reopened.getCall(call.id);
   assert.equal(got.twilioSid, "CA-test-sid");
   assert.equal(got.summary, "Gespraech zusammengefasst");
-  assert.equal(got.objectiveAchieved, "true");
+  assert.equal(got.objectiveAchieved, true);
   assert.equal(got.failureReason, "no-answer");
   // getCall findet auch per twilioSid (wie json)
   assert.equal(reopened.getCall("CA-test-sid").id, call.id);
@@ -495,7 +495,7 @@ test("purgeTranscript loescht NUR die Segmente des Ziel-Calls; Summary + anderer
   store.addTranscript(c2.id, "caller", "Bleibt");
   // Summary wie der Produktionspfad (claude.js) setzt + persistiert.
   store.getCall(c1.id).summary = "Zusammenfassung 1";
-  store.getCall(c1.id).objectiveAchieved = "true";
+  store.getCall(c1.id).objectiveAchieved = true;
   await store.save();
 
   // Beide Calls haben vor dem Purge persistierte Segmente.

@@ -6,7 +6,7 @@
 // (jede Testdatei laeuft als eigener node:test-Kindprozess, keine Cross-File-Leaks).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config, assertConfig, numEnv, configFatalErrors } from "../src/config.js";
+import { config, assertConfig, numEnv, configFatalErrors, eurToCents } from "../src/config.js";
 
 // console.error abfangen, ohne den Testlauf zuzumuellen. Liefert die Zeilen.
 function captureConsoleError(fn) {
@@ -58,6 +58,16 @@ test("T-P2-02: gueltiges Budget -> kein neuer Fatal, korrekter Float-Wert", () =
   const v = numEnv("MAX_BUDGET_EUR", "12.5", { fallback: 8, min: 0, integer: false });
   assert.equal(v, 12.5);
   assert.equal(configFatalErrors().length, before, "valider Wert darf keinen Fatal erzeugen");
+});
+
+test("S1-COV-1: eurToCents rundet die JS-Float-Falle korrekt (0.29 EUR -> exakt 29 Cent, nicht 28)", () => {
+  // 0.29 * 100 === 28.999999999999996 in JS-Float-Arithmetik (node -e verifiziert).
+  // Ohne Math.round wuerde maxBudgetCents lautlos knapp UNTER dem konfigurierten
+  // MAX_BUDGET_EUR-Cap landen. Alle bisherigen Testwerte (1, 8, 12.5) sind exakt
+  // darstellbar und haetten diesen Bug NICHT sichtbar gemacht.
+  assert.equal(eurToCents(0.29), 29);
+  // Grenzfall 0 (Not-Aus-Wert wie bei MAX_CALLS_PER_HOUR) bleibt exakt 0.
+  assert.equal(eurToCents(0), 0);
 });
 
 test("T-P2-03: negativer Gate-Wert -> Fatal (nennt Minimum); '0' bleibt gueltiger Not-Aus", () => {

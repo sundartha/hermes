@@ -76,7 +76,7 @@ function makeConfig(overrides = {}) {
     multiTenant: false,
     claudeModel: "claude-haiku-4-5",
     voiceEngine: "budget",
-    maxBudgetEur: 8,
+    maxBudgetCents: 800,
     ...overrides,
   };
 }

@@ -11,7 +11,7 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const AT = "2026-01-01T00:00:00Z";
 const OTHER = "other";
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 
 // Frischer Plain-State pro Aufruf (kein geteilter Modul-Zustand): zwei Owner-Calls
 // (einer mit 2-Segment-Transkript + Action Item, einer ohne) plus ein Call eines

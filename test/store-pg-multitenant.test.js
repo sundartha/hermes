@@ -26,7 +26,7 @@ import * as ops from "../src/store/state-ops.js";
 
 const TENANT_B = "tenant_b";
 const APP_ROLE = "app_user"; // liest/schreibt unter GUC, ohne Superuser/BYPASSRLS
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
 // Spiegel aus der DB) - so wird Persistenz statt nur In-Memory geprueft.

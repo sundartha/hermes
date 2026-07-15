@@ -14,7 +14,7 @@ import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 const APP_ROLE = "app_user"; // liest Owner-Daten, ohne Superuser/BYPASSRLS

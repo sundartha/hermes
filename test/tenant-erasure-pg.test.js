@@ -12,7 +12,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 
 const OTHER = "other";
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetEur: 8 };
+const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
 // Spiegel aus der DB), um Persistenz statt nur In-Memory zu pruefen.
