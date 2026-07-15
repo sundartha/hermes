@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
 import { captureConsole, noopWatchdog, makeConfigOverrides } from "./helpers.js";
 import { config } from "../src/config.js";
-import { fakeTimers } from "./telnyx-shim-harness.js";
+import { fakeTimers, ingestTimeoutDeps } from "./telnyx-shim-harness.js";
 
 // afix-p1: config.telnyxElevenLabs fuer die Dauer eines Tests setzen/restaurieren -
 // deterministisch statt env-abhaengig (eine lokale .env darf die Observability-Tests nicht
@@ -33,10 +33,8 @@ const NOOP_WATCHDOG = noopWatchdog();
 // Timeout nicht selbst pruefen. Bundelt config (echter Singleton) + frischen Fake-Timer je
 // Aufruf -> verhindert einen echten unref-Timer-Leak (P12 Repeatable), ohne dass der Test die
 // Timer inspizieren muss. Die Timeout-Logik selbst hat eigene Tests unten (fireAll/pendingCount).
-function ingestTimeoutDeps() {
-  const t = fakeTimers();
-  return { config, setTimer: t.setTimer, clearTimer: t.clearTimer };
-}
+// G5-TEST-DUP (Review-Blocker Runde 3): zentralisiert in telnyx-shim-harness.js (Import oben),
+// statt hier byte-identisch zu telnyx-stab-p9-watchdog.test.js dupliziert zu sein.
 
 // Fake-Store: haelt GENAU einen Call (oder keinen), zeichnet markAnswered/endCallRecord
 // auf und spiegelt deren Effekt auf das Fixture-Objekt (wie state-ops.js: dieselbe
@@ -296,6 +294,13 @@ test("afix-p1: onHangup raeumt das Retry-Token - danach ist wieder genau ein Ret
     assert.equal(vc.speakCalls.length, 1, "erster Retry verbraucht");
 
     await handler({ query: { callId: "call_1" }, body: hangupBody("cc_1") }, fakeRes());
+    // AFIX-TIMEOUT-STALE-CALL (Review-Blocker Runde 3): onSpeakFailed prueft jetzt den
+    // frischen Call-Status - ein Retry ist nur fuer einen AKTIVEN Call moeglich, nie fuer
+    // einen bereits beendeten (der hangup-Aufruf oben hat call.status auf "completed"
+    // gesetzt). Simuliert hier eine neue, aktive Call-Session mit derselben ID - das
+    // eigentliche Testziel bleibt das Freigeben von openingRetryUsed in onHangup,
+    // unabhaengig vom neuen Status-Gate.
+    call.status = "active";
     await handler({ query: { callId: "call_1" }, body: speakFailedBody("cc_1") }, fakeRes());
 
     assert.equal(vc.speakCalls.length, 2, "nach hangup wieder ein frisches Retry-Token");
@@ -1000,4 +1005,45 @@ test("afix-timeout: hangup VOR Timeout -> Timer geloescht, kein Aufruf nach Call
   timers.fireAll();
   await new Promise((r) => setImmediate(r));
   assert.equal(vc.speakCalls.length, before, "kein Speak nach Call-Ende");
+});
+
+// AFIX-TIMEOUT-STALE-CALL (Review-Blocker Runde 3, S1): der Timer-Callback haelt den
+// call-Objektverweis vom Arm-Zeitpunkt fest. Wird der Call zwischenzeitlich ueber einen
+// ANDEREN Pfad beendet (/api/calls/:id/cancel, terminateCappedCall bei Max-Dauer - beide
+// aendern NUR store.status, OHNE dieses Modul zu durchlaufen, solange auch Telnyx' eigenes
+// hangup-Webhook ausbleibt), darf das spaetere Feuern des Timers KEINEN Speak-Befehl mehr an
+// den bereits beendeten Call schicken. Ohne den Fix haette onSpeakFailed hier ungeprueft
+// einen Azure-Retry abgesetzt (wie im Test oben "kein speak.ended/failed -> ... Azure-Retry").
+test("afix-timeout (Review-Blocker Runde 3, AFIX-TIMEOUT-STALE-CALL): Call extern beendet VOR Timeout -> Timer-Feuern loest KEINEN Retry aus", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+    assert.equal(vc.speakCalls.length, 1, "nur der Opening-Speak");
+    assert.equal(timers.pendingCount(), 1, "Opening-Speak-Timer armiert");
+
+    // Externe Terminierung ueber einen ANDEREN Pfad (server.js: cancel_call/terminateCappedCall) -
+    // aendert NUR store.status, laeuft NICHT durch dieses Modul (kein onHangup hier, Timer bleibt
+    // stehen bis er selbst feuert).
+    store.endCallRecord("call_1", "cancelled");
+
+    const lines = await captureConsole(async () => {
+      timers.fireAll(); // Timer feuert weiterhin auf die stale call-Referenz vom Arm-Zeitpunkt
+      await new Promise((r) => setImmediate(r));
+    });
+
+    assert.equal(vc.speakCalls.length, 1, "kein Retry an einen bereits extern beendeten Call");
+    assert.equal(vc.startAssistantCalls.length, 0, "kein Assistant-Start an einen beendeten Call");
+    assert.ok(
+      lines.some((l) => l.includes("bereits beendeten Call ignoriert")),
+      "Guard-Log fehlt",
+    );
+  });
 });

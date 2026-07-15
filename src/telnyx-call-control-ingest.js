@@ -187,6 +187,19 @@ export function makeCallControlIngest({
   // laeuft unabhaengig weiter.
   async function onSpeakFailed(call, callControlId) {
     clearOpeningSpeakTimer(call.id); // afix-timeout: idempotent - egal ob echtes Event oder Selbst-Timeout
+    // AFIX-TIMEOUT-STALE-CALL (Review-Blocker Runde 3): der Timer-Callback in
+    // armOpeningSpeakTimeout haelt den call-Objektverweis vom Arm-Zeitpunkt fest. Wurde der Call
+    // zwischenzeitlich ueber einen ANDEREN Pfad beendet (/api/calls/:id/cancel,
+    // terminateCappedCall bei Max-Dauer - beide loesen kein Event in diesem Modul aus, solange
+    // Telnyx' eigenes hangup-Webhook ebenfalls ausbleibt), wuerde der Timer sonst trotzdem
+    // feuern und per Retry-Zweig einen Speak-Befehl an einen bereits beendeten Call schicken.
+    // Frischer Store-Stand + Statuspruefung VOR jeder Wirkung (Muster onHangup/
+    // terminateViaCallControl: "Frischer Store-Stand pro Aufruf"); no-op bei nicht-aktivem Call.
+    const freshCall = store.getCall(call.id);
+    if (!freshCall || freshCall.status !== "active") {
+      console.warn(`[voice/call-control] Speak-Offenlegung-Timeout fuer bereits beendeten Call ignoriert (call=${call.id})`);
+      return;
+    }
     if (callControlId && consumeOpeningRetry(call.id)) {
       console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> Retry mit Bestands-Stimme`);
       await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });

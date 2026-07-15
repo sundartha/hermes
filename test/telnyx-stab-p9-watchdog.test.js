@@ -21,6 +21,7 @@ import {
   agentTurnSpy,
   fakeTimers,
   makeTestWatchdog,
+  ingestTimeoutDeps,
 } from "./telnyx-shim-harness.js";
 import { fakeTelnyxShimConfig, captureConsole, makeConfigOverrides } from "./helpers.js";
 
@@ -67,14 +68,10 @@ function ingestRes() {
 // clearTimeout) - ohne diese Deps wuerde ein spaeter hier reichender assistantVoiceConfigured()
 // = true-Pfad (Retry-Zweig in onSpeakFailed) armOpeningSpeakTimeout() mit einem TypeError auf
 // config.telnyxOpeningSpeakTimeoutS crashen lassen, den der Handler-catch (handleCallControlEvent)
-// nur still nach console.error verschluckt - diese Testdatei haette das NIE bemerkt. Bundelt
-// config (echter Singleton) + einen vom Watchdog-Timer ENTKOPPELTEN Fake-Timer (Muster
-// ingestTimeoutDeps, telnyx-event-ingest-machine.test.js) - EINE Stelle statt einer dreifachen
-// Wiederholung an den drei makeCallControlIngest-Aufrufen dieser Datei (G5).
-function ingestTimeoutDeps() {
-  const t = fakeTimers();
-  return { config, setTimer: t.setTimer, clearTimer: t.clearTimer };
-}
+// nur still nach console.error verschluckt - diese Testdatei haette das NIE bemerkt.
+// G5-TEST-DUP (Review-Blocker Runde 3): ingestTimeoutDeps() jetzt zentral in
+// telnyx-shim-harness.js (Import oben), statt hier byte-identisch zu
+// telnyx-event-ingest-machine.test.js dupliziert zu sein.
 
 function speakEndedBody(callControlId) {
   return { data: { event_type: "call.speak.ended", payload: { call_control_id: callControlId } } };

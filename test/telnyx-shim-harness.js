@@ -10,6 +10,7 @@ import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
 import { makeCallControlTerminator } from "../src/telnyx-call-terminate.js";
+import { config } from "../src/config.js";
 
 const SSE_DATA_PREFIX = "data: ";
 
@@ -225,6 +226,15 @@ export function fakeTimers() {
     // (der one-shot-State-Delete verschluckt ein zweites Feuern still).
     pendingDelays: () => pending.map((p) => p.ms),
   };
+}
+
+// afix-timeout / afix-timeout-caller-gap (G5, Review-Blocker Runde 3): die drei
+// makeCallControlIngest-Ingest-Deps (config + ein vom Watchdog-Timer entkoppelter Fake-Timer)
+// werden von telnyx-event-ingest-machine.test.js UND telnyx-stab-p9-watchdog.test.js gebraucht -
+// vorher zweimal byte-identisch definiert, jetzt EINE Stelle statt zwei Kopien.
+export function ingestTimeoutDeps() {
+  const t = fakeTimers();
+  return { config, setTimer: t.setTimer, clearTimer: t.clearTimer };
 }
 
 // Baut Watchdog + geteiltes Terminierungs-Primitiv aus den ECHTEN Factories (kein Mock der
