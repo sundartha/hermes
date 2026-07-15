@@ -17,12 +17,28 @@ import { LOGIN_URL } from "../../lib/routes.js";
 </div>
 
 <script>
-  import { AUTH_STATE, AUTH_EVENT, agentInfo, loadAuthState, logout } from "../../lib/api.js";
+  import {
+    AUTH_STATE,
+    AUTH_EVENT,
+    agentInfo,
+    loadAuthState,
+    logout,
+    NUMBER_POLL_INTERVAL_MS,
+    shouldPollNumberStatus,
+  } from "../../lib/api.js";
 
   const loginLink = document.getElementById("auth-login");
   const account = document.getElementById("auth-account");
   const whoEl = document.getElementById("auth-who");
   const logoutBtn = document.getElementById("auth-logout");
+
+  // Hintergrund-Poll waehrend die Rufnummer eingerichtet wird (requested/provisioning):
+  // sonst haengt der Chip auf "Setting up..." fest, bis der Nutzer manuell neu laedt.
+  // pollTimer haelt IMMER hoechstens einen ausstehenden Timer (refresh() raeumt vor
+  // jedem Reschedule auf) -- kein Doppel-Polling bei parallelen refresh()-Aufrufen
+  // (z.B. Logout waehrend ein Poll ansteht).
+  let pollTimer = null;
+  let pollAttempts = 0;
 
   // Eine bestehende Session liegt vor, sobald das Cookie den webAuth-Check
   // passiert (200) ODER der Tenant nur auf Freigabe wartet (403). In beiden
@@ -45,12 +61,19 @@ import { LOGIN_URL } from "../../lib/routes.js";
   }
 
   async function refresh() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     const result = await loadAuthState();
     applyControls(result);
     // App-Shell ueber den ermittelten Zustand + Daten informieren. Empfaenger
     // registriert seinen Listener synchron beim Modul-Start; dieser dispatch
     // liegt hinter dem await oben und damit garantiert danach.
     document.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: result }));
+    if (shouldPollNumberStatus(result, pollAttempts)) {
+      pollAttempts += 1;
+      pollTimer = setTimeout(refresh, NUMBER_POLL_INTERVAL_MS);
+    } else {
+      pollAttempts = 0;
+    }
   }
 
   logoutBtn.addEventListener("click", async () => {

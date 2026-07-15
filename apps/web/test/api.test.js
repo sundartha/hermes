@@ -14,9 +14,11 @@ import {
   isNumberProvisioning,
   logout,
   loadAuthState,
+  NUMBER_POLL_MAX_ATTEMPTS,
   NUMBER_STATUS,
   numberPlaceholderText,
   numberSetupFeeFrom,
+  shouldPollNumberStatus,
   startBillingSetupCheckout,
 } from "../src/lib/api.js";
 // Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
@@ -212,16 +214,66 @@ test("isNumberProvisioning: true fuer requested/provisioning, false fuer active/
   assert.equal(isNumberProvisioning({}), false);
 });
 
+// shouldPollNumberStatus: steuert den Hintergrund-Poll der Auth-Insel, damit der
+// Chip nicht bis zum manuellen Reload auf "Setting up..." haengen bleibt.
+test("shouldPollNumberStatus: true nur bei AUTHENTICATED+provisioning innerhalb des Attempt-Deckels", () => {
+  const provisioning = {
+    state: AUTH_STATE.AUTHENTICATED,
+    data: { agent: { numberStatus: "provisioning" } },
+  };
+  assert.equal(shouldPollNumberStatus(provisioning, 0), true);
+  assert.equal(shouldPollNumberStatus(provisioning, NUMBER_POLL_MAX_ATTEMPTS - 1), true);
+});
+
+test("shouldPollNumberStatus: false sobald der Attempt-Deckel erreicht ist", () => {
+  const provisioning = {
+    state: AUTH_STATE.AUTHENTICATED,
+    data: { agent: { numberStatus: "requested" } },
+  };
+  assert.equal(shouldPollNumberStatus(provisioning, NUMBER_POLL_MAX_ATTEMPTS), false);
+});
+
+test("shouldPollNumberStatus: false bei aufgeloester Nummer oder Nicht-Authenticated", () => {
+  assert.equal(
+    shouldPollNumberStatus(
+      { state: AUTH_STATE.AUTHENTICATED, data: { agent: { numberStatus: "active" } } },
+      0,
+    ),
+    false,
+  );
+  assert.equal(
+    shouldPollNumberStatus(
+      { state: AUTH_STATE.PENDING, data: { agent: { numberStatus: "provisioning" } } },
+      0,
+    ),
+    false,
+  );
+  assert.equal(shouldPollNumberStatus({ state: AUTH_STATE.ANONYMOUS, data: null }, 0), false);
+  assert.equal(shouldPollNumberStatus(undefined, 0), false);
+});
+
 test("numberPlaceholderText: eigener Text je numberStatus (Fix C: failed/blocked sichtbar)", () => {
-  assert.equal(numberPlaceholderText({ agent: { numberStatus: "provisioning" } }), "Setting up your number…");
-  assert.equal(numberPlaceholderText({ agent: { numberStatus: "requested" } }), "Setting up your number…");
+  assert.equal(
+    numberPlaceholderText({ agent: { numberStatus: "provisioning" } }),
+    "Setting up your number…",
+  );
+  assert.equal(
+    numberPlaceholderText({ agent: { numberStatus: "requested" } }),
+    "Setting up your number…",
+  );
   assert.equal(numberPlaceholderText({ agent: { numberStatus: "failed" } }), "Number setup failed");
   assert.equal(
     numberPlaceholderText({ agent: { numberStatus: "blocked" } }),
     "Number setup delayed — capacity limit reached",
   );
-  assert.equal(numberPlaceholderText({ agent: { numberStatus: "active" } }), "No number assigned yet");
-  assert.equal(numberPlaceholderText({ agent: { numberStatus: "none" } }), "No number assigned yet");
+  assert.equal(
+    numberPlaceholderText({ agent: { numberStatus: "active" } }),
+    "No number assigned yet",
+  );
+  assert.equal(
+    numberPlaceholderText({ agent: { numberStatus: "none" } }),
+    "No number assigned yet",
+  );
   assert.equal(numberPlaceholderText(undefined), "No number assigned yet"); // fail-closed
 });
 
@@ -305,7 +357,10 @@ test("numberSetupFeeFrom: gueltige Cents -> {amountCents, currency}, Default-Wae
     amountCents: 500,
     currency: "eur",
   });
-  assert.deepEqual(numberSetupFeeFrom({ numberSetupFeeCents: 500 }), { amountCents: 500, currency: "eur" });
+  assert.deepEqual(numberSetupFeeFrom({ numberSetupFeeCents: 500 }), {
+    amountCents: 500,
+    currency: "eur",
+  });
 });
 
 test("numberSetupFeeFrom: fehlend/0/negativ/nicht-numerisch -> null", () => {

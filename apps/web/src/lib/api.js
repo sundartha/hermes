@@ -169,6 +169,21 @@ export function isNumberProvisioning(data) {
   return numberStatus === NUMBER_STATUS.PROVISIONING || numberStatus === NUMBER_STATUS.REQUESTED;
 }
 
+// Hintergrund-Poll waehrend "Setting up...": ohne das haengt der Chip auf dem
+// Platzhalter fest, bis der Nutzer die Seite manuell neu laedt (Bug, Jul 2026).
+// Intervall + Deckel hier benannt statt als Magic Number an der Aufrufstelle.
+export const NUMBER_POLL_INTERVAL_MS = 4000;
+export const NUMBER_POLL_MAX_ATTEMPTS = 90; // ~6 Minuten Deckel -> kein Endlos-Timer bei nie fertiger Nummer
+
+// Ob die Auth-Insel nach diesem refresh() einen weiteren Poll ansetzen soll: nur
+// waehrend eine Nummer eingerichtet wird (isNumberProvisioning) UND innerhalb des
+// Attempt-Deckels. attemptCount ist die Anzahl bereits verstrichener Polls (0-basiert).
+export function shouldPollNumberStatus(result, attemptCount) {
+  if (!result || result.state !== AUTH_STATE.AUTHENTICATED) return false;
+  if (!isNumberProvisioning(result.data)) return false;
+  return attemptCount < NUMBER_POLL_MAX_ATTEMPTS;
+}
+
 // Chip-Platzhaltertexte (Fix C, PLAN-VOUCHER-SETUP-FEE-GAP.md) - EINE Quelle (G5) statt
 // einer zweiten Kopie im Astro-Script. Wortlaut ist ein Vorschlag (siehe Plan §6).
 const NUMBER_TEXT_NO_NUMBER = "No number assigned yet";
