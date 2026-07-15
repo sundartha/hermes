@@ -179,6 +179,19 @@ test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, 
       null,
       "kein callControlId, da originateViaCallControl vor der Rueckgabe warf",
     );
+    // S1-1 (Review-Blocker Runde 1): der explizit beworbene C5-Fix-Zweck ("Notification fehlte
+    // komplett bei Dial-Fehlschlag") war bisher ungetestet - nur reserveReleased/status wurden
+    // geprueft. finishCall() legt bei einem nicht-completed Call (hier status=failed) genau EINE
+    // Notification an (state-ops.js addNotification); s ist derselbe bereits gewartete Store-
+    // Zustand wie oben (reserveReleased===true laeuft im selben finishCall-Aufruf VOR der
+    // Notification, also steht sie zu diesem Zeitpunkt bereits fest).
+    assert.equal(s.notifications.length, 1, "genau eine neue Notification (kein Doppel-Feuer)");
+    assert.equal(
+      s.notifications[0].title,
+      "Anruf nicht zustande gekommen",
+      "der C5-Fix erzeugt jetzt die Notification, die vor dem Umbau bei einem Dial-Fehlschlag fehlte",
+    );
+    assert.equal(s.notifications[0].callId, calls[0].id, "Notification haengt am fehlgeschlagenen Call");
   } finally {
     await srv.stop();
   }

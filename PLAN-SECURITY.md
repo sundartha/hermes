@@ -315,3 +315,21 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > place_call-Dial-Fehlschlag zuvor ohne Settlement/Notification/Reserve-Freigabe stehen.
 > `bridge.js` (Realtime-Engine, 6. Pfad, andere Topologie) bleibt bewusst ausserhalb (siehe
 > `PLAN-FRAGILITY-REMEDIATION.md` P7-Restrisiko).
+>
+> Restrisiko (akzeptiert, bounded, Review-Blocker S1-2): `bill` laeuft in ALLEN 5 Pfaden
+> fire-and-forget (`void bill()` in `terminateAndBillCall`) - absichtlich, sonst wuerde z.B.
+> `cancel_call` auf den vollen Summary-/SMS-Roundtrip warten (echter LLM-Aufruf ueber
+> `src/llm.js`, Retry-Budget bis ~12s), ein Verstoss gegen den harten Max-Dauer-Cap (Absolute
+> Regel 1). Vor diesem Umbau lief die Reserve-Freigabe (`releaseReserve`) im `place_call`-Dial-
+> Fehlschlag-Pfad synchron VOR `endCallRecord` UND vor der HTTP-Response; seit dem Umzug auf
+> `terminateAndBillCall` laeuft sie wie bei den anderen 4 Pfaden asynchron und ist zum
+> Response-Zeitpunkt nicht mehr garantiert abgeschlossen. Das Fenster ist eng (typischerweise
+> im Millisekundenbereich: der Call steht auf "failed" mit leerem Transkript, `finishCall`
+> kehrt VOR jedem `summarizeCall`/SMS-Versand zurueck) - ein zweiter `place_call` desselben
+> Tenants, der GENAU in diesem Fenster startet, kann faelschlich wegen Budget/Reserve abgelehnt
+> werden. Richtung ist fail-closed (kein Overspend-Risiko, nur eine zu enge Ablehnung) und
+> selbstheilend (die Reserve wird Millisekunden spaeter freigegeben, kein dauerhaft blockiertes
+> Budget). Bewusst NICHT fuer diesen einen Pfad awaited: das wuerde die Uniformitaet der 5 Pfade
+> (dieselbe Fire-and-forget-Semantik, `call-termination-order.test.js`) aufbrechen und ein
+> Selektor-Argument in `terminateAndBillCall` erzwingen (Clean-Code G15/F3), fuer einen Nutzen,
+> der bereits durch OUT-05s Reserve-Release-Backstop-Timer bounded ist.
