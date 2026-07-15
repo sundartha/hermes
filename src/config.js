@@ -208,6 +208,20 @@ export const config = {
     min: 5,
     max: 300,
   }),
+  // Befund 2 (PLAN-TELNYX-AI-ASSISTANT-NO-AUDIO.md): Telnyx' Speak-Command kann verstummen,
+  // OHNE je ein call.speak.started/ended/failed zu emittieren (Live-Test Call 2/3, 2026-07-14).
+  // Ohne Terminal-Event haengt der Opening-Speak-Node bis zum manuellen Hangup in Stille. Dieser
+  // Timeout behandelt ein fehlendes Terminal-Event nach N Sekunden wie ein call.speak.failed
+  // (Azure-Retry falls Assistant-Config frei, sonst Fail-Safe = kein Assistant-Start). 45s: reale
+  // Sprechdauer Call 1 (command->speak.ended) war 16.57s -> 45s laesst Spielraum fuer laengere
+  // Anliegen-Saetze + Netz-Jitter, ohne bei einem echten Stall endlos zu warten. min 10 / max 120
+  // via numEnv (Wert < 10 -> Boot-Refusal ueber fatalConfigErrors, > 120 -> Clamp): 0 oder absurd
+  // hoch wuerde den Guard sonst lautlos inert schalten (P9-CFG1-Footgun, analog telnyxDeadAirTimeoutS).
+  telnyxOpeningSpeakTimeoutS: numEnv(
+    "TELNYX_OPENING_SPEAK_TIMEOUT_S",
+    process.env.TELNYX_OPENING_SPEAK_TIMEOUT_S,
+    { fallback: 45, min: 10, max: 120 },
+  ),
   // stab-p9 (Kosten-Notaus): Per-Conversation-Loop-Guard. Max. KONSEKUTIVE nicht-substanzielle
   // (leere/Echo-)Shim-Turns, bevor der Call kontrolliert beendet wird - ZUSAETZLICH zum
   // per-Minute-Rate-Limiter (telnyxShimMaxTurnsPerMin) und zum Budget-Cap. Substanz = dieselbe

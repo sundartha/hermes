@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { makeCallControlIngest } from "../src/telnyx-call-control-ingest.js";
 import { captureConsole, noopWatchdog, makeConfigOverrides } from "./helpers.js";
 import { config } from "../src/config.js";
+import { fakeTimers } from "./telnyx-shim-harness.js";
 
 // afix-p1: config.telnyxElevenLabs fuer die Dauer eines Tests setzen/restaurieren -
 // deterministisch statt env-abhaengig (eine lokale .env darf die Observability-Tests nicht
@@ -27,6 +28,15 @@ const EMPTY_ELEVENLABS_CONFIG = { voiceId: "", apiKeyRef: "", model: "Default" }
 // test/telnyx-stab-p9-watchdog.test.js gegen die ECHTEN Module ab) - EIN No-op-Spy statt
 // 16x wortgleicher Inline-Definition (G5).
 const NOOP_WATCHDOG = noopWatchdog();
+
+// afix-timeout: die drei neuen Ingest-Deps fuer answered-Bestandstests, die den Opening-Speak-
+// Timeout nicht selbst pruefen. Bundelt config (echter Singleton) + frischen Fake-Timer je
+// Aufruf -> verhindert einen echten unref-Timer-Leak (P12 Repeatable), ohne dass der Test die
+// Timer inspizieren muss. Die Timeout-Logik selbst hat eigene Tests unten (fireAll/pendingCount).
+function ingestTimeoutDeps() {
+  const t = fakeTimers();
+  return { config, setTimer: t.setTimer, clearTimer: t.clearTimer };
+}
 
 // Fake-Store: haelt GENAU einen Call (oder keinen), zeichnet markAnswered/endCallRecord
 // auf und spiegelt deren Effekt auf das Fixture-Objekt (wie state-ops.js: dieselbe
@@ -135,6 +145,7 @@ test("answered: Opening-Speak gefeuert (Text=openingText, voiceProfile aus local
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
@@ -171,6 +182,7 @@ test("afix-p1 (b): Opening-Speak mit Assistant-Stimme wirft -> genau ein Retry m
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
   await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
     const res = fakeRes();
@@ -197,6 +209,7 @@ test("afix-p1 (b+d): auch der Retry mit der Bestands-Stimme scheitert -> kein dr
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
   await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
     const res = fakeRes();
@@ -309,6 +322,7 @@ test("afix-p1 (d, Blocker Runde 3): Config fehlt UND Opening-Speak wirft synchro
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
 
   await withElevenLabsConfig(EMPTY_ELEVENLABS_CONFIG, async () => {
@@ -360,6 +374,7 @@ test("afix-p1 (Observability): opening_voice-Marker fuer elevenlabs/config_missi
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
   await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
     const lines = await captureConsole(() =>
@@ -380,6 +395,7 @@ test("afix-p1 (Observability): opening_voice-Marker fuer elevenlabs/config_missi
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
   await withElevenLabsConfig(EMPTY_ELEVENLABS_CONFIG, async () => {
     const lines = await captureConsole(() =>
@@ -666,6 +682,7 @@ test("OBS-2: answered->speak.ended->hangup -> drei Erfolgs-Logs, ccid-Wert nirge
     openingText: () => OPENING_TEXT,
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
+    ...ingestTimeoutDeps(),
   });
   const ccid = "cc_secret";
   const lines = await captureConsole(async () => {
@@ -775,6 +792,7 @@ test("stab-p10: answered nach Instanzwechsel - Opening-Speak auf dem nachgeladen
     localeFor: () => ({ voiceProfile: "de_female_neural" }),
     watchdog: NOOP_WATCHDOG,
     reattachActiveCall,
+    ...ingestTimeoutDeps(),
   });
   const res = fakeRes();
   await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, res);
@@ -819,4 +837,108 @@ test("stab-p10: Rehydrate-Miss (reattachActiveCall -> call:null) -> 200, keine W
   assert.equal(lines.length, 1, "genau eine Log-Zeile bei Rehydrate-Miss");
   assert.match(lines[0], /reason=unknown_call/);
   assert.ok(!lines[0].includes(leakyCallId), "roher Query-Wert darf NICHT im Log stehen");
+});
+
+// ---- afix-timeout (Befund 2): Opening-Speak-Timeout-Guard ----
+
+test("afix-timeout: answered armiert genau EINEN Opening-Speak-Timer (Delay = config.telnyxOpeningSpeakTimeoutS*1000)", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+  assert.equal(timers.pendingCount(), 1, "genau ein Opening-Speak-Timer nach answered");
+  // Delay aus derselben config gelesen (drift-fest, RCA-Lehre "gleiche Fixture-Werte testen nichts").
+  assert.deepEqual(timers.pendingDelays(), [config.telnyxOpeningSpeakTimeoutS * 1000]);
+});
+
+test("afix-timeout: kein speak.ended/failed -> Timer feuert -> genau EIN Azure-Retry (wie onSpeakFailed)", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await withElevenLabsConfig(FULL_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+    assert.equal(vc.speakCalls.length, 1, "nur der Opening-Speak, noch kein Retry");
+    timers.fireAll();
+    await new Promise((r) => setImmediate(r)); // onSpeakFailed-Kette drainen
+    assert.equal(vc.speakCalls.length, 2, "Timeout loest genau EINEN Azure-Retry aus");
+    assert.equal(vc.speakCalls[1].useAssistantVoice, false, "Retry mit Bestands-Stimme");
+    assert.equal(vc.startAssistantCalls.length, 0, "kein Assistant-Start (Offenlegung nicht bestaetigt)");
+    assert.equal(timers.pendingCount(), 0, "Timer nach Feuern geraeumt (kein Leak)");
+  });
+});
+
+test("afix-timeout: Timer feuert OHNE Assistant-Config -> Fail-Safe (kein Retry, kein Assistant-Start)", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await withElevenLabsConfig(EMPTY_ELEVENLABS_CONFIG, async () => {
+    await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+    assert.equal(vc.speakCalls.length, 1, "Opening-Speak (Azure via Config-Fallback)");
+    const lines = await captureConsole(async () => {
+      timers.fireAll();
+      await new Promise((r) => setImmediate(r));
+    });
+    assert.equal(vc.speakCalls.length, 1, "kein Retry ohne freie Assistant-Config (byte-identisch onSpeakFailed)");
+    assert.equal(vc.startAssistantCalls.length, 0);
+    assert.ok(lines.some((l) => l.includes("kein Assistant-Start")), "Fail-Safe-Log fehlt");
+  });
+});
+
+test("afix-timeout: speak.ended VOR Timeout -> Timer geloescht, spaeteres fireAll loest nichts aus", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de", assistantId: "asst_77" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+  assert.equal(timers.pendingCount(), 1);
+  await handler({ query: { callId: "call_1" }, body: speakEndedBody("cc_1") }, fakeRes());
+  assert.equal(timers.pendingCount(), 0, "speak.ended hat den Opening-Speak-Timer geloescht");
+  assert.equal(vc.startAssistantCalls.length, 1, "regulaerer Assistant-Start");
+  const before = vc.speakCalls.length;
+  timers.fireAll();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(vc.speakCalls.length, before, "kein spaeter Fehlalarm nach echtem speak.ended");
+});
+
+test("afix-timeout: hangup VOR Timeout -> Timer geloescht, kein Aufruf nach Call-Ende", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const timers = fakeTimers();
+  const handler = makeCallControlIngest({
+    store, voiceControl: vc.voiceControl, finishCall: async () => {},
+    openingText: () => OPENING_TEXT, localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG, config, setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+  });
+  await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
+  assert.equal(timers.pendingCount(), 1);
+  await handler({ query: { callId: "call_1" }, body: hangupBody("cc_1") }, fakeRes());
+  assert.equal(timers.pendingCount(), 0, "hangup hat den Opening-Speak-Timer geloescht");
+  const before = vc.speakCalls.length;
+  timers.fireAll();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(vc.speakCalls.length, before, "kein Speak nach Call-Ende");
 });

@@ -33,6 +33,19 @@ function logEventReceived(callId, body) {
   );
 }
 
+// afix-timeout (Befund 2): Sekunden->ms fuer den Opening-Speak-Timer (G25, benannte Konstante
+// wie telnyx-conversation-watchdog.js MS_PER_SECOND).
+const MS_PER_SECOND = 1000;
+
+// Timer, der den Event-Loop NICHT am Leben haelt (der HTTP-Server tut das) - lokales Idiom wie
+// telnyx-conversation-watchdog.js defaultSetTimer / middleware.js (.unref()). Injizierbar fuer
+// deterministische Fake-Timer-Tests.
+function defaultSetTimer(fn, ms) {
+  const handle = setTimeout(fn, ms);
+  if (handle && typeof handle.unref === "function") handle.unref();
+  return handle;
+}
+
 export function makeCallControlIngest({
   store,
   voiceControl,
@@ -41,6 +54,9 @@ export function makeCallControlIngest({
   localeFor,
   reattachActiveCall,
   watchdog,
+  config,
+  setTimer = defaultSetTimer,
+  clearTimer = clearTimeout,
 }) {
   // afix-p1 (Fallback-Kette, Regel 2 - das Opening darf NIE ausfallen): pro Call genau EIN
   // Retry mit der Bestands-Stimme (Azure), wenn der Opening-Speak mit der Assistant-Stimme
@@ -50,6 +66,42 @@ export function makeCallControlIngest({
   // BEWUSST: Prozess-Restart mid-Call verliert den Merker -> hoechstens EIN weiterer Retry,
   // im schlimmsten Fall heutiges Verhalten (kein Retry). Kein Sweep noetig (onHangup raeumt).
   const openingRetryUsed = new Set();
+
+  // afix-timeout (Befund 2): Telnyx' Speak-Command kann verstummen, OHNE je ein
+  // call.speak.started/ended/failed zu emittieren (Live-Test Call 2/3). Ohne Terminal-Event
+  // haengt der Opening-Speak-Node bis zum manuellen Hangup in Stille. Pro Call EIN Watchdog-Timer
+  // (Muster telnyx-conversation-watchdog.js states-Map): feuert er, wird das fehlende Event wie
+  // ein call.speak.failed behandelt (dieselbe onSpeakFailed-Funktion, G5). Aufgeraeumt bei
+  // speak.ended/failed/hangup (idempotent). Bewusst NICHT im Watchdog: der terminiert den Call
+  // NACH ai_assistant_start; dieser Timeout greift DAVOR und terminiert NICHT, sondern loest
+  // Retry-oder-Fail-Safe aus (S3/S4-Vermeidung: getrennte Ein-Zweck-States statt Mehrzweck).
+  const openingSpeakTimers = new Map(); // callId -> Timer-Handle
+
+  // Timer fuer diesen Call loeschen, falls einer laeuft (idempotent, Muster clearNamedTimer im
+  // Watchdog). Nach dem Feuern ist der Map-Eintrag ggf. schon weg; das get/if-Guard macht den
+  // Aufruf in jedem Pfad (echtes Event ODER Selbst-Timeout) zum sicheren No-op.
+  function clearOpeningSpeakTimer(callId) {
+    const timer = openingSpeakTimers.get(callId);
+    if (!timer) return;
+    clearTimer(timer);
+    openingSpeakTimers.delete(callId);
+  }
+
+  // Nach abgesetztem Opening-Speak den Watchdog armieren: kommt binnen
+  // config.telnyxOpeningSpeakTimeoutS Sekunden KEIN speak.ended/speak.failed, wird onSpeakFailed
+  // wie bei einem echten Fehler ausgeloest (G5, kein zweiter Fehlerpfad). Vorher ein evtl.
+  // laufender Timer geloescht (nie zwei Timer je Call, Muster restartDeadAirTimer). Der
+  // Timer-Callback laeuft ausserhalb des Handler-try/catch -> Rejection secret-frei abfangen
+  // (keine unhandled rejection, Muster terminateOnce).
+  function armOpeningSpeakTimeout(call, callControlId) {
+    clearOpeningSpeakTimer(call.id);
+    const timer = setTimer(() => {
+      Promise.resolve(onSpeakFailed(call, callControlId)).catch((err) =>
+        console.error("[voice/call-control]", err.message),
+      );
+    }, config.telnyxOpeningSpeakTimeoutS * MS_PER_SECOND);
+    openingSpeakTimers.set(call.id, timer);
+  }
 
   // Review-Blocker Runde 3 (d): der Ingest reicht useAssistantVoice:true IMMER an sendOpeningSpeak
   // durch - die Fallback-Entscheidung "Config fehlt -> Azure" faellt erst im Adapter
@@ -113,9 +165,11 @@ export function makeCallControlIngest({
       await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
     }
     console.log(`[voice/call-control] answered (call=${call.id}) -> Opening-Speak abgesetzt`);
+    armOpeningSpeakTimeout(call, callControlId); // afix-timeout: fehlt speak.ended/failed -> onSpeakFailed
   }
   // Regel 2: ai_assistant_start NUR als Reaktion auf das speak.ended des Disclosure-Nodes.
   async function onSpeakEnded(call, callControlId) {
+    clearOpeningSpeakTimer(call.id); // afix-timeout: echtes Terminal-Event kam -> Watchdog aus
     if (!call.assistantId) {
       // assistantId persistiert P5 bei der Origination; fehlt sie -> fail-safe skip
       // (kein Crash/Orphan; Disclosure + Settlement sind davon unabhaengig).
@@ -140,6 +194,7 @@ export function makeCallControlIngest({
   // die Offenlegung je zu hoeren war (Regel 2). Kein Crash/Orphan: das Settlement bei hangup
   // laeuft unabhaengig weiter.
   async function onSpeakFailed(call, callControlId) {
+    clearOpeningSpeakTimer(call.id); // afix-timeout: idempotent - egal ob echtes Event oder Selbst-Timeout
     if (callControlId && consumeOpeningRetry(call.id)) {
       console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> Retry mit Bestands-Stimme`);
       await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
@@ -153,6 +208,7 @@ export function makeCallControlIngest({
   // machen ausstehende Max-Dauer-/Reserve-Timer zum No-op, Bestandsmuster).
   async function onHangup(call) {
     openingRetryUsed.delete(call.id); // afix-p1: Retry-Token freigeben (Call terminal)
+    clearOpeningSpeakTimer(call.id); // afix-timeout: Opening-Speak-Watchdog stoppen (Call terminal)
     watchdog.clear(call.id); // stab-p9: Wache stoppen (Call terminal, egal welcher Grund)
     if (call.status === "active") store.endCallRecord(call.id, "completed");
     await finishCall(store.getCall(call.id));
