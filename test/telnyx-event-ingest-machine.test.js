@@ -846,7 +846,7 @@ test("stab-p10: Rehydrate-Miss (reattachActiveCall -> call:null) -> 200, keine W
 
 // ---- afix-timeout (Befund 2): Opening-Speak-Timeout-Guard ----
 
-test("afix-timeout: answered armiert genau EINEN Opening-Speak-Timer (Delay = config.telnyxOpeningSpeakTimeoutS*1000)", async () => {
+test("afix-timeout: answered armiert genau EINEN Opening-Speak-Timer (Delay = config.telnyxAssistant.openingSpeakTimeoutS*1000)", async () => {
   const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
   const store = fakeStore(call);
   const vc = fakeVoiceControl();
@@ -859,7 +859,7 @@ test("afix-timeout: answered armiert genau EINEN Opening-Speak-Timer (Delay = co
   await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
   assert.equal(timers.pendingCount(), 1, "genau ein Opening-Speak-Timer nach answered");
   // Delay aus derselben config gelesen (drift-fest, RCA-Lehre "gleiche Fixture-Werte testen nichts").
-  assert.deepEqual(timers.pendingDelays(), [config.telnyxOpeningSpeakTimeoutS * 1000]);
+  assert.deepEqual(timers.pendingDelays(), [config.telnyxAssistant.openingSpeakTimeoutS * 1000]);
 });
 
 test("afix-timeout: kein speak.ended/failed -> Timer feuert -> genau EIN Azure-Retry (wie onSpeakFailed)", async () => {

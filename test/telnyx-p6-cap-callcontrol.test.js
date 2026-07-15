@@ -160,7 +160,7 @@ test("T7: cancel_call verwendet hangUpAction (dieselbe Quelle wie terminateCappe
 });
 
 test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlossen)", () => {
-  const marker = "config.telnyxAiAssistantEnabled && outboundProvider === PROVIDER.TELNYX";
+  const marker = "config.telnyxAssistant.enabled && outboundProvider === PROVIDER.TELNYX";
   const block = serverSrc.slice(serverSrc.indexOf(marker), serverSrc.indexOf(marker) + 1500);
 
   assert.match(block, /armMaxDurationTimer\(call,\s*null\)/);

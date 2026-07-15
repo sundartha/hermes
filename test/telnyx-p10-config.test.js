@@ -47,19 +47,24 @@ const REQUIRED_OK = {
   storeBackend: "json",
   paymentEnabled: false,
   webDistDir: "",
-  telnyxAiAssistantEnabled: true,
-  telnyxAssistantId: "assistant-1",
   telnyxApiKey: "key-1",
   telnyxConnectionId: "conn-1",
-  telnyxCallControlAppId: "ccapp-1",
-  telnyxShimMaxTurnsPerMin: 30,
-  telnyxShimSharedSecret: "shim-secret",
+  telnyxAssistant: {
+    enabled: true,
+    assistantId: "assistant-1",
+    callControlAppId: "ccapp-1",
+    shimMaxTurnsPerMin: 30,
+    shimSharedSecret: "shim-secret",
+  },
 };
 
 test("assertConfig: Flag an + TELNYX_ASSISTANT_ID leer -> fail-closed (false)", () => {
-  withConfig({ ...REQUIRED_OK, telnyxAssistantId: "" }, () => {
-    assert.equal(assertConfig(), false);
-  });
+  withConfig(
+    { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, assistantId: "" } },
+    () => {
+      assert.equal(assertConfig(), false);
+    },
+  );
 });
 
 test("assertConfig: Flag an + TELNYX_API_KEY leer -> fail-closed (false)", () => {
@@ -77,35 +82,47 @@ test("assertConfig: Flag an + TELNYX_CONNECTION_ID leer -> fail-closed (false)",
 // Ohne Call-Control-App-ID kann originateViaCallControl nur den 422/10015 produzieren
 // (Live-Bug 2026-07-10) - der Boot muss vorher fail-closed verweigern statt still zu starten.
 test("assertConfig: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> fail-closed (false)", () => {
-  withConfig({ ...REQUIRED_OK, telnyxCallControlAppId: "" }, () => {
-    assert.equal(assertConfig(), false);
-  });
+  withConfig(
+    { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, callControlAppId: "" } },
+    () => {
+      assert.equal(assertConfig(), false);
+    },
+  );
 });
 
 test("assertConfig im Hosting: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> Boot-Refusal nennt die Var", () => {
-  withConfig({ ...REQUIRED_OK, telnyxCallControlAppId: "" }, () => {
-    const lines = captureConsoleError(() => {
-      assert.equal(assertConfig(), false);
-    });
-    assert.match(lines.join("\n"), /TELNYX_CALL_CONTROL_APP_ID/);
-  });
+  withConfig(
+    { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, callControlAppId: "" } },
+    () => {
+      const lines = captureConsoleError(() => {
+        assert.equal(assertConfig(), false);
+      });
+      assert.match(lines.join("\n"), /TELNYX_CALL_CONTROL_APP_ID/);
+    },
+  );
 });
 
 test("assertConfig: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> fail-closed (false)", () => {
-  withConfig({ ...REQUIRED_OK, telnyxShimSharedSecret: "" }, () => {
-    assert.equal(assertConfig(), false);
-  });
+  withConfig(
+    { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, shimSharedSecret: "" } },
+    () => {
+      assert.equal(assertConfig(), false);
+    },
+  );
 });
 
 test("assertConfig im Hosting: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> Boot-Refusal + nennt die Var", () => {
-  withConfig({ ...REQUIRED_OK, telnyxShimSharedSecret: "" }, () => {
-    const lines = captureConsoleError(() => {
-      assert.equal(assertConfig(), false);
-    });
-    const out = lines.join("\n");
-    assert.match(out, /Boot wird verweigert/);
-    assert.match(out, /TELNYX_SHIM_SHARED_SECRET/);
-  });
+  withConfig(
+    { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, shimSharedSecret: "" } },
+    () => {
+      const lines = captureConsoleError(() => {
+        assert.equal(assertConfig(), false);
+      });
+      const out = lines.join("\n");
+      assert.match(out, /Boot wird verweigert/);
+      assert.match(out, /TELNYX_SHIM_SHARED_SECRET/);
+    },
+  );
 });
 
 test("assertConfig: Flag an + alle fuenf gesetzt -> Boot ok (true, Gegenprobe)", () => {
@@ -118,12 +135,15 @@ test("assertConfig: Flag aus (alle fuenf leer) -> Boot ok (true, byte-identische
   withConfig(
     {
       ...REQUIRED_OK,
-      telnyxAiAssistantEnabled: false,
-      telnyxAssistantId: "",
       telnyxApiKey: "",
       telnyxConnectionId: "",
-      telnyxCallControlAppId: "",
-      telnyxShimSharedSecret: "",
+      telnyxAssistant: {
+        enabled: false,
+        assistantId: "",
+        callControlAppId: "",
+        shimMaxTurnsPerMin: REQUIRED_OK.telnyxAssistant.shimMaxTurnsPerMin,
+        shimSharedSecret: "",
+      },
     },
     () => {
       assert.equal(assertConfig(), true);
@@ -132,14 +152,17 @@ test("assertConfig: Flag aus (alle fuenf leer) -> Boot ok (true, byte-identische
 });
 
 test("assertConfig im Hosting: Flag an + fehlende ID -> Boot-Refusal + nennt die Var", () => {
-  withConfig({ ...REQUIRED_OK, telnyxAssistantId: "" }, () => {
-    const lines = captureConsoleError(() => {
-      assert.equal(assertConfig(), false);
-    });
-    const out = lines.join("\n");
-    assert.match(out, /Boot wird verweigert/);
-    assert.match(out, /TELNYX_ASSISTANT_ID/);
-  });
+  withConfig(
+    { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, assistantId: "" } },
+    () => {
+      const lines = captureConsoleError(() => {
+        assert.equal(assertConfig(), false);
+      });
+      const out = lines.join("\n");
+      assert.match(out, /Boot wird verweigert/);
+      assert.match(out, /TELNYX_ASSISTANT_ID/);
+    },
+  );
 });
 
 // Produktions-sichere Basis (Muster SAFE_PROD aus config-prod-footguns.test.js): alle
@@ -154,7 +177,7 @@ const SAFE_PROD = {
 
 test("productionFootguns: Flag an + absurd hoher Turn-Deckel -> fatal (nennt Var)", () => {
   const errors = productionFootguns(
-    { ...SAFE_PROD, telnyxAiAssistantEnabled: true, telnyxShimMaxTurnsPerMin: 10000 },
+    { ...SAFE_PROD, telnyxAssistant: { enabled: true, shimMaxTurnsPerMin: 10000 } },
     true,
   );
   assert.equal(errors.length, 1);
@@ -163,7 +186,7 @@ test("productionFootguns: Flag an + absurd hoher Turn-Deckel -> fatal (nennt Var
 
 test("productionFootguns: Flag an + Default-Turn-Deckel (30) -> kein Footgun", () => {
   const errors = productionFootguns(
-    { ...SAFE_PROD, telnyxAiAssistantEnabled: true, telnyxShimMaxTurnsPerMin: 30 },
+    { ...SAFE_PROD, telnyxAssistant: { enabled: true, shimMaxTurnsPerMin: 30 } },
     true,
   );
   assert.deepEqual(errors, []);
@@ -171,7 +194,7 @@ test("productionFootguns: Flag an + Default-Turn-Deckel (30) -> kein Footgun", (
 
 test("productionFootguns: Flag aus + absurd hoher Turn-Deckel -> inert (kein Footgun)", () => {
   const errors = productionFootguns(
-    { ...SAFE_PROD, telnyxAiAssistantEnabled: false, telnyxShimMaxTurnsPerMin: 10000 },
+    { ...SAFE_PROD, telnyxAssistant: { enabled: false, shimMaxTurnsPerMin: 10000 } },
     true,
   );
   assert.deepEqual(errors, [], "Bremse ohne aktiven Assistant ist nicht sicherheitsrelevant");

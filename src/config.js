@@ -72,7 +72,7 @@ export function eurToCents(eur) {
   return Math.round(eur * CENTS_PER_EUR);
 }
 
-export const config = {
+const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
   // Ganzzahl-Cents (G26: Geld nie als Fliesskomma) - Env-Name bleibt MAX_BUDGET_EUR
@@ -183,84 +183,90 @@ export const config = {
   },
 
   // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
-  // Master-Flag fuer den in-house Custom-LLM-Shim (/v1/chat/completions). DEFAULT AUS
-  // (fail-closed, Muster PAYMENT_ENABLED): der Endpunkt antwortet 404 bis zum Cutover
-  // (Existenz hinter dem Flag -> keine monatelang offene Angriffsflaeche zwischen Merge
-  // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
-  // identisch. Volle 4-Orte-Doku + assertConfig/Footgun-Pflichtcheck: P10.
-  telnyxAiAssistantEnabled: (process.env.TELNYX_AI_ASSISTANT_ENABLED || "false") === "true",
-  // P5: ID des in P7 provisionierten Telnyx-AI-Assistants (ai_assistant_start). Leer ->
-  // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
-  // Bei aktivem Flag ist die ID Boot-Pflicht (assertConfig, P10).
-  telnyxAssistantId: process.env.TELNYX_ASSISTANT_ID || "",
-  // ID der Call-Control-Application, ueber die originateViaCallControl (POST /v2/calls)
-  // waehlt. EIGENE Var, weil Telnyx hier einen ANDEREN Objekttyp erwartet als TeXML:
-  // wird die TeXML-ID (telnyxConnectionId) gesendet, lehnt Telnyx deterministisch ab mit
-  // HTTP 422 "10015 Invalid value for connection_id (Call Control App ID)" - der Live-Bug
-  // vom 2026-07-10 (RCA: tasks/rca-place-call-422.md). Bei aktivem Flag Boot-Pflicht.
-  telnyxCallControlAppId: process.env.TELNYX_CALL_CONTROL_APP_ID || "",
-  // P5: max. Shim-Turns pro callId und Minute (Toll-/Token-Fraud-Bremse VOR agentTurn,
-  // zusaetzlich zum IP-Limiter aus rateLimitPerMin + dem Budget-Cap). Das Zeitfenster
-  // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS). Ein zu
-  // hoher Wert im Hosting bei aktivem Flag ist ein Footgun (productionFootguns, P10).
-  telnyxShimMaxTurnsPerMin: numEnv(
-    "TELNYX_SHIM_MAX_TURNS_PER_MIN",
-    process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
-    { fallback: 30, min: 1 },
-  ),
-  // stab-p9 (Kosten-Notaus, PLAN-STABILIZE-LAUNCH.md P9): Dead-Air-Watchdog. Sekunden OHNE
-  // weiteres Lebenszeichen (Shim-Turn) nach ai_assistant_start, ab denen der Call als stille
-  // TTS-Fehlfunktion gilt und KONTROLLIERT beendet wird. KONSERVATIV: deutlich ueber einer
-  // normalen Denk-/Sprechpause -> Normalfluss terminiert NIE (scharfe Kalibrierung aus P4/P5).
-  // Sinnvoll nur < maxCallDurationS, sonst greift ohnehin erst der harte Dauer-Cap. Nur im
-  // Assistant-Pfad wirksam (Flag aus -> nie armiert). Min 5, max 300 (= Cap-Ceiling).
-  telnyxDeadAirTimeoutS: numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", process.env.TELNYX_DEAD_AIR_TIMEOUT_S, {
-    fallback: 45,
-    min: 5,
-    max: 300,
-  }),
-  // Befund 2 (PLAN-TELNYX-AI-ASSISTANT-NO-AUDIO.md): Telnyx' Speak-Command kann verstummen,
-  // OHNE je ein call.speak.started/ended/failed zu emittieren (Live-Test Call 2/3, 2026-07-14).
-  // Ohne Terminal-Event haengt der Opening-Speak-Node bis zum manuellen Hangup in Stille. Dieser
-  // Timeout behandelt ein fehlendes Terminal-Event nach N Sekunden wie ein call.speak.failed
-  // (Azure-Retry falls Assistant-Config frei, sonst Fail-Safe = kein Assistant-Start). 45s: reale
-  // Sprechdauer Call 1 (command->speak.ended) war 16.57s -> 45s laesst Spielraum fuer laengere
-  // Anliegen-Saetze + Netz-Jitter, ohne bei einem echten Stall endlos zu warten. min 10 / max 120
-  // via numEnv (Wert < 10 -> Boot-Refusal ueber fatalConfigErrors, > 120 -> Clamp): 0 oder absurd
-  // hoch wuerde den Guard sonst lautlos inert schalten (P9-CFG1-Footgun, analog telnyxDeadAirTimeoutS).
-  telnyxOpeningSpeakTimeoutS: numEnv(
-    "TELNYX_OPENING_SPEAK_TIMEOUT_S",
-    process.env.TELNYX_OPENING_SPEAK_TIMEOUT_S,
-    { fallback: 45, min: 10, max: 120 },
-  ),
-  // stab-p9 (Kosten-Notaus): Per-Conversation-Loop-Guard. Max. KONSEKUTIVE nicht-substanzielle
-  // (leere/Echo-)Shim-Turns, bevor der Call kontrolliert beendet wird - ZUSAETZLICH zum
-  // per-Minute-Rate-Limiter (telnyxShimMaxTurnsPerMin) und zum Budget-Cap. Substanz = dieselbe
-  // Definition wie stab-p7 (callerSubstanceMinLen). Ein substanzieller Turn setzt den Zaehler
-  // zurueck -> Normalfluss loest NIE aus. Hoeher als maxEmptyTurns (der weichere end_call-Guard),
-  // damit die weicheren Mechanismen zuerst greifen. Min 3, max 50 (Muster telnyxDeadAirTimeoutS):
-  // ohne Obergrenze wuerde ein im Hosting versehentlich absurd hoher Wert (z.B. 999999) diesen
-  // Kosten-Notaus lautlos inert schalten (Review-Befund P9-CFG1) - der Clamp verhindert das
-  // unabhaengig vom gesetzten Wert, ganz ohne eigenen Footgun-Boot-Check.
-  telnyxLoopGuardMaxEmptyTurns: numEnv(
-    "TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS",
-    process.env.TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS,
-    { fallback: 8, min: 3, max: 50 },
-  ),
-  // E2: statisches Telnyx-Integration-Secret, das der Shim als Bearer erwartet (Server
-  // liest es zur Bearer-Pruefung). SECRET - nie loggen/leaken. Bei aktivem Flag Boot-
-  // Pflicht (assertConfig), sonst kann der Shim NIE authentifizieren (fail-closed).
-  telnyxShimSharedSecret: process.env.TELNYX_SHIM_SHARED_SECRET || "",
-  // E3: NAME des Telnyx-Integration-Secrets, das denselben WERT haelt (external_llm.
-  // llm_api_key_ref). NUR das Provisioning-Skript liest ihn; der Server nie -> KEIN
-  // assertConfig-Check (nur REQUIRED-Gate im Skript). Analog telnyxElevenLabs.apiKeyRef.
-  telnyxShimApiKeyRef: process.env.TELNYX_SHIM_API_KEY_REF || "",
-  // OBS-FLAG (Diagnose): einmaliger, default-off Shape-Dump im Shim. Flag AN -> der Shim
-  // loggt pro authentifiziertem Turn EINE keys-only-Zeile (Top-Level-Feldnamen des
-  // forward_metadata-Body + zwei Booleans, WELCHE Position die call_control_id traegt),
-  // NIE Werte. Nur fuer den EINEN ueberwachten Diagnose-Call; danach wieder AUS. Neutraler
-  // Default, NICHT boot-required (kein assertConfig/Footgun), keine Verhaltensaenderung am Gate.
-  telnyxShimDebugShape: (process.env.TELNYX_SHIM_DEBUG_SHAPE || "false") === "true",
+  // C6a (P5): gruppiert (10 zusammengehoerige Keys, Praezedenzfall telnyxElevenLabs) -
+  // erste Grouping-Phase hinter dem Config-Proxy-Guard. Zugriff ausschliesslich ueber
+  // config.telnyxAssistant.<key>; der Proxy wirft laut bei jedem uebersehenen alten
+  // flachen Zugriff (config.telnyxAssistantId etc. existiert nicht mehr).
+  telnyxAssistant: {
+    // Master-Flag fuer den in-house Custom-LLM-Shim (/v1/chat/completions). DEFAULT AUS
+    // (fail-closed, Muster PAYMENT_ENABLED): der Endpunkt antwortet 404 bis zum Cutover
+    // (Existenz hinter dem Flag -> keine monatelang offene Angriffsflaeche zwischen Merge
+    // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
+    // identisch. Volle 4-Orte-Doku + assertConfig/Footgun-Pflichtcheck: P10.
+    enabled: (process.env.TELNYX_AI_ASSISTANT_ENABLED || "false") === "true",
+    // P5: ID des in P7 provisionierten Telnyx-AI-Assistants (ai_assistant_start). Leer ->
+    // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
+    // Bei aktivem Flag ist die ID Boot-Pflicht (assertConfig, P10).
+    assistantId: process.env.TELNYX_ASSISTANT_ID || "",
+    // ID der Call-Control-Application, ueber die originateViaCallControl (POST /v2/calls)
+    // waehlt. EIGENE Var, weil Telnyx hier einen ANDEREN Objekttyp erwartet als TeXML:
+    // wird die TeXML-ID (telnyxConnectionId) gesendet, lehnt Telnyx deterministisch ab mit
+    // HTTP 422 "10015 Invalid value for connection_id (Call Control App ID)" - der Live-Bug
+    // vom 2026-07-10 (RCA: tasks/rca-place-call-422.md). Bei aktivem Flag Boot-Pflicht.
+    callControlAppId: process.env.TELNYX_CALL_CONTROL_APP_ID || "",
+    // P5: max. Shim-Turns pro callId und Minute (Toll-/Token-Fraud-Bremse VOR agentTurn,
+    // zusaetzlich zum IP-Limiter aus rateLimitPerMin + dem Budget-Cap). Das Zeitfenster
+    // selbst ist eine Modul-Konstante im Shim (Muster middleware RATE_WINDOW_MS). Ein zu
+    // hoher Wert im Hosting bei aktivem Flag ist ein Footgun (productionFootguns, P10).
+    shimMaxTurnsPerMin: numEnv(
+      "TELNYX_SHIM_MAX_TURNS_PER_MIN",
+      process.env.TELNYX_SHIM_MAX_TURNS_PER_MIN,
+      { fallback: 30, min: 1 },
+    ),
+    // stab-p9 (Kosten-Notaus, PLAN-STABILIZE-LAUNCH.md P9): Dead-Air-Watchdog. Sekunden OHNE
+    // weiteres Lebenszeichen (Shim-Turn) nach ai_assistant_start, ab denen der Call als stille
+    // TTS-Fehlfunktion gilt und KONTROLLIERT beendet wird. KONSERVATIV: deutlich ueber einer
+    // normalen Denk-/Sprechpause -> Normalfluss terminiert NIE (scharfe Kalibrierung aus P4/P5).
+    // Sinnvoll nur < maxCallDurationS, sonst greift ohnehin erst der harte Dauer-Cap. Nur im
+    // Assistant-Pfad wirksam (Flag aus -> nie armiert). Min 5, max 300 (= Cap-Ceiling).
+    deadAirTimeoutS: numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", process.env.TELNYX_DEAD_AIR_TIMEOUT_S, {
+      fallback: 45,
+      min: 5,
+      max: 300,
+    }),
+    // Befund 2 (PLAN-TELNYX-AI-ASSISTANT-NO-AUDIO.md): Telnyx' Speak-Command kann verstummen,
+    // OHNE je ein call.speak.started/ended/failed zu emittieren (Live-Test Call 2/3, 2026-07-14).
+    // Ohne Terminal-Event haengt der Opening-Speak-Node bis zum manuellen Hangup in Stille. Dieser
+    // Timeout behandelt ein fehlendes Terminal-Event nach N Sekunden wie ein call.speak.failed
+    // (Azure-Retry falls Assistant-Config frei, sonst Fail-Safe = kein Assistant-Start). 45s: reale
+    // Sprechdauer Call 1 (command->speak.ended) war 16.57s -> 45s laesst Spielraum fuer laengere
+    // Anliegen-Saetze + Netz-Jitter, ohne bei einem echten Stall endlos zu warten. min 10 / max 120
+    // via numEnv (Wert < 10 -> Boot-Refusal ueber fatalConfigErrors, > 120 -> Clamp): 0 oder absurd
+    // hoch wuerde den Guard sonst lautlos inert schalten (P9-CFG1-Footgun, analog deadAirTimeoutS).
+    openingSpeakTimeoutS: numEnv(
+      "TELNYX_OPENING_SPEAK_TIMEOUT_S",
+      process.env.TELNYX_OPENING_SPEAK_TIMEOUT_S,
+      { fallback: 45, min: 10, max: 120 },
+    ),
+    // stab-p9 (b): Per-Conversation-Loop-Guard. Max. KONSEKUTIVE nicht-substanzielle
+    // (leere/Echo-)Shim-Turns, bevor der Call kontrolliert beendet wird - ZUSAETZLICH zum
+    // per-Minute-Rate-Limiter (shimMaxTurnsPerMin) und zum Budget-Cap. Substanz = dieselbe
+    // Definition wie stab-p7 (callerSubstanceMinLen). Ein substanzieller Turn setzt den Zaehler
+    // zurueck -> Normalfluss loest NIE aus. Hoeher als maxEmptyTurns (der weichere end_call-Guard),
+    // damit die weicheren Mechanismen zuerst greifen. Min 3, max 50 (Muster deadAirTimeoutS):
+    // ohne Obergrenze wuerde ein im Hosting versehentlich absurd hoher Wert (z.B. 999999) diesen
+    // Kosten-Notaus lautlos inert schalten (Review-Befund P9-CFG1) - der Clamp verhindert das
+    // unabhaengig vom gesetzten Wert, ganz ohne eigenen Footgun-Boot-Check.
+    loopGuardMaxEmptyTurns: numEnv(
+      "TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS",
+      process.env.TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS,
+      { fallback: 8, min: 3, max: 50 },
+    ),
+    // E2: statisches Telnyx-Integration-Secret, das der Shim als Bearer erwartet (Server
+    // liest es zur Bearer-Pruefung). SECRET - nie loggen/leaken. Bei aktivem Flag Boot-
+    // Pflicht (assertConfig), sonst kann der Shim NIE authentifizieren (fail-closed).
+    shimSharedSecret: process.env.TELNYX_SHIM_SHARED_SECRET || "",
+    // E3: NAME des Telnyx-Integration-Secrets, das denselben WERT haelt (external_llm.
+    // llm_api_key_ref). NUR das Provisioning-Skript liest ihn; der Server nie -> KEIN
+    // assertConfig-Check (nur REQUIRED-Gate im Skript). Analog telnyxElevenLabs.apiKeyRef.
+    shimApiKeyRef: process.env.TELNYX_SHIM_API_KEY_REF || "",
+    // OBS-FLAG (Diagnose): einmaliger, default-off Shape-Dump im Shim. Flag AN -> der Shim
+    // loggt pro authentifiziertem Turn EINE keys-only-Zeile (Top-Level-Feldnamen des
+    // forward_metadata-Body + zwei Booleans, WELCHE Position die call_control_id traegt),
+    // NIE Werte. Nur fuer den EINEN ueberwachten Diagnose-Call; danach wieder AUS. Neutraler
+    // Default, NICHT boot-required (kein assertConfig/Footgun), keine Verhaltensaenderung am Gate.
+    shimDebugShape: (process.env.TELNYX_SHIM_DEBUG_SHAPE || "false") === "true",
+  },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
@@ -659,6 +665,33 @@ export const config = {
   webDistDir: process.env.WEB_DIST_DIR ? path.resolve(process.env.WEB_DIST_DIR) : "",
 };
 
+// Struct-3 (C6a, PLAN-FRAGILITY-REMEDIATION.md P5): rekursiver Proxy-Guard - ein
+// verschobener/getippter Config-Key liefert nicht mehr lautlos undefined, sondern wirft
+// SOFORT beim ersten Lesezugriff (G27: Struktur statt Konvention/Grep-Vigilanz). Arrays
+// UND Symbole werden unverpackt durchgereicht: Arrays sind Positions-, keine Namens-
+// Zugriffe (kein Typo-Risiko), Symbole (util.inspect, Iterator-Protokoll) gehoeren nicht
+// zur benannten Config-Flaeche. Bewusst OHNE Memoisierung: jeder Zugriff auf eine
+// verschachtelte Gruppe liefert eine NEUE Proxy-Huelle um dasselbe Zielobjekt (kein
+// Objekt-Identitaets-Versprechen) - dafuer bleibt Object.assign(config, {...}) in Tests
+// fuer Top-Level-Keys unveraendert moeglich (nur `get` bewacht, kein `set`-Trap).
+function guardedConfig(target, path = "config") {
+  return new Proxy(target, {
+    get(obj, prop, receiver) {
+      if (typeof prop === "symbol" || prop in obj) {
+        const value = Reflect.get(obj, prop, receiver);
+        const isNestedGroup = value && typeof value === "object" && !Array.isArray(value);
+        return isNestedGroup ? guardedConfig(value, `${path}.${String(prop)}`) : value;
+      }
+      throw new TypeError(
+        `${path}.${String(prop)} existiert nicht (verschobener/entfernter Config-Key? ` +
+          "Gruppierung in src/config.js pruefen).",
+      );
+    },
+  });
+}
+
+export const config = guardedConfig(rawConfig);
+
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen
 // einen ungesicherten IdP validiert (z.B. versehentlich auf eine interne Metadata-IP).
 // localhost/127.0.0.1/[::1] = lokaler Test-IdP und bleibt zulaessig.
@@ -713,7 +746,10 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
     errors.push("DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).");
   // C-Telnyx: aktiver Assistant + entwaffnete Shim-Rate-Bremse (Regel 1). Nur wenn das
   // Flag an ist (Flag aus -> Shim 404, Bremse inert -> kein Footgun).
-  if (cfg.telnyxAiAssistantEnabled && cfg.telnyxShimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING)
+  if (
+    cfg.telnyxAssistant?.enabled &&
+    cfg.telnyxAssistant?.shimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING
+  )
     errors.push(
       "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
     );
@@ -764,16 +800,16 @@ export function assertConfig() {
   // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/callControlAppId tragen
   // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7);
   // connectionId (TeXML) bleibt Pflicht, weil der Inbound-/Nummern-Pfad weiter darueber laeuft.
-  if (config.telnyxAiAssistantEnabled) {
-    if (!config.telnyxAssistantId)
+  if (config.telnyxAssistant.enabled) {
+    if (!config.telnyxAssistant.assistantId)
       missing.push("TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
     if (!config.telnyxApiKey)
       missing.push("TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
     if (!config.telnyxConnectionId)
       missing.push("TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyxCallControlAppId)
+    if (!config.telnyxAssistant.callControlAppId)
       missing.push("TELNYX_CALL_CONTROL_APP_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyxShimSharedSecret)
+    if (!config.telnyxAssistant.shimSharedSecret)
       missing.push("TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
   }
   // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):

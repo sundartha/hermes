@@ -6,7 +6,7 @@
 // (String-/Kommentar-bewusst), NICHT der gesamte Dateitext. Grund: der rohe
 // Dateitext erzeugt False Positives, die schon auf dem unveraenderten Bestand
 // rot waeren (z.B. `Authorization: Bearer ${config.telnyxApiKey}` im
-// Request-Header-Aufbau, `const secret = config.telnyxShimSharedSecret` als
+// Request-Header-Aufbau, `const secret = config.telnyxAssistant.shimSharedSecret` als
 // reine Zuweisung, das Wort "rawBody" in einem Kommentar). Nur was tatsaechlich
 // in einer console-Ausgabe landet, ist fuer Regel 4 (Secrets nie loggen)
 // relevant.
@@ -32,9 +32,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 // Familie 1: exakte Bezeichner der realen Secrets/Auth-Kanaele in diesem Scope
-// (verifiziert gegen src/config.js: telnyxApiKey, telnyxShimSharedSecret).
+// (verifiziert gegen src/config.js: telnyxApiKey, telnyxAssistant.shimSharedSecret).
 const FORBIDDEN_IDENTIFIERS = [
-  /config\.telnyx\w*Secret/,
+  /config\.(telnyx\w*\.)?\w*Secret/,
   /config\.telnyxApiKey/,
   /req\.headers\.authorization/i,
   /telnyx-signature-ed25519/,

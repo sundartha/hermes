@@ -179,9 +179,9 @@ export const telnyxVoice = {
   // (originateCall, Nummern-Routing) benutzt weiterhin telnyxConnectionId.
   async originateViaCallControl({ from, to, webhookUrl, method, timeLimit }) {
     if (!config.telnyxApiKey) throw new Error("Telnyx originateViaCallControl: TELNYX_API_KEY fehlt");
-    if (!config.telnyxCallControlAppId)
+    if (!config.telnyxAssistant.callControlAppId)
       throw new Error("Telnyx originateViaCallControl: TELNYX_CALL_CONTROL_APP_ID fehlt");
-    const payload = { connection_id: config.telnyxCallControlAppId, to, from };
+    const payload = { connection_id: config.telnyxAssistant.callControlAppId, to, from };
     if (webhookUrl) payload.webhook_url = webhookUrl;
     if (method) payload.webhook_url_method = method;
     // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-
