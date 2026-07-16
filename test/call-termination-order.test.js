@@ -194,6 +194,8 @@ test("billThunk liest den Call bei JEDEM Aufruf des Thunks frisch (nicht einmali
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
 const ingestSrc = fs.readFileSync(path.join(ROOT, "src", "telnyx-call-control-ingest.js"), "utf8");
+// P5 (Server-Slim): terminateCappedCall wanderte nach telephony/call-lifecycle.js.
+const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
 
 function sliceBetween(src, startMarker, endMarker, fromIndex = 0) {
   const start = src.indexOf(startMarker, fromIndex);
@@ -264,9 +266,11 @@ test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk 
     serverSrc,
     /import \{ terminateAndBillCall, hangUpAction, billThunk \} from "\.\/telephony\/call-termination\.js";/,
   );
-  const cappedBlock = sliceBetween(serverSrc, "async function terminateCappedCall(", "\n}\n");
-  // P4 (Server-Slim): siehe Kommentar oben - callFinish.finishCall statt bare finishCall.
-  assert.match(cappedBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*callId\)/);
+  // P5 (Server-Slim): terminateCappedCall lebt jetzt in call-lifecycle.js; finishCall kommt
+  // dort als injizierter Dep herein (== callFinish.finishCall bei der Verdrahtung), daher
+  // referenziert der Modul-Quelltext den bare Dep-Namen, nicht callFinish.finishCall.
+  const cappedBlock = sliceBetween(lifecycleSrc, "async function terminateCappedCall(", "\n}\n");
+  assert.match(cappedBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*callId\)/);
   const cancelBlock = sliceBetween(serverSrc, 'app.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
   assert.match(cancelBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
 });
