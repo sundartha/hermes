@@ -63,6 +63,7 @@ import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
+import { makeCallFinish } from "./telephony/call-finish.js";
 import {
   makeOutboundGates,
   E164_FORMAT_ERROR,
@@ -164,6 +165,21 @@ const { gates: outboundGates } = makeOutboundGates({
 // werden geschlossen; die Gating-Bedingung `if (config.paymentEnabled)` bleibt beim
 // Aufrufer (finishCall / Provisioning-Drain), nicht im Modul.
 const metering = makeMetering({ store, config });
+
+// call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)
+// EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler; INV-7).
+// EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND makeCallControlIngest
+// (call._finished/billedAt-Guards verlangen Identitaet). metering ist oben konstruiert (P1);
+// die paymentEnabled-Gating-Bedingung bleibt im finishCall-Body (INV-9), Cents bleiben Ganzzahl.
+const callFinish = makeCallFinish({
+  store,
+  config,
+  metering,
+  messaging,
+  summarizeCall,
+  planSummarySms,
+  audit,
+});
 
 app.use(securityHeaders);
 
@@ -655,7 +671,7 @@ async function terminateCappedCall(callId, providerCallSid, status) {
       // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
       // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
       hangUp: hangUpAction(voiceControl, call, providerCallSid),
-      bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
+      bill: billThunk(callFinish.finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
       callId, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
   } catch (e) {
@@ -677,16 +693,6 @@ function armMaxDurationTimer(call, providerCallSid) {
   scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
 }
 
-// OUT-05 (F2): Worst-Case-Reserve eines Calls freigeben (idempotent ueber call.reserveReleased,
-// state-ops). FEHLER-SCHLUCKEND: KEIN Freigabepfad (catch/finishCall/Backstop) darf je einen
-// unhandled reject werfen; ein IO-Fehler ist secret-frei geloggt (err.message) und sonst
-// folgenlos (die Reserve ist ephemer, faellt spaetestens beim Boot auf 0). Liefert ein Promise.
-function releaseReserve(call) {
-  return store
-    .withStoreLock(() => store.releaseOutboundReserve(call))
-    .catch((e) => console.error("[reserve] release:", e.message));
-}
-
 // OUT-05 (F2): Reserve-Release-Backstop. Unabhaengig vom Provider-completed-Callback gibt dieser
 // Timer die Reserve nach maxDur + Grace frei (schliesst den "Originate 200, Callback verloren"-
 // Fall). BEIDE Engines (KEIN realtime-Guard), NUR nach erfolgreichem Originate armiert. Idempotent
@@ -694,7 +700,7 @@ function releaseReserve(call) {
 // Handle-Tracking noetig (Stil wie armMaxDurationTimer). Liest den Call beim Feuern frisch.
 function armReserveReleaseTimer(call) {
   const delay = callMaxDurationMs(call) + config.reserveReleaseGraceMs;
-  setTimeout(() => releaseReserve(store.getCall(call.id) || call), delay);
+  setTimeout(() => callFinish.releaseReserve(store.getCall(call.id) || call), delay);
 }
 
 // P8: TeXML-Handoff-Antwort auf /voice/incoming, wenn der Call-Control-Assistant den Leg
@@ -948,99 +954,6 @@ app.post("/voice/outbound", async (req, res) => {
     );
 });
 
-// ---------------- Call zu Ende -> Summary + Notification + SMS ----------------
-// Idempotent: kann von Status-Callback, Bridge und cancel_call gleichzeitig angestossen werden.
-async function finishCall(call) {
-  if (!call || call._finished) return;
-  call._finished = true;
-  // F9 (A6): Abrechnung genau EINMAL ueber Prozessgrenzen. Der persistierte billedAt-Marker
-  // (ueberlebt Restart, anders als _finished) gated NUR den Abrechnungsblock; Summary/
-  // Notification bleiben retry-bar, SMS bleibt ueber summarySmsSentAt idempotent (R-8.5).
-  if (!call.billedAt) {
-    // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
-    // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
-    if (config.paymentEnabled) metering.recordVoiceMinuteMeter(call);
-    metering.reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
-    store.markBilled(call.id); // -> billed_at persistiert, ueberlebt Restart (F9)
-  }
-  await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costEur
-  store.save();
-
-  if (call.status !== "completed" || !call.transcript.length) {
-    store.addNotification(
-      call.status === "cancelled" ? "Anruf abgebrochen" : "Anruf nicht zustande gekommen",
-      `${call.direction === "outbound" ? call.to : call.from} (Status: ${call.status})`,
-      call.id,
-    );
-    return;
-  }
-
-  try {
-    const result = await summarizeCall(call);
-    if (!result) return;
-    // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung): NUR nach Summary-Erfolg.
-    // summarizeCall hat summary/objectiveAchieved + Action Items bereits persistiert;
-    // das Roh-Transkript wird jetzt geloescht (nur noch Summary at rest). Scheitert
-    // die Summary (result null / Exception), bleibt das Transkript -> die 30-Tage-
-    // pruneOldData-Retention raeumt es als Defense-in-Depth ab.
-    store.purgeTranscript(call.id);
-    const aiCount = (result.actionItems || []).length;
-    const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
-    store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);
-
-    // F2 P7: Ziel + Sende-Entscheidung in planSummarySms ausgelagert (offline testbar -
-    // server.js bootet beim Import). Ziel ist die PRIVATE Nummer des Call-Tenants (ueber
-    // call.tenantId, identischer Schluessel wie der Absender -> keine Cross-Tenant-Fehl-
-    // zustellung, H3), NICHT mehr config.ownerNumber (kein Fallback im finishCall-Pfad,
-    // AK #5). Der Guard prueft Ziel + Absender + Opt-Out VOR jedem String-Bau, damit ein
-    // fehlendes Ziel die .slice-Operation nie crasht (M4). settings.agentName fuer den
-    // Body kommt aus derselben in-memory tenantContext-Quelle.
-    const plan = planSummarySms(store, config, call);
-    if (plan.send) {
-      const sms =
-        `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
-        (aiCount
-          ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
-          : "");
-      try {
-        await messaging(call.provider).sendSms({
-          from: plan.smsFrom.e164,
-          to: plan.to,
-          body: sms.slice(0, 1500),
-        });
-        // F2 P8 (H1): Kosten-Beleg + Quelle des Tages-Cap-Zaehlers (dailySmsCount). NUR
-        // nach ERFOLGREICHEM Send - schlaegt sendSms fehl, springt der catch an, es wird
-        // KEIN Event geschrieben -> der Cap zaehlt nur real gesendete SMS (AK #3). grobe
-        // Kosten aus dem benannten Tarif (config.smsCostCents); NIE die Zielnummer (PII).
-        store.recordUsageEvent({
-          tenantId: call.tenantId,
-          callId: call.id,
-          kind: USAGE_EVENT_KIND.SMS,
-          quantity: 1,
-          costCents: config.smsCostCents,
-        });
-        // F2 P9 (M2): persistierten Dedup-Marker setzen - NUR nach erfolgreichem Send.
-        // Ueberlebt den Prozess-Restart und unterdrueckt eine zweite Summary-SMS bei einem
-        // spaeten /voice/status-Retry (planSummarySms prueft summarySmsSentAt). Bewusst
-        // NACH recordUsageEvent: der Marker steht erst, wenn die SMS real raus ist.
-        store.markSummarySmsSent(call.id);
-      } catch (e) {
-        console.error(
-          "[sms]",
-          e.message,
-          "(Trial: Zielnummer verifiziert? SMS-faehige Twilio-Nummer?)",
-        );
-      }
-    } else if (plan.reason) {
-      // Kein Ziel -> SMS still uebersprungen. Notification (oben) bleibt, kein Throw (M4).
-      // Audit nur Marker + Reason, NIE die Nummer (H4); req=null -> ip=system.
-      audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
-    }
-  } catch (err) {
-    console.error("[summary]", err.message);
-  }
-}
-
 app.post("/voice/status", async (req, res) => {
   res.sendStatus(200);
   let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
@@ -1103,7 +1016,7 @@ app.post("/voice/status", async (req, res) => {
         store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
     },
     hangUp: null,
-    bill: billThunk(finishCall, store, call.id),
+    bill: billThunk(callFinish.finishCall, store, call.id),
     callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
   });
 });
@@ -1118,7 +1031,7 @@ app.post(
   makeCallControlIngest({
     store,
     voiceControl,
-    finishCall,
+    finishCall: callFinish.finishCall,
     openingText,
     localeFor,
     reattachActiveCall,
@@ -1249,7 +1162,7 @@ app.post("/api/calls", async (req, res) => {
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(call.id, "failed"),
       hangUp: null,
-      bill: billThunk(finishCall, store, call.id),
+      bill: billThunk(callFinish.finishCall, store, call.id),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
     // Rohe Provider-Message NICHT an den Client (Secret-/Param-Leak, Regel 4/5):
@@ -1298,7 +1211,7 @@ app.post("/api/calls/:id/cancel", async (req, res) => {
     // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
     // EINE Quelle) - cancel_call eines C-Telnyx-Calls trifft den Call-Control-Hangup.
     hangUp: hangUpAction(voiceControl, call, call.twilioSid),
-    bill: billThunk(finishCall, store, call.id),
+    bill: billThunk(callFinish.finishCall, store, call.id),
     onHangUpError: (e) => console.error("[cancel]", e.message),
     callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
   });
@@ -2065,7 +1978,7 @@ const httpServer = app.listen(config.port, () => {
 });
 
 // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
-attachMediaBridge(httpServer, finishCall);
+attachMediaBridge(httpServer, callFinish.finishCall);
 
 // F11 (A6): Graceful Shutdown. Ein Deploy/Restart schickt SIGTERM (Render), Ctrl+C SIGINT.
 // OHNE Handler killt Node den Prozess sofort -> ein in-flight /voice/turn stirbt mitten im
