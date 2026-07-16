@@ -136,11 +136,12 @@ test("Flag AN + NICHT-Telnyx (Twilio-Owner): Outbound faellt auf TeXML/Bestand z
 // Kein Klon der P6-Runtime-Tests: sichert nur, dass rearmActiveCallTimers die
 // Hangup-Endpunktwahl weiterhin an hangUpAction delegiert (Befund 1) statt sie
 // inline nach voiceEngine zu verzweigen.
-const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
+// P5 (Server-Slim): rearmActiveCallTimers wanderte nach telephony/call-lifecycle.js.
+const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
 
 test("Wiring: rearmActiveCallTimers terminalisiert C-Telnyx ausschliesslich ueber terminateCappedCall/scheduleMaxDurationEnd (kein direkter voiceEngine-getriebener endCall)", () => {
   const marker = "function rearmActiveCallTimers()";
-  const block = serverSrc.slice(serverSrc.indexOf(marker), serverSrc.indexOf(marker) + 1200);
+  const block = lifecycleSrc.slice(lifecycleSrc.indexOf(marker), lifecycleSrc.indexOf(marker) + 1200);
   // Der realtime-Guard bleibt (Budget-only), aber KEIN C-Telnyx-Sonderpfad ueber voiceEngine:
   assert.match(block, /config\.voiceEngine === "realtime"\) return/);
   assert.match(block, /terminateCappedCall\(call\.id, call\.twilioSid/);

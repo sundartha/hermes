@@ -202,13 +202,14 @@ test("reattachActiveCall RACE-1: nach Abschluss wird der In-Flight-Eintrag gerae
 // import-sicher (Top-Level app.listen) - der Wiring-Beweis, dass /voice/status denselben
 // reattachActiveCall()-Wrapper nutzt wie /voice/turn/outbound (statt store.attachActiveCall
 // direkt, der urspruengliche Bug), ist damit nur ueber den Quelltext fassbar.
+// P5: Wrapper lebt jetzt in call-lifecycle.js, verdrahtet als lifecycle.reattachActiveCall
 test("server.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie /voice/turn (keine direkte store.attachActiveCall-Umgehung)", () => {
   const src = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
 
   const statusHandler = src.slice(src.indexOf('app.post("/voice/status"'), src.indexOf('app.post("/voice/status"') + 1500);
   assert.match(
     statusHandler,
-    /await reattachActiveCall\(/,
+    /await lifecycle\.reattachActiveCall\(/,
     "/voice/status muss ueber reattachActiveCall() re-attachen (Restzeit-Klassifikation+Timer-Rearm)",
   );
   assert.doesNotMatch(
@@ -218,5 +219,5 @@ test("server.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie 
   );
 
   const turnHandler = src.slice(src.indexOf('app.post("/voice/turn"'), src.indexOf('app.post("/voice/turn"') + 1500);
-  assert.match(turnHandler, /await reattachActiveCall\(/, "/voice/turn bleibt auf reattachActiveCall()");
+  assert.match(turnHandler, /await lifecycle\.reattachActiveCall\(/, "/voice/turn bleibt auf reattachActiveCall()");
 });

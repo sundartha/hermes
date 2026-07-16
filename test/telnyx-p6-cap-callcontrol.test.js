@@ -139,10 +139,12 @@ test("T5b: reattach Aktiv-Restzeit-Fixture (callControlId, twilioSid null) -> sc
 // ---- T6-T8: Wiring-Guards (Quelltext, Muster reattach-active-call.test.js) ----
 
 const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
+// P5 (Server-Slim): terminateCappedCall wanderte nach telephony/call-lifecycle.js.
+const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
 
 test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte providerCallSid-Ternary)", () => {
   const marker = "async function terminateCappedCall(callId, providerCallSid, status) {";
-  const block = serverSrc.slice(serverSrc.indexOf(marker), serverSrc.indexOf(marker) + 1200);
+  const block = lifecycleSrc.slice(lifecycleSrc.indexOf(marker), lifecycleSrc.indexOf(marker) + 1200);
 
   assert.match(block, /hangUp:\s*hangUpAction\(voiceControl,\s*call,\s*providerCallSid\)/);
   assert.doesNotMatch(
