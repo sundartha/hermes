@@ -9,28 +9,17 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import {
-  DEFAULT_PROVIDER,
   PROVIDER,
   NUMBER_STATUS,
   USAGE_EVENT_KIND,
-  normNum,
 } from "./store/defaults.js";
 import { hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
-import {
-  agentTurn,
-  summarizeCall,
-  openingText,
-  callerHasSpoken,
-} from "./claude.js";
+import { agentTurn, summarizeCall } from "./claude.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
-import { makeCallControlIngest } from "./telnyx-call-control-ingest.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
-import { startInboundAiAssistant, inboundCallControlId } from "./telnyx-inbound.js";
-import { metrics } from "./metrics.js";
-import { degradedSpeechFor } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO, BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
@@ -48,14 +37,8 @@ import {
   providerFromHeaders,
   numberProvisioning,
 } from "./telephony/registry.js";
-import {
-  say as sayD,
-  hangup as hangupD,
-} from "./telephony/directives.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { localeFor } from "./i18n/locales.js";
-import { SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
-import { callFailureReason } from "./telephony/failure-reason.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -77,6 +60,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "./billing/webhook.js";
+import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeTenantWriteRoutes } from "./routes/api-tenant-write.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
@@ -153,7 +137,8 @@ const metering = makeMetering({ store, config });
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)
 // EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler; INV-7).
-// EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND makeCallControlIngest
+// EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND - via
+// makeVoiceRoutes - makeCallControlIngest
 // (call._finished/billedAt-Guards verlangen Identitaet). metering ist oben konstruiert (P1);
 // die paymentEnabled-Gating-Bedingung bleibt im finishCall-Body (INV-9), Cents bleiben Ganzzahl.
 const callFinish = makeCallFinish({
@@ -596,391 +581,35 @@ const ttsStore = createTtsStore({ ttlMs: config.elevenLabsPlayTts.tokenTtlMs });
 // Direktiven ein. Schliesst die EINE ttsStore-Instanz (INV-7) + config.
 const directiveSynth = makeDirectiveSynth({ config, ttsStore });
 
-// AUTH-AUSNAHME (Regel 3, begruendet): oeffentlich erreichbar, weil Telnyx diese URL
-// SERVERSEITIG fetcht (kein Provider-Signatur-Header) - deshalb bewusst VOR der
-// /voice-Signaturpruefung registriert (sonst 403). Loest KEINEN Call/keine SMS/keine
-// Kosten aus (Regel 1 unberuehrt); die einzige Absicherung der PII-Audio ist der
-// kryptografisch unratbare Token + kurze TTL + EINMALIGER Abruf (takeOnce). Kein Log
-// von Token/Bytes (kein PII/Secret-Leak, Regel 4).
-app.get("/voice/tts/:token", (req, res) => {
-  const audio = ttsStore.takeOnce(req.params.token);
-  if (!audio) return res.status(404).end();
-  res.type(audio.contentType).send(audio.bytes);
-});
-
-// ---- Inbound-Signaturpruefung fuer alle /voice-Webhooks (fail-closed) ----
-// Der Provider signiert jeden Request. Ohne diese Pruefung kann jeder, der die URL
-// kennt, Anrufe/Transkripte faelschen und Claude-Turns (=Kosten) ausloesen. Die
-// Krypto (Twilio-HMAC) lebt im Adapter; hier bleibt nur das Skip-Gate (Local/Test)
-// und die fail-closed-Antwort. rawBody (req.rawBody) ist fuer kuenftige Provider da.
-app.use("/voice", (req, res, next) => {
-  if (config.skipTwilioSignatureCheck) return next();
-  const ok = inboundSignatureVerifier().verifyInboundSignature({
-    headers: req.headers,
-    rawBody: req.rawBody,
-    url: config.publicUrl + req.originalUrl,
-    params: req.body || {},
-  });
-  if (!ok) {
-    // OBS-3: Ein fehlgeschlagener Provider-Signatur-Check war bisher stumm (nur 403) -
-    // gedrehte Keys, ein falsch signierender Client oder gestoerte Zustellung blieben in
-    // den Render-Logs unsichtbar (Regel 7). Genau EINE PII-/secret-freie Zeile: der
-    // query-freie Pfad (kein PII) + die Provider-HERKUNFT als Enum-Token aus
-    // providerFromHeaders (der EINZIGEN Header->Provider-Karte, G5) - NIE Header-Werte,
-    // rawBody oder Timestamps (Regel 4). req.baseUrl+req.path statt nacktem req.path:
-    // innerhalb von app.use("/voice", ...) ist req.path MOUNT-RELATIV (Express strippt
-    // den "/voice"-Praefix), req.baseUrl liefert genau diesen Praefix zurueck - beide
-    // zusammen ergeben den vollen, weiterhin query-freien Routen-Pfad. Additiv VOR dem
-    // unveraenderten fail-closed-403.
-    console.warn(
-      `[voice-signature] ungueltige Inbound-Signatur -> 403 (path=${req.baseUrl}${req.path} provider=${providerFromHeaders(req.headers) || "unknown"})`,
-    );
-    return res.status(403).send("invalid inbound signature");
-  }
-  next();
-});
-
-// Voice-Render-Helfer (Server-Slim P3): render + Turn-/Say-/Stream-Direktiven leben
-// jetzt in telephony/voice-render.js. EINE Instanz (INV-7), config wird geschlossen
-// (publicUrl/sttSpeechTimeoutSec zur Laufzeit gelesen). Aufruf-Sites bleiben wortgleich;
-// das voiceRender-Objekt geht in P11 an makeVoiceRoutes.
+// Voice-Render-Helfer (Server-Slim P3): EINE Instanz (INV-7), config wird geschlossen.
+// Geht als Dep an makeVoiceRoutes (P11); die Render-Funktionen werden dort destrukturiert.
 const voiceRender = makeVoiceRender({ config });
-const { render, turnDirectives, sayInCallVoice, followupTurnDirectives, streamDirectives } = voiceRender;
 
-// normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
-// geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
-
-// Webhook-Parsing (Speech-Ergebnis/Lifecycle-Status/Speak-Outcome) lebt hinter dem
-// WebhookEvents-Port (Port 5): webhookEvents(provider) aus telephony/registry.js,
-// Implementierung je Provider in telephony/adapters/<provider>/webhook-events.js.
-
-// ---- Eingabe-Validierung fuer API-Routen ----
-// E164, TEXT_LIMITS, invalidText: extrahiert nach src/routes/_validation.js (T4 Phase 2).
-
-// Gesprochene Degradations-/Reprompt-Texte fuer den /voice/turn-Fehlerpfad leben seit
-// F1 P4 sprachabhaengig im Locale-Bundle (i18n/locales.js, eine Quelle pro Sprache):
-//   llmDegradedSpeech  - wuerdevolles Ende bei anhaltender LLM-Nichtverfuegbarkeit
-//                        (LlmUnavailableError aus dem resilienten Seam)
-//   turnErrorSpeech    - generisches technisches Ende fuer jeden anderen Fehler
-//   noSpeechReprompt   - knappe Rueckfrage, wenn der Gather leer lief (G4)
-// Der Aufrufer hat call -> localeFor(call.language).<feld>. DE-Werte sind byte-identisch
-// zum frueheren Inline-Bestand (i18n-Test pinnt sie).
-
-// P8: TeXML-Handoff-Antwort auf /voice/incoming, wenn der Call-Control-Assistant den Leg
-// uebernimmt. Leere Direktivenliste (renderDirectives([]) -> <Response></Response>) als
-// Platzhalter; die exakte Telnyx-Handoff-Direktive ist live unbestaetigt (P0/P11). Zentral
-// benannt statt inline-[] gestreut.
-const INBOUND_ASSISTANT_HANDOFF = [];
-
-// C-Telnyx-Inbound (P8, Befund 8): startet - falls einschlaegig - den Call-Control-Assistant
-// fuer einen Inbound-Leg und liefert die Handoff-TeXML; sonst null (Aufrufer faellt fail-safe
-// auf den bestehenden TeXML-Gather-Pfad zurueck). ERBT Signatur (app.use "/voice"), Tenant-
-// Resolve (numberRecordByE164) UND Budget-Gate vom Aufrufer - KEIN neuer Gate, dieser Helper
-// fuegt keinen hinzu. Nur bei aktivem Flag + signatur-authentifiziertem Telnyx-Provider
-// (Anti-Spoof: provider stammt aus dem Signatur-Header, nicht aus To/Body). callControlId
-// fehlt (Twilio ODER TeXML-Feld absent) -> null, kein kaputter Assistant-Pfad. Der Max-Dauer-
-// Timer ist beim Aufrufer BEREITS armiert; terminateCappedCall liest den Call frisch und
-// trifft via hangUpAction(callControlId) den Call-Control-Hangup, sobald callControlId
-// persistiert ist (P6) - KEIN Re-Arm (zweiter Timer = Leak). Exakte Handoff-Direktive live
-// unbestaetigt (wie P4-Adapter-Body-Form) - mit dem Owner in P0/P11 fixen.
-async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
-  if (!(config.telnyxAssistant.enabled && provider === PROVIDER.TELNYX)) return null;
-  const callControlId = inboundCallControlId(body);
-  if (!callControlId) return null;
-  await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });
-  return render(INBOUND_ASSISTANT_HANDOFF, provider);
-}
-
-// ---------------- INBOUND ----------------
-// Twilio-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
-// Die Twilio-Signatur ist hier bereits fail-closed geprueft (app.use("/voice")).
-// Erst danach wird To gelesen und auf einen Tenant aufgeloest (Anti-Spoof: To
-// vor der Signatur waere Tenant-Spoofing). Unbekannte/fehlende To -> hoeflicher
-// Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet
-// nichts).
-app.post("/voice/incoming", async (req, res) => {
-  // Provider EINMAL aus dem (bereits fail-closed signatur-geprueften) Header
-  // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> Default
-  // twilio -> byte-identisch zum Bestand. Quelle ist der Signatur-Header, nicht
-  // To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
-  const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
-  // S1-1: kompletter Handler-Body in try/catch. Seit await synthesizeDirectiveAudio
-  // ist dieser Handler async - Express 4 faengt Promise-Rejections aus async-Handlern
-  // NICHT ab, eine Exception ohne try/catch wuerde zur stillen unhandledRejection statt
-  // einer Antwort, der eingehende Anruf haenge bis zum Provider-Timeout. call bleibt
-  // ausserhalb sichtbar (let statt const), damit der Fehlerpfad - falls die Exception
-  // erst NACH der Call-Erzeugung auftritt - dieselbe Sprache wie der Erfolgspfad
-  // spricht; vor der Erzeugung faellt localeFor(undefined) fail-safe auf DE zurueck
-  // (wie der Unrouted-Pfad unten).
-  let call;
-  try {
-    const to = normNum(req.body.To);
-    // EIN Lookup liefert tenantId UND number.language (F1 P4, §0-A: die angerufene Nummer
-    // ist der Geo-Anker). null = unbekannte/nicht-aktive Nummer -> fail-closed Hangup.
-    const numberRecord = store.numberRecordByE164(to);
-    if (!numberRecord) {
-      audit("inbound_unrouted", req, `to=${to || "-"}`);
-      // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
-      // (byte-identisch zum Bestand, nicht ueber-engineeren).
-      return res
-        .type("text/xml")
-        .send(
-          render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
-        );
-    }
-    const tenantId = numberRecord.tenantId;
-    // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
-    // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
-    const language = store.resolveCallLanguage({ tenantId, numberRecord });
-    const locale = localeFor(language);
-
-    // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
-    // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
-    if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
-      return res
-        .type("text/xml")
-        .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
-    }
-
-    call = store.createCall({
-      direction: "inbound",
-      from: req.body.From || "unbekannt",
-      to,
-      twilioSid: req.body.CallSid,
-      tenantId,
-      provider,
-      language,
-    });
-    store.markAnswered(call.id);
-    lifecycle.armMaxDurationTimer(call, req.body.CallSid);
-
-    if (config.voiceEngine === "realtime") {
-      return res.type("text/xml").send(render(streamDirectives(call), provider));
-    }
-
-    const ctx = store.tenantContext(call.tenantId);
-    const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
-
-    // P8: Handoff an den Call-Control-Assistant, falls einschlaegig; sonst (null) faellt
-    // der Aufrufer fail-safe auf den bestehenden TeXML-Gather-Pfad zurueck (byte-identisch).
-    const handoffXml = await inboundAssistantHandoffXml({
-      call,
-      provider,
-      body: req.body,
-      greeting,
-      voiceProfile: locale.voiceProfile,
-    });
-    if (handoffXml) return res.type("text/xml").send(handoffXml);
-
-    store.addTranscript(call.id, "agent", greeting);
-    res
-      .type("text/xml")
-      .send(render(await directiveSynth.synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
-  } catch (err) {
-    console.error("[incoming]", err.message);
-    // S1-1: gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt /voice/turn,
-    // Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
-    // turnErrorSpeech (kein llmDegradedSpeech-Fall wie bei /voice/turn). Vor der Call-
-    // Erzeugung gibt es noch kein call.provider fuer synthesizeDirectiveAudio (der Guard
-    // dort wuerde selbst werfen) -> reines Azure-<Say> wie der Unrouted-Pfad oben.
-    const locale = localeFor(call?.language);
-    const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
-    const outDirectives = call ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
-    res.type("text/xml").send(render(outDirectives, provider));
-  }
-});
-
-// ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
-app.post("/voice/turn", async (req, res) => {
-  let call = store.getCall(req.query.callId);
-  if (!call || call.status !== "active") {
-    // F12 (A6): dem Prozess unbekannter, aber in der DB aktiver Call (Deploy-Instanz-
-    // wechsel)? Erst RLS-sauber re-attachen+klassifizieren, DANN erst fail-closed auflegen.
-    const reattached = await lifecycle.reattachActiveCall(req.query.callId);
-    if (reattached.call) {
-      call = reattached.call; // aktiver Call, Cap re-armiert -> normal fortfahren
-    } else {
-      // Fail-closed Hangup wie im Bestand, aber NICHT mehr still (Runde 2, S-A):
-      // dieses Muster entsteht real, wenn ein Deploy-Instanzwechsel den in-memory-
-      // Call verliert (Testanruf call_mr3lg2g7t9zg) - ohne Logzeile ist der Vorfall
-      // in den Render-Logs unsichtbar (CLAUDE.md Regel 7). callId ist server-
-      // generiert, kein PII. Anders als /voice/status (Rauschen) ist ein Turn-
-      // Webhook ohne aktiven Call IMMER ein totes Live-Gespraech.
-      // Warn-Log NUR bei echt unbekanntem Call - ein terminalisiertes Ueber-Zeit-Leg
-      // (logUnknown:false) WAR aktiv, "kein aktiver Call" waere dort irrefuehrend (G2).
-      if (reattached.logUnknown)
-        console.warn(
-          `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
-        );
-      return res.type("text/xml").send(render([hangupD()]));
-    }
-  }
-  // L0: Luecke seit dem Render des vorigen Folge-Gathers ~ STT-Finalisierungs-Totzeit.
-  metrics.logTurnGap(call.id);
-
-  const heard = webhookEvents(call.provider).parseSpeechResult(req.body);
-  try {
-    // G3/G26-Fix (Runde 2): callerHasSpoken (claude.js) statt blosser Zeilen-Existenz -
-    // sonst haette outbound schon ein einzelnes aufgezeichnetes Rausch-/Echo-Fragment
-    // diesen Kurzschluss fuer den Rest des Calls vor agentTurn gestellt und den R4-Empty-
-    // Turn-Zaehler (unansweredAgentTurns, nur bei echtem agentTurn-Aufruf neu ausgewertet)
-    // dauerhaft eingefroren (siehe Kommentar an callerHasSpoken).
-    if (!heard && callerHasSpoken(call)) {
-      metrics.recordTurnRendered(call.id); // L0: Folge-Gather offen -> Render-Zeitpunkt
-      const reprompt = followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt);
-      return res
-        .type("text/xml")
-        .send(render(await directiveSynth.synthesizeDirectiveAudio(call, reprompt), call.provider));
-    }
-    const { speech, endCall } = await agentTurn(call, heard || null);
-    const directives = endCall
-      ? [sayInCallVoice(call, speech), hangupD()]
-      : followupTurnDirectives(call, speech);
-    if (!endCall) metrics.recordTurnRendered(call.id); // L0: nur wenn ein Folge-Turn folgt
-    res
-      .type("text/xml")
-      .send(render(await directiveSynth.synthesizeDirectiveAudio(call, directives), call.provider));
-  } catch (err) {
-    console.error("[turn]", err.message);
-    // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit
-    // (Breaker offen ODER Retries erschoepft -> LlmUnavailableError aus llm.complete)
-    // wuerdevoll und kontrolliert beenden statt mit einem nackten "technischen Problem"
-    // aufzulegen: der Agent verabschiedet sich hoeflich und sichert die Rueckmeldung zu.
-    // KEIN Retry hier (der Seam hat bereits begrenzt+selektiv retried); das Gespraech
-    // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
-    // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
-    const locale = localeFor(call.language);
-    const speech = degradedSpeechFor(err, locale);
-    const errorDirectives = [sayInCallVoice(call, speech), hangupD()];
-    res
-      .type("text/xml")
-      .send(render(await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives), call.provider));
-  }
-});
-
-// ---------------- OUTBOUND: Angerufener nimmt ab ----------------
-app.post("/voice/outbound", async (req, res) => {
-  let call = store.getCall(req.query.callId);
-  if (!call) {
-    // F12 (A6): siehe /voice/turn - erst re-attachen+klassifizieren, dann fail-closed.
-    const reattached = await lifecycle.reattachActiveCall(req.query.callId);
-    if (reattached.call) {
-      call = reattached.call;
-    } else {
-      // Sichtbarer fail-closed Hangup (Runde 2, S-A) - Begruendung siehe /voice/turn.
-      if (reattached.logUnknown)
-        console.warn(`[voice/outbound] unbekannter Call (callId=${req.query.callId || "-"}) -> Hangup`);
-      return res.type("text/xml").send(render([hangupD()]));
-    }
-  }
-  call.twilioSid = req.body.CallSid || call.twilioSid;
-  store.markAnswered(call.id);
-  store.save();
-
-  if (config.voiceEngine === "realtime") {
-    return res.type("text/xml").send(render(streamDirectives(call), call.provider));
-  }
-
-  // Schicht 1 (P3b-R) + G2: /voice/outbound ist LLM-FREI. Der gesamte gesprochene
-  // Erst-Turn (Pflicht-Offenlegung Regel 2 als erster Satz + Bruecke + gekapptes
-  // Anliegen) wird als EIN <Say> INNERHALB des <Gather> gerendert - byte-strukturgleich
-  // zum bewaehrten Inbound-Greeting (turnDirectives(call, greeting)). Damit ist das
-  // Mikrofon sofort offen und der Angerufene kann direkt antworten (loest den leeren-
-  // Erst-Gather-Deadlock). openingText ist rein synchron -> der Webhook haengt NIE an
-  // einem flackernden Upstream. Das Anliegen wird hier deterministisch genannt; der
-  // erste LLM-Turn (/voice/turn) wiederholt es nicht (systemPrompt-Hinweis).
-  const opening = openingText(call);
-  store.addTranscript(call.id, "agent", opening);
-  res
-    .type("text/xml")
-    .send(
-      render(await directiveSynth.synthesizeDirectiveAudio(call, turnDirectives(call, opening)), call.provider),
-    );
-});
-
-app.post("/voice/status", async (req, res) => {
-  res.sendStatus(200);
-  let call = store.getCall(req.body.CallSid) || store.getCall(req.query.callId || "");
-  if (!call) {
-    // F12 (A6) Runde 2 (S1-1): denselben reattachActiveCall()-Pfad wie /voice/turn und
-    // /voice/outbound nutzen - NICHT store.attachActiveCall direkt. Ein direkter Aufruf
-    // wuerde ein Ueber-Zeit-Leg (Deploy-Instanzwechsel liefert answered/completed verspaetet)
-    // OHNE Restzeit-Pruefung und OHNE Timer-Rearm als aktiv in den Spiegel zurueckholen -
-    // der Call liefe danach fuer den Rest seiner Lebensdauer OHNE Max-Dauer-Cap (Regel 1),
-    // weil ein folgendes /voice/turn ihn dann schon aktiv im Spiegel findet und
-    // reattachActiveCall nie wieder aufruft. RLS-scoped, nur DB-bestaetigt (nie der Body).
-    const reattached = await lifecycle.reattachActiveCall(req.query.callId || "");
-    // Beide null-Faelle bleiben still (Bestand: kein PII/Debug-Rauschen): logUnknown=true
-    // -> wirklich unbekannt; logUnknown=false -> Ueber-Zeit-Leg wurde bereits terminalisiert
-    // + gebucht (terminateCappedCall), hier ist nichts mehr zu tun.
-    if (!reattached.call) return;
-    call = reattached.call;
-  }
-  const provider = call.provider || DEFAULT_PROVIDER;
-
-  // TTS-Stoerung sichtbar machen (graceful degradation): Telnyx meldet ein
-  // fehlgeschlagenes server-seitiges TTS (<Say> ueber Azure-NTTS) als Command-Event
-  // OHNE CallStatus. Ein solches Event ist KEIN Lifecycle-Uebergang -> hier terminieren,
-  // sonst wuerde es mit status=undefined faelschlich als Lifecycle-Event geloggt. Nur
-  // der Fehlschlag wird geloggt (OK-Speak waere Rauschen) und macht die sporadische
-  // Azure-Stoerung zum diagnostizierbaren, PII-freien Signal (reason = Telnyx-Token).
-  const speak = webhookEvents(provider).parseSpeakOutcome(req.body);
-  if (speak.outcome !== SPEAK_OUTCOME.NONE) {
-    if (speak.outcome === SPEAK_OUTCOME.FAILED)
-      console.error(
-        "[voice/speak]",
-        JSON.stringify({ callId: call.id, provider, outcome: speak.outcome, reason: speak.reason }),
-      );
-    return;
-  }
-
-  const { status: callStatus, diagnostics } = webhookEvents(provider).parseLifecycleEvent(req.body);
-  // PII-frei (Pre-Mortem): nur callId/Status/Provider/Diagnose ins Log, NIE
-  // From/To/Telefonnummern. Macht Telnyx-Lifecycle-Events + CallDuration + die
-  // Hangup-Ursache (HangupCause/HangupSource/SipHangupCause) sichtbar - sonst ist
-  // das Telnyx-Call-Ende beim Debugging blind.
-  console.log(
-    "[voice/status]",
-    JSON.stringify({ callId: call.id, status: callStatus, provider, diagnostics }),
-  );
-  if (callStatus === "in-progress" || callStatus === "answered")
-    return void store.markAnswered(call.id);
-  if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
-  // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose persistieren
-  // (PII-frei). completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
-  store.recordFailureReason(call.id, callFailureReason({ status: callStatus, diagnostics }));
-  // C5 (Struct-4): Settlement-Gateway statt manuellem endCallRecord+finishCall-Paar - bill
-  // (Settlement) ist bei terminateAndBillCall ein strukturell erzwungenes Pflichtfeld (Fail-
-  // Fast-Guard, verhindert die C5-Bugklasse: ein neuer Terminierungspfad vergisst finishCall).
-  // hangUp:null: der Provider hat den Call bereits beendet (dieses Event IST der Hangup), kein
-  // eigener Hangup-Versuch noetig (bereits getesteter Zweig, call-termination-order.test.js).
-  await terminateAndBillCall({
-    persistEnd: () => {
-      if (call.status === "active")
-        store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
-    },
-    hangUp: null,
-    bill: billThunk(callFinish.finishCall, store, call.id),
-    callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
-  });
-});
-
-// Call-Control-Event-Ingest (P4.5): additiv, liegt UNTER app.use("/voice") -> Ed25519
-// fail-closed (Regel 3). Faehrt die event-getriebene Zustandsmaschine (answered->
-// Opening-Speak (Offenlegung+Anliegen); speak.ended->ai_assistant_start; hangup->Settlement
-// finishCall). Korrelation ueber ?callId (Muster /voice/status), KEIN Store-Sekundaerindex.
-// Der bestehende Budget/TeXML-Pfad (/voice/status|turn|outbound) bleibt byte-identisch.
-app.post(
-  "/voice/call-control",
-  makeCallControlIngest({
+// ---- Voice-Webhooks (Server-Slim P11) ---------------------------------------------
+// Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
+// status/call-control) leben jetzt in routes/voice.js (makeVoiceRoutes, DI-Muster wie
+// makeCallRoutes) - REINE Verschiebung. Mount an UNVERAENDERTER Position: nach
+// express.static(publicDir), vor makeCallRoutes (INV-2). /voice ist Auth-Gate-exempt
+// (Sig fail-closed). INV-4: TTS-Route VOR der Sig-MW (im Router festgehalten). finishCall
+// = die EINE callFinish-Instanz (INV-7); watchdog = der EINE conversationWatchdog (geteilt
+// mit dem Shim); voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
+app.use(
+  makeVoiceRoutes({
     store,
-    voiceControl,
-    finishCall: callFinish.finishCall,
-    openingText,
-    localeFor,
-    reattachActiveCall: lifecycle.reattachActiveCall,
-    watchdog: conversationWatchdog,
     config,
+    audit,
+    voiceRender,
+    directiveSynth,
+    ttsStore,
+    lifecycle,
+    finishCall: callFinish.finishCall,
+    voiceControl,
+    webhookEvents,
+    providerFromHeaders,
+    inboundSignatureVerifier,
+    terminateAndBillCall,
+    billThunk,
+    watchdog: conversationWatchdog,
   }),
 );
 

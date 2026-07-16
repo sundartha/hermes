@@ -203,10 +203,12 @@ test("reattachActiveCall RACE-1: nach Abschluss wird der In-Flight-Eintrag gerae
 // reattachActiveCall()-Wrapper nutzt wie /voice/turn/outbound (statt store.attachActiveCall
 // direkt, der urspruengliche Bug), ist damit nur ueber den Quelltext fassbar.
 // P5: Wrapper lebt jetzt in call-lifecycle.js, verdrahtet als lifecycle.reattachActiveCall
-test("server.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie /voice/turn (keine direkte store.attachActiveCall-Umgehung)", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
+// P11 (Server-Slim): die /voice-Handler wanderten nach src/routes/voice.js (makeVoiceRoutes,
+// Router statt app) - reine Verschiebung, derselbe Quelltext-Check liest jetzt dort.
+test("voice.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie /voice/turn (keine direkte store.attachActiveCall-Umgehung)", () => {
+  const src = fs.readFileSync(path.join(ROOT, "src", "routes", "voice.js"), "utf8");
 
-  const statusHandler = src.slice(src.indexOf('app.post("/voice/status"'), src.indexOf('app.post("/voice/status"') + 1500);
+  const statusHandler = src.slice(src.indexOf('router.post("/voice/status"'), src.indexOf('router.post("/voice/status"') + 1500);
   assert.match(
     statusHandler,
     /await lifecycle\.reattachActiveCall\(/,
@@ -218,6 +220,6 @@ test("server.js: /voice/status nutzt denselben reattachActiveCall()-Wrapper wie 
     "/voice/status darf store.attachActiveCall NICHT mehr direkt umgehen (F12-S1-1)",
   );
 
-  const turnHandler = src.slice(src.indexOf('app.post("/voice/turn"'), src.indexOf('app.post("/voice/turn"') + 1500);
+  const turnHandler = src.slice(src.indexOf('router.post("/voice/turn"'), src.indexOf('router.post("/voice/turn"') + 1500);
   assert.match(turnHandler, /await lifecycle\.reattachActiveCall\(/, "/voice/turn bleibt auf reattachActiveCall()");
 });

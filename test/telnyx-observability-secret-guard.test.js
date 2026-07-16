@@ -20,12 +20,19 @@
 // und faengt die haeufigste Leak-Form: ein Secret oder eine Rufnummer direkt
 // als console.*-Argument.
 //
-// Zwei Tripwires gegen einen still wertlos werdenden Guard: (1) jede Scan-
-// Einheit muss mindestens einen console.*-Aufruf enthalten (sonst waere ein
-// Umbenennen von console.* auf einen Wrapper ein unbemerkter Blackout);
-// (2) der Region-Schnitt fuer server.js muss seine Textanker finden (sonst
-// waere ein Bruch der /voice-Middleware-Struktur ein stiller Leerlauf-Pass).
-// Beide Faelle sollen laut scheitern statt leise gruen zu bleiben.
+// Eine Tripwire gegen einen still wertlos werdenden Guard: jede Scan-Einheit
+// muss mindestens einen console.*-Aufruf enthalten (sonst waere ein Umbenennen
+// von console.* auf einen Wrapper ein unbemerkter Blackout). Dieser Fall soll
+// laut scheitern statt leise gruen zu bleiben.
+//
+// P11 (Server-Slim): die /voice-Webhooks (inkl. der Signatur-Middleware) leben
+// jetzt komplett in src/routes/voice.js. Der frühere Region-Schnitt aus
+// server.js (Textanker um app.use("/voice", ...)) ist damit entfallen -
+// routes/voice.js laeuft stattdessen als vollstaendiges Whole-File-Scan-Ziel
+// (WHOLE_FILE_SCAN_TARGETS): deckt dieselbe [voice-signature]-Log-Zeile + alle
+// Handler-Logs ab, staerker als der alte Regionsschnitt (keine Textanker, die
+// bei einem Strukturbruch brechen koennten - readFileSync scheitert bereits
+// laut, wenn die Datei fehlt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -51,14 +58,12 @@ const ALL_FORBIDDEN_PATTERNS = [...FORBIDDEN_IDENTIFIERS, ...FORBIDDEN_SUBSTRING
 // console.<method>( beginnt.
 const CONSOLE_CALL_START = /console\.(?:log|warn|error|info|debug)\s*\(/y;
 
-const VOICE_MIDDLEWARE_START_MARKER = 'app.use("/voice"';
-const VOICE_MIDDLEWARE_END_MARKER = "\n});";
-
 // G35: die gescannten Dateien als benannte Ziel-Tabelle (kein Wert verstreut).
 const WHOLE_FILE_SCAN_TARGETS = [
   ["telnyx-llm-shim.js", "../src/telnyx-llm-shim.js"],
   ["telnyx-call-control-ingest.js", "../src/telnyx-call-control-ingest.js"],
   ["telephony/adapters/telnyx/voice.js", "../src/telephony/adapters/telnyx/voice.js"],
+  ["routes/voice.js", "../src/routes/voice.js"],
 ];
 
 // Index direkt nach dem schliessenden Anfuehrungszeichen von quote, beginnend
@@ -168,18 +173,6 @@ function findLeaks(argTexts) {
   return leaks;
 }
 
-// Schneidet die /voice-Middleware-Region aus server.js anhand zweier
-// semantischer Textanker (kein bruechiger Datei:Zeile-Verweis, vgl. C2).
-// ok=false signalisiert einen gebrochenen Anker (fail-loud statt leerer Scan).
-function voiceMiddlewareRegion(serverSource) {
-  const start = serverSource.indexOf(VOICE_MIDDLEWARE_START_MARKER);
-  if (start === -1) return { ok: false, region: "" };
-  const rest = serverSource.slice(start);
-  const relativeEnd = rest.indexOf(VOICE_MIDDLEWARE_END_MARKER);
-  if (relativeEnd === -1) return { ok: false, region: "" };
-  return { ok: true, region: rest.slice(0, relativeEnd) };
-}
-
 function srcPath(relativePath) {
   return fileURLToPath(new URL(relativePath, import.meta.url));
 }
@@ -199,13 +192,6 @@ for (const [label, relativePath] of WHOLE_FILE_SCAN_TARGETS) {
     assertNoConsoleLeak(label, source);
   });
 }
-
-test("server.js /voice-Middleware: console.*-Logs leaken keine Secrets/PII", () => {
-  const serverSource = readFileSync(srcPath("../src/server.js"), "utf8");
-  const { ok, region } = voiceMiddlewareRegion(serverSource);
-  assert.ok(ok, "Anker der /voice-Middleware in server.js nicht gefunden - Region-Drift");
-  assertNoConsoleLeak("server.js /voice-Middleware", region);
-});
 
 test("Detektor faengt einen synthetischen Leak (Positiv-Kontrolle)", () => {
   const synthetic = [
