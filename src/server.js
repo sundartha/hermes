@@ -60,6 +60,7 @@ import { makeMcpRoutes } from "./routes/mcp.js";
 import { PLAN_CATALOG } from "./plans.js";
 import { createPortalRunner } from "./portal-pool.js";
 import { wireWebLogin } from "./wiring/web-login.js";
+import { makeAuthGate } from "./wiring/auth-gate.js";
 import { guardedBoot, fakeOriginateBootBlocked } from "./boot-guard.js";
 import {
   makeRequestTenant,
@@ -323,56 +324,23 @@ if (config.webDistDir) {
   app.get("/app/*", (_req, res) => res.sendFile(path.join(config.webDistDir, "app", "index.html")));
 }
 
-app.use((req, res, next) => {
-  if (!config.dashboardPassword) return next();
-  // Self-Service-Seite (I9 + #3) ist die GETRENNTE Tenant-Sicht: NICHT hinter der
-  // Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt KEINE
-  // Tenant-Daten (die kommen ueber /api/self-service/*, abgesichert per webAuthMw +
-  // Session-Cookie aus dem OIDC-Browser-Login, nicht mehr per Bearer-Paste).
-  // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
-  // byte-identisch zum Bestand.
-  if (config.selfServiceEnabled && config.multiTenant && req.path === CUSTOMER_PORTAL_PATH)
-    return next();
-  // /webhooks/stripe ist Basic-Auth-exempt: Stripe kann KEINE Basic-Auth-Credentials
-  // senden. Die Sicherung ist die HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET
-  // (fail-closed, Regel 3) - exakt analog zu /voice (Twilio-/Telnyx-Signatur). Zusaetzlich
-  // PAYMENT_ENABLED-gegated (aus -> 404). Der Handler liegt im guardedBoot-Block (braucht
-  // accounts/sessions), die Exemption hier ist die Basic-Auth-Vorschaltung.
-  if (
-    req.path.startsWith("/voice") ||
-    req.path.startsWith("/mcp") ||
-    req.path.startsWith("/.well-known") ||
-    req.path === STRIPE_WEBHOOK_PATH ||
-    req.path === "/healthz" ||
-    // T3: das Server-Icon (public/brand/*, Quelle src/mcp-server-info.js) ist keine
-    // sensible Nutzdaten-Route, nur ein statisches PNG. Ein MCP-Host laedt
-    // icons[0].src aus der initialize-Antwort OHNE Dashboard-Credentials - ohne diese
-    // Ausnahme liefert die express.static-Route weiter unten in Produktion
-    // (DASHBOARD_PASSWORD gesetzt) 401 statt des Icons, der T3-Fix waere live
-    // wirkungslos (empirisch geprueft, exakt wie die STRIPE_WEBHOOK_PATH-Begruendung
-    // oben: eng auf ein Praefix begrenzt, kein Blanket-Bypass).
-    req.path.startsWith(BRAND_ASSETS_PREFIX) ||
-    // Favicon-Konvention: Icon-Fetcher (Browser-Tabs, Connector-UIs wie
-    // claude.ai) ziehen /favicon.ico OHNE Credentials von der Wurzel - hinter
-    // Basic-Auth antwortete die Route in Produktion 401 (empirisch 2026-07-02),
-    // der Host fiel auf einen generischen Platzhalter zurueck. Dieselbe enge
-    // Ein-Pfad-Begruendung wie BRAND_ASSETS_PREFIX: ein statisches, oeffentliches
-    // Marken-Asset, keine Nutzdaten.
-    req.path === "/favicon.ico"
-  )
-    return next();
-  // Genuiner lokaler In-Process-Aufrufer (MCP-Tools rufen die eigene /api ueber
-  // http://localhost) ist von der Basic-Auth ausgenommen. NICHT per Socket-Adresse
-  // allein: hinter Render ist auch externer Traffic Loopback -> das oeffnete Dashboard
-  // + API ohne Passwort fuer das ganze Internet (AM1, empirisch bestaetigt).
-  // isTrustedLocalCaller verlangt zusaetzlich KEIN X-Forwarded-For (Proxy-Weiterleitung).
-  if (isTrustedLocalCaller(req)) return next();
-  const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
-  if (safeEqual(req.headers.authorization || "", expected)) return next();
-  audit("auth_failed", req, `path=${req.path}`);
-  res.set("WWW-Authenticate", 'Basic realm="Hermes"');
-  res.status(401).send("Auth required");
-});
+// ---- Basic-Auth-Gate (Server-Slim P14) --------------------------------------------
+// Kern-Safety-Naht: Gate + gesamte Exemption-Liste leben jetzt in
+// src/wiring/auth-gate.js (makeAuthGate) - REINE Verschiebung. Mount an
+// UNVERAENDERTER Position (nach der WEB_DIST_DIR-Static-Schicht, VOR
+// express.static(publicDir) unten, INV-2); Exemption-Reihenfolge eingefroren
+// (INV-3, auth-gate-exemption-order.test.js). Alle Voice-/API-/MCP-Router (unten)
+// bleiben HINTER dem Gate. STRIPE_WEBHOOK_PATH bleibt EINE Quelle (INV-1).
+app.use(
+  makeAuthGate({
+    config,
+    audit,
+    isTrustedLocalCaller,
+    safeEqual,
+    BRAND_ASSETS_PREFIX,
+    paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
+  }),
+);
 app.use(express.static(config.publicDir));
 
 // Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII).
