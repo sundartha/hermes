@@ -4,8 +4,6 @@
 import "./process-guards.js";
 import path from "path";
 import express from "express";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
 import {
@@ -20,15 +18,13 @@ import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
-import { registerTools } from "./mcp-tools.js";
-import { uiServerExtension } from "./ui/contract.js";
-import { HERMES_SERVER_INFO, BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
+import { BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
 import { attachMediaBridge } from "./bridge.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
-import { mcpAuth, registerWellKnown } from "./auth.js";
-import { audit, safeEqual, hashEmail } from "./util.js";
+import { registerWellKnown } from "./auth.js";
+import { audit, safeEqual } from "./util.js";
 import {
   voiceControl,
   messaging,
@@ -68,6 +64,7 @@ import { makeProfileRoutes } from "./routes/api-profiles.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
+import { makeMcpRoutes } from "./routes/mcp.js";
 import { PLAN_CATALOG } from "./plans.js";
 import {
   makeWebAuthRoutes,
@@ -90,7 +87,6 @@ import {
   isTrustedLocalCaller,
   internalIdentity,
   OWNER_ID,
-  ANON_IDENTITY,
   TENANT_REJECT,
   tenantOwnsCall,
 } from "./request-tenant.js";
@@ -112,7 +108,7 @@ const provisioningQueue = createQueue();
 // signiertem Cookie + gueltiger DB-Session) VOR der req.auth/MCP-Logik aus: die
 // staerkere, jederzeit invalidierbare Identitaet gewinnt, fail-closed (-> TENANT_REJECT,
 // nie Owner). Volle Begruendung im Modul-Doc von request-tenant.js. isTrustedLocalCaller/
-// internalIdentity sowie OWNER_ID/ANON_IDENTITY/TENANT_REJECT kommen aus demselben
+// internalIdentity sowie OWNER_ID/TENANT_REJECT kommen aus demselben
 // Modul (oben importiert).
 const { requestTenant, requireTenant } = makeRequestTenant(store);
 
@@ -717,78 +713,14 @@ app.use(
 app.use(makeOnboardRoutes({ store, config, audit, provisioning }));
 
 // ================= MCP ueber Streamable HTTP (Custom Connector) =================
-// Stateless: pro Request ein frischer Server+Transport (einfach & robust fuer den Prototyp).
-// Auth via mcpAuth-Middleware (src/auth.js): Legacy-Bearer-Token, statisches
-// Token oder OAuth 2.1 (MCP_AUTH). Fail-closed bleibt Default (nur localhost).
-app.post("/mcp", mcpAuth, async (req, res) => {
-  // tenant=<id|reject|owner> auditiert die I4-Aufloesung (kein Secret: nur die
-  // tenantId, nie email/sub). Flag aus -> immer tenant=owner (byte-identisch).
-  // E-Mail wird gehasht (T-P0-7): dieses Diagnose-Log laeuft pro Request und landet
-  // im Render-stdout - die Klartext-Adresse waere PII at rest. Der forensische
-  // Identitaets-Nachweis bleibt vollstaendig im audit()-Trail (requestedBy).
-  // AM6: Tenant EINMAL aus dem verifizierten JWT aufloesen (req.auth.sub) und an die
-  // In-Process-Tools reichen (scopedTenant als X-Internal-Tenant), damit der REST-Hop
-  // nicht aus der email-first Identitaet re-aufloest (sub/email-Divergenz). Flag aus ->
-  // requestTenant === BOOTSTRAP_TENANT_ID (byte-identisch).
-  const scopedTenant = requestTenant(req);
-  if (req.auth)
-    console.log(
-      "[mcp]",
-      req.auth.email ? hashEmail(req.auth.email) : "anonym",
-      `tenant=${scopedTenant}`,
-      req.body?.method || "",
-    );
-  // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub. Sie wird
-  // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
-  // mehr fuer das Rechteprofil. Kein req.auth (Legacy/localhost/stdio) -> null.
-  const identity = req.auth ? req.auth.email || req.auth.sub || ANON_IDENTITY : null;
-  // Rechteprofil keyt seit Phase S auf den am Gateway aufgeloesten Tenant (scopedTenant),
-  // nicht auf die email-/sub-Identitaet. BOOTSTRAP -> OWNER_PROFILE, sonst stored-or-DEFAULT
-  // (fail-closed: ein authentifizierter Nutzer ohne Tenant-Profil bekommt DEFAULT_PROFILE).
-  const profile = store.resolveProfile(scopedTenant);
-  try {
-    // Rich-UI: Server deklariert die io.modelcontextprotocol/ui-Extension im initialize-
-    // Response (MCP Apps / SEP-1865 - PFLICHT, sonst rendert der Host das ui://-Widget
-    // NICHT, auch bei korrektem Tool-_meta). Nur bei aktivem Master-Schalter; aus ->
-    // keine Extension -> byte-identisch. Auto-registrierte tools/resources werden vom SDK
-    // dazugemerged (verdraengen die Extension nicht).
-    const serverOptions = config.mcpUiEnabled
-      ? { capabilities: { extensions: uiServerExtension() } }
-      : undefined;
-    const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
-    // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.mcpUiEnabled
-    // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
-    // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate
-    // mehr, weil der stateless Transport (sessionIdGenerator=undefined) die initialize-
-    // Capabilities nicht zum tools/list-POST mitfuehrt - das Widget-_meta erschien sonst
-    // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
-    // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert.
-    const uiHost = { enabled: config.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
-    registerTools(server, {
-      identity,
-      scopedTenant,
-      allowCalendar: profile.allowCalendar,
-      uiHost,
-    });
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    res.on("close", () => {
-      transport.close();
-      server.close();
-    });
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-  } catch (err) {
-    console.error("[mcp]", err.message);
-    if (!res.headersSent)
-      res
-        .status(500)
-        .json({ jsonrpc: "2.0", error: { code: -32603, message: "internal error" }, id: null });
-  }
-});
-app.get("/mcp", (_req, res) => res.status(405).json({ error: "POST only (stateless transport)" }));
-app.delete("/mcp", (_req, res) =>
-  res.status(405).json({ error: "POST only (stateless transport)" }),
-);
+// Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt jetzt in src/routes/mcp.js
+// (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
+// Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
+// errorHandler (INV-2). /mcp ist Auth-Gate-exempt (Gate ruft next() fuer /mcp*, INV-3);
+// mcpAuth bleibt die EINZIGE Absicherung auf POST, fail-closed. Stateless pro Request
+// (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
+// Wurzel-Instanz (INV-7).
+app.use(makeMcpRoutes({ config, store, requestTenant }));
 
 // ---- Catch-all Error-Net (AC4) -------------------------------------------------
 // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur
