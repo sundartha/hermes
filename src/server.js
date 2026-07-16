@@ -39,7 +39,7 @@ import { degradedSpeechFor } from "./llm.js";
 import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO, BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
-import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
+import { attachMediaBridge } from "./bridge.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
@@ -49,7 +49,6 @@ import { makeSingleFlight } from "./single-flight.js";
 import {
   voiceControl,
   messaging,
-  voiceRenderer,
   webhookEvents,
   inboundSignatureVerifier,
   providerFromHeaders,
@@ -57,11 +56,9 @@ import {
 } from "./telephony/registry.js";
 import {
   say as sayD,
-  gather as gatherD,
   hangup as hangupD,
-  redirect as redirectD,
-  stream as streamD,
 } from "./telephony/directives.js";
+import { makeVoiceRender } from "./telephony/voice-render.js";
 import { localeFor, languageForCountry } from "./i18n/locales.js";
 import { SPEAK_OUTCOME } from "./telephony/adapters/telnyx/speak-events.js";
 import { callFailureReason } from "./telephony/failure-reason.js";
@@ -599,10 +596,12 @@ app.use("/voice", (req, res, next) => {
   next();
 });
 
-// Kurz-Helfer fuer Direktiven-Listen -> Provider-Markup (TwiML/TeXML). provider
-// wird vom Aufrufer durchgereicht; undefined -> voiceRenderer-Default twilio ->
-// jeder arg-lose render(x)-Aufruf bleibt byte-identisch (Hot-Path, R5).
-const render = (directives, provider) => voiceRenderer(provider).renderDirectives(directives);
+// Voice-Render-Helfer (Server-Slim P3): render + Turn-/Say-/Stream-Direktiven leben
+// jetzt in telephony/voice-render.js. EINE Instanz (INV-7), config wird geschlossen
+// (publicUrl/sttSpeechTimeoutSec zur Laufzeit gelesen). Aufruf-Sites bleiben wortgleich;
+// das voiceRender-Objekt geht in P11 an makeVoiceRoutes.
+const voiceRender = makeVoiceRender({ config });
+const { render, turnDirectives, sayInCallVoice, followupTurnDirectives, streamDirectives } = voiceRender;
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -614,36 +613,6 @@ const render = (directives, provider) => voiceRenderer(provider).renderDirective
 // ---- Eingabe-Validierung fuer API-Routen ----
 // E164, TEXT_LIMITS, invalidText: extrahiert nach src/routes/_validation.js (T4 Phase 2).
 
-// Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem Prompt +
-// Redirect-Fallback auf dieselbe Turn-URL. speechTimeoutSec (optional) setzt festes
-// STT-Endpointing statt "auto" - NUR Folge-Gathers im /voice/turn (G3). Erst-Gather
-// (Inbound-Greeting + Outbound) ruft OHNE -> "auto" bleibt (End-of-Speech-Erkennung
-// noetig, sonst Erst-Turn-Deadlock). Telnyx-TeXML loest relative URLs anders auf als
-// Twilio -> absolute URL fuer Telnyx (config.publicUrl im Module-Scope).
-function turnDirectives(call, text, { speechTimeoutSec } = {}) {
-  const isTelnyx = call.provider === "telnyx";
-  const base = isTelnyx ? config.publicUrl : "";
-  const action = `${base}/voice/turn?callId=${call.id}`;
-  // Voice-Profil (TTS-Voice + STT-Locale) aus call.language ableiten (F1 P4). DE-Call
-  // -> DE_FEMALE_NEURAL -> Renderer byte-identisch (Snapshot). Fail-safe ueber localeFor.
-  const voiceProfile = localeFor(call.language).voiceProfile;
-  return [gatherD({ promptText: text, action, voiceProfile, speechTimeoutSec }), redirectD(action)];
-}
-
-// Gesprochenen Satz im Voice-Profil des Calls rendern (F1 P4): sayD(text) defaultet auf
-// DE; in den sprachabhaengigen Pfaden (Turn-Ende, Fehler) muss die Voice der call.language
-// folgen. DE-Call -> DE-Default -> byte-identisch. EINE Ableitungsstelle (G5).
-function sayInCallVoice(call, text) {
-  return sayD(text, localeFor(call.language).voiceProfile);
-}
-
-// Folge-Gather im laufenden Gespraech (/voice/turn): wie turnDirectives, aber mit
-// festem STT-Endpointing (config.sttSpeechTimeoutSec) gegen Satz-Truncation (G3).
-// Eigener Name statt Boolean-Flag (kein Selektor-Argument, G15/F3).
-function followupTurnDirectives(call, text) {
-  return turnDirectives(call, text, { speechTimeoutSec: config.sttSpeechTimeoutSec });
-}
-
 // Gesprochene Degradations-/Reprompt-Texte fuer den /voice/turn-Fehlerpfad leben seit
 // F1 P4 sprachabhaengig im Locale-Bundle (i18n/locales.js, eine Quelle pro Sprache):
 //   llmDegradedSpeech  - wuerdevolles Ende bei anhaltender LLM-Nichtverfuegbarkeit
@@ -652,24 +621,6 @@ function followupTurnDirectives(call, text) {
 //   noSpeechReprompt   - knappe Rueckfrage, wenn der Gather leer lief (G4)
 // Der Aufrufer hat call -> localeFor(call.language).<feld>. DE-Werte sind byte-identisch
 // zum frueheren Inline-Bestand (i18n-Test pinnt sie).
-
-// Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
-// provider-aware (Twilio /media byte-identisch, Telnyx eigener Pfad) - der upgrade-
-// Handler leitet daraus fail-closed den Provider ab. stream_token authentifiziert
-// den WebSocket (Bridge prueft beim start-Event, bridge.js).
-function streamDirectives(call) {
-  const path = MEDIA_PATH[call.provider] || MEDIA_PATH[DEFAULT_PROVIDER];
-  const url = config.publicUrl.replace(/^https/, "wss") + path;
-  return [
-    streamD({
-      url,
-      params: [
-        { name: "call_id", value: call.id },
-        { name: "stream_token", value: call.streamToken },
-      ],
-    }),
-  ];
-}
 
 // Gemeinsame Call-Max-Dauer in ms (G5): armMaxDurationTimer UND der Reserve-Backstop-Timer
 // teilen diese Rechnung (call-eigenes Limit vor globalem Default).
