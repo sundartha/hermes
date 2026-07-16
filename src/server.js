@@ -6,11 +6,6 @@ import path from "path";
 import express from "express";
 import { config, assertConfig } from "./config.js";
 import * as store from "./store.js";
-import {
-  PROVIDER,
-  NUMBER_STATUS,
-  USAGE_EVENT_KIND,
-} from "./store/defaults.js";
 import { hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
 import { agentTurn, summarizeCall } from "./claude.js";
@@ -41,7 +36,6 @@ import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
 import {
-  setTenantIdentityIfAbsent,
   recordProvisioningJob,
   markProvisioningJob,
   classifyQueuedProvisioningJobs,
@@ -55,32 +49,17 @@ import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
-import { verifyStripeSignature, applyStripeWebhookSerialized } from "./billing/webhook.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeTenantWriteRoutes } from "./routes/api-tenant-write.js";
-import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes } from "./routes/api-profiles.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { PLAN_CATALOG } from "./plans.js";
-import {
-  makeWebAuthRoutes,
-  makeAdminRoutes,
-  makeOidc,
-  makeAccounts,
-  makeSessions,
-  webAuth,
-  webAuthAllowPending,
-  adminOnly,
-  LOGIN_ROUTE,
-} from "./web-auth.js";
-import { makePortalStore } from "./store/portal.js";
-import { makeAuditStore } from "./audit-store.js";
-import { runReleaseReconcile } from "./release-reconcile.js";
 import { createPortalRunner } from "./portal-pool.js";
+import { wireWebLogin } from "./wiring/web-login.js";
 import { guardedBoot, fakeOriginateBootBlocked } from "./boot-guard.js";
 import {
   makeRequestTenant,
@@ -285,208 +264,34 @@ if (!config.webDistDir) {
   app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
 }
 
-// tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers. Wie RETENTION_SWEEP_INTERVAL_MS
-// eine interne Kadenz (kein Operator-Knopf) -> Modul-Konstante, nicht config.js; der
-// eigentliche Sicherheits-Knopf ist das Grace-Fenster (RELEASE_GRACE_DAYS, config).
-const RELEASE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
-
-// Boot-Lauf + periodischer Sweep des DID-Release-Reconcilers. fire-and-forget (blockiert
-// weder guardedBoot/listen noch den Healthcheck); nowMs pro Lauf injiziert -> der reine
-// Klassifizierer/Executor bleibt Date.now-frei. Wird aus dem guardedBoot-Block gerufen,
-// weil der durable Audit (auditStore) den privilegierten portalRunner braucht - denselben
-// Runner wie der suspended_at-stempelnde Billing-Webhook (EINE pg-Wiring-Quelle, G5).
-// Free-Tier-Vorbehalt: Render-Free kann schlafen -> der Boot-Lauf deckt den Deploy-Fall;
-// eine Render-Cron ist das spaetere Upgrade (fuer den Launch nicht noetig, Observe-Only-Default).
-function scheduleReleaseReconcile(deps) {
-  const run = () =>
-    void runReleaseReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
-      console.error("[did-release]", e.message),
-    );
-  run();
-  setInterval(run, RELEASE_RECONCILE_INTERVAL_MS).unref();
-}
-
 // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
 // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
 // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
 // damit /auth/login nicht durch Basic-Auth geblockt wird.
 if (config.sessionSecret && config.storeBackend === "pg") {
-  // AC5 (Boot-Entkopplung): der gesamte Portal-/Web-Login-Block laeuft in guardedBoot.
-  // Wirft createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
-  // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> die Web-Login/Portal-
-  // Routen werden NICHT gemountet (existieren nicht -> 404), aber der Boot laeuft weiter:
-  // /voice, /healthz, /mcp und das Owner-Dashboard (Basic-Auth NACH diesem Block) bleiben.
-  // Portal-pg-Fail toetet die Telefonie also nicht mehr.
-  await guardedBoot("Web-Login/Portal", async () => {
-    const portalRunner = await createPortalRunner();
-    const oidc = makeOidc(config);
-    const accounts = makeAccounts(portalRunner);
-    const sessions = makeSessions(portalRunner);
-    const auditStore = makeAuditStore(portalRunner);
-    // tenant-prolif-d: DID-Release-Reconcile scharfschalten (Boot-Lauf + Sweep). Der
-    // Provider laeuft ueber den bestehenden NumberProvisioning-Port (nur Telnyx). graceMs=0
-    // (Default) = Observe-Only -> loggt nur Kandidaten, gibt nichts frei.
-    scheduleReleaseReconcile({
+  // AC5/INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (jetzt in
+  // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
+  // createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
+  // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> Routen NICHT gemountet
+  // (404), aber /voice, /healthz, /mcp und das Owner-Dashboard leben weiter. Q1: wireWebLogin
+  // loggt im Erfolgsfall "[boot] Web-Login aktiv" (eigene Zeile), sodass der fail-open-
+  // Zustand nicht mehr unsichtbar ist. createPortalRunner injiziert (DIP-Seam, offline
+  // fakebar); STRIPE_WEBHOOK_PATH/CUSTOMER_PORTAL_PATH/APP_PATH bleiben EINE Konstante
+  // (INV-1) und werden hereingereicht. provision = provisioning.triggerTenantProvisioning
+  // (die EINE P6-Orchestrator-Instanz, oben konstruiert, TDZ-Vermeidung).
+  await guardedBoot("Web-Login/Portal", () =>
+    wireWebLogin({
+      app,
+      config,
       store,
-      provisioner: numberProvisioning(PROVIDER.TELNYX),
-      audit: auditStore,
-      graceMs: config.releaseGraceMs,
-    });
-    const portalStore = makePortalStore(portalRunner);
-    const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
-    // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst
-    // 403-Deadlock). Gleiche Session-Mechanik, nur das Status-Gate ist gelockert (web-auth.js).
-    const webAuthPendingMw = webAuthAllowPending({
-      secret: config.sessionSecret,
-      sessions,
-      accounts,
-    });
-    const adminMw = adminOnly({ adminEmails: config.adminEmails });
-    // P2b: Vor-/Nachname aus dem verifizierten IdP-Profil set-if-absent in den Gate-Store
-    // schreiben (gleiche Kompositions-Quelle wie /api/onboard: applyOwnerIdentity ueber
-    // setTenantIdentityIfAbsent + Store-Lock, G5). FAIL-OPEN wie ensureTenant: ein Store-
-    // Schluckauf darf den Login NICHT blocken -> Folge ist ein eingeloggter Tenant ohne
-    // ownerName, den das Outbound-Identitaets-Gate fail-CLOSED sperrt (kein Leak). save()
-    // NUR bei echter Mutation (set-if-absent: Folge-Logins = No-Op). Kein Secret im Log.
-    const applyTenantIdentity = async (tenantId, identity) => {
-      try {
-        await store.withStoreLock(() => {
-          const s = store.load();
-          if (setTenantIdentityIfAbsent(s, tenantId, identity)) store.save();
-        });
-      } catch (e) {
-        console.error("[web-auth] applyTenantIdentity fehlgeschlagen:", e.message);
-      }
-    };
-    const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
-    app.use("/auth", loginRateLimiter);
-    app.use(
-      makeWebAuthRoutes({
-        secret: config.sessionSecret,
-        redirectUri: config.publicUrl + "/auth/callback",
-        ttlSeconds: config.sessionTtlSeconds,
-        // Login-Flow-Cookie-TTL (state/pkce/nonce), separat von der Session-TTL: grosszuegig
-        // genug fuer den Mail-Verify-Round-Trip; Ablauf faengt die Callback-Recovery benign ab.
-        loginCookieTtlSeconds: config.loginCookieTtlSeconds,
-        oidc,
-        accounts,
-        sessions,
-        audit: auditStore,
-        // Post-Login ins Kunden-Portal NUR wenn die Self-Service-Shell gemountet ist
-        // (gleicher Flag-Gate wie die /tenant.html-Basic-Auth-Exemption unten). Sonst
-        // Default "/" -> byte-identisch zum Bestand (kein Redirect auf eine Seite, die
-        // ohne Self-Service-Flags nicht Basic-Auth-exempt waere).
-        // Single-Origin (P1): mit WEB_DIST_DIR landet der frisch eingeloggte Tenant auf
-        // der App-Shell (/app) im unified Build (vorrangig vor dem Self-Service-Portal).
-        postLoginPath: config.webDistDir
-          ? APP_PATH
-          : config.selfServiceEnabled && config.multiTenant
-            ? CUSTOMER_PORTAL_PATH
-            : undefined,
-        // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben.
-        // Muss im WorkOS-Dashboard als Sign-out-Redirect-URL registriert sein (Phase 3).
-        postLogoutUrl: config.publicUrl + LOGIN_ROUTE,
-        // Lokaler Dev-Login-Shim (NUR mit config.devLoginEnabled, fail-closed): mintet
-        // dieselbe Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
-        devLoginEnabled: config.devLoginEnabled,
-        // Signup-Spiegel-Nachzug: zieht den per accounts.upsertOnFirstLogin (mintSession)
-        // frisch angelegten Tenant in den pg-Store-Spiegel, BEVOR der Self-Service-Subscribe-
-        // Pfad eine WRITE-Store-Op (setTenantStripe etc.) ausloest, die ihn sonst nicht faende.
-        ensureTenant: (tid) => store.ensureTenant(tid),
-        // tenant-prolif-b: nach dem Login den (evtl. gemergten) sub in den Resolver-Index
-        // spiegeln (mintSession), damit der MCP/REST-Kanal den kanonischen Tenant ohne Neustart
-        // aufloest. Fassade store.bindSubToTenant (beide Backends).
-        bindSub: (sub, tid) => store.bindSubToTenant(sub, tid),
-        // P2b: Identitaets-Write (Vor-/Nachname aus dem verifizierten IdP-Profil) ueber die
-        // Fassade in den Gate-Store - sonst sperrt das Outbound-Identitaets-Gate den Web-Tenant.
-        applyTenantIdentity,
-      }),
-    );
-
-    // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt
-    // req.tenant (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten.
-    // VOR der Basic-Auth-Schicht registriert -> /api/portal/* ist owner-Basic-Auth-
-    // exempt und ausschliesslich ueber webAuth (Kunden-Session) gesichert.
-    app.get("/api/portal/state", webAuthMw, async (req, res) => {
-      try {
-        const calls = await portalStore.listCalls(req.tenant.tenantId);
-        res.json({ tenantId: req.tenant.tenantId, calls });
-      } catch (e) {
-        console.error("[portal] state", e.message);
-        res.status(500).json({ error: "interner Fehler" });
-      }
-    });
-
-    // ---- Admin: Tenant freigeben / suspendieren (admin-allowlist, fail-closed) ----
-    // Routen-Handler in makeAdminRoutes (web-auth.js), damit der Test exakt denselben
-    // Handler prueft statt einer Replik (G5). suspend invalidiert sofort alle Sessions
-    // des Tenants; jede Aktion auditiert; nicht-existenter Tenant -> 404. store: approve
-    // loescht den suspended_at-Grace-Anker (tenant-prolif-c Invariante 2, G3-Fix).
-    app.use(makeAdminRoutes({ accounts, sessions, audit: auditStore, webAuthMw, adminMw, store }));
-
-    // ---- Self-Service (I9 + #3): web-session-only, hinter webAuthMw ----------------
-    // Konvergenz #3: Self-Service haengt jetzt am echten OIDC-Browser-Login statt am
-    // X-Internal-Identity-Pfad. NUR hier (im Web-Login-Block: sessionSecret + pg)
-    // registriert -> ohne Web-Login-Infra existieren die Routen nicht (404). Zusaetzlich
-    // an SELF_SERVICE_ENABLED + MULTI_TENANT gegated (eigenes Reife-Flag; ohne
-    // MULTI_TENANT keyt der Mirror nur den Owner-Bucket). VOR der Basic-Auth-Schicht ->
-    // ausschliesslich ueber webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth.
-    // audit = util.audit (nur Keys, keine Werte/PII).
-    if (config.selfServiceEnabled && config.multiTenant) {
-      app.use(
-        makeSelfServiceRoutes({
-          store,
-          webAuthMw,
-          webAuthPendingMw,
-          audit,
-          config,
-          billing: stripeBilling,
-          accounts,
-          provision: provisioning.triggerTenantProvisioning,
-        }),
-      );
-    }
-
-    // ---- Stripe-Webhook (W4): Abo-Lifecycle nachziehen ------------------------------
-    // KEINE Basic-Auth (Stripe kann keine Credentials senden) - die Sicherung ist die
-    // HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed, eigener Begruendungs-
-    // Kommentar wie /voice, Regel 3). Ohne PAYMENT_ENABLED -> 404 (byte-identisch).
-    // Liegt im guardedBoot-Block, weil applyStripeWebhookSerialized (P1) accounts.setStatus +
-    // sessions.invalidateByTenant braucht (nur hier konstruiert). Serialisiert pro Stripe-
-    // Korrelationsschluessel (subscriptionId, Fallback tenantRef) + verwirft veraltete/doppelte
-    // Events (Ordnungswache) - Details in billing/webhook.js. Idempotent: jeder Event wirkt nur
-    // als Vorwaerts-Zustand; Wiederholung aendert nichts.
-    app.post(STRIPE_WEBHOOK_PATH, async (req, res) => {
-      if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled" });
-      const ok = verifyStripeSignature({
-        rawBody: req.rawBody,
-        signatureHeader: req.headers["stripe-signature"],
-        secret: config.stripeWebhookSecret,
-        nowS: Math.floor(Date.now() / 1000),
-      });
-      if (!ok) {
-        audit("stripe_webhook_rejected", req, "signature");
-        return res.status(400).json({ error: "invalid signature" });
-      }
-      // rawBody ist verifiziert -> jetzt erst parsen (kein Vertrauen vor der Signatur).
-      let event;
-      try {
-        event = JSON.parse(req.rawBody.toString("utf8"));
-      } catch {
-        return res.status(400).json({ error: "bad payload" });
-      }
-      await applyStripeWebhookSerialized(event, {
-        store,
-        accounts,
-        sessions,
-        audit,
-        req,
-        provision: provisioning.triggerTenantProvisioning,
-        billing: stripeBilling,
-      });
-      res.json({ received: true });
-    });
-  });
+      audit,
+      provision: provisioning.triggerTenantProvisioning,
+      createPortalRunner,
+      stripeWebhookPath: STRIPE_WEBHOOK_PATH,
+      customerPortalPath: CUSTOMER_PORTAL_PATH,
+      appPath: APP_PATH,
+    }),
+  );
 }
 
 // ---- Single-Origin: apps/web (Astro-Build) statisch ausliefern (WEB_DIST_DIR) ----
