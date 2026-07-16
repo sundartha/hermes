@@ -91,8 +91,8 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "./billing/webhook.js";
-import { invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
+import { makeTenantWriteRoutes } from "./routes/api-tenant-write.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
@@ -1191,47 +1191,24 @@ app.use(
   }),
 );
 
-app.post("/api/settings", (req, res) => {
-  const tenant = requireTenant(req, res); // L2: tenant-gescopt; REJECT -> 403
-  if (!tenant) return;
-  const { settings, changed } = store.updateSettings(tenant, req.body || {});
-  // Nur die Keys loggen - Werte (z.B. greeting-Freitext) gehoeren nicht ins Log
-  audit("settings_update", req, `keys=${changed.join(",") || "-"}`);
-  res.json(settings);
-});
-
-app.post("/api/action-items/:id/toggle", (req, res) => {
-  const item = store.toggleActionItem(req.params.id);
-  if (!item) return res.status(404).json({ error: "not found" });
-  res.json(item);
-});
-
-app.post("/api/calendar", (req, res) => {
-  const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403 (vor dem Booking-Recht)
-  if (!tenant) return;
-  // Booking-Recht (Phase 2, Phase S tenant-gekeyt): BOOTSTRAP/Owner erlaubt, restriktives
-  // Profil (allowBooking false) wird abgewiesen. Das Recht keyt auf den schon aufgeloesten
-  // tenant; identity bleibt nur fuer das Audit (requestedBy), nie aus dem Body.
-  const identity = internalIdentity(req);
-  if (!store.resolveProfile(tenant).allowBooking) {
-    audit("booking_denied", req, `requestedBy=${identity || OWNER_ID}`);
-    return res.status(403).json({ error: "Kein Recht, Termine zu buchen (allowBooking=false)." });
-  }
-  const { title, start, end } = req.body || {};
-  if (!title || !start || !end)
-    return res.status(400).json({ error: "title, start, end sind Pflicht" });
-  const titleErr = invalidText("title", title);
-  if (titleErr) return res.status(400).json({ error: titleErr });
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  if (isNaN(startDate) || isNaN(endDate))
-    return res
-      .status(400)
-      .json({ error: "start und end muessen gueltige Datumswerte sein (ISO 8601)" });
-  if (endDate <= startDate) return res.status(400).json({ error: "end muss nach start liegen" });
-  // Normalisiert speichern: findConflict() vergleicht ISO-Strings lexikographisch
-  res.json(store.addCalendarEvent(tenant, title, startDate.toISOString(), endDate.toISOString()));
-});
+// ---- Tenant-Write-Routen (Server-Slim P8) ---------------------------------------
+// Die tenant-scoped Schreib-Route-Gruppe (POST /api/settings,
+// POST /api/action-items/:id/toggle, POST /api/calendar) lebt jetzt in
+// src/routes/api-tenant-write.js (makeTenantWriteRoutes, DI-Muster wie makeReadRoutes)
+// - reine Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
+// makeReadRoutes, vor makeProfileRoutes), hinter Basic-Auth (Bestand deckt /api/* ab).
+// requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT); die handler-interne
+// Reihenfolge (requireTenant -> allowBooking -> Validierung) ist exakt mitgewandert.
+// internalIdentity/OWNER_ID injiziert (EINE Quelle, request-tenant.js).
+app.use(
+  makeTenantWriteRoutes({
+    store,
+    audit,
+    tenant: { requireTenant },
+    internalIdentity,
+    OWNER_ID,
+  }),
+);
 
 // ---- Rechteprofile verwalten (Phase 2) ----
 // AC7-Decomposition: die /api/profiles-Route-Gruppe lebt jetzt in
