@@ -196,6 +196,8 @@ const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
 const ingestSrc = fs.readFileSync(path.join(ROOT, "src", "telnyx-call-control-ingest.js"), "utf8");
 // P5 (Server-Slim): terminateCappedCall wanderte nach telephony/call-lifecycle.js.
 const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
+// P9 (Server-Slim): die /api/calls-Route-Gruppe wanderte nach routes/api-calls.js.
+const apiCallsSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "api-calls.js"), "utf8");
 
 function sliceBetween(src, startMarker, endMarker, fromIndex = 0) {
   const start = src.indexOf(startMarker, fromIndex);
@@ -225,15 +227,17 @@ test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) 
 
 test("Quelltext: place_call-catch nutzt terminateAndBillCall (die geschlossene C5-Luecke)", () => {
   const routeBlock = sliceBetween(
-    serverSrc,
-    'app.post("/api/calls", async (req, res) => {',
-    'app.post("/api/calls/:id/cancel"',
+    apiCallsSrc,
+    'router.post("/api/calls", async (req, res) => {',
+    'router.post("/api/calls/:id/cancel"',
   );
   const catchBlock = sliceBetween(routeBlock, "} catch (err) {", "res.status(providerStatus");
   assert.match(catchBlock, /terminateAndBillCall\(\{/);
   assert.match(catchBlock, /hangUp:\s*null/);
-  // P4 (Server-Slim): siehe Kommentar oben - callFinish.finishCall statt bare finishCall.
-  assert.match(catchBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
+  // P9 (Server-Slim): finishCall kommt jetzt als injizierter Dep herein (== callFinish.finishCall
+  // bei der Verdrahtung in server.js) - der Modul-Quelltext referenziert den bare Dep-Namen,
+  // wie terminateCappedCall in call-lifecycle.js.
+  assert.match(catchBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     catchBlock,
     /await releaseReserve\(call\)/,
@@ -271,6 +275,6 @@ test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk 
   // referenziert der Modul-Quelltext den bare Dep-Namen, nicht callFinish.finishCall.
   const cappedBlock = sliceBetween(lifecycleSrc, "async function terminateCappedCall(", "\n}\n");
   assert.match(cappedBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*callId\)/);
-  const cancelBlock = sliceBetween(serverSrc, 'app.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
-  assert.match(cancelBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
+  const cancelBlock = sliceBetween(apiCallsSrc, 'router.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
+  assert.match(cancelBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
 });
