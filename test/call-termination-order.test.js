@@ -211,7 +211,9 @@ test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) 
   );
   assert.match(block, /terminateAndBillCall\(\{/);
   assert.match(block, /hangUp:\s*null/);
-  assert.match(block, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
+  // P4 (Server-Slim): finishCall wanderte nach telephony/call-finish.js - die Aufrufstelle
+  // referenziert es jetzt ueber die EINE callFinish-Instanz (INV-7), kein bare finishCall mehr.
+  assert.match(block, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     block,
     /^\s*finishCall\(store\.getCall\(call\.id\)\);\s*$/m,
@@ -228,7 +230,8 @@ test("Quelltext: place_call-catch nutzt terminateAndBillCall (die geschlossene C
   const catchBlock = sliceBetween(routeBlock, "} catch (err) {", "res.status(providerStatus");
   assert.match(catchBlock, /terminateAndBillCall\(\{/);
   assert.match(catchBlock, /hangUp:\s*null/);
-  assert.match(catchBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
+  // P4 (Server-Slim): siehe Kommentar oben - callFinish.finishCall statt bare finishCall.
+  assert.match(catchBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     catchBlock,
     /await releaseReserve\(call\)/,
@@ -262,7 +265,8 @@ test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk 
     /import \{ terminateAndBillCall, hangUpAction, billThunk \} from "\.\/telephony\/call-termination\.js";/,
   );
   const cappedBlock = sliceBetween(serverSrc, "async function terminateCappedCall(", "\n}\n");
-  assert.match(cappedBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*callId\)/);
+  // P4 (Server-Slim): siehe Kommentar oben - callFinish.finishCall statt bare finishCall.
+  assert.match(cappedBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*callId\)/);
   const cancelBlock = sliceBetween(serverSrc, 'app.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
-  assert.match(cancelBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
+  assert.match(cancelBlock, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
 });
