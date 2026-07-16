@@ -2,34 +2,17 @@
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
 // MUSS erste Importzeile bleiben (vor store.js) - globales Crash-Netz, ESM-Eval-Order (T-P0-07).
 import "./process-guards.js";
-import path from "path";
-import express from "express";
-import { config, assertConfig } from "./config.js";
+import { config } from "./config.js";
 import * as store from "./store.js";
-import { hasActiveNumber } from "./store/views.js";
 import { planSummarySms } from "./sms-summary.js";
-import { agentTurn, summarizeCall } from "./claude.js";
-import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
+import { summarizeCall } from "./claude.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
-import { originateAiAssistantCall } from "./telnyx-origination.js";
-import { BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
-import { attachMediaBridge } from "./bridge.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
-import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
-import { registerWellKnown } from "./auth.js";
-import { audit, safeEqual } from "./util.js";
-import {
-  voiceControl,
-  messaging,
-  webhookEvents,
-  inboundSignatureVerifier,
-  providerFromHeaders,
-  numberProvisioning,
-} from "./telephony/registry.js";
+import { audit } from "./util.js";
+import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
-import { localeFor } from "./i18n/locales.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -49,32 +32,14 @@ import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
-import { makeVoiceRoutes } from "./routes/voice.js";
-import { makeReadRoutes } from "./routes/api-read.js";
-import { makeTenantWriteRoutes } from "./routes/api-tenant-write.js";
-import { makeProfileRoutes } from "./routes/api-profiles.js";
-import { makeBillingRoutes } from "./routes/api-billing.js";
-import { makeCallRoutes } from "./routes/api-calls.js";
-import { makeOnboardRoutes } from "./routes/api-onboard.js";
-import { makeMcpRoutes } from "./routes/mcp.js";
-import { PLAN_CATALOG } from "./plans.js";
-import { createPortalRunner } from "./portal-pool.js";
-import { wireWebLogin } from "./wiring/web-login.js";
-import { makeAuthGate } from "./wiring/auth-gate.js";
-import { guardedBoot, fakeOriginateBootBlocked } from "./boot-guard.js";
 import {
   makeRequestTenant,
-  isTrustedLocalCaller,
   internalIdentity,
   OWNER_ID,
   TENANT_REJECT,
-  tenantOwnsCall,
 } from "./request-tenant.js";
-
-const app = express();
-// Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
-// per X-Forwarded-For eine beliebige IP vortaeuschen.
-app.set("trust proxy", 1);
+import { buildApp } from "./app.js";
+import { bootServer } from "./boot.js";
 
 // Eine Queue-Instanz pro Prozess (Konstruktion in der Naht, nicht im Handler; P15).
 // Default In-Memory (deterministisch, drain-on-demand); QUEUE_BACKEND=pgboss wirft
@@ -89,7 +54,7 @@ const provisioningQueue = createQueue();
 // staerkere, jederzeit invalidierbare Identitaet gewinnt, fail-closed (-> TENANT_REJECT,
 // nie Owner). Volle Begruendung im Modul-Doc von request-tenant.js. isTrustedLocalCaller/
 // internalIdentity sowie OWNER_ID/TENANT_REJECT kommen aus demselben
-// Modul (oben importiert).
+// Modul (in app.js importiert, wo sie gebraucht werden).
 const { requestTenant, requireTenant } = makeRequestTenant(store);
 
 // Outbound-Gate-Kette EINMAL beim Boot verdrahtet (Modul-Scope wie provisioningQueue,
@@ -149,11 +114,11 @@ const lifecycle = makeCallLifecycle({
 // provisioning-orchestrator (P6): enqueue/trigger/drain(single-flight)/reconcile fuer den
 // Nummern-Kauf. EINMAL beim Boot verdrahtet (Naht wie metering/callFinish/lifecycle, INV-7):
 // der Single-Flight-Guard lebt im Factory-Scope = EIN Drain-Guard pro Prozess (kein
-// Doppelkauf). KONSTRUIERT VOR dem guardedBoot-Block (unten), weil triggerTenantProvisioning
-// dort als provision-Seam an zwei Stellen (self-service + Stripe-Webhook) gebraucht wird -
-// eine spaetere Konstruktion feuerte im pg+session-Boot einen TDZ-ReferenceError, den
-// guardedBoot fail-OPEN verschluckt (Routen lautlos 404, INV-11). provisioningQueue + metering
-// (P1) liegen bereits davor.
+// Doppelkauf). KONSTRUIERT VOR dem guardedBoot-Block (in buildApp), weil
+// triggerTenantProvisioning dort als provision-Seam an zwei Stellen (self-service + Stripe-
+// Webhook) gebraucht wird - eine spaetere Konstruktion feuerte im pg+session-Boot einen
+// TDZ-ReferenceError, den guardedBoot fail-OPEN verschluckt (Routen lautlos 404, INV-11).
+// provisioningQueue + metering (P1) liegen bereits davor.
 const provisioning = makeProvisioningOrchestrator({
   store,
   config,
@@ -170,180 +135,19 @@ const provisioning = makeProvisioningOrchestrator({
   findNumber,
 });
 
-app.use(securityHeaders);
-
-// ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
-// /voice/* ist ausgenommen (kommt von Twilio, eigene Signaturpruefung), ebenso
-// vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes Loopback OHNE
-// Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
-// externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
-// Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
-const rateLimiter = createRateLimiter(config.rateLimitPerMin);
-app.use((req, res, next) => {
-  if (req.path.startsWith("/voice") || isTrustedLocalCaller(req)) return next();
-  rateLimiter(req, res, next);
-});
-
-// Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
-// und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
-const BODY_LIMIT = "100kb";
-// Kunden-Portal (Self-Service-Shell). Ziel des Post-Login-Redirects UND der Basic-Auth-
-// Exemption: ein frisch eingeloggter (suspendierter) Tenant landet hier (zeigt
-// "Choose your plan"), NICHT auf "/" (Owner-Dashboard hinter Basic-Auth = Sackgasse).
-const CUSTOMER_PORTAL_PATH = "/tenant.html";
-// P5: Ziel des Landing-Redirects (kein Magic-String, G25). "/" hat kein Index ->
-// 302 auf den Login (= Registrierung, Strategie R2). Pfad lebt auf dem Gateway
-// (makeWebAuthRoutes GET /auth/login), nicht auf der Static Site.
-const LOGIN_PATH = "/auth/login";
-// Single-Origin (P1): App-Shell-Pfad im apps/web-Build (kein Magic-String, G25). Ziel
-// des Post-Login-Redirects UND des /tenant.html-Altpfad-Redirects, sobald WEB_DIST_DIR
-// aktiv ist (das Tenant-Dashboard lebt dann unter /app im unified Build).
-const APP_PATH = "/app";
-// W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
-// den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
-const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
-// rawBody fuer /voice (Twilio/Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
-// gegen den unveraenderten Body. Der Twilio-HMAC nutzt weiterhin nur die geparsten
-// Params - die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
-const captureRawBody = (req, _res, buf) => {
-  if (req.path.startsWith("/voice") || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
-};
-app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Twilio-Webhooks
-app.use(express.json({ limit: BODY_LIMIT, verify: captureRawBody })); // eigene API + MCP
-
-// Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten
-app.use((err, _req, res, next) => {
-  if (!err.status || err.status < 400 || err.status >= 500) return next(err);
-  res.status(err.status).json({ error: err.type || "bad request" });
-});
-
-// ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
-// /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigene MCP-Auth),
-// /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
-// /healthz (Keep-Alive) und vertrauenswuerdige lokale In-Process-Aufrufe (interne
-// MCP-Tools, isTrustedLocalCaller - NICHT per Socket-Adresse allein, s.u.).
-app.get("/healthz", (_req, res) => res.json({ ok: true }));
-
-// ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
-// AUTH-AUSNAHME (Regel 3, begruendet): bewusst VOR der Basic-Auth gemountet, ohne
-// Login erreichbar - exakt wie /healthz. Liefert NUR den oeffentlichen Tarif-Katalog
-// (Preise/Leistungen, identisch zu www.sundartha.com/preise) - KEINE Tenant-Daten,
-// KEINE Secrets, KEINE PII, kein Schreibpfad. SSoT: src/plans.js (Marketing-Spiegel
-// apps/web/src/lib/plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
-app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
-
-registerWellKnown(app);
-
-// ---- Telnyx AI Assistant Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1) ----------------
-// AUTH-AUSNAHME (Regel 3, begruendet): Telnyx BYO-LLM ruft diesen /v1/chat/completions-
-// kompatiblen Endpunkt SERVERSEITIG (kein Basic-Auth-Header moeglich) -> bewusst VOR der
-// Basic-Auth registriert (analog /voice/tts/:token), mit EIGENER fail-closed Absicherung:
-// 404 bei TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag); statisches Bearer-
-// Integration-Secret (E2) timing-sicher via safeEqual + call_control_id-Korrelation aus
-// forward_metadata (E1) gegen den Store-Call-Record (403 sonst); Budget-Gate pro Turn (kein
-// Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
-// bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
-// fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
 // stab-p9 (Kosten-Notaus): EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
 // Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
 // stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
-// der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2).
+// der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). EINMAL beim Boot
+// verdrahtet (Naht wie metering/callFinish/lifecycle/provisioning, INV-7); geht als deps-
+// Eintrag an buildApp (Shim-Mount + Voice-Routes teilen sich die EINE Instanz).
 const conversationWatchdog = makeConversationWatchdog({
   config,
   terminate: makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX }),
 });
-app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog: conversationWatchdog }));
 
-// P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
-// Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
-// Basic-Auth + express.static gemountet wie /auth/*; traegt keine Tenant-Daten, braucht
-// keine Session - daher unkonditional (greift auch ohne Web-Login-Infra).
-// Single-Origin (P1): mit WEB_DIST_DIR faellt "/" bewusst durch auf die statische
-// Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
-// gilt nur OHNE den unified Build (byte-identisch zum Bestand).
-if (!config.webDistDir) {
-  app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
-}
-
-// ---- OIDC-Browser-Login (/auth/*) -----------------------------------
-// Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
-// ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
-// damit /auth/login nicht durch Basic-Auth geblockt wird.
-if (config.sessionSecret && config.storeBackend === "pg") {
-  // AC5/INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (jetzt in
-  // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
-  // createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
-  // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> Routen NICHT gemountet
-  // (404), aber /voice, /healthz, /mcp und das Owner-Dashboard leben weiter. Q1: wireWebLogin
-  // loggt im Erfolgsfall "[boot] Web-Login aktiv" (eigene Zeile), sodass der fail-open-
-  // Zustand nicht mehr unsichtbar ist. createPortalRunner injiziert (DIP-Seam, offline
-  // fakebar); STRIPE_WEBHOOK_PATH/CUSTOMER_PORTAL_PATH/APP_PATH bleiben EINE Konstante
-  // (INV-1) und werden hereingereicht. provision = provisioning.triggerTenantProvisioning
-  // (die EINE P6-Orchestrator-Instanz, oben konstruiert, TDZ-Vermeidung).
-  await guardedBoot("Web-Login/Portal", () =>
-    wireWebLogin({
-      app,
-      config,
-      store,
-      audit,
-      provision: provisioning.triggerTenantProvisioning,
-      createPortalRunner,
-      stripeWebhookPath: STRIPE_WEBHOOK_PATH,
-      customerPortalPath: CUSTOMER_PORTAL_PATH,
-      appPath: APP_PATH,
-    }),
-  );
-}
-
-// ---- Single-Origin: apps/web (Astro-Build) statisch ausliefern (WEB_DIST_DIR) ----
-// Hinter dem Pfad-Flag (leer = aus -> heutiges Serving byte-identisch). MUSS VOR der
-// Basic-Auth (unten) liegen, SONST verlangte die oeffentliche Marketing-Site das
-// Admin-Passwort.
-// AUTH-AUSNAHME (Regel 3, begruendet): Marketing-Seiten + die /app-Shell sind bewusst
-// oeffentlich - statisches HTML/JS OHNE Tenant-Daten. Jede Tenant-Sicht laedt ihre Daten
-// erst ueber /api/self-service/* (webAuthMw, active-only, Session-Cookie) -> kein
-// Datenleck ueber das statische Serving. /api/*, /auth/*, /.well-known/*, der Stripe-
-// Webhook und /healthz sind oben bereits gematcht (Mount-Reihenfolge) -> kein Shadowing;
-// die Owner-Legacy-API liegt HINTER der Basic-Auth (unten) -> von diesem Mount unberuehrt.
-if (config.webDistDir) {
-  // /tenant.html -> /app: schattet die public/tenant.html (Owner-Removal-Altpfad) und
-  // erhaelt alte Bookmarks - das Tenant-Dashboard lebt im Build unter /app. P2/D2: den
-  // Query-String ERHALTEN. Der Post-Checkout-Rueckkehrpfad landet auf /tenant.html?sub=ok
-  // bzw. ?card=ok (self-service-routes.js); ohne Weitergabe ginge der Parameter beim
-  // Redirect verloren und die BillingIsland (?sub/?card-Handler) saehe ihn nie. Nur den
-  // Such-Teil anhaengen (kein Query -> reines /app, byte-identisch zum Altverhalten).
-  app.get(CUSTOMER_PORTAL_PATH, (req, res) => {
-    const queryAt = req.originalUrl.indexOf("?");
-    const search = queryAt === -1 ? "" : req.originalUrl.slice(queryAt);
-    res.redirect(302, APP_PATH + search);
-  });
-  // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
-  // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
-  app.use(express.static(config.webDistDir, { extensions: ["html"] }));
-  // SPA-Fallback: Unterpfade unter /app liefern die App-Shell (Client-seitiges Routing).
-  app.get("/app/*", (_req, res) => res.sendFile(path.join(config.webDistDir, "app", "index.html")));
-}
-
-// ---- Basic-Auth-Gate (Server-Slim P14) --------------------------------------------
-// Kern-Safety-Naht: Gate + gesamte Exemption-Liste leben jetzt in
-// src/wiring/auth-gate.js (makeAuthGate) - REINE Verschiebung. Mount an
-// UNVERAENDERTER Position (nach der WEB_DIST_DIR-Static-Schicht, VOR
-// express.static(publicDir) unten, INV-2); Exemption-Reihenfolge eingefroren
-// (INV-3, auth-gate-exemption-order.test.js). Alle Voice-/API-/MCP-Router (unten)
-// bleiben HINTER dem Gate. STRIPE_WEBHOOK_PATH bleibt EINE Quelle (INV-1).
-app.use(
-  makeAuthGate({
-    config,
-    audit,
-    isTrustedLocalCaller,
-    safeEqual,
-    BRAND_ASSETS_PREFIX,
-    paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
-  }),
-);
-app.use(express.static(config.publicDir));
-
-// Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII).
+// Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII). EINMAL
+// beim Boot verdrahtet (Naht wie conversationWatchdog, INV-7).
 const ttsStore = createTtsStore({ ttlMs: config.elevenLabsPlayTts.tokenTtlMs });
 
 // Play-TTS-Direktiven-Synth (fail-safe, Server-Slim P2): webt <Play>-Audio in Telnyx-
@@ -354,288 +158,28 @@ const directiveSynth = makeDirectiveSynth({ config, ttsStore });
 // Geht als Dep an makeVoiceRoutes (P11); die Render-Funktionen werden dort destrukturiert.
 const voiceRender = makeVoiceRender({ config });
 
-// ---- Voice-Webhooks (Server-Slim P11) ---------------------------------------------
-// Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
-// status/call-control) leben jetzt in routes/voice.js (makeVoiceRoutes, DI-Muster wie
-// makeCallRoutes) - REINE Verschiebung. Mount an UNVERAENDERTER Position: nach
-// express.static(publicDir), vor makeCallRoutes (INV-2). /voice ist Auth-Gate-exempt
-// (Sig fail-closed). INV-4: TTS-Route VOR der Sig-MW (im Router festgehalten). finishCall
-// = die EINE callFinish-Instanz (INV-7); watchdog = der EINE conversationWatchdog (geteilt
-// mit dem Shim); voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
-app.use(
-  makeVoiceRoutes({
-    store,
-    config,
-    audit,
-    voiceRender,
-    directiveSynth,
-    ttsStore,
-    lifecycle,
-    finishCall: callFinish.finishCall,
-    voiceControl,
-    webhookEvents,
-    providerFromHeaders,
-    inboundSignatureVerifier,
-    terminateAndBillCall,
-    billThunk,
-    watchdog: conversationWatchdog,
-  }),
-);
-
-// ================= REST-API (Dashboard + MCP-Tools) =================
-
-// ---- Outbound-Call-Routen (Server-Slim P9) --------------------------------------
-// Die Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel) lebt
-// jetzt in src/routes/api-calls.js (makeCallRoutes, DI-Muster wie makeReadRoutes) -
-// reine Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
-// der REST-API-Section, vor makeReadRoutes), hinter Basic-Auth (Bestand deckt /api/* ab).
-// INV-9: die Outbound-Gate-Kette (outboundGates = EIN gepinntes Array) + der Max-Dauer-
-// Cap (arm.*) + der Fehlerpfad (terminateAndBillCall) wandern unveraendert mit; finishCall
-// = die EINE callFinish-Instanz (INV-7), arm.* = die EINE lifecycle-Instanz.
-app.use(
-  makeCallRoutes({
-    store,
-    config,
-    audit,
-    outboundGates,
-    voiceControl,
-    originateAiAssistantCall,
-    terminateAndBillCall,
-    hangUpAction,
-    billThunk,
-    finishCall: callFinish.finishCall,
-    arm: {
-      armMaxDurationTimer: lifecycle.armMaxDurationTimer,
-      armReserveReleaseTimer: lifecycle.armReserveReleaseTimer,
-    },
-    tenant: { requestTenant, tenantOwnsCall },
-    internalIdentity,
-    OWNER_ID,
-  }),
-);
-
-// ---- Read-/Export-Routen (Phase 3) ----
-// T4-Decomposition: die GET-Route-Gruppe (/api/state, /api/calls/:id,
-// /api/tenant-data/export) lebt jetzt in src/routes/api-read.js (makeReadRoutes,
-// DI-Muster wie makeProfileRoutes) - reine Verschiebung, Verhalten unveraendert.
-// STATE_*-Konstanten und die View-Helfer (publicCall/upcomingCalendar/activeNumberFor)
-// sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
-// die request-tenant-Resolver werden injiziert. Hinter Basic-Auth (Bestand deckt
-// /api/* ab); die lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
-app.use(
-  makeReadRoutes({
-    store,
-    config,
-    audit,
-    tenant: { requestTenant, requireTenant, tenantOwnsCall },
-  }),
-);
-
-// ---- Tenant-Write-Routen (Server-Slim P8) ---------------------------------------
-// Die tenant-scoped Schreib-Route-Gruppe (POST /api/settings,
-// POST /api/action-items/:id/toggle, POST /api/calendar) lebt jetzt in
-// src/routes/api-tenant-write.js (makeTenantWriteRoutes, DI-Muster wie makeReadRoutes)
-// - reine Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
-// makeReadRoutes, vor makeProfileRoutes), hinter Basic-Auth (Bestand deckt /api/* ab).
-// requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT); die handler-interne
-// Reihenfolge (requireTenant -> allowBooking -> Validierung) ist exakt mitgewandert.
-// internalIdentity/OWNER_ID injiziert (EINE Quelle, request-tenant.js).
-app.use(
-  makeTenantWriteRoutes({
-    store,
-    audit,
-    tenant: { requireTenant },
-    internalIdentity,
-    OWNER_ID,
-  }),
-);
-
-// ---- Rechteprofile verwalten (Phase 2) ----
-// AC7-Decomposition: die /api/profiles-Route-Gruppe lebt jetzt in
-// src/routes/api-profiles.js (makeProfileRoutes, DI-Muster wie makeWebAuthRoutes) -
-// reine Verschiebung, Verhalten unveraendert. validIdentity wird von dort importiert
-// (eine Quelle, G5) und unten in /api/onboard weiterverwendet.
-// Hinter Basic-Auth (Bestand deckt /api/* ab); KEIN MCP-Tool (s. Modul-Kommentar).
-app.use(makeProfileRoutes({ store, audit }));
-
-// ---- Billing-Routen (Server-Slim P7) --------------------------------------------
-// Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return)
-// lebt jetzt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster wie
-// makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
-// Mount-Position (nach makeProfileRoutes, vor /api/onboard), hinter Basic-Auth
-// (Bestand deckt /api/* ab). billing = stripeBilling (EINE Instanz, INV-7);
-// requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). Der Safety-Kontext
-// (kein MCP-Tool, PAYMENT_ENABLED-404-Gate) ist ins Modul mitgewandert.
-app.use(
-  makeBillingRoutes({
-    config,
-    store,
-    audit,
-    billing: stripeBilling,
-    tenant: { requireTenant },
-  }),
-);
-
-// ---- Onboarding-Routen (Server-Slim P10) ----------------------------------------
-// /api/onboard + /api/onboard/retry lebt jetzt in src/routes/api-onboard.js
-// (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes) - reine
-// Verschiebung. Unveraenderte Mount-Position (nach makeBillingRoutes, vor /mcp),
-// hinter Basic-Auth (Bestand deckt /api/* ab). provisioning = die EINE P6-Instanz
-// (INV-7). Der withStoreLock-kritische Abschnitt + Nummern-Caps + persist_error->503
-// wandern unveraendert mit.
-app.use(makeOnboardRoutes({ store, config, audit, provisioning }));
-
-// ================= MCP ueber Streamable HTTP (Custom Connector) =================
-// Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt jetzt in src/routes/mcp.js
-// (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
-// Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
-// errorHandler (INV-2). /mcp ist Auth-Gate-exempt (Gate ruft next() fuer /mcp*, INV-3);
-// mcpAuth bleibt die EINZIGE Absicherung auf POST, fail-closed. Stateless pro Request
-// (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
-// Wurzel-Instanz (INV-7).
-app.use(makeMcpRoutes({ config, store, requestTenant }));
-
-// ---- Catch-all Error-Net (AC4) -------------------------------------------------
-// MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur
-// Fehler von davor gemounteten Routen. Last-Resort-Netz fuer synchron geworfene/per
-// next(err) gereichte Routen-Fehler -> generische 500, NIE err.message/stack/Env an den
-// Client (Regel 4/5); err.stack nur server-seitig laut geloggt. Die per-Route-try/catch
-// (z.B. /auth/login, /voice/turn) bleiben die primaere Schicht (Express 4 reicht
-// async-Rejections NICHT automatisch hierher). Die body-parser-Error-MW (oben, 4xx
-// Parser-Fehler) bleibt unveraendert an ihrer Stelle.
-app.use(errorHandler);
-
-// ---------------- Start ----------------
-store.load();
-
-// Retention (DSGVO): alte Transkripte/Notifications beim Start und periodisch loeschen
-const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
-function runRetention() {
-  const removed = store.pruneOldData();
-  if (removed.calls || removed.notifications || removed.actionItems)
-    console.log(
-      `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.retentionDays} Tage)`,
-    );
-}
-runRetention();
-setInterval(runRetention, RETENTION_SWEEP_INTERVAL_MS).unref();
-
-const ok = assertConfig();
-// Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
-// GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp, keine Audio-Bridge.
-// Lieber kein Dienst als ein Dienst mit lautlos abgeschaltetem Budget-/Kosten-Gate
-// (R4 Toll-Fraud). Die actionable Diagnose hat assertConfig() bereits ausgegeben.
-if (!ok) {
-  console.error("[boot] Start abgebrochen: Safety-/Pflicht-Konfiguration ungueltig (siehe oben).");
-  process.exit(1);
-}
-
-// Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE nur mit geskippter Signaturpruefung zulaessig ->
-// in Prod (Signatur fail-closed AN, Regel 1) Boot-Refusal statt stillem Nicht-Waehlen.
-if (fakeOriginateBootBlocked(config)) {
-  console.error(
-    "[boot] Start abgebrochen: FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true " +
-      "zulaessig (Test-Seam, in Produktion unzulaessig).",
-  );
-  process.exit(1);
-}
-
-// Boot-Guard (Pre-Mortem): jeder Tenant - auch der Bootstrap-Tenant - haelt seine
-// Absendernummer im Store, nicht in der Env. Tenant-agnostisch (P2b): der Dienst ist
-// "telefonbar", sobald IRGENDEIN Tenant eine aktive Nummer hat (kein OWNER/BOOTSTRAP-Pin
-// mehr). Nach lokalem Reset (data/store.json geloescht) oder frischem Postgres ohne Seed
-// waere keine aktive Nummer da -> Outbound + SMS still tot. Fail-closed wie die fruehere
-// TWILIO_NUMBER-Boot-Pflicht: leerer Store -> kein Start. Loggt KEINE Nummer (kein Leak),
-// verweist auf das Bootstrap-CLI.
-if (!hasActiveNumber(store.load())) {
-  console.error(
-    "[boot] Keine aktive Nummer im Store. Erst seeden: " +
-      "npm run bootstrap-tenant -- <e164> <provider>",
-  );
-  process.exit(1);
-}
-
-// F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
-// allen Boot-Gates (assertConfig/fakeOriginateBootBlocked/hasActiveNumber), unmittelbar
-// VOR app.listen. Vorher (VOR assertConfig) haette ein Zombie-Call bereits
-// store.setCallEndedAt() + den synchronen Teil von finishCall (Buchung/markBilled)
-// ausgeloest, BEVOR ein scheiterndes assertConfig() im selben Tick process.exit(1)
-// feuert - der async-Rest von finishCall (releaseReserve/store.save/Notification/SMS)
-// liefe dann NIE mehr, der Call bliebe teilgebucht+Reserve-nie-freigegeben auf Platte
-// stehen. Das widerspraeche dem Boot-Gate-Versprechen "GAR NICHT gestartet" (Regel 1/
-// OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
-lifecycle.rearmActiveCallTimers();
-
-const httpServer = app.listen(config.port, () => {
-  // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
-  const port = httpServer.address().port;
-  // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
-  process.env.GATEWAY_URL ||= `http://localhost:${port}`;
-  // TEMP-DIAGNOSE (STT-Live-Abschluss, siehe STATUS.md Abschnitt 2): deployten Commit ausgeben, damit im
-  // Render-Log eindeutig sichtbar ist, WELCHE Version laeuft (Render setzt
-  // RENDER_GIT_COMMIT). Phase 3: wieder entfernen.
-  console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);
-  console.log(`\n  Hermes Gateway laeuft auf http://localhost:${port}`);
-  console.log(`  Dashboard:      http://localhost:${port}`);
-  console.log(
-    `  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
-  );
-  console.log(
-    `  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
-  );
-  console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
-  console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
-  // Outbound-Freigabe (outbound-p3): keine statische ALLOWED_NUMBERS-Liste mehr - Permit ist
-  // die per-Tenant-Verifikation (Abo+KYC, Pfad 2). OUTBOUND_FROZEN zeigt den globalen
-  // Kill-Switch-Zustand. Kein PII (Nummern) mehr im Banner.
-  console.log(
-    `  Outbound:       ${config.outboundFrozen ? "EINGEFROREN (OUTBOUND_FROZEN=true)" : "aktiv (Verifikation per Tenant: Abo+KYC)"}`,
-  );
-  console.log(
-    `  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
-  );
-  // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
-  // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
-  // lief bereits davor. Gated auf PROVISIONING_ENABLED, Default Observe-Only (maxAge=0).
-  void provisioning.reconcileOrphanedProvisioning();
-});
-
-// Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
-attachMediaBridge(httpServer, callFinish.finishCall);
-
-// F11 (A6): Graceful Shutdown. Ein Deploy/Restart schickt SIGTERM (Render), Ctrl+C SIGINT.
-// OHNE Handler killt Node den Prozess sofort -> ein in-flight /voice/turn stirbt mitten im
-// LLM-await (Agent-Transkript nie persistiert, keine TwiML-Antwort). Der Drain laesst laufende
-// Requests fertig laufen (await close) und flusht ERST DANACH den Store. Das ORDERING ist
-// entscheidend: kein Handler darf NACH dem finalen save() noch eine Mutation anhaengen.
-// Watchdog kappt einen haengenden Drain hart mit exit(0). shuttingDown schuetzt gegen
-// Wiedereintritt (zweites Signal / SIGTERM+SIGINT). Secret-frei (nur Signalname).
-//
-// Review-Blocker Runde 1 (F11):
-// S1-A: closeIdleConnections() MUSS unmittelbar NEBEN dem close(resolve)-Aufruf stehen,
-// NICHT erst nach dessen await. server.close() loest seinen Callback erst auf, wenn die
-// Verbindungszaehlung auf 0 steht - inklusive idler Keep-Alive-Sockets, die Node sonst
-// erst nach keepAliveTimeout von selbst schliesst. Haelt z.B. ein Health-Checker eine
-// staendig erneuerte Keep-Alive-Verbindung offen, wuerde "await close()" NIE von selbst
-// aufloesen, wenn closeIdleConnections() erst danach kaeme (Aufruf ohne Wirkung).
-// S1-B: store.save() haengt beim pg-Backend seinen DB-Write an eine asynchrone
-// flushChain und gibt nur EINE fruehe Referenz zurueck. Ein waehrend des Await feuernder
-// Hintergrund-Timer (Max-Dauer-Cap/Reserve-Release, unabhaengig von HTTP-Verbindungen)
-// kann seinen eigenen Flush HINTER dieser Referenz anhaengen - store.drainFlushes()
-// loopt, bis die Kette nachweislich stabil ist, bevor process.exit(0) faellt.
-let shuttingDown = false;
-async function gracefulShutdown(signal) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-  const watchdog = setTimeout(() => process.exit(0), config.shutdownDrainTimeoutMs).unref();
-  const closed = new Promise((resolve) => httpServer.close(resolve));
-  if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
-  await closed;
-  await store.save();
-  await store.drainFlushes();
-  clearTimeout(watchdog);
-  process.exit(0);
-}
-process.once("SIGTERM", gracefulShutdown);
-process.once("SIGINT", gracefulShutdown);
+// ---------------- Kompositionswurzel (Server-Slim P15) ----------------
+// buildApp(deps) verdrahtet die komplette Express-App (Middleware, Wiring, Router-Mounts,
+// src/app.js); bootServer(deps) fuehrt die Boot-Sequenz aus (store.load, Retention,
+// Fail-closed-Gates, listen, Audio-Bridge, Graceful-Shutdown, src/boot.js). Beide teilen
+// sich EIN deps-Buendel (F1: je Funktion 1 Argument). buildApp MUSS vollstaendig durchlaufen
+// (inkl. dem awaited guardedBoot-Block), BEVOR bootServer startet - store.load() wird NICHT
+// vorgezogen (Pre-Mortem 11: scheduleReleaseReconcile feuert weiterhin vor store.load, exakt
+// wie im Bestand).
+const deps = {
+  config,
+  store,
+  audit,
+  callFinish,
+  lifecycle,
+  provisioning,
+  outboundGates,
+  requestTenant,
+  requireTenant,
+  conversationWatchdog,
+  ttsStore,
+  directiveSynth,
+  voiceRender,
+};
+const { app } = await buildApp(deps);
+await bootServer({ app, ...deps });
