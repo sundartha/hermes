@@ -4,11 +4,14 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
+import { safeEqual } from "./util.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
 // Default-Lebensdauer der Login-Flow-Cookies (pkce/state/nonce) in Sekunden, falls deps
-// keinen Wert injiziert (Tests). Produktion reicht config.loginCookieTtlSeconds durch.
+// keinen Wert injiziert (Tests). Bewusster Test-Fallback; die Produktionsquelle ist
+// config.loginCookieTtlSeconds (Fallback 1800), durchgereicht via deps.loginCookieTtlSeconds.
+// web-auth bleibt config-frei (DI-Naht) - kein config-Import hier.
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
 // Login-Route: eine Quelle (G5) fuer die Route-Registrierung, den Recovery-Redirect und
 // den Link der terminalen Seite.
@@ -45,9 +48,7 @@ export function verifyValue(signed, secret) {
   const value = signed.slice(0, i),
     sig = signed.slice(i + 1);
   const expected = crypto.createHmac("sha256", secret).update(value).digest("base64url");
-  const a = Buffer.from(sig),
-    b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b) ? value : null;
+  return safeEqual(sig, expected) ? value : null;
 }
 
 // PKCE S256.

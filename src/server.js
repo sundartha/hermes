@@ -126,6 +126,7 @@ import {
   OWNER_ID,
   ANON_IDENTITY,
   TENANT_REJECT,
+  tenantOwnsCall,
 } from "./request-tenant.js";
 
 const app = express();
@@ -704,14 +705,6 @@ function streamDirectives(call) {
     }),
   ];
 }
-
-// Tenant-Eigentums-Pruefung fuer Einzel-Call-Lesepfade (I5; I6/I7 reusen sie nach
-// Rebase fuer cancel/Outbound). Die Scoping-Regel call.tenantId === tenantId lebt
-// fuer Listen in state-ops tenantCallScope (via exportTenantData), hier fuer den
-// Einzel-Call-Zugriff. Reines Praedikat, kein Nebeneffekt; der 404-Antwort-Code
-// bleibt in der Route (Helper wiederverwendbar). Liefert true, wenn der
-// Request-Tenant den Call besitzt.
-const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 
 // Gemeinsame Call-Max-Dauer in ms (G5): armMaxDurationTimer UND der Reserve-Backstop-Timer
 // teilen diese Rechnung (call-eigenes Limit vor globalem Default).

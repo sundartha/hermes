@@ -352,6 +352,12 @@ const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ih
 // signalisieren (behebt R4). Richtungsneutral - die konkrete Reaktion steuert der systemPrompt.
 const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 
+// Rueckgespielt an das Modell, wenn ein end_call unterdrueckt wird (Outbound, noch keine
+// substanzielle Antwort). EINE Quelle fuer beide Engines: Budget-Tool-Loop UND
+// Realtime-bridge.js (dort function_call_output). G5/G27.
+export const END_CALL_WAIT_INSTRUCTION =
+  "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.";
+
 // stab-p7 (a/b): EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
 // config.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
 // Richtungen werten call.transcript darueber aus, wirksam aber nur bei Outbound - siehe
@@ -402,6 +408,20 @@ function unansweredAgentTurns(transcript) {
     if (isSubstantialCallerText(entry.text)) break;
   }
   return count;
+}
+
+// stab-p7 (a/b) als EINE strukturell erzwungene Invariante (G27): der Outbound-Frueh-
+// auflege-Schutz gilt fuer JEDE Voice-Engine (Budget-agentTurn UND Realtime-bridge.js),
+// nicht mehr nur per Kommentar. Unterdrueckt end_call, solange (i) keine SUBSTANZIELLE
+// Anrufer-Aeusserung vorliegt UND (ii) die Zahl konsekutiver Leer-Turns die Schwelle
+// (maxEmptyTurns) noch nicht erreicht hat. Nur Outbound; Inbound liefert immer false
+// (Direction-Kurzschluss zuerst -> robust auch ohne transcript-Feld). Rein, kein
+// Nebeneffekt (N7). unansweredAgentTurns bleibt modul-privat.
+export function shouldSuppressEndCall(call) {
+  if (call.direction !== "outbound") return false;
+  const substantialCallerSeen = callerHasSpoken(call);
+  const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.maxEmptyTurns;
+  return !substantialCallerSeen && !emptyTurnsReached;
 }
 
 // I8 (call-quality Impl-1): deterministisches Text-Shaping der Modell-Antwort VOR dem
@@ -470,22 +490,11 @@ export async function agentTurn(call, callerText) {
     });
   }
 
-  // T1-Sicherungsboden + stab-p7 (a)+(b): Im Outbound-Pfad wird ein end_call unterdrueckt,
-  // SOLANGE (i) noch keine SUBSTANZIELLE Anrufer-Aeusserung vorliegt (content-basiert statt
-  // "Zeile existiert" - eine Echo-/Rausch-Zeile deaktiviert den Schutz nicht mehr, R2/E3) UND
-  // (ii) die Zahl konsekutiver Leer-Turns die Schwelle noch nicht erreicht hat. Erst wenn das
-  // Gegenueber substanziell spricht ODER nach maxEmptyTurns unbeantworteten Agent-Turns gibt
-  // der Guard end_call frei (er erzwingt es NIE - das Modell entscheidet). Nur Outbound;
-  // Inbound bleibt byte-identisch (immer false). Zeitliches Notaus bleibt maxCallDurationS.
-  // G5-Fix (Review zu phase/stab-p7-fix-g326-r2): statt das Substanz-Praedikat hier erneut
-  // aufzuschreiben, den bestehenden Helper callerHasSpoken() nutzen - fuer Outbound liefert
-  // er exakt denselben some()-Ausdruck (siehe Kommentar/Impl. oben). Verhindert Auseinander-
-  // driften von suppressEndCall und dem /voice/turn-Kurzschluss bei kuenftigen Aenderungen
-  // der Substanz-Definition.
-  const substantialCallerSeen = callerHasSpoken(call);
-  const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.maxEmptyTurns;
-  const suppressEndCall =
-    call.direction === "outbound" && !substantialCallerSeen && !emptyTurnsReached;
+  // T1-Sicherungsboden + stab-p7 (a)+(b): siehe shouldSuppressEndCall oben (EINE Quelle,
+  // von Budget-agentTurn UND Realtime-bridge.js genutzt, G27). Der Guard erzwingt end_call
+  // NIE - das Modell entscheidet, der Guard unterdrueckt nur ein verfruehtes Auflegen.
+  // Zeitliches Notaus bleibt maxCallDurationS.
+  const suppressEndCall = shouldSuppressEndCall(call);
 
   let messages = history;
   let endCall = false;
@@ -528,8 +537,7 @@ export async function agentTurn(call, callerText) {
               return {
                 type: "tool_result",
                 tool_use_id: tu.id,
-                content:
-                  "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
+                content: END_CALL_WAIT_INSTRUCTION,
               };
             }
             endCall = true;

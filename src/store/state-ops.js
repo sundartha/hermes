@@ -556,7 +556,7 @@ export function seedBootstrapNumber(
   });
 }
 
-// Config-derive Owner-Nummer-Seed beim Boot (analog seedBootstrapIdentity): traegt die
+// Config-derive Owner-Nummer-Seed beim Boot (analog seedBootstrapKyc): traegt die
 // Owner-Absendernummer aus (e164, provider) ein. Render free hat ein fluechtiges
 // Dateisystem -> ohne diesen Seed waere nach jedem Deploy keine aktive Owner-Nummer im
 // Store und der Boot-Guard (server.js) braeche fail-closed ab (Owner-Outbound/SMS tot).
@@ -588,38 +588,8 @@ export function bootstrapTenant(s, e164, tenantId, provider = DEFAULT_PROVIDER) 
   if (tenantId === BOOTSTRAP_TENANT_ID) seedBootstrapKyc(s, tenantId);
 }
 
-// Seedet die private Summary-Zielnummer des OWNER-Tenants idempotent aus der config-
-// Owner-Nummer (F2 P11). Hintergrund: seit P7 geht die Inbound-Summary-SMS an
-// tenant.privateNumber (NICHT mehr config.ownerNumber) - ohne diesen Seed verloere der
-// Owner nach der finishCall-Umstellung STILL seine eigene Summary-SMS. Config-frei:
-// rawOwnerNumber wird durchgereicht (Muster seedBootstrapIdentity/seedBootstrapNumberFromConfig,
-// state-ops bleibt config-frei). Idempotent: hat der Owner schon eine privateNumber, No-Op
-// (gesetzte gewinnt - kein Override einer per Self-Service gesetzten Nummer). Validierung
-// ueber die EINE geteilte Quelle normalizePrivateNumber (G5), aber mit Laendercode-Gate AUS
-// ("*"): die config-Owner-Nummer ist Plattform-TRUSTED (dieselbe, die seedBootstrapNumber als
-// aktive Absendernummer eintraegt) - die Toll-Fraud-Bremse (countryAllowed) gilt nur fuer
-// USER-Eingaben (self-service/onboarding), nicht fuers Boot-Seeding der Owner-Config.
-// Ungueltiges E.164-Format ODER leere Config -> KEIN Seed (boot-sicher, KEIN Throw; der
-// Aufrufer warnt). Fehlender Owner-Tenant -> No-Op. Liefert true, wenn der Owner DANACH
-// eine privateNumber hat (frisch geseedet ODER schon vorhanden), sonst false -> der
-// Aufrufer kann fail-soft eine PII-freie Boot-Warnung emittieren.
-export function seedBootstrapPrivateNumber(s, rawOwnerNumber, tenantId) {
-  const owner = findTenant(s, tenantId);
-  if (!owner) return false;
-  if (owner.privateNumber) return true; // idempotent: gesetzte Nummer gewinnt
-  let e164;
-  try {
-    e164 = normalizePrivateNumber(rawOwnerNumber, ["*"]); // "*" -> kein Laendercode-Gate (TRUSTED)
-  } catch {
-    return false; // ungueltiges E.164-Format in der Owner-Config -> kein Seed
-  }
-  if (!e164) return false; // leere/fehlende Config -> kein Seed
-  owner.privateNumber = e164;
-  return true;
-}
-
 // Bindet die Owner-OAuth-Identitaet (WorkOS sub) idempotent an den Bootstrap-Tenant
-// (AM6 G4) ueber das I8-additive idpSubject-Feld. Geschwister zu seedBootstrapPrivateNumber:
+// (AM6 G4) ueber das I8-additive idpSubject-Feld. Geschwister zu seedBootstrapKyc:
 // set-if-absent (eine per Self-Service/Web-Login gebundene Identitaet gewinnt), config-frei
 // (rawSub durchgereicht), kein IO. resolveTenant findet danach den Tenant mit der aktiven
 // Nummer ueber den sub-Claim. Minimaler Sanity-Guard (getrimmt, nicht-leer) statt Voll-
@@ -690,7 +660,7 @@ function firstNameOf(fullName) {
 }
 
 // Setzt firstName + komponierten ownerName auf einem Tenant-Record (G1). Geteilt von
-// registerTenant UND seedBootstrapIdentity (G5: eine Kompositionsstelle). Trimmt; leere
+// registerTenant UND setTenantIdentityIfAbsent (G5: eine Kompositionsstelle). Trimmt; leere
 // Teile -> Feld bleibt weg, damit der config-Owner-Fallback im tenantContext sauber
 // greift (kein leerer Daten-Muell). ownerName = "firstName lastName".
 export function applyOwnerIdentity(tenant, firstName, lastName) {
@@ -705,25 +675,13 @@ export function applyOwnerIdentity(tenant, firstName, lastName) {
 // auf einen EXISTIERENDEN Tenant. Findet den Tenant; fehlt er ODER traegt er bereits einen
 // ownerName -> No-Op (NIE einen Tenant aus dem Nichts erfinden: sonst aktivierte der Web-
 // Login-Pfad versehentlich einen suspendierten Tenant - Invariante 5). Liefert true NUR,
-// wenn jetzt ein ownerName steht (echte Mutation) -> der Wrapper flusht nur dann. Geteilt
-// von seedBootstrapIdentity (Boot/Owner) UND dem Web-Login-Pfad (P2b). G5: EINE set-if-
-// absent-Identitaets-Quelle, EINE Kompositionsstelle (applyOwnerIdentity).
+// wenn jetzt ein ownerName steht (echte Mutation) -> der Wrapper flusht nur dann. Genutzt
+// vom Web-Login-Pfad (P2b, server.js applyTenantIdentity).
 export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } = {}) {
   const tenant = findTenant(s, tenantId);
   if (!tenant || tenant.ownerName) return false;
   applyOwnerIdentity(tenant, firstName, lastName);
   return Boolean(tenant.ownerName);
-}
-
-// Stellt die Owner-Identitaet (firstName/lastName -> ownerName) idempotent im Spiegel
-// sicher (Variante a, G1). Wie seedBootstrapNumber: json load() ruft makeDefaultState nicht
-// auf Bestands-Stores, pg hydriert owner_name als NULL. Schuetzt den UNGEGATETEN Inbound-
-// Greeting (server.js) + summarizeCall. Delegiert an die gemeinsame set-if-absent-Quelle
-// (setTenantIdentityIfAbsent, G5): traegt der Owner-Tenant bereits ownerName ODER fehlt er
-// (seedState ohne tenants) -> No-Op. Leere Config-Teile -> kein Seed (Boot-Refusal in
-// assertConfig faengt das ab). Signatur + Verhalten unveraendert (verhaltens-erhaltend).
-export function seedBootstrapIdentity(s, firstName, lastName, tenantId) {
-  setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName });
 }
 
 // Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): nimmt

@@ -5,7 +5,15 @@
 import WebSocket, { WebSocketServer } from "ws";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { toolDefs, execTool, disclosureSentence, systemPrompt } from "./claude.js";
+import {
+  toolDefs,
+  execTool,
+  disclosureSentence,
+  systemPrompt,
+  shapeForSpeech,
+  shouldSuppressEndCall,
+  END_CALL_WAIT_INSTRUCTION,
+} from "./claude.js";
 import { localeFor } from "./i18n/locales.js";
 import { safeEqual } from "./util.js";
 import { voiceControl, mediaTransport } from "./telephony/registry.js";
@@ -33,6 +41,21 @@ function providerFromMediaPath(pathname) {
 // Genutzt an allen vier openaiWs.send-Call-Sites (Barge-in, Tool-Result, Follow-up, Inbound).
 export function canSend(ws) {
   return ws?.readyState === WebSocket.OPEN;
+}
+
+// Reicht ein function_call_output an OpenAI zurueck und stoesst die naechste Antwort an.
+// Nur auf offenem Socket (canSend) - feuert sonst im Call-Ende-Race auf einen toten
+// Socket (wirft). EINE Sende-Quelle fuer den generischen Tool-Pfad UND das unterdrueckte
+// end_call (G5) - kein dupliziertes send-Paar. String(output): Bestandsverhalten.
+function sendFunctionOutput(openaiWs, callId, output) {
+  if (!canSend(openaiWs)) return;
+  openaiWs.send(
+    JSON.stringify({
+      type: "conversation.item.create",
+      item: { type: "function_call_output", call_id: callId, output: String(output) },
+    }),
+  );
+  openaiWs.send(JSON.stringify({ type: "response.create" }));
 }
 
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
@@ -324,7 +347,10 @@ export function handleOpenAiEvent(ev, ctx) {
       break;
     case "response.audio_transcript.done":
     case "response.output_audio_transcript.done":
-      if (ev.transcript?.trim()) store.addTranscript(call.id, "agent", ev.transcript.trim());
+      // I8-Paritaet: Agent-Text durch denselben Shaper wie die Budget-Engine (agentTurn),
+      // damit Realtime-Transkripte im Dashboard/DSGVO-Export keine Markdown-Reste tragen.
+      if (ev.transcript?.trim())
+        store.addTranscript(call.id, "agent", shapeForSpeech(ev.transcript.trim()));
       break;
 
     // ---- Tool-Aufrufe der KI (gleiche Tools wie Budget-Engine) ----
@@ -338,25 +364,20 @@ export function handleOpenAiEvent(ev, ctx) {
           args = JSON.parse(item.arguments || "{}");
         } catch {}
         if (item.name === "end_call") {
-          // (d) KI signalisiert Zielerreichung -> HANGUP_MS Puffer fuer die Verabschiedung
-          ctx.scheduleHangup("end_call von KI");
-        } else {
-          const result = execTool(call, item.name, args);
-          // OT-2 (P3): execTool laeuft immer (Seiteneffekt), nur der Send geht ueber den
-          // OPEN-Guard - feuert sonst genau im Call-Ende-Race auf einen toten Socket (wirft).
-          if (canSend(openaiWs)) {
-            openaiWs.send(
-              JSON.stringify({
-                type: "conversation.item.create",
-                item: {
-                  type: "function_call_output",
-                  call_id: item.call_id,
-                  output: String(result),
-                },
-              }),
-            );
-            openaiWs.send(JSON.stringify({ type: "response.create" }));
+          // Guard-Paritaet zur Budget-Engine (shouldSuppressEndCall, EINE Quelle): ein
+          // Outbound-Call darf NICHT vor der ersten substanziellen Antwort beendet werden
+          // (auch nicht waehrend/direkt nach der Offenlegung). Unterdrueckt -> Wait-Instruktion
+          // zurueckspielen statt aufzulegen; sonst (d) HANGUP_MS-Puffer fuer die Verabschiedung.
+          if (shouldSuppressEndCall(call)) {
+            sendFunctionOutput(openaiWs, item.call_id, END_CALL_WAIT_INSTRUCTION);
+          } else {
+            ctx.scheduleHangup("end_call von KI");
           }
+        } else {
+          // OT-2 (P3): execTool laeuft immer (Seiteneffekt), nur der Send geht ueber den
+          // OPEN-Guard (im Helfer gekapselt).
+          const result = execTool(call, item.name, args);
+          sendFunctionOutput(openaiWs, item.call_id, result);
         }
       }
       break;
