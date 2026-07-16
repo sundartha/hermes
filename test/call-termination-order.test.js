@@ -198,6 +198,8 @@ const ingestSrc = fs.readFileSync(path.join(ROOT, "src", "telnyx-call-control-in
 const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
 // P9 (Server-Slim): die /api/calls-Route-Gruppe wanderte nach routes/api-calls.js.
 const apiCallsSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "api-calls.js"), "utf8");
+// P11 (Server-Slim): die /voice-Handler wanderten nach routes/voice.js (makeVoiceRoutes).
+const voiceSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "voice.js"), "utf8");
 
 function sliceBetween(src, startMarker, endMarker, fromIndex = 0) {
   const start = src.indexOf(startMarker, fromIndex);
@@ -209,15 +211,17 @@ function sliceBetween(src, startMarker, endMarker, fromIndex = 0) {
 
 test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) statt dem alten manuellen Paar", () => {
   const block = sliceBetween(
-    serverSrc,
-    'app.post("/voice/status", async (req, res) => {',
-    '\napp.post(',
+    voiceSrc,
+    'router.post("/voice/status", async (req, res) => {',
+    '\n  router.post(',
   );
   assert.match(block, /terminateAndBillCall\(\{/);
   assert.match(block, /hangUp:\s*null/);
-  // P4 (Server-Slim): finishCall wanderte nach telephony/call-finish.js - die Aufrufstelle
-  // referenziert es jetzt ueber die EINE callFinish-Instanz (INV-7), kein bare finishCall mehr.
-  assert.match(block, /bill:\s*billThunk\(callFinish\.finishCall,\s*store,\s*call\.id\)/);
+  // P11 (Server-Slim): finishCall kommt jetzt als injizierter Dep in makeVoiceRoutes herein
+  // (== callFinish.finishCall bei der Verdrahtung in server.js) - der Modul-Quelltext
+  // referenziert den bare Dep-Namen, wie terminateCappedCall in call-lifecycle.js (P5) und
+  // die Aufrufstellen in api-calls.js (P9).
+  assert.match(block, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
   assert.doesNotMatch(
     block,
     /^\s*finishCall\(store\.getCall\(call\.id\)\);\s*$/m,
