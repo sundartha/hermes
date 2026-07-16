@@ -40,8 +40,8 @@ import { registerTools } from "./mcp-tools.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO, BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
 import { attachMediaBridge, MEDIA_PATH } from "./bridge.js";
-import { synthesizeSpeech } from "./tts/synth.js";
 import { createTtsStore } from "./tts/store.js";
+import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { createRateLimiter, securityHeaders, errorHandler } from "./middleware.js";
 import { mcpAuth, registerWellKnown } from "./auth.js";
 import { audit, safeEqual, hashEmail } from "./util.js";
@@ -56,7 +56,6 @@ import {
   numberProvisioning,
 } from "./telephony/registry.js";
 import {
-  DIRECTIVE,
   say as sayD,
   gather as gatherD,
   hangup as hangupD,
@@ -552,6 +551,10 @@ app.use(express.static(config.publicDir));
 // Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII).
 const ttsStore = createTtsStore({ ttlMs: config.elevenLabsPlayTts.tokenTtlMs });
 
+// Play-TTS-Direktiven-Synth (fail-safe, Server-Slim P2): webt <Play>-Audio in Telnyx-
+// Direktiven ein. Schliesst die EINE ttsStore-Instanz (INV-7) + config.
+const directiveSynth = makeDirectiveSynth({ config, ttsStore });
+
 // AUTH-AUSNAHME (Regel 3, begruendet): oeffentlich erreichbar, weil Telnyx diese URL
 // SERVERSEITIG fetcht (kein Provider-Signatur-Header) - deshalb bewusst VOR der
 // /voice-Signaturpruefung registriert (sonst 403). Loest KEINEN Call/keine SMS/keine
@@ -639,50 +642,6 @@ function sayInCallVoice(call, text) {
 // Eigener Name statt Boolean-Flag (kein Selektor-Argument, G15/F3).
 function followupTurnDirectives(call, text) {
   return turnDirectives(call, text, { speechTimeoutSec: config.sttSpeechTimeoutSec });
-}
-
-// Play-TTS-Einwebung (fail-safe): synthetisiert die gesprochenen Texte einer Direktiven-
-// Liste zur Webhook-Zeit (hartes Timeout in synthesizeSpeech), legt die Bytes in den
-// ttsStore und webt die Serve-URL als audioUrl/promptAudioUrl ein -> der Telnyx-Renderer
-// gibt <Play> statt <Say>. Flag AUS oder Nicht-Telnyx oder Synth-Fehler/Timeout -> Liste
-// UNVERAENDERT zurueck -> Azure-<Say> byte-identisch (NIE den Call toeten). Genau EIN
-// sprechender Text pro Turn -> genau ein Synth-Call pro Webhook.
-async function synthesizeDirectiveAudio(call, directives) {
-  const cfg = config.elevenLabsPlayTts;
-  if (!cfg.enabled || call.provider !== PROVIDER.TELNYX) return directives;
-  const out = [];
-  for (const d of directives) out.push(await withPlayAudio(d, cfg));
-  return out;
-}
-
-async function withPlayAudio(d, cfg) {
-  const text = d.kind === DIRECTIVE.GATHER ? d.promptText : d.kind === DIRECTIVE.SAY ? d.text : "";
-  if (!text) return d;
-  const url = await synthToServeUrl(text, cfg);
-  if (!url) return d; // fail-safe -> Azure-<Say>
-  return d.kind === DIRECTIVE.GATHER ? { ...d, promptAudioUrl: url } : { ...d, audioUrl: url };
-}
-
-async function synthToServeUrl(text, cfg) {
-  const result = await synthesizeSpeech(text, {
-    fetchImpl: fetch,
-    apiKey: cfg.apiKey,
-    voiceId: cfg.voiceId,
-    model: cfg.model,
-    apiBase: cfg.apiBase,
-    outputFormat: cfg.outputFormat,
-    timeoutMs: cfg.synthTimeoutMs,
-  });
-  if (!result.ok) {
-    // Beobachtbarkeit: stille Degradation auf Azure sichtbar machen (Betriebs-Symptom
-    // "Call verbindet, aber Azure statt ElevenLabs"). reason ist ein grober Code
-    // (http_<status>/timeout/error), NIE der Key/Secret.
-    const detail = result.detail ? `: ${result.detail}` : "";
-    console.warn(`[play-tts] Synth fehlgeschlagen (${result.reason}${detail}) -> Azure-Fallback`);
-    return null;
-  }
-  const token = ttsStore.put(result.bytes, result.contentType);
-  return `${config.publicUrl}/voice/tts/${token}`;
 }
 
 // Gesprochene Degradations-/Reprompt-Texte fuer den /voice/turn-Fehlerpfad leben seit
@@ -896,7 +855,7 @@ app.post("/voice/incoming", async (req, res) => {
     store.addTranscript(call.id, "agent", greeting);
     res
       .type("text/xml")
-      .send(render(await synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
+      .send(render(await directiveSynth.synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
   } catch (err) {
     console.error("[incoming]", err.message);
     // S1-1: gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt /voice/turn,
@@ -906,7 +865,7 @@ app.post("/voice/incoming", async (req, res) => {
     // dort wuerde selbst werfen) -> reines Azure-<Say> wie der Unrouted-Pfad oben.
     const locale = localeFor(call?.language);
     const errorDirectives = [sayD(locale.turnErrorSpeech, locale.voiceProfile), hangupD()];
-    const outDirectives = call ? await synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
+    const outDirectives = call ? await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives) : errorDirectives;
     res.type("text/xml").send(render(outDirectives, provider));
   }
 });
@@ -970,7 +929,7 @@ app.post("/voice/turn", async (req, res) => {
       const reprompt = followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt);
       return res
         .type("text/xml")
-        .send(render(await synthesizeDirectiveAudio(call, reprompt), call.provider));
+        .send(render(await directiveSynth.synthesizeDirectiveAudio(call, reprompt), call.provider));
     }
     const { speech, endCall } = await agentTurn(call, heard || null);
     const directives = endCall
@@ -979,7 +938,7 @@ app.post("/voice/turn", async (req, res) => {
     if (!endCall) metrics.recordTurnRendered(call.id); // L0: nur wenn ein Folge-Turn folgt
     res
       .type("text/xml")
-      .send(render(await synthesizeDirectiveAudio(call, directives), call.provider));
+      .send(render(await directiveSynth.synthesizeDirectiveAudio(call, directives), call.provider));
   } catch (err) {
     console.error("[turn]", err.message);
     // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit
@@ -994,7 +953,7 @@ app.post("/voice/turn", async (req, res) => {
     const errorDirectives = [sayInCallVoice(call, speech), hangupD()];
     res
       .type("text/xml")
-      .send(render(await synthesizeDirectiveAudio(call, errorDirectives), call.provider));
+      .send(render(await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives), call.provider));
   }
 });
 
@@ -1034,7 +993,7 @@ app.post("/voice/outbound", async (req, res) => {
   res
     .type("text/xml")
     .send(
-      render(await synthesizeDirectiveAudio(call, turnDirectives(call, opening)), call.provider),
+      render(await directiveSynth.synthesizeDirectiveAudio(call, turnDirectives(call, opening)), call.provider),
     );
 });
 
