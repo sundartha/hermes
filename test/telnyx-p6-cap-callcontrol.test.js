@@ -138,9 +138,10 @@ test("T5b: reattach Aktiv-Restzeit-Fixture (callControlId, twilioSid null) -> sc
 
 // ---- T6-T8: Wiring-Guards (Quelltext, Muster reattach-active-call.test.js) ----
 
-const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
 // P5 (Server-Slim): terminateCappedCall wanderte nach telephony/call-lifecycle.js.
 const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
+// P9 (Server-Slim): die /api/calls-Route-Gruppe wanderte nach routes/api-calls.js.
+const apiCallsSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "api-calls.js"), "utf8");
 
 test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte providerCallSid-Ternary)", () => {
   const marker = "async function terminateCappedCall(callId, providerCallSid, status) {";
@@ -155,8 +156,8 @@ test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte provid
 });
 
 test("T7: cancel_call verwendet hangUpAction (dieselbe Quelle wie terminateCappedCall)", () => {
-  const marker = 'app.post("/api/calls/:id/cancel"';
-  const block = serverSrc.slice(serverSrc.indexOf(marker), serverSrc.indexOf(marker) + 1500);
+  const marker = 'router.post("/api/calls/:id/cancel"';
+  const block = apiCallsSrc.slice(apiCallsSrc.indexOf(marker), apiCallsSrc.indexOf(marker) + 1500);
 
   assert.match(block, /hangUp:\s*hangUpAction\(voiceControl,\s*call,\s*call\.twilioSid\)/);
 });
@@ -165,7 +166,7 @@ test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlosse
   // P6 (Struct-1, Outbound-Gate-Kette-Extraktion): outboundProvider lebt seither als
   // ctx.outboundProvider (Gate-Loop-Ergebnis) - reine Variablenquelle, kein Verhaltenswechsel.
   const marker = "config.telnyxAssistant.enabled && ctx.outboundProvider === PROVIDER.TELNYX";
-  const block = serverSrc.slice(serverSrc.indexOf(marker), serverSrc.indexOf(marker) + 1500);
+  const block = apiCallsSrc.slice(apiCallsSrc.indexOf(marker), apiCallsSrc.indexOf(marker) + 1500);
 
   assert.match(block, /armMaxDurationTimer\(call,\s*null\)/);
   assert.doesNotMatch(block, /P6-Luecke/, "die alte, bewusste Luecke darf nicht mehr dokumentiert sein");
