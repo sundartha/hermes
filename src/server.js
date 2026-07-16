@@ -89,14 +89,13 @@ import { makeProvisioningOrchestrator } from "./worker/provisioning-orchestrator
 import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
-import { flushMeters } from "./billing/meter.js";
 import { makeMetering } from "./billing/metering.js";
-import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "./billing/webhook.js";
 import { invalidText } from "./routes/_validation.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeSelfServiceRoutes } from "./self-service-routes.js";
 import { makeProfileRoutes, validIdentity } from "./routes/api-profiles.js";
+import { makeBillingRoutes } from "./routes/api-billing.js";
 import { PLAN_CATALOG } from "./plans.js";
 import {
   makeWebAuthRoutes,
@@ -1242,68 +1241,23 @@ app.post("/api/calendar", (req, res) => {
 // Hinter Basic-Auth (Bestand deckt /api/* ab); KEIN MCP-Tool (s. Modul-Kommentar).
 app.use(makeProfileRoutes({ store, audit }));
 
-// ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
-// und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
-// Basic-Auth (Bestand deckt /api/* ab; localhost = Owner) - KEIN MCP-Tool. NUR im
-// Metering-Pfad erreichbar: ohne PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch
-// zum Bestand). "Periodisch" = extern cron-baar (echter Scheduler = P8); KEIN neuer
-// Scheduler-Dep. Antwort = nur Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
-app.post("/api/billing/flush-meters", async (req, res) => {
-  if (!config.paymentEnabled)
-    return res.status(404).json({ error: "metering disabled (PAYMENT_ENABLED)" });
-  const result = await flushMeters(store.load(), { billing: stripeBilling });
-  store.save();
-  audit("meter_flush", req, `sent=${result.sent} failed=${result.failed}`);
-  res.json(result);
-});
-
-// ---- Karten-Erfassung via Stripe Checkout (setup-Mode), Pay1 ----
-// Hinter Basic-Auth (Bestand deckt /api/* ab; localhost = Owner). KEIN MCP-Tool
-// (kein offener ungegateter Geld-Endpunkt, R4). tenant-scoped (requireTenant ->
-// fail-closed 403 bei TENANT_REJECT). Ohne PAYMENT_ENABLED -> 404 (byte-identisch
-// zum Bestand, Muster flush-meters). Die Karte wird OHNE Abbuchung am Customer
-// gespeichert; der spaetere Hold/Capture (Pay2) nutzt customer+payment_method.
-const CARD_ON_FILE_STATUS = "card_on_file"; // kein Magic-String (G25)
-
-app.post("/api/billing/setup-checkout", async (req, res) => {
-  if (!config.paymentEnabled)
-    return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
-  if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
-  const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
-  if (!tenant) return;
-
-  const successUrl = `${config.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
-  const cancelUrl = `${config.publicUrl}/tenant.html?card=canceled`;
-  // Fix B: derselbe Self-Heal wie der Pay3-Pfad (geteilte Logik, G5 - s. card-setup.js).
-  const { session, healed } = await startCheckoutWithStaleCustomerHeal(
-    { store, billing: stripeBilling, tenant, retryDelayMs: config.stripeCustomerRetryDelayMs },
-    (customerId) =>
-      stripeBilling.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl }),
-  );
-  if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
-  audit("billing_setup_checkout", req, `tenant=${tenant}`);
-  res.json({ url: session.url });
-});
-
-app.get("/api/billing/checkout-return", async (req, res) => {
-  if (!config.paymentEnabled)
-    return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
-  const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
-  if (!tenant) return;
-  const sessionId = req.query.session_id;
-  if (!sessionId || typeof sessionId !== "string")
-    return res.status(400).json({ error: "session_id ist Pflicht" });
-
-  // Karte fail-closed an den eigenen Customer binden (geteilte Customer-Match-
-  // Invariante, G5: identisch zum Self-Service-Pfad). Mismatch -> 403, kein Store.
-  const { ok } = await bindCardFromSession({ store, billing: stripeBilling, tenant, sessionId });
-  if (!ok) {
-    audit("billing_card_mismatch", req, `tenant=${tenant}`);
-    return res.status(403).json({ error: "Customer-Mismatch" });
-  }
-  audit("billing_card_saved", req, `tenant=${tenant}`);
-  res.json({ status: CARD_ON_FILE_STATUS });
-});
+// ---- Billing-Routen (Server-Slim P7) --------------------------------------------
+// Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return)
+// lebt jetzt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster wie
+// makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
+// Mount-Position (nach makeProfileRoutes, vor /api/onboard), hinter Basic-Auth
+// (Bestand deckt /api/* ab). billing = stripeBilling (EINE Instanz, INV-7);
+// requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). Der Safety-Kontext
+// (kein MCP-Tool, PAYMENT_ENABLED-404-Gate) ist ins Modul mitgewandert.
+app.use(
+  makeBillingRoutes({
+    config,
+    store,
+    audit,
+    billing: stripeBilling,
+    tenant: { requireTenant },
+  }),
+);
 
 // ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
 // (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth (Bestand deckt
