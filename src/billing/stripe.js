@@ -77,6 +77,13 @@ function authHeaders(extra = {}) {
   };
 }
 
+// EINE Quelle (G5) fuer "Auth-Header + optionaler Idempotency-Key", die vier Geld-Calls
+// (placeHold/reportMeter/createSubscriptionCheckoutSession/createSubscription) identisch
+// brauchen. Fehlt der Key -> nur Auth-Header (byte-identisch zum bisherigen Inline-Ternary).
+function idempotentHeaders(idempotencyKey) {
+  return authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+}
+
 function assertOk(res, op) {
   if (!res.ok) throw new Error(`Stripe ${op} fehlgeschlagen: HTTP ${res.status}`);
 }
@@ -128,7 +135,7 @@ export const stripeBilling = {
     idempotencyKey,
   }) {
     // Idempotency-Key (number-id-basiert): Retry haelt nie doppelt (Stripe-Header).
-    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    const headers = idempotentHeaders(idempotencyKey);
     // off_session=true + gespeicherter customer/payment_method: Stripe belastet die am
     // Customer hinterlegte Karte ohne Redirect (kein return_url/automatic_payment_methods
     // noetig) - behebt den 400-Wurzel-Fehler des frueheren confirm-ohne-PM-Pfades.
@@ -179,7 +186,7 @@ export const stripeBilling = {
   async reportMeter({ tenantRef, kind, quantity, idempotencyKey }) {
     const eventName = STRIPE_METER_EVENT_NAME[kind];
     if (!eventName) throw new Error(`Stripe reportMeter: unbekanntes kind '${kind}'`);
-    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    const headers = idempotentHeaders(idempotencyKey);
     const body = new URLSearchParams({ event_name: eventName });
     body.set("payload[value]", String(quantity));
     body.set("payload[tenant_ref]", tenantRef); // Audit, kein Geheimnis
@@ -261,7 +268,7 @@ export const stripeBilling = {
     cancelUrl,
     idempotencyKey,
   }) {
-    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    const headers = idempotentHeaders(idempotencyKey);
     const body = new URLSearchParams({
       mode: CHECKOUT_SUBSCRIPTION_MODE,
       customer: customerId,
@@ -323,7 +330,7 @@ export const stripeBilling = {
   // subscriptionId + current_period_end + current_period_start (Unix-s) verlassen den
   // Adapter (KEIN Stripe-Objekt).
   async createSubscription({ tenantRef, customerId, priceId, paymentMethodId, idempotencyKey }) {
-    const headers = authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+    const headers = idempotentHeaders(idempotencyKey);
     const body = new URLSearchParams({
       customer: customerId,
       "items[0][price]": priceId,

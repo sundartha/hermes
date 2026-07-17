@@ -16,11 +16,12 @@
 // Bibliotheksaufrufe; Serialisierung pro Stripe-Korrelationsschluessel liegt in
 // billing/webhook.js).
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.js";
+import { requirePaymentEnabled } from "../billing/payment-gate.js";
 
 // deps: { config, store, audit, accounts, sessions, billing, provision }.
 export function makeStripeWebhookRoute({ config, store, audit, accounts, sessions, billing, provision }) {
   return async (req, res) => {
-    if (!config.paymentEnabled) return res.status(404).json({ error: "payment disabled" });
+    if (!requirePaymentEnabled(res, config, "payment disabled")) return;
     const ok = verifyStripeSignature({
       rawBody: req.rawBody,
       signatureHeader: req.headers["stripe-signature"],

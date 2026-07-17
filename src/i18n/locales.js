@@ -71,6 +71,13 @@ const STYLE_CLAUSES_EN = Object.freeze({
   "formell-professionell": "Use a formal, neutral tone and address the other person politely.",
 });
 
+// EINE Quelle (G5) fuer die drei sprach-identischen styleClause-Lookups: Stil-Id -> Klausel,
+// unbekannt/null -> NEUTRAL (Siezen). Faktorei statt drei woertlich gleicher Lambdas; der
+// Anti-Injection-Pfad (nur bekannte Keys ODER NEUTRAL) bleibt exakt.
+function makeStyleClause(clauses) {
+  return (styleId) => clauses[styleId] || NEUTRAL_ADDRESS_CLAUSE;
+}
+
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
 // interpoliert wird (disclosure/bridgePhrase/summarySystem) - der Aufrufer reicht die
 // gebundene Identitaet bzw. das Anliegen herein (keine Identitaets-Logik im Bundle).
@@ -99,7 +106,7 @@ export const LOCALES = Object.freeze({
     // an Ort und Stelle (claude.js, gleiche Zeile). Unbekannt/null -> NEUTRAL (Siezen) =>
     // agentStyle=null byte-identisch. KEIN Freitext erreicht je den Prompt (nur Katalog-
     // Werte oder NEUTRAL) -> Anti-Injection (Pre-Mortem 1), staerker als der typeof-Pfad.
-    styleClause: (styleId) => STYLE_CLAUSES_DE[styleId] || NEUTRAL_ADDRESS_CLAUSE,
+    styleClause: makeStyleClause(STYLE_CLAUSES_DE),
     // Outbound-Bruecke (claude.js openingText): nach der Offenlegung gesprochen.
     // Ich-Satz-Passthrough (Runde 2, S-B): ein bereits sprechbarer Ich-Satz (neue
     // place_call-objective-Description) wird woertlich gesprochen - keine Bruecke.
@@ -151,7 +158,7 @@ export const LOCALES = Object.freeze({
       inbound: "L'appelant est en ligne. Salue-le maintenant conformément à tes instructions.",
     },
     speechClause: "Réponds exclusivement en français parlé et naturel.",
-    styleClause: (styleId) => STYLE_CLAUSES_FR[styleId] || NEUTRAL_ADDRESS_CLAUSE,
+    styleClause: makeStyleClause(STYLE_CLAUSES_FR),
     // Ich-Satz-Passthrough wie DE (je/j'); sonst kuratierte, natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
@@ -195,7 +202,7 @@ export const LOCALES = Object.freeze({
       inbound: "The caller is on the line. Greet them now according to your instructions.",
     },
     speechClause: "Reply only in natural, spoken English.",
-    styleClause: (styleId) => STYLE_CLAUSES_EN[styleId] || NEUTRAL_ADDRESS_CLAUSE,
+    styleClause: makeStyleClause(STYLE_CLAUSES_EN),
     // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^i\b|^i'/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,

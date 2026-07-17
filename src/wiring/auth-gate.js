@@ -12,18 +12,22 @@
 // isTrustedLocalCaller -> safeEqual. Jede ausgelassene Exemption blockt einen
 // Provider (tote Webhooks); jede zusaetzliche oeffnet das Dashboard.
 //
+import { isSelfServiceLive } from "../config.js";
+
 // deps (injiziert, EINE Quelle je Kollaborator, DIP/G5): config wird per-Request
 // gelesen (dashboardPassword/selfServiceEnabled/multiTenant) -> die Factory SCHLIESST
 // config, friert es NICHT zur Import-Zeit ein (wie makeVoiceRender). audit=util.audit
 // (loggt nur den Pfad, kein Secret). safeEqual=util.safeEqual (timing-sicher,
 // unveraendert). isTrustedLocalCaller=request-tenant.js. BRAND_ASSETS_PREFIX=
-// mcp-server-info.js. paths.STRIPE_WEBHOOK_PATH bleibt EINE Quelle (INV-1).
+// mcp-server-info.js. VOICE_PATH_PREFIX=app.js (EINE Quelle, G5, geteilt mit
+// rawBody-Capture + Rate-Limit-Bypass). paths.STRIPE_WEBHOOK_PATH bleibt EINE Quelle (INV-1).
 export function makeAuthGate({
   config,
   audit,
   isTrustedLocalCaller,
   safeEqual,
   BRAND_ASSETS_PREFIX,
+  VOICE_PATH_PREFIX,
   paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
 }) {
   return (req, res, next) => {
@@ -34,15 +38,14 @@ export function makeAuthGate({
     // Session-Cookie aus dem OIDC-Browser-Login, nicht mehr per Bearer-Paste).
     // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
     // byte-identisch zum Bestand.
-    if (config.selfServiceEnabled && config.multiTenant && req.path === CUSTOMER_PORTAL_PATH)
-      return next();
+    if (isSelfServiceLive(config) && req.path === CUSTOMER_PORTAL_PATH) return next();
     // /webhooks/stripe ist Basic-Auth-exempt: Stripe kann KEINE Basic-Auth-Credentials
     // senden. Die Sicherung ist die HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET
     // (fail-closed, Regel 3) - exakt analog zu /voice (Twilio-/Telnyx-Signatur). Zusaetzlich
     // PAYMENT_ENABLED-gegated (aus -> 404). Der Handler liegt im guardedBoot-Block (braucht
     // accounts/sessions), die Exemption hier ist die Basic-Auth-Vorschaltung.
     if (
-      req.path.startsWith("/voice") ||
+      req.path.startsWith(VOICE_PATH_PREFIX) ||
       req.path.startsWith("/mcp") ||
       req.path.startsWith("/.well-known") ||
       req.path === STRIPE_WEBHOOK_PATH ||

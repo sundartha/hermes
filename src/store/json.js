@@ -7,11 +7,9 @@ import path from "path";
 import { config } from "../config.js";
 import {
   defaultSettings,
-  defaultSettingsMap,
   demoCalendar,
   calendarMap,
   emptyUsage,
-  emptyUsageMap,
   sanitizeProfile,
   BOOTSTRAP_TENANT_ID,
   normNum,
@@ -116,25 +114,30 @@ function bucketToCents(bucket) {
   return merged;
 }
 
+// Generischer Alt-Shape->owner-keyed-Map-Migrator (G5): usage/settings teilten dieselbe
+// Form. Kollabiert den "kein Objekt"-Sonderfall in den generischen Merge-Pfad (leere
+// Quelle -> nur der Owner-Default-Bucket, byte-identisch zu emptyUsageMap/defaultSettingsMap).
+// migrateCalendarToMap bleibt SEPARAT (Array-Shape, kein Bucket-Transform - kein erzwungener Fit).
+function migrateFlatToMap(value, { isFlat, mapBucket, defaultBucket }) {
+  const source = value && typeof value === "object" ? value : {};
+  if (isFlat(source)) return { [BOOTSTRAP_TENANT_ID]: mapBucket(source) };
+  const map = {};
+  for (const [tenantId, bucket] of Object.entries(source)) map[tenantId] = mapBucket(bucket);
+  map[BOOTSTRAP_TENANT_ID] ||= defaultBucket();
+  return map;
+}
+
 // Migriert einen alten FLACHEN usage-{inputTokens,...} Store auf die owner-keyed
 // Usage-Map (P4). Erkennt das alte Shape an einem numerischen costEur auf der
 // Top-Ebene. Defensiv (fehlend -> frische Map) + idempotent (bereits eine Map ->
 // fehlende Bucket-Felder defaulten). seedState()-Tests seeden usage flach ->
 // diese Migration haelt sie gruen, ohne jeden seedState-Aufrufer anzufassen.
 function migrateUsageToMap(usage) {
-  if (!usage || typeof usage !== "object") return emptyUsageMap();
-  if (typeof usage.costEur === "number") {
-    // Altes flaches Shape -> wird der Owner-Bucket.
-    return { [BOOTSTRAP_TENANT_ID]: bucketToCents(usage) };
-  }
-  // Bereits eine Map: jeden Bucket gegen den Default auffuellen + auf costCents heben,
-  // Owner sicherstellen.
-  const map = {};
-  for (const [tenantId, bucket] of Object.entries(usage)) {
-    map[tenantId] = bucketToCents(bucket);
-  }
-  map[BOOTSTRAP_TENANT_ID] ||= emptyUsage();
-  return map;
+  return migrateFlatToMap(usage, {
+    isFlat: (u) => typeof u.costEur === "number",
+    mapBucket: bucketToCents,
+    defaultBucket: emptyUsage,
+  });
 }
 
 // Migriert ein altes FLACHES settings-{agentName,...} auf die owner-keyed Map (I2).
@@ -143,16 +146,11 @@ function migrateUsageToMap(usage) {
 // Owner-Bucket weiter. Defensiv (fehlend -> frische Map) + idempotent (bereits Map
 // -> jeden Bucket gegen den Default auffuellen, Owner sicherstellen).
 function migrateSettingsToMap(settings) {
-  if (!settings || typeof settings !== "object") return defaultSettingsMap();
-  if (typeof settings.agentName === "string") {
-    return { [BOOTSTRAP_TENANT_ID]: { ...defaultSettings(), ...settings } };
-  }
-  const map = {};
-  for (const [tenantId, bucket] of Object.entries(settings)) {
-    map[tenantId] = { ...defaultSettings(), ...bucket };
-  }
-  map[BOOTSTRAP_TENANT_ID] ||= defaultSettings();
-  return map;
+  return migrateFlatToMap(settings, {
+    isFlat: (s) => typeof s.agentName === "string",
+    mapBucket: (bucket) => ({ ...defaultSettings(), ...bucket }),
+    defaultBucket: defaultSettings,
+  });
 }
 
 // Migriert eine alte FLACHE calendar-Liste auf die owner-keyed Map (I2). Erkennt

@@ -99,6 +99,23 @@ function clearCookies(res, names) {
   }
 }
 
+// Login-Flow-Cookies (state/pkce/nonce) als EINE Namensliste (G5) fuer die drei Cleanup-Stellen.
+const LOGIN_FLOW_COOKIE_NAMES = ["pkce_verifier", "oauth_state", "oidc_nonce"];
+
+// Signierten Cookie lesen + HMAC verifizieren in EINEM Schritt (G5). Fehlt der Cookie ODER
+// ist die Signatur ungueltig -> null (fail-closed). NICHT fuer oauth_state: dort MUSS
+// "Cookie fehlt" (null-Recovery) von "ungueltig signiert" (400) unterschieden werden.
+export function readSignedCookie(req, name, secret) {
+  const raw = readCookie(req, name);
+  return raw ? verifyValue(raw, secret) : null;
+}
+
+// EINE Quelle (G5) fuer die generische 400-CSRF-Antwort (bewusst detail-arm, kein Leak
+// welcher Check scheiterte). Gibt die Antwort zurueck -> Aufrufer `return`t sie (Muster recoverLogin).
+function rejectCsrf(res) {
+  return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+}
+
 // Recovery bei FEHLENDEM Login-Flow-Cookie (benign: Drop/Expiry/anderer Tab beim Mail-Link).
 // Erster Versuch -> 302 zurueck auf den Login als markierter retry. Kommt der markierte
 // Versuch erneut ohne Cookie zurueck (Browser blockiert Cookies), bricht der Loop-Guard ab
@@ -202,7 +219,7 @@ export function makeWebAuthRoutes(deps) {
       const url = await oidc.authorizeUrl({ challenge, state, redirectUri });
       res.redirect(302, url);
     } catch {
-      clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
+      clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
       res.status(500).send("Anmeldung fehlgeschlagen");
     }
   });
@@ -220,7 +237,7 @@ export function makeWebAuthRoutes(deps) {
     if (signedState === null) return recoverLogin(req, res);
     const stateFromCookie = verifyValue(signedState, secret);
     if (!stateFromCookie || stateFromCookie !== req.query.state) {
-      return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+      return rejectCsrf(res);
     }
 
     // nonce: signierter Cookie muss vorhanden und gueltig sein. Fehlt/ungueltig ->
@@ -229,15 +246,13 @@ export function makeWebAuthRoutes(deps) {
     // (Same-Session). WorkOS User Management liefert kein id_token, an das ein nonce
     // gebunden werden koennte -> das Cookie selbst ist die Bindung; der Replay-Schutz
     // liegt bei PKCE.
-    const signedNonce = readCookie(req, "oidc_nonce");
-    const nonce = signedNonce ? verifyValue(signedNonce, secret) : null;
+    const nonce = readSignedCookie(req, "oidc_nonce", secret);
     if (!nonce) {
-      return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+      return rejectCsrf(res);
     }
 
     // PKCE-Verifier aus Cookie
-    const signedVerifier = readCookie(req, "pkce_verifier");
-    const verifier = signedVerifier ? verifyValue(signedVerifier, secret) : null;
+    const verifier = readSignedCookie(req, "pkce_verifier", secret);
 
     // Verifier + code muessen vorhanden sein, BEVOR wir WorkOS anrufen: ein fehlender
     // Verifier (Cookie weg/ungueltig) oder ein Callback ohne code (z.B. WorkOS-Fehler-
@@ -245,7 +260,7 @@ export function makeWebAuthRoutes(deps) {
     // fast lokal (400, gleiche generische Meldung wie state/nonce - kein Detail-Leak,
     // welcher Check scheiterte), statt einen garantiert ungueltigen Request abzusetzen.
     if (!verifier || typeof req.query.code !== "string" || !req.query.code) {
-      return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+      return rejectCsrf(res);
     }
 
     try {
@@ -259,13 +274,13 @@ export function makeWebAuthRoutes(deps) {
         lastName: claims.lastName,
         workosSessionId,
       });
-      clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
+      clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
 
       await audit.record({ actorSub: claims.sub, tenantId, action: "login" });
       res.redirect(302, postLoginPath);
     } catch {
       // Generischer Fehler: kein internes Detail, keine Token-Leaks
-      clearCookies(res, ["pkce_verifier", "oauth_state", "oidc_nonce"]);
+      clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
       res.status(401).send("Anmeldung fehlgeschlagen");
     }
   });
@@ -279,8 +294,7 @@ export function makeWebAuthRoutes(deps) {
   // Formular). Alt-Sessions/Dev-Login OHNE workos_session_id -> weiterhin 204 ohne Body
   // (rein lokal, byte-identisch zum Bestand).
   router.post("/auth/logout", async (req, res) => {
-    const signedSession = readCookie(req, "session");
-    const sessionId = signedSession ? verifyValue(signedSession, secret) : null;
+    const sessionId = readSignedCookie(req, "session", secret);
     let workosSessionId = null;
     if (sessionId) {
       const row = await sessions.get(sessionId);
@@ -647,8 +661,7 @@ export function makeAccounts(runner) {
 // webAuthAllowPending nicht auseinanderdriften. Fail-closed: kein Detail-Leak, kein
 // Token-/Cookie-Logging (der Aufrufer faengt unerwartete Fehler generisch ab).
 async function resolveWebSession({ secret, sessions, accounts }, req) {
-  const raw = readCookie(req, "session");
-  const sessionId = raw ? verifyValue(raw, secret) : null;
+  const sessionId = readSignedCookie(req, "session", secret);
   if (!sessionId) return null;
   const row = await sessions.get(sessionId);
   if (!row || row.invalidated_at != null || new Date(row.expires_at) <= new Date()) return null;

@@ -206,7 +206,7 @@
   Timeline.prototype.play = function (from) {
     if (from !== undefined) {
       this.time = from; this._curIter = 0;
-      for (var i = 0; i < this.tweens.length; i++) this.tweens[i].captured = false;
+      this._resetCaptures();
     }
     this.paused = false;
     return this;

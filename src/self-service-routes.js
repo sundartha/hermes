@@ -16,6 +16,7 @@ import { Router } from "express";
 import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
+import { requirePaymentEnabled } from "./billing/payment-gate.js";
 import {
   createTenantSubscription,
   priceIdForPlan,
@@ -306,8 +307,7 @@ export function makeSelfServiceRoutes({
     webAuthPendingMw,
     asyncBilling(
       async (req, res) => {
-        if (!config.paymentEnabled)
-          return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+        if (!requirePaymentEnabled(res, config)) return;
         if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
         const tenant = req.tenant.tenantId;
         // BK2: optionaler Plan aus dem Kachel-Flow. Bare "Karte hinzufuegen" (kein Plan)
@@ -353,8 +353,7 @@ export function makeSelfServiceRoutes({
     webAuthPendingMw,
     asyncBilling(
       async (req, res) => {
-        if (!config.paymentEnabled)
-          return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+        if (!requirePaymentEnabled(res, config)) return;
         const tenant = req.tenant.tenantId;
         const sessionId = req.query.session_id;
         if (!sessionId || typeof sessionId !== "string")
@@ -425,8 +424,7 @@ export function makeSelfServiceRoutes({
     webAuthPendingMw,
     asyncBilling(
       async (req, res) => {
-        if (!config.paymentEnabled)
-          return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+        if (!requirePaymentEnabled(res, config)) return;
         const tenant = req.tenant.tenantId;
         const planSlug = (req.body || {}).plan;
         // BK2: bucht + aktiviert ueber die geteilte Sequenz (subscribeAndActivate) - DIESELBE

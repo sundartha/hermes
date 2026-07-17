@@ -13,6 +13,7 @@
 import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
+import { requirePaymentEnabled } from "../billing/payment-gate.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
@@ -32,8 +33,7 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   // zum Bestand). "Periodisch" = extern cron-baar (echter Scheduler = P8); KEIN neuer
   // Scheduler-Dep. Antwort = nur Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
   router.post("/api/billing/flush-meters", async (req, res) => {
-    if (!config.paymentEnabled)
-      return res.status(404).json({ error: "metering disabled (PAYMENT_ENABLED)" });
+    if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
     const result = await flushMeters(store.load(), { billing });
     store.save();
     audit("meter_flush", req, `sent=${result.sent} failed=${result.failed}`);
@@ -47,8 +47,7 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   // zum Bestand, Muster flush-meters). Die Karte wird OHNE Abbuchung am Customer
   // gespeichert; der spaetere Hold/Capture (Pay2) nutzt customer+payment_method.
   router.post("/api/billing/setup-checkout", async (req, res) => {
-    if (!config.paymentEnabled)
-      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+    if (!requirePaymentEnabled(res, config)) return;
     if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
     const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
     if (!tenant) return;
@@ -67,8 +66,7 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   });
 
   router.get("/api/billing/checkout-return", async (req, res) => {
-    if (!config.paymentEnabled)
-      return res.status(404).json({ error: "payment disabled (PAYMENT_ENABLED)" });
+    if (!requirePaymentEnabled(res, config)) return;
     const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
     if (!tenant) return;
     const sessionId = req.query.session_id;

@@ -20,6 +20,7 @@ import { BRAND_ASSETS_PREFIX } from "../src/mcp-server-info.js";
 // die injizierten Werte entgegennimmt).
 const CUSTOMER_PORTAL_PATH = "/tenant.html";
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
+const VOICE_PATH_PREFIX = "/voice";
 
 // Minimal-Express-Double: status()/set() chainbar, send() erfassend (Muster
 // auth-mcp-bypass.test.js fakeRes(), um send() statt json() erweitert).
@@ -59,6 +60,7 @@ function makeGate(overrides = {}) {
     isTrustedLocalCaller: overrides.isTrustedLocalCaller ?? (() => false),
     safeEqual,
     BRAND_ASSETS_PREFIX,
+    VOICE_PATH_PREFIX,
     paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
   });
 }

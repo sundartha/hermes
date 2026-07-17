@@ -38,6 +38,7 @@ import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../store/defaults.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
+import { isSelfServiceLive } from "../config.js";
 
 // tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
 // Operator-Knopf -> Modul-Konstante; der Sicherheits-Knopf ist RELEASE_GRACE_DAYS/config).
@@ -125,7 +126,7 @@ export async function wireWebLogin({
       // eingeloggte Tenant auf der App-Shell (/app) im unified Build (vorrangig).
       postLoginPath: config.webDistDir
         ? appPath
-        : config.selfServiceEnabled && config.multiTenant
+        : isSelfServiceLive(config)
           ? customerPortalPath
           : undefined,
       // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben. Muss im
@@ -177,7 +178,7 @@ export async function wireWebLogin({
   // der Mirror nur den Owner-Bucket). VOR der Basic-Auth-Schicht -> ausschliesslich ueber
   // webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth. audit = util.audit (nur
   // Keys, keine Werte/PII).
-  if (config.selfServiceEnabled && config.multiTenant) {
+  if (isSelfServiceLive(config)) {
     app.use(
       makeSelfServiceRoutes({
         store,

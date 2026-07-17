@@ -822,6 +822,14 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   return errors;
 }
 
+// EINE Quelle (G5) fuer das Self-Service-Reifekriterium: nur "scharf", wenn BEIDE Flags
+// gesetzt sind (SELF_SERVICE_ENABLED + MULTI_TENANT). Reine Praedikatfunktion, per Import
+// genutzt (auth-gate/web-login) statt vierfach woertlich. INV-3-Exemption-Reihenfolge
+// bleibt strukturell unveraendert (nur die Bedingung wird benannt, nicht verschoben).
+export function isSelfServiceLive(cfg) {
+  return Boolean(cfg.selfServiceEnabled && cfg.multiTenant);
+}
+
 export function assertConfig() {
   const missing = [];
   if (!config.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
@@ -908,11 +916,7 @@ export function assertConfig() {
   // Self-Service ist seit der Login-Konvergenz web-session-only: die Routen sind NUR
   // im Web-Login-Block (SESSION_SECRET + STORE_BACKEND=pg) registriert. Flags an, aber
   // ohne diese Infra -> /api/self-service/* sind nicht erreichbar (404, fail-closed).
-  if (
-    config.selfServiceEnabled &&
-    config.multiTenant &&
-    !(config.sessionSecret && config.storeBackend === "pg")
-  )
+  if (isSelfServiceLive(config) && !(config.sessionSecret && config.storeBackend === "pg"))
     console.error(
       "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.",
     );

@@ -3,6 +3,7 @@
 // Antipattern, P15). global fetch ist eingebaut (Node) - keine neue Dependency.
 // Der Port spricht "body"; Telnyx erwartet "text" (Mapping hier).
 import { config } from "../../../config.js";
+import { assertTelnyxOk } from "./errors.js";
 
 const MESSAGES_PATH = "/v2/messages";
 
@@ -18,9 +19,9 @@ export const telnyxMessaging = {
       },
       body: JSON.stringify({ from, to, text: body }),
     });
-    if (!res.ok) {
-      // Kontext werfen (P8), aber NIE den API-Key in die Meldung leaken (Regel 4).
-      throw new Error(`Telnyx sendSms fehlgeschlagen: HTTP ${res.status}`);
-    }
+    // Kontext werfen (P8), aber NIE den API-Key in die Meldung leaken (Regel 4). Geteilter
+    // Telnyx-Fehlerpfad (G5): allowlisted code/title reichern die Meldung an (log-only,
+    // keine HTTP-Flaeche, kein Secret) - Kontrollfluss bleibt: throw genau bei !res.ok.
+    await assertTelnyxOk(res, "sendSms");
   },
 };
