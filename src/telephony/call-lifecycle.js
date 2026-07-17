@@ -9,6 +9,8 @@
 // via terminateAndBillCall (unveraendert, in call-termination.js). rearmActiveCallTimers
 // bleibt Boot-only; seine Aufrufposition in server.js (NACH allen exit1-Gates, VOR listen,
 // INV-5) aendert sich durch die Extraktion NICHT.
+import { VOICE_ENGINE } from "../config.js";
+
 export function makeCallLifecycle({
   store,
   config,
@@ -114,7 +116,7 @@ export function makeCallLifecycle({
   // Terminalisierungspfad beenden (gekappt+gebucht, kein Phantom-active, K2/K3). Die
   // Zombie-Buchung laeuft async (finishCall) und blockiert den Boot nicht.
   function rearmActiveCallTimers() {
-    if (config.voiceEngine === "realtime") return;
+    if (config.voiceEngine === VOICE_ENGINE.REALTIME) return;
     const nowMs = Date.now();
     let reArmed = 0;
     let terminalized = 0;

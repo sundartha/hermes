@@ -510,7 +510,7 @@ async function resolveOrCreateTenant(c, sub, email) {
   if (existing.rows.length > 0) return existing.rows[0].tenant_id;
   const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
   await c.query(
-    `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, 'suspended', $2)
+    `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2)
      ON CONFLICT (id) DO UPDATE SET idp_subject = EXCLUDED.idp_subject`,
     [tenantId, sub],
   );
@@ -581,7 +581,7 @@ export function makeAccounts(runner) {
           // Autorisierungsquelle in webAuth) liest danach denselben Wert - sonst binden
           // mintSession/ensureTenant/applyTenantIdentity/session an einen ANDEREN Tenant als
           // die Autorisierung (Review-Blocker Runde 1: Rueckgabe-vs-Autorisierung-Divergenz).
-          const result = row || { tenantId, role: "member", status: "suspended" };
+          const result = row || { tenantId, role: "member", status: TENANT_STATUS.SUSPENDED };
           return { tenantId: result.tenantId, status: result.status, role: result.role };
         } catch (err) {
           await c.query("ROLLBACK");
@@ -790,7 +790,7 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
   });
   router.post("/api/admin/tenants/:id/suspend", webAuthMw, adminMw, async (req, res) => {
     try {
-      const ok = await accounts.setStatus(req.params.id, "suspended");
+      const ok = await accounts.setStatus(req.params.id, TENANT_STATUS.SUSPENDED);
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
       await sessions.invalidateByTenant(req.params.id);
       await audit.record({
@@ -798,7 +798,7 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
         tenantId: req.params.id,
         action: "tenant_suspend",
       });
-      res.json({ tenantId: req.params.id, status: "suspended" });
+      res.json({ tenantId: req.params.id, status: TENANT_STATUS.SUSPENDED });
     } catch (e) {
       console.error("[admin] suspend", e.message);
       res.status(500).json({ error: "interner Fehler" });

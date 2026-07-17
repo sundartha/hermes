@@ -27,3 +27,21 @@ test("S1-14b: telnyx-Call -> absolute Action-URL (config.publicUrl-Praefix)", ()
   assert.equal(gatherD.action, "https://agent.test/voice/turn?callId=call_2");
   assert.equal(redirectD.url, "https://agent.test/voice/turn?callId=call_2");
 });
+
+// S3 (P8-Testluecke): streamDirectives() - https->wss-Ersetzung + provider-abhaengiger
+// MEDIA_PATH (twilio/telnyx) + Param-Form (call_id/stream_token). Bisher ungetestet.
+test("S3: streamDirectives -> wss-URL + Provider-Pfad (twilio)", () => {
+  const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
+  const [stream] = streamDirectives({ id: "call_9", provider: "twilio", streamToken: "tok9" });
+  assert.equal(stream.url, "wss://agent.test/media");
+  assert.deepEqual(stream.params, [
+    { name: "call_id", value: "call_9" },
+    { name: "stream_token", value: "tok9" },
+  ]);
+});
+
+test("S3: streamDirectives -> telnyx-Media-Pfad", () => {
+  const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
+  const [stream] = streamDirectives({ id: "call_10", provider: "telnyx", streamToken: "tok10" });
+  assert.equal(stream.url, "wss://agent.test/media/telnyx");
+});

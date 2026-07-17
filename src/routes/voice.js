@@ -19,6 +19,7 @@
 // der Settlement-Seam (terminateAndBillCall/billThunk) und config/store/audit werden
 // injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
+import { VOICE_ENGINE } from "../config.js";
 import { normNum, DEFAULT_PROVIDER } from "../store/defaults.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
@@ -219,7 +220,7 @@ export function makeVoiceRoutes({
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
 
-      if (config.voiceEngine === "realtime") {
+      if (config.voiceEngine === VOICE_ENGINE.REALTIME) {
         return res.type("text/xml").send(render(streamDirectives(call), provider));
       }
 
@@ -334,7 +335,7 @@ export function makeVoiceRoutes({
     store.markAnswered(call.id);
     store.save();
 
-    if (config.voiceEngine === "realtime") {
+    if (config.voiceEngine === VOICE_ENGINE.REALTIME) {
       return res.type("text/xml").send(render(streamDirectives(call), call.provider));
     }
 

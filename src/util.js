@@ -24,7 +24,7 @@ function sha256Hex(value) {
 
 // Telefonnummer fuer Logs maskieren: die letzten 4 Zeichen bleiben sichtbar (zur
 // Wiedererkennung), davor ein nicht umkehrbares SHA256-Praefix zur Korrelation.
-// Bsp.: +491701234567 -> ***4567#9f2c1a. Leerwert -> "-".
+// Bsp.: +491701234567 -> ***4567#b4267a. Leerwert -> "-".
 export function maskNumber(value) {
   const s = String(value ?? "").trim();
   if (!s) return "-";
@@ -34,7 +34,7 @@ export function maskNumber(value) {
 // E-Mail fuer Logs auf einen nicht umkehrbaren SHA256-Praefix reduzieren (erste 8
 // Hex-Stellen): stabil pro Adresse, aber nicht rueckrechenbar. Normalisiert
 // (trim + lowercase), damit dieselbe Adresse dasselbe Token ergibt. Bsp.:
-// a@b.de -> 0d6f3a1c. Leerwert -> "-".
+// a@b.de -> 363a175f. Leerwert -> "-".
 export function hashEmail(value) {
   const s = String(value ?? "").trim().toLowerCase();
   if (!s) return "-";

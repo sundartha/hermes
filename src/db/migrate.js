@@ -8,7 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { defaultSettings, demoCalendar } from "../store/defaults.js";
+import { defaultSettings, demoCalendar, TENANT_STATUS } from "../store/defaults.js";
 import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -99,9 +99,10 @@ export async function seedDefaults(db, tenantId) {
   // 'suspended' (fail-safe). Der Owner/Bootstrap-Tenant MUSS explizit 'active' sein,
   // sonst sperrt der neue Default den Owner aus. ON CONFLICT DO NOTHING haelt es
   // idempotent (bestehende Owner-Zeile bleibt unveraendert).
-  await db.query(`INSERT INTO tenant (id, status) VALUES ($1, 'active') ON CONFLICT DO NOTHING`, [
-    tenantId,
-  ]);
+  await db.query(
+    `INSERT INTO tenant (id, status) VALUES ($1, '${TENANT_STATUS.ACTIVE}') ON CONFLICT DO NOTHING`,
+    [tenantId],
+  );
 
   const s = defaultSettings();
   await db.query(
@@ -159,6 +160,7 @@ export async function seedDefaults(db, tenantId) {
 export async function migrate(db, tenantId) {
   await applySchema(db);
   await backfillPeriodStart(db);
+  // MUSS NACH applySchema laufen (Spalte tenant_id existiert erst dann, siehe oben).
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);
   await seedDefaults(db, tenantId);

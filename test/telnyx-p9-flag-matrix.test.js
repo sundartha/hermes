@@ -143,7 +143,8 @@ test("Wiring: rearmActiveCallTimers terminalisiert C-Telnyx ausschliesslich uebe
   const marker = "function rearmActiveCallTimers()";
   const block = lifecycleSrc.slice(lifecycleSrc.indexOf(marker), lifecycleSrc.indexOf(marker) + 1200);
   // Der realtime-Guard bleibt (Budget-only), aber KEIN C-Telnyx-Sonderpfad ueber voiceEngine:
-  assert.match(block, /config\.voiceEngine === "realtime"\) return/);
+  // (P8: "realtime"-Literal -> VOICE_ENGINE.REALTIME-Konstante, G25 - Regex mitgezogen)
+  assert.match(block, /config\.voiceEngine === VOICE_ENGINE\.REALTIME\) return/);
   assert.match(block, /terminateCappedCall\(call\.id, call\.twilioSid/);
   assert.match(block, /scheduleMaxDurationEnd\(call, call\.twilioSid/);
   assert.doesNotMatch(

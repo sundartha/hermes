@@ -1,6 +1,6 @@
-// Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, Phase P1): in-house /v1/chat/completions-
+// Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md): in-house /v1/chat/completions-
 // kompatibler Endpunkt. Kapselt agentTurn (claude.js) und framt die Antwort OpenAI-spec-
-// konform (stab-p6): stream:true -> SSE-Delta-Sequenz (role-Chunk, content-Chunk, separater
+// konform: stream:true -> SSE-Delta-Sequenz (role-Chunk, content-Chunk, separater
 // finish-Chunk, data:[DONE]); stream:false/fehlend -> plain chat.completion-JSON. Modus
 // wird per-Request aus req.body.stream ausgehandelt. Bei C-Telnyx UND C-ElevenLabs identisch.
 // Existenz fail-closed hinter TELNYX_AI_ASSISTANT_ENABLED (404 bis Cutover); Auth ueber
@@ -127,7 +127,7 @@ function lastUserContentShape(messages) {
 // einen Fallback (nie leer) - ist es hier doch leer, ist das eine Anomalie UNSERES Formats;
 // ist es nicht-leer und der Anrufer hoert nichts, liegt es am Vendor/TTS.
 // EINE Quelle (G5) fuer den gesprochenen Turn-Text: nur echter String-Content, sonst "".
-// Genutzt von der PII-freien Shape-Diagnose (speechEmpty) UND als Basis der afix-p3-
+// Genutzt von der PII-freien Shape-Diagnose (speechEmpty) UND als Basis der
 // Sprechdauer-Schaetzung - vorher stand dieser Guard inline in messagesTurnShape.
 function speechTextOf(turn) {
   return turn && typeof turn.speech === "string" ? turn.speech : "";
@@ -234,7 +234,7 @@ function logShimTurnOk(payload) {
   console.log(formatShimLine("turn_ok", payload));
 }
 
-// afix-p3: der Hangup ist geplant, nicht ausgefuehrt - ohne diese Zeile waere im Live-Log
+// Der Hangup ist geplant, nicht ausgefuehrt - ohne diese Zeile waere im Live-Log
 // nicht unterscheidbar, ob end_call gefallen ist. callId + delayMs + turnSeq (MINOR-1-Fix, 2.
 // Review-Runde: turnSeq dokumentiert, nach wie vielen Turns der Call den Abschied ausgeloest
 // hat - PII-frei, kein Text).
@@ -294,11 +294,11 @@ export function makeTelnyxLlmShim({
     sweepMs: SHIM_RATE_SWEEP_MS,
   });
 
-  // stab-p9 (S2/G5): fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (auch der
+  // Fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (S2/G5, auch der
   // Dead-Air-Watchdog nutzt es). Byte-identisches Verhalten/Log wie zuvor (SHIM_LOG_PREFIX).
   const terminateViaCallControl = makeCallControlTerminator({ store, voiceControl, logPrefix: SHIM_LOG_PREFIX });
 
-  // stab-p9-FIX (Review-Blocker P9-WD1): jede shim-getriebene Terminierung MUSS den
+  // Jede shim-getriebene Terminierung MUSS den
   // Dead-Air-Timer SOFORT loeschen. observeTurn (Schritt 4.6) armiert den Timer auf JEDEM
   // Turn VOR allen drei Gates - im Moment der Terminierung ist er also immer frisch
   // gestellt. Das Loeschen passiert sonst NUR verzoegert ueber den spaeter eintreffenden
@@ -307,7 +307,7 @@ export function makeTelnyxLlmShim({
   // erneut: zweiter Hangup-Versuch PLUS ein irrefuehrendes dead_air-Log. Ein Aufruf
   // erledigt Hangup+Clear zusammen (G5) - kein Aufrufer kann das Clear vergessen. Genutzt
   // vom Loop-Guard (Schritt 4.6) und Mid-Call-Budget-Kill (Schritt 6, P6) - beides Notaus-
-  // Pfade, die SOFORT terminieren. end_call (Schritt 8) terminiert seit afix-p3 NICHT mehr
+  // Pfade, die SOFORT terminieren. end_call (Schritt 8) terminiert NICHT mehr
   // hierueber, sondern verzoegert ueber watchdog.scheduleFarewellHangup (Schutz des
   // Abschiedssatzes, R4). KEIN Store-Write - Settlement bleibt P4.5 onHangup.
   async function terminateCall(callId) {
@@ -362,15 +362,15 @@ export function makeTelnyxLlmShim({
     const locale = localeFor(call.language);
     const model =
       typeof req.body?.model === "string" && req.body.model ? req.body.model : config.claudeModel;
-    // OpenAI-spec-Modus (stab-p6): strikt stream===true -> SSE-Delta-Sequenz; sonst (false/
+    // OpenAI-spec-Modus: strikt stream===true -> SSE-Delta-Sequenz; sonst (false/
     // fehlend/nicht-boolean) -> plain chat.completion-JSON. Telnyx sendet live stream:true.
     const wantsStream = req.body?.stream === true;
 
-    // 4.6) stab-p9 Loop-Guard + Dead-Air-Feed (Kosten-Notaus, ZUSAETZLICH zum Rate-Limiter):
+    // 4.6) Loop-Guard + Dead-Air-Feed (Kosten-Notaus, ZUSAETZLICH zum Rate-Limiter):
     // Jeder aufgeloeste Turn fuettert den Dead-Air-Timer (Lebenszeichen) und fuehrt den
     // Leer-Turn-Streak fort. M konsekutive nicht-substanzielle Turns -> kontrollierte
     // Terminierung, VOR agentTurn (kein Token-Burn): Abschiedssatz ZUERST, dann realer
-    // Hangup (Muster Budget-Gate, Schritt 6). Substanz = EINE Quelle mit stab-p7.
+    // Hangup (Muster Budget-Gate, Schritt 6). Substanz = EINE geteilte Quelle.
     // K0: observeTurn liefert zusaetzlich turnSeq (Shim-Request-Nummer dieses Calls) - rein
     // additiv, veraendert weder diese noch die nachfolgenden Gates (Rate-/Budget-Gate) an
     // Reihenfolge oder Verhalten. MINOR-1-Fix: turnSeq wird JETZT in JEDE Gate-Log-Zeile ab
@@ -420,7 +420,7 @@ export function makeTelnyxLlmShim({
     // 7) Kern: agentTurn (in-house Tool-Loop) gegen die per Call-Control-ID gebundene,
     // frische call-Referenz.
     let endCall = false;
-    let farewellChars = 0; // afix-p3: Basis der Sprechdauer-Schaetzung (Schritt 8)
+    let farewellChars = 0; // Basis der Sprechdauer-Schaetzung (Schritt 8)
     try {
       const startedAt = Date.now();
       const turn = await agentTurn(call, callerText);
@@ -470,7 +470,7 @@ export function makeTelnyxLlmShim({
       // bleibt endCall auf dem Default false - Schritt 8 ist dann ein No-op.
     }
 
-    // 8) end_call (afix-p3, Wurzel R4): der Abschiedssatz ist als Completion raus - die TTS-
+    // 8) end_call (Wurzel R4): der Abschiedssatz ist als Completion raus - die TTS-
     // Synthese/Wiedergabe laeuft aber erst an. Frueher terminierte der Shim hier SOFORT (Live
     // gemessen: Hangup 81 ms nach der Completion) und schnitt den Abschied ab. Jetzt uebergibt er
     // die Terminierung an den Watchdog, der ALLE Timer dieses Calls besitzt: er verzoegert um die

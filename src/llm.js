@@ -1,6 +1,6 @@
-// Resilienter LLM-Client-Seam (P3b-R Schicht 2): EINE Stelle, die weiss, WIE robust
+// Resilienter LLM-Client-Seam: EINE Stelle, die weiss, WIE robust
 // mit Anthropic gesprochen wird - Timeout, selektiver Jitter-Retry, Connection-
-// Hygiene, Circuit-Breaker. Alle Aufrufer (claude.js, ab CP3) haengen an dieser
+// Hygiene, Circuit-Breaker. Alle Aufrufer (claude.js) haengen an dieser
 // Abstraktion (DIP), nicht am rohen SDK. Beruehrt KEINE Safety-Gates und nicht die
 // Disclosure - messages.create ist ein reiner, statusloser LLM-Call (idempotent,
 // kein Toll-Fraud bei Retry).
@@ -11,7 +11,7 @@
 // NICHT als importierbares Modul freigegeben (nur intern fuer global fetch; empirisch
 // belegt: import "undici"/"node:undici" werfen ERR_MODULE_NOT_FOUND/ERR_UNKNOWN_BUILTIN_MODULE,
 // kein globalThis.getGlobalDispatcher). Ein eigener Dispatcher braeuchte daher undici
-// als neue Dependency - ausserhalb des CP7-Scopes (Owner-Freigabe noetig). Die Hygiene
+// als neue Dependency - ausserhalb des aktuellen Scopes (Owner-Freigabe noetig). Die Hygiene
 // wirkt weiter ueber das Retry selbst: maxRetries:0 am SDK + manueller Retry holt beim
 // Re-Request eine frische fetch-Connection (vergifteter Socket wird nicht im selben
 // fetch wiederverwendet). Zusaetzlich faengt isTransient den neuen undici-Premature-
@@ -41,7 +41,7 @@ const PREMATURE_CLOSE_MESSAGE = "Premature close";
 const BACKOFF_FACTOR = 2;
 
 // Geworfen, wenn der Breaker offen ist ODER die Retry-Obergrenze erschoepft ist.
-// Der Aufrufer (CP4) faengt diesen Typ und rendert eine wuerdevolle Degradation.
+// Der Aufrufer faengt diesen Typ und rendert eine wuerdevolle Degradation.
 // Traegt nur den Grund - niemals params, Key oder rohe Fehlerdetails (Secret-Schutz).
 export class LlmUnavailableError extends Error {
   constructor(reason) {
@@ -82,7 +82,7 @@ export function isTransient(err) {
 
 // Exponentieller Voll-Jitter-Backoff. random injiziert -> deterministisch testbar
 // (kein Math.random im Hot-Path-Test). 0/1 als Exponent erlaubt.
-function backoffDelay(baseMs, attempt, jitter, random) {
+function backoffDelay({ baseMs, attempt, jitter, random }) {
   const exp = baseMs * BACKOFF_FACTOR ** attempt;
   return jitter ? Math.floor(random() * exp) : exp;
 }
@@ -139,16 +139,16 @@ export async function withRetry(fn, { max, baseMs, jitter, retryable, sleep, ran
       const transient = retryable(err);
       if (transient) breaker?.recordFailure();
       if (!transient || attempt >= max) throw err; // selektiv + Obergrenze
-      const delay = backoffDelay(baseMs, attempt, jitter, random);
+      const delay = backoffDelay({ baseMs, attempt, jitter, random });
       attempt += 1;
       await sleep(delay);
     }
   }
 }
 
-// Metrik-Hook als No-op (echter PII-freier Emitter erst CP5). Hier nur die Form
-// fixiert (outcome/attempts/latencyMs/breakerState), damit CP5 nur das Backend
-// einsetzt, nicht die Aufrufstellen aendert.
+// Metrik-Hook als No-op (echter PII-freier Emitter folgt spaeter). Hier nur die Form
+// fixiert (outcome/attempts/latencyMs/breakerState), damit ein spaeterer Emitter nur
+// das Backend einsetzt, nicht die Aufrufstellen aendert.
 const noopMetrics = { llmCall() {} };
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

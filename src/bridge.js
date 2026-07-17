@@ -153,9 +153,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
         openaiWs,
         state,
         providerWs,
-        log,
         hangup,
-        finalize,
         media,
         store,
       };

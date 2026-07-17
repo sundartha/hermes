@@ -1,8 +1,8 @@
-// ---- makeCallRoutes (Server-Slim P9) --------------------------------------------
+// ---- makeCallRoutes (Server-Slim-Decomposition) ---------------------------------
 // Extrahierte Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel)
 // als Factory mit Dependency-Injection - gleiches Muster wie makeReadRoutes/
 // makeTenantWriteRoutes/makeBillingRoutes. Teil der server.js-Decomposition
-// (PLAN-SERVER-SLIM P9): REINE Verschiebung, Verhalten unveraendert (byte-identische
+// (PLAN-SERVER-SLIM.md): REINE Verschiebung, Verhalten unveraendert (byte-identische
 // Pfade/Status/Bodies/Audit-Events). Der G30-Split der langen /api/calls-Handler ist
 // bewusste Folgearbeit, NICHT diese Phase.
 //
@@ -19,6 +19,7 @@
 // (Gate-Array, Timer, Terminierung, finishCall) und die request-tenant-Resolver werden
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
+import { VOICE_ENGINE } from "../config.js";
 import { normNum, PROVIDER } from "../store/defaults.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
@@ -145,7 +146,7 @@ export function makeCallRoutes({
         // Max-Dauer hart durchsetzen (Budget-Engine). Fuer Twilio redundant zum
         // timeLimit-Param, fuer Telnyx (TeXML-Pfad) der einzige verlaessliche Cap. Erst NACH
         // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
-        if (config.voiceEngine !== "realtime") armMaxDurationTimer(call, tw.sid);
+        if (config.voiceEngine !== VOICE_ENGINE.REALTIME) armMaxDurationTimer(call, tw.sid);
       }
       armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
       res.json({

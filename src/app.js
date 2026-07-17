@@ -1,4 +1,4 @@
-// ---- Kompositionswurzel HTTP-Schicht (Server-Slim P15) --------------------------
+// ---- Kompositionswurzel HTTP-Schicht (PLAN-SERVER-SLIM.md) ----------------------
 // buildApp(deps) baut die Express-App als EINE sichtbare Middleware-/Mount-Sequenz
 // (INV-2) aus benannten Registrar-Funktionen + Router-Factory-Mounts. REINE
 // Verschiebung aus server.js (byte-identische Reihenfolge, Semantik, Antworten).
@@ -126,7 +126,7 @@ export function registerPublicRoutes({ app, config, store, watchdog }) {
   // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
   // bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
   // fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
-  // stab-p9 (Kosten-Notaus): EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
+  // Kosten-Notaus: EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
   // Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
   // stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
   // der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). watchdog kommt
@@ -177,7 +177,7 @@ export function registerStaticServing({ app, config }) {
 }
 
 export function installAuthGate({ app, config, audit }) {
-  // ---- Basic-Auth-Gate (Server-Slim P14) --------------------------------------------
+  // ---- Basic-Auth-Gate ---------------------------------------------------------------
   // Kern-Safety-Naht: Gate + gesamte Exemption-Liste leben in src/wiring/auth-gate.js
   // (makeAuthGate). Mount an UNVERAENDERTER Position (nach der WEB_DIST_DIR-Static-
   // Schicht, VOR express.static(publicDir) in buildApp, INV-2); Exemption-Reihenfolge
@@ -226,7 +226,7 @@ export async function buildApp(deps) {
   // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
   // damit /auth/login nicht durch Basic-Auth geblockt wird.
   if (config.sessionSecret && config.storeBackend === "pg") {
-    // AC5/INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (in
+    // INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (in
     // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
     // createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
     // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> Routen NICHT gemountet
@@ -258,7 +258,7 @@ export async function buildApp(deps) {
   // Play-TTS-Seam, Voice-Render-Helfer und Directiven-Synth kommen als die EINEN
   // Wurzel-Instanzen herein (INV-7, in server.js konstruiert).
 
-  // ---- Voice-Webhooks (Server-Slim P11) ---------------------------------------------
+  // ---- Voice-Webhooks -----------------------------------------------------------------
   // Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
   // status/call-control) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
   // makeCallRoutes). Mount an UNVERAENDERTER Position: nach express.static(publicDir), vor
@@ -288,7 +288,7 @@ export async function buildApp(deps) {
 
   // ================= REST-API (Dashboard + MCP-Tools) =================
 
-  // ---- Outbound-Call-Routen (Server-Slim P9) --------------------------------------
+  // ---- Outbound-Call-Routen -------------------------------------------------------
   // Die Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel) lebt
   // in src/routes/api-calls.js (makeCallRoutes, DI-Muster wie makeReadRoutes) - reine
   // Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
@@ -335,7 +335,7 @@ export async function buildApp(deps) {
     }),
   );
 
-  // ---- Tenant-Write-Routen (Server-Slim P8) ---------------------------------------
+  // ---- Tenant-Write-Routen ---------------------------------------------------------
   // Die tenant-scoped Schreib-Route-Gruppe (POST /api/settings,
   // POST /api/action-items/:id/toggle, POST /api/calendar) lebt in
   // src/routes/api-tenant-write.js (makeTenantWriteRoutes, DI-Muster wie makeReadRoutes)
@@ -355,14 +355,14 @@ export async function buildApp(deps) {
   );
 
   // ---- Rechteprofile verwalten (Phase 2) ----
-  // AC7-Decomposition: die /api/profiles-Route-Gruppe lebt in
+  // Die /api/profiles-Route-Gruppe lebt in
   // src/routes/api-profiles.js (makeProfileRoutes, DI-Muster wie makeWebAuthRoutes) -
   // reine Verschiebung, Verhalten unveraendert. validIdentity wird von dort importiert
   // (eine Quelle, G5) und in /api/onboard weiterverwendet.
   // Hinter Basic-Auth (Bestand deckt /api/* ab); KEIN MCP-Tool (s. Modul-Kommentar).
   app.use(makeProfileRoutes({ store, audit }));
 
-  // ---- Billing-Routen (Server-Slim P7) --------------------------------------------
+  // ---- Billing-Routen ---------------------------------------------------------------
   // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return)
   // lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster wie
   // makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
@@ -380,7 +380,7 @@ export async function buildApp(deps) {
     }),
   );
 
-  // ---- Onboarding-Routen (Server-Slim P10) ----------------------------------------
+  // ---- Onboarding-Routen ------------------------------------------------------------
   // /api/onboard + /api/onboard/retry lebt in src/routes/api-onboard.js
   // (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes) - reine
   // Verschiebung. Unveraenderte Mount-Position (nach makeBillingRoutes, vor /mcp),
@@ -399,7 +399,7 @@ export async function buildApp(deps) {
   // Wurzel-Instanz (INV-7).
   app.use(makeMcpRoutes({ config, store, requestTenant }));
 
-  // ---- Catch-all Error-Net (AC4) -------------------------------------------------
+  // ---- Catch-all Error-Net -----------------------------------------------------------
   // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur
   // Fehler von davor gemounteten Routen. Last-Resort-Netz fuer synchron geworfene/per
   // next(err) gereichte Routen-Fehler -> generische 500, NIE err.message/stack/Env an den
