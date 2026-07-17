@@ -11,6 +11,7 @@ import {
   WIDGET_CALENDAR,
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
+import { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
@@ -401,8 +402,14 @@ export function registerTools(
         // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
         // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
         language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
+        // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
+        // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
+        // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).
         max_duration_s: z
           .number()
+          .int()
+          .positive()
+          .max(MAX_CALL_DURATION_CAP_S)
           .optional()
           .describe("Maximale Gespraechsdauer in Sekunden (Default 180, Max 300)."),
       },

@@ -17,6 +17,7 @@ import {
   normNum,
   E164,
   resolveSeedProvider,
+  CENTS_PER_EUR,
 } from "./defaults.js";
 import { findActiveNumber } from "./views.js";
 import * as ops from "./state-ops.js";
@@ -94,6 +95,16 @@ function finishLoad() {
   return state;
 }
 
+// Konvertiert einen (evtl. Alt-Shape) Usage-Bucket auf costCents als autoritativen Geldwert
+// (P1). Alt-Bucket traegt numerisches costEur (Float) -> Ganzzahl-Cents; costEur wird entfernt.
+// costMicroCentsRem ist ephemer -> defaultet ueber emptyUsage() auf 0 (Boot startet bei 0).
+function bucketToCents(bucket) {
+  const merged = { ...emptyUsage(), ...bucket };
+  if (typeof bucket.costEur === "number") merged.costCents = Math.round(bucket.costEur * CENTS_PER_EUR);
+  delete merged.costEur;
+  return merged;
+}
+
 // Migriert einen alten FLACHEN usage-{inputTokens,...} Store auf die owner-keyed
 // Usage-Map (P4). Erkennt das alte Shape an einem numerischen costEur auf der
 // Top-Ebene. Defensiv (fehlend -> frische Map) + idempotent (bereits eine Map ->
@@ -103,12 +114,13 @@ function migrateUsageToMap(usage) {
   if (!usage || typeof usage !== "object") return emptyUsageMap();
   if (typeof usage.costEur === "number") {
     // Altes flaches Shape -> wird der Owner-Bucket.
-    return { [BOOTSTRAP_TENANT_ID]: { ...emptyUsage(), ...usage } };
+    return { [BOOTSTRAP_TENANT_ID]: bucketToCents(usage) };
   }
-  // Bereits eine Map: jeden Bucket gegen den Default auffuellen, Owner sicherstellen.
+  // Bereits eine Map: jeden Bucket gegen den Default auffuellen + auf costCents heben,
+  // Owner sicherstellen.
   const map = {};
   for (const [tenantId, bucket] of Object.entries(usage)) {
-    map[tenantId] = { ...emptyUsage(), ...bucket };
+    map[tenantId] = bucketToCents(bucket);
   }
   map[BOOTSTRAP_TENANT_ID] ||= emptyUsage();
   return map;
@@ -247,7 +259,11 @@ export function save() {
     // einem Restart die (idempotente) Abrechnung ueberspringen (Unter-Zaehlung). Der persistierte
     // billedAt-Marker ist der prozessuebergreifende Idempotenz-Weg; _finished bleibt strikt ephemer
     // (pg persistiert es ohnehin nie -> Backend-Parity). Der In-Prozess-state bleibt unberuehrt.
-    const stripEphemeral = (key, value) => (key === "_finished" ? undefined : value);
+    // costMicroCentsRem (P1) ist derselbe Fall: der Sub-Cent-Rest der KI-Akkumulation ist
+    // strukturell ephemer (wie reservations) - pg persistiert ihn ohnehin nie (Backend-Parity),
+    // ein persistierter Rest wuerde bei Reload den falschen Cent-Uebertrag vortaeuschen.
+    const stripEphemeral = (key, value) =>
+      key === "_finished" || key === "costMicroCentsRem" ? undefined : value;
     fs.writeFileSync(fd, JSON.stringify(persisted, stripEphemeral, 2));
     fs.fsyncSync(fd); // Daten muessen auf der Platte sein, BEVOR der Rename committet
   } finally {

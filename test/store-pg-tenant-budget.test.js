@@ -28,7 +28,7 @@ test("P4 Test 1: Pro-Tenant-Budget-Isolation (A ueber Cap, B unberuehrt)", async
   ops.trackUsage(s, TENANT_A, TOKENS_OVER_CAP, 0, PRICES);
   assert.equal(ops.budgetExceeded(s, TENANT_A, PRICES), true, "A hat den Cap gerissen");
   assert.equal(ops.budgetExceeded(s, TENANT_B, PRICES), false, "B ist frei");
-  assert.equal(ops.usageFor(s, TENANT_B).costEur, 0, "B-Bucket ist null");
+  assert.equal(ops.usageFor(s, TENANT_B).costCents, 0, "B-Bucket ist null");
 });
 
 test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", async () => {
@@ -36,7 +36,13 @@ test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", asyn
   const s = store.load();
   ops.trackUsage(s, TENANT_A, 1_000_000, 1_000_000, PRICES);
   const bucketB = ops.usageFor(s, TENANT_B);
-  assert.deepEqual(bucketB, { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 });
+  assert.deepEqual(bucketB, {
+    inputTokens: 0,
+    outputTokens: 0,
+    costCents: 0,
+    costMicroCentsRem: 0,
+    calls: 0,
+  });
 });
 
 test("P4 Test 3: globaler Notaus greift, waehrend jeder Tenant unter seinem Cap bleibt", async () => {
@@ -267,7 +273,7 @@ test("outbound-p1c Test 8 (pg): reserveExceedsBudget + addVoiceUsageCostCents ue
   assert.equal(store.budgetExceeded(TENANT_A, PRICES), true, "Ist-Minuten reissen den Cap");
 });
 
-test("outbound-p1c Test 9 (pg): tenant_budget-Seed + costEur-Reconcile ueberleben save()->reload", async () => {
+test("outbound-p1c Test 9 (pg): tenant_budget-Seed + costCents-Reconcile ueberleben save()->reload", async () => {
   const { store, runner } = await makePgTestStore();
   const s = store.load();
   ops.registerTenant(s, "user_x", { firstName: "Max", defaultBudgetCents: 1000 });
@@ -283,5 +289,5 @@ test("outbound-p1c Test 9 (pg): tenant_budget-Seed + costEur-Reconcile ueberlebe
     { tenantId: "user_x", budgetCents: 1000, hardCapCents: 1000 },
     "tenant_budget-Default-Seed persistiert (flushTenantBudgets)",
   );
-  assert.equal(ops.usageFor(s2, "user_x").costEur, 2.5, "Reconcile-costEur persistiert (flushUsage)");
+  assert.equal(ops.usageFor(s2, "user_x").costCents, 250, "Reconcile-costCents persistiert (flushUsage)");
 });

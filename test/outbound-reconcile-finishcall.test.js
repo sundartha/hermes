@@ -3,7 +3,7 @@
 // ist auf state-ops-Ebene gepinnt (outbound-reserve-reconcile.test.js); dieser Spawn-Test
 // deckt die drei zuvor unverifizierten Stellen ab:
 //   1) reconcileOutboundVoiceBudget laeuft bei JEDEM Call-Ende (auch ohne PAYMENT_ENABLED)
-//      und mutiert persistent den Tenant-Budget-Bucket (costEur im Store),
+//      und mutiert persistent den Tenant-Budget-Bucket (costCents im Store),
 //   2) der direction-Guard: ein INBOUND-Call darf NICHT abziehen (byte-identisch),
 //   3) tariffCentsPerMin(call.to) am Reconcile-Pfad: Inland vs. International buchen
 //      unterschiedliche Cents (der Tarif ist am Ziel gekoppelt, nicht pauschal).
@@ -17,7 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, CENTS_PER_EUR } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Fixe Abrechnungsfenster: answeredAt..endedAt = genau BILLED_MINUTES (ceil-stabil, da
 // exaktes Vielfaches einer Minute). Aus diesen Konstanten leiten sich die Erwartungswerte
@@ -29,8 +29,6 @@ const DOMESTIC_TARIFF_CENTS = 20; // +49/+33/+44 -> Inlandstarif
 const DEFAULT_TARIFF_CENTS = 300; // alles andere -> Worst-Case-Default
 const DOMESTIC_TO = "+4915112345678"; // DE -> Inlandstarif
 const INTL_TO = "+12025550123"; // US -> Default-Tarif
-
-const eur = (cents) => cents / CENTS_PER_EUR;
 
 const postStatus = (srv, callId, fields) =>
   fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
@@ -47,8 +45,8 @@ async function completeCall(srv, callId) {
   await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId}"`));
 }
 
-// costEur des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
-const ownerCostEur = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costEur;
+// costCents des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
+const ownerCostCents = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents;
 
 test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound zieht nichts ab", async () => {
   const srv = await startServer({
@@ -89,23 +87,23 @@ test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound zieht nicht
   });
   try {
     // (2) INBOUND zuerst: der direction-Guard verhindert jeden Abzug. Der seedState-
-    // Bucket startet bei costEur 0; der Inbound-Call hat abrechenbare Minuten (5 Min,
-    // to=Inland) - ein gebrochener Guard wuerde also abziehen. costEur bleibt 0 ->
+    // Bucket startet bei costCents 0; der Inbound-Call hat abrechenbare Minuten (5 Min,
+    // to=Inland) - ein gebrochener Guard wuerde also abziehen. costCents bleibt 0 ->
     // byte-identisch. (readStore liefert den Owner-Bucket erst NACH dem ersten save(),
     // den finishCall hier ausloest - vorher haelt store.json die flache Seed-Form.)
     await completeCall(srv, "rc_inbound");
-    assert.equal(ownerCostEur(srv), 0, "Inbound bucht NICHT in den Budget-Bucket (direction-Guard)");
+    assert.equal(ownerCostCents(srv), 0, "Inbound bucht NICHT in den Budget-Bucket (direction-Guard)");
 
     // (1)+(3) OUTBOUND Inland: Reconcile bucht BILLED_MINUTES x Inlandstarif.
     await completeCall(srv, "rc_out_dom");
-    const afterDomestic = eur(BILLED_MINUTES * DOMESTIC_TARIFF_CENTS);
-    assert.equal(ownerCostEur(srv), afterDomestic, "Outbound Inland: Minuten x Inlandstarif gebucht");
+    const afterDomestic = BILLED_MINUTES * DOMESTIC_TARIFF_CENTS;
+    assert.equal(ownerCostCents(srv), afterDomestic, "Outbound Inland: Minuten x Inlandstarif gebucht");
 
     // (3) OUTBOUND International: derselbe Pfad nutzt tariffCentsPerMin(call.to) -> der
     // teurere Default-Tarif kommt OBENDRAUF (beweist die Kopplung an call.to, nicht pauschal).
     await completeCall(srv, "rc_out_intl");
-    const afterIntl = afterDomestic + eur(BILLED_MINUTES * DEFAULT_TARIFF_CENTS);
-    assert.equal(ownerCostEur(srv), afterIntl, "Outbound International: Default-Tarif additiv gebucht");
+    const afterIntl = afterDomestic + BILLED_MINUTES * DEFAULT_TARIFF_CENTS;
+    assert.equal(ownerCostCents(srv), afterIntl, "Outbound International: Default-Tarif additiv gebucht");
   } finally {
     await srv.stop();
   }

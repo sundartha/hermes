@@ -17,7 +17,7 @@
 // spaeterer Scope, nicht P3b.
 import { config } from "../config.js";
 import * as ops from "./state-ops.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_PROVIDER } from "./defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_PROVIDER, CENTS_PER_EUR } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 
 // Owner-Tenant zentral in defaults.js; hier re-exportiert, weil Tests + pg-helpers
@@ -265,7 +265,7 @@ export function makePgStore(runner) {
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg),
     // Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). flushUsage persistiert
-    // den costEur-Bucket des Tenants.
+    // den costCents-Bucket des Tenants (als cost_eur-Spalte).
     addVoiceUsageCostCents(tenantId, costCents) {
       const usage = ops.addVoiceUsageCostCents(requireState(), tenantId, costCents);
       save();
@@ -841,7 +841,9 @@ function rowToUsage(r) {
   return {
     inputTokens: Number(r.input_tokens),
     outputTokens: Number(r.output_tokens),
-    costEur: Number(r.cost_eur),
+    // Postgres NUMERIC ist exakt dezimal -> verlustfreie Cent-Ableitung (P1, keine Schema-Migration)
+    costCents: Math.round(Number(r.cost_eur) * CENTS_PER_EUR),
+    costMicroCentsRem: 0, // ephemer, nicht persistiert (wie reservations); Boot startet bei 0
     calls: Number(r.calls),
   };
 }
@@ -1012,7 +1014,9 @@ async function flushUsage(client, tenantId, usage) {
      ON CONFLICT (tenant_id) DO UPDATE SET
        input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
        cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls`,
-    [tenantId, usage.inputTokens, usage.outputTokens, usage.costEur, usage.calls],
+    // costCents ist autoritativ (P1); die Spalte bleibt cost_eur (keine Schema-Migration) ->
+    // hier die EINE Ableitungsstelle zur Persistenz (Schwester zu rowToUsage).
+    [tenantId, usage.inputTokens, usage.outputTokens, usage.costCents / CENTS_PER_EUR, usage.calls],
   );
 }
 

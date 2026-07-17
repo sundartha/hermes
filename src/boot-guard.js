@@ -30,3 +30,12 @@ export async function guardedBoot(label, fn) {
 export function fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck }) {
   return fakeOriginate === true && skipTwilioSignatureCheck !== true;
 }
+
+// S1-7: Vollstaendigkeit der Stripe-Meter-Abbildung. JEDE usage_event-Sorte MUSS ein
+// event_name haben; fehlt eins, wirft reportMeter zur Laufzeit 'unbekanntes kind', flushMeters
+// zaehlt failed++ OHNE das Event sent zu markieren -> Endlos-Retry, Umsatz nie gemeldet.
+// Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster fakeOriginateBootBlocked):
+// liefert die Sorten OHNE Mapping (leer = vollstaendig).
+export function meterMappingGaps(usageEventKinds, meterEventNames) {
+  return usageEventKinds.filter((kind) => !meterEventNames[kind]);
+}

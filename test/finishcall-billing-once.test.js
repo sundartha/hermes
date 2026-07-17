@@ -15,7 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, CENTS_PER_EUR } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Fixes Abrechnungsfenster: answeredAt..endedAt = genau BILLED_MINUTES (Muster
 // outbound-reconcile-finishcall.test.js - kein nacktes Cent-Literal, G25).
@@ -27,7 +27,6 @@ const DEFAULT_TARIFF_CENTS = 300; // alles andere -> Worst-Case-Default
 const DOMESTIC_TO = "+4915112345678"; // DE -> Inlandstarif
 const CALL_ID = "bill_once";
 
-const eur = (cents) => cents / CENTS_PER_EUR;
 const TARIFF_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
   VOICE_TARIFF_DEFAULT_CENTS: String(DEFAULT_TARIFF_CENTS),
@@ -47,8 +46,8 @@ async function completeCall(srv, callId) {
   await waitForLog(srv, new RegExp(`\\[voice/status\\][^\\n]*"callId":"${callId}"`));
 }
 
-// costEur des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
-const ownerCostEur = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costEur;
+// costCents des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
+const ownerCostCents = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents;
 
 test("finishCall bucht Voice-Minuten genau einmal ueber einen Prozess-Neustart hinweg", async () => {
   const seed = seedState({
@@ -65,11 +64,11 @@ test("finishCall bucht Voice-Minuten genau einmal ueber einen Prozess-Neustart h
   });
 
   const srv1 = await startServer({ env: TARIFF_ENV, seed });
-  const expectedCostEur = eur(BILLED_MINUTES * DOMESTIC_TARIFF_CENTS);
+  const expectedCostCents = BILLED_MINUTES * DOMESTIC_TARIFF_CENTS;
   let dataDir;
   try {
     await completeCall(srv1, CALL_ID);
-    assert.equal(ownerCostEur(srv1), expectedCostEur, "erste Buchung: Minuten x Inlandstarif");
+    assert.equal(ownerCostCents(srv1), expectedCostCents, "erste Buchung: Minuten x Inlandstarif");
     // _finished ist jetzt In-Memory gesetzt, aber NICHT auf Platte (json.save()-Replacer, F9).
     const persisted = srv1.readStore().calls.find((c) => c.id === CALL_ID);
     assert.equal(
@@ -89,8 +88,8 @@ test("finishCall bucht Voice-Minuten genau einmal ueber einen Prozess-Neustart h
   try {
     await completeCall(srv2, CALL_ID);
     assert.equal(
-      ownerCostEur(srv2),
-      expectedCostEur,
+      ownerCostCents(srv2),
+      expectedCostCents,
       "zweiter /voice/status-Callback nach Restart bucht NICHT erneut (bleibt X, nicht 2X)",
     );
   } finally {

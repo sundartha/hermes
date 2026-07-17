@@ -3,7 +3,7 @@
 // Reserve > verbleibender effektiver Cap -> true (402 vor Dial), (2) Reserve unter dem
 // Rest erlaubt, (3) Reconcile bucht die Ist-Minuten in DENSELBEN usage-Bucket und hebt
 // damit budgetExceeded + Reservierung an, (4) Reservierung nutzt die per-Tenant-Cap-
-// Aufloesung (effectiveCapEur) - der globale Notaus bleibt davon unberuehrt, (5) Owner
+// Aufloesung (effectiveCapCents) - der globale Notaus bleibt davon unberuehrt, (5) Owner
 // ohne tenant_budget-Zeile faellt auf maxBudgetCents. Rein ueber state-ops (kein Netz, kein
 // Server, kein pglite; Lehre P6a: state-ops-Unit NICHT mit Spawn/pglite mischen).
 import { test } from "node:test";
@@ -38,10 +38,10 @@ test("INV(2): Reserve unter dem Rest -> false (erlaubt)", () => {
   assert.equal(reserveExceedsBudget(s, TENANT_A, 60, PRICES), false, "0.60 EUR Reserve < 8 EUR Cap");
 });
 
-test("INV(3): Reconcile bucht die Ist-Minuten in den Budget-Bucket (costEur)", () => {
+test("INV(3): Reconcile bucht die Ist-Minuten in den Budget-Bucket (costCents)", () => {
   const s = makeDefaultState();
   addVoiceUsageCostCents(s, TENANT_A, 100); // 1.00 EUR Ist
-  assert.equal(usageFor(s, TENANT_A).costEur, 1.0, "100 ct -> 1.00 EUR im Live-Bucket");
+  assert.equal(usageFor(s, TENANT_A).costCents, 100, "100 ct -> exakt 100 Cents im Live-Bucket");
 });
 
 test("INV(3b): Reconcile hebt budgetExceeded + reserveExceedsBudget an (Carrier-Minuten sichtbar)", () => {
@@ -57,7 +57,7 @@ test("INV(3b): Reconcile hebt budgetExceeded + reserveExceedsBudget an (Carrier-
   );
 });
 
-test("INV(4): Reservierung nutzt per-Tenant effectiveCapEur (Zeile gewinnt), global unberuehrt", () => {
+test("INV(4): Reservierung nutzt per-Tenant effectiveCapCents (Zeile gewinnt), global unberuehrt", () => {
   const s = makeDefaultState();
   setTenantBudget(s, TENANT_A, { budgetCents: 200, hardCapCents: 200 }); // 2 EUR < 8 global
   // Reserve 3 EUR > 2-EUR-Zeile, aber < 8-EUR-maxBudgetCents -> die Zeile gewinnt.
@@ -87,10 +87,10 @@ test("Grenzfall (T5): Reserve exakt = Rest -> false (strikt >, erlaubt)", () => 
   assert.equal(reserveExceedsBudget(s, TENANT_A, 101, PRICES), true, "ein Cent drueber -> blockiert");
 });
 
-test("Grenzfall (T5): Reconcile mit 0 ct laesst costEur unveraendert", () => {
+test("Grenzfall (T5): Reconcile mit 0 ct laesst costCents unveraendert", () => {
   const s = makeDefaultState();
   addVoiceUsageCostCents(s, TENANT_A, 0);
-  assert.equal(usageFor(s, TENANT_A).costEur, 0, "0 ct -> kein Abzug");
+  assert.equal(usageFor(s, TENANT_A).costCents, 0, "0 ct -> kein Abzug");
 });
 
 test("Bestand: trackUsage + budgetExceeded byte-identisch (Reconcile addiert nur dazu)", () => {

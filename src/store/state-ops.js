@@ -31,7 +31,8 @@ import {
   PROVISION_NUMBER_JOB,
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
-  globalCapEur,
+  MICRO_CENTS_PER_CENT,
+  globalCapCents,
   KYC_LEVEL,
   KYC_ORDER,
 } from "./defaults.js";
@@ -685,7 +686,7 @@ export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } =
 }
 
 // Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): nimmt
-// jeden neuen Tenant aus dem geteilten globalen Pool (sonst faellt er in effectiveCapEur
+// jeden neuen Tenant aus dem geteilten globalen Pool (sonst faellt er in effectiveCapCents
 // auf cfg.maxBudgetCents zurueck). Set-if-absent wie idpSubject: nur wenn ein Default > 0
 // uebergeben wird UND noch keine tenant_budget-Zeile existiert -> setTenantBudget
 // (budget == hard cap == Default). 0/fehlend bzw. schon eine Zeile -> No-Op (Owner/Bestand
@@ -1296,77 +1297,103 @@ export function usageOf(s, tenantId) {
 
 // Plattform-Summe ueber ALLE Tenant-Buckets (globaler Budget-Notaus, R2). Fuer
 // owner-only faellt die Summe mit dem Owner-Bucket zusammen -> verhaltens-identisch.
+// costCents/costMicroCentsRem summieren EXAKT ueber Mikro-Cents mit Uebertrag (P1
+// Safety-BLOCKER): kein Per-Tenant-Rundungsverlust, bevor die Plattform-Summe gegen
+// den globalen Cap verglichen wird.
 export function globalUsageTotals(s) {
-  const total = emptyUsage();
+  let inputTokens = 0,
+    outputTokens = 0,
+    calls = 0,
+    microTotal = 0;
   for (const bucket of Object.values(s.usage)) {
-    total.inputTokens += bucket.inputTokens;
-    total.outputTokens += bucket.outputTokens;
-    total.costEur += bucket.costEur;
-    total.calls += bucket.calls;
+    inputTokens += bucket.inputTokens;
+    outputTokens += bucket.outputTokens;
+    calls += bucket.calls;
+    microTotal += bucket.costCents * MICRO_CENTS_PER_CENT + (bucket.costMicroCentsRem || 0);
   }
-  return total;
+  return {
+    inputTokens,
+    outputTokens,
+    calls,
+    costCents: Math.floor(microTotal / MICRO_CENTS_PER_CENT),
+    costMicroCentsRem: microTotal % MICRO_CENTS_PER_CENT,
+  };
 }
 
 // USD-Kosten eines Token-Verbrauchs (Claude-Preise pro 1M Tokens). EINE Quelle
-// (G5) der Preisformel: trackUsage (Live-Bucket, EUR-Float) UND aiCostCents
-// (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
+// (G5) der Preisformel: trackUsage (Live-Bucket, Mikro-Cent-Akkumulator) UND
+// aiCostCents (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
 function tokenCostUsd(inputTokens, outputTokens, cfg) {
   return (
     (inputTokens / 1e6) * cfg.priceInPerMTokUsd + (outputTokens / 1e6) * cfg.priceOutPerMTokUsd
   );
 }
 
-// Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
-// costEur bleibt JS-Float (Bestand, akzeptiertes Risiko). Liefert den Bucket.
+// Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4). P1
+// Safety-BLOCKER: kein Per-Inkrement-Cent-Rounding - ein einzelner Haiku-Turn kostet
+// oft << 0,5 Cent und wuerde bei einer Pro-Inkrement-Rundung IMMER auf 0 fallen (das
+// Budget-Gate saehe den KI-Kostenanteil nie). Stattdessen akkumuliert dieser Pfad
+// EXAKT in Mikro-Cents (costMicroCentsRem) und bucht nur den vollen Cent-Uebertrag
+// nach costCents (Math.floor) - der Sub-Cent-Rest reist ungerundet ueber die
+// Inkremente mit, bis er selbst einen ganzen Cent ergibt. Liefert den Bucket.
 export function trackUsage(s, tenantId, inputTokens, outputTokens, cfg) {
   const usage = usageFor(s, tenantId);
   usage.inputTokens += inputTokens;
   usage.outputTokens += outputTokens;
-  usage.costEur += tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur;
+  const microInc = Math.round(
+    tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT,
+  );
+  const totalMicro = usage.costMicroCentsRem + microInc;
+  usage.costCents += Math.floor(totalMicro / MICRO_CENTS_PER_CENT);
+  usage.costMicroCentsRem = totalMicro % MICRO_CENTS_PER_CENT;
   return usage;
 }
 
 // Bucht die IST-Voice-Minutenkosten (GANZZAHL Cents) eines beendeten Outbound-Calls in den
-// LIVE-usage-Bucket des Tenants (outbound-p1c Reconcile, D1). Cent->EUR ueber CENTS_PER_EUR
-// (dieselbe Bruecke wie effectiveCapEur, G5); costEur bleibt JS-Float (Bestand). So sieht
+// LIVE-usage-Bucket des Tenants (outbound-p1c Reconcile, D1). Ganze Cents, exakt (keine
+// Mikro-Cent-Bruecke noetig - der Voice-Tarif ist bereits Ganzzahl Cents/Minute). So sieht
 // der Budget-Gate (budgetExceeded) + die Vorab-Reservierung endlich die Carrier-Minuten.
 // Nebeneffekt im Namen (N7). Reine Mutation, kein IO (Wrapper saved).
 export function addVoiceUsageCostCents(s, tenantId, costCents) {
   const usage = usageFor(s, tenantId);
-  usage.costEur += costCents / CENTS_PER_EUR;
+  usage.costCents += costCents;
   return usage;
 }
 
-// Effektiver pro-Tenant-Cap in EUR: existiert eine tenant_budget-Zeile, gilt deren
-// hard_cap_cents (Ganzzahl Cents -> EUR ueber CENTS_PER_EUR); sonst der globale Cap
-// (globalCapEur, G5 - dieselbe Divisionsstelle wie globalBudgetExceeded/
-// globalReserveExceedsBudget, Owner/Bestand ohne Zeile -> byte-identisch), von
-// budgetExceeded genutzt.
-function effectiveCapEur(s, tenantId, cfg) {
+// Effektiver pro-Tenant-Cap in GANZZAHL Cents: existiert eine tenant_budget-Zeile, gilt
+// deren hard_cap_cents; sonst der globale Cap (globalCapCents, G5 - dieselbe Quelle wie
+// globalBudgetExceeded/globalReserveExceedsBudget, Owner/Bestand ohne Zeile -> byte-
+// identisch), von budgetExceeded genutzt.
+function effectiveCapCents(s, tenantId, cfg) {
   const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
-  return budget ? budget.hardCapCents / CENTS_PER_EUR : globalCapEur(cfg);
+  return budget ? budget.hardCapCents : globalCapCents(cfg);
 }
 
 // Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
 // Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetCents). Verbrauchsquelle
 // bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
-// neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL.
+// neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL. Rein
+// Integer costCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap
+// aequivalent zu x>=cap - bit-identisch zum frueheren Float-Gate.
 export function budgetExceeded(s, tenantId, cfg) {
-  return usageFor(s, tenantId).costEur >= effectiveCapEur(s, tenantId, cfg);
+  return usageFor(s, tenantId).costCents >= effectiveCapCents(s, tenantId, cfg);
 }
 
 // Vorab-Reservierung (outbound-p1c, Kosten-Achse, D1): wuerde der Worst-Case-Minutenpreis
 // (reserveCents, GANZZAHL Cents) den verbleibenden effektiven Tenant-Cap UEBERSTEIGEN?
-// Ist-Verbrauch (costEur) + Reserve > effektiver Cap -> true (402 vor Dial). DIESELBE
-// Cap-Aufloesung (effectiveCapEur) + derselbe usage-Bucket wie budgetExceeded (G5);
+// Ist-Verbrauch (costCents) + Reserve > effektiver Cap -> true (402 vor Dial). DIESELBE
+// Cap-Aufloesung (effectiveCapCents) + derselbe usage-Bucket wie budgetExceeded (G5);
 // globalBudgetExceeded bleibt PARALLEL (Schnittmenge, Regel 1). Reine Query, kein IO.
 // Neu (OUT-05): die bereits gebuchte In-Flight-Reserve des Tenants (reservationFor)
 // zaehlt kumulativ mit -> N kurz aufeinanderfolgende Calls koennen den Cap nicht mehr
-// gemeinsam ueberschreiten. Bei LEERER Reserve byte-identisch zum Bestand.
+// gemeinsam ueberschreiten. Bei LEERER Reserve byte-identisch zum Bestand. P1: rein
+// Integer costCents (der settled Sub-Cent-Rest costMicroCentsRem wird an dieser
+// Vergleichskante geflooert - Effekt < 1 Cent, dominiert vom Worst-Case-Reserve-
+// Ueberschaetzer; die Sub-Cent-Turns selbst gehen NICHT verloren, sie tragen in costCents).
 export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
   return (
-    usageFor(s, tenantId).costEur + (reservationFor(s, tenantId) + reserveCents) / CENTS_PER_EUR >
-    effectiveCapEur(s, tenantId, cfg)
+    usageFor(s, tenantId).costCents + reservationFor(s, tenantId) + reserveCents >
+    effectiveCapCents(s, tenantId, cfg)
   );
 }
 
@@ -1448,7 +1475,7 @@ export function voiceMinutesUsedSince(s, tenantId, sinceIso) {
 // Minuten-Kontingent-Gate-Praedikat (B1b, GAP B): sind die im laufenden Abrechnungs-
 // fenster verbrauchten Voice-Minuten >= dem Plan-Kontingent? Geschwister zu
 // budgetExceeded (reine, IO-freie Query), aber auf der MINUTEN-Quelle
-// (voiceMinutesUsedSince), NICHT auf usageFor/costEur (keine Achsen-Vermischung,
+// (voiceMinutesUsedSince), NICHT auf usageFor/costCents (keine Achsen-Vermischung,
 // kein Doppelzaehlen mit der EUR-Achse, B4). State-ops bleibt katalog-/zeit-frei:
 // der Aufrufer (B2) reicht das aufgeloeste includedMinutes (aus findPlan) und den
 // Periodenanker periodStartIso herein.
@@ -1486,16 +1513,18 @@ export function markMeterEventsSent(s, eventIds) {
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
 // gegen config.maxBudgetCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
 // (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
-// Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt.
+// Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt. Rein
+// Integer costCents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
+// ganzzahligem Cap, s. budgetExceeded).
 export function globalBudgetExceeded(s, cfg) {
-  return globalUsageTotals(s).costEur >= globalCapEur(cfg);
+  return globalUsageTotals(s).costCents >= globalCapCents(cfg);
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
 // s.reservations (tenantId -> GANZZAHL Cents) haelt die noch nicht abgerechneten
 // Worst-Case-Kosten laufender Outbound-Calls, damit der Budget-Gate (Tenant UND global,
 // Schnittmenge, Regel 1) auch WAEHREND eines Calls den kumulierten Verbrauch sieht. Der
-// settled-Bucket (usageFor.costEur, gefuellt erst bei Call-Ende) bleibt UNVERAENDERT und
+// settled-Bucket (usageFor.costCents, gefuellt erst bei Call-Ende) bleibt UNVERAENDERT und
 // PARALLEL. Strukturell ephemer (nie persistiert/hydriert).
 
 // Reserve EINES Tenants (reine Query). Fehlender Eintrag -> 0.
@@ -1511,11 +1540,11 @@ export function reservationsTotal(s) {
 // Globaler Reserve-Notaus (R2, reserve-bewusst): wuerde reserveCents zusaetzlich zur
 // settled Plattform-Summe + ALLEN In-Flight-Reserven den globalen Cap ueberschreiten?
 // Schliesst die reserve-blinde Luecke in globalBudgetExceeded (das nur settled prueft).
-// Reine Query, kein IO.
+// Reine Query, kein IO. P1: rein Integer costCents (settled Sub-Cent-Rest an dieser
+// Vergleichskante geflooert, s. reserveExceedsBudget).
 export function globalReserveExceedsBudget(s, reserveCents, cfg) {
   return (
-    globalUsageTotals(s).costEur + (reservationsTotal(s) + reserveCents) / CENTS_PER_EUR >
-    globalCapEur(cfg)
+    globalUsageTotals(s).costCents + reservationsTotal(s) + reserveCents > globalCapCents(cfg)
   );
 }
 
@@ -1524,8 +1553,11 @@ export function globalReserveExceedsBudget(s, reserveCents, cfg) {
 // atomar (keine TOCTOU). Bucht reserveCents auf s.reservations[tenantId], wenn WEDER die
 // pro-Tenant- NOCH die globale reserve-bewusste Decke reisst; eine abgelehnte Reserve
 // hinterlaesst KEINEN Schreibeffekt. Nebeneffekt im Namen (N7). Liefert true=reserviert
-// (Dial erlaubt) / false=abgelehnt (402 vor Dial).
+// (Dial erlaubt) / false=abgelehnt (402 vor Dial). Fail-closed (S1-6, Absolute Regel 1):
+// ein negativer/NaN reserveCents darf den Reserve-Ledger NIE senken - !(x>=0) faengt
+// sowohl < 0 als auch NaN (NaN>=0 ist immer false).
 export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg) {
+  if (!(reserveCents >= 0)) return false;
   if (
     reserveExceedsBudget(s, tenantId, reserveCents, cfg) ||
     globalReserveExceedsBudget(s, reserveCents, cfg)

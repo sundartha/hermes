@@ -11,7 +11,7 @@
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
-import { globalCapEur } from "../store/defaults.js";
+import { globalCapEur, CENTS_PER_EUR } from "../store/defaults.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -19,6 +19,20 @@ export const STATE_CALLS = 30,
   STATE_ACTION_ITEMS = 50,
   STATE_CALENDAR = 10,
   STATE_NOTIFICATIONS = 10;
+
+// costEur wird HIER an der EINEN API-Projektionskante aus dem autoritativen costCents
+// abgeleitet (P1 Minor 1); interne Felder (costCents/costMicroCentsRem) verlassen die API
+// NICHT. mcp-tools.js (pickAgentStatus + Text-Render) liest dieses abgeleitete costEur ->
+// eine Quelle (G5), keine Dreifach-Ableitung.
+function usageView(u, config) {
+  return {
+    inputTokens: u.inputTokens,
+    outputTokens: u.outputTokens,
+    calls: u.calls,
+    costEur: u.costCents / CENTS_PER_EUR,
+    maxBudgetEur: globalCapEur(config),
+  };
+}
 
 // deps: { store, config, audit, tenant }. store traegt load/tenantContext/
 // exportTenantData/getCall/usageOf (+ getCalendar via upcomingCalendar). config ist
@@ -52,7 +66,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
       actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
       calendar: upcomingCalendar(store, tenantId).slice(0, STATE_CALENDAR),
-      usage: { ...store.usageOf(tenantId), maxBudgetEur: globalCapEur(config) },
+      usage: usageView(store.usageOf(tenantId), config),
       notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
       agent: {
         // Anzeige-Nummer = aktive Store-Nummer des Request-Tenants (auch der Owner ist

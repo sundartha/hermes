@@ -61,7 +61,10 @@ function makeMockStore({ listSize = 1 } = {}) {
       actionItems: bulk(`ai-${t}-`),
       notifications: bulk(`n-${t}-`),
     }),
-    usageOf: () => ({ spentEur: 2 }),
+    // P1: usageOf liefert den REALEN Bucket-Shape (costCents autoritativ). usageView
+    // (api-read.js) leitet costEur davon ab UND whitelistet - costCents/costMicroCentsRem
+    // duerfen die API NICHT verlassen (s. Test unten).
+    usageOf: () => ({ inputTokens: 5, outputTokens: 7, costCents: 200, costMicroCentsRem: 999, calls: 3 }),
     getCall: (id) => calls.find((c) => c.id === id),
     getCalendar: () => [
       { end: FUTURE, title: "future" },
@@ -134,7 +137,12 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     assert.equal(body.calls.length, 2);
     assertNoStreamToken(body, "/api/state"); // R3.1
     assert.equal(body.usage.maxBudgetEur, 8);
-    assert.equal(body.usage.spentEur, 2);
+    // P1: costEur wird an DIESER Kante aus costCents abgeleitet (200 Cents -> 2.00 EUR);
+    // die internen Felder costCents/costMicroCentsRem verlassen die API NICHT (Whitelist).
+    assert.equal(body.usage.costEur, 2);
+    assert.equal(body.usage.calls, 3);
+    assert.ok(!("costCents" in body.usage), "costCents ist intern, kein API-Leak");
+    assert.ok(!("costMicroCentsRem" in body.usage), "costMicroCentsRem ist intern, kein API-Leak");
     // upcomingCalendar filtert den vergangenen Termin weg -> nur der zukuenftige.
     assert.equal(body.calendar.length, 1);
     assert.equal(body.calendar[0].title, "future");

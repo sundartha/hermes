@@ -70,7 +70,9 @@ function freshState() {
     ],
   });
   // usage flach -> auf die P4-Map heben + Owner-Budget knapp UNTER dem Gate.
-  s.usage = { [BOOTSTRAP_TENANT_ID]: { inputTokens: 0, outputTokens: 0, costEur: 4, calls: 2 } };
+  s.usage = {
+    [BOOTSTRAP_TENANT_ID]: { inputTokens: 0, outputTokens: 0, costCents: 400, costMicroCentsRem: 0, calls: 2 },
+  };
   return s;
 }
 
@@ -90,7 +92,7 @@ test("eraseTenantData(owner) entfernt NUR Owner-Calls; fremder Tenant + Config b
   // settings/calendar/usage/profiles unangetastet (Service-Config/Budget-Gate)
   assert.equal(s.settings.agentName, "Hermes");
   assert.deepEqual(s.calendar, []);
-  assert.equal(s.usage[BOOTSTRAP_TENANT_ID].costEur, 4, "Budget-Zaehler unveraendert");
+  assert.equal(s.usage[BOOTSTRAP_TENANT_ID].costCents, 400, "Budget-Zaehler unveraendert");
   assert.deepEqual(s.profiles, {});
 });
 

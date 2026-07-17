@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { guardedBoot, fakeOriginateBootBlocked } from "../src/boot-guard.js";
+import { guardedBoot, fakeOriginateBootBlocked, meterMappingGaps } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 
 // Erreichbarer Fake-Pool, dessen Rolle Superuser ist -> assertNoBypassRls wirft den
@@ -94,4 +94,20 @@ test("OUT-05 F2: fakeOriginateBootBlocked-Wahrheitstabelle", () => {
   assert.equal(fakeOriginateBootBlocked({ fakeOriginate: true, skipTwilioSignatureCheck: true }), false);
   assert.equal(fakeOriginateBootBlocked({ fakeOriginate: false, skipTwilioSignatureCheck: false }), false);
   assert.equal(fakeOriginateBootBlocked({ fakeOriginate: false, skipTwilioSignatureCheck: true }), false);
+});
+
+// S1-7: meterMappingGaps meldet jede usage_event-Sorte OHNE Stripe-Meter-Abbildung
+// (kein Spawn noetig, reine Entscheidung).
+test("S1-7: meterMappingGaps meldet fehlende Meter-Abbildungen (Boot-Assertion)", () => {
+  const kinds = ["voice_minute", "ai_token", "sms", "number_month"];
+  assert.deepEqual(
+    meterMappingGaps(kinds, { voice_minute: "x", ai_token: "y", sms: "z", number_month: "w" }),
+    [],
+    "vollstaendige Abbildung -> keine Luecke",
+  );
+  assert.deepEqual(
+    meterMappingGaps(kinds, { voice_minute: "x", ai_token: "y", number_month: "w" }),
+    ["sms"],
+    "kuenstlich unvollstaendige Map -> Luecke gemeldet",
+  );
 });

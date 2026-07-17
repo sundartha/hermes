@@ -290,3 +290,15 @@ test("compute_reserve: setzt ctx.maxDur/ctx.reserveCents, Cap greift bei ueberla
     "reserveCents ist eine nicht-negative Ganzzahl (Wert selbst haengt am realen config-Singleton, s. Modul-Doc)",
   );
 });
+
+test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf config-Default, KEINE negative Reserve", async () => {
+  const { gates } = makeOutboundGates(makeDeps());
+  const ctx = baseCtx({ b: { max_duration_s: -300 } });
+  const denial = await gateBy(gates, "compute_reserve").run(ctx);
+  assert.equal(denial, null);
+  assert.equal(ctx.maxDur, 180, "negativer Body-Wert -> config-Default, NICHT -300 durchgereicht");
+  assert.ok(
+    Number.isInteger(ctx.reserveCents) && ctx.reserveCents > 0,
+    "reserveCents bleibt eine positive Ganzzahl (kein negativer/Null-Reserve-Fallout)",
+  );
+});
