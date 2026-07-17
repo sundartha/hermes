@@ -30,19 +30,27 @@ export function makeProvisioningOrchestrator({
   classifyQueuedProvisioningJobs, // store-op
   findNumber, // store-op
 }) {
-  // Provisioning-Job einreihen + Job-Spur persistieren (geteilt von /api/onboard UND dem
-  // Webhook-Aktivierungs-Trigger, G5). Enqueue ist idempotent ueber den number-id-Key;
+  // Job-Spur persistieren, DANN den Provisioning-Job einreihen (geteilt von /api/onboard UND
+  // dem Webhook-Aktivierungs-Trigger, G5). Enqueue ist idempotent ueber den number-id-Key;
   // recordProvisioningJob dedupt die Spur. Liefert {ok, jobId} | {ok:false}. Der Aufrufer
   // stoesst den Drain an (Reihenfolge bleibt aufrufer-spezifisch).
   async function queueProvisioning(numberId, tenantId) {
     const idempotencyKey = `provision_${numberId}`;
-    queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+    // Enqueue erst NACH persistierter Job-Spur (fail-closed, G31): stand das enqueue davor,
+    // kaufte ein spaeterer Fremd-Drain (anderer Tenant) den Queue-Job auch bei gescheiterter
+    // Persistenz -> eine aktivierte Nummer (echtes Geld) OHNE provisioningJobs-Spur, die
+    // reconcileOrphanedProvisioning nie klassifizieren kann. Reihenfolge jetzt strukturell:
+    // erst Commit, dann fuer den Drain sichtbar machen.
     return store
       .withStoreLock(() => {
         const s = store.load();
         const job = recordProvisioningJob(s, { numberId, tenantId, idempotencyKey });
         store.save();
         return { ok: true, jobId: job.id };
+      })
+      .then((res) => {
+        queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
+        return res;
       })
       .catch((e) => {
         console.error("[provision] Job-Spur fehlgeschlagen:", e.message);
