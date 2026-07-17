@@ -165,7 +165,10 @@ test("T7: cancel_call verwendet hangUpAction (dieselbe Quelle wie terminateCappe
 test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlossen)", () => {
   // P6 (Struct-1, Outbound-Gate-Kette-Extraktion): outboundProvider lebt seither als
   // ctx.outboundProvider (Gate-Loop-Ergebnis) - reine Variablenquelle, kein Verhaltenswechsel.
-  const marker = "config.telnyxAssistant.enabled && ctx.outboundProvider === PROVIDER.TELNYX";
+  // P5 (Provider-Registry): der Telnyx-Literal-Vergleich wurde durch die Capability-Seam
+  // (providerSupports/CAPABILITY) ersetzt - derselbe Marker-Anker, neue Quelltext-Form.
+  const marker =
+    "config.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)";
   const block = apiCallsSrc.slice(apiCallsSrc.indexOf(marker), apiCallsSrc.indexOf(marker) + 1500);
 
   assert.match(block, /armMaxDurationTimer\(call,\s*null\)/);

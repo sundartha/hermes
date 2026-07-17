@@ -9,16 +9,18 @@
 // Provider-Signatur (Regel 3) und die Offenlegungs-Textpfade (Regel 2).
 //
 // Import-vs-Inject wie api-calls.js (P9): reine Modul-Konstanten/Praedikate/Formatierer
-// mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER/PROVIDER, sayD/hangupD,
-// SPEAK_OUTCOME, localeFor, callFailureReason, degradedSpeechFor, agentTurn/
-// openingText/callerHasSpoken, metrics, startInboundAiAssistant/inboundCallControlId,
-// makeCallControlIngest) werden direkt importiert (G5 "eine Quelle"). Laufzeit-
-// Instanzen (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall/watchdog, INV-7),
-// der Provider-Dispatch-Seam (voiceControl/webhookEvents/providerFromHeaders/
-// inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
-// billThunk) und config/store/audit werden injiziert (INV-7 "eine Instanz").
+// mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, providerSupports/CAPABILITY
+// (P5, registry.js), sayD/hangupD, SPEAK_OUTCOME, localeFor, callFailureReason,
+// degradedSpeechFor, agentTurn/openingText/callerHasSpoken, metrics,
+// startInboundAiAssistant/inboundCallControlId, makeCallControlIngest) werden direkt
+// importiert (G5 "eine Quelle"). Laufzeit-Instanzen (voiceRender/directiveSynth/
+// ttsStore/lifecycle/finishCall/watchdog, INV-7), der Provider-Dispatch-Seam
+// (voiceControl/webhookEvents/providerFromHeaders/inboundSignatureVerifier, DIP) sowie
+// der Settlement-Seam (terminateAndBillCall/billThunk) und config/store/audit werden
+// injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
-import { normNum, DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
+import { normNum, DEFAULT_PROVIDER } from "../store/defaults.js";
+import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
@@ -86,7 +88,7 @@ export function makeVoiceRoutes({
   // persistiert ist (P6) - KEIN Re-Arm (zweiter Timer = Leak). Exakte Handoff-Direktive live
   // unbestaetigt (wie P4-Adapter-Body-Form) - mit dem Owner in P0/P11 fixen.
   async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
-    if (!(config.telnyxAssistant.enabled && provider === PROVIDER.TELNYX)) return null;
+    if (!(config.telnyxAssistant.enabled && providerSupports(provider, CAPABILITY.AI_ASSISTANT))) return null;
     const callControlId = inboundCallControlId(body);
     if (!callControlId) return null;
     await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });

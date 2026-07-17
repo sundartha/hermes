@@ -21,6 +21,7 @@
 import { Router } from "express";
 import { normNum, PROVIDER } from "../store/defaults.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
+import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -111,7 +112,7 @@ export function makeCallRoutes({
       // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
       // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
       // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-      if (config.telnyxAssistant.enabled && ctx.outboundProvider === PROVIDER.TELNYX) {
+      if (config.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
         await originateAiAssistantCall({
           store,
           voiceControl,
@@ -185,7 +186,7 @@ export function makeCallRoutes({
             error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,
           }
         : { error: "Anruf konnte nicht gestartet werden." };
-      if (ctx.outboundProvider === "twilio") {
+      if (ctx.outboundProvider === PROVIDER.TWILIO) {
         body.hint = "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.";
       }
       res.status(providerStatus ? 502 : 500).json(body);

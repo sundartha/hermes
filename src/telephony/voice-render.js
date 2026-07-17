@@ -18,7 +18,7 @@ import {
 } from "./directives.js";
 import { localeFor } from "../i18n/locales.js";
 import { MEDIA_PATH } from "../bridge.js";
-import { DEFAULT_PROVIDER } from "../store/defaults.js";
+import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
 
 export function makeVoiceRender({ config }) {
   // Kurz-Helfer fuer Direktiven-Listen -> Provider-Markup (TwiML/TeXML). provider
@@ -33,7 +33,7 @@ export function makeVoiceRender({ config }) {
   // noetig, sonst Erst-Turn-Deadlock). Telnyx-TeXML loest relative URLs anders auf als
   // Twilio -> absolute URL fuer Telnyx (config.publicUrl zur Laufzeit gelesen).
   function turnDirectives(call, text, { speechTimeoutSec } = {}) {
-    const isTelnyx = call.provider === "telnyx";
+    const isTelnyx = call.provider === PROVIDER.TELNYX;
     const base = isTelnyx ? config.publicUrl : "";
     const action = `${base}/voice/turn?callId=${call.id}`;
     // Voice-Profil (TTS-Voice + STT-Locale) aus call.language ableiten (F1 P4). DE-Call
