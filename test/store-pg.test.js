@@ -54,7 +54,8 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
   assert.deepEqual(s.usage[BOOTSTRAP_TENANT_ID], {
     inputTokens: 0,
     outputTokens: 0,
-    costEur: 0,
+    costCents: 0,
+    costMicroCentsRem: 0,
     calls: 0,
   });
   // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
@@ -184,7 +185,8 @@ test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
   const expectedUsd = 1.0 + 5.0;
   assert.equal(usage.inputTokens, 1_000_000);
   assert.equal(usage.outputTokens, 1_000_000);
-  assert.ok(Math.abs(usage.costEur - expectedUsd * PRICES.usdToEur) < 1e-9);
+  assert.equal(usage.costCents, 558);
+  assert.equal(usage.costMicroCentsRem, 0);
   assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), false);
   store.trackUsage(BOOTSTRAP_TENANT_ID, 0, 2_000_000, PRICES); // schiebt ueber 8 EUR
   assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), true);

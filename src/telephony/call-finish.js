@@ -43,7 +43,7 @@ export function makeCallFinish({
       metering.reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
       store.markBilled(call.id); // -> billed_at persistiert, ueberlebt Restart (F9)
     }
-    await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costEur
+    await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costCents
     store.save();
 
     if (call.status !== "completed" || !call.transcript.length) {

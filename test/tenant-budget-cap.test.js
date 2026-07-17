@@ -12,7 +12,10 @@ import {
   trackUsage,
   budgetExceeded,
   globalBudgetExceeded,
+  globalUsageTotals,
   setTenantBudget,
+  usageFor,
+  addVoiceUsageCostCents,
 } from "../src/store/state-ops.js";
 
 const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
@@ -27,7 +30,7 @@ test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.maxBudgetCents (byte-id
   // knapp unter dem Cap -> frei
   trackUsage(s, TENANT_A, Math.floor(TOKENS_PER_EUR * 7.9), 0, PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "unter 8 EUR -> frei");
-  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costEur >= maxBudgetCents)
+  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costCents >= maxBudgetCents)
   trackUsage(s, TENANT_A, Math.ceil(TOKENS_PER_EUR * 0.2), 0, PRICES);
   assert.equal(
     budgetExceeded(s, TENANT_A, PRICES),
@@ -77,8 +80,8 @@ test("Grenzfall (T5/G3): hardCapCents exakt = Verbrauch -> exceeded (>= wie Best
   const s = makeDefaultState();
   setTenantBudget(s, TENANT_A, { budgetCents: 400, hardCapCents: 500 }); // 5 EUR
   trackUsage(s, TENANT_A, Math.round(TOKENS_PER_EUR * 5), 0, PRICES); // genau ~5 EUR
-  // costEur ist Float; >= 5 EUR muss exceeden. Wir runden minimal drueber, um den
-  // Inklusiv-Vergleich deterministisch zu treffen.
+  // costCents ist eine Ganzzahl; >= 5 EUR muss exceeden. Wir runden minimal drueber, um
+  // den Inklusiv-Vergleich deterministisch zu treffen.
   trackUsage(s, TENANT_A, 1, 0, PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "Verbrauch >= Cap -> exceeded");
 });
@@ -95,4 +98,76 @@ test("setTenantBudget ist Upsert (eine Zeile pro Tenant, zweiter Aufruf aktualis
   setTenantBudget(s, TENANT_A, { budgetCents: 300, hardCapCents: 900 });
   assert.equal(s.tenantBudgets.length, 1, "kein Duplikat");
   assert.deepEqual(s.tenantBudgets[0], { tenantId: TENANT_A, budgetCents: 300, hardCapCents: 900 });
+});
+
+// ---- S1-1 (P1 Integer-Cents-Kern): addVoiceUsageCostCents/globalUsageTotals + der
+// Safety-BLOCKER (Sub-Cent-Turns duerfen nie pro Inkrement auf 0 gerundet werden) ----
+
+test("S1-1: addVoiceUsageCostCents bucht ganze Cents exakt (kein Float-Drift)", () => {
+  const s = makeDefaultState();
+  addVoiceUsageCostCents(s, TENANT_A, 250);
+  assert.equal(usageFor(s, TENANT_A).costCents, 250);
+  addVoiceUsageCostCents(s, TENANT_A, 250);
+  assert.equal(usageFor(s, TENANT_A).costCents, 500, "zweite Buchung addiert exakt, kein Rundungsfehler");
+});
+
+test("S1-1: globalUsageTotals summiert costCents als Ganzzahl ueber alle Tenant-Buckets", () => {
+  const s = makeDefaultState();
+  addVoiceUsageCostCents(s, TENANT_A, 300);
+  addVoiceUsageCostCents(s, TENANT_B, 450);
+  assert.equal(globalUsageTotals(s).costCents, 750, "Owner-Bucket ist 0, Summe = A+B");
+});
+
+test("Grenzfall (T5): cap-1/cap/cap+1 mit ganzen Cents (addVoiceUsageCostCents) - >= wie Bestand", () => {
+  const s = makeDefaultState();
+  setTenantBudget(s, TENANT_A, { budgetCents: 500, hardCapCents: 500 });
+  addVoiceUsageCostCents(s, TENANT_A, 499);
+  assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "499 < 500 -> frei");
+  addVoiceUsageCostCents(s, TENANT_A, 1); // -> 500
+  assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "500 >= 500 -> exceeded");
+  addVoiceUsageCostCents(s, TENANT_A, 1); // -> 501
+  assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "501 > 500 -> exceeded");
+});
+
+// P1-SAFETY-BLOCKER: der KI-Kosten-Live-Gate-Akkumulator (trackUsage) darf einen
+// Sub-Cent-Turn NICHT pro Inkrement auf 0 runden - sonst wird die KI-Kosten-Achse des
+// Budget-Gates blind (stille Aufweichung von Absolute Regel 1). Ground-Truth ist die
+// PRAEZISE (nicht per-Schritt gerundete) Summe ueber alle Turns.
+test("S1-1 BLOCKER: viele Sub-Cent-Turns summieren ueber den Cap -> Gate greift", () => {
+  const s = makeDefaultState();
+  setTenantBudget(s, TENANT_A, { budgetCents: 500, hardCapCents: 500 });
+  const SUBCENT_TOKENS = 1000; // 0.00093 EUR = 0.093 Cent/Turn (<< 0,5 Cent)
+  const TURNS = 6000;
+  for (let i = 0; i < TURNS; i++) trackUsage(s, TENANT_A, SUBCENT_TOKENS, 0, PRICES);
+  const preciseCents = TURNS * (SUBCENT_TOKENS / 1e6) * PRICES.priceInPerMTokUsd * PRICES.usdToEur * 100;
+  assert.ok(preciseCents > 500, "Vorbedingung: praezise Summe (~558) reisst den Cap");
+  assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "aufsummierte Sub-Cent-Turns reissen den Cap");
+  assert.ok(
+    usageFor(s, TENANT_A).costCents >= 500,
+    "Sub-Cent-Turns in costCents akkumuliert, NICHT auf 0 gerundet (eine per-Inkrement-Rundung wuerde hier 0 liefern)",
+  );
+});
+
+test("S1-1: praezise Rekonstruktion aus costCents+costMicroCentsRem (kein per-Schritt-Rounding)", () => {
+  const s = makeDefaultState();
+  const turns = [
+    [1000, 0],
+    [777, 200],
+    [12345, 6789],
+    [1, 0],
+    [999999, 999999],
+  ];
+  let preciseEurSum = 0;
+  for (const [inTok, outTok] of turns) {
+    trackUsage(s, TENANT_A, inTok, outTok, PRICES);
+    preciseEurSum +=
+      ((inTok / 1e6) * PRICES.priceInPerMTokUsd + (outTok / 1e6) * PRICES.priceOutPerMTokUsd) *
+      PRICES.usdToEur;
+  }
+  const bucket = usageFor(s, TENANT_A);
+  const reconstructedEur = (bucket.costCents + bucket.costMicroCentsRem / 1e6) / 100;
+  assert.ok(
+    Math.abs(reconstructedEur - preciseEurSum) < 1e-9,
+    "Mikro-Cent-Rest fuehrt die volle Praezision ueber die Inkremente mit",
+  );
 });

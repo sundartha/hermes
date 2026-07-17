@@ -19,7 +19,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, CENTS_PER_EUR } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Tarif so, dass die gebuchte Zombie-Minute eine sichtbare Summe ergibt (G25, Muster
 // finishcall-billing-once.test.js - kein nacktes Cent-Literal).
@@ -29,7 +29,6 @@ const TARIFF_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
   VOICE_TARIFF_DEFAULT_CENTS: "300",
 };
-const eur = (cents) => cents / CENTS_PER_EUR;
 
 // Zombie-Anker: fixer, weit zurueckliegender answeredAt -> Restzeit garantiert <=0. Der
 // gekappte End-Anker ist deterministisch answeredAt + ZOMBIE_MAX_S (NIE Boot-Zeit/2026).
@@ -71,8 +70,8 @@ test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)"
       "endedAt = gekappter Anker (answeredAt + Max-Dauer), NIE Boot-Zeit",
     );
     assert.equal(
-      s.usage[BOOTSTRAP_TENANT_ID].costEur,
-      eur(ZOMBIE_MINUTES * DOMESTIC_TARIFF_CENTS),
+      s.usage[BOOTSTRAP_TENANT_ID].costCents,
+      ZOMBIE_MINUTES * DOMESTIC_TARIFF_CENTS,
       "gebuchte Minuten = gekappte Dauer x Inlandstarif (genau einmal)",
     );
   } finally {

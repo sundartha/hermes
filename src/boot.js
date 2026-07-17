@@ -6,9 +6,11 @@
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
 import { assertConfig } from "./config.js";
-import { fakeOriginateBootBlocked } from "./boot-guard.js";
+import { fakeOriginateBootBlocked, meterMappingGaps } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { attachMediaBridge } from "./bridge.js";
+import { USAGE_EVENT_KIND } from "./store/defaults.js";
+import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -21,7 +23,7 @@ function runRetention(store, config) {
     );
 }
 
-// Alle drei fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen
+// Alle vier fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen
 // exit1-Gates" strukturell sichtbar - kein Code danach kann ein Gate vergessen).
 function assertBootGates(config, store) {
   const ok = assertConfig();
@@ -55,6 +57,19 @@ function assertBootGates(config, store) {
     console.error(
       "[boot] Keine aktive Nummer im Store. Erst seeden: " +
         "npm run bootstrap-tenant -- <e164> <provider>",
+    );
+    process.exit(1);
+  }
+
+  // S1-7: Vollstaendigkeit der Stripe-Meter-Abbildung. Fehlt einer usage_event-Sorte ein
+  // event_name, wirft reportMeter erst zur LAUFZEIT (beim ersten Flush dieser Sorte) - der
+  // Umsatz dieser Sorte bliebe unbemerkt endlos pending. Boot-Zeit-Assertion statt spaeter
+  // Ueberraschung (Muster der drei vorigen Gates).
+  const meterGaps = meterMappingGaps(Object.values(USAGE_EVENT_KIND), STRIPE_METER_EVENT_NAME);
+  if (meterGaps.length) {
+    console.error(
+      `[boot] Start abgebrochen: usage_event-Sorten ohne Stripe-Meter-Abbildung: ${meterGaps.join(",")}. ` +
+        "STRIPE_METER_EVENT_NAME in src/billing/stripe.js vervollstaendigen.",
     );
     process.exit(1);
   }

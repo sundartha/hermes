@@ -58,10 +58,13 @@ function isMissingCustomerDetail(detail) {
 // die Customer-Bindung (stripe_customer_id pro Tenant) ist NICHT in P6b3-Scope ->
 // der Meter meldet payload[value]=quantity + tenant_ref (Audit), kein erfundener
 // stripe_customer_id. event_name muss zu den im Stripe-Dashboard angelegten Metern
-// passen (Owner-Smoke).
-const STRIPE_METER_EVENT_NAME = Object.freeze({
+// passen (Owner-Smoke). EXPORT (P1, S1-7): boot.js prueft ueber meterMappingGaps, dass
+// JEDE usage_event-Sorte (USAGE_EVENT_KIND) hier ein Mapping hat - sonst faellt ein
+// SMS-Event beim Flush endlos auf 'failed' zurueck (Umsatz nie gemeldet).
+export const STRIPE_METER_EVENT_NAME = Object.freeze({
   voice_minute: "voice_minutes",
   ai_token: "ai_tokens",
+  sms: "sms_messages", // S1-7: SMS-Producer existiert real (call-finish.js kind=SMS)
   number_month: "number_months",
 });
 

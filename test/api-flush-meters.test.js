@@ -112,3 +112,39 @@ test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0}, Ev
     await stripe.close();
   }
 });
+
+// (D) P1/S1-7: EIN pending "sms"-usage_event -> 200 {sent:1,failed:0}. Beweist, dass das
+// SMS-Mapping (STRIPE_METER_EVENT_NAME.sms) existiert - vor dem Fix warf reportMeter
+// 'unbekanntes kind' und flushMeters zaehlte failed:1 (Event bleibt pending, Umsatz nie
+// gemeldet).
+test("mit PAYMENT_ENABLED, EIN pending sms-usage_event: -> 200 {sent:1,failed:0} (SMS-Meter-Mapping vorhanden)", async () => {
+  const stripe = await startFakeStripe();
+  const seed = {
+    ...seedState(),
+    usageEvents: [
+      {
+        id: "ue_sms1",
+        tenantId: BOOTSTRAP_TENANT_ID,
+        callId: null,
+        kind: "sms",
+        quantity: 1,
+        costCents: 3,
+        occurredAt: new Date().toISOString(),
+        stripeMeterSent: false,
+      },
+    ],
+  };
+  const srv = await startServer({ env: { ...PAY_ENV, STRIPE_API_BASE: stripe.url }, seed });
+  try {
+    const res = await flushMeters(srv);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body, { sent: 1, failed: 0 });
+    assert.equal(stripe.meterPosts.length, 1, "genau ein Meter-POST an Stripe");
+    const stored = srv.readStore().usageEvents.find((e) => e.id === "ue_sms1");
+    assert.equal(stored.stripeMeterSent, true, "sms-Event nach Flush als gesendet markiert");
+  } finally {
+    await srv.stop();
+    await stripe.close();
+  }
+});

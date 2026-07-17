@@ -121,18 +121,36 @@ export const USAGE_EVENT_KIND = Object.freeze({
   NUMBER_MONTH: "number_month",
 });
 
-// Cent<->EUR-Bruecke fuer budgetExceeded (G25): hard_cap_cents (Ganzzahl Cents,
-// Money at rest) -> EUR-Vergleich gegen den bestehenden costEur-Live-Bucket.
+// Cent<->EUR-Bruecke (G25): EUR-Ableitung an Anzeige-/Persistenz-Kanten (z.B.
+// api-read.js usageView, pg.js flushUsage). Das Budget-Gate selbst vergleicht rein
+// Integer costCents (P1) - keine Division im Gate-Pfad.
 export const CENTS_PER_EUR = 100;
+
+// Sub-Cent-Aufloesung fuer die KI-Kosten-Akkumulation (Safety-BLOCKER P1): der
+// Sub-Cent-Anteil eines Turns (Haiku << 0,5 Cent) darf NICHT pro Inkrement auf 0
+// gerundet werden. trackUsage akkumuliert exakt in Mikro-Cents (1 Cent = 1e6) und
+// bucht nur den vollen Cent-Uebertrag in costCents (G26: Money at rest = Ganzzahl).
+export const MICRO_CENTS_PER_CENT = 1_000_000;
 
 // Globaler Notaus-Cap in EUR (Cents->EUR-Ruecklesung von cfg.maxBudgetCents, G5:
 // EINE Divisionsstelle statt vier duplizierten `cfg.maxBudgetCents / CENTS_PER_EUR`-
 // Stellen in server.js/api-read.js/state-ops.js). Reine Funktion von cfg, keine
-// State-Abhaengigkeit - state-ops.js effectiveCapEur nutzt sie als Fallback-Zweig,
-// wenn kein pro-Tenant-Budget existiert.
+// State-Abhaengigkeit - api-read.js nutzt sie fuer die Anzeige-Projektion.
 export function globalCapEur(cfg) {
   return cfg.maxBudgetCents / CENTS_PER_EUR;
 }
+
+// Globaler Notaus-Cap in GANZZAHL Cents (G5: eine Quelle fuer das Gate-Rechnen in Cents;
+// Schwester zu globalCapEur, das fuer Anzeige/Fehlertext nach EUR ableitet). cfg.maxBudgetCents
+// ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix im Gate.
+export function globalCapCents(cfg) {
+  return cfg.maxBudgetCents;
+}
+
+// Intrinsische Fallback-/Cap-Werte der Reserve-Dauer (KEIN Operator-Knopf -> nicht config.js,
+// G35 n.z.). MAX_CALL_DURATION_CAP_S deckelt AUCH den Body-Override (place_call max_duration_s).
+export const DEFAULT_CALL_DURATION_S = 180;
+export const MAX_CALL_DURATION_CAP_S = 300;
 
 // Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
 // Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
@@ -250,10 +268,10 @@ export function calendarMap() {
   return { [BOOTSTRAP_TENANT_ID]: demoCalendar() };
 }
 
-// Ein leerer Usage-Bucket (pro Tenant). costEur als JS-Float (Bestand,
-// dokumentiertes akzeptiertes Risiko; pg cost_eur NUMERIC at rest).
+// Leerer Usage-Bucket. Money at rest = GANZZAHL Cents (costCents, G26). costMicroCentsRem
+// = ephemerer Sub-Cent-Rest der KI-Akkumulation (nie auf Platte, Reset 0 bei Boot).
 export function emptyUsage() {
-  return { inputTokens: 0, outputTokens: 0, costEur: 0, calls: 0 };
+  return { inputTokens: 0, outputTokens: 0, costCents: 0, costMicroCentsRem: 0, calls: 0 };
 }
 
 // Usage-Map mit dem Owner-Bucket vorbelegt. Daten-Schicht pro-Tenant (P4):

@@ -28,6 +28,8 @@ import {
   homeCountryCode,
   normalizeDialTarget,
   globalCapEur,
+  DEFAULT_CALL_DURATION_S,
+  MAX_CALL_DURATION_CAP_S,
 } from "../store/defaults.js";
 import { findActiveNumber } from "../store/views.js";
 import { E164, invalidText, validateAssistantContext } from "../routes/_validation.js";
@@ -80,12 +82,6 @@ const PREMIUM_PREFIXES = [
 const HOUR_MS = 60 * 60 * 1000;
 const SECONDS_PER_MINUTE = 60;
 
-// G25: die bisher nackten 180/300 aus compute_reserve. Intrinsische Fallback-/Cap-Werte
-// der Reserve-Formel (KEIN neuer Operator-Knopf - der Operator stellt config.maxCallDurationS;
-// darum NICHT nach config.js, G35 n.z.).
-const DEFAULT_CALL_DURATION_S = 180;
-const MAX_CALL_DURATION_CAP_S = 300;
-
 // EXPORT (server.js Pre-Gate-Check + numberGateError-Format-Branch nutzen ihn).
 export const E164_FORMAT_ERROR = "to muss E.164 sein, z.B. +4917212345678";
 
@@ -112,6 +108,19 @@ export function tariffCentsPerMin(to) {
   return defaultConfig.voiceTariffDomesticPrefixes.some((p) => to.startsWith(p))
     ? defaultConfig.voiceTariffDomesticCents
     : defaultConfig.voiceTariffDefaultCents;
+}
+
+// S1-6 Wurzelfix: loest die Max-Gespraechsdauer (Sekunden) aus dem optionalen, UNVALIDIERTEN
+// Body-Override auf: erster endlich-UND-strikt-positiver Kandidat aus [Body, config-Default,
+// Hard-Default], dann hart auf MAX_CALL_DURATION_CAP_S geklemmt. Ersetzt den `parseInt(raw||def,10)
+// || DEFAULT`-Trap, der nur 0/null/NaN abfing (negative Zahlen sind in JS truthy: -300 rutschte
+// bis zu einer NEGATIVEN Reserve durch). chosen ist immer >0 (DEFAULT_CALL_DURATION_S als Boden)
+// -> Math.min nie NaN.
+export function resolveMaxDurationS(raw, cfg) {
+  const chosen = [parseInt(raw, 10), cfg.maxCallDurationS, DEFAULT_CALL_DURATION_S].find(
+    (v) => Number.isFinite(v) && v > 0,
+  );
+  return Math.min(chosen, MAX_CALL_DURATION_CAP_S);
 }
 
 // Fabrik: baut die geordnete Gate-Kette einmal beim Boot (P15, wie makeTenantResolver) -
@@ -497,10 +506,7 @@ export function makeOutboundGates({
     {
       name: "compute_reserve",
       run(ctx) {
-        ctx.maxDur = Math.min(
-          parseInt(ctx.b.max_duration_s || config.maxCallDurationS, 10) || DEFAULT_CALL_DURATION_S,
-          MAX_CALL_DURATION_CAP_S,
-        );
+        ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, config);
         ctx.reserveCents = tariffCentsPerMin(ctx.to) * Math.ceil(ctx.maxDur / SECONDS_PER_MINUTE);
         return null;
       },

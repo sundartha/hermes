@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, CENTS_PER_EUR } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const DOMESTIC_TARIFF_CENTS = 20;
 const DOMESTIC_TO = "+4915112345678"; // DE -> Inlandstarif
@@ -19,7 +19,6 @@ const TARIFF_ENV = {
   VOICE_TARIFF_DEFAULT_CENTS: "300",
   FAKE_ORIGINATE: "true", // netzfreier Call-Control-Hangup (kein echter Telnyx-Request)
 };
-const eur = (cents) => cents / CENTS_PER_EUR;
 
 // Zombie-Anker: fixer, weit zurueckliegender answeredAt -> Restzeit garantiert <=0. Der
 // gekappte End-Anker ist deterministisch answeredAt + ZOMBIE_MAX_S (NIE Boot-Zeit/2026).
@@ -64,8 +63,8 @@ test("R1: Boot-Re-Arm terminalisiert einen C-Telnyx-Zombie (callControlId, kein 
       "endedAt = gekappter Anker (answeredAt + Max-Dauer), NIE Boot-Zeit",
     );
     assert.equal(
-      s.usage[BOOTSTRAP_TENANT_ID].costEur,
-      eur(ZOMBIE_MINUTES * DOMESTIC_TARIFF_CENTS),
+      s.usage[BOOTSTRAP_TENANT_ID].costCents,
+      ZOMBIE_MINUTES * DOMESTIC_TARIFF_CENTS,
       "gebuchte Minuten = gekappte Dauer x Inlandstarif (genau einmal) - rearm orphant den C-Telnyx-Cap NICHT mehr",
     );
   } finally {
