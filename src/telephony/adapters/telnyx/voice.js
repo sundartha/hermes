@@ -65,6 +65,14 @@ function logCallControlOk(op, status, ccidPresent) {
   console.log(`[telnyx/voice] ${op} ok status=${status} ccid=${ccidPresent}`);
 }
 
+// Telnyx-v2 wrappt manche Antworten in {data}, andere nicht - beide Formen abdecken (G5:
+// EINE Unwrap-Stelle). Body nicht lesbar/kein JSON -> {} (Aufrufer liest nur optionale
+// Felder). Non-destruktiv, nur auf dem Erfolgspfad (assertTelnyxOk hat !ok bereits verworfen).
+async function parseTelnyxResource(res) {
+  const json = await res.json().catch(() => ({}));
+  return json.data || json;
+}
+
 // Gemeinsames Fetch-Skelett fuer Call-Control-Actions (G5): endCallViaCallControl und
 // startAssistant posten beide auf {base}/v2/calls/{callControlId}/actions/{action} mit
 // JSON-Body und pruefen ueber denselben assertTelnyxOk-Helper. action/body/op als EIN
@@ -142,10 +150,8 @@ export const telnyxVoice = {
       },
     );
     await assertTelnyxOk(res, "originateCall", ATTACH_STATUS);
-    // Twilio-kompatible Call-Resource. Telnyx-v2 wrappt manche Antworten in {data};
-    // beide Formen abdecken. sid = CallSid (Fallback call_sid).
-    const json = await res.json().catch(() => ({}));
-    const data = json.data || json;
+    // Twilio-kompatible Call-Resource. sid = CallSid (Fallback call_sid).
+    const data = await parseTelnyxResource(res);
     return { sid: data.sid || data.call_sid };
   },
 
@@ -193,8 +199,7 @@ export const telnyxVoice = {
       body: JSON.stringify(payload),
     });
     await assertTelnyxOk(res, "originateViaCallControl", ATTACH_STATUS);
-    const json = await res.json().catch(() => ({}));
-    const data = json.data || json;
+    const data = await parseTelnyxResource(res);
     // OBS-2: ccid-PRAESENZ hier = ob die Antwort eine call_control_id trug (nie der Wert).
     logCallControlOk("originateViaCallControl", res.status, Boolean(data.call_control_id));
     return { callControlId: data.call_control_id };

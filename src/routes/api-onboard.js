@@ -55,6 +55,15 @@ const RETRY_REASON_MESSAGE = {
     "bitte Provider-/Stripe-Zustand manuell abgleichen (Runbook PROV-01), kein Auto-Retry.",
 };
 
+// EINE Quelle (G5) fuer den an POST /api/onboard und /api/onboard/retry identischen
+// tenantId-400-Guard (validIdentity + identischer Fehlertext). true = gueltig (Aufrufer
+// faehrt fort); false = Guard hat bereits geantwortet (Aufrufer bricht mit return ab).
+function requireValidTenantId(res, tenantId) {
+  if (validIdentity(tenantId)) return true;
+  res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+  return false;
+}
+
 // deps: { store, config, audit, provisioning }. store traegt load/save/withStoreLock/
 // resolveTenant/tenantActiveSubscriber. config ist das globale Config-Objekt
 // (defaultTenantBudgetCents/geoEnabled/provisioningCountry/forceNumberCountry/
@@ -89,10 +98,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
         .json({ error: "idpSubject ungueltig (nicht leer, ohne Whitespace, <=254 Zeichen)" });
     const sub = idpSubject ?? null;
     const tenantId = sub ? tenantIdForSubject(sub) : bodyTenantId;
-    if (!validIdentity(tenantId))
-      return res
-        .status(400)
-        .json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+    if (!requireValidTenantId(res, tenantId)) return;
 
     // Onboard-Guard (tenant-prolif-b): reine Bedingungspruefung in onboard-guard.js
     // (isoliert unit-testbar), hier nur die IO-Verdrahtung (audit + Response). Fail-closed:
@@ -234,10 +240,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
   // Kauflogik (G5). 'already_provisioned' = Tenant hat schon eine lebende Nummer (idempotent).
   router.post("/api/onboard/retry", async (req, res) => {
     const { tenantId } = req.body || {};
-    if (!validIdentity(tenantId))
-      return res
-        .status(400)
-        .json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+    if (!requireValidTenantId(res, tenantId)) return;
     // Geld-Safety (Regel 1): nur ein aktiver, KYC-verifizierter Subscriber - verhindert, dass
     // der Owner versehentlich Geld fuer einen Fremd-/suspendierten/Nicht-Zahler-Tenant ausgibt.
     if (!store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) {

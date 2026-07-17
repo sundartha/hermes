@@ -63,11 +63,14 @@ const APP_PATH = "/app";
 // W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
 // den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
+// /voice-Praefix als EINE Quelle (G5): Basic-Auth-Exemption (auth-gate), rawBody-Capture
+// und der Rate-Limit-Bypass teilen denselben Praefix.
+const VOICE_PATH_PREFIX = "/voice";
 // rawBody fuer /voice (Twilio/Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
 // gegen den unveraenderten Body. Der Twilio-HMAC nutzt weiterhin nur die geparsten
 // Params - die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
 const captureRawBody = (req, _res, buf) => {
-  if (req.path.startsWith("/voice") || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
+  if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
 };
 
 export function installGlobalMiddleware({ app, config }) {
@@ -81,7 +84,7 @@ export function installGlobalMiddleware({ app, config }) {
   // Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
   const rateLimiter = createRateLimiter(config.rateLimitPerMin);
   app.use((req, res, next) => {
-    if (req.path.startsWith("/voice") || isTrustedLocalCaller(req)) return next();
+    if (req.path.startsWith(VOICE_PATH_PREFIX) || isTrustedLocalCaller(req)) return next();
     rateLimiter(req, res, next);
   });
 
@@ -187,6 +190,7 @@ export function installAuthGate({ app, config, audit }) {
       isTrustedLocalCaller,
       safeEqual,
       BRAND_ASSETS_PREFIX,
+      VOICE_PATH_PREFIX,
       paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
     }),
   );

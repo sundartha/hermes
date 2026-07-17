@@ -51,11 +51,30 @@ test("Dry-Run (Default): onboard registriert + fragt an, Nummer bleibt 'requeste
   }
 });
 
-test("Fehlende tenantId -> 400", async () => {
+// P7 (Cluster 3, G5): requireValidTenantId() ersetzt den vormals wortgleich verdoppelten
+// 400-Guard aus POST /api/onboard und POST /api/onboard/retry - beide Routen antworten
+// mit IDENTISCHEM Fehlertext (EINE Quelle statt zwei Kopien, die auseinanderdriften koennten).
+const TENANT_ID_REQUIRED_MESSAGE = "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)";
+
+test("Fehlende tenantId -> 400 mit dem geteilten requireValidTenantId-Text (POST /api/onboard)", async () => {
   const srv = await startServer();
   try {
     const res = await postJson(`${srv.localUrl}/api/onboard`, {});
     assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.error, TENANT_ID_REQUIRED_MESSAGE);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Fehlende tenantId -> 400 mit demselben Text wie /api/onboard (POST /api/onboard/retry)", async () => {
+  const srv = await startServer();
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard/retry`, {});
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.error, TENANT_ID_REQUIRED_MESSAGE);
   } finally {
     await srv.stop();
   }

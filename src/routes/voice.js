@@ -76,6 +76,15 @@ export function makeVoiceRoutes({
   const { render, turnDirectives, sayInCallVoice, followupTurnDirectives, streamDirectives } =
     voiceRender;
 
+  // EINE Quelle (G5) fuer die TeXML-Antwort "Directiven synthetisieren -> rendern -> als
+  // text/xml senden". Provider = call.provider (bei /voice/incoming identisch zum lokalen
+  // provider, weil createCall genau diesen speichert). await bleibt beim Aufrufer -> ein
+  // Synth-Fehler laeuft in dessen try/catch (byte-identische Fehlerbehandlung).
+  async function sendVoiceXml(res, call, directives) {
+    const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives);
+    res.type("text/xml").send(render(audio, call.provider));
+  }
+
   // C-Telnyx-Inbound (P8, Befund 8): startet - falls einschlaegig - den Call-Control-Assistant
   // fuer einen Inbound-Leg und liefert die Handoff-TeXML; sonst null (Aufrufer faellt fail-safe
   // auf den bestehenden TeXML-Gather-Pfad zurueck). ERBT Signatur (app.use "/voice"), Tenant-
@@ -229,9 +238,7 @@ export function makeVoiceRoutes({
       if (handoffXml) return res.type("text/xml").send(handoffXml);
 
       store.addTranscript(call.id, "agent", greeting);
-      res
-        .type("text/xml")
-        .send(render(await directiveSynth.synthesizeDirectiveAudio(call, turnDirectives(call, greeting)), provider));
+      await sendVoiceXml(res, call, turnDirectives(call, greeting));
     } catch (err) {
       console.error("[incoming]", err.message);
       // S1-1: gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt /voice/turn,
@@ -284,18 +291,14 @@ export function makeVoiceRoutes({
       if (!heard && callerHasSpoken(call)) {
         metrics.recordTurnRendered(call.id); // L0: Folge-Gather offen -> Render-Zeitpunkt
         const reprompt = followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt);
-        return res
-          .type("text/xml")
-          .send(render(await directiveSynth.synthesizeDirectiveAudio(call, reprompt), call.provider));
+        return await sendVoiceXml(res, call, reprompt);
       }
       const { speech, endCall } = await agentTurn(call, heard || null);
       const directives = endCall
         ? [sayInCallVoice(call, speech), hangupD()]
         : followupTurnDirectives(call, speech);
       if (!endCall) metrics.recordTurnRendered(call.id); // L0: nur wenn ein Folge-Turn folgt
-      res
-        .type("text/xml")
-        .send(render(await directiveSynth.synthesizeDirectiveAudio(call, directives), call.provider));
+      await sendVoiceXml(res, call, directives);
     } catch (err) {
       console.error("[turn]", err.message);
       // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit
@@ -308,9 +311,7 @@ export function makeVoiceRoutes({
       const locale = localeFor(call.language);
       const speech = degradedSpeechFor(err, locale);
       const errorDirectives = [sayInCallVoice(call, speech), hangupD()];
-      res
-        .type("text/xml")
-        .send(render(await directiveSynth.synthesizeDirectiveAudio(call, errorDirectives), call.provider));
+      await sendVoiceXml(res, call, errorDirectives);
     }
   });
 
@@ -347,11 +348,7 @@ export function makeVoiceRoutes({
     // erste LLM-Turn (/voice/turn) wiederholt es nicht (systemPrompt-Hinweis).
     const opening = openingText(call);
     store.addTranscript(call.id, "agent", opening);
-    res
-      .type("text/xml")
-      .send(
-        render(await directiveSynth.synthesizeDirectiveAudio(call, turnDirectives(call, opening)), call.provider),
-      );
+    await sendVoiceXml(res, call, turnDirectives(call, opening));
   });
 
   router.post("/voice/status", async (req, res) => {
