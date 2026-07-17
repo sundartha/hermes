@@ -273,6 +273,30 @@ test("T-I13-4: Fehlerpfad traegt callId, aber KEINE Cache-Zaehler (keine Respons
   assert.ok(!("cache_read_input_tokens" in m));
 });
 
+// S1-10: Der Breaker-open-Zweig in complete() emittiert eine STRUKTURELL abweichende
+// Metrik-Payload (outcome/attempts/breakerState, OHNE latencyMs) - anders als success/
+// non-transient (die immer latencyMs tragen, da eine echte Messung stattfand). Diese
+// Form ist bisher nirgends festgenagelt.
+test("S1-10: Breaker-open-Metrik traegt outcome/attempts/breakerState, KEIN latencyMs", async () => {
+  const config = llmConfig({ llmBreakerThreshold: 1, llmMaxRetries: 0 });
+  const { client, metricCalls } = clientWith({
+    config,
+    create: () => Promise.reject(prematureClose()),
+  });
+  await assert.rejects(() => client.complete({}), LlmUnavailableError); // saettigt + oeffnet den Breaker
+  const before = metricCalls.length;
+  await assert.rejects(
+    () => client.complete({}),
+    (e) => e instanceof LlmUnavailableError && e.reason === "circuit-open",
+  );
+  assert.equal(metricCalls.length, before + 1, "genau EINE Metrik fuer den Breaker-open-Call");
+  const m = metricCalls[metricCalls.length - 1];
+  assert.equal(m.outcome, "breaker-open");
+  assert.equal(m.attempts, 0);
+  assert.equal(m.breakerState, "open");
+  assert.deepEqual(Object.keys(m).sort(), ["attempts", "breakerState", "outcome"]);
+});
+
 test("T-CP2-13: Metrik-Stub wird je Outcome einmal mit der fixierten Form gerufen (kein PII)", async () => {
   // Erfolg
   const ok = clientWith({ create: () => Promise.resolve({ id: "x" }) });

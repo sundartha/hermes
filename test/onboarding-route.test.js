@@ -87,6 +87,43 @@ test("Per-Tenant-Cap blockt die zweite Nummer desselben Tenants -> 409", async (
   }
 });
 
+// ---- S1-9: fail-closed Pre-Check der privateNumber (normalizePrivateNumber, VOR dem
+// Store-Lock). Ohne den Pre-Check wirft registerTenant erst im Lock -> 503 statt 400.
+
+test("S1-9a: ungueltige privateNumber -> 400, kein persist_error-503", async () => {
+  const srv = await startServer();
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+      tenantId: "t_pn",
+      privateNumber: "not-a-number",
+    });
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.match(json.error, /privateNumber ungueltig/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("S1-9b: gueltige privateNumber -> 200 (Dry-Run), Nummer wird am Tenant persistiert", async () => {
+  const srv = await startServer();
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+      tenantId: "t_pn2",
+      privateNumber: "+4915112345678",
+    });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.status, "requested");
+    assert.equal(json.provisioning, "disabled");
+    const store = srv.readStore();
+    const tenant = store.tenants.find((t) => t.id === "t_pn2");
+    assert.equal(tenant.privateNumber, "+4915112345678");
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("PROVISIONING_ENABLED + Telnyx-Mock: Route antwortet SOFORT 'queued', async Drain -> 'active'", async () => {
   const mock = await startTelnyxProvisioningMock();
   const srv = await startServer({
