@@ -79,15 +79,26 @@ async function setup() {
   return db;
 }
 
-// Fuehrt eine Aktion als unprivilegierte Rolle mit gesetzter Owner-GUC aus.
-async function asAppRole(db, fn) {
-  await db.query(`SET ROLE ${APP_ROLE}`);
-  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+// Fuehrt fn() unter SET ROLE (+ optional gesetzter Tenant-GUC) aus und garantiert RESET ROLE
+// per finally - auch wenn fn() wirft. Gemeinsames Skelett fuer JEDEN SET-ROLE-Test in diesem
+// File (G5): asAppRole, ensureTenantAs und beide Seeding-Tests nutzen denselben Helper statt
+// das Muster einzeln zu wiederholen. tenantId=undefined laesst die GUC unangetastet - fuer die
+// Gegenprobe "Ohne GUC blockt...", die gezielt die Abwesenheit der GUC prueft.
+async function withRole(db, role, tenantId, fn) {
+  if (role) await db.query(`SET ROLE ${role}`);
+  if (tenantId !== undefined) {
+    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
+  }
   try {
     return await fn();
   } finally {
-    await db.query(`RESET ROLE`);
+    if (role) await db.query(`RESET ROLE`);
   }
+}
+
+// Fuehrt eine Aktion als unprivilegierte Rolle mit gesetzter Owner-GUC aus.
+function asAppRole(db, fn) {
+  return withRole(db, APP_ROLE, BOOTSTRAP_TENANT_ID, fn);
 }
 
 test("RLS: Owner-GUC sieht nur Owner-Calls, keine fremden", async () => {
@@ -165,9 +176,7 @@ test("Seeding der Owner-Defaults passiert die FORCE-RLS-WITH-CHECK (GUC vor Seed
      GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${OWNER_ROLE};`,
   );
 
-  await db.query(`SET ROLE ${OWNER_ROLE}`);
-  try {
-    await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+  await withRole(db, OWNER_ROLE, BOOTSTRAP_TENANT_ID, async () => {
     // seedDefaults mit gesetzter GUC -> Inserts passieren die WITH-CHECK.
     await seedDefaults(
       { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) },
@@ -177,9 +186,7 @@ test("Seeding der Owner-Defaults passiert die FORCE-RLS-WITH-CHECK (GUC vor Seed
     assert.equal(cal.length, demoCalendar().length, "Demo-Kalender geseedet trotz FORCE-RLS");
     const settings = (await db.query(`SELECT agent_name FROM settings`)).rows;
     assert.equal(settings[0].agent_name, "Hermes");
-  } finally {
-    await db.query(`RESET ROLE`);
-  }
+  });
 });
 
 // Gegenprobe zur Ordnungs-Invariante: OHNE gesetzte GUC blockt die WITH-CHECK das
@@ -192,19 +199,16 @@ test("Ohne GUC blockt die FORCE-RLS-WITH-CHECK das Owner-Seeding", async () => {
      GRANT SELECT, INSERT, UPDATE, DELETE ON tenant, settings, usage, calendar_event TO ${OWNER_ROLE};
      GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${OWNER_ROLE};`,
   );
-  await db.query(`SET ROLE ${OWNER_ROLE}`);
-  try {
-    await assert.rejects(
+  await withRole(db, OWNER_ROLE, undefined, () =>
+    assert.rejects(
       () =>
         seedDefaults(
           { query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) },
           BOOTSTRAP_TENANT_ID,
         ),
       /row-level security|policy/i,
-    );
-  } finally {
-    await db.query(`RESET ROLE`);
-  }
+    ),
+  );
 });
 
 // PA-3 (S1-1): baut den Produktionszustand nach Boot nach - Owner geseedet (Superuser),
@@ -239,14 +243,8 @@ async function setupSignup() {
 // Ruft store.ensureTenant unter (optional) gesetzter Rolle auf. Die GUC wird VORHER
 // explizit auf den Owner gepinnt - simuliert eine Pool-Verbindung, die zuletzt fuer einen
 // ANDEREN Tenant benutzt wurde (genau der Zustand, in dem der fehlende setTenant zuschlaegt).
-async function ensureTenantAs(db, store, role) {
-  if (role) await db.query(`SET ROLE ${role}`);
-  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
-  try {
-    return await store.ensureTenant(SIGNUP_TENANT_ID);
-  } finally {
-    if (role) await db.query(`RESET ROLE`);
-  }
+function ensureTenantAs(db, store, role) {
+  return withRole(db, role, BOOTSTRAP_TENANT_ID, () => store.ensureTenant(SIGNUP_TENANT_ID));
 }
 
 test("PA-3/S1-1 (rot-vor-Fix): ensureTenant hydriert nicht-aktive Call-Zeile unter FORCE RLS - kein Flush-Datenverlust", async () => {
