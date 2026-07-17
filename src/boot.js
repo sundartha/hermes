@@ -102,7 +102,16 @@ function logBootBanner(config, port) {
 }
 
 export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning }) {
-  store.load();
+  // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
+  // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
+  // exit(1) faengt das globale uncaughtException-Netz (process-guards) den Boot-Throw ab und
+  // der Prozess endet LAUTLOS mit Code 0 (empirisch bestaetigt) - kein sichtbarer Boot-Ausfall.
+  try {
+    store.load();
+  } catch (err) {
+    console.error(`[boot] Store nicht ladbar - fail-closed, kein Start: ${err.message}`);
+    process.exit(1);
+  }
 
   runRetention(store, config);
   setInterval(() => runRetention(store, config), RETENTION_SWEEP_INTERVAL_MS).unref();
@@ -135,40 +144,54 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
   // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
   attachMediaBridge(httpServer, callFinish.finishCall);
 
-  // F11 (A6): Graceful Shutdown. Ein Deploy/Restart schickt SIGTERM (Render), Ctrl+C SIGINT.
-  // OHNE Handler killt Node den Prozess sofort -> ein in-flight /voice/turn stirbt mitten im
-  // LLM-await (Agent-Transkript nie persistiert, keine TwiML-Antwort). Der Drain laesst laufende
-  // Requests fertig laufen (await close) und flusht ERST DANACH den Store. Das ORDERING ist
-  // entscheidend: kein Handler darf NACH dem finalen save() noch eine Mutation anhaengen.
-  // Watchdog kappt einen haengenden Drain hart mit exit(0). shuttingDown schuetzt gegen
-  // Wiedereintritt (zweites Signal / SIGTERM+SIGINT). Secret-frei (nur Signalname).
-  //
-  // Review-Blocker Runde 1 (F11):
-  // S1-A: closeIdleConnections() MUSS unmittelbar NEBEN dem close(resolve)-Aufruf stehen,
-  // NICHT erst nach dessen await. server.close() loest seinen Callback erst auf, wenn die
-  // Verbindungszaehlung auf 0 steht - inklusive idler Keep-Alive-Sockets, die Node sonst
-  // erst nach keepAliveTimeout von selbst schliesst. Haelt z.B. ein Health-Checker eine
-  // staendig erneuerte Keep-Alive-Verbindung offen, wuerde "await close()" NIE von selbst
-  // aufloesen, wenn closeIdleConnections() erst danach kaeme (Aufruf ohne Wirkung).
-  // S1-B: store.save() haengt beim pg-Backend seinen DB-Write an eine asynchrone
-  // flushChain und gibt nur EINE fruehe Referenz zurueck. Ein waehrend des Await feuernder
-  // Hintergrund-Timer (Max-Dauer-Cap/Reserve-Release, unabhaengig von HTTP-Verbindungen)
-  // kann seinen eigenen Flush HINTER dieser Referenz anhaengen - store.drainFlushes()
-  // loopt, bis die Kette nachweislich stabil ist, bevor process.exit(0) faellt.
+  const gracefulShutdown = makeGracefulShutdown({ httpServer, store, config });
+  process.once("SIGTERM", gracefulShutdown);
+  process.once("SIGINT", gracefulShutdown);
+}
+
+// A6/F11 + S1-2: Graceful-Shutdown-Handler als injizierbare Fabrik (testbar mit Stub-store +
+// Exit-Spy, ohne echten Prozess-Exit/Spawn). Deploy/Restart -> SIGTERM (Render), Ctrl+C -> SIGINT.
+// Der Drain laesst in-flight Requests fertig laufen (await close) und flusht ERST DANACH den
+// Store; das Ordering ist entscheidend (kein Handler haengt nach dem finalen save() eine Mutation
+// an). S1-A: closeIdleConnections() unmittelbar NEBEN close(resolve) (idle Keep-Alive-Sockets,
+// sonst loest await close NIE auf). S1-B: drainFlushes() loopt bis die flushChain stabil ist
+// (Hintergrund-Timer kann waehrend des Awaits einen Flush nachhaengen). shuttingDown schuetzt
+// gegen Wiedereintritt (zweites Signal). Secret-frei (nur Signalname).
+// S1-2: Ein FEHLGESCHLAGENER (rejectender) finaler Flush -> exit(1) statt lautlos exit(0)
+// (pg.drainFlushes wirft lastFlushError; json.save wirft synchron) = sichtbarer Datenverlust-
+// Alarm. Ein reiner Drain-HANG bleibt beim Watchdog-exit(0) (unveraendert).
+export function makeGracefulShutdown({
+  httpServer,
+  store,
+  config,
+  exit = process.exit,
+  log = console.log,
+  logError = console.error,
+}) {
   let shuttingDown = false;
-  async function gracefulShutdown(signal) {
+  return async function gracefulShutdown(signal) {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-    const watchdog = setTimeout(() => process.exit(0), config.shutdownDrainTimeoutMs).unref();
+    log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
+    const watchdog = setTimeout(() => exit(0), config.shutdownDrainTimeoutMs).unref();
     const closed = new Promise((resolve) => httpServer.close(resolve));
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
     await closed;
-    await store.save();
-    await store.drainFlushes();
+    let flushError = null;
+    try {
+      await store.save();
+      await store.drainFlushes();
+    } catch (err) {
+      flushError = err;
+    }
     clearTimeout(watchdog);
-    process.exit(0);
-  }
-  process.once("SIGTERM", gracefulShutdown);
-  process.once("SIGINT", gracefulShutdown);
+    if (flushError) {
+      logError(
+        `[shutdown] Finaler Store-Flush FEHLGESCHLAGEN - Datenverlust moeglich: ${flushError.message}`,
+      );
+      exit(1);
+      return;
+    }
+    exit(0);
+  };
 }

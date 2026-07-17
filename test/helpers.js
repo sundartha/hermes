@@ -747,10 +747,13 @@ export async function startServerExpectExit({
   seed,
   rawStore,
   ownerNumber,
+  dataDir: reuseDataDir,
   timeoutMs = 8000,
 } = {}) {
-  // rawStore (Korruptions-Pfad) bleibt verbatim; sonst Owner-Nummer sicherstellen.
-  const dataDir = tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
+  // reuseDataDir (S1-4 Corrupt-Store-Test): laeuft auf einem vorbereiteten dataDir weiter (z.B.
+  // korrupt + nicht-schreibbar), statt frisch zu seeden - mirror von startServer.
+  const dataDir =
+    reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
   const child = spawn(process.execPath, ["src/server.js"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },

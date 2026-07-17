@@ -446,7 +446,10 @@ const rawConfig = {
   provisioningRedriveMaxAgeMs: numEnv(
     "PROVISIONING_REDRIVE_MAX_AGE_MS",
     process.env.PROVISIONING_REDRIVE_MAX_AGE_MS,
-    { fallback: 0, min: 0 },
+    // S1-3: strikt < 24h (kleinstes Anbieter-Idempotenzfenster, Stripe-Hold) erzwingen - ein zu
+    // grosser Wert oeffnet den Doppelkauf-Pfad. Clamp (kein Boot-Refusal, Schwester-Muster wie
+    // maxCallDurationS): numEnv klemmt n>max auf max.
+    { fallback: 0, min: 0, max: MS_PER_DAY - 1 },
   ),
   // tenant-prolif-d: Grace-Periode (TAGE) bis zum automatischen DID-Release eines
   // suspendierten Tenants. 0 (Default) = Observe-Only fail-closed: der Reconcile gibt

@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import { startServer, seedState, seedCall } from "./helpers.js";
+import { makeGracefulShutdown } from "../src/boot.js";
 
 const LLM_DELAY_MS = 800; // Handler haengt hier im await, waehrend SIGTERM eintrifft
 const AGENT_SPEECH = "Ich rufe im Auftrag von Jonas an und haette eine kurze Frage.";
@@ -193,4 +194,48 @@ test("SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen
     if (srv.child.exitCode === null) srv.child.kill("SIGKILL");
     await mock.close();
   }
+});
+
+// S1-2: makeGracefulShutdown() unit-getestet mit einem Stub-store + Exit-Spy (kein echter
+// Prozess-Exit/Spawn) - ein fehlgeschlagener finaler Flush muss sichtbar sein (exit 1), statt
+// lautlos in exit(0) zu muenden. Die beiden Spawn-Tests oben bleiben der Verhaltens-Anker fuer
+// den bestehenden Erfolgs-/Watchdog-Pfad; diese Faelle pruefen gezielt den neuen Fehler-Arm.
+function fakeHttpServer() {
+  return { close: (cb) => cb(), closeIdleConnections() {} };
+}
+const FAKE_CONFIG = { shutdownDrainTimeoutMs: 10000 };
+
+test("S1-2: gracefulShutdown -> rejectender finaler Flush = genau ein exit(1) + lauter Alarm", async () => {
+  const exits = [];
+  const errors = [];
+  const shutdown = makeGracefulShutdown({
+    httpServer: fakeHttpServer(),
+    store: {
+      save: async () => {},
+      drainFlushes: async () => {
+        throw new Error("DB weg (Test)");
+      },
+    },
+    config: FAKE_CONFIG,
+    exit: (c) => exits.push(c),
+    log: () => {},
+    logError: (m) => errors.push(m),
+  });
+  await shutdown("SIGTERM");
+  assert.deepEqual(exits, [1], "fehlgeschlagener finaler Flush -> genau ein exit(1), kein Fall-through");
+  assert.ok(errors.some((m) => /FEHLGESCHLAGEN/.test(m)), "lauter Datenverlust-Alarm");
+});
+
+test("S1-2: gracefulShutdown -> erfolgreicher finaler Flush = genau ein exit(0)", async () => {
+  const exits = [];
+  const shutdown = makeGracefulShutdown({
+    httpServer: fakeHttpServer(),
+    store: { save: async () => {}, drainFlushes: async () => {} },
+    config: FAKE_CONFIG,
+    exit: (c) => exits.push(c),
+    log: () => {},
+    logError: () => {},
+  });
+  await shutdown("SIGTERM");
+  assert.deepEqual(exits, [0], "sauberer Flush -> genau ein exit(0)");
 });

@@ -57,14 +57,25 @@ export function load() {
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
     state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
   } catch {
-    // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3):
-    // erst forensisch nach .corrupt-<ts> sichern, LAUT loggen, dann mit Defaults weiter
-    // (Telefonie ueberlebt - aber sichtbar, mit Datenverlust-Hinweis statt stillem Wipe).
+    // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
+    // forensisch nach .corrupt-<ts> sichern. NUR wenn die Sicherung GELINGT, darf der Store mit
+    // Defaults weiterlaufen (das korrupte Original ist dann sicher weggeschrieben). Scheitert die
+    // Sicherung (z.B. nicht-schreibbares dataDir), waere makeDefaultState()+save() ein stiller
+    // Wipe des korrupten Originals OHNE Forensik-Backup (S1-4) -> stattdessen fail-closed werfen;
+    // boot.js beendet den Boot dann sichtbar (exit 1).
     const corruptPath = `${FILE}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+    let backedUp = false;
     try {
       fs.renameSync(FILE, corruptPath);
+      backedUp = true;
     } catch (re) {
-      console.error("[store] .corrupt-Rename fehlgeschlagen:", re.message);
+      console.error(
+        `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.message}). ` +
+          `Original bleibt unveraendert unter ${FILE}. Fail-closed: kein Start mit Defaults.`,
+      );
+    }
+    if (!backedUp) {
+      throw new Error("store.json korrupt und forensische Sicherung fehlgeschlagen - fail-closed");
     }
     console.error(
       `[store] KORRUPTES store.json erkannt - umbenannt nach ${corruptPath}. ` +
@@ -272,13 +283,13 @@ export function save() {
   fs.renameSync(tmp, FILE);
 }
 
-// F11 (Review-Blocker Runde 1, S1-B): Backend-Parity zu store/pg.js. Dort haengt
-// save() den DB-Write an eine asynchrone flushChain, die waehrend eines await
-// von einem Hintergrund-Timer verlaengert werden kann - drainFlushes() loopt dort,
-// bis die Kette stabil ist. Das json-Backend schreibt in save() vollstaendig
-// synchron (writeFileSync+fsyncSync laufen ab, BEVOR save() zurueckkehrt) - es
-// gibt keinen Flush-Nachlauf, der noch abzuwarten waere. No-Op, nur damit
-// store.drainFlushes() bei STORE_BACKEND=json nicht undefined ist (siehe store.js).
+// F11/S1-2: Backend-Parity zu store/pg.js. Vertrag: ein fehlgeschlagener finaler Flush ist fuer
+// gracefulShutdown beobachtbar. pg deferrt den DB-Write an eine asynchrone flushChain und laesst
+// den Fehler ueber drainFlushes() werfen; das json-Backend schreibt in save() vollstaendig
+// synchron (writeFileSync+fsyncSync ab, BEVOR save() zurueckkehrt) und WIRFT eine Schreib-/Rename-
+// Stoerung bereits synchron aus save() heraus (gracefulShutdown faengt sie im selben try/catch).
+// Es gibt daher keinen deferred Fehlerzustand, den drainFlushes() nachreichen muesste -> No-Op,
+// nur damit store.drainFlushes() bei STORE_BACKEND=json nicht undefined ist (siehe store.js).
 export async function drainFlushes() {}
 
 export const newId = ops.newId;
