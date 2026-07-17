@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
+import { seedDefaults } from "../src/db/migrate.js";
 import { config } from "../src/config.js";
 import {
   defaultSettings,
@@ -644,4 +645,25 @@ test("ensureTenant: unbekannte Id -> false, fabriziert keinen Tenant", async () 
   const ok = await store.ensureTenant("t_nonexistent");
   assert.equal(ok, false);
   assert.equal(store.load().tenants.length, before, "kein Tenant aus dem Nichts");
+});
+
+// S1-12: calendar_event.id ist GLOBALER PK mit festen Demo-IDs. Ein zweiter Tenant sieht unter
+// seiner RLS-GUC die Owner-Zeilen NICHT (tenant_isolation) -> sein SELECT-Existenz-Guard greift
+// nicht, die Demo-Schleife laeuft und insert-t DIESELBEN globalen IDs. Ohne ON CONFLICT (id)
+// DO NOTHING wirft der Insert eine PK-Kollision (verifiziert). Deterministische Single-Connection-
+// Reproduktion der "zwei parallel bootenden Prozesse"-Race.
+test("S1-12: zweiter Tenant-Seed kollidiert nicht am globalen calendar_event-PK (ON CONFLICT DO NOTHING)", async () => {
+  const { db } = await makePgTestStore(); // init(): GUC=BOOTSTRAP, 3 Demo-Events (ev1/ev2/ev3)
+  const TENANT_B = "t_seed_collision";
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [TENANT_B]);
+  await assert.doesNotReject(
+    seedDefaults(db, TENANT_B),
+    "zweiter Tenant-Seed darf am globalen calendar_event-PK NICHT kollidieren",
+  );
+  // Idempotenz-Gegentest: nochmal (TENANT_B hat weiterhin 0 eigene calendar_event-Zeilen, alle
+  // kollidierten -> Loop laeuft erneut, ON CONFLICT no-op-t erneut).
+  await assert.doesNotReject(seedDefaults(db, TENANT_B), "wiederholter Seed bleibt kollisionsfrei");
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+  const { rows } = await db.query(`SELECT count(*)::int AS n FROM calendar_event`);
+  assert.equal(rows[0].n, 3, "genau die 3 Owner-Demo-Events, keine Duplikate/Neuzeilen");
 });

@@ -128,3 +128,32 @@ test("T-P2-06: TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS absurd hoch -> auf max 50 gekle
   );
   assert.equal(configFatalErrors().length, before, "Clamp ist kein Fatal");
 });
+
+// S1-3: PROVISIONING_REDRIVE_MAX_AGE_MS muss strikt < 24h bleiben (kleinstes Anbieter-
+// Idempotenzfenster/Stripe-Hold), sonst oeffnet ein zu grosser Hosting-Wert den Doppelkauf-Pfad.
+// Frischer config-Import pro Env-Wert (Query-String = eigener Modul-Cache-Key): config wird EINMAL
+// beim Import aus process.env gebaut. Unter NODE_ENV=test (npm test) ist dotenv aus -> keine
+// .env-Interferenz. KEIN Spawn (in-process fresh import).
+test("S1-3: config klemmt PROVISIONING_REDRIVE_MAX_AGE_MS strikt unter das 24h-Doppelkauf-Fenster", async () => {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const saved = process.env.PROVISIONING_REDRIVE_MAX_AGE_MS;
+  const freshConfig = async (raw, tag) => {
+    process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = raw;
+    return import(`../src/config.js?s1-3-${tag}`);
+  };
+  try {
+    const atDay = await freshConfig(String(MS_PER_DAY), "day"); // exakt 24h
+    assert.equal(atDay.config.provisioningRedriveMaxAgeMs, MS_PER_DAY - 1, "24h -> auf 24h-1ms geklemmt");
+    assert.ok(
+      !atDay.configFatalErrors().some((e) => e.includes("PROVISIONING_REDRIVE_MAX_AGE_MS")),
+      "Clamp ist KEIN Fatal",
+    );
+    const atEdge = await freshConfig(String(MS_PER_DAY - 1), "edge");
+    assert.equal(atEdge.config.provisioningRedriveMaxAgeMs, MS_PER_DAY - 1, "24h-1ms bleibt unveraendert");
+    const atZero = await freshConfig("0", "zero");
+    assert.equal(atZero.config.provisioningRedriveMaxAgeMs, 0, "0 (Observe-Only) bleibt 0");
+  } finally {
+    if (saved === undefined) delete process.env.PROVISIONING_REDRIVE_MAX_AGE_MS;
+    else process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = saved;
+  }
+});

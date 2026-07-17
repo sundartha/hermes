@@ -140,8 +140,13 @@ export async function seedDefaults(db, tenantId) {
   if (existing.rows.length === 0) {
     for (const ev of demoCalendar()) {
       await db.query(
+        // S1-12: id ist globaler PK (schema.sql: `id TEXT PRIMARY KEY`) mit festen Demo-IDs ->
+        // zwei parallel bootende Prozesse (bzw. ein zweiter Tenant, dessen RLS die Owner-Zeilen
+        // vor dem tenant-scoped SELECT-Guard versteckt) kollidieren am id-PK. ON CONFLICT (id)
+        // DO NOTHING wie die drei anderen Inserts dieser Funktion; der SELECT-Existenz-Guard bleibt.
         `INSERT INTO calendar_event (id, tenant_id, title, starts_at, ends_at)
-         VALUES ($1, $2, $3, $4, $5)`,
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (id) DO NOTHING`,
         [ev.id, tenantId, ev.title, ev.start, ev.end],
       );
     }

@@ -13,6 +13,10 @@ import fs from "fs";
 import path from "path";
 import { tempDataDir, startServer, startServerExpectExit } from "./helpers.js";
 
+// T-P1-03b: Dateimodi fuer den nicht-schreibbaren dataDir-Fall (S1-4).
+const READ_EXEC_NO_WRITE = 0o500; // r-x fuer Owner: File lesbar, dir NICHT schreibbar -> renameSync scheitert
+const OWNER_RWX = 0o700;
+
 let store;
 let withStoreLock;
 let dataDir;
@@ -150,4 +154,31 @@ test("T-P1-03: korruptes store.json -> .corrupt-Rename + lautes Log + fail-close
     Array.isArray(fresh.calls),
     "neues store.json ist gueltiges Default-JSON (kein stiller Wipe)",
   );
+});
+
+// ---- T-P1-03b: korrupt + nicht-schreibbares dataDir -> Sicherung scheitert -> fail-closed ----
+// Ohne Backup darf der korrupte Store NICHT mit Defaults ueberschrieben werden (S1-4). json.js
+// wirft, boot.js beendet sichtbar (exit != 0). Kindprozess, weil load() den Modul-globalen state
+// cached (wie T-P1-03). Non-writable dir = deterministischer renameSync-Fehler.
+test("T-P1-03b: korrupt + non-writable dataDir -> 'Sicherung FEHLGESCHLAGEN', exit != 0, Original byte-identisch", async () => {
+  const raw = "{ this is not json";
+  const dataDir = tempDataDir(undefined, raw); // schreibt store.json = raw verbatim
+  fs.chmodSync(dataDir, READ_EXEC_NO_WRITE);
+  let result;
+  try {
+    result = await startServerExpectExit({ dataDir });
+  } finally {
+    fs.chmodSync(dataDir, OWNER_RWX); // wieder schreibbar fuer Asserts/Cleanup
+  }
+  assert.notEqual(result.code, 0, "fail-closed: Boot bricht mit Exit != 0 ab (kein lautloser Exit 0)");
+  assert.match(result.output, /Sicherung FEHLGESCHLAGEN/, "ehrliches Log: Sicherung fehlgeschlagen, Original bleibt");
+  assert.doesNotMatch(result.output, /umbenannt nach/, "KEINE Luege 'umbenannt' wenn der Rename scheiterte");
+  assert.equal(
+    fs.readFileSync(path.join(dataDir, "store.json"), "utf8"),
+    raw,
+    "korruptes Original byte-identisch (kein Wipe, kein Default-Overwrite)",
+  );
+  const files = fs.readdirSync(dataDir);
+  assert.ok(!files.some((f) => f.startsWith("store.json.corrupt-")), "kein .corrupt-Backup (Rename scheiterte)");
+  assert.ok(!files.some((f) => f.includes(".tmp-")), "kein Default-Write-Versuch (kein verwaistes .tmp)");
 });

@@ -35,6 +35,10 @@ export function makePgStore(runner) {
   // Serialisiert die DB-Flushes: Mutationen rufen save() synchron, der DB-Write
   // wird an diese Kette gehaengt, damit Flushes nicht ineinander laufen.
   let flushChain = Promise.resolve();
+  // S1-2: Fehlerzustand des ZULETZT abgeschlossenen Flush. save() setzt ihn im Fehlerarm,
+  // loescht ihn im Erfolgsarm (Voll-Upsert-Semantik: nur der letzte Flush zaehlt).
+  // drainFlushes() wirft ihn -> gracefulShutdown kann fail-closed exit(1) statt lautlos exit(0).
+  let lastFlushError = null;
 
   function requireState() {
     if (!state) throw new Error("pg-Store nicht initialisiert - erst await store.init() aufrufen");
@@ -88,9 +92,19 @@ export function makePgStore(runner) {
     const snapshot = requireState();
     flushChain = flushChain
       .then(() => runner.withClient((client) => flush(client, snapshot, preFlush)))
-      .catch((err) => {
-        console.error("[pg] Flush fehlgeschlagen:", err.message);
-      });
+      .then(
+        () => {
+          // Erfolgreicher Flush loescht einen zuvor gemerkten Fehler (nur der letzte Flush
+          // zaehlt - kein maskierter Verlust, Voll-Upsert-Semantik).
+          lastFlushError = null;
+        },
+        (err) => {
+          // Fehler ueberlebt als lastFlushError (drainFlushes liest ihn); die Kette bleibt
+          // trotzdem RESOLVED -> Aufrufer-Verhalten (createCall etc., gracefulShutdown) unveraendert.
+          lastFlushError = err;
+          console.error("[pg] Flush fehlgeschlagen:", err.message);
+        },
+      );
     return flushChain;
   }
 
@@ -109,9 +123,13 @@ export function makePgStore(runner) {
     let ref = flushChain;
     for (;;) {
       await ref;
-      if (flushChain === ref) return;
+      if (flushChain === ref) break;
       ref = flushChain;
     }
+    // S1-2: Ein fehlgeschlagener (letzter) Flush ueberlebt hier -> werfen, damit der finale
+    // Shutdown-Flush nicht lautlos in exit(0) muendet. Ein nachfolgender erfolgreicher save()
+    // hat lastFlushError bereits geleert (Clear-on-Success).
+    if (lastFlushError) throw lastFlushError;
   }
 
   return {

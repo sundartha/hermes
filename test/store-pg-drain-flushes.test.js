@@ -64,3 +64,36 @@ test("drainFlushes() wartet auf einen erst waehrend eines laufenden Awaits angeh
     "drainFlushes() muss auch den waehrend des ersten Awaits neu angehaengten Flush abwarten",
   );
 });
+
+test("S1-2: drainFlushes() wirft den Fehler eines fehlgeschlagenen letzten Flush und cleart ihn nach Erfolg", async () => {
+  const { store, runner } = await makePgTestStore();
+  const realWithClient = runner.withClient.bind(runner);
+  let failNext = false;
+  runner.withClient = async (fn) => {
+    if (failNext) {
+      failNext = false;
+      throw new Error("DB weg (Test)");
+    }
+    return realWithClient(fn);
+  };
+
+  // Happy-Path: sauberer Flush -> drainFlushes() resolvt.
+  store.save();
+  await assert.doesNotReject(store.drainFlushes(), "sauberer Flush -> drainFlushes resolvt");
+
+  // Letzter Flush rejectet -> lastFlushError gesetzt -> drainFlushes() wirft (mit Original-Message).
+  failNext = true;
+  store.save();
+  await assert.rejects(
+    store.drainFlushes(),
+    /DB weg \(Test\)/,
+    "fehlgeschlagener letzter Flush -> drainFlushes wirft",
+  );
+
+  // Danach erfolgreicher Flush -> Clear-on-Success -> drainFlushes() resolvt wieder.
+  store.save();
+  await assert.doesNotReject(
+    store.drainFlushes(),
+    "erfolgreicher Folge-Flush cleart den Fehler (Voll-Upsert, nur letzter Flush zaehlt)",
+  );
+});
