@@ -563,8 +563,39 @@ export function makeConfigOverrides(configObj) {
   function withBlankedConfig(key, fn) {
     return withConfig(key, "", fn);
   }
-  return { withConfig, withBlankedConfig };
+  // cc-p6-fix1 (Review-Blocker G5): Multi-Key-Variante fuer Faelle, die mehrere Felder
+  // gleichzeitig ueberschreiben (z.B. ein Pflichtfeld-Bundle wie CONFIG_REQUIRED_OK).
+  // Ersetzt die byte-identische Save-Set-Restore-Schleife, die zuvor in
+  // config-boolenv.test.js, config-failclosed.test.js und config-payment-guard.test.js
+  // dreifach als lokales `withConfig(overrides, fn)` kopiert war (Datei-Kommentar dort
+  // verwies bereits explizit auf "Muster config-failclosed.test.js").
+  function withConfigOverrides(overrides, fn) {
+    const saved = {};
+    for (const k of Object.keys(overrides)) saved[k] = configObj[k];
+    Object.assign(configObj, overrides);
+    try {
+      return fn();
+    } finally {
+      Object.assign(configObj, saved);
+    }
+  }
+  return { withConfig, withBlankedConfig, withConfigOverrides };
 }
+
+// cc-p6-fix1 (Review-Blocker G5): gemeinsame Pflichtfeld-Fixture fuer assertConfig()-Tests
+// (config-boolenv.test.js, config-failclosed.test.js, config-payment-guard.test.js hatten
+// sie zuvor byte-identisch bzw. mit leichten Abweichungen lokal kopiert). Deckt genau die
+// Felder ab, die assertConfig() unabhaengig vom geprueften Aspekt verlangt; Aufrufer mit
+// zusaetzlichen Anforderungen (z.B. PAYMENT_ENABLED-Pfad) spreaden + ueberschreiben lokal.
+export const CONFIG_REQUIRED_OK = Object.freeze({
+  anthropicApiKey: "x",
+  twilioSid: "x",
+  twilioToken: "x",
+  publicUrl: "https://example.test",
+  mcpAuth: "",
+  storeBackend: "json",
+  paymentEnabled: false,
+});
 
 // ---- Telnyx-Origination/-Inbound-Rohstoffe (Nummern/Header/Seed/POST-Helper) ----
 // EINE Quelle (G5/S2) statt der frueher in telnyx-p5-origination + telnyx-p8-inbound +

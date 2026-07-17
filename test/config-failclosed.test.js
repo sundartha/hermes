@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig, numEnv, configFatalErrors, eurToCents } from "../src/config.js";
+import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "./helpers.js";
 
 // console.error abfangen, ohne den Testlauf zuzumuellen. Liefert die Zeilen.
 function captureConsoleError(fn) {
@@ -22,25 +23,7 @@ function captureConsoleError(fn) {
 }
 
 // Pflichtfelder erfuellen, NUR den geprueften Aspekt variieren (Test-Isolation).
-function withConfig(overrides, fn) {
-  const saved = {};
-  for (const k of Object.keys(overrides)) saved[k] = config[k];
-  Object.assign(config, overrides);
-  try {
-    return fn();
-  } finally {
-    Object.assign(config, saved);
-  }
-}
-const REQUIRED_OK = {
-  anthropicApiKey: "x",
-  twilioSid: "x",
-  twilioToken: "x",
-  publicUrl: "https://example.test",
-  mcpAuth: "",
-  storeBackend: "json",
-  paymentEnabled: false,
-};
+const { withConfigOverrides } = makeConfigOverrides(config);
 
 test("T-P2-01: NaN-Budget -> numEnv sammelt Fatal (nennt MAX_BUDGET_EUR)", () => {
   numEnv("MAX_BUDGET_EUR", "acht", { fallback: 8, min: 0, integer: false });
@@ -98,7 +81,7 @@ test("T-P2-04: maxCallDurationS NaN -> Fatal (kein stilles 300); Clamp-Pfad blei
 });
 
 test("T-P2-05: assertConfig faellt bei numerischem Fatal und nennt die Var", () => {
-  withConfig(REQUIRED_OK, () => {
+  withConfigOverrides(CONFIG_REQUIRED_OK, () => {
     numEnv("RATE_LIMIT_PER_MIN", "kaputt", { fallback: 120, min: 0 }); // erzeugt Fatal
     const lines = captureConsoleError(() => {
       assert.equal(assertConfig(), false, "numerischer Fatal -> assertConfig false");

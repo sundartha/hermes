@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { boolEnv, configFatalErrors, assertConfig, config } from "../src/config.js";
+import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "./helpers.js";
 
 // console.error abfangen, ohne den Testlauf zuzumuellen. Liefert die Zeilen.
 function captureConsoleError(fn) {
@@ -20,25 +21,7 @@ function captureConsoleError(fn) {
 }
 
 // Pflichtfelder erfuellen, NUR den geprueften Aspekt variieren (Test-Isolation).
-function withConfig(overrides, fn) {
-  const saved = {};
-  for (const k of Object.keys(overrides)) saved[k] = config[k];
-  Object.assign(config, overrides);
-  try {
-    return fn();
-  } finally {
-    Object.assign(config, saved);
-  }
-}
-const REQUIRED_OK = {
-  anthropicApiKey: "x",
-  twilioSid: "x",
-  twilioToken: "x",
-  publicUrl: "https://example.test",
-  mcpAuth: "",
-  storeBackend: "json",
-  paymentEnabled: false,
-};
+const { withConfigOverrides } = makeConfigOverrides(config);
 
 test("boolEnv: unset/leer -> fallback ohne Fatal (beide Richtungen)", () => {
   const before = configFatalErrors().length;
@@ -76,7 +59,7 @@ test('boolEnv: "1"/"yes"/"on"/"maybe"/"0"/"no" -> Fatal + fallback', () => {
 });
 
 test("boolEnv: Fatal -> assertConfig() === false und nennt die Var", () => {
-  withConfig(REQUIRED_OK, () => {
+  withConfigOverrides(CONFIG_REQUIRED_OK, () => {
     boolEnv("SOME_SWITCH", "kaputt", { fallback: false });
     const lines = captureConsoleError(() => assert.equal(assertConfig(), false));
     assert.ok(lines.join("\n").includes("SOME_SWITCH"));
