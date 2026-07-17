@@ -10,6 +10,7 @@
 // bleibt Boot-only; seine Aufrufposition in server.js (NACH allen exit1-Gates, VOR listen,
 // INV-5) aendert sich durch die Extraktion NICHT.
 import { VOICE_ENGINE } from "../config.js";
+import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 
 export function makeCallLifecycle({
   store,
@@ -24,10 +25,13 @@ export function makeCallLifecycle({
   cappedEndedAtMs,
   classifyCallTime,
 }) {
-  // Gemeinsame Call-Max-Dauer in ms (G5): armMaxDurationTimer UND der Reserve-Backstop-Timer
-  // teilen diese Rechnung (call-eigenes Limit vor globalem Default).
+  // Gemeinsame Call-Max-Dauer in ms: armMaxDurationTimer UND der Reserve-Backstop-Timer teilen
+  // dieselbe Rechnung (call-eigenes Limit vor globalem Default). Die Formel selbst lebt in
+  // src/call-duration.js (G5: EINE Quelle innerhalb der Telephony-Schicht, auch fuer den
+  // Realtime-Cap in bridge.js; state-ops.js#callLimitMs bleibt eine bewusst getrennte zweite
+  // Kopie, OQ-1); hier wird nur der config-Default gebunden.
   function callMaxDurationMs(call) {
-    return (call.maxDurationS || config.maxCallDurationS) * 1000;
+    return computeMaxDurationMs(call, config.maxCallDurationS);
   }
 
   // F10 (A6): der EINZIGE Terminalisierungspfad des Max-Dauer-Caps - kein zweiter Bucht-freier

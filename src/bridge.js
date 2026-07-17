@@ -19,6 +19,7 @@ import { safeEqual } from "./util.js";
 import { voiceControl, mediaTransport } from "./telephony/registry.js";
 import { PROVIDER } from "./store/defaults.js";
 import { MEDIA_EVENT } from "./telephony/media-events.js";
+import { callMaxDurationMs } from "./call-duration.js";
 
 // WS-Pfad -> Provider (explizit, fail-closed). EINZIGE Quelle der Pfade (G5):
 // server.js importiert MEDIA_PATH fuer die <Stream>-URL, der upgrade-Handler
@@ -279,7 +280,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
             endTimer = setTimeout(
               () => hangup("Max-Dauer erreicht"),
-              (call.maxDurationS || config.maxCallDurationS) * 1000,
+              callMaxDurationMs(call, config.maxCallDurationS),
             );
             connectOpenAI();
             break;

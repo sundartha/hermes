@@ -1,7 +1,7 @@
-// F10 Runde 2 (S1/G5), C5 (Struct-4) erweitert auf alle 5 Terminierungspfade: der EINE
-// Terminierungspfad, den JEDER Beender eines aktiven Calls durchlaeuft (Max-Dauer-Cap-Timer,
-// cancel_call, /voice/status, Telnyx onHangup, place_call-Dial-Fehlschlag - server.js UND
-// telnyx-call-control-ingest.js) - Reihenfolge fest: erst persistieren, dann den Provider-
+// F10 Runde 2 (S1/G5), C5 (Struct-4): der EINE Terminierungspfad, den JEDER Beender eines
+// aktiven Calls IN DER BUDGET-ENGINE durchlaeuft - fuenf Ausloeser: Max-Dauer-Cap-Timer
+// (terminateCappedCall), cancel_call, place_call-Dial-Fehlschlag, /voice/status und der
+// Telnyx-onHangup - Reihenfolge fest: erst persistieren, dann den Provider-
 // Leg auflegen (awaited), ERST DANACH billing/summary/SMS anstossen (fire-and-forget). Die
 // umgekehrte Reihenfolge hielte den Anruf beim Provider technisch live, waehrend die
 // Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js, Retry-Budget bis
@@ -10,6 +10,11 @@
 // gebundene Thunks rein (persistEnd/hangUp/bill), keine Abhaengigkeit auf store/
 // voiceControl/finishCall aus server.js -> offline ohne Server/Store/Netz unit-
 // testbar (Muster sms-summary.js).
+//
+// Die REALTIME-Engine (bridge.js) terminalisiert NICHT ueber diesen Weg: ihr finalize()
+// beendet den Call idempotent (closed-Guard) via store.endCallRecord + onCallEnded (in Prod
+// = callFinish.finishCall, gebucht genau einmal), NICHT ueber terminateAndBillCall. Beide
+// Wege buchen heute korrekt genau einmal - dieser Helfer ist der Budget-Engine-Pfad.
 //
 // hangUp ist optional (null/undefined), wenn (noch) kein Provider-Call-Sid existiert -
 // dann wird der Hangup-Versuch uebersprungen, persistiert+gebucht wird trotzdem.
