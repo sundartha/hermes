@@ -9,9 +9,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
-import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { applySchema, seedDefaults } from "../src/db/migrate.js";
 import { demoCalendar } from "../src/store/defaults.js";
+import { makePgTestStore } from "./pg-helpers.js";
 
 // Dieser Test kontrolliert die number-Zeilen selbst (manuelle Inserts) und prueft
 // die RLS-Isolation deterministisch. Der frische pg-Store seedet keine Owner-Nummer
@@ -25,20 +26,12 @@ const SIGNUP_TENANT_ID = "signup";
 const LOST_CALL_ID = "call_signup_ended";
 const ENSURE_ROLE = "ensure_role"; // NOBYPASSRLS: nur so greift FORCE RLS im ensureTenant-Read
 
-// pglite-Runner-Vertrag (EINE Quelle, G5): withClient bindet query/exec an dieselbe
-// pglite-Verbindung, damit SET ROLE + GUC waehrend der Store-Operation gesetzt bleiben.
-function pgliteRunner(db) {
-  return {
-    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
-  };
-}
-
 // Baut den Owner-Store auf (migriert das Schema), seedet einen zweiten Tenant mit
 // eigenen Call-/Transkript-/Profil-Zeilen und legt die unprivilegierte Rolle an.
+// pglite-Runner-Aufbau kommt aus dem geteilten Helper (G5): makePgTestStore() baut
+// dieselbe withClient-Bindung wie pg-helpers.js in allen anderen pg-Tests.
 async function setup() {
-  const db = new PGlite();
-  const store = makePgStore(pgliteRunner(db));
-  await store.init(); // migriert + seedet Owner
+  const { store, db } = await makePgTestStore();
 
   await db.query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [OTHER_TENANT_ID]);
   await db.query(
@@ -217,9 +210,7 @@ test("Ohne GUC blockt die FORCE-RLS-WITH-CHECK das Owner-Seeding", async () => {
 // mit reinem SELECT (der Flush laeuft im Test als Superuser; im Fokus steht der Read-Pfad in
 // ensureTenant, der die RLS-GUC setzen muss).
 async function setupSignup() {
-  const db = new PGlite();
-  const store = makePgStore(pgliteRunner(db));
-  await store.init(); // migriert + seedet Owner (Superuser)
+  const { store, db } = await makePgTestStore();
 
   await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [SIGNUP_TENANT_ID]);
   await db.query(
