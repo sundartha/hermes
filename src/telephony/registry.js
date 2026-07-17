@@ -1,5 +1,7 @@
-// Telefonie-Registry: liefert die aktive Adapter-Instanz. Ab P5 zwei Adapter
-// (Twilio + Telnyx). voiceRenderer/messaging waehlen ueber einen optionalen
+// Telefonie-Registry: liefert die aktive Adapter-Instanz ueber eine ADAPTERS-Tabelle
+// + pick(port, provider) (P5). Ein dritter Provider wird HIER an EINER Datenstruktur
+// registriert statt an mehreren Ternaries - pick() wirft fail-closed, wenn (port,
+// provider) fehlt. voiceRenderer/messaging waehlen ueber einen optionalen
 // provider-Param (Default twilio -> bestehende arg-lose Call-Sites in server.js
 // byte-identisch). inboundSignatureVerifier dispatcht NACH Signatur-Header (nicht
 // nach provider/To): die Signatur ist die erste fail-closed-Stufe und liegt
@@ -8,7 +10,9 @@
 // Karte: der Verifier dispatcht darueber, server.js (P6a) leitet daraus den
 // Inbound-Provider ab (Single Source of Truth). voiceControl ist provider-aware
 // (Telnyx-Outbound, Onboarding-Phase): Default twilio -> arg-lose Call-Sites
-// byte-identisch.
+// byte-identisch. providerSupports/CAPABILITY (P5) sind eine zweite, davon
+// getrennte Tabelle: Ja/Nein-Metadaten statt Adapter-Instanzen (ersetzt die
+// verstreuten provider===PROVIDER.TELNYX-Capability-Checks in den Routen).
 import { twilioVoice } from "./adapters/twilio/voice.js";
 import { telnyxVoice } from "./adapters/telnyx/voice.js";
 import { twilioMessaging } from "./adapters/twilio/messaging.js";
@@ -48,21 +52,86 @@ const fakeVoice = {
   async speak() {},
 };
 
+// EINZIGE Provider->Port-Registrierung. Ein dritter Provider wird HIER an einer
+// Datenstruktur eingetragen statt an mehreren Ternaries. Jeder Eintrag IST der
+// Rueckgabewert der Factory (Adapter-Objekt bzw. fertiger VoiceRenderer) - pick()
+// bleibt dadurch uniform ueber alle Ports.
+const PORT = Object.freeze({
+  VOICE_CONTROL: "voiceControl",
+  MESSAGING: "messaging",
+  MEDIA_TRANSPORT: "mediaTransport",
+  WEBHOOK_EVENTS: "webhookEvents",
+  NUMBER_PROVISIONING: "numberProvisioning",
+  VOICE_RENDERER: "voiceRenderer",
+});
+
+const ADAPTERS = Object.freeze({
+  [PORT.VOICE_CONTROL]: { [PROVIDER.TWILIO]: twilioVoice, [PROVIDER.TELNYX]: telnyxVoice },
+  [PORT.MESSAGING]: { [PROVIDER.TWILIO]: twilioMessaging, [PROVIDER.TELNYX]: telnyxMessaging },
+  [PORT.MEDIA_TRANSPORT]: { [PROVIDER.TWILIO]: twilioMedia, [PROVIDER.TELNYX]: telnyxMedia },
+  [PORT.WEBHOOK_EVENTS]: {
+    [PROVIDER.TWILIO]: twilioWebhookEvents,
+    [PROVIDER.TELNYX]: telnyxWebhookEvents,
+  },
+  // Sonderfall: Twilio-Provisioning ist NICHT im Scope -> Eintrag fehlt BEWUSST,
+  // pick wirft dann fail-closed (kein stiller Twilio-Fallback fuer einen Geld-Pfad).
+  [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
+  // Sonderfall (b): Eintrag = fertiger VoiceRenderer. Telnyx bekommt die globale
+  // ElevenLabs-Plattform-Config LAZY zur Render-Zeit injiziert - der Arrow liest
+  // config.telnyxElevenLabs erst beim Aufruf, NICHT zur Import-Zeit (P15: kein
+  // Lazy-Init-Singleton, config-Bindung an der Kompositionsstelle).
+  [PORT.VOICE_RENDERER]: {
+    [PROVIDER.TWILIO]: { renderDirectives: twilioRenderDirectives },
+    [PROVIDER.TELNYX]: {
+      renderDirectives: (d) => telnyxRenderDirectives(d, { elevenLabs: config.telnyxElevenLabs }),
+    },
+  },
+});
+
+// Liefert die registrierte Implementierung fuer (port, provider) oder wirft fail-closed.
+// Der Fehlertext nennt Provider + Port (Diagnose) und enthaelt NIE ein Secret; "nicht
+// unterstuetzt" ist bewusst Teil der Meldung (Bestandsvertrag numberProvisioning).
+function pick(port, provider) {
+  const impl = ADAPTERS[port]?.[provider];
+  if (impl === undefined)
+    throw new Error(`Provider '${provider}' fuer Port '${port}' nicht unterstuetzt`);
+  return impl;
+}
+
+// Optionale Provider-Faehigkeiten (KEIN Adapter, sondern Ja/Nein-Metadaten). Ersetzt die
+// drei verstreuten provider===PROVIDER.TELNYX-Checks (S2-22). Fail-closed: fehlender
+// Provider ODER fehlende Capability -> false.
+export const CAPABILITY = Object.freeze({
+  AI_ASSISTANT: "aiAssistant", // Telnyx Call-Control-AI-Assistant-Pfad
+  PLAY_AUDIO_TTS: "playAudioTts", // <Play>-Vorab-Synthese (ElevenLabs) statt <Say>
+});
+
+const PROVIDER_CAPABILITIES = Object.freeze({
+  [PROVIDER.TWILIO]: Object.freeze({}),
+  [PROVIDER.TELNYX]: Object.freeze({
+    [CAPABILITY.AI_ASSISTANT]: true,
+    [CAPABILITY.PLAY_AUDIO_TTS]: true,
+  }),
+});
+
+export function providerSupports(provider, capability) {
+  return PROVIDER_CAPABILITIES[provider]?.[capability] === true;
+}
+
 /** @returns {import("./ports.js").VoiceControl} */
 export const voiceControl = (provider = PROVIDER.TWILIO) => {
+  // Sonderfall (a): fakeOriginate-Override VOR pick (Test-Seam, boot-gehaertet).
   if (config.fakeOriginate) return fakeVoice;
-  return provider === PROVIDER.TELNYX ? telnyxVoice : twilioVoice;
+  return pick(PORT.VOICE_CONTROL, provider);
 };
 
 /** @returns {import("./ports.js").Messaging} */
-export const messaging = (provider = PROVIDER.TWILIO) =>
-  provider === PROVIDER.TELNYX ? telnyxMessaging : twilioMessaging;
+export const messaging = (provider = PROVIDER.TWILIO) => pick(PORT.MESSAGING, provider);
 
 // MediaTransport (Port 4, Realtime-WS-Frame-Schicht, Aufrufer bridge.js). Provider-
 // aware wie voiceControl: Default twilio -> bestehender Realtime-Pfad byte-identisch.
 /** @returns {import("./ports.js").MediaTransport} */
-export const mediaTransport = (provider = PROVIDER.TWILIO) =>
-  provider === PROVIDER.TELNYX ? telnyxMedia : twilioMedia;
+export const mediaTransport = (provider = PROVIDER.TWILIO) => pick(PORT.MEDIA_TRANSPORT, provider);
 
 // WebhookEvents (Port 5, reines Parsing VOR den Safety-Gates). Provider-aware wie
 // mediaTransport: Default twilio -> bestehende Call-Sites (server.js) byte-identisch.
@@ -71,28 +140,22 @@ export const mediaTransport = (provider = PROVIDER.TWILIO) =>
 // providerFromHeaders+erfolgreicher Signaturpruefung weiter oben im Request-Pfad -
 // header-basiert waere hier unnoetige Spoof-Flaeche (Provider-Wahl VOR Signatur-Trust).
 /** @returns {import("./ports.js").WebhookEvents} */
-export const webhookEvents = (provider = PROVIDER.TWILIO) =>
-  provider === PROVIDER.TELNYX ? telnyxWebhookEvents : twilioWebhookEvents;
+export const webhookEvents = (provider = PROVIDER.TWILIO) => pick(PORT.WEBHOOK_EVENTS, provider);
 
 // NumberProvisioning (Port 3, Onboarding/Geld-Pfad): nur Telnyx implementiert
 // (Twilio-Provisioning ist nicht im Scope dieser Phase). Fail-closed: ein nicht
 // unterstuetzter Provider wirft, statt still einen falschen Adapter zu liefern.
 /** @returns {import("./ports.js").NumberProvisioning} */
-export const numberProvisioning = (provider = PROVIDER.TELNYX) => {
-  if (provider === PROVIDER.TELNYX) return telnyxNumberProvisioning;
-  throw new Error(`NumberProvisioning fuer Provider '${provider}' nicht unterstuetzt`);
-};
+export const numberProvisioning = (provider = PROVIDER.TELNYX) =>
+  pick(PORT.NUMBER_PROVISIONING, provider);
 
-// Telnyx bekommt die ElevenLabs-TTS-Konfiguration (globale Plattform-Stimme)
-// HIER injiziert - der Renderer selbst bleibt config-frei/pur (Snapshot-Tests
-// ohne Env), die Verdrahtung lebt an der Kompositions-Stelle (P15). Gate liegt
-// im Renderer (apiKeyRef+voiceId leer -> Azure byte-identisch). Twilio-Zweig
-// unveraendert (kein ElevenLabs ueber Twilio-Say).
+// Telnyx bekommt die ElevenLabs-TTS-Konfiguration (globale Plattform-Stimme) lazy
+// zur Render-Zeit injiziert (Sonderfall b, siehe ADAPTERS oben) - der Renderer selbst
+// bleibt config-frei/pur (Snapshot-Tests ohne Env). Gate liegt im Renderer
+// (apiKeyRef+voiceId leer -> Azure byte-identisch). Twilio-Zweig unveraendert (kein
+// ElevenLabs ueber Twilio-Say).
 /** @returns {import("./ports.js").VoiceRenderer} */
-export const voiceRenderer = (provider = PROVIDER.TWILIO) =>
-  provider === PROVIDER.TELNYX
-    ? { renderDirectives: (d) => telnyxRenderDirectives(d, { elevenLabs: config.telnyxElevenLabs }) }
-    : { renderDirectives: twilioRenderDirectives };
+export const voiceRenderer = (provider = PROVIDER.TWILIO) => pick(PORT.VOICE_RENDERER, provider);
 
 // Header -> Provider (rein, IO-frei). EINZIGE Stelle, die Inbound-Signatur-Header
 // auf einen Provider abbildet: der Signatur-Verifier dispatcht darueber UND

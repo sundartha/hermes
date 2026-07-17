@@ -1,7 +1,8 @@
 // Play-TTS-Direktiven-Synth (Server-Slim P2, reine Verschiebung aus server.js). Die Factory
-// schliesst config + die EINE ttsStore-Instanz (INV-7); PROVIDER/DIRECTIVE/synthesizeSpeech
-// importiert das Modul selbst (EINE Quelle je, G5). fetch bleibt das Node-Globale (NICHT
-// importieren, sonst driftet der Timeout-Pfad gegen den Bestand).
+// schliesst config + die EINE ttsStore-Instanz (INV-7); providerSupports/CAPABILITY
+// (P5, registry.js)/DIRECTIVE/synthesizeSpeech importiert das Modul selbst (EINE Quelle
+// je, G5). fetch bleibt das Node-Globale (NICHT importieren, sonst driftet der
+// Timeout-Pfad gegen den Bestand).
 //
 // Play-TTS-Einwebung (fail-safe): synthetisiert die gesprochenen Texte einer Direktiven-
 // Liste zur Webhook-Zeit (hartes Timeout in synthesizeSpeech), legt die Bytes in den
@@ -10,13 +11,13 @@
 // UNVERAENDERT zurueck -> Azure-<Say> byte-identisch (NIE den Call toeten). Genau EIN
 // sprechender Text pro Turn -> genau ein Synth-Call pro Webhook.
 import { synthesizeSpeech } from "./synth.js";
-import { PROVIDER } from "../store/defaults.js";
+import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
 
 export function makeDirectiveSynth({ config, ttsStore }) {
   async function synthesizeDirectiveAudio(call, directives) {
     const cfg = config.elevenLabsPlayTts;
-    if (!cfg.enabled || call.provider !== PROVIDER.TELNYX) return directives;
+    if (!cfg.enabled || !providerSupports(call.provider, CAPABILITY.PLAY_AUDIO_TTS)) return directives;
     const out = [];
     for (const d of directives) out.push(await withPlayAudio(d, cfg));
     return out;
