@@ -498,17 +498,9 @@ export function makePgStore(runner) {
             return true;
           }
           state.tenants.push(rowToTenant(full));
-          // RLS-GUC dieses Tenants SETZEN, bevor tenant-scoped gelesen wird (Muster hydrate():
-          // setTenant vor hydrateTenantInto, G5). G31 temporale Kopplung: die gesetzte GUC ist
-          // Vorbedingung des Reads. Ohne sie filtert FORCE RLS unter der stale/fremden GUC einer
-          // wiederverwendeten Pool-Verbindung die Reads LEER -> der leere Spiegel liesse den
-          // naechsten Flush die realen nicht-aktiven Call-Zeilen loeschen
-          // (deleteMissingCallsKeepActive mit leerer keep-Liste = stiller Datenverlust).
-          await setTenant(client, tenantId);
-          // tenant-scoped Zeilen nachladen (settings/calls/...): fuer einen frischen Signup
-          // leer (nichts angelegt), aber zukunftssicher. Eigener tenant_id-Filter je Query
-          // (zweite Linie zur RLS) - kein Cross-Tenant-Leck.
-          await hydrateTenantInto(client, state, tenantId);
+          // hydrateTenant-Helfer (G5/G27): setzt die RLS-GUC VOR dem tenant-scoped Read
+          // (settings/calls/...). Reihenfolge strukturell erzwungen, siehe Helfer-Kommentar.
+          await hydrateTenant(client, state, tenantId);
           return true;
         });
       } catch (e) {
@@ -539,6 +531,18 @@ async function setTenant(client, tenantId) {
   await client.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
 }
 
+// Buendelt setTenant + hydrateTenantInto zu EINER Stelle (G5/G27). G31 temporale
+// Kopplung: setTenant MUSS vor hydrateTenantInto laufen - sonst filtert FORCE RLS
+// unter der stale/fremden GUC einer wiederverwendeten Pool-Verbindung die Reads LEER,
+// der leere Spiegel liesse den naechsten Flush reale Zeilen loeschen (stiller
+// Datenverlust). Als eine Funktion statt zweier Call-Sites mit derselben Reihenfolge
+// ist eine kuenftige dritte Call-Site strukturell sicher statt caller-discipline-
+// abhaengig.
+async function hydrateTenant(client, state, tenantId) {
+  await setTenant(client, tenantId);
+  await hydrateTenantInto(client, state, tenantId);
+}
+
 // ---- Hydrierung: DB-Zeilen -> verschachtelter Spiegel-Shape (multi-tenant, I8) ----
 // Laeuft auf einer Verbindung. Liest zuerst die tenant-Tabelle (state.tenants), dann
 // pro Tenant unter dessen RLS-GUC die tenant-scoped Zeilen in die Buckets/Listen.
@@ -550,8 +554,7 @@ async function hydrate(client) {
   const state = ops.makeDefaultState();
   state.tenants = await hydrateTenants(client);
   for (const tenant of state.tenants) {
-    await setTenant(client, tenant.id);
-    await hydrateTenantInto(client, state, tenant.id);
+    await hydrateTenant(client, state, tenant.id);
   }
   // Profiles global (Owner-Removal P5): an KEINEN Tenant gebunden. Die profile-Tabelle
   // haengt nicht mehr an app.current_tenant (Policy profile_global, USING(true)) - die
