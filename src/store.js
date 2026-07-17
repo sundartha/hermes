@@ -7,6 +7,7 @@
 // erzeugt (kein DATABASE_URL noetig) -> heutiger Pfad bleibt laufzeit-bitidentisch.
 // "pg" = Postgres: Pool-Konstruktion (Verdrahtung) lebt hier in createPgBackend,
 // die Fachlogik in store/pg.js kennt keine Pool-Konstruktion (DIP, P15).
+import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "./config.js";
 import * as jsonBackend from "./store/json.js";
 import { makeChainMutex } from "./chain-mutex.js";
@@ -190,14 +191,39 @@ export const {
 // n/a: Render free plan = 1 Instanz; bewusst akzeptiertes Prototyp-Risiko, siehe
 // PLAN-SECURITY.md OT-3).
 //
-// HARD-RULE (Re-Entrancy): ein withStoreLock(fn)-Body darf NIE erneut withStoreLock
-// aufrufen (die Kette wartet sonst auf sich selbst -> Deadlock). Kritische Abschnitte
-// kurz halten: load() -> mutiere -> save(), kein fremdes await dazwischen.
+// HARD-RULE (Re-Entrancy, P2 strukturell erzwungen): ein withStoreLock(fn)-Body darf NIE
+// erneut withStoreLock aufrufen (die Kette wartet sonst auf sich selbst -> prozessweiter
+// Zirkel-Deadlock, der alle folgenden Call-/Budget-/Transkript-Writes still einfriert).
+// Frueher nur per Konvention (dieser Kommentar) behauptet; jetzt strukturell gesichert:
+// storeLockContext (AsyncLocalStorage) markiert den GERADE laufenden Lock-Body. Ein zweiter
+// Aufruf, dessen Kontext den Marker schon traegt (direkt ODER transitiv ueber await-
+// Schichten), wirft SYNCHRON - der Stack zeigt auf die schuldige Zeile, statt still zu
+// haengen. Kritische Abschnitte trotzdem kurz halten: load() -> mutiere -> save(), kein
+// fremdes await dazwischen.
+//
+// KEIN Modul-Flag: ein Boolean wuerde legitime NEBENLAEUFIGE (nicht verschachtelte) Aufrufe
+// faelschlich abweisen. AsyncLocalStorage bindet den Marker an genau EINEN Ausfuehrungs-
+// Kontext; ein nachrueckender Lauf erbt ihn nicht (der .then-Callback laeuft im Kontext
+// seiner Registrierung, nicht dem des aufloesenden Laufs) -> normale Serialisierung bleibt.
+// REENTRANCY_MARKER ist ein Sentinel; nur seine Anwesenheit zaehlt, nie sein Inhalt.
 //
 // Ketten-Mechanik ausgelagert nach chain-mutex.js (G5, geteilt mit makeSingleFlight in
 // src/single-flight.js) - EIGENE Chain-Instanz hier (runStoreExclusive), der lange
 // Provisioning-Drain-Await darf diese kurze Store-Schreib-Serialisierung nicht blockieren.
 const runStoreExclusive = makeChainMutex();
+const storeLockContext = new AsyncLocalStorage();
+const REENTRANCY_MARKER = Symbol("store-lock-active");
 export function withStoreLock(fn) {
-  return runStoreExclusive(fn);
+  // Synchron werfen, BEVOR ein weiterer .then an die Kette gehaengt wird - sonst reiht sich
+  // der innere Lauf HINTER dem aeusseren ein, auf den er wartet (Deadlock).
+  if (storeLockContext.getStore()) {
+    throw new Error(
+      "withStoreLock reentrant: ein withStoreLock-Body darf NIE erneut withStoreLock aufrufen " +
+        "(Deadlock-Schutz). Verschachtelten Store-Lock aufloesen; kritischen Abschnitt kurz halten.",
+    );
+  }
+  // fn NICHT direkt an runStoreExclusive geben: der Marker wird erst gesetzt, wenn der Lauf
+  // TATSAECHLICH startet (storeLockContext.run laeuft im .then-Callback der Kette), nicht schon
+  // bei der Registrierung - so erbt ein legitimer nachrueckender Lauf den Marker nicht.
+  return runStoreExclusive(() => storeLockContext.run(REENTRANCY_MARKER, fn));
 }
