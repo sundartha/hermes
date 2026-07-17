@@ -303,14 +303,26 @@ export function exportTenantData(s, tenantId) {
   };
 }
 
-export function markAnswered(s, callId) {
-  const call = getCall(s, callId);
+// G5 (PA-5): gemeinsame Set-once-ISO-Marker-Logik der drei strukturell identischen
+// Marker-Setter (markAnswered/markSummarySmsSent/markBilled). Setzt fieldName EINMALIG auf
+// die aktuelle ISO-Zeit, wenn call existiert und das Feld noch leer ist; jeder Folgeaufruf
+// ist ein No-op (der zuerst gesetzte Marker gewinnt -> stabiler Zeitstempel, kein Doppel-
+// Schreiben). Fehlender call (null) -> changed=false, KEIN Throw (ein verspaeteter Retry
+// fuer einen unbekannten Call darf den Setter nicht crashen). Liefert { call, changed }
+// (Wrapper-Kontrakt: save NUR bei changed). BEWUSST nur fuer die drei Set-once-ISO-Marker:
+// recordFailureReason (value-gated + 3. Arg) und setCallEndedAt (status-gated, expliziter
+// Anker) haben andere Semantik und bleiben getrennt.
+function setOnceTimestamp(call, fieldName) {
   let changed = false;
-  if (call && !call.answeredAt) {
-    call.answeredAt = new Date().toISOString();
+  if (call && !call[fieldName]) {
+    call[fieldName] = new Date().toISOString();
     changed = true;
   }
   return { call, changed };
+}
+
+export function markAnswered(s, callId) {
+  return setOnceTimestamp(getCall(s, callId), "answeredAt");
 }
 
 // Setzt Terminal-Status + EXPLIZITEN endedAt-Anker (F9). Idempotent: nur aus 'active'
@@ -337,29 +349,17 @@ export function endCallRecord(s, callId, status = "completed") {
 // Persistierter Dedup-Marker fuer die Summary-SMS (F2 P9, M2): setzt summarySmsSentAt
 // (ISO) am Call-Record NACH erfolgreichem Send. Ueberlebt - anders als das In-Memory-
 // Flag call._finished - einen Prozess-Restart zwischen Call-Ende und spaetem
-// /voice/status-Retry und macht den Versand so idempotent (genau eine SMS). Idempotent
-// (gesetzter Marker gewinnt, Muster wie markAnswered). Wrapper saved bei changed.
+// /voice/status-Retry und macht den Versand so idempotent (genau eine SMS). Set-once
+// via setOnceTimestamp (gesetzter Marker gewinnt); Wrapper saved bei changed.
 export function markSummarySmsSent(s, callId) {
-  const call = getCall(s, callId);
-  let changed = false;
-  if (call && !call.summarySmsSentAt) {
-    call.summarySmsSentAt = new Date().toISOString();
-    changed = true;
-  }
-  return { call, changed };
+  return setOnceTimestamp(getCall(s, callId), "summarySmsSentAt");
 }
 
-// F9 (A6): persistierter Bucht-Marker. Set-once (gesetzter gewinnt, Muster markSummarySmsSent):
+// F9 (A6): persistierter Bucht-Marker. Set-once via setOnceTimestamp (gesetzter gewinnt):
 // ein verspaeteter /voice/status-Retry NACH einem Restart findet den Marker und bucht die
 // Voice-Minuten NICHT erneut. Wrapper saved bei changed.
 export function markBilled(s, callId) {
-  const call = getCall(s, callId);
-  let changed = false;
-  if (call && !call.billedAt) {
-    call.billedAt = new Date().toISOString();
-    changed = true;
-  }
-  return { call, changed };
+  return setOnceTimestamp(getCall(s, callId), "billedAt");
 }
 
 // Anker der Max-Dauer-Rechnung: der ECHTE Call-Start (answeredAt bevorzugt, sonst startedAt),
