@@ -7,7 +7,7 @@ import "./process-guards.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./mcp-tools.js";
-import { config } from "./config.js";
+import { config, resolveGatewayUrl } from "./config.js";
 import { uiServerExtension } from "./ui/contract.js";
 import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
 
@@ -26,7 +26,4 @@ registerTools(server, {
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error(
-  "[hermes] MCP-Server bereit (stdio). Gateway: " +
-    (process.env.GATEWAY_URL || "http://localhost:3000"),
-);
+console.error("[hermes] MCP-Server bereit (stdio). Gateway: " + resolveGatewayUrl());

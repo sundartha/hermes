@@ -5,7 +5,7 @@
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
-import { assertConfig } from "./config.js";
+import { assertConfig, gatewayUrlForPort } from "./config.js";
 import { fakeOriginateBootBlocked, meterMappingGaps } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { attachMediaBridge } from "./bridge.js";
@@ -80,8 +80,8 @@ function logBootBanner(config, port) {
   // Render-Log eindeutig sichtbar ist, WELCHE Version laeuft (Render setzt
   // RENDER_GIT_COMMIT). Phase 3: wieder entfernen.
   console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);
-  console.log(`\n  Hermes Gateway laeuft auf http://localhost:${port}`);
-  console.log(`  Dashboard:      http://localhost:${port}`);
+  console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
+  console.log(`  Dashboard:      ${gatewayUrlForPort(port)}`);
   console.log(
     `  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
@@ -133,7 +133,7 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
     const port = httpServer.address().port;
     // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
-    process.env.GATEWAY_URL ||= `http://localhost:${port}`;
+    process.env.GATEWAY_URL ||= gatewayUrlForPort(port);
     logBootBanner(config, port);
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
