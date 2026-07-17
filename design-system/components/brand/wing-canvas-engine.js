@@ -150,7 +150,6 @@
   }
   function Timeline(opts) {
     opts = opts || {};
-    this.target = null;
     this.tweens = [];
     this.cursor = 0;      // Ende der Sequenz (Default-Anhaengepunkt)
     this.prevStart = 0;   // Startzeit des zuletzt hinzugefuegten Tweens ("<")
@@ -171,7 +170,6 @@
     return parseFloat(position) || this.cursor;
   };
   Timeline.prototype._add = function (target, vars, duration, position) {
-    this.target = target;
     var start = this._resolve(position, duration);
     this.tweens.push({
       target: target, start: start, duration: duration,
@@ -211,7 +209,6 @@
     this.paused = false;
     return this;
   };
-  Timeline.prototype.pause = function () { this.paused = true; return this; };
   Timeline.prototype.kill = function () { this.paused = true; this.tweens = []; };
   Timeline.prototype._resetCaptures = function () {
     for (var i = 0; i < this.tweens.length; i++) this.tweens[i].captured = false;
@@ -324,8 +321,11 @@
     var dx = x - cx, dy = y - cy, len = Math.hypot(dx, dy) || 1;
     return [x + (dx / len) * SEAM_PAD, y + (dy / len) * SEAM_PAD];
   }
-  function drawTriangle(ctx, img, dpr,
-    dx0, dy0, dx1, dy1, dx2, dy2, sx0, sy0, sx1, sy1, sx2, sy2) {
+  // blit={ctx,img,dpr} (invariant je Frame); dst/src=[x0,y0,x1,y1,x2,y2] (F1).
+  function drawTriangle(blit, dst, src) {
+    var ctx = blit.ctx, img = blit.img, dpr = blit.dpr;
+    var [dx0, dy0, dx1, dy1, dx2, dy2] = dst;
+    var [sx0, sy0, sx1, sy1, sx2, sy2] = src;
     var den = sx0 * (sy1 - sy2) - sy0 * (sx1 - sx2) + (sx1 * sy2 - sx2 * sy1);
     if (!den) return;
     var a = (dx0 * (sy1 - sy2) - sy0 * (dx1 - dx2) + (dx1 * sy2 - dx2 * sy1)) / den;
@@ -444,15 +444,16 @@
     }
     function drawMesh() {
       var cols = dctx.cols;
+      var blit = { ctx: ctx2d, img: dctx.img, dpr: dpr };
       for (var gy = 0; gy < dctx.segY; gy++) {
         for (var gx = 0; gx < dctx.segX; gx++) {
           var i00 = gy * cols + gx, i10 = i00 + 1, i01 = i00 + cols, i11 = i01 + 1;
-          drawTriangle(ctx2d, dctx.img, dpr,
-            dctx.scr[i00 * 2], dctx.scr[i00 * 2 + 1], dctx.scr[i10 * 2], dctx.scr[i10 * 2 + 1], dctx.scr[i11 * 2], dctx.scr[i11 * 2 + 1],
-            dctx.original[i00 * 2], dctx.original[i00 * 2 + 1], dctx.original[i10 * 2], dctx.original[i10 * 2 + 1], dctx.original[i11 * 2], dctx.original[i11 * 2 + 1]);
-          drawTriangle(ctx2d, dctx.img, dpr,
-            dctx.scr[i00 * 2], dctx.scr[i00 * 2 + 1], dctx.scr[i11 * 2], dctx.scr[i11 * 2 + 1], dctx.scr[i01 * 2], dctx.scr[i01 * 2 + 1],
-            dctx.original[i00 * 2], dctx.original[i00 * 2 + 1], dctx.original[i11 * 2], dctx.original[i11 * 2 + 1], dctx.original[i01 * 2], dctx.original[i01 * 2 + 1]);
+          drawTriangle(blit,
+            [dctx.scr[i00 * 2], dctx.scr[i00 * 2 + 1], dctx.scr[i10 * 2], dctx.scr[i10 * 2 + 1], dctx.scr[i11 * 2], dctx.scr[i11 * 2 + 1]],
+            [dctx.original[i00 * 2], dctx.original[i00 * 2 + 1], dctx.original[i10 * 2], dctx.original[i10 * 2 + 1], dctx.original[i11 * 2], dctx.original[i11 * 2 + 1]]);
+          drawTriangle(blit,
+            [dctx.scr[i00 * 2], dctx.scr[i00 * 2 + 1], dctx.scr[i11 * 2], dctx.scr[i11 * 2 + 1], dctx.scr[i01 * 2], dctx.scr[i01 * 2 + 1]],
+            [dctx.original[i00 * 2], dctx.original[i00 * 2 + 1], dctx.original[i11 * 2], dctx.original[i11 * 2 + 1], dctx.original[i01 * 2], dctx.original[i01 * 2 + 1]]);
         }
       }
     }

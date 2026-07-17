@@ -51,9 +51,9 @@ export async function assertNoBypassRls(client) {
 export async function createPortalRunner({
   pool = new pg.Pool({ connectionString: config.databaseUrl }),
 } = {}) {
-  // Fail-closed: Rollen-Pruefung einmalig nach Pool-Aufbau. connect() liegt JETZT im
-  // try (AC7) - bei connect- ODER Assertions-Fehler wird der Pool beendet (kein
-  // Pool-Leak) und der Fehler kontrolliert propagiert (server.js faengt ihn -> AC5).
+  // Fail-closed: Rollen-Pruefung einmalig nach Pool-Aufbau. connect() liegt im try -
+  // bei connect- ODER Assertions-Fehler wird der Pool beendet (kein Pool-Leak) und
+  // der Fehler kontrolliert propagiert (server.js faengt ihn).
   let client;
   try {
     client = await pool.connect();

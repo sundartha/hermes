@@ -30,7 +30,7 @@ const SPEAK_ACTION = "speak";
 // flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
 const ELEVENLABS_VOICE_SETTINGS_TYPE = "elevenlabs";
 
-// afix-p2 (R2): STT-Sprach-Hint pro Call. Modell MUSS mitgesendet werden - TranscriptionConfig.model
+// STT-Sprach-Hint pro Call (RCA-Wurzel R2). Modell MUSS mitgesendet werden - TranscriptionConfig.model
 // hat laut Telnyx-OpenAPI den Default "distil-whisper/distil-large-v2" (ENGLISCH-ONLY, non-streaming);
 // ein transcription-Block ohne model koennte die STT still auf Englisch kippen. Der Wert spiegelt das
 // STT-Modell des Assistant-Objekts (deepgram/flux = das einzige Telnyx-Modell mit Turn-Taking-Features).
@@ -88,7 +88,7 @@ async function postCallControlAction(callControlId, { action, body, op }) {
 }
 
 // Voice-Felder des speak-Bodys (eine Aufgabe, eine Abstraktionsebene: G30/G34).
-// ElevenLabs-Zweig = dieselbe Stimme, die der AI-Assistant danach spricht (afix-p1/R5:
+// ElevenLabs-Zweig = dieselbe Stimme, die der AI-Assistant danach spricht (RCA-Wurzel R5:
 // EINE Stimme im ganzen Call). KEIN `language`: im SpeakRequest optional (required =
 // payload+voice), es steuert die Azure-/Telnyx-TTS-Sprache; ElevenLabs-Modelle sind
 // multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
@@ -103,7 +103,7 @@ function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
   return voiceAttrs(voiceProfile); // { voice, language } - Bestand
 }
 
-// afix-p1 Observability: EINE Quelle fuer "ist die Assistant-Stimme ueberhaupt konfiguriert?"
+// Observability: EINE Quelle fuer "ist die Assistant-Stimme ueberhaupt konfiguriert?"
 // - der Ingest-Log-Marker kann damit nie von dem abweichen, was speak wirklich sendet (G5).
 export function assistantVoiceConfigured() {
   return hasElevenLabsVoice(config.telnyxElevenLabs);
@@ -222,7 +222,7 @@ export const telnyxVoice = {
   // Telnyx-AI-Assistant an den laufenden Call-Control-Call anhaengen (ai_assistant_start).
   // Provider-neutraler Transport: assistantId liefert der Caller (P5/P7); der Adapter erzeugt/
   // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
-  // Assistant-Config (P7), NICHT hier. Der per-Call-transcription-Block (afix-p2) gewinnt laut
+  // Assistant-Config (P7), NICHT hier. Der per-Call-transcription-Block gewinnt laut
   // Telnyx-OpenAPI ueber das Assistant-Objekt; language ist OPTIONAL - fehlt sie, sendet der
   // Adapter KEIN transcription-Feld und der Body bleibt Bestand. Nur telnyx-call-control-ingest.js
   // reicht call.language durch; telnyx-inbound.js ruft startAssistant OHNE language (Inbound
@@ -243,7 +243,7 @@ export const telnyxVoice = {
   // Language ueber dieselbe Map wie der TeXML-Renderer (voiceAttrs, G5), sofern useAssistantVoice
   // fehlt/false ODER die ElevenLabs-Config unvollstaendig ist (Azure-Neural, byte-identisch zum
   // Bestand). useAssistantVoice=true + vollstaendige Config -> dieselbe ElevenLabs-Stimme, die
-  // der AI-Assistant danach spricht (afix-p1/R5, speakVoiceFields). Der fruehere ElevenLabs-
+  // der AI-Assistant danach spricht (RCA-Wurzel R5, speakVoiceFields). Der fruehere ElevenLabs-
   // LIVE-RELAY-Befund (unterdrueckt den Inbound-Track) gilt fuer den TeXML-Gather-Pfad
   // (Inbound-Track, render.js), NICHT fuer diesen Call-Control-speak: hier folgt kein Gather,
   // sondern ai_assistant_start - es gibt keinen Inbound-Track zu unterdruecken. Body-Feldform

@@ -8,10 +8,10 @@ import { aiCostCents } from "./store/state-ops.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
 
-// Resilienter LLM-Seam (P3b-R Schicht 2, src/llm.js): EINE Stelle fuer Timeout/
-// selektiven Retry/Breaker. Verdrahtung am Modul-Top (P15), Fachcode ruft nur
+// Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
+// selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
 // llm.complete(...). Wirft bei Breaker-open/Retries-erschoepft LlmUnavailableError
-// (Aufrufer behandelt das in CP4); 4xx/Auth propagieren unveraendert.
+// (Aufrufer faengt das, degradedSpeechFor aus llm.js); 4xx/Auth propagieren unveraendert.
 const llm = createLlmClient({ apiKey: config.anthropicApiKey, config, metrics });
 
 // L3: tatsaechlich verarbeitete Input-Token EINES Anthropic-Aufrufs inkl. Cache. Mit
@@ -184,6 +184,12 @@ const OPENING_GOAL_MAX_CHARS = 160;
 // Tuning-Knopf -> nicht in config.js (Praezedenz OPENING_GOAL_MAX_CHARS).
 const CALENDAR_PREVIEW_LIMIT = 8;
 
+// Tool-Name des end_call-Tools (G25): EINE Quelle fuer Schema-Name/Dispatch-Case/Guard.
+const END_CALL_TOOL_NAME = "end_call";
+
+// Default-Termindauer in Minuten, wenn book_appointment kein durationMinutes liefert (G25).
+const DEFAULT_EVENT_DURATION_MINUTES = 60;
+
 // Erst-Turn-Text fuer den LLM-FREIEN /voice/outbound-Pfad (G2): Offenlegung (Regel 2,
 // erster Satz) + Bruecke + gekapptes Anliegen, in EINEM Gather-Say. Rein synchron,
 // kein Anthropic-Pfad. Das Anliegen wird hier deterministisch genannt; der erste
@@ -215,14 +221,14 @@ function trimGoalForSpeech(goal) {
 export function toolDefs(tenantId) {
   const s = store.tenantContext(tenantId).settings;
   const tools = [
-    // afix-p4 (RCA-Wurzel R3): Das Modell schloss aus STT-Kauderwelsch, das Ziel sei
+    // RCA-Wurzel R3: Das Modell schloss aus STT-Kauderwelsch, das Ziel sei
     // erreicht, und rief end_call. Das enge Verbot sitzt deshalb GENAU HIER, am Tool-
     // Entscheidungspunkt (Lehre call-quality-chain: breite Stil-/Meta-Regeln im Prompt-
     // Rumpf kippen bei Haiku in Ueberkorrektur, Verbote an der Tool-Description wirken).
     // Der letzte Satz ist der Ausstieg: er verhindert, dass der Agent aus Vorsicht GAR
     // nicht mehr auflegt. Keine Sprach-Variante noetig - toolDefs ist locale-frei.
     {
-      name: "end_call",
+      name: END_CALL_TOOL_NAME,
       description:
         "Beendet das Telefonat. IMMER erst aufrufen, NACHDEM du dich verabschiedet hast. " +
         "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenuebers verstanden hast. " +
@@ -267,7 +273,10 @@ export function toolDefs(tenantId) {
               "Termintitel, z.B. 'Friseur Schneider'. Ist kein konkreter Anlass bekannt, bilde den Titel selbst aus deinem Auftrag (z.B. 'Termin: <Anliegen>') - frage den Gespraechspartner NIEMALS nach Thema oder Grund.",
           },
           start: { type: "string", description: "Start als ISO 8601, z.B. 2026-06-15T14:00:00" },
-          durationMinutes: { type: "number", description: "Dauer in Minuten, Default 60" },
+          durationMinutes: {
+            type: "number",
+            description: `Dauer in Minuten, Default ${DEFAULT_EVENT_DURATION_MINUTES}`,
+          },
         },
         required: ["title", "start"],
       },
@@ -308,7 +317,9 @@ export function execTool(call, name, input) {
     case "book_appointment": {
       const start = new Date(input.start);
       if (isNaN(start)) return "FEHLER: Ungueltiges Datum.";
-      const end = new Date(start.getTime() + (input.durationMinutes || 60) * 60000);
+      const end = new Date(
+        start.getTime() + (input.durationMinutes || DEFAULT_EVENT_DURATION_MINUTES) * 60000,
+      );
       const conflict = store.findConflict(call.tenantId, start.toISOString(), end.toISOString());
       if (conflict)
         return `KONFLIKT: Ueberschneidung mit "${conflict.title}" (${fmtDate(conflict.start, dateLocale)}). Bitte anderen Slot vorschlagen.`;
@@ -324,7 +335,7 @@ export function execTool(call, name, input) {
       store.addActionItem(call.id, input.message, "todo");
       return "Nachricht ist notiert.";
     }
-    case "end_call":
+    case END_CALL_TOOL_NAME:
       return "OK";
     default:
       return "Unbekanntes Tool.";
@@ -333,10 +344,10 @@ export function execTool(call, name, input) {
 
 // ---------- Gespraechs-Turn ----------
 
-// stab-p7 (c): Erst-Turn-Bootstrap-Marker. Feuert NUR, wenn das Transkript beim Eintritt in
+// Erst-Turn-Bootstrap-Marker. Feuert NUR, wenn das Transkript beim Eintritt in
 // agentTurn noch KEINE agent-Zeile enthaelt, und weist das Modell an, das Gespraech zu
-// eroeffnen/zu begruessen. agentTurn hat ZWEI Aufrufer mit unterschiedlichem Vorzustand
-// (siehe stab-p7-spec.md): ueber die Budget-Engine (server.js /voice/turn) ist dieser
+// eroeffnen/zu begruessen. agentTurn hat ZWEI Aufrufer mit unterschiedlichem Vorzustand:
+// ueber die Budget-Engine (server.js /voice/turn) ist dieser
 // Zustand NICHT erreichbar, weil server.js die Greeting-/Opening-Zeile synchron per
 // addTranscript() IN /voice/incoming BZW. /voice/outbound eintraegt, BEVOR der erste
 // agentTurn-Aufruf ueberhaupt stattfindet. Erreichbar ist der Zustand ueber den zweiten
@@ -346,7 +357,7 @@ export function execTool(call, name, input) {
 // zum bisherigen Inline-Text (nur extrahiert, G25/G5).
 const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das Gespraech.]";
 const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ihn.]";
-// stab-p7 (c): Stiller-Folge-Turn-Marker. Sobald der Agent schon gesprochen hat und der
+// Stiller-Folge-Turn-Marker. Sobald der Agent schon gesprochen hat und der
 // Anrufer nichts Substanzielles beitrug, haelt dieser neutrale Marker die Anthropic-messages-
 // Kette gueltig (Abschluss mit user-Turn), OHNE dem Modell erneut "beginne/begruesse" zu
 // signalisieren (behebt R4). Richtungsneutral - die konkrete Reaktion steuert der systemPrompt.
@@ -358,19 +369,19 @@ const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 export const END_CALL_WAIT_INSTRUCTION =
   "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.";
 
-// stab-p7 (a/b): EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
+// EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
 // config.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
 // Richtungen werten call.transcript darueber aus, wirksam aber nur bei Outbound - siehe
 // Kommentar an suppressEndCall unten) UND fuer die Empty-Turn-Zaehlung in
 // unansweredAgentTurns unten (G3/G26-Fix). Steuert NICHT mehr, ob eine Anrufer-Zeile
 // ueberhaupt im Transkript landet - das Recording ist davon entkoppelt (siehe agentTurn)
-// UND (stab-p9) fuer den Loop-Guard im Conversation-Watchdog (EINE Quelle, S2).
+// UND fuer den Loop-Guard im Conversation-Watchdog (EINE Quelle, S2).
 // Rein, kein Nebeneffekt (N7).
 export function isSubstantialCallerText(text) {
   return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
 }
 
-// G3/G26-Fix (Runde 2, Review zu phase/stab-p7-fix-g326-r1): server.js's No-Speech-
+// G3/G26-Fix (Runde 2): server.js's No-Speech-
 // Kurzschluss in /voice/turn (kein Speech gehoert -> nur ein statischer Reprompt, agentTurn
 // wird uebersprungen) darf outbound NICHT mehr an "irgendeine caller-Zeile existiert" haengen.
 // Seit der Record-Gate-Entkopplung oben landet naemlich JEDE nicht-leere Aeusserung im
@@ -388,7 +399,7 @@ export function callerHasSpoken(call) {
     : call.transcript.some((t) => t.role === "caller");
 }
 
-// stab-p7 (a) + G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): "wie oft hat der Agent in
+// G3/G26-Fix: "wie oft hat der Agent in
 // Folge gesprochen, ohne eine SUBSTANZIELLE Antwort zu erhalten" (relevant nur fuer den
 // Outbound-Guard, siehe suppressEndCall unten). Seit dem Record-Gate-Fix landet JEDE
 // nicht-leere Anrufer-Aeusserung im Transkript (auch Rausch-/Echo-Fragmente wie ".") - ein
@@ -410,7 +421,7 @@ function unansweredAgentTurns(transcript) {
   return count;
 }
 
-// stab-p7 (a/b) als EINE strukturell erzwungene Invariante (G27): der Outbound-Frueh-
+// EINE strukturell erzwungene Invariante (G27): der Outbound-Frueh-
 // auflege-Schutz gilt fuer JEDE Voice-Engine (Budget-agentTurn UND Realtime-bridge.js),
 // nicht mehr nur per Kommentar. Unterdrueckt end_call, solange (i) keine SUBSTANZIELLE
 // Anrufer-Aeusserung vorliegt UND (ii) die Zahl konsekutiver Leer-Turns die Schwelle
@@ -455,8 +466,8 @@ export function shapeForSpeech(text) {
 
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
 export async function agentTurn(call, callerText) {
-  // G3/G26-Fix (Review zu phase/stab-p7-fix-rec1-r2): das Transkript-Record-Gate ist
-  // RICHTUNGSLOS und byte-identisch zum Master-Stand vor stab-p7 (41ce40b:
+  // G3/G26-Fix: das Transkript-Record-Gate ist
+  // RICHTUNGSLOS und byte-identisch zum fruehen Master-Stand (41ce40b:
   // "if (callerText) store.addTranscript(...)"). JEDE nicht-leere Anrufer-Aeusserung landet
   // im Transkript - auch eine echte, aber kurze Antwort (z.B. STT-Ziffer "5"), die vorher
   // outbound am Substanz-Filter (isSubstantialCallerText) scheiterte und dadurch weder im
@@ -471,7 +482,7 @@ export async function agentTurn(call, callerText) {
     role: t.role === "agent" ? "assistant" : "user",
     content: t.text,
   }));
-  // stab-p7 (c): Die Anthropic-messages-Kette MUSS mit einem user-Turn enden (sonst kein
+  // Die Anthropic-messages-Kette MUSS mit einem user-Turn enden (sonst kein
   // frischer Assistant-Turn). Der INHALT haengt davon ab, ob im Transkript bereits eine
   // agent-Zeile steht: existiert noch KEINE (Shim-Erstkontakt, siehe Kommentar an den
   // Bootstrap-Konstanten oben), ist es der echte Gespraechsbeginn -> Eroeffnungs-Bootstrap.
@@ -490,7 +501,7 @@ export async function agentTurn(call, callerText) {
     });
   }
 
-  // T1-Sicherungsboden + stab-p7 (a)+(b): siehe shouldSuppressEndCall oben (EINE Quelle,
+  // T1-Sicherungsboden: siehe shouldSuppressEndCall oben (EINE Quelle,
   // von Budget-agentTurn UND Realtime-bridge.js genutzt, G27). Der Guard erzwingt end_call
   // NIE - das Modell entscheidet, der Guard unterdrueckt nur ein verfruehtes Auflegen.
   // Zeitliches Notaus bleibt maxCallDurationS.
@@ -530,7 +541,7 @@ export async function agentTurn(call, callerText) {
       {
         role: "user",
         content: toolUses.map((tu) => {
-          if (tu.name === "end_call") {
+          if (tu.name === END_CALL_TOOL_NAME) {
             if (suppressEndCall) {
               // end_call ignorieren und das Modell anweisen, auf die Antwort zu warten.
               suppressedEndCall = true;

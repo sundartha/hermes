@@ -9,6 +9,9 @@
 // laeuft immer, releaseReserve wird intra-modul aufgerufen.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
 
+// Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
+const SMS_BODY_MAX_CHARS = 1500;
+
 export function makeCallFinish({
   store,
   config,
@@ -86,7 +89,7 @@ export function makeCallFinish({
           await messaging(call.provider).sendSms({
             from: plan.smsFrom.e164,
             to: plan.to,
-            body: sms.slice(0, 1500),
+            body: sms.slice(0, SMS_BODY_MAX_CHARS),
           });
           // F2 P8 (H1): Kosten-Beleg + Quelle des Tages-Cap-Zaehlers (dailySmsCount). NUR
           // nach ERFOLGREICHEM Send - schlaegt sendSms fehl, springt der catch an, es wird

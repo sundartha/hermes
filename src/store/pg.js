@@ -1341,10 +1341,10 @@ function deserializeObjective(value) {
 // Loescht Zeilen des Tenants, deren TEXT-PK nicht mehr im Spiegel steht (Retention
 // /Prune). Leere keep-Liste -> alle Zeilen des Tenants weg.
 async function deleteMissing(client, table, tenantId, keepIds) {
-  await deleteMissingByText(client, table, "id", tenantId, keepIds);
+  await deleteMissingByText({ client, table, column: "id", tenantId, keepValues: keepIds });
 }
 
-async function deleteMissingByText(client, table, column, tenantId, keepValues) {
+async function deleteMissingByText({ client, table, column, tenantId, keepValues }) {
   if (keepValues.length === 0) {
     await client.query(`DELETE FROM ${table} WHERE tenant_id=$1`, [tenantId]);
     return;

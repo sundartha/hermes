@@ -75,8 +75,8 @@ export function findPlan(slug) {
 //   allowedCountryCodes=[]   - kein per-Profil-Land-Freibrief; globales Land-Gate bleibt
 //                              Schnittmenge (so restriktiv wie heute)
 //   allowCalendar/Booking=false - Funktion bewusst verworfen
-//   maxCallsPerHour=null     - nur globaler Plattform-Cap (server.js userHourReached:
-//                              null -> config.maxCallsPerHour). Minuten-Quota (GAP B) +
+//   maxCallsPerHour=null     - nur globaler Plattform-Cap (telephony/outbound-gates.js
+//                              userHourReached: null -> config.maxCallsPerHour). Minuten-Quota (GAP B) +
 //                              Budget sind die echten Deckel.
 //
 // KOPPLUNG A2: sanitizeProfile (defaults.js) droppt maxCallsPerHour=null heute (typeof

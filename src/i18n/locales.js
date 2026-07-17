@@ -205,7 +205,7 @@ export const LOCALES = Object.freeze({
     styleClause: makeStyleClause(STYLE_CLAUSES_EN),
     // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.
     bridgePhrase: (goal) =>
-      /^i\b|^i'/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
+      /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     disclosure: (ownerName) =>

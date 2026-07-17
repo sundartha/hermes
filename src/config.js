@@ -93,6 +93,10 @@ export function eurToCents(eur) {
   return Math.round(eur * CENTS_PER_EUR);
 }
 
+// Voice-Engine-Namen (G25/G11): EINE Quelle statt verstreuter "budget"/"realtime"-Literale
+// in config.js, routes/voice.js, telephony/call-lifecycle.js, routes/api-calls.js, boot.js.
+export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget", REALTIME: "realtime" });
+
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -682,7 +686,7 @@ const rawConfig = {
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)
   // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
-  voiceEngine: process.env.VOICE_ENGINE || "budget",
+  voiceEngine: process.env.VOICE_ENGINE || VOICE_ENGINE.BUDGET,
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   realtimeModel: process.env.REALTIME_MODEL || "gpt-realtime",
   realtimeVoice: process.env.REALTIME_VOICE || "alloy",

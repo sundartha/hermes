@@ -14,7 +14,7 @@
 // KYC_OUTBOUND_MIN) kommen direkt aus ihrer Heimat (eine Quelle, G5 - wie normNum in
 // makeCallRoutes); nur die Laufzeit-Instanzen werden injiziert.
 import { Router } from "express";
-import { validIdentity } from "./api-profiles.js";
+import { validIdentity, IDENTITY_MAX_LEN } from "./api-profiles.js";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
 import { resolveOnboardCountry } from "../geo/resolve.js";
@@ -60,7 +60,9 @@ const RETRY_REASON_MESSAGE = {
 // faehrt fort); false = Guard hat bereits geantwortet (Aufrufer bricht mit return ab).
 function requireValidTenantId(res, tenantId) {
   if (validIdentity(tenantId)) return true;
-  res.status(400).json({ error: "tenantId ist Pflicht (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+  res
+    .status(400)
+    .json({ error: `tenantId ist Pflicht (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)` });
   return false;
 }
 
@@ -95,7 +97,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
     if (idpSubject !== undefined && !validIdentity(idpSubject))
       return res
         .status(400)
-        .json({ error: "idpSubject ungueltig (nicht leer, ohne Whitespace, <=254 Zeichen)" });
+        .json({ error: `idpSubject ungueltig (nicht leer, ohne Whitespace, <=${IDENTITY_MAX_LEN} Zeichen)` });
     const sub = idpSubject ?? null;
     const tenantId = sub ? tenantIdForSubject(sub) : bodyTenantId;
     if (!requireValidTenantId(res, tenantId)) return;
@@ -153,7 +155,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
     // load -> registerTenant -> setTenantGeo -> requestNumber -> save, kein fremdes await
     // dazwischen. Ein Save-I/O-Fehler wird als behandelter 503 beantwortet (AC4), NIE als
     // unhandled async rejection (die den Request haengen liesse / den Prozess via P0-Netz killte).
-    const reqRes = await store
+    const numberResult = await store
       .withStoreLock(() => {
         const s = store.load();
         registerTenant(s, tenantId, {
@@ -182,15 +184,15 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
         console.error("[onboard] Persistenz fehlgeschlagen:", e.message);
         return { ok: false, reason: "persist_error" };
       });
-    if (!reqRes.ok && reqRes.reason === "persist_error")
+    if (!numberResult.ok && numberResult.reason === "persist_error")
       return res.status(503).json({ error: "Persistenz fehlgeschlagen" });
-    if (!reqRes.ok) {
-      audit("onboard_denied", req, `tenant=${tenantId} grund=${reqRes.reason}`);
+    if (!numberResult.ok) {
+      audit("onboard_denied", req, `tenant=${tenantId} grund=${numberResult.reason}`);
       return res
-        .status(ONBOARD_REASON_STATUS[reqRes.reason] || 400)
-        .json({ error: `Nummer-Anfrage abgelehnt (${reqRes.reason})` });
+        .status(ONBOARD_REASON_STATUS[numberResult.reason] || 400)
+        .json({ error: `Nummer-Anfrage abgelehnt (${numberResult.reason})` });
     }
-    const numberId = reqRes.number.id;
+    const numberId = numberResult.number.id;
     audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
 
     // Dry-Run (Default, fail-closed): kein echter Kauf, Nummer bleibt 'requested'.
@@ -198,7 +200,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
       return res.json({
         tenantId,
         numberId,
-        status: reqRes.number.status,
+        status: numberResult.number.status,
         country,
         language,
         provisioning: "disabled",
@@ -216,7 +218,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
     res.json({
       tenantId,
       numberId,
-      status: reqRes.number.status,
+      status: numberResult.number.status,
       country,
       language,
       provisioning: "queued",

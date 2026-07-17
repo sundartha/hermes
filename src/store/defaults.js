@@ -84,6 +84,15 @@ export const NUMBER_TRANSITIONS = Object.freeze({
 // nicht Teil dieser Phase.
 export const GLOBAL_CAP_REASON = "global_cap";
 
+// Skip-Gruende von requestNumber() als Enum (G25/G11): EINE Quelle statt verstreuter
+// String-Literale in state-ops.js. GLOBAL_CAP bleibt der bestehende GLOBAL_CAP_REASON-
+// Export (kein Duplikat, Wert identisch).
+export const REQUEST_NUMBER_REASON = Object.freeze({
+  TENANT_INACTIVE: "tenant_inactive",
+  TENANT_CAP: "tenant_cap",
+  GLOBAL_CAP: GLOBAL_CAP_REASON,
+});
+
 // Persistenz-Entscheidung fuer ein requestNumber()-Ergebnis (Fix B, PLAN-PROVISIONING-
 // CAP.md Phase A). Erfolg wird IMMER persistiert ('requested' auch im Dry-Run); der
 // global_cap-Skip wird IMMER persistiert (reine Observability, kein Trigger); jeder
@@ -193,7 +202,9 @@ export const KYC_OUTBOUND_MIN = KYC_LEVEL.CARD;
 function nextWeekday(daysAhead, hour) {
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);
-  d.setHours(Math.floor(hour), (hour % 1) * 60, 0, 0);
+  const wholeHours = Math.floor(hour);
+  const minutes = (hour % 1) * 60;
+  d.setHours(wholeHours, minutes, 0, 0);
   return d.toISOString();
 }
 

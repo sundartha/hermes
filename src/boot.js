@@ -5,7 +5,7 @@
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
-import { assertConfig, gatewayUrlForPort } from "./config.js";
+import { assertConfig, gatewayUrlForPort, VOICE_ENGINE } from "./config.js";
 import { fakeOriginateBootBlocked, meterMappingGaps } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { attachMediaBridge } from "./bridge.js";
@@ -83,7 +83,7 @@ function logBootBanner(config, port) {
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
   console.log(`  Dashboard:      ${gatewayUrlForPort(port)}`);
   console.log(
-    `  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === "realtime" && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
+    `  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === VOICE_ENGINE.REALTIME && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
   console.log(
     `  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,

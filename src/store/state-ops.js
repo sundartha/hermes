@@ -26,6 +26,7 @@ import {
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   GLOBAL_CAP_REASON,
+  REQUEST_NUMBER_REASON,
   TENANT_STATUS,
   PROVISIONING_JOB_STATUS,
   PROVISION_NUMBER_JOB,
@@ -1043,13 +1044,13 @@ export function requestNumber(
 ) {
   const tenant = findTenant(s, tenantId);
   if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE)
-    return { ok: false, reason: "tenant_inactive" };
+    return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_INACTIVE };
   if (liveNumbers(s).length >= maxNumbers) {
     markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);
     return { ok: false, reason: GLOBAL_CAP_REASON };
   }
   if (liveNumbers(s, tenantId).length >= maxNumbersPerTenant)
-    return { ok: false, reason: "tenant_cap" };
+    return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_CAP };
   const number = {
     id: newId("num"),
     e164: null,

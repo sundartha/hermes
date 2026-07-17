@@ -307,7 +307,7 @@ function isStaleEvent(lastApplied, candidate) {
 
 // Serialisiert applyStripeWebhook (unveraendert, s.o.) pro Korrelationsschluessel + verwirft
 // veraltete/doppelte Events. Das ist der Entry-Point, den die Route ab jetzt ruft (s.
-// server.js) - applyStripeWebhook bleibt daneben direkt exportiert/aufrufbar fuer
+// routes/stripe-webhook.js) - applyStripeWebhook bleibt daneben direkt exportiert/aufrufbar fuer
 // test/p3-payment-webhook.test.js (Signatur/Verhalten unveraendert). Ohne Korrelations-
 // schluessel (Event traegt weder subscriptionId noch tenantRef, seltener Malformed-Fall) ->
 // direkter Passthrough OHNE Lock; applyStripeWebhook's bestehendes no_tenant-Ignore greift
