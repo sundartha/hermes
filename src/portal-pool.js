@@ -73,5 +73,6 @@ export async function createPortalRunner({
         c.release();
       }
     },
+    _pool: pool,
   };
 }
