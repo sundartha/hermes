@@ -498,6 +498,13 @@ export function makePgStore(runner) {
             return true;
           }
           state.tenants.push(rowToTenant(full));
+          // RLS-GUC dieses Tenants SETZEN, bevor tenant-scoped gelesen wird (Muster hydrate():
+          // setTenant vor hydrateTenantInto, G5). G31 temporale Kopplung: die gesetzte GUC ist
+          // Vorbedingung des Reads. Ohne sie filtert FORCE RLS unter der stale/fremden GUC einer
+          // wiederverwendeten Pool-Verbindung die Reads LEER -> der leere Spiegel liesse den
+          // naechsten Flush die realen nicht-aktiven Call-Zeilen loeschen
+          // (deleteMissingCallsKeepActive mit leerer keep-Liste = stiller Datenverlust).
+          await setTenant(client, tenantId);
           // tenant-scoped Zeilen nachladen (settings/calls/...): fuer einen frischen Signup
           // leer (nichts angelegt), aber zukunftssicher. Eigener tenant_id-Filter je Query
           // (zweite Linie zur RLS) - kein Cross-Tenant-Leck.

@@ -20,15 +20,24 @@ import { demoCalendar } from "../src/store/defaults.js";
 const OTHER_TENANT_ID = "other";
 const APP_ROLE = "app_user"; // liest Owner-Daten, ohne Superuser/BYPASSRLS
 const OWNER_ROLE = "owner_role"; // Tabellen-Eigentuemer ohne BYPASSRLS (FORCE greift)
+// PA-3 (S1-1): frischer Web-Login NACH Boot + eine bereits BEENDETE (nicht-aktive) Call-Zeile.
+const SIGNUP_TENANT_ID = "signup";
+const LOST_CALL_ID = "call_signup_ended";
+const ENSURE_ROLE = "ensure_role"; // NOBYPASSRLS: nur so greift FORCE RLS im ensureTenant-Read
+
+// pglite-Runner-Vertrag (EINE Quelle, G5): withClient bindet query/exec an dieselbe
+// pglite-Verbindung, damit SET ROLE + GUC waehrend der Store-Operation gesetzt bleiben.
+function pgliteRunner(db) {
+  return {
+    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
+  };
+}
 
 // Baut den Owner-Store auf (migriert das Schema), seedet einen zweiten Tenant mit
 // eigenen Call-/Transkript-/Profil-Zeilen und legt die unprivilegierte Rolle an.
 async function setup() {
   const db = new PGlite();
-  const runner = {
-    withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
-  };
-  const store = makePgStore(runner);
+  const store = makePgStore(pgliteRunner(db));
   await store.init(); // migriert + seedet Owner
 
   await db.query(`INSERT INTO tenant (id) VALUES ($1) ON CONFLICT DO NOTHING`, [OTHER_TENANT_ID]);
@@ -196,4 +205,80 @@ test("Ohne GUC blockt die FORCE-RLS-WITH-CHECK das Owner-Seeding", async () => {
   } finally {
     await db.query(`RESET ROLE`);
   }
+});
+
+// PA-3 (S1-1): baut den Produktionszustand nach Boot nach - Owner geseedet (Superuser),
+// dann ein frischer Tenant + eine bereits BEENDETE (nicht-aktive) Call-Zeile direkt in die
+// DB (Superuser umgeht die WITH-CHECK der FORCE-RLS). Eine unprivilegierte NOBYPASSRLS-Rolle
+// mit reinem SELECT (der Flush laeuft im Test als Superuser; im Fokus steht der Read-Pfad in
+// ensureTenant, der die RLS-GUC setzen muss).
+async function setupSignup() {
+  const db = new PGlite();
+  const store = makePgStore(pgliteRunner(db));
+  await store.init(); // migriert + seedet Owner (Superuser)
+
+  await db.query(`INSERT INTO tenant (id) VALUES ($1)`, [SIGNUP_TENANT_ID]);
+  await db.query(
+    `INSERT INTO call (id, tenant_id, stream_token, direction, status, started_at, ended_at)
+     VALUES ($1, $2, 'tok', 'inbound', 'ended', now()::text, now()::text)`,
+    [LOST_CALL_ID, SIGNUP_TENANT_ID],
+  );
+  // Reines SELECT auf ALLE Tabellen, die ensureTenant liest (tenant + hydrateTenantInto):
+  // fehlte ein Recht, wuerfe der Read (permission denied) statt leer zu filtern -> der Bug
+  // manifestierte sich ueber einen anderen Pfad (unscharf). SELECT-only, damit der Read
+  // sauber RLS-gefiltert (leer), nicht permission-blockiert wird.
+  await db.exec(
+    `CREATE ROLE ${ENSURE_ROLE} NOLOGIN NOBYPASSRLS;
+     GRANT SELECT ON tenant, settings, call, transcript_segment, action_item,
+       calendar_event, usage, notification, number, provisioning_job, tenant_budget,
+       usage_event TO ${ENSURE_ROLE};`,
+  );
+  return { db, store };
+}
+
+// Ruft store.ensureTenant unter (optional) gesetzter Rolle auf. Die GUC wird VORHER
+// explizit auf den Owner gepinnt - simuliert eine Pool-Verbindung, die zuletzt fuer einen
+// ANDEREN Tenant benutzt wurde (genau der Zustand, in dem der fehlende setTenant zuschlaegt).
+async function ensureTenantAs(db, store, role) {
+  if (role) await db.query(`SET ROLE ${role}`);
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
+  try {
+    return await store.ensureTenant(SIGNUP_TENANT_ID);
+  } finally {
+    if (role) await db.query(`RESET ROLE`);
+  }
+}
+
+test("PA-3/S1-1 (rot-vor-Fix): ensureTenant hydriert nicht-aktive Call-Zeile unter FORCE RLS - kein Flush-Datenverlust", async () => {
+  const { db, store } = await setupSignup();
+
+  const ok = await ensureTenantAs(db, store, ENSURE_ROLE);
+  assert.equal(ok, true, "ensureTenant meldet Erfolg (Tenant existiert in der DB)");
+
+  // (a) Spiegel-Beweis: ohne setTenant-vor-hydrate filtert FORCE RLS die Zeile unter der
+  // stale Owner-GUC leer -> der Spiegel kennt den Call nicht.
+  assert.ok(
+    store.getCall(LOST_CALL_ID),
+    "ensureTenant muss die nicht-aktive Call-Zeile in den Spiegel hydrieren (setTenant vor hydrateTenantInto)",
+  );
+
+  // (b) Datenverlust-Beweis: der Flush (jetzt als Superuser, RESET ROLE erfolgt) loescht
+  // die reale Zeile, wenn der Spiegel-keep-Set leer ist. Direkter SELECT beweist Ueberleben.
+  store.save();
+  await store.drainFlushes();
+  const rows = (await db.query(`SELECT id FROM call WHERE id = $1`, [LOST_CALL_ID])).rows;
+  assert.equal(rows.length, 1, "nicht-aktive Call-Zeile ueberlebt den Flush (kein stiller Datenverlust)");
+});
+
+test("PA-3/S1-1 Gegenprobe: als Superuser (BYPASSRLS) faellt der Bug NICHT auf - die NOBYPASSRLS-Rolle ist Pflicht", async () => {
+  const { db, store } = await setupSignup();
+  // OHNE SET ROLE: Superuser umgeht FORCE RLS -> hydrateTenantInto sieht die Zeile AUCH
+  // ohne setTenant. Der Test waere mit UND ohne Fix gruen -> wertlos. Belegt (wie die
+  // Bestands-Gegenprobe oben im File "RLS-Rolle Superuser"), warum der eigentliche Test
+  // die NOBYPASSRLS-Rolle braucht.
+  await ensureTenantAs(db, store, null);
+  assert.ok(
+    store.getCall(LOST_CALL_ID),
+    "als Superuser ist die Zeile ohnehin sichtbar (RLS umgangen) - der Read-Pfad ist so nicht pruefbar",
+  );
 });
