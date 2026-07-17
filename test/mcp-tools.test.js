@@ -193,6 +193,70 @@ test("T-C3-01: duration_s springt bei markAnswered nicht zurueck (Monotonie)", a
   }
 });
 
+// ---- S1-5: list_action_items gegen 3 Fixtures (gemischt/leer/Termin-Praefix) ----
+
+test("S1-5a: list_action_items filtert erledigte aus + praefixt Termine mit '(Termin) '", async () => {
+  const actionItems = [
+    { id: "a1", text: "Rueckruf", type: "todo", done: false },
+    { id: "a2", text: "Zahnarzt", type: "appointment", done: false },
+    { id: "a3", text: "Erledigt", type: "todo", done: true },
+  ];
+  const mock = await startGatewayMock({ body: { actionItems } });
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const result = await handlers.get("list_action_items")();
+    const text = toolText(result);
+    assert.match(text, /\[a1\] Rueckruf/);
+    assert.match(text, /\[a2\] \(Termin\) Zahnarzt/);
+    assert.doesNotMatch(text, /a3/, "erledigtes Item (done:true) darf nicht auftauchen");
+    assert.doesNotMatch(text, /Erledigt/);
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+});
+
+test("S1-5b: list_action_items ohne offene Items -> 'Keine offenen Action Items.'", async () => {
+  const mock = await startGatewayMock({ body: { actionItems: [] } });
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const result = await handlers.get("list_action_items")();
+    assert.equal(toolText(result), "Keine offenen Action Items.");
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+});
+
+test("S1-5c: Todo-Zeile traegt KEIN '(Termin) '-Praefix (Ternary nicht invertiert)", async () => {
+  const actionItems = [
+    { id: "b1", text: "Einkaufen", type: "todo", done: false },
+    { id: "b2", text: "Friseur", type: "appointment", done: false },
+  ];
+  const mock = await startGatewayMock({ body: { actionItems } });
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({ identity: null, allowCalendar: true });
+    const result = await handlers.get("list_action_items")();
+    const lines = toolText(result).split("\n");
+    const todoLine = lines.find((l) => l.startsWith("[b1]"));
+    const apptLine = lines.find((l) => l.startsWith("[b2]"));
+    assert.equal(todoLine, "[b1] Einkaufen");
+    assert.equal(apptLine, "[b2] (Termin) Friseur");
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+});
+
 test("T-C3-02: completed-Call misst startedAt..endedAt, nicht answeredAt..endedAt", async () => {
   const body = {
     status: "completed",

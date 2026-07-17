@@ -95,6 +95,53 @@ test("T-P0-04b: createPortalRunner Superuser-Assertion -> client.release + pool.
   assert.equal(ended, true, "pool.end muss laufen");
 });
 
+// S1-13: withClient() gegen einen ECHTEN createPortalRunner (Boot-Assertion via
+// roleClient bestanden, danach Work-Client fuer den eigentlichen Query). Jeder Test
+// baut seinen eigenen frischen Fake-Pool (P12-Unabhaengigkeit).
+function makeFakePool() {
+  let connectCount = 0;
+  let workReleased = 0;
+  const roleClient = {
+    query: async () => ({ rows: [{ is_su: "off", rolbypassrls: false }] }),
+    release: () => {},
+  };
+  const workClient = {
+    query: async () => ({ rows: [] }),
+    release: () => {
+      workReleased += 1;
+    },
+  };
+  const pool = {
+    connect: async () => {
+      connectCount += 1;
+      return connectCount === 1 ? roleClient : workClient;
+    },
+    end: async () => {},
+  };
+  return { pool, workReleasedCount: () => workReleased };
+}
+
+test("S1-13a: withClient gibt den Rueckgabewert von fn durch UND released den Work-Client", async () => {
+  const { pool, workReleasedCount } = makeFakePool();
+  const runner = await createPortalRunner({ pool });
+  const out = await runner.withClient(async () => "SENTINEL");
+  assert.equal(out, "SENTINEL", "withClient muss await fn(...) zurueckgeben");
+  assert.equal(workReleasedCount(), 1);
+});
+
+test("S1-13b: withClient released den Work-Client auch wenn fn wirft (finally-Garantie)", async () => {
+  const { pool, workReleasedCount } = makeFakePool();
+  const runner = await createPortalRunner({ pool });
+  await assert.rejects(
+    () =>
+      runner.withClient(async () => {
+        throw new Error("boom-in-fn");
+      }),
+    /boom-in-fn/,
+  );
+  assert.equal(workReleasedCount(), 1, "Work-Client muss trotz Wurf released werden");
+});
+
 // TC6 - PGlite-Rauchtest: normaler app_user laeuft ohne Fehler (AC3 + AC7)
 test("assertNoBypassRls: PGlite NOLOGIN NOBYPASSRLS app_user -> kein Fehler", async () => {
   const db = new PGlite();
