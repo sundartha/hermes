@@ -12,12 +12,10 @@ import {
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
 import { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
+import { resolveGatewayUrl } from "./config.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
-
-// Zur Aufrufzeit lesen (server.js setzt GATEWAY_URL ggf. erst beim Start)
-const GATEWAY = () => (process.env.GATEWAY_URL || "http://localhost:3000").replace(/\/$/, "");
 
 // identity (optional): wird als interner X-Internal-Identity-Header an die localhost-
 // REST-API gereicht und dient seit Phase S nur noch Audit/requestedBy (Forensik), NICHT
@@ -30,7 +28,8 @@ async function api(method, path, body, identity, scopedTenant) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;
   if (scopedTenant) headers["X-Internal-Tenant"] = scopedTenant;
-  const res = await fetch(GATEWAY() + path, {
+  // Zur Aufrufzeit gelesen (server.js setzt GATEWAY_URL ggf. erst beim Start)
+  const res = await fetch(resolveGatewayUrl() + path, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,

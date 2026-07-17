@@ -98,3 +98,9 @@ test("telnyxAssistant: die 10 alten flachen Config-Pfade existieren nicht mehr",
     assert.throws(() => config[key], TypeError, `config.${key} sollte nicht mehr existieren`);
   }
 });
+
+// P6: MS_PER_DAY-Dedup-Regressionsanker (perTargetWindowMs-Fallback nutzt jetzt die
+// benannte Konstante statt des rohen 24h-ms-Literals, Wert bleibt identisch).
+test("MS_PER_DAY: perTargetWindowMs faellt bei unset auf genau 24h (86400000 ms)", () => {
+  assert.equal(config.perTargetWindowMs, 86400000);
+});

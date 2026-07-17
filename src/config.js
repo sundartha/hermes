@@ -46,6 +46,27 @@ export function configFatalErrors() {
   return fatalConfigErrors.slice();
 }
 
+// ---- Boolean-Env-Validierung (fail-closed, P6/S2-1) ----
+// Pendant zu numEnv() fuer Schalter-Vars: ein GESETZTER, aber nicht-exakter Boolean-
+// Wert ("1"/"yes"/"True") darf NICHT still auf den falschen Default kippen. Bei einem
+// Enabling-Flag waere das zufaellig fail-closed, bei OUTBOUND_FROZEN (Kill-Switch,
+// Default false) ist es fail-OPEN: der Operator glaubt eingefroren zu haben, Outbound
+// laeuft weiter. abwesend/leer -> dokumentierter Default (KEIN Fatal); "true"/"false"
+// (nach trim+lowercase) -> Bool; alles andere -> Fatal-Push + Fallback (Boot-Refusal
+// statt stillem Flag-Flip). Teilt fatalConfigErrors[] mit numEnv -> assertConfig()
+// faellt. Diagnose nennt Var + erwartete Form (Symmetrie zu numEnv); boolEnv wird NUR
+// auf Schalter-Vars angewandt, nie auf Secrets -> kein Secret-Leak.
+export function boolEnv(name, raw, { fallback }) {
+  if (raw === undefined || raw === "") return fallback;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  fatalConfigErrors.push(
+    `${name}="${raw}" ist kein gueltiger Boolean (erwartet: "true" oder "false").`,
+  );
+  return fallback;
+}
+
 // Produktions-Erkennung: Render setzt RENDER_EXTERNAL_URL automatisch -> echtes
 // oeffentliches Hosting. EINE Quelle des Diskriminators (G5). Call-time gelesen, damit
 // productionFootguns/assertConfig denselben Ausdruck treffen, auch wenn ein Test das
@@ -116,7 +137,7 @@ const rawConfig = {
   // (byte-identisch, auch stdout): Konsumenten no-oppen. Zum Live-Messen (Datengrundlage
   // fuer L1) am Host auf "true" setzen - reine Diagnose, beruehrt KEINE Safety-Gates,
   // KEINE Disclosure, KEINE Resilienz-Werte. Tests pinnen das via BASE_ENV.
-  metricsEnabled: (process.env.METRICS_ENABLED || "false") === "true",
+  metricsEnabled: boolEnv("METRICS_ENABLED", process.env.METRICS_ENABLED, { fallback: false }),
 
   twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
   twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
@@ -160,7 +181,9 @@ const rawConfig = {
   // die mp3 vorab und Telnyx spielt eine STATISCHE Datei -> Inbound-Track lebt. Gate
   // Default AUS (Muster PAYMENT_ENABLED) -> Azure-<Say> byte-identisch. apiKey ist SECRET.
   elevenLabsPlayTts: {
-    enabled: (process.env.ELEVENLABS_PLAY_TTS_ENABLED || "false") === "true",
+    enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", process.env.ELEVENLABS_PLAY_TTS_ENABLED, {
+      fallback: false,
+    }),
     // .trim() gegen manuell eingegebenen Whitespace: ein Trailing-Space in voiceId/model/
     // outputFormat wird von encodeURIComponent zu %20 -> ElevenLabs lehnt mit HTTP 400 ab
     // (live belegt). apiKey getrimmt gegen pasted Newline. Solche Werte tragen NIE legitim
@@ -193,7 +216,9 @@ const rawConfig = {
     // (Existenz hinter dem Flag -> keine monatelang offene Angriffsflaeche zwischen Merge
     // und Live). Bei Flag aus bleibt der Live-CALL-Pfad (Budget/Realtime-Engine) byte-
     // identisch. Volle 4-Orte-Doku + assertConfig/Footgun-Pflichtcheck: P10.
-    enabled: (process.env.TELNYX_AI_ASSISTANT_ENABLED || "false") === "true",
+    enabled: boolEnv("TELNYX_AI_ASSISTANT_ENABLED", process.env.TELNYX_AI_ASSISTANT_ENABLED, {
+      fallback: false,
+    }),
     // P5: ID des in P7 provisionierten Telnyx-AI-Assistants (ai_assistant_start). Leer ->
     // P4.5 onSpeakEnded skippt fail-safe (Disclosure+Settlement laufen unabhaengig weiter).
     // Bei aktivem Flag ist die ID Boot-Pflicht (assertConfig, P10).
@@ -265,14 +290,16 @@ const rawConfig = {
     // forward_metadata-Body + zwei Booleans, WELCHE Position die call_control_id traegt),
     // NIE Werte. Nur fuer den EINEN ueberwachten Diagnose-Call; danach wieder AUS. Neutraler
     // Default, NICHT boot-required (kein assertConfig/Footgun), keine Verhaltensaenderung am Gate.
-    shimDebugShape: (process.env.TELNYX_SHIM_DEBUG_SHAPE || "false") === "true",
+    shimDebugShape: boolEnv("TELNYX_SHIM_DEBUG_SHAPE", process.env.TELNYX_SHIM_DEBUG_SHAPE, {
+      fallback: false,
+    }),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
   // DEFAULT AUS (fail-closed): die Onboard-Route reicht KEINEN Billing-Client herein
   // -> kein Hold/Capture, requested->provisioning->active wie bisher (byte-identisch).
-  paymentEnabled: (process.env.PAYMENT_ENABLED || "false") === "true",
+  paymentEnabled: boolEnv("PAYMENT_ENABLED", process.env.PAYMENT_ENABLED, { fallback: false }),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "", // SECRET - nie loggen/leaken
   stripeApiBase: (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\/$/, ""),
   // Einmalige Setup-Gebuehr pro Nummer in GANZZAHL Cents (Geld nie als Float, G26).
@@ -376,7 +403,7 @@ const rawConfig = {
   isProduction: detectProduction(),
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
-  sendSmsSummary: (process.env.SEND_SMS_SUMMARY || "true") === "true",
+  sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
   // Tages-Cap pro Tenant fuer Summary-SMS (F2 P8, Toll-Fraud-Schutz H1): nach so vielen
   // ERFOLGREICH gesendeten Summary-SMS im rollierenden 24h-Fenster wird die naechste still
   // uebersprungen (Audit-Marker reason=daily_cap, kein Fehler). Pro call.tenantId, nicht
@@ -390,7 +417,7 @@ const rawConfig = {
   // nur exakt "true" friert. Ersetzt die fruehere statische ALLOWED_NUMBERS-Notbremse (D8):
   // Permit ist jetzt die per-Tenant-Verifikation (Abo+KYC, Pfad 2); die immer-scharfen Riegel
   // (Denylist/Land/Rate/Reserve/Budget/KYC/Eigen-Nummer) bleiben darunter unveraendert.
-  outboundFrozen: (process.env.OUTBOUND_FROZEN || "false") === "true",
+  outboundFrozen: boolEnv("OUTBOUND_FROZEN", process.env.OUTBOUND_FROZEN, { fallback: false }),
   // Erlaubte Laendervorwahlen fuer Outbound (kommasepariert, E.164-Prefix wie +49).
   // Default +49,+33,+44 (Deutschland, Frankreich, UK - F1 Phase 8). BEWUSST nur diese
   // drei, NICHT global ("*"): ein zu weites Gate oeffnet teure Ziele (Pre-Mortem R2).
@@ -417,7 +444,7 @@ const rawConfig = {
   }),
   // Cooldown-Fenster (Millisekunden) fuer perTargetCallCap. Default 24 h.
   perTargetWindowMs: numEnv("PER_TARGET_WINDOW_MS", process.env.PER_TARGET_WINDOW_MS, {
-    fallback: 24 * 60 * 60 * 1000,
+    fallback: MS_PER_DAY,
     min: 1,
   }),
   // Notbremse fuer das (zahlungsfreie) Onboarding: harte Obergrenze, wie viele
@@ -436,7 +463,9 @@ const rawConfig = {
   // bleibt 'requested', KEIN Geld). Erst true -> echte Kaeufe (gedeckelt durch
   // maxNumbers). Bewusst global statt pro-Order: Blast-Radius ist durch die Caps
   // + Auth + Allowlist bereits winzig (Owner-Phase). NIE per Default an.
-  provisioningEnabled: (process.env.PROVISIONING_ENABLED || "false") === "true",
+  provisioningEnabled: boolEnv("PROVISIONING_ENABLED", process.env.PROVISIONING_ENABLED, {
+    fallback: false,
+  }),
   // PROV-01 Crash-Recovery (F4/F5): maximales Job-Alter (ms), bis zu dem der Boot-
   // Reconciler eine in 'requested' haengende Nummer AUTOMATISCH nachfuehren darf.
   // 0 (Default) = Observe-Only fail-closed: KEIN Auto-Nachkauf, haengende Jobs werden
@@ -465,12 +494,12 @@ const rawConfig = {
   // Erst true (nach allen dichten Scope-Gates I5/I6/I7) loest die Auth-Achse den
   // Request-Tenant auf. EIN gemeinsames Flag fuer I4-I7 (kein separates Login-Flag;
   // Self-Service kommt spaeter unter eigenem Reife-Flag).
-  multiTenant: (process.env.MULTI_TENANT || "false") === "true",
+  multiTenant: boolEnv("MULTI_TENANT", process.env.MULTI_TENANT, { fallback: false }),
   // Rich-UI ui://-Resource fuer faehige MCP-Hosts (P1-W3). DEFAULT AN (Produkt-Default):
   // der Rich-UI-Pfad ist aktiv. Bleibt fail-closed gehedged - ein Host bekommt das Widget
   // NUR, wenn er die Capability deklariert; sonst weiter nur Text/structuredContent. Mit
   // MCP_UI_ENABLED=false explizit abschaltbar (Tests pinnen das via BASE_ENV).
-  mcpUiEnabled: (process.env.MCP_UI_ENABLED || "true") === "true",
+  mcpUiEnabled: boolEnv("MCP_UI_ENABLED", process.env.MCP_UI_ENABLED, { fallback: true }),
   // Strukturierter Per-Call-Kontext (PLAN-PERSONAL-ASSISTANT P3): optionales context-
   // Objekt an place_call -> kompakte HINTERGRUND-Sektion im Outbound-systemPrompt + additiv
   // persistiertes Feld. DEFAULT AN (Praezedenz mcpUiEnabled, I12 call-quality-Scheibe): der
@@ -478,19 +507,25 @@ const rawConfig = {
   // Offenlegung/Persona; eigener Validierungs-/Persist-Pfad seit P3 gehaertet, 10+ Tests).
   // Mit ASSISTANT_CONTEXT_ENABLED=false weiter fail-closed abschaltbar (Tests pinnen das
   // explizit via BASE_ENV, siehe test/helpers.js).
-  assistantContextEnabled: (process.env.ASSISTANT_CONTEXT_ENABLED || "true") === "true",
+  assistantContextEnabled: boolEnv("ASSISTANT_CONTEXT_ENABLED", process.env.ASSISTANT_CONTEXT_ENABLED, {
+    fallback: true,
+  }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
   // -> heutiges Admin-Dashboard + /api/* byte-identisch. Getrennt von MULTI_TENANT
   // (groesste Angriffsflaeche: oeffentlicher Tenant-Login + Self-Service-Schreiben).
-  selfServiceEnabled: (process.env.SELF_SERVICE_ENABLED || "false") === "true",
+  selfServiceEnabled: boolEnv("SELF_SERVICE_ENABLED", process.env.SELF_SERVICE_ENABLED, {
+    fallback: false,
+  }),
   // Lokaler Dev-Login-Shim (Single-Origin P1): POST /auth/dev-login mintet eine Session
   // OHNE WorkOS-Round-Trip - NUR fuer den lokalen Chrome-e2e-Loop. DOPPELT fail-closed:
-  // explizites Opt-in (=== "true") UND nie im Hosting (Render setzt RENDER_EXTERNAL_URL ->
+  // explizites Opt-in (boolEnv, fail-closed) UND nie im Hosting (Render setzt RENDER_EXTERNAL_URL ->
   // hier zu false neutralisiert). Eine versehentlich auf Render gesetzte DEV_LOGIN_ENABLED
   // verweigert zusaetzlich den Boot (productionFootguns liest die rohe Env, zweite Sperre).
-  devLoginEnabled: process.env.DEV_LOGIN_ENABLED === "true" && !process.env.RENDER_EXTERNAL_URL,
+  devLoginEnabled:
+    boolEnv("DEV_LOGIN_ENABLED", process.env.DEV_LOGIN_ENABLED, { fallback: false }) &&
+    !process.env.RENDER_EXTERNAL_URL,
   // ISO-Laendercode fuer die Nummernsuche (DE-only Launch, Plan-Entscheidung #3).
   provisioningCountry: process.env.PROVISIONING_COUNTRY || "DE",
   // Erzwungenes KAUF-Land fuer ALLE neuen Nummern (ISO-2), ENTKOPPELT vom erkannten
@@ -507,7 +542,7 @@ const rawConfig = {
   // autoritativ, R4). Die IP verlaesst den Prozess NIE (kein HTTP-Geo). Der echte mmdb-
   // Reader braucht ggf. ein Asset (GEO_DB_PATH) + einen Owner-genehmigten Dep; bis dahin
   // ist der maxmind-Adapter fail-safe null (DE-Fallback, kein Crash), siehe src/geo/maxmind.js.
-  geoEnabled: (process.env.GEO_ENABLED || "false") === "true",
+  geoEnabled: boolEnv("GEO_ENABLED", process.env.GEO_ENABLED, { fallback: false }),
   // Pfad zur lokalen GeoLite2-Country-mmdb (nur relevant bei GEO_ENABLED=true). Leer ->
   // der maxmind-Adapter liefert fail-safe null (DE-Fallback). Das Asset committen wir NICHT.
   geoDbPath: process.env.GEO_DB_PATH || "",
@@ -573,14 +608,18 @@ const rawConfig = {
     min: 0,
   }),
   // NUR fuer lokale Tests ohne Twilio (z.B. curl gegen /voice/*). Niemals im Hosting setzen!
-  skipTwilioSignatureCheck: (process.env.SKIP_TWILIO_SIGNATURE_CHECK || "false") === "true",
+  skipTwilioSignatureCheck: boolEnv(
+    "SKIP_TWILIO_SIGNATURE_CHECK",
+    process.env.SKIP_TWILIO_SIGNATURE_CHECK,
+    { fallback: false },
+  ),
   // OUT-05 (F2): Test-Seam. true -> voiceControl liefert den fakeVoice-Adapter (synthetischer
   // Originate-Erfolg, endCall No-op), damit der Reserve-Atomaritaets-/Freigabepfad OFFLINE
   // testbar ist (der echte Twilio-Client wirft synchron ohne AC-SID). BOOT-GEHAERTET
   // (boot-guard.js): nur zulaessig mit SKIP_TWILIO_SIGNATURE_CHECK=true -> in Prod (Signatur-
   // pruefung fail-closed AN, Regel 1) fuehrt es zum Boot-Refusal, NIE zu stillem Nicht-Waehlen.
   // KEINE abgeschaltete Sicherung: alle Gates laufen unveraendert VOR voiceControl.
-  fakeOriginate: (process.env.FAKE_ORIGINATE || "false") === "true",
+  fakeOriginate: boolEnv("FAKE_ORIGINATE", process.env.FAKE_ORIGINATE, { fallback: false }),
 
   // ---- Datenschutz ----
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
@@ -705,6 +744,19 @@ function guardedConfig(target, path = "config") {
 }
 
 export const config = guardedConfig(rawConfig);
+
+// ---- Gateway-URL (G5: EINE Quelle fuer den localhost-Fallback, S2-20) ----
+// Die MCP-Tools/-Server sprechen mit der eigenen REST-API. Ohne gesetztes GATEWAY_URL
+// faellt der Konsument auf http://localhost:<port> zurueck. boot.js setzt GATEWAY_URL
+// beim Listen auf den TATSAECHLICH gebundenen Port (bei PORT=0 vom OS vergeben) und
+// nutzt dafuer gatewayUrlForPort(port). resolveGatewayUrl() liest zur Aufrufzeit
+// GATEWAY_URL (Trailing-Slash gestrippt) oder faellt auf den config-Port zurueck.
+export function gatewayUrlForPort(port) {
+  return `http://localhost:${port}`;
+}
+export function resolveGatewayUrl() {
+  return (process.env.GATEWAY_URL || gatewayUrlForPort(config.port)).replace(/\/$/, "");
+}
 
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen
 // einen ungesicherten IdP validiert (z.B. versehentlich auf eine interne Metadata-IP).

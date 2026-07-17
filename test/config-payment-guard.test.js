@@ -6,45 +6,33 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig } from "../src/config.js";
+import { makeConfigOverrides, CONFIG_REQUIRED_OK } from "./helpers.js";
 
-function withConfig(overrides, fn) {
-  const saved = {};
-  for (const k of Object.keys(overrides)) saved[k] = config[k];
-  Object.assign(config, overrides);
-  try {
-    return fn();
-  } finally {
-    Object.assign(config, saved);
-  }
-}
+const { withConfigOverrides } = makeConfigOverrides(config);
 
 // Alle anderen Pflichtfelder erfuellt -> NUR der Fee-Wert entscheidet ueber das Urteil.
+// Basis CONFIG_REQUIRED_OK (helpers.js) + PAYMENT_ENABLED-Pfad-spezifische Felder.
 const REQUIRED_OK = {
-  anthropicApiKey: "x",
-  twilioSid: "x",
-  twilioToken: "x",
-  publicUrl: "https://example.test",
-  mcpAuth: "",
-  storeBackend: "json",
+  ...CONFIG_REQUIRED_OK,
   paymentEnabled: true,
   stripeSecretKey: "x",
   stripeWebhookSecret: "x", // W4: Boot-Pflicht bei PAYMENT_ENABLED (sonst Webhook unverifizierbar)
 };
 
 test("assertConfig: NaN NUMBER_SETUP_FEE_CENTS bei PAYMENT_ENABLED ist fail-closed (KORR1)", () => {
-  withConfig({ ...REQUIRED_OK, numberSetupFeeCents: NaN }, () => {
+  withConfigOverrides({ ...REQUIRED_OK, numberSetupFeeCents: NaN }, () => {
     assert.equal(assertConfig(), false);
   });
 });
 
 test("assertConfig: nicht-ganzzahliges NUMBER_SETUP_FEE_CENTS ist fail-closed", () => {
-  withConfig({ ...REQUIRED_OK, numberSetupFeeCents: 5.5 }, () => {
+  withConfigOverrides({ ...REQUIRED_OK, numberSetupFeeCents: 5.5 }, () => {
     assert.equal(assertConfig(), false);
   });
 });
 
 test("assertConfig: gueltiges ganzzahliges NUMBER_SETUP_FEE_CENTS > 0 ist ok", () => {
-  withConfig({ ...REQUIRED_OK, numberSetupFeeCents: 100 }, () => {
+  withConfigOverrides({ ...REQUIRED_OK, numberSetupFeeCents: 100 }, () => {
     assert.equal(assertConfig(), true);
   });
 });
@@ -52,7 +40,7 @@ test("assertConfig: gueltiges ganzzahliges NUMBER_SETUP_FEE_CENTS > 0 ist ok", (
 test("assertConfig: PAYMENT_ENABLED ohne STRIPE_WEBHOOK_SECRET ist fail-closed (W4)", () => {
   // Ohne Webhook-Secret ist der Stripe-Webhook fail-closed unverifizierbar (kein
   // Abo-Lifecycle) -> Boot-Refusal, exakt wie STRIPE_SECRET_KEY.
-  withConfig({ ...REQUIRED_OK, numberSetupFeeCents: 100, stripeWebhookSecret: "" }, () => {
+  withConfigOverrides({ ...REQUIRED_OK, numberSetupFeeCents: 100, stripeWebhookSecret: "" }, () => {
     assert.equal(assertConfig(), false);
   });
 });
