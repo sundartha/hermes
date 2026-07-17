@@ -6,10 +6,12 @@
 // (flach/Map-mit-mehreren-Tenants) als Regressionsnetz gegen die alte, getrennte
 // Implementierung (emptyUsageMap/defaultSettingsMap). Muster wie
 // tenant-settings-calendar-map.test.js (temp-DATA_DIR, dynamischer json.js-Import).
+// usage-Faelle erwarten das cc-p1-Geldformat (Integer costCents statt Float costEur,
+// G26 "Geld nie als Float") - migrateFlatToMap's mapBucket fuer usage ist bucketToCents.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, emptyUsage, defaultSettings } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, emptyUsage, defaultSettings, CENTS_PER_EUR } from "../src/store/defaults.js";
 
 let config;
 before(async () => {
@@ -37,17 +39,25 @@ test("Migration usage: null -> nur der Owner-Default-Bucket", async () => {
   assert.deepEqual(state.usage, { [BOOTSTRAP_TENANT_ID]: emptyUsage() });
 });
 
-test("Migration usage: flaches Shape (costEur:number) -> Owner-Bucket mit den Werten", async () => {
+test("Migration usage: flaches Shape (costEur:number) -> Owner-Bucket mit costCents, costEur entfernt", async () => {
   const flat = { inputTokens: 10, outputTokens: 20, costEur: 0.05, calls: 3 };
   const state = await loadStore({ usage: flat });
-  assert.deepEqual(state.usage, { [BOOTSTRAP_TENANT_ID]: { ...emptyUsage(), ...flat } });
+  assert.deepEqual(state.usage, {
+    [BOOTSTRAP_TENANT_ID]: {
+      ...emptyUsage(),
+      inputTokens: 10,
+      outputTokens: 20,
+      calls: 3,
+      costCents: Math.round(0.05 * CENTS_PER_EUR),
+    },
+  });
 });
 
-test("Migration usage: bereits eine Map mit >=2 Tenants -> jeder Bucket aufgefuellt, Owner ergaenzt", async () => {
+test("Migration usage: bereits eine Map mit >=2 Tenants -> jeder Bucket costCents, Owner ergaenzt", async () => {
   const mapShape = { alex: { costEur: 1.5 }, maria: { calls: 7 } };
   const state = await loadStore({ usage: mapShape });
   assert.deepEqual(state.usage, {
-    alex: { ...emptyUsage(), costEur: 1.5 },
+    alex: { ...emptyUsage(), costCents: Math.round(1.5 * CENTS_PER_EUR) },
     maria: { ...emptyUsage(), calls: 7 },
     [BOOTSTRAP_TENANT_ID]: emptyUsage(),
   });

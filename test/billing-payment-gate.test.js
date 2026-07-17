@@ -1,25 +1,32 @@
 // P7 (Cluster 7, G5, DoD-Pflicht): requirePaymentEnabled() in src/billing/payment-gate.js
-// ersetzt den vormals an 6 Stellen verdoppelten PAYMENT_ENABLED-404-Guard (5 identisch +
-// 1 abweichender Text im Metering-Flush). Zwei Ebenen:
+// ersetzt den vormals an 7 Stellen verdoppelten PAYMENT_ENABLED-404-Guard (6 identisch +
+// 1 abweichender Text im Metering-Flush; der 7. Fund - routes/stripe-webhook.js - kam erst
+// aus dem P7-Review nach, Blocker S2). Drei Ebenen:
 //   (1) direkter Unit-Test der reinen Funktion (fail-closed, Default-/Override-Message);
 //   (2) alle 6 realen Routen (routes/api-billing.js + self-service-routes.js) bei
-//       PAYMENT_ENABLED=false -> 404 mit dem exakten JSON-Body.
+//       PAYMENT_ENABLED=false -> 404 mit dem exakten JSON-Body;
+//   (3) der 7. Fund routes/stripe-webhook.js -> 404 mit seinem EIGENEN abweichenden Text
+//       ("payment disabled", ohne "(PAYMENT_ENABLED)"-Suffix), bevor die Signaturpruefung
+//       greift (Gate steht als ALLERERSTE Zeile im Handler).
 // KEIN Server-Spawn (Lehre p6a-Stall): api-billing.js direkt gemountet (Gate kommt VOR
 // jedem store/billing-Zugriff -> Stub-Deps genuegen); self-service-routes.js braucht eine
 // echte eingeloggte Session (webAuthPendingMw laeuft VOR dem Gate) -> pglite ohne Spawn,
-// Muster w4-self-service-subscribe.test.js.
+// Muster w4-self-service-subscribe.test.js; stripe-webhook.js ist ein direkter
+// Handler-Aufruf (kein Router-Mount noetig, Gate steht vor jedem rawBody-Zugriff).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { requirePaymentEnabled } from "../src/billing/payment-gate.js";
 import { makeBillingRoutes } from "../src/routes/api-billing.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
+import { makeStripeWebhookRoute } from "../src/routes/stripe-webhook.js";
 import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { registerTenant } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 
 const PAYMENT_DISABLED_MESSAGE = "payment disabled (PAYMENT_ENABLED)";
 const METERING_DISABLED_MESSAGE = "metering disabled (PAYMENT_ENABLED)";
+const STRIPE_WEBHOOK_DISABLED_MESSAGE = "payment disabled";
 
 // ---- (1) Direkter Unit-Test der reinen Gate-Funktion ----------------------------
 
@@ -167,4 +174,30 @@ test("PAYMENT_ENABLED aus: alle 3 self-service/billing-Routen -> 404 mit exaktem
   } finally {
     await new Promise((r) => server.close(r));
   }
+});
+
+// ---- (2c) routes/stripe-webhook.js: der 7. Fund, abweichender Text ("payment disabled",
+// ohne "(PAYMENT_ENABLED)"-Suffix). Gate ist die allererste Zeile -> direkter Handler-
+// Aufruf mit einem Fake-req/res genuegt (kein rawBody/Signatur-Setup noetig).
+
+function fakeStripeWebhookReqRes() {
+  const res = fakeRes();
+  const req = { rawBody: Buffer.from(""), headers: {} };
+  return { req, res };
+}
+
+test("PAYMENT_ENABLED aus: routes/stripe-webhook.js -> 404 mit dem eigenen abweichenden Text", async () => {
+  const handler = makeStripeWebhookRoute({
+    config: { paymentEnabled: false },
+    store: {},
+    audit: () => {},
+    accounts: {},
+    sessions: {},
+    billing: {},
+    provision: async () => {},
+  });
+  const { req, res } = fakeStripeWebhookReqRes();
+  await handler(req, res);
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(res.body, { error: STRIPE_WEBHOOK_DISABLED_MESSAGE });
 });
