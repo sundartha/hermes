@@ -19,7 +19,7 @@
 // ("openai" = Fake-Socket, "provider" = serverseitiger Bridge-Socket). Da der
 // Handler synchron laeuft und beide send-Wrapper synchron aufzeichnen, pinnt
 // assert.deepStrictEqual die exakte Reihenfolge ueber beide Sockets hinweg.
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { register, createRequire } from "node:module";
@@ -103,13 +103,13 @@ async function waitForFake(timeoutMs = 3000) {
 // http.Server + attachMediaBridge + echter Provider-Client + start-Frame ->
 // connectOpenAI() -> Fake-OpenAI-Socket. Liefert die geordnete sends-Liste, den
 // Fake (zum Treiben der Events) und cleanup().
-async function setupCall(callOverrides = {}) {
+async function setupCall(callOverrides = {}, onCallEnded = () => {}) {
   resetOpenAiSockets();
   const httpServer = http.createServer();
   await new Promise((r) => httpServer.listen(0, "127.0.0.1", r));
   const port = httpServer.address().port;
 
-  const wss = attachMediaBridge(httpServer, () => {});
+  const wss = attachMediaBridge(httpServer, onCallEnded);
 
   const sends = [];
   let providerWs = null;
@@ -172,7 +172,7 @@ async function setupCall(callOverrides = {}) {
     await new Promise((r) => httpServer.close(r));
   };
 
-  return { call, fake, sends, cleanup };
+  return { call, fake, sends, cleanup, providerWs, client, httpServer };
 }
 
 // ---- connectOpenAI open-Handler (Kontext, NICHT Ziel des Refactorings) ----
@@ -685,5 +685,32 @@ test("OpenAI-Socket error -> hangup('openai-error')", async () => {
   } finally {
     cap.restore();
     await cleanup();
+  }
+});
+
+// ---- PA-1: finalize()-Idempotenz (Wiring-Regressionsgurt fuer PA-16) ----
+
+test("finalize-Idempotenz: STOP-Frame DANN providerWs-Close rufen onCallEnded GENAU EINMAL", async () => {
+  const onCallEnded = mock.fn();
+  const { call, providerWs, client, httpServer } = await setupCall({}, onCallEnded);
+  try {
+    // Echter Doppel-Trigger an den zwei realen finalize-Einstiegen:
+    // Trigger 1 - STOP-Media-Frame (Gegenseite legt auf) -> finalize("completed").
+    providerWs.emit("message", Buffer.from(JSON.stringify({ event: "stop" })));
+    // Trigger 2 - providerWs-Close (der Socket-Close nach dem Hangup) -> zweiter finalize-
+    // Einstieg. Der closed-Guard MUSS ihn verschlucken.
+    providerWs.emit("close");
+
+    // Faengt Doppelaufruf (Guard entfernt -> 2) UND verlorenen Callback (onCallEnded weg -> 0).
+    assert.equal(onCallEnded.mock.callCount(), 1);
+    const rec = onCallEnded.mock.calls[0].arguments[0];
+    assert.equal(rec.id, call.id);
+    assert.equal(rec.status, "completed"); // STOP + nicht cancelled -> completed
+    assert.deepEqual(rec, store.getCall(call.id)); // finalize liest den Record frisch aus dem Store
+  } finally {
+    try {
+      client.close();
+    } catch {}
+    await new Promise((r) => httpServer.close(r));
   }
 });
