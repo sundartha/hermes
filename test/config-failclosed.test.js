@@ -140,3 +140,57 @@ test("S1-3: config klemmt PROVISIONING_REDRIVE_MAX_AGE_MS strikt unter das 24h-D
     else process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = saved;
   }
 });
+
+// PA-4 (S1-3): parseInt/parseFloat kappen teil-numerischen Muell still auf den
+// numerischen Prefix. Ein vertippter Safety-/Kosten-Gate-Env darf NICHT lautlos auf
+// diesen Teilwert kippen, sondern muss Boot verweigern. Rot-vor-Fix: ohne den
+// Voll-String-Check liefert der Int-Zweig 120 / der Float-Zweig 8.5 OHNE Fatal.
+test("T-P2-07: Int-Trailing-Muell '120abc' -> Fatal + Fallback (kein stiller Teilwert 120)", () => {
+  const before = configFatalErrors().length;
+  const v = numEnv("MAX_CALLS_PER_HOUR", "120abc", { fallback: 6, min: 0 });
+  assert.equal(v, 6, "teil-numerischer Muell darf NICHT still auf 120 kippen, sondern Fallback");
+  assert.ok(
+    configFatalErrors()
+      .slice(before)
+      .some((e) => e.includes("MAX_CALLS_PER_HOUR")),
+    "'120abc' muss einen Fatal erzeugen, der die Var nennt",
+  );
+});
+
+test("T-P2-08: Float-Trailing-Muell '8.5abc' -> Fatal + Fallback (kein stiller Teilwert 8.5)", () => {
+  const before = configFatalErrors().length;
+  const v = numEnv("MAX_BUDGET_EUR", "8.5abc", { fallback: 8, min: 0, integer: false });
+  assert.equal(v, 8, "teil-numerischer Float-Muell darf NICHT still auf 8.5 kippen, sondern Fallback");
+  assert.ok(
+    configFatalErrors()
+      .slice(before)
+      .some((e) => e.includes("MAX_BUDGET_EUR")),
+    "'8.5abc' muss einen Fatal erzeugen, der die Var nennt",
+  );
+});
+
+test("T-P2-09: Rand-Whitespace bleibt gueltig (Int '  6  ' und Float '  8.5  ' - kein neuer Fatal)", () => {
+  // PM-4: parseInt/parseFloat trimmen Rand-Whitespace bereits; der Voll-String-Check
+  // darf eine gueltige Env mit Trailing-Newline/Spaces NICHT als Muell ablehnen.
+  const beforeInt = configFatalErrors().length;
+  const vi = numEnv("MAX_CALLS_PER_HOUR", "  6  ", { fallback: 6, min: 0 });
+  assert.equal(vi, 6, "Rand-Whitespace um eine Ganzzahl bleibt gueltig");
+  assert.equal(configFatalErrors().length, beforeInt, "getrimmte gueltige Ganzzahl erzeugt keinen Fatal");
+  const beforeFloat = configFatalErrors().length;
+  const vf = numEnv("MAX_BUDGET_EUR", "  8.5  ", { fallback: 8, min: 0, integer: false });
+  assert.equal(vf, 8.5, "Rand-Whitespace um eine Dezimalzahl bleibt gueltig");
+  assert.equal(configFatalErrors().length, beforeFloat, "getrimmte gueltige Dezimalzahl erzeugt keinen Fatal");
+});
+
+test("T-P2-10: Trailing-Muell an einem Gate -> assertConfig verweigert Boot (nennt die Var)", () => {
+  withConfigOverrides(CONFIG_REQUIRED_OK, () => {
+    numEnv("RATE_LIMIT_PER_MIN", "120abc", { fallback: 120, min: 0 }); // teil-numerischer Muell
+    const lines = captureConsoleError(() => {
+      assert.equal(assertConfig(), false, "teil-numerischer Fatal -> assertConfig false (Boot-Refusal)");
+    });
+    assert.ok(
+      lines.join("\n").includes("RATE_LIMIT_PER_MIN"),
+      "Diagnose muss die verletzte Var nennen",
+    );
+  });
+});

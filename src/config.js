@@ -12,13 +12,24 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 // ---- Numerische Env-Validierung (fail-closed, OT-4) ----
-// Eine GESETZTE, aber ungueltige numerische Env-Var (NaN/Infinity oder ausserhalb
-// des erlaubten Bereichs) darf NICHT still auf einen no-op kippen - sonst schaltet
+// Eine GESETZTE, aber ungueltige numerische Env-Var (NaN/Infinity, teil-numerischer
+// Muell wie "120abc" oder ausserhalb des erlaubten Bereichs) darf NICHT still auf
+// einen no-op/Teilwert kippen - sonst schaltet
 // sich ein Safety-/Kosten-Gate lautlos ab (z.B. ist costEur >= NaN IMMER false ->
 // Budget-Guard blockt nie). numEnv() parst UND validiert; Befunde landen in
 // fatalConfigErrors[], das assertConfig() zusaetzlich zu den Presence-Checks liest
 // -> Boot wird verweigert statt lautlos ohne Gate weiterzulaufen.
 const fatalConfigErrors = [];
+
+// Voll-String-Muster fuer numEnv: der GESAMTE (getrimmte) Wert muss eine Zahl sein.
+// parseInt/parseFloat kappen einen numerischen Prefix STILL ("120abc" -> 120,
+// "8.5abc" -> 8.5) -> ein vertippter Safety-/Kosten-Gate-Env kippt lautlos auf einen
+// Teilwert statt Boot zu verweigern (S1-3). Ganzzahl = Vorzeichen + Ziffern (kein
+// Dezimalpunkt, sonst waere parseInt("8.5")===8 ein stiller Teilwert); Dezimal
+// zusaetzlich ein Nachkommateil. Exponential-/Hex-Notation bewusst NICHT - Config-
+// Werte sind schlichte Dezimalzahlen; der Check bleibt laut gegen echten Muell.
+const NUM_ENV_INTEGER_PATTERN = /^[+-]?\d+$/;
+const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 
 // Leere/abwesende Var -> dokumentierter Default (KEIN Fatal); nur gesetzt-aber-
 // ungueltig ist fatal. max ist ein bewusster Clamp (Obergrenze wie maxCallDurationS),
@@ -26,8 +37,15 @@ const fatalConfigErrors = [];
 // betrifft ausschliesslich numerische, nicht-geheime Vars -> kein Secret-Leak).
 export function numEnv(name, raw, { fallback, min, max, integer = true } = {}) {
   if (raw === undefined || raw === "") return fallback;
-  const n = integer ? parseInt(raw, 10) : parseFloat(raw);
-  if (!Number.isFinite(n)) {
+  // .trim() ZUERST: parseInt/parseFloat ignorieren Rand-Whitespace bereits; der
+  // Voll-String-Check darf eine gueltige Env mit Trailing-Newline/Spaces NICHT als
+  // Muell ablehnen (sonst Boot-Refusal beim naechsten Deploy, PM-4).
+  const trimmed = raw.trim();
+  const pattern = integer ? NUM_ENV_INTEGER_PATTERN : NUM_ENV_DECIMAL_PATTERN;
+  const n = integer ? parseInt(trimmed, 10) : parseFloat(trimmed);
+  // pattern.test faengt teil-numerischen Muell ("120abc"); Number.isFinite faengt
+  // zusaetzlich einen Ueberlauf gueltiger Ziffernketten auf Infinity.
+  if (!pattern.test(trimmed) || !Number.isFinite(n)) {
     fatalConfigErrors.push(
       `${name}="${raw}" ist keine gueltige Zahl (erwartet: ${integer ? "Ganzzahl" : "Zahl"}${min !== undefined ? `, >= ${min}` : ""}).`,
     );
