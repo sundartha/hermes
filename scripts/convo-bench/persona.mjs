@@ -45,12 +45,12 @@ function mirrorTranscript(transcript) {
   }));
 }
 
-async function callPersonaLlm({ apiKey, model, scenario, transcript }) {
+async function callPersonaLlm({ apiKey, model, scenario, transcript, turnIndex }) {
   const client = new Anthropic({ apiKey });
   const resp = await client.messages.create({
     model,
     max_tokens: PERSONA_MAX_TOKENS,
-    system: scenario.personaPrompt,
+    system: personaPromptFor(scenario, turnIndex),
     messages: mirrorTranscript(transcript),
   });
   if (resp.stop_reason === "refusal") return { text: null, refused: true, usage: resp.usage };
@@ -64,9 +64,30 @@ async function callPersonaLlm({ apiKey, model, scenario, transcript }) {
 // aber ein nicht-leerer Fallback ist billiger als verschwendete Turns).
 const EMPTY_PERSONA_FALLBACK = "Ja.";
 
-// Liefert den naechsten Callee-Turn: scriptedTurns[turnIndex] hat Vorrang vor der
-// Persona-LLM (Spec §4, deterministische Repro fuer termin-duenn); sttNoise-Transform
-// greift auf BEIDEN Pfaden (scripted + LLM), wenn scenario.sttNoise gesetzt ist.
+// P4: ein Szenario kann einzelne Callee-Turns als STILL deklarieren (silentTurns:
+// number[], 0-basiert wie scriptedTurns). Ein stiller Turn geht als LEERES SpeechResult
+// an /voice/turn - exakt das, was ein Gather ohne Erkennung liefert - und trifft damit
+// die P3.2-Staffel (no-speech-escalation.js), nicht das Modell. Der leere Text darf
+// NICHT ins Transkript: mirrorTranscript wuerde daraus einen leeren Message-Block bauen,
+// den die Anthropic-API ablehnt (der Persona-Call wuerde den Lauf abbrechen). Der Runner
+// setzt dafuer einen lesbaren Marker.
+function silentTurn() {
+  return { text: "", silent: true, refused: false, usage: null };
+}
+
+// P4: Szenario "personenwechsel" - ab fromTurnIndex (0-basiert) uebernimmt eine ZWEITE
+// Persona den Hoerer. Reine Funktion, exportiert als Test-Seam (Muster applySttNoise).
+export function personaPromptFor(scenario, turnIndex) {
+  const sw = scenario.personaSwitch;
+  if (sw && turnIndex >= sw.fromTurnIndex) return sw.personaPrompt;
+  return scenario.personaPrompt;
+}
+
+// Liefert den naechsten Callee-Turn: Stille schlaegt Skript schlaegt Persona-LLM
+// (scriptedTurns[turnIndex] hat Vorrang vor der Persona-LLM, Spec §4, deterministische
+// Repro fuer termin-duenn); sttNoise-Transform greift auf scripted + LLM, wenn
+// scenario.sttNoise gesetzt ist - ein stiller Turn traegt per Definition keinen Text,
+// sttNoise ist dort gegenstandslos.
 export async function nextCalleeTurn({
   apiKey,
   model = PERSONA_MODEL_DEFAULT,
@@ -74,12 +95,13 @@ export async function nextCalleeTurn({
   transcript,
   turnIndex,
 }) {
+  if (scenario.silentTurns?.includes(turnIndex)) return silentTurn();
   const scripted = scenario.scriptedTurns?.[turnIndex];
   if (scripted !== undefined) {
     const text = scenario.sttNoise ? applySttNoise(scripted) : scripted;
     return { text, refused: false, usage: null };
   }
-  const reply = await callPersonaLlm({ apiKey, model, scenario, transcript });
+  const reply = await callPersonaLlm({ apiKey, model, scenario, transcript, turnIndex });
   if (reply.refused) return reply;
   const rawText = reply.text || EMPTY_PERSONA_FALLBACK;
   const text = scenario.sttNoise ? applySttNoise(rawText) : rawText;

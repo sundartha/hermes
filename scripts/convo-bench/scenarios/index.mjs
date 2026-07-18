@@ -6,6 +6,10 @@ import partnerKnapp from "./partner-knapp.mjs";
 import sttNoise from "./stt-noise.mjs";
 import inboundNachricht from "./inbound-nachricht.mjs";
 import kauderwelschErstantwort from "./kauderwelsch-erstantwort.mjs";
+import holdWarteschleife from "./hold-warteschleife.mjs";
+import personenwechsel from "./personenwechsel.mjs";
+import spaeterNochmal from "./spaeter-nochmal.mjs";
+import unerfuellbareRecherche from "./unerfuellbare-recherche.mjs";
 
 export const SCENARIOS = Object.freeze({
   [friseurVoll.id]: friseurVoll,
@@ -14,6 +18,10 @@ export const SCENARIOS = Object.freeze({
   [sttNoise.id]: sttNoise,
   [inboundNachricht.id]: inboundNachricht,
   [kauderwelschErstantwort.id]: kauderwelschErstantwort,
+  [holdWarteschleife.id]: holdWarteschleife,
+  [personenwechsel.id]: personenwechsel,
+  [spaeterNochmal.id]: spaeterNochmal,
+  [unerfuellbareRecherche.id]: unerfuellbareRecherche,
 });
 
 export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));

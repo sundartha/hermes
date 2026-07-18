@@ -17,9 +17,13 @@ export default {
   scriptedTurns: { 0: "17 Uhr passt mir gut." },
   sttNoise: false,
   maxTurns: 8,
-  expectBooking: false,
   expectDegradation: false,
-  checks: ["no_raw_iso_date_spoken", "turn_count_within_budget", "no_verbatim_question_repeat"],
+  checks: [
+    "no_raw_iso_date_spoken",
+    "turn_count_within_budget",
+    "no_verbatim_question_repeat",
+    "no_transliterated_umlauts_de",
+  ],
   // Heuristik-Flag (Spec §9): NICHT Hard-Gate. Der Judge (judgeFocus) ist das
   // primaere, verlaessliche Signal fuer die eigentliche Frage (Kohaerenz).
   mustNotAskSubstrings: ["was ist denn das thema", "worum geht es"],
