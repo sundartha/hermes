@@ -48,8 +48,8 @@ import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 //                        (LlmUnavailableError aus dem resilienten Seam)
 //   turnErrorSpeech    - generisches technisches Ende fuer jeden anderen Fehler
 //   noSpeechReprompt   - knappe Rueckfrage, wenn der Gather leer lief (G4)
-// Der Aufrufer hat call -> localeFor(call.language).<feld>. DE-Werte sind byte-identisch
-// zum frueheren Inline-Bestand (i18n-Test pinnt sie).
+// Der Aufrufer hat call -> localeFor(call.language).<feld>. DE-Werte tragen seit P1
+// korrekte Umlaute (i18n-Test + de-umlaut-orthography pinnen sie).
 
 // P8: TeXML-Handoff-Antwort auf /voice/incoming, wenn der Call-Control-Assistant den Leg
 // uebernimmt. Leere Direktivenliste (renderDirectives([]) -> <Response></Response>) als
@@ -187,11 +187,11 @@ export function makeVoiceRoutes({
       if (!numberRecord) {
         audit("inbound_unrouted", req, `to=${to || "-"}`);
         // Kein Tenant, kein Call -> keine Sprache ableitbar; der hoefliche Hangup bleibt DE
-        // (byte-identisch zum Bestand, nicht ueber-engineeren).
+        // (kein Locale-Lookup ohne Tenant, nicht ueber-engineeren).
         return res
           .type("text/xml")
           .send(
-            render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhoeren."), hangupD()], provider),
+            render([sayD("Diese Nummer ist nicht erreichbar. Auf Wiederhören."), hangupD()], provider),
           );
       }
       const tenantId = numberRecord.tenantId;

@@ -45,14 +45,14 @@ test("Gather ohne Prompt -> leeres Gather + Redirect (Bestandsverhalten)", () =>
 
 test("Say + Hangup -> TwiML byte-identisch (Budget/EndCall)", () => {
   const out = renderDirectives([
-    say("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
+    say("Das Demo-Budget ist aufgebraucht. Auf Wiederhören."),
     hangup(),
   ]);
   assert.equal(
     out,
     XML +
       "<Response>" +
-      '<Say voice="Polly.Vicki-Neural" language="de-DE">Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.</Say>' +
+      '<Say voice="Polly.Vicki-Neural" language="de-DE">Das Demo-Budget ist aufgebraucht. Auf Wiederhören.</Say>' +
       "<Hangup/></Response>",
   );
 });

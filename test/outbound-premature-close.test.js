@@ -30,7 +30,7 @@ import {
 } from "./_outbound-harness.js";
 
 // Teilstring von LLM_DEGRADED_SPEECH (server.js): pinnt die wuerdevolle Degradation.
-const LLM_DEGRADED_MARKER = "Ich melde mich, sobald es wieder moeglich ist";
+const LLM_DEGRADED_MARKER = "Ich melde mich, sobald es wieder möglich ist";
 // Teilstring von TURN_ERROR_SPEECH (server.js): pinnt das generische technische Ende.
 const TURN_ERROR_MARKER = "technisches Problem";
 

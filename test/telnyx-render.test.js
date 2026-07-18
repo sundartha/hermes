@@ -70,14 +70,14 @@ test("Telnyx-Gather aktiviert STT (transcriptionEngine gesetzt, sonst kein Speec
 
 test("Say + Hangup -> TeXML byte-identisch (Budget/EndCall)", () => {
   const out = renderDirectives([
-    say("Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren."),
+    say("Das Demo-Budget ist aufgebraucht. Auf Wiederhören."),
     hangup(),
   ]);
   assert.equal(
     out,
     XML +
       "<Response>" +
-      '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.</Say>' +
+      '<Say voice="Azure.de-DE-KatjaNeural" language="de-DE">Das Demo-Budget ist aufgebraucht. Auf Wiederhören.</Say>' +
       "<Hangup/></Response>",
   );
 });
