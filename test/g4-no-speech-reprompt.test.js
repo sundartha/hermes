@@ -29,7 +29,7 @@ test("G4: leerer Gather nach bereits-gesprochenem Caller -> knappe Rueckfrage, k
     });
     const body = await res.text();
     assert.equal(res.status, 200);
-    assert.match(body, /<Say[^>]*>Koennen Sie das bitte wiederholen\?<\/Say>/);
+    assert.match(body, /<Say[^>]*>Können Sie das bitte wiederholen\?<\/Say>/);
     assert.match(body, /<Gather/); // Folge-Gather -> Call laeuft weiter
     assert.doesNotMatch(body, /<Hangup/); // KEIN Auflegen
   } finally {

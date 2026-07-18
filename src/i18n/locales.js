@@ -6,12 +6,18 @@
 // auf DEFAULT_LANGUAGE (de) zurueck, wenn call.language unbekannt/fehlend ist (R7,
 // heutiges Verhalten) - so faerbt kein FR-Pfad den DE-Bestand ab.
 //
-// Konvention: Deutsche gesprochene/geschriebene Strings bleiben ASCII-transliteriert
-// (ue/ae/oe/ss) und byte-identisch zum Bestand (claude.js vorher). Franzoesische Strings
-// tragen BEWUSST die korrekten Akzente (UTF-8): franzoesische TTS-Stimmen (Polly/Azure,
-// Phase 3) brauchen die Akzente fuer die richtige Aussprache ("resume" != "résumé"). Die
-// Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>, Twilio-SDK); Akzente sind keine
-// XML-Sonderzeichen und passieren die Escaper unveraendert.
+// Konvention: Deutsche GESPROCHENE Strings tragen die korrekten Umlaute (UTF-8) - aus
+// demselben Grund wie die franzoesischen Akzente: die TTS-Stimme (Azure/Polly) liest
+// "Gespraech" als Buchstabenfolge, nicht als deutsches Wort. NICHT zurueck-
+// transliterieren. Kein Sonderfall fuer ss/sz: "ss" ist orthografisch gueltig und wird
+// korrekt gelesen, "ue/oe/ae" als Umlautersatz ist es nicht. Ausgenommen und bewusst
+// transliteriert bleiben Strings, die NIE gesprochen werden: realtimeOpener (Steuertext
+// fuer response.create) und summarySystem (LLM-Prompt, dessen Output als JSON geparst
+// wird) - siehe test/de-umlaut-orthography.test.js, das diese Grenze festhaelt.
+// Franzoesische Strings tragen ebenfalls die korrekten Akzente ("resume" != "résumé").
+// Die Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>, Twilio-SDK); Umlaute und
+// Akzente sind keine XML-Sonderzeichen und passieren die Escaper unveraendert.
+// KOMMENTARE bleiben ASCII (Repo-Konvention) - nur die Strings aendern sich.
 import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
 
 // Logische Voice-Profile (Strings) als Forward-Referenz fuer den Telephonie-Renderer
@@ -117,31 +123,31 @@ export const LOCALES = Object.freeze({
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar).
     disclosure: (ownerName) =>
-      `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.`,
+      `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
     // Zusammenfassungs-Prompt-Sprach-Teil (claude.js summarizeCall). Die JSON-Keys
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
       `Du fasst ein Telefonat des KI-Assistenten von ${owner} zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. Nenne in der summary konkrete Ergebnisse (vereinbartes Datum/Uhrzeit, Preis, Name der Kontaktperson), sofern im Transkript vorhanden, statt allgemeiner Umschreibungen. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn ${owner} wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.`,
     // Statische Server-Texte (F1 Phase 4): reine Strings (keine Identitaets-Bindung).
     // Quelle: zuvor hart in server.js (Reprompt/Fehler/Hangup) bzw. defaults.js
-    // (greetingDefault). DE-Werte BYTE-IDENTISCH zum Bestand uebernommen - ein FR/EN-Pfad
+    // (greetingDefault). DE-Werte tragen seit P1 korrekte Umlaute - ein FR/EN-Pfad
     // faerbt DE nicht ab. greetingDefault = DEFAULT_GREETING (eine Quelle, kein Drift).
     llmDegradedSpeech:
-      "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
+      "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder möglich ist. Auf Wiederhören.",
     turnErrorSpeech:
-      "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
-    noSpeechReprompt: "Koennen Sie das bitte wiederholen?",
-    budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
+      "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es später erneut.",
+    noSpeechReprompt: "Können Sie das bitte wiederholen?",
+    budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhören.",
     greetingDefault: DEFAULT_GREETING,
     // I2 (call-quality Impl-1): Turn-Fallback-Satz (claude.js agentTurn), falls das
     // Modell in allen 4 Tool-Loop-Runden KEINEN Text liefert. Vorher hart deutsch +
     // richtungsverkehrt (die Inbound-Formulierung "vielen Dank fuer Ihren Anruf" ging
     // faelschlich auch bei Outbound-Calls raus). JETZT richtungsabhaengig UND
-    // sprachabhaengig. DE-inbound BYTE-IDENTISCH zum Vorgaenger-String (Regressionsschutz,
-    // siehe personal-assistant-characterization/turn-fallback-locale-Tests).
+    // sprachabhaengig. DE-inbound weiter gepinnt, seit P1 mit korrekten Umlauten (siehe
+    // personal-assistant-characterization/turn-fallback-locale-Tests).
     turnFallbackSpeech: {
-      inbound: "Alles klar, vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!",
-      outbound: "Alles klar, vielen Dank fuer Ihre Zeit. Auf Wiederhoeren!",
+      inbound: "Alles klar, vielen Dank für Ihren Anruf. Auf Wiederhören!",
+      outbound: "Alles klar, vielen Dank für Ihre Zeit. Auf Wiederhören!",
     },
   }),
   fr: Object.freeze({

@@ -10,7 +10,7 @@ import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ";
-const DISCLOSURE_TAIL = "wird fuer meinen Auftraggeber zusammengefasst";
+const DISCLOSURE_TAIL = "wird für meinen Auftraggeber zusammengefasst";
 // G2: /voice/outbound spricht Offenlegung + Anliegen LLM-frei IM Erst-Gather. Der
 // Outbound-systemPrompt weist den LLM daher an, beides NICHT zu wiederholen (statt die
 // Offenlegung als ersten Satz vom Modell zu verlangen). Diese Klausel pinnt das.

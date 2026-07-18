@@ -20,7 +20,7 @@ import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js"
 // (byte-identisch); ein Refactor, der sie verschiebt, faellt hier auf.
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =
-  "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.";
+  "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
 const DE_SPEECH_CLAUSE = "Nur natuerlich gesprochenes Deutsch.";
 // I11 (call-quality Impl-1): Klausel "nenne konkrete Ergebnisse ..." ergaenzt (S2 aus
 // tasks/call-quality-findings.md: Summary war zu allgemein).
@@ -149,19 +149,19 @@ test("EN-Bundle: statische Server-Texte (Reprompt/Fehler/Hangup/Greeting) sind e
   assert.equal(en.voiceProfile, "en-female-neural");
 });
 
-test("Statische Texte: DE byte-identisch zum frueheren server.js-Bestand (kein Drift durch das Bundle)", () => {
+test("Statische Texte: DE-Wortlaut gepinnt (Umlaute seit P1, kein Drift durch das Bundle)", () => {
   assert.equal(
     LOCALES.de.llmDegradedSpeech,
-    "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder moeglich ist. Auf Wiederhoeren.",
+    "Entschuldigung, ich kann Ihr Anliegen gerade nicht bearbeiten. Ich melde mich, sobald es wieder möglich ist. Auf Wiederhören.",
   );
   assert.equal(
     LOCALES.de.turnErrorSpeech,
-    "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es spaeter erneut.",
+    "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es später erneut.",
   );
-  assert.equal(LOCALES.de.noSpeechReprompt, "Koennen Sie das bitte wiederholen?");
+  assert.equal(LOCALES.de.noSpeechReprompt, "Können Sie das bitte wiederholen?");
   assert.equal(
     LOCALES.de.budgetExhaustedHangup,
-    "Das Demo-Budget ist aufgebraucht. Auf Wiederhoeren.",
+    "Das Demo-Budget ist aufgebraucht. Auf Wiederhören.",
   );
 });
 
@@ -183,7 +183,7 @@ before(async () => {
 const deCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "de", ...over });
 const frCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "fr", ...over });
 
-test("DE byte-identisch: disclosureSentence(de) == Bestands-Wortlaut", () => {
+test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => {
   assert.equal(disclosureSentence(deCall()), DE_DISCLOSURE);
 });
 

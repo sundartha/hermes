@@ -296,7 +296,7 @@ test("SP6 systemPrompt outbound de permissive (allow personal+bank) byte-identis
   );
 });
 // ---------- disclosureSentence (keine Uhr, voll deterministisch) ----------
-const DISCLOSURE_DE = `Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespraech wird fuer meinen Auftraggeber zusammengefasst.`;
+const DISCLOSURE_DE = `Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`;
 const DISCLOSURE_FR = `Bonjour, ceci est un assistant IA mandaté par Jonas Beispiel. Cette conversation sera résumée pour mon mandant.`;
 const DISCLOSURE_EN = `Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.`;
 

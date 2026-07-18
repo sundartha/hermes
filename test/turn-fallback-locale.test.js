@@ -71,10 +71,10 @@ after(async () => {
   await new Promise((r) => server.close(r));
 });
 
-test("I2-1: Inbound-Fallback DE ist byte-identisch zum Bestand", async () => {
+test("I2-1: Inbound-Fallback DE ist der gepinnte DE-Satz", async () => {
   const call = store.getCall("call_fb_in");
   const { speech } = await agentTurn(call, "Hallo?");
-  assert.equal(speech, "Alles klar, vielen Dank fuer Ihren Anruf. Auf Wiederhoeren!");
+  assert.equal(speech, "Alles klar, vielen Dank für Ihren Anruf. Auf Wiederhören!");
   assert.equal(speech, LOCALES.de.turnFallbackSpeech.inbound);
 });
 
