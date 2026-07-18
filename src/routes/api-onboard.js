@@ -138,18 +138,18 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
     // abgeleitet (eine Quelle: languageForCountry). country (Herkunftsland) + language
     // landen auf Tenant-Geo; das Number-Request traegt das KAUF-Land (numberCountry, s.u.).
     // KEIN body.country + leeres forceNumberCountry -> Verhalten byte-identisch (DE/de).
-    const proposedCountry = config.geoEnabled ? geoLookup(req.ip)?.country : null;
+    const proposedCountry = config.provisioning.geoEnabled ? geoLookup(req.ip)?.country : null;
     const country = resolveOnboardCountry({
       userCountry: req.body?.country,
       proposedCountry,
-      fallbackCountry: config.provisioningCountry,
+      fallbackCountry: config.provisioning.provisioningCountry,
     });
     const language = languageForCountry(country);
     // Kauf-Land (number.country) ENTKOPPELT vom Herkunftsland: config.forceNumberCountry
     // (z.B. "US") ueberschreibt NUR, wo die Nummer gekauft wird - die Sprache bleibt am
     // erkannten Herkunftsland (language oben). Leer -> Kauf-Land = Herkunftsland (byte-
     // identisch). tenant.country bleibt das Herkunftsland (Quelle fuer Sprache/Analytics).
-    const numberCountry = config.forceNumberCountry || country;
+    const numberCountry = config.provisioning.forceNumberCountry || country;
 
     // Store-Mutation + Persistenz im prozess-lokalen kritischen Abschnitt (OT-3 AC2):
     // load -> registerTenant -> setTenantGeo -> requestNumber -> save, kein fremdes await
@@ -163,7 +163,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
           lastName,
           privateNumber,
           idpSubject: sub,
-          defaultBudgetCents: config.defaultTenantBudgetCents,
+          defaultBudgetCents: config.billing.defaultTenantBudgetCents,
         });
         setTenantGeo(s, tenantId, { country, defaultLanguage: language });
         const r = requestNumber(s, {
@@ -171,8 +171,8 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
           provider: PROVIDER.TELNYX,
           country: numberCountry,
           language,
-          maxNumbers: config.maxNumbers,
-          maxNumbersPerTenant: config.maxNumbersPerTenant,
+          maxNumbers: config.provisioning.maxNumbers,
+          maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
         // Fix B (G5/S2): Persistenz-Entscheidung geteilt mit triggerTenantProvisioning
         // (shouldPersistProvisionResult, EINE Quelle statt woertlicher Duplizierung).
@@ -196,7 +196,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
     audit("onboard_request", req, `tenant=${tenantId} number=${numberId}`);
 
     // Dry-Run (Default, fail-closed): kein echter Kauf, Nummer bleibt 'requested'.
-    if (!config.provisioningEnabled)
+    if (!config.provisioning.provisioningEnabled)
       return res.json({
         tenantId,
         numberId,

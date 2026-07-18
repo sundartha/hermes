@@ -129,7 +129,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // Lesepfad get_my_number unter MULTI_TENANT konsumiert ihn -> die sub/email-
   // Divergenz verschwindet an EINER autoritativen Aufloesung am JWT.
   function requestTenant(req) {
-    if (!config.multiTenant) return singleTenantBootstrap();
+    if (!config.tenancy.multiTenant) return singleTenantBootstrap();
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
     // AM6: am /mcp-Gateway bereits aufgeloester Tenant (X-Internal-Tenant, trusted-
     // localhost). Analog req.tenant eine Vorab-Aufloesung -> direkt zurueck, kein zweiter

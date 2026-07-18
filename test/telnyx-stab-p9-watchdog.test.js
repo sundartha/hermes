@@ -23,7 +23,8 @@ import {
   makeTestWatchdog,
   ingestTimeoutDeps,
 } from "./telnyx-shim-harness.js";
-import { fakeTelnyxShimConfig, captureConsole, makeConfigOverrides } from "./helpers.js";
+import { captureConsole, makeConfigOverrides } from "./helpers.js";
+import { fakeTelnyxShimConfig } from "./config-namespaces-helper.js";
 
 // Voller Satz statt Kuerzel: robust gegen eine lokal geleakte CALLER_SUBSTANCE_MIN_LEN
 // (isSubstantialCallerText liest den echten config.js-Singleton, nicht WATCHDOG_TEST_CONFIG).

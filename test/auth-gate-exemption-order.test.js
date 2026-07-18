@@ -52,13 +52,15 @@ function fakeReq(path, headers = {}) {
 
 const DASHBOARD_PASSWORD = "s3cret-pw";
 
-// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key> (namespaced), dashboardPassword
-// bleibt flach (auth-gate.js liest config.dashboardPassword direkt, unveraendert).
+// PA-18: auth-gate.js liest config.auth.dashboardPassword + config.tenancy.<key>
+// (beide namespaced) - der Fake baut die Namespace-Struktur hier direkt (hybrid mit
+// tenancy), NICHT ueber withConfigNamespaces (das wuerde das literal-nested tenancy
+// per Getter ueberschreiben und selfServiceEnabled auf undefined zurueckfallen lassen).
 function makeGate(overrides = {}) {
   auditCalls.length = 0;
   return makeAuthGate({
     config: {
-      dashboardPassword: DASHBOARD_PASSWORD,
+      auth: { dashboardPassword: DASHBOARD_PASSWORD },
       tenancy: { selfServiceEnabled: false, multiTenant: false },
       ...overrides.config,
     },
@@ -139,7 +141,7 @@ test("auth-gate: /tenant.html nur bei BEIDEN Flags exempt (Schnittmenge, kein OR
 // === (d) Gate deaktiviert (kein dashboardPassword): alles offen ==================
 
 test("auth-gate: leeres dashboardPassword -> jeder Pfad passiert ungeprueft", async () => {
-  const gate = makeGate({ config: { dashboardPassword: "" } });
+  const gate = makeGate({ config: { auth: { dashboardPassword: "" } } });
   for (const path of [...GUARDED_PATHS, ...UNCONDITIONAL_EXEMPT_PATHS]) {
     assert.equal(await run(gate, fakeReq(path), fakeRes()), true, path);
   }

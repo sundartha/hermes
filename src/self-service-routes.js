@@ -74,7 +74,7 @@ function maskPrivateNumber(e164) {
 // die UI reichen planSlug + currentPeriodEnd; die opake sub_-Referenz gehoert nicht in
 // die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
-  if (!config.paymentEnabled) return {};
+  if (!config.billing.paymentEnabled) return {};
   const { planSlug, currentPeriodStart, currentPeriodEnd } = store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
@@ -98,10 +98,10 @@ function paymentView(store, config, tenant) {
 // (sonst haelt provisionNumber gar keinen Hold) -> 0 sonst (kein irrefuehrender Betrag;
 // die aufrufende UI blendet den Billing-Block dann ohnehin aus).
 function numberSetupFeeCentsFor(s, config, tenant) {
-  if (!config.paymentEnabled) return 0;
+  if (!config.billing.paymentEnabled) return 0;
   const { country: homeCountry } = tenantGeo(s, tenant);
-  const country = resolveNumberCountry(homeCountry, config.forceNumberCountry);
-  return holdAmountForCountry(country, config.numberSetupFeeCents);
+  const country = resolveNumberCountry(homeCountry, config.provisioning.forceNumberCountry);
+  return holdAmountForCountry(country, config.billing.numberSetupFeeCents);
 }
 
 // BK2: Reiner Selektor (N7, kein Nebeneffekt): untrusted Input (Body ODER zurueckgetragene
@@ -124,8 +124,8 @@ function returnSuccessUrl(publicUrl, planSlug) {
 // setup-Mode (nur Karte speichern, byte-identisch zum Bestand). priceId ist bei
 // planSlug != null vom Aufrufer bereits aufgeloest (plan_unconfigured-Gate davor).
 function createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }) {
-  const successUrl = returnSuccessUrl(config.publicUrl, planSlug);
-  const cancelUrl = `${config.publicUrl}${CARD_RETURN_CANCELED}`;
+  const successUrl = returnSuccessUrl(config.server.publicUrl, planSlug);
+  const cancelUrl = `${config.server.publicUrl}${CARD_RETURN_CANCELED}`;
   if (!planSlug)
     return billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
   return billing.createSubscriptionCheckoutSession({
@@ -220,7 +220,7 @@ export function makeSelfServiceRoutes({
       // Subscribe-Klick sichtbar (die Plan-Kacheln lesen genau dieses Feld). currency
       // ungegated (nicht geheim, wie PLAN_CATALOG.currency immer gesetzt).
       numberSetupFeeCents: numberSetupFeeCentsFor(agentState, config, tenant),
-      currency: config.paymentCurrency,
+      currency: config.billing.paymentCurrency,
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
       calendar: upcomingCalendar(store, tenant),
@@ -284,14 +284,14 @@ export function makeSelfServiceRoutes({
     const tenant = req.tenant.tenantId;
     const s = store.load();
     res.json({
-      paymentEnabled: !!config.paymentEnabled,
+      paymentEnabled: !!config.billing.paymentEnabled,
       hasCard: hasCardOnFile(store.tenantStripe(tenant)),
       planSlug: store.tenantSubscription(tenant).planSlug,
       status: req.tenant.status,
       // Phase A: identisch zur /state-Route (numberSetupFeeCentsFor, EINE Quelle) - dieser
       // Endpunkt ist der einzige, den ein SUSPENDIERTER Tenant vor dem Checkout sieht.
       numberSetupFeeCents: numberSetupFeeCentsFor(s, config, tenant),
-      currency: config.paymentCurrency,
+      currency: config.billing.paymentCurrency,
     });
   });
 
@@ -308,7 +308,7 @@ export function makeSelfServiceRoutes({
     asyncBilling(
       async (req, res) => {
         if (!requirePaymentEnabled(res, config)) return;
-        if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
+        if (!config.server.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
         const tenant = req.tenant.tenantId;
         // BK2: optionaler Plan aus dem Kachel-Flow. Bare "Karte hinzufuegen" (kein Plan)
         // -> setup-Mode-successUrl ohne &plan= (byte-identisch zum Bestand).
@@ -327,7 +327,7 @@ export function makeSelfServiceRoutes({
         // Start ueber den Self-Heal-Wrapper - eine tote customerId (Stripe resource_missing)
         // fuehrt zu EINEM automatischen Neuanlauf mit frischem Customer statt zu 502.
         const { session, healed } = await startCheckoutWithStaleCustomerHeal(
-          { store, billing, tenant, retryDelayMs: config.stripeCustomerRetryDelayMs },
+          { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
           (customerId) =>
             createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }),
         );

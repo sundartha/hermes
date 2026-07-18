@@ -27,31 +27,33 @@ async function makePgliteRunner() {
   return { withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) };
 }
 
-// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key> (namespaced). PA-17 Runde 2:
-// makeOidc (web-auth.js) liest cfg.auth.{workosApiBase,oidcClientId,oidcClientSecret}
-// (vorher flach) - wireWebLogin ruft makeOidc(config) eager beim Wiring auf, darum
-// muss die Attrappe hier dieselbe Namespace-Form tragen wie der echte config-Export,
-// sonst wirft makeOidc TypeError und guardedBoot faengt das faelschlich als Fault-Path.
-// Alle anderen hier gelisteten Felder bleiben flach (wireWebLogin liest sie direkt,
-// unveraendert).
+// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key>. PA-17: makeOidc (web-auth.js)
+// liest cfg.auth.{workosApiBase,oidcClientId,oidcClientSecret}. PA-18: wireWebLogin
+// selbst liest cfg.auth.{sessionSecret,adminEmails,loginRateLimitPerMin,
+// sessionTtlSeconds,loginCookieTtlSeconds,devLoginEnabled}, cfg.server.{publicUrl,
+// webDistDir}, cfg.provisioning.releaseGraceMs; gemountete Self-Service-Routen lesen
+// cfg.billing.paymentEnabled (S2-16 Zweig 1). Die Attrappe traegt seither DIESELBE
+// Namespace-Form wie der echte config-Export (kein Hybrid mehr) - ein flacher Override
+// (z.B. `{ ...baseConfig, devLoginEnabled: true }`) traefe sonst NUR einen wirkungslosen
+// Flach-Nachbarn statt den gelesenen Namespace-Pfad (Lehre auth-gate-exemption-order.test.js).
+// storeBackend bleibt flach: wireWebLogin selbst liest es nicht (nur app.js VOR dem Aufruf).
 const baseConfig = {
-  sessionSecret: "s",
   storeBackend: "pg",
-  releaseGraceMs: 0,
   tenancy: { selfServiceEnabled: false, multiTenant: false },
   auth: {
     workosApiBase: "https://api.workos.test",
     oidcClientId: "wl_client",
     oidcClientSecret: "wl_secret",
+    sessionSecret: "s",
+    adminEmails: [],
+    loginRateLimitPerMin: 30,
+    sessionTtlSeconds: 3600,
+    loginCookieTtlSeconds: 600,
+    devLoginEnabled: false,
   },
-  adminEmails: [],
-  loginRateLimitPerMin: 30,
-  sessionTtlSeconds: 3600,
-  loginCookieTtlSeconds: 600,
-  publicUrl: "http://localhost",
-  webDistDir: "",
-  paymentEnabled: false,
-  devLoginEnabled: false,
+  server: { publicUrl: "http://localhost", webDistDir: "" },
+  provisioning: { releaseGraceMs: 0 },
+  billing: { paymentEnabled: false },
 };
 
 const fakeStore = {
@@ -148,7 +150,9 @@ test("P13/Q1: wireWebLogin Fault-Path -> guardedBoot false, kein Marker, 'deakti
 // ---- S2-15: Dev-Login-Redirect-Verdrahtung Ende-zu-Ende gegen echtes Schema --------
 
 test("S2-15: devLoginEnabled -> POST /auth/dev-login mintet Session, 302-Redirect + Session-Cookie", async () => {
-  const deps = await makeDeps({ config: { ...baseConfig, devLoginEnabled: true } });
+  const deps = await makeDeps({
+    config: { ...baseConfig, auth: { ...baseConfig.auth, devLoginEnabled: true } },
+  });
   const capture = captureConsole();
   try {
     await guardedBoot("Web-Login/Portal", () => wireWebLogin(deps));

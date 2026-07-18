@@ -5,7 +5,8 @@
 // haette eine dritte Kopie hinzugefuegt. telnyx-llm-shim.test.js deckt den
 // Basis-Shim OHNE voiceControl/callControlId ab und bleibt bewusst eigenstaendig
 // (andere fakeStore-/fakeRes-Form, kein Hangup-Pfad in seinen Fixtures).
-import { fakeTelnyxShimConfig, noopWatchdog } from "./helpers.js";
+import { noopWatchdog } from "./helpers.js";
+import { fakeTelnyxShimConfig, withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
@@ -196,9 +197,11 @@ export function jsonCompletion(res) {
 
 // Kompaktes N/M fuer schnelle, lesbare Tests (config.js-Defaults 45s/8 waeren nur langsamer
 // zu lesen, nicht anders zu pruefen - die Watchdog-Logik ist schwellenwert-agnostisch).
-export const WATCHDOG_TEST_CONFIG = {
+// PA-18: withConfigNamespaces haengt die Namespace-Getter an (der migrierte Watchdog liest
+// config.telnyx.telnyxAssistant.X; dual-read haelt den flachen Zugriff daneben gueltig).
+export const WATCHDOG_TEST_CONFIG = withConfigNamespaces({
   telnyxAssistant: { deadAirTimeoutS: 30, loopGuardMaxEmptyTurns: 3 },
-};
+});
 export const DEAD_AIR_TEST_MS = 30_000; // = telnyxDeadAirTimeoutS * 1000
 
 // Deterministischer Fake-Timer (P12 Fast/Repeatable): setTimer/clearTimer injiziert statt

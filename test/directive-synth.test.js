@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say, gather, hangup } from "../src/telephony/directives.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PUBLIC_URL = "https://agent.test";
 const FIXED_TOKEN = "fixed-token-abc";
@@ -24,7 +25,7 @@ function fakeTtsStore() {
 }
 
 function fakeConfig({ enabled }) {
-  return {
+  return withConfigNamespaces({
     publicUrl: PUBLIC_URL,
     elevenLabsPlayTts: {
       enabled,
@@ -35,7 +36,7 @@ function fakeConfig({ enabled }) {
       outputFormat: "mp3_44100_128",
       synthTimeoutMs: 2000,
     },
-  };
+  });
 }
 
 function withFakeFetch(fetchImpl, fn) {

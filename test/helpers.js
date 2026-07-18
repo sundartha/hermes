@@ -500,28 +500,11 @@ export function fakeProvisioner(overrides = {}) {
   return { log, orderCalls, ...base, ...overrides };
 }
 
-// Fake-Config fuer den Telnyx Brain-Shim (makeTelnyxLlmShim): EINE Quelle (G5/S2) statt
-// der frueher in telnyx-llm-shim.test.js + telnyx-shim-endcall.test.js byte-identisch
-// kopierten Definition. telnyxShimMaxTurnsPerMin=100 bewusst grosszuegig (!= config.js-
-// Default 30): einzelne Turn-Tests sollen vom per-callId-Rate-Limiter unberuehrt bleiben,
-// der einen eigenen Testfall mit engerem Limit bekommt.
-export function fakeTelnyxShimConfig({
-  enabled = true,
-  claudeModel = "claude-haiku-4-5",
-  telnyxShimMaxTurnsPerMin = 100,
-  telnyxShimSharedSecret = "shim-secret",
-  telnyxShimDebugShape = false,
-} = {}) {
-  return {
-    claudeModel,
-    telnyxAssistant: {
-      enabled,
-      shimMaxTurnsPerMin: telnyxShimMaxTurnsPerMin,
-      shimSharedSecret: telnyxShimSharedSecret,
-      shimDebugShape: telnyxShimDebugShape,
-    },
-  };
-}
+// PA-18: fakeTelnyxShimConfig lebt jetzt in config-namespaces-helper.js (das config.js
+// bereits legitim importiert) - ein config.js-Import HIER wuerde config.js schon beim
+// Import von helpers.js auswerten, VOR dem env-Setup jeder aufrufenden Datei (s.
+// config-namespaces-helper.js-Doku, test-base-env-drift). Re-Export bewusst UNTERLASSEN
+// (kein zusaetzlicher Re-Export-Umweg, G5) - die vier Konsumenten importieren direkt.
 
 // stab-p9: No-op-ConversationWatchdog fuer Bestandstests, die die Kosten-Notaus-Achse nicht
 // pruefen - haelt sie byte-identisch (observeTurn NIE loopExceeded, arm/clear wirkungslos).

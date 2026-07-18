@@ -290,7 +290,7 @@ export function makeTelnyxLlmShim({
   // (makeFixedWindowCounter, G5) statt einer zweiten Zaehler-Implementierung hier.
   const shimRateHit = makeFixedWindowCounter({
     windowMs: SHIM_RATE_WINDOW_MS,
-    limit: config.telnyxAssistant.shimMaxTurnsPerMin,
+    limit: config.telnyx.telnyxAssistant.shimMaxTurnsPerMin,
     sweepMs: SHIM_RATE_SWEEP_MS,
   });
 
@@ -317,12 +317,12 @@ export function makeTelnyxLlmShim({
 
   return async function handleChatCompletion(req, res) {
     // 1) Existenz-Gate (Invariante 1): Flag aus -> 404, VOR jeder Arbeit/Parsing.
-    if (!config.telnyxAssistant.enabled) return res.status(HTTP_NOT_FOUND).end();
+    if (!config.telnyx.telnyxAssistant.enabled) return res.status(HTTP_NOT_FOUND).end();
 
     // 2) Statischer Bearer (Befund 2, E2): Telnyx sendet das Integration-Secret als
     // Authorization: Bearer <secret>, pro Turn identisch. Leerer config-Wert -> 403
     // (Empty-Secret-Trap, safeEqual("","")===true waere sonst die Falle, wie D3).
-    const secret = config.telnyxAssistant.shimSharedSecret;
+    const secret = config.telnyx.telnyxAssistant.shimSharedSecret;
     const bearer = bearerFrom(req.headers.authorization || "");
     if (!secret || !safeEqual(bearer, secret)) {
       logShimGate({
@@ -340,7 +340,7 @@ export function makeTelnyxLlmShim({
     // P1b-FIX ein Drift-Detektor (die Korrelation laeuft ueber extra_metadata). Feuert AUCH
     // auf dem Erfolgspfad. Erst NACH dem Bearer-Gate (kein Dump unauthentifizierter Bodies).
     // Rein additiv, keine Gate-Aenderung.
-    if (config.telnyxAssistant.shimDebugShape) logShimShape(forwardMetadataShape(req.body));
+    if (config.telnyx.telnyxAssistant.shimDebugShape) logShimShape(forwardMetadataShape(req.body));
     if (!ccid) {
       logShimGate({
         reason: "no_ccid",
@@ -361,7 +361,7 @@ export function makeTelnyxLlmShim({
 
     const locale = localeFor(call.language);
     const model =
-      typeof req.body?.model === "string" && req.body.model ? req.body.model : config.claudeModel;
+      typeof req.body?.model === "string" && req.body.model ? req.body.model : config.llm.claudeModel;
     // OpenAI-spec-Modus: strikt stream===true -> SSE-Delta-Sequenz; sonst (false/
     // fehlend/nicht-boolean) -> plain chat.completion-JSON. Telnyx sendet live stream:true.
     const wantsStream = req.body?.stream === true;
@@ -436,7 +436,7 @@ export function makeTelnyxLlmShim({
       // nicht" (§2.2). Nur auf dem Erfolgspfad (es gibt ein Turn-Ergebnis); reine Diagnose,
       // messagesTurnShape ist wurf-frei und darf die bereits erfolgreiche Turn-Response nicht
       // in den Catch reissen.
-      if (config.telnyxAssistant.shimDebugShape) logShimShape(messagesTurnShape(req.body, turn));
+      if (config.telnyx.telnyxAssistant.shimDebugShape) logShimShape(messagesTurnShape(req.body, turn));
       endCall = turn.endCall === true;
       farewellChars = speechTextOf(turn).length;
       writeCompletion(res, { model, content: turn.speech, stream: wantsStream }); // Abschiedssatz geht ZUERST raus

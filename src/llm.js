@@ -180,15 +180,15 @@ export function createLlmClient({
 } = {}) {
   const sdk = new Anthropic({
     apiKey,
-    timeout: config.llmRequestTimeoutMs, // expliziter Per-Request-Timeout (Pflicht; SDK-Default 10 min waere webhook-toedlich)
+    timeout: config.llm.llmRequestTimeoutMs, // expliziter Per-Request-Timeout (Pflicht; SDK-Default 10 min waere webhook-toedlich)
     maxRetries: 0, // manueller Retry ERSETZT den SDK-Retry (sonst doppelte Backoffs)
   });
   const create = messagesCreate || ((params) => sdk.messages.create(params));
   const breaker = makeBreaker(
     {
-      threshold: config.llmBreakerThreshold,
-      windowMs: config.llmBreakerWindowMs,
-      cooldownMs: config.llmBreakerCooldownMs,
+      threshold: config.llm.llmBreakerThreshold,
+      windowMs: config.llm.llmBreakerWindowMs,
+      cooldownMs: config.llm.llmBreakerCooldownMs,
     },
     Date.now,
   );
@@ -214,8 +214,8 @@ export function createLlmClient({
           return create(params);
         },
         {
-          max: config.llmMaxRetries,
-          baseMs: config.llmBackoffMs,
+          max: config.llm.llmMaxRetries,
+          baseMs: config.llm.llmBackoffMs,
           jitter: true,
           retryable: isTransient,
           sleep,

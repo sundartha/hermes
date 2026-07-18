@@ -49,7 +49,7 @@ export async function assertNoBypassRls(client) {
 // ist der Produktiv-Pfad (no-arg) unveraendert. Tests injizieren einen Fake-Pool, um
 // connect-/Assertions-Fehler ohne echte DB zu pruefen.
 export async function createPortalRunner({
-  pool = new pg.Pool({ connectionString: config.databaseUrl }),
+  pool = new pg.Pool({ connectionString: config.store.databaseUrl }),
 } = {}) {
   // Fail-closed: Rollen-Pruefung einmalig nach Pool-Aufbau. connect() liegt im try -
   // bei connect- ODER Assertions-Fehler wird der Pool beendet (kein Pool-Leak) und

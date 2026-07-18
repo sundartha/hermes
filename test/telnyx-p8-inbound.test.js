@@ -15,6 +15,7 @@ import {
 } from "./helpers.js";
 import { startInboundAiAssistant, inboundCallControlId } from "../src/telnyx-inbound.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // === A: startInboundAiAssistant + inboundCallControlId (DI, offline) ==================
 
@@ -41,7 +42,7 @@ test("startInboundAiAssistant: assistantId + callControlId + EIN store.save()", 
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in1", provider: "telnyx" };
-  const config = { telnyxAssistant: { assistantId: "asst_x" } };
+  const config = withConfigNamespaces({ telnyxAssistant: { assistantId: "asst_x" } });
 
   await startInboundAiAssistant({
     store,
@@ -62,7 +63,7 @@ test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge 
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in2", provider: "telnyx" };
-  const config = { telnyxAssistant: { assistantId: "asst_x" } };
+  const config = withConfigNamespaces({ telnyxAssistant: { assistantId: "asst_x" } });
 
   await startInboundAiAssistant({
     store,
@@ -98,7 +99,7 @@ test("startInboundAiAssistant: call.language gesetzt -> startAssistant OHNE lang
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in2b", provider: "telnyx", language: "fr" };
-  const config = { telnyxAssistant: { assistantId: "asst_x" } };
+  const config = withConfigNamespaces({ telnyxAssistant: { assistantId: "asst_x" } });
 
   await startInboundAiAssistant({
     store,

@@ -16,12 +16,12 @@ import { HERMES_SERVER_INFO } from "./mcp-server-info.js";
 // kaputt (anthropics/claude-ai-mcp#149), stdio teilt EINE Pipe. Server deklariert die
 // io.modelcontextprotocol/ui-Extension + die Tools tragen das Widget-_meta (uiHost),
 // gegated am Master-Schalter MCP_UI_ENABLED (aus -> byte-identisch).
-const serverOptions = config.mcpUiEnabled
+const serverOptions = config.tenancy.mcpUiEnabled
   ? { capabilities: { extensions: uiServerExtension() } }
   : undefined;
 const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
 registerTools(server, {
-  uiHost: { enabled: config.mcpUiEnabled },
+  uiHost: { enabled: config.tenancy.mcpUiEnabled },
 });
 
 const transport = new StdioServerTransport();

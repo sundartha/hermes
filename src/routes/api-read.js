@@ -57,7 +57,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     // Listen-Scope ueber die EINE Quelle (tenantCallScope via exportTenantData):
     // calls/actionItems/notifications EINES Tenants. Flag aus -> ungefiltert
     // (Bestand). Danach die Bestands-Slices.
-    const scoped = config.multiTenant ? store.exportTenantData(tenantId) : s;
+    const scoped = config.tenancy.multiTenant ? store.exportTenantData(tenantId) : s;
 
     res.json({
       // settings/calendar/usage sind seit I2/P4 Maps tenantId -> Bucket; tenantContext
@@ -76,8 +76,8 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
         number: activeNumberFor(s, tenantId),
         numberStatus: numberStatusFor(s, tenantId),
         owner: ctx.ownerName,
-        model: config.claudeModel,
-        voiceEngine: config.voiceEngine,
+        model: config.llm.claudeModel,
+        voiceEngine: config.voice.voiceEngine,
       },
     });
   });
@@ -89,7 +89,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     // aus -> requestTenant === BOOTSTRAP_TENANT_ID; trotzdem ueber config.multiTenant
     // gaten, damit Legacy-Calls ohne tenantId bei Flag aus byte-identisch (200)
     // bleiben. getCall matcht auch twilioSid -> der Guard deckt beide id-Achsen.
-    if (config.multiTenant && !tenantOwnsCall(call, requestTenant(req)))
+    if (config.tenancy.multiTenant && !tenantOwnsCall(call, requestTenant(req)))
       return res.status(404).json({ error: "not found" });
     res.json(publicCall(call));
   });

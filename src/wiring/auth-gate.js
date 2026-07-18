@@ -31,7 +31,7 @@ export function makeAuthGate({
   paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
 }) {
   return (req, res, next) => {
-    if (!config.dashboardPassword) return next();
+    if (!config.auth.dashboardPassword) return next();
     // Self-Service-Seite (I9 + #3) ist die GETRENNTE Tenant-Sicht: NICHT hinter der
     // Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt KEINE
     // Tenant-Daten (die kommen ueber /api/self-service/*, abgesichert per webAuthMw +
@@ -73,7 +73,7 @@ export function makeAuthGate({
     // + API ohne Passwort fuer das ganze Internet (AM1, empirisch bestaetigt).
     // isTrustedLocalCaller verlangt zusaetzlich KEIN X-Forwarded-For (Proxy-Weiterleitung).
     if (isTrustedLocalCaller(req)) return next();
-    const expected = "Basic " + Buffer.from("admin:" + config.dashboardPassword).toString("base64");
+    const expected = "Basic " + Buffer.from("admin:" + config.auth.dashboardPassword).toString("base64");
     if (safeEqual(req.headers.authorization || "", expected)) return next();
     audit("auth_failed", req, `path=${req.path}`);
     res.set("WWW-Authenticate", 'Basic realm="Hermes"');

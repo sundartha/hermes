@@ -11,6 +11,7 @@ import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } f
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "quota-web-secret-0123456789";
 const SUB = "quota-sub";
@@ -49,7 +50,7 @@ async function setup({ paymentEnabled = true } = {}) {
       webAuthMw,
       webAuthPendingMw,
       audit: () => {},
-      config: { paymentEnabled, publicUrl: "https://test.local" },
+      config: withConfigNamespaces({ paymentEnabled, publicUrl: "https://test.local" }),
       billing: {},
       accounts,
       provision: async () => {},
