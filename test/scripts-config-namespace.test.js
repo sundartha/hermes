@@ -38,9 +38,14 @@ const ACCESS_RE = /(?<![\w/])config\.([A-Za-z_$][\w$]*)(?:\.([A-Za-z_$][\w$]*))?
 for (const rel of SCRIPTS) {
   test(`config-Zugriffe in ${rel} zeigen auf gueltige Namespace-Pfade`, () => {
     const code = stripComments(readFileSync(join(REPO, rel), "utf8"));
-    let m;
     let checked = 0;
-    while ((m = ACCESS_RE.exec(code))) {
+    // matchAll() iteriert auf einem internen Klon von ACCESS_RE (die Regex wird bei jedem
+    // Aufruf per String.prototype.matchAll kopiert) - ein throw waehrend der Iteration
+    // (z.B. eine fehlschlagende Assertion) mutiert daher NIE das geteilte Modul-Regex-Objekt.
+    // Mit dem alten ACCESS_RE.exec()-while-Loop bliebe lastIndex bei einem Abbruch auf dem
+    // Abbruch-Offset stehen und der naechste, unabhaengige Testfall wuerde ab dieser Stelle
+    // statt ab Dateianfang scannen (F.I.R.S.T./Independence-Verstoss).
+    for (const m of code.matchAll(ACCESS_RE)) {
       const [, first, second] = m;
       if (NESTED_GROUPS.has(first)) {
         assert.doesNotThrow(() => config[first][second], `${rel}: config.${first}.${second}`);
@@ -57,3 +62,29 @@ for (const rel of SCRIPTS) {
     assert.ok(checked > 0, `${rel}: kein config-Zugriff gefunden (Datei-Liste veraltet?)`);
   });
 }
+
+// Regression fuer P12-Blocker (Runde 1): das modulweite ACCESS_RE darf durch einen
+// Abbruch (throw) mitten in einer Iteration nicht beschaedigt werden - sonst wuerde ein
+// scheiternder Test in der Schleife oben den lastIndex-Zustand an den naechsten,
+// unabhaengigen test()-Fall durchreichen (geteilter Mutable-State zwischen Faellen).
+test("ACCESS_RE-Iteration mutiert bei einem Abbruch nicht den geteilten Regex-Zustand", () => {
+  assert.equal(ACCESS_RE.lastIndex, 0, "Vorbedingung: ACCESS_RE ist zwischen Testfaellen unbenutzt (lastIndex 0)");
+
+  const snippetWithAbort = "config.telnyx.apiKey config.stripe.secretKey config.broken.leaf";
+  assert.throws(() => {
+    for (const m of snippetWithAbort.matchAll(ACCESS_RE)) {
+      if (m[2] === "leaf") throw new Error("simulierter Assertion-Abbruch mitten im Scan");
+    }
+  });
+  assert.equal(
+    ACCESS_RE.lastIndex,
+    0,
+    "ACCESS_RE.lastIndex darf nach einem Abbruch nicht auf einem Byte-Offset > 0 stehen bleiben",
+  );
+
+  // Ein nachfolgender, unabhaengiger Scan (wie der naechste test()-Fall in der Suite)
+  // muss trotz des vorherigen Abbruchs wieder vollstaendig ab Dateianfang funktionieren.
+  const nextSnippet = "config.claude.model config.smsCap.perDay";
+  const found = [...nextSnippet.matchAll(ACCESS_RE)].map((m) => `${m[1]}.${m[2]}`);
+  assert.deepEqual(found, ["claude.model", "smsCap.perDay"]);
+});
