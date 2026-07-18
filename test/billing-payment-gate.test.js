@@ -23,6 +23,7 @@ import { makeStripeWebhookRoute } from "../src/routes/stripe-webhook.js";
 import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { registerTenant } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PAYMENT_DISABLED_MESSAGE = "payment disabled (PAYMENT_ENABLED)";
 const METERING_DISABLED_MESSAGE = "metering disabled (PAYMENT_ENABLED)";
@@ -45,20 +46,20 @@ function fakeRes() {
 
 test("requirePaymentEnabled: paymentEnabled=true -> true, res unberuehrt", () => {
   const res = fakeRes();
-  assert.equal(requirePaymentEnabled(res, { paymentEnabled: true }), true);
+  assert.equal(requirePaymentEnabled(res, withConfigNamespaces({ paymentEnabled: true })), true);
   assert.equal(res.statusCode, null);
 });
 
 test("requirePaymentEnabled: paymentEnabled=false, kein message-Override -> 404 mit Default-Text", () => {
   const res = fakeRes();
-  assert.equal(requirePaymentEnabled(res, { paymentEnabled: false }), false);
+  assert.equal(requirePaymentEnabled(res, withConfigNamespaces({ paymentEnabled: false })), false);
   assert.equal(res.statusCode, 404);
   assert.deepEqual(res.body, { error: PAYMENT_DISABLED_MESSAGE });
 });
 
 test("requirePaymentEnabled: paymentEnabled=false, message-Override -> 404 mit dem uebergebenen Text", () => {
   const res = fakeRes();
-  assert.equal(requirePaymentEnabled(res, { paymentEnabled: false }, "custom text"), false);
+  assert.equal(requirePaymentEnabled(res, withConfigNamespaces({ paymentEnabled: false }), "custom text"), false);
   assert.deepEqual(res.body, { error: "custom text" });
 });
 
@@ -69,7 +70,7 @@ async function startBillingApp() {
   app.use(express.json());
   app.use(
     makeBillingRoutes({
-      config: { paymentEnabled: false },
+      config: withConfigNamespaces({ paymentEnabled: false }),
       store: {},
       audit: () => {},
       billing: {},
@@ -141,7 +142,7 @@ test("PAYMENT_ENABLED aus: alle 3 self-service/billing-Routen -> 404 mit exaktem
       webAuthMw: webAuth({ secret: SECRET, sessions, accounts }),
       webAuthPendingMw: webAuthAllowPending({ secret: SECRET, sessions, accounts }),
       audit: () => {},
-      config: { paymentEnabled: false, publicUrl: "https://test.local" },
+      config: withConfigNamespaces({ paymentEnabled: false, publicUrl: "https://test.local" }),
       billing: {},
       accounts,
       provision: async () => {},
@@ -188,7 +189,7 @@ function fakeStripeWebhookReqRes() {
 
 test("PAYMENT_ENABLED aus: routes/stripe-webhook.js -> 404 mit dem eigenen abweichenden Text", async () => {
   const handler = makeStripeWebhookRoute({
-    config: { paymentEnabled: false },
+    config: withConfigNamespaces({ paymentEnabled: false }),
     store: {},
     audit: () => {},
     accounts: {},

@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planSummarySms } from "../src/sms-summary.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PROV = PROVIDER.TWILIO;
 
@@ -30,7 +31,7 @@ function makeStore(tenants) {
 const call = (tenantId) => ({ id: `call_${tenantId}`, tenantId, provider: PROV });
 // PA-10: dailySmsCap muss numerisch sein (fail-closed-Guard); 20 = Prod-Default, der
 // Fake-Store liefert dailySmsCount 0 -> der Send-Pfad bleibt unveraendert.
-const cfg = (sendSmsSummary = true) => ({ sendSmsSummary, dailySmsCap: 20 });
+const cfg = (sendSmsSummary = true) => withConfigNamespaces({ sendSmsSummary, dailySmsCap: 20 });
 
 test("alles vorhanden -> send=true, Ziel = private Nummer des Call-Tenants", () => {
   const store = makeStore({

@@ -2,7 +2,7 @@
 // fuer den Nummern-Kauf. Reine Verschiebung aus server.js. Factory schliesst die injizierten
 // Deps; reine Konstanten/Geo-Helfer importiert das Modul selbst (EINE Quelle, G5). INV-7: der
 // makeSingleFlight-Guard lebt im Factory-Scope = EIN Drain-Guard pro Prozess (kein Doppelkauf).
-// Die Gating-Bedingung `if (config.paymentEnabled)` bleibt beim Aufrufer (runProvisioningDrain-
+// Die Gating-Bedingung `if (config.billing.paymentEnabled)` bleibt beim Aufrufer (runProvisioningDrain-
 // Body), nicht ausgelagert. Geld-Invarianten (Hold-vor-Order, kein active ohne Capture,
 // Rollback) liegen unveraendert in provisionNumber/handleProvisionJob.
 import { makeSingleFlight } from "../single-flight.js";
@@ -87,11 +87,11 @@ export function makeProvisioningOrchestrator({
         const r = resolveProvisionRetry(s, {
           tenantId,
           nowMs: Date.now(),
-          maxAgeMs: config.provisioningRedriveMaxAgeMs,
-          fallbackCountry: config.provisioningCountry,
-          forceNumberCountry: config.forceNumberCountry,
-          maxNumbers: config.maxNumbers,
-          maxNumbersPerTenant: config.maxNumbersPerTenant,
+          maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
+          fallbackCountry: config.provisioning.provisioningCountry,
+          forceNumberCountry: config.provisioning.forceNumberCountry,
+          maxNumbers: config.provisioning.maxNumbers,
+          maxNumbersPerTenant: config.provisioning.maxNumbersPerTenant,
         });
         // Fix B (G5/S2): dieselbe Persistenz-Entscheidung wie POST /api/onboard. Fuer redrive/
         // needs_manual_reconcile mutiert der Core NICHT; nur der fresh-Pfad (requestNumber) schreibt.
@@ -117,7 +117,7 @@ export function makeProvisioningOrchestrator({
     const numberId = numberResult.reason === "redrive" ? numberResult.numberId : numberResult.number.id;
     // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf/
     // Re-Drive - EINE Stelle fuer beide Pfade (G5, kein doppelter Gate).
-    if (!config.provisioningEnabled) return { ok: true, reason: "dry_run", numberId };
+    if (!config.provisioning.provisioningEnabled) return { ok: true, reason: "dry_run", numberId };
     // Redrive: KEINE neue Nummer/Job (queueProvisioning), sondern den bestehenden stuck-Job in
     // den single-flight-Drain zurueckgeben (dieselbe numberId/idempotencyKey -> kein Doppelkauf).
     if (numberResult.reason === "redrive") {
@@ -139,12 +139,12 @@ export function makeProvisioningOrchestrator({
     const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
     // Geld-/Zahlungs-Optionen sind land-unabhaengig (global). Die Suchparameter
     // (countryCode/connectionId) werden PRO JOB aus dem Number-Record abgeleitet
-    // (P7, Geo-Provisioning) - nicht mehr global aus config.provisioningCountry.
+    // (P7, Geo-Provisioning) - nicht mehr global aus config.provisioning.provisioningCountry.
     const moneyOpts = {};
-    if (config.paymentEnabled) {
+    if (config.billing.paymentEnabled) {
       deps.billing = billing;
-      moneyOpts.holdAmountCents = config.numberSetupFeeCents;
-      moneyOpts.currency = config.paymentCurrency;
+      moneyOpts.holdAmountCents = config.billing.numberSetupFeeCents;
+      moneyOpts.currency = config.billing.paymentCurrency;
     }
     await queue.drain(async (queuedJob) => {
       const record = s.provisioningJobs.find((j) => j.idempotencyKey === queuedJob.idempotencyKey);
@@ -156,8 +156,8 @@ export function makeProvisioningOrchestrator({
       // Per-Land-Hold (P9, R3): ueberschreibt den globalen moneyOpts.holdAmountCents nur,
       // wenn das Land einen eigenen Tarif hat; sonst = numberSetupFeeCents (byte-identisch).
       // Fehlender Record / DE -> Default. NUR im Geld-Pfad (PAYMENT_ENABLED), sonst undefined.
-      const holdAmountCents = config.paymentEnabled
-        ? holdAmountForCountry(number?.country, config.numberSetupFeeCents)
+      const holdAmountCents = config.billing.paymentEnabled
+        ? holdAmountForCountry(number?.country, config.billing.numberSetupFeeCents)
         : undefined;
       const opts = {
         ...moneyOpts,
@@ -170,7 +170,7 @@ export function makeProvisioningOrchestrator({
         // number_month-Meter (P6b3, Meter 1): NUR wenn eine Nummer NEU aktiviert wurde
         // (r.number, nicht skipped) UND im Metering-Pfad. Erste Periode bei Aktivierung
         // (monatlicher Scheduler = P8). costCents = der Setup-Tarif (numberSetupFeeCents).
-        if (config.paymentEnabled) metering.recordNumberMonthMeter(r.number);
+        if (config.billing.paymentEnabled) metering.recordNumberMonthMeter(r.number);
         store.save();
         return r;
       } catch (err) {
@@ -229,10 +229,10 @@ export function makeProvisioningOrchestrator({
   // app.listen-Callback (blockiert weder listen noch Healthcheck). Log PII-/Secret-frei (nur
   // interne job/number/tenant-IDs + Grund, kein e164/PaymentIntent/Key, Regel 4).
   function reconcileOrphanedProvisioning() {
-    if (!config.provisioningEnabled) return;
+    if (!config.provisioning.provisioningEnabled) return;
     const buckets = classifyQueuedProvisioningJobs(store.load(), {
       nowMs: Date.now(),
-      maxAgeMs: config.provisioningRedriveMaxAgeMs,
+      maxAgeMs: config.provisioning.provisioningRedriveMaxAgeMs,
       kycMinLevel: KYC_OUTBOUND_MIN,
     });
     closeSettledProvisioningJobs(buckets.close);

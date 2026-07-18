@@ -9,6 +9,7 @@ import { makeMetering } from "../src/billing/metering.js";
 import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const TENANT_A = "tenant_a";
 const NUMBER_SETUP_FEE_CENTS = 500;
@@ -110,7 +111,7 @@ test("reconcileOutboundVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCent
 
 test("recordNumberMonthMeter: undefined (uebersprungener Job) -> kein Event", () => {
   const store = fakeStore();
-  const config = { numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS };
+  const config = withConfigNamespaces({ numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS });
   const { recordNumberMonthMeter } = makeMetering({ store, config });
   recordNumberMonthMeter(undefined);
   assert.equal(store.usageEvents.length, 0);
@@ -118,7 +119,7 @@ test("recordNumberMonthMeter: undefined (uebersprungener Job) -> kein Event", ()
 
 test("recordNumberMonthMeter: Number -> Event mit kind/quantity/costCents aus holdAmountForCountry", () => {
   const store = fakeStore();
-  const config = { numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS };
+  const config = withConfigNamespaces({ numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS });
   const { recordNumberMonthMeter } = makeMetering({ store, config });
   const number = { tenantId: TENANT_A, country: "DE" };
   recordNumberMonthMeter(number);
@@ -135,7 +136,7 @@ test("Modul bucht ungated: paymentEnabled=false bucht trotzdem (Gate liegt beim 
   const { recordVoiceMinuteMeter, reconcileOutboundVoiceBudget, recordNumberMonthMeter } =
     makeMetering({
       store,
-      config: { paymentEnabled: false, numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS },
+      config: withConfigNamespaces({ paymentEnabled: false, numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS }),
     });
   const call = makeCall();
   recordVoiceMinuteMeter(call);

@@ -807,7 +807,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
 // verlangt die Proxy-[[Get]]-Invariante den EXAKTEN Zielwert -> sonst TypeError beim ersten
 // config.<ns>-Zugriff. Die Blaetter sind enumerable Getter (damit JSON.stringify(config.<ns>)
 // die Gruppe zu ihren Werten serialisiert, wie die bestehende telnyxAssistant-Gruppe).
-function attachNamespaces(target, namespaces) {
+export function attachNamespaces(target, namespaces) {
   for (const [namespace, keys] of Object.entries(namespaces)) {
     const group = {};
     for (const key of keys) {

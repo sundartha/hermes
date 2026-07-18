@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { PLAN_CATALOG, CATALOG_SLUGS } from "../src/plans.js";
 import { PLAN_SLUGS, priceIdForPlan } from "../src/billing/subscribe.js";
 import { PLAN_CATALOG as WEB_CATALOG } from "../apps/web/src/lib/plans.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const EXPECTED_SLUGS = ["starter", "business"];
 
@@ -51,7 +52,7 @@ test("subscribe.js teilt referenziell DIESELBE Slug-Quelle (eine Quelle, G5/S2)"
 test("jeder Katalog-Slug hat einen aufloesbaren Stripe-Price-Config-Key", () => {
   // Faengt 'neuer Tier ohne Price-Config-Key' ab: priceIdForPlan muss fuer JEDEN
   // buchbaren Slug bei gesetzter Config eine Price-Id liefern (sonst Tier tot).
-  const config = { stripeStarterPriceId: "price_s", stripeBusinessPriceId: "price_b" };
+  const config = withConfigNamespaces({ stripeStarterPriceId: "price_s", stripeBusinessPriceId: "price_b" });
   for (const slug of CATALOG_SLUGS) {
     assert.ok(priceIdForPlan(slug, config), `${slug}: kein Stripe-Price-Config-Key`);
   }

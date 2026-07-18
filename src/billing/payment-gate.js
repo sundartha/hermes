@@ -4,7 +4,7 @@
 // sendet 404 und gibt false zurueck. message defaultet auf den an 5 Stellen identischen Text;
 // der Metering-Flush ueberschreibt ihn mit seinem eigenen (byte-identisch erhalten).
 export function requirePaymentEnabled(res, config, message = "payment disabled (PAYMENT_ENABLED)") {
-  if (config.paymentEnabled) return true;
+  if (config.billing.paymentEnabled) return true;
   res.status(404).json({ error: message });
   return false;
 }

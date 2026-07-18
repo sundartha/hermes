@@ -11,6 +11,7 @@ import { makePgTestStore } from "./pg-helpers.js";
 import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "subscribe-web-secret-0123456789";
 const SUB_B = "sub-b";
@@ -60,7 +61,7 @@ async function setup({ card = true, paymentEnabled = true, billing } = {}) {
   const provisionSpy = [];
   const app = express();
   app.use(express.json());
-  const cfg = { ...CONFIG, paymentEnabled };
+  const cfg = withConfigNamespaces({ ...CONFIG, paymentEnabled });
   app.use(
     makeSelfServiceRoutes({
       store,
