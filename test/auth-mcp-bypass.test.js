@@ -36,18 +36,31 @@ test("AM1: legacyLocalBypassAllowed - ausserhalb Produktion nur localhost", () =
   assert.equal(legacyLocalBypassAllowed(reqFrom("203.0.113.7"), false), false);
 });
 
-// Verdrahtung: dieselbe localhost-Legacy-Anfrage (kein Token) kippt allein durch das
-// Produktions-Gate von next() auf 401. config.* wird ueberschrieben + strikt restauriert
-// (Muster config-prod-footguns.test.js withConfig). mcpAuth/mcpAuthToken werden explizit
-// gesetzt, damit der Test unabhaengig von der Runner-Env ist (kein BASE_ENV im Prozess).
-test("AM1: mcpAuth - Produktions-Gate kippt localhost-Legacy-Bypass auf 401", async () => {
+// Gemeinsamer Save/Restore-Helper fuer mcpAuth/mcpAuthToken/isProduction, von allen
+// mcpAuth-Tests unten genutzt (AM1 Produktions-Gate + PA-17 Modus-Matrix) - eine einzige
+// Implementierung des Override/Restore-Patterns statt einer je Test. Der Proxy hat kein
+// set-Trap, schreibt also rawConfig[key] durch - die Namespace-Getter (config.auth.*)
+// lesen denselben Speicherort, migrierte auth.js sieht den Override.
+function withMcpConfig(overrides, fn) {
   const saved = {
-    isProduction: config.isProduction,
     mcpAuth: config.mcpAuth,
     mcpAuthToken: config.mcpAuthToken,
+    isProduction: config.isProduction,
   };
+  Object.assign(config, { mcpAuth: "", mcpAuthToken: "", isProduction: false, ...overrides });
   try {
-    Object.assign(config, { mcpAuth: "", mcpAuthToken: "", isProduction: true });
+    return fn();
+  } finally {
+    Object.assign(config, saved);
+  }
+}
+
+// Verdrahtung: dieselbe localhost-Legacy-Anfrage (kein Token) kippt allein durch das
+// Produktions-Gate von next() auf 401. config.* wird ueber withMcpConfig ueberschrieben
+// + strikt restauriert. mcpAuth/mcpAuthToken werden explizit gesetzt, damit der Test
+// unabhaengig von der Runner-Env ist (kein BASE_ENV im Prozess).
+test("AM1: mcpAuth - Produktions-Gate kippt localhost-Legacy-Bypass auf 401", async () => {
+  await withMcpConfig({ isProduction: true, mcpAuth: "", mcpAuthToken: "" }, async () => {
     let nexted = false;
     const res = fakeRes();
     await mcpAuth(reqFrom("127.0.0.1"), res, () => {
@@ -64,9 +77,7 @@ test("AM1: mcpAuth - Produktions-Gate kippt localhost-Legacy-Bypass auf 401", as
     });
     assert.equal(nexted2, true, "ausserhalb Produktion Bypass wie bisher");
     assert.equal(res2.statusCode, null);
-  } finally {
-    Object.assign(config, saved);
-  }
+  });
 });
 
 // PA-17: Verdrahtungs-Test fuer die config.<flatKey> -> config.<namespace>.<key>-Migration
@@ -85,23 +96,6 @@ async function runMcpAuth(req) {
     nexted = true;
   });
   return { nexted, statusCode: res.statusCode };
-}
-
-// Override + strikt restaurierter Save/Restore auf den Flach-Keys (Muster oben): der
-// Proxy hat kein set-Trap, schreibt also rawConfig[key] durch - die Namespace-Getter
-// (config.auth.*) lesen denselben Speicherort, migrierte auth.js sieht den Override.
-function withMcpConfig(overrides, fn) {
-  const saved = {
-    mcpAuth: config.mcpAuth,
-    mcpAuthToken: config.mcpAuthToken,
-    isProduction: config.isProduction,
-  };
-  Object.assign(config, { mcpAuth: "", mcpAuthToken: "", isProduction: false, ...overrides });
-  try {
-    return fn();
-  } finally {
-    Object.assign(config, saved);
-  }
 }
 
 test("PA-17: mcpAuth Modus-Matrix (off/oauth/token/legacy) - Verzweigung unveraendert", async () => {
