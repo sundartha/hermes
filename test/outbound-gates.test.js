@@ -6,9 +6,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveMaxDurationS } from "../src/telephony/outbound-gates.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-const CFG = { maxCallDurationS: 180 };
-const DEFAULT_S = 180; // == CFG.maxCallDurationS in diesem Setup (kein config-Fallback-Fall)
+const CFG = withConfigNamespaces({ maxCallDurationS: 180 });
+const DEFAULT_S = 180; // == CFG.safety.maxCallDurationS in diesem Setup (kein config-Fallback-Fall)
 const CAP_S = 300;
 
 test("resolveMaxDurationS: negativer/0/NaN/leerer/fehlender Body-Wert faellt auf den config-Default", () => {
@@ -31,7 +32,7 @@ test("resolveMaxDurationS: MAX_CALL_DURATION_CAP_S deckelt jeden ueberlangen Wer
 });
 
 test("resolveMaxDurationS: ungueltiger Body UND ungueltiger config-Default -> DEFAULT_CALL_DURATION_S, nie NaN", () => {
-  const result = resolveMaxDurationS(undefined, { maxCallDurationS: undefined });
+  const result = resolveMaxDurationS(undefined, withConfigNamespaces({ maxCallDurationS: undefined }));
   assert.equal(result, DEFAULT_S, "harter Hard-Default greift, wenn beide Kandidaten ungueltig sind");
   assert.ok(Number.isFinite(result), "niemals NaN");
 });

@@ -25,7 +25,7 @@ export function makeStripeWebhookRoute({ config, store, audit, accounts, session
     const ok = verifyStripeSignature({
       rawBody: req.rawBody,
       signatureHeader: req.headers["stripe-signature"],
-      secret: config.stripeWebhookSecret,
+      secret: config.billing.stripeWebhookSecret,
       nowS: Math.floor(Date.now() / 1000),
     });
     if (!ok) {

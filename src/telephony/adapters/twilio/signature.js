@@ -8,7 +8,7 @@ import { config } from "../../../config.js";
 /** @type {import("../../ports.js").InboundSignatureVerifier["verifyInboundSignature"]} */
 export function verifyInboundSignature({ headers, url, params }) {
   // Fail-closed: ohne PUBLIC_URL kann die signierte URL nicht rekonstruiert werden.
-  if (!config.publicUrl) return false;
+  if (!config.server.publicUrl) return false;
   const signature = headers["x-twilio-signature"] || "";
-  return twilio.validateRequest(config.twilioToken, signature, url, params || {});
+  return twilio.validateRequest(config.telephony.twilioToken, signature, url, params || {});
 }

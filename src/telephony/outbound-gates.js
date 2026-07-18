@@ -105,9 +105,9 @@ export const isTrunkZeroFormatError = (to) => !isDenied(to) && hasTrunkZeroAfter
 // Liest das config-Singleton (defaultConfig) - in Produktion dasselbe Objekt wie das in
 // die Factory injizierte config; der Reserve-Betrag wird im Unit-Test nicht asserted.
 export function tariffCentsPerMin(to) {
-  return defaultConfig.voiceTariffDomesticPrefixes.some((p) => to.startsWith(p))
-    ? defaultConfig.voiceTariffDomesticCents
-    : defaultConfig.voiceTariffDefaultCents;
+  return defaultConfig.billing.voiceTariffDomesticPrefixes.some((p) => to.startsWith(p))
+    ? defaultConfig.billing.voiceTariffDomesticCents
+    : defaultConfig.billing.voiceTariffDefaultCents;
 }
 
 // S1-6 Wurzelfix: loest die Max-Gespraechsdauer (Sekunden) aus dem optionalen, UNVALIDIERTEN
@@ -117,7 +117,7 @@ export function tariffCentsPerMin(to) {
 // bis zu einer NEGATIVEN Reserve durch). chosen ist immer >0 (DEFAULT_CALL_DURATION_S als Boden)
 // -> Math.min nie NaN.
 export function resolveMaxDurationS(raw, cfg) {
-  const chosen = [parseInt(raw, 10), cfg.maxCallDurationS, DEFAULT_CALL_DURATION_S].find(
+  const chosen = [parseInt(raw, 10), cfg.safety.maxCallDurationS, DEFAULT_CALL_DURATION_S].find(
     (v) => Number.isFinite(v) && v > 0,
   );
   return Math.min(chosen, MAX_CALL_DURATION_CAP_S);
@@ -137,24 +137,25 @@ export function makeOutboundGates({
   // Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
   // nie ueber die globale Erlaubnis hinaus (Profil "*"/leer = keine Zusatz-Einschraenkung).
   function countryGateAllowed(to, profile) {
-    if (!matchesPrefix(to, config.allowedCountryCodes)) return false;
+    if (!matchesPrefix(to, config.safety.allowedCountryCodes)) return false;
     const p = profile.allowedCountryCodes;
     return !p || !p.length || matchesPrefix(to, p);
   }
 
   // Cooldown-Fensterstart fuer den per-(Tenant,Ziel)-Cap (outbound-p1d). Eigenes Fenster
-  // (config.perTargetWindowMs) - die Stundenlimits unten nutzen hourWindowStart.
-  const perTargetWindowStart = () => new Date(Date.now() - config.perTargetWindowMs).toISOString();
+  // (config.safety.perTargetWindowMs) - die Stundenlimits unten nutzen hourWindowStart.
+  const perTargetWindowStart = () =>
+    new Date(Date.now() - config.safety.perTargetWindowMs).toISOString();
   // Globales Stundenlimit ueber ALLE Outbound-Calls (Plattform-Notbremse, Bestand, wird nie
   // entfernt). Tenant-unabhaengig (ohne Filter = alle Calls).
   const globalHourReached = () =>
-    store.countOutboundCallsSince(hourWindowStart()) >= config.maxCallsPerHour;
+    store.countOutboundCallsSince(hourWindowStart()) >= config.safety.maxCallsPerHour;
   // Pro-Nutzer-Stundenlimit: effektiv min(global, profil) - ein Profil kann nur senken.
   function userHourReached(profile, requestedBy) {
     const limit =
       profile.maxCallsPerHour == null
-        ? config.maxCallsPerHour
-        : Math.min(config.maxCallsPerHour, profile.maxCallsPerHour);
+        ? config.safety.maxCallsPerHour
+        : Math.min(config.safety.maxCallsPerHour, profile.maxCallsPerHour);
     return store.countOutboundCallsSince(hourWindowStart(), { requestedBy }) >= limit;
   }
   // Per-(Tenant,Ziel)-Wiederhol-Cap (outbound-p1d, D4, Belaestigungs-Bremse, Schutz Dritter):
@@ -164,7 +165,7 @@ export function makeOutboundGates({
   function perTargetCapReached(tenantId, to) {
     return (
       store.countOutboundCallsSince(perTargetWindowStart(), { tenantId, to }) >=
-      config.perTargetCallCap
+      config.safety.perTargetCallCap
     );
   }
 
@@ -248,7 +249,7 @@ export function makeOutboundGates({
       return {
         status: 429,
         grund: "stundenlimit",
-        message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.maxCallsPerHour}). Bitte spaeter erneut.`,
+        message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.safety.maxCallsPerHour}). Bitte spaeter erneut.`,
       };
     if (userHourReached(profile, requestedBy))
       return {
@@ -294,7 +295,7 @@ export function makeOutboundGates({
     {
       name: "outbound_frozen",
       run(ctx) {
-        if (!config.outboundFrozen) return null;
+        if (!config.safety.outboundFrozen) return null;
         return deny(403, { error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." }, {
           event: "place_call_denied",
           detail: `to=${ctx.to} grund=frozen`,
@@ -433,7 +434,7 @@ export function makeOutboundGates({
       name: "assistant_context",
       run(ctx) {
         ctx.context = null;
-        if (!config.assistantContextEnabled) return null;
+        if (!config.tenancy.assistantContextEnabled) return null;
         const r = validateAssistantContext(ctx.b.context);
         if (r.error) return deny(400, { error: r.error });
         ctx.context = r.value;
@@ -475,14 +476,14 @@ export function makeOutboundGates({
     },
     // Minuten-Kontingent-Gate (B2, GAP B): SEPARATES Gate NEBEN dem Budget-Gate (eigenes
     // audit grund=minutes), NIE in die Budget-Pruefung gefaltet (getrennte Achsen). Hinter
-    // config.paymentEnabled (aus -> No-Op, byte-identisch). Owner/Bootstrap ausgenommen, VOR
+    // config.billing.paymentEnabled (aus -> No-Op, byte-identisch). Owner/Bootstrap ausgenommen, VOR
     // der "kein Plan -> blocken"-Regel. Inbound bleibt ungated: die Minuten-Erschoepfung
     // deckelt nur den aktiven, teuren Outbound.
     {
       name: "minutes",
       run(ctx) {
         if (
-          !config.paymentEnabled ||
+          !config.billing.paymentEnabled ||
           ctx.tenantId === BOOTSTRAP_TENANT_ID ||
           !planMinutesExhausted(ctx.tenantId)
         )

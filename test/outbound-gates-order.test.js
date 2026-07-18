@@ -11,6 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const EXPECTED_ORDER = [
   "outbound_frozen",
@@ -80,7 +81,7 @@ function defaultConfig() {
 function makeDeps(o = {}) {
   return {
     store: { ...defaultStore(), ...o.store },
-    config: { ...defaultConfig(), ...o.config },
+    config: withConfigNamespaces({ ...defaultConfig(), ...o.config }),
     requestTenant: o.requestTenant ?? (() => "T"),
     internalIdentity: o.internalIdentity ?? (() => null),
     OWNER_ID: "owner",
@@ -193,6 +194,43 @@ test("number_gate: Denylist (Satelliten-Prefix) -> 403 grund=denylist requestedB
   assert.equal(denial.status, 403);
   assert.equal(denial.audit.detail, `to=${ctx.to} grund=denylist requestedBy=owner`);
   assert.ok(!denial.audit.detail.includes("tenant="));
+});
+
+// PA-15 (PM-10-Guard): Wert-Tests der migrierten Gate-Werte (config.safety.*). Fangen den
+// "falscher-aber-existierender-Blattname"-Fall (z.B. maxCallsPerHour <-> perTargetCallCap
+// vertauscht), den weder der grep-Gate noch der guardedConfig-Proxy fangen wuerden.
+test("number_gate: LAND-Gate (config.safety.allowedCountryCodes) -> 403 grund=land", async () => {
+  const { gates } = makeOutboundGates(makeDeps());
+  const ctx = baseCtx({ to: "+15551234567" });
+  const denial = await gateBy(gates, "number_gate").run(ctx);
+  assert.equal(denial.status, 403);
+  assert.match(denial.audit.detail, /grund=land/);
+});
+
+test("number_gate: STUNDENLIMIT (config.safety.maxCallsPerHour) -> 429, Meldung nennt den Blattwert", async () => {
+  const { gates } = makeOutboundGates(
+    makeDeps({
+      config: { maxCallsPerHour: 5 },
+      store: { countOutboundCallsSince: () => 5 },
+    }),
+  );
+  const denial = await gateBy(gates, "number_gate").run(baseCtx());
+  assert.equal(denial.status, 429);
+  assert.match(denial.body.error, /MAX_CALLS_PER_HOUR=5/);
+});
+
+test("number_gate: PER-ZIEL-CAP (config.safety.perTargetCallCap + perTargetWindowMs) -> 429 grund=ziel_limit", async () => {
+  const { gates } = makeOutboundGates(
+    makeDeps({
+      config: { perTargetCallCap: 2 },
+      // Filter mit .to isoliert den Per-Ziel-Zaehler von den Stundenlimits (die ohne
+      // .to-Filter zaehlen).
+      store: { countOutboundCallsSince: (_since, filter) => (filter?.to ? 2 : 0) },
+    }),
+  );
+  const denial = await gateBy(gates, "number_gate").run(baseCtx());
+  assert.equal(denial.status, 429);
+  assert.match(denial.audit.detail, /grund=ziel_limit/);
 });
 
 test("valid_text: ueberlanges objective -> 400, audit null", async () => {
