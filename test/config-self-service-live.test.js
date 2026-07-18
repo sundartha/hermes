@@ -8,22 +8,22 @@ import assert from "node:assert/strict";
 import { isSelfServiceLive } from "../src/config.js";
 
 test("isSelfServiceLive: beide Flags an -> true", () => {
-  assert.equal(isSelfServiceLive({ selfServiceEnabled: true, multiTenant: true }), true);
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: true } }), true);
 });
 
 test("isSelfServiceLive: nur selfServiceEnabled an -> false", () => {
-  assert.equal(isSelfServiceLive({ selfServiceEnabled: true, multiTenant: false }), false);
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: false } }), false);
 });
 
 test("isSelfServiceLive: nur multiTenant an -> false", () => {
-  assert.equal(isSelfServiceLive({ selfServiceEnabled: false, multiTenant: true }), false);
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: true } }), false);
 });
 
 test("isSelfServiceLive: beide Flags aus -> false", () => {
-  assert.equal(isSelfServiceLive({ selfServiceEnabled: false, multiTenant: false }), false);
+  assert.equal(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: false } }), false);
 });
 
 test("isSelfServiceLive: liefert immer einen echten Boolean (kein truthy-Objekt-Leak)", () => {
-  assert.strictEqual(isSelfServiceLive({ selfServiceEnabled: true, multiTenant: true }), true);
-  assert.strictEqual(isSelfServiceLive({ selfServiceEnabled: false, multiTenant: false }), false);
+  assert.strictEqual(isSelfServiceLive({ tenancy: { selfServiceEnabled: true, multiTenant: true } }), true);
+  assert.strictEqual(isSelfServiceLive({ tenancy: { selfServiceEnabled: false, multiTenant: false } }), false);
 });

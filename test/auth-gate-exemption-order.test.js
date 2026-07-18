@@ -52,10 +52,16 @@ function fakeReq(path, headers = {}) {
 
 const DASHBOARD_PASSWORD = "s3cret-pw";
 
+// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key> (namespaced), dashboardPassword
+// bleibt flach (auth-gate.js liest config.dashboardPassword direkt, unveraendert).
 function makeGate(overrides = {}) {
   auditCalls.length = 0;
   return makeAuthGate({
-    config: { dashboardPassword: DASHBOARD_PASSWORD, selfServiceEnabled: false, multiTenant: false, ...overrides.config },
+    config: {
+      dashboardPassword: DASHBOARD_PASSWORD,
+      tenancy: { selfServiceEnabled: false, multiTenant: false },
+      ...overrides.config,
+    },
     audit: overrides.audit ?? fakeAudit,
     isTrustedLocalCaller: overrides.isTrustedLocalCaller ?? (() => false),
     safeEqual,
@@ -117,16 +123,16 @@ test("auth-gate: geschuetzte Pfade ohne Credentials -> 401, auth_failed geloggt"
 // === (c) Flag-Gate: CUSTOMER_PORTAL_PATH nur unter selfService+multiTenant =======
 
 test("auth-gate: /tenant.html nur bei BEIDEN Flags exempt (Schnittmenge, kein OR)", async () => {
-  const beideFlagsAn = makeGate({ config: { selfServiceEnabled: true, multiTenant: true } });
+  const beideFlagsAn = makeGate({ config: { tenancy: { selfServiceEnabled: true, multiTenant: true } } });
   assert.equal(await run(beideFlagsAn, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), true);
 
-  const nurSelfService = makeGate({ config: { selfServiceEnabled: true, multiTenant: false } });
+  const nurSelfService = makeGate({ config: { tenancy: { selfServiceEnabled: true, multiTenant: false } } });
   assert.equal(await run(nurSelfService, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), false);
 
-  const nurMultiTenant = makeGate({ config: { selfServiceEnabled: false, multiTenant: true } });
+  const nurMultiTenant = makeGate({ config: { tenancy: { selfServiceEnabled: false, multiTenant: true } } });
   assert.equal(await run(nurMultiTenant, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), false);
 
-  const beideAus = makeGate({ config: { selfServiceEnabled: false, multiTenant: false } });
+  const beideAus = makeGate({ config: { tenancy: { selfServiceEnabled: false, multiTenant: false } } });
   assert.equal(await run(beideAus, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), false);
 });
 

@@ -27,12 +27,13 @@ async function makePgliteRunner() {
   return { withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) };
 }
 
+// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key> (namespaced); alle anderen
+// hier gelisteten Felder bleiben flach (wireWebLogin liest sie direkt, unveraendert).
 const baseConfig = {
   sessionSecret: "s",
   storeBackend: "pg",
   releaseGraceMs: 0,
-  selfServiceEnabled: false,
-  multiTenant: false,
+  tenancy: { selfServiceEnabled: false, multiTenant: false },
   adminEmails: [],
   loginRateLimitPerMin: 30,
   sessionTtlSeconds: 3600,
@@ -158,7 +159,9 @@ test("S2-15: devLoginEnabled -> POST /auth/dev-login mintet Session, 302-Redirec
 
 test("S2-16: selfServiceEnabled+multiTenant mountet /api/self-service/state (401 statt 404); Flags aus -> 404", async () => {
   // Zweig 1: Flags AN -> Route existiert, webAuth fail-closed 401 (kein 404).
-  const depsOn = await makeDeps({ config: { ...baseConfig, selfServiceEnabled: true, multiTenant: true } });
+  const depsOn = await makeDeps({
+    config: { ...baseConfig, tenancy: { selfServiceEnabled: true, multiTenant: true } },
+  });
   const captureOn = captureConsole();
   try {
     await guardedBoot("Web-Login/Portal", () => wireWebLogin(depsOn));
