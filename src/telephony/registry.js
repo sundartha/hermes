@@ -78,7 +78,7 @@ const ADAPTERS = Object.freeze({
   [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
   // Sonderfall (b): Eintrag = fertiger VoiceRenderer. Telnyx bekommt die globale
   // ElevenLabs-Plattform-Config LAZY zur Render-Zeit injiziert - der Arrow liest
-  // config.telnyxElevenLabs erst beim Aufruf, NICHT zur Import-Zeit (P15: kein
+  // config.telnyx.telnyxElevenLabs erst beim Aufruf, NICHT zur Import-Zeit (P15: kein
   // Lazy-Init-Singleton, config-Bindung an der Kompositionsstelle).
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TWILIO]: { renderDirectives: twilioRenderDirectives },
