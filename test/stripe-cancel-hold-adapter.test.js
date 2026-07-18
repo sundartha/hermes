@@ -7,23 +7,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { stripeBilling } from "../src/billing/stripe.js";
+import { makeStripeStub } from "./helpers.js";
 
 const SECRET = "sk_test_cancel_leak_probe";
 
 // Stub: jeder Response traegt ok/status (der Adapter parst hier kein json() bei cancelHold).
-function withStripeStub(impl, fn) {
-  const originalFetch = global.fetch;
-  const originalKey = config.billing.stripeSecretKey;
-  const originalBase = config.billing.stripeApiBase;
-  config.billing.stripeSecretKey = SECRET;
-  config.billing.stripeApiBase = "https://api.stripe.test"; // NIE api.stripe.com im Test
-  global.fetch = impl;
-  return Promise.resolve(fn()).finally(() => {
-    global.fetch = originalFetch;
-    config.billing.stripeSecretKey = originalKey;
-    config.billing.stripeApiBase = originalBase;
-  });
-}
+// pa20-fix1: geteilte Implementierung (G5) statt lokaler Kopie - makeStripeStub buendelt
+// fetch-Stub + stripeSecretKey/stripeApiBase-Override (Muster wie makeConfigOverrides).
+const withStripeStub = makeStripeStub(config, SECRET);
 
 test("cancelHold: POST /v1/payment_intents/<id>/cancel, Bearer + form-urlencoded, KEIN Body", async () => {
   let captured;
