@@ -87,6 +87,7 @@ export const BASE_ENV = {
   // Baseline-Drift (Lehre test-base-env-drift). am6-oauth-tenant.test.js setzt es explizit.
   OWNER_IDP_SUBJECT: "",
   MAX_CALL_DURATION_S: "180",
+  CAP_FAREWELL_LEAD_MS: "20000", // P3.1: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   RESERVE_RELEASE_GRACE_MS: "15000", // OUT-05 F2: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   FAKE_ORIGINATE: "false", // OUT-05 F2: Test-Seam AUS; einzelne Tests setzen ihn explizit
   SHUTDOWN_DRAIN_TIMEOUT_MS: "8000", // A6 F11: neutraler Default, sonst leakt lokales .env in Spawn-Tests

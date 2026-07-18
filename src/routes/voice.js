@@ -11,13 +11,13 @@
 // Import-vs-Inject wie api-calls.js (P9): reine Modul-Konstanten/Praedikate/Formatierer
 // mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, providerSupports/CAPABILITY
 // (P5, registry.js), sayD/hangupD, SPEAK_OUTCOME, localeFor, callFailureReason,
-// degradedSpeechFor, agentTurn/openingText/callerHasSpoken, metrics,
-// startInboundAiAssistant/inboundCallControlId, makeCallControlIngest) werden direkt
-// importiert (G5 "eine Quelle"). Laufzeit-Instanzen (voiceRender/directiveSynth/
-// ttsStore/lifecycle/finishCall/watchdog, INV-7), der Provider-Dispatch-Seam
-// (voiceControl/webhookEvents/providerFromHeaders/inboundSignatureVerifier, DIP) sowie
-// der Settlement-Seam (terminateAndBillCall/billThunk) und config/store/audit werden
-// injiziert (INV-7 "eine Instanz").
+// degradedSpeechFor, agentTurn/openingText/callerHasSpoken, remainingMaxDurationMs,
+// noSpeechEscalation, metrics, startInboundAiAssistant/inboundCallControlId,
+// makeCallControlIngest) werden direkt importiert (G5 "eine Quelle"). Laufzeit-Instanzen
+// (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall/watchdog, INV-7), der
+// Provider-Dispatch-Seam (voiceControl/webhookEvents/providerFromHeaders/
+// inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
+// billThunk) und config/store/audit werden injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
 import { normNum, DEFAULT_PROVIDER } from "../store/defaults.js";
@@ -28,6 +28,8 @@ import { localeFor } from "../i18n/locales.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
+import { remainingMaxDurationMs } from "../store/state-ops.js";
+import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
 import { startInboundAiAssistant, inboundCallControlId } from "../telnyx-inbound.js";
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
@@ -84,6 +86,41 @@ export function makeVoiceRoutes({
   async function sendVoiceXml(res, call, directives) {
     const audio = await directiveSynth.synthesizeDirectiveAudio(call, directives);
     res.type("text/xml").send(render(audio, call.provider));
+  }
+
+  // P3.1 (PLAN-CONVERSATION-QUALITY-V2): Abschied VOR dem harten Max-Dauer-Cap. Faellt die
+  // Restzeit unter den Vorlauf, endet dieser Turn mit einem deterministischen Abschluss-Satz
+  // statt mit einem Folge-Gather, den der wortlose Timer-Backstop Sekunden spaeter
+  // abschneiden wuerde. Der Cap wird dadurch NICHT verlaengert (Regel 1): der Satz liegt
+  // INNERHALB der Frist; terminateCappedCall bleibt unangetastet und beendet den Call
+  // weiterhin spaetestens bei maxCallDurationS - auch wenn ueberhaupt kein Turn mehr kommt.
+  // TURN-basiert statt Timer-basiert, weil nur hier ein Request offen ist, in den sich
+  // rendern laesst; dadurch laeuft der Pfad ueber voiceRender/directives und bedient beide
+  // Provider ohne den optionalen speak-Port (den Twilio gar nicht hat).
+  // Der Satz ist ein Locale-String, KEIN LLM-Text - er muss auch kommen, wenn das Modell
+  // klemmt. Genug Restzeit ODER capFarewellLeadMs=0 (Aus-Schalter) -> null.
+  function capFarewellOutcome(call) {
+    const remaining = remainingMaxDurationMs(call, Date.now(), config.safety.maxCallDurationS);
+    if (remaining >= config.safety.capFarewellLeadMs) return null;
+    return { speech: localeFor(call.language).capFarewellSpeech, endCall: true };
+  }
+
+  // P3.2: gestaffelte Antwort auf einen leeren Gather. Der Streak lebt ephemer am Call;
+  // die Staffel selbst ist rein (no-speech-escalation.js).
+  function noSpeechOutcome(call) {
+    return noSpeechEscalation(store.countNoSpeechTurn(call.id), localeFor(call.language));
+  }
+
+  // EINE Quelle (G5) fuer die drei Renderpfade des Turn-Handlers (Modell-Turn, No-Speech,
+  // Fehlerpfad): beenden -> Satz + Hangup, sonst Folge-Gather (Mikro offen). Nebeneffekt
+  // im Namen (N7, "send"): setzt zugleich den L0-Render-Zeitpunkt, aber nur wenn ein
+  // Folge-Turn ueberhaupt erwartet wird.
+  async function sendTurnOutcome(res, call, { speech, endCall }) {
+    if (!endCall) metrics.recordTurnRendered(call.id);
+    const directives = endCall
+      ? [sayInCallVoice(call, speech), hangupD()]
+      : followupTurnDirectives(call, speech);
+    await sendVoiceXml(res, call, directives);
   }
 
   // C-Telnyx-Inbound (P8, Befund 8): startet - falls einschlaegig - den Call-Control-Assistant
@@ -293,16 +330,18 @@ export function makeVoiceRoutes({
       // Turn-Zaehler (unansweredAgentTurns, nur bei echtem agentTurn-Aufruf neu ausgewertet)
       // dauerhaft eingefroren (siehe Kommentar an callerHasSpoken).
       if (!heard && callerHasSpoken(call)) {
-        metrics.recordTurnRendered(call.id); // L0: Folge-Gather offen -> Render-Zeitpunkt
-        const reprompt = followupTurnDirectives(call, localeFor(call.language).noSpeechReprompt);
-        return await sendVoiceXml(res, call, reprompt);
+        // P3.2: gestaffelte Eskalation statt desselben Satzes bis zum stillen Cap.
+        // P3.1 hat Vorrang: laeuft die Restzeit aus, ist ein weiterer Reprompt sinnlos -
+        // der Timer-Backstop wuerde ihn wortlos abschneiden.
+        return await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? noSpeechOutcome(call));
       }
-      const { speech, endCall } = await agentTurn(call, heard || null);
-      const directives = endCall
-        ? [sayInCallVoice(call, speech), hangupD()]
-        : followupTurnDirectives(call, speech);
-      if (!endCall) metrics.recordTurnRendered(call.id); // L0: nur wenn ein Folge-Turn folgt
-      await sendVoiceXml(res, call, directives);
+      // P3.2: eine VERSTANDENE Aeusserung bricht die Staffel ab (konsekutiv, nicht kumulativ).
+      if (heard) store.clearNoSpeechStreak(call.id);
+      const modelOutcome = await agentTurn(call, heard || null);
+      // P3.1: NACH agentTurn geprueft - sonst fiele die letzte Anrufer-Zeile aus Transkript,
+      // Summary und Export. Trifft der Cap-Vorlauf, ersetzt der deterministische Abschluss-
+      // Satz die Modell-Antwort (derselbe [Say, Hangup]-Zweig wie ein echtes end_call).
+      await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? modelOutcome);
     } catch (err) {
       console.error("[turn]", err.message);
       // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit
@@ -313,9 +352,7 @@ export function makeVoiceRoutes({
       // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
       // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
       const locale = localeFor(call.language);
-      const speech = degradedSpeechFor(err, locale);
-      const errorDirectives = [sayInCallVoice(call, speech), hangupD()];
-      await sendVoiceXml(res, call, errorDirectives);
+      await sendTurnOutcome(res, call, { speech: degradedSpeechFor(err, locale), endCall: true });
     }
   });
 

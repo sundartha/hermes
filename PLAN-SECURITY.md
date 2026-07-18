@@ -390,3 +390,31 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > **Deploy-Kopplung (Reihenfolge, kein Code-Gate):** In Produktion steht
 > `DIAGNOSTIC_RETENTION_DAYS=0`, bis die Datenschutzerklaerung (`apps/web`) den
 > Diagnosemodus und seine Frist nennt.
+
+## P3-INBOUND — Frueh-Hangup-Schutz symmetrisiert (Kostenachse benannt, nach P2b)
+
+> **Geschlossene Luecke:** `shouldSuppressEndCall` hatte einen Direction-Kurzschluss
+> (`if (call.direction !== "outbound") return false`). Der Schutz gegen voreiliges
+> Auflegen (RCA-R3) galt damit nur fuer Outbound; ein Inbound-Call konnte beendet werden,
+> bevor der Anrufer ueberhaupt gesprochen hatte. Der Kurzschluss ist entfernt, das
+> Praedikat ist jetzt richtungslos - `maxEmptyTurns` (Default 3, `min: 2`) gilt beidseitig.
+>
+> **Bewusste Rest-Asymmetrie:** `callerHasSpoken` bleibt richtungsabhaengig (TG-REC-1):
+> outbound zaehlt nur eine SUBSTANZIELLE Zeile (>= `CALLER_SUBSTANCE_MIN_LEN`), inbound
+> jede nicht-leere. Der Guard hebt sich inbound also FRUEHER - der konservativere Bias auf
+> dem Pfad, den Fremde ausloesen.
+>
+> **Kostenachse (benannt, bounded, akzeptiert):** Ein Inbound-Call, bei dem niemand spricht
+> (Anrufbeantworter, Fehlwahl, Rauschen), kann sich bis zu `maxEmptyTurns` Turns lang nicht
+> selbst beenden. LLM-Token laufen richtungsunabhaengig ueber `trackUsage`/`tokenCostUsd`
+> IN den Budget-Guard (gedeckelt). Carrier-Minuten laufen NICHT hinein:
+> `reconcileOutboundVoiceBudget` steigt bei `call.direction !== "outbound"` explizit aus.
+> Begrenzt wird die Exposition allein durch den harten `MAX_CALL_DURATION_S`-Cap - Worst
+> Case sind `maxCallDurationS` statt eines frueheren Auflegens. **Vertretbar nur mit
+> `MAX_EMPTY_TURNS` auf dem konservativen Default 3. Wer den Wert hochdreht, kauft
+> Hoeflichkeit mit Carrier-Minuten, die kein Gate sieht.**
+>
+> **Nicht beruehrt (Regel 1):** `CAP_FAREWELL_LEAD_MS` (P3.1) verlaengert den Max-Dauer-Cap
+> NICHT. Der Abschluss-Satz wird INNERHALB der Frist gerendert; `terminateCappedCall`,
+> `armMaxDurationTimer` und `POST /api/calls/:id/cancel` (Owner-Notaus ohne Ansage) bleiben
+> unveraendert. `CAP_FAREWELL_LEAD_MS=0` schaltet die Ansage aus, ohne den Cap anzufassen.

@@ -95,6 +95,10 @@ export const {
   markSummarySmsSent,
   markBilled, // F9 (A6): Bucht-Idempotenz-Marker
   recordFailureReason,
+  // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
+  // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
+  countNoSpeechTurn,
+  clearNoSpeechStreak,
   countOutboundCallsSince,
   findTenantByNumber,
   numberRecordByE164,

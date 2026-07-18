@@ -48,7 +48,11 @@ function makeCtx(overrides = {}) {
   const openaiWs = overrides.openaiWs ?? fakeSocket();
   const calls = { addTranscript: [], hangup: [], scheduleHangup: [], finalize: [] };
   const ctx = {
-    call: { id: "call-1", tenantId: "t1", direction: "inbound" },
+    // P3.3: transcript ist an einem echten Call-Record IMMER ein Array (state-ops
+    // createCall). shouldSuppressEndCall/callerHasSpoken lesen es seit P3.3 richtungslos
+    // (der fruehere Inbound-Direction-Kurzschluss ist weg) - ein Fake-ctx ohne transcript
+    // waere kein realistischer Call mehr.
+    call: { id: "call-1", tenantId: "t1", direction: "inbound", transcript: [] },
     streamRef: "stream-1",
     openaiWs,
     providerWs,
@@ -150,8 +154,18 @@ test("Crash-Guard liegt im Listener: ein Throw aus store.addTranscript propagier
 // Kaputtes JSON -> args bleibt {}, KEIN Throw. Getestet ueber den end_call-Zweig, der
 // (anders als der generische Tool-Pfad) KEIN execTool aufruft — execTool ist ein
 // Modul-Import (nicht ueber ctx injizierbar), end_call dagegen ruft nur ctx.scheduleHangup.
+// P3.3: dieser Test prueft den Parse-Guard, NICHT shouldSuppressEndCall (das deckt der
+// P7/C7-Block unten ab) - eine substanzielle caller-Zeile haelt den seit P3.3 richtungslosen
+// Fruehauflege-Schutz hier bewusst aus dem Weg (Guard-Verhalten ist NICHT Testgegenstand).
 test("kaputtes function_call.arguments wirft nicht (In-Handler-Guard -> args = {})", () => {
-  const ctx = makeCtx();
+  const ctx = makeCtx({
+    call: {
+      id: "call-1",
+      tenantId: "t1",
+      direction: "inbound",
+      transcript: [{ role: "caller", text: "Ja, Donnerstag passt" }],
+    },
+  });
   assert.doesNotThrow(() =>
     handleOpenAiEvent(
       {

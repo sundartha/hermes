@@ -200,6 +200,11 @@ export function createCall(
     // pg-Spalte (bewusst nicht persistiert): nach Boot ist die Reserve ohnehin 0 (ephemer).
     reserveCents: reserveCents || 0,
     reserveReleased: false,
+    // P3.2: Zaehler konsekutiver Turns mit leerem Gather (No-Speech-Staffel in
+    // /voice/turn). EPHEMER wie reserveCents: KEINE pg-Spalte, keine Hydrierung in
+    // rowToCall -> nach einem Deploy-Instanzwechsel beginnt die Staffel fail-safe von
+    // vorn (mehr Hoeflichkeit, nie ein frueherer Hangup).
+    noSpeechStreak: 0,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -421,6 +426,24 @@ export function recordFailureReason(s, callId, reason) {
     changed = true;
   }
   return { call, changed };
+}
+
+// P3.2: konsekutiven Leer-Gather-Turn mitzaehlen und den NEUEN Streak liefern (Nebeneffekt
+// im Namen, N7). Unbekannter Call -> 0 (der Aufrufer rendert dann die erste Stufe; ein
+// fehlender Call kann diesen Pfad ohnehin nicht erreichen). Fehlendes Feld (pg-hydrierter
+// Call) -> 0 als Basis, kein NaN.
+export function countNoSpeechTurn(s, callId) {
+  const call = getCall(s, callId);
+  if (!call) return 0;
+  call.noSpeechStreak = (call.noSpeechStreak || 0) + 1;
+  return call.noSpeechStreak;
+}
+
+// P3.2: Gegenstueck - eine verstandene Aeusserung bricht die Staffel ab ("drei
+// AUFEINANDERFOLGENDE leere Turns", nicht drei ueber den ganzen Call verteilte).
+export function clearNoSpeechStreak(s, callId) {
+  const call = getCall(s, callId);
+  if (call) call.noSpeechStreak = 0;
 }
 
 // Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers Pro-Stunde-Gate
