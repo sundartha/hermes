@@ -134,6 +134,26 @@ test("planSummarySms: smsCount=25 + config ohne Cap -> Guard schliesst die alte 
   );
 });
 
+// Review-Blocker Runde 1 (G26/G3): typeof config.dailySmsCap !== "number" laesst NaN UND
+// Infinity durch (typeof NaN === "number", typeof Infinity === "number"). Ohne
+// Number.isFinite waere "count >= NaN" bzw. "count >= Infinity" immer false -> die
+// Tageskappe faellt still auf send=true zurueck, exakt dieselbe Fail-open-Luecke wie beim
+// fehlenden Key. Beide Werte muessen den Guard genauso auslaesen wie ein fehlender Key.
+test("planSummarySms: config.dailySmsCap=NaN -> wirft laut (Number.isFinite faengt NaN, nicht nur typeof)", () => {
+  assert.throws(
+    () => planSummarySms(planStore({ smsCount: 25 }), cfg(NaN), call),
+    /dailySmsCap/,
+  );
+});
+
+test("planSummarySms: config.dailySmsCap=Infinity -> wirft laut (Number.isFinite faengt Infinity)", () => {
+  // Ohne Guard-Fix waere "25 >= Infinity" false -> send=true trotz 25 gesendeter SMS.
+  assert.throws(
+    () => planSummarySms(planStore({ smsCount: 25 }), cfg(Infinity), call),
+    /dailySmsCap/,
+  );
+});
+
 // ---- 3. pglite-Round-Trip: SMS-Beleg + Cap-Zaehler ueberleben den Restart ----
 
 async function reopen(db) {
