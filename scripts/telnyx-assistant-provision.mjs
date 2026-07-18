@@ -172,7 +172,7 @@ export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef
     instructions: ASSISTANT_INSTRUCTIONS,
     external_llm: {
       base_url: `${publicUrl}${SHIM_BASE_ROUTE}`, // Praefix; Telnyx haengt /chat/completions an
-      model, // config.claudeModel (BYO-autoritativ)
+      model, // config.llm.claudeModel (BYO-autoritativ)
       llm_api_key_ref: llmApiKeyRef, // NAME des Telnyx-Integration-Secrets
       forward_metadata: true, // legt call_control_id in den Body (E1)
     },
@@ -206,7 +206,7 @@ export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef
 // Bearer-Header + Content-Type. Eine Stelle (G5), analog voice.js headers().
 function headers() {
   return {
-    Authorization: `Bearer ${config.telnyxApiKey}`,
+    Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
     "Content-Type": JSON_HEADERS_TYPE,
   };
 }
@@ -214,8 +214,8 @@ function headers() {
 // Voraussetzungen fuer den Live-Lauf. Fehlt etwas -> smokePass=false. KEINE
 // Secrets loggen: nur ob gesetzt, nie der Wert (Regel 4/5).
 const REQUIRED = Object.freeze([
-  ["TELNYX_API_KEY", config.telnyxApiKey],
-  ["PUBLIC_URL", config.publicUrl],
+  ["TELNYX_API_KEY", config.telephony.telnyxApiKey],
+  ["PUBLIC_URL", config.server.publicUrl],
   ["TELNYX_ELEVENLABS_VOICE_ID", config.telnyxElevenLabs.voiceId],
   ["TELNYX_ELEVENLABS_API_KEY_REF", config.telnyxElevenLabs.apiKeyRef],
   ["TELNYX_SHIM_API_KEY_REF", config.telnyxAssistant.shimApiKeyRef],
@@ -240,7 +240,7 @@ function report(smokePass, reason) {
 // POST auf die Collection. Exportiert, damit der Offline-Test die Methode/URL ohne Netz
 // festnagelt (P11).
 export function assistantRequest(existingId) {
-  const base = `${config.telnyxApiBase}${AI_ASSISTANTS_PATH}`;
+  const base = `${config.telephony.telnyxApiBase}${AI_ASSISTANTS_PATH}`;
   return { method: "POST", url: existingId ? `${base}/${existingId}` : base };
 }
 
@@ -248,7 +248,7 @@ export function assistantRequest(existingId) {
 // sendAssistantConfig gebraucht (kein genereller Read-Pfad). Gleiche Fehler-/Envelope-
 // Konvention wie sendAssistantConfig (assertTelnyxOk, {data}-Wrapper Muster voice.js).
 async function fetchAssistant(id) {
-  const res = await fetch(`${config.telnyxApiBase}${AI_ASSISTANTS_PATH}/${id}`, {
+  const res = await fetch(`${config.telephony.telnyxApiBase}${AI_ASSISTANTS_PATH}/${id}`, {
     method: "GET",
     headers: headers(),
   });
@@ -347,11 +347,11 @@ async function main() {
   }
 
   const assistantConfig = buildAssistantConfig({
-    publicUrl: config.publicUrl,
+    publicUrl: config.server.publicUrl,
     voiceId: config.telnyxElevenLabs.voiceId,
     voiceModel: config.telnyxElevenLabs.model,
     apiKeyRef: config.telnyxElevenLabs.apiKeyRef,
-    model: config.claudeModel,
+    model: config.llm.claudeModel,
     llmApiKeyRef: config.telnyxAssistant.shimApiKeyRef,
   });
   const id = await sendAssistantConfig(assistantConfig, process.env[ASSISTANT_ID_ENV] || "");

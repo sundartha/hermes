@@ -30,9 +30,9 @@ const CHECKLIST = Object.freeze([
 // KEINE Secrets loggen: nur ob gesetzt, nie den Wert.
 const REQUIRED = Object.freeze([
   ["Owner-Telnyx-Nummer (Store)", ownerTelnyxNumber],
-  ["TELNYX_CONNECTION_ID", config.telnyxConnectionId],
-  ["OPENAI_API_KEY", config.openaiApiKey],
-  ["PUBLIC_URL", config.publicUrl],
+  ["TELNYX_CONNECTION_ID", config.telephony.telnyxConnectionId],
+  ["OPENAI_API_KEY", config.voice.openaiApiKey],
+  ["PUBLIC_URL", config.server.publicUrl],
 ]);
 
 function report(smokePass, reason) {
