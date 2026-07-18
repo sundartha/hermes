@@ -6,7 +6,14 @@
 
 Setze `PLAN-CONVERSATION-QUALITY-V2.md` um: alle agenten-tauglichen Phasen nacheinander in DIESER Session, autonom bis zum Abschluss oder bis zum ersten nicht heilbaren Fehler.
 
-**Deine Rolle: Lean-Lead.** Du liest NIE Quellcode und NIE Diffs — nur `PLAN-CONVERSATION-QUALITY-V2.md`, kompakte Workflow-Returns, Testresultate und Report-Dateien. Kontext klein halten; die Subagenten machen die Arbeit.
+**Deine Rolle: Lean-Lead. Token-Effizienz ist eine harte Anforderung, keine Stilfrage.** Die Subagenten machen die Arbeit; du orchestrierst und mergst. **Zielgroesse: unter 100k Kontext ueber die GESAMTE Kette.** Konkret:
+
+- Du liest **NIE** Quellcode, **NIE** Diffs, **NIE** Testausgaben im Volltext.
+- Vom Plan liest du **nur den Abschnitt der aktuellen Phase** — mit `Read` + `offset`/`limit`, Zeilenbereich vorher per `grep -n "^### P"` bestimmen. **Nie das ganze Dokument**, es hat ~1770 Zeilen. Einmalige Ausnahme zu Beginn: §0 (Owner-Entscheidungen) und die Phasenliste in §9.
+- Workflow-Returns muessen **kompakt strukturiert** zurueckkommen: `{phase, verdict: PASS|FAIL, commit, testsPassed, testsFailed, blocker[], ownerTodo[]}`. Erzwinge das per `schema` im `agent()`-Aufruf. **Keine Diffs, keine Code-Zitate, keine Volltext-Berichte im Return.**
+- Die ausfuehrlichen Phasen-Reports schreiben die Subagenten selbst nach `tasks/cq-<phase>-report.md`. **Du liest diese Dateien NICHT** — ausser bei FAIL, und dann nur die Blocker-Sektion.
+- Beim Merge kein `git diff`, kein `git show`. `git merge` + `npm test` genuegen; `git diff --stat` nur, wenn eine Zahl gebraucht wird.
+- Status an den User: **eine Zeile pro Phase.** Keine Zusammenfassung des Codes, keine Aufzaehlung geaenderter Dateien.
 
 **Lies zuerst §0 des Plans (Owner-Entscheidungen E1/E2/E3).** Sie sind bindend und stehen ueber jeder Analyse im restlichen Dokument. Insbesondere E1: der Agent bucht keine Termine, kein Kalender-Sync — das ist eine Produkt-Entscheidung des Owners, keine Option.
 
@@ -53,4 +60,6 @@ Diese Schritte NICHT versuchen, NICHT umgehen, und NICHT als Fehlschlag werten. 
 
 **Was du NICHT tun sollst:** Den Plan inhaltlich neu verhandeln. Das Pre-Mortem-Verdikt (§2: wahrscheinlichste Todesursache ist fehlender Nutzen, nicht Qualitaet) ist Kontext fuer den Owner, kein Auftrag an dich — du setzt die Code-Phasen um, der Owner beantwortet P0 parallel.
 
-**Am Ende:** Abschlussreport nach `tasks/conversation-quality-run-report.md` (Phasenliste mit Merge-Commits, Teststand, gesammelte offene Owner-Schritte inkl. faelliger Probeanrufe, Pre-Mortem-relevante Beobachtungen) + kompakte Zusammenfassung an den User. Kein Push.
+**Am Ende:** Abschlussreport nach `tasks/conversation-quality-run-report.md` — **aus den gesammelten strukturierten Returns geschrieben, nicht durch Nachlesen der Phasen-Reports.** Inhalt: Phasenliste mit Merge-Commits (inkl. P4-Hash fuer die Baseline), Teststand, alle gesammelten `ownerTodo`-Eintraege in der Reihenfolge, in der der Owner sie abarbeiten kann (Deploy zuerst), Pre-Mortem-relevante Beobachtungen. Dazu eine kompakte Zusammenfassung an den User. Kein Push.
+
+**Wenn dein Kontext trotz allem voll laeuft:** nicht weiterwursteln. Den aktuellen Stand in den Abschlussreport schreiben (gemergte Phasen, naechste Phase, offene Owner-Schritte) und dem User sagen, dass die Kette in einer frischen Session mit diesem Prompt fortgesetzt werden kann — der Report ist dann der Wiedereinstiegspunkt.
