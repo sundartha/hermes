@@ -1,6 +1,10 @@
 // SEP-1865 "MCP Apps"-Vertrag, schlank nachgebildet (Owner-Entscheidung 2026-06-26:
 // kein @modelcontextprotocol/ext-apps-Dep). EINZIGE Stelle, die die Protokoll-Strings
-// kennt - der Rest des Seams referenziert nur diese Konstanten (G5/G17/G35).
+// kennt - der Rest des Seams referenziert nur diese Konstanten (G5/G17/G35). Enthaelt
+// zusaetzlich die geteilten Fabriken makeCapabilityDetector + makeUiRenderer, die genau
+// diese Konstanten je Host-Konvention zu Detektoren/Renderern binden (EINE Quelle je
+// Cluster statt Copy-Paste pro Host, G5); Widget-HTML/-Titel host-agnostisch aus dem Katalog.
+import { hasWidget, widgetHtml, widgetTitle } from "./widget-catalog.js";
 
 // mimeType der UI-Resource: exakt dieser String, sonst rendert kein Host (P0-Befund).
 export const UI_MIME = "text/html;profile=mcp-app";
@@ -15,12 +19,20 @@ export const UI_META_KEY = "ui"; // -> _meta.ui.resourceUri
 const UI_URI_PREFIX = "ui://hermes/";
 export const uiResourceUri = (widgetId) => `${UI_URI_PREFIX}${widgetId}`;
 
-// fail-closed: true NUR wenn der Client die UI-Capability mit UI_MIME deklariert.
-// Unbekannte/fehlende Struktur -> false (nie werfen, nie fail-open).
-export function capabilityDeclaresUi(clientCapabilities) {
-  const mimeTypes = clientCapabilities?.extensions?.[UI_CAPABILITY_KEY]?.mimeTypes;
-  return Array.isArray(mimeTypes) && mimeTypes.includes(UI_MIME);
+// Baut einen fail-closed Capability-Detektor fuer genau einen mimeType: true NUR wenn der
+// Client die UI-Capability (UI_CAPABILITY_KEY) mit diesem mimeType deklariert; unbekannte/
+// fehlende Struktur -> false (nie werfen, nie fail-open). EINE Quelle fuer beide Host-
+// Konventionen - nur die mimeType-Konstante variiert (G5). Bei abweichendem P0-Beleg
+// aendert sich AUSSCHLIESSLICH die uebergebene Konstante, nicht diese Logik.
+function makeCapabilityDetector(mimeType) {
+  return (clientCapabilities) => {
+    const mimeTypes = clientCapabilities?.extensions?.[UI_CAPABILITY_KEY]?.mimeTypes;
+    return Array.isArray(mimeTypes) && mimeTypes.includes(mimeType);
+  };
 }
+
+// fail-closed: true NUR wenn der Client die UI-Capability mit UI_MIME deklariert.
+export const capabilityDeclaresUi = makeCapabilityDetector(UI_MIME);
 
 // Server-Seite (MCP Apps / SEP-1865): der Server MUSS die Extension im initialize-
 // Response deklarieren, sonst rendert der Host (Claude/Copilot/...) das ui://-Widget
@@ -39,9 +51,26 @@ export const CHATGPT_META_KEY = "openai/outputTemplate";
 
 // fail-closed: true NUR wenn der Host die UI-Capability mit CHATGPT_UI_MIME deklariert.
 // Symmetrisch zu capabilityDeclaresUi; disjunkter mimeType -> eindeutige Adapter-Wahl.
-// Bei abweichendem P0-Beleg aendert sich AUSSCHLIESSLICH dieser Body (fail-closed bleibt
-// invariant: kein belegter Marker -> false -> Stufe 0).
-export function capabilityDeclaresChatgptUi(clientCapabilities) {
-  const mimeTypes = clientCapabilities?.extensions?.[UI_CAPABILITY_KEY]?.mimeTypes;
-  return Array.isArray(mimeTypes) && mimeTypes.includes(CHATGPT_UI_MIME);
+export const capabilityDeclaresChatgptUi = makeCapabilityDetector(CHATGPT_UI_MIME);
+
+// Baut einen UiRenderer (DIP-Port, ports.js) fuer eine Host-Konvention. Host-unabhaengig:
+// hasWidget/resourceUri/registerResource; host-spezifisch NUR mimeType + die _meta-Form
+// (metaKey/buildMeta). 1 Argument (Objekt) statt drei Einzelparameter (F1). Wird zur
+// Modul-Ladezeit einmal pro Adapter aufgerufen -> stabiler Singleton, keine Lazy-Init (P15).
+export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
+  return {
+    mimeType,
+    hasWidget: (widgetId) => hasWidget(widgetId),
+    resourceUri: (widgetId) => uiResourceUri(widgetId),
+    registerResource(server, widgetId) {
+      const uri = uiResourceUri(widgetId);
+      server.registerResource(
+        widgetId,
+        uri,
+        { title: widgetTitle(widgetId), mimeType },
+        async () => ({ contents: [{ uri, mimeType, text: widgetHtml(widgetId) }] }),
+      );
+    },
+    toolMeta: (widgetId) => ({ [metaKey]: buildMeta(uiResourceUri(widgetId)) }),
+  };
 }
