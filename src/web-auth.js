@@ -382,8 +382,8 @@ function sidFromAccessToken(accessToken) {
 // die Vertrauensquelle. CSRF = state-Cookie, Replay-Schutz = PKCE (beides im Router).
 // Niemals Code/Secret/Token loggen.
 export function makeOidc(config, { _fetch = fetch } = {}) {
-  const authorizeEndpoint = `${config.workosApiBase}/user_management/authorize`;
-  const authenticateEndpoint = `${config.workosApiBase}/user_management/authenticate`;
+  const authorizeEndpoint = `${config.auth.workosApiBase}/user_management/authorize`;
+  const authenticateEndpoint = `${config.auth.workosApiBase}/user_management/authenticate`;
 
   return {
     // authorizeUrl bleibt async (Router awaitet + faengt fail-closed). provider=authkit
@@ -392,7 +392,7 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
     async authorizeUrl({ challenge, state, redirectUri }) {
       const params = new URLSearchParams({
         response_type: "code",
-        client_id: config.oidcClientId,
+        client_id: config.auth.oidcClientId,
         redirect_uri: redirectUri,
         provider: "authkit",
         code_challenge: challenge,
@@ -413,8 +413,8 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
           grant_type: "authorization_code",
           code,
           code_verifier: verifier,
-          client_id: config.oidcClientId,
-          client_secret: config.oidcClientSecret,
+          client_id: config.auth.oidcClientId,
+          client_secret: config.auth.oidcClientSecret,
         }),
       });
       // Fehlerstatus: NUR den Status nennen, NIE den Body (WorkOS-Fehlerkoerper kann
@@ -454,7 +454,7 @@ export function makeOidc(config, { _fetch = fetch } = {}) {
     sessionLogoutUrl({ workosSessionId, returnTo }) {
       const params = new URLSearchParams({ session_id: workosSessionId });
       if (returnTo) params.set("return_to", returnTo);
-      return `${config.workosApiBase}/user_management/sessions/logout?${params}`;
+      return `${config.auth.workosApiBase}/user_management/sessions/logout?${params}`;
     },
   };
 }

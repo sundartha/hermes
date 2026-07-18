@@ -9,7 +9,14 @@ import { config } from "../src/config.js";
 import { legacyLocalBypassAllowed, mcpAuth } from "../src/auth.js";
 
 const LOCAL = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
-const reqFrom = (remoteAddress) => ({ socket: { remoteAddress }, headers: {} });
+// reqWith baut das Express-Request-Double (socket.remoteAddress + optionaler Bearer-
+// Header). reqFrom ist der Spezialfall ohne Auth-Header (G5: reqFrom war reqWith + einem
+// weggelassenen Auth-Zweig - EINE Struktur-Quelle statt zweier redundanter Bauten).
+const reqWith = ({ remoteAddress = "203.0.113.7", auth } = {}) => ({
+  socket: { remoteAddress },
+  headers: auth ? { authorization: auth } : {},
+});
+const reqFrom = (remoteAddress) => reqWith({ remoteAddress });
 
 // Minimal-Express-Double: status() chainbar, json()/set() erfassend.
 function fakeRes() {
@@ -80,15 +87,6 @@ test("AM1: mcpAuth - Produktions-Gate kippt localhost-Legacy-Bypass auf 401", as
   });
 });
 
-// PA-17: Verdrahtungs-Test fuer die config.<flatKey> -> config.<namespace>.<key>-Migration
-// in auth.js. Reine Zugriffspfad-Aenderung ohne Logik-Aenderung: dieser Test deckt alle vier
-// mcpAuth-Modi in einem deterministischen In-Process-Matrix-Lauf ab, damit "vor/nach identisch"
-// beweisbar bleibt (Reviewer-Vorgehen: Test gegen unmigrierte und migrierte auth.js gruen).
-const reqWith = ({ remoteAddress = "203.0.113.7", auth } = {}) => ({
-  socket: { remoteAddress },
-  headers: auth ? { authorization: auth } : {},
-});
-
 async function runMcpAuth(req) {
   let nexted = false;
   const res = fakeRes();
@@ -98,6 +96,10 @@ async function runMcpAuth(req) {
   return { nexted, statusCode: res.statusCode };
 }
 
+// PA-17: Verdrahtungs-Test fuer die config.<flatKey> -> config.<namespace>.<key>-Migration
+// in auth.js. Reine Zugriffspfad-Aenderung ohne Logik-Aenderung: dieser Test deckt alle vier
+// mcpAuth-Modi in einem deterministischen In-Process-Matrix-Lauf ab, damit "vor/nach identisch"
+// beweisbar bleibt (Reviewer-Vorgehen: Test gegen unmigrierte und migrierte auth.js gruen).
 test("PA-17: mcpAuth Modus-Matrix (off/oauth/token/legacy) - Verzweigung unveraendert", async () => {
   // off -> immer next(), egal welcher Request
   await withMcpConfig({ mcpAuth: "off" }, async () => {
