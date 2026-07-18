@@ -1221,75 +1221,93 @@ async function deleteMissingProfiles(client, keepTenantIds) {
   await client.query(`DELETE FROM profile WHERE tenant_id <> ALL($1::text[])`, [keepTenantIds]);
 }
 
-// number-Flush (Onboarding-Lifecycle): id-PK-Upsert mit allen Lifecycle-Feldern
-// (status, provider_number_id, e164 NULLABLE fuer 'requested').
-// Multi-Tenant (I8): flush ruft flushNumbers pro Tenant unter dessen RLS-GUC; der
-// own-Filter haelt das pro Aufruf auf die Nummern DIESES Tenants (zweite Linie zur
-// per-Tenant-GUC). So round-trippen die Nummern aller Tenants (nicht mehr owner-only).
-async function flushNumbers(client, tenantId, numbers) {
-  const own = numbers.filter((n) => n.tenantId === tenantId);
+// Buendelt das dreifach identische own-Filter + deleteMissing + Insert-Loop-Idiom der
+// tenant-scoped id-PK-Tabellen (number/provisioning_job/usage_event) an EINER Stelle
+// (G5, Template Method). Der own-Filter haelt jeden Flush-Aufruf auf die Zeilen DIESES
+// Tenants - eine zweite Verteidigungslinie ZUSAETZLICH zur per-Tenant-RLS-GUC
+// (Defense-in-Depth, dokumentierte Absicht: der INSERT schreibt tenant_id=<tenantId>,
+// nicht row.tenantId). deleteMissing prunt Zeilen, die nicht mehr im Spiegel stehen,
+// VOR dem Insert-Loop (Retention/Erase). insertRow upsert't eine einzelne Zeile
+// (tabellenspezifisch, closure ueber client + tenantId). tenant_budget nutzt den Helfer
+// bewusst NICHT (PK=tenant_id, kein deleteMissing -> flushTenantBudgets bleibt separat).
+async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
+  const own = rows.filter((r) => r.tenantId === tenantId);
   await deleteMissing(
     client,
-    "number",
+    table,
     tenantId,
-    own.map((n) => n.id),
+    own.map((r) => r.id),
   );
-  for (const n of own) {
-    await client.query(
-      `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET
-         e164=EXCLUDED.e164, provider=EXCLUDED.provider,
-         status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
-         payment_intent_id=EXCLUDED.payment_intent_id,
-         country=EXCLUDED.country, language=EXCLUDED.language`,
-      [
-        n.id,
-        tenantId,
-        n.e164 ?? null,
-        n.provider || DEFAULT_PROVIDER,
-        n.status,
-        n.providerNumberId ?? null,
-        n.paymentIntentId ?? null,
-        n.country ?? null,
-        n.language ?? null,
-      ],
-    );
+  for (const row of own) {
+    await insertRow(row);
   }
 }
 
-// provisioning_job-Flush (async Worker, P6b2): id-PK-Upsert der Job-Spur. own-Filter
-// + deleteMissing pro Tenant unter dessen RLS-GUC (zweite Linie, Muster wie
-// flushNumbers). status/attempts/last_error koennen sich aendern (Worker-Lauf), der
-// Rest (number_id/kind/idempotency_key) bleibt nach dem Insert stabil. created_at ist
-// application-provided (F4, gegen DB-now()-Skew) und bleibt nach dem Insert immutable.
-async function flushProvisioningJobs(client, tenantId, jobs) {
-  const own = jobs.filter((j) => j.tenantId === tenantId);
-  await deleteMissing(
+// number-Flush (Onboarding-Lifecycle): id-PK-Upsert mit allen Lifecycle-Feldern
+// (status, provider_number_id, e164 NULLABLE fuer 'requested'). Multi-Tenant (I8):
+// flush ruft flushNumbers pro Tenant unter dessen RLS-GUC; flushOwnScoped kapselt
+// own-Filter + deleteMissing (siehe dort). So round-trippen die Nummern aller Tenants
+// (nicht mehr owner-only).
+async function flushNumbers(client, tenantId, numbers) {
+  await flushOwnScoped({
     client,
-    "provisioning_job",
     tenantId,
-    own.map((j) => j.id),
-  );
-  for (const j of own) {
-    await client.query(
-      `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET
-         status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
-      [
-        j.id,
-        tenantId,
-        j.numberId,
-        j.kind,
-        j.status,
-        j.idempotencyKey,
-        j.attempts,
-        j.lastError ?? null,
-        j.createdAt,
-      ],
-    );
-  }
+    table: "number",
+    rows: numbers,
+    insertRow: (n) =>
+      client.query(
+        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (id) DO UPDATE SET
+           e164=EXCLUDED.e164, provider=EXCLUDED.provider,
+           status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
+           payment_intent_id=EXCLUDED.payment_intent_id,
+           country=EXCLUDED.country, language=EXCLUDED.language`,
+        [
+          n.id,
+          tenantId,
+          n.e164 ?? null,
+          n.provider || DEFAULT_PROVIDER,
+          n.status,
+          n.providerNumberId ?? null,
+          n.paymentIntentId ?? null,
+          n.country ?? null,
+          n.language ?? null,
+        ],
+      ),
+  });
+}
+
+// provisioning_job-Flush (async Worker, P6b2): id-PK-Upsert der Job-Spur ueber
+// flushOwnScoped (own-Filter + deleteMissing, siehe dort). status/attempts/last_error
+// koennen sich aendern (Worker-Lauf), der Rest (number_id/kind/idempotency_key) bleibt
+// nach dem Insert stabil. created_at ist application-provided (F4, gegen DB-now()-Skew)
+// und bleibt nach dem Insert immutable.
+async function flushProvisioningJobs(client, tenantId, jobs) {
+  await flushOwnScoped({
+    client,
+    tenantId,
+    table: "provisioning_job",
+    rows: jobs,
+    insertRow: (j) =>
+      client.query(
+        `INSERT INTO provisioning_job (id, tenant_id, number_id, kind, status, idempotency_key, attempts, last_error, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (id) DO UPDATE SET
+           status=EXCLUDED.status, attempts=EXCLUDED.attempts, last_error=EXCLUDED.last_error`,
+        [
+          j.id,
+          tenantId,
+          j.numberId,
+          j.kind,
+          j.status,
+          j.idempotencyKey,
+          j.attempts,
+          j.lastError ?? null,
+          j.createdAt,
+        ],
+      ),
+  });
 }
 
 // tenant_budget-Flush (P6b3): PK = tenant_id (eine Zeile pro Tenant), kein
@@ -1309,25 +1327,23 @@ async function flushTenantBudgets(client, tenantId, budgets) {
   }
 }
 
-// usage_event-Flush (P6b3): append-only id-PK-Ledger. own-Filter + deleteMissing
-// (Retention/Erase koennten Events entfernen) + Upsert (nur stripe_meter_sent
-// aenderbar nach dem Insert). Muster wie flushProvisioningJobs.
+// usage_event-Flush (P6b3): append-only id-PK-Ledger ueber flushOwnScoped (own-Filter
+// + deleteMissing, siehe dort - Retention/Erase koennten Events entfernen). Upsert:
+// nur stripe_meter_sent ist nach dem Insert aenderbar.
 async function flushUsageEvents(client, tenantId, events) {
-  const own = events.filter((e) => e.tenantId === tenantId);
-  await deleteMissing(
+  await flushOwnScoped({
     client,
-    "usage_event",
     tenantId,
-    own.map((e) => e.id),
-  );
-  for (const e of own) {
-    await client.query(
-      `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
-      [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent],
-    );
-  }
+    table: "usage_event",
+    rows: events,
+    insertRow: (e) =>
+      client.query(
+        `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
+        [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent],
+      ),
+  });
 }
 
 // objectiveAchieved kann string ODER boolean sein (json speichert beides). Die

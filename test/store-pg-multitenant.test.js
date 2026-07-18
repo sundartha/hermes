@@ -16,7 +16,10 @@ import {
   PROVIDER,
   NUMBER_STATUS,
   KYC_LEVEL,
+  PROVISIONING_JOB_STATUS,
+  USAGE_EVENT_KIND,
 } from "../src/store/defaults.js";
+import { aggregatePendingMeters } from "../src/billing/meter.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
 
@@ -201,4 +204,239 @@ test("RLS-WITH-CHECK: Insert mit fremder tenant_id unter gesetzter GUC wird gebl
       await db.query(`RESET ROLE`);
     }
   }, /row-level security|policy/i);
+});
+
+// ---- PA-6: flushOwnScoped-Helfer (own-Filter + deleteMissing + Insert-Loop) ----
+// Golden-Master/Cross-Tenant/Downstream-Netz um die 3 auf flushOwnScoped umgestellten
+// Flush-Funktionen (number/provisioning_job/usage_event). Additiv, verhaltens-erhaltend:
+// muss VOR und NACH dem Refactor gruen sein (das beweist den Verhaltens-Erhalt).
+
+// Volle number-Zeile bauen (P13-Build-Helfer): reduziert die 9-Feld-Boilerplate der
+// Tests unten auf die pro Test relevanten Abweichungen (id/e164/tenantId meist
+// ueberschrieben). Provider/Status/die optionalen Felder tragen sinnvolle Defaults.
+function makeNumberRow(overrides) {
+  return {
+    id: "num",
+    e164: "+49900000000",
+    tenantId: TENANT_B,
+    provider: PROVIDER.TWILIO,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: null,
+    paymentIntentId: null,
+    country: null,
+    language: null,
+    ...overrides,
+  };
+}
+
+test("T-PA6-1 number: volle Lifecycle-Spalten round-trippen (Golden-Master)", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
+  const full = makeNumberRow({
+    id: "num_b_full",
+    e164: "+49999000222",
+    provider: PROVIDER.TELNYX,
+    status: NUMBER_STATUS.ACTIVE,
+    providerNumberId: "prov-xyz",
+    paymentIntentId: "pi_b",
+    country: "FR",
+    language: "fr",
+  });
+  s.numbers.push(full);
+
+  await store.save();
+  const r = await reopen(db);
+  const rs = r.load();
+
+  assert.deepEqual(
+    rs.numbers.find((n) => n.id === "num_b_full"),
+    full,
+    "volle Lifecycle-Spalten (provider_number_id/payment_intent_id/country/language) round-trippen",
+  );
+});
+
+test("T-PA6-2 provisioning_job: Cross-Tenant own-Filter + volle Spalten round-trippen", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
+  // FK number_id -> number(id): flushNumbers laeuft vor flushProvisioningJobs (flushTenantScope).
+  s.numbers.push(makeNumberRow({ id: "num_owner", e164: "+49999000333", tenantId: BOOTSTRAP_TENANT_ID }));
+  s.numbers.push(makeNumberRow({ id: "num_b", e164: "+49999000444" }));
+
+  const jobOwner = ops.recordProvisioningJob(s, {
+    numberId: "num_owner",
+    tenantId: BOOTSTRAP_TENANT_ID,
+    idempotencyKey: "idem-o",
+  });
+  const jobB = ops.recordProvisioningJob(s, {
+    numberId: "num_b",
+    tenantId: TENANT_B,
+    idempotencyKey: "idem-b",
+  });
+  ops.markProvisioningJob(s, jobB.id, PROVISIONING_JOB_STATUS.FAILED, "boom");
+
+  await store.save();
+  const r = await reopen(db);
+  const rs = r.load();
+
+  // Cross-Tenant/own-Filter: der B-Job steht NUR unter TENANT_B - dieser Assert faellt
+  // rot, sobald der own-Filter im Helfer fehlt (dann schriebe der Owner-Flush B's Job
+  // mit tenant_id=owner, weil state.provisioningJobs UNGEFILTERT an flushOwnScoped ginge).
+  assert.deepEqual(
+    rs.provisioningJobs.filter((j) => j.tenantId === TENANT_B).map((j) => j.id),
+    [jobB.id],
+  );
+  assert.ok(
+    rs.provisioningJobs
+      .filter((j) => j.tenantId === BOOTSTRAP_TENANT_ID)
+      .every((j) => j.id !== jobB.id),
+    "kein B-Job unter Owner-tenantId",
+  );
+
+  // Volle Spalten des B-Jobs.
+  const rehydrated = rs.provisioningJobs.find((j) => j.id === jobB.id);
+  assert.equal(rehydrated.status, PROVISIONING_JOB_STATUS.FAILED);
+  assert.equal(rehydrated.attempts, 1);
+  assert.equal(rehydrated.lastError, "boom");
+  assert.equal(rehydrated.createdAt, jobB.createdAt);
+  assert.equal(rehydrated.numberId, "num_b");
+  assert.equal(rehydrated.idempotencyKey, "idem-b");
+
+  assert.ok(jobOwner.id, "Owner-Job angelegt (Setup-Kontrolle fuer den Cross-Tenant-Vergleich)");
+});
+
+test("T-PA6-3 usage_event: Cross-Tenant own-Filter + volle Spalten round-trippen", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
+
+  const ownerEvent = ops.recordUsageEvent(s, {
+    tenantId: BOOTSTRAP_TENANT_ID,
+    callId: null,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: 500,
+  });
+  const bEvent1 = ops.recordUsageEvent(s, {
+    tenantId: TENANT_B,
+    callId: null,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: 500,
+  });
+  const bEvent2 = ops.recordUsageEvent(s, {
+    tenantId: TENANT_B,
+    callId: null,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 7,
+    costCents: 42,
+  });
+  ops.markMeterEventsSent(s, [bEvent1.id]); // eine der zwei B-Zeilen als gesendet markieren
+
+  await store.save();
+  const r = await reopen(db);
+  const rs = r.load();
+
+  // Cross-Tenant: B-Events nur unter TENANT_B, Owner-Event getrennt, keine Vermischung.
+  assert.deepEqual(
+    rs.usageEvents
+      .filter((e) => e.tenantId === TENANT_B)
+      .map((e) => e.id)
+      .sort(),
+    [bEvent1.id, bEvent2.id].sort(),
+  );
+  assert.deepEqual(
+    rs.usageEvents.filter((e) => e.tenantId === BOOTSTRAP_TENANT_ID).map((e) => e.id),
+    [ownerEvent.id],
+  );
+
+  // Volle Spalten (cost_cents/quantity/stripe_meter_sent round-trippen).
+  const r1 = rs.usageEvents.find((e) => e.id === bEvent1.id);
+  assert.equal(r1.costCents, 500);
+  assert.equal(r1.quantity, 1);
+  assert.equal(r1.stripeMeterSent, true, "markMeterEventsSent round-trippt");
+  const r2 = rs.usageEvents.find((e) => e.id === bEvent2.id);
+  assert.equal(r2.costCents, 42);
+  assert.equal(r2.quantity, 7);
+  assert.equal(r2.stripeMeterSent, false);
+});
+
+test("T-PA6-4 usage_event Downstream: planMinutesExceeded + aggregatePendingMeters lesen die round-getrippten Zeilen", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
+
+  const sentEvent = ops.recordUsageEvent(s, {
+    tenantId: TENANT_B,
+    callId: null,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 5,
+    costCents: 30,
+  });
+  ops.recordUsageEvent(s, {
+    tenantId: TENANT_B,
+    callId: null,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 7,
+    costCents: 42,
+  });
+  ops.markMeterEventsSent(s, [sentEvent.id]);
+
+  await store.save();
+  const r = await reopen(db);
+  const rs = r.load();
+
+  // planMinutesExceeded summiert AUCH bereits gemeldete Events (voiceMinutesUsedSince
+  // zaehlt Verbrauch, keine Melde-Grenze): 5+7=12 verbrauchte Minuten.
+  assert.equal(
+    ops.planMinutesExceeded(rs, TENANT_B, {
+      includedMinutes: 10,
+      periodStartIso: "2000-01-01T00:00:00.000Z",
+    }),
+    true,
+    "12 verbrauchte Minuten >= 10 Kontingent -> exceeded",
+  );
+  assert.equal(
+    ops.planMinutesExceeded(rs, TENANT_B, {
+      includedMinutes: 100,
+      periodStartIso: "2000-01-01T00:00:00.000Z",
+    }),
+    false,
+    "12 verbrauchte Minuten < 100 Kontingent -> nicht exceeded",
+  );
+
+  // aggregatePendingMeters schliesst das bereits gesendete Event aus - stripe_meter_sent
+  // hat den Round-Trip ueberlebt.
+  const bMeters = aggregatePendingMeters(rs).filter((m) => m.tenantId === TENANT_B);
+  assert.equal(bMeters.length, 1);
+  assert.equal(bMeters[0].kind, USAGE_EVENT_KIND.VOICE_MINUTE);
+  assert.equal(bMeters[0].quantity, 7, "nur das ungesendete Event zaehlt ins Aggregat");
+});
+
+test("T-PA6-5 number: leere keep-Liste (deleteMissing empty-branch) prunt genau den Tenant", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
+  s.numbers.push(makeNumberRow({ id: "num_b", e164: "+49999000555" }));
+  s.numbers.push(makeNumberRow({ id: "num_owner", e164: "+49999000666", tenantId: BOOTSTRAP_TENANT_ID }));
+  await store.save();
+
+  // B's Nummer aus dem Spiegel entfernen (derselbe Store-Spiegel - store.load() liefert
+  // dieselbe Referenz, kein reopen noetig), erneut speichern -> flushNumbers sieht fuer
+  // B own=[] -> deleteMissing(client,"number",B,[]) -> Voll-Prune-Zweig.
+  const s2 = store.load();
+  const i = s2.numbers.findIndex((n) => n.id === "num_b");
+  s2.numbers.splice(i, 1);
+  await store.save();
+
+  // Direkter Superuser-Read (kein GUC noetig): belegt den Voll-Prune ohne den own-Filter
+  // ueber den Read-Pfad zu maskieren.
+  const countB = (await db.query(`SELECT count(*)::int AS c FROM number WHERE tenant_id=$1`, [TENANT_B]))
+    .rows[0].c;
+  const countOwner = (
+    await db.query(`SELECT count(*)::int AS c FROM number WHERE tenant_id=$1`, [BOOTSTRAP_TENANT_ID])
+  ).rows[0].c;
+  assert.equal(countB, 0, "B-Nummern vollstaendig geprunt (leere keep-Liste -> Voll-Prune-Zweig)");
+  assert.ok(countOwner > 0, "Owner-Nummern unberuehrt vom B-Flush");
 });
