@@ -190,9 +190,9 @@ function normalizeContextReceived(cr) {
 // Berechtigungen als EIN flacher String (passt in genau einen data-mcp-Slot, W1-Binding
 // rendert Nicht-Arrays via textContent). EINE Quelle - auch der Stufe-0-Textblock liest
 // data.permissions (keine Duplizierung der allow*-Formatierung, G5/S2).
+// Kalender/Buchen entfielen mit P1b - der Agent hat diese Faehigkeiten nicht mehr.
 function permissionsSummary(settings) {
   return (
-    `Kalender=${settings.allowCalendar}, Buchen=${settings.allowBooking}, ` +
     `Summaries=${settings.allowSummaries}, PersoenlicheDaten=${settings.allowPersonalData}, ` +
     `Bankdaten=${settings.allowBankData}`
   );

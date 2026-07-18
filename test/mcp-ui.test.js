@@ -668,8 +668,7 @@ const AGENT_KEYS = [
   "permissions",
   "voiceEngine",
 ];
-const PERMISSIONS_STR =
-  "Kalender=true, Buchen=false, Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
+const PERMISSIONS_STR = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
 const agentStatusOutput = z.object({
   number: z.string().nullable(),
   owner: z.string().nullable(),

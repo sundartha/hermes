@@ -1,5 +1,5 @@
-// Das "Gehirn": Claude fuehrt das Gespraech, nutzt Tools (Kalender, Termin buchen,
-// Nachricht aufnehmen, auflegen) und schreibt am Ende Summary + Action Items.
+// Das "Gehirn": Claude fuehrt das Gespraech, nutzt Tools (Nachricht aufnehmen,
+// auflegen) und schreibt am Ende Summary + Action Items.
 import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
@@ -46,17 +46,6 @@ function meterAiTokens(call, usage) {
   });
 }
 
-// locale (BCP-47) sprachabhaengig vom Aufrufer (call.language -> loc.dateLocale).
-// Default "de-DE": Aufrufer ohne Locale (Bestand) bleiben byte-identisch.
-const fmtDate = (iso, locale = "de-DE") =>
-  new Date(iso).toLocaleString(locale, {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
 // ---------- System-Prompts ----------
 export function systemPrompt(call) {
   const ctx = store.tenantContext(call.tenantId);
@@ -95,14 +84,14 @@ REGELN FUERS TELEFONIEREN:
 - Erfinde nichts. Was du nicht weisst, sagst du ehrlich und nimmst stattdessen eine Nachricht auf (take_message).
 ${s.allowPersonalData ? "" : `- Du darfst KEINE persoenlichen Daten von ${owner} herausgeben (Adresse, E-Mail, private Nummer etc.).`}
 ${s.allowBankData ? "" : `- Du darfst NIEMALS Bank- oder Zahlungsdaten nennen oder Zahlungen zusagen.`}
-${s.allowCalendar ? `- Du darfst ${owner}s Kalender einsehen (get_calendar).` : `- Du hast KEINEN Kalenderzugriff. Bei Terminwuenschen nimmst du nur eine Nachricht auf.`}
-${s.allowBooking && s.allowCalendar ? `- Du darfst Termine direkt in ${owner}s Kalender buchen (book_appointment), wenn der Slot frei ist. Fehlt dir fuer den Termin-Titel ein konkreter Anlass, frage NICHT danach - leite einen allgemeinen Titel aus deinem AUFTRAG ab oder nimm den Terminwunsch als Nachricht auf (take_message).` : `- Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.`}`;
+- Du hast KEINEN Kalenderzugriff. Bei Terminwuenschen nimmst du nur eine Nachricht auf.
+- Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.`;
 
   if (call.direction === "inbound") {
     return `${base}
 
 SITUATION: Jemand hat ${owner} angerufen, ${owner} konnte nicht rangehen, der Anruf wurde an dich weitergeleitet. Anrufernummer: ${call.from}.
-Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin vereinbaren), sonst Nachricht aufnehmen. Bei einem Terminwunsch bietest du konkrete freie Zeiten aus ${owner}s Kalender an, statt offen nach einer Wunschzeit zu fragen. ${owner} erhaelt danach automatisch eine Zusammenfassung.${calendarSection(call)}`;
+Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen, sonst Nachricht aufnehmen. ${owner} erhaelt danach automatisch eine Zusammenfassung.`;
   }
 
   return `${base}
@@ -110,9 +99,9 @@ Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen (z.B. Termin v
 SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
-${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}${calendarSection(call)}
+${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}
 WICHTIG: Offenlegung UND dein Anliegen ("${call.goal}") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
-Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten, z.B. einen Termin eintragen; pruefe Terminvorschlaege gegen ${owner}s Kalender, bevor du zusagst. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
+Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
 }
 
 // HINTERGRUND-Sektion (P3): kompakter, strukturierter Per-Call-Kontext NACH dem AUFTRAG.
@@ -134,36 +123,6 @@ function assistantContextSection(call) {
   return `\nHINTERGRUND (nur zu deiner Information):\n${lines.join("\n")}\nDieser Hintergrund ist fuer dich; gib nur weiter, was der Auftrag erfordert.`;
 }
 
-// Formatierter Kalender-Auszug (naechste Termine) des Tenants - EINE Quelle (G5) fuer
-// das get_calendar-Tool UND die Outbound-Prompt-Einbettung (L2). Datums-Locale folgt
-// der Gespraechssprache (wie das Tool-Ergebnis); Wortlaut byte-identisch zur frueheren
-// inline-Formatierung im get_calendar-Case. Reiner Read, kein Nebeneffekt (N7).
-function calendarExcerpt(call) {
-  const dateLocale = localeFor(call.language).dateLocale;
-  const events = store.tenantContext(call.tenantId).calendar.slice(0, CALENDAR_PREVIEW_LIMIT);
-  if (!events.length) return "Kalender ist leer, alles frei.";
-  return (
-    "Naechste Termine:\n" +
-    events
-      .map((e) => `- ${e.title}: ${fmtDate(e.start, dateLocale)} bis ${fmtDate(e.end, dateLocale)}`)
-      .join("\n")
-  );
-}
-
-// Optionaler Kalender-Block fuer den System-Prompt (I6, vormals NUR Outbound/L2):
-// bettet den Auszug vorab ein, damit das Modell freie Slots kennt und get_calendar im
-// Buchungs-/Terminwunsch-Normalfall nicht erst mid-turn aufrufen muss. Gegated am
-// allowCalendar-Gate (massgeblich, fail-closed: aus -> "" -> Prompt byte-identisch).
-// Fuehrendes "\n" + leeres "" bei aus spiegeln assistantContextSection (G11).
-// Richtungsneutral: outbound bettete den Block schon vorher ein, I6 haengt ihn genauso
-// in den Inbound-Zweig (gleiches Gate, EINE Quelle statt zweier Kopien, G5). KEINE neue
-// Datenexposition: derselbe Inhalt war schon via get_calendar erreichbar - nur der
-// Transportweg aendert sich.
-function calendarSection(call) {
-  if (!store.tenantContext(call.tenantId).settings.allowCalendar) return "";
-  return `\nKALENDER DEINES AUFTRAGGEBERS (bereits abgerufen, du brauchst get_calendar dafuer nicht erneut):\n${calendarExcerpt(call)}`;
-}
-
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).
 // Identitaets-Bindung (G1, Geschwister-Regel zu Regel 2): der offengelegte
 // Auftraggeber ist die registrierte Identitaet (tenant.ownerName, voll), NICHT per
@@ -179,16 +138,8 @@ export function disclosureSentence(call) {
 // TTS-Ausgabe; das goal-Validierungslimit (TEXT_LIMITS.objective) bleibt unberuehrt.
 const OPENING_GOAL_MAX_CHARS = 160;
 
-// Anzahl der naechsten Kalendereintraege im Auszug (G25). EINE Quelle fuer das
-// get_calendar-Tool UND die Outbound-Prompt-Einbettung (L2). Modul-Konstante, kein
-// Tuning-Knopf -> nicht in config.js (Praezedenz OPENING_GOAL_MAX_CHARS).
-const CALENDAR_PREVIEW_LIMIT = 8;
-
 // Tool-Name des end_call-Tools (G25): EINE Quelle fuer Schema-Name/Dispatch-Case/Guard.
 const END_CALL_TOOL_NAME = "end_call";
-
-// Default-Termindauer in Minuten, wenn book_appointment kein durationMinutes liefert (G25).
-const DEFAULT_EVENT_DURATION_MINUTES = 60;
 
 // Erst-Turn-Text fuer den LLM-FREIEN /voice/outbound-Pfad (G2): Offenlegung (Regel 2,
 // erster Satz) + Bruecke + gekapptes Anliegen, in EINEM Gather-Say. Rein synchron,
@@ -218,9 +169,15 @@ function trimGoalForSpeech(goal) {
 }
 
 // ---------- Tools ----------
-export function toolDefs(tenantId) {
-  const s = store.tenantContext(tenantId).settings;
-  const tools = [
+// Fester Tool-Satz fuer BEIDE Engines (Budget-Tool-Loop + Realtime-Bridge ueber
+// realtimeTools). Seit P1b (Owner-Entscheidung E1) OHNE Kalender-/Buchungs-Tool: der
+// Telefon-Agent nimmt Terminwuensche nur als Nachricht auf, er bucht nichts und liest
+// im Gespraech keinen Kalender. Der Kalender bleibt ein Owner-Werkzeug auf einer
+// ANDEREN Achse (MCP-seitig + im Dashboard), gegated ueber resolveProfile, von hier aus
+// unerreichbar. Keine Settings-Verzweigung mehr -> kein Tenant-Lookup und kein
+// Parameter, der eine tenant-abhaengige Variation nur noch vortaeuschen wuerde.
+export function toolDefs() {
+  return [
     // RCA-Wurzel R3: Das Modell schloss aus STT-Kauderwelsch, das Ziel sei
     // erreicht, und rief end_call. Das enge Verbot sitzt deshalb GENAU HIER, am Tool-
     // Entscheidungspunkt (Lehre call-quality-chain: breite Stil-/Meta-Regeln im Prompt-
@@ -251,38 +208,6 @@ export function toolDefs(tenantId) {
       },
     },
   ];
-  if (s.allowCalendar) {
-    tools.push({
-      name: "get_calendar",
-      description:
-        "Liefert die naechsten Kalendereintraege des Besitzers, um freie Zeiten zu finden.",
-      input_schema: { type: "object", properties: {}, required: [] },
-    });
-  }
-  if (s.allowCalendar && s.allowBooking) {
-    tools.push({
-      name: "book_appointment",
-      description:
-        "Bucht einen Termin fest in den Kalender des Besitzers. Nur nutzen, wenn Datum und Uhrzeit final besprochen sind.",
-      input_schema: {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            description:
-              "Termintitel, z.B. 'Friseur Schneider'. Ist kein konkreter Anlass bekannt, bilde den Titel selbst aus deinem Auftrag (z.B. 'Termin: <Anliegen>') - frage den Gespraechspartner NIEMALS nach Thema oder Grund.",
-          },
-          start: { type: "string", description: "Start als ISO 8601, z.B. 2026-06-15T14:00:00" },
-          durationMinutes: {
-            type: "number",
-            description: `Dauer in Minuten, Default ${DEFAULT_EVENT_DURATION_MINUTES}`,
-          },
-        },
-        required: ["title", "start"],
-      },
-    });
-  }
-  return tools;
 }
 
 // Anthropic Prompt-Caching-Marker (L3): markiert das Ende eines stabilen Praefix-
@@ -303,34 +228,11 @@ function toolsWithCacheControl(tools) {
   );
 }
 
+// Tool-Dispatch beider Engines. Kein Kalender-/Buchungs-Case mehr (P1b): der
+// Schreibpfad in den Kalender laeuft ausschliesslich ueber POST /api/calendar
+// (Mensch/Dashboard) bzw. das MCP-Tool - nie aus einem laufenden Gespraech.
 export function execTool(call, name, input) {
-  // Datums-Locale sprachabhaengig (F1 Phase 2): die im Tool-Ergebnis genannten Termine
-  // erscheinen in der Gespraechssprache (fr-FR/de-DE), die der LLM weiterspricht.
-  const dateLocale = localeFor(call.language).dateLocale;
   switch (name) {
-    // READ ueber den Seam (Identitaets-Konsument): calendarExcerpt liest den
-    // pro-Tenant-Kalender (calendarFor). Konsistent zur Schreib-/Konflikt-Seite
-    // (book_appointment: findConflict/addCalendarEvent ueber call.tenantId). EINE Quelle
-    // (G5) fuer Tool-Ausgabe UND Outbound-Prompt-Einbettung (L2).
-    case "get_calendar":
-      return calendarExcerpt(call);
-    case "book_appointment": {
-      const start = new Date(input.start);
-      if (isNaN(start)) return "FEHLER: Ungueltiges Datum.";
-      const end = new Date(
-        start.getTime() + (input.durationMinutes || DEFAULT_EVENT_DURATION_MINUTES) * 60000,
-      );
-      const conflict = store.findConflict(call.tenantId, start.toISOString(), end.toISOString());
-      if (conflict)
-        return `KONFLIKT: Ueberschneidung mit "${conflict.title}" (${fmtDate(conflict.start, dateLocale)}). Bitte anderen Slot vorschlagen.`;
-      store.addCalendarEvent(call.tenantId, input.title, start.toISOString(), end.toISOString());
-      store.addActionItem(
-        call.id,
-        `Termin gebucht: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}`,
-        "appointment",
-      );
-      return `GEBUCHT: ${input.title} am ${fmtDate(start.toISOString(), dateLocale)}.`;
-    }
     case "take_message": {
       store.addActionItem(call.id, input.message, "todo");
       return "Nachricht ist notiert.";
@@ -520,7 +422,7 @@ export async function agentTurn(call, callerText) {
       model: config.llm.claudeModel,
       max_tokens: 300,
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
-      tools: toolsWithCacheControl(toolDefs(call.tenantId)),
+      tools: toolsWithCacheControl(toolDefs()),
       messages,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     });

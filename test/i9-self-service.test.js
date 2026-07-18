@@ -213,14 +213,14 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
   }
 });
 
-test("(b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt", async () => {
+test("(b) Schreiben: B setzt agentName + agentStyle; Owner-Bucket unberuehrt", async () => {
   const s = await setup();
   try {
-    const res = await postSettings(s, { agentName: "B-Agent", allowCalendar: false });
+    const res = await postSettings(s, { agentName: "B-Agent", agentStyle: "warm-persoenlich" });
     assert.equal(res.status, 200);
     const stored = s.store.load().settings;
     assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
-    assert.equal(stored[TENANT_B].allowCalendar, false, "allowCalendar gesetzt");
+    assert.equal(stored[TENANT_B].agentStyle, "warm-persoenlich", "agentStyle gesetzt");
     assert.equal(
       stored[BOOTSTRAP_TENANT_ID].agentName,
       defaultSettings().agentName,
