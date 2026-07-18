@@ -20,6 +20,7 @@ import { planSummarySms } from "../src/sms-summary.js";
 import { publicCall } from "../src/store/views.js";
 import { makeDefaultState, createCall, markSummarySmsSent } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PROV = PROVIDER.TWILIO;
 
@@ -76,7 +77,7 @@ test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein 
   };
   // PA-10: dailySmsCap numerisch (fail-closed-Guard); 20 = Prod-Default, dailySmsCount 0
   // -> der Kontroll-Pfad (before) sendet unveraendert.
-  const cfg = { sendSmsSummary: true, dailySmsCap: 20 };
+  const cfg = withConfigNamespaces({ sendSmsSummary: true, dailySmsCap: 20 });
 
   const before = planSummarySms(store, cfg, { id: "call_A", tenantId: "A", provider: PROV });
   assert.equal(before.send, true, "ohne Marker wuerde gesendet (Kontroll-Pfad)");

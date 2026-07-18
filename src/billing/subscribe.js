@@ -31,7 +31,7 @@ const PLAN_PRICE_CONFIG_KEY = Object.freeze({
 export function priceIdForPlan(slug, config) {
   const key = PLAN_PRICE_CONFIG_KEY[slug];
   if (!key) return null;
-  return config[key] || null;
+  return config.billing[key] || null;
 }
 
 // Suffix-Laenge der paymentMethodId im Idempotenz-Key. Genug Entropie, um zwei

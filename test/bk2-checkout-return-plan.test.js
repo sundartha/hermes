@@ -22,6 +22,7 @@ import {
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { CustomerMissingError } from "../src/billing/errors.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "bk2-checkout-secret-0123456789";
 const SUB = "sub-bk2";
@@ -141,7 +142,7 @@ async function setup({
       webAuthMw,
       webAuthPendingMw,
       audit: (event, _req, detail) => auditCalls.push({ event, detail }),
-      config: { ...CONFIG, paymentEnabled, ...configPatch },
+      config: withConfigNamespaces({ ...CONFIG, paymentEnabled, ...configPatch }),
       billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
       accounts,
       provision: async (t) => provisionSpy.push(t),

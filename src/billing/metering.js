@@ -1,10 +1,9 @@
 // Metering: Voice-Minuten-/Nummern-Meter (P6b3) + Budget-Reconcile (outbound-p1c).
 // Reine Verschiebung aus server.js (Server-Slim P1). Die Factory schliesst store+config;
 // die Kosten-/Kind-Quellen (tariffCentsPerMin, holdAmountForCountry, USAGE_EVENT_KIND)
-// importiert das Modul selbst (EINE Quelle je, G5). Die Gating-Bedingung
-// `if (config.paymentEnabled)` liegt beim AUFRUFER (finishCall / Provisioning-Drain),
-// NICHT hier: reconcileOutboundVoiceBudget laeuft immer, recordVoiceMinuteMeter /
-// recordNumberMonthMeter nur im Payment-Pfad.
+// importiert das Modul selbst (EINE Quelle je, G5). Die paymentEnabled-Gating-Bedingung liegt
+// beim AUFRUFER (finishCall / Provisioning-Drain), NICHT hier: reconcileOutboundVoiceBudget
+// laeuft immer, recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 import { holdAmountForCountry } from "../telephony/provisioning-geo.js";
@@ -61,7 +60,7 @@ export function makeMetering({ store, config }) {
       tenantId: number.tenantId,
       kind: USAGE_EVENT_KIND.NUMBER_MONTH,
       quantity: 1,
-      costCents: holdAmountForCountry(number.country, config.numberSetupFeeCents),
+      costCents: holdAmountForCountry(number.country, config.billing.numberSetupFeeCents),
     });
   }
 

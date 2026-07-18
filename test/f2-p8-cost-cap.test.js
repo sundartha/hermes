@@ -18,6 +18,7 @@ import { makePgStore } from "../src/store/pg.js";
 import { USAGE_EVENT_KIND, NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { planSummarySms } from "../src/sms-summary.js";
 import { makePgTestStore } from "./pg-helpers.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const A = "tenant_a";
 const B = "tenant_b";
@@ -87,7 +88,7 @@ function planStore({
   };
 }
 const call = { id: "call_a", tenantId: A, provider: PROVIDER.TWILIO };
-const cfg = (dailySmsCap = 20) => ({ sendSmsSummary: true, dailySmsCap });
+const cfg = (dailySmsCap = 20) => withConfigNamespaces({ sendSmsSummary: true, dailySmsCap });
 
 test("planSummarySms: Cap NICHT erreicht (count < cap) -> send=true", () => {
   const plan = planSummarySms(planStore({ smsCount: 19 }), cfg(20), call);
@@ -120,7 +121,7 @@ test("planSummarySms: dailySmsCap=0 (Not-Aus) -> jede SMS gesperrt", () => {
 // LAUT, bevor eine Sende-Entscheidung ohne gueltige Kappe faellt.
 test("planSummarySms: config ohne dailySmsCap -> wirft laut (fail-closed statt fail-open)", () => {
   assert.throws(
-    () => planSummarySms(planStore({ smsCount: 19 }), { sendSmsSummary: true }, call),
+    () => planSummarySms(planStore({ smsCount: 19 }), withConfigNamespaces({ sendSmsSummary: true }), call),
     /dailySmsCap/,
   );
 });
@@ -129,7 +130,7 @@ test("planSummarySms: smsCount=25 + config ohne Cap -> Guard schliesst die alte 
   // Ohne Guard/Fallback waere "25 >= undefined" false -> send=true trotz 25 gesendeter SMS
   // (Toll-Fraud). Der Guard verhindert genau diesen stillen Send, indem er laut scheitert.
   assert.throws(
-    () => planSummarySms(planStore({ smsCount: 25 }), { sendSmsSummary: true }, call),
+    () => planSummarySms(planStore({ smsCount: 25 }), withConfigNamespaces({ sendSmsSummary: true }), call),
     /dailySmsCap/,
   );
 });

@@ -69,9 +69,9 @@ export const STRIPE_METER_EVENT_NAME = Object.freeze({
 });
 
 function authHeaders(extra = {}) {
-  if (!config.stripeSecretKey) throw new Error("Stripe Billing: STRIPE_SECRET_KEY fehlt");
+  if (!config.billing.stripeSecretKey) throw new Error("Stripe Billing: STRIPE_SECRET_KEY fehlt");
   return {
-    Authorization: `Bearer ${config.stripeSecretKey}`,
+    Authorization: `Bearer ${config.billing.stripeSecretKey}`,
     "Content-Type": "application/x-www-form-urlencoded",
     ...extra,
   };
@@ -122,7 +122,7 @@ async function assertOkWithDetail(res, op) {
   throw new Error(message);
 }
 
-const url = (path) => config.stripeApiBase + path;
+const url = (path) => config.billing.stripeApiBase + path;
 
 /** @type {import("./ports.js").BillingPort} */
 export const stripeBilling = {
@@ -212,9 +212,9 @@ export const stripeBilling = {
       mode: CHECKOUT_SETUP_MODE,
       customer: customerId,
       // Stripe verlangt im setup-Mode ein currency (sonst HTTP 400 parameter_missing).
-      // app-weite config.paymentCurrency (default eur) - dieselbe Waehrung wie der
+      // app-weite config.billing.paymentCurrency (default eur) - dieselbe Waehrung wie der
       // spaetere Abo-Price, damit Karte und Recurring nicht divergieren.
-      currency: config.paymentCurrency,
+      currency: config.billing.paymentCurrency,
       success_url: successUrl,
       cancel_url: cancelUrl,
     });

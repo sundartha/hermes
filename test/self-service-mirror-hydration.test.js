@@ -26,6 +26,7 @@ import {
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
 import { NUMBER_STATUS, TENANT_STATUS, tenantIdForSubject } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // ---- Benannte Konstanten (G25, kein Magic-Value) ---------------------------------
 const SECRET = "mirror-hydration-secret-0123456789"; // Session-Cookie-HMAC
@@ -124,7 +125,7 @@ async function setup() {
       webAuthMw,
       webAuthPendingMw,
       audit: () => {},
-      config: CONFIG,
+      config: withConfigNamespaces({ ...CONFIG }),
       billing: fakeBilling(),
       accounts,
       provision: provisionSeam(store),

@@ -21,6 +21,7 @@ import { GREETING_TEMPLATES } from "../src/self-service.js";
 import { PERSONA_STYLE_IDS } from "../src/i18n/locales.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "self-service-web-secret-0123456789";
 const SUB_B = "sub-b";
@@ -124,7 +125,7 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
   app.use(express.json());
   // Eigenes Config-Objekt (NICHT das Singleton kippen, F.I.R.S.T./Independent): so ist
   // der Flag-aus-Fall in einem separaten setup() testbar, ohne andere Tests zu stoeren.
-  const cfg = { paymentEnabled, publicUrl: PUBLIC_URL };
+  const cfg = withConfigNamespaces({ paymentEnabled, publicUrl: PUBLIC_URL });
   app.use(
     makeSelfServiceRoutes({
       store,

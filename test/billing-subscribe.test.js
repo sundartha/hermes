@@ -11,9 +11,13 @@ import {
   hasActiveSubscription,
   checkoutSessionIdempotencyKey,
 } from "../src/billing/subscribe.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const TENANT = "t_x";
-const CONFIG = { stripeStarterPriceId: "price_starter", stripeBusinessPriceId: "price_business" };
+const CONFIG = withConfigNamespaces({
+  stripeStarterPriceId: "price_starter",
+  stripeBusinessPriceId: "price_business",
+});
 
 // Fake-Store: haelt EINEN Tenant-Bucket mit stripe-Karte + Abo-Referenzen, exakt die
 // Felder, die subscribe.js liest/schreibt (Fassaden-Form).
@@ -56,7 +60,7 @@ test("priceIdForPlan: bekannte Slugs -> Price, unbekannt/unkonfiguriert -> null"
   assert.equal(priceIdForPlan("starter", CONFIG), "price_starter");
   assert.equal(priceIdForPlan("business", CONFIG), "price_business");
   assert.equal(priceIdForPlan("enterprise", CONFIG), null, "unbekannter Slug -> null");
-  assert.equal(priceIdForPlan("starter", {}), null, "fehlende Price-Id -> null");
+  assert.equal(priceIdForPlan("starter", withConfigNamespaces({})), null, "fehlende Price-Id -> null");
 });
 
 test("createTenantSubscription: unbekannter Plan -> unknown_plan, kein Stripe-Call", async () => {
@@ -70,7 +74,7 @@ test("createTenantSubscription: unbekannter Plan -> unknown_plan, kein Stripe-Ca
 
 test("createTenantSubscription: konfigurierter Tier ohne Price -> plan_unconfigured", async () => {
   const r = await createTenantSubscription({
-    store: fakeStore(), billing: fakeBilling(), config: {}, tenant: TENANT, planSlug: "starter",
+    store: fakeStore(), billing: fakeBilling(), config: withConfigNamespaces({}), tenant: TENANT, planSlug: "starter",
   });
   assert.deepEqual(r, { ok: false, reason: "plan_unconfigured" });
 });

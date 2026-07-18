@@ -38,6 +38,7 @@ import {
 } from "../src/billing/webhook.js";
 import { PLAN_CATALOG } from "../src/plans.js";
 import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // ---- Benannte Konstanten (G25, kein Magic-Value) ---------------------------------
 const SECRET = "bk5-smoke-secret-0123456789"; // Session-Cookie-HMAC
@@ -167,7 +168,7 @@ async function setup({ activated = false } = {}) {
       webAuthMw,
       webAuthPendingMw,
       audit: () => {},
-      config: CONFIG,
+      config: withConfigNamespaces({ ...CONFIG }),
       billing: fakeBilling(billingSpy),
       accounts,
       provision: realProvision(store),

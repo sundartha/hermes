@@ -24,6 +24,7 @@ import {
   findNumber,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // Fake-Store: load() liefert den geteilten State (wie der json-Backend). withStoreLock
 // schnappschusst provisioningJobs VOR dem Body und rollt bei einem Body-Fehler (z.B. ein
@@ -74,7 +75,7 @@ function makeOrchestrator(store) {
   const queue = makeMemoryQueue();
   const orchestrator = makeProvisioningOrchestrator({
     store,
-    config: { paymentEnabled: false },
+    config: withConfigNamespaces({ paymentEnabled: false }),
     queue,
     billing: {},
     metering: { recordNumberMonthMeter() {} },

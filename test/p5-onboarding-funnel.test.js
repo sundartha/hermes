@@ -22,6 +22,7 @@ import * as ops from "../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 import { holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
 import { resolveNumberCountry } from "../src/geo/resolve.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const SECRET = "p5-onboarding-secret-0123456789";
 const SUB = "sub-p5";
@@ -76,7 +77,7 @@ async function setup({ card = true, configOverride = {} } = {}) {
       webAuthMw,
       webAuthPendingMw,
       audit: () => {},
-      config: { ...CONFIG, ...configOverride },
+      config: withConfigNamespaces({ ...CONFIG, ...configOverride }),
       billing: fakeBilling(),
       accounts,
       provision: async (t) => provisionSpy.push(t),
