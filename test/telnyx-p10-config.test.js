@@ -166,18 +166,17 @@ test("assertConfig im Hosting: Flag an + fehlende ID -> Boot-Refusal + nennt die
 });
 
 // Produktions-sichere Basis (Muster SAFE_PROD aus config-prod-footguns.test.js): alle
-// vier Bestands-Footguns entschaerft. Tests variieren NUR die Telnyx-Felder.
+// vier Bestands-Footguns entschaerft. Tests variieren NUR die Telnyx-Felder. Namespaced
+// (PA-14): productionFootguns() liest cfg.<namespace>.<key>, nicht mehr cfg.<key> flach.
 const SAFE_PROD = {
-  dashboardPassword: "geheim",
-  mcpAuth: "",
-  skipTwilioSignatureCheck: false,
-  oauthIssuerUrl: "",
-  storeBackend: "pg",
+  auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "" },
+  safety: { skipTwilioSignatureCheck: false },
+  store: { storeBackend: "pg" },
 };
 
 test("productionFootguns: Flag an + absurd hoher Turn-Deckel -> fatal (nennt Var)", () => {
   const errors = productionFootguns(
-    { ...SAFE_PROD, telnyxAssistant: { enabled: true, shimMaxTurnsPerMin: 10000 } },
+    { ...SAFE_PROD, telnyx: { telnyxAssistant: { enabled: true, shimMaxTurnsPerMin: 10000 } } },
     true,
   );
   assert.equal(errors.length, 1);
@@ -186,7 +185,7 @@ test("productionFootguns: Flag an + absurd hoher Turn-Deckel -> fatal (nennt Var
 
 test("productionFootguns: Flag an + Default-Turn-Deckel (30) -> kein Footgun", () => {
   const errors = productionFootguns(
-    { ...SAFE_PROD, telnyxAssistant: { enabled: true, shimMaxTurnsPerMin: 30 } },
+    { ...SAFE_PROD, telnyx: { telnyxAssistant: { enabled: true, shimMaxTurnsPerMin: 30 } } },
     true,
   );
   assert.deepEqual(errors, []);
@@ -194,7 +193,7 @@ test("productionFootguns: Flag an + Default-Turn-Deckel (30) -> kein Footgun", (
 
 test("productionFootguns: Flag aus + absurd hoher Turn-Deckel -> inert (kein Footgun)", () => {
   const errors = productionFootguns(
-    { ...SAFE_PROD, telnyxAssistant: { enabled: false, shimMaxTurnsPerMin: 10000 } },
+    { ...SAFE_PROD, telnyx: { telnyxAssistant: { enabled: false, shimMaxTurnsPerMin: 10000 } } },
     true,
   );
   assert.deepEqual(errors, [], "Bremse ohne aktiven Assistant ist nicht sicherheitsrelevant");

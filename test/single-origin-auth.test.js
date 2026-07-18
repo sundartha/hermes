@@ -152,12 +152,12 @@ test("dev-login OHNE devLoginEnabled: Route existiert nicht -> 404 (fail-closed)
 // die ROHE Env, damit eine versehentlich gesetzte DEV_LOGIN_ENABLED=true den Boot
 // verweigert (Muster config-prod-footguns.test.js: gegen die Guard-Funktion).
 
+// Namespaced (PA-14): productionFootguns() liest cfg.<namespace>.<key>, nicht mehr
+// cfg.<key> flach.
 const SAFE_PROD = {
-  dashboardPassword: "geheim",
-  mcpAuth: "",
-  skipTwilioSignatureCheck: false,
-  oauthIssuerUrl: "",
-  storeBackend: "pg",
+  auth: { dashboardPassword: "geheim", mcpAuth: "", oauthIssuerUrl: "" },
+  safety: { skipTwilioSignatureCheck: false },
+  store: { storeBackend: "pg" },
 };
 
 function withEnv(name, value, fn) {
@@ -185,5 +185,18 @@ test("DEV_LOGIN_ENABLED=true im Hosting -> productionFootguns fatal (Boot-Refusa
 test("DEV_LOGIN_ENABLED nicht gesetzt im Hosting -> kein Footgun", () => {
   withEnv("DEV_LOGIN_ENABLED", undefined, () => {
     assert.deepEqual(productionFootguns(SAFE_PROD, true), [], "ohne DEV_LOGIN_ENABLED sauber");
+  });
+});
+
+test("DEV_LOGIN_ENABLED-Roh-Pruefung ist unabhaengig vom config-Objekt (Roh-Env 'true' schlaegt durch, auch wenn cfg.auth.devLoginEnabled === false)", () => {
+  withEnv("DEV_LOGIN_ENABLED", "true", () => {
+    // Der (neutralisierte) config-Wert weicht bewusst von der rohen Env ab: cfg sagt false,
+    // die rohe Env sagt "true". productionFootguns liest die ROHE Env, nicht cfg -> Footgun MUSS greifen.
+    const cfg = { ...SAFE_PROD, auth: { ...SAFE_PROD.auth, devLoginEnabled: false } };
+    const errors = productionFootguns(cfg, true);
+    assert.ok(
+      errors.some((e) => /DEV_LOGIN_ENABLED/.test(e)),
+      "die zweite, rohe Sperre feuert unabhaengig vom abweichenden config-Wert",
+    );
   });
 });

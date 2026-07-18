@@ -830,7 +830,7 @@ export function gatewayUrlForPort(port) {
   return `http://localhost:${port}`;
 }
 export function resolveGatewayUrl() {
-  return stripTrailingSlash(process.env.GATEWAY_URL || gatewayUrlForPort(config.port));
+  return stripTrailingSlash(process.env.GATEWAY_URL || gatewayUrlForPort(config.server.port));
 }
 
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen
@@ -863,24 +863,24 @@ const TELNYX_SHIM_MAX_TURNS_CEILING = 120;
 export function productionFootguns(cfg = config, isProduction = detectProduction()) {
   if (!isProduction) return [];
   const errors = [];
-  if (!cfg.dashboardPassword)
+  if (!cfg.auth.dashboardPassword)
     errors.push(
       "DASHBOARD_PASSWORD fehlt - Dashboard und API waeren oeffentlich erreichbar (im Hosting Pflicht).",
     );
-  if (cfg.mcpAuth === "off")
+  if (cfg.auth.mcpAuth === "off")
     errors.push("MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).");
-  if (cfg.skipTwilioSignatureCheck)
+  if (cfg.safety.skipTwilioSignatureCheck)
     errors.push(
       "SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
     );
-  if (isInsecureHttpIssuer(cfg.oauthIssuerUrl))
+  if (isInsecureHttpIssuer(cfg.auth.oauthIssuerUrl))
     errors.push("OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).");
-  if (cfg.storeBackend !== "pg")
+  if (cfg.store.storeBackend !== "pg")
     errors.push(
       "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
     );
   // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
-  // config.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
+  // config.auth.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
   // unabhaengige Sperre liest die ROHE Env, damit eine versehentlich auf Render gesetzte
   // DEV_LOGIN_ENABLED=true den Boot verweigert statt still ignoriert zu werden (Regel 3).
   if (process.env.DEV_LOGIN_ENABLED === "true")
@@ -888,8 +888,8 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   // C-Telnyx: aktiver Assistant + entwaffnete Shim-Rate-Bremse (Regel 1). Nur wenn das
   // Flag an ist (Flag aus -> Shim 404, Bremse inert -> kein Footgun).
   if (
-    cfg.telnyxAssistant?.enabled &&
-    cfg.telnyxAssistant?.shimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING
+    cfg.telnyx?.telnyxAssistant?.enabled &&
+    cfg.telnyx?.telnyxAssistant?.shimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING
   )
     errors.push(
       "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
@@ -902,44 +902,45 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
 // genutzt (auth-gate/web-login) statt vierfach woertlich. INV-3-Exemption-Reihenfolge
 // bleibt strukturell unveraendert (nur die Bedingung wird benannt, nicht verschoben).
 export function isSelfServiceLive(cfg) {
-  return Boolean(cfg.selfServiceEnabled && cfg.multiTenant);
+  return Boolean(cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant);
 }
 
 export function assertConfig() {
   const missing = [];
-  if (!config.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
-  if (!config.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
-  if (!config.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
+  if (!config.llm.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
+  if (!config.telephony.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
+  if (!config.telephony.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
   // Absendernummer + Owner-Identitaet sind keine Boot-Pflicht-Env mehr (P2b): sie leben
   // im Store (Bootstrap-CLI/Onboarding/Self-Service), nicht in der Env. Stattdessen
   // verlangt der Boot-Guard in server.js fail-closed eine aktive Nummer im Store
   // (assertConfig bleibt storefrei).
-  if (!config.publicUrl || config.publicUrl.includes("CHANGE-ME")) missing.push("PUBLIC_URL");
-  if (config.mcpAuth === "oauth" && !config.oauthIssuerUrl)
+  if (!config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"))
+    missing.push("PUBLIC_URL");
+  if (config.auth.mcpAuth === "oauth" && !config.auth.oauthIssuerUrl)
     missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
-  if (config.storeBackend === "pg" && !config.databaseUrl)
+  if (config.store.storeBackend === "pg" && !config.store.databaseUrl)
     missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
-  if (config.paymentEnabled && !config.stripeSecretKey)
+  if (config.billing.paymentEnabled && !config.billing.stripeSecretKey)
     missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
   // W4: das Webhook-Signing-Secret ist sicherheitskritisch (ohne ist der Stripe-Webhook
   // fail-closed unverifizierbar -> kein Abo-Lifecycle). Boot-Pflicht bei aktivem Payment
   // (Muster STRIPE_SECRET_KEY). Die Price-Ids sind BEWUSST keine Boot-Pflicht: ein Tier
   // darf unbuchbar bleiben (Route-500), das stoppt den Boot nicht.
-  if (config.paymentEnabled && !config.stripeWebhookSecret)
+  if (config.billing.paymentEnabled && !config.billing.stripeWebhookSecret)
     missing.push("STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)");
   // numEnv() faengt einen nicht-numerischen NUMBER_SETUP_FEE_CENTS bereits am Env-Parse
   // ab (fatalConfigErrors -> Boot-Refusal). Dieser Check bleibt als Invariante auf dem
   // config-Wert (> 0 ganzzahlig bei PAYMENT_ENABLED) - direkt geprueft von
   // config-payment-guard.test.js, das den config-Wert ohne Env-Pfad mutiert.
   if (
-    config.paymentEnabled &&
-    (!Number.isInteger(config.numberSetupFeeCents) || config.numberSetupFeeCents <= 0)
+    config.billing.paymentEnabled &&
+    (!Number.isInteger(config.billing.numberSetupFeeCents) || config.billing.numberSetupFeeCents <= 0)
   )
     missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
   // Single-Origin (P1): WEB_DIST_DIR gesetzt, aber der Build (<dir>/index.html) fehlt ->
   // sichtbarer Boot-Fehler statt stiller 401. Ohne index.html faende express.static nichts,
   // jeder Marketing-Request fiele auf die Basic-Auth durch (Admin-Passwort statt Landing).
-  if (config.webDistDir && !existsSync(path.join(config.webDistDir, "index.html")))
+  if (config.server.webDistDir && !existsSync(path.join(config.server.webDistDir, "index.html")))
     missing.push(
       "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
     );
@@ -949,16 +950,16 @@ export function assertConfig() {
   // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/callControlAppId tragen
   // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7);
   // connectionId (TeXML) bleibt Pflicht, weil der Inbound-/Nummern-Pfad weiter darueber laeuft.
-  if (config.telnyxAssistant.enabled) {
-    if (!config.telnyxAssistant.assistantId)
+  if (config.telnyx.telnyxAssistant.enabled) {
+    if (!config.telnyx.telnyxAssistant.assistantId)
       missing.push("TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyxApiKey)
+    if (!config.telephony.telnyxApiKey)
       missing.push("TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyxConnectionId)
+    if (!config.telephony.telnyxConnectionId)
       missing.push("TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyxAssistant.callControlAppId)
+    if (!config.telnyx.telnyxAssistant.callControlAppId)
       missing.push("TELNYX_CALL_CONTROL_APP_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyxAssistant.shimSharedSecret)
+    if (!config.telnyx.telnyxAssistant.shimSharedSecret)
       missing.push("TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
   }
   // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
@@ -976,27 +977,27 @@ export function assertConfig() {
   // Footgun-Warnungen NUR im lokalen/Test-Modus: im Hosting (isProduction) sind
   // dieselben Punkte oben bereits fatal (productionFootguns) -> hier kein
   // Doppel-Report, lokal aber weiterhin ein sichtbarer Hinweis.
-  if (!isProduction && config.skipTwilioSignatureCheck)
+  if (!isProduction && config.safety.skipTwilioSignatureCheck)
     console.error(
       "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
     );
-  if (!isProduction && config.mcpAuth === "off")
+  if (!isProduction && config.auth.mcpAuth === "off")
     console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
-  if (config.paymentEnabled && !config.provisioningEnabled)
+  if (config.billing.paymentEnabled && !config.provisioning.provisioningEnabled)
     console.error(
       "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",
     );
-  if (config.storeBackend !== "pg" && config.sessionSecret)
+  if (config.store.storeBackend !== "pg" && config.auth.sessionSecret)
     console.error("[Hinweis] Web-Login braucht STORE_BACKEND=pg (Sessions in der DB).");
   // Self-Service ist seit der Login-Konvergenz web-session-only: die Routen sind NUR
   // im Web-Login-Block (SESSION_SECRET + STORE_BACKEND=pg) registriert. Flags an, aber
   // ohne diese Infra -> /api/self-service/* sind nicht erreichbar (404, fail-closed).
-  if (isSelfServiceLive(config) && !(config.sessionSecret && config.storeBackend === "pg"))
+  if (isSelfServiceLive(config) && !(config.auth.sessionSecret && config.store.storeBackend === "pg"))
     console.error(
       "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.",
     );
   // http-OIDC-Issuer: lokal nur ein Hinweis (Test-IdP), im Hosting oben bereits fatal.
-  if (!isProduction && isInsecureHttpIssuer(config.oauthIssuerUrl))
+  if (!isProduction && isInsecureHttpIssuer(config.auth.oauthIssuerUrl))
     console.error(
       "[Sicherheit] OAUTH_ISSUER_URL ist nicht https - nur fuer lokale Tests zulaessig (SSRF/MITM-Risiko)!",
     );
