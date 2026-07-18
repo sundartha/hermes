@@ -87,10 +87,19 @@ export function createMetrics({
     log("shim_turn", { callId, latencyMs });
   }
 
-  return { llmCall, logTurn, recordTurnRendered, logTurnGap, logShimTurn };
+  // ZEICHENZAHL des in einem Turn Gehoerten (P2a, Voraussetzung fuer die Endpointing-
+  // Kalibrierung P9). Ein Absacken des Medians nach einem Endpointing-Flip ist das
+  // Truncation-Signal - eine LAENGE ist kein Inhalt, identisches PII-Niveau wie logTurn.
+  // Das Gehoerte selbst geht NIE ins Log (kein text-Feld, auch nicht gekuerzt).
+  function logSpeechResult({ callId, chars }) {
+    if (!enabled) return;
+    log("speech_result", { callId, chars });
+  }
+
+  return { llmCall, logTurn, recordTurnRendered, logTurnGap, logShimTurn, logSpeechResult };
 }
 
 // Prozessweiter Singleton (P15). Konsumenten: claude.js (llmCall via createLlmClient,
-// logTurn) + server.js (recordTurnRendered/logTurnGap im /voice/turn) + telnyx-llm-shim.js
-// (logShimTurn im Custom-LLM-Shim, C-Telnyx P10).
+// logTurn) + routes/voice.js (recordTurnRendered/logTurnGap/logSpeechResult im /voice/turn)
+// + telnyx-llm-shim.js (logShimTurn im Custom-LLM-Shim, C-Telnyx P10).
 export const metrics = createMetrics();

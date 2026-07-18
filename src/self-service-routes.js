@@ -223,6 +223,11 @@ export function makeSelfServiceRoutes({
       currency: config.billing.paymentCurrency,
       calls: data.calls.map(publicCall),
       actionItems: data.actionItems,
+      // P2a: der Meldungs-Feed - dieselbe tenant-gescopte Quelle wie calls/actionItems
+      // (exportTenantData filtert auf die callIds DIESES Tenants, kein Fremd-Leak, H3).
+      // Additiv: ein alter Client ohne das Feld rendert wie bisher. Keine Slice - die
+      // Menge ist bereits durch MAX_NOTIFICATIONS im Store begrenzt (wie actionItems).
+      notifications: data.notifications,
       calendar: upcomingCalendar(store, tenant),
       agent: {
         number: activeNumberFor(agentState, tenant),

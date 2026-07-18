@@ -81,6 +81,17 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
 .st.completed{background:rgba(31,170,89,.16);color:#7fe3aa}
 .st.failed{background:rgba(255,255,255,.1);color:var(--text-muted)}
 .empty{color:var(--text-muted);font-size:13px;text-align:center;padding:22px 8px}
+/* P2a: Kartenrumpf (Summary + Ziel-Chip) + Meldungs-Feed */
+.call-b{padding:0 18px 15px;display:flex;flex-direction:column;gap:9px}
+.cs{color:var(--text-soft);font-size:13px;line-height:1.5}
+.obj{align-self:flex-start;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;padding:3px 10px;border-radius:99px;background:rgba(255,255,255,.1);color:var(--text-soft)}
+.obj.yes{background:rgba(31,170,89,.16);color:#7fe3aa}
+.obj.no{background:rgba(255,255,255,.1);color:var(--text-muted)}
+.nt{border-bottom:1px solid var(--navy-700);padding:12px 2px}
+.nt:last-child{border-bottom:0}
+.nt-t{font-weight:600;font-size:13.5px}
+.nt-b{color:var(--text-muted);font-size:12.5px;margin-top:3px}
+.nt-a{color:var(--text-muted);font-size:11.5px;margin-top:4px}
 /* p6-funnel: Plan-Auswahl-Karten (Starter/Business, KEIN Free) */
 .plans{display:flex;gap:14px;flex-wrap:wrap}
 .plan{position:relative;flex:1 1 200px;border:1px solid var(--navy-700);border-radius:15px;padding:18px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;gap:10px}
@@ -176,6 +187,16 @@ h3{font-size:16px;font-weight:600;margin-bottom:4px}
       <div id="calls"><div class="empty">Noch nicht verbunden.</div></div>
     </div>
 
+    <!-- Meldungen (P2a): der Ereignis-Feed. Deckt auch die Faelle OHNE Summary ab
+         ("Anruf nicht zustande gekommen" / "Anruf abgebrochen") - dort ist das die
+         einzige lesbare Spur. Versteckt, solange der Server das Feld nicht liefert
+         (I9-Muster wie billingCard: alter Server -> Karte bleibt inaktiv). -->
+    <div class="card c12" id="notifCard" style="display:none">
+      <h3>Meldungen</h3>
+      <div class="hint">Was seit deinem letzten Blick passiert ist.</div>
+      <div id="notifications"></div>
+    </div>
+
   </div>
 </div>
 
@@ -252,6 +273,28 @@ function showAuth(text, showLogin, showLogout){
 
 function esc(s){return String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
+// P2a: Ziel-Bewertung als Chip. objectiveAchieved ist true | false | "unclear" | null -
+// json speichert Boolean, pg deserialisiert "true"/"false" zurueck zu Boolean (store/pg.js
+// deserializeObjective), darum EIN String-Lookup statt vier Vergleiche. null/undefined
+// (noch keine Summary, z.B. laufender Call) -> KEIN Chip, kein falsches Signal.
+const OBJECTIVE_CHIPS = {
+  "true":    { cls:"yes",     text:"Ziel erreicht" },
+  "false":   { cls:"no",      text:"Ziel nicht erreicht" },
+  "unclear": { cls:"unclear", text:"Ziel unklar" },
+};
+function objectiveChip(value){
+  const chip = OBJECTIVE_CHIPS[String(value)];
+  return chip ? `<span class="obj ${chip.cls}">${chip.text}</span>` : "";
+}
+
+// P2a: Kartenrumpf mit Summary + Ziel-Chip. Beides fehlt (aktiver oder nicht zustande
+// gekommener Call) -> gar kein Rumpf, die Karte sieht aus wie bisher (byte-identisch).
+function callBody(c){
+  const chip = objectiveChip(c.objectiveAchieved);
+  const summary = c.summary ? `<div class="cs">${esc(c.summary)}</div>` : "";
+  return (summary || chip) ? `<div class="call-b">${summary}${chip}</div>` : "";
+}
+
 function renderCalls(calls){
   if(!calls.length){$("calls").innerHTML='<div class="empty">Keine Anrufe.</div>';return}
   $("calls").innerHTML = calls.map(c=>{
@@ -265,8 +308,30 @@ function renderCalls(calls){
         </div>
         <span class="st ${c.status}">${c.status==="active"?"Live":c.status==="completed"?"Beendet":c.status==="cancelled"?"Abgebrochen":"Fehlgeschlagen"}</span>
       </div>
+      ${callBody(c)}
     </div>`;
   }).join("");
+}
+
+// ISO-Zeitstempel -> de-DE-Anzeige. Unparsebar/fehlend -> leer, nie "Invalid Date".
+function formatNotificationTime(at){
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("de-DE");
+}
+
+// P2a: Meldungs-Feed. Kein Array vom Server (alter Server / Feld fehlt) -> Karte bleibt
+// versteckt, statt eine leere Karte zu zeigen (I9-Muster wie renderBilling/hasCard).
+function renderNotifications(notifications){
+  const card = $("notifCard");
+  if(!Array.isArray(notifications)){ card.style.display="none"; return; }
+  card.style.display="";
+  $("notifications").innerHTML = notifications.length
+    ? notifications.map(n=>`<div class="nt">
+        <div class="nt-t">${esc(n.title)}</div>
+        <div class="nt-b">${esc(n.body)}</div>
+        <div class="nt-a">${formatNotificationTime(n.at)}</div>
+      </div>`).join("")
+    : '<div class="empty">Keine Meldungen.</div>';
 }
 
 // Chip-Text fuer eine NICHT-aktive Nummer (Fix C, PLAN-VOUCHER-SETUP-FEE-GAP.md): failed/
@@ -299,6 +364,7 @@ async function refresh(){
   $("agentNum").textContent = agentNumberText(s.agent);
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
   renderCalls(s.calls);
+  renderNotifications(s.notifications);
   renderBilling(s);
   renderStyle(s);
 }
