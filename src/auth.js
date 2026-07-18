@@ -13,15 +13,15 @@ const isLocalSocket = (req) =>
 
 // AM1: Der Legacy-Socket-Bypass (MCP_AUTH="" ohne MCP_AUTH_TOKEN) ist reine lokale Dev-
 // Bequemlichkeit und darf in Produktion /mcp NIE oeffnen (s.o. - dort ist jeder Request
-// "localhost"). Nur ausserhalb der Produktion (config.isProduction = RENDER_EXTERNAL_URL).
+// "localhost"). Nur ausserhalb der Produktion (config.server.isProduction = RENDER_EXTERNAL_URL).
 // isProduction injizierbar -> unit-testbar (Muster productionFootguns). Reine Query.
-export function legacyLocalBypassAllowed(req, isProduction = config.isProduction) {
+export function legacyLocalBypassAllowed(req, isProduction = config.server.isProduction) {
   return !isProduction && isLocalSocket(req);
 }
 
 // Erwartete Audience: explizit gesetzt oder kanonische MCP-URL.
-const audience = () => config.oauthAudience || `${config.publicUrl}/mcp`;
-const metadataUrl = () => `${config.publicUrl}/.well-known/oauth-protected-resource`;
+const audience = () => config.auth.oauthAudience || `${config.server.publicUrl}/mcp`;
+const metadataUrl = () => `${config.server.publicUrl}/.well-known/oauth-protected-resource`;
 
 // JWKS-URI ueber die Standard-Metadata des Issuers finden. Beide gaengigen
 // Pfade versuchen: OIDC (openid-configuration) und OAuth 2.1 AS-Metadata
@@ -32,7 +32,7 @@ async function discoverJwksUri() {
   let lastErr;
   for (const p of paths) {
     try {
-      const r = await fetch(`${config.oauthIssuerUrl}${p}`);
+      const r = await fetch(`${config.auth.oauthIssuerUrl}${p}`);
       if (!r.ok) {
         lastErr = new Error(`${p} HTTP ${r.status}`);
         continue;
@@ -79,7 +79,7 @@ async function verifyOauth(req, res, next) {
   }
   try {
     const { payload } = await jwtVerify(token, await getJwks(), {
-      issuer: config.oauthIssuerUrl,
+      issuer: config.auth.oauthIssuerUrl,
       audience: audience(),
       clockTolerance: 30,
     });
@@ -93,19 +93,19 @@ async function verifyOauth(req, res, next) {
 
 // Express-Middleware vor POST /mcp.
 export async function mcpAuth(req, res, next) {
-  if (config.mcpAuth === "oauth") return verifyOauth(req, res, next);
-  if (config.mcpAuth === "off") return next();
+  if (config.auth.mcpAuth === "oauth") return verifyOauth(req, res, next);
+  if (config.auth.mcpAuth === "off") return next();
 
   // Modus "token" und Legacy ("") teilen die statische Bearer-Pruefung.
-  if (config.mcpAuthToken) {
-    if (safeEqual(req.headers.authorization || "", `Bearer ${config.mcpAuthToken}`)) return next();
+  if (config.auth.mcpAuthToken) {
+    if (safeEqual(req.headers.authorization || "", `Bearer ${config.auth.mcpAuthToken}`)) return next();
     audit("auth_failed", req, "path=/mcp");
     return res.status(401).json({ error: "unauthorized" });
   }
   // Kein Token gesetzt: "token" verlangt trotzdem eines, Legacy faellt AUSSERHALB der
   // Produktion auf localhost-only zurueck (fail-closed wie seit Phase 1). In Produktion
   // ist der Socket-Bypass deaktiviert (AM1) -> 401, auch von localhost.
-  if (config.mcpAuth === "token") {
+  if (config.auth.mcpAuth === "token") {
     audit("auth_failed", req, "path=/mcp grund=kein_token");
     return res.status(401).json({ error: "unauthorized" });
   }
@@ -121,7 +121,7 @@ export async function mcpAuth(req, res, next) {
 export function registerWellKnown(app) {
   const doc = () => ({
     resource: audience(),
-    authorization_servers: config.oauthIssuerUrl ? [config.oauthIssuerUrl] : [],
+    authorization_servers: config.auth.oauthIssuerUrl ? [config.auth.oauthIssuerUrl] : [],
     bearer_methods_supported: ["header"],
   });
   app.get("/.well-known/oauth-protected-resource", (_q, res) => res.json(doc()));
