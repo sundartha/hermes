@@ -96,7 +96,7 @@ Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen, sonst Nachric
 
   return `${base}
 
-SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Slot, eine Bestaetigung vor einer Buchung) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als gebucht oder vereinbart bezeichnest du einen Termin erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
+SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Termin, welche Uhrzeit) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als vereinbart bezeichnest du einen Terminwunsch erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
 DEIN AUFTRAG: ${call.goal}
 ${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
 ${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}

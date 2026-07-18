@@ -20,10 +20,17 @@ const OWNER = "Jonas Beispiel";
 const EXPECTED_TOOL_NAMES = ["end_call", "take_message"];
 // Marker der entfernten In-Call-Kalenderflaeche. Erscheint einer davon im
 // System-Prompt, verspricht der Agent wieder eine Faehigkeit, die er nicht hat.
+// "Buchung" gehoert dazu (Runde-1-Fix): die outbound-SITUATION-Zeile sprach vor
+// dem Fix trotz der beiden UNCONDITIONAL_LINES weiterhin von einer "Buchung" und
+// davon, einen Termin als "gebucht" zu bezeichnen - ein direkter Widerspruch zum
+// Phasenziel. Das Wort kommt im Bestandsprompt sonst nirgends vor (auch nicht in
+// der allgemeinen Anti-Halluzinations-Regel, die von "gebucht" statt "Buchung"
+// spricht), daher ist es ein eindeutiger, nicht-brittle Marker.
 const REMOVED_PROMPT_MARKERS = [
   "book_appointment",
   "get_calendar",
   "KALENDER DEINES AUFTRAGGEBERS",
+  "Buchung",
 ];
 // Die beiden jetzt UNBEDINGTEN Prompt-Zeilen (vormals die false-Zweige zweier
 // Ternaries). Gegenprobe: sie beweisen Zweig-Kollaps statt blosser Loeschung.
