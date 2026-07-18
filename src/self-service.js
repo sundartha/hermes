@@ -13,13 +13,11 @@ import { DEFAULT_GREETING } from "./store/defaults.js";
 // verworfen - kein Freitext, kein PII/Impersonation im Feld. language ist seit F1 P4
 // uebersteuerbar (Entscheidung #8), agentStyle seit PA P4 nach exakt gleichem Muster (kein
 // eigener Sonderbranch mehr - die Katalog-Pruefung lebt einmal in updateSettings, nicht hier).
-export const SELF_SERVICE_FREE_FIELDS = [
-  "agentName",
-  "allowCalendar",
-  "allowBooking",
-  "language",
-  "agentStyle",
-];
+// allowCalendar/allowBooking sind seit P1b KEINE Self-Service-Felder mehr: der
+// Telefon-Agent hat weder Kalender- noch Buchungs-Tool, ein Schalter dafuer waere
+// ein Angebot ohne Wirkung (E1). Die Felder bleiben im Datenmodell und nur ueber
+// POST /api/settings (Plattform-Admin) schreibbar.
+export const SELF_SERVICE_FREE_FIELDS = ["agentName", "language", "agentStyle"];
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
 // false->true NEIN - Aktivieren bleibt Plattform-Admin via POST /api/settings).
@@ -30,7 +28,7 @@ export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBan
 // Satz ist NICHT Teil des greeting und bleibt fest verdrahtet (Regel 2).
 export const GREETING_TEMPLATES = Object.freeze([
   DEFAULT_GREETING, // = der geseedete Default; eine Quelle in defaults.js (G5, kein Drift)
-  "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht auf oder vereinbare einen Termin. Wie kann ich helfen?",
+  "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
   "Hallo! Der KI-Assistent von {owner} hier. Wie kann ich Ihnen weiterhelfen?",
 ]);
 

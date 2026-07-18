@@ -212,7 +212,7 @@ function nextWeekday(daysAhead, hour) {
 // UND die Self-Service-Vorlagen (self-service.js GREETING_TEMPLATES) referenzieren
 // sie, damit der geseedete Default IMMER eine waehlbare Vorlage bleibt (kein Drift).
 export const DEFAULT_GREETING =
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann Nachrichten aufnehmen oder direkt einen Termin vereinbaren. Wie kann ich helfen?";
+  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?";
 
 // ---- Geo-Location (F1): Default-Land + -Sprache ----
 // EINE Quelle (G5/G25) fuer die Geo-Defaults: defaultSettings().language, der
@@ -228,6 +228,12 @@ export function defaultSettings() {
   return {
     agentName: "Hermes",
     greeting: DEFAULT_GREETING,
+    // Seit P1b (Owner-Entscheidung E1) OHNE lesenden Konsumenten: der Telefon-Agent
+    // hat kein Kalender-/Buchungs-Tool mehr, und Self-Service kann die Felder nicht
+    // mehr setzen. Bewusst NICHT entfernt - ein Spalten-Drop waere eine Migration mit
+    // Rollback-Risiko ohne funktionalen Gewinn. Die GLEICHNAMIGEN Felder auf der
+    // Profil-Achse (PROFILE_FIELDS weiter unten) leben unabhaengig weiter und gaten
+    // weiterhin das MCP-Tool und POST /api/calendar - nicht verwechseln.
     allowCalendar: true,
     allowBooking: true,
     allowSummaries: true,

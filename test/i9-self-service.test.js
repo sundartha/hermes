@@ -213,14 +213,14 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
   }
 });
 
-test("(b) Schreiben: B setzt agentName + allowCalendar; Owner-Bucket unberuehrt", async () => {
+test("(b) Schreiben: B setzt agentName + agentStyle; Owner-Bucket unberuehrt", async () => {
   const s = await setup();
   try {
-    const res = await postSettings(s, { agentName: "B-Agent", allowCalendar: false });
+    const res = await postSettings(s, { agentName: "B-Agent", agentStyle: "warm-persoenlich" });
     assert.equal(res.status, 200);
     const stored = s.store.load().settings;
     assert.equal(stored[TENANT_B].agentName, "B-Agent", "B-Bucket traegt B's Wert");
-    assert.equal(stored[TENANT_B].allowCalendar, false, "allowCalendar gesetzt");
+    assert.equal(stored[TENANT_B].agentStyle, "warm-persoenlich", "agentStyle gesetzt");
     assert.equal(
       stored[BOOTSTRAP_TENANT_ID].agentName,
       defaultSettings().agentName,
@@ -241,6 +241,19 @@ test("(c1) Nicht-Whitelist-Feld (allowSummaries) wird ignoriert", async () => {
       true,
       "allowSummaries nicht geschrieben",
     );
+  } finally {
+    await s.close();
+  }
+});
+
+test("(c1b) allowCalendar/allowBooking sind seit P1b kein Self-Service-Feld mehr (E1)", async () => {
+  const s = await setup();
+  try {
+    const res = await postSettings(s, { allowCalendar: false, allowBooking: false });
+    assert.equal(res.status, 200);
+    const bucket = s.store.load().settings[TENANT_B];
+    assert.equal(bucket.allowCalendar, true, "allowCalendar nicht geschrieben (Default true)");
+    assert.equal(bucket.allowBooking, true, "allowBooking nicht geschrieben (Default true)");
   } finally {
     await s.close();
   }

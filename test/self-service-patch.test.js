@@ -51,3 +51,16 @@ test("greeting bleibt unberuehrt: Freitext wird weiterhin in selfServicePatch ab
   assert.equal("greeting" in clean, false);
   assert.ok(rejected.includes("greeting"));
 });
+
+test("allowCalendar/allowBooking sind seit P1b KEIN Self-Service-Feld mehr (Angebot ohne Wirkung, E1)", () => {
+  // Regression zum P1b-Review-Blocker: der Telefon-Agent hat kein Kalender-/Buchungs-
+  // Tool mehr, ein Self-Service-Schalter dafuer waere ein Versprechen ohne Wirkung.
+  // Beide Felder fallen daher (wie allowSummaries) in den generischen Ablehnungszweig.
+  assert.ok(!SELF_SERVICE_FREE_FIELDS.includes("allowCalendar"));
+  assert.ok(!SELF_SERVICE_FREE_FIELDS.includes("allowBooking"));
+  const { clean, rejected } = selfServicePatch({ allowCalendar: false, allowBooking: false }, {});
+  assert.equal("allowCalendar" in clean, false, "allowCalendar nicht durchgereicht");
+  assert.equal("allowBooking" in clean, false, "allowBooking nicht durchgereicht");
+  assert.ok(rejected.includes("allowCalendar"), "allowCalendar explizit abgelehnt");
+  assert.ok(rejected.includes("allowBooking"), "allowBooking explizit abgelehnt");
+});

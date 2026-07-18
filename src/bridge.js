@@ -60,8 +60,8 @@ function sendFunctionOutput(openaiWs, callId, output) {
 }
 
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
-function realtimeTools(tenantId) {
-  return toolDefs(tenantId).map((t) => ({
+function realtimeTools() {
+  return toolDefs().map((t) => ({
     type: "function",
     name: t.name,
     description: t.description,
@@ -188,7 +188,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
               output_audio_format: "g711_ulaw",
               input_audio_transcription: transcription,
               turn_detection: { type: "server_vad" },
-              tools: realtimeTools(call.tenantId),
+              tools: realtimeTools(),
               tool_choice: "auto",
             },
           }),
