@@ -16,7 +16,7 @@
  * Baut den maxmind-Lookup. Aktuell ohne Reader-Dep -> liefert immer null (fail-safe).
  * Die Signatur (dbPath) steht bereits, damit die spaetere Reader-Verdrahtung nur den
  * Funktionskoerper austauscht, nicht die Aufrufer.
- * @param {string} [dbPath] - Pfad zur GeoLite2-Country-mmdb (config.geoDbPath)
+ * @param {string} [dbPath] - Pfad zur GeoLite2-Country-mmdb (config.provisioning.geoDbPath)
  * @returns {import("./ports.js").GeoLookup}
  */
 export function makeMaxmindGeoLookup(dbPath = "") {

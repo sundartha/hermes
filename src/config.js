@@ -239,7 +239,7 @@ const rawConfig = {
   // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
   // C6a (P5): gruppiert (10 zusammengehoerige Keys, Praezedenzfall telnyxElevenLabs) -
   // erste Grouping-Phase hinter dem Config-Proxy-Guard. Zugriff ausschliesslich ueber
-  // config.telnyxAssistant.<key>; der Proxy wirft laut bei jedem uebersehenen alten
+  // config.telnyx.telnyxAssistant.<key>; der Proxy wirft laut bei jedem uebersehenen alten
   // flachen Zugriff (config.telnyxAssistantId etc. existiert nicht mehr).
   telnyxAssistant: {
     // Master-Flag fuer den in-house Custom-LLM-Shim (/v1/chat/completions). DEFAULT AUS

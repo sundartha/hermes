@@ -19,8 +19,8 @@ function decodeXmlEntities(text) {
 
 // Loest die Gather-action-URL IMMER gegen den echten gespawnten Server auf (baseUrl =
 // srv.localUrl). Telnyx rendert eine ABSOLUTE URL mit der (in Tests nicht real
-// erreichbaren) config.publicUrl-Domain (turnDirectives, server.js: `base =
-// isTelnyx ? config.publicUrl : ""`) - ein blosses new URL(action, baseUrl) wuerde bei
+// erreichbaren) config.server.publicUrl-Domain (turnDirectives, server.js: `base =
+// isTelnyx ? config.server.publicUrl : ""`) - ein blosses new URL(action, baseUrl) wuerde bei
 // einer absoluten Action deren fremden Origin behalten. Deshalb wird NUR Pfad+Query
 // aus der Action uebernommen, der Origin kommt immer von baseUrl.
 function resolveTurnUrl(actionAttr, baseUrl) {

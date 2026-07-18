@@ -72,7 +72,7 @@ const { gates: outboundGates } = makeOutboundGates({
 
 // Metering-Instanz (P6b3-Meter + outbound-p1c-Reconcile) EINMAL beim Boot verdrahtet
 // (Naht wie outboundGates/provisioningQueue, nicht im Handler; INV-7). store+config
-// werden geschlossen; die Gating-Bedingung `if (config.paymentEnabled)` bleibt beim
+// werden geschlossen; die Gating-Bedingung `if (config.billing.paymentEnabled)` bleibt beim
 // Aufrufer (finishCall / Provisioning-Drain), nicht im Modul.
 const metering = makeMetering({ store, config });
 

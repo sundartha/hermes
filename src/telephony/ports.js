@@ -122,7 +122,7 @@
 /**
  * @typedef {Object} NumberProvisioning
  *   Port 3 (Onboarding/Provisioning-Pfad, NICHT Hot-Path). Loest ECHTES Geld aus
- *   (Nummernkauf) - deshalb gedeckelt durch config.maxNumbers (Kosten-Notbremse,
+ *   (Nummernkauf) - deshalb gedeckelt durch config.provisioning.maxNumbers (Kosten-Notbremse,
  *   ersetzt das uebersprungene Stripe-Schloss) und nur ueber die Onboarding-Route
  *   hinter Auth + Gates erreichbar. Alle Methoden werfen MIT Kontext (P8), aber NIE
  *   mit dem API-Key (Regel 4).

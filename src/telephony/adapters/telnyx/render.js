@@ -54,7 +54,7 @@ function attrString(obj) {
 // <Say voice="ElevenLabs.<Model>.<VoiceId>" api_key_ref="..."> an die ElevenLabs-
 // API; der ElevenLabs-API-Key liegt als Telnyx-Integration-Secret und wird ueber
 // den api_key_ref-IDENTIFIER referenziert. opts.elevenLabs injiziert die Registry
-// aus config.telnyxElevenLabs - der Renderer bleibt config-frei und pur. KEIN
+// aus config.telnyx.telnyxElevenLabs - der Renderer bleibt config-frei und pur. KEIN
 // language-Attribut am ElevenLabs-Say: die Voice ist multilingual, die gesprochene
 // Sprache folgt dem Text (Telnyx-Doku-Beispiel traegt keins). Gate fail-safe statt
 // fail-closed: ElevenLabs NUR wenn apiKeyRef UND voiceId gesetzt, sonst Azure-
@@ -162,7 +162,7 @@ function renderDirective(d, opts) {
 }
 
 // opts (optional, Telnyx-eigene Erweiterung ueber den Port hinaus): { elevenLabs }
-// - die Registry injiziert config.telnyxElevenLabs, Aufrufe ohne opts bleiben
+// - die Registry injiziert config.telnyx.telnyxElevenLabs, Aufrufe ohne opts bleiben
 // byte-identisch zum Bestand (Azure).
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
 export function renderDirectives(directives, opts = {}) {

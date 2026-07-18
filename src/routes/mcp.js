@@ -74,7 +74,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         ? { capabilities: { extensions: uiServerExtension() } }
         : undefined;
       const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
-      // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.mcpUiEnabled
+      // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.tenancy.mcpUiEnabled
       // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
       // Renderer ist der Default (siehe ui/registry.js); kein per-Request-Capability-Gate
       // mehr, weil der stateless Transport (sessionIdGenerator=undefined) die initialize-

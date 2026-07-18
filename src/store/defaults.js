@@ -31,7 +31,7 @@ export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
 
 // Provider fuer den Owner-Number-Autoseed aufloesen (render-owner-autoseed, AC4 /
 // Pre-Mortem R1 - stiller Falsch-Carrier). PURE Entscheidung (providerRaw als Arg,
-// lowercase erwartet wie config.ownerNumberProvider), bewusst getrennt vom IO-Wrapper
+// lowercase erwartet wie config.provisioning.ownerNumberProvider), bewusst getrennt vom IO-Wrapper
 // in json.js und so direkt unit-testbar: ungesetzt/leer -> DEFAULT_PROVIDER (Twilio,
 // haeufigste Konfiguration, Zero-Config); gesetzt + gueltig (twilio|telnyx) -> dieser
 // Provider; gesetzt + ungueltig (z.B. Tippfehler "twillio") -> null (fail-closed -> der
@@ -47,7 +47,7 @@ export function resolveSeedProvider(providerRaw) {
 // Zustaende einer provisionierten Nummer. Eine Nummer wird NIE direkt "active"
 // gebaut - sie durchlaeuft requested -> provisioning -> active. Der reale
 // Provider-Kauf haengt strukturell an provisioning (kein Kauf ohne diesen
-// Zustand); die Cap-Pruefung (config.maxNumbers) ersetzt das frueher geplante
+// Zustand); die Cap-Pruefung (config.provisioning.maxNumbers) ersetzt das frueher geplante
 // Stripe-Schloss (Payment uebersprungen, Kosten-Notbremse bleibt).
 export const NUMBER_STATUS = Object.freeze({
   REQUESTED: "requested", // angefragt, noch KEINE e164, KEIN Provider-Kauf
@@ -329,7 +329,7 @@ export const E164 = /^\+[1-9]\d{6,14}$/;
 // Laendervorwahlen, bei denen eine '0' UNMITTELBAR nach der Vorwahl ein nationaler
 // Trunk-Praefix (Verkehrsausscheidungsziffer) ist, der in E.164 NICHT vorkommen darf
 // (DE/FR/UK lassen die fuehrende 0 im internationalen Format weg). BEWUSST eine eigene,
-// enge Liste - NICHT an config.allowedCountryCodes gekoppelt (G13): Italien (+39) z.B.
+// enge Liste - NICHT an config.safety.allowedCountryCodes gekoppelt (G13): Italien (+39) z.B.
 // BEHAELT die fuehrende 0 im NSN; eine an die Anruf-Allowlist gebundene Regel wuerde dort
 // gueltige Nummern faelschlich ablehnen (Pre-Mortem). Telefonie-Tatsache, kein Policy-Gate
 // -> bewusst kein Env-Knopf (fail-safe gegen Fehlkonfiguration).

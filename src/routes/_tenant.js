@@ -95,7 +95,7 @@ export const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 // dieselbe Instanz in jede Route-Factory -> kein zweiter Resolver, G5/DIP).
 // config defaultet auf das config-Singleton, damit der A4-Kompat-Pfad
 // (makeRequestTenant) ohne explizite config byte-identisch dieselbe Quelle liest
-// (Tests mutieren config.multiTenant live auf dem Singleton).
+// (Tests mutieren config.tenancy.multiTenant live auf dem Singleton).
 export function makeTenantResolver({ store, config = defaultConfig }) {
   // EXPLIZITE Bindung an den konfigurierten Single-Tenant-Bootstrap (P3). Genau EINE
   // Stelle, an der der Flag-aus-/Single-Tenant-Pfad an einen Tenant gebunden wird -

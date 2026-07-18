@@ -86,7 +86,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     const call = store.getCall(req.params.id);
     if (!call) return res.status(404).json({ error: "not found" });
     // Tenant-Scope (I5): fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Flag
-    // aus -> requestTenant === BOOTSTRAP_TENANT_ID; trotzdem ueber config.multiTenant
+    // aus -> requestTenant === BOOTSTRAP_TENANT_ID; trotzdem ueber config.tenancy.multiTenant
     // gaten, damit Legacy-Calls ohne tenantId bei Flag aus byte-identisch (200)
     // bleiben. getCall matcht auch twilioSid -> der Guard deckt beide id-Achsen.
     if (config.tenancy.multiTenant && !tenantOwnsCall(call, requestTenant(req)))

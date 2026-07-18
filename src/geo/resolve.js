@@ -17,7 +17,7 @@ export function normCountry(raw) {
 // Land-Praezedenz beim Onboarding: User-Wahl (autoritativ, R4) > IP-Geo-VORSCHLAG >
 // config-Fallback > DEFAULT_COUNTRY. Eine gespoofte IP aendert nichts Autoritatives -
 // mit User-Wahl wird sie ueberstimmt, ohne ist sie nur ein Vorschlag. Der Fallback
-// (config.provisioningCountry) wird vom Aufrufer hereingereicht (config-frei).
+// (config.provisioning.provisioningCountry) wird vom Aufrufer hereingereicht (config-frei).
 export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCountry } = {}) {
   return (
     normCountry(userCountry) || normCountry(proposedCountry) || fallbackCountry || DEFAULT_COUNTRY
@@ -26,7 +26,7 @@ export function resolveOnboardCountry({ userCountry, proposedCountry, fallbackCo
 
 // Kauf-Land-Praezedenz (Runde 1, PLAN-VOUCHER-SETUP-FEE-GAP.md Phase A): das Land, in dem
 // eine Nummer TATSAECHLICH gekauft wird, kann vom Herkunftsland (homeCountry, s.o.)
-// abweichen - config.forceNumberCountry (z.B. "US") ueberschreibt NUR den Kauf, nie
+// abweichen - config.provisioning.forceNumberCountry (z.B. "US") ueberschreibt NUR den Kauf, nie
 // Sprache/Analytics (die bleiben am Herkunftsland). Leer/undefined -> Kauf-Land =
 // Herkunftsland (byte-identisch). EIN Ort fuer diese Kombination (G5): requestNumberFor-
 // PaidTenant (provision-trigger.js, der tatsaechliche Kauf) UND numberSetupFeeCentsFor

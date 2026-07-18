@@ -11,10 +11,10 @@
 // provisionNumber, nicht hier. P9 aendert NUR den Hold-WERT, nie die Dedup-/Order-Kette.
 //
 // HOLD PRO LAND (P9, R3 = Capture-Mismatch): heute ist der Hold ein fixer Wert fuer alle
-// Laender (config.numberSetupFeeCents). Weicht der reale Telnyx-Laenderpreis davon ab,
+// Laender (config.billing.numberSetupFeeCents). Weicht der reale Telnyx-Laenderpreis davon ab,
 // driftet der Hold vom Capture (R3). Diese Tabelle erlaubt pro Land einen eigenen
 // holdAmountCents; fehlt der Eintrag (oder das Land ist gar nicht hier), greift der
-// Default vom Aufrufer = config.numberSetupFeeCents = byte-identisch zum Bestand.
+// Default vom Aufrufer = config.billing.numberSetupFeeCents = byte-identisch zum Bestand.
 // KONSERVATIV: ein abweichender Wert wird erst eingetragen, wenn der Live-Preis bestaetigt
 // ist (PROVISIONING_ENABLED bleibt false). Solange kein Wert gesetzt ist -> Default.
 //
@@ -62,7 +62,7 @@ export function searchParamsForCountry(country) {
 // Loest den Hold-Betrag (Integer Cents) fuer das Land (ISO-2, case-insensitiv) auf.
 // Hat das Land einen Tabellen-Eintrag MIT holdAmountCents -> dieser Wert (Land-Tarif).
 // Sonst (DE/leer/unbekannt/Land ohne eigenen Wert) -> defaultHoldCents vom Aufrufer
-// (= config.numberSetupFeeCents) = byte-identisch zum Bestand. KEINE config-Kopplung im
+// (= config.billing.numberSetupFeeCents) = byte-identisch zum Bestand. KEINE config-Kopplung im
 // Modul (Default kommt als Arg, haelt das Modul testbar/config-arm). Money = Ganzzahl
 // Cents: ein nicht-ganzzahliger Tabellen-Wert ist ein Programmierfehler -> fail-closed
 // werfen (kein stiller Float-Hold, R3).

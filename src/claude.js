@@ -370,7 +370,7 @@ export const END_CALL_WAIT_INSTRUCTION =
   "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.";
 
 // EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
-// config.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
+// config.voice.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
 // Richtungen werten call.transcript darueber aus, wirksam aber nur bei Outbound - siehe
 // Kommentar an suppressEndCall unten) UND fuer die Empty-Turn-Zaehlung in
 // unansweredAgentTurns unten (G3/G26-Fix). Steuert NICHT mehr, ob eine Anrufer-Zeile

@@ -10,7 +10,7 @@ import { safeEqual } from "./util.js";
 const RANDOM_BYTES = 16;
 // Default-Lebensdauer der Login-Flow-Cookies (pkce/state/nonce) in Sekunden, falls deps
 // keinen Wert injiziert (Tests). Bewusster Test-Fallback; die Produktionsquelle ist
-// config.loginCookieTtlSeconds (Fallback 1800), durchgereicht via deps.loginCookieTtlSeconds.
+// config.auth.loginCookieTtlSeconds (Fallback 1800), durchgereicht via deps.loginCookieTtlSeconds.
 // web-auth bleibt config-frei (DI-Naht) - kein config-Import hier.
 const DEFAULT_LOGIN_COOKIE_TTL_SECONDS = 1800;
 // Login-Route: eine Quelle (G5) fuer die Route-Registrierung, den Recovery-Redirect und
@@ -153,7 +153,7 @@ export function makeWebAuthRoutes(deps) {
   // Resolver-Index (DI wie ensureTenant; Default No-Op -> Bestands-Auth-Tests unveraendert).
   const bindSub = deps.bindSub || (async () => {});
   // Login-Flow-Cookie-TTL (state/pkce/nonce) per DI (Muster ttlSeconds): Produktion reicht
-  // config.loginCookieTtlSeconds durch, Tests fallen auf den Default zurueck. `??` ehrt eine
+  // config.auth.loginCookieTtlSeconds durch, Tests fallen auf den Default zurueck. `??` ehrt eine
   // explizite 0 (min:0 in config).
   const loginCookieTtlSeconds = deps.loginCookieTtlSeconds ?? DEFAULT_LOGIN_COOKIE_TTL_SECONDS;
   const router = Router();

@@ -45,7 +45,7 @@ export async function assertNoBypassRls(client) {
   }
 }
 
-// pool ist injizierbar (DI) - Default = realer pg-Pool aus config.databaseUrl, also
+// pool ist injizierbar (DI) - Default = realer pg-Pool aus config.store.databaseUrl, also
 // ist der Produktiv-Pfad (no-arg) unveraendert. Tests injizieren einen Fake-Pool, um
 // connect-/Assertions-Fehler ohne echte DB zu pruefen.
 export async function createPortalRunner({

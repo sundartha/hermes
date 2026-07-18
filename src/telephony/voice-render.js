@@ -1,5 +1,5 @@
 // Voice-Render-Helfer (Server-Slim P3, reine Verschiebung aus server.js). Die Factory
-// schliesst config und liest config.publicUrl/config.sttSpeechTimeoutSec ZUR LAUFZEIT
+// schliesst config und liest config.server.publicUrl/config.voice.sttSpeechTimeoutSec ZUR LAUFZEIT
 // (nicht zur Import-Zeit einfrieren - sonst driftet der Telnyx-Absolut-URL-Pfad). Der
 // voiceRenderer-Port, die Direktiven-Helfer, localeFor, MEDIA_PATH und DEFAULT_PROVIDER
 // werden hier importiert (EINE Quelle je, G5). Rein: kein I/O, keine Nebeneffekte.
@@ -31,7 +31,7 @@ export function makeVoiceRender({ config }) {
   // STT-Endpointing statt "auto" - NUR Folge-Gathers im /voice/turn (G3). Erst-Gather
   // (Inbound-Greeting + Outbound) ruft OHNE -> "auto" bleibt (End-of-Speech-Erkennung
   // noetig, sonst Erst-Turn-Deadlock). Telnyx-TeXML loest relative URLs anders auf als
-  // Twilio -> absolute URL fuer Telnyx (config.publicUrl zur Laufzeit gelesen).
+  // Twilio -> absolute URL fuer Telnyx (config.server.publicUrl zur Laufzeit gelesen).
   function turnDirectives(call, text, { speechTimeoutSec } = {}) {
     const isTelnyx = call.provider === PROVIDER.TELNYX;
     const base = isTelnyx ? config.server.publicUrl : "";
@@ -50,7 +50,7 @@ export function makeVoiceRender({ config }) {
   }
 
   // Folge-Gather im laufenden Gespraech (/voice/turn): wie turnDirectives, aber mit
-  // festem STT-Endpointing (config.sttSpeechTimeoutSec) gegen Satz-Truncation (G3).
+  // festem STT-Endpointing (config.voice.sttSpeechTimeoutSec) gegen Satz-Truncation (G3).
   // Eigener Name statt Boolean-Flag (kein Selektor-Argument, G15/F3).
   function followupTurnDirectives(call, text) {
     return turnDirectives(call, text, { speechTimeoutSec: config.voice.sttSpeechTimeoutSec });

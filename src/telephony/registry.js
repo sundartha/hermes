@@ -30,7 +30,7 @@ import { PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
 import crypto from "node:crypto";
 
-// OUT-05 (F2): Test-Seam. fakeVoice ersetzt den Provider-Transport, wenn config.fakeOriginate
+// OUT-05 (F2): Test-Seam. fakeVoice ersetzt den Provider-Transport, wenn config.safety.fakeOriginate
 // gesetzt ist (boot-gehaertet, boot-guard.js) - EIN zentraler Registry-Gate, server.js bleibt
 // davon unberuehrt. originateCall liefert einen synthetischen, netzfreien Erfolg; endCall ist
 // ein No-op. Alle Sicherheits-Gates (Budget/Denylist/Land/Stundenlimit/Offenlegung/Signatur)
@@ -78,7 +78,7 @@ const ADAPTERS = Object.freeze({
   [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
   // Sonderfall (b): Eintrag = fertiger VoiceRenderer. Telnyx bekommt die globale
   // ElevenLabs-Plattform-Config LAZY zur Render-Zeit injiziert - der Arrow liest
-  // config.telnyxElevenLabs erst beim Aufruf, NICHT zur Import-Zeit (P15: kein
+  // config.telnyx.telnyxElevenLabs erst beim Aufruf, NICHT zur Import-Zeit (P15: kein
   // Lazy-Init-Singleton, config-Bindung an der Kompositionsstelle).
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TWILIO]: { renderDirectives: twilioRenderDirectives },
