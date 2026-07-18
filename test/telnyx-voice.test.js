@@ -5,6 +5,7 @@
 // Kein pglite/Server-Spawn hier (eigene Datei -> kein Test-Worker-Stall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { makeConfigOverrides } from "./helpers.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -26,15 +27,9 @@ const { config } = await import("../src/config.js");
 // Fehlende Config simulieren (Adapter liest config bei jedem Aufruf): Wert leeren,
 // Aufruf, Wert restaurieren. fetch wird dabei gestubbt, damit ein durchrutschender
 // Call NICHT die echte API trifft (er soll ohnehin vorher fail-closed werfen).
-async function withBlankedConfig(key, fn) {
-  const saved = config[key];
-  config[key] = "";
-  try {
-    await fn();
-  } finally {
-    config[key] = saved;
-  }
-}
+// PA-20 (Flip): geteilte Implementierung (G5) statt lokaler Kopie - makeConfigOverrides
+// routet den flachen Key ueber sein Namespace-Blatt (config.telephony.*).
+const { withBlankedConfig } = makeConfigOverrides(config);
 
 // fetch-Stub: zeichnet den letzten Aufruf auf und liefert eine konfigurierbare Antwort.
 function stubFetch(response) {

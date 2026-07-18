@@ -126,15 +126,15 @@ test("S1-3: config klemmt PROVISIONING_REDRIVE_MAX_AGE_MS strikt unter das 24h-D
   };
   try {
     const atDay = await freshConfig(String(MS_PER_DAY), "day"); // exakt 24h
-    assert.equal(atDay.config.provisioningRedriveMaxAgeMs, MS_PER_DAY - 1, "24h -> auf 24h-1ms geklemmt");
+    assert.equal(atDay.config.provisioning.provisioningRedriveMaxAgeMs, MS_PER_DAY - 1, "24h -> auf 24h-1ms geklemmt");
     assert.ok(
       !atDay.configFatalErrors().some((e) => e.includes("PROVISIONING_REDRIVE_MAX_AGE_MS")),
       "Clamp ist KEIN Fatal",
     );
     const atEdge = await freshConfig(String(MS_PER_DAY - 1), "edge");
-    assert.equal(atEdge.config.provisioningRedriveMaxAgeMs, MS_PER_DAY - 1, "24h-1ms bleibt unveraendert");
+    assert.equal(atEdge.config.provisioning.provisioningRedriveMaxAgeMs, MS_PER_DAY - 1, "24h-1ms bleibt unveraendert");
     const atZero = await freshConfig("0", "zero");
-    assert.equal(atZero.config.provisioningRedriveMaxAgeMs, 0, "0 (Observe-Only) bleibt 0");
+    assert.equal(atZero.config.provisioning.provisioningRedriveMaxAgeMs, 0, "0 (Observe-Only) bleibt 0");
   } finally {
     if (saved === undefined) delete process.env.PROVISIONING_REDRIVE_MAX_AGE_MS;
     else process.env.PROVISIONING_REDRIVE_MAX_AGE_MS = saved;

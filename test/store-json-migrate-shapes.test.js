@@ -22,7 +22,7 @@ before(async () => {
 let migrateSeq = 0;
 async function loadStore(raw) {
   const dir = tempDataDir(raw);
-  config.dataDir = dir;
+  config.server.dataDir = dir;
   const mod = await import(`../src/store/json.js?migrate-shapes=${migrateSeq++}`);
   return mod.load();
 }

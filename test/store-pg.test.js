@@ -303,12 +303,12 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   assert.ok(!reopened.getCall(doneOld.id), "Loeschung persistiert (samt Transkript per Cascade)");
 });
 
-test("pruneOldData() ohne Argument nutzt config.retentionDays (Produktions-Caller server.js:583)", async () => {
+test("pruneOldData() ohne Argument nutzt config.privacy.retentionDays (Produktions-Caller server.js:583)", async () => {
   // server.js:583 ruft store.pruneOldData() OHNE Argument. Der Default (=
-  // config.retentionDays) MUSS auch unter pg greifen, sonst ist die DSGVO-
+  // config.privacy.retentionDays) MUSS auch unter pg greifen, sonst ist die DSGVO-
   // Retention still abgeschaltet. Default hier deterministisch auf 30 Tage.
   const { store } = await makePgTestStore();
-  config.retentionDays = 30;
+  config.privacy.retentionDays = 30;
   const old = new Date(Date.now() - 40 * 24 * 3600 * 1000).toISOString();
   const doneOld = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.endCallRecord(doneOld.id, "completed");

@@ -8,6 +8,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig, productionFootguns } from "../src/config.js";
+import { makeConfigOverrides } from "./helpers.js";
+
+const { withConfigOverrides } = makeConfigOverrides(config);
 
 // Eine produktionssichere Basis-Config: alle vier Footguns entschaerft. Tests
 // variieren NUR den geprueften Aspekt (Isolation), Hosting wird per isProduction=true
@@ -80,13 +83,6 @@ function withProdEnv(fn) {
   }
 }
 
-function withConfig(overrides, fn) {
-  const saved = {};
-  for (const k of Object.keys(overrides)) saved[k] = config[k];
-  Object.assign(config, overrides);
-  try { return fn(); } finally { Object.assign(config, saved); }
-}
-
 function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
@@ -104,7 +100,7 @@ const REQUIRED_OK_PROD = {
 };
 
 test("T-P0-5-08: assertConfig im Hosting -> Footgun macht Boot-Refusal (false) + nennt Var", () => {
-  withProdEnv(() => withConfig(REQUIRED_OK_PROD, () => {
+  withProdEnv(() => withConfigOverrides(REQUIRED_OK_PROD, () => {
     const lines = captureConsoleError(() => {
       assert.equal(assertConfig(), false, "fehlendes DASHBOARD_PASSWORD im Hosting -> assertConfig false");
     });
@@ -115,7 +111,7 @@ test("T-P0-5-08: assertConfig im Hosting -> Footgun macht Boot-Refusal (false) +
 });
 
 test("T-P0-5-09: assertConfig im Hosting + alles entschaerft -> kein Footgun-Refusal (true)", () => {
-  withProdEnv(() => withConfig({ ...REQUIRED_OK_PROD, dashboardPassword: "geheim", storeBackend: "pg", databaseUrl: "postgres://test-db" }, () => {
+  withProdEnv(() => withConfigOverrides({ ...REQUIRED_OK_PROD, dashboardPassword: "geheim", storeBackend: "pg", databaseUrl: "postgres://test-db" }, () => {
     captureConsoleError(() => {
       assert.equal(assertConfig(), true, "saubere Hosting-Config bootet (kein Fehl-Refusal)");
     });

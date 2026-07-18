@@ -75,14 +75,14 @@ test("searchParamsForCountry: FR -> +33-Suche (countryCode FR)", () => {
 
 test("searchParamsForCountry: DE -> globaler config-Fallback (byte-identisch)", () => {
   const params = searchParamsForCountry("DE");
-  assert.equal(params.countryCode, config.provisioningCountry);
-  assert.equal(params.connectionId, config.telnyxConnectionId);
+  assert.equal(params.countryCode, config.provisioning.provisioningCountry);
+  assert.equal(params.connectionId, config.telephony.telnyxConnectionId);
 });
 
 test("searchParamsForCountry: unbekannt/leer -> config-Fallback (kein Crash, R7)", () => {
   for (const c of ["ZZ", "", null, undefined]) {
     const params = searchParamsForCountry(c);
-    assert.equal(params.countryCode, config.provisioningCountry, `Fallback fuer ${c}`);
+    assert.equal(params.countryCode, config.provisioning.provisioningCountry, `Fallback fuer ${c}`);
   }
 });
 
@@ -90,12 +90,12 @@ test("searchParamsForCountry: case-insensitiv (fr -> FR)", () => {
   assert.equal(searchParamsForCountry("fr").countryCode, "FR");
 });
 
-// AM5: US als Test-Land (entkoppelt vom config.provisioningCountry-Default; connectionId
+// AM5: US als Test-Land (entkoppelt vom config.provisioning.provisioningCountry-Default; connectionId
 // faellt weiter auf den globalen config-Wert).
 test("searchParamsForCountry: US -> +1-Suche (countryCode US, case-insensitiv)", () => {
   assert.equal(searchParamsForCountry("US").countryCode, "US");
   assert.equal(searchParamsForCountry("us").countryCode, "US");
-  assert.equal(searchParamsForCountry("US").connectionId, config.telnyxConnectionId);
+  assert.equal(searchParamsForCountry("US").connectionId, config.telephony.telnyxConnectionId);
 });
 
 // ---- holdAmountForCountry (Hold pro Land, P9) ----
@@ -143,7 +143,7 @@ test("DE-Request -> Suche mit config-Fallback-countryCode (byte-identisch)", asy
 
   await drainWithGeo(queue, s, { provisioner: prov });
 
-  assert.ok(prov.log.includes(`search:${config.provisioningCountry}`), `log=${prov.log.join(",")}`);
+  assert.ok(prov.log.includes(`search:${config.provisioning.provisioningCountry}`), `log=${prov.log.join(",")}`);
 });
 
 test("R1: ZWEIMAL drainen -> genau EIN Kauf (Idempotenz unangetastet)", async () => {

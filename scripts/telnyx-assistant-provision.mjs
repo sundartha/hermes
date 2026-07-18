@@ -216,9 +216,9 @@ function headers() {
 const REQUIRED = Object.freeze([
   ["TELNYX_API_KEY", config.telephony.telnyxApiKey],
   ["PUBLIC_URL", config.server.publicUrl],
-  ["TELNYX_ELEVENLABS_VOICE_ID", config.telnyxElevenLabs.voiceId],
-  ["TELNYX_ELEVENLABS_API_KEY_REF", config.telnyxElevenLabs.apiKeyRef],
-  ["TELNYX_SHIM_API_KEY_REF", config.telnyxAssistant.shimApiKeyRef],
+  ["TELNYX_ELEVENLABS_VOICE_ID", config.telnyx.telnyxElevenLabs.voiceId],
+  ["TELNYX_ELEVENLABS_API_KEY_REF", config.telnyx.telnyxElevenLabs.apiKeyRef],
+  ["TELNYX_SHIM_API_KEY_REF", config.telnyx.telnyxAssistant.shimApiKeyRef],
 ]);
 
 // Reine Pruef-Funktion (P11 testbar, Muster smoke-stripe-payment.mjs isTestKey): liefert
@@ -348,11 +348,11 @@ async function main() {
 
   const assistantConfig = buildAssistantConfig({
     publicUrl: config.server.publicUrl,
-    voiceId: config.telnyxElevenLabs.voiceId,
-    voiceModel: config.telnyxElevenLabs.model,
-    apiKeyRef: config.telnyxElevenLabs.apiKeyRef,
+    voiceId: config.telnyx.telnyxElevenLabs.voiceId,
+    voiceModel: config.telnyx.telnyxElevenLabs.model,
+    apiKeyRef: config.telnyx.telnyxElevenLabs.apiKeyRef,
     model: config.llm.claudeModel,
-    llmApiKeyRef: config.telnyxAssistant.shimApiKeyRef,
+    llmApiKeyRef: config.telnyx.telnyxAssistant.shimApiKeyRef,
   });
   const id = await sendAssistantConfig(assistantConfig, process.env[ASSISTANT_ID_ENV] || "");
   // NUR die opake assistant_id ausgeben (kein Key/Secret, Regel 4/5). Owner uebernimmt

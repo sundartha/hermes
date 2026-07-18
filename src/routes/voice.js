@@ -202,7 +202,7 @@ export function makeVoiceRoutes({
 
       // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
       // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
-      if (store.budgetExceeded(tenantId, config) || store.globalBudgetExceeded(config)) {
+      if (store.budgetExceeded(tenantId, config.billing) || store.globalBudgetExceeded(config.billing)) {
         return res
           .type("text/xml")
           .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));

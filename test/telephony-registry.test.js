@@ -42,7 +42,7 @@ const FULL_COVERAGE = [
 
 // ---- Selektion: exakte Adapter-Identitaet je Port/Provider ----
 test("pick liefert die exakte Adapter-Instanz je Provider", () => {
-  config.fakeOriginate = false;
+  config.safety.fakeOriginate = false;
   assert.equal(voiceControl(PROVIDER.TELNYX), telnyxVoice);
   assert.equal(voiceControl(PROVIDER.TWILIO), twilioVoice);
   assert.equal(mediaTransport(PROVIDER.TELNYX), telnyxMedia);
@@ -53,7 +53,7 @@ test("pick liefert die exakte Adapter-Instanz je Provider", () => {
 
 // ---- Default-Byte-Identitaet: arg-los -> Twilio (numberProvisioning -> Telnyx) ----
 test("arg-lose Factories defaulten byte-identisch", () => {
-  config.fakeOriginate = false;
+  config.safety.fakeOriginate = false;
   assert.equal(voiceControl(), twilioVoice);
   assert.equal(voiceControl(undefined), twilioVoice);
   assert.equal(mediaTransport(), twilioMedia);
@@ -62,7 +62,7 @@ test("arg-lose Factories defaulten byte-identisch", () => {
 
 // ---- fakeOriginate-Override VOR pick (Sonderfall a) ----
 test("fakeOriginate-Override greift vor pick, fuer jeden Provider inkl. unbekannt", async () => {
-  config.fakeOriginate = true;
+  config.safety.fakeOriginate = true;
   try {
     const a = voiceControl(PROVIDER.TWILIO);
     assert.equal(a, voiceControl(PROVIDER.TELNYX)); // dieselbe Fake-Instanz
@@ -70,13 +70,13 @@ test("fakeOriginate-Override greift vor pick, fuer jeden Provider inkl. unbekann
     assert.notEqual(a, twilioVoice);
     assert.match((await a.originateCall()).sid, /^fake_/);
   } finally {
-    config.fakeOriginate = false;
+    config.safety.fakeOriginate = false;
   }
 });
 
 // ---- fail-closed Wurf fuer unbekannten Provider, Fehlermeldung OHNE Secret ----
 test("unbekannter Provider -> Wurf mit Provider-Namen, ohne Secret", () => {
-  config.fakeOriginate = false;
+  config.safety.fakeOriginate = false;
   for (const [name, factory] of FULL_COVERAGE) {
     assert.throws(() => factory("nonsense"), (e) => {
       assert.match(e.message, /nicht unterstuetzt/, name);
@@ -90,8 +90,8 @@ test("unbekannter Provider -> Wurf mit Provider-Namen, ohne Secret", () => {
 
 // ---- Signatur-Gate wirft NIE (Sonderfall c) ----
 test("inboundSignatureVerifier wirft nie und liefert false", () => {
-  config.publicUrl = "";
-  config.telnyxPublicKey = "";
+  config.server.publicUrl = "";
+  config.telephony.telnyxPublicKey = "";
   assert.doesNotThrow(() => {
     assert.equal(
       inboundSignatureVerifier().verifyInboundSignature({
@@ -115,7 +115,7 @@ test("inboundSignatureVerifier wirft nie und liefert false", () => {
 // ---- Vollstaendigkeits-Invariante: jeder bekannte Provider ist in jedem Full-Coverage-
 //      Port registriert (faengt einen kuenftig vergessenen dritten Provider VOR Deploy) ----
 test("jeder PROVIDER-Wert ist in jedem Full-Coverage-Port registriert", () => {
-  config.fakeOriginate = false;
+  config.safety.fakeOriginate = false;
   for (const provider of Object.values(PROVIDER))
     for (const [name, factory] of FULL_COVERAGE)
       assert.doesNotThrow(() => factory(provider), `${name}/${provider} fehlt in ADAPTERS`);

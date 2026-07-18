@@ -859,7 +859,7 @@ test("afix-timeout: answered armiert genau EINEN Opening-Speak-Timer (Delay = co
   await handler({ query: { callId: "call_1" }, body: answeredBody("cc_1") }, fakeRes());
   assert.equal(timers.pendingCount(), 1, "genau ein Opening-Speak-Timer nach answered");
   // Delay aus derselben config gelesen (drift-fest, RCA-Lehre "gleiche Fixture-Werte testen nichts").
-  assert.deepEqual(timers.pendingDelays(), [config.telnyxAssistant.openingSpeakTimeoutS * 1000]);
+  assert.deepEqual(timers.pendingDelays(), [config.telnyx.telnyxAssistant.openingSpeakTimeoutS * 1000]);
 });
 
 test("afix-timeout: kein speak.ended/failed -> Timer feuert -> genau EIN Azure-Retry (wie onSpeakFailed)", async () => {

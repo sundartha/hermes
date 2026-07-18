@@ -403,8 +403,8 @@ export function makeTelnyxLlmShim({
     // Skip + Log, eigener try/catch, secret-frei) - dasselbe GETEILTE Primitiv wie der
     // Loop-Guard (Schritt 4.6) und der end_call-Hangup (Schritt 8, G5). Settlement bleibt
     // P4.5 onHangup (EIN idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
-    const tenantBudgetOver = store.budgetExceeded(call.tenantId, config);
-    const globalBudgetOver = !tenantBudgetOver && store.globalBudgetExceeded(config);
+    const tenantBudgetOver = store.budgetExceeded(call.tenantId, config.billing);
+    const globalBudgetOver = !tenantBudgetOver && store.globalBudgetExceeded(config.billing);
     if (tenantBudgetOver || globalBudgetOver) {
       logShimGate({
         reason: tenantBudgetOver ? "budget_tenant" : "budget_global",

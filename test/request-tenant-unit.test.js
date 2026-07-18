@@ -8,8 +8,8 @@
 // zu ueberschreiben. Sie decken insbesondere den Web-Session-Zweig (req.tenant) und
 // die fail-closed-Faelle ab, die ueber echtes webAuthMiddleware nicht herstellbar sind.
 //
-// Der Resolver liest `config.multiTenant` aus dem importierten config-Singleton; wir
-// mutieren ihn direkt und stellen ihn wieder her (etabliertes Repo-Muster, vgl.
+// Der Resolver liest `config.tenancy.multiTenant` aus dem importierten config-Singleton;
+// wir mutieren ihn direkt und stellen ihn wieder her (etabliertes Repo-Muster, vgl.
 // config-payment-guard.test.js). Laeuft offline, ohne .env (dotenv no-op ohne Datei).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -26,15 +26,15 @@ import {
 
 // --- Test-Helfer ---------------------------------------------------------------
 
-// config.multiTenant fuer die Dauer von fn() setzen und danach exakt restaurieren
+// config.tenancy.multiTenant fuer die Dauer von fn() setzen und danach exakt restaurieren
 // (Test-Isolation; kein Spawn, keine Env). Spiegelt withConfig aus config-payment-guard.
 function withMultiTenant(value, fn) {
-  const saved = config.multiTenant;
-  config.multiTenant = value;
+  const saved = config.tenancy.multiTenant;
+  config.tenancy.multiTenant = value;
   try {
     return fn();
   } finally {
-    config.multiTenant = saved;
+    config.tenancy.multiTenant = saved;
   }
 }
 

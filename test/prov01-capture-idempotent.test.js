@@ -7,7 +7,7 @@
 // JEDER andere Stripe-Fehler (anderer code, anderer PI-Status) wirft weiter.
 //
 // Kein Server-Spawn, kein pglite: die reale stripeBilling-Logik wird gegen einen in-process
-// HTTP-Mock getrieben (config.stripeApiBase-Override; config ist nicht eingefroren -> Base-URL
+// HTTP-Mock getrieben (config.billing.stripeApiBase-Override; config ist nicht eingefroren -> Base-URL
 // und Secret werden pro Test gesetzt und in finally wiederhergestellt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -40,15 +40,15 @@ const ALREADY_CAPTURED_BODY = {
 
 // Setzt Base-URL + Secret auf den Mock, ruft fn, stellt danach wieder her (Independent/R).
 async function withStripeMock(url, fn) {
-  const savedBase = config.stripeApiBase;
-  const savedKey = config.stripeSecretKey;
-  config.stripeApiBase = url;
-  config.stripeSecretKey = "sk_test_x";
+  const savedBase = config.billing.stripeApiBase;
+  const savedKey = config.billing.stripeSecretKey;
+  config.billing.stripeApiBase = url;
+  config.billing.stripeSecretKey = "sk_test_x";
   try {
     return await fn();
   } finally {
-    config.stripeApiBase = savedBase;
-    config.stripeSecretKey = savedKey;
+    config.billing.stripeApiBase = savedBase;
+    config.billing.stripeSecretKey = savedKey;
   }
 }
 

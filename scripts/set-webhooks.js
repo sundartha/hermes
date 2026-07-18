@@ -33,7 +33,7 @@ if (!ownerTwilioNumber) {
   );
   process.exit(1);
 }
-const c = twilio(config.twilioSid, config.twilioToken);
+const c = twilio(config.telephony.twilioSid, config.telephony.twilioToken);
 const nums = await c.incomingPhoneNumbers.list({ limit: 20 });
 const norm = (n) => (n || "").replace(/[\s\-()]/g, "");
 const mine = nums.find((n) => norm(n.phoneNumber) === norm(ownerTwilioNumber));

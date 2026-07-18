@@ -6,23 +6,15 @@
 //      TELNYX_SHIM_SHARED_SECRET fehlen.
 //  (2) productionFootguns() sperrt einen absurd hohen TELNYX_SHIM_MAX_TURNS_PER_MIN
 //      im Hosting bei aktivem Flag (die per-callId-Fraud-Bremse waere sonst inert).
-// Muster: config-payment-guard.test.js (withConfig-Singleton-Mutation, kein Spawn)
+// Muster: config-payment-guard.test.js (withConfigOverrides-Singleton-Mutation, kein Spawn)
 // + config-prod-footguns.test.js (productionFootguns als reine Funktion, cfg injiziert).
 // Jede node:test-Datei laeuft als eigener Kindprozess -> kein Cross-File-Leak.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, assertConfig, productionFootguns } from "../src/config.js";
+import { makeConfigOverrides } from "./helpers.js";
 
-function withConfig(overrides, fn) {
-  const saved = {};
-  for (const k of Object.keys(overrides)) saved[k] = config[k];
-  Object.assign(config, overrides);
-  try {
-    return fn();
-  } finally {
-    Object.assign(config, saved);
-  }
-}
+const { withConfigOverrides } = makeConfigOverrides(config);
 
 function captureConsoleError(fn) {
   const lines = [];
@@ -59,7 +51,7 @@ const REQUIRED_OK = {
 };
 
 test("assertConfig: Flag an + TELNYX_ASSISTANT_ID leer -> fail-closed (false)", () => {
-  withConfig(
+  withConfigOverrides(
     { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, assistantId: "" } },
     () => {
       assert.equal(assertConfig(), false);
@@ -68,13 +60,13 @@ test("assertConfig: Flag an + TELNYX_ASSISTANT_ID leer -> fail-closed (false)", 
 });
 
 test("assertConfig: Flag an + TELNYX_API_KEY leer -> fail-closed (false)", () => {
-  withConfig({ ...REQUIRED_OK, telnyxApiKey: "" }, () => {
+  withConfigOverrides({ ...REQUIRED_OK, telnyxApiKey: "" }, () => {
     assert.equal(assertConfig(), false);
   });
 });
 
 test("assertConfig: Flag an + TELNYX_CONNECTION_ID leer -> fail-closed (false)", () => {
-  withConfig({ ...REQUIRED_OK, telnyxConnectionId: "" }, () => {
+  withConfigOverrides({ ...REQUIRED_OK, telnyxConnectionId: "" }, () => {
     assert.equal(assertConfig(), false);
   });
 });
@@ -82,7 +74,7 @@ test("assertConfig: Flag an + TELNYX_CONNECTION_ID leer -> fail-closed (false)",
 // Ohne Call-Control-App-ID kann originateViaCallControl nur den 422/10015 produzieren
 // (Live-Bug 2026-07-10) - der Boot muss vorher fail-closed verweigern statt still zu starten.
 test("assertConfig: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> fail-closed (false)", () => {
-  withConfig(
+  withConfigOverrides(
     { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, callControlAppId: "" } },
     () => {
       assert.equal(assertConfig(), false);
@@ -91,7 +83,7 @@ test("assertConfig: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> fail-closed (fa
 });
 
 test("assertConfig im Hosting: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> Boot-Refusal nennt die Var", () => {
-  withConfig(
+  withConfigOverrides(
     { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, callControlAppId: "" } },
     () => {
       const lines = captureConsoleError(() => {
@@ -103,7 +95,7 @@ test("assertConfig im Hosting: Flag an + TELNYX_CALL_CONTROL_APP_ID leer -> Boot
 });
 
 test("assertConfig: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> fail-closed (false)", () => {
-  withConfig(
+  withConfigOverrides(
     { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, shimSharedSecret: "" } },
     () => {
       assert.equal(assertConfig(), false);
@@ -112,7 +104,7 @@ test("assertConfig: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> fail-closed (fal
 });
 
 test("assertConfig im Hosting: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> Boot-Refusal + nennt die Var", () => {
-  withConfig(
+  withConfigOverrides(
     { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, shimSharedSecret: "" } },
     () => {
       const lines = captureConsoleError(() => {
@@ -126,13 +118,13 @@ test("assertConfig im Hosting: Flag an + TELNYX_SHIM_SHARED_SECRET leer -> Boot-
 });
 
 test("assertConfig: Flag an + alle fuenf gesetzt -> Boot ok (true, Gegenprobe)", () => {
-  withConfig(REQUIRED_OK, () => {
+  withConfigOverrides(REQUIRED_OK, () => {
     assert.equal(assertConfig(), true);
   });
 });
 
 test("assertConfig: Flag aus (alle fuenf leer) -> Boot ok (true, byte-identische Invariante)", () => {
-  withConfig(
+  withConfigOverrides(
     {
       ...REQUIRED_OK,
       telnyxApiKey: "",
@@ -152,7 +144,7 @@ test("assertConfig: Flag aus (alle fuenf leer) -> Boot ok (true, byte-identische
 });
 
 test("assertConfig im Hosting: Flag an + fehlende ID -> Boot-Refusal + nennt die Var", () => {
-  withConfig(
+  withConfigOverrides(
     { ...REQUIRED_OK, telnyxAssistant: { ...REQUIRED_OK.telnyxAssistant, assistantId: "" } },
     () => {
       const lines = captureConsoleError(() => {

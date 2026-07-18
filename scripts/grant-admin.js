@@ -19,7 +19,7 @@ if (!email) {
 
 // Accounts existieren nur im pg-Backend. Im json-Pfad gibt es keine account-Tabelle
 // -> klare Diagnose statt stillem No-Op (fail-closed, kein falscher Erfolg).
-if (config.storeBackend !== "pg") {
+if (config.store.storeBackend !== "pg") {
   console.error(
     "[grant-admin] Accounts existieren nur im pg-Backend (STORE_BACKEND=pg). " +
       "Im json-Pfad gibt es keine Account-/Rollen-Tabelle.",

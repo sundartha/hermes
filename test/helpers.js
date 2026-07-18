@@ -533,14 +533,30 @@ export function noopWatchdog() {
 // Import hier wuerde diese Reihenfolge unterlaufen und eine lokale .env leaken lassen, siehe
 // Lehre test-base-env-drift). Die zurueckgegebenen Funktionen bleiben bei <=3 Argumenten (F1),
 // weil configObj per Closure gebunden ist statt bei jedem Aufruf mitgereicht zu werden.
+// PA-20: nach dem Flip existiert keine flache config-Oberflaeche mehr. Der Helfer routet
+// jeden flachen Override-Key ueber sein Namespace-Blatt (Getter+Setter auf denselben Slot).
+// Der Flach->Namespace-Index wird EINMAL aus der uebergebenen Oberflaeche gebaut (13 enumerable
+// Namespaces, je enumerable Blaetter) - KEIN statischer config.js-Import (test-base-env-drift).
 export function makeConfigOverrides(configObj) {
+  const namespaceOfKey = {};
+  for (const namespace of Object.keys(configObj)) {
+    for (const key of Object.keys(configObj[namespace])) namespaceOfKey[key] = namespace;
+  }
+  const readValue = (key) => configObj[namespaceOfKey[key]][key];
+  const writeValue = (key, value) => {
+    configObj[namespaceOfKey[key]][key] = value;
+  };
   async function withConfig(key, value, fn) {
-    const saved = configObj[key];
-    configObj[key] = value;
+    const saved = readValue(key);
+    writeValue(key, value);
     try {
-      await fn();
+      // pa20-fix1: Rueckgabewert von fn() durchreichen (bisher verworfen) - noetig fuer
+      // makeStripeStub weiter unten, dessen Aufrufer teils `const result = await
+      // withStripeStub(...)` schreiben. Rein additiv: kein Bestandsaufrufer liest den
+      // Rueckgabewert von withConfig(), also byte-identisches Verhalten fuer sie.
+      return await fn();
     } finally {
-      configObj[key] = saved;
+      writeValue(key, saved);
     }
   }
   function withBlankedConfig(key, fn) {
@@ -554,15 +570,36 @@ export function makeConfigOverrides(configObj) {
   // verwies bereits explizit auf "Muster config-failclosed.test.js").
   function withConfigOverrides(overrides, fn) {
     const saved = {};
-    for (const k of Object.keys(overrides)) saved[k] = configObj[k];
-    Object.assign(configObj, overrides);
+    for (const k of Object.keys(overrides)) saved[k] = readValue(k);
+    for (const k of Object.keys(overrides)) writeValue(k, overrides[k]);
     try {
       return fn();
     } finally {
-      Object.assign(configObj, saved);
+      for (const k of Object.keys(saved)) writeValue(k, saved[k]);
     }
   }
   return { withConfig, withBlankedConfig, withConfigOverrides };
+}
+
+// pa20-fix1 (Review-Blocker G5): Fabrik fuer withStripeStub, gebunden per Closure an EIN
+// config-Objekt + EINEN Test-Secret-Key - ersetzt die in billing-stripe-idempotent-headers
+// .test.js, stripe-cancel-hold-adapter.test.js und stripe-setup-checkout.test.js byte-
+// identisch kopierte Save-Set-Restore-Logik (global.fetch + config.billing.stripeSecretKey/
+// stripeApiBase). Baut auf withConfig() auf (dieselbe Namespace-Routing-Logik wie
+// makeConfigOverrides), NIE api.stripe.com im Test. Reicht den Rueckgabewert von fn()
+// durch, weil manche Aufrufer `const result = await withStripeStub(...)` schreiben.
+const STRIPE_TEST_API_BASE = "https://api.stripe.test";
+export function makeStripeStub(configObj, secret) {
+  const { withConfig } = makeConfigOverrides(configObj);
+  return function withStripeStub(impl, fn) {
+    const originalFetch = global.fetch;
+    global.fetch = impl;
+    return withConfig("stripeSecretKey", secret, () =>
+      withConfig("stripeApiBase", STRIPE_TEST_API_BASE, fn),
+    ).finally(() => {
+      global.fetch = originalFetch;
+    });
+  };
 }
 
 // cc-p6-fix1 (Review-Blocker G5): gemeinsame Pflichtfeld-Fixture fuer assertConfig()-Tests

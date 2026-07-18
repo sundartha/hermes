@@ -7,6 +7,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { legacyLocalBypassAllowed, mcpAuth } from "../src/auth.js";
+import { makeConfigOverrides } from "./helpers.js";
+
+const { withConfigOverrides } = makeConfigOverrides(config);
 
 const LOCAL = ["127.0.0.1", "::1", "::ffff:127.0.0.1"];
 // reqWith baut das Express-Request-Double (socket.remoteAddress + optionaler Bearer-
@@ -45,21 +48,12 @@ test("AM1: legacyLocalBypassAllowed - ausserhalb Produktion nur localhost", () =
 
 // Gemeinsamer Save/Restore-Helper fuer mcpAuth/mcpAuthToken/isProduction, von allen
 // mcpAuth-Tests unten genutzt (AM1 Produktions-Gate + PA-17 Modus-Matrix) - eine einzige
-// Implementierung des Override/Restore-Patterns statt einer je Test. Der Proxy hat kein
-// set-Trap, schreibt also rawConfig[key] durch - die Namespace-Getter (config.auth.*)
-// lesen denselben Speicherort, migrierte auth.js sieht den Override.
+// Implementierung des Override/Restore-Patterns statt einer je Test. withConfigOverrides
+// (PA-20) routet jeden flachen Key ueber sein Namespace-Blatt (Setter auf denselben
+// rawConfig-Slot) - die Namespace-Getter (config.auth.*/config.server.*) lesen denselben
+// Speicherort, migrierte auth.js sieht den Override.
 function withMcpConfig(overrides, fn) {
-  const saved = {
-    mcpAuth: config.mcpAuth,
-    mcpAuthToken: config.mcpAuthToken,
-    isProduction: config.isProduction,
-  };
-  Object.assign(config, { mcpAuth: "", mcpAuthToken: "", isProduction: false, ...overrides });
-  try {
-    return fn();
-  } finally {
-    Object.assign(config, saved);
-  }
+  return withConfigOverrides({ mcpAuth: "", mcpAuthToken: "", isProduction: false, ...overrides }, fn);
 }
 
 // Verdrahtung: dieselbe localhost-Legacy-Anfrage (kein Token) kippt allein durch das
@@ -76,7 +70,7 @@ test("AM1: mcpAuth - Produktions-Gate kippt localhost-Legacy-Bypass auf 401", as
     assert.equal(nexted, false, "kein next() in Produktion");
     assert.equal(res.statusCode, 401);
 
-    config.isProduction = false;
+    config.server.isProduction = false;
     let nexted2 = false;
     const res2 = fakeRes();
     await mcpAuth(reqFrom("127.0.0.1"), res2, () => {

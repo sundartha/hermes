@@ -34,52 +34,52 @@ console.log("\n═══ Hermes — Setup-Check ═══");
 
 // ---------- 1. .env Grundlagen ----------
 h("1. Konfiguration (.env)");
-config.anthropicApiKey ? ok("ANTHROPIC_API_KEY gesetzt") : bad("ANTHROPIC_API_KEY fehlt");
-config.twilioSid && config.twilioToken
+config.llm.anthropicApiKey ? ok("ANTHROPIC_API_KEY gesetzt") : bad("ANTHROPIC_API_KEY fehlt");
+config.telephony.twilioSid && config.telephony.twilioToken
   ? ok("Twilio-Credentials gesetzt")
   : bad("TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN fehlen");
 ownerTwilioNumber
   ? ok(`Owner-Twilio-Nummer (Store): ${ownerTwilioNumber}`)
   : bad("Keine aktive Owner-Twilio-Nummer im Store", "npm run seed-owner-number -- <e164> twilio");
-config.publicUrl && !config.publicUrl.includes("CHANGE-ME")
-  ? ok(`PUBLIC_URL: ${config.publicUrl}`)
+config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")
+  ? ok(`PUBLIC_URL: ${config.server.publicUrl}`)
   : bad(
       "PUBLIC_URL fehlt oder ist Platzhalter",
-      "ngrok http " + config.port + " starten und URL eintragen",
+      "ngrok http " + config.server.port + " starten und URL eintragen",
     );
 ok("Outbound-Freigabe: per-Tenant-Verifikation (Abo+KYC); keine statische Allowlist mehr");
 // Laender-Gate (Pre-Mortem 0.2): begrenzt teure Ziel-Laender. Die statische Allowlist
 // entfaellt seit outbound-p3 (Permit = per-Tenant-Verifikation), daher kein Nummern-Cross-Check mehr.
-if (config.allowedCountryCodes.includes("*")) {
+if (config.safety.allowedCountryCodes.includes("*")) {
   wrn(
     "Laender-Gate: alle Laendervorwahlen erlaubt (*)",
     "Bewusst? Das Land-Gate ist damit aus - nur Denylist + Stundenlimit + Verifikation bremsen",
   );
 } else {
-  ok(`Laender-Gate: ${config.allowedCountryCodes.join(", ")}`);
+  ok(`Laender-Gate: ${config.safety.allowedCountryCodes.join(", ")}`);
 }
-config.maxCallsPerHour > 0
-  ? ok(`Max. Outbound-Calls/Stunde: ${config.maxCallsPerHour}`)
+config.safety.maxCallsPerHour > 0
+  ? ok(`Max. Outbound-Calls/Stunde: ${config.safety.maxCallsPerHour}`)
   : wrn(
-      `MAX_CALLS_PER_HOUR ist ${config.maxCallsPerHour}`,
+      `MAX_CALLS_PER_HOUR ist ${config.safety.maxCallsPerHour}`,
       "0 oder ungueltig -> jeder Outbound-Call wird gesperrt (Not-Aus)",
     );
-if (config.voiceEngine === "realtime") {
-  config.openaiApiKey
+if (config.voice.voiceEngine === "realtime") {
+  config.voice.openaiApiKey
     ? ok("Voice-Engine: realtime, OPENAI_API_KEY gesetzt")
     : bad("VOICE_ENGINE=realtime, aber OPENAI_API_KEY fehlt");
 } else {
   ok("Voice-Engine: budget (Twilio STT/TTS + Claude Haiku)");
 }
 // MCP-Auth-Modus melden (Detailpruefung fuer oauth weiter unten in Abschnitt 6)
-if (config.mcpAuth === "oauth") {
-  config.oauthIssuerUrl
-    ? ok(`MCP-Auth: oauth (Issuer ${config.oauthIssuerUrl})`)
+if (config.auth.mcpAuth === "oauth") {
+  config.auth.oauthIssuerUrl
+    ? ok(`MCP-Auth: oauth (Issuer ${config.auth.oauthIssuerUrl})`)
     : bad("MCP_AUTH=oauth, aber OAUTH_ISSUER_URL fehlt");
-} else if (config.mcpAuth === "off") {
+} else if (config.auth.mcpAuth === "off") {
   wrn("MCP-Auth: off", "/mcp ist OHNE jede Pruefung offen - nur fuer lokale Demos!");
-} else if (config.mcpAuth === "token" || config.mcpAuthToken) {
-  config.mcpAuthToken
+} else if (config.auth.mcpAuth === "token" || config.auth.mcpAuthToken) {
+  config.auth.mcpAuthToken
     ? ok("MCP-Auth: statisches Bearer-Token gesetzt")
     : bad("MCP_AUTH=token, aber MCP_AUTH_TOKEN fehlt");
 } else {
@@ -91,18 +91,18 @@ if (config.mcpAuth === "oauth") {
 
 // ---------- 2. Anthropic ----------
 h("2. Anthropic API");
-if (config.anthropicApiKey) {
+if (config.llm.anthropicApiKey) {
   try {
     const r = await fetch("https://api.anthropic.com/v1/models", {
-      headers: { "x-api-key": config.anthropicApiKey, "anthropic-version": "2023-06-01" },
+      headers: { "x-api-key": config.llm.anthropicApiKey, "anthropic-version": "2023-06-01" },
     });
     if (r.ok) {
       const models = (await r.json()).data?.map((m) => m.id) || [];
       ok("API-Key gueltig");
-      models.some((m) => m.startsWith(config.claudeModel))
-        ? ok(`Modell verfuegbar: ${config.claudeModel}`)
+      models.some((m) => m.startsWith(config.llm.claudeModel))
+        ? ok(`Modell verfuegbar: ${config.llm.claudeModel}`)
         : wrn(
-            `Modell '${config.claudeModel}' nicht in der Modell-Liste`,
+            `Modell '${config.llm.claudeModel}' nicht in der Modell-Liste`,
             "CLAUDE_MODEL in .env pruefen",
           );
     } else bad(`API-Key abgelehnt (HTTP ${r.status})`, "Key unter console.anthropic.com pruefen");
@@ -114,10 +114,10 @@ if (config.anthropicApiKey) {
 // ---------- 3. Twilio ----------
 h("3. Twilio");
 let trialAccount = false;
-if (config.twilioSid && config.twilioToken) {
-  const client = twilio(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
+if (config.telephony.twilioSid && config.telephony.twilioToken) {
+  const client = twilio(config.telephony.twilioSid, config.telephony.twilioToken, { edge: config.telephony.twilioEdge });
   try {
-    const acct = await client.api.v2010.accounts(config.twilioSid).fetch();
+    const acct = await client.api.v2010.accounts(config.telephony.twilioSid).fetch();
     ok(`Credentials gueltig (Account: ${acct.friendlyName})`);
     trialAccount = acct.type === "Trial";
     trialAccount
@@ -137,8 +137,8 @@ if (config.twilioSid && config.twilioToken) {
       );
     } else {
       ok("Owner-Twilio-Nummer gehoert zum Account");
-      const wantVoice = `${config.publicUrl}/voice/incoming`;
-      const wantStatus = `${config.publicUrl}/voice/status`;
+      const wantVoice = `${config.server.publicUrl}/voice/incoming`;
+      const wantStatus = `${config.server.publicUrl}/voice/status`;
       norm(mine.voiceUrl) === norm(wantVoice)
         ? ok("Voice-Webhook korrekt gesetzt")
         : bad(
@@ -151,7 +151,7 @@ if (config.twilioSid && config.twilioToken) {
             `Status-Callback ist '${mine.statusCallback || "(leer)"}'`,
             `Empfohlen: ${wantStatus} (POST) - sonst keine Summaries bei Inbound-Calls`,
           );
-      mine.capabilities?.sms === false && config.sendSmsSummary
+      mine.capabilities?.sms === false && config.voice.sendSmsSummary
         ? wrn("Nummer kann kein SMS", "SEND_SMS_SUMMARY=false setzen oder SMS-faehige Nummer holen")
         : null;
     }
@@ -161,19 +161,19 @@ if (config.twilioSid && config.twilioToken) {
 }
 
 // ---------- 4. OpenAI (nur bei realtime) ----------
-if (config.voiceEngine === "realtime" && config.openaiApiKey) {
+if (config.voice.voiceEngine === "realtime" && config.voice.openaiApiKey) {
   h("4. OpenAI (Realtime-Engine)");
   try {
     const r = await fetch("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${config.openaiApiKey}` },
+      headers: { Authorization: `Bearer ${config.voice.openaiApiKey}` },
     });
     if (r.ok) {
       const ids = (await r.json()).data?.map((m) => m.id) || [];
       ok("API-Key gueltig");
-      ids.includes(config.realtimeModel)
-        ? ok(`Realtime-Modell verfuegbar: ${config.realtimeModel}`)
+      ids.includes(config.voice.realtimeModel)
+        ? ok(`Realtime-Modell verfuegbar: ${config.voice.realtimeModel}`)
         : wrn(
-            `Modell '${config.realtimeModel}' nicht gelistet`,
+            `Modell '${config.voice.realtimeModel}' nicht gelistet`,
             "Fallback: REALTIME_MODEL=gpt-4o-realtime-preview",
           );
     } else bad(`OpenAI-Key abgelehnt (HTTP ${r.status})`);
@@ -184,13 +184,13 @@ if (config.voiceEngine === "realtime" && config.openaiApiKey) {
 
 // ---------- 5. Tunnel: erreicht die Aussenwelt DIESEN Server? ----------
 h("5. Oeffentlicher Tunnel (ngrok)");
-if (config.publicUrl && !config.publicUrl.includes("CHANGE-ME")) {
+if (config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")) {
   try {
     const [pub, loc] = await Promise.all([
-      fetch(`${config.publicUrl}/api/state`, { headers: { "ngrok-skip-browser-warning": "1" } })
+      fetch(`${config.server.publicUrl}/api/state`, { headers: { "ngrok-skip-browser-warning": "1" } })
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
-      fetch(`http://localhost:${config.port}/api/state`)
+      fetch(`http://localhost:${config.server.port}/api/state`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
     ]);
@@ -215,17 +215,17 @@ if (config.publicUrl && !config.publicUrl.includes("CHANGE-ME")) {
 }
 
 // ---------- 6. MCP-OAuth (nur bei MCP_AUTH=oauth) ----------
-if (config.mcpAuth === "oauth") {
+if (config.auth.mcpAuth === "oauth") {
   h("6. MCP-OAuth (Resource Server)");
   // (a) Issuer erreichbar + Metadata mit jwks_uri (OIDC oder OAuth-2.1-Stil)
-  if (config.oauthIssuerUrl) {
+  if (config.auth.oauthIssuerUrl) {
     let jwksUri = null;
     for (const p of [
       "/.well-known/openid-configuration",
       "/.well-known/oauth-authorization-server",
     ]) {
       try {
-        const r = await fetch(`${config.oauthIssuerUrl}${p}`);
+        const r = await fetch(`${config.auth.oauthIssuerUrl}${p}`);
         if (r.ok) {
           const meta = await r.json();
           if (meta.jwks_uri) {
@@ -243,7 +243,7 @@ if (config.mcpAuth === "oauth") {
   }
   // (b) Gateway liefert Protected-Resource-Metadata, (c) /mcp ohne Token -> 401
   try {
-    const base = `http://localhost:${config.port}`;
+    const base = `http://localhost:${config.server.port}`;
     const meta = await fetch(`${base}/.well-known/oauth-protected-resource`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
@@ -253,7 +253,7 @@ if (config.mcpAuth === "oauth") {
         "Erst 'npm start', dann erneut pruefen",
       );
     } else {
-      meta.authorization_servers?.includes(config.oauthIssuerUrl)
+      meta.authorization_servers?.includes(config.auth.oauthIssuerUrl)
         ? ok("Gateway-Metadata zeigt auf den Issuer")
         : bad("Gateway-Metadata-authorization_servers passt nicht zum Issuer");
       const noTok = await fetch(`${base}/mcp`, { method: "POST" }).catch(() => null);

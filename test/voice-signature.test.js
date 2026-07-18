@@ -6,7 +6,7 @@
 // Frueher ein Spawn-Test mit leerer PUBLIC_URL. Seit OT-4 verweigert der Boot bei
 // leerer Pflicht-Config (PUBLIC_URL) den Start (fail-closed) -> ein laufender
 // Server mit leerer PUBLIC_URL ist nicht mehr herstellbar. Der verbleibende,
-// pruefbare Kern (`if (!config.publicUrl) return false`) wird hier als Unit gegen
+// pruefbare Kern (`if (!config.server.publicUrl) return false`) wird hier als Unit gegen
 // den Port festgenagelt: offline, ohne Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -14,8 +14,8 @@ import { config } from "../src/config.js";
 import { verifyInboundSignature } from "../src/telephony/adapters/twilio/signature.js";
 
 test("verifyInboundSignature fail-closed ohne PUBLIC_URL (selbst mit Signatur-Header)", () => {
-  const saved = config.publicUrl;
-  config.publicUrl = "";
+  const saved = config.server.publicUrl;
+  config.server.publicUrl = "";
   try {
     const ok = verifyInboundSignature({
       headers: { "x-twilio-signature": "irgendwas" },
@@ -24,6 +24,6 @@ test("verifyInboundSignature fail-closed ohne PUBLIC_URL (selbst mit Signatur-He
     });
     assert.equal(ok, false, "ohne publicUrl darf keine Signatur als gueltig gelten");
   } finally {
-    config.publicUrl = saved;
+    config.server.publicUrl = saved;
   }
 });

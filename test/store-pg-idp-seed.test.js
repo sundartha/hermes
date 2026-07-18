@@ -16,15 +16,15 @@ const runnerFor = (db) => ({
   withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }),
 });
 
-// config.ownerIdpSubject fuer die Dauer von fn() setzen + exakt restaurieren (Muster
+// config.auth.ownerIdpSubject fuer die Dauer von fn() setzen + exakt restaurieren (Muster
 // withConfig aus config-payment-guard.test.js; Test-Isolation, kein Spawn/keine Env).
 async function withOwnerIdpSubject(value, fn) {
-  const saved = config.ownerIdpSubject;
-  config.ownerIdpSubject = value;
+  const saved = config.auth.ownerIdpSubject;
+  config.auth.ownerIdpSubject = value;
   try {
     return await fn();
   } finally {
-    config.ownerIdpSubject = saved;
+    config.auth.ownerIdpSubject = saved;
   }
 }
 

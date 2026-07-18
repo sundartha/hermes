@@ -1,7 +1,7 @@
 // S1-15: geoLookupAdapter() waehlt den Geo-Lookup-Adapter config-getrieben (fail-closed
 // analog telephony/registry.js). Identitaetsvergleich gegen nullGeoLookup in beiden
-// Zweigen. config.geoEnabled wird pro Test gesetzt/wiederhergestellt (Muster wie
-// config.stripeApiBase in stripe-setup-checkout.test.js).
+// Zweigen. config.provisioning.geoEnabled wird pro Test gesetzt/wiederhergestellt (Muster
+// wie config.billing.stripeApiBase in stripe-setup-checkout.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -9,12 +9,12 @@ import { geoLookupAdapter } from "../src/geo/registry.js";
 import { nullGeoLookup } from "../src/geo/stub.js";
 
 function withGeoEnabled(value, fn) {
-  const original = config.geoEnabled;
-  config.geoEnabled = value;
+  const original = config.provisioning.geoEnabled;
+  config.provisioning.geoEnabled = value;
   try {
     return fn();
   } finally {
-    config.geoEnabled = original;
+    config.provisioning.geoEnabled = original;
   }
 }
 

@@ -1,6 +1,6 @@
 // P5: Telnyx-Ed25519-Verifikation, fail-closed-Paritaet zum Twilio-Verifier. In-Test
 // generiertes Ed25519-Schluesselpaar; der Public-Key wird (als Telnyx-base64-raw-32-
-// Byte UND als PEM) in config.telnyxPublicKey injiziert. Korrekt signierter
+// Byte UND als PEM) in config.telephony.telnyxPublicKey injiziert. Korrekt signierter
 // `${ts}|${rawBody}` -> true; manipuliert/abgelaufen/fehlend/kein-Key -> false.
 // Offline (node:crypto, kein Netz).
 import { test } from "node:test";
@@ -33,7 +33,7 @@ const nowS = () => Math.floor(Date.now() / 1000);
 
 test("korrekt signierter Webhook (base64-raw-32-Byte-Key) -> true", () => {
   const { privateKey, rawBase64 } = makeKeys();
-  config.telnyxPublicKey = rawBase64;
+  config.telephony.telnyxPublicKey = rawBase64;
   const ts = String(nowS());
   const rawBody = Buffer.from(JSON.stringify({ data: { event_type: "message.received" } }));
   const sig = sign(privateKey, ts, rawBody);
@@ -48,7 +48,7 @@ test("korrekt signierter Webhook (base64-raw-32-Byte-Key) -> true", () => {
 
 test("korrekt signierter Webhook (PEM-Key) -> true", () => {
   const { privateKey, pem } = makeKeys();
-  config.telnyxPublicKey = pem;
+  config.telephony.telnyxPublicKey = pem;
   const ts = String(nowS());
   const rawBody = Buffer.from("{}");
   const sig = sign(privateKey, ts, rawBody);
@@ -63,7 +63,7 @@ test("korrekt signierter Webhook (PEM-Key) -> true", () => {
 
 test("manipulierter Body -> false", () => {
   const { privateKey, rawBase64 } = makeKeys();
-  config.telnyxPublicKey = rawBase64;
+  config.telephony.telnyxPublicKey = rawBase64;
   const ts = String(nowS());
   const sig = sign(privateKey, ts, Buffer.from("original"));
   assert.equal(
@@ -77,7 +77,7 @@ test("manipulierter Body -> false", () => {
 
 test("abgelaufener Timestamp (> Replay-Window) -> false", () => {
   const { privateKey, rawBase64 } = makeKeys();
-  config.telnyxPublicKey = rawBase64;
+  config.telephony.telnyxPublicKey = rawBase64;
   const ts = String(nowS() - REPLAY_WINDOW_S - 60);
   const rawBody = Buffer.from("{}");
   const sig = sign(privateKey, ts, rawBody);
@@ -92,7 +92,7 @@ test("abgelaufener Timestamp (> Replay-Window) -> false", () => {
 
 test("fehlender Signatur-Header -> false", () => {
   const { rawBase64 } = makeKeys();
-  config.telnyxPublicKey = rawBase64;
+  config.telephony.telnyxPublicKey = rawBase64;
   const ts = String(nowS());
   assert.equal(
     verifyInboundSignature({ headers: { "telnyx-timestamp": ts }, rawBody: Buffer.from("{}") }),
@@ -102,7 +102,7 @@ test("fehlender Signatur-Header -> false", () => {
 
 test("fehlender Public-Key (Config leer) -> false (fail-closed)", () => {
   const { privateKey } = makeKeys();
-  config.telnyxPublicKey = "";
+  config.telephony.telnyxPublicKey = "";
   const ts = String(nowS());
   const rawBody = Buffer.from("{}");
   const sig = sign(privateKey, ts, rawBody);
