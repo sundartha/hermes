@@ -20,16 +20,16 @@ import * as canonical from "../src/routes/_tenant.js";
 
 // --- Test-Helfer ---------------------------------------------------------------
 
-// config.multiTenant fuer die Dauer von fn() setzen und danach exakt restaurieren
-// (Test-Isolation; kein Spawn, keine Env). Der Resolver liest config.multiTenant live
-// vom selben Singleton, das hier mutiert wird.
+// config.tenancy.multiTenant fuer die Dauer von fn() setzen und danach exakt restaurieren
+// (Test-Isolation; kein Spawn, keine Env). Der Resolver liest config.tenancy.multiTenant
+// live vom selben Singleton, das hier mutiert wird.
 function withMultiTenant(value, fn) {
-  const saved = config.multiTenant;
-  config.multiTenant = value;
+  const saved = config.tenancy.multiTenant;
+  config.tenancy.multiTenant = value;
   try {
     return fn();
   } finally {
-    config.multiTenant = saved;
+    config.tenancy.multiTenant = saved;
   }
 }
 

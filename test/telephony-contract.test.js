@@ -32,8 +32,8 @@ test("renderDirectives liefert fuer beide Adapter einen String", () => {
 
 test("verifyInboundSignature ist fuer beide Adapter bool + fail-closed (leerer Request)", () => {
   // Kein gueltiger Krypto-Kontext -> beide MUESSEN false liefern, ohne zu werfen.
-  config.publicUrl = "";
-  config.telnyxPublicKey = "";
+  config.server.publicUrl = "";
+  config.telephony.telnyxPublicKey = "";
   for (const [name, verify] of VERIFIERS) {
     const out = verify({ headers: {}, rawBody: Buffer.from(""), url: "", params: {} });
     assert.equal(typeof out, "boolean", `${name} liefert boolean`);
@@ -45,8 +45,8 @@ test("sendSms ist fuer beide Adapter aufrufbar und mappt (fetch/client gemockt)"
   // Telnyx ueber global fetch, Twilio ueber seinen client. Beide sehen dieselben
   // Port-Parameter {from,to,body}; der Test prueft nur die Aufrufbarkeit + das
   // Mapping, kein echter Netz-Call.
-  config.telnyxApiKey = "k";
-  config.telnyxApiBase = "https://api.telnyx.com";
+  config.telephony.telnyxApiKey = "k";
+  config.telephony.telnyxApiBase = "https://api.telnyx.com";
   const originalFetch = global.fetch;
   let telnyxText;
   global.fetch = async (_url, opts) => {

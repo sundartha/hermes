@@ -1,6 +1,10 @@
-// PA-12 (config-Hub-Entschaerfung): Unit-Test fuer die zweite, verschachtelte
-// Zugriffs-Oberflaeche (CONFIG_NAMESPACES + attachNamespaces in src/config.js).
-// Reiner Unit-Test, offline, kein Server-Spawn (Muster config-shape.test.js).
+// PA-12 (config-Hub-Entschaerfung): Unit-Test fuer die verschachtelte Zugriffs-Oberflaeche
+// (CONFIG_NAMESPACES + attachNamespaces in src/config.js). Reiner Unit-Test, offline, kein
+// Server-Spawn (Muster config-shape.test.js).
+// PA-20 (Flip): die 13 Namespaces sind die EINZIGE Oberflaeche - kein dual-read mehr. Die
+// alte Alias-Gleichheit/PM-1-Flach-Override-Tests entfallen (der Flach-Pfad existiert nicht
+// mehr); an ihre Stelle tritt der Setter-Durchschlag-Test ueber makeConfigOverrides(config)
+// und eine TypeError-Regression fuer entfernte flache Keys (Read UND Write).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, CONFIG_NAMESPACES, configFatalErrors } from "../src/config.js";
@@ -26,7 +30,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
 };
 const EXPECTED_TOTAL_KEYS = 99;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und deckt disjunkt die Flach-Oberflaeche (99 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (99 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -45,30 +49,13 @@ test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und deckt di
     EXPECTED_TOTAL_KEYS,
     "kein Key darf in zwei Namespaces gleichzeitig stehen",
   );
-  const flatKeys = Object.getOwnPropertyNames(config).filter((k) => !(k in CONFIG_NAMESPACES));
-  assert.deepEqual(
-    new Set(allNamespacedKeys),
-    new Set(flatKeys),
-    "die Karte deckt exakt die Flach-Oberflaeche ab (keine erfundenen/vergessenen Keys)",
-  );
 });
 
-test("Default-Alias-Gleichheit: config.<ns>.<key> liefert denselben Wert wie config.<flatKey> fuer alle 99 Keys", () => {
-  for (const [namespace, keys] of Object.entries(CONFIG_NAMESPACES)) {
-    for (const key of keys) {
-      const viaFlat = config[key];
-      const viaNamespace = config[namespace][key];
-      // Der Proxy-Guard mintet pro Zugriff auf eine verschachtelte Gruppe eine frische
-      // Huelle (bewusst ohne Memoisierung, s. guardedConfig-Kommentar) -> === waere fuer
-      // Nested-Objekte selbst flat-vs-flat false. Arrays/Primitive bleiben identisch.
-      const isNestedObject =
-        viaFlat && typeof viaFlat === "object" && !Array.isArray(viaFlat);
-      if (isNestedObject) {
-        assert.deepEqual(viaNamespace, viaFlat, `${namespace}.${key} (nested)`);
-      } else {
-        assert.strictEqual(viaNamespace, viaFlat, `${namespace}.${key}`);
-      }
-    }
+test("Oberflaeche: config traegt GENAU die 13 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
+  assert.equal(new Set(Object.keys(config)).size, Object.keys(CONFIG_NAMESPACES).length);
+  assert.deepEqual(Object.keys(config).sort(), Object.keys(CONFIG_NAMESPACES).sort());
+  for (const namespace of Object.keys(CONFIG_NAMESPACES)) {
+    assert.ok(namespace in config, `${namespace} muss ueber 'in' erreichbar sein`);
   }
 });
 
@@ -79,14 +66,13 @@ function sentinelFor(currentValue) {
   return "__pa12_override_sentinel__";
 }
 
-test("PM-1: ein Override auf dem Flach-Pfad schlaegt fuer JEDES primitive Blatt auf config.<ns>.<key> durch", () => {
+test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES primitive Blatt denselben Speicher-Slot", () => {
   let checked = 0;
   for (const [namespace, keys] of Object.entries(CONFIG_NAMESPACES)) {
     for (const key of keys) {
-      const currentValue = config[key];
-      // Arrays/nested Objekte sind hier nicht das Ziel: PM-1 beweist die Getter-statt-
-      // Kopie-Eigenschaft an den primitiven Blaettern (93 von 99), die per Object.assign
-      // direkt ueberschrieben werden.
+      const currentValue = config[namespace][key];
+      // Arrays/nested Objekte sind hier nicht das Ziel: der Test beweist die Getter/Setter-
+      // statt-Kopie-Eigenschaft an den primitiven Blaettern (93 von 99).
       if (currentValue && typeof currentValue === "object") continue;
       checked += 1;
       const sentinel = sentinelFor(currentValue);
@@ -94,7 +80,7 @@ test("PM-1: ein Override auf dem Flach-Pfad schlaegt fuer JEDES primitive Blatt 
         assert.strictEqual(
           config[namespace][key],
           sentinel,
-          `${namespace}.${key} muss den Flach-Override live sehen (kein Wert-Kopie-Getter)`,
+          `${namespace}.${key} muss den Override live sehen (kein Wert-Kopie-Getter)`,
         );
       });
       // Restore-Assertion: nach withConfigOverrides zeigt der Namespace wieder den
@@ -129,25 +115,42 @@ test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN F
   }
 });
 
-test("Duck-Typing + Guard: JSON.stringify/await funktionieren auf den neuen Gruppen, unbekannte Keys werfen weiter", async () => {
+test("Duck-Typing + Guard: JSON.stringify/await funktionieren auf den Namespace-Gruppen, unbekannte Keys werfen weiter", async () => {
   assert.doesNotThrow(() => JSON.stringify(config.safety));
   assert.deepEqual(JSON.parse(JSON.stringify(config.safety)), config.safety);
 
   const awaited = await config.safety;
-  assert.equal(awaited.maxCallsPerHour, config.maxCallsPerHour);
+  assert.equal(awaited.maxCallsPerHour, config.safety.maxCallsPerHour);
 
   assert.throws(() => config.safety.nope, TypeError);
 
   // Nested-Blatt-Konsistenz: elevenLabsPlayTts bleibt ein eigenstaendiges nested Objekt
-  // INNERHALB voice (OQ-6), NICHT in voice-Blaetter aufgeloest.
-  assert.equal(config.voice.elevenLabsPlayTts.model, config.elevenLabsPlayTts.model);
+  // INNERHALB voice (OQ-6).
+  assert.equal(typeof config.voice.elevenLabsPlayTts.model, "string");
   assert.throws(() => config.voice.elevenLabsPlayTts.nope, TypeError);
 });
 
-test("Flach-Oberflaeche unveraendert: 99 enumerable Keys, Namespaces nur ueber 'in' erreichbar (kein Blast-Radius auf Object.keys/JSON.stringify)", () => {
-  assert.equal(Object.keys(config).length, EXPECTED_TOTAL_KEYS);
-  for (const namespace of Object.keys(CONFIG_NAMESPACES)) {
-    assert.ok(!Object.keys(config).includes(namespace), `${namespace} darf nicht enumerable sein`);
-    assert.ok(namespace in config, `${namespace} muss ueber 'in' erreichbar sein`);
+// PA-20 (Flip): der flache Pfad existiert NACHWEISLICH nicht mehr - fail-closed statt
+// still-undefined. Stichprobe je betroffenem Namespace, Read UND Write (Set-Trap, §2.1).
+test("Flip-Regression: entfernte flache Keys werfen TypeError bei Read UND Write", () => {
+  const removedFlatKeys = [
+    "maxBudgetCents",
+    "maxCallsPerHour",
+    "mcpAuth",
+    "storeBackend",
+    "telnyxElevenLabs",
+    "telnyxAssistant",
+    "elevenLabsPlayTts",
+    "anthropicApiKey",
+  ];
+  for (const key of removedFlatKeys) {
+    assert.throws(() => config[key], TypeError, `config.${key} (Read) sollte nicht mehr existieren`);
+    assert.throws(
+      () => {
+        config[key] = "x";
+      },
+      TypeError,
+      `config.${key} = ... (Write) sollte nicht mehr moeglich sein`,
+    );
   }
 });

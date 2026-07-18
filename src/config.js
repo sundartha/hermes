@@ -748,15 +748,14 @@ const rawConfig = {
 // Properties, die die Plattform selbst abfragt. Modul-Konstante (keine Config-Flaeche).
 const SAFE_DUCK_TYPING_PROPS = new Set(["then", "toJSON"]);
 
-// Struct-3 (C6a, PLAN-FRAGILITY-REMEDIATION.md P5): rekursiver Proxy-Guard - ein
-// verschobener/getippter Config-Key liefert nicht mehr lautlos undefined, sondern wirft
-// SOFORT beim ersten Lesezugriff (G27: Struktur statt Konvention/Grep-Vigilanz). Arrays
-// UND Symbole werden unverpackt durchgereicht: Arrays sind Positions-, keine Namens-
-// Zugriffe (kein Typo-Risiko), Symbole (util.inspect, Iterator-Protokoll) gehoeren nicht
-// zur benannten Config-Flaeche. Bewusst OHNE Memoisierung: jeder Zugriff auf eine
-// verschachtelte Gruppe liefert eine NEUE Proxy-Huelle um dasselbe Zielobjekt (kein
-// Objekt-Identitaets-Versprechen) - dafuer bleibt Object.assign(config, {...}) in Tests
-// fuer Top-Level-Keys unveraendert moeglich (nur `get` bewacht, kein `set`-Trap).
+// PA-20 (Flip): Die flache Oberflaeche ist entfernt - die 13 Namespaces sind die EINZIGE
+// Zugriffs-Oberflaeche. Der Proxy bewacht `get` UND `set`: ein Read auf einen entfernten
+// flachen Key wirft (fail-closed statt still-undefined); ein Write auf einen unbekannten
+// (flachen/vertippten) Key wirft ebenfalls, statt still eine Stray-Property anzulegen, die
+// den rawConfig-Speicher NIE erreicht (ein Test-Override liefe sonst faelschlich ins Leere,
+// gruen ohne den Wert zu treffen). Namespace-Blaetter tragen einen Setter auf denselben
+// rawConfig-Slot (`prop in obj` -> Reflect.set ruft ihn) -> config.<ns>.<key> = v bleibt
+// moeglich; Symbole (Iterator/util.inspect) bleiben durchgereicht.
 function guardedConfig(target, path = "config") {
   return new Proxy(target, {
     get(obj, prop, receiver) {
@@ -768,20 +767,28 @@ function guardedConfig(target, path = "config") {
       if (SAFE_DUCK_TYPING_PROPS.has(prop)) return undefined;
       throw new TypeError(
         `${path}.${String(prop)} existiert nicht (verschobener/entfernter Config-Key? ` +
-          "Gruppierung in src/config.js pruefen).",
+          "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
+      );
+    },
+    set(obj, prop, value, receiver) {
+      if (typeof prop === "symbol" || prop in obj) return Reflect.set(obj, prop, value, receiver);
+      throw new TypeError(
+        `${path}.${String(prop)} kann nicht gesetzt werden (flache Oberflaeche entfernt; ` +
+          "config.<namespace>.<key> nutzen).",
       );
     },
   });
 }
 
-// ---- PA-12 (config-Hub-Entschaerfung): zweite, verschachtelte Zugriffs-Oberflaeche ----
-// 13 Namespaces ZUSAETZLICH zum erhaltenen Flach-Alias. Jedes Blatt ist ein GETTER auf
+// ---- PA-12 (config-Hub-Entschaerfung) + PA-20 (Flip): verschachtelte Zugriffs-Oberflaeche ----
+// 13 Namespaces sind seit PA-20 die EINZIGE oeffentliche Oberflaeche (die vormals
+// zusaetzlich erhaltenen Flach-Aliase sind entfernt). Jedes Blatt ist Getter+Setter auf
 // DENSELBEN rawConfig-Speicherort (kein zweiter numEnv/boolEnv, keine Wert-Kopie): ein
-// Override auf dem Flach-Pfad (Object.assign(config, ...) im Test, der Proxy hat kein
-// set-Trap -> schreibt rawConfig[key]) schlaegt so 1:1 auf config.<ns>.<key> durch (PM-1).
-// numEnv/boolEnv bleiben eager beim rawConfig-Aufbau oben; die Getter lesen nur den
-// fertigen Wert -> kein verschluckter Fatal-Push, kein Doppel-Eval. Leaf-Namen sind
-// IDENTISCH zu den Flach-Keys (Migration ab PA-13 = "config.<ns>." voranstellen).
+// Override ueber config.<ns>.<key> = v schreibt rawConfig[key] und schlaegt damit auf
+// jeden anderen Lesezugriff auf dasselbe Blatt durch. numEnv/boolEnv bleiben eager beim
+// rawConfig-Aufbau oben; die Getter lesen nur den fertigen Wert -> kein verschluckter
+// Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
+// NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["maxBudgetCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
@@ -798,27 +805,55 @@ export const CONFIG_NAMESPACES = Object.freeze({
   privacy: ["retentionDays"],
 });
 
-// Haengt jede Namespace-Gruppe als NICHT-enumerable Property an target an (mutiert target).
-// NICHT-enumerable haelt die Flach-Enumeration byte-identisch: Object.keys(config)/
-// JSON.stringify(config)/for-in sehen die Gruppen NICHT -> kein Consumer, der config
-// iteriert (z.B. der Geld-Manifest-Scan), aendert sein Verhalten; nur der Namens-Zugriff
-// config.<ns> kommt hinzu. configurable:true ist PFLICHT: guardedConfig gibt fuer Objekte
-// eine frische Wrapper-Proxy zurueck; bei einer non-configurable+non-writable Data-Property
-// verlangt die Proxy-[[Get]]-Invariante den EXAKTEN Zielwert -> sonst TypeError beim ersten
-// config.<ns>-Zugriff. Die Blaetter sind enumerable Getter (damit JSON.stringify(config.<ns>)
-// die Gruppe zu ihren Werten serialisiert, wie die bestehende telnyxAssistant-Gruppe).
+// EINE Gruppen-Fabrik (G5) fuer beide Oberflaechen: jedes Blatt ist Getter+Setter auf
+// DENSELBEN Speicher-Slot (kein zweiter numEnv/boolEnv, keine Wert-Kopie). Der Setter haelt
+// die Test-Override-Semantik (config.<ns>.<key> = v trifft rawConfig[key], das alle anderen
+// Namespace-Getter lesen). configurable:true ist Pflicht (s.u.).
+function makeNamespaceGroup(keys, storage) {
+  const group = {};
+  for (const key of keys) {
+    Object.defineProperty(group, key, {
+      enumerable: true,
+      get: () => storage[key],
+      set: (value) => {
+        storage[key] = value;
+      },
+    });
+  }
+  return group;
+}
+
+// Test-Fixtures (config-namespaces-helper.js withConfigNamespaces): Namespaces NICHT-
+// enumerable an einen flachen Mock haengen -> dessen Flach-Enumeration bleibt byte-identisch
+// (dual-read Mock). Nur fuer Hand-Mocks, NICHT fuer den echten config-Singleton.
 export function attachNamespaces(target, namespaces) {
   for (const [namespace, keys] of Object.entries(namespaces)) {
-    const group = {};
-    for (const key of keys) {
-      Object.defineProperty(group, key, { enumerable: true, get: () => target[key] });
-    }
-    Object.defineProperty(target, namespace, { enumerable: false, configurable: true, value: group });
+    Object.defineProperty(target, namespace, {
+      enumerable: false,
+      configurable: true,
+      value: makeNamespaceGroup(keys, target),
+    });
   }
 }
-attachNamespaces(rawConfig, CONFIG_NAMESPACES);
 
-export const config = guardedConfig(rawConfig);
+// PA-20 (Flip): eigene Oberflaeche mit NUR den 13 Namespaces (enumerable), Blaetter delegieren
+// an den internen rawConfig-Speicher. configurable:true ist PFLICHT: guardedConfig gibt fuer
+// Objekt-Blaetter/-Gruppen eine FRISCHE Wrapper-Proxy zurueck; bei einer non-configurable-
+// Data-Property verlangt die Proxy-[[Get]]-Invariante den EXAKTEN Zielwert -> sonst TypeError
+// beim ersten config.<ns>-Zugriff.
+function buildNamespaceSurface(storage, namespaces) {
+  const surface = {};
+  for (const [namespace, keys] of Object.entries(namespaces)) {
+    Object.defineProperty(surface, namespace, {
+      enumerable: true,
+      configurable: true,
+      value: makeNamespaceGroup(keys, storage),
+    });
+  }
+  return surface;
+}
+
+export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
 
 // ---- Gateway-URL (G5: EINE Quelle fuer den localhost-Fallback, S2-20) ----
 // Die MCP-Tools/-Server sprechen mit der eigenen REST-API. Ohne gesetztes GATEWAY_URL

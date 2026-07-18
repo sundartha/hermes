@@ -68,17 +68,17 @@ test("neuer Tenant ohne Bucket: settingsFor liefert frische Defaults, calendarFo
 // ---- (2) Migration ueber json.load() mit tempDataDir ----
 // Schreibt ein altes FLACHES store.json (flaches settings + flache calendar-Liste)
 // in ein frisches Temp-DATA_DIR und laedt es ueber ein isoliertes json.js-Modul.
-// json.js memoisiert den State prozessweit UND liest config.dataDir nur beim ersten
-// Modul-Load - deshalb wird config.dataDir (live mutierbar, wie die pg-Tests es mit
-// config.twilioNumber tun) VOR dem Cache-gebusteten Import gesetzt, damit der
-// frische Modul-Klon sein eigenes store.json sieht. Build-Operate-Check (P13).
+// json.js memoisiert den State prozessweit UND liest config.server.dataDir nur beim
+// ersten Modul-Load - deshalb wird config.server.dataDir (live mutierbar) VOR dem
+// Cache-gebusteten Import gesetzt, damit der frische Modul-Klon sein eigenes
+// store.json sieht. Build-Operate-Check (P13).
 let migrateSeq = 0;
 async function loadFlatStore(flat) {
   const dir = tempDataDir();
   const fs = await import("fs");
   const path = await import("path");
   fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify(flat, null, 2));
-  config.dataDir = dir;
+  config.server.dataDir = dir;
   const mod = await import(`../src/store/json.js?migrate=${migrateSeq++}`);
   return mod.load();
 }

@@ -3,6 +3,7 @@
 // keine .env (Muster config-prod-footguns.test.js).
 // PA-11: zusaetzlich Fresh-Import-Regression fuer die Trailing-Slash-Configs, Env je
 // Fall gesetzt+restauriert (Muster Query-String-Cache-Buster wie config-boolenv.test.js).
+// PA-20 (Flip): alle Zugriffe auf config.<ns>.<key> umgestellt (Flach-Aliase entfernt).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config, stripTrailingSlash } from "../src/config.js";
@@ -15,17 +16,17 @@ test("Proxy-Guard: unbekannter Top-Level-Key wirft TypeError statt undefined", (
 });
 
 test("Proxy-Guard: unbekannter verschachtelter Key wirft TypeError", () => {
-  assert.throws(() => config.telnyxElevenLabs.doesNotExistNested, TypeError);
+  assert.throws(() => config.telnyx.telnyxElevenLabs.doesNotExistNested, TypeError);
 });
 
 test("Proxy-Guard: legitimer Zugriff liefert weiterhin den echten Default-Wert", () => {
-  assert.equal(typeof config.telnyxElevenLabs.model, "string");
-  assert.equal(config.telnyxElevenLabs.model, "Default");
+  assert.equal(typeof config.telnyx.telnyxElevenLabs.model, "string");
+  assert.equal(config.telnyx.telnyxElevenLabs.model, "Default");
 });
 
 test("Proxy-Guard: Arrays bleiben unverpackte echte Arrays (keine Namens-Zugriffe)", () => {
-  assert.ok(Array.isArray(config.allowedCountryCodes));
-  assert.ok(config.allowedCountryCodes.includes("+49"));
+  assert.ok(Array.isArray(config.safety.allowedCountryCodes));
+  assert.ok(config.safety.allowedCountryCodes.includes("+49"));
 });
 
 test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.inspect)", () => {
@@ -36,8 +37,8 @@ test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.ins
 // value.then - beides normale property-Reads, die der Guard sonst als unbekannten Key
 // missversteht und einen TypeError wirft statt zu serialisieren/aufzuloesen.
 test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duck-Typing)", () => {
-  assert.doesNotThrow(() => JSON.stringify(config.telnyxAssistant));
-  assert.deepEqual(JSON.parse(JSON.stringify(config.telnyxAssistant)), {
+  assert.doesNotThrow(() => JSON.stringify(config.telnyx.telnyxAssistant));
+  assert.deepEqual(JSON.parse(JSON.stringify(config.telnyx.telnyxAssistant)), {
     enabled: false,
     assistantId: "",
     callControlAppId: "",
@@ -56,28 +57,28 @@ test("Proxy-Guard: JSON.stringify auf die Top-Level-Config wirft nicht (toJSON-D
 });
 
 test("Proxy-Guard: await/Promise.resolve auf eine Config-Gruppe wirft nicht (then-Duck-Typing)", async () => {
-  const awaited = await config.telnyxAssistant;
+  const awaited = await config.telnyx.telnyxAssistant;
   assert.equal(awaited.shimMaxTurnsPerMin, 30); // Objekt kommt unveraendert/lesbar durch
-  const resolved = await Promise.resolve(config.telnyxAssistant);
+  const resolved = await Promise.resolve(config.telnyx.telnyxAssistant);
   assert.equal(resolved.shimMaxTurnsPerMin, 30);
 });
 
 test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewacht", () => {
-  assert.throws(() => config.telnyxAssistant.doesNotExistNested, TypeError);
+  assert.throws(() => config.telnyx.telnyxAssistant.doesNotExistNested, TypeError);
 });
 
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
 test("telnyxAssistant: alle 10 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
-  assert.equal(config.telnyxAssistant.enabled, false);
-  assert.equal(config.telnyxAssistant.assistantId, "");
-  assert.equal(config.telnyxAssistant.callControlAppId, "");
-  assert.equal(config.telnyxAssistant.shimMaxTurnsPerMin, 30);
-  assert.equal(config.telnyxAssistant.deadAirTimeoutS, 45);
-  assert.equal(config.telnyxAssistant.openingSpeakTimeoutS, 45);
-  assert.equal(config.telnyxAssistant.loopGuardMaxEmptyTurns, 8);
-  assert.equal(config.telnyxAssistant.shimSharedSecret, "");
-  assert.equal(config.telnyxAssistant.shimApiKeyRef, "");
-  assert.equal(config.telnyxAssistant.shimDebugShape, false);
+  assert.equal(config.telnyx.telnyxAssistant.enabled, false);
+  assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
+  assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
+  assert.equal(config.telnyx.telnyxAssistant.shimMaxTurnsPerMin, 30);
+  assert.equal(config.telnyx.telnyxAssistant.deadAirTimeoutS, 45);
+  assert.equal(config.telnyx.telnyxAssistant.openingSpeakTimeoutS, 45);
+  assert.equal(config.telnyx.telnyxAssistant.loopGuardMaxEmptyTurns, 8);
+  assert.equal(config.telnyx.telnyxAssistant.shimSharedSecret, "");
+  assert.equal(config.telnyx.telnyxAssistant.shimApiKeyRef, "");
+  assert.equal(config.telnyx.telnyxAssistant.shimDebugShape, false);
 });
 
 // Regression: der alte flache Pfad existiert NACHWEISLICH nicht mehr - waere er
@@ -101,10 +102,26 @@ test("telnyxAssistant: die 10 alten flachen Config-Pfade existieren nicht mehr",
   }
 });
 
+// PA-20 (Flip): die Flach-Aliase (auch die 3 nested Blaetter selbst) sind entfernt - die
+// Namespaces sind die EINZIGE Oberflaeche. Analoge Regression wie oben, diesmal fuer die
+// obersten Flach-Keys statt der telnyxAssistant-internen Sub-Keys.
+test("Flip: die Flach-Aliase existieren nicht mehr (Read wirft TypeError)", () => {
+  const removedFlatKeys = [
+    "maxBudgetCents",
+    "allowedCountryCodes",
+    "telnyxAssistant",
+    "telnyxElevenLabs",
+    "elevenLabsPlayTts",
+  ];
+  for (const key of removedFlatKeys) {
+    assert.throws(() => config[key], TypeError, `config.${key} sollte nicht mehr existieren`);
+  }
+});
+
 // P6: MS_PER_DAY-Dedup-Regressionsanker (perTargetWindowMs-Fallback nutzt jetzt die
 // benannte Konstante statt des rohen 24h-ms-Literals, Wert bleibt identisch).
 test("MS_PER_DAY: perTargetWindowMs faellt bei unset auf genau 24h (86400000 ms)", () => {
-  assert.equal(config.perTargetWindowMs, 86400000);
+  assert.equal(config.safety.perTargetWindowMs, 86400000);
 });
 
 // PA-11 (G5-Dedup): stripTrailingSlash buendelt das 7x wiederholte
@@ -125,12 +142,12 @@ test("PA-11: stripTrailingSlash entfernt genau EINEN abschliessenden Slash", () 
 // ausgewertet wird (Muster config-boolenv.test.js).
 test("PA-11: die 6 eager URL-Configs strippen den Trailing-Slash exakt (git-HEAD-Wert)", async () => {
   const cases = [
-    { env: "TELNYX_API_BASE", raw: "https://api.telnyx.com/", pick: (c) => c.telnyxApiBase, want: "https://api.telnyx.com" },
-    { env: "STRIPE_API_BASE", raw: "https://api.stripe.com/", pick: (c) => c.stripeApiBase, want: "https://api.stripe.com" },
-    { env: "PUBLIC_URL", raw: "https://hermes.example.test/", pick: (c) => c.publicUrl, want: "https://hermes.example.test" },
-    { env: "OAUTH_ISSUER_URL", raw: "https://idp.example.test/", pick: (c) => c.oauthIssuerUrl, want: "https://idp.example.test" },
-    { env: "WORKOS_API_BASE", raw: "https://api.workos.com/", pick: (c) => c.workosApiBase, want: "https://api.workos.com" },
-    { env: "ELEVENLABS_API_BASE", raw: "https://api.elevenlabs.io/", pick: (c) => c.elevenLabsPlayTts.apiBase, want: "https://api.elevenlabs.io" },
+    { env: "TELNYX_API_BASE", raw: "https://api.telnyx.com/", pick: (c) => c.telephony.telnyxApiBase, want: "https://api.telnyx.com" },
+    { env: "STRIPE_API_BASE", raw: "https://api.stripe.com/", pick: (c) => c.billing.stripeApiBase, want: "https://api.stripe.com" },
+    { env: "PUBLIC_URL", raw: "https://hermes.example.test/", pick: (c) => c.server.publicUrl, want: "https://hermes.example.test" },
+    { env: "OAUTH_ISSUER_URL", raw: "https://idp.example.test/", pick: (c) => c.auth.oauthIssuerUrl, want: "https://idp.example.test" },
+    { env: "WORKOS_API_BASE", raw: "https://api.workos.com/", pick: (c) => c.auth.workosApiBase, want: "https://api.workos.com" },
+    { env: "ELEVENLABS_API_BASE", raw: "https://api.elevenlabs.io/", pick: (c) => c.voice.elevenLabsPlayTts.apiBase, want: "https://api.elevenlabs.io" },
   ];
   for (const [i, { env, raw, pick, want }] of cases.entries()) {
     const saved = process.env[env];
@@ -155,7 +172,7 @@ test("PA-11: ELEVENLABS_API_BASE trimmt VOR dem Strip (Whitespace nach dem Slash
   try {
     process.env.ELEVENLABS_API_BASE = "https://api.elevenlabs.io/ ";
     const fresh = await import("../src/config.js?pa11-elevenws");
-    assert.equal(fresh.config.elevenLabsPlayTts.apiBase, "https://api.elevenlabs.io");
+    assert.equal(fresh.config.voice.elevenLabsPlayTts.apiBase, "https://api.elevenlabs.io");
   } finally {
     if (saved === undefined) delete process.env.ELEVENLABS_API_BASE;
     else process.env.ELEVENLABS_API_BASE = saved;

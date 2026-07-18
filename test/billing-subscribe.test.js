@@ -12,6 +12,8 @@ import {
   checkoutSessionIdempotencyKey,
 } from "../src/billing/subscribe.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { config as realConfig } from "../src/config.js";
+import { makeConfigOverrides } from "./helpers.js";
 
 const TENANT = "t_x";
 const CONFIG = withConfigNamespaces({
@@ -61,6 +63,22 @@ test("priceIdForPlan: bekannte Slugs -> Price, unbekannt/unkonfiguriert -> null"
   assert.equal(priceIdForPlan("business", CONFIG), "price_business");
   assert.equal(priceIdForPlan("enterprise", CONFIG), null, "unbekannter Slug -> null");
   assert.equal(priceIdForPlan("starter", withConfigNamespaces({})), null, "fehlende Price-Id -> null");
+});
+
+// PA-20 (Flip, PM-5-Verifikation): priceIdForPlan liest config.billing[key] - der
+// Namespace-Bracket-Zugriff (Plan-slug -> Stripe-Price) muss auf dem ECHTEN config-
+// Singleton (nicht nur einem Hand-Mock) eine echte Price-Id liefern, kein undefined/
+// TypeError. makeConfigOverrides routet den flachen Override-Key ueber sein Namespace-
+// Blatt (billing), Restore per finally.
+test("priceIdForPlan: liest config.billing[key] vom ECHTEN config-Singleton (kein Bracket-Blindflug)", () => {
+  const { withConfigOverrides } = makeConfigOverrides(realConfig);
+  withConfigOverrides(
+    { stripeStarterPriceId: "price_real_starter", stripeBusinessPriceId: "price_real_business" },
+    () => {
+      assert.equal(priceIdForPlan("starter", realConfig), "price_real_starter");
+      assert.equal(priceIdForPlan("business", realConfig), "price_real_business");
+    },
+  );
 });
 
 test("createTenantSubscription: unbekannter Plan -> unknown_plan, kein Stripe-Call", async () => {

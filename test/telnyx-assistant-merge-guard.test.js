@@ -109,8 +109,8 @@ test("preservedFieldSnapshot: fehlendes telephony_settings-Objekt -> kein Crash,
 // (fieldsNotApplied) laeuft jetzt auch beim Create. calls.length ist deshalb 2 (POST+GET),
 // nicht mehr 1 (Bestand vor MAJOR-2 - s. die beiden dedizierten Tests unten).
 test("sendAssistantConfig: Create (kein existingId) macht POST + Nachher-GET, KEIN Merge-Check", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   await withQueuedFetch(
     [{ json: { data: { id: "asst_new" } } }],
     async (calls) => {
@@ -127,8 +127,8 @@ test("sendAssistantConfig: Create (kein existingId) macht POST + Nachher-GET, KE
 });
 
 test("sendAssistantConfig: Update, Sicherheitsfelder unveraendert -> GET/POST/GET, id kommt durch", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   const stableSnapshot = { data: assistantWithSafetyFields() };
   await withQueuedFetch(
     [
@@ -165,8 +165,8 @@ test("sendAssistantConfig: Update, Sicherheitsfelder unveraendert -> GET/POST/GE
 // recording_settings und default_texml_app_id gleichzeitig - alle drei muessen im Fehler
 // benannt werden, transcription (top-level, unveraendert) NICHT.
 test("sendAssistantConfig: Update ersetzt telephony_settings als Ganzes -> wirft mit allen 3 verschachtelten Feldern (Merge-Annahme widerlegt), KEIN falsch-gruener Erfolg", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   await withQueuedFetch(
     [
       { json: { data: assistantWithSafetyFields() } }, // GET vorher: alle Sicherheitsfelder gesetzt
@@ -258,8 +258,8 @@ test("MAJOR-3: fieldsNotApplied/appliedFieldSnapshot tolerieren Telnyx-Zusatzfel
 });
 
 test("sendAssistantConfig: K1/K2-Felder live bestaetigt (GET-nachher matcht den gesendeten Wert) -> kein Fehler", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   const before = { data: assistantWithSafetyFields() };
   const after = {
     data: assistantWithSafetyFields({
@@ -278,8 +278,8 @@ test("sendAssistantConfig: K1/K2-Felder live bestaetigt (GET-nachher matcht den 
 });
 
 test("sendAssistantConfig: Telnyx verwirft interrupt_prediction_threshold still (GET-nachher fehlt das Feld) -> wirft, K1 NICHT live", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   const before = { data: assistantWithSafetyFields() };
   const after = {
     data: assistantWithSafetyFields({
@@ -312,8 +312,8 @@ test("sendAssistantConfig: Telnyx verwirft interrupt_prediction_threshold still 
 // Verifikation jetzt AUCH ohne existingId aktiv ist (Erfolg UND Fehlschlag) - spiegelbildlich
 // zu den beiden K1/K2-Update-Tests oben, nur mit existingId="".
 test("sendAssistantConfig: Create, K1/K2-Felder live bestaetigt -> kein Fehler (MAJOR-2)", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   const after = { data: { id: "asst_new", ...K_CONFIG } };
   await withQueuedFetch([{ json: { data: { id: "asst_new" } } }, { json: after }], async (calls) => {
     const id = await sendAssistantConfig(K_CONFIG, "");
@@ -323,8 +323,8 @@ test("sendAssistantConfig: Create, K1/K2-Felder live bestaetigt -> kein Fehler (
 });
 
 test("sendAssistantConfig: Create, Telnyx verwirft interrupt_prediction_threshold still -> wirft AUCH ohne existingId (MAJOR-2)", async () => {
-  config.telnyxApiBase = "https://telnyx.test";
-  config.telnyxApiKey = "test-key";
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
   const after = {
     data: {
       id: "asst_new",

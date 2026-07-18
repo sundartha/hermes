@@ -533,14 +533,26 @@ export function noopWatchdog() {
 // Import hier wuerde diese Reihenfolge unterlaufen und eine lokale .env leaken lassen, siehe
 // Lehre test-base-env-drift). Die zurueckgegebenen Funktionen bleiben bei <=3 Argumenten (F1),
 // weil configObj per Closure gebunden ist statt bei jedem Aufruf mitgereicht zu werden.
+// PA-20: nach dem Flip existiert keine flache config-Oberflaeche mehr. Der Helfer routet
+// jeden flachen Override-Key ueber sein Namespace-Blatt (Getter+Setter auf denselben Slot).
+// Der Flach->Namespace-Index wird EINMAL aus der uebergebenen Oberflaeche gebaut (13 enumerable
+// Namespaces, je enumerable Blaetter) - KEIN statischer config.js-Import (test-base-env-drift).
 export function makeConfigOverrides(configObj) {
+  const namespaceOfKey = {};
+  for (const namespace of Object.keys(configObj)) {
+    for (const key of Object.keys(configObj[namespace])) namespaceOfKey[key] = namespace;
+  }
+  const readValue = (key) => configObj[namespaceOfKey[key]][key];
+  const writeValue = (key, value) => {
+    configObj[namespaceOfKey[key]][key] = value;
+  };
   async function withConfig(key, value, fn) {
-    const saved = configObj[key];
-    configObj[key] = value;
+    const saved = readValue(key);
+    writeValue(key, value);
     try {
       await fn();
     } finally {
-      configObj[key] = saved;
+      writeValue(key, saved);
     }
   }
   function withBlankedConfig(key, fn) {
@@ -554,12 +566,12 @@ export function makeConfigOverrides(configObj) {
   // verwies bereits explizit auf "Muster config-failclosed.test.js").
   function withConfigOverrides(overrides, fn) {
     const saved = {};
-    for (const k of Object.keys(overrides)) saved[k] = configObj[k];
-    Object.assign(configObj, overrides);
+    for (const k of Object.keys(overrides)) saved[k] = readValue(k);
+    for (const k of Object.keys(overrides)) writeValue(k, overrides[k]);
     try {
       return fn();
     } finally {
-      Object.assign(configObj, saved);
+      for (const k of Object.keys(saved)) writeValue(k, saved[k]);
     }
   }
   return { withConfig, withBlankedConfig, withConfigOverrides };

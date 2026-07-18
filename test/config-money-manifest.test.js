@@ -12,7 +12,7 @@
 // env-unabhaengig (prueft nur Property-Keys, nie Werte).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config } from "../src/config.js";
+import { CONFIG_NAMESPACES } from "../src/config.js";
 
 // EINE Liste aller Geld-Felder in config.js (G26: Cents-Ganzzahlen bzw. EUR/USD-Preise).
 const MONEY_CONFIG_KEYS = Object.freeze([
@@ -29,8 +29,13 @@ const MONEY_CONFIG_KEYS = Object.freeze([
 
 const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;
 
+// PA-20 (Flip): config selbst traegt nur noch die 13 Namespaces (Object.keys(config) waere
+// hier blind - "maxBudgetCents" in config ist seit dem Flip false). Der Scan laeuft daher
+// auf CONFIG_NAMESPACES (den 99 Blaettern), nicht mehr auf der Laufzeit-Oberflaeche - der
+// Manifest-Guard bleibt so wirksam statt vakuum-gruen zu werden.
 test("Geld-Manifest: jedes Cents-/Eur-/Usd-Feld in config.js ist im Manifest erfasst", () => {
-  const moneyShapedKeys = Object.keys(config).filter((k) => MONEY_NAME_PATTERN.test(k));
+  const allNamespacedKeys = Object.values(CONFIG_NAMESPACES).flat();
+  const moneyShapedKeys = allNamespacedKeys.filter((k) => MONEY_NAME_PATTERN.test(k));
   const unregistered = moneyShapedKeys.filter((k) => !MONEY_CONFIG_KEYS.includes(k));
   assert.deepEqual(
     unregistered,
@@ -41,7 +46,8 @@ test("Geld-Manifest: jedes Cents-/Eur-/Usd-Feld in config.js ist im Manifest erf
 });
 
 test("Geld-Manifest: kein gelistetes Feld wurde stillschweigend aus config.js entfernt", () => {
-  const missing = MONEY_CONFIG_KEYS.filter((k) => !(k in config));
+  const allNamespacedKeys = Object.values(CONFIG_NAMESPACES).flat();
+  const missing = MONEY_CONFIG_KEYS.filter((k) => !allNamespacedKeys.includes(k));
   assert.deepEqual(
     missing,
     [],

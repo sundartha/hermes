@@ -15,7 +15,7 @@ test("resolveGatewayUrl: ohne GATEWAY_URL -> Fallback auf den config-Port", () =
   const prev = process.env.GATEWAY_URL;
   try {
     delete process.env.GATEWAY_URL;
-    assert.equal(resolveGatewayUrl(), gatewayUrlForPort(config.port));
+    assert.equal(resolveGatewayUrl(), gatewayUrlForPort(config.server.port));
   } finally {
     if (prev === undefined) delete process.env.GATEWAY_URL;
     else process.env.GATEWAY_URL = prev;

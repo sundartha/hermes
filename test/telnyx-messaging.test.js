@@ -16,8 +16,8 @@ function withMockFetch(impl, fn) {
 }
 
 test("sendSms: POST /v2/messages, Bearer + JSON, body->text-Mapping", async () => {
-  config.telnyxApiKey = "test-telnyx-key";
-  config.telnyxApiBase = "https://api.telnyx.com";
+  config.telephony.telnyxApiKey = "test-telnyx-key";
+  config.telephony.telnyxApiBase = "https://api.telnyx.com";
   let captured;
   await withMockFetch(
     async (url, opts) => {
@@ -38,8 +38,8 @@ test("sendSms: POST /v2/messages, Bearer + JSON, body->text-Mapping", async () =
 });
 
 test("sendSms: Nicht-2xx -> wirft mit HTTP-Status, OHNE API-Key in der Meldung", async () => {
-  config.telnyxApiKey = "geheim-leak-test";
-  config.telnyxApiBase = "https://api.telnyx.com";
+  config.telephony.telnyxApiKey = "geheim-leak-test";
+  config.telephony.telnyxApiBase = "https://api.telnyx.com";
   await withMockFetch(
     async () => ({ ok: false, status: 422 }),
     async () => {
@@ -59,8 +59,8 @@ test("sendSms: Nicht-2xx -> wirft mit HTTP-Status, OHNE API-Key in der Meldung",
 });
 
 test("sendSms: Nicht-2xx mit Telnyx-Errors-Envelope -> Meldung um code/title angereichert (P7-Cluster12)", async () => {
-  config.telnyxApiKey = "geheim-leak-test-2";
-  config.telnyxApiBase = "https://api.telnyx.com";
+  config.telephony.telnyxApiKey = "geheim-leak-test-2";
+  config.telephony.telnyxApiBase = "https://api.telnyx.com";
   await withMockFetch(
     async () => ({
       ok: false,
@@ -86,7 +86,7 @@ test("sendSms: Nicht-2xx mit Telnyx-Errors-Envelope -> Meldung um code/title ang
 });
 
 test("sendSms: fehlender API-Key -> wirft (fail-closed, kein Netz-Call)", async () => {
-  config.telnyxApiKey = "";
+  config.telephony.telnyxApiKey = "";
   let called = false;
   await withMockFetch(
     async () => {

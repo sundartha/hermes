@@ -71,7 +71,7 @@ test('Kill-Switch: OUTBOUND_FROZEN="TRUE" -> config.outboundFrozen===true (kein 
   try {
     process.env.OUTBOUND_FROZEN = "TRUE";
     const fresh = await import("../src/config.js?boolenv-frozen-true");
-    assert.equal(fresh.config.outboundFrozen, true);
+    assert.equal(fresh.config.safety.outboundFrozen, true);
     assert.ok(
       !fresh.configFatalErrors().some((e) => e.includes("OUTBOUND_FROZEN")),
       "normalisierbarer Wert ist kein Fatal",
@@ -87,7 +87,7 @@ test('Kill-Switch: OUTBOUND_FROZEN="1" -> Fatal + Fallback false (Boot-Refusal s
   try {
     process.env.OUTBOUND_FROZEN = "1";
     const fresh = await import("../src/config.js?boolenv-frozen-bad");
-    assert.equal(fresh.config.outboundFrozen, false);
+    assert.equal(fresh.config.safety.outboundFrozen, false);
     assert.ok(fresh.configFatalErrors().some((e) => e.includes("OUTBOUND_FROZEN")));
   } finally {
     if (saved === undefined) delete process.env.OUTBOUND_FROZEN;

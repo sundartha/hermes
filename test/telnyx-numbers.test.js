@@ -139,14 +139,14 @@ test("orderNumber: HTTP-Fehler wirft MIT Status, OHNE API-Key (Regel 4)", async 
 
 test("fail-closed: ohne TELNYX_API_KEY wirft jede Methode (kein Live-Call)", async () => {
   stubFetch({ json: { data: [] } });
-  const saved = config.telnyxApiKey;
-  config.telnyxApiKey = "";
+  const saved = config.telephony.telnyxApiKey;
+  config.telephony.telnyxApiKey = "";
   try {
     await assert.rejects(() => prov.searchNumbers({ countryCode: "DE" }), /TELNYX_API_KEY fehlt/);
     await assert.rejects(() => prov.orderNumber({ e164: "+49" }), /TELNYX_API_KEY fehlt/);
     await assert.rejects(() => prov.releaseNumber("x"), /TELNYX_API_KEY fehlt/);
   } finally {
-    config.telnyxApiKey = saved;
+    config.telephony.telnyxApiKey = saved;
   }
 });
 

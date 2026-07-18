@@ -1,18 +1,18 @@
 // S1-17: createQueue() waehlt das Queue-Backend config-getrieben (fail-closed).
-// config.queueBackend wird pro Test gesetzt/wiederhergestellt (Muster wie
-// config.geoEnabled in geo-registry.test.js).
+// config.store.queueBackend wird pro Test gesetzt/wiederhergestellt (Muster wie
+// config.provisioning.geoEnabled in geo-registry.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { createQueue } from "../src/queue/registry.js";
 
 function withQueueBackend(value, fn) {
-  const original = config.queueBackend;
-  config.queueBackend = value;
+  const original = config.store.queueBackend;
+  config.store.queueBackend = value;
   try {
     return fn();
   } finally {
-    config.queueBackend = original;
+    config.store.queueBackend = original;
   }
 }
 

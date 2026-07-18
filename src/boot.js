@@ -38,7 +38,7 @@ function assertBootGates(config, store) {
 
   // Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE nur mit geskippter Signaturpruefung zulaessig ->
   // in Prod (Signatur fail-closed AN, Regel 1) Boot-Refusal statt stillem Nicht-Waehlen.
-  if (fakeOriginateBootBlocked(config)) {
+  if (fakeOriginateBootBlocked(config.safety)) {
     console.error(
       "[boot] Start abgebrochen: FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true " +
         "zulaessig (Test-Seam, in Produktion unzulaessig).",

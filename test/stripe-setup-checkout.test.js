@@ -14,15 +14,15 @@ const SECRET = "sk_test_geheim_leak_probe";
 // Stub: jeder Response traegt ok/status + ein .json() (der Adapter parst json()).
 function withStripeStub(impl, fn) {
   const originalFetch = global.fetch;
-  const originalKey = config.stripeSecretKey;
-  const originalBase = config.stripeApiBase;
-  config.stripeSecretKey = SECRET;
-  config.stripeApiBase = "https://api.stripe.test"; // NIE api.stripe.com im Test
+  const originalKey = config.billing.stripeSecretKey;
+  const originalBase = config.billing.stripeApiBase;
+  config.billing.stripeSecretKey = SECRET;
+  config.billing.stripeApiBase = "https://api.stripe.test"; // NIE api.stripe.com im Test
   global.fetch = impl;
   return Promise.resolve(fn()).finally(() => {
     global.fetch = originalFetch;
-    config.stripeSecretKey = originalKey;
-    config.stripeApiBase = originalBase;
+    config.billing.stripeSecretKey = originalKey;
+    config.billing.stripeApiBase = originalBase;
   });
 }
 
@@ -77,8 +77,8 @@ test("createSetupCheckoutSession: POST /v1/checkout/sessions, mode=setup + custo
   assert.equal(captured.opts.body.get("success_url"), "https://agent.test/ok");
   assert.equal(captured.opts.body.get("cancel_url"), "https://agent.test/no");
   assert.equal(captured.opts.body.get("metadata[tenant_ref]"), "tenant_a");
-  // Stripe verlangt im setup-Mode ein currency (sonst HTTP 400) - aus config.paymentCurrency.
-  assert.equal(captured.opts.body.get("currency"), config.paymentCurrency);
+  // Stripe verlangt im setup-Mode ein currency (sonst HTTP 400) - aus config.billing.paymentCurrency.
+  assert.equal(captured.opts.body.get("currency"), config.billing.paymentCurrency);
   assert.deepEqual(result, { url: "https://stripe.test/c/cs_1", sessionId: "cs_1" });
 });
 

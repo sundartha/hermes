@@ -18,5 +18,5 @@ before(async () => {
 });
 
 test("I12: assistantContextEnabled ohne Env-Var -> true (Produkt-Default an)", () => {
-  assert.equal(config.assistantContextEnabled, true);
+  assert.equal(config.tenancy.assistantContextEnabled, true);
 });

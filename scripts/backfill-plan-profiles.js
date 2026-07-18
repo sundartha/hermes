@@ -12,7 +12,7 @@ const reconcile = process.argv.includes("--reconcile");
 
 // json = No-Op (kein Fehler, kein Exit 1 - legitimer Migrations-No-Op, NICHT grant-admins
 // harter Refusal). Beweist §5.7 (Prod=pg; json=Owner/Dev) ohne Wurf.
-if (config.storeBackend !== "pg") {
+if (config.store.storeBackend !== "pg") {
   console.log("[backfill] json-Backend: No-Op (keine Bestands-Subscriber lokal).");
   process.exit(0);
 }
@@ -27,7 +27,7 @@ const runner = await createPortalRunner();
 // Reconcile-Resolver NUR bei --reconcile + vorhandenem Secret; fail-SOFT (Stripe-Fehler ->
 // null = no_plan-Skip, NIE Abbruch des ganzen Laufs). Secret nie loggen/leaken (Regel 4).
 let resolvePlanSlug;
-if (reconcile && config.stripeSecretKey) {
+if (reconcile && config.billing.stripeSecretKey) {
   const { stripeBilling } = await import("../src/billing/stripe.js");
   resolvePlanSlug = async (subscriptionId) => {
     try {

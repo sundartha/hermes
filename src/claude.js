@@ -42,7 +42,7 @@ function meterAiTokens(call, usage) {
     callId: call.id,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
     quantity: inputTokens + usage.output_tokens,
-    costCents: aiCostCents(inputTokens, usage.output_tokens, config),
+    costCents: aiCostCents(inputTokens, usage.output_tokens, config.llm),
   });
 }
 
@@ -525,7 +525,7 @@ export async function agentTurn(call, callerText) {
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     });
     roundtrips += 1;
-    store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config);
+    store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config.llm);
     meterAiTokens(call, resp.usage);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
@@ -607,7 +607,7 @@ export async function summarizeCall(call) {
     ],
     callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
   });
-  store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config);
+  store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config.llm);
   meterAiTokens(call, resp.usage);
 
   let parsed = { summary: "", actionItems: [] };

@@ -13,15 +13,15 @@ const SECRET = "sk_test_idempotent-headers-probe";
 
 function withStripeStub(impl, fn) {
   const originalFetch = global.fetch;
-  const originalKey = config.stripeSecretKey;
-  const originalBase = config.stripeApiBase;
-  config.stripeSecretKey = SECRET;
-  config.stripeApiBase = "https://api.stripe.test";
+  const originalKey = config.billing.stripeSecretKey;
+  const originalBase = config.billing.stripeApiBase;
+  config.billing.stripeSecretKey = SECRET;
+  config.billing.stripeApiBase = "https://api.stripe.test";
   global.fetch = impl;
   return Promise.resolve(fn()).finally(() => {
     global.fetch = originalFetch;
-    config.stripeSecretKey = originalKey;
-    config.stripeApiBase = originalBase;
+    config.billing.stripeSecretKey = originalKey;
+    config.billing.stripeApiBase = originalBase;
   });
 }
 

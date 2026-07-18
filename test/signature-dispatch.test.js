@@ -15,7 +15,7 @@ test("x-twilio-signature -> Twilio-Pfad (fail-closed ohne PUBLIC_URL -> false)",
   // publicUrl leer -> der Twilio-Verifier kann die signierte URL nicht
   // rekonstruieren und liefert false. Dass ueberhaupt false (statt der
   // fall-through-false) zurueckkommt, beweist: der Twilio-Pfad wurde betreten.
-  config.publicUrl = "";
+  config.server.publicUrl = "";
   const ok = inboundSignatureVerifier().verifyInboundSignature({
     headers: { "x-twilio-signature": "irgendwas" },
     url: "https://agent.test/voice/incoming",
@@ -26,7 +26,7 @@ test("x-twilio-signature -> Twilio-Pfad (fail-closed ohne PUBLIC_URL -> false)",
 
 test("telnyx-Header -> Telnyx-Pfad (korrekte Ed25519-Signatur -> true)", () => {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
-  config.telnyxPublicKey = publicKey
+  config.telephony.telnyxPublicKey = publicKey
     .export({ format: "der", type: "spki" })
     .subarray(-ED25519_RAW_KEY_LEN)
     .toString("base64");

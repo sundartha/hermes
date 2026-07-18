@@ -30,7 +30,7 @@ function usageView(u, config) {
     outputTokens: u.outputTokens,
     calls: u.calls,
     costEur: u.costCents / CENTS_PER_EUR,
-    maxBudgetEur: globalCapEur(config),
+    maxBudgetEur: globalCapEur(config.billing),
   };
 }
 

@@ -152,7 +152,7 @@ test("originateViaCallControl: fail-closed ohne API_KEY / CALL_CONTROL_APP_ID", 
   );
   await withConfig(
     "telnyxAssistant",
-    { ...config.telnyxAssistant, callControlAppId: "" },
+    { ...config.telnyx.telnyxAssistant, callControlAppId: "" },
     () =>
       assert.rejects(
         () => telnyxVoice.originateViaCallControl(CC_ORIGINATE),
@@ -297,8 +297,8 @@ test("startAssistant: fail-closed ohne API_KEY / callControlId / assistantId", a
 
 // 11) fakeVoice-Seam: fakeOriginate -> neue Methoden netzfrei (kein Crash im P5-Testpfad)
 test("fakeVoice: Call-Control-Methoden sind netzfrei", async () => {
-  const saved = config.fakeOriginate;
-  config.fakeOriginate = true;
+  const saved = config.safety.fakeOriginate;
+  config.safety.fakeOriginate = true;
   try {
     const v = voiceControl();
     const r = await v.originateViaCallControl(CC_ORIGINATE);
@@ -307,7 +307,7 @@ test("fakeVoice: Call-Control-Methoden sind netzfrei", async () => {
     await v.startAssistant({ callControlId: "cc_1", assistantId: "a" });
     await v.speak({ callControlId: "cc_1", text: "Hallo", voiceProfile: "de-female-neural" });
   } finally {
-    config.fakeOriginate = saved;
+    config.safety.fakeOriginate = saved;
   }
 });
 

@@ -466,9 +466,12 @@ export function makeOutboundGates({
     {
       name: "budget",
       run(ctx) {
-        if (!store.budgetExceeded(ctx.tenantId, config) && !store.globalBudgetExceeded(config))
+        if (
+          !store.budgetExceeded(ctx.tenantId, config.billing) &&
+          !store.globalBudgetExceeded(config.billing)
+        )
           return null;
-        return deny(402, { error: `Budget-Limit von ${globalCapEur(config)} EUR erreicht.` }, {
+        return deny(402, { error: `Budget-Limit von ${globalCapEur(config.billing)} EUR erreicht.` }, {
           event: "place_call_denied",
           detail: `to=${ctx.to} grund=budget tenant=${ctx.tenantId}`,
         });
@@ -523,7 +526,7 @@ export function makeOutboundGates({
         let reserved;
         try {
           reserved = await store.withStoreLock(() =>
-            store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config),
+            store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing),
           );
         } catch (e) {
           console.error(`[place_call] reserve fehlgeschlagen tenant=${ctx.tenantId}:`, e.message); // secret-frei
