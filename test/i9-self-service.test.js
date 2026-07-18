@@ -246,6 +246,19 @@ test("(c1) Nicht-Whitelist-Feld (allowSummaries) wird ignoriert", async () => {
   }
 });
 
+test("(c1b) allowCalendar/allowBooking sind seit P1b kein Self-Service-Feld mehr (E1)", async () => {
+  const s = await setup();
+  try {
+    const res = await postSettings(s, { allowCalendar: false, allowBooking: false });
+    assert.equal(res.status, 200);
+    const bucket = s.store.load().settings[TENANT_B];
+    assert.equal(bucket.allowCalendar, true, "allowCalendar nicht geschrieben (Default true)");
+    assert.equal(bucket.allowBooking, true, "allowBooking nicht geschrieben (Default true)");
+  } finally {
+    await s.close();
+  }
+});
+
 test("(c2) Restrict-only: allowBankData false->true wird abgelehnt", async () => {
   const s = await setup({ bankData: false });
   try {
