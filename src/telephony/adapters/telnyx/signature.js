@@ -26,7 +26,7 @@ const TS_HEADER = "telnyx-timestamp";
 // SPKI-Prefix rekonstruiert. Jeder Fehler -> null (fail-closed). Reine Funktion,
 // pro Verify aus config gelesen (Webhook selten) - kein Lazy-Singleton (P15).
 function publicKeyOrNull() {
-  const raw = config.telnyxPublicKey;
+  const raw = config.telephony.telnyxPublicKey;
   if (!raw) return null;
   try {
     if (raw.includes("BEGIN")) return crypto.createPublicKey(raw);

@@ -98,7 +98,7 @@ export function makeVoiceRoutes({
   // persistiert ist (P6) - KEIN Re-Arm (zweiter Timer = Leak). Exakte Handoff-Direktive live
   // unbestaetigt (wie P4-Adapter-Body-Form) - mit dem Owner in P0/P11 fixen.
   async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
-    if (!(config.telnyxAssistant.enabled && providerSupports(provider, CAPABILITY.AI_ASSISTANT))) return null;
+    if (!(config.telnyx.telnyxAssistant.enabled && providerSupports(provider, CAPABILITY.AI_ASSISTANT))) return null;
     const callControlId = inboundCallControlId(body);
     if (!callControlId) return null;
     await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });
@@ -131,11 +131,11 @@ export function makeVoiceRoutes({
   // Krypto (Twilio-HMAC) lebt im Adapter; hier bleibt nur das Skip-Gate (Local/Test)
   // und die fail-closed-Antwort. rawBody (req.rawBody) ist fuer kuenftige Provider da.
   router.use("/voice", (req, res, next) => {
-    if (config.skipTwilioSignatureCheck) return next();
+    if (config.safety.skipTwilioSignatureCheck) return next();
     const ok = inboundSignatureVerifier().verifyInboundSignature({
       headers: req.headers,
       rawBody: req.rawBody,
-      url: config.publicUrl + req.originalUrl,
+      url: config.server.publicUrl + req.originalUrl,
       params: req.body || {},
     });
     if (!ok) {
@@ -220,7 +220,7 @@ export function makeVoiceRoutes({
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
 
-      if (config.voiceEngine === VOICE_ENGINE.REALTIME) {
+      if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
         return res.type("text/xml").send(render(streamDirectives(call), provider));
       }
 
@@ -335,7 +335,7 @@ export function makeVoiceRoutes({
     store.markAnswered(call.id);
     store.save();
 
-    if (config.voiceEngine === VOICE_ENGINE.REALTIME) {
+    if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
       return res.type("text/xml").send(render(streamDirectives(call), call.provider));
     }
 
