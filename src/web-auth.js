@@ -688,47 +688,45 @@ const PENDING_ALLOWED_STATUS = Object.freeze(
   new Set([TENANT_STATUS.ACTIVE, TENANT_STATUS.SUSPENDED]),
 );
 
-// ---- webAuth ---------------------------------------------------------
-// Express-Middleware: prueft Session-Cookie (signiert), laedt Session + Account,
-// setzt req.tenant. Fail-closed: kein Detail-Leak in Fehlerkoerpern, kein Token-
-// oder Cookie-Logging. Unerwartete Fehler -> 401. Status-Gate: nur active passiert
-// (suspended/closed -> 403); die suspended-erreichbare Variante ist webAuthAllowPending.
-export function webAuth(deps) {
-  return async function webAuthMiddleware(req, res, next) {
-    try {
-      const ctx = await resolveWebSession(deps, req);
-      if (!ctx) return res.status(401).json({ error: "Unauthorized" });
-      if (ctx.acct.status !== TENANT_STATUS.ACTIVE)
-        return res.status(403).json({ error: "Forbidden" });
-      req.tenant = tenantContextOf(ctx);
-      next();
-    } catch {
-      res.status(401).json({ error: "Unauthorized" });
-    }
+// ---- webAuthWithStatusGate (gemeinsames Middleware-Skelett, G5/G26) ----
+// Higher-Order-Factory: baut aus einem Status-Praedikat eine Web-Session-Middleware.
+// Die fail-closed-Mechanik ist in BEIDEN Varianten strukturell identisch - kein Cookie/
+// keine gueltige Session -> 401; verbotener Status -> 403; req.tenant NUR im erlaubten
+// Zweig gesetzt; unerwarteter Fehler -> generischer 401 (kein Detail-/Token-/Cookie-Leak).
+// Die EINZIGE gewollte Divergenz ist statusAllowed(status): active-only (webAuth) vs.
+// active|suspended (webAuthAllowPending). resolveWebSession/tenantContextOf bleiben die
+// EINE Aufloesungsquelle - hier NICHT dupliziert, NICHT umgangen.
+function webAuthWithStatusGate(statusAllowed) {
+  return function makeWebAuthMiddleware(deps) {
+    return async function webAuthGateMiddleware(req, res, next) {
+      try {
+        const ctx = await resolveWebSession(deps, req);
+        if (!ctx) return res.status(401).json({ error: "Unauthorized" });
+        if (!statusAllowed(ctx.acct.status))
+          return res.status(403).json({ error: "Forbidden" });
+        req.tenant = tenantContextOf(ctx);
+        next();
+      } catch {
+        res.status(401).json({ error: "Unauthorized" });
+      }
+    };
   };
 }
 
+// ---- webAuth ---------------------------------------------------------
+// Active-only-Gate: nur active passiert, suspended/closed/unerwartet -> 403. Haengt an
+// /state + Settings-Routen (Tenant-Daten). Die suspended-erreichbare Variante ist
+// webAuthAllowPending. Fail-closed: kein Detail-/Token-/Cookie-Leak (siehe Skelett oben).
+export const webAuth = webAuthWithStatusGate((status) => status === TENANT_STATUS.ACTIVE);
+
 // ---- webAuthAllowPending (P5) ----------------------------------------
 // Variante fuer die drei Self-Aktivierungs-Routen (setup-checkout/return/subscribe) +
-// billing/status: verlangt eine GUELTIGE Session (fail-closed: kein/abgelaufenes Cookie
-// -> 401) und bindet jede Wirkung an den EIGENEN Tenant, laesst aber suspended durch -
-// SONST koennte sich ein frisch eingeloggter Tenant nie selbst aktivieren (403-Deadlock).
-// closed/unbekannt bleibt HART gesperrt (kein Reaktivieren). Oeffnet KEINE Tenant-Daten:
-// nur active-only webAuth haengt an /state + Settings-Routen.
-export function webAuthAllowPending(deps) {
-  return async function webAuthAllowPendingMiddleware(req, res, next) {
-    try {
-      const ctx = await resolveWebSession(deps, req);
-      if (!ctx) return res.status(401).json({ error: "Unauthorized" });
-      if (!PENDING_ALLOWED_STATUS.has(ctx.acct.status))
-        return res.status(403).json({ error: "Forbidden" });
-      req.tenant = tenantContextOf(ctx);
-      next();
-    } catch {
-      res.status(401).json({ error: "Unauthorized" });
-    }
-  };
-}
+// billing/status: laesst zusaetzlich suspended durch (frisch eingeloggt, darf sich selbst
+// aktivieren - sonst 403-Deadlock), closed/unbekannt bleibt HART gesperrt (kein
+// Reaktivieren). Oeffnet KEINE Tenant-Daten; nur active-only webAuth haengt an /state.
+export const webAuthAllowPending = webAuthWithStatusGate((status) =>
+  PENDING_ALLOWED_STATUS.has(status),
+);
 
 // ---- adminOnly -------------------------------------------------------
 // Express-Middleware NACH webAuth (braucht req.tenant): erlaubt nur Admins -
