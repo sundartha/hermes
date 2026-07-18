@@ -14,7 +14,8 @@ const { withConfigOverrides } = makeConfigOverrides(config);
 
 // EINE Quelle (G5) fuer die 13 erwarteten Namespace-Groessen (OQ-3, PLAN-POLISH-A.md).
 const EXPECTED_NAMESPACE_COUNTS = {
-  safety: 10,
+  // P3.1: capFarewellLeadMs ergaenzt (Cap-Vorlauf-Ansage vor dem harten Max-Dauer-Cap).
+  safety: 11,
   billing: 15,
   provisioning: 11,
   auth: 15,
@@ -29,9 +30,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 100;
+const EXPECTED_TOTAL_KEYS = 101;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (100 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (101 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -73,7 +74,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
     for (const key of keys) {
       const currentValue = config[namespace][key];
       // Arrays/nested Objekte sind hier nicht das Ziel: der Test beweist die Getter/Setter-
-      // statt-Kopie-Eigenschaft an den primitiven Blaettern (94 von 100).
+      // statt-Kopie-Eigenschaft an den primitiven Blaettern (95 von 101).
       if (currentValue && typeof currentValue === "object") continue;
       checked += 1;
       const sentinel = sentinelFor(currentValue);
@@ -89,7 +90,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
       assert.strictEqual(config[namespace][key], currentValue, `${namespace}.${key} restauriert`);
     }
   }
-  assert.equal(checked, 94, "alle primitiven Blaetter (100 - 3 Arrays - 3 nested Objekte) geprueft");
+  assert.equal(checked, 95, "alle primitiven Blaetter (101 - 3 Arrays - 3 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

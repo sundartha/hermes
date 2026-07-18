@@ -323,15 +323,26 @@ function unansweredAgentTurns(transcript) {
   return count;
 }
 
-// EINE strukturell erzwungene Invariante (G27): der Outbound-Frueh-
+// EINE strukturell erzwungene Invariante (G27): der Frueh-
 // auflege-Schutz gilt fuer JEDE Voice-Engine (Budget-agentTurn UND Realtime-bridge.js),
-// nicht mehr nur per Kommentar. Unterdrueckt end_call, solange (i) keine SUBSTANZIELLE
-// Anrufer-Aeusserung vorliegt UND (ii) die Zahl konsekutiver Leer-Turns die Schwelle
-// (maxEmptyTurns) noch nicht erreicht hat. Nur Outbound; Inbound liefert immer false
-// (Direction-Kurzschluss zuerst -> robust auch ohne transcript-Feld). Rein, kein
-// Nebeneffekt (N7). unansweredAgentTurns bleibt modul-privat.
+// nicht mehr nur per Kommentar. Unterdrueckt end_call, solange (i) keine Anrufer-
+// Aeusserung vorliegt UND (ii) die Zahl konsekutiver Leer-Turns die Schwelle
+// (maxEmptyTurns) noch nicht erreicht hat. Rein, kein Nebeneffekt (N7).
+// unansweredAgentTurns bleibt modul-privat.
+//
+// P3.3 (PLAN-CONVERSATION-QUALITY-V2): der fruehere Direction-Kurzschluss
+// ("if (call.direction !== 'outbound') return false") ist WEG - er liess exakt die
+// RCA-R3-Fehlerklasse (voreiliges Auflegen, bevor der Gegenueber ueberhaupt sprach) fuer
+// Inbound offen. callerHasSpoken bleibt bewusst richtungsabhaengig (TG-REC-1): fuer Inbound
+// zaehlt JEDE nicht-leere caller-Zeile als "gesprochen", nicht erst eine substanzielle.
+// Der Guard hebt sich inbound damit FRUEHER als outbound - genau der richtige Bias auf
+// einem Pfad, den Fremde ausloesen (siehe Kosten-Abwaegung in PLAN-SECURITY.md).
+// KOSTEN (benannt, bounded): ein Inbound-Call, bei dem niemand spricht (Anrufbeantworter,
+// Fehlwahl, Rauschen), kann sich jetzt bis zu maxEmptyTurns Turns lang nicht selbst
+// beenden. LLM-Token laufen richtungsunabhaengig in den Budget-Guard; Carrier-Minuten NICHT
+// (reconcileOutboundVoiceBudget steigt bei Inbound aus). Begrenzt wird die Exposition
+// allein durch den 180-s-Hard-Cap. maxEmptyTurns fuer Inbound NIE hochdrehen.
 export function shouldSuppressEndCall(call) {
-  if (call.direction !== "outbound") return false;
   const substantialCallerSeen = callerHasSpoken(call);
   const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.voice.maxEmptyTurns;
   return !substantialCallerSeen && !emptyTurnsReached;

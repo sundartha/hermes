@@ -382,6 +382,16 @@ export function recordFailureReason(callId, reason) {
   return call;
 }
 
+// P3.2: ephemerer No-Speech-Streak - KEIN save() (das Feld ist wie reserveCents nicht
+// persistenz-tragend; ein Flush aus anderem Anlass nimmt es folgenlos mit).
+export function countNoSpeechTurn(callId) {
+  return ops.countNoSpeechTurn(load(), callId);
+}
+
+export function clearNoSpeechStreak(callId) {
+  ops.clearNoSpeechStreak(load(), callId);
+}
+
 export function countOutboundCallsSince(sinceIso, filters = {}) {
   return ops.countOutboundCallsSince(load(), sinceIso, filters);
 }

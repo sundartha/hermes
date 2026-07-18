@@ -137,6 +137,16 @@ export const LOCALES = Object.freeze({
     turnErrorSpeech:
       "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es später erneut.",
     noSpeechReprompt: "Können Sie das bitte wiederholen?",
+    // P3.2: zweite Stufe der No-Speech-Staffel (nach dem zweiten leeren Gather) - deutlicher
+    // als die knappe Rueckfrage, aber noch keine Beendigung.
+    noSpeechRepromptAgain: "Ich höre Sie leider immer noch nicht. Sind Sie noch in der Leitung?",
+    // P3.2: dritte Stufe - wuerdevoller Ausstieg statt Endlosschleife bis zum stillen Cap.
+    noSpeechFarewell:
+      "Ich kann Sie leider nicht hören. Ich versuche es später noch einmal. Auf Wiederhören.",
+    // P3.1: deterministischer Abschluss-Satz kurz vor dem harten Max-Dauer-Cap. KEIN
+    // LLM-Text - er muss auch dann kommen, wenn das Modell gerade klemmt.
+    capFarewellSpeech:
+      "Ich muss das Gespräch jetzt leider beenden. Vielen Dank für Ihre Zeit. Auf Wiederhören.",
     budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhören.",
     greetingDefault: DEFAULT_GREETING,
     // I2 (call-quality Impl-1): Turn-Fallback-Satz (claude.js agentTurn), falls das
@@ -179,6 +189,11 @@ export const LOCALES = Object.freeze({
       "Désolé, je ne peux pas traiter votre demande pour le moment. Je vous recontacte dès que possible. Au revoir.",
     turnErrorSpeech: "Désolé, un problème technique est survenu. Veuillez réessayer plus tard.",
     noSpeechReprompt: "Pouvez-vous répéter ?",
+    noSpeechRepromptAgain: "Je ne vous entends toujours pas. Êtes-vous encore en ligne ?",
+    noSpeechFarewell:
+      "Je ne vous entends malheureusement pas. Je réessaierai plus tard. Au revoir.",
+    capFarewellSpeech:
+      "Je dois malheureusement terminer l'appel maintenant. Merci pour votre temps. Au revoir.",
     budgetExhaustedHangup: "Le budget de démonstration est épuisé. Au revoir.",
     // FR-Greeting-Default: {owner} wird zur Laufzeit ersetzt (wie DE). Nur fuer FR-Tenants
     // relevant; der Bestands-/Owner-Tenant traegt weiter den DE-Seed (kein Backfill).
@@ -222,6 +237,9 @@ export const LOCALES = Object.freeze({
       "Sorry, I can't handle your request right now. I'll get back to you as soon as possible. Goodbye.",
     turnErrorSpeech: "Sorry, a technical problem occurred. Please try again later.",
     noSpeechReprompt: "Could you repeat that?",
+    noSpeechRepromptAgain: "I still can't hear you. Are you still there?",
+    noSpeechFarewell: "I'm afraid I can't hear you. I'll try again later. Goodbye.",
+    capFarewellSpeech: "I have to end the call now. Thank you for your time. Goodbye.",
     budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",
     greetingDefault:
       "Hi, this is the AI assistant of {owner}. {owner} can't take the call right now. I can take a message or arrange an appointment. How can I help?",

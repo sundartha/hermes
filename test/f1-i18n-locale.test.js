@@ -136,6 +136,9 @@ test("EN-Bundle: statische Server-Texte (Reprompt/Fehler/Hangup/Greeting) sind e
     "llmDegradedSpeech",
     "turnErrorSpeech",
     "noSpeechReprompt",
+    "noSpeechRepromptAgain",
+    "noSpeechFarewell",
+    "capFarewellSpeech",
     "budgetExhaustedHangup",
     "greetingDefault",
   ]) {
@@ -159,6 +162,20 @@ test("Statische Texte: DE-Wortlaut gepinnt (Umlaute seit P1, kein Drift durch da
     "Entschuldigung, da ist ein technisches Problem aufgetreten. Bitte versuchen Sie es später erneut.",
   );
   assert.equal(LOCALES.de.noSpeechReprompt, "Können Sie das bitte wiederholen?");
+  // P3.2: die zwei weiteren Eskalations-Stufen der No-Speech-Staffel.
+  assert.equal(
+    LOCALES.de.noSpeechRepromptAgain,
+    "Ich höre Sie leider immer noch nicht. Sind Sie noch in der Leitung?",
+  );
+  assert.equal(
+    LOCALES.de.noSpeechFarewell,
+    "Ich kann Sie leider nicht hören. Ich versuche es später noch einmal. Auf Wiederhören.",
+  );
+  // P3.1: deterministischer Abschluss-Satz kurz vor dem harten Max-Dauer-Cap.
+  assert.equal(
+    LOCALES.de.capFarewellSpeech,
+    "Ich muss das Gespräch jetzt leider beenden. Vielen Dank für Ihre Zeit. Auf Wiederhören.",
+  );
   assert.equal(
     LOCALES.de.budgetExhaustedHangup,
     "Das Demo-Budget ist aufgebraucht. Auf Wiederhören.",

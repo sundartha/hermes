@@ -29,6 +29,11 @@ const SPOKEN_DE_FIELDS = [
   ["S5 budgetExhaustedHangup", LOCALES.de.budgetExhaustedHangup],
   ["S6 turnFallbackSpeech.inbound", LOCALES.de.turnFallbackSpeech.inbound],
   ["S7 turnFallbackSpeech.outbound", LOCALES.de.turnFallbackSpeech.outbound],
+  // P3.2: die zwei weiteren Eskalations-Stufen der No-Speech-Staffel.
+  ["S9 noSpeechRepromptAgain", LOCALES.de.noSpeechRepromptAgain],
+  ["S10 noSpeechFarewell", LOCALES.de.noSpeechFarewell],
+  // P3.1: deterministischer Abschluss-Satz kurz vor dem harten Max-Dauer-Cap.
+  ["S11 capFarewellSpeech", LOCALES.de.capFarewellSpeech],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {

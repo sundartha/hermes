@@ -240,6 +240,10 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // P3.2: ephemerer No-Speech-Streak - Wrapper-Paritaet zu json.js. KEIN save(): es gibt
+    // keine Spalte (Muster releaseOutboundReserve), der Flush-Spaltenblock bleibt unberuehrt.
+    countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),
+    clearNoSpeechStreak: (callId) => ops.clearNoSpeechStreak(requireState(), callId),
     countOutboundCallsSince: (sinceIso, filters = {}) =>
       ops.countOutboundCallsSince(requireState(), sinceIso, filters),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),

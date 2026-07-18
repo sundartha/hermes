@@ -454,8 +454,24 @@ for (const { label, value, callId, recorded } of INBOUND_RECORD_GATE_CASES) {
 // Store/HTTP-Mock - Plain-Object-Calls reichen (rein, kein Nebeneffekt). Nutzt dieselbe
 // MAX_EMPTY_TURNS=2/CALLER_SUBSTANCE_MIN_LEN=2-Schwelle aus before() oben.
 
-test("shouldSuppressEndCall: inbound liefert immer false (Direction-Kurzschluss, auch ohne substanzielle Zeile)", () => {
-  const call = { direction: "inbound", transcript: [] };
+test("P3.3: inbound OHNE Anrufer-Zeile unter der Leer-Turn-Schwelle -> true (Symmetrisierung)", () => {
+  const call = { direction: "inbound", transcript: [{ role: "agent", text: "Guten Tag." }] };
+  assert.equal(shouldSuppressEndCall(call), true);
+});
+
+test("P3.3: inbound bei maxEmptyTurns unbeantworteten Agent-Turns -> false (Deadlock-Freigabe)", () => {
+  const call = {
+    direction: "inbound",
+    transcript: [
+      { role: "agent", text: "Guten Tag." },
+      { role: "agent", text: "Sind Sie noch dran?" },
+    ],
+  };
+  assert.equal(shouldSuppressEndCall(call), false);
+});
+
+test("P3.3: inbound MIT (auch nicht-substanzieller) Anrufer-Zeile -> false (TG-REC-1 bleibt)", () => {
+  const call = { direction: "inbound", transcript: [{ role: "caller", text: "." }] };
   assert.equal(shouldSuppressEndCall(call), false);
 });
 
