@@ -168,7 +168,7 @@ function migrateCalendarToMap(calendar) {
   return map;
 }
 
-// Profile aus config.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
+// Profile aus config.tenancy.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
 // Render (free plan) hat ein fluechtiges Dateisystem -> ohne diesen Seed waeren
 // Profile nach jedem Neustart weg. Schluessel sind seit Phase S tenantIds (vormals
 // emails) - der Operator stellt PROFILES_JSON auf tenantId-Keys um (.env.example).
@@ -193,7 +193,7 @@ function seedProfilesFromEnv() {
   state.profiles = { ...seeded, ...state.profiles };
 }
 
-// Owner-/Betriebsnummer aus config.ownerNumberSeed (Env OWNER_NUMBER_SEED) beim Boot
+// Owner-/Betriebsnummer aus config.provisioning.ownerNumberSeed (Env OWNER_NUMBER_SEED) beim Boot
 // idempotent in den json-Store seeden (render-owner-autoseed). Render (free plan) hat ein
 // fluechtiges Dateisystem -> ohne diesen Seed waere nach jedem Deploy keine aktive
 // Owner-Nummer im Store und der Boot-Guard (server.js) braeche fail-closed mit exit(1) ab.

@@ -131,7 +131,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
 
     // F1 Phase 6 - Land/Sprache bei der Registrierung. Praezedenz (fail-safe):
     // User-Wahl (body.country, EXPLIZIT, autoritativ R4) > IP-Geo-VORSCHLAG (lokaler
-    // Lookup, nur bei GEO_ENABLED) > config.provisioningCountry > DEFAULT_COUNTRY. Die IP
+    // Lookup, nur bei GEO_ENABLED) > config.provisioning.provisioningCountry > DEFAULT_COUNTRY. Die IP
     // (req.ip, proxy-aware via 'trust proxy') verlaesst den Prozess NIE - der Lookup ist
     // streng lokal. Eine gespoofte IP aendert nichts Autoritatives: ohne User-Wahl ist sie
     // nur ein Vorschlag, mit User-Wahl wird sie ueberstimmt. language wird aus dem Land
@@ -145,7 +145,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
       fallbackCountry: config.provisioning.provisioningCountry,
     });
     const language = languageForCountry(country);
-    // Kauf-Land (number.country) ENTKOPPELT vom Herkunftsland: config.forceNumberCountry
+    // Kauf-Land (number.country) ENTKOPPELT vom Herkunftsland: config.provisioning.forceNumberCountry
     // (z.B. "US") ueberschreibt NUR, wo die Nummer gekauft wird - die Sprache bleibt am
     // erkannten Herkunftsland (language oben). Leer -> Kauf-Land = Herkunftsland (byte-
     // identisch). tenant.country bleibt das Herkunftsland (Quelle fuer Sprache/Analytics).

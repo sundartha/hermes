@@ -30,7 +30,7 @@ import { PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
 import crypto from "node:crypto";
 
-// OUT-05 (F2): Test-Seam. fakeVoice ersetzt den Provider-Transport, wenn config.fakeOriginate
+// OUT-05 (F2): Test-Seam. fakeVoice ersetzt den Provider-Transport, wenn config.safety.fakeOriginate
 // gesetzt ist (boot-gehaertet, boot-guard.js) - EIN zentraler Registry-Gate, server.js bleibt
 // davon unberuehrt. originateCall liefert einen synthetischen, netzfreien Erfolg; endCall ist
 // ein No-op. Alle Sicherheits-Gates (Budget/Denylist/Land/Stundenlimit/Offenlegung/Signatur)

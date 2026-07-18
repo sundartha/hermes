@@ -1,7 +1,7 @@
 // Strukturierte, PII-FREIE Mess-Instrumentierung (L0). EINE Stelle, die Latenz-/
 // Loop-/STT-Gap-Signale als parsebare Log-Zeilen ausgibt. Traegt NIE params, Keys
 // oder Transkript - nur Outcomes, Zaehler, Millisekunden, Tool-NAMEN. Hinter dem
-// Master-Schalter config.metricsEnabled (Default aus = byte-identisch, auch stdout).
+// Master-Schalter config.metrics.metricsEnabled (Default aus = byte-identisch, auch stdout).
 // DIP: enabled/log/now/maxTrackedCalls injizierbar -> Unit-Test ohne stdout-Scraping.
 import { config } from "./config.js";
 

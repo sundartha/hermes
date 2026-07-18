@@ -1,4 +1,4 @@
-// UI-Registry: waehlt hinter dem Master-Schalter (config.mcpUiEnabled) GENAU EINEN
+// UI-Registry: waehlt hinter dem Master-Schalter (config.tenancy.mcpUiEnabled) GENAU EINEN
 // Renderer. Default = der MCP-native Renderer (offizieller "MCP Apps"-Standard, von
 // Claude/Copilot/Goose ... gerendert). Erklaert ein Host explizit die ChatGPT-Skybridge-
 // Konvention (disjunkter mimeType), gewinnt dieser Adapter.

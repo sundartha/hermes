@@ -405,7 +405,7 @@ export function makePgStore(runner) {
       return save();
     },
 
-    // Default = config.retentionDays, identisch zum json-Backend: der einzige
+    // Default = config.privacy.retentionDays, identisch zum json-Backend: der einzige
     // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
     // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).
     pruneOldData(days = config.privacy.retentionDays) {

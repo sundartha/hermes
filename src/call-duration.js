@@ -20,7 +20,7 @@ import { MS_PER_SECOND } from "./utils/timer.js";
 // Teil dieser Runde. Das ist also weiterhin eine ECHTE Duplizierung (G5), keine aufgeloeste -
 // nur die Positionierung ist jetzt korrekt fuer eine kuenftige Zusammenfuehrung vorbereitet.
 //
-// Config-frei (Muster state-ops.js callLimitMs): der globale Default (config.maxCallDurationS)
+// Config-frei (Muster state-ops.js callLimitMs): der globale Default (config.safety.maxCallDurationS)
 // wird vom Aufrufer hereingereicht - dieses Modul importiert config NICHT, bleibt rein und
 // offline unit-testbar.
 //

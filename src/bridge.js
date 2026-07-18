@@ -170,7 +170,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
       openaiWs.on("open", () => {
         // Sprachabhaengige Realtime-Felder aus dem EINEN i18n-Bundle (Phase 5). localeFor
         // faellt fail-safe auf de zurueck (unbekannte/fehlende call.language -> Bestand).
-        // DE: realtimeVoice/whisperLocale sind null -> config.realtimeVoice bzw. Whisper-
+        // DE: realtimeVoice/whisperLocale sind null -> config.voice.realtimeVoice bzw. Whisper-
         // Auto-Detect (kein language-Feld) -> byte-identisch zum Bestand.
         const loc = localeFor(call.language);
         // Whisper-language nur setzen, wenn das Bundle einen ISO-Code liefert (FR/EN);

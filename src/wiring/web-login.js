@@ -132,7 +132,7 @@ export async function wireWebLogin({
       // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben. Muss im
       // WorkOS-Dashboard als Sign-out-Redirect-URL registriert sein.
       postLogoutUrl: config.server.publicUrl + LOGIN_ROUTE,
-      // Lokaler Dev-Login-Shim (NUR mit config.devLoginEnabled, fail-closed): mintet dieselbe
+      // Lokaler Dev-Login-Shim (NUR mit config.auth.devLoginEnabled, fail-closed): mintet dieselbe
       // Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
       devLoginEnabled: config.auth.devLoginEnabled,
       // Signup-Spiegel-Nachzug: zieht den per accounts.upsertOnFirstLogin (mintSession) frisch

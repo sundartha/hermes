@@ -369,7 +369,7 @@ function callStartAnchorMs(call) {
 }
 
 // Hartes Max-Dauer-Limit dieses Calls in ms (call-eigenes maxDurationS vor injiziertem Default).
-// config-frei: defaultMaxDurationS reicht der Aufrufer (server.js: config.maxCallDurationS) herein.
+// config-frei: defaultMaxDurationS reicht der Aufrufer (server.js: config.safety.maxCallDurationS) herein.
 function callLimitMs(call, defaultMaxDurationS) {
   return (call.maxDurationS || defaultMaxDurationS) * MS_PER_SECOND;
 }
@@ -1512,7 +1512,7 @@ export function markMeterEventsSent(s, eventIds) {
 }
 
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
-// gegen config.maxBudgetCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
+// gegen config.billing.maxBudgetCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
 // (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
 // Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt. Rein
 // Integer costCents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei

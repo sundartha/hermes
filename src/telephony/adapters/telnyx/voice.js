@@ -157,7 +157,7 @@ export const telnyxVoice = {
   },
 
   // Laufenden Call beenden (Twilio-kompatibel: Status=completed). Braucht den
-  // account_sid (config.telnyxAccountSid) zusaetzlich zum CallSid - account-weite
+  // account_sid (config.telephony.telnyxAccountSid) zusaetzlich zum CallSid - account-weite
   // Konstante, daher aus config statt durch den Port-Vertrag gereicht (endCall
   // bekommt nur den CallSid, byte-identisch zum Twilio-Adapter).
   async endCall(callSid) {

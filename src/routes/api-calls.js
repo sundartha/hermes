@@ -28,7 +28,7 @@ import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
 // NUR bool/count, NIE der Kontext-Inhalt selbst (kein zweiter Transportweg fuer
 // HINTERGRUND-Daten). active=false, wenn der Kanal komplett abgeschaltet ist
-// (config.assistantContextEnabled aus - context ist dann IMMER null, s.o.).
+// (config.tenancy.assistantContextEnabled aus - context ist dann IMMER null, s.o.).
 function contextReceivedMeta(context, config) {
   return {
     active: config.tenancy.assistantContextEnabled,

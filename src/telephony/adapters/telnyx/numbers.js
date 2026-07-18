@@ -1,6 +1,6 @@
 // Telnyx-Adapter: NumberProvisioning (searchNumbers/orderNumber/releaseNumber)
 // ueber die Telnyx-v2-REST-API. Loest ECHTES Geld aus (orderNumber)
-// -> nur ueber die gegatete Onboarding-Route + config.maxNumbers-Notbremse erreichbar.
+// -> nur ueber die gegatete Onboarding-Route + config.provisioning.maxNumbers-Notbremse erreichbar.
 // Kein SDK: fetch + JSON (Bearer). API-Key NIE in Fehlermeldungen leaken (Regel 4).
 //
 // Verifiziert gegen die Telnyx-Doku (2026-06-15), live UNBESTAETIGT (mit dem Owner

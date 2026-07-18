@@ -91,7 +91,7 @@ function paymentView(store, config, tenant) {
 // provisioning-geo.js) - GENAU dieselbe Formel, die runProvisioningDrain (server.js) beim
 // ECHTEN Kauf anwendet (EINE Quelle, kein Drift zwischen Anzeige und tatsaechlichem Hold-
 // Betrag). tenantGeo liest das HERKUNFTSland, das /api/onboard bereits gesetzt hat; das
-// tatsaechliche KAUF-Land kann davon abweichen (config.forceNumberCountry, z.B. US -
+// tatsaechliche KAUF-Land kann davon abweichen (config.provisioning.forceNumberCountry, z.B. US -
 // dieselbe Override-Kombination wie requestNumberForPaidTenant in provision-trigger.js,
 // via resolveNumberCountry, G5). Noch kein Onboard (kein country, kein Override) ->
 // holdAmountForCountry faellt auf den globalen Default. Nur bei PAYMENT_ENABLED relevant

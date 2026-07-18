@@ -29,7 +29,7 @@ const VOICE_PROFILE_EN = "en-female-neural";
 // (de/fr/en), NICHT das BCP-47. Daher zwei NEUE Felder statt Wiederverwendung -
 // dieselbe eine Quelle, nur die richtigen Werte fuer den richtigen Konsumenten.
 //
-// realtimeVoice fuer DE bewusst null: die Bridge faellt dann auf config.realtimeVoice
+// realtimeVoice fuer DE bewusst null: die Bridge faellt dann auf config.voice.realtimeVoice
 // (Env REALTIME_VOICE, Default "alloy") zurueck -> DE byte-identisch zum Bestand und
 // Env-uebersteuerbar, statt "alloy" doppelt zu verdrahten. FR/EN tragen eine kuratierte
 // OpenAI-Voice (R10 fail-closed: unbekannte Voice lehnt der Provider ab -> Live-Smoke-
@@ -88,7 +88,7 @@ export const LOCALES = Object.freeze({
     sttLocale: "de-DE", // STT BCP-47 (Phase 3: twilio/telnyx Gather-Render)
     voiceProfile: VOICE_PROFILE_DE, // TTS-Voice-Profil (Phase 3: render TTS)
     // OpenAI-Realtime (Phase 5, NUR VOICE_ENGINE=realtime). null -> Bridge nutzt
-    // config.realtimeVoice bzw. laesst Whisper-language weg (DE byte-identisch).
+    // config.voice.realtimeVoice bzw. laesst Whisper-language weg (DE byte-identisch).
     realtimeVoice: null,
     whisperLocale: null,
     // Realtime-Opener (Steuertext fuer response.create). disclosure ist der bereits
