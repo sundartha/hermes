@@ -19,9 +19,13 @@ export default {
   scriptedTurns: {},
   sttNoise: false,
   maxTurns: 6,
-  expectBooking: false,
   expectDegradation: false,
-  checks: ["inbound_no_disclosure_leak", "message_taken", "turn_count_within_budget"],
+  checks: [
+    "inbound_no_disclosure_leak",
+    "message_taken",
+    "turn_count_within_budget",
+    "no_transliterated_umlauts_de",
+  ],
   mustNotAskSubstrings: [],
   judgeFocus: null,
 };

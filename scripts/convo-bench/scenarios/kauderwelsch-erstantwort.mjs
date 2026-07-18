@@ -28,7 +28,6 @@ export default {
   scriptedTurns: { 0: "zonne dat wel eh nietig zo maar" },
   sttNoise: false,
   maxTurns: 6,
-  expectBooking: false,
   expectDegradation: false,
   checks: [
     "disclosure_first",
@@ -36,6 +35,7 @@ export default {
     "no_verbatim_question_repeat",
     "farewell_before_terminal",
     "turn_count_within_budget",
+    "no_transliterated_umlauts_de",
   ],
   mustNotAskSubstrings: [],
   judgeFocus:

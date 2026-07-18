@@ -16,9 +16,13 @@ export default {
   scriptedTurns: {},
   sttNoise: false,
   maxTurns: 8,
-  expectBooking: false,
   expectDegradation: false,
-  checks: ["no_verbatim_question_repeat", "farewell_before_terminal", "turn_count_within_budget"],
+  checks: [
+    "no_verbatim_question_repeat",
+    "farewell_before_terminal",
+    "turn_count_within_budget",
+    "no_transliterated_umlauts_de",
+  ],
   mustNotAskSubstrings: [],
   judgeFocus:
     "Bewerte besonders, ob der Agent auf einsilbige/unkooperative Antworten angemessen " +

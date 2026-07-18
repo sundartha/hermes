@@ -1,8 +1,10 @@
-// Szenario "friseur-voll" (Spec §9): outbound, Per-Call-Kontext AKTIV. Stammkunde bei
-// "Friseur Schneider" will den naechsten freien Termin bei Petra fuer einen
-// Herrenhaarschnitt, bevorzugt vormittags. Persona = Empfangsmitarbeiterin, die einen
-// Vormittags-Slot anbietet und am Ende eine konkrete Buchung bestaetigt (Realitaets-
-// Pruefung fuer booked_with_nongeneric_title).
+// Szenario "friseur-voll": outbound, Per-Call-Kontext AKTIV. Stammkunde bei "Friseur
+// Schneider" will den naechsten freien Termin bei Petra fuer einen Herrenhaarschnitt,
+// bevorzugt vormittags. Persona = Empfangsmitarbeiterin, die einen Vormittags-Slot
+// anbietet.
+// P4/P1b: Der Agent BUCHT nicht mehr (book_appointment existiert nicht mehr). Die
+// Erfolgsdefinition ist deshalb umgestellt - nicht "gebucht", sondern: den Terminwunsch
+// sauber als Nachricht fuer den Besitzer abliefern (message_taken) statt scheinzubuchen.
 export default {
   id: "friseur-voll",
   direction: "outbound",
@@ -20,18 +22,19 @@ export default {
     "Termin bei Petra fuer einen Herrenhaarschnitt, bevorzugt vormittags. Du hast am Dienstag " +
     "10:30 Uhr und Donnerstag 9:00 Uhr bei Petra frei. Antworte in GENAU 1 kurzem gesprochenen " +
     "Satz, KEIN Meta-Kommentar, keine Regieanweisungen. Biete proaktiv einen freien Slot an, " +
-    "wenn nach einem Termin gefragt wird, und bestaetige eine finale Buchung freundlich und knapp.",
+    "wenn nach einem Termin gefragt wird, und bestaetige eine getroffene Terminabsprache " +
+    "freundlich und knapp.",
   scriptedTurns: {},
   sttNoise: false,
   maxTurns: 8,
-  expectBooking: true,
   expectDegradation: false,
   checks: [
     "disclosure_first",
     "no_redundant_ask_about_briefed_info",
-    "booked_with_nongeneric_title",
+    "message_taken",
     "farewell_before_terminal",
     "turn_count_within_budget",
+    "no_transliterated_umlauts_de",
   ],
   mustNotAskSubstrings: ["welchen service", "was fuer einen termin"],
   judgeFocus: null,

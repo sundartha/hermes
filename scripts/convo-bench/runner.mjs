@@ -95,6 +95,16 @@ function recordAgentSay(transcript, parsed) {
   transcript.push({ role: "agent", text: parsed.sayTexts.join(" ") });
 }
 
+// P4: ein stiller Callee-Turn geht als LEERES SpeechResult raus; im Transkript steht
+// dafuer dieser Marker - Persona-Spiegelung und Judge duerfen keinen leeren Text-Block
+// sehen (die Anthropic-API lehnt ihn ab), und "der Angerufene sagt nichts" ist fuer den
+// Judge eine echte, bewertbare Information.
+const SILENT_TURN_TRANSCRIPT_TEXT = "[Schweigen - der Angerufene sagt nichts]";
+
+function calleeTranscriptText(callee) {
+  return callee.silent ? SILENT_TURN_TRANSCRIPT_TEXT : callee.text;
+}
+
 function extractCallIdFromUrl(url) {
   return new URL(url).searchParams.get("callId");
 }
@@ -259,7 +269,7 @@ export async function runScenarioRepeat({
         break;
       }
       if (callee.usage) personaUsages.push(callee.usage);
-      transcript.push({ role: "caller", text: callee.text });
+      transcript.push({ role: "caller", text: calleeTranscriptText(callee) });
 
       const turnRes = await fetch(parsed.nextTurnUrl, {
         method: "POST",
