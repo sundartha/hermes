@@ -115,6 +115,15 @@ export function eurToCents(eur) {
 // in config.js, routes/voice.js, telephony/call-lifecycle.js, routes/api-calls.js, boot.js.
 export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget", REALTIME: "realtime" });
 
+// PA-11 (S2-trailingslash, G5): EINE Quelle fuer das 7x wiederholte Trailing-Slash-
+// Idiom. Entfernt genau EINEN abschliessenden Slash, damit `${base}/pfad` nie zu
+// `//pfad` wird (kanonische Basis-URL). Regex NICHT global -> "x//" bleibt "x/" (nur
+// der letzte Slash faellt) - Bestandsverhalten von .replace(/\/$/,"") an allen 7 URL-
+// Configs. Reine Funktion (kein Nebeneffekt).
+export function stripTrailingSlash(url) {
+  return url.replace(/\/$/, "");
+}
+
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -171,7 +180,7 @@ const rawConfig = {
   // ---- Telnyx (zweiter Provider, P5; alle optional) ----
   telnyxApiKey: process.env.TELNYX_API_KEY || "", // SECRET - nie loggen/leaken
   telnyxPublicKey: process.env.TELNYX_PUBLIC_KEY || "", // Ed25519-Public-Key des Telnyx-Accounts (verify)
-  telnyxApiBase: (process.env.TELNYX_API_BASE || "https://api.telnyx.com").replace(/\/$/, ""),
+  telnyxApiBase: stripTrailingSlash(process.env.TELNYX_API_BASE || "https://api.telnyx.com"),
   // TeXML-Application/Connection-ID: haelt die Voice-URL beim Provider, Pflicht fuer
   // Telnyx-Outbound (originateCall POST /v2/texml/calls/{connection_id}). Leer ->
   // Telnyx-Outbound wirft (fail-closed), Twilio-Outbound unberuehrt.
@@ -213,7 +222,7 @@ const rawConfig = {
     apiKey: (process.env.ELEVENLABS_API_KEY || "").trim(), // SECRET, nie loggen/leaken
     voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
     model: (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim(), // Latenz-optimiert
-    apiBase: (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim().replace(/\/$/, ""),
+    apiBase: stripTrailingSlash((process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim()),
     outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(), // Owner-Wahl mp3
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
       fallback: 4000,
@@ -323,7 +332,7 @@ const rawConfig = {
   // -> kein Hold/Capture, requested->provisioning->active wie bisher (byte-identisch).
   paymentEnabled: boolEnv("PAYMENT_ENABLED", process.env.PAYMENT_ENABLED, { fallback: false }),
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "", // SECRET - nie loggen/leaken
-  stripeApiBase: (process.env.STRIPE_API_BASE || "https://api.stripe.com").replace(/\/$/, ""),
+  stripeApiBase: stripTrailingSlash(process.env.STRIPE_API_BASE || "https://api.stripe.com"),
   // Einmalige Setup-Gebuehr pro Nummer in GANZZAHL Cents (Geld nie als Float, G26).
   // Bei PAYMENT_ENABLED Pflicht > 0 (assertConfig); 0 = kein Magic-Default.
   numberSetupFeeCents: numEnv("NUMBER_SETUP_FEE_CENTS", process.env.NUMBER_SETUP_FEE_CENTS, {
@@ -418,7 +427,7 @@ const rawConfig = {
 
   port: numEnv("PORT", process.env.PORT, { fallback: 3000, min: 0 }),
   // Render setzt RENDER_EXTERNAL_URL automatisch -> kein ngrok noetig
-  publicUrl: (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "").replace(/\/$/, ""),
+  publicUrl: stripTrailingSlash(process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || ""),
   // Import-Zeit-Snapshot der Produktions-Erkennung fuer Laufzeit-Konsumenten (z.B. der
   // /mcp-Auth-Bypass-Gate in auth.js). productionFootguns/assertConfig nutzen denselben
   // Begriff call-time ueber detectProduction() (injizierbarer Test-Seam).
@@ -661,7 +670,7 @@ const rawConfig = {
   mcpAuth: (process.env.MCP_AUTH || "").toLowerCase(),
   // OAuth-Issuer (IdP, z.B. WorkOS AuthKit). Das Gateway findet JWKS selbst ueber
   // <issuer>/.well-known/openid-configuration.
-  oauthIssuerUrl: (process.env.OAUTH_ISSUER_URL || "").replace(/\/$/, ""),
+  oauthIssuerUrl: stripTrailingSlash(process.env.OAUTH_ISSUER_URL || ""),
   // Erwartete Audience im Access-Token. Leer -> `${publicUrl}/mcp` (kanonische MCP-URL).
   oauthAudience: process.env.OAUTH_AUDIENCE || "",
 
@@ -676,7 +685,7 @@ const rawConfig = {
   // WorkOS User-Management API-Basis (authorize/authenticate). Die Umgebung wird ueber
   // client_id + API-Key unterschieden, NICHT ueber den Host -> derselbe Host fuer Staging
   // und Produktion. Konstanter Default; nur fuer Tests/Self-Hosting ueberschreibbar.
-  workosApiBase: (process.env.WORKOS_API_BASE || "https://api.workos.com").replace(/\/$/, ""),
+  workosApiBase: stripTrailingSlash(process.env.WORKOS_API_BASE || "https://api.workos.com"),
   // Admin-Allowlist (kommasepariert, E-Mails). Nur diese duerfen approve/suspend.
   adminEmails: (process.env.ADMIN_EMAILS || "")
     .split(",")
@@ -777,7 +786,7 @@ export function gatewayUrlForPort(port) {
   return `http://localhost:${port}`;
 }
 export function resolveGatewayUrl() {
-  return (process.env.GATEWAY_URL || gatewayUrlForPort(config.port)).replace(/\/$/, "");
+  return stripTrailingSlash(process.env.GATEWAY_URL || gatewayUrlForPort(config.port));
 }
 
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen
