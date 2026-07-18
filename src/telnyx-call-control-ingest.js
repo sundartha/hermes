@@ -11,6 +11,10 @@ import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
 import { terminateAndBillCall, billThunk } from "./telephony/call-termination.js";
 
+// Modul-Log-Tag: EINE Quelle fuer das Praefix aller Call-Control-Logs (G5/Magic-String;
+// Muster metrics.js LOG_PREFIX / telnyx-conversation-watchdog.js WATCHDOG_LOG_PREFIX).
+const CALL_CONTROL_LOG_PREFIX = "[voice/call-control]";
+
 // OBS-2: Log-Hygiene-Bound fuer rohe Telnyx-Protokoll-Token (event_type/status). Interner
 // Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (wie errors.js ERROR_DETAIL_MAX_LEN),
 // NICHT config.js (G35). Der /voice/call-control-Mount ist Ed25519-signaturgeprueft, der Body
@@ -31,7 +35,7 @@ function rawToken(value) {
 function logEventReceived(callId, body) {
   const env = eventEnvelope(body);
   console.log(
-    `[voice/call-control] event empfangen (call=${callId}) event_type=${rawToken(env?.event_type)} status=${rawToken(env?.payload?.status)}`,
+    `${CALL_CONTROL_LOG_PREFIX} event empfangen (call=${callId}) event_type=${rawToken(env?.event_type)} status=${rawToken(env?.payload?.status)}`,
   );
 }
 
@@ -86,7 +90,7 @@ export function makeCallControlIngest({
     clearOpeningSpeakTimer(call.id);
     const timer = setTimer(() => {
       Promise.resolve(onSpeakFailed(call, callControlId)).catch((err) =>
-        console.error("[voice/call-control]", err.message),
+        console.error(CALL_CONTROL_LOG_PREFIX, err.message),
       );
     }, config.telnyxAssistant.openingSpeakTimeoutS * MS_PER_SECOND);
     openingSpeakTimers.set(call.id, timer);
@@ -116,11 +120,11 @@ export function makeCallControlIngest({
   // unsichtbar. PII-frei (interne call.id, nie ccid/Secrets/Text).
   function logOpeningVoice(call, useAssistantVoice) {
     if (useAssistantVoice && assistantVoiceConfigured()) {
-      console.log(`[voice/call-control] opening_voice=elevenlabs (call=${call.id})`);
+      console.log(`${CALL_CONTROL_LOG_PREFIX} opening_voice=elevenlabs (call=${call.id})`);
       return;
     }
     const reason = useAssistantVoice ? "config_missing" : "retry_after_failure";
-    console.log(`[voice/call-control] opening_voice=azure reason=${reason} (call=${call.id})`);
+    console.log(`${CALL_CONTROL_LOG_PREFIX} opening_voice=azure reason=${reason} (call=${call.id})`);
   }
 
   // Der EINE Opening-Speak (kein zweiter Aufrufpfad, G5): Text/Stimme/Provider identisch,
@@ -150,10 +154,10 @@ export function makeCallControlIngest({
       // Bestands-Stimme. Ist das Token schon verbraucht, faellt der Fehler an den
       // Handler-Catch durch (kein startAssistant, heutiger Fail-Safe = (d)).
       if (!consumeOpeningRetry(call.id)) throw err;
-      console.warn(`[voice/call-control] Opening-Speak fehlgeschlagen (call=${call.id}) reason=speak_error -> Retry mit Bestands-Stimme`);
+      console.warn(`${CALL_CONTROL_LOG_PREFIX} Opening-Speak fehlgeschlagen (call=${call.id}) reason=speak_error -> Retry mit Bestands-Stimme`);
       await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
     }
-    console.log(`[voice/call-control] answered (call=${call.id}) -> Opening-Speak abgesetzt`);
+    console.log(`${CALL_CONTROL_LOG_PREFIX} answered (call=${call.id}) -> Opening-Speak abgesetzt`);
     armOpeningSpeakTimeout(call, callControlId); // afix-timeout: fehlt speak.ended/failed -> onSpeakFailed
   }
   // Regel 2: ai_assistant_start NUR als Reaktion auf das speak.ended des Disclosure-Nodes.
@@ -162,7 +166,7 @@ export function makeCallControlIngest({
     if (!call.assistantId) {
       // assistantId persistiert P5 bei der Origination; fehlt sie -> fail-safe skip
       // (kein Crash/Orphan; Disclosure + Settlement sind davon unabhaengig).
-      console.warn(`[voice/call-control] speak.ended ohne assistantId (call=${call.id}) -> kein Assistant-Start`);
+      console.warn(`${CALL_CONTROL_LOG_PREFIX} speak.ended ohne assistantId (call=${call.id}) -> kein Assistant-Start`);
       return;
     }
     // Auth des Shims laeuft ueber das statische Telnyx-Integration-Secret (E2); ai_assistant_start
@@ -174,7 +178,7 @@ export function makeCallControlIngest({
       // "multi" = KEIN Hint). Neutrale Sprache rein, Mapping auf den Provider-Hint im Adapter.
       language: call.language,
     });
-    console.log(`[voice/call-control] speak.ended (call=${call.id}) -> ai_assistant_start abgesetzt`);
+    console.log(`${CALL_CONTROL_LOG_PREFIX} speak.ended (call=${call.id}) -> ai_assistant_start abgesetzt`);
     watchdog.arm(call.id); // stab-p9: Dead-Air-Wache starten (ai_assistant_start ist raus)
   }
   // (c) Die Offenlegung ist per EVENT gescheitert -> genau EIN Retry mit der Bestands-Stimme.
@@ -194,11 +198,11 @@ export function makeCallControlIngest({
     // terminateViaCallControl: "Frischer Store-Stand pro Aufruf"); no-op bei nicht-aktivem Call.
     const freshCall = store.getCall(call.id);
     if (!freshCall || freshCall.status !== "active") {
-      console.warn(`[voice/call-control] Speak-Offenlegung-Timeout fuer bereits beendeten Call ignoriert (call=${call.id})`);
+      console.warn(`${CALL_CONTROL_LOG_PREFIX} Speak-Offenlegung-Timeout fuer bereits beendeten Call ignoriert (call=${call.id})`);
       return;
     }
     if (callControlId && consumeOpeningRetry(call.id)) {
-      console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> Retry mit Bestands-Stimme`);
+      console.warn(`${CALL_CONTROL_LOG_PREFIX} Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> Retry mit Bestands-Stimme`);
       await sendOpeningSpeak({ call, callControlId, useAssistantVoice: false });
       // afix-timeout (Review-Blocker Runde 1): auch der Retry-Leg kann verstummen, OHNE je ein
       // Terminal-Event zu senden (identisches Symptom wie der Erst-Speak) - ohne erneutes
@@ -213,7 +217,7 @@ export function makeCallControlIngest({
       if (store.getCall(call.id)?.status === "active") armOpeningSpeakTimeout(call, callControlId);
       return;
     }
-    console.warn(`[voice/call-control] Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> kein Assistant-Start`);
+    console.warn(`${CALL_CONTROL_LOG_PREFIX} Speak-Offenlegung fehlgeschlagen (call=${call.id}) -> kein Assistant-Start`);
   }
   // Regel 1: Terminal-Settlement (Ist-Minuten buchen + Reserve freigeben), idempotent
   // ueber billedAt/reserveReleased. Spiegelt den /voice/status-completed-Pfad; finishCall
@@ -234,7 +238,7 @@ export function makeCallControlIngest({
       bill: billThunk(finishCall, store, call.id),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
-    console.log(`[voice/call-control] hangup (call=${call.id}) -> Settlement finishCall`);
+    console.log(`${CALL_CONTROL_LOG_PREFIX} hangup (call=${call.id}) -> Settlement finishCall`);
   }
 
   // A6 (stab-p10): Read-through-Rehydrate. Kennt der Prozess-Spiegel den Call nicht
@@ -260,7 +264,7 @@ export function makeCallControlIngest({
       if (!call) {
         // unbekannter/fremder callId -> still 200, kein Existenz-Leck (Muster /voice/status).
         // Regel 4: nur der Grund-Token, NIE der rohe (Caller-kontrollierte) Query-Wert.
-        console.warn("[voice/call-control] Event fuer unbekannten callId ignoriert (reason=unknown_call)");
+        console.warn(`${CALL_CONTROL_LOG_PREFIX} Event fuer unbekannten callId ignoriert (reason=unknown_call)`);
         return;
       }
       const { eventType, callControlId } = parseCallControlEvent(req.body);
@@ -272,7 +276,7 @@ export function makeCallControlIngest({
       // unbekannt/sonstiges -> keine Wirkung (200 bereits gesendet)
     } catch (err) {
       // 200 ist raus; Fehler nur secret-frei loggen (kein Roh-Body/Key), keine unhandled rejection.
-      console.error("[voice/call-control]", err.message);
+      console.error(CALL_CONTROL_LOG_PREFIX, err.message);
     }
   };
 }
