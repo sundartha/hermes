@@ -120,3 +120,50 @@ test("P3-C2 (Gegenprobe): grosszuegige Restzeit -> normaler Turn, kein Cap-Absch
 // die unveraendert gruene Bestandssuite test/max-duration-live-cap.test.js +
 // test/max-duration-rearm.test.js (siehe Report). Diese Dateien pruefen terminateCappedCall/
 // armMaxDurationTimer und sind von P3.1 nicht angefasst worden.
+
+// P3-COV1 (Review-Blocker Runde 1): die KOMBINATION aus leerem Gather UND knapper Restzeit
+// war bisher ungetestet - P3-C1/P3-C2 decken den Cap-Vorlauf nur im agentTurn-Zweig ab,
+// P3-G4b/c die Staffel nur ohne knappe Restzeit. voice.js verzweigt bei "kein Speech gehoert
+// UND Caller hat schon gesprochen" auf capFarewellOutcome(call) ?? noSpeechOutcome(call) -
+// der Cap-Vorlauf MUSS auch hier vor der Staffel gewinnen, sonst wuerde Stufe 1 der Staffel
+// gerendert und der Timer-Backstop den Call Sekunden spaeter wortlos abschneiden (P3.1s
+// eigentlicher Zweck). Kein LLM-Mock noetig: dieser Zweig kehrt VOR agentTurn zurueck.
+test("P3-COV1: leerer Gather UND Restzeit unter CAP_FAREWELL_LEAD_MS -> Abschluss-Satz statt Staffel-Stufe-1", async () => {
+  const id = "call_p3cov1";
+  const srv = await startServer({
+    env: { CAP_FAREWELL_LEAD_MS: "20000" },
+    seed: seedState({
+      calls: [
+        seedCall({
+          id,
+          provider: "telnyx",
+          status: "active",
+          direction: "outbound",
+          maxDurationS: 20, // < CAP_FAREWELL_LEAD_MS=20000ms -> remaining ist ab Call-Start < Vorlauf
+          transcript: [{ role: "caller", text: "..." }], // callerHasSpoken=true -> No-Speech-Zweig
+        }),
+      ],
+    }),
+  });
+  try {
+    const res = await fetch(`${srv.localUrl}/voice/turn?callId=${id}`, {
+      method: "POST",
+      body: new URLSearchParams({ SpeechResult: "" }), // leer -> kein heard, No-Speech-Zweig
+    });
+    const body = await res.text();
+    assert.equal(res.status, 200);
+    assert.match(
+      body,
+      /<Say[^>]*>Ich muss das Gespräch jetzt leider beenden\. Vielen Dank für Ihre Zeit\. Auf Wiederhören\.<\/Say>/,
+    );
+    assert.match(body, /<Hangup/);
+    assert.doesNotMatch(body, /<Gather/, `Cap-Vorlauf darf keinen Folge-Gather rendern: ${body}`);
+    assert.doesNotMatch(
+      body,
+      /Können Sie das bitte wiederholen/,
+      `Staffel-Stufe-1 darf bei knapper Restzeit nicht rendern, der Cap-Vorlauf muss gewinnen: ${body}`,
+    );
+  } finally {
+    await srv.stop();
+  }
+});
