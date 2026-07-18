@@ -774,6 +774,50 @@ function guardedConfig(target, path = "config") {
   });
 }
 
+// ---- PA-12 (config-Hub-Entschaerfung): zweite, verschachtelte Zugriffs-Oberflaeche ----
+// 13 Namespaces ZUSAETZLICH zum erhaltenen Flach-Alias. Jedes Blatt ist ein GETTER auf
+// DENSELBEN rawConfig-Speicherort (kein zweiter numEnv/boolEnv, keine Wert-Kopie): ein
+// Override auf dem Flach-Pfad (Object.assign(config, ...) im Test, der Proxy hat kein
+// set-Trap -> schreibt rawConfig[key]) schlaegt so 1:1 auf config.<ns>.<key> durch (PM-1).
+// numEnv/boolEnv bleiben eager beim rawConfig-Aufbau oben; die Getter lesen nur den
+// fertigen Wert -> kein verschluckter Fatal-Push, kein Doppel-Eval. Leaf-Namen sind
+// IDENTISCH zu den Flach-Keys (Migration ab PA-13 = "config.<ns>." voranstellen).
+export const CONFIG_NAMESPACES = Object.freeze({
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
+  billing: ["maxBudgetCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
+  auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
+  llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "priceInPerMTokUsd", "priceOutPerMTokUsd", "usdToEur"],
+  telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
+  telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed"],
+  server: ["port", "publicUrl", "isProduction", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  store: ["storeBackend", "databaseUrl", "queueBackend"],
+  metrics: ["metricsEnabled"],
+  privacy: ["retentionDays"],
+});
+
+// Haengt jede Namespace-Gruppe als NICHT-enumerable Property an target an (mutiert target).
+// NICHT-enumerable haelt die Flach-Enumeration byte-identisch: Object.keys(config)/
+// JSON.stringify(config)/for-in sehen die Gruppen NICHT -> kein Consumer, der config
+// iteriert (z.B. der Geld-Manifest-Scan), aendert sein Verhalten; nur der Namens-Zugriff
+// config.<ns> kommt hinzu. configurable:true ist PFLICHT: guardedConfig gibt fuer Objekte
+// eine frische Wrapper-Proxy zurueck; bei einer non-configurable+non-writable Data-Property
+// verlangt die Proxy-[[Get]]-Invariante den EXAKTEN Zielwert -> sonst TypeError beim ersten
+// config.<ns>-Zugriff. Die Blaetter sind enumerable Getter (damit JSON.stringify(config.<ns>)
+// die Gruppe zu ihren Werten serialisiert, wie die bestehende telnyxAssistant-Gruppe).
+function attachNamespaces(target, namespaces) {
+  for (const [namespace, keys] of Object.entries(namespaces)) {
+    const group = {};
+    for (const key of keys) {
+      Object.defineProperty(group, key, { enumerable: true, get: () => target[key] });
+    }
+    Object.defineProperty(target, namespace, { enumerable: false, configurable: true, value: group });
+  }
+}
+attachNamespaces(rawConfig, CONFIG_NAMESPACES);
+
 export const config = guardedConfig(rawConfig);
 
 // ---- Gateway-URL (G5: EINE Quelle fuer den localhost-Fallback, S2-20) ----
