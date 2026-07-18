@@ -67,7 +67,7 @@ export function makePgStore(runner) {
       // binden. Nur bei echter Mutation (set-if-absent) wird die bootstrap-Zeile geflusht;
       // danach ist idp_subject persistent -> Folge-Boots sind No-Op/byte-identisch. P2b bleibt
       // sonst: kein config-derived Daten-Seed (Erst-Setup ueber scripts/bootstrap-tenant.js).
-      if (ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
+      if (ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID))
         await flushBootstrap();
       // Phase outbound-p1: Owner-Tenant idempotent auf id_verified heilen (set-if-absent),
       // damit er den fail-closed kycReached-Flip ueberlebt. kyc_level round-trippt bereits
@@ -408,7 +408,7 @@ export function makePgStore(runner) {
     // Default = config.retentionDays, identisch zum json-Backend: der einzige
     // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
     // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).
-    pruneOldData(days = config.retentionDays) {
+    pruneOldData(days = config.privacy.retentionDays) {
       const removed = ops.pruneOldData(requireState(), days);
       if (removed.calls || removed.notifications || removed.actionItems) save();
       return removed;

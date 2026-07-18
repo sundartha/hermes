@@ -42,7 +42,7 @@ export function makeCallFinish({
     if (!call.billedAt) {
       // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
       // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
-      if (config.paymentEnabled) metering.recordVoiceMinuteMeter(call);
+      if (config.billing.paymentEnabled) metering.recordVoiceMinuteMeter(call);
       metering.reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
       store.markBilled(call.id); // -> billed_at persistiert, ueberlebt Restart (F9)
     }
@@ -100,7 +100,7 @@ export function makeCallFinish({
             callId: call.id,
             kind: USAGE_EVENT_KIND.SMS,
             quantity: 1,
-            costCents: config.smsCostCents,
+            costCents: config.billing.smsCostCents,
           });
           // F2 P9 (M2): persistierten Dedup-Marker setzen - NUR nach erfolgreichem Send.
           // Ueberlebt den Prozess-Restart und unterdrueckt eine zweite Summary-SMS bei einem

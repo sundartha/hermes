@@ -20,7 +20,7 @@ import {
 import { findActiveNumber } from "./views.js";
 import * as ops from "./state-ops.js";
 
-const FILE = path.join(config.dataDir, "store.json");
+const FILE = path.join(config.server.dataDir, "store.json");
 
 let state = null;
 
@@ -176,10 +176,10 @@ function migrateCalendarToMap(calendar) {
 // wird wie ueber die API sanitisiert (Whitelist). Kaputtes JSON crasht den Start NICHT
 // (wird geloggt und ignoriert - fail-safe).
 function seedProfilesFromEnv() {
-  if (!config.profilesSeed) return;
+  if (!config.tenancy.profilesSeed) return;
   let parsed;
   try {
-    parsed = JSON.parse(config.profilesSeed);
+    parsed = JSON.parse(config.tenancy.profilesSeed);
   } catch {
     console.error("[profiles] PROFILES_JSON ist kein gueltiges JSON - ignoriert");
     return;
@@ -207,7 +207,7 @@ function seedProfilesFromEnv() {
 // als aktive Nummer geseedet. Keine Diagnose loggt die Nummer (nur Var-Name + Erwartung,
 // AC7: kein PII-Leak).
 function seedOwnerNumberFromEnv() {
-  const raw = config.ownerNumberSeed;
+  const raw = config.provisioning.ownerNumberSeed;
   if (!raw) return; // AC2: leere Var = kein Seed -> Boot-Guard bleibt fail-closed
   if (findActiveNumber(state, BOOTSTRAP_TENANT_ID)) return; // AC6/AC8: Store gewinnt
   const norm = normNum(raw);
@@ -215,7 +215,7 @@ function seedOwnerNumberFromEnv() {
     console.error("[owner-number] OWNER_NUMBER_SEED hat kein gueltiges E.164-Format - ignoriert");
     return; // AC3: kein Seed -> Guard greift (AC7: Nummer NIE im Log)
   }
-  const provider = resolveSeedProvider(config.ownerNumberProvider);
+  const provider = resolveSeedProvider(config.provisioning.ownerNumberProvider);
   if (provider === null) {
     console.error(
       "[owner-number] OWNER_NUMBER_PROVIDER ungueltig (erwartet twilio|telnyx) - ignoriert",
@@ -233,7 +233,7 @@ function seedOwnerNumberFromEnv() {
 // in-memory; re-seedet jeden Boot, idempotent). Leer -> kein Seed (Tenant bleibt ohne
 // Bindung -> resolveTenant fail-closed). Loggt KEINE Identitaet.
 function seedOwnerIdpSubjectFromEnv() {
-  ops.seedBootstrapIdpSubject(state, config.ownerIdpSubject, BOOTSTRAP_TENANT_ID);
+  ops.seedBootstrapIdpSubject(state, config.auth.ownerIdpSubject, BOOTSTRAP_TENANT_ID);
 }
 
 // Phase outbound-p1: den Bootstrap/Owner-Tenant idempotent auf id_verified heilen, damit
@@ -247,7 +247,7 @@ function seedOwnerKyc() {
 }
 
 export function save() {
-  fs.mkdirSync(config.dataDir, { recursive: true });
+  fs.mkdirSync(config.server.dataDir, { recursive: true });
   // Atomic write (OT-3 AC1): erst in ein Temp-File IM SELBEN Verzeichnis schreiben +
   // fsync, dann atomar ueber FILE renamen. Ein Crash/Kill mid-write hinterlaesst so
   // hoechstens ein verwaistes .tmp-File, NIE ein truncated store.json. Das tmp MUSS im
@@ -645,7 +645,7 @@ export function bootstrapTenant(e164, tenantId, provider) {
 }
 
 // ---- Retention (DSGVO-Datenminimierung) ----
-export function pruneOldData(days = config.retentionDays) {
+export function pruneOldData(days = config.privacy.retentionDays) {
   const removed = ops.pruneOldData(load(), days);
   if (removed.calls || removed.notifications || removed.actionItems) save();
   return removed;

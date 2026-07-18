@@ -83,7 +83,8 @@ const ADAPTERS = Object.freeze({
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TWILIO]: { renderDirectives: twilioRenderDirectives },
     [PROVIDER.TELNYX]: {
-      renderDirectives: (d) => telnyxRenderDirectives(d, { elevenLabs: config.telnyxElevenLabs }),
+      renderDirectives: (d) =>
+        telnyxRenderDirectives(d, { elevenLabs: config.telnyx.telnyxElevenLabs }),
     },
   },
 });
@@ -121,7 +122,7 @@ export function providerSupports(provider, capability) {
 /** @returns {import("./ports.js").VoiceControl} */
 export const voiceControl = (provider = PROVIDER.TWILIO) => {
   // Sonderfall (a): fakeOriginate-Override VOR pick (Test-Seam, boot-gehaertet).
-  if (config.fakeOriginate) return fakeVoice;
+  if (config.safety.fakeOriginate) return fakeVoice;
   return pick(PORT.VOICE_CONTROL, provider);
 };
 

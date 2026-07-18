@@ -47,11 +47,14 @@ export function searchParamsForCountry(country) {
   const entry = COUNTRY_SEARCH_PARAMS[key];
   if (!entry) {
     // DE/unbekannt/leer: globales Verhalten (Regel 6: unbekannt -> sicherer Default).
-    return { countryCode: config.provisioningCountry, connectionId: config.telnyxConnectionId };
+    return {
+      countryCode: config.provisioning.provisioningCountry,
+      connectionId: config.telephony.telnyxConnectionId,
+    };
   }
   return {
     countryCode: entry.telnyxCountryCode,
-    connectionId: entry.connectionId || config.telnyxConnectionId,
+    connectionId: entry.connectionId || config.telephony.telnyxConnectionId,
     ...(entry.phoneNumberType ? { type: entry.phoneNumberType } : {}),
   };
 }

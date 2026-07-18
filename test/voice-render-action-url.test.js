@@ -6,7 +6,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeVoiceRender } from "../src/telephony/voice-render.js";
 
-const fakeConfig = { publicUrl: "https://agent.test", sttSpeechTimeoutSec: 2 };
+const fakeConfig = {
+  server: { publicUrl: "https://agent.test" },
+  voice: { sttSpeechTimeoutSec: 2 },
+};
 
 test("S1-14a: twilio-Call -> relative Action-URL (Bestand)", () => {
   const { turnDirectives } = makeVoiceRender({ config: fakeConfig });

@@ -34,15 +34,16 @@ const RESOURCE_POLL_INTERVAL_MS = 1000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function authHeaders(extra = {}) {
-  if (!config.telnyxApiKey) throw new Error("Telnyx NumberProvisioning: TELNYX_API_KEY fehlt");
+  if (!config.telephony.telnyxApiKey)
+    throw new Error("Telnyx NumberProvisioning: TELNYX_API_KEY fehlt");
   return {
-    Authorization: `Bearer ${config.telnyxApiKey}`,
+    Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
     "Content-Type": "application/json",
     ...extra,
   };
 }
 
-const url = (path) => config.telnyxApiBase + path;
+const url = (path) => config.telephony.telnyxApiBase + path;
 
 // Loest die phone_number-Ressourcen-id (release/voice) per gedeckeltem Poll auf, da
 // die Order async-pending ist (s.o.). Liefert die id oder wirft MIT Kontext (kein
