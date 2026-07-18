@@ -711,10 +711,14 @@ test("T-F1-07: adminOnly mit verifizierter Email in Allowlist -> 200", async () 
 // faengt malformte Antworten als KLAREN Fehler statt undefined-Deref-Crash.
 
 const WORKOS_BASE = "https://api.workos.test";
+// Spiegelt die echte config.auth-Namespace-Form (PA-17 Runde 2): makeOidc liest
+// config.auth.<key>, nicht mehr config.<key> flach.
 const OIDC_CFG = {
-  workosApiBase: WORKOS_BASE,
-  oidcClientId: "client_abc",
-  oidcClientSecret: "sk_test_secret",
+  auth: {
+    workosApiBase: WORKOS_BASE,
+    oidcClientId: "client_abc",
+    oidcClientSecret: "sk_test_secret",
+  },
 };
 
 // fetch-Attrappe: zeichnet den letzten Request auf, liefert die konfigurierte Antwort.

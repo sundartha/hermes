@@ -27,13 +27,23 @@ async function makePgliteRunner() {
   return { withClient: (fn) => fn({ query: (t, p) => db.query(t, p) }) };
 }
 
-// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key> (namespaced); alle anderen
-// hier gelisteten Felder bleiben flach (wireWebLogin liest sie direkt, unveraendert).
+// PA-14: isSelfServiceLive(cfg) liest cfg.tenancy.<key> (namespaced). PA-17 Runde 2:
+// makeOidc (web-auth.js) liest cfg.auth.{workosApiBase,oidcClientId,oidcClientSecret}
+// (vorher flach) - wireWebLogin ruft makeOidc(config) eager beim Wiring auf, darum
+// muss die Attrappe hier dieselbe Namespace-Form tragen wie der echte config-Export,
+// sonst wirft makeOidc TypeError und guardedBoot faengt das faelschlich als Fault-Path.
+// Alle anderen hier gelisteten Felder bleiben flach (wireWebLogin liest sie direkt,
+// unveraendert).
 const baseConfig = {
   sessionSecret: "s",
   storeBackend: "pg",
   releaseGraceMs: 0,
   tenancy: { selfServiceEnabled: false, multiTenant: false },
+  auth: {
+    workosApiBase: "https://api.workos.test",
+    oidcClientId: "wl_client",
+    oidcClientSecret: "wl_secret",
+  },
   adminEmails: [],
   loginRateLimitPerMin: 30,
   sessionTtlSeconds: 3600,
