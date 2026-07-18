@@ -74,7 +74,9 @@ test("Guard: persistierter Marker unterdrueckt die zweite SMS (send=false, kein 
     tenantContext: () => ({ settings: { smsSummaryOptIn: true } }),
     dailySmsCount: () => 0,
   };
-  const cfg = { sendSmsSummary: true };
+  // PA-10: dailySmsCap numerisch (fail-closed-Guard); 20 = Prod-Default, dailySmsCount 0
+  // -> der Kontroll-Pfad (before) sendet unveraendert.
+  const cfg = { sendSmsSummary: true, dailySmsCap: 20 };
 
   const before = planSummarySms(store, cfg, { id: "call_A", tenantId: "A", provider: PROV });
   assert.equal(before.send, true, "ohne Marker wuerde gesendet (Kontroll-Pfad)");
