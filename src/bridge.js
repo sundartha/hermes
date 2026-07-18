@@ -139,9 +139,12 @@ export function attachMediaBridge(httpServer, onCallEnded) {
 
     function connectOpenAI() {
       openaiWs = new WebSocket(
-        `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(config.realtimeModel)}`,
+        `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(config.voice.realtimeModel)}`,
         {
-          headers: { Authorization: `Bearer ${config.openaiApiKey}`, "OpenAI-Beta": "realtime=v1" },
+          headers: {
+            Authorization: `Bearer ${config.voice.openaiApiKey}`,
+            "OpenAI-Beta": "realtime=v1",
+          },
         },
       );
 
@@ -180,7 +183,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             session: {
               modalities: ["text", "audio"],
               instructions: instructions(call),
-              voice: loc.realtimeVoice ?? config.realtimeVoice,
+              voice: loc.realtimeVoice ?? config.voice.realtimeVoice,
               input_audio_format: "g711_ulaw",
               output_audio_format: "g711_ulaw",
               input_audio_transcription: transcription,
@@ -280,7 +283,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
             endTimer = setTimeout(
               () => hangup("Max-Dauer erreicht"),
-              callMaxDurationMs(call, config.maxCallDurationS),
+              callMaxDurationMs(call, config.safety.maxCallDurationS),
             );
             connectOpenAI();
             break;

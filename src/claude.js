@@ -12,7 +12,7 @@ import { metrics } from "./metrics.js";
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
 // llm.complete(...). Wirft bei Breaker-open/Retries-erschoepft LlmUnavailableError
 // (Aufrufer faengt das, degradedSpeechFor aus llm.js); 4xx/Auth propagieren unveraendert.
-const llm = createLlmClient({ apiKey: config.anthropicApiKey, config, metrics });
+const llm = createLlmClient({ apiKey: config.llm.anthropicApiKey, config, metrics });
 
 // L3: tatsaechlich verarbeitete Input-Token EINES Anthropic-Aufrufs inkl. Cache. Mit
 // Prompt-Caching zaehlt usage.input_tokens nur den UNGECACHTEN Rest; der gecachte
@@ -35,7 +35,7 @@ function inputTokensOf(usage) {
 // Gesamt-Tokens, costCents aus derselben Preisformel (aiCostCents, G5). callId
 // verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
 function meterAiTokens(call, usage) {
-  if (!config.paymentEnabled) return;
+  if (!config.billing.paymentEnabled) return;
   const inputTokens = inputTokensOf(usage);
   store.recordUsageEvent({
     tenantId: call.tenantId,
@@ -122,7 +122,7 @@ Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen k
 // deutsch (das Prompt-Geruest ist deutsch, auch fuer fr/en - nur speechClause/Datum
 // wechseln, P0). Speist NIE Offenlegung/Persona (Anti-Spoofing, Leitplanke 2).
 function assistantContextSection(call) {
-  if (!config.assistantContextEnabled || !call.context) return "";
+  if (!config.tenancy.assistantContextEnabled || !call.context) return "";
   const c = call.context;
   const lines = [];
   if (c.summary) lines.push(`- Worum es geht: ${c.summary}`);
@@ -378,7 +378,7 @@ export const END_CALL_WAIT_INSTRUCTION =
 // UND fuer den Loop-Guard im Conversation-Watchdog (EINE Quelle, S2).
 // Rein, kein Nebeneffekt (N7).
 export function isSubstantialCallerText(text) {
-  return typeof text === "string" && text.trim().length >= config.callerSubstanceMinLen;
+  return typeof text === "string" && text.trim().length >= config.voice.callerSubstanceMinLen;
 }
 
 // G3/G26-Fix (Runde 2): server.js's No-Speech-
@@ -431,7 +431,7 @@ function unansweredAgentTurns(transcript) {
 export function shouldSuppressEndCall(call) {
   if (call.direction !== "outbound") return false;
   const substantialCallerSeen = callerHasSpoken(call);
-  const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.maxEmptyTurns;
+  const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.voice.maxEmptyTurns;
   return !substantialCallerSeen && !emptyTurnsReached;
 }
 
@@ -517,7 +517,7 @@ export async function agentTurn(call, callerText) {
   // Tool-Loop (max. 4 Runden pro Turn)
   for (let i = 0; i < 4; i++) {
     const resp = await llm.complete({
-      model: config.claudeModel,
+      model: config.llm.claudeModel,
       max_tokens: 300,
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
       tools: toolsWithCacheControl(toolDefs(call.tenantId)),
@@ -594,7 +594,7 @@ export async function summarizeCall(call) {
     .join("\n");
 
   const resp = await llm.complete({
-    model: config.claudeModel,
+    model: config.llm.claudeModel,
     max_tokens: 500,
     // Zusammenfassungs-Prompt sprachabhaengig (F1 Phase 2): die Summary entsteht in der
     // Gespraechssprache (de byte-identisch); die JSON-Keys bleiben sprachunabhaengig.

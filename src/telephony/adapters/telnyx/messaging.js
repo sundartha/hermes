@@ -10,11 +10,11 @@ const MESSAGES_PATH = "/v2/messages";
 /** @type {import("../../ports.js").Messaging} */
 export const telnyxMessaging = {
   async sendSms({ from, to, body }) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx sendSms: TELNYX_API_KEY fehlt");
-    const res = await fetch(config.telnyxApiBase + MESSAGES_PATH, {
+    if (!config.telephony.telnyxApiKey) throw new Error("Telnyx sendSms: TELNYX_API_KEY fehlt");
+    const res = await fetch(config.telephony.telnyxApiBase + MESSAGES_PATH, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.telnyxApiKey}`,
+        Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ from, to, text: body }),

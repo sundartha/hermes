@@ -13,7 +13,10 @@ let sdkFactory = twilio;
 
 // Baut genau den Client wie bisher: SID + Token + Edge aus der zentralen Config.
 export function twilioClient() {
-  if (!client) client = sdkFactory(config.twilioSid, config.twilioToken, { edge: config.twilioEdge });
+  if (!client)
+    client = sdkFactory(config.telephony.twilioSid, config.telephony.twilioToken, {
+      edge: config.telephony.twilioEdge,
+    });
   return client;
 }
 

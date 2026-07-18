@@ -34,7 +34,7 @@ export function makeVoiceRender({ config }) {
   // Twilio -> absolute URL fuer Telnyx (config.publicUrl zur Laufzeit gelesen).
   function turnDirectives(call, text, { speechTimeoutSec } = {}) {
     const isTelnyx = call.provider === PROVIDER.TELNYX;
-    const base = isTelnyx ? config.publicUrl : "";
+    const base = isTelnyx ? config.server.publicUrl : "";
     const action = `${base}/voice/turn?callId=${call.id}`;
     // Voice-Profil (TTS-Voice + STT-Locale) aus call.language ableiten (F1 P4). DE-Call
     // -> DE_FEMALE_NEURAL -> Renderer byte-identisch (Snapshot). Fail-safe ueber localeFor.
@@ -53,7 +53,7 @@ export function makeVoiceRender({ config }) {
   // festem STT-Endpointing (config.sttSpeechTimeoutSec) gegen Satz-Truncation (G3).
   // Eigener Name statt Boolean-Flag (kein Selektor-Argument, G15/F3).
   function followupTurnDirectives(call, text) {
-    return turnDirectives(call, text, { speechTimeoutSec: config.sttSpeechTimeoutSec });
+    return turnDirectives(call, text, { speechTimeoutSec: config.voice.sttSpeechTimeoutSec });
   }
 
   // Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
@@ -62,7 +62,7 @@ export function makeVoiceRender({ config }) {
   // den WebSocket (Bridge prueft beim start-Event, bridge.js).
   function streamDirectives(call) {
     const path = MEDIA_PATH[call.provider] || MEDIA_PATH[DEFAULT_PROVIDER];
-    const url = config.publicUrl.replace(/^https/, "wss") + path;
+    const url = config.server.publicUrl.replace(/^https/, "wss") + path;
     return [
       streamD({
         url,

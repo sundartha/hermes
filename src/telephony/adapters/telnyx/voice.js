@@ -54,7 +54,7 @@ const ATTACH_STATUS = { attachStatus: true };
 // Default form-urlencoded haelt die TeXML-Bestandsaufrufer byte-identisch; die Call-Control-
 // Methoden reichen JSON durch (contentType ist ein Wert-Parameter, KEIN Verhaltens-Flag).
 function headers(contentType = FORM_HEADERS_TYPE) {
-  return { Authorization: `Bearer ${config.telnyxApiKey}`, "Content-Type": contentType };
+  return { Authorization: `Bearer ${config.telephony.telnyxApiKey}`, "Content-Type": contentType };
 }
 
 // OBS-2: PII-freie Erfolgs-Spur pro Call-Control-Op (Op-Name + HTTP-Status + call_control_id-
@@ -80,7 +80,7 @@ async function parseTelnyxResource(res) {
 // andere URL-Form (kein callControlId/actions-Pfad) und eigenes Response-Parsing.
 async function postCallControlAction(callControlId, { action, body, op }) {
   const res = await fetch(
-    `${config.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${action}`,
+    `${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}/${callControlId}/actions/${action}`,
     { method: "POST", headers: headers(JSON_HEADERS_TYPE), body: JSON.stringify(body) },
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
@@ -94,7 +94,7 @@ async function postCallControlAction(callControlId, { action, body, op }) {
 // multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
 // Fail-SAFE (Fallback a): unvollstaendige ElevenLabs-Config -> Azure-Bestand byte-identisch.
 function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
-  const el = config.telnyxElevenLabs;
+  const el = config.telnyx.telnyxElevenLabs;
   if (useAssistantVoice && hasElevenLabsVoice(el))
     return {
       voice: elevenLabsVoiceName(el),
@@ -106,7 +106,7 @@ function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
 // Observability: EINE Quelle fuer "ist die Assistant-Stimme ueberhaupt konfiguriert?"
 // - der Ingest-Log-Marker kann damit nie von dem abweichen, was speak wirklich sendet (G5).
 export function assistantVoiceConfigured() {
-  return hasElevenLabsVoice(config.telnyxElevenLabs);
+  return hasElevenLabsVoice(config.telnyx.telnyxElevenLabs);
 }
 
 // Neutrale Gespraechssprache (call.language: de|fr|en) -> Telnyx-transcription-Felder. Das Mapping
@@ -127,8 +127,9 @@ export const telnyxVoice = {
   // Outbound-Call starten. connection_id (TeXML-Application) haelt die Voice-URL
   // beim Provider; From/To/Url/StatusCallback steuern den konkreten Call.
   async originateCall({ from, to, url, statusCallback, statusCallbackEvent, method, timeLimit }) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx originateCall: TELNYX_API_KEY fehlt");
-    if (!config.telnyxConnectionId)
+    if (!config.telephony.telnyxApiKey)
+      throw new Error("Telnyx originateCall: TELNYX_API_KEY fehlt");
+    if (!config.telephony.telnyxConnectionId)
       throw new Error("Telnyx originateCall: TELNYX_CONNECTION_ID fehlt");
     const form = new URLSearchParams({ From: from, To: to, Url: url });
     if (statusCallback) form.set("StatusCallback", statusCallback);
@@ -142,7 +143,7 @@ export const telnyxVoice = {
     // Feld wird trotzdem mitgegeben (schadet nicht, greift falls unterstuetzt).
     if (timeLimit) form.set("TimeLimit", String(timeLimit));
     const res = await fetch(
-      `${config.telnyxApiBase}${TEXML_BASE}/calls/${config.telnyxConnectionId}`,
+      `${config.telephony.telnyxApiBase}${TEXML_BASE}/calls/${config.telephony.telnyxConnectionId}`,
       {
         method: "POST",
         headers: headers(),
@@ -160,10 +161,11 @@ export const telnyxVoice = {
   // Konstante, daher aus config statt durch den Port-Vertrag gereicht (endCall
   // bekommt nur den CallSid, byte-identisch zum Twilio-Adapter).
   async endCall(callSid) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx endCall: TELNYX_API_KEY fehlt");
-    if (!config.telnyxAccountSid) throw new Error("Telnyx endCall: TELNYX_ACCOUNT_SID fehlt");
+    if (!config.telephony.telnyxApiKey) throw new Error("Telnyx endCall: TELNYX_API_KEY fehlt");
+    if (!config.telephony.telnyxAccountSid)
+      throw new Error("Telnyx endCall: TELNYX_ACCOUNT_SID fehlt");
     const res = await fetch(
-      `${config.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telnyxAccountSid}/Calls/${callSid}`,
+      `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
       { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) },
     );
     await assertTelnyxOk(res, "endCall", ATTACH_STATUS);
@@ -184,16 +186,17 @@ export const telnyxVoice = {
   // (Call Control App ID)" (Live-Bug 2026-07-10, tasks/rca-place-call-422.md). Der TeXML-Pfad
   // (originateCall, Nummern-Routing) benutzt weiterhin telnyxConnectionId.
   async originateViaCallControl({ from, to, webhookUrl, method, timeLimit }) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx originateViaCallControl: TELNYX_API_KEY fehlt");
-    if (!config.telnyxAssistant.callControlAppId)
+    if (!config.telephony.telnyxApiKey)
+      throw new Error("Telnyx originateViaCallControl: TELNYX_API_KEY fehlt");
+    if (!config.telnyx.telnyxAssistant.callControlAppId)
       throw new Error("Telnyx originateViaCallControl: TELNYX_CALL_CONTROL_APP_ID fehlt");
-    const payload = { connection_id: config.telnyxAssistant.callControlAppId, to, from };
+    const payload = { connection_id: config.telnyx.telnyxAssistant.callControlAppId, to, from };
     if (webhookUrl) payload.webhook_url = webhookUrl;
     if (method) payload.webhook_url_method = method;
     // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-
     // Timer (Absolute Regel). time_limit_secs greift zusaetzlich, falls Telnyx es honoriert.
     if (timeLimit) payload.time_limit_secs = timeLimit;
-    const res = await fetch(`${config.telnyxApiBase}${CALL_CONTROL_BASE}`, {
+    const res = await fetch(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
       method: "POST",
       headers: headers(JSON_HEADERS_TYPE),
       body: JSON.stringify(payload),
@@ -210,7 +213,8 @@ export const telnyxVoice = {
   // Budget-/TeXML-Hangup-Pfad. Adressiert den call_control_id-Endpunkt, NICHT TeXML
   // (Regel 1/Befund c: falscher Endpunkt/ID = Kostenexplosion). Leere ID -> fail-closed.
   async endCallViaCallControl(callControlId) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx endCallViaCallControl: TELNYX_API_KEY fehlt");
+    if (!config.telephony.telnyxApiKey)
+      throw new Error("Telnyx endCallViaCallControl: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx endCallViaCallControl: callControlId fehlt");
     await postCallControlAction(callControlId, {
       action: HANGUP_ACTION,
@@ -228,7 +232,8 @@ export const telnyxVoice = {
   // reicht call.language durch; telnyx-inbound.js ruft startAssistant OHNE language (Inbound
   // bleibt in dieser Phase BYTE-IDENTISCH, STT-Sprach-Hint dort ist P6-Scope).
   async startAssistant({ callControlId, assistantId, language }) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
+    if (!config.telephony.telnyxApiKey)
+      throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx startAssistant: callControlId fehlt");
     if (!assistantId) throw new Error("Telnyx startAssistant: assistantId fehlt");
     await postCallControlAction(callControlId, {
@@ -249,7 +254,7 @@ export const telnyxVoice = {
   // sondern ai_assistant_start - es gibt keinen Inbound-Track zu unterdruecken. Body-Feldform
   // live UNBESTAETIGT (wie P4) -> mit Owner in P5/P11 fixen. Leere ID/Text -> fail-closed.
   async speak({ callControlId, text, voiceProfile, useAssistantVoice = false }) {
-    if (!config.telnyxApiKey) throw new Error("Telnyx speak: TELNYX_API_KEY fehlt");
+    if (!config.telephony.telnyxApiKey) throw new Error("Telnyx speak: TELNYX_API_KEY fehlt");
     if (!callControlId) throw new Error("Telnyx speak: callControlId fehlt");
     if (!text) throw new Error("Telnyx speak: text fehlt");
     await postCallControlAction(callControlId, {

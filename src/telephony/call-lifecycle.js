@@ -31,7 +31,7 @@ export function makeCallLifecycle({
   // Realtime-Cap in bridge.js; state-ops.js#callLimitMs bleibt eine bewusst getrennte zweite
   // Kopie, OQ-1); hier wird nur der config-Default gebunden.
   function callMaxDurationMs(call) {
-    return computeMaxDurationMs(call, config.maxCallDurationS);
+    return computeMaxDurationMs(call, config.safety.maxCallDurationS);
   }
 
   // F10 (A6): der EINZIGE Terminalisierungspfad des Max-Dauer-Caps - kein zweiter Bucht-freier
@@ -52,7 +52,7 @@ export function makeCallLifecycle({
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
       const endedAtIso = new Date(
-        cappedEndedAtMs(call, Date.now(), config.maxCallDurationS),
+        cappedEndedAtMs(call, Date.now(), config.safety.maxCallDurationS),
       ).toISOString();
       await terminateAndBillCall({
         persistEnd: () => store.setCallEndedAt(callId, status, endedAtIso),
@@ -89,7 +89,7 @@ export function makeCallLifecycle({
   // ueber call.reserveReleased -> ein frueherer finishCall macht den Timer zum No-op; kein Timer-
   // Handle-Tracking noetig (Stil wie armMaxDurationTimer). Liest den Call beim Feuern frisch.
   function armReserveReleaseTimer(call) {
-    const delay = callMaxDurationMs(call) + config.reserveReleaseGraceMs;
+    const delay = callMaxDurationMs(call) + config.safety.reserveReleaseGraceMs;
     setTimeout(() => releaseReserve(store.getCall(call.id) || call), delay);
   }
 
@@ -106,7 +106,7 @@ export function makeCallLifecycle({
   function reattachActiveCall(callId) {
     return reattachActiveCallCore(callId, {
       attachActiveCall: store.attachActiveCall,
-      maxCallDurationS: config.maxCallDurationS,
+      maxCallDurationS: config.safety.maxCallDurationS,
       terminateCappedCall,
       scheduleMaxDurationEnd,
     });
@@ -120,14 +120,14 @@ export function makeCallLifecycle({
   // Terminalisierungspfad beenden (gekappt+gebucht, kein Phantom-active, K2/K3). Die
   // Zombie-Buchung laeuft async (finishCall) und blockiert den Boot nicht.
   function rearmActiveCallTimers() {
-    if (config.voiceEngine === VOICE_ENGINE.REALTIME) return;
+    if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) return;
     const nowMs = Date.now();
     let reArmed = 0;
     let terminalized = 0;
     for (const call of store.load().calls.filter((c) => c.status === "active")) {
       // G5 (Review-Blocker Runde 2): dieselbe Klassifikation wie reattachActiveCall() (F12) -
       // ausgelagert nach state-ops.js, um die Restzeit-Verzweigung nicht zweimal zu pflegen.
-      const { remaining, expired } = classifyCallTime(call, nowMs, config.maxCallDurationS);
+      const { remaining, expired } = classifyCallTime(call, nowMs, config.safety.maxCallDurationS);
       if (expired) {
         void terminateCappedCall(call.id, call.twilioSid, "failed");
         terminalized++;
