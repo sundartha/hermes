@@ -28,7 +28,9 @@ function makeStore(tenants) {
   };
 }
 const call = (tenantId) => ({ id: `call_${tenantId}`, tenantId, provider: PROV });
-const cfg = (sendSmsSummary = true) => ({ sendSmsSummary });
+// PA-10: dailySmsCap muss numerisch sein (fail-closed-Guard); 20 = Prod-Default, der
+// Fake-Store liefert dailySmsCount 0 -> der Send-Pfad bleibt unveraendert.
+const cfg = (sendSmsSummary = true) => ({ sendSmsSummary, dailySmsCap: 20 });
 
 test("alles vorhanden -> send=true, Ziel = private Nummer des Call-Tenants", () => {
   const store = makeStore({

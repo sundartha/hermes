@@ -36,10 +36,21 @@ export function planSummarySms(store, config, call) {
   if (!config.sendSmsSummary) return { to, smsFrom, send: false, reason: null };
   if (!to) return { to, smsFrom, send: false, reason: "no_private_number" };
   if (!smsFrom || !optIn) return { to, smsFrom, send: false, reason: null };
+  // Toll-Fraud-Kappe fail-closed (PA-10): config MUSS dailySmsCap als ENDLICHE Zahl
+  // liefern (config.js numEnv, Default 20). Fehlt der Wert oder ist er NaN/Infinity bei
+  // einem Partial-Config-Aufrufer, waere "count >= NaN" bzw. "count >= Infinity" immer
+  // false und die Tageskappe still umgangen -> lieber laut scheitern als die Kostenbremse
+  // blind loesen. Number.isFinite() statt typeof, weil typeof NaN und typeof Infinity
+  // beide "number" sind (deckungsgleich mit numEnv in config.js). In Produktion liefert
+  // numEnv immer eine endliche Zahl -> der Guard feuert dort nie.
+  if (!Number.isFinite(config.dailySmsCap))
+    throw new Error(
+      "planSummarySms: config.dailySmsCap fehlt oder ist nicht numerisch - SMS-Tageskappe (Toll-Fraud-Schutz) ist fail-closed",
+    );
   // Tages-Cap pro Tenant (H1): zaehlt NUR erfolgreich gesendete SMS (Ledger), im
   // rollierenden 24h-Fenster. Cap erreicht -> still uebersprungen, kein Fehler.
   const since = new Date(Date.now() - MS_PER_DAY).toISOString();
-  if (store.dailySmsCount(call.tenantId, since) >= (config.dailySmsCap ?? 20))
+  if (store.dailySmsCount(call.tenantId, since) >= config.dailySmsCap)
     return { to, smsFrom, send: false, reason: "daily_cap" };
   return { to, smsFrom, send: true, reason: null };
 }
