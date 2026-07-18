@@ -69,7 +69,7 @@ test("T-L0-1b (I13): llmCall traegt callId + Cache-Zaehler additiv, NUR wenn mit
   assert.ok(!("secret" in entries[0].payload));
 });
 
-test("T-L0-2: Master-Schalter aus -> keine der fuenf Funktionen loggt (byte-identisch)", () => {
+test("T-L0-2: Master-Schalter aus -> keine der sechs Funktionen loggt (byte-identisch)", () => {
   const { log, entries } = collector();
   const m = createMetrics({ enabled: false, log });
 
@@ -78,6 +78,7 @@ test("T-L0-2: Master-Schalter aus -> keine der fuenf Funktionen loggt (byte-iden
   m.recordTurnRendered("c1");
   m.logTurnGap("c1");
   m.logShimTurn({ callId: "c1", latencyMs: 42 });
+  m.logSpeechResult({ callId: "c1", chars: 17 });
 
   assert.equal(entries.length, 0);
 });
@@ -128,6 +129,30 @@ test("T-L0-6 (P10): logShimTurn ist PII-frei (nur callId + latencyMs)", () => {
   assert.equal(entries[0].payload.callId, "c1");
   assert.equal(entries[0].payload.latencyMs, 250);
   assert.ok(!("secret" in entries[0].payload));
+});
+
+test("T-L0-7 (P2a): logSpeechResult ist PII-frei (nur callId + chars, NIE Text)", () => {
+  const { log, entries } = collector();
+  const m = createMetrics({ enabled: true, log });
+
+  m.logSpeechResult({ callId: "c1", chars: 42, text: "ich haette gern einen Termin" });
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, "speech_result");
+  assert.deepEqual(Object.keys(entries[0].payload).sort(), ["callId", "chars"]);
+  assert.equal(entries[0].payload.chars, 42);
+  assert.ok(!("text" in entries[0].payload));
+  assert.equal(JSON.stringify(entries[0].payload).includes("Termin"), false, "Gehoertes NIE im Log");
+});
+
+test("T-L0-7b (P2a): chars=0 wird geloggt (No-Speech ist ein Signal, kein Nicht-Ereignis)", () => {
+  const { log, entries } = collector();
+  const m = createMetrics({ enabled: true, log });
+
+  m.logSpeechResult({ callId: "c1", chars: 0 });
+
+  assert.equal(entries.length, 1);
+  assert.deepEqual(entries[0].payload, { callId: "c1", chars: 0 });
 });
 
 test("T-L0-5: beschraenkte Map verdraengt den aeltesten Eintrag (Leak-Schutz)", () => {

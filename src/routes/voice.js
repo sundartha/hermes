@@ -283,6 +283,9 @@ export function makeVoiceRoutes({
     metrics.logTurnGap(call.id);
 
     const heard = webhookEvents(call.provider).parseSpeechResult(req.body);
+    // P2a: LAENGE des Gehoerten als Truncation-Signal (P9-Grundlage), NIE der Text.
+    // Unbedingt - auch chars=0 ist ein Signal (No-Speech vs. abgeschnittener Satz).
+    metrics.logSpeechResult({ callId: call.id, chars: heard.length });
     try {
       // G3/G26-Fix (Runde 2): callerHasSpoken (claude.js) statt blosser Zeilen-Existenz -
       // sonst haette outbound schon ein einzelnes aufgezeichnetes Rausch-/Echo-Fragment
