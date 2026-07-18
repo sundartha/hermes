@@ -49,12 +49,12 @@ export function isTestKey(secretKey) {
 // ist NICHT am Customer attached (sonst HTTP 400 "payment method must be attached").
 async function attachTestCard(customerId) {
   const headers = {
-    Authorization: `Bearer ${config.stripeSecretKey}`,
+    Authorization: `Bearer ${config.billing.stripeSecretKey}`,
     "Content-Type": "application/x-www-form-urlencoded",
   };
   const attachBody = new URLSearchParams({ customer: customerId });
   const attached = await fetch(
-    `${config.stripeApiBase}${PAYMENT_METHODS_PATH}/${TEST_PAYMENT_METHOD}/attach`,
+    `${config.billing.stripeApiBase}${PAYMENT_METHODS_PATH}/${TEST_PAYMENT_METHOD}/attach`,
     { method: "POST", headers, body: attachBody },
   );
   if (!attached.ok)
@@ -64,7 +64,7 @@ async function attachTestCard(customerId) {
 
   const defaultBody = new URLSearchParams();
   defaultBody.set("invoice_settings[default_payment_method]", attachedPaymentMethodId);
-  const setDefault = await fetch(`${config.stripeApiBase}${CUSTOMERS_PATH}/${customerId}`, {
+  const setDefault = await fetch(`${config.billing.stripeApiBase}${CUSTOMERS_PATH}/${customerId}`, {
     method: "POST",
     headers,
     body: defaultBody,
@@ -84,7 +84,7 @@ function report(smokePass, lines) {
 
 async function main() {
   // Gate (fail-closed): nur Test-Key. Verhindert versehentlichen Live-Charge.
-  if (!isTestKey(config.stripeSecretKey)) {
+  if (!isTestKey(config.billing.stripeSecretKey)) {
     report(false, ["STRIPE_SECRET_KEY fehlt oder ist KEIN sk_test_-Key (fail-closed, nie live)"]);
   }
 
@@ -112,10 +112,10 @@ async function main() {
     { provisioner: fakeProvisioner(), billing: stripeBilling },
     {
       numberId: requested.number.id,
-      countryCode: config.provisioningCountry,
+      countryCode: config.provisioning.provisioningCountry,
       connectionId: SMOKE_CONNECTION_ID,
       holdAmountCents: SMOKE_AMOUNT_CENTS,
-      currency: config.paymentCurrency,
+      currency: config.billing.paymentCurrency,
     },
   );
 
@@ -125,7 +125,7 @@ async function main() {
     `customer=${customerId}`,
     `paymentIntent=${result.paymentIntentId}`,
     `numberStatus=${result.status} (erwartet: ${NUMBER_STATUS.ACTIVE})`,
-    `betrag=${SMOKE_AMOUNT_CENTS} Cents ${config.paymentCurrency} (Hold->Capture durchgelaufen)`,
+    `betrag=${SMOKE_AMOUNT_CENTS} Cents ${config.billing.paymentCurrency} (Hold->Capture durchgelaufen)`,
   ]);
 }
 

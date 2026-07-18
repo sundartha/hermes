@@ -39,13 +39,13 @@ const NO_VALUE = "-"; // Platzhalter fuer fehlende Metadaten-Felder in der Tabel
 const COLUMN_WIDTH = 12; // feste Spaltenbreite (kein Table-Package, keine neue Dependency)
 
 function headers() {
-  return { Authorization: `Bearer ${config.telnyxApiKey}` };
+  return { Authorization: `Bearer ${config.telephony.telnyxApiKey}` };
 }
 
 // GET-only Fetch-Wrapper: EINE Fehlerstelle (G5), gleiche Konvention wie
 // telnyx-assistant-provision.mjs (assertTelnyxOk, {data}-Envelope-Unwrap).
 async function getJson(path, op) {
-  const res = await fetch(`${config.telnyxApiBase}${path}`, { method: "GET", headers: headers() });
+  const res = await fetch(`${config.telephony.telnyxApiBase}${path}`, { method: "GET", headers: headers() });
   await assertTelnyxOk(res, op, { attachStatus: true });
   const json = await res.json().catch(() => ({}));
   return json.data ?? json;
@@ -139,7 +139,7 @@ function failClosed(reason) {
 async function main() {
   // Fail-closed VOR jedem Netzzugriff (Muster telnyx-assistant-provision.mjs REQUIRED-Gate):
   // kein Key -> kein Fetch-Versuch, kein irrefuehrender Netzwerkfehler.
-  if (!config.telnyxApiKey) failClosed("kein TELNYX_API_KEY konfiguriert (kein Netzzugriff versucht)");
+  if (!config.telephony.telnyxApiKey) failClosed("kein TELNYX_API_KEY konfiguriert (kein Netzzugriff versucht)");
 
   const conversationId = process.argv[2];
   if (!conversationId) failClosed("kein Argument uebergeben (Telnyx-Conversation-ID fehlt)");
