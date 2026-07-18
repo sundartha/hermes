@@ -70,7 +70,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // NICHT, auch bei korrektem Tool-_meta). Nur bei aktivem Master-Schalter; aus ->
       // keine Extension -> byte-identisch. Auto-registrierte tools/resources werden vom SDK
       // dazugemerged (verdraengen die Extension nicht).
-      const serverOptions = config.mcpUiEnabled
+      const serverOptions = config.tenancy.mcpUiEnabled
         ? { capabilities: { extensions: uiServerExtension() } }
         : undefined;
       const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
@@ -81,7 +81,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // Capabilities nicht zum tools/list-POST mitfuehrt - das Widget-_meta erschien sonst
       // NIE. capabilities dienen nur noch der expliziten ChatGPT-Adapter-Wahl. Kein neuer
       // Endpunkt, mcpAuth + res.on("close")-Cleanup unveraendert.
-      const uiHost = { enabled: config.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
+      const uiHost = { enabled: config.tenancy.mcpUiEnabled, capabilities: req.body?.params?.capabilities };
       registerTools(server, {
         identity,
         scopedTenant,

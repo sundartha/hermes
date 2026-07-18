@@ -148,7 +148,7 @@ const conversationWatchdog = makeConversationWatchdog({
 
 // Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII). EINMAL
 // beim Boot verdrahtet (Naht wie conversationWatchdog, INV-7).
-const ttsStore = createTtsStore({ ttlMs: config.elevenLabsPlayTts.tokenTtlMs });
+const ttsStore = createTtsStore({ ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs });
 
 // Play-TTS-Direktiven-Synth (fail-safe, Server-Slim P2): webt <Play>-Audio in Telnyx-
 // Direktiven ein. Schliesst die EINE ttsStore-Instanz (INV-7) + config.

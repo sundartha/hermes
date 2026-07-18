@@ -203,7 +203,7 @@ test("SIGTERM mit haengendem Request: Watchdog erzwingt exit 0, ohne den finalen
 function fakeHttpServer() {
   return { close: (cb) => cb(), closeIdleConnections() {} };
 }
-const FAKE_CONFIG = { shutdownDrainTimeoutMs: 10000 };
+const FAKE_CONFIG = { server: { shutdownDrainTimeoutMs: 10000 } };
 
 test("S1-2: gracefulShutdown -> rejectender finaler Flush = genau ein exit(1) + lauter Alarm", async () => {
   const exits = [];

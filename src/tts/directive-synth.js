@@ -16,7 +16,7 @@ import { DIRECTIVE } from "../telephony/directives.js";
 
 export function makeDirectiveSynth({ config, ttsStore }) {
   async function synthesizeDirectiveAudio(call, directives) {
-    const cfg = config.elevenLabsPlayTts;
+    const cfg = config.voice.elevenLabsPlayTts;
     if (!cfg.enabled || !providerSupports(call.provider, CAPABILITY.PLAY_AUDIO_TTS)) return directives;
     const out = [];
     for (const d of directives) out.push(await withPlayAudio(d, cfg));
@@ -50,7 +50,7 @@ export function makeDirectiveSynth({ config, ttsStore }) {
       return null;
     }
     const token = ttsStore.put(result.bytes, result.contentType);
-    return `${config.publicUrl}/voice/tts/${token}`;
+    return `${config.server.publicUrl}/voice/tts/${token}`;
   }
 
   return { synthesizeDirectiveAudio };

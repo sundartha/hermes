@@ -24,6 +24,7 @@ import {
   STATE_NOTIFICATIONS,
 } from "../src/routes/api-read.js";
 import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const STREAM_TOKEN = "s".repeat(32); // WS-Zugangsgeheimnis, darf nie eine Antwort verlassen
 const FOREIGN = "tenant_foreign";
@@ -75,13 +76,13 @@ function makeMockStore({ listSize = 1 } = {}) {
 
 // Fake-config: alle Felder, die /api/state liest. multiTenant pro Test setzbar.
 function makeConfig(overrides = {}) {
-  return {
+  return withConfigNamespaces({
     multiTenant: false,
     claudeModel: "claude-haiku-4-5",
     voiceEngine: "budget",
     maxBudgetCents: 800,
     ...overrides,
-  };
+  });
 }
 
 // Fake-tenant-Resolver: requestTenant aus Header X-Test-Tenant (Default Owner);

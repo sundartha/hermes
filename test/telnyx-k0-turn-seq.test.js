@@ -12,7 +12,8 @@ import assert from "node:assert/strict";
 import { makeConversationWatchdog } from "../src/telnyx-conversation-watchdog.js";
 import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
-import { fakeTelnyxShimConfig, captureConsole } from "./helpers.js";
+import { captureConsole } from "./helpers.js";
+import { fakeTelnyxShimConfig } from "./config-namespaces-helper.js";
 import {
   fakeStore,
   makeCall,

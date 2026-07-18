@@ -48,7 +48,7 @@ export const HERMES_SERVER_INFO = {
       sizes: [HERMES_ICON_SIZE],
     },
     {
-      src: `${config.publicUrl}${BRAND_ASSETS_PREFIX}${HERMES_ICON_FILENAME}`,
+      src: `${config.server.publicUrl}${BRAND_ASSETS_PREFIX}${HERMES_ICON_FILENAME}`,
       mimeType: "image/png",
       sizes: ["1024x1024"],
     },

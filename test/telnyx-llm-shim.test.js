@@ -8,7 +8,8 @@ import assert from "node:assert/strict";
 import { makeTelnyxLlmShim, callControlIdFromForwardedMetadata } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { LlmUnavailableError } from "../src/llm.js";
-import { fakeTelnyxShimConfig, noopWatchdog } from "./helpers.js";
+import { noopWatchdog } from "./helpers.js";
+import { fakeTelnyxShimConfig } from "./config-namespaces-helper.js";
 import {
   sseChunks,
   sseContent,

@@ -79,14 +79,14 @@ export async function wireWebLogin({
     store,
     provisioner: numberProvisioning(PROVIDER.TELNYX),
     audit: auditStore,
-    graceMs: config.releaseGraceMs,
+    graceMs: config.provisioning.releaseGraceMs,
   });
   const portalStore = makePortalStore(portalRunner);
-  const webAuthMw = webAuth({ secret: config.sessionSecret, sessions, accounts });
+  const webAuthMw = webAuth({ secret: config.auth.sessionSecret, sessions, accounts });
   // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst
   // 403-Deadlock). Gleiche Session-Mechanik, nur das Status-Gate ist gelockert (web-auth.js).
-  const webAuthPendingMw = webAuthAllowPending({ secret: config.sessionSecret, sessions, accounts });
-  const adminMw = adminOnly({ adminEmails: config.adminEmails });
+  const webAuthPendingMw = webAuthAllowPending({ secret: config.auth.sessionSecret, sessions, accounts });
+  const adminMw = adminOnly({ adminEmails: config.auth.adminEmails });
 
   // P2b: Vor-/Nachname aus dem verifizierten IdP-Profil set-if-absent in den Gate-Store
   // schreiben (gleiche Kompositions-Quelle wie /api/onboard: applyOwnerIdentity ueber
@@ -106,16 +106,16 @@ export async function wireWebLogin({
     }
   };
 
-  const loginRateLimiter = createRateLimiter(config.loginRateLimitPerMin);
+  const loginRateLimiter = createRateLimiter(config.auth.loginRateLimitPerMin);
   app.use("/auth", loginRateLimiter);
   app.use(
     makeWebAuthRoutes({
-      secret: config.sessionSecret,
-      redirectUri: config.publicUrl + "/auth/callback",
-      ttlSeconds: config.sessionTtlSeconds,
+      secret: config.auth.sessionSecret,
+      redirectUri: config.server.publicUrl + "/auth/callback",
+      ttlSeconds: config.auth.sessionTtlSeconds,
       // Login-Flow-Cookie-TTL (state/pkce/nonce), separat von der Session-TTL: grosszuegig
       // genug fuer den Mail-Verify-Round-Trip; Ablauf faengt die Callback-Recovery benign ab.
-      loginCookieTtlSeconds: config.loginCookieTtlSeconds,
+      loginCookieTtlSeconds: config.auth.loginCookieTtlSeconds,
       oidc,
       accounts,
       sessions,
@@ -124,17 +124,17 @@ export async function wireWebLogin({
       // Flag-Gate wie die /tenant.html-Basic-Auth-Exemption in der Wurzel). Sonst Default
       // "/" -> byte-identisch zum Bestand. Single-Origin: mit WEB_DIST_DIR landet der frisch
       // eingeloggte Tenant auf der App-Shell (/app) im unified Build (vorrangig).
-      postLoginPath: config.webDistDir
+      postLoginPath: config.server.webDistDir
         ? appPath
         : isSelfServiceLive(config)
           ? customerPortalPath
           : undefined,
       // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben. Muss im
       // WorkOS-Dashboard als Sign-out-Redirect-URL registriert sein.
-      postLogoutUrl: config.publicUrl + LOGIN_ROUTE,
+      postLogoutUrl: config.server.publicUrl + LOGIN_ROUTE,
       // Lokaler Dev-Login-Shim (NUR mit config.devLoginEnabled, fail-closed): mintet dieselbe
       // Session wie der echte Callback fuer den Chrome-e2e-Loop ohne WorkOS.
-      devLoginEnabled: config.devLoginEnabled,
+      devLoginEnabled: config.auth.devLoginEnabled,
       // Signup-Spiegel-Nachzug: zieht den per accounts.upsertOnFirstLogin (mintSession) frisch
       // angelegten Tenant in den pg-Store-Spiegel, BEVOR der Self-Service-Subscribe-Pfad eine
       // WRITE-Store-Op (setTenantStripe etc.) ausloest, die ihn sonst nicht faende.

@@ -92,7 +92,7 @@ export function makeCallControlIngest({
       Promise.resolve(onSpeakFailed(call, callControlId)).catch((err) =>
         console.error(CALL_CONTROL_LOG_PREFIX, err.message),
       );
-    }, config.telnyxAssistant.openingSpeakTimeoutS * MS_PER_SECOND);
+    }, config.telnyx.telnyxAssistant.openingSpeakTimeoutS * MS_PER_SECOND);
     openingSpeakTimers.set(call.id, timer);
   }
 

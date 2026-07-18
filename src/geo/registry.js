@@ -13,6 +13,6 @@ import { makeMaxmindGeoLookup } from "./maxmind.js";
  * @returns {import("./ports.js").GeoLookup}
  */
 export function geoLookupAdapter() {
-  if (!config.geoEnabled) return nullGeoLookup;
-  return makeMaxmindGeoLookup(config.geoDbPath);
+  if (!config.provisioning.geoEnabled) return nullGeoLookup;
+  return makeMaxmindGeoLookup(config.provisioning.geoDbPath);
 }

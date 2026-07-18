@@ -11,7 +11,7 @@
 // P7-Provisioning (leer -> P4.5 onSpeakEnded/startAssistant fail-safe, nicht-secret). Der
 // Shim authentifiziert per statischem Shared-Secret (E2), nicht mehr per-Call.
 export function bindAssistantToCall(call, config) {
-  call.assistantId = config.telnyxAssistant.assistantId;
+  call.assistantId = config.telnyx.telnyxAssistant.assistantId;
 }
 
 export async function originateAiAssistantCall({ store, voiceControl, config, call, fromNumber, to, maxDur }) {
@@ -19,7 +19,7 @@ export async function originateAiAssistantCall({ store, voiceControl, config, ca
   const { callControlId } = await voiceControl(call.provider).originateViaCallControl({
     from: fromNumber,
     to,
-    webhookUrl: `${config.publicUrl}/voice/call-control?callId=${call.id}`,
+    webhookUrl: `${config.server.publicUrl}/voice/call-control?callId=${call.id}`,
     method: "POST",
     timeLimit: maxDur,
   });

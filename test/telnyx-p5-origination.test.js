@@ -14,6 +14,7 @@ import {
   TELNYX_ASSISTANT_BOOT_ENV,
 } from "./helpers.js";
 import { originateAiAssistantCall } from "../src/telnyx-origination.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // === A: originateAiAssistantCall (DI, offline) ===================================
 
@@ -38,7 +39,10 @@ test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", asy
   const store = spyStore();
   const voiceControl = spyVoiceControl("cc_1");
   const call = { id: "call_abc", provider: "telnyx" };
-  const config = { publicUrl: "https://agent.test", telnyxAssistant: { assistantId: "asst_9" } };
+  const config = withConfigNamespaces({
+    publicUrl: "https://agent.test",
+    telnyxAssistant: { assistantId: "asst_9" },
+  });
 
   await originateAiAssistantCall({
     store,

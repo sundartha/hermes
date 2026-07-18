@@ -24,3 +24,31 @@ export function withConfigNamespaces(flatConfig) {
   attachNamespaces(flatConfig, CONFIG_NAMESPACES);
   return flatConfig;
 }
+
+// Fake-Config fuer den Telnyx Brain-Shim (makeTelnyxLlmShim): EINE Quelle (G5/S2) statt
+// der frueher in telnyx-llm-shim.test.js + telnyx-shim-endcall.test.js byte-identisch
+// kopierten Definition. telnyxShimMaxTurnsPerMin=100 bewusst grosszuegig (!= config.js-
+// Default 30): einzelne Turn-Tests sollen vom per-callId-Rate-Limiter unberuehrt bleiben,
+// der einen eigenen Testfall mit engerem Limit bekommt.
+// PA-18: lebt HIER statt in helpers.js (das praktisch jedes Testfile ALS ALLERERSTES
+// importiert, VOR dessen eigenem env-Setup - ein config.js-Import dort wuerde den
+// test-base-env-drift-Bug reproduzieren, s. Modul-Kommentar oben). withConfigNamespaces
+// haengt die Namespace-Getter an (dual-read: der migrierte Shim liest config.telnyx.
+// telnyxAssistant.X, Bestandsassertions auf den flachen Keys bleiben unveraendert gueltig).
+export function fakeTelnyxShimConfig({
+  enabled = true,
+  claudeModel = "claude-haiku-4-5",
+  telnyxShimMaxTurnsPerMin = 100,
+  telnyxShimSharedSecret = "shim-secret",
+  telnyxShimDebugShape = false,
+} = {}) {
+  return withConfigNamespaces({
+    claudeModel,
+    telnyxAssistant: {
+      enabled,
+      shimMaxTurnsPerMin: telnyxShimMaxTurnsPerMin,
+      shimSharedSecret: telnyxShimSharedSecret,
+      shimDebugShape: telnyxShimDebugShape,
+    },
+  });
+}

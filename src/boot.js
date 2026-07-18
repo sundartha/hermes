@@ -19,7 +19,7 @@ function runRetention(store, config) {
   const removed = store.pruneOldData();
   if (removed.calls || removed.notifications || removed.actionItems)
     console.log(
-      `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.retentionDays} Tage)`,
+      `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.privacy.retentionDays} Tage)`,
     );
 }
 
@@ -83,21 +83,21 @@ function logBootBanner(config, port) {
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
   console.log(`  Dashboard:      ${gatewayUrlForPort(port)}`);
   console.log(
-    `  Voice-Engine:   ${config.voiceEngine}${config.voiceEngine === VOICE_ENGINE.REALTIME && !config.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
+    `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
   console.log(
-    `  MCP (HTTP):     ${config.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
+    `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );
-  console.log(`  Twilio-Webhook: ${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
-  console.log(`  Status-Callback:${config.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
+  console.log(`  Twilio-Webhook: ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
+  console.log(`  Status-Callback:${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
   // Outbound-Freigabe (outbound-p3): keine statische ALLOWED_NUMBERS-Liste mehr - Permit ist
   // die per-Tenant-Verifikation (Abo+KYC, Pfad 2). OUTBOUND_FROZEN zeigt den globalen
   // Kill-Switch-Zustand. Kein PII (Nummern) mehr im Banner.
   console.log(
-    `  Outbound:       ${config.outboundFrozen ? "EINGEFROREN (OUTBOUND_FROZEN=true)" : "aktiv (Verifikation per Tenant: Abo+KYC)"}`,
+    `  Outbound:       ${config.safety.outboundFrozen ? "EINGEFROREN (OUTBOUND_FROZEN=true)" : "aktiv (Verifikation per Tenant: Abo+KYC)"}`,
   );
   console.log(
-    `  Nummern-Gates:  Land ${config.allowedCountryCodes.join(",")} | max ${config.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
+    `  Nummern-Gates:  Land ${config.safety.allowedCountryCodes.join(",")} | max ${config.safety.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
   );
 }
 
@@ -129,7 +129,7 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
   // OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
   lifecycle.rearmActiveCallTimers();
 
-  const httpServer = app.listen(config.port, () => {
+  const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
     const port = httpServer.address().port;
     // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
@@ -173,7 +173,7 @@ export function makeGracefulShutdown({
     if (shuttingDown) return;
     shuttingDown = true;
     log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
-    const watchdog = setTimeout(() => exit(0), config.shutdownDrainTimeoutMs).unref();
+    const watchdog = setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref();
     const closed = new Promise((resolve) => httpServer.close(resolve));
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
     await closed;

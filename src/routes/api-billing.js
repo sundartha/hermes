@@ -48,15 +48,15 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   // gespeichert; der spaetere Hold/Capture (Pay2) nutzt customer+payment_method.
   router.post("/api/billing/setup-checkout", async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
-    if (!config.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
+    if (!config.server.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
     const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
     if (!tenant) return;
 
-    const successUrl = `${config.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${config.publicUrl}/tenant.html?card=canceled`;
+    const successUrl = `${config.server.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${config.server.publicUrl}/tenant.html?card=canceled`;
     // Fix B: derselbe Self-Heal wie der Pay3-Pfad (geteilte Logik, G5 - s. card-setup.js).
     const { session, healed } = await startCheckoutWithStaleCustomerHeal(
-      { store, billing, tenant, retryDelayMs: config.stripeCustomerRetryDelayMs },
+      { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },
       (customerId) =>
         billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl }),
     );

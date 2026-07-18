@@ -31,7 +31,7 @@ import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 // (config.assistantContextEnabled aus - context ist dann IMMER null, s.o.).
 function contextReceivedMeta(context, config) {
   return {
-    active: config.assistantContextEnabled,
+    active: config.tenancy.assistantContextEnabled,
     summary: !!context?.summary,
     key_facts_count: Array.isArray(context?.key_facts) ? context.key_facts.length : 0,
     recipient_relationship: !!context?.recipient_relationship,
@@ -113,7 +113,7 @@ export function makeCallRoutes({
       // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
       // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
       // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-      if (config.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
+      if (config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
         await originateAiAssistantCall({
           store,
           voiceControl,
@@ -135,8 +135,8 @@ export function makeCallRoutes({
         const tw = await voiceControl(ctx.outboundProvider).originateCall({
           from: ctx.fromNumber,
           to: ctx.to,
-          url: `${config.publicUrl}/voice/outbound?callId=${call.id}`,
-          statusCallback: `${config.publicUrl}/voice/status?callId=${call.id}`,
+          url: `${config.server.publicUrl}/voice/outbound?callId=${call.id}`,
+          statusCallback: `${config.server.publicUrl}/voice/status?callId=${call.id}`,
           statusCallbackEvent: ["answered", "completed"],
           method: "POST",
           timeLimit: ctx.maxDur,
@@ -146,7 +146,7 @@ export function makeCallRoutes({
         // Max-Dauer hart durchsetzen (Budget-Engine). Fuer Twilio redundant zum
         // timeLimit-Param, fuer Telnyx (TeXML-Pfad) der einzige verlaessliche Cap. Erst NACH
         // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
-        if (config.voiceEngine !== VOICE_ENGINE.REALTIME) armMaxDurationTimer(call, tw.sid);
+        if (config.voice.voiceEngine !== VOICE_ENGINE.REALTIME) armMaxDurationTimer(call, tw.sid);
       }
       armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
       res.json({
@@ -201,7 +201,7 @@ export function makeCallRoutes({
     // aus -> ungefiltert wie heute (byte-identisch, auch fuer Calls ohne tenantId).
     // Nutzt I5's gemeinsamen tenantOwnsCall-Helper (eine Quelle der Ownership-Regel,
     // wie GET /api/calls/:id); !call short-circuitet vor dem tenantOwnsCall-Zugriff.
-    if (!call || (config.multiTenant && !tenantOwnsCall(call, requestTenant(req))))
+    if (!call || (config.tenancy.multiTenant && !tenantOwnsCall(call, requestTenant(req))))
       return res.status(404).json({ error: "not found" });
     if (call.status !== "active") return res.json({ status: call.status });
     const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar

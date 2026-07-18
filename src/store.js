@@ -18,7 +18,7 @@ async function createPgBackend() {
   // eine der synchronen Store-Funktionen aufruft (Spiegel ist dann hydriert).
   const pg = (await import("pg")).default;
   const { makePgStore } = await import("./store/pg.js");
-  const pool = new pg.Pool({ connectionString: config.databaseUrl });
+  const pool = new pg.Pool({ connectionString: config.store.databaseUrl });
   // Runner-Vertrag (siehe db/migrate.js + store/pg.js):
   //   query(text, params) -> {rows}  : eine parametrisierte Anweisung
   //   exec(sqlScript)                : Mehrfach-Anweisung (DDL); pg.Pool.query mit
@@ -53,7 +53,7 @@ async function createPgBackend() {
 // uncaughtException-Guard (AC4) wuerde die Rejection sonst nur loggen und der Prozess
 // liefe ohne Persistenz weiter - darum hier ein eigener, diagnostizierter Exit.
 let backend;
-if (config.storeBackend === "pg") {
+if (config.store.storeBackend === "pg") {
   try {
     backend = await createPgBackend();
   } catch (e) {

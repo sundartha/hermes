@@ -168,7 +168,7 @@ test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlosse
   // P5 (Provider-Registry): der Telnyx-Literal-Vergleich wurde durch die Capability-Seam
   // (providerSupports/CAPABILITY) ersetzt - derselbe Marker-Anker, neue Quelltext-Form.
   const marker =
-    "config.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)";
+    "config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)";
   const block = apiCallsSrc.slice(apiCallsSrc.indexOf(marker), apiCallsSrc.indexOf(marker) + 1500);
 
   assert.match(block, /armMaxDurationTimer\(call,\s*null\)/);

@@ -82,7 +82,7 @@ export function installGlobalMiddleware({ app, config }) {
   // Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
   // externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
   // Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
-  const rateLimiter = createRateLimiter(config.rateLimitPerMin);
+  const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
   app.use((req, res, next) => {
     if (req.path.startsWith(VOICE_PATH_PREFIX) || isTrustedLocalCaller(req)) return next();
     rateLimiter(req, res, next);
@@ -140,7 +140,7 @@ export function registerPublicRoutes({ app, config, store, watchdog }) {
   // Single-Origin (P1): mit WEB_DIST_DIR faellt "/" bewusst durch auf die statische
   // Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
   // gilt nur OHNE den unified Build (byte-identisch zum Bestand).
-  if (!config.webDistDir) {
+  if (!config.server.webDistDir) {
     app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
   }
 }
@@ -156,7 +156,7 @@ export function registerStaticServing({ app, config }) {
   // Datenleck ueber das statische Serving. /api/*, /auth/*, /.well-known/*, der Stripe-
   // Webhook und /healthz sind oben bereits gematcht (Mount-Reihenfolge) -> kein Shadowing;
   // die Owner-Legacy-API liegt HINTER der Basic-Auth (unten) -> von diesem Mount unberuehrt.
-  if (config.webDistDir) {
+  if (config.server.webDistDir) {
     // /tenant.html -> /app: schattet die public/tenant.html (Owner-Removal-Altpfad) und
     // erhaelt alte Bookmarks - das Tenant-Dashboard lebt im Build unter /app. P2/D2: den
     // Query-String ERHALTEN. Der Post-Checkout-Rueckkehrpfad landet auf /tenant.html?sub=ok
@@ -170,9 +170,9 @@ export function registerStaticServing({ app, config }) {
     });
     // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
     // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
-    app.use(express.static(config.webDistDir, { extensions: ["html"] }));
+    app.use(express.static(config.server.webDistDir, { extensions: ["html"] }));
     // SPA-Fallback: Unterpfade unter /app liefern die App-Shell (Client-seitiges Routing).
-    app.get("/app/*", (_req, res) => res.sendFile(path.join(config.webDistDir, "app", "index.html")));
+    app.get("/app/*", (_req, res) => res.sendFile(path.join(config.server.webDistDir, "app", "index.html")));
   }
 }
 
@@ -225,7 +225,7 @@ export async function buildApp(deps) {
   // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
   // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
   // damit /auth/login nicht durch Basic-Auth geblockt wird.
-  if (config.sessionSecret && config.storeBackend === "pg") {
+  if (config.auth.sessionSecret && config.store.storeBackend === "pg") {
     // INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (in
     // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
     // createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
@@ -253,7 +253,7 @@ export async function buildApp(deps) {
 
   registerStaticServing({ app, config });
   installAuthGate({ app, config, audit });
-  app.use(express.static(config.publicDir));
+  app.use(express.static(config.server.publicDir));
 
   // Play-TTS-Seam, Voice-Render-Helfer und Directiven-Synth kommen als die EINEN
   // Wurzel-Instanzen herein (INV-7, in server.js konstruiert).

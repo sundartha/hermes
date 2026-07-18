@@ -11,6 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import Anthropic from "@anthropic-ai/sdk";
 import { isTransient, withRetry, createLlmClient, LlmUnavailableError } from "../src/llm.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 // --- Test-Doubles (lokal, Single-Consumer-Konvention) ---
 
@@ -41,7 +42,7 @@ function fakeSleep() {
 
 // Minimal-Config mit den sechs LLM-Feldern (deterministisch, kein echter Backoff).
 function llmConfig(overrides = {}) {
-  return {
+  return withConfigNamespaces({
     llmRequestTimeoutMs: 3500,
     llmMaxRetries: 2,
     llmBackoffMs: 1,
@@ -49,7 +50,7 @@ function llmConfig(overrides = {}) {
     llmBreakerWindowMs: 10000,
     llmBreakerCooldownMs: 30000,
     ...overrides,
-  };
+  });
 }
 
 // Standard-withRetry-Optionen mit injizierten Fakes; max/baseMs ueberschreibbar.

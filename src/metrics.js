@@ -16,7 +16,7 @@ const defaultLog = (kind, payload) =>
   console.log(`${LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`);
 
 export function createMetrics({
-  enabled = config.metricsEnabled,
+  enabled = config.metrics.metricsEnabled,
   log = defaultLog,
   now = Date.now,
   maxTrackedCalls = MAX_TRACKED_CALLS,
