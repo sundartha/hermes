@@ -6,7 +6,9 @@
 // Menge + Optionalitaet ab. P3 ergaenzt das OPTIONALE advisory-Feld context (Server
 // bleibt autoritativ, Wirkung nur bei ASSISTANT_CONTEXT_ENABLED); die Required-Menge
 // bleibt unveraendert -> /api/calls bei Flag aus byte-identisch (die P0-Pins in
-// personal-assistant-characterization.test.js decken das Laufzeitverhalten ab).
+// personal-assistant-characterization.test.js decken das Laufzeitverhalten ab). P2b
+// ergaenzt zusaetzlich das OPTIONALE Diagnose-Retention-Flag diagnostic (Server bleibt
+// autoritativ, siehe src/diagnostic-retention.js); auch das aendert die Required-Menge nicht.
 //
 // Seam wie mcp-tools.test.js / mcp-ui.test.js: ein fakeServer faengt die per
 // server.tool ODER server.registerTool registrierten Schemas ein, ohne echten
@@ -34,8 +36,9 @@ function captureSchemas() {
   return schemas;
 }
 
-// Soll-Form von place_call NACH P3 (= P1 + das optionale advisory-Feld context). Aus
-// diesen Eintraegen leiten sich Feldanzahl + Optionalitaet ab - kein nacktes Zahl-Literal (G25).
+// Soll-Form von place_call NACH P2b (= P1 + das optionale advisory-Feld context + das
+// optionale Diagnose-Retention-Flag diagnostic). Aus diesen Eintraegen leiten sich
+// Feldanzahl + Optionalitaet ab - kein nacktes Zahl-Literal (G25).
 const PLACE_CALL_SHAPE = {
   to: { optional: false },
   objective: { optional: false },
@@ -44,6 +47,7 @@ const PLACE_CALL_SHAPE = {
   context: { optional: true },
   language: { optional: true },
   max_duration_s: { optional: true },
+  diagnostic: { optional: true },
 };
 
 test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext ohne Secrets in der Assistenten-Rolle", () => {
@@ -56,7 +60,7 @@ test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext
   assert.match(briefing, /assistent/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
 });
 
-test("P1-02: place_call-Schema bleibt strukturell unveraendert (gleiche Felder + Optionalitaet)", () => {
+test("P1-02 (nach P2b): place_call-Schema bleibt strukturell unveraendert (gleiche Felder + Optionalitaet)", () => {
   const schema = captureSchemas().get("place_call");
   const actualKeys = Object.keys(schema).sort();
   const expectedKeys = Object.keys(PLACE_CALL_SHAPE).sort();

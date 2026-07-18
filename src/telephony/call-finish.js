@@ -6,8 +6,11 @@
 // attachMediaBridge UND makeCallControlIngest - die In-Memory-Guards (call._finished) und
 // der persistierte billedAt-Marker verlangen Identitaet. Die paymentEnabled-Gating-Bedingung
 // (Voice-Minuten-Meter) bleibt im finishCall-Body (INV-9); reconcileOutboundVoiceBudget
-// laeuft immer, releaseReserve wird intra-modul aufgerufen.
+// laeuft immer, releaseReserve wird intra-modul aufgerufen. P2b: die injizierte config
+// schliesst zusaetzlich config.privacy (Diagnose-Retention-Frist) - dieselbe Rolle wie
+// config.billing fuer das Metering, nur fuer den Roh-Transkript-Purge-Entscheid.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
+import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
@@ -60,13 +63,19 @@ export function makeCallFinish({
 
     try {
       const result = await summarizeCall(call);
+      // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung). P2b: der Purge steht jetzt VOR
+      // dem Frueh-Return. Ein leeres `result` heisst hier NICHT "Fehler" - ein Fehler
+      // WIRFT und landet im catch unten, und ein leeres Transkript ist oben bereits
+      // rausgefallen. Es heisst genau eins: fuer diesen Tenant sind Summaries
+      // abgeschaltet (allowSummaries=false, claude.js). Vorher lief der Purge erst
+      // DANACH - wer Summaries abschaltete, bekam still die LAENGSTE Aufbewahrung
+      // (Roh-Transkript bis RETENTION_DAYS) statt der kuerzesten. Genau verkehrt herum.
+      // Einzige Ausnahme ist die Diagnose-Retention (Ziel == eigene verifizierte Nummer
+      // des Tenants); die raeumt pruneOldData nach DIAGNOSTIC_RETENTION_DAYS ab.
+      // Unveraendert: scheitert die Summary mit einer Exception, bleibt das Transkript
+      // liegen -> pruneOldData als Defense-in-Depth.
+      if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
       if (!result) return;
-      // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung): NUR nach Summary-Erfolg.
-      // summarizeCall hat summary/objectiveAchieved + Action Items bereits persistiert;
-      // das Roh-Transkript wird jetzt geloescht (nur noch Summary at rest). Scheitert
-      // die Summary (result null / Exception), bleibt das Transkript -> die 30-Tage-
-      // pruneOldData-Retention raeumt es als Defense-in-Depth ab.
-      store.purgeTranscript(call.id);
       const aiCount = (result.actionItems || []).length;
       const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
       store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);

@@ -11,16 +11,19 @@ import { hasActiveNumber } from "./store/views.js";
 import { attachMediaBridge } from "./bridge.js";
 import { USAGE_EVENT_KIND } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
+import { hasPrunedSomething } from "./store/state-ops.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 // Retention (DSGVO): alte Transkripte/Notifications beim Start und periodisch loeschen
 function runRetention(store, config) {
   const removed = store.pruneOldData();
-  if (removed.calls || removed.notifications || removed.actionItems)
-    console.log(
-      `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ${removed.actionItems} erledigte Action Items (aelter als ${config.privacy.retentionDays} Tage)`,
-    );
+  if (!hasPrunedSomething(removed)) return;
+  console.log(
+    `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ` +
+      `${removed.actionItems} erledigte Action Items (aelter als ${config.privacy.retentionDays} Tage), ` +
+      `${removed.diagnosticTranscripts} Diagnose-Transkripte (aelter als ${config.privacy.diagnosticRetentionDays} Tage)`,
+  );
 }
 
 // Alle vier fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen

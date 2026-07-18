@@ -23,6 +23,7 @@ import { VOICE_ENGINE } from "../config.js";
 import { normNum, PROVIDER } from "../store/defaults.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
+import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -86,6 +87,19 @@ export function makeCallRoutes({
     // normalize_target aufgeloeste Nummer - die lokale `to` bleibt roh und wird ab hier NICHT
     // mehr gelesen.
     const language = store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
+    // P2b (Diagnose-Retention): der Body-Wert ist ein WUNSCH, keine Wahrheit. Die
+    // Scope-Pruefung liegt hier, serverseitig, gegen ctx.to (das NORMALISIERTE Ziel nach
+    // dem normalize_target-Gate) und die eigene verifizierte Nummer des Tenants. Kein
+    // Treffer -> still false, kein Fehler (der Anruf laeuft normal, nur ohne Retention).
+    // Bewusst KEIN neues Gate in der outboundGates-Kette: das hier lehnt nie ab, wird
+    // von keinem Gate gelesen und haette die reihenfolge-gepinnte Safety-Kette nur
+    // verbreitert (test/outbound-gates-order.test.js bleibt unangetastet).
+    const diagnostic = diagnosticRetentionGranted({
+      requested: b.diagnostic,
+      to: ctx.to,
+      ownNumber: store.tenantPrivateNumber(ctx.tenantId),
+      privacy: config.privacy,
+    });
     // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
     // statt TwiML.
     const call = store.createCall({
@@ -102,6 +116,7 @@ export function makeCallRoutes({
       tenantId: ctx.tenantId,
       provider: ctx.outboundProvider,
       reserveCents: ctx.reserveCents, // OUT-05 (F2)
+      diagnostic, // P2b: serverseitig aufgeloest, nie roh aus dem Body
     });
     audit(
       "place_call",
@@ -155,6 +170,10 @@ export function makeCallRoutes({
         twilioSid: call.twilioSid,
         status: "dialing",
         context_received: contextReceivedMeta(ctx.context, config), // I10
+        // P2b: ehrliche Rueckmeldung, ob der Diagnose-Wunsch gewaehrt wurde. Eine still
+        // verweigerte, datenschutzrelevante Anforderung ohne jede Beobachtbarkeit waere
+        // ein eigener Defekt (Praezedenz: context_received/I10). NUR ein Boolean.
+        diagnostic: call.diagnostic,
       });
     } catch (err) {
       // C5 (Struct-4): die eigentliche Luecke - bisher lief hier NIE finishCall (Settlement/
