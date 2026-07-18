@@ -37,6 +37,11 @@ Nicht in dieser Kette: **P0** (reine Owner-Phase, Anlass-Tagebuch — laeuft par
 **Umgang mit ⛔ NICHT-AGENTEN-ARBEIT (im Plan markiert):**
 Diese Schritte NICHT versuchen, NICHT umgehen, und NICHT als Fehlschlag werten. Dazu gehoeren Probeanrufe (P1, P5), der Render-Dashboard-Flip (P2a), Bench-Messlaeufe (P4) und die Datenschutz-Zeile in `apps/web` (P2b — Website laeuft ueber den `staging`-Branch, Datei NICHT editieren, nur Textvorschlag in den Report). Implementiere den Code-Teil, sammle die offenen Owner-Schritte und berichte sie am Ende gesammelt. Eine Phase, deren Abnahme nur per Probeanruf moeglich ist, gilt als "implementiert, Abnahme offen" — nicht als rot.
 
+**Bench-Baseline (Owner-Entscheidung): die Kette WARTET NICHT darauf.** Der Owner erhebt Baseline und Vergleich gebuendelt NACH der Kette. Konsequenz fuer dich:
+- P4 gilt als PASS, sobald Code + gruene Suite stehen. Die Baseline-Zahlen NICHT erheben, NICHT schaetzen, NICHT aus alten Reports uebernehmen.
+- P5 laeuft normal weiter. Sein Abnahmekriterium, das gegen die Baseline vergleicht, gilt als **"Abnahme offen"** — kein Grund zu stoppen.
+- **Notiere den P4-Merge-Commit-Hash im Abschlussreport.** Der Owner braucht ihn, um die Baseline nachtraeglich auf dem echten Vorher-Stand zu erheben (`git worktree add` auf diesen Commit, dort `npm run convo-bench`), bevor er den Vergleich auf dem Endstand faehrt. Ohne diesen Hash ist der Vorher-Wert nicht mehr rekonstruierbar.
+
 **Fail-closed-Regeln (nicht verhandelbar):**
 - Erreicht eine Phase kein PASS oder bleibt ein Merge-Gate rot -> Kette STOPPEN, Zustand berichten (welche Phasen gemergt, was rot, Wurzel-Hypothese). NIE "trotzdem mergen".
 - Flake-Protokoll: `p5-gate-proof` hat ~12 % Voll-Last-Flake — rot gilt nur als echt, wenn die Datei ISOLIERT (`node --test test/<datei>.test.js`) rot bleibt.
