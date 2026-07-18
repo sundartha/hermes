@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { webAuth, signValue } from "../src/web-auth.js";
+import { webAuth, webAuthAllowPending, signValue } from "../src/web-auth.js";
 
 const SECRET = "test-secret-012345678901234567890";
 const FUTURE = new Date(Date.now() + 3600_000).toISOString();
@@ -26,9 +26,9 @@ function fakeDeps(over = {}) {
   };
 }
 
-async function mount(deps) {
+async function mount(deps, factory = webAuth) {
   const app = express();
-  app.get("/probe", webAuth(deps), (req, res) => res.json(req.tenant));
+  app.get("/probe", factory(deps), (req, res) => res.json(req.tenant));
   const server = await new Promise((r) => {
     const s = app.listen(0, "127.0.0.1", () => r(s));
   });
@@ -116,3 +116,44 @@ test("unbekannte Session -> 401", async () => {
     await s.close();
   }
 });
+
+// ---- PA-9: Status-Gate-Matrix (4 Status x 2 Middlewares) --------------
+// Sperrt die GEWOLLTE Divergenz mechanisch fest: die zwei Middlewares unterscheiden sich
+// AUSSCHLIESSLICH im Status-Praedikat (active-only vs. active|suspended). Alle 8 Zellen als
+// Golden-Truth-Table mit {statusCode, req.tenant} - vor und nach der Higher-Order-Dedup
+// identisch. Der Pass-Fall (200) prueft den VOLLEN req.tenant-Inhalt, nicht nur den Code.
+const accountFor = (status) => ({ tenantId: "t_u1", role: "member", status, email: "u1@x" });
+
+const expectedTenant = (status) => ({
+  tenantId: "t_u1",
+  sub: "u1",
+  role: "member",
+  email: "u1@x",
+  status,
+});
+
+// 4. Status "unexpected" = ausserhalb des TENANT_STATUS-Enums -> beweist Default-Deny.
+const STATUS_MATRIX = [
+  { status: "active", webAuth: 200, pending: 200 },
+  { status: "suspended", webAuth: 403, pending: 200 }, // einzige Zelle, in der die zwei divergieren
+  { status: "closed", webAuth: 403, pending: 403 },
+  { status: "unexpected", webAuth: 403, pending: 403 },
+];
+
+for (const row of STATUS_MATRIX) {
+  for (const [label, factory, expected] of [
+    ["webAuth", webAuth, row.webAuth],
+    ["webAuthAllowPending", webAuthAllowPending, row.pending],
+  ]) {
+    test(`Status-Gate: ${label} + status=${row.status} -> ${expected}`, async () => {
+      const s = await mount(fakeDeps({ account: accountFor(row.status) }), factory);
+      try {
+        const r = await get(`${s.base}/probe`, sessionCookie("sess1"));
+        assert.equal(r.status, expected);
+        if (expected === 200) assert.deepEqual(JSON.parse(r.body), expectedTenant(row.status));
+      } finally {
+        await s.close();
+      }
+    });
+  }
+}
