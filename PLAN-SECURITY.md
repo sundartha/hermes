@@ -339,3 +339,54 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > globalen `onUnhandledRejection`-Handler (`process-guards.js`) durchzureichen - der Log-
 > Eintrag traegt ein stabiles `[terminateAndBillCall]`-Praefix + `callId` (Korrelation, keine
 > PII) + `e.message`, secret-frei. Alle 5 Terminierungspfade reichen `callId` mit.
+
+## P2B-DIAG — Diagnose-Retention + geschlossenes `allowSummaries`-Leck (nach P2a)
+
+> **Geschlossene Luecke (Wurzel):** Bei `allowSummaries=false` gab `summarizeCall` `null`
+> zurueck, `finishCall` returnte frueh und `purgeTranscript` lief NIE - ein Tenant, der
+> Summaries abschaltete, bekam still die LAENGSTE Aufbewahrung (Roh-Transkript bis
+> `RETENTION_DAYS`) statt der kuerzesten. Der Purge steht jetzt VOR dem Frueh-Return; ein
+> leeres Summary-Ergebnis heisst strukturell "Summaries aus" (ein echter Fehler wirft und
+> landet im `catch`, wo das Transkript wie bisher liegen bleibt und von `pruneOldData`
+> abgeraeumt wird).
+>
+> **Diagnose-Retention (Scope):** `call.diagnostic` wird AUSSCHLIESSLICH serverseitig
+> gesetzt (`src/diagnostic-retention.js`, aufgerufen in `POST /api/calls`) und NUR, wenn
+> das normalisierte Ziel exakt der `privateNumber` des anrufenden Tenants entspricht. Der
+> Body-/MCP-Wert ist ein Wunsch, keine Wahrheit; die Pruefung ist strikt (`=== true`,
+> String-Truthiness kann sie nicht aufweichen). Fremde Gespraechsinhalte koennen damit
+> nicht laenger liegen als versprochen. Fail-closed in jeder Richtung: kein Flag, kein
+> Treffer oder `DIAGNOSTIC_RETENTION_DAYS=0` ergibt exakt das Bestandsverhalten.
+>
+> **Frist + Loeschpfad:** `DIAGNOSTIC_RETENTION_DAYS` (Default 7, `min: 0`), strikt
+> getrennt von `RETENTION_DAYS` (30). Der bestehende Retention-Sweep (`boot.js
+> runRetention` -> `store.pruneOldData` -> `state-ops.purgeExpiredDiagnosticTranscripts`)
+> bekam einen zweiten, strengeren Durchgang: Roh-Transkripte markierter Calls fallen nach
+> der kurzen Frist, der Call-Record selbst erst nach der langen. Der Durchgang laeuft
+> UNABHAENGIG von `RETENTION_DAYS` - `RETENTION_DAYS=0` darf die kuerzere Frist nicht mit
+> abschalten. `DIAGNOSTIC_RETENTION_DAYS=0` bedeutet hier bewusst "cutoff = jetzt" (alles
+> faellt), nicht "Durchgang aus" - nur diese Asymmetrie ist fail-closed.
+>
+> **Restrisiko 1 (akzeptiert, bounded) - Sweep-Takt:** `pruneOldData` laeuft beim Boot UND
+> alle 6 h (`RETENTION_SWEEP_INTERVAL_MS`, `boot.js`). Die reale Obergrenze ist damit
+> `DIAGNOSTIC_RETENTION_DAYS + 6 h`, nicht die Frist auf die Minute. Render Free hat keine
+> Cron-Jobs (Owner-Removal-Kette); ein exakterer Takt braeuchte einen eigenen Timer.
+>
+> **Restrisiko 2 (akzeptiert, benannt) - `privateNumber` ist validiert, nicht OTP-
+> verifiziert:** Ein Tenant kann seine `privateNumber` per Self-Service setzen
+> (`self-service-routes.js` -> `setPrivateNumber`); geprueft werden E.164-Form und
+> erlaubtes Land, KEIN Rueckruf-/OTP-Nachweis. Wer dort die Nummer eines Dritten eintraegt,
+> koennte fuer Anrufe an diesen Dritten die verlaengerte Aufbewahrung ausloesen.
+> Gegengewichte: dieselbe Nummer ist das Ziel der Summary-SMS (der Missbrauch leitet die
+> eigenen Zusammenfassungen an den Dritten weiter, also selbst-begrenzend), Outbound ist
+> ohnehin KYC- und abo-gegated, und die Frist bleibt kurz. Ein OTP-Nachweis der
+> `privateNumber` ist die saubere Loesung und bleibt offen.
+>
+> **Restrisiko 3 (akzeptiert) - Fristverkuerzung wirkt erst beim naechsten Sweep:** Wird
+> `DIAGNOSTIC_RETENTION_DAYS` von 7 auf 0 gedreht, faellt ein bereits markiertes
+> Transkript nicht sofort, sondern beim naechsten Sweep (<= 6 h). `RETENTION_DAYS` bleibt
+> der harte Backstop.
+>
+> **Deploy-Kopplung (Reihenfolge, kein Code-Gate):** In Produktion steht
+> `DIAGNOSTIC_RETENTION_DAYS=0`, bis die Datenschutzerklaerung (`apps/web`) den
+> Diagnosemodus und seine Frist nennt.

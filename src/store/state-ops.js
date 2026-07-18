@@ -123,6 +123,7 @@ export function createCall(
     tenantId,
     provider,
     reserveCents,
+    diagnostic,
   },
 ) {
   const call = {
@@ -186,6 +187,12 @@ export function createCall(
     // identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     callControlId: null,
     assistantId: null,
+    // P2b (Diagnose-Retention): markiert einen Call, dessen Roh-Transkript die Summary
+    // ueberleben darf. Wird AUSSCHLIESSLICH serverseitig gesetzt (Ziel == eigene
+    // verifizierte Nummer des Tenants, src/diagnostic-retention.js) - nie roh aus dem
+    // Request-Body. Default false = Bestandsverhalten (Purge nach Summary); undefined/
+    // fehlend -> false, byte-identisch zur pg-Hydrierung (rowToCall).
+    diagnostic: diagnostic === true,
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist
@@ -1593,10 +1600,11 @@ export function addNotification(s, title, body, callId) {
 }
 
 // ---- Retention (DSGVO-Datenminimierung) ----
-// Loescht beendete Calls (samt Transkript), Notifications und ERLEDIGTE Action
-// Items, die aelter als `days` sind. Aktive Calls und offene Action Items
-// bleiben immer erhalten. days <= 0 schaltet die Retention ab.
-export function pruneOldData(s, days) {
+// Loescht beendete Calls (samt Transkript), Notifications und ERLEDIGTE Action Items,
+// die aelter als `days` sind. Aktive Calls und offene Action Items bleiben immer
+// erhalten. days <= 0 schaltet diesen Durchgang ab. (Bisheriger pruneOldData-Rumpf,
+// unveraendert - nur benannt und aus der Komposition herausgezogen.)
+function pruneExpiredRecords(s, days) {
   const removed = { calls: 0, notifications: 0, actionItems: 0 };
   if (!days || days <= 0) return removed;
   const cutoff = new Date(Date.now() - days * MS_PER_DAY).toISOString();
@@ -1617,6 +1625,49 @@ export function pruneOldData(s, days) {
   removed.notifications = before.notifications - s.notifications.length;
   removed.actionItems = before.actionItems - s.actionItems.length;
   return removed;
+}
+
+// Zweiter, STRENGERER Retention-Durchgang (P2b): loescht die Roh-Transkripte beendeter
+// Diagnose-Calls, die aelter als `days` sind. Der CALL-RECORD bleibt stehen (er faellt
+// erst ueber die lange RETENTION_DAYS-Frist) - genau das macht die kuerzere Frist zur
+// bindenden. Reine Mutation, kein IO; liefert die Zahl geleerter Transkripte.
+//
+// BEWUSSTE ASYMMETRIE zu pruneExpiredRecords: dort heisst days<=0 "Retention aus" (alles
+// bleibt), hier heisst 0 "Feature aus" (cutoff = jetzt -> jedes beendete Diagnose-
+// Transkript faellt). Nur diese Richtung ist fail-closed: DIAGNOSTIC_RETENTION_DAYS=0
+// darf nicht in unbegrenzte Rohdaten kippen. Negative Werte kann config nicht liefern
+// (numEnv min:0) und werden zusaetzlich geklemmt. Das Leeren selbst laeuft ueber
+// purgeTranscript - EINE Mutationsquelle (G5), kein zweites `call.transcript = []`.
+export function purgeExpiredDiagnosticTranscripts(s, days) {
+  const cutoff = new Date(Date.now() - Math.max(days, 0) * MS_PER_DAY).toISOString();
+  let purged = 0;
+  for (const call of s.calls) {
+    if (call.diagnostic !== true || !call.endedAt || call.endedAt >= cutoff) continue;
+    if (purgeTranscript(s, call.id)) purged++;
+  }
+  return purged;
+}
+
+// Die EINE Retention-Fassade beider Backends: Record-Durchgang (lange Frist) plus
+// Diagnose-Transkript-Durchgang (kurze Frist). Benannte Optionen statt zweier
+// gleichartiger Zahlen-Positionen - 30 und 7 nebeneinander sind nicht
+// verwechselungssicher (F1/G25).
+export function pruneOldData(s, { retentionDays, diagnosticRetentionDays }) {
+  const removed = pruneExpiredRecords(s, retentionDays);
+  // Laeuft UNABHAENGIG von retentionDays: eine abgeschaltete Record-Retention
+  // (RETENTION_DAYS=0, u.a. der Test-Default in BASE_ENV) darf die kuerzere
+  // Diagnose-Frist NICHT mit abschalten - sonst laege genau das Roh-Transkript am
+  // laengsten, das am kuerzesten liegen soll.
+  removed.diagnosticTranscripts = purgeExpiredDiagnosticTranscripts(s, diagnosticRetentionDays);
+  return removed;
+}
+
+// Hat ein pruneOldData-Lauf irgendetwas veraendert? EINE Quelle fuer die save()-Bedingung
+// BEIDER Backends und die Log-Bedingung in boot.js. Vorher stand dieselbe OR-Kette
+// dreimal - ein dort vergessener neuer Zaehler haette einen Purge still nicht persistiert
+// (Datenverlust-Klasse, G5/S2).
+export function hasPrunedSomething(removed) {
+  return Object.values(removed).some((n) => n > 0);
 }
 
 // ---- Settings ----

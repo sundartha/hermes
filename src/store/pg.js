@@ -408,9 +408,13 @@ export function makePgStore(runner) {
     // Default = config.privacy.retentionDays, identisch zum json-Backend: der einzige
     // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
     // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).
-    pruneOldData(days = config.privacy.retentionDays) {
-      const removed = ops.pruneOldData(requireState(), days);
-      if (removed.calls || removed.notifications || removed.actionItems) save();
+    // P2b: zweite, strengere Frist fuer Diagnose-Transkripte (diagnosticDays).
+    pruneOldData(days = config.privacy.retentionDays, diagnosticDays = config.privacy.diagnosticRetentionDays) {
+      const removed = ops.pruneOldData(requireState(), {
+        retentionDays: days,
+        diagnosticRetentionDays: diagnosticDays,
+      });
+      if (ops.hasPrunedSomething(removed)) save();
       return removed;
     },
 
@@ -846,6 +850,12 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // (Lehre i8-design-decisions). NULL -> null (json-Parity).
     callControlId: r.call_control_id ?? null,
     assistantId: r.assistant_id ?? null,
+    // P2b: Diagnose-Markierung hydrieren. Ohne diese Zeile ginge sie beim Restart
+    // verloren UND der naechste Flush schriebe sie auf FALSE zurueck (Lehre
+    // i8-design-decisions). Explizites === true statt Truthiness: der Boolean-Wert
+    // kommt aus dem Treiber, und ein NULL aus einer alt-migrierten Zeile muss auf
+    // false fallen, nie auf true (fail-closed, bekannte pg-Boolean-Drift).
+    diagnostic: r.diagnostic === true,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -1061,8 +1071,8 @@ async function flushCalls(client, tenantId, calls) {
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
           summary_sms_sent_at, context, failure_reason, billed_at,
-          call_control_id, assistant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+          call_control_id, assistant_id, diagnostic)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1108,6 +1118,9 @@ async function flushCalls(client, tenantId, calls) {
         // Origination gesetzt, nicht beim initialen createCall.
         c.callControlId ?? null,
         c.assistantId ?? null,
+        // P2b: Diagnose-Markierung. Wie context NICHT im ON CONFLICT DO UPDATE SET -
+        // sie wird bei createCall gesetzt und danach nie mehr geaendert.
+        c.diagnostic === true,
       ],
     );
     await flushTranscript(client, tenantId, c);

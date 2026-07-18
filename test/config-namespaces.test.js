@@ -26,11 +26,12 @@ const EXPECTED_NAMESPACE_COUNTS = {
   server: 7,
   store: 3,
   metrics: 1,
-  privacy: 1,
+  // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
+  privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 99;
+const EXPECTED_TOTAL_KEYS = 100;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (99 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (100 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -72,7 +73,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
     for (const key of keys) {
       const currentValue = config[namespace][key];
       // Arrays/nested Objekte sind hier nicht das Ziel: der Test beweist die Getter/Setter-
-      // statt-Kopie-Eigenschaft an den primitiven Blaettern (93 von 99).
+      // statt-Kopie-Eigenschaft an den primitiven Blaettern (94 von 100).
       if (currentValue && typeof currentValue === "object") continue;
       checked += 1;
       const sentinel = sentinelFor(currentValue);
@@ -88,7 +89,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
       assert.strictEqual(config[namespace][key], currentValue, `${namespace}.${key} restauriert`);
     }
   }
-  assert.equal(checked, 93, "alle primitiven Blaetter (99 - 3 Arrays - 3 nested Objekte) geprueft");
+  assert.equal(checked, 94, "alle primitiven Blaetter (100 - 3 Arrays - 3 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

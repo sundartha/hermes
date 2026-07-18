@@ -645,9 +645,18 @@ export function bootstrapTenant(e164, tenantId, provider) {
 }
 
 // ---- Retention (DSGVO-Datenminimierung) ----
-export function pruneOldData(days = config.privacy.retentionDays) {
-  const removed = ops.pruneOldData(load(), days);
-  if (removed.calls || removed.notifications || removed.actionItems) save();
+// P2b: zweite, strengere Frist fuer Diagnose-Transkripte. Positionaler Bestandsvertrag
+// bleibt (Tests/Produktion rufen no-arg bzw. mit einer Zahl); die Defaults kommen wie
+// bisher aus config.privacy.
+export function pruneOldData(
+  days = config.privacy.retentionDays,
+  diagnosticDays = config.privacy.diagnosticRetentionDays,
+) {
+  const removed = ops.pruneOldData(load(), {
+    retentionDays: days,
+    diagnosticRetentionDays: diagnosticDays,
+  });
+  if (ops.hasPrunedSomething(removed)) save();
   return removed;
 }
 

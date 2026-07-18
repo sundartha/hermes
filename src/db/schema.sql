@@ -164,7 +164,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- Bestand byte-identisch (TeXML-Pfad setzt diese Felder nie).
   ai_assistant_token TEXT,
   call_control_id    TEXT,
-  assistant_id       TEXT
+  assistant_id       TEXT,
+  -- P2b (Diagnose-Retention): Call, dessen Roh-Transkript die Summary ueberleben darf
+  -- (Ziel == eigene verifizierte Nummer des Tenants). NOT NULL DEFAULT FALSE: es gibt
+  -- keinen dritten Zustand, und Bestandszeilen sind per Definition nicht diagnostisch.
+  diagnostic BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -189,6 +193,9 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS billed_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS ai_assistant_token TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS call_control_id TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS assistant_id TEXT;
+-- P2b: Diagnose-Markierung auf einer schon existierenden call-Tabelle nachziehen.
+-- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

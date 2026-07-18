@@ -61,7 +61,7 @@ before(async () => {
 
 test("pruneOldData loescht nur Altes und Beendetes", () => {
   const removed = store.pruneOldData(RETENTION_DAYS);
-  assert.deepEqual(removed, { calls: 1, notifications: 1, actionItems: 1 });
+  assert.deepEqual(removed, { calls: 1, notifications: 1, actionItems: 1, diagnosticTranscripts: 0 });
 
   const s = store.load();
   const callIds = s.calls.map((c) => c.id);
@@ -87,6 +87,11 @@ test("Loeschung ist persistiert (store.json auf Platte)", () => {
 
 test("RETENTION_DAYS=0 schaltet die Retention ab", () => {
   const countsBefore = store.load().calls.length;
-  assert.deepEqual(store.pruneOldData(0), { calls: 0, notifications: 0, actionItems: 0 });
+  assert.deepEqual(store.pruneOldData(0), {
+    calls: 0,
+    notifications: 0,
+    actionItems: 0,
+    diagnosticTranscripts: 0,
+  });
   assert.equal(store.load().calls.length, countsBefore);
 });

@@ -268,6 +268,11 @@ services:
         value: "120"
       - key: RETENTION_DAYS
         value: "30"
+      # P2b: Diagnose-Retention in Produktion vorerst AUS. Erst auf "7" stellen, wenn die
+      # Datenschutzerklaerung (apps/web) den Diagnosemodus + die Frist nennt. Achtung:
+      # die Live-Services sind Dashboard-managed - diese Zeile allein aendert Live nichts.
+      - key: DIAGNOSTIC_RETENTION_DAYS
+        value: "0"
       # Store-Backend: json (Default, Datei) oder pg (Postgres). Bei pg DATABASE_URL setzen.
       - key: STORE_BACKEND
         value: "pg"

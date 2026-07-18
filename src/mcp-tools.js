@@ -411,6 +411,15 @@ export function registerTools(
           .max(MAX_CALL_DURATION_CAP_S)
           .optional()
           .describe("Maximale Gespraechsdauer in Sekunden (Default 180, Max 300)."),
+        // P2b (Diagnose-Retention): reiner WUNSCH. Der Server gewaehrt ihn NUR, wenn das
+        // Ziel die eigene verifizierte Nummer des Nutzers ist - sonst still ignoriert.
+        // Ohne dieses Feld erreichte das Flag /api/calls nie (Zod strippt unbekannte Keys).
+        diagnostic: z
+          .boolean()
+          .optional()
+          .describe(
+            "NUR setzen, wenn der Nutzer ausdruecklich einen Testanruf an die EIGENE Nummer machen und das Gespraech hinterher analysieren will. Behaelt das Roh-Transkript fuer eine begrenzte Frist. Bei jedem anderen Ziel ignoriert der Server das Feld. Niemals ungefragt setzen.",
+          ),
       },
       outputSchema: CALL_OUTPUT,
       ...enableWidgetUi(WIDGET_CALL),

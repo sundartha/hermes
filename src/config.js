@@ -656,6 +656,17 @@ const rawConfig = {
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
   // werden geloescht (DSGVO-Datenminimierung). 0 = Retention aus.
   retentionDays: numEnv("RETENTION_DAYS", process.env.RETENTION_DAYS, { fallback: 30, min: 0 }),
+  // P2b: eigene, STRENGERE Frist fuer die Roh-Transkripte diagnostisch markierter Calls
+  // (Ziel == eigene verifizierte Nummer des Tenants). Strikt getrennt von retentionDays:
+  // der Call-Record faellt weiter erst nach RETENTION_DAYS, sein Roh-Transkript schon
+  // hier - die kuerzere Frist ist damit immer die bindende. 0 = Diagnose-Retention aus
+  // (kein Flag wird gewaehrt UND jedes markierte Alt-Transkript faellt beim naechsten
+  // Sweep) - fail-closed in die Loesch-Richtung.
+  diagnosticRetentionDays: numEnv(
+    "DIAGNOSTIC_RETENTION_DAYS",
+    process.env.DIAGNOSTIC_RETENTION_DAYS,
+    { fallback: 7, min: 0 },
+  ),
 
   // ---- MCP ueber HTTP ----
   // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
@@ -802,7 +813,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   server: ["port", "publicUrl", "isProduction", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
-  privacy: ["retentionDays"],
+  privacy: ["retentionDays", "diagnosticRetentionDays"],
 });
 
 // EINE Gruppen-Fabrik (G5) fuer beide Oberflaechen: jedes Blatt ist Getter+Setter auf

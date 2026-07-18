@@ -98,6 +98,10 @@ export const BASE_ENV = {
   SKIP_TWILIO_SIGNATURE_CHECK: "true",
   RATE_LIMIT_PER_MIN: "1000",
   RETENTION_DAYS: "0",
+  // P2b: Diagnose-Retention in Spawn-Tests neutral AUS (= Bestandsverhalten). Ohne diese
+  // Zeile leakt eine lokale .env via dotenv in die Spawn-Tests -> Baseline-Drift.
+  // diagnostic-retention-http.test.js setzt sie explizit auf "7".
+  DIAGNOSTIC_RETENTION_DAYS: "0",
   VOICE_ENGINE: "budget",
   OPENAI_API_KEY: "",
   REALTIME_MODEL: "gpt-realtime",
