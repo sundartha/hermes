@@ -732,6 +732,37 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
   });
 });
 
+// Review-Blocker T1 (P5b, Runde 3): spendMonthKey ist nullable (unlesbare Uhr, s.
+// spendMonthWindowKey), aber RICH_STATE oben liefert durchgaengig einen String - der
+// Fallback-Textzweig UND der nullable-Schema-Zweig liefen bislang in KEINEM Test durch
+// echtes null. Fixture per Spread aus RICH_STATE (G5 - keine zweite Kopie des ganzen
+// Objekts), NUR usage.spendMonthKey auf null gesetzt.
+const RICH_STATE_NULL_SPEND_MONTH_KEY = {
+  ...RICH_STATE,
+  usage: { ...RICH_STATE.usage, spendMonthKey: null },
+};
+
+test("T-W3-AC1b: spendMonthKey=null (unlesbare Uhr) - Text-Fallback 'unbekannt' + nullable-Schema-Zweig", async () => {
+  await withGateway(RICH_STATE_NULL_SPEND_MONTH_KEY, async () => {
+    const { tools } = captureUi({ uiHost: capableHost() });
+    const { handler } = tools.get("get_agent_status");
+    const result = await handler({});
+
+    const txt = result.content[0].text;
+    assert.match(
+      txt,
+      /KI-Kosten Spend-Monat unbekannt: 0\.600 EUR/,
+      "Spend-Monat-Achse: Fallback-Wortlaut statt eines Schluessels",
+    );
+
+    assert.equal(result.structuredContent.spendMonthKey, null, "structuredContent traegt null durch");
+    assert.doesNotThrow(
+      () => agentStatusOutput.parse(result.structuredContent),
+      "nullable-Schema-Zweig (spendMonthKey) validiert bei echtem null",
+    );
+  });
+});
+
 test("T-W3-AC2: Stufe 1 (faehiger Host) - genau eine agent-status-Resource + _meta zeigt darauf", async () => {
   await withGateway(RICH_STATE, async () => {
     const { tools, resources } = captureUi({ uiHost: capableHost() });
