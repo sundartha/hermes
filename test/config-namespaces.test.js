@@ -22,20 +22,22 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
-  llm: 10,
+  // P8: briefingModel + briefingTimeoutMs ergaenzt (Pre-Call-Briefing-Modell + -Timeout) -> 12.
+  llm: 12,
   telnyx: 2,
   voice: 10,
   telephony: 8,
-  tenancy: 5,
+  // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
+  tenancy: 6,
   server: 7,
   store: 3,
   metrics: 1,
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 100;
+const EXPECTED_TOTAL_KEYS = 103;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (100 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (103 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -93,7 +95,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
       assert.strictEqual(config[namespace][key], currentValue, `${namespace}.${key} restauriert`);
     }
   }
-  assert.equal(checked, 93, "alle primitiven Blaetter (100 - 3 Arrays - 4 nested Objekte) geprueft");
+  // P8: briefingModel/briefingTimeoutMs/precallBriefingEnabled sind alle drei primitiv
+  // (kein neues Array, kein neues nested Objekt) -> 93 + 3 = 96.
+  assert.equal(checked, 96, "alle primitiven Blaetter (103 - 3 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

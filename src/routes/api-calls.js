@@ -24,6 +24,7 @@ import { normNum, PROVIDER } from "../store/defaults.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
+import { fetchPrecallBriefing } from "../precall-briefing.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -100,6 +101,30 @@ export function makeCallRoutes({
       ownNumber: store.tenantPrivateNumber(ctx.tenantId),
       privacy: config.privacy,
     });
+
+    // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing VOR dem Waehlen. Laeuft NUR,
+    // wenn der Owner selbst keinen Kontext mitgeschickt hat (Owner-Eingabe gewinnt immer),
+    // und nur hinter PRECALL_BRIEFING_ENABLED (Default aus). Fail-Soft: Fehler/Timeout/
+    // Schemaverstoss -> null -> ctx.context bleibt null -> systemPrompt byte-identisch
+    // zum Bestand (assistantContextSection: `!call.context -> ""`). Bewusst KEIN Gate in
+    // der outboundGates-Kette (Praezedenz diagnostic oben): es lehnt nie ab und haette die
+    // reihenfolge-gepinnte Safety-Kette nur verbreitert. Position NACH der Kette ist
+    // Pflicht - so entstehen keine Briefing-Token fuer einen Call, den Budget-, Nummern-
+    // oder KYC-Gate ohnehin ablehnen (Regel 1).
+    if (!ctx.context) {
+      const briefed = await fetchPrecallBriefing({
+        objective: ctx.objective,
+        ownerNotes: b.briefing,
+        constraints: b.constraints,
+        to: ctx.to,
+        tenantId: ctx.tenantId,
+      });
+      if (briefed) {
+        ctx.context = briefed.context;
+        ctx.mandate = ctx.mandate || briefed.mandate;
+      }
+    }
+
     // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
     // statt TwiML.
     const call = store.createCall({
