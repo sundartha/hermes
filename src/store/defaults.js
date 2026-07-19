@@ -141,6 +141,38 @@ export const CENTS_PER_EUR = 100;
 // bucht nur den vollen Cent-Uebertrag in costCents (G26: Money at rest = Ganzzahl).
 export const MICRO_CENTS_PER_CENT = 1_000_000;
 
+// Audit-/Log-Grund fuer einen unbuchbaren Geldwert (D7). EINE Quelle (G5/G25): Schreib-,
+// Lese- und Hydrierungskante nennen denselben String, damit der Operator "Bucket vergiftet"
+// NIE mit "Budget wirklich erschoepft" verwechselt - genau diese Fehldiagnose hat den
+// Vorfall verlaengert. Deutsch, wie die uebrigen Gate-Gruende (denylist/land/reserve).
+export const USAGE_CORRUPT_REASON = "usage_korrupt";
+
+// Ist x ein BUCHBARER Geldbetrag (GANZZAHL-Cents-Konvention, G26)? EINZIGE
+// Gueltigkeitsquelle aller Geld-Kanten (D7, G5): Schreibkante (trackUsage,
+// addVoiceUsageCostCents), Lesekante (budgetExceeded, globalBudgetExceeded und die beiden
+// reserve-bewussten Schwestern), Reserve-Riegel (tryReserveOutboundBudget) und die
+// pg-Hydrierung (rowToUsage) fragen NUR hier. Vorher stand eine negierte Vorzeichenpruefung
+// ad hoc genau einmal (in tryReserveOutboundBudget); fuenf weitere Inline-Kopien waeren
+// exakt die Invarianten-per-Konvention-Klasse, an der die naechste vergessene
+// Schreibstelle fail-open geht.
+//
+// Prueft auf Endlichkeit, Ganzzahligkeit und Nicht-Negativitaet, NIE auf Kleinheit
+// (P1-Safety-BLOCKER): ein Sub-Cent-Turn (Haiku << 0,5 Cent, faehrt in
+// costMicroCentsRem) und ein legitimer 0-Betrag bleiben buchbar - die Kleinheits-Ausnahme
+// gilt fuer die MICRO-Cent-Einheit, nicht fuer die (groebere) Cents-Achse selbst.
+// Number.isFinite faengt NaN UND +/-Infinity (ein positiver Unendlich-Wert waere bei
+// einer reinen >=0-Pruefung durchgerutscht - genau die Luecke, die die alte Pruefung
+// offen liess) und faengt zugleich Nicht-Zahlen ("5" ist nicht buchbar).
+// Number.isInteger (Review-Fix Runde 1, G26): diese Funktion ist die EINZIGE
+// Gueltigkeitsquelle der Ganzzahl-Cents-Konvention (G26, Money at rest) - ohne
+// Ganzzahl-Pruefung waere ein fraktionaler Wert (z.B. 0.5) klaglos in den
+// Ganzzahl-Akkumulator costCents geschrieben worden. turnIncrementsBookable bleibt
+// kompatibel: Token-Zaehler und microInc sind produktionsseitig immer Ganzzahlen.
+// Reine Funktion.
+export function isBookableCents(x) {
+  return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
+}
+
 // Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt
 // (G25), weil tokenCostUsd sonst zwei nackte 1e6 traegt, die NICHTS mit dem
 // gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.

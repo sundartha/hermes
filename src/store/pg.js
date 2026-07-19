@@ -17,7 +17,13 @@
 // spaeterer Scope, nicht P3b.
 import { config } from "../config.js";
 import * as ops from "./state-ops.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_PROVIDER, CENTS_PER_EUR } from "./defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  DEFAULT_PROVIDER,
+  CENTS_PER_EUR,
+  isBookableCents,
+  USAGE_CORRUPT_REASON,
+} from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 
 // Owner-Tenant zentral in defaults.js; hier re-exportiert, weil Tests + pg-helpers
@@ -882,12 +888,24 @@ function rowToCalendarEvent(r) {
   return { id: r.id, title: r.title, start: r.starts_at, end: r.ends_at };
 }
 
+// Hydriert cost_eur zu GANZZAHL Cents. Postgres NUMERIC ist exakt dezimal -> verlustfreie
+// Cent-Ableitung (P1, keine Schema-Migration). HEILKANTE (D7): NUMERIC haelt auch den Wert
+// 'NaN'; ohne diese Normalisierung ist ein einmal vergifteter Bestand nach JEDEM Boot
+// wieder da und macht beide Geld-Gates blind - sie ist die einzige der vier Kanten, die
+// heilt statt nur zu verhindern. Unbuchbar -> 0, aber NIE still: der Betrag ist damit real
+// verloren, und genau das muss der Operator sehen. Log secret-frei.
+function hydratedCostCents(costEur) {
+  const cents = Math.round(Number(costEur) * CENTS_PER_EUR);
+  if (isBookableCents(cents)) return cents;
+  console.error(`[pg] grund=${USAGE_CORRUPT_REASON} cost_eur=${costEur} -> costCents=0`);
+  return 0;
+}
+
 function rowToUsage(r) {
   return {
     inputTokens: Number(r.input_tokens),
     outputTokens: Number(r.output_tokens),
-    // Postgres NUMERIC ist exakt dezimal -> verlustfreie Cent-Ableitung (P1, keine Schema-Migration)
-    costCents: Math.round(Number(r.cost_eur) * CENTS_PER_EUR),
+    costCents: hydratedCostCents(r.cost_eur),
     costMicroCentsRem: 0, // ephemer, nicht persistiert (wie reservations); Boot startet bei 0
     calls: Number(r.calls),
   };

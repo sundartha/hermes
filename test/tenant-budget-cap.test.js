@@ -174,3 +174,17 @@ test("S1-1: praezise Rekonstruktion aus costCents+costMicroCentsRem (kein per-Sc
     "Mikro-Cent-Rest fuehrt die volle Praezision ueber die Inkremente mit",
   );
 });
+
+// P1-Safety-BLOCKER in der GEGENRICHTUNG: der D7-Riegel darf Sub-Cent-Turns NICHT
+// verwerfen. 200 Turns a 54 Input-Token = je 5022 Mikro-Cent (0,005 Cent, weit unter
+// jeder Rundungsschwelle) muessen exakt 1 Cent + 4400 Mikro-Cent-Rest ergeben.
+// Ein Guard, der auf Kleinheit statt auf Endlichkeit pruefte, liefert hier 0.
+test("P1-BLOCKER: 200 Sub-Cent-Turns ergeben exakt 1 Cent (D7-Riegel verwirft sie nicht)", () => {
+  const s = makeDefaultState();
+  const SUBCENT_TOKENS = 54;
+  const TURNS = 200;
+  for (let i = 0; i < TURNS; i++) trackUsage(s, TENANT_A, tokensOf(SUBCENT_TOKENS, 0), PRICES);
+  const bucket = usageFor(s, TENANT_A);
+  assert.equal(bucket.costCents, 1, "voller Cent-Uebertrag gebucht");
+  assert.equal(bucket.costMicroCentsRem, 4400, "Sub-Cent-Rest reist ungerundet mit");
+});
