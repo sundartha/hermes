@@ -706,6 +706,22 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
     assert.match(txt, /Agent-Nummer:/, "Backward-Compat-Format (Agent-Nummer)");
     assert.match(txt, /Berechtigungen:/, "Backward-Compat-Format (Berechtigungen)");
 
+    // P5b-Review-Blocker: die drei Geld-/Monats-Zeilen tragen je ein eigenes Achsen-Label
+    // (Lebenszeit vs. Spend-Monat vs. Reserve) UND den dazugehoerigen Wert aus RICH_STATE -
+    // je eine Assertion pro Achse, damit ein kuenftiges Vertauschen/Vergessen der Labels
+    // (das im Plan benannte D4-Wiederholungsrisiko) rot schlaegt.
+    assert.match(
+      txt,
+      /KI-Kosten gesamt \(Lebenszeit\): 2\.100 EUR von 10 EUR eigenem Budget/,
+      "Lebenszeit-Achse: Label + costEur/tenantCapEur",
+    );
+    assert.match(
+      txt,
+      /KI-Kosten Spend-Monat 2026-07: 0\.600 EUR/,
+      "Spend-Monat-Achse: Label + Monatsschluessel + spendMonthCostEur",
+    );
+    assert.match(txt, /Aktuell reserviert: 0\.600 EUR/, "Reserve-Achse: Label + reservedEur");
+
     assert.ok(result.structuredContent, "structuredContent vorhanden");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
     assert.equal(result.structuredContent.permissions, PERMISSIONS_STR);
@@ -807,6 +823,11 @@ test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding",
   // Erbt W1-Binding: die injizierte Bootstrap-Quelle (run(window)) ist vorhanden.
   assert.ok(html.includes("run(window)"), "injiziertes W1-Binding (run(window)) vorhanden");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_AGENT_STATUS), true, "Adapter kennt agent-status");
+  // P5b-Review-Blocker: die drei neuen Monats-/Reserve-Felder muessen als eigene
+  // data-mcp-Zeilen im Markup stehen, sonst bindet W1 sie nie an sichtbare Slots.
+  for (const field of ["spendMonthCostEur", "spendMonthKey", "reservedEur"]) {
+    assert.ok(html.includes(`data-mcp="${field}"`), `Slot data-mcp=${field}`);
+  }
 });
 
 // ===== W-batch: drei weitere read-only Widgets ueber den BESTEHENDEN Seam =====
