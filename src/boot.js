@@ -6,12 +6,19 @@
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
 import { assertConfig, gatewayUrlForPort, VOICE_ENGINE } from "./config.js";
-import { fakeOriginateBootBlocked, meterMappingGaps } from "./boot-guard.js";
+import {
+  fakeOriginateBootBlocked,
+  meterMappingGaps,
+  spendCapCoherence,
+  unpricedModels,
+  SPEND_CAP_FINDING,
+} from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { attachMediaBridge } from "./bridge.js";
-import { USAGE_EVENT_KIND } from "./store/defaults.js";
+import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import { hasPrunedSomething } from "./store/state-ops.js";
+import { audit } from "./util.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -26,8 +33,58 @@ function runRetention(store, config) {
   );
 }
 
-// Alle vier fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen
-// exit1-Gates" strukturell sichtbar - kein Code danach kann ein Gate vergessen).
+// P3: Konfig-Warnungen, die der Audit-Trail mitschreibt: NUR Befunde, die aendern, WAS
+// der Dienst ablehnen wird. Klausel B heisst "jedes Auslandsziel scheitert am
+// Reserve-Gate" (D5) - eine Ablehnungs-Ursache und damit Forensik, wie jede andere
+// Gate-Entscheidung. Der 0-Sentinel (A0) ist dokumentiertes Bestandsverhalten und ein
+// unbepreistes Modell bewirkt reine Ueber-Bepreisung - beide aendern keine Ablehnung
+// -> nur WARN, ohne Audit-Zeile.
+const AUDITED_BOOT_FINDINGS = new Set([SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE]);
+
+// P3: Kohaerenz der Budget-Achsen GEGENEINANDER (spendCapCoherence, src/boot-guard.js).
+// Klausel A (Tenant-Default >= Plattform-Cap) ist FATAL - eine inerte Tenant-Achse ist
+// echter Schutzverlust (Regel 1). A0/B sind WARN (siehe Klausel-Kommentar im Guard).
+function assertSpendCapCoherence(config) {
+  const findings = spendCapCoherence({
+    tenantDefaultCents: config.billing.defaultTenantBudgetCents,
+    platformCapCents: config.billing.platformSpendCapCents,
+    // Worst Case, NICHT der Inlandstarif: der Guard rechnet das teuerste Ziel.
+    maxTariffCents: config.billing.voiceTariffDefaultCents,
+    // Die HARTE Obergrenze, nicht die Default-Dauer: resolveMaxDurationS klemmt jeden
+    // Body-Override hierauf - das ist die laengstmoegliche Reserve.
+    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
+  });
+  const fatal = findings.find((f) => f.fatal);
+  if (fatal) {
+    console.error(`[boot] Start abgebrochen: ${fatal.message}`);
+    process.exit(1);
+  }
+  for (const finding of findings) {
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+    if (AUDITED_BOOT_FINDINGS.has(finding.code)) {
+      audit("boot_konfig_warnung", null, `grund=${finding.code} ${finding.message}`);
+    }
+  }
+}
+
+// P3: Modelle ohne Preistabellen-Eintrag (unpricedModels, src/boot-guard.js) buchen
+// fail-closed zur TEUERSTEN Rate (priceForModel, state-ops.js) - Folge ist reine
+// Ueber-Bepreisung (bis 3x), nie Ueber-Ausgabe. NUR WARN, kein exit(1): ein Boot-
+// Refusal tauschte hier ein Kostenproblem gegen einen Totalausfall der Telefonie.
+function warnUnpricedModels(config) {
+  const unpriced = unpricedModels([config.llm.claudeModel, config.llm.briefingModel], config.llm.modelPricesUsd);
+  if (!unpriced.length) return;
+  console.warn(
+    `[boot] Konfig-Warnung: Modell(e) ohne Preis in modelPricesUsd: ${unpriced.join(",")} - ` +
+      "bucht fail-closed zur teuersten hinterlegten Rate (Ueber-Bepreisung, priceForModel).",
+  );
+}
+
+// Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
+// strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
+// Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
+// das fuenfte, das noch process.exit(1) rufen kann - warnUnpricedModels ist reine
+// Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -76,6 +133,14 @@ function assertBootGates(config, store) {
     );
     process.exit(1);
   }
+
+  // P3: Boot-Guards Konfig-Kohaerenz (Budget-Achsen gegeneinander) + Modellpreise. NACH
+  // allen vier obigen Gates, DAMIT assertConfig() bereits gelaufen ist (Zahlen validiert)
+  // und die bestehenden Gates ihre exakte Ausgabe-Reihenfolge behalten. Beide koennen
+  // NOCH process.exit(1) rufen (assertSpendCapCoherence bei Klausel A) - deshalb MUESSEN
+  // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
+  assertSpendCapCoherence(config);
+  warnUnpricedModels(config);
 }
 
 function logBootBanner(config, port) {

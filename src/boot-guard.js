@@ -39,3 +39,104 @@ export function fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureChe
 export function meterMappingGaps(usageEventKinds, meterEventNames) {
   return usageEventKinds.filter((kind) => !meterEventNames[kind]);
 }
+
+// P3: Sekunden->Minuten-Bruecke der Worst-Case-Reserve (G25: benannte Konstante statt
+// nackter 60). Zeit-Einheit, kein Betriebsparameter -> gehoert NICHT nach config.js
+// (G35 n.z.). Muster: MS_PER_MINUTE in src/billing/metering.js, MS_PER_DAY in src/config.js.
+const SECONDS_PER_MINUTE = 60;
+
+// P3: Befund-Codes des Kohaerenz-Guards (G25/G11: EINE Quelle statt Roh-Strings in Guard,
+// Verdrahtung und Test).
+export const SPEND_CAP_FINDING = Object.freeze({
+  TENANT_DEFAULT_INERT: "tenant_default_inert", // Klausel A  - FATAL
+  TENANT_DEFAULT_UNSET: "tenant_default_unset", // Klausel A0 - WARN
+  WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable", // Klausel B - WARN + Audit
+});
+
+// P3: laengste Gespraechsdauer, die unter der Tenant-Decke zum Worst-Case-Tarif noch
+// bezahlbar ist. Division sicher: der Aufrufer ruft NUR, wenn
+// maxTariffCents * n > tenantDefaultCents > 0 gilt - das erzwingt maxTariffCents > 0
+// (kein Division-durch-0).
+function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
+  return Math.floor(tenantDefaultCents / maxTariffCents) * SECONDS_PER_MINUTE;
+}
+
+// P3 (Boot-Guards Konfig-Kohaerenz): prueft die Budget-Achsen GEGENEINANDER, nicht nur
+// jede einzeln. Drei sich ausschliessende Klauseln (Reihenfolge ist die Spezifikation):
+//
+// A0 (WARN): tenantDefaultCents === 0 ist der dokumentierte Sentinel "kein Tenant-
+//   Default" (src/config.js, min:0) - jeder Tenant ohne eigene tenant_budget-Zeile
+//   faellt auf den geteilten Plattform-Cap zurueck. Kein Schutzverlust, nur Hinweis.
+// A (FATAL): tenantDefaultCents >= platformCapCents macht die Tenant-Achse INERT - der
+//   globale Cap bindet immer zuerst, die per-Tenant-Decke wirkt nie (Regel 1: eine
+//   inerte Kosten-Achse ist echter Schutzverlust). >=, NICHT >: bei Gleichstand bindet
+//   die Tenant-Achse ebenfalls nie.
+// B (WARN + Audit): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
+//   Zielverkehr (maxTariffCents) ueber die laengstmoegliche Gespraechsdauer
+//   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes
+//   Auslandsziel scheitert am Reserve-Gate, bevor die Tenant-Decke erreicht ist. Das
+//   ist eine Ablehnungs-Ursache (Forensik), aber niemals fatal.
+//
+// Der A0-Early-Return VOR Klausel A macht "tenantDefaultCents > 0" fuer Klausel A
+// strukturell wahr (G27: Struktur statt Konvention) - Klausel B erbt das ebenfalls.
+// Es entsteht hoechstens EIN Befund (die Klauseln schliessen sich aus); Array-Form
+// haelt die Verdrahtung trotzdem uniform (Muster meterMappingGaps: leer = in Ordnung).
+//
+// Voraussetzung: laeuft NACH assertConfig() - nicht-numerische Werte sind dort bereits
+// fail-closed abgefangen (numEnv). Kein eigener NaN-Riegel (kein zweites
+// Gueltigkeitsidiom, G5/D7-Klasse).
+export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTariffCents, maxCallDurationS }) {
+  if (tenantDefaultCents === 0) {
+    return [
+      {
+        code: SPEND_CAP_FINDING.TENANT_DEFAULT_UNSET,
+        fatal: false,
+        message:
+          `DEFAULT_TENANT_BUDGET_CENTS=0 (Sentinel: kein Tenant-Default) - jeder Tenant ` +
+          "ohne eigene tenant_budget-Zeile faellt auf den geteilten Plattform-Cap " +
+          `platformSpendCapCents=${platformCapCents} zurueck.`,
+      },
+    ];
+  }
+  if (tenantDefaultCents >= platformCapCents) {
+    return [
+      {
+        code: SPEND_CAP_FINDING.TENANT_DEFAULT_INERT,
+        fatal: true,
+        message:
+          `DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ist >= MAX_BUDGET_EUR*100=${platformCapCents} ` +
+          "- die Tenant-Budget-Achse ist damit WIRKUNGSLOS (der globale Plattform-Cap bindet " +
+          "immer zuerst). Abhilfe: DEFAULT_TENANT_BUDGET_CENTS unter den Plattform-Cap senken " +
+          "ODER MAX_BUDGET_EUR anheben.",
+      },
+    ];
+  }
+  const worstCaseReserveCents = maxTariffCents * Math.ceil(maxCallDurationS / SECONDS_PER_MINUTE);
+  if (worstCaseReserveCents > tenantDefaultCents) {
+    const maxDurationS = affordableCallDurationS(tenantDefaultCents, maxTariffCents);
+    return [
+      {
+        code: SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE,
+        fatal: false,
+        message:
+          `Worst-Case-Reserve ${worstCaseReserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
+          `* max. Gespraechsdauer) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
+          `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar.`,
+      },
+    ];
+  }
+  return [];
+}
+
+// P3 (Boot-Guards Modellpreise): Modelle OHNE Eintrag in der Preistabelle (leer = alles
+// bepreist). Reine Funktion (Muster meterMappingGaps).
+//
+// Object.hasOwn statt modelPricesUsd[id] ist PFLICHT, kein Stil: in Produktion ist
+// modelPricesUsd ein guardedConfig-PROXY, dessen get-Trap bei einem unbekannten
+// Schluessel TypeError wirft (src/config.js). Ein Roh-Index wuerde ausgerechnet DIESEN
+// Boot-Guard zum Boot-Killer machen. Object.hasOwn laeuft ueber [[GetOwnProperty]] -
+// kein Trap definiert, damit ungefiltert ans Target durch. Praezedenz: priceForModel
+// in src/store/state-ops.js nutzt dasselbe Muster fuer denselben Proxy.
+export function unpricedModels(modelIds, modelPricesUsd) {
+  return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
+}
