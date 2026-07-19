@@ -20,6 +20,13 @@
 // bis der Backstop-Timer greift). reserve_budget behaelt seinen eigenen try/catch: ein
 // Store-Throw wird IMMER zum Denial (402), NIE zu reserviertem Budget, NIE zu einem unhandled
 // reject (fail-closed, Absolute Regel 1).
+//
+// FRUEHWARNUNG (Budget-Achsen P6): NACH einer ERFOLGREICHEN Reservierung meldet
+// reserve_budget - GENAU EINMAL pro Spend-Monat - dass die Plattform-Summe eine
+// konfigurierbare Schwelle ueberschritten hat (Audit + optionale SMS an den Betreiber).
+// TRIFFT KEINE ENTSCHEIDUNG und AENDERT KEIN Gate: der Call ist zu diesem Zeitpunkt
+// bereits erlaubt. Absolut fail-soft (s. emitPlatformSpendWarning unten) - ein Fehler auf
+// diesem Pfad darf niemals einen Anruf kosten.
 import { config as defaultConfig } from "../config.js";
 import {
   BOOTSTRAP_TENANT_ID,
@@ -98,6 +105,23 @@ const PLATFORM_DENIAL_REASON = "budget_platform";
 const TENANT_UNREADABLE_DENIAL =
   "Dein Budget ist gesperrt: der Verbrauchsstand ist nicht lesbar. Bitte Betreiber kontaktieren.";
 
+// Fruehwarnung (Budget-Achsen P6): eigenes Ereignis + eigener SMS-Praefix, GETRENNT von
+// PLATFORM_DENIAL/PLATFORM_DENIAL_REASON oben - eine Warnung ist keine Ablehnung und
+// aendert keine Gate-Entscheidung (s. reserve_budget-Gate unten).
+const PLATFORM_WARN_EVENT = "platform_spend_warning";
+const PLATFORM_WARN_SMS_PREFIX = "[Hermes] Plattform-Warnschwelle erreicht: ";
+
+// EINE Fehlersenke (G5): der synchrone catch UND der Promise-catch in
+// emitPlatformSpendWarning loggen dieselbe Zeile. Secret-frei (nur e.message), NIE die
+// Zielnummer.
+const logWarningFailure = (e) => console.error(`[${PLATFORM_WARN_EVENT}]`, e.message);
+
+// Audit-Detail = die EINE Faktenquelle, aus der auch der SMS-Body gebaut wird (G5).
+// AUSSCHLIESSLICH Summen-Cents + Monatsschluessel: KEINE tenantId, kein to, keine
+// requestedBy. Die Plattform-Summe ist eine Betreiber-Groesse; eine tenantId daneben
+// waere ein Cross-Tenant-Leck (Absolute Regel 4/6, wie PLATFORM_DENIAL).
+const warningDetail = (w) => `summe_cents=${w.totalCents} monat=${w.monthKey}`;
+
 const isDenied = (to) =>
   EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
@@ -146,6 +170,8 @@ export function makeOutboundGates({
   internalIdentity,
   OWNER_ID,
   TENANT_REJECT,
+  audit,
+  messaging,
 }) {
   // Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
   // nie ueber die globale Erlaubnis hinaus (Profil "*"/leer = keine Zusatz-Einschraenkung).
@@ -333,12 +359,46 @@ export function makeOutboundGates({
   // Plattform-Achse hat abgelehnt" (Schnittmenge, Regel 1). Laeuft im selben
   // withStoreLock-Callback wie die Entscheidung (reserve_budget-Gate unten) und bleibt
   // REIN SYNCHRON (Lock-Invariante des Moduls, s. Modul-Doc oben).
+  // SAFETY-KERN: eigener try/catch. Wuerde der Claim in den try/catch des Gates fallen,
+  // machte ein Throw hier aus einem BEREITS RESERVIERTEN Call ein 402 - die Reserve waere
+  // gebucht und bliebe bis zum Backstop-Timer haengen. Eine Warnung darf nie ablehnen.
+  function claimSpendWarning() {
+    try {
+      return store.claimPlatformSpendWarning(config.billing, new Date().toISOString());
+    } catch (e) {
+      logWarningFailure(e);
+      return null;
+    }
+  }
+
   function reserveOutcome(ctx) {
     const reserved = store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing);
-    if (reserved) return { reserved: true };
+    if (reserved) return { reserved: true, warning: claimSpendWarning() };
     if (store.reserveExceedsBudget(ctx.tenantId, ctx.reserveCents, config.billing))
       return { reserved: false, ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents) };
     return { reserved: false, grund: PLATFORM_DENIAL_REASON, message: PLATFORM_DENIAL };
+  }
+
+  // Fruehwarnung melden (Budget-Achsen P6). TRIFFT KEINE ENTSCHEIDUNG: der Call ist hier
+  // bereits erlaubt UND reserviert. ABSOLUT FAIL-SOFT - ein Fehler auf diesem Pfad darf
+  // niemals einen Anruf kosten: (1) der komplette Rumpf liegt in try/catch (faengt auch ein
+  // SYNCHRONES Werfen von messaging(), z.B. unbekannter Provider); (2) sendSms wird NICHT
+  // awaitet und traegt sofort ein .catch (kein Lock-Halten, keine Verzoegerung des Dials,
+  // kein unhandled reject); (3) der Claim selbst haengt in seinem eigenen try/catch (s.
+  // claimSpendWarning). audit(event, null, detail) -> ip=system: ein Plattform-Ereignis ist
+  // keinem Request zuzurechnen (Muster sms_summary_skipped).
+  function emitPlatformSpendWarning(warning, ctx) {
+    try {
+      const detail = warningDetail(warning);
+      audit(PLATFORM_WARN_EVENT, null, detail);
+      const to = config.billing.platformAlertSmsTo;
+      if (!to) return; // leer = nur Audit (exakt der Plan-Zustand)
+      messaging(ctx.outboundProvider)
+        .sendSms({ from: ctx.fromNumber, to, body: PLATFORM_WARN_SMS_PREFIX + detail })
+        .catch(logWarningFailure); // Fehler wird geschluckt+geloggt, NIE hochgereicht
+    } catch (e) {
+      logWarningFailure(e); // synchroner Wurf (z.B. unbekannter Provider in messaging())
+    }
   }
 
   // Einheitliche Denial-Form (G5): audit === null bei reinen 400-Formatfehlern (keine
@@ -623,7 +683,10 @@ export function makeOutboundGates({
             detail: `to=${ctx.to} grund=reserve_error tenant=${ctx.tenantId}`,
           });
         }
-        if (outcome.reserved) return null;
+        if (outcome.reserved) {
+          if (outcome.warning) emitPlatformSpendWarning(outcome.warning, ctx);
+          return null;
+        }
         return deny(402, { error: outcome.message }, {
           event: "place_call_denied",
           detail: `to=${ctx.to} grund=${outcome.grund} tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,

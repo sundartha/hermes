@@ -122,6 +122,10 @@ export const {
   tryReserveOutboundBudget,
   releaseOutboundReserve,
   reservationOf,
+  // Plattform-Fruehwarnung (Budget-Achsen P6): OHNE diesen Re-Export waere
+  // store.claimPlatformSpendWarning undefined -> outbound-gates.js wuerfe zur Laufzeit
+  // einen TypeError. Muster wie tryReserveOutboundBudget.
+  claimPlatformSpendWarning,
   usageOf,
   addNotification,
   pruneOldData,

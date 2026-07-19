@@ -264,7 +264,9 @@ export function save() {
     // prozessweit weiter korrekt, nur die PLATTE ist per Konstruktion reserve-frei. Die
     // reservations UND subIndex sind strukturell ephemer (nie auf Platte): idiomatisches
     // rest-omit (tenant-prolif-b: der Index wird jeden Boot neu aufgebaut, kein Persist-Drift).
-    const { reservations, subIndex, ...persisted } = state;
+    // platformSpendWarnedMonth (Budget-Achsen P6) ist derselbe Fall: der Fruehwarn-Marker ist
+    // strukturell ephemer (s. state-ops.js Modul-Doc), NIE auf Platte.
+    const { reservations, subIndex, platformSpendWarnedMonth, ...persisted } = state;
     // F9 (A6): _finished ist ein transienter In-Prozess-Dedup-Marker von finishCall
     // (server.js) - NIE auf Platte, wie reservations. Ein persistiertes _finished wuerde nach
     // einem Restart die (idempotente) Abrechnung ueberspringen (Unter-Zaehlung). Der persistierte
@@ -511,6 +513,14 @@ export function releaseOutboundReserve(call) {
 
 export function reservationOf(tenantId) {
   return ops.reservationFor(load(), tenantId);
+}
+
+// Plattform-Fruehwarnung (Budget-Achsen P6): reine In-Memory-Mutation auf
+// platformSpendWarnedMonth, KEIN save() - der Marker ist strukturell ephemer (wie
+// reservations, s. state-ops.js Modul-Doc). cfg wird vom Aufrufer (outbound-gates.js)
+// hereingereicht, wie bei tryReserveOutboundBudget.
+export function claimPlatformSpendWarning(cfg, nowIso) {
+  return ops.claimPlatformSpendWarning(load(), cfg, nowIso);
 }
 
 // ---- Per-Tenant-Budget + Metering (P6b3) ----

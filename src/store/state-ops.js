@@ -93,6 +93,12 @@ export function makeDefaultState() {
     // (json.save schliesst es aus), nie in pg (kein Flush) -> ein Neustart startet bei 0
     // (korrekt: ein Boot toetet in-flight Calls, A6). Money at rest = Ganzzahl Cents (G26).
     reservations: {},
+    // Fruehwarn-Marker (Budget-Achsen P6): der Spend-Monat, fuer den die Plattform-
+    // Warnschwelle bereits gemeldet wurde. PROZESS-LOKAL und STRUKTURELL EPHEMER (json.save
+    // schliesst den Key aus, pg hat keine Spalte). Bewusst KEIN Anhaengen an spendMonthKey:
+    // der lebt PRO TENANT-BUCKET, die Schwelle ist eine PLATTFORM-Groesse - es gibt keinen
+    // Plattform-Bucket, der einen Schluessel truege.
+    platformSpendWarnedMonth: null,
     // sub -> tenantId Resolver-Index (tenant-prolif-b). MERGE-OVERLAY fuer resolveTenant:
     // traegt die per Email-Merge (Phase A) an einen FREMDEN Tenant gebundenen Zweit-subs,
     // die NICHT als tenant.idpSubject gespiegelt sind. pg fuellt ihn bei init() aus account
@@ -1911,6 +1917,55 @@ export function releaseOutboundReserve(s, call) {
   s.reservations[call.tenantId] = Math.max(0, reservationFor(s, call.tenantId) - call.reserveCents);
   call.reserveReleased = true;
   return true;
+}
+
+// ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----
+// Meldet - GENAU EINMAL pro Spend-Monat - dass die Plattform-Summe eine konfigurierbare
+// Warnschwelle ueberschritten hat, BEVOR der Notaus (globalBudgetExceeded/
+// globalReserveExceedsBudget) tatsaechlich blockt. AENDERT KEINE GATE-ENTSCHEIDUNG: die
+// Praedikate oben bleiben unangetastet und nebeneffektfrei (reine Query, kein IO - s. deren
+// eigene Modul-Doku). Der Emissionsort (Audit/SMS) ist NICHT hier, sondern im
+// reserve_budget-Gate (outbound-gates.js), NACH einer erfolgreichen Reservierung.
+
+const PERCENT_SCALE = 100; // G25: Prozent -> Ganzzahl-Vergleich ohne Fliesskomma
+
+// Schwelle in SKALIERTEN Cents (cap * prozent), oder null = Warnung AUS. !(percent > 0)
+// faengt 0 (dokumentierter Aus-Sentinel), negative und fehlende Werte in EINER Bedingung -
+// die Abweichung geht immer Richtung Bestand (Warnung aus), nie Richtung Falschalarm.
+// Reine Funktion.
+function platformWarnThresholdScaled(cfg) {
+  const percent = cfg.platformSpendWarnPercent;
+  if (!(percent > 0)) return null;
+  return globalCapCents(cfg) * percent;
+}
+
+// Plattform-Ist (settled + In-Flight) - DIESELBE Groesse, die globalReserveExceedsBudget
+// gegen den Cap haelt (kein zweiter Wahrheitsanker). Bewusst NICHT ueber
+// globalSpendOrDeny: dessen denyCorruptUsage-Log gehoert an die GATE-Kante, nicht an eine
+// Beobachtung (identische Begruendung wie bei tenantBudgetSnapshot). Reine Query.
+function platformSpendObservedCents(s) {
+  const total = globalUsageTotals(s).costCents + reservationsTotal(s);
+  return isBookableCents(total) ? total : null;
+}
+
+// Meldet die Plattform-Warnschwelle GENAU EINMAL pro Spend-Monat (Nebeneffekt im Namen,
+// N7 - "claim" wie tryReserveOutboundBudget/releaseOutboundReserve, die ebenfalls mutieren
+// UND das Ergebnis melden). Liefert {totalCents, monthKey} beim erstmaligen Ueberschreiten,
+// sonst null. nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei, Muster
+// spendMonthUsageCents).
+export function claimPlatformSpendWarning(s, cfg, nowIso) {
+  const threshold = platformWarnThresholdScaled(cfg);
+  if (threshold === null) return null;
+  const totalCents = platformSpendObservedCents(s);
+  if (totalCents === null || totalCents * PERCENT_SCALE < threshold) return null;
+  const monthKey = spendMonthKeyOf(nowIso);
+  // Unlesbarer Anker -> melden, aber KEINEN Marker setzen: ein gespeichertes null wuerde
+  // beim naechsten Mal als null===null "schon gemeldet" gelesen und die Warnung DAUERHAFT
+  // verschlucken. Zu laut ist erlaubt, stumm nie.
+  if (monthKey === null) return { totalCents, monthKey };
+  if (s.platformSpendWarnedMonth === monthKey) return null;
+  s.platformSpendWarnedMonth = monthKey;
+  return { totalCents, monthKey };
 }
 
 // ---- Notifications ----

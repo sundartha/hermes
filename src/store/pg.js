@@ -316,6 +316,11 @@ export function makePgStore(runner) {
       ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg),
     releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call),
     reservationOf: (tenantId) => ops.reservationFor(requireState(), tenantId),
+    // Plattform-Fruehwarnung (Budget-Achsen P6): Wrapper-Parity zu json.js. Reine
+    // In-Memory-Mutation auf dem Spiegel (kein save/Flush): platformSpendWarnedMonth wird
+    // von flush() NIE geschrieben (keine Spalte) -> strukturell ephemer, wie reservations.
+    claimPlatformSpendWarning: (cfg, nowIso) =>
+      ops.claimPlatformSpendWarning(requireState(), cfg, nowIso),
 
     // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
     setTenantBudget(tenantId, amounts) {

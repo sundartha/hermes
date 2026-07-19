@@ -60,7 +60,9 @@ const { requestTenant, requireTenant } = makeRequestTenant(store);
 // Outbound-Gate-Kette EINMAL beim Boot verdrahtet (Modul-Scope wie provisioningQueue,
 // P15): geordnetes Array, Reihenfolge per test/outbound-gates-order.test.js festgenagelt.
 // requestTenant/internalIdentity/OWNER_ID/TENANT_REJECT werden durchgereicht (EINE Quelle,
-// kein zweiter Tenant-Resolver, G5/DIP).
+// kein zweiter Tenant-Resolver, G5/DIP). audit/messaging (Budget-Achsen P6) speisen die
+// fail-soft Plattform-Fruehwarnung im reserve_budget-Gate - dieselben Instanzen wie
+// callFinish (kein zweiter Audit-/Messaging-Zugang, DIP).
 const { gates: outboundGates } = makeOutboundGates({
   store,
   config,
@@ -68,6 +70,8 @@ const { gates: outboundGates } = makeOutboundGates({
   internalIdentity,
   OWNER_ID,
   TENANT_REJECT,
+  audit,
+  messaging,
 });
 
 // Metering-Instanz (P6b3-Meter + outbound-p1c-Reconcile) EINMAL beim Boot verdrahtet
