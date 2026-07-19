@@ -198,6 +198,13 @@ function permissionsSummary(settings) {
   );
 }
 
+// Nachkommastellen fuer EUR-Betraege im get_agent_status-Textblock (G25: benannte
+// Konstante statt dreimal nackter Literal-3 fuer costEur/spendMonthCostEur/reservedEur).
+const AGENT_STATUS_EUR_DIGITS = 3;
+function eurDigits(eur) {
+  return eur.toFixed(AGENT_STATUS_EUR_DIGITS);
+}
+
 // Daten-Kontrakt get_agent_status (W3-Spec): GENAU diese flachen Eigen-Felder duerfen
 // nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. number/
 // owner koennen fail-closed leer sein (kein aktiver Nummern-Seed / Tenant ohne
@@ -212,12 +219,18 @@ function pickAgentStatus(s) {
     calls: s.usage.calls,
     costEur: s.usage.costEur,
     tenantCapEur: s.usage.tenantCapEur,
+    // P5b: dieselben drei TENANT-EIGENEN Felder wie /api/state.usage (eine Quelle,
+    // keine zweite Ableitung) - Spend-Monat-Verbrauch/-Schluessel + eigene Reserve.
+    spendMonthCostEur: s.usage.spendMonthCostEur,
+    spendMonthKey: s.usage.spendMonthKey,
+    reservedEur: s.usage.reservedEur,
     permissions: permissionsSummary(s.settings),
   };
 }
 
 // outputSchema fuer get_agent_status: validiert GENAU die Whitelist (Stufe 0
 // schema-validiert). number/owner nullable (fail-closed leer ist ein gueltiger Zustand).
+// spendMonthKey nullable (unlesbare Uhr -> null, s. spendMonthWindowKey).
 const AGENT_STATUS_OUTPUT = {
   number: z.string().nullable(),
   owner: z.string().nullable(),
@@ -226,6 +239,9 @@ const AGENT_STATUS_OUTPUT = {
   calls: z.number(),
   costEur: z.number(),
   tenantCapEur: z.number(),
+  spendMonthCostEur: z.number(),
+  spendMonthKey: z.string().nullable(),
+  reservedEur: z.number(),
   permissions: z.string(),
 };
 
@@ -687,7 +703,10 @@ export function registerTools(
             type: "text",
             text:
               `Agent-Nummer: ${data.number}\nBesitzer: ${data.owner}\nVoice-Engine: ${data.voiceEngine}\nModell: ${data.model}\n` +
-              `Calls bisher: ${data.calls}\nKI-Kosten: ${data.costEur.toFixed(3)} EUR von ${data.tenantCapEur} EUR eigenem Budget\n` +
+              `Calls bisher: ${data.calls}\n` +
+              `KI-Kosten gesamt (Lebenszeit): ${eurDigits(data.costEur)} EUR von ${data.tenantCapEur} EUR eigenem Budget\n` +
+              `KI-Kosten Spend-Monat ${data.spendMonthKey ?? "unbekannt"}: ${eurDigits(data.spendMonthCostEur)} EUR\n` +
+              `Aktuell reserviert: ${eurDigits(data.reservedEur)} EUR\n` +
               `Berechtigungen: ${data.permissions}`,
           },
         ],

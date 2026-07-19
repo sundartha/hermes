@@ -68,6 +68,9 @@ function makeMockStore({ listSize = 1 } = {}) {
     usageOf: () => ({ inputTokens: 5, outputTokens: 7, costCents: 200, costMicroCentsRem: 999, calls: 3 }),
     // P5a: die Tenant-Achse (eigene Decke) - NICHT der globale Plattform-Cap (config.platformSpendCapCents=800).
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 200, remainingCents: 800 }),
+    // P5b: eigene In-Flight-Reserve (reservationFor) - ohne diese Methode wirft
+    // usageView() eine TypeError, sobald die Projektion sie aufruft.
+    reservationOf: () => 60,
     getCall: (id) => calls.find((c) => c.id === id),
     getCalendar: () => [
       { end: FUTURE, title: "future" },

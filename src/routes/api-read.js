@@ -12,6 +12,7 @@
 import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
 import { CENTS_PER_EUR } from "../store/defaults.js";
+import { spendMonthUsageCents, spendMonthWindowKey } from "../store/state-ops.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -32,13 +33,25 @@ export const STATE_CALLS = 30,
 // ERSATZLOS, kein Schluessel-behalten-Bedeutung-wechseln. Die Plattform-Achse (globaler
 // Notaus) verlaesst diese Projektion NICHT: kein Feld hier leitet sich aus dem globalen
 // Cap oder der globalen Verbrauchssumme ab (Cross-Tenant-Leck-Riegel, Absolute Regel 4/6).
-function usageView(u, budget) {
+//
+// P5b (drei weitere TENANT-EIGENE Felder, dieselbe Regel gilt fuer sie): spendMonthCostEur
+// und spendMonthKey kommen AUSSCHLIESSLICH aus der nebeneffektfreien Leseprojektion
+// spendMonthUsageCents/spendMonthWindowKey (state-ops.js) - beide lesen nur den
+// Tenant-Bucket + die Uhr, kein s-Argument, also strukturell kein Zugriff auf fremde
+// Buckets oder Plattform-Summen. reservedEur kommt aus reservationOf (reservationFor,
+// EIN Tenant-Schluessel) - NICHT aus reservationsTotal (das waere die Plattform-Summe).
+// Diese Phase ist reine Anzeige: keines der vier Geld-Praedikate wird hier beruehrt,
+// der Flip auf die Spend-Monat-Achse ist P7.
+function usageView({ usage, budget, reservedCents, nowIso }) {
   return {
-    inputTokens: u.inputTokens,
-    outputTokens: u.outputTokens,
-    calls: u.calls,
-    costEur: u.costCents / CENTS_PER_EUR,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    calls: usage.calls,
+    costEur: usage.costCents / CENTS_PER_EUR,
     tenantCapEur: budget.capCents / CENTS_PER_EUR,
+    spendMonthCostEur: spendMonthUsageCents(usage, nowIso) / CENTS_PER_EUR,
+    spendMonthKey: spendMonthWindowKey(usage, nowIso),
+    reservedEur: reservedCents / CENTS_PER_EUR,
   };
 }
 
@@ -74,7 +87,12 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
       actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
       calendar: upcomingCalendar(store, tenantId).slice(0, STATE_CALENDAR),
-      usage: usageView(store.usageOf(tenantId), store.tenantBudgetSnapshot(tenantId, config.billing)),
+      usage: usageView({
+        usage: store.usageOf(tenantId),
+        budget: store.tenantBudgetSnapshot(tenantId, config.billing),
+        reservedCents: store.reservationOf(tenantId),
+        nowIso: new Date().toISOString(),
+      }),
       notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
       agent: {
         // Anzeige-Nummer = aktive Store-Nummer des Request-Tenants (auch der Owner ist
