@@ -34,6 +34,8 @@ import {
   CENTS_PER_EUR,
   MICRO_CENTS_PER_CENT,
   TOKENS_PER_M_TOK,
+  isBookableCents,
+  USAGE_CORRUPT_REASON,
   globalCapCents,
   KYC_LEVEL,
   KYC_ORDER,
@@ -1399,6 +1401,40 @@ function tokenCostUsd(tokens, cfg) {
   );
 }
 
+// ---- D7-Riegel: unbuchbare Geldwerte laut verwerfen bzw. laut sperren ----
+// Dieses Modul ist sonst IO-frei; die zwei console-Aufrufe hier sind eine bewusste,
+// eng begrenzte Ausnahme (kein Datei-/DB-IO). Ein STILLER Discard bzw. eine stille
+// Sperre auf einer Geld-Kante waere dieselbe fail-open-durch-Vergessen-Klasse, die
+// diese Phase behebt: der Betrag ist real verloren bzw. der Dienst ist stumm, und
+// beides muss der Operator sehen. Beide Logs sind secret-frei (nur Kante + Zahl).
+
+// Verwirft einen unbuchbaren SCHREIBversuch und liefert den Bucket BIT-IDENTISCH
+// zurueck (Rueckgabevertrag beider Schreibkanten bleibt "der Bucket").
+function discardCorruptWrite(usage, kante, wert) {
+  console.error(`[usage] grund=${USAGE_CORRUPT_REASON} verworfen kante=${kante} wert=${wert}`);
+  return usage;
+}
+
+// Sperrt an einer Geld-LESEKANTE fail-closed (Absolute Regel 1): ein nicht-endlicher
+// Verbrauch macht sonst BEIDE Geld-Gates blind, weil NaN >= cap und NaN > cap immer
+// false sind. Liefert IMMER true - alle vier Leser lesen true als "blocken".
+function denyCorruptUsage(kante, wert) {
+  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} costCents=${wert}`);
+  return true;
+}
+
+// Sind ALLE drei Inkremente eines Turns buchbar (G28: zusammengesetzte Bedingung
+// eingekapselt)? isBookableCents traegt "Cents" im Namen, ist inhaltlich aber der EINE
+// Riegel "endlich und nicht negativ" und gilt fuer Token-Zaehler genauso: ein NaN-Zaehler
+// vergiftet den Bucket auf demselben Weg. Bewusst EIN Praedikat statt drei Inline-Kopien.
+function turnIncrementsBookable(tokens, microInc) {
+  return (
+    isBookableCents(tokens.inputTokens) &&
+    isBookableCents(tokens.outputTokens) &&
+    isBookableCents(microInc)
+  );
+}
+
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
 // tokens = {inputTokens, outputTokens, model}; das Modell entscheidet die Preisstaffel
 // (P7a, fail-closed bei unbekannter ID). P1 Safety-BLOCKER: kein Per-Inkrement-Cent-
@@ -1407,14 +1443,20 @@ function tokenCostUsd(tokens, cfg) {
 // nie). Stattdessen akkumuliert dieser Pfad EXAKT in Mikro-Cents (costMicroCentsRem)
 // und bucht nur den vollen Cent-Uebertrag nach costCents (Math.floor) - der Sub-Cent-
 // Rest reist ungerundet ueber die Inkremente mit, bis er selbst einen ganzen Cent
-// ergibt. Liefert den Bucket.
+// ergibt. Liefert den Bucket. Ein unbuchbarer Turn (D7) wird vor jeder Mutation
+// verworfen - der Bucket bleibt bit-identisch, der Rueckgabewert bleibt der Bucket.
 export function trackUsage(s, tenantId, tokens, cfg) {
   const usage = usageFor(s, tenantId);
-  usage.inputTokens += tokens.inputTokens;
-  usage.outputTokens += tokens.outputTokens;
   const microInc = Math.round(
     tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT,
   );
+  // D7-Riegel VOR jeder Mutation: bisher stiegen inputTokens/outputTokens schon, bevor die
+  // Kostenrechnung ueberhaupt lief - ein NaN-Turn hinterliess also drei vergiftete Felder.
+  // Alles-oder-nichts, kein Teil-Schreibeffekt.
+  if (!turnIncrementsBookable(tokens, microInc))
+    return discardCorruptWrite(usage, `trackUsage tenant:${tenantId}`, microInc);
+  usage.inputTokens += tokens.inputTokens;
+  usage.outputTokens += tokens.outputTokens;
   const totalMicro = usage.costMicroCentsRem + microInc;
   usage.costCents += Math.floor(totalMicro / MICRO_CENTS_PER_CENT);
   usage.costMicroCentsRem = totalMicro % MICRO_CENTS_PER_CENT;
@@ -1428,6 +1470,8 @@ export function trackUsage(s, tenantId, tokens, cfg) {
 // Nebeneffekt im Namen (N7). Reine Mutation, kein IO (Wrapper saved).
 export function addVoiceUsageCostCents(s, tenantId, costCents) {
   const usage = usageFor(s, tenantId);
+  if (!isBookableCents(costCents))
+    return discardCorruptWrite(usage, `addVoiceUsageCostCents tenant:${tenantId}`, costCents);
   usage.costCents += costCents;
   return usage;
 }
@@ -1447,8 +1491,14 @@ function effectiveCapCents(s, tenantId, cfg) {
 // neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL. Rein
 // Integer costCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap
 // aequivalent zu x>=cap - bit-identisch zum frueheren Float-Gate.
+// Ein unbuchbarer Bucket (D7) sperrt fail-closed mit eigenem Grund usage_korrupt - im
+// Extremfall beendet das einen LAUFENDEN Call (telnyx-llm-shim) und weist kostenlosen
+// Inbound ab (voice.js). Bei NaN-Verbrauch ist genau das richtig, und der eigene Grund
+// macht es vom echten "Budget erschoepft" unterscheidbar.
 export function budgetExceeded(s, tenantId, cfg) {
-  return usageFor(s, tenantId).costCents >= effectiveCapCents(s, tenantId, cfg);
+  const spent = usageFor(s, tenantId).costCents;
+  if (!isBookableCents(spent)) return denyCorruptUsage(`tenant:${tenantId}`, spent);
+  return spent >= effectiveCapCents(s, tenantId, cfg);
 }
 
 // Vorab-Reservierung (outbound-p1c, Kosten-Achse, D1): wuerde der Worst-Case-Minutenpreis
@@ -1463,9 +1513,10 @@ export function budgetExceeded(s, tenantId, cfg) {
 // Vergleichskante geflooert - Effekt < 1 Cent, dominiert vom Worst-Case-Reserve-
 // Ueberschaetzer; die Sub-Cent-Turns selbst gehen NICHT verloren, sie tragen in costCents).
 export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
+  const spent = usageFor(s, tenantId).costCents;
+  if (!isBookableCents(spent)) return denyCorruptUsage(`tenant:${tenantId}`, spent);
   return (
-    usageFor(s, tenantId).costCents + reservationFor(s, tenantId) + reserveCents >
-    effectiveCapCents(s, tenantId, cfg)
+    spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg)
   );
 }
 
@@ -1589,7 +1640,9 @@ export function markMeterEventsSent(s, eventIds) {
 // Integer costCents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
 // ganzzahligem Cap, s. budgetExceeded).
 export function globalBudgetExceeded(s, cfg) {
-  return globalUsageTotals(s).costCents >= globalCapCents(cfg);
+  const total = globalUsageTotals(s).costCents;
+  if (!isBookableCents(total)) return denyCorruptUsage("plattform", total);
+  return total >= globalCapCents(cfg);
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
@@ -1615,9 +1668,9 @@ export function reservationsTotal(s) {
 // Reine Query, kein IO. P1: rein Integer costCents (settled Sub-Cent-Rest an dieser
 // Vergleichskante geflooert, s. reserveExceedsBudget).
 export function globalReserveExceedsBudget(s, reserveCents, cfg) {
-  return (
-    globalUsageTotals(s).costCents + reservationsTotal(s) + reserveCents > globalCapCents(cfg)
-  );
+  const total = globalUsageTotals(s).costCents;
+  if (!isBookableCents(total)) return denyCorruptUsage("plattform", total);
+  return total + reservationsTotal(s) + reserveCents > globalCapCents(cfg);
 }
 
 // Atomare Check+Reserve (Schnittmenge Tenant UND global, Regel 1). REIN SYNCHRON, KEIN
@@ -1626,10 +1679,12 @@ export function globalReserveExceedsBudget(s, reserveCents, cfg) {
 // pro-Tenant- NOCH die globale reserve-bewusste Decke reisst; eine abgelehnte Reserve
 // hinterlaesst KEINEN Schreibeffekt. Nebeneffekt im Namen (N7). Liefert true=reserviert
 // (Dial erlaubt) / false=abgelehnt (402 vor Dial). Fail-closed (S1-6, Absolute Regel 1):
-// ein negativer/NaN reserveCents darf den Reserve-Ledger NIE senken - !(x>=0) faengt
-// sowohl < 0 als auch NaN (NaN>=0 ist immer false).
+// ein unbuchbarer reserveCents darf den Reserve-Ledger NIE senken. Frueher stand hier eine
+// direkte negierte reserveCents-Vorzeichenpruefung inline; sie fragt jetzt dieselbe EINE
+// Quelle wie alle anderen Geld-Kanten (isBookableCents, D7/G5) und schliesst dabei die
+// Luecke bei einem positiven Unendlich-Wert, den die alte Pruefung durchliess.
 export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg) {
-  if (!(reserveCents >= 0)) return false;
+  if (!isBookableCents(reserveCents)) return false;
   if (
     reserveExceedsBudget(s, tenantId, reserveCents, cfg) ||
     globalReserveExceedsBudget(s, reserveCents, cfg)

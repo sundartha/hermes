@@ -16,7 +16,14 @@ export function makeMetering({ store, config }) {
   // UND Budget-Reconcile.
   function voiceMinutesOf(call) {
     if (!call.answeredAt || !call.endedAt) return 0;
-    return Math.ceil((new Date(call.endedAt) - new Date(call.answeredAt)) / MS_PER_MINUTE);
+    const minutes = Math.ceil((new Date(call.endedAt) - new Date(call.answeredAt)) / MS_PER_MINUTE);
+    // Wurzel-Normalisierung (D7): ein unbrauchbares answeredAt/endedAt ergibt NaN, und
+    // NaN <= 0 ist false - beide Aufrufer-Riegel (minutes <= 0) liessen es durch und
+    // NaN*Tarif landete im Geld-Bucket. Hier auf 0 = "nie beantwortet" normalisiert, damit
+    // beide Riegel BYTE-IDENTISCH bleiben und keine zweite Kopie derselben Pruefung
+    // entsteht (G5). Number.isFinite statt isBookableCents: das ist die MINUTEN-Achse,
+    // nicht die Cent-Achse - der Cent-Riegel sitzt eine Schicht tiefer in state-ops.
+    return Number.isFinite(minutes) ? minutes : 0;
   }
 
   // Voice-Minuten-Meter EINES beendeten Calls (P6b3, Meter 2). NUR im Metering-Pfad
