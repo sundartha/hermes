@@ -377,8 +377,15 @@ const rawConfig = {
   // im Bestand auf den globalen Cap. Ein 0-Wert darf NIE als 0-Cap interpretiert werden -
   // das wuerde jeden Outbound, jeden kostenlosen Inbound und jeden laufenden Call sperren.
   // Globaler Backstop (platformSpendCapCents) bleibt PARALLEL (Schnittmenge, Regel 1).
+  //
+  // Fallback-Wert 600 (P3 Review-Fix, vorher 1000): MUSS echt kleiner als der Fallback von
+  // platformSpendCapCents (eurToCents(8)=800) sein, sonst besteht der ausgelieferte
+  // CODE-Default den eigenen Boot-Guard NICHT (spendCapCoherence, Klausel A) - jeder Host
+  // OHNE gesetzte DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR wuerde beim naechsten Boot
+  // fail-closed abbrechen. 600 = Minutenwert des Starter-Abos (30 min * 20 ct), synchron
+  // mit dem in .env.example/render.yaml dokumentierten Wert (EINE Zahl, drei Stellen).
   defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
-    fallback: 1000,
+    fallback: 600,
     min: 0,
   }),
   // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede

@@ -113,3 +113,29 @@ test("T-P3-12: ausgelieferte Beispiel-Konfig (600/300) bootet gruen, Klausel-B-W
     await srv.stop();
   }
 });
+
+// T-P3-13 (Review-Fix Runde 1, Merge-Gate): ECHTER Spawn OHNE jeden Override fuer
+// DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR - der numEnv-CODE-FALLBACK greift also
+// exakt wie auf einem Host, der beide Vars nie setzt. `undefined` in env ueberschreibt
+// den BASE_ENV-Pin auf dieselbe Var und wird von child_process.spawn aus der Kind-Env
+// entfernt (nicht als String "undefined" gesetzt) - process.env sieht die Var damit als
+// echt ABWESEND, genau wie ein Host ohne diese Env-Zeilen. Rot vor diesem Fix: der alte
+// Fallback 1000 verlor gegen den platformSpendCapCents-Fallback 800 -> exit(1) trotz
+// "keine Config gesetzt".
+test("T-P3-13: kein Override fuer DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR (reine CODE-Fallbacks) bootet gruen", async () => {
+  const srv = await startServer({
+    env: { DEFAULT_TENANT_BUDGET_CENTS: undefined, MAX_BUDGET_EUR: undefined },
+  });
+  try {
+    const res = await fetch(`${srv.localUrl}/healthz`);
+    assert.equal(res.status, 200, `reiner CODE-Fallback darf nicht booten verweigern:\n${srv.stdout}`);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+    assert.doesNotMatch(
+      srv.stdout,
+      /Konfig-Warnung: .*DEFAULT_TENANT_BUDGET_CENTS/,
+      "Fallback 600 ist weder 0 (A0) noch >= 800 (A)",
+    );
+  } finally {
+    await srv.stop();
+  }
+});
