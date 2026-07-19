@@ -472,3 +472,39 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > akkumuliert weiter EXAKT in Mikro-Cents (`costMicroCentsRem`) und rundet NICHT pro
 > Inkrement. Denylist/Land-Gate/Stundenlimit/Max-Dauer/Signaturpruefung sind nicht
 > angefasst.
+
+## P2A-TENANTFALLBACK — Tenant-Achse bindet fuer Tenants ohne eigene Zeile (2026-07-19)
+
+> **Geschlossene Luecke (D3):** Ein Tenant OHNE eigene `tenant_budget`-Zeile fiel in
+> `effectiveCapCents` bisher direkt auf den globalen Plattform-Cap (`globalCapCents`)
+> zurueck. Damit war der PLATTFORM-NOTAUS zugleich das Nutzer-Kontingent - die Tenant-
+> Achse des Budget-Gates war fuer jeden Tenant ohne Zeile wirkungslos, der Cap effektiv
+> ein GETEILTER Topf ueber alle Tenants.
+>
+> **Neu:** `effectiveCapCents` (genutzt von `budgetExceeded` UND `reserveExceedsBudget`)
+> hat eine dritte Praezedenzstufe zwischen der Tenant-Zeile und dem globalen Cap: die
+> Tenant-Default-Decke aus der Config (`defaultTenantBudgetCents`). Praezedenz absteigend:
+> (1) `tenant_budget`-Zeile, (2) `defaultTenantBudgetCents`, (3) `globalCapCents`.
+> `globalCapCents` bleibt PARALLEL ueber `globalBudgetExceeded`/`globalReserveExceedsBudget`
+> bestehen - es gilt weiter die Schnittmenge min(Tenant, Plattform), Absolute Regel 1. Kein
+> Gate wird entfernt oder ersetzt, es kommt nur eine zusaetzliche, engere Decke dazu.
+>
+> **0-Sentinel (SAFETY-BLOCKER, kein Stilfehler):** Der Fallback greift nur bei
+> `defaultTenantBudgetCents > 0`. 0 ist die dokumentierte Sentinel-Semantik "kein
+> Default-Seed" - ein bedingungsloser Fallback lieferte bei Live-Wert 0 einen Cap von 0:
+> `budgetExceeded` (`>=`) waere fuer JEDEN Tenant ohne Zeile sofort `true` - jeder
+> Outbound blockt, der kostenlose Inbound-Pfad weist ab, jeder laufende Call legt mitten
+> im Gespraech auf. Das waere ein Totalausfall der Telefonie. Derselbe Vergleich faengt
+> zugleich ein fehlendes oder nicht-numerisches Feld ab (`undefined > 0` ist `false`) und
+> landet dann ebenfalls auf dem Bestandsverhalten - die Abweichung geht immer Richtung
+> Bestand, nie Richtung 0-Cap. Test: `test/effective-cap-fallback.test.js`.
+>
+> **Offene Inkohaerenz (nicht in dieser Phase geloest):** Live UND `.env.example`/
+> `render.yaml` stehen auf `MAX_BUDGET_EUR=8` (800 Cent) bei `DEFAULT_TENANT_BUDGET_CENTS=
+> 1000`. In dieser Konstellation bindet die Schnittmenge weiter am globalen Cap (800 <
+> 1000) - der neue Fallback ist bei den aktuellen Werten ein reiner Code-Riegel ohne
+> sofortige Live-Wirkung, kein Verstoss gegen Regel 1. Aufloesung gehoert an P0
+> (`MAX_BUDGET_EUR` anheben) oder ans Senken des Default-Werts, nicht an diese Phase.
+>
+> **Nicht beruehrt:** Kein Gate entfernt/aufgeweicht. `seedTenantDefaultBudget` (Seed
+> beim Registrieren) unveraendert. Kein Backfill bestehender Tenants, keine Migration.
