@@ -826,6 +826,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // verloren UND der naechste Flush wuerde ihn ueberschreiben (JSONB auto-geparst zu
     // Objekt|null, Muster summary_sms_sent_at/I8). NULL -> null (json-Parity).
     context: r.context ?? null,
+    // P6: Mandat mit-hydrieren. Ohne diese Zeile ginge es beim Restart verloren UND der
+    // naechste Flush wuerde es ueberschreiben (Lehre I8). NULL -> null (json-Parity).
+    mandate: r.mandate ?? null,
     callerName: r.caller_name,
     language: r.language,
     maxDurationS: r.max_duration_s,
@@ -1075,8 +1078,8 @@ async function flushCalls(client, tenantId, calls) {
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
           summary_sms_sent_at, context, failure_reason, billed_at,
-          call_control_id, assistant_id, diagnostic)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+          call_control_id, assistant_id, diagnostic, mandate)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1125,6 +1128,10 @@ async function flushCalls(client, tenantId, calls) {
         // P2b: Diagnose-Markierung. Wie context NICHT im ON CONFLICT DO UPDATE SET -
         // sie wird bei createCall gesetzt und danach nie mehr geaendert.
         c.diagnostic === true,
+        // P6: Vorab-Mandat als JSONB ($29, ans Ende angehaengt -> keine Umnummerierung).
+        // Wie context NICHT im ON CONFLICT DO UPDATE SET: bei createCall gesetzt, danach
+        // unveraendert.
+        c.mandate ? JSON.stringify(c.mandate) : null,
       ],
     );
     await flushTranscript(client, tenantId, c);

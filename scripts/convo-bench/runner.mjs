@@ -85,6 +85,7 @@ function buildCallSeed(scenario, provider) {
     briefing: scenario.briefing,
     constraints: scenario.constraints,
     context: scenario.context,
+    mandate: scenario.mandate, // P6: undefined bei Bestands-Szenarien -> Sektion ""
     language: "de",
     status: "active",
   });

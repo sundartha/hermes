@@ -161,6 +161,21 @@ export function globalCapCents(cfg) {
 export const DEFAULT_CALL_DURATION_S = 180;
 export const MAX_CALL_DURATION_CAP_S = 300;
 
+// P6 (PLAN-CONVERSATION-QUALITY-V2, Anhang C): Verhalten des Agenten, wenn ein Angebot
+// AUSSERHALB des vorab erteilten Mandats liegt. EINE Quelle (G25/G5) fuer das
+// place_call-Schema (zod-Enum), die /api/calls-Validierung und den Prompt-Renderer.
+// Das Mandat erlaubt NUR muendliche Zusagen im vom Owner gesetzten Rahmen - es oeffnet
+// keinen Kalender- oder Buchungspfad (Owner-Entscheidung E1).
+export const MANDATE_OUT_OF_SCOPE = Object.freeze({
+  TAKE_MESSAGE: "take_message",
+  DECLINE: "decline",
+  ACCEPT_BEST: "accept_best",
+});
+export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
+// Konservativster der drei Wege: ohne ausdrueckliche Angabe gibt der Agent ein Angebot
+// ausserhalb seines Spielraums als Nachricht weiter, statt ab- oder zuzusagen.
+export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
+
 // Tenant-Lebenszyklus (Onboarding). status steuert, ob ein Tenant ueberhaupt
 // Nummern/Calls bekommen darf (suspended/closed = gesperrt, fail-closed).
 export const TENANT_STATUS = Object.freeze({

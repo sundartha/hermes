@@ -194,10 +194,24 @@ function checkInboundNoDisclosureLeak(runResult) {
 // als Nachricht ab, statt ihn scheinzubuchen). Der Check laeuft, wo ein Szenario ihn
 // deklariert; die Deklaration IST die Anwendbarkeitsentscheidung. Fuer das einzige
 // Bestands-Szenario mit diesem Check (inbound-nachricht, inbound) aendert sich nichts.
+// EINE Zaehlquelle fuer beide Richtungen der Frage (G5).
+function actionItemCount(runResult) {
+  return (runResult.storeSnapshot.actionItems || []).length;
+}
+
 function checkMessageTaken(runResult) {
   const id = "message_taken";
-  const pass = (runResult.storeSnapshot.actionItems || []).length > 0;
+  const pass = actionItemCount(runResult) > 0;
   return { id, pass, detail: pass ? "ok" : "keine actionItems im Store" };
+}
+
+// P6 (Mandat): Gegenstueck zu message_taken. Liegt das Angebot INNERHALB des vorab
+// erteilten Mandats, ist take_message der Fehler - der Agent soll selbst zusagen. Die
+// Deklaration im Szenario IST die Anwendbarkeitsentscheidung (Muster message_taken).
+function checkNoMessageTaken(runResult) {
+  const id = "no_message_taken";
+  const n = actionItemCount(runResult);
+  return { id, pass: n === 0, detail: n === 0 ? "ok" : `${n} actionItems trotz Mandat` };
 }
 
 // afix-p4 (RCA R3): Der Agent darf nach einer unverstaendlichen Aeusserung nicht SOFORT
@@ -256,6 +270,7 @@ const CHECKS = {
   no_tool_loop_exhaustion: checkNoToolLoopExhaustion,
   inbound_no_disclosure_leak: checkInboundNoDisclosureLeak,
   message_taken: checkMessageTaken,
+  no_message_taken: checkNoMessageTaken,
   no_hangup_on_unintelligible_reply: checkNoHangupOnUnintelligibleReply,
   no_early_agent_hangup: checkNoEarlyAgentHangup,
   no_transliterated_umlauts_de: checkNoTransliteratedUmlautsDe,

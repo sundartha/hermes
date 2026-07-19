@@ -32,7 +32,7 @@ import {
   MAX_CALL_DURATION_CAP_S,
 } from "../store/defaults.js";
 import { findActiveNumber } from "../store/views.js";
-import { E164, invalidText, validateAssistantContext } from "../routes/_validation.js";
+import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
 import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "../billing/period.js";
 
@@ -423,6 +423,21 @@ export function makeOutboundGates({
           invalidText("constraints", ctx.b.constraints);
         if (!err) return null;
         return deny(400, { error: err });
+      },
+    },
+    // P6 (Mandat statt Rueckfrage): optionales Vorab-Mandat, DIESELBE Naht wie die
+    // objective/briefing-Validierung - NACH allen Sicherheits-Gates, 400 = reiner
+    // Eingabefehler, kein Audit. Kein Flag: fehlt das Feld, bleibt ctx.mandate null und
+    // der Prompt byte-identisch. Das Mandat erlaubt NUR muendliche Zusagen im vom Owner
+    // gesetzten Rahmen; es oeffnet keinen Kalender-/Buchungspfad (E1) und beruehrt kein
+    // Sicherheits-Gate.
+    {
+      name: "valid_mandate",
+      run(ctx) {
+        const r = validateMandate(ctx.b.mandate);
+        if (r.error) return deny(400, { error: r.error });
+        ctx.mandate = r.value;
+        return null;
       },
     },
     // P3 (PLAN-PERSONAL-ASSISTANT): optionaler strukturierter Per-Call-Kontext, DIESELBE Naht

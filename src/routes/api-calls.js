@@ -110,6 +110,7 @@ export function makeCallRoutes({
       briefing: b.briefing,
       constraints: b.constraints,
       context: ctx.context,
+      mandate: ctx.mandate, // P6: serverseitig normalisiert, nie roh aus dem Body
       language,
       maxDurationS: ctx.maxDur,
       requestedBy: ctx.requestedBy,

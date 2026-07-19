@@ -157,7 +157,7 @@ test("T-P4-7 no_early_agent_hangup respektiert die szenario-eigene Schwelle", ()
   assert.equal(naResult.detail, "n/a (kein Agent-Hangup)");
 });
 
-test("T-P4-8 Registry-Integritaet: alle 10 Szenarien referenzieren nur bekannte Checks", () => {
+test("T-P4-8 Registry-Integritaet: alle registrierten Szenarien referenzieren nur bekannte Checks", () => {
   for (const id of SCENARIO_IDS) {
     const sc = SCENARIOS[id];
     const rr = runResult({ direction: sc.direction, language: "de" });
