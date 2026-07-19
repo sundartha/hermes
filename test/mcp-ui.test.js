@@ -642,7 +642,15 @@ const RICH_STATE = {
     model: "claude-haiku",
     secretAgentField: "agent-LEAK", // darf NIE durch
   },
-  usage: { calls: 3, costEur: 2.1, tenantCapEur: 10, internalCounter: 999 },
+  usage: {
+    calls: 3,
+    costEur: 2.1,
+    tenantCapEur: 10,
+    spendMonthCostEur: 0.6,
+    spendMonthKey: "2026-07",
+    reservedEur: 0.6,
+    internalCounter: 999,
+  },
   settings: {
     allowCalendar: true,
     allowBooking: false,
@@ -665,6 +673,9 @@ const AGENT_KEYS = [
   "number",
   "owner",
   "permissions",
+  "reservedEur",
+  "spendMonthCostEur",
+  "spendMonthKey",
   "tenantCapEur",
   "voiceEngine",
 ];
@@ -677,6 +688,9 @@ const agentStatusOutput = z.object({
   calls: z.number(),
   costEur: z.number(),
   tenantCapEur: z.number(),
+  spendMonthCostEur: z.number(),
+  spendMonthKey: z.string().nullable(),
+  reservedEur: z.number(),
   permissions: z.string(),
 });
 

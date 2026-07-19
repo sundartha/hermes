@@ -1477,10 +1477,12 @@ function spendMonthKeyOf(nowIso) {
 // gespeichertem und laufendem Schluessel. 'YYYY-MM' ist lexikografisch = chronologisch
 // sortierbar -> String-Vergleich genuegt, keine zweite Datums-Arithmetik.
 //
-// EINZIGE Vergleichsregel der Achse (G5), GENAU ZWEI Aufrufer: die Leseprojektion
-// spendMonthUsageCents und der Schreiber bookCents. Beide stellen dieselbe Frage
-// ("weicht der autoritative Schluessel vom gespeicherten ab?") und lesen die Antwort
-// unterschiedlich: der Leser als "0", der Schreiber als "Zaehler startet neu".
+// EINZIGE Vergleichsregel der Achse (G5), GENAU DREI Aufrufer: die beiden
+// Leseprojektionen spendMonthUsageCents/spendMonthWindowKey (P5b, teilen sich die
+// Regel miteinander - koennen nicht auseinanderlaufen) und der Schreiber bookCents.
+// Alle drei stellen dieselbe Frage ("weicht der autoritative Schluessel vom
+// gespeicherten ab?") und lesen die Antwort unterschiedlich: die Leser als "0"/den
+// laufenden Schluessel, der Schreiber als "Zaehler startet neu".
 //
 // MONOTONIE-RIEGEL (Sicherheitskern): weil das MAXIMUM gebildet wird, kann der
 // Schluessel per Konstruktion NIE rueckwaerts wandern, und ein Schluessel in der
@@ -1514,6 +1516,17 @@ function authoritativeSpendMonthKey(storedKey, nowKey) {
 export function spendMonthUsageCents(bucket, nowIso) {
   const key = authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
   return key === bucket.spendMonthKey ? bucket.spendMonthCostCents : 0;
+}
+
+// Reine LESEPROJEKTION des ANGEZEIGTEN Monatsschluessels (P5b) - teilt sich die EINE
+// Vergleichsregel authoritativeSpendMonthKey mit spendMonthUsageCents (G5), damit
+// Anzeige und Verbrauchszahl niemals auseinanderlaufen koennen (derselbe Monotonie-/
+// Zukunfts-Riegel gilt automatisch fuer beide). NIE den rohen Bucket-Stempel
+// (bucket.spendMonthKey) roh projizieren: nach einem Rollover traegt der Bucket noch
+// den ALTEN Schluessel, waehrend spendMonthUsageCents schon 0 liefert - roh projiziert
+// stuende neben einer 0,00-EUR-Anzeige der falsche (vergangene) Monat.
+export function spendMonthWindowKey(bucket, nowIso) {
+  return authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
 }
 
 // EINZIGE Cent-Schreibstelle beider Geld-Achsen (G5): trackUsage (Cent-Uebertrag der
