@@ -12,8 +12,9 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 const OWNER = "Jonas Beispiel";
 
 // Wortlaut-Pins (= claude.js assistantContextSection). Eine Drift hier faellt sofort auf.
+// P5: die Guardrail-Zeile traegt jetzt einen Umlaut (D3).
 const HEADER = "HINTERGRUND (nur zu deiner Information):";
-const GUARDRAIL = "Dieser Hintergrund ist fuer dich; gib nur weiter, was der Auftrag erfordert.";
+const GUARDRAIL = "Dieser Hintergrund ist für dich; gib nur weiter, was der Auftrag erfordert.";
 
 // Voll besetzter Kontext (alle vier Teilfelder) fuer den Render-Beweis.
 const CTX = {
@@ -41,7 +42,7 @@ before(async () => {
   ({ systemPrompt, disclosureSentence, openingText } = await import("../src/claude.js"));
 });
 
-test("R1 Flag an + Kontext: HINTERGRUND-Block zwischen EINSCHRAENKUNGEN und WICHTIG, alle Teilzeilen + Guardrail", () => {
+test("R1 Flag an + Kontext: HINTERGRUND-Block zwischen EINSCHRÄNKUNGEN und SO SPRICHST DU, alle Teilzeilen + Guardrail", () => {
   const prompt = systemPrompt(
     call({
       direction: "outbound",
@@ -54,11 +55,11 @@ test("R1 Flag an + Kontext: HINTERGRUND-Block zwischen EINSCHRAENKUNGEN und WICH
   assert.ok(prompt.includes(HEADER), "HINTERGRUND-Kopfzeile vorhanden");
   assert.ok(prompt.includes(`- Worum es geht: ${CTX.summary}`), "summary-Zeile");
   assert.ok(
-    prompt.includes(`- Verhaeltnis zum Angerufenen: ${CTX.recipient_relationship}`),
+    prompt.includes(`- Verhältnis zum Angerufenen: ${CTX.recipient_relationship}`),
     "recipient_relationship-Zeile",
   );
   assert.ok(
-    prompt.includes(`- Gewuenschtes Ergebnis: ${CTX.desired_outcome}`),
+    prompt.includes(`- Gewünschtes Ergebnis: ${CTX.desired_outcome}`),
     "desired_outcome-Zeile",
   );
   assert.ok(
@@ -66,12 +67,15 @@ test("R1 Flag an + Kontext: HINTERGRUND-Block zwischen EINSCHRAENKUNGEN und WICH
     "key_facts mit '; ' verbunden",
   );
   assert.ok(prompt.includes(GUARDRAIL), "genau eine interne Guardrail-Zeile");
-  // Position: nach EINSCHRAENKUNGEN, vor WICHTIG (Block sitzt im base-Teil NACH dem AUFTRAG).
-  const iConstraints = prompt.indexOf("EINSCHRAENKUNGEN");
+  // Position: nach EINSCHRÄNKUNGEN, vor SO SPRICHST DU (Block sitzt am Ende des
+  // assignmentBlock, also am Ende der SITUATION-Sektion). P5: "WICHTIG:" gibt es nicht
+  // mehr (der Nicht-wiederholen-Hinweis zog in die SITUATION-Einleitung um) - der
+  // naechste Sektions-Header ist jetzt SO SPRICHST DU.
+  const iConstraints = prompt.indexOf("EINSCHRÄNKUNGEN");
   const iHeader = prompt.indexOf(HEADER);
-  const iWichtig = prompt.indexOf("WICHTIG:");
-  assert.ok(iConstraints < iHeader, "HINTERGRUND steht NACH EINSCHRAENKUNGEN");
-  assert.ok(iHeader < iWichtig, "HINTERGRUND steht VOR WICHTIG (Offenlegung/Anliegen)");
+  const iSpeechRules = prompt.indexOf("SO SPRICHST DU:");
+  assert.ok(iConstraints < iHeader, "HINTERGRUND steht NACH EINSCHRÄNKUNGEN");
+  assert.ok(iHeader < iSpeechRules, "HINTERGRUND steht VOR SO SPRICHST DU");
 });
 
 test("R2 Flag an + context null: systemPrompt byte-identisch zur kontextlosen Baseline (kein HINTERGRUND)", () => {

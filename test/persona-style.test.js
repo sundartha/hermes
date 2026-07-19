@@ -15,8 +15,10 @@ const T_WARM = "warm";
 const T_FORMELL = "formell";
 
 // Lokalisierte Stil-Klauseln als Golden-Master (byte-stabil; pinnt den P2-Wortlaut).
+// P5: DE traegt jetzt Umlaute (D3); der Katalog-KEY "warm-persoenlich" bleibt
+// unveraendert (D5 - ein Key-Rename braeche jeden Tenant mit gesetztem agentStyle).
 const WARM = {
-  de: "Triff einen warmen, persoenlichen Ton und duze den Anrufer.",
+  de: "Triff einen warmen, persönlichen Ton und duze den Anrufer.",
   fr: "Adopte un ton chaleureux et personnel et tutoie ton interlocuteur.",
   en: "Use a warm, personal tone and address the other person informally.",
 };
@@ -26,10 +28,12 @@ const FORMELL = {
   en: "Use a formal, neutral tone and address the other person politely.",
 };
 const NEUTRAL = "Sieze fremde Anrufer.";
-const FIXED_RULE_FRAGE = "- Stelle pro Antwort hoechstens eine Frage.";
-const FIXED_RULE_ENDCALL =
-  "- Wenn das Anliegen erledigt ist oder das Gespraech zu Ende geht, verabschiede dich und rufe danach das Tool end_call auf.";
-const FIXED_RULE_KURZ = "- Antworte KURZ: 1-2 gesprochene Saetze pro Antwort.";
+// P5: FIXED_RULE_FRAGE entfaellt - Laenge und "hoechstens eine Frage" sind in Anhang A
+// EIN Punkt geworden (siehe FIXED_RULE_KURZ). end_call-Regel lebt jetzt im
+// SO-KOMMST-DU-ZUM-ERGEBNIS-Block statt in einer eigenen Regelzeile.
+const FIXED_RULE_ENDCALL = "Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.";
+const FIXED_RULE_KURZ =
+  "- Höchstens zwei gesprochene Sätze pro Antwort, höchstens eine Frage darin.";
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
@@ -61,14 +65,12 @@ test("PS1 defaultSettings().agentStyle === null", () => {
 
 // (2) null = Bestand byte-identisch: die Siez-Zeile steht unveraendert in ihrem fixen
 // Kontext (kein Stilsatz, keine Blank-Line). Der VOLLE Prompt-Byte-Pin liegt in
-// personal-assistant-characterization (P0, laeuft ebenfalls bei null).
+// personal-assistant-characterization (P0/P5, laeuft ebenfalls bei null).
 test("PS2 agentStyle=null: Siez-Zeile byte-identisch im fixen Kontext, kein Stilsatz", () => {
   const p = systemPrompt(call({ direction: "outbound", language: "de" }));
   assert.ok(
-    p.includes(
-      `- Sei freundlich, professionell und effizient. ${NEUTRAL}\n${FIXED_RULE_FRAGE}`,
-    ),
-    "Bestands-Siez-Zeile unveraendert, direkt gefolgt von der fixen Frage-Regel",
+    p.includes(`- ${NEUTRAL} Freundlich, konkret, ohne Floskelketten.`),
+    "Bestands-Siez-Zeile unveraendert, direkt gefolgt von der fixen Kontext-Klausel",
   );
   assert.ok(!p.includes("duze") && !p.includes("tutoie"), "kein Stilsatz bei null");
 });
@@ -79,17 +81,22 @@ test("PS2 agentStyle=null: Siez-Zeile byte-identisch im fixen Kontext, kein Stil
 for (const lang of ["de", "fr", "en"]) {
   test(`PS3 ${lang}: warm/formell ersetzen die Siez-Zeile`, () => {
     const warm = systemPrompt(call({ tenantId: T_WARM, direction: "outbound", language: lang }));
-    assert.ok(warm.includes(`und effizient. ${WARM[lang]}`), "warm-Klausel eingewoben");
+    assert.ok(
+      warm.includes(`- ${WARM[lang]} Freundlich, konkret, ohne Floskelketten.`),
+      "warm-Klausel eingewoben",
+    );
     assert.ok(!warm.includes(NEUTRAL), "Siez-Zeile ersetzt (warm)");
 
     const formell = systemPrompt(
       call({ tenantId: T_FORMELL, direction: "outbound", language: lang }),
     );
-    assert.ok(formell.includes(`und effizient. ${FORMELL[lang]}`), "formell-Klausel eingewoben");
+    assert.ok(
+      formell.includes(`- ${FORMELL[lang]} Freundlich, konkret, ohne Floskelketten.`),
+      "formell-Klausel eingewoben",
+    );
     // Die fixen Regeln bleiben in JEDEM Fall unveraendert.
     for (const p of [warm, formell]) {
-      assert.ok(p.includes(FIXED_RULE_KURZ), "Laengen-Regel fix");
-      assert.ok(p.includes(FIXED_RULE_FRAGE), "eine-Frage-Regel fix");
+      assert.ok(p.includes(FIXED_RULE_KURZ), "Laengen-/Frage-Regel fix");
       assert.ok(p.includes(FIXED_RULE_ENDCALL), "end_call-Regel fix");
     }
   });

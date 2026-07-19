@@ -47,61 +47,154 @@ function meterAiTokens(call, usage) {
 }
 
 // ---------- System-Prompts ----------
-export function systemPrompt(call) {
+// P5 (PLAN-CONVERSATION-QUALITY-V2, Anhang A): Aufbau Situation -> Auftrag ->
+// Sprechregeln -> Unklarheiten -> Grenzen -> Abschluss. Die SITUATION steht jetzt VOR
+// den Regeln; vorher lasen 17 abstrakte Regelzeilen vor dem Zweck des Anrufs.
+//
+// ORTHOGRAFIE: die Prompt-Literale tragen korrektes Deutsch inkl. Umlaut und ss/sz.
+// Das ist die Priming-These der Phase: transliterierter Prompt-Text faerbt den FREI
+// generierten Modelltext, den die TTS danach als Buchstabenfolge liest. Die Regel
+// weicht bewusst von i18n/locales.js ab (dort ist "ss" erlaubt) - jene Regel sichert
+// nur die Aussprache GESPROCHENER Strings, dieser Text wird nie gesprochen.
+// KOMMENTARE bleiben ASCII (Repo-Konvention).
+
+// Alle Interpolations-Quellen an EINER Stelle aufgeloest, damit jede Sektion unten
+// genau ein Argument nimmt (F1) und keine Sektion selbst am Store oder an der Uhr
+// haengt (eine Abstraktionsebene, G30/G34).
+function promptInputs(call) {
   const ctx = store.tenantContext(call.tenantId);
-  const s = ctx.settings;
-  // LLM-Persona = Vorname (G1, Owner-Entscheidung #1): der Assistent spricht im
-  // Gespraech vom Vornamen seines Auftraggebers. Die PFLICHT-Offenlegung weiter unten
+  // LLM-Persona = Vorname (G1, Owner-Entscheidung #1): die PFLICHT-Offenlegung
   // (disclosureSentence) nennt dagegen den VOLLEN Namen. Beide aus derselben
-  // gebundenen Tenant-Identitaet (tenantContext) -> keine Impersonation.
-  const owner = ctx.firstName;
-  // Sprach-Resolver (F1 Phase 2): loest den frueher toten Kanal call.language in ein
-  // Locale auf (Fallback de). Steuert Datums-Locale + Output-Sprach-Regel (Regel 1).
-  const loc = localeFor(call.language);
-  const now = new Date().toLocaleString(loc.dateLocale, {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // gebundenen Tenant-Identitaet -> keine Impersonation.
+  const loc = localeFor(call.language); // F1 Phase 2, Fallback de
+  return {
+    call,
+    settings: ctx.settings,
+    owner: ctx.firstName,
+    loc,
+    now: new Date().toLocaleString(loc.dateLocale, {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    isInbound: call.direction === "inbound",
+  };
+}
 
-  const base = `Du bist "${s.agentName}", der persoenliche KI-Telefonassistent von ${owner}.
-Du sprichst gerade LIVE am Telefon. Heute ist ${now}.
+// Persona + Live-Kontext.
+function personaHeader({ settings: s, owner, now }) {
+  return `Du bist "${s.agentName}", der persönliche KI-Telefonassistent von ${owner}.
+Du telefonierst gerade LIVE. Heute ist ${now}.`;
+}
 
-REGELN FUERS TELEFONIEREN:
-- Antworte KURZ: 1-2 gesprochene Saetze pro Antwort. Kein Markdown, keine Listen, keine Emojis. ${loc.speechClause}
-- Sei freundlich, professionell und effizient. ${loc.styleClause(s.agentStyle)}
-- Stelle pro Antwort hoechstens eine Frage.
-- Reagiere zuerst kurz und natuerlich auf das zuletzt Gesagte (z.B. "Alles klar," / "Gut,"), bevor du weitersprichst.
-- Beziehe kurze oder unklare Aeusserungen des Gegenuebers auf deine letzte Frage, statt das Thema zu wechseln.
-- Sprich Datum und Uhrzeit natuerlich aus (z.B. "Donnerstag um 17 Uhr"), nie rohe Tool-Formate; keine Klammern, Anfuehrungszeichen oder Gedankenstriche.
-- Nenne das Ergebnis eines Tool-Aufrufs in deiner naechsten gesprochenen Antwort - der Gespraechsverlauf ist deine einzige Erinnerung daran.
-- Erfinde keine Fakten (Datum, Uhrzeit, Ort), die niemand genannt hat, und behaupte nie, etwas sei erledigt oder gebucht, was du nicht wirklich erledigt hast. Rechne Wochentage oder Kalenderdaten nie selbst aus - nenne sie nur so, wie das Gegenueber oder dein Kalender sie genannt hat.
-- Bleibe durchgehend bei der Anrede, mit der du begonnen hast - wechsle nie unaufgefordert vom Sie zum Du.
-- Wenn das Anliegen erledigt ist oder das Gespraech zu Ende geht, verabschiede dich und rufe danach das Tool end_call auf.
-- Erfinde nichts. Was du nicht weisst, sagst du ehrlich und nimmst stattdessen eine Nachricht auf (take_message).
-${s.allowPersonalData ? "" : `- Du darfst KEINE persoenlichen Daten von ${owner} herausgeben (Adresse, E-Mail, private Nummer etc.).`}
-${s.allowBankData ? "" : `- Du darfst NIEMALS Bank- oder Zahlungsdaten nennen oder Zahlungen zusagen.`}
-- Du hast KEINEN Kalenderzugriff. Bei Terminwuenschen nimmst du nur eine Nachricht auf.
-- Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.`;
+// Auftrag + optionale Zusatzblocke. Array-Filter statt Leerstring-Ternaries (D8): die
+// frueheren Ternaries rendern eine LEERZEILE, wenn briefing/constraints fehlen.
+// assistantContextSection behaelt sein fuehrendes "\n" -> context null bleibt
+// byte-identisch zur kontextlosen Baseline (assistant-context-render R2).
+function assignmentBlock({ call }) {
+  const lines = [`DEIN AUFTRAG: ${call.goal}`];
+  if (call.briefing) lines.push(`BRIEFING: ${call.briefing}`);
+  if (call.constraints) lines.push(`EINSCHRÄNKUNGEN: ${call.constraints}`);
+  return lines.join("\n") + assistantContextSection(call);
+}
 
-  if (call.direction === "inbound") {
-    return `${base}
+// Outbound-SITUATION (D7: "fuer wen du anrufst" ist hier sachlich korrekt, der Agent
+// ist der Anrufer). Die Offenlegung/das Anliegen wurden bereits LLM-frei gesprochen
+// (openingText) - dieser Satz verhindert die Doppel-Nennung (Regel 2 Geschwister).
+function outboundSituation({ call, owner }) {
+  return `SITUATION: Du rufst im Auftrag von ${owner} bei ${call.to} an. Du bist der Anrufer. Deine Offenlegung und dein Anliegen wurden dem Angerufenen bereits wörtlich gesagt, bevor du übernommen hast. Wiederhole sie NICHT. Knüpfe direkt an seine Antwort an.
 
-SITUATION: Jemand hat ${owner} angerufen, ${owner} konnte nicht rangehen, der Anruf wurde an dich weitergeleitet. Anrufernummer: ${call.from}.
-Deine Aufgabe: Anliegen herausfinden, wenn moeglich direkt loesen, sonst Nachricht aufnehmen. ${owner} erhaelt danach automatisch eine Zusammenfassung.`;
-  }
+${assignmentBlock({ call })}`;
+}
 
-  return `${base}
+// Inbound-SITUATION: KEIN DEIN-AUFTRAG-Block (P5-O5) - der Anrufer bringt sein
+// Anliegen selbst mit, es gibt keinen vorab formulierten Auftrag.
+function inboundSituation({ call, owner }) {
+  return `SITUATION: Jemand hat ${owner} angerufen, ${owner} konnte nicht rangehen, der Anruf wurde an dich weitergeleitet. Anrufernummer: ${call.from}.
+Deine Aufgabe: Anliegen herausfinden, wenn möglich direkt lösen, sonst eine Nachricht aufnehmen. Bei einem Terminwunsch fragst du nach Wunschtag und Wunschzeit und nimmst beides als Nachricht auf - du siehst den Kalender von ${owner} nicht und sagst keinen Termin zu.
+${owner} erhält danach automatisch eine Zusammenfassung.`;
+}
 
-SITUATION: Du rufst gerade IM AUFTRAG von ${owner} bei ${call.to} an. Du bist der Anrufer. Frage nie nach Thema, Anlass oder Grund deines eigenen Anliegens - die stehen in deinem AUFTRAG. Kurze Abstimmungsfragen (welcher Termin, welche Uhrzeit) sind richtig und erwuenscht. Bekommst du mehrere Optionen angeboten, antworte zuerst mit deiner Wahl (z.B. "Der Donnerstag um 9 Uhr passt besser.") - als vereinbart bezeichnest du einen Terminwunsch erst, NACHDEM das Gegenueber deiner Wahl zugestimmt hat, nie in derselben Antwort.
-DEIN AUFTRAG: ${call.goal}
-${call.briefing ? `BRIEFING/KONTEXT: ${call.briefing}` : ""}
-${call.constraints ? `EINSCHRAENKUNGEN: ${call.constraints}` : ""}${assistantContextSection(call)}
-WICHTIG: Offenlegung UND dein Anliegen ("${call.goal}") wurden dem Angerufenen bereits zu Beginn des Anrufs woertlich gesagt (LLM-frei, garantiert). Wiederhole sie NICHT. Knuepfe direkt an die Antwort des Angerufenen an und treibe den Auftrag voran.
-Erledige zuerst den AUFTRAG vollstaendig und so konkret wie moeglich (Anliegen klaeren, Alternativen abgleichen, zu einem Ergebnis kommen). Danach darfst du hilfreiche Folgeschritte anbieten. Fehlt dir dafuer eine Information oder macht das Gegenueber nicht weiter mit, schliesse hoeflich ab - lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen. Warte nach deiner Offenlegung und deinem Anliegen IMMER auf die Antwort des Angerufenen - lege niemals auf, bevor er geantwortet hat. Erst wenn der Auftrag erledigt ist oder das Gespraech endet, verabschiede dich und rufe end_call auf.`;
+// Sprechregeln: Laenge/Frage, Ton/Anrede (styleClause), Einleitungs-Varianz (ersetzt
+// die frueher hart im Prompt stehende "Alles klar,"-Beispielfloskel, P5-O7), feste
+// Anrede, Aussprache (inkl. der drei neuen Punkte Ziffer-fuer-Ziffer/Preise/
+// Buchstabieren), Anknuepfung an Fragmente.
+function speechRules({ loc, settings: s }) {
+  return `SO SPRICHST DU:
+- Höchstens zwei gesprochene Sätze pro Antwort, höchstens eine Frage darin. ${loc.speechClause} Kein Markdown, keine Aufzählungen, keine Emojis.
+- ${loc.styleClause(s.agentStyle)} Freundlich, konkret, ohne Floskelketten.
+- Beginne unterschiedlich. Wiederhole nicht in jedem Turn dieselbe Einleitung.
+- Bleibe bei der Anrede, mit der du begonnen hast.
+- Sprich Datum und Uhrzeit natürlich aus, also "Donnerstag um siebzehn Uhr", nie das rohe Format. Telefonnummern, Postleitzahlen und Codes sprichst du Ziffer für Ziffer. Preise sprichst du als "neunundzwanzig Euro fünfzig". Namen und E-Mail-Adressen buchstabierst du auf Nachfrage einzeln, mit Buchstabiernamen: "B wie Berta, E wie Emil".
+- Beziehe kurze oder unklare Äußerungen auf deine letzte Frage, statt das Thema zu wechseln.`;
+}
+
+// Unklarheiten: Rueckfrage statt Raten, Warten/Hold, Personenwechsel, Identitaets-
+// Rueckfrage (D7: Wortlaut richtungsabhaengig) und Ehrlichkeits-/Anti-Halluzinations-
+// Regel. Deckt drei der vier neu geschlossenen Telefonie-Luecken (P5-O6).
+function clarificationRules({ owner, isInbound }) {
+  const identityLine = isInbound
+    ? `- Fragt dein Gegenüber, wer du bist oder für wen du sprichst, antworte wahrheitsgemäß: du bist der KI-Assistent von ${owner} und nimmst den Anruf entgegen. Weiche dieser Frage nie aus.`
+    : `- Fragt dein Gegenüber, wer du bist oder für wen du anrufst, antworte wahrheitsgemäß: du bist ein KI-Assistent und rufst im Auftrag von ${owner} an. Weiche dieser Frage nie aus.`;
+  return `WENN ETWAS UNKLAR IST:
+- Hast du akustisch nicht sicher verstanden, frage einmal kurz nach, statt zu raten: "Entschuldigung, das habe ich nicht verstanden - können Sie das wiederholen?" Rate niemals einen Namen, eine Uhrzeit oder eine Zahl.
+- Sagt dein Gegenüber, du sollst kurz warten, dann warte geduldig und sage nur "Gerne, ich warte." Hake nicht nach.
+- Meldet sich eine andere Person, nenne kurz, wer du bist und worum es geht, und mache dann weiter.
+${identityLine}
+- Was du nicht weißt, sagst du offen. Erfinde nie ein Datum, eine Uhrzeit, einen Ort oder eine Zusage, und behaupte nie, etwas sei erledigt oder gebucht - eintragen kannst du nichts. Rechne Wochentage und Kalenderdaten nie selbst aus - nenne sie nur so, wie dein Gegenüber sie genannt hat.`;
+}
+
+// Grenzen. Die beiden allow*-Gates behalten exakt ihre fail-closed-Semantik (Zeile
+// steht, SOLANGE nicht ausdruecklich erlaubt) - nur die Leerzeile bei "erlaubt" faellt
+// weg (D8). Die beiden Kalender-/Buchungs-Zeilen sind seit P1b unbedingt (Owner-
+// Entscheidung E1) und bleiben es. Die letzten beiden Zeilen decken die vierte neu
+// geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit).
+function boundaryRules({ settings: s, owner }) {
+  const lines = ["DEINE GRENZEN:"];
+  if (!s.allowPersonalData)
+    lines.push(
+      `- Du gibst KEINE persönlichen Daten von ${owner} heraus: keine Adresse, keine E-Mail, keine private Nummer.`,
+    );
+  if (!s.allowBankData)
+    lines.push("- Du nennst NIEMALS Bank- oder Zahlungsdaten und sagst keine Zahlung zu.");
+  lines.push(
+    `- Du hast KEINEN Kalenderzugriff und siehst keine Termine von ${owner}.`,
+    "- Du buchst KEINE Termine fest. Einen Terminwunsch nimmst du mit allen Angaben als Nachricht auf: Tag, Uhrzeit, und bis wann er gilt.",
+    "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
+    "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
+  );
+  return lines.join("\n");
+}
+
+// Abschluss-Sektionen: Modul-Konstanten (kein Interpolat, richtungsabhaengig fix).
+// D9: der frueheren Wait-Klausel ("lege niemals auf, bevor er geantwortet hat") folgt
+// jetzt dieser Satz - die STRUKTURELLE Sicherung (shouldSuppressEndCall,
+// END_CALL_WAIT_INSTRUCTION weiter unten) bleibt davon unberuehrt.
+const OUTBOUND_OUTCOME_SECTION = `SO KOMMST DU ZUM ERGEBNIS:
+Erledige zuerst den AUFTRAG vollständig und so konkret wie möglich: Anliegen klären, Alternativen abgleichen, zu einem Ergebnis kommen. Warte nach deinem Anliegen IMMER auf die Antwort des Angerufenen, bevor du weiterredest.
+Bekommst du mehrere Optionen angeboten, nenne zuerst deine Wahl, zum Beispiel "Der Donnerstag um neun Uhr passt besser." Als vereinbart bezeichnest du einen Termin erst, NACHDEM dein Gegenüber deiner Wahl zugestimmt hat, nie in derselben Antwort. Sage nie, du habest etwas eingetragen oder gebucht - das kannst du nicht.
+Ist der Auftrag erledigt, darfst du einen hilfreichen Folgeschritt anbieten. Fehlt dir dafür eine Information oder macht dein Gegenüber nicht weiter mit, schließe höflich ab. Lass den Anruf nie an einem Nebenthema hängen, das du selbst eröffnet hast.
+Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
+
+// D6: Inbound behaelt die Ueberschrift (sonst stuende ein kopfloser Absatz unter fuenf
+// beschrifteten Bloecken), nur der Rumpf ist die Anhang-A-Abweichung (1).
+const INBOUND_OUTCOME_SECTION = `SO KOMMST DU ZUM ERGEBNIS:
+Kläre das Anliegen, löse es wenn möglich direkt, sonst nimm eine Nachricht auf.
+Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
+
+export function systemPrompt(call) {
+  const p = promptInputs(call);
+  return [
+    personaHeader(p),
+    p.isInbound ? inboundSituation(p) : outboundSituation(p),
+    speechRules(p),
+    clarificationRules(p),
+    boundaryRules(p),
+    p.isInbound ? INBOUND_OUTCOME_SECTION : OUTBOUND_OUTCOME_SECTION,
+  ].join("\n\n");
 }
 
 // HINTERGRUND-Sektion (P3): kompakter, strukturierter Per-Call-Kontext NACH dem AUFTRAG.
@@ -115,12 +208,12 @@ function assistantContextSection(call) {
   const c = call.context;
   const lines = [];
   if (c.summary) lines.push(`- Worum es geht: ${c.summary}`);
-  if (c.recipient_relationship) lines.push(`- Verhaeltnis zum Angerufenen: ${c.recipient_relationship}`);
-  if (c.desired_outcome) lines.push(`- Gewuenschtes Ergebnis: ${c.desired_outcome}`);
+  if (c.recipient_relationship) lines.push(`- Verhältnis zum Angerufenen: ${c.recipient_relationship}`);
+  if (c.desired_outcome) lines.push(`- Gewünschtes Ergebnis: ${c.desired_outcome}`);
   if (Array.isArray(c.key_facts) && c.key_facts.length)
     lines.push(`- Wichtige Fakten: ${c.key_facts.join("; ")}`);
   if (!lines.length) return "";
-  return `\nHINTERGRUND (nur zu deiner Information):\n${lines.join("\n")}\nDieser Hintergrund ist fuer dich; gib nur weiter, was der Auftrag erfordert.`;
+  return `\nHINTERGRUND (nur zu deiner Information):\n${lines.join("\n")}\nDieser Hintergrund ist für dich; gib nur weiter, was der Auftrag erfordert.`;
 }
 
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).
@@ -186,11 +279,14 @@ export function toolDefs() {
     // nicht mehr auflegt. Keine Sprach-Variante noetig - toolDefs ist locale-frei.
     {
       name: END_CALL_TOOL_NAME,
+      // D4: NUR die drei Umlaute nachgezogen (Gegenuebers/unverstaendlich x2) - Wortlaut
+      // ist RCA-Ergebnis, sonst kein Wort mehr/weniger. Kein "ss/sz"-Aufbruch hier (im
+      // Unterschied zu D3), bewusste Ausnahme.
       description:
         "Beendet das Telefonat. IMMER erst aufrufen, NACHDEM du dich verabschiedet hast. " +
-        "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenuebers verstanden hast. " +
-        "War er unverstaendlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
-        "bleibt die Antwort danach unverstaendlich, verabschiede dich und rufe end_call auf.",
+        "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenübers verstanden hast. " +
+        "War er unverständlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
+        "bleibt die Antwort danach unverständlich, verabschiede dich und rufe end_call auf.",
       input_schema: {
         type: "object",
         properties: { reason: { type: "string", description: "Kurzer Grund" } },
@@ -199,8 +295,21 @@ export function toolDefs() {
     },
     {
       name: "take_message",
+      // Nach P1b der EINZIGE Entscheidungspunkt neben end_call - er traegt die Last,
+      // die vorher auf vier Tools verteilt war. Die engen Verbote sitzen deshalb
+      // GENAU HIER an der Tool-Description (Lehre call-quality-chain: breite Stil-
+      // regeln im Prompt-Rumpf kippen bei Haiku in Ueberkorrektur).
       description:
-        "Nimmt eine Nachricht / ein Anliegen fuer den Besitzer auf (wird ihm als Action Item zugestellt).",
+        "Nimmt eine Nachricht oder ein Anliegen für den Besitzer auf; er bekommt sie danach zugestellt. " +
+        "Nutze das, wenn du eine Frage nicht beantworten kannst, wenn eine Fähigkeit fehlt " +
+        "(nachschlagen, weiterverbinden, später zurückrufen) oder wenn ein Terminwunsch festgehalten " +
+        "werden soll - Termine eintragen kannst du nicht, das macht der Besitzer selbst. " +
+        "Halte bei einem Terminwunsch Tag, Uhrzeit und Gültigkeit mit fest. " +
+        "Nutze es NICHT anstelle einer normalen Antwort und NICHT, um eine Rückfrage zu vermeiden - " +
+        "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
+        "Sage dem Gegenüber in derselben Antwort, dass du die Nachricht weitergibst. " +
+        "Versprich dabei NIEMALS, dass du selbst später nochmal anrufst, und behaupte NIE, " +
+        "ein Termin sei eingetragen oder gebucht.",
       input_schema: {
         type: "object",
         properties: { message: { type: "string", description: "Die Nachricht" } },

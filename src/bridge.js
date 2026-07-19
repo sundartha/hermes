@@ -70,11 +70,13 @@ function realtimeTools() {
 }
 
 // Gleiche Persona/Regeln wie die Budget-Engine, plus Sprech-Hinweis fuer Speech-to-Speech.
+// P5: der Barge-in-Halbsatz ("Mache kleine Pausen moeglich, lass dich unterbrechen.") ist
+// gestrichen - Barge-in laeuft auf Audio-Ebene per server_vad, nicht durch eine
+// Modellentscheidung, die Anweisung war irrefuehrend. Der Prosodie-Hinweis bleibt.
+// Reststring bleibt transliteriert (bridge.js ist laut L3 dormant, P5 investiert hier
+// keine Umlaut-Arbeit).
 function instructions(call) {
-  return (
-    systemPrompt(call) +
-    "\n\nSPRECHWEISE: natuerlich, zuegig, kurze Saetze. Mache kleine Pausen moeglich, lass dich unterbrechen."
-  );
+  return systemPrompt(call) + "\n\nSPRECHWEISE: natuerlich, zuegig, kurze Saetze.";
 }
 
 // HEIKLE STELLE 2: Call-Ende-Puffer. Ruft die KI das end_call-Tool auf, wird NICHT sofort

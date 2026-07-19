@@ -17,6 +17,11 @@
 // Franzoesische Strings tragen ebenfalls die korrekten Akzente ("resume" != "résumé").
 // Die Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>, Twilio-SDK); Umlaute und
 // Akzente sind keine XML-Sonderzeichen und passieren die Escaper unveraendert.
+// P5 (PLAN-CONVERSATION-QUALITY-V2): die Prompt-Bausteine dieses Bundles (speechClause,
+// STYLE_CLAUSES_DE) tragen seit P5 ebenfalls korrekte Umlaute - sie fliessen in den von
+// claude.js zusammengesetzten Systemprompt, der nie gesprochen, aber vom Modell gelesen
+// wird (Priming-These). realtimeOpener und summarySystem bleiben ausdruecklich
+// transliteriert (siehe P1-U3 oben), sie sind kein Prompt-Baustein im P5-Sinn.
 // KOMMENTARE bleiben ASCII (Repo-Konvention) - nur die Strings aendern sich.
 import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
 
@@ -65,7 +70,7 @@ const NEUTRAL_ADDRESS_CLAUSE = "Sieze fremde Anrufer.";
 // byte-stabil (R8). Ein fehlender Key faellt in styleClause auf NEUTRAL zurueck; der
 // Vollstaendigkeits-Test (persona-style.test.js) faengt Drift gegen PERSONA_STYLE_IDS.
 const STYLE_CLAUSES_DE = Object.freeze({
-  "warm-persoenlich": "Triff einen warmen, persoenlichen Ton und duze den Anrufer.",
+  "warm-persoenlich": "Triff einen warmen, persönlichen Ton und duze den Anrufer.",
   "formell-professionell": "Triff einen formellen, sachlichen Ton und sieze den Anrufer.",
 });
 const STYLE_CLAUSES_FR = Object.freeze({
@@ -107,7 +112,7 @@ export const LOCALES = Object.freeze({
         "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
     },
     // System-Prompt-Sprach-Teil: die Output-Sprach-Regel in Regel 1 (claude.js).
-    speechClause: "Nur natuerlich gesprochenes Deutsch.",
+    speechClause: "Nur natürlich gesprochenes Deutsch.",
     // Persona-Stil (P2): Stil-ID -> Ton-/Anrede-Klausel, ersetzt die fixe Siez-Anweisung
     // an Ort und Stelle (claude.js, gleiche Zeile). Unbekannt/null -> NEUTRAL (Siezen) =>
     // agentStyle=null byte-identisch. KEIN Freitext erreicht je den Prompt (nur Katalog-
