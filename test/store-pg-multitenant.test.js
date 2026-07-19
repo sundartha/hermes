@@ -22,6 +22,7 @@ import {
 import { aggregatePendingMeters } from "../src/billing/meter.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
+import { PRICES, tokensOf } from "./_prices.js";
 
 // P2b: kein config-derived Identitaets-Seed mehr -> ein frischer pg-Store hat den
 // Owner-Tenant (status active) OHNE ownerName. Die Identitaet kommt ueber Self-Service
@@ -29,7 +30,6 @@ import * as ops from "../src/store/state-ops.js";
 
 const TENANT_B = "tenant_b";
 const APP_ROLE = "app_user"; // liest/schreibt unter GUC, ohne Superuser/BYPASSRLS
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
 // Spiegel aus der DB) - so wird Persistenz statt nur In-Memory geprueft.
@@ -70,7 +70,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   const iso2 = "2030-02-01T11:00:00.000Z";
   ops.settingsFor(s, TENANT_B).agentName = "B-Agent";
   ops.addCalendarEvent(s, TENANT_B, "B-Termin", iso1, iso2);
-  ops.trackUsage(s, TENANT_B, 1_000_000, 0, PRICES);
+  ops.trackUsage(s, TENANT_B, tokensOf(1_000_000, 0), PRICES);
   s.numbers.push({
     id: "num_b",
     e164: "+49999000111",

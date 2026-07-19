@@ -141,6 +141,11 @@ export const CENTS_PER_EUR = 100;
 // bucht nur den vollen Cent-Uebertrag in costCents (G26: Money at rest = Ganzzahl).
 export const MICRO_CENTS_PER_CENT = 1_000_000;
 
+// Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt
+// (G25), weil tokenCostUsd sonst zwei nackte 1e6 traegt, die NICHTS mit dem
+// gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
+export const TOKENS_PER_M_TOK = 1_000_000;
+
 // Globaler Notaus-Cap in EUR (Cents->EUR-Ruecklesung von cfg.maxBudgetCents, G5:
 // EINE Divisionsstelle statt vier duplizierten `cfg.maxBudgetCents / CENTS_PER_EUR`-
 // Stellen in server.js/api-read.js/state-ops.js). Reine Funktion von cfg, keine

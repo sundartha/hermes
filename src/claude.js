@@ -34,16 +34,37 @@ function inputTokensOf(usage) {
 // trackUsage fuettert den Budget-Bucket, dieser Meter den Stripe-Ledger. quantity =
 // Gesamt-Tokens, costCents aus derselben Preisformel (aiCostCents, G5). callId
 // verknuepft den Beleg, ueberlebt aber ein Call-Erase (usage_event ohne call-FK).
-function meterAiTokens(call, usage) {
+function meterAiTokens(call, tokens) {
   if (!config.billing.paymentEnabled) return;
-  const inputTokens = inputTokensOf(usage);
   store.recordUsageEvent({
     tenantId: call.tenantId,
     callId: call.id,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
-    quantity: inputTokens + usage.output_tokens,
-    costCents: aiCostCents(inputTokens, usage.output_tokens, config.llm),
+    quantity: tokens.inputTokens + tokens.outputTokens,
+    costCents: aiCostCents(tokens, config.llm),
   });
+}
+
+// Verbrauchs-Tripel EINER Anthropic-Antwort in der Form, die beide Kosten-Achsen
+// erwarten: Tokens inkl. Cache-Anteil (inputTokensOf) + die Modell-ID, unter deren
+// Preisstaffel gebucht wird (P7a).
+//
+// Modell-Quelle ist die ANGEFORDERTE ID - dieselbe, die an llm.complete geht -, NICHT
+// resp.model: Anthropic antwortet mit der aufgeloesten, DATIERTEN Snapshot-ID, die in
+// der Preistabelle nicht steht. Jeder Turn liefe damit in den Fail-closed-Zweig
+// (teuerste Rate) und das Budget waere systematisch zu frueh erschoepft. Reine Funktion.
+function billedTokens(usage, model) {
+  return { inputTokens: inputTokensOf(usage), outputTokens: usage.output_tokens, model };
+}
+
+// Bucht den Verbrauch EINER Anthropic-Antwort auf BEIDE Kosten-Achsen: den Live-
+// Budget-Bucket (Regel 1) und - nur bei PAYMENT_ENABLED - den Stripe-Ledger. EINE
+// Stelle (G5) statt der bisher in agentTurn UND summarizeCall doppelten zwei Zeilen.
+// Reihenfolge (trackUsage vor meterAiTokens) unveraendert. Nebeneffekte im Namen (N7).
+function bookTokenUsage(call, usage, model) {
+  const tokens = billedTokens(usage, model);
+  store.trackUsage(call.tenantId, tokens, config.llm);
+  meterAiTokens(call, tokens);
 }
 
 // ---------- System-Prompts ----------
@@ -601,10 +622,14 @@ export async function agentTurn(call, callerText) {
   let roundtrips = 0; // L0: Anzahl llm.complete-Roundtrips dieses Turns
   const firedTools = []; // L0: vom Modell angeforderte Tool-NAMEN dieses Turns (PII-frei)
 
+  // EINE Modell-ID fuer Anfrage UND Buchung (P7a): das Gate muss exakt das Modell
+  // bepreisen, das gefragt wurde.
+  const model = config.llm.claudeModel;
+
   // Tool-Loop (max. 4 Runden pro Turn)
   for (let i = 0; i < 4; i++) {
     const resp = await llm.complete({
-      model: config.llm.claudeModel,
+      model,
       max_tokens: 300,
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
       tools: toolsWithCacheControl(toolDefs()),
@@ -612,8 +637,7 @@ export async function agentTurn(call, callerText) {
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     });
     roundtrips += 1;
-    store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config.llm);
-    meterAiTokens(call, resp.usage);
+    bookTokenUsage(call, resp.usage, model);
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
     if (textParts.length) speech = textParts.join(" ").trim();
@@ -680,8 +704,9 @@ export async function summarizeCall(call) {
     .map((t) => `${t.role === "agent" ? "AGENT" : "ANRUFER"}: ${t.text}`)
     .join("\n");
 
+  const model = config.llm.claudeModel;
   const resp = await llm.complete({
-    model: config.llm.claudeModel,
+    model,
     max_tokens: 500,
     // Zusammenfassungs-Prompt sprachabhaengig (F1 Phase 2): die Summary entsteht in der
     // Gespraechssprache (de byte-identisch); die JSON-Keys bleiben sprachunabhaengig.
@@ -694,8 +719,7 @@ export async function summarizeCall(call) {
     ],
     callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
   });
-  store.trackUsage(call.tenantId, inputTokensOf(resp.usage), resp.usage.output_tokens, config.llm);
-  meterAiTokens(call, resp.usage);
+  bookTokenUsage(call, resp.usage, model);
 
   let parsed = { summary: "", actionItems: [] };
   try {

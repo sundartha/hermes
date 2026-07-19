@@ -745,9 +745,30 @@ const rawConfig = {
   realtimeVoice: process.env.REALTIME_VOICE || "alloy",
   twilioEdge: process.env.TWILIO_EDGE || "frankfurt",
 
-  // Preise pro 1M Tokens in USD (Claude Haiku 4.5). Nur fuer den Budget-Guard.
-  priceInPerMTokUsd: 1.0,
-  priceOutPerMTokUsd: 5.0,
+  // Preise pro 1M Tokens in USD, PRO MODELL-ID. Nur fuer den Budget-Guard (Regel 1).
+  // EINZIGE Preisquelle: das Live-Gate (trackUsage) UND der Stripe-Ledger (aiCostCents)
+  // leiten ihren Betrag hieraus ab (G5). Ein Modell, das hier NICHT steht, wird mit der
+  // TEUERSTEN hinterlegten Rate gebucht (fail-closed, priceForModel in state-ops.js) -
+  // nie mit 0, nie mit dem Haiku-Default. Jedes neue Modell MUSS hier eingetragen werden,
+  // BEVOR CLAUDE_MODEL darauf gestellt wird (siehe PLAN-SECURITY.md, P7A-MODELPRICE).
+  //
+  // LISTENPREISE, bewusst NICHT der Sonnet-5-Einfuehrungsrabatt (2/10 USD, laeuft
+  // 2026-08-31 aus): ein zu NIEDRIGER Preis macht das Budget-Gate blind, ein zu hoher
+  // ist hoechstens zu streng. Achtung: eine DATIERTE Snapshot-ID
+  // ("claude-haiku-4-5-20251001") ist ein ANDERER Schluessel als der Alias und wuerde
+  // in den Fail-closed-Zweig laufen.
+  //
+  // BEWUSST NICHT Object.freeze(...): guardedConfig (unten) wrapt jeden Objekt-Wert bei
+  // JEDEM Zugriff frisch in einen NEUEN Proxy. Fuer eine per Object.freeze non-configurable
+  // GEMACHTE Eigenschaft verlangt die Sprache aber, dass [[Get]] denselben (SameValue)
+  // Rueckgabewert liefert wie am Target - ein frischer Wrapper verletzt diese Invariante und
+  // die Engine wirft TypeError bei JEDEM Zugriff (auch auf bekannte Modelle), nicht nur bei
+  // unbekannten. Genau der Fail-open-durch-Crash, den priceForModel verhindern soll. Muster
+  // wie die bestehenden ungefreezten Objekt-Bloecke telnyxElevenLabs/telnyxAssistant oben.
+  modelPricesUsd: {
+    "claude-haiku-4-5": { inPerMTok: 1.0, outPerMTok: 5.0 },
+    "claude-sonnet-5": { inPerMTok: 3.0, outPerMTok: 15.0 },
+  },
   usdToEur: 0.93,
 
   // DATA_DIR-Override, damit Tests nicht das echte data/store.json anfassen
@@ -820,7 +841,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   billing: ["maxBudgetCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
-  llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "priceInPerMTokUsd", "priceOutPerMTokUsd", "usdToEur"],
+  llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge"],

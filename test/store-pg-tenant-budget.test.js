@@ -13,8 +13,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
+import { PRICES, tokensOf } from "./_prices.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 const APP_ROLE = "app_user"; // liest Owner-Daten, ohne Superuser/BYPASSRLS
@@ -25,7 +25,7 @@ const TOKENS_OVER_CAP = 10_000_000; // 10 USD * 0.93 = 9.3 EUR > 8
 test("P4 Test 1: Pro-Tenant-Budget-Isolation (A ueber Cap, B unberuehrt)", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  ops.trackUsage(s, TENANT_A, TOKENS_OVER_CAP, 0, PRICES);
+  ops.trackUsage(s, TENANT_A, tokensOf(TOKENS_OVER_CAP, 0), PRICES);
   assert.equal(ops.budgetExceeded(s, TENANT_A, PRICES), true, "A hat den Cap gerissen");
   assert.equal(ops.budgetExceeded(s, TENANT_B, PRICES), false, "B ist frei");
   assert.equal(ops.usageFor(s, TENANT_B).costCents, 0, "B-Bucket ist null");
@@ -34,7 +34,7 @@ test("P4 Test 1: Pro-Tenant-Budget-Isolation (A ueber Cap, B unberuehrt)", async
 test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
-  ops.trackUsage(s, TENANT_A, 1_000_000, 1_000_000, PRICES);
+  ops.trackUsage(s, TENANT_A, tokensOf(1_000_000, 1_000_000), PRICES);
   const bucketB = ops.usageFor(s, TENANT_B);
   assert.deepEqual(bucketB, {
     inputTokens: 0,
@@ -49,8 +49,8 @@ test("P4 Test 3: globaler Notaus greift, waehrend jeder Tenant unter seinem Cap 
   const { store } = await makePgTestStore();
   const s = store.load();
   // Je 6 USD * 0.93 = 5.58 EUR pro Tenant -> unter 8, Summe 11.16 EUR -> ueber 8.
-  ops.trackUsage(s, TENANT_A, 6_000_000, 0, PRICES);
-  ops.trackUsage(s, TENANT_B, 6_000_000, 0, PRICES);
+  ops.trackUsage(s, TENANT_A, tokensOf(6_000_000, 0), PRICES);
+  ops.trackUsage(s, TENANT_B, tokensOf(6_000_000, 0), PRICES);
   assert.equal(ops.budgetExceeded(s, TENANT_A, PRICES), false, "A einzeln unter Cap");
   assert.equal(ops.budgetExceeded(s, TENANT_B, PRICES), false, "B einzeln unter Cap");
   assert.equal(ops.globalBudgetExceeded(s, PRICES), true, "Plattform-Summe ueber Cap");

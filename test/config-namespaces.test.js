@@ -19,7 +19,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   billing: 15,
   provisioning: 11,
   auth: 15,
-  llm: 11,
+  // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
+  // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
+  // 2 primitiver Keys) -> 10 statt 11.
+  llm: 10,
   telnyx: 2,
   voice: 10,
   telephony: 8,
@@ -30,9 +33,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 101;
+const EXPECTED_TOTAL_KEYS = 100;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (101 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (100 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -74,7 +77,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
     for (const key of keys) {
       const currentValue = config[namespace][key];
       // Arrays/nested Objekte sind hier nicht das Ziel: der Test beweist die Getter/Setter-
-      // statt-Kopie-Eigenschaft an den primitiven Blaettern (95 von 101).
+      // statt-Kopie-Eigenschaft an den primitiven Blaettern (93 von 100).
       if (currentValue && typeof currentValue === "object") continue;
       checked += 1;
       const sentinel = sentinelFor(currentValue);
@@ -90,7 +93,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
       assert.strictEqual(config[namespace][key], currentValue, `${namespace}.${key} restauriert`);
     }
   }
-  assert.equal(checked, 95, "alle primitiven Blaetter (101 - 3 Arrays - 3 nested Objekte) geprueft");
+  assert.equal(checked, 93, "alle primitiven Blaetter (100 - 3 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

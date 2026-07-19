@@ -418,3 +418,57 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > NICHT. Der Abschluss-Satz wird INNERHALB der Frist gerendert; `terminateCappedCall`,
 > `armMaxDurationTimer` und `POST /api/calls/:id/cancel` (Owner-Notaus ohne Ansage) bleiben
 > unveraendert. `CAP_FAREWELL_LEAD_MS=0` schaltet die Ansage aus, ohne den Cap anzufassen.
+
+## P7A-MODELPRICE — Budget-Guard rechnet pro Modell (fail-closed, 2026-07-19)
+
+> **Geschlossene Luecke:** `tokenCostUsd` rechnete mit EINER globalen Formel
+> (`priceInPerMTokUsd`/`priceOutPerMTokUsd`, faktisch Haiku-Preise). Jedes andere
+> Modell - auch ein teureres - wurde zu Haiku-Preisen gebucht. Auf der KI-Kosten-Achse
+> haette der Budget-Guard (Regel 1) damit bis zu einem Faktor 3 zu wenig gesehen.
+>
+> **Neu:** `config.llm.modelPricesUsd` ist die EINZIGE Preisquelle. Live-Gate
+> (`trackUsage`) und Stripe-Ledger (`aiCostCents`) leiten beide daraus ab; die
+> Modell-ID reist als Teil des Verbrauchs-Tripels `{inputTokens, outputTokens, model}`
+> vom Aufrufer (`src/claude.js`) bis in die Preisformel.
+>
+> **Fail-closed:** Eine Modell-ID, die NICHT in der Tabelle steht, wird mit der
+> TEUERSTEN hinterlegten Rate gebucht (`priceForModel`/`mostExpensivePrice`) - nie mit
+> 0, nie mit dem Haiku-Default. Eine leere Tabelle wirft benannt statt still auf 0 zu
+> fallen. Beides ist getestet (`test/model-price-gate.test.js`), inklusive des Nachweises,
+> dass ein unbekanntes Modell das Gate weiterhin REISST.
+>
+> **Proxy-Falle (bewusst festgehalten):** `config.llm.modelPricesUsd` ist zur Laufzeit
+> ein `guardedConfig`-Proxy, dessen `get`-Trap bei unbekanntem Schluessel wirft. Der
+> Lookup MUSS `Object.hasOwn` nutzen; ein Roh-Index `prices[model]` wuerde den Turn mit
+> 500 killen statt konservativ zu buchen. Ein Test faehrt den Fail-closed-Zweig deshalb
+> gegen die ECHTE `config`-Oberflaeche, nicht nur gegen einen Plain-Object-Mock.
+>
+> **Zweite Proxy-Falle (in dieser Phase gefunden + behoben, nicht im Ursprungsplan):**
+> `modelPricesUsd` war im ersten Entwurf `Object.freeze(...)`. `guardedConfig` wrapt
+> jeden Objekt-Wert bei JEDEM Zugriff in einen NEUEN Proxy; fuer eine per `Object.freeze`
+> non-configurable/non-writable GEMACHTE Eigenschaft verlangt die Sprache aber, dass
+> `[[Get]]` denselben (SameValue) Rueckgabewert wie am Target liefert. Ein frischer
+> Wrapper verletzt diese Invariante -> die Engine warf `TypeError` bei JEDEM Zugriff auf
+> `config.llm.modelPricesUsd[...]`, auch auf BEKANNTE Modelle - nicht nur bei unbekannten.
+> Genau der Fail-open-durch-Crash (500 auf jeden Turn), den `priceForModel` verhindern
+> soll, waere damit ab dem ersten Request eingetreten. Gefunden durch das Rot-vor-Fix-
+> Protokoll: der Test gegen die echte `config`-Oberflaeche (siehe oben) schlug nach dem
+> ersten Implementierungsversuch mit genau dieser Proxy-Invariant-Meldung fehl. Fix:
+> `modelPricesUsd` bleibt ein normales (ungefreeztes) Objekt, Muster wie die bestehenden
+> nested Config-Bloecke `telnyxElevenLabs`/`telnyxAssistant`.
+>
+> **Betriebs-Auflage (KEIN Boot-Gate):** Jedes kuenftige Modell MUSS in
+> `modelPricesUsd` eingetragen werden, BEVOR `CLAUDE_MODEL` darauf gestellt wird. Auch
+> eine DATIERTE Snapshot-ID (`claude-haiku-4-5-20251001`) ist ein ANDERER Schluessel als
+> der Alias. Sonst rechnet das Gate mit der teuersten Rate - Calls brechen zu frueh ab.
+> Bewusst KEIN Boot-Refusal: das wuerde ein eingegrenztes Geld-Risiko (konservativ zu
+> teuer buchen) in einen Totalausfall der Telefonie verwandeln.
+>
+> **Preis-Politik:** In der Tabelle stehen LISTENPREISE, nicht Einfuehrungsrabatte
+> (Sonnet 5: 3/15 USD, nicht die bis 2026-08-31 gueltigen 2/10). Ein zu NIEDRIGER Preis
+> macht das Gate blind; ein zu hoher ist hoechstens zu streng.
+>
+> **Nicht beruehrt:** Der P1-Safety-Blocker bleibt unveraendert - `trackUsage`
+> akkumuliert weiter EXAKT in Mikro-Cents (`costMicroCentsRem`) und rundet NICHT pro
+> Inkrement. Denylist/Land-Gate/Stundenlimit/Max-Dauer/Signaturpruefung sind nicht
+> angefasst.

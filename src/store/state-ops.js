@@ -33,6 +33,7 @@ import {
   USAGE_EVENT_KIND,
   CENTS_PER_EUR,
   MICRO_CENTS_PER_CENT,
+  TOKENS_PER_M_TOK,
   globalCapCents,
   KYC_LEVEL,
   KYC_ORDER,
@@ -1356,28 +1357,63 @@ export function globalUsageTotals(s) {
   };
 }
 
-// USD-Kosten eines Token-Verbrauchs (Claude-Preise pro 1M Tokens). EINE Quelle
-// (G5) der Preisformel: trackUsage (Live-Bucket, Mikro-Cent-Akkumulator) UND
-// aiCostCents (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
-function tokenCostUsd(inputTokens, outputTokens, cfg) {
-  return (
-    (inputTokens / 1e6) * cfg.priceInPerMTokUsd + (outputTokens / 1e6) * cfg.priceOutPerMTokUsd
+// Teuerste hinterlegte Rate - das Fail-closed-Ziel fuer ein unbekanntes Modell (P7a).
+// "Teuerste" = groesster Output-Preis, bei Gleichstand groesster Input-Preis: Output
+// dominiert die Rechnung in jeder bekannten Claude-Staffel (out = 5x in). Eine LEERE
+// Tabelle wirft benannt statt still - ein Startwert 0 waere fail-OPEN (Preis 0 = Gate
+// blind, Regel 1). Reine Funktion.
+function mostExpensivePrice(prices) {
+  const rates = Object.values(prices);
+  if (!rates.length)
+    throw new Error("modelPricesUsd ist leer - keine Preisquelle fuer den Budget-Guard (Regel 1)");
+  return rates.reduce((max, p) =>
+    p.outPerMTok > max.outPerMTok ||
+    (p.outPerMTok === max.outPerMTok && p.inPerMTok > max.inPerMTok)
+      ? p
+      : max,
   );
 }
 
-// Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4). P1
-// Safety-BLOCKER: kein Per-Inkrement-Cent-Rounding - ein einzelner Haiku-Turn kostet
-// oft << 0,5 Cent und wuerde bei einer Pro-Inkrement-Rundung IMMER auf 0 fallen (das
-// Budget-Gate saehe den KI-Kostenanteil nie). Stattdessen akkumuliert dieser Pfad
-// EXAKT in Mikro-Cents (costMicroCentsRem) und bucht nur den vollen Cent-Uebertrag
-// nach costCents (Math.floor) - der Sub-Cent-Rest reist ungerundet ueber die
-// Inkremente mit, bis er selbst einen ganzen Cent ergibt. Liefert den Bucket.
-export function trackUsage(s, tenantId, inputTokens, outputTokens, cfg) {
+// Preis-Aufloesung PRO MODELL (P7a). Fail-closed: ein Modell, das NICHT in der
+// Preistabelle steht, wird mit der TEUERSTEN hinterlegten Rate gebucht - nie mit 0,
+// nie mit dem Haiku-Default (Regel 1: ein zu niedriger Preis macht die KI-Kosten-Achse
+// des Budget-Gates blind, ein zu hoher ist hoechstens zu streng).
+//
+// Object.hasOwn statt prices[model]: cfg.modelPricesUsd ist in Produktion ein
+// guardedConfig-PROXY, dessen get-Trap bei einem unbekannten Schluessel TypeError WIRFT.
+// Ein Roh-Index wuerde den Turn also mit 500 killen statt konservativ zu buchen; hasOwn
+// laeuft ueber die has-Trap und damit ungefiltert ans Target. Reine Funktion.
+function priceForModel(model, prices) {
+  return Object.hasOwn(prices, model) ? prices[model] : mostExpensivePrice(prices);
+}
+
+// USD-Kosten EINES Token-Verbrauchs unter der Preisstaffel des buchenden Modells.
+// EINE Quelle (G5) der Preisformel: trackUsage (Live-Bucket, Mikro-Cent-Akkumulator)
+// UND aiCostCents (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
+// tokens = {inputTokens, outputTokens, model}.
+function tokenCostUsd(tokens, cfg) {
+  const price = priceForModel(tokens.model, cfg.modelPricesUsd);
+  return (
+    (tokens.inputTokens / TOKENS_PER_M_TOK) * price.inPerMTok +
+    (tokens.outputTokens / TOKENS_PER_M_TOK) * price.outPerMTok
+  );
+}
+
+// Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
+// tokens = {inputTokens, outputTokens, model}; das Modell entscheidet die Preisstaffel
+// (P7a, fail-closed bei unbekannter ID). P1 Safety-BLOCKER: kein Per-Inkrement-Cent-
+// Rounding - ein einzelner Haiku-Turn kostet oft << 0,5 Cent und wuerde bei einer
+// Pro-Inkrement-Rundung IMMER auf 0 fallen (das Budget-Gate saehe den KI-Kostenanteil
+// nie). Stattdessen akkumuliert dieser Pfad EXAKT in Mikro-Cents (costMicroCentsRem)
+// und bucht nur den vollen Cent-Uebertrag nach costCents (Math.floor) - der Sub-Cent-
+// Rest reist ungerundet ueber die Inkremente mit, bis er selbst einen ganzen Cent
+// ergibt. Liefert den Bucket.
+export function trackUsage(s, tenantId, tokens, cfg) {
   const usage = usageFor(s, tenantId);
-  usage.inputTokens += inputTokens;
-  usage.outputTokens += outputTokens;
+  usage.inputTokens += tokens.inputTokens;
+  usage.outputTokens += tokens.outputTokens;
   const microInc = Math.round(
-    tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT,
+    tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT,
   );
   const totalMicro = usage.costMicroCentsRem + microInc;
   usage.costCents += Math.floor(totalMicro / MICRO_CENTS_PER_CENT);
@@ -1452,8 +1488,8 @@ export function setTenantBudget(s, tenantId, { budgetCents, hardCapCents }) {
 // Logischer AI-Token-Kostenanteil in GANZZAHL Cents (P6b3, Stripe-Meter). Leitet
 // sich aus DERSELBEN Preisformel ab wie der trackUsage-Live-Bucket (tokenCostUsd,
 // G5) - hier nur nach EUR-Cents gerundet (Money at rest = Ganzzahl Cents, G26).
-export function aiCostCents(inputTokens, outputTokens, cfg) {
-  return Math.round(tokenCostUsd(inputTokens, outputTokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
+export function aiCostCents(tokens, cfg) {
+  return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR);
 }
 
 // Append-only Usage-Ledger-Eintrag (P6b3, Stripe-Meter-Quelle). NIE mutiert
