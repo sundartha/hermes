@@ -1533,9 +1533,20 @@ export function spendMonthUsageCents(bucket, nowIso) {
 // waere nach P7 der wiederkehrende strukturelle Verlust des KI-Kostenanteils.
 //
 // Nebeneffekt im Namen (N7). Reine Mutation, kein IO.
+//
+// GRENZFALL null===null (Review-Blocker Runde 1): ist WEDER ein gespeicherter Schluessel
+// NOCH nowIso lesbar vorhanden, liefert authoritativeSpendMonthKey null (Zeile "kein
+// storedKey... -> nowKey" greift nicht, weil auch nowKey fehlt). Ohne den Explizit-Guard
+// unten waere die allgemeine Gleichheitspruefung "key === usage.spendMonthKey" hier
+// null===null=true und laese den Fall faelschlich als "derselbe Monat" durch -
+// spendMonthCostCents wuerde weiterakkumulieren, OBWOHL nie ein Monat gestempelt wurde
+// (Widerspruch zur MONOTONIE-Doku oben: "ohne Anker wird NIE gestempelt"). Der Guard
+// macht diesen Grenzfall zum expliziten No-Op auf der Spend-Monat-Achse - costCents
+// (Lebenszeit) bucht trotzdem weiter, nur die periodische Achse bleibt unangetastet.
 function bookCents(usage, cents, nowIso) {
   usage.costCents += cents;
   const key = authoritativeSpendMonthKey(usage.spendMonthKey, spendMonthKeyOf(nowIso));
+  if (key === null) return; // kein Anker je gestempelt UND nowIso unlesbar -> No-Op (kein Phantom-Betrag)
   usage.spendMonthCostCents = key === usage.spendMonthKey ? usage.spendMonthCostCents + cents : cents;
   usage.spendMonthKey = key;
 }

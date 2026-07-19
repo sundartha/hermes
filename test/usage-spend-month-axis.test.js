@@ -270,6 +270,12 @@ test("(l) ops-Ebene OHNE nowIso: die BESTANDS-Felder bleiben bit-identisch, der 
   assert.equal(usage.costMicroCentsRem, REMAINDER_AFTER_TRANSFER, "Sub-Cent-Rest bit-identisch zum Bestand");
   assert.equal(usage.inputTokens, 650_000);
   assert.equal(usage.spendMonthKey, null, "ohne Anker wird NIE gestempelt (fail-closed: kein frischer Monat ohne Uhr)");
+  assert.equal(
+    usage.spendMonthCostCents,
+    0,
+    "Review-Blocker Runde 1 (G3/T5): OHNE Anker bleibt auch der Monats-Zaehler bei 0 - " +
+      "kein Phantom-Betrag ueber die null===null-Gleichheit in bookCents",
+  );
 });
 
 // ---- (m) unlesbarer Anker: fail-closed = Bestand erhalten, nicht auf 0/null zuruecksetzen ----
