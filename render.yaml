@@ -240,8 +240,10 @@ services:
         value: "20"
       - key: VOICE_TARIFF_DEFAULT_CENTS
         value: "300"
+      # Muss ECHT KLEINER als MAX_BUDGET_EUR*100 sein - sonst verweigert der Boot-Guard
+      # (spendCapCoherence) den Start. 600 = Starter-Minutenwert (30 min * 20 ct).
       - key: DEFAULT_TENANT_BUDGET_CENTS
-        value: "1000"
+        value: "600"
       # ---- LLM-Resilienz (Budget-Engine, src/llm.js) ----
       - key: LLM_REQUEST_TIMEOUT_MS
         value: "3500"
