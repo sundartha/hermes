@@ -21,7 +21,7 @@ import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js"
 const OWNER_NAME = "Jonas Beispiel";
 const DE_DISCLOSURE =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel. Das Gespräch wird für meinen Auftraggeber zusammengefasst.";
-const DE_SPEECH_CLAUSE = "Nur natuerlich gesprochenes Deutsch.";
+const DE_SPEECH_CLAUSE = "Nur natürlich gesprochenes Deutsch."; // P5: Umlaut (D3)
 // I11 (call-quality Impl-1): Klausel "nenne konkrete Ergebnisse ..." ergaenzt (S2 aus
 // tasks/call-quality-findings.md: Summary war zu allgemein).
 const DE_SUMMARY =

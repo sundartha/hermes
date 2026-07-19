@@ -32,11 +32,13 @@ const REMOVED_PROMPT_MARKERS = [
   "KALENDER DEINES AUFTRAGGEBERS",
   "Buchung",
 ];
-// Die beiden jetzt UNBEDINGTEN Prompt-Zeilen (vormals die false-Zweige zweier
-// Ternaries). Gegenprobe: sie beweisen Zweig-Kollaps statt blosser Loeschung.
+// Die beiden jetzt UNBEDINGTEN Prompt-Zeilen (P5: boundaryRules in claude.js, vormals
+// die false-Zweige zweier Ternaries). Praefix-Pin statt volle Zeile: der Owner-Name ist
+// interpoliert (D3-Umlaute: "Du gibst KEINE ... Du buchst KEINE ..."), die zweite Zeile
+// enthaelt keine Interpolation und ist deshalb voll gepinnt.
 const UNCONDITIONAL_LINES = [
-  "- Du hast KEINEN Kalenderzugriff. Bei Terminwuenschen nimmst du nur eine Nachricht auf.",
-  "- Du darfst KEINE Termine fest buchen, nur Terminwuensche als Nachricht aufnehmen.",
+  "- Du hast KEINEN Kalenderzugriff und siehst keine Termine von ",
+  "- Du buchst KEINE Termine fest.",
 ];
 
 let systemPrompt, toolDefs, execTool, store;

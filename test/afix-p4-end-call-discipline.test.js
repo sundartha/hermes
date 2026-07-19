@@ -30,10 +30,12 @@ const KAUDERWELSCH = "zonne dat wel eh nietig zo maar";
 // NUR bei NICHT verstandener Aeusserung) muesste zwangslaeufig den Wortlaut aendern und
 // faellt damit auf, statt an einzeln matchbaren Fragmenten vorbeizuschluepfen.
 const END_CALL_FAREWELL_CLAUSE = "IMMER erst aufrufen, NACHDEM du dich verabschiedet hast.";
+// P5 (D4): NUR die drei Umlaute nachgezogen (Gegenuebers/unverstaendlich x2) - Wortlaut
+// ist RCA-Ergebnis, sonst kein Wort mehr/weniger.
 const END_CALL_UNDERSTANDING_CLAUSE =
-  "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenuebers verstanden hast. " +
-  "War er unverstaendlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
-  "bleibt die Antwort danach unverstaendlich, verabschiede dich und rufe end_call auf.";
+  "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenübers verstanden hast. " +
+  "War er unverständlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
+  "bleibt die Antwort danach unverständlich, verabschiede dich und rufe end_call auf.";
 const END_CALL_DESCRIPTION = `Beendet das Telefonat. ${END_CALL_FAREWELL_CLAUSE} ${END_CALL_UNDERSTANDING_CLAUSE}`;
 
 let nextResponse;

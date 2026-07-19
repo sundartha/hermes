@@ -9,14 +9,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LOCALES } from "../src/i18n/locales.js";
 import { startServer } from "./helpers.js";
+// P5: EINE Quelle (G5) fuer die Stamm-Denylist statt der frueher lokalen Kopie -
+// zweiter Konsument ist test/cq-p5-prompt-redesign.test.js. Reines Umbenennen des
+// Imports, keine Verhaltensaenderung (dieselben neun Staemme, case-insensitiv).
+import { SPOKEN_TRANSLITERATION_STEMS as TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 const UNROUTED_TO = "+49999999999"; // nicht geseedet -> nicht routbar (S8-Pfad)
 const CALLER_FROM = "+4915112345678";
-
-// Bekannte ASCII-Ersatzschreibungen deutscher Umlaute (Wortstamm-basiert).
-const TRANSLITERATION_STEMS =
-  /fuer|Gespraech|moeglich|Koennen|spaeter|Wiederhoer|natuerlich|naechst|hoefl/i;
 
 // S1-S7: die gesprochenen DE-Felder des Locale-Bundles, einzeln benannt (id fuer die
 // Fehlermeldung). S8 lebt nicht im Bundle und wird unten ueber den echten Renderpfad

@@ -92,9 +92,10 @@ after(async () => {
 test("systemPrompt outbound de fuehrt Auftrag-zuerst + hoeflichen Abschluss", () => {
   const prompt = systemPrompt(store.getCall(CALL_ID));
   assert.ok(prompt.includes("Erledige zuerst den AUFTRAG"), "Auftrag-zuerst fehlt");
-  assert.ok(prompt.includes("schliesse hoeflich ab"), "hoeflicher Abschluss fehlt");
+  // P5: Wortlaut traegt jetzt Umlaute (D3) und ist umformuliert (Anhang A).
+  assert.ok(prompt.includes("schließe höflich ab"), "hoeflicher Abschluss fehlt");
   assert.ok(
-    prompt.includes("lass den Anruf nie an einem selbst eroeffneten Nebenthema haengen"),
+    prompt.includes("Lass den Anruf nie an einem Nebenthema hängen, das du selbst eröffnet hast."),
     "Nebenthema-Fuehrung fehlt",
   );
 });
@@ -106,9 +107,11 @@ test("systemPrompt outbound de lockert den Scope-Guard, behaelt aber die Wait-Si
     !prompt.includes("Sage nichts zu, was ausserhalb deines Auftrags liegt"),
     "harter Scope-Guard darf nicht mehr im Prompt stehen",
   );
-  // G2/T1-Sicherung byte-stabil: nie auflegen, bevor das Gegenueber geantwortet hat.
+  // D9: die PROMPT-Ebene der Wait-Sicherung ist umformuliert ("lege niemals auf, bevor er
+  // geantwortet hat" -> "Warte ... IMMER auf die Antwort ..."); die STRUKTURELLE Sicherung
+  // (shouldSuppressEndCall + END_CALL_WAIT_INSTRUCTION in claude.js) bleibt unveraendert.
   assert.ok(
-    prompt.includes("lege niemals auf, bevor er geantwortet hat"),
+    prompt.includes("Warte nach deinem Anliegen IMMER auf die Antwort des Angerufenen"),
     "Wait-for-answer-Sicherung muss erhalten bleiben",
   );
 });
