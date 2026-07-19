@@ -369,10 +369,14 @@ const rawConfig = {
     min: 0,
   }),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
-  // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26) beim Registrieren (D5): nimmt
-  // jeden neuen Tenant aus dem geteilten globalen Pool (sonst effectiveCapEur = maxBudgetCents).
-  // 0 = kein Default-Seed (Tenant faellt auf den globalen Cap). Globaler Backstop
-  // (maxBudgetCents) bleibt PARALLEL (Schnittmenge, Regel 1) und wird NICHT angehoben.
+  // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26). ZWEI Wirkungen (P2a/D3):
+  // (1) Seed beim Registrieren -> explizite tenant_budget-Zeile (seedTenantDefaultBudget),
+  // (2) Gate-Fallback in effectiveCapCents fuer jeden Tenant OHNE Zeile - dadurch nimmt der
+  // Wert auch den Bestand aus dem geteilten globalen Pool, nicht nur Neuzugaenge.
+  // 0 = Sentinel "kein Default": kein Seed UND kein Gate-Fallback, der Tenant faellt wie
+  // im Bestand auf den globalen Cap. Ein 0-Wert darf NIE als 0-Cap interpretiert werden -
+  // das wuerde jeden Outbound, jeden kostenlosen Inbound und jeden laufenden Call sperren.
+  // Globaler Backstop (maxBudgetCents) bleibt PARALLEL (Schnittmenge, Regel 1).
   defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
     fallback: 1000,
     min: 0,

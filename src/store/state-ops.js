@@ -724,9 +724,11 @@ export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } =
   return Boolean(tenant.ownerName);
 }
 
-// Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): nimmt
-// jeden neuen Tenant aus dem geteilten globalen Pool (sonst faellt er in effectiveCapCents
-// auf cfg.maxBudgetCents zurueck). Set-if-absent wie idpSubject: nur wenn ein Default > 0
+// Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): schreibt
+// die Decke als explizite tenant_budget-Zeile fest, damit sie auch dann bindet, wenn der
+// Config-Default spaeter gesenkt oder auf 0 gestellt wird (seit P2a ist der Config-Default
+// zusaetzlich der Gate-Fallback in effectiveCapCents - die Zeile bleibt die staerkere,
+// vom Operator pro Tenant setzbare Quelle). Set-if-absent wie idpSubject: nur wenn ein Default > 0
 // uebergeben wird UND noch keine tenant_budget-Zeile existiert -> setTenantBudget
 // (budget == hard cap == Default). 0/fehlend bzw. schon eine Zeile -> No-Op (Owner/Bestand
 // unveraendert). Config-frei (Default kommt als Arg). Kein Throw, kein IO.
@@ -1482,13 +1484,33 @@ export function addVoiceUsageCostCents(s, tenantId, costCents) {
   return usage;
 }
 
-// Effektiver pro-Tenant-Cap in GANZZAHL Cents: existiert eine tenant_budget-Zeile, gilt
-// deren hard_cap_cents; sonst der globale Cap (globalCapCents, G5 - dieselbe Quelle wie
-// globalBudgetExceeded/globalReserveExceedsBudget, Owner/Bestand ohne Zeile -> byte-
-// identisch), von budgetExceeded genutzt.
+// Effektiver pro-Tenant-Cap (TENANT-MONATSDECKE) in GANZZAHL Cents, genutzt von
+// budgetExceeded UND reserveExceedsBudget. Praezedenz, absteigend:
+//   (1) tenant_budget-Zeile -> deren hard_cap_cents
+//   (2) Tenant-Default-Decke aus der Config (defaultTenantBudgetCents)
+//   (3) globaler Cap (globalCapCents)
+//
+// P2a/D3: Stufe (2) ist neu. Vorher fiel JEDER Tenant ohne Zeile direkt auf Stufe (3) -
+// damit war der PLATTFORM-NOTAUS zugleich Nutzer-Kontingent, die Tenant-Achse fuer alle
+// Tenants ohne Zeile wirkungslos und der Cap ein GETEILTER Topf. globalCapCents bleibt
+// PARALLEL ueber globalBudgetExceeded/globalReserveExceedsBudget bestehen - es gilt
+// weiter die Schnittmenge min(Tenant, Plattform), Absolute Regel 1. Kein Gate wird
+// entfernt oder ersetzt, es kommt nur eine zusaetzliche, engere Decke dazu.
+//
+// Der Test `> 0` ist SICHERHEITSKRITISCH, nicht kosmetisch. 0 ist die dokumentierte
+// Sentinel-Semantik "kein Default-Seed" (config.js defaultTenantBudgetCents, min 0), und
+// seedTenantDefaultBudget ueberspringt bei 0. Ein bedingungsloser Fallback lieferte bei
+// Live-Wert 0 einen Cap von 0: budgetExceeded (>=) waere fuer JEDEN Tenant ohne Zeile
+// true - jeder Outbound blockt, der KOSTENLOSE Inbound-Pfad weist ab (routes/voice.js)
+// und der Shim legt mitten im laufenden Gespraech auf (telnyx-llm-shim.js). Das waere ein
+// Totalausfall der Telefonie. Derselbe Vergleich faengt zugleich einen fehlenden oder
+// nicht-numerischen Wert ab (undefined > 0 ist false) und landet dann ebenfalls auf dem
+// Bestandsverhalten - die Abweichung geht immer Richtung Bestand, nie Richtung 0-Cap.
 function effectiveCapCents(s, tenantId, cfg) {
   const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
-  return budget ? budget.hardCapCents : globalCapCents(cfg);
+  if (budget) return budget.hardCapCents;
+  const tenantDefaultCents = cfg.defaultTenantBudgetCents;
+  return tenantDefaultCents > 0 ? tenantDefaultCents : globalCapCents(cfg);
 }
 
 // Liest den Ist-Verbrauch EINES Tenants + wendet den D7-Riegel an (G5-Review-Fix Runde 1):
@@ -1505,7 +1527,8 @@ function tenantSpendOrDeny(s, tenantId) {
 }
 
 // Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
-// Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetCents). Verbrauchsquelle
+// Tenant hard_cap_cents wenn gesetzt, sonst die Tenant-Default-Decke, sonst der
+// Plattform-Cap - Praezedenz s. effectiveCapCents). Verbrauchsquelle
 // bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
 // neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL. Rein
 // Integer costCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap
