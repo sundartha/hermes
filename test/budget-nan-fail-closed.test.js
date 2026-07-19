@@ -26,8 +26,11 @@ import { PRICES, tokensOf } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
 const CAP_CENTS = PRICES.maxBudgetCents; // 800
-const UNBOOKABLE = [NaN, Infinity, -Infinity, -1, -0.5, "5", null, undefined];
-const BOOKABLE = [0, 1, 250, 0.5];
+// 0.5 ist UNBOOKABLE (Review-Fix Runde 1, G26): isBookableCents verlangt seither auch
+// Ganzzahligkeit - die Ganzzahl-Cents-Konvention (Money at rest) liesse sonst einen
+// fraktionalen Wert klaglos in den Ganzzahl-Akkumulator costCents durch.
+const UNBOOKABLE = [NaN, Infinity, -Infinity, -1, -0.5, 0.5, "5", null, undefined];
+const BOOKABLE = [0, 1, 250];
 
 // Leitet console.error waehrend fn um (Muster test/boot-guard.test.js captureErrAsync):
 // restauriert IMMER, auch bei Wurf. fn darf sync oder async sein.
@@ -126,7 +129,7 @@ test("trackUsage(NaN-Input) verwirft alles-oder-nichts, liefert BIT-IDENTISCH de
 
 // ---- T5-Raender: isBookableCents + die Schreib-/Reserve-Kanten je Randwert ----
 
-test("T5-Raender: UNBOOKABLE wird ueberall abgelehnt, BOOKABLE bleibt buchbar (0/0.5 inklusive)", () => {
+test("T5-Raender: UNBOOKABLE wird ueberall abgelehnt, BOOKABLE bleibt buchbar (0 inklusive)", () => {
   for (const val of UNBOOKABLE) {
     assert.equal(isBookableCents(val), false, `isBookableCents(${String(val)}) muss false sein`);
     const s = makeDefaultState();
@@ -160,6 +163,30 @@ test("Reserve-Lesekanten: NaN-Bucket sperrt reserveExceedsBudget + globalReserve
   });
   assert.equal(a, true, "reserveExceedsBudget muss bei NaN sperren, sonst wuerde reserviert");
   assert.equal(b, true, "globalReserveExceedsBudget muss bei NaN sperren");
+  assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
+});
+
+// ---- G26-Regressionstest (Review-Blocker Runde 1): fraktionaler Tenant-Bucket sperrt die TENANT-Lesekanten ----
+// Vor dem Fix pruefte isBookableCents NUR Endlichkeit + Nicht-Negativitaet - ein
+// fraktionaler Bucket (0.5 statt einer Ganzzahl-Cents) waere klaglos durchgerutscht.
+// budgetExceeded/reserveExceedsBudget lesen usageFor(...).costCents DIREKT (keine
+// Re-Aggregation) und sind daher unmittelbar exponiert. globalBudgetExceeded/
+// globalReserveExceedsBudget lesen stattdessen globalUsageTotals(s).costCents, das
+// IMMER ueber Math.floor(microTotal/MICRO_CENTS_PER_CENT) neu abgeleitet wird
+// (state-ops.js globalUsageTotals) - ein einzelner fraktionaler Tenant-Bucket flooert
+// dort implizit zu einer Ganzzahl und erreicht den D7-Riegel gar nicht fraktional; die
+// globale Achse bleibt DAFUER von den bestehenden NaN-Tests abgedeckt (b'/Reserve-
+// Lesekanten), die einen wirklich unbuchbaren (NaN-)Wert durchreichen.
+test("G26-Regressionstest: fraktionaler Tenant-Bucket (0.5) sperrt budgetExceeded + reserveExceedsBudget fail-closed", async () => {
+  const s = makeDefaultState();
+  usageFor(s, TENANT_A).costCents = 0.5;
+  let a, c;
+  const out = await captureErr(() => {
+    a = budgetExceeded(s, TENANT_A, PRICES);
+    c = reserveExceedsBudget(s, TENANT_A, 60, PRICES);
+  });
+  assert.equal(a, true, "budgetExceeded muss bei fraktionalem Tenant-Bucket sperren");
+  assert.equal(c, true, "reserveExceedsBudget muss bei fraktionalem Tenant-Bucket sperren");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 

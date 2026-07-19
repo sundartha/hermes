@@ -156,14 +156,21 @@ export const USAGE_CORRUPT_REASON = "usage_korrupt";
 // exakt die Invarianten-per-Konvention-Klasse, an der die naechste vergessene
 // Schreibstelle fail-open geht.
 //
-// Prueft AUSSCHLIESSLICH auf Endlichkeit und Nicht-Negativitaet, NIE auf Kleinheit
+// Prueft auf Endlichkeit, Ganzzahligkeit und Nicht-Negativitaet, NIE auf Kleinheit
 // (P1-Safety-BLOCKER): ein Sub-Cent-Turn (Haiku << 0,5 Cent, faehrt in
-// costMicroCentsRem) und ein legitimer 0-Betrag bleiben buchbar. Number.isFinite faengt
-// NaN UND +/-Infinity (ein positiver Unendlich-Wert waere bei einer reinen >=0-Pruefung
-// durchgerutscht - genau die Luecke, die die alte Pruefung offen liess) und faengt
-// zugleich Nicht-Zahlen ("5" ist nicht buchbar). Reine Funktion.
+// costMicroCentsRem) und ein legitimer 0-Betrag bleiben buchbar - die Kleinheits-Ausnahme
+// gilt fuer die MICRO-Cent-Einheit, nicht fuer die (groebere) Cents-Achse selbst.
+// Number.isFinite faengt NaN UND +/-Infinity (ein positiver Unendlich-Wert waere bei
+// einer reinen >=0-Pruefung durchgerutscht - genau die Luecke, die die alte Pruefung
+// offen liess) und faengt zugleich Nicht-Zahlen ("5" ist nicht buchbar).
+// Number.isInteger (Review-Fix Runde 1, G26): diese Funktion ist die EINZIGE
+// Gueltigkeitsquelle der Ganzzahl-Cents-Konvention (G26, Money at rest) - ohne
+// Ganzzahl-Pruefung waere ein fraktionaler Wert (z.B. 0.5) klaglos in den
+// Ganzzahl-Akkumulator costCents geschrieben worden. turnIncrementsBookable bleibt
+// kompatibel: Token-Zaehler und microInc sind produktionsseitig immer Ganzzahlen.
+// Reine Funktion.
 export function isBookableCents(x) {
-  return Number.isFinite(x) && x >= 0;
+  return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
 }
 
 // Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt

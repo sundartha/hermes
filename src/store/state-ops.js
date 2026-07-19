@@ -1417,7 +1417,10 @@ function discardCorruptWrite(usage, kante, wert) {
 
 // Sperrt an einer Geld-LESEKANTE fail-closed (Absolute Regel 1): ein nicht-endlicher
 // Verbrauch macht sonst BEIDE Geld-Gates blind, weil NaN >= cap und NaN > cap immer
-// false sind. Liefert IMMER true - alle vier Leser lesen true als "blocken".
+// false sind. Aufrufer sind die beiden SpendOrDeny-Helfer (tenantSpendOrDeny/
+// globalSpendOrDeny, G5-Review-Fix Runde 1) - sie melden das Deny-Signal weiter an die
+// vier Gate-Funktionen, die dann true (blocken) liefern. Liefert IMMER true
+// (Bestandsvertrag).
 function denyCorruptUsage(kante, wert) {
   console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} costCents=${wert}`);
   return true;
@@ -1425,8 +1428,11 @@ function denyCorruptUsage(kante, wert) {
 
 // Sind ALLE drei Inkremente eines Turns buchbar (G28: zusammengesetzte Bedingung
 // eingekapselt)? isBookableCents traegt "Cents" im Namen, ist inhaltlich aber der EINE
-// Riegel "endlich und nicht negativ" und gilt fuer Token-Zaehler genauso: ein NaN-Zaehler
-// vergiftet den Bucket auf demselben Weg. Bewusst EIN Praedikat statt drei Inline-Kopien.
+// Riegel "endlich, ganzzahlig und nicht negativ" und gilt fuer Token-Zaehler genauso: ein
+// NaN-Zaehler vergiftet den Bucket auf demselben Weg. Bewusst EIN Praedikat statt drei
+// Inline-Kopien. Token-Zaehler (inputTokens/outputTokens) und microInc sind
+// produktionsseitig immer Ganzzahlen (API-Zaehler bzw. Math.round) - die Ganzzahl-Pruefung
+// aendert hier nichts am Bestandsverhalten.
 function turnIncrementsBookable(tokens, microInc) {
   return (
     isBookableCents(tokens.inputTokens) &&
@@ -1485,6 +1491,19 @@ function effectiveCapCents(s, tenantId, cfg) {
   return budget ? budget.hardCapCents : globalCapCents(cfg);
 }
 
+// Liest den Ist-Verbrauch EINES Tenants + wendet den D7-Riegel an (G5-Review-Fix Runde 1):
+// budgetExceeded UND reserveExceedsBudget standen vorher wortgleich als "Wert lesen ->
+// if(!isBookableCents) deny" da - dieselbe Anwendungsebene, zweimal kopiert. Liefert bei
+// buchbarem Bucket {deny:false, spent}; bei unbuchbarem Bucket loggt denyCorruptUsage
+// bereits fail-closed und die Funktion liefert nur noch {deny:true} - der Aufrufer muss
+// dann bloss true zurueckgeben.
+function tenantSpendOrDeny(s, tenantId) {
+  const spent = usageFor(s, tenantId).costCents;
+  if (isBookableCents(spent)) return { deny: false, spent };
+  denyCorruptUsage(`tenant:${tenantId}`, spent);
+  return { deny: true };
+}
+
 // Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
 // Tenant hard_cap_cents wenn gesetzt, sonst cfg.maxBudgetCents). Verbrauchsquelle
 // bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
@@ -1496,16 +1515,17 @@ function effectiveCapCents(s, tenantId, cfg) {
 // Inbound ab (voice.js). Bei NaN-Verbrauch ist genau das richtig, und der eigene Grund
 // macht es vom echten "Budget erschoepft" unterscheidbar.
 export function budgetExceeded(s, tenantId, cfg) {
-  const spent = usageFor(s, tenantId).costCents;
-  if (!isBookableCents(spent)) return denyCorruptUsage(`tenant:${tenantId}`, spent);
-  return spent >= effectiveCapCents(s, tenantId, cfg);
+  const spend = tenantSpendOrDeny(s, tenantId);
+  if (spend.deny) return true;
+  return spend.spent >= effectiveCapCents(s, tenantId, cfg);
 }
 
 // Vorab-Reservierung (outbound-p1c, Kosten-Achse, D1): wuerde der Worst-Case-Minutenpreis
 // (reserveCents, GANZZAHL Cents) den verbleibenden effektiven Tenant-Cap UEBERSTEIGEN?
 // Ist-Verbrauch (costCents) + Reserve > effektiver Cap -> true (402 vor Dial). DIESELBE
-// Cap-Aufloesung (effectiveCapCents) + derselbe usage-Bucket wie budgetExceeded (G5);
-// globalBudgetExceeded bleibt PARALLEL (Schnittmenge, Regel 1). Reine Query, kein IO.
+// Cap-Aufloesung (effectiveCapCents) + derselbe usage-Bucket wie budgetExceeded (G5,
+// jetzt ueber denselben tenantSpendOrDeny-Helfer); globalBudgetExceeded bleibt PARALLEL
+// (Schnittmenge, Regel 1). Reine Query, kein IO.
 // Neu (OUT-05): die bereits gebuchte In-Flight-Reserve des Tenants (reservationFor)
 // zaehlt kumulativ mit -> N kurz aufeinanderfolgende Calls koennen den Cap nicht mehr
 // gemeinsam ueberschreiten. Bei LEERER Reserve byte-identisch zum Bestand. P1: rein
@@ -1513,11 +1533,9 @@ export function budgetExceeded(s, tenantId, cfg) {
 // Vergleichskante geflooert - Effekt < 1 Cent, dominiert vom Worst-Case-Reserve-
 // Ueberschaetzer; die Sub-Cent-Turns selbst gehen NICHT verloren, sie tragen in costCents).
 export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
-  const spent = usageFor(s, tenantId).costCents;
-  if (!isBookableCents(spent)) return denyCorruptUsage(`tenant:${tenantId}`, spent);
-  return (
-    spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg)
-  );
+  const spend = tenantSpendOrDeny(s, tenantId);
+  if (spend.deny) return true;
+  return spend.spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg);
 }
 
 // Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId
@@ -1633,6 +1651,18 @@ export function markMeterEventsSent(s, eventIds) {
   return n;
 }
 
+// Liest die Plattform-Summe ueber ALLE Tenant-Buckets + wendet den D7-Riegel an
+// (G5-Review-Fix Runde 1, Geschwister zu tenantSpendOrDeny): globalBudgetExceeded UND
+// globalReserveExceedsBudget standen vorher wortgleich als "Wert lesen ->
+// if(!isBookableCents) deny" da. Liefert bei buchbarer Summe {deny:false, total}; sonst
+// loggt denyCorruptUsage bereits fail-closed und liefert {deny:true}.
+function globalSpendOrDeny(s) {
+  const total = globalUsageTotals(s).costCents;
+  if (isBookableCents(total)) return { deny: false, total };
+  denyCorruptUsage("plattform", total);
+  return { deny: true };
+}
+
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
 // gegen config.billing.maxBudgetCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
 // (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
@@ -1640,9 +1670,9 @@ export function markMeterEventsSent(s, eventIds) {
 // Integer costCents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
 // ganzzahligem Cap, s. budgetExceeded).
 export function globalBudgetExceeded(s, cfg) {
-  const total = globalUsageTotals(s).costCents;
-  if (!isBookableCents(total)) return denyCorruptUsage("plattform", total);
-  return total >= globalCapCents(cfg);
+  const spend = globalSpendOrDeny(s);
+  if (spend.deny) return true;
+  return spend.total >= globalCapCents(cfg);
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
@@ -1668,9 +1698,9 @@ export function reservationsTotal(s) {
 // Reine Query, kein IO. P1: rein Integer costCents (settled Sub-Cent-Rest an dieser
 // Vergleichskante geflooert, s. reserveExceedsBudget).
 export function globalReserveExceedsBudget(s, reserveCents, cfg) {
-  const total = globalUsageTotals(s).costCents;
-  if (!isBookableCents(total)) return denyCorruptUsage("plattform", total);
-  return total + reservationsTotal(s) + reserveCents > globalCapCents(cfg);
+  const spend = globalSpendOrDeny(s);
+  if (spend.deny) return true;
+  return spend.total + reservationsTotal(s) + reserveCents > globalCapCents(cfg);
 }
 
 // Atomare Check+Reserve (Schnittmenge Tenant UND global, Regel 1). REIN SYNCHRON, KEIN
