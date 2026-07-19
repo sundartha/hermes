@@ -1477,11 +1477,12 @@ function spendMonthKeyOf(nowIso) {
 // gespeichertem und laufendem Schluessel. 'YYYY-MM' ist lexikografisch = chronologisch
 // sortierbar -> String-Vergleich genuegt, keine zweite Datums-Arithmetik.
 //
-// EINZIGE Vergleichsregel der Achse (G5), GENAU DREI Aufrufer: die beiden
-// Leseprojektionen spendMonthUsageCents/spendMonthWindowKey (P5b, teilen sich die
-// Regel miteinander - koennen nicht auseinanderlaufen) und der Schreiber bookCents.
-// Alle drei stellen dieselbe Frage ("weicht der autoritative Schluessel vom
-// gespeicherten ab?") und lesen die Antwort unterschiedlich: die Leser als "0"/den
+// EINZIGE Vergleichsregel der Achse (G5), GENAU ZWEI direkte Aufrufer: die
+// Leseprojektion spendMonthWindowKey (P5b, einzige Stelle, die den autoritativen
+// Schluessel zusammensetzt - spendMonthUsageCents bezieht ihn NUR noch darueber,
+// siehe unten, statt ihn ein zweites Mal selbst zusammenzusetzen) und der Schreiber
+// bookCents. Beide stellen dieselbe Frage ("weicht der autoritative Schluessel vom
+// gespeicherten ab?") und lesen die Antwort unterschiedlich: der Leser als "0"/den
 // laufenden Schluessel, der Schreiber als "Zaehler startet neu".
 //
 // MONOTONIE-RIEGEL (Sicherheitskern): weil das MAXIMUM gebildet wird, kann der
@@ -1513,18 +1514,25 @@ function authoritativeSpendMonthKey(storedKey, nowKey) {
 // nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei, Muster voiceMinutesUsedSince /
 // setSuspendedAtIfAbsent).
 // P4: INERT - KEIN Gate ruft diese Funktion. Der Flip ist P7.
+// Bezieht den autoritativen Schluessel ueber spendMonthWindowKey (G5-Fix, Review-Blocker
+// Runde 2): vorher bauten beide Leseprojektionen unabhaengig voneinander denselben
+// Ausdruck erneut zusammen - woertlich identische Zeile, zweimal im selben Modul. Jetzt
+// gibt es GENAU EINE Stelle, die den autoritativen Monatsschluessel zusammensetzt, und
+// die Nicht-Divergenz zwischen Anzeige und Verbrauchszahl ist strukturell statt nur
+// konventionell erzwungen.
 export function spendMonthUsageCents(bucket, nowIso) {
-  const key = authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
+  const key = spendMonthWindowKey(bucket, nowIso);
   return key === bucket.spendMonthKey ? bucket.spendMonthCostCents : 0;
 }
 
-// Reine LESEPROJEKTION des ANGEZEIGTEN Monatsschluessels (P5b) - teilt sich die EINE
-// Vergleichsregel authoritativeSpendMonthKey mit spendMonthUsageCents (G5), damit
-// Anzeige und Verbrauchszahl niemals auseinanderlaufen koennen (derselbe Monotonie-/
-// Zukunfts-Riegel gilt automatisch fuer beide). NIE den rohen Bucket-Stempel
-// (bucket.spendMonthKey) roh projizieren: nach einem Rollover traegt der Bucket noch
-// den ALTEN Schluessel, waehrend spendMonthUsageCents schon 0 liefert - roh projiziert
-// stuende neben einer 0,00-EUR-Anzeige der falsche (vergangene) Monat.
+// Reine LESEPROJEKTION des ANGEZEIGTEN Monatsschluessels (P5b) - EINZIGE Stelle, die
+// die Vergleichsregel authoritativeSpendMonthKey zusammensetzt; spendMonthUsageCents
+// bezieht den Schluessel ausschliesslich hierueber (G5), damit Anzeige und
+// Verbrauchszahl niemals auseinanderlaufen KOENNEN (derselbe Monotonie-/Zukunfts-Riegel
+// gilt automatisch fuer beide). NIE den rohen Bucket-Stempel (bucket.spendMonthKey) roh
+// projizieren: nach einem Rollover traegt der Bucket noch den ALTEN Schluessel, waehrend
+// spendMonthUsageCents schon 0 liefert - roh projiziert stuende neben einer
+// 0,00-EUR-Anzeige der falsche (vergangene) Monat.
 export function spendMonthWindowKey(bucket, nowIso) {
   return authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
 }
