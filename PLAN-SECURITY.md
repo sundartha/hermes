@@ -548,3 +548,47 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > erfuellen das Diagnose-Ziel, ohne dem aufrufenden LLM eine maschinenlesbare
 > Umgehungsanleitung fuer die Reserve-Berechnung zu liefern (per Negativ-Assert in jedem
 > Reserve-Testfall gepinnt).
+
+## P7-SPENDMONTH — Gate-Achse auf UTC-Kalendermonat umstellbar (2026-07-20)
+
+> **Was diese Phase einzieht:** zwei benannte Aufloesungsfunktionen
+> (`gateUsageCents`/`gatePlatformUsageCents`, `src/store/state-ops.js`), auf die alle vier
+> Gate-Praedikate (`budgetExceeded`/`reserveExceedsBudget`/`globalBudgetExceeded`/
+> `globalReserveExceedsBudget`) umgestellt sind. Hinter EINEM Flag
+> (`BUDGET_MONTH_ENABLED`, `config.billing.budgetMonthEnabled`, Default AUS): AUS liest
+> weiter den Lebenszeit-Zaehler `costCents` (byte-identisch zum Bestand), AN liest
+> stattdessen die additive, seit P4 mitgefuehrte Spend-Monat-Achse
+> (`spendMonthUsageCents`) - denselben UTC-Kalendermonat. **Diese Phase flippt das Flag
+> NICHT** - der Flip ist ein bewusster Betreiber-Akt NACH einem Live-Beleg, dass
+> `spendMonthKey` einen Neustart uebersteht (Free-Tier-Host, fluechtiges Dateisystem).
+>
+> **Bewusst akzeptierte Divergenz (Kalendermonat vs. Abrechnungsperiode):** der Gate-Monat
+> beginnt am 1. UTC, die Stripe-Abrechnungsperiode am Anmeldetag des Tenants. Ein Tenant
+> kann dadurch innerhalb EINER Rechnungsperiode zwei Gate-Monate ausschoepfen - also bis
+> zu 2x seine eigentliche Decke. Akzeptiert: ein Anker an der Stripe-Periode waere ohne
+> Abo fail-closed und wuerde jeden pre-Payment-Tenant dauerhaft sperren; eine halbierte
+> Decke verschiebt die Willkuer nur auf einen anderen Wert. Datiert festgehalten, damit
+> diese Kante in einem Jahr als bewusste Entscheidung erinnert wird, nicht als Bug neu
+> entdeckt.
+>
+> **Was der (kuenftige) Flip aufgibt:** der Lebenszeit-Akku war ein Bug (siehe P4) UND ein
+> absoluter Deckel - ein Tenant/die Plattform konnte den Cap genau EINMAL je Lebenszeit
+> ausschoepfen. Ab Flag AN kostet die Plattform bis zum Cap, JEDEN Monat, unbegrenzt oft.
+> Das ist die einzige bewusste Lockerung der gesamten Budget-Achsen-Kette.
+>
+> **Was dagegen steht:** Default AUS (die volle Bestandssuite bleibt mit Flag AUS
+> unveraendert gruen, siehe `test/budget-month-flip.test.js`); Rollback per Env-Flip OHNE
+> Deploy; `costCents` bleibt unveraendert als unabhaengige Gegenprobe stehen (D7-Riegel
+> prueft nach dieser Phase BEIDE Zahlen - Gate-Groesse UND Lebenszeit-Wert derselben
+> Quelle - ein Flag darf eine bestehende Sicherung nie schrumpfen lassen); die P6-
+> Fruehwarnung (`claimPlatformSpendWarning`) liest ueber `platformSpendObservedCents`
+> dieselbe Achse wie das Gate, damit sie nach einem Flip nicht dauerhaft auf der
+> abgeschalteten Lebenszeit-Achse fehlalarmiert.
+>
+> **Nicht Teil dieser Phase:** kein Flag-Flip, keine Cap-Neudimensionierung (die Cap-Werte
+> `MAX_BUDGET_EUR`/`DEFAULT_TENANT_BUDGET_CENTS` sind nach einem kuenftigen Flip MONATS-
+> statt Lebenszeit-Werte - eine Env-Entscheidung des Betreibers, kein Code-Default), kein
+> abgeleiteter Plattform-Cap (eigene Folgephase), keine Aenderung an den
+> Ablehnungstexten/`tenantBudgetSnapshot` (die zeigen nach einem Flip weiter
+> Lebenszeit-Zahlen neben einer Monats-Entscheidung - irrefuehrend, aber nicht unsicher,
+> da keine Gate-Entscheidung daran haengt; bewusst ausgeklammerte Folgephase).

@@ -289,11 +289,15 @@ export function makePgStore(runner) {
       save();
       return usage;
     },
-    budgetExceeded: (tenantId, cfg) => ops.budgetExceeded(requireState(), tenantId, cfg),
-    globalBudgetExceeded: (cfg) => ops.globalBudgetExceeded(requireState(), cfg),
+    // nowIso wird HIER erzeugt (IO-Grenze) und an die zeit-freie ops-Funktion durchgereicht
+    // (P7, Muster trackUsage): die Fassaden-Signatur bleibt unveraendert.
+    budgetExceeded: (tenantId, cfg) =>
+      ops.budgetExceeded(requireState(), tenantId, cfg, new Date().toISOString()),
+    globalBudgetExceeded: (cfg) =>
+      ops.globalBudgetExceeded(requireState(), cfg, new Date().toISOString()),
     // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
-      ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg),
+      ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     // Diagnose-Snapshot der Tenant-Achse (P5a): reine Query, kein save (wie
     // budgetExceeded). Wrapper-Parity zu json.js.
     tenantBudgetSnapshot: (tenantId, cfg) => ops.tenantBudgetSnapshot(requireState(), tenantId, cfg),
@@ -313,7 +317,7 @@ export function makePgStore(runner) {
     // flush() NIE geschrieben (keine Spalte) -> strukturell ephemer, wie im json-Backend.
     // reservationOf ist reine Query (analog usageOf).
     tryReserveOutboundBudget: (tenantId, reserveCents, cfg) =>
-      ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg),
+      ops.tryReserveOutboundBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     releaseOutboundReserve: (call) => ops.releaseOutboundReserve(requireState(), call),
     reservationOf: (tenantId) => ops.reservationFor(requireState(), tenantId),
     // Plattform-Fruehwarnung (Budget-Achsen P6): Wrapper-Parity zu json.js. Reine

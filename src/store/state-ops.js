@@ -1439,12 +1439,20 @@ function discardCorruptWrite(usage, kante, wert) {
 
 // Sperrt an einer Geld-LESEKANTE fail-closed (Absolute Regel 1): ein nicht-endlicher
 // Verbrauch macht sonst BEIDE Geld-Gates blind, weil NaN >= cap und NaN > cap immer
-// false sind. Aufrufer sind die beiden SpendOrDeny-Helfer (tenantSpendOrDeny/
-// globalSpendOrDeny, G5-Review-Fix Runde 1) - sie melden das Deny-Signal weiter an die
-// vier Gate-Funktionen, die dann true (blocken) liefern. Liefert IMMER true
-// (Bestandsvertrag).
-function denyCorruptUsage(kante, wert) {
-  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} costCents=${wert}`);
+// false sind. Einziger Aufrufer ist der gemeinsame spendOrDeny-Rumpf (fuer beide
+// Achsen, Tenant UND Plattform, G5-Review-Fix Runde 1) - er meldet das Deny-Signal
+// weiter an die vier Gate-Funktionen, die dann true (blocken) liefern.
+//
+// feld benennt EXPLIZIT, welcher der zwei geprueften Werte tatsaechlich vergiftet ist
+// ("gateCents" oder "lifetimeCents" - Review-Blocker Runde 1, P8/G2): ein zuvor
+// hartcodiertes "costCents=" log das Feld unabhaengig vom tatsaechlich betroffenen
+// Wert. Seit P7 ist gateCents nach dem Flip die MONATSZAHL, nicht mehr costCents - ein
+// vergifteter Monats-Wert bei gesundem costCents zeigte im Log trotzdem "costCents=NaN"
+// und verwies einen On-Call-Ops (CLAUDE.md Regel 7: "erst Runtime-Output lesen, nie
+// raten") auf das falsche Feld, weil der Runtime-Output selbst luegt. Liefert IMMER
+// true (Bestandsvertrag).
+function denyCorruptUsage(kante, feld, wert) {
+  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} feld=${feld} wert=${wert}`);
   return true;
 }
 
@@ -1653,50 +1661,99 @@ function effectiveCapCents(s, tenantId, cfg) {
   return tenantDefaultCents > 0 ? tenantDefaultCents : globalCapCents(cfg);
 }
 
-// Liest den Ist-Verbrauch EINES Tenants + wendet den D7-Riegel an (G5-Review-Fix Runde 1):
-// budgetExceeded UND reserveExceedsBudget standen vorher wortgleich als "Wert lesen ->
-// if(!isBookableCents) deny" da - dieselbe Anwendungsebene, zweimal kopiert. Liefert bei
-// buchbarem Bucket {deny:false, spent}; bei unbuchbarem Bucket loggt denyCorruptUsage
-// bereits fail-closed und die Funktion liefert nur noch {deny:true} - der Aufrufer muss
-// dann bloss true zurueckgeben.
-function tenantSpendOrDeny(s, tenantId) {
-  const spent = usageFor(s, tenantId).costCents;
-  if (isBookableCents(spent)) return { deny: false, spent };
-  denyCorruptUsage(`tenant:${tenantId}`, spent);
+// ---- Gate-Verbrauchsaufloesung (Budget-Achsen P7) ----
+// ZWEI benannte Aufloesungen fuer die ZWEI Verbrauchsquellen im Modul: die Tenant-Achse
+// (usageFor-Bucket) und die Plattform-Achse (globalUsageTotals-Summe ueber ALLE Buckets).
+// Hinter GENAU EINEM Flag (BUDGET_MONTH_ENABLED, config.js): AUS (Default) liefert exakt
+// den bisherigen Lebenszeit-Ausdruck (bucket.costCents bzw. globalUsageTotals(s).costCents),
+// byte-identisch zum Bestand. AN liest stattdessen die additive, seit P4 mitgefuehrte
+// Spend-Monat-Achse (spendMonthUsageCents) - denselben UTC-Kalendermonat, den bookCents
+// seit P4 mitschreibt. KEIN weiteres Praedikat/keine Fassade liest das Flag (Beleg:
+// test/budget-month-flip.test.js zaehlt die Lesestellen in diesem Modul) - beide Achsen
+// schalten dadurch STRUKTURELL gemeinsam: es kann nie einen Zustand geben, in dem eine
+// Achse periodisch und die andere lebenslang rechnet.
+export function gateUsageCents(s, tenantId, cfg, nowIso) {
+  const bucket = usageFor(s, tenantId);
+  return cfg.budgetMonthEnabled ? spendMonthUsageCents(bucket, nowIso) : bucket.costCents;
+}
+
+// Plattform-Monatssumme: reine Ganzzahl-Summe der Monatsprojektion JEDES Buckets - KEINE
+// Mikro-Cent-Bruecke noetig (anders als globalUsageTotals). Grund: bookCents bucht den
+// Sub-Cent-Rest (costMicroCentsRem) per P1-Safety-Entscheidung IMMER lebenszeit-skaliert,
+// nie auf die Monats-Achse - auf der Monats-Achse existiert also kein Rest, der beim
+// Summieren verloren gehen koennte, die Ganzzahl-Summe ist exakt.
+function platformSpendMonthCents(s, nowIso) {
+  return Object.values(s.usage).reduce((sum, bucket) => sum + spendMonthUsageCents(bucket, nowIso), 0);
+}
+
+export function gatePlatformUsageCents(s, cfg, nowIso) {
+  return cfg.budgetMonthEnabled ? platformSpendMonthCents(s, nowIso) : globalUsageTotals(s).costCents;
+}
+
+// Liest den Gate-Verbrauch (ueber die Aufloesung oben) + wendet den D7-Riegel an
+// (G5-Review-Fix Runde 1): tenantSpendOrDeny UND globalSpendOrDeny stehen wortgleich als
+// "Wert lesen -> if(!isBookableCents) deny" da - EIN gemeinsamer Rumpf fuer beide.
+//
+// P7-Erweiterung (D7-Reichweite darf NIE schrumpfen): geprueft wird die Gate-Groesse
+// (gateCents, nach dem Flip die Monatszahl) UND der Lebenszeit-Wert derselben Quelle
+// (lifetimeCents) - eine UNABHAENGIGE Gegenprobe, NICHT die Gate-Groesse selbst. Nur die
+// Gate-Groesse zu pruefen wuerde die Reichweite der Sicherung VERKLEINERN: ein Bucket mit
+// vergiftetem Lebenszeit-Zaehler und gesunder Monatszahl rutschte durch, obwohl er heute
+// sperrt - ein Flag darf keine Sicherung schrumpfen lassen. Nur den Lebenszeit-Wert zu
+// pruefen waere nach dem Flip fail-OPEN: NaN >= cap ist false. Bei Flag AUS sind gateCents
+// und lifetimeCents DIESELBE Zahl (spendOrDeny bleibt dann verhaltens-identisch zum
+// Bestand). Liefert bei beidseitig buchbaren Werten {deny:false, spent:gateCents}; sonst
+// loggt denyCorruptUsage bereits fail-closed (der vergiftete Wert, gleich welche Seite,
+// UNTER SEINEM EIGENEN Feldnamen - "gateCents" oder "lifetimeCents", Review-Blocker
+// Runde 1) und die Funktion liefert nur noch {deny:true} - der Aufrufer muss dann bloss
+// true zurueckgeben.
+function spendOrDeny({ label, gateCents, lifetimeCents }) {
+  const gateBookable = isBookableCents(gateCents);
+  if (gateBookable && isBookableCents(lifetimeCents)) return { deny: false, spent: gateCents };
+  const feld = gateBookable ? "lifetimeCents" : "gateCents";
+  denyCorruptUsage(label, feld, gateBookable ? lifetimeCents : gateCents);
   return { deny: true };
 }
 
-// Pro-Tenant-Budget (P6b3): der LIVE-usage-Bucket gegen den EFFEKTIVEN Cap (pro-
-// Tenant hard_cap_cents wenn gesetzt, sonst die Tenant-Default-Decke, sonst der
-// Plattform-Cap - Praezedenz s. effectiveCapCents). Verbrauchsquelle
-// bleibt die usage-Map (schneller Live-Gate, kein Doppelzaehlen mit usage_event);
-// neu ist NUR die pro-Tenant-Decke. globalBudgetExceeded bleibt PARALLEL. Rein
-// Integer costCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap
-// aequivalent zu x>=cap - bit-identisch zum frueheren Float-Gate.
-// Ein unbuchbarer Bucket (D7) sperrt fail-closed mit eigenem Grund usage_korrupt - im
-// Extremfall beendet das einen LAUFENDEN Call (telnyx-llm-shim) und weist kostenlosen
-// Inbound ab (voice.js). Bei NaN-Verbrauch ist genau das richtig, und der eigene Grund
-// macht es vom echten "Budget erschoepft" unterscheidbar.
-export function budgetExceeded(s, tenantId, cfg) {
-  const spend = tenantSpendOrDeny(s, tenantId);
+function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
+  return spendOrDeny({
+    label: `tenant:${tenantId}`,
+    gateCents: gateUsageCents(s, tenantId, cfg, nowIso),
+    lifetimeCents: usageFor(s, tenantId).costCents, // unabhaengige Gegenprobe, NICHT die Gate-Groesse
+  });
+}
+
+// Pro-Tenant-Budget (P6b3): der GATE-Verbrauch (gateUsageCents - Lebenszeit bei Flag AUS,
+// Spend-Monat bei Flag AN) gegen den EFFEKTIVEN Cap (pro-Tenant hard_cap_cents wenn
+// gesetzt, sonst die Tenant-Default-Decke, sonst der Plattform-Cap - Praezedenz s.
+// effectiveCapCents). globalBudgetExceeded bleibt PARALLEL. Rein Integer
+// gateCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap aequivalent zu
+// x>=cap - bit-identisch zum frueheren Float-Gate.
+// Ein unbuchbarer Bucket (D7, jetzt auf BEIDEN Seiten geprueft) sperrt fail-closed mit
+// eigenem Grund usage_korrupt - im Extremfall beendet das einen LAUFENDEN Call
+// (telnyx-llm-shim) und weist kostenlosen Inbound ab (voice.js). Bei NaN-Verbrauch ist
+// genau das richtig, und der eigene Grund macht es vom echten "Budget erschoepft"
+// unterscheidbar.
+export function budgetExceeded(s, tenantId, cfg, nowIso) {
+  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
   if (spend.deny) return true;
   return spend.spent >= effectiveCapCents(s, tenantId, cfg);
 }
 
 // Vorab-Reservierung (outbound-p1c, Kosten-Achse, D1): wuerde der Worst-Case-Minutenpreis
 // (reserveCents, GANZZAHL Cents) den verbleibenden effektiven Tenant-Cap UEBERSTEIGEN?
-// Ist-Verbrauch (costCents) + Reserve > effektiver Cap -> true (402 vor Dial). DIESELBE
-// Cap-Aufloesung (effectiveCapCents) + derselbe usage-Bucket wie budgetExceeded (G5,
-// jetzt ueber denselben tenantSpendOrDeny-Helfer); globalBudgetExceeded bleibt PARALLEL
-// (Schnittmenge, Regel 1). Reine Query, kein IO.
+// Gate-Verbrauch (gateUsageCents) + Reserve > effektiver Cap -> true (402 vor Dial).
+// DIESELBE Cap-Aufloesung (effectiveCapCents) + derselbe Verbrauchs-Helfer wie
+// budgetExceeded (G5, ueber denselben tenantSpendOrDeny-Helfer); globalBudgetExceeded
+// bleibt PARALLEL (Schnittmenge, Regel 1). Reine Query, kein IO.
 // Neu (OUT-05): die bereits gebuchte In-Flight-Reserve des Tenants (reservationFor)
 // zaehlt kumulativ mit -> N kurz aufeinanderfolgende Calls koennen den Cap nicht mehr
 // gemeinsam ueberschreiten. Bei LEERER Reserve byte-identisch zum Bestand. P1: rein
-// Integer costCents (der settled Sub-Cent-Rest costMicroCentsRem wird an dieser
+// Integer Cents (der settled Sub-Cent-Rest costMicroCentsRem wird an dieser
 // Vergleichskante geflooert - Effekt < 1 Cent, dominiert vom Worst-Case-Reserve-
-// Ueberschaetzer; die Sub-Cent-Turns selbst gehen NICHT verloren, sie tragen in costCents).
-export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
-  const spend = tenantSpendOrDeny(s, tenantId);
+// Ueberschaetzer; die Sub-Cent-Turns selbst gehen NICHT verloren, sie tragen im Bucket).
+export function reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso) {
+  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
   if (spend.deny) return true;
   return spend.spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg);
 }
@@ -1834,28 +1891,27 @@ export function markMeterEventsSent(s, eventIds) {
   return n;
 }
 
-// Liest die Plattform-Summe ueber ALLE Tenant-Buckets + wendet den D7-Riegel an
-// (G5-Review-Fix Runde 1, Geschwister zu tenantSpendOrDeny): globalBudgetExceeded UND
-// globalReserveExceedsBudget standen vorher wortgleich als "Wert lesen ->
-// if(!isBookableCents) deny" da. Liefert bei buchbarer Summe {deny:false, total}; sonst
-// loggt denyCorruptUsage bereits fail-closed und liefert {deny:true}.
-function globalSpendOrDeny(s) {
-  const total = globalUsageTotals(s).costCents;
-  if (isBookableCents(total)) return { deny: false, total };
-  denyCorruptUsage("plattform", total);
-  return { deny: true };
+// Liest den Gate-Verbrauch der Plattform (ueber gatePlatformUsageCents) + wendet den
+// D7-Riegel an (G5-Review-Fix Runde 1, Geschwister zu tenantSpendOrDeny): beide teilen
+// sich seit P7 den gemeinsamen spendOrDeny-Rumpf oben statt ihn wortgleich zu duplizieren.
+function globalSpendOrDeny(s, cfg, nowIso) {
+  return spendOrDeny({
+    label: "plattform",
+    gateCents: gatePlatformUsageCents(s, cfg, nowIso),
+    lifetimeCents: globalUsageTotals(s).costCents,
+  });
 }
 
-// Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
-// gegen config.billing.platformSpendCapCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
-// (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
-// Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt. Rein
-// Integer costCents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
+// Globaler Budget-Notaus (Plattform-Cap, R2): Gate-Verbrauch der Plattform (gatePlatform-
+// UsageCents) gegen config.billing.platformSpendCapCents. Bleibt PARALLEL zum pro-Tenant-
+// Budget bestehen (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit
+// dem Owner-Bucket zusammen -> byte-identisch zum Bestand bei Flag AUS. Wird NIE entfernt.
+// Rein Integer Cents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
 // ganzzahligem Cap, s. budgetExceeded).
-export function globalBudgetExceeded(s, cfg) {
-  const spend = globalSpendOrDeny(s);
+export function globalBudgetExceeded(s, cfg, nowIso) {
+  const spend = globalSpendOrDeny(s, cfg, nowIso);
   if (spend.deny) return true;
-  return spend.total >= globalCapCents(cfg);
+  return spend.spent >= globalCapCents(cfg);
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
@@ -1875,15 +1931,15 @@ export function reservationsTotal(s) {
   return Object.values(s.reservations).reduce((sum, cents) => sum + cents, 0);
 }
 
-// Globaler Reserve-Notaus (R2, reserve-bewusst): wuerde reserveCents zusaetzlich zur
-// settled Plattform-Summe + ALLEN In-Flight-Reserven den globalen Cap ueberschreiten?
-// Schliesst die reserve-blinde Luecke in globalBudgetExceeded (das nur settled prueft).
-// Reine Query, kein IO. P1: rein Integer costCents (settled Sub-Cent-Rest an dieser
+// Globaler Reserve-Notaus (R2, reserve-bewusst): wuerde reserveCents zusaetzlich zum
+// Gate-Verbrauch der Plattform + ALLEN In-Flight-Reserven den globalen Cap ueberschreiten?
+// Schliesst die reserve-blinde Luecke in globalBudgetExceeded (das nur settled/Monat prueft).
+// Reine Query, kein IO. P1: rein Integer Cents (settled Sub-Cent-Rest an dieser
 // Vergleichskante geflooert, s. reserveExceedsBudget).
-export function globalReserveExceedsBudget(s, reserveCents, cfg) {
-  const spend = globalSpendOrDeny(s);
+export function globalReserveExceedsBudget(s, reserveCents, cfg, nowIso) {
+  const spend = globalSpendOrDeny(s, cfg, nowIso);
   if (spend.deny) return true;
-  return spend.total + reservationsTotal(s) + reserveCents > globalCapCents(cfg);
+  return spend.spent + reservationsTotal(s) + reserveCents > globalCapCents(cfg);
 }
 
 // Atomare Check+Reserve (Schnittmenge Tenant UND global, Regel 1). REIN SYNCHRON, KEIN
@@ -1896,11 +1952,11 @@ export function globalReserveExceedsBudget(s, reserveCents, cfg) {
 // direkte negierte reserveCents-Vorzeichenpruefung inline; sie fragt jetzt dieselbe EINE
 // Quelle wie alle anderen Geld-Kanten (isBookableCents, D7/G5) und schliesst dabei die
 // Luecke bei einem positiven Unendlich-Wert, den die alte Pruefung durchliess.
-export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg) {
+export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg, nowIso) {
   if (!isBookableCents(reserveCents)) return false;
   if (
-    reserveExceedsBudget(s, tenantId, reserveCents, cfg) ||
-    globalReserveExceedsBudget(s, reserveCents, cfg)
+    reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso) ||
+    globalReserveExceedsBudget(s, reserveCents, cfg, nowIso)
   )
     return false;
   s.reservations[tenantId] = reservationFor(s, tenantId) + reserveCents;
@@ -1939,12 +1995,15 @@ function platformWarnThresholdScaled(cfg) {
   return globalCapCents(cfg) * percent;
 }
 
-// Plattform-Ist (settled + In-Flight) - DIESELBE Groesse, die globalReserveExceedsBudget
-// gegen den Cap haelt (kein zweiter Wahrheitsanker). Bewusst NICHT ueber
-// globalSpendOrDeny: dessen denyCorruptUsage-Log gehoert an die GATE-Kante, nicht an eine
-// Beobachtung (identische Begruendung wie bei tenantBudgetSnapshot). Reine Query.
-function platformSpendObservedCents(s) {
-  const total = globalUsageTotals(s).costCents + reservationsTotal(s);
+// Plattform-Ist (Gate-Verbrauch + In-Flight) - DIESELBE Groesse, die
+// globalReserveExceedsBudget gegen den Cap haelt (kein zweiter Wahrheitsanker; P7: die
+// Warnung folgt damit automatisch der Gate-Achse - Lebenszeit bei Flag AUS, Spend-Monat
+// bei Flag AN - statt nach dem Flip dauerhaft auf der abgeschalteten Lebenszeit-Achse
+// falsch zu alarmieren). Bewusst NICHT ueber globalSpendOrDeny: dessen denyCorruptUsage-
+// Log gehoert an die GATE-Kante, nicht an eine Beobachtung (identische Begruendung wie
+// bei tenantBudgetSnapshot). Reine Query.
+function platformSpendObservedCents(s, cfg, nowIso) {
+  const total = gatePlatformUsageCents(s, cfg, nowIso) + reservationsTotal(s);
   return isBookableCents(total) ? total : null;
 }
 
@@ -1956,7 +2015,7 @@ function platformSpendObservedCents(s) {
 export function claimPlatformSpendWarning(s, cfg, nowIso) {
   const threshold = platformWarnThresholdScaled(cfg);
   if (threshold === null) return null;
-  const totalCents = platformSpendObservedCents(s);
+  const totalCents = platformSpendObservedCents(s, cfg, nowIso);
   if (totalCents === null || totalCents * PERCENT_SCALE < threshold) return null;
   const monthKey = spendMonthKeyOf(nowIso);
   // Unlesbarer Anker -> melden, aber KEINEN Marker setzen: ein gespeichertes null wuerde

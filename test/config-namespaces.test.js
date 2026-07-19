@@ -18,7 +18,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   safety: 11,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
-  billing: 17,
+  // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
+  billing: 18,
   provisioning: 11,
   auth: 15,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
@@ -37,9 +38,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 105;
+const EXPECTED_TOTAL_KEYS = 106;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (105 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (106 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -101,7 +102,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // (kein neues Array, kein neues nested Objekt) -> 93 + 3 = 96.
   // P6: platformSpendWarnPercent/platformAlertSmsTo sind ebenfalls primitiv (Zahl/String,
   // kein Array/nested Objekt) -> 96 + 2 = 98.
-  assert.equal(checked, 98, "alle primitiven Blaetter (105 - 3 Arrays - 4 nested Objekte) geprueft");
+  // P7: budgetMonthEnabled ist ebenfalls primitiv (Boolean, kein Array/nested Objekt) -> 99.
+  assert.equal(checked, 99, "alle primitiven Blaetter (106 - 3 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

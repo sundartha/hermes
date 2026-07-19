@@ -254,6 +254,12 @@ services:
       # die Warnung).
       - key: PLATFORM_ALERT_SMS_TO
         value: ""
+      # ---- Spend-Monat-Flip (Budget-Achsen P7) ----
+      # AN = beide Gate-Achsen messen im UTC-Kalendermonat statt lebenslang. AUS (Default)
+      # ist byte-identisch zum Bestand. Vorbedingung vor dem Flip: Live-Beleg, dass
+      # spendMonthKey einen Neustart uebersteht. Rollback = Env-Flip ohne Deploy.
+      - key: BUDGET_MONTH_ENABLED
+        value: "false"
       # ---- LLM-Resilienz (Budget-Engine, src/llm.js) ----
       - key: LLM_REQUEST_TIMEOUT_MS
         value: "3500"
