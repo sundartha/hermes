@@ -57,6 +57,8 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
     costCents: 0,
     costMicroCentsRem: 0,
     calls: 0,
+    spendMonthKey: null,
+    spendMonthCostCents: 0,
   });
   // Demo-Kalender identisch zur gemeinsamen Quelle (defaults.js).
   assert.deepEqual(store.getCalendar(BOOTSTRAP_TENANT_ID), demoCalendar());

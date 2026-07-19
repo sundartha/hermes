@@ -107,6 +107,8 @@ function finishLoad() {
 // Konvertiert einen (evtl. Alt-Shape) Usage-Bucket auf costCents als autoritativen Geldwert
 // (P1). Alt-Bucket traegt numerisches costEur (Float) -> Ganzzahl-Cents; costEur wird entfernt.
 // costMicroCentsRem ist ephemer -> defaultet ueber emptyUsage() auf 0 (Boot startet bei 0).
+// spendMonthKey/spendMonthCostCents (P4) defaulten fuer Bestandsbuckets ueber denselben
+// emptyUsage()-Spread auf null/0 - keine eigene Migration noetig.
 function bucketToCents(bucket) {
   const merged = { ...emptyUsage(), ...bucket };
   if (typeof bucket.costEur === "number") merged.costCents = Math.round(bucket.costEur * CENTS_PER_EUR);
@@ -271,6 +273,11 @@ export function save() {
     // costMicroCentsRem (P1) ist derselbe Fall: der Sub-Cent-Rest der KI-Akkumulation ist
     // strukturell ephemer (wie reservations) - pg persistiert ihn ohnehin nie (Backend-Parity),
     // ein persistierter Rest wuerde bei Reload den falschen Cent-Uebertrag vortaeuschen.
+    // P4-ASYMMETRIE, bewusst: spendMonthCostCents/spendMonthKey stehen NICHT auf dieser
+    // Liste - sie WERDEN persistiert. Ein Monats-Anker nur im Prozess-Spiegel wuerde bei
+    // jedem Boot neu gestempelt und den Cap nach P7 faktisch wirkungslos machen.
+    // costMicroCentsRem bleibt ephemer -> die Monats-Achse driftet ueber einen Neustart
+    // minimal anders als costCents: < 1 Cent pro Neustart, akzeptiert (s. schema.sql).
     const stripEphemeral = (key, value) =>
       key === "_finished" || key === "costMicroCentsRem" ? undefined : value;
     fs.writeFileSync(fd, JSON.stringify(persisted, stripEphemeral, 2));
@@ -448,8 +455,10 @@ export function tenantContext(tenantId) {
 }
 
 // ---- Usage / Budget-Guard ----
+// nowIso wird HIER erzeugt (IO-Grenze) und an die zeit-freie ops-Funktion durchgereicht
+// (P4, Muster setSuspendedAtIfAbsent) - die Fassaden-Signatur bleibt unveraendert.
 export function trackUsage(tenantId, tokens, cfg) {
-  const usage = ops.trackUsage(load(), tenantId, tokens, cfg);
+  const usage = ops.trackUsage(load(), tenantId, tokens, cfg, new Date().toISOString());
   save();
   return usage;
 }
@@ -474,9 +483,9 @@ export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
   return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg);
 }
 
-// Reconcile (outbound-p1c): Mutation -> save (wie trackUsage).
+// Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). nowIso s. trackUsage (P4).
 export function addVoiceUsageCostCents(tenantId, costCents) {
-  const usage = ops.addVoiceUsageCostCents(load(), tenantId, costCents);
+  const usage = ops.addVoiceUsageCostCents(load(), tenantId, costCents, new Date().toISOString());
   save();
   return usage;
 }

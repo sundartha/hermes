@@ -339,8 +339,20 @@ export function calendarMap() {
 
 // Leerer Usage-Bucket. Money at rest = GANZZAHL Cents (costCents, G26). costMicroCentsRem
 // = ephemerer Sub-Cent-Rest der KI-Akkumulation (nie auf Platte, Reset 0 bei Boot).
+// spendMonthKey/spendMonthCostCents (P4): zweite, PERIODISCHE Achse (UTC-Kalendermonat)
+// NEBEN dem unveraenderten Lebenszeit-Zaehler costCents. null = noch nie gestempelt ->
+// die Leseprojektion spendMonthUsageCents liefert 0. INERT: kein Gate liest sie (P7).
+// NICHT die Stripe-Abrechnungsperiode (src/billing/period.js).
 export function emptyUsage() {
-  return { inputTokens: 0, outputTokens: 0, costCents: 0, costMicroCentsRem: 0, calls: 0 };
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    costCents: 0,
+    costMicroCentsRem: 0,
+    calls: 0,
+    spendMonthKey: null,
+    spendMonthCostCents: 0,
+  };
 }
 
 // Usage-Map mit dem Owner-Bucket vorbelegt. Daten-Schicht pro-Tenant (P4):

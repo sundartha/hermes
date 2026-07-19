@@ -238,8 +238,9 @@ CREATE TABLE IF NOT EXISTS calendar_event (
 );
 
 -- usage: Owner-Zeile. cost_eur-Spalte als NUMERIC (praezise at rest); der
--- In-Memory-Spiegel haelt cost_eur jedoch als JS-Float und akkumuliert ihn so -
--- wie im json-Bestand (kein neuer Verstoss, kein Geld-als-Float-Regress).
+-- In-Memory-Spiegel haelt den autoritativen Wert seit P1 als GANZZAHL costCents;
+-- cost_eur ist die Persistenz-Kodierung (flushUsage/rowToUsage sind die beiden
+-- Ableitungsstellen).
 CREATE TABLE IF NOT EXISTS usage (
   tenant_id     TEXT PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
   input_tokens  BIGINT NOT NULL DEFAULT 0,
@@ -247,6 +248,28 @@ CREATE TABLE IF NOT EXISTS usage (
   cost_eur      NUMERIC NOT NULL DEFAULT 0,
   calls         BIGINT NOT NULL DEFAULT 0
 );
+-- Spend-Monat-Achse (Budget-Achsen P4): zweite, PERIODISCHE Verbrauchsachse NEBEN dem
+-- unveraenderten Lebenszeit-Zaehler cost_eur. spend_month_key = UTC-Kalendermonat
+-- 'YYYY-MM'; NULL = noch nie gestempelt (Bestandszeile) -> die Leseprojektion liefert 0.
+-- Additiv und inert: in P4 liest KEIN Gate diese Spalten.
+--
+-- ZWEI GELDKODIERUNGEN IN EINER TABELLE (bewusst): spend_month_cost_cents ist GANZZAHL
+-- CENTS (G26, Money at rest), die Nachbarspalte cost_eur ist NUMERIC in EURO (Alt-
+-- Konvention, bleibt aus Kompatibilitaet). Die Einheit NICHT aus der Nachbarspalte
+-- ableiten - sie steht im Spaltennamen.
+--
+-- ABGRENZUNG: das ist NICHT die Stripe-Abrechnungsperiode (src/billing/period.js,
+-- Spalte stripe_current_period_start). Kalendermonat UTC, tenant-unabhaengig, immer
+-- definiert - der Stripe-Anker waere ohne Abo fail-closed und wuerde jeden
+-- pre-Payment-Tenant sperren.
+--
+-- BEWUSSTE DRIFT (dokumentiert, akzeptiert): spend_month_cost_cents WIRD persistiert,
+-- der Sub-Cent-Rest costMicroCentsRem NICHT (ephemer, Boot startet bei 0). Ueber einen
+-- Neustart driftet die Monats-Achse dadurch minimal anders als cost_eur - hoechstens
+-- < 1 Cent pro Neustart. Die Alternative, den Anker nur im Prozess-Spiegel zu halten,
+-- wuerde ihn bei jedem Boot neu stempeln und den Cap nach P7 wirkungslos machen.
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_key TEXT;
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_cost_cents BIGINT NOT NULL DEFAULT 0;
 
 -- profile: GLOBAL, keine Tenant-Bindung (Rechteprofile sind betreiber-/admin-weit, nicht pro
 -- Telefon-Workspace). Phase S: die Profil-Rechte-Achse keyt auf die tenantId (vormals email).

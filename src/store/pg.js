@@ -282,8 +282,10 @@ export function makePgStore(runner) {
     // (Wrapper-Parity zu json.js); der Owner-Tenant traegt ownerName im Store.
     tenantContext: (tenantId) => ops.tenantContext(requireState(), "", tenantId),
 
+    // nowIso wird HIER erzeugt (IO-Grenze) und an die zeit-freie ops-Funktion durchgereicht
+    // (P4, Muster setSuspendedAtIfAbsent) - die Fassaden-Signatur bleibt unveraendert.
     trackUsage(tenantId, tokens, cfg) {
-      const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg);
+      const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg, new Date().toISOString());
       save();
       return usage;
     },
@@ -293,9 +295,9 @@ export function makePgStore(runner) {
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg),
     // Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). flushUsage persistiert
-    // den costCents-Bucket des Tenants (als cost_eur-Spalte).
+    // den costCents-Bucket des Tenants (als cost_eur-Spalte). nowIso s. trackUsage (P4).
     addVoiceUsageCostCents(tenantId, costCents) {
-      const usage = ops.addVoiceUsageCostCents(requireState(), tenantId, costCents);
+      const usage = ops.addVoiceUsageCostCents(requireState(), tenantId, costCents, new Date().toISOString());
       save();
       return usage;
     },
@@ -908,6 +910,13 @@ function rowToUsage(r) {
     costCents: hydratedCostCents(r.cost_eur),
     costMicroCentsRem: 0, // ephemer, nicht persistiert (wie reservations); Boot startet bei 0
     calls: Number(r.calls),
+    // Spend-Monat-Achse (P4). Bestandszeile ohne Wert -> null/0 (die Spalte kommt per
+    // ADD COLUMN IF NOT EXISTS mit DEFAULT 0 dazu). BIGINT liefert der Treiber als String
+    // -> Number, wie input_tokens/calls. BEWUSST OHNE isBookableCents-Heilkante: BIGINT
+    // kann - anders als das NUMERIC in cost_eur - den Wert 'NaN' gar nicht darstellen;
+    // eine Heilkante ohne moegliche Vergiftung waere toter Code (G9).
+    spendMonthKey: r.spend_month_key ?? null,
+    spendMonthCostCents: Number(r.spend_month_cost_cents ?? 0),
   };
 }
 
@@ -1072,14 +1081,30 @@ async function flushSettings(client, tenantId, settings) {
 
 async function flushUsage(client, tenantId, usage) {
   await client.query(
-    `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls,
+                        spend_month_key, spend_month_cost_cents)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (tenant_id) DO UPDATE SET
        input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
-       cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls`,
+       cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls,
+       spend_month_key=EXCLUDED.spend_month_key,
+       spend_month_cost_cents=EXCLUDED.spend_month_cost_cents`,
     // costCents ist autoritativ (P1); die Spalte bleibt cost_eur (keine Schema-Migration) ->
     // hier die EINE Ableitungsstelle zur Persistenz (Schwester zu rowToUsage).
-    [tenantId, usage.inputTokens, usage.outputTokens, usage.costCents / CENTS_PER_EUR, usage.calls],
+    // spend_month_cost_cents geht als GANZZAHL Cents raus (keine EUR-Ableitung, G26).
+    // usage.spendMonthCostCents bewusst OHNE ?? 0 (wie usage.costCents oben): emptyUsage()
+    // und rowToUsage sind die beiden einzigen Bucket-Quellen und garantieren das Feld - ein
+    // '??' wuerde einen echten Shape-Defekt maskieren statt ihn an der NOT-NULL-Spalte laut
+    // werden zu lassen.
+    [
+      tenantId,
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.costCents / CENTS_PER_EUR,
+      usage.calls,
+      usage.spendMonthKey ?? null,
+      usage.spendMonthCostCents,
+    ],
   );
 }
 
