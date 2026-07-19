@@ -1439,12 +1439,20 @@ function discardCorruptWrite(usage, kante, wert) {
 
 // Sperrt an einer Geld-LESEKANTE fail-closed (Absolute Regel 1): ein nicht-endlicher
 // Verbrauch macht sonst BEIDE Geld-Gates blind, weil NaN >= cap und NaN > cap immer
-// false sind. Aufrufer sind die beiden SpendOrDeny-Helfer (tenantSpendOrDeny/
-// globalSpendOrDeny, G5-Review-Fix Runde 1) - sie melden das Deny-Signal weiter an die
-// vier Gate-Funktionen, die dann true (blocken) liefern. Liefert IMMER true
-// (Bestandsvertrag).
-function denyCorruptUsage(kante, wert) {
-  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} costCents=${wert}`);
+// false sind. Einziger Aufrufer ist der gemeinsame spendOrDeny-Rumpf (fuer beide
+// Achsen, Tenant UND Plattform, G5-Review-Fix Runde 1) - er meldet das Deny-Signal
+// weiter an die vier Gate-Funktionen, die dann true (blocken) liefern.
+//
+// feld benennt EXPLIZIT, welcher der zwei geprueften Werte tatsaechlich vergiftet ist
+// ("gateCents" oder "lifetimeCents" - Review-Blocker Runde 1, P8/G2): ein zuvor
+// hartcodiertes "costCents=" log das Feld unabhaengig vom tatsaechlich betroffenen
+// Wert. Seit P7 ist gateCents nach dem Flip die MONATSZAHL, nicht mehr costCents - ein
+// vergifteter Monats-Wert bei gesundem costCents zeigte im Log trotzdem "costCents=NaN"
+// und verwies einen On-Call-Ops (CLAUDE.md Regel 7: "erst Runtime-Output lesen, nie
+// raten") auf das falsche Feld, weil der Runtime-Output selbst luegt. Liefert IMMER
+// true (Bestandsvertrag).
+function denyCorruptUsage(kante, feld, wert) {
+  console.error(`[budget] grund=${USAGE_CORRUPT_REASON} kante=${kante} feld=${feld} wert=${wert}`);
   return true;
 }
 
@@ -1695,13 +1703,15 @@ export function gatePlatformUsageCents(s, cfg, nowIso) {
 // pruefen waere nach dem Flip fail-OPEN: NaN >= cap ist false. Bei Flag AUS sind gateCents
 // und lifetimeCents DIESELBE Zahl (spendOrDeny bleibt dann verhaltens-identisch zum
 // Bestand). Liefert bei beidseitig buchbaren Werten {deny:false, spent:gateCents}; sonst
-// loggt denyCorruptUsage bereits fail-closed (der vergiftete Wert, gleich welche Seite)
-// und die Funktion liefert nur noch {deny:true} - der Aufrufer muss dann bloss true
-// zurueckgeben.
+// loggt denyCorruptUsage bereits fail-closed (der vergiftete Wert, gleich welche Seite,
+// UNTER SEINEM EIGENEN Feldnamen - "gateCents" oder "lifetimeCents", Review-Blocker
+// Runde 1) und die Funktion liefert nur noch {deny:true} - der Aufrufer muss dann bloss
+// true zurueckgeben.
 function spendOrDeny({ label, gateCents, lifetimeCents }) {
   const gateBookable = isBookableCents(gateCents);
   if (gateBookable && isBookableCents(lifetimeCents)) return { deny: false, spent: gateCents };
-  denyCorruptUsage(label, gateBookable ? lifetimeCents : gateCents);
+  const feld = gateBookable ? "lifetimeCents" : "gateCents";
+  denyCorruptUsage(label, feld, gateBookable ? lifetimeCents : gateCents);
   return { deny: true };
 }
 

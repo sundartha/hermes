@@ -47,6 +47,20 @@ function sourceOf(relativePath) {
   return fs.readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
+// Leitet console.error waehrend fn um (Muster test/budget-nan-fail-closed.test.js /
+// test/boot-guard.test.js captureErrAsync): restauriert IMMER, auch bei Wurf.
+async function captureErr(fn) {
+  const logs = [];
+  const orig = console.error;
+  console.error = (...a) => logs.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.error = orig;
+  }
+  return logs.join("\n");
+}
+
 // ==== T1-T3: Prod-Symptom + Gegentests ==============================================
 
 test("T1 Prod-Symptom: veralteter Monatsschluessel (Vormonat) gibt das Kontingent frei (Flag AN)", () => {
@@ -150,6 +164,27 @@ test("T8 D7 auf der Monats-Achse: vergiftete Monatszahl sperrt statt fail-open (
     budgetExceeded(s, TENANT_A, FLAG_ON, JULY_ISO),
     true,
     "NaN >= cap ist false - ohne den D7-Riegel waere das Gate hier blind",
+  );
+});
+
+test("T8b Log-Feld-Label (Review-Blocker Runde 1, P8/G2): das Deny-Log benennt das TATSAECHLICH vergiftete Feld", async () => {
+  const s = stateWithUsage(TENANT_A, {
+    costCents: 100, // gesund - dieses Feld ist NICHT das vergiftete
+    spendMonthKey: "2026-07",
+    spendMonthCostCents: NaN, // vergiftet die Monats-Achse (= gateCents bei Flag AN)
+  });
+  const out = await captureErr(() => {
+    budgetExceeded(s, TENANT_A, FLAG_ON, JULY_ISO);
+  });
+  assert.match(
+    out,
+    /feld=gateCents wert=NaN/,
+    "das Log muss das aufgeloeste Gate-Feld (gateCents) als vergiftet benennen, nicht ein hartcodiertes costCents",
+  );
+  assert.doesNotMatch(
+    out,
+    /costCents=/,
+    "der irrefuehrende Bestandslabel 'costCents=' (costCents ist hier gesund=100) darf im Deny-Log nicht mehr auftauchen",
   );
 });
 
