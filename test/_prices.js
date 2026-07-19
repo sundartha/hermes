@@ -18,7 +18,7 @@ export const PRICES = Object.freeze({
     [TEST_MODEL_EXPENSIVE]: { inPerMTok: 3.0, outPerMTok: 15.0 },
   }),
   usdToEur: 0.93,
-  maxBudgetCents: 800,
+  platformSpendCapCents: 800,
 });
 
 // Verbrauchs-Tripel in der Bestands-Schreibweise (Default-Modell = das guenstige,

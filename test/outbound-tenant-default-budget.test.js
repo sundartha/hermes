@@ -1,6 +1,6 @@
 // outbound-p1c (D5): registerTenant seedt EINMALIG die per-Tenant-Default-Kostendecke
 // (tenant_budget), damit ein neuer Tenant aus dem geteilten globalen Pool genommen wird
-// (sonst faellt er in effectiveCapEur auf cfg.maxBudgetCents). Prueft: (1) Seed legt die
+// (sonst faellt er in effectiveCapEur auf cfg.platformSpendCapCents). Prueft: (1) Seed legt die
 // Zeile budget == hard cap == Default an + hebt budgetExceeded auf den Default-Cap, (2)
 // set-if-absent (zweiter registerTenant ueberschreibt NICHT), (3) defaultBudgetCents 0
 // oder weggelassen -> KEINE Zeile (Owner/Bestand byte-identisch). Rein ueber state-ops.

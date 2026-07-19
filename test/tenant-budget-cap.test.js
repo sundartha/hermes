@@ -29,12 +29,12 @@ const TOKENS_PER_EUR = 1_000_000 / 0.93; // ~1.075M Input-Tokens = 1 EUR
 // statt mehrfach verstreuter direkter Preis-Feld-Zugriffe auf PRICES, P7a).
 const RATE = PRICES.modelPricesUsd[TEST_MODEL_CHEAP];
 
-test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.maxBudgetCents (byte-identisch)", () => {
+test("INV(3): Owner ohne tenant_budget-Zeile = exakt cfg.platformSpendCapCents (byte-identisch)", () => {
   const s = makeDefaultState();
   // knapp unter dem Cap -> frei
   trackUsage(s, TENANT_A, tokensOf(Math.floor(TOKENS_PER_EUR * 7.9), 0), PRICES);
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "unter 8 EUR -> frei");
-  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costCents >= maxBudgetCents)
+  // genau auf/ueber dem Cap (>=) -> exceeded, wie der Bestand (costCents >= platformSpendCapCents)
   trackUsage(s, TENANT_A, tokensOf(Math.ceil(TOKENS_PER_EUR * 0.2), 0), PRICES);
   assert.equal(
     budgetExceeded(s, TENANT_A, PRICES),
@@ -51,7 +51,7 @@ test("INV(1): pro-Tenant-Cap blockt A, B ohne Zeile telefoniert weiter", () => {
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "A ueber seinem pro-Tenant-Cap");
   // B: 4 EUR, keine eigene Zeile -> faellt auf den globalen 8-EUR-Cap -> frei
   trackUsage(s, TENANT_B, tokensOf(Math.floor(TOKENS_PER_EUR * 4), 0), PRICES);
-  assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B faellt auf maxBudgetCents, frei");
+  assert.equal(budgetExceeded(s, TENANT_B, PRICES), false, "B faellt auf platformSpendCapCents, frei");
 });
 
 test("INV(2): Schnittmenge - globaler Notaus greift, waehrend jeder unter SEINEM Cap bleibt", () => {

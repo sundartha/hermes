@@ -178,19 +178,19 @@ export function isBookableCents(x) {
 // gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
 export const TOKENS_PER_M_TOK = 1_000_000;
 
-// Globaler Notaus-Cap in EUR (Cents->EUR-Ruecklesung von cfg.maxBudgetCents, G5:
-// EINE Divisionsstelle statt vier duplizierten `cfg.maxBudgetCents / CENTS_PER_EUR`-
+// Globaler Notaus-Cap in EUR (Cents->EUR-Ruecklesung von cfg.platformSpendCapCents, G5:
+// EINE Divisionsstelle statt vier duplizierten `cfg.platformSpendCapCents / CENTS_PER_EUR`-
 // Stellen in server.js/api-read.js/state-ops.js). Reine Funktion von cfg, keine
 // State-Abhaengigkeit - api-read.js nutzt sie fuer die Anzeige-Projektion.
 export function globalCapEur(cfg) {
-  return cfg.maxBudgetCents / CENTS_PER_EUR;
+  return cfg.platformSpendCapCents / CENTS_PER_EUR;
 }
 
 // Globaler Notaus-Cap in GANZZAHL Cents (G5: eine Quelle fuer das Gate-Rechnen in Cents;
-// Schwester zu globalCapEur, das fuer Anzeige/Fehlertext nach EUR ableitet). cfg.maxBudgetCents
+// Schwester zu globalCapEur, das fuer Anzeige/Fehlertext nach EUR ableitet). cfg.platformSpendCapCents
 // ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix im Gate.
 export function globalCapCents(cfg) {
-  return cfg.maxBudgetCents;
+  return cfg.platformSpendCapCents;
 }
 
 // Intrinsische Fallback-/Cap-Werte der Reserve-Dauer (KEIN Operator-Knopf -> nicht config.js,

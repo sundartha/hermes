@@ -25,7 +25,7 @@ import { makePgTestStore } from "./pg-helpers.js";
 import { PRICES, tokensOf } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
-const CAP_CENTS = PRICES.maxBudgetCents; // 800
+const CAP_CENTS = PRICES.platformSpendCapCents; // 800
 // 0.5 ist UNBOOKABLE (Review-Fix Runde 1, G26): isBookableCents verlangt seither auch
 // Ganzzahligkeit - die Ganzzahl-Cents-Konvention (Money at rest) liesse sonst einen
 // fraktionalen Wert klaglos in den Ganzzahl-Akkumulator costCents durch.

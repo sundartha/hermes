@@ -143,7 +143,7 @@ test("Duck-Typing + Guard: JSON.stringify/await funktionieren auf den Namespace-
 // still-undefined. Stichprobe je betroffenem Namespace, Read UND Write (Set-Trap, §2.1).
 test("Flip-Regression: entfernte flache Keys werfen TypeError bei Read UND Write", () => {
   const removedFlatKeys = [
-    "maxBudgetCents",
+    "platformSpendCapCents",
     "maxCallsPerHour",
     "mcpAuth",
     "storeBackend",

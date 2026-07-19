@@ -10,7 +10,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
 
-const CFG = { maxBudgetCents: 100 }; // 1 EUR Cap (Owner-Fallback ohne tenant_budget-Zeile)
+const CFG = { platformSpendCapCents: 100 }; // 1 EUR Cap (Owner-Fallback ohne tenant_budget-Zeile)
 const RESERVE_CENTS = 60; // 0.60 EUR pro Reservierung
 
 let store;

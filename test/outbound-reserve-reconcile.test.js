@@ -4,7 +4,7 @@
 // Rest erlaubt, (3) Reconcile bucht die Ist-Minuten in DENSELBEN usage-Bucket und hebt
 // damit budgetExceeded + Reservierung an, (4) Reservierung nutzt die per-Tenant-Cap-
 // Aufloesung (effectiveCapCents) - der globale Notaus bleibt davon unberuehrt, (5) Owner
-// ohne tenant_budget-Zeile faellt auf maxBudgetCents. Rein ueber state-ops (kein Netz, kein
+// ohne tenant_budget-Zeile faellt auf platformSpendCapCents. Rein ueber state-ops (kein Netz, kein
 // Server, kein pglite; Lehre P6a: state-ops-Unit NICHT mit Spawn/pglite mischen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -60,23 +60,23 @@ test("INV(3b): Reconcile hebt budgetExceeded + reserveExceedsBudget an (Carrier-
 test("INV(4): Reservierung nutzt per-Tenant effectiveCapCents (Zeile gewinnt), global unberuehrt", () => {
   const s = makeDefaultState();
   setTenantBudget(s, TENANT_A, { budgetCents: 200, hardCapCents: 200 }); // 2 EUR < 8 global
-  // Reserve 3 EUR > 2-EUR-Zeile, aber < 8-EUR-maxBudgetCents -> die Zeile gewinnt.
+  // Reserve 3 EUR > 2-EUR-Zeile, aber < 8-EUR-platformSpendCapCents -> die Zeile gewinnt.
   assert.equal(reserveExceedsBudget(s, TENANT_A, 300, PRICES), true, "pro-Tenant-Zeile (2 EUR) gewinnt");
   // budgetExceeded byte-identisch (kein Verbrauch); globaler Notaus von der Reserve unberuehrt.
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "leerer Bucket -> budgetExceeded unveraendert");
   assert.equal(globalBudgetExceeded(s, PRICES), false, "globaler Notaus von der Reserve unberuehrt");
 });
 
-test("INV(5): Owner ohne tenant_budget-Zeile -> Cap = maxBudgetCents (byte-identisch)", () => {
+test("INV(5): Owner ohne tenant_budget-Zeile -> Cap = platformSpendCapCents (byte-identisch)", () => {
   const s = makeDefaultState();
-  // kein setTenantBudget -> effektiver Cap = maxBudgetCents (8 EUR)
+  // kein setTenantBudget -> effektiver Cap = platformSpendCapCents (8 EUR)
   assert.equal(
     reserveExceedsBudget(s, TENANT_A, 60, PRICES),
     false,
-    "0.60 EUR Reserve < 8 EUR (maxBudgetCents)",
+    "0.60 EUR Reserve < 8 EUR (platformSpendCapCents)",
   );
-  // Worst-Case ueber dem globalen 8-EUR-Cap -> true (Owner faellt auf maxBudgetCents).
-  assert.equal(reserveExceedsBudget(s, TENANT_A, 900, PRICES), true, "9 EUR Reserve > 8 EUR maxBudgetCents");
+  // Worst-Case ueber dem globalen 8-EUR-Cap -> true (Owner faellt auf platformSpendCapCents).
+  assert.equal(reserveExceedsBudget(s, TENANT_A, 900, PRICES), true, "9 EUR Reserve > 8 EUR platformSpendCapCents");
 });
 
 test("Grenzfall (T5): Reserve exakt = Rest -> false (strikt >, erlaubt)", () => {
