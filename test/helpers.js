@@ -236,6 +236,10 @@ export const BASE_ENV = {
   // test-base-env-drift). test/platform-spend-warning.test.js setzt den Wert explizit.
   PLATFORM_SPEND_WARN_PERCENT: "0",
   PLATFORM_ALERT_SMS_TO: "",
+  // P7 (Budget-Achsen, Der Flip): neutral AUS (Default, byte-identisch zum Bestand) - sonst
+  // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
+  // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.
+  BUDGET_MONTH_ENABLED: "false",
   // outbound-p1d: per-(Tenant,Ziel)-Cap neutral HOCH (Gate feuert in Altbestand-Tests nie,
   // wie MAX_CALLS_PER_HOUR=100). Ohne diese Zeilen leakt eine lokale .env mit
   // PER_TARGET_CALL_CAP/PER_TARGET_WINDOW_MS via dotenv in Spawn-Tests -> Baseline-Drift

@@ -472,17 +472,19 @@ export function usageOf(tenantId) {
   return ops.usageOf(load(), tenantId);
 }
 
+// nowIso wird HIER erzeugt (IO-Grenze) und an die zeit-freie ops-Funktion durchgereicht
+// (P7, Muster trackUsage): die Fassaden-Signatur bleibt unveraendert.
 export function budgetExceeded(tenantId, cfg) {
-  return ops.budgetExceeded(load(), tenantId, cfg);
+  return ops.budgetExceeded(load(), tenantId, cfg, new Date().toISOString());
 }
 
 export function globalBudgetExceeded(cfg) {
-  return ops.globalBudgetExceeded(load(), cfg);
+  return ops.globalBudgetExceeded(load(), cfg, new Date().toISOString());
 }
 
 // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
 export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
-  return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg);
+  return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg, new Date().toISOString());
 }
 
 // Diagnose-Snapshot der Tenant-Achse (P5a, Anzeige + Ablehnungstexte): reine Query,
@@ -504,7 +506,7 @@ export function addVoiceUsageCostCents(tenantId, costCents) {
 // server.js-Aufrufpfad (F2) uebernimmt store.withStoreLock. reservationOf ist reine Query
 // (Fassaden-Name analog usageOf zu usageFor, G11).
 export function tryReserveOutboundBudget(tenantId, reserveCents, cfg) {
-  return ops.tryReserveOutboundBudget(load(), tenantId, reserveCents, cfg);
+  return ops.tryReserveOutboundBudget(load(), tenantId, reserveCents, cfg, new Date().toISOString());
 }
 
 export function releaseOutboundReserve(call) {
