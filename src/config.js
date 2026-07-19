@@ -163,6 +163,20 @@ const rawConfig = {
     min: 1,
   }),
 
+  // ---- Pre-Call-Briefing (P8, src/precall-briefing.js) ----
+  // Modell des briefenden Aufrufs. MUSS in modelPricesUsd stehen, sonst bucht das
+  // Budget-Gate fail-closed zur TEUERSTEN Rate (priceForModel, P7a). Sonnet statt Opus:
+  // das Briefing ist eine Struktur-Extraktion aus kurzem Owner-Text.
+  briefingModel: process.env.PRECALL_BRIEFING_MODEL || "claude-sonnet-5",
+  // Eigener kurzer Per-Request-Timeout: POST /api/calls wartet synchron darauf, BEVOR
+  // gewaehlt wird; kein Retry (maxRetries 0) -> das ist die gesamte Wartezeit im
+  // schlechtesten Fall. Bewusst NICHT an llmRequestTimeoutMs gekoppelt: dort regiert das
+  // 15-s-Provider-Hardcut eines laufenden Turns, hier die Geduld des Aufrufers.
+  briefingTimeoutMs: numEnv("PRECALL_BRIEFING_TIMEOUT_MS", process.env.PRECALL_BRIEFING_TIMEOUT_MS, {
+    fallback: 6000,
+    min: 1,
+  }),
+
   // ---- Mess-Instrumentierung (L0, src/metrics.js) ----
   // Master-Schalter fuer PII-freie Latenz-/Loop-/STT-Gap-Logs. DEFAULT AUS
   // (byte-identisch, auch stdout): Konsumenten no-oppen. Zum Live-Messen (Datengrundlage
@@ -541,6 +555,14 @@ const rawConfig = {
   assistantContextEnabled: boolEnv("ASSISTANT_CONTEXT_ENABLED", process.env.ASSISTANT_CONTEXT_ENABLED, {
     fallback: true,
   }),
+  // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing. Ein starkes Modell fuellt VOR
+  // dem Waehlen den strukturierten call.context (+ optional das Mandat) aus dem Auftrag
+  // des Nutzers. DEFAULT AUS (fail-closed): kein zweiter LLM-Aufruf, keine Zusatzkosten,
+  // /api/calls byte-identisch. Wirkt NUR zusammen mit assistantContextEnabled - ohne den
+  // Konsumenten (HINTERGRUND-Sektion, claude.js) waere das Briefing bezahlter Muell.
+  precallBriefingEnabled: boolEnv("PRECALL_BRIEFING_ENABLED", process.env.PRECALL_BRIEFING_ENABLED, {
+    fallback: false,
+  }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
@@ -841,11 +863,11 @@ export const CONFIG_NAMESPACES = Object.freeze({
   billing: ["maxBudgetCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
-  llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur"],
+  llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge"],
-  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled"],
   server: ["port", "publicUrl", "isProduction", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],

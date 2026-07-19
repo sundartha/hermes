@@ -203,6 +203,13 @@ export const BASE_ENV = {
   // ASSISTANT_CONTEXT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift
   // (Lehre test-base-env-drift). Der Smoke-/HTTP-Test setzt sie explizit auf "true".
   ASSISTANT_CONTEXT_ENABLED: "false",
+  // P8 Pre-Call-Briefing default AUS (fail-closed): Bestandssuite byte-identisch (kein
+  // zweiter LLM-Aufruf im place_call-Pfad). Ohne diese Zeilen leakt eine lokale .env via
+  // dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Die P8-Tests
+  // setzen sie explizit.
+  PRECALL_BRIEFING_ENABLED: "false",
+  PRECALL_BRIEFING_MODEL: "claude-sonnet-5",
+  PRECALL_BRIEFING_TIMEOUT_MS: "6000",
   // ---- Payment/Billing (P6b1) ----
   // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
   // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.

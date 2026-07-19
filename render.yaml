@@ -226,6 +226,13 @@ services:
       # das Self-Service-Dashboard (nach dem Bootstrap-CLI), nicht ueber die Env.
       - key: CLAUDE_MODEL
         value: claude-haiku-4-5
+      # ---- Pre-Call-Briefing (P8) ---- Default AUS; Anschalten ist Owner-Arbeit.
+      - key: PRECALL_BRIEFING_ENABLED
+        value: "false"
+      - key: PRECALL_BRIEFING_MODEL
+        value: claude-sonnet-5
+      - key: PRECALL_BRIEFING_TIMEOUT_MS
+        value: "6000"
       - key: MAX_BUDGET_EUR
         value: "8"
       # ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c) ----
