@@ -231,6 +231,11 @@ export const BASE_ENV = {
   VOICE_TARIFF_DOMESTIC_CENTS: "0",
   VOICE_TARIFF_DEFAULT_CENTS: "0",
   DEFAULT_TENANT_BUDGET_CENTS: "0",
+  // P6 (Budget-Achsen, Fruehwarnung): neutral AUS (0 = kein Ereignis, byte-identisch
+  // zum Bestand) - sonst leakt eine lokale .env via dotenv in Spawn-Tests (Lehre
+  // test-base-env-drift). test/platform-spend-warning.test.js setzt den Wert explizit.
+  PLATFORM_SPEND_WARN_PERCENT: "0",
+  PLATFORM_ALERT_SMS_TO: "",
   // outbound-p1d: per-(Tenant,Ziel)-Cap neutral HOCH (Gate feuert in Altbestand-Tests nie,
   // wie MAX_CALLS_PER_HOUR=100). Ohne diese Zeilen leakt eine lokale .env mit
   // PER_TARGET_CALL_CAP/PER_TARGET_WINDOW_MS via dotenv in Spawn-Tests -> Baseline-Drift

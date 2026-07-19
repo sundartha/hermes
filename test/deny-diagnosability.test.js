@@ -29,6 +29,10 @@ function defaultStore(overrides = {}) {
     tryReserveOutboundBudget: () => true,
     reserveExceedsBudget: () => false,
     withStoreLock: (fn) => fn(),
+    // Budget-Achsen P6 (Fruehwarnung): der Fake soll die reale Kontraktflaeche spiegeln
+    // statt sich auf das Schlucken eines TypeError zu verlassen. null = keine Warnung
+    // faellig (diese Datei prueft Ablehnungstexte, nicht die Warnung).
+    claimPlatformSpendWarning: () => null,
     ...overrides,
   };
 }

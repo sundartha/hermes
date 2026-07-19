@@ -393,6 +393,20 @@ const rawConfig = {
   // Betrag (Ledger-Quelle fuer Billing + Tages-Cap-Zaehler). 0 = Menge ohne Kostenbeleg;
   // Live mit dem Provider-SMS-Tarif abgleichen.
   smsCostCents: numEnv("SMS_COST_CENTS", process.env.SMS_COST_CENTS, { fallback: 0, min: 0 }),
+  // ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----
+  // Anteil von platformSpendCapCents, ab dem GENAU EIN Audit-Ereignis pro Spend-Monat
+  // feuert - BEVOR der Notaus blockt. Ganzzahl 0-100. 0 = Warnung AUS, byte-identisch
+  // zum Bestand. AENDERT KEINE Gate-Entscheidung (Vorbedingung fuer P7).
+  platformSpendWarnPercent: numEnv(
+    "PLATFORM_SPEND_WARN_PERCENT",
+    process.env.PLATFORM_SPEND_WARN_PERCENT,
+    { fallback: 80, min: 0, max: 100 },
+  ),
+  // Betreiber-Nummer (E.164) fuer die zusaetzliche Warn-SMS. LEER = KEINE SMS, nur Audit.
+  // Eigene Env, weil das Owner-Konzept aus dem Code entfernt ist (Admin laeuft ueber
+  // account.role) - es gibt KEINE natuerliche Zielnummer fuer eine PLATTFORM-Groesse. NIE
+  // die private Nummer eines Tenants: das waere eine Betreiber-Zahl an einen Kunden.
+  platformAlertSmsTo: process.env.PLATFORM_ALERT_SMS_TO || "",
   // ---- Abo-Buchung (Stripe Recurring, W4) ----
   // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer = Tier nicht buchbar
   // (priceIdForPlan -> null -> Route 500, KEIN Boot-Stop). Opake price_-Referenzen,
@@ -871,7 +885,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

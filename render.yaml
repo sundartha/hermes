@@ -244,6 +244,16 @@ services:
       # (spendCapCoherence) den Start. 600 = Starter-Minutenwert (30 min * 20 ct).
       - key: DEFAULT_TENANT_BUDGET_CENTS
         value: "600"
+      # ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----
+      # 80% von MAX_BUDGET_EUR -> genau EIN Audit-Ereignis pro Spend-Monat, BEVOR der
+      # Plattform-Notaus blockt. AENDERT KEINE Gate-Entscheidung.
+      - key: PLATFORM_SPEND_WARN_PERCENT
+        value: "80"
+      # Betreiber-Nummer fuer die Warn-SMS. Leer = nur Audit-Log, keine SMS. MUSS vor
+      # dem P7-Flip auf eine echte Betreiber-Nummer gesetzt werden (sonst liest niemand
+      # die Warnung).
+      - key: PLATFORM_ALERT_SMS_TO
+        value: ""
       # ---- LLM-Resilienz (Budget-Engine, src/llm.js) ----
       - key: LLM_REQUEST_TIMEOUT_MS
         value: "3500"

@@ -68,6 +68,10 @@ function defaultStore() {
     // bleibt die einzige Ja/Nein-Quelle (s. reserve_budget-Test unten).
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     reserveExceedsBudget: () => true,
+    // Budget-Achsen P6 (Fruehwarnung): der Fake soll die reale Kontraktflaeche spiegeln
+    // statt sich auf das Schlucken eines TypeError zu verlassen. null = keine Warnung
+    // faellig (Gate-Verhalten dieser Datei bleibt unberuehrt).
+    claimPlatformSpendWarning: () => null,
   };
 }
 
