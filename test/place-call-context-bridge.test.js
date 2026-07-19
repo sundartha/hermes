@@ -44,6 +44,7 @@ const PLACE_CALL_SHAPE = {
   objective: { optional: false },
   briefing: { optional: true },
   constraints: { optional: true },
+  mandate: { optional: true },
   context: { optional: true },
   language: { optional: true },
   max_duration_s: { optional: true },
@@ -102,4 +103,35 @@ test("P3-01: place_call-context ist optional + Beschreibung haelt Hintergrund-/S
   assert.match(desc, /hintergrund/i, "nennt 'Hintergrund'");
   assert.match(desc, /secret/i, "untersagt Secrets");
   assert.match(desc, /assistent/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
+});
+
+// P6 (PLAN-CONVERSATION-QUALITY-V2): das mandate-Feld ist OPTIONAL (advisory Schema, der
+// Server validiert/normalisiert autoritativ). Die Beschreibungen SIND das Feature: sie
+// zwingen das aufrufende Chat-Modell, den Owner nach dem Rahmen zu fragen, statt einen zu
+// erfinden, und stellen den E1-Vertrag (kein Buchen/Kalender) sowie den
+// constraints-Vorrang klar.
+test("P6-01: place_call-mandate ist optional + Beschreibungen halten E1-/Vorrang-/Enum-Vertrag", () => {
+  const schema = captureSchemas().get("place_call");
+  assert.ok(schema.mandate, "mandate ist registriert");
+  assert.equal(schema.mandate.isOptional(), true, "mandate ist optional (advisory)");
+  const desc = schema.mandate.description || "";
+  assert.match(desc, /mandat/i, "nennt 'Mandat'");
+  assert.match(
+    desc,
+    /bucht.*nichts|keinen kalenderzugriff/i,
+    "haelt den E1-Vertrag (kein Buchen/Kalenderzugriff)",
+  );
+  assert.match(
+    desc,
+    /gewinnt immer constraints|gewinnt IMMER constraints/i,
+    "nennt den constraints-Vorrang",
+  );
+  const inner = schema.mandate.unwrap();
+  const decideFreely = inner.shape.decide_freely.description || "";
+  assert.match(decideFreely, /konkret/i, "decide_freely verlangt Konkretheit");
+  assert.match(decideFreely, /constraints/i, "decide_freely verweist auf constraints");
+  const onOutOfScope = inner.shape.on_out_of_scope.description || "";
+  assert.match(onOutOfScope, /take_message/, "on_out_of_scope dokumentiert take_message");
+  assert.match(onOutOfScope, /decline/, "on_out_of_scope dokumentiert decline");
+  assert.match(onOutOfScope, /accept_best/, "on_out_of_scope dokumentiert accept_best");
 });

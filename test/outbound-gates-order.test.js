@@ -24,6 +24,7 @@ const EXPECTED_ORDER = [
   "resolve_profile",
   "number_gate",
   "valid_text",
+  "valid_mandate",
   "assistant_context",
   "resolve_outbound",
   "budget",

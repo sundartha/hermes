@@ -12,6 +12,7 @@
 // store/defaults.js neben normNum (EINE Quelle, G5 - F2 brauchte denselben Regex im
 // private-number-Setter; statt einer zweiten Kopie re-exportieren wir hier). Die
 // bestehenden Konsumenten (server.js /api/calls) importieren E164 unveraendert von hier.
+import { MANDATE_OUT_OF_SCOPE_VALUES } from "../store/defaults.js";
 export { E164 } from "../store/defaults.js";
 export const TEXT_LIMITS = {
   objective: 500,
@@ -23,6 +24,10 @@ export const TEXT_LIMITS = {
   "context.summary": 1000,
   "context.recipient_relationship": 200,
   "context.desired_outcome": 500,
+  // P6: Mandats-Teilfelder. Gleicher Kosten-/DoS-Deckel-Gedanke wie context.*;
+  // decide_freely traegt den Rahmen selbst, fallback_order nur eine Reihenfolge.
+  "mandate.decide_freely": 1000,
+  "mandate.fallback_order": 500,
 };
 
 // P3: key_facts ist ein laengenbegrenztes String-Array. Die beiden Deckel reisen als EIN
@@ -53,16 +58,38 @@ export function invalidStringArray(name, value, { maxItems, maxLen }) {
   return null;
 }
 
-// Nur die vier bekannten Teilfelder uebernehmen; leeres Ergebnis -> null (Block
-// byte-identisch). Typ-/Laengenpruefung passiert danach in validateAssistantContext.
-function pickContext(raw) {
+// Fehlertext oder null; optionale Enum-Felder (null/undefined) sind erlaubt. Gleicher
+// Vertrag wie invalidText/invalidStringArray.
+export function invalidEnum(name, value, allowed) {
+  if (value == null) return null;
+  if (typeof value !== "string") return `${name} muss ein String sein`;
+  if (!allowed.includes(value)) return `${name} muss einer von ${allowed.join(", ")} sein`;
+  return null;
+}
+
+// Nur die bekannten Teilfelder uebernehmen; leeres Ergebnis -> null (Block
+// byte-identisch). EINE Quelle fuer context (P3) und mandate (P6): unbekannte Keys
+// fallen weg -> Storage-/DoS-Deckel.
+function pickKnownFields(raw, fields) {
   const out = {};
-  if (raw.summary != null) out.summary = raw.summary;
-  if (raw.recipient_relationship != null) out.recipient_relationship = raw.recipient_relationship;
-  if (raw.desired_outcome != null) out.desired_outcome = raw.desired_outcome;
-  if (raw.key_facts != null) out.key_facts = raw.key_facts;
+  for (const field of fields) if (raw[field] != null) out[field] = raw[field];
   return Object.keys(out).length ? out : null;
 }
+
+// Gemeinsames Geruest beider Teilobjekt-Validierer (parse-don't-validate): null -> null,
+// Nicht-Objekt -> 400, unbekannte Keys weg, leer -> null. Die feldweisen Regeln bleiben
+// beim Aufrufer (checkFields) - eine Aufgabe, eine Abstraktionsebene.
+function validateSubObject({ name, raw, fields, checkFields }) {
+  if (raw == null) return { value: null };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { error: `${name} muss ein Objekt sein` };
+  const value = pickKnownFields(raw, fields);
+  if (value == null) return { value: null };
+  const error = checkFields(value);
+  return error ? { error } : { value };
+}
+
+const CONTEXT_FIELDS = ["summary", "recipient_relationship", "desired_outcome", "key_facts"];
+const MANDATE_FIELDS = ["decide_freely", "fallback_order", "on_out_of_scope"];
 
 // P3-Kontext validieren UND normalisieren (parse-don't-validate): nimmt den rohen
 // Body-Wert, weist Teilfeld-Verstoesse als 400 zurueck und gibt sonst ein Objekt aus NUR
@@ -71,15 +98,27 @@ function pickContext(raw) {
 // EINE Quelle der Teilfeld-Regeln (kein Copy-Paste, G5): je Textfeld invalidText, das
 // Array ueber invalidStringArray.
 export function validateAssistantContext(raw) {
-  if (raw == null) return { value: null };
-  if (typeof raw !== "object" || Array.isArray(raw))
-    return { error: "context muss ein Objekt sein" };
-  const value = pickContext(raw);
-  if (value == null) return { value: null };
-  const error =
-    invalidText("context.summary", value.summary) ||
-    invalidText("context.recipient_relationship", value.recipient_relationship) ||
-    invalidText("context.desired_outcome", value.desired_outcome) ||
-    invalidStringArray("context.key_facts", value.key_facts, KEY_FACTS_LIMITS);
-  return error ? { error } : { value };
+  return validateSubObject({
+    name: "context",
+    raw,
+    fields: CONTEXT_FIELDS,
+    checkFields: (v) =>
+      invalidText("context.summary", v.summary) ||
+      invalidText("context.recipient_relationship", v.recipient_relationship) ||
+      invalidText("context.desired_outcome", v.desired_outcome) ||
+      invalidStringArray("context.key_facts", v.key_facts, KEY_FACTS_LIMITS),
+  });
+}
+
+// P6: Vorab-Mandat. Gleicher Vertrag wie validateAssistantContext, andere Feldregeln.
+export function validateMandate(raw) {
+  return validateSubObject({
+    name: "mandate",
+    raw,
+    fields: MANDATE_FIELDS,
+    checkFields: (v) =>
+      invalidText("mandate.decide_freely", v.decide_freely) ||
+      invalidText("mandate.fallback_order", v.fallback_order) ||
+      invalidEnum("mandate.on_out_of_scope", v.on_out_of_scope, MANDATE_OUT_OF_SCOPE_VALUES),
+  });
 }

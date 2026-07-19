@@ -3,7 +3,7 @@
 import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { USAGE_EVENT_KIND } from "./store/defaults.js";
+import { USAGE_EVENT_KIND, MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_DEFAULT } from "./store/defaults.js";
 import { aiCostCents } from "./store/state-ops.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
@@ -169,6 +169,64 @@ function boundaryRules({ settings: s, owner }) {
   return lines.join("\n");
 }
 
+// P6 (PLAN-CONVERSATION-QUALITY-V2, Anhang C): MANDAT statt Rueckfrage. Der Owner gibt
+// beim place_call vorab eine Vollmacht mit; darin sagt der Agent verbindlich zu, statt
+// jede Terminfrage als Nachricht zurueckzugeben. Nach L6/E1 ist das der EINZIGE
+// Mechanismus, mit dem er in einer Terminfrage etwas Verbindliches sagen kann.
+// E1 bleibt unangetastet: kein Kalenderzugriff, kein Eintragen, kein Buchen - der
+// Aufloesungssatz in MANDATE_SCOPE_RULES sagt das explizit, damit der Block nicht gegen
+// die unbedingten Zeilen in boundaryRules laeuft.
+// Formulierungsprinzip (Anhang C): wer Ruecksprache halten muss, ist mandatiert, nicht
+// inkompetent - als Grund NIE das eigene Unwissen nennen, sondern den Auftragsrahmen.
+const MANDATE_SCOPE_RULES =
+  "Das darfst du im Gespräch ohne Rückfrage verbindlich zusagen. Innerhalb dieses Rahmens entscheidest du selbst, fragst NICHT nach und gibst es NICHT als Nachricht weiter. Eintragen oder buchen kannst du weiterhin nichts - du sagst nur verbindlich zu, was in diesem Rahmen liegt.";
+// Nur wenn es auch EINSCHRÄNKUNGEN gibt: sonst verwiese der Satz auf einen Block, den
+// dieser Prompt gar nicht enthaelt.
+const MANDATE_CONSTRAINTS_PRECEDENCE = " Die EINSCHRÄNKUNGEN gehen deinem Spielraum immer vor.";
+const MANDATE_FALLBACK_RULES =
+  "Arbeite diese Reihenfolge selbständig ab, bevor du das Anliegen zurückgibst.";
+// Erste Zeile der AUSSERHALB-Sektion je on_out_of_scope (G23: EIN Objekt statt einer
+// if/else-Kette). owner wird nur im take_message-Zweig gebraucht - einheitliche
+// Signatur, damit der Aufrufer nicht verzweigen muss.
+const MANDATE_OUT_OF_SCOPE_SENTENCE = Object.freeze({
+  [MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE]: (owner) =>
+    `Sag klar, dass du das nicht selbst zusagen kannst. Halte das Angebot mit allen Details fest - Tag, Uhrzeit, Preis und bis wann es gilt -, gib es über take_message weiter und sag zu, dass ${owner} sich meldet.`,
+  [MANDATE_OUT_OF_SCOPE.DECLINE]: () =>
+    "Sag klar, dass du das nicht zusagen kannst, und lehne höflich ab, ohne ein Gegenangebot zu machen.",
+  [MANDATE_OUT_OF_SCOPE.ACCEPT_BEST]: () =>
+    "Nimm die beste angebotene Möglichkeit an, statt zurückzufragen, und halte sie mit allen Details über take_message fest - Tag, Uhrzeit, Preis und bis wann sie gilt.",
+});
+const MANDATE_OUT_OF_SCOPE_RULES =
+  "Nenne als Grund NIE dein eigenes Unwissen, sondern immer deinen Auftragsrahmen. Versprich NIEMALS, dass du selbst nochmal anrufst.";
+
+// Ein Mandat traegt nur, wenn mindestens eins seiner drei Felder gesetzt ist. Sonst ""
+// -> filter(Boolean) in systemPrompt -> Prompt byte-identisch zum Bestand (Muster D8).
+function hasMandateContent(mandate) {
+  return Boolean(
+    mandate && (mandate.decide_freely || mandate.fallback_order || mandate.on_out_of_scope),
+  );
+}
+
+// Mandats-Sektion. Jeder Unterblock rendert genau dann, wenn sein Feld gesetzt ist; der
+// AUSSERHALB-Block rendert immer mit, sobald ueberhaupt ein Mandat vorliegt (Default
+// take_message). Unbekannter on_out_of_scope-Wert (Legacy-/Fremddatensatz) faellt
+// fail-safe auf den Default zurueck, statt den laufenden Turn zu werfen.
+function mandateSection({ call, owner }) {
+  const m = call.mandate;
+  if (!hasMandateContent(m)) return "";
+  const outOfScope =
+    MANDATE_OUT_OF_SCOPE_SENTENCE[m.on_out_of_scope] ||
+    MANDATE_OUT_OF_SCOPE_SENTENCE[MANDATE_OUT_OF_SCOPE_DEFAULT];
+  const precedence = call.constraints ? MANDATE_CONSTRAINTS_PRECEDENCE : "";
+  const blocks = [];
+  if (m.decide_freely)
+    blocks.push(`DEIN SPIELRAUM: ${m.decide_freely}\n${MANDATE_SCOPE_RULES}${precedence}`);
+  if (m.fallback_order)
+    blocks.push(`WENN DER ERSTWUNSCH NICHT GEHT: ${m.fallback_order}\n${MANDATE_FALLBACK_RULES}`);
+  blocks.push(`AUSSERHALB DEINES SPIELRAUMS: ${outOfScope(owner)}\n${MANDATE_OUT_OF_SCOPE_RULES}`);
+  return blocks.join("\n\n");
+}
+
 // Abschluss-Sektionen: Modul-Konstanten (kein Interpolat, richtungsabhaengig fix).
 // D9: der frueheren Wait-Klausel ("lege niemals auf, bevor er geantwortet hat") folgt
 // jetzt dieser Satz - die STRUKTURELLE Sicherung (shouldSuppressEndCall,
@@ -193,8 +251,13 @@ export function systemPrompt(call) {
     speechRules(p),
     clarificationRules(p),
     boundaryRules(p),
+    // P6: rote Linien (GRENZEN) zuerst, dann der gruene Bereich. Ohne Mandat "" ->
+    // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster D8).
+    mandateSection(p),
     p.isInbound ? INBOUND_OUTCOME_SECTION : OUTBOUND_OUTCOME_SECTION,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 // HINTERGRUND-Sektion (P3): kompakter, strukturierter Per-Call-Kontext NACH dem AUFTRAG.
@@ -309,7 +372,9 @@ export function toolDefs() {
         "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
         "Sage dem Gegenüber in derselben Antwort, dass du die Nachricht weitergibst. " +
         "Versprich dabei NIEMALS, dass du selbst später nochmal anrufst, und behaupte NIE, " +
-        "ein Termin sei eingetragen oder gebucht.",
+        "ein Termin sei eingetragen oder gebucht. " +
+        "Nutze es NICHT für etwas, das dein Auftrag dich selbst entscheiden lässt - " +
+        "das sagst du direkt zu, statt es weiterzugeben.",
       input_schema: {
         type: "object",
         properties: { message: { type: "string", description: "Die Nachricht" } },

@@ -11,7 +11,7 @@ import {
   WIDGET_CALENDAR,
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
-import { MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
+import { MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
 import { resolveGatewayUrl } from "./config.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -370,6 +370,35 @@ export function registerTools(
           .optional()
           .describe(
             "Harte Grenzen, die der Agent im Gespraech nicht ueberschreiten darf, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro, keine Anzahlung zusagen.'",
+          ),
+        // P6 (PLAN-CONVERSATION-QUALITY-V2): Vorab-Mandat. Ohne Eintrag im zod-Schema
+        // erreichte das Feld /api/calls nie (zod strippt unbekannte Keys - dieselbe
+        // Falle wie bei diagnostic). Kein Constraint-DSL: die Feld-BESCHREIBUNGEN sind
+        // das Feature, nicht der Typ.
+        mandate: z
+          .object({
+            decide_freely: z
+              .string()
+              .optional()
+              .describe(
+                "Die Vollmacht - was der Agent im Gespraech OHNE Rueckfrage verbindlich zusagen darf, z.B. 'Termin an jedem Werktag zwischen 9 und 12 Uhr, bis 60 Euro'. Formuliere sie so konkret, dass am Telefon eine Ja/Nein-Entscheidung daraus ableitbar ist; vage Rahmen ('flexibel', 'irgendwann') helfen nicht. Frage den Nutzer ZUERST kurz nach seinem Rahmen, statt einen zu erfinden. OHNE dieses Feld darf der Agent gar nichts zusagen und gibt jeden Vorschlag nur als Nachricht weiter. Harte Verbote gehoeren NICHT hierher, sondern in constraints.",
+              ),
+            fallback_order: z
+              .string()
+              .optional()
+              .describe(
+                "Praeferenz-Reihenfolge, die der Agent selbstaendig abarbeitet, wenn der Erstwunsch nicht geht, z.B. 'zuerst Donnerstag frueh, sonst Freitag, sonst naechste Woche'. Ohne dieses Feld probiert er von sich aus keine Alternative.",
+              ),
+            on_out_of_scope: z
+              .enum(MANDATE_OUT_OF_SCOPE_VALUES)
+              .optional()
+              .describe(
+                "Was der Agent tut, wenn ein Angebot AUSSERHALB von decide_freely liegt: 'take_message' (Default) - Angebot mit allen Details festhalten, weitergeben und zusagen, dass der Nutzer sich meldet; 'decline' - hoeflich ablehnen, ohne Gegenangebot; 'accept_best' - die beste angebotene Moeglichkeit trotzdem annehmen und festhalten. Setze 'accept_best' NUR, wenn der Nutzer ausdruecklich sagt, dass ihm jede Option recht ist.",
+              ),
+          })
+          .optional()
+          .describe(
+            "Optionales Vorab-MANDAT: der Rahmen, in dem der Agent im Gespraech SELBST entscheiden darf, statt jede Frage als Nachricht zurueckzugeben. Der Agent bucht dadurch NICHTS und bekommt KEINEN Kalenderzugriff - er sagt nur muendlich zu, was der Nutzer ihm vorab erlaubt hat. Frage den Nutzer nach seinem Rahmen, wenn im Anruf eine Termin- oder Preisfrage zu erwarten ist; ohne Mandat kann der Agent auf 'Wann passt es Ihnen?' nur mit 'Ich gebe das weiter' antworten. Bei Konflikt mit constraints gewinnt IMMER constraints.",
           ),
         context: z
           .object({

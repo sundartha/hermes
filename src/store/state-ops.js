@@ -117,6 +117,7 @@ export function createCall(
     briefing,
     constraints,
     context,
+    mandate,
     language,
     maxDurationS,
     requestedBy,
@@ -148,6 +149,10 @@ export function createCall(
     // Nur befuellt, wenn der Server das Flag an hat (sonst null -> Prompt-Block + Persist
     // byte-identisch). Speist KEINE Identitaetsgroesse; reine Hintergrund-Faerbung.
     context: context || null,
+    // P6 (PLAN-CONVERSATION-QUALITY-V2): Vorab-Mandat (additiv NULLABLE). Fehlt es ->
+    // null -> Prompt-Sektion "" -> Prompt + Persist byte-identisch zum Bestand. Erlaubt
+    // dem Agenten nur muendliche Zusagen im Owner-Rahmen, KEINE Buchung (E1).
+    mandate: mandate || null,
     // caller_name-Producer entfernt (G1, Identitaets-Bindung): die Offenlegung ist
     // an tenant.ownerName gebunden, NICHT per Call-Parameter setzbar. DB-Spalte
     // bleibt additiv nullable (kein destruktives Migrat) -> Feld bleibt im Record.

@@ -10,6 +10,8 @@ import holdWarteschleife from "./hold-warteschleife.mjs";
 import personenwechsel from "./personenwechsel.mjs";
 import spaeterNochmal from "./spaeter-nochmal.mjs";
 import unerfuellbareRecherche from "./unerfuellbare-recherche.mjs";
+import mandatInnerhalb from "./mandat-innerhalb.mjs";
+import mandatAusserhalb from "./mandat-ausserhalb.mjs";
 
 export const SCENARIOS = Object.freeze({
   [friseurVoll.id]: friseurVoll,
@@ -22,6 +24,8 @@ export const SCENARIOS = Object.freeze({
   [personenwechsel.id]: personenwechsel,
   [spaeterNochmal.id]: spaeterNochmal,
   [unerfuellbareRecherche.id]: unerfuellbareRecherche,
+  [mandatInnerhalb.id]: mandatInnerhalb,
+  [mandatAusserhalb.id]: mandatAusserhalb,
 });
 
 export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));

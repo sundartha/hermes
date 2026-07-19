@@ -150,6 +150,10 @@ CREATE TABLE IF NOT EXISTS call (
   -- recipient_relationship, desired_outcome) als JSONB. Additiv NULLABLE: nur befuellt bei
   -- ASSISTANT_CONTEXT_ENABLED, sonst NULL -> Bestand byte-identisch.
   context JSONB,
+  -- P6 (PLAN-CONVERSATION-QUALITY-V2): Vorab-Mandat (decide_freely, fallback_order,
+  -- on_out_of_scope) als JSONB. Additiv NULLABLE: nur befuellt, wenn place_call ein
+  -- Mandat mitgibt, sonst NULL -> Bestand byte-identisch.
+  mandate JSONB,
   -- CDF1 (Report #2 5.4): maschinenlesbarer, PII-freier Fehlergrund (mapped Token, z.B.
   -- no-answer/busy/failed:<sipcause>) NICHT erfolgreicher Calls. Additiv NULLABLE: im
   -- /voice/status-Callback aus der Provider-Diagnose gesetzt, sonst NULL -> Bestand
@@ -196,6 +200,9 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS assistant_id TEXT;
 -- P2b: Diagnose-Markierung auf einer schon existierenden call-Tabelle nachziehen.
 -- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FALSE;
+-- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).
+-- Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS mandate JSONB;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
