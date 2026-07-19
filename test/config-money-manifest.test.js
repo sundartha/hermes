@@ -16,7 +16,7 @@ import { CONFIG_NAMESPACES } from "../src/config.js";
 
 // EINE Liste aller Geld-Felder in config.js (G26: Cents-Ganzzahlen bzw. EUR/USD-Preise).
 const MONEY_CONFIG_KEYS = Object.freeze([
-  "maxBudgetCents",
+  "platformSpendCapCents",
   "numberSetupFeeCents",
   "voiceTariffDomesticCents",
   "voiceTariffDefaultCents",
@@ -32,7 +32,7 @@ const MONEY_CONFIG_KEYS = Object.freeze([
 const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;
 
 // PA-20 (Flip): config selbst traegt nur noch die 13 Namespaces (Object.keys(config) waere
-// hier blind - "maxBudgetCents" in config ist seit dem Flip false). Der Scan laeuft daher
+// hier blind - "platformSpendCapCents" in config ist seit dem Flip false). Der Scan laeuft daher
 // auf CONFIG_NAMESPACES (den 99 Blaettern), nicht mehr auf der Laufzeit-Oberflaeche - der
 // Manifest-Guard bleibt so wirksam statt vakuum-gruen zu werden.
 test("Geld-Manifest: jedes Cents-/Eur-/Usd-Feld in config.js ist im Manifest erfasst", () => {

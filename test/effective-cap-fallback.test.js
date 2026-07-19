@@ -29,11 +29,11 @@ const NO_TENANT_DEFAULT = 0;
 const DOMESTIC_RESERVE_CENTS = 60;
 
 const CFG_WITH_DEFAULT = Object.freeze({
-  maxBudgetCents: PLATFORM_CAP_CENTS,
+  platformSpendCapCents: PLATFORM_CAP_CENTS,
   defaultTenantBudgetCents: TENANT_DEFAULT_CENTS,
 });
 const CFG_SENTINEL_ZERO = Object.freeze({
-  maxBudgetCents: PLATFORM_CAP_CENTS,
+  platformSpendCapCents: PLATFORM_CAP_CENTS,
   defaultTenantBudgetCents: NO_TENANT_DEFAULT,
 });
 
@@ -112,7 +112,7 @@ test("Praezedenz: eine tenant_budget-Zeile schlaegt die Default-Decke", () => {
 // das Feld nicht) - ohne diesen Test waere das eine unbelegte Annahme.
 test("cfg ohne defaultTenantBudgetCents -> Plattform-Cap (byte-identisch zum Bestand)", () => {
   const s = makeDefaultState();
-  const CFG_OHNE_FELD = Object.freeze({ maxBudgetCents: PLATFORM_CAP_CENTS });
+  const CFG_OHNE_FELD = Object.freeze({ platformSpendCapCents: PLATFORM_CAP_CENTS });
   assert.equal(budgetExceeded(s, TENANT_A, CFG_OHNE_FELD), false, "leerer Bucket -> frei, kein 0-Cap");
   addVoiceUsageCostCents(s, TENANT_A, PLATFORM_CAP_CENTS - 1);
   assert.equal(budgetExceeded(s, TENANT_A, CFG_OHNE_FELD), false, "1199 < 1200 -> frei");

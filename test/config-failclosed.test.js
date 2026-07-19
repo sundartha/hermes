@@ -42,7 +42,7 @@ test("T-P2-02: gueltiges Budget -> kein neuer Fatal, korrekter Float-Wert", () =
 
 test("S1-COV-1: eurToCents rundet die JS-Float-Falle korrekt (0.29 EUR -> exakt 29 Cent, nicht 28)", () => {
   // 0.29 * 100 === 28.999999999999996 in JS-Float-Arithmetik (node -e verifiziert).
-  // Ohne Math.round wuerde maxBudgetCents lautlos knapp UNTER dem konfigurierten
+  // Ohne Math.round wuerde platformSpendCapCents lautlos knapp UNTER dem konfigurierten
   // MAX_BUDGET_EUR-Cap landen. Alle bisherigen Testwerte (1, 8, 12.5) sind exakt
   // darstellbar und haetten diesen Bug NICHT sichtbar gemacht.
   assert.equal(eurToCents(0.29), 29);

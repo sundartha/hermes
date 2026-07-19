@@ -70,7 +70,7 @@ function defaultConfig() {
     outboundFrozen: false,
     assistantContextEnabled: false,
     paymentEnabled: false,
-    maxBudgetCents: 800,
+    platformSpendCapCents: 800,
     allowedCountryCodes: ["+49"],
     maxCallsPerHour: 100,
     perTargetWindowMs: 3600000,
@@ -262,7 +262,7 @@ test("resolve_outbound: keine aktive Tenant-Nummer -> 403 grund=keine_tenant_num
 
 test("budget: store.budgetExceeded -> 402 grund=budget tenant=..., kein requestedBy, Meldung nennt globalCapEur", async () => {
   const { gates } = makeOutboundGates(
-    makeDeps({ store: { budgetExceeded: () => true }, config: { maxBudgetCents: 800 } }),
+    makeDeps({ store: { budgetExceeded: () => true }, config: { platformSpendCapCents: 800 } }),
   );
   const denial = await gateBy(gates, "budget").run(baseCtx());
   assert.equal(denial.status, 402);

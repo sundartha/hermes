@@ -107,7 +107,7 @@ test("telnyxAssistant: die 10 alten flachen Config-Pfade existieren nicht mehr",
 // obersten Flach-Keys statt der telnyxAssistant-internen Sub-Keys.
 test("Flip: die Flach-Aliase existieren nicht mehr (Read wirft TypeError)", () => {
   const removedFlatKeys = [
-    "maxBudgetCents",
+    "platformSpendCapCents",
     "allowedCountryCodes",
     "telnyxAssistant",
     "telnyxElevenLabs",

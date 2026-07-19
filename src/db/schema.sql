@@ -348,7 +348,7 @@ CREATE TABLE IF NOT EXISTS provisioning_job (
 -- Money als GANZZAHL Cents (G26). budget_cents = weiches Inklusiv-Kontingent,
 -- hard_cap_cents = harte Call-Sperre (budgetExceeded). PK = tenant_id (eine Zeile
 -- pro Tenant). KEINE Owner-Zeile geseedet: Owner ohne Zeile faellt auf
--- cfg.maxBudgetCents (byte-identisch zum Bestand).
+-- cfg.platformSpendCapCents (byte-identisch zum Bestand).
 CREATE TABLE IF NOT EXISTS tenant_budget (
   tenant_id      TEXT PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
   budget_cents   BIGINT NOT NULL,

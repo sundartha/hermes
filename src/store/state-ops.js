@@ -73,7 +73,7 @@ export function makeDefaultState() {
     // (RLS-fest, hydrierbar). [{ id, numberId, tenantId, kind, status, idempotencyKey, attempts, lastError }]
     provisioningJobs: [],
     // Per-Tenant-Kostendecke (P6b3): [{ tenantId, budgetCents, hardCapCents }].
-    // KEINE Owner-Vorbelegung -> Owner ohne Zeile faellt auf cfg.maxBudgetCents
+    // KEINE Owner-Vorbelegung -> Owner ohne Zeile faellt auf cfg.platformSpendCapCents
     // (budgetExceeded), byte-identisch zum Bestand.
     tenantBudgets: [],
     // Append-only Usage-Ledger (P6b3): Quelle fuer das Stripe-Metering (NICHT fuers
@@ -1694,7 +1694,7 @@ function globalSpendOrDeny(s) {
 }
 
 // Globaler Budget-Notaus (Plattform-Cap, R2): Summe ueber ALLE Tenant-Buckets
-// gegen config.billing.maxBudgetCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
+// gegen config.billing.platformSpendCapCents. Bleibt PARALLEL zum pro-Tenant-Budget bestehen
 // (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit dem
 // Owner-Bucket zusammen -> byte-identisch zum Bestand. Wird NIE entfernt. Rein
 // Integer costCents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
