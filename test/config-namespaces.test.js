@@ -40,7 +40,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
 };
 const EXPECTED_TOTAL_KEYS = 106;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (105 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (106 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
