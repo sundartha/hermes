@@ -27,8 +27,7 @@ import {
   requestNumber,
 } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
-
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
+import { PRICES, tokensOf } from "./_prices.js";
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert
 // den Spiegel aus der DB) - so wird Persistenz statt nur In-Memory geprueft.
@@ -182,14 +181,14 @@ test("countOutboundCallsSince mit und ohne requestedBy", async () => {
 
 test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
   const { store, db } = await makePgTestStore();
-  const usage = store.trackUsage(BOOTSTRAP_TENANT_ID, 1_000_000, 1_000_000, PRICES);
+  const usage = store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(1_000_000, 1_000_000), PRICES);
   const expectedUsd = 1.0 + 5.0;
   assert.equal(usage.inputTokens, 1_000_000);
   assert.equal(usage.outputTokens, 1_000_000);
   assert.equal(usage.costCents, 558);
   assert.equal(usage.costMicroCentsRem, 0);
   assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), false);
-  store.trackUsage(BOOTSTRAP_TENANT_ID, 0, 2_000_000, PRICES); // schiebt ueber 8 EUR
+  store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(0, 2_000_000), PRICES); // schiebt ueber 8 EUR
   assert.equal(store.budgetExceeded(BOOTSTRAP_TENANT_ID, PRICES), true);
   await store.save();
   const reopened = await reopen(db);

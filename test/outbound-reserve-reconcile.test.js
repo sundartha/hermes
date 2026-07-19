@@ -18,8 +18,8 @@ import {
   reserveExceedsBudget,
   addVoiceUsageCostCents,
 } from "../src/store/state-ops.js";
+import { PRICES, tokensOf } from "./_prices.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 const TENANT_A = "tenant_a";
 
 test("INV(1): teure Worst-Case-Reserve > kleiner Rest-Cap -> true (402 vor Dial)", () => {
@@ -96,7 +96,7 @@ test("Grenzfall (T5): Reconcile mit 0 ct laesst costCents unveraendert", () => {
 test("Bestand: trackUsage + budgetExceeded byte-identisch (Reconcile addiert nur dazu)", () => {
   const s = makeDefaultState();
   const TOKENS_PER_EUR = 1_000_000 / 0.93;
-  trackUsage(s, TENANT_A, Math.floor(TOKENS_PER_EUR * 7), 0, PRICES); // 7 EUR Token-Kosten
+  trackUsage(s, TENANT_A, tokensOf(Math.floor(TOKENS_PER_EUR * 7), 0), PRICES); // 7 EUR Token-Kosten
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "7 EUR < 8 EUR -> frei (Bestand)");
   addVoiceUsageCostCents(s, TENANT_A, 150); // +1.50 EUR Carrier -> 8.50 EUR ueber dem Cap
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), true, "Token + Carrier zusammen reissen den Cap");

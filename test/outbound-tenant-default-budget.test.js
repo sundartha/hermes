@@ -12,8 +12,8 @@ import {
   trackUsage,
   budgetExceeded,
 } from "../src/store/state-ops.js";
+import { PRICES, tokensOf } from "./_prices.js";
 
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 const DEFAULT_BUDGET_CENTS = 1000; // 10 EUR
 const TOKENS_PER_EUR = 1_000_000 / 0.93;
 
@@ -35,7 +35,7 @@ test("seeded Default-Budget hebt budgetExceeded auf den Default-Cap (ueber dem 8
   const s = makeDefaultState();
   registerTenant(s, "user_x", { defaultBudgetCents: DEFAULT_BUDGET_CENTS }); // 10 EUR
   // 9 EUR Verbrauch: ueber dem globalen 8-EUR-Default, aber unter dem 10-EUR-Tenant-Cap.
-  trackUsage(s, "user_x", Math.round(TOKENS_PER_EUR * 9), 0, PRICES);
+  trackUsage(s, "user_x", tokensOf(Math.round(TOKENS_PER_EUR * 9), 0), PRICES);
   assert.equal(budgetExceeded(s, "user_x", PRICES), false, "9 EUR < 10-EUR-Tenant-Cap -> frei");
 });
 

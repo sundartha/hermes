@@ -448,8 +448,8 @@ export function tenantContext(tenantId) {
 }
 
 // ---- Usage / Budget-Guard ----
-export function trackUsage(tenantId, inputTokens, outputTokens, cfg) {
-  const usage = ops.trackUsage(load(), tenantId, inputTokens, outputTokens, cfg);
+export function trackUsage(tenantId, tokens, cfg) {
+  const usage = ops.trackUsage(load(), tenantId, tokens, cfg);
   save();
   return usage;
 }

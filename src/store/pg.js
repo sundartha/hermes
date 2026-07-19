@@ -276,8 +276,8 @@ export function makePgStore(runner) {
     // (Wrapper-Parity zu json.js); der Owner-Tenant traegt ownerName im Store.
     tenantContext: (tenantId) => ops.tenantContext(requireState(), "", tenantId),
 
-    trackUsage(tenantId, inputTokens, outputTokens, cfg) {
-      const usage = ops.trackUsage(requireState(), tenantId, inputTokens, outputTokens, cfg);
+    trackUsage(tenantId, tokens, cfg) {
+      const usage = ops.trackUsage(requireState(), tenantId, tokens, cfg);
       save();
       return usage;
     },

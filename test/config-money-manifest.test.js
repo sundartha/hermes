@@ -23,8 +23,10 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   "defaultTenantBudgetCents",
   "smsCostCents",
   "usdToEur",
-  "priceInPerMTokUsd",
-  "priceOutPerMTokUsd",
+  // P7a: eine Preistabelle pro Modell-ID ersetzt die vormals zwei globalen
+  // Preis-Skalare (Input/Output pro 1M Tokens). Der Namens-Scan greift ueber
+  // das Usd-Suffix weiter.
+  "modelPricesUsd",
 ]);
 
 const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;

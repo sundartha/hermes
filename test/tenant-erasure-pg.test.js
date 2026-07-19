@@ -10,9 +10,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { makePgStore, BOOTSTRAP_TENANT_ID } from "../src/store/pg.js";
+import { PRICES, tokensOf } from "./_prices.js";
 
 const OTHER = "other";
-const PRICES = { priceInPerMTokUsd: 1.0, priceOutPerMTokUsd: 5.0, usdToEur: 0.93, maxBudgetCents: 800 };
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
 // Spiegel aus der DB), um Persistenz statt nur In-Memory zu pruefen.
@@ -199,7 +199,7 @@ test("Re-Hydrierung nach Erase: Owner-Calls leer, settings/usage/calendar ueberl
   const { store, db } = await setup();
   // Service/Identitaet/Budget-Gate vorab setzen, damit ihr Ueberleben pruefbar ist.
   store.updateSettings(BOOTSTRAP_TENANT_ID, { agentName: "Owner-Service" });
-  store.trackUsage(BOOTSTRAP_TENANT_ID, 1_000_000, 0, PRICES);
+  store.trackUsage(BOOTSTRAP_TENANT_ID, tokensOf(1_000_000, 0), PRICES);
   const c = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   store.addTranscript(c.id, "agent", "weg");
   await store.save();
