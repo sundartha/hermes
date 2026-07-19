@@ -35,8 +35,8 @@ test("OUT-05 F2: zwei gleichzeitige place_call gegen engen Cap -> genau 1x200, 1
     const denied = r1.status === 402 ? r1 : r2;
     assert.match(
       (await denied.json()).error,
-      /Anrufkosten/,
-      "402 kommt vom Reserve-Gate, nicht vom settled-Budget-Gate",
+      /es fehlen \d+\.\d{2} EUR/,
+      "402 kommt vom Reserve-Gate (Fehlbetrag-Text, P5a), nicht vom settled-Budget-Gate",
     );
     const dialed = r1.status === 200 ? r1 : r2;
     assert.equal((await dialed.json()).status, "dialing");

@@ -112,6 +112,10 @@ export const {
   budgetExceeded,
   globalBudgetExceeded,
   reserveExceedsBudget,
+  // Diagnose-Snapshot der Tenant-Achse (P5a): OHNE diesen Re-Export waere
+  // store.tenantBudgetSnapshot undefined -> makeReadRoutes/outbound-gates.js wuerfen zur
+  // Laufzeit einen TypeError. Muster wie reserveExceedsBudget (reine Query).
+  tenantBudgetSnapshot,
   addVoiceUsageCostCents,
   // Reserve-Ledger (OUT-05): OHNE diese Re-Exports sind sie auf der Fassade undefined -> die
   // server.js-Verdrahtung (F2) wuerfe zur Laufzeit einen TypeError. Muster wie reserveExceedsBudget.

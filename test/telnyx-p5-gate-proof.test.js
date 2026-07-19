@@ -281,7 +281,7 @@ test("Gate 13 Reserve: Worst-Case-Reserve > Cap blockt auch mit Flag an (402)", 
     ownerNumber: TELNYX_OWNER_NUMBER,
     to: "+12025550123", // US -> Worst-Case-Default-Tarif (teuer)
     status: 402,
-    grund: "reserve",
+    grund: "reserve_ueber_rest",
   });
-  assert.match((await res.json()).error, /Anrufkosten/);
+  assert.match((await res.json()).error, /es fehlen \d+\.\d{2} EUR/);
 });

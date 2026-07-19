@@ -642,7 +642,7 @@ const RICH_STATE = {
     model: "claude-haiku",
     secretAgentField: "agent-LEAK", // darf NIE durch
   },
-  usage: { calls: 3, costEur: 2.1, maxBudgetEur: 10, internalCounter: 999 },
+  usage: { calls: 3, costEur: 2.1, tenantCapEur: 10, internalCounter: 999 },
   settings: {
     allowCalendar: true,
     allowBooking: false,
@@ -661,11 +661,11 @@ const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/ag
 const AGENT_KEYS = [
   "calls",
   "costEur",
-  "maxBudgetEur",
   "model",
   "number",
   "owner",
   "permissions",
+  "tenantCapEur",
   "voiceEngine",
 ];
 const PERMISSIONS_STR = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
@@ -676,7 +676,7 @@ const agentStatusOutput = z.object({
   model: z.string(),
   calls: z.number(),
   costEur: z.number(),
-  maxBudgetEur: z.number(),
+  tenantCapEur: z.number(),
   permissions: z.string(),
 });
 

@@ -1674,6 +1674,26 @@ export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
   return spend.spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg);
 }
 
+// Diagnose-Snapshot der TENANT-Achse (P5a): Decke, Ist-Verbrauch und freier Rest in
+// GANZZAHL Cents aus DERSELBEN Quelle wie die Gate-Praedikate (effectiveCapCents,
+// usageFor, reservationFor). REIN LESEND: kein Praedikat, keine Entscheidung -
+// budgetExceeded/reserveExceedsBudget bleiben unveraendert die einzigen Gate-Fragen.
+// spentCents/remainingCents sind null, wenn der Bucket unbuchbar ist (D7); der Aufrufer
+// (outbound-gates.js) rendert dann KEINE Zahl, sondern einen ziffernfreien Sperrtext.
+// remainingCents zieht die bereits gebuchte In-Flight-Reserve ab (reservationFor) - der
+// "freie Rest" schliesst laufende Calls mit ein, wie reserveExceedsBudget es tut, und
+// kann bei bereits ueberreservierten Buckets legitim NEGATIV sein (kein D7-Fall, s.
+// outbound-gates.js tenantReserveDenial).
+// Bewusst NICHT ueber tenantSpendOrDeny: dessen denyCorruptUsage-Log gehoert an die
+// GATE-Kante, nicht an eine Anzeige, die /api/state bei jedem Dashboard-Poll aufruft
+// (sonst Log-Flut bei einem dauerhaft vergifteten Bucket).
+export function tenantBudgetSnapshot(s, tenantId, cfg) {
+  const capCents = effectiveCapCents(s, tenantId, cfg);
+  const spent = usageFor(s, tenantId).costCents;
+  if (!isBookableCents(spent)) return { capCents, spentCents: null, remainingCents: null };
+  return { capCents, spentCents: spent, remainingCents: capCents - spent - reservationFor(s, tenantId) };
+}
+
 // Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId
 // (eine Zeile pro Tenant). budgetCents = weiches Inklusiv-Kontingent (Billing-
 // Anzeige), hardCapCents = harte Call-Sperre (budgetExceeded). Reine Mutation,

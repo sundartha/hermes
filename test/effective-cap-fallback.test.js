@@ -14,6 +14,9 @@ import {
   budgetExceeded,
   reserveExceedsBudget,
   setTenantBudget,
+  tenantBudgetSnapshot,
+  usageFor,
+  tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
 
 const TENANT_A = "tenant_a";
@@ -118,4 +121,58 @@ test("cfg ohne defaultTenantBudgetCents -> Plattform-Cap (byte-identisch zum Bes
   assert.equal(budgetExceeded(s, TENANT_A, CFG_OHNE_FELD), false, "1199 < 1200 -> frei");
   addVoiceUsageCostCents(s, TENANT_A, 1);
   assert.equal(budgetExceeded(s, TENANT_A, CFG_OHNE_FELD), true, "1200 >= 1200 -> gesperrt");
+});
+
+// ---- (6) tenantBudgetSnapshot (P5a): reiner Diagnose-Leser, dieselbe Praezedenz/Quelle ----
+
+test("tenantBudgetSnapshot: Praezedenz Zeile > Default > 0-Sentinel-Plattform, gleiche Werte wie die Gate-Praedikate", () => {
+  const s = makeDefaultState();
+  // 0-Sentinel: kein Default -> Plattform-Cap.
+  assert.deepEqual(
+    tenantBudgetSnapshot(s, TENANT_A, CFG_SENTINEL_ZERO),
+    { capCents: PLATFORM_CAP_CENTS, spentCents: 0, remainingCents: PLATFORM_CAP_CENTS },
+    "0-Sentinel -> Cap ist der Plattform-Cap, unverbrauchter Bucket",
+  );
+  // Default-Decke.
+  assert.deepEqual(
+    tenantBudgetSnapshot(s, TENANT_A, CFG_WITH_DEFAULT),
+    { capCents: TENANT_DEFAULT_CENTS, spentCents: 0, remainingCents: TENANT_DEFAULT_CENTS },
+    "Default-Decke bindet ohne tenant_budget-Zeile",
+  );
+  // Zeile schlaegt Default (wie effectiveCapCents).
+  const ROW_CAP_CENTS = 500;
+  setTenantBudget(s, TENANT_A, { budgetCents: ROW_CAP_CENTS, hardCapCents: ROW_CAP_CENTS });
+  addVoiceUsageCostCents(s, TENANT_A, 120);
+  assert.deepEqual(
+    tenantBudgetSnapshot(s, TENANT_A, CFG_WITH_DEFAULT),
+    { capCents: ROW_CAP_CENTS, spentCents: 120, remainingCents: ROW_CAP_CENTS - 120 },
+    "eine tenant_budget-Zeile gewinnt gegen die Default-Decke - dieselbe Praezedenz wie budgetExceeded",
+  );
+});
+
+test("tenantBudgetSnapshot: remainingCents zieht die In-Flight-Reserve ab (reservationFor)", () => {
+  const s = makeDefaultState();
+  addVoiceUsageCostCents(s, TENANT_A, 100);
+  assert.equal(
+    tryReserveOutboundBudget(s, TENANT_A, DOMESTIC_RESERVE_CENTS, CFG_WITH_DEFAULT),
+    true,
+    "Vorbedingung: die Reserve muss tatsaechlich gebucht werden",
+  );
+  const snapshot = tenantBudgetSnapshot(s, TENANT_A, CFG_WITH_DEFAULT);
+  assert.equal(snapshot.capCents, TENANT_DEFAULT_CENTS);
+  assert.equal(snapshot.spentCents, 100, "settled Verbrauch bleibt unangetastet von der Reserve");
+  assert.equal(
+    snapshot.remainingCents,
+    TENANT_DEFAULT_CENTS - 100 - DOMESTIC_RESERVE_CENTS,
+    "der freie Rest schliesst die laufende In-Flight-Reserve ein, wie reserveExceedsBudget es tut",
+  );
+});
+
+test("tenantBudgetSnapshot: unbuchbarer Bucket (D7) -> spentCents/remainingCents === null, capCents bleibt lesbar", () => {
+  const s = makeDefaultState();
+  usageFor(s, TENANT_A).costCents = NaN;
+  const snapshot = tenantBudgetSnapshot(s, TENANT_A, CFG_WITH_DEFAULT);
+  assert.equal(snapshot.capCents, TENANT_DEFAULT_CENTS, "die Decke selbst ist unabhaengig vom vergifteten Bucket lesbar");
+  assert.equal(snapshot.spentCents, null, "kein Ist-Verbrauch gerendert - 'NaN EUR' waere eine Falschauskunft");
+  assert.equal(snapshot.remainingCents, null, "kein freier Rest gerendert (D7)");
 });

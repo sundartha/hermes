@@ -135,6 +135,33 @@ export const USAGE_EVENT_KIND = Object.freeze({
 // Integer costCents (P1) - keine Division im Gate-Pfad.
 export const CENTS_PER_EUR = 100;
 
+// Nachkommastellen der EUR-Anzeige in Ablehnungstexten (P5a). Benannte Konstante statt
+// nackter "2" in toFixed().
+export const EUR_DECIMALS = 2;
+
+// EINE Geld-nach-Text-Kante (G5/G25): Ablehnungstexte (outbound-gates.js) formatieren
+// Cents NUR hier zu einem EUR-String. api-read.js bleibt numerisch (JSON-Zahl, kein
+// String) - kein Duplikat derselben Formatierung.
+export function eurText(cents) {
+  return (cents / CENTS_PER_EUR).toFixed(EUR_DECIMALS);
+}
+
+// 'YYYY-MM-DD' - Laenge des ISO-Datumspraefix (G25, keine nackte 10 in slice()).
+const ISO_DATE_LENGTH = 10;
+
+// Letzter Tag des laufenden UTC-Kalendermonats (Spend-Monat-Achse, s. state-ops.js
+// spendMonthKeyOf/emptyUsage - dieselbe Achse, hier nur als Anzeige-Datum statt als
+// Vergleichsschluessel). Tag 0 des Folgemonats = letzter Tag des laufenden Monats;
+// Date.UTC normalisiert den Dezember-Ueberlauf selbst (Monat 12 -> Jahr+1, Monat 0).
+// nowMs kommt vom Aufrufer (Date.now()), damit dieses Modul zeit-frei bleibt (Muster
+// voiceMinutesUsedSince/setSuspendedAtIfAbsent) und der Wert nie unlesbar sein kann.
+// Reine Funktion.
+export function spendMonthEndDate(nowMs) {
+  const at = new Date(nowMs);
+  const lastDayOfMonth = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0));
+  return lastDayOfMonth.toISOString().slice(0, ISO_DATE_LENGTH);
+}
+
 // Sub-Cent-Aufloesung fuer die KI-Kosten-Akkumulation (Safety-BLOCKER P1): der
 // Sub-Cent-Anteil eines Turns (Haiku << 0,5 Cent) darf NICHT pro Inkrement auf 0
 // gerundet werden. trackUsage akkumuliert exakt in Mikro-Cents (1 Cent = 1e6) und
@@ -178,17 +205,12 @@ export function isBookableCents(x) {
 // gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
 export const TOKENS_PER_M_TOK = 1_000_000;
 
-// Globaler Notaus-Cap in EUR (Cents->EUR-Ruecklesung von cfg.platformSpendCapCents, G5:
-// EINE Divisionsstelle statt vier duplizierten `cfg.platformSpendCapCents / CENTS_PER_EUR`-
-// Stellen in server.js/api-read.js/state-ops.js). Reine Funktion von cfg, keine
-// State-Abhaengigkeit - api-read.js nutzt sie fuer die Anzeige-Projektion.
-export function globalCapEur(cfg) {
-  return cfg.platformSpendCapCents / CENTS_PER_EUR;
-}
-
-// Globaler Notaus-Cap in GANZZAHL Cents (G5: eine Quelle fuer das Gate-Rechnen in Cents;
-// Schwester zu globalCapEur, das fuer Anzeige/Fehlertext nach EUR ableitet). cfg.platformSpendCapCents
-// ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix im Gate.
+// Globaler Notaus-Cap in GANZZAHL Cents (G5: eine Quelle fuer das Gate-Rechnen in Cents).
+// cfg.platformSpendCapCents ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix
+// im Gate. Die EUR-Anzeige-Schwester (frueher globalCapEur) ist mit P5a entfallen: die
+// Plattform-Achse gibt NIE eine Zahl an einen Tenant heraus (Cross-Tenant-Leck-Riegel,
+// s. outbound-gates.js PLATFORM_DENIAL) - eine EUR-Ableitung dieses Caps hatte ab da
+// keinen Aufrufer mehr (F4, tote Funktion).
 export function globalCapCents(cfg) {
   return cfg.platformSpendCapCents;
 }

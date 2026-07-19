@@ -483,6 +483,12 @@ export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
   return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg);
 }
 
+// Diagnose-Snapshot der Tenant-Achse (P5a, Anzeige + Ablehnungstexte): reine Query,
+// kein save (wie budgetExceeded).
+export function tenantBudgetSnapshot(tenantId, cfg) {
+  return ops.tenantBudgetSnapshot(load(), tenantId, cfg);
+}
+
 // Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). nowIso s. trackUsage (P4).
 export function addVoiceUsageCostCents(tenantId, costCents) {
   const usage = ops.addVoiceUsageCostCents(load(), tenantId, costCents, new Date().toISOString());

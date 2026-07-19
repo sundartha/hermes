@@ -211,7 +211,7 @@ function pickAgentStatus(s) {
     model: s.agent.model,
     calls: s.usage.calls,
     costEur: s.usage.costEur,
-    maxBudgetEur: s.usage.maxBudgetEur,
+    tenantCapEur: s.usage.tenantCapEur,
     permissions: permissionsSummary(s.settings),
   };
 }
@@ -225,7 +225,7 @@ const AGENT_STATUS_OUTPUT = {
   model: z.string(),
   calls: z.number(),
   costEur: z.number(),
-  maxBudgetEur: z.number(),
+  tenantCapEur: z.number(),
   permissions: z.string(),
 };
 
@@ -687,7 +687,7 @@ export function registerTools(
             type: "text",
             text:
               `Agent-Nummer: ${data.number}\nBesitzer: ${data.owner}\nVoice-Engine: ${data.voiceEngine}\nModell: ${data.model}\n` +
-              `Calls bisher: ${data.calls}\nKI-Kosten: ${data.costEur.toFixed(3)} EUR von max. ${data.maxBudgetEur} EUR\n` +
+              `Calls bisher: ${data.calls}\nKI-Kosten: ${data.costEur.toFixed(3)} EUR von ${data.tenantCapEur} EUR eigenem Budget\n` +
               `Berechtigungen: ${data.permissions}`,
           },
         ],

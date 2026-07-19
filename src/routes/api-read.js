@@ -11,7 +11,7 @@
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
-import { globalCapEur, CENTS_PER_EUR } from "../store/defaults.js";
+import { CENTS_PER_EUR } from "../store/defaults.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -24,13 +24,21 @@ export const STATE_CALLS = 30,
 // abgeleitet (P1 Minor 1); interne Felder (costCents/costMicroCentsRem) verlassen die API
 // NICHT. mcp-tools.js (pickAgentStatus + Text-Render) liest dieses abgeleitete costEur ->
 // eine Quelle (G5), keine Dreifach-Ableitung.
-function usageView(u, config) {
+//
+// tenantCapEur (P5a, HARTE Migration, kein sanfter Bedeutungswechsel): der EFFEKTIVE
+// TENANT-Cap aus budget.capCents (tenantBudgetSnapshot) - NICHT mehr der globale
+// Plattform-Cap des Vorgaenger-Feldes. "3,50 von 8,00" neben dem globalen Cap sah gesund
+// aus, waehrend die eigene Decke laengst blockierte (D4) - der alte Schluessel entfaellt
+// ERSATZLOS, kein Schluessel-behalten-Bedeutung-wechseln. Die Plattform-Achse (globaler
+// Notaus) verlaesst diese Projektion NICHT: kein Feld hier leitet sich aus dem globalen
+// Cap oder der globalen Verbrauchssumme ab (Cross-Tenant-Leck-Riegel, Absolute Regel 4/6).
+function usageView(u, budget) {
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     calls: u.calls,
     costEur: u.costCents / CENTS_PER_EUR,
-    maxBudgetEur: globalCapEur(config.billing),
+    tenantCapEur: budget.capCents / CENTS_PER_EUR,
   };
 }
 
@@ -66,7 +74,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       calls: scoped.calls.slice(0, STATE_CALLS).map(publicCall),
       actionItems: scoped.actionItems.slice(0, STATE_ACTION_ITEMS),
       calendar: upcomingCalendar(store, tenantId).slice(0, STATE_CALENDAR),
-      usage: usageView(store.usageOf(tenantId), config),
+      usage: usageView(store.usageOf(tenantId), store.tenantBudgetSnapshot(tenantId, config.billing)),
       notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
       agent: {
         // Anzeige-Nummer = aktive Store-Nummer des Request-Tenants (auch der Owner ist

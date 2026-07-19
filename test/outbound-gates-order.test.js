@@ -62,6 +62,12 @@ function defaultStore() {
     globalBudgetExceeded: () => false,
     withStoreLock: (fn) => fn(),
     tryReserveOutboundBudget: () => true,
+    // P5a (Achsen in Anzeige/Ablehnung getrennt): tenantBudgetDenial/tenantReserveDenial
+    // lesen diesen Snapshot fuer die Ablehnungstexte. reserveExceedsBudget entscheidet nur
+    // noch, WELCHE Achse ein reserve_budget-Deny beschriftet - tryReserveOutboundBudget
+    // bleibt die einzige Ja/Nein-Quelle (s. reserve_budget-Test unten).
+    tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
+    reserveExceedsBudget: () => true,
   };
 }
 
@@ -260,14 +266,14 @@ test("resolve_outbound: keine aktive Tenant-Nummer -> 403 grund=keine_tenant_num
   );
 });
 
-test("budget: store.budgetExceeded -> 402 grund=budget tenant=..., kein requestedBy, Meldung nennt globalCapEur", async () => {
+test("budget: store.budgetExceeded -> 402 grund=budget_tenant tenant=..., kein requestedBy, Meldung nennt EIGENE Decke", async () => {
   const { gates } = makeOutboundGates(
     makeDeps({ store: { budgetExceeded: () => true }, config: { platformSpendCapCents: 800 } }),
   );
   const denial = await gateBy(gates, "budget").run(baseCtx());
   assert.equal(denial.status, 402);
-  assert.match(denial.body.error, /Budget-Limit von 8 EUR/);
-  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=budget tenant=T`);
+  assert.equal(denial.body.error, "Dein Budget-Limit ist erreicht: 3.50 von 10.00 EUR verbraucht.");
+  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=budget_tenant tenant=T`);
 });
 
 test("minutes: Plan-Minuten erschoepft -> 402 grund=minutes tenant=..., kein requestedBy", async () => {
@@ -297,13 +303,13 @@ test("reserve_budget: Store-Throw -> 402 grund=reserve_error, kein requestedBy (
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_error tenant=T`);
 });
 
-test("reserve_budget: tryReserveOutboundBudget=false -> 402 grund=reserve requestedBy=...", async () => {
+test("reserve_budget: tryReserveOutboundBudget=false -> 402 grund=reserve_ueber_rest requestedBy=...", async () => {
   const { gates } = makeOutboundGates(
     makeDeps({ store: { tryReserveOutboundBudget: () => false } }),
   );
   const denial = await gateBy(gates, "reserve_budget").run(baseCtx({ reserveCents: 100 }));
   assert.equal(denial.status, 402);
-  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve tenant=T requestedBy=owner`);
+  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_ueber_rest tenant=T requestedBy=owner`);
 });
 
 // === (c) Derivations-Gates (mutieren ctx, lehnen nie ab) =========================
