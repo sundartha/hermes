@@ -195,6 +195,10 @@ test("open-Handshake: session.update + response.create mit Offenlegungssatz (Out
     assert.equal(sessionUpdate.session.output_audio_format, "g711_ulaw");
     assert.equal(sessionUpdate.session.voice, "alloy");
     assert.ok(Array.isArray(sessionUpdate.session.tools));
+    // P5: der Barge-in-Halbsatz ist aus den Realtime-instructions gestrichen (Barge-in
+    // laeuft ueber server_vad, nicht per Modellanweisung) - der Prosodie-Hinweis bleibt.
+    assert.ok(!sessionUpdate.session.instructions.includes("Pausen"));
+    assert.ok(sessionUpdate.session.instructions.includes("natuerlich, zuegig, kurze Saetze"));
 
     const responseCreate = JSON.parse(raw1);
     assert.equal(responseCreate.type, "response.create");
