@@ -5,6 +5,13 @@
 // Zustands-Shape und delegieren die Mutationen hierher - so lebt die Fachlogik
 // (Call-Record-Aufbau, Retention-Praedikate, Kostenformel, ...) genau EINMAL
 // (Duplizierung vermieden). Die Backends kuemmern sich nur um Persistenz.
+//
+// Die Spend-Monat-Achse (spendMonthKey/spendMonthCostCents, P4) ist der UTC-KALENDERMONAT
+// und ausdruecklich NICHT die Stripe-ABRECHNUNGSPERIODE aus src/billing/period.js
+// (periodStartFromEnd/resolvePeriodStartIso, Spalte stripe_current_period_start). Der
+// Begriff "Periode" ist im Repo an Stripe vergeben und wird fuer diese Achse NICHT benutzt.
+// Bewusst nicht der Stripe-Anker: der ist ohne Abo fail-closed und wuerde jeden
+// pre-Payment-Tenant dauerhaft sperren - das Gegenteil des Ziels.
 import crypto from "crypto";
 import {
   defaultSettings,
@@ -1450,6 +1457,100 @@ function turnIncrementsBookable(tokens, microInc) {
   );
 }
 
+// ---- Spend-Monat-Achse (Budget-Achsen P4): additiv, INERT, kein Gate liest sie ----
+
+// UTC-Kalendermonat 'YYYY-MM' aus einem ISO-Zeitpunkt. EINZIGE Ableitungsstelle der
+// Spend-Monat-Achse (G5): lokal statt UTC gerechnet driftete der Rollover zwischen
+// json- und pg-Backend auseinander. Explizit getUTC* statt nowIso.slice(0, 7) - ein
+// ISO-String MIT Offset ("...T01:00+02:00") traegt im Praefix den LOKALEN Monat und
+// haette am Monatsersten den falschen Schluessel gestempelt.
+// Unlesbarer Anker -> null; die Aufrufer behandeln das als "kein Rollover", nie als
+// frischen Monat (fail-closed: eine kaputte Uhr darf den Zaehler nicht ruecksetzen).
+// Reine Funktion.
+function spendMonthKeyOf(nowIso) {
+  const at = new Date(nowIso);
+  if (Number.isNaN(at.getTime())) return null;
+  return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Der AUTORITATIVE Monatsschluessel eines Buckets zum Zeitpunkt nowKey: der SPAETERE aus
+// gespeichertem und laufendem Schluessel. 'YYYY-MM' ist lexikografisch = chronologisch
+// sortierbar -> String-Vergleich genuegt, keine zweite Datums-Arithmetik.
+//
+// EINZIGE Vergleichsregel der Achse (G5), GENAU ZWEI Aufrufer: die Leseprojektion
+// spendMonthUsageCents und der Schreiber bookCents. Beide stellen dieselbe Frage
+// ("weicht der autoritative Schluessel vom gespeicherten ab?") und lesen die Antwort
+// unterschiedlich: der Leser als "0", der Schreiber als "Zaehler startet neu".
+//
+// MONOTONIE-RIEGEL (Sicherheitskern): weil das MAXIMUM gebildet wird, kann der
+// Schluessel per Konstruktion NIE rueckwaerts wandern, und ein Schluessel in der
+// ZUKUNFT (Clock-Skew, falsch gestellte Container-Uhr) gewinnt - er liest NICHT als
+// frischer Monat und faellt NICHT auf 0. Ohne diesen Riegel waere die Achse ueber eine
+// einzige Uhr-Anomalie beliebig oft ruecksetzbar, also der Cap nach P7 abschaltbar.
+//
+// Semantik im Ueberblick (storedKey vs. nowKey):
+//   aelter   -> nowKey    (Rollover: Leser 0, Schreiber startet bei 0)
+//   gleich   -> nowKey    (Normalfall: weiterzaehlen)
+//   ZUKUNFT  -> storedKey (Riegel: kein Reset, kein Rueckwaerts-Stempel)
+//   kein nowKey (unlesbar) -> storedKey (fail-closed)
+//   kein storedKey (Bestandszeile/frischer Bucket) -> nowKey (erste Stempelung)
+// Reine Funktion.
+function authoritativeSpendMonthKey(storedKey, nowKey) {
+  if (!nowKey) return storedKey ?? null;
+  if (!storedKey) return nowKey;
+  return storedKey > nowKey ? storedKey : nowKey;
+}
+
+// Reine LESEPROJEKTION des Monatsverbrauchs in GANZZAHL Cents - KEINE Mutation, kein
+// Reset-Job, kein Cron, kein preDeploy (Render Free Tier hat weder Shell noch Jobs).
+// Liefert 0, sobald der gespeicherte Schluessel aelter als der laufende Monat ist; der
+// persistierte Zaehler bleibt dabei unangetastet und wird erst vom naechsten
+// Schreibvorgang neu gestartet. Ein Rollover an der LESEKANTE waere ein ungespeicherter
+// Schreibeffekt mitten im Gate-Pfad - usageFor legt den Bucket schon beim Lesen per ||=
+// an - und feuerte bei jedem /api/state-Poll.
+// nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei, Muster voiceMinutesUsedSince /
+// setSuspendedAtIfAbsent).
+// P4: INERT - KEIN Gate ruft diese Funktion. Der Flip ist P7.
+export function spendMonthUsageCents(bucket, nowIso) {
+  const key = authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
+  return key === bucket.spendMonthKey ? bucket.spendMonthCostCents : 0;
+}
+
+// EINZIGE Cent-Schreibstelle beider Geld-Achsen (G5): trackUsage (Cent-Uebertrag der
+// Mikro-Cent-Akkumulation) UND addVoiceUsageCostCents buchen hier, damit costCents und
+// spendMonthCostCents nie auseinanderlaufen KOENNEN. Genau diese Buendelung ist die
+// Gegenmassnahme zu "fail-open durch Vergessen" (Pre-Mortem TOD 2): eine kuenftige
+// dritte Schreibstelle, die nur costCents erhoeht, waere nach P7 ein blindes Gate ohne
+// Symptom - ein blindes Gate blockt nur nichts mehr.
+//
+// costCents bleibt UNVERAENDERT monoton (Lebenszeit-Forensik und die unabhaengige
+// Gegenprobe, gegen die sich eine vergessene Schreibstelle ueberhaupt nachweisen laesst
+// - der Grund, warum die Achse additiv und nicht ersetzend ist).
+//
+// MIKRO-CENT-REGEL (P1-Safety-BLOCKER): costMicroCentsRem wird hier BEWUSST NICHT
+// angefasst. Der Sub-Cent-Rest bleibt LEBENSZEIT-skaliert und ueberlebt jeden
+// Monatswechsel; nur der Cent-Zaehler ist periodisch. Ein mit-zurueckgesetzter Rest
+// waere nach P7 der wiederkehrende strukturelle Verlust des KI-Kostenanteils.
+//
+// Nebeneffekt im Namen (N7). Reine Mutation, kein IO.
+//
+// GRENZFALL null===null (Review-Blocker Runde 1): ist WEDER ein gespeicherter Schluessel
+// NOCH nowIso lesbar vorhanden, liefert authoritativeSpendMonthKey null (Zeile "kein
+// storedKey... -> nowKey" greift nicht, weil auch nowKey fehlt). Ohne den Explizit-Guard
+// unten waere die allgemeine Gleichheitspruefung "key === usage.spendMonthKey" hier
+// null===null=true und laese den Fall faelschlich als "derselbe Monat" durch -
+// spendMonthCostCents wuerde weiterakkumulieren, OBWOHL nie ein Monat gestempelt wurde
+// (Widerspruch zur MONOTONIE-Doku oben: "ohne Anker wird NIE gestempelt"). Der Guard
+// macht diesen Grenzfall zum expliziten No-Op auf der Spend-Monat-Achse - costCents
+// (Lebenszeit) bucht trotzdem weiter, nur die periodische Achse bleibt unangetastet.
+function bookCents(usage, cents, nowIso) {
+  usage.costCents += cents;
+  const key = authoritativeSpendMonthKey(usage.spendMonthKey, spendMonthKeyOf(nowIso));
+  if (key === null) return; // kein Anker je gestempelt UND nowIso unlesbar -> No-Op (kein Phantom-Betrag)
+  usage.spendMonthCostCents = key === usage.spendMonthKey ? usage.spendMonthCostCents + cents : cents;
+  usage.spendMonthKey = key;
+}
+
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
 // tokens = {inputTokens, outputTokens, model}; das Modell entscheidet die Preisstaffel
 // (P7a, fail-closed bei unbekannter ID). P1 Safety-BLOCKER: kein Per-Inkrement-Cent-
@@ -1460,7 +1561,9 @@ function turnIncrementsBookable(tokens, microInc) {
 // Rest reist ungerundet ueber die Inkremente mit, bis er selbst einen ganzen Cent
 // ergibt. Liefert den Bucket. Ein unbuchbarer Turn (D7) wird vor jeder Mutation
 // verworfen - der Bucket bleibt bit-identisch, der Rueckgabewert bleibt der Bucket.
-export function trackUsage(s, tenantId, tokens, cfg) {
+// nowIso (P4, optional): vom Aufrufer injizierter Zeitpunkt fuer die Spend-Monat-Achse
+// (Muster voiceMinutesUsedSince/setSuspendedAtIfAbsent, state-ops bleibt zeit-frei).
+export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
   const usage = usageFor(s, tenantId);
   const microInc = Math.round(
     tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT,
@@ -1473,7 +1576,9 @@ export function trackUsage(s, tenantId, tokens, cfg) {
   usage.inputTokens += tokens.inputTokens;
   usage.outputTokens += tokens.outputTokens;
   const totalMicro = usage.costMicroCentsRem + microInc;
-  usage.costCents += Math.floor(totalMicro / MICRO_CENTS_PER_CENT);
+  // Der volle Cent-Uebertrag geht ueber die EINE Buchungsstelle auf BEIDE Achsen; der
+  // Sub-Cent-Rest bleibt lebenszeit-skaliert im Bucket (P1-Safety-BLOCKER, s. bookCents).
+  bookCents(usage, Math.floor(totalMicro / MICRO_CENTS_PER_CENT), nowIso);
   usage.costMicroCentsRem = totalMicro % MICRO_CENTS_PER_CENT;
   return usage;
 }
@@ -1482,12 +1587,13 @@ export function trackUsage(s, tenantId, tokens, cfg) {
 // LIVE-usage-Bucket des Tenants (outbound-p1c Reconcile, D1). Ganze Cents, exakt (keine
 // Mikro-Cent-Bruecke noetig - der Voice-Tarif ist bereits Ganzzahl Cents/Minute). So sieht
 // der Budget-Gate (budgetExceeded) + die Vorab-Reservierung endlich die Carrier-Minuten.
+// nowIso (P4, optional): s. trackUsage.
 // Nebeneffekt im Namen (N7). Reine Mutation, kein IO (Wrapper saved).
-export function addVoiceUsageCostCents(s, tenantId, costCents) {
+export function addVoiceUsageCostCents(s, tenantId, costCents, nowIso) {
   const usage = usageFor(s, tenantId);
   if (!isBookableCents(costCents))
     return discardCorruptWrite(usage, `addVoiceUsageCostCents tenant:${tenantId}`, costCents);
-  usage.costCents += costCents;
+  bookCents(usage, costCents, nowIso);
   return usage;
 }
 
