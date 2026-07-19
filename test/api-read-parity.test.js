@@ -66,6 +66,8 @@ function makeMockStore({ listSize = 1 } = {}) {
     // (api-read.js) leitet costEur davon ab UND whitelistet - costCents/costMicroCentsRem
     // duerfen die API NICHT verlassen (s. Test unten).
     usageOf: () => ({ inputTokens: 5, outputTokens: 7, costCents: 200, costMicroCentsRem: 999, calls: 3 }),
+    // P5a: die Tenant-Achse (eigene Decke) - NICHT der globale Plattform-Cap (config.platformSpendCapCents=800).
+    tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 200, remainingCents: 800 }),
     getCall: (id) => calls.find((c) => c.id === id),
     getCalendar: () => [
       { end: FUTURE, title: "future" },
@@ -137,7 +139,7 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     // Flag aus -> ungefilterte Bestandsliste (beide Calls), durch publicCall.
     assert.equal(body.calls.length, 2);
     assertNoStreamToken(body, "/api/state"); // R3.1
-    assert.equal(body.usage.maxBudgetEur, 8);
+    assert.equal(body.usage.tenantCapEur, 10);
     // P1: costEur wird an DIESER Kante aus costCents abgeleitet (200 Cents -> 2.00 EUR);
     // die internen Felder costCents/costMicroCentsRem verlassen die API NICHT (Whitelist).
     assert.equal(body.usage.costEur, 2);

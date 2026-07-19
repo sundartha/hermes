@@ -34,13 +34,13 @@ test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert"
     },
   });
   try {
-    await t.test("internationales Ziel: Reserve 9 EUR > 1-EUR-Cap -> 402 grund=reserve", async () => {
+    await t.test("internationales Ziel: Reserve 9 EUR > 1-EUR-Cap -> 402 grund=reserve_ueber_rest", async () => {
       const res = await postCall(srv.localUrl, INTL);
       assert.equal(res.status, 402, "Worst-Case-Reserve ueberschreitet den Cap -> 402 vor Dial");
       assert.match(
         (await res.json()).error,
-        /Anrufkosten/,
-        "Reserve-Fehlertext (nicht das nachgelagerte Budget-Gate)",
+        /es fehlen 8\.00 EUR/,
+        "Reserve-Fehlertext (nicht das nachgelagerte Budget-Gate) nennt den Fehlbetrag",
       );
     });
 

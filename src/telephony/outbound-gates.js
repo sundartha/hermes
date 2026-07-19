@@ -27,7 +27,8 @@ import {
   hasTrunkZeroAfterCountryCode,
   homeCountryCode,
   normalizeDialTarget,
-  globalCapEur,
+  eurText,
+  spendMonthEndDate,
   DEFAULT_CALL_DURATION_S,
   MAX_CALL_DURATION_CAP_S,
 } from "../store/defaults.js";
@@ -84,6 +85,18 @@ const SECONDS_PER_MINUTE = 60;
 
 // EXPORT (server.js Pre-Gate-Check + numberGateError-Format-Branch nutzen ihn).
 export const E164_FORMAT_ERROR = "to muss E.164 sein, z.B. +4917212345678";
+
+// ---- Ablehnungstexte nach Achse getrennt (P5a) -----------------------------------
+// Der Plattform-Notaus ist eine BETREIBER-Groesse: die Meldung benennt ihn, nennt aber
+// NIE eine Zahl - weder den Cap noch die Summe ueber fremde Tenants. Eine Plattform-Zahl
+// in einer Tenant-Antwort waere ein Cross-Tenant-Leck (Absolute Regel 4/6). KONSTANTE
+// statt Template: der String kann per Konstruktion keinen Wert interpolieren.
+const PLATFORM_DENIAL = "Plattform-Notaus aktiv, bitte Betreiber kontaktieren.";
+const PLATFORM_DENIAL_REASON = "budget_platform";
+// Unlesbarer Verbrauchsstand (D7): die EIGENE Achse sperrt, aber es wird KEINE Zahl
+// gerendert - "NaN EUR" waere eine Falschauskunft auf einer Geld-Kante.
+const TENANT_UNREADABLE_DENIAL =
+  "Dein Budget ist gesperrt: der Verbrauchsstand ist nicht lesbar. Bitte Betreiber kontaktieren.";
 
 const isDenied = (to) =>
   EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
@@ -275,6 +288,57 @@ export function makeOutboundGates({
   function outboundFrom(s, tenantId) {
     const own = findActiveNumber(s, tenantId);
     return own ? { fromNumber: own.e164, provider: own.provider, numberRecord: own } : null;
+  }
+
+  // Ablehnungsgrund + -text der TENANT-Achse im budget-Gate (Bucket lesbar -> eigene Decke
+  // + eigener Verbrauch; unbuchbar (D7) -> ziffernfreier Sperrtext, s. TENANT_UNREADABLE_DENIAL).
+  // EIGENE Zahlen, NIE eine Plattform-Groesse (Absolute Regel 4/6, s. PLATFORM_DENIAL oben).
+  function tenantBudgetDenial(tenantId) {
+    const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
+    if (snapshot.spentCents === null)
+      return { grund: "budget_tenant", message: TENANT_UNREADABLE_DENIAL };
+    return {
+      grund: "budget_tenant",
+      message: `Dein Budget-Limit ist erreicht: ${eurText(snapshot.spentCents)} von ${eurText(snapshot.capCents)} EUR verbraucht.`,
+    };
+  }
+
+  // Ablehnungsgrund + -text der TENANT-Achse im reserve_budget-Gate: Fehlbetrag (EINE
+  // Formel fuer beide Reserve-Gruende: reserveCents - remainingCents) + Spend-Monat-Ende
+  // als Fakt (KEINE Reset-Zusage, P4-Achse ist vor P7 nicht die Gate-Quelle). Bucket
+  // unbuchbar (D7) -> ziffernfreier Sperrtext, Grund bleibt reserve_erschoepft (kein
+  // dritter Grund fuer denselben Sperrzustand).
+  function tenantReserveDenial(tenantId, reserveCents) {
+    const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
+    if (snapshot.remainingCents === null)
+      return { grund: "reserve_erschoepft", message: TENANT_UNREADABLE_DENIAL };
+    const missingEur = eurText(reserveCents - snapshot.remainingCents);
+    const monthEnd = spendMonthEndDate(Date.now());
+    if (snapshot.remainingCents > 0)
+      return {
+        grund: "reserve_ueber_rest",
+        message: `Dieser Anruf passt nicht mehr in dein Budget: es fehlen ${missingEur} EUR. Aktueller Spend-Monat endet am ${monthEnd}.`,
+      };
+    return {
+      grund: "reserve_erschoepft",
+      message: `Dein Budget ist erschoepft: es fehlen ${missingEur} EUR. Aktueller Spend-Monat endet am ${monthEnd}.`,
+    };
+  }
+
+  // Klassifiziert das Ergebnis von tryReserveOutboundBudget NACH Achse (Tenant vs.
+  // Plattform), OHNE eine zweite Entscheidung zu treffen: tryReserveOutboundBudget bleibt
+  // die EINZIGE Quelle des Ja/Nein (reserved). Bei Ablehnung fragt reserveExceedsBudget
+  // (reine Query, KEIN zweiter Reserve-Versuch) dieselbe Tenant-Decke, die
+  // tryReserveOutboundBudget intern schon geprueft hat - false dort heisst zwingend "die
+  // Plattform-Achse hat abgelehnt" (Schnittmenge, Regel 1). Laeuft im selben
+  // withStoreLock-Callback wie die Entscheidung (reserve_budget-Gate unten) und bleibt
+  // REIN SYNCHRON (Lock-Invariante des Moduls, s. Modul-Doc oben).
+  function reserveOutcome(ctx) {
+    const reserved = store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing);
+    if (reserved) return { reserved: true };
+    if (store.reserveExceedsBudget(ctx.tenantId, ctx.reserveCents, config.billing))
+      return { reserved: false, ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents) };
+    return { reserved: false, grund: PLATFORM_DENIAL_REASON, message: PLATFORM_DENIAL };
   }
 
   // Einheitliche Denial-Form (G5): audit === null bei reinen 400-Formatfehlern (keine
@@ -477,19 +541,27 @@ export function makeOutboundGates({
     },
     // Budget-Schnittmenge (R2): pro-Tenant-Budget UND globaler Notaus (Summe ueber alle
     // Buckets) PARALLEL, beide fail-closed. Der globale Notaus wird NIE entfernt; pro-Tenant
-    // schraenkt nur zusaetzlich ein.
+    // schraenkt nur zusaetzlich ein. PRAEZEDENZ (P5a, Achsen in Text getrennt): budgetExceeded
+    // wird IMMER geprueft, globalBudgetExceeded NUR wenn das erste false ist (wie zuvor per
+    // Kurzschluss-`&&`) - feuern BEIDE Achsen, gewinnt die EIGENE: der Nutzer bekommt die
+    // Zahl, auf die er reagieren kann, eine Plattform-Groesse erreicht ihn nie.
     {
       name: "budget",
       run(ctx) {
-        if (
-          !store.budgetExceeded(ctx.tenantId, config.billing) &&
-          !store.globalBudgetExceeded(config.billing)
-        )
-          return null;
-        return deny(402, { error: `Budget-Limit von ${globalCapEur(config.billing)} EUR erreicht.` }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=budget tenant=${ctx.tenantId}`,
-        });
+        if (store.budgetExceeded(ctx.tenantId, config.billing)) {
+          const { grund, message } = tenantBudgetDenial(ctx.tenantId);
+          return deny(402, { error: message }, {
+            event: "place_call_denied",
+            detail: `to=${ctx.to} grund=${grund} tenant=${ctx.tenantId}`,
+          });
+        }
+        if (store.globalBudgetExceeded(config.billing)) {
+          return deny(402, { error: PLATFORM_DENIAL }, {
+            event: "place_call_denied",
+            detail: `to=${ctx.to} grund=${PLATFORM_DENIAL_REASON} tenant=${ctx.tenantId}`,
+          });
+        }
+        return null;
       },
     },
     // Minuten-Kontingent-Gate (B2, GAP B): SEPARATES Gate NEBEN dem Budget-Gate (eigenes
@@ -534,15 +606,16 @@ export function makeOutboundGates({
     // store.withStoreLock (Schnittmenge Tenant+global) VOR dem Dial. INVARIANTE: der
     // Lock-Body ist REIN SYNCHRON - NIE ein Netz-await hierhinein. fail-closed: JEDER
     // Body-Throw (z.B. json-IO) gilt als Denial (402), NIE als reserviert, und darf keinen
-    // unhandled reject erzeugen.
+    // unhandled reject erzeugen. reserveOutcome (Achsen-Klassifizierung, P5a) laeuft IM
+    // selben Lock-Callback wie tryReserveOutboundBudget selbst: der Ablehnungstext
+    // beschreibt exakt den Zustand, auf dem die Entscheidung beruht - ein Nachlesen NACH
+    // dem Lock haette eine fremde, zwischenzeitliche Freigabe schon sehen koennen.
     {
       name: "reserve_budget",
       async run(ctx) {
-        let reserved;
+        let outcome;
         try {
-          reserved = await store.withStoreLock(() =>
-            store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing),
-          );
+          outcome = await store.withStoreLock(() => reserveOutcome(ctx));
         } catch (e) {
           console.error(`[place_call] reserve fehlgeschlagen tenant=${ctx.tenantId}:`, e.message); // secret-frei
           return deny(402, { error: "Reservierung fehlgeschlagen. Bitte erneut versuchen." }, {
@@ -550,15 +623,11 @@ export function makeOutboundGates({
             detail: `to=${ctx.to} grund=reserve_error tenant=${ctx.tenantId}`,
           });
         }
-        if (reserved) return null;
-        return deny(
-          402,
-          { error: "Voraussichtliche Anrufkosten ueberschreiten das verfuegbare Budget." },
-          {
-            event: "place_call_denied",
-            detail: `to=${ctx.to} grund=reserve tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,
-          },
-        );
+        if (outcome.reserved) return null;
+        return deny(402, { error: outcome.message }, {
+          event: "place_call_denied",
+          detail: `to=${ctx.to} grund=${outcome.grund} tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,
+        });
       },
     },
   ];

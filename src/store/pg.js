@@ -294,6 +294,9 @@ export function makePgStore(runner) {
     // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg),
+    // Diagnose-Snapshot der Tenant-Achse (P5a): reine Query, kein save (wie
+    // budgetExceeded). Wrapper-Parity zu json.js.
+    tenantBudgetSnapshot: (tenantId, cfg) => ops.tenantBudgetSnapshot(requireState(), tenantId, cfg),
     // Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). flushUsage persistiert
     // den costCents-Bucket des Tenants (als cost_eur-Spalte). nowIso s. trackUsage (P4).
     addVoiceUsageCostCents(tenantId, costCents) {

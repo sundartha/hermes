@@ -15,8 +15,9 @@
 // Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab), an
 // unveraenderter Mount-Position (vor makeReadRoutes). normNum/PROVIDER (store/defaults)
 // und isTrunkZeroFormatError/E164_FORMAT_ERROR (outbound-gates) kommen direkt aus ihrer
-// Heimat (eine Quelle, G5 - wie globalCapEur in makeReadRoutes); die Laufzeit-Instanzen
-// (Gate-Array, Timer, Terminierung, finishCall) und die request-tenant-Resolver werden
+// Heimat (eine Quelle, G5 - wie eurText/spendMonthEndDate in outbound-gates.js); die
+// Laufzeit-Instanzen (Gate-Array, Timer, Terminierung, finishCall) und die
+// request-tenant-Resolver werden
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";

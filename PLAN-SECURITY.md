@@ -508,3 +508,43 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 >
 > **Nicht beruehrt:** Kein Gate entfernt/aufgeweicht. `seedTenantDefaultBudget` (Seed
 > beim Registrieren) unveraendert. Kein Backfill bestehender Tenants, keine Migration.
+
+## P5A-ACHSENTRENNUNG — Achsen in Anzeige und Ablehnung getrennt (2026-07-19)
+
+> **Neue Informationskante:** `/api/state` und jede 402-Ablehnung des `budget`-/
+> `reserve_budget`-Gates (`src/telephony/outbound-gates.js`) nennen jetzt EIGENE
+> Budgetzahlen des anfragenden Tenants (Decke, Verbrauch, Fehlbetrag). Vorher stand in
+> `usage.maxBudgetEur` der GLOBALE Plattform-Cap neben dem TENANT-Verbrauch - "3,50 von
+> 8,00" sah gesund aus, waehrend die eigene Decke (oder die Plattform-Achse) laengst
+> blockierte (D4). Der alte Schluessel `maxBudgetEur` ist ERSATZLOS entfallen (kein
+> Schluessel-behalten-Bedeutung-wechseln), neuer Schluessel `tenantCapEur`
+> (`src/store/state-ops.js` `tenantBudgetSnapshot`, EINE Quelle mit den Gate-Praedikaten
+> `effectiveCapCents`/`usageFor`/`reservationFor`).
+>
+> **Begrenzt auf die EIGENE Tenant-Achse - die Plattform-Achse bleibt zahlenfrei.** Der
+> Plattform-Notaus (`globalBudgetExceeded`/`globalReserveExceedsBudget`) wird zwar
+> BENANNT (`grund=budget_platform`, Text "Plattform-Notaus aktiv, bitte Betreiber
+> kontaktieren."), gibt aber NIE eine Zahl heraus - weder den Cap noch die Summe ueber
+> fremde Tenants. Der Text ist ein interpolationsfreies String-Literal
+> (`PLATFORM_DENIAL`), der Plattform-Zweig liest `tenantBudgetSnapshot` gar nicht erst.
+> `globalCapEur` (die einzige EUR-Ableitung des Plattform-Caps) ist mit dieser Phase aus
+> dem Repo entfernt (tote Funktion, kein Aufrufer mehr) - eine Plattform-Zahl kann an
+> dieser Stelle strukturell nicht mehr in eine Tenant-Antwort geraten (Cross-Tenant-Leck,
+> Absolute Regel 4/6). Test: `test/deny-diagnosability.test.js`,
+> `test/api-state-usage-axis.test.js` (Whitelist-Assert auf die Feldmenge von `usage`).
+>
+> **Akzeptierte Kante (0-Sentinel, aus P2A-TENANTFALLBACK geerbt):** Steht
+> `DEFAULT_TENANT_BUDGET_CENTS=0` (Sentinel "kein Default-Seed"), faellt
+> `effectiveCapCents` laut P2A-Praezedenz auf den globalen Cap - `tenantCapEur` traegt
+> dann denselben Zahlenwert wie der Plattform-Cap. Das ist KEINE Plattform-Offenlegung:
+> es ist die real bindende eigene Decke DIESES Tenants, und es wird nie ein Plattform-
+> VERBRAUCH (Summe ueber fremde Tenants) sichtbar. Prod steht auf `DEFAULT_TENANT_BUDGET_
+> CENTS=600` (> 0), der P3-Boot-Guard `spendCapCoherence` haelt die Ordnung.
+>
+> **Kein Praedikat, keine Gate-Entscheidung geaendert.** `budgetExceeded` (`>=`) und
+> `reserveExceedsBudget` (`>`) sind unangetastet; `tenantBudgetSnapshot` ist eine rein
+> lesende Diagnose-Query auf DERSELBEN Quelle. Die Ablehnung nennt NIEMALS eine noch
+> ausfuehrbare `max_duration_s`/Sekunden/Minutenzahl - Fehlbetrag + Spend-Monat-Ende
+> erfuellen das Diagnose-Ziel, ohne dem aufrufenden LLM eine maschinenlesbare
+> Umgehungsanleitung fuer die Reserve-Berechnung zu liefern (per Negativ-Assert in jedem
+> Reserve-Testfall gepinnt).
