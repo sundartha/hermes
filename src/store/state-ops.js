@@ -724,6 +724,13 @@ export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } =
   return Boolean(tenant.ownerName);
 }
 
+// Findet die tenant_budget-Zeile eines Tenants (oder null). EINE Lookup-Stelle fuer
+// seedTenantDefaultBudget, effectiveCapCents UND setTenantBudget (G5-Review-Fix): vorher
+// stand derselbe s.tenantBudgets.find(...)-Aufruf wortgleich an allen drei Stellen.
+function tenantBudgetRow(s, tenantId) {
+  return s.tenantBudgets.find((b) => b.tenantId === tenantId) || null;
+}
+
 // Seedt die per-Tenant-Kostendecke EINMALIG beim Registrieren (outbound-p1c, D5): schreibt
 // die Decke als explizite tenant_budget-Zeile fest, damit sie auch dann bindet, wenn der
 // Config-Default spaeter gesenkt oder auf 0 gestellt wird (seit P2a ist der Config-Default
@@ -734,7 +741,7 @@ export function setTenantIdentityIfAbsent(s, tenantId, { firstName, lastName } =
 // unveraendert). Config-frei (Default kommt als Arg). Kein Throw, kein IO.
 function seedTenantDefaultBudget(s, tenantId, defaultBudgetCents) {
   if (!defaultBudgetCents) return; // 0/undefined -> kein Seed (kein 0-Cap-Tenant)
-  if (s.tenantBudgets.find((b) => b.tenantId === tenantId)) return;
+  if (tenantBudgetRow(s, tenantId)) return;
   setTenantBudget(s, tenantId, { budgetCents: defaultBudgetCents, hardCapCents: defaultBudgetCents });
 }
 
@@ -1507,7 +1514,7 @@ export function addVoiceUsageCostCents(s, tenantId, costCents) {
 // nicht-numerischen Wert ab (undefined > 0 ist false) und landet dann ebenfalls auf dem
 // Bestandsverhalten - die Abweichung geht immer Richtung Bestand, nie Richtung 0-Cap.
 function effectiveCapCents(s, tenantId, cfg) {
-  const budget = s.tenantBudgets.find((b) => b.tenantId === tenantId);
+  const budget = tenantBudgetRow(s, tenantId);
   if (budget) return budget.hardCapCents;
   const tenantDefaultCents = cfg.defaultTenantBudgetCents;
   return tenantDefaultCents > 0 ? tenantDefaultCents : globalCapCents(cfg);
@@ -1566,7 +1573,7 @@ export function reserveExceedsBudget(s, tenantId, reserveCents, cfg) {
 // Anzeige), hardCapCents = harte Call-Sperre (budgetExceeded). Reine Mutation,
 // kein IO. Money als GANZZAHL Cents (G26). Liefert die Zeile.
 export function setTenantBudget(s, tenantId, { budgetCents, hardCapCents }) {
-  const existing = s.tenantBudgets.find((b) => b.tenantId === tenantId);
+  const existing = tenantBudgetRow(s, tenantId);
   if (existing) {
     existing.budgetCents = budgetCents;
     existing.hardCapCents = hardCapCents;
