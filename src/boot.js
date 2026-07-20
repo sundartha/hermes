@@ -96,9 +96,20 @@ function assertProviderRateInBand(config) {
   process.exit(1);
 }
 
-// LCT P4: die zwei Riegel des Flips. Die Deckungsquote wird HIER GELESEN, aber NICHT
-// hier gerechnet: costTruingCoveragePercent (P3) ist die EINE Quelle fuer Sweep-Ausgabe
-// und beide Boot-Guards. Leere Pflicht-Menge = FATAL (ein Dienst, der Geld
+// LCT P4b (G5): die Deckungs-Eingabe beider Boot-Guards (P4 assertCostTruingBooking,
+// P4b warnVoiceTariffBelowFullCost) an EINER Stelle - beide vergleichen dieselbe live
+// aus dem Spiegel gerechnete Quote gegen dieselbe Schwelle. costTruingCoveragePercent
+// (P3) ist die EINE Quelle der Quote (auch fuer die Sweep-Ausgabe). store.load() ist
+// gecached, der Doppelaufruf beider Guards kostet kein zweites IO.
+function currentCoverage(config, store) {
+  return {
+    coveragePercent: costTruingCoveragePercent(store.load()),
+    minCoveragePercent: config.billing.costTruingMinCoveragePercent,
+  };
+}
+
+// LCT P4: die zwei Riegel des Flips. Deckungsquote + Schwelle liefert currentCoverage
+// (die EINE Quelle, s.o.). Leere Pflicht-Menge = FATAL (ein Dienst, der Geld
 // zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft, darf nicht
 // starten). Quote unter der Schwelle = WARN, kein exit(1) - ein Boot-Refusal tauschte
 // ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz warnUnpricedModels);
@@ -107,8 +118,7 @@ function assertCostTruingBooking(config, store) {
   const findings = costTruingBookingFindings({
     bookingEnabled: config.billing.costTruingBookingEnabled,
     requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
-    coveragePercent: costTruingCoveragePercent(store.load()),
-    minCoveragePercent: config.billing.costTruingMinCoveragePercent,
+    ...currentCoverage(config, store),
   });
   const fatal = findings.find((f) => f.fatal);
   if (fatal) {
@@ -140,16 +150,14 @@ function warnTariffDrift(config, store) {
 
 // LCT P4b: Vollkosten-Boot-Guard (WARN). Haelt den konfigurierten Inlandstarif gegen die
 // Vollkostenschwelle UND die live aus dem Spiegel gerechnete Deckungsquote. Feuert nur in
-// der Konjunktion (voiceTariffFloorFindings). Die Quote wird HIER GELESEN, aber NICHT hier
-// gerechnet: costTruingCoveragePercent (P3) ist die EINE Quelle (auch fuer den P4-Guard und
-// die Sweep-Ausgabe). WARN, kein exit(1). An KEIN Flag gekoppelt: der Tarif ist auch ohne
-// aktive Korrekturbuchung der Buchungswert jedes nicht abgeglichenen Calls.
+// der Konjunktion (voiceTariffFloorFindings). Deckungsquote + Schwelle liefert currentCoverage
+// (dieselbe EINE Quelle wie der P4-Guard). WARN, kein exit(1). An KEIN Flag gekoppelt: der
+// Tarif ist auch ohne aktive Korrekturbuchung der Buchungswert jedes nicht abgeglichenen Calls.
 function warnVoiceTariffBelowFullCost(config, store) {
   const findings = voiceTariffFloorFindings({
     domesticTariffCents: config.billing.voiceTariffDomesticCents,
     fullCostFloorCents: config.billing.voiceTariffFullCostFloorCents,
-    coveragePercent: costTruingCoveragePercent(store.load()),
-    minCoveragePercent: config.billing.costTruingMinCoveragePercent,
+    ...currentCoverage(config, store),
   });
   for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }

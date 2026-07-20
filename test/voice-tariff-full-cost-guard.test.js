@@ -2,11 +2,12 @@
 // test/cost-truing-booking-guard.test.js.
 //   (Wahrheitstabelle) Unit: voiceTariffFloorFindings (src/boot-guard.js) - reine
 //       Entscheidung, Konjunktion aus zwei Schwellen.
-//   (p)/(q)/(r) Boot-Beweis: Spawn-Tests, Muster fiveCallsSeed -> tenCallsSeed.
+//   (p)/(q)/(r) Boot-Beweis: Spawn-Tests, Seed-Bauer outboundCallsSeed (G5: geteilt mit
+//       cost-truing-booking-guard.test.js, definiert in test/helpers.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { voiceTariffFloorFindings, VOICE_TARIFF_FLOOR_FINDING } from "../src/boot-guard.js";
-import { startServer, seedState, seedCall } from "./helpers.js";
+import { startServer, seedState, outboundCallsSeed } from "./helpers.js";
 
 // ---- Unit: voiceTariffFloorFindings (Konjunktions-Wahrheitstabelle) ----
 
@@ -73,25 +74,13 @@ test("U6: Gleichstand Coverage==Schwelle (80<80 false) -> [] (strikt <, Gleichst
 });
 
 // ---- Boot-Beweis ----
-
-function outboundEndedCall(id, costTruedSource) {
-  return seedCall({ id, direction: "outbound", endedAt: new Date().toISOString(), costTruedSource });
-}
-
-// 10 beendete Outbound-Calls, davon `proven` mit costTruedSource='telnyx_detail_records'
-// (der Rest 'unavailable') - costTruingCoveragePercent liest NUR den Anteil DETAIL_RECORDS.
-function tenCallsSeed(proven) {
-  const calls = [];
-  for (let i = 0; i < 10; i++) {
-    calls.push(outboundEndedCall(`call_q_${i}`, i < proven ? "telnyx_detail_records" : "unavailable"));
-  }
-  return seedState({ calls });
-}
+// Seed-Bauer outboundCallsSeed (G5): geteilt mit cost-truing-booking-guard.test.js, in
+// test/helpers.js. 10 Calls, davon `proven` bewiesen, IDs mit Praefix call_q_.
 
 test("(p) Tarif 6 < Schwelle 10, Deckung 20% < 80% -> genau EINE WARN-Zeile mit beiden Zahlen, /healthz 200, kein exit", async () => {
   const srv = await startServer({
     env: { VOICE_TARIFF_DOMESTIC_CENTS: "6", VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "10" },
-    seed: tenCallsSeed(2),
+    seed: outboundCallsSeed(10, 2, "call_q_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -109,7 +98,7 @@ test("(p) Tarif 6 < Schwelle 10, Deckung 20% < 80% -> genau EINE WARN-Zeile mit 
 test("(q1) Tarif 6 < Schwelle 10, aber Deckung 90% >= 80% -> keine Meldung (offene Flanke, Vorbedingung 1 nicht eigenstaendig ueberwacht)", async () => {
   const srv = await startServer({
     env: { VOICE_TARIFF_DOMESTIC_CENTS: "6", VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "10" },
-    seed: tenCallsSeed(9),
+    seed: outboundCallsSeed(10, 9, "call_q_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -123,7 +112,7 @@ test("(q1) Tarif 6 < Schwelle 10, aber Deckung 90% >= 80% -> keine Meldung (offe
 test("(q2) Tarif 20 >= Schwelle 10, Deckung 20% < 80% -> keine Meldung (Guard feuert nur in der Konjunktion)", async () => {
   const srv = await startServer({
     env: { VOICE_TARIFF_DOMESTIC_CENTS: "20", VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "10" },
-    seed: tenCallsSeed(2),
+    seed: outboundCallsSeed(10, 2, "call_q_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);

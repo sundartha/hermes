@@ -414,6 +414,25 @@ export function seedCall(overrides = {}) {
   };
 }
 
+// LCT P4/P4b (G5): geteilter Seed fuer die Deckungsquote-Boot-Beweise. EINE Quelle statt
+// der frueher in cost-truing-booking-guard.test.js (fiveCallsSeed) und voice-tariff-full-
+// cost-guard.test.js (tenCallsSeed) je kopierten Bauer. Ein beendeter Outbound-Call traegt
+// costTruedSource; costTruingCoveragePercent liest NUR den Anteil 'telnyx_detail_records'.
+function outboundEndedCall(id, costTruedSource) {
+  return seedCall({ id, direction: "outbound", endedAt: new Date().toISOString(), costTruedSource });
+}
+
+// count beendete Outbound-Calls, davon die ersten `proven` als bewiesen
+// ('telnyx_detail_records'), der Rest 'unavailable'. `prefix` haelt die IDs je Aufrufer
+// eindeutig (call_p_ im P4-Test, call_q_ im P4b-Test).
+export function outboundCallsSeed(count, proven, prefix) {
+  const calls = [];
+  for (let i = 0; i < count; i++) {
+    calls.push(outboundEndedCall(`${prefix}${i}`, i < proven ? "telnyx_detail_records" : "unavailable"));
+  }
+  return seedState({ calls });
+}
+
 // Wartet, bis das stdout des Kindprozesses auf das Pattern matcht - die
 // HTTP-Antwort kommt oft an, BEVOR die Log-Pipe beim Parent eingetroffen ist.
 export async function waitForLog(srv, regex, timeoutMs = 3000) {
