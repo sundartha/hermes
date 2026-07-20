@@ -28,7 +28,23 @@ export const TARIFF_DRIFT_FINDING = Object.freeze({
   UNDERESTIMATE: "underestimate", // Tarif UNTER dem gemessenen p95 - Reserve deckt den Anruf nicht
   OVERESTIMATE: "overestimate", // Tarif ueber p95 um > warnPercent - die Vorfalls-Richtung
   INSUFFICIENT_SAMPLES: "insufficient_samples", // zu wenig Daten - KEIN Alarm, aber sichtbar
+  // Die Stichprobe LAG VOR, aber die Waehrungs-Umrechnung verliess den sicheren
+  // Integer-Bereich (providerMicroCentsToBucketCents -> null). EIGENER Code und ALARMIERBAR:
+  // faellt er mit insufficient_samples zusammen, verstummt der Waechter lautlos genau in dem
+  // Extremfall, den er entdecken soll (ein absurder actualCostMicroCents), und sieht dabei
+  // aus wie harmlose Datenknappheit. Ein Rechenfehler auf dem Geld-Pfad ist ein Befund,
+  // kein Nicht-Ereignis.
+  CONVERSION_ERROR: "conversion_error",
 });
+
+// Die EINE Stelle, an der steht, WELCHE Befunde alarmieren (G27: Struktur statt verstreuter
+// if-Bedingungen). null ("im Band") und insufficient_samples stehen bewusst NICHT drin -
+// sonst wird der Kanal taub trainiert.
+const ALERTABLE_DRIFT_CODES = Object.freeze([
+  TARIFF_DRIFT_FINDING.UNDERESTIMATE,
+  TARIFF_DRIFT_FINDING.OVERESTIMATE,
+  TARIFF_DRIFT_FINDING.CONVERSION_ERROR,
+]);
 
 // Nur BEWIESEN vollstaendig abgeglichene Calls (costTruedSource === DETAIL_RECORDS)
 // sind Stichproben. 'incomplete' ist systematisch ZU NIEDRIG - liesse man es zu,
@@ -102,28 +118,24 @@ function classifyDrift(configuredCentsPerMin, measuredCentsPerMin, warnPercent) 
 // Ein Eintrag EINES Praefixes: misst, entscheidet insufficient_samples VOR jeder
 // Tarif-Aussage, konvertiert dann in die Bucket-Waehrung und klassifiziert. F1 (<=3
 // Argumente): die vier Konfig-Groessen reisen als EIN params-Objekt (sie gehoeren
-// zusammen - derselbe Aufruf braucht immer alle vier).
+// zusammen - derselbe Aufruf braucht immer alle vier). Beide Ausstiege OHNE Messwert
+// setzen measuredCentsPerMin auf null, nie auf 0 (PM-4), unterscheiden sich aber im Code -
+// samples reist in JEDEM Fall mit und trennt "keine Daten" von "Daten, aber Rechenfehler".
 function driftEntryForPrefix(prefix, calls, params) {
   const { configuredCentsPerMin, providerToBucketRateMicro, minSamples, warnPercent } = params;
   const { samples, p95ProviderMicroCentsPerMin } = measuredCentsPerMinByPrefix(calls, prefix);
-  if (samples < minSamples)
-    return { prefix, code: TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES, samples, measuredCentsPerMin: null, configuredCentsPerMin };
+  const base = { prefix, samples, configuredCentsPerMin, measuredCentsPerMin: null };
+  if (samples < minSamples) return { ...base, code: TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES };
   const measuredCentsPerMin = providerMicroCentsToBucketCents(p95ProviderMicroCentsPerMin, providerToBucketRateMicro);
-  if (measuredCentsPerMin === null)
-    return { prefix, code: TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES, samples, measuredCentsPerMin: null, configuredCentsPerMin };
-  return {
-    prefix,
-    code: classifyDrift(configuredCentsPerMin, measuredCentsPerMin, warnPercent),
-    samples,
-    measuredCentsPerMin,
-    configuredCentsPerMin,
-  };
+  if (measuredCentsPerMin === null) return { ...base, code: TARIFF_DRIFT_FINDING.CONVERSION_ERROR };
+  return { ...base, code: classifyDrift(configuredCentsPerMin, measuredCentsPerMin, warnPercent), measuredCentsPerMin };
 }
 
 // Eintraege: { prefix, code, samples, measuredCentsPerMin, configuredCentsPerMin }
-// code === null heisst "im Band". insufficient_samples -> measuredCentsPerMin === null,
-// samples IMMER gesetzt: "kein Alarm" und "zu wenig Daten" duerfen nicht dieselbe
-// Beobachtung sein - P4b haengt sein Abnahmekriterium genau daran.
+// code === null heisst "im Band". insufficient_samples und conversion_error ->
+// measuredCentsPerMin === null, samples IMMER gesetzt: "kein Alarm", "zu wenig Daten" und
+// "Umrechnung gescheitert" duerfen nicht dieselbe Beobachtung sein - P4b haengt sein
+// Abnahmekriterium genau daran.
 export function tariffDriftReport({ calls, prefixes, ...params }) {
   return prefixes.map((prefix) => driftEntryForPrefix(prefix, calls, params));
 }
@@ -146,21 +158,23 @@ export function tariffDriftReportFromConfig(calls, billing) {
   });
 }
 
-// Die EINE Stelle, an der "insufficient_samples alarmiert nicht" steht - als Filter,
-// nicht als verstreute if-Bedingung. Sonst wird der Kanal taub trainiert.
+// Der Filter gegen ALERTABLE_DRIFT_CODES, nicht gegen verstreute if-Bedingungen. Die
+// Entprellung des Aufrufers greift je Praefix UND Code, also auch fuer conversion_error.
 export function alertableDriftFindings(report) {
-  return report.filter(
-    (e) => e.code === TARIFF_DRIFT_FINDING.UNDERESTIMATE || e.code === TARIFF_DRIFT_FINDING.OVERESTIMATE,
-  );
+  return report.filter((e) => ALERTABLE_DRIFT_CODES.includes(e.code));
 }
 
 // Eine PII-freie Zeile je Eintrag (Praefix wie "+49" ist keine Rufnummer). Nennt
 // IMMER stichproben=; bei insufficient_samples zusaetzlich fenster= (laut, nicht still -
 // eine Fehlkonfiguration wie minSamples > DRIFT_SAMPLE_WINDOW bleibt sichtbar statt
-// als stiller Dauer-Alarm-Ausfall).
+// als stiller Dauer-Alarm-Ausfall). conversion_error nennt KEIN fenster= (die Daten waren
+// da) und behauptet auch keinen Messwert - "gemessen=null" laese sich als 0 lesen.
 export function driftLine(entry) {
   const head = `praefix=${entry.prefix} stichproben=${entry.samples}`;
   if (entry.code === TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES)
     return `${head} fenster=${DRIFT_SAMPLE_WINDOW} befund=${entry.code}`;
-  return `${head} konfiguriert=${entry.configuredCentsPerMin}ct gemessen=${entry.measuredCentsPerMin}ct befund=${entry.code ?? "im_band"}`;
+  const configured = `konfiguriert=${entry.configuredCentsPerMin}ct`;
+  const befund = `befund=${entry.code ?? "im_band"}`;
+  if (entry.code === TARIFF_DRIFT_FINDING.CONVERSION_ERROR) return `${head} ${configured} ${befund}`;
+  return `${head} ${configured} gemessen=${entry.measuredCentsPerMin}ct ${befund}`;
 }

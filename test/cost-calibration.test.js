@@ -238,6 +238,55 @@ test("P5-14: alertableDriftFindings enthaelt underestimate+overestimate, nie ins
   assert.ok(alertable.every((e) => e.code !== TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES));
 });
 
+// Ueberlauf-Fixture: volle Stichprobe (20 >= minSamples), aber jeder Ist-Betrag liegt an
+// Number.MAX_SAFE_INTEGER. providerMicroCentsPerMinOf laesst ihn noch durch (er IST ein
+// sicherer Integer), erst providerMicroCentsToBucketCents kippt bei der Multiplikation mit
+// rateMicro aus dem sicheren Bereich. Genau der Fall, in dem der Waechter frueher wie
+// harmlose Datenknappheit aussah.
+function overflowSamples(prefix, n) {
+  return Array.from({ length: n }, (_, i) => ({
+    ...driftSample({ to: prefix, costCts: 1, endedMinutesAgo: 1 + i }),
+    actualCostMicroCents: Number.MAX_SAFE_INTEGER,
+  }));
+}
+
+test("P5-16: Umrechnungs-Ueberlauf bei voller Stichprobe -> conversion_error (NICHT insufficient_samples) UND alarmierbar", () => {
+  const report = tariffDriftReport({
+    calls: overflowSamples("+49", 20),
+    prefixes: ["+49"],
+    configuredCentsPerMin: 20,
+    providerToBucketRateMicro: NEUTRAL_RATE_MICRO,
+    minSamples: 20,
+    warnPercent: 50,
+  });
+  const [entry] = report;
+  assert.notEqual(
+    entry.code,
+    TARIFF_DRIFT_FINDING.INSUFFICIENT_SAMPLES,
+    "ein Umrechnungsfehler darf nicht als Datenknappheit getarnt werden",
+  );
+  assert.equal(entry.code, TARIFF_DRIFT_FINDING.CONVERSION_ERROR);
+  assert.equal(entry.measuredCentsPerMin, null, "kein Messwert - aber auch nie 0 (PM-4)");
+  assert.equal(entry.samples, 20, "die Stichprobenzahl reist mit: Daten LAGEN vor");
+  assert.equal(alertableDriftFindings(report).length, 1, "der Geld-Pfad-Fehler alarmiert");
+});
+
+test("P5-17: driftLine bei conversion_error nennt stichproben, aber kein fenster= und kein gemessen=null", () => {
+  const [entry] = tariffDriftReport({
+    calls: overflowSamples("+49", 20),
+    prefixes: ["+49"],
+    configuredCentsPerMin: 20,
+    providerToBucketRateMicro: NEUTRAL_RATE_MICRO,
+    minSamples: 20,
+    warnPercent: 50,
+  });
+  const line = driftLine(entry);
+  assert.match(line, /stichproben=20/);
+  assert.match(line, /befund=conversion_error/);
+  assert.doesNotMatch(line, /fenster=/, "kein Datenknappheits-Vokabular");
+  assert.doesNotMatch(line, /gemessen=null/, "null ist kein Messwert");
+});
+
 test("P5-15: PII - der Report traegt die volle Rufnummer nirgends, nur den Praefix", () => {
   const PII_PHONE = "+4915155512345";
   const calls = uniformSamples(PII_PHONE, 20, 20);

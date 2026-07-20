@@ -293,8 +293,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
   // hoechstens EINE Meldung je Praefix und Befund-Code je COST_ALERT_DEBOUNCE_MS (24 h) ->
-  // bei 3 Praefixen x 2 alarmierenden Codes maximal 6 SMS am Tag, statt 4 Meldungen je
-  // Befund und Tag aus dem 6-h-Sweep.
+  // bei 3 Praefixen x 3 alarmierenden Codes (ALERTABLE_DRIFT_CODES) maximal 9 SMS am Tag,
+  // statt 4 Meldungen je Befund und Tag aus dem 6-h-Sweep. Der Schluessel traegt den Code,
+  // conversion_error entprellt also getrennt von under-/overestimate.
   function alertDrift(entry, nowMs) {
     if (!shouldEmitFinding(`${entry.prefix} ${entry.code}`, nowMs)) return;
     const detail = driftLine(entry);
