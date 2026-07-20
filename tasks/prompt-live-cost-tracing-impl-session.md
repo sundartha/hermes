@@ -11,7 +11,9 @@ Lies das Dokument zuerst vollstaendig; es ist die Arbeitsgrundlage und setzt kei
 Gespraechskontext voraus. Alle acht Owner-Entscheidungen sind darin bereits getroffen
 (Kapitel 8), es gibt nichts mehr zu klaeren, was den Zuschnitt betrifft.
 
-Stand: `master @ 89d8ef9`. Der Plan ist committet, **nichts davon ist umgesetzt**.
+Stand: `master @ d8ed32b`, live laeuft `450fd12`. Der Plan ist committet, **nichts davon
+ist umgesetzt**. Zwischen Live-Stand und `master` liegt ausschliesslich Dokumentation —
+kein Code-Rueckstand, den ein Deploy mitbraechte.
 
 ## Deine Rolle: Lead, und zwar duenn
 
@@ -98,13 +100,20 @@ in den Commit. Immer die geaenderten Dateien einzeln adden.
 
 Arbeite die Phasen in der Reihenfolge aus Kapitel 7 ab. Zwei Dinge musst du wissen:
 
-- **P6 hat eine harte Vorbedingung ausserhalb dieses Plans:** `MAX_BUDGET_EUR` muss
-  angehoben sein, bevor P6 ausgeliefert wird (Entscheidung 8). Heute steht der
-  Plattform-Deckel auf 800 Cent, die entschiedene Business-Decke betraegt 900 Cent — P6
-  laesst sich ohne die Anhebung nicht regelkonform ausliefern und wuerde am Boot-Guard
-  fatal scheitern. **Frag den Owner, ob die Anhebung erfolgt ist, bevor du P6 startest.**
-- **P2 beruehrt das DB-Schema.** `hermes-db` lief am 2026-07-24 ab — pruefe den aktuellen
-  Stand der Datenbank, bevor du eine Migration planst.
+- **Die Vorbedingung von P6 ist ERLEDIGT.** Entscheidung 8 verlangte, `MAX_BUDGET_EUR`
+  anzuheben, bevor P6 ausgeliefert wird. Das ist am 2026-07-20 geschehen: der
+  Plattform-Deckel steht live auf **30 EUR** (3000 Cent), vorher 8. Die entschiedene
+  Business-Decke von 900 Cent passt damit hinein, `spendCapCoherence` ist zufrieden.
+  Du musst hier nichts mehr erfragen — **aber lies den Live-Wert vor P6 einmal nach**
+  (die Env ist Dashboard-verwaltet und kann sich ausserhalb des Repos geaendert haben).
+  Faellt er unter die abgeleitete Business-Decke, verweigert der Boot-Guard aus P6 den
+  Start; das ist gewollt und faengt den Fall laut ab.
+- **P2 beruehrt das DB-Schema.** `hermes-db` laeuft am **2026-07-24** ab — pruefe den
+  aktuellen Stand der Datenbank, bevor du eine Migration planst.
+- **Die Prod-DB enthaelt noch Testdaten.** 26 von 28 Tenants sind Testkonten (in WorkOS
+  geloescht, in Hermes stehengeblieben); ihre Entfernung ist eine eigene Baustelle. Wenn
+  eine Phase etwas an der Prod-DB misst, lies Tenant-Zahlen entsprechend vorsichtig — nur
+  `owner` und der Tenant auf `...ZQKWZMTH` tragen echte Historie.
 - Der Rueckbau des Telnyx-Assistant-Pfads (Entscheidung 5) ist **Folgearbeit ausserhalb
   dieser Kette** und blockiert nichts. Erst wenn er gemergt ist, darf die Vollkostenschwelle
   `VOICE_TARIFF_FULL_COST_FLOOR_CENTS` von 10 auf 5 EUR-Cent sinken. Ausloeser ist der
