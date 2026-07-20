@@ -14,16 +14,18 @@ import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
+import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
 
-// deps: { config, store, audit, billing, tenant }. config ist das globale Config-
-// Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs). store traegt
+// deps: { config, store, audit, billing, tenant, costTruing }. config ist das globale
+// Config-Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs). store traegt
 // load/save. audit ist util.audit (loggt nur Keys, keine Werte/Secrets). billing ist
 // die EINE stripeBilling-Instanz (Stripe-Port). tenant buendelt die request-tenant-
-// Resolver: requireTenant (tenant-gescopt; REJECT -> 403).
-export function makeBillingRoutes({ config, store, audit, billing, tenant: { requireTenant } }) {
+// Resolver: requireTenant (tenant-gescopt; REJECT -> 403). costTruing ist die EINE
+// LCT-P3-Instanz (INV-7, in server.js konstruiert).
+export function makeBillingRoutes({ config, store, audit, billing, tenant: { requireTenant }, costTruing }) {
   const router = Router();
 
   // ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
@@ -63,6 +65,21 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
     if (healed) audit("stripe_customer_self_heal", req, `tenant=${tenant}`);
     audit("billing_setup_checkout", req, `tenant=${tenant}`);
     res.json({ url: session.url });
+  });
+
+  // ---- Kosten-Abgleich manuell anstossen (LCT P3) ----
+  // Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab) - KEIN MCP-Tool
+  // (Muster flush-meters, R4: kein offener ungegateter Geld-naher Endpunkt). BEWUSST
+  // OHNE PAYMENT_ENABLED-Gate: der Abgleich ist Beobachtung der Kosten-Achse, die - wie
+  // reconcileOutboundVoiceBudget - auch ohne Zahlungspfad laeuft; ein 404 hier machte den
+  // Job im heutigen Live-Betrieb unausloesbar. NICHT tenant-gescopt: ein Plattform-Job
+  // ueber alle Tenants (Muster flush-meters). Antwort = NUR Zaehler + Quote, keine
+  // Call-IDs, keine Rufnummern, keine Tenant-Kennungen. Ausloeser Nummer zwei neben dem
+  // Intervall - der Laufriegel im Modul faengt die Ueberlappung.
+  router.post("/api/billing/cost-truing/sweep", async (req, res) => {
+    const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    audit("cost_truing_sweep", req, `skipped=${result.skipped} deckung=${result.coveragePercent ?? "-"}%`);
+    res.json(result);
   });
 
   router.get("/api/billing/checkout-return", async (req, res) => {

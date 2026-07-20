@@ -130,6 +130,16 @@ export const USAGE_EVENT_KIND = Object.freeze({
   NUMBER_MONTH: "number_month",
 });
 
+// LCT P3: Herkunft des Ist-Werts am Call (costTruedSource). KEINE dritte Kosten-Achse -
+// eine Herkunftsangabe. 'incomplete' = Records da, Pflicht-Menge nicht vollstaendig
+// (auch bei LEERER Pflicht-Menge: die beweist nichts). 'unavailable' = nicht gemessen
+// (ok:false, leere Antwort, unparsbare Summe) und NIEMALS "Kosten = 0".
+export const COST_TRUING_SOURCE = Object.freeze({
+  DETAIL_RECORDS: "telnyx_detail_records",
+  INCOMPLETE: "incomplete",
+  UNAVAILABLE: "unavailable",
+});
+
 // Cent<->EUR-Bruecke (G25): EUR-Ableitung an Anzeige-/Persistenz-Kanten (z.B.
 // api-read.js usageView, pg.js flushUsage). Das Budget-Gate selbst vergleicht rein
 // Integer costCents (P1) - keine Division im Gate-Pfad.

@@ -21,7 +21,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
   // P1 (Live-Cost-Tracing): providerCurrency ergaenzt (Waehrung der Provider-CDR) -> 19.
   // P2 (Live-Cost-Tracing): providerToBucketRateMicro ergaenzt (Kurs Provider->Bucket) -> 20.
-  billing: 20,
+  // P3 (Live-Cost-Tracing): sieben Kosten-Abgleich-Felder ergaenzt (costTruingDelayMinutes,
+  // costTruingMaxAttempts, costTruingRequiredRecordTypes, costTruingMinCoveragePercent,
+  // costTruingCoverageStallSweeps, costDriftWarnPercent, costAlertDebounceMs) -> 27.
+  billing: 27,
   provisioning: 11,
   auth: 15,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
@@ -40,9 +43,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 108;
+const EXPECTED_TOTAL_KEYS = 115;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (108 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (115 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -107,7 +110,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // P7: budgetMonthEnabled ist ebenfalls primitiv (Boolean, kein Array/nested Objekt) -> 99.
   // P1 (Live-Cost-Tracing): providerCurrency ist ebenfalls primitiv (String) -> 100.
   // P2 (Live-Cost-Tracing): providerToBucketRateMicro ist ebenfalls primitiv (Zahl) -> 101.
-  assert.equal(checked, 101, "alle primitiven Blaetter (108 - 3 Arrays - 4 nested Objekte) geprueft");
+  // P3 (Live-Cost-Tracing): sechs der sieben neuen Felder sind primitiv (Zahl) -> 107.
+  // costTruingRequiredRecordTypes ist das VIERTE Array (kein primitives Blatt, s.u.).
+  assert.equal(checked, 107, "alle primitiven Blaetter (115 - 4 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {
