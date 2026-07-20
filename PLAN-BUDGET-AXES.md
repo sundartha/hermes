@@ -24,8 +24,16 @@ gemeintes Limit (`MAX_BUDGET_EUR=8` -> 800 Cent) geprueft wird. Der Zaehler steh
 Der Zustand ist **selbstverriegelnd**: weil kein Call mehr zustande kommt, waechst der
 Zaehler nie auf 800, das einfachere `budget`-Gate schweigt dauerhaft, und der Nutzer sieht
 nie die verstaendlichere Meldung. Verschaerfend: der 800-Cent-Topf ist ein GETEILTER Topf
-ueber alle 28 Tenants — 55 % davon halten fremde Nutzer. Der Owner kann aktuell nicht
-telefonieren.
+ueber alle 28 Tenants. Der Owner kann aktuell nicht telefonieren, weil andere Konten den
+gemeinsamen Topf gefuellt haben.
+
+**Praezisierung der Schwere (Korrektur):** Eine fruehere Fassung nannte das ein Problem
+"fremder Tenants". Das ist die falsche Rahmung — in einem Multi-Tenant-Produkt sind andere
+Tenants KUNDEN, kein Fremdkoerper. Der Defekt ist nicht, WER den Topf haelt, sondern DASS
+es einen gemeinsamen Topf gibt. Bei 6 Tenants heisst das, dass einer die anderen blockiert.
+Bei der angestrebten Skala heisst dasselbe: **ein einzelner beliebiger Nutzer schaltet den
+Dienst fuer alle ab** — dauerhaft, weil der Zaehler nie zurueckgesetzt wird. In diesem
+Punkt war die Mehrmandantenfaehigkeit bisher nur behauptet, nicht vorhanden.
 
 ---
 
@@ -36,10 +44,10 @@ telefonieren.
 | Tenant | Verbrauch | Calls |
 | --- | --- | --- |
 | Owner-Nutzer (der blockierte Tenant) | 3.50 EUR | 19 |
-| Fremd-Tenant B | 1.62 EUR | 11 |
-| Fremd-Tenant C | 1.42 EUR | 9 |
-| Fremd-Tenant D | 0.81 EUR | 4 |
-| Fremd-Tenant E | 0.41 EUR | 4 |
+| Tenant B | 1.62 EUR | 11 |
+| Tenant C | 1.42 EUR | 9 |
+| Tenant D | 0.81 EUR | 4 |
+| Tenant E | 0.41 EUR | 4 |
 | `owner` (Bootstrap) | 0.03 EUR | 14 |
 | **Summe** | **7.79 EUR** | **61** |
 
@@ -47,9 +55,11 @@ Die Tenant-IDs sind hier bewusst pseudonymisiert (Kunden-Identifikatoren gehoere
 nicht in die Git-Historie). Reproduzierbar mit den echten IDs ueber die Messung in
 `~/.config/hermes/budget-messung.sql`.
 
-**Entscheidend ist die Verteilung, nicht die Identitaet: 4.29 EUR — 55 % des
-Deckels — halten FREMDE Tenants.** Der Owner-Nutzer wird von Konten blockiert, die
-nicht seine sind.
+**Entscheidend ist die Struktur, nicht die Identitaet: 4.29 EUR — 55 % des Deckels —
+entfallen auf Konten, die den blockierten Tenant nichts angehen.** Die Zahl belegt keinen
+Missbrauch, sondern eine fehlende Achse: der Verbrauch JEDES Kontos zaehlt gegen den
+Deckel JEDES anderen. Dass es hier 55 % sind, ist ein Zufall der Tenant-Zahl — bei
+hinreichend vielen Konten genuegt ein einziges, um alle zu sperren.
 
 Cap: `MAX_BUDGET_EUR=8` -> 800 Cent. **Kopffreiheit: 21 Cent.**
 `tenant_budget`-Zeilen in der Live-DB: **0** (bei 28 Tenants).
@@ -821,7 +831,7 @@ Praedikat-Aenderung in dieser Phase.**
 - Eine 402 nennt **welche Achse** ausgeloest hat; Plattform-Meldungen sind zahlenfrei.
 - Eine `reserve`-Ablehnung nennt Fehlbetrag und Monatsende — und **keine** ausfuehrbare
   Dauer.
-- Kein Endpunkt und kein MCP-Tool gibt Plattform-Zahlen oder fremde Tenant-Werte an einen
+- Kein Endpunkt und kein MCP-Tool gibt Plattform-Zahlen oder Werte anderer Tenants an einen
   Nicht-Admin.
 - Die Gate-Reihenfolge (`test/outbound-gates-order.test.js`) bleibt in Namen und Reihenfolge
   unveraendert; `reserve_budget` bleibt LETZTES Glied.
@@ -1229,18 +1239,48 @@ technische.
 - (d) Gestaffelt nach Plan (Starter/Business unterschiedliche Decken) — richtig, aber
   teurer, weil es die `tenant_budget`-Zeile am Abo-Webhook aufhaengt.
 
-**Empfehlung: (b)**, mit der harten Invariante aus P3 (`tenantDefault < platformCap`). Die
-Zahl gehoert an das Kundenversprechen gekoppelt, nicht frei geraten — sonst wiederholt sich
-exakt der Fehler von 8 EUR: eine Zahl ohne Bezugsgroesse. Die Neu-Dimensionierung darf NUR
-zusammen mit P6 wirksam werden.
+> **ENTSCHEIDUNG DES OWNERS (2026-07-19) + KORREKTUR DER FRAGESTELLUNG.**
+>
+> **Tenant-Decken, gestaffelt nach Plan — also (d), nicht (b):** Starter **3 EUR**,
+> Business **9 EUR**. Grundlage sind gemessene, nicht geschaetzte Kosten (s.u.); die
+> Staffelung braucht eine `tenant_budget`-Zeile am Abo-Webhook und ist damit eine eigene,
+> noch nicht gebaute Phase. Bis dahin gilt EIN globaler Default in Hoehe des kleineren
+> Werts (300 Cent).
+>
+> **Der Plattform-Notaus wird NICHT als feste Zahl gesetzt.** Alle vier Optionen oben
+> nennen einen Absolutbetrag — das ist die falsche Form. Nach P2a ist die Gesamt-Exposition
+> ohnehin durch die Summe aller Tenant-Decken begrenzt. Ein fester Plattform-Cap fuegt nur
+> dann Schutz hinzu, wenn er UNTERHALB dieser Summe liegt — und dann loest er bei Wachstum
+> aus und blockiert ALLE Kunden, auch die zahlenden. Bei Starter 3 / Business 9 EUR
+> summieren sich 50 Business-Kunden auf 450 EUR; ein Notaus von 50 EUR (Option a) traefe
+> bei etwa fuenf Kunden. **Erfolg wuerde einen Totalausfall ausloesen** — dieselbe Klasse
+> von Defekt wie der geteilte Topf, nur eine Ebene hoeher.
+>
+> **Neue Form: `platformSpendCap = Summe(aktive Tenant-Decken) * 1.3`.** Waechst
+> automatisch mit jedem Kunden mit, bestraft Wachstum nie und faengt weiterhin den Fall,
+> gegen den der Notaus wirklich schuetzt: dass die Tenant-Decken selbst versagen
+> (Seeding-Bug, Tenants ohne Zeile, Fehler in `effectiveCapCents` — exakt der Zustand vor
+> P2a). Die P3-Invariante `tenantDefault < platformCap` bleibt dadurch automatisch erfuellt.
+>
+> **Verteidigungslinien, richtig sortiert:** die Tenant-Decke ist die eigentliche
+> Kontrolle; die Warnung (P6) ist immer an und kann keinen Ausfall ausloesen;
+> `OUTBOUND_FROZEN` ist der manuelle Not-Aus, den der Betreiber bewusst zieht; der
+> automatische Plattform-Cap ist die DRITTE Linie und darf deshalb die lockerste sein.
+>
+> **Gemessene Grundlage** (Telnyx Usage Reports + ElevenLabs, 2026-07-19), ersetzt die
+> Annahme von 20 ct/min: variable Kosten **5.4 ct/min** all-in (Telefonie 3.9, STT 0.6,
+> TTS 0.6, Recording/Inference 0.05, Claude-Tokens 0.27). Damit Starter 30 min = 1.62 EUR,
+> Business 120 min = 6.48 EUR. ElevenLabs ist ein FESTPREIS-Abo (6.00 USD netto/Monat) und
+> gehoert NICHT in einen Minutentarif; es ist Plattform-Fixkost und wird in `costCents`
+> gar nicht gebucht — ebenso wenig wie STT, TTS und die DID-Miete.
 
-### Frage 2 — Duerfen die Zaehler FREMDER Tenants angefasst werden?
+### Frage 2 — Duerfen die Zaehler ANDERER Tenants angefasst werden?
 
 Die 5 Nicht-Owner-Tenants halten zusammen 4,29 EUR des heutigen Deckels.
 
 - (a) **Nichts anfassen (Plan-Default):** `costCents` bleibt als Forensik-/
   Abrechnungsnachweis, der Flip loest die Blockade.
-- (b) Fremde `costCents` auf 0 setzen (ohne Flip).
+- (b) `costCents` anderer Tenants auf 0 setzen (ohne Flip).
 - (c) Nur den Owner-Tenant zuruecksetzen.
 - (d) `tenant_budget`-Zeilen fuer die 6 aktiven Tenants von Hand setzen.
 
