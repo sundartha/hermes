@@ -132,11 +132,17 @@ export const USAGE_EVENT_KIND = Object.freeze({
 
 // LCT P3: Herkunft des Ist-Werts am Call (costTruedSource). KEINE dritte Kosten-Achse -
 // eine Herkunftsangabe. 'incomplete' = Records da, Pflicht-Menge nicht vollstaendig
-// (auch bei LEERER Pflicht-Menge: die beweist nichts). 'unavailable' = nicht gemessen
-// (ok:false, leere Antwort, unparsbare Summe) und NIEMALS "Kosten = 0".
+// (auch bei LEERER Pflicht-Menge: die beweist nichts) - ein DATENPROBLEM (Messung
+// lueckenhaft). 'no_estimate' (LCT P4) = Records VOLLSTAENDIG bewiesen, aber KEIN
+// persistierter Schaetzbetrag (Bestandszeile von vor P2) - strukturell nicht korrigierbar,
+// kein Messproblem; wie 'incomplete' nicht erstattbar und nicht 'telnyx_detail_records',
+// aber ein anderer Sachverhalt und deshalb ein eigener Zustand (zwei Ursachen teilen sich
+// NICHT ein Label). 'unavailable' = nicht gemessen (ok:false, leere Antwort, unparsbare
+// Summe) und NIEMALS "Kosten = 0".
 export const COST_TRUING_SOURCE = Object.freeze({
   DETAIL_RECORDS: "telnyx_detail_records",
   INCOMPLETE: "incomplete",
+  NO_ESTIMATE: "no_estimate",
   UNAVAILABLE: "unavailable",
 });
 

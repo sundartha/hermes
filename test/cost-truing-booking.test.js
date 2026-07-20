@@ -8,7 +8,7 @@
 // Kurs-Arithmetik selbst ist test/usage-correction-booking.test.js Fall f/j vorbehalten).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER, costTruingCoveragePercent } from "../src/billing/cost-truing.js";
 import {
   makeDefaultState,
   createCall,
@@ -277,9 +277,13 @@ test("(k) Pflicht-Menge ['typ-a','typ-b'] im Test selbst gesetzt, Records tragen
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100);
 });
 
-// ---- (l) kein persistierter Schaetzbetrag (Bestandszeile) -> strukturell nicht korrigierbar ----
-
-test("(l) estimatedCostCents=null (Bestandszeile), Records vollstaendig -> costCents unveraendert, costTruedSource='incomplete'", async () => {
+// ---- (l) kein persistierter Schaetzbetrag (Bestandszeile) -> eigener Zustand NO_ESTIMATE ----
+// Vollstaendige Records (measured.source = 'telnyx_detail_records'), aber estimatedCostCents=null.
+// Der Call ist strukturell nicht korrigierbar - das ist KEIN Messproblem ('incomplete') und
+// KEINE bewiesene Deckung ('telnyx_detail_records'), sondern ein eigener Sachverhalt. Die
+// Sweep-Bilanz muss GENAU das zaehlen, was persistiert wird: nicht 'gemessen', sondern
+// 'ohne_schaetzung'. (LCT-P4-Korrektur: zwei Sachverhalte teilen sich NICHT ein Label.)
+test("(l) estimatedCostCents=null (Bestandszeile), Records vollstaendig -> costTruedSource='no_estimate', Bilanz gemessen=0/ohne_schaetzung=1, keine Buchung", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   seedUsageCents(state, BOOTSTRAP_TENANT_ID, 100);
@@ -290,9 +294,59 @@ test("(l) estimatedCostCents=null (Bestandszeile), Records vollstaendig -> costC
     store, config, voiceControl: voiceControl(control(recordsWithTotal(FULL_RECORD_TYPES, 5_000_000))),
     audit: () => {}, now: () => nowMs,
   });
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100);
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.INCOMPLETE, "ohne Schaetzbetrag NIE 'telnyx_detail_records', trotz vollstaendiger Records");
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(
+    call.costTruedSource,
+    COST_TRUING_SOURCE.NO_ESTIMATE,
+    "vollstaendige Records ohne Schaetzbetrag -> eigener Zustand, NIE 'incomplete' oder 'telnyx_detail_records'",
+  );
+  assert.equal(result.measured, 0, "ein als NO_ESTIMATE persistierter Call darf in der Bilanz NIE als 'gemessen' erscheinen");
+  assert.equal(result.noEstimate, 1, "er wird im eigenen NO_ESTIMATE-Zaehler gefuehrt");
+  assert.equal(result.incomplete, 0, "kein Messproblem -> nicht 'incomplete'");
+  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100, "kein Schaetzbetrag -> keine Korrektur gebucht");
+  assert.notEqual(call.costTruedAt, null, "Records lagen vor -> der Call ist abgeschlossen (kein weiterer Versuch)");
+});
+
+// ---- (o) Flag AUS: dieselbe Bestandszeile bleibt byte-identisch zu P3 ----
+// Flag AUS liefert truedSourceOf den ROHEN measured.source. Vollstaendige Records ->
+// 'telnyx_detail_records' wie in P3; NO_ESTIMATE darf bei ausgeschaltetem Flag NIE
+// erscheinen (die erste Zusage der Phase: Flag AUS = P3-byte-identisch).
+test("(o) Flag AUS: vollstaendige Records + estimatedCostCents=null -> roh 'telnyx_detail_records', NIE 'no_estimate'", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  seedUsageCents(state, BOOTSTRAP_TENANT_ID, 100);
+  const call = makeDueOutboundCall(state, { nowMs }); // estimatedCostCents bleibt null
+  const store = makeStubStore(state, { nowMs });
+  const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES, costTruingBookingEnabled: false });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: voiceControl(control(recordsWithTotal(FULL_RECORD_TYPES, 5_000_000))),
+    audit: () => {}, now: () => nowMs,
+  });
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS, "Flag AUS -> roher Klassifikationswert wie P3, kein NO_ESTIMATE");
+  assert.equal(result.measured, 1, "roh vollstaendig -> als 'gemessen' gezaehlt (P3-Bilanz)");
+  assert.equal(result.noEstimate, 0, "NO_ESTIMATE entsteht nur bei aktivem Flag");
+  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100, "Flag AUS bucht nie");
+});
+
+// ---- (p) Deckungsquote unveraendert: NO_ESTIMATE drueckt die Quote GENAU so wie zuvor
+// 'incomplete' (beide sind nicht 'telnyx_detail_records', also nicht-proven) ----
+test("(p) costTruingCoveragePercent: NO_ESTIMATE und 'incomplete' druecken die Quote identisch (Bestandszeile bleibt nicht-proven)", () => {
+  const nowMs = Date.now();
+  const withNoEstimate = makeDefaultState();
+  makeDueOutboundCall(withNoEstimate, { nowMs }).costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  makeDueOutboundCall(withNoEstimate, { nowMs, legId: "cc_2" }).costTruedSource = COST_TRUING_SOURCE.NO_ESTIMATE;
+
+  const withIncomplete = makeDefaultState();
+  makeDueOutboundCall(withIncomplete, { nowMs }).costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  makeDueOutboundCall(withIncomplete, { nowMs, legId: "cc_2" }).costTruedSource = COST_TRUING_SOURCE.INCOMPLETE;
+
+  assert.equal(costTruingCoveragePercent(withNoEstimate), 50, "1 von 2 beweisbar vollstaendig");
+  assert.equal(
+    costTruingCoveragePercent(withNoEstimate),
+    costTruingCoveragePercent(withIncomplete),
+    "die Quote ist identisch, ob die Bestandszeile 'incomplete' (alt) oder NO_ESTIMATE (neu) heisst",
+  );
 });
 
 // ---- (m) leere Pflicht-Menge: Allquantor-Falle bleibt geschlossen ----

@@ -744,7 +744,7 @@ test("(P5-S7) usage/spendMonth und Sweep-Rueckgabe bleiben byte-identisch (negat
   assert.deepStrictEqual(usageAfter, usageBefore, "usage-Map inkl. costCents/spendMonthCostCents unveraendert");
   assert.deepStrictEqual(
     Object.keys(result).sort(),
-    ["candidates", "coveragePercent", "failed", "incomplete", "measured", "skipped", "skippedCalls", "unavailable"].sort(),
-    "Sweep-Rueckgabe traegt kein neues Feld",
+    ["candidates", "coveragePercent", "failed", "incomplete", "measured", "noEstimate", "skipped", "skippedCalls", "unavailable"].sort(),
+    "Sweep-Rueckgabe traegt genau die bekannten Zaehler/Quoten-Felder (noEstimate seit der LCT-P4-Korrektur)",
   );
 });
