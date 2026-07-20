@@ -86,8 +86,9 @@ const metering = makeMetering({ store, config });
 // manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
 // damit keinen. voiceControl kommt aus der Registry (Adapter ohne getVoiceCostRecords ->
 // sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate, kein Meter, keine
-// Buchung wird beruehrt.
-const costTruing = makeCostTruing({ store, config, voiceControl, audit });
+// Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist dieselbe Instanz wie
+// bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
+const costTruing = makeCostTruing({ store, config, voiceControl, audit, messaging });
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)
 // EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler; INV-7).

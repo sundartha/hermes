@@ -23,8 +23,11 @@
 // Waehrungs-Warnung: actualCostMicroCents bleibt USD-Mikro-Cent, UNVERAENDERT. Keine
 // Umrechnung in dieser Phase (der Umrechnungskurs Provider->Bucket, config.billing.
 // PROVIDER_TO_BUCKET_RATE_MICRO, hat hier weiterhin KEINEN Verbraucher - P4 fuehrt ihn ein).
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT } from "../store/defaults.js";
+import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
 import { nextCostTruingAttempt } from "../store/state-ops.js";
+import { findActiveNumber } from "../store/views.js";
+import { sendFailSoftAlertSms } from "../telephony/alert-sms.js";
+import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 
 // Sweep-Kadenz (Muster RETENTION_SWEEP_INTERVAL_MS, src/boot.js). Exportiert: boot.js
 // registriert das Intervall selbst (der Job macht Provider-IO und laeuft NICHT beim
@@ -45,6 +48,10 @@ const COST_TRUING_FINDING = Object.freeze({
   COVERAGE_STALLED: "coverage_stalled",
 });
 const COST_TRUING_AUDIT_EVENT = "cost_truing_befund";
+// LCT P5 (Drift-Waechter): eigenes Audit-Ereignis + eigener SMS-Praefix, getrennt von
+// COST_TRUING_AUDIT_EVENT (verschiedene Aussage: Deckungsquote vs. Tarif-Abweichung).
+const TARIFF_DRIFT_AUDIT_EVENT = "tarif_drift_befund";
+const DRIFT_ALERT_SMS_PREFIX = "[hermes] Tarif-Drift: ";
 
 const isEndedOutbound = (call) => call.direction === OUTBOUND_DIRECTION && !!call.endedAt;
 const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;
@@ -65,7 +72,9 @@ export function costTruingCoveragePercent(state) {
   return Math.floor((proven * PERCENT_BASE) / ended.length);
 }
 
-export function makeCostTruing({ store, config, voiceControl, audit, now = Date.now }) {
+// messaging ist der Alarmkanal (LCT P5, Drift-Waechter-SMS), kein Abgleich-Pfad - der
+// Provider-Kosten-Abgleich selbst laeuft ausschliesslich ueber voiceControl.
+export function makeCostTruing({ store, config, voiceControl, audit, messaging, now = Date.now }) {
   // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
   // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
   // Node ist single-threaded, aber der Sweep awaitet pro Call einen Provider-Abruf.
@@ -79,7 +88,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, now = Date.
 
   // Entprellfenster je Befund-Code (COST_ALERT_DEBOUNCE_MS, Default 24 h). Ohne sie
   // meldete der 6-h-Sweep denselben Befund viermal am Tag und trainierte den Kanal taub.
-  // P5 nutzt denselben Mechanismus (dort je Praefix+Code).
+  // Ein Schluessel, zwei Nutzer: P3 entprellt je Befund-Code, P5 keyt zusaetzlich auf den
+  // Praefix ("<praefix> <code>"). BEWUSST DIESELBE Map und DIESELBE Regel - eine zweite
+  // Entprellung mit eigenem Fenster liefe beim ersten Nachziehen auseinander.
   const lastFindingMs = new Map();
   let sweepsBelowThreshold = 0;
 
@@ -149,10 +160,10 @@ export function makeCostTruing({ store, config, voiceControl, audit, now = Date.
     );
   }
 
-  function shouldEmitFinding(code, nowMs) {
-    const last = lastFindingMs.get(code);
+  function shouldEmitFinding(key, nowMs) {
+    const last = lastFindingMs.get(key);
     if (last !== undefined && nowMs - last < config.billing.costAlertDebounceMs) return false;
-    lastFindingMs.set(code, nowMs);
+    lastFindingMs.set(key, nowMs);
     return true;
   }
 
@@ -252,6 +263,57 @@ export function makeCostTruing({ store, config, voiceControl, audit, now = Date.
     countOutcome(tally, measured, closed);
   }
 
+  // LCT P5 (Drift-Waechter): Absender des Alarms ist die aktive Nummer des BOOTSTRAP-
+  // Tenants - das ist die eigene Betreiber-Nummer. NIE "irgendeine aktive Nummer": das
+  // waere die DID eines Kunden als Absender einer Betreiber-Meldung. Keine Nummer -> null
+  // -> KEINE SMS (fail-closed), eine WARN-Zeile ohne Nummer. Laeuft laut Vertrag von
+  // sendFailSoftAlertSms NUR, wenn ein Empfaenger konfiguriert ist - ohne Alarmkanal waere
+  // diese WARN-Zeile eine Falschmeldung. findActiveNumber liefert undefined, wenn nichts
+  // passt; hier auf null normalisiert (der Baustein prueft auf falsy).
+  function resolveDriftAlertSender() {
+    const sender = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID);
+    if (sender) return sender;
+    console.warn("[cost-truing] Tarif-Drift-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS");
+    return null;
+  }
+
+  // Versand ueber den geteilten fail-soft-Baustein (G5, EINE Quelle mit
+  // emitPlatformSpendWarning): try/catch, Empfaenger-Riegel und fire-and-forget liegen
+  // dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel (platformAlertSmsTo) wird
+  // NIE geloggt.
+  function sendDriftAlertSms(detail) {
+    sendFailSoftAlertSms({
+      messaging,
+      to: config.billing.platformAlertSmsTo,
+      body: DRIFT_ALERT_SMS_PREFIX + detail,
+      resolveSender: resolveDriftAlertSender,
+      onError: (e) => console.error("[cost-truing] Tarif-Drift-Alarm SMS fehlgeschlagen:", e.message),
+    });
+  }
+
+  // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
+  // hoechstens EINE Meldung je Praefix und Befund-Code je COST_ALERT_DEBOUNCE_MS (24 h) ->
+  // bei 3 Praefixen x 3 alarmierenden Codes (ALERTABLE_DRIFT_CODES) maximal 9 SMS am Tag,
+  // statt 4 Meldungen je Befund und Tag aus dem 6-h-Sweep. Der Schluessel traegt den Code,
+  // conversion_error entprellt also getrennt von under-/overestimate.
+  function alertDrift(entry, nowMs) {
+    if (!shouldEmitFinding(`${entry.prefix} ${entry.code}`, nowMs)) return;
+    const detail = driftLine(entry);
+    console.warn(`[cost-truing] Tarif-Drift ${detail}`);
+    audit(TARIFF_DRIFT_AUDIT_EVENT, null, detail); // req=null -> ip=system
+    sendDriftAlertSms(detail);
+  }
+
+  // Ausloeser 2 von 2 (Laufzeit). Der Boot-Guard allein genuegt NICHT: er feuert einmal je
+  // Prozessstart, und ein Dienst, der nach dem Deploy wochenlang ohne Restart laeuft,
+  // wertet genau in dem Zeitraum nicht aus, in dem sich P4 auf P5 als Gegenmassnahme
+  // stuetzt. insufficient_samples wird GELOGGT, aber NIE alarmiert (alertableDriftFindings).
+  function reportTariffDrift(state, nowMs) {
+    const report = tariffDriftReportFromConfig(state.calls, config.billing);
+    console.log(`[cost-truing] tarif-drift ${report.map(driftLine).join(" | ")}`);
+    for (const entry of alertableDriftFindings(report)) alertDrift(entry, nowMs);
+  }
+
   async function sweepAllCandidates(trigger) {
     const nowMs = now();
     // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
@@ -266,6 +328,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, now = Date.
         `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls}`,
     );
     reportCoverage(coveragePercent, nowMs);
+    reportTariffDrift(store.load(), nowMs);
     return { skipped: false, candidates: candidates.length, coveragePercent, ...tally };
   }
 

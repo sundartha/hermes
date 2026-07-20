@@ -235,6 +235,8 @@ export const BASE_ENV = {
   COST_TRUING_COVERAGE_STALL_SWEEPS: "8",
   COST_DRIFT_WARN_PERCENT: "50",
   COST_ALERT_DEBOUNCE_MS: "86400000",
+  // LCT P5 (Drift-Waechter): auf den Code-Default gepinnt (Lehre test-base-env-drift).
+  COST_CALIBRATION_MIN_SAMPLES: "20",
   // W4: Abo-Env neutral leer (fail-closed): ohne diese Zeilen leakt eine lokale .env mit
   // STRIPE_*_PRICE_ID / STRIPE_WEBHOOK_SECRET via dotenv in Spawn-Tests -> Baseline-Drift
   // (Lehre test-base-env-drift). PAYMENT_ENABLED=false -> der Webhook-Secret-Boot-Check greift nicht.
