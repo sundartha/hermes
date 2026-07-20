@@ -17,14 +17,22 @@ const NUMBER_SETUP_FEE_CENTS = 500;
 function fakeStore() {
   const usageEvents = [];
   const voiceCostCents = [];
+  const estimatedCostCents = [];
   return {
     usageEvents,
     voiceCostCents,
+    estimatedCostCents,
     recordUsageEvent(ev) {
       usageEvents.push(ev);
     },
     addVoiceUsageCostCents(tenantId, costCents) {
       voiceCostCents.push({ tenantId, costCents });
+    },
+    // LCT P2: reconcileOutboundVoiceBudget persistiert den gebuchten Schaetzbetrag zusaetzlich
+    // am Call (store.recordCallEstimatedCostCents). Ohne diesen Stub wuerfe der reale Aufruf
+    // einen TypeError (echte Interface-Erweiterung, kein Testartefakt).
+    recordCallEstimatedCostCents(callId, costCents) {
+      estimatedCostCents.push({ callId, costCents });
     },
   };
 }
@@ -105,6 +113,12 @@ test("reconcileOutboundVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCent
   assert.equal(store.voiceCostCents.length, 1);
   assert.deepEqual(store.voiceCostCents[0], {
     tenantId: TENANT_A,
+    costCents: 1 * tariffCentsPerMin(call.to),
+  });
+  // LCT P2 (E2): derselbe Betrag wird IM SELBEN Schritt am Call persistiert - nicht spaeter
+  // aus dem Tarif rekonstruiert.
+  assert.deepEqual(store.estimatedCostCents[0], {
+    callId: call.id,
     costCents: 1 * tariffCentsPerMin(call.to),
   });
 });

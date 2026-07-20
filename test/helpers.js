@@ -221,6 +221,9 @@ export const BASE_ENV = {
   // Provider-Waehrung explizit (Lehre test-base-env-drift): ohne diese Zeile leakt eine
   // lokale .env mit PROVIDER_CURRENCY via dotenv in die Spawn-Tests.
   PROVIDER_CURRENCY: "USD",
+  // LCT P2: Kurs explizit im Band (Lehre test-base-env-drift). Ohne diese Zeile leakt eine
+  // lokale .env via dotenv in die Spawn-Tests und erzeugte dort eine fremde Boot-WARN.
+  PROVIDER_TO_BUCKET_RATE_MICRO: "920000",
   // W4: Abo-Env neutral leer (fail-closed): ohne diese Zeilen leakt eine lokale .env mit
   // STRIPE_*_PRICE_ID / STRIPE_WEBHOOK_SECRET via dotenv in Spawn-Tests -> Baseline-Drift
   // (Lehre test-base-env-drift). PAYMENT_ENABLED=false -> der Webhook-Secret-Boot-Check greift nicht.

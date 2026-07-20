@@ -9,7 +9,21 @@ import { findTenant } from "./state-ops.js";
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
 // und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
 // rein interner persistierter Dedup-Marker -> wie _finished gestrippt (kein API-Leak).
-export function publicCall({ streamToken, _finished, summarySmsSentAt, ...rest }) {
+// LCT P2: die fuenf Kosten-Felder verlassen die API NICHT (Muster summarySmsSentAt) -
+// interne Abrechnungs-/Forensik-Groessen, kein Anzeige-Vertrag. Haelt /api/state und die
+// Self-Service-Antwort BYTE-IDENTISCH zum Bestand; die Sichtbarkeit entscheidet P5, nicht
+// diese inerte Phase.
+export function publicCall({
+  streamToken,
+  _finished,
+  summarySmsSentAt,
+  estimatedCostCents,
+  actualCostMicroCents,
+  costTruedAt,
+  costTruedSource,
+  costTruingAttempts,
+  ...rest
+}) {
   return rest;
 }
 
