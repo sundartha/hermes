@@ -212,6 +212,11 @@ services:
         value: "50"
       - key: COST_ALERT_DEBOUNCE_MS
         value: "86400000"
+      # ---- Drift-Waechter (LCT P5, misst den Ist-Minutensatz je Ziel-Praefix - justiert
+      # NICHT). Default reicht, wird trotzdem explizit ausgeliefert (Muster P1/P3, der
+      # Live-Wert ist ablesbar statt nur im Code zu stehen).
+      - key: COST_CALIBRATION_MIN_SAMPLES
+        value: "20"
       # ---- Abo-Buchung (Stripe Recurring, W4) ----
       - key: STRIPE_STARTER_PRICE_ID
         sync: false

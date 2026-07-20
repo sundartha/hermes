@@ -190,3 +190,24 @@ export function providerRateOutOfBand(rateMicro) {
     },
   ];
 }
+
+// LCT P5: der Alarmkanal selbst. Ein Alarm ohne Empfaenger ist kein Alarm - und diese
+// Vorbedingung stand bisher nur im Planungsdokument, haftete also an der Disziplin
+// dessen, der die Phase umsetzt. WARN und NICHT fatal: ein fehlender Alarmkanal macht
+// den Dienst nicht unsicherer als heute, er macht ihn blind - und Blindheit ist das
+// Thema dieses Plans, kein Grund, die Telefonie auf einem Free Tier abzuschalten.
+// Der BESETZTE Fall liefert [] -> die Nummer wird nie geloggt (Regel 4/PII).
+export const ALERT_CHANNEL_FINDING = Object.freeze({ UNSET: "platform_alert_sms_unset" });
+
+export function alertChannelFindings(platformAlertSmsTo) {
+  if (platformAlertSmsTo) return [];
+  return [
+    {
+      code: ALERT_CHANNEL_FINDING.UNSET,
+      fatal: false,
+      message:
+        "PLATFORM_ALERT_SMS_TO ist leer - Plattform-Warnung und Tarif-Drift-Alarm laufen " +
+        "nur ins Audit-Log, es geht KEINE SMS an einen Menschen.",
+    },
+  ];
+}

@@ -12,6 +12,7 @@ import {
   spendCapCoherence,
   unpricedModels,
   providerRateOutOfBand,
+  alertChannelFindings,
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
@@ -20,6 +21,7 @@ import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import { hasPrunedSomething } from "./store/state-ops.js";
 import { COST_TRUING_SWEEP_INTERVAL_MS, SWEEP_TRIGGER } from "./billing/cost-truing.js";
+import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
 import { audit } from "./util.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -90,6 +92,26 @@ function warnProviderRateOutOfBand(config) {
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
+// LCT P5: Alarmkanal-Guard (alertChannelFindings). WARN, kein exit(1) - Begruendung im
+// Guard. Loggt NIE den Wert (der besetzte Fall liefert [] und meldet damit gar nichts).
+function warnAlertChannelUnset(config) {
+  for (const f of alertChannelFindings(config.billing.platformAlertSmsTo))
+    console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+}
+
+// LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
+// nicht eine je Praefix je Boot (Risiko-Abschnitt der Phase: WARN-Muedigkeit). WARN nur,
+// wenn ueberhaupt ein Befund vorliegt; ein durchweg im Band liegender Zustand loggt ruhig.
+// KEIN SMS-Alarm hier: der Boot feuert einmal je Prozessstart, der laufende Alarm haengt am
+// Sweep (src/billing/cost-truing.js). KEIN Audit: der Befund aendert nichts daran, WAS der
+// Dienst ablehnt (Kriterium von AUDITED_BOOT_FINDINGS) - Muster warnUnpricedModels.
+function warnTariffDrift(config, store) {
+  const report = tariffDriftReportFromConfig(store.load().calls, config.billing);
+  const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
+  if (report.some((e) => e.code !== null)) console.warn(line);
+  else console.log(line);
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
@@ -152,6 +174,8 @@ function assertBootGates(config, store) {
   assertSpendCapCoherence(config);
   warnUnpricedModels(config);
   warnProviderRateOutOfBand(config);
+  warnAlertChannelUnset(config);
+  warnTariffDrift(config, store);
 }
 
 function logBootBanner(config, port) {

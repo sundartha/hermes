@@ -15,6 +15,7 @@ import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
 import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
+import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
@@ -80,6 +81,18 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     audit("cost_truing_sweep", req, `skipped=${result.skipped} deckung=${result.coveragePercent ?? "-"}%`);
     res.json(result);
+  });
+
+  // ---- Drift-Waechter: gemessener Minutensatz je Praefix (LCT P5) ----
+  // Hinter der bestehenden /api/*-Basic-Auth, NICHT tenant-gescopt - dieselbe Naht und
+  // dieselbe Begruendung wie der Sweep-Endpunkt daneben (Plattform-Groesse ueber alle
+  // Tenants). BEWUSST NICHT in /api/state: dort gilt der Cross-Tenant-Leck-Riegel
+  // (api-read.js, usageView) - ein praefix-weites p95 ueber alle Tenants ist genau die
+  // Plattform-Aggregation, die diese Projektion nicht verlassen darf. Antwort ist
+  // PII-frei: Praefix ("+49" ist keine Rufnummer), Befund-Code, Stichprobenzahl, zwei
+  // Cent-Betraege. Kein Alarm-Empfaenger, keine Call-ID, keine Tenant-Kennung.
+  router.get("/api/billing/cost-drift", (req, res) => {
+    res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
   });
 
   router.get("/api/billing/checkout-return", async (req, res) => {

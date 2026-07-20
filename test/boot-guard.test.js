@@ -6,7 +6,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { guardedBoot, fakeOriginateBootBlocked, meterMappingGaps } from "../src/boot-guard.js";
+import {
+  guardedBoot,
+  fakeOriginateBootBlocked,
+  meterMappingGaps,
+  alertChannelFindings,
+  ALERT_CHANNEL_FINDING,
+} from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 
 // Erreichbarer Fake-Pool, dessen Rolle Superuser ist -> assertNoBypassRls wirft den
@@ -110,4 +116,17 @@ test("S1-7: meterMappingGaps meldet fehlende Meter-Abbildungen (Boot-Assertion)"
     ["sms"],
     "kuenstlich unvollstaendige Map -> Luecke gemeldet",
   );
+});
+
+// LCT P5 (Drift-Waechter): alertChannelFindings ist die reine Wahrheitstabelle des
+// Alarmkanal-Guards (kein Spawn noetig, Muster meterMappingGaps).
+test("P5-B1: alertChannelFindings('') -> genau ein Befund, UNSET, nicht fatal", () => {
+  const findings = alertChannelFindings("");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
+  assert.equal(findings[0].fatal, false);
+});
+
+test("P5-B2: alertChannelFindings(nummer) -> [] (Kanal besetzt, kein Befund)", () => {
+  assert.deepEqual(alertChannelFindings("+491234567890"), []);
 });

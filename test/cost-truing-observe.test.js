@@ -20,7 +20,7 @@ import {
   createCall,
   recordCallCostTruingResult,
 } from "../src/store/state-ops.js";
-import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const MS_PER_MINUTE = 60 * 1000;
@@ -53,8 +53,12 @@ function makeStubStore(state) {
   };
 }
 
-// Konfig-Fixture fuer die sieben P3-Felder (billing-Namespace). Jeder Test ueberschreibt
-// nur, was er wirklich pruefen will (F1: Default-Objekt statt loser Argumente).
+// Konfig-Fixture fuer die P3-Felder + LCT P5 (Drift-Waechter, billing-Namespace). Jeder
+// Test ueberschreibt nur, was er wirklich pruefen will (F1: Default-Objekt statt loser
+// Argumente). providerToBucketRateMicro NEUTRAL (Faktor 1,0) - haelt die P5-Fixturen als
+// Cent direkt lesbar (die Waehrungsrichtung selbst ist test/cost-calibration.test.js P5-07
+// vorbehalten). platformAlertSmsTo default leer (BASE_ENV-Zustand) - die P5-S-Tests setzen
+// ihn explizit, wo sie den Alarmkanal pruefen.
 function fakeConfig(overrides = {}) {
   return withConfigNamespaces({
     costTruingDelayMinutes: 180,
@@ -64,6 +68,12 @@ function fakeConfig(overrides = {}) {
     costTruingCoverageStallSweeps: 8,
     costDriftWarnPercent: 50,
     costAlertDebounceMs: 24 * 60 * 60 * 1000,
+    voiceTariffDomesticCents: 20,
+    voiceTariffDefaultCents: 300,
+    voiceTariffDomesticPrefixes: ["+49", "+33", "+44"],
+    providerToBucketRateMicro: 1_000_000,
+    costCalibrationMinSamples: 20,
+    platformAlertSmsTo: "",
     ...overrides,
   });
 }
@@ -83,6 +93,49 @@ function makeDueOutboundCall(state, { nowMs, tenantId = BOOTSTRAP_TENANT_ID, pro
   if (legRef.twilioSid) call.twilioSid = legRef.twilioSid;
   if (estimatedCostCents !== null) call.estimatedCostCents = estimatedCostCents;
   return call;
+}
+
+// LCT P5: ein bereits abgeglichener Drift-Sample-Call (costTruedSource/costTruedAt schon
+// gesetzt) - KEIN Truing-Kandidat (isTruingCandidate verlangt costTruedAt===null), taucht
+// aber in reportTariffDrift() auf (das liest state.calls unabhaengig vom Truing-Status).
+// minutes fest auf 1 (answeredAt einen Takt vor endedAt) - costCts entspricht direkt der
+// USD-Cent/min-Rate.
+function makeDriftCall(state, { to = "+49", costCts, endedMinutesAgo = 1, tenantId = BOOTSTRAP_TENANT_ID }) {
+  const nowMs = Date.now();
+  const call = createCall(state, { direction: "outbound", from: "+49", to, tenantId, provider: "telnyx" });
+  call.status = "completed";
+  call.endedAt = new Date(nowMs - endedMinutesAgo * MS_PER_MINUTE).toISOString();
+  call.answeredAt = new Date(nowMs - (endedMinutesAgo + 1) * MS_PER_MINUTE).toISOString();
+  call.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  call.costTruedAt = call.endedAt;
+  call.actualCostMicroCents = costCts * 1_000_000;
+  return call;
+}
+
+// LCT P5: n Drift-Sample-Calls mit distinkten endedAt-Zeitpunkten (Kollisionsvermeidung).
+function makeDriftCalls(state, prefix, costCts, n) {
+  return Array.from({ length: n }, (_, i) => makeDriftCall(state, { to: prefix, costCts, endedMinutesAgo: i + 1 }));
+}
+
+// LCT P5: aktive Bootstrap-Nummer im Store - der Absender des Drift-Alarms. Ohne sie
+// (P5-S5) sendet sendDriftAlertSms fail-closed keine SMS.
+function withBootstrapNumber(state, { e164 = "+15005550006", provider = "twilio" } = {}) {
+  state.numbers.push({ id: "num_owner", e164, tenantId: BOOTSTRAP_TENANT_ID, provider, status: NUMBER_STATUS.ACTIVE });
+  return state;
+}
+
+// LCT P5: Fake-Messaging-Registry (Muster fakeVoiceControl) - zaehlt sendSms-Aufrufe,
+// sendet NIEMALS echt (Test-Disziplin: kein Test loest eine echte SMS aus).
+function fakeMessaging() {
+  const calls = [];
+  const messaging = () => ({
+    async sendSms(args) {
+      calls.push(args);
+      return { sid: "SM_fake" };
+    },
+  });
+  messaging.calls = calls;
+  return messaging;
 }
 
 function fakeVoiceControl(byProvider) {
@@ -537,4 +590,161 @@ test("(k) {ok:true, records:[]} -> 'unavailable', actualCostMicroCents bleibt nu
   assert.equal(call.costTruedSource, COST_TRUING_SOURCE.UNAVAILABLE);
   assert.equal(call.actualCostMicroCents, null);
   assert.equal(call.costTruedAt, null, "eine leere Antwort ist keine gemessene Null - der Call bleibt offen");
+});
+
+// ---- (P5) LCT P5 (Drift-Waechter): Laufzeit-Ausloeser + Entprellung + Alarmkanal ----
+
+test("(P5-S1) Laufzeit-Ausloeser OHNE Boot: Sweep bei 4facher Tarif-Abweichung -> genau eine Alarmmeldung (Audit + SMS)", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 20); // 4x konfigurierter Tarif (20 ct) -> underestimate
+  const store = makeStubStore(state);
+  const { calls: auditCalls, audit } = auditSpy();
+  const messaging = fakeMessaging();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
+  });
+
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  const driftAudits = auditCalls.filter((c) => c.event === "tarif_drift_befund");
+  assert.equal(driftAudits.length, 1, "genau eine Audit-Meldung");
+  assert.equal(messaging.calls.length, 1, "genau ein SMS-Versand");
+});
+
+test("(P5-S2) Entprellung je Praefix+Code: zweiter Sweep im Fenster -> keine zweite SMS; nach Fensterablauf wieder genau eine", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 20);
+  const store = makeStubStore(state);
+  const { audit } = auditSpy();
+  const messaging = fakeMessaging();
+  let clock = nowMs;
+  const DEBOUNCE_MS = 1000;
+  const config = fakeConfig({ costAlertDebounceMs: DEBOUNCE_MS, platformAlertSmsTo: "+491234567890" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => clock,
+  });
+
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(messaging.calls.length, 1, "Sweep 1: genau eine SMS");
+
+  clock += 500; // innerhalb des Entprellfensters
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(messaging.calls.length, 1, "Sweep 2 (innerhalb Debounce): keine zweite SMS");
+
+  clock += DEBOUNCE_MS; // Fenster jetzt abgelaufen
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(messaging.calls.length, 2, "Sweep 3 (nach Debounce): wieder genau eine SMS");
+});
+
+test("(P5-S3) insufficient_samples: Log nennt die Stichprobenzahl, sendSms wird NIE aufgerufen", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 1); // 1 Sample, weit unter minSamples (20)
+  const store = makeStubStore(state);
+  const { audit } = auditSpy();
+  const messaging = fakeMessaging();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const spies = collectLogSpies();
+  try {
+    const { runCostTruingSweep } = makeCostTruing({
+      store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
+    });
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  } finally {
+    spies.restore();
+  }
+  assert.ok(spies.logs.some((line) => line.includes("stichproben=1")), "Log nennt die Stichprobenzahl");
+  assert.equal(messaging.calls.length, 0, "sendSms wird bei insufficient_samples nie aufgerufen");
+});
+
+test("(P5-S4) platformAlertSmsTo leer: Audit feuert trotzdem, messaging() wird NIE aufgerufen (T13-Praezedenz)", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 20);
+  const store = makeStubStore(state);
+  const { calls: auditCalls, audit } = auditSpy();
+  const messaging = fakeMessaging();
+  const config = fakeConfig({ platformAlertSmsTo: "" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
+  });
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(auditCalls.filter((c) => c.event === "tarif_drift_befund").length, 1, "Audit feuert trotzdem");
+  assert.equal(messaging.calls.length, 0, "messaging() wird nie aufgerufen");
+});
+
+test("(P5-S5) keine aktive Bootstrap-Nummer: kein SMS, kein Wurf, Sweep-Rueckgabe unveraendert", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState(); // KEINE Nummer im Store
+  makeDriftCalls(state, "+49", 80, 20);
+  const store = makeStubStore(state);
+  const { audit } = auditSpy();
+  const messaging = fakeMessaging();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
+  });
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(result.skipped, false);
+  assert.equal(messaging.calls.length, 0, "keine aktive Bootstrap-Nummer -> kein Versand");
+});
+
+test("(P5-S6a) sendSms rejectet asynchron -> Sweep laeuft durch, kein unhandled rejection", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 20);
+  const store = makeStubStore(state);
+  const { audit } = auditSpy();
+  const rejectingMessaging = () => ({
+    async sendSms() {
+      throw new Error("provider_down");
+    },
+  });
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging: rejectingMessaging, now: () => nowMs,
+  });
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(result.skipped, false, "Sweep laeuft trotz asynchron rejectendem SMS-Versand durch");
+});
+
+test("(P5-S6b) messaging() wirft synchron -> Sweep laeuft durch, kein unhandled rejection", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 20);
+  const store = makeStubStore(state);
+  const { audit } = auditSpy();
+  const throwingMessaging = () => {
+    throw new Error("unbekannter provider");
+  };
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging: throwingMessaging, now: () => nowMs,
+  });
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  assert.equal(result.skipped, false, "Sweep laeuft trotz synchronem Wurf durch");
+});
+
+test("(P5-S7) usage/spendMonth und Sweep-Rueckgabe bleiben byte-identisch (negativer Beweis der Phase)", async () => {
+  const nowMs = Date.now();
+  const state = withBootstrapNumber(makeDefaultState());
+  makeDriftCalls(state, "+49", 80, 20);
+  const store = makeStubStore(state);
+  const { audit } = auditSpy();
+  const messaging = fakeMessaging();
+  const config = fakeConfig({ platformAlertSmsTo: "+491234567890" });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({}), audit, messaging, now: () => nowMs,
+  });
+  const usageBefore = structuredClone(state.usage);
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  const usageAfter = structuredClone(state.usage);
+  assert.deepStrictEqual(usageAfter, usageBefore, "usage-Map inkl. costCents/spendMonthCostCents unveraendert");
+  assert.deepStrictEqual(
+    Object.keys(result).sort(),
+    ["candidates", "coveragePercent", "failed", "incomplete", "measured", "skipped", "skippedCalls", "unavailable"].sort(),
+    "Sweep-Rueckgabe traegt kein neues Feld",
+  );
 });
