@@ -13,6 +13,7 @@ import {
   unpricedModels,
   providerRateOutOfBand,
   alertChannelFindings,
+  costTruingBookingFindings,
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
@@ -20,7 +21,7 @@ import { attachMediaBridge } from "./bridge.js";
 import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import { hasPrunedSomething } from "./store/state-ops.js";
-import { COST_TRUING_SWEEP_INTERVAL_MS, SWEEP_TRIGGER } from "./billing/cost-truing.js";
+import { COST_TRUING_SWEEP_INTERVAL_MS, SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
 import { audit } from "./util.js";
 
@@ -84,12 +85,36 @@ function warnUnpricedModels(config) {
   );
 }
 
-// LCT P2: Umrechnungskurs gegen das Toleranzband (providerRateOutOfBand, src/boot-guard.js).
-// NUR WARN, kein exit(1) - der Kurs hat in dieser Phase keinen Verbraucher; ab P4 wird
-// derselbe Befund fatal. UNKONDITIONAL: an kein Flag gekoppelt (Begruendung im Guard).
-function warnProviderRateOutOfBand(config) {
-  for (const finding of providerRateOutOfBand(config.billing.providerToBucketRateMicro))
-    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+// LCT P4: Umrechnungskurs gegen das Toleranzband - seit dieser Phase FATAL (in P2 war
+// derselbe Befund eine WARN). UNKONDITIONAL: an kein Flag gekoppelt (Begruendung im
+// Guard). Muster assertSpendCapCoherence.
+function assertProviderRateInBand(config) {
+  const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((f) => f.fatal);
+  if (!fatal) return;
+  console.error(`[boot] Start abgebrochen: ${fatal.message}`);
+  process.exit(1);
+}
+
+// LCT P4: die zwei Riegel des Flips. Die Deckungsquote wird HIER GELESEN, aber NICHT
+// hier gerechnet: costTruingCoveragePercent (P3) ist die EINE Quelle fuer Sweep-Ausgabe
+// und beide Boot-Guards. Leere Pflicht-Menge = FATAL (ein Dienst, der Geld
+// zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft, darf nicht
+// starten). Quote unter der Schwelle = WARN, kein exit(1) - ein Boot-Refusal tauschte
+// ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz warnUnpricedModels);
+// die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
+function assertCostTruingBooking(config, store) {
+  const findings = costTruingBookingFindings({
+    bookingEnabled: config.billing.costTruingBookingEnabled,
+    requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
+    coveragePercent: costTruingCoveragePercent(store.load()),
+    minCoveragePercent: config.billing.costTruingMinCoveragePercent,
+  });
+  const fatal = findings.find((f) => f.fatal);
+  if (fatal) {
+    console.error(`[boot] Start abgebrochen: ${fatal.message}`);
+    process.exit(1);
+  }
+  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }
 
 // LCT P5: Alarmkanal-Guard (alertChannelFindings). WARN, kein exit(1) - Begruendung im
@@ -115,8 +140,9 @@ function warnTariffDrift(config, store) {
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
-// das fuenfte, das noch process.exit(1) rufen kann - warnUnpricedModels ist reine
-// Diagnose (nie fatal).
+// das fuenfte, assertProviderRateInBand (LCT P4) das sechste und assertCostTruingBooking
+// (LCT P4) das siebte, das noch process.exit(1) rufen kann - warnUnpricedModels/
+// warnAlertChannelUnset/warnTariffDrift sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -173,7 +199,8 @@ function assertBootGates(config, store) {
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
   assertSpendCapCoherence(config);
   warnUnpricedModels(config);
-  warnProviderRateOutOfBand(config);
+  assertProviderRateInBand(config);
+  assertCostTruingBooking(config, store);
   warnAlertChannelUnset(config);
   warnTariffDrift(config, store);
 }

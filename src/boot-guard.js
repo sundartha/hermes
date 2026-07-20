@@ -160,16 +160,14 @@ export const PROVIDER_RATE_FINDING = Object.freeze({
 // Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster meterMappingGaps/
 // spendCapCoherence): leer = im Band. Hoechstens EIN Befund.
 //
-// fatal:false ist die STUFE DIESER PHASE, nicht die Regel: in P2/P3 hat der Kurs keinen
-// Verbraucher, ein Boot-Refusal tauschte einen Schaden von NULL gegen den Totalausfall der
-// Telefonie auf einem Free Tier mit haeufigen Restarts. Vorbild im Bestand:
-// warnUnpricedModels. P4 - die Phase, in der der Kurs erstmals Geld bewegt - hebt genau
-// dieses eine Feld auf true.
+// fatal:true seit LCT P4: ab der Korrekturbuchung bewegt der Kurs Geld. Waere er um
+// Zehnerpotenzen zu klein, laege das Ist fuer JEDEN Call bei ~1 % der Schaetzung, bei
+// formal vollstaendiger Datenlage - die faktische Vollrueckerstattung jeder Schaetzung,
+// die das Vollstaendigkeits-Praedikat NICHT faengt (die Records sind ja da).
 //
-// Die EXISTENZ der Pruefung haengt an nichts, insbesondere NICHT an
-// COST_TRUING_BOOKING_ENABLED: P8 entfernt dieses Flag, und eine daran gekoppelte
-// Bedingung waere danach entweder weg oder als undefined falsy - lautlos tot genau in dem
-// Moment, in dem die Korrekturbuchung bedingungslos aktiv wird.
+// WEITERHIN OHNE JEDE FLAG-BEDINGUNG. P8 entfernt COST_TRUING_BOOKING_ENABLED; eine
+// daran gekoppelte Sicherung waere danach entweder weg oder als undefined falsy -
+// lautlos tot genau in dem Moment, in dem die Buchung bedingungslos aktiv wird.
 //
 // Voraussetzung: laeuft NACH assertConfig() - nicht-numerische Werte und die 0 sind dort
 // bereits fail-closed abgefangen (numEnv, min 1). Kein zweites Gueltigkeitsidiom hier (G5).
@@ -180,13 +178,12 @@ export function providerRateOutOfBand(rateMicro) {
   return [
     {
       code: PROVIDER_RATE_FINDING.OUT_OF_BAND,
-      fatal: false,
+      fatal: true,
       message:
         `PROVIDER_TO_BUCKET_RATE_MICRO=${rateMicro} liegt ausserhalb des Toleranzbandes ` +
         `${minMicro}..${maxMicro} (Anker ${PROVIDER_RATE_ANCHOR_MICRO} = 0,92 je Einheit). ` +
-        "Haeufigste Ursache: Zehnerpotenz-Vertipper (920 statt 920000). Der Kurs hat in " +
-        "dieser Phase noch keinen Verbraucher - ab der Korrekturbuchung verweigert dieser " +
-        "Guard den Start.",
+        "Haeufigste Ursache: Zehnerpotenz-Vertipper (920 statt 920000). Der Kurs bewegt " +
+        "seit der Korrekturbuchung Geld - der Start wird verweigert.",
     },
   ];
 }
@@ -210,4 +207,44 @@ export function alertChannelFindings(platformAlertSmsTo) {
         "nur ins Audit-Log, es geht KEINE SMS an einen Menschen.",
     },
   ];
+}
+
+// LCT P4: die zwei Riegel des Flips. FATAL = leere Pflicht-Menge bei aktiver Buchung ("Ein
+// Dienst, der Geld zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft,
+// darf nicht starten"). WARN = Deckungsquote unter der Schwelle (ablesbar, kein exit(1) -
+// ein Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall).
+export const COST_TRUING_BOOKING_FINDING = Object.freeze({
+  REQUIRED_TYPES_EMPTY: "cost_truing_required_types_empty", // FATAL
+  COVERAGE_BELOW_THRESHOLD: "cost_truing_coverage_below_threshold", // WARN
+});
+
+// Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster spendCapCoherence).
+// Buchung AUS -> [] (der Deploy ist wirkungsfrei, auch bei leerer Menge/0% Deckung).
+// coveragePercent wird HEREINGEREICHT, nicht hier gerechnet: die eine Quelle ist
+// costTruingCoveragePercent(store) aus P3 - zwei Rechnungen derselben Groesse waeren
+// zwei Zahlen, die auseinanderlaufen. Beide Befunde koennen GEMEINSAM auftreten; der
+// Aufrufer behandelt fatal zuerst (Muster assertSpendCapCoherence).
+export function costTruingBookingFindings({ bookingEnabled, requiredRecordTypes, coveragePercent, minCoveragePercent }) {
+  if (bookingEnabled !== true) return [];
+  const findings = [];
+  if (requiredRecordTypes.length === 0) {
+    findings.push({
+      code: COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_EMPTY,
+      fatal: true,
+      message:
+        "COST_TRUING_BOOKING_ENABLED=true, aber COST_TRUING_REQUIRED_RECORD_TYPES ist leer " +
+        "- ein Dienst, der Geld zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit " +
+        "prueft, darf nicht starten. Erst die Pflicht-Menge aus einem Live-Beleg setzen.",
+    });
+  }
+  if (coveragePercent < minCoveragePercent) {
+    findings.push({
+      code: COST_TRUING_BOOKING_FINDING.COVERAGE_BELOW_THRESHOLD,
+      fatal: false,
+      message:
+        `Deckungsquote ${coveragePercent}% liegt unter COST_TRUING_MIN_COVERAGE_PERCENT=${minCoveragePercent}% ` +
+        "- Korrekturbuchungen laufen auf einer duennen Datenlage.",
+    });
+  }
+  return findings;
 }

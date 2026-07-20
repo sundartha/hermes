@@ -323,6 +323,15 @@ export function makePgStore(runner) {
       save();
       return usage;
     },
+    // LCT P4: Korrekturbuchung (Wrapper-Parity zu json.js) - save NUR bei booked. flushUsage
+    // persistiert cost_correction_micro_cents_rem - ohne den Spalten-Eintrag im ON CONFLICT
+    // DO UPDATE SET fiele der Rest beim naechsten Flush auf 0 zurueck, und der Uebertrag
+    // waere genau das, was er nie sein darf: verworfen.
+    applyCostCorrectionCents(tenantId, input) {
+      const result = ops.applyCostCorrectionCents(requireState(), tenantId, input, new Date().toISOString());
+      if (result.booked) save();
+      return result;
+    },
     // Lese-Zugriff auf den Usage-Bucket eines Tenants (I5): liest den Spiegel
     // (kein DB-Roundtrip), Wrapper-Parity zu json.js. Reine Query, kein save.
     usageOf: (tenantId) => ops.usageOf(requireState(), tenantId),
@@ -962,6 +971,11 @@ function rowToUsage(r) {
     // eine Heilkante ohne moegliche Vergiftung waere toter Code (G9).
     spendMonthKey: r.spend_month_key ?? null,
     spendMonthCostCents: Number(r.spend_month_cost_cents ?? 0),
+    // LCT P4: PERSISTIERT (im Gegensatz zur Zeile darueber). BIGINT liefert der Treiber
+    // als String -> Number, wie spend_month_cost_cents. Keine isBookableCents-Heilkante:
+    // BIGINT kann - anders als das NUMERIC in cost_eur - kein 'NaN' darstellen; der
+    // Bereichs-Riegel sitzt in convertProviderMicroToBucketCents (EINE Stelle).
+    costCorrectionMicroCentsRem: Number(r.cost_correction_micro_cents_rem ?? 0),
   };
 }
 
@@ -1127,20 +1141,22 @@ async function flushSettings(client, tenantId, settings) {
 async function flushUsage(client, tenantId, usage) {
   await client.query(
     `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls,
-                        spend_month_key, spend_month_cost_cents)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+                        spend_month_key, spend_month_cost_cents, cost_correction_micro_cents_rem)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (tenant_id) DO UPDATE SET
        input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
        cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls,
        spend_month_key=EXCLUDED.spend_month_key,
-       spend_month_cost_cents=EXCLUDED.spend_month_cost_cents`,
+       spend_month_cost_cents=EXCLUDED.spend_month_cost_cents,
+       cost_correction_micro_cents_rem=EXCLUDED.cost_correction_micro_cents_rem`,
     // costCents ist autoritativ (P1); die Spalte bleibt cost_eur (keine Schema-Migration) ->
     // hier die EINE Ableitungsstelle zur Persistenz (Schwester zu rowToUsage).
     // spend_month_cost_cents geht als GANZZAHL Cents raus (keine EUR-Ableitung, G26).
     // usage.spendMonthCostCents bewusst OHNE ?? 0 (wie usage.costCents oben): emptyUsage()
     // und rowToUsage sind die beiden einzigen Bucket-Quellen und garantieren das Feld - ein
     // '??' wuerde einen echten Shape-Defekt maskieren statt ihn an der NOT-NULL-Spalte laut
-    // werden zu lassen.
+    // werden zu lassen. cost_correction_micro_cents_rem (LCT P4) ebenfalls OHNE ?? 0 -
+    // derselbe Garantie-Grund.
     [
       tenantId,
       usage.inputTokens,
@@ -1149,6 +1165,7 @@ async function flushUsage(client, tenantId, usage) {
       usage.calls,
       usage.spendMonthKey ?? null,
       usage.spendMonthCostCents,
+      usage.costCorrectionMicroCentsRem,
     ],
   );
 }

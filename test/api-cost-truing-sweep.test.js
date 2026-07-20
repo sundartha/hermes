@@ -55,7 +55,7 @@ function endedOutboundCall(state, { minutesAgo = ENDED_MINUTES_AGO } = {}) {
 
 // (A) Verdrahtungs- und Shape-Beweis am leeren Store: der Endpunkt existiert, costTruing
 // ist als Dependency angekommen (waere es undefined, faellt der Handler in einen
-// TypeError -> 500), und die Antwort traegt genau die acht Zaehler-/Quoten-Felder.
+// TypeError -> 500), und die Antwort traegt genau die neun Zaehler-/Quoten-Felder.
 // GELD-PFAD: Nenner 0 -> coveragePercent 0, NICHT 100 und NICHT null/NaN - der
 // Nenner-0-Freispruch waere die fail-open-Variante genau der Zahl, die ab P4 den Flip
 // freigibt.
@@ -71,6 +71,7 @@ test("POST /api/billing/cost-truing/sweep, leerer Store: 200 + volle Zaehler-Sha
       coveragePercent: 0,
       measured: 0,
       incomplete: 0,
+      noEstimate: 0,
       unavailable: 0,
       skippedCalls: 0,
       failed: 0,
@@ -104,6 +105,7 @@ test("POST /api/billing/cost-truing/sweep mit Store-Daten: echter Sweep (Kandida
       coveragePercent: 50, // 1 von 2 beendeten Outbound-Calls beweisbar vollstaendig
       measured: 0,
       incomplete: 0,
+      noEstimate: 0,
       unavailable: 0,
       skippedCalls: 1, // Twilio-Adapter ohne getVoiceCostRecords -> sauberes No-op
       failed: 0,

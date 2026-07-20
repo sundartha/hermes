@@ -20,10 +20,11 @@
 // VORAUSSETZUNG FAELLT BEIM ERSTEN SKALIERUNGSSCHRITT (2. Instanz) - dann ist der Riegel
 // wirkungslos und muss ersetzt werden.
 //
-// Waehrungs-Warnung: actualCostMicroCents bleibt USD-Mikro-Cent, UNVERAENDERT. Keine
-// Umrechnung in dieser Phase (der Umrechnungskurs Provider->Bucket, config.billing.
-// PROVIDER_TO_BUCKET_RATE_MICRO, hat hier weiterhin KEINEN Verbraucher - P4 fuehrt ihn ein).
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+// Waehrungs-Regel (D5): actualCostMicroCents bleibt am Call USD-Mikro-Cent,
+// UNVERAENDERT. Die Umrechnung USD -> EUR-Bucket lebt an GENAU EINER Stelle:
+// convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
+// applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
+import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, BOOTSTRAP_TENANT_ID, isBookableCents } from "../store/defaults.js";
 import { nextCostTruingAttempt } from "../store/state-ops.js";
 import { findActiveNumber } from "../store/views.js";
 import { sendFailSoftAlertSms } from "../telephony/alert-sms.js";
@@ -133,6 +134,10 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return {
       actualCostMicroCents: total,
       source: complete ? COST_TRUING_SOURCE.DETAIL_RECORDS : COST_TRUING_SOURCE.INCOMPLETE,
+      // LCT P4: zweiter Beleg des Vollstaendigkeits-Praedikats. Nicht-ganzzahlige oder
+      // fehlende billedSec zaehlen als 0 (fail-closed) - Summe 0 heisst "nichts
+      // abgerechnet" und verbietet jede Rueckerstattung.
+      billedSecTotal: records.reduce((sum, r) => sum + (Number.isSafeInteger(r?.billedSec) && r.billedSec > 0 ? r.billedSec : 0), 0),
     };
   }
 
@@ -201,19 +206,69 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       emitFinding(COST_TRUING_FINDING.COVERAGE_STALLED, coveragePercent, nowMs);
   }
 
-  // Zaehlt das Ergebnis EINES abgeglichenen Calls in die Sweep-Bilanz ein. measured=null
-  // heisst "diesmal nicht gemessen" (ok:false/leere Antwort/unparsbare Summe): closed=true
-  // -> die Versuche sind erschoepft, der Call bleibt dauerhaft 'unavailable' (failed);
-  // closed=false -> ein spaeterer Lauf bekommt eine neue Chance (unavailable, aber offen).
-  // measured!==null trennt weiter nach der Vollstaendigkeits-Herkunft (measured/incomplete).
-  function countOutcome(tally, measured, closed) {
-    if (!measured) {
+  // Zaehlt das Ergebnis EINES abgeglichenen Calls in die Sweep-Bilanz ein. Bezugsgroesse
+  // ist der PERSISTIERTE truedSource (nicht der rohe measured.source) - die Bilanz zaehlt
+  // damit GENAU den Sachverhalt, der am Call landet, und kann ihm nie widersprechen.
+  // 'unavailable' (== measured war null: ok:false/leere Antwort/unparsbare Summe): closed
+  // -> Versuche erschoepft, dauerhaft 'failed'; offen -> ein spaeterer Lauf bekommt eine
+  // neue Chance (unavailable). Sonst nach Herkunft: 'telnyx_detail_records' -> gemessen,
+  // 'no_estimate' -> ohne Schaetzbetrag (NIE gemessen), Rest ('incomplete') -> unvollstaendig.
+  function countOutcome(tally, truedSource, closed) {
+    if (truedSource === COST_TRUING_SOURCE.UNAVAILABLE) {
       if (closed) tally.failed++;
       else tally.unavailable++;
       return;
     }
-    if (measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS) tally.measured++;
+    if (truedSource === COST_TRUING_SOURCE.DETAIL_RECORDS) tally.measured++;
+    else if (truedSource === COST_TRUING_SOURCE.NO_ESTIMATE) tally.noEstimate++;
     else tally.incomplete++;
+  }
+
+  // LCT P4, das Herz der Phase: das VOLLSTAENDIGKEITS-Praedikat. Nur wenn ALLE drei
+  // Belege vorliegen, darf Geld ZURUECKGEGEBEN werden. Nachgebucht wird immer.
+  //   1. source === 'telnyx_detail_records' - gesetzt NUR bei kompletter Pflicht-Menge
+  //      (classifyRecords, EINE Quelle; ueber der LEEREN Menge ist das nie wahr).
+  //   2. billedSecTotal > 0 - Records ohne abgerechnete Sekunden beweisen nichts.
+  //   3. estimatedCostCents ist ein persistierter, buchbarer Betrag (P2) - gegen den
+  //      und NUR gegen den wird gerechnet, nie gegen einen neu abgeleiteten Tarif.
+  // Die Waehrung steht bewusst NICHT in dieser Liste: P1 verwirft fremdwaehrende
+  // Records schon am Adapter, ein zweiter Riegel hier waere eine zweite Wahrheit (G5).
+  function refundProven(call, measured) {
+    return (
+      measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS &&
+      measured.billedSecTotal > 0 &&
+      isBookableCents(call.estimatedCostCents)
+    );
+  }
+
+  // Flag AUS -> byte-identisch zu P3 (die erste und wichtigste Zusage dieser Phase): der
+  // rohe measured.source, also NIE 'no_estimate'.
+  // Flag AN, kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar. Zwei
+  // getrennte Sachverhalte, zwei getrennte Zustaende (kein gemeinsames Label):
+  //   - Records VOLLSTAENDIG (measured.source === 'telnyx_detail_records') -> 'no_estimate'
+  //     (die Messung ist gut, es fehlt nur der Schaetzbetrag).
+  //   - Records unvollstaendig -> es bleibt beim Messproblem 'incomplete' (== measured.source).
+  // Beide sind nicht 'telnyx_detail_records', drueckt die Deckungsquote also identisch.
+  function truedSourceOf(call, measured) {
+    if (!config.billing.costTruingBookingEnabled) return measured.source;
+    if (isBookableCents(call.estimatedCostCents)) return measured.source;
+    return measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS
+      ? COST_TRUING_SOURCE.NO_ESTIMATE
+      : measured.source;
+  }
+
+  // Bucht die Korrektur EINES abgeglichenen Calls. Kein Estimate -> gar keine Korrektur
+  // (Bestandszeile von vor P2, beide Richtungen). Die Asymmetrie selbst liegt eine
+  // Schicht tiefer in applyCostCorrectionCents - hier steht nur der BEWEIS.
+  function bookCorrectionFor(call, measured) {
+    if (!isBookableCents(call.estimatedCostCents)) return;
+    const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
+      actualCostMicroCents: measured.actualCostMicroCents,
+      estimatedCostCents: call.estimatedCostCents,
+      providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
+      dataComplete: refundProven(call, measured),
+    });
+    console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
   }
 
   async function trueOneCall(call, tally) {
@@ -252,15 +307,22 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       : null;
     const attempt = nextCostTruingAttempt(call);
     const closed = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
+    // EINE Herkunfts-Bestimmung fuer Persistenz UND Bilanz (G5): countOutcome zaehlt exakt
+    // den Wert, der am Call landet - kein zweites, aus measured.source neu abgeleitetes Urteil.
+    const truedSource = measured ? truedSourceOf(call, measured) : COST_TRUING_SOURCE.UNAVAILABLE;
 
     store.recordCallCostTruingResult(call.id, {
-      source: measured ? measured.source : COST_TRUING_SOURCE.UNAVAILABLE,
+      source: truedSource,
       actualCostMicroCents: measured ? measured.actualCostMicroCents : null,
       closedAt: closed ? new Date(now()).toISOString() : null,
     });
 
     if (measured) warnOnCostDrift(call, measured.actualCostMicroCents);
-    countOutcome(tally, measured, closed);
+    // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
+    // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
+    // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
+    if (measured && config.billing.costTruingBookingEnabled) bookCorrectionFor(call, measured);
+    countOutcome(tally, truedSource, closed);
   }
 
   // LCT P5 (Drift-Waechter): Absender des Alarms ist die aktive Nummer des BOOTSTRAP-
@@ -319,12 +381,13 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
     // ist ohnehin erst nach COST_TRUING_DELAY_MINUTES faellig und kommt im naechsten Lauf.
     const candidates = store.load().calls.filter((c) => isTruingCandidate(c, nowMs));
-    const tally = { measured: 0, incomplete: 0, unavailable: 0, skippedCalls: 0, failed: 0 };
+    const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls: 0, failed: 0 };
     for (const call of candidates) await trueOneCall(call, tally);
     const coveragePercent = costTruingCoveragePercent(store.load());
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidates.length} ` +
         `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
+        `ohne_schaetzung=${tally.noEstimate} ` +
         `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls}`,
     );
     reportCoverage(coveragePercent, nowMs);

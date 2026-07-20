@@ -132,11 +132,17 @@ export const USAGE_EVENT_KIND = Object.freeze({
 
 // LCT P3: Herkunft des Ist-Werts am Call (costTruedSource). KEINE dritte Kosten-Achse -
 // eine Herkunftsangabe. 'incomplete' = Records da, Pflicht-Menge nicht vollstaendig
-// (auch bei LEERER Pflicht-Menge: die beweist nichts). 'unavailable' = nicht gemessen
-// (ok:false, leere Antwort, unparsbare Summe) und NIEMALS "Kosten = 0".
+// (auch bei LEERER Pflicht-Menge: die beweist nichts) - ein DATENPROBLEM (Messung
+// lueckenhaft). 'no_estimate' (LCT P4) = Records VOLLSTAENDIG bewiesen, aber KEIN
+// persistierter Schaetzbetrag (Bestandszeile von vor P2) - strukturell nicht korrigierbar,
+// kein Messproblem; wie 'incomplete' nicht erstattbar und nicht 'telnyx_detail_records',
+// aber ein anderer Sachverhalt und deshalb ein eigener Zustand (zwei Ursachen teilen sich
+// NICHT ein Label). 'unavailable' = nicht gemessen (ok:false, leere Antwort, unparsbare
+// Summe) und NIEMALS "Kosten = 0".
 export const COST_TRUING_SOURCE = Object.freeze({
   DETAIL_RECORDS: "telnyx_detail_records",
   INCOMPLETE: "incomplete",
+  NO_ESTIMATE: "no_estimate",
   UNAVAILABLE: "unavailable",
 });
 
@@ -208,6 +214,22 @@ export const USAGE_CORRUPT_REASON = "usage_korrupt";
 // Reine Funktion.
 export function isBookableCents(x) {
   return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
+}
+
+// Skala, in der providerToBucketRateMicro gefuehrt wird (config.js). Benannt, damit
+// weder die Korrektur-Formel (state-ops.CORRECTION_DIVISOR) noch der Drift-Waechter
+// (cost-calibration.providerMicroCentsToBucketCents) eine nackte 1_000_000 im Rumpf
+// traegt (G25) und nicht mit dem gleich aussehenden MICRO_CENTS_PER_CENT verwechselt
+// wird - die beiden haben NICHTS miteinander zu tun (Kurs-Skala vs. Geld-Aufloesung).
+// EINE Quelle fuer beide Umrechner (G5): dieselbe Kurs-Skala wird nie zweimal gepflegt.
+export const PROVIDER_RATE_SCALE = 1_000_000;
+
+// Ist x ein buchbarer KORREKTUR-Betrag (LCT P4)? Schwester von isBookableCents, mit
+// EINEM Unterschied: BELIEBIGES VORZEICHEN. isBookableCents (x >= 0) bleibt
+// UNVERAENDERT - es ist der fail-closed-Riegel gegen korrupte Werte auf dem
+// Bestandspfad (D12) und wird NICHT aufgeweicht, sondern bekommt einen Nachbarn.
+export function isCorrectionCents(x) {
+  return Number.isFinite(x) && Number.isInteger(x);
 }
 
 // Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt
@@ -381,6 +403,14 @@ export function emptyUsage() {
     outputTokens: 0,
     costCents: 0,
     costMicroCentsRem: 0,
+    // LCT P4: Sub-Cent-Rest der KORREKTURBUCHUNGEN. PERSISTIERT - und das ist der
+    // Unterschied zum Nachbarn costMicroCentsRem eine Zeile darueber, der ausdruecklich
+    // ephemer ist. Zwei gleich benannte Rest-Felder mit verschiedener Lebensdauer sind
+    // eine Falle fuer den naechsten Leser, deshalb hier hart begruendet: der
+    // Korrektur-Rest sammelt sich ueber TAGE (ein Abgleichlauf alle 6 h, verzoegert um
+    // 180 min), der trackUsage-Rest entsteht und verbraucht sich innerhalb EINES
+    // Gespraechs. Ein Restart wirft beim Korrektur-Rest also echtes Geld weg.
+    costCorrectionMicroCentsRem: 0,
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
