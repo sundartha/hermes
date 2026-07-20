@@ -14,6 +14,7 @@ import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { voiceAttrs } from "./render.js";
 import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
+import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
 
 const TEXML_BASE = "/v2/texml";
 // Call-Control-Basis (P4, AI-Assistant-Pfad): Origination/Hangup/ai_assistant_start laufen
@@ -25,6 +26,33 @@ const JSON_HEADERS_TYPE = "application/json";
 const HANGUP_ACTION = "hangup";
 const ASSISTANT_START_ACTION = "ai_assistant_start";
 const SPEAK_ACTION = "speak";
+
+// ---- CDR/Ist-Kosten (PLAN-LIVE-COST-TRACING P1) ----
+// Einzige Telnyx-Quelle mit Einzel-Call-Granularitaet (Kap. 2.6): GET /v2/detail_records.
+// usage_reports aggregiert nur, der call.hangup-Webhook traegt kein Kostenfeld.
+const DETAIL_RECORDS_BASE = "/v2/detail_records";
+// HTTP-200-verifizierte record_type-Enumwerte (Messung 2026-07-20). "call" existiert NICHT
+// (HTTP 400, code 10011). amd/conference/messaging/media-streaming sind gueltig, aber leer
+// -> nicht abgefragt (Requests ohne Ertrag). EINE Quelle des Enums (G5/G25).
+const COST_RECORD_TYPES = Object.freeze([
+  "sip-trunking", "call-control", "speech-to-text",
+  "text-to-speech", "recording", "inference", "ai-voice-assistant",
+]);
+// Eine Seite je Typ. Volle Seite = moeglicher Datenverlust -> fail-closed (ok:false)
+// statt stiller Untermenge; eine Paginierungsschleife haette in P1 keinen Aufrufer.
+const COST_RECORDS_PAGE_SIZE = 250;
+// Kandidaten-Felder der Leg-Referenz. Welche record_types ueberhaupt eine tragen, ist
+// UNBELEGT (Kap. 2.6) - P3 beantwortet das aus dem leg_unresolved-Zaehler. Kein Treffer
+// -> Record faellt weg (konservativ: fehlende Records heissen spaeter 'incomplete',
+// ein FREMDER Record waere eine Fehlbuchung).
+const LEG_ID_FIELDS = Object.freeze(["leg_id", "call_leg_id"]);
+// Kandidaten-Felder des Record-Zeitstempels fuer den zusaetzlichen CLIENT-seitigen
+// Fensterfilter (Design-Entscheidung P1, s. getVoiceCostRecords) - der Feldname ist wie
+// die Query-Parameternamen des Zeitfensters UNBELEGT (Kap. 2.6 belegt nur cost/rate/
+// currency/rate_measured_in). Kein Treffer -> Fensterpruefung greift nicht (die strikte
+// Leg-ID-Gleichheit bleibt der primaere Riegel; ein fehlendes Zeitstempel-Feld verwirft den
+// Record NICHT - anders als eine fehlende Leg-Referenz, die IMMER verwirft, s. recordLegId).
+const RECORD_TIMESTAMP_FIELDS = Object.freeze(["recorded_at", "created_at"]);
 // SpeakRequest.voice_settings ist laut Telnyx-OpenAPI eine per `type` diskriminierte Union;
 // ElevenLabsVoiceSettings verlangt type="elevenlabs" (das ASSISTANT-Objekt dagegen hat ein
 // flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
@@ -120,6 +148,88 @@ function transcriptionFields(language) {
   if (!language) return {};
   const hint = STT_FLUX_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
   return { transcription: { model: STT_MODEL, language: hint } };
+}
+
+// ---- CDR/Ist-Kosten Helfer (PLAN-LIVE-COST-TRACING P1) ----
+
+// Erste aufloesbare Leg-Referenz eines Roh-Records (G5: eine Stelle, ein Feldvertrag).
+function recordLegId(raw) {
+  for (const field of LEG_ID_FIELDS) {
+    if (raw[field]) return String(raw[field]);
+  }
+  return null;
+}
+
+// Client-seitiger Zusatzfilter gegen das Anrufsfenster (Design-Entscheidung P1): kein
+// aufloesbares/parsebares Zeitstempel-Feld -> NICHT ablehnen (die strikte Leg-ID-
+// Gleichheit in toCostRecord bleibt der primaere Riegel; ein fehlendes Feld ist keine
+// Erkenntnis ueber die Zeit, konservativ = durchlassen statt raten).
+function withinRecordWindow(raw, startedAt, endedAt) {
+  const rawTimestamp = RECORD_TIMESTAMP_FIELDS.map((field) => raw[field]).find(Boolean);
+  if (!rawTimestamp) return true;
+  const t = Date.parse(rawTimestamp);
+  if (Number.isNaN(t)) return true;
+  return t >= Date.parse(startedAt) && t <= Date.parse(endedAt);
+}
+
+// Roh-Record -> Port-Record oder Ablehnungsgrund (fuer den PII-freien Zaehler in
+// getVoiceCostRecords). EINE Gueltigkeitsquelle je Record, in dieser Reihenfolge:
+// Waehrung, Leg, Zeitfenster, Kosten - jeder Zweig mit eigenem Grund.
+function toCostRecord(raw, { legId, startedAt, endedAt }) {
+  const currency = String(raw.currency || "").trim().toUpperCase();
+  const expectedCurrency = String(config.billing.providerCurrency).trim().toUpperCase();
+  if (!currency || currency !== expectedCurrency) return { reason: "currency_mismatch" };
+
+  const recordLeg = recordLegId(raw);
+  if (recordLeg === null) return { reason: "leg_unresolved" };
+  if (recordLeg !== legId) return { reason: "leg_mismatch" };
+
+  if (!withinRecordWindow(raw, startedAt, endedAt)) return { reason: "out_of_window" };
+
+  const costMicroCents = parseDecimalToMicroCents(raw.cost);
+  if (costMicroCents === null) return { reason: "cost_unparsable" };
+
+  return {
+    record: {
+      recordType: raw.record_type,
+      costMicroCents,
+      currency,
+      billedSec: parseNonNegativeInteger(raw.billed_sec),
+      legId,
+    },
+  };
+}
+
+// Eine Typ-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die Port-
+// Methode selbst (G31). Server-Filter sind NUR filter[record_type] + page[size] (Kap. 2.6
+// belegt genau diese zwei) - das Zeitfenster wird NICHT als Query-Parameter geraten (die
+// Parameternamen sind UNBELEGT); die Fensterpruefung laeuft ausschliesslich client-seitig
+// in toCostRecord. Jeder Wurf und jedes rejectende fetch (Netzfehler/Timeout) wird zu
+// { ok:false, reason:"provider_error" } - kein Timeout-Aufrufer in P1 (s. Phasen-Report).
+async function fetchCostRecordPage(recordType) {
+  const q = new URLSearchParams();
+  q.set("filter[record_type]", recordType);
+  q.set("page[size]", String(COST_RECORDS_PAGE_SIZE));
+  try {
+    const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${q}`, {
+      headers: headers(),
+    });
+    await assertTelnyxOk(res, "getVoiceCostRecords", ATTACH_STATUS);
+    const raw = await parseTelnyxResource(res);
+    if (!Array.isArray(raw)) return { ok: false, reason: "shape_unexpected" };
+    return { ok: true, raw };
+  } catch {
+    return { ok: false, reason: "provider_error" };
+  }
+}
+
+// PII-freier Erfolgs-Log fuer getVoiceCostRecords (OBS-2-Linie wie logCallControlOk): Op-
+// Name, Anzahl akzeptierter Records + Ablehnungsgruende. NIE legId, NIE eine Rufnummer,
+// NIE der Key (Regel 4/5).
+function logCostRecordsOk(recordCount, rejectedByReason) {
+  console.log(
+    `[telnyx/voice] getVoiceCostRecords ok records=${recordCount} rejected=${JSON.stringify(rejectedByReason)}`,
+  );
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -262,5 +372,37 @@ export const telnyxVoice = {
       body: { payload: text, ...speakVoiceFields({ voiceProfile, useAssistantVoice }) },
       op: "speak",
     });
+  },
+
+  // Ist-Kosten-Datensaetze EINES Calls abrufen (PLAN-LIVE-COST-TRACING P1). OPTIONAL am
+  // Port, Telnyx-only wie originateViaCallControl: Twilios price-Feld deckt nur
+  // Connectivity - dieselbe Signatur mit anderer Semantik waere schlimmer als keine.
+  //
+  // WIRFT NIE. Rueckgabe ist ein ERGEBNIS-OBJEKT, nie eine nackte Zahl: die
+  // Unterscheidung "gemessen 0" vs. "nicht gemessen" ist im Typ erzwungen, nicht per
+  // Konvention (G31). ok:false heisst NIEMALS "Kosten = 0".
+  //
+  // Server-Filter + zusaetzliche CLIENT-seitige Pruefung auf legId und Zeitfenster: die
+  // Query-Parameternamen des Zeitfilters sind UNBELEGT (Kap. 2.6 belegt filter[record_type]
+  // + page[size]). Ignoriert Telnyx den Filter, holen wir zu viel - durchgelassen wird
+  // trotzdem nichts Falsches.
+  async getVoiceCostRecords({ legId, startedAt, endedAt } = {}) {
+    if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
+    if (!legId || !startedAt || !endedAt) return { ok: false, reason: "params_missing" };
+
+    const records = [];
+    const rejectedByReason = {};
+    for (const recordType of COST_RECORD_TYPES) {
+      const page = await fetchCostRecordPage(recordType);
+      if (!page.ok) return page; // kein Teil-Erfolg (P1-Risiko/G31)
+      if (page.raw.length === COST_RECORDS_PAGE_SIZE) return { ok: false, reason: "page_truncated" };
+      for (const rawRecord of page.raw) {
+        const outcome = toCostRecord(rawRecord, { legId, startedAt, endedAt });
+        if (outcome.record) records.push(outcome.record);
+        else rejectedByReason[outcome.reason] = (rejectedByReason[outcome.reason] || 0) + 1;
+      }
+    }
+    logCostRecordsOk(records.length, rejectedByReason);
+    return { ok: true, records };
   },
 };

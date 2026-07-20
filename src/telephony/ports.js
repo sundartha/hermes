@@ -67,6 +67,30 @@
  */
 
 /**
+ * @typedef {Object} VoiceCostRecordsParams
+ * @property {string} legId     - provider-seitige Leg-Referenz des Calls
+ * @property {string} startedAt - ISO-Zeitstempel Call-Beginn (Fensteruntergrenze)
+ * @property {string} endedAt   - ISO-Zeitstempel Call-Ende (Fensterobergrenze)
+ */
+
+/**
+ * @typedef {Object} VoiceCostRecord
+ * @property {string} recordType     - Provider-Kostenart (sip-trunking, text-to-speech, ...)
+ * @property {number} costMicroCents - GANZZAHL Mikro-Cents in der Provider-Waehrung.
+ *   NICHT EUR: die Umrechnung ist ausdruecklich NICHT Teil dieses Ports (D5).
+ * @property {string} currency       - Provider-Waehrung des Records (ISO-4217, Grossschreibung)
+ * @property {number|null} billedSec - abgerechnete Sekunden; null = nicht auslesbar
+ * @property {string} legId          - Leg-Referenz, gegen die der Record aufgeloest wurde
+ */
+
+/**
+ * @typedef {Object} VoiceCostRecordsResult
+ * @property {boolean} ok
+ * @property {VoiceCostRecord[]} [records] - nur bei ok:true; leere Liste = "nichts gefunden"
+ * @property {string} [reason]             - nur bei ok:false; PII-frei, fuer Logs
+ */
+
+/**
  * @typedef {Object} VoiceControl
  * @property {(params: OriginateParams) => Promise<OriginateResult>} originateCall
  *   Startet einen Outbound-Call (TeXML). Heute: calls.create(...).
@@ -86,6 +110,12 @@
  *   Stimme, die der AI-Assistant danach benutzt, sofern der Adapter sie kennt" - KEIN
  *   Provider-String; das Mapping auf die Provider-Payload lebt adapter-intern. Fehlt der
  *   Parameter (Inbound-Pfad), ist das Verhalten byte-identisch zum Bestand.
+ * @property {(params: VoiceCostRecordsParams) => Promise<VoiceCostRecordsResult>} [getVoiceCostRecords]
+ *   Ist-Kosten-Datensaetze EINES Calls (Provider-CDR). Telnyx-only (wie
+ *   originateViaCallControl): Twilios price-Feld deckt nur Connectivity - dieselbe
+ *   Signatur mit anderer Semantik waere schlimmer als keine. Fehlt die Methode, faellt
+ *   der Aufrufer auf "kein Abgleich" zurueck; das ist der konservative Fall.
+ *   WIRFT NIE. ok:false heisst "nicht gemessen" und NIEMALS "Kosten = 0".
  */
 
 /**
