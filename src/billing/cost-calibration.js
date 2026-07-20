@@ -5,7 +5,7 @@
 // aus PM-2; ein dummer, aber vorhersagbarer Wert ist hier die bessere Eigenschaft.
 // tariffCentsPerMin (src/telephony/outbound-gates.js) wird von dieser Phase NICHT
 // importiert und NICHT beruehrt.
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT } from "../store/defaults.js";
+import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE } from "../store/defaults.js";
 import { voiceMinutesOf } from "./metering.js";
 
 // Groesse des rollenden Fensters: die juengsten N abgeglichenen Calls je Praefix.
@@ -21,8 +21,6 @@ export const DRIFT_SAMPLE_WINDOW = 100;
 // Ausreisser darf den Waechter nicht dauerhaft schreien lassen.
 const DRIFT_PERCENTILE = 95;
 const PERCENT_BASE = 100;
-// Mikro-Skala des Umrechnungskurses (1_000_000 = Faktor 1,0), s. providerMicroCentsToBucketCents.
-const MICRO_RATE_UNIT = 1_000_000;
 
 export const TARIFF_DRIFT_FINDING = Object.freeze({
   UNDERESTIMATE: "underestimate", // Tarif UNTER dem gemessenen p95 - Reserve deckt den Anruf nicht
@@ -101,7 +99,7 @@ export function measuredCentsPerMinByPrefix(calls, prefix) {
 export function providerMicroCentsToBucketCents(providerMicroCents, rateMicro) {
   const product = providerMicroCents * rateMicro;
   if (!Number.isSafeInteger(product)) return null; // zweite Linie, nie stillschweigend 0
-  return Math.ceil(product / (MICRO_CENTS_PER_CENT * MICRO_RATE_UNIT));
+  return Math.ceil(product / (MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE));
 }
 
 // Klassifikation, Ganzzahl-Arithmetik, keine Division:

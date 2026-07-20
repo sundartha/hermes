@@ -9,11 +9,26 @@ import {
   makeDefaultState,
   usageFor,
   applyCostCorrectionCents,
+  bookCostCorrectionCents,
 } from "../src/store/state-ops.js";
-import { emptyUsage, isBookableCents, isCorrectionCents } from "../src/store/defaults.js";
+import { emptyUsage, isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../src/store/defaults.js";
 
 const TENANT_A = "tenant_a";
 const JULY_ISO = "2026-07-19T10:00:00.000Z"; // Schluessel '2026-07'
+
+// Leitet console.error waehrend fn um (Muster test/budget-nan-fail-closed.test.js) und
+// restauriert IMMER, auch bei Wurf. Die Discard-Kante loggt ueber discardCorruptWrite.
+function captureErr(fn) {
+  const logs = [];
+  const orig = console.error;
+  console.error = (...a) => logs.push(a.map(String).join(" "));
+  try {
+    fn();
+  } finally {
+    console.error = orig;
+  }
+  return logs.join("\n");
+}
 
 // Neutraler Kurs (Faktor 1,0): actualCostMicroCents in Mikro-Cent bildet 1:1 auf
 // Ziel-Bucket-Cent ab (X * 1_000_000 Mikro-Cent -> X Cent, ohne Rundungsrest), s.
@@ -143,4 +158,51 @@ test("Praedikate: isBookableCents(-1)===false bleibt unveraendert; isCorrectionC
   assert.equal(isCorrectionCents(NaN), false);
   assert.equal(isCorrectionCents(Infinity), false);
   assert.equal(isCorrectionCents(-Infinity), false);
+});
+
+// ---- D7-Riegel END-TO-END: ein korrupter deltaCents wird verworfen (booked=false),
+// der usage-Bucket bleibt BIT-IDENTISCH und die Verwerfung wird geloggt. Analog zu
+// trackUsage(NaN)/addVoiceUsageCostCents(NaN) in test/budget-nan-fail-closed.test.js -
+// die Praedikat-Tests oben pruefen nur isCorrectionCents(x) direkt, NICHT die
+// Schreibkante. Die einzige oeffentliche Fassade store.applyCostCorrectionCents ist
+// direkt aufrufbar, der Pfad also erreichbar. ----
+
+test("D7 end-to-end: bookCostCorrectionCents(NaN/1.5) verwirft, Bucket bit-identisch, geloggt", () => {
+  for (const bad of [NaN, 1.5, Infinity, -Infinity]) {
+    const s = makeDefaultState();
+    seedUsage(s, TENANT_A, { costCents: 42, spendMonthKey: "2026-07", spendMonthCostCents: 30 });
+    const before = { ...usageFor(s, TENANT_A) };
+    let result;
+    const out = captureErr(() => {
+      result = bookCostCorrectionCents(s, TENANT_A, bad, JULY_ISO);
+    });
+    assert.equal(result.booked, false, `deltaCents=${String(bad)} darf nicht buchen`);
+    assert.deepEqual(usageFor(s, TENANT_A), before, `deltaCents=${String(bad)}: Bucket bit-identisch`);
+    assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
+  }
+});
+
+test("D7 end-to-end: applyCostCorrectionCents mit NaN-estimatedCostCents verwirft alles-oder-nichts", () => {
+  const s = makeDefaultState();
+  // Vorbelegter Bucket inkl. Korrektur-Rest: er MUSS bit-gleich bleiben (alles-oder-nichts).
+  seedUsage(s, TENANT_A, {
+    costCents: 42,
+    spendMonthKey: "2026-07",
+    spendMonthCostCents: 30,
+    costCorrectionMicroCentsRem: 104_000_000_000,
+  });
+  const before = { ...usageFor(s, TENANT_A) };
+  let result;
+  const out = captureErr(() => {
+    // estimatedCostCents=NaN -> deltaCents = bucketCents - NaN = NaN -> isCorrectionCents(NaN)=false.
+    result = applyCostCorrectionCents(
+      s,
+      TENANT_A,
+      { actualCostMicroCents: 50_000_000, estimatedCostCents: NaN, providerToBucketRateMicro: 920_000, dataComplete: true },
+      JULY_ISO,
+    );
+  });
+  assert.equal(result.booked, false, "NaN-Schaetzung darf nicht buchen");
+  assert.deepEqual(usageFor(s, TENANT_A), before, "kein Teil-Schreibeffekt: der Korrektur-Rest bleibt bit-identisch");
+  assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });

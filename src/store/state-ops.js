@@ -1666,6 +1666,17 @@ function bookCents(usage, cents, nowIso) {
   usage.spendMonthKey = key;
 }
 
+// Mikro-Cent-Carry (G5): verteilt (Rest + Inkrement) in den vollen Cent-Uebertrag und den
+// neuen Sub-Cent-Rest - das EINE Ganzzahl-Idiom hinter trackUsage (Cent-Aufloesung) und
+// convertProviderMicroToBucketCents (Kurs-Umrechnung), das sich nur im Divisor und in der
+// Einheit des Restes unterscheidet. REINE Funktion, MUTIERT NICHTS: der Aufrufer entscheidet,
+// ob er Uebertrag UND Rest gemeinsam fortschreibt (alles-oder-nichts). floor und modulo
+// teilen sich denselben Quotienten - kein "/ divisor"-Zwischenschritt als Float.
+function carryMicroRemainder(remMicro, incrementMicro, divisor) {
+  const totalMicro = remMicro + incrementMicro;
+  return { carryCents: Math.floor(totalMicro / divisor), remMicro: totalMicro % divisor };
+}
+
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
 // tokens = {inputTokens, outputTokens, model}; das Modell entscheidet die Preisstaffel
 // (P7a, fail-closed bei unbekannter ID). P1 Safety-BLOCKER: kein Per-Inkrement-Cent-
@@ -1690,11 +1701,11 @@ export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
     return discardCorruptWrite(usage, `trackUsage tenant:${tenantId}`, microInc);
   usage.inputTokens += tokens.inputTokens;
   usage.outputTokens += tokens.outputTokens;
-  const totalMicro = usage.costMicroCentsRem + microInc;
+  const { carryCents, remMicro } = carryMicroRemainder(usage.costMicroCentsRem, microInc, MICRO_CENTS_PER_CENT);
   // Der volle Cent-Uebertrag geht ueber die EINE Buchungsstelle auf BEIDE Achsen; der
   // Sub-Cent-Rest bleibt lebenszeit-skaliert im Bucket (P1-Safety-BLOCKER, s. bookCents).
-  bookCents(usage, Math.floor(totalMicro / MICRO_CENTS_PER_CENT), nowIso);
-  usage.costMicroCentsRem = totalMicro % MICRO_CENTS_PER_CENT;
+  bookCents(usage, carryCents, nowIso);
+  usage.costMicroCentsRem = remMicro;
   return usage;
 }
 
@@ -1729,11 +1740,14 @@ const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
 export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCents, providerToBucketRateMicro }) {
   const safeRemMicro =
     Number.isSafeInteger(remMicro) && remMicro >= 0 && remMicro < CORRECTION_DIVISOR ? remMicro : 0;
-  const totalMicro = safeRemMicro + actualCostMicroCents * providerToBucketRateMicro;
-  return {
-    bucketCents: Math.floor(totalMicro / CORRECTION_DIVISOR),
-    remMicro: totalMicro % CORRECTION_DIVISOR,
-  };
+  // Multiplikation zuerst; die EINZIGE Division steckt in carryMicroRemainder (floor und
+  // modulo teilen denselben Quotienten) - kein "* rate / 1e6"-Zwischenschritt als Float.
+  const { carryCents, remMicro: carriedRem } = carryMicroRemainder(
+    safeRemMicro,
+    actualCostMicroCents * providerToBucketRateMicro,
+    CORRECTION_DIVISOR,
+  );
+  return { bucketCents: carryCents, remMicro: carriedRem };
 }
 
 // LCT P4, DIE Cent-Schreibkante der Korrektur (Anhang-Signatur, verbindlich).

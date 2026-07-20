@@ -210,10 +210,12 @@ export function isBookableCents(x) {
   return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
 }
 
-// Skala, in der providerToBucketRateMicro gefuehrt wird (config.js). Benannt, damit die
-// Korrektur-Formel keine nackte 1_000_000 im Rumpf traegt (G25) und nicht mit dem
-// gleich aussehenden MICRO_CENTS_PER_CENT verwechselt wird - die beiden haben NICHTS
-// miteinander zu tun (Kurs-Skala vs. Geld-Aufloesung).
+// Skala, in der providerToBucketRateMicro gefuehrt wird (config.js). Benannt, damit
+// weder die Korrektur-Formel (state-ops.CORRECTION_DIVISOR) noch der Drift-Waechter
+// (cost-calibration.providerMicroCentsToBucketCents) eine nackte 1_000_000 im Rumpf
+// traegt (G25) und nicht mit dem gleich aussehenden MICRO_CENTS_PER_CENT verwechselt
+// wird - die beiden haben NICHTS miteinander zu tun (Kurs-Skala vs. Geld-Aufloesung).
+// EINE Quelle fuer beide Umrechner (G5): dieselbe Kurs-Skala wird nie zweimal gepflegt.
 export const PROVIDER_RATE_SCALE = 1_000_000;
 
 // Ist x ein buchbarer KORREKTUR-Betrag (LCT P4)? Schwester von isBookableCents, mit
