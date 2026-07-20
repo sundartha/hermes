@@ -185,6 +185,10 @@ services:
         value: "0"
       - key: PAYMENT_CURRENCY
         value: "eur"
+      # Waehrung der Provider-Detail-Records. Default im Code = USD; hier explizit, damit
+      # der Live-Wert ablesbar ist statt nur im Code zu stehen.
+      - key: PROVIDER_CURRENCY
+        value: "USD"
       # ---- Abo-Buchung (Stripe Recurring, W4) ----
       - key: STRIPE_STARTER_PRICE_ID
         sync: false

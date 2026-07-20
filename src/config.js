@@ -354,6 +354,13 @@ const rawConfig = {
     min: 0,
   }),
   paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
+  // Waehrung, in der der Telefonie-Provider seine Detail-Records ausweist (ISO-4217,
+  // Grossschreibung). Default USD - in allen 293 Records der Messung vom 2026-07-20 war
+  // currency="USD". NICHT dasselbe wie paymentCurrency (das ist die Kundenwaehrung des
+  // Stripe-Hold): USD und EUR duerfen sich auf dem Geld-Pfad nie vermischen (D5).
+  // Wirkung in P1: ein Record mit ABWEICHENDER Waehrung wird VERWORFEN, nie umgerechnet.
+  // Die USD/EUR-Umrechnung entscheidet P2, nicht dieses Feld.
+  providerCurrency: (process.env.PROVIDER_CURRENCY || "USD").toUpperCase(),
   // ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c, D1) ----
   // Voice-Minuten-Tarif (GANZZAHL Cents/min, G26). EINE Kosten-Quelle (G5): speist die
   // Vorab-Reservierung (Worst-Case vor dem Dial), den Budget-Reconcile (Ist bei Call-Ende)
@@ -893,7 +900,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
