@@ -203,6 +203,28 @@ export function createCall(
     // die Voice-Minuten-Buchung prozessuebergreifend genau-einmal. NULL -> null (pg-Parity via
     // rowToCall). Muster summarySmsSentAt.
     billedAt: null,
+    // LCT P2: Kosten-Achse dieses Calls. ALLE fuenf sind additiv und INERT - kein Gate,
+    // kein Meter und keine Projektion liest sie in dieser Phase.
+    //
+    // estimatedCostCents: der TATSAECHLICH gebuchte Schaetzbetrag (GANZZAHL Cents),
+    // geschrieben von reconcileOutboundVoiceBudget im SELBEN Schritt, in dem gebucht wird.
+    // NIE spaeter aus tariffCentsPerMin rekonstruiert: der Tarif aendert sich (P4b), die
+    // Buchung nicht - eine rekonstruierte Differenz erstattete Geld zurueck, das real
+    // ausgegeben wurde, und oeffnete den geteilten Lebenszeit-Topf wieder.
+    estimatedCostCents: null,
+    // actualCostMicroCents: Summe der Provider-Ist-Kosten dieses Calls in GANZZAHL
+    // Mikro-Cents, in der PROVIDER-WAEHRUNG UNVERAENDERT (heute USD). KEINE Umrechnung an
+    // dieser Kante - die lebt an genau einer Stelle in P4. Eine umgerechnete Zahl ist
+    // unrekonstruierbar, sobald der Kurs sich aendert, und genau sie ist der Forensik-Wert.
+    actualCostMicroCents: null,
+    // costTruedAt/costTruedSource: Gegenstueck zum binaeren billedAt (D9) - "Ist-Wert steht
+    // aus" hat damit endlich einen Zustand. Beschrieben ab P3.
+    costTruedAt: null,
+    costTruedSource: null,
+    // costTruingAttempts: PERSISTIERT, nicht in-memory. Ein Prozess-lokaler Zaehler wird auf
+    // dem Render-Free-Tier bei jedem Restart genullt, erreicht COST_TRUING_MAX_ATTEMPTS (P3)
+    // nie und liesse den Job unbegrenzt gegen tote Calls laufen.
+    costTruingAttempts: 0,
     // P5 (C-Telnyx, PLAN-TELNYX-AI-ASSISTANT.md): Call-Control-Handles. Initial null, erst
     // bei erfolgreicher Call-Control-Origination gesetzt (telnyx-origination.js) - byte-
     // identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
@@ -393,6 +415,22 @@ export function markSummarySmsSent(s, callId) {
 // Voice-Minuten NICHT erneut. Wrapper saved bei changed.
 export function markBilled(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "billedAt");
+}
+
+// LCT P2: persistiert den GEBUCHTEN Schaetzbetrag am Call. Set-once (Muster markBilled):
+// der zuerst gebuchte Wert gewinnt, ein spaeter Retry ueberschreibt ihn nie - er ist der
+// Bezugspunkt, gegen den P4 die Korrektur bildet.
+//
+// isBookableCents ist hier PFLICHT und dieselbe EINE Gueltigkeitsquelle (defaults.js), die
+// addVoiceUsageCostCents benutzt: wird die Buchung dort als korrupt verworfen, darf hier
+// KEIN Estimate stehenbleiben - sonst rechnete P4 eine Rueckerstattung gegen einen Betrag,
+// der nie in den Bucket gelaufen ist. Liefert { call, changed } (Wrapper saved bei changed).
+export function recordCallEstimatedCostCents(s, callId, costCents) {
+  const call = getCall(s, callId);
+  if (!call || call.estimatedCostCents !== null || !isBookableCents(costCents))
+    return { call: call || null, changed: false };
+  call.estimatedCostCents = costCents;
+  return { call, changed: true };
 }
 
 // Anker der Max-Dauer-Rechnung: der ECHTE Call-Start (answeredAt bevorzugt, sonst startedAt),

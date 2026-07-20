@@ -239,6 +239,13 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // LCT P2: gebuchter Schaetzbetrag - Flush schreibt estimated_cost_cents
+    // (INSERT + ON CONFLICT DO UPDATE SET).
+    recordCallEstimatedCostCents(callId, costCents) {
+      const { call, changed } = ops.recordCallEstimatedCostCents(requireState(), callId, costCents);
+      if (changed) save();
+      return call;
+    },
     // CDF1 (Report #2 5.4): persistierter Fehlergrund - Wrapper-Parity zu json.js. Der
     // Flush schreibt failure_reason am call-Record (INSERT + ON CONFLICT DO UPDATE).
     recordFailureReason(callId, reason) {
@@ -825,6 +832,15 @@ function rowToSettings(r) {
   };
 }
 
+// LCT P2: BIGINT liefert der Treiber als STRING (Praezedenz rowToUsage:
+// spend_month_cost_cents). Ein roher String im Geld-Feld waere in P4 eine
+// String-Konkatenation statt einer Summe. NULL bleibt null ("nie abgeglichen") und wird
+// NIEMALS zu 0 ("gemessen: kostenlos") - das ist genau die Unterscheidung, die P1 im
+// Ergebnis-Typ erzwingt und die diese Kante nicht wieder einebnen darf.
+function hydratedMicroCents(raw) {
+  return raw === null || raw === undefined ? null : Number(raw);
+}
+
 function rowToCall(r, segmentsByCall, itemIdsByCall) {
   return {
     id: r.id,
@@ -883,6 +899,15 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // kommt aus dem Treiber, und ein NULL aus einer alt-migrierten Zeile muss auf
     // false fallen, nie auf true (fail-closed, bekannte pg-Boolean-Drift).
     diagnostic: r.diagnostic === true,
+    // LCT P2: Kosten-Achse hydrieren. Ohne diese Zeilen ginge sie beim Restart verloren UND
+    // der naechste Flush schriebe sie auf NULL zurueck (Lehre i8-design-decisions - dieselbe
+    // Klasse, die schon tenantId einmal gekostet hat). Bestandszeile ohne Wert -> null
+    // (bzw. 0 fuer den Zaehler), json-Parity zu createCall.
+    estimatedCostCents: r.estimated_cost_cents ?? null,
+    actualCostMicroCents: hydratedMicroCents(r.actual_cost_micro_cents),
+    costTruedAt: r.cost_trued_at ?? null,
+    costTruedSource: r.cost_trued_source ?? null,
+    costTruingAttempts: r.cost_truing_attempts ?? 0,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -1133,15 +1158,21 @@ async function flushCalls(client, tenantId, calls) {
           briefing, constraints, caller_name, language, max_duration_s, requested_by,
           status, started_at, answered_at, ended_at, summary, objective_achieved, provider,
           summary_sms_sent_at, context, failure_reason, billed_at,
-          call_control_id, assistant_id, diagnostic, mandate)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+          call_control_id, assistant_id, diagnostic, mandate,
+          estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
+          cost_trued_source, cost_truing_attempts)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
          objective_achieved=EXCLUDED.objective_achieved, provider=EXCLUDED.provider,
          summary_sms_sent_at=EXCLUDED.summary_sms_sent_at, failure_reason=EXCLUDED.failure_reason,
          billed_at=EXCLUDED.billed_at,
-         call_control_id=EXCLUDED.call_control_id, assistant_id=EXCLUDED.assistant_id`,
+         call_control_id=EXCLUDED.call_control_id, assistant_id=EXCLUDED.assistant_id,
+         estimated_cost_cents=EXCLUDED.estimated_cost_cents,
+         actual_cost_micro_cents=EXCLUDED.actual_cost_micro_cents,
+         cost_trued_at=EXCLUDED.cost_trued_at, cost_trued_source=EXCLUDED.cost_trued_source,
+         cost_truing_attempts=EXCLUDED.cost_truing_attempts`,
       [
         c.id,
         tenantId,
@@ -1187,6 +1218,17 @@ async function flushCalls(client, tenantId, calls) {
         // Wie context NICHT im ON CONFLICT DO UPDATE SET: bei createCall gesetzt, danach
         // unveraendert.
         c.mandate ? JSON.stringify(c.mandate) : null,
+        // LCT P2 ($30-$34): ALLE FUENF im ON CONFLICT DO UPDATE SET - anders als
+        // context/mandate/diagnostic (bei createCall gesetzt, danach unveraenderlich)
+        // mutieren sie NACH dem Create: estimated_cost_cents in reconcileOutboundVoiceBudget,
+        // die vier uebrigen im Kosten-Abgleich (P3). Fehlte auch nur eine im UPDATE-SET,
+        // fiele der Wert beim naechsten Flush auf den Create-Zustand zurueck, der Call
+        // saehe dauerhaft "nie abgeglichen" aus und P3 fragte ihn endlos erneut ab.
+        c.estimatedCostCents ?? null,
+        c.actualCostMicroCents ?? null,
+        c.costTruedAt ?? null,
+        c.costTruedSource ?? null,
+        c.costTruingAttempts ?? 0,
       ],
     );
     await flushTranscript(client, tenantId, c);

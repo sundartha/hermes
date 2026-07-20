@@ -51,7 +51,19 @@ export function makeMetering({ store, config }) {
     if (call.direction !== "outbound") return;
     const minutes = voiceMinutesOf(call);
     if (minutes <= 0) return;
-    store.addVoiceUsageCostCents(call.tenantId, minutes * tariffCentsPerMin(call.to));
+    // LCT P2: EIN Ausdruck, EIN Wert - gebucht und persistiert wird dieselbe Zahl im selben
+    // Schritt. Der Schaetzbetrag DARF spaeter NICHT aus tariffCentsPerMin rekonstruiert
+    // werden: P4b senkt den Tarif, und P3 gleicht mit COST_TRUING_DELAY_MINUTES Verzug ab -
+    // der ENV-Wechsel faellt genau in dieses Fenster. Eine gegen den NEUEN Tarif gerechnete
+    // Korrektur erstattete real ausgegebenes Geld zurueck und oeffnete den geteilten
+    // Lebenszeit-Topf wieder (Kapitel 4 des Plans).
+    //
+    // Reihenfolge ist Absicht: erst buchen, dann den Bezugswert festhalten. Beide Schritte
+    // sind synchrone Spiegel-Mutationen ohne IO dazwischen; die Richtung im Zweifel ist die,
+    // die MEHR gebucht laesst (fehlender Estimate -> P4 korrigiert gar nicht, fail-closed).
+    const estimatedCostCents = minutes * tariffCentsPerMin(call.to);
+    store.addVoiceUsageCostCents(call.tenantId, estimatedCostCents);
+    store.recordCallEstimatedCostCents(call.id, estimatedCostCents);
   }
 
   // number_month-Meter EINER neu aktivierten Nummer (P6b3, Meter 1). NUR im Metering-

@@ -140,3 +140,53 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
 export function unpricedModels(modelIds, modelPricesUsd) {
   return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
 }
+
+// LCT P2 (Kurs-Guard): der Umrechnungskurs Provider-Waehrung -> Ziel-Bucket gegen ein
+// Toleranzband um einen im CODE gepinnten Anker. Anker und Bandgrenzen sind BENANNTE
+// Konstanten, keine Literale im Rumpf (G25).
+//
+// PROVIDER_RATE_ANCHOR_MICRO traegt bewusst denselben ZAHLENWERT wie der ENV-Default in
+// config.js, ist aber eine EIGENE Konstante und referenziert ihn NICHT: zoege eine
+// Default-Aenderung den Anker still mit, pruefte das Band gegen sich selbst und waere ab
+// diesem Moment strukturell tot.
+const PROVIDER_RATE_ANCHOR_MICRO = 920000;
+const PROVIDER_RATE_BAND_MIN_FACTOR = 0.5;
+const PROVIDER_RATE_BAND_MAX_FACTOR = 2.0;
+
+export const PROVIDER_RATE_FINDING = Object.freeze({
+  OUT_OF_BAND: "provider_rate_out_of_band",
+});
+
+// Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster meterMappingGaps/
+// spendCapCoherence): leer = im Band. Hoechstens EIN Befund.
+//
+// fatal:false ist die STUFE DIESER PHASE, nicht die Regel: in P2/P3 hat der Kurs keinen
+// Verbraucher, ein Boot-Refusal tauschte einen Schaden von NULL gegen den Totalausfall der
+// Telefonie auf einem Free Tier mit haeufigen Restarts. Vorbild im Bestand:
+// warnUnpricedModels. P4 - die Phase, in der der Kurs erstmals Geld bewegt - hebt genau
+// dieses eine Feld auf true.
+//
+// Die EXISTENZ der Pruefung haengt an nichts, insbesondere NICHT an
+// COST_TRUING_BOOKING_ENABLED: P8 entfernt dieses Flag, und eine daran gekoppelte
+// Bedingung waere danach entweder weg oder als undefined falsy - lautlos tot genau in dem
+// Moment, in dem die Korrekturbuchung bedingungslos aktiv wird.
+//
+// Voraussetzung: laeuft NACH assertConfig() - nicht-numerische Werte und die 0 sind dort
+// bereits fail-closed abgefangen (numEnv, min 1). Kein zweites Gueltigkeitsidiom hier (G5).
+export function providerRateOutOfBand(rateMicro) {
+  const minMicro = Math.round(PROVIDER_RATE_ANCHOR_MICRO * PROVIDER_RATE_BAND_MIN_FACTOR);
+  const maxMicro = Math.round(PROVIDER_RATE_ANCHOR_MICRO * PROVIDER_RATE_BAND_MAX_FACTOR);
+  if (rateMicro >= minMicro && rateMicro <= maxMicro) return [];
+  return [
+    {
+      code: PROVIDER_RATE_FINDING.OUT_OF_BAND,
+      fatal: false,
+      message:
+        `PROVIDER_TO_BUCKET_RATE_MICRO=${rateMicro} liegt ausserhalb des Toleranzbandes ` +
+        `${minMicro}..${maxMicro} (Anker ${PROVIDER_RATE_ANCHOR_MICRO} = 0,92 je Einheit). ` +
+        "Haeufigste Ursache: Zehnerpotenz-Vertipper (920 statt 920000). Der Kurs hat in " +
+        "dieser Phase noch keinen Verbraucher - ab der Korrekturbuchung verweigert dieser " +
+        "Guard den Start.",
+    },
+  ];
+}

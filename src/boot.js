@@ -11,6 +11,7 @@ import {
   meterMappingGaps,
   spendCapCoherence,
   unpricedModels,
+  providerRateOutOfBand,
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
@@ -80,6 +81,14 @@ function warnUnpricedModels(config) {
   );
 }
 
+// LCT P2: Umrechnungskurs gegen das Toleranzband (providerRateOutOfBand, src/boot-guard.js).
+// NUR WARN, kein exit(1) - der Kurs hat in dieser Phase keinen Verbraucher; ab P4 wird
+// derselbe Befund fatal. UNKONDITIONAL: an kein Flag gekoppelt (Begruendung im Guard).
+function warnProviderRateOutOfBand(config) {
+  for (const finding of providerRateOutOfBand(config.billing.providerToBucketRateMicro))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
@@ -141,6 +150,7 @@ function assertBootGates(config, store) {
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
   assertSpendCapCoherence(config);
   warnUnpricedModels(config);
+  warnProviderRateOutOfBand(config);
 }
 
 function logBootBanner(config, port) {

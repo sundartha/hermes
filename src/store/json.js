@@ -54,6 +54,7 @@ export function load() {
     state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
     state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
+    state.calls = migrateCallCostFields(state.calls || []);
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
     // forensisch nach .corrupt-<ts> sichern. NUR wenn die Sicherung GELINGT, darf der Store mit
@@ -168,6 +169,22 @@ function migrateCalendarToMap(calendar) {
   }
   map[BOOTSTRAP_TENANT_ID] ||= demoCalendar();
   return map;
+}
+
+// LCT P2: Bestands-store.json traegt die fuenf Kosten-Felder nicht. undefined ist hier
+// gefaehrlich und nicht bloss unsauber: der persistierte Zaehler wird in P3 inkrementiert,
+// und undefined + 1 ist NaN - ein Abbruch-Riegel, der nie greift. "fehlt" heisst deshalb
+// strukturell null bzw. 0, nicht per Konvention (G27). Idempotent: ??= laesst gesetzte
+// Werte - auch die 0 - unangetastet.
+function migrateCallCostFields(calls) {
+  for (const c of calls) {
+    c.estimatedCostCents ??= null;
+    c.actualCostMicroCents ??= null;
+    c.costTruedAt ??= null;
+    c.costTruedSource ??= null;
+    c.costTruingAttempts ??= 0;
+  }
+  return calls;
 }
 
 // Profile aus config.tenancy.profilesSeed (Env-Var PROFILES_JSON) in den Store mergen.
@@ -379,6 +396,13 @@ export function markSummarySmsSent(callId) {
 // F9 (A6): persistierter Bucht-Marker - mutiert -> save bei changed (Muster markSummarySmsSent).
 export function markBilled(callId) {
   const { call, changed } = ops.markBilled(load(), callId);
+  if (changed) save();
+  return call;
+}
+
+// LCT P2: gebuchter Schaetzbetrag am Call - mutiert -> save bei changed (Muster markBilled).
+export function recordCallEstimatedCostCents(callId, costCents) {
+  const { call, changed } = ops.recordCallEstimatedCostCents(load(), callId, costCents);
   if (changed) save();
   return call;
 }

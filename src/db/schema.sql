@@ -172,7 +172,20 @@ CREATE TABLE IF NOT EXISTS call (
   -- P2b (Diagnose-Retention): Call, dessen Roh-Transkript die Summary ueberleben darf
   -- (Ziel == eigene verifizierte Nummer des Tenants). NOT NULL DEFAULT FALSE: es gibt
   -- keinen dritten Zustand, und Bestandszeilen sind per Definition nicht diagnostisch.
-  diagnostic BOOLEAN NOT NULL DEFAULT FALSE
+  diagnostic BOOLEAN NOT NULL DEFAULT FALSE,
+  -- LCT P2 (Ist-Kosten-Achse): estimated_cost_cents ist der TATSAECHLICH gebuchte
+  -- Schaetzbetrag (GANZZAHL Cents, reconcileOutboundVoiceBudget), NIE spaeter aus dem
+  -- Tarif rekonstruiert. actual_cost_micro_cents ist BIGINT (nicht NUMERIC/Float, G26) in
+  -- GANZZAHL Mikro-Cents, PROVIDER-WAEHRUNG unveraendert (heute USD) - KEINE Umrechnung an
+  -- dieser Kante (D5), die lebt an genau einer Stelle in P4. cost_trued_at/cost_trued_source
+  -- sind das Gegenstueck zum binaeren billed_at (D9). cost_truing_attempts ist PERSISTIERT
+  -- (nicht in-memory): ein Prozess-lokaler Zaehler wird auf dem Render-Free-Tier bei jedem
+  -- Restart genullt und erreicht COST_TRUING_MAX_ATTEMPTS (P3) nie.
+  estimated_cost_cents INTEGER,
+  actual_cost_micro_cents BIGINT,
+  cost_trued_at TEXT,
+  cost_trued_source TEXT,
+  cost_truing_attempts INTEGER NOT NULL DEFAULT 0
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -203,6 +216,23 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FA
 -- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS mandate JSONB;
+
+-- LCT P2: Kosten-Achse am Call auf Bestands-Tabellen nachziehen (Muster provider/
+-- billed_at/mandate). Idempotent; frische DB = No-op.
+-- actual_cost_micro_cents ist BIGINT, NICHT NUMERIC und nicht Float: Geld at rest bleibt
+-- Ganzzahl (G26), und die Mikro-Cent-Einheit existiert im Repo bereits
+-- (MICRO_CENTS_PER_CENT). Der Wert steht in der PROVIDER-Waehrung (USD) unveraendert -
+-- KEINE Umrechnung an der Persistenzkante (D5); die lebt an genau einer Stelle in P4.
+-- KEIN Index: P3 stellt keine eigene SQL-Query (RLS), sondern arbeitet auf dem
+-- In-Memory-Spiegel aus hydrateTenantInto - ein Index ohne Aufrufer waere toter Code.
+-- KEIN Backfill: migrate() laeuft bei JEDEM Boot ungebremst und auf EINER Connection mit
+-- app.current_tenant fest auf BOOTSTRAP_TENANT_ID; ein Backfill auf der FORCE-RLS-Tabelle
+-- call saehe nur die Bootstrap-Zeilen. NULL bedeutet "nie abgeglichen".
+ALTER TABLE call ADD COLUMN IF NOT EXISTS estimated_cost_cents INTEGER;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS actual_cost_micro_cents BIGINT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_trued_at TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_trued_source TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_truing_attempts INTEGER NOT NULL DEFAULT 0;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

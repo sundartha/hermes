@@ -189,6 +189,10 @@ services:
       # der Live-Wert ablesbar ist statt nur im Code zu stehen.
       - key: PROVIDER_CURRENCY
         value: "USD"
+      # Kurs Provider-Waehrung -> Bucket in Mikro-Einheiten (920000 = 0,92 EUR je USD).
+      # Explizit, damit der Live-Wert ablesbar ist statt nur im Code zu stehen.
+      - key: PROVIDER_TO_BUCKET_RATE_MICRO
+        value: "920000"
       # ---- Abo-Buchung (Stripe Recurring, W4) ----
       - key: STRIPE_STARTER_PRICE_ID
         sync: false
