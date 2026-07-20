@@ -40,6 +40,7 @@ import {
   MAX_CALL_DURATION_CAP_S,
 } from "../store/defaults.js";
 import { findActiveNumber } from "../store/views.js";
+import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
 import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "../billing/period.js";
@@ -380,25 +381,33 @@ export function makeOutboundGates({
   }
 
   // Fruehwarnung melden (Budget-Achsen P6). TRIFFT KEINE ENTSCHEIDUNG: der Call ist hier
-  // bereits erlaubt UND reserviert. ABSOLUT FAIL-SOFT - ein Fehler auf diesem Pfad darf
-  // niemals einen Anruf kosten: (1) der komplette Rumpf liegt in try/catch (faengt auch ein
-  // SYNCHRONES Werfen von messaging(), z.B. unbekannter Provider); (2) sendSms wird NICHT
-  // awaitet und traegt sofort ein .catch (kein Lock-Halten, keine Verzoegerung des Dials,
-  // kein unhandled reject); (3) der Claim selbst haengt in seinem eigenen try/catch (s.
-  // claimSpendWarning). audit(event, null, detail) -> ip=system: ein Plattform-Ereignis ist
-  // keinem Request zuzurechnen (Muster sms_summary_skipped).
+  // bereits erlaubt UND reserviert. Der Versand selbst liegt in sendFailSoftAlertSms
+  // (src/telephony/alert-sms.js) - EIN fail-soft-Baustein fuer beide Alarm-Kanaele (G5);
+  // die dortigen drei Fail-soft-Zusagen gelten unveraendert fuer diesen Pfad. Der Claim
+  // haengt in seinem eigenen try/catch (s. claimSpendWarning). audit(event, null, detail)
+  // -> ip=system: ein Plattform-Ereignis ist keinem Request zuzurechnen (Muster
+  // sms_summary_skipped). Absender ist die Nummer, ueber die dieser Call laeuft - sie
+  // steht im Gate-Kontext bereits fest, deshalb ein reiner ctx-Lesezugriff statt Lookup.
+  // Der eigene try/catch bleibt und deckt AUSSCHLIESSLICH audit()+warningDetail(): der
+  // Versand kann seit der Extraktion nicht mehr werfen, audit() schon - und ein Throw hier
+  // machte aus einem BEREITS RESERVIERTEN Call ein 402 (dieselbe Begruendung wie bei
+  // claimSpendWarning). Eine Warnung darf nie ablehnen.
   function emitPlatformSpendWarning(warning, ctx) {
+    let detail;
     try {
-      const detail = warningDetail(warning);
+      detail = warningDetail(warning);
       audit(PLATFORM_WARN_EVENT, null, detail);
-      const to = config.billing.platformAlertSmsTo;
-      if (!to) return; // leer = nur Audit (exakt der Plan-Zustand)
-      messaging(ctx.outboundProvider)
-        .sendSms({ from: ctx.fromNumber, to, body: PLATFORM_WARN_SMS_PREFIX + detail })
-        .catch(logWarningFailure); // Fehler wird geschluckt+geloggt, NIE hochgereicht
     } catch (e) {
-      logWarningFailure(e); // synchroner Wurf (z.B. unbekannter Provider in messaging())
+      logWarningFailure(e);
+      return; // ohne belastbares detail keine SMS
     }
+    sendFailSoftAlertSms({
+      messaging,
+      to: config.billing.platformAlertSmsTo,
+      body: PLATFORM_WARN_SMS_PREFIX + detail,
+      resolveSender: () => ({ provider: ctx.outboundProvider, e164: ctx.fromNumber }),
+      onError: logWarningFailure,
+    });
   }
 
   // Einheitliche Denial-Form (G5): audit === null bei reinen 400-Formatfehlern (keine

@@ -1541,14 +1541,43 @@ sichtbar und alarmiert, ohne dass sich der Tarif selbst bewegt.
   Absicherung lautlos entwerten. WARN und nicht fatal, weil ein fehlender Alarmkanal den
   Dienst nicht unsicherer macht als heute — er macht ihn nur blind, und Blindheit ist das
   Thema dieses Plans.
-- Anzeige des gemessenen Werts neben dem konfigurierten im Owner-Dashboard.
+- Anzeige des gemessenen Werts neben dem konfigurierten — **nicht** im Owner-Dashboard,
+  sondern ueber `GET /api/billing/cost-drift` (s. Abweichung 2 unten).
+
+#### Abweichung 2 (bei der Umsetzung festgestellt): kein Owner-Dashboard mehr
+
+Dieser Plan wurde gegen einen Stand geschrieben, in dem `public/index.html` als
+Owner-Dashboard existierte. **Das ist seit `8dfa98d` (`refactor(owner-p4)`, Owner-Removal-
+Kette) nicht mehr der Fall:** die Datei ist geloescht, das Owner-Konzept ist zugunsten von
+`account.role` aufgegeben. Der Deliverable "Anzeige im Owner-Dashboard" ist damit **nicht
+umsetzbar wie geschrieben**, und zwar aus zwei unabhaengigen Gruenden:
+
+1. **Die Zieldatei existiert nicht.** `public/index.html` ist geloescht; es gibt kein
+   Owner-Dashboard, in das gerendert werden koennte.
+2. **Das verbliebene Dashboard ist das falsche.** `public/tenant.html` ist die
+   Tenant-Self-Service-Oberflaeche. Der Drift-Befund ist eine **Plattform-Aggregation ueber
+   alle Tenants** (ein praefix-weites p95). Ihn dort zu rendern waere genau das
+   Cross-Tenant-Leck, das der Riegel in `api-read.js` (`usageView`) verhindert — deshalb
+   liegt der Wert auch bewusst **nicht** in `/api/state`.
+
+**Stattdessen umgesetzt:** `GET /api/billing/cost-drift` in `src/routes/api-billing.js`,
+hinter derselben `/api/*`-Basic-Auth und mit derselben Nicht-Tenant-Scoping-Begruendung wie
+der Sweep-Endpunkt daneben. Die Antwort ist PII-frei (Praefix, Befund-Code,
+Stichprobenzahl, zwei Cent-Betraege — kein Alarm-Empfaenger, keine Call-ID, keine
+Tenant-Kennung). Zusaetzlich bleiben Boot-Log und Sweep-Log als zweiter Sichtbarkeitskanal.
+
+**Folge fuer P4b:** dessen Abnahmekriterium haengt an der Sichtbarkeit von
+`insufficient_samples` samt Stichprobenzahl, nicht an einem bestimmten Anzeigemedium. Es ist
+ab hier gegen **`GET /api/billing/cost-drift` plus Boot-Log** zu pruefen. `src/routes/
+api-read.js` und `public/index.html` entfallen aus der Datei-Liste unten.
 
 #### Betroffene Dateien
 
 `src/billing/cost-calibration.js` (neu, reine Funktionen), `src/boot-guard.js`,
 `src/billing/cost-truing.js` (**neu in dieser Liste**: der Laufzeit-Ausloeser haengt sich
 ans Ende des P3-Sweeps, s. Kern — die Auswertung selbst bleibt in `cost-calibration.js`,
-der Sweep ruft sie nur), `src/routes/api-read.js`, `public/index.html`, `src/config.js`,
+der Sweep ruft sie nur), `src/routes/api-billing.js` (**ersetzt `src/routes/api-read.js`
+und `public/index.html`**, s. Abweichung 2), `src/config.js`,
 `.env.example`, `render.yaml` (`COST_CALIBRATION_MIN_SAMPLES` — Pruefung wie in P1, auch bei
 Ergebnis "Default reicht"), `test/cost-calibration.test.js` (neu),
 `test/boot-guard-*.test.js`.
@@ -1557,9 +1586,10 @@ Ergebnis "Default reicht"), `test/cost-calibration.test.js` (neu),
 
 - Der Boot-Guard warnt bei einer 4-fachen Abweichung und schweigt bei einer 10-prozentigen.
 - Unter `COST_CALIBRATION_MIN_SAMPLES` Datenpunkten: **keine Tarif-Aussage und kein Alarm**,
-  aber der Befund-Code `insufficient_samples` samt Stichprobenzahl ist im Boot-Log und im
-  Dashboard **sichtbar**. "Zu wenig Daten" darf keinen Kanal taub trainieren, aber es darf
-  auch nicht wie Zustimmung aussehen.
+  aber der Befund-Code `insufficient_samples` samt Stichprobenzahl ist im Boot-Log und in
+  der Antwort von `GET /api/billing/cost-drift` **sichtbar** (Anzeigemedium geaendert, s.
+  Abweichung 2). "Zu wenig Daten" darf keinen Kanal taub trainieren, aber es darf auch
+  nicht wie Zustimmung aussehen.
 - **Die Auswertung laeuft ohne Restart:** ein Sweep-Durchlauf loest dieselbe Bewertung samt
   Alarm aus wie der Boot-Guard. Ein Test pinnt das an einem Prozess, der nie neu bootet.
 - **Entprellung:** zwei Sweeps innerhalb von `COST_ALERT_DEBOUNCE_MS` mit demselben Befund
