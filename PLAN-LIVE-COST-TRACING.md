@@ -173,6 +173,37 @@ baubar ist. **Verzug bis zur Verfuegbarkeit: keine dokumentierte SLA gefunden �
 Empirisch erscheinen Calls vom Vortag bereits am Folgetag, also Stunden statt Tage; das ist
 eine Beobachtung, keine Zusicherung, und der Entwurf darf sich nicht darauf stuetzen.
 
+#### Roh-Beleg der Stichprobe vom 2026-07-20 (read-only, 293 Records)
+
+Gemessen ueber alle sieben belegten `record_type`s, `page[size]=50` je Typ:
+
+| record_type | Beispiel `cost` | Beispiel `rate` | `currency` | Notation |
+| --- | --- | --- | --- | --- |
+| `sip-trunking` | `"0.0802"` (bei `billed_sec: 120`) | `"0.0401"` | USD | dezimal |
+| `call-control` | `"0.004"` | `"0.002"` | USD | dezimal |
+| `speech-to-text` | `"0.0000"` | `"0.01500"` | USD | dezimal, **echte Null** |
+| `text-to-speech` | `"1.687E-4"`, `"0.003216"` | `"7.0E-7"` | USD | **teils wissenschaftlich** |
+| `recording` | `"0.002"` | `"0.002"` | USD | dezimal |
+| `inference` | `"0.001315"` | `"1.0E-4"` | USD | teils wissenschaftlich |
+| `ai-voice-assistant` | `"0.05"` | `"0.05"` | USD | dezimal |
+
+Drei Dinge, die diese Stichprobe entscheidet:
+
+1. **Die Einheit ist belegt** (s. Kapitel 4): `cost` steht in USD, nicht in Cent.
+2. **Die `record_type`-Enumwerte sind belegt** — Kapitel 2.1 fuehrte sie als
+   `product`-Achse und warnte ausdruecklich, die Detail-Records-Achse sei anders benannt
+   und der Enum-Wert je Kostenart **UNBELEGT**. Die Stichprobe zeigt: **die Namen sind
+   identisch.** `"call"` dagegen existiert nicht (HTTP 400, `code 10011`). Die
+   Pflicht-Menge `COST_TRUING_REQUIRED_RECORD_TYPES` aus P3 kann damit auf diesen sieben
+   Werten aufsetzen; die dortige empirische Ableitung ist vorweggenommen, nicht ersetzt —
+   P3 prueft weiterhin gegen die echte Antwort, statt die Tabelle abzuschreiben.
+3. **Wissenschaftliche Notation ist Normalbetrieb**, nicht Datenkorruption. Konsequenz fuer
+   den Parser: s. P1 Kern.
+
+**`currency` war in allen 293 Records `USD`** — der Default `PROVIDER_CURRENCY=USD` aus P1
+steht damit ebenfalls auf Daten, und der Fremdwaehrungs-Pfad ist ein echter Ausnahmepfad,
+kein latenter Normalfall.
+
 ---
 
 ## 3. Befunde
@@ -189,7 +220,7 @@ eine Beobachtung, keine Zusicherung, und der Entwurf darf sich nicht darauf stue
 | **D8** | Tenant-Decke ist ein flacher 600-ct-Default fuer jeden Tenant, gesetzt bei Registrierung VOR der Plan-Wahl; `createTenantSubscription` fasst sie nie an | `config.js:387`, `state-ops.js:747-759`, `billing/subscribe.js:92-112` | S1 | P6 — **Vorbedingung: Entscheidung 8** (`MAX_BUDGET_EUR`=800 ct traegt die entschiedene Business-Decke von 900 ct nicht; die Anhebung geschieht in PLAN-BUDGET-AXES vor der Auslieferung von P6; **Bauort-Hinweis: die Datei liegt seit `a0431fa` nur noch in der Historie — s. Kasten in Entscheidung 4**. Bleibt die Anhebung aus, scheitert der Boot fatal ueber `spendCapCoherence`, nicht der Zahlungspfad) |
 | **D9** | Es gibt keinen Zustand "vorlaeufig geschaetzt, Ist-Wert steht aus". `billedAt` ist binaer; nach `finishCall` ist der Buchungspfad fuer den Call dicht | `src/telephony/call-finish.js:39-49` | S2 | P2 |
 | **D10** | Kein Index auf `call.tenant_id`, `call.started_at`, `call.call_control_id` oder `usage_event.call_id` — ein CDR-Abgleich per Provider-ID oder Zeitfenster liefe unindiziert | `src/db/schema.sql` (nur `account_email_idx`, `number.e164`) | S2 | **NICHT behoben — bewusst.** P3 stellt keine eigene SQL-Query (RLS-Begruendung dort); der Abgleich laeuft ueber den In-Memory-Spiegel, den `hydrateTenantInto` (`pg.js:669-675`) ohnehin vollstaendig laedt. Ein Index ohne Aufrufer waere toter Code (CLAUDE.md). Wird erst relevant, wenn P3 je auf einen SQL-Lesepfad umgestellt wird — dann als eigene Phase mit `set_config('app.current_tenant', ...)` nach Vorbild `hydrateTenant`. |
-| **D11** | Die gebuchte Dauer ist die selbst gemessene Wanduhr (`answeredAt`..`endedAt`), nicht die Provider-Dauer — zwei unabhaengige Fehlerquellen (Dauer UND Preis) in einer Zahl | `src/billing/metering.js:17-27` | S2 | P3 (sichtbar) |
+| **D11** | Die gebuchte Dauer ist die selbst gemessene Wanduhr (`answeredAt`..`endedAt`), nicht die Provider-Dauer — zwei unabhaengige Fehlerquellen (Dauer UND Preis) in einer Zahl. **Verschaerft durch die Messung vom 2026-07-20: Telnyx rechnet in 60-Sekunden-Schritten AUFGERUNDET** (`call_sec: 62` -> `billed_sec: 120`, belegt an `sip-trunking`, `call-control` und `recording`). Unsere Wanduhr-Minuten unterschaetzen die abgerechneten Minuten damit **systematisch**, nicht zufaellig — bei kurzen Anrufen um bis zu knapp das Doppelte. Das zeigt in die **Unterbuchungs-Richtung**, also die einzige, die dieser Plan als nicht fail-closed fuehrt. Heute wird das von der Ueberbuchung durch den 20-ct-Tarif ueberdeckt; nach P4b faellt diese Deckung weg | `src/billing/metering.js:17-27`, Kap. 2.6 | S2 | P3 (sichtbar) |
 | **D12** | Ein negativer Korrekturbetrag ist heute strukturell nicht buchbar: `isBookableCents` verlangt `x >= 0` und `addVoiceUsageCostCents` verwirft alles andere als Korruption | `src/store/defaults.js:199-201`, `state-ops.js:1627-1633` | Design-Randbedingung | P4 |
 
 ---
@@ -236,9 +267,13 @@ Der Plan fuehrt genau vier neue Begriffe ein. Jeder ist gegen die bestehenden ab
   Der Umrechnungsfaktor von der Provider-Hauptwaehrung auf Mikro-Cent ist damit
   **10^8** (`CENTS_PER_UNIT = 100` mal `MICRO_CENTS_PER_CENT = 1_000_000`), **nicht 10^6**.
 
-  **Status dieser Aussage: belegt aus der Provider-Doku und aus der eigenen Messung,
-  aber nicht an einem echten `detail_records`-Aufruf verifiziert — bis dahin eine
-  ANNAHME.** P1 macht die Verifikation deshalb zur Abnahmebedingung (s. dort). Waere der
+  **Status dieser Aussage: seit dem 2026-07-20 an echten `detail_records`-Antworten
+  VERIFIZIERT — keine ANNAHME mehr.** Beleg: `sip-trunking` liefert `rate: "0.0401"` und
+  `cost: "0.0802"` bei `billed_sec: 120`, `currency: "USD"` — also 4,01 USD-Cent je Minute,
+  genau die von diesem Kapitel vorhergesagte Groessenordnung (`0.039` je Minute, **nicht**
+  `3.9` und **nicht** `0.00039`). Der Faktor 10^8 steht damit auf Daten. Roh-Belege in
+  Kapitel 2.6. P1 fuehrte die Verifikation als Abnahmebedingung (s. dort); sie ist erfuellt,
+  **bevor** die erste Zeile Code der Kette geschrieben wurde. Waere der
   Faktor um 100 zu klein, laege das Ist fuer JEDEN Call bei ~1 % der Schaetzung, bei
   formal vollstaendiger Datenlage — also die faktische Vollrueckerstattung jeder
   Schaetzung. Das ist derselbe Ausfallmodus wie PM-4 und wird vom
@@ -338,13 +373,34 @@ Twilio-Implementierung waere also eine ANDERE Semantik unter demselben Namen. Fe
 Methode, faellt der Aufrufer (P3) auf "kein Abgleich" zurueck; das ist der konservative Fall.
 
 **Geld-Parsing (G26, verbindlich):** Telnyx liefert `cost` als Dezimal**string** in der
-**Hauptwaehrungseinheit** (USD), nicht in Cent — s. Kapitel 4, dort auch die Begruendung
-und der ANNAHME-Status. `parseDecimalToMicroCents(str)` arbeitet **rein string-basiert**
-(Vorzeichen, Vor-/Nachkomma trennen, auf **8** Nachkommastellen auffuellen bzw.
-abschneiden — 8 = `log10(10^8)`, die Stellenzahl des Faktors Hauptwaehrung -> Mikro-Cent)
-und beruehrt nie `parseFloat`. Nicht-parsebar, negativ oder nicht-endlich -> **kein
-Record**, nicht "0". Ein stillschweigend zu 0 gewordener Preis ist die gefaehrlichste Zahl
-in diesem ganzen Plan (s. P4).
+**Hauptwaehrungseinheit** (USD), nicht in Cent — s. Kapitel 4, dort seit der Messung vom
+2026-07-20 mit Beleg statt ANNAHME. `parseDecimalToMicroCents(str)` arbeitet **rein
+string-basiert** (Vorzeichen, Vor-/Nachkomma trennen, auf **8** Nachkommastellen
+auffuellen bzw. abschneiden — 8 = `log10(10^8)`, die Stellenzahl des Faktors
+Hauptwaehrung -> Mikro-Cent) und beruehrt nie `parseFloat`. Nicht-parsebar, negativ oder
+nicht-endlich -> **kein Record**, nicht "0". Ein stillschweigend zu 0 gewordener Preis ist
+die gefaehrlichste Zahl in diesem ganzen Plan (s. P4).
+
+**Wissenschaftliche Notation ist gueltige Eingabe — Korrektur vom 2026-07-20 gegen die
+erste Fassung dieses Absatzes.** Die verwarf `"1e-3"` als ungueltig, in der Annahme, diese
+Schreibweise trete nur bei korrupten Daten auf. Eine Stichprobe von 293 echten Records
+(read-only, alle sieben `record_type`s) widerlegt das: **16 von 50 `text-to-speech`-Records
+tragen ihren `cost` als `"1.61E-4"`, `"1.687E-4"`, `"1.75E-4"`**, ebenso 9 von 26
+`inference`-`rate`-Werten (`"1.0E-4"`). Telnyx waehlt die Notation offenbar nach
+Betragsgroesse, nicht nach Datenqualitaet. Nach der alten Spec waere rund ein Drittel der
+TTS-Kosten verworfen worden — bei einer Kostenart, die in
+`COST_TRUING_REQUIRED_RECORD_TYPES` steht. Jeder betroffene Call waere dauerhaft
+`'incomplete'` geblieben, die Deckungsquote aus P4/P4b haette ihre Schwelle nie erreicht,
+und der Flip waere nicht freigebbar gewesen. Das ist fail-closed und damit ungefaehrlich,
+aber es haette die Kette lautlos an ihrem Ziel vorbeilaufen lassen: monatelang messen,
+nie umschalten duerfen.
+
+Der Parser trennt deshalb **Mantisse und Exponent string-basiert** und verschiebt den
+Dezimalpunkt per Ganzzahl-Arithmetik (Stellen schieben, nicht multiplizieren) — `parseFloat`
+bleibt auch hier verboten, die 8-Stellen-Abschneidung gilt unveraendert nach der
+Verschiebung. Der Exponent ist auf einen benannten Bereich begrenzt
+(`COST_EXPONENT_MIN` / `COST_EXPONENT_MAX`); ausserhalb -> kein Record. Ein `E`-Wert, der
+den Betrag ins Absurde hebt, ist damit nicht parsebar statt still gross.
 
 **Der Faktor 10^8 steht nicht als nackte Zahl im Code**, sondern als
 `MICRO_CENTS_PER_CURRENCY_UNIT = CENTS_PER_EUR * MICRO_CENTS_PER_CENT` aus den beiden
@@ -376,13 +432,18 @@ Default USD reicht" lautet, gehoert der Schritt in die Phase; CLAUDE.md verlangt
 #### Akzeptanzkriterium
 
 - Alle Bestandstests unveraendert gruen; kein Produktionspfad ruft die Methode auf.
-- **Die Einheit ist an einem echten `detail_records`-Aufruf belegt** (s. Kern), Roh-String
-  im Phasen-Report.
+- **Die Einheit ist an einem echten `detail_records`-Aufruf belegt** — erledigt am
+  2026-07-20, Roh-Beleg in Kapitel 2.6 und im Phasen-Report.
 - `parseDecimalToMicroCents("0.0122")` === `1220000` (= 1,22 Cent); `("0")` === `0`;
   `("1")` === `100000000` (1 USD = 100 Cent).
+- **Wissenschaftliche Notation ist gueltig** (echte Telnyx-Schreibweise, s. Kern):
+  `("1.687E-4")` === `16870` (= 0,01687 Cent); `("1e-3")` === `100000` (= 0,1 Cent);
+  `("7.0E-7")` === `70` — Klein-`e` und Gross-`E` gleichwertig.
 - `("0.000000004")` schneidet auf `0` ab und wird als gueltiger 0-Record gefuehrt (echte
-  Null ist etwas anderes als fehlende Daten — s. P4).
-- `("abc")`, `("")`, `(null)`, `("-0.01")`, `("1e-3")` -> jeweils ungueltig, kein Record.
+  Null ist etwas anderes als fehlende Daten — s. P4). `speech-to-text` liefert `"0.0000"`
+  bei `rate: "0.01500"` real aus, dieser Fall ist keine Theorie.
+- `("abc")`, `("")`, `(null)`, `("-0.01")`, `("1.0E+400")`, `("1e")`, `("E-4")` ->
+  jeweils ungueltig, kein Record.
 - Fremdwaehrung -> Record verworfen, Grund geloggt.
 
 #### Rot-vor-Fix-Test
@@ -394,8 +455,15 @@ pinnt `0.1 + 0.2`-Klassen-Faelle: `("0.07")` + `("0.01")` summiert exakt `800000
 (a2) **Einheiten-Riegel:** ein Record ueber einen 60-Sekunden-Call mit dem aus Kapitel 2
 belegten Satz (`cost: "0.039"`) ergibt `3900000` Mikro-Cent = 3,9 Cent. Faellt rot aus,
 sobald jemand den Faktor auf 10^6 zurueckdreht — dann waeren es 0,039 Cent.
+(a3) **Notations-Riegel:** `("1.687E-4")` === `16870`. Faellt rot aus, sobald jemand die
+wissenschaftliche Notation wieder verwirft — der Fehler, den die erste Fassung dieser Phase
+festgeschrieben hatte und den erst die Messung vom 2026-07-20 gefangen hat.
 (b) Fingierte Telnyx-Antwort mit gemischten `record_type`s -> alle Records mit korrekten
-`costMicroCents`.
+`costMicroCents`. **Die Fixture bildet die real gemessenen Formate ab** (Kapitel 2.6):
+`sip-trunking "0.0802"`, `call-control "0.004"`, `speech-to-text "0.0000"`,
+`text-to-speech "1.687E-4"`, `recording "0.002"`, `inference "0.001315"`,
+`ai-voice-assistant "0.05"` — **keine gleichfoermig erfundenen Werte**, sonst testet die
+Fixture nur sich selbst.
 (c) HTTP 500 / Timeout -> `{ ok: false }`, kein Wurf.
 (d) Antwort mit `currency: "EUR"` bei `providerCurrency=USD` -> Record verworfen.
 
