@@ -77,9 +77,9 @@ test("T-T3-AC3: echter initialize-Request ueber POST /mcp (Live-Connector-Pfad) 
     assert.deepEqual(hosted.sizes, ["1024x1024"]);
     // websiteUrl: Marken-Homepage fuer Hosts, die ihr Connector-Branding von
     // der Website-Domain ableiten (dort liegt zusaetzlich ein favicon.ico).
-    // www-Variante ist Absicht: Googles Favicon-Cache (den claude.ai fuer das
-    // Connector-Icon anzapft) haelt unter dem Apex-Schluessel ein veraltetes
-    // Icon fest, unter www liegt die Fluegel-Marke (siehe mcp-server-info.js).
+    // www-Variante ist Absicht (sauberer Favicon-Cache-Schluessel bei Google);
+    // claude.ai wertet websiteUrl fuer sein Icon aber NICHT aus - Begruendung
+    // und Beleg stehen in mcp-server-info.js.
     assert.equal(result.serverInfo.websiteUrl, "https://www.sundartha.com");
   } finally {
     await srv.stop();

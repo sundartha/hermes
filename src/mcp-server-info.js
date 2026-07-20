@@ -35,11 +35,21 @@ export const HERMES_SERVER_INFO = {
   // Connector-Branding (Icon/Link) von der Website-Domain ab statt aus icons -
   // deshalb liegt dort zusaetzlich ein favicon.ico (apps/web/public).
   //
-  // Bewusst die www-Variante: claude.ai rendert Connector-Icons ueber
-  // google.com/s2/favicons?domain=<domain>, und Google fuehrt seinen Cache pro
-  // Host. Der Schluessel der Apex-Domain haelt ein veraltetes Icon fest (der
-  // graue Wuerfel), der www-Schluessel liefert bereits die Fluegel-Marke. www
-  // ist ein 301 auf den Apex - dieselbe Site, nur ein anderer Cache-Schluessel.
+  // Bewusst die www-Variante (301 auf den Apex - dieselbe Site): Hosts, die ihr
+  // Icon ueber Googles Favicon-Dienst aufloesen, treffen damit einen sauberen
+  // Cache-Schluessel.
+  //
+  // FUER claude.ai bringt websiteUrl NICHTS - empirisch belegt 2026-07-13
+  // (Connector neu verbunden, serverInfo also frisch gelesen): der Host leitet
+  // die Icon-Domain aus der Connector-URL ab (app.sundartha.com -> eTLD+1) und
+  // rendert google.com/s2/favicons?domain=sundartha.com; websiteUrl und icons
+  // werden ignoriert. Nicht wieder als Icon-Hebel probieren.
+  //
+  // Der graue Wuerfel dort ist KEIN Code-Problem: s2 loest hart auf den
+  // http-Origin auf, und Googlebot lief am 23.06.2026 auf http://sundartha.com/
+  // in unsere Basic-Auth (401, in der Search Console sichtbar) - Google hat
+  // deshalb nie ein Favicon fuer diesen Origin. Behoben wird das ausserhalb des
+  // Codes (Search Console: http-Property + Recrawl), nicht hier.
   websiteUrl: "https://www.sundartha.com",
   icons: [
     {
