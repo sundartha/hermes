@@ -226,6 +226,54 @@ export function providerRateOutOfBand(rateMicro) {
   ];
 }
 
+// LCT P6: Befund-Codes der Tenant-Kostendecke-aus-Plan-Ableitung gegen den Plattform-Cap
+// (kein Magic-String im Guard/in der Verdrahtung, G25/G11).
+export const PLAN_CAP_FINDING = Object.freeze({
+  PLAN_CAP_INERT: "plan_cap_inert", // erste Linie - FATAL
+  TENANT_CAP_ROW_INERT: "tenant_cap_row_inert", // zweite Linie - WARN
+});
+
+// LCT P6 erste Linie (FATAL): die ABGELEITETEN Decken ALLER Katalog-Slugs gegen den
+// Plattform-Cap. Greift OHNE jede tenant_budget-Zeile (frischer Deploy, erster Kunde
+// noch nicht da) - verhindert, dass eine inkohaerente Konfiguration ueberhaupt in den
+// Betrieb kommt. capForSlug wird HEREINGEREICHT (Muster: reine Entscheidung, config-frei/
+// testbar, wie spendCapCoherence); der Aufrufer baut es aus planCapCents + config.billing.
+export function planCapInertFindings({ slugs, platformCapCents, capForSlug }) {
+  const inert = slugs.filter((slug) => capForSlug(slug) >= platformCapCents);
+  if (!inert.length) return [];
+  return [
+    {
+      code: PLAN_CAP_FINDING.PLAN_CAP_INERT,
+      fatal: true,
+      message:
+        `Abgeleitete Plan-Decke(n) ${inert.join(",")} erreichen/uebersteigen ` +
+        `platformSpendCapCents=${platformCapCents} - die per-Tenant-Achse waere fuer diese ` +
+        "Plaene WIRKUNGSLOS (der Plattform-Cap bindet zuerst). Abhilfe: MAX_BUDGET_EUR anheben " +
+        "ODER Kopffreiheit senken.",
+    },
+  ];
+}
+
+// LCT P6 zweite Linie (WARN): Nachlese ueber TATSAECHLICH gesetzte tenant_budget-Zeilen,
+// die vor einer nachtraeglichen Cap-Senkung geschrieben wurden. WARN, nicht fatal: die
+// erste Linie garantiert Kohaerenz fuer die Zukunft; ein fataler Boot ueber eine bereits
+// geklemmte Alt-Zeile risse die Telefonie ab - genau das, was der Clamp an der Schreibkante
+// (deriveTenantBudgetFromPlan) vermeiden soll. budgetRows = s.tenantBudgets.
+export function tenantCapRowInertFindings({ budgetRows, platformCapCents }) {
+  const inert = budgetRows.filter((r) => r.hardCapCents >= platformCapCents);
+  if (!inert.length) return [];
+  return [
+    {
+      code: PLAN_CAP_FINDING.TENANT_CAP_ROW_INERT,
+      fatal: false,
+      message:
+        `${inert.length} gesetzte tenant_budget-Zeile(n) erreichen/uebersteigen ` +
+        `platformSpendCapCents=${platformCapCents} (Tenant-Achse fuer sie inert) - vermutlich ` +
+        "wurde MAX_BUDGET_EUR nach dem Setzen gesenkt. MAX_BUDGET_EUR anheben oder Zeilen neu ableiten.",
+    },
+  ];
+}
+
 // LCT P5: der Alarmkanal selbst. Ein Alarm ohne Empfaenger ist kein Alarm - und diese
 // Vorbedingung stand bisher nur im Planungsdokument, haftete also an der Disziplin
 // dessen, der die Phase umsetzt. WARN und NICHT fatal: ein fehlender Alarmkanal macht

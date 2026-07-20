@@ -51,6 +51,7 @@ import {
   COST_TRUING_SOURCE,
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
+import { planCapCents } from "../billing/plan-caps.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -1020,6 +1021,44 @@ export function setTenantSubscription(
   // die uebrigen Felder oben.
   if (numberSetupFeeExempt !== undefined) tenant.stripeNumberSetupFeeExempt = numberSetupFeeExempt;
   return tenant;
+}
+
+// LCT P6: leitet die Tenant-Kostendecke aus dem EFFEKTIVEN Plan-Slug ab und schreibt sie
+// als tenant_budget-Zeile. Laeuft NACH setTenantSubscription (der Patch ist dann schon
+// angewendet), also ist tenant.stripePlanSlug bereits der EFFEKTIVE Slug -
+// patch.planSlug ?? bestehender Slug ergibt sich hier gratis, ohne das Patch-Feld zu lesen
+// (G31: Struktur statt Konvention).
+//
+// DREI Slug-Faelle, strikt getrennt (die Verwechslung baut den Abo-ohne-Nummer-Vorfall neu):
+//   (1) Slug fehlt/leer       -> NO-OP (Budget-Zeile unberuehrt), KEIN Wurf.
+//   (2) Slug gesetzt+bekannt  -> Decke ableiten, ggf. auf platformCap klemmen (WARN), setzen.
+//   (3) Slug gesetzt+UNBEKANNT-> planCapCents WIRFT (der EINZIGE Wurf dieser Phase).
+//
+// BEIDE Pflichtfelder (budget_cents UND hard_cap_cents) auf denselben Wert - budget_cents
+// ist BIGINT NOT NULL; ein Aufruf nur mit hardCapCents setzte budgetCents=undefined, der
+// Flush verletzte NOT NULL und flush() rollte die GESAMTE Transaktion zurueck (alle
+// Tenants/Calls/Buckets). setTenantBudget selbst wird NICHT umgebaut (eigener Schritt).
+//
+// AUSDRUECKLICH auch von backfillPlanProfiles gewuenscht: heilt slug-lose Bestands-Abos;
+// dass es die Decke MIT schreibt, ist Absicht (Entscheidung 2), kein Versehen.
+export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return; // setTenantSubscription hat vorher schon fail-closed geworfen, falls fehlend
+  const slug = tenant.stripePlanSlug;
+  if (!slug) return; // Fall (1): No-op, kein Wurf
+  let capCents = planCapCents(slug, cfg); // Fall (3): wirft bei unbekanntem Slug
+  const platformCapCents = cfg.platformSpendCapCents;
+  if (capCents >= platformCapCents) {
+    // Zweite Linie (leise, aber NICHT still): ein nachtraeglich gesenkter Plattform-Cap
+    // darf den Stripe-Webhook nicht abreissen -> klemmen + GENAU EINE WARN, KEIN Wurf. Bei
+    // kohaerenter Konfiguration ist dieser Zweig unerreichbar (erste Linie am Boot ist fatal).
+    console.warn(
+      `[budget] plan-cap grund=clamp slug=${slug} abgeleitet=${capCents} ` +
+        `platformSpendCapCents=${platformCapCents} -> geklemmt (Tenant-Achse inert)`,
+    );
+    capCents = platformCapCents;
+  }
+  setTenantBudget(s, tenantId, { budgetCents: capCents, hardCapCents: capCents }); // beide Felder
 }
 
 // Lese-Query der Abo-Referenzen eines Tenants (W4). Reine Query, kein IO. Liefert STETS

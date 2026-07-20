@@ -18,8 +18,12 @@ const post = (url, to) =>
 test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async () => {
   const srv = await startServer({
     env: {
-      MAX_BUDGET_EUR: "1",
-      VOICE_TARIFF_DOMESTIC_CENTS: "20",
+      // LCT P6: MAX_BUDGET_EUR muss echt ueber der abgeleiteten Business-Plan-Decke
+      // (900 ct) liegen, sonst verweigert der Boot-Guard (plan_cap_inert). Reserve pro
+      // Call: 200 ct/min x ceil(180/60)=3 min = 600 ct; zwei Reserven (1200 ct) reissen
+      // den 1000-ct-Cap, eine einzelne (600 ct) nicht.
+      MAX_BUDGET_EUR: "10",
+      VOICE_TARIFF_DOMESTIC_CENTS: "200",
       ALLOWED_COUNTRY_CODES: "*",
       FAKE_ORIGINATE: "true",
     },

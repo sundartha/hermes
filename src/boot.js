@@ -15,6 +15,8 @@ import {
   alertChannelFindings,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
+  planCapInertFindings,
+  tenantCapRowInertFindings,
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
@@ -24,6 +26,8 @@ import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import { hasPrunedSomething } from "./store/state-ops.js";
 import { COST_TRUING_SWEEP_INTERVAL_MS, SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
+import { CATALOG_SLUGS } from "./plans.js";
+import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -50,7 +54,15 @@ const AUDITED_BOOT_FINDINGS = new Set([SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE
 // P3: Kohaerenz der Budget-Achsen GEGENEINANDER (spendCapCoherence, src/boot-guard.js).
 // Klausel A (Tenant-Default >= Plattform-Cap) ist FATAL - eine inerte Tenant-Achse ist
 // echter Schutzverlust (Regel 1). A0/B sind WARN (siehe Klausel-Kommentar im Guard).
-function assertSpendCapCoherence(config) {
+//
+// LCT P6 haengt zwei weitere Linien an (store.load() ist gecacht, kein Zweit-IO, Muster
+// currentCoverage): erste Linie (fatal) prueft ALLE Katalog-Slugs' abgeleitete Decke gegen
+// den Plattform-Cap - unabhaengig davon, ob schon ein Tenant diesen Plan gebucht hat
+// (verhindert eine inkohaerente Konfiguration VOR dem ersten Kunden). Zweite Linie (WARN)
+// liest die Nachlese ueber TATSAECHLICH gesetzte tenant_budget-Zeilen (nachtraeglich
+// gesenkter Cap). Beide koennen NOCH process.exit(1) ausloesen (nur die erste) - deshalb
+// bleibt assertSpendCapCoherence vor rearmActiveCallTimers() (INV-5).
+function assertSpendCapCoherence(config, store) {
   const findings = spendCapCoherence({
     tenantDefaultCents: config.billing.defaultTenantBudgetCents,
     platformCapCents: config.billing.platformSpendCapCents,
@@ -60,12 +72,22 @@ function assertSpendCapCoherence(config) {
     // Body-Override hierauf - das ist die laengstmoegliche Reserve.
     maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
-  const fatal = findings.find((f) => f.fatal);
+  const planCapFindings = planCapInertFindings({
+    slugs: CATALOG_SLUGS,
+    platformCapCents: config.billing.platformSpendCapCents,
+    capForSlug: (slug) => planCapCents(slug, config.billing),
+  });
+  const rowFindings = tenantCapRowInertFindings({
+    budgetRows: store.load().tenantBudgets,
+    platformCapCents: config.billing.platformSpendCapCents,
+  });
+  const all = [...findings, ...planCapFindings, ...rowFindings];
+  const fatal = all.find((f) => f.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
   }
-  for (const finding of findings) {
+  for (const finding of all) {
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
     if (AUDITED_BOOT_FINDINGS.has(finding.code)) {
       audit("boot_konfig_warnung", null, `grund=${finding.code} ${finding.message}`);
@@ -222,7 +244,7 @@ function assertBootGates(config, store) {
   // und die bestehenden Gates ihre exakte Ausgabe-Reihenfolge behalten. Beide koennen
   // NOCH process.exit(1) rufen (assertSpendCapCoherence bei Klausel A) - deshalb MUESSEN
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
-  assertSpendCapCoherence(config);
+  assertSpendCapCoherence(config, store);
   warnUnpricedModels(config);
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);

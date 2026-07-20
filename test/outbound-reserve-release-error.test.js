@@ -19,7 +19,11 @@ test("OUT-05 F2: catch-Pfad gibt die Reserve frei (zweiter Call erreicht wieder 
   const srv = await startServer({
     env: {
       TWILIO_ACCOUNT_SID: "x",
-      MAX_BUDGET_EUR: "1",
+      // LCT P6: MAX_BUDGET_EUR muss echt ueber der abgeleiteten Business-Plan-Decke
+      // (900 ct) liegen, sonst verweigert der Boot-Guard (plan_cap_inert). Beide Calls
+      // erwarten hier ohnehin 5xx (Reserve greift nicht) - der genaue Cap-Wert ist fuer
+      // diesen Test irrelevant, solange er die Reserve (60 ct) nicht selbst reisst.
+      MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "20",
       ALLOWED_COUNTRY_CODES: "*",
     },

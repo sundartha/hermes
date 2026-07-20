@@ -409,8 +409,11 @@ export function makePgStore(runner) {
     tenantStripe: (tenantId) => ops.tenantStripe(requireState(), tenantId),
 
     // ---- Abo-Referenzen pro Tenant (W4): Wrapper-Parity zu json.js ----
+    // LCT P6: deriveTenantBudgetFromPlan laeuft NACH setTenantSubscription, im selben
+    // save()-Fenster - tenant.stripePlanSlug ist dann bereits der EFFEKTIVE Slug.
     setTenantSubscription(tenantId, patch) {
       const tenant = ops.setTenantSubscription(requireState(), tenantId, patch);
+      ops.deriveTenantBudgetFromPlan(requireState(), tenantId, config.billing);
       save();
       return tenant;
     },

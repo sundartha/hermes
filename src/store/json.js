@@ -659,8 +659,12 @@ export function tenantStripe(tenantId) {
 // ---- Abo-Referenzen pro Tenant (W4) ----
 // setTenantSubscription mutiert -> save (Muster wie setTenantStripe); tenantSubscription
 // und findTenantBySubscription sind reine Queries (kein save, analog tenantStripe).
+// LCT P6: deriveTenantBudgetFromPlan laeuft NACH setTenantSubscription, im selben
+// save()-Fenster (Wrapper-Parity zu pg.js) - tenant.stripePlanSlug ist dann bereits der
+// EFFEKTIVE Slug.
 export function setTenantSubscription(tenantId, patch) {
   const tenant = ops.setTenantSubscription(load(), tenantId, patch);
+  ops.deriveTenantBudgetFromPlan(load(), tenantId, config.billing);
   save();
   return tenant;
 }

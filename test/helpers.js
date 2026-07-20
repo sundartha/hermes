@@ -38,7 +38,16 @@ export const BASE_ENV = {
   DATA_DIR: "", // wird pro Server durch ein Temp-Verzeichnis ersetzt
   ANTHROPIC_API_KEY: "test-anthropic-key",
   CLAUDE_MODEL: "claude-haiku-4-5",
-  MAX_BUDGET_EUR: "8",
+  // LCT P6: 30 (statt vormals 8) - der Plattform-Cap muss echt ueber der abgeleiteten
+  // Business-Plan-Decke (900 ct) liegen, sonst verweigert JEDER Spawn-Test den Boot
+  // (plan_cap_inert, erste Linie, greift unconditional auf ALLE Katalog-Slugs). 30 spiegelt
+  // den Live-Wert (Entscheidung 8, PLAN-LIVE-COST-TRACING) - der CODE-Fallback in
+  // src/config.js bleibt bewusst bei 8 (Anhebung ist NICHT Teil dieser Phase, s.
+  // test/boot-failclosed.test.js T-P3-13).
+  MAX_BUDGET_EUR: "30",
+  // LCT P6: Deckel-Basissatz (billing/plan-caps.js) neutral auf den Code-Default gepinnt
+  // (Lehre test-base-env-drift).
+  VOICE_CAP_RATE_CENTS_PER_MIN: "6",
   // ---- LLM-Resilienz-Seam (P3b-R, src/llm.js) ----
   // Neutral + deterministisch: kurzer Timeout/Backoff, damit Tests, die den Seam ab
   // CP3 beruehren, nicht haengen; sonst leakt eine lokale .env via dotenv in Spawn-Tests

@@ -162,7 +162,10 @@ test("Flag an + Telnyx + ueber Budget -> Hangup, kein Call-Record, startAssistan
     env: {
       FAKE_ORIGINATE: "true",
       TELNYX_AI_ASSISTANT_ENABLED: "true",
-      MAX_BUDGET_EUR: "8",
+      // LCT P6: kein MAX_BUDGET_EUR-Override mehr - BASE_ENV traegt bereits 30 (musste
+      // damals mit der alten BASE_ENV=8 uebereinstimmen; ein niedrigerer Wert wuerde seit
+      // P6 den Boot-Guard verweigern, plan_cap_inert). costEur:99 (9900 ct) uebersteigt
+      // auch den 3000-ct-Cap bei weitem.
       ...TELNYX_ASSISTANT_BOOT_ENV,
     },
     seed: (() => {

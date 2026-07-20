@@ -27,7 +27,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P5 (Live-Cost-Tracing, Drift-Waechter): costCalibrationMinSamples ergaenzt -> 28.
   // P4 (Live-Cost-Tracing, Der Flip): costTruingBookingEnabled ergaenzt -> 29.
   // P4b (Live-Cost-Tracing, Vollkosten-Boot-Guard): voiceTariffFullCostFloorCents ergaenzt -> 30.
-  billing: 30,
+  // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ergaenzt -> 31.
+  billing: 31,
   provisioning: 11,
   auth: 15,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
@@ -46,9 +47,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 118;
+const EXPECTED_TOTAL_KEYS = 119;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (118 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (119 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -119,7 +120,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // P4 (Live-Cost-Tracing, Der Flip): costTruingBookingEnabled ist primitiv (Boolean) -> 109.
   // P4b (Live-Cost-Tracing, Vollkosten-Boot-Guard): voiceTariffFullCostFloorCents ist
   // primitiv (Zahl, kein Array/nested Objekt) -> 110.
-  assert.equal(checked, 110, "alle primitiven Blaetter (118 - 4 Arrays - 4 nested Objekte) geprueft");
+  // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ist
+  // primitiv (Zahl, kein Array/nested Objekt) -> 111.
+  assert.equal(checked, 111, "alle primitiven Blaetter (119 - 4 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

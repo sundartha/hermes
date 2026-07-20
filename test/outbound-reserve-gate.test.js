@@ -21,25 +21,27 @@ const postCall = (url, to) =>
   });
 
 test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert", async (t) => {
-  // Cap = MAX_BUDGET_EUR = 1 EUR (Owner ohne tenant_budget-Zeile). Default-Tarif 300 ct/min
-  // x 3 min (maxDur 180 s) = 900 ct = 9 EUR > 1-EUR-Cap. Inland 20 ct/min x 3 = 60 ct < Cap.
+  // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (Owner ohne tenant_budget-Zeile; LCT P6: muss
+  // echt ueber der abgeleiteten Business-Plan-Decke von 900 ct liegen, sonst verweigert der
+  // Boot-Guard, plan_cap_inert). Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180 s) =
+  // 1200 ct = 12 EUR > 10-EUR-Cap -> Fehlbetrag 2.00 EUR. Inland 20 ct/min x 3 = 60 ct < Cap.
   const srv = await startServer({
     env: {
       ALLOWED_NUMBERS: `${DOMESTIC},${INTL}`,
       ALLOWED_COUNTRY_CODES: "*",
-      MAX_BUDGET_EUR: "1",
+      MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "20",
-      VOICE_TARIFF_DEFAULT_CENTS: "300",
+      VOICE_TARIFF_DEFAULT_CENTS: "400",
       TWILIO_ACCOUNT_SID: "x",
     },
   });
   try {
-    await t.test("internationales Ziel: Reserve 9 EUR > 1-EUR-Cap -> 402 grund=reserve_ueber_rest", async () => {
+    await t.test("internationales Ziel: Reserve 12 EUR > 10-EUR-Cap -> 402 grund=reserve_ueber_rest", async () => {
       const res = await postCall(srv.localUrl, INTL);
       assert.equal(res.status, 402, "Worst-Case-Reserve ueberschreitet den Cap -> 402 vor Dial");
       assert.match(
         (await res.json()).error,
-        /es fehlen 8\.00 EUR/,
+        /es fehlen 2\.00 EUR/,
         "Reserve-Fehlertext (nicht das nachgelagerte Budget-Gate) nennt den Fehlbetrag",
       );
     });

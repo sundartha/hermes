@@ -149,7 +149,7 @@ test("Minuten- und Budget-Achse sind getrennt (verschiedene 402-Meldungen)", asy
   const budgetSeed = seedQuota({
     subscription: STARTER_SUB,
     usageEvents: [], // Minuten frisch
-    usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) }, // 99 >= MAX_BUDGET_EUR(8)
+    usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) }, // 99 >= MAX_BUDGET_EUR(30, LCT P6)
   });
   const budgetRes = await tryOutbound(PAY_ENV, budgetSeed, SUB_A);
   assert.equal(budgetRes.status, 402, "Budget erschoepft -> geblockt");
