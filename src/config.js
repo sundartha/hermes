@@ -380,6 +380,42 @@ const rawConfig = {
     fallback: 920000,
     min: 1,
   }),
+  // ---- Kosten-Abgleich im Beobachtungsmodus (LCT P3) ----
+  // Aufschub, bevor ein beendeter Call abgeglichen wird. KONFIGURATION, keine
+  // Code-Konstante: die CDR-Latenz ist UNBELEGT (Kap. 2.6 des Plans) - empirisch
+  // erscheinen Calls Stunden spaeter, zugesichert ist nichts. Wird nach dem ersten
+  // Live-Beleg nachgezogen statt geraten und vergessen.
+  costTruingDelayMinutes: numEnv("COST_TRUING_DELAY_MINUTES", process.env.COST_TRUING_DELAY_MINUTES, { fallback: 180, min: 0 }),
+  // Obergrenze der Abgleich-Versuche je Call (gezaehlt im PERSISTIERTEN
+  // costTruingAttempts). Danach gilt der Call als abgeschlossen + 'unavailable', damit
+  // der Job nicht ewig gegen tote Calls laeuft. min 1 - 0 hiesse "nie abgleichen".
+  costTruingMaxAttempts: numEnv("COST_TRUING_MAX_ATTEMPTS", process.env.COST_TRUING_MAX_ATTEMPTS, { fallback: 5, min: 1 }),
+  // Pflicht-Menge der record_types, die ein GESUNDER Call zeigen muss. CODE-DEFAULT IST
+  // DIE LEERE MENGE, und leer bedeutet 'incomplete' - nicht "alles erlaubt", sondern
+  // "nichts bewiesen". BEWUSST KEIN geratener Nicht-leer-Default: ein vorbelegtes
+  // ['call-control'] saehe nach Vollstaendigkeit aus und liesse ab P4 Rueckerstattungen
+  // auf genau der duennen Datenlage zu, gegen die P4 argumentiert. Die Menge wird
+  // gesetzt, wenn sie am Live-Beleg gemessen ist (Kandidaten aus der Messung vom
+  // 2026-07-20: sip-trunking, call-control, speech-to-text, text-to-speech, recording,
+  // inference, ai-voice-assistant - "call" existiert NICHT).
+  costTruingRequiredRecordTypes: (process.env.COST_TRUING_REQUIRED_RECORD_TYPES || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean),
+  // Vorbedingung des Flips (P4/P4b lesen DIESELBE Schwelle, bewusst keine zweite):
+  // Mindest-Deckungsquote in Prozent. Wird sie unterschritten, meldet jeder Sweep den
+  // Befund coverage_below_threshold. Die Schwelle wird NIE gesenkt, um die Vorbedingung
+  // zu erfuellen - das waere die Sicherung an ihre eigene Verletzung angepasst.
+  costTruingMinCoveragePercent: numEnv("COST_TRUING_MIN_COVERAGE_PERCENT", process.env.COST_TRUING_MIN_COVERAGE_PERCENT, { fallback: 80, min: 0, max: 100 }),
+  // Stillstands-Grenze: so viele aufeinanderfolgende Sweeps unter der Schwelle ->
+  // Eskalation + Owner-Entscheidung (Ursache beheben oder Abbruch nach P3/P5).
+  // 8 x 6 h = rund zwei Tage.
+  costTruingCoverageStallSweeps: numEnv("COST_TRUING_COVERAGE_STALL_SWEEPS", process.env.COST_TRUING_COVERAGE_STALL_SWEEPS, { fallback: 8, min: 1 }),
+  // Ab welcher relativen Abweichung Ist/Schaetzung eine WARN-Zeile faellt (D2).
+  costDriftWarnPercent: numEnv("COST_DRIFT_WARN_PERCENT", process.env.COST_DRIFT_WARN_PERCENT, { fallback: 50, min: 0 }),
+  // Entprellfenster je Befund-Code (Default 24 h). Ohne sie meldete der 6-h-Sweep
+  // denselben Befund viermal am Tag und trainierte den Kanal taub. P5 nutzt dasselbe Feld.
+  costAlertDebounceMs: numEnv("COST_ALERT_DEBOUNCE_MS", process.env.COST_ALERT_DEBOUNCE_MS, { fallback: 24 * 60 * 60 * 1000, min: 0 }),
   // ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c, D1) ----
   // Voice-Minuten-Tarif (GANZZAHL Cents/min, G26). EINE Kosten-Quelle (G5): speist die
   // Vorab-Reservierung (Worst-Case vor dem Dial), den Budget-Reconcile (Ist bei Call-Ende)
@@ -919,7 +955,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

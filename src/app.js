@@ -211,6 +211,7 @@ export async function buildApp(deps) {
     ttsStore,
     directiveSynth,
     voiceRender,
+    costTruing,
   } = deps;
 
   const app = express();
@@ -363,13 +364,14 @@ export async function buildApp(deps) {
   app.use(makeProfileRoutes({ store, audit }));
 
   // ---- Billing-Routen ---------------------------------------------------------------
-  // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return)
-  // lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster wie
-  // makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
+  // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return,
+  // cost-truing/sweep) lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster
+  // wie makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
   // Mount-Position (nach makeProfileRoutes, vor /api/onboard), hinter Basic-Auth
   // (Bestand deckt /api/* ab). billing = stripeBilling (EINE Instanz, INV-7);
-  // requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). Der Safety-Kontext
-  // (kein MCP-Tool, PAYMENT_ENABLED-404-Gate) ist ins Modul mitgewandert.
+  // requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). costTruing = die
+  // EINE LCT-P3-Instanz (INV-7, in server.js konstruiert). Der Safety-Kontext (kein
+  // MCP-Tool, PAYMENT_ENABLED-404-Gate) ist ins Modul mitgewandert.
   app.use(
     makeBillingRoutes({
       config,
@@ -377,6 +379,7 @@ export async function buildApp(deps) {
       audit,
       billing: stripeBilling,
       tenant: { requireTenant },
+      costTruing,
     }),
   );
 

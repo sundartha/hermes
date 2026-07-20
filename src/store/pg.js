@@ -246,6 +246,14 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // LCT P3: Abgleich-Ergebnis - Flush schreibt actual_cost_micro_cents/cost_trued_at/
+    // cost_trued_source/cost_truing_attempts (P2 hat ALLE FUENF im ON CONFLICT DO UPDATE
+    // SET - ohne das fiele der Wert beim naechsten Flush auf den Create-Zustand zurueck).
+    recordCallCostTruingResult(callId, outcome) {
+      const { call, changed } = ops.recordCallCostTruingResult(requireState(), callId, outcome);
+      if (changed) save();
+      return call;
+    },
     // CDF1 (Report #2 5.4): persistierter Fehlergrund - Wrapper-Parity zu json.js. Der
     // Flush schreibt failure_reason am call-Record (INSERT + ON CONFLICT DO UPDATE).
     recordFailureReason(callId, reason) {

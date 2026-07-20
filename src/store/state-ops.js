@@ -46,6 +46,7 @@ import {
   globalCapCents,
   KYC_LEVEL,
   KYC_ORDER,
+  COST_TRUING_SOURCE,
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
 
@@ -430,6 +431,37 @@ export function recordCallEstimatedCostCents(s, callId, costCents) {
   if (!call || call.estimatedCostCents !== null || !isBookableCents(costCents))
     return { call: call || null, changed: false };
   call.estimatedCostCents = costCents;
+  return { call, changed: true };
+}
+
+// LCT P3: naechste Versuchsnummer eines Calls. EINE Quelle (G5) fuer den Kandidaten-
+// Riegel in cost-truing.js UND das Hochzaehlen unten - sonst driften Abbruch-Bedingung
+// und Zaehler auseinander. Fehlender/korrupter Zaehler -> Start bei 0, nie NaN
+// (NaN + 1 bliebe NaN und der Call liefe unbegrenzt weiter).
+export function nextCostTruingAttempt(call) {
+  const attempts = call?.costTruingAttempts;
+  return (Number.isSafeInteger(attempts) && attempts >= 0 ? attempts : 0) + 1;
+}
+
+// LCT P3: Ergebnis EINES Kosten-Abgleichs am Call. Schreibt NUR P2-Felder - keine
+// Budget-/Usage-/Meter-Achse wird beruehrt (das ist die Kernaussage der Phase).
+// costTruedAt !== null ist der PERSISTIERTE Idempotenz-Riegel: ein abgeschlossener Call
+// wird nie erneut angefasst (gegen sequenzielle Wiederholung; gegen VERSCHRAENKUNG
+// schuetzt der Laufriegel in cost-truing.js). closedAt=null laesst den Call bewusst offen
+// ({ok:false} -> spaeterer Lauf), der Versuchszaehler steigt trotzdem und terminiert den
+// Job nach COST_TRUING_MAX_ATTEMPTS (Entscheidung beim Aufrufer, state-ops bleibt
+// config- und zeitfrei). actualCostMicroCents wird nur uebernommen, wenn es eine
+// Ganzzahl >= 0 ist - USD-Mikro-Cent, UNVERAENDERT (keine Umrechnung, D5).
+// Liefert { call, changed } (Wrapper saved bei changed).
+export function recordCallCostTruingResult(s, callId, { source, actualCostMicroCents, closedAt }) {
+  const call = getCall(s, callId);
+  if (!call || call.costTruedAt !== null || !Object.values(COST_TRUING_SOURCE).includes(source))
+    return { call: call || null, changed: false };
+  call.costTruingAttempts = nextCostTruingAttempt(call);
+  if (Number.isSafeInteger(actualCostMicroCents) && actualCostMicroCents >= 0)
+    call.actualCostMicroCents = actualCostMicroCents;
+  call.costTruedSource = source;
+  if (closedAt) call.costTruedAt = closedAt;
   return { call, changed: true };
 }
 

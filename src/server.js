@@ -32,6 +32,7 @@ import { resolveProvisionRetry } from "./billing/provision-trigger.js";
 import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
+import { makeCostTruing } from "./billing/cost-truing.js";
 import {
   makeRequestTenant,
   internalIdentity,
@@ -79,6 +80,14 @@ const { gates: outboundGates } = makeOutboundGates({
 // werden geschlossen; die Gating-Bedingung `if (config.billing.paymentEnabled)` bleibt beim
 // Aufrufer (finishCall / Provisioning-Drain), nicht im Modul.
 const metering = makeMetering({ store, config });
+
+// Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
+// Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
+// manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
+// damit keinen. voiceControl kommt aus der Registry (Adapter ohne getVoiceCostRecords ->
+// sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate, kein Meter, keine
+// Buchung wird beruehrt.
+const costTruing = makeCostTruing({ store, config, voiceControl, audit });
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)
 // EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler; INV-7).
@@ -184,6 +193,7 @@ const deps = {
   ttsStore,
   directiveSynth,
   voiceRender,
+  costTruing,
 };
 const { app } = await buildApp(deps);
 await bootServer({ app, ...deps });

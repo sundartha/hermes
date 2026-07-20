@@ -407,6 +407,13 @@ export function recordCallEstimatedCostCents(callId, costCents) {
   return call;
 }
 
+// LCT P3: Abgleich-Ergebnis am Call - mutiert -> save bei changed (Muster markBilled).
+export function recordCallCostTruingResult(callId, outcome) {
+  const { call, changed } = ops.recordCallCostTruingResult(load(), callId, outcome);
+  if (changed) save();
+  return call;
+}
+
 // CDF1 (Report #2 5.4): persistierter Fehlergrund (mapped Token): mutiert -> save bei
 // changed (Muster wie markSummarySmsSent). Der Grund ueberlebt den Prozess-Restart.
 export function recordFailureReason(callId, reason) {

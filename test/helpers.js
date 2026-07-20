@@ -224,6 +224,17 @@ export const BASE_ENV = {
   // LCT P2: Kurs explizit im Band (Lehre test-base-env-drift). Ohne diese Zeile leakt eine
   // lokale .env via dotenv in die Spawn-Tests und erzeugte dort eine fremde Boot-WARN.
   PROVIDER_TO_BUCKET_RATE_MICRO: "920000",
+  // LCT P3: Kosten-Abgleich explizit auf den Code-Defaults gepinnt (Lehre
+  // test-base-env-drift). Ohne diese Zeilen faerbte eine lokale .env die Spawn-Suite.
+  // Der Sweep laeuft ohnehin nur per Intervall (6 h, unref) - in einem Spawn-Test feuert
+  // er nie; die P3-Tests rufen die Fabrik direkt und in-process auf.
+  COST_TRUING_DELAY_MINUTES: "180",
+  COST_TRUING_MAX_ATTEMPTS: "5",
+  COST_TRUING_REQUIRED_RECORD_TYPES: "",
+  COST_TRUING_MIN_COVERAGE_PERCENT: "80",
+  COST_TRUING_COVERAGE_STALL_SWEEPS: "8",
+  COST_DRIFT_WARN_PERCENT: "50",
+  COST_ALERT_DEBOUNCE_MS: "86400000",
   // W4: Abo-Env neutral leer (fail-closed): ohne diese Zeilen leakt eine lokale .env mit
   // STRIPE_*_PRICE_ID / STRIPE_WEBHOOK_SECRET via dotenv in Spawn-Tests -> Baseline-Drift
   // (Lehre test-base-env-drift). PAYMENT_ENABLED=false -> der Webhook-Secret-Boot-Check greift nicht.

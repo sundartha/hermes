@@ -286,11 +286,15 @@ test("twilioVoice.getVoiceCostRecords ist NICHT implementiert (bewusst, Twilio-p
   assert.equal(twilioVoice.getVoiceCostRecords, undefined);
 });
 
-// ---- (g) Kein-Aufrufer-Riegel ----
+// ---- (g) Aufrufer-Riegel ----
 
-// Rein textuelle Pruefung ueber src/ (Muster telnyx-assistant-route-drift.test.js): pinnt
-// das Akzeptanzkriterium "kein Produktionspfad ruft getVoiceCostRecords auf" strukturell,
-// statt sich auf eine Zusicherung im Review zu verlassen.
+// Rein textuelle Pruefung ueber src/ (Muster telnyx-assistant-route-drift.test.js). Bis P2
+// pinnte dieser Test "kein Aufrufer" - P3 (Kosten-Abgleich im Beobachtungsmodus,
+// billing/cost-truing.js) fuehrt den ERSTEN und EINZIGEN vorgesehenen Aufrufer ein (ueber
+// den voiceControl-Port, kein direkter Adapter-Import). Der Riegel bleibt wertvoll, nur
+// umgekehrt: er pinnt jetzt, DASS der Aufrufer NUR dort (+ server.js, reiner Kommentar-
+// Treffer aus der Verdrahtung) steht und NICHT in einem Geld-/Gate-Pfad, den P3
+// ausdruecklich unangetastet laesst (metering.js, call-finish.js, outbound-gates.js).
 function listJsFilesRecursive(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
@@ -302,10 +306,25 @@ function listJsFilesRecursive(dir) {
   return out;
 }
 
-test("getVoiceCostRecords hat in src/ genau zwei Fundstellen (ports.js + adapters/telnyx/voice.js) - kein Aufrufer", () => {
+// Geld-/Gate-Pfade, die P3 ausdruecklich NICHT anfasst (PLAN-LIVE-COST-TRACING.md P3,
+// Abschnitt "Bewusst NICHT angefasst"). Ein Treffer hier waere ein echter Scope-Bruch.
+const FORBIDDEN_CALLER_FILES = Object.freeze([
+  "billing/metering.js",
+  "telephony/call-finish.js",
+  "telephony/outbound-gates.js",
+]);
+
+test("getVoiceCostRecords: Aufrufer NUR in cost-truing.js (LCT P3) - NIE in einem Geld-/Gate-Pfad", () => {
   const srcDir = fileURLToPath(new URL("../src", import.meta.url));
   const hits = listJsFilesRecursive(srcDir)
     .filter((f) => readFileSync(f, "utf8").includes("getVoiceCostRecords"))
     .map((f) => path.relative(srcDir, f).split(path.sep).join("/"));
-  assert.deepEqual(hits.sort(), ["telephony/adapters/telnyx/voice.js", "telephony/ports.js"]);
+  const forbidden = hits.filter((f) => FORBIDDEN_CALLER_FILES.includes(f));
+  assert.deepEqual(forbidden, [], "P3 (Beobachtungsmodus) darf keinen dieser Geld-/Gate-Pfade beruehren");
+  assert.deepEqual(hits.sort(), [
+    "billing/cost-truing.js",
+    "server.js",
+    "telephony/adapters/telnyx/voice.js",
+    "telephony/ports.js",
+  ]);
 });

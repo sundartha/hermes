@@ -193,6 +193,25 @@ services:
       # Explizit, damit der Live-Wert ablesbar ist statt nur im Code zu stehen.
       - key: PROVIDER_TO_BUCKET_RATE_MICRO
         value: "920000"
+      # ---- Kosten-Abgleich im Beobachtungsmodus (LCT P3, misst - bucht NICHT) ----
+      - key: COST_TRUING_DELAY_MINUTES
+        value: "180"
+      - key: COST_TRUING_MAX_ATTEMPTS
+        value: "5"
+      # LEER = 'incomplete' ("nichts bewiesen"), NIEMALS "vollstaendig". Erst nach
+      # gemessenem Live-Beleg besetzen; die Enum-Werte sind sip-trunking, call-control,
+      # speech-to-text, text-to-speech, recording, inference, ai-voice-assistant -
+      # "call" existiert NICHT.
+      - key: COST_TRUING_REQUIRED_RECORD_TYPES
+        value: ""
+      - key: COST_TRUING_MIN_COVERAGE_PERCENT
+        value: "80"
+      - key: COST_TRUING_COVERAGE_STALL_SWEEPS
+        value: "8"
+      - key: COST_DRIFT_WARN_PERCENT
+        value: "50"
+      - key: COST_ALERT_DEBOUNCE_MS
+        value: "86400000"
       # ---- Abo-Buchung (Stripe Recurring, W4) ----
       - key: STRIPE_STARTER_PRICE_ID
         sync: false

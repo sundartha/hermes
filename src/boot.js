@@ -19,6 +19,7 @@ import { attachMediaBridge } from "./bridge.js";
 import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import { hasPrunedSomething } from "./store/state-ops.js";
+import { COST_TRUING_SWEEP_INTERVAL_MS, SWEEP_TRIGGER } from "./billing/cost-truing.js";
 import { audit } from "./util.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -179,7 +180,7 @@ function logBootBanner(config, port) {
   );
 }
 
-export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning }) {
+export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning, costTruing }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
   // exit(1) faengt das globale uncaughtException-Netz (process-guards) den Boot-Throw ab und
@@ -195,6 +196,27 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
   setInterval(() => runRetention(store, config), RETENTION_SWEEP_INTERVAL_MS).unref();
 
   assertBootGates(config, store);
+
+  // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden
+  // periodischen Jobs (Retention hier, DID-Release-Reconciler in wiring/web-login.js):
+  // setInterval(...).unref(), benannte Intervall-Konstante, kein Scheduler-Dependency,
+  // kein Render-Cron (gibt es auf dem Free Tier nicht).
+  //
+  // BEWUSSTE ABWEICHUNG von beiden Vorbildern: KEIN Lauf beim Boot. Beide Vorbilder sind
+  // store-lokal bzw. observe-only; dieser Sweep macht Provider-IO, und im Repo hat KEIN
+  // Provider-Call einen Timeout/AbortController (dokumentiert in src/single-flight.js).
+  // Ein haengender CDR-Abruf duerfte nie an der Boot-Sequenz haengen. Wer "jetzt" will,
+  // nimmt den Endpunkt. NACH assertBootGates, damit die Konfiguration validiert ist.
+  //
+  // runCostTruingSweep wirft nicht (interner try/finally + per-Call-catch); zusaetzlich
+  // .catch() am Aufruf, damit ein unerwarteter Wurf nie zum unhandled rejection wird.
+  setInterval(
+    () =>
+      void costTruing
+        .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
+        .catch((e) => console.error("[cost-truing]", e.message)),
+    COST_TRUING_SWEEP_INTERVAL_MS,
+  ).unref();
 
   // F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
   // allen Boot-Gates (assertConfig/fakeOriginateBootBlocked/hasActiveNumber), unmittelbar
