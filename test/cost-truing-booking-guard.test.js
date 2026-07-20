@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../src/boot-guard.js";
-import { startServer, startServerExpectExit, seedState, seedCall } from "./helpers.js";
+import { startServer, startServerExpectExit, outboundCallsSeed } from "./helpers.js";
 
 // ---- Unit: costTruingBookingFindings ----
 
@@ -92,25 +92,13 @@ test("(n2) Gegenprobe: Pflicht-Menge gesetzt -> Server startet trotz aktiver Buc
 });
 
 // ---- (p) Deckungsquote-WARN am Boot: genau eine Zeile, kein Boot-Refusal ----
-
-function outboundEndedCall(id, costTruedSource) {
-  return seedCall({ id, direction: "outbound", endedAt: new Date().toISOString(), costTruedSource });
-}
-
-// 5 beendete Outbound-Calls, davon `proven` mit costTruedSource='telnyx_detail_records'
-// (der Rest 'unavailable') - costTruingCoveragePercent liest NUR den Anteil DETAIL_RECORDS.
-function fiveCallsSeed(proven) {
-  const calls = [];
-  for (let i = 0; i < 5; i++) {
-    calls.push(outboundEndedCall(`call_p_${i}`, i < proven ? "telnyx_detail_records" : "unavailable"));
-  }
-  return seedState({ calls });
-}
+// Seed-Bauer outboundCallsSeed (G5): geteilt mit voice-tariff-full-cost-guard.test.js,
+// definiert in test/helpers.js. 5 Calls, davon `proven` bewiesen, IDs mit Praefix call_p_.
 
 test("(p1) 1 von 5 bewiesen (20% < 80%) -> genau EINE WARN-Zeile, /healthz 200, kein Boot-Refusal", async () => {
   const srv = await startServer({
     env: { COST_TRUING_BOOKING_ENABLED: "true", COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
-    seed: fiveCallsSeed(1),
+    seed: outboundCallsSeed(5, 1, "call_p_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -126,7 +114,7 @@ test("(p1) 1 von 5 bewiesen (20% < 80%) -> genau EINE WARN-Zeile, /healthz 200, 
 test("(p2) 5 von 5 bewiesen (100%) -> keine Deckungs-WARN", async () => {
   const srv = await startServer({
     env: { COST_TRUING_BOOKING_ENABLED: "true", COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
-    seed: fiveCallsSeed(5),
+    seed: outboundCallsSeed(5, 5, "call_p_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -140,7 +128,7 @@ test("(p2) 5 von 5 bewiesen (100%) -> keine Deckungs-WARN", async () => {
 test("(p3) Buchung AUS bei 20% Deckung -> keine Deckungs-WARN (der Riegel haengt an bookingEnabled)", async () => {
   const srv = await startServer({
     env: { COST_TRUING_BOOKING_ENABLED: "false", COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
-    seed: fiveCallsSeed(1),
+    seed: outboundCallsSeed(5, 1, "call_p_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);

@@ -20,6 +20,7 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   "numberSetupFeeCents",
   "voiceTariffDomesticCents",
   "voiceTariffDefaultCents",
+  "voiceTariffFullCostFloorCents",
   "defaultTenantBudgetCents",
   "smsCostCents",
   "usdToEur",

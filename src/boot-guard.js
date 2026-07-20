@@ -141,6 +141,44 @@ export function unpricedModels(modelIds, modelPricesUsd) {
   return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
 }
 
+// LCT P4b: Vollkosten-Boot-Guard (WARN). Sichert die spaetere Owner-Tarifsenkung ab.
+// Feuert GENAU in der KONJUNKTION: der gesenkte Tarif liegt unter der Vollkostenschwelle
+// UND die Abgleich-Deckung ist duenn. Nur EINE der beiden -> KEINE Meldung. WARN, kein
+// exit(1) (Praezedenz warnUnpricedModels/warnAlertChannelUnset): ein Boot-Refusal tauschte
+// ein Kostenproblem gegen einen Telefonie-Totalausfall.
+//
+// Was dieser Guard NICHT leistet (ausdruecklich): er feuert nur in der Konjunktion.
+// Vorbedingung 1 (Vollkostendeckung) ist damit NICHT eigenstaendig ueberwacht - bei hoher
+// Deckung schweigt er auch unter der Vollkostenschwelle (Test (q) pinnt das). Solange der
+// Assistant-Pfad im Code steht, verlangt jede Aenderung von VOICE_TARIFF_FULL_COST_FLOOR_CENTS
+// eine erneute Pruefung gegen den konfigurierten Tarif.
+//
+// coveragePercent wird HEREINGEREICHT, nicht hier gerechnet: die eine Quelle ist
+// costTruingCoveragePercent(store) aus P3 (G5). Nenner 0 liefert dort bereits 0% (kein
+// Freispruch) - ein leerer Spiegel bei gesenktem Tarif ist damit WARN, nicht Schweigen.
+// KEINE Literale (10, 80) im Rumpf - beide Schwellen kommen als benannte Konstanten herein.
+export const VOICE_TARIFF_FLOOR_FINDING = Object.freeze({
+  BELOW_FULL_COST: "voice_tariff_below_full_cost", // WARN
+});
+
+export function voiceTariffFloorFindings({ domesticTariffCents, fullCostFloorCents, coveragePercent, minCoveragePercent }) {
+  const belowFloor = domesticTariffCents < fullCostFloorCents;
+  const thinCoverage = coveragePercent < minCoveragePercent;
+  if (!(belowFloor && thinCoverage)) return [];
+  return [
+    {
+      code: VOICE_TARIFF_FLOOR_FINDING.BELOW_FULL_COST,
+      fatal: false,
+      message:
+        `VOICE_TARIFF_DOMESTIC_CENTS=${domesticTariffCents} liegt unter der Vollkostenschwelle ` +
+        `VOICE_TARIFF_FULL_COST_FLOOR_CENTS=${fullCostFloorCents}, waehrend die Abgleich-Deckung ` +
+        `${coveragePercent}% unter COST_TRUING_MIN_COVERAGE_PERCENT=${minCoveragePercent}% liegt - ` +
+        "der gesenkte Tarif ist der Buchungswert jedes nicht abgeglichenen Calls und wird von der " +
+        "Messung nicht gedeckt.",
+    },
+  ];
+}
+
 // LCT P2 (Kurs-Guard): der Umrechnungskurs Provider-Waehrung -> Ziel-Bucket gegen ein
 // Toleranzband um einen im CODE gepinnten Anker. Anker und Bandgrenzen sind BENANNTE
 // Konstanten, keine Literale im Rumpf (G25).

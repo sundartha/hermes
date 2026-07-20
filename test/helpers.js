@@ -253,6 +253,9 @@ export const BASE_ENV = {
   // byte-identisch). Die outbound-p1c-Tests setzen die Werte explizit.
   VOICE_TARIFF_DOMESTIC_CENTS: "0",
   VOICE_TARIFF_DEFAULT_CENTS: "0",
+  // LCT P4b: Vollkosten-Boot-Guard test-neutral aus (Schwelle 0 => 0<0 false => still),
+  // analog VOICE_TARIFF_DOMESTIC_CENTS=0. Die P4b-Tests setzen die Schwelle explizit.
+  VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "0",
   DEFAULT_TENANT_BUDGET_CENTS: "0",
   // P6 (Budget-Achsen, Fruehwarnung): neutral AUS (0 = kein Ereignis, byte-identisch
   // zum Bestand) - sonst leakt eine lokale .env via dotenv in Spawn-Tests (Lehre
@@ -409,6 +412,25 @@ export function seedCall(overrides = {}) {
     actionItemIds: [],
     ...overrides,
   };
+}
+
+// LCT P4/P4b (G5): geteilter Seed fuer die Deckungsquote-Boot-Beweise. EINE Quelle statt
+// der frueher in cost-truing-booking-guard.test.js (fiveCallsSeed) und voice-tariff-full-
+// cost-guard.test.js (tenCallsSeed) je kopierten Bauer. Ein beendeter Outbound-Call traegt
+// costTruedSource; costTruingCoveragePercent liest NUR den Anteil 'telnyx_detail_records'.
+function outboundEndedCall(id, costTruedSource) {
+  return seedCall({ id, direction: "outbound", endedAt: new Date().toISOString(), costTruedSource });
+}
+
+// count beendete Outbound-Calls, davon die ersten `proven` als bewiesen
+// ('telnyx_detail_records'), der Rest 'unavailable'. `prefix` haelt die IDs je Aufrufer
+// eindeutig (call_p_ im P4-Test, call_q_ im P4b-Test).
+export function outboundCallsSeed(count, proven, prefix) {
+  const calls = [];
+  for (let i = 0; i < count; i++) {
+    calls.push(outboundEndedCall(`${prefix}${i}`, i < proven ? "telnyx_detail_records" : "unavailable"));
+  }
+  return seedState({ calls });
 }
 
 // Wartet, bis das stdout des Kindprozesses auf das Pattern matcht - die

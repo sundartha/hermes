@@ -592,3 +592,43 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > Ablehnungstexten/`tenantBudgetSnapshot` (die zeigen nach einem Flip weiter
 > Lebenszeit-Zahlen neben einer Monats-Entscheidung - irrefuehrend, aber nicht unsicher,
 > da keine Gate-Entscheidung daran haengt; bewusst ausgeklammerte Folgephase).
+
+## P4B-FULLCOSTGUARD — Vollkosten-Boot-Guard sichert die kuenftige Owner-Tarifsenkung ab (2026-07-20)
+
+> **Was diese Phase einzieht:** eine neue Env-Var `VOICE_TARIFF_FULL_COST_FLOOR_CENTS`
+> (`config.billing.voiceTariffFullCostFloorCents`, GANZZAHL EUR-Cent, Default 10) plus
+> eine reine WARN-Boot-Entscheidung `voiceTariffFloorFindings` (`src/boot-guard.js`),
+> verdrahtet als `warnVoiceTariffBelowFullCost` (`src/boot.js`, Ende von
+> `assertBootGates`). Diese Phase SENKT `VOICE_TARIFF_DOMESTIC_CENTS` NICHT (bleibt
+> Default `20`) - sie liefert nur die Absicherung fuer eine spaetere Owner-Tarifsenkung.
+>
+> **Feuert GENAU in der Konjunktion:** der konfigurierte Inlandstarif
+> (`VOICE_TARIFF_DOMESTIC_CENTS`) liegt unter der Vollkostenschwelle UND die live aus
+> dem Kosten-Abgleich-Spiegel gerechnete Deckungsquote (`costTruingCoveragePercent`, P3,
+> EINE Quelle - auch fuer den P4-Buchungsguard) liegt unter
+> `COST_TRUING_MIN_COVERAGE_PERCENT`. Nur EINE der beiden Bedingungen -> KEINE Meldung.
+> WARN, kein `exit(1)` (Praezedenz `warnUnpricedModels`/`warnAlertChannelUnset`): ein
+> Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall.
+>
+> **Schwellen-Herleitung (10, nicht 5):** teuerste AKTIVIERBARE Konfiguration inklusive
+> des im Code UND per Env (`TELNYX_AI_ASSISTANT_ENABLED`) noch aktivierbaren
+> Assistant-Pfads, 10,4 USD-Cent/min * 0,92 (USD->EUR-Kurs) = 9,568, aufgerundet 10. Nach
+> VOLLZOGENEM Rueckbau des Assistant-Pfads (grep findet `startAssistant`/
+> `ai_assistant_start` nicht mehr) sinkt die Schwelle auf 5 (5,4 USD-Cent * 0,92 = 4,968,
+> aufgerundet) - der Rueckbau selbst ist NICHT Teil dieser Phase.
+>
+> **`min:0`, nicht `min:1`:** Test-neutral wie `VOICE_TARIFF_DOMESTIC_CENTS=0` - BASE_ENV
+> setzt beide auf `"0"` (`0 < 0` = false = still), sonst feuerte der Guard flaechendeckend
+> in der Suite. Unset (Prod/Render) faellt auf den armierten Default `10` zurueck. `0`
+> deaktiviert den WARN bewusst und sichtbar - er ist eine Diagnose (kein Geld-Gate), also
+> KEIN per-Default abgeschaltetes Safety-Gate im Sinne von Regel 1.
+>
+> **Bewusst NICHT eigenstaendig ueberwacht:** die Vollkosten-Deckungsquote ALLEIN. Bei
+> hoher Deckung (>= `COST_TRUING_MIN_COVERAGE_PERCENT`) schweigt der Guard auch dann,
+> wenn der Tarif unter der Vollkostenschwelle liegt (Test (q1) pinnt diese Flanke explizit
+> als akzeptierte Kante, nicht als Luecke). Der Guard beweist "die Senkung ist unter
+> duenner Deckung passiert", nicht "die Senkung ist beliebig sicher".
+>
+> **Nicht beruehrt:** `metering.js`, `outbound-gates.js`, kein Buchungs-/Gate-Pfad,
+> `VOICE_TARIFF_DOMESTIC_CENTS`-Default (bleibt `20`). Denylist/Land-Gate/Stundenlimit/
+> Budget-Guard/Max-Dauer/Signaturpruefung sind nicht angefasst.
