@@ -277,6 +277,11 @@ services:
         value: "20"
       - key: VOICE_TARIFF_DEFAULT_CENTS
         value: "300"
+      # LCT P4b - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
+      # darunter bei duenner Abgleich-Deckung, warnt der Boot (WARN, kein exit).
+      # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.
+      - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
+        value: "10"
       # Muss ECHT KLEINER als MAX_BUDGET_EUR*100 sein - sonst verweigert der Boot-Guard
       # (spendCapCoherence) den Start. 600 = Starter-Minutenwert (30 min * 20 ct).
       - key: DEFAULT_TENANT_BUDGET_CENTS

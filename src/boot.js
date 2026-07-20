@@ -14,6 +14,7 @@ import {
   providerRateOutOfBand,
   alertChannelFindings,
   costTruingBookingFindings,
+  voiceTariffFloorFindings,
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
@@ -137,6 +138,22 @@ function warnTariffDrift(config, store) {
   else console.log(line);
 }
 
+// LCT P4b: Vollkosten-Boot-Guard (WARN). Haelt den konfigurierten Inlandstarif gegen die
+// Vollkostenschwelle UND die live aus dem Spiegel gerechnete Deckungsquote. Feuert nur in
+// der Konjunktion (voiceTariffFloorFindings). Die Quote wird HIER GELESEN, aber NICHT hier
+// gerechnet: costTruingCoveragePercent (P3) ist die EINE Quelle (auch fuer den P4-Guard und
+// die Sweep-Ausgabe). WARN, kein exit(1). An KEIN Flag gekoppelt: der Tarif ist auch ohne
+// aktive Korrekturbuchung der Buchungswert jedes nicht abgeglichenen Calls.
+function warnVoiceTariffBelowFullCost(config, store) {
+  const findings = voiceTariffFloorFindings({
+    domesticTariffCents: config.billing.voiceTariffDomesticCents,
+    fullCostFloorCents: config.billing.voiceTariffFullCostFloorCents,
+    coveragePercent: costTruingCoveragePercent(store.load()),
+    minCoveragePercent: config.billing.costTruingMinCoveragePercent,
+  });
+  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
@@ -203,6 +220,7 @@ function assertBootGates(config, store) {
   assertCostTruingBooking(config, store);
   warnAlertChannelUnset(config);
   warnTariffDrift(config, store);
+  warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
 }
 
 function logBootBanner(config, port) {
