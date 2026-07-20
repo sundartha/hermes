@@ -25,7 +25,12 @@ const TILE_CANVAS = 180;
 const TILE_DISPLAY = 150;
 const STAGE_CANVAS = 540;
 const DEFAULT_STAGE_SIZE = 240;
-const PRESET_IDS: PresetId[] = ["classic", "rapid", "premium"];
+const PRESET_IDS: PresetId[] = ["classic", "rapid", "premium", "olympian"];
+
+// Default: weisser Fluegel wie zuvor (Gold aus). Der Gold-Look bleibt als
+// optionaler Regler erhalten, ist aber standardmaessig deaktiviert.
+const DEFAULT_GOLD = 0;
+const DEFAULT_SHIMMER = 0.7;
 
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
@@ -61,6 +66,9 @@ async function boot(): Promise<void> {
       preset,
       animate,
     });
+    tile.setGold(DEFAULT_GOLD);
+    tile.setShimmer(DEFAULT_SHIMMER);
+    tile.setAmbient(animate);
     allApps.push(tile);
   }
 
@@ -70,12 +78,13 @@ async function boot(): Promise<void> {
     texture,
     canvasSize: STAGE_CANVAS,
     displaySize: DEFAULT_STAGE_SIZE,
-    preset: "classic",
+    preset: "olympian",
     animate,
   });
+  stage.setAmbient(animate); // Gold/Lichtpuls setzen die Regler-Defaults.
   allApps.push(stage);
 
-  let activePreset: PresetId = "classic";
+  let activePreset: PresetId = "olympian";
   const readout = $("#json-readout");
   const controls = new LabControls($("#sliders"), stage, () => updateReadout());
 
@@ -135,6 +144,14 @@ async function boot(): Promise<void> {
     if (!size) return;
     stage.setDisplaySize(Number(size));
     activate(sizeGroup, (b) => b === btn);
+  });
+
+  // Ambient-Schweben (Default an; bleibt bei reduced-motion ohne Wirkung,
+  // weil die Stage dann ohnehin statisch bootet)
+  const ambientToggle = $("#ambient") as HTMLInputElement;
+  stage.setAmbient(animate && ambientToggle.checked);
+  ambientToggle.addEventListener("change", () => {
+    stage.setAmbient(ambientToggle.checked);
   });
 
   // Root-Marker

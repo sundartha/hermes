@@ -186,6 +186,21 @@ export class WingApp {
     this.state.rootRotation = value;
   }
 
+  /** Gold-Staerke 0..1 (0 = weisser Fluegel, 1 = volles Hermes-Gold). */
+  setGold(strength: number, color?: number): void {
+    this.wing?.setGold(strength, color);
+  }
+
+  /** Staerke des bewegungsgetriebenen Lichtpulses 0..~1.5. */
+  setShimmer(amount: number): void {
+    this.wing?.setShimmer(amount);
+  }
+
+  /** Permanentes, sehr sanftes Ambient-Schweben an/aus. */
+  setAmbient(on: boolean): void {
+    this.wing?.setAmbient(on);
+  }
+
   setRate(rate: number): void {
     this.status.setRate(rate);
   }

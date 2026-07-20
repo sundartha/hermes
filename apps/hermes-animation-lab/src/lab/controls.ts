@@ -8,6 +8,8 @@ import type { WingApp } from "../wing/WingApp.js";
 export type SliderKey =
   | "intensity"
   | "speed"
+  | "gold"
+  | "shimmer"
   | "bend"
   | "compression"
   | "tipLag"
@@ -28,6 +30,8 @@ type SliderSpec = {
 const SLIDER_SPECS: readonly SliderSpec[] = [
   { key: "intensity", label: "intensity", min: 0, max: 2, step: 0.01, value: 1 },
   { key: "speed", label: "speed", min: 0.1, max: 2.5, step: 0.01, value: 1 },
+  { key: "gold", label: "Gold", min: 0, max: 1, step: 0.01, value: 0 },
+  { key: "shimmer", label: "Lichtpuls", min: 0, max: 1.5, step: 0.01, value: 0.7 },
   { key: "bend", label: "bend", min: 0, max: 2, step: 0.01, value: 1 },
   { key: "compression", label: "compression", min: 0, max: 2, step: 0.01, value: 1 },
   { key: "tipLag", label: "tipLag", min: 0, max: 2, step: 0.01, value: 1 },
@@ -97,6 +101,12 @@ export class LabControls {
         break;
       case "speed":
         this.stage.setSpeed(v);
+        break;
+      case "gold":
+        this.stage.setGold(v);
+        break;
+      case "shimmer":
+        this.stage.setShimmer(v);
         break;
       case "bend":
         this.stage.setGains({ bend: v });

@@ -67,7 +67,7 @@ h2 {
 /* --- Preset-Galerie ------------------------------------------------------ */
 .preset-gallery {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--gap);
 }
 .preset-tile {
@@ -130,6 +130,18 @@ h2 {
 }
 .stage-wrap[data-bg="brand"] {
   background: var(--brand-surface);
+}
+/* Olymp: naechtlicher Himmel mit warmem Gold-Schimmer — laesst das goldene
+   Hermes-Gefieder leuchten (reiner CSS-Hintergrund, keine zweite Fluegel-Ebene). */
+.stage-wrap[data-bg="olymp"] {
+  background:
+    radial-gradient(
+      120% 120% at 50% 38%,
+      rgba(230, 190, 92, 0.16) 0%,
+      rgba(40, 38, 64, 0.6) 42%,
+      #14131f 100%
+    ),
+    #100f18;
 }
 .stage-wrap[data-bg="checker"] {
   background-color: #ffffff;

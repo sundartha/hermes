@@ -5,6 +5,7 @@ import type { HermesMotionState } from "../types.js";
  * intensity/speed bleiben neutral (1).
  */
 export const REST_STATE: Readonly<HermesMotionState> = Object.freeze({
+  beat: 0,
   flap: 0,
   bend: 0,
   compression: 0,
@@ -22,6 +23,7 @@ export function createState(): HermesMotionState {
 
 /** Setzt ein Ziel-Objekt feldweise auf den Ruhe-Zustand zurueck (ohne Neu-Allokation). */
 export function resetState(target: HermesMotionState): void {
+  target.beat = REST_STATE.beat;
   target.flap = REST_STATE.flap;
   target.bend = REST_STATE.bend;
   target.compression = REST_STATE.compression;

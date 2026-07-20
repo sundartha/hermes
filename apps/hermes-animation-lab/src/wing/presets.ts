@@ -11,6 +11,7 @@ export type KeyPose = { label: string; time: number };
 // Nur die ANIMIERTEN Kanaele. rootRotation ist ein statischer Authoring-Tilt
 // (Regler) und wird bewusst NICHT pro Zyklus zurueckgesetzt.
 const REST_CHANNELS = {
+  beat: 0,
   flap: 0,
   bend: 0,
   compression: 0,
@@ -84,13 +85,45 @@ const premium: PresetCycle = (state, groupPause) =>
     .to(state, { tipLag: 0.18, duration: 0.18, ease: "power2.out" }, "<")
     .to(state, { flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0, duration: 0.34, ease: "sine.inOut" });
 
-export const PRESETS: Record<PresetId, PresetCycle> = { classic, rapid, premium };
+// --- D · Olympian -----------------------------------------------------------
+// Der Goetterbote-Flug: ein KLAR LESBARER Wing-Beat des GANZEN Fluegels um die
+// Schulter (`beat`), nicht nur Federspitzen-Zucken. Bewusst im "schoenen"
+// Halbraum gehalten — der Fluegel hebt/holt aus (gehoben & gefaltet) und snappt
+// in eine breite, voll gespreizte Pose mit Auftriebs-Surge; er rotiert NICHT
+// ueber die Diagonale hinaus ins Horizontale (sonst foreshortened die
+// Silhouette zu einem flachen Strich). Kraft = schneller Fold->Spread-Snap +
+// Lift; die Federn kaskadieren verzoegert nach (tipLag = Overlapping Action).
+// Pose-fuer-Pose per Frame-Render verifiziert. Abschluss sine.inOut durch die
+// Ruhe -> nahtloser Loop (mit groupPause 0 am getragensten).
+const olympian: PresetCycle = (state, groupPause) =>
+  gsap
+    .timeline({ paused: true, repeat: -1, repeatDelay: groupPause })
+    .set(state, { ...REST_CHANNELS })
+    // 1. Wind-up (Aufschlag/Gather): ganzer Fluegel hebt & faltet, dippt minimal
+    .to(state, { beat: -1.0, flap: -0.06, bend: 0.1, compression: 0.24, lift: -0.06, duration: 0.18, ease: "sine.inOut" })
+    // 2. Power-Beat (Abschlag): schneller Snap zu BREIT/voll gespreizt + Auftrieb
+    .to(state, { beat: 0.33, flap: 0.34, bend: 0.42, compression: 0, lift: 0.6, duration: 0.24, ease: "power3.out" })
+    // 3. Follow-Through: Spitzen kaskadieren stark nach, traegt oben aus
+    .to(state, { tipLag: 0.85, lift: 0.8, duration: 0.22, ease: "power2.out" }, "-=0.1")
+    // 4. Recovery: leicht zurueck Richtung Gather, faltet an
+    .to(state, { beat: -0.47, flap: 0.04, bend: 0.2, compression: 0.12, lift: 0.52, duration: 0.16, ease: "power2.inOut" })
+    .to(state, { tipLag: -0.2, duration: 0.16, ease: "sine.inOut" }, "<")
+    // 5. weiches Settle zur Ruhe (sine -> nahtloser Loop-Uebergang)
+    .to(state, { beat: 0, flap: 0, bend: 0, compression: 0, tipLag: 0, lift: 0, duration: 0.28, ease: "sine.inOut" });
+
+export const PRESETS: Record<PresetId, PresetCycle> = {
+  classic,
+  rapid,
+  premium,
+  olympian,
+};
 
 /** Aktive Zyklusdauer (ohne Gruppen-Pause) in Sekunden — fuer das Keypose-Seeking. */
 export const PRESET_CYCLE_DURATION: Record<PresetId, number> = {
   classic: 1.12,
   rapid: 0.67,
   premium: 1.32,
+  olympian: 0.98,
 };
 
 /** Keyposes je Preset (Zeit innerhalb eines Zyklus) fuer Review-Screenshots. */
@@ -118,5 +151,13 @@ export const PRESET_KEYPOSES: Record<PresetId, KeyPose[]> = {
     { label: "04-ausschweben", time: 0.66 },
     { label: "05-zweiter-schlag", time: 0.9 },
     { label: "06-endpose", time: 1.3 },
+  ],
+  olympian: [
+    { label: "01-ruhe", time: 0.0 },
+    { label: "02-windup", time: 0.18 },
+    { label: "03-power-spread", time: 0.42 },
+    { label: "04-follow-through", time: 0.62 },
+    { label: "05-recovery", time: 0.78 },
+    { label: "06-endpose", time: 0.98 },
   ],
 };

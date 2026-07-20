@@ -4,6 +4,12 @@ import type { DeformGains, HermesMotionState } from "../types.js";
 // Alle Winkel in Radiant. Die Werte definieren den Charakter der Bewegung bei
 // state-Wert 1 und Gewicht 1; die Presets bleiben damit klein und lesbar.
 
+/**
+ * Schlagwinkel des GANZEN Fluegels pro Einheit `beat` (starre Rotation um den
+ * Root, ungewichtet). ~0.33 rad (~19 Grad) bei beat 1 -> deutlich sichtbarer
+ * Wing-Beat, der die Silhouette traegt, statt nur die Spitzen zu zucken.
+ */
+const BEAT_GAIN = 0.33;
 /** Max. Schlagwinkel der aussersten Federn pro Einheit `flap`. */
 const FLAP_GAIN = 0.26;
 /** Zusaetzliche Kruemmung an den Spitzen pro Einheit `bend` (gewichtet mit w^2). */
@@ -111,7 +117,8 @@ export function deform(
     const angle =
       baseAngle +
       amp *
-        (state.flap * FLAP_GAIN * w +
+        (state.beat * BEAT_GAIN +
+          state.flap * FLAP_GAIN * w +
           state.bend * BEND_GAIN * gains.bend * w * w +
           state.tipLag * TIPLAG_GAIN * gains.tipLag * wTip);
 

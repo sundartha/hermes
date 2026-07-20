@@ -8,6 +8,13 @@
  * (siehe deform.ts). `intensity` und `speed` sind global.
  */
 export type HermesMotionState = {
+  /**
+   * Ganzer-Fluegel-Schlag um die Schulter (Root), typ. -1.5..0.5. Rotiert ALLE
+   * Vertices STARR um den Root (ungewichtet) -> klar lesbarer Wing-Beat statt
+   * nur Federspitzen-Flattern. Negativ = Fluegel hebt/holt aus (Aufschlag),
+   * positiv = sweept runter (Abschlag). Mit intensity skaliert.
+   */
+  beat: number;
   /** Hauptschlag-Phase, typ. -0.3..1. Treibt die Rotation um den Root (gewichtet). */
   flap: number;
   /** Kruemmung entlang der Fluegellaenge (Biegung wie eine biegende Klinge), typ. 0..1. */
@@ -39,8 +46,8 @@ export type HermesStatus =
   | "success"
   | "error";
 
-/** Die drei Bewegungsvarianten. */
-export type PresetId = "classic" | "rapid" | "premium";
+/** Die Bewegungsvarianten. */
+export type PresetId = "classic" | "rapid" | "premium" | "olympian";
 
 /**
  * Authoring-Gains: skalieren die Beitraege der jeweiligen Kanaele in der
