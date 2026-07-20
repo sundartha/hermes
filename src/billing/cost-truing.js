@@ -20,10 +20,11 @@
 // VORAUSSETZUNG FAELLT BEIM ERSTEN SKALIERUNGSSCHRITT (2. Instanz) - dann ist der Riegel
 // wirkungslos und muss ersetzt werden.
 //
-// Waehrungs-Warnung: actualCostMicroCents bleibt USD-Mikro-Cent, UNVERAENDERT. Keine
-// Umrechnung in dieser Phase (der Umrechnungskurs Provider->Bucket, config.billing.
-// PROVIDER_TO_BUCKET_RATE_MICRO, hat hier weiterhin KEINEN Verbraucher - P4 fuehrt ihn ein).
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+// Waehrungs-Regel (D5): actualCostMicroCents bleibt am Call USD-Mikro-Cent,
+// UNVERAENDERT. Die Umrechnung USD -> EUR-Bucket lebt an GENAU EINER Stelle:
+// convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
+// applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
+import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, BOOTSTRAP_TENANT_ID, isBookableCents } from "../store/defaults.js";
 import { nextCostTruingAttempt } from "../store/state-ops.js";
 import { findActiveNumber } from "../store/views.js";
 import { sendFailSoftAlertSms } from "../telephony/alert-sms.js";
@@ -133,6 +134,10 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return {
       actualCostMicroCents: total,
       source: complete ? COST_TRUING_SOURCE.DETAIL_RECORDS : COST_TRUING_SOURCE.INCOMPLETE,
+      // LCT P4: zweiter Beleg des Vollstaendigkeits-Praedikats. Nicht-ganzzahlige oder
+      // fehlende billedSec zaehlen als 0 (fail-closed) - Summe 0 heisst "nichts
+      // abgerechnet" und verbietet jede Rueckerstattung.
+      billedSecTotal: records.reduce((sum, r) => sum + (Number.isSafeInteger(r?.billedSec) && r.billedSec > 0 ? r.billedSec : 0), 0),
     };
   }
 
@@ -216,6 +221,46 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     else tally.incomplete++;
   }
 
+  // LCT P4, das Herz der Phase: das VOLLSTAENDIGKEITS-Praedikat. Nur wenn ALLE drei
+  // Belege vorliegen, darf Geld ZURUECKGEGEBEN werden. Nachgebucht wird immer.
+  //   1. source === 'telnyx_detail_records' - gesetzt NUR bei kompletter Pflicht-Menge
+  //      (classifyRecords, EINE Quelle; ueber der LEEREN Menge ist das nie wahr).
+  //   2. billedSecTotal > 0 - Records ohne abgerechnete Sekunden beweisen nichts.
+  //   3. estimatedCostCents ist ein persistierter, buchbarer Betrag (P2) - gegen den
+  //      und NUR gegen den wird gerechnet, nie gegen einen neu abgeleiteten Tarif.
+  // Die Waehrung steht bewusst NICHT in dieser Liste: P1 verwirft fremdwaehrende
+  // Records schon am Adapter, ein zweiter Riegel hier waere eine zweite Wahrheit (G5).
+  function refundProven(call, measured) {
+    return (
+      measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS &&
+      measured.billedSecTotal > 0 &&
+      isBookableCents(call.estimatedCostCents)
+    );
+  }
+
+  // Flag AUS -> byte-identisch zu P3 (die erste und wichtigste Zusage dieser Phase).
+  // Flag AN -> ein Call OHNE persistierten Schaetzbetrag ist strukturell nicht
+  // korrigierbar und heisst deshalb 'incomplete' ("nichts bewiesen"), nie
+  // 'telnyx_detail_records'.
+  function truedSourceOf(call, measured) {
+    if (!config.billing.costTruingBookingEnabled) return measured.source;
+    return isBookableCents(call.estimatedCostCents) ? measured.source : COST_TRUING_SOURCE.INCOMPLETE;
+  }
+
+  // Bucht die Korrektur EINES abgeglichenen Calls. Kein Estimate -> gar keine Korrektur
+  // (Bestandszeile von vor P2, beide Richtungen). Die Asymmetrie selbst liegt eine
+  // Schicht tiefer in applyCostCorrectionCents - hier steht nur der BEWEIS.
+  function bookCorrectionFor(call, measured) {
+    if (!isBookableCents(call.estimatedCostCents)) return;
+    const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
+      actualCostMicroCents: measured.actualCostMicroCents,
+      estimatedCostCents: call.estimatedCostCents,
+      providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
+      dataComplete: refundProven(call, measured),
+    });
+    console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
+  }
+
   async function trueOneCall(call, tally) {
     let control;
     try {
@@ -254,12 +299,16 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const closed = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
 
     store.recordCallCostTruingResult(call.id, {
-      source: measured ? measured.source : COST_TRUING_SOURCE.UNAVAILABLE,
+      source: measured ? truedSourceOf(call, measured) : COST_TRUING_SOURCE.UNAVAILABLE,
       actualCostMicroCents: measured ? measured.actualCostMicroCents : null,
       closedAt: closed ? new Date(now()).toISOString() : null,
     });
 
     if (measured) warnOnCostDrift(call, measured.actualCostMicroCents);
+    // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
+    // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
+    // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
+    if (measured && config.billing.costTruingBookingEnabled) bookCorrectionFor(call, measured);
     countOutcome(tally, measured, closed);
   }
 

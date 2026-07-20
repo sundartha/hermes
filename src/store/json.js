@@ -531,6 +531,14 @@ export function addVoiceUsageCostCents(tenantId, costCents) {
   return usage;
 }
 
+// LCT P4: Korrekturbuchung - save NUR bei booked (Muster recordCallCostTruingResult). Ein
+// verworfener Lauf mutiert nichts, auch nicht den Rest -> kein save.
+export function applyCostCorrectionCents(tenantId, input) {
+  const result = ops.applyCostCorrectionCents(load(), tenantId, input, new Date().toISOString());
+  if (result.booked) save();
+  return result;
+}
+
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
 // KEIN save(): reservations ist strukturell ephemer (nie auf Platte). Der Wrapper mutiert
 // NUR den In-Prozess-state (load() liefert das eine Singleton); die Serialisierung im

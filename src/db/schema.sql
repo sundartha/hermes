@@ -301,6 +301,14 @@ CREATE TABLE IF NOT EXISTS usage (
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_key TEXT;
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_cost_cents BIGINT NOT NULL DEFAULT 0;
 
+-- LCT P4: Sub-Cent-Rest der Korrekturbuchungen, GANZZAHL Mikro-Cent des ZIEL-Buckets.
+-- PERSISTIERT - bewusst anders als der Schwester-Rest costMicroCentsRem (ephemer, Boot
+-- startet bei 0, s. Kommentarblock oben). Begruendung der Asymmetrie: der Korrektur-Rest
+-- sammelt sich ueber TAGE (Abgleich alle 6 h, verzoegert um 180 min), waehrend der
+-- trackUsage-Rest innerhalb eines Gespraechs entsteht und verbraucht wird - ein Restart
+-- wirft hier echtes Geld weg, dort nicht. Wertebereich [0, 1e12).
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS cost_correction_micro_cents_rem BIGINT NOT NULL DEFAULT 0;
+
 -- profile: GLOBAL, keine Tenant-Bindung (Rechteprofile sind betreiber-/admin-weit, nicht pro
 -- Telefon-Workspace). Phase S: die Profil-Rechte-Achse keyt auf die tenantId (vormals email).
 -- tenant_id ist alleiniger PK (honest naming - die Spalte haelt jetzt tenantIds). Sanitisiertes

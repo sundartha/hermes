@@ -119,6 +119,10 @@ export const {
   // Laufzeit einen TypeError. Muster wie reserveExceedsBudget (reine Query).
   tenantBudgetSnapshot,
   addVoiceUsageCostCents,
+  // LCT P4: Korrekturbuchung (Umrechnung + Fall-Entscheidung + Rest, ein Schritt). OHNE
+  // diesen Re-Export waere die Methode auf der Fassade undefined -> der Sweep wuerfe zur
+  // Laufzeit einen TypeError.
+  applyCostCorrectionCents,
   // Reserve-Ledger (OUT-05): OHNE diese Re-Exports sind sie auf der Fassade undefined -> die
   // server.js-Verdrahtung (F2) wuerfe zur Laufzeit einen TypeError. Muster wie reserveExceedsBudget.
   tryReserveOutboundBudget,

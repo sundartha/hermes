@@ -42,6 +42,8 @@ import {
   MICRO_CENTS_PER_CENT,
   TOKENS_PER_M_TOK,
   isBookableCents,
+  isCorrectionCents,
+  PROVIDER_RATE_SCALE,
   USAGE_CORRUPT_REASON,
   globalCapCents,
   KYC_LEVEL,
@@ -1621,12 +1623,20 @@ export function spendMonthWindowKey(bucket, nowIso) {
   return authoritativeSpendMonthKey(bucket.spendMonthKey, spendMonthKeyOf(nowIso));
 }
 
-// EINZIGE Cent-Schreibstelle beider Geld-Achsen (G5): trackUsage (Cent-Uebertrag der
-// Mikro-Cent-Akkumulation) UND addVoiceUsageCostCents buchen hier, damit costCents und
-// spendMonthCostCents nie auseinanderlaufen KOENNEN. Genau diese Buendelung ist die
-// Gegenmassnahme zu "fail-open durch Vergessen" (Pre-Mortem TOD 2): eine kuenftige
-// dritte Schreibstelle, die nur costCents erhoeht, waere nach P7 ein blindes Gate ohne
-// Symptom - ein blindes Gate blockt nur nichts mehr.
+// EINZIGE Cent-Schreibstelle beider Geld-Achsen (G5) fuer alle NICHT-NEGATIVEN Betraege:
+// trackUsage, addVoiceUsageCostCents UND (seit LCT P4) die POSITIVE Korrekturbuchung
+// bookCostCorrectionCents buchen hier, damit costCents und spendMonthCostCents nie
+// auseinanderlaufen KOENNEN.
+//
+// GENAU EINE benannte Ausnahme (LCT P4): die NEGATIVE Korrektur schreibt bewusst NUR
+// costCents und laesst spendMonthCostCents unangetastet - sonst liesse sich die
+// Monatsdecke durch verspaetete Gutschriften aus einem abgeschlossenen Monat aufweiten.
+// Ein Cap, den man mit alten Calls zurueckdrehen kann, ist kein Cap. Die Ausnahme lebt
+// AUSSCHLIESSLICH in bookCostCorrectionCents und ist dort testgepinnt.
+//
+// Genau diese Buendelung ist die Gegenmassnahme zu "fail-open durch Vergessen"
+// (Pre-Mortem TOD 2): eine kuenftige dritte Schreibstelle, die nur costCents erhoeht,
+// waere nach P7 ein blindes Gate ohne Symptom - ein blindes Gate blockt nur nichts mehr.
 //
 // costCents bleibt UNVERAENDERT monoton (Lebenszeit-Forensik und die unabhaengige
 // Gegenprobe, gegen die sich eine vergessene Schreibstelle ueberhaupt nachweisen laesst
@@ -1700,6 +1710,83 @@ export function addVoiceUsageCostCents(s, tenantId, costCents, nowIso) {
     return discardCorruptWrite(usage, `addVoiceUsageCostCents tenant:${tenantId}`, costCents);
   bookCents(usage, costCents, nowIso);
   return usage;
+}
+
+// LCT P4: Divisor der Korrektur-Formel. ZUSAMMENGESETZT aus den zwei vorhandenen
+// Konstanten, nie als nackte 1e12 - eine zweite, unabhaengig gepflegte Zahl waere genau
+// die Drift, an der der naechste Einheiten-Fehler entsteht.
+const CORRECTION_DIVISOR = MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE;
+
+// Provider-Mikro-Cent (USD) -> Ziel-Bucket-Cent (EUR), GANZZAHL, mit Rest-Uebertrag.
+// REINE Funktion, MUTIERT NICHTS - genau deshalb kann der Aufrufer die Fall-Entscheidung
+// NACH der Rechnung treffen und den Rest verwerfen, ohne ihn vorher geschrieben zu haben
+// (alles-oder-nichts). Multiplikation zuerst, GENAU EINE Division ganz am Ende, gemeinsam
+// mit der Cent-Rundung: kein "* rate / 1e6"-Zwischenschritt, der eine Float-Stufe und
+// damit einen unexakten Rest einfuehrte.
+// remMicro ausserhalb [0, CORRECTION_DIVISOR) oder nicht ganzzahlig -> 0 (fail-closed:
+// ein korrupter Rest darf hoechstens einen Cent kosten, nie eine Rueckerstattung
+// vergroessern). Der Aufrufer garantiert actualCostMicroCents >= 0 (P1-Typ).
+export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCents, providerToBucketRateMicro }) {
+  const safeRemMicro =
+    Number.isSafeInteger(remMicro) && remMicro >= 0 && remMicro < CORRECTION_DIVISOR ? remMicro : 0;
+  const totalMicro = safeRemMicro + actualCostMicroCents * providerToBucketRateMicro;
+  return {
+    bucketCents: Math.floor(totalMicro / CORRECTION_DIVISOR),
+    remMicro: totalMicro % CORRECTION_DIVISOR,
+  };
+}
+
+// LCT P4, DIE Cent-Schreibkante der Korrektur (Anhang-Signatur, verbindlich).
+// EIGENES Praedikat isCorrectionCents (Vorzeichen erlaubt) - isBookableCents bleibt
+// unangetastet. Drei Regeln, alle drei sind Sicherungen und keine Kosmetik:
+//   1. 0-BODEN: usage.costCents faellt NIE unter 0.
+//   2. ACHSEN-ASYMMETRIE: positive Korrekturen gehen ueber bookCents auf BEIDE Achsen,
+//      negative NUR auf die Lebenszeit-Achse. Sonst liesse sich die Monatsdecke durch
+//      verspaetete Gutschriften aus einem abgeschlossenen Monat aufweiten.
+//   3. deltaCents === 0 beruehrt KEINE Achse (kein Phantom-Monatsstempel ueber
+//      bookCents(0)) - der Lauf gilt trotzdem als gebucht, s. applyCostCorrectionCents.
+// Liefert { usage, booked }. Nebeneffekt im Namen (N7).
+export function bookCostCorrectionCents(s, tenantId, deltaCents, nowIso) {
+  const usage = usageFor(s, tenantId);
+  if (!isCorrectionCents(deltaCents))
+    return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
+  if (deltaCents > 0) bookCents(usage, deltaCents, nowIso); // beide Achsen
+  // 0-BODEN + Achsen-Asymmetrie. NEBENEFFEKT, der in den Kommentar gehoert: wird
+  // costCents auf 0 geklemmt, bricht still die Invariante
+  // spendMonthCostCents <= costCents. spendOrDeny nutzt die Lebenszeitzahl als
+  // UNABHAENGIGE Gegenprobe gegen die Monatszahl; nach einem Clamp ist diese
+  // Gegenprobe nicht mehr aussagekraeftig. Heute entsteht daraus kein Schaden (beide
+  // bleiben buchbar), die geaenderte BEDEUTUNG der Gegenprobe steht deshalb hier.
+  else if (deltaCents < 0) usage.costCents = Math.max(0, usage.costCents + deltaCents);
+  return { usage, booked: true };
+}
+
+// LCT P4: EIN Schritt aus Umrechnung, Fall-Entscheidung, Buchung und Rest-Fortschreibung.
+// Verhaeltnis zu bookCostCorrectionCents wie trackUsage zu bookCents: hier liegt die
+// Arithmetik, dort die Cent-Schreibkante.
+// dataComplete ist KEIN Verhaltensschalter (F3/G15), sondern ein DATUM ueber die
+// Datenlage, das die Regel selbst braucht: die Asymmetrie IST die Regel.
+//   Ist > Schaetzung  -> IMMER gebucht (Unterschaetzung wird bedingungslos geheilt)
+//   Ist < Schaetzung  -> nur bei dataComplete === true
+//   verworfen         -> costCorrectionMicroCentsRem bleibt BIT-GLEICH
+// Liefert { usage, booked, deltaCents }.
+export function applyCostCorrectionCents(s, tenantId,
+  { actualCostMicroCents, estimatedCostCents, providerToBucketRateMicro, dataComplete }, nowIso) {
+  const usage = usageFor(s, tenantId);
+  const { bucketCents, remMicro } = convertProviderMicroToBucketCents({
+    remMicro: usage.costCorrectionMicroCentsRem,
+    actualCostMicroCents,
+    providerToBucketRateMicro,
+  });
+  const deltaCents = bucketCents - estimatedCostCents;
+  // Die einzige Stelle, an der Geld zurueckgegeben werden kann - und sie verlangt den
+  // Beweis. Reihenfolge ist Absicht: verworfen wird VOR jeder Mutation, damit der Rest
+  // nachweislich bit-gleich bleibt (Rundungs-Absatz des Plans).
+  if (deltaCents < 0 && !dataComplete) return { usage, booked: false, deltaCents };
+  const booked = bookCostCorrectionCents(s, tenantId, deltaCents, nowIso);
+  if (!booked.booked) return { usage, booked: false, deltaCents }; // isCorrectionCents-Riegel
+  usage.costCorrectionMicroCentsRem = remMicro; // NUR zusammen mit der Buchung
+  return { usage, booked: true, deltaCents };
 }
 
 // Effektiver pro-Tenant-Cap (TENANT-MONATSDECKE) in GANZZAHL Cents, genutzt von

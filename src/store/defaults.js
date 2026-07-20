@@ -210,6 +210,20 @@ export function isBookableCents(x) {
   return Number.isFinite(x) && Number.isInteger(x) && x >= 0;
 }
 
+// Skala, in der providerToBucketRateMicro gefuehrt wird (config.js). Benannt, damit die
+// Korrektur-Formel keine nackte 1_000_000 im Rumpf traegt (G25) und nicht mit dem
+// gleich aussehenden MICRO_CENTS_PER_CENT verwechselt wird - die beiden haben NICHTS
+// miteinander zu tun (Kurs-Skala vs. Geld-Aufloesung).
+export const PROVIDER_RATE_SCALE = 1_000_000;
+
+// Ist x ein buchbarer KORREKTUR-Betrag (LCT P4)? Schwester von isBookableCents, mit
+// EINEM Unterschied: BELIEBIGES VORZEICHEN. isBookableCents (x >= 0) bleibt
+// UNVERAENDERT - es ist der fail-closed-Riegel gegen korrupte Werte auf dem
+// Bestandspfad (D12) und wird NICHT aufgeweicht, sondern bekommt einen Nachbarn.
+export function isCorrectionCents(x) {
+  return Number.isFinite(x) && Number.isInteger(x);
+}
+
 // Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt
 // (G25), weil tokenCostUsd sonst zwei nackte 1e6 traegt, die NICHTS mit dem
 // gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
@@ -381,6 +395,14 @@ export function emptyUsage() {
     outputTokens: 0,
     costCents: 0,
     costMicroCentsRem: 0,
+    // LCT P4: Sub-Cent-Rest der KORREKTURBUCHUNGEN. PERSISTIERT - und das ist der
+    // Unterschied zum Nachbarn costMicroCentsRem eine Zeile darueber, der ausdruecklich
+    // ephemer ist. Zwei gleich benannte Rest-Felder mit verschiedener Lebensdauer sind
+    // eine Falle fuer den naechsten Leser, deshalb hier hart begruendet: der
+    // Korrektur-Rest sammelt sich ueber TAGE (ein Abgleichlauf alle 6 h, verzoegert um
+    // 180 min), der trackUsage-Rest entsteht und verbraucht sich innerhalb EINES
+    // Gespraechs. Ein Restart wirft beim Korrektur-Rest also echtes Geld weg.
+    costCorrectionMicroCentsRem: 0,
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
