@@ -52,6 +52,7 @@ import {
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
+import { CATALOG_SLUGS } from "../plans.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -1011,6 +1012,16 @@ export function setTenantSubscription(
 ) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
+  // S1-1 (torn write): einen GESETZTEN, aber unbekannten Slug ablehnen, BEVOR irgendein Feld
+  // mutiert wird - sonst ueberlebt der ungueltige Slug im In-Memory-Singleton (save() wird in
+  // DIESEM Aufruf zwar uebersprungen, weil deriveTenantBudgetFromPlan darunter wirft, aber ein
+  // spaeterer, unabhaengiger save() flusht die Mutation still auf Platte/DB). Validierung VOR
+  // Mutation macht die Schreibkante atomar. null/leer = erlaubter selektiver Patch (No-op in der
+  // Ableitung), wirft NIE - der EINZIGE Wurf ist "Slug gesetzt, aber unbekannt" (Message-Parity
+  // zu planCapCents). CATALOG_SLUGS ist die SSoT der buchbaren Slugs (plans.js), cfg-frei.
+  if (planSlug != null && planSlug !== "" && !CATALOG_SLUGS.includes(planSlug)) {
+    throw new Error(`setTenantSubscription: unbekannter Plan-Slug '${planSlug}' (kein Katalog-Eintrag)`);
+  }
   if (subscriptionId !== undefined) tenant.stripeSubscriptionId = subscriptionId;
   if (planSlug !== undefined) tenant.stripePlanSlug = planSlug;
   if (currentPeriodEnd !== undefined) tenant.stripeCurrentPeriodEnd = currentPeriodEnd;
@@ -1032,7 +1043,11 @@ export function setTenantSubscription(
 // DREI Slug-Faelle, strikt getrennt (die Verwechslung baut den Abo-ohne-Nummer-Vorfall neu):
 //   (1) Slug fehlt/leer       -> NO-OP (Budget-Zeile unberuehrt), KEIN Wurf.
 //   (2) Slug gesetzt+bekannt  -> Decke ableiten, ggf. auf platformCap klemmen (WARN), setzen.
-//   (3) Slug gesetzt+UNBEKANNT-> planCapCents WIRFT (der EINZIGE Wurf dieser Phase).
+//   (3) Slug gesetzt+UNBEKANNT-> planCapCents WIRFT. Ueber die normale Schreibkante
+//       (setTenantSubscription) unerreichbar: die lehnt einen unbekannten Slug bereits VOR
+//       jeder Mutation ab (S1-1, atomar). planCapCents bleibt hier der Riegel fuer einen
+//       Katalog-Slug OHNE Kopffreiheit-Eintrag (Konfig-Inkohaerenz, am Boot fatal via
+//       planCapInertFindings) - dann wirft es, bevor setTenantBudget schreibt (kein Torn Write).
 //
 // BEIDE Pflichtfelder (budget_cents UND hard_cap_cents) auf denselben Wert - budget_cents
 // ist BIGINT NOT NULL; ein Aufruf nur mit hardCapCents setzte budgetCents=undefined, der

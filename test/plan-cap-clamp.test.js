@@ -163,3 +163,30 @@ test("(j3) tenantCapRowInertFindings: keine Zeile >= platformCap -> leer", () =>
   });
   assert.deepEqual(findings, []);
 });
+
+// ---- (j4) S1-2: planCapInertFindings faengt einen werfenden capForSlug (Katalog-Slug ohne
+// Kopffreiheit-Eintrag) und liefert ein fatal:true-Finding, statt selbst zu werfen -----------
+// Vor dem Fix waere der Wurf uncaught durch assertBootGates gelaufen und der Prozess LAUTLOS
+// mit exit(0) geendet (globales uncaughtException-Netz) - der fatale Guard versagte still.
+test("(j4) planCapInertFindings: werfender capForSlug -> fatal:true PLAN_CAP_UNDERIVABLE (kein Wurf)", () => {
+  let findings;
+  assert.doesNotThrow(() => {
+    findings = bootGuardMod.planCapInertFindings({
+      slugs: ["starter", "enterprise"], // 'enterprise' hat keinen Kopffreiheit-Eintrag -> planCapCents wirft
+      platformCapCents: 100000, // hoch genug, dass 'starter' NICHT inert ist -> isoliert den Wurf-Zweig
+      capForSlug: (slug) => planCapThatThrows(slug),
+    });
+  });
+  assert.equal(findings.length, 1, `genau EIN Finding erwartet, war: ${JSON.stringify(findings)}`);
+  assert.equal(findings[0].fatal, true);
+  assert.equal(findings[0].code, bootGuardMod.PLAN_CAP_FINDING.PLAN_CAP_UNDERIVABLE);
+  assert.match(findings[0].message, /enterprise/);
+});
+
+// Kleiner Stub, der planCapCents' Wurf-Verhalten nachbildet (wirft bei 'enterprise'), ohne
+// die echte config/plan-caps zu koppeln - der Guard soll JEDEN Wurf des injizierten
+// capForSlug fangen, unabhaengig von der Ursache.
+function planCapThatThrows(slug) {
+  if (slug === "starter") return 300;
+  throw new Error(`planCapCents: unbekannter Plan-Slug '${slug}'`);
+}

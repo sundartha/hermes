@@ -405,6 +405,79 @@ test("(h) unbekannter Plan-Slug -> setTenantSubscription wirft (fail-closed)", a
   );
 });
 
+// ---- (h2) S1-1 TORN WRITE: der Wurf hinterlaesst KEINE Mutation im Singleton, auch nicht
+// nach einem spaeteren, unabhaengigen save() ------------------------------------------------
+// Repro des Blockers: vor dem Fix mutierte ops.setTenantSubscription stripePlanSlug BEVOR
+// deriveTenantBudgetFromPlan warf; die Mutation ueberlebte im Singleton und ein spaeterer,
+// unabhaengiger save() (anderer Tenant) flushte den ungueltigen Slug still auf die DB.
+test("(h2) unbekannter Slug wirft ATOMAR: Tenant-Record unveraendert, kein Flush durch spaeteren save()", async () => {
+  const { store, runner } = await makeTestStore();
+  const tenantId = "t_h2";
+  const s = store.load();
+  ops.registerTenant(s, tenantId, { firstName: "H2" });
+  assert.throws(
+    () => store.setTenantSubscription(tenantId, { planSlug: "enterprise", subscriptionId: "sub_h2" }),
+    /unbekannter Plan-Slug 'enterprise'/,
+  );
+  // In-Memory sofort nach dem Wurf: NICHTS mutiert (kein Slug, keine subscriptionId, keine Zeile).
+  assert.equal(store.tenantSubscription(tenantId).planSlug, null, "stripePlanSlug NICHT mutiert");
+  assert.equal(store.tenantSubscription(tenantId).subscriptionId, null, "subscriptionId NICHT mutiert");
+  assert.equal(s.tenantBudgets.find((b) => b.tenantId === tenantId), undefined, "keine Budget-Zeile");
+  // Ein spaeterer, voellig unabhaengiger save() (zweiter Tenant) darf den ungueltigen Slug
+  // NICHT nachtraeglich flushen. Frischer Store auf DERSELBEN pglite-DB -> hydriert aus der DB.
+  ops.registerTenant(store.load(), "t_h2_other", { firstName: "Other" });
+  await store.save();
+  const store2 = makePgStore(runner);
+  await store2.init();
+  assert.equal(
+    store2.tenantSubscription(tenantId).planSlug,
+    null,
+    "nach unrelated save()+reload weiterhin kein 'enterprise' auf der DB (Torn Write behoben)",
+  );
+});
+
+// ---- (h3) S1-1 Webhook-Gate: ACTIVATE mit unbekanntem plan_slug wirft NICHT (kein unhandled
+// rejection durch die Route), aktiviert NICHT und schreibt keine Budget-Zeile -----------------
+test("(h3) applyStripeWebhook ACTIVATE mit unbekanntem plan_slug -> ignoriert fail-closed (kein Wurf, keine Aktivierung)", async () => {
+  const { store } = await makeTestStore();
+  const tenantId = "t_h3";
+  const s = store.load();
+  ops.registerTenant(s, tenantId, { firstName: "H3" });
+  const event = {
+    type: webhookMod.SUBSCRIPTION_EVENT.UPDATED,
+    data: {
+      object: {
+        id: "sub_h3",
+        status: "active",
+        current_period_end: 1893456000,
+        current_period_start: 1890864000,
+        metadata: { tenant_ref: tenantId, plan_slug: "enterprise" },
+      },
+    },
+  };
+  const setStatusCalls = [];
+  const auditCalls = [];
+  await assert.doesNotReject(
+    webhookMod.applyStripeWebhook(event, {
+      store,
+      accounts: { setStatus: async (t, st) => setStatusCalls.push([t, st]) },
+      sessions: { invalidateByTenant: async () => {} },
+      audit: (kind, _req, detail) => auditCalls.push(`${kind} ${detail}`),
+      req: {},
+      provision: noopProvision(),
+      billing: undefined,
+    }),
+    "unbekannter Slug darf im Webhook NICHT werfen (sonst unhandled rejection in der Route)",
+  );
+  assert.deepEqual(setStatusCalls, [], "NICHT aktiviert (fail-closed)");
+  assert.equal(store.tenantSubscription(tenantId).subscriptionId, null, "kein Abo geschrieben");
+  assert.equal(s.tenantBudgets.find((b) => b.tenantId === tenantId), undefined, "keine Budget-Zeile");
+  assert.ok(
+    auditCalls.some((l) => l.includes("stripe_webhook_ignored") && l.includes("unknown_plan")),
+    `unknown_plan auditiert, war: ${JSON.stringify(auditCalls)}`,
+  );
+});
+
 // ---- (i) pg-Rundlauf: BEIDE Pflichtfelder ueberleben save()->reload, kein Mit-Verlust ---
 
 test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im selben Flush geschriebener Call bleibt erhalten", async () => {
