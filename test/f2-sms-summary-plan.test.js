@@ -93,3 +93,37 @@ test("kein Absender (keine aktive Nummer) -> send=false, kein reason (Bestandsve
   assert.equal(plan.send, false);
   assert.equal(plan.reason, null);
 });
+
+// SMS-02 (PLAN-LAUNCH-TESTS.md P1): Budget-/Land-Gate-Luecke bei der Summary-SMS explizit
+// sperren/dokumentieren. planSummarySms liest NUR privateNumber/Absender/optIn/dailySmsCap
+// (s. Funktionskoerper sms-summary.js) - KEIN Budget-Gate, anders als der Outbound-Call-Pfad
+// (store.budgetExceeded() vor jedem place_call, s. store/json.js). Dies ist der bewusst
+// dokumentierte IST-Zustand aus PLAN-LAUNCH-TESTS.md, KEIN Bug, den dieser Test fixen soll:
+// der SMS-Versand ist nicht an den Euro-Budget-Notaus gekoppelt, nur an DAILY_SMS_CAP.
+test("SMS-02: Budget bereits ueberschritten -> planSummarySms liest das GAR NICHT (send=true trotz Budget-Ueberschreitung, dokumentierter Ist-Zustand)", () => {
+  const store = makeStore({
+    A: { privateNumber: "+491701234567", sender: "+4915100000001", optIn: true },
+  });
+  // budgetExceeded() bildet dieselbe Store-Methode nach, die das Outbound-Gate vor jedem
+  // Call abfragt (store/json.js budgetExceeded(tenantId, cfg)) - hier fest auf true (Budget
+  // IST ueberschritten). Ein Aufruf-Zaehler beweist, dass planSummarySms sie NIE konsultiert
+  // (nicht nur "Ergebnis ignoriert", sondern strukturell "gar nicht gelesen").
+  let budgetChecked = 0;
+  store.budgetExceeded = () => {
+    budgetChecked += 1;
+    return true;
+  };
+  const plan = planSummarySms(store, cfg(), call("A"));
+  assert.equal(
+    plan.send,
+    true,
+    "IST-Zustand (kein Fix hier, s. PLAN-LAUNCH-TESTS.md SMS-02): planSummarySms sendet " +
+      "trotz bereits ueberschrittenem Budget - kein Euro-Budget-Notaus fuer die Summary-SMS",
+  );
+  assert.equal(
+    budgetChecked,
+    0,
+    "planSummarySms ruft store.budgetExceeded() GAR NICHT auf - die Summary-SMS hat kein " +
+      "eigenes Budget-Gate (nur DAILY_SMS_CAP, s. dailySmsCount oben)",
+  );
+});

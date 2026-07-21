@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDefaultState, recordUsageEvent, pendingMeterEvents } from "../src/store/state-ops.js";
 import { aggregatePendingMeters, flushMeters } from "../src/billing/meter.js";
-import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { USAGE_EVENT_KIND, CENTS_PER_EUR } from "../src/store/defaults.js";
 import { fakeBilling } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
@@ -201,4 +201,42 @@ test("INV(5c): idempotencyKey stabil je Aggregat (meter_<tenant>_<kind>_<minEven
   assert.equal(args.tenantRef, TENANT_A);
   assert.equal(args.quantity, 5);
   assert.equal(args.costCents, 250);
+});
+
+// BILL-04 (Erweiterung, PLAN-LAUNCH-TESTS.md P1): Metering-Konsistenz zwischen dem
+// autoritativen Ledger (usage_event.costCents, Ganzzahl - DAS, worauf meter.js/Stripe
+// rechnet, s.o.) und der costEur-Ableitung, die an der Anzeige-Kante entsteht (routes/
+// api-read.js usageView: costCents / CENTS_PER_EUR, s. store/defaults.js "Cent<->EUR-
+// Bruecke"). Ueber 10000 kleine Buchungen MUSS die Ganzzahl-Cent-Summe des Ledgers exakt
+// (Toleranz 0) der aus costEur zurueckgerechneten Summe entsprechen - sonst driftet jede
+// costEur-basierte Anzeige/Budget-Ableitung vom Ledger weg, den Stripe-Metering tatsaechlich
+// sieht (Doppelquelle, Owner-/Kunden-Anzeige zeigt einen anderen Betrag als abgerechnet wird).
+test("BILL-04: 10000 kleine Buchungen - Ledger-Cents-Summe vs. aggregierte costEur*CENTS_PER_EUR (Toleranz 0)", () => {
+  const s = makeDefaultState();
+  let ledgerCentsSum = 0;
+  for (let i = 0; i < 10000; i++) {
+    // kleine, variierende Centbetraege (1..37) - realistische AI-Token-/Voice-Minuten-
+    // Kleinstbetraege, bei denen Rundungsdrift am ehesten sichtbar wird.
+    const costCents = (i % 37) + 1;
+    recordUsageEvent(s, {
+      tenantId: TENANT_A,
+      callId: `c${i}`,
+      kind: USAGE_EVENT_KIND.AI_TOKEN,
+      quantity: 1,
+      costCents,
+    });
+    ledgerCentsSum += costCents;
+  }
+  assert.equal(s.usageEvents.length, 10000);
+  // Dieselbe Ableitung wie usageView (routes/api-read.js): EIN costEur je Event aus dem
+  // autoritativen costCents, aufsummiert, dann zur Cent-Groesse zurueckmultipliziert.
+  const costEurSum = s.usageEvents.reduce((sum, e) => sum + e.costCents / CENTS_PER_EUR, 0);
+  const costEurSumAsCents = costEurSum * CENTS_PER_EUR;
+  assert.equal(
+    costEurSumAsCents,
+    ledgerCentsSum,
+    "costEur-Ableitung darf NICHT vom Ganzzahl-Ledger abdriften (Toleranz 0) - sonst " +
+      "driften Stripe-Metering (rechnet auf costCents, s. meter.js) und jede costEur-" +
+      "basierte Anzeige/Budget-Ableitung auseinander",
+  );
 });

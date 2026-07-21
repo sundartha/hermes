@@ -210,3 +210,46 @@ test("I6 Flag AUS: X-Internal-Identity wird ignoriert -> Schreiben landet im OWN
     await srv.stop();
   }
 });
+
+// OUT-11 (PLAN-LAUNCH-TESTS.md Erweiterung): cancel_call auf einen BEREITS terminierten
+// Call muss idempotent sein - 200 mit dem ALTEN Status, KEIN zweiter Hangup-Versuch, KEIN
+// doppeltes Settlement. Route-Code (src/routes/api-calls.js) prueft `call.status !== "active"`
+// VOR jedem Seiteneffekt (audit/hangUp/bill) und gibt fruh zurueck - dieser Test haelt genau
+// dieses bestehende Verhalten fest (heute schon korrekt, keine Aenderung an src/ noetig).
+test("OUT-11: cancel_call auf bereits beendeten Call -> idempotente 200 mit Alt-Status, kein zweiter Hangup/keine zweite Buchung", async (t) => {
+  const srv = await startServer({
+    seed: seedState({
+      calls: [
+        seedCall({
+          id: "call_done",
+          tenantId: BOOTSTRAP_TENANT_ID,
+          status: "completed",
+          endedAt: "2026-07-01T09:00:00.000Z",
+        }),
+      ],
+    }),
+  });
+  try {
+    await t.test("erster Cancel-Aufruf auf einen NICHT-aktiven Call -> 200, status=completed (Alt-Status), kein Fehler", async () => {
+      const res = await postJson(`${srv.localUrl}/api/calls/call_done/cancel`, {});
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.status, "completed", "die Route liefert den VORHANDENEN Status zurueck, nicht 'cancelled'");
+    });
+
+    await t.test("zweiter Cancel-Aufruf (Retry) bleibt idempotent, Call-Record unveraendert", async () => {
+      const res = await postJson(`${srv.localUrl}/api/calls/call_done/cancel`, {});
+      assert.equal(res.status, 200);
+      assert.equal((await res.json()).status, "completed");
+      const stored = srv.readStore().calls.find((c) => c.id === "call_done");
+      assert.equal(stored.status, "completed", "kein Ueberschreiben durch den No-op-Pfad");
+      assert.equal(
+        stored.endedAt,
+        "2026-07-01T09:00:00.000Z",
+        "endedAt bleibt der urspruengliche Zeitstempel (kein zweites persistEnd)",
+      );
+    });
+  } finally {
+    await srv.stop();
+  }
+});
