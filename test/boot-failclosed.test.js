@@ -89,8 +89,10 @@ test("T-P3-10: DEFAULT_TENANT_BUDGET_CENTS=5000 gegen MAX_BUDGET_EUR=30 -> Boot 
 // T-P3-11 (Merge-Gate): die in BASE_ENV gepinnten Werte (MAX_BUDGET_EUR=30 seit LCT P6,
 // DEFAULT_TENANT_BUDGET_CENTS=0, VOICE_TARIFF_DEFAULT_CENTS=0, CLAUDE_MODEL/
 // PRECALL_BRIEFING_MODEL beide bepreist) muessen weiterhin gruen booten - byte-identisch
-// bis auf die eine A0-Konfig-Warnung (Sentinel 0 ist dokumentiertes Bestandsverhalten).
-test("T-P3-11: BASE_ENV (Default=0) bootet gruen, genau eine A0-Konfig-Warnung, keine weiteren Warnungen", async () => {
+// bis auf die eine A0-Konfig-Warnung (Sentinel 0 ist dokumentiertes Bestandsverhalten)
+// plus die seit P8 unbedingte Deckungs-WARN (0 Calls -> 0% < 80%); die A0-Zeile bleibt
+// die einzige `DEFAULT_TENANT_BUDGET_CENTS=0`-Warnung.
+test("T-P3-11: BASE_ENV (Default=0) bootet gruen, genau eine A0-Konfig-Warnung (plus die seit P8 unbedingte Deckungs-WARN)", async () => {
   const srv = await startServer({});
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);

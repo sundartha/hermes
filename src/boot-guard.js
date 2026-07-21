@@ -203,9 +203,9 @@ export const PROVIDER_RATE_FINDING = Object.freeze({
 // formal vollstaendiger Datenlage - die faktische Vollrueckerstattung jeder Schaetzung,
 // die das Vollstaendigkeits-Praedikat NICHT faengt (die Records sind ja da).
 //
-// WEITERHIN OHNE JEDE FLAG-BEDINGUNG. P8 entfernt COST_TRUING_BOOKING_ENABLED; eine
-// daran gekoppelte Sicherung waere danach entweder weg oder als undefined falsy -
-// lautlos tot genau in dem Moment, in dem die Buchung bedingungslos aktiv wird.
+// WEITERHIN OHNE JEDE FLAG-BEDINGUNG. Eine an die Aktivierung der Korrekturbuchung
+// gekoppelte Sicherung waere entweder weg oder als undefined falsy - lautlos tot genau
+// dann, wenn die Buchung Geld bewegt. Der Kurs-Guard prueft deshalb unkonditional.
 //
 // Voraussetzung: laeuft NACH assertConfig() - nicht-numerische Werte und die 0 sind dort
 // bereits fail-closed abgefangen (numEnv, min 1). Kein zweites Gueltigkeitsidiom hier (G5).
@@ -337,22 +337,22 @@ export const COST_TRUING_BOOKING_FINDING = Object.freeze({
 });
 
 // Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster spendCapCoherence).
-// Buchung AUS -> [] (der Deploy ist wirkungsfrei, auch bei leerer Menge/0% Deckung).
+// Unkonditional seit P8: die Korrekturbuchung ist bedingungslos aktiv, also laeuft auch
+// diese Pruefung immer (kein Flag-Kurzschluss mehr, der sie auslassen koennte).
 // coveragePercent wird HEREINGEREICHT, nicht hier gerechnet: die eine Quelle ist
 // costTruingCoveragePercent(store) aus P3 - zwei Rechnungen derselben Groesse waeren
 // zwei Zahlen, die auseinanderlaufen. Beide Befunde koennen GEMEINSAM auftreten; der
 // Aufrufer behandelt fatal zuerst (Muster assertSpendCapCoherence).
-export function costTruingBookingFindings({ bookingEnabled, requiredRecordTypes, coveragePercent, minCoveragePercent }) {
-  if (bookingEnabled !== true) return [];
+export function costTruingBookingFindings({ requiredRecordTypes, coveragePercent, minCoveragePercent }) {
   const findings = [];
   if (requiredRecordTypes.length === 0) {
     findings.push({
       code: COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_EMPTY,
       fatal: true,
       message:
-        "COST_TRUING_BOOKING_ENABLED=true, aber COST_TRUING_REQUIRED_RECORD_TYPES ist leer " +
-        "- ein Dienst, der Geld zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit " +
-        "prueft, darf nicht starten. Erst die Pflicht-Menge aus einem Live-Beleg setzen.",
+        "COST_TRUING_REQUIRED_RECORD_TYPES ist leer - ein Dienst, der Geld zurueckerstattet, " +
+        "ohne zu wissen, wogegen er Vollstaendigkeit prueft, darf nicht starten. Erst die " +
+        "Pflicht-Menge aus einem Live-Beleg setzen.",
     });
   }
   if (coveragePercent < minCoveragePercent) {

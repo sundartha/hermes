@@ -25,13 +25,12 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // costTruingMaxAttempts, costTruingRequiredRecordTypes, costTruingMinCoveragePercent,
   // costTruingCoverageStallSweeps, costDriftWarnPercent, costAlertDebounceMs) -> 27.
   // P5 (Live-Cost-Tracing, Drift-Waechter): costCalibrationMinSamples ergaenzt -> 28.
-  // P4 (Live-Cost-Tracing, Der Flip): costTruingBookingEnabled ergaenzt -> 29.
-  // P4b (Live-Cost-Tracing, Vollkosten-Boot-Guard): voiceTariffFullCostFloorCents ergaenzt -> 30.
-  // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ergaenzt -> 31.
+  // P4b (Live-Cost-Tracing, Vollkosten-Boot-Guard): voiceTariffFullCostFloorCents ergaenzt -> 29.
+  // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ergaenzt -> 30.
   // P7 (Live-Cost-Tracing, Fixkosten sichtbar machen): fuenf Felder ergaenzt
   // (ttsCharacterQuota, ttsCharacterQuotaWarnPercent, ttsQuotaCycleAnchorDay,
-  // platformFixedCostCentsPerMonth, numberMonthlyCostCents) -> 36.
-  billing: 36,
+  // platformFixedCostCentsPerMonth, numberMonthlyCostCents) -> 35.
+  billing: 35,
   provisioning: 11,
   auth: 15,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
@@ -50,9 +49,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 124;
+const EXPECTED_TOTAL_KEYS = 123;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (124 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (123 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -120,14 +119,13 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // P3 (Live-Cost-Tracing): sechs der sieben neuen Felder sind primitiv (Zahl) -> 107.
   // costTruingRequiredRecordTypes ist das VIERTE Array (kein primitives Blatt, s.u.).
   // P5 (Live-Cost-Tracing, Drift-Waechter): costCalibrationMinSamples ist primitiv (Zahl) -> 108.
-  // P4 (Live-Cost-Tracing, Der Flip): costTruingBookingEnabled ist primitiv (Boolean) -> 109.
   // P4b (Live-Cost-Tracing, Vollkosten-Boot-Guard): voiceTariffFullCostFloorCents ist
-  // primitiv (Zahl, kein Array/nested Objekt) -> 110.
+  // primitiv (Zahl, kein Array/nested Objekt) -> 109.
   // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ist
-  // primitiv (Zahl, kein Array/nested Objekt) -> 111.
+  // primitiv (Zahl, kein Array/nested Objekt) -> 110.
   // P7 (Live-Cost-Tracing, Fixkosten sichtbar machen): alle fuenf neuen Felder sind
-  // primitiv (Zahl, kein Array/nested Objekt) -> 116.
-  assert.equal(checked, 116, "alle primitiven Blaetter (124 - 4 Arrays - 4 nested Objekte) geprueft");
+  // primitiv (Zahl, kein Array/nested Objekt) -> 115.
+  assert.equal(checked, 115, "alle primitiven Blaetter (123 - 4 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

@@ -239,13 +239,12 @@ export const BASE_ENV = {
   // er nie; die P3-Tests rufen die Fabrik direkt und in-process auf.
   COST_TRUING_DELAY_MINUTES: "180",
   COST_TRUING_MAX_ATTEMPTS: "5",
-  COST_TRUING_REQUIRED_RECORD_TYPES: "",
+  // Nicht-leer, weil der Pflicht-Mengen-Riegel seit P8 unkonditional prueft (die
+  // Korrekturbuchung ist bedingungslos aktiv); leer -> Boot-Refusal (das prueft (n1)
+  // mit lokalem Override).
+  COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control",
   COST_TRUING_MIN_COVERAGE_PERCENT: "80",
   COST_TRUING_COVERAGE_STALL_SWEEPS: "8",
-  // LCT P4 (Der Flip): Korrekturbuchung neutral AUS (Default, byte-identisch zu P3) - sonst
-  // leakt eine lokale .env mit COST_TRUING_BOOKING_ENABLED=true via dotenv in Spawn-Tests
-  // -> Baseline-Drift (Lehre test-base-env-drift). Die P4-Tests setzen es explizit.
-  COST_TRUING_BOOKING_ENABLED: "false",
   COST_DRIFT_WARN_PERCENT: "50",
   COST_ALERT_DEBOUNCE_MS: "86400000",
   // LCT P5 (Drift-Waechter): auf den Code-Default gepinnt (Lehre test-base-env-drift).

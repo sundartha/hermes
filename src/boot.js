@@ -138,7 +138,6 @@ function currentCoverage(config, store) {
 // die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
 function assertCostTruingBooking(config, store) {
   const findings = costTruingBookingFindings({
-    bookingEnabled: config.billing.costTruingBookingEnabled,
     requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
     ...currentCoverage(config, store),
   });

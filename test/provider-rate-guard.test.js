@@ -38,11 +38,6 @@ test("F2-01: PROVIDER_TO_BUCKET_RATE_MICRO=920 -> Boot-Refusal (LCT P4: der Kurs
   assert.equal(code, 1);
   assert.match(output, /Start abgebrochen/);
   assert.doesNotMatch(output, /Gateway laeuft/);
-  assert.doesNotMatch(
-    output,
-    /COST_TRUING_BOOKING_ENABLED/,
-    "der Guard haengt an keinem Flag - er prueft unkonditional, auch wenn die Buchung selbst ausgeschaltet ist",
-  );
 });
 
 test("F2-02: Gegenprobe PROVIDER_TO_BUCKET_RATE_MICRO=920000 -> keine WARN-Zeile", async () => {
@@ -51,7 +46,6 @@ test("F2-02: Gegenprobe PROVIDER_TO_BUCKET_RATE_MICRO=920000 -> keine WARN-Zeile
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /PROVIDER_TO_BUCKET_RATE_MICRO=920000 liegt ausserhalb/);
-    assert.doesNotMatch(srv.stdout, /COST_TRUING_BOOKING_ENABLED/);
   } finally {
     await srv.stop();
   }
