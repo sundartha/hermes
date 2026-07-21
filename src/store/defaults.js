@@ -411,6 +411,13 @@ export function emptyUsage() {
     // 180 min), der trackUsage-Rest entsteht und verbraucht sich innerhalb EINES
     // Gespraechs. Ein Restart wirft beim Korrektur-Rest also echtes Geld weg.
     costCorrectionMicroCentsRem: 0,
+    // KE-P6: ElevenLabs-Zeichen dieses Tenants, LEBENSZEIT-Summe wie calls. Quelle ist
+    // AUSSCHLIESSLICH der zugeordnete Telnyx-Beleg (number_of_characters am
+    // text-to-speech-Beleg mit provider elevenlabs) - der globale platformTtsUsage-Zaehler
+    // daneben misst den anderen Pfad (Play-TTS) und bleibt unveraendert. REINE SICHTBARKEIT:
+    // kein Gate, kein Meter, keine Projektion liest diese Zahl (die /api/state-Usage-
+    // Projektion ist eine Whitelist, s. test/api-state-usage-axis.test.js).
+    ttsCharacters: 0,
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,

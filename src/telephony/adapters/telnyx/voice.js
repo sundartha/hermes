@@ -175,6 +175,16 @@ export const COST_RECORD_TIME_FIELDS = Object.freeze({
 // BEWIESENEN Beleg, ohne die nur ueber die Session zugeordneten Typen zu schuetzen - die
 // tragen kein gemessenes Zeitfeld. Mehr Risiko, keine zweite Linie.
 const RECORD_TIMESTAMP_FIELDS = Object.freeze(["recorded_at", "created_at"]);
+// GEMESSENE Mengenangabe des ElevenLabs-Belegs (Plan F6, Messung 2026-07-21): der
+// text-to-speech-Beleg traegt provider="elevenlabs" und number_of_characters=<n>. Damit ist
+// der ElevenLabs-Verbrauch je Anruf ablesbar - ohne zweiten Anbieter-Zugang und ohne
+// Key-je-Tenant (skaliert nicht auf Millionen Nutzer).
+const TTS_RECORD_TYPE = "text-to-speech";
+// BEWUSST NICHT ELEVENLABS_VOICE_SETTINGS_TYPE wiederverwendet (gleicher Wortlaut, weiter
+// unten): das ist der Union-Diskriminator von SpeakRequest.voice_settings (Telnyx-OpenAPI),
+// hier ist es ein GEMESSENER Feldwert der Beleg-API. Zwei unabhaengige Provider-Vertraege,
+// die getrennt driften koennen - eine gemeinsame Konstante waere kuenstliche Kopplung (G13).
+const ELEVENLABS_COST_RECORD_PROVIDER = "elevenlabs";
 // SpeakRequest.voice_settings ist laut Telnyx-OpenAPI eine per `type` diskriminierte Union;
 // ElevenLabsVoiceSettings verlangt type="elevenlabs" (das ASSISTANT-Objekt dagegen hat ein
 // flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
@@ -351,6 +361,18 @@ function withinRecordWindow(raw, startedAt, endedAt) {
   return t >= Date.parse(startedAt) && t <= Date.parse(endedAt);
 }
 
+// ElevenLabs-Zeichen EINES Belegs, oder null. Streng: nur der gemessene Typ und nur der
+// gemessene Provider - ein text-to-speech-Beleg eines anderen Providers zaehlt NICHT auf den
+// ElevenLabs-Zaehler. parseNonNegativeInteger ist derselbe strenge Zahl-Parser wie fuer
+// billed_sec (G5); alles Unparsbare ist null = "nicht gemessen", NIE 0.
+// KEINE Ablehnungsquelle: dieses Feld entscheidet NIE ueber die Zuordnung eines Belegs
+// (Spec A3 - die Zuordnungslogik bleibt unveraendert), es reist nur mit.
+function elevenLabsCharactersOf(raw) {
+  if (raw.record_type !== TTS_RECORD_TYPE) return null;
+  if (String(raw.provider || "").trim().toLowerCase() !== ELEVENLABS_COST_RECORD_PROVIDER) return null;
+  return parseNonNegativeInteger(raw.number_of_characters);
+}
+
 // Roh-Record -> Port-Record (mit dem Zuordnungsweg `via`) oder Ablehnungsgrund (beides fuer
 // die PII-freien Zaehler in getVoiceCostRecords). EINE Gueltigkeitsquelle je Record, in
 // dieser Reihenfolge: Waehrung, Zuordnung (Anker/Session), Zeitfenster, Kosten - jeder
@@ -375,6 +397,9 @@ function toCostRecord(raw, { legId, sessionIds, startedAt, endedAt }) {
       costMicroCents,
       currency,
       billedSec: parseNonNegativeInteger(raw.billed_sec),
+      // KE-P6: reist nur bei ZUGEORDNETEN Belegen mit - dieselbe fail-closed-Asymmetrie
+      // wie die Kosten. null = kein ElevenLabs-TTS-Beleg (der Normalfall je Typ).
+      ttsCharacters: elevenLabsCharactersOf(raw),
       legId,
     },
   };
@@ -430,6 +455,15 @@ function rateLimitResetHintMs(res) {
   return seconds === null ? null : seconds * MS_PER_SECOND;
 }
 
+// Ein Belegabruf-LAUF (KE-P6): die prozessweite Drossel und die Zaehler GENAU DIESES Laufs
+// in einem Umschlag. Warum zusammen und nicht als zweiter Parameter: beide reisen durch
+// dieselbe Kette (Versuch -> Seite -> Typ -> Pool); getrennt braeuchte jede Funktion vier
+// Argumente (F1). Die Zaehler sind TELEMETRIE - sie speisen ausschliesslich die Sweep-
+// Log-Zeile und den Bruchpunkt-Waechter (KE-P8); KEINE Entscheidung im Geldpfad liest sie.
+function createPoolFetchRun(throttle) {
+  return { throttle, requests: 0, pages: 0 };
+}
+
 // Eine Typ-/SEITEN-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die
 // Port-Methode selbst (G31). Erlaubte Server-Parameter sind AUSSCHLIESSLICH
 // filter[record_type], page[size] und page[number] - mehr nicht. JEDER weitere
@@ -452,14 +486,17 @@ function rateLimitResetHintMs(res) {
 // verlaesst diese Datei nie. Der Hinweis wird VOR assertTelnyxOk aus den Headern gelesen:
 // der Wurf traegt nur Status und Telnyx-Code (strikte Allowlist in ./errors.js), die
 // Antwort selbst ist danach nicht mehr erreichbar.
-async function attemptCostRecordPage(recordType, pageNumber, throttle) {
+async function attemptCostRecordPage(recordType, pageNumber, poolRun) {
   const q = new URLSearchParams();
   q.set("filter[record_type]", recordType);
   q.set("page[size]", String(COST_RECORDS_PAGE_SIZE));
   q.set("page[number]", String(pageNumber));
   let rateLimit = null;
   try {
-    await throttle.reserveSlot();
+    await poolRun.throttle.reserveSlot();
+    // Gezaehlt wird die ABGESETZTE Anfrage (nach der Reservierung, vor dem fetch): sie
+    // verbraucht das Minutenkontingent, ob sie 200 oder 429 wird.
+    poolRun.requests++;
     const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${q}`, {
       headers: headers(),
     });
@@ -480,11 +517,11 @@ async function attemptCostRecordPage(recordType, pageNumber, throttle) {
 // ok:false - eine Wiederholungs-SCHLEIFE gegen ein Kontingent ist genau der Mechanismus,
 // der live 184 von 224 Anfragen verbrannt hat. Der Fehlerpfad bleibt unveraendert
 // ({ok:false, reason:"provider_error"}), er wird nur je Versuch geloggt.
-async function fetchCostRecordPage(recordType, pageNumber, throttle) {
-  const attempt = await attemptCostRecordPage(recordType, pageNumber, throttle);
+async function fetchCostRecordPage(recordType, pageNumber, poolRun) {
+  const attempt = await attemptCostRecordPage(recordType, pageNumber, poolRun);
   if (!attempt.rateLimit) return attempt.page;
-  await throttle.waitForWindowReset(attempt.rateLimit.hintMs);
-  return (await attemptCostRecordPage(recordType, pageNumber, throttle)).page;
+  await poolRun.throttle.waitForWindowReset(attempt.rateLimit.hintMs);
+  return (await attemptCostRecordPage(recordType, pageNumber, poolRun)).page;
 }
 
 // Neuester GEMESSENER Zeitstempel eines Belegs in Millisekunden, oder null. Nur die je Typ
@@ -528,12 +565,13 @@ function isPageBeforeSince(rawPage, recordType, sinceMs) {
 // `since` filtert den Pool NIE - es bindet nur, wie weit geblaettert wird. Was geholt
 // wurde, kommt vollstaendig in den Pool; ueber die Zugehoerigkeit entscheidet allein die
 // Zuordnung (assignCostRecords), unveraendert.
-async function fetchRecordTypePages(recordType, sinceMs, throttle) {
+async function fetchRecordTypePages(recordType, sinceMs, poolRun) {
   const raw = [];
   const lastAllowedPage = FIRST_PAGE_NUMBER + MAX_PAGES_PER_RECORD_TYPE - 1;
   for (let pageNumber = FIRST_PAGE_NUMBER; pageNumber <= lastAllowedPage; pageNumber++) {
-    const page = await fetchCostRecordPage(recordType, pageNumber, throttle);
+    const page = await fetchCostRecordPage(recordType, pageNumber, poolRun);
     if (!page.ok) return page;
+    poolRun.pages++; // eine EINGESAMMELTE Seite (Anfragen koennen mehr sein: 429-Wiederholung)
     raw.push(...page.raw);
     if (page.lastPage || isPageBeforeSince(page.raw, recordType, sinceMs))
       return { ok: true, raw, complete: true };
@@ -551,10 +589,10 @@ async function fetchRecordTypePages(recordType, sinceMs, throttle) {
 // Typ bricht ab - complete:false macht den ganzen Pool unbrauchbar (bookablePool in
 // billing/cost-truing.js uebersetzt es an genau EINER Stelle in ok:false), die restlichen
 // Typen zu holen waere reine Verschwendung.
-async function fetchAllCostRecords(sinceMs, throttle) {
+async function fetchAllCostRecords(sinceMs, poolRun) {
   const rawRecords = [];
   for (const recordType of ASSIGNABLE_COST_RECORD_TYPES) {
-    const pages = await fetchRecordTypePages(recordType, sinceMs, throttle);
+    const pages = await fetchRecordTypePages(recordType, sinceMs, poolRun);
     if (!pages.ok) return pages;
     rawRecords.push(...pages.raw);
     if (!pages.complete) return { ok: true, raw: rawRecords, complete: false };
@@ -756,8 +794,15 @@ export const telnyxVoice = {
   // random/now injizierbar, Default eingebaut): produktive Aufrufer setzen ihn NIE, der
   // Test injiziert eine Sprung-Uhr, statt eine reale Minute zu warten (F.I.R.S.T.).
   async fetchCostRecordPool({ since, throttle = detailRecordsThrottle } = {}) {
-    if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
-    return fetchAllCostRecords(parseSinceMs(since), throttle);
+    // KE-P6: requests/pages sind Kennzahlen des ABRUFS und stehen deshalb auf JEDER
+    // Antwortform - auch auf ok:false. Genau das macht D1 sichtbar: der Sweep konnte
+    // bisher keine einzige Zahl ueber seinen eigenen Abruf nennen. EINE Stelle stempelt
+    // sie an, damit kein interner Rueckgabepfad sie verlieren kann.
+    const poolRun = createPoolFetchRun(throttle);
+    const result = config.telephony.telnyxApiKey
+      ? await fetchAllCostRecords(parseSinceMs(since), poolRun)
+      : { ok: false, reason: "config_missing" };
+    return { ...result, requests: poolRun.requests, pages: poolRun.pages };
   },
 
   // Ordnet die Roh-Belege EINES Pools genau EINEM Call zu. SYNCHRON und ohne Netz - zwischen

@@ -362,6 +362,15 @@ export function makePgStore(runner) {
     },
     platformTtsUsageView: (nowIso) => ops.platformTtsUsageView(requireState(), config.billing, nowIso),
 
+    // ElevenLabs-Zeichen pro Tenant (KE-P6): Wrapper-Parity zu json.js. flushUsage
+    // persistiert tts_characters - ohne den Spalten-Eintrag im ON CONFLICT DO UPDATE SET
+    // fiele der Zaehler beim naechsten Flush auf 0 zurueck.
+    recordTenantTtsCharacters(tenantId, chars) {
+      const r = ops.recordTenantTtsCharacters(requireState(), tenantId, chars);
+      if (r.changed) save();
+      return r;
+    },
+
     // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);
@@ -1005,6 +1014,9 @@ function rowToUsage(r) {
     // BIGINT kann - anders als das NUMERIC in cost_eur - kein 'NaN' darstellen; der
     // Bereichs-Riegel sitzt in convertProviderMicroToBucketCents (EINE Stelle).
     costCorrectionMicroCentsRem: Number(r.cost_correction_micro_cents_rem ?? 0),
+    // KE-P6: Bestandszeile ohne Wert -> 0 (die Spalte kommt per ADD COLUMN IF NOT EXISTS mit
+    // DEFAULT 0 dazu). BIGINT liefert der Treiber als String -> Number, wie calls.
+    ttsCharacters: Number(r.tts_characters ?? 0),
   };
 }
 
@@ -1173,22 +1185,24 @@ async function flushSettings(client, tenantId, settings) {
 async function flushUsage(client, tenantId, usage) {
   await client.query(
     `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls,
-                        spend_month_key, spend_month_cost_cents, cost_correction_micro_cents_rem)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                        spend_month_key, spend_month_cost_cents, cost_correction_micro_cents_rem,
+                        tts_characters)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      ON CONFLICT (tenant_id) DO UPDATE SET
        input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
        cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls,
        spend_month_key=EXCLUDED.spend_month_key,
        spend_month_cost_cents=EXCLUDED.spend_month_cost_cents,
-       cost_correction_micro_cents_rem=EXCLUDED.cost_correction_micro_cents_rem`,
+       cost_correction_micro_cents_rem=EXCLUDED.cost_correction_micro_cents_rem,
+       tts_characters=EXCLUDED.tts_characters`,
     // costCents ist autoritativ (P1); die Spalte bleibt cost_eur (keine Schema-Migration) ->
     // hier die EINE Ableitungsstelle zur Persistenz (Schwester zu rowToUsage).
     // spend_month_cost_cents geht als GANZZAHL Cents raus (keine EUR-Ableitung, G26).
     // usage.spendMonthCostCents bewusst OHNE ?? 0 (wie usage.costCents oben): emptyUsage()
     // und rowToUsage sind die beiden einzigen Bucket-Quellen und garantieren das Feld - ein
     // '??' wuerde einen echten Shape-Defekt maskieren statt ihn an der NOT-NULL-Spalte laut
-    // werden zu lassen. cost_correction_micro_cents_rem (LCT P4) ebenfalls OHNE ?? 0 -
-    // derselbe Garantie-Grund.
+    // werden zu lassen. cost_correction_micro_cents_rem (LCT P4) und tts_characters (KE-P6)
+    // ebenfalls OHNE ?? 0 - derselbe Garantie-Grund.
     [
       tenantId,
       usage.inputTokens,
@@ -1198,6 +1212,7 @@ async function flushUsage(client, tenantId, usage) {
       usage.spendMonthKey ?? null,
       usage.spendMonthCostCents,
       usage.costCorrectionMicroCentsRem,
+      usage.ttsCharacters,
     ],
   );
 }

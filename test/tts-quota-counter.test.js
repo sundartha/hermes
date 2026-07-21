@@ -18,15 +18,19 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { makeDefaultState, recordTtsCharacters, platformTtsUsageView, globalBudgetExceeded } from "../src/store/state-ops.js";
+import {
+  makeDefaultState, recordTtsCharacters, platformTtsUsageView, globalBudgetExceeded,
+  recordTenantTtsCharacters, usageFor,
+} from "../src/store/state-ops.js";
 import { emptyUsage } from "../src/store/defaults.js";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { tempDataDir } from "./helpers.js";
-import { makePgTestStore } from "./pg-helpers.js";
+import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 
 const TENANT_A = "tenant_a";
+const TENANT_B = "tenant_b";
 // Quota=1000, Warn=75% -> Schwelle 750 Zeichen. Anker=Tag 3 (nicht der Monatserste).
 const CFG = { ttsCharacterQuota: 1000, ttsCharacterQuotaWarnPercent: 75, ttsQuotaCycleAnchorDay: 3 };
 const AUG_ISO = "2026-08-15T10:00:00.000Z"; // Tag 15 >= Anker 3 -> Schluessel '2026-08'
@@ -116,6 +120,59 @@ test("(i) Warn-Prozent 0: nie eine Warnung, egal wie hoch der Verbrauch", () => 
   const cfgNoWarn = { ...CFG, ttsCharacterQuotaWarnPercent: 0 };
   const result = recordTtsCharacters(s, 999_999, cfgNoWarn, AUG_ISO);
   assert.equal(result.warning, null);
+});
+
+// ==== ElevenLabs-Zeichen PRO TENANT (KE-P6) ==================================
+// Andere Achse als platformTtsUsage darueber (globaler Play-TTS-Zaehler): diese Zeichen
+// kommen aus dem zugeordneten Telnyx-Beleg (Assistant-Pfad) und landen PRO TENANT.
+
+test("(t1) Zeichen landen am richtigen Tenant, kein Ueberlauf in den anderen", () => {
+  const s = makeDefaultState();
+  recordTenantTtsCharacters(s, TENANT_A, 238);
+  recordTenantTtsCharacters(s, TENANT_B, 17);
+  recordTenantTtsCharacters(s, TENANT_A, 12);
+  assert.equal(usageFor(s, TENANT_A).ttsCharacters, 250);
+  assert.equal(usageFor(s, TENANT_B).ttsCharacters, 17);
+  assert.equal(s.platformTtsUsage.characters, 0, "der GLOBALE Zaehler bleibt unberuehrt (anderer Pfad)");
+});
+
+test("(t2) Grenzfaelle: 0, negativ, Nicht-Ganzzahl -> No-op, kein Wurf", () => {
+  const s = makeDefaultState();
+  for (const bad of [0, -5, 1.5, NaN, "238", null, undefined])
+    assert.equal(recordTenantTtsCharacters(s, TENANT_A, bad).changed, false, `Wert ${String(bad)}`);
+  assert.equal(usageFor(s, TENANT_A).ttsCharacters, 0);
+});
+
+test("(t3) json-Fassade: der Tenant-Zaehler ueberlebt einen Reload", async () => {
+  const { mod, dir } = await freshJsonStore();
+  mod.load();
+  mod.recordTenantTtsCharacters(TENANT_A, 238);
+  assert.equal(mod.usageOf(TENANT_A).ttsCharacters, 238);
+
+  const raw = JSON.parse(fs.readFileSync(path.join(dir, "store.json"), "utf8"));
+  assert.equal(raw.usage[TENANT_A].ttsCharacters, 238, "die Zeile steht auf der Platte");
+
+  config.server.dataDir = dir;
+  const reopened = await import(`../src/store/json.js?tts-tenant-reload=${jsonSeq++}`);
+  const reloaded = reopened.load();
+  assert.equal(reloaded.usage[TENANT_A].ttsCharacters, 238, "der Zaehler ueberlebt den Prozess-Neustart");
+});
+
+test("(t4) pg-Rundlauf (PGlite): tts_characters -> save -> reopen -> hydriert", async () => {
+  const { store, db } = await makePgTestStore();
+  store.recordTenantTtsCharacters(BOOTSTRAP_TENANT_ID, 238);
+  await store.save();
+  const rows = (await db.query(
+    "SELECT tts_characters FROM usage WHERE tenant_id = $1", [BOOTSTRAP_TENANT_ID],
+  )).rows;
+  assert.equal(Number(rows[0].tts_characters), 238);
+
+  // Re-Init aus der DB (Muster (j3)): der Wert kommt aus der SPALTE, nicht aus dem Spiegel.
+  const runner = { withClient: (fn) => fn({ query: (t, p) => db.query(t, p), exec: (sql) => db.exec(sql) }) };
+  const { makePgStore } = await import("../src/store/pg.js");
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.equal(reopened.usageOf(BOOTSTRAP_TENANT_ID).ttsCharacters, 238, "der Zaehler ueberlebt Re-Init aus der DB");
 });
 
 // ==== Fassaden-Roundtrip: json + pg (Backend-Paritaet, (j)) ========================

@@ -2374,6 +2374,21 @@ export function platformTtsUsageView(s, cfg, nowIso) {
   return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
 }
 
+// ---- ElevenLabs-Zeichen PRO TENANT (KE-P6) ----
+// Verbucht die Zeichen EINES abgeglichenen Calls auf dem Tenant-Bucket. Bewusst OHNE Zyklus
+// und OHNE Warnschwelle: die Zyklus-/Kontingent-Logik gehoert dem PLATTFORM-Zaehler
+// (recordTtsCharacters darueber, EIN ElevenLabs-Konto). Hier ist die Frage eine andere -
+// "welcher Tenant verbraucht wie viel" - und dafuer ist die Lebenszeit-Summe (wie
+// usage.calls) die einfachste funktionsfaehige Form (P15). Ganzzahl-Arithmetik (G26).
+// Nicht-ganzzahlig/<=0 -> No-op, KEIN Wurf: der Aufrufer ist ein Sweep, der nie abbrechen darf.
+// Liefert {changed} wie recordTtsCharacters, damit die Fassaden nur bei echter Aenderung
+// speichern.
+export function recordTenantTtsCharacters(s, tenantId, chars) {
+  if (!Number.isSafeInteger(chars) || chars <= 0) return { changed: false };
+  usageFor(s, tenantId).ttsCharacters += chars;
+  return { changed: true };
+}
+
 // ---- Notifications ----
 export function addNotification(s, title, body, callId) {
   s.notifications.unshift({

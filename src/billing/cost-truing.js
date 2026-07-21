@@ -161,6 +161,15 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return total;
   }
 
+  // Summe eines GANZZAHL-Mengenfelds ueber alle Records. Nicht-ganzzahlig, fehlend oder
+  // negativ zaehlt als 0 (fail-closed). EINE Regel fuer BEIDE Mengen (G5): billedSec (Beweis
+  // der Abrechnung) und ttsCharacters (ElevenLabs-Menge) - zwei nebeneinander gepflegte
+  // reduce-Ausdruecke liefen beim ersten Nachziehen auseinander.
+  function sumIntegerField(records, field) {
+    return records.reduce(
+      (sum, r) => sum + (Number.isSafeInteger(r?.[field]) && r[field] > 0 ? r[field] : 0), 0);
+  }
+
   // Die leere Pflicht-Menge (Punkt 5 des Auftrags) - EIN Ausdruck, testgepinnt:
   // requiredRecordTypes.length > 0 ist DER Riegel: ueber der LEEREN Menge ist
   // "jeder Typ ist vertreten" allquantifiziert wahr und damit fuer JEDEN Call erfuellt -
@@ -176,10 +185,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return {
       actualCostMicroCents: total,
       source: complete ? COST_TRUING_SOURCE.DETAIL_RECORDS : COST_TRUING_SOURCE.INCOMPLETE,
-      // LCT P4: zweiter Beleg des Vollstaendigkeits-Praedikats. Nicht-ganzzahlige oder
-      // fehlende billedSec zaehlen als 0 (fail-closed) - Summe 0 heisst "nichts
-      // abgerechnet" und verbietet jede Rueckerstattung.
-      billedSecTotal: records.reduce((sum, r) => sum + (Number.isSafeInteger(r?.billedSec) && r.billedSec > 0 ? r.billedSec : 0), 0),
+      // LCT P4: zweiter Beleg des Vollstaendigkeits-Praedikats.
+      billedSecTotal: sumIntegerField(records, "billedSec"),
+      // KE-P6: ElevenLabs-Zeichen der ZUGEORDNETEN text-to-speech-Belege dieses Calls.
+      // 0 heisst "kein zugeordneter ElevenLabs-Beleg" und fuehrt zu KEINEM Schreibzugriff.
+      ttsCharacters: sumIntegerField(records, "ttsCharacters"),
     };
   }
 
@@ -310,10 +320,63 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
   }
 
+  // ElevenLabs-Zeichen des Calls, PRO TENANT (KE-P6, Plan F6). Der globale Zaehler
+  // (platformTtsUsage, LCT P7) bleibt unveraendert, was er ist: er misst den Play-TTS-Pfad,
+  // den unser Prozess selbst synthetisiert. Auf dem Assistant-Pfad synthetisiert Telnyx
+  // serverseitig - dort steht er dauerhaft bei 0, und genau diese Luecke schliesst der
+  // Telnyx-Beleg.
+  // RIEGEL GEGEN DOPPELZAEHLUNG ist costTruedAt und sonst nichts: eine Messung
+  // (measured !== null) setzt closed und damit costTruedAt, der Call ist danach nie wieder
+  // Kandidat (isTruingCandidate). Kein zweiter Riegel noetig - ein zweiter waere eine zweite
+  // Wahrheit. Gegen VERSCHRAENKUNG zweier Sweeps traegt der Laufriegel sweepRunning.
+  // 0 Zeichen -> gar kein Schreibzugriff (ein Anruf ohne zugeordneten ElevenLabs-Beleg darf
+  // keine Tenant-Zeile anfassen).
+  function bookTtsCharactersFor(call, measured) {
+    if (measured.ttsCharacters <= 0) return;
+    store.recordTenantTtsCharacters(call.tenantId, measured.ttsCharacters);
+  }
+
+  // Abruf-Kennzahlen EINER Provider-Antwort, gelesen VOR der Buchbarkeits-Uebersetzung
+  // (bookablePool weiter unten): sie beschreiben den ABRUF, nicht die Buchbarkeit. Getrennt
+  // gehalten, weil bookablePool eine complete:false-Antwort bewusst zu ok:false verdichtet -
+  // die Anfragen waren trotzdem da und muessen im Log erscheinen (sonst waere der
+  // Bruchpunkt-Waechter ausgerechnet im Stoerfall blind).
+  // `incomplete` heisst "dieser Abruf hat KEIN vollstaendiges Bild geliefert" - ok:false und
+  // complete:false sind darin dasselbe.
+  // Reihenfolge bewusst VOR NO_COST_RECORDS/bookablePool (nicht neben fetchCostRecordPoolFor,
+  // wo diese Kennzahlen inhaltlich hingehoeren): NO_COST_RECORDS referenziert NO_POOL_FETCH
+  // und muesste sonst vor dessen Deklaration darauf zugreifen (TDZ).
+  const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
+
+  function poolFetchStats(pool) {
+    return {
+      requests: nonNegativeCount(pool?.requests),
+      pages: nonNegativeCount(pool?.pages),
+      records: Array.isArray(pool?.raw) ? pool.raw.length : 0,
+      incomplete: !(pool?.ok === true && pool.complete !== false),
+    };
+  }
+
+  // Kein Abruf VERSUCHT (Twilio/unbekannter Provider): nichts angefragt und nichts
+  // unvollstaendig - ein 'incomplete' waere hier eine Falschaussage ueber einen Abruf, den es
+  // nie gab.
+  const NO_POOL_FETCH = Object.freeze({ requests: 0, pages: 0, records: 0, incomplete: false });
+
+  function emptyFetchTally() {
+    return { requests: 0, pages: 0, records: 0, incompletePools: 0 };
+  }
+
+  function addPoolFetchStats(fetchTally, stats) {
+    fetchTally.requests += stats.requests;
+    fetchTally.pages += stats.pages;
+    fetchTally.records += stats.records;
+    if (stats.incomplete) fetchTally.incompletePools++;
+  }
+
   // "Kein Abgleich moeglich": unbekannter Provider (die Registry wirft fail-closed) oder ein
   // Adapter ohne die beiden Beleg-Methoden (Twilio). EINE Entscheidung an EINER Stelle (G5) -
   // die Buchungsschleife kennt danach nur noch control===null (sauberes No-op) und pool.ok.
-  const NO_COST_RECORDS = Object.freeze({ control: null, pool: null });
+  const NO_COST_RECORDS = Object.freeze({ control: null, pool: null, stats: NO_POOL_FETCH });
 
   // Nur ein VOLLSTAENDIGER Pool darf Geld bewegen: gegen eine bewiesene Untermenge erstattet
   // die Korrektur real ausgegebenes Geld zurueck - die fail-OPEN-Richtung im Geldpfad.
@@ -337,9 +400,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     if (typeof control.fetchCostRecordPool !== "function" || typeof control.assignCostRecords !== "function")
       return NO_COST_RECORDS;
     try {
-      return { control, pool: bookablePool(await control.fetchCostRecordPool({ since })) };
+      const answer = await control.fetchCostRecordPool({ since });
+      return { control, pool: bookablePool(answer), stats: poolFetchStats(answer) };
     } catch {
-      return { control, pool: { ok: false } }; // der Port WIRFT NIE - zweite Linie
+      // der Port WIRFT NIE - zweite Linie. Kein zaehlbarer Abruf, aber auch kein
+      // vollstaendiges Bild (poolFetchStats(null) -> incomplete:true).
+      return { control, pool: { ok: false }, stats: poolFetchStats(null) };
     }
   }
 
@@ -352,10 +418,14 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   async function fetchCostRecordPools(candidates) {
     const since = poolSinceFor(candidates);
     const pools = new Map();
+    const fetchTally = emptyFetchTally();
     for (const call of candidates) {
-      if (!pools.has(call.provider)) pools.set(call.provider, await fetchCostRecordPoolFor(call.provider, since));
+      if (pools.has(call.provider)) continue;
+      const fetched = await fetchCostRecordPoolFor(call.provider, since);
+      pools.set(call.provider, fetched);
+      addPoolFetchStats(fetchTally, fetched.stats);
     }
-    return pools;
+    return { pools, fetchTally };
   }
 
   // SYNCHRON (KE-P2/PM-5): zwischen Pool-Abruf und Buchungsschleife liegt strukturell kein
@@ -406,6 +476,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
     // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
     if (measured) bookCorrectionFor(call, measured);
+    if (measured) bookTtsCharactersFor(call, measured);
     countOutcome(tally, truedSource, closed);
   }
 
@@ -441,6 +512,26 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     for (const entry of alertableDriftFindings(report)) alertDrift(entry, nowMs);
   }
 
+  // Die Sweep-Bilanz als EINE Zeile. Das Format ist TESTGEPINNT: es ist die Datenquelle des
+  // Bruchpunkt-Waechters (KE-P8) und liefert B = pool/kandidaten aus der Wirklichkeit (U9).
+  // Die Bestandsfelder und ihre Reihenfolge bleiben unveraendert (Log-Konsumenten), die vier
+  // Abruf-Felder kommen HINTEN dazu.
+  // vollstaendig=true heisst "kein unvollstaendiger Abruf in diesem Sweep" - bei 0 Kandidaten
+  // (0 Abrufe) also ebenfalls true; die daneben stehenden anfragen=0 pool=0 machen den Fall
+  // eindeutig. Bewusst als Zaehler formuliert und nicht als Allquantor ueber der leeren Menge:
+  // "nichts Unvollstaendiges beobachtet" ist eine Beobachtung, "alles vollstaendig" waere eine
+  // Behauptung (dieselbe Falle wie die leere Pflicht-Menge in classifyRecords).
+  function logSweepLine({ trigger, candidateCount, tally, fetchTally }) {
+    console.log(
+      `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
+        `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
+        `ohne_schaetzung=${tally.noEstimate} ` +
+        `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls} ` +
+        `anfragen=${fetchTally.requests} seiten=${fetchTally.pages} ` +
+        `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0}`,
+    );
+  }
+
   async function sweepAllCandidates(trigger) {
     const nowMs = now();
     // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
@@ -449,16 +540,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // D1: der Abruf ist schleifeninvariant und laeuft EINMAL je Provider - VOR der Schleife.
     // Ab hier bis zur Bilanz kommt kein Netz-await mehr (PM-5): zwei verschraenkte Sweeps
     // koennen sich hier nicht mehr dazwischenschieben.
-    const pools = await fetchCostRecordPools(candidates);
+    const { pools, fetchTally } = await fetchCostRecordPools(candidates);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls: 0, failed: 0 };
     for (const call of candidates) trueOneCall(call, pools.get(call.provider), tally);
     const coveragePercent = costTruingCoveragePercent(store.load());
-    console.log(
-      `[cost-truing] sweep trigger=${trigger} kandidaten=${candidates.length} ` +
-        `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
-        `ohne_schaetzung=${tally.noEstimate} ` +
-        `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls}`,
-    );
+    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally });
     reportCoverage(coveragePercent, nowMs);
     reportTariffDrift(store.load(), nowMs);
     return { skipped: false, candidates: candidates.length, coveragePercent, ...tally };

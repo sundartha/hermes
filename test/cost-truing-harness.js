@@ -10,7 +10,9 @@
 // Telnyx-Adapter brauchen (cost-truing-pool.test.js), importieren DIESE Datei deshalb
 // DYNAMISCH, NACH ihrem eigenen process.env-Setup (Lehre test-base-env-drift, Muster
 // telnyx-cost-records.test.js) - genau wie sie telnyxVoice/cost-truing.js dynamisch holen.
-import { createCall, recordCallCostTruingResult, applyCostCorrectionCents } from "../src/store/state-ops.js";
+import {
+  createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordTenantTtsCharacters,
+} from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
@@ -37,6 +39,11 @@ export function makeStubStore(state, { nowMs = Date.now() } = {}) {
     },
     applyCostCorrectionCents(tenantId, input) {
       return applyCostCorrectionCents(state, tenantId, input, new Date(nowMs).toISOString());
+    },
+    // KE-P6: ElevenLabs-Zeichen pro Tenant - dieselbe Delegation wie die beiden Methoden
+    // darueber (ECHTE state-ops-Funktion, kein zweites, vereinfachtes Verhalten).
+    recordTenantTtsCharacters(tenantId, chars) {
+      return recordTenantTtsCharacters(state, tenantId, chars);
     },
   };
 }

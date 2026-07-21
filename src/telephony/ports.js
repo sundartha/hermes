@@ -80,6 +80,9 @@
  *   NICHT EUR: die Umrechnung ist ausdruecklich NICHT Teil dieses Ports (D5).
  * @property {string} currency       - Provider-Waehrung des Records (ISO-4217, Grossschreibung)
  * @property {number|null} billedSec - abgerechnete Sekunden; null = nicht auslesbar
+ * @property {number|null} ttsCharacters - ElevenLabs-Zeichen (number_of_characters) des
+ *   Belegs; null = kein ElevenLabs-text-to-speech-Beleg oder nicht auslesbar. NIE 0 als
+ *   Ersatz fuer "unbekannt".
  * @property {string} legId          - Leg-Referenz, gegen die der Record aufgeloest wurde
  */
 
@@ -112,6 +115,9 @@
  *   unvollstaendig (erreichbar ab KE-P3, Seitenobergrenze). Fuer den Verbraucher dasselbe
  *   wie ok:false - aus einer Untermenge laesst sich keine Rueckerstattung beweisen.
  * @property {string} [reason]    - nur bei ok:false; PII-frei, fuer Logs
+ * @property {number} requests - HTTP-Anfragen dieses Abrufs (inkl. der einen 429-Wiederholung).
+ *   IMMER gesetzt, auch bei ok:false - der Abruf hat das Kontingent auch dann verbraucht.
+ * @property {number} pages    - eingesammelte Seiten (<= requests).
  */
 
 /**
