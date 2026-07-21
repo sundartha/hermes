@@ -15,14 +15,9 @@ import {
   costTruingCoveragePercent,
   SWEEP_TRIGGER,
 } from "../src/billing/cost-truing.js";
-import {
-  makeDefaultState,
-  createCall,
-  recordCallCostTruingResult,
-  applyCostCorrectionCents,
-} from "../src/store/state-ops.js";
+import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { makeStubStore, fakeConfig, isoMinutesAgo, makeDueOutboundCall, fakeVoiceControl } from "./cost-truing-harness.js";
 
 const MS_PER_MINUTE = 60 * 1000;
 
@@ -33,73 +28,8 @@ const PII_PHONE = "+4915155512345";
 const PII_OWNER_NAME = "Maxine Musterfrau";
 const PII_TRANSCRIPT_FRAGMENT = "mein Geburtsdatum ist der 3. Januar";
 
-// ---- Stub-Store (Muster metering-unit.test.js: faengt Schreibzugriffe in einem Array) ----
-// store.load() liefert den ECHTEN state-Spiegel; recordCallCostTruingResult UND (seit P8,
-// die Korrekturbuchung ist unkonditional) applyCostCorrectionCents delegieren an die ECHTE
-// state-ops-Funktion (kein zweites, vereinfachtes Store-Mock-Verhalten; Muster
-// cost-truing-booking.test.js). Die Stub hat BEWUSST keine query/pool/client-Methode
-// (Fall d: der Sweep darf nie eigenes SQL absetzen - ein Aufruf einer solchen Methode
-// waere ein TypeError).
-function makeStubStore(state, { nowMs = Date.now() } = {}) {
-  const writes = [];
-  return {
-    state,
-    writes,
-    load() {
-      return state;
-    },
-    recordCallCostTruingResult(callId, outcome) {
-      const { call, changed } = recordCallCostTruingResult(state, callId, outcome);
-      if (changed) writes.push({ callId, outcome });
-      return call;
-    },
-    applyCostCorrectionCents(tenantId, input) {
-      return applyCostCorrectionCents(state, tenantId, input, new Date(nowMs).toISOString());
-    },
-  };
-}
-
-// Konfig-Fixture fuer die P3-Felder + LCT P5 (Drift-Waechter, billing-Namespace). Jeder
-// Test ueberschreibt nur, was er wirklich pruefen will (F1: Default-Objekt statt loser
-// Argumente). providerToBucketRateMicro NEUTRAL (Faktor 1,0) - haelt die P5-Fixturen als
-// Cent direkt lesbar (die Waehrungsrichtung selbst ist test/cost-calibration.test.js P5-07
-// vorbehalten). platformAlertSmsTo default leer (BASE_ENV-Zustand) - die P5-S-Tests setzen
-// ihn explizit, wo sie den Alarmkanal pruefen.
-function fakeConfig(overrides = {}) {
-  return withConfigNamespaces({
-    costTruingDelayMinutes: 180,
-    costTruingMaxAttempts: 5,
-    costTruingRequiredRecordTypes: [],
-    costTruingMinCoveragePercent: 80,
-    costTruingCoverageStallSweeps: 8,
-    costDriftWarnPercent: 50,
-    costAlertDebounceMs: 24 * 60 * 60 * 1000,
-    voiceTariffDomesticCents: 20,
-    voiceTariffDefaultCents: 300,
-    voiceTariffDomesticPrefixes: ["+49", "+33", "+44"],
-    providerToBucketRateMicro: 1_000_000,
-    costCalibrationMinSamples: 20,
-    platformAlertSmsTo: "",
-    ...overrides,
-  });
-}
-
-function isoMinutesAgo(nowMs, minutes) {
-  return new Date(nowMs - minutes * MS_PER_MINUTE).toISOString();
-}
-
-// Ein beendeter Outbound-Call, faellig fuer den Abgleich (endedAt lange genug her).
-// legRef waehlt twilioSid ODER callControlId (providerLegIdOf: twilioSid || callControlId).
-function makeDueOutboundCall(state, { nowMs, tenantId = BOOTSTRAP_TENANT_ID, provider = "telnyx", legRef = { callControlId: "cc_1" }, endedMinutesAgo = 200, estimatedCostCents = null, to = "+49" } = {}) {
-  const call = createCall(state, { direction: "outbound", from: "+49", to, tenantId, provider });
-  call.status = "completed";
-  call.answeredAt = isoMinutesAgo(nowMs, endedMinutesAgo + 1);
-  call.endedAt = isoMinutesAgo(nowMs, endedMinutesAgo);
-  if (legRef.callControlId) call.callControlId = legRef.callControlId;
-  if (legRef.twilioSid) call.twilioSid = legRef.twilioSid;
-  if (estimatedCostCents !== null) call.estimatedCostCents = estimatedCostCents;
-  return call;
-}
+// makeStubStore/fakeConfig/isoMinutesAgo/makeDueOutboundCall kommen aus cost-truing-harness.js
+// (KE-P2, G5) - byte-identisch zum frueheren lokalen Stand hier.
 
 // LCT P5: ein bereits abgeglichener Drift-Sample-Call (costTruedSource/costTruedAt schon
 // gesetzt) - KEIN Truing-Kandidat (isTruingCandidate verlangt costTruedAt===null), taucht
@@ -144,14 +74,6 @@ function fakeMessaging() {
   return messaging;
 }
 
-function fakeVoiceControl(byProvider) {
-  return (provider) => {
-    const impl = byProvider[provider];
-    if (!impl) throw new Error(`Provider '${provider}' fuer Port 'voiceControl' nicht unterstuetzt`);
-    return impl;
-  };
-}
-
 // Vollstaendig aussehende Records (5 Typen), Betraege aus der Live-Messung vom 2026-07-20
 // (parseDecimalToMicroCents-Ausgabe: 0.0802->8020000, 0.004->400000, 0.0000->0,
 // 1.687E-4->16870, 0.002->200000). Summe = 8636870 Mikro-Cent (USD).
@@ -166,6 +88,22 @@ function fullRecordSet(legId) {
 }
 const FULL_RECORD_SET_TOTAL_MICRO_CENTS = 8636870;
 const FULL_RECORD_TYPES = ["sip-trunking", "call-control", "speech-to-text", "text-to-speech", "recording"];
+
+// KE-P2: der Port ist zweigeteilt - EIN Pool-Abruf je Sweep, danach je Call eine SYNCHRONE
+// Zuordnung. recordsFor(legId) spielt genau die Rolle, die frueher getVoiceCostRecords({legId})
+// hatte; onFetch zaehlt die Pool-Abrufe (frueher: die Adapter-Aufrufe je Kandidat).
+function fakeCostRecordAdapter(recordsFor, { onFetch = () => {}, poolResult = { ok: true, raw: [], complete: true } } = {}) {
+  return {
+    async fetchCostRecordPool() {
+      onFetch();
+      return poolResult;
+    },
+    assignCostRecords(pool, { legId }) {
+      if (!pool.ok) return pool;
+      return { ok: true, records: recordsFor(legId) };
+    },
+  };
+}
 
 function collectLogSpies() {
   const logs = [];
@@ -199,11 +137,7 @@ test("(a) zwei beendete Calls, Adapter liefert Records -> actualCostMicroCents g
   const callA = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: legA } });
   const callB = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: legB } });
   const store = makeStubStore(state);
-  const control = {
-    async getVoiceCostRecords({ legId }) {
-      return { ok: true, records: fullRecordSet(legId) };
-    },
-  };
+  const control = fakeCostRecordAdapter(fullRecordSet);
   const config = fakeConfig();
   const { audit } = auditSpy();
   const { runCostTruingSweep } = makeCostTruing({
@@ -234,12 +168,10 @@ test("(b) Adapter liefert {ok:false} -> costTruedAt bleibt null bis Versuch 5, d
   const call = makeDueOutboundCall(state, { nowMs });
   const store = makeStubStore(state);
   let callCount = 0;
-  const control = {
-    async getVoiceCostRecords() {
-      callCount++;
-      return { ok: false, reason: "provider_error" };
-    },
-  };
+  const control = fakeCostRecordAdapter(() => [], {
+    onFetch: () => callCount++,
+    poolResult: { ok: false, reason: "provider_error" },
+  });
   const config = fakeConfig({ costTruingMaxAttempts: 5 });
   // JEDER Lauf bekommt eine FRISCHE makeCostTruing-Instanz (simuliert einen Prozess-
   // Restart zwischen den Sweeps, Render-Free-Tier). Das ist der einzige Weg, der einen
@@ -278,7 +210,7 @@ test("(c) Call endete vor weniger als COST_TRUING_DELAY_MINUTES -> nicht angefas
   const call = makeDueOutboundCall(state, { nowMs, endedMinutesAgo: 10 }); // < 180 Min
   const store = makeStubStore(state);
   let callCount = 0;
-  const control = { async getVoiceCostRecords() { callCount++; return { ok: true, records: [] }; } };
+  const control = fakeCostRecordAdapter(() => [], { onFetch: () => callCount++ });
   const config = fakeConfig({ costTruingDelayMinutes: 180 });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
@@ -302,11 +234,7 @@ test("(d) zwei Tenants im Store, je ein faelliger Call -> BEIDE abgeglichen; kei
   const store = makeStubStore(state);
   assert.equal(typeof store.query, "undefined");
   assert.equal(typeof store.pool, "undefined");
-  const control = {
-    async getVoiceCostRecords({ legId }) {
-      return { ok: true, records: fullRecordSet(legId) };
-    },
-  };
+  const control = fakeCostRecordAdapter(fullRecordSet);
   const config = fakeConfig();
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
@@ -331,11 +259,9 @@ test("(e) 20 ct geschaetzt vs. 5 ct gemessen (75% Abweichung) -> genau eine WARN
   });
   call.transcript.push({ role: "user", text: PII_TRANSCRIPT_FRAGMENT, at: new Date(nowMs).toISOString() });
   const store = makeStubStore(state);
-  const control = {
-    async getVoiceCostRecords({ legId }) {
-      return { ok: true, records: [{ recordType: "sip-trunking", costMicroCents: 5_000_000, currency: "USD", billedSec: 60, legId }] };
-    },
-  };
+  const control = fakeCostRecordAdapter((legId) => [
+    { recordType: "sip-trunking", costMicroCents: 5_000_000, currency: "USD", billedSec: 60, legId },
+  ]);
   // costTruingMinCoveragePercent=0: isoliert die Drift-WARN von der Deckungs-WARN (Fall j).
   const config = fakeConfig({ costDriftWarnPercent: 50, costTruingMinCoveragePercent: 0 });
   const { audit } = auditSpy();
@@ -357,14 +283,14 @@ test("(e) 20 ct geschaetzt vs. 5 ct gemessen (75% Abweichung) -> genau eine WARN
   assert.doesNotMatch(allOutput, /Geburtsdatum/, "kein Transkript-Fragment im Log");
 });
 
-// ---- (f) Adapter ohne getVoiceCostRecords (Twilio-Form) -> sauberer No-op ----
+// ---- (f) Adapter ohne Beleg-Methoden (Twilio-Form) -> sauberer No-op ----
 
-test("(f) Adapter ohne getVoiceCostRecords -> wirft nicht, KEIN Feld geschrieben, skippedCalls zaehlt", async () => {
+test("(f) Adapter ohne Beleg-Methoden -> wirft nicht, KEIN Feld geschrieben, skippedCalls zaehlt", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   const call = makeDueOutboundCall(state, { nowMs, provider: "twilio", legRef: { twilioSid: "CA_1" } });
   const store = makeStubStore(state);
-  const control = {}; // Twilio-Form: keine getVoiceCostRecords-Methode
+  const control = {}; // Twilio-Form: keine fetchCostRecordPool/assignCostRecords-Methoden
   const config = fakeConfig();
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ twilio: control }), audit: () => {}, now: () => nowMs,
@@ -389,14 +315,12 @@ test("(g) zwei ueberlappende Laeufe (haengender Provider-Call) -> zweiter Lauf i
   const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_g" } });
   const store = makeStubStore(state);
   let callCount = 0;
-  let resolveRecords;
-  const pending = new Promise((resolve) => { resolveRecords = resolve; });
-  const control = {
-    async getVoiceCostRecords() {
-      callCount++;
-      return pending;
-    },
-  };
+  let resolvePool;
+  const pending = new Promise((resolve) => { resolvePool = resolve; });
+  const control = fakeCostRecordAdapter(
+    (legId) => [{ recordType: "sip-trunking", costMicroCents: 1000, currency: "USD", billedSec: 60, legId }],
+    { onFetch: () => callCount++, poolResult: pending },
+  );
   const config = fakeConfig();
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
@@ -410,7 +334,7 @@ test("(g) zwei ueberlappende Laeufe (haengender Provider-Call) -> zweiter Lauf i
   assert.deepEqual(result2, { skipped: true, reason: "sweep_running" });
   assert.equal(callCount, 1, "der zweite Lauf darf den Adapter nicht (erneut) rufen");
 
-  resolveRecords({ ok: true, records: [{ recordType: "sip-trunking", costMicroCents: 1000, currency: "USD", billedSec: 60, legId: "cc_g" }] });
+  resolvePool({ ok: true, raw: [], complete: true });
   const result1 = await run1;
   assert.equal(result1.skipped, false);
   assert.equal(callCount, 1, "Adapter insgesamt genau einmal gerufen");
@@ -429,7 +353,7 @@ test("(h1) leere COST_TRUING_REQUIRED_RECORD_TYPES -> costTruedSource ist 'incom
   const state = makeDefaultState();
   const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_h1" } });
   const store = makeStubStore(state);
-  const control = { async getVoiceCostRecords({ legId }) { return { ok: true, records: fullRecordSet(legId) }; } };
+  const control = fakeCostRecordAdapter(fullRecordSet);
   const config = fakeConfig({ costTruingRequiredRecordTypes: [] });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
@@ -447,7 +371,7 @@ test("(h2) Gegenprobe: dieselben Records mit ERFUELLTER Pflicht-Menge -> 'telnyx
   // gezielt die Klassifikation bei ERFUELLTER Pflicht-Menge, nicht den Estimate-Zustand.
   const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_h2" }, estimatedCostCents: 20 });
   const store = makeStubStore(state);
-  const control = { async getVoiceCostRecords({ legId }) { return { ok: true, records: fullRecordSet(legId) }; } };
+  const control = fakeCostRecordAdapter(fullRecordSet);
   const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
@@ -461,7 +385,7 @@ test("(h3) Gegenprobe: dieselben Records mit NICHT erfuellter Pflicht-Menge -> '
   const state = makeDefaultState();
   const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_h3" } });
   const store = makeStubStore(state);
-  const control = { async getVoiceCostRecords({ legId }) { return { ok: true, records: fullRecordSet(legId) }; } };
+  const control = fakeCostRecordAdapter(fullRecordSet);
   const config = fakeConfig({ costTruingRequiredRecordTypes: [...FULL_RECORD_TYPES, "inference"] });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
@@ -591,7 +515,7 @@ test("(k) {ok:true, records:[]} -> 'unavailable', actualCostMicroCents bleibt nu
   const state = makeDefaultState();
   const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_k" } });
   const store = makeStubStore(state);
-  const control = { async getVoiceCostRecords() { return { ok: true, records: [] }; } };
+  const control = fakeCostRecordAdapter(() => []);
   const config = fakeConfig({ costTruingMaxAttempts: 5 });
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,

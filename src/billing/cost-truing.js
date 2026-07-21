@@ -43,6 +43,9 @@ const OUTBOUND_DIRECTION = "outbound"; // dieselbe Achse wie metering.js, hier 2
 const PERCENT_BASE = 100;
 const MS_PER_MINUTE = 60 * 1000;
 const SWEEP_RUNNING_REASON = "sweep_running";
+// Grund fuer einen Pool, der zwar geantwortet hat, dessen Menge aber nachweislich
+// unvollstaendig ist (pool.complete === false, ab KE-P3 erreichbar).
+const POOL_INCOMPLETE_REASON = "pool_incomplete";
 const COST_TRUING_FINDING = Object.freeze({
   COVERAGE_BELOW_THRESHOLD: "coverage_below_threshold",
   COVERAGE_STALLED: "coverage_stalled",
@@ -77,9 +80,9 @@ export function costTruingCoveragePercent(state) {
 export function makeCostTruing({ store, config, voiceControl, audit, messaging, now = Date.now }) {
   // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
   // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
-  // Node ist single-threaded, aber der Sweep awaitet pro Call einen Provider-Abruf.
-  // Feuert das Intervall, waehrend der manuelle Lauf noch auf eine Antwort wartet,
-  // saehen sonst BEIDE Laeufe costTruedAt === null fuer denselben Call und
+  // Node ist single-threaded, aber der Sweep awaitet den Pool-Abruf je Provider (KE-P2,
+  // vor der Buchungsschleife). Feuert das Intervall, waehrend der manuelle Lauf noch auf
+  // eine Antwort wartet, saehen sonst BEIDE Laeufe costTruedAt === null fuer denselben Call und
   // verarbeiteten ihn doppelt (ab P4: doppelte Korrekturbuchung). Ein nach dem await
   // gesetzter Riegel schuetzt genau hier NICHT. Ein zweiter Aufruf ist ein
   // protokolliertes No-op, KEIN Fehler. (costTruedAt selbst riegelt nur SEQUENZIELLE
@@ -267,31 +270,69 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
   }
 
-  async function trueOneCall(call, tally) {
+  // "Kein Abgleich moeglich": unbekannter Provider (die Registry wirft fail-closed) oder ein
+  // Adapter ohne die beiden Beleg-Methoden (Twilio). EINE Entscheidung an EINER Stelle (G5) -
+  // die Buchungsschleife kennt danach nur noch control===null (sauberes No-op) und pool.ok.
+  const NO_COST_RECORDS = Object.freeze({ control: null, pool: null });
+
+  // Nur ein VOLLSTAENDIGER Pool darf Geld bewegen: gegen eine bewiesene Untermenge erstattet
+  // die Korrektur real ausgegebenes Geld zurueck - die fail-OPEN-Richtung im Geldpfad.
+  // complete:false ist deshalb dasselbe wie ok:false, uebersetzt an genau EINER Stelle.
+  function bookablePool(pool) {
+    if (!pool?.ok) return pool ?? { ok: false };
+    return pool.complete === false ? { ok: false, reason: POOL_INCOMPLETE_REASON } : pool;
+  }
+
+  // Der Belegabruf EINES Providers - genau EINMAL je Sweep (D1: der Abruf ist
+  // schleifeninvariant, die Query kennt weder legId noch Zeitfenster).
+  async function fetchCostRecordPoolFor(provider) {
     let control;
     try {
-      control = voiceControl(call.provider);
+      control = voiceControl(provider);
     } catch {
-      tally.skippedCalls++; // unbekannter Provider -> pick() wirft fail-closed
-      return;
+      return NO_COST_RECORDS; // unbekannter Provider -> pick() wirft fail-closed
     }
-    // Adapter ohne getVoiceCostRecords (Twilio: price deckt nur Connectivity) und Call
-    // ohne aufloesbare Leg-Referenz sind SAUBERE No-ops: kein Wurf, KEIN Feld-Schreiben,
-    // KEIN verbrauchter Versuch. Fehlende Faehigkeit ist der konservative Fall - der Call
-    // bleibt im Nenner der Deckungsquote und drueckt sie, statt sie zu beschoenigen.
+    if (typeof control.fetchCostRecordPool !== "function" || typeof control.assignCostRecords !== "function")
+      return NO_COST_RECORDS;
+    try {
+      return { control, pool: bookablePool(await control.fetchCostRecordPool()) };
+    } catch {
+      return { control, pool: { ok: false } }; // der Port WIRFT NIE - zweite Linie
+    }
+  }
+
+  // Ein Pool je VORKOMMENDEM Provider, jeder Provider genau einmal. Die Kandidatenliste
+  // bestimmt die Menge - kein Providername im Billing-Pfad (DIP). Ohne Kandidaten kein Abruf.
+  async function fetchCostRecordPools(candidates) {
+    const pools = new Map();
+    for (const call of candidates) {
+      if (!pools.has(call.provider)) pools.set(call.provider, await fetchCostRecordPoolFor(call.provider));
+    }
+    return pools;
+  }
+
+  // SYNCHRON (KE-P2/PM-5): zwischen Pool-Abruf und Buchungsschleife liegt strukturell kein
+  // Netz-await mehr. Provideraufloesung und Faehigkeitspruefung sind in
+  // fetchCostRecordPoolFor gewandert (EINE Entscheidung, EINE Stelle).
+  function trueOneCall(call, { control, pool }, tally) {
+    // Adapter ohne die Beleg-Methoden (Twilio: price deckt nur Connectivity) und Call ohne
+    // aufloesbare Leg-Referenz sind SAUBERE No-ops: kein Wurf, KEIN Feld-Schreiben, KEIN
+    // verbrauchter Versuch. Fehlende Faehigkeit ist der konservative Fall - der Call bleibt
+    // im Nenner der Deckungsquote und drueckt sie, statt sie zu beschoenigen.
     const legId = providerLegIdOf(call);
-    if (typeof control.getVoiceCostRecords !== "function" || !legId) {
+    if (!control || !legId) {
       tally.skippedCalls++;
       return;
     }
 
     let result;
     try {
-      result = await control.getVoiceCostRecords({
-        legId,
-        startedAt: call.startedAt,
-        endedAt: call.endedAt,
-      });
+      // Ein nicht nutzbarer Pool laesst ALLE Kandidaten 'unavailable' - kein Teilerfolg, keine
+      // Herkunft 'telnyx_detail_records', keine Rueckerstattung. Der Versuchszaehler steigt
+      // je Kandidat genau einmal, exakt wie bei einem ok:false-Abruf im Bestand.
+      result = pool.ok
+        ? control.assignCostRecords(pool, { legId, startedAt: call.startedAt, endedAt: call.endedAt })
+        : pool;
     } catch {
       result = { ok: false }; // der Port WIRFT NIE - zweite Linie, nie ein Sweep-Abbruch
     }
@@ -358,8 +399,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
     // ist ohnehin erst nach COST_TRUING_DELAY_MINUTES faellig und kommt im naechsten Lauf.
     const candidates = store.load().calls.filter((c) => isTruingCandidate(c, nowMs));
+    // D1: der Abruf ist schleifeninvariant und laeuft EINMAL je Provider - VOR der Schleife.
+    // Ab hier bis zur Bilanz kommt kein Netz-await mehr (PM-5): zwei verschraenkte Sweeps
+    // koennen sich hier nicht mehr dazwischenschieben.
+    const pools = await fetchCostRecordPools(candidates);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls: 0, failed: 0 };
-    for (const call of candidates) await trueOneCall(call, tally);
+    for (const call of candidates) trueOneCall(call, pools.get(call.provider), tally);
     const coveragePercent = costTruingCoveragePercent(store.load());
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidates.length} ` +

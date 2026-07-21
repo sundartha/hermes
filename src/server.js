@@ -85,10 +85,10 @@ const metering = makeMetering({ store, config });
 // Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
 // Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
 // manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
-// damit keinen. voiceControl kommt aus der Registry (Adapter ohne getVoiceCostRecords ->
-// sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate, kein Meter, keine
-// Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist dieselbe Instanz wie
-// bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
+// damit keinen. voiceControl kommt aus der Registry (Adapter ohne fetchCostRecordPool/
+// assignCostRecords -> sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate,
+// kein Meter, keine Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist
+// dieselbe Instanz wie bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
 const costTruing = makeCostTruing({ store, config, voiceControl, audit, messaging });
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)

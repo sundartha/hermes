@@ -398,7 +398,12 @@ async function fetchAllCostRecords() {
     if (!page.ok) return page;
     rawRecords.push(...page.raw);
   }
-  return { ok: true, raw: rawRecords };
+  // complete=true ist hier keine Zusicherung auf Vorrat: JEDE Seite hat ihre Vollstaendigkeit
+  // bereits gegen meta.total_pages DER ANTWORT bewiesen (KE-P1, isSinglePageResult) - eine
+  // unvollstaendige Seite ist schon oben ok:false/page_truncated. Das Feld gehoert trotzdem in
+  // den Pool-Vertrag: sein Verbraucher (billing/cost-truing.js) muss es fail-closed auswerten,
+  // BEVOR KE-P3 die Seitenobergrenze einfuehrt und den Wert variabel macht.
+  return { ok: true, raw: rawRecords, complete: true };
 }
 
 // Zuordnungswege als feste Spalten, in ASSIGNMENT_ROUTES-Reihenfolge und immer vollzaehlig
@@ -564,36 +569,56 @@ export const telnyxVoice = {
     });
   },
 
-  // Ist-Kosten-Datensaetze EINES Calls abrufen (PLAN-LIVE-COST-TRACING P1). OPTIONAL am
-  // Port, Telnyx-only wie originateViaCallControl: Twilios price-Feld deckt nur
-  // Connectivity - dieselbe Signatur mit anderer Semantik waere schlimmer als keine.
+  // Roh-Belege EINES Sweeps (KE-P2). Der Abruf ist SCHLEIFENINVARIANT: die Query kennt nur
+  // filter[record_type] + page[size] - kein legId, kein Zeitfenster. Jeder Kandidat holte
+  // bisher exakt dieselben Daten. Deshalb laeuft er EINMAL je Sweep VOR der
+  // Kandidatenschleife (billing/cost-truing.js); die ZUORDNUNG bleibt je Call
+  // (assignCostRecords). OPTIONAL am Port, Telnyx-only (Twilios price deckt nur
+  // Connectivity - dieselbe Signatur mit anderer Semantik waere schlimmer als keine).
   //
-  // WIRFT NIE. Rueckgabe ist ein ERGEBNIS-OBJEKT, nie eine nackte Zahl: die
-  // Unterscheidung "gemessen 0" vs. "nicht gemessen" ist im Typ erzwungen, nicht per
-  // Konvention (G31). ok:false heisst NIEMALS "Kosten = 0".
+  // WIRFT NIE. Rueckgabe ist ein ERGEBNIS-OBJEKT (G31): ok:false heisst NIEMALS "Kosten = 0".
   //
-  // Server-Filter (filter[record_type] + page[size]), danach die ZWEISTUFIGE Zuordnung
-  // client-seitig: Stufe 1 sucht die Belege mit call_control_id === legId und sammelt deren
-  // Session-IDs, Stufe 2 akzeptiert alles, was in dieser Session liegt. KEIN Anker gefunden
-  // -> leere Session-Menge -> LEERE Record-Liste bei ok:true (fail-closed, nie ein lockererer
-  // Fallback). Das Zeitfenster ist dahinter KEINE zweite Linie: seine Query-Parameternamen
-  // sind unbelegt (Kap. 2.6), und der client-seitige Filter (withinRecordWindow) findet auf
-  // den gemessenen Belegformen nicht jeden Beleg erreicht. Bei PARALLEL laufenden Calls
-  // traegt deshalb allein die Call-Lokalitaet der Session (s. SESSION_ID_FIELDS) - konto-weit
-  // gemessen, aber nie unter Parallelverkehr. Die via_-Zaehler im Log machen den Anteil der
-  // rein ueber die Session angenommenen Belege dauerhaft sichtbar (s. tasks/lct-DEPLOY-CHECKLIST.md).
-  async getVoiceCostRecords({ legId, startedAt, endedAt } = {}) {
+  // Der Vertrag kennt bereits {since} (ports.js) - DIESE Fassung wertet ihn NICHT aus (eine
+  // Seite je Typ; die Seitenschleife bringt KE-P3, den abgeleiteten Wert KE-P5). Bewusst kein
+  // entgegengenommener und still ignorierter Parameter: ein wirkungsloser Zeit-Parameter im
+  // Geldpfad ist genau die Fehlerklasse "falsch, aber HTTP 200".
+  async fetchCostRecordPool() {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
+    return fetchAllCostRecords();
+  },
+
+  // Ordnet die Roh-Belege EINES Pools genau EINEM Call zu. SYNCHRON und ohne Netz - zwischen
+  // Pool-Abruf und Buchungsschleife darf kein weiteres Netz-await liegen (PM-5). Die Logik ist
+  // aus der frueheren getVoiceCostRecords VERSCHOBEN, nicht veraendert.
+  //
+  // ZWEISTUFIGE Zuordnung: Stufe 1 sucht die Belege mit call_control_id === legId und sammelt
+  // deren Session-IDs, Stufe 2 akzeptiert alles, was in dieser Session liegt. KEIN Anker
+  // gefunden -> leere Session-Menge -> LEERE Record-Liste bei ok:true (fail-closed, nie ein
+  // lockererer Fallback). Das Zeitfenster ist dahinter KEINE zweite Linie: seine Query-
+  // Parameternamen sind unbelegt (Kap. 2.6), und der client-seitige Filter
+  // (withinRecordWindow) findet auf den gemessenen Belegformen nicht jeden Beleg erreicht.
+  // Bei PARALLEL laufenden Calls traegt deshalb allein die Call-Lokalitaet der Session (s.
+  // SESSION_ID_FIELDS) - konto-weit gemessen, aber nie unter Parallelverkehr. Die via_-
+  // Zaehler im Log machen den Anteil der rein ueber die Session angenommenen Belege
+  // dauerhaft sichtbar (s. tasks/lct-DEPLOY-CHECKLIST.md).
+  //
+  // Das Op-/Log-Token beider Methoden bleibt "getVoiceCostRecords" (logCostRecordsOk/
+  // logCostRecordsFailure/assertTelnyxOk): an dieser Zeichenkette haengen die laufende
+  // Beobachtung der Session-Invariante und die Live-Abnahme (tasks/lct-DEPLOY-CHECKLIST.md).
+  // Das FORMAT wird ergaenzt, nie umgebaut - ein Rename waere Kosmetik gegen eine
+  // geld-relevante Sonde.
+  assignCostRecords(pool, { legId, startedAt, endedAt } = {}) {
     if (!legId || !startedAt || !endedAt) return { ok: false, reason: "params_missing" };
+    // Ein Pool ohne Rohbelege ist keine Messung, sondern eine fehlende Messung: ok:false
+    // statt Wurf (der Port WIRFT NIE) und NIEMALS eine leere Record-Liste, die wie
+    // "gemessen, 0 Kosten" aussaehe.
+    if (!Array.isArray(pool?.raw)) return { ok: false, reason: "pool_missing" };
 
-    const fetched = await fetchAllCostRecords();
-    if (!fetched.ok) return fetched; // kein Teil-Erfolg (P1-Risiko/G31)
-
-    const sessionIds = anchoredSessionIds(fetched.raw, legId);
+    const sessionIds = anchoredSessionIds(pool.raw, legId);
     const records = [];
     const acceptedByRoute = {};
     const rejectedByReason = {};
-    for (const raw of fetched.raw) {
+    for (const raw of pool.raw) {
       const outcome = toCostRecord(raw, { legId, sessionIds, startedAt, endedAt });
       if (outcome.record) {
         records.push(outcome.record);

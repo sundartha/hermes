@@ -91,6 +91,24 @@
  */
 
 /**
+ * @typedef {Object} VoiceCostRecordPoolParams
+ * @property {string} [since] - ISO-Untergrenze des Einzugs. AB KE-P3 wirksam (Seitenschleife),
+ *   in KE-P2 OHNE WIRKUNG und deshalb von keinem Aufrufer gesetzt: ein entgegengenommener,
+ *   still ignorierter Zeit-Parameter waere im Geldpfad genau die Fehlerklasse "falsch, aber
+ *   HTTP 200".
+ */
+
+/**
+ * @typedef {Object} VoiceCostRecordPool
+ * @property {boolean} ok
+ * @property {object[]} [raw]     - nur bei ok:true; ROHE Provider-Belege, KEINEM Call zugeordnet
+ * @property {boolean} [complete] - nur bei ok:true; false = die Menge ist nachweislich
+ *   unvollstaendig. Fuer den Verbraucher dasselbe wie ok:false - aus einer Untermenge laesst
+ *   sich keine Rueckerstattung beweisen.
+ * @property {string} [reason]    - nur bei ok:false; PII-frei, fuer Logs
+ */
+
+/**
  * @typedef {Object} VoiceControl
  * @property {(params: OriginateParams) => Promise<OriginateResult>} originateCall
  *   Startet einen Outbound-Call (TeXML). Heute: calls.create(...).
@@ -110,12 +128,16 @@
  *   Stimme, die der AI-Assistant danach benutzt, sofern der Adapter sie kennt" - KEIN
  *   Provider-String; das Mapping auf die Provider-Payload lebt adapter-intern. Fehlt der
  *   Parameter (Inbound-Pfad), ist das Verhalten byte-identisch zum Bestand.
- * @property {(params: VoiceCostRecordsParams) => Promise<VoiceCostRecordsResult>} [getVoiceCostRecords]
- *   Ist-Kosten-Datensaetze EINES Calls (Provider-CDR). Telnyx-only (wie
- *   originateViaCallControl): Twilios price-Feld deckt nur Connectivity - dieselbe
- *   Signatur mit anderer Semantik waere schlimmer als keine. Fehlt die Methode, faellt
- *   der Aufrufer auf "kein Abgleich" zurueck; das ist der konservative Fall.
+ * @property {(params?: VoiceCostRecordPoolParams) => Promise<VoiceCostRecordPool>} [fetchCostRecordPool]
+ *   Roh-Belege EINES Sweeps (Provider-CDR), gedacht fuer EINEN Aufruf je Sweep VOR der
+ *   Kandidatenschleife: der Abruf ist schleifeninvariant (nur filter[record_type] +
+ *   page[size]), die Zuordnung nicht. Telnyx-only wie originateViaCallControl; fehlt die
+ *   Methode, faellt der Aufrufer auf "kein Abgleich" zurueck (konservativer Fall).
  *   WIRFT NIE. ok:false heisst "nicht gemessen" und NIEMALS "Kosten = 0".
+ * @property {(pool: VoiceCostRecordPool, params: VoiceCostRecordsParams) => VoiceCostRecordsResult} [assignCostRecords]
+ *   Ordnet die Belege EINES Pools genau EINEM Call zu - SYNCHRON und ohne Netz (PM-5).
+ *   Gehoert mit fetchCostRecordPool zusammen: ein Adapter implementiert beide oder keine.
+ *   WIRFT NIE; leere Record-Liste bei ok:true heisst "nichts zugeordnet", nie "0 Kosten".
  */
 
 /**

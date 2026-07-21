@@ -9,65 +9,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCostTruing, SWEEP_TRIGGER, costTruingCoveragePercent } from "../src/billing/cost-truing.js";
-import {
-  makeDefaultState,
-  createCall,
-  recordCallCostTruingResult,
-  applyCostCorrectionCents,
-  usageFor,
-} from "../src/store/state-ops.js";
+import { makeDefaultState, createCall, usageFor } from "../src/store/state-ops.js";
 import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, emptyUsage } from "../src/store/defaults.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { makeStubStore, fakeConfig, isoMinutesAgo } from "./cost-truing-harness.js";
 
-const MS_PER_MINUTE = 60 * 1000;
-const NEUTRAL_RATE = 1_000_000;
 const FULL_RECORD_TYPES = ["sip-trunking", "call-control", "speech-to-text", "text-to-speech", "recording"];
 
-// ---- Stub-Store (Muster cost-truing-observe.test.js) ----
-// applyCostCorrectionCents delegiert an die ECHTE state-ops-Funktion (2-Arg-Fassade wie
-// json.js/pg.js: tenantId + input, nowIso wird HIER an der IO-Grenze erzeugt).
-function makeStubStore(state, { nowMs = Date.now() } = {}) {
-  const writes = [];
-  return {
-    state,
-    writes,
-    load() {
-      return state;
-    },
-    recordCallCostTruingResult(callId, outcome) {
-      const { call, changed } = recordCallCostTruingResult(state, callId, outcome);
-      if (changed) writes.push({ callId, outcome });
-      return call;
-    },
-    applyCostCorrectionCents(tenantId, input) {
-      return applyCostCorrectionCents(state, tenantId, input, new Date(nowMs).toISOString());
-    },
-  };
-}
-
-function fakeConfig(overrides = {}) {
-  return withConfigNamespaces({
-    costTruingDelayMinutes: 180,
-    costTruingMaxAttempts: 5,
-    costTruingRequiredRecordTypes: [],
-    costTruingMinCoveragePercent: 80,
-    costTruingCoverageStallSweeps: 8,
-    costDriftWarnPercent: 50,
-    costAlertDebounceMs: 24 * 60 * 60 * 1000,
-    voiceTariffDomesticCents: 20,
-    voiceTariffDefaultCents: 300,
-    voiceTariffDomesticPrefixes: ["+49", "+33", "+44"],
-    providerToBucketRateMicro: NEUTRAL_RATE,
-    costCalibrationMinSamples: 20,
-    platformAlertSmsTo: "",
-    ...overrides,
-  });
-}
-
-function isoMinutesAgo(nowMs, minutes) {
-  return new Date(nowMs - minutes * MS_PER_MINUTE).toISOString();
-}
-
+// makeStubStore/fakeConfig/isoMinutesAgo kommen aus cost-truing-harness.js (KE-P2, G5) -
+// byte-identisch zum frueheren lokalen Stand hier; providerToBucketRateMicro=1_000_000 ist
+// dort bereits der Default (die "neutrale" Rate dieser Datei).
+//
+// makeDueOutboundCall/voiceControl bleiben BEWUSST lokal (keine Vereinheitlichung mit
+// cost-truing-observe.test.js): dieser 3-Minuten-Call mit String-legId ist Teil der
+// Tarif-Drift-Fixturen dieser Datei - eine Verschmelzung waere ein Verhaltensrisiko in
+// einem Geld-Test, ohne Nutzen fuer KE-P2.
 function makeDueOutboundCall(
   state,
   {
@@ -105,8 +60,18 @@ function seedUsageCents(state, tenantId, costCents) {
   state.usage[tenantId] = { ...emptyUsage(), costCents };
 }
 
+// KE-P2: der Port ist zweigeteilt - der Pool-Abruf liefert hier immer eine leere,
+// vollstaendige Huelle (raw:[]), records ordnet assignCostRecords unmittelbar zu (die
+// eigentliche Zuordnungslogik ist NICHT Pruefgegenstand dieser Datei, s. Header-Kommentar).
 function control(records) {
-  return { async getVoiceCostRecords() { return { ok: true, records }; } };
+  return {
+    async fetchCostRecordPool() {
+      return { ok: true, raw: [], complete: true };
+    },
+    assignCostRecords() {
+      return { ok: true, records };
+    },
+  };
 }
 
 function voiceControl(impl) {
