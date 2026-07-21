@@ -2179,6 +2179,19 @@ ausdruecklich als Nicht-Ziel gefuehrt (Kapitel 10).
 **Abhaengig:** P4 **+ ein voller Abrechnungsmonat mit `COST_TRUING_BOOKING_ENABLED=true`
 ohne Drift-Alarm**
 
+> **Owner-Entscheidung 2026-07-21: die Zeit-Vorbedingung wird bewusst UEBERGANGEN.** Die
+> "ein voller Monat"-Abhaengigkeit schuetzt einen Nutzerbestand vor einem ungeprueften
+> Buchungspfad — den gibt es hier nicht: der Dienst hat **null zahlende Nutzer**, der
+> Flip war **nie live**, und der maximale Schaden einer fehlbuchenden Korrektur ist durch
+> den geteilten Lebenszeit-Topf `MAX_BUDGET_EUR` (30 EUR) hart gedeckelt. Unter diesen
+> Umstaenden kostet der entfernte Notausgang nichts Reales. **Getauscht wird bewusst:** nach
+> P8 ist die Korrekturbuchung im Code bedingungslos aktiv — ein Deploy schaltet sie ohne
+> Env-Abschalter scharf. Das ist der Preis, und er ist bei null Nutzern akzeptiert. Faellt
+> der erste echte Nutzer an, BEVOR der Flip einmal in Betrieb beobachtet wurde, ist diese
+> Entscheidung neu zu bewerten. In dieser Kette wird ohnehin nicht deployt (Merge auf
+> `master` ist kein Ausliefern) — P8 macht den AN-Zustand zum Code-Default, nicht zum
+> Live-Zustand.
+
 #### Ziel
 
 `COST_TRUING_BOOKING_ENABLED` verschwindet; die Korrekturbuchung ist normales Verhalten.
