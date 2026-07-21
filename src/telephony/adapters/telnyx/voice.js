@@ -129,6 +129,8 @@ const STT_LANGUAGE_AUTO = "auto";
 // includeDetail=false), NIE der API-Key (Regel 4/5). attachStatus haengt err.providerStatus
 // an, damit der Aufrufer (server.js) die Ablehnung kategorisieren kann. Gemeinsamer Parser
 // in ./errors.js (G5) - eine konsistente Telnyx-Envelope-Entscheidung im Provider-Package.
+// Der allowlistete Telnyx-Code liegt dort zusaetzlich strukturiert als err.providerCode an
+// (Quelle der Fehler-Spur des Belegabrufs, s. logCostRecordsFailure).
 const ATTACH_STATUS = { attachStatus: true };
 
 // Bearer-Header + Content-Type. Eine Stelle (G5) = EINE Quelle fuer den geheimen Bearer-Key.
@@ -297,12 +299,34 @@ function toCostRecord(raw, { legId, sessionIds, startedAt, endedAt }) {
   };
 }
 
+// Platzhalter, wenn der Fehler gar keine HTTP-Antwort hatte (Netzfehler/Timeout): die Zeile
+// erscheint trotzdem - "kein Status" ist selbst ein Befund (Netz statt Provider-Ablehnung),
+// und eine fehlende Zeile waere von "kein Fehler" nicht zu unterscheiden.
+const MISSING_PROVIDER_FIELD = "none";
+
+// PII-freie FEHLER-Spur des Belegabrufs (Gegenstueck zu logCostRecordsOk): Op-Name, der
+// abgefragte record_type, Provider-Status und der allowlistete Telnyx-Code. Der Code kommt
+// STRUKTURIERT vom Error (err.providerCode aus ./errors.js) - den Meldungstext zu parsen
+// waere brittle, und der Text ist kein Vertrag. NIE der API-Key, NIE eine Rufnummer, NIE der
+// Roh-Body, NIE eine Session-/Leg-ID: record_type ist ein Enumwert, Status und Code sind
+// Provider-Metadaten. console.warn (nicht error) wie die uebrigen Kosten-Befunde in
+// billing/cost-truing.js: der Abruf degradiert, der Call bleibt unvollstaendig - es bewegt
+// sich kein Geld (G11).
+function logCostRecordsFailure(recordType, err) {
+  const status = err?.providerStatus ?? MISSING_PROVIDER_FIELD;
+  const code = err?.providerCode ?? MISSING_PROVIDER_FIELD;
+  console.warn(
+    `[telnyx/voice] getVoiceCostRecords fehler typ=${recordType} status=${status} code=${code}`,
+  );
+}
+
 // Eine Typ-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die Port-
 // Methode selbst (G31). Server-Filter sind NUR filter[record_type] + page[size] (Kap. 2.6
 // belegt genau diese zwei) - das Zeitfenster wird NICHT als Query-Parameter geraten (die
 // Parameternamen sind UNBELEGT); die Fensterpruefung laeuft ausschliesslich client-seitig
 // in toCostRecord. Jeder Wurf und jedes rejectende fetch (Netzfehler/Timeout) wird zu
-// { ok:false, reason:"provider_error" } - kein Timeout-Aufrufer in P1 (s. Phasen-Report).
+// { ok:false, reason:"provider_error" } - unveraendert; SICHTBAR ist der Fehler seit KE-P0
+// ueber logCostRecordsFailure (Status + Telnyx-Code, PII-frei).
 async function fetchCostRecordPage(recordType) {
   const q = new URLSearchParams();
   q.set("filter[record_type]", recordType);
@@ -315,7 +339,8 @@ async function fetchCostRecordPage(recordType) {
     const raw = await parseTelnyxResource(res);
     if (!Array.isArray(raw)) return { ok: false, reason: "shape_unexpected" };
     return { ok: true, raw };
-  } catch {
+  } catch (err) {
+    logCostRecordsFailure(recordType, err);
     return { ok: false, reason: "provider_error" };
   }
 }

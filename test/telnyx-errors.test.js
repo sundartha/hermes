@@ -106,3 +106,45 @@ test("assertTelnyxOk: leerer Body -> reiner status-only-Throw", async () => {
     /Telnyx orderNumber fehlgeschlagen: HTTP 402$/,
   );
 });
+
+// KE-P0: der Telnyx-Code muss STRUKTURIERT beim Aufrufer ankommen. Ohne err.providerCode
+// bliebe nur das Regexen der Meldung - brittle, und der Meldungstext ist kein Vertrag.
+// 429/10011 ist die gemessene Antwort des Belegabrufs bei ueberschrittenem Kontingent.
+const RATE_LIMIT_ENVELOPE = JSON.stringify({
+  errors: [{ code: "10011", title: "Too many requests", detail: "quota exceeded" }],
+});
+
+test("assertTelnyxOk: err.providerCode traegt den allowlisteten Telnyx-Code (strukturiert)", async () => {
+  await assert.rejects(
+    () => assertTelnyxOk(fakeRes({ status: 429, text: RATE_LIMIT_ENVELOPE }), "getVoiceCostRecords", { attachStatus: true }),
+    (err) => {
+      assert.equal(err.providerCode, "10011");
+      assert.equal(err.providerStatus, 429);
+      return true;
+    },
+  );
+});
+
+test("assertTelnyxOk: providerCode ist NUR der Code - nie detail, nie der Roh-Body (Allowlist)", async () => {
+  const body = JSON.stringify({
+    secret_key: "KEYsuper-secret",
+    errors: [{ code: "10011", title: "t", detail: "from=+18643028341" }],
+  });
+  await assert.rejects(
+    () => assertTelnyxOk(fakeRes({ status: 429, text: body }), "op", { includeDetail: true }),
+    (err) => {
+      assert.equal(err.providerCode, "10011", "auch mit includeDetail nur der nackte Code");
+      return true;
+    },
+  );
+});
+
+test("assertTelnyxOk: Body ohne errors[].code -> kein providerCode (kein geratener Wert)", async () => {
+  await assert.rejects(
+    () => assertTelnyxOk(fakeRes({ status: 502, text: "<html>upstream error</html>" }), "op"),
+    (err) => {
+      assert.equal(err.providerCode, undefined, "nicht-JSON -> kein Code, keine Erfindung");
+      return true;
+    },
+  );
+});
