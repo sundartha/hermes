@@ -59,6 +59,46 @@ const DRIFT_ALERT_SMS_PREFIX = "[hermes] Tarif-Drift: ";
 const isEndedOutbound = (call) => call.direction === OUTBOUND_DIRECTION && !!call.endedAt;
 const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;
 
+// Beendet-Zeitstempel EINES Calls in Millisekunden, oder null (fehlend/unbrauchbar).
+// EINE Parse-Stelle fuer die zwei Verbraucher - die Faelligkeit eines Kandidaten und die
+// Zeitschranke des Belegabrufs (G5). Zwei eigene Date.parse-Ausdruecke liefen beim ersten
+// Nachziehen auseinander, und ein NaN, das bis in new Date(...).toISOString() durchschluege,
+// wuerfe - der Sweep braeche mitten in der Kandidatenliste ab.
+const endedAtMs = (call) => {
+  const ms = Date.parse(call.endedAt);
+  return Number.isFinite(ms) ? ms : null;
+};
+
+// Marge, um die die Zeitschranke des Belegabrufs VOR dem aeltesten Kandidaten liegt (KE-P5).
+// GELD-Sicherung, kein Sparknopf - die Richtungen sind nicht symmetrisch:
+//   zu grosszuegig -> ein paar Anfragen mehr, kein Beleg geht verloren;
+//   zu knapp       -> die Seitenschleife des Adapters endet, BEVOR der Beleg gefunden ist,
+//                     und der Pool gilt trotzdem als vollstaendig (complete:true) - eine
+//                     Rueckerstattung auf einer bewiesenen Untermenge.
+// Herleitung: die Belege tragen Zeitfelder vom GESPRAECHSBEGINN, nicht vom Ende - der
+// Pflicht-Typ call-control fuehrt ausschliesslich started_at (Messung 2026-07-21). Der
+// groesste Abstand zum endedAt eines Kandidaten ist damit die Gespraechsdauer, und die
+// deckelt MAX_CALL_DURATION_S (config.js) hart bei hoechstens 300 s. Eine Stunde ist das
+// Zwoelffache davon und traegt zusaetzlich den Versatz zwischen unserer Uhr (endedAt) und
+// der Provider-Uhr (Belegzeitstempel).
+const POOL_SINCE_MARGIN_MS = 60 * MS_PER_MINUTE;
+
+// Zeitschranke des Belegabrufs, abgeleitet aus dem AELTESTEN Kandidaten (KE-P5): ohne sie
+// zog ein Sweep mit einem 3 h alten Call denselben Umfang wie einer mit 200 Kandidaten -
+// der Adapter blaettert je Typ bis zur letzten Seite bzw. bis zur Seitenobergrenze.
+// Kein Kandidat mit brauchbarem Zeitstempel -> KEINE Schranke (undefined): das kostet
+// Anfragen, kann aber keinen Beleg verlieren. Ein unbrauchbarer endedAt faellt heraus,
+// statt die Schranke als NaN ins Bodenlose zu ziehen (solche Calls sind ohnehin keine
+// Kandidaten, s. isTruingCandidate).
+function poolSinceFor(candidates) {
+  let oldestMs = null;
+  for (const call of candidates) {
+    const ms = endedAtMs(call);
+    if (ms !== null && (oldestMs === null || ms < oldestMs)) oldestMs = ms;
+  }
+  return oldestMs === null ? undefined : new Date(oldestMs - POOL_SINCE_MARGIN_MS).toISOString();
+}
+
 // Anteil der beendeten Outbound-Calls mit beweisbar vollstaendiger Datenlage. Zaehler:
 // costTruedSource === 'telnyx_detail_records' (dieser Wert wird unten NUR bei kompletter
 // Typ-Menge gesetzt - EINE Quelle der Vollstaendigkeits-Aussage, kein zweites Praedikat).
@@ -104,8 +144,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   function isTruingCandidate(call, nowMs) {
     if (!isEndedOutbound(call) || call.costTruedAt !== null) return false;
     if (nextCostTruingAttempt(call) > config.billing.costTruingMaxAttempts) return false;
-    const endedMs = Date.parse(call.endedAt);
-    if (!Number.isFinite(endedMs)) return false; // unbrauchbarer Zeitstempel != "faellig"
+    const endedMs = endedAtMs(call);
+    if (endedMs === null) return false; // unbrauchbarer Zeitstempel != "faellig"
     return nowMs - endedMs >= config.billing.costTruingDelayMinutes * MS_PER_MINUTE;
   }
 
@@ -284,8 +324,10 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   }
 
   // Der Belegabruf EINES Providers - genau EINMAL je Sweep (D1: der Abruf ist
-  // schleifeninvariant, die Query kennt weder legId noch Zeitfenster).
-  async function fetchCostRecordPoolFor(provider) {
+  // schleifeninvariant, die Query kennt weder legId noch Zeitfenster). `since` bindet
+  // ausschliesslich die Seitenschleife des Adapters und geht NIE als Query-Parameter
+  // hinaus - ein geratener Zeitfilter liefert HTTP 200 mit 0 Treffern (Messung, s. ports.js).
+  async function fetchCostRecordPoolFor(provider, since) {
     let control;
     try {
       control = voiceControl(provider);
@@ -295,18 +337,23 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     if (typeof control.fetchCostRecordPool !== "function" || typeof control.assignCostRecords !== "function")
       return NO_COST_RECORDS;
     try {
-      return { control, pool: bookablePool(await control.fetchCostRecordPool()) };
+      return { control, pool: bookablePool(await control.fetchCostRecordPool({ since })) };
     } catch {
       return { control, pool: { ok: false } }; // der Port WIRFT NIE - zweite Linie
     }
   }
 
   // Ein Pool je VORKOMMENDEM Provider, jeder Provider genau einmal. Die Kandidatenliste
-  // bestimmt die Menge - kein Providername im Billing-Pfad (DIP). Ohne Kandidaten kein Abruf.
+  // bestimmt die Menge - kein Providername im Billing-Pfad (DIP). Ohne Kandidaten kein
+  // Abruf: die Schleife laeuft nicht, kein Provider wird aufgeloest, 0 Anfragen.
+  // EINE Zeitschranke je Sweep, VOR der Schleife bestimmt: sie haengt an der
+  // Kandidatenmenge, nicht am Provider - je Provider neu zu rechnen waere dieselbe Zahl
+  // zweimal (G5). Rein synchron, also kein zusaetzliches Netz-await (PM-5).
   async function fetchCostRecordPools(candidates) {
+    const since = poolSinceFor(candidates);
     const pools = new Map();
     for (const call of candidates) {
-      if (!pools.has(call.provider)) pools.set(call.provider, await fetchCostRecordPoolFor(call.provider));
+      if (!pools.has(call.provider)) pools.set(call.provider, await fetchCostRecordPoolFor(call.provider, since));
     }
     return pools;
   }

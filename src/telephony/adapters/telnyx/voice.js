@@ -745,8 +745,9 @@ export const telnyxVoice = {
   // WIRFT NIE. Rueckgabe ist ein ERGEBNIS-OBJEKT (G31): ok:false heisst NIEMALS "Kosten = 0".
   //
   // `since` ist ab KE-P3 WIRKSAM: es bindet die Seitenschleife (parseSinceMs), nie die
-  // Query und nie den Pool-Inhalt. Bis KE-P5 setzt es kein Aufrufer - ohne Schranke wird
-  // je Typ bis zur letzten Seite oder bis zur Seitenobergrenze geblaettert.
+  // Query und nie den Pool-Inhalt. Seit KE-P5 setzt es der Sweep aus dem AELTESTEN
+  // Kandidaten minus Marge (billing/cost-truing.js); fehlt es, wird je Typ bis zur letzten
+  // Seite oder bis zur Seitenobergrenze geblaettert.
   // complete:false heisst "bewiesene Untermenge" und ist fuer den Verbraucher dasselbe wie
   // ok:false (bookablePool) - nie eine Rueckerstattungsgrundlage.
   //

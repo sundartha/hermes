@@ -17,25 +17,14 @@ const { telnyxVoice, ASSIGNABLE_COST_RECORD_TYPES } = await import("../src/telep
 const { makeCostTruing, SWEEP_TRIGGER } = await import("../src/billing/cost-truing.js");
 const { makeDefaultState, usageFor } = await import("../src/store/state-ops.js");
 const { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, emptyUsage } = await import("../src/store/defaults.js");
-const { makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl } = await import(
-  "./cost-truing-harness.js"
-);
+const {
+  makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl, stubCountingFetch,
+  foreignSipTrunkingPage, NEVER_LAST_PAGE_TOTAL,
+} = await import("./cost-truing-harness.js");
 
 // Kandidatenzahl der D1-Kernzusage: gross genug, um "einmal je Typ" von "einmal je
 // Kandidat" scharf zu unterscheiden (6 vs. 35), klein genug, um lesbar zu bleiben.
 const CANDIDATE_COUNT = 5;
-
-// Zaehlender fetch-Stub: eine LEERE, gemessene Listen-Seite je Typ ({data:[]} -> ok, kurze
-// Seite, keine Truncation). Die Zuordnung ist hier NICHT der Pruefgegenstand, nur die
-// ANZAHL der Anfragen bzw. (P2-3) der Abbruch beim ersten scheiternden Typ.
-function stubCountingFetch({ status = 200, ok = true, body = { data: [] } } = {}) {
-  const calls = [];
-  global.fetch = async (url, opts) => {
-    calls.push({ url, opts });
-    return { ok, status, json: async () => body, text: async () => JSON.stringify(body) };
-  };
-  return calls;
-}
 
 // Fake-Adapter im NEUEN Port-Zuschnitt. recordsFor(legId) spielt genau die Rolle, die
 // frueher getVoiceCostRecords({legId}) hatte. trace zeichnet die Aufruf-Reihenfolge (PM-5:
@@ -206,7 +195,7 @@ test("(P2-3) ok:false-Pool -> ALLE Kandidaten unavailable, keine Buchung", async
   const state = makeDefaultState();
   const calls = [0, 1, 2].map((i) => makeDueOutboundCall(state, { nowMs, legRef: { callControlId: `cc_fail_${i}` } }));
   const store = makeStubStore(state);
-  const fetchCalls = stubCountingFetch({ status: 500, ok: false, body: {} });
+  const fetchCalls = stubCountingFetch({ status: 500, ok: false, bodyFor: () => ({}) });
   const usageBefore = structuredClone(state.usage);
   const { runCostTruingSweep } = makeCostTruing({
     store, config: fakeConfig(), voiceControl: fakeVoiceControl({ telnyx: telnyxVoice }), audit: () => {}, now: () => nowMs,
@@ -228,24 +217,6 @@ test("(P2-3) ok:false-Pool -> ALLE Kandidaten unavailable, keine Buchung", async
 
 // ---- P3-3: Seitenobergrenze -> KEINE Rueckerstattung, kein Cent bewegt ----
 
-// Volle, gemessene sip-trunking-Seite (Spec A1): call_control_id + telnyx_session_id sind die
-// Zuordnungs-IDs, started_at das Zeitfeld, telnyx_leg_id der KOEDER (Feld, das der Code NICHT
-// als Zuordnungsquelle nutzen darf - A2). meta.total_pages=99 laesst KEINE Seite als letzte
-// gelten - das Ende der Seitenschleife kann hier nur die Seitenobergrenze bringen.
-function measuredSipTrunkingPageBody() {
-  const records = Array.from({ length: 50 }, (_, i) => ({
-    record_type: "sip-trunking",
-    cost: "0.0401",
-    currency: "USD",
-    call_control_id: `cc_p3_3_${i}`,
-    telnyx_session_id: `sess_p3_3_${i}`,
-    telnyx_leg_id: "0bad0bad-0bad-11f1-0bad-0bad0bad0bad0", // Koeder, s. A2
-    started_at: "2026-07-20T10:01:00Z",
-    billed_sec: 60,
-  }));
-  return { data: records, meta: { total_results: 50 * 99, total_pages: 99, page_size: 50 } };
-}
-
 test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavailable, kein Cent bewegt", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
@@ -255,7 +226,14 @@ test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavaila
   );
   const store = makeStubStore(state);
   const usageBefore = structuredClone(state.usage);
-  const fetchCalls = stubCountingFetch({ body: measuredSipTrunkingPageBody() });
+  // Die Belege liegen bei nowMs, also INNERHALB der ab KE-P5 abgeleiteten Schranke - nur so
+  // beendet weiterhin die SEITENOBERGRENZE die Schleife und nicht `since` (das ist die
+  // Zusage dieses Tests).
+  const fetchCalls = stubCountingFetch({
+    bodyFor: () => foreignSipTrunkingPage({
+      at: new Date(nowMs).toISOString(), idPrefix: "cc_p3_3", totalPages: NEVER_LAST_PAGE_TOTAL,
+    }),
+  });
   const { runCostTruingSweep } = makeCostTruing({
     store, config: fakeConfig(), voiceControl: fakeVoiceControl({ telnyx: telnyxVoice }), audit: () => {}, now: () => nowMs,
   });
@@ -270,5 +248,5 @@ test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavaila
     assert.equal(call.costTruingAttempts, 1);
   }
   assert.deepStrictEqual(structuredClone(state.usage), usageBefore, "keine Korrektur, insbesondere keine Rueckerstattung");
-  assert.ok(fetchCalls.length < 99, "die Seitenobergrenze beendet die Schleife, statt das Kontingent zu sprengen");
+  assert.ok(fetchCalls.length < NEVER_LAST_PAGE_TOTAL, "die Seitenobergrenze beendet die Schleife, statt das Kontingent zu sprengen");
 });
