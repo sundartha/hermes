@@ -68,7 +68,35 @@ test("call.hangup: Settlement idempotent - billedAt + reserveReleased gesetzt, z
     const res1 = await postCallControl(srv, {}, hangupBody("cc_1"));
     assert.equal(res1.status, 200);
 
-    const state1 = await waitForStoreState(srv, (s) => Boolean(s.calls[0].billedAt));
+    // settlement-flake-1: gewartet wird auf BEIDE Settlement-Marker, nie nur auf billedAt.
+    // finishCall (src/telephony/call-finish.js) schreibt sie in ZWEI getrennten Platten-
+    // Schreibvorgaengen: store.markBilled persistiert sofort (json-Wrapper: save bei changed),
+    // die Reserve-Freigabe folgt erst NACH dem await auf store.withStoreLock und geht erst mit
+    // dem store.save() danach raus. Eine Wartebedingung nur auf billedAt verankert damit am
+    // FRUEHEREN Schreibvorgang und prueft das Feld des SPAETEREN - sie trifft den Zwischenstand
+    // (billedAt gesetzt, reserveReleased noch false) verlaesslich in rund einem Viertel der
+    // Laeufe. Das Praedikat darf die interne Schreib-REIHENFOLGE nicht kennen; es fordert den
+    // fertigen Settlement-Zustand.
+    //
+    // Diese Reihenfolge ist KEINE Crash-Sicherheits-Frage - deshalb wird hier gewartet statt am
+    // Produkt umgebaut. Es gibt bewusst KEINE Atomaritaet, die beiden Marker haben verschiedene
+    // Lebensdauern: billedAt ist der prozessuebergreifende Bucht-Riegel (eigene Spalte billed_at,
+    // in rowToCall hydriert), reserveReleased ist das In-Prozess-Schloss eines strukturell
+    // EPHEMEREN Ledgers - src/store/json.js schliesst s.reservations per rest-omit aus jedem
+    // save() aus (gepinnt von test/reservation-json-ephemeral.test.js), src/store/pg.js hat
+    // weder Spalte noch Hydrierung. Ein Prozessabbruch zwischen den Schreibvorgaengen kann
+    // folglich keine Reserve gebunden lassen: nach dem Boot ist der Ledger 0, und eine spaete
+    // Freigabe klemmt releaseOutboundReserve auf >= 0 (test/reservation-ledger.test.js). Faellt
+    // diese Vorbedingung je (persistenter Reserve-Ledger, eigene Spalte), wird die Reihenfolge
+    // sehr wohl relevant - dann schlaegt zuerst der Ephemeralitaets-Test an.
+    //
+    // Gleicher Warte-Anker wie test/telnyx-p5-origination.test.js, das auf denselben
+    // finishCall-Abschluss wartet. Beide Felder sind monoton (setOnceTimestamp bzw. Latch),
+    // deshalb ist der von waitForStoreState final zurueckgelieferte Re-Read stabil.
+    const state1 = await waitForStoreState(
+      srv,
+      (s) => Boolean(s.calls[0].billedAt) && s.calls[0].reserveReleased === true,
+    );
     assert.equal(state1.calls[0].status, "completed");
     assert.ok(state1.calls[0].billedAt);
     assert.equal(state1.calls[0].reserveReleased, true);
