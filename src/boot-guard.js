@@ -327,12 +327,16 @@ export function alertChannelFindings(platformAlertSmsTo) {
   ];
 }
 
-// LCT P4: die zwei Riegel des Flips. FATAL = leere Pflicht-Menge bei aktiver Buchung ("Ein
+// LCT P4: die Riegel des Flips. FATAL = leere Pflicht-Menge bei aktiver Buchung ("Ein
 // Dienst, der Geld zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft,
-// darf nicht starten"). WARN = Deckungsquote unter der Schwelle (ablesbar, kein exit(1) -
-// ein Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall).
+// darf nicht starten"). FATAL = Pflicht-Typ, den der Adapter nie zuordnen KANN (LCT-FIX-1)
+// - derselbe Sachverhalt wie die leere Menge, nur andersherum unerfuellbar: beide nehmen
+// der Vollstaendigkeits-Aussage jeden Sinn, bevor Geld bewegt wird. WARN =
+// Deckungsquote unter der Schwelle (ablesbar, kein exit(1) - ein Boot-Refusal tauschte ein
+// Kostenproblem gegen einen Telefonie-Totalausfall).
 export const COST_TRUING_BOOKING_FINDING = Object.freeze({
   REQUIRED_TYPES_EMPTY: "cost_truing_required_types_empty", // FATAL
+  REQUIRED_TYPES_UNASSIGNABLE: "cost_truing_required_types_unassignable", // FATAL
   COVERAGE_BELOW_THRESHOLD: "cost_truing_coverage_below_threshold", // WARN
 });
 
@@ -341,9 +345,19 @@ export const COST_TRUING_BOOKING_FINDING = Object.freeze({
 // diese Pruefung immer (kein Flag-Kurzschluss mehr, der sie auslassen koennte).
 // coveragePercent wird HEREINGEREICHT, nicht hier gerechnet: die eine Quelle ist
 // costTruingCoveragePercent(store) aus P3 - zwei Rechnungen derselben Groesse waeren
-// zwei Zahlen, die auseinanderlaufen. Beide Befunde koennen GEMEINSAM auftreten; der
-// Aufrufer behandelt fatal zuerst (Muster assertSpendCapCoherence).
-export function costTruingBookingFindings({ requiredRecordTypes, coveragePercent, minCoveragePercent }) {
+// zwei Zahlen, die auseinanderlaufen. Genauso assignableRecordTypes: welche Belegtypen es
+// gibt und welche davon zuordenbar sind, gehoert dem Adapter, der die Belege liest, nicht
+// diesem Guard - hier waere es eine zweite Quelle, die stillschweigend veralten kann. Der
+// Aufrufer reicht sie herein. Der Parameter ist PFLICHT (kein []-Default: ein vergessenes
+// Argument soll laut scheitern, nicht die Pruefung lautlos abschalten).
+// Befunde koennen GEMEINSAM auftreten; der Aufrufer behandelt fatal zuerst (Muster
+// assertSpendCapCoherence).
+export function costTruingBookingFindings({
+  requiredRecordTypes,
+  assignableRecordTypes,
+  coveragePercent,
+  minCoveragePercent,
+}) {
   const findings = [];
   if (requiredRecordTypes.length === 0) {
     findings.push({
@@ -353,6 +367,21 @@ export function costTruingBookingFindings({ requiredRecordTypes, coveragePercent
         "COST_TRUING_REQUIRED_RECORD_TYPES ist leer - ein Dienst, der Geld zurueckerstattet, " +
         "ohne zu wissen, wogegen er Vollstaendigkeit prueft, darf nicht starten. Erst die " +
         "Pflicht-Menge aus einem Live-Beleg setzen.",
+    });
+  }
+  // Gegen die ALLOWLIST der zuordenbaren Typen, NICHT gegen eine Deny-Liste - Begruendung
+  // s. ASSIGNABLE_COST_RECORD_TYPES (telephony/adapters/telnyx/voice.js), die EINE Quelle
+  // dieser Aussage. Hier lokal: der Vergleich ist exakt und case-sensitiv wie der spaetere
+  // Vollstaendigkeits-Vergleich in cost-truing.js; nur so meldet der Guard genau das, was
+  // dort dauerhaft unerfuellbar bliebe.
+  const unassignable = requiredRecordTypes.filter((t) => !assignableRecordTypes.includes(t));
+  if (unassignable.length > 0) {
+    findings.push({
+      code: COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE,
+      fatal: true,
+      message:
+        `COST_TRUING_REQUIRED_RECORD_TYPES fordert ${unassignable.join(",")} - kein zuordenbarer ` +
+        `Belegtyp. Zuordenbar sind exakt: ${assignableRecordTypes.join(",")}.`,
     });
   }
   if (coveragePercent < minCoveragePercent) {

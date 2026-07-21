@@ -16,7 +16,7 @@ Kette, nicht für den Merge.
 | `PROVIDER_TO_BUCKET_RATE_MICRO` | P2 | `920000` (= 0,92 EUR/USD) | Default fahren lassen, außer der Kurs hat sich seit der letzten Owner-Prüfung wesentlich bewegt. **Muss im Band [0,5×..2,0×] um den Anker `920000` liegen** (also 460000–1840000), sonst verweigert der Boot fatal (ab P4; in P2/P3 nur WARN). | Zehnerpotenz-Vertipper (z.B. `920` statt `920000`) → Boot-Refusal `exit(1)` seit P4 unkonditional, unabhängig vom Stand jeder anderen Variable. |
 | `COST_TRUING_DELAY_MINUTES` | P3 | `180` | Default fahren lassen; CDR-Latenz beim Provider ist laut Plan unbelegt, Wert nach erstem Live-Beleg empirisch nachziehen, nicht raten. | Zu kurz: Sweep versucht Abgleich, bevor der Provider die Records hat, verbraucht Versuche unnötig. Zu lang: verzögert Sichtbarkeit, kein Sicherheitsrisiko. |
 | `COST_TRUING_MAX_ATTEMPTS` | P3 | `5` | Default fahren lassen. | Zu niedrig: Calls werden nach wenigen Versuchen dauerhaft als `unavailable` abgeschlossen, bevor der Provider die Daten geliefert hat. |
-| `COST_TRUING_REQUIRED_RECORD_TYPES` | P3, seit P4/P8 **fatal** | leer (`""`) | **BLOCKIEREND, siehe Abschnitt 2.** Muss vor jedem Deploy dieser Kette aus einem frischen Live-Beleg gesetzt werden. | Leer + `COST_TRUING_BOOKING_ENABLED` existiert seit P8 nicht mehr als Abschalter → Boot verweigert **unkonditional** (`exit(1)`, jeder Deploy, jeder Prozessstart). |
+| `COST_TRUING_REQUIRED_RECORD_TYPES` | P3, seit P4/P8 **fatal** | leer (`""`) | **BLOCKIEREND, siehe Abschnitt 2.** Muss vor jedem Deploy dieser Kette aus einem frischen Live-Beleg gesetzt werden — **ohne `inference`** (nicht zuordenbar, seit LCT-FIX-1 ebenfalls Boot-Refusal). | Leer + `COST_TRUING_BOOKING_ENABLED` existiert seit P8 nicht mehr als Abschalter → Boot verweigert **unkonditional** (`exit(1)`, jeder Deploy, jeder Prozessstart). Enthält die Menge einen Wert außerhalb der sechs zuordenbaren Typen (`inference`, aber auch jede abweichende Schreibweise oder ein Tippfehler), verweigert der Boot ebenfalls (`exit(1)`) — sonst wäre sie dauerhaft unerfüllbar: keine Rückerstattung, jede Nachforderung gebucht. |
 | `COST_TRUING_MIN_COVERAGE_PERCENT` | P3 | `80` | Default fahren lassen; ist die Vorbedingungs-Schwelle für die Aussagekraft der Korrekturbuchung und darf laut Plan **nie gesenkt werden**, um eine Vorbedingung künstlich zu erfüllen. | Zu niedrig gesenkt: die Deckungsquoten-Warnung verliert ihre Aussagekraft, Owner-Aktionen (P4b-Tarifsenkung) stützen sich auf eine zu dünne Datenbasis. |
 | `COST_TRUING_COVERAGE_STALL_SWEEPS` | P3 | `8` (≈ 2 Tage bei 6h-Kadenz) | Default fahren lassen. | Prozess-lokaler Zähler, wird bei Free-Tier-Restart genullt — bekanntes akzeptiertes Restrisiko, kein Blocker. |
 | `COST_DRIFT_WARN_PERCENT` | P3 | `50` | Default fahren lassen. | Die Drift-Prozentzahl aus P3 vergleicht USD-Mikro-Cent gegen EUR-Cent ohne Umrechnung (bewusste Log-only-Vereinfachung); P5 rechnet korrekt um. Reiner Log-Wert, kein Gate. |
@@ -54,13 +54,65 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   `sip-trunking`, `call-control`, `speech-to-text`, `text-to-speech`, `recording`,
   `inference`, `ai-voice-assistant` (der Typ `"call"` existiert **nicht**, liefert
   HTTP 400).
+  **Als Pflicht-Typ wählbar sind davon nur die sechs ZUORDENBAREN** — `sip-trunking`,
+  `call-control`, `speech-to-text`, `text-to-speech`, `recording`,
+  `ai-voice-assistant`. **`inference` ist ausgeschlossen:** der Beleg trägt
+  ausschließlich `conversation_id`, also weder Anker noch Session, und ist damit
+  strukturell keinem Call zuordenbar (LCT-FIX-1). Stünde er in der Pflicht-Menge,
+  wäre sie dauerhaft unerfüllbar → jeder Call bliebe `'incomplete'` → **jede
+  Rückerstattung verfällt, während jede Nachforderung gebucht wird** (einseitige
+  Korrektur zulasten des Kunden, Deckungsquote dauerhaft 0 %). Der Boot-Guard
+  (`costTruingBookingFindings`) lehnt diesen Fall seit LCT-FIX-1 genauso hart ab wie
+  die leere Menge — ein frischer Live-Beleg *enthält* `inference`-Records, deshalb
+  darf er nicht ungefiltert in die Variable übernommen werden.
+  Geprüft wird gegen die **Allowlist der zuordenbaren Typen**
+  (`ASSIGNABLE_COST_RECORD_TYPES`, abgeleitet aus dem Produktions-Enum): jeder Wert
+  außerhalb dieser sechs führt zum Boot-Refusal — auch eine abweichende Schreibweise
+  (`Inference`), ein Tippfehler oder das nicht existierende `"call"`. Der Vergleich in
+  `cost-truing.js` ist exakt und case-sensitiv; ein solcher Wert wäre sonst genauso
+  dauerhaft unerfüllbar wie `inference`, nur ohne Warnung.
   **OWNER-ENTSCHEIDUNG vor dem Deploy:** nicht jeder Call trägt jeden Typ (z.B. läuft
   `ai-voice-assistant` nur, wenn der inzwischen zum Rückbau vorgesehene
-  Assistant-Pfad aktiv war — Owner-Entscheidung 5). Welche der sieben Typen als
-  **Pflicht** in die Menge aufgenommen werden (d.h. ihr Fehlen schließt einen Call
+  Assistant-Pfad aktiv war — Owner-Entscheidung 5). Welche der sechs wählbaren Typen
+  als **Pflicht** in die Menge aufgenommen werden (d.h. ihr Fehlen schließt einen Call
   als `'incomplete'`), muss der Owner anhand eines frischen Live-Belegs festlegen,
   nicht die P3-Kandidatenliste blind übernehmen (P4-Report, Abschnitt 9).
   Konsequenz falsch/leer: Boot-Refusal, `/healthz` nie erreichbar.
+
+- [x] **Session-Zuordnung ist gemessen, nicht angenommen** (LCT-FIX-1) — **nicht
+  blockierend, erledigt.** Die zweistufige Beleg-Zuordnung (`getVoiceCostRecords`)
+  setzt voraus, dass eine Session **call-lokal** ist. Wäre sie es nicht, kippte die
+  Zuordnung von fail-closed nach fail-OPEN: fremde Belege landeten auf dem eigenen
+  Tenant. Diese Invariante wurde am 2026-07-21 read-only über das **gesamte
+  Telnyx-Konto** geprüft — nicht an einer Stichprobe:
+
+  > 297 Belege, 54 Sessions. **0 Sessions tragen mehr als einen Anker**
+  > (`call_control_id`). Verteilung Anker/Session: 27×1, 27×0. Mehrere *Legs* je
+  > Session (bis 3) sind normal — das sind die Beine desselben Anrufs.
+
+  Gegenprobe an drei echten Anrufen über beide Pfade (Assistant-Outbound und
+  TeXML-Inbound), mit dem echten Anrufsfenster: 7 / 7 / 10 Belege, Pflicht-Typen
+  jeweils vollständig, Summen deckungsgleich mit der Einzelabfrage.
+
+  **Grenze der Messung, bewusst benannt:** das Konto hatte zum Messzeitpunkt wenig
+  Verkehr, und in der Stichprobe liefen **nie zwei Anrufe gleichzeitig**. Genau
+  Parallelität ist der Fall, der die Invariante stressen würde. Sie ist damit gestützt,
+  nicht bewiesen — bei nennenswertem Parallelverkehr erneut prüfen (dieselbe Abfrage:
+  Sessions mit mehr als einem Anker suchen; jeder Treffer ist ein Abbruchgrund).
+
+  **Laufende Beobachtung statt Deploy-Gate:** die PII-freie Log-Zeile
+  `[telnyx/voice] getVoiceCostRecords ok records=… via_anchor=… via_telnyx_session_id=…
+  via_call_session_id=… rejected=…` zählt je Zuordnungsweg getrennt (Format testgepinnt).
+  `via_anchor` = Identitätsgleichheit, kein Annahme-Risiko; die `via_*_session_id`-Spalten
+  sind die Belege, die allein über die Invariante hereinkamen — real 4 von 7 bzw. 9 von 10.
+  Auffällig ist nicht ihre Existenz, sondern ein **Sprung** gegenüber diesen Größenordnungen.
+
+  *Warum hier kein blockierendes Vor-Deploy-Gate steht:* die `via_`-Zähler entstehen
+  ausschließlich in `getVoiceCostRecords`, deren einziger Aufrufer der Sweep ist — und der
+  bucht unkonditional (`COST_TRUING_BOOKING_ENABLED` ist seit P8 entfernt). Eine Auflage
+  „prüfen, bevor gebucht wird" wäre nicht ausführbar: wer die Zahlen lesen kann, hat bereits
+  gebucht. Statt einer Schein-Sicherung steht deshalb oben die Messung, die vor jedem Deploy
+  ohne Buchung wiederholbar ist.
 
 - [ ] **`MAX_BUDGET_EUR` ist live ≥ 9 (= 900 ct).**
   P6 führt eine erste, **fatale** Boot-Guard-Linie (`planCapInertFindings`) ein, die
