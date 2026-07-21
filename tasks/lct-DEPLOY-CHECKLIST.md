@@ -16,7 +16,7 @@ Kette, nicht für den Merge.
 | `PROVIDER_TO_BUCKET_RATE_MICRO` | P2 | `920000` (= 0,92 EUR/USD) | Default fahren lassen, außer der Kurs hat sich seit der letzten Owner-Prüfung wesentlich bewegt. **Muss im Band [0,5×..2,0×] um den Anker `920000` liegen** (also 460000–1840000), sonst verweigert der Boot fatal (ab P4; in P2/P3 nur WARN). | Zehnerpotenz-Vertipper (z.B. `920` statt `920000`) → Boot-Refusal `exit(1)` seit P4 unkonditional, unabhängig vom Stand jeder anderen Variable. |
 | `COST_TRUING_DELAY_MINUTES` | P3 | `180` | Default fahren lassen; CDR-Latenz beim Provider ist laut Plan unbelegt, Wert nach erstem Live-Beleg empirisch nachziehen, nicht raten. | Zu kurz: Sweep versucht Abgleich, bevor der Provider die Records hat, verbraucht Versuche unnötig. Zu lang: verzögert Sichtbarkeit, kein Sicherheitsrisiko. |
 | `COST_TRUING_MAX_ATTEMPTS` | P3 | `5` | Default fahren lassen. | Zu niedrig: Calls werden nach wenigen Versuchen dauerhaft als `unavailable` abgeschlossen, bevor der Provider die Daten geliefert hat. |
-| `COST_TRUING_REQUIRED_RECORD_TYPES` | P3, seit P4/P8 **fatal** | leer (`""`) | **BLOCKIEREND, siehe Abschnitt 2.** Muss vor jedem Deploy dieser Kette aus einem frischen Live-Beleg gesetzt werden — **ohne `inference`** (nicht zuordenbar, seit LCT-FIX-1 ebenfalls Boot-Refusal). | Leer + `COST_TRUING_BOOKING_ENABLED` existiert seit P8 nicht mehr als Abschalter → Boot verweigert **unkonditional** (`exit(1)`, jeder Deploy, jeder Prozessstart). Enthält die Menge `inference`, verweigert der Boot ebenfalls (`exit(1)`) — vor LCT-FIX-1 wäre sie dauerhaft unerfüllbar gewesen: keine Rückerstattung, jede Nachforderung gebucht. |
+| `COST_TRUING_REQUIRED_RECORD_TYPES` | P3, seit P4/P8 **fatal** | leer (`""`) | **BLOCKIEREND, siehe Abschnitt 2.** Muss vor jedem Deploy dieser Kette aus einem frischen Live-Beleg gesetzt werden — **ohne `inference`** (nicht zuordenbar, seit LCT-FIX-1 ebenfalls Boot-Refusal). | Leer + `COST_TRUING_BOOKING_ENABLED` existiert seit P8 nicht mehr als Abschalter → Boot verweigert **unkonditional** (`exit(1)`, jeder Deploy, jeder Prozessstart). Enthält die Menge einen Wert außerhalb der sechs zuordenbaren Typen (`inference`, aber auch jede abweichende Schreibweise oder ein Tippfehler), verweigert der Boot ebenfalls (`exit(1)`) — sonst wäre sie dauerhaft unerfüllbar: keine Rückerstattung, jede Nachforderung gebucht. |
 | `COST_TRUING_MIN_COVERAGE_PERCENT` | P3 | `80` | Default fahren lassen; ist die Vorbedingungs-Schwelle für die Aussagekraft der Korrekturbuchung und darf laut Plan **nie gesenkt werden**, um eine Vorbedingung künstlich zu erfüllen. | Zu niedrig gesenkt: die Deckungsquoten-Warnung verliert ihre Aussagekraft, Owner-Aktionen (P4b-Tarifsenkung) stützen sich auf eine zu dünne Datenbasis. |
 | `COST_TRUING_COVERAGE_STALL_SWEEPS` | P3 | `8` (≈ 2 Tage bei 6h-Kadenz) | Default fahren lassen. | Prozess-lokaler Zähler, wird bei Free-Tier-Restart genullt — bekanntes akzeptiertes Restrisiko, kein Blocker. |
 | `COST_DRIFT_WARN_PERCENT` | P3 | `50` | Default fahren lassen. | Die Drift-Prozentzahl aus P3 vergleicht USD-Mikro-Cent gegen EUR-Cent ohne Umrechnung (bewusste Log-only-Vereinfachung); P5 rechnet korrekt um. Reiner Log-Wert, kein Gate. |
@@ -65,6 +65,12 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   (`costTruingBookingFindings`) lehnt diesen Fall seit LCT-FIX-1 genauso hart ab wie
   die leere Menge — ein frischer Live-Beleg *enthält* `inference`-Records, deshalb
   darf er nicht ungefiltert in die Variable übernommen werden.
+  Geprüft wird gegen die **Allowlist der zuordenbaren Typen**
+  (`ASSIGNABLE_COST_RECORD_TYPES`, abgeleitet aus dem Produktions-Enum): jeder Wert
+  außerhalb dieser sechs führt zum Boot-Refusal — auch eine abweichende Schreibweise
+  (`Inference`), ein Tippfehler oder das nicht existierende `"call"`. Der Vergleich in
+  `cost-truing.js` ist exakt und case-sensitiv; ein solcher Wert wäre sonst genauso
+  dauerhaft unerfüllbar wie `inference`, nur ohne Warnung.
   **OWNER-ENTSCHEIDUNG vor dem Deploy:** nicht jeder Call trägt jeden Typ (z.B. läuft
   `ai-voice-assistant` nur, wenn der inzwischen zum Rückbau vorgesehene
   Assistant-Pfad aktiv war — Owner-Entscheidung 5). Welche der sechs wählbaren Typen
@@ -81,10 +87,26 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   (eine der IDs ist nicht call-lokal), kippt die Zuordnung von fail-closed nach
   fail-OPEN: fremde Belege würden auf den eigenen Tenant gebucht.
   **Prüfung nach dem Deploy, vor dem ersten Sweep mit Buchung:** die PII-freie Log-Zeile
-  `[telnyx/voice] getVoiceCostRecords ok sessions=… records=… rejected=…` lesen —
-  `sessions=1` je Call ist der erwartete Zustand, `sessions>1` widerlegt die Annahme und
-  ist der Abbruchgrund. `records=0` bei bekannt kostenpflichtigem Call heißt: Anker nicht
-  gefunden (fail-closed, kein Geldrisiko, aber Deckungsquote 0 %).
+  `[telnyx/voice] getVoiceCostRecords ok records=… via_anchor=… via_telnyx_session_id=…
+  via_call_session_id=… rejected=…` lesen. Die `via_`-Spalten zählen **je Zuordnungsweg
+  getrennt**, wie viele Belege gebucht wurden; ihr Format ist testgepinnt
+  (`test/telnyx-cost-records.test.js`). Zu lesen ist:
+  - `via_anchor` = Belege, die die eigene `call_control_id` tragen (Identitätsgleichheit,
+    kein Annahme-Risiko).
+  - `via_telnyx_session_id` / `via_call_session_id` = Belege, die **ausschließlich** über
+    die Session-Annahme hereinkamen. **Nur diese Zahlen tragen das fail-OPEN-Risiko** —
+    eine nicht call-lokale Session-ID würde sich genau hier als zusätzliche Belege zeigen,
+    ohne dass irgendeine andere Zahl auffällig wäre.
+
+  **Gegenprobe (der eigentliche Beweis, ein Zählerstand allein genügt nicht):** einen Call
+  auswählen, der **parallel zu einem zweiten Call** lief, und die Beleganzahl je
+  `record_type` gegen das Telnyx-Portal (Detail Records desselben Zeitfensters) halten.
+  Stimmen sie überein, ist die Annahme für diesen Fall gestützt; liefert Hermes **mehr**
+  Belege als das Portal für diesen Call ausweist, ist die Annahme widerlegt (fremde Belege
+  auf dem eigenen Tenant) — **Abbruchgrund**. `records=0` bei bekannt kostenpflichtigem Call
+  heißt: kein Beleg zugeordnet (fail-closed, kein Geldrisiko, aber Deckungsquote 0 %);
+  `via_anchor=0` dabei heißt zusätzlich, dass kein Beleg über den Anker kam (Anker fehlte
+  oder fiel vorher an Währung/Zeitfenster).
 
 - [ ] **`MAX_BUDGET_EUR` ist live ≥ 9 (= 900 ct).**
   P6 führt eine erste, **fatale** Boot-Guard-Linie (`planCapInertFindings`) ein, die

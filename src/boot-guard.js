@@ -329,9 +329,9 @@ export function alertChannelFindings(platformAlertSmsTo) {
 
 // LCT P4: die Riegel des Flips. FATAL = leere Pflicht-Menge bei aktiver Buchung ("Ein
 // Dienst, der Geld zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft,
-// darf nicht starten"). FATAL = Pflicht-Typ, den der Adapter nachweislich nie zuordnen kann
-// (LCT-FIX-1) - derselbe Sachverhalt wie die leere Menge, nur andersherum unerfuellbar:
-// beide nehmen der Vollstaendigkeits-Aussage jeden Sinn, bevor Geld bewegt wird. WARN =
+// darf nicht starten"). FATAL = Pflicht-Typ, den der Adapter nie zuordnen KANN (LCT-FIX-1)
+// - derselbe Sachverhalt wie die leere Menge, nur andersherum unerfuellbar: beide nehmen
+// der Vollstaendigkeits-Aussage jeden Sinn, bevor Geld bewegt wird. WARN =
 // Deckungsquote unter der Schwelle (ablesbar, kein exit(1) - ein Boot-Refusal tauschte ein
 // Kostenproblem gegen einen Telefonie-Totalausfall).
 export const COST_TRUING_BOOKING_FINDING = Object.freeze({
@@ -345,16 +345,16 @@ export const COST_TRUING_BOOKING_FINDING = Object.freeze({
 // diese Pruefung immer (kein Flag-Kurzschluss mehr, der sie auslassen koennte).
 // coveragePercent wird HEREINGEREICHT, nicht hier gerechnet: die eine Quelle ist
 // costTruingCoveragePercent(store) aus P3 - zwei Rechnungen derselben Groesse waeren
-// zwei Zahlen, die auseinanderlaufen. Genauso unassignableRecordTypes: die Liste der nie
-// zuordenbaren Belegtypen gehoert dem Adapter, der die Belege liest, nicht diesem Guard -
-// hier waere sie eine zweite Quelle, die stillschweigend veralten kann. Der Aufrufer
-// reicht sie herein. Der Parameter ist PFLICHT (kein []-Default: ein
-// vergessenes Argument soll laut scheitern, nicht die Pruefung lautlos abschalten).
+// zwei Zahlen, die auseinanderlaufen. Genauso assignableRecordTypes: welche Belegtypen es
+// gibt und welche davon zuordenbar sind, gehoert dem Adapter, der die Belege liest, nicht
+// diesem Guard - hier waere es eine zweite Quelle, die stillschweigend veralten kann. Der
+// Aufrufer reicht sie herein. Der Parameter ist PFLICHT (kein []-Default: ein vergessenes
+// Argument soll laut scheitern, nicht die Pruefung lautlos abschalten).
 // Befunde koennen GEMEINSAM auftreten; der Aufrufer behandelt fatal zuerst (Muster
 // assertSpendCapCoherence).
 export function costTruingBookingFindings({
   requiredRecordTypes,
-  unassignableRecordTypes,
+  assignableRecordTypes,
   coveragePercent,
   minCoveragePercent,
 }) {
@@ -369,16 +369,23 @@ export function costTruingBookingFindings({
         "Pflicht-Menge aus einem Live-Beleg setzen.",
     });
   }
-  const unassignable = requiredRecordTypes.filter((t) => unassignableRecordTypes.includes(t));
+  // Gegen die ALLOWLIST der zuordenbaren Typen, NICHT gegen eine Deny-Liste: eine Deny-Liste
+  // laesst jeden Wert durch, der kein realer record_type ist (Case-Drift "Inference", das
+  // nicht existierende "call", jeder Tippfehler) - und der Schaden ist bei allen derselbe
+  // wie beim strukturell unzuordenbaren Typ. Der Vergleich ist exakt und case-sensitiv wie
+  // der spaetere Vollstaendigkeits-Vergleich in cost-truing.js; nur so meldet der Guard
+  // genau das, was dort dauerhaft unerfuellbar bliebe.
+  const unassignable = requiredRecordTypes.filter((t) => !assignableRecordTypes.includes(t));
   if (unassignable.length > 0) {
     findings.push({
       code: COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE,
       fatal: true,
       message:
-        `COST_TRUING_REQUIRED_RECORD_TYPES fordert ${unassignable.join(",")} - diese Belegtypen ` +
-        "tragen weder Anker noch Session und koennen keinem Call zugeordnet werden. Die " +
-        "Pflicht-Menge waere dauerhaft unerfuellbar: keine Rueckerstattung mehr, jede " +
-        "Nachforderung gebucht. Diese Typen aus der Pflicht-Menge entfernen.",
+        `COST_TRUING_REQUIRED_RECORD_TYPES fordert ${unassignable.join(",")} - kein zuordenbarer ` +
+        "Belegtyp (unbekannter Wert/Tippfehler/andere Schreibweise, oder ein Typ, der weder " +
+        "Anker noch Session traegt). Die Pflicht-Menge waere dauerhaft unerfuellbar: keine " +
+        "Rueckerstattung mehr, jede Nachforderung gebucht. Zuordenbar sind exakt: " +
+        `${assignableRecordTypes.join(",")}.`,
     });
   }
   if (coveragePercent < minCoveragePercent) {

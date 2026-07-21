@@ -33,8 +33,9 @@ const SPEAK_ACTION = "speak";
 const DETAIL_RECORDS_BASE = "/v2/detail_records";
 // HTTP-200-verifizierte record_type-Enumwerte (Messung 2026-07-20). "call" existiert NICHT
 // (HTTP 400, code 10011). amd/conference/messaging/media-streaming sind gueltig, aber leer
-// -> nicht abgefragt (Requests ohne Ertrag). EINE Quelle des Enums (G5/G25).
-const COST_RECORD_TYPES = Object.freeze([
+// -> nicht abgefragt (Requests ohne Ertrag). EINE Quelle des Enums (G5/G25) - exportiert,
+// damit Tests und der Boot-Guard gegen genau diese Menge koppeln statt gegen eine Kopie.
+export const COST_RECORD_TYPES = Object.freeze([
   "sip-trunking", "call-control", "speech-to-text",
   "text-to-speech", "recording", "inference", "ai-voice-assistant",
 ]);
@@ -61,23 +62,38 @@ const ANCHOR_ID_FIELD = "call_control_id";
 // koennen die Annahme daher nur nachspielen, nicht belegen. Faellt sie - eine der beiden
 // IDs ist nicht call-lokal, z.B. sitzungsuebergreifend im Assistant-Pfad -, kippt die
 // Zuordnung von fail-closed nach fail-OPEN: fremde Belege landeten auf dem eigenen Tenant.
-// Falsifizierbar ohne Codeaenderung am PII-freien Log dieser Methode: `sessions=` zaehlt
-// die je Call aufgeloesten Sessions, ein Wert > 1 ist das Warnsignal. Die Live-Verifikation
-// vor dem ersten Deploy steht als Auflage in tasks/lct-DEPLOY-CHECKLIST.md.
+// Falsifizierbar ohne Codeaenderung am PII-freien Log dieser Methode: es zaehlt je
+// Zuordnungsweg GETRENNT, wie viele Belege gebucht wurden (via_anchor / via_<Session-Feld>).
+// Nur diese Aufteilung zeigt den fail-OPEN-Fall: die ueber ein Session-Feld - und NICHT
+// ueber den Anker - angenommenen Belege sind genau die, die eine nicht call-lokale ID
+// hereinliesse. Gegenprobe der Auflage in tasks/lct-DEPLOY-CHECKLIST.md: die Beleganzahl
+// eines Calls, der PARALLEL zu einem zweiten lief, muss der des Telnyx-Portals entsprechen.
 const SESSION_ID_FIELDS = Object.freeze(["telnyx_session_id", "call_session_id"]);
+// Der Anker als Zuordnungsweg (Stufe 1) neben den Session-Feldern (Stufe 2). Die Wege sind
+// die Schluessel des Zaehlers im Log; sie werden IMMER alle gemeldet, auch mit 0 - ein je
+// nach Datenlage verschwindender Schluessel machte die Sonde unlesbar.
+const ANCHOR_ROUTE = "anchor";
+const ASSIGNMENT_ROUTES = Object.freeze([ANCHOR_ROUTE, ...SESSION_ID_FIELDS]);
 // Belegtypen, die STRUKTURELL nie einem Call zugeordnet werden koennen: sie tragen weder
 // den Anker noch eine Session-Referenz. `inference` fuehrt ausschliesslich conversation_id
-// (Messung 2026-07-21). EINE Quelle dieser Aussage (G5): der Boot-Guard lehnt genau diese
-// Typen als PFLICHT-Typ ab (COST_TRUING_REQUIRED_RECORD_TYPES). Eine unerfuellbare
-// Pflicht-Menge haelt die Vollstaendigkeits-Aussage dauerhaft auf false - dann verfaellt
-// jede Rueckerstattung, waehrend jede Nachforderung gebucht wird (einseitige Korrektur
-// zulasten des Kunden, Deckungsquote dauerhaft 0 %).
+// (Messung 2026-07-21). EINE Quelle dieser Aussage (G5).
 export const UNASSIGNABLE_COST_RECORD_TYPES = Object.freeze(["inference"]);
+// Die Gegenmenge: die Belegtypen, die ueberhaupt als PFLICHT-Typ taugen
+// (COST_TRUING_REQUIRED_RECORD_TYPES). Der Boot-Guard prueft gegen DIESE Allowlist, nicht
+// gegen die Deny-Liste darueber - eine Deny-Liste laesst jeden Wert durch, der kein realer
+// record_type ist (Case-Drift `Inference`, das nicht existierende "call", jeder Tippfehler),
+// und der Schaden ist derselbe: die Pflicht-Menge waere dauerhaft unerfuellbar, jeder Call
+// bliebe 'incomplete' - keine Rueckerstattung mehr, jede Nachforderung gebucht (einseitige
+// Korrektur zulasten des Kunden, Deckungsquote dauerhaft 0 %). Struktur statt Konvention
+// (G27): abgeleitet, nicht von Hand gepflegt.
+export const ASSIGNABLE_COST_RECORD_TYPES = Object.freeze(
+  COST_RECORD_TYPES.filter((t) => !UNASSIGNABLE_COST_RECORD_TYPES.includes(t)),
+);
 // Kandidaten-Felder des Record-Zeitstempels fuer den zusaetzlichen CLIENT-seitigen
 // Fensterfilter (Design-Entscheidung P1, s. getVoiceCostRecords) - der Feldname ist wie
 // die Query-Parameternamen des Zeitfensters UNBELEGT (Kap. 2.6 belegt nur cost/rate/
 // currency/rate_measured_in). Kein Treffer -> Fensterpruefung greift nicht (die ZUORDNUNG
-// ueber Anker/Session ist der primaere Riegel, s. assignmentRejectionReason; ein fehlendes
+// ueber Anker/Session ist der primaere Riegel, s. assignmentOutcome; ein fehlendes
 // Zeitstempel-Feld verwirft den Record NICHT - anders als eine fehlende Session-Referenz,
 // die IMMER verwirft). Die Messung 2026-07-21 zeigt zusaetzlich `started_at` an sip-trunking;
 // bewusst NICHT aufgenommen - das Zeitfenster bleibt in dieser Phase unveraendert.
@@ -182,13 +198,15 @@ function transcriptionFields(language) {
 // ---- CDR/Ist-Kosten Helfer (PLAN-LIVE-COST-TRACING P1) ----
 
 // Session-Referenzen EINES Roh-Belegs (G5: eine Stelle, ein Feldvertrag) - geteilt von der
-// Anker-Sammlung (Stufe 1) und der Zuordnungspruefung (Stufe 2).
-function recordSessionIds(raw) {
-  const ids = [];
+// Anker-Sammlung (Stufe 1) und der Zuordnungspruefung (Stufe 2). Jede Referenz traegt den
+// Feldnamen mit: ueber WELCHES Feld ein Beleg hereinkam, ist die Falsifikations-Groesse der
+// unbelegten Session-Annahme (s. SESSION_ID_FIELDS) - eine nackte ID-Liste verloere sie.
+function recordSessionRefs(raw) {
+  const refs = [];
   for (const field of SESSION_ID_FIELDS) {
-    if (raw[field]) ids.push(String(raw[field]));
+    if (raw[field]) refs.push({ field, id: String(raw[field]) });
   }
-  return ids;
+  return refs;
 }
 
 // Stufe 1: zeigt der Beleg DIREKT auf die uebergebene Leg-Referenz? Exakte Gleichheit auf
@@ -207,23 +225,27 @@ function anchoredSessionIds(rawRecords, legId) {
   const sessionIds = new Set();
   for (const raw of rawRecords) {
     if (!matchesAnchor(raw, legId)) continue;
-    for (const sessionId of recordSessionIds(raw)) sessionIds.add(sessionId);
+    for (const ref of recordSessionRefs(raw)) sessionIds.add(ref.id);
   }
   return sessionIds;
 }
 
-// Stufe 2: gehoert der Beleg zum Call? null = ja (direkter Anker ODER eine Session aus der
-// Anker-Menge), sonst der PII-freie Ablehnungsgrund fuer den Zaehler.
+// Stufe 2: gehoert der Beleg zum Call? { via } = ja, und zwar ueber DIESEN Weg (Anker oder
+// konkretes Session-Feld); { reason } = nein, mit dem PII-freien Ablehnungsgrund. Der Weg
+// wird mitgegeben, nicht nur das Ja: nur getrennt gezaehlt zeigt das Log, wie viele Belege
+// allein an einem Session-Feld haengen - die Groesse, die bei einer nicht call-lokalen ID
+// von fail-closed nach fail-OPEN kippt.
 // BEWUSSTE GRENZE: die Typen aus UNASSIGNABLE_COST_RECORD_TYPES tragen weder Anker noch
 // Session (heute `inference`: nur conversation_id). Sie bleiben unzuordenbar
 // (session_unresolved) und fehlen in der Summe; im Messfenster 2026-07-21 waren das
 // 0,000000 USD. Die Zuordnung dafuer aufzuweichen waere der teure Fehler, nicht der
 // fehlende Beleg - deshalb verbietet der Boot-Guard sie stattdessen als Pflicht-Typ.
-function assignmentRejectionReason(raw, { legId, sessionIds }) {
-  if (matchesAnchor(raw, legId)) return null;
-  const recordSessions = recordSessionIds(raw);
-  if (recordSessions.length === 0) return "session_unresolved";
-  return recordSessions.some((id) => sessionIds.has(id)) ? null : "session_mismatch";
+function assignmentOutcome(raw, { legId, sessionIds }) {
+  if (matchesAnchor(raw, legId)) return { via: ANCHOR_ROUTE };
+  const refs = recordSessionRefs(raw);
+  if (refs.length === 0) return { reason: "session_unresolved" };
+  const hit = refs.find((ref) => sessionIds.has(ref.id));
+  return hit ? { via: hit.field } : { reason: "session_mismatch" };
 }
 
 // Client-seitiger Zusatzfilter gegen das Anrufsfenster (Design-Entscheidung P1): kein
@@ -238,16 +260,17 @@ function withinRecordWindow(raw, startedAt, endedAt) {
   return t >= Date.parse(startedAt) && t <= Date.parse(endedAt);
 }
 
-// Roh-Record -> Port-Record oder Ablehnungsgrund (fuer den PII-freien Zaehler in
-// getVoiceCostRecords). EINE Gueltigkeitsquelle je Record, in dieser Reihenfolge:
-// Waehrung, Zuordnung (Anker/Session), Zeitfenster, Kosten - jeder Zweig mit eigenem Grund.
+// Roh-Record -> Port-Record (mit dem Zuordnungsweg `via`) oder Ablehnungsgrund (beides fuer
+// die PII-freien Zaehler in getVoiceCostRecords). EINE Gueltigkeitsquelle je Record, in
+// dieser Reihenfolge: Waehrung, Zuordnung (Anker/Session), Zeitfenster, Kosten - jeder
+// Zweig mit eigenem Grund.
 function toCostRecord(raw, { legId, sessionIds, startedAt, endedAt }) {
   const currency = String(raw.currency || "").trim().toUpperCase();
   const expectedCurrency = String(config.billing.providerCurrency).trim().toUpperCase();
   if (!currency || currency !== expectedCurrency) return { reason: "currency_mismatch" };
 
-  const assignmentReason = assignmentRejectionReason(raw, { legId, sessionIds });
-  if (assignmentReason) return { reason: assignmentReason };
+  const assignment = assignmentOutcome(raw, { legId, sessionIds });
+  if (assignment.reason) return { reason: assignment.reason };
 
   if (!withinRecordWindow(raw, startedAt, endedAt)) return { reason: "out_of_window" };
 
@@ -255,6 +278,7 @@ function toCostRecord(raw, { legId, sessionIds, startedAt, endedAt }) {
   if (costMicroCents === null) return { reason: "cost_unparsable" };
 
   return {
+    via: assignment.via,
     record: {
       recordType: raw.record_type,
       costMicroCents,
@@ -303,14 +327,24 @@ async function fetchAllCostRecords() {
   return { ok: true, raw: rawRecords };
 }
 
+// Zuordnungswege als feste Spalten, in ASSIGNMENT_ROUTES-Reihenfolge und immer vollzaehlig
+// (fehlender Weg = 0). Das Format haengt eine BLOCKIERENDE Deploy-Auflage daran
+// (tasks/lct-DEPLOY-CHECKLIST.md) und ist deshalb testgepinnt.
+function formatAssignmentRoutes(acceptedByRoute) {
+  return ASSIGNMENT_ROUTES.map((route) => `via_${route}=${acceptedByRoute[route] || 0}`).join(" ");
+}
+
 // PII-freier Erfolgs-Log fuer getVoiceCostRecords (OBS-2-Linie wie logCallControlOk): Op-Name,
-// ANZAHL aufgeloester Sessions, Anzahl akzeptierter Records + Ablehnungsgruende. Alles
+// Anzahl akzeptierter Records, dieselbe Anzahl je Zuordnungsweg + Ablehnungsgruende. Alles
 // Zaehler, nie Werte: NIE eine call_control_id, NIE eine Session-ID, NIE legId, NIE eine
-// Rufnummer, NIE der Key (Regel 4/5). sessions=0 unterscheidet "Anker nicht gefunden" von
-// "Anker da, aber nichts passte" - ohne diese Zahl sind beide Faelle im Log ununterscheidbar.
-function logCostRecordsOk({ sessionCount, recordCount, rejectedByReason }) {
+// Rufnummer, NIE der Key (Regel 4/5). via_anchor=0 bei records=0 heisst "kein Beleg kam ueber
+// den Anker herein" (Anker fehlte oder fiel vorher an Waehrung/Zeitfenster); jede Zahl in
+// einer via_<Session-Feld>-Spalte zaehlt Belege, die AUSSCHLIESSLICH die Session-Annahme
+// hereingelassen hat - genau die Groesse, die die Auflage vor dem ersten Deploy gegen das
+// Telnyx-Portal gegenprueft.
+function logCostRecordsOk({ recordCount, acceptedByRoute, rejectedByReason }) {
   console.log(
-    `[telnyx/voice] getVoiceCostRecords ok sessions=${sessionCount} records=${recordCount} rejected=${JSON.stringify(rejectedByReason)}`,
+    `[telnyx/voice] getVoiceCostRecords ok records=${recordCount} ${formatAssignmentRoutes(acceptedByRoute)} rejected=${JSON.stringify(rejectedByReason)}`,
   );
 }
 
@@ -479,13 +513,18 @@ export const telnyxVoice = {
 
     const sessionIds = anchoredSessionIds(fetched.raw, legId);
     const records = [];
+    const acceptedByRoute = {};
     const rejectedByReason = {};
     for (const raw of fetched.raw) {
       const outcome = toCostRecord(raw, { legId, sessionIds, startedAt, endedAt });
-      if (outcome.record) records.push(outcome.record);
-      else rejectedByReason[outcome.reason] = (rejectedByReason[outcome.reason] || 0) + 1;
+      if (outcome.record) {
+        records.push(outcome.record);
+        acceptedByRoute[outcome.via] = (acceptedByRoute[outcome.via] || 0) + 1;
+      } else {
+        rejectedByReason[outcome.reason] = (rejectedByReason[outcome.reason] || 0) + 1;
+      }
     }
-    logCostRecordsOk({ sessionCount: sessionIds.size, recordCount: records.length, rejectedByReason });
+    logCostRecordsOk({ recordCount: records.length, acceptedByRoute, rejectedByReason });
     return { ok: true, records };
   },
 };

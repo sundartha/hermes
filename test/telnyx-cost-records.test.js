@@ -15,7 +15,9 @@
 // CALL-LOKALEN Wert bezeichnen, spielen diese Fixtures nach - sie beweisen sie NICHT. Was
 // die Tests hier wirklich pinnen, ist die fail-closed-Richtung: was NICHT in der vom Anker
 // aufgespannten Session liegt, kommt nie mit. Die Live-Verifikation der Annahme (Log-Zeile
-// `sessions=`) steht als Auflage in tasks/lct-DEPLOY-CHECKLIST.md.
+// mit den je Zuordnungsweg getrennten Zaehlern `via_…`) steht als Auflage in
+// tasks/lct-DEPLOY-CHECKLIST.md - das Format ist hier gepinnt, damit die Auflage nicht
+// still an einer geaenderten Log-Zeile zerbricht.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -33,7 +35,7 @@ process.env.PROVIDER_CURRENCY = "USD";
 const { parseDecimalToMicroCents, parseNonNegativeInteger } = await import(
   "../src/telephony/adapters/telnyx/cost-parse.js"
 );
-const { telnyxVoice, UNASSIGNABLE_COST_RECORD_TYPES } = await import(
+const { telnyxVoice, COST_RECORD_TYPES, UNASSIGNABLE_COST_RECORD_TYPES } = await import(
   "../src/telephony/adapters/telnyx/voice.js"
 );
 const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
@@ -82,8 +84,11 @@ function stubFetchByRecordType(pagesByType, { status = 200 } = {}) {
   return calls;
 }
 
-// EINE Quelle der gemessenen ID-Felder je record_type (Messung 2026-07-21). Werte kommen als
-// Parameter, damit Fremd-Session-Faelle DIESELBE Form mit anderen IDs bauen (G5).
+// Die gemessenen ID-Felder je record_type (Messung 2026-07-21). Werte kommen als Parameter,
+// damit Fremd-Session-Faelle DIESELBE Form mit anderen IDs bauen (G5). Die Schluessel-MENGE
+// ist KEINE zweite Quelle des Enums: sie ist an COST_RECORD_TYPES gekoppelt (Test weiter
+// unten) - ohne die Kopplung koennte ein neuer Produktions-Typ hier fehlen und der
+// Deckungstest bliebe gruen, waehrend der Boot-Guard den Typ nicht kennt.
 const ID_FIELDS_BY_RECORD_TYPE = Object.freeze({
   "sip-trunking": ({ anchorId, sessionId }) => ({ call_control_id: anchorId, telnyx_session_id: sessionId }),
   // KEIN call_control_id - genau der Fall, der nur ueber die Session auffindbar ist.
@@ -229,6 +234,10 @@ function stubRealRecords({ ids = OWN_IDS } = {}) {
 // (bekaeme ein Typ in der Tabelle spaeter einen Anker, bliebe die Assertion gruen und
 // pruefte ab da nichts mehr). Ohne Anker UND ohne Session waere der Typ gar nicht
 // zuordenbar - das ist die andere Menge (UNASSIGNABLE_COST_RECORD_TYPES).
+// Erwartete Kardinalitaeten AUS den Produktions-Konstanten, nicht als nackte Zahlen (G25/S2):
+// ein Typ mehr im Enum aendert beide Erwartungen automatisch mit.
+const ASSIGNABLE_RECORD_COUNT = COST_RECORD_TYPES.length - UNASSIGNABLE_COST_RECORD_TYPES.length;
+
 const SESSION_ONLY_RECORD_TYPES = Object.freeze(
   Object.keys(ID_FIELDS_BY_RECORD_TYPE).filter(
     (t) => !ID_FIELDS_BY_RECORD_TYPE[t](OWN_IDS).call_control_id
@@ -242,7 +251,11 @@ test("getVoiceCostRecords: reale Belegformen - der Anker spannt die Session auf,
   assert.equal(res.ok, true);
   // ROT VOR DEM FIX: die alte leg_id/call_leg_id-Zuordnung findet in diesen realen Formen
   // KEINEN einzigen Beleg -> records.length === 0.
-  assert.equal(res.records.length, 6, "6 von 7 Typen zuordenbar (inference traegt keine Session)");
+  assert.equal(
+    res.records.length,
+    ASSIGNABLE_RECORD_COUNT,
+    "alle Typen ausser den unzuordenbaren kommen mit (inference traegt keine Session)",
+  );
   const sum = res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
   assert.equal(sum, 9326870); // 4010000 + 100000 + 0 + 16870 + 200000 + 5000000
   const found = new Set(res.records.map((r) => r.recordType));
@@ -258,10 +271,10 @@ test("getVoiceCostRecords: reale Belegformen - der Anker spannt die Session auf,
   assert.equal(res.records.find((r) => r.recordType === "sip-trunking").billedSec, 60);
 });
 
-test("getVoiceCostRecords: fragt alle sieben record_types mit Bearer-Key ab", async () => {
+test("getVoiceCostRecords: fragt jeden record_type aus COST_RECORD_TYPES mit Bearer-Key ab", async () => {
   const calls = stubRealRecords();
   await telnyxVoice.getVoiceCostRecords(WINDOW);
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, COST_RECORD_TYPES.length);
   for (const c of calls) {
     assert.ok(c.url.startsWith(`${API_BASE}/v2/detail_records`));
     assert.equal(c.opts.headers.Authorization, `Bearer ${API_KEY}`);
@@ -421,6 +434,18 @@ test("getVoiceCostRecords: fremde `call_session_id` kommt NIE mit (Zuordnung ble
 // ein unerfuellbarer Pflicht-Typ durchrutschen (dauerhaft 'incomplete': keine
 // Rueckerstattung, jede Nachforderung gebucht); waere sie zu lang, verboete der Boot einen
 // zuordenbaren Typ ohne Grund. Beide Richtungen werden geprueft.
+// Die Kopplung, ohne die der Deckungstest darunter nur die Test-Kopie prueft: kaeme ein Typ
+// in COST_RECORD_TYPES dazu, den die Feld-Tabelle nicht kennt, bliebe der Deckungstest gruen,
+// waehrend die abgeleitete Zuordenbarkeits-Allowlist des Boot-Guards ihn stillschweigend
+// mitfuehrt (moeglicherweise als dauerhaft unerfuellbaren Pflicht-Typ).
+test("die Feld-Tabelle deckt GENAU das Produktions-Enum COST_RECORD_TYPES ab (keine zweite Quelle)", () => {
+  assert.deepEqual(
+    Object.keys(ID_FIELDS_BY_RECORD_TYPE).sort(),
+    [...COST_RECORD_TYPES].sort(),
+    "jeder abgefragte record_type braucht seine gemessene Belegform - und umgekehrt",
+  );
+});
+
 test("UNASSIGNABLE_COST_RECORD_TYPES deckt sich mit den Belegformen: weder Anker noch Session", () => {
   const hasNoReference = (recordType) => {
     const fields = ID_FIELDS_BY_RECORD_TYPE[recordType](OWN_IDS);
@@ -454,6 +479,57 @@ test("getVoiceCostRecords: Beleg ausserhalb des Zeitfensters wird verworfen (rec
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 0, "Zeitfenster bleibt die zweite Linie neben der Zuordnung");
+});
+
+// ---- (e2) Falsifikations-Sonde: das Log-Format der Deploy-Auflage ----
+
+// console.log EINES Aufrufs einsammeln (immer zurueckgesetzt, auch beim Wurf - sonst
+// verloere die restliche Suite ihre Ausgabe; F.I.R.S.T./Independent).
+async function captureLogLines(run) {
+  const lines = [];
+  const original = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    await run();
+  } finally {
+    console.log = original;
+  }
+  return lines;
+}
+
+function costRecordsLogLine(lines) {
+  return lines.find((l) => l.includes("getVoiceCostRecords ok"));
+}
+
+// An dieser Zeile haengt eine BLOCKIERENDE Deploy-Auflage (tasks/lct-DEPLOY-CHECKLIST.md):
+// sie ist das einzige Instrument, das die unbelegte Session-Annahme live falsifizieren kann.
+// Ungepinnt zerbraeche die Auflage still an einem geaenderten Format. Die drei via_-Spalten
+// kommen aus den Fixtures: Anker = sip-trunking + ai-voice-assistant, telnyx_session_id =
+// call-control + recording, call_session_id = speech-to-text + text-to-speech; inference
+// traegt keine Referenz und wird abgelehnt.
+test("getVoiceCostRecords: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-Auflage)", async () => {
+  stubRealRecords();
+  const lines = await captureLogLines(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  assert.equal(
+    costRecordsLogLine(lines),
+    `[telnyx/voice] getVoiceCostRecords ok records=${ASSIGNABLE_RECORD_COUNT} `
+      + "via_anchor=2 via_telnyx_session_id=2 via_call_session_id=2 "
+      + `rejected={"session_unresolved":${UNASSIGNABLE_COST_RECORD_TYPES.length}}`,
+  );
+});
+
+// Die Spalten muessen auch dann vollzaehlig dastehen, wenn ein Weg nichts beigetragen hat -
+// eine je nach Datenlage verschwindende Spalte macht die Sonde unlesbar (fehlt sie, ist
+// "0 Belege ueber dieses Feld" nicht von "Format geaendert" zu unterscheiden).
+test("getVoiceCostRecords: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker gefunden)", async () => {
+  stubRealRecords({ ids: FOREIGN_IDS });
+  const lines = await captureLogLines(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  assert.equal(
+    costRecordsLogLine(lines),
+    "[telnyx/voice] getVoiceCostRecords ok records=0 "
+      + "via_anchor=0 via_telnyx_session_id=0 via_call_session_id=0 "
+      + `rejected={"session_mismatch":${ASSIGNABLE_RECORD_COUNT},"session_unresolved":${UNASSIGNABLE_COST_RECORD_TYPES.length}}`,
+  );
 });
 
 test("getVoiceCostRecords: volle Seite -> ok:false, reason page_truncated", async () => {

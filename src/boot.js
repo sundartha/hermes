@@ -20,10 +20,11 @@ import {
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
-// LCT-FIX-1: welche Belegtypen nie zuordenbar sind, weiss der Adapter, der die Belege liest -
-// der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung. Provider-Konstante, kein
-// Transport: dieselbe Richtung wie telnyx-call-control-ingest.js (assistantVoiceConfigured).
-import { UNASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
+// LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
+// die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
+// Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
+// (assistantVoiceConfigured).
+import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { attachMediaBridge } from "./bridge.js";
 import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
@@ -137,15 +138,16 @@ function currentCoverage(config, store) {
 // LCT P4: die Riegel des Flips. Deckungsquote + Schwelle liefert currentCoverage
 // (die EINE Quelle, s.o.). Leere Pflicht-Menge = FATAL (ein Dienst, der Geld
 // zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft, darf nicht
-// starten). Ebenso FATAL seit LCT-FIX-1: ein Pflicht-Typ, den der Adapter nie zuordnen
-// kann - eine unerfuellbare Pflicht-Menge bucht dauerhaft nur zulasten des Kunden. Quote
-// unter der Schwelle = WARN, kein exit(1) - ein Boot-Refusal tauschte ein Kostenproblem
-// gegen einen Telefonie-Totalausfall (Praezedenz warnUnpricedModels); die laute Linie ist
-// der Befund coverage_below_threshold aus dem Sweep.
+// starten). Ebenso FATAL seit LCT-FIX-1: ein Pflicht-Typ, der nicht in der Allowlist der
+// zuordenbaren Belegtypen steht (unbekannter Wert, Tippfehler, andere Schreibweise oder ein
+// strukturell unzuordenbarer Typ) - eine unerfuellbare Pflicht-Menge bucht dauerhaft nur
+// zulasten des Kunden. Quote unter der Schwelle = WARN, kein exit(1) - ein Boot-Refusal
+// tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz
+// warnUnpricedModels); die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
 function assertCostTruingBooking(config, store) {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
-    unassignableRecordTypes: UNASSIGNABLE_COST_RECORD_TYPES,
+    assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
     ...currentCoverage(config, store),
   });
   const fatal = findings.find((f) => f.fatal);

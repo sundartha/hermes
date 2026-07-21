@@ -5,19 +5,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../src/boot-guard.js";
-import { UNASSIGNABLE_COST_RECORD_TYPES } from "../src/telephony/adapters/telnyx/voice.js";
+import {
+  ASSIGNABLE_COST_RECORD_TYPES,
+  UNASSIGNABLE_COST_RECORD_TYPES,
+} from "../src/telephony/adapters/telnyx/voice.js";
 import { startServer, startServerExpectExit, outboundCallsSeed } from "./helpers.js";
 
-// Die nie zuordenbaren Typen kommen aus DER Quelle, die der Boot auch verdrahtet (G5) -
-// eine im Test wiederholte Literal-Liste koennte davon abdriften.
+// Zuordenbare und nie zuordenbare Typen kommen aus DEN Quellen, die der Boot auch verdrahtet
+// (G5) - eine im Test wiederholte Literal-Liste koennte davon abdriften.
+const ASSIGNABLE = ASSIGNABLE_COST_RECORD_TYPES;
 const UNASSIGNABLE = UNASSIGNABLE_COST_RECORD_TYPES;
+// Werte, die KEIN realer record_type sind und die eine reine Deny-Liste durchliesse: die
+// Schreibvariante eines echten Typs und der laut Telnyx-Messung nicht existierende "call"
+// (HTTP 400). Ihr Schaden ist derselbe wie beim strukturell unzuordenbaren Typ.
+const NON_ENUM_RECORD_TYPES = Object.freeze(["Inference", "call", "sip_trunking"]);
 
 // ---- Unit: costTruingBookingFindings ----
 
 test("U2: leere Pflicht-Menge (Deckung ueber der Schwelle) -> genau ein Befund, fatal:true", () => {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: [],
-    unassignableRecordTypes: UNASSIGNABLE,
+    assignableRecordTypes: ASSIGNABLE,
     coveragePercent: 100,
     minCoveragePercent: 80,
   });
@@ -29,7 +37,7 @@ test("U2: leere Pflicht-Menge (Deckung ueber der Schwelle) -> genau ein Befund, 
 test("U3: Menge gesetzt + 20% vs. 80% -> genau ein Befund, fatal:false", () => {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: ["sip-trunking"],
-    unassignableRecordTypes: UNASSIGNABLE,
+    assignableRecordTypes: ASSIGNABLE,
     coveragePercent: 20,
     minCoveragePercent: 80,
   });
@@ -41,7 +49,7 @@ test("U3: Menge gesetzt + 20% vs. 80% -> genau ein Befund, fatal:false", () => {
 test("U4: 80% vs. 80% (Gleichstand) -> [] (>=, Gleichstand ist erfuellt)", () => {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: ["sip-trunking"],
-    unassignableRecordTypes: UNASSIGNABLE,
+    assignableRecordTypes: ASSIGNABLE,
     coveragePercent: 80,
     minCoveragePercent: 80,
   });
@@ -51,7 +59,7 @@ test("U4: 80% vs. 80% (Gleichstand) -> [] (>=, Gleichstand ist erfuellt)", () =>
 test("U5: beide Befunde koennen GEMEINSAM auftreten (leere Menge UND Deckung unter Schwelle)", () => {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: [],
-    unassignableRecordTypes: UNASSIGNABLE,
+    assignableRecordTypes: ASSIGNABLE,
     coveragePercent: 20,
     minCoveragePercent: 80,
   });
@@ -68,7 +76,7 @@ test("U5: beide Befunde koennen GEMEINSAM auftreten (leere Menge UND Deckung unt
 test("U6: nie zuordenbarer Pflicht-Typ -> fataler Befund, nennt den Typ", () => {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: ["sip-trunking", ...UNASSIGNABLE],
-    unassignableRecordTypes: UNASSIGNABLE,
+    assignableRecordTypes: ASSIGNABLE,
     coveragePercent: 100,
     minCoveragePercent: 80,
   });
@@ -78,10 +86,30 @@ test("U6: nie zuordenbarer Pflicht-Typ -> fataler Befund, nennt den Typ", () => 
   for (const t of UNASSIGNABLE) assert.match(findings[0].message, new RegExp(t));
 });
 
+// ROT VOR DEM FIX (Runde 2): der Guard prueft gegen eine Deny-Liste, also passiert JEDER
+// Wert, der kein realer record_type ist - mit exakt demselben Schaden wie der strukturell
+// unzuordenbare Typ (Pflicht-Menge dauerhaft unerfuellbar, cost-truing.js vergleicht exakt).
+test("U6b: Nicht-Enum-Pflicht-Typ (Case-Drift, Tippfehler, nicht existierender Typ) -> fataler Befund", () => {
+  for (const bad of NON_ENUM_RECORD_TYPES) {
+    const findings = costTruingBookingFindings({
+      requiredRecordTypes: ["sip-trunking", bad],
+      assignableRecordTypes: ASSIGNABLE,
+      coveragePercent: 100,
+      minCoveragePercent: 80,
+    });
+    assert.equal(findings.length, 1, `Wert ${bad}`);
+    assert.equal(findings[0].fatal, true, `Wert ${bad}`);
+    assert.equal(findings[0].code, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE, `Wert ${bad}`);
+    // Der beanstandete Wert selbst muss die Meldung anfuehren - ein blosses Vorkommen von
+    // "call" kaeme auch ueber das mitgelistete "call-control" durch und pruefte nichts.
+    assert.ok(findings[0].message.includes(`fordert ${bad} `), `Wert ${bad} fehlt in: ${findings[0].message}`);
+  }
+});
+
 test("U7: nur zuordenbare Pflicht-Typen -> kein Unzuordenbar-Befund", () => {
   const findings = costTruingBookingFindings({
-    requiredRecordTypes: ["sip-trunking", "call-control", "speech-to-text", "text-to-speech", "recording", "ai-voice-assistant"],
-    unassignableRecordTypes: UNASSIGNABLE,
+    requiredRecordTypes: [...ASSIGNABLE],
+    assignableRecordTypes: ASSIGNABLE,
     coveragePercent: 100,
     minCoveragePercent: 80,
   });
