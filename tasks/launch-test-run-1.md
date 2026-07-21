@@ -90,7 +90,7 @@ kein Netz).
 | CFG-02 (P1) | Boot mit `RENDER_EXTERNAL_URL=https://x` + `SKIP_TWILIO_SIGNATURE_CHECK=true`; Kontrastprobe ohne `RENDER_EXTERNAL_URL` (mehrfach oben schon erfolgreich gebootet) | ✅ GRUEN | Mit `RENDER_EXTERNAL_URL` -> sauberer Boot-Refusal (Exit-Code 1, listet alle 3 verletzten Footguns inkl. MCP_AUTH=off + SKIP_TWILIO_SIGNATURE_CHECK + STORE_BACKEND!=pg, kein Listen auf dem Port). Ohne `RENDER_EXTERNAL_URL` -> normaler Boot (kein False-Positive, mehrfach in dieser Session demonstriert) |
 | PROV-01 (P0) | `PROVISIONING_ENABLED=true STORE_BACKEND=json`, `POST /api/onboard` fuer neuen Tenant, SOFORT `kill -9` vor Drain, Neustart, `POST /api/onboard/retry` | 🔴 ROT (erwartet, aber ANDERE Ursache als im Plan vermutet) | Der Provisioning-Job UEBERLEBTE den Crash korrekt im JSON-Store (`status:"queued", attempts:0`) und wurde beim Neustart ordentlich erkannt (`[provision-reconcile] hold ... grund=no_active_subscriber`) — bis hierhin sogar ROBUSTER als der Plan-Text unterstellt. Der `retry`-Call scheitert aber NICHT wie im Plan erwartet mit 409/already_provisioned, sondern mit **403 "Kein aktiver, verifizierter Subscriber - kein Nummernkauf"** (mein Dummy-Env hatte `PAYMENT_ENABLED=false`, es existiert also gar kein verifizierter Subscriber-Pfad). Bleibt ROT im Sinne von "Recovery gelingt nicht automatisch", aber die genaue im Plan beschriebene Fehlerursache (occupiesCapacity zaehlt 'requested' als belegt) wurde NICHT reproduziert — dafuer braeuchte es vermutlich `PAYMENT_ENABLED=true` + einen echten/simulierten verifizierten Subscriber. Empfehlung an die Fix-Kette: Repro mit `PAYMENT_ENABLED=true` wiederholen, um die im Plan beschriebene 409-Situation tatsaechlich zu treffen |
 | DEP-01 (P1) | `npm audit --omit=dev` + `test -f package-lock.json` | 🔴 ROT (neuer Befund seit 2026-07-02) | 2 Schwachstellen: 1x HIGH (`axios` 1.0.0-1.17.0, mehrere CVEs inkl. Prototype-Pollution/DoS, Fix via `npm audit fix` verfuegbar) + 1x LOW (`body-parser`, DoS bei ungueltigem `limit`-Wert, transitiv ueber `@modelcontextprotocol/sdk`). Plan erwartete 0 (Stand 2026-07-02) — seither neue Advisories oder Versions-Drift. Lockfile vorhanden (`lockfile-ok`). Kein Fix in dieser Session (Scope-Regel: keine Dependency-Aenderungen) |
-| DEP-02 (P2) | Clean-Install in frischem `git worktree` (NICHT im Arbeitsbaum) | Siehe eigener Abschnitt unten | — |
+| DEP-02 (P2) | Clean-Install in frischem `git worktree --detach` (NICHT im Arbeitsbaum), `rm -rf node_modules && npm install && npm test` | ✅ GRUEN | `npm install`: 246 Packages sauber (nur `EBADENGINE`-Warnung, s.u.). Voller `npm test` in diesem Worktree: **2582/2584 gruen, 2 rot (0 cancelled)** — die 2 roten sind EXAKT die bereits bekannten, dokumentierten Befunde (MCP-06, BILL-04), sonst nichts Neues. **Wichtig:** die 3 in Runde 1 haengenden Dateien (`telnyx-p5-gate-proof`, `telnyx-p5-origination`, `w5-abo-allowlist-gate`) liefen hier ALLE sauber durch, KEIN Haenger, KEIN Timeout — starkes Indiz, dass die Runde-1-Diagnose stimmt: der frische Worktree hat KEIN `.env` (gitignored, wird von `git worktree` nicht mitkopiert), also fehlt genau der vermutete Leck-Pfad (lokales `.env` driftet in den Server-Spawn der Tests). Empfehlung an die Fix-Kette: den Hang gezielt mit einer `.env`-Kopie im Worktree reproduzieren, um die genaue Env-Var zu isolieren, statt weiter zu raten. Nebenbefund: `npm warn EBADENGINE` — dieser Rechner hat global Node v24.18.0 installiert, `package.json` pinnt `>=22 <23`; `npm install`/`npm test` liefen trotzdem fehlerfrei (nur Warnung, kein Hard-Fail) — fuer DEP-03 (Live-Node-Version-Check) relevant, aber dort einzuordnen, nicht hier gefixt |
 
 ## Schritt 4 — live-Tests
 
@@ -117,11 +117,73 @@ in dieser Session), aber empfohlen fuer die naechste Runde: `languageForCountry`
 entweder um weitere Laender erweitern oder bei unbekanntem Land fail-closed/explizit
 statt still auf `de` zurueckfallen.
 
-## Zusammenfassung
+## Zusammenfassung (Endstand nach Runde 2 — auto + lokal komplett, live wie geplant uebersprungen)
 
-- Baseline: 2535/2541 gruen, 3 Infra-Haenger diagnostiziert (kein Assertion-Fehler)
-- 9 von 13 geplanten neuen/erweiterten auto-Tests geschrieben, davon 7 gruen + 2 echte,
-  dokumentierte Befunde (MCP-06, BILL-04)
-- 1 Locale-Luecke identifiziert und verifiziert (US/sonstige Laender -> Agent faellt
-  still auf Deutsch zurueck, Widget bleibt Englisch)
-- lokal-Tier + 4 verbleibende auto-IDs offen fuer die naechste Session
+**Zaehler:**
+- auto: 13/13 geplante neue/erweiterte Tests geschrieben. Gruen: 12 (IN-03, OUT-11-Ext,
+  MCP-07, MCP-08, UI-02, CFG-03, SMS-02, AUTH-07-auto, IN-08, OUT-07-Ext, OUT-10-Ext,
+  DASH-02). Rot (echt, dokumentiert): MCP-06, BILL-04-Erweiterung (2, macht 14 —
+  BILL-04 zaehlt als Erweiterung eines bereits bestehenden Tests, nicht als eigene
+  Planzeile). OUT-05/PROV-06 bewusst an die Fix-Kette delegiert (nicht hier
+  geschrieben, Session-Regel).
+- lokal: 10 IDs bearbeitet. Gruen: OUT-04, OUT-12, OUT-09 (3 Sub-Faelle), IN-07, OBS-01,
+  CFG-02, DEP-02 (7). Rot: PROV-01 (erwartet rot, andere Ursache als vom Plan
+  vermutet), DEP-01 (neuer Befund, axios HIGH + body-parser LOW). Blockiert/Teilbeleg:
+  SMS-01 (kein lokaler ANTHROPIC_API_KEY, Idempotenz aber am vorgelagerten Schritt
+  bewiesen).
+- live: alle IDs uebersprungen (Owner-Session), unveraendert.
+
+**Rote Tests (nach Prio sortiert), mit 1-Satz-Diagnose:**
+1. **PROV-01 (P0)** — Provisioning-Crash-Recovery gelingt nicht automatisch; Job
+   ueberlebt den Crash korrekt, aber der Retry scheitert an einem STRIKTEREN Gate
+   (403 fehlender verifizierter Subscriber) als vom Plan vermutet (409
+   already_provisioned) — Repro mit PAYMENT_ENABLED=true noetig, um die im Plan
+   beschriebene Situation exakt zu treffen.
+2. **MCP-06 (P1/P2-Bereich)** — `get_transcript` auf aktivem Call wirft einen rohen
+   MCP-SDK-Fehler statt einer sauberen Hinweismeldung (reale UX-Regression fuer
+   fruehe Poller).
+3. **DEP-01 (P1)** — 2 neue Dependency-Schwachstellen seit 2026-07-02 (axios HIGH,
+   body-parser LOW), Fix via `npm audit fix` verfuegbar, nicht in dieser Session
+   angewandt (Scope-Regel).
+4. **BILL-04-Erweiterung (P2)** — costEur-Float driftet nach 10k Buchungen minimal
+   vom Cent-Ledger ab (bekanntes Float-Problem, sehr kleiner Betrag, aber ein echter
+   struktureller Fund).
+
+**Abgleich mit den 3 in `NEXT-SESSION-LAUNCH-TESTRUN.md` erwarteten Rot-Faellen:** Der
+Plan selbst nennt keine 3 explizit erwarteten Rot-Faelle als Liste, sondern OUT-05
+(Concurrency-Budget-Race) und PROV-01 als je bereits bekannte Baustellen (OUT-05 an die
+Fix-Kette delegiert, hier nicht erneut angefasst) plus die devisen Hinweise aus den
+Testbeschreibungen selbst. **Unerwartet rot / neue Befunde fuer die Fix-Kette:** MCP-06,
+BILL-04-Erweiterung (beide Runde 1) und DEP-01 (Runde 2, Dependency-Drift). PROV-01 war
+erwartet rot, aber mit einer ANDEREN Fehlerursache als im Plan-Text beschrieben — das ist
+selbst ein kleiner neuer Befund (das strengere Subscriber-Gate greift VOR dem im Plan
+beschriebenen occupiesCapacity-Bug).
+
+**Branch/Commits:** `test/launch-run-1`, basierend auf `origin/master` nach Sync.
+Commits: `021cb62` (Runde 1: auto-Tier Teil 1 + Protokoll), `81343d2` (Runde 2: restliche
+auto-Tests + kompletter lokal-Tier + Protokoll-Update). Nichts gepusht (weder origin
+noch upstream), `master` unberuehrt.
+
+**Empfehlung an die Fix-Kette / vor dem Live-Testtag:**
+1. PROV-01 mit `PAYMENT_ENABLED=true` erneut reproduzieren, um die im Plan
+   beschriebene 409-Situation tatsaechlich zu treffen, dann fixen.
+2. MCP-06 fixen (sauberer Hinweis statt rohem SDK-Fehler bei `get_transcript` auf
+   aktivem Call).
+3. `npm audit fix` fuer axios/body-parser einplanen (DEP-01), vor Launch erneut
+   `npm audit --omit=dev` laufen lassen.
+4. Die BASE_ENV-Drift-Hypothese aus Runde 1 (Haenger bei den 3 Telnyx/Abo-Dateien)
+   ist jetzt durch DEP-02 stark erhaertet (frischer Worktree ohne `.env` hatte KEINEN
+   einzigen Haenger) — gezielt mit einer `.env`-Kopie im Worktree nachstellen, um die
+   genaue Variable zu finden, statt weiter zu raten.
+5. Locale-Luecke (siehe Deep-Dive oben): `languageForCountry` fuer Nicht-DE/AT/CH/FR/GB/IE-
+   Laender entweder erweitern oder explizit/fail-closed machen, bevor ein Kunde aus
+   einem anderen Land onboarded wird.
+6. BILL-04-Float-Drift: costEur-Ableitung langfristig durch eine reine Integer-Cents-
+   Rechnung ersetzen (kein Fix in dieser Session, nur dokumentiert).
+7. Kein P0 aus dem "Launch-Blocker (P0) auf einen Blick"-Abschnitt wurde in dieser
+   Session vollstaendig gruen abgehakt ausser IN-03 — die uebrigen P0-Zeilen (OUT-01/02/03/05,
+   IN-01/02, MCP-02/03, AUTH-01/02/03, CFG-01, OUT-04/PROV-01/SMS-01) verteilen sich auf
+   bereits-gruene Bestandssuiten (OUT-01/02/03, IN-01/02, MCP-02/03, AUTH-01/02/03, CFG-01
+   liefen alle in der Baseline gruen mit), OUT-05 (an Fix-Kette delegiert), OUT-04 (jetzt
+   gruen, siehe oben), PROV-01 (rot) und SMS-01 (blockiert/Teilbeleg) — **PROV-01 bleibt
+   damit der einzige noch offene P0-Launch-Blocker aus dieser Session.**
