@@ -22,6 +22,24 @@
 //
 // PII: das Ziel (to) wird NIE geloggt - weder hier noch von den Aufrufern.
 
+import { findActiveNumber } from "../store/views.js";
+import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+
+// Absender-Aufloesung fuer eine store-basierte Plattform-Alarm-SMS (EINE Quelle, G5):
+// die aktive Nummer des BOOTSTRAP-Tenants - die eigene Betreiber-Nummer, NIE die DID
+// eines Kunden. Zwei Verbraucher teilen sie: der Drift-Waechter (LCT P5) und die
+// ElevenLabs-Kontingent-Warnung (LCT P7). Keine Nummer -> null (fail-closed, KEINE SMS)
+// plus EINE WARN-Zeile. Die Warnung ist keine Falschmeldung: sendFailSoftAlertSms ruft
+// resolveSender laut Vertrag NUR nach dem Empfaenger-Riegel - ein fehlender Absender bei
+// aktivem Alarmkanal ist echt meldenswert. findActiveNumber liefert undefined, wenn nichts
+// passt; hier auf null normalisiert (sendFailSoftAlertSms prueft auf falsy).
+export function resolveBootstrapAlertSender(store) {
+  const sender = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID);
+  if (sender) return sender;
+  console.warn("[alert-sms] Plattform-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS");
+  return null;
+}
+
 // sender = { provider, e164 } (Form von findActiveNumber, src/store/views.js).
 // resolveSender liefert null, wenn kein zulaessiger Absender feststeht -> KEINE SMS
 // (fail-closed gegen einen Alarm mit fremder Absendernummer).

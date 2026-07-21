@@ -12,9 +12,7 @@ import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
 import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
-import { sendFailSoftAlertSms } from "./telephony/alert-sms.js";
-import { findActiveNumber } from "./store/views.js";
-import { BOOTSTRAP_TENANT_ID } from "./store/defaults.js";
+import { sendFailSoftAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
@@ -168,13 +166,12 @@ const conversationWatchdog = makeConversationWatchdog({
 const ttsStore = createTtsStore({ ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs });
 
 // LCT P7 (Fixkosten sichtbar machen): Alarm bei ueberschrittener ElevenLabs-Kontingent-
-// Warnschwelle, ueber denselben fail-soft-Kanal wie der Drift-Waechter (LCT P5,
-// resolveDriftAlertSender in cost-truing.js) UND die Plattform-Fruehwarnung (P6,
-// emitPlatformSpendWarning in outbound-gates.js) - sendFailSoftAlertSms traegt Empfaenger-
-// Riegel/fire-and-forget/try-catch (EINE Quelle, G5). Absender ist die aktive Nummer des
-// BOOTSTRAP-Tenants (die eigene Betreiber-Nummer, NIE die DID eines Kunden). Bewusste
-// Mini-Duplikation zu resolveDriftAlertSender (kleiner Blast-Radius statt einer weiteren
-// Extraktion; s. Phasen-Report). req=null -> audit() loggt ip=system (Muster
+// Warnschwelle, ueber denselben fail-soft-Kanal wie der Drift-Waechter (LCT P5) UND die
+// Plattform-Fruehwarnung (P6, emitPlatformSpendWarning in outbound-gates.js) -
+// sendFailSoftAlertSms traegt Empfaenger-Riegel/fire-and-forget/try-catch (EINE Quelle,
+// G5). Absender ist die aktive Nummer des BOOTSTRAP-Tenants (die eigene Betreiber-Nummer,
+// NIE die DID eines Kunden) - der geteilte resolveBootstrapAlertSender (G5, gemeinsame
+// Quelle mit dem Drift-Waechter). req=null -> audit() loggt ip=system (Muster
 // PLATFORM_WARN_EVENT): ein Plattform-Ereignis ist keinem Request zuzurechnen.
 const TTS_QUOTA_WARN_EVENT = "tts_quota_warning";
 const TTS_QUOTA_SMS_PREFIX = "[Hermes] ElevenLabs-Kontingent-Warnschwelle erreicht: ";
@@ -185,7 +182,7 @@ function onTtsQuotaWarning(warning) {
     messaging,
     to: config.billing.platformAlertSmsTo,
     body: TTS_QUOTA_SMS_PREFIX + detail,
-    resolveSender: () => findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID) || null,
+    resolveSender: () => resolveBootstrapAlertSender(store),
     onError: (e) => console.error(`[${TTS_QUOTA_WARN_EVENT}] Alarm-SMS fehlgeschlagen:`, e.message),
   });
 }

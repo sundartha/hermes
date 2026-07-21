@@ -7,7 +7,8 @@
 // NIE eine echte (kostenpflichtige) SMS raus.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sendFailSoftAlertSms } from "../src/telephony/alert-sms.js";
+import { sendFailSoftAlertSms, resolveBootstrapAlertSender } from "../src/telephony/alert-sms.js";
+import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
 const TO = "+49999";
@@ -148,4 +149,41 @@ test("alert-sms: kehrt vor Aufloesung des sendSms-Promise zurueck", async () => 
   });
   assert.equal(settled, false);
   await new Promise((r) => setImmediate(r));
+});
+
+// ---- resolveBootstrapAlertSender (LCT P7 Review Runde 1, Blocker G5) ----
+// EINE Quelle fuer den Absender store-basierter Plattform-Alarme (Drift-Waechter LCT P5 +
+// ElevenLabs-Kontingent LCT P7). Diese Tests pinnen genau die zwei Zusagen der Extraktion:
+// aktive Bootstrap-Nummer -> Absender; keine -> null (fail-closed).
+function makeStoreStub(numbers) {
+  return { load: () => ({ numbers }) };
+}
+
+test("resolveBootstrapAlertSender: liefert die aktive Nummer des BOOTSTRAP-Tenants", () => {
+  const store = makeStoreStub([
+    { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49111" },
+  ]);
+  assert.deepEqual(resolveBootstrapAlertSender(store), {
+    tenantId: BOOTSTRAP_TENANT_ID,
+    status: NUMBER_STATUS.ACTIVE,
+    provider: "telnyx",
+    e164: "+49111",
+  });
+});
+
+// fail-closed: keine eigene aktive Nummer -> null. Insbesondere darf die aktive Nummer
+// eines FREMDEN Tenants NIE als Absender einer Betreiber-Meldung durchschlagen (das waere
+// die DID eines Kunden).
+test("resolveBootstrapAlertSender: keine aktive Bootstrap-Nummer -> null (kein Fremd-Tenant)", () => {
+  const store = makeStoreStub([
+    { tenantId: "kunde-x", status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49222" },
+    { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.PROVISIONING, provider: "telnyx", e164: "+49333" },
+  ]);
+  assert.equal(resolveBootstrapAlertSender(store), null);
+});
+
+// Der Baustein prueft auf falsy: das leere Ergebnis MUSS null sein (nicht undefined von
+// findActiveNumber durchgereicht), damit sendFailSoftAlertSms sauber abriegelt.
+test("resolveBootstrapAlertSender: leeres Ergebnis ist null, nicht undefined", () => {
+  assert.strictEqual(resolveBootstrapAlertSender(makeStoreStub([])), null);
 });

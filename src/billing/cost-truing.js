@@ -24,10 +24,9 @@
 // UNVERAENDERT. Die Umrechnung USD -> EUR-Bucket lebt an GENAU EINER Stelle:
 // convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
 // applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, BOOTSTRAP_TENANT_ID, isBookableCents } from "../store/defaults.js";
+import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, isBookableCents } from "../store/defaults.js";
 import { nextCostTruingAttempt } from "../store/state-ops.js";
-import { findActiveNumber } from "../store/views.js";
-import { sendFailSoftAlertSms } from "../telephony/alert-sms.js";
+import { sendFailSoftAlertSms, resolveBootstrapAlertSender } from "../telephony/alert-sms.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 
 // Sweep-Kadenz (Muster RETENTION_SWEEP_INTERVAL_MS, src/boot.js). Exportiert: boot.js
@@ -325,30 +324,18 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     countOutcome(tally, truedSource, closed);
   }
 
-  // LCT P5 (Drift-Waechter): Absender des Alarms ist die aktive Nummer des BOOTSTRAP-
-  // Tenants - das ist die eigene Betreiber-Nummer. NIE "irgendeine aktive Nummer": das
-  // waere die DID eines Kunden als Absender einer Betreiber-Meldung. Keine Nummer -> null
-  // -> KEINE SMS (fail-closed), eine WARN-Zeile ohne Nummer. Laeuft laut Vertrag von
-  // sendFailSoftAlertSms NUR, wenn ein Empfaenger konfiguriert ist - ohne Alarmkanal waere
-  // diese WARN-Zeile eine Falschmeldung. findActiveNumber liefert undefined, wenn nichts
-  // passt; hier auf null normalisiert (der Baustein prueft auf falsy).
-  function resolveDriftAlertSender() {
-    const sender = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID);
-    if (sender) return sender;
-    console.warn("[cost-truing] Tarif-Drift-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS");
-    return null;
-  }
-
   // Versand ueber den geteilten fail-soft-Baustein (G5, EINE Quelle mit
   // emitPlatformSpendWarning): try/catch, Empfaenger-Riegel und fire-and-forget liegen
   // dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel (platformAlertSmsTo) wird
-  // NIE geloggt.
+  // NIE geloggt. Absender ist die aktive Nummer des BOOTSTRAP-Tenants (die eigene
+  // Betreiber-Nummer, NIE die DID eines Kunden) - der geteilte resolveBootstrapAlertSender
+  // (G5, gemeinsam mit der ElevenLabs-Kontingent-Warnung LCT P7).
   function sendDriftAlertSms(detail) {
     sendFailSoftAlertSms({
       messaging,
       to: config.billing.platformAlertSmsTo,
       body: DRIFT_ALERT_SMS_PREFIX + detail,
-      resolveSender: resolveDriftAlertSender,
+      resolveSender: () => resolveBootstrapAlertSender(store),
       onError: (e) => console.error("[cost-truing] Tarif-Drift-Alarm SMS fehlgeschlagen:", e.message),
     });
   }
