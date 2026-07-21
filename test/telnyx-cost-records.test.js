@@ -23,7 +23,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeConfigOverrides } from "./helpers.js";
+import { captureConsole, makeConfigOverrides } from "./helpers.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -67,7 +67,7 @@ const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_A
 
 // fetch-Stub: liefert je filter[record_type] eine konfigurierte Seite. Zeichnet alle
 // Aufrufe auf (URL, Header) fuer Struktur-Assertions.
-function stubFetchByRecordType(pagesByType, { status = 200 } = {}) {
+function stubFetchByRecordType(pagesByType) {
   const calls = [];
   global.fetch = async (url, opts) => {
     calls.push({ url, opts });
@@ -75,11 +75,25 @@ function stubFetchByRecordType(pagesByType, { status = 200 } = {}) {
     const recordType = u.searchParams.get("filter[record_type]");
     const data = pagesByType[recordType] || [];
     return {
-      ok: status < 400,
-      status,
+      ok: true,
+      status: 200,
       json: async () => ({ data }),
       text: async () => JSON.stringify({ data }),
     };
+  };
+  return calls;
+}
+
+// fetch-Stub fuer den FEHLERPFAD (KE-P0): jede Anfrage scheitert mit demselben HTTP-Status
+// und Telnyx-Fehler-Envelope. assertTelnyxOk liest im !ok-Zweig res.text() (nicht json()) -
+// beide Formen liefern denselben Body (Faithful Response-Double). Getrennt vom Erfolgs-Stub,
+// dessen einzige Aufgabe "eine Seite je record_type" ist; ein status-Schalter dort waere ein
+// zweiter Weg fuer denselben Zweck.
+function stubFetchFailure({ status, body }) {
+  const calls = [];
+  global.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return { ok: false, status, json: async () => body, text: async () => JSON.stringify(body) };
   };
   return calls;
 }
@@ -295,7 +309,7 @@ test("getVoiceCostRecords: Ende-zu-Ende sip-trunking cost 0.0401 -> costMicroCen
 // ---- (c) HTTP 500 und Timeout ----
 
 test("getVoiceCostRecords: HTTP 500 -> ok:false, records undefined, kein Wurf", async () => {
-  stubFetchByRecordType({}, { status: 500 });
+  stubFetchFailure({ status: 500, body: {} });
   await assert.doesNotReject(async () => {
     const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
     assert.equal(res.ok, false);
@@ -315,6 +329,79 @@ test("getVoiceCostRecords: rejectendes fetch (Netzfehler/Timeout) -> ok:false, k
     assert.equal(res.records, undefined);
     assert.notEqual(res.records?.length, 0);
   });
+});
+
+// ---- (c2) KE-P0: der Fehlerpfad ist sichtbar (Status + Telnyx-Code, PII-frei) ----
+
+// GEMESSENE Antwort des Belegabrufs bei ueberschrittenem Minutenkontingent (Plan F1):
+// HTTP 429 mit Telnyx-Code 10011. Der Envelope traegt bewusst GIFT in `detail` (Key-Form,
+// Rufnummer, Session-ID) - das ist hier das Gegenstueck zur Koeder-Pflicht: Felder, die der
+// Code NICHT verwenden darf. Faende sich eines davon in der Log-Zeile, waere der Leak-Test
+// rot; ein Test, der nur wegen des Koeders gruen liefe, gibt es hier nicht, weil die Zeile
+// exakt verglichen wird.
+const RATE_LIMIT_STATUS = 429;
+const RATE_LIMIT_CODE = "10011";
+const LEAK_NUMBER = "+4915112345678";
+const POISONED_DETAIL = `Bearer ${API_KEY} from=${LEAK_NUMBER} session=${SESSION_ID}`;
+const RATE_LIMIT_BODY = {
+  secret_key: API_KEY, // top-level-Gift: darf ebenfalls nirgends auftauchen
+  errors: [{ code: RATE_LIMIT_CODE, title: "Too many requests", detail: POISONED_DETAIL }],
+};
+// Der Abruf bricht beim ERSTEN scheiternden Typ ab (kein Teil-Erfolg) -> genau EINE Zeile,
+// und zwar fuer den ersten Typ des Produktions-Enums (keine zweite Quelle der Reihenfolge).
+const FIRST_RECORD_TYPE = COST_RECORD_TYPES[0];
+
+const failureLines = (lines) => lines.filter((l) => l.includes("getVoiceCostRecords fehler"));
+
+test("getVoiceCostRecords: 429 loggt Provider-Status und Telnyx-Code (Fehlerpfad sichtbar)", async () => {
+  stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
+  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  assert.deepEqual(failureLines(lines), [
+    `[telnyx/voice] getVoiceCostRecords fehler typ=${FIRST_RECORD_TYPE} `
+      + `status=${RATE_LIMIT_STATUS} code=${RATE_LIMIT_CODE}`,
+  ]);
+});
+
+// Die Zeile ist eine Betriebs-Sonde: sie landet dauerhaft im Render-Log. Regel 4/5 -
+// Fragmente werden ueber ein LABEL gemeldet, nie ueber ihren Wert (sonst leakte die
+// Fehlermeldung des Tests genau das, was sie verbietet).
+const FORBIDDEN_IN_FAILURE_LINE = Object.freeze([
+  ["API-Key", API_KEY],
+  ["Bearer-Praefix", "Bearer"],
+  ["Rufnummer", LEAK_NUMBER],
+  ["Session-ID", SESSION_ID],
+  ["Anker (call_control_id)", CALL_CONTROL_ID],
+  ["Leg-UUID", TELNYX_LEG_ID],
+  ["Telnyx-detail", "quota"],
+]);
+
+test("getVoiceCostRecords: die Fehler-Zeile leakt weder Key noch Rufnummer noch Session-/Leg-ID", async () => {
+  stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
+  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const [line] = failureLines(lines);
+  assert.ok(line, "Fehler-Zeile fehlt");
+  for (const [label, fragment] of FORBIDDEN_IN_FAILURE_LINE)
+    assert.ok(!line.includes(fragment), `${label} darf nicht in der Fehler-Zeile stehen`);
+});
+
+test("getVoiceCostRecords: Netzfehler ohne HTTP-Antwort -> Zeile erscheint mit neutralem Platzhalter", async () => {
+  global.fetch = async () => {
+    throw new Error("network timeout");
+  };
+  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  assert.deepEqual(failureLines(lines), [
+    `[telnyx/voice] getVoiceCostRecords fehler typ=${FIRST_RECORD_TYPE} status=none code=none`,
+  ]);
+});
+
+test("getVoiceCostRecords: 429 laesst Rueckgabe und Kontrollfluss unveraendert (ok:false, provider_error)", async () => {
+  stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
+  const res = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW)).then(
+    () => telnyxVoice.getVoiceCostRecords(WINDOW),
+  );
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, "provider_error");
+  assert.equal(res.records, undefined, "ok:false ist NIE die leere Menge");
 });
 
 // ---- (d) Fremdwaehrung ----
@@ -510,19 +597,9 @@ test("getVoiceCostRecords: gemessenes started_at ausserhalb des Fensters filtert
 
 // ---- (e2) Falsifikations-Sonde: das Log-Format der Deploy-Auflage ----
 
-// console.log EINES Aufrufs einsammeln (immer zurueckgesetzt, auch beim Wurf - sonst
-// verloere die restliche Suite ihre Ausgabe; F.I.R.S.T./Independent).
-async function captureLogLines(run) {
-  const lines = [];
-  const original = console.log;
-  console.log = (...args) => lines.push(args.join(" "));
-  try {
-    await run();
-  } finally {
-    console.log = original;
-  }
-  return lines;
-}
+// captureConsole (test/helpers.js) faengt console.log UND console.warn eines Aufrufs ab und
+// restauriert immer, auch beim Wurf (F.I.R.S.T./Independent) - EINE Quelle statt einer
+// lokalen Kopie. Der Erfolgs-Log laeuft ueber console.log, die Fehler-Spur ueber console.warn.
 
 function costRecordsLogLine(lines) {
   return lines.find((l) => l.includes("getVoiceCostRecords ok"));
@@ -538,7 +615,7 @@ function costRecordsLogLine(lines) {
 // traegt keine Referenz und wird abgelehnt.
 test("getVoiceCostRecords: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-Auflage)", async () => {
   stubRealRecords();
-  const lines = await captureLogLines(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
   assert.equal(
     costRecordsLogLine(lines),
     `[telnyx/voice] getVoiceCostRecords ok records=${ASSIGNABLE_RECORD_COUNT} `
@@ -552,7 +629,7 @@ test("getVoiceCostRecords: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der
 // "0 Belege ueber dieses Feld" nicht von "Format geaendert" zu unterscheiden).
 test("getVoiceCostRecords: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker gefunden)", async () => {
   stubRealRecords({ ids: FOREIGN_IDS });
-  const lines = await captureLogLines(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
   assert.equal(
     costRecordsLogLine(lines),
     "[telnyx/voice] getVoiceCostRecords ok records=0 "
