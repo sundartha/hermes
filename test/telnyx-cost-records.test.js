@@ -6,8 +6,16 @@
 // LCT-FIX-1: die frueheren Fixtures ERFANDEN das Feld leg_id. Genau deshalb war diese Suite
 // gruen, waehrend live JEDER Beleg verworfen wurde (records=0, rejected={"leg_unresolved":205,
 // "leg_mismatch":92}) - ein Test gegen selbst erfundene Daten prueft die eigene Annahme, nicht
-// die Wirklichkeit. Die Fixtures tragen ab jetzt die GEMESSENEN Feldnamen und Wertformen
-// (Quelle: tasks/lct-fix-1-spec.md Abschnitt 2, Messung 2026-07-21 ueber 297 echte Belege).
+// die Wirklichkeit. Die Fixtures tragen ab jetzt die Feldnamen und Wertformen aus der
+// Live-Messung 2026-07-21 (297 echte Belege).
+//
+// REICHWEITE DIESER TESTS - ehrlich benannt, damit der Vorfall sich nicht wiederholt: der
+// Rohauszug jener Messung liegt NICHT im Repo. Belegt ist damit nur, welche Felder die
+// Belege fuehren; die Annahme, dass `telnyx_session_id` und `call_session_id` denselben,
+// CALL-LOKALEN Wert bezeichnen, spielen diese Fixtures nach - sie beweisen sie NICHT. Was
+// die Tests hier wirklich pinnen, ist die fail-closed-Richtung: was NICHT in der vom Anker
+// aufgespannten Session liegt, kommt nie mit. Die Live-Verifikation der Annahme (Log-Zeile
+// `sessions=`) steht als Auflage in tasks/lct-DEPLOY-CHECKLIST.md.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -25,7 +33,9 @@ process.env.PROVIDER_CURRENCY = "USD";
 const { parseDecimalToMicroCents, parseNonNegativeInteger } = await import(
   "../src/telephony/adapters/telnyx/cost-parse.js"
 );
-const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
+const { telnyxVoice, UNASSIGNABLE_COST_RECORD_TYPES } = await import(
+  "../src/telephony/adapters/telnyx/voice.js"
+);
 const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
 const { config } = await import("../src/config.js");
 
@@ -72,7 +82,7 @@ function stubFetchByRecordType(pagesByType, { status = 200 } = {}) {
   return calls;
 }
 
-// EINE Quelle der realen ID-Felder je record_type (Spec Abschnitt 2). Werte kommen als
+// EINE Quelle der gemessenen ID-Felder je record_type (Messung 2026-07-21). Werte kommen als
 // Parameter, damit Fremd-Session-Faelle DIESELBE Form mit anderen IDs bauen (G5).
 const ID_FIELDS_BY_RECORD_TYPE = Object.freeze({
   "sip-trunking": ({ anchorId, sessionId }) => ({ call_control_id: anchorId, telnyx_session_id: sessionId }),
@@ -187,8 +197,9 @@ test("parseNonNegativeInteger: ungueltige Werte -> null", () => {
 
 // ---- (b) Reale Belegformen: zweistufige Zuordnung (Anker + Session) ----
 
-// Live gesetzt als COST_TRUING_REQUIRED_RECORD_TYPES - erst ueber die Session erfuellbar,
-// denn call-control traegt keinen Anker.
+// Realistischer Kandidat fuer COST_TRUING_REQUIRED_RECORD_TYPES (live noch leer, der Wert
+// ist eine Owner-Entscheidung vor dem Deploy) - erst ueber die Session erfuellbar, denn
+// call-control traegt keinen Anker.
 const REQUIRED_RECORD_TYPES = Object.freeze(["sip-trunking", "call-control"]);
 
 // Ein realer Beleg je record_type (Kosten und Zusatzfelder aus der Messung 2026-07-21).
@@ -212,10 +223,18 @@ function stubRealRecords({ ids = OWN_IDS } = {}) {
 }
 
 // Belege, die in der gemessenen Wirklichkeit KEINEN Anker tragen und daher ausschliesslich
-// ueber die aufgespannte Session gefunden werden koennen (Spec Abschnitt 2).
-const SESSION_ONLY_RECORD_TYPES = Object.freeze([
-  "call-control", "recording", "speech-to-text", "text-to-speech",
-]);
+// ueber die aufgespannte Session gefunden werden koennen. ABGELEITET aus der Feld-Tabelle
+// (S2): welcher Typ keinen Anker fuehrt, steht dort bereits - eine zweite, von Hand
+// gepflegte Liste koennte davon abdriften und die Zusicherung still verfallen lassen
+// (bekaeme ein Typ in der Tabelle spaeter einen Anker, bliebe die Assertion gruen und
+// pruefte ab da nichts mehr). Ohne Anker UND ohne Session waere der Typ gar nicht
+// zuordenbar - das ist die andere Menge (UNASSIGNABLE_COST_RECORD_TYPES).
+const SESSION_ONLY_RECORD_TYPES = Object.freeze(
+  Object.keys(ID_FIELDS_BY_RECORD_TYPE).filter(
+    (t) => !ID_FIELDS_BY_RECORD_TYPE[t](OWN_IDS).call_control_id
+      && !UNASSIGNABLE_COST_RECORD_TYPES.includes(t),
+  ),
+);
 
 test("getVoiceCostRecords: reale Belegformen - der Anker spannt die Session auf, die Belege OHNE Anker kommen mit", async () => {
   stubRealRecords();
@@ -372,6 +391,47 @@ test("getVoiceCostRecords: Belege einer FREMDEN Session kommen NIE mit (Tenant-T
     !res.records.some((r) => r.costMicroCents === 999000000),
     "ein fremder Beleg waere eine Fehlbuchung auf einen fremden Tenant",
   );
+});
+
+// LCT-FIX-1: die Gegenprobe zum Test darueber auf dem ZWEITEN Session-Feldnamen. Der
+// fremde Beleg ist ein speech-to-text-Record, der NUR eine call_session_id fuehrt - genau
+// die Form, die die (im Repo unbelegte) Gleichsetzung der beiden Session-Felder betrifft.
+// Der Test pinnt, was die Zuordnung wirklich zusichert: auch ueber call_session_id wird
+// NUR akzeptiert, was in der vom Anker aufgespannten Menge liegt. Ohne diese Zeile bliebe
+// der call_session_id-Zweig einseitig gepinnt (nur der Treffer-, nie der Ablehnungsfall).
+test("getVoiceCostRecords: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-closed)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })], // Anker + eigene Session
+    "speech-to-text": [
+      realRecord("speech-to-text", { cost: "0.0000" }),
+      realRecord("speech-to-text", { cost: "9.99", ids: FOREIGN_IDS }),
+    ],
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, true);
+  assert.equal(res.records.length, 2, "nur Anker-Beleg + eigener speech-to-text-Beleg");
+  assert.ok(
+    !res.records.some((r) => r.costMicroCents === 999000000),
+    "eine fremde call_session_id waere eine Fehlbuchung auf einen fremden Tenant",
+  );
+});
+
+// LCT-FIX-1 / G27: haelt die Adapter-Konstante gegen die gemessenen Belegformen. Der
+// Boot-Guard lehnt genau diese Typen als Pflicht-Typ ab - waere die Liste zu kurz, koennte
+// ein unerfuellbarer Pflicht-Typ durchrutschen (dauerhaft 'incomplete': keine
+// Rueckerstattung, jede Nachforderung gebucht); waere sie zu lang, verboete der Boot einen
+// zuordenbaren Typ ohne Grund. Beide Richtungen werden geprueft.
+test("UNASSIGNABLE_COST_RECORD_TYPES deckt sich mit den Belegformen: weder Anker noch Session", () => {
+  const hasNoReference = (recordType) => {
+    const fields = ID_FIELDS_BY_RECORD_TYPE[recordType](OWN_IDS);
+    return !fields.call_control_id && !fields.telnyx_session_id && !fields.call_session_id;
+  };
+  assert.deepEqual(
+    Object.keys(ID_FIELDS_BY_RECORD_TYPE).filter(hasNoReference).sort(),
+    [...UNASSIGNABLE_COST_RECORD_TYPES].sort(),
+    "genau die Typen ohne jede Referenz gehoeren in UNASSIGNABLE_COST_RECORD_TYPES",
+  );
+  assert.ok(SESSION_ONLY_RECORD_TYPES.length > 0, "ohne Session-only-Typen pruefte Stufe 2 nichts");
 });
 
 test("getVoiceCostRecords: `inference` bleibt unzuordenbar (nur conversation_id) - bewusste Grenze", async () => {

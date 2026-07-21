@@ -199,9 +199,11 @@ services:
       - key: COST_TRUING_MAX_ATTEMPTS
         value: "5"
       # LEER = 'incomplete' ("nichts bewiesen"), NIEMALS "vollstaendig". Erst nach
-      # gemessenem Live-Beleg besetzen; die Enum-Werte sind sip-trunking, call-control,
-      # speech-to-text, text-to-speech, recording, inference, ai-voice-assistant -
-      # "call" existiert NICHT.
+      # gemessenem Live-Beleg besetzen; waehlbar sind nur die ZUORDENBAREN Typen:
+      # sip-trunking, call-control, speech-to-text, text-to-speech, recording,
+      # ai-voice-assistant. NICHT waehlbar ist inference (nur conversation_id, keinem
+      # Call zuordenbar) - als Pflicht-Typ verweigert der Boot seit LCT-FIX-1 den Start,
+      # weil die Menge dauerhaft unerfuellbar waere. "call" existiert NICHT.
       - key: COST_TRUING_REQUIRED_RECORD_TYPES
         value: ""
       - key: COST_TRUING_MIN_COVERAGE_PERCENT

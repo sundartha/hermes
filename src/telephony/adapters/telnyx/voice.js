@@ -49,12 +49,30 @@ const COST_RECORDS_PAGE_SIZE = 250;
 // providerLegIdOf(call) liefert in BEIDEN Pfaden eine `v3:`-Token (twilioSid im TeXML-/
 // Budget-Pfad, callControlId im Assistant-Pfad) - genau die Form traegt call_control_id.
 const ANCHOR_ID_FIELD = "call_control_id";
-// Stufe 2 (Aufspannen): zwei Feldnamen fuer DIESELBE Provider-Session - sip-trunking/
-// call-control/recording/ai-voice-assistant schreiben telnyx_session_id, speech-to-text/
-// text-to-speech call_session_id; kein Beleg traegt beide. NICHT dabei: telnyx_leg_id/
-// call_leg_id - sie sind UUIDs eines zweiten, mit der `v3:`-Token unvereinbaren ID-Systems
-// und als Zuordnungsquelle wertlos.
+// Stufe 2 (Aufspannen): die zwei Feldnamen, unter denen Belege eine Provider-Session
+// fuehren - sip-trunking/call-control/recording/ai-voice-assistant schreiben
+// telnyx_session_id, speech-to-text/text-to-speech call_session_id; kein Beleg traegt
+// beide. NICHT dabei: telnyx_leg_id/call_leg_id - sie sind UUIDs eines zweiten, mit der
+// `v3:`-Token unvereinbaren ID-Systems und als Zuordnungsquelle wertlos.
+//
+// UNBELEGTE ANNAHME, bewusst NICHT als bewiesen gefuehrt: dass beide Feldnamen denselben,
+// CALL-LOKALEN Wert bezeichnen. Belegt ist nur, dass die Felder so heissen und so aussehen
+// (Live-Messung 2026-07-21, 297 Belege); der Rohauszug liegt NICHT im Repo, die Tests
+// koennen die Annahme daher nur nachspielen, nicht belegen. Faellt sie - eine der beiden
+// IDs ist nicht call-lokal, z.B. sitzungsuebergreifend im Assistant-Pfad -, kippt die
+// Zuordnung von fail-closed nach fail-OPEN: fremde Belege landeten auf dem eigenen Tenant.
+// Falsifizierbar ohne Codeaenderung am PII-freien Log dieser Methode: `sessions=` zaehlt
+// die je Call aufgeloesten Sessions, ein Wert > 1 ist das Warnsignal. Die Live-Verifikation
+// vor dem ersten Deploy steht als Auflage in tasks/lct-DEPLOY-CHECKLIST.md.
 const SESSION_ID_FIELDS = Object.freeze(["telnyx_session_id", "call_session_id"]);
+// Belegtypen, die STRUKTURELL nie einem Call zugeordnet werden koennen: sie tragen weder
+// den Anker noch eine Session-Referenz. `inference` fuehrt ausschliesslich conversation_id
+// (Messung 2026-07-21). EINE Quelle dieser Aussage (G5): der Boot-Guard lehnt genau diese
+// Typen als PFLICHT-Typ ab (COST_TRUING_REQUIRED_RECORD_TYPES). Eine unerfuellbare
+// Pflicht-Menge haelt die Vollstaendigkeits-Aussage dauerhaft auf false - dann verfaellt
+// jede Rueckerstattung, waehrend jede Nachforderung gebucht wird (einseitige Korrektur
+// zulasten des Kunden, Deckungsquote dauerhaft 0 %).
+export const UNASSIGNABLE_COST_RECORD_TYPES = Object.freeze(["inference"]);
 // Kandidaten-Felder des Record-Zeitstempels fuer den zusaetzlichen CLIENT-seitigen
 // Fensterfilter (Design-Entscheidung P1, s. getVoiceCostRecords) - der Feldname ist wie
 // die Query-Parameternamen des Zeitfensters UNBELEGT (Kap. 2.6 belegt nur cost/rate/
@@ -196,10 +214,11 @@ function anchoredSessionIds(rawRecords, legId) {
 
 // Stufe 2: gehoert der Beleg zum Call? null = ja (direkter Anker ODER eine Session aus der
 // Anker-Menge), sonst der PII-freie Ablehnungsgrund fuer den Zaehler.
-// BEWUSSTE GRENZE: `inference`-Belege tragen ausschliesslich conversation_id - weder Anker
-// noch Session. Sie bleiben unzuordenbar (session_unresolved) und fehlen in der Summe; im
-// Messfenster 2026-07-21 waren das 0,000000 USD. Die Zuordnung dafuer aufzuweichen waere
-// der teure Fehler, nicht der fehlende Beleg.
+// BEWUSSTE GRENZE: die Typen aus UNASSIGNABLE_COST_RECORD_TYPES tragen weder Anker noch
+// Session (heute `inference`: nur conversation_id). Sie bleiben unzuordenbar
+// (session_unresolved) und fehlen in der Summe; im Messfenster 2026-07-21 waren das
+// 0,000000 USD. Die Zuordnung dafuer aufzuweichen waere der teure Fehler, nicht der
+// fehlende Beleg - deshalb verbietet der Boot-Guard sie stattdessen als Pflicht-Typ.
 function assignmentRejectionReason(raw, { legId, sessionIds }) {
   if (matchesAnchor(raw, legId)) return null;
   const recordSessions = recordSessionIds(raw);
