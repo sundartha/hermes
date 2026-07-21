@@ -14,9 +14,9 @@
 // Belege fuehren; die Annahme, dass `telnyx_session_id` und `call_session_id` denselben,
 // CALL-LOKALEN Wert bezeichnen, spielen diese Fixtures nach - sie beweisen sie NICHT. Was
 // die Tests hier wirklich pinnen, ist die fail-closed-Richtung: was NICHT in der vom Anker
-// aufgespannten Session liegt, kommt nie mit. Die Live-Verifikation der Annahme (Log-Zeile
-// mit den je Zuordnungsweg getrennten Zaehlern `via_…`) steht als Auflage in
-// tasks/lct-DEPLOY-CHECKLIST.md - das Format ist hier gepinnt, damit die Auflage nicht
+// aufgespannten Session liegt, kommt nie mit. Die laufende Beobachtung der Session-Invariante
+// (Log-Zeile mit den je Zuordnungsweg getrennten Zaehlern `via_…`) ist in
+// tasks/lct-DEPLOY-CHECKLIST.md beschrieben - das Format ist hier gepinnt, damit sie nicht
 // still an einer geaenderten Log-Zeile zerbricht.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -493,7 +493,8 @@ test("getVoiceCostRecords: Beleg mit geratenem Zeitstempel-Feld ausserhalb des F
 // `started_at` (sip-trunking, Messung 2026-07-21) und es steht bewusst NICHT in
 // RECORD_TIMESTAMP_FIELDS - auf der gemessenen Belegform filtert das Zeitfenster also
 // NICHTS. Damit ist es KEINE zweite Linie hinter der Zuordnung; bei parallel laufenden
-// Calls trennt allein die unbelegte Session-Annahme (Stopp-Kriterium der Deploy-Auflage).
+// Calls traegt allein die Call-Lokalitaet der Session (konto-weit gemessen 2026-07-21,
+// aber nie unter Parallelverkehr - s. tasks/lct-DEPLOY-CHECKLIST.md).
 // Der Test faellt, sobald jemand `started_at` aufnimmt - dann ist diese Aussage in
 // voice.js und in tasks/lct-DEPLOY-CHECKLIST.md neu zu bewerten, statt still zu veralten.
 test("getVoiceCostRecords: gemessenes started_at ausserhalb des Fensters filtert NICHT (Zeitfenster ist keine zweite Linie)", async () => {
@@ -527,9 +528,11 @@ function costRecordsLogLine(lines) {
   return lines.find((l) => l.includes("getVoiceCostRecords ok"));
 }
 
-// An dieser Zeile haengt eine BLOCKIERENDE Deploy-Auflage (tasks/lct-DEPLOY-CHECKLIST.md):
-// sie ist das einzige Instrument, das die unbelegte Session-Annahme live falsifizieren kann.
-// Ungepinnt zerbraeche die Auflage still an einem geaenderten Format. Die drei via_-Spalten
+// An dieser Zeile haengt die laufende Beobachtung der Session-Invariante
+// (tasks/lct-DEPLOY-CHECKLIST.md): sie ist das einzige Instrument, das eine nicht
+// call-lokale Session IM BETRIEB sichtbar machen wuerde - die konto-weite Messung
+// deckt Parallelverkehr nicht ab. Ungepinnt zerbraeche sie still an einem geaenderten
+// Format. Die drei via_-Spalten
 // kommen aus den Fixtures: Anker = sip-trunking + ai-voice-assistant, telnyx_session_id =
 // call-control + recording, call_session_id = speech-to-text + text-to-speech; inference
 // traegt keine Referenz und wird abgelehnt.

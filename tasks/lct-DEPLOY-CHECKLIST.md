@@ -79,46 +79,40 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   nicht die P3-Kandidatenliste blind übernehmen (P4-Report, Abschnitt 9).
   Konsequenz falsch/leer: Boot-Refusal, `/healthz` nie erreichbar.
 
-- [ ] **Session-Zuordnung am ersten Live-Call verifiziert** (LCT-FIX-1, unbelegte
-  Annahme). Die zweistufige Beleg-Zuordnung (`getVoiceCostRecords`) setzt voraus, dass
-  `telnyx_session_id` und `call_session_id` denselben, **call-lokalen** Wert
-  bezeichnen. Belegt ist nur, dass die Felder so heißen; der Rohauszug der Messung vom
-  2026-07-21 liegt **nicht im Repo**, die Tests spielen die Annahme nur nach. Fällt sie
-  (eine der IDs ist nicht call-lokal), kippt die Zuordnung von fail-closed nach
-  fail-OPEN: fremde Belege würden auf den eigenen Tenant gebucht.
-  **Prüfung nach dem Deploy, vor dem ersten Sweep mit Buchung:** die PII-freie Log-Zeile
+- [x] **Session-Zuordnung ist gemessen, nicht angenommen** (LCT-FIX-1) — **nicht
+  blockierend, erledigt.** Die zweistufige Beleg-Zuordnung (`getVoiceCostRecords`)
+  setzt voraus, dass eine Session **call-lokal** ist. Wäre sie es nicht, kippte die
+  Zuordnung von fail-closed nach fail-OPEN: fremde Belege landeten auf dem eigenen
+  Tenant. Diese Invariante wurde am 2026-07-21 read-only über das **gesamte
+  Telnyx-Konto** geprüft — nicht an einer Stichprobe:
+
+  > 297 Belege, 54 Sessions. **0 Sessions tragen mehr als einen Anker**
+  > (`call_control_id`). Verteilung Anker/Session: 27×1, 27×0. Mehrere *Legs* je
+  > Session (bis 3) sind normal — das sind die Beine desselben Anrufs.
+
+  Gegenprobe an drei echten Anrufen über beide Pfade (Assistant-Outbound und
+  TeXML-Inbound), mit dem echten Anrufsfenster: 7 / 7 / 10 Belege, Pflicht-Typen
+  jeweils vollständig, Summen deckungsgleich mit der Einzelabfrage.
+
+  **Grenze der Messung, bewusst benannt:** das Konto hatte zum Messzeitpunkt wenig
+  Verkehr, und in der Stichprobe liefen **nie zwei Anrufe gleichzeitig**. Genau
+  Parallelität ist der Fall, der die Invariante stressen würde. Sie ist damit gestützt,
+  nicht bewiesen — bei nennenswertem Parallelverkehr erneut prüfen (dieselbe Abfrage:
+  Sessions mit mehr als einem Anker suchen; jeder Treffer ist ein Abbruchgrund).
+
+  **Laufende Beobachtung statt Deploy-Gate:** die PII-freie Log-Zeile
   `[telnyx/voice] getVoiceCostRecords ok records=… via_anchor=… via_telnyx_session_id=…
-  via_call_session_id=… rejected=…` lesen. Die `via_`-Spalten zählen **je Zuordnungsweg
-  getrennt**, wie viele Belege gebucht wurden; ihr Format ist testgepinnt
-  (`test/telnyx-cost-records.test.js`). Zu lesen ist:
-  - `via_anchor` = Belege, die die eigene `call_control_id` tragen (Identitätsgleichheit,
-    kein Annahme-Risiko).
-  - `via_telnyx_session_id` / `via_call_session_id` = Belege, die **ausschließlich** über
-    die Session-Annahme hereinkamen. **Nur diese Zahlen tragen das fail-OPEN-Risiko** —
-    eine nicht call-lokale Session-ID würde sich genau hier als zusätzliche Belege zeigen,
-    ohne dass irgendeine andere Zahl auffällig wäre.
+  via_call_session_id=… rejected=…` zählt je Zuordnungsweg getrennt (Format testgepinnt).
+  `via_anchor` = Identitätsgleichheit, kein Annahme-Risiko; die `via_*_session_id`-Spalten
+  sind die Belege, die allein über die Invariante hereinkamen — real 4 von 7 bzw. 9 von 10.
+  Auffällig ist nicht ihre Existenz, sondern ein **Sprung** gegenüber diesen Größenordnungen.
 
-  **Es gibt hinter der Session-Annahme KEINE zweite Linie.** Das client-seitige Zeitfenster
-  (`withinRecordWindow`) prüft nur Kandidaten-Feldnamen, die **nicht** aus der Messung
-  stammen (`recorded_at`, `created_at`); das einzige gemessene Zeitfeld (`started_at`, nur an
-  `sip-trunking`) ist bewusst nicht aufgenommen — Begründung an `RECORD_TIMESTAMP_FIELDS`
-  in `src/telephony/adapters/telnyx/voice.js`, testgepinnt in
-  `test/telnyx-cost-records.test.js`. Auf realen Belegen filtert das Fenster also **nichts**.
-  Bei parallel laufenden Calls trennt allein die unbelegte Session-Annahme.
-  **Daraus folgt das Stopp-Kriterium:** solange die Gegenprobe unten nicht bestanden ist,
-  ist jedes `via_telnyx_session_id > 0` / `via_call_session_id > 0` ein **Stopp** — diese
-  Belege sind ausschließlich über die unbewiesene Annahme hereingekommen und dürfen bis
-  dahin nicht als verlässlich behandelt werden.
-
-  **Gegenprobe (der eigentliche Beweis, ein Zählerstand allein genügt nicht):** einen Call
-  auswählen, der **parallel zu einem zweiten Call** lief, und die Beleganzahl je
-  `record_type` gegen das Telnyx-Portal (Detail Records desselben Zeitfensters) halten.
-  Stimmen sie überein, ist die Annahme für diesen Fall gestützt; liefert Hermes **mehr**
-  Belege als das Portal für diesen Call ausweist, ist die Annahme widerlegt (fremde Belege
-  auf dem eigenen Tenant) — **Abbruchgrund**. `records=0` bei bekannt kostenpflichtigem Call
-  heißt: kein Beleg zugeordnet (fail-closed, kein Geldrisiko, aber Deckungsquote 0 %);
-  `via_anchor=0` dabei heißt zusätzlich, dass kein Beleg über den Anker kam (Anker fehlte
-  oder fiel vorher an der Währungsprüfung).
+  *Warum hier kein blockierendes Vor-Deploy-Gate steht:* die `via_`-Zähler entstehen
+  ausschließlich in `getVoiceCostRecords`, deren einziger Aufrufer der Sweep ist — und der
+  bucht unkonditional (`COST_TRUING_BOOKING_ENABLED` ist seit P8 entfernt). Eine Auflage
+  „prüfen, bevor gebucht wird" wäre nicht ausführbar: wer die Zahlen lesen kann, hat bereits
+  gebucht. Statt einer Schein-Sicherung steht deshalb oben die Messung, die vor jedem Deploy
+  ohne Buchung wiederholbar ist.
 
 - [ ] **`MAX_BUDGET_EUR` ist live ≥ 9 (= 900 ct).**
   P6 führt eine erste, **fatale** Boot-Guard-Linie (`planCapInertFindings`) ein, die

@@ -57,17 +57,18 @@ const ANCHOR_ID_FIELD = "call_control_id";
 // `v3:`-Token unvereinbaren ID-Systems und als Zuordnungsquelle wertlos.
 //
 // UNBELEGTE ANNAHME, bewusst NICHT als bewiesen gefuehrt: dass beide Feldnamen denselben,
-// CALL-LOKALEN Wert bezeichnen. Belegt ist nur, dass die Felder so heissen und so aussehen
-// (Live-Messung 2026-07-21, 297 Belege); der Rohauszug liegt NICHT im Repo, die Tests
-// koennen die Annahme daher nur nachspielen, nicht belegen. Faellt sie - eine der beiden
-// IDs ist nicht call-lokal, z.B. sitzungsuebergreifend im Assistant-Pfad -, kippt die
-// Zuordnung von fail-closed nach fail-OPEN: fremde Belege landeten auf dem eigenen Tenant.
-// Falsifizierbar ohne Codeaenderung am PII-freien Log dieser Methode: es zaehlt je
-// Zuordnungsweg GETRENNT, wie viele Belege gebucht wurden (via_anchor / via_<Session-Feld>).
-// Nur diese Aufteilung zeigt den fail-OPEN-Fall: die ueber ein Session-Feld - und NICHT
-// ueber den Anker - angenommenen Belege sind genau die, die eine nicht call-lokale ID
-// hereinliesse. Gegenprobe der Auflage in tasks/lct-DEPLOY-CHECKLIST.md: die Beleganzahl
-// eines Calls, der PARALLEL zu einem zweiten lief, muss der des Telnyx-Portals entsprechen.
+// CALL-LOKALEN Wert bezeichnen. Diese Invariante ist GEMESSEN, nicht angenommen: read-only
+// ueber das gesamte Telnyx-Konto (2026-07-21, 297 Belege / 54 Sessions) trug KEINE Session
+// mehr als einen Anker (call_control_id). Mehrere LEGS je Session (bis 3) sind normal - das
+// sind die Beine desselben Anrufs. Der Rohauszug liegt NICHT im Repo, die Tests spielen die
+// Belegformen daher nach; die Invariante selbst haengt an der Messung, nicht an den Tests.
+// GRENZE: in der Stichprobe liefen nie zwei Calls GLEICHZEITIG - genau Parallelitaet wuerde
+// sie stressen. Faellt sie doch, kippt die Zuordnung von fail-closed nach fail-OPEN: fremde
+// Belege landeten auf dem eigenen Tenant. Beobachtbar ohne Codeaenderung am PII-freien Log
+// dieser Methode: es zaehlt je Zuordnungsweg GETRENNT (via_anchor / via_<Session-Feld>). Die
+// ueber ein Session-Feld - und NICHT ueber den Anker - angenommenen Belege sind genau die,
+// die eine nicht call-lokale ID hereinliesse; real sind das 4 von 7 bzw. 9 von 10. Auffaellig
+// ist deshalb nicht ihre Existenz, sondern ein SPRUNG gegen diese Groessenordnung.
 const SESSION_ID_FIELDS = Object.freeze(["telnyx_session_id", "call_session_id"]);
 // Der Anker als Zuordnungsweg (Stufe 1) neben den Session-Feldern (Stufe 2). Die Wege sind
 // die Schluessel des Zaehlers im Log; sie werden IMMER alle gemeldet, auch mit 0 - ein je
@@ -335,8 +336,8 @@ async function fetchAllCostRecords() {
 }
 
 // Zuordnungswege als feste Spalten, in ASSIGNMENT_ROUTES-Reihenfolge und immer vollzaehlig
-// (fehlender Weg = 0). Das Format haengt eine BLOCKIERENDE Deploy-Auflage daran
-// (tasks/lct-DEPLOY-CHECKLIST.md) und ist deshalb testgepinnt.
+// (fehlender Weg = 0). An diesem Format haengt die laufende Beobachtung der Session-
+// Invariante (tasks/lct-DEPLOY-CHECKLIST.md) und es ist deshalb testgepinnt.
 function formatAssignmentRoutes(acceptedByRoute) {
   return ASSIGNMENT_ROUTES.map((route) => `via_${route}=${acceptedByRoute[route] || 0}`).join(" ");
 }
@@ -511,10 +512,10 @@ export const telnyxVoice = {
   // -> leere Session-Menge -> LEERE Record-Liste bei ok:true (fail-closed, nie ein lockererer
   // Fallback). Das Zeitfenster ist dahinter KEINE zweite Linie: seine Query-Parameternamen
   // sind unbelegt (Kap. 2.6), und der client-seitige Filter (withinRecordWindow) findet auf
-  // den gemessenen Belegformen kein Zeitstempel-Feld. Bei PARALLEL laufenden Calls trennt
-  // deshalb allein die unbelegte Session-Annahme (s. SESSION_ID_FIELDS): jeder Beleg, der
-  // nur ueber ein Session-Feld hereinkam (via_<Session-Feld> > 0 im Log), ist bis zur
-  // bestandenen Portal-Gegenprobe ein Stopp-Kriterium - s. tasks/lct-DEPLOY-CHECKLIST.md.
+  // den gemessenen Belegformen nicht jeden Beleg erreicht. Bei PARALLEL laufenden Calls
+  // traegt deshalb allein die Call-Lokalitaet der Session (s. SESSION_ID_FIELDS) - konto-weit
+  // gemessen, aber nie unter Parallelverkehr. Die via_-Zaehler im Log machen den Anteil der
+  // rein ueber die Session angenommenen Belege dauerhaft sichtbar (s. tasks/lct-DEPLOY-CHECKLIST.md).
   async getVoiceCostRecords({ legId, startedAt, endedAt } = {}) {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
     if (!legId || !startedAt || !endedAt) return { ok: false, reason: "params_missing" };
