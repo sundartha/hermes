@@ -49,6 +49,13 @@ export function hasActiveNumber(s) {
   return s.numbers.some((n) => n.status === NUMBER_STATUS.ACTIVE);
 }
 
+// LCT P7 (Fixkosten sichtbar machen): Plattform-weiter Zaehler aktiver Nummern fuer die
+// DID-Listenmiete-Anzeige (GET /api/billing/platform-costs). PII-frei: liefert nur eine
+// Ganzzahl, KEINE E.164/Tenant-Kennung. Gleiche Status-Quelle wie hasActiveNumber (G5).
+export function countActiveNumbers(s) {
+  return s.numbers.filter((n) => n.status === NUMBER_STATUS.ACTIVE).length;
+}
+
 // Aktive Nummer eines Tenants als e164-String fuer die Anzeige (fail-closed: keine
 // eigene aktive Nummer -> "", NIE die Nummer eines fremden Tenants als Fallback ->
 // kein PII-/Toll-Fraud-Leck). Gleiche Quelle wie outboundFrom (findActiveNumber).

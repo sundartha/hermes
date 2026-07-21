@@ -10,6 +10,7 @@ import {
   demoCalendar,
   calendarMap,
   emptyUsage,
+  emptyPlatformTtsUsage,
   sanitizeProfile,
   BOOTSTRAP_TENANT_ID,
   normNum,
@@ -54,6 +55,7 @@ export function load() {
     state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
     state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
+    state.platformTtsUsage ||= emptyPlatformTtsUsage(); // LCT P7: Bestands-store.json ohne die Zeile nachziehen
     state.calls = migrateCallCostFields(state.calls || []);
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
@@ -562,6 +564,21 @@ export function reservationOf(tenantId) {
 // hereingereicht, wie bei tryReserveOutboundBudget.
 export function claimPlatformSpendWarning(cfg, nowIso) {
   return ops.claimPlatformSpendWarning(load(), cfg, nowIso);
+}
+
+// ---- ElevenLabs-Kontingent-Zaehler (LCT P7) ----
+// ANDERS als claimPlatformSpendWarning darueber: platformTtsUsage PERSISTIERT (s.
+// state-ops.js Modul-Doc) -> save() NUR bei changed (Muster recordCallCostTruingResult).
+// cfg = config.billing (dieselbe Instanz, die alle anderen Fassaden-Methoden hier lesen).
+export function recordTtsCharacters(chars, nowIso) {
+  const r = ops.recordTtsCharacters(load(), chars, config.billing, nowIso);
+  if (r.changed) save();
+  return r.warning;
+}
+
+// Reine Leseprojektion (kein save). nowIso vom Aufrufer (Muster tenantBudgetSnapshot).
+export function platformTtsUsageView(nowIso) {
+  return ops.platformTtsUsageView(load(), config.billing, nowIso);
 }
 
 // ---- Per-Tenant-Budget + Metering (P6b3) ----

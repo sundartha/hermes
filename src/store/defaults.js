@@ -424,6 +424,17 @@ export function emptyUsageMap() {
   return { [BOOTSTRAP_TENANT_ID]: emptyUsage() };
 }
 
+// LCT P7: globaler ElevenLabs-Zeichenzaehler (nicht tenant-scoped, Muster profile - EIN
+// Konto, keine Tenant-Dimension). PERSISTIERT (ueberlebt einen Restart - ein Free-Tier-
+// Dyno startet haeufig neu, ein rein prozess-lokaler Zaehler erreichte die Kontingent-
+// Wand nie; dieselbe Begruendung wie costTruingAttempts). cycleKey/warnedCycle sind
+// 'YYYY-MM'-Zyklusschluessel (Anker = TTS_QUOTA_CYCLE_ANCHOR_DAY, NICHT der Kalendermonat -
+// der ElevenLabs-Zyklus faellt auf einen Tag mitten im Monat). REINE SICHTBARKEIT: kein
+// Gate liest die Zahl.
+export function emptyPlatformTtsUsage() {
+  return { cycleKey: null, characters: 0, warnedCycle: null };
+}
+
 // ---- Rechteprofile pro Nutzer (Phase 2) ----
 // Profil-Felder mit erwartetem Typ (Whitelist gegen sanitizeProfile, analog
 // updateSettings). "string[]" = Array aus Strings.

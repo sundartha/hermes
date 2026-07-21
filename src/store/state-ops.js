@@ -19,6 +19,7 @@ import {
   calendarMap,
   emptyUsage,
   emptyUsageMap,
+  emptyPlatformTtsUsage,
   BOOTSTRAP_TENANT_ID,
   sanitizeProfile,
   resolveProfileFrom,
@@ -104,6 +105,12 @@ export function makeDefaultState() {
     // der lebt PRO TENANT-BUCKET, die Schwelle ist eine PLATTFORM-Groesse - es gibt keinen
     // Plattform-Bucket, der einen Schluessel truege.
     platformSpendWarnedMonth: null,
+    // LCT P7: globaler ElevenLabs-Zeichenzaehler (Muster profile - keine Tenant-Dimension).
+    // ANDERS als platformSpendWarnedMonth direkt darueber: DIESES Feld PERSISTIERT (json
+    // nimmt es NICHT in die Ephemer-Strip-Liste auf, pg haelt eine eigene Tabelle) - ein
+    // rein prozess-lokaler Zaehler wuerde bei jedem Free-Tier-Restart auf 0 fallen und die
+    // Kontingent-Wand nie erreichen (dieselbe P4-Asymmetrie-Begruendung wie spendMonthKey).
+    platformTtsUsage: emptyPlatformTtsUsage(),
     // sub -> tenantId Resolver-Index (tenant-prolif-b). MERGE-OVERLAY fuer resolveTenant:
     // traegt die per Email-Merge (Phase A) an einen FREMDEN Tenant gebundenen Zweit-subs,
     // die NICHT als tenant.idpSubject gespiegelt sind. pg fuellt ihn bei init() aus account
@@ -1637,23 +1644,20 @@ function spendMonthKeyOf(nowIso) {
   return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-// Der AUTORITATIVE Monatsschluessel eines Buckets zum Zeitpunkt nowKey: der SPAETERE aus
-// gespeichertem und laufendem Schluessel. 'YYYY-MM' ist lexikografisch = chronologisch
-// sortierbar -> String-Vergleich genuegt, keine zweite Datums-Arithmetik.
-//
-// EINZIGE Vergleichsregel der Achse (G5), GENAU ZWEI direkte Aufrufer: die
-// Leseprojektion spendMonthWindowKey (P5b, einzige Stelle, die den autoritativen
-// Schluessel zusammensetzt - spendMonthUsageCents bezieht ihn NUR noch darueber,
-// siehe unten, statt ihn ein zweites Mal selbst zusammenzusetzen) und der Schreiber
-// bookCents. Beide stellen dieselbe Frage ("weicht der autoritative Schluessel vom
-// gespeicherten ab?") und lesen die Antwort unterschiedlich: der Leser als "0"/den
-// laufenden Schluessel, der Schreiber als "Zaehler startet neu".
+// Der SPAETERE aus gespeichertem und laufendem periodischen Schluessel ('YYYY-MM',
+// lexikografisch = chronologisch sortierbar -> String-Vergleich genuegt, keine zweite
+// Datums-Arithmetik). EINZIGE Monotonie-/Zukunftsschluessel-Regel BEIDER periodischer
+// Achsen dieses Moduls (G5): der Spend-Monat der Budget-Achse (P4/P7, ueber
+// authoritativeSpendMonthKey darunter) UND der ElevenLabs-Zyklus-Schluessel (LCT P7,
+// ttsCycleKeyOf/recordTtsCharacters weiter unten) teilen sich denselben Riegel statt ihn
+// ein zweites Mal zu implementieren.
 //
 // MONOTONIE-RIEGEL (Sicherheitskern): weil das MAXIMUM gebildet wird, kann der
 // Schluessel per Konstruktion NIE rueckwaerts wandern, und ein Schluessel in der
 // ZUKUNFT (Clock-Skew, falsch gestellte Container-Uhr) gewinnt - er liest NICHT als
-// frischer Monat und faellt NICHT auf 0. Ohne diesen Riegel waere die Achse ueber eine
-// einzige Uhr-Anomalie beliebig oft ruecksetzbar, also der Cap nach P7 abschaltbar.
+// frischer Zeitraum und faellt NICHT auf 0. Ohne diesen Riegel waere jede Achse ueber
+// eine einzige Uhr-Anomalie beliebig oft ruecksetzbar, also ihr Cap/Kontingent
+// abschaltbar.
 //
 // Semantik im Ueberblick (storedKey vs. nowKey):
 //   aelter   -> nowKey    (Rollover: Leser 0, Schreiber startet bei 0)
@@ -1662,10 +1666,24 @@ function spendMonthKeyOf(nowIso) {
 //   kein nowKey (unlesbar) -> storedKey (fail-closed)
 //   kein storedKey (Bestandszeile/frischer Bucket) -> nowKey (erste Stempelung)
 // Reine Funktion.
-function authoritativeSpendMonthKey(storedKey, nowKey) {
+export function laterMonotonicKey(storedKey, nowKey) {
   if (!nowKey) return storedKey ?? null;
   if (!storedKey) return nowKey;
   return storedKey > nowKey ? storedKey : nowKey;
+}
+
+// Der AUTORITATIVE Monatsschluessel eines Usage-Buckets zum Zeitpunkt nowKey. Delegiert
+// unveraendert an laterMonotonicKey (G5) - Semantik byte-identisch zum Bestand vor der
+// Extraktion (Beweis: die bestehenden Spend-Monat-/Budget-Tests bleiben gruen).
+//
+// GENAU ZWEI direkte Aufrufer: die Leseprojektion spendMonthWindowKey (P5b, einzige
+// Stelle, die den autoritativen Schluessel zusammensetzt - spendMonthUsageCents bezieht
+// ihn NUR noch darueber, siehe unten, statt ihn ein zweites Mal selbst zusammenzusetzen)
+// und der Schreiber bookCents. Beide stellen dieselbe Frage ("weicht der autoritative
+// Schluessel vom gespeicherten ab?") und lesen die Antwort unterschiedlich: der Leser als
+// "0"/den laufenden Schluessel, der Schreiber als "Zaehler startet neu".
+function authoritativeSpendMonthKey(storedKey, nowKey) {
+  return laterMonotonicKey(storedKey, nowKey);
 }
 
 // Reine LESEPROJEKTION des Monatsverbrauchs in GANZZAHL Cents - KEINE Mutation, kein
@@ -2274,6 +2292,59 @@ export function claimPlatformSpendWarning(s, cfg, nowIso) {
   if (s.platformSpendWarnedMonth === monthKey) return null;
   s.platformSpendWarnedMonth = monthKey;
   return { totalCents, monthKey };
+}
+
+// ---- ElevenLabs-Kontingent-Zaehler (LCT P7) ----
+// Globaler, nicht-tenant-scoped Zeichenzaehler ueber den Play-TTS-Vorab-Synthese-Pfad
+// (src/tts/directive-synth.js). REINE SICHTBARKEIT: kein Gate/Reserve/Buchung liest diese
+// Achse - die Zahlen dienen ausschliesslich dem Anzeige-Endpunkt (GET /api/billing/
+// platform-costs).
+
+// Zyklus-Schluessel des ElevenLabs-Kontingents ('YYYY-MM'). Anker = anchorDay (Tag im
+// Monat, aus config.billing.ttsQuotaCycleAnchorDay): ab anchorDay laeuft der aktuelle
+// Monat als Schluessel, DAVOR gilt noch der VORmonat -> der Reset faellt auf den
+// ElevenLabs-Zyklus-Tag, NICHT den Kalender-Monatsersten (anders als spendMonthKeyOf).
+// Unlesbares nowIso -> null (der Aufrufer behandelt das ueber laterMonotonicKey
+// fail-closed, kein Reset). Reine Funktion.
+function ttsCycleKeyOf(nowIso, anchorDay) {
+  const at = new Date(nowIso);
+  if (Number.isNaN(at.getTime())) return null;
+  const anchored = new Date(at.getTime());
+  if (at.getUTCDate() < anchorDay) anchored.setUTCMonth(anchored.getUTCMonth() - 1);
+  return `${anchored.getUTCFullYear()}-${String(anchored.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Verbucht erfolgreich an ElevenLabs gesendete Zeichen auf dem globalen Zaehler und
+// meldet die Warnschwelle GENAU EINMAL je Zyklus (Muster claimPlatformSpendWarning).
+// nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei). Liefert {changed, warning}:
+// warning != null NUR beim ERSTmaligen Ueberschreiten im Zyklus (sonst null - keine
+// zweite SMS je Zyklus). Ganzzahl-Arithmetik durchweg (G26); Zukunfts-/Unlesbar-Riegel
+// ueber laterMonotonicKey (dieselbe Regel wie die Spend-Monat-Achse, G5).
+export function recordTtsCharacters(s, chars, cfg, nowIso) {
+  const row = s.platformTtsUsage;
+  const key = laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
+  if (key === null) return { changed: false, warning: null }; // kein Anker je gestempelt UND Uhr unlesbar -> No-op
+  const rolledOver = key !== row.cycleKey;
+  row.characters = rolledOver ? chars : row.characters + chars;
+  row.cycleKey = key;
+  const threshold = cfg.ttsCharacterQuota * cfg.ttsCharacterQuotaWarnPercent; // skaliert, kein Float
+  const crossed = cfg.ttsCharacterQuotaWarnPercent > 0 && row.characters * PERCENT_SCALE >= threshold;
+  if (crossed && row.warnedCycle !== key) {
+    row.warnedCycle = key;
+    return { changed: true, warning: { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key } };
+  }
+  return { changed: true, warning: null };
+}
+
+// Reine Leseprojektion fuer den Anzeige-Endpunkt (kein Gate). Zyklus-korrekt: nach einem
+// Rollover wird 0 gezeigt, OHNE die Zeile zu mutieren (Muster spendMonthUsageCents/
+// spendMonthWindowKey - Leser und Schreiber teilen sich denselben autoritativen
+// Schluessel ueber laterMonotonicKey).
+export function platformTtsUsageView(s, cfg, nowIso) {
+  const row = s.platformTtsUsage;
+  const key = laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
+  const characters = key === row.cycleKey ? row.characters : 0;
+  return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
 }
 
 // ---- Notifications ----
