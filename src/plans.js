@@ -52,6 +52,17 @@ export const PLAN_CATALOG = Object.freeze([
 // billing/subscribe.js (PLAN_SLUGS) - kein zweites Slug-Literal (G5/S2).
 export const CATALOG_SLUGS = Object.freeze(PLAN_CATALOG.map((p) => p.slug));
 
+// Kern-Praedikat: ist `slug` ein buchbarer Katalog-Slug? EINE Quelle der
+// Mitgliedschaftspruefung (G5/S2) - vier Aufrufstellen (subscribe.js, webhook.js,
+// state-ops.js, self-service-routes.js) teilen sie sich, JEDE behaelt aber ihre
+// eigene Reaktion (throw / soft-ignore+audit / reject-Objekt / null) und ihr eigenes
+// null/leer-Handling. Reine Mitgliedschaft: null/undefined/leer -> false (Array.includes
+// matcht sie nicht) - identisch zum vorher an jeder Stelle inline geschriebenen
+// CATALOG_SLUGS.includes(slug), nur nicht mehr dupliziert.
+export function isKnownPlanSlug(slug) {
+  return CATALOG_SLUGS.includes(slug);
+}
+
 // Katalog-Lookup nach Slug (BK4: includedMinutes der Minuten-Kontingent-Anzeige).
 // Reiner Accessor - kapselt, dass der Katalog ein Array ist (G17/G36), kein .find
 // verstreut beim Aufrufer. Unbekannter/leerer Slug -> null (Aufrufer zeigt Leerzustand).

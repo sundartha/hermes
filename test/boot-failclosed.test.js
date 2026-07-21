@@ -5,6 +5,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit } from "./helpers.js";
+import { eurToCents } from "../src/config.js";
+import { planCapInertFindings } from "../src/boot-guard.js";
+import { CATALOG_SLUGS } from "../src/plans.js";
+import { planCapCents } from "../src/billing/plan-caps.js";
+
+// LCT P6 Gegenprobe (j1): kohaerenter MAX_BUDGET_EUR-Wert - hoch genug (3000 ct), dass die
+// hoechste abgeleitete Plan-Decke (business=900 ct) darunter bleibt. EINE Quelle fuer den
+// Env-Override UND die Kohaerenz-Gegenpruefung (kein zweites Literal, G5).
+const GEGENPROBE_BUDGET_EUR = 30;
+
+// Muss dem config.js-Fallback von VOICE_CAP_RATE_CENTS_PER_MIN (EUR-Cent/min) entsprechen: die
+// Gegenprobe setzt KEINEN Kurs-Override, der Server leitet die Plan-Decken also mit genau
+// diesem Fallback ab. 6 = auf die naechste Ganzzahl aufgerundete 5,4 ct/min (Muster env-docs).
+const VOICE_CAP_RATE_CENTS_PER_MIN_FALLBACK = 6;
 
 test("T-P2-06: NaN-Budget (MAX_BUDGET_EUR=acht) -> Boot verweigert (exit 1), nennt Var", async () => {
   const { code, output } = await startServerExpectExit({ env: { MAX_BUDGET_EUR: "acht" } });
@@ -156,13 +170,28 @@ test("LCT P6 (j1): MAX_BUDGET_EUR=8 -> plan_cap_inert (business), Boot verweiger
 });
 
 test("LCT P6 (j1 Gegenprobe): MAX_BUDGET_EUR=30 bootet gruen (kein plan_cap_inert)", async () => {
-  const srv = await startServer({ env: { MAX_BUDGET_EUR: "30" } });
+  const srv = await startServer({ env: { MAX_BUDGET_EUR: String(GEGENPROBE_BUDGET_EUR) } });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
-    assert.doesNotMatch(srv.stdout, /plan_cap_inert/);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
   } finally {
     await srv.stop();
   }
+  // Echte Kohaerenz-Pruefung statt toter stdout-Regex: boot.js druckt finding.message, NIE
+  // finding.code 'plan_cap_inert' - eine /plan_cap_inert/-Assertion gegen stdout war fuer jedes
+  // Ergebnis wahr und pruefte nichts. Direkt gegen den Guard (Muster env-docs): bei
+  // MAX_BUDGET_EUR=30 liegt die hoechste abgeleitete Plan-Decke (business=900 ct) unter
+  // platformSpendCapCents=3000 -> planCapInertFindings ist leer, GENAU das laesst den Boot
+  // oben gruen durchlaufen.
+  const inertFindings = planCapInertFindings({
+    slugs: CATALOG_SLUGS,
+    platformCapCents: eurToCents(GEGENPROBE_BUDGET_EUR),
+    capForSlug: (slug) => planCapCents(slug, { voiceCapRateCentsPerMin: VOICE_CAP_RATE_CENTS_PER_MIN_FALLBACK }),
+  });
+  assert.deepEqual(
+    inertFindings,
+    [],
+    `MAX_BUDGET_EUR=${GEGENPROBE_BUDGET_EUR} muss kohaerent sein (kein plan_cap_inert): ${JSON.stringify(inertFindings)}`,
+  );
 });

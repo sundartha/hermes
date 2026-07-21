@@ -7,7 +7,7 @@ import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { customerMatches } from "./card-setup.js";
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
-import { CATALOG_SLUGS } from "../plans.js";
+import { isKnownPlanSlug } from "../plans.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -212,7 +212,7 @@ export async function applyStripeWebhook(
     // Antwort/Stripe-Timeout). Hier fail-closed abfangen: NICHT aktivieren (Ueberbuchung fail-
     // closed, die richtige Decke ist bei unbekanntem Plan unbestimmbar). planSlug==null ist der
     // erlaubte selektive Patch (gespeicherter Slug bleibt) und wird NIE abgelehnt.
-    if (planSlug != null && !CATALOG_SLUGS.includes(planSlug)) {
+    if (planSlug != null && !isKnownPlanSlug(planSlug)) {
       audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
       return;
     }

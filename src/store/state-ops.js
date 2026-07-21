@@ -52,7 +52,7 @@ import {
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
-import { CATALOG_SLUGS } from "../plans.js";
+import { isKnownPlanSlug } from "../plans.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -1018,8 +1018,8 @@ export function setTenantSubscription(
   // spaeterer, unabhaengiger save() flusht die Mutation still auf Platte/DB). Validierung VOR
   // Mutation macht die Schreibkante atomar. null/leer = erlaubter selektiver Patch (No-op in der
   // Ableitung), wirft NIE - der EINZIGE Wurf ist "Slug gesetzt, aber unbekannt" (Message-Parity
-  // zu planCapCents). CATALOG_SLUGS ist die SSoT der buchbaren Slugs (plans.js), cfg-frei.
-  if (planSlug != null && planSlug !== "" && !CATALOG_SLUGS.includes(planSlug)) {
+  // zu planCapCents). isKnownPlanSlug ist die SSoT-Mitgliedschaftspruefung (plans.js), cfg-frei.
+  if (planSlug != null && planSlug !== "" && !isKnownPlanSlug(planSlug)) {
     throw new Error(`setTenantSubscription: unbekannter Plan-Slug '${planSlug}' (kein Katalog-Eintrag)`);
   }
   if (subscriptionId !== undefined) tenant.stripeSubscriptionId = subscriptionId;
