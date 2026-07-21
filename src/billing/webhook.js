@@ -7,6 +7,7 @@ import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { customerMatches } from "./card-setup.js";
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
+import { isKnownPlanSlug } from "../plans.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -203,6 +204,18 @@ export async function applyStripeWebhook(
     return;
   }
   if (action === WEBHOOK_ACTION.ACTIVATE) {
+    // S1-1 (G11): einen GESETZTEN, aber unbekannten Plan-Slug NIE an den Store weiterreichen
+    // (Muster createTenantSubscription, subscribe.js: unknown_plan fail-closed - hier fehlte
+    // dieses Gate als einzigem der beiden Schwester-Aufrufer). store.setTenantSubscription lehnt
+    // einen unbekannten Slug zwar atomar ab (wirft), aber die Route hat KEIN try/catch um
+    // applyStripeWebhookSerialized -> der Wurf liefe als unhandled rejection durch (haengende
+    // Antwort/Stripe-Timeout). Hier fail-closed abfangen: NICHT aktivieren (Ueberbuchung fail-
+    // closed, die richtige Decke ist bei unbekanntem Plan unbestimmbar). planSlug==null ist der
+    // erlaubte selektive Patch (gespeicherter Slug bleibt) und wird NIE abgelehnt.
+    if (planSlug != null && !isKnownPlanSlug(planSlug)) {
+      audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
+      return;
+    }
     // Nur die wirklich gelieferten Felder nachziehen (selektiver Patch): planSlug/
     // currentPeriodEnd/currentPeriodStart koennen fehlen -> der gespeicherte Wert bleibt unveraendert.
     const patch = {};

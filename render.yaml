@@ -282,6 +282,11 @@ services:
       # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.
       - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
         value: "10"
+      # LCT P6 - Deckel-Basissatz je Voice-Minute (EUR-Cent). Leitet die Tenant-Kostendecke
+      # aus dem Plan ab (30 min * Satz * 5/3 = Starter, 120 min * Satz * 5/4 = Business).
+      # 6 = aufgerundete 5,4 gemessene ct/min -> 300 / 900 ct.
+      - key: VOICE_CAP_RATE_CENTS_PER_MIN
+        value: "6"
       # Muss ECHT KLEINER als MAX_BUDGET_EUR*100 sein - sonst verweigert der Boot-Guard
       # (spendCapCoherence) den Start. 600 = Starter-Minutenwert (30 min * 20 ct).
       - key: DEFAULT_TENANT_BUDGET_CENTS

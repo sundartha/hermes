@@ -9,7 +9,7 @@
 // Store-Fassade). Diese Schicht persistiert nur die Abo-Referenzen am Tenant.
 
 import { hasCardOnFile } from "../self-service.js";
-import { CATALOG_SLUGS } from "../plans.js";
+import { CATALOG_SLUGS, isKnownPlanSlug } from "../plans.js";
 import { activatePaidTenant } from "./activation.js";
 import { customerMatches } from "./card-setup.js";
 
@@ -90,7 +90,7 @@ export function hasActiveSubscription(store, tenant) {
 // und store.setTenantSubscription. Nebeneffekt (Anlegen + Speichern) im Namen (N7).
 // Aktiviert NICHT (Status-Flip liegt im Route-Layer ueber accounts.setStatus).
 export async function createTenantSubscription({ store, billing, config, tenant, planSlug }) {
-  if (!PLAN_SLUGS.includes(planSlug)) return { ok: false, reason: "unknown_plan" };
+  if (!isKnownPlanSlug(planSlug)) return { ok: false, reason: "unknown_plan" };
   const priceId = priceIdForPlan(planSlug, config);
   if (!priceId) return { ok: false, reason: "plan_unconfigured" };
   // Doppelabbuchungs-Schutz: ein Tenant mit bereits gespeichertem Abo bucht nicht

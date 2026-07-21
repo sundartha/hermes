@@ -5,6 +5,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, startServerExpectExit } from "./helpers.js";
+import { eurToCents } from "../src/config.js";
+import { planCapInertFindings } from "../src/boot-guard.js";
+import { CATALOG_SLUGS } from "../src/plans.js";
+import { planCapCents } from "../src/billing/plan-caps.js";
+
+// LCT P6 Gegenprobe (j1): kohaerenter MAX_BUDGET_EUR-Wert - hoch genug (3000 ct), dass die
+// hoechste abgeleitete Plan-Decke (business=900 ct) darunter bleibt. EINE Quelle fuer den
+// Env-Override UND die Kohaerenz-Gegenpruefung (kein zweites Literal, G5).
+const GEGENPROBE_BUDGET_EUR = 30;
+
+// Muss dem config.js-Fallback von VOICE_CAP_RATE_CENTS_PER_MIN (EUR-Cent/min) entsprechen: die
+// Gegenprobe setzt KEINEN Kurs-Override, der Server leitet die Plan-Decken also mit genau
+// diesem Fallback ab. 6 = auf die naechste Ganzzahl aufgerundete 5,4 ct/min (Muster env-docs).
+const VOICE_CAP_RATE_CENTS_PER_MIN_FALLBACK = 6;
 
 test("T-P2-06: NaN-Budget (MAX_BUDGET_EUR=acht) -> Boot verweigert (exit 1), nennt Var", async () => {
   const { code, output } = await startServerExpectExit({ env: { MAX_BUDGET_EUR: "acht" } });
@@ -33,7 +47,9 @@ test("Boot-Guard: keine aktive Nummer im Store -> Boot verweigert (exit 1), nenn
 });
 
 test("T-P2-08: vollstaendige Config bootet -> GET /healthz 200 (kein Fehl-Refusal)", async () => {
-  const srv = await startServer({ env: { MAX_BUDGET_EUR: "8" } });
+  // LCT P6: kein MAX_BUDGET_EUR-Override mehr hier - BASE_ENV traegt bereits 30 (musste
+  // damals mit der alten BASE_ENV=8 uebereinstimmen, ist seit P6 redundant).
+  const srv = await startServer({});
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200, "saubere Config muss unveraendert booten");
@@ -53,24 +69,24 @@ test("OUT-05 F2: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK -> Boot ve
 
 // ---- P3 (Boot-Guards Konfig-Kohaerenz/Modellpreise) -------------------------------
 
-// T-P3-10: MAX_BUDGET_EUR=8 (BASE_ENV) -> platformSpendCapCents=800. Mit dem
-// ausgelieferten alten .env.example-Wert DEFAULT_TENANT_BUDGET_CENTS=1000 ist die
-// Tenant-Achse inert (1000 >= 800) - echter Schutzverlust, Klausel A. Rot vor Fix:
-// heute bootet diese Konstellation durch (kein Kohaerenz-Guard existiert).
-test("T-P3-10: DEFAULT_TENANT_BUDGET_CENTS=1000 gegen MAX_BUDGET_EUR=8 -> Boot verweigert (exit 1)", async () => {
+// T-P3-10: MAX_BUDGET_EUR=30 (BASE_ENV, LCT P6) -> platformSpendCapCents=3000. Eine
+// Tenant-Default-Decke >= 3000 ist die Tenant-Achse inert (Klausel A) - echter
+// Schutzverlust. Rot vor dem P3-Fix: damals bootete diese Konstellation durch (kein
+// Kohaerenz-Guard existierte).
+test("T-P3-10: DEFAULT_TENANT_BUDGET_CENTS=5000 gegen MAX_BUDGET_EUR=30 -> Boot verweigert (exit 1)", async () => {
   const { code, output } = await startServerExpectExit({
-    env: { DEFAULT_TENANT_BUDGET_CENTS: "1000" },
+    env: { DEFAULT_TENANT_BUDGET_CENTS: "5000" },
   });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
   assert.match(output, /Start abgebrochen/);
   assert.match(output, /DEFAULT_TENANT_BUDGET_CENTS/);
   assert.match(output, /MAX_BUDGET_EUR/);
-  assert.match(output, /1000/);
-  assert.match(output, /800/);
+  assert.match(output, /5000/);
+  assert.match(output, /3000/);
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-// T-P3-11 (Merge-Gate): die in BASE_ENV gepinnten Werte (MAX_BUDGET_EUR=8,
+// T-P3-11 (Merge-Gate): die in BASE_ENV gepinnten Werte (MAX_BUDGET_EUR=30 seit LCT P6,
 // DEFAULT_TENANT_BUDGET_CENTS=0, VOICE_TARIFF_DEFAULT_CENTS=0, CLAUDE_MODEL/
 // PRECALL_BRIEFING_MODEL beide bepreist) muessen weiterhin gruen booten - byte-identisch
 // bis auf die eine A0-Konfig-Warnung (Sentinel 0 ist dokumentiertes Bestandsverhalten).
@@ -114,28 +130,68 @@ test("T-P3-12: ausgelieferte Beispiel-Konfig (600/300) bootet gruen, Klausel-B-W
   }
 });
 
-// T-P3-13 (Review-Fix Runde 1, Merge-Gate): ECHTER Spawn OHNE jeden Override fuer
-// DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR - der numEnv-CODE-FALLBACK greift also
-// exakt wie auf einem Host, der beide Vars nie setzt. `undefined` in env ueberschreibt
-// den BASE_ENV-Pin auf dieselbe Var und wird von child_process.spawn aus der Kind-Env
-// entfernt (nicht als String "undefined" gesetzt) - process.env sieht die Var damit als
-// echt ABWESEND, genau wie ein Host ohne diese Env-Zeilen. Rot vor diesem Fix: der alte
-// Fallback 1000 verlor gegen den platformSpendCapCents-Fallback 800 -> exit(1) trotz
-// "keine Config gesetzt".
-test("T-P3-13: kein Override fuer DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR (reine CODE-Fallbacks) bootet gruen", async () => {
-  const srv = await startServer({
+// T-P3-13 (Review-Fix Runde 1, Merge-Gate; LCT P6 GEDREHT): ECHTER Spawn OHNE jeden
+// Override fuer DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR - der numEnv-CODE-FALLBACK
+// greift also exakt wie auf einem Host, der beide Vars nie setzt. `undefined` in env
+// ueberschreibt den BASE_ENV-Pin auf dieselbe Var und wird von child_process.spawn aus der
+// Kind-Env entfernt (nicht als String "undefined" gesetzt) - process.env sieht die Var
+// damit als echt ABWESEND, genau wie ein Host ohne diese Env-Zeilen.
+//
+// LCT P6 / Punkt 0 (bewusst NICHT Teil dieser Phase): der Plan-Cap-Boot-Guard prueft die
+// abgeleitete Business-Decke (900 ct) gegen platformSpendCapCents. Der CODE-Fallback von
+// MAX_BUDGET_EUR bleibt bei 8 (800 ct) - die Anhebung ist Entscheidung 8/PLAN-BUDGET-AXES,
+// ausdruecklich NICHT Teil von P6 (der LIVE-Wert ist bereits 30, nur der Repo-Fallback
+// nicht). Diese Konstellation war VOR P6 gruen (T-P3-13 bewies das damals) und ist es nach
+// P6 zu Recht NICHT mehr: 900 >= 800 macht die Tenant-Achse fuer Business WIRKUNGSLOS -
+// genau die Inkohaerenz, die die erste Linie fangen soll. Der Test pinnt jetzt die
+// UMGEKEHRTE Erwartung (fatal), bis der Fallback in einer Folge-Phase angehoben wird.
+test("T-P3-13: reiner CODE-Fallback fuer MAX_BUDGET_EUR (8) ist seit LCT P6 plan_cap_inert -> Boot verweigert (exit 1)", async () => {
+  const { code, output } = await startServerExpectExit({
     env: { DEFAULT_TENANT_BUDGET_CENTS: undefined, MAX_BUDGET_EUR: undefined },
   });
+  assert.equal(code, 1, `erwartet exit 1 (plan_cap_inert), Output:\n${output}`);
+  assert.match(output, /Start abgebrochen/);
+  assert.match(output, /business/);
+  assert.match(output, /800/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});
+
+// (j1, LCT P6) Erste Linie, fatal am Boot OHNE jede tenant_budget-Zeile (frischer Deploy,
+// erster Kunde noch nicht da) - explizit ueber MAX_BUDGET_EUR statt ueber den CODE-Fallback
+// (Gegenstueck zu T-P3-13, hier via Env statt via Abwesenheit). Gegenprobe: MAX_BUDGET_EUR=30
+// (BASE_ENV-Wert) bootet gruen, kein Fatal.
+test("LCT P6 (j1): MAX_BUDGET_EUR=8 -> plan_cap_inert (business), Boot verweigert (exit 1)", async () => {
+  const { code, output } = await startServerExpectExit({ env: { MAX_BUDGET_EUR: "8" } });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /Start abgebrochen/);
+  assert.match(output, /business/);
+  assert.match(output, /800/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});
+
+test("LCT P6 (j1 Gegenprobe): MAX_BUDGET_EUR=30 bootet gruen (kein plan_cap_inert)", async () => {
+  const srv = await startServer({ env: { MAX_BUDGET_EUR: String(GEGENPROBE_BUDGET_EUR) } });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
-    assert.equal(res.status, 200, `reiner CODE-Fallback darf nicht booten verweigern:\n${srv.stdout}`);
+    assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
-    assert.doesNotMatch(
-      srv.stdout,
-      /Konfig-Warnung: .*DEFAULT_TENANT_BUDGET_CENTS/,
-      "Fallback 600 ist weder 0 (A0) noch >= 800 (A)",
-    );
   } finally {
     await srv.stop();
   }
+  // Echte Kohaerenz-Pruefung statt toter stdout-Regex: boot.js druckt finding.message, NIE
+  // finding.code 'plan_cap_inert' - eine /plan_cap_inert/-Assertion gegen stdout war fuer jedes
+  // Ergebnis wahr und pruefte nichts. Direkt gegen den Guard (Muster env-docs): bei
+  // MAX_BUDGET_EUR=30 liegt die hoechste abgeleitete Plan-Decke (business=900 ct) unter
+  // platformSpendCapCents=3000 -> planCapInertFindings ist leer, GENAU das laesst den Boot
+  // oben gruen durchlaufen.
+  const inertFindings = planCapInertFindings({
+    slugs: CATALOG_SLUGS,
+    platformCapCents: eurToCents(GEGENPROBE_BUDGET_EUR),
+    capForSlug: (slug) => planCapCents(slug, { voiceCapRateCentsPerMin: VOICE_CAP_RATE_CENTS_PER_MIN_FALLBACK }),
+  });
+  assert.deepEqual(
+    inertFindings,
+    [],
+    `MAX_BUDGET_EUR=${GEGENPROBE_BUDGET_EUR} muss kohaerent sein (kein plan_cap_inert): ${JSON.stringify(inertFindings)}`,
+  );
 });

@@ -12,12 +12,14 @@ const TEST_SAFETY_MARGIN_MS = 200; // Puffer ueber dem exakten Timer-Delay (Jitt
 const BACKSTOP_WAIT_MS = MAX_DURATION_S * 1000 + GRACE_MS + TEST_SAFETY_MARGIN_MS;
 
 test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callback frei", async () => {
-  // Reserve pro Call: 60 ct/min x ceil(1/60)=1 min = 60 ct; zwei Reserven (120 ct) reissen
-  // den 100-ct-Cap (MAX_BUDGET_EUR=1), eine einzelne nicht.
+  // Reserve pro Call: 600 ct/min x ceil(1/60)=1 min = 600 ct; zwei Reserven (1200 ct)
+  // reissen den 1000-ct-Cap (MAX_BUDGET_EUR=10 - LCT P6: muss echt ueber der abgeleiteten
+  // Business-Plan-Decke von 900 ct liegen, sonst verweigert der Boot-Guard, plan_cap_inert),
+  // eine einzelne nicht.
   const srv = await startServer({
     env: {
-      MAX_BUDGET_EUR: "1",
-      VOICE_TARIFF_DOMESTIC_CENTS: "60",
+      MAX_BUDGET_EUR: "10",
+      VOICE_TARIFF_DOMESTIC_CENTS: "600",
       RESERVE_RELEASE_GRACE_MS: String(GRACE_MS),
       ALLOWED_COUNTRY_CODES: "*",
       FAKE_ORIGINATE: "true",

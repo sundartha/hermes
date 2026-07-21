@@ -31,7 +31,7 @@ import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 // Fix A1 (Runde 1, G5): dieselbe Kauf-Land-Override-Kombination wie requestNumberForPaid-
 // Tenant (provision-trigger.js) - EIN Ort statt einer dritten, abweichenden Inline-Kopie.
 import { resolveNumberCountry } from "./geo/resolve.js";
-import { CATALOG_SLUGS } from "./plans.js";
+import { isKnownPlanSlug } from "./plans.js";
 import { quotaView } from "./billing/meter.js";
 
 // Pay3: Redirect-Ziele nach Rueckkehr von Stripe Checkout (kein Magic-String, G25).
@@ -105,9 +105,9 @@ function numberSetupFeeCentsFor(s, config, tenant) {
 }
 
 // BK2: Reiner Selektor (N7, kein Nebeneffekt): untrusted Input (Body ODER zurueckgetragene
-// Query) -> bekannter Katalog-Slug oder null. SSoT = CATALOG_SLUGS (G5, kein zweites Literal).
+// Query) -> bekannter Katalog-Slug oder null. SSoT = isKnownPlanSlug (G5, kein zweites Literal).
 function knownPlanSlug(raw) {
-  return typeof raw === "string" && CATALOG_SLUGS.includes(raw) ? raw : null;
+  return typeof raw === "string" && isKnownPlanSlug(raw) ? raw : null;
 }
 
 // BK2: Baut die Stripe-successUrl. {CHECKOUT_SESSION_ID} = Stripe-Platzhalter. Optionaler,

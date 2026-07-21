@@ -51,6 +51,8 @@ import {
   COST_TRUING_SOURCE,
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
+import { planCapCents } from "../billing/plan-caps.js";
+import { isKnownPlanSlug } from "../plans.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -1010,6 +1012,16 @@ export function setTenantSubscription(
 ) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
+  // S1-1 (torn write): einen GESETZTEN, aber unbekannten Slug ablehnen, BEVOR irgendein Feld
+  // mutiert wird - sonst ueberlebt der ungueltige Slug im In-Memory-Singleton (save() wird in
+  // DIESEM Aufruf zwar uebersprungen, weil deriveTenantBudgetFromPlan darunter wirft, aber ein
+  // spaeterer, unabhaengiger save() flusht die Mutation still auf Platte/DB). Validierung VOR
+  // Mutation macht die Schreibkante atomar. null/leer = erlaubter selektiver Patch (No-op in der
+  // Ableitung), wirft NIE - der EINZIGE Wurf ist "Slug gesetzt, aber unbekannt" (Message-Parity
+  // zu planCapCents). isKnownPlanSlug ist die SSoT-Mitgliedschaftspruefung (plans.js), cfg-frei.
+  if (planSlug != null && planSlug !== "" && !isKnownPlanSlug(planSlug)) {
+    throw new Error(`setTenantSubscription: unbekannter Plan-Slug '${planSlug}' (kein Katalog-Eintrag)`);
+  }
   if (subscriptionId !== undefined) tenant.stripeSubscriptionId = subscriptionId;
   if (planSlug !== undefined) tenant.stripePlanSlug = planSlug;
   if (currentPeriodEnd !== undefined) tenant.stripeCurrentPeriodEnd = currentPeriodEnd;
@@ -1020,6 +1032,72 @@ export function setTenantSubscription(
   // die uebrigen Felder oben.
   if (numberSetupFeeExempt !== undefined) tenant.stripeNumberSetupFeeExempt = numberSetupFeeExempt;
   return tenant;
+}
+
+// LCT P6: leitet die Tenant-Kostendecke aus dem EFFEKTIVEN Plan-Slug ab und schreibt sie
+// als tenant_budget-Zeile. Laeuft NACH setTenantSubscription (der Patch ist dann schon
+// angewendet), also ist tenant.stripePlanSlug bereits der EFFEKTIVE Slug -
+// patch.planSlug ?? bestehender Slug ergibt sich hier gratis, ohne das Patch-Feld zu lesen
+// (G31: Struktur statt Konvention).
+//
+// VIER Slug-Faelle, strikt getrennt (die Verwechslung baut den Abo-ohne-Nummer-Vorfall neu):
+//   (1) Slug fehlt/leer        -> NO-OP (Budget-Zeile unberuehrt), KEIN Wurf.
+//   (1b) Slug gesetzt, aber (nicht mehr) im Katalog (entfernt/umbenannt/Alt-/Testdaten) ->
+//       NO-OP + LAUTE WARN, KEIN Wurf. Ein slug-loser Folge-Patch (planSlug===undefined:
+//       Perioden-Verlaengerung / numberSetupFeeExempt) erreicht diese Ableitung auf dem
+//       bereits PERSISTIERTEN Slug; die Schreibkante (setTenantSubscription) prueft NUR
+//       patch.planSlug und laesst den unveraenderten Alt-Slug ungeprueft passieren. Wie die
+//       Schwester-Konvention resolveTierForTenant/PROFILE_SKIP.NO_PLAN behandeln wir
+//       "fehlend ODER unbekannt" GLEICH (fail-closed, NIE Wurf) - sonst risse planCapCents
+//       den nicht gefangenen Stripe-Webhook ab (haengende Antwort). Die bestehende Decke
+//       bleibt (fail-closed: die zuletzt abgeleitete Grenze bindet weiter).
+//   (2) Slug gesetzt+bekannt   -> Decke ableiten, ggf. auf platformCap klemmen (WARN), setzen.
+//   (3) KATALOG-Slug OHNE Kopffreiheit-Eintrag (CATALOG_SLUGS/PLAN_CAP_HEADROOM auseinander-
+//       gelaufen, Konfig-Inkohaerenz, am Boot fatal via planCapInertFindings) -> planCapCents
+//       WIRFT, bevor setTenantBudget schreibt (kein Torn Write). Der isKnownPlanSlug-Riegel
+//       aus (1b) faengt DIESEN Fall NICHT ab (der Slug IST im Katalog) - er bleibt der
+//       Riegel gegen Konfig-Drift, ist aber bei kohaerenter Konfiguration zur Laufzeit
+//       unerreichbar (erste Linie am Boot ist fatal).
+//
+// BEIDE Pflichtfelder (budget_cents UND hard_cap_cents) auf denselben Wert - budget_cents
+// ist BIGINT NOT NULL; ein Aufruf nur mit hardCapCents setzte budgetCents=undefined, der
+// Flush verletzte NOT NULL und flush() rollte die GESAMTE Transaktion zurueck (alle
+// Tenants/Calls/Buckets). setTenantBudget selbst wird NICHT umgebaut (eigener Schritt).
+//
+// AUSDRUECKLICH auch von backfillPlanProfiles gewuenscht: heilt slug-lose Bestands-Abos;
+// dass es die Decke MIT schreibt, ist Absicht (Entscheidung 2), kein Versehen.
+export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return; // setTenantSubscription hat vorher schon fail-closed geworfen, falls fehlend
+  const slug = tenant.stripePlanSlug;
+  if (!slug) return; // Fall (1): No-op, kein Wurf
+  // Fall (1b): ein persistierter Slug, den der Katalog nicht (mehr) kennt (Umbenennung/
+  // Entfernung ODER Alt-/Testdaten), erreicht diese Ableitung ueber einen slug-losen
+  // Folge-Patch, den die Schreibkante nicht erneut prueft. Fail-closed wie die Schwester-
+  // Konvention (resolveTierForTenant): No-op + LAUTE WARN statt Wurf - ein geworfener
+  // planCapCents-Fehler risse hier den nicht gefangenen Stripe-Webhook ab. Die bestehende
+  // Decke bleibt unberuehrt (die zuletzt abgeleitete Grenze bindet weiter). Der Slug ist ein
+  // Plan-Bezeichner, keine PII/kein Secret (wie die clamp-WARN unten).
+  if (!isKnownPlanSlug(slug)) {
+    console.warn(
+      `[budget] plan-cap grund=slug_unbekannt slug=${slug} tenant=${tenantId} -> ` +
+        "Ableitung uebersprungen (bestehende Decke bleibt, Tenant-Achse fail-closed)",
+    );
+    return;
+  }
+  let capCents = planCapCents(slug, cfg); // Fall (3): wirft nur noch bei Katalog-Slug OHNE Kopffreiheit
+  const platformCapCents = cfg.platformSpendCapCents;
+  if (capCents >= platformCapCents) {
+    // Zweite Linie (leise, aber NICHT still): ein nachtraeglich gesenkter Plattform-Cap
+    // darf den Stripe-Webhook nicht abreissen -> klemmen + GENAU EINE WARN, KEIN Wurf. Bei
+    // kohaerenter Konfiguration ist dieser Zweig unerreichbar (erste Linie am Boot ist fatal).
+    console.warn(
+      `[budget] plan-cap grund=clamp slug=${slug} abgeleitet=${capCents} ` +
+        `platformSpendCapCents=${platformCapCents} -> geklemmt (Tenant-Achse inert)`,
+    );
+    capCents = platformCapCents;
+  }
+  setTenantBudget(s, tenantId, { budgetCents: capCents, hardCapCents: capCents }); // beide Felder
 }
 
 // Lese-Query der Abo-Referenzen eines Tenants (W4). Reine Query, kein IO. Liefert STETS

@@ -467,6 +467,15 @@ const rawConfig = {
     { fallback: 10, min: 0 },
   ),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
+  // LCT P6: Deckel-Basissatz je Voice-Minute (GANZZAHL EUR-Cent, G26) fuer die Ableitung
+  // der Tenant-Decke aus dem Plan (billing/plan-caps.js). AUSDRUECKLICH NICHT der gemessene
+  // 5,4 (USD-ct) und NICHT P5s Live-Kalibrierung - die auf die naechste Ganzzahl
+  // aufgerundeten 5,4: eine Decke soll nach oben irren. Vom Menschen gesetzt, nicht
+  // selbstjustierend (PM-1). Ergibt mit Kopffreiheit 5/3 bzw. 5/4 exakt 300 / 900 ct.
+  voiceCapRateCentsPerMin: numEnv("VOICE_CAP_RATE_CENTS_PER_MIN", process.env.VOICE_CAP_RATE_CENTS_PER_MIN, {
+    fallback: 6,
+    min: 1, // 0 waere eine 0-Decke fuer jeden Abschluss (0-Cap-Tenant) - fail-closed verboten
+  }),
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26). ZWEI Wirkungen (P2a/D3):
   // (1) Seed beim Registrieren -> explizite tenant_budget-Zeile (seedTenantDefaultBudget),
   // (2) Gate-Fallback in effectiveCapCents fuer jeden Tenant OHNE Zeile - dadurch nimmt der
@@ -991,7 +1000,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingBookingEnabled", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingBookingEnabled", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

@@ -156,7 +156,7 @@ test("Flag an: unbekannte Identitaet -> 403 Reject (NIE Owner-Tenant)", async ()
 
 // (3) Pro-Tenant-Budget erschoepft -> der Tenant ist geblockt, kein Call entsteht.
 test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", async () => {
-  const seed = seedTenants({ usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) } }); // 99 >= MAX_BUDGET_EUR(8)
+  const seed = seedTenants({ usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(99) } }); // 99 >= MAX_BUDGET_EUR(30, LCT P6)
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
     const res = await placeCall(srv, SUB_A);
@@ -173,14 +173,16 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
 
 // (4) Globaler Notaus PARALLEL/unveraendert: je Tenant UNTER dem Cap, aber die SUMME
 // reisst ihn -> 402. Wuerde der globale Notaus durch den pro-Tenant-Bucket ERSETZT
-// (Schnittmenge gebrochen), liefe A (5 < 8) durch -> dieser Test faengt das.
+// (Schnittmenge gebrochen), liefe A (20 < 30) durch -> dieser Test faengt das.
+// LCT P6: Werte auf BASE_ENV MAX_BUDGET_EUR=30 (statt vormals 8) nachgezogen - bucket()
+// ist EUR-nominal (json.js migriert costEur*100 -> costCents beim Laden).
 test("Flag an: globaler Notaus greift bei Summe (je Tenant < Cap) -> 402; global unveraendert", async () => {
   const seed = seedTenants({
-    usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(5), [B]: bucket(5) },
-  }); // 5+5=10 >= 8
+    usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(20), [B]: bucket(20) },
+  }); // 20+20=40 >= 30
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
-    const res = await placeCall(srv, SUB_A); // A einzeln 5 < Cap 8, aber Summe 10 >= 8
+    const res = await placeCall(srv, SUB_A); // A einzeln 20 < Cap 30, aber Summe 40 >= 30
     assert.equal(
       res.status,
       402,
