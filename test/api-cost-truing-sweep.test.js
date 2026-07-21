@@ -7,8 +7,9 @@
 // test/api-flush-meters.test.js). Spawn-Test (startServer), netzfrei.
 //
 // NETZFREIHEIT: die Fixturen benutzen bewusst provider=twilio. Der Twilio-Adapter hat
-// KEIN getVoiceCostRecords -> trueOneCall zaehlt den Call als uebersprungen, ohne je einen
-// Provider zu kontaktieren. Damit laeuft der echte Sweep end-to-end, ohne Netz.
+// keine Beleg-Methoden (fetchCostRecordPool/assignCostRecords) -> trueOneCall zaehlt den
+// Call als uebersprungen, ohne je einen Provider zu kontaktieren. Damit laeuft der echte
+// Sweep end-to-end, ohne Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp } from "./helpers.js";
@@ -107,7 +108,7 @@ test("POST /api/billing/cost-truing/sweep mit Store-Daten: echter Sweep (Kandida
       incomplete: 0,
       noEstimate: 0,
       unavailable: 0,
-      skippedCalls: 1, // Twilio-Adapter ohne getVoiceCostRecords -> sauberes No-op
+      skippedCalls: 1, // Twilio-Adapter ohne Beleg-Methoden -> sauberes No-op
       failed: 0,
     });
     const raw = JSON.stringify(body);

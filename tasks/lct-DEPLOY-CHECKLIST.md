@@ -80,10 +80,10 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   Konsequenz falsch/leer: Boot-Refusal, `/healthz` nie erreichbar.
 
 - [x] **Session-Zuordnung ist gemessen, nicht angenommen** (LCT-FIX-1) — **nicht
-  blockierend, erledigt.** Die zweistufige Beleg-Zuordnung (`getVoiceCostRecords`)
-  setzt voraus, dass eine Session **call-lokal** ist. Wäre sie es nicht, kippte die
-  Zuordnung von fail-closed nach fail-OPEN: fremde Belege landeten auf dem eigenen
-  Tenant. Diese Invariante wurde am 2026-07-21 read-only über das **gesamte
+  blockierend, erledigt.** Die zweistufige Beleg-Zuordnung (`assignCostRecords`, bis
+  KE-P2 `getVoiceCostRecords`) setzt voraus, dass eine Session **call-lokal** ist. Wäre
+  sie es nicht, kippte die Zuordnung von fail-closed nach fail-OPEN: fremde Belege
+  landeten auf dem eigenen Tenant. Diese Invariante wurde am 2026-07-21 read-only über das **gesamte
   Telnyx-Konto** geprüft — nicht an einer Stichprobe:
 
   > 297 Belege, 54 Sessions. **0 Sessions tragen mehr als einen Anker**
@@ -108,7 +108,7 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   Auffällig ist nicht ihre Existenz, sondern ein **Sprung** gegenüber diesen Größenordnungen.
 
   *Warum hier kein blockierendes Vor-Deploy-Gate steht:* die `via_`-Zähler entstehen
-  ausschließlich in `getVoiceCostRecords`, deren einziger Aufrufer der Sweep ist — und der
+  ausschließlich in `assignCostRecords`, deren einziger Aufrufer der Sweep ist — und der
   bucht unkonditional (`COST_TRUING_BOOKING_ENABLED` ist seit P8 entfernt). Eine Auflage
   „prüfen, bevor gebucht wird" wäre nicht ausführbar: wer die Zahlen lesen kann, hat bereits
   gebucht. Statt einer Schein-Sicherung steht deshalb oben die Messung, die vor jedem Deploy

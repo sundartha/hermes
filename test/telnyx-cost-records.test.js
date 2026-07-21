@@ -1,7 +1,9 @@
 // Telnyx-CDR-Seam am Voice-Port (PLAN-LIVE-COST-TRACING P1): parseDecimalToMicroCents/
-// parseNonNegativeInteger (cost-parse.js) und telnyxVoice.getVoiceCostRecords. Rein offline
-// (global.fetch gestubbt, F.I.R.S.T.), kein pglite/Server-Spawn (eigene Datei -> kein
-// Test-Worker-Stall). Env VOR dem dynamischen Import gesetzt (Muster telnyx-voice.test.js).
+// parseNonNegativeInteger (cost-parse.js) und telnyxVoice.fetchCostRecordPool/
+// assignCostRecords (KE-P2: der frueher einteilige Port ist zweigeteilt, s. fetchAndAssign
+// unten). Rein offline (global.fetch gestubbt, F.I.R.S.T.), kein pglite/Server-Spawn (eigene
+// Datei -> kein Test-Worker-Stall). Env VOR dem dynamischen Import gesetzt (Muster
+// telnyx-voice.test.js).
 //
 // LCT-FIX-1: die frueheren Fixtures ERFANDEN das Feld leg_id. Genau deshalb war diese Suite
 // gruen, waehrend live JEDER Beleg verworfen wurde (records=0, rejected={"leg_unresolved":205,
@@ -63,7 +65,29 @@ const FOREIGN_IDS = Object.freeze({
   legUuid: FOREIGN_LEG_ID,
 });
 
+// KOEDER (A2, KE-P2-Aequivalenztest): telnyx_leg_id/call_leg_id tragen an ALLEN Belegen -
+// eigenen wie fremden - DENSELBEN Wert. Benutzte der Code sie als Zuordnungsquelle, bekaeme
+// JEDER Call JEDEN Beleg inklusive des fremden, und beide Summen unten waeren falsch. Genau
+// dieser Feldname hat live 297 von 297 Belegen verworfen (LCT-FIX-1).
+const BAIT_LEG_ID = "0bad0bad-0bad-11f1-0bad-0bad0bad0bad0";
+// Zweiter Anruf desselben Sweeps (Plan F4: gemessenes Paar mit 20,4 s Ueberlappung) - der
+// geteilte Pool (KE-P2) darf die beiden Anker nicht miteinander vermischen.
+const SECOND_CALL_CONTROL_ID = "v3:ZweiterAnkerDesselbenSweeps0000000000000000000000";
+const SECOND_SESSION_ID = "3f7ac1b2-84f2-11f0-9c1a-02420a0d0b10";
+const CALL_A_IDS = Object.freeze({ anchorId: CALL_CONTROL_ID, sessionId: SESSION_ID, legUuid: BAIT_LEG_ID });
+const CALL_B_IDS = Object.freeze({ anchorId: SECOND_CALL_CONTROL_ID, sessionId: SECOND_SESSION_ID, legUuid: BAIT_LEG_ID });
+const FOREIGN_POOL_IDS = Object.freeze({ anchorId: FOREIGN_CALL_CONTROL_ID, sessionId: FOREIGN_SESSION_ID, legUuid: BAIT_LEG_ID });
+
 const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT };
+
+// KE-P2: der Port ist zweigeteilt. Diese Helferin spiegelt die PRODUKTIVE Verdrahtung aus
+// billing/cost-truing.js - EIN Pool-Abruf, danach die SYNCHRONE Zuordnung je Call. Die
+// Bestandsfaelle pruefen damit unveraendert dieselbe Kette ueber den neuen Schnitt.
+async function fetchAndAssign(params = WINDOW) {
+  const pool = await telnyxVoice.fetchCostRecordPool();
+  if (!pool.ok) return pool;
+  return telnyxVoice.assignCostRecords(pool, params);
+}
 
 // Antwortkoerper EINER Listen-Seite in der GEMESSENEN Form (Messung 2026-07-21):
 // {data:[...]} plus - bei einer paginierten Menge - {meta:{total_results, total_pages,
@@ -141,6 +165,17 @@ function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_I
     // genau diesen Codepfad meint.
     ...extraFields,
   };
+}
+
+// Das ZWEITE BEIN eines Anrufs (Plan F3/PM-11, KE-P2-Aequivalenztest): dieselbe Session,
+// der Anker gehoert dem ersten Bein. Genau dieser Beleg traegt den ABGERECHNETEN Betrag -
+// wer je Typ nur den ersten Treffer nimmt, verliert 0,0401 USD und erstattet real
+// ausgegebenes Geld zurueck. Nur fuer Typen mit Anker-Feld relevant (sip-trunking); bei
+// call-control (nie Anker) ist das Loeschen ein No-op.
+function secondLegRecord(recordType, opts) {
+  const record = realRecord(recordType, opts);
+  delete record.call_control_id;
+  return record;
 }
 
 // ---- (a) Parser-Tabelle, ohne Float-Zwischenschritt ----
@@ -272,9 +307,9 @@ const SESSION_ONLY_RECORD_TYPES = Object.freeze(
   ),
 );
 
-test("getVoiceCostRecords: reale Belegformen - der Anker spannt die Session auf, die Belege OHNE Anker kommen mit", async () => {
+test("Belegabruf: reale Belegformen - der Anker spannt die Session auf, die Belege OHNE Anker kommen mit", async () => {
   stubRealRecords();
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   // ROT VOR DEM FIX: die alte leg_id/call_leg_id-Zuordnung findet in diesen realen Formen
   // KEINEN einzigen Beleg -> records.length === 0.
@@ -298,9 +333,9 @@ test("getVoiceCostRecords: reale Belegformen - der Anker spannt die Session auf,
   assert.equal(res.records.find((r) => r.recordType === "sip-trunking").billedSec, 60);
 });
 
-test("getVoiceCostRecords: fragt jeden record_type aus COST_RECORD_TYPES mit Bearer-Key ab", async () => {
+test("Belegabruf: fragt jeden record_type aus COST_RECORD_TYPES mit Bearer-Key ab", async () => {
   const calls = stubRealRecords();
-  await telnyxVoice.getVoiceCostRecords(WINDOW);
+  await fetchAndAssign(WINDOW);
   assert.equal(calls.length, COST_RECORD_TYPES.length);
   for (const c of calls) {
     assert.ok(c.url.startsWith(`${API_BASE}/v2/detail_records`));
@@ -308,19 +343,80 @@ test("getVoiceCostRecords: fragt jeden record_type aus COST_RECORD_TYPES mit Bea
   }
 });
 
-test("getVoiceCostRecords: Ende-zu-Ende sip-trunking cost 0.0401 -> costMicroCents 4010000", async () => {
+test("Belegabruf: Ende-zu-Ende sip-trunking cost 0.0401 -> costMicroCents 4010000", async () => {
   stubRealRecords();
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   const sipTrunking = res.records.find((r) => r.recordType === "sip-trunking");
   assert.equal(sipTrunking.costMicroCents, 4010000);
 });
 
+// ---- (b2) KE-P2: die wichtigste Zusage der Kette - assignCostRecords ordnet aus einem
+// GETEILTEN Pool genau wie der Bestandspfad zu ----
+
+// 9 Belege, Reihenfolge bewusst: Null-Zwilling VOR dem abgerechneten Beleg, fremder Beleg
+// ZUERST. secondLegRecord loescht den Anker (das zweite Bein derselben Session traegt ihn
+// laut Messung nicht); call-control-Belege tragen laut Feld-Tabelle nie einen Anker.
+function twoAnchorPool() {
+  return [
+    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, ids: CALL_A_IDS }), // Null-Zwilling A
+    secondLegRecord("sip-trunking", { cost: "0.0401", billedSec: 60, ids: CALL_A_IDS }), // abgerechnet A
+    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, ids: CALL_B_IDS }), // Null-Zwilling B
+    secondLegRecord("sip-trunking", { cost: "0.0502", billedSec: 60, ids: CALL_B_IDS }), // abgerechnet B
+    realRecord("call-control", { cost: "9.99", billedSec: 60, ids: FOREIGN_POOL_IDS }), // Fehlbuchungs-Falle
+    realRecord("call-control", { cost: "0.002", billedSec: 60, ids: CALL_A_IDS }),
+    realRecord("call-control", { cost: "0.0", billedSec: 0, ids: CALL_A_IDS }), // Null-Zwilling A
+    realRecord("call-control", { cost: "0.003", billedSec: 60, ids: CALL_B_IDS }),
+    realRecord("call-control", { cost: "0.0", billedSec: 0, ids: CALL_B_IDS }), // Null-Zwilling B
+  ];
+}
+
+const sumMicroCents = (res) => res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
+
+test("assignCostRecords: geteilter Pool - zwei Anker, kein Anker-Beleg gleicht dem anderen, fremde Session bei keinem", async () => {
+  const pool9 = twoAnchorPool();
+  const byType = (recordType) => pool9.filter((r) => r.record_type === recordType);
+  const calls = stubFetchByRecordType({ "sip-trunking": byType("sip-trunking"), "call-control": byType("call-control") });
+
+  const pool = await telnyxVoice.fetchCostRecordPool();
+  assert.equal(calls.length, COST_RECORD_TYPES.length, "EIN Pool-Abruf, unabhaengig davon, dass er fuer BEIDE Calls zustaendig ist");
+  assert.equal(pool.ok, true);
+  assert.equal(pool.complete, true);
+  assert.equal(pool.raw.length, 9);
+
+  const a = telnyxVoice.assignCostRecords(pool, { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT });
+  const b = telnyxVoice.assignCostRecords(pool, { legId: SECOND_CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT });
+
+  assert.equal(a.records.length, 4);
+  assert.equal(b.records.length, 4);
+  assert.equal(sumMicroCents(a), 4_210_000, "0 + 4010000 + 200000 + 0");
+  assert.equal(sumMicroCents(b), 5_320_000, "0 + 5020000 + 300000 + 0");
+  assert.ok(a.records.some((r) => r.costMicroCents === 4_010_000), "der abgerechnete sip-trunking-Beleg haengt am Session-Weg");
+  assert.equal(a.records.filter((r) => r.costMicroCents === 0).length, 2, "beide Null-Zwillinge sind mitgezaehlt");
+  assert.ok(!a.records.some((r) => r.costMicroCents === 999_000_000), "fremde Session kommt bei A nicht mit");
+  assert.ok(!b.records.some((r) => r.costMicroCents === 999_000_000), "fremde Session kommt bei B nicht mit");
+  assert.ok(!a.records.some((r) => r.costMicroCents === 5_020_000), "keine Quervermischung: B-Beleg landet nicht bei A");
+
+  // Zuordnung ist REIN: derselbe Pool, dieselbe Antwort - unabhaengig von der Reihenfolge.
+  assert.deepEqual(
+    telnyxVoice.assignCostRecords(pool, { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT }),
+    a,
+  );
+});
+
+test("assignCostRecords: ohne brauchbaren Pool -> ok:false (pool_missing), nie eine leere Messung", () => {
+  const res = telnyxVoice.assignCostRecords({ ok: false, reason: "provider_error" }, WINDOW);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, "pool_missing");
+  assert.equal(res.records, undefined);
+  assert.doesNotThrow(() => telnyxVoice.assignCostRecords(undefined, WINDOW));
+});
+
 // ---- (c) HTTP 500 und Timeout ----
 
-test("getVoiceCostRecords: HTTP 500 -> ok:false, records undefined, kein Wurf", async () => {
+test("Belegabruf: HTTP 500 -> ok:false, records undefined, kein Wurf", async () => {
   stubFetchFailure({ status: 500, body: {} });
   await assert.doesNotReject(async () => {
-    const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+    const res = await fetchAndAssign(WINDOW);
     assert.equal(res.ok, false);
     assert.equal(res.records, undefined);
     // ok:false ist NICHT die leere Menge - "0 Records gefunden" waere ok:true mit [].
@@ -328,12 +424,12 @@ test("getVoiceCostRecords: HTTP 500 -> ok:false, records undefined, kein Wurf", 
   });
 });
 
-test("getVoiceCostRecords: rejectendes fetch (Netzfehler/Timeout) -> ok:false, kein Wurf", async () => {
+test("Belegabruf: rejectendes fetch (Netzfehler/Timeout) -> ok:false, kein Wurf", async () => {
   global.fetch = async () => {
     throw new Error("network timeout");
   };
   await assert.doesNotReject(async () => {
-    const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+    const res = await fetchAndAssign(WINDOW);
     assert.equal(res.ok, false);
     assert.equal(res.records, undefined);
     assert.notEqual(res.records?.length, 0);
@@ -362,9 +458,9 @@ const FIRST_RECORD_TYPE = COST_RECORD_TYPES[0];
 
 const failureLines = (lines) => lines.filter((l) => l.includes("getVoiceCostRecords fehler"));
 
-test("getVoiceCostRecords: 429 loggt Provider-Status und Telnyx-Code (Fehlerpfad sichtbar)", async () => {
+test("Belegabruf: 429 loggt Provider-Status und Telnyx-Code (Fehlerpfad sichtbar)", async () => {
   stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
-  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => fetchAndAssign(WINDOW));
   assert.deepEqual(failureLines(lines), [
     `[telnyx/voice] getVoiceCostRecords fehler typ=${FIRST_RECORD_TYPE} `
       + `status=${RATE_LIMIT_STATUS} code=${RATE_LIMIT_CODE}`,
@@ -384,29 +480,29 @@ const FORBIDDEN_IN_FAILURE_LINE = Object.freeze([
   ["Telnyx-detail", "quota"],
 ]);
 
-test("getVoiceCostRecords: die Fehler-Zeile leakt weder Key noch Rufnummer noch Session-/Leg-ID", async () => {
+test("Belegabruf: die Fehler-Zeile leakt weder Key noch Rufnummer noch Session-/Leg-ID", async () => {
   stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
-  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => fetchAndAssign(WINDOW));
   const [line] = failureLines(lines);
   assert.ok(line, "Fehler-Zeile fehlt");
   for (const [label, fragment] of FORBIDDEN_IN_FAILURE_LINE)
     assert.ok(!line.includes(fragment), `${label} darf nicht in der Fehler-Zeile stehen`);
 });
 
-test("getVoiceCostRecords: Netzfehler ohne HTTP-Antwort -> Zeile erscheint mit neutralem Platzhalter", async () => {
+test("Belegabruf: Netzfehler ohne HTTP-Antwort -> Zeile erscheint mit neutralem Platzhalter", async () => {
   global.fetch = async () => {
     throw new Error("network timeout");
   };
-  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => fetchAndAssign(WINDOW));
   assert.deepEqual(failureLines(lines), [
     `[telnyx/voice] getVoiceCostRecords fehler typ=${FIRST_RECORD_TYPE} status=none code=none`,
   ]);
 });
 
-test("getVoiceCostRecords: 429 laesst Rueckgabe und Kontrollfluss unveraendert (ok:false, provider_error)", async () => {
+test("Belegabruf: 429 laesst Rueckgabe und Kontrollfluss unveraendert (ok:false, provider_error)", async () => {
   stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
-  const res = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW)).then(
-    () => telnyxVoice.getVoiceCostRecords(WINDOW),
+  const res = await captureConsole(() => fetchAndAssign(WINDOW)).then(
+    () => fetchAndAssign(WINDOW),
   );
   assert.equal(res.ok, false);
   assert.equal(res.reason, "provider_error");
@@ -415,58 +511,58 @@ test("getVoiceCostRecords: 429 laesst Rueckgabe und Kontrollfluss unveraendert (
 
 // ---- (d) Fremdwaehrung ----
 
-test("getVoiceCostRecords: fremde Waehrung wird verworfen, gleiche Waehrung kleingeschrieben akzeptiert", async () => {
+test("Belegabruf: fremde Waehrung wird verworfen, gleiche Waehrung kleingeschrieben akzeptiert", async () => {
   // Der EUR-Beleg traegt den Anker und waere zuordenbar - er faellt trotzdem weg. Das pinnt
   // die Reihenfolge Waehrung-vor-Zuordnung in toCostRecord.
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", currency: "EUR" })],
   });
-  const eurRes = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const eurRes = await fetchAndAssign(WINDOW);
   assert.equal(eurRes.ok, true);
   assert.equal(eurRes.records.length, 0, "EUR-Record bei PROVIDER_CURRENCY=USD verworfen");
 
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", currency: "usd" })],
   });
-  const usdRes = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const usdRes = await fetchAndAssign(WINDOW);
   assert.equal(usdRes.ok, true);
   assert.equal(usdRes.records.length, 1, "Kleingeschriebenes 'usd' case-insensitiv akzeptiert");
 });
 
 // ---- (e) Grenzfaelle des Seams ----
 
-test("getVoiceCostRecords: fehlender legId -> ok:false, reason params_missing", async () => {
+test("Belegabruf: fehlender legId -> ok:false, reason params_missing", async () => {
   stubFetchByRecordType({});
-  const res = await telnyxVoice.getVoiceCostRecords({ startedAt: STARTED_AT, endedAt: ENDED_AT });
+  const res = await fetchAndAssign({ startedAt: STARTED_AT, endedAt: ENDED_AT });
   assert.equal(res.ok, false);
   assert.equal(res.reason, "params_missing");
 });
 
-test("getVoiceCostRecords: fehlender startedAt/endedAt -> ok:false, reason params_missing", async () => {
+test("Belegabruf: fehlender startedAt/endedAt -> ok:false, reason params_missing", async () => {
   stubFetchByRecordType({});
   assert.equal(
-    (await telnyxVoice.getVoiceCostRecords({ legId: CALL_CONTROL_ID, endedAt: ENDED_AT })).reason,
+    (await fetchAndAssign({ legId: CALL_CONTROL_ID, endedAt: ENDED_AT })).reason,
     "params_missing",
   );
   assert.equal(
-    (await telnyxVoice.getVoiceCostRecords({ legId: CALL_CONTROL_ID, startedAt: STARTED_AT })).reason,
+    (await fetchAndAssign({ legId: CALL_CONTROL_ID, startedAt: STARTED_AT })).reason,
     "params_missing",
   );
 });
 
-test("getVoiceCostRecords: fehlende Config (TELNYX_API_KEY) -> ok:false, reason config_missing", async () => {
+test("Belegabruf: fehlende Config (TELNYX_API_KEY) -> ok:false, reason config_missing", async () => {
   stubFetchByRecordType({});
   await withBlankedConfig("telnyxApiKey", async () => {
-    const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+    const res = await fetchAndAssign(WINDOW);
     assert.equal(res.ok, false);
     assert.equal(res.reason, "config_missing");
   });
 });
 
-test("getVoiceCostRecords: kein Anker in der Antwort -> LEERE Liste, ok:true, kein Wurf (fail-closed)", async () => {
+test("Belegabruf: kein Anker in der Antwort -> LEERE Liste, ok:true, kein Wurf (fail-closed)", async () => {
   stubRealRecords({ ids: FOREIGN_IDS });
   await assert.doesNotReject(async () => {
-    const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+    const res = await fetchAndAssign(WINDOW);
     assert.equal(res.ok, true);
     assert.deepEqual(res.records, [], "ohne Anker wird NICHTS akzeptiert - kein lockererer Fallback");
   });
@@ -477,17 +573,17 @@ test("getVoiceCostRecords: kein Anker in der Antwort -> LEERE Liste, ok:true, ke
 // UNSERER eigenen, global eindeutigen ID - verwerfen waere Datenverlust ohne Sicherheits-
 // gewinn. Ohne diesen Test bliebe der direkte Anker-Zweig ungepinnt (alle anderen Fixtures
 // tragen zusaetzlich die passende Session und wuerden ihn nicht bemerken).
-test("getVoiceCostRecords: Beleg MIT Anker aber OHNE Session-Referenz wird akzeptiert", async () => {
+test("Belegabruf: Beleg MIT Anker aber OHNE Session-Referenz wird akzeptiert", async () => {
   const anchorOnly = realRecord("sip-trunking", { cost: "0.0401" });
   delete anchorOnly.telnyx_session_id;
   stubFetchByRecordType({ "sip-trunking": [anchorOnly] });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 1, "Identitaetsgleichheit auf call_control_id genuegt");
   assert.equal(res.records[0].legId, CALL_CONTROL_ID);
 });
 
-test("getVoiceCostRecords: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)", async () => {
+test("Belegabruf: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
     "call-control": [
@@ -495,7 +591,7 @@ test("getVoiceCostRecords: Belege einer FREMDEN Session kommen NIE mit (Tenant-T
       realRecord("call-control", { cost: "9.99", ids: FOREIGN_IDS }),
     ],
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 2, "nur die zwei eigenen Belege");
   const sum = res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
@@ -512,7 +608,7 @@ test("getVoiceCostRecords: Belege einer FREMDEN Session kommen NIE mit (Tenant-T
 // Der Test pinnt, was die Zuordnung wirklich zusichert: auch ueber call_session_id wird
 // NUR akzeptiert, was in der vom Anker aufgespannten Menge liegt. Ohne diese Zeile bliebe
 // der call_session_id-Zweig einseitig gepinnt (nur der Treffer-, nie der Ablehnungsfall).
-test("getVoiceCostRecords: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-closed)", async () => {
+test("Belegabruf: fremde `call_session_id` kommt NIE mit (Zuordnung bleibt fail-closed)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })], // Anker + eigene Session
     "speech-to-text": [
@@ -520,7 +616,7 @@ test("getVoiceCostRecords: fremde `call_session_id` kommt NIE mit (Zuordnung ble
       realRecord("speech-to-text", { cost: "9.99", ids: FOREIGN_IDS }),
     ],
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 2, "nur Anker-Beleg + eigener speech-to-text-Beleg");
   assert.ok(
@@ -559,12 +655,12 @@ test("UNASSIGNABLE_COST_RECORD_TYPES deckt sich mit den Belegformen: weder Anker
   assert.ok(SESSION_ONLY_RECORD_TYPES.length > 0, "ohne Session-only-Typen pruefte Stufe 2 nichts");
 });
 
-test("getVoiceCostRecords: `inference` bleibt unzuordenbar (nur conversation_id) - bewusste Grenze", async () => {
+test("Belegabruf: `inference` bleibt unzuordenbar (nur conversation_id) - bewusste Grenze", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
     inference: [realRecord("inference", { cost: "0.001315" })],
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 1);
   assert.equal(res.records[0].recordType, "sip-trunking");
@@ -574,13 +670,13 @@ test("getVoiceCostRecords: `inference` bleibt unzuordenbar (nur conversation_id)
 // (RECORD_TIMESTAMP_FIELDS). `recorded_at` ist ein solcher Name - er stammt NICHT aus der
 // Messung 2026-07-21, dieser Test pinnt also bewusst nur den Codepfad, nicht die
 // Wirklichkeit. Der Test darunter haelt fest, was auf den GEMESSENEN Belegformen gilt.
-test("getVoiceCostRecords: Beleg mit geratenem Zeitstempel-Feld ausserhalb des Fensters wird verworfen (recorded_at)", async () => {
+test("Belegabruf: Beleg mit geratenem Zeitstempel-Feld ausserhalb des Fensters wird verworfen (recorded_at)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [
       realRecord("sip-trunking", { cost: "0.0401", extraFields: { recorded_at: "2026-07-20T09:00:00Z" } }),
     ],
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 0, "geratenes Zeitstempel-Feld ausserhalb des Fensters -> verworfen");
 });
@@ -593,13 +689,13 @@ test("getVoiceCostRecords: Beleg mit geratenem Zeitstempel-Feld ausserhalb des F
 // aber nie unter Parallelverkehr - s. tasks/lct-DEPLOY-CHECKLIST.md).
 // Der Test faellt, sobald jemand `started_at` aufnimmt - dann ist diese Aussage in
 // voice.js und in tasks/lct-DEPLOY-CHECKLIST.md neu zu bewerten, statt still zu veralten.
-test("getVoiceCostRecords: gemessenes started_at ausserhalb des Fensters filtert NICHT (Zeitfenster ist keine zweite Linie)", async () => {
+test("Belegabruf: gemessenes started_at ausserhalb des Fensters filtert NICHT (Zeitfenster ist keine zweite Linie)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [
       realRecord("sip-trunking", { cost: "0.0401", extraFields: { started_at: "2026-07-20T09:00:00Z" } }),
     ],
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 1, "der Anker traegt den Beleg - das Zeitfenster greift auf started_at nicht");
 });
@@ -622,9 +718,9 @@ function costRecordsLogLine(lines) {
 // kommen aus den Fixtures: Anker = sip-trunking + ai-voice-assistant, telnyx_session_id =
 // call-control + recording, call_session_id = speech-to-text + text-to-speech; inference
 // traegt keine Referenz und wird abgelehnt.
-test("getVoiceCostRecords: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-Auflage)", async () => {
+test("Belegabruf: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-Auflage)", async () => {
   stubRealRecords();
-  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => fetchAndAssign(WINDOW));
   assert.equal(
     costRecordsLogLine(lines),
     `[telnyx/voice] getVoiceCostRecords ok records=${ASSIGNABLE_RECORD_COUNT} `
@@ -636,9 +732,9 @@ test("getVoiceCostRecords: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der
 // Die Spalten muessen auch dann vollzaehlig dastehen, wenn ein Weg nichts beigetragen hat -
 // eine je nach Datenlage verschwindende Spalte macht die Sonde unlesbar (fehlt sie, ist
 // "0 Belege ueber dieses Feld" nicht von "Format geaendert" zu unterscheiden).
-test("getVoiceCostRecords: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker gefunden)", async () => {
+test("Belegabruf: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker gefunden)", async () => {
   stubRealRecords({ ids: FOREIGN_IDS });
-  const lines = await captureConsole(() => telnyxVoice.getVoiceCostRecords(WINDOW));
+  const lines = await captureConsole(() => fetchAndAssign(WINDOW));
   assert.equal(
     costRecordsLogLine(lines),
     "[telnyx/voice] getVoiceCostRecords ok records=0 "
@@ -677,12 +773,12 @@ const anchorPage = () => [realRecord("sip-trunking", { cost: "0.0401", billedSec
 // Seite von fuenf als vollstaendig -> ok:true mit 51 Belegen aus 212. Eine stille
 // Untermenge ist im Geldpfad die fail-OPEN-Richtung: gegen eine zu kleine Ist-Summe
 // erstattet die Korrektur real ausgegebenes Geld zurueck.
-test("getVoiceCostRecords: volle Seite mit meta.total_pages>1 gilt NICHT als vollstaendig", async () => {
+test("Belegabruf: volle Seite mit meta.total_pages>1 gilt NICHT als vollstaendig", async () => {
   stubFetchByRecordType({
     "sip-trunking": anchorPage(),
     "call-control": { records: fullCallControlPage(), meta: MEASURED_PAGED_META },
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, false, "eine Seite von fuenf ist keine vollstaendige Messung");
   assert.equal(res.reason, "page_truncated");
   assert.equal(res.records, undefined, "ok:false ist NIE die leere Menge");
@@ -692,12 +788,12 @@ test("getVoiceCostRecords: volle Seite mit meta.total_pages>1 gilt NICHT als vol
 // Seite gibt, bleibt sie vollstaendig - sonst waere jede exakt 50 Belege grosse Menge
 // dauerhaft unmessbar (Deckungsquote 0 %, keine Rueckerstattung mehr, jede Nachforderung
 // gebucht: einseitige Korrektur zulasten des Kunden).
-test("getVoiceCostRecords: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async () => {
+test("Belegabruf: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async () => {
   stubFetchByRecordType({
     "sip-trunking": anchorPage(),
     "call-control": { records: fullCallControlPage(), meta: MEASURED_SINGLE_PAGE_META },
   });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, true);
   assert.equal(
     res.records.length,
@@ -710,9 +806,9 @@ test("getVoiceCostRecords: volle Seite mit meta.total_pages=1 bleibt vollstaendi
 // Provider-Drift-Grenzfall - dieselbe Kennzeichnung wie beim recorded_at-Test oben. Ohne
 // brauchbares meta ist "es gibt nur diese Seite" UNBEWIESEN. Unbewiesen heisst im Geldpfad
 // fail-closed, nicht durchwinken.
-test("getVoiceCostRecords: volle Seite OHNE meta -> fail-closed (page_truncated)", async () => {
+test("Belegabruf: volle Seite OHNE meta -> fail-closed (page_truncated)", async () => {
   stubFetchByRecordType({ "sip-trunking": anchorPage(), "call-control": fullCallControlPage() });
-  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  const res = await fetchAndAssign(WINDOW);
   assert.equal(res.ok, false);
   assert.equal(res.reason, "page_truncated");
 });
@@ -721,9 +817,9 @@ test("getVoiceCostRecords: volle Seite OHNE meta -> fail-closed (page_truncated)
 // Literal, nicht COST_RECORDS_PAGE_SIZE (s. Kommentar bei MEASURED_PAGE_SIZE). Faellt der
 // Test, hat entweder jemand die Anforderung veraendert oder die Messung ist ueberholt;
 // beides gehoert angesehen, nicht stillschweigend nachgezogen.
-test("getVoiceCostRecords: fordert die gemessene Maximal-Seitengroesse page[size]=50 an", async () => {
+test("Belegabruf: fordert die gemessene Maximal-Seitengroesse page[size]=50 an", async () => {
   const calls = stubRealRecords();
-  await telnyxVoice.getVoiceCostRecords(WINDOW);
+  await fetchAndAssign(WINDOW);
   assert.equal(calls.length, COST_RECORD_TYPES.length);
   for (const c of calls)
     assert.equal(new URL(c.url).searchParams.get("page[size]"), String(MEASURED_PAGE_SIZE));
@@ -731,8 +827,9 @@ test("getVoiceCostRecords: fordert die gemessene Maximal-Seitengroesse page[size
 
 // ---- (f) Twilio-Riegel ----
 
-test("twilioVoice.getVoiceCostRecords ist NICHT implementiert (bewusst, Twilio-price deckt nur Connectivity)", () => {
-  assert.equal(twilioVoice.getVoiceCostRecords, undefined);
+test("twilioVoice.fetchCostRecordPool/assignCostRecords sind NICHT implementiert (bewusst, Twilio-price deckt nur Connectivity)", () => {
+  assert.equal(twilioVoice.fetchCostRecordPool, undefined);
+  assert.equal(twilioVoice.assignCostRecords, undefined);
 });
 
 // ---- (g) Aufrufer-Riegel ----
@@ -763,10 +860,17 @@ const FORBIDDEN_CALLER_FILES = Object.freeze([
   "telephony/outbound-gates.js",
 ]);
 
-test("getVoiceCostRecords: Aufrufer NUR in cost-truing.js (LCT P3) - NIE in einem Geld-/Gate-Pfad", () => {
+// KE-P2: der frueher einteilige Port ist zweigeteilt - der Riegel greppt jetzt BEIDE
+// Symbole (Vereinigung der Treffer), sonst saehe er nur noch die Haelfte der Aufrufer.
+const COST_RECORD_PORT_SYMBOLS = Object.freeze(["fetchCostRecordPool", "assignCostRecords"]);
+
+test("Belegabruf: Aufrufer NUR in cost-truing.js (LCT P3) - NIE in einem Geld-/Gate-Pfad", () => {
   const srcDir = fileURLToPath(new URL("../src", import.meta.url));
   const hits = listJsFilesRecursive(srcDir)
-    .filter((f) => readFileSync(f, "utf8").includes("getVoiceCostRecords"))
+    .filter((f) => {
+      const text = readFileSync(f, "utf8");
+      return COST_RECORD_PORT_SYMBOLS.some((symbol) => text.includes(symbol));
+    })
     .map((f) => path.relative(srcDir, f).split(path.sep).join("/"));
   const forbidden = hits.filter((f) => FORBIDDEN_CALLER_FILES.includes(f));
   assert.deepEqual(forbidden, [], "P3 (Beobachtungsmodus) darf keinen dieser Geld-/Gate-Pfade beruehren");
