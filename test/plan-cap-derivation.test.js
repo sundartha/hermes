@@ -518,3 +518,76 @@ test("(i) pg-Rundlauf: budgetCents+hardCapCents beide 900 nach reload; ein im se
     "Patch ohne Slug hat die Zeile nicht veraendert",
   );
 });
+
+// ---- (j) S1-1 Runde 3: ein FRUEHER gueltiger, jetzt aus dem Katalog entfernter/umbenannter
+// (Alt-/Test-) Slug erreicht die Ableitung ueber einen SLUG-LOSEN Folge-Patch. Die
+// Schreibkanten-Validierung (setTenantSubscription) prueft NUR patch.planSlug - der alte,
+// bereits persistierte Slug wird NIE erneut geprueft. Vor dem Fix warf planCapCents darauf
+// uncaught und riss den nicht gefangenen Stripe-Webhook ab (haengende Antwort). Erwartung:
+// No-op + WARN, KEIN Wurf; bestehende Decke bleibt (fail-closed). ---------------------------
+
+test("(j) persistierter, nicht mehr im Katalog gefuehrter Slug + slug-loser Patch wirft NICHT (No-op, Decke bleibt)", async () => {
+  const { store } = await makeTestStore();
+  const tenantId = "t_j";
+  const s = store.load();
+  ops.registerTenant(s, tenantId, { firstName: "J" });
+  // Bestehende Decke aus einer frueheren, damals gueltigen Ableitung.
+  ops.setTenantBudget(s, tenantId, { budgetCents: 300, hardCapCents: 300 });
+  // Simuliert Katalog-Umbenennung/-Entfernung ODER Alt-/Testdaten: ein Slug, der bei
+  // Persistenz gueltig war, den isKnownPlanSlug jetzt aber ablehnt. Direkt am Record geplant -
+  // die Schreibkante wuerde ihn heute abweisen, genau darum geht es (er sitzt bereits at rest).
+  s.tenants.find((t) => t.id === tenantId).stripePlanSlug = "legacy-discontinued-plan";
+  // Slug-loser Folge-Patch (Perioden-Verlaengerung): triggert die Ableitung auf dem
+  // PERSISTIERTEN Alt-Slug.
+  assert.doesNotThrow(
+    () => store.setTenantSubscription(tenantId, { currentPeriodEnd: 1896134400 }),
+    "persistierter Alt-Slug darf die Ableitung NICHT werfen lassen",
+  );
+  assert.deepEqual(
+    s.tenantBudgets.find((b) => b.tenantId === tenantId),
+    { tenantId, budgetCents: 300, hardCapCents: 300 },
+    "bestehende Decke unveraendert (No-op, fail-closed)",
+  );
+});
+
+test("(j2) applyStripeWebhook ACTIVATE ohne plan_slug bei persistiertem Alt-Slug: kein unhandled rejection, Aktivierung laeuft durch", async () => {
+  const { store } = await makeTestStore();
+  const tenantId = "t_j2";
+  const s = store.load();
+  ops.registerTenant(s, tenantId, { firstName: "J2" });
+  const tenant = s.tenants.find((t) => t.id === tenantId);
+  tenant.stripeSubscriptionId = "sub_j2";
+  tenant.stripePlanSlug = "legacy-discontinued-plan"; // Alt-Slug at rest, Katalog kennt ihn nicht mehr
+  // Perioden-Verlaengerung: Event OHNE plan_slug in der Metadata (der gespeicherte Slug bleibt).
+  const event = {
+    type: webhookMod.SUBSCRIPTION_EVENT.UPDATED,
+    data: {
+      object: {
+        id: "sub_j2",
+        status: "active",
+        current_period_end: 1896134400,
+        current_period_start: 1893456000,
+        metadata: { tenant_ref: tenantId },
+      },
+    },
+  };
+  const setStatusCalls = [];
+  await assert.doesNotReject(
+    webhookMod.applyStripeWebhook(event, {
+      store,
+      accounts: { setStatus: async (t, st) => setStatusCalls.push([t, st]) },
+      sessions: { invalidateByTenant: async () => {} },
+      audit: () => {},
+      req: {},
+      provision: noopProvision(),
+      billing: undefined,
+    }),
+    "persistierter Alt-Slug darf den Webhook NICHT werfen lassen (sonst haengende Stripe-Antwort)",
+  );
+  assert.deepEqual(setStatusCalls, [[tenantId, "active"]], "Webhook lief vollstaendig durch (activatePaidTenant)");
+  assert.equal(
+    store.tenantSubscription(tenantId).currentPeriodEnd,
+    1896134400,
+    "Perioden-Anker nachgezogen",
+  );
+});

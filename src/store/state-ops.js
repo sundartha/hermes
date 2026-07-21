@@ -1040,14 +1040,24 @@ export function setTenantSubscription(
 // patch.planSlug ?? bestehender Slug ergibt sich hier gratis, ohne das Patch-Feld zu lesen
 // (G31: Struktur statt Konvention).
 //
-// DREI Slug-Faelle, strikt getrennt (die Verwechslung baut den Abo-ohne-Nummer-Vorfall neu):
-//   (1) Slug fehlt/leer       -> NO-OP (Budget-Zeile unberuehrt), KEIN Wurf.
-//   (2) Slug gesetzt+bekannt  -> Decke ableiten, ggf. auf platformCap klemmen (WARN), setzen.
-//   (3) Slug gesetzt+UNBEKANNT-> planCapCents WIRFT. Ueber die normale Schreibkante
-//       (setTenantSubscription) unerreichbar: die lehnt einen unbekannten Slug bereits VOR
-//       jeder Mutation ab (S1-1, atomar). planCapCents bleibt hier der Riegel fuer einen
-//       Katalog-Slug OHNE Kopffreiheit-Eintrag (Konfig-Inkohaerenz, am Boot fatal via
-//       planCapInertFindings) - dann wirft es, bevor setTenantBudget schreibt (kein Torn Write).
+// VIER Slug-Faelle, strikt getrennt (die Verwechslung baut den Abo-ohne-Nummer-Vorfall neu):
+//   (1) Slug fehlt/leer        -> NO-OP (Budget-Zeile unberuehrt), KEIN Wurf.
+//   (1b) Slug gesetzt, aber (nicht mehr) im Katalog (entfernt/umbenannt/Alt-/Testdaten) ->
+//       NO-OP + LAUTE WARN, KEIN Wurf. Ein slug-loser Folge-Patch (planSlug===undefined:
+//       Perioden-Verlaengerung / numberSetupFeeExempt) erreicht diese Ableitung auf dem
+//       bereits PERSISTIERTEN Slug; die Schreibkante (setTenantSubscription) prueft NUR
+//       patch.planSlug und laesst den unveraenderten Alt-Slug ungeprueft passieren. Wie die
+//       Schwester-Konvention resolveTierForTenant/PROFILE_SKIP.NO_PLAN behandeln wir
+//       "fehlend ODER unbekannt" GLEICH (fail-closed, NIE Wurf) - sonst risse planCapCents
+//       den nicht gefangenen Stripe-Webhook ab (haengende Antwort). Die bestehende Decke
+//       bleibt (fail-closed: die zuletzt abgeleitete Grenze bindet weiter).
+//   (2) Slug gesetzt+bekannt   -> Decke ableiten, ggf. auf platformCap klemmen (WARN), setzen.
+//   (3) KATALOG-Slug OHNE Kopffreiheit-Eintrag (CATALOG_SLUGS/PLAN_CAP_HEADROOM auseinander-
+//       gelaufen, Konfig-Inkohaerenz, am Boot fatal via planCapInertFindings) -> planCapCents
+//       WIRFT, bevor setTenantBudget schreibt (kein Torn Write). Der isKnownPlanSlug-Riegel
+//       aus (1b) faengt DIESEN Fall NICHT ab (der Slug IST im Katalog) - er bleibt der
+//       Riegel gegen Konfig-Drift, ist aber bei kohaerenter Konfiguration zur Laufzeit
+//       unerreichbar (erste Linie am Boot ist fatal).
 //
 // BEIDE Pflichtfelder (budget_cents UND hard_cap_cents) auf denselben Wert - budget_cents
 // ist BIGINT NOT NULL; ein Aufruf nur mit hardCapCents setzte budgetCents=undefined, der
@@ -1061,7 +1071,21 @@ export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
   if (!tenant) return; // setTenantSubscription hat vorher schon fail-closed geworfen, falls fehlend
   const slug = tenant.stripePlanSlug;
   if (!slug) return; // Fall (1): No-op, kein Wurf
-  let capCents = planCapCents(slug, cfg); // Fall (3): wirft bei unbekanntem Slug
+  // Fall (1b): ein persistierter Slug, den der Katalog nicht (mehr) kennt (Umbenennung/
+  // Entfernung ODER Alt-/Testdaten), erreicht diese Ableitung ueber einen slug-losen
+  // Folge-Patch, den die Schreibkante nicht erneut prueft. Fail-closed wie die Schwester-
+  // Konvention (resolveTierForTenant): No-op + LAUTE WARN statt Wurf - ein geworfener
+  // planCapCents-Fehler risse hier den nicht gefangenen Stripe-Webhook ab. Die bestehende
+  // Decke bleibt unberuehrt (die zuletzt abgeleitete Grenze bindet weiter). Der Slug ist ein
+  // Plan-Bezeichner, keine PII/kein Secret (wie die clamp-WARN unten).
+  if (!isKnownPlanSlug(slug)) {
+    console.warn(
+      `[budget] plan-cap grund=slug_unbekannt slug=${slug} tenant=${tenantId} -> ` +
+        "Ableitung uebersprungen (bestehende Decke bleibt, Tenant-Achse fail-closed)",
+    );
+    return;
+  }
+  let capCents = planCapCents(slug, cfg); // Fall (3): wirft nur noch bei Katalog-Slug OHNE Kopffreiheit
   const platformCapCents = cfg.platformSpendCapCents;
   if (capCents >= platformCapCents) {
     // Zweite Linie (leise, aber NICHT still): ein nachtraeglich gesenkter Plattform-Cap
