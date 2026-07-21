@@ -275,6 +275,17 @@ export const BASE_ENV = {
   // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.
   BUDGET_MONTH_ENABLED: "false",
+  // LCT P7 (Fixkosten sichtbar machen): warnPercent neutral AUS (0 = kein Ereignis, wie
+  // PLATFORM_SPEND_WARN_PERCENT oben) - sonst leakt eine lokale .env via dotenv in
+  // Spawn-Tests (Lehre test-base-env-drift). Quota/Anker/Fixkosten bleiben auf den
+  // dokumentierten Code-Defaults (reine Anzeige, kein Gate liest sie - unkritisch fuer
+  // Bestandstests). test/tts-quota-counter.test.js setzt die Achse direkt ueber die
+  // Ops-Ebene, nicht ueber einen Spawn-Server.
+  TTS_CHARACTER_QUOTA: "39981",
+  TTS_CHARACTER_QUOTA_WARN_PERCENT: "0",
+  TTS_QUOTA_CYCLE_ANCHOR_DAY: "3",
+  PLATFORM_FIXED_COST_CENTS_PER_MONTH: "600",
+  NUMBER_MONTHLY_COST_CENTS: "92",
   // outbound-p1d: per-(Tenant,Ziel)-Cap neutral HOCH (Gate feuert in Altbestand-Tests nie,
   // wie MAX_CALLS_PER_HOUR=100). Ohne diese Zeilen leakt eine lokale .env mit
   // PER_TARGET_CALL_CAP/PER_TARGET_WINDOW_MS via dotenv in Spawn-Tests -> Baseline-Drift

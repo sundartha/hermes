@@ -4,6 +4,11 @@
 // gesteuert (offline, deterministisch), Fake-Response-Shape wie tts-synth.test.js.
 // Deckt zusaetzlich zum Spawn-Byte-Gate (voice-play-tts.test.js) den Synth-FAIL-Fail-safe
 // ab (der Fake-Origin dort liefert immer 200) sowie die Empty-Text-Direktive isoliert.
+//
+// LCT P7: makeDirectiveSynth verlangt seit P7 zusaetzlich store/onQuotaWarning (injizierte
+// Zaehl-/Alarm-Abhaengigkeit). fakeStore() ist ein No-op-Spy (recordTtsCharacters liefert
+// immer null) - diese Datei prueft NUR die <Play>-Verdrahtung, nicht die Zaehl-Semantik
+// selbst (die deckt test/tts-quota-counter.test.js ab).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
@@ -22,6 +27,14 @@ function fakeTtsStore() {
       return FIXED_TOKEN;
     },
   };
+}
+
+// LCT P7: No-op-Spy fuer die injizierte Zaehl-Abhaengigkeit (s. Modul-Kommentar oben).
+function fakeCounterStore() {
+  return { recordTtsCharacters: () => null };
+}
+function noopQuotaWarning() {
+  assert.fail("onQuotaWarning haette in dieser Datei nie aufgerufen werden duerfen");
 }
 
 function fakeConfig({ enabled }) {
@@ -65,7 +78,12 @@ function failFetch() {
 
 test("Flag AUS -> Direktiven referenz-identisch zurueck, kein put, kein fetch", async () => {
   const ttsStore = fakeTtsStore();
-  const { synthesizeDirectiveAudio } = makeDirectiveSynth({ config: fakeConfig({ enabled: false }), ttsStore });
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: false }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
   const directives = [say("Hallo")];
   const call = { provider: "telnyx" };
   await withFakeFetch(throwingFetch, async () => {
@@ -77,7 +95,12 @@ test("Flag AUS -> Direktiven referenz-identisch zurueck, kein put, kein fetch", 
 
 test("Nicht-Telnyx (Flag AN) -> Direktiven unveraendert, kein put, kein fetch", async () => {
   const ttsStore = fakeTtsStore();
-  const { synthesizeDirectiveAudio } = makeDirectiveSynth({ config: fakeConfig({ enabled: true }), ttsStore });
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
   const directives = [say("Hallo")];
   const call = { provider: "twilio" };
   await withFakeFetch(throwingFetch, async () => {
@@ -89,7 +112,12 @@ test("Nicht-Telnyx (Flag AN) -> Direktiven unveraendert, kein put, kein fetch", 
 
 test("Telnyx + Flag AN + Synth-OK -> GATHER bekommt promptAudioUrl, SAY bekommt audioUrl, EIN put je sprechender Direktive", async () => {
   const ttsStore = fakeTtsStore();
-  const { synthesizeDirectiveAudio } = makeDirectiveSynth({ config: fakeConfig({ enabled: true }), ttsStore });
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
   const call = { provider: "telnyx" };
   const directives = [say("Guten Tag"), gather({ promptText: "Wie kann ich helfen?", action: "/voice/turn" })];
   const out = await withFakeFetch(okFetch(), () => synthesizeDirectiveAudio(call, directives));
@@ -100,7 +128,12 @@ test("Telnyx + Flag AN + Synth-OK -> GATHER bekommt promptAudioUrl, SAY bekommt 
 
 test("Telnyx + Flag AN + Synth-FAIL -> Liste unveraendert (Fail-safe -> Azure-Say), kein put", async () => {
   const ttsStore = fakeTtsStore();
-  const { synthesizeDirectiveAudio } = makeDirectiveSynth({ config: fakeConfig({ enabled: true }), ttsStore });
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
   const call = { provider: "telnyx" };
   const directives = [say("Guten Tag")];
   const out = await withFakeFetch(failFetch(), () => synthesizeDirectiveAudio(call, directives));
@@ -110,7 +143,12 @@ test("Telnyx + Flag AN + Synth-FAIL -> Liste unveraendert (Fail-safe -> Azure-Sa
 
 test("Telnyx + Flag AN + nicht-sprechende Direktive gemischt mit sprechender -> nur EIN Synth-Call", async () => {
   const ttsStore = fakeTtsStore();
-  const { synthesizeDirectiveAudio } = makeDirectiveSynth({ config: fakeConfig({ enabled: true }), ttsStore });
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
   const call = { provider: "telnyx" };
   const h = hangup();
   const directives = [h, say("Auf Wiedersehen")];

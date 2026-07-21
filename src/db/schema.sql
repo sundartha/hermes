@@ -336,6 +336,21 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- platform_tts_usage: GLOBAL, keine Tenant-Bindung (LCT P7 - das ElevenLabs-Kontingent
+-- ist plattformweit, EIN Konto, Muster profile oben). Singleton-Tabelle (id-CHECK erzwingt
+-- genau eine Zeile) statt tenant_id-PK: es gibt keine Tenant-Dimension, ein Zeichenzaehler
+-- pro Zeile genuegt. characters ist BIGINT (Ganzzahl, G26) - der Zaehler zaehlt AUSSCHLIESSLICH
+-- erfolgreich an ElevenLabs gesendete Zeichen (result.ok, s. directive-synth.js), NIE
+-- Fehlschlaege/Fallback. cycle_key/warned_cycle sind 'YYYY-MM'-Zyklusschluessel (Anker =
+-- TTS_QUOTA_CYCLE_ANCHOR_DAY, NICHT der Kalendermonat) - dieselbe Notation wie
+-- usage.spend_month_key. REINE SICHTBARKEIT: kein Gate liest diese Tabelle.
+CREATE TABLE IF NOT EXISTS platform_tts_usage (
+  id           INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  cycle_key    TEXT,
+  characters   BIGINT NOT NULL DEFAULT 0,
+  warned_cycle TEXT
+);
+
 -- notification: Ring-Puffer (neueste zuerst), seq fuer stabile Reihenfolge.
 CREATE TABLE IF NOT EXISTS notification (
   id        TEXT PRIMARY KEY,
@@ -511,6 +526,8 @@ ALTER TABLE tenant_budget      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenant_budget      FORCE  ROW LEVEL SECURITY;
 ALTER TABLE usage_event        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_event        FORCE  ROW LEVEL SECURITY;
+ALTER TABLE platform_tts_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_tts_usage FORCE  ROW LEVEL SECURITY;
 
 -- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
 -- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
@@ -551,6 +568,11 @@ CREATE POLICY tenant_isolation ON usage
 DROP POLICY IF EXISTS tenant_isolation ON profile;
 DROP POLICY IF EXISTS profile_global ON profile;
 CREATE POLICY profile_global ON profile USING (true) WITH CHECK (true);
+-- platform_tts_usage: GLOBAL wie profile - keine Tenant-Dimension, kein app.current_tenant-
+-- Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv (Muster profile_global).
+DROP POLICY IF EXISTS tenant_isolation ON platform_tts_usage;
+DROP POLICY IF EXISTS platform_tts_usage_global ON platform_tts_usage;
+CREATE POLICY platform_tts_usage_global ON platform_tts_usage USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
   USING (tenant_id = current_setting('app.current_tenant', true))

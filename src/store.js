@@ -132,6 +132,11 @@ export const {
   // store.claimPlatformSpendWarning undefined -> outbound-gates.js wuerfe zur Laufzeit
   // einen TypeError. Muster wie tryReserveOutboundBudget.
   claimPlatformSpendWarning,
+  // ElevenLabs-Kontingent-Zaehler (LCT P7): OHNE diese Re-Exports waeren
+  // store.recordTtsCharacters/store.platformTtsUsageView undefined -> directive-synth.js
+  // UND makeBillingRoutes wuerfen zur Laufzeit einen TypeError. Muster claimPlatformSpendWarning.
+  recordTtsCharacters,
+  platformTtsUsageView,
   usageOf,
   addNotification,
   pruneOldData,

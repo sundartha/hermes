@@ -16,6 +16,7 @@ import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../bill
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
 import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
 import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
+import { countActiveNumbers } from "../store/views.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
@@ -93,6 +94,31 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   // Cent-Betraege. Kein Alarm-Empfaenger, keine Call-ID, keine Tenant-Kennung.
   router.get("/api/billing/cost-drift", (req, res) => {
     res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
+  });
+
+  // ---- Fixkosten sichtbar machen (LCT P7): ElevenLabs-Wand + DID-Miete ----
+  // Hinter der bestehenden /api/*-Basic-Auth, NICHT tenant-gescopt - dieselbe Naht und
+  // Begruendung wie cost-drift daneben (Plattform-Aggregat, kein Tenant-Filter existiert).
+  // public/index.html gibt es nicht mehr (Owner-Removal P5) - dieser Reader ist der
+  // Anzeige-Pfad. REINE ANZEIGE: kein Gate/keine Reserve/keine Buchung liest diese Route.
+  // Antwort ist PII-frei: nur Cent-Betraege, ein Nummern-ZAEHLER (keine E.164), die
+  // Zeichenzahl des TTS-Kontingents und der Zyklus-Schluessel. "Listenpreis, nicht
+  // Rechnungsposten" (Entscheidung 6) - listPriceNotBilled markiert das explizit in der
+  // Antwort, damit kein Konsument die Zahl faelschlich als Ist-Kosten liest.
+  router.get("/api/billing/platform-costs", (req, res) => {
+    const nowIso = new Date().toISOString();
+    const activeNumbers = countActiveNumbers(store.load());
+    const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
+    const fixedCostCentsPerMonth = config.billing.platformFixedCostCentsPerMonth + didRentCents;
+    res.json({
+      currency: "EUR",
+      listPriceNotBilled: true,
+      elevenLabsCents: config.billing.platformFixedCostCentsPerMonth,
+      didRentCents,
+      activeNumbers,
+      fixedCostCentsPerMonth,
+      ttsQuota: store.platformTtsUsageView(nowIso),
+    });
   });
 
   router.get("/api/billing/checkout-return", async (req, res) => {

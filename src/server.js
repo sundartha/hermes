@@ -12,6 +12,7 @@ import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
 import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
+import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
@@ -164,9 +165,25 @@ const conversationWatchdog = makeConversationWatchdog({
 // beim Boot verdrahtet (Naht wie conversationWatchdog, INV-7).
 const ttsStore = createTtsStore({ ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs });
 
+// LCT P7 (Fixkosten sichtbar machen): Alarm bei ueberschrittener ElevenLabs-Kontingent-
+// Warnschwelle, ueber denselben Bootstrap-Alarm-Baustein wie der Drift-Waechter (LCT P5,
+// sendDriftAlertSms) - sendBootstrapAlertSms buendelt Empfaenger-Riegel, Bootstrap-Absender
+// (die eigene Betreiber-Nummer, NIE die DID eines Kunden) und fail-soft-Versand an EINER
+// Stelle (G5). req=null -> audit() loggt ip=system (Muster PLATFORM_WARN_EVENT): ein
+// Plattform-Ereignis ist keinem Request zuzurechnen.
+const TTS_QUOTA_WARN_EVENT = "tts_quota_warning";
+const TTS_QUOTA_SMS_PREFIX = "[Hermes] ElevenLabs-Kontingent-Warnschwelle erreicht: ";
+function onTtsQuotaWarning(warning) {
+  const detail = `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`;
+  audit(TTS_QUOTA_WARN_EVENT, null, detail);
+  sendBootstrapAlertSms({ messaging, config, store, prefix: TTS_QUOTA_SMS_PREFIX, detail, logTag: TTS_QUOTA_WARN_EVENT });
+}
+
 // Play-TTS-Direktiven-Synth (fail-safe, Server-Slim P2): webt <Play>-Audio in Telnyx-
-// Direktiven ein. Schliesst die EINE ttsStore-Instanz (INV-7) + config.
-const directiveSynth = makeDirectiveSynth({ config, ttsStore });
+// Direktiven ein. Schliesst die EINE ttsStore-Instanz (INV-7) + config. store/onQuotaWarning
+// (LCT P7) sind dieselbe store-Fassade wie ueberall in server.js verdrahtet + der Warn-
+// Callback oben - injiziert statt im Modul konstruiert (DIP/P15).
+const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });
 
 // Voice-Render-Helfer (Server-Slim P3): EINE Instanz (INV-7), config wird geschlossen.
 // Geht als Dep an makeVoiceRoutes (P11); die Render-Funktionen werden dort destrukturiert.

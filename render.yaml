@@ -307,6 +307,17 @@ services:
       # spendMonthKey einen Neustart uebersteht. Rollback = Env-Flip ohne Deploy.
       - key: BUDGET_MONTH_ENABLED
         value: "false"
+      # ---- Fixkosten sichtbar machen (LCT P7) ---- Listenpreis, reine Anzeige, NIE ein Gate.
+      - key: TTS_CHARACTER_QUOTA
+        value: "39981"
+      - key: TTS_CHARACTER_QUOTA_WARN_PERCENT
+        value: "75"
+      - key: TTS_QUOTA_CYCLE_ANCHOR_DAY
+        value: "3"
+      - key: PLATFORM_FIXED_COST_CENTS_PER_MONTH
+        value: "600"
+      - key: NUMBER_MONTHLY_COST_CENTS
+        value: "92"
       # ---- LLM-Resilienz (Budget-Engine, src/llm.js) ----
       - key: LLM_REQUEST_TIMEOUT_MS
         value: "3500"

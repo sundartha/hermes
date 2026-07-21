@@ -28,7 +28,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P4 (Live-Cost-Tracing, Der Flip): costTruingBookingEnabled ergaenzt -> 29.
   // P4b (Live-Cost-Tracing, Vollkosten-Boot-Guard): voiceTariffFullCostFloorCents ergaenzt -> 30.
   // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ergaenzt -> 31.
-  billing: 31,
+  // P7 (Live-Cost-Tracing, Fixkosten sichtbar machen): fuenf Felder ergaenzt
+  // (ttsCharacterQuota, ttsCharacterQuotaWarnPercent, ttsQuotaCycleAnchorDay,
+  // platformFixedCostCentsPerMonth, numberMonthlyCostCents) -> 36.
+  billing: 36,
   provisioning: 11,
   auth: 15,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
@@ -47,9 +50,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 119;
+const EXPECTED_TOTAL_KEYS = 124;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (119 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (124 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -122,7 +125,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // primitiv (Zahl, kein Array/nested Objekt) -> 110.
   // P6 (Live-Cost-Tracing, Tenant-Decken aus dem Abo): voiceCapRateCentsPerMin ist
   // primitiv (Zahl, kein Array/nested Objekt) -> 111.
-  assert.equal(checked, 111, "alle primitiven Blaetter (119 - 4 Arrays - 4 nested Objekte) geprueft");
+  // P7 (Live-Cost-Tracing, Fixkosten sichtbar machen): alle fuenf neuen Felder sind
+  // primitiv (Zahl, kein Array/nested Objekt) -> 116.
+  assert.equal(checked, 116, "alle primitiven Blaetter (124 - 4 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

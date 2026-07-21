@@ -522,6 +522,44 @@ const rawConfig = {
   budgetMonthEnabled: boolEnv("BUDGET_MONTH_ENABLED", process.env.BUDGET_MONTH_ENABLED, {
     fallback: false,
   }),
+  // ---- Fixkosten sichtbar machen (LCT P7) ----
+  // Listenpreis, NICHT Rechnungsposten - reine Anzeige, NIE ein Gate (Entscheidung 6,
+  // PLAN-LIVE-COST-TRACING). EUR-Cent: USD-Betraege sind vorab mit 0,92 umgerechnet, USD
+  // und EUR werden hier NIE vermischt.
+  //
+  // ElevenLabs-Zeichenkontingent des Starter-Tarifs (Play-TTS-Wand, D7). 39981 = das heute
+  // belegte Kontingent.
+  ttsCharacterQuota: numEnv("TTS_CHARACTER_QUOTA", process.env.TTS_CHARACTER_QUOTA, {
+    fallback: 39981,
+    min: 1,
+  }),
+  // Anteil des Kontingents, ab dem GENAU EIN Alarm pro Zyklus feuert (Muster
+  // platformSpendWarnPercent). Ganzzahl 0-100; 0 = Warnung AUS.
+  ttsCharacterQuotaWarnPercent: numEnv(
+    "TTS_CHARACTER_QUOTA_WARN_PERCENT",
+    process.env.TTS_CHARACTER_QUOTA_WARN_PERCENT,
+    { fallback: 75, min: 0, max: 100 },
+  ),
+  // Tag im Monat, an dem der ElevenLabs-Abrechnungszyklus zurueckgesetzt wird (belegt: der
+  // 3.) - AUSDRUECKLICH NICHT der Kalendermonatserste (ttsCycleKeyOf, state-ops.js). Als
+  // benannter, konfigurierbarer Wert statt vergrabenem Literal (G25/G35). 1-28: jenseits
+  // von 28 wuerde der Anker im Februar nie erreicht (kuerzester Monat).
+  ttsQuotaCycleAnchorDay: numEnv("TTS_QUOTA_CYCLE_ANCHOR_DAY", process.env.TTS_QUOTA_CYCLE_ANCHOR_DAY, {
+    fallback: 3,
+    min: 1,
+    max: 28,
+  }),
+  // ElevenLabs-Fixkosten in GANZZAHL EUR-Cent (belegt: 6,00 USD/Monat -> 600 EUR-Cent).
+  platformFixedCostCentsPerMonth: numEnv(
+    "PLATFORM_FIXED_COST_CENTS_PER_MONTH",
+    process.env.PLATFORM_FIXED_COST_CENTS_PER_MONTH,
+    { fallback: 600, min: 0 },
+  ),
+  // DID-Listenmiete je Nummer in GANZZAHL EUR-Cent (1,00 USD x 0,92 -> 92 EUR-Cent).
+  numberMonthlyCostCents: numEnv("NUMBER_MONTHLY_COST_CENTS", process.env.NUMBER_MONTHLY_COST_CENTS, {
+    fallback: 92,
+    min: 0,
+  }),
   // ---- Abo-Buchung (Stripe Recurring, W4) ----
   // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer = Tier nicht buchbar
   // (priceIdForPlan -> null -> Route 500, KEIN Boot-Stop). Opake price_-Referenzen,
@@ -1000,7 +1038,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingBookingEnabled", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingBookingEnabled", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

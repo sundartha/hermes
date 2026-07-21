@@ -28,6 +28,13 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   // Preis-Skalare (Input/Output pro 1M Tokens). Der Namens-Scan greift ueber
   // das Usd-Suffix weiter.
   "modelPricesUsd",
+  // LCT P7 (Fixkosten sichtbar machen): DID-Listenmiete je Nummer (EUR-Cent).
+  "numberMonthlyCostCents",
+  // platformFixedCostCentsPerMonth traegt kein Cents-/Eur-/Usd-Suffix am WORTENDE (endet
+  // auf "PerMonth", Muster voiceCapRateCentsPerMin - ebenfalls nicht vom Namens-Scan
+  // erfasst) und wird deshalb bewusst zusaetzlich manuell eingetragen: reine Anzeige-
+  // Fixkosten in GANZZAHL EUR-Cent, dasselbe Geld-Feld-Muster wie die Cents-Suffix-Felder.
+  "platformFixedCostCentsPerMonth",
 ]);
 
 const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;

@@ -7,7 +7,8 @@
 // NIE eine echte (kostenpflichtige) SMS raus.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sendFailSoftAlertSms } from "../src/telephony/alert-sms.js";
+import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../src/telephony/alert-sms.js";
+import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
 const TO = "+49999";
@@ -148,4 +149,79 @@ test("alert-sms: kehrt vor Aufloesung des sendSms-Promise zurueck", async () => 
   });
   assert.equal(settled, false);
   await new Promise((r) => setImmediate(r));
+});
+
+// ---- resolveBootstrapAlertSender (LCT P7 Review Runde 1, Blocker G5) ----
+// EINE Quelle fuer den Absender store-basierter Plattform-Alarme (Drift-Waechter LCT P5 +
+// ElevenLabs-Kontingent LCT P7). Diese Tests pinnen genau die zwei Zusagen der Extraktion:
+// aktive Bootstrap-Nummer -> Absender; keine -> null (fail-closed).
+function makeStoreStub(numbers) {
+  return { load: () => ({ numbers }) };
+}
+
+test("resolveBootstrapAlertSender: liefert die aktive Nummer des BOOTSTRAP-Tenants", () => {
+  const store = makeStoreStub([
+    { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49111" },
+  ]);
+  assert.deepEqual(resolveBootstrapAlertSender(store), {
+    tenantId: BOOTSTRAP_TENANT_ID,
+    status: NUMBER_STATUS.ACTIVE,
+    provider: "telnyx",
+    e164: "+49111",
+  });
+});
+
+// fail-closed: keine eigene aktive Nummer -> null. Insbesondere darf die aktive Nummer
+// eines FREMDEN Tenants NIE als Absender einer Betreiber-Meldung durchschlagen (das waere
+// die DID eines Kunden).
+test("resolveBootstrapAlertSender: keine aktive Bootstrap-Nummer -> null (kein Fremd-Tenant)", () => {
+  const store = makeStoreStub([
+    { tenantId: "kunde-x", status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49222" },
+    { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.PROVISIONING, provider: "telnyx", e164: "+49333" },
+  ]);
+  assert.equal(resolveBootstrapAlertSender(store), null);
+});
+
+// Der Baustein prueft auf falsy: das leere Ergebnis MUSS null sein (nicht undefined von
+// findActiveNumber durchgereicht), damit sendFailSoftAlertSms sauber abriegelt.
+test("resolveBootstrapAlertSender: leeres Ergebnis ist null, nicht undefined", () => {
+  assert.strictEqual(resolveBootstrapAlertSender(makeStoreStub([])), null);
+});
+
+// ---- sendBootstrapAlertSms (LCT P7 Review Runde 2, Blocker G5 Form 2) ----
+// Der komplette store-basierte Bootstrap-Alarm-Versand, den zuvor Drift-Waechter (LCT P5)
+// und ElevenLabs-Kontingent (LCT P7) je als eigenen Aufruf-Rumpf doppelt trugen. Diese
+// Tests pinnen die zusammengesetzten Zusagen: Empfaenger aus config, Body = prefix+detail,
+// Bootstrap-Nummer als Absender. Damit ist die in server.js/cost-truing.js verbliebene
+// Verdrahtung nur noch duenne Uebergabe (Event-Name/Praefix), der Baustein selbst gedeckt.
+const BOOTSTRAP_SENDER = { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49111" };
+
+test("sendBootstrapAlertSms: Body = prefix+detail, Empfaenger aus config, Bootstrap-Nummer als Absender", () => {
+  const { messaging, calls } = makeMessagingStub();
+  const config = { billing: { platformAlertSmsTo: TO } };
+  const store = makeStoreStub([BOOTSTRAP_SENDER]);
+  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] Warnung: ", detail: "zeichen=800/1000", logTag: "tts_quota_warning" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].provider, BOOTSTRAP_SENDER.provider);
+  assert.deepEqual(calls[0].args, { from: BOOTSTRAP_SENDER.e164, to: TO, body: "[Hermes] Warnung: zeichen=800/1000" });
+});
+
+// Empfaenger-Riegel bleibt durchgereicht: leeres platformAlertSmsTo = Alarmkanal aus -> KEIN
+// Versand (und resolveSender laeuft laut Vertrag gar nicht erst - hier: keine Bootstrap-Nummer
+// noetig, kein Versand).
+test("sendBootstrapAlertSms: ohne konfigurierten Empfaenger KEIN Versand", () => {
+  const { messaging, calls } = makeMessagingStub();
+  const config = { billing: { platformAlertSmsTo: "" } };
+  const store = makeStoreStub([BOOTSTRAP_SENDER]);
+  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] ", detail: "x", logTag: "cost-truing" });
+  assert.equal(calls.length, 0);
+});
+
+// fail-closed: keine aktive Bootstrap-Nummer -> KEIN Versand (nie mit fremder Absendernummer).
+test("sendBootstrapAlertSms: ohne aktive Bootstrap-Nummer KEIN Versand", () => {
+  const { messaging, calls } = makeMessagingStub();
+  const config = { billing: { platformAlertSmsTo: TO } };
+  const store = makeStoreStub([]); // resolveBootstrapAlertSender -> null
+  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] ", detail: "x", logTag: "cost-truing" });
+  assert.equal(calls.length, 0);
 });

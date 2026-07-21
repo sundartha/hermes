@@ -23,6 +23,7 @@ import {
   CENTS_PER_EUR,
   isBookableCents,
   USAGE_CORRUPT_REASON,
+  emptyPlatformTtsUsage,
 } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 
@@ -350,6 +351,17 @@ export function makePgStore(runner) {
     claimPlatformSpendWarning: (cfg, nowIso) =>
       ops.claimPlatformSpendWarning(requireState(), cfg, nowIso),
 
+    // ---- ElevenLabs-Kontingent-Zaehler (LCT P7): Wrapper-Parity zu json.js ----
+    // ANDERS als claimPlatformSpendWarning darueber: platformTtsUsage PERSISTIERT (eigene
+    // Tabelle, flushPlatformTtsUsage) -> save() NUR bei changed (Muster
+    // recordCallCostTruingResult). cfg = config.billing (dieselbe Instanz wie im json-Backend).
+    recordTtsCharacters(chars, nowIso) {
+      const r = ops.recordTtsCharacters(requireState(), chars, config.billing, nowIso);
+      if (r.changed) save();
+      return r.warning;
+    },
+    platformTtsUsageView: (nowIso) => ops.platformTtsUsageView(requireState(), config.billing, nowIso),
+
     // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);
@@ -615,6 +627,7 @@ async function hydrate(client) {
   // haengt nicht mehr an app.current_tenant (Policy profile_global, USING(true)) - die
   // gesetzte GUC ist fuer diesen Read irrelevant. EIN Read, nicht pro Tenant.
   state.profiles = await hydrateProfiles(client);
+  state.platformTtsUsage = await hydratePlatformTtsUsage(client); // LCT P7: global, wie profiles
   await hydrateSubIndex(client, state); // tenant-prolif-b: Merge-Overlay aus account
   return state;
 }
@@ -624,6 +637,19 @@ async function hydrate(client) {
 async function hydrateProfiles(client) {
   const rows = (await client.query(`SELECT tenant_id, data FROM profile`)).rows;
   return Object.fromEntries(rows.map((r) => [r.tenant_id, r.data]));
+}
+
+// Liest die globale Singleton-Zeile (id=1) der platform_tts_usage-Tabelle (LCT P7, Muster
+// hydrateProfiles - kein RLS-Tenant-Filter). Keine Zeile (frische DB, kein Seed) ->
+// ops.emptyPlatformTtsUsage(). characters ist BIGINT -> der Treiber liefert es als String,
+// Number() normalisiert (Backend-Paritaet zu json.js; Wertebereich weit unter 2^53).
+async function hydratePlatformTtsUsage(client) {
+  const rows = (
+    await client.query(`SELECT cycle_key, characters, warned_cycle FROM platform_tts_usage WHERE id = 1`)
+  ).rows;
+  if (rows.length === 0) return emptyPlatformTtsUsage();
+  const r = rows[0];
+  return { cycleKey: r.cycle_key, characters: Number(r.characters), warnedCycle: r.warned_cycle };
 }
 
 // tenant-prolif-b: den sub->tenantId-Resolver-Index aus der account-Tabelle fuellen. account
@@ -1008,6 +1034,9 @@ async function flush(client, state, preFlush) {
     // Tenant gebunden (Policy profile_global, kein app.current_tenant). Liegt bewusst
     // AUSSERHALB der per-Tenant-Schleife - sonst N-fach gegen dieselben Zeilen.
     await flushProfiles(client, state.profiles);
+    // LCT P7: platform_tts_usage ist global wie profile - EIN Flush, ausserhalb der
+    // Tenant-Schleife (kein app.current_tenant, keine Tenant-Dimension).
+    await flushPlatformTtsUsage(client, state.platformTtsUsage);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -1358,6 +1387,17 @@ async function flushProfiles(client, profiles) {
       [tenantId, JSON.stringify(data)],
     );
   }
+}
+
+// TTS-Kontingent-Flush (LCT P7, global, Singleton id=1, Muster flushProfiles). Voll-Upsert
+// der EINEN Zeile - kein deleteMissing noetig (keine Sammlung, kein tenant_id-Schluessel).
+async function flushPlatformTtsUsage(client, row) {
+  await client.query(
+    `INSERT INTO platform_tts_usage (id, cycle_key, characters, warned_cycle) VALUES (1,$1,$2,$3)
+     ON CONFLICT (id) DO UPDATE SET cycle_key=EXCLUDED.cycle_key, characters=EXCLUDED.characters,
+       warned_cycle=EXCLUDED.warned_cycle`,
+    [row.cycleKey, row.characters, row.warnedCycle],
+  );
 }
 
 // Loescht Profile-Zeilen, deren tenant_id nicht mehr im Spiegel steht (global, kein

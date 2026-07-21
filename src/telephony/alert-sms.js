@@ -22,6 +22,24 @@
 //
 // PII: das Ziel (to) wird NIE geloggt - weder hier noch von den Aufrufern.
 
+import { findActiveNumber } from "../store/views.js";
+import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+
+// Absender-Aufloesung fuer eine store-basierte Plattform-Alarm-SMS (EINE Quelle, G5):
+// die aktive Nummer des BOOTSTRAP-Tenants - die eigene Betreiber-Nummer, NIE die DID
+// eines Kunden. Zwei Verbraucher teilen sie: der Drift-Waechter (LCT P5) und die
+// ElevenLabs-Kontingent-Warnung (LCT P7). Keine Nummer -> null (fail-closed, KEINE SMS)
+// plus EINE WARN-Zeile. Die Warnung ist keine Falschmeldung: sendFailSoftAlertSms ruft
+// resolveSender laut Vertrag NUR nach dem Empfaenger-Riegel - ein fehlender Absender bei
+// aktivem Alarmkanal ist echt meldenswert. findActiveNumber liefert undefined, wenn nichts
+// passt; hier auf null normalisiert (sendFailSoftAlertSms prueft auf falsy).
+export function resolveBootstrapAlertSender(store) {
+  const sender = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID);
+  if (sender) return sender;
+  console.warn("[alert-sms] Plattform-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS");
+  return null;
+}
+
 // sender = { provider, e164 } (Form von findActiveNumber, src/store/views.js).
 // resolveSender liefert null, wenn kein zulaessiger Absender feststeht -> KEINE SMS
 // (fail-closed gegen einen Alarm mit fremder Absendernummer).
@@ -36,4 +54,22 @@ export function sendFailSoftAlertSms({ messaging, to, body, resolveSender, onErr
   } catch (e) {
     onError(e); // synchroner Wurf (z.B. unbekannter Provider in messaging())
   }
+}
+
+// Kompletter store-basierter Bootstrap-Alarm-Versand (EINE Quelle, G5): setzt Empfaenger
+// (config.billing.platformAlertSmsTo), Body (prefix + detail), den geteilten Bootstrap-
+// Absender und den Fehler-Log in EINER Stelle zusammen und reicht sie an den fail-soft-
+// Baustein weiter. Zwei Verbraucher teilen ihn: der Drift-Waechter (LCT P5,
+// src/billing/cost-truing.js) und die ElevenLabs-Kontingent-Warnung (LCT P7, src/server.js) -
+// beide bauten zuvor denselben Aufruf-Rumpf doppelt. logTag unterscheidet die Log-Zeile.
+// EIN Options-Argument (F1). Der Versand ist fail-soft: alle Riegel liegen in
+// sendFailSoftAlertSms, ein Fehler bricht den Aufrufer NIE ab. Ziel (to) wird NIE geloggt.
+export function sendBootstrapAlertSms({ messaging, config, store, prefix, detail, logTag }) {
+  sendFailSoftAlertSms({
+    messaging,
+    to: config.billing.platformAlertSmsTo,
+    body: prefix + detail,
+    resolveSender: () => resolveBootstrapAlertSender(store),
+    onError: (e) => console.error(`[${logTag}] Alarm-SMS fehlgeschlagen:`, e.message),
+  });
 }
