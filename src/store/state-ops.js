@@ -1630,6 +1630,24 @@ function turnIncrementsBookable(tokens, microInc) {
 
 // ---- Spend-Monat-Achse (Budget-Achsen P4): additiv, INERT, kein Gate liest sie ----
 
+// Parst einen ISO-Zeitpunkt zu einem Date oder null, wenn er unlesbar ist. EINZIGE
+// Anker-Pruefung BEIDER periodischer Achsen dieses Moduls (G5): spendMonthKeyOf UND
+// ttsCycleKeyOf leiten ihre Uhr-Anomalie-Behandlung ("unlesbar -> null -> kein Reset")
+// aus dieser einen Stelle ab statt sie zu kopieren. Reine Funktion.
+function parseValidDate(nowIso) {
+  const at = new Date(nowIso);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+// UTC-Kalendermonat 'YYYY-MM' eines Datums. EINZIGE Monats-Schluessel-Formatierung beider
+// periodischer Achsen (G5): explizit getUTC* statt date.toISOString().slice(0, 7) waere
+// aequivalent, aber der Aufrufer ttsCycleKeyOf verschiebt das Date VOR der Formatierung
+// (Zyklus-Anker != Kalendermonatsanfang) - ueber ein gemeinsames Date-Argument teilen sich
+// beide Achsen dieselbe Format-Zeile. Reine Funktion.
+function yearMonthKey(date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 // UTC-Kalendermonat 'YYYY-MM' aus einem ISO-Zeitpunkt. EINZIGE Ableitungsstelle der
 // Spend-Monat-Achse (G5): lokal statt UTC gerechnet driftete der Rollover zwischen
 // json- und pg-Backend auseinander. Explizit getUTC* statt nowIso.slice(0, 7) - ein
@@ -1639,9 +1657,8 @@ function turnIncrementsBookable(tokens, microInc) {
 // frischen Monat (fail-closed: eine kaputte Uhr darf den Zaehler nicht ruecksetzen).
 // Reine Funktion.
 function spendMonthKeyOf(nowIso) {
-  const at = new Date(nowIso);
-  if (Number.isNaN(at.getTime())) return null;
-  return `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
+  const at = parseValidDate(nowIso);
+  return at ? yearMonthKey(at) : null;
 }
 
 // Der SPAETERE aus gespeichertem und laufendem periodischen Schluessel ('YYYY-MM',
@@ -2308,11 +2325,11 @@ export function claimPlatformSpendWarning(s, cfg, nowIso) {
 // Unlesbares nowIso -> null (der Aufrufer behandelt das ueber laterMonotonicKey
 // fail-closed, kein Reset). Reine Funktion.
 function ttsCycleKeyOf(nowIso, anchorDay) {
-  const at = new Date(nowIso);
-  if (Number.isNaN(at.getTime())) return null;
+  const at = parseValidDate(nowIso);
+  if (at === null) return null;
   const anchored = new Date(at.getTime());
   if (at.getUTCDate() < anchorDay) anchored.setUTCMonth(anchored.getUTCMonth() - 1);
-  return `${anchored.getUTCFullYear()}-${String(anchored.getUTCMonth() + 1).padStart(2, "0")}`;
+  return yearMonthKey(anchored);
 }
 
 // Der autoritative Zyklus-Schluessel des ElevenLabs-Zaehlers zum Zeitpunkt nowIso: der
