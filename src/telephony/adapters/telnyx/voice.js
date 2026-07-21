@@ -15,6 +15,7 @@ import { assertTelnyxOk } from "./errors.js";
 import { voiceAttrs } from "./render.js";
 import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
+import { createMinuteWindowThrottle } from "./rate-limit.js";
 
 const TEXML_BASE = "/v2/texml";
 // Call-Control-Basis (P4, AI-Assistant-Pfad): Origination/Hangup/ai_assistant_start laufen
@@ -60,6 +61,35 @@ const FIRST_PAGE_NUMBER = 1;
 // complete:false. Mehr Belege sind ein Fall fuer eine engere Zeitschranke (`since`,
 // KE-P5), nicht fuer mehr Seiten.
 const MAX_PAGES_PER_RECORD_TYPE = 10;
+// GEMESSENES Kontingent von /v2/detail_records (Plan F1, Messung 2026-07-21): 40 Anfragen je
+// FIXEM UTC-Minutenfenster (Header "x-ratelimit-limit: 40, 40;w=60"), der Reset faellt immer
+// auf :00, das Fenster gleitet NICHT. Drei unabhaengige Messungen tragen die Aussage: die 41.
+// Anfrage eines Bursts ist HTTP 429 (Telnyx-Code 10011), 39 s spaeter wieder 200 mit
+// remaining=39, und 35 Anfragen ueber ein volles Fenster ergaben 0 x 429. Ohne Drossel sind
+// 224 Anfragen ohne Pause live {"200":40,"429":184} - 184 verworfene Anfragen und ein Sweep
+// ohne Messung.
+const DETAIL_RECORDS_LIMIT_PER_MINUTE = 40;
+// Bewusste Reserve UNTER dem gemessenen Limit. Sie deckt zwei UNBELEGTE Groessen ab: ob das
+// Kontingent je Key, je Konto oder je Organisation zaehlt (Plan U5 - ein zweiter Prozess am
+// selben Konto teilte es), und den Versatz zwischen unserer Uhr und der Fenstergrenze des
+// Providers. Das Ausreizen spart Sekunden, das Sprengen kostet die ganze Messung.
+const DETAIL_RECORDS_RESERVE_PER_MINUTE = 10;
+const DETAIL_RECORDS_BUDGET_PER_MINUTE =
+  DETAIL_RECORDS_LIMIT_PER_MINUTE - DETAIL_RECORDS_RESERVE_PER_MINUTE;
+// HTTP 429 = Kontingent erschoepft (Telnyx-Code 10011). Telnyx nennt KEIN Retry-After, nur
+// x-ratelimit-reset: SEKUNDEN bis zur naechsten vollen Minute (gemessen 15 s im
+// Normalbetrieb, 17 s unmittelbar nach dem 429).
+const RATE_LIMITED_STATUS = 429;
+const RATE_LIMIT_RESET_HEADER = "x-ratelimit-reset";
+const MS_PER_SECOND = 1000;
+// EINE Drossel je Prozess: das Kontingent gehoert dem ENDPUNKT, nicht dem einzelnen Aufruf.
+// Sie gilt AUSSCHLIESSLICH fuer den Belegabruf - Origination, Assistant-Start, speak und
+// Nummernkauf laufen NICHT hierdurch, weil die Kontingente pro Endpunkt konfiguriert sind
+// (gemessen: /v2/usage_reports traegt "5, 5;w=1"). Ein gedrosselter Origination-Pfad wuerde
+// einen echten Anruf um bis zu eine Minute verzoegern - genau das darf nie passieren.
+const detailRecordsThrottle = createMinuteWindowThrottle({
+  budget: DETAIL_RECORDS_BUDGET_PER_MINUTE,
+});
 // Zuordnung Beleg -> Call, ZWEISTUFIG (LCT-FIX-1). Die frueheren Kandidaten leg_id/
 // call_leg_id liefert Telnyx nicht bzw. nur als UUID eines ANDEREN ID-Systems - damit wurde
 // live JEDER Beleg verworfen (297 Belege, Messung 2026-07-21).
@@ -387,6 +417,16 @@ function isLastPage(records, meta, pageNumber) {
   return records.length < COST_RECORDS_PAGE_SIZE;
 }
 
+// Wartehinweis einer Kontingent-Ablehnung: x-ratelimit-reset traegt die SEKUNDEN bis zur
+// naechsten vollen Minute (Plan F1; ein Retry-After gibt es bei Telnyx nicht). Fehlender,
+// leerer oder unbrauchbarer Header -> null; dann rechnet die Drossel dieselbe Groesse aus
+// der eigenen Uhr. parseNonNegativeInteger ist derselbe strenge Zahl-Parser wie fuer
+// billed_sec (G5) - ein "17,5" oder "bald" darf nie als Wartezeit durchgehen.
+function rateLimitResetHintMs(res) {
+  const seconds = parseNonNegativeInteger(res?.headers?.get?.(RATE_LIMIT_RESET_HEADER));
+  return seconds === null ? null : seconds * MS_PER_SECOND;
+}
+
 // Eine Typ-/SEITEN-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die
 // Port-Methode selbst (G31). Erlaubte Server-Parameter sind AUSSCHLIESSLICH
 // filter[record_type], page[size] und page[number] - mehr nicht. JEDER weitere
@@ -401,23 +441,47 @@ function isLastPage(records, meta, pageNumber) {
 // Jeder Wurf und jedes rejectende fetch (Netzfehler/Timeout) wird zu
 // { ok:false, reason:"provider_error" } - unveraendert; SICHTBAR seit KE-P0 ueber
 // logCostRecordsFailure (Status + Telnyx-Code, PII-frei).
-async function fetchCostRecordPage(recordType, pageNumber) {
+// KE-P4: JEDE Anfrage reserviert vorher einen Slot der Drossel (gemessenes Kontingent, s.
+// DETAIL_RECORDS_BUDGET_PER_MINUTE). Die Reservierung steht INNERHALB des try - der Port
+// WIRFT NIE, auch nicht, wenn die injizierte Uhr/das Warten scheitert.
+// Rueckgabe ist ein Zwei-Feld-Umschlag: `page` ist das Ergebnis wie bisher, `rateLimit`
+// ({hintMs} | null) ist ALLEIN die Wiederholungs-Entscheidung des direkten Aufrufers und
+// verlaesst diese Datei nie. Der Hinweis wird VOR assertTelnyxOk aus den Headern gelesen:
+// der Wurf traegt nur Status und Telnyx-Code (strikte Allowlist in ./errors.js), die
+// Antwort selbst ist danach nicht mehr erreichbar.
+async function attemptCostRecordPage(recordType, pageNumber, throttle) {
   const q = new URLSearchParams();
   q.set("filter[record_type]", recordType);
   q.set("page[size]", String(COST_RECORDS_PAGE_SIZE));
   q.set("page[number]", String(pageNumber));
+  let rateLimit = null;
   try {
+    await throttle.reserveSlot();
     const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${q}`, {
       headers: headers(),
     });
+    if (res.status === RATE_LIMITED_STATUS) rateLimit = { hintMs: rateLimitResetHintMs(res) };
     await assertTelnyxOk(res, "getVoiceCostRecords", ATTACH_STATUS);
     const { data, meta } = await parseTelnyxBody(res);
-    if (!Array.isArray(data)) return { ok: false, reason: "shape_unexpected" };
-    return { ok: true, raw: data, lastPage: isLastPage(data, meta, pageNumber) };
+    if (!Array.isArray(data)) return { page: { ok: false, reason: "shape_unexpected" }, rateLimit: null };
+    return { page: { ok: true, raw: data, lastPage: isLastPage(data, meta, pageNumber) }, rateLimit: null };
   } catch (err) {
     logCostRecordsFailure(recordType, err);
-    return { ok: false, reason: "provider_error" };
+    return { page: { ok: false, reason: "provider_error" }, rateLimit };
   }
+}
+
+// Eine Seite mit GENAU EINER Wiederholung nach einer Kontingent-Ablehnung: nach dem Reset
+// auf :00 ist das Fenster frei, ein zweiter Fehlschlag ist dann kein Timing-Problem mehr,
+// sondern ein fremder Verbraucher am selben Kontingent (Plan U5). Danach fail-closed
+// ok:false - eine Wiederholungs-SCHLEIFE gegen ein Kontingent ist genau der Mechanismus,
+// der live 184 von 224 Anfragen verbrannt hat. Der Fehlerpfad bleibt unveraendert
+// ({ok:false, reason:"provider_error"}), er wird nur je Versuch geloggt.
+async function fetchCostRecordPage(recordType, pageNumber, throttle) {
+  const attempt = await attemptCostRecordPage(recordType, pageNumber, throttle);
+  if (!attempt.rateLimit) return attempt.page;
+  await throttle.waitForWindowReset(attempt.rateLimit.hintMs);
+  return (await attemptCostRecordPage(recordType, pageNumber, throttle)).page;
 }
 
 // Neuester GEMESSENER Zeitstempel eines Belegs in Millisekunden, oder null. Nur die je Typ
@@ -461,11 +525,11 @@ function isPageBeforeSince(rawPage, recordType, sinceMs) {
 // `since` filtert den Pool NIE - es bindet nur, wie weit geblaettert wird. Was geholt
 // wurde, kommt vollstaendig in den Pool; ueber die Zugehoerigkeit entscheidet allein die
 // Zuordnung (assignCostRecords), unveraendert.
-async function fetchRecordTypePages(recordType, sinceMs) {
+async function fetchRecordTypePages(recordType, sinceMs, throttle) {
   const raw = [];
   const lastAllowedPage = FIRST_PAGE_NUMBER + MAX_PAGES_PER_RECORD_TYPE - 1;
   for (let pageNumber = FIRST_PAGE_NUMBER; pageNumber <= lastAllowedPage; pageNumber++) {
-    const page = await fetchCostRecordPage(recordType, pageNumber);
+    const page = await fetchCostRecordPage(recordType, pageNumber, throttle);
     if (!page.ok) return page;
     raw.push(...page.raw);
     if (page.lastPage || isPageBeforeSince(page.raw, recordType, sinceMs))
@@ -484,10 +548,10 @@ async function fetchRecordTypePages(recordType, sinceMs) {
 // Typ bricht ab - complete:false macht den ganzen Pool unbrauchbar (bookablePool in
 // billing/cost-truing.js uebersetzt es an genau EINER Stelle in ok:false), die restlichen
 // Typen zu holen waere reine Verschwendung.
-async function fetchAllCostRecords(sinceMs) {
+async function fetchAllCostRecords(sinceMs, throttle) {
   const rawRecords = [];
   for (const recordType of ASSIGNABLE_COST_RECORD_TYPES) {
-    const pages = await fetchRecordTypePages(recordType, sinceMs);
+    const pages = await fetchRecordTypePages(recordType, sinceMs, throttle);
     if (!pages.ok) return pages;
     rawRecords.push(...pages.raw);
     if (!pages.complete) return { ok: true, raw: rawRecords, complete: false };
@@ -517,7 +581,7 @@ function logCostRecordsOk({ recordCount, acceptedByRoute, rejectedByReason }) {
 }
 
 // `since` bindet AUSSCHLIESSLICH die Seitenschleife - es filtert NIE den Pool und geht NIE
-// als Query-Parameter hinaus (s. fetchCostRecordPage). Fehlend oder unbrauchbar -> null =
+// als Query-Parameter hinaus (s. attemptCostRecordPage). Fehlend oder unbrauchbar -> null =
 // keine Schranke: das kostet Anfragen, kann aber keinen Beleg verlieren. Die
 // fail-OPEN-Richtung waere ein zu SPAETES since, nicht ein fehlendes.
 function parseSinceMs(since) {
@@ -682,9 +746,14 @@ export const telnyxVoice = {
   // je Typ bis zur letzten Seite oder bis zur Seitenobergrenze geblaettert.
   // complete:false heisst "bewiesene Untermenge" und ist fuer den Verbraucher dasselbe wie
   // ok:false (bookablePool) - nie eine Rueckerstattungsgrundlage.
-  async fetchCostRecordPool({ since } = {}) {
+  //
+  // KE-P4: jede Anfrage laeuft durch die Drossel am gemessenen Minutenfenster. `throttle`
+  // ist ein Konstruktions-Parameter mit Produktions-Default (Muster src/llm.js: sleep/
+  // random/now injizierbar, Default eingebaut): produktive Aufrufer setzen ihn NIE, der
+  // Test injiziert eine Sprung-Uhr, statt eine reale Minute zu warten (F.I.R.S.T.).
+  async fetchCostRecordPool({ since, throttle = detailRecordsThrottle } = {}) {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
-    return fetchAllCostRecords(parseSinceMs(since));
+    return fetchAllCostRecords(parseSinceMs(since), throttle);
   },
 
   // Ordnet die Roh-Belege EINES Pools genau EINEM Call zu. SYNCHRON und ohne Netz - zwischen

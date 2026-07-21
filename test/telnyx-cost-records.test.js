@@ -84,11 +84,46 @@ const FOREIGN_POOL_IDS = Object.freeze({ anchorId: FOREIGN_CALL_CONTROL_ID, sess
 
 const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT };
 
+const { createMinuteWindowThrottle } = await import(
+  "../src/telephony/adapters/telnyx/rate-limit.js"
+);
+
+// KE-P4: die produktive Drossel haengt an der ECHTEN Uhr und einem ECHTEN Timer. Jeder
+// Abruf im Test injiziert deshalb eine Drossel mit SPRUNG-Uhr - sonst bliebe der 31. Abruf
+// einer realen Minute bis zur naechsten vollen Minute stehen und die Suite haenge an der
+// Wanduhr (F.I.R.S.T.: Fast/Repeatable). Injiziert wird die ECHTE Fabrik, kein
+// Attrappen-Objekt: ein Stub, der nie drosselt, koennte die Drossel nicht beweisen.
+const BUDGET_PER_MINUTE = 30; // gemessene 40 minus bewusster Reserve 10
+const THROTTLE_START_AT = "2026-07-21T16:18:30.000Z"; // gemessener Burst-Zeitpunkt (Plan F1)
+
+// Sprung-Uhr: sleep() bewegt die Uhr, statt zu warten. Zeichnet jede Wartedauer auf - dasselbe
+// Muster wie test/telnyx-cost-throttle.test.js (G5, eine Sprung-Uhr-Form je Datei).
+function jumpClock(startIso = THROTTLE_START_AT) {
+  const startMs = Date.parse(startIso);
+  let nowMs = startMs;
+  const sleeps = [];
+  return {
+    now: () => nowMs,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+      nowMs += ms;
+    },
+    sleeps,
+    elapsedMs: () => nowMs - startMs,
+  };
+}
+const testThrottle = (clock = jumpClock()) =>
+  createMinuteWindowThrottle({ budget: BUDGET_PER_MINUTE, now: clock.now, sleep: clock.sleep });
+
+// EIN Weg in den Belegabruf im Test - mit injizierter Drossel.
+const fetchPool = (params = {}) =>
+  telnyxVoice.fetchCostRecordPool({ ...params, throttle: testThrottle() });
+
 // KE-P2: der Port ist zweigeteilt. Diese Helferin spiegelt die PRODUKTIVE Verdrahtung aus
 // billing/cost-truing.js - EIN Pool-Abruf, danach die SYNCHRONE Zuordnung je Call. Die
 // Bestandsfaelle pruefen damit unveraendert dieselbe Kette ueber den neuen Schnitt.
 async function fetchAndAssign(params = WINDOW) {
-  const pool = await telnyxVoice.fetchCostRecordPool();
+  const pool = await fetchPool();
   if (!pool.ok) return pool;
   return telnyxVoice.assignCostRecords(pool, params);
 }
@@ -107,10 +142,12 @@ function listPageBody(page) {
 // page[number]=1). Eine nicht konfigurierte Seite ist LEER - die gemessene Form des Endes
 // (kurze Seite). EINE Stelle fuer die Antwortform (listPageBody). Zeichnet alle Aufrufe auf
 // (URL, Header) fuer Struktur-Assertions.
-function stubFetchPages(pagesByType) {
+// KE-P4: optionale Uhr zeichnet den ZEITPUNKT jeder Anfrage auf (atMs) - die Drossel-Tests
+// pruefen darueber, wie viele Anfragen in welches simulierte Minutenfenster fielen.
+function stubFetchPages(pagesByType, clock = null) {
   const calls = [];
   global.fetch = async (url, opts) => {
-    calls.push({ url, opts });
+    calls.push({ url, opts, atMs: clock ? clock.now() : null });
     const u = new URL(url);
     const pages = pagesByType[u.searchParams.get("filter[record_type]")] || [];
     const index = Number(u.searchParams.get("page[number]") || FIRST_PAGE) - 1;
@@ -145,11 +182,19 @@ const pageNumbersFor = (calls, recordType) =>
 // beide Formen liefern denselben Body (Faithful Response-Double). Getrennt vom Erfolgs-Stub,
 // dessen einzige Aufgabe "eine Seite je record_type" ist; ein status-Schalter dort waere ein
 // zweiter Weg fuer denselben Zweck.
-function stubFetchFailure({ status, body }) {
+// KE-P4: optionale Header - Headers ist case-insensitiv wie im echten fetch; ein NICHT
+// gesetzter Header liefert null, genau der gemessene Fall "Telnyx nennt kein Retry-After".
+function stubFetchFailure({ status, body, headers: responseHeaders = {} }) {
   const calls = [];
   global.fetch = async (url, opts) => {
     calls.push({ url, opts });
-    return { ok: false, status, json: async () => body, text: async () => JSON.stringify(body) };
+    return {
+      ok: false,
+      status,
+      headers: new Headers(responseHeaders),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    };
   };
   return calls;
 }
@@ -400,7 +445,7 @@ test("assignCostRecords: geteilter Pool - zwei Anker, kein Anker-Beleg gleicht d
   const byType = (recordType) => pool9.filter((r) => r.record_type === recordType);
   const calls = stubFetchByRecordType({ "sip-trunking": byType("sip-trunking"), "call-control": byType("call-control") });
 
-  const pool = await telnyxVoice.fetchCostRecordPool();
+  const pool = await fetchPool();
   assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length, "EIN Pool-Abruf, unabhaengig davon, dass er fuer BEIDE Calls zustaendig ist");
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, true);
@@ -483,13 +528,20 @@ const FIRST_RECORD_TYPE = ASSIGNABLE_COST_RECORD_TYPES[0];
 
 const failureLines = (lines) => lines.filter((l) => l.includes("getVoiceCostRecords fehler"));
 
+// KE-P4: ein 429 wird GENAU EINMAL wiederholt (nach dem Reset ist das Fenster frei). Die
+// Fehler-Zeile erscheint deshalb je Versuch - zweimal, nie mehr. Mehr waere eine Schleife
+// gegen ein Kontingent.
+const ATTEMPTS_PER_RATE_LIMITED_PAGE = 2;
+
 test("Belegabruf: 429 loggt Provider-Status und Telnyx-Code (Fehlerpfad sichtbar)", async () => {
   stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY });
   const lines = await captureConsole(() => fetchAndAssign(WINDOW));
-  assert.deepEqual(failureLines(lines), [
-    `[telnyx/voice] getVoiceCostRecords fehler typ=${FIRST_RECORD_TYPE} `
-      + `status=${RATE_LIMIT_STATUS} code=${RATE_LIMIT_CODE}`,
-  ]);
+  const expected = `[telnyx/voice] getVoiceCostRecords fehler typ=${FIRST_RECORD_TYPE} `
+    + `status=${RATE_LIMIT_STATUS} code=${RATE_LIMIT_CODE}`;
+  assert.deepEqual(
+    failureLines(lines),
+    Array.from({ length: ATTEMPTS_PER_RATE_LIMITED_PAGE }, () => expected),
+  );
 });
 
 // Die Zeile ist eine Betriebs-Sonde: sie landet dauerhaft im Render-Log. Regel 4/5 -
@@ -926,7 +978,7 @@ function manyFullSipTrunkingPages(count) {
 test("(P3-2) Seitenobergrenze erreicht -> complete:false (bewiesene Untermenge, ok bleibt true)", async () => {
   const totalPages = 99;
   const calls = stubFetchPages({ "sip-trunking": manyFullSipTrunkingPages(totalPages) });
-  const pool = await telnyxVoice.fetchCostRecordPool();
+  const pool = await fetchPool();
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, false);
   const pageNumbers = pageNumbersFor(calls, "sip-trunking");
@@ -941,7 +993,7 @@ test("(P3-2b) volle Seiten OHNE meta laufen nicht endlos -> complete:false", asy
     Array.from({ length: MEASURED_PAGE_SIZE }, () => realRecord("sip-trunking", { cost: BILLED_CC_COST, billedSec: 60 })),
   );
   const calls = stubFetchPages({ "sip-trunking": plainPages });
-  const pool = await telnyxVoice.fetchCostRecordPool();
+  const pool = await fetchPool();
   assert.equal(pool.complete, false);
   assert.ok(pageNumbersFor(calls, "sip-trunking").length < totalPages);
 });
@@ -981,20 +1033,20 @@ function unsortedCallControlPages() {
 
 test("(P3-4) unsortierte Seite (erster Beleg ausserhalb, Rest innerhalb) bricht die Schleife NICHT ab", async () => {
   const calls = stubFetchPages({ "call-control": unsortedCallControlPages() });
-  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  await fetchPool({ since: SINCE_BOUNDARY });
   assert.ok(pageNumbersFor(calls, "call-control").includes(2), "Seite 2 wurde angefordert - Seite 1 hat die Schleife nicht vorzeitig beendet");
 });
 
 test("(P3-5) eine GANZE Seite vor 'since' beendet die Seitenschleife", async () => {
   const calls = stubFetchPages({ "call-control": unsortedCallControlPages() });
-  const pool = await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  const pool = await fetchPool({ since: SINCE_BOUNDARY });
   assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2], "Seite 3 wird nie geholt");
   assert.equal(pool.complete, true, "das Fenster wurde verlassen - das ist keine Untermenge");
 });
 
 test("(P3-6) Beleg OHNE gemessenes Zeitfeld gilt als innerhalb - die Schleife laeuft weiter", async () => {
   const calls = stubFetchPages({ "call-control": threeFullPages(ccRecordWithoutTimestamp) });
-  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  await fetchPool({ since: SINCE_BOUNDARY });
   assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2, 3]);
 });
 
@@ -1013,7 +1065,7 @@ test("(P3-7) das Zeitfeld wird JE TYP gelesen: 'started_at' an speech-to-text is
   const calls = stubFetchPages({
     "speech-to-text": threeFullPages(() => sttRecordAt("started_at", BEFORE_SINCE)),
   });
-  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  await fetchPool({ since: SINCE_BOUNDARY });
   assert.deepEqual(pageNumbersFor(calls, "speech-to-text"), [1, 2, 3], "started_at ist auf speech-to-text kein Zeitfeld - die Schleife liest es nicht");
 });
 
@@ -1021,7 +1073,7 @@ test("(P3-8) 'start_time' vor 'since' beendet die speech-to-text-Schleife (das g
   const calls = stubFetchPages({
     "speech-to-text": threeFullPages(() => sttRecordAt("start_time", BEFORE_SINCE)),
   });
-  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  await fetchPool({ since: SINCE_BOUNDARY });
   assert.deepEqual(pageNumbersFor(calls, "speech-to-text"), [1], "start_time ist das gemessene Zeitfeld - die Schleife endet nach Seite 1");
 });
 
@@ -1037,7 +1089,7 @@ test("(P3-9) abgerufene Typenmenge ist GENAU ASSIGNABLE_COST_RECORD_TYPES - infe
 
 test("(P3-10) die Query traegt AUSSCHLIESSLICH filter[record_type], page[size]=50, page[number] - nie einen Zeitfilter", async () => {
   const calls = stubRealRecords();
-  await telnyxVoice.fetchCostRecordPool({ since: "2026-07-20T00:00:00Z" });
+  await fetchPool({ since: "2026-07-20T00:00:00Z" });
   assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
   for (const c of calls) {
     const params = new URL(c.url).searchParams;
@@ -1054,6 +1106,98 @@ test("(P3-11) die Zeitfeld-Tabelle deckt GENAU die abgerufenen Typen ab (keine z
     Object.keys(COST_RECORD_TIME_FIELDS).sort(),
     [...ASSIGNABLE_COST_RECORD_TYPES].sort(),
   );
+});
+
+// ---- (i) KE-P4: Drossel am gemessenen Minutenfenster ----
+
+// 6 Seiten JE zuordenbarem Typ = 6 x 6 = 36 Anfragen - mehr als das Minutenbudget (30) und
+// bewusst UNTER der Seitenobergrenze, damit dieser Test nicht an MAX_PAGES_PER_RECORD_TYPE
+// haengt. meta ist kohaerent gemessen: 6 Seiten x 50 = 300 Belege.
+const THROTTLE_PAGES_PER_TYPE = 6;
+const THROTTLE_META = Object.freeze({
+  total_results: THROTTLE_PAGES_PER_TYPE * MEASURED_PAGE_SIZE,
+  total_pages: THROTTLE_PAGES_PER_TYPE,
+  page_size: MEASURED_PAGE_SIZE,
+});
+const THROTTLE_REQUEST_COUNT = ASSIGNABLE_COST_RECORD_TYPES.length * THROTTLE_PAGES_PER_TYPE; // 36
+
+// KOEDER (A2) aus der GEMESSENEN Form selbst: wo der Typ telnyx_leg_id/call_leg_id fuehrt,
+// zeigt die Leg-UUID auf eine FREMDE Leg - benutzte der Code sie, waeren die Erwartungen
+// unten falsch. NULL-ZWILLING (A2): der letzte Beleg JEDER Seite ist echt null
+// (cost "0.0", billed_sec 0, call_sec 0) - das zweite Bein. Der Test weist nach, dass die
+// Drossel keinen Beleg verliert, auch nicht den, an dem die Rueckerstattung haengt.
+function throttledPages(recordType) {
+  const billed = () => realRecord(recordType, {
+    cost: BILLED_CC_COST, billedSec: 60,
+    ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID }, extraFields: { call_sec: 60 },
+  });
+  const nullTwin = () => realRecord(recordType, {
+    cost: "0.0", billedSec: 0,
+    ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID }, extraFields: { call_sec: 0 },
+  });
+  const page = () => ({
+    records: [...Array.from({ length: MEASURED_PAGE_SIZE - 1 }, billed), nullTwin()],
+    meta: THROTTLE_META,
+  });
+  return Array.from({ length: THROTTLE_PAGES_PER_TYPE }, page);
+}
+const throttledPagesByType = () =>
+  Object.fromEntries(ASSIGNABLE_COST_RECORD_TYPES.map((t) => [t, throttledPages(t)]));
+
+const requestsPerMinute = (calls) => {
+  const byMinute = new Map();
+  for (const c of calls) {
+    const minute = Math.floor(c.atMs / 60_000);
+    byMinute.set(minute, (byMinute.get(minute) || 0) + 1);
+  }
+  return byMinute;
+};
+
+test("(P4-1) hoechstens 30 Anfragen je fixem UTC-Minutenfenster - und kein Beleg geht verloren", async () => {
+  const clock = jumpClock();
+  const calls = stubFetchPages(throttledPagesByType(), clock);
+  const pool = await telnyxVoice.fetchCostRecordPool({ throttle: testThrottle(clock) });
+
+  assert.equal(calls.length, THROTTLE_REQUEST_COUNT, "36 Seiten wurden angefordert");
+  const perMinute = [...requestsPerMinute(calls).values()];
+  for (const count of perMinute)
+    assert.ok(count <= BUDGET_PER_MINUTE, `kein Fenster ueber dem Budget (gesehen: ${count})`);
+  assert.deepEqual(perMinute, [BUDGET_PER_MINUTE, THROTTLE_REQUEST_COUNT - BUDGET_PER_MINUTE]);
+  assert.equal(clock.now() % 60_000, 0, "die Pause endet exakt auf :00 - das Fenster ist fix, nicht gleitend");
+  // Die Drossel darf nur bremsen, nie filtern.
+  assert.equal(pool.ok, true);
+  assert.equal(pool.complete, true);
+  assert.equal(pool.raw.length, THROTTLE_REQUEST_COUNT * MEASURED_PAGE_SIZE);
+  assert.equal(pool.raw.filter((r) => r.cost === "0.0").length, THROTTLE_REQUEST_COUNT,
+    "jeder Null-Zwilling ist mitgekommen");
+});
+
+test("(P4-2) 429 -> GENAU ein Wiederholungsversuch mit dem Wartehinweis des Providers, danach ok:false", async () => {
+  const RESET_SECONDS = 17; // gemessen unmittelbar nach dem 429 (Plan F1)
+  const calls = stubFetchFailure({
+    status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY,
+    headers: { "x-ratelimit-reset": String(RESET_SECONDS) },
+  });
+  const clock = jumpClock();
+  let pool;
+  await captureConsole(async () => {
+    pool = await telnyxVoice.fetchCostRecordPool({ throttle: testThrottle(clock) });
+  });
+  assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE, "ein Versuch + genau eine Wiederholung");
+  assert.deepEqual(pageNumbersFor(calls, FIRST_RECORD_TYPE), [FIRST_PAGE, FIRST_PAGE],
+    "die Wiederholung holt DIESELBE Seite - keine wird uebersprungen");
+  assert.equal(clock.elapsedMs(), RESET_SECONDS * 1000, "gewartet wurde nach x-ratelimit-reset");
+  assert.equal(pool.ok, false);
+  assert.equal(pool.reason, "provider_error");
+  assert.equal(pool.raw, undefined, "ok:false ist NIE die leere Menge");
+});
+
+test("(P4-3) 429 ohne x-ratelimit-reset -> Wartezeit bis zur naechsten vollen Minute aus der eigenen Uhr", async () => {
+  const calls = stubFetchFailure({ status: RATE_LIMIT_STATUS, body: RATE_LIMIT_BODY }); // kein Header
+  const clock = jumpClock(); // 16:18:30Z -> 30 000 ms bis :00
+  await captureConsole(() => telnyxVoice.fetchCostRecordPool({ throttle: testThrottle(clock) }));
+  assert.equal(clock.elapsedMs(), 30_000);
+  assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE);
 });
 
 // ---- (f) Twilio-Riegel ----
