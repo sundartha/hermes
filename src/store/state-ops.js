@@ -2252,14 +2252,16 @@ export function releaseOutboundReserve(s, call) {
 
 const PERCENT_SCALE = 100; // G25: Prozent -> Ganzzahl-Vergleich ohne Fliesskomma
 
-// Schwelle in SKALIERTEN Cents (cap * prozent), oder null = Warnung AUS. !(percent > 0)
-// faengt 0 (dokumentierter Aus-Sentinel), negative und fehlende Werte in EINER Bedingung -
-// die Abweichung geht immer Richtung Bestand (Warnung aus), nie Richtung Falschalarm.
+// Ganzzahl-Prozent-Schwelle ohne Fliesskomma (ueber PERCENT_SCALE, G25/G26): liegt value
+// bei/ueber percent Prozent von base? !(percent > 0) faengt 0 (dokumentierter Aus-Sentinel),
+// negative und fehlende Werte in EINER Bedingung -> false (Schwelle AUS); die Abweichung
+// geht immer Richtung Bestand (kein Alarm), nie Richtung Falschalarm. EINE Vergleichsregel
+// fuer BEIDE Prozent-Schwellen des Moduls (G5): die Plattform-Spend-Warnung
+// (claimPlatformSpendWarning) UND das ElevenLabs-Kontingent (recordTtsCharacters, LCT P7).
 // Reine Funktion.
-function platformWarnThresholdScaled(cfg) {
-  const percent = cfg.platformSpendWarnPercent;
-  if (!(percent > 0)) return null;
-  return globalCapCents(cfg) * percent;
+function scaledThresholdCrossed(value, base, percent) {
+  if (!(percent > 0)) return false;
+  return value * PERCENT_SCALE >= base * percent;
 }
 
 // Plattform-Ist (Gate-Verbrauch + In-Flight) - DIESELBE Groesse, die
@@ -2280,10 +2282,9 @@ function platformSpendObservedCents(s, cfg, nowIso) {
 // sonst null. nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei, Muster
 // spendMonthUsageCents).
 export function claimPlatformSpendWarning(s, cfg, nowIso) {
-  const threshold = platformWarnThresholdScaled(cfg);
-  if (threshold === null) return null;
   const totalCents = platformSpendObservedCents(s, cfg, nowIso);
-  if (totalCents === null || totalCents * PERCENT_SCALE < threshold) return null;
+  if (totalCents === null) return null; // korrupter Verbrauchszaehler -> stumm (Gate-Kante loggt)
+  if (!scaledThresholdCrossed(totalCents, globalCapCents(cfg), cfg.platformSpendWarnPercent)) return null;
   const monthKey = spendMonthKeyOf(nowIso);
   // Unlesbarer Anker -> melden, aber KEINEN Marker setzen: ein gespeichertes null wuerde
   // beim naechsten Mal als null===null "schon gemeldet" gelesen und die Warnung DAUERHAFT
@@ -2314,6 +2315,16 @@ function ttsCycleKeyOf(nowIso, anchorDay) {
   return `${anchored.getUTCFullYear()}-${String(anchored.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// Der autoritative Zyklus-Schluessel des ElevenLabs-Zaehlers zum Zeitpunkt nowIso: der
+// SPAETERE aus gespeichertem und laufendem Zyklus-Schluessel ueber laterMonotonicKey
+// (dieselbe Monotonie-/Zukunftsschluessel-Regel wie die Spend-Monat-Achse, G5 - Muster
+// spendMonthWindowKey). EINE Stelle, die den Schluessel zusammensetzt: der Schreiber
+// recordTtsCharacters UND die Leseprojektion platformTtsUsageView beziehen ihn NUR
+// darueber, damit Leser und Schreiber garantiert denselben Zyklus sehen. Reine Funktion.
+function ttsCycleWindowKey(row, cfg, nowIso) {
+  return laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
+}
+
 // Verbucht erfolgreich an ElevenLabs gesendete Zeichen auf dem globalen Zaehler und
 // meldet die Warnschwelle GENAU EINMAL je Zyklus (Muster claimPlatformSpendWarning).
 // nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei). Liefert {changed, warning}:
@@ -2322,13 +2333,12 @@ function ttsCycleKeyOf(nowIso, anchorDay) {
 // ueber laterMonotonicKey (dieselbe Regel wie die Spend-Monat-Achse, G5).
 export function recordTtsCharacters(s, chars, cfg, nowIso) {
   const row = s.platformTtsUsage;
-  const key = laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
+  const key = ttsCycleWindowKey(row, cfg, nowIso);
   if (key === null) return { changed: false, warning: null }; // kein Anker je gestempelt UND Uhr unlesbar -> No-op
   const rolledOver = key !== row.cycleKey;
   row.characters = rolledOver ? chars : row.characters + chars;
   row.cycleKey = key;
-  const threshold = cfg.ttsCharacterQuota * cfg.ttsCharacterQuotaWarnPercent; // skaliert, kein Float
-  const crossed = cfg.ttsCharacterQuotaWarnPercent > 0 && row.characters * PERCENT_SCALE >= threshold;
+  const crossed = scaledThresholdCrossed(row.characters, cfg.ttsCharacterQuota, cfg.ttsCharacterQuotaWarnPercent);
   if (crossed && row.warnedCycle !== key) {
     row.warnedCycle = key;
     return { changed: true, warning: { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key } };
@@ -2342,7 +2352,7 @@ export function recordTtsCharacters(s, chars, cfg, nowIso) {
 // Schluessel ueber laterMonotonicKey).
 export function platformTtsUsageView(s, cfg, nowIso) {
   const row = s.platformTtsUsage;
-  const key = laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
+  const key = ttsCycleWindowKey(row, cfg, nowIso);
   const characters = key === row.cycleKey ? row.characters : 0;
   return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
 }

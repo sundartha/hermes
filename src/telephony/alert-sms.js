@@ -55,3 +55,21 @@ export function sendFailSoftAlertSms({ messaging, to, body, resolveSender, onErr
     onError(e); // synchroner Wurf (z.B. unbekannter Provider in messaging())
   }
 }
+
+// Kompletter store-basierter Bootstrap-Alarm-Versand (EINE Quelle, G5): setzt Empfaenger
+// (config.billing.platformAlertSmsTo), Body (prefix + detail), den geteilten Bootstrap-
+// Absender und den Fehler-Log in EINER Stelle zusammen und reicht sie an den fail-soft-
+// Baustein weiter. Zwei Verbraucher teilen ihn: der Drift-Waechter (LCT P5,
+// src/billing/cost-truing.js) und die ElevenLabs-Kontingent-Warnung (LCT P7, src/server.js) -
+// beide bauten zuvor denselben Aufruf-Rumpf doppelt. logTag unterscheidet die Log-Zeile.
+// EIN Options-Argument (F1). Der Versand ist fail-soft: alle Riegel liegen in
+// sendFailSoftAlertSms, ein Fehler bricht den Aufrufer NIE ab. Ziel (to) wird NIE geloggt.
+export function sendBootstrapAlertSms({ messaging, config, store, prefix, detail, logTag }) {
+  sendFailSoftAlertSms({
+    messaging,
+    to: config.billing.platformAlertSmsTo,
+    body: prefix + detail,
+    resolveSender: () => resolveBootstrapAlertSender(store),
+    onError: (e) => console.error(`[${logTag}] Alarm-SMS fehlgeschlagen:`, e.message),
+  });
+}

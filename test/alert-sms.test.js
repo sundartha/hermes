@@ -7,7 +7,7 @@
 // NIE eine echte (kostenpflichtige) SMS raus.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sendFailSoftAlertSms, resolveBootstrapAlertSender } from "../src/telephony/alert-sms.js";
+import { sendFailSoftAlertSms, resolveBootstrapAlertSender, sendBootstrapAlertSms } from "../src/telephony/alert-sms.js";
 import { BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 
 const SENDER = { provider: "telnyx", e164: "+49111" };
@@ -186,4 +186,42 @@ test("resolveBootstrapAlertSender: keine aktive Bootstrap-Nummer -> null (kein F
 // findActiveNumber durchgereicht), damit sendFailSoftAlertSms sauber abriegelt.
 test("resolveBootstrapAlertSender: leeres Ergebnis ist null, nicht undefined", () => {
   assert.strictEqual(resolveBootstrapAlertSender(makeStoreStub([])), null);
+});
+
+// ---- sendBootstrapAlertSms (LCT P7 Review Runde 2, Blocker G5 Form 2) ----
+// Der komplette store-basierte Bootstrap-Alarm-Versand, den zuvor Drift-Waechter (LCT P5)
+// und ElevenLabs-Kontingent (LCT P7) je als eigenen Aufruf-Rumpf doppelt trugen. Diese
+// Tests pinnen die zusammengesetzten Zusagen: Empfaenger aus config, Body = prefix+detail,
+// Bootstrap-Nummer als Absender. Damit ist die in server.js/cost-truing.js verbliebene
+// Verdrahtung nur noch duenne Uebergabe (Event-Name/Praefix), der Baustein selbst gedeckt.
+const BOOTSTRAP_SENDER = { tenantId: BOOTSTRAP_TENANT_ID, status: NUMBER_STATUS.ACTIVE, provider: "telnyx", e164: "+49111" };
+
+test("sendBootstrapAlertSms: Body = prefix+detail, Empfaenger aus config, Bootstrap-Nummer als Absender", () => {
+  const { messaging, calls } = makeMessagingStub();
+  const config = { billing: { platformAlertSmsTo: TO } };
+  const store = makeStoreStub([BOOTSTRAP_SENDER]);
+  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] Warnung: ", detail: "zeichen=800/1000", logTag: "tts_quota_warning" });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].provider, BOOTSTRAP_SENDER.provider);
+  assert.deepEqual(calls[0].args, { from: BOOTSTRAP_SENDER.e164, to: TO, body: "[Hermes] Warnung: zeichen=800/1000" });
+});
+
+// Empfaenger-Riegel bleibt durchgereicht: leeres platformAlertSmsTo = Alarmkanal aus -> KEIN
+// Versand (und resolveSender laeuft laut Vertrag gar nicht erst - hier: keine Bootstrap-Nummer
+// noetig, kein Versand).
+test("sendBootstrapAlertSms: ohne konfigurierten Empfaenger KEIN Versand", () => {
+  const { messaging, calls } = makeMessagingStub();
+  const config = { billing: { platformAlertSmsTo: "" } };
+  const store = makeStoreStub([BOOTSTRAP_SENDER]);
+  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] ", detail: "x", logTag: "cost-truing" });
+  assert.equal(calls.length, 0);
+});
+
+// fail-closed: keine aktive Bootstrap-Nummer -> KEIN Versand (nie mit fremder Absendernummer).
+test("sendBootstrapAlertSms: ohne aktive Bootstrap-Nummer KEIN Versand", () => {
+  const { messaging, calls } = makeMessagingStub();
+  const config = { billing: { platformAlertSmsTo: TO } };
+  const store = makeStoreStub([]); // resolveBootstrapAlertSender -> null
+  sendBootstrapAlertSms({ messaging, config, store, prefix: "[Hermes] ", detail: "x", logTag: "cost-truing" });
+  assert.equal(calls.length, 0);
 });

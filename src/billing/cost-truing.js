@@ -26,7 +26,7 @@
 // applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
 import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, isBookableCents } from "../store/defaults.js";
 import { nextCostTruingAttempt } from "../store/state-ops.js";
-import { sendFailSoftAlertSms, resolveBootstrapAlertSender } from "../telephony/alert-sms.js";
+import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 
 // Sweep-Kadenz (Muster RETENTION_SWEEP_INTERVAL_MS, src/boot.js). Exportiert: boot.js
@@ -324,20 +324,13 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     countOutcome(tally, truedSource, closed);
   }
 
-  // Versand ueber den geteilten fail-soft-Baustein (G5, EINE Quelle mit
-  // emitPlatformSpendWarning): try/catch, Empfaenger-Riegel und fire-and-forget liegen
-  // dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel (platformAlertSmsTo) wird
-  // NIE geloggt. Absender ist die aktive Nummer des BOOTSTRAP-Tenants (die eigene
-  // Betreiber-Nummer, NIE die DID eines Kunden) - der geteilte resolveBootstrapAlertSender
-  // (G5, gemeinsam mit der ElevenLabs-Kontingent-Warnung LCT P7).
+  // Versand ueber den geteilten Bootstrap-Alarm-Baustein (G5, EINE Quelle mit der
+  // ElevenLabs-Kontingent-Warnung LCT P7): Empfaenger-Riegel, Bootstrap-Absender (die
+  // eigene Betreiber-Nummer, NIE die DID eines Kunden), try/catch und fire-and-forget
+  // liegen alle dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel (platformAlertSmsTo)
+  // wird NIE geloggt.
   function sendDriftAlertSms(detail) {
-    sendFailSoftAlertSms({
-      messaging,
-      to: config.billing.platformAlertSmsTo,
-      body: DRIFT_ALERT_SMS_PREFIX + detail,
-      resolveSender: () => resolveBootstrapAlertSender(store),
-      onError: (e) => console.error("[cost-truing] Tarif-Drift-Alarm SMS fehlgeschlagen:", e.message),
-    });
+    sendBootstrapAlertSms({ messaging, config, store, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: "cost-truing" });
   }
 
   // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
