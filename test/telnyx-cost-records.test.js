@@ -65,6 +65,16 @@ const FOREIGN_IDS = Object.freeze({
 
 const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT };
 
+// Antwortkoerper EINER Listen-Seite in der GEMESSENEN Form (Messung 2026-07-21):
+// {data:[...]} plus - bei einer paginierten Menge - {meta:{total_results, total_pages,
+// page_size}}. Ein blosses Array bleibt die meta-lose Seite (alle Bestands-Fixtures,
+// byte-identisch); {records, meta} baut die paginierte Form. EINE Stelle (G5), damit die
+// Antwortform nicht je Fixture neu erfunden wird - genau daran ist die Kette zweimal
+// gestorben.
+function listPageBody(page) {
+  return Array.isArray(page) ? { data: page } : { data: page.records, meta: page.meta };
+}
+
 // fetch-Stub: liefert je filter[record_type] eine konfigurierte Seite. Zeichnet alle
 // Aufrufe auf (URL, Header) fuer Struktur-Assertions.
 function stubFetchByRecordType(pagesByType) {
@@ -72,13 +82,12 @@ function stubFetchByRecordType(pagesByType) {
   global.fetch = async (url, opts) => {
     calls.push({ url, opts });
     const u = new URL(url);
-    const recordType = u.searchParams.get("filter[record_type]");
-    const data = pagesByType[recordType] || [];
+    const body = listPageBody(pagesByType[u.searchParams.get("filter[record_type]")] || []);
     return {
       ok: true,
       status: 200,
-      json: async () => ({ data }),
-      text: async () => JSON.stringify({ data }),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
     };
   };
   return calls;
@@ -638,12 +647,86 @@ test("getVoiceCostRecords: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein
   );
 });
 
-test("getVoiceCostRecords: volle Seite -> ok:false, reason page_truncated", async () => {
-  const fullPage = Array.from({ length: 250 }, () => realRecord("sip-trunking", { cost: "0.01" }));
-  stubFetchByRecordType({ "sip-trunking": fullPage });
+// ---- (e3) KE-P1: Vollstaendigkeit kommt aus der ANTWORT, nicht aus der Anforderung ----
+
+// GEMESSENE Werte (Plan F5 / Spec A1, Messung 2026-07-21) - bewusst LITERALE hier und
+// NICHT die Produktions-Konstante COST_RECORDS_PAGE_SIZE: ein Test, der die eigene
+// Konstante spiegelt, prueft nur sich selbst. Genau das war die abgeloeste 250er-Fixture -
+// sie war gruen, weil 250 === 250, und sagte ueber die Wirklichkeit nichts.
+const MEASURED_PAGE_SIZE = 50; // page[size] deckelt hart bei 50 (250/100/50 -> immer 50)
+const MEASURED_PAGED_META = Object.freeze({ total_results: 212, total_pages: 5, page_size: 50 });
+const MEASURED_SINGLE_PAGE_META = Object.freeze({ total_results: 50, total_pages: 1, page_size: 50 });
+
+// Eine volle Seite call-control-Belege. Der Typ traegt in der Messung KEINEN Anker
+// (call_control_id), sondern telnyx_leg_id + telnyx_session_id - der KOEDER kommt damit
+// aus der gemessenen Form selbst, ohne ein Feld zu erfinden. Er zeigt hier auf eine FREMDE
+// Leg-UUID: wuerde der Code telnyx_leg_id als Zuordnungsquelle benutzen, kaeme KEINER
+// dieser 50 Belege herein und jede Erwartung unten waere falsch.
+function fullCallControlPage() {
+  return Array.from({ length: MEASURED_PAGE_SIZE }, () =>
+    realRecord("call-control", { cost: "0.001", ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID } }),
+  );
+}
+
+// Der Anker-Beleg, der die Session ueberhaupt erst aufspannt (Stufe 1). Ohne ihn waere
+// jede Zaehlung unten trivial 0 und der Test bewiese nichts ueber die Untermenge.
+const anchorPage = () => [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })];
+
+// ROT VOR DEM FIX (gemessener Lauf im Phasenbericht): der Bestand fordert page[size]=250
+// an und vergleicht die Antwort mit der EIGENEN Anforderung. 50 !== 250, also gilt eine
+// Seite von fuenf als vollstaendig -> ok:true mit 51 Belegen aus 212. Eine stille
+// Untermenge ist im Geldpfad die fail-OPEN-Richtung: gegen eine zu kleine Ist-Summe
+// erstattet die Korrektur real ausgegebenes Geld zurueck.
+test("getVoiceCostRecords: volle Seite mit meta.total_pages>1 gilt NICHT als vollstaendig", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": anchorPage(),
+    "call-control": { records: fullCallControlPage(), meta: MEASURED_PAGED_META },
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, false, "eine Seite von fuenf ist keine vollstaendige Messung");
+  assert.equal(res.reason, "page_truncated");
+  assert.equal(res.records, undefined, "ok:false ist NIE die leere Menge");
+});
+
+// Gegenprobe zur Fail-closed-Richtung. Sagt die Antwort selbst, dass es nur diese eine
+// Seite gibt, bleibt sie vollstaendig - sonst waere jede exakt 50 Belege grosse Menge
+// dauerhaft unmessbar (Deckungsquote 0 %, keine Rueckerstattung mehr, jede Nachforderung
+// gebucht: einseitige Korrektur zulasten des Kunden).
+test("getVoiceCostRecords: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": anchorPage(),
+    "call-control": { records: fullCallControlPage(), meta: MEASURED_SINGLE_PAGE_META },
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, true);
+  assert.equal(
+    res.records.length,
+    1 + MEASURED_PAGE_SIZE,
+    "Anker-Beleg + alle 50 nur ueber die Session gefundenen call-control-Belege",
+  );
+});
+
+// KEINE gemessene Antwortform (real traegt jede Listen-Antwort ein meta), sondern der
+// Provider-Drift-Grenzfall - dieselbe Kennzeichnung wie beim recorded_at-Test oben. Ohne
+// brauchbares meta ist "es gibt nur diese Seite" UNBEWIESEN. Unbewiesen heisst im Geldpfad
+// fail-closed, nicht durchwinken.
+test("getVoiceCostRecords: volle Seite OHNE meta -> fail-closed (page_truncated)", async () => {
+  stubFetchByRecordType({ "sip-trunking": anchorPage(), "call-control": fullCallControlPage() });
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(res.ok, false);
   assert.equal(res.reason, "page_truncated");
+});
+
+// Die einzige Stelle, an der die gemessene 50 als WIRE-Wert festgenagelt ist - bewusst ein
+// Literal, nicht COST_RECORDS_PAGE_SIZE (s. Kommentar bei MEASURED_PAGE_SIZE). Faellt der
+// Test, hat entweder jemand die Anforderung veraendert oder die Messung ist ueberholt;
+// beides gehoert angesehen, nicht stillschweigend nachgezogen.
+test("getVoiceCostRecords: fordert die gemessene Maximal-Seitengroesse page[size]=50 an", async () => {
+  const calls = stubRealRecords();
+  await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(calls.length, COST_RECORD_TYPES.length);
+  for (const c of calls)
+    assert.equal(new URL(c.url).searchParams.get("page[size]"), String(MEASURED_PAGE_SIZE));
 });
 
 // ---- (f) Twilio-Riegel ----
