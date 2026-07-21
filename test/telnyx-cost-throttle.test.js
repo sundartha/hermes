@@ -5,26 +5,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createMinuteWindowThrottle } from "../src/telephony/adapters/telnyx/rate-limit.js";
+import { jumpClock as createJumpClock } from "./fake-clock.js";
 
 // GEMESSENER Burst-Zeitpunkt aus Plan F1 (16:18:30Z): 30 s vor der Fenstergrenze - damit
 // ist "bis :00" (30 000 ms) von "eine volle Minute" (60 000 ms) unterscheidbar.
 const BURST_AT_MS = Date.parse("2026-07-21T16:18:30.000Z");
 const MINUTE_MS = 60_000;
 
-// Sprung-Uhr: sleep() bewegt die Uhr, statt zu warten. Zeichnet jede Wartedauer auf.
-function jumpClock(startMs = BURST_AT_MS) {
-  let nowMs = startMs;
-  const sleeps = [];
-  return {
-    now: () => nowMs,
-    sleep: async (ms) => {
-      sleeps.push(ms);
-      nowMs += ms;
-    },
-    sleeps,
-    elapsedMs: () => nowMs - startMs,
-  };
-}
+// Sprung-Uhr mit dem in dieser Datei gemessenen Burst-Zeitpunkt als Default (Koerper in
+// test/fake-clock.js, geteilt mit test/telnyx-cost-records.test.js, G5).
+const jumpClock = (startMs = BURST_AT_MS) => createJumpClock(startMs);
 const throttleWith = (clock, budget) =>
   createMinuteWindowThrottle({ budget, now: clock.now, sleep: clock.sleep });
 

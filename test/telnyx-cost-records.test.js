@@ -87,6 +87,7 @@ const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_A
 const { createMinuteWindowThrottle } = await import(
   "../src/telephony/adapters/telnyx/rate-limit.js"
 );
+const { jumpClock: createJumpClock } = await import("./fake-clock.js");
 
 // KE-P4: die produktive Drossel haengt an der ECHTEN Uhr und einem ECHTEN Timer. Jeder
 // Abruf im Test injiziert deshalb eine Drossel mit SPRUNG-Uhr - sonst bliebe der 31. Abruf
@@ -96,22 +97,9 @@ const { createMinuteWindowThrottle } = await import(
 const BUDGET_PER_MINUTE = 30; // gemessene 40 minus bewusster Reserve 10
 const THROTTLE_START_AT = "2026-07-21T16:18:30.000Z"; // gemessener Burst-Zeitpunkt (Plan F1)
 
-// Sprung-Uhr: sleep() bewegt die Uhr, statt zu warten. Zeichnet jede Wartedauer auf - dasselbe
-// Muster wie test/telnyx-cost-throttle.test.js (G5, eine Sprung-Uhr-Form je Datei).
-function jumpClock(startIso = THROTTLE_START_AT) {
-  const startMs = Date.parse(startIso);
-  let nowMs = startMs;
-  const sleeps = [];
-  return {
-    now: () => nowMs,
-    sleep: async (ms) => {
-      sleeps.push(ms);
-      nowMs += ms;
-    },
-    sleeps,
-    elapsedMs: () => nowMs - startMs,
-  };
-}
+// Sprung-Uhr mit dem in dieser Datei gemessenen Burst-Zeitpunkt als Default (Koerper in
+// test/fake-clock.js, geteilt mit test/telnyx-cost-throttle.test.js, G5).
+const jumpClock = (startIso = THROTTLE_START_AT) => createJumpClock(startIso);
 const testThrottle = (clock = jumpClock()) =>
   createMinuteWindowThrottle({ budget: BUDGET_PER_MINUTE, now: clock.now, sleep: clock.sleep });
 
