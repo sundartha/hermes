@@ -171,6 +171,39 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
   }
 });
 
+// (3b) OUT-10: exakte Cap-Grenze am HTTP-Level, nicht nur weit darueber (99 in Test 3).
+// budgetExceeded ist bei state-ops.js bereits exhaustiv auf >= getestet (siehe
+// tenant-budget-cap.test.js); hier fehlte bislang der Beweis, dass genau DIESER
+// Vergleich auch ueber den echten /api/calls-Pfad (Route -> Gate -> budgetExceeded)
+// greift, statt nur an der reinen Funktion. Cap-1cent-Nachbar bleibt bewusst weg
+// (Float-costEur laesst sich nicht praezise auf den Cent treffen; die exakte
+// Cent-Grenze deckt bereits addVoiceUsageCostCents in tenant-budget-cap.test.js ab).
+// Fokus hier: die Grenze selbst (== Cap) muss ueber den vollen HTTP-Stack blocken,
+// UND knapp darunter darf sie es nicht (kein Off-by-one in der Attribution/Route).
+test("Flag an: Tenant-Budget EXAKT am Cap (8 EUR) blockt (402) ueber den vollen HTTP-Pfad; knapp darunter nicht", async () => {
+  const seedAtCap = seedTenants({ usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(8) } }); // exakt == MAX_BUDGET_EUR
+  const srvAtCap = await startServer({ env: FLAG_ON, seed: seedAtCap });
+  try {
+    const res = await placeCall(srvAtCap, SUB_A);
+    assert.equal(res.status, 402, "costEur exakt == Cap -> >= greift, A geblockt");
+    assert.equal(outboundCallsTo(srvAtCap).length, 0, "kein Call bei exakter Cap-Grenze");
+  } finally {
+    await srvAtCap.stop();
+  }
+
+  const seedUnderCap = seedTenants({
+    usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(7.9) },
+  }); // knapp unter Cap
+  const srvUnderCap = await startServer({ env: FLAG_ON, seed: seedUnderCap });
+  try {
+    const res = await placeCall(srvUnderCap, SUB_A);
+    assert.equal(res.status, 500, "knapp unter Cap -> NICHT geblockt, erreicht Offline-Originate");
+    assert.equal(outboundCallsTo(srvUnderCap).length, 1, "Call wird erzeugt, kein Fehl-Block");
+  } finally {
+    await srvUnderCap.stop();
+  }
+});
+
 // (4) Globaler Notaus PARALLEL/unveraendert: je Tenant UNTER dem Cap, aber die SUMME
 // reisst ihn -> 402. Wuerde der globale Notaus durch den pro-Tenant-Bucket ERSETZT
 // (Schnittmenge gebrochen), liefe A (5 < 8) durch -> dieser Test faengt das.

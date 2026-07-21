@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const ALLOWED = "+4915112345678"; // normale DE-Mobilnummer, dient als Positiv-Fall
 const postCall = (url, to) =>
@@ -305,4 +306,53 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
   } finally {
     await srv.stop();
   }
+});
+
+// ---- OUT-07 (PLAN-LAUNCH-TESTS.md Erweiterung) ----
+// Alle anderen Faelle von OUT-07 (Notruf-Kurzwahlen exakt, Land ausserhalb
+// ALLOWED_COUNTRY_CODES) sind oben bereits abgedeckt (0.1/0.2). Was noch fehlte: eine
+// Premium-Nummer in NATIONALER Schreibweise (fuehrende 0), die ERST durch die Trunk-0-
+// Normalisierung (privateNumber-Praezedenz, siehe dial-target-normalization.test.js) zu
+// ihrer vollen E.164-Form wird - deckt die Reihenfolge "normalisieren DANN Denylist"
+// end-to-end ab, nicht nur mit schon-E.164-Premium-Nummern wie oben.
+test("OUT-07: Premium-Nummer in nationaler Schreibweise wird normalisiert UND landet am Denylist-Gate (403), nicht am Format-Gate (400)", async (t) => {
+  const DE_PRIVATE_NUMBER = "+491737252163"; // ermoeglicht Trunk-0-Aufloesung (Heimatland DE)
+  const seedWithPrivateNumber = seedState({
+    tenants: [
+      {
+        id: BOOTSTRAP_TENANT_ID,
+        status: "active",
+        firstName: "Jonas",
+        ownerName: "Jonas Beispiel",
+        privateNumber: DE_PRIVATE_NUMBER,
+      },
+    ],
+  });
+
+  await t.test("'090012345678' (national) -> normalisiert zu '+4990012345678' -> 403 denylist", async () => {
+    const srv = await startServer({
+      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+      seed: seedWithPrivateNumber,
+    });
+    try {
+      const res = await postCall(srv.localUrl, "090012345678");
+      assert.equal(res.status, 403, "normalisierte Premium-Nummer muss am Denylist-Gate sperren, NICHT 400/500");
+      assert.match((await res.json()).error, /gesperrt/, "grund=denylist, nicht ein Format-/Netzfehler");
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  await t.test("Kontrastfall: dieselbe normale Nummer national eingegeben passiert bis Twilio (500)", async () => {
+    const srv = await startServer({
+      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+      seed: seedWithPrivateNumber,
+    });
+    try {
+      const res = await postCall(srv.localUrl, "01737252164"); // normale Mobilnummer, national
+      assert.equal(res.status, 500, "normalisierte NICHT-Premium-Nummer darf die Denylist passieren");
+    } finally {
+      await srv.stop();
+    }
+  });
 });

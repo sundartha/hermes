@@ -52,16 +52,45 @@ zeigen, sind Teil der obigen Baseline (ganze Suite lief einmal komplett durch). 
 | SMS-02 | `test/f2-sms-summary-plan.test.js` | ✅ bereits vorhanden, verifiziert gruen | Dokumentiert wie vorgesehen: `planSummarySms` liest das Euro-Budget-Gate gar nicht |
 | AUTH-07 (auto-Teil) | `test/auth-07-cookie-csrf.test.js` (neu) | ✅ 6/6 gruen | Cookie traegt HttpOnly+Secure+SameSite=Lax; Cross-Site-POST ohne Cookie -> 401 |
 
-**Noch OFFEN (nicht in dieser Session geschrieben):** IN-08 (extractSpeech-Praezedenz),
-OUT-07-Erweiterung (Denylist/Land/Premium in Trunk-0-Form), OUT-10-Erweiterung
-(Mid-Call-maxDur-Klemme + Budget-Cap-Grenzfall), DASH-02 (tenant.html XSS ohne jsdom).
-Empfehlung: naechste Session, gleiches Muster (siehe oben) fortsetzen.
+**Runde 2 (fortgesetzt, gleiche Session-Fortfuehrung):**
 
-## Schritt 3 — lokal-Tier
+| ID | Datei | Ergebnis | Befund |
+|---|---|---|---|
+| IN-08 | `test/in-08-first-turn-empty-speech.test.js` (neu) | ✅ 2/2 gruen | Praezedenz-Haelfte (SpeechResult vs. Transcript) bereits von `test/webhook-events.test.js` abgedeckt (kein neuer Test noetig). Neuer Fall: allererster Turn (nur Agent-Begruessung im Transkript, `callerHasSpoken=false`) + leeres SpeechResult -> es kommt DOCH zu einem LLM-Call (dokumentiertes Ist-Verhalten laut `src/claude.js`-Designkommentaren zum R4-Empty-Turn-Counter, keine Abweichung/Bug — Kontrasttest mit bereits vorhandener Caller-Zeile zeigt korrekt den No-Speech-Reprompt-Shortcut ohne LLM-Call) |
+| OUT-07 (Erweiterung) | `test/number-gate.test.js` (erweitert, 24->26 Tests) | ✅ 26/26 gruen | Neuer Fall: Premium-Nummer in nationaler Schreibweise (`090012345678`) wird normalisiert UND landet am Denylist-Gate (403 grund=denylist), NICHT am Format-Gate (400/500) — Trunk-0-Aufloesung + Denylist-Reihenfolge korrekt verdrahtet |
+| OUT-10 (Erweiterung) | `test/outbound-tenant.test.js` (erweitert) | ✅ 7/7 gruen | Teil 1 (max_duration_s-Klemmung auf 300s) bereits vollstaendig von `test/outbound-gates.test.js` abgedeckt. Teil 2 (Budget-Cap-Grenzfall) war bisher nur auf der reinen state-ops-Funktionsebene getestet (`tenant-budget-cap.test.js`) — neuer HTTP-Level-Test beweist: `costEur` EXAKT am Cap (8 EUR) blockt 402 ueber den vollen `/api/calls`-Pfad, knapp darunter (7,9 EUR) laesst den Call durch (kein Off-by-one in Route/Attribution) |
+| DASH-02 | `test/dash-02-tenant-xss.test.js` (neu) | ✅ 12/12 gruen | tenant.html nutzt (anders als das call.html-Widget) tatsaechlich `innerHTML` mit Template-Strings — daher KEIN jsdom (Repo-Regel "keine neuen Dependencies"), sondern `node:vm`-Sandbox + direkte String-Pruefung auf dem resultierenden Markup (statt geparster DOM-Knoten). Alle 4 XSS-Payloads (img/onerror, Tag-Breakout, Anfuehrungszeichen einzeln/doppelt) landen in `renderCalls`/`callBody`/`renderNotifications`/`planCard` ausschliesslich escaped — inkl. Attribut-Breakout-Check fuer `data-plan="${esc(plan.slug)}"`. **Kein XSS-Fund.** |
 
-**Nicht in dieser Session ausgefuehrt** (Zeit-/Scope-Grenze dieser Runde). Bekanntes
-Risiko: lokale Server-Spawns koennen auf dieselbe BASE_ENV-Drift treffen wie in Schritt 0
-diagnostiziert — vor dem naechsten Lauf test/helpers.js pruefen/haerten.
+Alle 4 in Runde 1 offen gelassenen auto-Tests sind damit erledigt. Neue Checkboxen in
+`PLAN-LAUNCH-TESTS.md`: IN-03, OUT-11, MCP-07, MCP-08, UI-02, CFG-03, SMS-02 (Runde 1) +
+OUT-07, OUT-10, DASH-02 (Runde 2). MCP-06 und BILL-04-Erweiterung bleiben bewusst offen
+(echte Befunde). AUTH-07 nur der auto-Teil (Cookie/CSRF); der live-Teil bleibt offen.
+
+## Schritt 3 — lokal-Tier (Runde 2)
+
+Ausgefuehrt gegen einen ECHTEN lokalen Server (`node src/server.js`), NICHT gegen `data/store.json`
+(NIE angefasst) — stattdessen `DATA_DIR=/tmp/hermes-lokal-run1` (bzw. `-prov01` fuer PROV-01)
+als Scratch-Verzeichnis, `TELNYX_API_KEY`/`TWILIO_*` bewusst ungueltig, `PAYMENT_ENABLED=false`,
+`PROVISIONING_ENABLED=false` (ausser bei PROV-01, das genau diese Flags braucht). Vor jedem
+Server-Start wurde der Port sauber per PID-Kill (`lsof -ti:3999`) freigeraeumt, nach jedem Test
+wurde ueberprueft, dass kein Prozess auf dem Server-Port haengen bleibt — keine Waisen-Prozesse
+auf der Maschine zurueckgelassen. Ein frisch gestarteter Server verweigert OHNE aktive Nummer im
+Store den Boot (`process.exit(1)`, by design, kein Bug) — daher vor jedem Lauf einmalig
+`node scripts/bootstrap-tenant.js <e164> twilio` gegen dasselbe `DATA_DIR` (reine Store-Operation,
+kein Netz).
+
+| ID | Kommando/Ablauf | Ergebnis | Beleg |
+|---|---|---|---|
+| OUT-04 (P0) | `POST /api/calls` mit `to="+4915112345678"` (E.164) und mit `to="017612345678"` (national) | ✅ GRUEN | E.164-Form: `to` landet zeichengenau im Store (`"to": "+4915112345678"`), Originate scheitert erst offline (500, Twilio-Dummy-Creds) — Ziffern-Fidelity bewiesen. Nationale Form ohne aufloesbares Heimatland (Owner-DID ist `+1`, keine `privateNumber` gesetzt) -> sauber 400 "to muss E.164 sein", KEINE Regeneration/Raten |
+| OUT-12 (P2) | identisch zu OUT-04b (selber Fall: US-DID + keine privateNumber) | ✅ GRUEN | Siehe oben — nationale 0 wird bei nicht aufloesbarem Heimatland korrekt abgelehnt (400), nicht geraten |
+| OUT-09 (P1) | 3 Server-Neustarts: `MAX_BUDGET_EUR=0`, `MAX_CALLS_PER_HOUR=1`, `PER_TARGET_CALL_CAP=1` | ✅ GRUEN (3/3) | `MAX_BUDGET_EUR=0` -> 402 "Budget-Limit von 0 EUR erreicht"; `MAX_CALLS_PER_HOUR=1` -> 429 "Stundenlimit..." (Store hatte durch vorherige Tests bereits >=1 Call in der Stunde, daher blockte schon der 1. Request dieser Runde — Gate wirkte trotzdem korrekt fail-closed); `PER_TARGET_CALL_CAP=1` -> 1. Call an ein Ziel erreicht Originate (500 offline), 2. Call an DASSELBE Ziel -> 429 "Wiederhol-Limit..." |
+| IN-07 (P2) | `POST /voice/turn` + `/voice/status` mit 5 Fuzzing-Bodies (fremdes JSON, leer, form-urlencoded mit Fantasie-Feldern, kaputtes/unparsebares JSON) | ✅ GRUEN | Alle Faelle sauber behandelt: unbekannte/leere Felder -> TeXML `<Hangup/>` (200), `/voice/status` -> "OK" (200), kaputtes JSON -> `{"error":"entity.parse.failed"}` (400, Express-Bodyparser-Fehlerpfad, kein Crash). Server lief nach allen 5 Faellen nachweislich weiter (Folge-Request 302 auf `/`) |
+| SMS-01 (P0) | Voller Inbound-Flow `/voice/incoming` -> `/voice/turn` (Speech) -> `/voice/status` (CallStatus=completed, 2x hintereinander = Twilio-Retry simuliert) | 🟡 BLOCKIERT (Teilbeleg) | Der Dummy-Env hat keinen gueltigen `ANTHROPIC_API_KEY` (401 "API key is invalid") — die Summary-Generierung (Vorstufe der SMS-Planung in `finishCall`) schlaegt DAHER fehl, BEVOR `sendSms` ueberhaupt aufgerufen wird; der eigentliche SMS-Fehlerpfad ist so lokal nicht erreichbar, ohne einen echten LLM-Call zu riskieren (bewusst nicht gemacht). **Trotzdem werthaltiges Teilergebnis:** der doppelte `/voice/status`-Callback (Retry-Simulation) loeste NUR beim ERSTEN Mal einen Summary-Versuch aus (`[summary] 401` erscheint genau einmal im Log), der zweite (identische) Callback loeste KEINEN zweiten Versuch aus und der Server crashte nicht — die geforderte Idempotenz-/Sturm-Schutz-Eigenschaft ist an der unmittelbar vorgelagerten Stufe nachgewiesen, auch wenn der SMS-Schritt selbst nicht erreicht wurde |
+| OBS-01 (P1) | `curl /metrics /api/metrics /debug/metrics`, je mit und ohne Basic-Auth | ✅ GRUEN | Alle 6 Kombinationen 404 (keine Route existiert, wie im Plan erwartet) |
+| CFG-02 (P1) | Boot mit `RENDER_EXTERNAL_URL=https://x` + `SKIP_TWILIO_SIGNATURE_CHECK=true`; Kontrastprobe ohne `RENDER_EXTERNAL_URL` (mehrfach oben schon erfolgreich gebootet) | ✅ GRUEN | Mit `RENDER_EXTERNAL_URL` -> sauberer Boot-Refusal (Exit-Code 1, listet alle 3 verletzten Footguns inkl. MCP_AUTH=off + SKIP_TWILIO_SIGNATURE_CHECK + STORE_BACKEND!=pg, kein Listen auf dem Port). Ohne `RENDER_EXTERNAL_URL` -> normaler Boot (kein False-Positive, mehrfach in dieser Session demonstriert) |
+| PROV-01 (P0) | `PROVISIONING_ENABLED=true STORE_BACKEND=json`, `POST /api/onboard` fuer neuen Tenant, SOFORT `kill -9` vor Drain, Neustart, `POST /api/onboard/retry` | 🔴 ROT (erwartet, aber ANDERE Ursache als im Plan vermutet) | Der Provisioning-Job UEBERLEBTE den Crash korrekt im JSON-Store (`status:"queued", attempts:0`) und wurde beim Neustart ordentlich erkannt (`[provision-reconcile] hold ... grund=no_active_subscriber`) — bis hierhin sogar ROBUSTER als der Plan-Text unterstellt. Der `retry`-Call scheitert aber NICHT wie im Plan erwartet mit 409/already_provisioned, sondern mit **403 "Kein aktiver, verifizierter Subscriber - kein Nummernkauf"** (mein Dummy-Env hatte `PAYMENT_ENABLED=false`, es existiert also gar kein verifizierter Subscriber-Pfad). Bleibt ROT im Sinne von "Recovery gelingt nicht automatisch", aber die genaue im Plan beschriebene Fehlerursache (occupiesCapacity zaehlt 'requested' als belegt) wurde NICHT reproduziert — dafuer braeuchte es vermutlich `PAYMENT_ENABLED=true` + einen echten/simulierten verifizierten Subscriber. Empfehlung an die Fix-Kette: Repro mit `PAYMENT_ENABLED=true` wiederholen, um die im Plan beschriebene 409-Situation tatsaechlich zu treffen |
+| DEP-01 (P1) | `npm audit --omit=dev` + `test -f package-lock.json` | 🔴 ROT (neuer Befund seit 2026-07-02) | 2 Schwachstellen: 1x HIGH (`axios` 1.0.0-1.17.0, mehrere CVEs inkl. Prototype-Pollution/DoS, Fix via `npm audit fix` verfuegbar) + 1x LOW (`body-parser`, DoS bei ungueltigem `limit`-Wert, transitiv ueber `@modelcontextprotocol/sdk`). Plan erwartete 0 (Stand 2026-07-02) — seither neue Advisories oder Versions-Drift. Lockfile vorhanden (`lockfile-ok`). Kein Fix in dieser Session (Scope-Regel: keine Dependency-Aenderungen) |
+| DEP-02 (P2) | Clean-Install in frischem `git worktree` (NICHT im Arbeitsbaum) | Siehe eigener Abschnitt unten | — |
 
 ## Schritt 4 — live-Tests
 
