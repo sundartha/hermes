@@ -112,7 +112,11 @@ function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_I
     currency,
     ...ID_FIELDS_BY_RECORD_TYPE[recordType](ids),
     ...(billedSec !== undefined ? { billed_sec: billedSec } : {}),
-    ...extraFields, // weitere reale Felder: started_at, recorded_at, rate_measured_in
+    // Zusatzfelder je Testfall. GEMESSEN sind started_at (nur sip-trunking) und
+    // rate_measured_in; die Zeitstempel-Kandidaten des Fensterfilters (recorded_at/
+    // created_at) sind GERATENE Feldnamen und werden nur dort injiziert, wo der Test
+    // genau diesen Codepfad meint.
+    ...extraFields,
   };
 }
 
@@ -470,7 +474,11 @@ test("getVoiceCostRecords: `inference` bleibt unzuordenbar (nur conversation_id)
   assert.equal(res.records[0].recordType, "sip-trunking");
 });
 
-test("getVoiceCostRecords: Beleg ausserhalb des Zeitfensters wird verworfen (recorded_at)", async () => {
+// Der Fensterfilter greift NUR auf einem der geratenen Kandidaten-Feldnamen
+// (RECORD_TIMESTAMP_FIELDS). `recorded_at` ist ein solcher Name - er stammt NICHT aus der
+// Messung 2026-07-21, dieser Test pinnt also bewusst nur den Codepfad, nicht die
+// Wirklichkeit. Der Test darunter haelt fest, was auf den GEMESSENEN Belegformen gilt.
+test("getVoiceCostRecords: Beleg mit geratenem Zeitstempel-Feld ausserhalb des Fensters wird verworfen (recorded_at)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [
       realRecord("sip-trunking", { cost: "0.0401", extraFields: { recorded_at: "2026-07-20T09:00:00Z" } }),
@@ -478,7 +486,25 @@ test("getVoiceCostRecords: Beleg ausserhalb des Zeitfensters wird verworfen (rec
   });
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(res.ok, true);
-  assert.equal(res.records.length, 0, "Zeitfenster bleibt die zweite Linie neben der Zuordnung");
+  assert.equal(res.records.length, 0, "geratenes Zeitstempel-Feld ausserhalb des Fensters -> verworfen");
+});
+
+// LCT-FIX-1 (Runde 3): die EHRLICHE Zusicherung. Das einzige gemessene Zeitfeld ist
+// `started_at` (sip-trunking, Messung 2026-07-21) und es steht bewusst NICHT in
+// RECORD_TIMESTAMP_FIELDS - auf der gemessenen Belegform filtert das Zeitfenster also
+// NICHTS. Damit ist es KEINE zweite Linie hinter der Zuordnung; bei parallel laufenden
+// Calls trennt allein die unbelegte Session-Annahme (Stopp-Kriterium der Deploy-Auflage).
+// Der Test faellt, sobald jemand `started_at` aufnimmt - dann ist diese Aussage in
+// voice.js und in tasks/lct-DEPLOY-CHECKLIST.md neu zu bewerten, statt still zu veralten.
+test("getVoiceCostRecords: gemessenes started_at ausserhalb des Fensters filtert NICHT (Zeitfenster ist keine zweite Linie)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [
+      realRecord("sip-trunking", { cost: "0.0401", extraFields: { started_at: "2026-07-20T09:00:00Z" } }),
+    ],
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, true);
+  assert.equal(res.records.length, 1, "der Anker traegt den Beleg - das Zeitfenster greift auf started_at nicht");
 });
 
 // ---- (e2) Falsifikations-Sonde: das Log-Format der Deploy-Auflage ----

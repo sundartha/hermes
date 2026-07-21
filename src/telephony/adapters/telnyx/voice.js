@@ -93,10 +93,17 @@ export const ASSIGNABLE_COST_RECORD_TYPES = Object.freeze(
 // Fensterfilter (Design-Entscheidung P1, s. getVoiceCostRecords) - der Feldname ist wie
 // die Query-Parameternamen des Zeitfensters UNBELEGT (Kap. 2.6 belegt nur cost/rate/
 // currency/rate_measured_in). Kein Treffer -> Fensterpruefung greift nicht (die ZUORDNUNG
-// ueber Anker/Session ist der primaere Riegel, s. assignmentOutcome; ein fehlendes
+// ueber Anker/Session ist der EINZIGE wirksame Riegel, s. assignmentOutcome; ein fehlendes
 // Zeitstempel-Feld verwirft den Record NICHT - anders als eine fehlende Session-Referenz,
-// die IMMER verwirft). Die Messung 2026-07-21 zeigt zusaetzlich `started_at` an sip-trunking;
-// bewusst NICHT aufgenommen - das Zeitfenster bleibt in dieser Phase unveraendert.
+// die IMMER verwirft). AUF DEN GEMESSENEN BELEGFORMEN TRAEGT KEIN BELEG eines dieser
+// Felder: der Filter ist heute wirkungslos und ausdruecklich KEINE zweite Linie hinter der
+// Zuordnung (testgepinnt in test/telnyx-cost-records.test.js).
+// Warum `started_at` (das EINZIGE gemessene Zeitfeld, Messung 2026-07-21) trotzdem nicht
+// aufgenommen ist: es trat nur an sip-trunking auf - genau dem Typ, der den Anker traegt und
+// damit ueber Identitaetsgleichheit bereits bewiesen ist. Es aufzunehmen verwuerfe im
+// Grenzfall (Uhren-Versatz gegen unsere eigenen startedAt/endedAt aus dem Store) einen
+// BEWIESENEN Beleg, ohne die nur ueber die Session zugeordneten Typen zu schuetzen - die
+// tragen kein gemessenes Zeitfeld. Mehr Risiko, keine zweite Linie.
 const RECORD_TIMESTAMP_FIELDS = Object.freeze(["recorded_at", "created_at"]);
 // SpeakRequest.voice_settings ist laut Telnyx-OpenAPI eine per `type` diskriminierte Union;
 // ElevenLabsVoiceSettings verlangt type="elevenlabs" (das ASSISTANT-Objekt dagegen hat ein
@@ -502,8 +509,12 @@ export const telnyxVoice = {
   // client-seitig: Stufe 1 sucht die Belege mit call_control_id === legId und sammelt deren
   // Session-IDs, Stufe 2 akzeptiert alles, was in dieser Session liegt. KEIN Anker gefunden
   // -> leere Session-Menge -> LEERE Record-Liste bei ok:true (fail-closed, nie ein lockererer
-  // Fallback). Das Zeitfenster bleibt die zweite Linie: die Query-Parameternamen dafuer sind
-  // UNBELEGT (Kap. 2.6), gefiltert wird ausschliesslich client-seitig (withinRecordWindow).
+  // Fallback). Das Zeitfenster ist dahinter KEINE zweite Linie: seine Query-Parameternamen
+  // sind unbelegt (Kap. 2.6), und der client-seitige Filter (withinRecordWindow) findet auf
+  // den gemessenen Belegformen kein Zeitstempel-Feld. Bei PARALLEL laufenden Calls trennt
+  // deshalb allein die unbelegte Session-Annahme (s. SESSION_ID_FIELDS): jeder Beleg, der
+  // nur ueber ein Session-Feld hereinkam (via_<Session-Feld> > 0 im Log), ist bis zur
+  // bestandenen Portal-Gegenprobe ein Stopp-Kriterium - s. tasks/lct-DEPLOY-CHECKLIST.md.
   async getVoiceCostRecords({ legId, startedAt, endedAt } = {}) {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
     if (!legId || !startedAt || !endedAt) return { ok: false, reason: "params_missing" };

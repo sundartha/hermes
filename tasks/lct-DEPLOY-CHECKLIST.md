@@ -98,6 +98,18 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
     eine nicht call-lokale Session-ID würde sich genau hier als zusätzliche Belege zeigen,
     ohne dass irgendeine andere Zahl auffällig wäre.
 
+  **Es gibt hinter der Session-Annahme KEINE zweite Linie.** Das client-seitige Zeitfenster
+  (`withinRecordWindow`) prüft nur Kandidaten-Feldnamen, die **nicht** aus der Messung
+  stammen (`recorded_at`, `created_at`); das einzige gemessene Zeitfeld (`started_at`, nur an
+  `sip-trunking`) ist bewusst nicht aufgenommen — Begründung an `RECORD_TIMESTAMP_FIELDS`
+  in `src/telephony/adapters/telnyx/voice.js`, testgepinnt in
+  `test/telnyx-cost-records.test.js`. Auf realen Belegen filtert das Fenster also **nichts**.
+  Bei parallel laufenden Calls trennt allein die unbelegte Session-Annahme.
+  **Daraus folgt das Stopp-Kriterium:** solange die Gegenprobe unten nicht bestanden ist,
+  ist jedes `via_telnyx_session_id > 0` / `via_call_session_id > 0` ein **Stopp** — diese
+  Belege sind ausschließlich über die unbewiesene Annahme hereingekommen und dürfen bis
+  dahin nicht als verlässlich behandelt werden.
+
   **Gegenprobe (der eigentliche Beweis, ein Zählerstand allein genügt nicht):** einen Call
   auswählen, der **parallel zu einem zweiten Call** lief, und die Beleganzahl je
   `record_type` gegen das Telnyx-Portal (Detail Records desselben Zeitfensters) halten.
@@ -106,7 +118,7 @@ Der Dienst startet nicht (`exit(1)`) oder bucht falsch, wenn diese nicht erfüll
   auf dem eigenen Tenant) — **Abbruchgrund**. `records=0` bei bekannt kostenpflichtigem Call
   heißt: kein Beleg zugeordnet (fail-closed, kein Geldrisiko, aber Deckungsquote 0 %);
   `via_anchor=0` dabei heißt zusätzlich, dass kein Beleg über den Anker kam (Anker fehlte
-  oder fiel vorher an Währung/Zeitfenster).
+  oder fiel vorher an der Währungsprüfung).
 
 - [ ] **`MAX_BUDGET_EUR` ist live ≥ 9 (= 900 ct).**
   P6 führt eine erste, **fatale** Boot-Guard-Linie (`planCapInertFindings`) ein, die

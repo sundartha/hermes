@@ -138,11 +138,10 @@ function currentCoverage(config, store) {
 // LCT P4: die Riegel des Flips. Deckungsquote + Schwelle liefert currentCoverage
 // (die EINE Quelle, s.o.). Leere Pflicht-Menge = FATAL (ein Dienst, der Geld
 // zurueckerstattet, ohne zu wissen, wogegen er Vollstaendigkeit prueft, darf nicht
-// starten). Ebenso FATAL seit LCT-FIX-1: ein Pflicht-Typ, der nicht in der Allowlist der
-// zuordenbaren Belegtypen steht (unbekannter Wert, Tippfehler, andere Schreibweise oder ein
-// strukturell unzuordenbarer Typ) - eine unerfuellbare Pflicht-Menge bucht dauerhaft nur
-// zulasten des Kunden. Quote unter der Schwelle = WARN, kein exit(1) - ein Boot-Refusal
-// tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz
+// starten). Ebenso FATAL seit LCT-FIX-1: ein Pflicht-Typ ausserhalb der Allowlist der
+// zuordenbaren Belegtypen - Begruendung s. ASSIGNABLE_COST_RECORD_TYPES
+// (telephony/adapters/telnyx/voice.js). Quote unter der Schwelle = WARN, kein exit(1) -
+// ein Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz
 // warnUnpricedModels); die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
 function assertCostTruingBooking(config, store) {
   const findings = costTruingBookingFindings({

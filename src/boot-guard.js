@@ -369,12 +369,11 @@ export function costTruingBookingFindings({
         "Pflicht-Menge aus einem Live-Beleg setzen.",
     });
   }
-  // Gegen die ALLOWLIST der zuordenbaren Typen, NICHT gegen eine Deny-Liste: eine Deny-Liste
-  // laesst jeden Wert durch, der kein realer record_type ist (Case-Drift "Inference", das
-  // nicht existierende "call", jeder Tippfehler) - und der Schaden ist bei allen derselbe
-  // wie beim strukturell unzuordenbaren Typ. Der Vergleich ist exakt und case-sensitiv wie
-  // der spaetere Vollstaendigkeits-Vergleich in cost-truing.js; nur so meldet der Guard
-  // genau das, was dort dauerhaft unerfuellbar bliebe.
+  // Gegen die ALLOWLIST der zuordenbaren Typen, NICHT gegen eine Deny-Liste - Begruendung
+  // s. ASSIGNABLE_COST_RECORD_TYPES (telephony/adapters/telnyx/voice.js), die EINE Quelle
+  // dieser Aussage. Hier lokal: der Vergleich ist exakt und case-sensitiv wie der spaetere
+  // Vollstaendigkeits-Vergleich in cost-truing.js; nur so meldet der Guard genau das, was
+  // dort dauerhaft unerfuellbar bliebe.
   const unassignable = requiredRecordTypes.filter((t) => !assignableRecordTypes.includes(t));
   if (unassignable.length > 0) {
     findings.push({
@@ -382,10 +381,7 @@ export function costTruingBookingFindings({
       fatal: true,
       message:
         `COST_TRUING_REQUIRED_RECORD_TYPES fordert ${unassignable.join(",")} - kein zuordenbarer ` +
-        "Belegtyp (unbekannter Wert/Tippfehler/andere Schreibweise, oder ein Typ, der weder " +
-        "Anker noch Session traegt). Die Pflicht-Menge waere dauerhaft unerfuellbar: keine " +
-        "Rueckerstattung mehr, jede Nachforderung gebucht. Zuordenbar sind exakt: " +
-        `${assignableRecordTypes.join(",")}.`,
+        `Belegtyp. Zuordenbar sind exakt: ${assignableRecordTypes.join(",")}.`,
     });
   }
   if (coveragePercent < minCoveragePercent) {
