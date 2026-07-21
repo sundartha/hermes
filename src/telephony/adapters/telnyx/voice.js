@@ -41,17 +41,28 @@ const COST_RECORD_TYPES = Object.freeze([
 // Eine Seite je Typ. Volle Seite = moeglicher Datenverlust -> fail-closed (ok:false)
 // statt stiller Untermenge; eine Paginierungsschleife haette in P1 keinen Aufrufer.
 const COST_RECORDS_PAGE_SIZE = 250;
-// Kandidaten-Felder der Leg-Referenz. Welche record_types ueberhaupt eine tragen, ist
-// UNBELEGT (Kap. 2.6) - P3 beantwortet das aus dem leg_unresolved-Zaehler. Kein Treffer
-// -> Record faellt weg (konservativ: fehlende Records heissen spaeter 'incomplete',
-// ein FREMDER Record waere eine Fehlbuchung).
-const LEG_ID_FIELDS = Object.freeze(["leg_id", "call_leg_id"]);
+// Zuordnung Beleg -> Call, ZWEISTUFIG (LCT-FIX-1). Die frueheren Kandidaten leg_id/
+// call_leg_id liefert Telnyx nicht bzw. nur als UUID eines ANDEREN ID-Systems - damit wurde
+// live JEDER Beleg verworfen (297 Belege, Messung 2026-07-21).
+//
+// Stufe 1 (Anker): DAS Feld, das die Belege mit der uebergebenen Leg-Referenz verbindet.
+// providerLegIdOf(call) liefert in BEIDEN Pfaden eine `v3:`-Token (twilioSid im TeXML-/
+// Budget-Pfad, callControlId im Assistant-Pfad) - genau die Form traegt call_control_id.
+const ANCHOR_ID_FIELD = "call_control_id";
+// Stufe 2 (Aufspannen): zwei Feldnamen fuer DIESELBE Provider-Session - sip-trunking/
+// call-control/recording/ai-voice-assistant schreiben telnyx_session_id, speech-to-text/
+// text-to-speech call_session_id; kein Beleg traegt beide. NICHT dabei: telnyx_leg_id/
+// call_leg_id - sie sind UUIDs eines zweiten, mit der `v3:`-Token unvereinbaren ID-Systems
+// und als Zuordnungsquelle wertlos.
+const SESSION_ID_FIELDS = Object.freeze(["telnyx_session_id", "call_session_id"]);
 // Kandidaten-Felder des Record-Zeitstempels fuer den zusaetzlichen CLIENT-seitigen
 // Fensterfilter (Design-Entscheidung P1, s. getVoiceCostRecords) - der Feldname ist wie
 // die Query-Parameternamen des Zeitfensters UNBELEGT (Kap. 2.6 belegt nur cost/rate/
-// currency/rate_measured_in). Kein Treffer -> Fensterpruefung greift nicht (die strikte
-// Leg-ID-Gleichheit bleibt der primaere Riegel; ein fehlendes Zeitstempel-Feld verwirft den
-// Record NICHT - anders als eine fehlende Leg-Referenz, die IMMER verwirft, s. recordLegId).
+// currency/rate_measured_in). Kein Treffer -> Fensterpruefung greift nicht (die ZUORDNUNG
+// ueber Anker/Session ist der primaere Riegel, s. assignmentRejectionReason; ein fehlendes
+// Zeitstempel-Feld verwirft den Record NICHT - anders als eine fehlende Session-Referenz,
+// die IMMER verwirft). Die Messung 2026-07-21 zeigt zusaetzlich `started_at` an sip-trunking;
+// bewusst NICHT aufgenommen - das Zeitfenster bleibt in dieser Phase unveraendert.
 const RECORD_TIMESTAMP_FIELDS = Object.freeze(["recorded_at", "created_at"]);
 // SpeakRequest.voice_settings ist laut Telnyx-OpenAPI eine per `type` diskriminierte Union;
 // ElevenLabsVoiceSettings verlangt type="elevenlabs" (das ASSISTANT-Objekt dagegen hat ein
@@ -152,17 +163,53 @@ function transcriptionFields(language) {
 
 // ---- CDR/Ist-Kosten Helfer (PLAN-LIVE-COST-TRACING P1) ----
 
-// Erste aufloesbare Leg-Referenz eines Roh-Records (G5: eine Stelle, ein Feldvertrag).
-function recordLegId(raw) {
-  for (const field of LEG_ID_FIELDS) {
-    if (raw[field]) return String(raw[field]);
+// Session-Referenzen EINES Roh-Belegs (G5: eine Stelle, ein Feldvertrag) - geteilt von der
+// Anker-Sammlung (Stufe 1) und der Zuordnungspruefung (Stufe 2).
+function recordSessionIds(raw) {
+  const ids = [];
+  for (const field of SESSION_ID_FIELDS) {
+    if (raw[field]) ids.push(String(raw[field]));
   }
-  return null;
+  return ids;
+}
+
+// Stufe 1: zeigt der Beleg DIREKT auf die uebergebene Leg-Referenz? Exakte Gleichheit auf
+// einer global eindeutigen Provider-ID - der staerkste Zugehoerigkeitsbeweis hier.
+function matchesAnchor(raw, legId) {
+  return Boolean(raw[ANCHOR_ID_FIELD]) && String(raw[ANCHOR_ID_FIELD]) === legId;
+}
+
+// Stufe 1, aufgesammelt: die Provider-Sessions, die beweisbar zu diesem Call gehoeren.
+// LEERE Menge = kein Anker in der Antwort; dann akzeptiert Stufe 2 NICHTS. Genau diese
+// Asymmetrie ist gewollt: ein fehlender Beleg heisst spaeter nur 'incomplete', ein FREMDER
+// Beleg waere eine Fehlbuchung auf einen fremden Tenant. Waehrung, Zeitfenster und Kosten
+// spielen hier bewusst keine Rolle - diese Stufe beantwortet nur "welche Session ist unsere",
+// nicht "ist der Beleg buchbar" (das entscheidet toCostRecord, je Beleg).
+function anchoredSessionIds(rawRecords, legId) {
+  const sessionIds = new Set();
+  for (const raw of rawRecords) {
+    if (!matchesAnchor(raw, legId)) continue;
+    for (const sessionId of recordSessionIds(raw)) sessionIds.add(sessionId);
+  }
+  return sessionIds;
+}
+
+// Stufe 2: gehoert der Beleg zum Call? null = ja (direkter Anker ODER eine Session aus der
+// Anker-Menge), sonst der PII-freie Ablehnungsgrund fuer den Zaehler.
+// BEWUSSTE GRENZE: `inference`-Belege tragen ausschliesslich conversation_id - weder Anker
+// noch Session. Sie bleiben unzuordenbar (session_unresolved) und fehlen in der Summe; im
+// Messfenster 2026-07-21 waren das 0,000000 USD. Die Zuordnung dafuer aufzuweichen waere
+// der teure Fehler, nicht der fehlende Beleg.
+function assignmentRejectionReason(raw, { legId, sessionIds }) {
+  if (matchesAnchor(raw, legId)) return null;
+  const recordSessions = recordSessionIds(raw);
+  if (recordSessions.length === 0) return "session_unresolved";
+  return recordSessions.some((id) => sessionIds.has(id)) ? null : "session_mismatch";
 }
 
 // Client-seitiger Zusatzfilter gegen das Anrufsfenster (Design-Entscheidung P1): kein
-// aufloesbares/parsebares Zeitstempel-Feld -> NICHT ablehnen (die strikte Leg-ID-
-// Gleichheit in toCostRecord bleibt der primaere Riegel; ein fehlendes Feld ist keine
+// aufloesbares/parsebares Zeitstempel-Feld -> NICHT ablehnen (die Zuordnung ueber Anker/
+// Session in toCostRecord bleibt der primaere Riegel; ein fehlendes Feld ist keine
 // Erkenntnis ueber die Zeit, konservativ = durchlassen statt raten).
 function withinRecordWindow(raw, startedAt, endedAt) {
   const rawTimestamp = RECORD_TIMESTAMP_FIELDS.map((field) => raw[field]).find(Boolean);
@@ -174,15 +221,14 @@ function withinRecordWindow(raw, startedAt, endedAt) {
 
 // Roh-Record -> Port-Record oder Ablehnungsgrund (fuer den PII-freien Zaehler in
 // getVoiceCostRecords). EINE Gueltigkeitsquelle je Record, in dieser Reihenfolge:
-// Waehrung, Leg, Zeitfenster, Kosten - jeder Zweig mit eigenem Grund.
-function toCostRecord(raw, { legId, startedAt, endedAt }) {
+// Waehrung, Zuordnung (Anker/Session), Zeitfenster, Kosten - jeder Zweig mit eigenem Grund.
+function toCostRecord(raw, { legId, sessionIds, startedAt, endedAt }) {
   const currency = String(raw.currency || "").trim().toUpperCase();
   const expectedCurrency = String(config.billing.providerCurrency).trim().toUpperCase();
   if (!currency || currency !== expectedCurrency) return { reason: "currency_mismatch" };
 
-  const recordLeg = recordLegId(raw);
-  if (recordLeg === null) return { reason: "leg_unresolved" };
-  if (recordLeg !== legId) return { reason: "leg_mismatch" };
+  const assignmentReason = assignmentRejectionReason(raw, { legId, sessionIds });
+  if (assignmentReason) return { reason: assignmentReason };
 
   if (!withinRecordWindow(raw, startedAt, endedAt)) return { reason: "out_of_window" };
 
@@ -223,12 +269,29 @@ async function fetchCostRecordPage(recordType) {
   }
 }
 
-// PII-freier Erfolgs-Log fuer getVoiceCostRecords (OBS-2-Linie wie logCallControlOk): Op-
-// Name, Anzahl akzeptierter Records + Ablehnungsgruende. NIE legId, NIE eine Rufnummer,
-// NIE der Key (Regel 4/5).
-function logCostRecordsOk(recordCount, rejectedByReason) {
+// Alle Roh-Belege der abgefragten Typen einsammeln - die Zuordnung entscheidet erst auf der
+// VOLLEN Antwort (Stufe 1 findet den Anker moeglicherweise erst im letzten Typ). Ergebnis-
+// Objekt wie die Port-Methode (G31), KEIN Teil-Erfolg: die erste fehlschlagende oder volle
+// Seite bricht ab.
+async function fetchAllCostRecords() {
+  const rawRecords = [];
+  for (const recordType of COST_RECORD_TYPES) {
+    const page = await fetchCostRecordPage(recordType);
+    if (!page.ok) return page;
+    if (page.raw.length === COST_RECORDS_PAGE_SIZE) return { ok: false, reason: "page_truncated" };
+    rawRecords.push(...page.raw);
+  }
+  return { ok: true, raw: rawRecords };
+}
+
+// PII-freier Erfolgs-Log fuer getVoiceCostRecords (OBS-2-Linie wie logCallControlOk): Op-Name,
+// ANZAHL aufgeloester Sessions, Anzahl akzeptierter Records + Ablehnungsgruende. Alles
+// Zaehler, nie Werte: NIE eine call_control_id, NIE eine Session-ID, NIE legId, NIE eine
+// Rufnummer, NIE der Key (Regel 4/5). sessions=0 unterscheidet "Anker nicht gefunden" von
+// "Anker da, aber nichts passte" - ohne diese Zahl sind beide Faelle im Log ununterscheidbar.
+function logCostRecordsOk({ sessionCount, recordCount, rejectedByReason }) {
   console.log(
-    `[telnyx/voice] getVoiceCostRecords ok records=${recordCount} rejected=${JSON.stringify(rejectedByReason)}`,
+    `[telnyx/voice] getVoiceCostRecords ok sessions=${sessionCount} records=${recordCount} rejected=${JSON.stringify(rejectedByReason)}`,
   );
 }
 
@@ -382,27 +445,28 @@ export const telnyxVoice = {
   // Unterscheidung "gemessen 0" vs. "nicht gemessen" ist im Typ erzwungen, nicht per
   // Konvention (G31). ok:false heisst NIEMALS "Kosten = 0".
   //
-  // Server-Filter + zusaetzliche CLIENT-seitige Pruefung auf legId und Zeitfenster: die
-  // Query-Parameternamen des Zeitfilters sind UNBELEGT (Kap. 2.6 belegt filter[record_type]
-  // + page[size]). Ignoriert Telnyx den Filter, holen wir zu viel - durchgelassen wird
-  // trotzdem nichts Falsches.
+  // Server-Filter (filter[record_type] + page[size]), danach die ZWEISTUFIGE Zuordnung
+  // client-seitig: Stufe 1 sucht die Belege mit call_control_id === legId und sammelt deren
+  // Session-IDs, Stufe 2 akzeptiert alles, was in dieser Session liegt. KEIN Anker gefunden
+  // -> leere Session-Menge -> LEERE Record-Liste bei ok:true (fail-closed, nie ein lockererer
+  // Fallback). Das Zeitfenster bleibt die zweite Linie: die Query-Parameternamen dafuer sind
+  // UNBELEGT (Kap. 2.6), gefiltert wird ausschliesslich client-seitig (withinRecordWindow).
   async getVoiceCostRecords({ legId, startedAt, endedAt } = {}) {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
     if (!legId || !startedAt || !endedAt) return { ok: false, reason: "params_missing" };
 
+    const fetched = await fetchAllCostRecords();
+    if (!fetched.ok) return fetched; // kein Teil-Erfolg (P1-Risiko/G31)
+
+    const sessionIds = anchoredSessionIds(fetched.raw, legId);
     const records = [];
     const rejectedByReason = {};
-    for (const recordType of COST_RECORD_TYPES) {
-      const page = await fetchCostRecordPage(recordType);
-      if (!page.ok) return page; // kein Teil-Erfolg (P1-Risiko/G31)
-      if (page.raw.length === COST_RECORDS_PAGE_SIZE) return { ok: false, reason: "page_truncated" };
-      for (const rawRecord of page.raw) {
-        const outcome = toCostRecord(rawRecord, { legId, startedAt, endedAt });
-        if (outcome.record) records.push(outcome.record);
-        else rejectedByReason[outcome.reason] = (rejectedByReason[outcome.reason] || 0) + 1;
-      }
+    for (const raw of fetched.raw) {
+      const outcome = toCostRecord(raw, { legId, sessionIds, startedAt, endedAt });
+      if (outcome.record) records.push(outcome.record);
+      else rejectedByReason[outcome.reason] = (rejectedByReason[outcome.reason] || 0) + 1;
     }
-    logCostRecordsOk(records.length, rejectedByReason);
+    logCostRecordsOk({ sessionCount: sessionIds.size, recordCount: records.length, rejectedByReason });
     return { ok: true, records };
   },
 };

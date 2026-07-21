@@ -2,6 +2,12 @@
 // parseNonNegativeInteger (cost-parse.js) und telnyxVoice.getVoiceCostRecords. Rein offline
 // (global.fetch gestubbt, F.I.R.S.T.), kein pglite/Server-Spawn (eigene Datei -> kein
 // Test-Worker-Stall). Env VOR dem dynamischen Import gesetzt (Muster telnyx-voice.test.js).
+//
+// LCT-FIX-1: die frueheren Fixtures ERFANDEN das Feld leg_id. Genau deshalb war diese Suite
+// gruen, waehrend live JEDER Beleg verworfen wurde (records=0, rejected={"leg_unresolved":205,
+// "leg_mismatch":92}) - ein Test gegen selbst erfundene Daten prueft die eigene Annahme, nicht
+// die Wirklichkeit. Die Fixtures tragen ab jetzt die GEMESSENEN Feldnamen und Wertformen
+// (Quelle: tasks/lct-fix-1-spec.md Abschnitt 2, Messung 2026-07-21 ueber 297 echte Belege).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -25,10 +31,27 @@ const { config } = await import("../src/config.js");
 
 const { withBlankedConfig } = makeConfigOverrides(config);
 
-const LEG_ID = "leg_abc123";
 const STARTED_AT = "2026-07-20T10:00:00Z";
 const ENDED_AT = "2026-07-20T10:05:00Z";
-const WINDOW = { legId: LEG_ID, startedAt: STARTED_AT, endedAt: ENDED_AT };
+
+// Reale ID-FORMEN (Werte synthetisch, Form gemessen): der Anker ist eine `v3:`-Token
+// (providerLegIdOf liefert genau die), Session und Leg sind UUIDs eines ZWEITEN ID-Systems.
+const CALL_CONTROL_ID = "v3:LoD0swXYmiEsyntheticAnchorForTestsOnly0000000000000";
+const SESSION_ID = "285df0e6-84f2-11f0-9c1a-02420a0d0b0e";
+const TELNYX_LEG_ID = "285df0e6-84f2-11f0-9c1a-02420a0d0b0f";
+const CONVERSATION_ID = "conv-9f2c1b7a";
+const FOREIGN_CALL_CONTROL_ID = "v3:FremderAnkerEinesAnderenTenants00000000000000000000";
+const FOREIGN_SESSION_ID = "9c4b21aa-84f2-11f0-9c1a-02420a0d0c11";
+const FOREIGN_LEG_ID = "9c4b21aa-84f2-11f0-9c1a-02420a0d0c12";
+
+const OWN_IDS = Object.freeze({ anchorId: CALL_CONTROL_ID, sessionId: SESSION_ID, legUuid: TELNYX_LEG_ID });
+const FOREIGN_IDS = Object.freeze({
+  anchorId: FOREIGN_CALL_CONTROL_ID,
+  sessionId: FOREIGN_SESSION_ID,
+  legUuid: FOREIGN_LEG_ID,
+});
+
+const WINDOW = { legId: CALL_CONTROL_ID, startedAt: STARTED_AT, endedAt: ENDED_AT };
 
 // fetch-Stub: liefert je filter[record_type] eine konfigurierte Seite. Zeichnet alle
 // Aufrufe auf (URL, Header) fuer Struktur-Assertions.
@@ -49,13 +72,32 @@ function stubFetchByRecordType(pagesByType, { status = 200 } = {}) {
   return calls;
 }
 
-function rawRecord({ recordType, cost, billedSec, currency = "USD", legId = LEG_ID }) {
+// EINE Quelle der realen ID-Felder je record_type (Spec Abschnitt 2). Werte kommen als
+// Parameter, damit Fremd-Session-Faelle DIESELBE Form mit anderen IDs bauen (G5).
+const ID_FIELDS_BY_RECORD_TYPE = Object.freeze({
+  "sip-trunking": ({ anchorId, sessionId }) => ({ call_control_id: anchorId, telnyx_session_id: sessionId }),
+  // KEIN call_control_id - genau der Fall, der nur ueber die Session auffindbar ist.
+  "call-control": ({ sessionId, legUuid }) => ({ telnyx_leg_id: legUuid, telnyx_session_id: sessionId }),
+  recording: ({ sessionId }) => ({ telnyx_session_id: sessionId }),
+  "ai-voice-assistant": ({ anchorId, sessionId, legUuid }) => ({
+    call_control_id: anchorId,
+    telnyx_leg_id: legUuid,
+    telnyx_session_id: sessionId,
+    conversation_id: CONVERSATION_ID,
+  }),
+  "speech-to-text": ({ sessionId, legUuid }) => ({ call_session_id: sessionId, call_leg_id: legUuid }),
+  "text-to-speech": ({ sessionId, legUuid }) => ({ call_session_id: sessionId, call_leg_id: legUuid }),
+  inference: () => ({ conversation_id: CONVERSATION_ID }), // KEINE Session-/Leg-Referenz
+});
+
+function realRecord(recordType, { cost, billedSec, currency = "USD", ids = OWN_IDS, extraFields = {} } = {}) {
   return {
     record_type: recordType,
     cost,
     currency,
-    leg_id: legId,
+    ...ID_FIELDS_BY_RECORD_TYPE[recordType](ids),
     ...(billedSec !== undefined ? { billed_sec: billedSec } : {}),
+    ...extraFields, // weitere reale Felder: started_at, recorded_at, rate_measured_in
   };
 }
 
@@ -143,42 +185,63 @@ test("parseNonNegativeInteger: ungueltige Werte -> null", () => {
   }
 });
 
-// ---- (b) Gemischte record_types (real gemessene Werte) ----
+// ---- (b) Reale Belegformen: zweistufige Zuordnung (Anker + Session) ----
 
-const MEASURED_RECORDS = [
-  { recordType: "sip-trunking", cost: "0.0802", billedSec: 120, expected: 8020000 },
-  { recordType: "call-control", cost: "0.004", expected: 400000 },
-  { recordType: "speech-to-text", cost: "0.0000", expected: 0 },
-  { recordType: "text-to-speech", cost: "1.687E-4", expected: 16870 },
-  { recordType: "recording", cost: "0.002", expected: 200000 },
-  { recordType: "inference", cost: "0.001315", expected: 131500 },
-  { recordType: "ai-voice-assistant", cost: "0.05", expected: 5000000 },
+// Live gesetzt als COST_TRUING_REQUIRED_RECORD_TYPES - erst ueber die Session erfuellbar,
+// denn call-control traegt keinen Anker.
+const REQUIRED_RECORD_TYPES = Object.freeze(["sip-trunking", "call-control"]);
+
+// Ein realer Beleg je record_type (Kosten und Zusatzfelder aus der Messung 2026-07-21).
+const REAL_RECORDS = [
+  { recordType: "sip-trunking", cost: "0.0401", billedSec: 60, extraFields: { started_at: "2026-07-20T10:01:00Z" } },
+  { recordType: "call-control", cost: "0.001" },
+  { recordType: "speech-to-text", cost: "0.0000" },
+  { recordType: "text-to-speech", cost: "1.687E-4" },
+  { recordType: "recording", cost: "0.002" },
+  { recordType: "ai-voice-assistant", cost: "0.05", billedSec: 60, extraFields: { rate_measured_in: "ai_voice_assistant_minutes" } },
+  { recordType: "inference", cost: "0.001315" }, // unzuordenbar - bewusste Grenze
 ];
 
-function stubMeasuredRecords() {
+function stubRealRecords({ ids = OWN_IDS } = {}) {
   const pages = {};
-  for (const r of MEASURED_RECORDS) {
+  for (const r of REAL_RECORDS)
     pages[r.recordType] = [
-      rawRecord({ recordType: r.recordType, cost: r.cost, billedSec: r.billedSec }),
+      realRecord(r.recordType, { cost: r.cost, billedSec: r.billedSec, extraFields: r.extraFields, ids }),
     ];
-  }
   return stubFetchByRecordType(pages);
 }
 
-test("getVoiceCostRecords: 7 record_types, korrekte Mikro-Cents, Summe, Waehrung, legId", async () => {
-  const calls = stubMeasuredRecords();
+// Belege, die in der gemessenen Wirklichkeit KEINEN Anker tragen und daher ausschliesslich
+// ueber die aufgespannte Session gefunden werden koennen (Spec Abschnitt 2).
+const SESSION_ONLY_RECORD_TYPES = Object.freeze([
+  "call-control", "recording", "speech-to-text", "text-to-speech",
+]);
+
+test("getVoiceCostRecords: reale Belegformen - der Anker spannt die Session auf, die Belege OHNE Anker kommen mit", async () => {
+  stubRealRecords();
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(res.ok, true);
-  assert.equal(res.records.length, 7);
+  // ROT VOR DEM FIX: die alte leg_id/call_leg_id-Zuordnung findet in diesen realen Formen
+  // KEINEN einzigen Beleg -> records.length === 0.
+  assert.equal(res.records.length, 6, "6 von 7 Typen zuordenbar (inference traegt keine Session)");
   const sum = res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
-  assert.equal(sum, 13768370);
+  assert.equal(sum, 9326870); // 4010000 + 100000 + 0 + 16870 + 200000 + 5000000
+  const found = new Set(res.records.map((r) => r.recordType));
+  for (const sessionOnly of SESSION_ONLY_RECORD_TYPES)
+    assert.ok(found.has(sessionOnly), `${sessionOnly} traegt keinen Anker und muss ueber die Session kommen`);
+  for (const required of REQUIRED_RECORD_TYPES)
+    assert.ok(found.has(required), `Pflicht-Typ ${required} fehlt - die Pflicht-Menge waere nicht erfuellbar`);
+  assert.ok(!found.has("inference"));
   for (const r of res.records) {
     assert.equal(r.currency, "USD");
-    assert.equal(r.legId, LEG_ID);
+    assert.equal(r.legId, CALL_CONTROL_ID, "legId bleibt der uebergebene Anker (Korrelationsschluessel)");
   }
-  const sipTrunking = res.records.find((r) => r.recordType === "sip-trunking");
-  assert.equal(sipTrunking.billedSec, 120);
+  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").billedSec, 60);
+});
 
+test("getVoiceCostRecords: fragt alle sieben record_types mit Bearer-Key ab", async () => {
+  const calls = stubRealRecords();
+  await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(calls.length, 7);
   for (const c of calls) {
     assert.ok(c.url.startsWith(`${API_BASE}/v2/detail_records`));
@@ -186,11 +249,11 @@ test("getVoiceCostRecords: 7 record_types, korrekte Mikro-Cents, Summe, Waehrung
   }
 });
 
-test("getVoiceCostRecords: Ende-zu-Ende sip-trunking cost 0.0802 -> costMicroCents 8020000", async () => {
-  stubMeasuredRecords();
+test("getVoiceCostRecords: Ende-zu-Ende sip-trunking cost 0.0401 -> costMicroCents 4010000", async () => {
+  stubRealRecords();
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   const sipTrunking = res.records.find((r) => r.recordType === "sip-trunking");
-  assert.equal(sipTrunking.costMicroCents, 8020000);
+  assert.equal(sipTrunking.costMicroCents, 4010000);
 });
 
 // ---- (c) HTTP 500 und Timeout ----
@@ -221,18 +284,18 @@ test("getVoiceCostRecords: rejectendes fetch (Netzfehler/Timeout) -> ok:false, k
 // ---- (d) Fremdwaehrung ----
 
 test("getVoiceCostRecords: fremde Waehrung wird verworfen, gleiche Waehrung kleingeschrieben akzeptiert", async () => {
-  const eurPages = { "sip-trunking": [rawRecord({ recordType: "sip-trunking", cost: "0.0802", currency: "EUR" })] };
-  for (const t of ["call-control", "speech-to-text", "text-to-speech", "recording", "inference", "ai-voice-assistant"])
-    eurPages[t] = [];
-  stubFetchByRecordType(eurPages);
+  // Der EUR-Beleg traegt den Anker und waere zuordenbar - er faellt trotzdem weg. Das pinnt
+  // die Reihenfolge Waehrung-vor-Zuordnung in toCostRecord.
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", currency: "EUR" })],
+  });
   const eurRes = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(eurRes.ok, true);
   assert.equal(eurRes.records.length, 0, "EUR-Record bei PROVIDER_CURRENCY=USD verworfen");
 
-  const usdLowerPages = { "sip-trunking": [rawRecord({ recordType: "sip-trunking", cost: "0.0802", currency: "usd" })] };
-  for (const t of ["call-control", "speech-to-text", "text-to-speech", "recording", "inference", "ai-voice-assistant"])
-    usdLowerPages[t] = [];
-  stubFetchByRecordType(usdLowerPages);
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", currency: "usd" })],
+  });
   const usdRes = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(usdRes.ok, true);
   assert.equal(usdRes.records.length, 1, "Kleingeschriebenes 'usd' case-insensitiv akzeptiert");
@@ -249,8 +312,14 @@ test("getVoiceCostRecords: fehlender legId -> ok:false, reason params_missing", 
 
 test("getVoiceCostRecords: fehlender startedAt/endedAt -> ok:false, reason params_missing", async () => {
   stubFetchByRecordType({});
-  assert.equal((await telnyxVoice.getVoiceCostRecords({ legId: LEG_ID, endedAt: ENDED_AT })).reason, "params_missing");
-  assert.equal((await telnyxVoice.getVoiceCostRecords({ legId: LEG_ID, startedAt: STARTED_AT })).reason, "params_missing");
+  assert.equal(
+    (await telnyxVoice.getVoiceCostRecords({ legId: CALL_CONTROL_ID, endedAt: ENDED_AT })).reason,
+    "params_missing",
+  );
+  assert.equal(
+    (await telnyxVoice.getVoiceCostRecords({ legId: CALL_CONTROL_ID, startedAt: STARTED_AT })).reason,
+    "params_missing",
+  );
 });
 
 test("getVoiceCostRecords: fehlende Config (TELNYX_API_KEY) -> ok:false, reason config_missing", async () => {
@@ -262,18 +331,73 @@ test("getVoiceCostRecords: fehlende Config (TELNYX_API_KEY) -> ok:false, reason 
   });
 });
 
-test("getVoiceCostRecords: Record mit fremder Leg-ID wird verworfen", async () => {
-  const pages = { "sip-trunking": [rawRecord({ recordType: "sip-trunking", cost: "0.0802", legId: "leg_other" })] };
-  for (const t of ["call-control", "speech-to-text", "text-to-speech", "recording", "inference", "ai-voice-assistant"])
-    pages[t] = [];
-  stubFetchByRecordType(pages);
+test("getVoiceCostRecords: kein Anker in der Antwort -> LEERE Liste, ok:true, kein Wurf (fail-closed)", async () => {
+  stubRealRecords({ ids: FOREIGN_IDS });
+  await assert.doesNotReject(async () => {
+    const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+    assert.equal(res.ok, true);
+    assert.deepEqual(res.records, [], "ohne Anker wird NICHTS akzeptiert - kein lockererer Fallback");
+  });
+});
+
+// KEINE gemessene Form (real traegt sip-trunking immer beide Felder), sondern ein Provider-
+// Drift-Grenzfall: faellt das Session-Feld weg, bleibt der Anker Identitaetsgleichheit auf
+// UNSERER eigenen, global eindeutigen ID - verwerfen waere Datenverlust ohne Sicherheits-
+// gewinn. Ohne diesen Test bliebe der direkte Anker-Zweig ungepinnt (alle anderen Fixtures
+// tragen zusaetzlich die passende Session und wuerden ihn nicht bemerken).
+test("getVoiceCostRecords: Beleg MIT Anker aber OHNE Session-Referenz wird akzeptiert", async () => {
+  const anchorOnly = realRecord("sip-trunking", { cost: "0.0401" });
+  delete anchorOnly.telnyx_session_id;
+  stubFetchByRecordType({ "sip-trunking": [anchorOnly] });
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(res.ok, true);
-  assert.equal(res.records.length, 0);
+  assert.equal(res.records.length, 1, "Identitaetsgleichheit auf call_control_id genuegt");
+  assert.equal(res.records[0].legId, CALL_CONTROL_ID);
+});
+
+test("getVoiceCostRecords: Belege einer FREMDEN Session kommen NIE mit (Tenant-Trennung)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
+    "call-control": [
+      realRecord("call-control", { cost: "0.001" }),
+      realRecord("call-control", { cost: "9.99", ids: FOREIGN_IDS }),
+    ],
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, true);
+  assert.equal(res.records.length, 2, "nur die zwei eigenen Belege");
+  const sum = res.records.reduce((acc, r) => acc + r.costMicroCents, 0);
+  assert.equal(sum, 4110000); // 4010000 + 100000, der fremde Beleg (999000000) fehlt
+  assert.ok(
+    !res.records.some((r) => r.costMicroCents === 999000000),
+    "ein fremder Beleg waere eine Fehlbuchung auf einen fremden Tenant",
+  );
+});
+
+test("getVoiceCostRecords: `inference` bleibt unzuordenbar (nur conversation_id) - bewusste Grenze", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
+    inference: [realRecord("inference", { cost: "0.001315" })],
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, true);
+  assert.equal(res.records.length, 1);
+  assert.equal(res.records[0].recordType, "sip-trunking");
+});
+
+test("getVoiceCostRecords: Beleg ausserhalb des Zeitfensters wird verworfen (recorded_at)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [
+      realRecord("sip-trunking", { cost: "0.0401", extraFields: { recorded_at: "2026-07-20T09:00:00Z" } }),
+    ],
+  });
+  const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
+  assert.equal(res.ok, true);
+  assert.equal(res.records.length, 0, "Zeitfenster bleibt die zweite Linie neben der Zuordnung");
 });
 
 test("getVoiceCostRecords: volle Seite -> ok:false, reason page_truncated", async () => {
-  const fullPage = Array.from({ length: 250 }, () => rawRecord({ recordType: "sip-trunking", cost: "0.01" }));
+  const fullPage = Array.from({ length: 250 }, () => realRecord("sip-trunking", { cost: "0.01" }));
   stubFetchByRecordType({ "sip-trunking": fullPage });
   const res = await telnyxVoice.getVoiceCostRecords(WINDOW);
   assert.equal(res.ok, false);
