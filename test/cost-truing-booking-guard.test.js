@@ -9,19 +9,8 @@ import { startServer, startServerExpectExit, outboundCallsSeed } from "./helpers
 
 // ---- Unit: costTruingBookingFindings ----
 
-test("U1: Buchung AUS -> [] (auch bei leerer Menge UND 0% Deckung)", () => {
+test("U2: leere Pflicht-Menge (Deckung ueber der Schwelle) -> genau ein Befund, fatal:true", () => {
   const findings = costTruingBookingFindings({
-    bookingEnabled: false,
-    requiredRecordTypes: [],
-    coveragePercent: 0,
-    minCoveragePercent: 80,
-  });
-  assert.deepEqual(findings, []);
-});
-
-test("U2: Buchung AN + leere Pflicht-Menge (Deckung ueber der Schwelle) -> genau ein Befund, fatal:true", () => {
-  const findings = costTruingBookingFindings({
-    bookingEnabled: true,
     requiredRecordTypes: [],
     coveragePercent: 100,
     minCoveragePercent: 80,
@@ -31,9 +20,8 @@ test("U2: Buchung AN + leere Pflicht-Menge (Deckung ueber der Schwelle) -> genau
   assert.equal(findings[0].code, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_EMPTY);
 });
 
-test("U3: Buchung AN + Menge gesetzt + 20% vs. 80% -> genau ein Befund, fatal:false", () => {
+test("U3: Menge gesetzt + 20% vs. 80% -> genau ein Befund, fatal:false", () => {
   const findings = costTruingBookingFindings({
-    bookingEnabled: true,
     requiredRecordTypes: ["sip-trunking"],
     coveragePercent: 20,
     minCoveragePercent: 80,
@@ -43,9 +31,8 @@ test("U3: Buchung AN + Menge gesetzt + 20% vs. 80% -> genau ein Befund, fatal:fa
   assert.equal(findings[0].code, COST_TRUING_BOOKING_FINDING.COVERAGE_BELOW_THRESHOLD);
 });
 
-test("U4: Buchung AN + 80% vs. 80% (Gleichstand) -> [] (>=, Gleichstand ist erfuellt)", () => {
+test("U4: 80% vs. 80% (Gleichstand) -> [] (>=, Gleichstand ist erfuellt)", () => {
   const findings = costTruingBookingFindings({
-    bookingEnabled: true,
     requiredRecordTypes: ["sip-trunking"],
     coveragePercent: 80,
     minCoveragePercent: 80,
@@ -55,7 +42,6 @@ test("U4: Buchung AN + 80% vs. 80% (Gleichstand) -> [] (>=, Gleichstand ist erfu
 
 test("U5: beide Befunde koennen GEMEINSAM auftreten (leere Menge UND Deckung unter Schwelle)", () => {
   const findings = costTruingBookingFindings({
-    bookingEnabled: true,
     requiredRecordTypes: [],
     coveragePercent: 20,
     minCoveragePercent: 80,
@@ -65,23 +51,20 @@ test("U5: beide Befunde koennen GEMEINSAM auftreten (leere Menge UND Deckung unt
   assert.deepEqual(codes, [COST_TRUING_BOOKING_FINDING.COVERAGE_BELOW_THRESHOLD, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_EMPTY].sort());
 });
 
-// ---- (n) Boot-Refusal: leere Pflicht-Menge bei aktiver Buchung ----
+// ---- (n) Boot-Refusal: leere Pflicht-Menge (die Korrekturbuchung ist unkonditional aktiv) ----
 
-test("(n1) COST_TRUING_BOOKING_ENABLED=true + leere COST_TRUING_REQUIRED_RECORD_TYPES -> Boot-Refusal, nennt die Env-Var, kein Boot-Banner", async () => {
+test("(n1) leere COST_TRUING_REQUIRED_RECORD_TYPES -> Boot-Refusal, nennt die Env-Var, kein Boot-Banner", async () => {
   const { code, output } = await startServerExpectExit({
-    env: { COST_TRUING_BOOKING_ENABLED: "true", COST_TRUING_REQUIRED_RECORD_TYPES: "" },
+    env: { COST_TRUING_REQUIRED_RECORD_TYPES: "" }, // ueberschreibt den nicht-leeren BASE_ENV-Default
   });
   assert.equal(code, 1);
   assert.match(output, /COST_TRUING_REQUIRED_RECORD_TYPES/);
   assert.doesNotMatch(output, /Gateway laeuft/);
 });
 
-test("(n2) Gegenprobe: Pflicht-Menge gesetzt -> Server startet trotz aktiver Buchung", async () => {
+test("(n2) Gegenprobe: Pflicht-Menge gesetzt -> Server startet", async () => {
   const srv = await startServer({
-    env: {
-      COST_TRUING_BOOKING_ENABLED: "true",
-      COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control",
-    },
+    env: { COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -97,7 +80,7 @@ test("(n2) Gegenprobe: Pflicht-Menge gesetzt -> Server startet trotz aktiver Buc
 
 test("(p1) 1 von 5 bewiesen (20% < 80%) -> genau EINE WARN-Zeile, /healthz 200, kein Boot-Refusal", async () => {
   const srv = await startServer({
-    env: { COST_TRUING_BOOKING_ENABLED: "true", COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
+    env: { COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
     seed: outboundCallsSeed(5, 1, "call_p_"),
   });
   try {
@@ -113,22 +96,8 @@ test("(p1) 1 von 5 bewiesen (20% < 80%) -> genau EINE WARN-Zeile, /healthz 200, 
 
 test("(p2) 5 von 5 bewiesen (100%) -> keine Deckungs-WARN", async () => {
   const srv = await startServer({
-    env: { COST_TRUING_BOOKING_ENABLED: "true", COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
+    env: { COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
     seed: outboundCallsSeed(5, 5, "call_p_"),
-  });
-  try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
-    assert.equal(res.status, 200);
-    assert.doesNotMatch(srv.stdout, /Deckungsquote/);
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("(p3) Buchung AUS bei 20% Deckung -> keine Deckungs-WARN (der Riegel haengt an bookingEnabled)", async () => {
-  const srv = await startServer({
-    env: { COST_TRUING_BOOKING_ENABLED: "false", COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control" },
-    seed: outboundCallsSeed(5, 1, "call_p_"),
   });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);

@@ -60,7 +60,6 @@ function fakeConfig(overrides = {}) {
     providerToBucketRateMicro: NEUTRAL_RATE,
     costCalibrationMinSamples: 20,
     platformAlertSmsTo: "",
-    costTruingBookingEnabled: true,
     ...overrides,
   });
 }
@@ -166,59 +165,6 @@ test("(c) Ist 20ct > Schaetzung 5ct, Quelle 'incomplete' -> trotzdem gebucht (be
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 115, "Unterschaetzung wird IMMER geheilt");
 });
 
-// ---- (g) Flag AUS -> byte-identisch zu P3 (fuer alle drei Fixturen a/b/c) ----
-
-test("(g-a) Flag AUS: Fixtur (a) bucht NICHTS, costTruedSource bleibt 'telnyx_detail_records' (unveraendert wie P3)", async () => {
-  const nowMs = Date.now();
-  const state = makeDefaultState();
-  seedUsageCents(state, BOOTSTRAP_TENANT_ID, 100);
-  const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20 });
-  const store = makeStubStore(state, { nowMs });
-  const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES, costTruingBookingEnabled: false });
-  const { runCostTruingSweep } = makeCostTruing({
-    store, config, voiceControl: voiceControl(control(recordsWithTotal(FULL_RECORD_TYPES, 5_000_000))),
-    audit: () => {}, now: () => nowMs,
-  });
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  const usage = usageFor(state, BOOTSTRAP_TENANT_ID);
-  assert.equal(usage.costCents, 100);
-  assert.equal(usage.spendMonthCostCents, 0);
-  assert.equal(usage.costCorrectionMicroCentsRem, 0);
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS, "Klassifikation selbst ist P3-Verhalten, unabhaengig vom Flag");
-});
-
-test("(g-b) Flag AUS: Fixtur (b) bucht NICHTS, costTruedSource bleibt 'incomplete'", async () => {
-  const nowMs = Date.now();
-  const state = makeDefaultState();
-  seedUsageCents(state, BOOTSTRAP_TENANT_ID, 100);
-  const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20 });
-  const store = makeStubStore(state, { nowMs });
-  const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES, costTruingBookingEnabled: false });
-  const { runCostTruingSweep } = makeCostTruing({
-    store, config, voiceControl: voiceControl(control(recordsWithTotal(["sip-trunking"], 5_000_000))),
-    audit: () => {}, now: () => nowMs,
-  });
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100);
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.INCOMPLETE);
-});
-
-test("(g-c) Flag AUS: Fixtur (c) bucht NICHTS trotz Ist > Schaetzung, costTruedSource bleibt 'incomplete'", async () => {
-  const nowMs = Date.now();
-  const state = makeDefaultState();
-  seedUsageCents(state, BOOTSTRAP_TENANT_ID, 100);
-  const call = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 5 });
-  const store = makeStubStore(state, { nowMs });
-  const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES, costTruingBookingEnabled: false });
-  const { runCostTruingSweep } = makeCostTruing({
-    store, config, voiceControl: voiceControl(control(recordsWithTotal(["sip-trunking"], 20_000_000))),
-    audit: () => {}, now: () => nowMs,
-  });
-  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100, "Flag AUS: der Deploy dieser Phase ist wirkungsfrei, auch fuer die Ueberschaetzungsrichtung");
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.INCOMPLETE);
-});
-
 // ---- (h) Idempotenz: zweiter sequenzieller Sweep bucht nicht doppelt ----
 
 test("(h) zwei sequenzielle Sweeps ueber denselben Call -> zweiter Lauf: kandidaten=0, costCents unveraendert", async () => {
@@ -305,28 +251,6 @@ test("(l) estimatedCostCents=null (Bestandszeile), Records vollstaendig -> costT
   assert.equal(result.incomplete, 0, "kein Messproblem -> nicht 'incomplete'");
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100, "kein Schaetzbetrag -> keine Korrektur gebucht");
   assert.notEqual(call.costTruedAt, null, "Records lagen vor -> der Call ist abgeschlossen (kein weiterer Versuch)");
-});
-
-// ---- (o) Flag AUS: dieselbe Bestandszeile bleibt byte-identisch zu P3 ----
-// Flag AUS liefert truedSourceOf den ROHEN measured.source. Vollstaendige Records ->
-// 'telnyx_detail_records' wie in P3; NO_ESTIMATE darf bei ausgeschaltetem Flag NIE
-// erscheinen (die erste Zusage der Phase: Flag AUS = P3-byte-identisch).
-test("(o) Flag AUS: vollstaendige Records + estimatedCostCents=null -> roh 'telnyx_detail_records', NIE 'no_estimate'", async () => {
-  const nowMs = Date.now();
-  const state = makeDefaultState();
-  seedUsageCents(state, BOOTSTRAP_TENANT_ID, 100);
-  const call = makeDueOutboundCall(state, { nowMs }); // estimatedCostCents bleibt null
-  const store = makeStubStore(state, { nowMs });
-  const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES, costTruingBookingEnabled: false });
-  const { runCostTruingSweep } = makeCostTruing({
-    store, config, voiceControl: voiceControl(control(recordsWithTotal(FULL_RECORD_TYPES, 5_000_000))),
-    audit: () => {}, now: () => nowMs,
-  });
-  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS, "Flag AUS -> roher Klassifikationswert wie P3, kein NO_ESTIMATE");
-  assert.equal(result.measured, 1, "roh vollstaendig -> als 'gemessen' gezaehlt (P3-Bilanz)");
-  assert.equal(result.noEstimate, 0, "NO_ESTIMATE entsteht nur bei aktivem Flag");
-  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 100, "Flag AUS bucht nie");
 });
 
 // ---- (p) Deckungsquote unveraendert: NO_ESTIMATE drueckt die Quote GENAU so wie zuvor

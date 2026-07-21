@@ -204,11 +204,6 @@ services:
       # "call" existiert NICHT.
       - key: COST_TRUING_REQUIRED_RECORD_TYPES
         value: ""
-      # LCT P4 - Der Flip. false = die Korrekturbuchung ist wirkungsfrei (byte-identisch
-      # zu P3). Vorbedingungen vor dem Umlegen: COST_TRUING_REQUIRED_RECORD_TYPES gesetzt
-      # (sonst Boot-Refusal) + Deckungsquote >= COST_TRUING_MIN_COVERAGE_PERCENT.
-      - key: COST_TRUING_BOOKING_ENABLED
-        value: "false"
       - key: COST_TRUING_MIN_COVERAGE_PERCENT
         value: "80"
       - key: COST_TRUING_COVERAGE_STALL_SWEEPS

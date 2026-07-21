@@ -19,6 +19,7 @@ import {
   makeDefaultState,
   createCall,
   recordCallCostTruingResult,
+  applyCostCorrectionCents,
 } from "../src/store/state-ops.js";
 import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, NUMBER_STATUS } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -33,11 +34,13 @@ const PII_OWNER_NAME = "Maxine Musterfrau";
 const PII_TRANSCRIPT_FRAGMENT = "mein Geburtsdatum ist der 3. Januar";
 
 // ---- Stub-Store (Muster metering-unit.test.js: faengt Schreibzugriffe in einem Array) ----
-// store.load() liefert den ECHTEN state-Spiegel; recordCallCostTruingResult delegiert an
-// die ECHTE state-ops-Funktion (kein zweites, vereinfachtes Store-Mock-Verhalten). Die
-// Stub hat BEWUSST keine query/pool/client-Methode (Fall d: der Sweep darf nie eigenes
-// SQL absetzen - ein Aufruf einer solchen Methode waere ein TypeError).
-function makeStubStore(state) {
+// store.load() liefert den ECHTEN state-Spiegel; recordCallCostTruingResult UND (seit P8,
+// die Korrekturbuchung ist unkonditional) applyCostCorrectionCents delegieren an die ECHTE
+// state-ops-Funktion (kein zweites, vereinfachtes Store-Mock-Verhalten; Muster
+// cost-truing-booking.test.js). Die Stub hat BEWUSST keine query/pool/client-Methode
+// (Fall d: der Sweep darf nie eigenes SQL absetzen - ein Aufruf einer solchen Methode
+// waere ein TypeError).
+function makeStubStore(state, { nowMs = Date.now() } = {}) {
   const writes = [];
   return {
     state,
@@ -49,6 +52,9 @@ function makeStubStore(state) {
       const { call, changed } = recordCallCostTruingResult(state, callId, outcome);
       if (changed) writes.push({ callId, outcome });
       return call;
+    },
+    applyCostCorrectionCents(tenantId, input) {
+      return applyCostCorrectionCents(state, tenantId, input, new Date(nowMs).toISOString());
     },
   };
 }
@@ -435,7 +441,11 @@ test("(h1) leere COST_TRUING_REQUIRED_RECORD_TYPES -> costTruedSource ist 'incom
 test("(h2) Gegenprobe: dieselben Records mit ERFUELLTER Pflicht-Menge -> 'telnyx_detail_records'", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
-  const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_h2" } });
+  // estimatedCostCents muss buchbar sein (>= 0): ohne Schaetzbetrag klassifiziert
+  // truedSourceOf seit P8 unbedingt als NO_ESTIMATE (kein Flag-Kurzschluss mehr, der bei
+  // fehlendem Estimate den rohen measured.source durchreicht) - dieser Test prueft aber
+  // gezielt die Klassifikation bei ERFUELLTER Pflicht-Menge, nicht den Estimate-Zustand.
+  const call = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_h2" }, estimatedCostCents: 20 });
   const store = makeStubStore(state);
   const control = { async getVoiceCostRecords({ legId }) { return { ok: true, records: fullRecordSet(legId) }; } };
   const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES });

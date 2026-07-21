@@ -240,16 +240,13 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     );
   }
 
-  // Flag AUS -> byte-identisch zu P3 (die erste und wichtigste Zusage dieser Phase): der
-  // rohe measured.source, also NIE 'no_estimate'.
-  // Flag AN, kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar. Zwei
-  // getrennte Sachverhalte, zwei getrennte Zustaende (kein gemeinsames Label):
+  // Kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar. Zwei getrennte
+  // Sachverhalte, zwei getrennte Zustaende (kein gemeinsames Label):
   //   - Records VOLLSTAENDIG (measured.source === 'telnyx_detail_records') -> 'no_estimate'
   //     (die Messung ist gut, es fehlt nur der Schaetzbetrag).
   //   - Records unvollstaendig -> es bleibt beim Messproblem 'incomplete' (== measured.source).
   // Beide sind nicht 'telnyx_detail_records', drueckt die Deckungsquote also identisch.
   function truedSourceOf(call, measured) {
-    if (!config.billing.costTruingBookingEnabled) return measured.source;
     if (isBookableCents(call.estimatedCostCents)) return measured.source;
     return measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS
       ? COST_TRUING_SOURCE.NO_ESTIMATE
@@ -320,7 +317,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
     // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
     // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
-    if (measured && config.billing.costTruingBookingEnabled) bookCorrectionFor(call, measured);
+    if (measured) bookCorrectionFor(call, measured);
     countOutcome(tally, truedSource, closed);
   }
 
