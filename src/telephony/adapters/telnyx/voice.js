@@ -44,9 +44,22 @@ export const COST_RECORD_TYPES = Object.freeze([
 // nennt dasselbe Maximum). Genau daran war die fruehere 250 eine TOTE Sicherung: die
 // Antwort konnte diese Laenge nie erreichen, der Vergleich nie greifen. Ob eine Seite die
 // ganze Menge ist, entscheidet ab jetzt meta.total_pages AUS DER ANTWORT
-// (isSinglePageResult) - nie die selbst angeforderte Groesse. Eine Paginierungsschleife
-// haette hier weiterhin keinen Aufrufer; eine unvollstaendige Seite ist fail-closed.
+// (isLastPage) - nie die selbst angeforderte Groesse. Ab KE-P3 traegt die Seitenschleife
+// (fetchRecordTypePages) die Menge zusammen; eine nicht ausgeschoepfte Menge ist fail-closed.
 const COST_RECORDS_PAGE_SIZE = 50;
+// page[number] ist 1-BASIERT (Messung 2026-07-21: Seiten 1-3 mit page[size]=50 schliessen
+// luecken- und ueberlappungsfrei aneinander an).
+const FIRST_PAGE_NUMBER = 1;
+// Obergrenze der Seitenschleife JE TYP. Herleitung: der groesste gemessene Typ liefert
+// konto-weit und ohne Zeitschranke 212 Belege = 5 Seiten (Messung 2026-07-21); 10 Seiten
+// sind das Doppelte (500 Belege je Typ) und damit Reserve bis zum naechsten Sweep. Kein
+// Optimierungsknopf, sondern der Riegel gegen eine Schleife gegen einen Provider, der die
+// letzte Seite nie meldet: ohne sie verbraucht ein einziger Sweep das gemessene
+// Minutenkontingent (40 Anfragen je fixem UTC-Minutenfenster) und laeuft im Grenzfall
+// unbegrenzt. Erreicht die Schleife sie, ist die Menge eine BEWIESENE Untermenge ->
+// complete:false. Mehr Belege sind ein Fall fuer eine engere Zeitschranke (`since`,
+// KE-P5), nicht fuer mehr Seiten.
+const MAX_PAGES_PER_RECORD_TYPE = 10;
 // Zuordnung Beleg -> Call, ZWEISTUFIG (LCT-FIX-1). Die frueheren Kandidaten leg_id/
 // call_leg_id liefert Telnyx nicht bzw. nur als UUID eines ANDEREN ID-Systems - damit wurde
 // live JEDER Beleg verworfen (297 Belege, Messung 2026-07-21).
@@ -95,6 +108,24 @@ export const UNASSIGNABLE_COST_RECORD_TYPES = Object.freeze(["inference"]);
 export const ASSIGNABLE_COST_RECORD_TYPES = Object.freeze(
   COST_RECORD_TYPES.filter((t) => !UNASSIGNABLE_COST_RECORD_TYPES.includes(t)),
 );
+// GEMESSENE Zeitfelder je record_type (Messung 2026-07-21): drei Namensfamilien ohne
+// Schnittmenge, kein Feldname existiert auf allen Typen. AUSSCHLIESSLICH fuer die
+// Seitenschleife - sie entscheidet, ob eine GANZE Seite aelter als `since` ist. NICHT fuer
+// die Zuordnung: dort bleibt RECORD_TIMESTAMP_FIELDS unveraendert (zwei getrennte Fragen -
+// "wie weit blaettern wir" gegen "gehoert dieser Beleg in das Anrufsfenster").
+// Der Feldname wird NIE geraten: filter[started_at] auf speech-to-text (Zeitfeld heisst
+// dort start_time) lieferte 0 Treffer trotz 89 Datensaetzen. Ein falscher Name beendet die
+// Schleife zu frueh und verliert Belege still. Die Schluesselmenge ist an
+// ASSIGNABLE_COST_RECORD_TYPES gekoppelt (testgepinnt) - exportiert genau dafuer, wie das
+// Enum darueber, statt eine Kopie im Test zu pflegen.
+export const COST_RECORD_TIME_FIELDS = Object.freeze({
+  "sip-trunking": Object.freeze(["started_at", "finished_at"]),
+  "call-control": Object.freeze(["started_at"]),
+  recording: Object.freeze(["started_at"]),
+  "speech-to-text": Object.freeze(["start_time", "end_time"]),
+  "text-to-speech": Object.freeze(["created_at"]),
+  "ai-voice-assistant": Object.freeze(["created_at", "completed_at"]),
+});
 // Kandidaten-Felder des Record-Zeitstempels fuer den zusaetzlichen CLIENT-seitigen
 // Fensterfilter (Design-Entscheidung P1, s. getVoiceCostRecords) - der Feldname ist wie
 // die Query-Parameternamen des Zeitfensters UNBELEGT (Kap. 2.6 belegt nur cost/rate/
@@ -337,40 +368,44 @@ function logCostRecordsFailure(recordType, err) {
   );
 }
 
-// Eine Listen-Antwort mit hoechstens dieser Seitenzahl ist mit EINER Anfrage vollstaendig
-// eingesammelt. Gemessen: meta = {total_results:212, total_pages:5, page_size:50} mit
-// total_pages = ceil(total_results / page_size) - bei leerer Menge 0.
-const SINGLE_PAGE_TOTAL = 1;
-
-// Passt die GANZE Ergebnismenge auf die eine geholte Seite? Autoritativ ist
-// meta.total_pages AUS DER ANTWORT, nie die selbst angeforderte page[size]: gegen die
-// eigene Anforderung zu pruefen bestaetigt nur, was man selbst gesendet hat - das war die
-// tote Sicherung. Kein brauchbares total_pages (fehlt, kein Zahlwert, Provider-Drift):
-// eine VOLLE Seite ist dann unbewiesen -> fail-closed; eine KURZE Seite kann keine
-// Fortsetzung haben, der Provider haette sie sonst gefuellt.
-function isSinglePageResult(records, meta) {
+// War das die LETZTE Seite dieses Typs? Autoritativ ist meta.total_pages AUS DER ANTWORT,
+// nie die selbst angeforderte page[size]: gegen die eigene Anforderung zu pruefen
+// bestaetigt nur, was man selbst gesendet hat - das war die tote Sicherung. Gemessen:
+// meta = {total_results:212, total_pages:5, page_size:50} mit total_pages =
+// ceil(total_results / page_size), bei leerer Menge 0.
+// Kein brauchbares total_pages (fehlt, kein Zahlwert, Provider-Drift): eine KURZE Seite
+// kann keine Fortsetzung haben - der Provider haette sie sonst gefuellt; eine VOLLE Seite
+// ist unbewiesen und wird weitergeblaettert, bis eine kurze Seite oder die
+// Seitenobergrenze entscheidet. Bis KE-P1 war genau dieser Fall sofort ok:false - die
+// Seitenschleife beantwortet ihn EMPIRISCH statt ihn zu vermuten, das ist mehr Wissen,
+// nicht weniger.
+// Die umgekehrte Regel ("kurze Seite gewinnt gegen meta") waere die fail-OPEN-Richtung:
+// sie beendete den Einzug zu frueh und lieferte eine stille Untermenge als vollstaendig.
+function isLastPage(records, meta, pageNumber) {
   const totalPages = parseNonNegativeInteger(meta?.total_pages);
-  if (totalPages !== null) return totalPages <= SINGLE_PAGE_TOTAL;
+  if (totalPages !== null) return pageNumber >= totalPages;
   return records.length < COST_RECORDS_PAGE_SIZE;
 }
 
-// Eine Typ-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die Port-
-// Methode selbst (G31). Erlaubte Server-Parameter sind AUSSCHLIESSLICH filter[record_type]
-// und page[size] (plus page[number], sobald es eine Seitenschleife gibt). JEDER weitere
+// Eine Typ-/SEITEN-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die
+// Port-Methode selbst (G31). Erlaubte Server-Parameter sind AUSSCHLIESSLICH
+// filter[record_type], page[size] und page[number] - mehr nicht. JEDER weitere
 // filter[...]-Parameter ist verboten, solange keine Messung ihn belegt: ein falscher
 // Filtername liefert HTTP 200 mit 0 Treffern, KEINEN Fehler (gemessen 2026-07-21:
-// filter[created_at][gte] auf sip-trunking -> 200/0, obwohl das Feld dort nicht existiert)
-// - stiller Datenverlust, der wie eine leere Menge aussieht. Das Zeitfenster wird deshalb
-// nie als Query gesendet; die Fensterpruefung laeuft ausschliesslich client-seitig in
-// toCostRecord. Eine Seite, die die Menge nachweislich nicht ausschoepft, ist ein
-// moeglicher Datenverlust -> fail-closed (page_truncated), nie eine stille Untermenge.
+// filter[created_at][gte] auf sip-trunking -> 200/0, obwohl das Feld dort nicht existiert;
+// filter[started_at] auf speech-to-text -> 0 Treffer trotz 89 Datensaetzen, weil das
+// Zeitfeld dort start_time heisst) - stiller Datenverlust, der wie eine leere Menge
+// aussieht. Das Zeitfenster geht deshalb NIE als Query hinaus: `since` bindet allein, wie
+// weit geblaettert wird (fetchRecordTypePages), die Fensterpruefung je Beleg bleibt
+// client-seitig in toCostRecord.
 // Jeder Wurf und jedes rejectende fetch (Netzfehler/Timeout) wird zu
-// { ok:false, reason:"provider_error" } - unveraendert; SICHTBAR ist der Fehler seit KE-P0
-// ueber logCostRecordsFailure (Status + Telnyx-Code, PII-frei).
-async function fetchCostRecordPage(recordType) {
+// { ok:false, reason:"provider_error" } - unveraendert; SICHTBAR seit KE-P0 ueber
+// logCostRecordsFailure (Status + Telnyx-Code, PII-frei).
+async function fetchCostRecordPage(recordType, pageNumber) {
   const q = new URLSearchParams();
   q.set("filter[record_type]", recordType);
   q.set("page[size]", String(COST_RECORDS_PAGE_SIZE));
+  q.set("page[number]", String(pageNumber));
   try {
     const res = await fetch(`${config.telephony.telnyxApiBase}${DETAIL_RECORDS_BASE}?${q}`, {
       headers: headers(),
@@ -378,31 +413,85 @@ async function fetchCostRecordPage(recordType) {
     await assertTelnyxOk(res, "getVoiceCostRecords", ATTACH_STATUS);
     const { data, meta } = await parseTelnyxBody(res);
     if (!Array.isArray(data)) return { ok: false, reason: "shape_unexpected" };
-    if (!isSinglePageResult(data, meta)) return { ok: false, reason: "page_truncated" };
-    return { ok: true, raw: data };
+    return { ok: true, raw: data, lastPage: isLastPage(data, meta, pageNumber) };
   } catch (err) {
     logCostRecordsFailure(recordType, err);
     return { ok: false, reason: "provider_error" };
   }
 }
 
-// Alle Roh-Belege der abgefragten Typen einsammeln - die Zuordnung entscheidet erst auf der
-// VOLLEN Antwort (Stufe 1 findet den Anker moeglicherweise erst im letzten Typ). Ergebnis-
-// Objekt wie die Port-Methode (G31), KEIN Teil-Erfolg: der erste nicht-ok-Ausgang bricht
-// ab. Die Vollstaendigkeit EINER Seite beurteilt fetchCostRecordPage - dort liegt das meta
-// der Antwort, und eine zweite Beurteilung hier waere eine zweite Wahrheit (G5).
-async function fetchAllCostRecords() {
-  const rawRecords = [];
-  for (const recordType of COST_RECORD_TYPES) {
-    const page = await fetchCostRecordPage(recordType);
-    if (!page.ok) return page;
-    rawRecords.push(...page.raw);
+// Neuester GEMESSENER Zeitstempel eines Belegs in Millisekunden, oder null. Nur die je Typ
+// gemessenen Feldnamen zaehlen (COST_RECORD_TIME_FIELDS) - ein generischer Feld-Scan waere
+// genau die Fehlerklasse, an der diese Kette zweimal gestorben ist. NEUESTER, nicht
+// erster: ein Beleg, der vor `since` beginnt und danach endet, gehoert noch ins Fenster.
+// Nicht-Strings werden verworfen (Date.parse(123) ergaebe sonst eine Jahreszahl).
+function newestRecordTimestampMs(raw, recordType) {
+  let newest = null;
+  for (const field of COST_RECORD_TIME_FIELDS[recordType] || []) {
+    if (typeof raw[field] !== "string") continue;
+    const ms = Date.parse(raw[field]);
+    if (Number.isNaN(ms)) continue;
+    if (newest === null || ms > newest) newest = ms;
   }
-  // complete=true ist hier keine Zusicherung auf Vorrat: JEDE Seite hat ihre Vollstaendigkeit
-  // bereits gegen meta.total_pages DER ANTWORT bewiesen (KE-P1, isSinglePageResult) - eine
-  // unvollstaendige Seite ist schon oben ok:false/page_truncated. Das Feld gehoert trotzdem in
-  // den Pool-Vertrag: sein Verbraucher (billing/cost-truing.js) muss es fail-closed auswerten,
-  // BEVOR KE-P3 die Seitenobergrenze einfuehrt und den Wert variabel macht.
+  return newest;
+}
+
+// Darf die Seitenschleife hier enden? NUR wenn die GANZE Seite beweisbar aelter als
+// `since` ist. Der Abbruch am ERSTEN Beleg ausserhalb waere eine Sortier-Annahme: die
+// Sortierreihenfolge ist fuer 6 von 7 Typen UNBELEGT (nur sip-trunking ist als absteigend
+// gemessen, und sort= ist dort wirkungslos). Ein Beleg OHNE gemessenes Zeitfeld gilt als
+// innerhalb - ein fehlendes Feld ist keine Erkenntnis ueber die Zeit (dieselbe Regel wie
+// withinRecordWindow). Leere Seite = kein Beleg = kein Beweis.
+// RESTRISIKO, bewusst benannt: liegt eine Seite vollstaendig ausserhalb und eine spaetere
+// doch wieder innerhalb, endet der Einzug zu frueh. Das setzt eine grob monotone
+// Sortierung voraus - die deutlich schwaechere Annahme gegenueber "erster Beleg
+// ausserhalb", und sie greift ueberhaupt erst, wenn ein Aufrufer `since` setzt (KE-P5).
+function isPageBeforeSince(rawPage, recordType, sinceMs) {
+  if (sinceMs === null || rawPage.length === 0) return false;
+  return rawPage.every((raw) => {
+    const ms = newestRecordTimestampMs(raw, recordType);
+    return ms !== null && ms < sinceMs;
+  });
+}
+
+// Alle Seiten EINES Typs, aufsteigend ab FIRST_PAGE_NUMBER. Drei Ausgaenge, alle explizit:
+// (1) letzte Seite erreicht ODER die ganze Seite liegt vor `since` -> complete:true;
+// (2) Seitenobergrenze erreicht -> complete:false, eine BEWIESENE Untermenge;
+// (3) eine Seite scheitert -> ok:false, kein Teil-Erfolg.
+// `since` filtert den Pool NIE - es bindet nur, wie weit geblaettert wird. Was geholt
+// wurde, kommt vollstaendig in den Pool; ueber die Zugehoerigkeit entscheidet allein die
+// Zuordnung (assignCostRecords), unveraendert.
+async function fetchRecordTypePages(recordType, sinceMs) {
+  const raw = [];
+  const lastAllowedPage = FIRST_PAGE_NUMBER + MAX_PAGES_PER_RECORD_TYPE - 1;
+  for (let pageNumber = FIRST_PAGE_NUMBER; pageNumber <= lastAllowedPage; pageNumber++) {
+    const page = await fetchCostRecordPage(recordType, pageNumber);
+    if (!page.ok) return page;
+    raw.push(...page.raw);
+    if (page.lastPage || isPageBeforeSince(page.raw, recordType, sinceMs))
+      return { ok: true, raw, complete: true };
+  }
+  return { ok: true, raw, complete: false };
+}
+
+// Alle Roh-Belege der ZUORDENBAREN Typen einsammeln - die Zuordnung entscheidet erst auf
+// der VOLLEN Antwort (Stufe 1 findet den Anker moeglicherweise erst im letzten Typ).
+// Die Typenliste ist aus ASSIGNABLE_COST_RECORD_TYPES ABGELEITET, nicht von Hand gepflegt
+// (G27) - dieselbe Menge, gegen die der Boot-Guard die Pflicht-Typen prueft. Die Belege
+// der uebrigen Typen (heute `inference`: nur conversation_id) werden ausnahmslos als
+// session_unresolved verworfen; sie zu holen ist eine Anfrage ohne jeden Ertrag.
+// KEIN Teil-Erfolg: der erste nicht-ok-Ausgang bricht ab. Auch der erste UNVOLLSTAENDIGE
+// Typ bricht ab - complete:false macht den ganzen Pool unbrauchbar (bookablePool in
+// billing/cost-truing.js uebersetzt es an genau EINER Stelle in ok:false), die restlichen
+// Typen zu holen waere reine Verschwendung.
+async function fetchAllCostRecords(sinceMs) {
+  const rawRecords = [];
+  for (const recordType of ASSIGNABLE_COST_RECORD_TYPES) {
+    const pages = await fetchRecordTypePages(recordType, sinceMs);
+    if (!pages.ok) return pages;
+    rawRecords.push(...pages.raw);
+    if (!pages.complete) return { ok: true, raw: rawRecords, complete: false };
+  }
   return { ok: true, raw: rawRecords, complete: true };
 }
 
@@ -425,6 +514,16 @@ function logCostRecordsOk({ recordCount, acceptedByRoute, rejectedByReason }) {
   console.log(
     `[telnyx/voice] getVoiceCostRecords ok records=${recordCount} ${formatAssignmentRoutes(acceptedByRoute)} rejected=${JSON.stringify(rejectedByReason)}`,
   );
+}
+
+// `since` bindet AUSSCHLIESSLICH die Seitenschleife - es filtert NIE den Pool und geht NIE
+// als Query-Parameter hinaus (s. fetchCostRecordPage). Fehlend oder unbrauchbar -> null =
+// keine Schranke: das kostet Anfragen, kann aber keinen Beleg verlieren. Die
+// fail-OPEN-Richtung waere ein zu SPAETES since, nicht ein fehlendes.
+function parseSinceMs(since) {
+  if (typeof since !== "string") return null;
+  const ms = Date.parse(since);
+  return Number.isNaN(ms) ? null : ms;
 }
 
 /** @type {import("../../ports.js").VoiceControl} */
@@ -570,7 +669,7 @@ export const telnyxVoice = {
   },
 
   // Roh-Belege EINES Sweeps (KE-P2). Der Abruf ist SCHLEIFENINVARIANT: die Query kennt nur
-  // filter[record_type] + page[size] - kein legId, kein Zeitfenster. Jeder Kandidat holte
+  // filter[record_type] + page[size] + page[number] - kein legId. Jeder Kandidat holte
   // bisher exakt dieselben Daten. Deshalb laeuft er EINMAL je Sweep VOR der
   // Kandidatenschleife (billing/cost-truing.js); die ZUORDNUNG bleibt je Call
   // (assignCostRecords). OPTIONAL am Port, Telnyx-only (Twilios price deckt nur
@@ -578,13 +677,14 @@ export const telnyxVoice = {
   //
   // WIRFT NIE. Rueckgabe ist ein ERGEBNIS-OBJEKT (G31): ok:false heisst NIEMALS "Kosten = 0".
   //
-  // Der Vertrag kennt bereits {since} (ports.js) - DIESE Fassung wertet ihn NICHT aus (eine
-  // Seite je Typ; die Seitenschleife bringt KE-P3, den abgeleiteten Wert KE-P5). Bewusst kein
-  // entgegengenommener und still ignorierter Parameter: ein wirkungsloser Zeit-Parameter im
-  // Geldpfad ist genau die Fehlerklasse "falsch, aber HTTP 200".
-  async fetchCostRecordPool() {
+  // `since` ist ab KE-P3 WIRKSAM: es bindet die Seitenschleife (parseSinceMs), nie die
+  // Query und nie den Pool-Inhalt. Bis KE-P5 setzt es kein Aufrufer - ohne Schranke wird
+  // je Typ bis zur letzten Seite oder bis zur Seitenobergrenze geblaettert.
+  // complete:false heisst "bewiesene Untermenge" und ist fuer den Verbraucher dasselbe wie
+  // ok:false (bookablePool) - nie eine Rueckerstattungsgrundlage.
+  async fetchCostRecordPool({ since } = {}) {
     if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
-    return fetchAllCostRecords();
+    return fetchAllCostRecords(parseSinceMs(since));
   },
 
   // Ordnet die Roh-Belege EINES Pools genau EINEM Call zu. SYNCHRON und ohne Netz - zwischen

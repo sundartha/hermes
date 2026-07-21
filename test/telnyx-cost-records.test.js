@@ -37,9 +37,13 @@ process.env.PROVIDER_CURRENCY = "USD";
 const { parseDecimalToMicroCents, parseNonNegativeInteger } = await import(
   "../src/telephony/adapters/telnyx/cost-parse.js"
 );
-const { telnyxVoice, COST_RECORD_TYPES, UNASSIGNABLE_COST_RECORD_TYPES } = await import(
-  "../src/telephony/adapters/telnyx/voice.js"
-);
+const {
+  telnyxVoice,
+  COST_RECORD_TYPES,
+  UNASSIGNABLE_COST_RECORD_TYPES,
+  ASSIGNABLE_COST_RECORD_TYPES,
+  COST_RECORD_TIME_FIELDS,
+} = await import("../src/telephony/adapters/telnyx/voice.js");
 const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
 const { config } = await import("../src/config.js");
 
@@ -99,14 +103,18 @@ function listPageBody(page) {
   return Array.isArray(page) ? { data: page } : { data: page.records, meta: page.meta };
 }
 
-// fetch-Stub: liefert je filter[record_type] eine konfigurierte Seite. Zeichnet alle
-// Aufrufe auf (URL, Header) fuer Struktur-Assertions.
-function stubFetchByRecordType(pagesByType) {
+// KE-P3: mehrseitige Antwort je Typ. pagesByType[type] ist eine LISTE von Seiten (Index 0 =
+// page[number]=1). Eine nicht konfigurierte Seite ist LEER - die gemessene Form des Endes
+// (kurze Seite). EINE Stelle fuer die Antwortform (listPageBody). Zeichnet alle Aufrufe auf
+// (URL, Header) fuer Struktur-Assertions.
+function stubFetchPages(pagesByType) {
   const calls = [];
   global.fetch = async (url, opts) => {
     calls.push({ url, opts });
     const u = new URL(url);
-    const body = listPageBody(pagesByType[u.searchParams.get("filter[record_type]")] || []);
+    const pages = pagesByType[u.searchParams.get("filter[record_type]")] || [];
+    const index = Number(u.searchParams.get("page[number]") || FIRST_PAGE) - 1;
+    const body = listPageBody(pages[index] || []);
     return {
       ok: true,
       status: 200,
@@ -116,6 +124,21 @@ function stubFetchByRecordType(pagesByType) {
   };
   return calls;
 }
+
+// Bestandsform: EINE Seite je Typ, alle Folgeseiten leer. Alle aelteren Fixtures bleiben
+// dadurch byte-identisch.
+function stubFetchByRecordType(pagesByType) {
+  return stubFetchPages(
+    Object.fromEntries(Object.entries(pagesByType).map(([type, page]) => [type, [page]])),
+  );
+}
+
+const FIRST_PAGE = 1;
+const pageNumbersFor = (calls, recordType) =>
+  calls
+    .map((c) => new URL(c.url).searchParams)
+    .filter((p) => p.get("filter[record_type]") === recordType)
+    .map((p) => Number(p.get("page[number]")));
 
 // fetch-Stub fuer den FEHLERPFAD (KE-P0): jede Anfrage scheitert mit demselben HTTP-Status
 // und Telnyx-Fehler-Envelope. assertTelnyxOk liest im !ok-Zweig res.text() (nicht json()) -
@@ -333,10 +356,10 @@ test("Belegabruf: reale Belegformen - der Anker spannt die Session auf, die Bele
   assert.equal(res.records.find((r) => r.recordType === "sip-trunking").billedSec, 60);
 });
 
-test("Belegabruf: fragt jeden record_type aus COST_RECORD_TYPES mit Bearer-Key ab", async () => {
+test("Belegabruf: fragt jeden record_type aus ASSIGNABLE_COST_RECORD_TYPES mit Bearer-Key ab", async () => {
   const calls = stubRealRecords();
   await fetchAndAssign(WINDOW);
-  assert.equal(calls.length, COST_RECORD_TYPES.length);
+  assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
   for (const c of calls) {
     assert.ok(c.url.startsWith(`${API_BASE}/v2/detail_records`));
     assert.equal(c.opts.headers.Authorization, `Bearer ${API_KEY}`);
@@ -378,7 +401,7 @@ test("assignCostRecords: geteilter Pool - zwei Anker, kein Anker-Beleg gleicht d
   const calls = stubFetchByRecordType({ "sip-trunking": byType("sip-trunking"), "call-control": byType("call-control") });
 
   const pool = await telnyxVoice.fetchCostRecordPool();
-  assert.equal(calls.length, COST_RECORD_TYPES.length, "EIN Pool-Abruf, unabhaengig davon, dass er fuer BEIDE Calls zustaendig ist");
+  assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length, "EIN Pool-Abruf, unabhaengig davon, dass er fuer BEIDE Calls zustaendig ist");
   assert.equal(pool.ok, true);
   assert.equal(pool.complete, true);
   assert.equal(pool.raw.length, 9);
@@ -453,8 +476,10 @@ const RATE_LIMIT_BODY = {
   errors: [{ code: RATE_LIMIT_CODE, title: "Too many requests", detail: POISONED_DETAIL }],
 };
 // Der Abruf bricht beim ERSTEN scheiternden Typ ab (kein Teil-Erfolg) -> genau EINE Zeile,
-// und zwar fuer den ersten Typ des Produktions-Enums (keine zweite Quelle der Reihenfolge).
-const FIRST_RECORD_TYPE = COST_RECORD_TYPES[0];
+// und zwar fuer den ersten ABGEFRAGTEN Typ (KE-P3: ASSIGNABLE_COST_RECORD_TYPES, nicht mehr
+// COST_RECORD_TYPES) - heute wie morgen "sip-trunking", aber ehrlich hergeleitet statt an
+// der ungefilterten Liste (keine zweite Quelle der Reihenfolge).
+const FIRST_RECORD_TYPE = ASSIGNABLE_COST_RECORD_TYPES[0];
 
 const failureLines = (lines) => lines.filter((l) => l.includes("getVoiceCostRecords fehler"));
 
@@ -655,12 +680,19 @@ test("UNASSIGNABLE_COST_RECORD_TYPES deckt sich mit den Belegformen: weder Anker
   assert.ok(SESSION_ONLY_RECORD_TYPES.length > 0, "ohne Session-only-Typen pruefte Stufe 2 nichts");
 });
 
-test("Belegabruf: `inference` bleibt unzuordenbar (nur conversation_id) - bewusste Grenze", async () => {
-  stubFetchByRecordType({
-    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401" })],
-    inference: [realRecord("inference", { cost: "0.001315" })],
-  });
-  const res = await fetchAndAssign(WINDOW);
+// KE-P3: `inference` wird nicht mehr abgerufen (s. P3-9) - die Zusage "bleibt unzuordenbar"
+// gilt trotzdem, nur eine Ebene tiefer: assignCostRecords bekommt den Pool direkt (kein
+// Abruf noetig), genau wie ein Sweep ihn faende, haette ihn ein aelterer Pool doch getragen.
+test("assignCostRecords: ein Beleg ohne jede Referenz (inference-Form) bleibt unzuordenbar", () => {
+  const pool = {
+    ok: true,
+    complete: true,
+    raw: [
+      realRecord("sip-trunking", { cost: "0.0401" }),
+      realRecord("inference", { cost: "0.001315" }),
+    ],
+  };
+  const res = telnyxVoice.assignCostRecords(pool, WINDOW);
   assert.equal(res.ok, true);
   assert.equal(res.records.length, 1);
   assert.equal(res.records[0].recordType, "sip-trunking");
@@ -716,8 +748,9 @@ function costRecordsLogLine(lines) {
 // deckt Parallelverkehr nicht ab. Ungepinnt zerbraeche sie still an einem geaenderten
 // Format. Die drei via_-Spalten
 // kommen aus den Fixtures: Anker = sip-trunking + ai-voice-assistant, telnyx_session_id =
-// call-control + recording, call_session_id = speech-to-text + text-to-speech; inference
-// traegt keine Referenz und wird abgelehnt.
+// call-control + recording, call_session_id = speech-to-text + text-to-speech. `inference`
+// wird ab KE-P3 nicht mehr abgerufen (s. P3-9) - rejected bleibt deshalb LEER, statt einen
+// session_unresolved-Eintrag zu tragen: der Beleg erreicht den Pool gar nicht erst.
 test("Belegabruf: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-Auflage)", async () => {
   stubRealRecords();
   const lines = await captureConsole(() => fetchAndAssign(WINDOW));
@@ -725,7 +758,7 @@ test("Belegabruf: Log-Zeile zaehlt je Zuordnungsweg getrennt (Sonde der Deploy-A
     costRecordsLogLine(lines),
     `[telnyx/voice] getVoiceCostRecords ok records=${ASSIGNABLE_RECORD_COUNT} `
       + "via_anchor=2 via_telnyx_session_id=2 via_call_session_id=2 "
-      + `rejected={"session_unresolved":${UNASSIGNABLE_COST_RECORD_TYPES.length}}`,
+      + "rejected={}",
   );
 });
 
@@ -739,7 +772,7 @@ test("Belegabruf: Log-Zeile meldet jeden Zuordnungsweg auch mit 0 (kein Anker ge
     costRecordsLogLine(lines),
     "[telnyx/voice] getVoiceCostRecords ok records=0 "
       + "via_anchor=0 via_telnyx_session_id=0 via_call_session_id=0 "
-      + `rejected={"session_mismatch":${ASSIGNABLE_RECORD_COUNT},"session_unresolved":${UNASSIGNABLE_COST_RECORD_TYPES.length}}`,
+      + `rejected={"session_mismatch":${ASSIGNABLE_RECORD_COUNT}}`,
   );
 });
 
@@ -768,28 +801,12 @@ function fullCallControlPage() {
 // jede Zaehlung unten trivial 0 und der Test bewiese nichts ueber die Untermenge.
 const anchorPage = () => [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })];
 
-// ROT VOR DEM FIX (gemessener Lauf im Phasenbericht): der Bestand fordert page[size]=250
-// an und vergleicht die Antwort mit der EIGENEN Anforderung. 50 !== 250, also gilt eine
-// Seite von fuenf als vollstaendig -> ok:true mit 51 Belegen aus 212. Eine stille
-// Untermenge ist im Geldpfad die fail-OPEN-Richtung: gegen eine zu kleine Ist-Summe
-// erstattet die Korrektur real ausgegebenes Geld zurueck.
-test("Belegabruf: volle Seite mit meta.total_pages>1 gilt NICHT als vollstaendig", async () => {
-  stubFetchByRecordType({
-    "sip-trunking": anchorPage(),
-    "call-control": { records: fullCallControlPage(), meta: MEASURED_PAGED_META },
-  });
-  const res = await fetchAndAssign(WINDOW);
-  assert.equal(res.ok, false, "eine Seite von fuenf ist keine vollstaendige Messung");
-  assert.equal(res.reason, "page_truncated");
-  assert.equal(res.records, undefined, "ok:false ist NIE die leere Menge");
-});
-
 // Gegenprobe zur Fail-closed-Richtung. Sagt die Antwort selbst, dass es nur diese eine
 // Seite gibt, bleibt sie vollstaendig - sonst waere jede exakt 50 Belege grosse Menge
 // dauerhaft unmessbar (Deckungsquote 0 %, keine Rueckerstattung mehr, jede Nachforderung
 // gebucht: einseitige Korrektur zulasten des Kunden).
 test("Belegabruf: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async () => {
-  stubFetchByRecordType({
+  const calls = stubFetchByRecordType({
     "sip-trunking": anchorPage(),
     "call-control": { records: fullCallControlPage(), meta: MEASURED_SINGLE_PAGE_META },
   });
@@ -800,29 +817,243 @@ test("Belegabruf: volle Seite mit meta.total_pages=1 bleibt vollstaendig", async
     1 + MEASURED_PAGE_SIZE,
     "Anker-Beleg + alle 50 nur ueber die Session gefundenen call-control-Belege",
   );
+  // Gegenprobe zur Seitenschleife: meta sagt "nur diese eine Seite" -> keine zweite Anfrage.
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1]);
 });
 
-// KEINE gemessene Antwortform (real traegt jede Listen-Antwort ein meta), sondern der
-// Provider-Drift-Grenzfall - dieselbe Kennzeichnung wie beim recorded_at-Test oben. Ohne
-// brauchbares meta ist "es gibt nur diese Seite" UNBEWIESEN. Unbewiesen heisst im Geldpfad
-// fail-closed, nicht durchwinken.
-test("Belegabruf: volle Seite OHNE meta -> fail-closed (page_truncated)", async () => {
-  stubFetchByRecordType({ "sip-trunking": anchorPage(), "call-control": fullCallControlPage() });
+// KE-P3: die Seite war (mangels meta) UNBEWIESEN vollstaendig - vor P3 hiess das fail-closed
+// (page_truncated, s. Bestandsbericht KE-P1). Ab P3 wird der Beweis stattdessen EMPIRISCH
+// erbracht: die Seitenschleife blaettert nach, bis die naechste (kurze) Seite das Ende
+// zeigt. Das ist mehr Wissen, nicht weniger - P3-2/P3-2b decken den Fall ab, dass die
+// Folgeseiten NIE enden (dann bleibt es bei complete:false, s. dort).
+test("(P3-2c) volle Seite OHNE meta wird nachgeblaettert; erst die kurze Folgeseite beweist das Ende", async () => {
+  const calls = stubFetchPages({
+    "sip-trunking": [anchorPage()],
+    "call-control": [fullCallControlPage(), []], // Seite 2 ist LEER - die kurze Folgeseite
+  });
   const res = await fetchAndAssign(WINDOW);
-  assert.equal(res.ok, false);
-  assert.equal(res.reason, "page_truncated");
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2]);
+  assert.equal(res.ok, true);
+  assert.equal(
+    res.records.length,
+    1 + MEASURED_PAGE_SIZE,
+    "Anker-Beleg + alle 50 call-control-Belege der ersten Seite (Seite 2 traegt keine weiteren)",
+  );
 });
 
-// Die einzige Stelle, an der die gemessene 50 als WIRE-Wert festgenagelt ist - bewusst ein
-// Literal, nicht COST_RECORDS_PAGE_SIZE (s. Kommentar bei MEASURED_PAGE_SIZE). Faellt der
-// Test, hat entweder jemand die Anforderung veraendert oder die Messung ist ueberholt;
-// beides gehoert angesehen, nicht stillschweigend nachgezogen.
-test("Belegabruf: fordert die gemessene Maximal-Seitengroesse page[size]=50 an", async () => {
-  const calls = stubRealRecords();
+// ---- (h) KE-P3: Seitenschleife ohne geratene Filternamen ----
+
+// GEMESSENE Zeitpunkte fuer die since-Tests: IN_WINDOW_AT liegt im Anrufsfenster (WINDOW),
+// BEFORE_SINCE/AFTER_SINCE liegen vor/nach der since-Grenze SINCE_BOUNDARY.
+const IN_WINDOW_AT = STARTED_AT;
+const SINCE_BOUNDARY = "2026-07-20T09:00:00Z";
+const BEFORE_SINCE = "2026-07-20T08:00:00Z";
+const AFTER_SINCE = "2026-07-20T10:00:00Z";
+const BILLED_CC_COST = "0.001"; // -> 100000 Mikro-Cent (dieselbe Rate wie fullCallControlPage)
+const BILLED_CC_MICRO = 100_000;
+
+// KOEDER aus der GEMESSENEN Form selbst: call-control fuehrt telnyx_leg_id + telnyx_session_id
+// und NIE einen Anker. Die Leg-UUID zeigt auf eine FREMDE Leg - benutzte der Code sie als
+// Zuordnungsquelle, kaeme keiner dieser Belege herein und jede Erwartung unten waere falsch.
+// Genau dieser Feldname hat live 297 von 297 Belegen verworfen (LCT-FIX-1).
+function pagedCallControlRecord({ cost, billedSec, startedAt = IN_WINDOW_AT }) {
+  return realRecord("call-control", {
+    cost,
+    billedSec,
+    ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID },
+    extraFields: { started_at: startedAt, call_sec: billedSec },
+  });
+}
+
+// Das gemessene PAAR je Anruf (A2 Null-Zwilling-Pflicht): der Anker haengt am ersten Bein,
+// der abgerechnete Betrag am zweiten - eines der beiden Beine ist ECHT null. Wer je Typ nur
+// den ersten Treffer nimmt, verliert 0,0401 USD und erstattet ausgegebenes Geld zurueck.
+function sipTrunkingLegPair() {
+  return [
+    realRecord("sip-trunking", { cost: "0.0", billedSec: 0, extraFields: { started_at: IN_WINDOW_AT, call_sec: 0 } }),
+    secondLegRecord("sip-trunking", { cost: "0.0401", billedSec: 60, extraFields: { started_at: IN_WINDOW_AT, call_sec: 60 } }),
+  ];
+}
+
+// GEMESSENE meta aus Spec A1: {total_results:212, total_pages:5, page_size:50}. 212 = 4x50 +
+// 12, die letzte Seite ist also kurz - derselbe Grenzfall wie oben, nur mit der WIRKLICH
+// gemessenen Zahl (A2: Fixtures spiegeln nur Gemessenes).
+const PAGED_LAST_PAGE_COUNT =
+  MEASURED_PAGED_META.total_results - (MEASURED_PAGED_META.total_pages - 1) * MEASURED_PAGE_SIZE; // 12
+
+function fivePagedCallControlPages() {
+  const billed = () => pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60 });
+  const full = () => ({ records: Array.from({ length: MEASURED_PAGE_SIZE }, billed), meta: MEASURED_PAGED_META });
+  return [
+    full(), full(), full(), full(),
+    {
+      records: [
+        ...Array.from({ length: PAGED_LAST_PAGE_COUNT - 1 }, billed),
+        pagedCallControlRecord({ cost: "0.0", billedSec: 0 }), // Null-Zwilling auf der LETZTEN Seite
+      ],
+      meta: MEASURED_PAGED_META,
+    },
+  ];
+}
+
+test("(P3-1) Seitenschleife sammelt ALLE Seiten eines Typs (212 Belege, letzte Seite kurz)", async () => {
+  const calls = stubFetchPages({
+    "sip-trunking": [sipTrunkingLegPair()],
+    "call-control": fivePagedCallControlPages(),
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2, 3, 4, 5]);
+  assert.equal(res.ok, true);
+  const ccRecords = res.records.filter((r) => r.recordType === "call-control");
+  assert.equal(ccRecords.length, MEASURED_PAGED_META.total_results);
+  assert.equal(res.records.length, MEASURED_PAGED_META.total_results + 2, "212 call-control + 2 sip-trunking (Null-Zwilling + abgerechnet)");
+  const expectedSum = (MEASURED_PAGED_META.total_results - 1) * BILLED_CC_MICRO + 4_010_000;
+  assert.equal(sumMicroCents(res), expectedSum, "211 abgerechnete call-control-Belege + der abgerechnete sip-trunking-Beleg, zwei echte Nullen tragen 0 bei");
+  assert.equal(res.records.filter((r) => r.costMicroCents === 0).length, 2, "beide Null-Zwillinge sind mitgezaehlt");
+});
+
+// 99 identische volle Seiten OHNE Chance, ueber meta.total_pages als vollstaendig zu gelten
+// (meta.total_pages bleibt immer 99) - erzwingt die Seitenobergrenze.
+function manyFullSipTrunkingPages(count) {
+  const meta = { total_results: count * MEASURED_PAGE_SIZE, total_pages: count, page_size: MEASURED_PAGE_SIZE };
+  const fullPage = () => ({
+    records: Array.from({ length: MEASURED_PAGE_SIZE }, () => realRecord("sip-trunking", { cost: BILLED_CC_COST, billedSec: 60 })),
+    meta,
+  });
+  return Array.from({ length: count }, fullPage);
+}
+
+test("(P3-2) Seitenobergrenze erreicht -> complete:false (bewiesene Untermenge, ok bleibt true)", async () => {
+  const totalPages = 99;
+  const calls = stubFetchPages({ "sip-trunking": manyFullSipTrunkingPages(totalPages) });
+  const pool = await telnyxVoice.fetchCostRecordPool();
+  assert.equal(pool.ok, true);
+  assert.equal(pool.complete, false);
+  const pageNumbers = pageNumbersFor(calls, "sip-trunking");
+  assert.deepEqual(pageNumbers, Array.from({ length: pageNumbers.length }, (_, i) => i + 1), "lueckenlos ab Seite 1");
+  assert.ok(pageNumbers.length > 1 && pageNumbers.length < totalPages, "bindet die Obergrenze nach oben, ohne die Konstante zu spiegeln");
+  assert.equal(calls.length, pageNumbers.length, "der erste unvollstaendige Typ bricht ab - keine weiteren Typen angefragt");
+});
+
+test("(P3-2b) volle Seiten OHNE meta laufen nicht endlos -> complete:false", async () => {
+  const totalPages = 99;
+  const plainPages = Array.from({ length: totalPages }, () =>
+    Array.from({ length: MEASURED_PAGE_SIZE }, () => realRecord("sip-trunking", { cost: BILLED_CC_COST, billedSec: 60 })),
+  );
+  const calls = stubFetchPages({ "sip-trunking": plainPages });
+  const pool = await telnyxVoice.fetchCostRecordPool();
+  assert.equal(pool.complete, false);
+  assert.ok(pageNumbersFor(calls, "sip-trunking").length < totalPages);
+});
+
+// call-control-Belege ohne (P3-6) bzw. mit dem gemessenen (P3-7/P3-8) Zeitfeld, in Seiten
+// zu je MEASURED_PAGE_SIZE. meta traegt total_pages=3, damit die dritte Seite - erreichte
+// die Schleife sie ueberhaupt - regulaer als letzte Seite endet.
+function threeFullPages(recordFactory) {
+  const meta = { total_results: 3 * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
+  return Array.from({ length: 3 }, () => ({
+    records: Array.from({ length: MEASURED_PAGE_SIZE }, recordFactory),
+    meta,
+  }));
+}
+
+function ccRecordWithoutTimestamp() {
+  return realRecord("call-control", { cost: BILLED_CC_COST, billedSec: 60, ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID } });
+}
+
+// Eine Seite, deren ERSTER Beleg vor `since` liegt und deren RESTLICHE Belege danach -
+// gefolgt von einer Seite, die VOLLSTAENDIG vor `since` liegt. Prueft beide Richtungen der
+// "ganze Seite, nie erster Record"-Regel: P3-4 zeigt, dass Seite 1 die Schleife NICHT
+// vorzeitig beendet; P3-5 zeigt, dass Seite 2 sie sehr wohl beendet (Seite 3 bleibt ungeholt).
+function unsortedCallControlPages() {
+  const meta = { total_results: 3 * MEASURED_PAGE_SIZE, total_pages: 3, page_size: MEASURED_PAGE_SIZE };
+  const page1 = [
+    pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60, startedAt: BEFORE_SINCE }),
+    ...Array.from({ length: MEASURED_PAGE_SIZE - 1 }, () =>
+      pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60, startedAt: AFTER_SINCE })),
+  ];
+  const page2 = Array.from({ length: MEASURED_PAGE_SIZE }, () =>
+    pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60, startedAt: BEFORE_SINCE }));
+  const page3 = Array.from({ length: MEASURED_PAGE_SIZE }, () =>
+    pagedCallControlRecord({ cost: BILLED_CC_COST, billedSec: 60, startedAt: AFTER_SINCE }));
+  return [{ records: page1, meta }, { records: page2, meta }, { records: page3, meta }];
+}
+
+test("(P3-4) unsortierte Seite (erster Beleg ausserhalb, Rest innerhalb) bricht die Schleife NICHT ab", async () => {
+  const calls = stubFetchPages({ "call-control": unsortedCallControlPages() });
+  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  assert.ok(pageNumbersFor(calls, "call-control").includes(2), "Seite 2 wurde angefordert - Seite 1 hat die Schleife nicht vorzeitig beendet");
+});
+
+test("(P3-5) eine GANZE Seite vor 'since' beendet die Seitenschleife", async () => {
+  const calls = stubFetchPages({ "call-control": unsortedCallControlPages() });
+  const pool = await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2], "Seite 3 wird nie geholt");
+  assert.equal(pool.complete, true, "das Fenster wurde verlassen - das ist keine Untermenge");
+});
+
+test("(P3-6) Beleg OHNE gemessenes Zeitfeld gilt als innerhalb - die Schleife laeuft weiter", async () => {
+  const calls = stubFetchPages({ "call-control": threeFullPages(ccRecordWithoutTimestamp) });
+  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  assert.deepEqual(pageNumbersFor(calls, "call-control"), [1, 2, 3]);
+});
+
+// speech-to-text traegt sein Zeitfeld gemessen unter `start_time`, NICHT `started_at`
+// (Spec A1). `started_at` ist hier der KOEDER: liest der Code das Zeitfeld generisch statt
+// je Typ, endet er faelschlich nach Seite 1.
+function sttRecordAt(field, value) {
+  return realRecord("speech-to-text", {
+    cost: "0.0000",
+    ids: { ...OWN_IDS, legUuid: FOREIGN_LEG_ID },
+    extraFields: { [field]: value },
+  });
+}
+
+test("(P3-7) das Zeitfeld wird JE TYP gelesen: 'started_at' an speech-to-text ist KEIN Zeitfeld", async () => {
+  const calls = stubFetchPages({
+    "speech-to-text": threeFullPages(() => sttRecordAt("started_at", BEFORE_SINCE)),
+  });
+  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  assert.deepEqual(pageNumbersFor(calls, "speech-to-text"), [1, 2, 3], "started_at ist auf speech-to-text kein Zeitfeld - die Schleife liest es nicht");
+});
+
+test("(P3-8) 'start_time' vor 'since' beendet die speech-to-text-Schleife (das gemessene Feld greift)", async () => {
+  const calls = stubFetchPages({
+    "speech-to-text": threeFullPages(() => sttRecordAt("start_time", BEFORE_SINCE)),
+  });
+  await telnyxVoice.fetchCostRecordPool({ since: SINCE_BOUNDARY });
+  assert.deepEqual(pageNumbersFor(calls, "speech-to-text"), [1], "start_time ist das gemessene Zeitfeld - die Schleife endet nach Seite 1");
+});
+
+test("(P3-9) abgerufene Typenmenge ist GENAU ASSIGNABLE_COST_RECORD_TYPES - inference wird nie angefragt", async () => {
+  const calls = stubRealRecords(); // bietet inference weiterhin an (Koeder auf Fixture-Ebene)
   await fetchAndAssign(WINDOW);
-  assert.equal(calls.length, COST_RECORD_TYPES.length);
-  for (const c of calls)
-    assert.equal(new URL(c.url).searchParams.get("page[size]"), String(MEASURED_PAGE_SIZE));
+  const requestedTypes = calls.map((c) => new URL(c.url).searchParams.get("filter[record_type]"));
+  assert.deepEqual(new Set(requestedTypes), new Set(ASSIGNABLE_COST_RECORD_TYPES));
+  assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
+  for (const forbidden of UNASSIGNABLE_COST_RECORD_TYPES)
+    assert.ok(!requestedTypes.includes(forbidden), `${forbidden} darf nie angefragt werden`);
+});
+
+test("(P3-10) die Query traegt AUSSCHLIESSLICH filter[record_type], page[size]=50, page[number] - nie einen Zeitfilter", async () => {
+  const calls = stubRealRecords();
+  await telnyxVoice.fetchCostRecordPool({ since: "2026-07-20T00:00:00Z" });
+  assert.equal(calls.length, ASSIGNABLE_COST_RECORD_TYPES.length);
+  for (const c of calls) {
+    const params = new URL(c.url).searchParams;
+    assert.deepEqual([...params.keys()].sort(), ["filter[record_type]", "page[number]", "page[size]"]);
+    assert.equal(params.get("page[size]"), String(MEASURED_PAGE_SIZE));
+    assert.equal(params.get("page[number]"), "1");
+    for (const key of params.keys())
+      assert.ok(!/since|created_at|started_at/.test(key), `verbotener Zeitfilter-Key in der Query: ${key}`);
+  }
+});
+
+test("(P3-11) die Zeitfeld-Tabelle deckt GENAU die abgerufenen Typen ab (keine zweite Quelle)", () => {
+  assert.deepEqual(
+    Object.keys(COST_RECORD_TIME_FIELDS).sort(),
+    [...ASSIGNABLE_COST_RECORD_TYPES].sort(),
+  );
 });
 
 // ---- (f) Twilio-Riegel ----
