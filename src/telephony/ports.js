@@ -97,6 +97,11 @@
  *   NIE die Query (ein geratener Zeitfilter liefert HTTP 200 mit 0 Treffern) und NIE den
  *   Pool-Inhalt. Fehlt/unbrauchbar -> keine Schranke: mehr Anfragen, nie weniger Belege.
  *   Gesetzt wird er erst ab KE-P5 (aeltester endedAt der Kandidaten minus Marge).
+ * @property {{reserveSlot: () => Promise<void>, waitForWindowReset: (hintMs?: number|null) => Promise<void>}} [throttle]
+ *   Drossel am gemessenen Minutenfenster des Providers (40 Anfragen je FIXER UTC-Minute,
+ *   Reset auf :00). Default ist die prozessweite Drossel des Adapters mit echter Uhr und
+ *   echtem Timer; PRODUKTIVE Aufrufer setzen den Parameter NIE. Er existiert, damit ein
+ *   Test die Uhr injizieren kann, statt eine reale Minute zu warten.
  */
 
 /**
@@ -137,6 +142,7 @@
  *   getroffen ist; letzteres liefert complete:false. Telnyx-only wie
  *   originateViaCallControl; fehlt die Methode, faellt der Aufrufer auf "kein Abgleich"
  *   zurueck (konservativer Fall).
+ *   Der Abruf ist gedrosselt und kann deshalb bis zur naechsten vollen Minute blockieren.
  *   WIRFT NIE. ok:false heisst "nicht gemessen" und NIEMALS "Kosten = 0".
  * @property {(pool: VoiceCostRecordPool, params: VoiceCostRecordsParams) => VoiceCostRecordsResult} [assignCostRecords]
  *   Ordnet die Belege EINES Pools genau EINEM Call zu - SYNCHRON und ohne Netz (PM-5).
