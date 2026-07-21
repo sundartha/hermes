@@ -68,13 +68,16 @@ const MAX_PAGES_PER_RECORD_TYPE = 10;
 // remaining=39, und 35 Anfragen ueber ein volles Fenster ergaben 0 x 429. Ohne Drossel sind
 // 224 Anfragen ohne Pause live {"200":40,"429":184} - 184 verworfene Anfragen und ein Sweep
 // ohne Messung.
-const DETAIL_RECORDS_LIMIT_PER_MINUTE = 40;
+// Exportiert (Review KE-P4 Runde 2): ohne EINE Quelle (G5/G27) testet jeder Test eine
+// eigene Kopie der Budget-Zahl statt der produktiv verdrahteten - genau die Luecke, die
+// live 224 ungedrosselte Anfragen uebersehen hat.
+export const DETAIL_RECORDS_LIMIT_PER_MINUTE = 40;
 // Bewusste Reserve UNTER dem gemessenen Limit. Sie deckt zwei UNBELEGTE Groessen ab: ob das
 // Kontingent je Key, je Konto oder je Organisation zaehlt (Plan U5 - ein zweiter Prozess am
 // selben Konto teilte es), und den Versatz zwischen unserer Uhr und der Fenstergrenze des
 // Providers. Das Ausreizen spart Sekunden, das Sprengen kostet die ganze Messung.
-const DETAIL_RECORDS_RESERVE_PER_MINUTE = 10;
-const DETAIL_RECORDS_BUDGET_PER_MINUTE =
+export const DETAIL_RECORDS_RESERVE_PER_MINUTE = 10;
+export const DETAIL_RECORDS_BUDGET_PER_MINUTE =
   DETAIL_RECORDS_LIMIT_PER_MINUTE - DETAIL_RECORDS_RESERVE_PER_MINUTE;
 // HTTP 429 = Kontingent erschoepft (Telnyx-Code 10011). Telnyx nennt KEIN Retry-After, nur
 // x-ratelimit-reset: SEKUNDEN bis zur naechsten vollen Minute (gemessen 15 s im

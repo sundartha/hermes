@@ -43,6 +43,9 @@ const {
   UNASSIGNABLE_COST_RECORD_TYPES,
   ASSIGNABLE_COST_RECORD_TYPES,
   COST_RECORD_TIME_FIELDS,
+  DETAIL_RECORDS_LIMIT_PER_MINUTE,
+  DETAIL_RECORDS_RESERVE_PER_MINUTE,
+  DETAIL_RECORDS_BUDGET_PER_MINUTE,
 } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
 const { config } = await import("../src/config.js");
@@ -1186,6 +1189,85 @@ test("(P4-3) 429 ohne x-ratelimit-reset -> Wartezeit bis zur naechsten vollen Mi
   await captureConsole(() => telnyxVoice.fetchCostRecordPool({ throttle: testThrottle(clock) }));
   assert.equal(clock.elapsedMs(), 30_000);
   assert.equal(calls.length, ATTEMPTS_PER_RATE_LIMITED_PAGE);
+});
+
+// ---- (i2) KE-P4 Runde 2 (Review-Blocker): die PRODUKTIVE Drossel selbst war ungetestet ----
+// P4-1/2/3 injizieren je eine EIGENE Drossel (testThrottle, test-lokales BUDGET_PER_MINUTE) -
+// der modul-globale Default (detailRecordsThrottle in voice.js, echte Uhr/echter Timer) lief
+// nie durch einen Test. Zwei Mutationen blieben dadurch bei gruener Suite unentdeckt:
+// DETAIL_RECORDS_RESERVE_PER_MINUTE 10 -> 0 (die Reserve verschwindet, Budget = Limit) und die
+// Drossel selbst durch ein wirkungsloses Objekt ersetzt (der Live-Zustand VOR KE-P4). Die
+// beiden Tests unten pinnen genau das, OHNE eine eigene Drossel zu injizieren - Mock-Timer
+// statt Wanduhr (Muster t.mock.timers aus bridge-openai-event.test.js), damit die Suite
+// trotzdem in Millisekunden statt einer echten Minute laeuft (F.I.R.S.T.).
+
+test("(P4-R1) das produktive Minutenbudget behaelt die bewusste Reserve unter dem gemessenen Limit", () => {
+  // Pinnt die GEMESSENEN Werte selbst (Plan F1) statt sie ueber eine test-lokale Kopie zu
+  // pruefen - eine Reserve-Aenderung (z. B. 10 -> 0) macht diesen Test rot, unabhaengig davon,
+  // welche Drossel ein einzelner Aufrufer injiziert.
+  assert.equal(DETAIL_RECORDS_LIMIT_PER_MINUTE, 40, "gemessenes Kontingent, Plan F1");
+  assert.equal(DETAIL_RECORDS_RESERVE_PER_MINUTE, 10, "bewusste Reserve gegen U5/Uhr-Versatz");
+  assert.equal(DETAIL_RECORDS_BUDGET_PER_MINUTE, 30);
+});
+
+// GENAU EIN Request UEBER dem produktiven Budget, verteilt ueber ALLE zuordenbaren Typen (nie
+// mehr als einer insgesamt): die modul-globale Drossel haengt an der ECHTEN Uhr (now =
+// Date.now, beim Modul-Import gebunden - ein spaeter aktivierter Date-Mock wuerde diese
+// Bindung nicht mehr aendern). Ein zweiter Ueberschuss loeste eine KASKADE echter
+// Wartevorgaenge aus, weil das Fenster ohne gemockte Uhr real bleibt, bis eine echte Minute
+// vergeht - dafuer bewusst nicht mehr als einer.
+const WIRING_TYPE_COUNT = ASSIGNABLE_COST_RECORD_TYPES.length;
+const WIRING_BASE_PAGES_PER_TYPE = Math.floor(DETAIL_RECORDS_BUDGET_PER_MINUTE / WIRING_TYPE_COUNT);
+const WIRING_FIRST_TYPE_EXTRA_PAGES =
+  DETAIL_RECORDS_BUDGET_PER_MINUTE + 1 - WIRING_BASE_PAGES_PER_TYPE * WIRING_TYPE_COUNT;
+// Maximal moegliche Wartezeit der Drossel ist eine volle Minute (Fenstergrenze exakt
+// getroffen) - 1000 ms Sicherheitsspanne gegen einen Boundary-Rundungsfall, rein virtuell (der
+// Mock-Timer kostet keine echte Zeit).
+const WIRING_TICK_MS = 61_000;
+
+// Seiten NUR fuer die Drossel-MECHANIK: die Kostensumme pruefen P2-2/P4-1 bereits, hier
+// zaehlt allein, wie viele Anfragen die produktive Drossel durchlaesst. EIN realer Beleg je
+// Seite (eigene IDs) haelt die Antwortform gemessen (Spec A1), ohne den Null-Zwilling zu
+// brauchen, den nur eine Kostensummen-Pruefung verlangt (Spec A2).
+function wiringPages(recordType, pageCount) {
+  const meta = Object.freeze({
+    total_results: pageCount * MEASURED_PAGE_SIZE, total_pages: pageCount, page_size: MEASURED_PAGE_SIZE,
+  });
+  const page = () => ({
+    records: [realRecord(recordType, { cost: BILLED_CC_COST, billedSec: 60, ids: OWN_IDS })],
+    meta,
+  });
+  return Array.from({ length: pageCount }, page);
+}
+const wiringPagesByType = () =>
+  Object.fromEntries(
+    ASSIGNABLE_COST_RECORD_TYPES.map((type, i) => [
+      type,
+      wiringPages(type, WIRING_BASE_PAGES_PER_TYPE + (i === 0 ? WIRING_FIRST_TYPE_EXTRA_PAGES : 0)),
+    ]),
+  );
+
+test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produktiven Budget-Konstante an (Mock-Timer statt Wanduhr)", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] }); // NUR der Timer - Date.now bleibt real (s.o.)
+  try {
+    const calls = stubFetchPages(wiringPagesByType());
+    const poolPromise = telnyxVoice.fetchCostRecordPool({}); // KEIN throttle-Override -> modul-globaler Default
+
+    await new Promise((r) => setImmediate(r)); // Microtask-Queue leerlaufen lassen (Muster telnyx-event-ingest-machine.test.js)
+    assert.equal(
+      calls.length, DETAIL_RECORDS_BUDGET_PER_MINUTE,
+      "die produktive Drossel haelt nach GENAU dem echten Budget an - eine No-op-Drossel liesse hier bereits alle Anfragen durch",
+    );
+
+    t.mock.timers.tick(WIRING_TICK_MS); // die Drossel wartet bis zur naechsten vollen Minute (F1) - der Mock ersetzt die Wanduhr
+    const pool = await poolPromise;
+
+    assert.equal(calls.length, DETAIL_RECORDS_BUDGET_PER_MINUTE + 1, "nach dem Tick lief die letzte Anfrage durch");
+    assert.equal(pool.ok, true);
+    assert.equal(pool.complete, true);
+  } finally {
+    t.mock.timers.reset(); // echte Timer fuer die naechsten Tests wiederherstellen
+  }
 });
 
 // ---- (f) Twilio-Riegel ----
