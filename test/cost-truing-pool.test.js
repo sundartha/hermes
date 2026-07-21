@@ -1,6 +1,7 @@
 // KE-P2 (D1: den Abruf aus der Kandidatenschleife ziehen): Sweep-Ebene.
 // Warum eine EIGENE Datei und nicht cost-truing-observe.test.js: die Kernzusage ist eine
-// Aussage ueber ECHTE HTTP-Anfragen (35 -> 7). Sie ist nur mit dem ECHTEN Telnyx-Adapter
+// Aussage ueber ECHTE HTTP-Anfragen (35 -> 6, ab KE-P3: inference wird nicht mehr abgerufen).
+// Sie ist nur mit dem ECHTEN Telnyx-Adapter
 // beweisbar - ein Fake-Adapter koennte sie nicht falsifizieren. Der echte Adapter liest
 // config.telephony.telnyxApiKey/-Base und config.billing.providerCurrency, deshalb
 // process.env VOR den (dynamischen) Importen, Muster telnyx-cost-records.test.js
@@ -12,7 +13,7 @@ process.env.TELNYX_API_BASE = "https://telnyx.test";
 process.env.TELNYX_API_KEY = "KEYtest-secret-do-not-leak";
 process.env.PROVIDER_CURRENCY = "USD";
 
-const { telnyxVoice, COST_RECORD_TYPES } = await import("../src/telephony/adapters/telnyx/voice.js");
+const { telnyxVoice, ASSIGNABLE_COST_RECORD_TYPES } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { makeCostTruing, SWEEP_TRIGGER } = await import("../src/billing/cost-truing.js");
 const { makeDefaultState, usageFor } = await import("../src/store/state-ops.js");
 const { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, emptyUsage } = await import("../src/store/defaults.js");
@@ -21,7 +22,7 @@ const { makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl } = awa
 );
 
 // Kandidatenzahl der D1-Kernzusage: gross genug, um "einmal je Typ" von "einmal je
-// Kandidat" scharf zu unterscheiden (7 vs. 35), klein genug, um lesbar zu bleiben.
+// Kandidat" scharf zu unterscheiden (6 vs. 35), klein genug, um lesbar zu bleiben.
 const CANDIDATE_COUNT = 5;
 
 // Zaehlender fetch-Stub: eine LEERE, gemessene Listen-Seite je Typ ({data:[]} -> ok, kurze
@@ -55,7 +56,7 @@ function fakePoolAdapter({ recordsFor, complete = true, ok = true, trace = [], s
   };
 }
 
-// ---- P2-1: die Kernzusage, gemessen am ECHTEN Adapter (35 -> 7 HTTP-Anfragen) ----
+// ---- P2-1: die Kernzusage, gemessen am ECHTEN Adapter (35 -> 6 HTTP-Anfragen, ab KE-P3) ----
 
 test("(P2-1) Sweep holt die Belege EINMAL je Sweep, nicht je Kandidat", async () => {
   const nowMs = Date.now();
@@ -71,7 +72,7 @@ test("(P2-1) Sweep holt die Belege EINMAL je Sweep, nicht je Kandidat", async ()
 
   const res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
-  assert.equal(fetchCalls.length, COST_RECORD_TYPES.length, "EIN Abruf je Typ, unabhaengig von der Kandidatenzahl");
+  assert.equal(fetchCalls.length, ASSIGNABLE_COST_RECORD_TYPES.length, "EIN Abruf je Typ, unabhaengig von der Kandidatenzahl");
   assert.equal(res.candidates, CANDIDATE_COUNT, "kein Kandidat ging beim Zaehlen verloren");
   assert.equal(store.writes.length, CANDIDATE_COUNT, "jeder Kandidat bekommt genau einen Schreibzugriff");
 });
@@ -223,4 +224,51 @@ test("(P2-3) ok:false-Pool -> ALLE Kandidaten unavailable, keine Buchung", async
     assert.equal(call.costTruingAttempts, 1);
   }
   assert.deepStrictEqual(structuredClone(state.usage), usageBefore, "keine Korrektur ohne Messung");
+});
+
+// ---- P3-3: Seitenobergrenze -> KEINE Rueckerstattung, kein Cent bewegt ----
+
+// Volle, gemessene sip-trunking-Seite (Spec A1): call_control_id + telnyx_session_id sind die
+// Zuordnungs-IDs, started_at das Zeitfeld, telnyx_leg_id der KOEDER (Feld, das der Code NICHT
+// als Zuordnungsquelle nutzen darf - A2). meta.total_pages=99 laesst KEINE Seite als letzte
+// gelten - das Ende der Seitenschleife kann hier nur die Seitenobergrenze bringen.
+function measuredSipTrunkingPageBody() {
+  const records = Array.from({ length: 50 }, (_, i) => ({
+    record_type: "sip-trunking",
+    cost: "0.0401",
+    currency: "USD",
+    call_control_id: `cc_p3_3_${i}`,
+    telnyx_session_id: `sess_p3_3_${i}`,
+    telnyx_leg_id: "0bad0bad-0bad-11f1-0bad-0bad0bad0bad0", // Koeder, s. A2
+    started_at: "2026-07-20T10:01:00Z",
+    billed_sec: 60,
+  }));
+  return { data: records, meta: { total_results: 50 * 99, total_pages: 99, page_size: 50 } };
+}
+
+test("(P3-3) Seitenobergrenze -> KEINE Rueckerstattung: alle Kandidaten unavailable, kein Cent bewegt", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  state.usage[BOOTSTRAP_TENANT_ID] = { ...emptyUsage(), costCents: 100 };
+  const calls = [0, 1, 2].map((i) =>
+    makeDueOutboundCall(state, { nowMs, legRef: { callControlId: `cc_p3_3_cand_${i}` }, estimatedCostCents: 20 }),
+  );
+  const store = makeStubStore(state);
+  const usageBefore = structuredClone(state.usage);
+  const fetchCalls = stubCountingFetch({ body: measuredSipTrunkingPageBody() });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config: fakeConfig(), voiceControl: fakeVoiceControl({ telnyx: telnyxVoice }), audit: () => {}, now: () => nowMs,
+  });
+
+  const res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+
+  assert.equal(res.unavailable, 3);
+  assert.equal(res.measured, 0);
+  for (const call of calls) {
+    assert.equal(call.costTruedSource, COST_TRUING_SOURCE.UNAVAILABLE);
+    assert.equal(call.actualCostMicroCents, null);
+    assert.equal(call.costTruingAttempts, 1);
+  }
+  assert.deepStrictEqual(structuredClone(state.usage), usageBefore, "keine Korrektur, insbesondere keine Rueckerstattung");
+  assert.ok(fetchCalls.length < 99, "die Seitenobergrenze beendet die Schleife, statt das Kontingent zu sprengen");
 });

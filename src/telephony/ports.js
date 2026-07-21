@@ -92,10 +92,11 @@
 
 /**
  * @typedef {Object} VoiceCostRecordPoolParams
- * @property {string} [since] - ISO-Untergrenze des Einzugs. AB KE-P3 wirksam (Seitenschleife),
- *   in KE-P2 OHNE WIRKUNG und deshalb von keinem Aufrufer gesetzt: ein entgegengenommener,
- *   still ignorierter Zeit-Parameter waere im Geldpfad genau die Fehlerklasse "falsch, aber
- *   HTTP 200".
+ * @property {string} [since] - ISO-Untergrenze des Einzugs. AB KE-P3 WIRKSAM: bindet
+ *   ausschliesslich die Seitenschleife (Abbruch, sobald eine GANZE Seite aelter ist),
+ *   NIE die Query (ein geratener Zeitfilter liefert HTTP 200 mit 0 Treffern) und NIE den
+ *   Pool-Inhalt. Fehlt/unbrauchbar -> keine Schranke: mehr Anfragen, nie weniger Belege.
+ *   Gesetzt wird er erst ab KE-P5 (aeltester endedAt der Kandidaten minus Marge).
  */
 
 /**
@@ -103,8 +104,8 @@
  * @property {boolean} ok
  * @property {object[]} [raw]     - nur bei ok:true; ROHE Provider-Belege, KEINEM Call zugeordnet
  * @property {boolean} [complete] - nur bei ok:true; false = die Menge ist nachweislich
- *   unvollstaendig. Fuer den Verbraucher dasselbe wie ok:false - aus einer Untermenge laesst
- *   sich keine Rueckerstattung beweisen.
+ *   unvollstaendig (erreichbar ab KE-P3, Seitenobergrenze). Fuer den Verbraucher dasselbe
+ *   wie ok:false - aus einer Untermenge laesst sich keine Rueckerstattung beweisen.
  * @property {string} [reason]    - nur bei ok:false; PII-frei, fuer Logs
  */
 
@@ -131,8 +132,11 @@
  * @property {(params?: VoiceCostRecordPoolParams) => Promise<VoiceCostRecordPool>} [fetchCostRecordPool]
  *   Roh-Belege EINES Sweeps (Provider-CDR), gedacht fuer EINEN Aufruf je Sweep VOR der
  *   Kandidatenschleife: der Abruf ist schleifeninvariant (nur filter[record_type] +
- *   page[size]), die Zuordnung nicht. Telnyx-only wie originateViaCallControl; fehlt die
- *   Methode, faellt der Aufrufer auf "kein Abgleich" zurueck (konservativer Fall).
+ *   page[size] + page[number]), die Zuordnung nicht. Je Typ wird aufsteigend geblaettert,
+ *   bis die letzte Seite erreicht, das Fenster verlassen oder die Seitenobergrenze
+ *   getroffen ist; letzteres liefert complete:false. Telnyx-only wie
+ *   originateViaCallControl; fehlt die Methode, faellt der Aufrufer auf "kein Abgleich"
+ *   zurueck (konservativer Fall).
  *   WIRFT NIE. ok:false heisst "nicht gemessen" und NIEMALS "Kosten = 0".
  * @property {(pool: VoiceCostRecordPool, params: VoiceCostRecordsParams) => VoiceCostRecordsResult} [assignCostRecords]
  *   Ordnet die Belege EINES Pools genau EINEM Call zu - SYNCHRON und ohne Netz (PM-5).
