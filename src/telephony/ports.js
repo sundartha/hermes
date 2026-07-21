@@ -96,7 +96,7 @@
  *   ausschliesslich die Seitenschleife (Abbruch, sobald eine GANZE Seite aelter ist),
  *   NIE die Query (ein geratener Zeitfilter liefert HTTP 200 mit 0 Treffern) und NIE den
  *   Pool-Inhalt. Fehlt/unbrauchbar -> keine Schranke: mehr Anfragen, nie weniger Belege.
- *   Gesetzt wird er erst ab KE-P5 (aeltester endedAt der Kandidaten minus Marge).
+ *   Gesetzt wird er seit KE-P5 vom Sweep: aeltester endedAt der Kandidaten minus Marge.
  * @property {{reserveSlot: () => Promise<void>, waitForWindowReset: (hintMs?: number|null) => Promise<void>}} [throttle]
  *   Drossel am gemessenen Minutenfenster des Providers (40 Anfragen je FIXER UTC-Minute,
  *   Reset auf :00). Default ist die prozessweite Drossel des Adapters mit echter Uhr und

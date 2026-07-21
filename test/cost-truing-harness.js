@@ -89,3 +89,57 @@ export function fakeVoiceControl(byProvider) {
     return impl;
   };
 }
+
+// Der KOEDER aller Beleg-Fixturen (Spec A2): ein Feld, das der Code NICHT als
+// Zuordnungsquelle verwenden darf. Es traegt immer dieselbe FREMDE UUID - liest der Code
+// telnyx_leg_id, kommt kein einziger erwarteter Beleg herein und jede Erwartung faellt.
+const BAIT_LEG_ID = "0bad0bad-0bad-11f1-0bad-0bad0bad0bad0";
+// Gemessenes hartes page[size]-Maximum bzw. eine total_pages-Zahl, die keine Seite je zur
+// letzten macht (Spec A1) - so kann nur die Seitenobergrenze oder `since` die Schleife enden.
+export const MEASURED_PAGE_SIZE = 50;
+export const NEVER_LAST_PAGE_TOTAL = 99;
+
+// Zaehlender, NETZFREIER fetch-Stub der Sweep-Tests mit dem ECHTEN Telnyx-Adapter.
+// bodyFor(recordType, pageNumber) waehlt den Antwortkoerper - genau die beiden
+// Query-Parameter, von denen der Belegabruf abhaengt. Rueckgabe ist die Aufruf-Liste; ihre
+// LAENGE ist in mehreren Tests die eigentliche Zusage (KE-P2/KE-P5).
+export function stubCountingFetch({ status = 200, ok = true, bodyFor = () => ({ data: [] }) } = {}) {
+  const calls = [];
+  global.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    const params = new URL(String(url)).searchParams;
+    const body = bodyFor(params.get("filter[record_type]"), Number(params.get("page[number]")));
+    return { ok, status, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  return calls;
+}
+
+// GEMESSENE sip-trunking-Belegform (Spec A1): Zuordnungs-IDs call_control_id (Anker) +
+// telnyx_session_id, Zeitfelder started_at/finished_at, cost als STRING, billed_sec als
+// Zahl - dazu der Koeder. Der Anker fehlt bewusst, wenn callControlId null ist: das ZWEITE
+// Bein desselben Anrufs traegt ihn laut Messung nicht und kommt nur ueber die Session herein.
+export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null, cost = "0.0401", billedSec = 60 }) {
+  const record = {
+    record_type: "sip-trunking",
+    cost,
+    currency: "USD",
+    telnyx_session_id: sessionId,
+    telnyx_leg_id: BAIT_LEG_ID, // Koeder (A2)
+    started_at: at,
+    finished_at: at,
+    billed_sec: billedSec,
+  };
+  if (callControlId) record.call_control_id = callControlId;
+  return record;
+}
+
+// Eine VOLLE Seite FREMDER Belege (keiner traegt den Anker eines Kandidaten) in der
+// gemessenen Listen-Form {data, meta}.
+export function foreignSipTrunkingPage({ at, idPrefix, totalPages }) {
+  const data = Array.from({ length: MEASURED_PAGE_SIZE }, (_, i) =>
+    measuredSipTrunkingRecord({ at, callControlId: `${idPrefix}_${i}`, sessionId: `sess_${idPrefix}_${i}` }));
+  return {
+    data,
+    meta: { total_results: MEASURED_PAGE_SIZE * totalPages, total_pages: totalPages, page_size: MEASURED_PAGE_SIZE },
+  };
+}
