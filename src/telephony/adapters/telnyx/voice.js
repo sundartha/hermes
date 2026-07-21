@@ -39,9 +39,14 @@ export const COST_RECORD_TYPES = Object.freeze([
   "sip-trunking", "call-control", "speech-to-text",
   "text-to-speech", "recording", "inference", "ai-voice-assistant",
 ]);
-// Eine Seite je Typ. Volle Seite = moeglicher Datenverlust -> fail-closed (ok:false)
-// statt stiller Untermenge; eine Paginierungsschleife haette in P1 keinen Aufrufer.
-const COST_RECORDS_PAGE_SIZE = 250;
+// Eine Seite je Typ, in der GEMESSENEN Maximalgroesse: page[size] deckelt hart bei 50 -
+// angefordert 250/100/50 liefert meta.page_size immer 50 (Messung 2026-07-21, Telnyx-Doku
+// nennt dasselbe Maximum). Genau daran war die fruehere 250 eine TOTE Sicherung: die
+// Antwort konnte diese Laenge nie erreichen, der Vergleich nie greifen. Ob eine Seite die
+// ganze Menge ist, entscheidet ab jetzt meta.total_pages AUS DER ANTWORT
+// (isSinglePageResult) - nie die selbst angeforderte Groesse. Eine Paginierungsschleife
+// haette hier weiterhin keinen Aufrufer; eine unvollstaendige Seite ist fail-closed.
+const COST_RECORDS_PAGE_SIZE = 50;
 // Zuordnung Beleg -> Call, ZWEISTUFIG (LCT-FIX-1). Die frueheren Kandidaten leg_id/
 // call_leg_id liefert Telnyx nicht bzw. nur als UUID eines ANDEREN ID-Systems - damit wurde
 // live JEDER Beleg verworfen (297 Belege, Messung 2026-07-21).
@@ -151,9 +156,21 @@ function logCallControlOk(op, status, ccidPresent) {
 // Telnyx-v2 wrappt manche Antworten in {data}, andere nicht - beide Formen abdecken (G5:
 // EINE Unwrap-Stelle). Body nicht lesbar/kein JSON -> {} (Aufrufer liest nur optionale
 // Felder). Non-destruktiv, nur auf dem Erfolgspfad (assertTelnyxOk hat !ok bereits verworfen).
-async function parseTelnyxResource(res) {
+//
+// EINE Auswertung, ZWEI Projektionen (Muster telnyxErrorEnvelope in ./errors.js): `data`
+// ist die Nutzlast wie bisher, `meta` das Seiten-Objekt einer LISTEN-Antwort
+// ({total_results, total_pages, page_size}, Messung 2026-07-21). Das blosse Unwrappen
+// wirft meta strukturell weg - und genau dort haengt die Vollstaendigkeits-Aussage des
+// Belegabrufs. Kein zweiter Unwrap-Ausdruck daneben (G5).
+async function parseTelnyxBody(res) {
   const json = await res.json().catch(() => ({}));
-  return json.data || json;
+  return { data: json.data || json, meta: json.meta };
+}
+
+// Bestands-Projektion fuer EINZEL-Ressourcen (originateCall, originateViaCallControl):
+// nur die Nutzlast, Verhalten und Rueckgabeform unveraendert.
+async function parseTelnyxResource(res) {
+  return (await parseTelnyxBody(res)).data;
 }
 
 // Gemeinsames Fetch-Skelett fuer Call-Control-Actions (G5): endCallViaCallControl und
@@ -320,11 +337,34 @@ function logCostRecordsFailure(recordType, err) {
   );
 }
 
+// Eine Listen-Antwort mit hoechstens dieser Seitenzahl ist mit EINER Anfrage vollstaendig
+// eingesammelt. Gemessen: meta = {total_results:212, total_pages:5, page_size:50} mit
+// total_pages = ceil(total_results / page_size) - bei leerer Menge 0.
+const SINGLE_PAGE_TOTAL = 1;
+
+// Passt die GANZE Ergebnismenge auf die eine geholte Seite? Autoritativ ist
+// meta.total_pages AUS DER ANTWORT, nie die selbst angeforderte page[size]: gegen die
+// eigene Anforderung zu pruefen bestaetigt nur, was man selbst gesendet hat - das war die
+// tote Sicherung. Kein brauchbares total_pages (fehlt, kein Zahlwert, Provider-Drift):
+// eine VOLLE Seite ist dann unbewiesen -> fail-closed; eine KURZE Seite kann keine
+// Fortsetzung haben, der Provider haette sie sonst gefuellt.
+function isSinglePageResult(records, meta) {
+  const totalPages = parseNonNegativeInteger(meta?.total_pages);
+  if (totalPages !== null) return totalPages <= SINGLE_PAGE_TOTAL;
+  return records.length < COST_RECORDS_PAGE_SIZE;
+}
+
 // Eine Typ-Abfrage gegen /v2/detail_records. Wirft NICHT: Ergebnis-Objekt wie die Port-
-// Methode selbst (G31). Server-Filter sind NUR filter[record_type] + page[size] (Kap. 2.6
-// belegt genau diese zwei) - das Zeitfenster wird NICHT als Query-Parameter geraten (die
-// Parameternamen sind UNBELEGT); die Fensterpruefung laeuft ausschliesslich client-seitig
-// in toCostRecord. Jeder Wurf und jedes rejectende fetch (Netzfehler/Timeout) wird zu
+// Methode selbst (G31). Erlaubte Server-Parameter sind AUSSCHLIESSLICH filter[record_type]
+// und page[size] (plus page[number], sobald es eine Seitenschleife gibt). JEDER weitere
+// filter[...]-Parameter ist verboten, solange keine Messung ihn belegt: ein falscher
+// Filtername liefert HTTP 200 mit 0 Treffern, KEINEN Fehler (gemessen 2026-07-21:
+// filter[created_at][gte] auf sip-trunking -> 200/0, obwohl das Feld dort nicht existiert)
+// - stiller Datenverlust, der wie eine leere Menge aussieht. Das Zeitfenster wird deshalb
+// nie als Query gesendet; die Fensterpruefung laeuft ausschliesslich client-seitig in
+// toCostRecord. Eine Seite, die die Menge nachweislich nicht ausschoepft, ist ein
+// moeglicher Datenverlust -> fail-closed (page_truncated), nie eine stille Untermenge.
+// Jeder Wurf und jedes rejectende fetch (Netzfehler/Timeout) wird zu
 // { ok:false, reason:"provider_error" } - unveraendert; SICHTBAR ist der Fehler seit KE-P0
 // ueber logCostRecordsFailure (Status + Telnyx-Code, PII-frei).
 async function fetchCostRecordPage(recordType) {
@@ -336,9 +376,10 @@ async function fetchCostRecordPage(recordType) {
       headers: headers(),
     });
     await assertTelnyxOk(res, "getVoiceCostRecords", ATTACH_STATUS);
-    const raw = await parseTelnyxResource(res);
-    if (!Array.isArray(raw)) return { ok: false, reason: "shape_unexpected" };
-    return { ok: true, raw };
+    const { data, meta } = await parseTelnyxBody(res);
+    if (!Array.isArray(data)) return { ok: false, reason: "shape_unexpected" };
+    if (!isSinglePageResult(data, meta)) return { ok: false, reason: "page_truncated" };
+    return { ok: true, raw: data };
   } catch (err) {
     logCostRecordsFailure(recordType, err);
     return { ok: false, reason: "provider_error" };
@@ -347,14 +388,14 @@ async function fetchCostRecordPage(recordType) {
 
 // Alle Roh-Belege der abgefragten Typen einsammeln - die Zuordnung entscheidet erst auf der
 // VOLLEN Antwort (Stufe 1 findet den Anker moeglicherweise erst im letzten Typ). Ergebnis-
-// Objekt wie die Port-Methode (G31), KEIN Teil-Erfolg: die erste fehlschlagende oder volle
-// Seite bricht ab.
+// Objekt wie die Port-Methode (G31), KEIN Teil-Erfolg: der erste nicht-ok-Ausgang bricht
+// ab. Die Vollstaendigkeit EINER Seite beurteilt fetchCostRecordPage - dort liegt das meta
+// der Antwort, und eine zweite Beurteilung hier waere eine zweite Wahrheit (G5).
 async function fetchAllCostRecords() {
   const rawRecords = [];
   for (const recordType of COST_RECORD_TYPES) {
     const page = await fetchCostRecordPage(recordType);
     if (!page.ok) return page;
-    if (page.raw.length === COST_RECORDS_PAGE_SIZE) return { ok: false, reason: "page_truncated" };
     rawRecords.push(...page.raw);
   }
   return { ok: true, raw: rawRecords };
