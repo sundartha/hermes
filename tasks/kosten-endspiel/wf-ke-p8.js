@@ -5,16 +5,11 @@
 //  2) Modelle sind EXPLIZIT je agent() gepinnt, nie geerbt: Opus fuer Plan und
 //     Safety-Review, Sonnet fuer Implementierung, Clean-Code-Audit, Fix und Report.
 
-// ==PIN-START== (einziger Block, der je Phase abweicht)
-const PHASE = "KE-P8";
-const PHASE_TITLE = "Bruchpunkt-Waechter";
-const BRANCH = "phase/ke-p8-waechter";
-// ==PIN-END==
-
+// ==PIN-START== (einziger Block, der je Phase abweicht; meta MUSS erste Anweisung sein)
 export const meta = {
-  name: "wf-ke-phase",
+  name: "wf-ke-p8",
   description:
-    "Kosten-Endspiel: eine Phase umsetzen (Plan -> Impl im Worktree -> dualer Review -> Self-Fix bis PASS -> Report).",
+    "Kosten-Endspiel KE-P8: Bruchpunkt-Waechter (Plan -> Impl im Worktree -> dualer Review -> Self-Fix bis PASS -> Report).",
   phases: [
     { title: "Plan", detail: "Code-gegroundeter Umsetzungsplan (Opus)", model: "opus" },
     { title: "Implementieren", detail: "Umsetzung im Worktree, npm test gruen, commit (Sonnet)" },
@@ -23,6 +18,10 @@ export const meta = {
     { title: "Report", detail: "Detailbericht in tasks/ke-p<N>-report.md (Sonnet)" },
   ],
 };
+const PHASE = "KE-P8";
+const PHASE_TITLE = "Bruchpunkt-Waechter";
+const BRANCH = "phase/ke-p8-waechter";
+// ==PIN-END==
 
 const BASE = "master";
 const PLAN_DOC = "PLAN-KOSTEN-ENDSPIEL.md";
