@@ -42,6 +42,7 @@ test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", asyn
     costCents: 0,
     costMicroCentsRem: 0,
     costCorrectionMicroCentsRem: 0, // LCT P4: neues emptyUsage()-Feld
+    ttsCharacters: 0, // KE-P6: neues emptyUsage()-Feld
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,

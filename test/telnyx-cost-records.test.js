@@ -26,6 +26,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { captureConsole, makeConfigOverrides } from "./helpers.js";
+// KE-P6 (Aenderung 1): boot-guard.js hat NULL Imports (kein Config-/Spawn-Risiko) - statisch
+// importierbar wie helpers.js, ohne die env-vor-dynamischem-Import-Reihenfolge zu verletzen.
+import { costTruingBookingFindings, COST_TRUING_BOOKING_FINDING } from "../src/boot-guard.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -1097,6 +1100,97 @@ test("(P3-11) die Zeitfeld-Tabelle deckt GENAU die abgerufenen Typen ab (keine z
     Object.keys(COST_RECORD_TIME_FIELDS).sort(),
     [...ASSIGNABLE_COST_RECORD_TYPES].sort(),
   );
+});
+
+// ---- (j) KE-P6: ElevenLabs-Zeichen am Beleg + Boot-Guard-Kopplung ----
+
+// KE-P6 (Aenderung 1): die KOPPLUNG, nicht die Konstante. Die abgerufene Typenmenge wird aus
+// den ECHTEN (gestubbten) HTTP-Anfragen abgeleitet und der Boot-Guard dagegen gehalten.
+// Eine Assertion, die auf BEIDEN Seiten ASSIGNABLE_COST_RECORD_TYPES einsetzt, pruefte nur,
+// dass dieselbe Konstante zweimal importiert wurde - sie koennte eine von Hand gepflegte
+// Abruf-Liste (Entkopplung) nicht falsifizieren. Dieser Test kann es.
+test("(P6-1) Abruf-Typenmenge und Boot-Guard-Allowlist stammen aus DERSELBEN Quelle", async () => {
+  const calls = stubRealRecords(); // bietet ALLE 7 Typen an, auch inference
+  await fetchPool();
+  const fetched = [...new Set(calls.map((c) => new URL(c.url).searchParams.get("filter[record_type]")))];
+  assert.ok(fetched.length > 0, "ohne abgerufene Typen pruefte der Test nichts");
+
+  const guard = (t) => costTruingBookingFindings({
+    requiredRecordTypes: [t], assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
+    coveragePercent: 100, minCoveragePercent: 80,
+  });
+  for (const t of fetched)
+    assert.deepEqual(guard(t), [], `abgerufener Typ ${t} muss als Pflicht-Typ zulaessig sein`);
+  const notFetched = COST_RECORD_TYPES.filter((t) => !fetched.includes(t));
+  assert.ok(notFetched.length > 0, "ohne nicht abgerufenen Typ pruefte die Gegenrichtung nichts");
+  for (const t of notFetched)
+    assert.equal(guard(t)[0]?.code, COST_TRUING_BOOKING_FINDING.REQUIRED_TYPES_UNASSIGNABLE,
+      `nicht abgerufener Typ ${t} muss als Pflicht-Typ FATAL abgelehnt werden`);
+});
+
+// GEMESSENE ElevenLabs-Belegform (Plan F6): provider + number_of_characters am
+// text-to-speech-Beleg, cost in SCI-Notation. Der Koeder call_leg_id kommt aus der
+// gemeinsamen Feld-Tabelle (realRecord) - liest der Code ihn als Zuordnungsquelle, faellt
+// jede Erwartung.
+const elevenLabsTtsRecord = ({ chars, ids = OWN_IDS, provider = "elevenlabs", cost = "1.666E-4" }) =>
+  realRecord("text-to-speech", { cost, ids, extraFields: { provider, number_of_characters: chars } });
+
+test("(P6-2) ElevenLabs-Zeichen reisen am zugeordneten text-to-speech-Beleg mit", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })], // Anker
+    "text-to-speech": [elevenLabsTtsRecord({ chars: 238 })],
+  });
+  const res = await fetchAndAssign(WINDOW);
+  const tts = res.records.find((r) => r.recordType === "text-to-speech");
+  assert.equal(tts.ttsCharacters, 238);
+  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").ttsCharacters, null,
+    "Nicht-TTS-Belege tragen null, nie 0 - 0 waere eine gemessene Null");
+});
+
+// (P6-3) war urspruenglich EIN Test mit BEIDEN Bedingungen im selben Beleg
+// (chars:"viele", provider:"aws-polly") - "viele" ist fuer sich genommen schon
+// unparsbar, "aws-polly" fuer sich genommen schon der falsche Provider. Damit blieb
+// der Test gruen, wenn man in elevenLabsCharactersOf NUR den Provider-Waechter ODER
+// NUR den record_type-Waechter entfernte - er bestaetigte die eigene Annahme statt
+// sie zu falsifizieren (Spec A2). Drei getrennte Faelle, je EINEN Waechter isoliert
+// und mit sonst gueltigen Werten - fehlt einer, ist genau ein Fall betroffen:
+test("(P6-3a) fremder TTS-Provider zaehlt NICHT auf den ElevenLabs-Zaehler - auch mit gueltiger Menge (Provider-Waechter)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
+    "text-to-speech": [elevenLabsTtsRecord({ chars: 238, provider: "aws-polly" })],
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.equal(res.records.find((r) => r.recordType === "text-to-speech").ttsCharacters, null);
+});
+
+test("(P6-3b) eine unparsbare Zeichen-Menge zaehlt NICHT - auch beim echten ElevenLabs-Provider (Parser-Waechter)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
+    "text-to-speech": [elevenLabsTtsRecord({ chars: "viele", provider: "elevenlabs" })],
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.equal(res.records.find((r) => r.recordType === "text-to-speech").ttsCharacters, null);
+});
+
+test("(P6-3c) ein Nicht-TTS-Beleg zaehlt NICHT - auch mit elevenlabs-Provider und gueltiger Menge (record_type-Waechter)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", {
+      cost: "0.0401", billedSec: 60,
+      extraFields: { provider: "elevenlabs", number_of_characters: 99 },
+    })],
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").ttsCharacters, null);
+});
+
+test("(P6-4) ein NICHT zugeordneter ElevenLabs-Beleg liefert keine Zeichen (fail-closed)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
+    "text-to-speech": [elevenLabsTtsRecord({ chars: 999, ids: FOREIGN_POOL_IDS })], // fremde Session
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.ok(!res.records.some((r) => r.recordType === "text-to-speech"),
+    "fremder Beleg kommt nicht herein - und damit auch seine Zeichen nicht");
 });
 
 // ---- (i) KE-P4: Drossel am gemessenen Minutenfenster ----

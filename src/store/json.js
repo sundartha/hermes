@@ -581,6 +581,15 @@ export function platformTtsUsageView(nowIso) {
   return ops.platformTtsUsageView(load(), config.billing, nowIso);
 }
 
+// ---- ElevenLabs-Zeichen pro Tenant (KE-P6) ----
+// PERSISTIERT (usage-Bucket) -> save() NUR bei changed (Muster recordTtsCharacters daneben).
+// KEIN cfg-Parameter: die Operation kennt weder Zyklus noch Schwelle.
+export function recordTenantTtsCharacters(tenantId, chars) {
+  const r = ops.recordTenantTtsCharacters(load(), tenantId, chars);
+  if (r.changed) save();
+  return r;
+}
+
 // ---- Per-Tenant-Budget + Metering (P6b3) ----
 export function setTenantBudget(tenantId, amounts) {
   const row = ops.setTenantBudget(load(), tenantId, amounts);

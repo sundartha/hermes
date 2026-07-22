@@ -309,6 +309,15 @@ ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_cost_cents BIGINT NOT NUL
 -- wirft hier echtes Geld weg, dort nicht. Wertebereich [0, 1e12).
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS cost_correction_micro_cents_rem BIGINT NOT NULL DEFAULT 0;
 
+-- KE-P6: ElevenLabs-Zeichen PRO TENANT (Plan F6). Quelle ist der zugeordnete Telnyx-Beleg
+-- (record_type text-to-speech, provider 'elevenlabs', number_of_characters) - damit misst
+-- diese Achse auch den Assistant-Pfad, auf dem Telnyx serverseitig synthetisiert und unser
+-- Prozess bisher 0 Zeichen sah. NEBEN der globalen Singleton-Tabelle platform_tts_usage,
+-- die den Play-TTS-Pfad misst und unveraendert bleibt. BIGINT = Ganzzahl (G26), Lebenszeit-
+-- Summe wie calls. RLS: erbt tenant_isolation der usage-Tabelle (Spalte, keine neue Tabelle).
+-- REINE SICHTBARKEIT: kein Gate liest sie.
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS tts_characters BIGINT NOT NULL DEFAULT 0;
+
 -- profile: GLOBAL, keine Tenant-Bindung (Rechteprofile sind betreiber-/admin-weit, nicht pro
 -- Telefon-Workspace). Phase S: die Profil-Rechte-Achse keyt auf die tenantId (vormals email).
 -- tenant_id ist alleiniger PK (honest naming - die Spalte haelt jetzt tenantIds). Sanitisiertes

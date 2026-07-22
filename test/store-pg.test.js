@@ -57,6 +57,7 @@ test("frischer pg-Zustand == frischer json-Zustand (Defaults)", async () => {
     costCents: 0,
     costMicroCentsRem: 0,
     costCorrectionMicroCentsRem: 0, // LCT P4: neues emptyUsage()-Feld
+    ttsCharacters: 0, // KE-P6: neues emptyUsage()-Feld
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,

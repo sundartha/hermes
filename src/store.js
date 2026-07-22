@@ -137,6 +137,10 @@ export const {
   // UND makeBillingRoutes wuerfen zur Laufzeit einen TypeError. Muster claimPlatformSpendWarning.
   recordTtsCharacters,
   platformTtsUsageView,
+  // ElevenLabs-Zeichen pro Tenant (KE-P6): OHNE diesen Re-Export waere
+  // store.recordTenantTtsCharacters undefined -> billing/cost-truing.js wuerfe zur Laufzeit
+  // einen TypeError. Muster recordTtsCharacters.
+  recordTenantTtsCharacters,
   usageOf,
   addNotification,
   pruneOldData,

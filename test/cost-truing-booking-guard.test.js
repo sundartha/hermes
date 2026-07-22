@@ -152,6 +152,20 @@ test("(n3) nie zuordenbarer Typ in der Pflicht-Menge -> Boot-Refusal, nennt den 
   assert.doesNotMatch(output, /Gateway laeuft/);
 });
 
+// KE-P6: (n3) beweist, dass der ECHTE Boot einen nicht zuordenbaren Pflicht-Typ ablehnt.
+// Dies ist die Gegenrichtung: die VOLLE Menge der zuordenbaren Typen - also genau die Menge,
+// die der Abruf holt - muss der Boot akzeptieren. Zusammen pinnen beide die Verdrahtung in
+// boot.js (assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES), nicht nur den reinen Guard.
+test("(n4) die VOLLE Menge der zuordenbaren Typen als Pflicht-Menge -> Server startet", async () => {
+  const srv = await startServer({ env: { COST_TRUING_REQUIRED_RECORD_TYPES: ASSIGNABLE.join(",") } });
+  try {
+    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+  } finally {
+    await srv.stop();
+  }
+});
+
 // ---- (p) Deckungsquote-WARN am Boot: genau eine Zeile, kein Boot-Refusal ----
 // Seed-Bauer outboundCallsSeed (G5): geteilt mit voice-tariff-full-cost-guard.test.js,
 // definiert in test/helpers.js. 5 Calls, davon `proven` bewiesen, IDs mit Praefix call_p_.
