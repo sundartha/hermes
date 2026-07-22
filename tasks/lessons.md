@@ -112,3 +112,22 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   Budget-Guard nicht (`reconcileOutboundVoiceBudget` steigt bei Inbound aus) - der
   einzige Deckel ist `MAX_CALL_DURATION_S`. `MAX_EMPTY_TURNS` darf deshalb nie ueber 3
   gedreht werden.
+
+---
+
+## Live-Forensik (2026-07-22, Kosten-Endspiel-Verifikation)
+
+- **Eine auffaellige Betriebszahl NICHT durch die naechstliegende Env-Variable erklaeren.**
+  `anfragen=16` statt erwarteter 6-14 wurde spontan `COST_TRUING_MAX_ATTEMPTS=20`
+  zugeschrieben - plausibel, aber falsch (der Wert stand auf 5). Der Umfang haengt an
+  `poolSinceFor()`: dem Minimum des `endedAt` ueber ALLE Kandidaten. Regel: bevor eine Zahl
+  einer Konfiguration zugeschrieben wird, die Stelle lesen, die sie erzeugt. Eine plausible
+  Erklaerung ist keine gemessene.
+- **Deploy-Checklisten in `tasks/` sind Momentaufnahmen, kein Live-Zustand.** Beide
+  Checklisten sagten "nicht deployed", live lief der volle Stand. EINZIGE Quelle ist der
+  `[boot] deployed commit=<sha>`-Banner im Render-Log.
+- **Zwei aufeinanderfolgende Sweeps sagen mehr als einer.** Der Befund (Dauer-Leerlauf) wurde
+  erst sichtbar, als der zweite Sweep dieselbe `uebersprungen=`-Zahl bei geschrumpfter
+  Kandidatenmenge zeigte. Bei periodischen Jobs immer >=2 Laeufe vergleichen.
+- **Call-IDs sind Zeitstempel:** `call_` + `Date.now().toString(36)` in den ersten 8 Zeichen.
+  Damit laesst sich ein bestimmter Anruf ohne DB-Zugriff in Sweep-Logs wiederfinden.
