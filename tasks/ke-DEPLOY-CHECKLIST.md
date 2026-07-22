@@ -1,5 +1,13 @@
 # Deploy-Checkliste Kosten-Endspiel (KE-P0 .. KE-P8)
 
+> **UEBERHOLT ab 2026-07-22, 08:15 UTC:** KE-P0..P8 sind LIVE (Deploy `5c2c59e`,
+> Boot-Banner verifiziert). Der Satz "nicht deployed" unten galt bis zu diesem
+> Deploy. Die Live-Verifikation nach Kap. 4 ist gelaufen und BESTANDEN, ihr
+> Ergebnis steht in Kap. 7. **Einzige Wahrheit ueber den Live-Stand ist immer der
+> `[boot] deployed commit=<sha>`-Banner im Render-Log, nie diese Datei.**
+>
+> **Offen und NICHT deployed: KE-P9** (Merge `65f4aff`) — s. Kap. 8.
+
 Stand 2026-07-22. Code auf `master`, **nicht deployed**. Live laeuft weiterhin `3516c31`.
 
 Diese Liste ist fuer den Owner. Alles darin ist Owner-Aktion — die Umsetzung hat bewusst
@@ -187,3 +195,81 @@ die an ihre eigene Verletzung angepasst wird.
 `git revert` des jeweiligen Merge-Commits, oder Deploy des vorherigen Commits. Die
 Schema-Spalte kann bleiben (`DEFAULT 0`, kein Leser ausserhalb der neuen Achse) — sie muss
 fuer einen Rollback **nicht** entfernt werden.
+
+---
+
+## 7. Ergebnis der Live-Verifikation (2026-07-22, Deploy `5c2c59e`)
+
+Erster Sweep nach dem Deploy, `trigger=interval` um 09:15:15 UTC (Deploy 08:15 +
+1 h Kadenz — der neue `COST_TRUING_SWEEP_INTERVAL_MS`-Default greift):
+
+```
+kandidaten=33 gemessen=3 unvollstaendig=0 ohne_schaetzung=27 unbestimmt=0
+uebersprungen=3 anfragen=16 seiten=16 pool=697 vollstaendig=true
+```
+
+Abnahme gegen Kap. 4.3:
+
+| # | Bedingung | Ist | |
+| --- | --- | --- | --- |
+| 1 | `anfragen=` einstellig bis niedrig zweistellig (vorher 224) | **16** | knapp ueber der Erwartung 6–14, Ursache in Kap. 8 |
+| 2 | `vollstaendig=true` | ja | OK |
+| 3 | `gemessen= > 0` (vorher 0) | **3** | OK |
+| 4 | kein `status=429` | keiner | OK |
+
+Kap. 4.4 (Geld-Sonde): `via_anchor=3` von 7 Belegen — dieselbe Groessenordnung wie
+die Vormessung (4/7 bzw. 9/10). **Kein Sprung, kein Fremdbeleg-Verdacht.**
+
+Die Korrekturbuchung ist an einem echten Anruf belegt (`call_mrvtfqleeurd`,
+Outbound 08:23:48 UTC):
+
+```
+Kosten-Drift ist_usd_mikrocent=9426030 schaetzung_eur_cent=20 abweichung=52%
+korrektur    delta_eur_cent=-11 gebucht=true
+```
+
+9,426 USD-ct x 0,92 = 8,67 -> 9 EUR-ct Ist gegen 20 ct Schaetzung. Die 2,5-fache
+Ueber-Reservierung ist damit real geheilt. Der Verzug von 30 min (KE-P6B) ist
+mitbewiesen: mit den alten 180 min waere der Anruf in diesem Sweep nicht faellig
+gewesen.
+
+Nicht als Fehler gewertet (Kap. 4.6): Deckung 11 % (vor dem Sweep 2 %) unter der
+80-%-Schwelle, `ohne_schaetzung=27` aus dem Altbestand.
+
+---
+
+## 8. KE-P9 — gemergt, NICHT deployed
+
+Die Live-Verifikation hat einen Folgedefekt sichtbar gemacht, den der Sweep
+danach zeigte:
+
+```
+10:15:15  kandidaten=3 gemessen=0 ... uebersprungen=3
+          anfragen=11 seiten=11 pool=474 vollstaendig=true
+```
+
+**11 Anfragen und 474 Belege, um 3 Calls zu ueberspringen** — stuendlich, dauerhaft.
+Uebersprungene Calls (keine Leg-Referenz) werden nie geschlossen und bleiben
+Kandidaten; `poolSinceFor` bildete die Zeitschranke aber ueber ALLE Kandidaten.
+Ein einziger solcher Call fror `since` damit dauerhaft ein, der Pool waechst mit
+dem gesamten Kontoverkehr — bis ein Typ die Seitenobergrenze reisst, dann kippt
+`vollstaendig` auf `false` und **keine Rueckerstattung ist mehr moeglich**
+(Kap. 4.5 nennt genau das einen Rollback-Grund). Der Bruchpunkt-Waechter aus
+KE-P8 greift dabei nicht: er misst die Anfragezahl, die zweistellig bleibt.
+
+Das erklaert zugleich `anfragen=16` in Kap. 7 — nicht `COST_TRUING_MAX_ATTEMPTS`
+(der steht auf 5).
+
+**Fix:** Merge `65f4aff` (Spec `tasks/ke-p9-spec.md`, Report
+`tasks/ke-p9-report.md`). Eine Bedingung (`isRetrievable`) bestimmt Abruf-Umfang,
+Zeitschranke und Buchungsschleife. Suite 2935/0, Gate PASS ohne Fix-Runde,
+Rot-vor-Gruen im Wegwerf-Worktree unabhaengig nachgestellt.
+
+**Erwartete Wirkung nach dem Deploy — das Abnahmekriterium:**
+
+```
+kandidaten=3 ... uebersprungen=3 anfragen=0 seiten=0 pool=0 vollstaendig=true
+```
+
+Keine Env-Aenderung, keine Schema-Aenderung, keine neue Variable. Rollback:
+`git revert` des Merge-Commits.
