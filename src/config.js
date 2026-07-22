@@ -31,6 +31,12 @@ const fatalConfigErrors = [];
 const NUM_ENV_INTEGER_PATTERN = /^[+-]?\d+$/;
 const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 
+// Groesster Wert, den Node fuer setTimeout/setInterval als Verzoegerung annimmt
+// (32-Bit-signed-Millisekunden). Darueber warnt Node (TimeoutOverflowWarning) und setzt
+// die Verzoegerung auf 1 ms - aus einem vertippten "sehr selten" wuerde lautlos ein
+// Dauerlauf im Millisekundentakt. Deshalb wird geklemmt statt durchgereicht.
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 // Leere/abwesende Var -> dokumentierter Default (KEIN Fatal); nur gesetzt-aber-
 // ungueltig ist fatal. max ist ein bewusster Clamp (Obergrenze wie maxCallDurationS),
 // kein Fehler. Die Diagnose nennt nur Var + Erwartung, NIE einen Wert (numEnv
@@ -382,10 +388,27 @@ const rawConfig = {
   }),
   // ---- Kosten-Abgleich im Beobachtungsmodus (LCT P3) ----
   // Aufschub, bevor ein beendeter Call abgeglichen wird. KONFIGURATION, keine
-  // Code-Konstante: die CDR-Latenz ist UNBELEGT (Kap. 2.6 des Plans) - empirisch
-  // erscheinen Calls Stunden spaeter, zugesichert ist nichts. Wird nach dem ersten
-  // Live-Beleg nachgezogen statt geraten und vergessen.
-  costTruingDelayMinutes: numEnv("COST_TRUING_DELAY_MINUTES", process.env.COST_TRUING_DELAY_MINUTES, { fallback: 180, min: 0 }),
+  // Code-Konstante. Seit KE-P6B GEMESSEN statt geraten: der Testanruf vom 2026-07-21
+  // (PLAN-KOSTEN-ENDSPIEL.md F3) hatte spaetestens 133 s nach Gespraechsende alle Belege
+  // vollstaendig UND wertrichtig - 30 min sind der 13-fache Sicherheitsabstand. Der
+  // Abstand deckt zusaetzlich die Laufzeit EINES Sweeps ab: 6 zuordenbare Typen x
+  // hoechstens 10 Seiten = 60 Anfragen, bei 30 Anfragen je fixer UTC-Minute (Drossel
+  // KE-P4) also hoechstens 2 min Versatz zwischen erstem und letztem Typ.
+  costTruingDelayMinutes: numEnv("COST_TRUING_DELAY_MINUTES", process.env.COST_TRUING_DELAY_MINUTES, { fallback: 30, min: 0 }),
+  // Kadenz des Abgleich-Sweeps. Bis KE-P6B eine hartkodierte Modul-Konstante in
+  // billing/cost-truing.js (6 h); jetzt EINE Quelle, und zwar hier - der Wert bestimmt,
+  // wie lange die Ueberreservierung eines Anrufs im Topf steht, und ist damit ein
+  // Betriebsknopf (G35), kein Implementierungsdetail. boot.js registriert das Intervall.
+  // min: eine Kadenz unter einer Minute kann nicht einmal EIN Kontingentfenster des
+  // Providers ausschoepfen (gemessen 40 Anfragen je fixer UTC-Minute) und braennte
+  // stattdessen den PERSISTIERTEN Versuchszaehler jedes Kandidaten binnen Minuten ab -
+  // die Calls waeren danach dauerhaft 'unavailable' und nie wieder Kandidat.
+  // max: ueber MAX_TIMER_DELAY_MS faellt Nodes Timer lautlos auf 1 ms zurueck.
+  costTruingSweepIntervalMs: numEnv("COST_TRUING_SWEEP_INTERVAL_MS", process.env.COST_TRUING_SWEEP_INTERVAL_MS, {
+    fallback: 60 * 60 * 1000,
+    min: 60 * 1000,
+    max: MAX_TIMER_DELAY_MS,
+  }),
   // Obergrenze der Abgleich-Versuche je Call (gezaehlt im PERSISTIERTEN
   // costTruingAttempts). Danach gilt der Call als abgeschlossen + 'unavailable', damit
   // der Job nicht ewig gegen tote Calls laeuft. min 1 - 0 hiesse "nie abgleichen".
@@ -409,12 +432,13 @@ const rawConfig = {
   costTruingMinCoveragePercent: numEnv("COST_TRUING_MIN_COVERAGE_PERCENT", process.env.COST_TRUING_MIN_COVERAGE_PERCENT, { fallback: 80, min: 0, max: 100 }),
   // Stillstands-Grenze: so viele aufeinanderfolgende Sweeps unter der Schwelle ->
   // Eskalation + Owner-Entscheidung (Ursache beheben oder Abbruch nach P3/P5).
-  // 8 x 6 h = rund zwei Tage.
+  // 8 x 1 h Kadenz (COST_TRUING_SWEEP_INTERVAL_MS) = rund 8 h statt frueher zwei Tage.
   costTruingCoverageStallSweeps: numEnv("COST_TRUING_COVERAGE_STALL_SWEEPS", process.env.COST_TRUING_COVERAGE_STALL_SWEEPS, { fallback: 8, min: 1 }),
   // Ab welcher relativen Abweichung Ist/Schaetzung eine WARN-Zeile faellt (D2).
   costDriftWarnPercent: numEnv("COST_DRIFT_WARN_PERCENT", process.env.COST_DRIFT_WARN_PERCENT, { fallback: 50, min: 0 }),
-  // Entprellfenster je Befund-Code (Default 24 h). Ohne sie meldete der 6-h-Sweep
-  // denselben Befund viermal am Tag und trainierte den Kanal taub. P5 nutzt dasselbe Feld.
+  // Entprellfenster je Befund-Code (Default 24 h). Ohne sie meldete der Sweep denselben
+  // Befund in JEDER Kadenz erneut (bei der KE-P6B-Kadenz von 1 h 24-mal am Tag) und
+  // trainierte den Kanal taub. P5 nutzt dasselbe Feld.
   costAlertDebounceMs: numEnv("COST_ALERT_DEBOUNCE_MS", process.env.COST_ALERT_DEBOUNCE_MS, { fallback: 24 * 60 * 60 * 1000, min: 0 }),
   // ---- Drift-Waechter (LCT P5, misst - justiert NICHT) ----
   // Mindest-Stichprobe je Praefix; darunter gibt es KEINE Tarif-Aussage und KEINEN
@@ -1032,7 +1056,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

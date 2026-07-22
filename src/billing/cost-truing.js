@@ -29,12 +29,6 @@ import { nextCostTruingAttempt } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 
-// Sweep-Kadenz (Muster RETENTION_SWEEP_INTERVAL_MS, src/boot.js). Exportiert: boot.js
-// registriert das Intervall selbst (der Job macht Provider-IO und laeuft NICHT beim
-// Boot, s. Modul-Kommentar dort) - EINE Quelle statt einer zweiten, unabhaengig
-// gepflegten Zahl.
-export const COST_TRUING_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
-
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });
@@ -130,7 +124,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   let sweepRunning = false;
 
   // Entprellfenster je Befund-Code (COST_ALERT_DEBOUNCE_MS, Default 24 h). Ohne sie
-  // meldete der 6-h-Sweep denselben Befund viermal am Tag und trainierte den Kanal taub.
+  // meldete der Sweep denselben Befund in jeder Kadenz erneut (bei der KE-P6B-Kadenz von
+  // 1 h 24-mal am Tag) und trainierte den Kanal taub.
   // Ein Schluessel, zwei Nutzer: P3 entprellt je Befund-Code, P5 keyt zusaetzlich auf den
   // Praefix ("<praefix> <code>"). BEWUSST DIESELBE Map und DIESELBE Regel - eine zweite
   // Entprellung mit eigenem Fenster liefe beim ersten Nachziehen auseinander.
@@ -492,7 +487,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
   // hoechstens EINE Meldung je Praefix und Befund-Code je COST_ALERT_DEBOUNCE_MS (24 h) ->
   // bei 3 Praefixen x 3 alarmierenden Codes (ALERTABLE_DRIFT_CODES) maximal 9 SMS am Tag,
-  // statt 4 Meldungen je Befund und Tag aus dem 6-h-Sweep. Der Schluessel traegt den Code,
+  // statt einer Meldung je Befund und Sweep. Der Schluessel traegt den Code,
   // conversion_error entprellt also getrennt von under-/overestimate.
   function alertDrift(entry, nowMs) {
     if (!shouldEmitFinding(`${entry.prefix} ${entry.code}`, nowMs)) return;

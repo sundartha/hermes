@@ -194,8 +194,13 @@ services:
       - key: PROVIDER_TO_BUCKET_RATE_MICRO
         value: "920000"
       # ---- Kosten-Abgleich im Beobachtungsmodus (LCT P3, misst - bucht NICHT) ----
+      # KE-P6B: Verzug GEMESSEN (F3: Belege spaetestens 133 s nach Gespraechsende
+      # vollstaendig und wertrichtig) - 30 statt 180.
       - key: COST_TRUING_DELAY_MINUTES
-        value: "180"
+        value: "30"
+      # KE-P6B: Kadenz des Sweeps in ms, bis dahin hartkodiert (6 h).
+      - key: COST_TRUING_SWEEP_INTERVAL_MS
+        value: "3600000"
       - key: COST_TRUING_MAX_ATTEMPTS
         value: "5"
       # LEER = 'incomplete' ("nichts bewiesen"), NIEMALS "vollstaendig". Erst nach
