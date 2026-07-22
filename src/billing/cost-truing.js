@@ -368,9 +368,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Bruchpunkt-Waechter ausgerechnet im Stoerfall blind).
   // `incomplete` heisst "dieser Abruf hat KEIN vollstaendiges Bild geliefert" - ok:false und
   // complete:false sind darin dasselbe.
-  // Reihenfolge bewusst VOR NO_COST_RECORDS/bookablePool (nicht neben fetchCostRecordPoolFor,
-  // wo diese Kennzahlen inhaltlich hingehoeren): NO_COST_RECORDS referenziert NO_POOL_FETCH
-  // und muesste sonst vor dessen Deklaration darauf zugreifen (TDZ).
   const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
 
   function poolFetchStats(pool) {
@@ -381,11 +378,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       incomplete: !(pool?.ok === true && pool.complete !== false),
     };
   }
-
-  // Kein Abruf VERSUCHT (Twilio/unbekannter Provider): nichts angefragt und nichts
-  // unvollstaendig - ein 'incomplete' waere hier eine Falschaussage ueber einen Abruf, den es
-  // nie gab.
-  const NO_POOL_FETCH = Object.freeze({ requests: 0, pages: 0, records: 0, incomplete: false });
 
   function emptyFetchTally() {
     return { requests: 0, pages: 0, records: 0, incompletePools: 0 };
@@ -399,9 +391,44 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   }
 
   // "Kein Abgleich moeglich": unbekannter Provider (die Registry wirft fail-closed) oder ein
-  // Adapter ohne die beiden Beleg-Methoden (Twilio). EINE Entscheidung an EINER Stelle (G5) -
-  // die Buchungsschleife kennt danach nur noch control===null (sauberes No-op) und pool.ok.
-  const NO_COST_RECORDS = Object.freeze({ control: null, pool: null, stats: NO_POOL_FETCH });
+  // Adapter ohne die beiden Beleg-Methoden (Twilio: price deckt nur Connectivity). EINE
+  // Entscheidung an EINER Stelle (G5). SYNCHRON und ohne Netz - genau deshalb steht die
+  // Aufloesung ab KE-P9 VOR dem Abruf zur Verfuegung, statt als dessen Nebenprodukt zu
+  // entstehen; ein zweiter Netz-Zugriff kommt dadurch NICHT hinzu (PM-5).
+  function costRecordControlFor(provider) {
+    let control;
+    try {
+      control = voiceControl(provider);
+    } catch {
+      return null;
+    }
+    const hasCostRecordMethods =
+      typeof control.fetchCostRecordPool === "function" && typeof control.assignCostRecords === "function";
+    return hasCostRecordMethods ? control : null;
+  }
+
+  // DIE Bedingung "abrufbar" (KE-P9), an GENAU EINER Stelle formuliert: ohne belegfaehigen
+  // Adapter oder ohne aufloesbare Leg-Referenz ist ein Call strukturell nie abgleichbar. Er
+  // darf deshalb weder den UMFANG des Belegabrufs (welche Provider) noch dessen ZEITSCHRANKE
+  // bestimmen - ein einziger solcher Call fror `since` sonst dauerhaft ein, und der Pool
+  // wuchs mit dem gesamten Kontoverkehr, bis die Seitenobergrenze reisst und ALLE Kandidaten
+  // unavailable werden (keine Rueckerstattung mehr, fuer niemanden).
+  // Zwei getrennt gepflegte Fassungen dieser Bedingung waeren der Fehlertyp, der in dieser
+  // Kette schon dreimal gefangen wurde: ein Call fiele still aus dem Abruffenster und wuerde
+  // trotzdem abgeglichen - oder umgekehrt.
+  // Fehlende Faehigkeit bleibt der konservative Fall: der Call bleibt im NENNER der
+  // Deckungsquote und drueckt sie, statt sie zu beschoenigen.
+  const isRetrievable = (call, control) => control !== null && providerLegIdOf(call) !== null;
+
+  // Jeder in diesem Sweep vorkommende Provider genau EINMAL aufgeloest. Rein synchron; die
+  // Map ist die EINE Wahrheit, aus der sowohl der Abruf-Filter als auch der Abruf selbst
+  // liest (kein zweites voiceControl-Ergebnis, das abweichen koennte).
+  function costRecordControlsFor(candidates) {
+    const controls = new Map();
+    for (const call of candidates)
+      if (!controls.has(call.provider)) controls.set(call.provider, costRecordControlFor(call.provider));
+    return controls;
+  }
 
   // Nur ein VOLLSTAENDIGER Pool darf Geld bewegen: gegen eine bewiesene Untermenge erstattet
   // die Korrektur real ausgegebenes Geld zurueck - die fail-OPEN-Richtung im Geldpfad.
@@ -415,15 +442,10 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // schleifeninvariant, die Query kennt weder legId noch Zeitfenster). `since` bindet
   // ausschliesslich die Seitenschleife des Adapters und geht NIE als Query-Parameter
   // hinaus - ein geratener Zeitfilter liefert HTTP 200 mit 0 Treffern (Messung, s. ports.js).
-  async function fetchCostRecordPoolFor(provider, since) {
-    let control;
-    try {
-      control = voiceControl(provider);
-    } catch {
-      return NO_COST_RECORDS; // unbekannter Provider -> pick() wirft fail-closed
-    }
-    if (typeof control.fetchCostRecordPool !== "function" || typeof control.assignCostRecords !== "function")
-      return NO_COST_RECORDS;
+  // Bekommt die BEREITS aufgeloeste Belegsteuerung herein (KE-P9): dass dieser Adapter
+  // belegfaehig ist, wurde beim Auswaehlen der abrufbaren Kandidaten entschieden und wird
+  // hier nicht ein zweites Mal beurteilt.
+  async function fetchCostRecordPoolFor(control, since) {
     try {
       const answer = await control.fetchCostRecordPool({ since });
       return { control, pool: bookablePool(answer), stats: poolFetchStats(answer) };
@@ -434,19 +456,23 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     }
   }
 
-  // Ein Pool je VORKOMMENDEM Provider, jeder Provider genau einmal. Die Kandidatenliste
-  // bestimmt die Menge - kein Providername im Billing-Pfad (DIP). Ohne Kandidaten kein
-  // Abruf: die Schleife laeuft nicht, kein Provider wird aufgeloest, 0 Anfragen.
-  // EINE Zeitschranke je Sweep, VOR der Schleife bestimmt: sie haengt an der
-  // Kandidatenmenge, nicht am Provider - je Provider neu zu rechnen waere dieselbe Zahl
-  // zweimal (G5). Rein synchron, also kein zusaetzliches Netz-await (PM-5).
-  async function fetchCostRecordPools(candidates) {
-    const since = poolSinceFor(candidates);
+  // Ein Pool je vorkommendem Provider der ABRUFBAREN Kandidaten, jeder Provider genau einmal.
+  // Die Kandidatenliste bestimmt die Menge - kein Providername im Billing-Pfad (DIP). Kein
+  // abrufbarer Kandidat -> kein Abruf: die Schleife laeuft nicht, 0 Anfragen (KE-P9; genau
+  // derselbe Ausgang wie "gar keine Kandidaten").
+  // EINE Zeitschranke je Sweep, VOR der Schleife bestimmt: sie haengt an der Kandidatenmenge,
+  // nicht am Provider - je Provider neu zu rechnen waere dieselbe Zahl zweimal (G5). Gebildet
+  // ueber ALLE abrufbaren Kandidaten, nie ueber eine Teilmenge davon: eine zu weit nach vorn
+  // gerutschte Schranke verloere Belege und meldete den Pool trotzdem als vollstaendig - die
+  // fail-OPEN-Richtung im Geldpfad (s. POOL_SINCE_MARGIN_MS).
+  // Rein synchron ausserhalb des Abrufs, also kein zusaetzliches Netz-await (PM-5).
+  async function fetchCostRecordPools(retrievable, controls) {
+    const since = poolSinceFor(retrievable);
     const pools = new Map();
     const fetchTally = emptyFetchTally();
-    for (const call of candidates) {
+    for (const call of retrievable) {
       if (pools.has(call.provider)) continue;
-      const fetched = await fetchCostRecordPoolFor(call.provider, since);
+      const fetched = await fetchCostRecordPoolFor(controls.get(call.provider), since);
       pools.set(call.provider, fetched);
       addPoolFetchStats(fetchTally, fetched.stats);
     }
@@ -454,19 +480,14 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   }
 
   // SYNCHRON (KE-P2/PM-5): zwischen Pool-Abruf und Buchungsschleife liegt strukturell kein
-  // Netz-await mehr. Provideraufloesung und Faehigkeitspruefung sind in
-  // fetchCostRecordPoolFor gewandert (EINE Entscheidung, EINE Stelle).
+  // Netz-await mehr. Provideraufloesung und Faehigkeitspruefung sind in costRecordControlFor
+  // gewandert (EINE Entscheidung, EINE Stelle). Ab KE-P9 laeuft die Schleife ausschliesslich
+  // ueber ABRUFBARE Kandidaten (isRetrievable) - control und legId sind hier deshalb
+  // strukturell vorhanden, ein Ueberspring-Zweig waere toter Code. Wer nicht abrufbar ist,
+  // erreicht diese Funktion nie und bleibt ein vollstaendiges No-op (kein Wurf, KEIN
+  // Feld-Schreiben, KEIN verbrauchter Versuch).
   function trueOneCall(call, { control, pool }, tally) {
-    // Adapter ohne die Beleg-Methoden (Twilio: price deckt nur Connectivity) und Call ohne
-    // aufloesbare Leg-Referenz sind SAUBERE No-ops: kein Wurf, KEIN Feld-Schreiben, KEIN
-    // verbrauchter Versuch. Fehlende Faehigkeit ist der konservative Fall - der Call bleibt
-    // im Nenner der Deckungsquote und drueckt sie, statt sie zu beschoenigen.
     const legId = providerLegIdOf(call);
-    if (!control || !legId) {
-      tally.skippedCalls++;
-      return;
-    }
-
     let result;
     try {
       // Ein nicht nutzbarer Pool laesst ALLE Kandidaten 'unavailable' - kein Teilerfolg, keine
@@ -577,12 +598,24 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
     // ist ohnehin erst nach COST_TRUING_DELAY_MINUTES faellig und kommt im naechsten Lauf.
     const candidates = store.load().calls.filter((c) => isTruingCandidate(c, nowMs));
+    // KE-P9: ab hier arbeitet der Sweep auf den ABRUFBAREN Kandidaten. Sie allein bestimmen
+    // Umfang und Zeitschranke des Belegabrufs UND durchlaufen die Buchungsschleife - beide
+    // Seiten lesen dieselbe Bedingung (isRetrievable) und dieselben controls, sie koennen
+    // nicht auseinanderlaufen. Rein synchron, noch vor jedem await.
+    const controls = costRecordControlsFor(candidates);
+    const retrievable = candidates.filter((c) => isRetrievable(c, controls.get(c.provider)));
+    // Strukturell nie abgleichbar (keine Leg-Referenz / kein belegfaehiger Adapter): kein
+    // Abruf, kein Schreibzugriff, kein verbrauchter Versuch. Sie bleiben Kandidaten und
+    // erscheinen unveraendert als uebersprungen= (Owner-Entscheidung: nur Abruf-Filter).
+    const skippedCalls = candidates.length - retrievable.length;
     // D1: der Abruf ist schleifeninvariant und laeuft EINMAL je Provider - VOR der Schleife.
     // Ab hier bis zur Bilanz kommt kein Netz-await mehr (PM-5): zwei verschraenkte Sweeps
     // koennen sich hier nicht mehr dazwischenschieben.
-    const { pools, fetchTally } = await fetchCostRecordPools(candidates);
-    const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls: 0, failed: 0 };
-    for (const call of candidates) trueOneCall(call, pools.get(call.provider), tally);
+    // pools ist aus GENAU DIESER retrievable-Liste gebaut, ueber die die Schleife laeuft -
+    // deshalb liefert pools.get() hier nie undefined.
+    const { pools, fetchTally } = await fetchCostRecordPools(retrievable, controls);
+    const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
+    for (const call of retrievable) trueOneCall(call, pools.get(call.provider), tally);
     const coveragePercent = costTruingCoveragePercent(store.load());
     logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally });
     reportFetchVolume(fetchTally, nowMs);
