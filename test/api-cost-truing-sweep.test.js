@@ -18,7 +18,7 @@ import { BOOTSTRAP_TENANT_ID, PROVIDER, COST_TRUING_SOURCE } from "../src/store/
 
 const EXTERNAL_IP = externalIp();
 const MS_PER_MINUTE = 60 * 1000;
-// Weiter zurueck als der COST_TRUING_DELAY_MINUTES-Default (180, in BASE_ENV gepinnt),
+// Weiter zurueck als der COST_TRUING_DELAY_MINUTES-Default (30, in BASE_ENV gepinnt),
 // damit der Call im Sweep faellig ist.
 const ENDED_MINUTES_AGO = 200;
 

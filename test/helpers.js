@@ -235,9 +235,10 @@ export const BASE_ENV = {
   PROVIDER_TO_BUCKET_RATE_MICRO: "920000",
   // LCT P3: Kosten-Abgleich explizit auf den Code-Defaults gepinnt (Lehre
   // test-base-env-drift). Ohne diese Zeilen faerbte eine lokale .env die Spawn-Suite.
-  // Der Sweep laeuft ohnehin nur per Intervall (6 h, unref) - in einem Spawn-Test feuert
-  // er nie; die P3-Tests rufen die Fabrik direkt und in-process auf.
-  COST_TRUING_DELAY_MINUTES: "180",
+  // Der Sweep laeuft ohnehin nur per Intervall (KE-P6B: 1 h, unref) - in einem Spawn-Test
+  // feuert er nie; die P3-Tests rufen die Fabrik direkt und in-process auf.
+  COST_TRUING_DELAY_MINUTES: "30",
+  COST_TRUING_SWEEP_INTERVAL_MS: "3600000",
   COST_TRUING_MAX_ATTEMPTS: "5",
   // Nicht-leer, weil der Pflicht-Mengen-Riegel seit P8 unkonditional prueft (die
   // Korrekturbuchung ist bedingungslos aktiv); leer -> Boot-Refusal (das prueft (n1)

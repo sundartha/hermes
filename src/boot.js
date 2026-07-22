@@ -29,7 +29,7 @@ import { attachMediaBridge } from "./bridge.js";
 import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import { hasPrunedSomething } from "./store/state-ops.js";
-import { COST_TRUING_SWEEP_INTERVAL_MS, SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
+import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
@@ -305,7 +305,8 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden
   // periodischen Jobs (Retention hier, DID-Release-Reconciler in wiring/web-login.js):
-  // setInterval(...).unref(), benannte Intervall-Konstante, kein Scheduler-Dependency,
+  // setInterval(...).unref(), Intervall aus EINER Quelle (seit KE-P6B
+  // config.billing.costTruingSweepIntervalMs, Default 1 h), kein Scheduler-Dependency,
   // kein Render-Cron (gibt es auf dem Free Tier nicht).
   //
   // BEWUSSTE ABWEICHUNG von beiden Vorbildern: KEIN Lauf beim Boot. Beide Vorbilder sind
@@ -321,7 +322,7 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
       void costTruing
         .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
         .catch((e) => console.error("[cost-truing]", e.message)),
-    COST_TRUING_SWEEP_INTERVAL_MS,
+    config.billing.costTruingSweepIntervalMs,
   ).unref();
 
   // F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
