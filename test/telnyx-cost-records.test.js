@@ -1147,13 +1147,40 @@ test("(P6-2) ElevenLabs-Zeichen reisen am zugeordneten text-to-speech-Beleg mit"
     "Nicht-TTS-Belege tragen null, nie 0 - 0 waere eine gemessene Null");
 });
 
-test("(P6-3) fremder TTS-Provider und unparsbare Menge zaehlen NICHT auf den ElevenLabs-Zaehler", async () => {
+// (P6-3) war urspruenglich EIN Test mit BEIDEN Bedingungen im selben Beleg
+// (chars:"viele", provider:"aws-polly") - "viele" ist fuer sich genommen schon
+// unparsbar, "aws-polly" fuer sich genommen schon der falsche Provider. Damit blieb
+// der Test gruen, wenn man in elevenLabsCharactersOf NUR den Provider-Waechter ODER
+// NUR den record_type-Waechter entfernte - er bestaetigte die eigene Annahme statt
+// sie zu falsifizieren (Spec A2). Drei getrennte Faelle, je EINEN Waechter isoliert
+// und mit sonst gueltigen Werten - fehlt einer, ist genau ein Fall betroffen:
+test("(P6-3a) fremder TTS-Provider zaehlt NICHT auf den ElevenLabs-Zaehler - auch mit gueltiger Menge (Provider-Waechter)", async () => {
   stubFetchByRecordType({
     "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
-    "text-to-speech": [elevenLabsTtsRecord({ chars: "viele", provider: "aws-polly" })],
+    "text-to-speech": [elevenLabsTtsRecord({ chars: 238, provider: "aws-polly" })],
   });
   const res = await fetchAndAssign(WINDOW);
   assert.equal(res.records.find((r) => r.recordType === "text-to-speech").ttsCharacters, null);
+});
+
+test("(P6-3b) eine unparsbare Zeichen-Menge zaehlt NICHT - auch beim echten ElevenLabs-Provider (Parser-Waechter)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", { cost: "0.0401", billedSec: 60 })],
+    "text-to-speech": [elevenLabsTtsRecord({ chars: "viele", provider: "elevenlabs" })],
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.equal(res.records.find((r) => r.recordType === "text-to-speech").ttsCharacters, null);
+});
+
+test("(P6-3c) ein Nicht-TTS-Beleg zaehlt NICHT - auch mit elevenlabs-Provider und gueltiger Menge (record_type-Waechter)", async () => {
+  stubFetchByRecordType({
+    "sip-trunking": [realRecord("sip-trunking", {
+      cost: "0.0401", billedSec: 60,
+      extraFields: { provider: "elevenlabs", number_of_characters: 99 },
+    })],
+  });
+  const res = await fetchAndAssign(WINDOW);
+  assert.equal(res.records.find((r) => r.recordType === "sip-trunking").ttsCharacters, null);
 });
 
 test("(P6-4) ein NICHT zugeordneter ElevenLabs-Beleg liefert keine Zeichen (fail-closed)", async () => {
