@@ -1,8 +1,16 @@
 # PLAN-KOSTEN-ENDSPIEL
 
 Strategie-Plan zum endgueltigen Abschluss der Ist-Kosten-Erfassung (Nachfolger von
-`PLAN-LIVE-COST-TRACING.md`). Stand 2026-07-21. **Noch nicht umgesetzt, noch nicht
-freigegeben.**
+`PLAN-LIVE-COST-TRACING.md`). Stand 2026-07-21.
+
+> **UMSETZUNGSSTAND 2026-07-22: alle Code-Phasen umgesetzt und auf `master` gemergt,
+> NICHT deployed.** Phase 0, 1, 2, 3, 4, 5, 6, 6b, 8 sind fertig (je ein Bericht unter
+> `tasks/ke-p<N>-report.md`). Phase 7 ist Owner-Aktion und bleibt offen —
+> vorbereitet in `tasks/ke-DEPLOY-CHECKLIST.md`.
+> Umsetzungs-Spezifikation: `tasks/kosten-endspiel/impl-spec.md`.
+> Suite 2861/0 -> **2932/0**. Live laeuft weiterhin `3516c31`.
+>
+> Was sich gegenueber diesem Plan als anders herausgestellt hat, steht in Kapitel 9.
 
 Grundlage sind Messungen aus einer Fan-out-Vermessung (5 Messagenten, je ein
 Gegenpruefer mit Widerlegungs-Auftrag) plus Nachmessungen des Leads an Prod-DB und
@@ -456,7 +464,7 @@ traegt mindestens ein **Koeder-Feld**, das der Code nicht verwenden darf (`telny
 (c) jede Phase hat mindestens einen Test, der **vor** dem Fix rot ist, und dieses Rot wird
 im Phasenbericht dokumentiert.
 
-### Phase 0 — D4: den Fehlerpfad sichtbar machen (zuerst)
+### Phase 0 — D4: den Fehlerpfad sichtbar machen (zuerst) · [x] UMGESETZT (`tasks/ke-p0-report.md`)
 
 Ohne sie ist keine Folgephase verifizierbar: `catch {` (voice.js:318) bindet den Fehler
 nicht einmal.
@@ -471,7 +479,7 @@ nicht einmal.
 - **Test:** `test/telnyx-cost-records.test.js` — *"getVoiceCostRecords loggt Provider-Status
   und Telnyx-Code bei 429"*. Autonom verifizierbar.
 
-### Phase 1 — D3: die tote Sicherung ersetzen (S1)
+### Phase 1 — D3: die tote Sicherung ersetzen (S1) · [x] UMGESETZT (`tasks/ke-p1-report.md`)
 
 - **Aenderung:** `COST_RECORDS_PAGE_SIZE` 250 -> gemessene 50; `meta` muss den Aufrufer
   erreichen (heute wirft `parseTelnyxResource` es mit `json.data || json` strukturell weg);
@@ -488,7 +496,7 @@ nicht einmal.
 - Richtungshinweis: diese Phase macht das System voruebergehend **konservativer** (mehr
   `incomplete`, weniger Rueckerstattungen). Das ist die sichere Richtung.
 
-### Phase 2 — D1: den Abruf aus der Kandidatenschleife ziehen
+### Phase 2 — D1: den Abruf aus der Kandidatenschleife ziehen · [x] UMGESETZT (`tasks/ke-p2-report.md`)
 
 - **Aenderung:** Auftrennung in `fetchCostRecordPool({since})` und
   `assignCostRecords(pool, …)`. Zuordnungslogik **verschoben, nicht veraendert**. Ein
@@ -505,7 +513,7 @@ nicht einmal.
   ist die wichtigste Zusage der Kette: er pinnt, dass der geteilte Pool die fail-closed-
   Asymmetrie nicht aufweicht. Modellier ihn nach dem gemessenen Paar aus F4.
 
-### Phase 3 — D2: Paginierung ohne geratene Filternamen
+### Phase 3 — D2: Paginierung ohne geratene Filternamen · [x] UMGESETZT (`tasks/ke-p3-report.md`)
 
 - **Aenderung:** je Typ `page[number]` aufsteigend, bis eine **ganze** Seite aelter als
   `since` ist oder die Seitenobergrenze greift. Kein ungemessener Query-Parameter.
@@ -527,7 +535,7 @@ nicht einmal.
   ab"* — entschaerft die fuer 6 von 7 Typen UNBELEGTE Sortierung (U4), statt sie zu raten:
   Abbruch ist "ganze Seite ausserhalb", nie "erster Record ausserhalb".
 
-### Phase 4 — Drossel am gemessenen Fenster
+### Phase 4 — Drossel am gemessenen Fenster · [x] UMGESETZT (`tasks/ke-p4-report.md`)
 
 - **Aenderung:** Token-Bucket am **fixen UTC-Minutenfenster** (F1: Reset faellt immer auf
   `:00`, nicht gleitend), Budget bewusst 30 von 40. Bei 429 trotzdem: bis zum naechsten
@@ -537,7 +545,7 @@ nicht einmal.
   simulierter Minute; ein 429-Fixture -> genau ein Wiederholungsversuch, keine Schleife.
   Kein `sleep` im Test.
 
-### Phase 5 — `since` aus den Kandidaten ableiten
+### Phase 5 — `since` aus den Kandidaten ableiten · [x] UMGESETZT (`tasks/ke-p5-report.md`)
 
 - **Aenderung:** `since` = aeltester `endedAt` der Kandidaten minus Marge; keine Kandidaten
   -> gar kein Abruf. Der Blindwert waere sonst 33 h.
@@ -546,7 +554,7 @@ nicht einmal.
 - **gruen:** leere Kandidatenliste -> 0 `fetch`; ein 3 h alter Kandidat -> hoechstens 7
   Anfragen.
 
-### Phase 6 — Boot-Guard, ElevenLabs-Zaehler und Beobachtbarkeit
+### Phase 6 — Boot-Guard, ElevenLabs-Zaehler und Beobachtbarkeit · [x] UMGESETZT (`tasks/ke-p6-report.md`)
 
 - **Aenderung 1:** Die Kopplung `costTruingBookingFindings` (boot-guard.js:337–395) an
   `ASSIGNABLE_COST_RECORD_TYPES` bleibt 1:1 erhalten — loest der Umbau sie, wird die
@@ -565,7 +573,7 @@ nicht einmal.
   B = pool/kandidaten aus der Wirklichkeit, U9). Ein zweiter Test pinnt, dass die Zeichen
   am richtigen Tenant landen.
 
-### Phase 6b — Verzug und Kadenz an die Messung anpassen
+### Phase 6b — Verzug und Kadenz an die Messung anpassen · [x] UMGESETZT (`tasks/ke-p6b-report.md`)
 
 Erst hier, nicht frueher: eine kuerzere Kadenz ist nur tragbar, wenn ein Sweep 7–14 statt
 224 Anfragen kostet (Phase 2/3) und gedrosselt ist (Phase 4).
@@ -588,7 +596,7 @@ Erst hier, nicht frueher: eine kuerzere Kadenz ist nur tragbar, wenn ein Sweep 7
   zuruecknehmen (der 2026-07-21 gesetzte Wert 20 war die Fristverlaengerung, s.
   Entscheidung 5) — sonst bleibt W bei 3 h + 20 × 1 h = 23 h statt 8 h.
 
-### Phase 7 — Live-Verifikation (OWNER-AKTION, nicht autonom)
+### Phase 7 — Live-Verifikation (OWNER-AKTION, nicht autonom) · [ ] OFFEN (`tasks/ke-DEPLOY-CHECKLIST.md`)
 
 1. Owner deployt und prueft den `[boot]`-Banner auf den erwarteten Commit (Deploy-Status
    immer nachsehen — der Live-Service hatte schon `autoDeploy` an trotz
@@ -606,7 +614,7 @@ Erst hier, nicht frueher: eine kuerzere Kadenz ist nur tragbar, wenn ein Sweep 7
 6. **Vorbedingung:** Owner liest `COST_TRUING_REQUIRED_RECORD_TYPES` im Render-Dashboard ab
    (U8) — ohne den Wert ist `gemessen>0` nicht interpretierbar.
 
-### Phase 8 — Bruchpunkt-Waechter
+### Phase 8 — Bruchpunkt-Waechter · [x] UMGESETZT (`tasks/ke-p8-report.md`)
 
 - **Aenderung:** ueberschreitet `anfragen` je Sweep die Betriebsschwelle 1.440, feuert der
   **bestehende** entprellte Befundkanal (`shouldEmitFinding`, 24 h) — Log + Audit, kein
@@ -830,3 +838,65 @@ Geld-relevante Sonde und bleiben Abnahmekriterium in Phase 7.
 **Ueberholt:** `PLAN-LIVE-COST-TRACING.md` Kap. 2.6 behauptet, nur `filter[record_type]` +
 `page[size]` seien belegt und die Zeitfilter-Parameternamen unbekannt. Das ist durch F5
 ersetzt. Beim Weiterarbeiten gilt dieses Dokument.
+
+---
+
+## 9. Umsetzung 2026-07-22 — was anders war als geplant
+
+Nachtrag nach der Umsetzung. **Ueberholtes ist oben korrigiert, nicht fortgeschrieben.**
+Hier steht nur, was der Plan selbst nicht richtig vorhergesehen hat.
+
+### 9.1 Abweichungen vom Plan (inhaltlich)
+
+| # | Plan sagte | Umsetzung | Warum |
+| --- | --- | --- | --- |
+| 1 | Phase 6: ElevenLabs-Zeichen je Tenant, Persistenz offen gelassen | **Spalte** `usage.tts_characters`, keine neue Tabelle | Die `usage`-Tabelle ist bereits pro Tenant und traegt `tenant_isolation`-RLS. Eine Spalte erbt sie; eine neue Tabelle haette eine eigene Policy gebraucht — mehr Flaeche fuer denselben Zweck. |
+| 2 | Phase 1: `meta` muss den Aufrufer erreichen | `parseTelnyxResource` in `parseTelnyxBody` (data+meta) plus schmale Bestands-Projektion aufgeteilt | Die Funktion hat zwei weitere Aufrufer (Origination, Assistant-Start). Beide bleiben wortgleich, statt ihre Rueckgabeform mitzuaendern. |
+| 3 | Phase 0: Telnyx-Code loggen | `errors.js` haengt ihn als `err.providerCode` an | Den Meldungstext zu regexen waere brittle — der Text ist kein Vertrag. Strikt nur `code`, nie `title`/`detail`/Roh-Body. |
+| 4 | Phase 3: Fixture "3 Seiten 50/50/12" | Fixture in der **gemessenen** Form `{total_results:212, total_pages:5, page_size:50}` | Fixture-Disziplin (A2) schlaegt die Illustration im Plantext. |
+| 5 | Phase 8: Schwelle 1440 = 10 % des Intervalls | Konstante bleibt 1440, **Herleitung im Kommentar nachgezogen** | Seit Phase 6b laeuft der Sweep stuendlich; 1440 Anfragen sind bei Drossel-Budget 30/min rund 48 min, also fast das ganze Intervall. Die Schwelle meldet weiterhin vor dem Punkt, an dem zwei Sweeps ineinanderlaufen — nur knapper. Bewusst **keine** Env-Variable. |
+
+### 9.2 Fehler IM PLAN, die bei der Umsetzung auffielen
+
+- **Testzahl-Arithmetik Phase 3.** Der Plan nannte als Zielwert 2890; die eigene Tabelle
+  listet aber 4 Entfernungen statt der in der Kurzformel unterstellten 2. Richtig sind
+  **2889**. Der Umsetzer hat die Differenz aufgeklaert, statt Tests zu erfinden, um die Zahl
+  zu treffen.
+- **Reihenfolge-Falle Phase 6.** Die Plan-Skizze platzierte den `poolFetchStats`-Block nach
+  `NO_COST_RECORDS`, das ihn im Initializer referenziert — in dieser Reihenfolge ein
+  Temporal-Dead-Zone-`ReferenceError` beim ersten `makeCostTruing()`. Block vorgezogen.
+
+### 9.3 Was der Gate gefangen hat (echte Defekte, nicht Kosmetik)
+
+- **Phase 4, Runde 2 (S1):** die Drossel-Konstanten waren nicht exportiert, der Test
+  behauptete also seine eigene Literalzahl statt der Produktionsgroesse.
+- **Phase 6, Runde 1 (S1):** ein Koeder-Test buendelte zwei Bedingungen in EINEM Beleg
+  (`chars:"viele"` UND `provider:"aws-polly"`). Jede fuer sich haette den Test schon gruen
+  gehalten — er waere gruen geblieben, wenn man in `elevenLabsCharactersOf` nur die
+  Provider-Pruefung entfernt. Aufgeteilt.
+- **Phase 4, Runde 1 (S2):** die Sprung-Uhr war byte-identisch in zwei Testdateien
+  dupliziert -> `test/fake-clock.js`.
+
+Das ist die Rechtfertigung des Verfahrens: alle drei sind genau die Fehlerklasse, an der
+diese Kette zweimal gestorben ist — **ein gruener Test, der nichts beweist.**
+
+### 9.4 Messungen, die die Umsetzung nachtraeglich bestaetigt hat
+
+- Der Boot-Guard `COST_TRUING_REQUIRED_RECORD_TYPES ist leer -> Boot-Refusal` wurde beim
+  lokalen Smoke-Test **unabsichtlich ausgeloest** und hat korrekt fail-closed verweigert.
+  Mit gesetztem Wert bootet der Dienst, `/healthz` -> `200 {"ok":true}`.
+- Die Kopplung Boot-Guard <-> `ASSIGNABLE_COST_RECORD_TYPES` ist jetzt mit einem echten
+  Kopplungstest gepinnt, der die abgerufene Typenmenge aus **echten HTTP-Anfragen** ableitet,
+  statt zweimal dieselbe Konstante zu importieren.
+
+### 9.5 Was NICHT umgesetzt wurde
+
+- **Phase 7** (Live-Verifikation) — Owner-Aktion, vorbereitet in
+  `tasks/ke-DEPLOY-CHECKLIST.md`.
+- **Option C** (persistente Belegtabelle mit Wasserstand) — bleibt der vorgemerkte
+  Nachfolger am Bruchpunkt, wie im Plan entschieden.
+- **PM-5 Compare-and-Set fuer `costTruedAt`** — gehoert zur zweiten Instanz, nicht davor.
+  Die Phase-2-Auflage (kein Netz-`await` zwischen Pool-Abruf und Buchungsschleife) ist
+  erfuellt und strukturell erzwungen: die Buchungsschleife ist jetzt synchron.
+- **U3/U4/U5/U7/U10/U11** — bleiben UNBELEGT. Keine davon war Vorbedingung einer Phase;
+  Phase 3 ist gerade so gebaut, dass sie U3/U4 **nicht braucht**.
