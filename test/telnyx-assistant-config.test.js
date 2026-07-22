@@ -72,13 +72,17 @@ test("K1: interruption_settings.enable bleibt true UND interrupt_prediction_thre
   assert.equal(cfg.interruption_settings.interrupt_prediction_threshold, 0.4);
 });
 
-// K2 (PLAN-CONVERSATION-OPTIMIZATION.md): background_audio traegt genau die drei Felder der
-// predefined_media-Variante mit den geplanten Werten (office statt silence, gedaempftes volume).
-test("K2: voice_settings.background_audio ist predefined_media/office/0.3", () => {
+// K2 (PLAN-CONVERSATION-OPTIMIZATION.md) ist durch den Owner-Testanruf falsifiziert: das
+// Buero-Ambiente lag hoerbar unter der Stimme und passt nicht zu einem persoenlichen
+// Assistenten. background_audio traegt weiterhin genau die drei Felder der predefined_media-
+// Variante, value steht aber auf "silence" (= laut Spec "disables background audio").
+// Der explizite Block ist Absicht und KEIN Ueberbleibsel: der Update-POST ist ein Deep-Merge,
+// ein weggelassenes Feld wuerde das live gesetzte "office" stehen lassen (s. Provisioner).
+test("K2: voice_settings.background_audio ist predefined_media/silence/0.3", () => {
   const cfg = buildAssistantConfig(ARGS);
   assert.deepEqual(cfg.voice_settings.background_audio, {
     type: "predefined_media",
-    value: "office",
+    value: "silence",
     volume: 0.3,
   });
 });

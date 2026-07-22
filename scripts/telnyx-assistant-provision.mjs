@@ -51,12 +51,22 @@ const USER_IDLE_REPLY_SECS = 4;
 // fehlt in der oeffentlichen OpenAPI-Spec, existiert aber real am Live-Objekt (kein Tippfehler,
 // per GET verifiziert - Doku-Drift ist bei Telnyx systematisch, s. PLAN-CONVERSATION-OPTIMIZATION.md §9.6).
 const INTERRUPT_PREDICTION_THRESHOLD = 0.4;
-// K2 (PLAN-CONVERSATION-OPTIMIZATION.md): leises Raum-Ambiente statt digitaler Stille waehrend
-// Antwortpausen, gegen das Totzeit-Empfinden. "silence" ist der Default und bedeutet laut Spec
-// woertlich "disables background audio" - keine bewusste Wahl, nur nie umgestellt. predefined_media
-// kennt genau zwei Presets: "silence" | "office". volume 0.1-1.0 in 0.1-Schritten, bewusst niedrig.
+// K2 (PLAN-CONVERSATION-OPTIMIZATION.md) stand auf "office": leises Buero-Ambiente statt
+// digitaler Stille in den Antwortpausen, gegen das Totzeit-Empfinden. Der Owner-Testanruf
+// hat die dort offen gelassene Erwartung E2.3 ("fuehlt sich die Pause weniger tot an?")
+// FALSIFIZIERT - die Buero-Kulisse passt hoerbar nicht zu einem persoenlichen Assistenten
+// (Live-Beleg: der Ambiente-Playback lief 75ms nach ai_assistant_start an und endete erst
+// beim Auflegen, lag also durchgehend unter der Stimme). Deshalb zurueck auf "silence".
+// predefined_media kennt genau diese zwei Presets: "silence" | "office"; "silence" ist der
+// Telnyx-Default und bedeutet laut Spec woertlich "disables background audio".
+//
+// Das Feld wird WEITERHIN EXPLIZIT GESENDET statt weggelassen: der Update-POST ist ein
+// Deep-Merge (s. PRESERVED_SAFETY_FIELDS) - ein fehlendes Feld liesse das live gesetzte
+// "office" unveraendert stehen. Abschalten geht nur aktiv.
 const BACKGROUND_AUDIO_TYPE = "predefined_media";
-const BACKGROUND_AUDIO_VALUE = "office";
+const BACKGROUND_AUDIO_VALUE = "silence";
+// Range 0.1-1.0 in 0.1-Schritten. Unter "silence" wirkungslos (es gibt nichts zu daempfen);
+// bleibt als bewusst niedriger Wert stehen, falls je wieder ein Ambiente gewaehlt wird.
 const BACKGROUND_AUDIO_VOLUME = 0.3;
 // Telnyx verlangt `instructions` als Pflichtfeld (sonst HTTP 400 10004 /body/instructions).
 // Im BYO-Custom-LLM-Betrieb ist es INERT: der Shim (agentTurn/claude.js) baut Systemprompt +
