@@ -508,6 +508,83 @@ test("(j3) Deckung ueber der Schwelle -> kein Befund, aber die Quote steht im Sw
   assert.ok(spies.logs.some((line) => line.includes("deckung=100%")), "die Quote steht trotzdem im Log");
 });
 
+// ---- (j4/j5) KE-P8: Bruchpunkt-Waechter auf DEMSELBEN entprellten Befundkanal ----
+//
+// Gemeldet wird fetchTally.requests - genau das Feld, das die Sweep-Zeile als anfragen=
+// ausgibt. Dass diese Zahl ECHTE HTTP-Anfragen zaehlt und keine zweite Buchhaltung ist,
+// pinnt (P6-8) in test/cost-truing-sweep-log.test.js gegen den echten Adapter. Hier wird
+// deshalb am PORT gestubbt (requests/pages stehen laut ports.js auf JEDER Antwortform):
+// 1441 echte Anfragen muessten sonst durch die Drossel (30/min), also durch 48 Minuten.
+
+test("(j4) 1.500 Anfragen je Sweep -> genau ein Befund je Entprellfenster (Log + Audit, keine SMS)", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  makeDueOutboundCall(state, { nowMs, to: PII_PHONE, legRef: { callControlId: "cc_p8" } });
+  const store = makeStubStore(state);
+  const control = fakeCostRecordAdapter(() => [], {
+    poolResult: { ok: true, raw: [], complete: true, requests: 1500, pages: 30 },
+  });
+  const { calls: auditCalls, audit } = auditSpy();
+  const messaging = fakeMessaging();
+  let clock = nowMs;
+  // costTruingMinCoveragePercent: 0 isoliert den neuen Befund von der Deckungs-Meldung -
+  // sonst zaehlte diese Zusage zwei Sachverhalte auf einem Label.
+  const config = fakeConfig({ costTruingMinCoveragePercent: 0, costAlertDebounceMs: 1000 });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit, messaging, now: () => clock,
+  });
+  const volumeFindings = () =>
+    auditCalls.filter((c) => c.event === "cost_truing_befund" && c.detail.includes("requests_above_threshold"));
+
+  const spies = collectLogSpies();
+  try {
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    clock += 500; // zweiter Sweep INNERHALB des Entprellfensters (1000 ms)
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  } finally {
+    spies.restore();
+  }
+
+  assert.equal(volumeFindings().length, 1, "zwei Sweeps im Entprellfenster -> genau ein Befund");
+  assert.equal(volumeFindings()[0].detail, "grund=requests_above_threshold anfragen=1500 schwelle=1440");
+  assert.equal(
+    spies.warns.filter((l) => l.includes("requests_above_threshold")).length, 1,
+    "der Befund steht auch im Log, genau einmal",
+  );
+  assert.equal(messaging.calls.length, 0, "kein neuer Alarmweg: der Waechter verschickt keine SMS (PM-7)");
+  assert.doesNotMatch(
+    volumeFindings()[0].detail, new RegExp(PII_PHONE.replace("+", "\\+")), "keine Rufnummer im Befund",
+  );
+});
+
+test("(j5) 1.440 Anfragen sind die Schwelle, erst 1.441 ueberschreiten sie", async () => {
+  const findingsAt = async (requests) => {
+    const nowMs = Date.now();
+    const state = makeDefaultState();
+    makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_p8_grenze" } });
+    const store = makeStubStore(state);
+    const control = fakeCostRecordAdapter(() => [], {
+      poolResult: { ok: true, raw: [], complete: true, requests, pages: 1 },
+    });
+    const { calls: auditCalls, audit } = auditSpy();
+    const config = fakeConfig({ costTruingMinCoveragePercent: 0 });
+    // FRISCHE Instanz je Lauf: eigene Entprell-Map, die beiden Faelle sind unabhaengig.
+    const { runCostTruingSweep } = makeCostTruing({
+      store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit, now: () => nowMs,
+    });
+    const spies = collectLogSpies();
+    try {
+      await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+    } finally {
+      spies.restore();
+    }
+    return auditCalls.filter((c) => c.detail.includes("requests_above_threshold")).length;
+  };
+
+  assert.equal(await findingsAt(1440), 0, "auf der Schwelle ist sie nicht ueberschritten");
+  assert.equal(await findingsAt(1441), 1, "eine Anfrage darueber meldet");
+});
+
 // ---- (k) leere Records-Antwort ist keine gemessene Null ----
 
 test("(k) {ok:true, records:[]} -> 'unavailable', actualCostMicroCents bleibt null, Call bleibt offen", async () => {

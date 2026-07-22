@@ -43,12 +43,29 @@ const POOL_INCOMPLETE_REASON = "pool_incomplete";
 const COST_TRUING_FINDING = Object.freeze({
   COVERAGE_BELOW_THRESHOLD: "coverage_below_threshold",
   COVERAGE_STALLED: "coverage_stalled",
+  // KE-P8: dritter Code auf DEMSELBEN Kanal - kein eigener Alarmweg, keine SMS-Klasse (PM-7).
+  REQUESTS_ABOVE_THRESHOLD: "requests_above_threshold",
 });
 const COST_TRUING_AUDIT_EVENT = "cost_truing_befund";
 // LCT P5 (Drift-Waechter): eigenes Audit-Ereignis + eigener SMS-Praefix, getrennt von
 // COST_TRUING_AUDIT_EVENT (verschiedene Aussage: Deckungsquote vs. Tarif-Abweichung).
 const TARIFF_DRIFT_AUDIT_EVENT = "tarif_drift_befund";
 const DRIFT_ALERT_SMS_PREFIX = "[hermes] Tarif-Drift: ";
+
+// KE-P8 (Bruchpunkt-Waechter): Betriebsschwelle EINES Sweeps, in HTTP-Anfragen.
+// Herleitung (Plan Kap. 3): /v2/detail_records erlaubt gemessene 40 Anfragen je FIXEM
+// UTC-Minutenfenster (Plan F1, Messung 2026-07-21). 1440 Anfragen sind damit 36 Minuten
+// reiner Abrufzeit - 10 % des 6-h-Intervalls, aus dem die Schwelle stammt. Seit KE-P6B
+// laeuft der Sweep stuendlich; dieselben 1440 Anfragen sind dort rund 48 Minuten (unser
+// Drossel-Budget ist 30/min, nicht 40) und fuellen damit fast das ganze Intervall: die
+// Schwelle meldet weiterhin VOR dem Punkt, an dem zwei Sweeps ineinander laufen, nur knapper.
+// Die gemessenen 40 werden BEWUSST NICHT aus dem Telnyx-Adapter importiert - der
+// Billing-Pfad kennt keinen Provider (DIP), und die Schwelle ist eine Betriebsgroesse,
+// keine Provider-Eigenschaft. Aendert der Provider sein Kontingent, ist sie neu
+// herzuleiten; sichtbar wird das an anfragen= in der Sweep-Zeile (PM-6).
+// BEWUSST keine Env-Variable: eine Warnschwelle, die sich hochdrehen laesst, ist die
+// Sicherung, die an ihre eigene Verletzung angepasst wird.
+const SWEEP_REQUESTS_WARN_THRESHOLD = 1440;
 
 const isEndedOutbound = (call) => call.direction === OUTBOUND_DIRECTION && !!call.endedAt;
 const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;
@@ -219,13 +236,26 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return true;
   }
 
-  function emitFinding(code, coveragePercent, nowMs) {
+  // DER Befundkanal: entprellen -> WARN -> Audit, fuer JEDEN Code dieselbe Zeile (G5).
+  // KE-P8/PM-7: der Bruchpunkt-Waechter bekommt bewusst keinen eigenen Weg und keine
+  // SMS-Klasse, sondern nur einen weiteren Code hier. WAS gemeldet wird, formuliert der
+  // Aufrufer im detail - der Kanal kennt weder Deckungsquote noch Anfragezahl.
+  function emitFinding(code, detail, nowMs) {
     if (!shouldEmitFinding(code, nowMs)) return;
-    const detail =
-      `grund=${code} deckung=${coveragePercent}% ` +
-      `schwelle=${config.billing.costTruingMinCoveragePercent}% sweeps=${sweepsBelowThreshold}`;
-    console.warn(`[cost-truing] Befund ${detail}`);
-    audit(COST_TRUING_AUDIT_EVENT, null, detail); // req=null -> ip=system (Plattform-Ereignis)
+    const line = `grund=${code} ${detail}`;
+    console.warn(`[cost-truing] Befund ${line}`);
+    audit(COST_TRUING_AUDIT_EVENT, null, line); // req=null -> ip=system (Plattform-Ereignis)
+  }
+
+  // Die Zahlen der Deckungs-Achse. Das Format bleibt BYTE-IDENTISCH zum Bestand
+  // (Log-Konsumenten): grund= deckung= schwelle= sweeps= in genau dieser Reihenfolge.
+  function emitCoverageFinding(code, coveragePercent, nowMs) {
+    emitFinding(
+      code,
+      `deckung=${coveragePercent}% schwelle=${config.billing.costTruingMinCoveragePercent}% ` +
+        `sweeps=${sweepsBelowThreshold}`,
+      nowMs,
+    );
   }
 
   // Die Quote wird am Ende JEDES Sweeps ausgegeben - nur rechnen und nicht melden ist der
@@ -240,7 +270,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       return;
     }
     sweepsBelowThreshold++;
-    emitFinding(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD, coveragePercent, nowMs);
+    emitCoverageFinding(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD, coveragePercent, nowMs);
     // Terminierungsregel: bleibt die Quote ueber COST_TRUING_COVERAGE_STALL_SWEEPS
     // aufeinanderfolgende Sweeps unter der Schwelle, ist eine Owner-Entscheidung faellig
     // (Ursache beheben oder Abbruch nach P3/P5). Die SCHWELLE WIRD DABEI NIE GESENKT, um
@@ -250,7 +280,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // Meldung ist coverage_below_threshold, die Stillstands-Meldung ist nur die
     // Eskalationsstufe darueber.
     if (sweepsBelowThreshold >= config.billing.costTruingCoverageStallSweeps)
-      emitFinding(COST_TRUING_FINDING.COVERAGE_STALLED, coveragePercent, nowMs);
+      emitCoverageFinding(COST_TRUING_FINDING.COVERAGE_STALLED, coveragePercent, nowMs);
   }
 
   // Zaehlt das Ergebnis EINES abgeglichenen Calls in die Sweep-Bilanz ein. Bezugsgroesse
@@ -527,6 +557,21 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     );
   }
 
+  // KE-P8, der Bruchpunkt-Waechter: meldet, wenn EIN Sweep mehr Anfragen zieht als die
+  // Betriebsschwelle erlaubt. Die Zahl selbst steht schon in der Sweep-Zeile (anfragen=) -
+  // hier kommt KEINE zweite Log-Zeile dazu, nur der entprellte Befund. Gemeldet wird ein
+  // VOLUMEN, kein Fehler: der Sweep bleibt korrekt, er waechst nur aus seinem Intervall
+  // heraus (Gegenmassnahme: Plan Kap. 3, Stufe 1 - Fenster verschmaelern).
+  // Dieselbe Quelle wie das Log (fetchTally), damit Befund und Zeile nie auseinanderlaufen.
+  function reportFetchVolume(fetchTally, nowMs) {
+    if (fetchTally.requests <= SWEEP_REQUESTS_WARN_THRESHOLD) return;
+    emitFinding(
+      COST_TRUING_FINDING.REQUESTS_ABOVE_THRESHOLD,
+      `anfragen=${fetchTally.requests} schwelle=${SWEEP_REQUESTS_WARN_THRESHOLD}`,
+      nowMs,
+    );
+  }
+
   async function sweepAllCandidates(trigger) {
     const nowMs = now();
     // Kandidaten-Schnappschuss VOR den awaits: ein Call, der waehrend des Sweeps endet,
@@ -540,6 +585,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     for (const call of candidates) trueOneCall(call, pools.get(call.provider), tally);
     const coveragePercent = costTruingCoveragePercent(store.load());
     logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally });
+    reportFetchVolume(fetchTally, nowMs);
     reportCoverage(coveragePercent, nowMs);
     reportTariffDrift(store.load(), nowMs);
     return { skipped: false, candidates: candidates.length, coveragePercent, ...tally };
