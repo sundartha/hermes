@@ -124,6 +124,11 @@ diese Tests aus (Regressionsschutz, PLAN-I18N-TESTS.md 4.1: "kein roter Test in 
 ein Regressionsfang"); `test:gates` faehrt NUR sie (inkl. gruener R3-Mechanismus-Tests als
 Regressionsschutz, s. `tasks/i18n-tests/00-kanonische-liste.md`).
 
+`test/i18n-catalog-run.test.js` deckt die Wrapper-Logik selbst ab (S1-Pflichtfix) und zaehlt
+deshalb regressionsseitig mit — die Summe beider Laeufe ist damit 3054 (3044 unveraenderter
+Bestand + 10 neue Wrapper-Selbsttests), nicht mehr 3044. Details/Herleitung:
+`tasks/i18n-tests/16-lauf-trennung-selffix-bericht.md`.
+
 ## Referenzen
 
 - `.claude/refs/workflow.md` — Pflicht bei nicht-trivialen Tasks (Plan Mode, Subagents, Verifikation, `tasks/todo.md` + `tasks/lessons.md`)
