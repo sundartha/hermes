@@ -141,6 +141,11 @@ test("DID-02 (SOLL, heute rot) - Onboard mit body.country=US -> tenant/number.la
 // (de): number.language=de, tenant.country/defaultLanguage=DE/de (Quelle fuer Sprache/
 // Analytics). Beweist: Geo-/Sprach-Erkennung bleibt aktiv, nur die Kauf-Land-Wahl wird
 // neutralisiert. Laufzeit-Sprache liest number.language (resolveCallLanguage) -> de.
+//
+// Traegt zugleich LANG-06 des i18n-Launch-Testkatalogs (Welle W1, Mechanismus/gruen,
+// Spezifikation in tasks/i18n-tests/01-sprachaufloesung.md): US-DID plus de-Sprache bleibt
+// gepinnt, damit die bewusste Entkopplung von Kauf-Land und Sprache nicht lautlos kippt.
+// Deshalb EINMAL hier (G5) statt als zweite Fassung in einer eigenen Datei.
 test("FORCE_NUMBER_COUNTRY=US: number.country US, Sprache + tenant am Herkunftsland (DE)", async () => {
   const srv = await startServer({ env: { FORCE_NUMBER_COUNTRY: "US" } });
   try {

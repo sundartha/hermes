@@ -66,6 +66,12 @@ test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.
 
 // (2) Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer +
 // Override en -> call.language=en). Beweist die Override-Stufe am Outbound.
+//
+// Traegt zugleich VOICE-08 des i18n-Launch-Testkatalogs (Welle W1, Mechanismus/gruen,
+// Spezifikation in tasks/i18n-tests/03-telefonie-render.md): die vierstufige Praezedenz
+// settings > number > tenant > default bleibt gepinnt. Der Katalogfall ist durch diesen
+// Test und seine Nachbarn in dieser Datei vollstaendig abgedeckt - deshalb EINMAL hier
+// (G5) statt als zweite Fassung in einer eigenen Datei.
 test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Nummer + en -> call.language=en)", async () => {
   const srv = await startServer({
     env: ENV,

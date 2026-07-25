@@ -207,6 +207,11 @@ test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus
 });
 
 // --- F1 Phase 4: EN-Sprachpfad. Azure.en-GB-SoniaNeural + en-GB-STT; Nova-3 deckt EN ab.
+//
+// Traegt zugleich VOICE-03 des i18n-Launch-Testkatalogs (Welle W1, Mechanismus/gruen,
+// Spezifikation in tasks/i18n-tests/03-telefonie-render.md). Der Katalogfall verlangt exakt
+// diese Assertion - deshalb steht sie hier EINMAL (G5) statt als zweite Fassung in einer
+// eigenen Datei. Der Pin gilt fuer den Sprachcode "en" (s. VOICE-02 in directive-render).
 const EN = VOICE_PROFILE.EN_FEMALE_NEURAL;
 
 test("EN: Gather + Say + Redirect -> TeXML mit en-GB-STT + Azure.en-GB-SoniaNeural", () => {

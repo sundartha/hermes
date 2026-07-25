@@ -160,6 +160,12 @@ test("FR/Fail-closed: leeres Gather mit unbekanntem Profil wirft (STT-Locale aus
 
 // --- F1 Phase 4: EN-Sprachpfad (GB-Englisch). STT-Locale + TTS-Voice aus dem Profil
 // (TWILIO_VOICE). en-GB als volles BCP-47 (R9); Polly.Amy-Neural als GB-Stimme.
+//
+// Traegt zugleich VOICE-02 des i18n-Launch-Testkatalogs (Welle W1, Mechanismus/gruen,
+// Spezifikation in tasks/i18n-tests/03-telefonie-render.md). Der Katalogfall verlangt exakt
+// diese Assertion - deshalb steht sie hier EINMAL (G5) statt als zweite Fassung in einer
+// eigenen Datei. Achtung: der Pin gilt fuer den Sprachcode "en", nicht fuer "Englisch
+// generell" - Owner-Entscheidung 7.5 macht en-US spaeter zu einem eigenen Bundle.
 const EN = VOICE_PROFILE.EN_FEMALE_NEURAL;
 
 test("EN: Turn-Direktiven -> TwiML mit en-GB-STT + Polly.Amy-Neural", () => {
