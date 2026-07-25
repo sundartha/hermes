@@ -456,6 +456,27 @@ weil die Vorlagen sonst zweimal angefasst werden.
 **Wichtig:** diese Phase aendert **keine** Sprachauswahl. Sie legt die Vorlagen fuer de/en/fr an;
 welche gewaehlt wird, bleibt bis P10 unveraendert.
 
+**Schaerfung (am Code geprueft, 2026-07-25): WEB-04 ist eine harte Sperre, kein Schoenheitsfehler.**
+Ueber Self-Service ist Greeting-**Freitext ausdruecklich verboten** - `selfServicePatch`
+(`src/self-service.js:50`) akzeptiert ausschliesslich einen Eintrag aus `GREETING_TEMPLATES` und
+lehnt alles andere ab (Begruendung im Code: PII-/Missbrauchs-Riegel, Decision #7). **Alle drei
+Vorlagen sind deutsch**, inklusive des geseedeten `DEFAULT_GREETING` (`src/store/defaults.js:320`).
+Freien Text kann heute nur der Admin-Pfad schreiben (`updateSettings` prueft `greeting` nur per
+`typeof`).
+
+Daraus folgt der eigentliche Ernst des Befunds: `language` liegt in `SELF_SERVICE_FREE_FIELDS`,
+ein Kunde kann seine Sprache also auf `en` stellen - STT-Locale und TTS-Stimme folgen, sein
+Greeting **muss** aber deutsch bleiben, weil keine englische Vorlage waehlbar existiert. Die in
+Abschnitt 2a beschriebene Divergenz (britische Stimme liest deutschen Satz) ist damit **kein
+Randfall, sondern das garantierte Ergebnis fuer jeden englischsprachigen Self-Service-Kunden** -
+und zwar schon heute, unabhaengig vom Weltdefault-Flip aus P10.
+
+**Konsequenz fuer den Zuschnitt:** WEB-04 heisst nicht "eine englische Vorlage nachtragen", sondern
+"die Vorlagenmenge folgt der Tenant-Sprache". Der Vorlagen-Riegel selbst (nur Vorlage, kein
+Freitext) bleibt unangetastet - er ist ein Missbrauchsschutz, keine Sprachentscheidung.
+**Abnahme zusaetzlich:** ein Test belegt, dass ein Tenant mit `language='en'` mindestens eine
+waehlbare Vorlage bekommt und dass `selfServicePatch` sie akzeptiert.
+
 **Vorbedingung.** O7 beantwortet (Wortlaut, selektiv/total, Migration). **A5 geklaert:** ueber
 welchen Kanal entsteht das gesprochene Greeting live - `voice.js`/`defaults.js` oder die
 Telnyx-Assistant-Konfiguration? WEB-04 allein ist ohne Rueckfrage umsetzbar und kann vorgezogen
