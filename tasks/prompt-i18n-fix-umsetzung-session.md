@@ -9,6 +9,10 @@ Implementierer**. Du liest in dieser Session **keinen Produktionscode und keinen
 Volltext**. Deine Arbeit: Wellen schneiden, Workflows starten, Rueckgaben pruefen, mergen,
 Suite fahren, berichten. Alles andere machen Subagenten.
 
+**Alle Owner-Entscheidungen sind gefallen. Es gibt keine offene Frage, die dich blockiert.**
+Arbeite die Kette durch, ohne auf Freigaben zu warten. Frag mich nur in den Abbruchfaellen aus
+Abschnitt 6 — dort aber sofort und ohne Umweg.
+
 ## 0. Ausgangslage selbst pruefen (nicht glauben)
 
 ```
@@ -106,17 +110,34 @@ hoffen. Eine serielle Phase kostet Zeit, ein Merge-Konflikt im Lead kostet deine
 - `render.yaml` — P1, P7
 - Greeting-Pfad (`self-service.js` / `defaults.js`) — P3, P11
 
-### Zwei Phasen haben eine offene Vorbedingung
+### Keine offenen Vorbedingungen mehr — beide sind geklaert (2026-07-25)
 
-- **P3** braucht den **Wortlaut des Inbound-Pflichthinweises je Sprache** (O7). Der ist noch
-  nicht vorgegeben. **Handlung am Anfang der Session:** lass einen einzelnen Agenten drei
-  Vorschlaege (de/en/fr) erarbeiten und **leg sie mir vor, bevor Welle 1 startet**. WEB-04 ist
-  auch ohne den Wortlaut umsetzbar; haengt die Freigabe, baust du in P3 nur WEB-04 und ziehst
-  GAP-14 in eine spaetere Welle.
-- **P7** braucht den Live-Wert von **`VOICE_TARIFF_DEFAULT_CENTS`** aus dem Render-Dashboard.
-  **Frag mich danach, sobald Welle 3 laeuft** — dann ist die Antwort da, bevor Welle 4 startet.
-  Ohne den Wert misst `test/prod-env.js` GAP-33 weiter gegen den Blueprint-Wert `300`, und der
-  402-Befund koennte ein reines Blueprint-Artefakt sein (Praemisse P-B).
+- **Wortlaut des Inbound-Pflichthinweises (O7): entscheidet die Session selbst.** Owner-Vorgabe:
+  *"Wortlaut moechte ich, dass die Session das selber macht, die soll sich ja was selber
+  ausdenken. Das kann man ja jederzeit aendern. Und vielleicht im Internet recherchieren nach
+  guten Wortlauten ist mir egal."* Also: der P3-Plan-Agent formuliert je Sprache (de/en/fr)
+  selbst, darf dafuer recherchieren, und **haelt den gewaehlten Wortlaut im Phasenreport fest**.
+  Keine Rueckfrage, kein Freigabe-Gate. Zwei Randbedingungen bleiben:
+  der Satz ist **nicht abschaltbar** und **fest gerendert, nicht gepromptet** (kein
+  Modell-Ermessen, analog zum Outbound-Offenlegungssatz), und er wird nur vorangestellt, wenn
+  der Marker im Greeting fehlt.
+- **`VOICE_TARIFF_DEFAULT_CENTS` (aus O1): existiert im Render-Dashboard NICHT.** Der Wert laeuft
+  auf dem Code-Default `300`. Damit ist der GAP-33-402 live echt: Reserve
+  `300 ct/min x 3 min = 900 ct` gegen eine Tenant-Decke von `600 ct` -> es fehlen 3,00 EUR -> 402.
+  Vollstaendige Rechnung in `PLAN-I18N-FIX.md` Abschnitt 2a, **P-B1**.
+
+### Folge fuer die Reihenfolge — pruef das VOR Welle 1
+
+P-B1 bedeutet: **ein Tenant mit Standard-Budget kann heute ausschliesslich nach `+49`, `+33` und
+`+44` telefonieren.** Jedes andere Ziel wird mit 402 abgewiesen — ein US-Kunde kann keine
+US-Nummer anrufen. Der weltweite Start ist damit technisch blockiert, solange **P5 -> P7** nicht
+stehen.
+
+Der Wellenplan oben stellt P5 in Welle 2 und P7 in Welle 4. Das ist vertretbar, aber **pruef
+zuerst, ob P5 und P7 nicht vor P8/P9 gehoeren** — die Sprachkette ist Kosmetik gegenueber einem
+Outbound, der ausserhalb dreier Laender gar nicht funktioniert. Wenn du umstellst: begruende es
+in einer Zeile an mich und halt die Kollisionsregeln ein (P5 nach P2 wegen `outbound-gates.js`,
+P7 nach P5 und P6). Das ist ausdruecklich **deine** Entscheidung, keine Rueckfrage an mich.
 
 ---
 

@@ -151,9 +151,34 @@ sondern die **Vorab-Schaetzung**, und die entscheidet nur, ob das Gate den Anruf
 stehen. Die naechste Session bewertet die Position von P5 neu, statt sie aus diesem Plan zu
 uebernehmen.
 
-**Offen und vor P7 zu klaeren:** `VOICE_TARIFF_DEFAULT_CENTS` wurde im Dashboard **nicht
-abgelesen**. Der 402-Befund aus GAP-33 stammt vom Blueprint-Wert `300` - steht live etwas
-Realistisches, existiert dieser 402 in Produktion gar nicht.
+### P-B1 - Der 402 ist LIVE echt, kein Blueprint-Artefakt (Owner-Antwort 2026-07-25)
+
+Die letzte Unschaerfe ist aufgeloest: **`VOICE_TARIFF_DEFAULT_CENTS` existiert im Render-Dashboard
+nicht.** Damit laufen alle drei Eingangsgroessen der Reserve auf Code-Defaults, die zufaellig mit
+`render.yaml` uebereinstimmen - und die Rechnung ist nachvollziehbar:
+
+`compute_reserve` (`src/telephony/outbound-gates.js`):
+`reserveCents = tariffCentsPerMin(to) * Math.ceil(maxDur / 60)`
+
+| Groesse | Quelle | Wert |
+| --- | --- | --- |
+| `VOICE_TARIFF_DEFAULT_CENTS` | Code-Default (`config.js:463`), Dashboard leer | 300 ct/min |
+| `MAX_CALL_DURATION_S` | Code-Default 180 (`config.js:803`), `render.yaml` ebenfalls 180 | 180 s -> 3 min |
+| `DEFAULT_TENANT_BUDGET_CENTS` | Code-Default 600 (`config.js:512`), Dashboard leer | 600 ct |
+
+**Reserve = 300 x 3 = 900 ct gegen eine Decke von 600 ct -> es fehlen 3,00 EUR -> 402.** Das ist
+woertlich die Fehlermeldung, die der GAP-33-Lauf gemessen hat
+(`tasks/i18n-tests/14-gap33-bericht.md`, Befund B1).
+
+**Tragweite - das ist der eigentliche Launch-Blocker dieses Plans.** Ein Tenant mit
+Standard-Budget kann heute **ausschliesslich nach `+49`, `+33` und `+44`** telefonieren; jedes
+andere Ziel wird mit 402 abgewiesen. Ein US-Kunde kann keine US-Nummer anrufen. Der weltweite
+Start (Owner-Entscheidung 7.11) ist damit nicht "unschoen", sondern **technisch unmoeglich**,
+solange P5 und P7 nicht stehen.
+
+Damit ist die Abschwaechung aus P-B zu praezisieren: die ORIG-Kette ist zwar **kein dauerhafter
+Geldverlust** (`cost-truing` korrigiert), aber die **Gate-Wirkung ist ein harter Blocker**.
+P5 -> P7 ist der kritische Pfad, an dem der Weltstart haengt - nicht die Sprachkette.
 
 ---
 
@@ -1530,13 +1555,15 @@ Hier steht, wo die Datenlage duenn ist. Nichts davon wird in diesem Plan als gek
 >
 > **U2, U4, U5, U9, U10 bleiben unveraendert offen.** Neu hinzu:
 >
-> - **U11 - `VOICE_TARIFF_DEFAULT_CENTS` ist weiterhin nicht abgelesen.** Aus O1 offengeblieben.
->   Solange der Wert fehlt, misst `test/prod-env.js` GAP-33 gegen den Blueprint-Wert `300`, und der
->   402-Befund koennte ein reines Blueprint-Artefakt sein (siehe Praemisse P-B). **Vorbedingung
->   fuer P7.**
-> - **U12 - die Position von P5 ist neu zu bewerten.** Praemisse P-B entwertet die Begruendung
->   "laufender Geldverlust". Die naechste Session entscheidet die Reihenfolge neu, statt sie aus
->   diesem Plan zu uebernehmen.
+> - ~~**U11 - `VOICE_TARIFF_DEFAULT_CENTS` ist nicht abgelesen.**~~ **BEANTWORTET 2026-07-25: die
+>   Variable existiert im Dashboard nicht**, laeuft also auf dem Code-Default 300. Damit ist der
+>   402 live echt und kein Blueprint-Artefakt - vollstaendige Rechnung in Abschnitt 2a, P-B1.
+>   `test/prod-env.js` traegt den Wert kuenftig als *belegt gleich dem Blueprint* ein, nicht mehr
+>   als unmeasured.
+> - **U12 - die Position von P5 ist neu zu bewerten - und zwar nach OBEN.** P-B entwertet zwar die
+>   Begruendung "laufender Geldverlust", P-B1 ersetzt sie aber durch eine staerkere: **P5 -> P7 ist
+>   der kritische Pfad, ohne den kein Ziel ausserhalb `+49/+33/+44` erreichbar ist.** Die naechste
+>   Session prueft, ob P5 und P7 vor P8/P9 gehoeren.
 
 | # | Unsicherheit | Warum sie zaehlt | Aufloesung |
 | --- | --- | --- | --- |
