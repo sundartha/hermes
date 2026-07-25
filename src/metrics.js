@@ -96,10 +96,22 @@ export function createMetrics({
     log("speech_result", { callId, chars });
   }
 
-  return { llmCall, logTurn, recordTurnRendered, logTurnGap, logShimTurn, logSpeechResult };
+  // Ablehnung eines Outbound-Calls (GAP-35): das EINZIGE Laufzeitsignal, an dem ein
+  // laender-/sprachweiter Totalausfall auffaellt ("wenn ab morgen 100 % der Anrufe aus
+  // Land X scheitern - welche Log-Zeile sagt das?"). Whitelist wie llmCall: geloggt
+  // werden AUSSCHLIESSLICH diese drei Felder, auch wenn der Aufrufer mehr mitgibt -
+  // Gate-Grund, ISO-Land und Sprache des Tenants. NIE eine Rufnummer (weder Ziel noch
+  // Absender), NIE tenantId/requestedBy, NIE ein Transkriptfragment (Absolute Regel 4).
+  function logCallDenied({ grund, country, language }) {
+    if (!enabled) return;
+    log("call_denied", { grund, country, language });
+  }
+
+  return { llmCall, logTurn, recordTurnRendered, logTurnGap, logShimTurn, logSpeechResult, logCallDenied };
 }
 
 // Prozessweiter Singleton (P15). Konsumenten: claude.js (llmCall via createLlmClient,
 // logTurn) + routes/voice.js (recordTurnRendered/logTurnGap/logSpeechResult im /voice/turn)
-// + telnyx-llm-shim.js (logShimTurn im Custom-LLM-Shim, C-Telnyx P10).
+// + telnyx-llm-shim.js (logShimTurn im Custom-LLM-Shim, C-Telnyx P10)
+// + routes/api-calls.js (logCallDenied in der Denial-Senke von POST /api/calls).
 export const metrics = createMetrics();

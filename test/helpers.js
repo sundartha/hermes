@@ -62,6 +62,10 @@ export const BASE_ENV = {
   // L0-Instrumentierung in Spawn-Tests AUS (deterministisch, kein Log-Rauschen; sonst
   // leakt lokales .env via dotenv -> Baseline-Drift, Lehre test-base-env-drift).
   METRICS_ENABLED: "false",
+  // GAP-36: Deploy-Commit in Spawn-Tests neutral leer (-> Sentinel "unbekannt"), sonst
+  // leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
+  // gap-36-healthz-fingerprint.test.js setzt ihn explizit.
+  RENDER_GIT_COMMIT: "",
   TWILIO_ACCOUNT_SID: "ACtest00000000000000000000000000",
   TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
   // Absendernummern sind keine Env-Var mehr: die Owner-Nummer kommt ueber

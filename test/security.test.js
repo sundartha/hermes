@@ -12,7 +12,11 @@ test("healthz ist offen erreichbar", async () => {
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { ok: true });
+    // GAP-36 (P1): /healthz traegt zusaetzlich commit+configHash (Deploy-Wahrheit,
+    // s. test/gap-36-healthz-fingerprint.test.js) - hier nur die Auth-Ausnahme selbst
+    // geprueft (ok:true bleibt Teil der Form).
+    const body = await res.json();
+    assert.equal(body.ok, true);
   } finally {
     await srv.stop();
   }

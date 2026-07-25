@@ -17,6 +17,7 @@ import { agentTurn } from "./claude.js";
 import { localeFor } from "./i18n/locales.js";
 import { safeEqual } from "./util.js";
 import { BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
+import { configFingerprint } from "./config-fingerprint.js";
 import {
   voiceControl,
   webhookEvents,
@@ -104,7 +105,16 @@ export function registerPublicRoutes({ app, config, store, watchdog }) {
   // /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
   // /healthz (Keep-Alive) und vertrauenswuerdige lokale In-Process-Aufrufe (interne
   // MCP-Tools, isTrustedLocalCaller - NICHT per Socket-Adresse allein, s.u.).
-  app.get("/healthz", (_req, res) => res.json({ ok: true }));
+  // GAP-36 (Deploy-Wahrheit): der EINE Ort, an dem der laufende Dienst selbst sagt,
+  // welchen Commit und welche Konfiguration er faehrt (Post-Deploy-Smoke +
+  // Rollback-Drill). AUTH-AUSNAHME bleibt unveraendert (Keep-Alive) - deshalb NUR
+  // Git-SHA + Einweg-Hash, NIE ein Rohwert oder Secret (Begruendung in
+  // src/config-fingerprint.js). Pro Request neu gerechnet: sha256 ueber ~40 Byte ist
+  // vernachlaessigbar, der Endpunkt liegt hinter dem Rate-Limiter, und ein gecachter
+  // Wert waere ein Lazy-Init-Antipattern (P15) mit Staleness-Risiko.
+  app.get("/healthz", (_req, res) =>
+    res.json({ ok: true, commit: config.server.deployedCommit, configHash: configFingerprint(config) }),
+  );
 
   // ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
   // AUTH-AUSNAHME (Regel 3, begruendet): bewusst VOR der Basic-Auth gemountet, ohne

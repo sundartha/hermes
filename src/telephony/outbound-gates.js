@@ -123,6 +123,23 @@ const logWarningFailure = (e) => console.error(`[${PLATFORM_WARN_EVENT}]`, e.mes
 // waere ein Cross-Tenant-Leck (Absolute Regel 4/6, wie PLATFORM_DENIAL).
 const warningDetail = (w) => `summe_cents=${w.totalCents} monat=${w.monthKey}`;
 
+// Audit-Ereignis jeder Outbound-Ablehnung. EINE Konstante statt elf Literalen (G25).
+const PLACE_CALL_DENIED_EVENT = "place_call_denied";
+
+// EINE Bauform fuer das Audit-Objekt einer Ablehnung (G5). Der Ablehnungsgrund steht
+// genau EINMAL im Code und erscheint zweimal: im Bestands-Detailtext (Wortlaut
+// byte-identisch, von test/outbound-gates-order.test.js + deny-diagnosability.test.js
+// gepinnt) UND als eigenes, maschinenlesbares Feld, aus dem der Aufrufer das PII-freie
+// Denial-Ereignis baut (GAP-35). Struktur statt Konvention (G27): ein auditierter Deny
+// laesst sich gar nicht mehr ohne grund bauen. detailSuffix ist der bereits formatierte
+// Rest der Bestandszeile (tenant=/requestedBy=) - er variiert je Gate und bleibt deshalb
+// an der Aufrufstelle sichtbar.
+const denialAudit = (grund, ctx, detailSuffix = "") => ({
+  event: PLACE_CALL_DENIED_EVENT,
+  grund,
+  detail: `to=${ctx.to} grund=${grund}${detailSuffix}`,
+});
+
 const isDenied = (to) =>
   EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
@@ -429,10 +446,11 @@ export function makeOutboundGates({
       name: "outbound_frozen",
       run(ctx) {
         if (!config.safety.outboundFrozen) return null;
-        return deny(403, { error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=frozen`,
-        });
+        return deny(
+          403,
+          { error: "Outbound-Anrufe sind derzeit gesperrt (OUTBOUND_FROZEN)." },
+          denialAudit("frozen", ctx),
+        );
       },
     },
     // Derivations-Gate (mutiert ctx, lehnt nie ab): Identitaet serverseitig (nur localhost-
@@ -453,10 +471,11 @@ export function makeOutboundGates({
       name: "tenant_reject",
       run(ctx) {
         if (ctx.tenantId !== TENANT_REJECT) return null;
-        return deny(403, { error: "Kein Tenant fuer diese Identitaet." }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=tenant_unbekannt requestedBy=${ctx.requestedBy}`,
-        });
+        return deny(
+          403,
+          { error: "Kein Tenant fuer diese Identitaet." },
+          denialAudit("tenant_unbekannt", ctx, ` requestedBy=${ctx.requestedBy}`),
+        );
       },
     },
     // Derivations-Gate: nationale Schreibweise wird HIER deterministisch aufgeloest, NICHT im
@@ -494,10 +513,11 @@ export function makeOutboundGates({
       run(ctx) {
         const e = kycGateError(ctx.tenantId);
         if (!e) return null;
-        return deny(e.status, { error: e.message }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=${e.grund} tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,
-        });
+        return deny(
+          e.status,
+          { error: e.message },
+          denialAudit(e.grund, ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+        );
       },
     },
     // Identitaets-Gate (G1): ohne registrierten Auftraggeber-Namen KEIN Outbound (sonst
@@ -509,10 +529,11 @@ export function makeOutboundGates({
       run(ctx) {
         ctx.ownerName = store.tenantContext(ctx.tenantId).ownerName;
         if (ctx.ownerName) return null;
-        return deny(403, { error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=keine_identitaet tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,
-        });
+        return deny(
+          403,
+          { error: "Kein registrierter Auftraggeber-Name fuer diesen Tenant." },
+          denialAudit("keine_identitaet", ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+        );
       },
     },
     // Derivations-Gate: Rechteprofil tenant-gekeyt, aufgeloest NACH dem TENANT_REJECT-Check,
@@ -539,10 +560,11 @@ export function makeOutboundGates({
         });
         if (!e) return null;
         if (e.status === 400) return deny(400, { error: e.message });
-        return deny(e.status, { error: e.message }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=${e.grund} requestedBy=${ctx.requestedBy}`,
-        });
+        return deny(
+          e.status,
+          { error: e.message },
+          denialAudit(e.grund, ctx, ` requestedBy=${ctx.requestedBy}`),
+        );
       },
     },
     // Freitext-Validierung (E164/Nummern-Gates liefen schon). 400 = reiner Eingabefehler,
@@ -597,10 +619,11 @@ export function makeOutboundGates({
       run(ctx) {
         const o = outboundFrom(store.load(), ctx.tenantId);
         if (!o) {
-          return deny(403, { error: "Kein aktive Absendernummer fuer diesen Tenant." }, {
-            event: "place_call_denied",
-            detail: `to=${ctx.to} grund=keine_tenant_nummer tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,
-          });
+          return deny(
+            403,
+            { error: "Kein aktive Absendernummer fuer diesen Tenant." },
+            denialAudit("keine_tenant_nummer", ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+          );
         }
         ctx.fromNumber = o.fromNumber;
         ctx.outboundProvider = o.provider;
@@ -619,16 +642,14 @@ export function makeOutboundGates({
       run(ctx) {
         if (store.budgetExceeded(ctx.tenantId, config.billing)) {
           const { grund, message } = tenantBudgetDenial(ctx.tenantId);
-          return deny(402, { error: message }, {
-            event: "place_call_denied",
-            detail: `to=${ctx.to} grund=${grund} tenant=${ctx.tenantId}`,
-          });
+          return deny(402, { error: message }, denialAudit(grund, ctx, ` tenant=${ctx.tenantId}`));
         }
         if (store.globalBudgetExceeded(config.billing)) {
-          return deny(402, { error: PLATFORM_DENIAL }, {
-            event: "place_call_denied",
-            detail: `to=${ctx.to} grund=${PLATFORM_DENIAL_REASON} tenant=${ctx.tenantId}`,
-          });
+          return deny(
+            402,
+            { error: PLATFORM_DENIAL },
+            denialAudit(PLATFORM_DENIAL_REASON, ctx, ` tenant=${ctx.tenantId}`),
+          );
         }
         return null;
       },
@@ -653,10 +674,7 @@ export function makeOutboundGates({
             error:
               "Inkludierte Plan-Minuten aufgebraucht. Bitte Tarif anpassen oder neue Abrechnungsperiode abwarten.",
           },
-          {
-            event: "place_call_denied",
-            detail: `to=${ctx.to} grund=minutes tenant=${ctx.tenantId}`,
-          },
+          denialAudit("minutes", ctx, ` tenant=${ctx.tenantId}`),
         );
       },
     },
@@ -687,19 +705,21 @@ export function makeOutboundGates({
           outcome = await store.withStoreLock(() => reserveOutcome(ctx));
         } catch (e) {
           console.error(`[place_call] reserve fehlgeschlagen tenant=${ctx.tenantId}:`, e.message); // secret-frei
-          return deny(402, { error: "Reservierung fehlgeschlagen. Bitte erneut versuchen." }, {
-            event: "place_call_denied",
-            detail: `to=${ctx.to} grund=reserve_error tenant=${ctx.tenantId}`,
-          });
+          return deny(
+            402,
+            { error: "Reservierung fehlgeschlagen. Bitte erneut versuchen." },
+            denialAudit("reserve_error", ctx, ` tenant=${ctx.tenantId}`),
+          );
         }
         if (outcome.reserved) {
           if (outcome.warning) emitPlatformSpendWarning(outcome.warning, ctx);
           return null;
         }
-        return deny(402, { error: outcome.message }, {
-          event: "place_call_denied",
-          detail: `to=${ctx.to} grund=${outcome.grund} tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`,
-        });
+        return deny(
+          402,
+          { error: outcome.message },
+          denialAudit(outcome.grund, ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+        );
       },
     },
   ];

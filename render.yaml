@@ -333,10 +333,14 @@ services:
         value: "10000"
       - key: LLM_BREAKER_COOLDOWN_MS
         value: "30000"
-      # L0-Instrumentierung: PII-freie Latenz-/STT-Gap-Logs. Default aus = byte-identisch.
-      # Fuer eine Live-Messung (L1-Datengrundlage) im Dashboard auf "true" setzen.
+      # L0-Instrumentierung: PII-freie Latenz-/STT-Gap-Logs UND (GAP-35) das
+      # Ablehnungs-Ereignis mit Land/Sprache. Im Mehr-Laender-Betrieb
+      # (ALLOWED_COUNTRY_CODES > 1 Eintrag bzw. "*") ist das die EINZIGE Log-Zeile, an
+      # der ein laenderweiter Totalausfall auffaellt -> hier "true".
+      # ACHTUNG: der Live-Service ist Dashboard-managed - dieser Blueprint-Wert allein
+      # schaltet nichts scharf (Betriebsauflage im Abnahmeprotokoll).
       - key: METRICS_ENABLED
-        value: "false"
+        value: "true"
       - key: MAX_CALL_DURATION_S
         value: "180"
       # OUT-05: Reserve-Backstop-Puffer (ms) ueber der Call-Max-Dauer.
