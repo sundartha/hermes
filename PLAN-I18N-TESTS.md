@@ -634,6 +634,17 @@ Launch-Gate ist.
 >
 > **GAP-33 bleibt der erste auszufuehrende Test** - daran aendert keine Entscheidung etwas.
 
+> **Nachtrag 2026-07-25 - Welle W1 ist UMGESETZT** (Beleg:
+> [`tasks/i18n-tests/15-w1-bericht.md`](tasks/i18n-tests/15-w1-bericht.md)). Damit ist auch
+> belegt, dass die Gruppenlisten unten **inhaltlich ueberholt** sind: die genannten "106
+> Tests" sind ein Stand VOR der Duplikat-Aufloesung und VOR den Owner-Entscheidungen. Die
+> Gruppen 1-5 fuehren **26 IDs**, die entfallen oder zurueckgestellt sind (OUT-01, OUT-13,
+> LANG-08, PAY-13, PAY-14, LAW-04, LANG-01, LANG-10, WEB-22, WEB-23, FMT-07, FMT-08, FMT-10,
+> LANG-03, LANG-04, WEB-20, WEB-21, PROMPT-04, WEB-05, PAY-05, PAY-07, GAP-02, LAW-06,
+> LAW-07, GAP-12, GAP-13). Verbindlich ist die Schnittmenge aus
+> [`00-kanonische-liste.md`](tasks/i18n-tests/00-kanonische-liste.md) und Abschnitt 4.2;
+> tatsaechlicher W1-Umfang: **78 Tests**. Die **Gruppenreihenfolge** unten bleibt gueltig.
+
 Drei Wellen. Jede Welle hat eine Voraussetzung, ein Kommando und einen **Abbruchpunkt** -
 eine Bedingung, unter der nicht weitergemacht wird, weil jedes weitere Ergebnis wertlos waere.
 

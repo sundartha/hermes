@@ -98,6 +98,21 @@ implementierbar, `blockiert 7.x` = braucht zuerst die Produktentscheidung aus Ka
 D31 bis D35 sind neu: sie entstehen erst durch die Einarbeitung der `UI-*`-Tests, die im
 Master-Katalog fehlen.
 
+> **Nachtrag 2026-07-25 (aus der Umsetzung von Welle W1, Beleg:
+> [`15-w1-bericht.md`](15-w1-bericht.md)).** Zwei Korrekturen an dieser Tabelle:
+>
+> 1. **D25 (PAY-04 + GAP-32) ist NICHT durchgaengig "SOLL (rot)".** Gemessen: **PAY-04 ist
+>    gruen**, ebenso das verwandte ORIG-05. Grund: die Spezifikation verlangt die Assertion
+>    `reserveExceedsBudget(...) === true` - genau das liefert der Code heute. Der
+>    *Mechanismus* stimmt (R3), der Defekt sitzt im *Wert*. Den Sollzustand "der
+>    Auslandsanruf soll durchkommen" traegt bereits GAP-33
+>    (`test/prod-config-smoke.test.js`, heute rot mit 402). PAY-04/ORIG-05 sind deshalb als
+>    gruene Charakterisierung mit Verweis auf den SOLL-Traeger umgesetzt. Dasselbe gilt fuer
+>    **MCP-05**.
+> 2. **Zaehlung:** die entfallen-Spalte oben enthaelt **109** IDs, nicht 108 (ausgezaehlt,
+>    keine Doppelnennung). Damit **322 - 109 = 213** kanonische Tests statt 214; die
+>    Folgezahlen in Abschnitt 4 und 5 sind um eins zu hoch (richtig: 218 bzw. **216**).
+
 > **Nachtrag D3 (Live-Messung 2026-07-22,**
 > [`13-live-env-befund.md`](13-live-env-befund.md)**).** Die Praemisse des Clusters war falsch:
 > `ALLOWED_COUNTRY_CODES` steht live auf `*`, nicht auf `+49,+33,+44`. Der Leittest wechselt
