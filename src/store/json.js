@@ -703,6 +703,28 @@ export function findTenantBySubscription(subscriptionId) {
   return ops.findTenantBySubscription(load(), subscriptionId);
 }
 
+// ---- Billing-Hold (GAP-03, O2): Wrapper-Parity zu pg.js ----
+// findTenantByCustomer ist reine Query (kein save, analog findTenantBySubscription).
+// setBillingHold/clearBillingHold mutieren -> save (Muster setTenantStripe).
+// billingHoldActive ist reine Query; now an der IO-Grenze erzeugt (Muster budgetExceeded).
+export function findTenantByCustomer(customerId) {
+  return ops.findTenantByCustomer(load(), customerId);
+}
+
+export function setBillingHold(tenantId, patch) {
+  ops.setBillingHold(load(), tenantId, patch);
+  save();
+}
+
+export function clearBillingHold(tenantId) {
+  ops.clearBillingHold(load(), tenantId);
+  save();
+}
+
+export function billingHoldActive(tenantId) {
+  return ops.billingHoldActive(load(), tenantId, new Date().toISOString());
+}
+
 // ---- Private Summary-Nummer pro Tenant (F2) ----
 // setPrivateNumber mutiert -> save (Muster wie setTenantStripe); tenantPrivateNumber
 // ist reine Query (kein save, analog tenantStripe). PII: der Wert wird hier nie geloggt.

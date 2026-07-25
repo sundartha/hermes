@@ -1015,7 +1015,15 @@ export function tenantStripe(s, tenantId) {
 export function setTenantSubscription(
   s,
   tenantId,
-  { subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart, numberSetupFeeExempt } = {},
+  {
+    subscriptionId,
+    planSlug,
+    currentPeriodEnd,
+    currentPeriodStart,
+    numberSetupFeeExempt,
+    activationPending,
+    periodCreditRevoked,
+  } = {},
 ) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantSubscription: Tenant ${tenantId} nicht gefunden`);
@@ -1038,6 +1046,11 @@ export function setTenantSubscription(
   // abgerechnet wurde - befreit provisionNumber vom placeHold. Selektiver Patch wie
   // die uebrigen Felder oben.
   if (numberSetupFeeExempt !== undefined) tenant.stripeNumberSetupFeeExempt = numberSetupFeeExempt;
+  // GAP-04-Wartezustand (Marker der Aktivierungs-Erlaubnis, s. tenantMayRequestNumber) und
+  // GAP-03-Periodenguthaben-Widerruf (Rueckerstattung): selektive Patch-Keys, Muster wie
+  // numberSetupFeeExempt.
+  if (activationPending !== undefined) tenant.stripeActivationPending = activationPending;
+  if (periodCreditRevoked !== undefined) tenant.stripePeriodCreditRevoked = periodCreditRevoked;
   return tenant;
 }
 
@@ -1120,6 +1133,10 @@ export function tenantSubscription(s, tenantId) {
     // Fail-closed Default false (nie undefined): unbekannt/nicht geprueft -> placeHold
     // laeuft normal (kein stiller Kosten-Bypass).
     numberSetupFeeExempt: tenant?.stripeNumberSetupFeeExempt ?? false,
+    // GAP-04-Wartezustand (s. tenantMayRequestNumber) + GAP-03-Periodenguthaben-Widerruf:
+    // fail-closed Default false (nie undefined), Muster numberSetupFeeExempt.
+    activationPending: tenant?.stripeActivationPending ?? false,
+    periodCreditRevoked: tenant?.stripePeriodCreditRevoked ?? false,
   };
 }
 
@@ -1129,6 +1146,48 @@ export function tenantSubscription(s, tenantId) {
 export function findTenantBySubscription(s, subscriptionId) {
   if (!subscriptionId) return null;
   return s.tenants.find((t) => t.stripeSubscriptionId === subscriptionId) ?? null;
+}
+
+// GAP-03: Tenant-Aufloesung ueber die Stripe-Customer-Referenz (Geld-Ereignisse ohne
+// subscriptionId, z.B. charge.dispute.created/charge.refunded tragen nur customer). Reine
+// Query, kein IO. Muster findTenantBySubscription (fail-closed null, kein Cross-Tenant-Effekt).
+export function findTenantByCustomer(s, customerId) {
+  if (!customerId) return null;
+  return s.tenants.find((t) => t.stripeCustomerId === customerId) ?? null;
+}
+
+// ---- Billing-Hold (GAP-03, O2) ----
+// Setzt/loescht den Outbound-Sperrgrund eines Tenants + optionale Frist (dueAtIso, ISO).
+// Reine Mutation, kein IO (Wrapper saved). Fehlender Tenant -> No-Op (Muster
+// setSuspendedAtIfAbsent: ein Webhook-Event fuer einen unbekannten Tenant darf nicht werfen).
+export function setBillingHold(s, tenantId, { reason, dueAtIso = null } = {}) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return;
+  tenant.billingHold = reason;
+  tenant.billingHoldDueAt = dueAtIso;
+}
+
+// Reversibilitaet (O2/ENTSCHAERFT 3): ein bestaetigtes aktives Abo hebt jede Beanstandungs-
+// Wirkung auf (webhook.js ACTIVATE-Zweig). Symmetrisch zu setBillingHold, idempotent.
+export function clearBillingHold(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return;
+  tenant.billingHold = null;
+  tenant.billingHoldDueAt = null;
+}
+
+// Ist der Hold GERADE wirksam? Ohne gesetzten Grund -> null (kein Hold). Mit Grund, aber
+// OHNE Frist -> sofort aktiv (z.B. paused). Mit Frist -> erst wenn nowIso die Frist erreicht
+// hat (payment_action_required: Warnung davor, Sperre danach) - "Kein Scheduler": die Frist
+// wird hier, am Ausgabepunkt (outbound-gates.js), lazy durchgesetzt. Reine Query, kein IO.
+// nowIso wird injiziert (P12/R, Uhr testbar); der Fassaden-Wrapper reicht new Date().
+export function billingHoldActive(s, tenantId, nowIso) {
+  const tenant = findTenant(s, tenantId);
+  const reason = tenant?.billingHold ?? null;
+  if (!reason) return null;
+  const dueAtIso = tenant.billingHoldDueAt;
+  if (!dueAtIso) return reason;
+  return nowIso >= dueAtIso ? reason : null;
 }
 
 // ---- Private Summary-Nummer pro Tenant (F2) ----
@@ -1248,6 +1307,23 @@ function clearNumberProvisionSkip(tenant) {
 // defaults.js): die angefragte Nummer traegt von Anfang an ihren Geo-Anker, den der
 // spaetere Provider-Kauf (Telnyx-Laendersuche) und das Inbound-/Outbound-Routing
 // lesen. Bestehende Aufrufer ohne country/language bleiben verhaltens-erhaltend (DE/de).
+// GAP-04: darf fuer diesen Tenant eine Nummer angefragt werden? Zwei Wege, strikt getrennt:
+//  (1) status ACTIVE - der Bestandspfad (POST /api/onboard, Operator-Retry): UNVERAENDERT.
+//  (2) GAP-04-Wartezustand: die Zahlung ist bestaetigt (activatePaidTenant hat den Marker
+//      gesetzt), der Tenant ist aber noch NICHT aktiv - genau dafuer existiert der Marker,
+//      damit die Aktivierung das Provisioning-Ergebnis abwarten kann, statt es vorwegzunehmen.
+// Hart ausgeschlossen bleibt jeder GESPERRTE Tenant: closed nie, und ein gesetzter
+// Suspend-Anker (Zahlungsausfall/Abo geloescht) nie - der Marker ist eine Erlaubnis der
+// Aktivierung, KEINE Umgehung einer Sperre.
+export function tenantMayRequestNumber(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return false;
+  if (tenant.status === TENANT_STATUS.ACTIVE) return true;
+  if (tenant.status === TENANT_STATUS.CLOSED) return false;
+  if (tenant.suspendedAt) return false;
+  return tenant.stripeActivationPending === true;
+}
+
 export function requestNumber(
   s,
   {
@@ -1260,7 +1336,7 @@ export function requestNumber(
   },
 ) {
   const tenant = findTenant(s, tenantId);
-  if (!tenant || tenant.status !== TENANT_STATUS.ACTIVE)
+  if (!tenantMayRequestNumber(s, tenantId))
     return { ok: false, reason: REQUEST_NUMBER_REASON.TENANT_INACTIVE };
   if (liveNumbers(s).length >= maxNumbers) {
     markNumberProvisionSkipped(tenant, GLOBAL_CAP_REASON);

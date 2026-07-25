@@ -41,6 +41,11 @@ function fakeDeps({ delays = {}, executionOrder = null, tenant = TENANT } = {}) 
       setProfile: () => ({ profile: {}, changed: [] }),
       setSuspendedAtIfAbsent: (t) => calls.suspend.push(t),
       clearSuspendedAt: () => {},
+      // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
+      // clearBillingHold (Reversibilitaet bei ACTIVATE) - beide No-op-Fakes, dieser Test
+      // prueft die Serialisierungs-/Ordnungswache-Invariante, nicht die Geld-Wirkung.
+      ensureTenant: async () => {},
+      clearBillingHold: () => {},
     },
     accounts: {
       setStatus: async (t, status) => {
@@ -54,7 +59,11 @@ function fakeDeps({ delays = {}, executionOrder = null, tenant = TENANT } = {}) 
     sessions: { invalidateByTenant: async () => {} },
     audit: (name, _req, detail) => calls.audit.push([name, detail]),
     req: {},
-    provision: async (t) => calls.provision.push(t),
+    // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
+    provision: async (t) => {
+      calls.provision.push(t);
+      return { ok: true, reason: "queued" };
+    },
   };
 }
 

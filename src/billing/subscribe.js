@@ -178,8 +178,8 @@ export async function activateSubscriptionFromCheckoutSession({
         currentPeriodEnd: outcome.currentPeriodEnd,
         currentPeriodStart: outcome.currentPeriodStart,
       });
-      const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
-      return { ok: false, reason: "already_subscribed", profile };
+      const { profile, provisioned } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
+      return { ok: false, reason: "already_subscribed", profile, provisioned };
     }
     // Verwaiste, real bei Stripe abgerechnete Zweit-Subscription (s. Kommentar oben).
     // subscriptionId bleibt im Ergebnis (opake Referenz, KEIN Secret - wie ueberall
@@ -196,12 +196,13 @@ export async function activateSubscriptionFromCheckoutSession({
     currentPeriodEnd: outcome.currentPeriodEnd,
     currentPeriodStart: outcome.currentPeriodStart,
   });
-  const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
+  const { profile, provisioned } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
   return {
     ok: true,
     subscriptionId: outcome.subscriptionId,
     planSlug: outcome.planSlug,
     currentPeriodEnd: outcome.currentPeriodEnd,
     profile,
+    provisioned,
   };
 }

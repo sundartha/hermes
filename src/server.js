@@ -212,6 +212,7 @@ const deps = {
   directiveSynth,
   voiceRender,
   costTruing,
+  messaging,
 };
 const { app } = await buildApp(deps);
 await bootServer({ app, ...deps });

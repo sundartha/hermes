@@ -14,6 +14,7 @@ import {
   shouldPersistProvisionResult,
 } from "../store/defaults.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
+import { PROVISION_REASON } from "../billing/provision-outcome.js";
 
 export function makeProvisioningOrchestrator({
   store,
@@ -100,7 +101,7 @@ export function makeProvisioningOrchestrator({
       })
       .catch((e) => {
         console.error("[webhook-provision] Persistenz fehlgeschlagen:", e.message);
-        return { ok: false, reason: "persist_error" };
+        return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
       });
     if (!numberResult.ok) {
       // already_provisioned ist ein erwarteter idempotenter No-op (Webhook-Retry/Folge-
@@ -109,25 +110,26 @@ export function makeProvisioningOrchestrator({
       // trotz bezahltem Abo -> in den Audit-Trail (Spec BK3: "Limit ueberschritten -> kein Kauf,
       // Audit-Eintrag"). req=null -> audit-util markiert die Quelle als "system" (kein HTTP-
       // Kontext im Webhook-Trigger). Nur die tenantId + Grund-Code, kein Secret/PII (H4).
-      if (numberResult.reason !== "already_provisioned")
+      if (numberResult.reason !== PROVISION_REASON.ALREADY_PROVISIONED)
         audit("webhook_provision_skipped", null, `tenant=${tenantId} grund=${numberResult.reason}`);
       return { ok: false, reason: numberResult.reason };
     }
     // Beide ok-Faelle liefern eine numberId (redrive: numberResult.numberId; fresh: numberResult.number.id).
-    const numberId = numberResult.reason === "redrive" ? numberResult.numberId : numberResult.number.id;
+    const numberId =
+      numberResult.reason === PROVISION_REASON.REDRIVE ? numberResult.numberId : numberResult.number.id;
     // Dry-Run (PROVISIONING_ENABLED=false, P3-Default): Nummer bleibt 'requested', KEIN Kauf/
     // Re-Drive - EINE Stelle fuer beide Pfade (G5, kein doppelter Gate).
-    if (!config.provisioning.provisioningEnabled) return { ok: true, reason: "dry_run", numberId };
+    if (!config.provisioning.provisioningEnabled) return { ok: true, reason: PROVISION_REASON.DRY_RUN, numberId };
     // Redrive: KEINE neue Nummer/Job (queueProvisioning), sondern den bestehenden stuck-Job in
     // den single-flight-Drain zurueckgeben (dieselbe numberId/idempotencyKey -> kein Doppelkauf).
-    if (numberResult.reason === "redrive") {
+    if (numberResult.reason === PROVISION_REASON.REDRIVE) {
       redriveProvisioningJobs([numberResult.job]);
-      return { ok: true, reason: "redrive", numberId, jobId: numberResult.jobId };
+      return { ok: true, reason: PROVISION_REASON.REDRIVE, numberId, jobId: numberResult.jobId };
     }
     const jobRes = await queueProvisioning(numberId, tenantId);
-    if (!jobRes.ok) return { ok: false, reason: "persist_error" };
+    if (!jobRes.ok) return { ok: false, reason: PROVISION_REASON.PERSIST_ERROR };
     void runProvisioningDrainExclusive();
-    return { ok: true, reason: "queued", numberId, jobId: jobRes.jobId };
+    return { ok: true, reason: PROVISION_REASON.QUEUED, numberId, jobId: jobRes.jobId };
   }
 
   // Verarbeitet wartende provision_number-Jobs deterministisch (In-Memory-Drain).

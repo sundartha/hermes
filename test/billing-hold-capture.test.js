@@ -15,7 +15,6 @@ import {
   requestNumber,
   findNumber,
   setTenantStripe,
-  setTenantSubscription,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
@@ -202,29 +201,9 @@ test("Pay2 durchreichen: billing + Tenant MIT Karte -> placeHold bekommt custome
   assert.equal(holdArgs.paymentMethodId, "pm_1");
 });
 
-// ---- Fix B (0-EUR-Checkout generisch): numberSetupFeeExempt ueberspringt Hold/Capture ----
-
-test("Fix B: numberSetupFeeExempt=true -> KEIN placeHold/captureHold, paymentIntentId===null, direkt ACTIVE", async () => {
-  const { s, numberId } = seedRequested();
-  setTenantSubscription(s, "t_user1", { numberSetupFeeExempt: true });
-  const prov = fakeProvisioner();
-  const billing = fakeBilling();
-  const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
-
-  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(result.paymentIntentId, null, "kein PI ohne Hold");
-  assert.deepEqual(methodsOf(billing), [], "kein placeHold/captureHold fuer einen befreiten Tenant");
-  assert.deepEqual(prov.log, ["search:DE", `order:+4915799990001:order_${numberId}`]);
-});
-
-test("Fix B: numberSetupFeeExempt=true + KEIN Zahlungsmittel -> trotzdem ACTIVE (Karten-Pflicht gilt nur fuer den bezahlten Pfad)", async () => {
-  const { s, numberId } = seedRequested({ cardless: true });
-  setTenantSubscription(s, "t_user1", { numberSetupFeeExempt: true });
-  const prov = fakeProvisioner();
-  const billing = fakeBilling();
-  const result = await provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS });
-
-  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
-  assert.equal(result.paymentIntentId, null);
-  assert.deepEqual(methodsOf(billing), [], "kein Zahlungsmittel-Gate fuer einen befreiten Tenant");
-});
+// Fix B ("numberSetupFeeExempt=true -> KEIN placeHold/captureHold" + "... + KEIN
+// Zahlungsmittel -> trotzdem ACTIVE") ist mit P4/GAP-05 GELOESCHT (R1/R5, nicht
+// umgeschrieben): beide Tests pinnten genau den Polaritaets-Konflikt, den GAP-05 behebt
+// (Gutschein-Missbrauch - ein befreiter Tenant bekam eine Nummer OHNE jeden Hold/Karten-
+// Riegel). Das NEUE Verhalten (Hold IMMER, Storno statt Einzug bei Befreiung) ist gepinnt
+// in test/p4-setup-fee-hold.test.js + test/gap-05-number-hold.test.js.

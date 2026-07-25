@@ -791,6 +791,16 @@ export function makeAdminRoutes({ accounts, sessions, audit, webAuthMw, adminMw,
       const ok = await accounts.setStatus(req.params.id, TENANT_STATUS.SUSPENDED);
       if (!ok) return res.status(404).json({ error: "Tenant nicht gefunden" });
       await sessions.invalidateByTenant(req.params.id);
+      // GAP-04: Symmetrie zu approve/clearSuspendedAt - eine manuelle Sperre nimmt auch die
+      // Aktivierungs-Wartezustands-Erlaubnis zurueck, sonst duerfte ein gerade gesperrter
+      // Tenant ueber den stehengebliebenen Marker weiterhin eine Nummer anfragen
+      // (state-ops tenantMayRequestNumber). ensureTenant VOR dem Write (Muster mintSession/
+      // triggerTenantProvisioning): setTenantSubscription wirft fail-closed bei fehlendem
+      // Spiegel-Eintrag - ein Admin kann einen Tenant suspendieren, der noch NIE im Spiegel
+      // stand (kein Web-Login/Onboarding-Schreibzugriff bisher). ensureTenant ist selbst
+      // fail-soft (fangt DB-Fehler, wirft nie). Idempotent (No-Op ohne gesetzten Marker).
+      await store.ensureTenant(req.params.id);
+      store.setTenantSubscription(req.params.id, { activationPending: false });
       await audit.record({
         actorSub: req.tenant.sub,
         tenantId: req.params.id,

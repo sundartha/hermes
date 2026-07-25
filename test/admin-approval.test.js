@@ -165,6 +165,34 @@ test("Admin suspend -> suspended + alle Tenant-Sessions invalidiert + Audit", as
   }
 });
 
+// P4 GAP-04: Admin-Suspend loescht den Wartezustands-Marker (state-ops.tenantMayRequestNumber)
+// - sonst duerfte ein gerade gesperrter Tenant ueber den stehengebliebenen Marker weiterhin
+// eine Nummer anfragen.
+test("Admin suspend loescht den GAP-04-Wartezustands-Marker (activationPending)", async () => {
+  const s = await setup();
+  try {
+    await s.accounts.upsertOnFirstLogin({ sub: "target1", email: "t@x" });
+    await s.accounts.setStatus("t_target1", "active");
+    await s.store.ensureTenant("t_target1");
+    s.store.setTenantSubscription("t_target1", { activationPending: true });
+    assert.equal(
+      s.store.tenantSubscription("t_target1").activationPending,
+      true,
+      "Vorbedingung: Marker gesetzt",
+    );
+
+    const res = await post(`${s.base}/api/admin/tenants/t_target1/suspend`, s.adminSession);
+    assert.equal(res.status, 200);
+    assert.equal(
+      s.store.tenantSubscription("t_target1").activationPending,
+      false,
+      "Marker nach Admin-Suspend geloescht",
+    );
+  } finally {
+    await s.close();
+  }
+});
+
 test("ohne Session -> 401 (fail-closed, vor adminOnly)", async () => {
   const s = await setup();
   try {

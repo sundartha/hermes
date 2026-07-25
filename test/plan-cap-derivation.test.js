@@ -73,8 +73,11 @@ function fakeSubscribeBilling(overrides = {}) {
 function noopAccounts() {
   return { setStatus: async () => {} };
 }
+// GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Provisioning-Ergebnis
+// (provisionCleared) - der Noop muss also einen freigebenden Grund liefern, sonst
+// bliebe jeder Aufrufer hier faelschlich im GAP-04-Wartezustand haengen.
 function noopProvision() {
-  return async () => {};
+  return async () => ({ ok: true, reason: "queued" });
 }
 
 // ---- (a) Happy-Pfad + Formel direkt gepinnt --------------------------------------

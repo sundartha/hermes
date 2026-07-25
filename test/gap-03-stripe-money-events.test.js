@@ -1,7 +1,7 @@
 // GAP-03 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-03").
-// Jedes zahlungsrelevante Stripe-Ereignis muss eine getestete Wirkung haben. Rein,
-// offline (Muster test/p3-payment-webhook.test.js: Fake-Seams, applyStripeWebhook
-// direkt, kein Server-Spawn).
+// GEFIXT in P4: jedes der vier Geld-Ereignisse erzeugt jetzt eine assertierte Wirkung
+// (money-events.js + billing/webhook.js applyMoneyEvent). Rein, offline (Muster
+// test/p3-payment-webhook.test.js: Fake-Seams, applyStripeWebhook direkt, kein Server-Spawn).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyStripeWebhook } from "../src/billing/webhook.js";
@@ -20,7 +20,7 @@ const OUT_OF_SCOPE_TYPES = [
 // vor JEDEM store-Zugriff zurueckkehrt (webhook.js:200) - ein Aufruf einer store-Methode
 // waere selbst schon ein Befund (mehr Wirkung als heute), bricht den Test aber nicht.
 for (const type of OUT_OF_SCOPE_TYPES) {
-  test(`GAP-03 SOLL: Stripe-Event '${type}' muss eine assertierte Wirkung erzeugen (heute: IGNORE, keine Spur)`, async () => {
+  test(`Stripe-Event '${type}' erzeugt eine assertierte Wirkung (GAP-03, gefixt in P4)`, async () => {
     const auditCalls = [];
     await applyStripeWebhook(
       { type, data: { object: { id: "evt_gap03" } } },

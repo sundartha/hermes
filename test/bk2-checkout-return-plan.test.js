@@ -145,7 +145,11 @@ async function setup({
       config: withConfigNamespaces({ ...CONFIG, paymentEnabled, ...configPatch }),
       billing: fakeBilling(billingSpy, checkoutOutcome, { staleCustomerHeal }),
       accounts,
-      provision: async (t) => provisionSpy.push(t),
+      // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
+      provision: async (t) => {
+        provisionSpy.push(t);
+        return { ok: true, reason: "queued" };
+      },
     }),
   );
   const server = await new Promise((r) => {

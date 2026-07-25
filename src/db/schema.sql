@@ -81,6 +81,20 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_provision_skip_at    TEXT;
 -- Backfill (ein Bestands-Tenant war vor diesem Feld nie ueber diesen Pfad markiert). Muster wie
 -- stripe_number_setup_fee_exempt/number_provision_skip_at (ALTER-only, nullable, KEIN CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS suspended_at TEXT;
+-- GAP-04 (PLAN-I18N-FIX.md P4): Wartezustands-Marker der Aktivierung - true zwischen
+-- "Zahlung bestaetigt" und "Provisioning-Ergebnis geklaert" (activatePaidTenant). Erlaubt
+-- state-ops.tenantMayRequestNumber die Nummern-Anfrage, OHNE den Statuswechsel vorwegzunehmen.
+-- Additiv NULLABLE, kein CHECK (Muster stripe_number_setup_fee_exempt).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_activation_pending BOOLEAN;
+-- GAP-03 (O2): Outbound-Sperrgrund + optionale Frist (payment_action_required greift erst
+-- nach Fristablauf, "kein Scheduler" - der Wert wird lazy am Ausgabepunkt gelesen,
+-- outbound-gates.js billingHoldActive). NULL = kein Hold. Additiv NULLABLE, kein CHECK.
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_billing_hold TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_billing_hold_due_at TEXT;
+-- GAP-03 (O2): true nach einer Rueckerstattung (charge.refunded) - die inkludierten Minuten
+-- der laufenden Periode sind 0 (kein Hard-Suspend). Reversibel (webhook.js ACTIVATE-Zweig).
+-- Additiv NULLABLE, kein CHECK (Muster stripe_number_setup_fee_exempt).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_period_credit_revoked BOOLEAN;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

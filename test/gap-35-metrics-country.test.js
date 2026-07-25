@@ -85,6 +85,8 @@ function defaultStore() {
       allowedNumbers: [],
     }),
     tenantInactive: () => false,
+    // GAP-03: kein Zahlungsbeanstandungs-Hold (vollstaendig durchsteuerbarer Default-Store).
+    billingHoldActive: () => null,
     tenantActiveSubscriber: () => true,
     tenantSubscription: () => ({}),
     planMinutesExceeded: () => false,

@@ -57,6 +57,11 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
       // tenant-prolif-c: Grace-Anker-Seams (Suspend stempelt, Activate loescht).
       setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),
       clearSuspendedAt: (tenant) => calls.clearSuspend.push(tenant),
+      // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
+      // clearBillingHold (Reversibilitaet bei ACTIVATE) - beide No-op-Fakes, dieser Test
+      // prueft die KYC/Status/Provisioning-Kette, nicht die Geld-Wirkung der GAP-03-Achse.
+      ensureTenant: async () => {},
+      clearBillingHold: () => {},
     },
     accounts: {
       setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]),
@@ -65,9 +70,23 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
     sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },
     audit: () => {},
     req: {},
-    provision: async (tenant) => calls.provision.push(tenant),
+    // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
+    provision: async (tenant) => {
+      calls.provision.push(tenant);
+      return { ok: true, reason: "queued" };
+    },
   };
 }
+
+// P4 (GAP-04/GAP-03): eine erfolgreiche Aktivierung patcht setTenantSubscription jetzt
+// dreimal zusaetzlich zum eigentlichen Abo-Patch - activationPending true/false
+// (Wartezustands-Marker) + periodCreditRevoked:false (Reversibilitaet, s. webhook.js
+// ACTIVATE-Zweig). EINE Quelle fuer die drei Assertion-Sites unten (G5).
+const activationMarkerPatches = (tenant) => [
+  [tenant, { activationPending: true }],
+  [tenant, { activationPending: false }],
+  [tenant, { periodCreditRevoked: false }],
+];
 
 test("A(a) updated mit tenant_ref -> Abo + KYC(card) + active + provision genau 1x", async () => {
   const deps = fakeDeps();
@@ -87,6 +106,7 @@ test("A(a) updated mit tenant_ref -> Abo + KYC(card) + active + provision genau 
   );
   assert.deepEqual(deps.calls.subscription, [
     ["t_a", { subscriptionId: "sub_1", planSlug: "starter", currentPeriodEnd: 1893456000 }],
+    ...activationMarkerPatches("t_a"),
   ]);
   assert.deepEqual(deps.calls.kyc, [["t_a", KYC_LEVEL.CARD]], "KYC auf CARD gehoben");
   assert.deepEqual(deps.calls.setStatus, [["t_a", "active"]], "Status aktiv");
@@ -120,6 +140,7 @@ test("A(a2) updated mit current_period_start -> Anker im setTenantSubscription-P
         currentPeriodStart: 1890864000,
       },
     ],
+    ...activationMarkerPatches("t_a"),
   ]);
 });
 
@@ -326,6 +347,7 @@ test("A(k) Perioden-Anker aus items.data[0] landet im setTenantSubscription-Patc
         currentPeriodStart: 1890864000,
       },
     ],
+    ...activationMarkerPatches("t_q"),
   ], "Anker aus dem Item persistiert (kein leeres Quota-Fenster)");
 });
 

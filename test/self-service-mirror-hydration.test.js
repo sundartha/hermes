@@ -84,15 +84,19 @@ function fakeBilling() {
 // den Spiegel - sonst liest requestNumber noch 'suspended' -> tenant_inactive -> kein
 // Kauf), dann der echte Decision-Core auf demselben Store. Dry-Run: kein queue/drain ->
 // die Nummer bleibt 'requested'. save() persistiert die Mutation.
+// GAP-04: activatePaidTenant wertet die Rueckgabe jetzt aus (provisionCleared) - der
+// Nachbau reicht das Ergebnis von requestNumberForPaidTenant durch (dieselbe Form, die
+// der echte Orchestrator letztlich liefert: {ok:true, ...} bei frischer Anfrage).
 const provisionSeam = (store) => async (tenantId) => {
   await store.ensureTenant(tenantId);
-  requestNumberForPaidTenant(store.load(), {
+  const r = requestNumberForPaidTenant(store.load(), {
     tenantId,
     fallbackCountry: "DE",
     maxNumbers: HIGH_CAP,
     maxNumbersPerTenant: HIGH_CAP,
   });
   store.save();
+  return r.ok ? { ok: true, reason: "queued" } : r;
 };
 
 // Harness: EIN pglite-Store + Identitaets-Schicht + Web-Login-Routen (mit ensureTenant

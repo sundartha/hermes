@@ -192,6 +192,13 @@ export const {
   setTenantSubscription,
   tenantSubscription,
   findTenantBySubscription,
+  // GAP-03 (O2): Tenant-Aufloesung ueber die Customer-Referenz + Outbound-Sperrgrund-Ledger.
+  // OHNE diese Re-Exports sind sie auf der Fassade undefined -> billing/webhook.js UND
+  // outbound-gates.js wuerfen zur Laufzeit einen TypeError. Muster wie findTenantBySubscription.
+  findTenantByCustomer,
+  setBillingHold,
+  clearBillingHold,
+  billingHoldActive,
   // F2: private Summary-Nummer - Setter (Onboard/Self-Service P4/P5) + Reader (finishCall
   // P7 via planSummarySms). Muster wie setTenantStripe/tenantStripe. OHNE diese Re-Exports
   // sind sie auf der Fassade undefined -> self-service-routes UND planSummarySms werfen zur
