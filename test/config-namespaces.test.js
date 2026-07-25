@@ -44,15 +44,16 @@ const EXPECTED_NAMESPACE_COUNTS = {
   telephony: 8,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   tenancy: 6,
-  server: 7,
+  // P1 (i18n-Fix): deployedCommit ergaenzt (Deploy-Commit fuer /healthz + Boot-Banner) -> 8.
+  server: 8,
   store: 3,
   metrics: 1,
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 124;
+const EXPECTED_TOTAL_KEYS = 125;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (124 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (125 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -127,7 +128,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // P7 (Live-Cost-Tracing, Fixkosten sichtbar machen): alle fuenf neuen Felder sind
   // primitiv (Zahl, kein Array/nested Objekt) -> 115.
   // KE-P6B: costTruingSweepIntervalMs ist primitiv (Zahl) -> 116.
-  assert.equal(checked, 116, "alle primitiven Blaetter (124 - 4 Arrays - 4 nested Objekte) geprueft");
+  // P1 (i18n-Fix, GAP-36): deployedCommit ist primitiv (String) -> 117.
+  assert.equal(checked, 117, "alle primitiven Blaetter (125 - 4 Arrays - 4 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

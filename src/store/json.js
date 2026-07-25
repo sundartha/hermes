@@ -726,6 +726,13 @@ export function setTenantGeo(tenantId, patch) {
   return tenant;
 }
 
+// Leser der Geo-Felder (F1). Reine Query, kein save. Wird von der Denial-Metrik in
+// routes/api-calls.js gebraucht (GAP-35) - ohne diesen Re-Export waere store.tenantGeo
+// auf der Fassade undefined und die Senke wuerfe zur Laufzeit einen TypeError.
+export function tenantGeo(tenantId) {
+  return ops.tenantGeo(load(), tenantId);
+}
+
 // ---- Notifications ----
 export function addNotification(title, body, callId) {
   ops.addNotification(load(), title, body, callId);

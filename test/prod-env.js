@@ -70,9 +70,12 @@ export const LIVE_MEASURED = Object.freeze({
 // statt sie in einem stillen Default verschwinden zu lassen (G27: Struktur statt
 // Konvention). Aufloesbar nur durch Ablesen im Render-Dashboard (Owner-Zugriff).
 export const LIVE_UNMEASURED = Object.freeze({
-  // Beruehrt das Budget-Gate direkt (src/store/state-ops.js:1961,1974: Perioden- statt
-  // Lebenszeit-Topf), druckt aber keine Boot-Zeile - aus dem Log nicht ablesbar.
-  BUDGET_MONTH_ENABLED: "kein Boot-Ausdruck; Live-Wert nur im Dashboard ablesbar",
+  // Beruehrt das Budget-Gate direkt (Perioden- statt Lebenszeit-Topf). Seit P1 druckt der
+  // Boot-Banner die Achse ("Budget-Achse: ..."), der Wert ist also ab dem naechsten Deploy
+  // aus dem Log ablesbar. Der Eintrag bleibt hier, bis die Phase, die GAP-01/GAP-33 haelt
+  // (P6/P7), die Folgen eines geflippten prodEnv()-Spawns traegt - P1 aendert die
+  // Spawn-Umgebung fremder Phasen-Tests bewusst nicht.
+  BUDGET_MONTH_ENABLED: "Boot-Zeile ab P1 vorhanden; Uebernahme nach LIVE_MEASURED gehoert zu P6/P7",
   // Blueprint "false"; live muss der Wert davon abweichen, sonst gaebe es keinen
   // Self-Service-Launch. Kein Boot-Ausdruck, der den Wert zeigt.
   MULTI_TENANT: "kein Boot-Ausdruck; Blueprint-Wert widerspricht dem Live-Produkt",

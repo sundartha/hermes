@@ -37,6 +37,10 @@ const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 // Dauerlauf im Millisekundentakt. Deshalb wird geklemmt statt durchgereicht.
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
+// Sentinel fuer einen Boot ohne Deploy-Metadatum (lokal / fremder Host). Exportiert,
+// damit Boot-Banner-, /healthz- und Testcode denselben Wert nutzen (G25/G5).
+export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
+
 // Leere/abwesende Var -> dokumentierter Default (KEIN Fatal); nur gesetzt-aber-
 // ungueltig ist fatal. max ist ein bewusster Clamp (Obergrenze wie maxCallDurationS),
 // kein Fehler. Die Diagnose nennt nur Var + Erwartung, NIE einen Wert (numEnv
@@ -642,6 +646,12 @@ const rawConfig = {
   // /mcp-Auth-Bypass-Gate in auth.js). productionFootguns/assertConfig nutzen denselben
   // Begriff call-time ueber detectProduction() (injizierbarer Test-Seam).
   isProduction: detectProduction(),
+  // GAP-36 (Deploy-Wahrheit): Render injiziert RENDER_GIT_COMMIT beim Build. KEIN
+  // Betreiber-Knopf - ein Deploy-Metadatum, das hier liegt, weil jede Env-Var im Repo
+  // ueber config.js laeuft (Konvention) und weil boot.js UND /healthz denselben Wert
+  // brauchen (EINE Quelle, G5). Ungesetzt (lokal) -> Sentinel statt leerem String:
+  // "unbekannt" ist eine ehrliche Antwort, "" saehe im Smoke wie ein Feldfehler aus.
+  deployedCommit: process.env.RENDER_GIT_COMMIT || DEPLOYED_COMMIT_UNKNOWN,
   // Passwort-Schutz fuer Dashboard + API im oeffentlichen Hosting (User: admin). Leer = offen (nur lokal ok).
   dashboardPassword: process.env.DASHBOARD_PASSWORD || "",
   sendSmsSummary: boolEnv("SEND_SMS_SUMMARY", process.env.SEND_SMS_SUMMARY, { fallback: true }),
@@ -1064,7 +1074,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled"],
-  server: ["port", "publicUrl", "isProduction", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
+  server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays"],

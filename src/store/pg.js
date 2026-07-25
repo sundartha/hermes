@@ -456,6 +456,8 @@ export function makePgStore(runner) {
       save();
       return tenant;
     },
+    // Leser der Geo-Felder (F1): liest den hydrierten Spiegel, Wrapper-Parity zu json.js.
+    tenantGeo: (tenantId) => ops.tenantGeo(requireState(), tenantId),
 
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);

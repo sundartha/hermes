@@ -26,6 +26,7 @@ import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
+import { metrics } from "../metrics.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -63,6 +64,19 @@ export function makeCallRoutes({
 }) {
   const router = Router();
 
+  // GAP-35: die drei PII-freien Dimensionen des Ablehnungs-Ereignisses. Land und Sprache
+  // kommen aus dem TENANT (tenantGeo, reine Query), NICHT aus der Zielnummer: eine aus
+  // der E.164-Vorwahl abgeleitete Landangabe waere ein Rufnummern-Fragment im Log
+  // (Absolute Regel 4). Ohne aufgeloesten Tenant - outbound_frozen feuert VOR
+  // resolve_identity, tenant_reject traegt eine unbekannte Identitaet - liefert tenantGeo
+  // beide Achsen als null: geraten wird nichts. Bewusst NICHT resolveCallLanguage, das
+  // via settingsFor lazy einen Settings-Bucket anlegen wuerde (Schreib-Nebeneffekt auf
+  // einer unaufgeloesten Identitaet).
+  function denialDimensions(grund, tenantId) {
+    const { country, defaultLanguage } = store.tenantGeo(tenantId);
+    return { grund, country, language: defaultLanguage };
+  }
+
   // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
   router.post("/api/calls", async (req, res) => {
     const b = req.body || {};
@@ -80,7 +94,13 @@ export function makeCallRoutes({
     for (const gate of outboundGates) {
       const denial = await gate.run(ctx);
       if (denial) {
-        if (denial.audit) audit(denial.audit.event, req, denial.audit.detail);
+        if (denial.audit) {
+          audit(denial.audit.event, req, denial.audit.detail);
+          // GAP-35: dasselbe Ereignis maschinenlesbar und PII-frei. GLEICHE Bedingung wie
+          // das Audit - reine 400er-Eingabefehler sind keine Sicherheits-Ablehnung und
+          // erzeugen weiterhin weder Audit- noch Metrik-Zeile.
+          metrics.logCallDenied(denialDimensions(denial.audit.grund, ctx.tenantId));
+        }
         return res.status(denial.status).json(denial.body);
       }
     }

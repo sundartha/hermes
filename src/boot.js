@@ -6,6 +6,7 @@
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
 import { assertConfig, gatewayUrlForPort, VOICE_ENGINE } from "./config.js";
+import { configFingerprint } from "./config-fingerprint.js";
 import {
   fakeOriginateBootBlocked,
   meterMappingGaps,
@@ -260,11 +261,21 @@ function assertBootGates(config, store) {
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
 }
 
+// Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die
+// Banner-Zeile eine Abstraktionsebene bleibt (G34) und die Bedingung einen Namen hat (G28).
+function budgetAxisLabel(budgetMonthEnabled) {
+  return budgetMonthEnabled
+    ? "Perioden-Topf (BUDGET_MONTH_ENABLED=true)"
+    : "Lebenszeit-Topf (BUDGET_MONTH_ENABLED=false)";
+}
+
 function logBootBanner(config, port) {
-  // TEMP-DIAGNOSE (STT-Live-Abschluss, siehe STATUS.md Abschnitt 2): deployten Commit ausgeben, damit im
-  // Render-Log eindeutig sichtbar ist, WELCHE Version laeuft (Render setzt
-  // RENDER_GIT_COMMIT). Phase 3: wieder entfernen.
-  console.log(`  [boot] deployed commit=${process.env.RENDER_GIT_COMMIT || "unbekannt"}`);
+  // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
+  // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
+  // Wert aus derselben Quelle, G5) und wird von docs/RUNBOOK-RESTORE.md gelesen.
+  // Wortlaut der commit-Zeile bewusst unveraendert (das Runbook greppt sie).
+  console.log(`  [boot] deployed commit=${config.server.deployedCommit}`);
+  console.log(`  [boot] configHash=${configFingerprint(config)}`);
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
   console.log(`  Dashboard:      ${gatewayUrlForPort(port)}`);
   console.log(
@@ -284,6 +295,10 @@ function logBootBanner(config, port) {
   console.log(
     `  Nummern-Gates:  Land ${config.safety.allowedCountryCodes.join(",")} | max ${config.safety.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
   );
+  // GAP-36-Zusatz: welche Achse das Budget-Gate misst, war bisher NUR per DB-Messung
+  // ablesbar (der Flip hat keine Boot-Ausgabe) - genau die Blindheit, die diese Phase
+  // schliesst. Ein Safety-Gate-Schalter gehoert in den Boot-Banner.
+  console.log(`  Budget-Achse:   ${budgetAxisLabel(config.billing.budgetMonthEnabled)}`);
 }
 
 export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning, costTruing }) {
