@@ -130,6 +130,41 @@ test("NANP-Heimatland: 011/1+10/10 Ziffern werden korrekt aufgeloest", () => {
   assert.equal(normalizeDialTarget("01737252163", "+1"), "01737252163", "unbekannte Form bleibt unveraendert");
 });
 
+// Review-Fix Runde 1 (GAP-25, S1): NPA/NXX-Plausibilitaet - eine 10-stellige bzw.
+// "1"+10-stellige Eingabe, die keine gueltige NANP-Teilnehmernummer sein KANN (NPA/NXX
+// muessen mit 2-9 beginnen), darf NICHT klaglos zu einer formal gueltigen +1-Nummer
+// materialisiert werden ("ablehnen statt raten"). Ohne diese Pruefung wuerde z.B. eine
+// deutsche Ortsnetznummer ohne fuehrende 0 (Anfangsziffer 2-9) einen echten
+// Fremdanruf-Pfad oeffnen, den das Format-Gate vorher mit 400 abgewiesen hat.
+test("NANP-Heimatland: NPA/NXX-Plausibilitaet wird geprueft statt geraten (Review-Fix Runde 1)", () => {
+  // NPA (erste 3 Ziffern) beginnt mit 0 -> keine gueltige NANP-Ortsvorwahl.
+  assert.equal(normalizeDialTarget("0301234567", "+1"), "0301234567", "NPA darf nicht mit 0 beginnen");
+  // NPA beginnt mit 1 -> ebenfalls ungueltig.
+  assert.equal(normalizeDialTarget("1234567890", "+1"), "1234567890", "NPA darf nicht mit 1 beginnen");
+  // NXX (Ziffern 4-6) beginnt mit 0/1 -> ungueltig, obwohl die NPA gueltig ist.
+  assert.equal(normalizeDialTarget("2101234567", "+1"), "2101234567", "NXX darf nicht mit 0 beginnen");
+  assert.equal(normalizeDialTarget("2111234567", "+1"), "2111234567", "NXX darf nicht mit 1 beginnen");
+  // Dieselbe Pruefung gilt fuer die "1"+10-Ziffern-Schreibweise.
+  assert.equal(normalizeDialTarget("10301234567", "+1"), "10301234567", "dito fuer 1+10 Ziffern (NPA)");
+  // Eine gueltige NANP-Nummer bleibt unveraendert materialisierbar (kein False-Positive).
+  assert.equal(normalizeDialTarget("2125550123", "+1"), "+12125550123");
+  assert.equal(normalizeDialTarget("12125550123", "+1"), "+12125550123");
+});
+
+// Review-Fix Runde 1 (GAP-25, S1): explizite Entscheidung fuer den "00"-Praefix bei
+// NANP-Heimatland - "00" ist in KEINER NANP-Schreibweise ein gueltiges Praefix (NPA/NXX
+// beginnen nie mit 0), also unzweideutig die ITU-Auslandsvorwahl. Ein Tenant OHNE
+// privateNumber, dessen aktive DID zufaellig eine NANP-Nummer ist (z.B. ein
+// DE/FR-Tenant mit US-DID, s. Finding), darf eine ITU-Wahl weiterhin waehlen - das war
+// vor diesem Fix eine Regression gegen den Trunk-0-Pfad (Spezifikations-Zusage
+// "byte-identischer Wahlpfad" war fuer genau diese Konstellation verletzt).
+test("NANP-Heimatland: '00'-Praefix bleibt die ITU-Auslandsvorwahl (Review-Fix Runde 1)", () => {
+  assert.equal(normalizeDialTarget("0049173123456", "+1"), "+49173123456");
+  assert.equal(normalizeDialTarget("0044207123456", "+1"), "+44207123456");
+  // "011" bleibt weiterhin die NANP-EIGENE Auslandsvorwahl (unveraendert zum Bestand).
+  assert.equal(normalizeDialTarget("011441234567", "+1"), "+441234567");
+});
+
 // K3-Regressionsschutz: britische Ortsnetze 0113-0118 (Leeds/Sheffield/Nottingham/
 // Leicester/Bristol/Reading) sind KEINE Kurzwahl-Gasse - der +44-Wahlpfad bleibt
 // byte-identisch zum Bestand (NO_NATIONAL_ELEVEN_RANGE_COUNTRIES enthaelt +44 NICHT).
@@ -310,4 +345,39 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
 // NANP-Heimatland. Bricht das jemand, soll DIESER Test es sagen.
 test("Annahme: Default-Owner-Testnummer ist ein NANP-Heimatland", () => {
   assert.equal(homeCountryCode([OWNER_TEST_NUMBER.e164]), "+1");
+});
+
+// Review-Fix Runde 1 (GAP-25, S1): End-to-End-Beweis fuer die Live-Standardkonstellation
+// aus dem Finding - ein Tenant OHNE privateNumber, dessen aktive DID zufaellig eine
+// NANP-Nummer ist (frische DIDs sind heute US-Nummern, s. self-service-routes.js).
+// homeCountryCode liefert fuer diesen Tenant "+1" (NANP), obwohl der Nutzer selbst nach
+// ITU-Konvention waehlt.
+test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form nicht (Review-Fix Runde 1)", async (t) => {
+  const HTTP_ENV_ITU = {
+    ALLOWED_NUMBERS: DE_TARGET_E164,
+    ALLOWED_COUNTRY_CODES: "+1,+49",
+    TWILIO_ACCOUNT_SID: "x",
+  };
+
+  await t.test("'0049...' (ITU-Wahl) passiert alle Gates trotz NANP-Heimatland (500)", async () => {
+    const srv = await startServer({ env: HTTP_ENV_ITU }); // Default-DID +15005550006 (NANP), keine privateNumber
+    try {
+      const res = await postCall(srv.localUrl, `0049${DE_TARGET_NATIONAL.slice(1)}`);
+      assert.equal(res.status, 500, "die ITU-Wahl muss trotz NANP-Heimatland alle Gates passieren");
+    } finally {
+      await srv.stop();
+    }
+  });
+
+  await t.test("10-stellige, NANP-unplausible Eingabe bleibt 400 statt geraten (kein Fremdanruf-Pfad)", async () => {
+    const srv = await startServer({ env: HTTP_ENV_ITU }); // Default-DID +15005550006 (NANP), keine privateNumber
+    try {
+      // NPA beginnt mit "0" - keine gueltige NANP-Ortsvorwahl, darf NICHT zu +1... werden.
+      const res = await postCall(srv.localUrl, "0301234567");
+      assert.equal(res.status, 400, "eine NANP-unplausible 10-stellige Eingabe darf nicht materialisiert werden");
+      assert.match((await res.json()).error, /E\.164/);
+    } finally {
+      await srv.stop();
+    }
+  });
 });

@@ -496,6 +496,14 @@ const NANP_TRUNK_PREFIX = "1";
 const NANP_NSN_DIGITS = 10; // Teilnehmernummer ohne Laender-/Trunk-Praefix
 const NANP_NATIONAL_DIGITS = NANP_NSN_DIGITS + NANP_TRUNK_PREFIX.length;
 
+// NANP-Plausibilitaet (Review-Fix Runde 1, GAP-25): NPA (Ortsvorwahl) und NXX
+// (Nebenstellen-Praefix) beginnen laut NANP-Nummerierungsplan NIE mit 0 oder 1 - nur
+// 2-9 sind gueltige erste Ziffern. Ohne diese Pruefung wuerde JEDE 10-stellige Eingabe
+// (z.B. eine deutsche Ortsnetznummer ohne fuehrende 0) klaglos zu einer formal
+// gueltigen E.164-Nummer materialisiert ("ablehnen statt raten" wird sonst verletzt -
+// s. Kommentar an normalizeNanpTarget/normalizeDialTarget).
+const NANP_NSN_PATTERN = /^[2-9]\d{2}[2-9]\d{6}$/;
+
 // Heimatlaender, fuer die eine nationale Wahl-Konvention BEKANNT ist. Nur fuer sie darf
 // aus einer nationalen Schreibweise eine E.164-Nummer materialisiert werden.
 const DIALING_HOME_COUNTRY_CODES = [...TRUNK_ZERO_COUNTRY_CODES, NANP_COUNTRY_CODE];
@@ -540,19 +548,35 @@ export function homeCountryCode(candidateNumbers) {
 // TRUNK_ZERO_COUNTRY_CODES-Laendern): "0049..." ist die Wahl-Schreibweise von "+49...".
 const INTERNATIONAL_CALL_PREFIX = "00";
 
-// NANP-Zweig: "011..." ist die AUSLANDS-, "1"+10 Ziffern die nationale Schreibweise,
-// 10 blanke Ziffern die Teilnehmernummer. normNum vorweg, weil die NANP-Schreibweise
-// ueblicherweise Trennzeichen traegt ("1-415-555-0123"); normNum ist idempotent - der
-// Produktionspfad (routes/api-calls.js normNum(b.to)) aendert sich dadurch nicht (G5:
-// dieselbe eine Quelle, kein zweites Regex).
+// NANP-Zweig: "00..." ist die ITU-Auslandsvorwahl (unzweideutig - "00" ist in KEINER
+// NANP-Schreibweise ein gueltiges Praefix, NPA/NXX beginnen nie mit 0, s.
+// NANP_NSN_PATTERN), "011..." die NANP-EIGENE Auslandsvorwahl, "1"+10 Ziffern die
+// nationale Schreibweise, 10 blanke Ziffern die Teilnehmernummer. "00" wird VOR "011"
+// geprueft (dieselbe Reihenfolge wie im Trunk-0-Zweig) - Review-Fix Runde 1 (GAP-25):
+// ein NANP-Heimatland (z.B. eine europaeische Tenant-DID ohne privateNumber, die zufaellig
+// eine US-Nummer ist) darf eine ITU-Wahl ("0049...") nicht mehr ablehnen, nur weil die
+// DID zufaellig NANP ist - das war vor diesem Fix eine Regression gegen den Trunk-0-Pfad.
+// normNum vorweg, weil die NANP-Schreibweise ueblicherweise Trennzeichen traegt
+// ("1-415-555-0123"); normNum ist idempotent - der Produktionspfad
+// (routes/api-calls.js normNum(b.to)) aendert sich dadurch nicht (G5: dieselbe eine
+// Quelle, kein zweites Regex).
 function normalizeNanpTarget(raw) {
   const num = normNum(raw);
   if (num.startsWith("+")) return num;
+  if (num.startsWith(INTERNATIONAL_CALL_PREFIX))
+    return "+" + num.slice(INTERNATIONAL_CALL_PREFIX.length);
   if (num.startsWith(NANP_INTERNATIONAL_PREFIX))
     return "+" + num.slice(NANP_INTERNATIONAL_PREFIX.length);
   if (!/^\d+$/.test(num)) return num;
-  if (num.length === NANP_NATIONAL_DIGITS && num.startsWith(NANP_TRUNK_PREFIX)) return "+" + num;
-  if (num.length === NANP_NSN_DIGITS) return NANP_COUNTRY_CODE + num;
+  // Review-Fix Runde 1 (GAP-25): NPA/NXX-Plausibilitaet PRUEFEN statt raten - eine
+  // 10-stellige Eingabe, die keine gueltige NANP-Teilnehmernummer sein kann (z.B. eine
+  // deutsche Ortsnetznummer ohne fuehrende 0), bleibt unveraendert -> das E164-Gate
+  // lehnt ab (400), statt eine formal gueltige, aber falsche +1-Nummer zu erfinden.
+  if (num.length === NANP_NATIONAL_DIGITS && num.startsWith(NANP_TRUNK_PREFIX)) {
+    const nsn = num.slice(NANP_TRUNK_PREFIX.length);
+    return NANP_NSN_PATTERN.test(nsn) ? "+" + num : num;
+  }
+  if (num.length === NANP_NSN_DIGITS) return NANP_NSN_PATTERN.test(num) ? NANP_COUNTRY_CODE + num : num;
   return num; // unbekannte Form -> unveraendert, das E164-Gate lehnt ab (ablehnen statt raten)
 }
 
