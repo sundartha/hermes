@@ -216,11 +216,18 @@ export function makeSelfServiceRoutes({
     // s einmal laden fuer agent.number + numberStatus (selbe Quelle wie /api/state, G5;
     // eine Last statt zweier store.load()-Aufrufe).
     const agentState = store.load();
+    // P9 (WEB-01/WEB-04): EINE Sprachaufloesung fuer diese Antwort (G5) - sie speist die
+    // Vorlagenmenge UND das Sprach-Feld, aus dem das Dashboard sein lang-Attribut setzt.
+    const language = tenantLanguage(agentState, tenant);
     res.json({
       settings: ctx.settings,
+      // WEB-01: die aufgeloeste Sprache dieses Tenants als eigenes, additives Feld.
+      // settings.language taugt dafuer NICHT - es ist per Default null; die Praezedenz
+      // (settings -> number -> tenant) gehoert in den Server, nicht in den Client.
+      language,
       // WEB-04: Vorlagen in der Sprache, in der dieser Tenant auch telefoniert
       // (gleiche Praezedenz wie im Anruf, G5) - agentState ist oben bereits geladen.
-      greetingTemplates: greetingTemplatesFor(tenantLanguage(agentState, tenant)),
+      greetingTemplates: greetingTemplatesFor(language),
       // P4: kuratierte Stil-IDs fuers Dropdown (EINE Quelle = das P2-Enum; das Client-
       // Dropdown haelt KEIN eigenes ID-Set, G5/S2). Fehlt das Feld -> UI versteckt die
       // Karte (Flag-aus / alter Server) - I9-Muster wie hasCard beim billingCard.
@@ -288,9 +295,9 @@ export function makeSelfServiceRoutes({
       store.setPrivateNumber(tenant, privateNumber);
     } catch {
       audit("self_service_private_number", req, "outcome=rejected");
-      return res
-        .status(400)
-        .json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+      // P9 (WEB-09): stabiler, sprachneutraler Code statt deutschem Klartext - gleiche
+      // Vokabelform wie no_card/already_subscribed/plan_unconfigured in dieser Datei.
+      return res.status(400).json({ error: "invalid_private_number" });
     }
     const stored = store.tenantPrivateNumber(tenant) != null;
     audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);

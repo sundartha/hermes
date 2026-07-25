@@ -213,6 +213,23 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
   }
 });
 
+test("(w1) /state liefert die aufgeloeste Tenant-Sprache (Quelle des lang-Attributs, ex WEB-01)", async () => {
+  const s = await setup();
+  try {
+    // EXPLIZITE Sprachen statt Default: die Aussage ist "das Feld spiegelt die Aufloesung",
+    // nicht "der Default ist de" - damit ist dieser Test gegen den P10-Flip immun (A2).
+    s.bucketB.language = "en";
+    const en = JSON.parse((await getState(s)).body);
+    assert.equal(en.language, "en");
+    assert.deepEqual(en.greetingTemplates, greetingTemplatesFor("en"), "eine Aufloesung fuer beides (G5)");
+    s.bucketB.language = "fr";
+    const fr = JSON.parse((await getState(s)).body);
+    assert.equal(fr.language, "fr");
+  } finally {
+    await s.close();
+  }
+});
+
 test("(b) Schreiben: B setzt agentName + agentStyle; Owner-Bucket unberuehrt", async () => {
   const s = await setup();
   try {

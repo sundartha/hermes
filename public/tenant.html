@@ -353,6 +353,15 @@ function numberSetupFeeFrom(s){
   return { amountCents: cents, currency: (s && s.currency) || "eur" };
 }
 
+// WEB-01: das lang-Attribut folgt der Sprache, die der SERVER fuer diesen Tenant aufloest
+// (Feld `language` aus /api/self-service/state - dieselbe Aufloesung wie im Anruf; keine
+// zweite Praezedenz-Logik im Client). Fehlendes/leeres Feld (alter Server, 401/403-Pfad)
+// -> der statische Wert des Dokuments bleibt stehen (fail-soft, nie leer). Die sichtbaren
+// Texte bleiben vorerst deutsch; ein Textmechanismus ist NICHT Teil dieser Phase.
+function setDocumentLanguage(language){
+  if(typeof language==="string" && language) document.documentElement.lang = language;
+}
+
 async function refresh(){
   const r = await fetch("/api/self-service/state");
   // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
@@ -361,6 +370,7 @@ async function refresh(){
   if(!r.ok){ $("liveDot").classList.add("off"); showAuth("Voruebergehend nicht erreichbar.", false, true); return; }
   showAuth("Angemeldet.", false, true);
   const s = await r.json();
+  setDocumentLanguage(s.language);
   $("agentNum").textContent = agentNumberText(s.agent);
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
   renderCalls(s.calls);
