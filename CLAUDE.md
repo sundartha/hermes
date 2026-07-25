@@ -124,10 +124,11 @@ diese Tests aus (Regressionsschutz, PLAN-I18N-TESTS.md 4.1: "kein roter Test in 
 ein Regressionsfang"); `test:gates` faehrt NUR sie (inkl. gruener R3-Mechanismus-Tests als
 Regressionsschutz, s. `tasks/i18n-tests/00-kanonische-liste.md`).
 
-`test/i18n-catalog-run.test.js` deckt die Wrapper-Logik selbst ab (S1-Pflichtfix) und zaehlt
-deshalb regressionsseitig mit — die Summe beider Laeufe ist damit 3054 (3044 unveraenderter
-Bestand + 10 neue Wrapper-Selbsttests), nicht mehr 3044. Details/Herleitung:
-`tasks/i18n-tests/16-lauf-trennung-selffix-bericht.md`.
+Die Invariante der Trennung ist nicht eine feste Gesamtzahl, sondern: **beide Laeufe zusammen
+ergeben denselben Testbestand wie ein ungefilterter `node --test "test/*.test.js"`** — der Split
+verliert und dupliziert nichts. Bei der Einfuehrung nachgerechnet: 2930 + 114 = 3044 (dazu die 10
+Selbsttests in `test/i18n-catalog-run.test.js`, die die Wrapper-Logik abdecken und
+regressionsseitig mitzaehlen). Herleitung: `tasks/i18n-tests/17-lauf-trennung-bericht.md`.
 
 ## Referenzen
 

@@ -1,4 +1,4 @@
-# 16 - Lauf-Trennung Self-Fix Runde 1+2 (Bericht)
+# 17 - Lauf-Trennung Self-Fix Runde 1+2 (Bericht)
 
 Stand: 2026-07-25 | Basis: `9a5e9a6` | Branch: `phase/i18n-lauf-trennung-fix2`
 
