@@ -1,0 +1,22 @@
+---
+// Darstellung eines Rechtsdokuments. EINE Stelle fuer das Markup aller
+// Rechtsseiten (verbindliche DE-Fassung und informative Uebersetzung); der Text
+// kommt aus src/data/legal/, nicht aus dieser Datei.
+const { doc, note } = Astro.props;
+---
+
+<section class="section">
+  <div class="container">
+    <div class="legal">
+      <span class="eyebrow">{doc.eyebrow}</span>
+      <h1 class="section__title">{doc.title}</h1>
+      {note && <p class="legal__note">{note}</p>}
+      {doc.sections.map((section) => (
+        <>
+          <h2 class="legal__heading">{section.heading}</h2>
+          <p class="legal__text">{section.text}</p>
+        </>
+      ))}
+    </div>
+  </div>
+</section>
