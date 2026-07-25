@@ -222,6 +222,7 @@ export async function buildApp(deps) {
     directiveSynth,
     voiceRender,
     costTruing,
+    messaging,
   } = deps;
 
   const app = express();
@@ -258,6 +259,7 @@ export async function buildApp(deps) {
         stripeWebhookPath: STRIPE_WEBHOOK_PATH,
         customerPortalPath: CUSTOMER_PORTAL_PATH,
         appPath: APP_PATH,
+        messaging,
       }),
     );
   }

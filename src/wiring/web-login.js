@@ -66,6 +66,7 @@ export async function wireWebLogin({
   stripeWebhookPath,
   customerPortalPath,
   appPath,
+  messaging,
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
@@ -204,7 +205,9 @@ export async function wireWebLogin({
   // als Vorwaerts-Zustand.
   app.post(
     stripeWebhookPath,
-    makeStripeWebhookRoute({ config, store, audit, accounts, sessions, billing: stripeBilling, provision }),
+    makeStripeWebhookRoute({
+      config, store, audit, accounts, sessions, billing: stripeBilling, provision, messaging,
+    }),
   );
 
   // Q1: positiver Boot-Marker im Erfolgsfall - eigene Zeile. Erreicht NUR wenn alle Mounts

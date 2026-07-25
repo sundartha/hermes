@@ -4,10 +4,12 @@
 // unit-testbar ohne Server. Kein Stripe-SDK (Regel: wenige Deps); node:crypto reicht.
 import crypto from "node:crypto";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
+import { provisionAuditDetail } from "./provision-outcome.js";
 import { customerMatches } from "./card-setup.js";
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
+import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -28,7 +30,15 @@ export const WEBHOOK_ACTION = Object.freeze({
   ACTIVATE: "activate",
   SUSPEND: "suspend",
   IGNORE: "ignore",
+  // GAP-03 (O2): eines der vier bisher wirkungslosen Geld-Ereignisse (money-events.js).
+  MONEY: "money_event",
 });
+
+// Plattform-Alarm-SMS-Praefixe (kein Magic-String, G25). GAP-04: die Aktivierung wartet auf
+// ein Provisioning-Ergebnis, das nicht rechtzeitig geklaert wurde. GAP-03: ein Geld-Ereignis
+// mit Alarm-Wirkung (aktuell nur charge.dispute.created, s. money-events.js).
+const ACTIVATION_PENDING_ALARM_SMS_PREFIX = "[Hermes] Aktivierung wartet auf Provisioning: ";
+const MONEY_EVENT_ALARM_SMS_PREFIX = "[Hermes] Zahlungsereignis: ";
 
 // Stripe-Subscription-Status, die eine BESTAETIGTE Zahlung bedeuten und das Gate
 // oeffnen duerfen (Stripe-API-Werte). Stripe feuert .created auch bei 'incomplete'
@@ -135,9 +145,33 @@ export function interpretStripeEvent(event) {
         tenantRef: tenantRefOf(object),
         subscriptionId: object.subscription ?? null,
       };
-    default:
-      return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
+    default: {
+      // GAP-03 (O2): vier bisher wirkungslose Geld-Ereignisse ausserhalb der Subscription-
+      // Lifecycle-Allowlist. moneyActionFor liefert null fuer jeden anderen Typ -> IGNORE
+      // bleibt fuer alles Unbekannte unveraendert (Bestandsverhalten).
+      const money = moneyActionFor(event && event.type);
+      if (!money) return { action: WEBHOOK_ACTION.IGNORE, tenantRef: null, subscriptionId: null };
+      return {
+        action: WEBHOOK_ACTION.MONEY,
+        tenantRef: tenantRefOf(object),
+        subscriptionId: moneyEventSubscriptionId(event.type, object),
+        customerId: object.customer ?? null,
+        moneyAction: money.action,
+        moneyAlarm: money.alarm,
+      };
+    }
   }
+}
+
+// Money-Events tragen die Subscription-Referenz je nach Stripe-Objekttyp anders (O2, s.
+// money-events.js-Tabelle): customer.subscription.paused IST eine Subscription (object.id),
+// invoice.payment_action_required traegt sie am Feld subscription; charge.dispute.created/
+// charge.refunded (Objekttyp Charge) kennen KEINE Subscription-Referenz - dort loest die
+// Route ausschliesslich ueber customerId auf.
+function moneyEventSubscriptionId(type, object) {
+  if (type === MONEY_EVENT.SUBSCRIPTION_PAUSED) return object.id ?? null;
+  if (type === MONEY_EVENT.PAYMENT_ACTION_REQUIRED) return object.subscription ?? null;
+  return null;
 }
 
 // default_payment_method kommt expandiert als Objekt (id) oder unexpandiert als
@@ -193,11 +227,16 @@ export async function applyStripeWebhook(
   event,
   { store, accounts, sessions, audit, req, provision, billing },
 ) {
+  const interpreted = interpretStripeEvent(event);
   const {
     action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
     customerId, paymentMethodId,
-  } = interpretStripeEvent(event);
+  } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
+  // GAP-03: Geld-Ereignisse ausserhalb der Subscription-Lifecycle-Allowlist auditieren SICH
+  // SELBST zuerst (vor jeder Tenant-Aufloesung) - eigener Zweig, eigene Tenant-Aufloesungs-
+  // Reihenfolge (s. applyMoneyEvent).
+  if (action === WEBHOOK_ACTION.MONEY) return applyMoneyEvent(event, interpreted, { store, audit, req });
   const tenant = tenantRef || store.findTenantBySubscription(subscriptionId)?.id || null;
   if (!tenant) {
     audit("stripe_webhook_ignored", req, `action=${action} no_tenant`);
@@ -238,14 +277,38 @@ export async function applyStripeWebhook(
     ) {
       store.setTenantStripe(tenant, { paymentMethodId });
     }
-    // P5: dieselbe 3-Effekt-Aktivierung wie der Subscribe-Handler (KYC=CARD + active +
-    // payment-gegatetes, idempotentes Provisioning) - EINE Quelle (activation.js). Die
-    // Seam-Reihenfolge (KYC -> Status -> provision) bleibt unveraendert, nur jetzt geteilt
-    // statt inline. Idempotent im provision-Trigger (kein Doppelkauf bei Webhook-Retry/
-    // Folge-Events); bei PROVISIONING_ENABLED=false bleibt die Nummer 'requested' (KEIN Kauf).
-    const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
-    audit("stripe_webhook_activate", req, `tenant=${tenant} ${profileAuditDetail(profile)}`);
-    return;
+    // P5: dieselbe 3-Effekt-Aktivierung wie der Subscribe-Handler (KYC=CARD + Wartezustand +
+    // payment-gegatetes, idempotentes Provisioning + Status ERST nach geklaertem Ergebnis,
+    // GAP-04) - EINE Quelle (activation.js). Idempotent im provision-Trigger (kein Doppelkauf
+    // bei Webhook-Retry/Folge-Events); bei PROVISIONING_ENABLED=false bleibt die Nummer
+    // 'requested' (KEIN Kauf, aber dry_run gilt als geklaert -> Tenant wird aktiv).
+    const { profile, activated, provisioned } = await activatePaidTenant({
+      store, accounts, provision, billing, tenant,
+    });
+    audit(
+      "stripe_webhook_activate",
+      req,
+      `tenant=${tenant} ${profileAuditDetail(profile)} ${provisionAuditDetail(provisioned)}`,
+    );
+    // GAP-03/O2: ein bestaetigtes aktives Abo hebt jede Beanstandungs-Wirkung auf
+    // (Reversibilitaet) - ein zuvor gesetzter billing_hold/periodCreditRevoked darf einen
+    // wieder zahlenden Tenant nicht dauerhaft sperren.
+    if (activated) {
+      store.clearBillingHold(tenant);
+      store.setTenantSubscription(tenant, { periodCreditRevoked: false });
+      return { activated: true };
+    }
+    // GAP-04: das Provisioning-Ergebnis ist NICHT geklaert - der Wartezustands-Marker bleibt
+    // gesetzt (activation.js), der Operator-Retry findet den Tenant wieder. Plattform-Alarm-
+    // Wunsch geht an den Route-Layer zurueck (routes/stripe-webhook.js sendet die SMS - kein
+    // messaging-Import in dieser IO-freien Domaenenschicht).
+    return {
+      activated: false,
+      alarm: {
+        prefix: ACTIVATION_PENDING_ALARM_SMS_PREFIX,
+        detail: `tenant=${tenant} ${provisionAuditDetail(provisioned)}`,
+      },
+    };
   }
   // SUSPEND (Zahlung gescheitert / Abo geloescht): Status + Sessions sperren (gesperrter
   // Kunde kann nicht bis Cookie-Expiry weiterlesen).
@@ -257,6 +320,61 @@ export async function applyStripeWebhook(
   store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
   audit("stripe_webhook_suspend", req, `tenant=${tenant}`);
+  return { suspended: true };
+}
+
+// GAP-03 (O2): wendet eines der vier Geld-Ereignisse an. Reihenfolge fail-closed: ERST das
+// unbedingte Audit (mit Ereignis-ID, Idempotenz-Nachweisbarkeit), DANN die Tenant-Aufloesung
+// (tenantRef -> customerId), DANN die Wirkung. Tenant-Aufloesung laeuft bewusst NICHT ueber
+// subscriptionId: charge.dispute.created/charge.refunded (Objekttyp Charge) kennen gar keine
+// Subscription-Referenz, und die einzige "id" auf einem Subscription-/Invoice-Objekt waere
+// sonst eine Zufallsuebereinstimmung ohne belastbare Semantik - customerId ist das einzige
+// Feld, das ALLE vier Stripe-Objekttypen zuverlaessig tragen. Ohne jeden Korrelations-
+// schluessel -> "no_tenant"-Audit UND KEIN weiterer Store-Zugriff (der Katalogtest fuehrt
+// genau diesen Fall mit store={} - ein Store-Zugriff waere hier ein TypeError).
+async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
+  const { tenantRef, customerId, moneyAction, moneyAlarm } = interpreted;
+  const eventType = event && event.type;
+  const eventId = (event && event.id) ?? "unknown";
+  audit("stripe_money_event", req, `type=${eventType} event=${eventId} action=${moneyAction}`);
+  const tenant = tenantRef
+    ? tenantRef
+    : (customerId && store.findTenantByCustomer(customerId)?.id) || null;
+  if (!tenant) {
+    audit("stripe_money_event_ignored", req, "no_tenant");
+    return { action: WEBHOOK_ACTION.MONEY, tenant: null, alarm: null };
+  }
+  applyMoneyAction(store, tenant, moneyAction);
+  return {
+    action: WEBHOOK_ACTION.MONEY,
+    tenant,
+    alarm: moneyAlarm
+      ? { prefix: MONEY_EVENT_ALARM_SMS_PREFIX, detail: `type=${eventType} tenant=${tenant}` }
+      : null,
+  };
+}
+
+// Wirkung je Money-Event (O2, Tabelle in money-events.js). WARN schreibt NICHTS (nur das
+// unbedingte Audit oben) - der Katalogtest pinnt genau das (Dispute -> kein Store-Write).
+function applyMoneyAction(store, tenant, moneyAction) {
+  switch (moneyAction) {
+    case MONEY_ACTION.WARN:
+      return;
+    case MONEY_ACTION.REVOKE_PERIOD_CREDIT:
+      store.setTenantSubscription(tenant, { periodCreditRevoked: true });
+      return;
+    case MONEY_ACTION.HOLD_OUTBOUND:
+      store.setBillingHold(tenant, { reason: "paused" });
+      return;
+    case MONEY_ACTION.GRACE_THEN_HOLD:
+      store.setBillingHold(tenant, {
+        reason: "payment_action",
+        dueAtIso: graceDueAtIso(new Date().toISOString()),
+      });
+      return;
+    default:
+      return; // unbekannte Wirkung (sollte durch moneyActionFor nie vorkommen) -> No-Op
+  }
 }
 
 // ---- P1 (C1 Stripe-Webhook-Race, S1-1): Serialisierter Entry-Point -----------------
@@ -330,14 +448,17 @@ function isStaleEvent(lastApplied, candidate) {
 export async function applyStripeWebhookSerialized(event, deps) {
   const interpreted = interpretStripeEvent(event);
   if (interpreted.action === WEBHOOK_ACTION.IGNORE) return;
-  const key = interpreted.subscriptionId || interpreted.tenantRef;
+  // GAP-03: Money-Events koennen NUR eine customerId tragen (Charge-Objekte kennen keine
+  // Subscription) - dritte Faellstufe, damit auch sie serialisiert werden.
+  const key = interpreted.subscriptionId || interpreted.tenantRef || interpreted.customerId;
   if (!key) return applyStripeWebhook(event, deps);
   const candidate = eventAnchorOf(event, interpreted.action);
   return webhookLock(key, async () => {
     if (isStaleEvent(lastAppliedByKey.get(key), candidate)) return;
-    await applyStripeWebhook(event, deps);
+    const outcome = await applyStripeWebhook(event, deps);
     // Anker ERST nach erfolgreichem Aufruf setzen: ein werfender Aufruf darf einen
     // legitimen Stripe-Retry desselben Events nicht faelschlich als "stale" blockieren.
     lastAppliedByKey.set(key, candidate);
+    return outcome;
   });
 }

@@ -12,6 +12,7 @@
 // provisioniert NIE doppelt (Invariante 4). Nebeneffekt im Namen (N7).
 import { KYC_LEVEL } from "../store/defaults.js";
 import { resolveTierForTenant } from "./plan-profile-resolver.js";
+import { provisionCleared } from "./provision-outcome.js";
 
 // Provisioniert das plan-abgeleitete Rechteprofil auf die tenantId (A2, GAP A; Phase S
 // tenant-gekeyt). Die schreibfreie Aufloesung (planSlug -> Tier) + die fail-closed Skip-
@@ -58,25 +59,50 @@ async function syncNumberSetupFeeExemption({ store, billing, tenant }) {
   }
 }
 
+// GAP-04: Aktivierung wartet das Provisioning-Ergebnis ab, statt es vorwegzunehmen. VORHER
+// setzte diese Funktion active VOR provision() und wertete dessen Rueckgabe nie aus - ein
+// fehlgeschlagener Kauf (z.B. globaler Nummern-Cap erschoepft) hinterliess einen bezahlten,
+// aktiven Tenant OHNE Nummer und OHNE jede Kompensation. Jetzt: KYC wird unbedingt gesetzt
+// (Reifegrad-Fakt, unabhaengig vom Kaufausgang), der GAP-04-Wartezustands-Marker
+// (stripeActivationPending) erlaubt state-ops.tenantMayRequestNumber die Nummern-Anfrage
+// OHNE den Statuswechsel vorwegzunehmen, und erst ein GEKLAERTES Provisioning-Ergebnis
+// (provisionCleared) aktiviert den Tenant. Liefert zusaetzlich { activated, provisioned } -
+// die Aufrufer (webhook.js/subscribe.js) auditieren beides und koennen bei activated===false
+// einen Plattform-Alarm ausloesen.
 export async function activatePaidTenant({ store, accounts, provision, billing, tenant }) {
   store.setKycLevel(tenant, KYC_LEVEL.CARD);
-  await accounts.setStatus(tenant, "active");
-  // tenant-prolif-c (Invariante 2): der Tenant ist wieder active -> den Grace-Anker loeschen, die
-  // Suspend-Uhr ist zurueckgesetzt (kein Release-Kandidat mehr). Ruft denselben Store-Primitiv
-  // (store.clearSuspendedAt, G5) wie der dritte Reaktivierungspfad Admin-approve (web-auth.js) -
-  // der laeuft NICHT hier durch (kein Zahlungsereignis), muss aber dieselbe Invariante wahren.
-  // Idempotent (No-Op ohne gesetzten Anker).
+  // tenant-prolif-c (Invariante 2): der Tenant hat gerade bezahlt -> den Grace-Anker loeschen,
+  // die Suspend-Uhr ist zurueckgesetzt (kein Release-Kandidat mehr). Ruft denselben Store-
+  // Primitiv (store.clearSuspendedAt, G5) wie der dritte Reaktivierungspfad Admin-approve
+  // (web-auth.js). Idempotent (No-Op ohne gesetzten Anker).
   store.clearSuspendedAt(tenant);
+  // Wartezustand statt Vorab-Aktivierung: der Marker ist die benannte Erlaubnis, fuer diesen
+  // bezahlten Tenant eine Nummer anzufragen (state-ops tenantMayRequestNumber). Er ueberlebt
+  // einen Fehlschlag bewusst: der Operator-Retry findet den Tenant so wieder.
+  store.setTenantSubscription(tenant, { activationPending: true });
   // VOR provision(tenant): das ausgeloeste, idempotente Nummern-Provisioning kann
   // asynchron sehr schnell in den echten placeHold laufen (Provisioning-Drain,
   // single-flight) - die Befreiung muss vorher am Tenant stehen (Race-Schutz).
   await syncNumberSetupFeeExemption({ store, billing, tenant });
-  await provision(tenant);
-  // A2: zusaetzlicher idempotenter Effekt NACH der unveraenderten KYC->Status->provision-
-  // Reihenfolge - plan-abgeleitetes Rechteprofil auf die tenantId. SKIP wirft NICHT, damit
-  // KYC/Status/provision bei fehlendem Plan stehen bleiben (idempotenter Retry / der A3-Backfill
-  // holt das Profil nach). PAYMENT_ENABLED-Gate: der Pfad ist nur payment-gegated erreichbar
-  // (server.js Webhook 404 / Self-Service 404) -> aus = byte-identisch (Regel 3). accounts wird
-  // nur noch fuer setStatus gebraucht (Profil keyt seit Phase S auf die tenantId).
-  return { profile: provisionPlanProfile({ store, tenant }) };
+  const provisioned = await provision(tenant);
+  const profile = provisionPlanProfile({ store, tenant });
+  // Fail-closed auf der GELD-Seite: nur ein geklaertes Provisioning-Ergebnis aktiviert. Ein
+  // unbekannter/abgelehnter Grund gilt als NICHT geklaert (nie raten, G26) - der Marker bleibt
+  // gesetzt, der Operator-Retry (POST /api/onboard/retry) findet den Tenant wieder.
+  if (!provisionCleared(provisioned)) return { profile, activated: false, provisioned };
+  await accounts.setStatus(tenant, "active");
+  store.setTenantSubscription(tenant, { activationPending: false });
+  // Spiegel-Nachzug: accounts.setStatus schreibt NUR die DB. Bisher zog der nachgelagerte
+  // triggerTenantProvisioning->ensureTenant den Wert in den Spiegel; nach der Umkehr laeuft er
+  // davor (provision() ist ja bereits gelaufen). Ohne diesen Aufruf saehen die Spiegel-Leser
+  // (tenantActiveSubscriber, tenantInactive) den Tenant bis zum naechsten Login als gesperrt ->
+  // Outbound waere trotz bezahltem Abo zu.
+  await store.ensureTenant(tenant);
+  // A2: zusaetzlicher idempotenter Effekt NACH KYC->Wartezustand->provision->Status - plan-
+  // abgeleitetes Rechteprofil auf die tenantId. SKIP wirft NICHT, damit KYC/Status/provision
+  // bei fehlendem Plan stehen bleiben (idempotenter Retry / der A3-Backfill holt das Profil
+  // nach). PAYMENT_ENABLED-Gate: der Pfad ist nur payment-gegated erreichbar (server.js
+  // Webhook 404 / Self-Service 404) -> aus = byte-identisch (Regel 3). accounts wird nur noch
+  // fuer setStatus gebraucht (Profil keyt seit Phase S auf die tenantId).
+  return { profile, activated: true, provisioned };
 }

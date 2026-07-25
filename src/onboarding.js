@@ -14,11 +14,16 @@
 //
 // Payment (P6b1, optional ueber deps.billing): ist ein Billing-Client injiziert,
 // wird VOR dem ersten Provider-Call Geld reserviert (placeHold) und NACH dem Order -
-// direkt vor der Aktivierung - eingezogen (captureHold). Schlaegt etwas nach dem Hold
-// fehl, gibt cancelHold die Reservierung wieder frei. 'billing' ist eine Dependency
-// (kein Datum) -> sie reist mit 'provisioner' im deps-Objekt ({ provisioner, billing }),
-// billing optional/null (F1, 3 Args). Ohne billing (payment-off) ist der Pfad
-// byte-identisch zum Bestand (kein Hold/Capture).
+// direkt vor der Aktivierung - geschlossen (settleSetupFeeHold: Einzug ODER Storno,
+// GAP-05). Schlaegt etwas nach dem Hold fehl, gibt cancelHold die Reservierung wieder
+// frei. 'billing' ist eine Dependency (kein Datum) -> sie reist mit 'provisioner' im
+// deps-Objekt ({ provisioner, billing }), billing optional/null (F1, 3 Args). Ohne
+// billing (payment-off) ist der Pfad byte-identisch zum Bestand (kein Hold/Capture).
+//
+// GAP-05 (Gutschein-Missbrauch): der Setup-Hold wird IMMER gestellt, auch fuer einen
+// per numberSetupFeeExempt befreiten Tenant - eine Karte OHNE gueltigen Hold darf nie
+// eine Nummer bekommen. Die Befreiung wirkt nur noch auf die PREIS-Achse: statt
+// captureHold laeuft cancelHold (settleSetupFeeHold).
 import {
   beginProvisioning,
   beginCapturing,
@@ -50,17 +55,19 @@ export async function provisionNumber(
   const number = findNumber(s, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
-  // Hold VOR jedem Provider-Call (Money-Safety R4): kein orderNumber ohne reserviertes
-  // Geld. Schlaegt der Hold fehl, bleibt die Nummer 'requested' -> failNumber, KEIN
-  // Provider-Call, KEIN cancelHold (es wurde nichts gehalten).
+  // Hold VOR jedem Provider-Call (Money-Safety R4, GAP-05: der Hold ist der GATE - er wird
+  // IMMER gestellt, auch fuer einen per Gutschein befreiten Tenant). Schlaegt der Hold fehl,
+  // bleibt die Nummer 'requested' -> failNumber, KEIN Provider-Call, KEIN cancelHold (es
+  // wurde nichts gehalten).
   let paymentIntentId = null;
+  let setupFeeExempt = false;
   if (billing) {
-    paymentIntentId = await placeHoldUnlessExempt(s, numberId, {
+    ({ paymentIntentId, exempt: setupFeeExempt } = await placeSetupFeeHold(s, numberId, {
       tenantId: number.tenantId,
       billing,
       holdAmountCents,
       currency,
-    });
+    }));
   } else {
     beginProvisioning(s, numberId); // payment-off: 2-arg, byte-identisch
   }
@@ -88,12 +95,17 @@ export async function provisionNumber(
     throw err;
   }
 
-  // Kein Hold -> nichts zu erfassen (Fix B: exempt = billing gesetzt, aber
-  // paymentIntentId bleibt null).
-  if (billing && paymentIntentId) {
-    beginCapturing(s, numberId); // provisioning -> capturing (Geld-Einzug laeuft)
+  // GAP-05: der Hold wird IMMER geschlossen - regulaer per Einzug, befreit per Storno
+  // (settleSetupFeeHold). billing=null (payment-off) -> kein Hold gestellt, nichts zu
+  // schliessen.
+  if (billing) {
     try {
-      await billing.captureHold(paymentIntentId, holdAmountCents);
+      await settleSetupFeeHold(s, numberId, {
+        billing,
+        paymentIntentId,
+        holdAmountCents,
+        exempt: setupFeeExempt,
+      });
     } catch (capErr) {
       await rollbackAfterOrder(s, numberId, {
         provisioner,
@@ -125,19 +137,17 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
   }
 }
 
-// Reserviert das Geld fuer die Einrichtungsgebuehr, AUSSER der Tenant ist befreit (Fix B:
-// numberSetupFeeExempt, gesetzt in activation.js/syncNumberSetupFeeExemption - EINE
-// Quelle fuer Checkout-Return- UND Webhook-Pfad). Befreit -> beginProvisioning wie
-// payment-off (kein PI zu vermerken), Rueckgabe null (Aufrufer ueberspringt captureHold).
-// Sonst: Money-Safety wie bisher (Karte-Pflicht, Hold, dann beginProvisioning mit PI).
-// EIN Rueckgabewert statt Output-Argument (F2).
-async function placeHoldUnlessExempt(s, numberId, { tenantId, billing, holdAmountCents, currency }) {
-  if (tenantSubscription(s, tenantId).numberSetupFeeExempt) {
-    beginProvisioning(s, numberId);
-    return null;
-  }
-  // Money-Safety (R4, fail-closed): ohne hinterlegte Karte KEIN placeHold und KEIN
-  // Provider-Call. off_session-Hold braucht customer + payment_method.
+// Reserviert die Einrichtungsgebuehr. GAP-05: der Hold ist der GATE - er wird IMMER
+// gestellt, auch fuer einen befreiten Tenant (100-%-Gutschein, numberSetupFeeExempt).
+// Die Befreiung wirkt nur noch auf die PREIS-Achse: sie entscheidet am Ende ueber Storno
+// statt Einzug (settleSetupFeeHold). Money-Safety (R4, fail-closed) bleibt unveraendert:
+// ohne hinterlegte Karte KEIN placeHold und KEIN Provider-Call - off_session-Hold braucht
+// customer + payment_method, auch im befreiten Pfad (ohne gueltige Karte lehnt Stripe den
+// Hold ab -> failNumber, also auch dort KEINE Nummer ohne Karte; zusaetzlich strukturell
+// abgesichert ueber payment_method_collection='always' im Checkout, stripe.js).
+// Liefert { paymentIntentId, exempt } (EIN Rueckgabewert statt Output-Argument, F2).
+async function placeSetupFeeHold(s, numberId, { tenantId, billing, holdAmountCents, currency }) {
+  const exempt = tenantSubscription(s, tenantId).numberSetupFeeExempt;
   const { customerId, paymentMethodId } = tenantStripe(s, tenantId);
   if (!customerId || !paymentMethodId) {
     failNumber(s, numberId);
@@ -159,7 +169,17 @@ async function placeHoldUnlessExempt(s, numberId, { tenantId, billing, holdAmoun
     throw holdErr;
   }
   beginProvisioning(s, numberId, paymentIntentId);
-  return paymentIntentId;
+  return { paymentIntentId, exempt };
+}
+
+// Schliesst den Setup-Hold ab: Einzug (regulaer) ODER Storno (befreit, GAP-05). Beides
+// laeuft ueber DIESELBE Fehlerkante (rollbackAfterOrder beim Aufrufer) - ein gescheiterter
+// Abschluss darf nie eine bezahlte/gehaltene Waise hinterlassen (G5, kein zweiter
+// Rollback-Pfad).
+async function settleSetupFeeHold(s, numberId, { billing, paymentIntentId, holdAmountCents, exempt }) {
+  beginCapturing(s, numberId); // provisioning -> capturing (Geld-Abschluss laeuft)
+  if (exempt) return billing.cancelHold(paymentIntentId);
+  return billing.captureHold(paymentIntentId, holdAmountCents);
 }
 
 // Rollback NACH erfolgreichem Order (capture-Fehler, Payment-Pfad): Zustand failed,

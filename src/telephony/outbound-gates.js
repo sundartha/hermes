@@ -44,6 +44,7 @@ import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
 import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "../billing/period.js";
+import { includedMinutesFor } from "../billing/plan-caps.js";
 
 // Hardcoded (kein Env, nicht abschaltbar): Notruf-Kurzwahlen exakt (sonst wuerde "112" auch
 // legitime Nummern als Prefix treffen), Premium-/Service-Prefixe per startsWith. Eng gefasst,
@@ -254,6 +255,18 @@ export function makeOutboundGates({
         grund: "abo",
         message: "Abo inaktiv (Tenant gesperrt). Outbound-Anrufe sind gesperrt.",
       };
+    // O2/GAP-03: Zahlungsbeanstandung sperrt OUTBOUND, laesst Inbound unberuehrt (dieses
+    // Gate laeuft nur im Ausgangspfad). Reversibel: ein bestaetigtes aktives Abo loescht
+    // den Hold (webhook.js ACTIVATE). Bei payment_action_required greift er erst nach
+    // Fristablauf (dueAt), davor ist es nur Warnung + Audit (billingHoldActive liest die
+    // Frist lazy gegen die Uhr, s. state-ops.js).
+    const hold = store.billingHoldActive(tenantId);
+    if (hold)
+      return {
+        status: 403,
+        grund: "billing_hold",
+        message: "Outbound gesperrt: Zahlungsproblem. Bitte Zahlungsmittel/Betreiber pruefen.",
+      };
     if (profile.unrestricted) return null;
     if (profile.allowedNumbers?.includes(to)) return null;
     if (store.tenantActiveSubscriber(tenantId, KYC_OUTBOUND_MIN)) return null;
@@ -274,7 +287,9 @@ export function makeOutboundGates({
     const sub = store.tenantSubscription(tenantId);
     const plan = sub.planSlug ? findPlan(sub.planSlug) : null;
     return store.planMinutesExceeded(tenantId, {
-      includedMinutes: plan?.includedMinutes,
+      // GAP-03: nach einer Rueckerstattung (periodCreditRevoked) ist das Guthaben der
+      // laufenden Periode 0 - EINE Quelle mit der Anzeige (meter.js quotaView).
+      includedMinutes: includedMinutesFor({ plan, subscription: sub }),
       periodStartIso: resolvePeriodStartIso(sub),
     });
   }

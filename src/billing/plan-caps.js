@@ -31,3 +31,14 @@ export function planCapCents(planSlug, cfg) {
   }
   return (plan.includedMinutes * cfg.voiceCapRateCentsPerMin * headroom.numerator) / headroom.denominator;
 }
+
+// GAP-03/O2: inkludierte Minuten der laufenden Periode. Nach einer Rueckerstattung
+// (periodCreditRevoked) ist das Guthaben dieser Periode aufgebraucht (0) - kein Hard-
+// Suspend, der Tenant bleibt aktiv und inbound erreichbar. EINE Quelle fuer Gate
+// (outbound-gates.js planMinutesExhausted) UND Anzeige (meter.js quotaView) - Anzeige-
+// Fenster == Gate-Fenster ist Repo-Invariante. plan kann null sein (kein bekannter Plan) ->
+// undefined (die jeweiligen Aufrufer behandeln das bereits fail-closed).
+export function includedMinutesFor({ plan, subscription }) {
+  if (subscription?.periodCreditRevoked) return 0;
+  return plan?.includedMinutes;
+}

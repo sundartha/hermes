@@ -17,9 +17,22 @@
 // billing/webhook.js).
 import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/webhook.js";
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
+import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 
-// deps: { config, store, audit, accounts, sessions, billing, provision }.
-export function makeStripeWebhookRoute({ config, store, audit, accounts, sessions, billing, provision }) {
+// deps: { config, store, audit, accounts, sessions, billing, provision, messaging }.
+// GAP-03/GAP-04: messaging ist die EINE Provider-Registry-Dispatch-Funktion (DIP) fuer den
+// Plattform-Alarm-Relais - der SMS-Versand lebt HIER (Route, IO-erlaubt), NICHT in
+// billing/webhook.js (das bleibt IO-frei/testbar ohne echten Netz-Call).
+export function makeStripeWebhookRoute({
+  config,
+  store,
+  audit,
+  accounts,
+  sessions,
+  billing,
+  provision,
+  messaging,
+}) {
   return async (req, res) => {
     if (!requirePaymentEnabled(res, config, "payment disabled")) return;
     const ok = verifyStripeSignature({
@@ -39,7 +52,16 @@ export function makeStripeWebhookRoute({ config, store, audit, accounts, session
     } catch {
       return res.status(400).json({ error: "bad payload" });
     }
-    await applyStripeWebhookSerialized(event, { store, accounts, sessions, audit, req, provision, billing });
+    const outcome = await applyStripeWebhookSerialized(event, {
+      store, accounts, sessions, audit, req, provision, billing,
+    });
+    // Plattform-Alarm (GAP-03/GAP-04): sendBootstrapAlertSms ist fail-soft - ohne
+    // konfigurierten Empfaenger passiert nichts, ein Fehler bricht die Webhook-Antwort NIE ab.
+    if (outcome?.alarm)
+      sendBootstrapAlertSms({
+        messaging, config, store, prefix: outcome.alarm.prefix, detail: outcome.alarm.detail,
+        logTag: "stripe-money-event",
+      });
     res.json({ received: true });
   };
 }

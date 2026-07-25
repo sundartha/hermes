@@ -25,6 +25,7 @@ import {
   checkoutSessionIdempotencyKey,
 } from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
+import { provisionAuditDetail } from "./billing/provision-outcome.js";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
@@ -75,7 +76,8 @@ function maskPrivateNumber(e164) {
 // die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
   if (!config.billing.paymentEnabled) return {};
-  const { planSlug, currentPeriodStart, currentPeriodEnd } = store.tenantSubscription(tenant);
+  const { planSlug, currentPeriodStart, currentPeriodEnd, periodCreditRevoked } =
+    store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd },
@@ -83,7 +85,15 @@ function paymentView(store, config, tenant) {
     // Periodenanker (currentPeriodStart bevorzugt) + dasselbe Erschoepfungs-Praedikat
     // wie das Outbound-Gate -> Anzeige == durchgesetztes Gate (kein "Rest X, trotzdem
     // geblockt"). Kein Abo -> null (UI: Leerzustand). store.load() = der Ledger-State.
-    quota: quotaView(store.load(), { tenantId: tenant, planSlug, currentPeriodStart, currentPeriodEnd }),
+    // GAP-03: periodCreditRevoked (Rueckerstattung) zeigt dieselben 0 inkludierten Minuten
+    // wie das Gate (includedMinutesFor, EINE Quelle, billing/plan-caps.js).
+    quota: quotaView(store.load(), {
+      tenantId: tenant,
+      planSlug,
+      currentPeriodStart,
+      currentPeriodEnd,
+      periodCreditRevoked,
+    }),
   };
 }
 
@@ -149,8 +159,8 @@ function createCheckoutSession({ billing, config, tenant, customerId, planSlug, 
 async function subscribeAndActivate({ store, billing, config, accounts, provision, tenant, planSlug }) {
   const result = await createTenantSubscription({ store, billing, config, tenant, planSlug });
   if (!result.ok) return result;
-  const { profile } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
-  return { ...result, profile };
+  const { profile, provisioned } = await activatePaidTenant({ store, accounts, provision, billing, tenant });
+  return { ...result, profile, provisioned };
 }
 
 // Express 4 leitet abgelehnte Promises aus async-Handlern NICHT an die Fehler-Kette ->
@@ -405,7 +415,8 @@ export function makeSelfServiceRoutes({
         audit(
           "self_service_subscribe",
           req,
-          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ${profileAuditDetail(result.profile)}`,
+          `tenant=${tenant} plan=${carriedPlan} outcome=${result.ok ? "ok" : result.reason} ` +
+            `${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
         );
         // already_subscribed = idempotent-erfolgreich (Doppel-Redirect/Reload derselben
         // Session, Abo ist aktiv) -> sub=ok. Jeder andere/kuenftige reason -> sub=failed.
@@ -442,7 +453,11 @@ export function makeSelfServiceRoutes({
           const { status, body } = subscribeReject(result.reason, planSlug);
           return res.status(status).json(body);
         }
-        audit("self_service_subscribe", req, `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)}`);
+        audit(
+          "self_service_subscribe",
+          req,
+          `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
+        );
         res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
       },
       billingUnavailable,

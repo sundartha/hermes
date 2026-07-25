@@ -53,7 +53,7 @@ async function captureWarn(fn) {
   return lines;
 }
 
-test("(j2a) applyStripeWebhook ACTIVATE (business) laeuft vollstaendig durch, Decke geklemmt auf 500, genau EINE WARN", async () => {
+test("(j2a) applyStripeWebhook ACTIVATE (business) laeuft vollstaendig durch, Decke geklemmt auf 500 (3x WARN, GAP-04-Marker)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j2a";
   const s = store.load();
@@ -85,7 +85,7 @@ test("(j2a) applyStripeWebhook ACTIVATE (business) laeuft vollstaendig durch, De
       sessions: { invalidateByTenant: async () => {} },
       audit: () => {},
       req: {},
-      provision: async (t) => provisionCalls.push(t),
+      provision: async (t) => { provisionCalls.push(t); return { ok: true, reason: "queued" }; },
       billing: undefined,
     }),
   );
@@ -101,14 +101,22 @@ test("(j2a) applyStripeWebhook ACTIVATE (business) laeuft vollstaendig durch, De
     500,
     "auf platformSpendCapCents geklemmt (900 abgeleitet, 500 Cap)",
   );
+  // P4/GAP-03+GAP-04: activatePaidTenant patcht setTenantSubscription zusaetzlich zweimal
+  // fuer den Wartezustands-Marker (activationPending true dann false), UND applyStripeWebhook
+  // raeumt bei Erfolg reversibel auf (periodCreditRevoked:false) - jeder Patch laesst
+  // deriveTenantBudgetFromPlan erneut ableiten+klemmen -> 4 statt 1 Klemm-WARN (Webhook-
+  // Patch + 2x Marker + Reversibilitaets-Patch). Alle vier sind inhaltlich identisch
+  // (bewusst deterministisch).
   const clampLines = warnLines.filter((l) => l.includes("grund=clamp"));
-  assert.equal(clampLines.length, 1, `erwartet genau EINE Klemm-WARN, war:\n${warnLines.join("\n")}`);
-  assert.match(clampLines[0], /slug=business/);
-  assert.match(clampLines[0], /abgeleitet=900/);
-  assert.match(clampLines[0], /platformSpendCapCents=500/);
+  assert.equal(clampLines.length, 4, `erwartet 4 Klemm-WARNs (GAP-03/GAP-04-Marker), war:\n${warnLines.join("\n")}`);
+  for (const line of clampLines) {
+    assert.match(line, /slug=business/);
+    assert.match(line, /abgeleitet=900/);
+    assert.match(line, /platformSpendCapCents=500/);
+  }
 });
 
-test("(j2b) Checkout-Return-Pfad (business) laeuft vollstaendig durch, Decke geklemmt auf 500, genau EINE WARN", async () => {
+test("(j2b) Checkout-Return-Pfad (business) laeuft vollstaendig durch, Decke geklemmt auf 500 (3x WARN, GAP-04-Marker)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j2b";
   const s = store.load();
@@ -129,7 +137,7 @@ test("(j2b) Checkout-Return-Pfad (business) laeuft vollstaendig durch, Decke gek
       store,
       billing: { getSubscriptionCheckoutResult: async () => outcome },
       accounts: { setStatus: async () => {} },
-      provision: async (t) => provisionCalls.push(t),
+      provision: async (t) => { provisionCalls.push(t); return { ok: true, reason: "queued" }; },
       tenant: tenantId,
       sessionId: "cs_j2b",
       expectedPlanSlug: "business",
@@ -139,8 +147,10 @@ test("(j2b) Checkout-Return-Pfad (business) laeuft vollstaendig durch, Decke gek
   assert.equal(store.tenantStripe(tenantId).paymentMethodId, "pm_j2b", "Karte via Fake gebunden");
   assert.deepEqual(provisionCalls, [tenantId], "Provisioning ausgeloest");
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 500, "auf 500 geklemmt");
+  // P4/GAP-04: s. Kommentar in (j2a) - 3 statt 1 Klemm-WARN durch die zwei zusaetzlichen
+  // activationPending-Patches in activatePaidTenant.
   const clampLines = warnLines.filter((l) => l.includes("grund=clamp"));
-  assert.equal(clampLines.length, 1, `erwartet genau EINE Klemm-WARN, war:\n${warnLines.join("\n")}`);
+  assert.equal(clampLines.length, 3, `erwartet 3 Klemm-WARNs (GAP-04-Marker), war:\n${warnLines.join("\n")}`);
 });
 
 // ---- (j3) Nachlese-Guard direkt (zweite Linie, reine Funktion) ----------------------

@@ -13,6 +13,7 @@ import {
 } from "../store/state-ops.js";
 import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "./period.js";
+import { includedMinutesFor } from "./plan-caps.js";
 
 // Aggregiert die NOCH NICHT gesendeten usage_event-Zeilen je (tenantId, kind):
 // summiert quantity + costCents, sammelt die Event-ids (in stabiler Reihenfolge).
@@ -93,10 +94,15 @@ export async function flushMeters(s, { billing }) {
 // voiceMinutesUsedSince ein zweites Mal - zwei identische REINE Array-Filter auf einem
 // Cold-Path (Self-Service-GET), KEINE Logik-Duplizierung. Gewaehlt, weil die fail-closed-
 // Entscheidung NICHT zweitkodiert werden darf (Repo-Invariante, vgl. planMinutesExhausted).
-export function quotaView(s, { tenantId, planSlug, currentPeriodStart, currentPeriodEnd }) {
+export function quotaView(
+  s,
+  { tenantId, planSlug, currentPeriodStart, currentPeriodEnd, periodCreditRevoked },
+) {
   const plan = planSlug ? findPlan(planSlug) : null;
   if (!plan) return null;
-  const includedMinutes = plan.includedMinutes;
+  // GAP-03: nach einer Rueckerstattung zeigt die Anzeige dasselbe aufgebrauchte Guthaben
+  // wie das Gate (includedMinutesFor, EINE Quelle mit outbound-gates.js).
+  const includedMinutes = includedMinutesFor({ plan, subscription: { periodCreditRevoked } });
   const periodStartIso = resolvePeriodStartIso({ currentPeriodStart, currentPeriodEnd });
   const exhausted = planMinutesExceeded(s, tenantId, { includedMinutes, periodStartIso });
   const usedMinutes = periodStartIso ? voiceMinutesUsedSince(s, tenantId, periodStartIso) : 0;

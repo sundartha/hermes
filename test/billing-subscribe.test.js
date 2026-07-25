@@ -46,6 +46,10 @@ function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
     setProfile: () => ({ changed: ["maxNumbers"] }),
     // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
     clearSuspendedAt: () => {},
+    // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
+    // clearBillingHold (Reversibilitaet) - hier nicht relevant, wird aber nur vom Webhook-
+    // Pfad gerufen (applyStripeWebhook), nicht von activateSubscriptionFromCheckoutSession.
+    ensureTenant: async () => {},
   };
 }
 
@@ -220,7 +224,11 @@ function activationSpies() {
   return {
     calls,
     accounts: { setStatus: async (tenant, status) => calls.status.push({ tenant, status }) },
-    provision: async (tenant) => calls.provisioned.push(tenant),
+    // GAP-04: activatePaidTenant aktiviert nur bei GEKLAERTEM Ergebnis (provisionCleared).
+    provision: async (tenant) => {
+      calls.provisioned.push(tenant);
+      return { ok: true, reason: "queued" };
+    },
   };
 }
 

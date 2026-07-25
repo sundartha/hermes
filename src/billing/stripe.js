@@ -24,6 +24,11 @@ const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
 const SUBSCRIPTIONS_PATH = "/v1/subscriptions"; // W4: monatliches Recurring
 const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
 const CHECKOUT_SUBSCRIPTION_MODE = "subscription"; // Karte + Abo in EINEM gehosteten Schritt (kein Magic-String)
+// GAP-05 (Sicherungs-Achse): Stripe sammelt im subscription-Mode bei einem Rechnungsbetrag
+// von 0 (100-%-Coupon) per Default GAR KEINE Karte - genau so entsteht eine DID ohne
+// hinterlegtes Zahlungsmittel. "always" erzwingt die Kartenbindung unabhaengig vom Rabatt.
+// Die PREIS-Achse (allow_promotion_codes) bleibt davon unberuehrt (Owner-Entscheidung O2b).
+const PAYMENT_METHOD_COLLECTION_ALWAYS = "always";
 const OFF_SESSION = "true"; // Karte ohne Kunden-Interaktion belasten (kein 3DS-Redirect noetig)
 // W4: Stripe legt bei fehlgeschlagener Erstzahlung KEIN incomplete-Abo an, sondern wirft
 // (fail-closed, kein "Abo ohne Zahlung"). Kein Magic-String (G25).
@@ -277,6 +282,7 @@ export const stripeBilling = {
       "line_items[0][price]": priceId,
       "line_items[0][quantity]": "1",
       allow_promotion_codes: "true",
+      payment_method_collection: PAYMENT_METHOD_COLLECTION_ALWAYS,
     });
     body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
     body.set("subscription_data[metadata][tenant_ref]", tenantRef);
