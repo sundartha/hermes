@@ -101,15 +101,33 @@ Damit entfaellt die gesamte **Migrationsachse** dieses Plans:
   gerade Schaden an". Das gilt fuer GAP-03, GAP-05, GAP-10 und die ORIG-Kette. Die Dringlichkeit
   sinkt, die Notwendigkeit bleibt.
 
-**Was P-A NICHT entwertet** - zwei gemessene Befunde des Safety-Reviews gelten unveraendert, weil
-sie an der Korrektheit jedes einzelnen Anrufs haengen und nicht an Bestandsdaten:
+**Was P-A NICHT entwertet - und was es sehr wohl entwertet.** Der Safety-Review hatte zwei
+gemessene Befunde zum Flip. Nach P-A traegt nur noch einer davon:
 
-1. Der fest verdrahtete **Offenlegungssatz wird nach dem Flip englisch** fuer jeden Call ohne
-   aufloesbare Sprache (Absolute Regel 2).
-2. **STT-Locale und TTS-Stimme kippen auf `en-GB`, waehrend der Greeting-Text deutsch bleibt** -
-   britische Stimme liest deutschen Satz, englischer Erkenner hoert deutschen Anrufer.
+**Bleibt: die Sprach-DIVERGENZ innerhalb desselben Anrufs.** Gemessenes Ist-Rendering nach dem
+Flip: `<Gather language="en-GB"><Say voice="Azure.en-GB-SoniaNeural">Hallo, hier ist der
+KI-Assistent von Maria...</Say>`. Ursache: **Sprache und Text kommen aus verschiedenen Quellen.**
+Die Sprache loest ueber `resolveCallLanguage` (`src/store/state-ops.js:648-652`) auf -
+`settings.language || numberRecord.language || tenant.defaultLanguage || DEFAULT_LANGUAGE` - und
+steuert STT-Locale und TTS-Stimme. Der Begruessungs**text** kommt aus `ctx.settings.greeting`
+(`src/routes/voice.js:265`), einem gespeicherten Freitext, der von der Sprache nichts weiss.
 
-Beide sind in P10 als Gegenmassnahme und Abnahmekriterium zu behalten.
+**Das ist KEIN Argument fuer hartkodiertes Deutsch - im Gegenteil.** Der Sollzustand ist: Stimme,
+Spracherkenner UND Text folgen alle drei derselben Tenant-Sprache. Genau dafuer stehen WEB-04
+(es gibt heute ueberhaupt keine englische Greeting-Vorlage - alle drei `GREETING_TEMPLATES` sind
+deutsch) und PROMPT-03 (Greeting ignoriert `settings.language`) im Plan. Die Divergenz ist in
+jeder Sprachrichtung kaputt, nicht nur in dieser. **Abnahmekriterium von P10 bleibt deshalb: der
+Inbound-Smoke prueft das gerenderte TwiML/TeXML (`Gather language` + `Say voice`) GEGEN die
+Sprache des Greeting-Texts** - nicht den Text allein.
+
+**Entwertet: der englische Offenlegungssatz.** Der Befund lautete, dass `disclosureSentence`
+(`src/claude.js:254`) nach dem Flip englisch wird, sobald die Sprache nicht aufloest. Das ist nur
+dann falsch, wenn ein **deutschsprachiger** Tenant keine Sprache gesetzt hat - und nach P-A ist
+der einzige betroffene Tenant der Betreiber selbst, dem Englisch ausdruecklich recht ist. Der
+Befund faellt damit von "Blocker" auf **Hinweis**: kein eigenes Abnahmekriterium mehr, aber die
+Regel dahinter bleibt scharf - **der Offenlegungssatz muss je Sprache HART hinterlegt sein, ohne
+Fallback auf leer** (P11). Ein Anruf ohne Offenlegung waere ein Verstoss gegen Absolute Regel 2;
+ein Anruf mit Offenlegung in der falschen Sprache ist ein Qualitaetsmangel.
 
 ### P-B - Die Ist-Kosten werden bereits live gemessen und nachgebucht
 
@@ -933,10 +951,14 @@ gruen. A3, A6 erfuellt.
 > **Geaendert durch Praemisse P-A (Owner, 2026-07-25): der Backfill entfaellt.** Es gibt keine
 > fremden Bestandskunden, also gibt es keine Bestandsdaten zu retten. **Schritt 2 unten ist
 > gestrichen**, die `psql`-Zaehlung ist keine Vorbedingung mehr, und die Pre-Mortems 1 und 2 sind
-> gegenstandslos (sie stehen als Beleglage stehen, durchgestrichen kommentiert - nicht geloescht).
+> gegenstandslos (sie bleiben als Beleglage durchgestrichen stehen - nicht geloescht).
 > **Was BLEIBT:** Schritt 1 (Schreibpfad, weil kuenftige Datensaetze sonst falsch materialisieren),
-> Schritt 3 (der Flip), Pre-Mortem 3 und 4, und vor allem die **Gegenmassnahme ENTSCHAERFT (5)** -
-> Offenlegungssatz und STT/TTS-Locale kippen unabhaengig von jedem Bestandskunden.
+> Schritt 3 (der Flip), Pre-Mortem 3 und 4, und die **Gegenmassnahme ENTSCHAERFT (5)** - dort aber
+> nur noch in der halben Fassung: die **Sprach-Divergenz** (Stimme/Erkenner gegen Greeting-Text)
+> bleibt hartes Abnahmekriterium, der **englische Offenlegungssatz** faellt nach P-A auf Hinweis
+> zurueck. Herleitung beider in Abschnitt 2a.
+> **Ausdruecklich NICHT gemeint:** irgendetwas auf Deutsch festzunageln. Sollzustand ist, dass
+> Stimme, Spracherkenner und Text alle drei der Tenant-Sprache folgen (WEB-04, PROMPT-03).
 > Aufwand sinkt entsprechend von 3-4 Tagen auf **1 bis 2 Tage**.
 
 **IDs (7):** WORLD-01, WORLD-03, DID-01, DID-02, DID-03, E2E-04, E2E-05
