@@ -11,6 +11,11 @@ hier ist bereits ausgefuehrt.
 
 **Basis.** Commit `9a5e9a6`, Arbeitsbaum sauber.
 
+> **STAND 2026-07-25 nach der Owner-Runde.** Alle 15 Fragen aus Abschnitt 3 sind **entschieden**
+> (Antworten dort eingetragen). Dabei sind **zwei Praemissen gefallen, auf denen dieser Plan
+> aufgebaut war** - sie stehen in Abschnitt 2a und muessen vor der Umsetzung gelesen werden, weil
+> sie die Begruendung der Reihenfolge und den Zuschnitt von P5 und P10 beruehren.
+
 **Gemessene Ausgangslage.** `npm test`: 3044 Tests, 2958 gruen, **86 rot**. 85 der roten Blaetter
 entfallen auf **53 Katalog-IDs** (GAP-18 buendelt 12 Subtests unter einem Elterntest). Das 86.
 Rot ist `test/voice-status-lifecycle.test.js:137` - ein dokumentierter Voll-Last-Flake, isoliert
@@ -69,32 +74,109 @@ sind teurer und langsamer als jeder Geld- oder Gate-Fix davor, weshalb die Geld-
 Gate-Fixes nichts gewinnen, wenn man sie hinter die Sprache stellt, die Sprache aber alles
 verliert, wenn man sie vor ihre Vorbedingungen stellt.
 
+> **Dieser Satz gilt seit dem 2026-07-25 nur noch zur Haelfte.** Die Vorbedingung "verifizierter
+> Backfill" ist entfallen (Praemisse P-A unten). Was von der Begruendung traegt, steht in
+> Abschnitt 2a.
+
 ---
 
-## 3. Was der Owner entscheiden muss, BEVOR gefixt wird
+## 2a. Zwei gefallene Praemissen (Owner-Runde 2026-07-25)
 
-> **Keine Zeile dieser Tabelle ist ein Implementierungsauftrag.** Es sind Fragen an den Owner mit
-> einer Empfehlung und der Folge jeder Option. Ein Implementierer, der eine dieser Zeilen als
-> Aufgabe liest und die Empfehlung einfach umsetzt, arbeitet gegen diesen Plan. Das ist in diesem
-> Projekt bereits einmal schiefgegangen.
+Beide sind am Code bzw. vom Owner belegt und schlagen auf mehrere Phasen durch. Wer diesen Plan
+umsetzt, liest sie VOR dem Phasenschnitt.
 
-| # | Frage | betrifft IDs | Empfehlung | Folge wenn anders | blockiert |
-| --- | --- | --- | --- | --- | --- |
-| **O1** | **Ablesefrage, keine Codefrage:** welche Werte stehen im Render-Dashboard des Live-Service (`srv-d8m0fhflk1mc73bno570`) fuer `BUDGET_MONTH_ENABLED`, `DEFAULT_TENANT_BUDGET_CENTS`, `VOICE_TARIFF_DEFAULT_CENTS`, `MAX_CALLS_PER_HOUR`, `METRICS_ENABLED`? | GAP-01, GAP-32, GAP-33, GAP-35, GAP-10, GAP-07 | Werte einmal ablesen, in `test/prod-env.js` `LIVE_MEASURED` eintragen. **Praezisierung des Ist-Zustands (am Code geprueft, nicht nur "teils unmeasured"):** von diesen fuenf Achsen steht heute nur `BUDGET_MONTH_ENABLED` in `LIVE_UNMEASURED`; `DEFAULT_TENANT_BUDGET_CENTS`, `VOICE_TARIFF_DEFAULT_CENTS`, `MAX_CALLS_PER_HOUR` und `METRICS_ENABLED` stehen in KEINER der beiden Listen und laufen ueber `LIVE_ENV = {...RENDER_ENV, ...LIVE_MEASURED}` still auf Blueprint-Werten - der GAP-33-Smoke behauptet damit Live-Aussagen auf Blueprint-Zahlen, ohne das kenntlich zu machen. **Auflage:** jede hier abgelesene Achse wird nach der Ablesung entweder in `LIVE_MEASURED` oder (falls unbekannt) in `LIVE_UNMEASURED` eingetragen - keine bleibt danach still auf dem Blueprint-Wert. Insbesondere: steht `BUDGET_MONTH_ENABLED` bereits auf `true`? Das Projektgedaechtnis notiert es seit 2026-07-25 als AN, der GAP-33-Bericht fuehrt dieselbe Achse als nicht belegt - genau eine der beiden Aussagen ist falsch, und keine Codearbeit kann das entscheiden. **Nicht Teil dieser Ablesung:** `MAX_CALL_DURATION_CAP_S` ist keine Env-Variable, sondern eine Code-Konstante in `src/store/defaults.js:250-253` mit dem ausdruecklichen Kommentar "KEIN Operator-Knopf" - sie steht in keinem Dashboard und darf durch diese Frage nicht zu einer werden (siehe O6). | Ohne Ablesung bauen P6 und P7 auf geratenen Zahlen. Ein `fatal:true`-Flip mit falsch angenommenen Live-Werten legt den Dienst beim naechsten Boot still - der belegte Divergenzfall (Land-Gate live `*`) ist der Beweis, dass `render.yaml` hier nicht traegt. Steht das Flag bereits AN, faellt GAP-01s `brennt_heute` weg - die **Notwendigkeit** des Codefixes bleibt (sein Test verlangt den Reset ausdruecklich bei `budgetMonthEnabled=false`), nur die Dringlichkeit sinkt. | P6, P7 (+ Betriebsauflage in P1) |
-| **O2** | Welche automatische Reaktion gehoert zu welchem Stripe-Ereignis: `charge.dispute.created`, `charge.refunded`, `subscription.paused`, `invoice.payment_action_required`? | GAP-03 | Abgestuft statt einheitlich: Dispute -> **keine** Sperre, sondern Warnung + Plattform-Alarm + Audit (Disputes gehen regelmaessig zugunsten des Haendlers aus). Refund -> Periodenguthaben auf 0, kein Hard-Suspend. Paused -> Outbound sperren, Inbound weiter. `payment_action_required` -> Warnung mit Frist, Sperre erst nach Fristablauf. Keine Reaktion loescht Daten oder gibt eine DID frei; jede ist reversibel und schreibt Audit. | Einheitliches Suspend sperrt zahlende Kunden bei jedem Bankstreit und erzeugt Abwanderung. Einheitliches Nur-Loggen laesst den heutigen Zustand bestehen: nach einem Chargeback telefoniert der Kunde unveraendert weiter. | P4 |
-| **O2b** | **Widerspruch, der vor P4 aufgeloest werden muss:** bleiben Stripe-Coupons fuer den DID-Kauf uneingeschraenkt erlaubt, oder braucht es eine explizite Coupon-Allowlist? `test/gap-05-number-hold.test.js:51-75` verlangt woertlich `allow_promotion_codes !== 'true'` mit der Begruendung "darf nur GEMEINSAM mit einer expliziten Coupon-Allowlist gesetzt werden" - die urspruenglich vorgesehene Gegenmassnahme ("Coupons bleiben erlaubt, keine neue Allowlist") macht genau diesen Teil des Tests nicht gruen. | GAP-05 | Eine der beiden Optionen bewusst waehlen: (a) Coupons ganz abschalten (`allow_promotion_codes=false`), oder (b) eine schlanke, gepflegte Coupon-Allowlist einfuehren. Keine dritte Option macht den Test gruen. | Ohne Entscheidung flippt der Implementierer unter Abnahmedruck `allow_promotion_codes` auf `false` und eine laufende Marketing-Aktion laeuft still ins Leere (genau P4 Pre-Mortem 2), oder er senkt die Test-Erwartung. Die zweite GAP-05-Achse (Hold/Kartenbindung auch bei 100-%-Coupon nie umgehbar) ist von dieser Entscheidung unabhaengig und deckt die erste Assertion des Tests unveraendert ab. | P4 |
-| **O3** | Wird die Herkunfts-Tarifkorrektur rueckwirkend auf bereits gebuchte Perioden angewandt, und werden betroffene Tenants informiert? | ORIG-01, ORIG-02, ORIG-03 | Nicht rueckwirkend, ab Deploy; keine Nachbelastung, keine Gutschrift. **Aber Pflicht:** die bisherige Abweichung wird einmalig ausgewertet und dokumentiert, damit die Groessenordnung des Verlusts bekannt ist. Tenants mit spuerbar steigendem Minutenpreis werden einmal informiert. | Rueckwirkende Nachbelastung trifft Kunden fuer einen Fehler, den sie nicht verursacht haben, und erzeugt genau die Chargebacks, die P4 gerade behandeln lernt. Ohne Auswertung ist der teuerste Umbau des Plans hinterher nicht bewertbar. **Wichtig:** diese Frage blockiert den **Codefix nicht**, nur die Behandlung bereits gebuchter Perioden. | P5 (nur Nebenpfad) |
-| **O3b** | **Widerspruch, der vor P5 aufgeloest werden muss:** wird Inbound auf eine eigene DID ueberhaupt bepreist - und wenn ja, mit welchem Satz? `test/orig-01-05-cost-origin.test.js:90-115` assertiert heute woertlich `voiceEvents.length === 0` fuer Inbound (kein VOICE_MINUTE-Event ueberhaupt); die urspruenglich vorgesehene Gegenmassnahme "bucht mit dem Inlandssatz" ist das **Gegenteil** davon - beides gleichzeitig ist unmoeglich. | ORIG-03 | **Ja, Inlandssatz des DID-Landes.** Der Sachverhalt der Testnachricht ("darf keinen Auslands-Worst-Case fuer Inbound erzeugen") bleibt dabei erhalten - nur die Assertion "gar kein Event" wird nach R5 auf "Event zum Inlandssatz, nicht zum Auslands-Worst-Case" korrigiert. Das ist keine Absenkung der Erwartung, sondern eine Korrektur der Assertion auf den im Testnamen beschriebenen Sachverhalt. | Wird stattdessen die heutige Assertion woertlich uebernommen (Inbound bleibt ungebucht), muss P5 ausdruecklich benennen, welches ANDERE Glied Inbound-Kosten dann gegen Tenant- **und** Plattform-Decke bucht. Ohne eine dieser beiden Festlegungen darf ORIG-03 nicht gebaut werden - sonst schaltet der Implementierer unter Abnahmedruck `recordVoiceMinuteMeter` fuer Inbound lautlos ab und der Budget-Guard wird fuer Dauer-Inbound blind (Absolute Regel 1, P5 Pre-Mortem 3). | P5 |
-| **O4** | Was passiert mit Sperre **und** Verbrauchszaehler bei einer unbezahlten Folgeperiode - nicht nur, ob heute gesperrte Tenants reaktiviert werden? Stripe sendet `SUBSCRIPTION.UPDATED` (der geplante Reset-Anker) auch dann, wenn die Rechnung der neuen Periode **nicht** bezahlt ist (`past_due`/`unpaid`, laufendes Dunning). | GAP-01 | Reaktivierung **und** Zaehler-Reset haengen an **derselben** Bedingung: `subscription.status` aktiv/trialing UND bezahlte letzte Rechnung. Alle uebrigen bleiben gesperrt UND ihr Verbrauchszaehler wird NICHT zurueckgesetzt; sie erscheinen in einer Audit-Liste. Jede Reaktivierung schreibt Audit und loest eine Plattform-SMS aus. | Reaktivierung gegated, Reset ungegated (die urspruenglich einzig erwogene Variante): ein nicht zahlender Tenant bleibt zwar gesperrt, bekommt aber bei **jedem** Periodenwechsel ein frisches Ausgabekontingent auf Plattformkosten - unbegrenzt oft, bis der geteilte Plattform-Topf greift. Das ist dieselbe Schadensklasse wie die volle Automatik, nur ueber die Reset- statt die Reaktivierungs-Kante, und faellt am GAP-01-Test nicht auf (der faehrt `status:'active'`). Keine Automatik fuer beides: jeder rechtmaessig gesperrte zahlende Kunde braucht manuellen Eingriff - genau das, was diese Phase beheben soll. | P6 |
-| **O5** | Welche Zahlen gelten fuer das Pro-Tenant-Stundenlimit und fuer die verbleibende globale Notbremse (Entscheidung 7.7)? **Am Code verifiziert: `MAX_CALLS_PER_HOUR` ist heute BEIDES gleichzeitig** - die globale Bremse (`outbound-gates.js:190-192`) UND der effektive Pro-Tenant-Default (`userHourReached`: `profile.maxCallsPerHour == null ? config.safety.maxCallsPerHour : Math.min(...)`), und bezahlte Plaene setzen `maxCallsPerHour: null` (`plans.js:106`), laufen also heute ueber den globalen Wert. Der Umbau macht `MAX_CALLS_PER_HOUR` zur Pro-Tenant-Achse und braucht dafuer einen **neuen** Schluessel fuer die Plattformbremse. | GAP-10 | Der heutige Wert wird zum Pro-Tenant-Limit (6/h je Tenant statt 6/h fuer alle), die globale Notbremse bekommt einen **eigenen, neuen Env-Namen** (Richtwert 60/h) und **wird im Dashboard GESETZT, bevor der Code deployt wird** - nicht als Code-Default gestartet. Beide wirken als Schnittmenge - wie bei den Budget-Achsen. Boot-Banner und `configHash` aus P1 weisen **beide** Achsen aus. Ein Profil mit `maxCallsPerHour: 0` (DEFAULT_PROFILE, kein Outbound) hat nach dem Umbau weiterhin 0 - `Math.min(global, profil)` darf ein restriktives Profil nicht anheben. | Globale Bremse ersatzlos entfernt = **Verstoss gegen Absolute Regel 1**; ein kompromittierter Account faehrt beliebig viele Anrufe, jeder einzeln unter dem Tenant-Limit. **Neuer Schluessel ohne vorherige Dashboard-Belegung:** der im Dashboard heute gesetzte `MAX_CALLS_PER_HOUR`-Wert behaelt seinen Namen, wechselt aber lautlos die Semantik zum Pro-Tenant-Limit; die Plattformbremse laeuft dann am Deploy-Tag auf dem Code-Default (Richtwert 60) statt auf dem heutigen Wert - eine unbemerkte ~10-fache Erhoehung der Plattform-Kapazitaet. Beim heutigen plattformweiten Limit bleiben: ein aktiver Tenant verdraengt weiterhin alle anderen vom Outbound. | P6 |
-| **O6** | Ueber welchen Hebel wird die Boot-Kohaerenz hergestellt - Tenant-Decke anheben, Worst-Case-Tarif senken oder Max-Gespraechsdauer senken? Und: wird die Vorab-Reserve kuenftig aus dem **echten Zieltarif** gerechnet statt aus dem globalen Worst-Case? **`MAX_CALL_DURATION_CAP_S` ist keine Env-Variable, sondern eine Code-Konstante (`src/store/defaults.js:250-253`, Kommentar "KEIN Operator-Knopf -> nicht config.js") und deckelt zusaetzlich `place_call.max_duration_s` im MCP-Schema (`mcp-tools.js:456`).** | GAP-32, GAP-33 | **Beides kombinieren:** (a) die Reserve aus dem echten Zieltarif rechnen, den die Herkunfts-Achse aus P5 ohnehin liefert - der globale Worst-Case-Default von 300 ct/min steht gegen empirisch gemessene ~5,4 ct/min; (b) `MAX_CALL_DURATION_CAP_S` **als Code-Konstante** senken statt die Decke anzuheben (Rechnung: um die Reserve von 1500 ct unter die Tenant-Decke von 600 ct zu bringen, muss sie auf 120 s). **Guardrail:** der Hebel darf NICHT `VOICE_TARIFF_DEFAULT_CENTS` senken. Der Tarif ist die Messgroesse, mit der das Budget-Gate rechnet; ihn kleinzurechnen macht das Gate blind und ist faktisch eine Aufweichung von Absoluter Regel 1. **Zweiter Guardrail:** `MAX_CALL_DURATION_CAP_S` bleibt Code-Konstante und wird NICHT zur Env-Variable gemacht - sie ist eine der in Absoluter Regel 1 genannten Sicherungen (Max-Gespraechsdauer) und bewusst nicht per Operator-Knopf abschaltbar. | Decke anheben: jeder Tenant darf permanent mehr ausgeben, das Kostenrisiko pro Kunde steigt sofort und global. **Max-Dauer senken: jeder Anruf jedes Bestandskunden endet kuenftig frueher (Richtwert 120 statt 300 s) - das ist eine sofort spuerbare Verhaltensaenderung fuer laufende Gespraeche, nicht nur eine Zahlenkorrektur, und sie deckelt gleichzeitig den `place_call`-Body-Override.** Tarif senken (verboten): die Reserve unterschaetzt teure Ziele, das Gate wird genau in der Richtung blind, gegen die es gebaut wurde. Gar nicht entscheiden: der `fatal:true`-Flip ist nicht deploybar, GAP-32/GAP-33 bleiben rot, der Blueprint bleibt als Wiederherstellungspfad tot. | P7 |
-| **O7** | Wie lautet der exakte Pflicht-Wortlaut des Inbound-Hinweises (KI + Aufzeichnung) je Sprache? Wird ein Settings-Patch ohne Marker **selektiv** (nur das Greeting-Feld) oder total abgelehnt? Werden Bestandsgreetings migriert? | GAP-14, WEB-04 | Kurzer, fester Wortlaut je Sprache (de/en/fr), als nicht abschaltbarer Praefix, nur wenn der Marker fehlt - analog zum Offenlegungssatz bei Outbound. Ablehnung **selektiv** (nur das Greeting-Feld faellt, andere Felder gehen durch - genau das verlangt der Test bereits). Bestandsgreetings einmalig per Migration nachruesten. | Total-Ablehnung: ein Bestandskunde kann seinen Agentennamen nicht mehr aendern, weil sein altes Greeting den Marker nicht traegt - ein Support-Fall pro betroffenem Kunden. Validierung des Kundentextes statt festem Praefix: die Pflichtaussage haengt am Formulierungsgeschick des Kunden - genau das, was bei der Outbound-Offenlegung bewusst ausgeschlossen wurde. Ohne Migration bleibt die Compliance-Luecke bei Bestandskunden bestehen, obwohl der Code sie angeblich schliesst. | P3 |
-| **O8** | Wie wird beim Web-Login das Land des Tenants bestimmt: IP-Geolokation, aktive Abfrage oder Onboard-Redirect? | LANG-02, E2E-04, FMT-28 | **Aktive Abfrage** im ersten Self-Service-Schritt, ergaenzt um die Ableitung aus der DID-Vorwahl (Owner-Entscheidung E2). **Kein** IP-Geo als stille Uebernahme; hoechstens als sichtbare Vorbelegung. Ohne ableitbares Land bleibt das Feld leer und der bestehende Pfad greift. | IP-Geo: jeder Reisende und VPN-Nutzer bekommt dauerhaft ein falsches Land - mit Folgen fuer Sprache, Tarif und DID-Land, und der Fehler sieht spaeter wie eine Kundenangabe aus. Gar keine Bestimmung: LANG-02 bleibt ungefixt und der Flip aus P10 ist nicht deploybar. | P8 |
-| **O9** | Was bedeutet ein Landwechsel fuer eine bereits gekaufte DID: neue Nummer kaufen, alte behalten oder Wechsel verbieten? | E2E-01 | Vorerst **verbieten** - der Endpunkt antwortet mit einem stabilen Fehlercode (409) und Verweis auf den Support statt mit dem heutigen stillen 200-OK-No-Op. Billigste sichere Option, bis der DID-Lebenszyklus entschieden ist. "Strikt 1 Nummer pro Tenant" bleibt unangetastet. | Automatischer Neukauf: jeder Klick erzeugt laufende Mietkosten - die Nummern-Proliferation vom Juni 2026 als Selbstbedienung. Alte behalten: Land, Sprache und Absendernummer laufen dauerhaft auseinander und machen die gerade korrigierte Herkunfts-Tarifierung wieder unscharf. | P8 |
-| **O10** | Wird schriftlich bestaetigt, dass das neue Zeitzonenfeld am Tenant **nur** die Anzeige beeinflusst und niemals ein Anrufzeit-Gate speist (LAW-07 ist abgelehnt)? Woraus wird es fuer Bestandstenants abgeleitet? | FMT-28 | Zusicherung schriftlich; Ableitung aus dem DID-Land. Ein Test pinnt, dass **kein** Gate-Modul das Feld liest. | Ohne Zusicherung schleicht sich frueher oder spaeter ein Anrufzeit-Gate durch die Hintertuer ein - ein ungetestetes Gate, das Anrufe blockiert, die der Kunde bezahlt hat, und das niemand bewusst beschlossen hat. | P8 |
-| **O11** | Nach welchem Kriterium werden Bestandsdatensaetze VOR dem `DEFAULT_LANGUAGE`-Flip nachgetragen - und wie viele NULL-Zeilen gibt es ueberhaupt in `tenant.default_language` und `number.language`? | WORLD-01, WORLD-03, PROMPT-03, PROMPT-09, UI-14, UI-18, FMT-28 | **Erst messen, dann backfillen.** Land aus der DID-Vorwahl ableiten (E2), daraus die Sprache; DE/AT/CH -> `de`, FR -> `fr`. Bleibt das Land unableitbar, wird der Datensatz explizit auf `de` gesetzt, weil jeder heutige Bestandskunde faktisch deutschsprachig bedient wird. Flip erst, wenn die Zaehlung 0 NULL-Zeilen liefert. **Genau EIN Backfill-Lauf** fuer alle Ketten, nicht einer pro Buendel - diese Frage wird einmal beantwortet und gilt fuer Greeting, MCP-Tools und Widget gleichlautend. | Flip ohne Backfill: Bestandskunden werden am Deploy-Tag auf Englisch begruesst. Das ist der teuerste einzelne Fehler in diesem Plan. Backfill pauschal auf `en`: derselbe Schaden mit mehr Arbeit. Ohne vorherige Messung bleibt das gesamte Migrationsargument eine Vermutung und der Backfill ist nicht verifizierbar. | P10 |
-| **O12** | Bleibt `paymentCurrency=usd` ein legaler Konfigurationswert, oder wird der usd-Zweig als Altlast abgeschafft? | MCP-08 | **Behalten** und die Anzeige der tatsaechlichen Belastungswaehrung folgen lassen. Das ist keine Abkehr von Entscheidung 7.1 (EUR ueberall), sondern deren Invariante: Anzeige-Waehrung == Belastungs-Waehrung. Der Test prueft Waehrungs-**Treue**, keine USD-Vorgabe. | Abschaffung: der Katalogtest wird gegenstandslos und muss **geloescht** werden (nicht umgeschrieben) - dann ist MCP-08 nachtraeglich ein `test-falsch`-Fall und niemand darf Code dafuer schreiben. Beibehaltung ohne Treue-Fix: Hermes zeigt `$` und bucht `EUR` - in den USA FTC-relevant, in der EU PAngV-widrig. | P12 |
-| **O13** | Wer liefert die anwaltlich freigegebenen Rechtstexte (AGB, Datenschutz, Impressum) in DE und EN, und bis wann? | GAP-15 | **Sofort bei Beginn von P1 beauftragen**, auch wenn der Fix erst in P14 landet - das ist das einzige Element im Plan mit externem Vorlauf, den keine Codearbeit verkuerzt. DE bleibt die verbindliche Fassung (Festlegung EN-Marketing/DE-Legal), EN als ausdruecklich informative Uebersetzung mit Vorrangklausel. Bis freigegebener Text vorliegt liefert die EN-Route **404** statt eines Platzhalters. | Wird erst in P14 begonnen, steht am Launch-Tag ein Platzhalter-Datenschutztext auf einer weltweit verkaufenden Website. Maschinelle Uebersetzung: Zusicherungen im Netz, die niemand geprueft hat - schlechter als eine fehlende Seite. | P14 (Bestellung in P1) |
+### P-A - Es gibt keine fremden Bestandskunden
+
+**Owner, woertlich: "Ich hab noch nicht gelauncht. Alle aktiven User sind wir."** Saemtliche
+aktiven Accounts gehoeren dem Betreiber selbst.
+
+Damit entfaellt die gesamte **Migrationsachse** dieses Plans:
+
+- **Kein Backfill vor dem Sprach-Flip** (O11). Die Drei-Schritt-Zerlegung von P10
+  (Schreibpfad -> Backfill mit Messung -> Flip) schrumpft auf zwei Schritte; die
+  `psql`-Zaehlung von NULL-Zeilen und die FORCE-RLS-Auflage entfallen als Vorbedingung.
+- **Jedes Pre-Mortem der Bauart "ein Bestandskunde spricht ploetzlich Englisch" ist
+  gegenstandslos** und im Text als erledigt zu markieren, nicht stillschweigend zu loeschen.
+- **`brennt_heute` heisst ab jetzt "muss vor dem ersten fremden Kunden weg"**, nicht "richtet
+  gerade Schaden an". Das gilt fuer GAP-03, GAP-05, GAP-10 und die ORIG-Kette. Die Dringlichkeit
+  sinkt, die Notwendigkeit bleibt.
+
+**Was P-A NICHT entwertet** - zwei gemessene Befunde des Safety-Reviews gelten unveraendert, weil
+sie an der Korrektheit jedes einzelnen Anrufs haengen und nicht an Bestandsdaten:
+
+1. Der fest verdrahtete **Offenlegungssatz wird nach dem Flip englisch** fuer jeden Call ohne
+   aufloesbare Sprache (Absolute Regel 2).
+2. **STT-Locale und TTS-Stimme kippen auf `en-GB`, waehrend der Greeting-Text deutsch bleibt** -
+   britische Stimme liest deutschen Satz, englischer Erkenner hoert deutschen Anrufer.
+
+Beide sind in P10 als Gegenmassnahme und Abnahmekriterium zu behalten.
+
+### P-B - Die Ist-Kosten werden bereits live gemessen und nachgebucht
+
+Am Code geprueft: `src/billing/cost-truing.js:339` ruft `applyCostCorrectionCents` und bucht die
+Differenz zwischen Schaetzung und den echten Telnyx-`detail_records` nach. Der Betrag im Ledger
+ist am Ende also richtig.
+
+**Folge: die Einstufung der ORIG-Kette als "aktiver Geldverlust" in
+`tasks/i18n-tests/16-befund-klassifikation.md` ist zu scharf.** Falsch ist nicht die Abbuchung,
+sondern die **Vorab-Schaetzung**, und die entscheidet nur, ob das Gate den Anruf durchlaesst:
+
+| Fall | heutige Schaetzung | Wirkung |
+| --- | --- | --- |
+| US-DID -> `+49`/`+33`/`+44` | 20 ct/min (Inlandssatz, weil nur das ZIEL geprueft wird) | Gate reserviert **zu wenig**; die Decke kann ueberschritten werden, die Korrektur kommt erst nach dem Anruf |
+| US-DID -> `+1` oder sonstwohin | 300 ct/min | Gate reserviert 1500 ct gegen 600 ct Decke -> **402**, obwohl der Anruf real billig ist |
+
+`VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49","+33","+44"]` ist eine **Code-Konstante**
+(`src/config.js:105`), keine Env - im Dashboard ist daran nichts zu drehen.
+
+**Folge fuer die Reihenfolge:** P5 muss nicht mehr allein wegen "laufender Geldverlust" so frueh
+stehen. Die naechste Session bewertet die Position von P5 neu, statt sie aus diesem Plan zu
+uebernehmen.
+
+**Offen und vor P7 zu klaeren:** `VOICE_TARIFF_DEFAULT_CENTS` wurde im Dashboard **nicht
+abgelesen**. Der 402-Befund aus GAP-33 stammt vom Blueprint-Wert `300` - steht live etwas
+Realistisches, existiert dieser 402 in Produktion gar nicht.
+
+---
+
+## 3. Owner-Entscheidungen (alle 15 gefallen am 2026-07-25)
+
+> **Diese Tabelle war eine Fragenliste und ist jetzt eine Entscheidungsliste.** Die Spalte
+> "Entscheidung" ist ab sofort **bindend und umsetzbar**. Die urspruengliche Empfehlung steht
+> daneben, damit sichtbar bleibt, wo der Owner ihr NICHT gefolgt ist - an diesen Stellen traegt
+> der Plan ein ausdruecklich getragenes Risiko (O2b, O5, O8), das in Abschnitt 7 wiederholt wird.
+> Wo eine Entscheidung eine Testerwartung beruehrt, gilt weiterhin: **keine Erwartung senken**,
+> sondern nach Regel R5 korrigieren oder loeschen - mit Begruendung im Commit.
+
+| # | Entscheidung (bindend) | betrifft IDs | Abweichung von der Empfehlung? |
+| --- | --- | --- | --- |
+| **O1** | Live abgelesen: **`BUDGET_MONTH_ENABLED=true`**, **`METRICS_ENABLED=true`**. **`DEFAULT_TENANT_BUDGET_CENTS` und `MAX_CALLS_PER_HOUR` sind im Dashboard gar nicht gesetzt** - sie laufen auf den Code-Defaults `600` bzw. `6`, die zufaellig identisch mit `render.yaml` sind. **`VOICE_TARIFF_DEFAULT_CENTS` wurde nicht abgelesen und bleibt offen.** Umsetzung: die drei belegten Achsen wandern in `test/prod-env.js` `LIVE_MEASURED`, die zwei ungesetzten werden als "Code-Default, nicht Dashboard" vermerkt, `VOICE_TARIFF_DEFAULT_CENTS` bleibt in `LIVE_UNMEASURED`. | GAP-01, GAP-32, GAP-33, GAP-35, GAP-10, GAP-07 | nein. **Zwei neue belegte Divergenzen zu `render.yaml`** (dort beide `false`). **GAP-01 brennt nicht mehr heute** - der Perioden-Topf ist live aktiv; der Codefix bleibt noetig, weil sein Test `budgetMonthEnabled=false` ausdruecklich verlangt. **GAP-35 neu pruefen**: `METRICS_ENABLED` ist live bereits `true`. |
+| **O2** | **Abgestuft je Ereignis.** Dispute -> keine Sperre, sondern Warnung + Plattform-Alarm + Audit. Refund -> Periodenguthaben auf 0, kein Hard-Suspend. Paused -> Outbound sperren, Inbound weiter. `payment_action_required` -> Warnung mit Frist, Sperre erst nach Fristablauf. Keine Reaktion loescht Daten oder gibt eine DID frei; jede ist reversibel und schreibt Audit. | GAP-03 | nein |
+| **O2b** | **Keine Coupon-Allowlist. `allow_promotion_codes` bleibt wie es ist.** | GAP-05 | **JA.** Die zweite GAP-05-Assertion (`allow_promotion_codes !== 'true'`) **bleibt damit ROT** und wird nicht gefixt - bewusst getragenes Risiko, siehe 7.6. Die erste Achse (Hold und Kartenbindung auch bei 100-%-Coupon nie umgehbar) wird unveraendert gebaut. |
+| **O3** | **Nicht rueckwirkend**, ab Deploy. Keine Nachbelastung, keine Gutschrift. Die bisherige Abweichung wird einmalig ausgewertet und dokumentiert. | ORIG-01/02/03 | nein. Die Auflage "betroffene Tenants informieren" ist durch P-A gegenstandslos. |
+| **O3b** | **Inbound wird bepreist - exakt dieselbe Logik wie Outbound: vorher schaetzen, live messen, korrekt nachbuchen.** Die Assertion `voiceEvents.length === 0` wird nach R5 auf "Beleg zum Satz des DID-Landes, nicht zum Auslands-Worst-Case" korrigiert (der Testname sagt bereits das). | ORIG-03 | nein |
+| **O4** | **Reset UND Reaktivierung haengen an derselben Bedingung**: `subscription.status` aktiv/trialing UND bezahlte letzte Rechnung. Alle uebrigen bleiben gesperrt UND ihr Verbrauchszaehler wird NICHT zurueckgesetzt; Audit-Liste. Jede Reaktivierung schreibt Audit und loest eine Plattform-SMS aus. Eigener Test: Perioden-Wechsel mit `past_due` setzt die Achse NICHT zurueck. | GAP-01 | nein |
+| **O5** | **Das Stundenlimit gilt ausschliesslich pro Tenant. Es gibt KEINE globale Plattformbremse und auch keinen globalen Alarm.** Begruendung des Owners: ein plattformweites Anruflimit ist ein Skalierungs-Bremsklotz. Der Kill-Switch `OUTBOUND_FROZEN` bleibt unberuehrt und ist der verbleibende Not-Aus. | GAP-10 | **JA, und ausdruecklich gegen die Empfehlung.** Das ist eine bewusste Abweichung von Absoluter Regel 1 (Stundenlimit als Gate) - getragenes Risiko, siehe 7.7. Der Umbau selbst bleibt noetig: `MAX_CALLS_PER_HOUR` ist heute BEIDES (global + effektiver Pro-Tenant-Default). Ein Profil mit `maxCallsPerHour: 0` muss nach dem Umbau weiterhin 0 haben. |
+| **O6** | **`tariffCentsPerMin` bekommt Absender UND Ziel**: gleiches Land = Inlandssatz, verschiedene Laender = Auslandssatz. Live-Messung und Nachkorrektur bleiben unveraendert. **Keine rollende Selbstkalibrierung** (Owner-Entscheidung 3 vom 2026-07-20 bleibt). **`MAX_CALL_DURATION_CAP_S` bleibt bei 300 s und bleibt Code-Konstante** - kein Senken, keine Env-Variable. **`VOICE_TARIFF_DEFAULT_CENTS` wird NICHT gesenkt**; der Pauschalwert greift nur noch, wo kein echter Satz ermittelbar ist. | GAP-32, GAP-33, ORIG-01 | nein - aber die Begruendung hat sich geaendert, siehe Praemisse P-B. |
+| **O7** | **Fester Pflicht-Praefix je Sprache (de/en/fr)**, nicht abschaltbar, wird nur vorangestellt wenn der Marker im Greeting fehlt - analog zum Outbound-Offenlegungssatz. Settings-Patch ohne Marker wird **selektiv** abgelehnt (nur das Greeting-Feld faellt). Bestandsgreetings werden einmalig migriert. **Der genaue Wortlaut ist noch nicht vorgegeben** - die naechste Session schlaegt je Sprache einen vor und legt ihn dem Owner zur Freigabe vor, BEVOR sie ihn fest verdrahtet. | GAP-14, WEB-04 | nein. Die Migration betrifft durch P-A nur eigene Daten. |
+| **O8** | **IP-Geolokation** bestimmt das Land beim Web-Login. | LANG-02, E2E-04, FMT-28 | **JA.** Empfohlen war aktive Abfrage plus DID-Vorwahl. Getragenes Risiko: Reisende und VPN-Nutzer bekommen dauerhaft ein falsches Land, mit Wirkung auf Sprache, Tarif und DID-Land - und der Fehler sieht spaeter wie eine Kundenangabe aus. Siehe 7.8. `maxmind` liegt laut Projektstand bereits lokal vor. |
+| **O9** | **Landwechsel wird vorerst verboten**: stabiler Fehlercode 409 mit Verweis auf den Support statt des heutigen stillen 200-OK-No-Op. "Strikt eine Nummer pro Tenant" bleibt unangetastet. | E2E-01 | nein |
+| **O10** | **Das Zeitzonen-Feld kommt** - der Agent muss wissen, wie spaet es beim Tenant ist. **Ein Anrufzeit-Gate kommt NICHT** (LAW-07 bleibt abgelehnt). Ein Test pinnt, dass **kein** Gate-Modul das Feld liest. Ableitung aus dem DID-Land. | FMT-28 | nein |
+| **O11** | **Kein Backfill.** Es gibt keine fremden Bestandskunden (Praemisse P-A) - der Flip braucht keine vorherige Datenkorrektur. Der **Schreibpfad-Fix bleibt** (`state-ops.js:674`, `:1257` schreiben `DEFAULT_LANGUAGE` als Default-Parameter IN den Datensatz), damit kuenftige Datensaetze nicht falsch materialisieren. | WORLD-01, WORLD-03, PROMPT-03, PROMPT-09, UI-14, UI-18, FMT-28 | **JA, und es vereinfacht den Plan erheblich.** Die beiden Safety-Befunde aus P-A (Offenlegungssatz, STT/TTS-Locale) bleiben trotzdem Abnahmekriterium von P10. |
+| **O12** | **`paymentCurrency=usd` bleibt ein legaler Wert; die Anzeige folgt der Konfiguration.** Das ist die Invariante von Entscheidung 7.1 (Anzeige-Waehrung == Belastungs-Waehrung), kein Widerspruch dazu. Der Test prueft Waehrungs-Treue, keine USD-Vorgabe. | MCP-08 | nein |
+| **O13** | **Rechtstexte sofort beauftragen**, auch wenn der Einbau erst in P14 landet. DE bleibt die verbindliche Fassung, EN ausdruecklich informative Uebersetzung mit Vorrangklausel. **Bis freigegebener Text vorliegt liefert die EN-Route 404**, keinen Platzhalter. | GAP-15 | nein. Einziges Element mit externem Vorlauf - Bestellung gehoert in P1, nicht in P14. |
+
+### Was nach dieser Runde noch offen ist
+
+Zwei Punkte, die keine Entscheidung brauchen, sondern eine Handlung bzw. eine Vorlage:
+
+1. **`VOICE_TARIFF_DEFAULT_CENTS` im Dashboard ablesen** (aus O1 offengeblieben). Vorbedingung
+   fuer P7, weil der GAP-33-402 sonst weiter gegen den Blueprint-Wert `300` gemessen wird.
+2. **Wortlaut des Inbound-Pflichthinweises je Sprache** (aus O7). Die naechste Session legt einen
+   Vorschlag vor; verdrahtet wird er erst nach Freigabe.
+
+Die urspruengliche Fragefassung dieser Tabelle - mit Empfehlung, Folgen je Option und
+blockierter Phase - steht in der Git-Historie dieses Dokuments (Commit `80108b3`).
 
 ---
 
@@ -846,12 +928,22 @@ gruen. A3, A6 erfuellt.
 
 ---
 
-### P10 - Schreibpfad-Korrektur, Backfill und Weltdefault-Flip
+### P10 - Schreibpfad-Korrektur und Weltdefault-Flip
+
+> **Geaendert durch Praemisse P-A (Owner, 2026-07-25): der Backfill entfaellt.** Es gibt keine
+> fremden Bestandskunden, also gibt es keine Bestandsdaten zu retten. **Schritt 2 unten ist
+> gestrichen**, die `psql`-Zaehlung ist keine Vorbedingung mehr, und die Pre-Mortems 1 und 2 sind
+> gegenstandslos (sie stehen als Beleglage stehen, durchgestrichen kommentiert - nicht geloescht).
+> **Was BLEIBT:** Schritt 1 (Schreibpfad, weil kuenftige Datensaetze sonst falsch materialisieren),
+> Schritt 3 (der Flip), Pre-Mortem 3 und 4, und vor allem die **Gegenmassnahme ENTSCHAERFT (5)** -
+> Offenlegungssatz und STT/TTS-Locale kippen unabhaengig von jedem Bestandskunden.
+> Aufwand sinkt entsprechend von 3-4 Tagen auf **1 bis 2 Tage**.
 
 **IDs (7):** WORLD-01, WORLD-03, DID-01, DID-02, DID-03, E2E-04, E2E-05
 
 **Ziel.** `DEFAULT_LANGUAGE` wechselt von `de` auf `en`; DE/AT/CH bleiben `de`, FR bleibt `fr`;
-Laender ohne eigenes Bundle bekommen Englisch - und **kein Bestandskunde kippt dabei um**.
+Laender ohne eigenes Bundle bekommen Englisch - und **der Offenlegungssatz sowie die
+STT-/TTS-Locale eines DE-Anrufs kippen dabei NICHT mit**.
 
 **Position.** Der eigentliche Eingriff ist eine Konstante plus Tabelleneintraege und damit in einer
 Zeile rueckrollbar - vorausgesetzt, alles andere steht (P8). Fuenf der sieben IDs brauchen
@@ -859,12 +951,12 @@ ueberhaupt keinen eigenen Fix: DID-01/02/03 fallen laut kanonischer Liste automa
 WORLD-03 ist dieselbe Konstante, E2E-04/E2E-05 sind Aggregate aus LANG-02 + WORLD-01 bzw.
 FMT-11 + WORLD-01. Eine Wurzel, sechs Blaetter - das ist der Beleg, dass der Schnitt richtig sitzt.
 
-**Vorbedingung.** P8 und P9 live. **O11 beantwortet.** Und zwingend: die **psql-Zaehlabfrage gegen
-`hermes-db`**, wie viele Tenants/Nummern tatsaechlich NULL in `tenant.default_language` bzw.
-`number.language` tragen. Das gesamte Migrationsargument haengt an dieser bis heute ungemessenen
-Zahl.
+**Vorbedingung.** P8 und P9 live. ~~Und zwingend: die psql-Zaehlabfrage gegen `hermes-db`.~~
+**ENTFALLEN durch P-A** - ohne fremde Bestandskunden gibt es kein Migrationsargument, das an einer
+NULL-Zaehlung haengt.
 
-**Diese Phase besteht aus DREI Schritten in fester Reihenfolge:**
+**Diese Phase besteht aus ZWEI Schritten in fester Reihenfolge** (urspruenglich drei; Schritt 2
+ist durch P-A gestrichen):
 
 **Schritt 1 - Schreibpfad (A1 + A2), eigener Commit, VOR allem anderen.**
 `src/store/state-ops.js:674` (`seedBootstrapNumber`) und `:1257` (`requestNumber`) tragen
@@ -874,26 +966,23 @@ Land umgestellt, mit Test je Pfad. Im selben Commit werden die vier Assertions a
 auf ihr eigenes im Testnamen genanntes Subjekt (`"de"`) umgehaengt. **Danach muessen alle vier
 gruen sein und beim Flip gruen bleiben.** Sie sind der Alarm.
 
-**Schritt 2 - Backfill, eigener Lauf, mit Messung vorher und nachher.**
-Deckt **BEIDE** Tabellen: `tenant.default_language` **und** `number.language`. Zaehlung vor und
-nach dem Lauf, dokumentiert im Phasenreport. **FORCE-RLS-Auflage im Runbook:** unter Force-RLS
-liefert ein naives `SELECT` **0 Zeilen** und taeuscht "ist doch alles leer" vor - die Rolle muss
-gesetzt werden, sonst luegt die Messung, die hier das Freigabekriterium ist. Ein Rollback des
-Backfills ist nicht noetig: er schreibt nur explizit, was heute implizit gilt.
+**~~Schritt 2 - Backfill~~ - GESTRICHEN durch P-A.**
+Der urspruengliche Schritt deckte beide Tabellen (`tenant.default_language` und `number.language`)
+mit Zaehlung vorher/nachher und einer FORCE-RLS-Auflage. Er faellt weg, weil es keine fremden
+Bestandsdaten gibt. **Beleg bleibt hier stehen**, falls die Praemisse sich aendert: sobald der
+erste fremde Kunde produktiv ist, ist dieser Schritt vor jedem weiteren Sprachwechsel wieder
+Pflicht - inklusive der FORCE-RLS-Auflage, weil ein naives `SELECT` unter Force-RLS 0 Zeilen
+liefert und "ist doch alles leer" vortaeuscht.
 
-**Schritt 3 - der Flip, eigener Commit.**
-Beruehrt ausschliesslich die Konstante und die Landtabelle, damit `git revert` genuegt. Geht erst
-raus, wenn die Zaehlung aus Schritt 2 den erwarteten Rest zeigt.
+**Schritt 3 (jetzt Schritt 2) - der Flip, eigener Commit.**
+Beruehrt ausschliesslich die Konstante und die Landtabelle, damit `git revert` genuegt.
 
 **Pre-Mortem.**
-1. Am Tag des Flips begruesste Hermes Bestandskunden aus Bayern auf Englisch. Ursache: der Backfill
-   war als "machen wir gleich danach" eingeplant, der Flip ging zuerst raus, und weil
-   `DEFAULT_LANGUAGE` gleichzeitig der Fallback fuer NULL-Datensaetze ist, kippte der Bestand in
-   derselben Sekunde. Zwei Kunden kuendigten, einer schrieb oeffentlich darueber.
-2. Der Backfill lief nur ueber `tenant.default_language`; `number.language` wurde vergessen - zwei
-   Tabellen, eine uebersehen, weil beide Felder additiv-NULLABLE eingefuehrt wurden. Die Reparatur
-   dauerte laenger als der Flip, weil unter RLS ein naives `SELECT` null Zeilen lieferte und der
-   Betreuer daraus faelschlich "ist doch alles leer" schloss.
+1. ~~Am Tag des Flips begruesste Hermes Bestandskunden aus Bayern auf Englisch.~~
+   **Gegenstandslos durch P-A** - es gibt keine fremden Bestandskunden. Bleibt als Warnung stehen
+   fuer den Fall, dass die Praemisse kippt.
+2. ~~Der Backfill lief nur ueber eine der beiden Tabellen.~~ **Gegenstandslos durch P-A**
+   (kein Backfill).
 3. **Der Fall, den kein Backfill faengt (A1):** ab dem Flip materialisierte jede neu angelegte
    Nummer `en` **in den Datensatz** - non-NULL, also unsichtbar fuer jede NULL-Zaehlung. Ein halbes
    Jahr spaeter war der Bestand durchmischt und niemand wusste mehr, welcher Wert Absicht war.
@@ -907,7 +996,8 @@ raus, wenn die Zaehlung aus Schritt 2 den erwarteten Rest zeigt.
   Beschreibung. Schritt 1 vor Schritt 2 vor Schritt 3, je eigener Commit, je eigene Verifikation.
 - **ENTSCHAERFT (1):** der Flip haengt zusaetzlich an einem Env-Schalter - Rueckflip ohne Deploy in
   Minuten.
-- **ENTSCHAERFT (2):** Backfill deckt beide Tabellen; FORCE-RLS-Auflage steht im Runbook.
+- ~~**ENTSCHAERFT (2):** Backfill deckt beide Tabellen; FORCE-RLS-Auflage steht im Runbook.~~
+  **Entfaellt durch P-A** (kein Backfill).
 - **ENTSCHAERFT (3):** die vier A2-Tests sind der stehende Alarm gegen den Schreibpfad-Fehler.
 - **ENTSCHAERFT (4):** die Alt-Pins werden nach R5 **geloescht**, nicht umgeschrieben (Tabelle
   unten).
@@ -923,7 +1013,9 @@ raus, wenn die Zaehlung aus Schritt 2 den erwarteten Rest zeigt.
   weder aufgeraeumt noch angefasst.
 - **GETRAGEN:** Laender ohne eigenes Bundle bekommen Englisch, inklusive Offenlegungssatz
   (`PLAN-I18N-TESTS.md` 7.13 Punkt 4).
-- **GETRAGEN:** ergibt die psql-Zaehlung, dass es gar keine NULL-Zeilen gibt, entfaellt Schritt 2.
+- **GETRAGEN (durch P-A entschieden statt gemessen):** der Backfill entfaellt ohne Zaehlung, weil
+  alle aktiven Accounts dem Betreiber gehoeren. Bleibt diese Praemisse laenger stehen als gedacht -
+  also kommt ein fremder Kunde dazu, BEVOR P10 deployt ist -, ist Schritt 2 wieder Pflicht.
   Das ist dann ein **Messergebnis**, keine Annahme.
 
 **Aktivierungsfenster (S2, quer zu P10-P13).** Nach diesem Deploy spricht ein neuer Nicht-DE/FR-
@@ -956,7 +1048,7 @@ en-US-Frage aus Abschnitt 7).
 | `test/f1-geo-store.test.js:64` | **LOESCHEN (nur diese Zeile)** | Literaler `assert.equal(DEFAULT_LANGUAGE, "de")` innerhalb eines Tests, dessen Subjekt `defaultSettings().language` ist und weiter gilt. In der Klassifikation **nicht erfasst**, am Code gefunden. |
 | `test/f1-geo-onboard.test.js:69,91` und `test/f1-geo-store.test.js:161,178` | **NICHT loeschen** - siehe A2, Schritt 1 | Sie sind die Regressionsanzeige fuer den Schreibpfad. Wer sie loescht oder am Flip-Tag "anpasst", schaltet den Alarm ab. |
 
-**Aufwand.** 3 bis 4 Tage (davon rund ein Tag Backfill und DB-Verifikation).
+**Aufwand.** ~~3 bis 4 Tage~~ **1 bis 2 Tage** - der Backfill-Tag entfaellt durch P-A.
 
 ---
 
@@ -1220,6 +1312,13 @@ Gegenprobe gegen die Buendel der Klassifikation:
 **Rot-Liste-Verlauf:** 53 -> 51 (P1) -> 47 (P2) -> 45 (P3) -> 42 (P4) -> 39 (P5) -> 36 (P6) ->
 33 (P7) -> 29 (P8) -> 25 (P9) -> 18 (P10) -> 10 (P11) -> 5 (P12) -> 1 (P13) -> 0 (P14).
 
+> **Korrektur nach der Owner-Runde: der Zielwert ist 1, nicht 0.** Entscheidung O2b laesst die
+> zweite Assertion von GAP-05 bewusst rot (Abschnitt 7.6). Die ID bleibt damit dauerhaft in
+> `test:gates` stehen. Ab P4 ist der Verlauf also um eins hoeher als oben notiert, und die letzte
+> Zeile lautet **1 (P14)**. Das ist kein Restfehler, sondern ein getragenes Risiko mit
+> Wiedervorlage - es darf nicht als "noch nicht fertig" gelesen und nicht stillschweigend
+> weggefixt werden.
+
 **Gesamtaufwand:** rund 33 bis 40 Arbeitstage reine Umsetzung, ohne Wartezeiten auf
 Owner-Entscheidungen und ohne die externe Rechtstext-Lieferung.
 
@@ -1310,6 +1409,49 @@ Suite-Trennung (Aufgabe 1), nicht in diesen Fix-Vorrat.
 **Restschaden:** wird er nicht als Flake markiert, verwaessert er das Gate-Protokoll. Es bleibt
 dabei: **rot ist nur echt rot, wenn der Test isoliert rot ist.**
 
+### 7.6 - GAP-05 zweite Assertion: Coupons bleiben unbeschraenkt (Owner-Entscheidung O2b)
+
+`allow_promotion_codes` bleibt gesetzt, ohne Coupon-Allowlist. **Die zweite Assertion von
+`test/gap-05-number-hold.test.js:51-75` bleibt damit dauerhaft ROT** und ist die einzige
+Katalog-ID, die dieser Plan bewusst nicht auf gruen bringt. Die erste Achse (Hold und
+Kartenbindung auch bei einem 100-%-Coupon nie umgehbar) wird in P4 unveraendert gebaut.
+
+**Restschaden:** jeder aktive Promotion-Code im Stripe-Konto ist von jedem Checkout aus einloesbar,
+nicht nur von der Zielgruppe, fuer die er gedacht war. Bei einem 100-%-Code bedeutet das eine DID
+mit laufender Monatsmiete ohne Gegenwert. Solange keine 100-%-Codes existieren, ist die Belastung
+auf den Rabattbetrag begrenzt. **Wiedervorlage:** bevor der erste breit gestreute Rabattcode
+herausgeht.
+
+### 7.7 - Keine globale Plattform-Anrufbremse (Owner-Entscheidung O5)
+
+Das Stundenlimit wirkt kuenftig ausschliesslich pro Tenant. Eine plattformweite Obergrenze wird
+**ersatzlos** nicht eingefuehrt - auch kein blosser Alarm. Begruendung des Owners: ein globales
+Anruflimit ist ein Skalierungs-Bremsklotz.
+
+**Das ist eine bewusste Abweichung von Absoluter Regel 1** (`CLAUDE.md`: Stundenlimit gehoert zu
+den Gates, die nicht ersatzlos entfallen duerfen). Sie wird hier getragen, nicht uebersehen. Der
+verbleibende Not-Aus ist der Kill-Switch `OUTBOUND_FROZEN`; er wirkt total statt graduell und muss
+von Hand gezogen werden.
+
+**Restschaden:** eine Kostenexplosion, die sich ueber viele Tenants gleichzeitig verteilt (jeder
+einzeln unter seinem Limit), faellt erst am geteilten Plattform-Budget-Topf auf - also erst am
+Geld, nicht am Anrufvolumen. **Wiedervorlage:** sobald mehr als eine Handvoll fremder Tenants
+gleichzeitig Outbound faehrt.
+
+### 7.8 - Land per IP-Geolokation statt aktiver Abfrage (Owner-Entscheidung O8)
+
+Beim Web-Login bestimmt IP-Geo das Land des Tenants. Empfohlen war die aktive Abfrage plus
+Ableitung aus der DID-Vorwahl.
+
+**Restschaden:** Reisende, VPN-Nutzer und Kunden hinter Unternehmensproxys bekommen ein falsches
+Land - mit Wirkung auf Sprache, Tarifrechnung und DID-Land. Der Fehler ist im Nachhinein nicht von
+einer Kundenangabe zu unterscheiden, weil im Datensatz nur das Ergebnis steht.
+**Empfehlung fuer die Umsetzung, die den Restschaden fast aufhebt und keine zusaetzliche
+Owner-Entscheidung braucht:** das per IP ermittelte Land als **sichtbare Vorbelegung** rendern,
+die der Nutzer im selben Schritt ueberschreiben kann - dann ist die Herkunft der Angabe wieder
+eindeutig. Ausserdem: die Ableitung aus der DID-Vorwahl (Owner-Entscheidung E2) bleibt davon
+unberuehrt und schlaegt IP-Geo, sobald eine Nummer existiert.
+
 ### Track B - Infra-/URL-Cutover (`vodafone-agent` -> Hermes/Sundartha)
 
 Kein Katalog-Befund, laut `CLAUDE.md` nicht Teil normaler Tasks. Ebenso der Single-Origin-Cutover.
@@ -1323,6 +1465,31 @@ gegen die P1 den `/healthz`-Fingerabdruck einfuehrt.
 ## 8. Offene Punkte und Unsicherheiten
 
 Hier steht, wo die Datenlage duenn ist. Nichts davon wird in diesem Plan als geklaert behandelt.
+
+> **Stand nach der Owner-Runde 2026-07-25 - fuenf dieser Zeilen sind erledigt:**
+>
+> - **U1 entfaellt** (Praemisse P-A): kein Backfill, also auch keine NULL-Zaehlung als
+>   Freigabekriterium. Die `psql`/Force-RLS-Auflage bleibt nur als Wiedervorlage fuer den Fall,
+>   dass fremde Kunden dazukommen.
+> - **U3 beantwortet**: `BUDGET_MONTH_ENABLED` steht live auf `true` (Perioden-Topf aktiv). Damit
+>   ist die Streitfrage entschieden, das Projektgedaechtnis hatte recht, der GAP-33-Bericht nicht.
+> - **U6 beantwortet** (O7): fester Praefix je Sprache, selektive Ablehnung. Offen bleibt allein
+>   der genaue **Wortlaut** - den legt die naechste Session dem Owner vor, bevor sie ihn
+>   verdrahtet.
+> - **U7 beantwortet** (implizit durch O6/O3b und die Plan-Empfehlung): Kontroll-Marker werden
+>   **neutralisiert**, nicht uebersetzt. Bench-Beleg bleibt Abnahme.
+> - **U8 beantwortet** (O12): `usd` bleibt legal, die Anzeige folgt der Konfiguration. MCP-08 ist
+>   ein Fix, keine Testloeschung.
+>
+> **U2, U4, U5, U9, U10 bleiben unveraendert offen.** Neu hinzu:
+>
+> - **U11 - `VOICE_TARIFF_DEFAULT_CENTS` ist weiterhin nicht abgelesen.** Aus O1 offengeblieben.
+>   Solange der Wert fehlt, misst `test/prod-env.js` GAP-33 gegen den Blueprint-Wert `300`, und der
+>   402-Befund koennte ein reines Blueprint-Artefakt sein (siehe Praemisse P-B). **Vorbedingung
+>   fuer P7.**
+> - **U12 - die Position von P5 ist neu zu bewerten.** Praemisse P-B entwertet die Begruendung
+>   "laufender Geldverlust". Die naechste Session entscheidet die Reihenfolge neu, statt sie aus
+>   diesem Plan zu uebernehmen.
 
 | # | Unsicherheit | Warum sie zaehlt | Aufloesung |
 | --- | --- | --- | --- |
