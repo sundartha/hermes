@@ -88,6 +88,20 @@ const PREMIUM_PREFIXES = [
   "+33892",
   "+33810",
   "+33820",
+  // NANP-Sub-Ranges (GAP-18). Erst mit ALLOWED_COUNTRY_CODES="*" (Live-Zustand seit
+  // 2026-07-18, Boot-Banner) sind sie ueberhaupt erreichbar - die Liste enthielt bis P2
+  // KEINEN einzigen "+1"-Eintrag. Strikt NPA-genau (Laendercode + 3 Ziffern), NIE "+1"
+  // selbst: eine gewoehnliche US-/CA-Nummer MUSS durchkommen (Positivtest pinnt das).
+  // US/CA Pay-Per-Call und Premium:
+  "+1900",
+  "+1976",
+  // Karibische NANP-Vorwahlen mit dokumentierter One-Ring-/Premium-Rueckruf-Historie
+  // (IRSF). BEWUSST vollstaendige Laender-NPAs: der Betrug laeuft ueber regulaere
+  // Teilnehmernummern dieser Ziele, eine feinere Grenze existiert nicht. Preis dieser
+  // Entscheidung: kein Outbound in diese Laender (getragen, s. Phasenbericht).
+  "+1809", "+1829", "+1849",  // Dominikanische Republik
+  "+1876",                    // Jamaika
+  "+1268", "+1284", "+1473", "+1649", "+1664", "+1767",
 ];
 const HOUR_MS = 60 * 60 * 1000;
 const SECONDS_PER_MINUTE = 60;
@@ -141,8 +155,15 @@ const denialAudit = (grund, ctx, detailSuffix = "") => ({
   detail: `to=${ctx.to} grund=${grund}${detailSuffix}`,
 });
 
-const isDenied = (to) =>
-  EMERGENCY_SHORT_CODES.includes(to) || PREMIUM_PREFIXES.some((p) => to.startsWith(p));
+// Liefert den TREFFENDEN Eintrag statt nur true/false (GAP-18): der Ablehnungsgrund
+// allein sagt nicht, WELCHE Sub-Range gefeuert hat - genau das braucht die Forensik,
+// wenn ein ganzes Land still blockiert wird (Pre-Mortem 1). Kein zweiter Durchlauf
+// derselben Listen (G5): isDenied ist nur noch die Ja/Nein-Sicht darauf.
+function deniedPrefix(to) {
+  if (EMERGENCY_SHORT_CODES.includes(to)) return to;
+  return PREMIUM_PREFIXES.find((p) => to.startsWith(p)) ?? null;
+}
+const isDenied = (to) => deniedPrefix(to) !== null;
 const matchesPrefix = (to, codes) => codes.includes("*") || codes.some((c) => to.startsWith(c));
 const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
 
@@ -304,10 +325,12 @@ export function makeOutboundGates({
   // Allowlist-Gate.
   function numberGateError(to, caller) {
     const { profile, requestedBy, tenantId } = caller;
-    if (isDenied(to))
+    const denied = deniedPrefix(to);
+    if (denied)
       return {
         status: 403,
         grund: "denylist",
+        praefix: denied,
         message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
       };
     if (!E164.test(to)) return { status: 400, grund: "format", message: E164_FORMAT_ERROR };
@@ -503,10 +526,15 @@ export function makeOutboundGates({
     {
       name: "normalize_target",
       run(ctx) {
-        const homeCountry = homeCountryCode([
-          store.tenantPrivateNumber(ctx.tenantId),
-          findActiveNumber(store.load(), ctx.tenantId)?.e164,
-        ]);
+        // GAP-25 Review-Fix Runde 2: der NANP-Zweig von homeCountryCode braucht das
+        // TENANT-Herkunftsland (store.tenantGeo, dieselbe Quelle wie denialDimensions in
+        // routes/api-calls.js, G5) als Guard - ohne ihn wuerde eine europaeische DID-
+        // Zufalls-NANP-Nummer (DIDs sind heute default US, privateNumber ist optional)
+        // jeden Tenant zum NANP-Heimatland machen.
+        const homeCountry = homeCountryCode(
+          [store.tenantPrivateNumber(ctx.tenantId), findActiveNumber(store.load(), ctx.tenantId)?.e164],
+          store.tenantGeo(ctx.tenantId).country,
+        );
         ctx.to = normalizeDialTarget(ctx.to, homeCountry);
         return null;
       },
@@ -575,10 +603,14 @@ export function makeOutboundGates({
         });
         if (!e) return null;
         if (e.status === 400) return deny(400, { error: e.message });
+        // GAP-18: die getroffene Sperr-Range steht im Audit (Plan: "Grund + Praefix"),
+        // damit eine Ueberblockierung ganzer NPAs forensisch auffaellt. Nur beim
+        // Denylist-Gate gesetzt -> alle uebrigen Detailzeilen bleiben byte-identisch.
+        const praefix = e.praefix ? ` praefix=${e.praefix}` : "";
         return deny(
           e.status,
           { error: e.message },
-          denialAudit(e.grund, ctx, ` requestedBy=${ctx.requestedBy}`),
+          denialAudit(e.grund, ctx, `${praefix} requestedBy=${ctx.requestedBy}`),
         );
       },
     },

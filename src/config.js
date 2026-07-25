@@ -146,9 +146,13 @@ const rawConfig = {
 
   // ---- LLM-Resilienz-Seam (P3b-R Schicht 2, src/llm.js) ----
   // Per-Request-Timeout je Anthropic-Versuch (SDK-Default 10 min ist webhook-toedlich:
-  // Twilio kappt nach 15 s hart). Budget-Soll: (llmMaxRetries+1)*timeout + Backoff < 12 s.
-  // Mit Defaults: 3*3500 + (<=250+500) = <=11250 ms < 12000 ms < Twilio-15s. Default
-  // bewusst 3500 (nicht 4000), damit das Budget mit Sicherheitsmarge haelt.
+  // der Provider kappt einen unbeantworteten Webhook nach 15 s hart). Budget-Soll:
+  // (llmMaxRetries+1)*timeout + Backoff-Summe < 12 s. Mit Defaults: 3*3500 + 250*(2^2-1)
+  // = 11250 ms. GAP-22: dieser Rechenweg ist NICHT das ganze Turn-Budget - im selben
+  // Webhook laeuft zusaetzlich die Play-TTS-Vorab-Synthese (elevenLabsPlayTts.
+  // synthTimeoutMs) plus Netzreserve. Die vollstaendige Rechnung und der Boot-Waechter
+  // stehen in src/turn-budget.js (EINE Quelle, G5) - wer hier einen Wert anhebt, muss
+  // dort nachrechnen.
   llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", process.env.LLM_REQUEST_TIMEOUT_MS, {
     fallback: 3500,
     min: 1,
@@ -248,8 +252,12 @@ const rawConfig = {
     model: (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim(), // Latenz-optimiert
     apiBase: stripTrailingSlash((process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim()),
     outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(), // Owner-Wahl mp3
+    // GAP-22: 4000 sprengte zusammen mit dem LLM-Worst-Case (11250 ms) den 15-s-Hardcut.
+    // Der Schnitt liegt bewusst HIER und nicht bei den LLM-Werten: ein Synthese-Timeout
+    // faellt fail-safe auf Azure-<Say> zurueck (der Call ueberlebt), ein gekuerzter
+    // LLM-Timeout kostet Antworten. 11250 + 2000 + 1500 (Reserve) = 14750 <= 15000.
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
-      fallback: 4000,
+      fallback: 2000,
       min: 500,
       max: 10000,
     }),
@@ -973,6 +981,24 @@ const rawConfig = {
   realtimeVoice: process.env.REALTIME_VOICE || "alloy",
   twilioEdge: process.env.TWILIO_EDGE || "frankfurt",
 
+  // ---- Anrufbeantworter-Erkennung (GAP-21) ----
+  // DEFAULT AUS (Muster PAYMENT_ENABLED): die Feldnamen der Provider-Origination sind
+  // erst mit einem Objekt-GET der Live-API belegt; ein falsches Feld quittiert Telnyx mit
+  // HTTP 422 auf JEDEM Outbound (Praezedenzfall Call-Control-App-ID, tasks/rca-place-call-422.md).
+  // Rollback ist damit eine Env-Variable ohne Deploy.
+  machineDetection: {
+    enabled: boolEnv("MACHINE_DETECTION_ENABLED", process.env.MACHINE_DETECTION_ENABLED, {
+      fallback: false,
+    }),
+    // Obergrenze der Erkennung. Laeuft sie ab, liefert der Provider ein UNEINDEUTIGES
+    // Ergebnis -> weiterreden wie mit einem Menschen (fail-open, Pre-Mortem 3).
+    timeoutS: numEnv("MACHINE_DETECTION_TIMEOUT_S", process.env.MACHINE_DETECTION_TIMEOUT_S, {
+      fallback: 5,
+      min: 3,
+      max: 30,
+    }),
+  },
+
   // Preise pro 1M Tokens in USD, PRO MODELL-ID. Nur fuer den Budget-Guard (Regel 1).
   // EINZIGE Preisquelle: das Live-Gate (trackUsage) UND der Stripe-Ledger (aiCostCents)
   // leiten ihren Betrag hieraus ab (G5). Ein Modell, das hier NICHT steht, wird mit der
@@ -1072,7 +1098,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
-  telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge"],
+  telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],

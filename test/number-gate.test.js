@@ -133,14 +133,12 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   });
 });
 
-// ---- GAP-18 (P0, SOLL rot): NANP-Sub-Ranges bleiben gesperrt, auch wenn "+1" erlaubt ist ----
+// ---- GAP-18: NANP-Sub-Ranges bleiben gesperrt, auch wenn "+1" erlaubt ist ----
 // Denylist-Praezedenz (grund=denylist VOR Land-Gate) ist bereits gebaut (s. Pruefreihenfolge-
-// Test unten) - PREMIUM_PREFIXES kennt aber keinen einzigen "+1"-Eintrag
-// (src/telephony/outbound-gates.js:58-90; grep -c '"+1' -> 0 Treffer). Sobald
-// ALLOWED_COUNTRY_CODES "+1" enthaelt, passieren Pay-Per-Call- (1-900/1-976) UND die
-// NANP-Karibik-Inselvorwahlen (bekannt fuer Premium-Rueckruf-/One-Ring-Betrug) ungehindert
-// bis zum Twilio-Client. SOLL: alle zwoelf 403 grund=denylist.
-test("GAP-18 (SOLL, rot): NANP-Sub-Ranges (1-900/1-976 + Karibik-Inseln) bleiben gesperrt, auch wenn +1 erlaubt ist", async (t) => {
+// Test unten). PREMIUM_PREFIXES enthaelt seit GAP-18 zwoelf "+1"-Eintraege (1-900/1-976 +
+// Karibik-Inseln, bekannt fuer Premium-Rueckruf-/One-Ring-Betrug/IRSF) - alle zwoelf
+// muessen 403 grund=denylist liefern, auch mit ALLOWED_COUNTRY_CODES="+1".
+test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erlaubt ist (GAP-18)", async (t) => {
   const NANP_PREMIUM_TARGETS = [
     "+19005550123", // 1-900 Pay-Per-Call
     "+19765550123", // 1-976 Premium
@@ -173,6 +171,74 @@ test("GAP-18 (SOLL, rot): NANP-Sub-Ranges (1-900/1-976 + Karibik-Inseln) bleiben
   } finally {
     await srv.stop();
   }
+});
+
+// Pre-Mortem 1 (GAP-18): ein rein negativer Test (nur gesperrte Ziele) kann eine
+// Ueberblockierung nicht fangen - dafuer braucht es einen POSITIVEN Gegentest ueber
+// echte, gewoehnliche NANP-Nummern in verschiedenen Laendern/Regionen.
+test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierungs-Schutz)", async (t) => {
+  const ORDINARY_NANP_TARGETS = [
+    "+12025550123", // Washington DC
+    "+14155550123", // San Francisco
+    "+19175550123", // New York City
+    "+16045550123", // Vancouver (CA)
+    "+18685550123", // Trinidad und Tobago (NANP, aber NICHT gesperrt)
+  ];
+  const srv = await startServer({
+    env: {
+      ALLOWED_NUMBERS: ORDINARY_NANP_TARGETS.join(","),
+      ALLOWED_COUNTRY_CODES: "+1",
+      TWILIO_ACCOUNT_SID: "x",
+    },
+  });
+  try {
+    for (const to of ORDINARY_NANP_TARGETS) {
+      await t.test(`${to} -> 500 (passiert die Denylist)`, async () => {
+        const res = await postCall(srv.localUrl, to);
+        assert.equal(res.status, 500, `${to} darf NICHT von der Denylist geblockt werden`);
+      });
+    }
+  } finally {
+    await srv.stop();
+  }
+});
+
+// GAP-18: der Ablehnungsgrund allein sagt nicht, WELCHE Sub-Range gefeuert hat - genau
+// das braucht die Forensik, wenn ein ganzes Land still blockiert wird. Direkter Gate-
+// Aufruf (Muster test/outbound-gates-order.test.js): das Audit-Detail ist die EINE
+// pruefbare Quelle, ohne einen Audit-Log-Reader in test/helpers.js nachzuziehen.
+test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
+  const { makeOutboundGates } = await import("../src/telephony/outbound-gates.js");
+  const { withConfigNamespaces } = await import("./config-namespaces-helper.js");
+  const to = "+19005550123";
+  const { gates } = makeOutboundGates({
+    store: {
+      countOutboundCallsSince: () => 0,
+      tenantPrivateNumber: () => null,
+      load: () => ({
+        numbers: [{ tenantId: "T", status: "active", provider: "twilio", e164: "+1700000000" }],
+      }),
+      kycReached: () => true,
+      tenantContext: () => ({ ownerName: "Alice" }),
+      resolveProfile: () => ({
+        unrestricted: true,
+        allowedCountryCodes: null,
+        maxCallsPerHour: null,
+        allowedNumbers: [],
+      }),
+      tenantInactive: () => false,
+      tenantActiveSubscriber: () => true,
+    },
+    config: withConfigNamespaces({ outboundFrozen: false, allowedCountryCodes: ["*"] }),
+    requestTenant: () => "T",
+    internalIdentity: () => null,
+    OWNER_ID: "owner",
+    TENANT_REJECT: "reject",
+  });
+  const numberGate = gates.find((g) => g.name === "number_gate");
+  const denial = await numberGate.run({ to, tenantId: "T", requestedBy: "owner", profile: {} });
+  assert.equal(denial.status, 403);
+  assert.equal(denial.audit.detail, `to=${to} grund=denylist praefix=+1900 requestedBy=owner`);
 });
 
 // ---- OUT-25 (P0): Vollstaendiger Happy-Path fuer eine korrekt konfigurierte US-Freischaltung ----
