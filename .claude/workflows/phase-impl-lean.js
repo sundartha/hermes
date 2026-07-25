@@ -75,6 +75,32 @@ const SPEC_FILE = A.specFile || "";
 const MAX_FIX_ROUNDS = Number.isInteger(A.maxFixRounds) ? A.maxFixRounds : 2;
 const REPORT_PATH = `tasks/${String(PHASE).toLowerCase()}-report.md`;
 
+// MODELL-POLITIK: jeder agent() wird explizit gepinnt. Ohne Pin erbt der Subagent das
+// Session-Modell - bei einer Fable-Session ein Vielfaches der noetigen Kosten (Memory
+// [[workflow-model-policy]]). Zuordnung: Plan + Safety-Review = opus (dort entstehen bzw.
+// sterben Fehler), Impl/Clean-Code/Fix = sonnet (Ausfuehrung gegen fertige Spec bzw.
+// Regelanwendung gegen einen geschriebenen Katalog), Report = sonnet/low (reines
+// Zusammenschreiben).
+const MODEL_OPUS = "opus";
+const MODEL_SONNET = "sonnet";
+
+// HOCHRISIKO-PHASEN: hier ist ein Impl-Fehler kein haesslicher Code, sondern eine falsche
+// Geldrechnung (Tarif-Signatur), ein blindes Safety-Gate (Budget/Stundenlimit) oder ein
+// Live-Dienst, der nicht mehr startet (fatal:true beim Boot). Dort laeuft die Umsetzung
+// ebenfalls auf opus und der Safety-Review eine Stufe schaerfer.
+const HIGH_STAKES_PHASES = ["P5", "P6", "P7"];
+const HIGH_STAKES =
+  typeof A.highStakes === "boolean" ? A.highStakes : HIGH_STAKES_PHASES.includes(PHASE);
+
+const PLAN_AGENT = { model: MODEL_OPUS, effort: "high" };
+const IMPL_AGENT = HIGH_STAKES
+  ? { model: MODEL_OPUS, effort: "high" }
+  : { model: MODEL_SONNET, effort: "medium" };
+const SAFETY_AGENT = { model: MODEL_OPUS, effort: HIGH_STAKES ? "xhigh" : "high" };
+const CLEANCODE_AGENT = { model: MODEL_SONNET, effort: "medium" };
+const FIX_AGENT = { model: MODEL_SONNET, effort: "medium" };
+const REPORT_AGENT = { model: MODEL_SONNET, effort: "low" };
+
 const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT): Lies "${REPO}/.claude/refs/clean-code.md" (verbindlicher Prueftkatalog) und befolge ihn bei JEDER Code-Entscheidung. Insbesondere: keine Duplizierung (G5/S2, gemeinsame Logik extrahieren); keine Magic Numbers ausser 0/1/-1 (G25, benannte Konstante, in config.js wenn konfigurierbar G35); kein toter/auskommentierter Code (C5/G9), keine ungenutzten Imports (G12); intentions-ausdrueckende Namen, Nebeneffekte im Namen sichtbar (N7); eine Aufgabe + eine Abstraktionsebene pro Funktion (G30/G34), <=3 Argumente (F1, sonst Objekt); Lazy-Init-Antipattern vermeiden (P15); keine brittle Datei:Zeile-Kommentare (C2); ESM, kein Build-Step, kein TypeScript, Kommentare deutsch OHNE Umlaute (ue/oe/ae); neues Verhalten braucht einen automatisierten Test (P11/T-Serie), reiner Refactor laesst die Bestandssuite OHNE Test-Aenderung gruen.`;
 
 const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
@@ -98,7 +124,7 @@ const plan = await agent(
 ${CLEAN_CODE_REQ}
 ${ABS_RULES}
 LIEFERE: (1) neue Dateien inkl. Funktionssignaturen + Inhalts-Skizze; (2) pro bestehender Datei die exakten Edits (Vorher/Nachher); (3) neue/angepasste Tests (oder Begruendung, warum die Bestandssuite reicht); (4) das deterministisch pruefbare Ergebnis (Befehl + erwartete Ausgabe). Kleiner Blast-Radius. Deine Rueckgabe IST der Plan.`,
-  { label: `${PHASE}-plan`, phase: "Plan" },
+  { label: `${PHASE}-plan`, phase: "Plan", ...PLAN_AGENT },
 );
 
 // ---------- Phase 2: Implementieren (Worktree) ----------
@@ -152,6 +178,7 @@ EHRLICH fuellen. Tests nicht gruen / blockiert -> testsPass=false + deviations, 
     phase: "Implementieren",
     schema: IMPL_SCHEMA,
     isolation: "worktree",
+    ...IMPL_AGENT,
   },
 );
 
@@ -219,6 +246,7 @@ approved=true NUR wenn alles erfuellt UND deine Tests gruen. Im Zweifel blockier
           phase: "Review",
           schema: SAFETY_SCHEMA,
           isolation: "worktree",
+          ...SAFETY_AGENT,
         },
       ),
     () =>
@@ -233,6 +261,7 @@ blocker=true wenn s1 ODER s2 nicht leer. passNotes: was sauber ist. topTodos: 1-
           phase: "Review",
           schema: CC_SCHEMA,
           isolation: "worktree",
+          ...CLEANCODE_AGENT,
         },
       ),
   ]);
@@ -287,6 +316,7 @@ EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
       phase: "Self-Fix",
       schema: FIX_SCHEMA,
       isolation: "worktree",
+      ...FIX_AGENT,
     },
   );
   fixSummaries.push(
@@ -316,7 +346,7 @@ ${JSON.stringify(cc, null, 1)}
 === FIXES ===
 ${fixSummaries.join("\n")}
 Antworte NUR mit dem geschriebenen Dateipfad.`,
-    { label: `${PHASE}-report`, phase: "Report" },
+    { label: `${PHASE}-report`, phase: "Report", ...REPORT_AGENT },
   );
   reportPath = (reportAgent || "").toString().trim().slice(0, 300) || REPORT_PATH;
 } catch {
