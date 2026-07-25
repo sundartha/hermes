@@ -109,6 +109,33 @@ test("Onboard ohne country erbt PROVISIONING_COUNTRY (Fallback-Stufe) -> FR/fr",
   }
 });
 
+// DID-02 (i18n-Testkatalog). Beleg: src/routes/api-onboard.js:141-152,168,172-173;
+// src/i18n/locales.js:268-280; tasks/i18n-tests/06-nummern-provisioning.md ("DID-02").
+// SOLL-Test (heute rot): languageForCountry("US") liefert heute "de" (US fehlt in
+// LANGUAGE_FOR_COUNTRY), der SOLL-Zustand ist "en" (US-Kunden sprechen Englisch). Das
+// ist der spaetere Fix (Weltdefault bzw. US-Tabelleneintrag), NICHT Teil dieses
+// Testbaus (CLAUDE.md SCOPE-Regel) - dieser Test bleibt rot, bis er landet.
+test("DID-02 (SOLL, heute rot) - Onboard mit body.country=US -> tenant/number.language = 'en'", async () => {
+  const srv = await startServer();
+  try {
+    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_us", country: "US" });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.country, "US");
+    assert.equal(json.language, "en");
+
+    const store = srv.readStore();
+    const tenant = store.tenants.find((t) => t.id === "t_us");
+    assert.equal(tenant.country, "US", "tenant.country persistiert");
+    assert.equal(tenant.defaultLanguage, "en", "tenant.defaultLanguage persistiert");
+    const num = store.numbers.find((n) => n.id === json.numberId);
+    assert.equal(num.country, "US", "number.country persistiert");
+    assert.equal(num.language, "en", "number.language persistiert");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // FORCE_NUMBER_COUNTRY=US: das KAUF-Land ist entkoppelt vom Herkunftsland. Ein DE-User
 // bekommt eine US-Nummer (number.country=US), aber die Sprache bleibt am Herkunftsland
 // (de): number.language=de, tenant.country/defaultLanguage=DE/de (Quelle fuer Sprache/

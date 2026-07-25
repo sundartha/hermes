@@ -34,6 +34,25 @@ test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () =>
   assert.equal(r.number.country, "US");
 });
 
+// DID-03 (i18n-Testkatalog). Beleg: src/billing/provision-trigger.js:36-45;
+// tasks/i18n-tests/06-nummern-provisioning.md ("DID-03"). SOLL-Test (heute rot),
+// eigener Test statt Erweiterung des Bestandstests oben (Zeile 29-35): der Bestand
+// bleibt gruen und byte-identisch (Regel 3), das ist zugleich der Beleg fuer DID-15
+// (die bestehende Assertion dort deckt r.number.language BEWUSST NICHT ab). Der Fix
+// (languageForCountry("US") -> "en") ist NICHT Teil dieses Testbaus (SCOPE-Regel).
+test("DID-03 (SOLL, heute rot) - BK3 fallbackCountry US (Webhook-/Aktivierungspfad) soll number.language='en' liefern", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_us_lang", {});
+  const r = requestNumberForPaidTenant(s, {
+    tenantId: "t_us_lang",
+    fallbackCountry: "US",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.language, "en");
+});
+
 // forceNumberCountry entkoppelt das KAUF-Land vom Herkunftsland: Tenant-Geo DE, aber
 // erzwungenes US -> number.country=US, number.language bleibt am Herkunftsland (de).
 // Beweist die Provision-Pfad-Haelfte des Kauf-Land-Overrides (Onboard-Haelfte: f1-geo-onboard).

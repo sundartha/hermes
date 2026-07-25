@@ -35,12 +35,30 @@ test("localeFor: bekannte Sprache liefert das passende Locale (de/fr/en)", () =>
   assert.equal(localeFor("en").language, "en");
 });
 
-test("localeFor: unbekannte/fehlende/null Sprache faellt fail-safe auf de (R7)", () => {
+// Charakterisierung (i18n-Testkatalog, Regel 5): pinnt den HEUTIGEN Ist-Wert von
+// DEFAULT_LANGUAGE ("de") als Fail-Safe-Ergebnis. Der Fail-Safe-MECHANISMUS selbst ist
+// korrekt und bleibt (R3 der kanonischen Liste, tasks/i18n-tests/00-kanonische-liste.md) -
+// nur der WERT am Ende der Kette steht zur Debatte. Das SOLL-Gegenstueck fuer denselben
+// Sachverhalt ist WORLD-03 (heute rot, erwartet "en" statt DEFAULT_LANGUAGE): sobald
+// DEFAULT_LANGUAGE auf "en" gestellt wird (Owner-Entscheidung 7.12, weltweiter Start),
+// wird DIESER Test zwangslaeufig rot und muss dann nachgezogen werden (kanonische Liste,
+// Nachtrag 2026-07-25: "D4/LANG-21 aendert seinen erwarteten Wert").
+test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck (heute 'de', R7)", () => {
   assert.equal(localeFor("xx").language, DEFAULT_LANGUAGE);
   assert.equal(localeFor(undefined).language, DEFAULT_LANGUAGE);
   assert.equal(localeFor(null).language, DEFAULT_LANGUAGE);
   assert.equal(localeFor("").language, DEFAULT_LANGUAGE);
   assert.equal(DEFAULT_LANGUAGE, "de");
+});
+
+// WORLD-03 (i18n-Testkatalog, Owner-Entscheidung 7.12): SOLL-Gegenstueck zur obigen
+// Charakterisierung. Beleg: tasks/i18n-tests/00-kanonische-liste.md Abschnitt 4 (Nachtrag
+// 7.12); PLAN-I18N-TESTS.md Abschnitt 7.12. Heute rot (liefert "de"-Locale statt "en").
+test("WORLD-03 (SOLL, heute rot) - localeFor(null|undefined|'xx') liefert das EN-Locale (Weltdefault)", () => {
+  assert.equal(localeFor("xx").language, "en");
+  assert.equal(localeFor(undefined).language, "en");
+  assert.equal(localeFor(null).language, "en");
+  assert.equal(localeFor("").language, "en");
 });
 
 test("Bundle-Vertrag: STT-Locale ist volles BCP-47 + Voice-Profil je Sprache gesetzt", () => {
@@ -56,6 +74,21 @@ test("Bundle-Vertrag: STT-Locale ist volles BCP-47 + Voice-Profil je Sprache ges
     assert.equal(typeof LOCALES[lang].voiceProfile, "string");
     assert.ok(LOCALES[lang].voiceProfile.length > 0, `voiceProfile fehlt fuer ${lang}`);
   }
+});
+
+// VOICE-01 (i18n-Testkatalog). Beleg: src/i18n/locales.js:219-220;
+// tasks/i18n-tests/03-telefonie-render.md ("VOICE-01"). Mechanismus-Test (gruen,
+// Regressionsschutz): dieser Pin gilt AUSDRUECKLICH nur fuer den Sprachcode "en" - NICHT
+// fuer "Englisch generell". Owner-Entscheidung 7.5 (PLAN-I18N-TESTS.md Abschnitt 7.5)
+// macht ein kuenftiges "en-US"-Bundle zu einem EIGENEN, separaten Bundle-Eintrag; welche
+// Variante (en/en-GB vs. en-US) der WELTDEFAULT fuer Laender ohne eigenes Bundle waehlt,
+// ist ausdruecklich noch offen (00-kanonische-liste.md, D16/VOICE-01: "entblockt", aber
+// nur die Bundle-Frage, nicht die Weltdefault-Variante). Ein Test auf "irgendein
+// EN-Bundle" wuerde den spaeteren Bundle-Schnitt fuer en-US blockieren - deshalb hier
+// bewusst gegen den KONKRETEN Schluessel LOCALES.en, nicht gegen SUPPORTED_LANGUAGES.
+test("VOICE-01 (Mechanismus, gruen) - Bundle fuer Sprachcode 'en' bleibt auf en-GB gepinnt (sttLocale+dateLocale)", () => {
+  assert.equal(LOCALES.en.sttLocale, "en-GB");
+  assert.equal(LOCALES.en.dateLocale, "en-GB");
 });
 
 test("Bundle: DE-Summary-Prompt ist byte-identisch zum Bestand; FR ist franzoesisch mit gleichen JSON-Keys", () => {
@@ -111,6 +144,23 @@ test("Realtime-Bundle: localeFor-Fallback liefert DE-Sentinels (unbekannte Sprac
 });
 
 // ---- (A2) EN-Bundle (F1 P4): kuratierte Offenlegung + statische Texte ----
+
+// OUT-24 (i18n-Testkatalog). Beleg: src/i18n/locales.js:236-238;
+// tasks/i18n-tests/05-auslandstelefonie.md ("OUT-24"). Mechanismus-Test (gruen):
+// byte-exakter EN-Offenlegungssatz, UND der Nachweis, dass kein Call-Parameter (analog
+// zum FR-Pin weiter unten) ihn veraendern/abschalten kann - nur ownerName ist gebunden.
+test("OUT-24 (Mechanismus, gruen) - EN-Offenlegungssatz ist byte-stabil und nicht abschaltbar", () => {
+  const a = LOCALES.en.disclosure(OWNER_NAME);
+  assert.equal(
+    a,
+    "Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.",
+  );
+  // Kein zusaetzliches Argument/Call-Parameter kann den Wortlaut veraendern - die
+  // Funktion nimmt einzig ownerName entgegen (Signatur-Beweis: erneuter Aufruf mit
+  // demselben Namen liefert byte-identisch dasselbe Ergebnis).
+  const b = LOCALES.en.disclosure(OWNER_NAME);
+  assert.equal(a, b, "EN-Offenlegung muss byte-stabil/deterministisch sein");
+});
 
 test("EN-Bundle: kuratierte EN-Offenlegung (R8, nur ownerName gebunden) + EN-Summary mit gleichen JSON-Keys", () => {
   const disc = LOCALES.en.disclosure(OWNER_NAME);
@@ -199,6 +249,7 @@ before(async () => {
 
 const deCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "de", ...over });
 const frCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "fr", ...over });
+const enCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "en", ...over });
 
 test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => {
   assert.equal(disclosureSentence(deCall()), DE_DISCLOSURE);
@@ -207,6 +258,20 @@ test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => 
 test("DE byte-identisch: fehlende Sprache faellt auf de zurueck (Bestands-Aufrufer ohne language)", () => {
   // disclosure-regression ruft disclosureSentence OHNE language auf -> muss de bleiben.
   assert.equal(disclosureSentence({ tenantId: BOOTSTRAP_TENANT_ID }), DE_DISCLOSURE);
+});
+
+// LANG-07 (i18n-Testkatalog). Beleg: src/claude.js:254-259,264-278;
+// tasks/i18n-tests/01-sprachaufloesung.md ("LANG-07"). Mechanismus-Test (gruen):
+// disclosureSentence tut exakt das Dokumentierte - kein separater Bug in der Funktion
+// selbst. Der reale US-Default (LANG-02/LANG-04-Kette: ein web-onboardeter Tenant ohne
+// gesetztes number.language/tenant.defaultLanguage bekommt call.language="de") fuehrt
+// HIER dazu, dass ein US-Ziel trotzdem den deutschen Offenlegungssatz hoert.
+test("LANG-07 (Mechanismus, gruen) - Offenlegungssatz bleibt Deutsch fuer strukturell falsch aufgeloeste US-Tenants (call.language='de')", () => {
+  assert.equal(
+    disclosureSentence(deCall()),
+    DE_DISCLOSURE,
+    "call.language='de' (realer US-Default vor einem Geo-Fix) liefert die deutsche Offenlegung",
+  );
 });
 
 test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Regel", () => {
@@ -255,4 +320,24 @@ test("Gegenprobe: ein FR-Call faerbt einen parallelen DE-Call nicht ab (Resolver
   const deText = disclosureSentence(deCall());
   assert.equal(deText, DE_DISCLOSURE, "DE bleibt unveraendert, auch nachdem FR aufgeloest wurde");
   assert.notEqual(frText, deText);
+});
+
+// ---- LAW-02 (i18n-Testkatalog): EN end-to-end ueber disclosureSentence/openingText ----
+// Beleg: src/i18n/locales.js:237-239 (EN-Disclosure-Funktion); src/claude.js:250-258;
+// tasks/i18n-tests/09-recht-und-compliance.md ("LAW-02"). Bundle-Ebene ist bereits ueber
+// LOCALES.en/OUT-24 getestet - hier fehlte bislang das DE/FR-aequivalente End-to-End (via
+// disclosureSentence/openingText mit einem echten call.language="en"). Mechanismus-Test
+// (gruen): das Bundle ist korrekt verdrahtet, es war nur der Test-Lueckenschluss noetig.
+test("LAW-02 (Mechanismus, gruen) - EN: disclosureSentence(en) liefert die kuratierte EN-Offenlegung end-to-end", () => {
+  const en = disclosureSentence(enCall());
+  assert.equal(en, LOCALES.en.disclosure(OWNER_NAME), "EN-Offenlegung muss aus dem Bundle kommen");
+  assert.ok(en.includes(OWNER_NAME), "ownerName muss gebunden sein");
+  assert.notEqual(en, DE_DISCLOSURE, "EN darf nicht die DE-Offenlegung sein");
+  assert.ok(!en.includes("Guten Tag"), `EN darf keinen DE-Rest tragen: ${en}`);
+});
+
+test("LAW-02 (Mechanismus, gruen) - EN: openingText(en) nutzt die englische Bruecke + EN-Offenlegung", () => {
+  const text = openingText(enCall({ direction: "outbound", goal: "Test goal" }));
+  assert.equal(text, `${LOCALES.en.disclosure(OWNER_NAME)} ${LOCALES.en.bridgePhrase("Test goal")}`);
+  assert.ok(!text.includes("Es geht um Folgendes"), `EN darf keine DE-Bruecke tragen: ${text}`);
 });
