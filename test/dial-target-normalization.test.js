@@ -14,6 +14,8 @@ import assert from "node:assert/strict";
 import {
   homeCountryCode,
   normalizeDialTarget,
+  normNum,
+  E164,
   BOOTSTRAP_TENANT_ID,
 } from "../src/store/defaults.js";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
@@ -27,14 +29,26 @@ const postCall = (url, to) =>
 
 // ---- Sektion 1: reine Helfer ----
 test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
-  await t.test("erste Trunk-0-Vorwahl gewinnt (Praezedenz der Kandidaten)", () => {
+  // OUT-05 (P0, Charakterisierung/heutiger Stand - Ist-Pin-Falle, Regel 5): pinnt
+  // BEWUSST das GEFAeHRLICHE Ist-Verhalten (US-Kandidat wird uebersprungen, eine DE/FR-
+  // Nummer dahinter gewinnt STILL als "Heimatland"). GAP-25 (SOLL, rot,
+  // tasks/i18n-tests/11-luecken-und-e2e.md) formuliert den Sollzustand ("kein stiller
+  // Landeswechsel") fuer denselben Sachverhalt - dieser Test ist NICHT der Fix-Beweis,
+  // sondern der Regressionsschutz fuer den Ist-Mechanismus, bis GAP-25 behoben wird. Ein
+  // spaeterer Fix an homeCountryCode/normalizeDialTarget darf diesen Test AENDERN
+  // (nicht als Regression werten), s. Repo-Lehren zu Ist-Pin-Fallen (f1-geo-port.test.js,
+  // personal-assistant-characterization.test.js).
+  await t.test("erste Trunk-0-Vorwahl gewinnt (Praezedenz der Kandidaten) [Charakterisierung, s. GAP-25]", () => {
     assert.equal(homeCountryCode(["+491737252163"]), "+49");
     assert.equal(homeCountryCode(["+33612345678", "+491737252163"]), "+33");
     // US-DID (kein Trunk-0-Land) wird uebersprungen -> DE-Kandidat dahinter greift.
     assert.equal(homeCountryCode(["+15005550006", "+491737252163"]), "+49");
   });
 
-  await t.test("kein Trunk-0-Kandidat / Raender -> null (fail-closed)", () => {
+  // OUT-04 (P0, Charakterisierung/heutiger Stand - s. GAP-25 Hinweis oben): reine
+  // +1-Kandidatenlisten liefern fail-closed null (keine Fehlinterpretation), das bleibt
+  // Regressionsschutz unabhaengig vom GAP-25-Fix.
+  await t.test("kein Trunk-0-Kandidat / Raender -> null (fail-closed) [Charakterisierung, s. GAP-25]", () => {
     assert.equal(homeCountryCode(["+15005550006"]), null);
     assert.equal(homeCountryCode([]), null);
     assert.equal(homeCountryCode([null, undefined, 12345, ""]), null);
@@ -70,6 +84,54 @@ test("normalizeDialTarget (Telefon-Konvention)", async (t) => {
     assert.equal(normalizeDialTarget("0", "+49"), "+49"); // faellt am E164-Gate (400)
     assert.equal(normalizeDialTarget("00", "+49"), "+"); // dito
   });
+});
+
+// OUT-06 (P0, Charakterisierung/heutiger Stand - Ist-Pin-Falle, Regel 5, s. GAP-25):
+// normNum entfernt nur Trennzeichen, normalizeDialTarget kennt keine NANP-Konvention
+// (zehnstellig ohne Praefix, "011"-Auslandsvorwahl statt "00") - beide Faelle bleiben
+// unveraendert und scheitern generisch am E.164-Regex (400), ohne NANP-spezifische
+// Anleitung. GAP-25 (SOLL, rot) formuliert den Sollzustand fuer denselben Sachverhalt;
+// dieser Test ist NICHT der Fix-Beweis, sondern der Regressionsschutz fuer den
+// Ist-Mechanismus bis dahin.
+test("OUT-06 (Charakterisierung, s. GAP-25): NANP-Schreibweisen werden nicht normalisiert", () => {
+  assert.equal(normNum("(212) 555-0123"), "2125550123", "Klammern/Leerzeichen/Bindestrich entfernt");
+  assert.equal(normNum("212-555-0123"), "2125550123");
+
+  // Zehnstellig ohne Praefix bleibt UNVERAENDERT - keine +1-Ergaenzung.
+  assert.equal(normalizeDialTarget("2125550123", "+1"), "2125550123");
+  // "011" (NANP-Auslandsvorwahl) wird NICHT erkannt (nur "00" ist bekannt) -> unveraendert.
+  assert.equal(normalizeDialTarget("011491701234567", null), "011491701234567");
+
+  for (const raw of ["2125550123", "011491701234567"]) {
+    assert.equal(E164.test(raw), false, `${raw} darf die E.164-Pruefung nicht bestehen`);
+  }
+});
+
+// GAP-18/25-Nachbar: GAP-25 (P0, SOLL, ROT) - Invariante "kein stiller Landeswechsel bei
+// der Wahl-Normalisierung" (tasks/i18n-tests/11-luecken-und-e2e.md). "011" ist im NANP die
+// Auslandsvorwahl (Analogon zu "00" in DE/FR/UK); normalizeDialTarget kennt nur "00" und
+// faellt fuer "011..."-Eingaben auf die "fuehrende 0"-Regel zurueck - das materialisiert
+// FAELSCHLICH eine deutsche Nummer aus einem eigentlich britischen Ziel. Empirisch
+// gemessen (2026-07-25, diese Session): normalizeDialTarget("011441234567","+49") ->
+// "+4911441234567" (besteht E.164-Regex + Land-Gate bei ALLOWED_COUNTRY_CODES inkl. +49).
+// SOLL: die Eingabe bleibt unveraendert (E164-Gate lehnt ab, wie bei jeder anderen
+// unerkannten Schreibweise) statt eine falsche Nummer zu erfinden.
+test("GAP-25 (SOLL, rot): kein stiller Landeswechsel bei der Wahl-Normalisierung", () => {
+  assert.equal(
+    normalizeDialTarget("011441234567", "+49"),
+    "011441234567",
+    "SOLL: NANP-Auslandsvorwahl '011' darf NICHT als fuehrende 0 fehlinterpretiert werden",
+  );
+  assert.equal(
+    normalizeDialTarget("0114155501234", "+49"),
+    "0114155501234",
+    "SOLL: dito - keine deutsche Nummer aus einer '011'-Eingabe materialisieren",
+  );
+
+  // Umgekehrter Fall: eine erkennbare NANP-Schreibweise mit Heimatland +1 SOLL korrekt
+  // normalisiert werden (heute: OUT-06 zeigt, dass das nicht passiert).
+  assert.equal(normalizeDialTarget("2125550123", "+1"), "+12125550123");
+  assert.equal(normalizeDialTarget("1-415-555-0123", "+1"), "+14155550123");
 });
 
 // ---- Sektion 2: Producer POST /api/calls ueber HTTP ----
@@ -150,6 +212,56 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
     const srv = await startServer({ env: HTTP_ENV, seed: seedWithPrivateNumber });
     try {
       assert.equal((await postCall(srv.localUrl, DE_TARGET_E164)).status, 500);
+    } finally {
+      await srv.stop();
+    }
+  });
+});
+
+// OUT-05b (P0, Charakterisierung/heutiger Stand - Ist-Pin-Falle, Regel 5, s. GAP-25):
+// End-to-End-Beweis fuer den in OUT-05 pinnnten Sachverhalt - ein US-Kontext-Tenant
+// (US-Privatnummer) mit einer fremden DE-DID waehlt eine fuehrende '0' STILL als
+// deutsches Ziel. Der Beweis liegt NICHT im HTTP-Status (500 ist erwartungsgemaess,
+// wie jeder andere alle-Gates-passiert-Fall), sondern im TATSAeCHLICH persistierten
+// Call-Record: die normalisierte Nummer, die der Provider waehlen wuerde, traegt die
+// deutsche Vorwahl - obwohl der Tenant erkennbar im US-Kontext steht. GAP-25 (SOLL,
+// rot) fordert, dass genau das NICHT passiert; dieser Test bleibt Regressionsschutz
+// fuer den Ist-Mechanismus, bis GAP-25 behoben wird.
+test("OUT-05b (Charakterisierung, s. GAP-25): US-Tenant mit fremder DE-DID waehlt fuehrende 0 als stilles DE-Ziel", async (t) => {
+  const US_PRIVATE_NUMBER = "+15005550006";
+  const FOREIGN_DE_DID = "+491701234567";
+  const DE_NATIONAL_TARGET = "01737252163"; // vom Nutzer gemeint als lokale Schreibweise
+  const seed = seedState({
+    tenants: [
+      {
+        id: BOOTSTRAP_TENANT_ID,
+        status: "active",
+        firstName: "Jonas",
+        ownerName: "Jonas Beispiel",
+        privateNumber: US_PRIVATE_NUMBER,
+      },
+    ],
+  });
+
+  await t.test("Ergebnis passiert alle Gates (500) und traegt STILL das falsche +49-Ziel", async () => {
+    const srv = await startServer({
+      env: { ALLOWED_COUNTRY_CODES: "+1,+49", TWILIO_ACCOUNT_SID: "x" },
+      seed,
+      ownerNumber: { e164: FOREIGN_DE_DID, provider: "twilio" },
+    });
+    try {
+      const res = await postCall(srv.localUrl, DE_NATIONAL_TARGET);
+      assert.equal(res.status, 500, "normalisiertes +49-Ziel passiert ALLE Gates (Ist-Stand)");
+
+      const call = srv
+        .readStore()
+        .calls.find((c) => c.direction === "outbound" && c.tenantId === BOOTSTRAP_TENANT_ID);
+      assert.ok(call, "Call-Record muss angelegt worden sein (VOR dem Offline-Dial-Fehler)");
+      assert.equal(
+        call.to,
+        "+491737252163",
+        "der TATSAeCHLICH angelegte Call traegt das stille +49-Ziel, NICHT das vom US-Tenant gemeinte Ziel",
+      );
     } finally {
       await srv.stop();
     }
