@@ -322,6 +322,19 @@ EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
   fixSummaries.push(
     `r${round}: ${fix && fix.summary ? fix.summary.slice(0, 300) : "(kein Ergebnis)"}`,
   );
+  // Ein Fix-Agent kann sterben (API-Fehler, Abbruch) und liefert dann null - der Branch
+  // ${fixBranch} existiert in dem Fall NICHT. Frueher wurde reviewTarget trotzdem
+  // weitergesetzt: die Folgerunde reviewte einen Phantom-Branch, meldete "Branch existiert
+  // nicht" als Blocker und verbrannte die letzte Fix-Runde an einem Nicht-Befund
+  // (beobachtet 2026-07-25 in P5, ausgeloest durch ein API-529 in Runde 1). Ohne
+  // belegten Commit wird die Schleife deshalb abgebrochen; das Gate bleibt BLOCKED mit
+  // den ECHTEN Blockern der letzten belastbaren Review-Runde.
+  if (!fix || !fix.committed || !fix.headCommit) {
+    fixSummaries.push(
+      `r${round}: ABBRUCH - kein Commit vom Fix-Agenten (Branch ${fixBranch} existiert nicht). Self-Fix-Schleife beendet, Blocker der Runde ${round - 1 || "Erstreview"} bleiben stehen.`,
+    );
+    break;
+  }
   reviewTarget = fixBranch;
   [safety, cc] = await runReview(reviewTarget, `-r${round}`);
 }
