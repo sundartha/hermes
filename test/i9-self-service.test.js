@@ -17,7 +17,7 @@ import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
-import { GREETING_TEMPLATES } from "../src/self-service.js";
+import { greetingTemplatesFor } from "../src/self-service.js";
 import { PERSONA_STYLE_IDS } from "../src/i18n/locales.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
@@ -202,7 +202,7 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
       "Owner-Call NICHT enthalten",
     );
     assert.equal("streamToken" in body.calls[0], false, "streamToken NIE geleakt (publicCall)");
-    assert.deepEqual(body.greetingTemplates, GREETING_TEMPLATES, "Vorlagen mitgeliefert");
+    assert.deepEqual(body.greetingTemplates, greetingTemplatesFor("de"), "Vorlagen mitgeliefert (Tenant B hat keine gesetzte Sprache)");
     assert.deepEqual(
       body.calendar.map((e) => e.title),
       ["B-Termin"],
@@ -299,11 +299,11 @@ test("(d1) greeting-Freitext wird abgelehnt (nur Vorlage)", async () => {
 test("(d2) greeting-Vorlage wird akzeptiert", async () => {
   const s = await setup();
   try {
-    const res = await postSettings(s, { greeting: GREETING_TEMPLATES[1] });
+    const res = await postSettings(s, { greeting: greetingTemplatesFor("de")[1] });
     assert.equal(res.status, 200);
     assert.equal(
       s.store.load().settings[TENANT_B].greeting,
-      GREETING_TEMPLATES[1],
+      greetingTemplatesFor("de")[1],
       "Vorlage uebernommen",
     );
   } finally {

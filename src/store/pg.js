@@ -26,6 +26,7 @@ import {
   emptyPlatformTtsUsage,
 } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
+import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
 // Owner-Tenant zentral in defaults.js; hier re-exportiert, weil Tests + pg-helpers
 // die Konstante historisch von store/pg.js importieren (Import-Stabilitaet).
@@ -81,6 +82,15 @@ export function makePgStore(runner) {
       // (rowToTenant/flushTenants). LIVE ist pg -> heilt den realen Prod-Owner beim naechsten
       // Boot ohne Shell (Free-Tier hat kein preDeploy).
       if (ops.seedBootstrapKyc(state, BOOTSTRAP_TENANT_ID)) await flushBootstrap();
+      // O7-Migration (GAP-14) auf DEMSELBEN init-Client (kein zweiter Pool-Client):
+      // settings steht unter FORCE-RLS -> je Tenant die GUC setzen, sonst traefe der
+      // Upsert lautlos 0 Zeilen. Muster wie flushTenantScope. Idempotent: Folge-Boots
+      // aendern nichts und flushen nichts.
+      for (const tenantId of backfillGreetingNotices(state)) {
+        await setTenant(client, tenantId);
+        await flushSettings(client, tenantId, ops.settingsFor(state, tenantId));
+      }
+      await setTenant(client, BOOTSTRAP_TENANT_ID); // GUC wieder auf den Init-Scope
     });
     return state;
   }

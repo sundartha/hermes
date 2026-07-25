@@ -3,7 +3,8 @@
 // Tenant SELBST aendern darf, BEVOR store.updateSettings (die Admin-Whitelist)
 // laeuft. updateSettings wird NICHT aufgeweicht - diese Schicht liegt davor.
 
-import { DEFAULT_GREETING } from "./store/defaults.js";
+import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "./i18n/locales.js";
+import { withInboundNotice } from "./i18n/inbound-notice.js";
 
 // Felder, die ein Tenant SELBST setzen darf - updateSettings ist die EINE Validierungs-
 // quelle (G5): einfache Felder werden dort typeof-gecheckt, die optionalen Enum-Overrides
@@ -26,11 +27,34 @@ export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBan
 // Kuratierte greeting-Vorlagen (kein Freitext ueber Self-Service, PII-/Missbrauchs-
 // Riegel, Decision #7). {owner} wird zur Laufzeit ersetzt wie heute. Der Disclosure-
 // Satz ist NICHT Teil des greeting und bleibt fest verdrahtet (Regel 2).
-export const GREETING_TEMPLATES = Object.freeze([
-  DEFAULT_GREETING, // = der geseedete Default; eine Quelle in defaults.js (G5, kein Drift)
-  "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
-  "Hallo! Der KI-Assistent von {owner} hier. Wie kann ich Ihnen weiterhelfen?",
-]);
+//
+// WEB-04: die Vorlagenmenge FOLGT der Tenant-Sprache. Der Vorlagen-Riegel selbst (nur
+// Vorlage, kein Freitext) bleibt unangetastet. Jede Vorlage traegt den Pflichtsatz
+// (GAP-14); zusammengesetzt statt fuer jede Sprache literal gepflegt (G5). Einmalig beim
+// Laden gebaut und eingefroren - kein Lazy-Init (P15), keine Allokation je Request.
+function buildTemplates(locale) {
+  return Object.freeze(
+    [locale.greetingDefault, ...locale.greetingVariants].map((t) =>
+      withInboundNotice(t, locale.inboundNotice),
+    ),
+  );
+}
+
+const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze(
+  Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [lang, buildTemplates(LOCALES[lang])])),
+);
+
+// Die waehlbaren Vorlagen EINER Sprache (unbekannt -> Fallback wie localeFor).
+export function greetingTemplatesFor(language) {
+  return GREETING_TEMPLATES_BY_LANGUAGE[localeFor(language).language];
+}
+
+// Alle kuratierten Vorlagen ueber alle Sprachen - die Annahme-Menge von selfServicePatch.
+// Bewusst sprach-UNION: ein Patch darf language und greeting GLEICHZEITIG umstellen; eine
+// Pruefung gegen die alte Sprache wuerde genau diesen Wechsel-Patch verwerfen.
+export const ALL_GREETING_TEMPLATES = Object.freeze(
+  Object.values(GREETING_TEMPLATES_BY_LANGUAGE).flat(),
+);
 
 // Filtert einen rohen Patch auf den Self-Service-erlaubten Anteil. current = die
 // aktuellen Settings des Tenants (fuer den restrict-only-Vergleich). Liefert den
@@ -47,7 +71,7 @@ export function selfServicePatch(patch, current) {
       // String passiert) - die Vorlagen-Pruefung MUSS daher hier stattfinden (G5: kein Dup,
       // weil updateSettings diese Filterung nicht hat). agentStyle/language dagegen liegen in
       // SELF_SERVICE_FREE_FIELDS, weil updateSettings sie selbst fail-closed katalog-validiert.
-      if (GREETING_TEMPLATES.includes(value)) clean[key] = value;
+      if (ALL_GREETING_TEMPLATES.includes(value)) clean[key] = value;
       else rejected.push(key); // Freitext -> abgelehnt (nur Vorlage)
     } else if (SELF_SERVICE_RESTRICT_ONLY_FIELDS.includes(key)) {
       // Nur restriktiver: true->false ja, false->true NEIN. Hochheben abgelehnt.

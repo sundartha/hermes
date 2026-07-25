@@ -24,6 +24,7 @@
 // transliteriert (siehe P1-U3 oben), sie sind kein Prompt-Baustein im P5-Sinn.
 // KOMMENTARE bleiben ASCII (Repo-Konvention) - nur die Strings aendern sich.
 import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
+import { INBOUND_NOTICES } from "./inbound-notice.js";
 
 // Logische Voice-Profile (Strings) als Forward-Referenz fuer den Telephonie-Renderer
 // (Phase 3 mappt sie auf provider-spezifische Voice-Namen Polly/Azure). Im Bundle steht
@@ -154,6 +155,16 @@ export const LOCALES = Object.freeze({
       "Ich muss das Gespräch jetzt leider beenden. Vielen Dank für Ihre Zeit. Auf Wiederhören.",
     budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhören.",
     greetingDefault: DEFAULT_GREETING,
+    // Inbound-Pflichtsatz (GAP-14/O7): fest verdrahtet, durch kein Setting abschaltbar.
+    // GETRENNT von disclosure() (Outbound, Regel 2) - beide Achsen bleiben unabhaengig.
+    inboundNotice: INBOUND_NOTICES.de,
+    // Kuratierte Zusatz-Vorlagen NEBEN greetingDefault (Self-Service-Dropdown, kein
+    // Freitext). Der Pflichtsatz wird beim Katalogbau vorangestellt, nicht hier doppelt
+    // gepflegt (G5). DE-Wortlaut byte-identisch zu den frueheren GREETING_TEMPLATES[1..2].
+    greetingVariants: Object.freeze([
+      "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
+      "Hallo! Der KI-Assistent von {owner} hier. Wie kann ich Ihnen weiterhelfen?",
+    ]),
     // I2 (call-quality Impl-1): Turn-Fallback-Satz (claude.js agentTurn), falls das
     // Modell in allen 4 Tool-Loop-Runden KEINEN Text liefert. Vorher hart deutsch +
     // richtungsverkehrt (die Inbound-Formulierung "vielen Dank fuer Ihren Anruf" ging
@@ -202,8 +213,17 @@ export const LOCALES = Object.freeze({
     budgetExhaustedHangup: "Le budget de démonstration est épuisé. Au revoir.",
     // FR-Greeting-Default: {owner} wird zur Laufzeit ersetzt (wie DE). Nur fuer FR-Tenants
     // relevant; der Bestands-/Owner-Tenant traegt weiter den DE-Seed (kein Backfill).
+    // P3/WEB-04: das Terminversprechen ("convenir d'un rendez-vous") ist raus - seit P1b/E1
+    // hat der Agent kein Buchungs-Tool mehr, ein waehlbarer Text darf das nicht mehr zusagen.
     greetingDefault:
-      "Bonjour, vous êtes en relation avec l'assistant IA de {owner}. {owner} n'est pas disponible pour le moment. Je peux prendre un message ou convenir d'un rendez-vous. Comment puis-je vous aider ?",
+      "Bonjour, vous êtes en relation avec l'assistant IA de {owner}. {owner} n'est pas disponible pour le moment. Je peux prendre un message pour {owner}. Comment puis-je vous aider ?",
+    // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
+    // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
+    inboundNotice: INBOUND_NOTICES.fr,
+    greetingVariants: Object.freeze([
+      "Bonjour, vous êtes bien en ligne avec l'assistant IA de {owner}. Je prends note de votre message pour {owner}. Comment puis-je vous aider ?",
+      "Bonjour ! Ici l'assistant IA de {owner}. Comment puis-je vous aider ?",
+    ]),
     // I2: FR-Fallback (kuratiert, R8) - Anrede-neutral formuliert (kein tu/vous-Zwang),
     // richtungsabhaengig wie DE/EN.
     turnFallbackSpeech: {
@@ -246,8 +266,17 @@ export const LOCALES = Object.freeze({
     noSpeechFarewell: "I'm afraid I can't hear you. I'll try again later. Goodbye.",
     capFarewellSpeech: "I have to end the call now. Thank you for your time. Goodbye.",
     budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",
+    // P3/WEB-04: das Terminversprechen ("arrange an appointment") ist raus - seit P1b/E1
+    // hat der Agent kein Buchungs-Tool mehr, ein waehlbarer Text darf das nicht mehr zusagen.
     greetingDefault:
-      "Hi, this is the AI assistant of {owner}. {owner} can't take the call right now. I can take a message or arrange an appointment. How can I help?",
+      "Hi, this is the AI assistant of {owner}. {owner} can't take the call right now. I can take a message for {owner}. How can I help?",
+    // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
+    // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
+    inboundNotice: INBOUND_NOTICES.en,
+    greetingVariants: Object.freeze([
+      "Hello, you're through to {owner}'s AI assistant. I'll take a message for {owner}. How can I help?",
+      "Hi there! This is {owner}'s AI assistant. How can I help you?",
+    ]),
     // I2: EN-Fallback (kuratiert, R8), richtungsabhaengig wie DE/FR.
     turnFallbackSpeech: {
       inbound: "Alright, thank you for calling. Goodbye!",

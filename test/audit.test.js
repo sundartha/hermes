@@ -67,8 +67,11 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
     });
 
     await t.test("settings_update: nur Keys im Log, keine Werte", async () => {
+      // GAP-14: der Guard in updateSettings nimmt nur Greetings MIT Pflichtsatz an.
+      // Subjekt dieses Tests ist "keine WERTE im Log", nicht "jeder String ist schreibbar" -
+      // der Geheim-Token bleibt drin, beide Assertions bleiben unveraendert.
       const res = await postJson(`${srv.localUrl}/api/settings`, {
-        greeting: "GEHEIMER-FREITEXT",
+        greeting: "GEHEIMER-FREITEXT: Sie sprechen mit einer KI, das Gespräch wird transkribiert.",
         allowBooking: false,
       });
       assert.equal(res.status, 200);

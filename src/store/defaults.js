@@ -2,6 +2,10 @@
 // (json.js + pg.js) genutzt, damit "frischer pg-Zustand == frischer json-Zustand"
 // strukturell garantiert ist (eine Quelle statt zwei). Kein DB-/Datei-Zugriff hier.
 
+// GAP-14/O7: der Inbound-Pflichtsatz (Blatt-Modul, importiert selbst nichts - kein
+// Zyklus moeglich). Der geseedete DEFAULT_GREETING traegt ihn AT REST (s.u.).
+import { INBOUND_NOTICES, withInboundNotice } from "../i18n/inbound-notice.js";
+
 // Bootstrap-Tenant: in der Single-Tenant-Phase laeuft alles unter genau einem Tenant
 // (der "erste" Tenant, kein hartcodierter Owner-Sonderfall mehr - Owner-Removal P2a).
 // Benannte Konstante statt verstreutem Magic-String (von json/pg/state-ops/server
@@ -315,10 +319,16 @@ function nextWeekday(daysAhead, hour) {
 }
 
 // Default-Begruessung (erster Inbound-Satz). EINE Quelle (G5): defaultSettings()
-// UND die Self-Service-Vorlagen (self-service.js GREETING_TEMPLATES) referenzieren
+// UND die Self-Service-Vorlagen (self-service.js greetingTemplatesFor) referenzieren
 // sie, damit der geseedete Default IMMER eine waehlbare Vorlage bleibt (kein Drift).
-export const DEFAULT_GREETING =
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?";
+//
+// GAP-14: der geseedete Default traegt den Pflichtsatz bereits AT REST. Sonst waere der
+// Default der einzige Wert, den updateSettings nach dem Guard (state-ops) nicht mehr
+// zurueckschreiben koennte. Zusammensetzung statt zweiter Literal-Kopie des Satzes (G5).
+export const DEFAULT_GREETING = withInboundNotice(
+  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
+  INBOUND_NOTICES.de,
+);
 
 // ---- Geo-Location (F1): Default-Land + -Sprache ----
 // EINE Quelle (G5/G25) fuer die Geo-Defaults: defaultSettings().language, der

@@ -1,54 +1,109 @@
-// GAP-14 (tasks/i18n-tests/11-luecken-und-e2e.md): der Inbound-Pflichtsatz (KI-Hinweis +
-// Transkriptions-/Aufzeichnungshinweis) ist weder im gesprochenen Erst-Satz vorhanden noch
-// gegen ein Abschalten/Entfernen gesichert.
-//
-// Teil (a): Spawn-Server (Muster test/voice-greeting-tenant.test.js) - der erste gesprochene
-// Satz eines Inbound-Calls muss einen Pflicht-Marker fuer KI + Aufzeichnung/Transkription
-// tragen.
-// Teil (b): reiner Store-Test (Muster test/f1-geo-store.test.js) - updateSettings darf ein
-// Greeting OHNE diesen Marker nicht annehmen (fail-closed), auch wenn typeof passt.
+// Inbound-Pflichtsatz (ex GAP-14, tasks/i18n-tests/11-luecken-und-e2e.md): der erste
+// gesprochene Satz eines Inbound-Calls muss einen Pflicht-Marker fuer KI + Aufzeichnung/
+// Transkription tragen (Regel-2-Analogie fuer Inbound, s. src/i18n/inbound-notice.js).
+// Umbenannt in P3 (A3): der Name traegt die ID NICHT mehr am Anfang, sonst bliebe der
+// Test im test:gates-Lauf haengen (package.json config.i18nCatalogPattern).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 import { makeDefaultState, settingsFor, updateSettings } from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
+import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.js";
 
-// Pflicht-Marker: KI-Hinweis + Aufzeichnungs-/Transkriptionshinweis in EINEM Satz. Weder
-// DEFAULT_GREETING noch eine der drei GREETING_TEMPLATES traegt aktuell einen
-// Aufzeichnungs-/Transkriptionshinweis (nur den KI-Hinweis) - s. Ist-Stand-Beleg
-// tasks/i18n-tests/11-luecken-und-e2e.md:409-417.
-const MANDATORY_MARKER = /aufgezeichnet|wird transkribiert|mitgeschnitten/i;
+// Pflicht-Marker je Sprache statt einer deutschen Regex gegen den damaligen Default
+// (Pre-Mortem 5): nach dem P10-Flip loest ein Testfall OHNE gesetzte Sprache auf en auf -
+// eine DE-Regex waere dann rot, und der billigste Ausweg waere das Absenken der
+// Compliance-Assertion. Jeder Fall setzt seine Sprache deshalb EXPLIZIT.
+const CASES = [
+  ["de", INBOUND_NOTICES.de],
+  ["en", INBOUND_NOTICES.en],
+  ["fr", INBOUND_NOTICES.fr],
+];
 
-test("GAP-14 (a, SOLL rot): erster Inbound-Satz enthaelt einen Pflicht-Marker fuer KI + Aufzeichnung/Transkription", async () => {
-  const srv = await startServer({ seed: seedState({}) });
+for (const [language, notice] of CASES) {
+  test(`Inbound-Pflichtsatz: erster gesprochener Satz traegt KI- + Transkriptionshinweis (${language}) (ex GAP-14 a)`, async () => {
+    const srv = await startServer({ seed: seedState({ settings: { language } }) });
+    try {
+      const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+        method: "POST",
+        body: new URLSearchParams({
+          CallSid: "CAgap14",
+          From: "+4915112345678",
+          To: OWNER_TEST_NUMBER.e164,
+        }),
+      });
+      const body = await res.text();
+      assert.ok(
+        body.includes(notice),
+        `Pflichtsatz (${language}) fehlt im ersten gesprochenen Satz (Launch-Blocker): ${body}`,
+      );
+    } finally {
+      await srv.stop();
+    }
+  });
+}
+
+test("Inbound-Pflichtsatz: kein Doppelsatz, wenn das Greeting ihn bereits traegt", async () => {
+  const srv = await startServer({
+    seed: seedState({ settings: { greeting: DEFAULT_GREETING } }),
+  });
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
-        CallSid: "CAgap14",
+        CallSid: "CAgap14dup",
         From: "+4915112345678",
         To: OWNER_TEST_NUMBER.e164,
       }),
     });
     const body = await res.text();
-    assert.match(
-      body,
-      MANDATORY_MARKER,
-      `Pflicht-Marker (KI + Aufzeichnung/Transkription) fehlt im ersten gesprochenen Satz (Launch-Blocker): ${body}`,
-    );
+    const occurrences = body.split(INBOUND_NOTICES.de).length - 1;
+    assert.equal(occurrences, 1, `Pflichtsatz erscheint ${occurrences}x statt genau 1x: ${body}`);
   } finally {
     await srv.stop();
   }
 });
 
-test("GAP-14 (b, SOLL rot): updateSettings verwirft ein Greeting ohne Pflicht-Marker fail-closed", () => {
+test("Inbound-Pflichtsatz: updateSettings verwirft NUR das Greeting ohne Marker, der Rest des Patches laeuft durch (ex GAP-14 b)", () => {
   const s = makeDefaultState();
   const before = settingsFor(s, BOOTSTRAP_TENANT_ID).greeting;
-  updateSettings(s, BOOTSTRAP_TENANT_ID, { greeting: "Hallo." });
-  const after = settingsFor(s, BOOTSTRAP_TENANT_ID).greeting;
-  assert.equal(
-    after,
-    before,
-    "updateSettings MUSS ein Greeting ohne Pflicht-Marker (KI + Aufzeichnung) verwerfen (Launch-Blocker: heute passiert jeder String)",
-  );
+  const { changed } = updateSettings(s, BOOTSTRAP_TENANT_ID, {
+    greeting: "Hallo.",
+    agentName: "Neu",
+  });
+  const after = settingsFor(s, BOOTSTRAP_TENANT_ID);
+  assert.equal(after.greeting, before, "Greeting ohne Pflicht-Marker MUSS verworfen werden");
+  assert.equal(after.agentName, "Neu", "der uebrige Patch MUSS trotzdem durchlaufen");
+  assert.ok(changed.includes("agentName"), "agentName MUSS in changed stehen");
+  assert.ok(!changed.includes("greeting"), "greeting DARF NICHT in changed stehen");
+});
+
+test("Inbound-Pflichtsatz: ein Greeting MIT Marker wird angenommen (Gegenprobe)", () => {
+  const s = makeDefaultState();
+  const withMarker = `${INBOUND_NOTICES.de} Hallo, hier spricht Hermes.`;
+  const { changed } = updateSettings(s, BOOTSTRAP_TENANT_ID, { greeting: withMarker });
+  assert.equal(settingsFor(s, BOOTSTRAP_TENANT_ID).greeting, withMarker);
+  assert.ok(changed.includes("greeting"));
+});
+
+test("Inbound-Pflichtsatz: auch die Realtime-Engine rendert ihn vor dem Stream-Handoff", async () => {
+  const srv = await startServer({
+    env: { VOICE_ENGINE: "realtime" },
+    seed: seedState({}),
+  });
+  try {
+    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+      method: "POST",
+      body: new URLSearchParams({
+        CallSid: "CAgap14realtime",
+        From: "+4915112345678",
+        To: OWNER_TEST_NUMBER.e164,
+      }),
+    });
+    const body = await res.text();
+    assert.ok(body.includes(INBOUND_NOTICES.de), `Pflichtsatz fehlt im Realtime-Pfad: ${body}`);
+    assert.ok(body.includes('name="stream_token"'), `Stream-Handoff fehlt: ${body}`);
+  } finally {
+    await srv.stop();
+  }
 });

@@ -4,7 +4,7 @@
 // die in-process getestete Self-Service-Factory (injizierter pglite-Store) EINE
 // Quelle (G5/DIP) - kein Mismatch zwischen Test- und Produktions-Store.
 import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
-import { findTenant } from "./state-ops.js";
+import { findTenant, resolveCallLanguage } from "./state-ops.js";
 
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
 // und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
@@ -40,6 +40,14 @@ export function findActiveNumber(s, tenantId, provider) {
       n.status === NUMBER_STATUS.ACTIVE &&
       (provider === undefined || n.provider === provider),
   );
+}
+
+// Sprache eines Tenants OHNE laufenden Call (Self-Service-Ansicht, Greeting-Migration):
+// dieselbe Praezedenz wie im Anruf (resolveCallLanguage), mit der aktiven Nummer als
+// Geo-Anker - EINE Quelle (G5), damit die Vorlagen-Sprache im Dashboard nicht von der
+// Sprache abweicht, in der der Anruf spaeter tatsaechlich rendert.
+export function tenantLanguage(s, tenantId) {
+  return resolveCallLanguage(s, { tenantId, numberRecord: findActiveNumber(s, tenantId) });
 }
 
 // Existiert IRGENDEINE aktive Nummer im Store? Tenant-agnostisches Boot-Gate-Praedikat
