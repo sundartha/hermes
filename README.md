@@ -90,6 +90,15 @@ npm run check
 
 Prüft automatisch: Keys gültig, Twilio-Nummer + Webhooks korrekt, Allowlist-/Owner-Nummern im Trial verifiziert, ngrok-Tunnel zeigt auf dieses Gateway, OpenAI-Key (bei realtime). Erst demoen, wenn alles grün ist.
 
+### 3c. Tests
+
+```bash
+npm test          # Regressionsschutz, muss gruen sein
+npm run test:gates # i18n-Launch-Testkatalog, darf rot sein (sinkt Richtung 0 bis zum weltweiten Start)
+```
+
+Beide Laeufe partitionieren dieselbe Suite automatisch nach Katalog-ID im Testnamen (kein manuell gepflegter Ausschluss) — Details in `CLAUDE.md` unter "Befehle".
+
 ### 4. Twilio-Webhooks setzen
 
 Console → Phone Numbers → deine Nummer → **Voice Configuration**:

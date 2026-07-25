@@ -40,10 +40,31 @@ jobs:
       # anheben). Node-Coverage ist versionsabhaengig
       # (node 24 misst hier ~15 Punkte niedriger) -> Schwellen bewusst gegen die CI-Major
       # (22) geankert, nicht gegen die lokale node-Version.
+      #
+      # Laeuft ueber denselben Wrapper wie "npm test" (test/i18n-catalog-run.mjs regression),
+      # zusaetzliche node --test-Flags nach dem "--"-Trenner durchgereicht (G5: die
+      # Invocation - Flag-Name, Glob, Modus - steht damit an EINER Stelle, nicht hier UND im
+      # Wrapper dupliziert). Das klammert den i18n-Launch-Testkatalog aus (Muster aus
+      # package.json config.i18nCatalogPattern, EINE Quelle fuer npm test/test:gates/CI):
+      # der Katalog enthaelt gewollt rote Launch-Gate-Befunde, kein Regressionsfang
+      # (PLAN-I18N-TESTS.md 4.1), und riss diese Schwelle sonst bei jedem Push. Die
+      # Coverage-Differenz Regressionslauf vs. Volllauf ist dabei vernachlaessigbar (lokal
+      # node 26 gemessen, 2026-07-25: lines -0.07 / branches -0.08 / funcs -0.03 Punkte -
+      # weit innerhalb der 5-Punkte-Marge der Schwellen oben).
       - name: Coverage-Gate (unterschrittene Schwelle bricht den Build)
         run: |
-          node --test --experimental-test-coverage \
-            --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86 \
-            "test/*.test.js"
+          NODE_ENV=test node test/i18n-catalog-run.mjs regression -- \
+            --experimental-test-coverage \
+            --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86
+      # Eigener, ausdruecklich NICHT blockierender Schritt fuer den i18n-Launch-Testkatalog:
+      # "Kein roter Test in diesem Katalog ist ein Regressionsfang; alle sind Launch-Gates"
+      # (PLAN-I18N-TESTS.md 4.1). Rot heisst hier ein offener Produktbefund vor dem
+      # weltweiten Start, nicht ein kaputter Build - deshalb continue-on-error statt eines
+      # weiteren rot-auf-jedem-Push-Schritts. Der Schritt bleibt im Log sichtbar, damit die
+      # sinkende Rot-Zahl (heute: 85 von aktuell 114 Katalogtests) ueber die Zeit
+      # nachvollziehbar bleibt.
+      - name: i18n-Launch-Gates (informativ, blockiert den Build NICHT)
+        run: npm run test:gates
+        continue-on-error: true
       - name: Dependency-Audit (High-Severity bricht den Build)
         run: npm audit --audit-level=high
