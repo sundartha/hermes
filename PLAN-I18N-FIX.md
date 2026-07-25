@@ -715,13 +715,35 @@ haengen an der heutigen Signatur und muessen beim Bau mitgezogen werden (siehe E
 > ehrliche Zwischenlage**: `GAP-33` ist laut Abschnitt 6 die ID von **P7**, nicht von P5, und wird
 > von P7 aufgeloest (Tarif-Defaults + Budget-Kohaerenz).
 >
-> **Bindend fuer jede Umsetzung von P5:** `test/prod-config-smoke.test.js` behaelt seine
+> **Bindend fuer jede Umsetzung von P5 (B1):** `test/prod-config-smoke.test.js` behaelt seine
 > Praemisse - Absender ist die **Default-DID** (`OWNER_TEST_NUMBER`, US), nicht eine eigens
 > geseedete DE-Nummer. Wer den Absender tauscht, damit `GAP-33` gruen bleibt, hat nicht die
 > Regression behoben, sondern den einzigen Messpunkt fuer die ausgelieferte Live-Konfiguration
 > abgeschaltet (Verstoss gegen "keine Erwartung senken", Abschnitt 4). **`GAP-33` bleibt nach P5
 > rot und faellt erst in P7.** Die Tarif-Achse selbst gehoert in den eigenen
 > `test/cost-origin-axis.test.js`, wo beide Herkuenfte frei geseedet werden duerfen.
+>
+> **Bindend fuer jede Umsetzung von P5 (B2) - der Inbound-Satz haengt am Land der eigenen DID.**
+> Aus dem ersten Umsetzungsversuch (Safety-Review, Befund CORR-1): eine Inbound-Tarifierung, die
+> **unconditional** `voiceTariffDomesticCents` zurueckgibt, ist falsch. Sie unterstellt, die
+> eigene DID liege immer im Inland - live liegt sie fuer die Mehrheit der Tenants in den **USA**.
+> Ergebnis waere eine systematische Unterberechnung der Inbound-Minuten um rund das
+> Fuenfzehnfache (20 statt 300 ct/min), und `recordVoiceMinuteMeter` bucht diesen Wert unter
+> `PAYMENT_ENABLED` **live an Stripe** - ohne Richtungs-Guard, der es abfinge. Sollzustand:
+> der Inbound-Satz wird ueber **dieselbe** Inlands-Pruefung wie Outbound abgeleitet, mit der
+> eigenen DID an beiden Enden des Legs; nur eine DID, deren Land tatsaechlich in
+> `voiceTariffDomesticPrefixes` steht, bekommt den Inlandssatz, alle anderen den
+> Worst-Case-Default. Das ist genau die Lesart von O3b ("Beleg zum Satz des **DID-Landes**")
+> zusammen mit O6 ("der Pauschalwert greift nur, wo kein echter Satz ermittelbar ist").
+> **Der zugehoerige Test in `test/cost-origin-axis.test.js` muss fuer eine US-DID den
+> Default-Satz erwarten** - ein Test, der dort den Inlandssatz festschreibt, zementiert den
+> Fehler, statt ihn zu fangen.
+>
+> **Bindend fuer jede Umsetzung von P5 (B3):** dieser Abschnitt ist **Owner-Fassung**. Die
+> umsetzende Phase aendert `PLAN-I18N-FIX.md` **nicht** - weder um ein Abnahmekriterium
+> abzuschwaechen noch um eine eigene Abweichung nachtraeglich zu legitimieren. Abweichungen
+> gehoeren in `deviations` und in den Phasenreport, nie in die Spezifikation, an der die Phase
+> gemessen wird.
 
 **Abnahme.** ORIG-01, ORIG-02, ORIG-03 nicht mehr in der Rot-Liste (42 -> 39). `npm test` gruen -
 `test/prod-config-smoke.test.js` bleibt bei seiner Live-Praemisse (Default-US-DID) und `GAP-33`
