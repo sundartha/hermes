@@ -1184,3 +1184,93 @@ test("T-tpb-02: Dev-Login bindet den sub ebenfalls (bindSub ist UNCONDITIONAL, a
     await new Promise((r) => server.close(r));
   }
 });
+
+// ---- WEB-11 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:294) ----
+// CSRF-Fehlerantwort bei fehlgeschlagenem OIDC-State ist unuebersetztes Deutsch.
+//
+// SOLL (rot): der Body soll sprachneutral sein (kein "Ungueltige..."), nicht der deutsche
+// Klartext aus rejectCsrf (src/web-auth.js:115-117). Reproduziert dasselbe Szenario wie
+// "GET /auth/callback mit FALSCHEM state -> 400" oben, hier mit einer zusaetzlichen
+// Body-Assertion statt nur dem Statuscode.
+
+test("WEB-11 (SOLL rot): CSRF-State-Fehlantwort ist sprachneutral, kein 'Ungueltige...'", async () => {
+  const { deps } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue("the-real-state", SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=attacker-state`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 400);
+    assert.doesNotMatch(
+      res.body,
+      /Ungueltige/,
+      `SOLL: CSRF-Antwort muss sprachneutral sein (war "${res.body}")`,
+    );
+  } finally {
+    await srv.close();
+  }
+});
+
+// ---- WEB-12 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:313) ----
+// Anmeldung-fehlgeschlagen-Fehler (500 UND 401) sind deutscher Klartext.
+//
+// SOLL (rot): beide Fehlerantworten (authorizeUrl wirft -> 500, exchange wirft -> 401)
+// sollen sprachneutral/englisch sein, nicht "Anmeldung fehlgeschlagen" (src/web-auth.js:223,284).
+
+test("WEB-12a (SOLL rot): GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein 'Anmeldung fehlgeschlagen'", async () => {
+  const { deps } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => {
+        throw new Error("boom");
+      },
+      exchange: async () => ({ claims: { sub: "x", email: "y@z" } }),
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const res = await rawGet(`${srv.base}/auth/login`);
+    assert.ok(res.status >= 500 && res.status < 600);
+    assert.doesNotMatch(
+      res.body,
+      /Anmeldung fehlgeschlagen/,
+      `SOLL: Fehlertext muss sprachneutral sein (war "${res.body}")`,
+    );
+  } finally {
+    await srv.close();
+  }
+});
+
+test("WEB-12b (SOLL rot): GET /auth/callback bei exchange-Fehler -> 401, kein 'Anmeldung fehlgeschlagen'", async () => {
+  const { deps } = fakeDeps({
+    oidc: {
+      authorizeUrl: async () => "https://idp.test/authorize",
+      exchange: async () => {
+        throw new Error("boom");
+      },
+    },
+  });
+  const srv = await mountRouter(deps);
+  try {
+    const state = "state-xyz";
+    const cookies = [
+      `oauth_state=${encodeURIComponent(signValue(state, SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+      `oidc_nonce=${encodeURIComponent(signValue("nonce-abc", SECRET))}`,
+    ].join("; ");
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=${state}`, {
+      Cookie: cookies,
+    });
+    assert.equal(res.status, 401);
+    assert.doesNotMatch(
+      res.body,
+      /Anmeldung fehlgeschlagen/,
+      `SOLL: Fehlertext muss sprachneutral sein (war "${res.body}")`,
+    );
+  } finally {
+    await srv.close();
+  }
+});
