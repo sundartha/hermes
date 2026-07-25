@@ -201,7 +201,7 @@ P5 -> P7 ist der kritische Pfad, an dem der Weltstart haengt - nicht die Sprachk
 | **O4** | **Reset UND Reaktivierung haengen an derselben Bedingung**: `subscription.status` aktiv/trialing UND bezahlte letzte Rechnung. Alle uebrigen bleiben gesperrt UND ihr Verbrauchszaehler wird NICHT zurueckgesetzt; Audit-Liste. Jede Reaktivierung schreibt Audit und loest eine Plattform-SMS aus. Eigener Test: Perioden-Wechsel mit `past_due` setzt die Achse NICHT zurueck. | GAP-01 | nein |
 | **O5** | **Das Stundenlimit gilt ausschliesslich pro Tenant. Es gibt KEINE globale Plattformbremse und auch keinen globalen Alarm.** Begruendung des Owners: ein plattformweites Anruflimit ist ein Skalierungs-Bremsklotz. Der Kill-Switch `OUTBOUND_FROZEN` bleibt unberuehrt und ist der verbleibende Not-Aus. | GAP-10 | **JA, und ausdruecklich gegen die Empfehlung.** Das ist eine bewusste Abweichung von Absoluter Regel 1 (Stundenlimit als Gate) - getragenes Risiko, siehe 7.7. Der Umbau selbst bleibt noetig: `MAX_CALLS_PER_HOUR` ist heute BEIDES (global + effektiver Pro-Tenant-Default). Ein Profil mit `maxCallsPerHour: 0` muss nach dem Umbau weiterhin 0 haben. |
 | **O6** | **`tariffCentsPerMin` bekommt Absender UND Ziel**: gleiches Land = Inlandssatz, verschiedene Laender = Auslandssatz. Live-Messung und Nachkorrektur bleiben unveraendert. **Keine rollende Selbstkalibrierung** (Owner-Entscheidung 3 vom 2026-07-20 bleibt). **`MAX_CALL_DURATION_CAP_S` bleibt bei 300 s und bleibt Code-Konstante** - kein Senken, keine Env-Variable. **`VOICE_TARIFF_DEFAULT_CENTS` wird NICHT gesenkt**; der Pauschalwert greift nur noch, wo kein echter Satz ermittelbar ist. | GAP-32, GAP-33, ORIG-01 | nein - aber die Begruendung hat sich geaendert, siehe Praemisse P-B. |
-| **O7** | **Fester Pflicht-Praefix je Sprache (de/en/fr)**, nicht abschaltbar, wird nur vorangestellt wenn der Marker im Greeting fehlt - analog zum Outbound-Offenlegungssatz. Settings-Patch ohne Marker wird **selektiv** abgelehnt (nur das Greeting-Feld faellt). Bestandsgreetings werden einmalig migriert. **Der genaue Wortlaut ist noch nicht vorgegeben** - die naechste Session schlaegt je Sprache einen vor und legt ihn dem Owner zur Freigabe vor, BEVOR sie ihn fest verdrahtet. | GAP-14, WEB-04 | nein. Die Migration betrifft durch P-A nur eigene Daten. |
+| **O7** | **Fester Pflicht-Praefix je Sprache (de/en/fr)**, nicht abschaltbar, wird nur vorangestellt wenn der Marker im Greeting fehlt - analog zum Outbound-Offenlegungssatz. Settings-Patch ohne Marker wird **selektiv** abgelehnt (nur das Greeting-Feld faellt). Bestandsgreetings werden einmalig migriert. **Den genauen Wortlaut formuliert die umsetzende Session je Sprache selbst** (Owner-Nachtrag 2026-07-25: kein Freigabe-Gate, Recherche erlaubt, jederzeit aenderbar) und haelt ihn im Phasenreport fest. | GAP-14, WEB-04 | nein. Die Migration betrifft durch P-A nur eigene Daten. |
 | **O8** | **IP-Geolokation** bestimmt das Land beim Web-Login. | LANG-02, E2E-04, FMT-28 | **JA.** Empfohlen war aktive Abfrage plus DID-Vorwahl. Getragenes Risiko: Reisende und VPN-Nutzer bekommen dauerhaft ein falsches Land, mit Wirkung auf Sprache, Tarif und DID-Land - und der Fehler sieht spaeter wie eine Kundenangabe aus. Siehe 7.8. `maxmind` liegt laut Projektstand bereits lokal vor. |
 | **O9** | **Landwechsel wird vorerst verboten**: stabiler Fehlercode 409 mit Verweis auf den Support statt des heutigen stillen 200-OK-No-Op. "Strikt eine Nummer pro Tenant" bleibt unangetastet. | E2E-01 | nein |
 | **O10** | **Das Zeitzonen-Feld kommt** - der Agent muss wissen, wie spaet es beim Tenant ist. **Ein Anrufzeit-Gate kommt NICHT** (LAW-07 bleibt abgelehnt). Ein Test pinnt, dass **kein** Gate-Modul das Feld liest. Ableitung aus dem DID-Land. | FMT-28 | nein |
@@ -211,12 +211,21 @@ P5 -> P7 ist der kritische Pfad, an dem der Weltstart haengt - nicht die Sprachk
 
 ### Was nach dieser Runde noch offen ist
 
-Zwei Punkte, die keine Entscheidung brauchen, sondern eine Handlung bzw. eine Vorlage:
+**Beide Punkte sind seit dem 2026-07-25 erledigt. Es blockiert keine Phase mehr.**
 
-1. **`VOICE_TARIFF_DEFAULT_CENTS` im Dashboard ablesen** (aus O1 offengeblieben). Vorbedingung
-   fuer P7, weil der GAP-33-402 sonst weiter gegen den Blueprint-Wert `300` gemessen wird.
-2. **Wortlaut des Inbound-Pflichthinweises je Sprache** (aus O7). Die naechste Session legt einen
-   Vorschlag vor; verdrahtet wird er erst nach Freigabe.
+1. ~~**`VOICE_TARIFF_DEFAULT_CENTS` im Dashboard ablesen**~~ - **abgelesen: die Variable existiert
+   im Render-Dashboard NICHT.** Der Wert laeuft auf dem Code-Default `300`; der GAP-33-402 ist
+   damit live echt, nicht blueprint-bedingt. Vollstaendige Rechnung in Abschnitt 2a, **P-B1**.
+   P7 hat damit keine offene Vorbedingung mehr.
+2. ~~**Wortlaut des Inbound-Pflichthinweises je Sprache**~~ - **der Wortlaut ist an die umsetzende
+   Session delegiert, es gibt KEIN Freigabe-Gate.** Owner woertlich: *"Wortlaut moechte ich, dass
+   die Session das selber macht, die soll sich ja was selber ausdenken. Das kann man ja jederzeit
+   aendern."* Recherche ist ausdruecklich erlaubt. Die umsetzende Phase (P3) formuliert je Sprache
+   (de/en/fr) selbst und **haelt den gewaehlten Wortlaut im Phasenreport fest**; sie fragt nicht
+   zurueck und wartet auf nichts. Unveraendert bindend bleiben nur die zwei Randbedingungen: der
+   Satz ist **nicht abschaltbar** und **fest gerendert, nicht gepromptet** (kein Modell-Ermessen,
+   analog zum Outbound-Offenlegungssatz), und er wird nur vorangestellt, wenn der Marker im
+   Greeting fehlt.
 
 Die urspruengliche Fragefassung dieser Tabelle - mit Empfehlung, Folgen je Option und
 blockierter Phase - steht in der Git-Historie dieses Dokuments (Commit `80108b3`).
@@ -506,10 +515,14 @@ Freitext) bleibt unangetastet - er ist ein Missbrauchsschutz, keine Sprachentsch
 **Abnahme zusaetzlich:** ein Test belegt, dass ein Tenant mit `language='en'` mindestens eine
 waehlbare Vorlage bekommt und dass `selfServicePatch` sie akzeptiert.
 
-**Vorbedingung.** O7 beantwortet (Wortlaut, selektiv/total, Migration). **A5 geklaert:** ueber
-welchen Kanal entsteht das gesprochene Greeting live - `voice.js`/`defaults.js` oder die
-Telnyx-Assistant-Konfiguration? WEB-04 allein ist ohne Rueckfrage umsetzbar und kann vorgezogen
-werden, falls O7 haengt.
+**Vorbedingung - keine mehr offen.** O7 ist vollstaendig beantwortet (selektiv, Migration), und
+seit dem Owner-Nachtrag 2026-07-25 gilt das auch fuer den Wortlaut: **diese Phase formuliert ihn
+je Sprache (de/en/fr) selbst, ohne Rueckfrage und ohne Freigabe-Gate**, darf dafuer recherchieren
+und haelt den gewaehlten Wortlaut im Phasenreport fest (Abschnitt 3, "Was nach dieser Runde noch
+offen ist", Punkt 2). Bindend bleiben nur: nicht abschaltbar, fest gerendert statt gepromptet,
+und nur vorangestellt wenn der Marker im Greeting fehlt. **A5 geklaert:** ueber welchen Kanal
+entsteht das gesprochene Greeting live - `voice.js`/`defaults.js` oder die
+Telnyx-Assistant-Konfiguration?
 
 **Pre-Mortem.**
 1. Der Pflichtsatz wurde als harter Praefix vor JEDES Greeting gesetzt. Kunden, die ihn bereits
