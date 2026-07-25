@@ -175,14 +175,43 @@ const hourWindowStart = () => new Date(Date.now() - HOUR_MS).toISOString();
 // auf 400.
 export const isTrunkZeroFormatError = (to) => !isDenied(to) && hasTrunkZeroAfterCountryCode(to);
 
-// Worst-Case-Minutentarif (GANZZAHL Cents/min) des Ziels (outbound-p1c, Kosten-Achse).
+// Traegt eine Nummer diese Vorwahl? Nicht-String (fehlende Herkunft aus einer DB-Zeile)
+// -> nein. Das ist die EINE fail-closed-Kante der Kosten-Achse (P5/ORIG-01): wer keine
+// Herkunft liefert, bekommt kein Inland. EXPORT, weil der Drift-Waechter
+// (billing/cost-calibration.js) dieselbe Praefix-Frage stellt und sie nicht zweitfassen soll.
+export const hasCountryPrefix = (number, prefix) =>
+  typeof number === "string" && number.startsWith(prefix);
+
+// Die getroffene Inlands-Vorwahl dieser Nummer, sonst null. Liefert den TREFFER statt
+// true/false (Muster deniedPrefix): "Inland" heisst DIESELBE Vorwahl an beiden Enden, dafuer
+// braucht es den Wert. BEWUSST NICHT matchesPrefix: das kennt die "*"-Wildcard des
+// Land-Gates - mit ALLOWED_COUNTRY_CODES="*" (Live-Zustand) waere sonst jedes Ziel weltweit
+// "Inland" und damit 20 statt 300 ct/min.
+function domesticPrefixOf(number) {
+  return defaultConfig.billing.voiceTariffDomesticPrefixes.find((p) => hasCountryPrefix(number, p)) ?? null;
+}
+
+// Herkunfts-Achse (P5, ORIG-01/02): ein Leg ist nur INLAND, wenn Ziel UND Absender dieselbe
+// bekannte Inlands-Vorwahl tragen. Verschiedene Laender -> Ausland; ein Land OHNE gemessenen
+// Inlandssatz (z.B. +1) -> ebenfalls Ausland, denn der guenstige Satz ist fuer +49/+33/+44
+// erhoben, nicht fuer "irgendwo gleich" (O6: der Pauschalwert greift nur, wo kein echter
+// Satz ermittelbar ist).
+export function isDomesticLeg(to, from) {
+  const toPrefix = domesticPrefixOf(to);
+  return toPrefix !== null && toPrefix === domesticPrefixOf(from);
+}
+
+// Worst-Case-Minutentarif (GANZZAHL Cents/min) EINES Legs (outbound-p1c + P5, Kosten-Achse).
 // EINE Kosten-Quelle (G5): Vorab-Reservierung, Budget-Reconcile UND Stripe-Voice-Meter.
-// Inlands-Vorwahl -> guenstiger Inlandstarif, alles andere -> Worst-Case-Default. to ist an
-// der Aufrufstelle bereits E.164-validiert (numberGateError). Prefix-Match wie matchesPrefix.
-// Liest das config-Singleton (defaultConfig) - in Produktion dasselbe Objekt wie das in
-// die Factory injizierte config; der Reserve-Betrag wird im Unit-Test nicht asserted.
-export function tariffCentsPerMin(to) {
-  return defaultConfig.billing.voiceTariffDomesticPrefixes.some((p) => to.startsWith(p))
+// from ist PFLICHT ohne Default (zwei Positionsstellen, Function.length === 2): ein
+// vergessener Aufrufer faellt beim Lesen auf, und zur Laufzeit greift der fail-closed-Weg
+// ueber hasCountryPrefix - fehlende Herkunft ergibt den TEUERSTEN Satz, nie den Inlandssatz.
+// Ein Fehler erzeugt damit sichtbare Ueberbepreisung, nie stillen Verlust.
+// to ist an der Aufrufstelle bereits E.164-validiert (numberGateError). Liest das
+// config-Singleton (defaultConfig) - in Produktion dasselbe Objekt wie das in die Factory
+// injizierte config.
+export function tariffCentsPerMin(to, from) {
+  return isDomesticLeg(to, from)
     ? defaultConfig.billing.voiceTariffDomesticCents
     : defaultConfig.billing.voiceTariffDefaultCents;
 }
@@ -727,12 +756,13 @@ export function makeOutboundGates({
     },
     // Derivations-Gate: Max-Dauer (Body-Override, gecappt auf MAX_CALL_DURATION_CAP_S) +
     // Reserve-Betrag (Worst-Case-Tarif * aufgerundete Minuten) fuer das folgende
-    // reserve_budget-Gate.
+    // reserve_budget-Gate. Herkunft = die aktive Absender-DID aus resolve_outbound
+    // (steht in der Kette VOR diesem Gate und lehnt ohne aktive Tenant-Nummer mit 403 ab).
     {
       name: "compute_reserve",
       run(ctx) {
         ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, config);
-        ctx.reserveCents = tariffCentsPerMin(ctx.to) * Math.ceil(ctx.maxDur / SECONDS_PER_MINUTE);
+        ctx.reserveCents = tariffCentsPerMin(ctx.to, ctx.fromNumber) * Math.ceil(ctx.maxDur / SECONDS_PER_MINUTE);
         return null;
       },
     },

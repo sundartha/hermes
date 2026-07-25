@@ -5,8 +5,8 @@
 //   1) reconcileOutboundVoiceBudget laeuft bei JEDEM Call-Ende (auch ohne PAYMENT_ENABLED)
 //      und mutiert persistent den Tenant-Budget-Bucket (costCents im Store),
 //   2) der direction-Guard: ein INBOUND-Call darf NICHT abziehen (byte-identisch),
-//   3) tariffCentsPerMin(call.to) am Reconcile-Pfad: Inland vs. International buchen
-//      unterschiedliche Cents (der Tarif ist am Ziel gekoppelt, nicht pauschal).
+//   3) der Leg-Tarif (callTariffCentsPerMin) am Reconcile-Pfad: Inland vs. International
+//      buchen unterschiedliche Cents (der Tarif haengt am Leg, nicht pauschal).
 //
 // Deterministisch ohne echtes Netz: die Calls sind mit fixen answeredAt/endedAt (5 Min
 // Abstand) und status="completed" geseedet -> endCallRecord laesst sie unberuehrt (nur
@@ -16,7 +16,7 @@
 // Platte. Muster wie voice-status-lifecycle.test.js (echte Route gegen den Kindprozess).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
+import { startServer, seedState, seedCall, waitForLog, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Fixe Abrechnungsfenster: answeredAt..endedAt = genau BILLED_MINUTES (ceil-stabil, da
@@ -70,6 +70,9 @@ test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound zieht nicht
           id: "rc_out_dom",
           direction: "outbound",
           to: DOMESTIC_TO,
+          // Absender mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
+          // BEIDEN Enden (seedCall-Default ist die US-DID = Auslands-Leg).
+          from: DOMESTIC_TEST_NUMBER.e164,
           status: "completed",
           answeredAt: ANSWERED_AT,
           endedAt: ENDED_AT,
@@ -99,8 +102,8 @@ test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound zieht nicht
     const afterDomestic = BILLED_MINUTES * DOMESTIC_TARIFF_CENTS;
     assert.equal(ownerCostCents(srv), afterDomestic, "Outbound Inland: Minuten x Inlandstarif gebucht");
 
-    // (3) OUTBOUND International: derselbe Pfad nutzt tariffCentsPerMin(call.to) -> der
-    // teurere Default-Tarif kommt OBENDRAUF (beweist die Kopplung an call.to, nicht pauschal).
+    // (3) OUTBOUND International: derselbe Pfad tarifiert das Leg -> der teurere
+    // Default-Tarif kommt OBENDRAUF (beweist die Kopplung ans Leg, nicht pauschal).
     await completeCall(srv, "rc_out_intl");
     const afterIntl = afterDomestic + BILLED_MINUTES * DEFAULT_TARIFF_CENTS;
     assert.equal(ownerCostCents(srv), afterIntl, "Outbound International: Default-Tarif additiv gebucht");

@@ -8,7 +8,7 @@
 // Call endet als 500 (alle Gates passiert, bis Originate), eine Reserve-Sperre als 402.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const DOMESTIC = "+4915112345678"; // DE-Mobil -> Inlandstarif (guenstig)
 const INTL = "+12025550123"; // US -> Worst-Case-Default-Tarif (teuer)
@@ -25,7 +25,10 @@ test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert"
   // echt ueber der abgeleiteten Business-Plan-Decke von 900 ct liegen, sonst verweigert der
   // Boot-Guard, plan_cap_inert). Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180 s) =
   // 1200 ct = 12 EUR > 10-EUR-Cap -> Fehlbetrag 2.00 EUR. Inland 20 ct/min x 3 = 60 ct < Cap.
+  // Absender-DID mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
+  // BEIDEN Enden - mit der US-Default-DID waere auch DOMESTIC ein Auslands-Leg.
   const srv = await startServer({
+    ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       ALLOWED_NUMBERS: `${DOMESTIC},${INTL}`,
       ALLOWED_COUNTRY_CODES: "*",

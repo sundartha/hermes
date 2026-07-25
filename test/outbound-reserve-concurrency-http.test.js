@@ -5,7 +5,7 @@
 // FAKE_ORIGINATE haelt den Test netzfrei (kein echter Twilio-Client).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const post = (url, to) =>
   fetch(`${url}/api/calls`, {
@@ -18,8 +18,11 @@ test("OUT-05 F2: zwei gleichzeitige place_call gegen engen Cap -> genau 1x200, 1
   // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (LCT P6: muss echt ueber der abgeleiteten
   // Business-Plan-Decke von 900 ct liegen, sonst verweigert der Boot-Guard, plan_cap_inert).
   // Inlandstarif 200 ct/min x ceil(180/60)=3 min = 600 ct je Reserve; zwei Reserven
-  // zusammen (1200 ct) reissen den Cap, eine einzelne (600 ct) nicht.
+  // zusammen (1200 ct) reissen den Cap, eine einzelne (600 ct) nicht. Absender-DID mit +49,
+  // damit der Inlandstarif die +49-Ziele ueberhaupt tarifiert (P5: gleiche Vorwahl an
+  // beiden Enden).
   const srv = await startServer({
+    ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "200",

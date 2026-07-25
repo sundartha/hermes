@@ -6,7 +6,7 @@
 // rausgeht (Muster wie outbound-reconcile-finishcall.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForLog } from "./helpers.js";
+import { startServer, waitForLog, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const post = (url, to) =>
   fetch(`${url}/api/calls`, {
@@ -16,7 +16,10 @@ const post = (url, to) =>
   });
 
 test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async () => {
+  // Absender-DID mit +49, damit VOICE_TARIFF_DOMESTIC_CENTS die +49-Ziele ueberhaupt
+  // tarifiert (P5: Inlandssatz nur bei gleicher Vorwahl an beiden Enden).
   const srv = await startServer({
+    ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       // LCT P6: MAX_BUDGET_EUR muss echt ueber der abgeleiteten Business-Plan-Decke
       // (900 ct) liegen, sonst verweigert der Boot-Guard (plan_cap_inert). Reserve pro

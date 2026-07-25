@@ -103,9 +103,10 @@ function detectProduction() {
   return !!process.env.RENDER_EXTERNAL_URL;
 }
 
-// Ziel-Vorwahlen mit Inlands-Tarif (E.164). BEWUSST eigenstaendig, NICHT an das Land-Gate
+// Vorwahlen mit Inlands-Tarif (E.164). BEWUSST eigenstaendig, NICHT an das Land-Gate
 // (allowedCountryCodes) gekoppelt: das Gate wird in Phase 4 '*' (weltweit), der Inlands-
-// Tarif bleibt auf diesen Vorwahlen. Alles andere -> voiceTariffDefaultCents (Worst-Case).
+// Tarif bleibt auf diesen Vorwahlen. Inland heisst DIESELBE dieser Vorwahlen an Ziel UND
+// Absender (P5, Herkunfts-Achse); alles andere -> voiceTariffDefaultCents (Worst-Case).
 const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
 
 // tenant-prolif-d: Tag->ms-Bruecke fuer RELEASE_GRACE_DAYS (G25/G35: benannte Konstante,
@@ -466,8 +467,9 @@ const rawConfig = {
   // Voice-Minuten-Tarif (GANZZAHL Cents/min, G26). EINE Kosten-Quelle (G5): speist die
   // Vorab-Reservierung (Worst-Case vor dem Dial), den Budget-Reconcile (Ist bei Call-Ende)
   // UND den Stripe-Voice-Meter (recordVoiceMinuteMeter) - loest das fruehere
-  // voiceMinuteCostCents auf. Inland (voiceTariffDomesticPrefixes) guenstig, alles andere
-  // Worst-Case-Default. Konservativ gesetzt; live mit dem Provider-Tarif abgleichen.
+  // voiceMinuteCostCents auf. Inland = DIESELBE dieser Vorwahlen (voiceTariffDomesticPrefixes)
+  // an Ziel UND Absender; alles andere Worst-Case-Default. Konservativ gesetzt; live mit
+  // dem Provider-Tarif abgleichen.
   voiceTariffDomesticCents: numEnv("VOICE_TARIFF_DOMESTIC_CENTS", process.env.VOICE_TARIFF_DOMESTIC_CENTS, {
     fallback: 20,
     min: 0,

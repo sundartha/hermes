@@ -4,7 +4,7 @@
 // Backstop-Timer (maxDur + RESERVE_RELEASE_GRACE_MS) feuert und sie eigenstaendig freigibt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
+import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const MAX_DURATION_S = 1;
 const GRACE_MS = 200;
@@ -15,8 +15,10 @@ test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callbac
   // Reserve pro Call: 600 ct/min x ceil(1/60)=1 min = 600 ct; zwei Reserven (1200 ct)
   // reissen den 1000-ct-Cap (MAX_BUDGET_EUR=10 - LCT P6: muss echt ueber der abgeleiteten
   // Business-Plan-Decke von 900 ct liegen, sonst verweigert der Boot-Guard, plan_cap_inert),
-  // eine einzelne nicht.
+  // eine einzelne nicht. Absender-DID mit +49, damit VOICE_TARIFF_DOMESTIC_CENTS die
+  // +49-Ziele ueberhaupt tarifiert (P5: Inlandssatz nur bei gleicher Vorwahl an beiden Enden).
   const srv = await startServer({
+    ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       MAX_BUDGET_EUR: "10",
       VOICE_TARIFF_DOMESTIC_CENTS: "600",

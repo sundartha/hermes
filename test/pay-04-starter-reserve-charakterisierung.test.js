@@ -38,12 +38,13 @@ import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 
 const TENANT_A = "t_pay04_starter";
 const NON_DOMESTIC_TARGET = "+15551234567"; // kein +49/+33/+44-Praefix
+const US_OWN_DID = "+15005550006"; // ausgelieferte Default-DID (ebenfalls ohne Inlands-Vorwahl)
 
 test("Charakterisierung PAY-04: Starter-Decke (300 ct) uebersteigt die Worst-Case-Reserve (1500 ct) schon bei 0 Ist-Verbrauch", () => {
   const capCents = planCapCents("starter", { voiceCapRateCentsPerMin: 6 });
   assert.equal(capCents, 300, "Vorbedingung: Starter-Plan-Decke (render.yaml:287-291-Formel)");
 
-  const reserveCents = tariffCentsPerMin(NON_DOMESTIC_TARGET) * Math.ceil(MAX_CALL_DURATION_CAP_S / 60);
+  const reserveCents = tariffCentsPerMin(NON_DOMESTIC_TARGET, US_OWN_DID) * Math.ceil(MAX_CALL_DURATION_CAP_S / 60);
   assert.equal(
     reserveCents,
     1500,

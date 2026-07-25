@@ -14,7 +14,7 @@
 // Leeres Transkript -> finishCall returnt VOR jedem LLM-Call (kein Anthropic-Mock noetig).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog } from "./helpers.js";
+import { startServer, seedState, seedCall, waitForLog, DOMESTIC_TEST_NUMBER } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Fixes Abrechnungsfenster: answeredAt..endedAt = genau BILLED_MINUTES (Muster
@@ -56,6 +56,9 @@ test("finishCall bucht Voice-Minuten genau einmal ueber einen Prozess-Neustart h
         id: CALL_ID,
         direction: "outbound",
         to: DOMESTIC_TO,
+        // Absender mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
+        // BEIDEN Enden (seedCall-Default ist die US-DID = Auslands-Leg).
+        from: DOMESTIC_TEST_NUMBER.e164,
         status: "completed",
         answeredAt: ANSWERED_AT,
         endedAt: ENDED_AT,

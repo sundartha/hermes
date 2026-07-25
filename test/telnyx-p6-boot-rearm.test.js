@@ -9,7 +9,14 @@
 // Muster/Tarif-Setup gespiegelt von max-duration-rearm.test.js (json-Backend).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  waitForLog,
+  waitForStoreState,
+  DOMESTIC_TEST_NUMBER,
+} from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const DOMESTIC_TARIFF_CENTS = 20;
@@ -38,6 +45,9 @@ test("R1: Boot-Re-Arm terminalisiert einen C-Telnyx-Zombie (callControlId, kein 
           id: "zombie_cc",
           direction: "outbound",
           to: DOMESTIC_TO,
+          // Absender mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
+          // BEIDEN Enden (seedCall-Default ist die US-DID = Auslands-Leg).
+          from: DOMESTIC_TEST_NUMBER.e164,
           status: "active",
           provider: "telnyx",
           twilioSid: null,
