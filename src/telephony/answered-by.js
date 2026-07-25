@@ -16,3 +16,10 @@ export function classifyAnsweredBy(raw) {
   if (raw === "human") return ANSWERED_BY.HUMAN;
   return ANSWERED_BY.UNKNOWN;
 }
+
+// GAP-21: Ergebnis der Anrufbeantworter-Erkennung aus dem /voice/outbound-Body. Beide
+// Adapter (Twilio + Telnyx/TeXML) liefern denselben Feldnamen `AnsweredBy` - EINE Quelle
+// (G5, Review-Fix Runde 2) statt einer byte-identischen Kopie in beiden webhook-events.js.
+export function parseAnsweredBy(body) {
+  return classifyAnsweredBy(body.AnsweredBy);
+}

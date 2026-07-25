@@ -3,7 +3,7 @@
 // Tests pinnen die Ausgabe byte-identisch). Twilio kennt weder Diagnose-Felder noch
 // Speak-Command-Events -> diagnostics bleibt leer, parseSpeakOutcome liefert immer NONE.
 import { SPEAK_OUTCOME } from "../telnyx/speak-events.js";
-import { classifyAnsweredBy } from "../../answered-by.js";
+import { parseAnsweredBy } from "../../answered-by.js";
 
 // Erkanntes Speech-Ergebnis aus dem /voice/turn-Body. Twilio sendet `SpeechResult`.
 export function parseSpeechResult(body) {
@@ -23,11 +23,9 @@ export function parseSpeakOutcome() {
 }
 
 // GAP-21: Ergebnis der Anrufbeantworter-Erkennung aus dem /voice/outbound-Body. Twilio
-// liefert `AnsweredBy` (dieselbe Feldform spiegelt TeXML). classifyAnsweredBy ist die
-// EINE Klassifikations-Quelle (G5, src/telephony/answered-by.js).
-export function parseAnsweredBy(body) {
-  return classifyAnsweredBy(body.AnsweredBy);
-}
+// liefert `AnsweredBy` (dieselbe Feldform spiegelt TeXML). Reine Delegation an
+// answered-by.js (G5, Review-Fix Runde 2) - KEINE Logik-Kopie.
+export { parseAnsweredBy };
 
 /** @type {import("../../ports.js").WebhookEvents} */
 export const twilioWebhookEvents = {

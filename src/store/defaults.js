@@ -508,6 +508,23 @@ const NANP_NSN_PATTERN = /^[2-9]\d{2}[2-9]\d{6}$/;
 // aus einer nationalen Schreibweise eine E.164-Nummer materialisiert werden.
 const DIALING_HOME_COUNTRY_CODES = [...TRUNK_ZERO_COUNTRY_CODES, NANP_COUNTRY_CODE];
 
+// ISO-3166-1-alpha-2-Mitgliedslaender des NANP (Nordamerika + karibische Mitglieder).
+// Fixe Telefonie-Tatsache (Nummerierungsplan-Mitgliedschaft), NICHT konfigurierbar
+// (G35 n.z., wie TRUNK_ZERO_COUNTRY_CODES/NO_NATIONAL_ELEVEN_RANGE_COUNTRIES) und
+// NICHT an config.safety.allowedCountryCodes gekoppelt (G13, gleiche Begruendung wie
+// bei TRUNK_ZERO_COUNTRY_CODES: eine Policy-Liste ist kein Telefonie-Fakt).
+const NANP_ISO_COUNTRIES = Object.freeze([
+  "US", "CA", "AG", "AI", "AS", "BB", "BM", "BS", "DM", "DO", "GD", "GU", "JM", "KN",
+  "KY", "LC", "MP", "MS", "PR", "SX", "TC", "TT", "VC", "VG", "VI",
+]);
+
+// Ist countryIso (ISO-3166-1-alpha-2, aus tenantGeo) ein NANP-Mitgliedsland? Reines
+// Praedikat, Nicht-String/unbekannt -> false (fail-closed). EINE Quelle (G5) fuer den
+// homeCountryCode-Guard unten.
+export function isNanpCountry(countryIso) {
+  return typeof countryIso === "string" && NANP_ISO_COUNTRIES.includes(countryIso.toUpperCase());
+}
+
 // Heimatlaender, in denen eine nationale Rufnummer NIE mit "11" beginnt: die 11x-Gasse ist
 // dort reine Kurzwahl/Dienste (DE 110/112/115/116xxx/118xx, FR 112/115/118xxx). Eine
 // Eingabe "011..." kann dort also keine nationale Nummer sein - normalisiert man sie
@@ -535,11 +552,26 @@ export function hasTrunkZeroAfterCountryCode(e164) {
 // Nutzers vor eigener DID - die DID kann in einem anderen Land liegen als der Nutzer,
 // z.B. US-DID eines DE-Tenants). Kein Treffer/leer -> null (Aufrufer normalisiert dann
 // NICHT, das E164-Gate lehnt ab - ablehnen statt raten).
-export function homeCountryCode(candidateNumbers) {
+//
+// tenantCountryIso (ISO-3166-1-alpha-2, aus store.tenantGeo) ist der GUARD fuer den
+// NANP-Zweig (Review-Fix Runde 2, GAP-25): eine Kandidatennummer, die zufaellig NANP-
+// foermig ist (haeufigster Fall - eine DID OHNE eigene privateNumber; DIDs sind heute per
+// FORCE_NUMBER_COUNTRY default US), darf NUR dann als Heimatland gelten, wenn das
+// TENANT-Herkunftsland selbst NANP ist. Sonst wuerde JEDER europaeische Tenant ohne
+// privateNumber ueber seine US-DID zum NANP-Heimatland (der Fund aus Runde 1: eine
+// deutsche Ortsnetznummer ohne fuehrende 0 waere dann als formal gueltige +1-Nummer
+// materialisiert worden - genau der neue Fremdanruf-Pfad, den diese Funktion verhindern
+// soll). Trunk-0-Laender (+49/+33/+44) bleiben UNGUARDED: ihre Kandidaten-Herkunft war
+// nie das Sicherheitsproblem (nur der NANP-Zweig oeffnete den neuen Pfad). Ein nicht
+// bestaetigter NANP-Kandidat wird uebersprungen (naechster Kandidat gewinnt), nicht die
+// ganze Suche abgebrochen.
+export function homeCountryCode(candidateNumbers, tenantCountryIso = null) {
   for (const num of candidateNumbers) {
     if (typeof num !== "string") continue;
     const code = DIALING_HOME_COUNTRY_CODES.find((c) => num.startsWith(c));
-    if (code) return code;
+    if (!code) continue;
+    if (code === NANP_COUNTRY_CODE && !isNanpCountry(tenantCountryIso)) continue;
+    return code;
   }
   return null;
 }

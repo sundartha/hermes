@@ -29,23 +29,37 @@ const postCall = (url, to) =>
 
 // ---- Sektion 1: reine Helfer ----
 test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
-  // OUT-05 (GAP-25, SOLL): NANP (+1) ist jetzt ein bekanntes Heimatland (eigene
-  // Wahl-Konvention, s. DIALING_HOME_COUNTRY_CODES in store/defaults.js) - ein
-  // US-Kandidat wird NICHT mehr uebersprungen. Frueher gewann still der DE/FR-Kandidat
-  // dahinter (der stille Landeswechsel aus OUT-05/OUT-05b); das ist mit diesem Fix
-  // ausgeschlossen.
+  // OUT-05 (GAP-25, SOLL): NANP (+1) ist ein bekanntes Heimatland (eigene Wahl-
+  // Konvention, s. DIALING_HOME_COUNTRY_CODES in store/defaults.js). Review-Fix Runde 2
+  // (GAP-25, S1): der NANP-Zweig ist zusaetzlich an das TENANT-Herkunftsland (2. Arg,
+  // ISO-3166-1-alpha-2 aus store.tenantGeo) gebunden - eine NANP-foermige Kandidatennummer
+  // (z.B. eine US-DID) gilt NUR als Heimatland, wenn der Tenant selbst nachweislich NANP
+  // ist. Die Trunk-0-Laender (+49/+33/+44) bleiben UNGUARDED (kein zweiter Parameter noetig).
   await t.test("erste bekannte Heimatland-Vorwahl gewinnt (Praezedenz der Kandidaten, GAP-25)", () => {
     assert.equal(homeCountryCode(["+491737252163"]), "+49");
     assert.equal(homeCountryCode(["+33612345678", "+491737252163"]), "+33");
-    // US-DID (NANP, jetzt bekanntes Heimatland) gewinnt VOR dem DE-Kandidaten dahinter.
-    assert.equal(homeCountryCode(["+15005550006", "+491737252163"]), "+1");
+    // US-DID (NANP) gewinnt VOR dem DE-Kandidaten dahinter - ABER NUR mit bestaetigtem
+    // NANP-Tenant-Herkunftsland (Review-Fix Runde 2).
+    assert.equal(homeCountryCode(["+15005550006", "+491737252163"], "US"), "+1");
   });
 
-  // OUT-04 (GAP-25, SOLL): reine +1-Kandidaten liefern jetzt "+1" (NANP ist ein
-  // bekanntes Heimatland). Nur Laender OHNE bekannte Wahl-Konvention (z.B. +39 IT)
-  // bleiben null (fail-closed - kein Raten).
+  // Review-Fix Runde 2 (GAP-25, S1): OHNE bestaetigtes NANP-Herkunftsland wird ein
+  // NANP-foermiger Kandidat UEBERSPRUNGEN, nicht als Heimatland akzeptiert - der naechste
+  // (Trunk-0-)Kandidat gewinnt, falls vorhanden. Das ist die Live-Standardkonstellation aus
+  // dem Finding: eine europaeische DID-Zufalls-NANP-Nummer OHNE Tenant-Geo-Bestaetigung darf
+  // keinen NANP-Fremdanruf-Pfad oeffnen.
+  await t.test("NANP-Kandidat OHNE bestaetigtes Tenant-Herkunftsland wird uebersprungen (Review-Fix Runde 2)", () => {
+    assert.equal(homeCountryCode(["+15005550006", "+491737252163"]), "+49");
+    assert.equal(homeCountryCode(["+15005550006", "+491737252163"], "DE"), "+49");
+    assert.equal(homeCountryCode(["+15005550006", "+491737252163"], null), "+49");
+  });
+
+  // OUT-04 (GAP-25, SOLL): ein reiner +1-Kandidat liefert "+1" NUR mit bestaetigtem
+  // NANP-Herkunftsland (Review-Fix Runde 2); ohne Bestaetigung -> null (fail-closed, kein
+  // Raten). Laender OHNE bekannte Wahl-Konvention (z.B. +39 IT) bleiben in jedem Fall null.
   await t.test("kein bekanntes Wahl-Heimatland -> null (fail-closed)", () => {
-    assert.equal(homeCountryCode(["+15005550006"]), "+1");
+    assert.equal(homeCountryCode(["+15005550006"], "US"), "+1");
+    assert.equal(homeCountryCode(["+15005550006"]), null, "Review-Fix Runde 2: unbestaetigtes NANP -> null");
     assert.equal(homeCountryCode([]), null);
     assert.equal(homeCountryCode([null, undefined, 12345, ""]), null);
     // +39 IT behaelt die fuehrende 0 im NSN -> bewusst KEIN Heimatland fuer die 0-Regel.
@@ -266,11 +280,26 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
     }
   });
 
-  // GAP-25 x GAP-18: beweist die Reihenfolge normalize -> denylist. NANP-Tenant
-  // (OWNER_TEST_NUMBER, Default-DID +15005550006), keine privateNumber -> homeCountry
-  // "+1" (GAP-25).
+  // GAP-25 x GAP-18: beweist die Reihenfolge normalize -> denylist. NANP-Tenant -
+  // Review-Fix Runde 2 (S1): das TENANT-Herkunftsland muss die NANP-DID BESTAETIGEN
+  // (tenant.country="US" -> store.tenantGeo), sonst wird der DID-Kandidat uebersprungen
+  // (s. "NANP-Kandidat OHNE bestaetigtes Tenant-Herkunftsland" oben) und der Test wuerde
+  // genau die Live-Standardkonstellation aus dem Finding pruefen (unbestaetigt), nicht den
+  // hier gewollten echten NANP-Tenant.
+  const seedNanpTenant = seedState({
+    tenants: [
+      {
+        id: BOOTSTRAP_TENANT_ID,
+        status: "active",
+        firstName: "Jonas",
+        ownerName: "Jonas Beispiel",
+        country: "US",
+      },
+    ],
+  });
+
   await t.test("NANP-Tenant: 10-stellige Eingabe wird zu +1 und durchlaeuft ALLE Gates", async () => {
-    const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" } });
+    const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" }, seed: seedNanpTenant });
     try {
       const res = await postCall(srv.localUrl, "2125550123");
       assert.equal(res.status, 500, "normalisiertes +1-Ziel muss ALLE Gates passieren");
@@ -282,7 +311,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("NANP-Tenant: 9005550123 wird zu +1900... und dort von der Denylist gestoppt", async () => {
-    const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" } });
+    const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" }, seed: seedNanpTenant });
     try {
       const res = await postCall(srv.localUrl, "9005550123");
       assert.equal(res.status, 403);
@@ -291,6 +320,41 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
       await srv.stop();
     }
   });
+
+  // Review-Fix Runde 2 (GAP-25, S1): die exakte Live-Standardkonstellation aus dem
+  // Finding - ein europaeischer Tenant (tenant.country="DE") OHNE privateNumber, dessen
+  // aktive DID zufaellig eine NANP-Nummer ist (frische DIDs sind heute per
+  // FORCE_NUMBER_COUNTRY default US). OHNE Tenant-Geo-Bestaetigung wird der DID-Kandidat
+  // NICHT als Heimatland akzeptiert -> "8912345678" (NANP-plausibel: NPA=891, NXX=234,
+  // beide 2-9) bleibt unveraendert -> das E.164-Gate lehnt ab (400), STATT eine formal
+  // gueltige +1-Nummer zu erfinden und einen Fremdanruf-Pfad zu oeffnen (vorher: 500 +
+  // persistierter Call to="+18912345678").
+  await t.test(
+    "Europaeischer Tenant ohne privateNumber + US-DID: unbestaetigte NANP-Form bleibt 400 (Review-Fix Runde 2)",
+    async () => {
+      const seedEuTenant = seedState({
+        tenants: [
+          {
+            id: BOOTSTRAP_TENANT_ID,
+            status: "active",
+            firstName: "Jonas",
+            ownerName: "Jonas Beispiel",
+            country: "DE",
+          },
+        ],
+      });
+      const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" }, seed: seedEuTenant });
+      try {
+        const res = await postCall(srv.localUrl, "8912345678");
+        assert.equal(res.status, 400, "kein NANP-Fremdanruf-Pfad ohne bestaetigtes Tenant-Herkunftsland");
+        assert.match((await res.json()).error, /E\.164/);
+        const call = srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === "+18912345678");
+        assert.equal(call, undefined, "kein Call-Record mit dem faelschlich materialisierten NANP-Ziel");
+      } finally {
+        await srv.stop();
+      }
+    },
+  );
 });
 
 // OUT-05b (GAP-25, SOLL): End-to-End-Beweis fuer den in OUT-05 gefixten Sachverhalt -
@@ -304,6 +368,10 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
   const US_PRIVATE_NUMBER = "+15005550006";
   const FOREIGN_DE_DID = "+491701234567";
   const DE_NATIONAL_TARGET = "01737252163"; // vom Nutzer gemeint als lokale Schreibweise
+  // Review-Fix Runde 2 (S1): country="US" bestaetigt den NANP-Kontext dieses Tenants
+  // (store.tenantGeo) - ohne diese Bestaetigung wuerde der homeCountryCode-Guard die
+  // NANP-privateNumber uebergehen und stattdessen auf die DE-DID dahinter zurueckfallen
+  // (genau der Fehler, den dieser Test verhindern soll).
   const seed = seedState({
     tenants: [
       {
@@ -312,6 +380,7 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
         firstName: "Jonas",
         ownerName: "Jonas Beispiel",
         privateNumber: US_PRIVATE_NUMBER,
+        country: "US",
       },
     ],
   });
@@ -342,9 +411,11 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
 
 // OWNER_TEST_NUMBER dokumentiert die Annahme: der Default-Seed ist eine US-Nummer
 // (NANP-Heimatland, GAP-25) - kein Trunk-0-Land, aber seit GAP-25 ein bekanntes
-// NANP-Heimatland. Bricht das jemand, soll DIESER Test es sagen.
+// NANP-Heimatland (mit bestaetigtem NANP-Tenant-Herkunftsland, Review-Fix Runde 2 - ohne
+// Bestaetigung liefert derselbe Kandidat seit Runde 2 null, s. Test oben). Bricht das
+// jemand, soll DIESER Test es sagen.
 test("Annahme: Default-Owner-Testnummer ist ein NANP-Heimatland", () => {
-  assert.equal(homeCountryCode([OWNER_TEST_NUMBER.e164]), "+1");
+  assert.equal(homeCountryCode([OWNER_TEST_NUMBER.e164], "US"), "+1");
 });
 
 // Review-Fix Runde 1 (GAP-25, S1): End-to-End-Beweis fuer die Live-Standardkonstellation

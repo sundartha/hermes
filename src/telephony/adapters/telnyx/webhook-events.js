@@ -6,7 +6,7 @@
 // Klassifikation, G5 - kein Duplikat; call-control-events.js importiert weiterhin direkt
 // von dort, unberuehrt).
 import { parseSpeakEvent } from "./speak-events.js";
-import { classifyAnsweredBy } from "../../answered-by.js";
+import { parseAnsweredBy } from "../../answered-by.js";
 
 // Erkanntes Speech-Ergebnis aus dem /voice/turn-Body. Telnyx liefert laut TeXML-Doku
 // `Transcript`, real zeigen die Turn-Posts (Live-Beleg 2026-06-20) aber `SpeechResult`
@@ -60,11 +60,10 @@ export function parseSpeakOutcome(body) {
 }
 
 // GAP-21: Ergebnis der Anrufbeantworter-Erkennung aus dem /voice/outbound-Body. Der
-// TeXML-Pfad ist Twilio-kompatibel und liefert ebenfalls `AnsweredBy`. classifyAnsweredBy
-// ist die EINE Klassifikations-Quelle (G5, src/telephony/answered-by.js).
-export function parseAnsweredBy(body) {
-  return classifyAnsweredBy(body.AnsweredBy);
-}
+// TeXML-Pfad ist Twilio-kompatibel und liefert ebenfalls `AnsweredBy`. Reine Delegation
+// an answered-by.js (G5, Review-Fix Runde 2) - KEINE Logik-Kopie, analog parseSpeakOutcome
+// oben.
+export { parseAnsweredBy };
 
 /** @type {import("../../ports.js").WebhookEvents} */
 export const telnyxWebhookEvents = {

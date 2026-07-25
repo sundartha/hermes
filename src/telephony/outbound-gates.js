@@ -511,10 +511,15 @@ export function makeOutboundGates({
     {
       name: "normalize_target",
       run(ctx) {
-        const homeCountry = homeCountryCode([
-          store.tenantPrivateNumber(ctx.tenantId),
-          findActiveNumber(store.load(), ctx.tenantId)?.e164,
-        ]);
+        // GAP-25 Review-Fix Runde 2: der NANP-Zweig von homeCountryCode braucht das
+        // TENANT-Herkunftsland (store.tenantGeo, dieselbe Quelle wie denialDimensions in
+        // routes/api-calls.js, G5) als Guard - ohne ihn wuerde eine europaeische DID-
+        // Zufalls-NANP-Nummer (DIDs sind heute default US, privateNumber ist optional)
+        // jeden Tenant zum NANP-Heimatland machen.
+        const homeCountry = homeCountryCode(
+          [store.tenantPrivateNumber(ctx.tenantId), findActiveNumber(store.load(), ctx.tenantId)?.e164],
+          store.tenantGeo(ctx.tenantId).country,
+        );
         ctx.to = normalizeDialTarget(ctx.to, homeCountry);
         return null;
       },
