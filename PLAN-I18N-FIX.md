@@ -705,9 +705,27 @@ haengen an der heutigen Signatur und muessen beim Bau mitgezogen werden (siehe E
 - **GETRAGEN:** die Korrektur **aendert die Abrechnung laufender Kunden** ab Deploy. Das ist die
   Absicht, kein Nebeneffekt. Ob rueckwirkend und ob informiert wird, entscheidet O3.
 
+> **KORREKTUR 2026-07-25 (Safety-Review der Umsetzung, empirisch belegt) - dieses
+> Abnahmekriterium war falsch formuliert und hat einen echten Befund verdeckt.** Es verlangte,
+> `test/prod-config-smoke.test.js` zeige fuer das Inlandsziel unveraendert `500`. Das ist unter
+> den ausgelieferten Live-Werten nach P5 **nicht erreichbar und darf es auch nicht sein**: live
+> traegt jeder Tenant eine **US-DID**, mit der Herkunfts-Achse wird damit auch ein `+49`-Ziel zum
+> Auslands-Leg -> `300 ct/min x 3 min = 900 ct` gegen die `600 ct`-Decke -> **402**. P5 verschaerft
+> P-B1 also von "nur `+49/+33/+44` gehen" auf "gar nichts geht". Das ist die **beabsichtigte,
+> ehrliche Zwischenlage**: `GAP-33` ist laut Abschnitt 6 die ID von **P7**, nicht von P5, und wird
+> von P7 aufgeloest (Tarif-Defaults + Budget-Kohaerenz).
+>
+> **Bindend fuer jede Umsetzung von P5:** `test/prod-config-smoke.test.js` behaelt seine
+> Praemisse - Absender ist die **Default-DID** (`OWNER_TEST_NUMBER`, US), nicht eine eigens
+> geseedete DE-Nummer. Wer den Absender tauscht, damit `GAP-33` gruen bleibt, hat nicht die
+> Regression behoben, sondern den einzigen Messpunkt fuer die ausgelieferte Live-Konfiguration
+> abgeschaltet (Verstoss gegen "keine Erwartung senken", Abschnitt 4). **`GAP-33` bleibt nach P5
+> rot und faellt erst in P7.** Die Tarif-Achse selbst gehoert in den eigenen
+> `test/cost-origin-axis.test.js`, wo beide Herkuenfte frei geseedet werden duerfen.
+
 **Abnahme.** ORIG-01, ORIG-02, ORIG-03 nicht mehr in der Rot-Liste (42 -> 39). `npm test` gruen -
-insbesondere `test/prod-config-smoke.test.js` zeigt fuer das Inlandsziel unveraendert 500 (keine
-Regression an der Gate-Kette), UND die drei bekannten Mitzieher
+`test/prod-config-smoke.test.js` bleibt bei seiner Live-Praemisse (Default-US-DID) und `GAP-33`
+bleibt bis P7 rot (siehe Korrektur oben), UND die drei bekannten Mitzieher
 (`cost-calibration.test.js`, `metering-unit.test.js`, `pay-04-starter-reserve-charakterisierung.test.js`)
 laufen gegen die neue Zweiargument-Signatur. A3, A6 erfuellt. Zusaetzlich: der Merge-Kommentar
 listet jeden Aufrufer mit `datei:zeile`; ein Kosten-Reconcile-Lauf gegen einen echten Telnyx-Beleg
