@@ -41,7 +41,10 @@ jobs:
       # (node 24 misst hier ~15 Punkte niedriger) -> Schwellen bewusst gegen die CI-Major
       # (22) geankert, nicht gegen die lokale node-Version.
       #
-      # --test-skip-pattern klammert den i18n-Launch-Testkatalog aus (Muster aus
+      # Laeuft ueber denselben Wrapper wie "npm test" (test/i18n-catalog-run.mjs regression),
+      # zusaetzliche node --test-Flags nach dem "--"-Trenner durchgereicht (G5: die
+      # Invocation - Flag-Name, Glob, Modus - steht damit an EINER Stelle, nicht hier UND im
+      # Wrapper dupliziert). Das klammert den i18n-Launch-Testkatalog aus (Muster aus
       # package.json config.i18nCatalogPattern, EINE Quelle fuer npm test/test:gates/CI):
       # der Katalog enthaelt gewollt rote Launch-Gate-Befunde, kein Regressionsfang
       # (PLAN-I18N-TESTS.md 4.1), und riss diese Schwelle sonst bei jedem Push. Die
@@ -50,10 +53,9 @@ jobs:
       # weit innerhalb der 5-Punkte-Marge der Schwellen oben).
       - name: Coverage-Gate (unterschrittene Schwelle bricht den Build)
         run: |
-          node --test --experimental-test-coverage \
-            --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86 \
-            --test-skip-pattern="$(node -p "require('./package.json').config.i18nCatalogPattern")" \
-            "test/*.test.js"
+          NODE_ENV=test node test/i18n-catalog-run.mjs regression -- \
+            --experimental-test-coverage \
+            --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86
       # Eigener, ausdruecklich NICHT blockierender Schritt fuer den i18n-Launch-Testkatalog:
       # "Kein roter Test in diesem Katalog ist ein Regressionsfang; alle sind Launch-Gates"
       # (PLAN-I18N-TESTS.md 4.1). Rot heisst hier ein offener Produktbefund vor dem
