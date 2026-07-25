@@ -221,6 +221,18 @@ test("startAssistant: transcription={model,language} bei bekannter Sprache (de)"
   assert.equal(body.assistant.id, "a");
 });
 
+// VOICE-17 (tasks/i18n-tests/03-telefonie-render.md): der Telnyx-Assistant-STT-Sprachhint
+// deckt "en" explizit ab (in STT_FLUX_HINTS) statt fail-open auf "auto" zu fallen - bislang
+// ungetestet (grep-Negativbefund im Katalog). Ergaenzt die bestehende "de"-Abdeckung oben
+// um den fuer diesen Testkatalog-Block relevanten EN-Fall.
+test("startAssistant: transcription={model,language} bei bekannter Sprache EN (VOICE-17)", async () => {
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "en" });
+  const body = JSON.parse(calls[0].body);
+  assert.deepEqual(body.transcription, { model: "deepgram/flux", language: "en" });
+  assert.equal(body.assistant.id, "a");
+});
+
 // afix-p2 (P2-T2): Sprache ausserhalb der flux-Hint-Liste -> "auto" (Telnyx-Detection statt
 // Hint-los), Modell bleibt deepgram/flux.
 test("startAssistant: unbekannte Sprache -> transcription.language=auto", async () => {
