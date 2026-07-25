@@ -108,12 +108,21 @@ Bei Bugs, unerwarteten Fehlern oder wiederkehrenden Issues: Ursache statt Sympto
 Start:        npm start              (Gateway + Dashboard + MCP-HTTP)
 MCP (stdio):  npm run mcp
 Setup-Check:  npm run check
-Tests:        npm test               (node:test, laeuft ohne Netz und ohne .env)
+Tests:        npm test               (Regressionsschutz, MUSS gruen sein - rot heisst: etwas ist kaputt)
+Launch-Gates: npm run test:gates     (i18n-Launch-Testkatalog, DARF rot sein - rot heisst: offener Produktbefund vor dem Start)
 Syntax:       node --check src/server.js
 Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 ```
 
 Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js`. Integrationstests starten den Server als Kindprozess mit `PORT=0` und `DATA_DIR`-Override (Temp-Verzeichnis) — `data/store.json` wird nie angefasst. Neues Verhalten braucht einen Test; der manuelle Smoke-Test bleibt fuer alles, was Tests nicht abdecken (echte Telefonie, Dashboard-Optik).
+
+`npm test` und `npm run test:gates` partitionieren dieselbe Suite ueber `test/i18n-catalog-run.mjs`
+(node:test `--test-skip-pattern`/`--test-name-pattern` gegen `package.json` `config.i18nCatalogPattern`).
+Jeder i18n-Launch-Testkatalog-Test traegt seine Katalog-ID (z.B. `GAP-18`, `PROMPT-01`) am
+Namensanfang — das ist die einzige Zuordnungsregel, keine gepflegte Liste. `npm test` schliesst
+diese Tests aus (Regressionsschutz, PLAN-I18N-TESTS.md 4.1: "kein roter Test in diesem Katalog ist
+ein Regressionsfang"); `test:gates` faehrt NUR sie (inkl. gruener R3-Mechanismus-Tests als
+Regressionsschutz, s. `tasks/i18n-tests/00-kanonische-liste.md`).
 
 ## Referenzen
 

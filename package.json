@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Hermes — autonomer Telefon-Assistent (MCP + echte Telefonie)",
   "type": "module",
+  "config": {
+    "_comment_i18nCatalogPattern": "Katalog-Praefixe des i18n-Launch-Testkatalogs (PLAN-I18N-TESTS.md 4.2 + tasks/i18n-tests/00-kanonische-liste.md), EINE Quelle fuer beide Testlaeufe unten. Jeder Katalogtest traegt seine ID am Namensanfang (bzw. nach dem Wort 'Charakterisierung ', der etablierten Konvention fuer R3-Mechanismus-Tests); ein neuer Test mit bestehendem Praefix landet ohne weiteren Handgriff im richtigen Lauf. Bekannte Ausnahme (nicht ueber Namensmuster erfassbar, s. Bericht): VOICE-02/03/08/17 stehen nur als Kommentar-Referenz an einem Bestandstest, nicht im Testnamen selbst - sie bleiben im Regressionslauf.",
+    "i18nCatalogPattern": "^(Charakterisierung )?(DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD)-[0-9]"
+  },
   "scripts": {
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
@@ -12,7 +16,8 @@
     "bootstrap-tenant": "node scripts/bootstrap-tenant.js",
     "check:tokens": "node scripts/check-token-sync.js",
     "convo-bench": "node scripts/convo-bench.mjs",
-    "test": "NODE_ENV=test node --test \"test/*.test.js\"",
+    "test": "NODE_ENV=test node test/i18n-catalog-run.mjs regression",
+    "test:gates": "NODE_ENV=test node test/i18n-catalog-run.mjs gates",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
