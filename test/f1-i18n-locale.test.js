@@ -251,6 +251,15 @@ const deCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language
 const frCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "fr", ...over });
 const enCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language: "en", ...over });
 
+// LANG-07 (i18n-Testkatalog). Beleg: src/claude.js:254-259,264-278;
+// tasks/i18n-tests/01-sprachaufloesung.md ("LANG-07"). Der Katalog-Sachverhalt
+// (Offenlegungssatz bleibt Deutsch fuer strukturell falsch aufgeloeste US-Tenants,
+// call.language="de") ist mechanisch bereits durch DIESEN Test abgedeckt: die Funktion
+// prueft nicht, WARUM ein Call call.language="de" traegt (LANG-02/LANG-04-Kette:
+// web-onboardeter US-Tenant ohne gesetztes number.language/tenant.defaultLanguage), sie
+// bekommt einzig den Wert. Ein zweiter Test mit identischem Aufruf
+// disclosureSentence(deCall()) === DE_DISCLOSURE haette keinen eigenen Pruefwert (G5) -
+// deshalb hier nur die Katalog-Referenz angehaengt statt einer Kopie.
 test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => {
   assert.equal(disclosureSentence(deCall()), DE_DISCLOSURE);
 });
@@ -258,20 +267,6 @@ test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => 
 test("DE byte-identisch: fehlende Sprache faellt auf de zurueck (Bestands-Aufrufer ohne language)", () => {
   // disclosure-regression ruft disclosureSentence OHNE language auf -> muss de bleiben.
   assert.equal(disclosureSentence({ tenantId: BOOTSTRAP_TENANT_ID }), DE_DISCLOSURE);
-});
-
-// LANG-07 (i18n-Testkatalog). Beleg: src/claude.js:254-259,264-278;
-// tasks/i18n-tests/01-sprachaufloesung.md ("LANG-07"). Mechanismus-Test (gruen):
-// disclosureSentence tut exakt das Dokumentierte - kein separater Bug in der Funktion
-// selbst. Der reale US-Default (LANG-02/LANG-04-Kette: ein web-onboardeter Tenant ohne
-// gesetztes number.language/tenant.defaultLanguage bekommt call.language="de") fuehrt
-// HIER dazu, dass ein US-Ziel trotzdem den deutschen Offenlegungssatz hoert.
-test("LANG-07 (Mechanismus, gruen) - Offenlegungssatz bleibt Deutsch fuer strukturell falsch aufgeloeste US-Tenants (call.language='de')", () => {
-  assert.equal(
-    disclosureSentence(deCall()),
-    DE_DISCLOSURE,
-    "call.language='de' (realer US-Default vor einem Geo-Fix) liefert die deutsche Offenlegung",
-  );
 });
 
 test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Regel", () => {
