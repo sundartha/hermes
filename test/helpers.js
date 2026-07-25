@@ -72,6 +72,10 @@ export const BASE_ENV = {
   // ensureOwnerNumber in den Spawn-Store (OWNER_TEST_NUMBER). Provider-spezifische
   // Tests reichen ownerNumber:{e164,provider} an startServer durch.
   TWILIO_EDGE: "frankfurt",
+  // GAP-21: Default AUS neutral gepinnt (Lehre test-base-env-drift). Einzelne Tests
+  // setzen MACHINE_DETECTION_ENABLED gezielt auf "true".
+  MACHINE_DETECTION_ENABLED: "false",
+  MACHINE_DETECTION_TIMEOUT_S: "5",
   // P2b: OWNER_FIRST_NAME/OWNER_LAST_NAME/OWNER_NUMBER sind keine Config-Env mehr. Die
   // Owner-Identitaet + -Nummer seedet ensureOwnerNumber direkt in den Spawn-Store
   // (OWNER_TEST_FIRST_NAME/OWNER_TEST_NUMBER), wie in Produktion (Store statt Env).
@@ -167,7 +171,7 @@ export const BASE_ENV = {
   ELEVENLABS_MODEL: "",
   ELEVENLABS_API_BASE: "",
   ELEVENLABS_OUTPUT_FORMAT: "",
-  ELEVENLABS_SYNTH_TIMEOUT_MS: "4000",
+  ELEVENLABS_SYNTH_TIMEOUT_MS: "2000",
   ELEVENLABS_TTS_TOKEN_TTL_MS: "60000",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das

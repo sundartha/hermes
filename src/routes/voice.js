@@ -33,6 +33,7 @@ import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
 import { startInboundAiAssistant, inboundCallControlId } from "../telnyx-inbound.js";
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
+import { ANSWERED_BY } from "../telephony/answered-by.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -374,6 +375,20 @@ export function makeVoiceRoutes({
     call.twilioSid = req.body.CallSid || call.twilioSid;
     store.markAnswered(call.id);
     store.save();
+
+    // GAP-21: nur bei EINDEUTIGEM Maschinen-Ergebnis auflegen. Unbekannt/fehlend/human ->
+    // Bestandspfad byte-identisch (fail-open Richtung Gespraech: ein leise antwortender
+    // Mensch darf nie abgewuergt werden). Kein neuer Endpunkt, keine neue Auth-Flaeche:
+    // der Wert kommt im bereits signaturgeprueften Webhook-Body. markAnswered ist bewusst
+    // vorher gelaufen (der Leg WURDE abgenommen und ist beim Carrier abrechenbar) - das
+    // Settlement laeuft unveraendert ueber /voice/status.
+    if (
+      config.telephony.machineDetection.enabled &&
+      webhookEvents(call.provider).parseAnsweredBy(req.body) === ANSWERED_BY.MACHINE
+    ) {
+      console.log(`[voice/outbound] Anrufbeantworter erkannt (callId=${call.id}) -> Hangup`);
+      return res.type("text/xml").send(render([hangupD()], call.provider));
+    }
 
     if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
       return res.type("text/xml").send(render(streamDirectives(call), call.provider));

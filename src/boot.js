@@ -35,6 +35,7 @@ import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibrati
 import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
+import { turnBudgetOverrun } from "./turn-budget.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -192,6 +193,25 @@ function warnVoiceTariffBelowFullCost(config, store) {
   for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }
 
+// GAP-22: Turn-Budget gegen den Provider-Hardcut. WARN, kein exit(1) - eine gesprengte
+// Wanduhr ist kein Safety-Gate und kein Geldleck (Regel 1 unberuehrt); ein Boot-Refusal
+// waere ein selbst verursachter Ausfall aus einem Env-Tippfehler. Feuert NUR im
+// Verletzungsfall, damit die ausgelieferte Konfiguration keine Zeile erzeugt.
+function warnTurnBudgetOverrun(config) {
+  const finding = turnBudgetOverrun({
+    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
+    maxRetries: config.llm.llmMaxRetries,
+    backoffMs: config.llm.llmBackoffMs,
+    synthTimeoutMs: config.voice.elevenLabsPlayTts.synthTimeoutMs,
+  });
+  if (!finding) return;
+  console.warn(
+    `[boot] Konfig-Warnung: Turn-Budget ${finding.budgetMs} ms ueberschreitet den ` +
+      `Provider-Hardcut ${finding.hardcutMs} ms um ${finding.overrunMs} ms ` +
+      "(LLM_REQUEST_TIMEOUT_MS/LLM_MAX_RETRIES/LLM_BACKOFF_MS/ELEVENLABS_SYNTH_TIMEOUT_MS).",
+  );
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
@@ -259,6 +279,7 @@ function assertBootGates(config, store) {
   warnAlertChannelUnset(config);
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
+  warnTurnBudgetOverrun(config); // GAP-22, WARN
 }
 
 // Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die

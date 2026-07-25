@@ -91,7 +91,7 @@ services:
       - key: ELEVENLABS_OUTPUT_FORMAT
         value: "mp3_44100_128"
       - key: ELEVENLABS_SYNTH_TIMEOUT_MS
-        value: "4000"
+        value: "2000"
       - key: ELEVENLABS_TTS_TOKEN_TTL_MS
         value: "60000"
       # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
@@ -411,6 +411,11 @@ services:
         value: "apps/web/dist"
       - key: TWILIO_EDGE
         value: frankfurt
+      # ---- Anrufbeantworter-Erkennung (GAP-21) ----
+      - key: MACHINE_DETECTION_ENABLED
+        value: "false"
+      - key: MACHINE_DETECTION_TIMEOUT_S
+        value: "5"
       - key: SEND_SMS_SUMMARY
         value: "true"
       - key: VOICE_ENGINE

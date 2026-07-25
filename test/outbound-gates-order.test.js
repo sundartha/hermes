@@ -203,7 +203,7 @@ test("number_gate: Denylist (Satelliten-Prefix) -> 403 grund=denylist requestedB
   const ctx = baseCtx({ to: "+870123456789" });
   const denial = await gateBy(gates, "number_gate").run(ctx);
   assert.equal(denial.status, 403);
-  assert.equal(denial.audit.detail, `to=${ctx.to} grund=denylist requestedBy=owner`);
+  assert.equal(denial.audit.detail, `to=${ctx.to} grund=denylist praefix=+870 requestedBy=owner`);
   assert.ok(!denial.audit.detail.includes("tenant="));
 });
 

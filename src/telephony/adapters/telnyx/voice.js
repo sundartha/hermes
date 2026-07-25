@@ -28,6 +28,17 @@ const HANGUP_ACTION = "hangup";
 const ASSISTANT_START_ACTION = "ai_assistant_start";
 const SPEAK_ACTION = "speak";
 
+// AMD-Feldnamen (GAP-21). TeXML ist Twilio-kompatibel (PascalCase-Formfelder), Call
+// Control spricht snake_case-JSON. VORBEDINGUNG der Phase: beide Namen VOR dem
+// Scharfschalten gegen einen echten Objekt-GET der Live-API belegen - bis dahin schuetzt
+// MACHINE_DETECTION_ENABLED=false. Call Control bekommt bewusst NUR das Modus-Feld
+// (keine zusaetzliche *_config-Struktur): jede weitere geratene Feldform ist ein
+// zusaetzliches 422-Risiko auf einem Pfad, der heute nicht der Live-Budget-Pfad ist.
+const TEXML_AMD_FIELD = "AnsweringMachineDetection";
+const TEXML_AMD_TIMEOUT_FIELD = "MachineDetectionTimeout";
+const CALL_CONTROL_AMD_FIELD = "answering_machine_detection";
+const AMD_MODE_DETECT = "detect";
+
 // ---- CDR/Ist-Kosten (PLAN-LIVE-COST-TRACING P1) ----
 // Einzige Telnyx-Quelle mit Einzel-Call-Granularitaet (Kap. 2.6): GET /v2/detail_records.
 // usage_reports aggregiert nur, der call.hangup-Webhook traegt kein Kostenfeld.
@@ -651,6 +662,12 @@ export const telnyxVoice = {
     // setzt server.js zusaetzlich den harten Max-Dauer-Timer (Absolute Regel). Das
     // Feld wird trotzdem mitgegeben (schadet nicht, greift falls unterstuetzt).
     if (timeLimit) form.set("TimeLimit", String(timeLimit));
+    // GAP-21: AMD als SIGNAL. Der Provider liefert das Ergebnis als AnsweredBy an
+    // /voice/outbound; dort wird nur bei EINDEUTIGEM Maschinen-Ergebnis aufgelegt.
+    if (config.telephony.machineDetection.enabled) {
+      form.set(TEXML_AMD_FIELD, AMD_MODE_DETECT);
+      form.set(TEXML_AMD_TIMEOUT_FIELD, String(config.telephony.machineDetection.timeoutS));
+    }
     const res = await fetch(
       `${config.telephony.telnyxApiBase}${TEXML_BASE}/calls/${config.telephony.telnyxConnectionId}`,
       {
@@ -705,6 +722,7 @@ export const telnyxVoice = {
     // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-
     // Timer (Absolute Regel). time_limit_secs greift zusaetzlich, falls Telnyx es honoriert.
     if (timeLimit) payload.time_limit_secs = timeLimit;
+    if (config.telephony.machineDetection.enabled) payload[CALL_CONTROL_AMD_FIELD] = AMD_MODE_DETECT;
     const res = await fetch(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
       method: "POST",
       headers: headers(JSON_HEADERS_TYPE),

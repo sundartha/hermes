@@ -244,5 +244,8 @@
  *   Erkennt ein server-seitiges TTS-Speak-Command-Event (SPEAK_OUTCOME-Enum aus
  *   telephony/adapters/telnyx/speak-events.js, EINE Quelle des Enums). NONE, wenn der
  *   Provider solche Events nicht kennt oder der Body keins ist.
+ * @property {(body: object) => string} parseAnsweredBy
+ *   Ergebnis der Anrufbeantworter-Erkennung aus dem /voice/outbound-Body (ANSWERED_BY-Enum
+ *   aus telephony/answered-by.js). Fehlendes/unbekanntes Feld -> UNKNOWN (fail-open).
  */
 export {};

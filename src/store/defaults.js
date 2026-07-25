@@ -486,6 +486,29 @@ export const E164 = /^\+[1-9]\d{6,14}$/;
 const TRUNK_ZERO_COUNTRY_CODES = ["+49", "+33", "+44"];
 const NATIONAL_TRUNK_PREFIX = "0";
 
+// NANP (+1, Nordamerika + karibische Mitglieder): EIGENE Wahl-Konvention. Der nationale
+// Praefix ist "1" (nicht "0"), der internationale "011" (nicht "00"). Deshalb eine eigene
+// Liste NEBEN TRUNK_ZERO_COUNTRY_CODES statt eines Eintrags darin: dort gilt die
+// "fuehrende 0"-Regel, hier gilt sie NIE (hasTrunkZeroAfterCountryCode bleibt unberuehrt).
+const NANP_COUNTRY_CODE = "+1";
+const NANP_INTERNATIONAL_PREFIX = "011";
+const NANP_TRUNK_PREFIX = "1";
+const NANP_NSN_DIGITS = 10; // Teilnehmernummer ohne Laender-/Trunk-Praefix
+const NANP_NATIONAL_DIGITS = NANP_NSN_DIGITS + NANP_TRUNK_PREFIX.length;
+
+// Heimatlaender, fuer die eine nationale Wahl-Konvention BEKANNT ist. Nur fuer sie darf
+// aus einer nationalen Schreibweise eine E.164-Nummer materialisiert werden.
+const DIALING_HOME_COUNTRY_CODES = [...TRUNK_ZERO_COUNTRY_CODES, NANP_COUNTRY_CODE];
+
+// Heimatlaender, in denen eine nationale Rufnummer NIE mit "11" beginnt: die 11x-Gasse ist
+// dort reine Kurzwahl/Dienste (DE 110/112/115/116xxx/118xx, FR 112/115/118xxx). Eine
+// Eingabe "011..." kann dort also keine nationale Nummer sein - normalisiert man sie
+// trotzdem ueber die Trunk-0-Regel, materialisiert man aus einer NANP-Auslandswahl
+// ("011" + 44...) eine falsche INLANDS-Nummer und ruft einen Dritten an (GAP-25).
+// "+44" ist BEWUSST NICHT dabei: 0113/0114/0115/0116/0117/0118 sind echte britische
+// Ortsnetze - dort bleibt der Wahlpfad byte-identisch zum Bestand.
+const NO_NATIONAL_ELEVEN_RANGE_COUNTRIES = ["+49", "+33"];
+
 // true, wenn die (bereits normNum-normalisierte) Nummer eine Trunk-0 direkt nach einer
 // dieser Laendervorwahlen traegt (z.B. +4901737... statt +491737...). Reines Praedikat
 // (kein Kanonisieren - Owner-Entscheidung #4: REJECT). Nicht-String/leer -> false
@@ -496,17 +519,18 @@ export function hasTrunkZeroAfterCountryCode(e164) {
   return TRUNK_ZERO_COUNTRY_CODES.some((code) => e164.startsWith(code + NATIONAL_TRUNK_PREFIX));
 }
 
-// Heimat-Laendervorwahl eines Tenants fuer die Interpretation nationaler Rufnummern
-// (fuehrende 0): die erste Kandidaten-Nummer (bereits E.164 im Store), deren Vorwahl in
-// TRUNK_ZERO_COUNTRY_CODES liegt - NUR dort ist "0 weglassen, Vorwahl davor" korrekt
-// (Gegenbeispiel +39 IT, s.o.). Kandidaten in Praezedenz beim Aufrufer (private
-// Mobilnummer = die "SIM" des Nutzers vor eigener DID - die DID kann in einem anderen
-// Land liegen als der Nutzer, z.B. US-DID eines DE-Tenants). Kein Treffer/leer -> null
-// (Aufrufer normalisiert dann NICHT, das E164-Gate lehnt ab - ablehnen statt raten).
+// Heimat-Laendervorwahl eines Tenants fuer die Interpretation nationaler Rufnummern: die
+// erste Kandidaten-Nummer (bereits E.164 im Store), deren Vorwahl eine BEKANNTE Wahl-
+// Konvention hat (DIALING_HOME_COUNTRY_CODES = Trunk-0-Laender + NANP, s.o.) - NUR dort
+// laesst sich eine nationale Schreibweise ueberhaupt korrekt aufloesen (Gegenbeispiel +39
+// IT, s.o.). Kandidaten in Praezedenz beim Aufrufer (private Mobilnummer = die "SIM" des
+// Nutzers vor eigener DID - die DID kann in einem anderen Land liegen als der Nutzer,
+// z.B. US-DID eines DE-Tenants). Kein Treffer/leer -> null (Aufrufer normalisiert dann
+// NICHT, das E164-Gate lehnt ab - ablehnen statt raten).
 export function homeCountryCode(candidateNumbers) {
   for (const num of candidateNumbers) {
     if (typeof num !== "string") continue;
-    const code = TRUNK_ZERO_COUNTRY_CODES.find((c) => num.startsWith(c));
+    const code = DIALING_HOME_COUNTRY_CODES.find((c) => num.startsWith(c));
     if (code) return code;
   }
   return null;
@@ -516,19 +540,47 @@ export function homeCountryCode(candidateNumbers) {
 // TRUNK_ZERO_COUNTRY_CODES-Laendern): "0049..." ist die Wahl-Schreibweise von "+49...".
 const INTERNATIONAL_CALL_PREFIX = "00";
 
-// Deterministische Normalisierung eines Wahl-Ziels nach Telefon-Konvention (Wurzelfix
-// LLM-Ziffern-Regeneration: der MCP-Client reicht die Nutzer-Eingabe zeichengenau durch,
-// JEDE Umformung passiert hier in Code statt im Modell). Erwartet normNum-Form:
-// "+..." unveraendert; "00..." -> "+..."; fuehrende einzelne 0 -> homeCountry + Rest
-// (nur mit ableitbarem Heimatland, s. homeCountryCode). Alles andere unveraendert -
-// KEINE Validierung hier: das nachgelagerte E164-/Trunk-0-Gate lehnt ab (fail-closed).
-export function normalizeDialTarget(num, homeCountry) {
-  if (typeof num !== "string") return "";
+// NANP-Zweig: "011..." ist die AUSLANDS-, "1"+10 Ziffern die nationale Schreibweise,
+// 10 blanke Ziffern die Teilnehmernummer. normNum vorweg, weil die NANP-Schreibweise
+// ueblicherweise Trennzeichen traegt ("1-415-555-0123"); normNum ist idempotent - der
+// Produktionspfad (routes/api-calls.js normNum(b.to)) aendert sich dadurch nicht (G5:
+// dieselbe eine Quelle, kein zweites Regex).
+function normalizeNanpTarget(raw) {
+  const num = normNum(raw);
+  if (num.startsWith("+")) return num;
+  if (num.startsWith(NANP_INTERNATIONAL_PREFIX))
+    return "+" + num.slice(NANP_INTERNATIONAL_PREFIX.length);
+  if (!/^\d+$/.test(num)) return num;
+  if (num.length === NANP_NATIONAL_DIGITS && num.startsWith(NANP_TRUNK_PREFIX)) return "+" + num;
+  if (num.length === NANP_NSN_DIGITS) return NANP_COUNTRY_CODE + num;
+  return num; // unbekannte Form -> unveraendert, das E164-Gate lehnt ab (ablehnen statt raten)
+}
+
+// Trunk-0-Zweig (Bestandsverhalten, byte-identisch bis auf die "011"-Ausnahme).
+function normalizeTrunkZeroTarget(num, homeCountry) {
   if (num.startsWith(INTERNATIONAL_CALL_PREFIX))
     return "+" + num.slice(INTERNATIONAL_CALL_PREFIX.length);
+  if (
+    num.startsWith(NANP_INTERNATIONAL_PREFIX) &&
+    NO_NATIONAL_ELEVEN_RANGE_COUNTRIES.includes(homeCountry)
+  )
+    return num; // GAP-25: keine Inlandsnummer aus einer NANP-Auslandswahl erfinden
   if (num.startsWith(NATIONAL_TRUNK_PREFIX) && homeCountry)
     return homeCountry + num.slice(NATIONAL_TRUNK_PREFIX.length);
   return num;
+}
+
+// Deterministische Normalisierung eines Wahl-Ziels nach Telefon-Konvention (Wurzelfix
+// LLM-Ziffern-Regeneration: der MCP-Client reicht die Nutzer-Eingabe zeichengenau durch,
+// JEDE Umformung passiert hier in Code statt im Modell). Erwartet normNum-Form (Ausnahme:
+// der NANP-Zweig normalisiert selbst, s.o.). KEINE Validierung hier: das nachgelagerte
+// E164-/Trunk-0-Gate lehnt ab (fail-closed). Reihenfolge im Trunk-0-Zweig ist die
+// Spezifikation: "00" (ITU) gewinnt vor der "011"-Ausnahme, sonst wuerde "0011..." falsch
+// klassifiziert.
+export function normalizeDialTarget(num, homeCountry) {
+  if (typeof num !== "string") return "";
+  if (homeCountry === NANP_COUNTRY_CODE) return normalizeNanpTarget(num);
+  return normalizeTrunkZeroTarget(num, homeCountry);
 }
 
 // Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines

@@ -1,15 +1,8 @@
 // GAP-21 (tasks/i18n-tests/11-luecken-und-e2e.md, kanonisch per
 // tasks/i18n-tests/00-kanonische-liste.md Cluster D24): Anrufbeantworter/IVR werden von
-// Hermes nicht erkannt - jeder Outbound-Call, der auf eine Mailbox laeuft, wird trotzdem
-// als vollwertiges Gespraech behandelt und bezahlt.
-//
-// Scope-Begrenzung dieses Tests (s. Workflow-Auftrag): fuer ein greenfield-Feature ohne
-// jeden Bestandscode waere ein Webhook-/Store-Integrationstest (Schritt 2/3 der
-// Katalog-Spezifikation) reine Spekulation ueber eine noch nicht existierende Form. Der
-// SOLL-Beweis wird deshalb auf Schritt 1 begrenzt: BEIDE Origination-Pfade (TeXML +
-// Call-Control) muessen ein Machine-Detection-Feld im gesendeten Body tragen - das ist
-// bereits ausreichend, um den Launch-Blocker rot zu zeigen (0 Treffer heute, grep-belegt:
-// tasks/i18n-tests/11-luecken-und-e2e.md:539-541).
+// Hermes erkannt (hinter MACHINE_DETECTION_ENABLED, Default AUS) - beide Origination-
+// Pfade (TeXML + Call-Control) tragen ein Machine-Detection-Feld im gesendeten Body, NUR
+// wenn das Flag an ist.
 //
 // Muster wie test/telnyx-voice.test.js: global.fetch gestubbt, Config VOR dem Import
 // gesetzt (Key-Leak-Schutz), kein Server-Spawn.
@@ -24,8 +17,28 @@ process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
 process.env.TELNYX_CONNECTION_ID = CONNECTION_ID;
 process.env.TELNYX_CALL_CONTROL_APP_ID = CALL_CONTROL_APP_ID;
+// K2 (Deploy-Sicherheitsbeweis): Flag AN fuer die Feld-Praesenz-Tests, Muster
+// PAYMENT_ENABLED/ELEVENLABS_PLAY_TTS_ENABLED. Der eigentliche Sicherheitsbeweis ist der
+// separate "Flag AUS"-Test unten (per withConfigOverrides, kein zweiter Modul-Import).
+process.env.MACHINE_DETECTION_ENABLED = "true";
+process.env.MACHINE_DETECTION_TIMEOUT_S = "5";
 
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
+const { config } = await import("../src/config.js");
+
+// Eigene Save-Set-Restore-Schleife statt makeConfigOverrides().withConfigOverrides: der
+// Helfer awaitet fn() NICHT (nur withConfig() tut das) - fuer einen ASYNCHRONEN Test-Body
+// (originateCall/originateViaCallControl sind async) restaurierte er das Flag VOR dem
+// Abschluss der Assertions. Try/finally hier bleibt explizit awaited.
+async function withMachineDetectionOff(fn) {
+  const saved = config.telephony.machineDetection;
+  config.telephony.machineDetection = { enabled: false, timeoutS: saved.timeoutS };
+  try {
+    await fn();
+  } finally {
+    config.telephony.machineDetection = saved;
+  }
+}
 
 function stubFetch(response = { json: {} }) {
   const calls = [];
@@ -41,38 +54,70 @@ function stubFetch(response = { json: {} }) {
   return calls;
 }
 
-// Breiter, namensneutraler Treffer statt eines geratenen exakten Feldnamens (das Feature
-// existiert noch nicht - ein spekulativer Literal-Pin waere selbst Ist-Pin-Risiko).
-const MACHINE_DETECTION_KEY = /answering_machine|machine_detection/i;
+// K1: der Regex traf nur den Unterstrich-Namen ("answering_machine_detection"), NIE die
+// PascalCase-Formfelder des TeXML-Pfads ("AnsweringMachineDetection" - kein Unterstrich).
+// Geweitet, damit BEIDE Namensformen erkannt werden, zusaetzlich zu den exakten
+// Feldnamen-Assertionen je Pfad unten (namensneutral UND exakt).
+const MACHINE_DETECTION_KEY = /(answering[_]?machine|machine)[_]?detection/i;
 
 function hasMachineDetectionField(obj) {
   return Object.keys(obj).some((k) => MACHINE_DETECTION_KEY.test(k));
 }
 
-test("GAP-21 (SOLL rot, TeXML): originateCall traegt ein Machine-Detection-Feld", async () => {
-  const calls = stubFetch({ json: { sid: "tnx_gap21" } });
+test("originateCall / originateViaCallControl traegt das Machine-Detection-Feld (GAP-21)", async (t) => {
+  await t.test("TeXML: originateCall traegt AnsweringMachineDetection=detect", async () => {
+    const calls = stubFetch({ json: { sid: "tnx_gap21" } });
+    await telnyxVoice.originateCall({
+      from: "+13125550100",
+      to: "+4917312345678",
+      url: "https://agent.test/voice/outbound?callId=call_gap21",
+      method: "POST",
+    });
+    const form = new URLSearchParams(calls[0].body.toString());
+    const obj = Object.fromEntries(form.entries());
+    assert.ok(hasMachineDetectionField(obj), `kein Machine-Detection-Feld: ${form.toString()}`);
+    assert.equal(obj.AnsweringMachineDetection, "detect", "exakter TeXML-Feldname (Objekt-GET-belegt)");
+  });
+
+  await t.test("Call-Control: originateViaCallControl traegt answering_machine_detection=detect", async () => {
+    const calls = stubFetch({ json: { call_control_id: "cc_gap21" } });
+    await telnyxVoice.originateViaCallControl({ from: "+13125550100", to: "+4917312345678" });
+    const body = JSON.parse(calls[0].body);
+    assert.ok(hasMachineDetectionField(body), `kein Machine-Detection-Feld: ${JSON.stringify(body)}`);
+    assert.equal(body.answering_machine_detection, "detect", "exakter Call-Control-Feldname (Objekt-GET-belegt)");
+  });
+});
+
+test("Detection-Timeout wird als eigenes Feld mitgeschickt", async () => {
+  const calls = stubFetch({ json: { sid: "tnx_gap21_timeout" } });
   await telnyxVoice.originateCall({
     from: "+13125550100",
     to: "+4917312345678",
-    url: "https://agent.test/voice/outbound?callId=call_gap21",
+    url: "https://agent.test/voice/outbound?callId=call_gap21b",
     method: "POST",
   });
   const form = new URLSearchParams(calls[0].body.toString());
-  assert.ok(
-    hasMachineDetectionField(Object.fromEntries(form.entries())),
-    `originateCall-Body traegt kein Machine-Detection-Feld (Launch-Blocker): ${form.toString()}`,
-  );
+  assert.equal(form.get("MachineDetectionTimeout"), "5");
 });
 
-test("GAP-21 (SOLL rot, Call-Control): originateViaCallControl traegt ein Machine-Detection-Feld", async () => {
-  const calls = stubFetch({ json: { call_control_id: "cc_gap21" } });
-  await telnyxVoice.originateViaCallControl({
-    from: "+13125550100",
-    to: "+4917312345678",
+// K2 (Pre-Mortem 2): der eigentliche Deploy-Sicherheitsbeweis. Flag AUS (Bestandsdefault)
+// -> BEIDE Origination-Bodies tragen KEIN Machine-Detection-Feld, byte-identisch zum
+// Bestand vor GAP-21.
+test("Flag AUS: beide Origination-Bodies sind byte-identisch zum Bestand (GAP-21 Deploy-Sicherung)", async () => {
+  await withMachineDetectionOff(async () => {
+    const calls1 = stubFetch({ json: { sid: "tnx_gap21_off" } });
+    await telnyxVoice.originateCall({
+      from: "+13125550100",
+      to: "+4917312345678",
+      url: "https://agent.test/voice/outbound?callId=call_gap21c",
+      method: "POST",
+    });
+    const form = new URLSearchParams(calls1[0].body.toString());
+    assert.ok(!hasMachineDetectionField(Object.fromEntries(form.entries())), "TeXML-Body traegt kein Feld");
+
+    const calls2 = stubFetch({ json: { call_control_id: "cc_gap21_off" } });
+    await telnyxVoice.originateViaCallControl({ from: "+13125550100", to: "+4917312345678" });
+    const body = JSON.parse(calls2[0].body);
+    assert.ok(!hasMachineDetectionField(body), "Call-Control-Body traegt kein Feld");
   });
-  const body = JSON.parse(calls[0].body);
-  assert.ok(
-    hasMachineDetectionField(body),
-    `originateViaCallControl-Body traegt kein Machine-Detection-Feld (Launch-Blocker): ${JSON.stringify(body)}`,
-  );
 });
