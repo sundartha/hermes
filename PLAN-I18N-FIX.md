@@ -1437,6 +1437,17 @@ Gegenprobe gegen die Buendel der Klassifikation:
 **Rot-Liste-Verlauf:** 53 -> 51 (P1) -> 47 (P2) -> 45 (P3) -> 42 (P4) -> 39 (P5) -> 36 (P6) ->
 33 (P7) -> 29 (P8) -> 25 (P9) -> 18 (P10) -> 10 (P11) -> 5 (P12) -> 1 (P13) -> 0 (P14).
 
+> **Zweite Korrektur (2026-07-26, in der Umsetzung gemessen): der Zielwert ist 2, nicht 1.**
+> Neben GAP-05 bleibt auch **GAP-15** rot - und zwar **inhaltlich, nicht technisch**. P14 hat die
+> Mechanik vollstaendig gebaut (DE-Content aus den Astro-Seiten in `apps/web/src/data/legal/`,
+> gemeinsame Rechtsdokument-Komponente, dynamische EN-Route, die nur baut was als `*.en.json`
+> geliefert ist, noindex + Vorrangklausel). Die beiden Assertions scheitern an genau dem, was
+> O13 als externen Vorlauf benannt hat: (1) die DE-Texte bezeichnen sich **selbst noch als
+> Platzhalter**, (2) es gibt keine EN-Fassung - die Route liefert vereinbarungsgemaess 404 statt
+> eines Platzhalters. **GAP-15 wird gruen, sobald der beauftragte Rechtstext geliefert und als
+> `*.de.json`/`*.en.json` eingespielt ist - ohne jede Code-Aenderung.** Das ist kein offener
+> Umsetzungspunkt dieses Plans, sondern eine offene Bestellung.
+>
 > **Korrektur nach der Owner-Runde: der Zielwert ist 1, nicht 0.** Entscheidung O2b laesst die
 > zweite Assertion von GAP-05 bewusst rot (Abschnitt 7.6). Die ID bleibt damit dauerhaft in
 > `test:gates` stehen. Ab P4 ist der Verlauf also um eins hoeher als oben notiert, und die letzte
