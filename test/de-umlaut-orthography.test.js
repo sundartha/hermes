@@ -34,6 +34,8 @@ const SPOKEN_DE_FIELDS = [
   ["S10 noSpeechFarewell", LOCALES.de.noSpeechFarewell],
   // P3.1: deterministischer Abschluss-Satz kurz vor dem harten Max-Dauer-Cap.
   ["S11 capFarewellSpeech", LOCALES.de.capFarewellSpeech],
+  // GAP-14: der Inbound-Pflichtsatz ist ein deterministisch GESPROCHENER DE-String.
+  ["S12 inboundNotice", LOCALES.de.inboundNotice],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {

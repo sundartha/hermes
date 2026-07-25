@@ -20,6 +20,7 @@ import {
 } from "./defaults.js";
 import { findActiveNumber } from "./views.js";
 import * as ops from "./state-ops.js";
+import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
 const FILE = path.join(config.server.dataDir, "store.json");
 
@@ -104,6 +105,11 @@ function finishLoad() {
   seedOwnerNumberFromEnv();
   seedOwnerIdpSubjectFromEnv();
   seedOwnerKyc();
+  // O7-Migration (GAP-14): Bestandsgreetings einmalig um den Pflichtsatz ergaenzen.
+  // In finishLoad, weil hier ALLE drei load()-Zweige durchlaufen (kein Pfad ausgelassen)
+  // und state.numbers/settings zu diesem Zeitpunkt garantiert normalisiert sind.
+  // Nur bei echter Aenderung schreiben -> zweiter Boot ist ein No-Op.
+  if (backfillGreetingNotices(state).length) save();
   return state;
 }
 

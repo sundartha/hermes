@@ -25,6 +25,7 @@ import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
+import { withInboundNotice } from "../i18n/inbound-notice.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
@@ -259,11 +260,24 @@ export function makeVoiceRoutes({
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
 
       if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
-        return res.type("text/xml").send(render(streamDirectives(call), provider));
+        // GAP-14: auch die Realtime-Engine darf den Pflichtsatz nicht dem Modell
+        // ueberlassen (der Opener ist eine Prompt-Anweisung). Deterministisch gerendert
+        // VOR dem Stream-Handoff; bridge.js bleibt unberuehrt (HEIKLE STELLE).
+        return res
+          .type("text/xml")
+          .send(render([sayD(locale.inboundNotice, locale.voiceProfile), ...streamDirectives(call)], provider));
       }
 
       const ctx = store.tenantContext(call.tenantId);
-      const greeting = ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName);
+      // GAP-14: der Pflichtsatz wird GERENDERT, nie gepromptet (Regel-2-Analogie fuer
+      // Inbound) - und nur vorangestellt, wenn er im Greeting fehlt (kein Doppelsatz).
+      // Deckt BEIDE Live-Kanaele: TeXML-Gather UND den Assistant-Speak-Node (derselbe
+      // String). replaceAll bleibt VOR dem Praefix -> der Fehlerpfad bei greeting=null
+      // wirft unveraendert (voice-incoming-catch-path).
+      const greeting = withInboundNotice(
+        ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName),
+        locale.inboundNotice,
+      );
 
       // P8: Handoff an den Call-Control-Assistant, falls einschlaegig; sonst (null) faellt
       // der Aufrufer fail-safe auf den bestehenden TeXML-Gather-Pfad zurueck (byte-identisch).

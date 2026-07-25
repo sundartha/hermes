@@ -13,7 +13,7 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
-import { GREETING_TEMPLATES } from "../src/self-service.js";
+import { ALL_GREETING_TEMPLATES } from "../src/self-service.js";
 
 const OWNER = "Jonas Beispiel";
 // Fester Tool-Satz beider Engines nach P1b.
@@ -97,7 +97,10 @@ test("P1b-4 execTool kennt book_appointment/get_calendar nicht mehr (kein Kalend
 });
 
 test("P1b-5 gesprochene Begruessungs-Vorlagen versprechen keine Terminbuchung mehr", () => {
-  for (const greeting of [DEFAULT_GREETING, ...GREETING_TEMPLATES]) {
-    assert.ok(!/Termin/i.test(greeting), `Terminversprechen in Vorlage: ${greeting}`);
+  // E1 gilt sprachunabhaengig: seit WEB-04 sind EN/FR-Vorlagen waehlbar, eine rein
+  // deutsche Regex wuerde ein englisches Terminversprechen durchwinken.
+  const NO_BOOKING_PROMISE = /Termin|appointment|rendez-vous/i;
+  for (const greeting of [DEFAULT_GREETING, ...ALL_GREETING_TEMPLATES]) {
+    assert.ok(!NO_BOOKING_PROMISE.test(greeting), `Terminversprechen in Vorlage: ${greeting}`);
   }
 });

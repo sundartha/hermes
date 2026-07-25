@@ -54,6 +54,9 @@ import {
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
 import { isKnownPlanSlug } from "../plans.js";
+// GAP-14: Wert-Guard fuer updateSettings (greeting muss den Inbound-Pflichtsatz tragen).
+// inbound-notice.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus).
+import { hasInboundNotice } from "../i18n/inbound-notice.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -2576,6 +2579,12 @@ const OPTIONAL_ENUM_FIELDS = Object.freeze({
   agentStyle: PERSONA_STYLE_IDS,
 });
 
+// Wert-Pruefungen jenseits von Typ/Enum. greeting: der Inbound-Pflichtsatz (GAP-14/O7)
+// darf nicht wegeditiert werden. SELEKTIV - nur dieses Feld faellt, der uebrige Patch
+// laeuft durch (ein Bestandskunde muss seinen agentName aendern koennen, auch wenn sein
+// Greeting den Marker nicht traegt). Bestand wird EINMALIG migriert, nicht je Write.
+const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
+
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
 // so keine fremden Felder in den Store schreiben oder Typen kippen. Optionale Enum-
@@ -2595,6 +2604,8 @@ export function updateSettings(s, tenantId, patch) {
       target[key] = value === "" ? null : value;
       changed.push(key);
     } else if (typeof value === typeof allowed[key]) {
+      const guard = FIELD_GUARDS[key];
+      if (guard && !guard(value)) continue; // selektiv verworfen, Patch laeuft weiter
       target[key] = value;
       changed.push(key);
     }

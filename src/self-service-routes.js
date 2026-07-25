@@ -13,7 +13,7 @@
 // store.updateSettings (greeting nur als Vorlage; Permission-Flags nur restriktiver;
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
 import { Router } from "express";
-import { selfServicePatch, GREETING_TEMPLATES, hasCardOnFile } from "./self-service.js";
+import { selfServicePatch, greetingTemplatesFor, hasCardOnFile } from "./self-service.js";
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { requirePaymentEnabled } from "./billing/payment-gate.js";
@@ -26,7 +26,13 @@ import {
 } from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { provisionAuditDetail } from "./billing/provision-outcome.js";
-import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "./store/views.js";
+import {
+  publicCall,
+  activeNumberFor,
+  numberStatusFor,
+  upcomingCalendar,
+  tenantLanguage,
+} from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 // Fix A1 (Runde 1, G5): dieselbe Kauf-Land-Override-Kombination wie requestNumberForPaid-
@@ -212,7 +218,9 @@ export function makeSelfServiceRoutes({
     const agentState = store.load();
     res.json({
       settings: ctx.settings,
-      greetingTemplates: GREETING_TEMPLATES,
+      // WEB-04: Vorlagen in der Sprache, in der dieser Tenant auch telefoniert
+      // (gleiche Praezedenz wie im Anruf, G5) - agentState ist oben bereits geladen.
+      greetingTemplates: greetingTemplatesFor(tenantLanguage(agentState, tenant)),
       // P4: kuratierte Stil-IDs fuers Dropdown (EINE Quelle = das P2-Enum; das Client-
       // Dropdown haelt KEIN eigenes ID-Set, G5/S2). Fehlt das Feld -> UI versteckt die
       // Karte (Flag-aus / alter Server) - I9-Muster wie hasCard beim billingCard.
