@@ -23,14 +23,16 @@ const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MICRO_CENTS_PER_CENT = 1_000_000;
 const NEUTRAL_RATE_MICRO = 1_000_000; // Faktor 1,0 - haelt die Fixturen als Cent lesbar
 
-// Ein Sample-Call: NUR die vier Felder, die cost-calibration.js liest. minutes fest auf 1,
+// Ein Sample-Call: NUR die Felder, die cost-calibration.js liest. minutes fest auf 1,
 // damit costCts direkt der USD-Cent/min-Rate entspricht (kein zusaetzlicher /minutes-Schritt
 // in den erwarteten Werten). endedMinutesAgo staffelt die Recency fuer den Fenster-Test (P5-10).
-function driftSample({ to, costCts, endedMinutesAgo = 1, source = COST_TRUING_SOURCE.DETAIL_RECORDS }) {
+// from faellt per Default auf to zurueck: seit der Herkunfts-Achse (P5) ist Stichprobe nur,
+// was den Praefix an BEIDEN Enden traegt - also ein echtes Inlands-Leg.
+function driftSample({ to, from = to, costCts, endedMinutesAgo = 1, source = COST_TRUING_SOURCE.DETAIL_RECORDS }) {
   const nowMs = Date.now();
   const endedAt = new Date(nowMs - endedMinutesAgo * 60_000).toISOString();
   const answeredAt = new Date(nowMs - (endedMinutesAgo + 1) * 60_000).toISOString();
-  return { to, costTruedSource: source, actualCostMicroCents: costCts * MICRO_CENTS_PER_CENT, answeredAt, endedAt };
+  return { to, from, costTruedSource: source, actualCostMicroCents: costCts * MICRO_CENTS_PER_CENT, answeredAt, endedAt };
 }
 
 // n gleichwertige Samples mit distinkten endedAt-Zeitpunkten (offsetStart..offsetStart+n-1
@@ -198,8 +200,8 @@ test("P5-11: minSamples 500 bei 100 Calls -> insufficient_samples, samples 100, 
 });
 
 test("P5-12: tariffCentsPerMin unveraendert; cost-calibration.js IMPORTIERT tariffCentsPerMin NICHT (keine funktionale Kopplung an den Tarif-Lookup)", () => {
-  assert.equal(tariffCentsPerMin("+4915155512345"), config.billing.voiceTariffDomesticCents);
-  assert.equal(tariffCentsPerMin("+15551234567"), config.billing.voiceTariffDefaultCents);
+  assert.equal(tariffCentsPerMin("+4915155512345", "+4930111222333"), config.billing.voiceTariffDomesticCents);
+  assert.equal(tariffCentsPerMin("+15551234567", "+4930111222333"), config.billing.voiceTariffDefaultCents);
   const src = fs.readFileSync(path.join(REPO_ROOT, "src", "billing", "cost-calibration.js"), "utf8");
   assert.doesNotMatch(
     src,

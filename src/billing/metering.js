@@ -29,11 +29,23 @@ export function voiceMinutesOf(call) {
   return Number.isFinite(minutes) ? minutes : 0;
 }
 
+// Minutensatz DIESES Legs (P5, Herkunfts-Achse). Die eigene DID des Tenants steht
+// richtungsabhaengig an verschiedenen Enden: outbound waehlen WIR (call.from), inbound wird
+// die DID angewaehlt (call.to). Inbound hat kein fremdes Ziel-Leg - der Satz haengt am Land
+// der EIGENEN DID, sie steht deshalb an beiden Enden (O3b/B2: Beleg zum Satz des DID-Landes,
+// nie zum Auslands-Worst-Case des Anrufers - aber auch nie pauschal Inland: eine US-DID
+// bekommt den Default-Satz). Unbekannte Richtung faellt in den outbound-Zweig und ohne
+// Herkunft fail-closed auf den teuersten Satz.
+export function callTariffCentsPerMin(call) {
+  if (call.direction === "inbound") return tariffCentsPerMin(call.to, call.to);
+  return tariffCentsPerMin(call.to, call.from);
+}
+
 export function makeMetering({ store, config }) {
   // Voice-Minuten-Meter EINES beendeten Calls (P6b3, Meter 2). NUR im Metering-Pfad
   // (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt (recordUsageEvent) im Namen.
-  // 0 Minuten -> kein Event (kein Null-Beleg). Kosten-Cents aus dem Ziel-Tarif
-  // (tariffCentsPerMin, EINE Kosten-Quelle G5) x Minuten.
+  // 0 Minuten -> kein Event (kein Null-Beleg). Kosten-Cents aus dem Leg-Tarif (Ziel UND
+  // Herkunft, callTariffCentsPerMin - EINE Kosten-Quelle G5) x Minuten.
   function recordVoiceMinuteMeter(call) {
     const minutes = voiceMinutesOf(call);
     if (minutes <= 0) return;
@@ -42,13 +54,13 @@ export function makeMetering({ store, config }) {
       callId: call.id,
       kind: USAGE_EVENT_KIND.VOICE_MINUTE,
       quantity: minutes,
-      costCents: minutes * tariffCentsPerMin(call.to),
+      costCents: minutes * callTariffCentsPerMin(call),
     });
   }
 
   // Reconcile (outbound-p1c, Kosten-Achse, D1): bucht die IST-Voice-Minuten eines beendeten
-  // OUTBOUND-Calls (Minuten x Ziel-Tarif) in den Budget-Bucket des Tenants - so sieht der
-  // Budget-Gate + die Vorab-Reservierung endlich die Carrier-Minuten. IMMER (auch ohne
+  // OUTBOUND-Calls (Minuten x Leg-Tarif: Ziel UND Herkunft) in den Budget-Bucket des
+  // Tenants - so sieht der Budget-Gate + die Vorab-Reservierung endlich die Carrier-Minuten. IMMER (auch ohne
   // PAYMENT_ENABLED, im owner-only-Interim). Inbound byte-identisch (kein Budget-Abzug).
   // Nie beantwortet -> 0 Minuten -> kein Abzug. Nebeneffekt (Store-Mutation) im Namen (N7).
   function reconcileOutboundVoiceBudget(call) {
@@ -65,7 +77,7 @@ export function makeMetering({ store, config }) {
     // Reihenfolge ist Absicht: erst buchen, dann den Bezugswert festhalten. Beide Schritte
     // sind synchrone Spiegel-Mutationen ohne IO dazwischen; die Richtung im Zweifel ist die,
     // die MEHR gebucht laesst (fehlender Estimate -> P4 korrigiert gar nicht, fail-closed).
-    const estimatedCostCents = minutes * tariffCentsPerMin(call.to);
+    const estimatedCostCents = minutes * callTariffCentsPerMin(call);
     store.addVoiceUsageCostCents(call.tenantId, estimatedCostCents);
     store.recordCallEstimatedCostCents(call.id, estimatedCostCents);
   }

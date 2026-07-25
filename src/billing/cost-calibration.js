@@ -4,8 +4,10 @@
 // der sich aus Anrufen speist, die das Gate durchgelassen hat, ist die Rueckkopplung
 // aus PM-2; ein dummer, aber vorhersagbarer Wert ist hier die bessere Eigenschaft.
 // tariffCentsPerMin (src/telephony/outbound-gates.js) wird von dieser Phase NICHT
-// importiert und NICHT beruehrt.
+// importiert und NICHT beruehrt. Seit P5 wird nur das reine Praefix-Praedikat
+// hasCountryPrefix aus demselben Modul geteilt (EINE Praefix-Frage, kein Tarif-Lookup).
 import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE } from "../store/defaults.js";
+import { hasCountryPrefix } from "../telephony/outbound-gates.js";
 import { voiceMinutesOf } from "./metering.js";
 
 // Groesse des rollenden Fensters: die juengsten N abgeglichenen Calls je Praefix.
@@ -48,11 +50,15 @@ const ALERTABLE_DRIFT_CODES = Object.freeze([
 // sind Stichproben. 'incomplete' ist systematisch ZU NIEDRIG - liesse man es zu,
 // erzeugte die lueckenhafte Messung selbst den Befund 'overestimate' und der Waechter
 // alarmierte gegen seine eigene Datenluecke (P4-Risiko/PM-8).
+// Praefix an BEIDEN Enden (P5, Herkunfts-Achse): Stichprobe ist nur, was auch zum
+// Inlandssatz tarifiert WURDE. Ein Leg von einer auslaendischen DID trifft den
+// Default-Satz - es gegen voiceTariffDomesticCents zu messen, verglich zwei
+// verschiedene Groessen.
 function isDriftSample(call, prefix) {
   return (
     call.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS &&
-    typeof call.to === "string" &&
-    call.to.startsWith(prefix)
+    hasCountryPrefix(call.to, prefix) &&
+    hasCountryPrefix(call.from, prefix)
   );
 }
 
@@ -141,9 +147,10 @@ export function tariffDriftReport({ calls, prefixes, ...params }) {
 // EINE Stelle, die config -> reine Argumente uebersetzt (G5): Boot-Guard, Sweep und
 // Lese-Endpunkt bauen den Aufruf NICHT je selbst zusammen. configuredCentsPerMin ist
 // voiceTariffDomesticCents, weil ALLE bewerteten Praefixe aus voiceTariffDomesticPrefixes
-// stammen und tariffCentsPerMin genau fuer diese den Inlandssatz liefert. Ziele OHNE
-// Praefix-Treffer werden bewusst NICHT bewertet (sie fallen auf voiceTariffDefaultCents =
-// 300 ct, den harten Deckel, PM-5) und keinem Praefix zugeschlagen. warnPercent teilt sich
+// stammen und der Inlandssatz genau fuer die Legs gilt, die diesen Praefix an BEIDEN Enden
+// tragen (P5) - genau die filtert isDriftSample. Legs OHNE diesen doppelten Treffer werden
+// bewusst NICHT bewertet (sie fallen auf voiceTariffDefaultCents = 300 ct, den harten
+// Deckel, PM-5) und keinem Praefix zugeschlagen. warnPercent teilt sich
 // costDriftWarnPercent mit dem P3-Kosten-Drift-Log (dieselbe Toleranzschwelle, EINE Quelle).
 export function tariffDriftReportFromConfig(calls, billing) {
   return tariffDriftReport({

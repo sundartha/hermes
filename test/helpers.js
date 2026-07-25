@@ -22,6 +22,12 @@ const STARTUP_TIMEOUT_MS = 15000;
 // bisherige BASE_ENV-Nummer + seedCall.from (byte-identisch zum Altbestand).
 export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "twilio" });
 
+// Inlands-DID fuer Tests, die ausdruecklich ein INLANDS-Leg fahren (P5-Herkunfts-Achse:
+// Inlandssatz nur bei gleicher Vorwahl an beiden Enden). BEWUSST kein neuer Default fuer
+// OWNER_TEST_NUMBER: die ausgelieferte Default-DID ist US, und genau das muss der
+// Live-Messpunkt test/prod-config-smoke.test.js weiter fahren.
+export const DOMESTIC_TEST_NUMBER = Object.freeze({ e164: "+4930111222333", provider: "twilio" });
+
 // Owner-Identitaet fuer Spawn-Tests: ersetzt den frueheren config-derived Identitaets-
 // Seed (OWNER_FIRST_NAME/OWNER_LAST_NAME, P2b entfernt). Die Identitaet lebt jetzt im
 // Store (wie die Owner-Nummer) -> ensureOwnerNumber traegt sie auf dem Owner-Tenant ein.

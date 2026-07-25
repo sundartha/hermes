@@ -18,7 +18,14 @@
 // (kein Anthropic-Mock). twilioSid=null (seedCall-Default) -> kein Provider-endCall.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, waitForLog, waitForStoreState } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  waitForLog,
+  waitForStoreState,
+  DOMESTIC_TEST_NUMBER,
+} from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Tarif so, dass die gebuchte Zombie-Minute eine sichtbare Summe ergibt (G25, Muster
@@ -48,6 +55,9 @@ test("Boot-Re-Arm terminalisiert einen Zombie gekappt + gebucht (nie Boot-Zeit)"
           id: "zombie",
           direction: "outbound",
           to: DOMESTIC_TO,
+          // Absender mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
+          // BEIDEN Enden (seedCall-Default ist die US-DID = Auslands-Leg).
+          from: DOMESTIC_TEST_NUMBER.e164,
           status: "active",
           answeredAt: ZOMBIE_ANSWERED_AT,
           startedAt: ZOMBIE_ANSWERED_AT,

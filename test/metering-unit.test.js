@@ -10,6 +10,7 @@ import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { DOMESTIC_TEST_NUMBER } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
 const NUMBER_SETUP_FEE_CENTS = 500;
@@ -37,11 +38,15 @@ function fakeStore() {
   };
 }
 
+// from = eine Inlands-DID: seit der Herkunfts-Achse (P5) haengt der Satz am LEG, und ein
+// Fixture mit US-Absender + DE-Ziel wuerde beide Seiten der Assertion auf denselben
+// Default-Satz ziehen (die Assertion waere gruen, aber inhaltsleer).
 function makeCall(overrides = {}) {
   return {
     id: "call_1",
     tenantId: TENANT_A,
     to: "+491701234567",
+    from: DOMESTIC_TEST_NUMBER.e164,
     direction: "outbound",
     answeredAt: "2026-01-01T00:00:00.000Z",
     endedAt: "2026-01-01T00:01:00.000Z", // 60000 ms = 1 Minute
@@ -88,7 +93,7 @@ test("recordVoiceMinuteMeter: N Minuten -> Event mit kind/quantity/costCents aus
   assert.equal(ev.callId, call.id);
   assert.equal(ev.kind, USAGE_EVENT_KIND.VOICE_MINUTE);
   assert.equal(ev.quantity, 1);
-  assert.equal(ev.costCents, 1 * tariffCentsPerMin(call.to));
+  assert.equal(ev.costCents, 1 * tariffCentsPerMin(call.to, call.from));
 });
 
 test("reconcileOutboundVoiceBudget: inbound -> kein addVoiceUsageCostCents", () => {
@@ -113,13 +118,13 @@ test("reconcileOutboundVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCent
   assert.equal(store.voiceCostCents.length, 1);
   assert.deepEqual(store.voiceCostCents[0], {
     tenantId: TENANT_A,
-    costCents: 1 * tariffCentsPerMin(call.to),
+    costCents: 1 * tariffCentsPerMin(call.to, call.from),
   });
   // LCT P2 (E2): derselbe Betrag wird IM SELBEN Schritt am Call persistiert - nicht spaeter
   // aus dem Tarif rekonstruiert.
   assert.deepEqual(store.estimatedCostCents[0], {
     callId: call.id,
-    costCents: 1 * tariffCentsPerMin(call.to),
+    costCents: 1 * tariffCentsPerMin(call.to, call.from),
   });
 });
 
