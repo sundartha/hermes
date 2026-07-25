@@ -1185,43 +1185,54 @@ test("T-tpb-02: Dev-Login bindet den sub ebenfalls (bindSub ist UNCONDITIONAL, a
   }
 });
 
-// ---- WEB-11 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:294) ----
-// CSRF-Fehlerantwort bei fehlgeschlagenem OIDC-State ist unuebersetztes Deutsch.
+// ---- ex WEB-11 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:294) ----
+// CSRF-Fehlerantwort bei fehlgeschlagenem OIDC-State ist ein stabiler, sprachneutraler
+// Code (kein deutscher Klartext) - src/web-auth.js rejectCsrf().
 //
-// SOLL (rot): der Body soll sprachneutral sein (kein "Ungueltige..."), nicht der deutsche
-// Klartext aus rejectCsrf (src/web-auth.js:115-117). Reproduziert dasselbe Szenario wie
-// "GET /auth/callback mit FALSCHEM state -> 400" oben, hier mit einer zusaetzlichen
-// Body-Assertion statt nur dem Statuscode.
+// Zweiter Request in DEMSELBEN Test gegen eine ANDERE rejectCsrf-Aufrufstelle (fehlender
+// oidc_nonce-Cookie statt State-Mismatch) pinnt die Regel-3-Invariante: der Code ist fuer
+// ALLE CSRF-Ablehnungsgruende byte-identisch - kein Detail-Leak, welcher Check scheiterte.
 
-test("WEB-11 (SOLL rot): CSRF-State-Fehlantwort ist sprachneutral, kein 'Ungueltige...'", async () => {
+test("CSRF-Fehlantwort ist ein sprachneutraler Code, identisch fuer alle Ablehnungsgruende (ex WEB-11)", async () => {
   const { deps } = fakeDeps();
   const srv = await mountRouter(deps);
   try {
-    const cookies = [
+    const stateMismatchCookies = [
       `oauth_state=${encodeURIComponent(signValue("the-real-state", SECRET))}`,
       `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
     ].join("; ");
-    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=attacker-state`, {
-      Cookie: cookies,
-    });
-    assert.equal(res.status, 400);
-    assert.doesNotMatch(
-      res.body,
-      /Ungueltige/,
-      `SOLL: CSRF-Antwort muss sprachneutral sein (war "${res.body}")`,
+    const stateMismatch = await rawGet(
+      `${srv.base}/auth/callback?code=authcode&state=attacker-state`,
+      { Cookie: stateMismatchCookies },
+    );
+    assert.equal(stateMismatch.status, 400);
+    assert.equal(stateMismatch.body, "csrf_state_invalid");
+
+    // andere Aufrufstelle: state passt, aber oidc_nonce-Cookie fehlt komplett.
+    const missingNonceCookies = [
+      `oauth_state=${encodeURIComponent(signValue("the-real-state", SECRET))}`,
+      `pkce_verifier=${encodeURIComponent(signValue("verifier-123", SECRET))}`,
+    ].join("; ");
+    const missingNonce = await rawGet(
+      `${srv.base}/auth/callback?code=authcode&state=the-real-state`,
+      { Cookie: missingNonceCookies },
+    );
+    assert.equal(missingNonce.status, 400);
+    assert.equal(
+      missingNonce.body,
+      stateMismatch.body,
+      "byte-identischer Body ueber beide Ablehnungsgruende hinweg (kein Detail-Leak)",
     );
   } finally {
     await srv.close();
   }
 });
 
-// ---- WEB-12 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:313) ----
-// Anmeldung-fehlgeschlagen-Fehler (500 UND 401) sind deutscher Klartext.
-//
-// SOLL (rot): beide Fehlerantworten (authorizeUrl wirft -> 500, exchange wirft -> 401)
-// sollen sprachneutral/englisch sein, nicht "Anmeldung fehlgeschlagen" (src/web-auth.js:223,284).
+// ---- ex WEB-12 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:313) ----
+// Login-Fehlerpfade (authorizeUrl wirft -> 500, exchange wirft -> 401) liefern den
+// stabilen, sprachneutralen Code ERROR_LOGIN_FAILED statt deutschem Klartext.
 
-test("WEB-12a (SOLL rot): GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein 'Anmeldung fehlgeschlagen'", async () => {
+test("Login-Fehlerpfad: authorizeUrl wirft -> 5xx + sprachneutraler Code (ex WEB-12a)", async () => {
   const { deps } = fakeDeps({
     oidc: {
       authorizeUrl: async () => {
@@ -1234,17 +1245,13 @@ test("WEB-12a (SOLL rot): GET /auth/login bei authorizeUrl-Fehler -> 5xx, kein '
   try {
     const res = await rawGet(`${srv.base}/auth/login`);
     assert.ok(res.status >= 500 && res.status < 600);
-    assert.doesNotMatch(
-      res.body,
-      /Anmeldung fehlgeschlagen/,
-      `SOLL: Fehlertext muss sprachneutral sein (war "${res.body}")`,
-    );
+    assert.equal(res.body, "login_failed");
   } finally {
     await srv.close();
   }
 });
 
-test("WEB-12b (SOLL rot): GET /auth/callback bei exchange-Fehler -> 401, kein 'Anmeldung fehlgeschlagen'", async () => {
+test("Login-Fehlerpfad: exchange wirft -> 401 + sprachneutraler Code (ex WEB-12b)", async () => {
   const { deps } = fakeDeps({
     oidc: {
       authorizeUrl: async () => "https://idp.test/authorize",
@@ -1265,11 +1272,7 @@ test("WEB-12b (SOLL rot): GET /auth/callback bei exchange-Fehler -> 401, kein 'A
       Cookie: cookies,
     });
     assert.equal(res.status, 401);
-    assert.doesNotMatch(
-      res.body,
-      /Anmeldung fehlgeschlagen/,
-      `SOLL: Fehlertext muss sprachneutral sein (war "${res.body}")`,
-    );
+    assert.equal(res.body, "login_failed");
   } finally {
     await srv.close();
   }

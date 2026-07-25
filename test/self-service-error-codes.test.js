@@ -1,13 +1,11 @@
-// WEB-09 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:261) -
-// Self-Service-API-Fehlertexte sind rohes Deutsch statt Code+lokalisierbarem Text.
+// ex WEB-09, umbenannt in P9 (A3) - i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md:261.
 //
-// SOLL (rot): das `error`-Feld einer fehlgeschlagenen POST /api/self-service/private-number
-// soll ein stabiler, sprachneutraler Code sein (z.B. "invalid_private_number"), kein
-// deutscher Klartext. Heute liefert src/self-service-routes.js:275 woertlich
-// "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)".
+// POST /api/self-service/private-number liefert bei ungueltigem Wert einen stabilen,
+// sprachneutralen Code im `error`-Feld ("invalid_private_number"), keinen deutschen
+// Klartext.
 //
-// Eigene Datei (Vorgabe): WEB-09 betrifft src/self-service-routes.js, NICHT den Auth-Pfad
-// (test/web-auth.test.js ist WEB-11/WEB-12 vorbehalten). In-process pglite (Muster
+// Eigene Datei (Vorgabe): betrifft src/self-service-routes.js, NICHT den Auth-Pfad
+// (test/web-auth.test.js deckt die dortigen Codes ab). In-process pglite (Muster
 // test/i9-self-service.test.js): kein Server-Spawn, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -61,7 +59,7 @@ async function setup() {
   };
 }
 
-test("WEB-09 (SOLL rot): ungueltige privateNumber liefert einen stabilen Code, kein deutsches Klartext-Fehlerfeld", async () => {
+test("private-number: ungueltiger Wert liefert 400 + stabilen Code invalid_private_number (ex WEB-09)", async () => {
   const srv = await setup();
   try {
     const res = await fetch(`${srv.base}/api/self-service/private-number`, {
@@ -71,12 +69,7 @@ test("WEB-09 (SOLL rot): ungueltige privateNumber liefert einen stabilen Code, k
     });
     assert.equal(res.status, 400);
     const json = await res.json();
-    // SOLL: ein stabiler Code ohne deutsche Signalwoerter/Leerzeichen (z.B. "invalid_private_number").
-    assert.doesNotMatch(
-      json.error,
-      /ungueltig|erwartet|erlaubtes|\s/,
-      `SOLL: error-Feld muss ein sprachneutraler Code sein, nicht deutscher Klartext (war "${json.error}")`,
-    );
+    assert.equal(json.error, "invalid_private_number");
   } finally {
     await srv.close();
   }

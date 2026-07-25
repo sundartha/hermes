@@ -35,6 +35,13 @@ const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="de"><head><meta charset
 <p><a href="${LOGIN_ROUTE}">Erneut anmelden</a></p>
 </body></html>`;
 
+// P9 (Fehler-Vertrag): die nutzersichtbaren Fehlerantworten der Auth-Pfade tragen stabile,
+// sprachneutrale Codes statt deutschem Klartext - ein Browser mit beliebigem Accept-Language
+// bekommt denselben, maschinenlesbaren Wert. Die Antworten bleiben bewusst detail-arm: EIN
+// Code fuer ALLE CSRF-Ablehnungsgruende (kein Leak, welcher Check scheiterte, Regel 3).
+const ERROR_CSRF_STATE_INVALID = "csrf_state_invalid";
+const ERROR_LOGIN_FAILED = "login_failed";
+
 const b64url = (buf) => buf.toString("base64url");
 
 // HMAC-signierter Cookie-Wert "<value>.<sig>". Timing-sichere Pruefung.
@@ -113,7 +120,7 @@ export function readSignedCookie(req, name, secret) {
 // EINE Quelle (G5) fuer die generische 400-CSRF-Antwort (bewusst detail-arm, kein Leak
 // welcher Check scheiterte). Gibt die Antwort zurueck -> Aufrufer `return`t sie (Muster recoverLogin).
 function rejectCsrf(res) {
-  return res.status(400).send("Ungueltige oder fehlende CSRF-State-Pruefung");
+  return res.status(400).send(ERROR_CSRF_STATE_INVALID);
 }
 
 // Recovery bei FEHLENDEM Login-Flow-Cookie (benign: Drop/Expiry/anderer Tab beim Mail-Link).
@@ -220,7 +227,7 @@ export function makeWebAuthRoutes(deps) {
       res.redirect(302, url);
     } catch {
       clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
-      res.status(500).send("Anmeldung fehlgeschlagen");
+      res.status(500).send(ERROR_LOGIN_FAILED);
     }
   });
 
@@ -281,7 +288,7 @@ export function makeWebAuthRoutes(deps) {
     } catch {
       // Generischer Fehler: kein internes Detail, keine Token-Leaks
       clearCookies(res, LOGIN_FLOW_COOKIE_NAMES);
-      res.status(401).send("Anmeldung fehlgeschlagen");
+      res.status(401).send(ERROR_LOGIN_FAILED);
     }
   });
 
