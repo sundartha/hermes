@@ -453,8 +453,12 @@ Inbound-Call; technisch ist es eine Greeting-Vorlage plus eine Validierung. Die 
 darauf warten zu lassen kauft Eleganz mit Wochen offener Transparenzpflicht. WEB-04 liegt hier,
 weil die Vorlagen sonst zweimal angefasst werden.
 
-**Wichtig:** diese Phase aendert **keine** Sprachauswahl. Sie legt die Vorlagen fuer de/en/fr an;
-welche gewaehlt wird, bleibt bis P10 unveraendert.
+**Wichtig:** diese Phase aendert **keine** Sprachauswahl. Sie legt die Vorlagen fuer de/en/fr an,
+sodass ueberhaupt eine englische und eine franzoesische Fassung existiert und im Self-Service
+waehlbar ist. Dass ein Tenant die zu seiner Sprache passende Vorlage **automatisch** bekommt, ist
+PROMPT-03 und passiert in **P11** (nicht P10 - P10 aendert nur, worauf die Sprache aufloest, nicht
+ob das Greeting ihr folgt). Zwischen P3 und P11 kann ein EN-/FR-Tenant seine Vorlage bereits
+selbst waehlen; ab P11 muss er es nicht mehr.
 
 **Schaerfung (am Code geprueft, 2026-07-25): WEB-04 ist eine harte Sperre, kein Schoenheitsfehler.**
 Ueber Self-Service ist Greeting-**Freitext ausdruecklich verboten** - `selfServicePatch`
