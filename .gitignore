@@ -10,6 +10,9 @@ node_modules/
 seed-test-payment.mjs
 seed-card-test-payment.mjs
 data/
+# Ausnahme: Rechtsdokument-Content (P14) ist Repo-Code (Source of Truth fuer
+# den Astro-Build), keine lokale Laufzeit-/Store-Ablage wie das Top-Level data/.
+!apps/web/src/data/
 .twilio-recovery-code
 render-logs.sh
 setup-render-key.sh

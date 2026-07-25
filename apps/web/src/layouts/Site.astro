@@ -4,7 +4,9 @@
 // erbt die Aesthetik des Vollbild-Hero (pages/index.astro) ueber dieselben
 // --hero-*-Tokens — kein Video, nur der dunkle Gradient + Scrims.
 //
-// INDEXIERBAR — SEO ist der Sinn dieser Seiten (Strategie W1/W5).
+// INDEXIERBAR — SEO ist der Sinn dieser Seiten (Strategie W1/W5). Ausnahme: die
+// informative EN-Uebersetzung der Rechtsdokumente (noindex-Prop, O13) - die
+// deutsche Fassung bleibt die verbindliche und die zu indexierende.
 //
 // Selbst gehostete Fonts (Instrument Serif + Space Grotesk) + Site-Chrome werden
 // hier importiert. Mit build.inlineStylesheets:"never" liefert Astro sie als
@@ -15,9 +17,14 @@
 import "../styles/fonts.css";
 import "../styles/site.css";
 import { LOGIN_URL } from "../lib/routes.js";
+import { LEGAL_CONTENT } from "../lib/legal-content.js";
+import { legalFooterLinks } from "../lib/legal.js";
 
 // lang ist ein echter Sprachwert (kein Verhaltens-Flag): Marketing EN, Legal DE.
-const { title, description, lang = "en" } = Astro.props;
+// noindex nur fuer nicht-verbindliche Fassungen (informative Uebersetzungen):
+// die deutsche Rechtsseite ist und bleibt die indexierte. Marketing-Seiten
+// bleiben unveraendert indexierbar (Strategie W1/W5).
+const { title, description, lang = "en", noindex = false } = Astro.props;
 
 // Absolute kanonische URL + OG-Ziele aus der Brand-Site (astro.config: site).
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
@@ -35,11 +42,11 @@ const footerMarketing = [
   { href: "/preise", label: "Pricing" },
   { href: "/registrieren", label: "Sign up" },
 ];
-const footerLegal = [
-  { href: "/datenschutz", label: "Privacy" },
-  { href: "/impressum", label: "Imprint" },
-  { href: "/agb", label: "Terms" },
-];
+// Rechts-Ziele folgen der Seitensprache: die englischen Marketing-/Funnel-Seiten
+// verlinken die informative EN-Fassung, SOBALD sie geliefert ist, sonst die
+// verbindliche deutsche Route. Labels bleiben englisch (Q-LANG). Ein Ziel ohne
+// Dokument kann nicht entstehen - also auch kein toter Footer-Link.
+const footerLegal = legalFooterLinks(LEGAL_CONTENT, lang);
 const contactEmail = "kontakt@sundartha.com";
 ---
 
@@ -52,6 +59,7 @@ const contactEmail = "kontakt@sundartha.com";
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalURL} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {noindex && <meta name="robots" content="noindex" />}
 
     <!-- Open Graph / Twitter: textbasiert (kein og:image-Asset vorhanden;
          twitter:card=summary kommt ohne Bild aus). -->
