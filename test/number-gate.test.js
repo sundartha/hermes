@@ -23,6 +23,10 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
     env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
   });
   try {
+    // OUT-10 (P0, i18n-Testkatalog 05-auslandstelefonie.md): "911" muss unabhaengig vom
+    // Laender-Gate (hier ALLOWED_COUNTRY_CODES="*") an der Denylist scheitern, VOR jeder
+    // Format-/Land-Pruefung - genau das deckt dieser bestehende Testfall bereits ab (911
+    // ist eines der vier EMERGENCY_SHORT_CODES). Keine neue Testdatei noetig (G5).
     await t.test("Notruf-Kurzwahlen -> 403 denylist (nicht 400 Format)", async () => {
       for (const to of ["110", "112", "911", "999"]) {
         const res = await postCall(srv.localUrl, to);
@@ -112,6 +116,10 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
     }
   });
 
+  // OUT-02 (P0, hochgestuft von P1 - Live-Messung 07-22, tasks/i18n-tests/13-live-env-
+  // befund.md: ALLOWED_COUNTRY_CODES steht LIVE auf "*", nicht auf den Code-Default
+  // "+49,+33,+44". Dieser bestehende Testfall prueft bereits genau den real wirksamen
+  // Zustand - kein neuer Test noetig (G5), nur die Katalog-Zuordnung dokumentiert.
   await t.test("* erlaubt alle Laender", async () => {
     const srv = await startServer({
       env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
@@ -123,6 +131,73 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
       await srv.stop();
     }
   });
+});
+
+// ---- GAP-18 (P0, SOLL rot): NANP-Sub-Ranges bleiben gesperrt, auch wenn "+1" erlaubt ist ----
+// Denylist-Praezedenz (grund=denylist VOR Land-Gate) ist bereits gebaut (s. Pruefreihenfolge-
+// Test unten) - PREMIUM_PREFIXES kennt aber keinen einzigen "+1"-Eintrag
+// (src/telephony/outbound-gates.js:58-90; grep -c '"+1' -> 0 Treffer). Sobald
+// ALLOWED_COUNTRY_CODES "+1" enthaelt, passieren Pay-Per-Call- (1-900/1-976) UND die
+// NANP-Karibik-Inselvorwahlen (bekannt fuer Premium-Rueckruf-/One-Ring-Betrug) ungehindert
+// bis zum Twilio-Client. SOLL: alle zwoelf 403 grund=denylist.
+test("GAP-18 (SOLL, rot): NANP-Sub-Ranges (1-900/1-976 + Karibik-Inseln) bleiben gesperrt, auch wenn +1 erlaubt ist", async (t) => {
+  const NANP_PREMIUM_TARGETS = [
+    "+19005550123", // 1-900 Pay-Per-Call
+    "+19765550123", // 1-976 Premium
+    "+18095550123", // Dominikanische Republik
+    "+18295550123", // Dominikanische Republik
+    "+18495550123", // Dominikanische Republik
+    "+18765550123", // Jamaika
+    "+12685550123", // Antigua und Barbuda
+    "+12845550123", // Britische Jungferninseln
+    "+14735550123", // Grenada
+    "+16495550123", // Turks- und Caicosinseln
+    "+16645550123", // Montserrat
+    "+17675550123", // Dominica
+  ];
+  const srv = await startServer({
+    env: {
+      ALLOWED_NUMBERS: NANP_PREMIUM_TARGETS.join(","),
+      ALLOWED_COUNTRY_CODES: "+1",
+      TWILIO_ACCOUNT_SID: "x",
+    },
+  });
+  try {
+    for (const to of NANP_PREMIUM_TARGETS) {
+      await t.test(`${to} -> 403 grund=denylist`, async () => {
+        const res = await postCall(srv.localUrl, to);
+        assert.equal(res.status, 403, `${to} muss als Denylist-Sperre abgewiesen werden`);
+        assert.match((await res.json()).error, /gesperrt/);
+      });
+    }
+  } finally {
+    await srv.stop();
+  }
+});
+
+// ---- OUT-25 (P0): Vollstaendiger Happy-Path fuer eine korrekt konfigurierte US-Freischaltung ----
+// Kombiniert alle Vorbedingungen eines vollstaendig freigeschalteten US-Tenants: +1 im
+// Laender-Gate, eine aktive +1-DID als Absendernummer, gueltiges KYC-Level + aktiver
+// Subscriber-Status. Der Owner-Pfad erfuellt beides byte-identisch zum Bestand (KYC via
+// seedBootstrapKyc auf id_verified beim Boot, Allowlist via tenantActiveSubscriber-Pfad 2 -
+// s. test/kyc-gate-outbound.test.js "Flag AUS: Owner-Pfad passiert via Boot-Seed
+// id_verified"), NUR mit einer +1-DID statt der Default-US-Testnummer als Absender.
+test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (500, kein 403/429/400)", async () => {
+  const US_TARGET = "+12025550123";
+  const srv = await startServer({
+    env: { ALLOWED_COUNTRY_CODES: "+1", TWILIO_ACCOUNT_SID: "x" },
+    ownerNumber: { e164: "+12025557000", provider: "twilio" },
+  });
+  try {
+    const res = await postCall(srv.localUrl, US_TARGET);
+    assert.equal(
+      res.status,
+      500,
+      "vollstaendig freigeschalteter US-Tenant muss ALLE Gates passieren (scheitert erst am Offline-Twilio-Client)",
+    );
+  } finally {
+    await srv.stop();
+  }
 });
 
 // ---- 0.3 Pro-Stunde-Limit ----
