@@ -98,11 +98,12 @@ Drei Dinge, die dabei ausdruecklich mit herauskommen muessen:
 
 Erst wenn Aufgabe 2 vorliegt. Ergebnis: `PLAN-I18N-FIX.md`. **Ein Plan, keine Umsetzung.**
 
-Vollprogramm, weil das Dokument die naechsten Sessions steuert: mehrere unabhaengige
-Entwuerfe fuer den Phasenschnitt, Bewertung durch unabhaengige Judges, Synthese aus dem
-Sieger. Dazu zwingend ein **Safety-Review auf Opus** — die Fixes fassen Budget-Gates,
-Land-Gate, Offenlegung und Stripe an, also genau die Stellen, an denen dieses Repo echtes
-Geld ausgibt und echte Menschen anruft.
+**Drei** unabhaengige Entwuerfe fuer den Phasenschnitt (verschiedene Leitlinien, z.B.
+Risiko-zuerst / Kundennutzen-zuerst / Abhaengigkeiten-zuerst), EIN Judge-Durchgang, Synthese
+aus dem Sieger mit den besten Ideen der Zweitplatzierten. Dazu zwingend ein **Safety-Review
+auf Opus** — die Fixes fassen Budget-Gates, Land-Gate, Offenlegung und Stripe an, also genau
+die Stellen, an denen dieses Repo echtes Geld ausgibt und echte Menschen anruft. Die
+Sorgfalt liegt im Safety-Review, nicht in der Zahl der Schleifen.
 
 Der Plan muss enthalten:
 - **Phasenschnitt** mit Reihenfolge und Begruendung. Leitlinie: was heute schon brennt und
@@ -128,6 +129,40 @@ Der Plan muss enthalten:
 **Delegiere alles, halte deinen Kontext frei.** Aufgabe 1 als einzelner Subagent oder kleiner
 Workflow, Aufgabe 2 und 3 als Workflow. Lass dir strukturierte Ergebnisse zurueckgeben
 (`schema`), keine Fliesstextberichte. Du liest die Ergebnisse, nicht die Dateien.
+
+**Token-Budget — das ist eine Vorgabe, keine Bitte.** Zur Kalibrierung, gemessen an der
+Vorsession: Scoping-Workflow (3 Agenten) 584k, Welle A (9 Agenten) 1,49M, Welle B (10
+Agenten) 1,64M Subagent-Token. Diese Session ist deutlich kleiner als eine Welle — sie baut
+nichts, sie ordnet und plant.
+
+Richtwerte, an denen du dich messen laesst:
+
+| Aufgabe | Agenten | Token-Rahmen |
+| --- | --- | --- |
+| 1 Lauf-Trennung | 1 Impl + 1 Review | ~150k |
+| 2 Klassifikation | 4-6 | ~400k |
+| 3 Strategie-Doc | 6-8 | ~700k |
+
+Konkrete Sparhebel, alle in der Vorsession als wirksam belegt:
+
+- **Nicht ein Agent pro Befund.** Die 85 Befunde in 5-6 fachliche Buendel schneiden (Geld,
+  Sprache, Telefonie, MCP/Widget, Web/Recht, Ops) und je Buendel EINEN Agenten. 85 Agenten
+  waeren absurd, und ein Agent mit 15 verwandten Befunden klassifiziert besser als 15
+  Agenten mit je einem, weil er die Abhaengigkeiten sieht.
+- **`effort` gestaffelt statt pauschal `high`.** Mechanische Arbeit (Testnamen einsammeln,
+  Dateien zuordnen, Tabellen fuellen) laeuft auf `low` bis `medium`. `high` nur fuer den
+  Phasenschnitt und das Safety-Review.
+- **Agenten sollen greppen, nicht lesen.** Die Belege stehen als `datei.js:ZEILE` in den
+  Kopfkommentaren der Tests — die reichen fast immer. Ganze Quelldateien nur lesen, wenn ein
+  konkreter Zweifel es verlangt.
+- **Aufgabe 3 heisst DREI Entwuerfe, nicht beliebig viele**, und ein Judge-Durchgang, nicht
+  mehrere Runden. "Vollprogramm" bezieht sich auf die Sorgfalt beim Safety-Review, nicht auf
+  die Zahl der Schleifen.
+- **`npm test` gehoert dem Lead**, nicht jedem Agenten. Ein Klassifikations-Agent braucht
+  keinen Suite-Lauf; er liest Testnamen und Belege.
+
+Wenn du merkst, dass ein Rahmen nicht reicht, sag mir das mit Begruendung — zieh ihn nicht
+still hoch.
 
 **Modell-Politik:** Subagenten NIE auf einem geerbten Fable laufen lassen. Opus fuer Plan-
 und Safety-Review, Sonnet fuer Recherche/Klassifikation/Umsetzung/Report — pro `agent()`
