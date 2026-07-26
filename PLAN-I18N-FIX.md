@@ -208,7 +208,7 @@ P5 -> P7 ist der kritische Pfad, an dem der Weltstart haengt - nicht die Sprachk
 | **O11** | **Kein Backfill.** Es gibt keine fremden Bestandskunden (Praemisse P-A) - der Flip braucht keine vorherige Datenkorrektur. Der **Schreibpfad-Fix bleibt** (`state-ops.js:674`, `:1257` schreiben `DEFAULT_LANGUAGE` als Default-Parameter IN den Datensatz), damit kuenftige Datensaetze nicht falsch materialisieren. | WORLD-01, WORLD-03, PROMPT-03, PROMPT-09, UI-14, UI-18, FMT-28 | **JA, und es vereinfacht den Plan erheblich.** Die beiden Safety-Befunde aus P-A (Offenlegungssatz, STT/TTS-Locale) bleiben trotzdem Abnahmekriterium von P10. |
 | **O12** | **`paymentCurrency=usd` bleibt ein legaler Wert; die Anzeige folgt der Konfiguration.** Das ist die Invariante von Entscheidung 7.1 (Anzeige-Waehrung == Belastungs-Waehrung), kein Widerspruch dazu. Der Test prueft Waehrungs-Treue, keine USD-Vorgabe. | MCP-08 | nein |
 | **O13** | **Rechtstexte sofort beauftragen**, auch wenn der Einbau erst in P14 landet. DE bleibt die verbindliche Fassung, EN ausdruecklich informative Uebersetzung mit Vorrangklausel. **Bis freigegebener Text vorliegt liefert die EN-Route 404**, keinen Platzhalter. | GAP-15 | nein. Einziges Element mit externem Vorlauf - Bestellung gehoert in P1, nicht in P14. |
-| **O14** (2026-07-26, nachgereicht) | **Die MCP-Tool-Beschreibungen bleiben einsprachig ENGLISCH** und folgen NICHT der Tenant-Sprache. Sie werden vom Client-Modell gelesen, nicht vom Tenant: **Modellsprache != Nutzersprache** ist ab hier eine dokumentierte Systemgrenze. Umsetzung: einmalige, **emphase-erhaltende** Uebersetzung der heute deutschen Beschreibungen und `.describe()`-Texte in `src/mcp-tools.js`, ohne Sprachverzweigung; der E2E-06-Kanal `mcpErrorLiterals` wird entsprechend auf tenant-sichtbaren Text eingegrenzt (R5-Korrektur). | E2E-06 | nein. Loest die einzige offene Frage von **P15**; Risiko und Gegenmassnahme (convo-bench vor Deploy) stehen dort. |
+| **O14** (2026-07-26, nachgereicht) | **Die MCP-Tool-Beschreibungen bleiben einsprachig ENGLISCH** und folgen NICHT der Tenant-Sprache. Sie werden vom Client-Modell gelesen, nicht vom Tenant: **Modellsprache != Nutzersprache** ist ab hier eine dokumentierte Systemgrenze. Umsetzung: einmalige, **emphase-erhaltende** Uebersetzung der heute deutschen Beschreibungen und `.describe()`-Texte in `src/mcp-tools.js`, ohne Sprachverzweigung; der E2E-06-Kanal `mcpErrorLiterals` wird entsprechend auf tenant-sichtbaren Text eingegrenzt (R5-Korrektur). | E2E-06 | nein. Loest die einzige offene Frage von **P15**; Risiko und Gegenmassnahme stehen dort - **nicht** `convo-bench` (der laeuft an dieser Achse vorbei, s. Korrektur in P15), sondern eine Handprobe aus claude.ai je Sprache. |
 
 ### Was nach dieser Runde noch offen ist
 
@@ -1516,15 +1516,26 @@ naechste Phase die Beschreibungen versehentlich wieder in die Lokalisierung hine
   stehen; wo das Deutsche schroff ist, bleibt das Englische schroff. Kein "please", kein
   Weichzeichnen. Beleg: ein Test, der je Beschreibung die Anzahl der Grossschreib-Marker und das
   Vorhandensein des Negativ-Beispiels pinnt - dieselbe Mechanik, mit der P11 die Verbots-Emphase
-  der gesprochenen Prompts gehalten hat. **Vor dem Deploy** laeuft `npm run convo-bench`
-  (n >= 5) gegen die Baseline; die Beschreibungen sind der Tool-Entscheidungspunkt, und nur der
-  Bench sieht, ob das Modell danach schlechter waehlt.
+  der gesprochenen Prompts gehalten hat.
+
+  > **KORREKTUR 2026-07-26: `convo-bench` ist fuer dieses Risiko das FALSCHE Instrument.** Hier
+  > stand zuerst "vor dem Deploy laeuft `npm run convo-bench` (n >= 5) gegen die Baseline". Am
+  > Code geprueft stimmt das nicht: der Bench seedet den Anruf ueber `buildCallSeed` **direkt mit
+  > `goal`/`briefing`/`constraints` aus der Szenario-Fixture** und ruft MCP nie an (`grep` ueber
+  > `scripts/convo-bench/*.mjs`: null Treffer fuer `mcp`, `place_call`, `toolDefs`). Er misst die
+  > Gespraechsqualitaet des **Sprach-Agenten** (`src/claude.js`) - die O14-Beschreibungen liest
+  > aber das **Client-Modell in claude.ai**, das der Bench gar nicht durchlaeuft. Fuer diese
+  > Achse gibt es **keinen automatisierten Waechter**; der einzige echte Beleg ist eine
+  > **Handprobe**: aus claude.ai je einmal mit deutscher und englischer Chat-Sprache einen Anruf
+  > ausloesen und pruefen, ob `goal`/`briefing` als vollstaendiger Ich-Satz mit konkretem Anlass
+  > ankommen (nicht als Infinitiv-Stummel). Der Marker-Pin-Test bleibt die einzige automatisierte
+  > Absicherung - er haelt den Wortlaut, nicht die Wirkung.
 
 **Abnahme.** E2E-06 nicht mehr in der Rot-Liste (Rot-Liste 2 -> 1, es bleibt GAP-05 als getragenes
 Risiko). `npm test` gruen. Zusaetzlich zwei Belege, die keine Suite liefert: (a) ein Smoke gegen
 einen laufenden Server - ein abgelehnter Outbound eines EN-Tenants liefert englischen
-`message`-Text **und** unveraenderten Grund-Schluessel; (b) `convo-bench` ohne Regress gegen die
-Baseline (Pre-Mortem 4).
+`message`-Text **und** unveraenderten Grund-Schluessel; (b) die Handprobe aus claude.ai je Sprache
+(s. Korrektur zu Pre-Mortem 4) - **nicht** `convo-bench`.
 
 **R5-Loeschpflichten.** Keine Loeschung. Eine R5-**Korrektur** an
 `test/e2e-06-en-purity-aggregate.test.js` (Kanal `mcpErrorLiterals` auf ausgelieferten Text
