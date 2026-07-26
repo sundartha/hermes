@@ -1,3 +1,7 @@
+// Datenkonstanten des Store-Blatt-Moduls (Format-/Provider-Wahrheit, kein IO, keine
+// config) - die einzige Abhaengigkeit dieser Datei. Genutzt von bootstrapHealDecision.
+import { E164, PROVIDER, normNum } from "./store/defaults.js";
+
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
 // und laeuft weiter (kein throw). Damit killt ein Portal-Pool-Fehler (DB unerreichbar
@@ -18,6 +22,42 @@ export async function guardedBoot(label, fn) {
     );
     return false;
   }
+}
+
+// GAP-38: darf der Boot einen leeren Store aus den Deploy-Parametern heilen?
+// Vier sich ausschliessende Ausgaenge (die Reihenfolge ist die Spezifikation). Reine
+// Entscheidung (arg-injiziert, config-/IO-frei, testbar; Muster spendCapCoherence);
+// importiert nur Datenkonstanten aus dem Blatt-Modul store/defaults.js.
+export const BOOTSTRAP_HEAL = Object.freeze({
+  NOT_NEEDED: "not_needed", // aktive Nummer da -> nichts tun
+  HEAL: "heal", // frischer Store + brauchbare Parameter
+  BLOCKED_STORE_NOT_FRESH: "blocked_store_not_fresh", // gelebter Store -> NIE heilen
+  BLOCKED_PARAMS: "blocked_params", // ohne/mit unbrauchbaren Parametern
+});
+
+// "Nachweislich frisch" heisst: KEINE Nummer (in keinem Zustand), KEIN Tenant ausser dem
+// Code-Default-Bootstrap-Tenant (makeDefaultState legt ihn IMMER an - seine Existenz
+// beweist also nichts) und KEINE Call-Historie. Jede weitere Zeile heisst "der Store hat
+// gelebt": dann wird NICHT geheilt, sondern der bestehende fail-closed Refusal greift
+// (Pre-Mortem: Nummern-Proliferation).
+//
+// Die E.164-Pruefung ist Pflicht und kein Stil: seedBootstrapNumber normalisiert nur, es
+// validiert NICHT - ein Tippfehler in BOOTSTRAP_E164 wuerde sonst als "aktive Nummer"
+// geseedet und der Boot liefe gruen mit totem Routing (Lehre seedOwnerNumberFromEnv).
+export function bootstrapHealDecision({
+  activeNumberPresent,
+  numberCount,
+  foreignTenantCount,
+  callCount,
+  e164,
+  provider,
+}) {
+  if (activeNumberPresent) return BOOTSTRAP_HEAL.NOT_NEEDED;
+  if (numberCount > 0 || foreignTenantCount > 0 || callCount > 0)
+    return BOOTSTRAP_HEAL.BLOCKED_STORE_NOT_FRESH;
+  if (!E164.test(normNum(e164 || "")) || !Object.values(PROVIDER).includes(provider))
+    return BOOTSTRAP_HEAL.BLOCKED_PARAMS;
+  return BOOTSTRAP_HEAL.HEAL;
 }
 
 // Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE ersetzt den Provider-Transport durch einen

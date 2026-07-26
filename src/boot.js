@@ -18,18 +18,26 @@ import {
   voiceTariffFloorFindings,
   planCapInertFindings,
   tenantCapRowInertFindings,
+  bootstrapHealDecision,
+  BOOTSTRAP_HEAL,
   SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
+import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
 // Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
 // (assistantVoiceConfigured).
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { attachMediaBridge } from "./bridge.js";
-import { USAGE_EVENT_KIND, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
+import {
+  USAGE_EVENT_KIND,
+  MAX_CALL_DURATION_CAP_S,
+  BOOTSTRAP_TENANT_ID,
+  normNum,
+} from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
-import { hasPrunedSomething } from "./store/state-ops.js";
+import { hasPrunedSomething, tenantsOf } from "./store/state-ops.js";
 import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
@@ -38,6 +46,10 @@ import { audit } from "./util.js";
 import { turnBudgetOverrun } from "./turn-budget.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// GAP-38: Praefix der Plattform-SMS, die eine In-Prozess-Heilung meldet (G25: benannte
+// Konstante statt Literal im Rumpf; Muster TTS_QUOTA_SMS_PREFIX in src/server.js).
+const BOOTSTRAP_HEAL_SMS_PREFIX = "[Hermes] Bootstrap: ";
 
 // Retention (DSGVO): alte Transkripte/Notifications beim Start und periodisch loeschen
 function runRetention(store, config) {
@@ -346,7 +358,69 @@ function logBootBanner(config, port) {
   );
 }
 
-export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning, costTruing }) {
+// GAP-38: heilt einen nachweislich frischen Store aus den Deploy-Parametern - der Ersatz
+// fuer das Pre-Deploy-Kommando, das Render auf plan:free nie ausfuehrt. Laeuft NACH
+// store.load() (ein Verbindungs-/Ladefehler hat den Prozess dort bereits beendet: pg-Init
+// exitet in store.js, ein Ladefehler in bootServer) und VOR assertBootGates - der
+// bestehende fail-closed Refusal bleibt die EINZIGE Stelle, die "keine Nummer -> kein
+// Start" entscheidet (G5). Diese Funktion verweigert nie selbst, sie heilt oder schweigt.
+// Idempotent: nach der Heilung liefert die Entscheidung NOT_NEEDED.
+export async function healBootstrapStore({ config, store, messaging }) {
+  const s = store.load();
+  const decision = bootstrapHealDecision({
+    activeNumberPresent: hasActiveNumber(s),
+    numberCount: s.numbers.length,
+    foreignTenantCount: tenantsOf(s).filter((t) => t.id !== BOOTSTRAP_TENANT_ID).length,
+    callCount: s.calls.length,
+    e164: config.provisioning.bootstrapE164,
+    provider: config.provisioning.bootstrapProvider,
+  });
+  if (decision === BOOTSTRAP_HEAL.NOT_NEEDED) return decision;
+  if (decision === BOOTSTRAP_HEAL.BLOCKED_STORE_NOT_FRESH) {
+    console.warn(
+      "[bootstrap-heal] Store ist nicht leer, aber ohne aktive Nummer - KEINE In-Prozess-Heilung " +
+        "(Proliferations-Schutz). Manuell: npm run bootstrap-tenant.",
+    );
+    return decision;
+  }
+  if (decision === BOOTSTRAP_HEAL.BLOCKED_PARAMS) {
+    // Gesetzt, aber unbrauchbar -> laut melden, NIE die Nummer loggen (Regel 4). Gar nicht
+    // gesetzt ist der Normalfall (lokal, Tests) und bleibt still.
+    if (config.provisioning.bootstrapE164)
+      console.error(
+        "[bootstrap-heal] BOOTSTRAP_E164/BOOTSTRAP_PROVIDER unbrauchbar " +
+          "(E.164 + twilio|telnyx erwartet) - keine Heilung.",
+      );
+    return decision;
+  }
+  await store.bootstrapTenant(
+    normNum(config.provisioning.bootstrapE164),
+    BOOTSTRAP_TENANT_ID,
+    config.provisioning.bootstrapProvider,
+  );
+  console.log("[bootstrap-heal] Leerer Store aus den Deploy-Parametern geheilt (in-prozess, idempotent).");
+  audit("bootstrap_store_geheilt", null, `provider=${config.provisioning.bootstrapProvider}`); // KEINE E.164
+  sendBootstrapAlertSms({
+    messaging,
+    config,
+    store,
+    prefix: BOOTSTRAP_HEAL_SMS_PREFIX,
+    detail: "leerer Store beim Boot aus den Deploy-Parametern geheilt",
+    logTag: "bootstrap-heal",
+  });
+  return decision;
+}
+
+export async function bootServer({
+  app,
+  config,
+  store,
+  lifecycle,
+  callFinish,
+  provisioning,
+  costTruing,
+  messaging,
+}) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
   // exit(1) faengt das globale uncaughtException-Netz (process-guards) den Boot-Throw ab und
@@ -361,6 +435,8 @@ export async function bootServer({ app, config, store, lifecycle, callFinish, pr
   runRetention(store, config);
   setInterval(() => runRetention(store, config), RETENTION_SWEEP_INTERVAL_MS).unref();
 
+  // GAP-38: VOR den Gates - die Heilung darf den Refusal nur VERMEIDEN, nie ersetzen.
+  await healBootstrapStore({ config, store, messaging });
   assertBootGates(config, store);
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden

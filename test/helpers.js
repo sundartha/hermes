@@ -104,6 +104,12 @@ export const BASE_ENV = {
   // den Autoseed pruefen (owner-number-seed.test.js), setzen sie explizit per env-Override.
   OWNER_NUMBER_SEED: "",
   OWNER_NUMBER_PROVIDER: "",
+  // GAP-38: Bootstrap-Parameter in Spawn-Tests neutral leer - sonst leakt eine lokale .env
+  // via dotenv und heilt Stores, deren Boot-Refusal drei Tests gerade beweisen
+  // (boot-failclosed, owner-number-seed, store-integrity). Tests, die die Heilung pruefen,
+  // setzen sie explizit per env-Override.
+  BOOTSTRAP_E164: "",
+  BOOTSTRAP_PROVIDER: "",
   // AM6: Owner-OAuth-Identitaets-Seed neutral leer (kein idp_subject-Seed). Ohne diese
   // Zeile leakt eine lokale .env mit OWNER_IDP_SUBJECT via dotenv in Spawn-Tests ->
   // Baseline-Drift (Lehre test-base-env-drift). am6-oauth-tenant.test.js setzt es explizit.

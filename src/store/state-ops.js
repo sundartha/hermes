@@ -761,10 +761,12 @@ export function findNumber(s, id) {
   return s.numbers.find((n) => n.id === id) || null;
 }
 
-// s.tenants kann fehlen (seedState seedet keine Tenants) -> defensiver Default.
-// Eine Quelle fuer alle Tenant-Finder (findTenant via id, resolveTenant via
-// idpSubject); der Guard lebt damit an EINER Stelle.
-const tenantsOf = (s) => s.tenants || [];
+// s.tenants kann fehlen (seedState seedet keine Tenants, und json.js normalisiert die
+// Liste beim Laden NICHT) -> defensiver Default. Eine Quelle fuer alle Tenant-Finder
+// (findTenant via id, resolveTenant via idpSubject); der Guard lebt damit an EINER
+// Stelle. Exportiert seit GAP-38: die Boot-Heilung zaehlt fremde Tenants und darf dafuer
+// kein zweites Gueltigkeitsidiom aufmachen (ein Wurf dort waere ein Boot-Killer).
+export const tenantsOf = (s) => s.tenants || [];
 
 export function findTenant(s, id) {
   return tenantsOf(s).find((t) => t.id === id) || null;

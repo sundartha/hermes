@@ -644,6 +644,13 @@ const rawConfig = {
   // R1). Telnyx-Owner MUSS OWNER_NUMBER_PROVIDER=telnyx setzen. Lowercase-normalisiert.
   ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
 
+  // GAP-38: Bootstrap-Parameter des Deploys (frueher nur vom preDeploy-Kommando gelesen,
+  // das Render auf plan:free nie ausfuehrt). Der Boot heilt damit einen NACHWEISLICH
+  // frischen Store in-prozess. Leer = keine Heilung (Boot bleibt fail-closed).
+  // Backend-agnostisch, anders als OWNER_NUMBER_SEED (json-only, nur Nummer ohne Tenant).
+  bootstrapE164: process.env.BOOTSTRAP_E164 || "",
+  bootstrapProvider: process.env.BOOTSTRAP_PROVIDER || "",
+
   // AM6: Owner-OAuth-Identitaet (WorkOS sub/user.id) idempotent an den Bootstrap-Tenant
   // binden (idp_subject). Wie OWNER_NUMBER_SEED ein Boot-Seed gegen Renders fluechtiges FS /
   // No-CLI-Free-Tier: resolveTenant findet so den Tenant MIT der aktiven Nummer ueber den
@@ -1108,7 +1115,7 @@ function guardedConfig(target, path = "config") {
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],

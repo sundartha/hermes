@@ -140,6 +140,26 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
    (Abhilfe: Empfaenger setzen ODER `PLATFORM_SPEND_WARN_PERCENT=0`). Details + getragene
    Restrisiken: `PLAN-SECURITY.md` Abschnitt `P6-BUDGETFENSTER`.
 
+9. **i18n-Launch-Gate P7 (GAP-32/GAP-33/GAP-38) - ERLEDIGT (2026-07-26), NICHT deployt.**
+   Kosten-Decken kohaerent (`MAX_BUDGET_EUR` 8->30, `DEFAULT_TENANT_BUDGET_CENTS` 600->1500
+   in `.env.example`/`render.yaml`/Code-Fallback), `preDeployCommand` raus + In-Prozess-
+   Heilung eines nachweislich frischen Stores, `WORST_CASE_UNAFFORDABLE` ist jetzt FATAL.
+   **DEPLOY-VORBEDINGUNGEN:** (a) `DEFAULT_TENANT_BUDGET_CENTS=1500` im Render-Dashboard
+   setzen (heute dort gar nicht gesetzt - der Code-Fallback traegt den Wert, eine reine
+   Code-Aenderung wirkt also live, aber unsichtbar); (b) **bestehende `tenant_budget`-Zeilen
+   werden NICHT nachgezogen** - Tenants mit einer Zeile aus `seedTenantDefaultBudget` (600)
+   oder plan-abgeleitet (300/900) bleiben beim 402. Vor dem Deploy am Prod-Postgres pruefen
+   und bewusst anheben/loeschen. Details + getragene Restrisiken: `PLAN-SECURITY.md`
+   Abschnitt `P7-BOOTKOHAERENZ`.
+10. **Plan-Decken liegen weiter unter der Worst-Case-Reserve (offen, Owner-Entscheidung).**
+    `planCapCents("starter")=300` / `business=900` sind kleiner als 1500 ct - ein zahlender
+    Starter-Abonnent kann weiterhin kein Ziel ohne gemessenen Inlandssatz anrufen
+    (`test/pay-04-starter-reserve-charakterisierung.test.js` pinnt das). Eigene Achse
+    (`VOICE_CAP_RATE_CENTS_PER_MIN` / `PLAN_CAP_HEADROOM`), ausdruecklich NICHT GAP-32/33.
+    **Vor dem ersten fremden Kunden zu entscheiden.**
+11. **`OWNER_NUMBER_SEED` gegen `BOOTSTRAP_E164` konsolidieren (offen).** Zwei Env-Paare fuer
+    dieselbe Sache; sie komponieren heute sauber (gepinnt), sind aber eine Falle.
+
 ## 3. Bewusst vertagt (nur Tracking, kein akuter Task)
 
 - Allowlist-Lockerung -> Phase 2 / Rechteprofile
