@@ -255,3 +255,15 @@ test("EN/R9: Gather-STT-Locale ist en-GB (volles BCP-47, nicht 'en'); Nova-3 meh
     "Deepgram Nova-3 (mehrsprachig, EN inkl.)",
   );
 });
+
+// FMT-24 (tasks/i18n-tests/10-zeit-format-daten.md): escapeXml ersetzt ausschliesslich
+// & < > " ' - CJK-Zeichen sind keine XML-Sonderzeichen und muessen unveraendert durch
+// den TeXML-Renderpfad laufen. Der Fehlermodus waere unsichtbar (Mojibake/abgeschnitten),
+// deshalb zusaetzlich die Bytezahl-Invariante wie in de-umlaut-orthography P1-U4.
+const CJK_SPEECH = "田中様、お電話ありがとうございます";
+test("FMT-24 (Mechanismus, gruen) - CJK-Text passiert escapeXml und den Say-Renderpfad unveraendert", () => {
+  const out = renderDirectives([say(CJK_SPEECH, VOICE_PROFILE.DE_FEMALE_NEURAL), hangup()]);
+  assert.ok(out.includes(`>${CJK_SPEECH}</Say>`), "CJK byte-identisch im Say-Element");
+  assert.doesNotMatch(out, /&#\d+;|&x[0-9a-f]+;/i, "keine numerische Escape-Sequenz");
+  assert.ok(Buffer.byteLength(out, "utf8") > out.length, "UTF-8 mehrbyte, kein Zeichen verloren");
+});

@@ -91,6 +91,39 @@ test("LANG-23 (Mechanismus, gruen) - parallele Onboards bleiben isoliert (kein G
   }
 });
 
+// LAW-22 (tasks/i18n-tests/09-recht-und-compliance.md, Nebenlaeufigkeit): zwei
+// gleichzeitige US-Onboards. Abgrenzung zu LANG-23 daneben (kein Duplikat, G5): dort
+// verschiedene Laender - der Sprach-Mix ist die Sonde. Bei IDENTISCHEM Land waere ein
+// Cross-Talk in der Sprache gar nicht sichtbar; die pruefbare Isolation ist hier die
+// RECORD-Identitaet (zwei Tenants, zwei verschiedene Nummern, kein Ueberschreiben).
+// R-G: die Katalog-Erwartung "je isoliert DE-Sprache" ist seit P10 falsch - US -> "en".
+test("LAW-22 (Mechanismus, gruen) - zwei parallele US-Onboards bleiben isoliert (je US/en, eigene Nummer)", async () => {
+  const srv = await startServer();
+  try {
+    const [resA, resB] = await Promise.all([
+      postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_us_par_a", country: "US" }),
+      postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_us_par_b", country: "US" }),
+    ]);
+    assert.equal(resA.status, 200);
+    assert.equal(resB.status, 200);
+    const [jsonA, jsonB] = await Promise.all([resA.json(), resB.json()]);
+    for (const json of [jsonA, jsonB]) {
+      assert.equal(json.country, "US");
+      assert.equal(json.language, "en");
+    }
+    const store = srv.readStore();
+    for (const id of ["t_us_par_a", "t_us_par_b"]) {
+      const tenant = store.tenants.find((t) => t.id === id);
+      assert.ok(tenant, `${id} ist angelegt (kein Record ging im Rennen verloren)`);
+      assert.equal(tenant.country, "US");
+      assert.equal(tenant.defaultLanguage, "en");
+    }
+    assert.notEqual(jsonA.numberId, jsonB.numberId, "keine geteilte Nummer zwischen den beiden Tenants");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // Geo aus (Default) + kein body.country -> Fallback DE/de (byte-identisch zum Bestand).
 test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async () => {
   const srv = await startServer();

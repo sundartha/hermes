@@ -182,6 +182,29 @@ test("resolveOnboardCountry: ungueltige Eingaben fallen fail-safe durch (kein Sc
   );
 });
 
+// LAW-18 (tasks/i18n-tests/09-recht-und-compliance.md): komplett fehlgeschlagene
+// Geo-Ermittlung (kein User-Land, kein IP-Vorschlag, kein config-Fallback).
+// R-G-KORREKTUR gegen den Katalogtext: der Sprach-Endwert ist NICHT pauschal
+// DEFAULT_LANGUAGE. resolveOnboardCountry faellt auf DEFAULT_COUNTRY, und die Sprache
+// leitet sich daraus ueber die TABELLE ab - DEFAULT_LANGUAGE greift erst fuer ein
+// tabellen-fremdes Fallback-Land. Beide Achsen gegen die Konstanten formuliert, nicht
+// gegen "DE"/"de" (sonst falsch-rot beim naechsten Weltdefault-Flip, 19-w2-baseline 1.1).
+const TABLE_FOREIGN_FALLBACK_COUNTRY = "ZW"; // gueltiges ISO-2 OHNE LANGUAGE_FOR_COUNTRY-Zeile
+test("LAW-18 (Mechanismus, gruen) - Total-Ausfall der Geo-Ermittlung: Land = DEFAULT_COUNTRY, Sprache aus der Tabelle", () => {
+  const country = resolveOnboardCountry({});
+  assert.equal(country, DEFAULT_COUNTRY);
+  assert.equal(
+    languageForCountry(country),
+    languageForCountry(DEFAULT_COUNTRY),
+    "die Sprache haengt am aufgeloesten Land, nicht an einer zweiten Regel",
+  );
+  assert.equal(
+    languageForCountry(resolveOnboardCountry({ fallbackCountry: TABLE_FOREIGN_FALLBACK_COUNTRY })),
+    DEFAULT_LANGUAGE,
+    "erst ein tabellen-fremdes Fallback-Land landet auf dem Weltdefault",
+  );
+});
+
 // ---- resolveNumberCountry: Kauf-Land-Override (Runde 1, PLAN-VOUCHER-SETUP-FEE-GAP.md) ----
 // Regressionstest fuer den Review-Blocker FEE-COUNTRY-DRIFT: numberSetupFeeCentsFor
 // (self-service-routes.js) und requestNumberForPaidTenant (provision-trigger.js) muessen

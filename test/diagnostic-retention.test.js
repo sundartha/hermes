@@ -27,6 +27,13 @@ const FOREIGN = "+491729999001";
 const daysAgo = (d) => new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
 const AT = "2026-01-01T00:00:00Z";
 
+// LAW-15 (i18n-Launch-Testkatalog, Buchhaltung - kein eigener Test, G5): die Haelfte
+// "fail-closed bei 0" ist hier bereits gepinnt (P2b-05: kein Flag wird gewaehrt;
+// P2b-12: der Purge laeuft trotzdem; P2b-24: jedes beendete Diagnose-Transkript faellt;
+// P2b-31: retentionDays=0 schaltet die Diagnose-Frist nicht mit ab) plus
+// test/retention.test.js "RETENTION_DAYS=0 schaltet die Retention ab". Die andere
+// Haelfte (Defaults 30/7 gegen .env.example) traegt
+// test/env-docs-spend-cap-coherence.test.js.
 // ---- Block A: diagnosticRetentionGranted (Scope-Pruefung, offline) ----
 
 test("P2b-01: eigenes Ziel + Frist scharf + requested=true -> gewaehrt", () => {

@@ -146,6 +146,11 @@ test("resolveCallLanguage: alles leer -> DEFAULT_LANGUAGE (de, letzter Notnagel)
 // gegen "en" (sonst falsch-rot beim naechsten Flip).
 // Abgrenzung zu PROMPT-17 unten: hier variieren die WERTE (null / "" / gesetzt), dort die
 // SATZFORM des Records (Feld fehlt ganz) - kein Duplikat (G5).
+//
+// FMT-27 (i18n-Launch-Testkatalog, Buchhaltung - kein eigener Test, G5): "number.language
+// uebersteuert tenant.defaultLanguage" ist eine WERT-Instanz genau dieser Matrix
+// (settings falsy x number gesetzt x tenant gesetzt -> number gewinnt). Das "US" im
+// FMT-27-Titel ist dekorativ: number.country nimmt an resolveCallLanguage nicht teil.
 test("LANG-17 (Mechanismus, gruen) - resolveCallLanguage-Praezedenz ueber alle Falsy-Kombinationen", () => {
   const FALSY = [null, ""]; // beide muessen zur naechsten Stufe durchfallen
   for (const settingsLang of [...FALSY, "en"]) {
