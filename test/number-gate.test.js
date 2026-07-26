@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
+import { EMERGENCY_SHORT_CODES } from "../src/telephony/number-denylist.js";
 
 const ALLOWED = "+4915112345678"; // normale DE-Mobilnummer, dient als Positiv-Fall
 const postCall = (url, to) =>
@@ -131,6 +132,25 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
       await srv.stop();
     }
   });
+});
+
+// OUT-15: der bestehende Notruf-Test oben laeuft mit ALLOWED_COUNTRY_CODES="*" - dort ist
+// das Land-Gate ausgeschaltet und beweist die Praezedenz nur schwach. Hier ist genau EIN
+// Land explizit erlaubt (+1); die Denylist muss trotzdem VOR Format- und Land-Pruefung
+// greifen (403 denylist, nicht 400 Format).
+test("OUT-15 (Mechanismus, gruen) - die Notruf-Denylist gewinnt auch bei explizit erlaubtem Land (+1)", async () => {
+  const srv = await startServer({
+    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1", TWILIO_ACCOUNT_SID: "x" },
+  });
+  try {
+    for (const to of EMERGENCY_SHORT_CODES) {
+      const res = await postCall(srv.localUrl, to);
+      assert.equal(res.status, 403, `${to} muss als Denylist-Sperre abgewiesen werden, nicht als Formatfehler`);
+      assert.match((await res.json()).error, /is blocked/, `${to} -> grund=denylist`);
+    }
+  } finally {
+    await srv.stop();
+  }
 });
 
 // ---- GAP-18: NANP-Sub-Ranges bleiben gesperrt, auch wenn "+1" erlaubt ist ----

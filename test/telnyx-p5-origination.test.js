@@ -36,14 +36,16 @@ function spyVoiceControl(callControlId = "cc_spy_1") {
   return voiceControl;
 }
 
+// EINE Origination-Config fuer beide Unit-Tests dieser Sektion (G5): publicUrl speist die
+// gepinnte webhookUrl, assistantId die Bindung.
+const originationConfig = () =>
+  withConfigNamespaces({ publicUrl: "https://agent.test", telnyxAssistant: { assistantId: "asst_9" } });
+
 test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", async () => {
   const store = spyStore();
   const voiceControl = spyVoiceControl("cc_1");
   const call = { id: "call_abc", provider: "telnyx" };
-  const config = withConfigNamespaces({
-    publicUrl: "https://agent.test",
-    telnyxAssistant: { assistantId: "asst_9" },
-  });
+  const config = originationConfig();
 
   await originateAiAssistantCall({
     store,
@@ -67,6 +69,27 @@ test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", asy
   assert.equal(call.assistantId, "asst_9", "aus config.telnyxAssistant.assistantId");
   assert.equal(call.callControlId, "cc_1", "aus der originateViaCallControl-Rueckgabe");
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
+});
+
+// OUT-27: der Assistant-Originationspfad hat KEINE eigene Laenderlogik - alles
+// Landbezogene (Normalisierung, Denylist, Land-Gate) ist in der Gate-Kette davor
+// abgeschlossen ("geprueft == gewaehlt"). Bewusst am VERHALTEN gemessen (Spy sieht exakt
+// das uebergebene to), nicht per grep auf Symbolnamen: ein grep waere blind gegen eine
+// spaeter inline geschriebene Umformung.
+test("OUT-27 (Mechanismus, gruen) - der Assistant-Originationspfad reicht 'to' unveraendert durch", async () => {
+  for (const to of ["+12025550123", "+491737252163", "01737252163", "011441234567", "2125550123"]) {
+    const voiceControl = spyVoiceControl();
+    await originateAiAssistantCall({
+      store: spyStore(),
+      voiceControl,
+      config: originationConfig(),
+      call: { id: "call_out27", provider: "telnyx" },
+      fromNumber: "+4930000000",
+      to,
+      maxDur: 180,
+    });
+    assert.equal(voiceControl.calls[0].params.to, to, `${to} muss unveraendert an den Provider gehen`);
+  }
 });
 
 // === B: Spawn - Pfadwahl ueber server.js /api/calls ================================

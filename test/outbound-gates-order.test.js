@@ -10,8 +10,13 @@
 // Kommentar).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const EXPECTED_ORDER = [
   "outbound_frozen",
@@ -34,6 +39,10 @@ const EXPECTED_ORDER = [
 ];
 
 const VALID_TO = "+491711234567";
+// W2-B3: ein gueltiges NANP-Ziel (Format-Gate passiert, Land-Gate entscheidet).
+const NANP_TARGET = "+12025550123";
+// Globales Gate, das +1 MIT einschliesst - Vorbedingung fuer "das Profil kann nur senken".
+const GLOBAL_CODES_INCLUDING_NANP = ["+49", "+33", "+44", "+1"];
 
 // Vollstaendig durchgesteuerter Default-Store: JEDES Gate laesst sich mit diesen Werten
 // isoliert aufrufen, ohne Vorbedingung zu verletzen (alle Praedikate "erlauben"). Tests
@@ -129,6 +138,10 @@ function baseCtx(overrides = {}) {
   };
 }
 
+// Profil-Variante fuer die Land-Schnittmenge: EIN Feld weicht vom Default-Profil ab
+// (F1/P13 - der Testrumpf bleibt auf die geprueften Codes reduziert).
+const profileWithCountryCodes = (codes) => ({ ...baseCtx().profile, allowedCountryCodes: codes });
+
 // === (a) Order-Snapshot ==========================================================
 
 test("Gate-Reihenfolge ist der eingefrorene Snapshot", () => {
@@ -223,6 +236,87 @@ test("number_gate: LAND-Gate (config.safety.allowedCountryCodes) -> 403 grund=la
   const denial = await gateBy(gates, "number_gate").run(ctx);
   assert.equal(denial.status, 403);
   assert.match(denial.audit.detail, /grund=land/);
+});
+
+// OUT-03 (tasks/i18n-tests/05-auslandstelefonie.md): das Tenant-Profil ist eine
+// SCHNITTMENGE mit dem globalen Gate, keine zweite Erlaubnis-Quelle. Der bestehende
+// LAND-Gate-Test darueber prueft nur die globale Achse mit leerem Profil - hier
+// entscheidet das Profil neben einer WEITEREN globalen Erlaubnis (kein Duplikat, G5).
+test("OUT-03 (Mechanismus, gruen) - das Tenant-Profil kann das Laender-Gate nur einschraenken, nie erweitern", async () => {
+  const narrowing = makeOutboundGates(makeDeps({ config: { allowedCountryCodes: GLOBAL_CODES_INCLUDING_NANP } }));
+  const narrowGate = gateBy(narrowing.gates, "number_gate");
+  const denial = await narrowGate.run(baseCtx({ to: NANP_TARGET, profile: profileWithCountryCodes(["+49"]) }));
+  assert.equal(denial.status, 403, "global erlaubtes +1 wird vom engeren Profil gesperrt");
+  assert.match(denial.audit.detail, /grund=land/);
+  assert.equal(
+    await narrowGate.run(baseCtx({ to: VALID_TO, profile: profileWithCountryCodes(["+49"]) })),
+    null,
+    "dasselbe Profil laesst sein eigenes Land weiterhin durch",
+  );
+
+  // Gegenrichtung: das globale Gate kennt nur +49 - kein Profilwert oeffnet +1.
+  const widening = makeOutboundGates(makeDeps());
+  for (const codes of [["+1"], ["*"], GLOBAL_CODES_INCLUDING_NANP]) {
+    const blocked = await gateBy(widening.gates, "number_gate").run(
+      baseCtx({ to: NANP_TARGET, profile: profileWithCountryCodes(codes) }),
+    );
+    assert.equal(blocked.status, 403, `Profil ${JSON.stringify(codes)} darf die globale Erlaubnis nicht erweitern`);
+    assert.match(blocked.audit.detail, /grund=land/);
+  }
+});
+
+// OUT-22: die drei "leeren" Profil-Zustaende ([] / undefined / null) muessen IDENTISCH
+// wirken - !p || !p.length faengt alle drei. Zweite Haelfte ist load-bearing: "keine
+// Zusatz-Einschraenkung" heisst NICHT "kein Gate" (die globale Achse bleibt).
+test("OUT-22 (Mechanismus, gruen) - leere/undefinierte Profil-allowedCountryCodes bedeuten keine Zusatz-Einschraenkung", async () => {
+  const { gates } = makeOutboundGates(makeDeps());
+  const numberGate = gateBy(gates, "number_gate");
+  for (const codes of [[], undefined, null]) {
+    assert.equal(
+      await numberGate.run(baseCtx({ to: VALID_TO, profile: profileWithCountryCodes(codes) })),
+      null,
+      `leeres Profil (${JSON.stringify(codes)}) darf das global erlaubte Ziel nicht sperren`,
+    );
+    const blocked = await numberGate.run(baseCtx({ to: NANP_TARGET, profile: profileWithCountryCodes(codes) }));
+    assert.equal(blocked.status, 403, `leeres Profil (${JSON.stringify(codes)}) oeffnet die globale Achse NICHT`);
+  }
+});
+
+// OUT-28: die Einzel-Gate-Tests darueber pruefen je EINE Verletzung isoliert. Hier sind
+// MEHRERE Gates gleichzeitig verletzt - bewiesen wird die Praezedenz (Land vor
+// Stundenlimit vor Ziel-Cap) an EINEM und demselben gueltigen US-Ziel. Der Denylist-Vorrang
+// davor traegt OUT-15 (test/number-gate.test.js).
+test("OUT-28 (Mechanismus, gruen) - bei einem gueltigen US-Ziel entscheidet deterministisch das erste verletzte Gate", async () => {
+  const exhausted = { countOutboundCallsSince: () => Number.MAX_SAFE_INTEGER };
+  const land = makeOutboundGates(
+    makeDeps({
+      config: { allowedCountryCodes: ["+49"], maxCallsPerHour: 0, perTargetCallCap: 0 },
+      store: exhausted,
+    }),
+  );
+  const landDenial = await gateBy(land.gates, "number_gate").run(baseCtx({ to: NANP_TARGET }));
+  assert.equal(landDenial.status, 403);
+  assert.match(landDenial.audit.detail, /grund=land/, "Land schlaegt Stundenlimit und Ziel-Cap");
+
+  const hourly = makeOutboundGates(
+    makeDeps({
+      config: { allowedCountryCodes: ["+1"], maxCallsPerHour: 0, perTargetCallCap: 0 },
+      store: exhausted,
+    }),
+  );
+  const hourlyDenial = await gateBy(hourly.gates, "number_gate").run(baseCtx({ to: NANP_TARGET }));
+  assert.equal(hourlyDenial.status, 429);
+  assert.match(hourlyDenial.audit.detail, /grund=stundenlimit/, "erlaubtes Land -> naechstes Glied entscheidet");
+
+  const perTarget = makeOutboundGates(
+    makeDeps({
+      config: { allowedCountryCodes: ["+1"], maxCallsPerHour: 100, perTargetCallCap: 0 },
+      store: { countOutboundCallsSince: (_since, filter) => (filter?.to ? 1 : 0) },
+    }),
+  );
+  const perTargetDenial = await gateBy(perTarget.gates, "number_gate").run(baseCtx({ to: NANP_TARGET }));
+  assert.equal(perTargetDenial.status, 429);
+  assert.match(perTargetDenial.audit.detail, /grund=ziel_limit/, "Stundenlimit frei -> Ziel-Cap entscheidet");
 });
 
 // GAP-10: der Ablehnungstext nennt den Env-Namen NICHT mehr (er darf die
@@ -374,4 +468,22 @@ test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf config-
     Number.isInteger(ctx.reserveCents) && ctx.reserveCents > 0,
     "reserveCents bleibt eine positive Ganzzahl (kein negativer/Null-Reserve-Fallout)",
   );
+});
+
+// === (d) Doku-Drift der Kettenlaenge =============================================
+
+// OUT-14 (SOLL, heute rot): der Modul-Kommentar in src/telephony/outbound-gates.js nennt
+// "16 Glieder", die Kette traegt 17. Bewusst als SOLL formuliert, NICHT als gruener Pin der
+// falschen Zahl (R-G-Abweichung von der Katalog-Erwartung "gruen"): ein Ist-Pin auf "16"
+// wuerde die Doku-Drift zum Sollzustand erklaeren und beim Korrigieren des Kommentars
+// brechen. So faellt der Test heute, und er heilt genau dann, wenn jemand die Zahl richtig
+// stellt - danach ist er der Waechter gegen die naechste Drift (G27: Struktur statt Disziplin).
+const CHAIN_LENGTH_COMMENT = /Gate-Kette \((\d+) Glieder\)/;
+
+test("OUT-14 (SOLL, rot) - die im Modul-Kommentar genannte Gliederzahl deckt sich mit der tatsaechlichen Gate-Kette", () => {
+  const source = fs.readFileSync(path.join(REPO_ROOT, "src", "telephony", "outbound-gates.js"), "utf8");
+  const match = source.match(CHAIN_LENGTH_COMMENT);
+  assert.ok(match, "der Modul-Kommentar nennt die Gliederzahl der Gate-Kette");
+  const { gates } = makeOutboundGates(makeDeps());
+  assert.equal(Number(match[1]), gates.length, "Kommentar-Zahl == Laenge der gebauten Kette");
 });

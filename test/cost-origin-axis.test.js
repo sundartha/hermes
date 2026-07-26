@@ -7,6 +7,11 @@
 // Auflage A3 fuer gruen gewordene Katalogtests vorsieht. Die Rueckverfolgbarkeit bleibt
 // per grep auf "ORIG-0x" erhalten.
 //
+// W2-B3 (2026-07-26): der OUT-12-Test unten traegt seine Katalog-ID am NAMENSANFANG und
+// laeuft damit im Gate-Lauf (npm run test:gates) - so schreibt es Regel R-B der Welle W2
+// vor (tasks/i18n-tests/18-w2-scope.md). Der aeltere ORIG-Block darueber behaelt seine
+// mittigen IDs und bleibt im Regressionslauf; beide Konventionen stehen bewusst nebeneinander.
+//
 // Offline, Fake-Store nach dem Muster test/metering-unit.test.js: kein Spawn, keine DB,
 // kein Netz (P12 F.I.R.S.T.).
 import { test } from "node:test";
@@ -22,6 +27,7 @@ const US_OWN_DID = "+15005550006"; // eigene DID OHNE Inlands-Vorwahl (die ausge
 const DE_TARGET = "+4915112345678"; // +49 steht in VOICE_TARIFF_DOMESTIC_PREFIXES
 const US_TARGET = "+15551234567"; // keine Inlands-Vorwahl
 const FR_TARGET = "+33612345678"; // +33 steht in VOICE_TARIFF_DOMESTIC_PREFIXES, aber != +49
+const TOLL_FREE_TARGET = "+18005550123"; // 1-800: fuer den ANRUFER gebuehrenfrei, fuer uns nicht
 const SECONDS_PER_MINUTE = 60;
 
 // Faengt die Geld-Nebeneffekte auf (recordUsageEvent / addVoiceUsageCostCents), ohne Store.
@@ -109,6 +115,23 @@ test("fail-closed: fehlende/unbrauchbare Herkunft -> teuerster Satz", () => {
     tariffCentsPerMin(DE_TARGET),
     abroad,
     "vergessenes Argument ergibt nie den Inlandssatz",
+  );
+});
+
+// OUT-12 (Charakterisierung, gruen): eine Toll-Free-Nummer bekommt KEINE Sonderbehandlung -
+// +1 steht in keiner Inlands-Vorwahlliste, also gilt der Worst-Case-Satz. Bewusst OHNE
+// roten SOLL-Zwilling (Abweichung zur R1-Regel der kanonischen Liste, begruendet): "fail-safe
+// teuer statt fail-open billig" ist die getroffene Produktentscheidung derselben Achse (PAY-22);
+// ein guenstigerer Toll-Free-Satz waere ein erfundenes Soll, solange kein Satz GEMESSEN ist.
+// Der Test faengt genau die gefaehrliche Richtung: ein stiller Kipp auf den billigen Satz.
+test("OUT-12 (Charakterisierung, gruen) - Toll-Free-Ziele werden zum Worst-Case-Tarif gerechnet, wie jedes andere +1-Ziel", () => {
+  const abroad = config.billing.voiceTariffDefaultCents;
+  assert.equal(tariffCentsPerMin(TOLL_FREE_TARGET, DE_OWN_DID), abroad);
+  assert.equal(tariffCentsPerMin(TOLL_FREE_TARGET, US_OWN_DID), abroad);
+  assert.equal(
+    tariffCentsPerMin(TOLL_FREE_TARGET, US_OWN_DID),
+    tariffCentsPerMin(US_TARGET, US_OWN_DID),
+    "keine Toll-Free-Sonderbehandlung gegenueber einer gewoehnlichen US-Nummer",
   );
 });
 

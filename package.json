@@ -4,7 +4,7 @@
   "description": "Hermes — autonomer Telefon-Assistent (MCP + echte Telefonie)",
   "type": "module",
   "config": {
-    "_comment_i18nCatalogPattern": "Katalog-Praefixe des i18n-Launch-Testkatalogs (PLAN-I18N-TESTS.md 4.2 + tasks/i18n-tests/00-kanonische-liste.md), EINE Quelle fuer beide Testlaeufe unten. Jeder Katalogtest traegt seine ID am Namensanfang (bzw. nach dem Wort 'Charakterisierung ', der etablierten Konvention fuer R3-Mechanismus-Tests); ein neuer Test mit bestehendem Praefix landet ohne weiteren Handgriff im richtigen Lauf. Bekannte Ausnahme (nicht ueber Namensmuster erfassbar, s. Bericht): VOICE-02/03/08/12/17/18/19/24, LANG-06, FMT-01, LANG-21, PROMPT-21 stehen nur als Kommentar-Referenz an einem Bestandstest, nicht im Testnamen selbst - sie bleiben im Regressionslauf.",
+    "_comment_i18nCatalogPattern": "Katalog-Praefixe des i18n-Launch-Testkatalogs (PLAN-I18N-TESTS.md 4.2 + tasks/i18n-tests/00-kanonische-liste.md), EINE Quelle fuer beide Testlaeufe unten. Jeder Katalogtest traegt seine ID am Namensanfang (bzw. nach dem Wort 'Charakterisierung ', der etablierten Konvention fuer R3-Mechanismus-Tests); ein neuer Test mit bestehendem Praefix landet ohne weiteren Handgriff im richtigen Lauf. Bekannte Ausnahme (nicht ueber Namensmuster erfassbar, s. Bericht): VOICE-02/03/08/12/17/18/19/24, LANG-06, FMT-01, LANG-21, PROMPT-21, OUT-18, FMT-22 stehen nur als Kommentar-Referenz an einem Bestandstest, nicht im Testnamen selbst - sie bleiben im Regressionslauf.",
     "i18nCatalogPattern": "^(Charakterisierung )?(DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD)-[0-9]"
   },
   "scripts": {
