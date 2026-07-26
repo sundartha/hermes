@@ -632,3 +632,64 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > **Nicht beruehrt:** `metering.js`, `outbound-gates.js`, kein Buchungs-/Gate-Pfad,
 > `VOICE_TARIFF_DOMESTIC_CENTS`-Default (bleibt `20`). Denylist/Land-Gate/Stundenlimit/
 > Budget-Guard/Max-Dauer/Signaturpruefung sind nicht angefasst.
+
+## P6-BUDGETFENSTER — Perioden-Fenster + ersatzloser Wegfall der Plattform-Stundenbremse (2026-07-26)
+
+> **Bewusste Abweichung von Absoluter Regel 1 (O5, Owner-Entscheidung):** die
+> plattformweite Stundenbremse (`globalHourReached`, `countOutboundCallsSince` OHNE
+> Filter) ist **ersatzlos entfallen**. Begruendung: ein globales Anruflimit macht mit
+> wachsender Tenant-Zahl jeden zusaetzlichen Kunden zum Gegner aller anderen - ein
+> einzelner Tenant konnte die gesamte Plattform aus dem Stundenfenster draengen. Die
+> verbleibende Achse (`tenantHourReached`) zaehlt nach `tenantId` statt `requestedBy` und
+> ist damit **strikt strenger** als die frueher zweite Achse (`count(tenantId) >=
+> count(requestedBy)`); `min(config, profil)` bleibt, `maxCallsPerHour:0` bleibt harter
+> Block. **Verbleibender Plattform-Not-Aus:** `OUTBOUND_FROZEN` (globaler Kill-Switch,
+> erstes Gate der Kette). Die GELD-Achse ist unveraendert eine Schnittmenge
+> (`globalBudgetExceeded`/`gatePlatformUsageCents` sind nicht angefasst).
+> Quelltext-Invariante (`test/gap-10-hour-limit-per-tenant.test.js`): jeder
+> `countOutboundCallsSince`-Aufruf in `outbound-gates.js` traegt ein Filter-Objekt - eine
+> ungefilterte Fundstelle waere die zurueckgebaute Plattform-Bremse.
+>
+> **Ablehnungstext ohne Env-Namen:** `MAX_CALLS_PER_HOUR=<n>` steht nicht mehr im
+> Kundentext (Regel-4-Nachbarschaft: der Anrufer erfaehrt die Sperre, nicht die
+> Konfigurationsflaeche). Der Blattwert bleibt ueber `grund=stundenlimit` im Audit-Log
+> forensisch nachvollziehbar; die Wertempfindlichkeit des Gates ist per Gegenprobe
+> getestet (`test/outbound-gates-order.test.js`).
+>
+> **Perioden-Fenster des Budget-Gates (GAP-01).** `gateUsageCents` misst im Zweig
+> `BUDGET_MONTH_ENABLED=false` nicht mehr die Lebenszeit, sondern `costCents` minus
+> `budgetPeriodBaselineCents` - gestempelt bei Beginn der Stripe-Abrechnungsperiode
+> (`stampBudgetPeriod`, aufgerufen in `activatePaidTenant`). Der Flag-AN-Zweig
+> (Spend-Monat, P7) und die Plattform-Achse bleiben unberuehrt. Reset-Bedingung = dieselbe
+> Kante wie die Reaktivierung (O4): erreichbar nur fuer ein bestaetigtes Abo
+> (`CONFIRMED_SUBSCRIPTION_STATUS`; `past_due`/`unpaid`/`incomplete` sind vorher `IGNORE`)
+> UND ohne aktiven `billingHold`. Monotonie-/Idempotenz-Riegel ueber `laterMonotonicKey`
+> (dieselbe eine Regel wie die Spend-Monat-Achse).
+>
+> **Getragene Restrisiken (bewusst akzeptiert, nicht behoben):**
+>
+> 1. Ein gestempelter Bucket ohne weiterlaufendes Abo (Kuendigung) friert auf dem letzten
+>    Baseline ein - das Fenster wird nie mehr zurueckgesetzt. Ueber die Zeit ist das
+>    **strenger** als vorher, aber dauerhaft um den Baseline lockerer als Lebenszeit. Der
+>    Tenant ist ueber `tenantInactive`/`allowlistError` ohnehin fuer Outbound gesperrt.
+> 2. Eine verspaetete Kostenkorrektur aus der Vorperiode faellt positiv ins neue Fenster
+>    bzw. wird negativ auf 0 geklemmt (`Math.max(0, ...)`, sonst waere sie ein Guthaben,
+>    das das Gate aufweitet). Identische Asymmetrie wie die bestehende Spend-Monat-Achse
+>    (`bookCostCorrectionCents`) - kein neuer Sachverhalt.
+> 3. `tenantBudgetSnapshot` (Anzeige/Ablehnungstexte) bleibt eine LEBENSZEIT-Sicht neben
+>    einer Perioden-Entscheidung. Bekannte, seit P7 bestehende Anzeige/Gate-Divergenz -
+>    irrefuehrend, aber nicht unsicher (keine Gate-Entscheidung haengt daran). Bewusst
+>    ausserhalb des Scopes dieser Phase.
+>
+> **Deploy-Vorbedingung (GAP-07).** `alertChannelFindings` liefert seit dieser Phase einen
+> FATALEN Befund bei `PAYMENT_ENABLED=true` UND `PLATFORM_SPEND_WARN_PERCENT>0` UND leerem
+> `PLATFORM_ALERT_SMS_TO`; `assertConfig()` faltet ihn in seine Fatal-Menge -> **Boot-
+> Refusal**. Vor dem Deploy ist der Live-Zustand von `PLATFORM_ALERT_SMS_TO` abzulesen:
+> ist der Kanal leer, verweigert die Instanz den Start. Abhilfe: Empfaenger setzen ODER
+> `PLATFORM_SPEND_WARN_PERCENT=0` (Warnung bewusst aus). Ohne Buchung oder mit
+> abgeschalteter Warnschwelle bleibt es bei der bestehenden WARN.
+>
+> **Nicht beruehrt:** `disclosureSentence`, Signaturpruefung, Auth, `MAX_BUDGET_EUR`/
+> `globalBudgetExceeded`/`gatePlatformUsageCents`, `DEFAULT_TENANT_BUDGET_CENTS`,
+> `BUDGET_MONTH_ENABLED`-AN-Pfad, `render.yaml`-Werte (`MAX_CALLS_PER_HOUR` bleibt `6`).
+> Keine neue Dependency, kein neuer Env-Schluessel.
