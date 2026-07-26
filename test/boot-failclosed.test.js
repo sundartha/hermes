@@ -139,23 +139,27 @@ test("T-P3-12: ausgelieferte Beispiel-Konfig (600/300) bootet gruen, Klausel-B-W
 // Kind-Env entfernt (nicht als String "undefined" gesetzt) - process.env sieht die Var
 // damit als echt ABWESEND, genau wie ein Host ohne diese Env-Zeilen.
 //
-// LCT P6 / Punkt 0 (bewusst NICHT Teil dieser Phase): der Plan-Cap-Boot-Guard prueft die
-// abgeleitete Business-Decke (900 ct) gegen platformSpendCapCents. Der CODE-Fallback von
-// MAX_BUDGET_EUR bleibt bei 8 (800 ct) - die Anhebung ist Entscheidung 8/PLAN-BUDGET-AXES,
-// ausdruecklich NICHT Teil von P6 (der LIVE-Wert ist bereits 30, nur der Repo-Fallback
-// nicht). Diese Konstellation war VOR P6 gruen (T-P3-13 bewies das damals) und ist es nach
-// P6 zu Recht NICHT mehr: 900 >= 800 macht die Tenant-Achse fuer Business WIRKUNGSLOS -
-// genau die Inkohaerenz, die die erste Linie fangen soll. Der Test pinnt jetzt die
-// UMGEKEHRTE Erwartung (fatal), bis der Fallback in einer Folge-Phase angehoben wird.
-test("T-P3-13: reiner CODE-Fallback fuer MAX_BUDGET_EUR (8) ist seit LCT P6 plan_cap_inert -> Boot verweigert (exit 1)", async () => {
-  const { code, output } = await startServerExpectExit({
+// P7 hat den Fallback angehoben (MAX_BUDGET_EUR 8->30, DEFAULT_TENANT_BUDGET_CENTS
+// 600->1500) - genau die Folge-Phase, auf die der P6-Stand hier verwies. Der reine
+// CODE-Fallback ist damit auf BEIDEN Achsen kohaerent: die abgeleitete Business-Decke
+// (900 ct) liegt unter platformSpendCapCents=3000 (kein plan_cap_inert) UND die
+// Tenant-Decke traegt die Worst-Case-Reserve (kein worst_case_unaffordable, seit P7 fatal).
+test("T-P3-13: reiner CODE-Fallback (MAX_BUDGET_EUR/DEFAULT_TENANT_BUDGET_CENTS ungesetzt) bootet seit P7 gruen", async () => {
+  const srv = await startServer({
     env: { DEFAULT_TENANT_BUDGET_CENTS: undefined, MAX_BUDGET_EUR: undefined },
   });
-  assert.equal(code, 1, `erwartet exit 1 (plan_cap_inert), Output:\n${output}`);
-  assert.match(output, /Start abgebrochen/);
-  assert.match(output, /business/);
-  assert.match(output, /800/);
-  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+  try {
+    const res = await fetch(`${srv.localUrl}/healthz`);
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+    assert.doesNotMatch(
+      srv.stdout,
+      /max_duration_s=/,
+      "Klausel B (worst_case_unaffordable) darf der CODE-Fallback nicht mehr ausloesen",
+    );
+  } finally {
+    await srv.stop();
+  }
 });
 
 // (j1, LCT P6) Erste Linie, fatal am Boot OHNE jede tenant_budget-Zeile (frischer Deploy,

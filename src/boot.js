@@ -335,6 +335,15 @@ function logBootBanner(config, port) {
   console.log(
     `  Budget-Achse:   Tenant ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Perioden-Fenster")} | Plattform ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Lebenszeit-Topf")}`,
   );
+  // P7: WELCHE Decken das Gate misst, stand bisher nirgends im Log - nach einem Deploy war
+  // nicht ablesbar, ob der Dienst die neuen Zahlen faehrt (der Betreiber muesste sie im
+  // Dashboard nachschlagen). Reine Betreiber-Zahlen, kein Secret, kein PII; das Boot-Log
+  // ist operator-only (NICHT /healthz, das den Hash statt der Rohwerte traegt).
+  console.log(
+    `  Kosten-Decken:  Tenant-Default ${config.billing.defaultTenantBudgetCents} ct | ` +
+      `Plattform ${config.billing.platformSpendCapCents} ct | ` +
+      `Worst-Case-Tarif ${config.billing.voiceTariffDefaultCents} ct/min`,
+  );
 }
 
 export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning, costTruing }) {

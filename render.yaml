@@ -274,8 +274,12 @@ services:
         value: claude-sonnet-5
       - key: PRECALL_BRIEFING_TIMEOUT_MS
         value: "6000"
+      # P7: 30 statt 8. 8 (=800 ct) war nicht startfaehig - die abgeleitete Business-Decke
+      # (900 ct) haette den Plattform-Cap uebersprungen (plan_cap_inert, exit 1). 30 ist
+      # zugleich der live gemessene Wert (test/prod-env.js LIVE_MEASURED), der Blueprint
+      # beschreibt den Dienst damit wieder wahrheitsgemaess.
       - key: MAX_BUDGET_EUR
-        value: "8"
+        value: "30"
       # ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c) ----
       - key: VOICE_TARIFF_DOMESTIC_CENTS
         value: "20"
@@ -292,9 +296,14 @@ services:
       - key: VOICE_CAP_RATE_CENTS_PER_MIN
         value: "6"
       # Muss ECHT KLEINER als MAX_BUDGET_EUR*100 sein - sonst verweigert der Boot-Guard
-      # (spendCapCoherence) den Start. 600 = Starter-Minutenwert (30 min * 20 ct).
+      # (spendCapCoherence, Klausel A) den Start.
+      # P7: 1500 statt 600 = VOICE_TARIFF_DEFAULT_CENTS(300) * ceil(MAX_CALL_DURATION_CAP_S(300)/60).
+      # Seit dem GAP-32-Flip ist eine Decke UNTER der Worst-Case-Reserve fatal: 600 hiess,
+      # dass jedes Ziel ohne gemessenen Inlandssatz vor dem Dial mit 402 abgewiesen wurde.
+      # Der Tarif wird NICHT gesenkt (Owner-Entscheidung O6) - die Decke steigt auf den
+      # Betrag, den die eigene Rechnung fordert. Weiterhin echt unter MAX_BUDGET_EUR*100 = 3000.
       - key: DEFAULT_TENANT_BUDGET_CENTS
-        value: "600"
+        value: "1500"
       # ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----
       # 80% von MAX_BUDGET_EUR -> genau EIN Audit-Ereignis pro Spend-Monat, BEVOR der
       # Plattform-Notaus blockt. AENDERT KEINE Gate-Entscheidung.

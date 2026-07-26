@@ -97,15 +97,12 @@ test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein
   );
 });
 
-// LCT P6 / Punkt 0 (bewusst NICHT Teil dieser Phase): die zweite, NEUE Kohaerenz-Achse
-// "hoechste abgeleitete Plan-Decke < MAX_BUDGET_EUR*100" (planCapInertFindings) gegen
-// dieselben drei Quellen. ANDERS als die drei Tests oben ist diese Achse HEUTE BEWUSST
-// NICHT erfuellt: der dokumentierte/CODE-Fallback-Wert von MAX_BUDGET_EUR bleibt bei 8
-// (800 ct) - das Anheben ist Entscheidung 8/PLAN-BUDGET-AXES, ausdruecklich NICHT Teil von
-// P6 (der LIVE-Wert auf Render ist bereits 30, nur Repo/Code-Fallback nicht). Diese Tests
-// PINNEN die bekannte Luecke (fatal===true) statt sie zu verstecken - sie sind der
-// Stolperdraht: sobald MAX_BUDGET_EUR in einer Quelle auf >=10 angehoben wird, muss der
-// jeweilige Test auf `false` gedreht werden (Muster T-P3-13, boot-failclosed.test.js).
+// LCT P6 / Punkt 0, in P7 AUFGELOEST: die zweite Kohaerenz-Achse "hoechste abgeleitete
+// Plan-Decke < MAX_BUDGET_EUR*100" (planCapInertFindings) gegen dieselben drei Quellen.
+// Bis P6 pinnten diese drei Tests die bekannte Luecke (fatal===true) mit der Anleitung
+// "auf false drehen, sobald MAX_BUDGET_EUR>=10". Genau das ist mit P7 passiert: alle drei
+// Quellen tragen jetzt 30 (3000 ct) und liegen ueber der abgeleiteten Business-Decke
+// (900 ct). Die Tests bleiben als Regressionsschutz stehen - nur mit umgekehrter Erwartung.
 function planCapFatalFor(platformCapCents) {
   return planCapInertFindings({
     slugs: CATALOG_SLUGS,
@@ -114,32 +111,32 @@ function planCapFatalFor(platformCapCents) {
   }).some((f) => f.fatal);
 }
 
-test("LCT P6 (bekannte Luecke, gepinnt): .env.example MAX_BUDGET_EUR=8 ist plan_cap_inert (business)", () => {
+test("LCT P6: .env.example MAX_BUDGET_EUR=30 ist kohaerent (P7 aufgeloest, kein plan_cap_inert)", () => {
   const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
   const platformCapCents = eurToCents(Number(readEnvValue(envExample, "MAX_BUDGET_EUR")));
   assert.equal(
     planCapFatalFor(platformCapCents),
-    true,
-    "Diese Assertion MUSS auf false gedreht werden, sobald .env.example MAX_BUDGET_EUR>=10 dokumentiert (Punkt 0 aufgeloest)",
+    false,
+    ".env.example dokumentiert einen Plattform-Cap, unter dem die abgeleitete Business-Plan-Decke inert waere",
   );
 });
 
-test("LCT P6 (bekannte Luecke, gepinnt): render.yaml MAX_BUDGET_EUR=8 ist plan_cap_inert (business)", () => {
+test("LCT P6: render.yaml MAX_BUDGET_EUR=30 ist kohaerent (P7 aufgeloest, kein plan_cap_inert)", () => {
   const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
   const platformCapCents = eurToCents(Number(readRenderValue(renderYaml, "MAX_BUDGET_EUR")));
   assert.equal(
     planCapFatalFor(platformCapCents),
-    true,
-    "Diese Assertion MUSS auf false gedreht werden, sobald render.yaml MAX_BUDGET_EUR>=10 dokumentiert (Punkt 0 aufgeloest)",
+    false,
+    "render.yaml dokumentiert einen Plattform-Cap, unter dem die abgeleitete Business-Plan-Decke inert waere",
   );
 });
 
-test("LCT P6 (bekannte Luecke, gepinnt): src/config.js numEnv-CODE-Fallback MAX_BUDGET_EUR=8 ist plan_cap_inert (business)", () => {
+test("LCT P6: src/config.js numEnv-CODE-Fallback MAX_BUDGET_EUR=30 ist kohaerent (P7 aufgeloest)", () => {
   const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
   const platformCapCents = eurToCents(readCodeFallback(configSrc, "MAX_BUDGET_EUR"));
   assert.equal(
     planCapFatalFor(platformCapCents),
-    true,
-    "Diese Assertion MUSS auf false gedreht werden, sobald der CODE-Fallback >=10 ist (Punkt 0 aufgeloest)",
+    false,
+    "der CODE-Fallback liefert einen Plattform-Cap, unter dem die abgeleitete Business-Plan-Decke inert waere",
   );
 });

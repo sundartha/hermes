@@ -47,9 +47,8 @@ export const BASE_ENV = {
   // LCT P6: 30 (statt vormals 8) - der Plattform-Cap muss echt ueber der abgeleiteten
   // Business-Plan-Decke (900 ct) liegen, sonst verweigert JEDER Spawn-Test den Boot
   // (plan_cap_inert, erste Linie, greift unconditional auf ALLE Katalog-Slugs). 30 spiegelt
-  // den Live-Wert (Entscheidung 8, PLAN-LIVE-COST-TRACING) - der CODE-Fallback in
-  // src/config.js bleibt bewusst bei 8 (Anhebung ist NICHT Teil dieser Phase, s.
-  // test/boot-failclosed.test.js T-P3-13).
+  // den Live-Wert (Entscheidung 8, PLAN-LIVE-COST-TRACING); seit P7 traegt der CODE-Fallback
+  // in src/config.js dieselbe Zahl (der Pin hier bleibt trotzdem, Lehre test-base-env-drift).
   MAX_BUDGET_EUR: "30",
   // LCT P6: Deckel-Basissatz (billing/plan-caps.js) neutral auf den Code-Default gepinnt
   // (Lehre test-base-env-drift).

@@ -13,15 +13,15 @@
 //   LIVE_ENV  - was der Dienst TATSAECHLICH faehrt. Traegt alle Gate-Aussagen.
 //   RENDER_ENV - der Blueprint render.yaml. Traegt ausschliesslich den Divergenz-Befund.
 //
-// Warum nicht der Blueprint allein: render.yaml ist laut eigenem Kommentar (:15-17)
-// Referenz und nicht Wahrheit - der Live-Service ist dashboard-managed. Gemessen am
-// 2026-07-25 ist der Blueprint nicht bloss ungenau, sondern nicht startfaehig:
-// MAX_BUDGET_EUR="8" (:275-276) ergibt platformSpendCapCents=800, und der Boot-Guard
-// bricht mit plan_cap_inert und exit(1) ab, weil die abgeleitete Business-Plan-Decke
-// darueber liegt. Ein Lauf gegen den Blueprint kaeme nie bis zu einem Gate - er wuerde
-// nur immer wieder denselben Boot-Abbruch zeigen. Deshalb faehrt GAP-33 die gemessenen
-// Live-Werte und pinnt die Nicht-Startfaehigkeit des Blueprints als eigenen Befund
-// (prod-config-smoke.test.js). Beleg: tasks/i18n-tests/13-live-env-befund.md.
+// Warum nicht der Blueprint allein: render.yaml ist laut eigenem Kommentar Referenz und
+// nicht Wahrheit - der Live-Service ist dashboard-managed. Gemessen am 2026-07-25 war der
+// Blueprint nicht bloss ungenau, sondern nicht startfaehig: MAX_BUDGET_EUR="8" ergab
+// platformSpendCapCents=800, und der Boot-Guard brach mit plan_cap_inert und exit(1) ab,
+// weil die abgeleitete Business-Plan-Decke darueber lag. P7 hat den Blueprint auf 30
+// (und die Tenant-Decke auf 1500) gehoben - der Boot-Blocker ist weg, die Trennung der
+// beiden Quellen bleibt aber bestehen: der Blueprint traegt weiterhin nur den
+// Divergenz-Befund, Gate-Aussagen haengen an LIVE_ENV.
+// Belege: tasks/i18n-tests/13-live-env-befund.md.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -56,12 +56,11 @@ export const LIVE_MEASURED = Object.freeze({
   // woertlich) in JEDEM Boot vom 2026-07-18 bis 2026-07-25T09:03:22Z. Der Blueprint sagt
   // "+49,+33,+44" - das Land-Gate ist live weltweit offen.
   ALLOWED_COUNTRY_CODES: "*",
-  // Blueprint "8" ist nicht startfaehig (s. Kopf). "30" ist an zwei unabhaengigen Stellen
-  // im Repo als Live-Wert festgehalten: test/env-docs-spend-cap-coherence.test.js:105
-  // ("der LIVE-Wert auf Render ist bereits 30, nur Repo/Code-Fallback nicht") und
-  // test/helpers.js:41-47 (Entscheidung 8 aus PLAN-LIVE-COST-TRACING). Die untere Schranke
-  // ist zusaetzlich am Betrieb belegt: der Live-Boot am 2026-07-25 zeigt den
-  // plan_cap_inert-Abbruch NICHT, den "8" hier reproduzierbar ausloest.
+  // "30" ist der live gefahrene Wert (Entscheidung 8 aus PLAN-LIVE-COST-TRACING, ebenso
+  // in test/helpers.js BASE_ENV gepinnt). Am Betrieb belegt: der Live-Boot am 2026-07-25
+  // zeigt den plan_cap_inert-Abbruch NICHT, den der fruehere Blueprint-Wert "8"
+  // reproduzierbar ausloest. Der Eintrag bleibt eine MESSUNG, auch nachdem P7 den
+  // Blueprint auf denselben Wert nachgezogen hat - Blueprint und Live sind zwei Quellen.
   MAX_BUDGET_EUR: "30",
 });
 
