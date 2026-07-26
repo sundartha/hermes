@@ -2,16 +2,10 @@
 // src/db/schema.sql:13-135; tasks/i18n-tests/10-zeit-format-daten.md ("FMT-28");
 // PLAN-I18N-TESTS.md Abschnitt 7.6 (Owner-Entscheidung 2026-07-25).
 //
-// SOLL-Test (heute rot). Die urspruengliche Katalog-Formulierung (10-zeit-format-
-// daten.md) pinnte "0 Treffer" als GRUEN - das war vor der Owner-Entscheidung 7.6.
-// Diese ist zweigeteilt: das Anrufzeit-*Gate* ist ABGELEHNT (LAW-07 entfaellt dafuer aus
-// dem Arbeitsvorrat), aber die Zeitzonen-*ANZEIGE* ist BESCHLOSSEN - ein timeZone-Feld
-// am Tenant, beim Onboarding aus dem Land gesetzt (00-kanonische-liste.md, Nachtrag
-// 2026-07-25: "FMT-28 entblockt (Datenmodell-Feld + claude.js:43 bekommt timeZone)").
-// Der SOLL-Zustand ist deshalb das GEGENTEIL des alten Katalog-Textes: ein timeZone-
-// Feld MUSS im Datenmodell auftauchen. Der Fix selbst (Feld ergaenzen + claude.js
-// konsumiert es) ist NICHT Teil dieses Testbaus (CLAUDE.md SCOPE-Regel) - dieser Test
-// bleibt rot, bis er landet.
+// P8 A3-Migration: dieser Test war "SOLL (rot)". Mit P8 (DEFAULT_TIMEZONE/resolveTimezone
+// in defaults.js, timezone-Spalte in schema.sql) ist der Zielzustand erreicht - der Test
+// wandert von test:gates nach npm test. Das Anrufzeit-*Gate* bleibt ABGELEHNT (LAW-07);
+// die Zeitzonen-*ANZEIGE* ist umgesetzt (Owner-Entscheidung 7.6).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -23,7 +17,7 @@ const defaultsSrc = fs.readFileSync(path.join(dir, "../src/store/defaults.js"), 
 const schemaSrc = fs.readFileSync(path.join(dir, "../src/db/schema.sql"), "utf8");
 const TZ_PATTERN = /timezone|timeZone/;
 
-test("FMT-28 (SOLL, heute rot) - Datenmodell traegt ein timeZone-Feld am Tenant (JSON-Defaults UND Postgres-Schema)", () => {
+test("Datenmodell traegt ein timezone-Feld am Tenant (JSON-Defaults UND Postgres-Schema) (ex FMT-28)", () => {
   assert.ok(
     TZ_PATTERN.test(defaultsSrc),
     "src/store/defaults.js muss ein timezone/timeZone-Feld kennen (Entscheidung 7.6: Zeitzonen-Anzeige am Tenant)",

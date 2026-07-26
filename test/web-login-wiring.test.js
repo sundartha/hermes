@@ -210,19 +210,17 @@ test("S2-16: selfServiceEnabled+multiTenant mountet /api/self-service/state (401
 
 // ---- LANG-02 (i18n-Testkatalog, kanonisch D27, tasks/i18n-tests/01-sprachaufloesung.md:140) --
 //
-// Polaritaet SOLL (rot), NICHT die Ist-Pin-Fassung aus der Sektionsdatei: die verbindliche
-// Aufloesung in tasks/i18n-tests/00-kanonische-liste.md Abschnitt 2 (Zeile "D27 ... LANG-02 |
-// SOLL (rot)") ueberschreibt die dort urspruenglich als Ist-Zustand ("Heute erwartbar: gruen")
-// formulierte Fassung nach Regel R1 (SOLL gewinnt bei Polaritaets-Konflikt). Der Test behauptet
-// deshalb den Zielzustand (Web-Login setzt tenant.country/defaultLanguage) und ist heute rot,
-// weil genau das nicht passiert (resolveOrCreateTenant, src/web-auth.js:503-518, schreibt nur
-// id/status/idp_subject - kein Land, keine Sprache).
+// P8 A3-Migration: dieser Test war "SOLL (rot)" (Web-Login setzte country/defaultLanguage
+// nie). Mit P8 (resolveOrCreateTenant, src/web-auth.js, schreibt jetzt country/
+// default_language/timezone im INSERT-Zweig ueber makeAccounts' signupGeo) ist der
+// Zielzustand erreicht - der Test wandert von test:gates (Launch-Katalog) nach npm test
+// (Regressionsschutz).
 //
 // Direkter DB-Read statt fakeStore.ensureTenant: der fakeStore in diesem File ist ein reiner
 // Wiring-Stub (No-Op-Methoden), der Tenant selbst entsteht in resolveOrCreateTenant() auf der
 // pglite-Instanz hinter createPortalRunner - dieselbe Quelle, die accounts.upsertOnFirstLogin
 // (mintSession, POST /auth/dev-login) tatsaechlich beschreibt.
-test("LANG-02 (SOLL rot): Web-Login-Pfad setzt tenant.country/defaultLanguage nie", async () => {
+test("Web-Login legt den Tenant mit country/defaultLanguage/timezone an (ex LANG-02)", async () => {
   const runner = await makePgliteRunner();
   const deps = await makeDeps({
     config: { ...baseConfig, auth: { ...baseConfig.auth, devLoginEnabled: true } },
@@ -246,18 +244,12 @@ test("LANG-02 (SOLL rot): Web-Login-Pfad setzt tenant.country/defaultLanguage ni
 
   const tenantId = tenantIdForSubject("dev-user");
   const { rows } = await runner.withClient((c) =>
-    c.query("SELECT country, default_language FROM tenant WHERE id = $1", [tenantId]),
+    c.query("SELECT country, default_language, timezone FROM tenant WHERE id = $1", [tenantId]),
   );
   assert.equal(rows.length, 1, "Dev-Login muss den Tenant angelegt haben");
-  // SOLL: der Login-Pfad soll country/defaultLanguage auf dem frisch angelegten Tenant setzen.
-  assert.notEqual(
-    rows[0].country,
-    null,
-    "SOLL: Web-Login-Pfad muss tenant.country setzen (heute: bleibt immer NULL)",
-  );
-  assert.notEqual(
-    rows[0].default_language,
-    null,
-    "SOLL: Web-Login-Pfad muss tenant.defaultLanguage setzen (heute: bleibt immer NULL)",
-  );
+  assert.notEqual(rows[0].country, null, "Web-Login-Pfad setzt tenant.country");
+  assert.notEqual(rows[0].default_language, null, "Web-Login-Pfad setzt tenant.defaultLanguage");
+  // P8/FMT-28: die P8-Abnahme "ein Login-Lauf legt einen Tenant mit gesetztem
+  // country + timezone an" gehoert an genau diese eine Stelle (kein Duplikat-Test, G5).
+  assert.notEqual(rows[0].timezone, null, "Web-Login-Pfad setzt tenant.timezone");
 });

@@ -3,7 +3,7 @@
 import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_DEFAULT } from "./store/defaults.js";
+import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
@@ -35,12 +35,19 @@ function promptInputs(call) {
   // (disclosureSentence) nennt dagegen den VOLLEN Namen. Beide aus derselben
   // gebundenen Tenant-Identitaet -> keine Impersonation.
   const loc = localeFor(call.language); // F1 Phase 2, Fallback de
+  // P8/FMT-28: die Uhrzeit im Prompt gilt in der Zeitzone des TENANTS, nicht in der des
+  // Serverprozesses (live UTC - der Agent nannte deutschen Anrufern bisher eine um 1-2 h
+  // falsche Uhrzeit). Eigener Reader (store.tenantTimezone), NICHT tenantContext: die
+  // Zeitzone gehoert nicht in die LLM-/MCP-View. resolveTimezone ist fail-safe -
+  // ein unbekannter IANA-Wert wuerde in toLocaleString sonst werfen und den Anruf toeten.
+  const timeZone = resolveTimezone(store.tenantTimezone(call.tenantId));
   return {
     call,
     settings: ctx.settings,
     owner: ctx.firstName,
     loc,
     now: new Date().toLocaleString(loc.dateLocale, {
+      timeZone,
       weekday: "long",
       day: "2-digit",
       month: "long",

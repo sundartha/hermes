@@ -24,6 +24,19 @@ export const SELF_SERVICE_FREE_FIELDS = ["agentName", "language", "agentStyle"];
 // false->true NEIN - Aktivieren bleibt Plattform-Admin via POST /api/settings).
 export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBankData"];
 
+// O9/E2E-01: Felder, die ein Tenant NICHT selbst umstellen darf, weil ihre Aenderung
+// Folgekosten und Folgezustaende haette (Land -> DID-Land, Setup-Tarif, Sprache) und
+// "strikt eine Nummer pro Tenant" gilt: es wird KEINE zweite DID gekauft. Heute
+// verschluckt selfServicePatch so ein Feld als "unbekannt" und die Route antwortet 200
+// ohne Wirkung - ein stiller No-Op, den kein Client von Erfolg unterscheiden kann.
+// Deshalb eine EIGENE, sichtbare Ablehnung statt der stillen rejected-Liste.
+export const SELF_SERVICE_LOCKED_FIELDS = ["country"];
+
+// Die im Patch enthaltenen gesperrten Keys (leer = frei). Reine Query, kein Nebeneffekt.
+export function lockedSelfServiceKeys(patch) {
+  return Object.keys(patch || {}).filter((k) => SELF_SERVICE_LOCKED_FIELDS.includes(k));
+}
+
 // Kuratierte greeting-Vorlagen (kein Freitext ueber Self-Service, PII-/Missbrauchs-
 // Riegel, Decision #7). {owner} wird zur Laufzeit ersetzt wie heute. Der Disclosure-
 // Satz ist NICHT Teil des greeting und bleibt fest verdrahtet (Regel 2).

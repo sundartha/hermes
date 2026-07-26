@@ -17,8 +17,7 @@ import { Router } from "express";
 import { validIdentity, IDENTITY_MAX_LEN } from "./api-profiles.js";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
 import { geoLookupAdapter } from "../geo/registry.js";
-import { resolveOnboardCountry } from "../geo/resolve.js";
-import { languageForCountry } from "../i18n/locales.js";
+import { resolveOnboardCountry, tenantGeoForCountry } from "../geo/resolve.js";
 import {
   PROVIDER,
   KYC_OUTBOUND_MIN,
@@ -117,39 +116,42 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
       return res.status(onboardGuardHit.status).json({ error: onboardGuardHit.error });
     }
 
-    // F2: private Summary-Nummer ist OPTIONAL. VOR dem Store-Lock gegen DIESELBE Quelle
-    // pruefen (normalizePrivateNumber, G5), damit ungueltige Eingaben als 400 statt 503
-    // (Throw im Lock -> persist_error) zurueckkommen. Fehlt sie -> null, Onboarding wie
-    // bisher. PII: nie ins Audit/Log (nur ein generischer Fehlertext, kein Wert, H4).
-    try {
-      normalizePrivateNumber(privateNumber);
-    } catch {
-      return res
-        .status(400)
-        .json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
-    }
-
     // F1 Phase 6 - Land/Sprache bei der Registrierung. Praezedenz (fail-safe):
     // User-Wahl (body.country, EXPLIZIT, autoritativ R4) > IP-Geo-VORSCHLAG (lokaler
     // Lookup, nur bei GEO_ENABLED) > config.provisioning.provisioningCountry > DEFAULT_COUNTRY. Die IP
     // (req.ip, proxy-aware via 'trust proxy') verlaesst den Prozess NIE - der Lookup ist
     // streng lokal. Eine gespoofte IP aendert nichts Autoritatives: ohne User-Wahl ist sie
-    // nur ein Vorschlag, mit User-Wahl wird sie ueberstimmt. language wird aus dem Land
-    // abgeleitet (eine Quelle: languageForCountry). country (Herkunftsland) + language
-    // landen auf Tenant-Geo; das Number-Request traegt das KAUF-Land (numberCountry, s.u.).
-    // KEIN body.country + leeres forceNumberCountry -> Verhalten byte-identisch (DE/de).
+    // nur ein Vorschlag, mit User-Wahl wird sie ueberstimmt.
+    // P8/FMT-11: die Land-Aufloesung steht jetzt VOR der privateNumber-Vorpruefung, weil
+    // das Laendergate der privaten Nummer aus DIESEM Land hergeleitet wird. Beide Schritte
+    // sind rein (kein IO) - die Umstellung aendert fuer den DE-Pfad nichts.
     const proposedCountry = config.provisioning.geoEnabled ? geoLookup(req.ip)?.country : null;
     const country = resolveOnboardCountry({
       userCountry: req.body?.country,
       proposedCountry,
       fallbackCountry: config.provisioning.provisioningCountry,
     });
-    const language = languageForCountry(country);
+    // P8/LANG-02: das vollstaendige Geo-Tripel aus EINER Quelle - derselbe Helfer, den der
+    // Web-Login-Pfad benutzt (kein zweiter, abweichender Ableitungsweg, G5).
+    const geo = tenantGeoForCountry(country);
+    const language = geo.defaultLanguage;
     // Kauf-Land (number.country) ENTKOPPELT vom Herkunftsland: config.provisioning.forceNumberCountry
     // (z.B. "US") ueberschreibt NUR, wo die Nummer gekauft wird - die Sprache bleibt am
     // erkannten Herkunftsland (language oben). Leer -> Kauf-Land = Herkunftsland (byte-
     // identisch). tenant.country bleibt das Herkunftsland (Quelle fuer Sprache/Analytics).
     const numberCountry = config.provisioning.forceNumberCountry || country;
+
+    // F2: private Summary-Nummer ist OPTIONAL. VOR dem Store-Lock gegen DIESELBE Quelle
+    // pruefen (normalizePrivateNumber, G5), damit ungueltige Eingaben als 400 statt 503
+    // (Throw im Lock -> persist_error) zurueckkommen. Fehlt sie -> null, Onboarding wie
+    // bisher. PII: nie ins Audit/Log (nur ein generischer Fehlertext, kein Wert, H4).
+    try {
+      normalizePrivateNumber(privateNumber, country);
+    } catch {
+      return res
+        .status(400)
+        .json({ error: "privateNumber ungueltig (E.164 erwartet, erlaubtes Land)" });
+    }
 
     // Store-Mutation + Persistenz im prozess-lokalen kritischen Abschnitt (OT-3 AC2):
     // load -> registerTenant -> setTenantGeo -> requestNumber -> save, kein fremdes await
@@ -164,8 +166,9 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
           privateNumber,
           idpSubject: sub,
           defaultBudgetCents: config.billing.defaultTenantBudgetCents,
+          country,
         });
-        setTenantGeo(s, tenantId, { country, defaultLanguage: language });
+        setTenantGeo(s, tenantId, geo);
         const r = requestNumber(s, {
           tenantId,
           provider: PROVIDER.TELNYX,

@@ -340,6 +340,26 @@ export const DEFAULT_GREETING = withInboundNotice(
 export const DEFAULT_COUNTRY = "DE";
 export const DEFAULT_LANGUAGE = "de";
 
+// P8/FMT-28 (Owner-Entscheidung 7.6): IANA-Zeitzone des Default-Landes. Reine ANZEIGE -
+// sie faerbt nur die Uhrzeit im Systemprompt (claude.js). Ein Anrufzeit-Gate ist
+// ausdruecklich ABGELEHNT (LAW-07); dass KEIN Gate-Modul dieses Feld liest, pinnt
+// test/p8-timezone-no-gate.test.js strukturell.
+export const DEFAULT_TIMEZONE = "Europe/Berlin";
+
+// Fail-safe Aufloesung einer gespeicherten Zeitzone (R7-Muster wie localeFor): fehlend,
+// leer oder kein gueltiger IANA-Bezeichner -> DEFAULT_TIMEZONE. PFLICHT, weil
+// Date#toLocaleString mit einer unbekannten timeZone einen RangeError WIRFT - ein
+// Muellwert an dieser Stelle wuerde sonst jeden Prompt-Bau und damit jeden Anruf toeten.
+export function resolveTimezone(timezone) {
+  if (typeof timezone !== "string" || !timezone.trim()) return DEFAULT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return timezone;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+}
+
 export function defaultSettings() {
   return {
     agentName: "Hermes",
@@ -660,14 +680,40 @@ export function normalizeDialTarget(num, homeCountry) {
   return normalizeTrunkZeroTarget(num, homeCountry);
 }
 
+// P8/FMT-11: der strenge Bestands-Default des Summary-SMS-Gates. Als benannte Konstante
+// (G25) statt zweier Literal-Kopien - countryAllowed UND die Land-Herleitung unten
+// teilen ihn.
+const DEFAULT_PRIVATE_NUMBER_CODES = Object.freeze(["+49"]);
+
+// ISO-3166-1-alpha-2 -> E.164-Laendervorwahl fuer die Laender, in denen Hermes heute
+// Kunden hat (identische Menge wie LANGUAGE_FOR_COUNTRY in i18n/locales.js; NANP laeuft
+// ueber isNanpCountry, s.u.). BEWUSST keine Weltliste: ein unbekanntes Land faellt auf
+// den strengen Bestands-Default zurueck, statt das Gate still zu oeffnen.
+const CALLING_CODE_FOR_COUNTRY = Object.freeze({
+  DE: "+49", AT: "+43", CH: "+41", FR: "+33", GB: "+44", IE: "+353",
+});
+
+// Erlaubte E.164-Praefixe der privaten Summary-Nummer EINES Tenants (Toll-Fraud-Gate H1).
+// Das Gate BLEIBT eine Allowlist - landabhaengig ist ausschliesslich die HERLEITUNG des
+// erlaubten Praefixes aus dem Tenant-Land, nie die Existenz des Gates (P8-Gegenmassnahme 2).
+// Unbekanntes/fehlendes Land -> DEFAULT_PRIVATE_NUMBER_CODES (fail-closed, byte-identisch
+// zum Bestand). isNanpCountry ist die EINE Quelle fuer die 25 NANP-Mitgliedslaender (G5).
+export function allowedPrivateNumberCodes(countryIso) {
+  const cc = String(countryIso || "").toUpperCase();
+  if (isNanpCountry(cc)) return [NANP_COUNTRY_CODE];
+  const code = CALLING_CODE_FOR_COUNTRY[cc];
+  return code ? [code] : DEFAULT_PRIVATE_NUMBER_CODES;
+}
+
 // Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines
 // Praefix-Praedikat: erlaubt nur Nummern, deren E.164-Praefix in allowedCodes liegt.
-// Default ["+49"] - BEWUSST strenger als das globale Call-Gate (+49,+33,+44): die
-// Summary-SMS soll eng sein (jede gesendete SMS kostet uns). "*" hebt das Gate auf.
-// Erwartet eine bereits normalisierte (normNum) E.164-Nummer; Nicht-String/leer -> false
-// (fail-closed). Spiegelt die Praefix-Logik von server.js matchesPrefix bewusst, bleibt
-// hier aber unabhaengig (eigener, strengerer Default; kein Import aus dem Route-Layer).
-export function countryAllowed(e164, allowedCodes = ["+49"]) {
+// Default DEFAULT_PRIVATE_NUMBER_CODES - BEWUSST strenger als das globale Call-Gate
+// (+49,+33,+44): die Summary-SMS soll eng sein (jede gesendete SMS kostet uns). "*" hebt
+// das Gate auf. Erwartet eine bereits normalisierte (normNum) E.164-Nummer; Nicht-String/
+// leer -> false (fail-closed). Spiegelt die Praefix-Logik von server.js matchesPrefix
+// bewusst, bleibt hier aber unabhaengig (eigener, strengerer Default; kein Import aus dem
+// Route-Layer).
+export function countryAllowed(e164, allowedCodes = DEFAULT_PRIVATE_NUMBER_CODES) {
   if (typeof e164 !== "string" || !e164) return false;
   return allowedCodes.includes("*") || allowedCodes.some((c) => e164.startsWith(c));
 }

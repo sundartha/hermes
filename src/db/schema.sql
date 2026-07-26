@@ -62,6 +62,11 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_number_setup_fee_exempt BOOLE
 -- (ALTER-only, nullable, KEIN CHECK; die Validierung lebt im Code).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS country          TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS default_language TEXT;
+-- P8/FMT-28 (Owner-Entscheidung 7.6): IANA-Zeitzone des Tenants, beim Eintritt aus dem
+-- Land abgeleitet. REINE ANZEIGE (Uhrzeit im Systemprompt) - ein Anrufzeit-Gate ist
+-- ausdruecklich abgelehnt (LAW-07). Additiv NULLABLE wie country/default_language:
+-- Bestand ohne Wert -> NULL, Code-Fallback resolveTimezone greift (kein Backfill, O11).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS timezone TEXT;
 -- F2: private Mobilnummer (E.164) des Tenants, an die nach einem Inbound-Call die
 -- Summary-SMS geht. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, finishCall
 -- ueberspringt die SMS still (kein Ziel). Muster wie kyc_level/stripe_*/geo (ALTER-only,

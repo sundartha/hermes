@@ -31,6 +31,7 @@ import {
   normNum,
   E164,
   countryAllowed,
+  allowedPrivateNumberCodes,
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
   GLOBAL_CAP_REASON,
@@ -57,6 +58,9 @@ import { isKnownPlanSlug } from "../plans.js";
 // GAP-14: Wert-Guard fuer updateSettings (greeting muss den Inbound-Pflichtsatz tragen).
 // inbound-notice.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus).
 import { hasInboundNotice } from "../i18n/inbound-notice.js";
+// P8/FMT-11: Denylist des Ziel-Gates der privaten Summary-Nummer, geteilt mit der
+// Outbound-Gate-Kette (D3, G5) - siehe number-denylist.js fuer die Begruendung.
+import { isDenied } from "../telephony/number-denylist.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -858,9 +862,12 @@ function seedTenantDefaultBudget(s, tenantId, defaultBudgetCents) {
 export function registerTenant(
   s,
   id,
-  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents } = {},
+  { firstName, lastName, privateNumber, idpSubject, defaultBudgetCents, country } = {},
 ) {
-  const e164 = normalizePrivateNumber(privateNumber); // validiert VOR jeder Mutation
+  // country ist das bereits aufgeloeste Herkunftsland des Registrierungs-Requests
+  // (P8/FMT-11): setTenantGeo laeuft erst NACH registerTenant, das Land-Gate der privaten
+  // Nummer braucht es aber schon hier. Fehlt es -> strenger Bestands-Default.
+  const e164 = normalizePrivateNumber(privateNumber, country); // validiert VOR jeder Mutation
   const existing = findTenant(s, id);
   if (existing) {
     if (idpSubject && !existing.idpSubject) existing.idpSubject = idpSubject;
@@ -1201,18 +1208,22 @@ export function billingHoldActive(s, tenantId, nowIso) {
 // ---- Private Summary-Nummer pro Tenant (F2) ----
 // EINE Normalisier-/Validier-Quelle (G5), geteilt von registerTenant (Onboarding) UND
 // setPrivateNumber (Self-Service) - kein Drift zwischen den beiden Schreibwegen. Reine
-// Funktion (kein Tenant, kein Store). Reihenfolge ist verbindlich (M3): normNum ZUERST
-// (strippt Whitespace/-/() ), dann E.164-Format, dann Laendercode-Gate (H1, Toll-Fraud).
+// Funktion (kein Tenant, kein Store). Reihenfolge ist verbindlich (M3): normNum ZUERST,
+// dann E.164-Format, dann die DENYLIST (Premium/Notruf - gleiche Praezedenz wie in der
+// Outbound-Gate-Kette), dann das Laendercode-Gate. tenantCountryIso (ISO-3166-1-alpha-2,
+// aus dem Tenant-Land) ist die Herleitungsquelle des erlaubten Praefixes (P8/FMT-11);
+// das Gate selbst BLEIBT eine Allowlist, unbekanntes Land -> strenger Bestands-Default.
 // Leer/null/"" -> null (Aufrufer entfernt das Feld; kein Daten-Muell at rest). Ungueltig
 // oder gesperrtes Land -> throw (fail-closed). PII: der Roh-/Zielwert wird NIE in die
 // Fehlermeldung gehoben (kein Nummer-Leak im Log, H4). Liefert die normalisierte E.164.
 // Exportiert, damit der Route-Layer (POST /api/onboard) VOR dem Store-Lock dieselbe
 // Quelle nutzt und ungueltige Eingaben als 400 abweist (statt Throw -> 503).
-export function normalizePrivateNumber(raw, allowedCountryCodes) {
+export function normalizePrivateNumber(raw, tenantCountryIso) {
   if (raw == null || (typeof raw === "string" && raw.trim() === "")) return null;
   const e164 = normNum(raw);
   if (!E164.test(e164)) throw new Error("private number: ungueltiges E.164-Format");
-  if (!countryAllowed(e164, allowedCountryCodes))
+  if (isDenied(e164)) throw new Error("private number: gesperrter Nummernbereich");
+  if (!countryAllowed(e164, allowedPrivateNumberCodes(tenantCountryIso)))
     throw new Error("private number: Laendercode nicht erlaubt");
   return e164;
 }
@@ -1223,11 +1234,14 @@ export function normalizePrivateNumber(raw, allowedCountryCodes) {
 // Mutation, kein IO (Wrapper saved). Leer/null/"" -> Feld entfernen (Skip-Pfad in
 // finishCall bleibt verlaesslich). Ungueltig/gesperrtes Land -> throw (fail-closed, kein
 // Muell at rest). Fehlender Tenant -> throw (Muster setKycLevel/setTenantStripe).
-// allowedCountryCodes optional (Default ["+49"] via countryAllowed). Liefert den Tenant.
-export function setPrivateNumber(s, tenantId, raw, allowedCountryCodes) {
+// Liefert den Tenant.
+export function setPrivateNumber(s, tenantId, raw) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setPrivateNumber: Tenant ${tenantId} nicht gefunden`);
-  const e164 = normalizePrivateNumber(raw, allowedCountryCodes);
+  // P8/FMT-11: dasselbe Land-Gate wie beim Onboarding, hergeleitet aus dem Tenant-Land
+  // (kein Drift zwischen den zwei Schreibwegen, G5). Tenant ohne country -> strenger
+  // Bestands-Default ["+49"], byte-identisch zum Zustand vor P8.
+  const e164 = normalizePrivateNumber(raw, tenant.country);
   if (e164 === null) delete tenant.privateNumber;
   else tenant.privateNumber = e164;
   return tenant;
@@ -1246,16 +1260,19 @@ export function tenantPrivateNumber(s, tenantId) {
 // ---- Geo-Location pro Tenant (F1, Phase 1) ----
 // Setzt Default-Land + -Sprache eines Tenants, die die Registrierung aus IP-Geo-
 // Vorschlag bzw. expliziter User-Wahl ableitet (Fallback fuer neue Nummern dieses
-// Tenants). patch = { country?, defaultLanguage? }: NUR uebergebene Keys werden gesetzt
-// (selektiver Patch via !== undefined, kein Ueberschreiben mit undefined) - Muster wie
-// setTenantStripe. Fehlender Tenant wirft (kein stilles No-Op). Geo-Daten sind nicht
-// sensibel (keine Secrets) -> speicherbar. Reine Mutation, kein IO (Wrapper saved).
-// Liefert den Tenant. country = ISO-3166-1-alpha-2, defaultLanguage = BCP-47-kurz.
-export function setTenantGeo(s, tenantId, { country, defaultLanguage } = {}) {
+// Tenants). patch = { country?, defaultLanguage?, timezone? }: NUR uebergebene Keys
+// werden gesetzt (selektiver Patch via !== undefined, kein Ueberschreiben mit undefined)
+// - Muster wie setTenantStripe. Fehlender Tenant wirft (kein stilles No-Op). Geo-Daten
+// sind nicht sensibel (keine Secrets) -> speicherbar. Reine Mutation, kein IO (Wrapper
+// saved). Liefert den Tenant. country = ISO-3166-1-alpha-2, defaultLanguage = BCP-47-kurz.
+// timezone (P8/FMT-28) ist ein reines ANZEIGE-Feld (IANA-Bezeichner) und wird von
+// tenantGeo() BEWUSST NICHT mit ausgeliefert - s. tenantTimezone unten.
+export function setTenantGeo(s, tenantId, { country, defaultLanguage, timezone } = {}) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setTenantGeo: Tenant ${tenantId} nicht gefunden`);
   if (country !== undefined) tenant.country = country;
   if (defaultLanguage !== undefined) tenant.defaultLanguage = defaultLanguage;
+  if (timezone !== undefined) tenant.timezone = timezone;
   return tenant;
 }
 
@@ -1265,6 +1282,17 @@ export function setTenantGeo(s, tenantId, { country, defaultLanguage } = {}) {
 export function tenantGeo(s, tenantId) {
   const tenant = findTenant(s, tenantId);
   return { country: tenant?.country ?? null, defaultLanguage: tenant?.defaultLanguage ?? null };
+}
+
+// P8/FMT-28: die Zeitzone eines Tenants - GETRENNT von tenantGeo(), und zwar mit Absicht.
+// tenantGeo() ist die Routing-/Sprach-Sicht, die die Gate-nahen Konsumenten
+// (outbound-gates, provision-trigger, api-calls, self-service-routes) lesen. Haenge die
+// Zeitzone dort an, kann ein kuenftiges Gate sie versehentlich mitlesen - genau das
+// Anrufzeit-Gate, das der Owner abgelehnt hat (LAW-07/O10). Eigener Reader = die
+// Zusicherung "nur Anzeige" ist strukturell, nicht per Kommentar. Fehlender Tenant /
+// fehlendes Feld -> null (der Konsument loest ueber resolveTimezone fail-safe auf).
+export function tenantTimezone(s, tenantId) {
+  return findTenant(s, tenantId)?.timezone ?? null;
 }
 
 // Terminale Zustaende (released/failed) belegen keine Kapazitaet mehr - jeder andere

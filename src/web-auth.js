@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { Router } from "express";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
 import { safeEqual } from "./util.js";
+import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
 const RANDOM_BYTES = 16;
@@ -507,7 +508,13 @@ function normalizeEmail(email) {
 // andere Emails zu blockieren. hashtext() ist reine Streuung fuer den Lock-Schluessel (kein
 // Sicherheitsmerkmal) - eine seltene Kollision serialisiert hoechstens zwei UNTERSCHIEDLICHE
 // Emails unnoetig mit, aendert aber nie das Ergebnis.
-async function resolveOrCreateTenant(c, sub, email) {
+// geo = das Geo-Tripel eines Neuzugangs (P8/LANG-02, tenantGeoForCountry). Es wird
+// AUSSCHLIESSLICH im INSERT-Zweig geschrieben, NIE im ON-CONFLICT-Zweig: ein
+// Bestandstenant behaelt seine (evtl. leeren) Werte - kein Backfill durch die Hintertuer
+// (O11), kein Ueberschreiben einer echten Kundenangabe durch einen Plattform-Default.
+// Der Write sitzt bewusst in DIESER Transaktion und nicht in einem zweiten Schreibpfad:
+// Tenant und seine Geo-Identitaet entstehen atomar oder gar nicht.
+async function resolveOrCreateTenant(c, { sub, email, geo }) {
   await c.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [email]);
   const existing = await c.query(
     `SELECT a.tenant_id FROM account a JOIN tenant t ON t.id = a.tenant_id
@@ -517,9 +524,10 @@ async function resolveOrCreateTenant(c, sub, email) {
   if (existing.rows.length > 0) return existing.rows[0].tenant_id;
   const tenantId = tenantIdForSubject(sub); // EINE Quelle (G5), identischer Wert
   await c.query(
-    `INSERT INTO tenant (id, status, idp_subject) VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2)
+    `INSERT INTO tenant (id, status, idp_subject, country, default_language, timezone)
+     VALUES ($1, '${TENANT_STATUS.SUSPENDED}', $2, $3, $4, $5)
      ON CONFLICT (id) DO UPDATE SET idp_subject = EXCLUDED.idp_subject`,
-    [tenantId, sub],
+    [tenantId, sub, geo.country, geo.defaultLanguage, geo.timezone],
   );
   return tenantId;
 }
@@ -542,7 +550,16 @@ async function selectAccountAuth(c, sub) {
 
 // ---- makeAccounts ----------------------------------------------------
 // Tenant + Account upsert beim ersten Login; Lesepfade fuer Middleware.
-export function makeAccounts(runner) {
+//
+// defaultCountry (P8/LANG-02): das Land, das ein per Web-Login entstehender Tenant
+// bekommt. BEWUSST der Plattform-Default (config.provisioning.provisioningCountry) und
+// KEIN IP-Geo: der Wert ist genau derselbe, den der bestehende Code-Fallback
+// (tenantGeo().country || fallbackCountry) heute schon liefert - der Login wird dadurch
+// verhaltensneutral explizit statt implizit. Eine IP-Herkunft saehe im Datensatz spaeter
+// wie eine Kundenangabe aus (P8-Gegenmassnahme 1). Fehlt der Wert -> DEFAULT_COUNTRY.
+// EINMAL bei der Konstruktion abgeleitet (konstant, kein Lazy-Init P15).
+export function makeAccounts(runner, { defaultCountry } = {}) {
+  const signupGeo = tenantGeoForCountry(resolveOnboardCountry({ fallbackCountry: defaultCountry }));
   return {
     // Erster Login: Tenant aufloesen (Email-Dedup) oder anlegen (suspended), Account
     // anlegen/aktualisieren. Gibt {tenantId, status, role} zurueck.
@@ -570,7 +587,7 @@ export function makeAccounts(runner) {
       return runner.withClient(async (c) => {
         await c.query("BEGIN");
         try {
-          const tenantId = await resolveOrCreateTenant(c, sub, normalizedEmail);
+          const tenantId = await resolveOrCreateTenant(c, { sub, email: normalizedEmail, geo: signupGeo });
           // Account anlegen/aktualisieren. tenant_id bleibt bei ON CONFLICT stabil (nur email
           // refresht) - ein Repeat-Login darf die (evtl. gemergte) Tenant-Bindung nicht kippen.
           await c.query(

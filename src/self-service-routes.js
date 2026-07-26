@@ -13,7 +13,12 @@
 // store.updateSettings (greeting nur als Vorlage; Permission-Flags nur restriktiver;
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
 import { Router } from "express";
-import { selfServicePatch, greetingTemplatesFor, hasCardOnFile } from "./self-service.js";
+import {
+  selfServicePatch,
+  greetingTemplatesFor,
+  hasCardOnFile,
+  lockedSelfServiceKeys,
+} from "./self-service.js";
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { requirePaymentEnabled } from "./billing/payment-gate.js";
@@ -267,6 +272,17 @@ export function makeSelfServiceRoutes({
   // Wert/PII gehoeren nicht ins Log, wie /api/settings).
   router.post("/api/self-service/settings", webAuthMw, (req, res) => {
     const tenant = req.tenant.tenantId;
+    // O9/E2E-01: Landwechsel ist vorerst NICHT self-service-faehig - stabiler 409 statt
+    // des stillen 200-OK-No-Op. 409 (Conflict), weil das Land bereits gebunden ist (DID,
+    // Tarif, Sprache); "remedy" ist ein sprachneutraler Token (WEB-09-Vokabelform wie
+    // invalid_private_number/no_card) und verweist auf den manuellen Support-Pfad -
+    // KEIN Freitext, keine Sprachannahme. Vor jedem Store-Zugriff: der Patch wirkt
+    // NICHT, auch nicht teilweise.
+    const locked = lockedSelfServiceKeys(req.body);
+    if (locked.length) {
+      audit("self_service_settings_denied", req, `locked=${locked.join(",")}`);
+      return res.status(409).json({ error: "country_change_unsupported", remedy: "contact_support" });
+    }
     const current = store.tenantContext(tenant).settings;
     const { clean, rejected } = selfServicePatch(req.body || {}, current);
     const { settings, changed } = store.updateSettings(tenant, clean);
