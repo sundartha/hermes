@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCostTruing, SWEEP_TRIGGER, costTruingCoveragePercent } from "../src/billing/cost-truing.js";
-import { makeDefaultState, createCall, usageFor } from "../src/store/state-ops.js";
+import { makeDefaultState, createCall, usageFor, budgetExceeded, setTenantBudget } from "../src/store/state-ops.js";
 import { COST_TRUING_SOURCE, BOOTSTRAP_TENANT_ID, emptyUsage } from "../src/store/defaults.js";
 import { makeStubStore, fakeConfig, isoMinutesAgo } from "./cost-truing-harness.js";
 
@@ -128,6 +128,78 @@ test("(c) Ist 20ct > Schaetzung 5ct, Quelle 'incomplete' -> trotzdem gebucht (be
   });
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 115, "Unterschaetzung wird IMMER geheilt");
+});
+
+// ---- PAY-06: der Sweep befreit die ueberbuchte Decke (Gate-Wirkung, nicht nur Bucket) ----
+// Umformuliert nach R-G (Begruendung im Blockreport): der Katalog unterstellt, der Sweep
+// befreie die RESERVE. Gemessen befreit die Reserve releaseOutboundReserve bei Call-Ende;
+// der Sweep korrigiert die zu hoch GEBUCHTE Schaetzung - und erst nach
+// costTruingDelayMinutes. Genau das ist die Decken-Befreiung, die der Katalog meint, und
+// sie ist als GATE-Wirkung ungepinnt: Test (a) oben prueft die Bucket-ZAHL, hier steht das
+// Gate-PRAEDIKAT budgetExceeded.
+const PAY06_CAP_CENTS = 300; // Tenant-Decke
+const PAY06_ESTIMATE_CENTS = 400; // Worst-Case-Ueberbuchung, liegt UEBER der Decke
+const PAY06_MEASURED_MICRO_CENTS = 90_000_000; // 90 ct Ist -> nach Korrektur wieder unter der Decke
+
+// Baut den ueberbuchten Ausgangszustand: Decke 300 ct, gebuchte Schaetzung 400 ct.
+// Liefert alles, was beide Faelle unten brauchen (Build-Operate-Check, P13).
+function seedOverbookedTenant(nowMs, { endedMinutesAgo }) {
+  const state = makeDefaultState();
+  seedUsageCents(state, BOOTSTRAP_TENANT_ID, PAY06_ESTIMATE_CENTS);
+  setTenantBudget(state, BOOTSTRAP_TENANT_ID, {
+    budgetCents: PAY06_CAP_CENTS,
+    hardCapCents: PAY06_CAP_CENTS,
+  });
+  makeDueOutboundCall(state, { nowMs, endedMinutesAgo, estimatedCostCents: PAY06_ESTIMATE_CENTS });
+  const config = fakeConfig({ costTruingRequiredRecordTypes: FULL_RECORD_TYPES });
+  const { runCostTruingSweep } = makeCostTruing({
+    store: makeStubStore(state, { nowMs }),
+    config,
+    voiceControl: voiceControl(control(recordsWithTotal(FULL_RECORD_TYPES, PAY06_MEASURED_MICRO_CENTS))),
+    audit: () => {},
+    now: () => nowMs,
+  });
+  return { state, config, runCostTruingSweep };
+}
+
+test("PAY-06: der Sweep gibt die ueberbuchte Decke frei - budgetExceeded kippt von true auf false", async () => {
+  const nowMs = Date.now();
+  // 200 Minuten her > costTruingDelayMinutes (180 in fakeConfig) -> faellig.
+  const { state, config, runCostTruingSweep } = seedOverbookedTenant(nowMs, { endedMinutesAgo: 200 });
+  assert.equal(
+    budgetExceeded(state, BOOTSTRAP_TENANT_ID, config),
+    true,
+    "Vorbedingung: die Worst-Case-Schaetzung sperrt den Tenant (400 >= 300)",
+  );
+
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+
+  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 90, "auf den Ist-Betrag korrigiert");
+  assert.equal(
+    budgetExceeded(state, BOOTSTRAP_TENANT_ID, config),
+    false,
+    "die Decke ist wieder frei - ohne diese Freigabe bliebe der Tenant fuer eine ueberschaetzte Buchung gesperrt",
+  );
+});
+
+test("PAY-06: ein noch NICHT faelliger Call laesst die Decke gesperrt (die Verzoegerung wirkt)", async () => {
+  const nowMs = Date.now();
+  // 10 Minuten her < costTruingDelayMinutes (180) -> noch kein Kandidat.
+  const { state, config, runCostTruingSweep } = seedOverbookedTenant(nowMs, { endedMinutesAgo: 10 });
+
+  const result = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+
+  assert.equal(result.candidates, 0, "vor Ablauf der Verzoegerung ist der Call kein Kandidat");
+  assert.equal(
+    usageFor(state, BOOTSTRAP_TENANT_ID).costCents,
+    PAY06_ESTIMATE_CENTS,
+    "die Schaetzung bleibt unangetastet",
+  );
+  assert.equal(
+    budgetExceeded(state, BOOTSTRAP_TENANT_ID, config),
+    true,
+    "und die Decke bleibt gesperrt",
+  );
 });
 
 // ---- (h) Idempotenz: zweiter sequenzieller Sweep bucht nicht doppelt ----

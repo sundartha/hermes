@@ -5,12 +5,18 @@
 // Zahlen als "truthy" passieren), und der Cap greift auch bei einem riesigen Body-Wert.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveMaxDurationS } from "../src/telephony/outbound-gates.js";
+import {
+  makeOutboundGates,
+  resolveMaxDurationS,
+  tariffCentsPerMin,
+} from "../src/telephony/outbound-gates.js";
+import { config } from "../src/config.js";
+import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const CFG = withConfigNamespaces({ maxCallDurationS: 180 });
 const DEFAULT_S = 180; // == CFG.safety.maxCallDurationS in diesem Setup (kein config-Fallback-Fall)
-const CAP_S = 300;
+const CAP_S = MAX_CALL_DURATION_CAP_S;
 
 test("resolveMaxDurationS: negativer/0/NaN/leerer/fehlender Body-Wert faellt auf den config-Default", () => {
   assert.equal(resolveMaxDurationS(-300, CFG), DEFAULT_S, "negativ -> nie truthy-durchgereicht");
@@ -35,4 +41,46 @@ test("resolveMaxDurationS: ungueltiger Body UND ungueltiger config-Default -> DE
   const result = resolveMaxDurationS(undefined, withConfigNamespaces({ maxCallDurationS: undefined }));
   assert.equal(result, DEFAULT_S, "harter Hard-Default greift, wenn beide Kandidaten ungueltig sind");
   assert.ok(Number.isFinite(result), "niemals NaN");
+});
+
+// ---- PAY-26: dieselbe Achse eine Ebene hoeher - im echten compute_reserve-Gate ----
+// Oben steht resolveMaxDurationS als reine Funktion; hier laeuft der ECHTE Gate mit
+// feindlichem Body. Der Angriff, den der S1-6-Wurzelfix abwehrt, zielt nicht auf die
+// Funktion, sondern auf die RESERVE: eine negative Dauer haette eine negative Reserve
+// ergeben - der Gate haette Geld "zurueckgegeben" statt zu reservieren.
+const SECONDS_PER_MINUTE = 60;
+const US_TARGET = "+15551234567"; // keine Inlands-Vorwahl -> Auslandssatz
+const DE_OWN_DID = "+4930111222333"; // eigene DID mit Inlands-Vorwahl
+const ABSURD_MAX_DURATION_S = 99999; // weit ueber jedem Cap
+// Der Gate liest weder store noch die Gate-Kette davor - compute_reserve ist ein reines
+// Derivations-Gate ueber ctx.b/ctx.to/ctx.fromNumber.
+const computeReserveGate = makeOutboundGates({ store: {}, config }).gates.find(
+  (g) => g.name === "compute_reserve",
+);
+
+async function reserveCentsFor(rawMaxDurationS) {
+  const ctx = { b: { max_duration_s: rawMaxDurationS }, to: US_TARGET, fromNumber: DE_OWN_DID };
+  await computeReserveGate.run(ctx);
+  return ctx.reserveCents;
+}
+
+test("PAY-26: negatives/nicht-numerisches max_duration_s im Body kann die Reserve nicht senken", async () => {
+  const baseline = await reserveCentsFor(undefined);
+  assert.ok(baseline > 0, "Vorbedingung: der unmanipulierte Fall reserviert ueberhaupt etwas");
+  for (const hostile of [-300, "abc", 0, NaN])
+    assert.equal(await reserveCentsFor(hostile), baseline, `${hostile}: senkt die Reserve nicht`);
+});
+
+test("PAY-26: ein ueberhoehtes max_duration_s wird auf MAX_CALL_DURATION_CAP_S gedeckelt", async () => {
+  const minutesAtCap = Math.ceil(MAX_CALL_DURATION_CAP_S / SECONDS_PER_MINUTE);
+  const capped = await reserveCentsFor(ABSURD_MAX_DURATION_S);
+  assert.equal(
+    capped,
+    tariffCentsPerMin(US_TARGET, DE_OWN_DID) * minutesAtCap,
+    "die Reserve waechst hoechstens bis zum harten Dauer-Cap",
+  );
+  assert.ok(
+    capped > (await reserveCentsFor(undefined)),
+    "Vorbedingung: der Cap liegt ueber dem config-Default, sonst waere die Aussage leer",
+  );
 });

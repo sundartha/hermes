@@ -3,6 +3,13 @@
 // test/spend-cap-coherence.test.js: kein pglite, kein Netz - F.I.R.S.T.) + Boot-Beweis via
 // startServer (f2, Muster test/boot-failclosed.test.js). Datei-Disziplin (p6a): Spawn hier,
 // KEIN pglite (das lebt in test/call-actual-cost-roundtrip.test.js).
+//
+// PAY-20 (Buchhaltung, kein eigener Test): die Katalog-Praemisse "providerToBucketRateMicro
+// ist eine reine Konstante OHNE automatisierten Drift-Alarm" ist WIDERLEGT (Re-Baseline
+// tasks/i18n-tests/19-w2-baseline.md §3.7). Der Alarm existiert zweistufig: das
+// Toleranzband-Gate providerRateOutOfBand am Boot (diese Datei) und der laufende
+// p95-Abgleich in src/billing/cost-calibration.js gegen warnPercent/minSamples
+// (test/cost-calibration.test.js). Ein SOLL-Test waere damit gegenstandslos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { providerRateOutOfBand, PROVIDER_RATE_FINDING } from "../src/boot-guard.js";
