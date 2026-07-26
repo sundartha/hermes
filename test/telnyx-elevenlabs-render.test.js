@@ -39,10 +39,13 @@ test("ElevenLabs-Gather: STT-Attribute byte-identisch zum Azure-Bestand, innerer
   );
 });
 
-// VOICE-12 (tasks/i18n-tests/03-telefonie-render.md): eine Voice-ID fuer alle drei
-// Sprachen, kein `language`-Attribut am ElevenLabs-<Say>. DE traegt der byte-exakte Test
-// oben, FR/EN dieser Test - der Regex unten schliesst unmittelbar hinter `api_key_ref` mit
-// `>`, das IST der Beweis fuer das fehlende `language`-Attribut. Kein zweiter Test (G5).
+// Charakterisierung des Ist-Zustands zu VOICE-12: eine Voice-ID fuer alle drei Sprachen,
+// kein `language`-Attribut am ElevenLabs-<Say>. DE traegt der byte-exakte Test oben, FR/EN
+// dieser Test - der Regex unten schliesst unmittelbar hinter `api_key_ref` mit `>`, das IST
+// der Beweis fuer das fehlende `language`-Attribut.
+// ACHTUNG: dieser Test beweist die TATSACHE, er pinnt NICHT den Sollzustand. Das Launch-Gate
+// dazu ist der rote VOICE-12-Test unten - beide gehoeren zusammen (R1/R2 der kanonischen
+// Liste: ein Ist-Pin allein wuerde den Defekt als Sollzustand festschreiben).
 test("ElevenLabs + FR/EN-Profil: STT-Locale folgt dem Profil, Voice bleibt dieselbe ID (multilingual)", () => {
   for (const [profile, locale] of [
     [VOICE_PROFILE.FR_FEMALE_NEURAL, "fr-FR"],
@@ -59,6 +62,40 @@ test("ElevenLabs + FR/EN-Profil: STT-Locale folgt dem Profil, Voice bleibt diese
       "eine Voice-ID fuer alle Sprachen",
     );
   }
+});
+
+// VOICE-12 (SOLL, heute rot) - Leittest des Clusters D20 (VOICE-13/VOICE-14 entfallen dort
+// als Duplikat, 00-kanonische-liste.md). Nachgezogen nach W2-B2, wo die ID nur als
+// Ist-Charakterisierung abgelegt worden war.
+//
+// Sollzustand aus Owner-Entscheidung 7.5 (PLAN-I18N-TESTS.md): "dateLocale, sttLocale und
+// TTS-Stimme loesen regional auf". Heute gibt es EINE globale Stimme (config.js
+// `TELNYX_ELEVENLABS_VOICE_ID` / `ELEVENLABS_VOICE_ID`), die der Renderer sprachblind in
+// jedes <Say> schreibt - ein deutscher, ein franzoesischer und ein englischer Satz klingen
+// nach derselben Sprecherin mit demselben Akzent.
+//
+// Bewusst am gerenderten Ergebnis formuliert, nicht an einer Funktionssignatur: der Fix darf
+// die Stimme aus dem Locale-Bundle, aus einer Env-Tabelle oder aus dem Tenant ziehen - der
+// Test schreibt den WEG nicht vor, nur das beobachtbare Ergebnis.
+test("VOICE-12 (SOLL, rot) - ElevenLabs-Stimme loest pro Sprache auf statt einer globalen ID", () => {
+  const voiceIdOf = (profile) => {
+    const out = renderDirectives([say("Text", profile)], OPTS);
+    const m = out.match(/<Say voice="ElevenLabs\.[^.]+\.([^"]+)"/);
+    assert.ok(m, `kein ElevenLabs-Say gerendert fuer ${profile}`);
+    return m[1];
+  };
+  const distinct = new Set(
+    [
+      VOICE_PROFILE.DE_FEMALE_NEURAL,
+      VOICE_PROFILE.FR_FEMALE_NEURAL,
+      VOICE_PROFILE.EN_FEMALE_NEURAL,
+    ].map(voiceIdOf),
+  );
+  assert.equal(
+    distinct.size,
+    3,
+    `DE/FR/EN muessen drei verschiedene Voice-IDs liefern, gefunden: ${[...distinct].join(", ")}`,
+  );
 });
 
 test("Gate halb/aus -> Azure-Bestand byte-identisch (fail-safe, kein Wurf mitten im Call)", () => {
