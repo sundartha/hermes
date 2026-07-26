@@ -1072,7 +1072,10 @@ test("T-Wb-CALLS-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calls
 
 test("T-Wb-CALLS-AC1b: leere Liste -> 'Noch keine Anrufe.' + structuredContent { calls:[] }", async () => {
   await withGateway({ calls: [] }, async () => {
-    const { tools } = captureUi({ uiHost: capableHost() });
+    // P15/T3a: die Leertexte folgen jetzt der Tenant-Sprache. Dieser Fall pinnt den
+    // DEUTSCHEN Backward-Compat-Text - die Sprache wird deshalb explizit gewaehlt,
+    // statt implizit vom Weltdefault-Schalter zu leben.
+    const { tools } = captureUi({ uiHost: capableHost(), language: "de" });
     const result = await tools.get("list_calls").handler({});
     assert.ok(!result.isError, "leere Liste ist kein Fehler");
     assert.equal(result.content[0].text, "Noch keine Anrufe.", "Backward-Compat-Text");
@@ -1154,7 +1157,10 @@ test("T-Wb-CAL-AC1: Stufe 0 - Backward-Compat-Text + structuredContent { calenda
 
 test("T-Wb-CAL-AC1b: leerer Kalender -> 'Kalender ist leer.' + structuredContent { calendar:[] }", async () => {
   await withGateway({ calendar: [] }, async () => {
-    const { tools } = captureUi({ uiHost: capableHost() });
+    // P15/T3a: die Leertexte folgen jetzt der Tenant-Sprache. Dieser Fall pinnt den
+    // DEUTSCHEN Backward-Compat-Text - die Sprache wird deshalb explizit gewaehlt,
+    // statt implizit vom Weltdefault-Schalter zu leben.
+    const { tools } = captureUi({ uiHost: capableHost(), language: "de" });
     const result = await tools.get("get_calendar").handler({});
     assert.ok(!result.isError, "leerer Kalender ist kein Fehler");
     assert.equal(result.content[0].text, "Kalender ist leer.", "Backward-Compat-Text");

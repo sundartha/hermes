@@ -105,6 +105,11 @@ export const {
   findTenantByNumber,
   numberRecordByE164,
   resolveCallLanguage,
+  // P15/T2: Sprache eines Tenants ohne laufenden Call (Anzeigetext der Gate-Ablehnung).
+  // Beide Backends exportieren sie -> die Fassade ist die EINE Quelle; ohne diesen
+  // Re-Export waere store.tenantLanguage undefined -> outbound-gates.js wuerfe zur
+  // Laufzeit einen TypeError. Muster wie resolveCallLanguage.
+  tenantLanguage,
   addActionItem,
   toggleActionItem,
   getCalendar,

@@ -119,7 +119,10 @@ test("T-P4-06b: leerer Kalender ([]) bleibt valide -> 'Kalender ist leer.', kein
   const prev = process.env.GATEWAY_URL;
   process.env.GATEWAY_URL = mock.url;
   try {
-    const handlers = captureTools({ identity: null, allowCalendar: true });
+    // P15/T3a: die Leertexte folgen jetzt der Tenant-Sprache. Dieser Fall pinnt den
+    // DEUTSCHEN Backward-Compat-Text - die Sprache wird deshalb explizit gewaehlt,
+    // statt implizit vom Weltdefault-Schalter zu leben.
+    const handlers = captureTools({ identity: null, allowCalendar: true, language: "de" });
     const result = await handlers.get("get_calendar")();
     assert.ok(!result?.isError, "leerer Kalender ist KEIN Fehler");
     assert.match(toolText(result), /Kalender ist leer/);

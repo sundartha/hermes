@@ -90,7 +90,7 @@ test("W5-2: aktiver Subscriber -> Denylist (Notruf/Premium) trotzdem 403, kein C
     for (const to of [DENY_EMERGENCY, DENY_PREMIUM]) {
       const res = await placeCall(srv, SUB_A, to);
       assert.equal(res.status, 403, `${to} muss trotz Abo gesperrt bleiben (Denylist)`);
-      assert.match((await res.json()).error, /gesperrt/);
+      assert.match((await res.json()).error, /is blocked/);
     }
     assert.equal(outboundCalls(srv).length, 0, "Denylist-Sperre VOR createCall -> kein Call");
   } finally {
@@ -111,7 +111,7 @@ test("W5-3: suspendierter Tenant -> 403 (Defense-in-depth), auch mit unrestricte
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 403, "suspended -> hart abgewiesen, trotz unrestricted-Profil");
-    assert.match((await res.json()).error, /Abo inaktiv|gesperrt/i);
+    assert.match((await res.json()).error, /Subscription inactive|blocked/i);
     assert.equal(outboundCalls(srv).length, 0, "Reject VOR createCall -> kein Call");
   } finally {
     await srv.stop();
@@ -162,7 +162,7 @@ test("W5-6a: aktiver Subscriber -> Land-Gate greift weiter (US -> 403 grund=land
   try {
     const res = await placeCall(srv, SUB_A, US);
     assert.equal(res.status, 403, "Abo lockert NUR die Allowlist, nicht das Land-Gate");
-    assert.match((await res.json()).error, /Laendervorwahl/);
+    assert.match((await res.json()).error, /Country code/);
     assert.equal(outboundCalls(srv).filter((c) => c.tenantId === A).length, 0);
   } finally {
     await srv.stop();
@@ -181,7 +181,7 @@ test("W5-6b: aktiver Subscriber -> Stundenlimit (pro Tenant) greift weiter (429)
   try {
     const res = await placeCall(srv, SUB_A);
     assert.equal(res.status, 429, "Abo lockert NUR die Allowlist, nicht das Stundenlimit");
-    assert.match((await res.json()).error, /Stundenlimit/);
+    assert.match((await res.json()).error, /Hourly limit/);
   } finally {
     await srv.stop();
   }

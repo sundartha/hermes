@@ -143,7 +143,7 @@ test("erschoepfte Plan-Minuten blocken den Outbound (402 grund=minutes), KEIN Ca
 });
 
 // (2) Beide Achsen unabhaengig: getrennte ifs, keine Doppelzaehlung. (a) Minuten leer +
-// Budget erschoepft -> Budget-Gate feuert ZUERST (/Budget-Limit/). (b) Minuten erschoepft +
+// Budget erschoepft -> Budget-Gate feuert ZUERST (/budget limit/). (b) Minuten erschoepft +
 // Budget frisch -> Minuten-Gate (/Plan-Minuten/). Zwei verschiedene Meldungen = Trennung.
 test("Minuten- und Budget-Achse sind getrennt (verschiedene 402-Meldungen)", async () => {
   const budgetSeed = seedQuota({
@@ -153,7 +153,7 @@ test("Minuten- und Budget-Achse sind getrennt (verschiedene 402-Meldungen)", asy
   });
   const budgetRes = await tryOutbound(PAY_ENV, budgetSeed, SUB_A);
   assert.equal(budgetRes.status, 402, "Budget erschoepft -> geblockt");
-  assert.match(budgetRes.body, /Budget-Limit/, "Budget-Gate feuert VOR dem Minuten-Gate");
+  assert.match(budgetRes.body, /budget limit/, "Budget-Gate feuert VOR dem Minuten-Gate");
 
   const minutesSeed = seedQuota({
     subscription: STARTER_SUB,

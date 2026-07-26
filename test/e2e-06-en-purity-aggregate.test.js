@@ -11,11 +11,23 @@
 // Kanaele tragen die Aussage bereits mit einem zweistelligen Befund (s.u.), das entspricht
 // der im Katalog dokumentierten Erwartung ("mit einem zweistelligen Zaehler").
 //
-// P11-Stand (Phasenbericht): P11 senkt den Zaehler von 8 auf 3 (systemPrompt/toolDefs/
-// openingText/inboundGreeting/summarySms/notificationTitle sind jetzt sprachrein) -
-// dieser Test bleibt bewusst ROT, weil drei Kanaele ausserhalb der P11-Wurzel liegen:
-// gateRejectionLiterals (naechstliegend P12), mcpErrorLiterals (P12), tenantHtmlFormat
-// (P13). Gruen wird der Test erst in der letzten der drei Folgephasen.
+// P11-Stand (Phasenbericht): P11 senkte den Zaehler von 8 auf 3 (systemPrompt/toolDefs/
+// openingText/inboundGreeting/summarySms/notificationTitle wurden sprachrein); die drei
+// Restlecks (gateRejectionLiterals, mcpErrorLiterals, tenantHtmlFormat) lagen ausserhalb
+// der P11-Wurzel.
+//
+// P15-Stand (PLAN-I18N-FIX P15, Auflage A3): die drei Restlecks sind geschlossen
+// (Gate-Ablehnungstexte aus i18n/gate-texts.js, MCP-Leertexte/Feldnamen aus i18n/
+// mcp-texts.js, tenant.html-Datumsformat vom Server). Der Test ist GRUEN und damit ein
+// Regressionsfang statt eines Launch-Gates - deshalb traegt er die Katalog-ID nicht mehr
+// am Namensanfang, sondern als "(ex E2E-06)"-Suffix (Zuordnungsregel: package.json
+// config.i18nCatalogPattern greift nur am Namensanfang). Der Dateiname bleibt fuer die
+// Katalog-Rueckverfolgbarkeit; geloescht wird der Test NICHT.
+//
+// R5 (im P15-Phasenreport begruendet): der Kanal mcpErrorLiterals mass vorher die
+// KOMPLETTE Quelldatei src/mcp-tools.js - inklusive der deutschen Kommentarzeilen, die die
+// Repo-Konvention ausdruecklich verlangt. So konnte er strukturell nie gruen werden. Er
+// misst jetzt AUSGELIEFERTEN Text (s. deliveredTextOf unten).
 //
 // DATA_DIR im before VOR dem ersten claude.js-Import (Repo-Regel, Muster
 // test/claude-identity.test.js) - store.tenantContext() liest sonst das echte
@@ -31,6 +43,7 @@ import {
   startServer,
   postTelnyxIncoming,
   ROOT,
+  GERMAN_STOPWORDS,
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
@@ -38,11 +51,6 @@ import { signValue, makeWebAuthRoutes } from "../src/web-auth.js";
 import express from "express";
 
 const TENANT_EN = "t_e2e06_en";
-
-// Deutsche Signal-/Funktionswoerter, die in einem rein-englischen Kanal NICHT vorkommen
-// duerfen (Muster WEB-05/E2E-02: "Guten Tag"/"Hallo"/"kann gerade nicht"/"Anruf").
-const GERMAN_STOPWORDS =
-  /Guten Tag|Hallo|kann gerade nicht|Anruf|Gegenseite|Bitte spaeter erneut|Nachricht|Ungueltige|Anmeldung fehlgeschlagen|Sitzung abgelaufen|Grund|Besitzer|Auftrag/;
 
 let systemPrompt, toolDefs, openingText;
 before(async () => {
@@ -64,7 +72,7 @@ function leaksOf(label, text, leaks) {
   if (GERMAN_STOPWORDS.test(text)) leaks.push(label);
 }
 
-test("E2E-06 (SOLL rot): germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-Tenant", async () => {
+test("Sprachreinheit: germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-Tenant (ex E2E-06)", async () => {
   const leaks = [];
   const callEn = seedCall({ tenantId: TENANT_EN, language: "en", direction: "outbound", goal: "Termin verschieben" });
 
@@ -130,14 +138,30 @@ test("E2E-06 (SOLL rot): germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-
   leaksOf("notificationTitle", notify[0] || "", leaks);
 
   // Kanal 6: Gate-Ablehnungstexte (numberGateError/Budget-402) - statischer Text-Check
-  // (keine Sprachverzweigung im Code, src/telephony/outbound-gates.js:278-297,329-351).
+  // ueber die ausgelieferten message:-Werte in src/telephony/outbound-gates.js.
   const gatesSrc = fs.readFileSync(path.join(ROOT, "src/telephony/outbound-gates.js"), "utf8");
   leaksOf("gateRejectionLiterals", gatesSrc.match(/message:\s*`[^`]+`|message:\s*"[^"]+"/g)?.join(" ") || "", leaks);
 
-  // Kanal 7: MCP-Tool-Beschreibungen/-Fehlermeldungen - statischer Text-Check
-  // (src/mcp-tools.js:65-67,77-79,108-110,339-342, keine Sprachverzweigung).
+  // Kanal 7: MCP-Tool-Texte - statischer Text-Check.
+  // R5-KORREKTUR (P15/T4, im Phasenreport begruendet): der Kanal misst TENANT-SICHTBAREN,
+  // AUSGELIEFERTEN Text - so wie der Nachbarkanal gateRejectionLiterals mit seinem
+  // message:-Muster. Vorher wurde die KOMPLETTE Quelldatei gegriffen, inklusive der
+  // deutschen Kommentarzeilen, die die Repo-Konvention ausdruecklich verlangt: der Kanal
+  // konnte strukturell nie gruen werden. Abgezogen werden GENAU ZWEI Klassen, beide mit
+  // eigener Abdeckung: (1) Kommentarzeilen (Konvention: deutsch); (2) die nach O14 bewusst
+  // englischen Tool-/Feld-Beschreibungen (Modellsprache != Nutzersprache) - sie haben mit
+  // test/p15-mcp-tool-descriptions-en.test.js einen EIGENEN Waechter, der sie gegen
+  // DIESELBE Stopwortliste prueft. Die Stopwortliste selbst, die Kanalzahl und
+  // TOTAL_CHECKED_LABELS bleiben unveraendert.
+  const QUOTED = String.raw`"(?:\\.|[^"\\])*"`;
+  const deliveredTextOf = (src) =>
+    src
+      .replace(/^[ \t]*\/\/.*$/gm, "")
+      .replace(new RegExp(String.raw`description:\s*${QUOTED}`, "g"), "")
+      .replace(new RegExp(String.raw`\.describe\(\s*${QUOTED}`, "g"), "")
+      .replace(new RegExp(String.raw`(tool\(\s*${QUOTED},\s*)${QUOTED}`, "g"), "$1");
   const mcpSrc = fs.readFileSync(path.join(ROOT, "src/mcp-tools.js"), "utf8");
-  leaksOf("mcpErrorLiterals", mcpSrc, leaks);
+  leaksOf("mcpErrorLiterals", deliveredTextOf(mcpSrc), leaks);
 
   // Kanal 8: Self-Service-/Auth-Fehlerseiten (CSRF, Session abgelaufen, Anmeldung
   // fehlgeschlagen) - reale Router-Antworten (Muster test/web-auth.test.js).

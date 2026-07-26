@@ -40,6 +40,29 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "Der Telefon-Agent ist momentan nicht erreichbar. Bitte spaeter erneut versuchen.",
     }),
+    // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
+    // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
+    emptyCalls: "Noch keine Anrufe.",
+    emptyCalendar: "Kalender ist leer.",
+    callStillRunning:
+      "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
+    // Feldnamen des get_agent_status-Textblocks (P15/T3a). LABEL, wo der Wert nur
+    // angehaengt wird; ZEILEN-Funktion, wo die Sprache die Wortstellung bestimmt
+    // (Geld-/Monatszeilen). Die Betraege kommen fertig formatiert herein (costDigits +
+    // Waehrungslabel) - keine Geld-/Formatlogik im Buendel.
+    agentStatus: Object.freeze({
+      number: "Agent-Nummer",
+      owner: "Besitzer",
+      voiceEngine: "Voice-Engine",
+      model: "Modell",
+      calls: "Calls bisher",
+      permissions: "Berechtigungen",
+      unknownMonth: "unbekannt",
+      costLifetime: (spent, cap) =>
+        `KI-Kosten gesamt (Lebenszeit): ${spent} von ${cap} eigenem Budget`,
+      costSpendMonth: (monthKey, amount) => `KI-Kosten Spend-Monat ${monthKey}: ${amount}`,
+      reserved: (amount) => `Aktuell reserviert: ${amount}`,
+    }),
   }),
   en: Object.freeze({
     roleAgent: "Agent",
@@ -57,6 +80,22 @@ export const MCP_TEXTS = Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "The phone agent is currently unavailable. Please try again later.",
     }),
+    emptyCalls: "No calls yet.",
+    emptyCalendar: "Calendar is empty.",
+    callStillRunning:
+      "Call is still running. Please poll get_call_status and try again later.",
+    agentStatus: Object.freeze({
+      number: "Agent number",
+      owner: "Owner",
+      voiceEngine: "Voice engine",
+      model: "Model",
+      calls: "Calls so far",
+      permissions: "Permissions",
+      unknownMonth: "unknown",
+      costLifetime: (spent, cap) => `AI cost total (lifetime): ${spent} of ${cap} own budget`,
+      costSpendMonth: (monthKey, amount) => `AI cost spend month ${monthKey}: ${amount}`,
+      reserved: (amount) => `Currently reserved: ${amount}`,
+    }),
   }),
   fr: Object.freeze({
     roleAgent: "Agent",
@@ -73,6 +112,22 @@ export const MCP_TEXTS = Object.freeze({
         "L'agent téléphonique a renvoyé une réponse incomplète. Veuillez réessayer plus tard.",
       [MCP_ERROR_CODE.UPSTREAM_UNREACHABLE]:
         "L'agent téléphonique est actuellement injoignable. Veuillez réessayer plus tard.",
+    }),
+    emptyCalls: "Aucun appel pour le moment.",
+    emptyCalendar: "L'agenda est vide.",
+    callStillRunning:
+      "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
+    agentStatus: Object.freeze({
+      number: "Numéro de l'agent",
+      owner: "Propriétaire",
+      voiceEngine: "Moteur vocal",
+      model: "Modèle",
+      calls: "Appels jusqu'ici",
+      permissions: "Autorisations",
+      unknownMonth: "inconnu",
+      costLifetime: (spent, cap) => `Coût IA total (à vie) : ${spent} sur ${cap} de budget propre`,
+      costSpendMonth: (monthKey, amount) => `Coût IA mois de dépense ${monthKey} : ${amount}`,
+      reserved: (amount) => `Actuellement réservé : ${amount}`,
     }),
   }),
 });

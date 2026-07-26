@@ -264,6 +264,21 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
     }
     for (const key of ["summaries", "personalData", "bankData"])
       assert.ok(texts.permissionLabels?.[key], `permissionLabels.${key} fehlt fuer ${language}`);
+    // P15/T3a: Leertexte + Feldnamen des get_agent_status-Blocks. Eine Luecke wuerde
+    // "undefined" in einen tenant-sichtbaren Text rendern (G27: Struktur statt Disziplin).
+    for (const key of ["emptyCalls", "emptyCalendar", "callStillRunning"])
+      assert.ok(
+        typeof texts[key] === "string" && texts[key].length > 0,
+        `${key} fehlt fuer ${language}`,
+      );
+    for (const key of ["number", "owner", "voiceEngine", "model", "calls", "permissions", "unknownMonth"])
+      assert.ok(texts.agentStatus?.[key], `agentStatus.${key} fehlt fuer ${language}`);
+    for (const key of ["costLifetime", "costSpendMonth", "reserved"])
+      assert.equal(
+        typeof texts.agentStatus?.[key],
+        "function",
+        `agentStatus.${key} fehlt fuer ${language}`,
+      );
   }
 });
 
@@ -308,6 +323,107 @@ test("permissionsSummary-Feldnamen folgen der Tenant-Sprache; DE byte-identisch 
         "Wert kommt aus DEMSELBEN Locale-Buendel, kein zweiter Katalog");
     }
   });
+});
+
+// ==================== T13 (P15/T3a) ====================
+// Die Leer-/Zwischenzustaende der Tool-Antworten sind tenant-sichtbarer Text und folgen
+// derselben Sprache wie Rollen-Praefix und Fehlertexte (loc.mcp) - kein zweiter Katalog.
+test("list_calls: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3a)", async () => {
+  await withGateway({ calls: [] }, async () => {
+    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
+      .get("list_calls")();
+    assert.equal(toolText(de), "Noch keine Anrufe.", "DE bleibt byte-identisch zum Bestand");
+    for (const language of SUPPORTED_LANGUAGES) {
+      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        .get("list_calls")();
+      assert.equal(toolText(r), MCP_TEXTS[language].emptyCalls);
+    }
+  });
+});
+
+// ==================== T14 (P15/T3a) ====================
+test("get_calendar: Leertext folgt der Tenant-Sprache; DE byte-identisch (P15/T3a)", async () => {
+  await withGateway({ calendar: [] }, async () => {
+    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", allowCalendar: true, language: "de" })
+      .get("get_calendar")();
+    assert.equal(toolText(de), "Kalender ist leer.", "DE bleibt byte-identisch zum Bestand");
+    for (const language of SUPPORTED_LANGUAGES) {
+      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, allowCalendar: true, language })
+        .get("get_calendar")();
+      assert.equal(toolText(r), MCP_TEXTS[language].emptyCalendar);
+    }
+  });
+});
+
+// ==================== T15 (P15/T3a) ====================
+test("get_transcript bei laufendem Anruf: Hinweistext folgt der Tenant-Sprache (P15/T3a)", async () => {
+  await withGateway({ status: "active" }, async () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        .get("get_transcript")({ call_id: "call_1" });
+      assert.equal(JSON.parse(toolText(r)).error, MCP_TEXTS[language].callStillRunning);
+    }
+    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
+      .get("get_transcript")({ call_id: "call_1" });
+    assert.equal(
+      JSON.parse(toolText(de)).error,
+      "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
+      "DE bleibt byte-identisch zum Bestand",
+    );
+  });
+});
+
+// ==================== T16 (P15/T3a) ====================
+// Der get_agent_status-Textblock traegt die Feldnamen der Tenant-Sprache. Der DE-Block ist
+// VOLLSTAENDIG byte-identisch zum Bestand (voller String-Vergleich, nicht nur Stichprobe).
+const AGENT_STATUS_TEXT_DE =
+  "Agent-Nummer: +18643028341\n" +
+  "Besitzer: Antonio\n" +
+  "Voice-Engine: budget\n" +
+  "Modell: claude-haiku\n" +
+  "Calls bisher: 3\n" +
+  "KI-Kosten gesamt (Lebenszeit): 2.100 EUR von 10 EUR eigenem Budget\n" +
+  "KI-Kosten Spend-Monat 2026-07: 0.600 EUR\n" +
+  "Aktuell reserviert: 0.600 EUR\n" +
+  "Berechtigungen: Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
+
+test("get_agent_status-Textblock: Feldnamen folgen der Sprache; DE byte-identisch (P15/T3a)", async () => {
+  await withConfig("paymentCurrency", "eur", async () => {
+    await withGateway(AGENT_STATE_FIXTURE, async () => {
+      const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
+        .get("get_agent_status")();
+      assert.equal(toolText(de), AGENT_STATUS_TEXT_DE, "DE-Textblock byte-identisch zum Bestand");
+
+      for (const language of ["en", "fr"]) {
+        const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+          .get("get_agent_status")();
+        const text = toolText(r);
+        const labels = MCP_TEXTS[language].agentStatus;
+        assert.match(text, new RegExp(`^${labels.number}: `), `${language}: uebersetztes Nummern-Label`);
+        assert.ok(text.includes(`\n${labels.permissions}: `), `${language}: uebersetztes Berechtigungs-Label`);
+        assert.doesNotMatch(
+          text,
+          /Agent-Nummer|Besitzer|Modell|Berechtigungen|KI-Kosten|Aktuell reserviert/,
+          `${language}: keine deutschen Feldnamen im Textblock`,
+        );
+      }
+    });
+  });
+});
+
+// ==================== T17 (P15/T3a) ====================
+// registerTools OHNE language-Argument (stdio-Transport, der keinen Store hat) faellt auf
+// den EINEN Fallback localeFor(null) = Weltdefault - nicht auf ein hartes "de".
+test("registerTools ohne language-Argument nutzt den Weltdefault (P15/T3a)", async () => {
+  setWorldDefaultLanguageEnabled(true);
+  try {
+    await withGateway({ calls: [] }, async () => {
+      const result = await captureTools({}).get("list_calls")();
+      assert.equal(toolText(result), MCP_TEXTS.en.emptyCalls);
+    });
+  } finally {
+    setWorldDefaultLanguageEnabled(false);
+  }
 });
 
 // ==================== T12 (ex MCP-12) ====================

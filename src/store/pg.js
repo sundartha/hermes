@@ -17,6 +17,7 @@
 // spaeterer Scope, nicht P3b.
 import { config } from "../config.js";
 import * as ops from "./state-ops.js";
+import { tenantLanguage as tenantLanguageOf } from "./views.js";
 import {
   BOOTSTRAP_TENANT_ID,
   DEFAULT_PROVIDER,
@@ -282,6 +283,8 @@ export function makePgStore(runner) {
     // Schwester-Query + Sprach-Aufloesung (F1 Phase 4). Reine Leser auf dem Spiegel.
     numberRecordByE164: (e164) => ops.numberRecordByE164(requireState(), e164),
     resolveCallLanguage: (args) => ops.resolveCallLanguage(requireState(), args),
+    // Wrapper-Paritaet zu json.js (P15/T2): reiner Leser auf dem Spiegel.
+    tenantLanguage: (tenantId) => tenantLanguageOf(requireState(), tenantId),
 
     addActionItem(callId, text, type = "todo") {
       const item = ops.addActionItem(requireState(), callId, text, type);

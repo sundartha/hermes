@@ -157,7 +157,7 @@ test("Gate 4 Denylist: Notruf-Kurzwahl blockt auch mit Flag an (403)", async () 
     status: 403,
     grund: "denylist",
   });
-  assert.match((await res.json()).error, /gesperrt/);
+  assert.match((await res.json()).error, /is blocked/);
 });
 
 // ---- Gate 5: E.164-Format (Muster number-gate.test.js) ----
@@ -181,7 +181,7 @@ test("Gate 6 Land: Ziel ausserhalb ALLOWED_COUNTRY_CODES blockt auch mit Flag an
     status: 403,
     grund: "land",
   });
-  assert.match((await res.json()).error, /Laendervorwahl/);
+  assert.match((await res.json()).error, /Country code/);
 });
 
 // ---- Gate 7: Stundenlimit pro Tenant (Muster number-gate.test.js) ----
@@ -192,7 +192,7 @@ test("Gate 7 Stundenlimit: MAX_CALLS_PER_HOUR erreicht blockt auch mit Flag an (
     status: 429,
     grund: "stundenlimit",
   });
-  assert.match((await res.json()).error, /Stundenlimit/);
+  assert.match((await res.json()).error, /Hourly limit/);
 });
 
 // ---- Gate 8: Profil-Senkung auf 0 (Muster a4-default-profile-zero.test.js) ----
@@ -204,7 +204,7 @@ test("Gate 8 Profil-Limit 0: profil-loser Tenant (DEFAULT=0) blockt auch mit Fla
     status: 429,
     grund: "stundenlimit",
   });
-  assert.match((await res.json()).error, /Stundenlimit/);
+  assert.match((await res.json()).error, /Hourly limit/);
 });
 
 // ---- Gate 9: Cooldown/per-Target-Cap (Muster outbound-per-target-cap.test.js) ----
@@ -216,7 +216,7 @@ test("Gate 9 Cooldown: per-(Tenant,Ziel)-Cap erreicht blockt auch mit Flag an (4
     status: 429,
     grund: "ziel_limit",
   });
-  assert.match((await res.json()).error, /Wiederhol-Limit/);
+  assert.match((await res.json()).error, /Repeat limit/);
 });
 
 // ---- Gate 10: Verifikation/Allowlist (Muster w5-abo-allowlist-gate.test.js W5-3) ----
@@ -228,7 +228,7 @@ test("Gate 10 Verifikation: suspendierter Tenant blockt auch mit Flag an (403, D
     status: 403,
     grund: "abo",
   });
-  assert.match((await res.json()).error, /Abo inaktiv|gesperrt/i);
+  assert.match((await res.json()).error, /Subscription inactive|blocked/i);
 });
 
 // ---- Gate 11: Budget (Muster outbound-tenant.test.js #3) ----
@@ -242,7 +242,7 @@ test("Gate 11 Budget: erschoepftes Tenant-Budget blockt auch mit Flag an (402)",
     status: 402,
     grund: "budget",
   });
-  assert.match((await res.json()).error, /Budget-Limit/);
+  assert.match((await res.json()).error, /budget limit/);
 });
 
 // ---- Gate 12: Minuten-Kontingent (Muster b2-quota-gate.test.js) ----
@@ -286,5 +286,5 @@ test("Gate 13 Reserve: Worst-Case-Reserve > Cap blockt auch mit Flag an (402)", 
     status: 402,
     grund: "reserve_ueber_rest",
   });
-  assert.match((await res.json()).error, /es fehlen \d+\.\d{2} EUR/);
+  assert.match((await res.json()).error, /\d+\.\d{2} EUR short/);
 });

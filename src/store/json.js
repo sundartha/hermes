@@ -18,7 +18,7 @@ import {
   resolveSeedProvider,
   CENTS_PER_EUR,
 } from "./defaults.js";
-import { findActiveNumber } from "./views.js";
+import { findActiveNumber, tenantLanguage as tenantLanguageOf } from "./views.js";
 import * as ops from "./state-ops.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
@@ -457,6 +457,14 @@ export function numberRecordByE164(e164) {
 
 export function resolveCallLanguage(args) {
   return ops.resolveCallLanguage(load(), args);
+}
+
+// Sprache eines Tenants OHNE laufenden Call - dieselbe eine Regel wie im Anruf
+// (views.tenantLanguage -> resolveCallLanguage mit der aktiven Nummer als Geo-Anker).
+// Als Store-Methode angeboten, weil die Outbound-Gate-Kette (P15/T2) sie fuer den
+// Anzeigetext einer Ablehnung braucht und dafuer keinen zweiten Resolver bekommt (G5).
+export function tenantLanguage(tenantId) {
+  return tenantLanguageOf(load(), tenantId);
 }
 
 // ---- Action Items ----
