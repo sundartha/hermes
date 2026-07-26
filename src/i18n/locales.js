@@ -28,6 +28,7 @@ import { INBOUND_NOTICES } from "./inbound-notice.js";
 import { PROMPT_DE } from "./prompts/de.js";
 import { PROMPT_FR } from "./prompts/fr.js";
 import { PROMPT_EN } from "./prompts/en.js";
+import { MCP_TEXTS } from "./mcp-texts.js";
 
 // Logische Voice-Profile (Strings) als Forward-Referenz fuer den Telephonie-Renderer
 // (Phase 3 mappt sie auf provider-spezifische Voice-Namen Polly/Azure). Im Bundle steht
@@ -163,6 +164,10 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7): fest verdrahtet, durch kein Setting abschaltbar.
     // GETRENNT von disclosure() (Outbound, Regel 2) - beide Achsen bleiben unabhaengig.
     inboundNotice: INBOUND_NOTICES.de,
+    // MCP-Textkanal (P12): Rollen-Praefixe + Fehlertexte der MCP-Tool-Schicht. Aus
+    // i18n/mcp-texts.js, weil sie NIE gesprochen werden (DE bleibt transliteriert,
+    // s. dort) - eingehaengt, damit localeFor() der EINE Resolver bleibt (G5).
+    mcp: MCP_TEXTS.de,
     // Kuratierte Zusatz-Vorlagen NEBEN greetingDefault (Self-Service-Dropdown, kein
     // Freitext). Der Pflichtsatz wird beim Katalogbau vorangestellt, nicht hier doppelt
     // gepflegt (G5). DE-Wortlaut byte-identisch zu den frueheren GREETING_TEMPLATES[1..2].
@@ -239,6 +244,8 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.fr,
+    // MCP-Textkanal (P12), s. DE.
+    mcp: MCP_TEXTS.fr,
     greetingVariants: Object.freeze([
       "Bonjour, vous êtes bien en ligne avec l'assistant IA de {owner}. Je prends note de votre message pour {owner}. Comment puis-je vous aider ?",
       "Bonjour ! Ici l'assistant IA de {owner}. Comment puis-je vous aider ?",
@@ -302,6 +309,8 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.en,
+    // MCP-Textkanal (P12), s. DE.
+    mcp: MCP_TEXTS.en,
     greetingVariants: Object.freeze([
       "Hello, you're through to {owner}'s AI assistant. I'll take a message for {owner}. How can I help?",
       "Hi there! This is {owner}'s AI assistant. How can I help you?",

@@ -20,6 +20,9 @@ const serverOptions = config.tenancy.mcpUiEnabled
   ? { capabilities: { extensions: uiServerExtension() } }
   : undefined;
 const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
+// P12: KEIN language-Feld - dieser Prozess hat keinen Store (ein Store-Import hier
+// oeffnete einen zweiten pg-Pool/JSON-Leser). Ohne Feld faellt localeFor() auf den
+// Weltdefault (R7). Der Tenant-genaue Kanal ist der HTTP-Connector (routes/mcp.js).
 registerTools(server, {
   uiHost: { enabled: config.tenancy.mcpUiEnabled },
 });

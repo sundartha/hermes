@@ -27,6 +27,7 @@ import { HERMES_SERVER_INFO } from "../mcp-server-info.js";
 import { mcpAuth } from "../auth.js";
 import { hashEmail } from "../util.js";
 import { ANON_IDENTITY } from "../request-tenant.js";
+import { tenantLanguage } from "../store/views.js";
 
 // deps: { config, store, requestTenant }. config = globales Config-Objekt (mcpUiEnabled).
 // store traegt resolveProfile. requestTenant = die EINE Wurzel-Instanz (INV-7; loest den
@@ -64,6 +65,11 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
     // nicht auf die email-/sub-Identitaet. BOOTSTRAP -> OWNER_PROFILE, sonst stored-or-DEFAULT
     // (fail-closed: ein authentifizierter Nutzer ohne Tenant-Profil bekommt DEFAULT_PROFILE).
     const profile = store.resolveProfile(scopedTenant);
+    // P12: die Sprache des MCP-Textkanals ist die Sprache des TENANTS - aufgeloest mit
+    // derselben Funktion und derselben Praezedenz wie im Anruf (views.tenantLanguage ->
+    // resolveCallLanguage), nie aus einem Request-Header oder Client-Locale. EINE
+    // Aufloesungsregel fuer Anruf, Self-Service und MCP (G5). Muster: self-service-routes.js.
+    const language = tenantLanguage(store.load(), scopedTenant);
     try {
       // Rich-UI: Server deklariert die io.modelcontextprotocol/ui-Extension im initialize-
       // Response (MCP Apps / SEP-1865 - PFLICHT, sonst rendert der Host das ui://-Widget
@@ -87,6 +93,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         scopedTenant,
         allowCalendar: profile.allowCalendar,
         uiHost,
+        language,
       });
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       res.on("close", () => {

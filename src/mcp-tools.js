@@ -12,7 +12,9 @@ import {
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
 import { MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
-import { resolveGatewayUrl } from "./config.js";
+import { config, resolveGatewayUrl } from "./config.js";
+import { localeFor } from "./i18n/locales.js";
+import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
 const LAST_TRANSCRIPT_LINES = 6;
@@ -45,8 +47,12 @@ const text = (s) => ({
 // Fehler-Tool-Ergebnis (MCP-Konvention isError): der LLM-Client sieht eine klare,
 // generische Meldung statt eines process-level Crashes. KEIN roher Gateway-Body.
 const errText = (s) => ({ content: [{ type: "text", text: s }], isError: true });
-const fmt = (iso) =>
-  new Date(iso).toLocaleString("de-DE", {
+// Datums-/Zeitformat der Tenant-Sprache (FMT-03). dateLocale kommt aus DEMSELBEN
+// Locale-Bundle wie der Anrufpfad (claude.js promptInputs) - kein zweites "de-DE"-
+// Literal in dieser Datei. Fabrik statt drittem Argument an pickCall/pickCalendarEntry:
+// die Bindung passiert EINMAL je Registrierung (registerTools), nicht je Zeile.
+const makeDateFormatter = (dateLocale) => (iso) =>
+  new Date(iso).toLocaleString(dateLocale, {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
@@ -60,11 +66,19 @@ const fmt = (iso) =>
 // Deref (`s.calendar.length`, `r.callId`) crasht darauf mit TypeError. Geprueft wird
 // Existenz/Typ, NICHT Nicht-Leere (leerer Kalender `[]` bleibt valide). Wirft eine
 // generische, provider-freie Tool-Fehlermeldung (kein roher Gateway-Body, Regel 5).
+// Tool-Fehler mit stabiler, sprachneutraler Kennung (P12): der Wurf legt NUR den Code
+// fest, die Uebersetzung passiert an EINER Kante (wrapHandler). Vorher war der deutsche
+// Klartext selbst das Format zwischen Wurf und Kante - jede Sprachverzweigung haette
+// ihn an beiden Enden duplizieren muessen (G5).
+class ToolError extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+}
+
 function requireFields(obj, specs) {
-  if (obj == null || typeof obj !== "object")
-    throw new Error(
-      "Der Telefon-Agent hat keine gueltige Antwort geliefert. Bitte spaeter erneut versuchen.",
-    );
+  if (obj == null || typeof obj !== "object") throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INVALID);
   for (const [field, type] of Object.entries(specs)) {
     const v = obj[field];
     const ok =
@@ -73,10 +87,7 @@ function requireFields(obj, specs) {
         : type === "object"
           ? v != null && typeof v === "object"
           : typeof v === type;
-    if (!ok)
-      throw new Error(
-        "Der Telefon-Agent hat eine unvollstaendige Antwort geliefert. Bitte spaeter erneut versuchen.",
-      );
+    if (!ok) throw new ToolError(MCP_ERROR_CODE.UPSTREAM_INCOMPLETE);
   }
   return obj;
 }
@@ -100,14 +111,14 @@ function durationS(c) {
 // nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. Sitzt
 // NACH der Tenant-Aufloesung (Gateway) und VOR jeder Sicht - eine einzige Stelle.
 // Kein Secret/Identitaet/Audio/Cross-Tenant-Feld passiert diese Funktion.
-function pickCallStatus(callId, c) {
+function pickCallStatus(callId, c, texts) {
   return {
     call_id: callId,
     status: mapStatus(c),
     duration_s: durationS(c),
     last_transcript_lines: c.transcript
       .slice(-LAST_TRANSCRIPT_LINES)
-      .map((t) => `${t.role === "agent" ? "Agent" : "Gegenseite"}: ${t.text}`),
+      .map((t) => `${t.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${t.text}`),
     // CDF1: PII-freier Fehlergrund NICHT erfolgreicher Calls. Erfolgreich/aktiv -> null
     // (Shape stabil; bestehende Felder unveraendert). Reines Whitelist-Feld, kein Roh-Durchstich.
     failure_reason: c.failureReason ?? null,
@@ -198,11 +209,18 @@ function permissionsSummary(settings) {
   );
 }
 
-// Nachkommastellen fuer EUR-Betraege im get_agent_status-Textblock (G25: benannte
+// Nachkommastellen der Kostenbetraege im get_agent_status-Textblock (G25: benannte
 // Konstante statt dreimal nackter Literal-3 fuer costEur/spendMonthCostEur/reservedEur).
-const AGENT_STATUS_EUR_DIGITS = 3;
-function eurDigits(eur) {
-  return eur.toFixed(AGENT_STATUS_EUR_DIGITS);
+const AGENT_STATUS_COST_DIGITS = 3;
+function costDigits(amount) {
+  return amount.toFixed(AGENT_STATUS_COST_DIGITS);
+}
+
+// Anzeige-Waehrung == Belastungs-Waehrung (MCP-08 / Owner-Entscheidung 7.1): das Label
+// folgt IMMER config.billing.paymentCurrency, nie einem Literal. Zur AUFRUFZEIT gelesen,
+// nicht beim Modul-Load: die Konfiguration ist ein Laufzeit-Objekt.
+function chargeCurrencyLabel() {
+  return config.billing.paymentCurrency.toUpperCase();
 }
 
 // Daten-Kontrakt get_agent_status (W3-Spec): GENAU diese flachen Eigen-Felder duerfen
@@ -255,16 +273,16 @@ const MY_NUMBER_OUTPUT = { number: z.string().nullable() };
 
 // Daten-Kontrakt list_calls: pro Eintrag GENAU diese Eigen-Felder. counterparty ist die
 // Gegenseite (to bei outbound, from bei inbound), status via mapStatus, startedAt
-// server-seitig formatiert (fmt - eine Quelle, derselbe Formatter wie der Stufe-0-Text).
+// server-seitig formatiert (formatDate - eine Quelle, derselbe Formatter wie der Stufe-0-Text).
 // summary optional. Kein Roh-Transkript/Audio/internes Feld passiert diese Funktion.
 // counterparty nullable: eine einzelne defekte Zeile darf nicht die ganze Liste killen.
-function pickCall(c) {
+function pickCall(c, formatDate) {
   const entry = {
     id: c.id,
     direction: c.direction,
     counterparty: (c.direction === "outbound" ? c.to : c.from) ?? null,
     status: mapStatus(c),
-    startedAt: fmt(c.startedAt),
+    startedAt: formatDate(c.startedAt),
   };
   if (c.summary) entry.summary = c.summary;
   return entry;
@@ -287,10 +305,10 @@ function callTextLine(e) {
 }
 
 // Daten-Kontrakt get_calendar: pro Eintrag GENAU title/start/end (start/end server-seitig
-// formatiert via fmt - eine Quelle, derselbe Formatter wie der Stufe-0-Text). title
+// formatiert via formatDate - eine Quelle, derselbe Formatter wie der Stufe-0-Text). title
 // nullable (Robustheit, eine defekte Zeile killt nicht die Liste). Kein internes Feld.
-function pickCalendarEntry(e) {
-  return { title: e.title ?? null, start: fmt(e.start), end: fmt(e.end) };
+function pickCalendarEntry(e, formatDate) {
+  return { title: e.title ?? null, start: formatDate(e.start), end: formatDate(e.end) };
 }
 const CALENDAR_ENTRY = z.object({
   title: z.string().nullable(),
@@ -304,11 +322,18 @@ const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 // X-Internal-Tenant (am /mcp-Gateway aufgeloest). allowCalendar steuert, ob das
 // get_calendar-Tool ueberhaupt registriert wird. stdio ruft registerTools(server)
 // ohne ctx -> identity/scopedTenant null (Owner), allowCalendar true.
+// language (P12): die BEREITS aufgeloeste Tenant-Sprache. Aufgeloest wird sie am
+// Transport (routes/mcp.js) mit derselben Funktion wie im Anrufpfad (views.tenantLanguage
+// -> resolveCallLanguage) - hier gibt es KEINE zweite Aufloesungsregel. Fehlt sie
+// (stdio-Transport, der keinen Store hat), faellt localeFor() fail-safe auf den
+// Weltdefault zurueck (R7) - derselbe eine Fallback wie ueberall sonst.
 export function registerTools(
   server,
-  { identity = null, scopedTenant = null, allowCalendar = true, uiHost = null } = {},
+  { identity = null, scopedTenant = null, allowCalendar = true, uiHost = null, language = null } = {},
 ) {
   const call = (method, path, body) => api(method, path, body, identity, scopedTenant);
+  const loc = localeFor(language); // Namensgleich zu claude.js promptInputs
+  const formatDate = makeDateFormatter(loc.dateLocale);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
 
   // Stufe 1 fuer EIN Widget aktivieren - geteilt von ALLEN UI-Tools (G5/S2, keine
@@ -336,9 +361,15 @@ export function registerTools(
       try {
         return await handler(...args);
       } catch (err) {
+        // P12: ein ToolError traegt eine stabile Kennung -> hier uebersetzt. Alles ohne
+        // bekannte Kennung behaelt sein Bestandsverhalten (err.message, z.B. "HTTP 500"
+        // oder "fetch failed" aus api()); nur der leere Fall bekommt den lokalisierten
+        // Auffangsatz. Diese Reihenfolge ist Absicht: wuerde err.message unterdrueckt,
+        // saehe ein EN-Tenant bei Netzfehlern wieder den deutschen Satz (MCP-05).
         return errText(
-          err?.message ||
-            "Der Telefon-Agent ist momentan nicht erreichbar. Bitte spaeter erneut versuchen.",
+          loc.mcp.errors[err?.code] ||
+            err?.message ||
+            loc.mcp.errors[MCP_ERROR_CODE.UPSTREAM_UNREACHABLE],
         );
       }
     };
@@ -498,7 +529,7 @@ export function registerTools(
   const callStatusResult = async (call_id) => {
     const c = await call("GET", `/api/calls/${call_id}`);
     requireFields(c, { transcript: "array" });
-    const data = pickCallStatus(call_id, c);
+    const data = pickCallStatus(call_id, c, loc.mcp);
     return {
       content: [
         {
@@ -629,7 +660,7 @@ export function registerTools(
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { calls: "array" });
-      const entries = s.calls.map(pickCall); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      const entries = s.calls.map((c) => pickCall(c, formatDate)); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
       const txt = entries.length ? entries.map(callTextLine).join("\n") : "Noch keine Anrufe.";
       return {
         content: [{ type: "text", text: txt }],
@@ -669,7 +700,7 @@ export function registerTools(
         // Existenz/Typ pruefen, NICHT Nicht-Leere: leerer Kalender ([]) ist valide
         // und behaelt den bestehenden "Kalender ist leer."-Pfad.
         requireFields(s, { calendar: "array" });
-        const entries = s.calendar.map(pickCalendarEntry); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+        const entries = s.calendar.map((e) => pickCalendarEntry(e, formatDate)); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
         const txt = entries.length
           ? entries.map((e) => `${e.title}: ${e.start} bis ${e.end}`).join("\n")
           : "Kalender ist leer.";
@@ -697,6 +728,7 @@ export function registerTools(
       const s = await call("GET", "/api/state");
       requireFields(s, { agent: "object", usage: "object", settings: "object" });
       const data = pickAgentStatus(s); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      const currency = chargeCurrencyLabel();
       return {
         content: [
           {
@@ -704,9 +736,9 @@ export function registerTools(
             text:
               `Agent-Nummer: ${data.number}\nBesitzer: ${data.owner}\nVoice-Engine: ${data.voiceEngine}\nModell: ${data.model}\n` +
               `Calls bisher: ${data.calls}\n` +
-              `KI-Kosten gesamt (Lebenszeit): ${eurDigits(data.costEur)} EUR von ${data.tenantCapEur} EUR eigenem Budget\n` +
-              `KI-Kosten Spend-Monat ${data.spendMonthKey ?? "unbekannt"}: ${eurDigits(data.spendMonthCostEur)} EUR\n` +
-              `Aktuell reserviert: ${eurDigits(data.reservedEur)} EUR\n` +
+              `KI-Kosten gesamt (Lebenszeit): ${costDigits(data.costEur)} ${currency} von ${data.tenantCapEur} ${currency} eigenem Budget\n` +
+              `KI-Kosten Spend-Monat ${data.spendMonthKey ?? "unbekannt"}: ${costDigits(data.spendMonthCostEur)} ${currency}\n` +
+              `Aktuell reserviert: ${costDigits(data.reservedEur)} ${currency}\n` +
               `Berechtigungen: ${data.permissions}`,
           },
         ],
