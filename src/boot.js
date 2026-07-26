@@ -20,7 +20,6 @@ import {
   tenantCapRowInertFindings,
   bootstrapHealDecision,
   BOOTSTRAP_HEAL,
-  SPEND_CAP_FINDING,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
@@ -62,17 +61,11 @@ function runRetention(store, config) {
   );
 }
 
-// P3: Konfig-Warnungen, die der Audit-Trail mitschreibt: NUR Befunde, die aendern, WAS
-// der Dienst ablehnen wird. Klausel B heisst "jedes Auslandsziel scheitert am
-// Reserve-Gate" (D5) - eine Ablehnungs-Ursache und damit Forensik, wie jede andere
-// Gate-Entscheidung. Der 0-Sentinel (A0) ist dokumentiertes Bestandsverhalten und ein
-// unbepreistes Modell bewirkt reine Ueber-Bepreisung - beide aendern keine Ablehnung
-// -> nur WARN, ohne Audit-Zeile.
-const AUDITED_BOOT_FINDINGS = new Set([SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE]);
-
 // P3: Kohaerenz der Budget-Achsen GEGENEINANDER (spendCapCoherence, src/boot-guard.js).
 // Klausel A (Tenant-Default >= Plattform-Cap) ist FATAL - eine inerte Tenant-Achse ist
-// echter Schutzverlust (Regel 1). A0/B sind WARN (siehe Klausel-Kommentar im Guard).
+// echter Schutzverlust (Regel 1). Klausel B (Worst-Case-Reserve > Tenant-Decke) ist seit
+// P7/GAP-32 EBENFALLS FATAL - unter ihr faellt ein ganzer Zielbereich vor dem Dial ins
+// Reserve-Gate. Nur A0 (Sentinel 0) bleibt WARN (siehe Klausel-Kommentar im Guard).
 //
 // LCT P6 haengt zwei weitere Linien an (store.load() ist gecacht, kein Zweit-IO, Muster
 // currentCoverage): erste Linie (fatal) prueft ALLE Katalog-Slugs' abgeleitete Decke gegen
@@ -106,12 +99,7 @@ function assertSpendCapCoherence(config, store) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
   }
-  for (const finding of all) {
-    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
-    if (AUDITED_BOOT_FINDINGS.has(finding.code)) {
-      audit("boot_konfig_warnung", null, `grund=${finding.code} ${finding.message}`);
-    }
-  }
+  for (const finding of all) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // P3: Modelle ohne Preistabellen-Eintrag (unpricedModels, src/boot-guard.js) buchen
@@ -185,7 +173,7 @@ function warnAlertChannelUnset(config) {
 // wenn ueberhaupt ein Befund vorliegt; ein durchweg im Band liegender Zustand loggt ruhig.
 // KEIN SMS-Alarm hier: der Boot feuert einmal je Prozessstart, der laufende Alarm haengt am
 // Sweep (src/billing/cost-truing.js). KEIN Audit: der Befund aendert nichts daran, WAS der
-// Dienst ablehnt (Kriterium von AUDITED_BOOT_FINDINGS) - Muster warnUnpricedModels.
+// Dienst ablehnt - Muster warnUnpricedModels.
 function warnTariffDrift(config, store) {
   const report = tariffDriftReportFromConfig(store.load().calls, config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;

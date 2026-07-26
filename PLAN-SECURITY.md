@@ -709,6 +709,18 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > ausdruecklich:** ein Tenant ohne eigene `tenant_budget`-Zeile darf 15,00 EUR statt 6,00 EUR
 > pro Fenster verbrauchen; der Plattform-Backstop bleibt als Schnittmenge bei 30,00 EUR.
 >
+> **Neuer FATALER Boot-Guard (GAP-32).** `spendCapCoherence` Klausel B
+> (`WORST_CASE_UNAFFORDABLE`: Worst-Case-Reserve > Tenant-Decke) ist von WARN auf **FATAL**
+> gedreht. Bis dahin stand die Zeile seit dem ersten Deploy folgenlos im Log, waehrend der
+> Dienst fuer jedes Ziel ohne gemessenen Inlandssatz faktisch abgeschaltet war — eine
+> Konfiguration, unter der ein ganzer Zielbereich **vor dem Dial** abgewiesen wird, ist kein
+> Betriebszustand. Die Meldung nennt beide Env-Namen, die berechnete Reserve und den
+> Zielwert (`Abhilfe: … auf mindestens <n> anheben`), ausschliesslich Betreiber-Zahlen —
+> kein Secret, kein PII. `AUDITED_BOOT_FINDINGS` in `src/boot.js` ist damit unerreichbar
+> geworden und ersatzlos entfallen (toter Code). **Rollback ohne Deploy:**
+> `DEFAULT_TENANT_BUDGET_CENTS` im Dashboard anheben; mit Deploy: `git revert` dieses einen
+> Commits.
+>
 > **Neuer SCHREIBENDER Boot-Pfad (GAP-38).** `healBootstrapStore` (`src/boot.js`) legt beim
 > Start Bootstrap-Tenant + aktive Nummer aus `BOOTSTRAP_E164`/`BOOTSTRAP_PROVIDER` an. Er
 > ersetzt den `preDeployCommand` in `render.yaml`, den Render auf `plan: free` **nie

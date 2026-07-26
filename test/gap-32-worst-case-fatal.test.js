@@ -1,59 +1,42 @@
-// GAP-32 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-32").
-// Ein unbezahlbarer Worst-Case-Tarif bricht den Start nicht, sondern warnt nur:
-// spendCapCoherence() liefert den Befund WORST_CASE_UNAFFORDABLE bewusst mit
-// fatal:false (src/boot-guard.js:114-127). Datei-Test gegen render.yaml, Muster
-// test/env-docs-spend-cap-coherence.test.js (readRenderValue + spendCapCoherence).
+// GAP-32 (Katalog: tasks/i18n-tests/11-luecken-und-e2e.md, Abschnitt "GAP-32"), in P7
+// behoben. Befund war: ein unbezahlbarer Worst-Case-Tarif brach den Start nicht ab,
+// sondern warnte nur - die Zeile stand seit dem ersten Deploy folgenlos im Log, waehrend
+// jedes Ziel ohne gemessenen Inlandssatz vor dem Dial abgewiesen wurde.
 //
-// Live-Zahlen (tasks/i18n-tests/13-live-env-befund.md Abschnitt 3, NICHT die aelteren
-// Katalog-Zahlen 900/300): render.yaml traegt MAX_BUDGET_EUR=8 (platformCapCents=800),
-// DEFAULT_TENANT_BUDGET_CENTS=600, VOICE_TARIFF_DEFAULT_CENTS=300 -> mit dem REALEN
-// Worst-Case-Anrufdauer-Deckel MAX_CALL_DURATION_CAP_S=300 (src/store/defaults.js:253,
-// NICHT render.yaml's MAX_CALL_DURATION_S=180, das ist nur der Anfrage-Default) ergibt
-// sich Reserve=1500 gegen Decke=600 - exakt die Zahlen aus dem Boot-Banner.
+// R5-Korrektur in P7: die frueheren render.yaml-IST-Pins (600/800/300) sind GELOESCHT -
+// sie pinnten exakt die Inkohaerenz, die P7 beseitigt hat (die ausgelieferten Zahlen loesen
+// den Befund nicht mehr aus; DASS sie kohaerent sind, prueft
+// test/env-docs-spend-cap-coherence.test.js gegen alle drei Quellen). Die SOLL-Assertion
+// steht woertlich und faehrt gegen KONSTRUIERTE Zahlen.
+//
+// A3: der Testname traegt die Katalog-ID nicht mehr am Anfang -> der jetzt gruene Test
+// liegt im Regressionslauf (npm test), nicht mehr im Launch-Gate.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { eurToCents } from "../src/config.js";
 import { spendCapCoherence, SPEND_CAP_FINDING } from "../src/boot-guard.js";
-import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 
-const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const RENDER_YAML = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+// Konstruiert, NICHT gemessen: platformCapCents liegt bewusst ueber der Tenant-Decke,
+// damit Klausel A nicht vorher greift und wirklich Klausel B geprueft wird.
+const UNAFFORDABLE = Object.freeze({
+  tenantDefaultCents: 600,
+  platformCapCents: 3000,
+  maxTariffCents: 300,
+  maxCallDurationS: 300, // -> Reserve 300 * 5 = 1500 ct > Decke 600 ct
+});
 
-function readRenderValue(text, name) {
-  const m = text.match(new RegExp(`key:\\s*${name}\\s*\\n\\s*value:\\s*"?([^"\\n]+)"?`));
-  if (!m) throw new Error(`${name} nicht in render.yaml gefunden`);
-  return m[1].trim();
-}
-
-test("GAP-32 SOLL: der WORST_CASE_UNAFFORDABLE-Befund muss den Start abbrechen (fatal:true), nicht nur warnen", () => {
-  const tenantDefaultCents = Number(readRenderValue(RENDER_YAML, "DEFAULT_TENANT_BUDGET_CENTS"));
-  const platformCapCents = eurToCents(Number(readRenderValue(RENDER_YAML, "MAX_BUDGET_EUR")));
-  const maxTariffCents = Number(readRenderValue(RENDER_YAML, "VOICE_TARIFF_DEFAULT_CENTS"));
-  assert.equal(tenantDefaultCents, 600, "Vorbedingung: live-gemessene Tenant-Decke");
-  assert.equal(platformCapCents, 800, "Vorbedingung: Plattform-Cap (MAX_BUDGET_EUR=8)");
-  assert.equal(maxTariffCents, 300, "Vorbedingung: live-gemessener Worst-Case-Tarif");
-
-  const findings = spendCapCoherence({
-    tenantDefaultCents,
-    platformCapCents,
-    maxTariffCents,
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
-  });
-  const worstCase = findings.find((f) => f.code === SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE);
-  assert.ok(
-    worstCase,
-    `Vorbedingung: render.yaml muss den WORST_CASE_UNAFFORDABLE-Befund ausloesen, war: ${JSON.stringify(findings)}`,
+test("Boot-Guard (GAP-32): ein unbezahlbarer Worst-Case-Tarif bricht den Start ab (fatal:true)", () => {
+  const worstCase = spendCapCoherence(UNAFFORDABLE).find(
+    (f) => f.code === SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE,
   );
-  assert.match(worstCase.message, /1500 Cent/, "Vorbedingung: die live-gemessene Reserve (1500 ct)");
-
+  assert.ok(worstCase, "konstruierte Eingabe muss den Befund ausloesen");
   assert.equal(
     worstCase.fatal,
     true,
-    "SOLL: ein Land im Gate, dessen Worst-Case-Tarif die kleinste Plan-Decke sprengt, muss " +
-      "den Start abbrechen - heute ist der Befund ausdruecklich fatal:false " +
-      "(src/boot-guard.js:114-127), die Warnzeile steht seit dem ersten Deploy folgenlos im Log",
+    "SOLL: ein Worst-Case-Tarif, der die Tenant-Decke sprengt, muss den Start abbrechen - " +
+      "unter dieser Konfiguration ist der Dienst fuer einen ganzen Zielbereich abgeschaltet",
   );
+  assert.match(worstCase.message, /DEFAULT_TENANT_BUDGET_CENTS=600/);
+  assert.match(worstCase.message, /VOICE_TARIFF_DEFAULT_CENTS=300/);
+  assert.match(worstCase.message, /1500 Cent/);
+  assert.match(worstCase.message, /mindestens 1500/);
 });

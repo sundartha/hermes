@@ -113,23 +113,21 @@ test("T-P3-11: BASE_ENV (Default=0) bootet gruen, genau eine A0-Konfig-Warnung (
   }
 });
 
-// T-P3-12: die AUSGELIEFERTE Beispiel-Konfiguration (.env.example/render.yaml nach der
-// P3-Korrektur: DEFAULT_TENANT_BUDGET_CENTS=600, VOICE_TARIFF_DEFAULT_CENTS=300) bootet
-// gruen, feuert aber die Klausel-B-Warnung inkl. Audit-Zeile (600 < 300*5=1500).
-test("T-P3-12: ausgelieferte Beispiel-Konfig (600/300) bootet gruen, Klausel-B-Warnung + Audit", async () => {
-  const srv = await startServer({
+// T-P3-12 (P7/GAP-32 GEDREHT): 600/300 war bis P6 die ausgelieferte Konfiguration und
+// bootete mit einer folgenlosen Klausel-B-Warnung durch - waehrend der Dienst fuer jedes
+// Ziel ohne gemessenen Inlandssatz faktisch abgeschaltet war (600 < 300*5=1500). Seit dem
+// Flip bricht genau diese Kombination den Start ab. Das ist zugleich der Beweis, dass der
+// Flip greift: ein Boot mit absichtlich inkohaerenten Werten startet nicht.
+test("T-P3-12: inkohaerente Werte (600/300) brechen den Start ab und nennen den Zielwert", async () => {
+  const { code, output } = await startServerExpectExit({
     env: { DEFAULT_TENANT_BUDGET_CENTS: "600", VOICE_TARIFF_DEFAULT_CENTS: "300" },
   });
-  try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
-    assert.equal(res.status, 200);
-    assert.match(srv.stdout, /\[boot\] Konfig-Warnung: .*max_duration_s=120/);
-    assert.match(srv.stdout, /\[audit\] boot_konfig_warnung ip=system grund=worst_case_unaffordable/);
-    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
-    assert.doesNotMatch(srv.stdout, /DEFAULT_TENANT_BUDGET_CENTS=0/);
-  } finally {
-    await srv.stop();
-  }
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /Start abgebrochen/);
+  assert.match(output, /DEFAULT_TENANT_BUDGET_CENTS=600/);
+  assert.match(output, /VOICE_TARIFF_DEFAULT_CENTS=300/);
+  assert.match(output, /mindestens 1500/, "Betreiber muss den Zielwert ohne Raten ablesen koennen");
+  assert.doesNotMatch(output, /Gateway laeuft/);
 });
 
 // T-P3-13 (Review-Fix Runde 1, Merge-Gate; LCT P6 GEDREHT): ECHTER Spawn OHNE jeden

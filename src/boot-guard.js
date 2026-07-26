@@ -90,7 +90,7 @@ const SECONDS_PER_MINUTE = 60;
 export const SPEND_CAP_FINDING = Object.freeze({
   TENANT_DEFAULT_INERT: "tenant_default_inert", // Klausel A  - FATAL
   TENANT_DEFAULT_UNSET: "tenant_default_unset", // Klausel A0 - WARN
-  WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable", // Klausel B - WARN + Audit
+  WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable", // Klausel B - FATAL
 });
 
 // P3: laengste Gespraechsdauer, die unter der Tenant-Decke zum Worst-Case-Tarif noch
@@ -111,11 +111,14 @@ function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
 //   globale Cap bindet immer zuerst, die per-Tenant-Decke wirkt nie (Regel 1: eine
 //   inerte Kosten-Achse ist echter Schutzverlust). >=, NICHT >: bei Gleichstand bindet
 //   die Tenant-Achse ebenfalls nie.
-// B (WARN + Audit): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
+// B (FATAL, GAP-32): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
 //   Zielverkehr (maxTariffCents) ueber die laengstmoegliche Gespraechsdauer
-//   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes
-//   Auslandsziel scheitert am Reserve-Gate, bevor die Tenant-Decke erreicht ist. Das
-//   ist eine Ablehnungs-Ursache (Forensik), aber niemals fatal.
+//   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes Ziel
+//   ohne gemessenen Inlandssatz scheitert am Reserve-Gate, bevor die Tenant-Decke erreicht
+//   ist. Bis P7 war das eine blosse WARN: die Zeile stand seit dem ersten Deploy folgenlos
+//   im Log, waehrend der Dienst fuer genau diese Ziele faktisch abgeschaltet war. Eine
+//   Konfiguration, unter der ein ganzer Zielbereich vor dem Dial abgewiesen wird, ist kein
+//   Betriebszustand - der Start wird verweigert und die Meldung nennt den Zielwert.
 //
 // Der A0-Early-Return VOR Klausel A macht "tenantDefaultCents > 0" fuer Klausel A
 // strukturell wahr (G27: Struktur statt Konvention) - Klausel B erbt das ebenfalls.
@@ -157,11 +160,13 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
     return [
       {
         code: SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE,
-        fatal: false,
+        fatal: true,
         message:
           `Worst-Case-Reserve ${worstCaseReserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
           `* max. Gespraechsdauer) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
-          `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar.`,
+          `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar. ` +
+          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${worstCaseReserveCents} anheben ` +
+          `(und echt unter MAX_BUDGET_EUR*100=${platformCapCents} halten).`,
       },
     ];
   }
