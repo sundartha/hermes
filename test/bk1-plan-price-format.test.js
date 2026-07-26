@@ -13,6 +13,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
+import { DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const html = fs.readFileSync(path.join(dir, "../public/tenant.html"), "utf8");
@@ -90,6 +91,27 @@ test("formatPlanPrice: eine fremde Locale erzeugt KEINE fremde Waehrung", () => 
   const usd = normSpace(ui.formatPlanPrice(499, "usd"));
   assert.ok(!usd.includes("€"), "USD bleibt USD, auch unter einer EUR-Locale");
   assert.equal(usd.replace(/\D/g, ""), "499");
+});
+
+// FMT-15 - nach P15b/C2 ist von der ID nur noch der Fallback-Zweig uebrig (19-w2-
+// baseline.md 3.6): sobald /state antwortet, kommt formatLocale vom Server. Der 403-Pfad
+// (gefuehrte Aktivierung) sieht /state NIE und rendert die Plan-Kacheln - also die erste
+// Geldanzeige, die ein Neukunde ueberhaupt sieht - im statischen Fallback. Diese Datei
+// importiert src/config.js nicht - im eigenen Test-Worker gilt damit der Code-Default
+// "en" (DEFAULT_LANGUAGE), unabhaengig von der lokalen .env (Lehre test-base-env-drift).
+test("FMT-15 (SOLL, rot) - der Vor-/state-Fallback folgt dem Weltdefault, nicht hart de-DE", () => {
+  const literal = html.match(/const STATIC_FORMAT_LOCALE = "([^"]+)";/);
+  assert.ok(literal, "STATIC_FORMAT_LOCALE nicht in tenant.html gefunden");
+  assert.equal(literal[1], localeFor(DEFAULT_LANGUAGE).dateLocale, "heute 'de-DE', SOLL 'en-GB'");
+});
+
+test("FMT-15 (SOLL, rot) - die Aktivierungs-Ansicht formatiert Preise nicht deutsch", () => {
+  const ui = extractPriceUi(); // frischer vm-Kontext, KEIN setFormatLocale (Vor-/state-Fallback)
+  const expected = new Intl.NumberFormat(localeFor(DEFAULT_LANGUAGE).dateLocale, {
+    style: "currency",
+    currency: "EUR",
+  }).format(4.99);
+  assert.equal(normSpace(ui.formatPlanPrice(499, "eur")), normSpace(expected), "heute '4,99 €', SOLL '€4.99'");
 });
 
 test("planCard: lokalisierter Katalog-Preis und Popular-Badge landen in der Kachel", () => {

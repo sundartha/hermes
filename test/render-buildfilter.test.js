@@ -71,3 +71,22 @@ test("hermes-web ist eine Static Site (type: web + runtime: static)", () => {
   assert.match(web, /^\s*runtime:\s*static\b/m, "hermes-web hat nicht runtime: static");
   assert.match(web, /^\s*staticPublishPath:\s*\S+/m, "hermes-web hat keinen staticPublishPath");
 });
+
+// GAP-37 (i18n-Testkatalog, tasks/i18n-tests/11-luecken-und-e2e.md; PLAN-I18N-TESTS.md
+// W27). WIDERSPRUCH ZUM W0-TEST OBEN - und genau das ist der Befund: baut UND serviert
+// derselbe Service apps/web, dann darf er apps/web/** nicht ignorieren, sonst deployt
+// ein reiner Frontend-Commit nie und der Gateway liefert dauerhaft ein veraltetes
+// Frontend aus. Aufloesbar nur durch eine Fix-Entscheidung (Build herausnehmen ODER
+// ignoredPaths kuerzen), nicht durch Entschaerfen dieses Tests.
+// GRENZE: geprueft wird der Blueprint, nicht der Render-Dashboard-Zustand (Live !=
+// render.yaml).
+test("GAP-37 (SOLL, rot) - der Gateway ignoriert apps/web nicht, obwohl er es baut und ausliefert", () => {
+  const buildsWeb = /buildCommand:.*apps\/web/.test(gateway);
+  const servesWeb = /key:\s*WEB_DIST_DIR\s*\n\s*value:\s*["']?apps\/web/.test(gateway);
+  assert.ok(buildsWeb && servesWeb, "Praemisse der ID entfallen -> ID neu entscheiden, Test nicht drehen");
+  assert.doesNotMatch(
+    gateway,
+    /ignoredPaths:[\s\S]*?-\s*["']?apps\/web\/\*\*/,
+    "Gateway baut+serviert apps/web, darf es deshalb nicht im buildFilter ignorieren",
+  );
+});

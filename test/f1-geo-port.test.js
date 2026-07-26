@@ -11,7 +11,7 @@ import { makeStubGeoLookup, nullGeoLookup } from "../src/geo/stub.js";
 import { makeMaxmindGeoLookup } from "../src/geo/maxmind.js";
 import { normCountry, resolveOnboardCountry, resolveNumberCountry } from "../src/geo/resolve.js";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY, localeFor } from "../src/i18n/locales.js";
-import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 
 // ---- (A) Stub-Adapter ----
 test("makeStubGeoLookup: bekannte IP -> {country}; unbekannte -> null", () => {
@@ -106,6 +106,26 @@ test("WORLD-02 (Regressionsachse, gruen) - DE/AT/CH bleiben 'de', FR bleibt 'fr'
 // s. WORLD-01/00-kanonische-liste.md Nachtrag 2026-07-25) - der Weltdefault traegt US mit.
 test("languageForCountry('US') liefert 'en' (US-Kunden sprechen Englisch, ueber den Weltdefault) (ex DID-01)", () => {
   assert.equal(languageForCountry("US"), "en");
+});
+
+// WEB-25 - der Bestandstest oben pinnt GB/IE -> "en" WERTGLEICH; seit P10 waere er auch
+// dann noch gruen, wenn beide Tabellenzeilen geloescht wuerden (der Weltdefault liefert
+// ebenfalls "en"). Dieser Test pinnt die HERKUNFT: GB/IE kommen aus der Tabelle und
+// bleiben unter BEIDEN Schalterstellungen "en", waehrend ein tabellen-fremdes Land dem
+// Weltdefault folgt.
+test("WEB-25 (Mechanismus, gruen) - GB/IE sind tabellen-verankert, nicht weltdefault-getragen", () => {
+  try {
+    setWorldDefaultLanguageEnabled(false);
+    assert.equal(languageForCountry("GB"), "en");
+    assert.equal(languageForCountry("IE"), "en");
+    assert.equal(languageForCountry("US"), "de", "Kontrast: tabellen-fremd folgt dem Weltdefault");
+    setWorldDefaultLanguageEnabled(true);
+    assert.equal(languageForCountry("GB"), "en");
+    assert.equal(languageForCountry("IE"), "en");
+    assert.equal(languageForCountry("US"), "en");
+  } finally {
+    setWorldDefaultLanguageEnabled(true);
+  }
 });
 
 // ---- normCountry: strikte ISO-2-Validierung ----

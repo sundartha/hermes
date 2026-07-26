@@ -11,6 +11,7 @@ import {
   claimsFromPayload,
   adminOnly,
 } from "../src/web-auth.js";
+import { GERMAN_STOPWORDS } from "./helpers.js";
 
 const SECRET = "test-session-secret-0123456789";
 
@@ -337,6 +338,25 @@ test("AM2: Callback ohne Cookie + markierter state -> terminale Seite (Loop-Guar
     assert.match(res.body, /\/auth\/login/);
     assert.equal(calls.create.length, 0);
     assert.equal(cookieValue(res.setCookie, "session"), null);
+  } finally {
+    await srv.close();
+  }
+});
+
+// WEB-13 - SOLL-Gegenstueck zum AM2-Ist-Pin darueber (der /Sitzung abgelaufen/ heute
+// bestaetigt). Die terminale Recovery-Seite erscheint, BEVOR eine Identitaet existiert
+// (kein Cookie, kein Tenant) - eine Tenant-Sprache gibt es dort strukturell nicht. Der
+// SOLL-Massstab ist deshalb der Weltdefault (P10: DEFAULT_LANGUAGE "en"), nicht "irgendeine
+// Sprache". Welcher Kanal ihn kuenftig traegt (Accept-Language, Weltdefault, sprachneutraler
+// Code), entscheidet die Fix-Phase - dieser Test entscheidet es NICHT.
+test("WEB-13 (SOLL, rot) - die Session-abgelaufen-Seite ist nicht hart deutsch", async () => {
+  const { deps } = fakeDeps();
+  const srv = await mountRouter(deps);
+  try {
+    const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=abc~retry`);
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(res.body, /lang="de"/);
+    assert.doesNotMatch(res.body, GERMAN_STOPWORDS);
   } finally {
     await srv.close();
   }

@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import {
   DEFAULT_LOCALE,
@@ -19,6 +20,7 @@ import {
   resolveWidgetLocale,
   widgetDictFor,
   translate,
+  I18N_SCRIPT_BY_LOCALE,
 } from "../src/ui/widget-i18n.js";
 import {
   WIDGET_AGENT_STATUS,
@@ -29,8 +31,9 @@ import {
   widgetHtml,
   withI18nScript,
 } from "../src/ui/widget-catalog.js";
-import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
+import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../src/store/state-ops.js";
+import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WIDGET_DIR = path.join(ROOT, "src", "ui", "widgets");
@@ -49,6 +52,9 @@ function widgetSources() {
     .map((f) => ({ file: f, html: fs.readFileSync(path.join(WIDGET_DIR, f), "utf8") }));
 }
 
+// UI-01 (Buchhaltung, gruen) - Dict-Key-Paritaet ist woertlich derselbe Sachverhalt wie
+// dieser Bestandstest; Spezifikation tasks/i18n-tests/12-sprachachsen-ui.md. Kein eigener
+// Test (G5).
 test("T-i18n-parity: alle Sprachtabellen tragen identische Key-Saetze", () => {
   assert.ok(LOCALES.length >= 2, "mindestens de+fr erwartet");
   const [first, ...rest] = LOCALES;
@@ -73,6 +79,8 @@ test("T-i18n-locale: resolveLocale nimmt den ersten unterstuetzten Kandidaten, s
   assert.equal(resolveLocale(["en-US", "de-DE"], WIDGET_DICT), "en", "en gewinnt als erster Treffer");
 });
 
+// UI-02 (Buchhaltung, gruen) - deckt beide Katalogschritte ab (en->Key, unbekannter
+// Key->Key); Spezifikation tasks/i18n-tests/12-sprachachsen-ui.md. Kein eigener Test (G5).
 test("T-i18n-translate: en -> Key selbst; Uebersetzung je Tabelle; unbekannter Key -> Key (EN-Fallback)", () => {
   assert.equal(translate(WIDGET_DICT, "en", "Duration"), "Duration");
   assert.equal(translate(WIDGET_DICT, "de", "Duration"), "Dauer");
@@ -97,6 +105,8 @@ test("T-i18n-keys-covered: jeder data-i18n-/t()-Key der Widget-Quellen existiert
   }
 });
 
+// UI-06 (Buchhaltung, gruen) - vergleicht Innentext gegen Key ueber alle Quellen;
+// Spezifikation tasks/i18n-tests/12-sprachachsen-ui.md. Kein eigener Test (G5).
 test("T-i18n-en-default: data-i18n-Elemente tragen den Key selbst als englischen Markup-Default", () => {
   for (const { file, html } of widgetSources()) {
     for (const m of html.matchAll(/data-i18n="([^"]+)"[^>]*>([^<]*)</g)) {
@@ -109,6 +119,9 @@ test("T-i18n-en-default: data-i18n-Elemente tragen den Key selbst als englischen
   }
 });
 
+// UI-05 (Buchhaltung, gruen) - prueft alle 5 Widgets, Platzhalter-Ersetzung und die
+// Position vor <body; Spezifikation tasks/i18n-tests/12-sprachachsen-ui.md. Kein eigener
+// Test (G5).
 test("T-i18n-inject: I18N_SCRIPT ist in ALLEN 5 Widget-HTML injiziert, kein Platzhalter-Leak", () => {
   for (const id of ALL_WIDGET_IDS) {
     const html = widgetHtml(id);
@@ -128,6 +141,9 @@ const SERVER_LANGUAGE_CASES = [
   { language: "en", sample: null },
 ];
 
+// UI-19 (Buchhaltung, ueberholt) - die im Katalog beschriebene Betrachter-Divergenz
+// existiert seit P13/E4 nicht mehr: die Fassung haengt an der servergerenderten
+// Agentensprache und ist je Sprache byte-stabil (Assertion unten). Kein eigener Test (G5).
 test("T-i18n-server-locale: je Sprache eine eigene, stabile Fassung - die Sprache ist Teil des Cache-Schluessels", () => {
   for (const id of ALL_WIDGET_IDS) {
     for (const { language, sample } of SERVER_LANGUAGE_CASES) {
@@ -203,4 +219,89 @@ test("tenant.country=FR faerbt die servergerenderte Widget-Sprache (ex UI-18)", 
     htmlDefault,
     "Land=FR (tenant.defaultLanguage=fr) MUSS die servergerenderte Widget-Sprache aendern",
   );
+});
+
+// ==================== UI-03 (umformuliert, R-G) ====================
+// Katalog-Praemisse "Fallback-Kette bei fehlendem navigator.language" ist seit P13/E4 tot
+// (widget-i18n.js-Kopfkommentar). Gemessen wird stattdessen die Eigenschaft, die davon
+// uebrig ist und die kein Bestandstest prueft: im AUSGELIEFERTEN Widget gibt es ueberhaupt
+// kein Betrachter-Sprachsignal mehr.
+test("UI-03 (Mechanismus, gruen) - kein Browser-/Betrachter-Sprachsignal im ausgelieferten Widget", () => {
+  const forbiddenSignal = /navigator|Accept-Language|window\.openai/;
+  for (const id of ALL_WIDGET_IDS) {
+    for (const locale of WIDGET_LOCALES) {
+      assert.doesNotMatch(
+        widgetHtml(id, locale),
+        forbiddenSignal,
+        `${id}/${locale}: Betrachter-Sprachsignal im ausgelieferten HTML gefunden`,
+      );
+    }
+  }
+});
+
+// Schneidet den Inhalt des (einzigen) <script>-Tags aus dem I18N-Script-Fragment heraus,
+// damit derselbe Quelltext in node:vm ausgefuehrt werden kann (Muster
+// mcp-ui-wing-canvas-mount.test.js).
+function scriptBodyOf(script) {
+  return script.match(/<script>([\s\S]*)<\/script>/)[1];
+}
+
+test("UI-04 (Mechanismus, gruen) - das I18N-Script setzt documentElement.lang auf die servergerenderte Locale", () => {
+  for (const locale of WIDGET_LOCALES) {
+    const documentElement = { lang: "" };
+    const sandbox = {};
+    sandbox.window = sandbox;
+    sandbox.document = {
+      documentElement,
+      readyState: "complete",
+      querySelectorAll: () => [],
+      addEventListener() {},
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(scriptBodyOf(I18N_SCRIPT_BY_LOCALE[locale]), sandbox);
+
+    assert.equal(documentElement.lang, locale, `${locale}: documentElement.lang nicht gesetzt`);
+    assert.equal(sandbox.window.HermesI18n.locale, locale, `${locale}: HermesI18n.locale falsch`);
+    const expectedDuration = locale === DEFAULT_LOCALE ? "Duration" : WIDGET_DICT[locale].Duration;
+    assert.equal(sandbox.window.HermesI18n.t("Duration"), expectedDuration, `${locale}: t("Duration") falsch`);
+  }
+});
+
+test("UI-07 (OCP, gruen) - eine neue Widget-Sprache braucht genau EINEN Dict-Eintrag", () => {
+  const key = "Duration";
+  const placeholder = "PLATZHALTER-ES";
+  // Lokale Kopie (F.I.R.S.T./Independence): WIDGET_DICT selbst bleibt unberuehrt.
+  const extendedDict = { ...WIDGET_DICT, es: { [key]: placeholder } };
+
+  assert.equal(resolveLocale(["es-ES"], extendedDict), "es", "neue Sprache wird ueber resolveLocale gefunden");
+  assert.equal(translate(extendedDict, "es", key), placeholder, "Uebersetzung greift ueber die erweiterte Tabelle");
+  assert.equal(translate(WIDGET_DICT, "es", key), key, "das Original-Dict bleibt unberuehrt (kein 'es' darin)");
+});
+
+test("UI-13 (Sicherungs-Invariante, gruen) - kein Markup-Schreibpfad im ausgelieferten Widget", () => {
+  // Abgrenzung zu T-W1-AC2: das dort geprueft BIND_SCRIPT-Fragment ist ein Teilstueck;
+  // hier steht das komplette ausgelieferte Dokument inkl. I18N-Script und Inline-Skripten
+  // auf dem Pruefstand.
+  const forbiddenWrite = /\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML|document\.write/;
+  for (const id of ALL_WIDGET_IDS) {
+    for (const locale of WIDGET_LOCALES) {
+      assert.doesNotMatch(
+        widgetHtml(id, locale),
+        forbiddenWrite,
+        `${id}/${locale}: Markup-Schreibpfad im ausgelieferten HTML gefunden`,
+      );
+    }
+  }
+});
+
+test("UI-15 (Mechanismus, gruen) - der Widget-Fallback ist EN-verankert, unabhaengig vom Weltdefault", () => {
+  try {
+    setWorldDefaultLanguageEnabled(false);
+    // Divergenz, die den Test nicht-vakuum macht: bei eingeschaltetem Weltdefault fallen
+    // beide zufaellig auf "en" zusammen - ausgeschaltet zeigt sich der Unterschied.
+    assert.equal(resolveWidgetLocale("xx"), DEFAULT_LOCALE, "unbekannte Agentensprache -> Widget-EN-Fallback");
+    assert.equal(localeFor("xx").language, "de", "Kontrast: die Sprach-Achse faellt (Vor-Flip) auf de zurueck");
+  } finally {
+    setWorldDefaultLanguageEnabled(true);
+  }
 });
