@@ -135,7 +135,7 @@ test("P5-B2: alertChannelFindings(nummer) -> [] (Kanal besetzt, kein Befund)", (
 
 // GAP-07 (P6): die scharfe Konjunktion ist FATAL, jede Abschwaechung faellt auf die WARN
 // zurueck. Hoechstens EIN Befund je Zustand.
-test("GAP-07-Wahrheitstabelle: leerer Kanal + Buchung + Warnschwelle>0 -> genau ein FATALER Befund", () => {
+test("Alarmkanal-Wahrheitstabelle (GAP-07): leerer Kanal + Buchung + Warnschwelle>0 -> genau ein FATALER Befund", () => {
   const findings = alertChannelFindings({
     platformAlertSmsTo: "",
     paymentEnabled: true,
@@ -146,7 +146,7 @@ test("GAP-07-Wahrheitstabelle: leerer Kanal + Buchung + Warnschwelle>0 -> genau 
   assert.equal(findings[0].fatal, true);
 });
 
-test("GAP-07-Wahrheitstabelle: Warnschwelle 0 bzw. keine Buchung -> WARN statt FATAL", () => {
+test("Alarmkanal-Wahrheitstabelle (GAP-07): Warnschwelle 0 bzw. keine Buchung -> WARN statt FATAL", () => {
   const warnOff = alertChannelFindings({
     platformAlertSmsTo: "",
     paymentEnabled: true,
@@ -164,7 +164,7 @@ test("GAP-07-Wahrheitstabelle: Warnschwelle 0 bzw. keine Buchung -> WARN statt F
   assert.equal(noPayment[0].fatal, false, "ohne Buchung ist der Dienst blind, nicht unsicher");
 });
 
-test("GAP-07-Wahrheitstabelle: besetzter Kanal liefert auch bei scharfer Warnung [] (Nummer wird nie geloggt)", () => {
+test("Alarmkanal-Wahrheitstabelle (GAP-07): besetzter Kanal liefert auch bei scharfer Warnung [] (Nummer wird nie geloggt)", () => {
   assert.deepEqual(
     alertChannelFindings({
       platformAlertSmsTo: "+491234567890",

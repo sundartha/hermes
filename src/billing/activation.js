@@ -13,6 +13,20 @@
 import { KYC_LEVEL } from "../store/defaults.js";
 import { resolveTierForTenant } from "./plan-profile-resolver.js";
 import { provisionCleared } from "./provision-outcome.js";
+import { resolvePeriodStartIso } from "./period.js";
+
+// O4/GAP-01: Reset des Verbrauchszaehlers und Reaktivierung haengen an DERSELBEN
+// Bedingung - deshalb steht der Stempel hier und nicht im Webhook. Erreichbar ist diese
+// Funktion nur fuer ein bestaetigtes Abo (webhook.js CONFIRMED_SUBSCRIPTION_STATUS:
+// past_due/unpaid/incomplete werden vorher als IGNORE verworfen). Zusaetzlich fail-closed
+// gegen eine offene Zahlungsbeanstandung (billingHoldActive): wer eine ungeklaerte
+// Rechnung hat, bekommt kein frisches Kontingent auf Plattformkosten. Ohne Perioden-Anker
+// passiert nichts - das Gate bleibt dann auf der Lebenszeit-Achse (strenger).
+// Liefert true, wenn ein neues Fenster begonnen hat (Audit-Detail).
+function stampBudgetPeriodIfPaid({ store, tenant }) {
+  if (store.billingHoldActive(tenant)) return false;
+  return store.stampBudgetPeriod(tenant, resolvePeriodStartIso(store.tenantSubscription(tenant))) === true;
+}
 
 // Provisioniert das plan-abgeleitete Rechteprofil auf die tenantId (A2, GAP A; Phase S
 // tenant-gekeyt). Die schreibfreie Aufloesung (planSlug -> Tier) + die fail-closed Skip-
@@ -76,6 +90,10 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   // Primitiv (store.clearSuspendedAt, G5) wie der dritte Reaktivierungspfad Admin-approve
   // (web-auth.js). Idempotent (No-Op ohne gesetzten Anker).
   store.clearSuspendedAt(tenant);
+  // O4/GAP-01: dieselbe Ebene wie die uebrigen Store-Effekte (G30). Der Stempel setzt das
+  // Budget-Fenster des Gates auf den Beginn der laufenden Abrechnungsperiode - eine
+  // Subtraktions-Baseline, kein Nullen des Lebenszeit-Zaehlers.
+  const budgetPeriodStarted = stampBudgetPeriodIfPaid({ store, tenant });
   // Wartezustand statt Vorab-Aktivierung: der Marker ist die benannte Erlaubnis, fuer diesen
   // bezahlten Tenant eine Nummer anzufragen (state-ops tenantMayRequestNumber). Er ueberlebt
   // einen Fehlschlag bewusst: der Operator-Retry findet den Tenant so wieder.
@@ -89,7 +107,8 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   // Fail-closed auf der GELD-Seite: nur ein geklaertes Provisioning-Ergebnis aktiviert. Ein
   // unbekannter/abgelehnter Grund gilt als NICHT geklaert (nie raten, G26) - der Marker bleibt
   // gesetzt, der Operator-Retry (POST /api/onboard/retry) findet den Tenant wieder.
-  if (!provisionCleared(provisioned)) return { profile, activated: false, provisioned };
+  if (!provisionCleared(provisioned))
+    return { profile, activated: false, provisioned, budgetPeriodStarted };
   await accounts.setStatus(tenant, "active");
   store.setTenantSubscription(tenant, { activationPending: false });
   // Spiegel-Nachzug: accounts.setStatus schreibt NUR die DB. Bisher zog der nachgelagerte
@@ -104,5 +123,5 @@ export async function activatePaidTenant({ store, accounts, provision, billing, 
   // nach). PAYMENT_ENABLED-Gate: der Pfad ist nur payment-gegated erreichbar (server.js
   // Webhook 404 / Self-Service 404) -> aus = byte-identisch (Regel 3). accounts wird nur noch
   // fuer setStatus gebraucht (Profil keyt seit Phase S auf die tenantId).
-  return { profile, activated: true, provisioned };
+  return { profile, activated: true, provisioned, budgetPeriodStarted };
 }

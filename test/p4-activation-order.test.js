@@ -14,6 +14,8 @@ import {
   setKycLevel,
   kycReached,
   clearSuspendedAt,
+  billingHoldActive,
+  stampBudgetPeriod,
 } from "../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 
@@ -25,6 +27,10 @@ function storeOn(s, { ensureTenantCalls = [] } = {}) {
     findTenantBySubscription: () => null,
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
     clearSuspendedAt: (t) => clearSuspendedAt(s, t),
+    // GAP-01: Perioden-Fenster des Budget-Gates. Wrapper-Parity zur Fassade
+    // (json/pg): Uhr an der IO-Grenze, {changed} -> Boolean.
+    billingHoldActive: (t) => billingHoldActive(s, t, new Date().toISOString()),
+    stampBudgetPeriod: (t, iso) => stampBudgetPeriod(s, t, iso).changed,
     ensureTenant: async (t) => {
       ensureTenantCalls.push(t);
     },

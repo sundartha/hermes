@@ -405,8 +405,9 @@ export function calendarMap() {
 // = ephemerer Sub-Cent-Rest der KI-Akkumulation (nie auf Platte, Reset 0 bei Boot).
 // spendMonthKey/spendMonthCostCents (P4): zweite, PERIODISCHE Achse (UTC-Kalendermonat)
 // NEBEN dem unveraenderten Lebenszeit-Zaehler costCents. null = noch nie gestempelt ->
-// die Leseprojektion spendMonthUsageCents liefert 0. INERT: kein Gate liest sie (P7).
-// NICHT die Stripe-Abrechnungsperiode (src/billing/period.js).
+// die Leseprojektion spendMonthUsageCents liefert 0. Sie ist die Gate-Quelle NUR bei
+// BUDGET_MONTH_ENABLED=true (P7). NICHT die Stripe-Abrechnungsperiode
+// (src/billing/period.js) - die traegt seit GAP-01 die dritte Achse weiter unten.
 export function emptyUsage() {
   return {
     inputTokens: 0,
@@ -431,6 +432,15 @@ export function emptyUsage() {
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
+    // GAP-01 (P6): DRITTE Achse - das Budget-Gate misst den Verbrauch der laufenden
+    // STRIPE-Abrechnungsperiode statt der Lebenszeit. budgetPeriodKey = ISO-Periodenstart
+    // (resolvePeriodStartIso, billing/period.js); null = nie gestempelt -> das Gate faellt
+    // auf costCents (Lebenszeit, strengste Achse) zurueck. budgetPeriodBaselineCents ist
+    // der Lebenszeit-Stand BEI Periodenbeginn - der Reset ist eine Subtraktion, kein
+    // Nullen: costCents bleibt monoton (Forensik + D7-Gegenprobe).
+    // NICHT der UTC-Kalendermonat (spendMonthKey daneben) und NICHT die Plattform-Achse.
+    budgetPeriodKey: null,
+    budgetPeriodBaselineCents: 0,
   };
 }
 

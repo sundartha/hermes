@@ -1743,13 +1743,15 @@ function spendMonthKeyOf(nowIso) {
   return at ? yearMonthKey(at) : null;
 }
 
-// Der SPAETERE aus gespeichertem und laufendem periodischen Schluessel ('YYYY-MM',
-// lexikografisch = chronologisch sortierbar -> String-Vergleich genuegt, keine zweite
-// Datums-Arithmetik). EINZIGE Monotonie-/Zukunftsschluessel-Regel BEIDER periodischer
-// Achsen dieses Moduls (G5): der Spend-Monat der Budget-Achse (P4/P7, ueber
-// authoritativeSpendMonthKey darunter) UND der ElevenLabs-Zyklus-Schluessel (LCT P7,
-// ttsCycleKeyOf/recordTtsCharacters weiter unten) teilen sich denselben Riegel statt ihn
-// ein zweites Mal zu implementieren.
+// Der SPAETERE aus gespeichertem und laufendem periodischen Schluessel. Zwei
+// Schluessel-FORMATE, beide lexikografisch = chronologisch sortierbar -> String-Vergleich
+// genuegt, keine zweite Datums-Arithmetik: 'YYYY-MM' (Spend-Monat, TTS-Zyklus) und
+// ISO-8601 (Stripe-Periodenstart, GAP-01). EINZIGE Monotonie-/Zukunftsschluessel-Regel
+// ALLER DREI periodischer Achsen dieses Moduls (G5): der Spend-Monat der Budget-Achse
+// (P4/P7, ueber authoritativeSpendMonthKey darunter), der ElevenLabs-Zyklus-Schluessel
+// (LCT P7, ttsCycleKeyOf/recordTtsCharacters weiter unten) UND das Perioden-Fenster des
+// Budget-Gates (GAP-01, stampBudgetPeriod) teilen sich denselben Riegel statt ihn zwei
+// weitere Male zu implementieren.
 //
 // MONOTONIE-RIEGEL (Sicherheitskern): weil das MAXIMUM gebildet wird, kann der
 // Schluessel per Konstruktion NIE rueckwaerts wandern, und ein Schluessel in der
@@ -2038,9 +2040,45 @@ function effectiveCapCents(s, tenantId, cfg) {
 // test/budget-month-flip.test.js zaehlt die Lesestellen in diesem Modul) - beide Achsen
 // schalten dadurch STRUKTURELL gemeinsam: es kann nie einen Zustand geben, in dem eine
 // Achse periodisch und die andere lebenslang rechnet.
+//
+// GAP-01 (P6) ersetzt den LEBENSZEIT-Zweig der TENANT-Achse durch das Perioden-Fenster
+// (budgetPeriodUsageCents darunter). Der Flag-AN-Zweig bleibt unberuehrt, ebenso die
+// Plattform-Achse (gatePlatformUsageCents, Absolute Regel 1).
+
+// Leseprojektion der PERIODEN-Achse (GAP-01). Reine Funktion, KEINE Mutation, kein Cron
+// (Render Free Tier hat weder Shell noch Jobs) - der Reset ist ein Ereignis (Stripe-
+// Perioden-Wechsel, s. stampBudgetPeriod), kein Zeitablauf. Nie gestempelt -> Lebenszeit
+// (Bestandsverhalten, fail-closed). Math.max(0, ...), weil eine verspaetete NEGATIVE
+// Kostenkorrektur aus der Vorperiode costCents unter den Baseline druecken kann - ein
+// negativer Verbrauch waere ein Guthaben, das das Gate aufweitet.
+function budgetPeriodUsageCents(bucket) {
+  if (!bucket.budgetPeriodKey) return bucket.costCents;
+  return Math.max(0, bucket.costCents - bucket.budgetPeriodBaselineCents);
+}
+
+// Stempelt den Beginn einer NEUEN Abrechnungsperiode auf den Usage-Bucket (GAP-01/O4).
+// Nebeneffekt im Namen (N7). Der Aufrufer (billing/activation.js) entscheidet, OB gestempelt
+// werden darf - hier lebt nur die WIE-Regel:
+//   - kein Anker (Abo ohne Perioden-Feld) -> No-Op, das Gate bleibt auf der Lebenszeit-Achse
+//   - gleicher Schluessel (Webhook-Retry, Metadata-Update) -> No-Op (idempotent)
+//   - AELTERER Schluessel -> No-Op. MONOTONIE-RIEGEL ueber dieselbe eine Regel wie die
+//     Spend-Monat-Achse (laterMonotonicKey, G5): ein rueckdatiertes/wiedereingespieltes
+//     Event darf ein Kontingent nicht beliebig oft neu oeffnen.
+// Reine Mutation, kein IO (Wrapper saved bei changed). Liefert { changed }.
+export function stampBudgetPeriod(s, tenantId, periodStartIso) {
+  if (!periodStartIso) return { changed: false };
+  const bucket = usageFor(s, tenantId);
+  if (laterMonotonicKey(bucket.budgetPeriodKey, periodStartIso) !== periodStartIso)
+    return { changed: false };
+  if (bucket.budgetPeriodKey === periodStartIso) return { changed: false };
+  bucket.budgetPeriodKey = periodStartIso;
+  bucket.budgetPeriodBaselineCents = bucket.costCents;
+  return { changed: true };
+}
+
 export function gateUsageCents(s, tenantId, cfg, nowIso) {
   const bucket = usageFor(s, tenantId);
-  return cfg.budgetMonthEnabled ? spendMonthUsageCents(bucket, nowIso) : bucket.costCents;
+  return cfg.budgetMonthEnabled ? spendMonthUsageCents(bucket, nowIso) : budgetPeriodUsageCents(bucket);
 }
 
 // Plattform-Monatssumme: reine Ganzzahl-Summe der Monatsprojektion JEDES Buckets - KEINE

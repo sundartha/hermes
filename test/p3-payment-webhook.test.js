@@ -62,6 +62,10 @@ function fakeDeps({ tenantBySub = null, stripeOnFile = { customerId: null, payme
       // prueft die KYC/Status/Provisioning-Kette, nicht die Geld-Wirkung der GAP-03-Achse.
       ensureTenant: async () => {},
       clearBillingHold: () => {},
+      // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es) - hier
+      // No-op-Fakes, dieser Test prueft die KYC/Status/Provisioning-Kette.
+      billingHoldActive: () => null,
+      stampBudgetPeriod: () => false,
     },
     accounts: {
       setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]),

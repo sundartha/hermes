@@ -46,6 +46,8 @@ test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", asyn
     calls: 0,
     spendMonthKey: null,
     spendMonthCostCents: 0,
+    budgetPeriodKey: null, // GAP-01: neues emptyUsage()-Feld
+    budgetPeriodBaselineCents: 0, // GAP-01: neues emptyUsage()-Feld
   });
 });
 

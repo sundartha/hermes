@@ -282,13 +282,15 @@ export async function applyStripeWebhook(
     // GAP-04) - EINE Quelle (activation.js). Idempotent im provision-Trigger (kein Doppelkauf
     // bei Webhook-Retry/Folge-Events); bei PROVISIONING_ENABLED=false bleibt die Nummer
     // 'requested' (KEIN Kauf, aber dry_run gilt als geklaert -> Tenant wird aktiv).
-    const { profile, activated, provisioned } = await activatePaidTenant({
+    const { profile, activated, provisioned, budgetPeriodStarted } = await activatePaidTenant({
       store, accounts, provision, billing, tenant,
     });
+    // GAP-01/O4: der Perioden-Reset ist eine Geld-Kante und gehoert damit in dieselbe
+    // Audit-Zeile wie Profil und Provisioning (kein zweites Ereignis, keine neue Senke).
     audit(
       "stripe_webhook_activate",
       req,
-      `tenant=${tenant} ${profileAuditDetail(profile)} ${provisionAuditDetail(provisioned)}`,
+      `tenant=${tenant} ${profileAuditDetail(profile)} ${provisionAuditDetail(provisioned)} budget_period=${budgetPeriodStarted ? "reset" : "kept"}`,
     );
     // GAP-03/O2: ein bestaetigtes aktives Abo hebt jede Beanstandungs-Wirkung auf
     // (Reversibilitaet) - ein zuvor gesetzter billing_hold/periodCreditRevoked darf einen

@@ -183,6 +183,10 @@ export const {
   setSuspendedAtIfAbsent,
   clearSuspendedAt,
   tenantSuspendedAt,
+  // GAP-01: Perioden-Fenster des Budget-Gates (billing/activation.js stempelt es). Ohne
+  // diesen Re-Export waere store.stampBudgetPeriod auf der Fassade undefined -> die
+  // Aktivierung wuerfe zur Laufzeit einen TypeError. Muster wie clearSuspendedAt.
+  stampBudgetPeriod,
   setTenantStripe,
   tenantStripe,
   // W4: Abo-Referenzen - Setter (Subscribe + Webhook) + Reader (Self-Service-View) +

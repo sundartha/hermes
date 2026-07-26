@@ -15,6 +15,8 @@ import {
   setKycLevel,
   kycReached,
   clearSuspendedAt,
+  billingHoldActive,
+  stampBudgetPeriod,
 } from "../src/store/state-ops.js";
 import { sanitizeProfile, KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
@@ -32,6 +34,10 @@ function storeOn(s) {
     setTenantSubscription: (t, p) => setTenantSubscription(s, t, p),
     // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
     clearSuspendedAt: (t) => clearSuspendedAt(s, t),
+    // GAP-01: Perioden-Fenster des Budget-Gates. Wrapper-Parity zur Fassade
+    // (json/pg): Uhr an der IO-Grenze, {changed} -> Boolean.
+    billingHoldActive: (t) => billingHoldActive(s, t, new Date().toISOString()),
+    stampBudgetPeriod: (t, iso) => stampBudgetPeriod(s, t, iso).changed,
     // GAP-04: Spiegel-Nachzug NACH erfolgreicher Aktivierung - json-Backend-Muster (No-op,
     // nur pg braucht den echten DB-Roundtrip).
     ensureTenant: async () => {},
