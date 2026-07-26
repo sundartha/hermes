@@ -70,7 +70,12 @@ export async function wireWebLogin({
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
-  const accounts = makeAccounts(portalRunner);
+  // P8/LANG-02: der Login-Pfad legt den Tenant mit Land/Sprache/Zeitzone an (Plattform-
+  // Default, kein IP-Geo - s. makeAccounts). Ohne das bekaeme jeder Web-Login-Kunde nach
+  // dem Weltdefault-Flip (P10) die falsche Sprache, weil sein Tenant kein Land traegt.
+  const accounts = makeAccounts(portalRunner, {
+    defaultCountry: config.provisioning.provisioningCountry,
+  });
   const sessions = makeSessions(portalRunner);
   const auditStore = makeAuditStore(portalRunner);
   // tenant-prolif-d: DID-Release-Reconcile scharfschalten (Boot-Lauf + Sweep). Der

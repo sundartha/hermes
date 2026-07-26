@@ -489,6 +489,8 @@ export function makePgStore(runner) {
     },
     // Leser der Geo-Felder (F1): liest den hydrierten Spiegel, Wrapper-Parity zu json.js.
     tenantGeo: (tenantId) => ops.tenantGeo(requireState(), tenantId),
+    // Leser der Tenant-Zeitzone (P8, nur Anzeige): Wrapper-Parity zu json.js.
+    tenantTimezone: (tenantId) => ops.tenantTimezone(requireState(), tenantId),
 
     addNotification(title, body, callId) {
       ops.addNotification(requireState(), title, body, callId);
@@ -711,7 +713,7 @@ const TENANT_COLUMNS =
   "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
   "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
   "stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, " +
-  "country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at, " +
+  "country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, " +
   "suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, " +
   "stripe_period_credit_revoked";
 
@@ -742,6 +744,7 @@ function rowToTenant(r) {
     tenant.stripeNumberSetupFeeExempt = r.stripe_number_setup_fee_exempt;
   if (r.country != null) tenant.country = r.country;
   if (r.default_language != null) tenant.defaultLanguage = r.default_language;
+  if (r.timezone != null) tenant.timezone = r.timezone;
   if (r.private_number != null) tenant.privateNumber = r.private_number;
   if (r.number_provision_skip_reason != null)
     tenant.numberProvisionSkipReason = r.number_provision_skip_reason;
@@ -1142,8 +1145,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -1156,6 +1159,7 @@ async function flushTenants(client, tenants) {
          stripe_current_period_start=EXCLUDED.stripe_current_period_start,
          stripe_number_setup_fee_exempt=EXCLUDED.stripe_number_setup_fee_exempt,
          country=EXCLUDED.country, default_language=EXCLUDED.default_language,
+         timezone=EXCLUDED.timezone,
          private_number=EXCLUDED.private_number,
          number_provision_skip_reason=EXCLUDED.number_provision_skip_reason,
          number_provision_skip_at=EXCLUDED.number_provision_skip_at,
@@ -1180,6 +1184,7 @@ async function flushTenants(client, tenants) {
         t.stripeNumberSetupFeeExempt ?? null,
         t.country ?? null,
         t.defaultLanguage ?? null,
+        t.timezone ?? null,
         t.privateNumber ?? null,
         t.numberProvisionSkipReason ?? null,
         t.numberProvisionSkipAt ?? null,

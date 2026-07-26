@@ -771,6 +771,11 @@ export function tenantGeo(tenantId) {
   return ops.tenantGeo(load(), tenantId);
 }
 
+// Leser des Tenant-Felds timezone (P8, nur Anzeige). Reine Query, kein save.
+export function tenantTimezone(tenantId) {
+  return ops.tenantTimezone(load(), tenantId);
+}
+
 // ---- Notifications ----
 export function addNotification(title, body, callId) {
   ops.addNotification(load(), title, body, callId);

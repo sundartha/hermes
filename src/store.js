@@ -214,6 +214,9 @@ export const {
   // Leser derselben Achse (GAP-35, Denial-Metrik). Muster wie tenantStripe zu
   // setTenantStripe; ohne diesen Re-Export ist store.tenantGeo auf der Fassade undefined.
   tenantGeo,
+  // P8/FMT-28: Leser der Tenant-Zeitzone (nur Anzeige, claude.js). Muster wie tenantGeo -
+  // ohne diesen Re-Export ist store.tenantTimezone auf der Fassade undefined.
+  tenantTimezone,
   seedBootstrapNumber,
   // P2b: Bootstrap-Tenant-Setup (CLI scripts/bootstrap-tenant.js). OHNE diesen Re-Export
   // ist store.bootstrapTenant undefined -> das CLI wuerfe einen TypeError.

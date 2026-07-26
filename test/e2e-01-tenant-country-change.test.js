@@ -1,15 +1,10 @@
 // E2E-01 (i18n-Testkatalog, tasks/i18n-tests/11-luecken-und-e2e.md:879) - Landwechsel eines
 // Bestandstenants (DE -> US).
 //
-// SOLL (rot): ein definierter, getesteter Uebergang - entweder aendert sich die Sprache
-// konsistent ueber alle Achsen, ODER der Wechsel wird mit begruendetem Fehler abgelehnt.
-// Heute existiert kein Aufrufer von setTenantGeo ausserhalb POST /api/onboard (das ueber
-// eine Self-Service-Session nicht erreichbar ist, WEB-20); der einzige Self-Service-
-// Schreibpfad fuer Tenant-Felder (POST /api/self-service/settings) filtert "country" ueber
-// selfServicePatch als unbekanntes Feld (SELF_SERVICE_FREE_FIELDS enthaelt nur agentName/
-// language/agentStyle, src/self-service.js:20) - der Request antwortet 200 OHNE Fehler,
-// OHNE die Aenderung vorzunehmen. Das ist WEDER ein konsistenter Wechsel NOCH eine
-// begruendete Ablehnung - genau der in E2E-01 beschriebene Fehlmodus.
+// P8 A3-Migration: dieser Test war "SOLL (rot)". Mit P8 (POST /api/self-service/settings
+// lehnt einen Patch mit "country" jetzt ueber lockedSelfServiceKeys VOR jedem Store-Zugriff
+// mit 409 ab, statt ihn still zu verschlucken) ist der Zielzustand erreicht - der Test
+// wandert von test:gates nach npm test.
 //
 // In-process pglite (Muster test/i9-self-service.test.js/WEB-09): kein Server-Spawn.
 import { test } from "node:test";
@@ -66,7 +61,7 @@ async function setup() {
   };
 }
 
-test("E2E-01 (SOLL rot): Land-Wechsel DE->US ist entweder konsistent uebernommen oder begruendet abgelehnt", async () => {
+test("Land-Wechsel DE->US wird begruendet abgelehnt statt still verschluckt (ex E2E-01)", async () => {
   const srv = await setup();
   try {
     const res = await fetch(`${srv.base}/api/self-service/settings`, {
