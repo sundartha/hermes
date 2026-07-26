@@ -72,6 +72,39 @@ test("BK3 forceNumberCountry US ueberschreibt Kauf-Land, Sprache bleibt am Herku
   assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
 });
 
+// A1 (PLAN-I18N-FIX, P10): der Wurzelfix von E2E-04 Teil 1 - fallbackCountry faerbt NUR
+// das Kauf-Land, NIEMALS die Sprache eines Tenants ohne eigene Geo. Flip-stabil (gilt vor
+// UND nach dem DEFAULT_LANGUAGE-Flip): der Tenant ohne Geo bekommt IMMER den Weltdefault,
+// nie die Sprache des Landes, in dem die Plattform zufaellig fuer ihn einkauft.
+test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Plattform-Fallback-Land", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_no_geo", {});
+  const r = requestNumberForPaidTenant(s, {
+    tenantId: "t_no_geo",
+    fallbackCountry: "FR",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.country, "FR", "Kauf-Land folgt dem Fallback");
+  assert.notEqual(r.number.language, "fr", "Sprache folgt dem Fallback-Land NICHT");
+});
+
+// Schwester-Pin: MIT eigener Tenant-Geo gewinnt die Tenant-Sprache ueber fallbackCountry.
+test("requestNumberForPaidTenant: Tenant MIT Geo DE schlaegt fallbackCountry FR -> 'de'", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_geo_de", {});
+  setTenantGeo(s, "t_geo_de", { country: "DE", defaultLanguage: "de" });
+  const r = requestNumberForPaidTenant(s, {
+    tenantId: "t_geo_de",
+    fallbackCountry: "FR",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.language, "de", "Tenant-Geo gewinnt ueber den Plattform-Fallback");
+});
+
 // T2: Idempotenz - zweite Aktivierung kauft nicht doppelt.
 test("BK3-T2 zweiter Trigger -> already_provisioned, weiterhin eine Nummer", () => {
   const s = makeDefaultState();

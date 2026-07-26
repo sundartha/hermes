@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
-import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import { DEFAULT_COUNTRY } from "../src/store/defaults.js";
 
 const postJson = (url, body) =>
   fetch(url, {
@@ -66,7 +66,7 @@ test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async 
     const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_de" });
     const json = await res.json();
     assert.equal(json.country, DEFAULT_COUNTRY);
-    assert.equal(json.language, DEFAULT_LANGUAGE);
+    assert.equal(json.language, "de");
     const store = srv.readStore();
     const tenant = store.tenants.find((t) => t.id === "t_de");
     assert.equal(tenant.country, "DE");
@@ -88,7 +88,7 @@ test("Onboard mit ungueltigem country -> ignoriert, Fallback DE/de (fail-safe)",
     });
     const json = await res.json();
     assert.equal(json.country, DEFAULT_COUNTRY);
-    assert.equal(json.language, DEFAULT_LANGUAGE);
+    assert.equal(json.language, "de");
     assert.equal(srv.readStore().tenants.find((t) => t.id === "t_junk").country, "DE");
   } finally {
     await srv.stop();

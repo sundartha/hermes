@@ -4,10 +4,11 @@
 // (triggerTenantProvisioning) UND die Tests rufen dieselbe Funktion, keine Replik.
 // Pure: kein store.save, kein config-Zugriff, kein Audit/Log (Command-Query-Trennung,
 // P5/P6) - Caps + Fallback-Land + Kauf-Land-Override kommen als Argumente herein (testbar
-// mit makeDefaultState). Verhaltens-identisch zur bisherigen Inline-Komposition (provider
-// TELNYX explizit, weil DEFAULT_PROVIDER = TWILIO; Herkunftsland aus Tenant-Geo mit
-// Fallback; Sprache aus dem HERKUNFTSland). KAUF-Land entkoppelt: forceNumberCountry
-// (z.B. "US") ueberschreibt NUR number.country, nie die Sprache - leer = byte-identisch.
+// mit makeDefaultState). provider TELNYX explizit, weil DEFAULT_PROVIDER = TWILIO.
+// KAUF-Land entkoppelt: forceNumberCountry (z.B. "US") ueberschreibt NUR number.country,
+// nie die Sprache - leer = byte-identisch. A1 (PLAN-I18N-FIX): Kauf-Land und Sprache sind
+// ZWEI getrennte Achsen, die vorher EINE Variable teilten - das Kauf-Land darf auf
+// fallbackCountry zurueckfallen, die Sprache NICHT (s. requestNumberForPaidTenant).
 import {
   tenantHasLiveNumber,
   tenantGeo,
@@ -30,16 +31,18 @@ export function requestNumberForPaidTenant(
   // active), wird KEINE zweite angefragt (Webhook-Retry / Folge-'updated' kauft nie doppelt).
   if (tenantHasLiveNumber(s, tenantId))
     return { ok: false, reason: "already_provisioned" };
-  // Herkunftsland = Quelle der Sprache; Kauf-Land = wo die Nummer entsteht. forceNumber-
-  // Country (z.B. "US") trennt beide: leer/undefined -> Kauf-Land = Herkunftsland
-  // (byte-identisch). Die Sprache bleibt IMMER am Herkunftsland (homeCountry).
-  const homeCountry = tenantGeo(s, tenantId).country || fallbackCountry;
-  const numberCountry = resolveNumberCountry(homeCountry, forceNumberCountry);
+  // Zwei getrennte Achsen, die bisher EINE Variable teilten: das KAUF-Land darf auf den
+  // Plattform-Fallback zurueckfallen, die SPRACHE nicht. Ein Tenant ohne eigenes Land hat
+  // keine belegte Sprache - er bekommt den Weltdefault, nicht die Sprache des Landes, in
+  // dem die Plattform zufaellig einkauft (E2E-04). forceNumberCountry (z.B. "US") faerbt
+  // NUR das Kauf-Land.
+  const tenantCountry = tenantGeo(s, tenantId).country;
+  const numberCountry = resolveNumberCountry(tenantCountry || fallbackCountry, forceNumberCountry);
   return requestNumber(s, {
     tenantId,
     provider: PROVIDER.TELNYX,
     country: numberCountry,
-    language: languageForCountry(homeCountry),
+    language: languageForCountry(tenantCountry),
     maxNumbers,
     maxNumbersPerTenant,
   });

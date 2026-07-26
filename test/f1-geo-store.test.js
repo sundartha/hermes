@@ -61,7 +61,6 @@ before(async () => {
 // Aufloesungs-Praezedenz immer ueberstimmen (Praezedenz-Bug). null = "nicht gesetzt".
 test("defaultSettings() traegt language = null (optionales Override, P4 #8)", () => {
   assert.equal(defaultSettings().language, null);
-  assert.equal(DEFAULT_LANGUAGE, "de");
   assert.equal(DEFAULT_COUNTRY, "DE");
 });
 
@@ -158,7 +157,7 @@ test("seedBootstrapNumber: Default-Geo = DE/de (bestehende Aufrufe verhaltens-er
   seedBootstrapNumber(s, "+491511234567", BOOTSTRAP_TENANT_ID);
   const num = s.numbers.find((n) => n.e164 === "+491511234567");
   assert.equal(num.country, DEFAULT_COUNTRY);
-  assert.equal(num.language, DEFAULT_LANGUAGE);
+  assert.equal(num.language, "de");
 });
 
 test("seedBootstrapNumber: explizites country/language landet auf dem Record (FR/+33)", () => {
@@ -169,13 +168,33 @@ test("seedBootstrapNumber: explizites country/language landet auf dem Record (FR
   assert.equal(num.language, "fr");
 });
 
+// A1 (PLAN-I18N-FIX, P10): country=FR OHNE explizites language -> die Sprache wird aus
+// dem LAND abgeleitet ('fr'), NICHT aus dem Weltdefault. Flip-stabil: gilt vor UND nach
+// dem DEFAULT_LANGUAGE-Flip identisch.
+test("seedBootstrapNumber: country=FR ohne language -> 'fr' (Sprache am Land, nicht am Weltdefault)", () => {
+  const s = makeDefaultState();
+  seedBootstrapNumber(s, "+33987654321", BOOTSTRAP_TENANT_ID, undefined, "FR");
+  const num = s.numbers.find((n) => n.e164 === "+33987654321");
+  assert.equal(num.country, "FR");
+  assert.equal(num.language, "fr");
+});
+
 // ---- (A) Number-Record Geo: requestNumber ----
 test("requestNumber: Default-Geo = DE/de", () => {
   const s = makeDefaultState();
   const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, ...CAPS });
   assert.equal(res.ok, true);
   assert.equal(res.number.country, DEFAULT_COUNTRY);
-  assert.equal(res.number.language, DEFAULT_LANGUAGE);
+  assert.equal(res.number.language, "de");
+});
+
+// A1 (PLAN-I18N-FIX, P10): Schwester-Pin zu seedBootstrapNumber oben, fuer requestNumber.
+test("requestNumber: country=FR ohne language -> 'fr'", () => {
+  const s = makeDefaultState();
+  const res = requestNumber(s, { tenantId: BOOTSTRAP_TENANT_ID, country: "FR", ...CAPS });
+  assert.equal(res.ok, true);
+  assert.equal(res.number.country, "FR");
+  assert.equal(res.number.language, "fr");
 });
 
 test("requestNumber: explizites country/language (FR) landet auf der angefragten Nummer", () => {
