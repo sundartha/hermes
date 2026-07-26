@@ -1530,6 +1530,13 @@ naechste Phase die Beschreibungen versehentlich wieder in die Lokalisierung hine
   > ausloesen und pruefen, ob `goal`/`briefing` als vollstaendiger Ich-Satz mit konkretem Anlass
   > ankommen (nicht als Infinitiv-Stummel). Der Marker-Pin-Test bleibt die einzige automatisierte
   > Absicherung - er haelt den Wortlaut, nicht die Wirkung.
+  >
+  > **Und sie ist zwingend eine NACH-Deploy-Pruefung.** claude.ai holt die Tool-Beschreibungen vom
+  > LIVE-Dienst; am 2026-07-26 am Connector abgelesen, liefert er noch wortgleich den deutschen
+  > Bestandstext. Vor dem Deploy misst die Handprobe also den alten Zustand und beweist nichts.
+  > Wer sie vorziehen will, braucht einen Connector gegen eine Staging-Instanz - sonst gilt:
+  > deployen, dann pruefen, und bei Regress ist `git revert` des Beschreibungs-Commits der
+  > Rueckweg (die Beschreibungen haengen an keiner Datenmigration).
 
 **Abnahme.** E2E-06 nicht mehr in der Rot-Liste (Rot-Liste 2 -> 1, es bleibt GAP-05 als getragenes
 Risiko). `npm test` gruen. Zusaetzlich zwei Belege, die keine Suite liefert: (a) ein Smoke gegen
