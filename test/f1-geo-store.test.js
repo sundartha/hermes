@@ -33,7 +33,10 @@ import {
   BOOTSTRAP_TENANT_ID,
   DEFAULT_COUNTRY,
   DEFAULT_LANGUAGE,
+  TENANT_STATUS,
 } from "../src/store/defaults.js";
+import { applySchema, migrate } from "../src/db/migrate.js";
+import { languageForCountry } from "../src/i18n/locales.js";
 
 const A = "tenant_a";
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 5 };
@@ -346,6 +349,83 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   const num = reopened.load().numbers.find((n) => n.id === "num_legacy");
   assert.equal(num.country, null, "fehlendes country -> null (kein undefined-Drift)");
   assert.equal(num.language, null, "fehlendes language -> null (kein undefined-Drift)");
+});
+
+// ---- GAP-34: Bestands-Backfill fuer number.country/language ----
+// SOLL (11-luecken-und-e2e.md + Owner-Entscheidung E2, PLAN-I18N-TESTS.md Abschnitt 7): die
+// Migration heilt Bestandszeilen - Sprache folgt dem Land, das Land wird aus der
+// DID-Vorwahl ABGELEITET, nie geraten; ohne ableitbares Land bleibt das Feld leer.
+// Gemessen fuehrt migrate() genau zwei Backfills (period_start, account_email) und
+// keinen fuer country/language. Beide Bloecke sind deshalb rot.
+// Gegen languageForCountry formuliert, NICHT gegen "en"/"de": DEFAULT_LANGUAGE ist seit
+// P10 env-umschaltbar - ein Literal-Pin waere beim naechsten Flip falsch-rot.
+// Die FR-Zeile ist load-bearing: US bezieht seine Sprache aus DEFAULT_LANGUAGE (kein
+// Tabellen-Eintrag in LANGUAGE_FOR_COUNTRY), FR aus dem Tabellen-Eintrag. Ohne die
+// FR-Zeile waere der Block genau dann falsch-GRUEN, wenn der Weltdefault auf "de" steht -
+// ein gruener Test, der den fehlenden Backfill zum Sollzustand erklaert (Pre-Mortem).
+const LEGACY_TENANT = "t_legacy";
+const LEGACY_US_E164 = "+12025550123";
+const LEGACY_FR_E164 = "+33123456789";
+const LEGACY_AT_E164 = "+436601234567";
+const LEGACY_DE_E164 = "+4915112340001";
+
+// Frische pglite-DB: Schema, ein Tenant, die uebergebenen Bestandszeilen, dann migrate().
+// Liefert conn (fuer den Idempotenz-Zweitlauf) + rows() als geordnete Projektion.
+async function seedAndMigrate(numbers) {
+  const conn = new PGlite();
+  await applySchema(conn);
+  await conn.query(`INSERT INTO tenant (id, status) VALUES ($1, $2)`, [
+    LEGACY_TENANT,
+    TENANT_STATUS.ACTIVE,
+  ]);
+  for (const n of numbers) {
+    await conn.query(
+      `INSERT INTO number (id, tenant_id, e164, provider, status, country, language)
+       VALUES ($1, $2, $3, 'telnyx', 'active', $4, $5)`,
+      [n.id, LEGACY_TENANT, n.e164, n.country, n.language],
+    );
+  }
+  await migrate(conn, LEGACY_TENANT);
+  const rows = async () =>
+    (await conn.query(`SELECT id, country, language FROM number ORDER BY id`)).rows;
+  return { conn, rows };
+}
+
+test("GAP-34 (SOLL, rot) - die Migration zieht number.language auf das Land der Nummer nach, ohne Kollateralschaden, idempotent", async () => {
+  const { conn, rows } = await seedAndMigrate([
+    { id: "num_at", e164: LEGACY_AT_E164, country: "AT", language: "de" },
+    { id: "num_fr", e164: LEGACY_FR_E164, country: "FR", language: "de" },
+    { id: "num_us", e164: LEGACY_US_E164, country: "US", language: "de" },
+  ]);
+  const nach = await rows();
+  assert.deepEqual(
+    nach,
+    [
+      { id: "num_at", country: "AT", language: languageForCountry("AT") },
+      { id: "num_fr", country: "FR", language: languageForCountry("FR") },
+      { id: "num_us", country: "US", language: languageForCountry("US") },
+    ],
+    "die franzoesische und die US-Zeile sprechen weiter Deutsch, weil es keinen Backfill gibt - " +
+      "AT ist die Gegenprobe gegen Kollateralschaden",
+  );
+
+  await migrate(conn, LEGACY_TENANT);
+  assert.deepEqual(await rows(), nach, "zweiter Lauf aendert nichts (idempotent)");
+});
+
+test("GAP-34 (SOLL, rot) - fehlendes Land wird aus der DID-Vorwahl abgeleitet, ohne Vorwahl bleibt es leer (E2: kein Raten)", async () => {
+  const { rows } = await seedAndMigrate([
+    { id: "num_de_legacy", e164: LEGACY_DE_E164, country: null, language: null },
+    { id: "num_ohne_did", e164: null, country: null, language: null },
+  ]);
+  assert.deepEqual(
+    await rows(),
+    [
+      { id: "num_de_legacy", country: "DE", language: languageForCountry("DE") },
+      { id: "num_ohne_did", country: null, language: null },
+    ],
+    "eine Bestandsnummer mit eindeutiger Vorwahl bleibt ohne Land - und eine ohne Vorwahl darf keines bekommen",
+  );
 });
 
 // ---- (C) pg-Roundtrip: Tenant-Geo ----

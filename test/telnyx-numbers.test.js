@@ -56,6 +56,10 @@ const orderResponder = (url) =>
     ? { json: { data: { phone_numbers: [{ id: "ord_sub_1", phone_number: "+4915112340001" }] } } }
     : { json: { data: [{ id: "num_abc", phone_number: "+4915112340001" }] } };
 
+// DID-08 (Buchhaltung, 06-nummern-provisioning.md): die Haelfte "der Order-Body traegt
+// KEIN Regulatory-/Bundle-Feld" ist woertlich die deepEqual-Assertion dieses Tests -
+// kein zweiter Test (G5). Die zweite Haelfte (Fehlerpfad ohne Differenzierung) steht
+// als eigener 422-Block weiter unten.
 test("orderNumber: connection_id im Order-Body + Idempotency-Key -> {e164, providerNumberId via resolve}", async () => {
   const calls = stubFetch(orderResponder);
   const res = await prov.orderNumber({
@@ -202,4 +206,38 @@ test("orderNumber 402 mit kaputtem/leerem Body: Fallback auf status-only, throw 
     () => prov.orderNumber({ e164: "+4915112340001" }),
     /Telnyx orderNumber fehlgeschlagen: HTTP 402$/,
   );
+});
+
+const REGULATORY_422_BODY = JSON.stringify({
+  errors: [{ code: "10009", title: "Regulatory requirements not met" }],
+});
+
+// DID-08: eine Regulatory-Ablehnung (der reale Grund, warum ein US-/GB-Kauf scheitert)
+// ist beim Kauf NICHT strukturiert unterscheidbar: orderNumber ruft assertTelnyxOk OHNE
+// attachStatus (anders als releaseNumber, das den 404-Konvergenzfall braucht). Ein
+// Aufrufer kann "Papierkram fehlt" nicht von "Provider kaputt" trennen, ohne den
+// Meldungstext zu regexen - und der Text ist kein Vertrag.
+test("DID-08 (Charakterisierung, gruen) - eine 422-Regulatory-Ablehnung traegt keinen providerStatus", async () => {
+  stubFetch({ ok: false, status: 422, text: REGULATORY_422_BODY });
+  await assert.rejects(
+    () => prov.orderNumber({ e164: "+12025550123", connectionId: "conn_1" }),
+    (err) => {
+      assert.match(err.message, /HTTP 422/);
+      assert.equal(err.providerStatus, undefined, "kein strukturierter Status am Kauf-Fehler");
+      assert.equal(err.providerCode, "10009", "nur der rohe Telnyx-Code ist maschinenlesbar");
+      return true;
+    },
+  );
+});
+
+// DID-09, Gegenprobe: die Luecke liegt in der TABELLE, nicht im Adapter - gibt jemand
+// einen type mit, reicht der Adapter ihn korrekt durch.
+test("DID-09 (Mechanismus, gruen) - searchNumbers setzt filter[phone_number_type] genau dann, wenn ein type kommt", async () => {
+  const mitTyp = stubFetch({ json: { data: [] } });
+  await prov.searchNumbers({ countryCode: "US", type: "local" });
+  assert.match(decodeURIComponent(mitTyp[0].url), /filter\[phone_number_type\]=local/);
+
+  const ohneTyp = stubFetch({ json: { data: [] } });
+  await prov.searchNumbers({ countryCode: "US" });
+  assert.doesNotMatch(decodeURIComponent(ohneTyp[0].url), /filter\[phone_number_type\]/);
 });
