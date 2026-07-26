@@ -182,7 +182,7 @@ P5 -> P7 ist der kritische Pfad, an dem der Weltstart haengt - nicht die Sprachk
 
 ---
 
-## 3. Owner-Entscheidungen (alle 15 gefallen am 2026-07-25)
+## 3. Owner-Entscheidungen (15 gefallen am 2026-07-25, O14 nachgereicht am 2026-07-26)
 
 > **Diese Tabelle war eine Fragenliste und ist jetzt eine Entscheidungsliste.** Die Spalte
 > "Entscheidung" ist ab sofort **bindend und umsetzbar**. Die urspruengliche Empfehlung steht
@@ -208,6 +208,7 @@ P5 -> P7 ist der kritische Pfad, an dem der Weltstart haengt - nicht die Sprachk
 | **O11** | **Kein Backfill.** Es gibt keine fremden Bestandskunden (Praemisse P-A) - der Flip braucht keine vorherige Datenkorrektur. Der **Schreibpfad-Fix bleibt** (`state-ops.js:674`, `:1257` schreiben `DEFAULT_LANGUAGE` als Default-Parameter IN den Datensatz), damit kuenftige Datensaetze nicht falsch materialisieren. | WORLD-01, WORLD-03, PROMPT-03, PROMPT-09, UI-14, UI-18, FMT-28 | **JA, und es vereinfacht den Plan erheblich.** Die beiden Safety-Befunde aus P-A (Offenlegungssatz, STT/TTS-Locale) bleiben trotzdem Abnahmekriterium von P10. |
 | **O12** | **`paymentCurrency=usd` bleibt ein legaler Wert; die Anzeige folgt der Konfiguration.** Das ist die Invariante von Entscheidung 7.1 (Anzeige-Waehrung == Belastungs-Waehrung), kein Widerspruch dazu. Der Test prueft Waehrungs-Treue, keine USD-Vorgabe. | MCP-08 | nein |
 | **O13** | **Rechtstexte sofort beauftragen**, auch wenn der Einbau erst in P14 landet. DE bleibt die verbindliche Fassung, EN ausdruecklich informative Uebersetzung mit Vorrangklausel. **Bis freigegebener Text vorliegt liefert die EN-Route 404**, keinen Platzhalter. | GAP-15 | nein. Einziges Element mit externem Vorlauf - Bestellung gehoert in P1, nicht in P14. |
+| **O14** (2026-07-26, nachgereicht) | **Die MCP-Tool-Beschreibungen bleiben einsprachig ENGLISCH** und folgen NICHT der Tenant-Sprache. Sie werden vom Client-Modell gelesen, nicht vom Tenant: **Modellsprache != Nutzersprache** ist ab hier eine dokumentierte Systemgrenze. Umsetzung: einmalige, **emphase-erhaltende** Uebersetzung der heute deutschen Beschreibungen und `.describe()`-Texte in `src/mcp-tools.js`, ohne Sprachverzweigung; der E2E-06-Kanal `mcpErrorLiterals` wird entsprechend auf tenant-sichtbaren Text eingegrenzt (R5-Korrektur). | E2E-06 | nein. Loest die einzige offene Frage von **P15**; Risiko und Gegenmassnahme (convo-bench vor Deploy) stehen dort. |
 
 ### Was nach dieser Runde noch offen ist
 
@@ -1460,14 +1461,23 @@ deshalb unveraendert dieselben drei Lecks - gemessen, nicht vermutet.
    476, 480, 566, 590, 617) plus die Leertexte `"Noch keine Anrufe."` (669) und
    `"Kalender ist leer."` (706) und die Textblock-Labels aus dem P12-S3.
 
-**Vorbedingung - eine Owner-Frage, sie blockiert Teil 3.** Sollen die **MCP-Tool-Beschreibungen**
-ueberhaupt der Tenant-Sprache folgen? Sie werden nicht vom Tenant gelesen, sondern vom **Client-
-Modell** (Claude in claude.ai), das aus ihnen ableitet, wann und wie es `place_call` aufruft. Drei
-Optionen: (a) mituebersetzen - konsequent, aber die in der Anrufqualitaets-Kette teuer erarbeiteten
-Verbots-Formulierungen muessten dreifach gepflegt werden und wirken je Sprache anders;
-(b) Beschreibungen bewusst EN-only halten (Modellsprache != Nutzersprache) und den Testkanal
-entsprechend eingrenzen; (c) Beschreibungen unangetastet lassen und E2E-06 dauerhaft rot fuehren
-wie GAP-05. Teil 1 und 2 sind von dieser Frage **nicht** betroffen und koennen sofort laufen.
+**Vorbedingung - entschieden (Owner, 2026-07-26): Option (b), Tool-Beschreibungen bleiben
+EINSPRACHIG ENGLISCH.** Zur Frage stand, ob die **MCP-Tool-Beschreibungen** der Tenant-Sprache
+folgen sollen. Sie werden nicht vom Tenant gelesen, sondern vom **Client-Modell** (Claude in
+claude.ai), das aus ihnen ableitet, wann und wie es `place_call` aufruft. Verworfen: (a)
+mituebersetzen - die in der Anrufqualitaets-Kette teuer erarbeiteten Verbots-Formulierungen
+muessten dreifach gepflegt werden und wirken je Sprache anders; (c) unangetastet lassen und E2E-06
+dauerhaft rot fuehren wie GAP-05.
+
+**Was (b) konkret heisst - und dass es Arbeit ist, nicht Nichtstun.** Die Beschreibungen sind heute
+**deutsch**, nicht englisch. "EN-only" ist damit eine **einmalige Uebersetzung ins Englische ohne
+Sprachverzweigung**: `place_call`/`get_call_status`/`cancel_call`-Beschreibungen und alle
+`.describe()`-Schematexte (goal, briefing, mandate, constraints, context) werden **einmal** auf EN
+gezogen und bleiben dort, unabhaengig von `settings.language`. **Modellsprache != Nutzersprache**
+ist damit eine bewusste, dokumentierte Systemgrenze: alles, was der Tenant liest (Fehlertexte,
+Feldnamen, Leertexte, Widget), folgt seiner Sprache - alles, was nur das Client-Modell liest,
+bleibt EN. Diese Grenze gehoert als Kommentar an den Kopf von `src/mcp-tools.js`, sonst zieht die
+naechste Phase die Beschreibungen versehentlich wieder in die Lokalisierung hinein.
 
 **Pre-Mortem.**
 1. Die Ablehnungstexte wurden uebersetzt, aber der Grund-Code (`grund=budget` vs. `grund=reserve`)
@@ -1479,6 +1489,13 @@ wie GAP-05. Teil 1 und 2 sind von dieser Frage **nicht** betroffen und koennen s
 3. `public/tenant.html` bekam eine Sprachverzweigung, aber das Dashboard laedt seine Sprache aus
    einer zweiten Quelle als der Rest des Systems - zwei Aufloesungsregeln, und ab da faellt die
    Anzeige bei jedem Sprachwechsel auseinander.
+4. **Die EN-Uebersetzung der Tool-Beschreibungen hat die Anrufqualitaet gekostet.** Die deutschen
+   Texte sind kein Zufallsprodukt: die Anrufqualitaets-Kette hat genau an diesen Beschreibungen die
+   engen Verbote am Tool-Entscheidungspunkt erarbeitet ("KEIN Infinitiv-Stummel", "frage ZUERST
+   kurz beim Nutzer nach", "Harte Verbote gehoeren NICHT hierher"). Eine glatte, hoefliche
+   Uebersetzung schleift diese Emphase ab - und danach setzt das Client-Modell wieder vage
+   Auftraege ab, die im Anruf als Stummel ankommen. Gemerkt haette man es erst am naechsten
+   schlechten Gespraech, nicht in der Suite.
 
 **Gegenmassnahme.**
 - **Zu (1):** die Gate-Texte sind Anzeige, der Ablehnungsgrund ist Protokoll. Der `reason`/`grund`-
@@ -1494,18 +1511,26 @@ wie GAP-05. Teil 1 und 2 sind von dieser Frage **nicht** betroffen und koennen s
 - **Zu (3):** `public/tenant.html` benutzt **dieselbe** Sprache, die die Seite ohnehin schon
   ausliefert (P9-Wurzel), und leitet daraus das Format ab. Keine zweite Aufloesungsfunktion, kein
   `navigator.language` - dieselbe Regel, die P13 fuer das Widget durchgesetzt hat.
+- **Zu (4):** die Uebersetzung ist **emphase-erhaltend, nicht sinngemaess**. Jede Grossschreibung
+  (KEIN/ZUERST/NICHT/IMMER/WOERTLICH), jede Negation und jedes Beispiel bleibt an derselben Stelle
+  stehen; wo das Deutsche schroff ist, bleibt das Englische schroff. Kein "please", kein
+  Weichzeichnen. Beleg: ein Test, der je Beschreibung die Anzahl der Grossschreib-Marker und das
+  Vorhandensein des Negativ-Beispiels pinnt - dieselbe Mechanik, mit der P11 die Verbots-Emphase
+  der gesprochenen Prompts gehalten hat. **Vor dem Deploy** laeuft `npm run convo-bench`
+  (n >= 5) gegen die Baseline; die Beschreibungen sind der Tool-Entscheidungspunkt, und nur der
+  Bench sieht, ob das Modell danach schlechter waehlt.
 
-**Abnahme.** E2E-06 nicht mehr in der Rot-Liste - **falls** die Owner-Frage auf (a) oder (b) faellt;
-bei (c) bleibt E2E-06 dauerhaft rot und wird wie GAP-05 als getragenes Risiko gefuehrt, nicht als
-offener Punkt. `npm test` gruen. Zusaetzlich ein Smoke gegen einen laufenden Server: ein
-abgelehnter Outbound eines EN-Tenants liefert englischen `message`-Text **und** unveraenderten
-Grund-Schluessel.
+**Abnahme.** E2E-06 nicht mehr in der Rot-Liste (Rot-Liste 2 -> 1, es bleibt GAP-05 als getragenes
+Risiko). `npm test` gruen. Zusaetzlich zwei Belege, die keine Suite liefert: (a) ein Smoke gegen
+einen laufenden Server - ein abgelehnter Outbound eines EN-Tenants liefert englischen
+`message`-Text **und** unveraenderten Grund-Schluessel; (b) `convo-bench` ohne Regress gegen die
+Baseline (Pre-Mortem 4).
 
 **R5-Loeschpflichten.** Keine Loeschung. Eine R5-**Korrektur** an
 `test/e2e-06-en-purity-aggregate.test.js` (Kanal `mcpErrorLiterals` auf ausgelieferten Text
 eingrenzen), analog zur GAP-15-Korrektur in P14.
 
-**Aufwand.** 1 bis 2 Tage fuer Teil 1 und 2; Teil 3 haengt an der Owner-Entscheidung.
+**Aufwand.** 1 bis 2 Tage. Keine offene Owner-Frage mehr - die Phase ist vollstaendig baubar.
 
 ---
 
