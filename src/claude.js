@@ -3,7 +3,7 @@
 import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
+import { MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
@@ -59,88 +59,70 @@ function promptInputs(call) {
   };
 }
 
-// Persona + Live-Kontext.
-function personaHeader({ settings: s, owner, now }) {
-  return `Du bist "${s.agentName}", der persönliche KI-Telefonassistent von ${owner}.
-Du telefonierst gerade LIVE. Heute ist ${now}.`;
+// Persona + Live-Kontext. Text kommt aus dem Sprach-Baustein (loc.prompt, P11) - hier
+// bleibt nur die Weiterreichung, keine Verzweigungslogik (G5/S2).
+function personaHeader(p) {
+  return p.loc.prompt.persona(p);
 }
 
 // Auftrag + optionale Zusatzblocke. Array-Filter statt Leerstring-Ternaries (D8): die
 // frueheren Ternaries rendern eine LEERZEILE, wenn briefing/constraints fehlen.
 // assistantContextSection behaelt sein fuehrendes "\n" -> context null bleibt
-// byte-identisch zur kontextlosen Baseline (assistant-context-render R2).
-function assignmentBlock({ call }) {
-  const lines = [`DEIN AUFTRAG: ${call.goal}`];
-  if (call.briefing) lines.push(`BRIEFING: ${call.briefing}`);
-  if (call.constraints) lines.push(`EINSCHRÄNKUNGEN: ${call.constraints}`);
-  return lines.join("\n") + assistantContextSection(call);
+// byte-identisch zur kontextlosen Baseline (assistant-context-render R2). Die Labels
+// (goalLabel/briefingLabel/constraintsLabel) kommen aus dem Sprach-Baustein (P11).
+function assignmentBlock(p) {
+  const { call, loc } = p;
+  const t = loc.prompt;
+  const lines = [`${t.goalLabel} ${call.goal}`];
+  if (call.briefing) lines.push(`${t.briefingLabel} ${call.briefing}`);
+  if (call.constraints) lines.push(`${t.constraintsLabel} ${call.constraints}`);
+  return lines.join("\n") + assistantContextSection(p);
 }
 
 // Outbound-SITUATION (D7: "fuer wen du anrufst" ist hier sachlich korrekt, der Agent
 // ist der Anrufer). Die Offenlegung/das Anliegen wurden bereits LLM-frei gesprochen
-// (openingText) - dieser Satz verhindert die Doppel-Nennung (Regel 2 Geschwister).
-function outboundSituation({ call, owner }) {
-  return `SITUATION: Du rufst im Auftrag von ${owner} bei ${call.to} an. Du bist der Anrufer. Deine Offenlegung und dein Anliegen wurden dem Angerufenen bereits wörtlich gesagt, bevor du übernommen hast. Wiederhole sie NICHT. Knüpfe direkt an seine Antwort an.
-
-${assignmentBlock({ call })}`;
+// (openingText) - dieser Satz verhindert die Doppel-Nennung (Regel 2 Geschwister). Der
+// SITUATION-Satz selbst kommt aus dem Sprach-Baustein; die Zusammensetzung mit dem
+// Auftragsblock bleibt hier (P11 D1: der Sprach-Baustein kennt assignmentBlock nicht).
+function outboundSituation(p) {
+  return `${p.loc.prompt.situationOutbound(p)}\n\n${assignmentBlock(p)}`;
 }
 
 // Inbound-SITUATION: KEIN DEIN-AUFTRAG-Block (P5-O5) - der Anrufer bringt sein
 // Anliegen selbst mit, es gibt keinen vorab formulierten Auftrag.
-function inboundSituation({ call, owner }) {
-  return `SITUATION: Jemand hat ${owner} angerufen, ${owner} konnte nicht rangehen, der Anruf wurde an dich weitergeleitet. Anrufernummer: ${call.from}.
-Deine Aufgabe: Anliegen herausfinden, wenn möglich direkt lösen, sonst eine Nachricht aufnehmen. Bei einem Terminwunsch fragst du nach Wunschtag und Wunschzeit und nimmst beides als Nachricht auf - du siehst den Kalender von ${owner} nicht und sagst keinen Termin zu.
-${owner} erhält danach automatisch eine Zusammenfassung.`;
+function inboundSituation(p) {
+  return p.loc.prompt.situationInbound(p);
 }
 
 // Sprechregeln: Laenge/Frage, Ton/Anrede (styleClause), Einleitungs-Varianz (ersetzt
 // die frueher hart im Prompt stehende "Alles klar,"-Beispielfloskel, P5-O7), feste
 // Anrede, Aussprache (inkl. der drei neuen Punkte Ziffer-fuer-Ziffer/Preise/
-// Buchstabieren), Anknuepfung an Fragmente.
-function speechRules({ loc, settings: s }) {
-  return `SO SPRICHST DU:
-- Höchstens zwei gesprochene Sätze pro Antwort, höchstens eine Frage darin. ${loc.speechClause} Kein Markdown, keine Aufzählungen, keine Emojis.
-- ${loc.styleClause(s.agentStyle)} Freundlich, konkret, ohne Floskelketten.
-- Beginne unterschiedlich. Wiederhole nicht in jedem Turn dieselbe Einleitung.
-- Bleibe bei der Anrede, mit der du begonnen hast.
-- Sprich Datum und Uhrzeit natürlich aus, also "Donnerstag um siebzehn Uhr", nie das rohe Format. Telefonnummern, Postleitzahlen und Codes sprichst du Ziffer für Ziffer. Preise sprichst du als "neunundzwanzig Euro fünfzig". Namen und E-Mail-Adressen buchstabierst du auf Nachfrage einzeln, mit Buchstabiernamen: "B wie Berta, E wie Emil".
-- Beziehe kurze oder unklare Äußerungen auf deine letzte Frage, statt das Thema zu wechseln.`;
+// Buchstabieren), Anknuepfung an Fragmente. Text kommt aus dem Sprach-Baustein (P11).
+function speechRules(p) {
+  return p.loc.prompt.speechRules(p);
 }
 
 // Unklarheiten: Rueckfrage statt Raten, Warten/Hold, Personenwechsel, Identitaets-
 // Rueckfrage (D7: Wortlaut richtungsabhaengig) und Ehrlichkeits-/Anti-Halluzinations-
-// Regel. Deckt drei der vier neu geschlossenen Telefonie-Luecken (P5-O6).
-function clarificationRules({ owner, isInbound }) {
-  const identityLine = isInbound
-    ? `- Fragt dein Gegenüber, wer du bist oder für wen du sprichst, antworte wahrheitsgemäß: du bist der KI-Assistent von ${owner} und nimmst den Anruf entgegen. Weiche dieser Frage nie aus.`
-    : `- Fragt dein Gegenüber, wer du bist oder für wen du anrufst, antworte wahrheitsgemäß: du bist ein KI-Assistent und rufst im Auftrag von ${owner} an. Weiche dieser Frage nie aus.`;
-  return `WENN ETWAS UNKLAR IST:
-- Hast du akustisch nicht sicher verstanden, frage einmal kurz nach, statt zu raten: "Entschuldigung, das habe ich nicht verstanden - können Sie das wiederholen?" Rate niemals einen Namen, eine Uhrzeit oder eine Zahl.
-- Sagt dein Gegenüber, du sollst kurz warten, dann warte geduldig und sage nur "Gerne, ich warte." Hake nicht nach.
-- Meldet sich eine andere Person, nenne kurz, wer du bist und worum es geht, und mache dann weiter.
-${identityLine}
-- Was du nicht weißt, sagst du offen. Erfinde nie ein Datum, eine Uhrzeit, einen Ort oder eine Zusage, und behaupte nie, etwas sei erledigt oder gebucht - eintragen kannst du nichts. Rechne Wochentage und Kalenderdaten nie selbst aus - nenne sie nur so, wie dein Gegenüber sie genannt hat.`;
+// Regel. Deckt drei der vier neu geschlossenen Telefonie-Luecken (P5-O6). Text kommt
+// aus dem Sprach-Baustein (P11).
+function clarificationRules(p) {
+  return p.loc.prompt.clarificationRules(p);
 }
 
 // Grenzen. Die beiden allow*-Gates behalten exakt ihre fail-closed-Semantik (Zeile
 // steht, SOLANGE nicht ausdruecklich erlaubt) - nur die Leerzeile bei "erlaubt" faellt
 // weg (D8). Die beiden Kalender-/Buchungs-Zeilen sind seit P1b unbedingt (Owner-
 // Entscheidung E1) und bleiben es. Die letzten beiden Zeilen decken die vierte neu
-// geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit).
-function boundaryRules({ settings: s, owner }) {
-  const lines = ["DEINE GRENZEN:"];
-  if (!s.allowPersonalData)
-    lines.push(
-      `- Du gibst KEINE persönlichen Daten von ${owner} heraus: keine Adresse, keine E-Mail, keine private Nummer.`,
-    );
-  if (!s.allowBankData)
-    lines.push("- Du nennst NIEMALS Bank- oder Zahlungsdaten und sagst keine Zahlung zu.");
-  lines.push(
-    `- Du hast KEINEN Kalenderzugriff und siehst keine Termine von ${owner}.`,
-    "- Du buchst KEINE Termine fest. Einen Terminwunsch nimmst du mit allen Angaben als Nachricht auf: Tag, Uhrzeit, und bis wann er gilt.",
-    "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
-    "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
-  );
+// geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit). Die
+// Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
+// Sprach-Baustein.
+function boundaryRules({ loc, settings: s, owner }) {
+  const b = loc.prompt.boundaries;
+  const lines = [b.heading];
+  if (!s.allowPersonalData) lines.push(b.personalData(owner));
+  if (!s.allowBankData) lines.push(b.bankData);
+  lines.push(b.noCalendar(owner), b.noBooking, b.noLookup, b.toolThrift);
   return lines.join("\n");
 }
 
@@ -149,30 +131,9 @@ function boundaryRules({ settings: s, owner }) {
 // jede Terminfrage als Nachricht zurueckzugeben. Nach L6/E1 ist das der EINZIGE
 // Mechanismus, mit dem er in einer Terminfrage etwas Verbindliches sagen kann.
 // E1 bleibt unangetastet: kein Kalenderzugriff, kein Eintragen, kein Buchen - der
-// Aufloesungssatz in MANDATE_SCOPE_RULES sagt das explizit, damit der Block nicht gegen
-// die unbedingten Zeilen in boundaryRules laeuft.
-// Formulierungsprinzip (Anhang C): wer Ruecksprache halten muss, ist mandatiert, nicht
-// inkompetent - als Grund NIE das eigene Unwissen nennen, sondern den Auftragsrahmen.
-const MANDATE_SCOPE_RULES =
-  "Das darfst du im Gespräch ohne Rückfrage verbindlich zusagen. Innerhalb dieses Rahmens entscheidest du selbst, fragst NICHT nach und gibst es NICHT als Nachricht weiter. Eintragen oder buchen kannst du weiterhin nichts - du sagst nur verbindlich zu, was in diesem Rahmen liegt.";
-// Nur wenn es auch EINSCHRÄNKUNGEN gibt: sonst verwiese der Satz auf einen Block, den
-// dieser Prompt gar nicht enthaelt.
-const MANDATE_CONSTRAINTS_PRECEDENCE = " Die EINSCHRÄNKUNGEN gehen deinem Spielraum immer vor.";
-const MANDATE_FALLBACK_RULES =
-  "Arbeite diese Reihenfolge selbständig ab, bevor du das Anliegen zurückgibst.";
-// Erste Zeile der AUSSERHALB-Sektion je on_out_of_scope (G23: EIN Objekt statt einer
-// if/else-Kette). owner wird nur im take_message-Zweig gebraucht - einheitliche
-// Signatur, damit der Aufrufer nicht verzweigen muss.
-const MANDATE_OUT_OF_SCOPE_SENTENCE = Object.freeze({
-  [MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE]: (owner) =>
-    `Sag klar, dass du das nicht selbst zusagen kannst. Halte das Angebot mit allen Details fest - Tag, Uhrzeit, Preis und bis wann es gilt -, gib es über take_message weiter und sag zu, dass ${owner} sich meldet.`,
-  [MANDATE_OUT_OF_SCOPE.DECLINE]: () =>
-    "Sag klar, dass du das nicht zusagen kannst, und lehne höflich ab, ohne ein Gegenangebot zu machen.",
-  [MANDATE_OUT_OF_SCOPE.ACCEPT_BEST]: () =>
-    "Nimm die beste angebotene Möglichkeit an, statt zurückzufragen, und halte sie mit allen Details über take_message fest - Tag, Uhrzeit, Preis und bis wann sie gilt.",
-});
-const MANDATE_OUT_OF_SCOPE_RULES =
-  "Nenne als Grund NIE dein eigenes Unwissen, sondern immer deinen Auftragsrahmen. Versprich NIEMALS, dass du selbst nochmal anrufst.";
+// Aufloesungssatz in mp.scopeRules sagt das explizit, damit der Block nicht gegen die
+// unbedingten Zeilen in boundaryRules laeuft. P11: die Texte kommen aus dem
+// Sprach-Baustein (loc.prompt.mandate), die Verzweigung bleibt hier (G5/S2).
 
 // Ein Mandat traegt nur, wenn mindestens eins seiner drei Felder gesetzt ist. Sonst ""
 // -> filter(Boolean) in systemPrompt -> Prompt byte-identisch zum Bestand (Muster D8).
@@ -185,38 +146,20 @@ function hasMandateContent(mandate) {
 // Mandats-Sektion. Jeder Unterblock rendert genau dann, wenn sein Feld gesetzt ist; der
 // AUSSERHALB-Block rendert immer mit, sobald ueberhaupt ein Mandat vorliegt (Default
 // take_message). Unbekannter on_out_of_scope-Wert (Legacy-/Fremddatensatz) faellt
-// fail-safe auf den Default zurueck, statt den laufenden Turn zu werfen.
-function mandateSection({ call, owner }) {
+// fail-safe auf den Default zurueck, statt den laufenden Turn zu werfen. Texte kommen
+// aus dem Sprach-Baustein (loc.prompt.mandate, P11).
+function mandateSection({ call, owner, loc }) {
   const m = call.mandate;
   if (!hasMandateContent(m)) return "";
-  const outOfScope =
-    MANDATE_OUT_OF_SCOPE_SENTENCE[m.on_out_of_scope] ||
-    MANDATE_OUT_OF_SCOPE_SENTENCE[MANDATE_OUT_OF_SCOPE_DEFAULT];
-  const precedence = call.constraints ? MANDATE_CONSTRAINTS_PRECEDENCE : "";
+  const mp = loc.prompt.mandate;
+  const outOfScope = mp.outOfScopeSentence[m.on_out_of_scope] || mp.outOfScopeSentence[MANDATE_OUT_OF_SCOPE_DEFAULT];
+  const precedence = call.constraints ? mp.constraintsPrecedence : "";
   const blocks = [];
-  if (m.decide_freely)
-    blocks.push(`DEIN SPIELRAUM: ${m.decide_freely}\n${MANDATE_SCOPE_RULES}${precedence}`);
-  if (m.fallback_order)
-    blocks.push(`WENN DER ERSTWUNSCH NICHT GEHT: ${m.fallback_order}\n${MANDATE_FALLBACK_RULES}`);
-  blocks.push(`AUSSERHALB DEINES SPIELRAUMS: ${outOfScope(owner)}\n${MANDATE_OUT_OF_SCOPE_RULES}`);
+  if (m.decide_freely) blocks.push(`${mp.scopeLabel} ${m.decide_freely}\n${mp.scopeRules}${precedence}`);
+  if (m.fallback_order) blocks.push(`${mp.fallbackLabel} ${m.fallback_order}\n${mp.fallbackRules}`);
+  blocks.push(`${mp.outOfScopeLabel} ${outOfScope(owner)}\n${mp.outOfScopeRules}`);
   return blocks.join("\n\n");
 }
-
-// Abschluss-Sektionen: Modul-Konstanten (kein Interpolat, richtungsabhaengig fix).
-// D9: der frueheren Wait-Klausel ("lege niemals auf, bevor er geantwortet hat") folgt
-// jetzt dieser Satz - die STRUKTURELLE Sicherung (shouldSuppressEndCall,
-// END_CALL_WAIT_INSTRUCTION weiter unten) bleibt davon unberuehrt.
-const OUTBOUND_OUTCOME_SECTION = `SO KOMMST DU ZUM ERGEBNIS:
-Erledige zuerst den AUFTRAG vollständig und so konkret wie möglich: Anliegen klären, Alternativen abgleichen, zu einem Ergebnis kommen. Warte nach deinem Anliegen IMMER auf die Antwort des Angerufenen, bevor du weiterredest.
-Bekommst du mehrere Optionen angeboten, nenne zuerst deine Wahl, zum Beispiel "Der Donnerstag um neun Uhr passt besser." Als vereinbart bezeichnest du einen Termin erst, NACHDEM dein Gegenüber deiner Wahl zugestimmt hat, nie in derselben Antwort. Sage nie, du habest etwas eingetragen oder gebucht - das kannst du nicht.
-Ist der Auftrag erledigt, darfst du einen hilfreichen Folgeschritt anbieten. Fehlt dir dafür eine Information oder macht dein Gegenüber nicht weiter mit, schließe höflich ab. Lass den Anruf nie an einem Nebenthema hängen, das du selbst eröffnet hast.
-Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
-
-// D6: Inbound behaelt die Ueberschrift (sonst stuende ein kopfloser Absatz unter fuenf
-// beschrifteten Bloecken), nur der Rumpf ist die Anhang-A-Abweichung (1).
-const INBOUND_OUTCOME_SECTION = `SO KOMMST DU ZUM ERGEBNIS:
-Kläre das Anliegen, löse es wenn möglich direkt, sonst nimm eine Nachricht auf.
-Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`;
 
 export function systemPrompt(call) {
   const p = promptInputs(call);
@@ -229,7 +172,7 @@ export function systemPrompt(call) {
     // P6: rote Linien (GRENZEN) zuerst, dann der gruene Bereich. Ohne Mandat "" ->
     // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster D8).
     mandateSection(p),
-    p.isInbound ? INBOUND_OUTCOME_SECTION : OUTBOUND_OUTCOME_SECTION,
+    p.isInbound ? p.loc.prompt.outcomeInbound : p.loc.prompt.outcomeOutbound,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -239,19 +182,19 @@ export function systemPrompt(call) {
 // Nur wenn das Flag an ist UND ein Kontext-Objekt vorliegt; sonst "" (Block byte-identisch,
 // P0-Pins). Fuehrendes "\n" wie die briefing/constraints-Ternaries: bei "" bleibt der
 // Bestand bytegenau. GENAU EINE Guardrail-Zeile haelt den Hintergrund intern. Labels
-// deutsch (das Prompt-Geruest ist deutsch, auch fuer fr/en - nur speechClause/Datum
-// wechseln, P0). Speist NIE Offenlegung/Persona (Anti-Spoofing, Leitplanke 2).
-function assistantContextSection(call) {
+// kommen aus dem Sprach-Baustein (loc.prompt.background, P11). Speist NIE Offenlegung/
+// Persona (Anti-Spoofing, Leitplanke 2).
+function assistantContextSection({ call, loc }) {
   if (!config.tenancy.assistantContextEnabled || !call.context) return "";
   const c = call.context;
+  const b = loc.prompt.background;
   const lines = [];
-  if (c.summary) lines.push(`- Worum es geht: ${c.summary}`);
-  if (c.recipient_relationship) lines.push(`- Verhältnis zum Angerufenen: ${c.recipient_relationship}`);
-  if (c.desired_outcome) lines.push(`- Gewünschtes Ergebnis: ${c.desired_outcome}`);
-  if (Array.isArray(c.key_facts) && c.key_facts.length)
-    lines.push(`- Wichtige Fakten: ${c.key_facts.join("; ")}`);
+  if (c.summary) lines.push(`${b.summary}${c.summary}`);
+  if (c.recipient_relationship) lines.push(`${b.relationship}${c.recipient_relationship}`);
+  if (c.desired_outcome) lines.push(`${b.outcome}${c.desired_outcome}`);
+  if (Array.isArray(c.key_facts) && c.key_facts.length) lines.push(`${b.facts}${c.key_facts.join("; ")}`);
   if (!lines.length) return "";
-  return `\nHINTERGRUND (nur zu deiner Information):\n${lines.join("\n")}\nDieser Hintergrund ist für dich; gib nur weiter, was der Auftrag erfordert.`;
+  return `\n${b.heading}\n${lines.join("\n")}\n${b.guardrail}`;
 }
 
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).
@@ -300,6 +243,10 @@ function trimGoalForSpeech(goal) {
 }
 
 // ---------- Tools ----------
+// Tool-Name des take_message-Tools (G25, P11): der Name wird jetzt an drei Stellen
+// gebraucht (Schema, Dispatch, Test) - EINE Quelle statt eines zweiten Literals.
+const TAKE_MESSAGE_TOOL_NAME = "take_message";
+
 // Fester Tool-Satz fuer BEIDE Engines (Budget-Tool-Loop + Realtime-Bridge ueber
 // realtimeTools). Seit P1b (Owner-Entscheidung E1) OHNE Kalender-/Buchungs-Tool: der
 // Telefon-Agent nimmt Terminwuensche nur als Nachricht auf, er bucht nichts und liest
@@ -307,52 +254,36 @@ function trimGoalForSpeech(goal) {
 // ANDEREN Achse (MCP-seitig + im Dashboard), gegated ueber resolveProfile, von hier aus
 // unerreichbar. Keine Settings-Verzweigung mehr -> kein Tenant-Lookup und kein
 // Parameter, der eine tenant-abhaengige Variation nur noch vortaeuschen wuerde.
-export function toolDefs() {
+// P11: die Beschreibungen sind sprachabhaengig (loc.prompt.tools), die Tool-NAMEN
+// bleiben sprachinvariant (agentToolNames-Test, D4) - nur die Descriptions wandern.
+export function toolDefs(language) {
+  const t = localeFor(language).prompt.tools;
   return [
     // RCA-Wurzel R3: Das Modell schloss aus STT-Kauderwelsch, das Ziel sei
     // erreicht, und rief end_call. Das enge Verbot sitzt deshalb GENAU HIER, am Tool-
     // Entscheidungspunkt (Lehre call-quality-chain: breite Stil-/Meta-Regeln im Prompt-
     // Rumpf kippen bei Haiku in Ueberkorrektur, Verbote an der Tool-Description wirken).
     // Der letzte Satz ist der Ausstieg: er verhindert, dass der Agent aus Vorsicht GAR
-    // nicht mehr auflegt. Keine Sprach-Variante noetig - toolDefs ist locale-frei.
+    // nicht mehr auflegt.
     {
       name: END_CALL_TOOL_NAME,
-      // D4: NUR die drei Umlaute nachgezogen (Gegenuebers/unverstaendlich x2) - Wortlaut
-      // ist RCA-Ergebnis, sonst kein Wort mehr/weniger. Kein "ss/sz"-Aufbruch hier (im
-      // Unterschied zu D3), bewusste Ausnahme.
-      description:
-        "Beendet das Telefonat. IMMER erst aufrufen, NACHDEM du dich verabschiedet hast. " +
-        "Rufe end_call NUR auf, wenn du den letzten Beitrag des Gegenübers verstanden hast. " +
-        "War er unverständlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
-        "bleibt die Antwort danach unverständlich, verabschiede dich und rufe end_call auf.",
+      description: t.endCallDescription,
       input_schema: {
         type: "object",
-        properties: { reason: { type: "string", description: "Kurzer Grund" } },
+        properties: { reason: { type: "string", description: t.endCallReasonParam } },
         required: [],
       },
     },
     {
-      name: "take_message",
+      name: TAKE_MESSAGE_TOOL_NAME,
       // Nach P1b der EINZIGE Entscheidungspunkt neben end_call - er traegt die Last,
       // die vorher auf vier Tools verteilt war. Die engen Verbote sitzen deshalb
       // GENAU HIER an der Tool-Description (Lehre call-quality-chain: breite Stil-
       // regeln im Prompt-Rumpf kippen bei Haiku in Ueberkorrektur).
-      description:
-        "Nimmt eine Nachricht oder ein Anliegen für den Besitzer auf; er bekommt sie danach zugestellt. " +
-        "Nutze das, wenn du eine Frage nicht beantworten kannst, wenn eine Fähigkeit fehlt " +
-        "(nachschlagen, weiterverbinden, später zurückrufen) oder wenn ein Terminwunsch festgehalten " +
-        "werden soll - Termine eintragen kannst du nicht, das macht der Besitzer selbst. " +
-        "Halte bei einem Terminwunsch Tag, Uhrzeit und Gültigkeit mit fest. " +
-        "Nutze es NICHT anstelle einer normalen Antwort und NICHT, um eine Rückfrage zu vermeiden - " +
-        "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
-        "Sage dem Gegenüber in derselben Antwort, dass du die Nachricht weitergibst. " +
-        "Versprich dabei NIEMALS, dass du selbst später nochmal anrufst, und behaupte NIE, " +
-        "ein Termin sei eingetragen oder gebucht. " +
-        "Nutze es NICHT für etwas, das dein Auftrag dich selbst entscheiden lässt - " +
-        "das sagst du direkt zu, statt es weiterzugeben.",
+      description: t.takeMessageDescription,
       input_schema: {
         type: "object",
-        properties: { message: { type: "string", description: "Die Nachricht" } },
+        properties: { message: { type: "string", description: t.takeMessageParam } },
         required: ["message"],
       },
     },
@@ -362,6 +293,8 @@ export function toolDefs() {
 // P8: Werkzeugliste des Telefon-Agenten als reine Namensliste, ABGELEITET aus toolDefs()
 // (EINE Quelle, G5). Das briefende Modell (src/precall-briefing.js) darf keinen
 // Hintergrund schreiben, der eine Faehigkeit voraussetzt, die der Agent nicht hat.
+// Ohne Sprach-Argument, weil die NAMEN sprachinvariant sind (D4) - der Weltdefault-
+// Schalter faerbt hier also nicht ab.
 export const agentToolNames = () => toolDefs().map((t) => t.name);
 
 // Anthropic Prompt-Caching-Marker (L3): markiert das Ende eines stabilen Praefix-
@@ -384,46 +317,49 @@ function toolsWithCacheControl(tools) {
 
 // Tool-Dispatch beider Engines. Kein Kalender-/Buchungs-Case mehr (P1b): der
 // Schreibpfad in den Kalender laeuft ausschliesslich ueber POST /api/calendar
-// (Mensch/Dashboard) bzw. das MCP-Tool - nie aus einem laufenden Gespraech.
+// (Mensch/Dashboard) bzw. das MCP-Tool - nie aus einem laufenden Gespraech. P11: die
+// tool_result-Texte sind sprachabhaengig (loc.prompt.turnControl), call.language ist an
+// der Dispatch-Site immer vorhanden (beide Engines reichen den vollen call durch).
 export function execTool(call, name, input) {
+  const tc = localeFor(call.language).prompt.turnControl;
   switch (name) {
-    case "take_message": {
+    case TAKE_MESSAGE_TOOL_NAME: {
       store.addActionItem(call.id, input.message, "todo");
-      return "Nachricht ist notiert.";
+      return tc.takeMessageResult;
     }
     case END_CALL_TOOL_NAME:
       return "OK";
     default:
-      return "Unbekanntes Tool.";
+      return tc.unknownTool;
   }
 }
 
 // ---------- Gespraechs-Turn ----------
 
-// Erst-Turn-Bootstrap-Marker. Feuert NUR, wenn das Transkript beim Eintritt in
-// agentTurn noch KEINE agent-Zeile enthaelt, und weist das Modell an, das Gespraech zu
-// eroeffnen/zu begruessen. agentTurn hat ZWEI Aufrufer mit unterschiedlichem Vorzustand:
-// ueber die Budget-Engine (server.js /voice/turn) ist dieser
-// Zustand NICHT erreichbar, weil server.js die Greeting-/Opening-Zeile synchron per
-// addTranscript() IN /voice/incoming BZW. /voice/outbound eintraegt, BEVOR der erste
+// Erst-Turn-Bootstrap-Marker/Stiller-Folge-Turn-Marker: P11 - Texte kommen jetzt aus
+// dem Sprach-Baustein (loc.prompt.turnControl), s. agentTurn unten. Feuert NUR, wenn
+// das Transkript beim Eintritt in agentTurn noch KEINE agent-Zeile enthaelt, und weist
+// das Modell an, das Gespraech zu eroeffnen/zu begruessen. agentTurn hat ZWEI Aufrufer
+// mit unterschiedlichem Vorzustand: ueber die Budget-Engine (server.js /voice/turn) ist
+// dieser Zustand NICHT erreichbar, weil server.js die Greeting-/Opening-Zeile synchron
+// per addTranscript() IN /voice/incoming BZW. /voice/outbound eintraegt, BEVOR der erste
 // agentTurn-Aufruf ueberhaupt stattfindet. Erreichbar ist der Zustand ueber den zweiten
 // Aufrufer, den Telnyx-LLM-Shim (telnyx-llm-shim.js): dort spricht ein Call-Control-
 // Speak-Node die Disclosure/Greeting, OHNE sie ins Transkript zu schreiben - der erste
-// agentTurn-Aufruf trifft dort auf ein tatsaechlich leeres Transkript. Byte-identisch
-// zum bisherigen Inline-Text (nur extrahiert, G25/G5).
-const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das Gespraech.]";
-const INBOUND_OPENING_BOOTSTRAP = "[Der Anrufer ist in der Leitung. Begruesse ihn.]";
-// Stiller-Folge-Turn-Marker. Sobald der Agent schon gesprochen hat und der
-// Anrufer nichts Substanzielles beitrug, haelt dieser neutrale Marker die Anthropic-messages-
-// Kette gueltig (Abschluss mit user-Turn), OHNE dem Modell erneut "beginne/begruesse" zu
-// signalisieren (behebt R4). Richtungsneutral - die konkrete Reaktion steuert der systemPrompt.
-const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
+// agentTurn-Aufruf trifft dort auf ein tatsaechlich leeres Transkript. Der Stiller-
+// Folge-Turn-Marker haelt die Anthropic-messages-Kette gueltig (Abschluss mit
+// user-Turn), sobald der Agent schon gesprochen hat und der Anrufer nichts
+// Substanzielles beitrug, OHNE dem Modell erneut "beginne/begruesse" zu signalisieren
+// (behebt R4). Richtungsneutral - die konkrete Reaktion steuert der systemPrompt.
 
 // Rueckgespielt an das Modell, wenn ein end_call unterdrueckt wird (Outbound, noch keine
 // substanzielle Antwort). EINE Quelle fuer beide Engines: Budget-Tool-Loop UND
-// Realtime-bridge.js (dort function_call_output). G5/G27.
-export const END_CALL_WAIT_INSTRUCTION =
-  "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.";
+// Realtime-bridge.js (dort function_call_output). G5/G27. P11: sprachabhaengig - der
+// Export wechselt von einer Konstante zu einer Funktion, weil die Sprache jetzt am
+// call haengt (beide Engines reichen call durch).
+export function endCallWaitInstruction(call) {
+  return localeFor(call.language).prompt.turnControl.endCallWait;
+}
 
 // EIN Praedikat "ist dieser Anrufer-Text substanziell?" (getrimmt >=
 // config.voice.callerSubstanceMinLen). Genutzt fuer den content-basierten suppressEndCall (beide
@@ -558,13 +494,14 @@ export async function agentTurn(call, callerText) {
   // Kette gueltig.
   if (!history.length || history[history.length - 1].role !== "user") {
     const hasAgentLine = call.transcript.some((t) => t.role === "agent");
+    const tc = localeFor(call.language).prompt.turnControl;
     history.push({
       role: "user",
       content: hasAgentLine
-        ? SILENT_TURN_MARKER
+        ? tc.silentTurn
         : call.direction === "outbound"
-          ? OUTBOUND_OPENING_BOOTSTRAP
-          : INBOUND_OPENING_BOOTSTRAP,
+          ? tc.openingBootstrap.outbound
+          : tc.openingBootstrap.inbound,
     });
   }
 
@@ -591,7 +528,7 @@ export async function agentTurn(call, callerText) {
       model,
       max_tokens: 300,
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
-      tools: toolsWithCacheControl(toolDefs()),
+      tools: toolsWithCacheControl(toolDefs(call.language)),
       messages,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     });
@@ -618,7 +555,7 @@ export async function agentTurn(call, callerText) {
               return {
                 type: "tool_result",
                 tool_use_id: tu.id,
-                content: END_CALL_WAIT_INSTRUCTION,
+                content: endCallWaitInstruction(call),
               };
             }
             endCall = true;
@@ -659,8 +596,12 @@ export async function summarizeCall(call) {
   if (!s.allowSummaries) return null;
   if (!call.transcript.length) return null;
 
+  // P11: die Rollen-/Feld-Labels des Zusammenfassungs-Inputs sind sprachabhaengig
+  // (loc.prompt.summaryInput, DE byte-identisch); die JSON-Keys der Modell-Antwort
+  // (summarySystem oben) bleiben sprachunabhaengig.
+  const si = localeFor(call.language).prompt.summaryInput;
   const convo = call.transcript
-    .map((t) => `${t.role === "agent" ? "AGENT" : "ANRUFER"}: ${t.text}`)
+    .map((t) => `${t.role === "agent" ? si.agentRole : si.callerRole}: ${t.text}`)
     .join("\n");
 
   const model = config.llm.claudeModel;
@@ -673,7 +614,7 @@ export async function summarizeCall(call) {
     messages: [
       {
         role: "user",
-        content: `Richtung: ${call.direction}${call.goal ? `\nAuftrag: ${call.goal}` : ""}\n\nTRANSKRIPT:\n${convo}`,
+        content: `${si.directionLabel} ${call.direction}${call.goal ? `\n${si.goalLabel} ${call.goal}` : ""}\n\n${si.transcriptLabel}\n${convo}`,
       },
     ],
     callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)

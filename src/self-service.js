@@ -3,8 +3,7 @@
 // Tenant SELBST aendern darf, BEVOR store.updateSettings (die Admin-Whitelist)
 // laeuft. updateSettings wird NICHT aufgeweicht - diese Schicht liegt davor.
 
-import { LOCALES, SUPPORTED_LANGUAGES, localeFor } from "./i18n/locales.js";
-import { withInboundNotice } from "./i18n/inbound-notice.js";
+import { ALL_GREETING_TEMPLATES } from "./i18n/greeting-catalog.js";
 
 // Felder, die ein Tenant SELBST setzen darf - updateSettings ist die EINE Validierungs-
 // quelle (G5): einfache Felder werden dort typeof-gecheckt, die optionalen Enum-Overrides
@@ -36,38 +35,6 @@ export const SELF_SERVICE_LOCKED_FIELDS = ["country"];
 export function lockedSelfServiceKeys(patch) {
   return Object.keys(patch || {}).filter((k) => SELF_SERVICE_LOCKED_FIELDS.includes(k));
 }
-
-// Kuratierte greeting-Vorlagen (kein Freitext ueber Self-Service, PII-/Missbrauchs-
-// Riegel, Decision #7). {owner} wird zur Laufzeit ersetzt wie heute. Der Disclosure-
-// Satz ist NICHT Teil des greeting und bleibt fest verdrahtet (Regel 2).
-//
-// WEB-04: die Vorlagenmenge FOLGT der Tenant-Sprache. Der Vorlagen-Riegel selbst (nur
-// Vorlage, kein Freitext) bleibt unangetastet. Jede Vorlage traegt den Pflichtsatz
-// (GAP-14); zusammengesetzt statt fuer jede Sprache literal gepflegt (G5). Einmalig beim
-// Laden gebaut und eingefroren - kein Lazy-Init (P15), keine Allokation je Request.
-function buildTemplates(locale) {
-  return Object.freeze(
-    [locale.greetingDefault, ...locale.greetingVariants].map((t) =>
-      withInboundNotice(t, locale.inboundNotice),
-    ),
-  );
-}
-
-const GREETING_TEMPLATES_BY_LANGUAGE = Object.freeze(
-  Object.fromEntries(SUPPORTED_LANGUAGES.map((lang) => [lang, buildTemplates(LOCALES[lang])])),
-);
-
-// Die waehlbaren Vorlagen EINER Sprache (unbekannt -> Fallback wie localeFor).
-export function greetingTemplatesFor(language) {
-  return GREETING_TEMPLATES_BY_LANGUAGE[localeFor(language).language];
-}
-
-// Alle kuratierten Vorlagen ueber alle Sprachen - die Annahme-Menge von selfServicePatch.
-// Bewusst sprach-UNION: ein Patch darf language und greeting GLEICHZEITIG umstellen; eine
-// Pruefung gegen die alte Sprache wuerde genau diesen Wechsel-Patch verwerfen.
-export const ALL_GREETING_TEMPLATES = Object.freeze(
-  Object.values(GREETING_TEMPLATES_BY_LANGUAGE).flat(),
-);
 
 // Filtert einen rohen Patch auf den Self-Service-erlaubten Anteil. current = die
 // aktuellen Settings des Tenants (fuer den restrict-only-Vergleich). Liefert den

@@ -117,7 +117,7 @@ function messageChainContains(capturedBodies, marker) {
   );
 }
 
-test("GAP-28 (SOLL rot, 1/4): Outbound-Erst-Turn injiziert den deutschen Bootstrap-Marker trotz language=en", async () => {
+test("Outbound-Erst-Turn injiziert keinen deutschen Bootstrap-Marker bei language=en (ex GAP-28, 1/4)", async () => {
   bodies = [];
   queue = [textMessage("Hello, how can I help you today?")];
   const call = store.getCall("call_gap28_boot");
@@ -128,7 +128,7 @@ test("GAP-28 (SOLL rot, 1/4): Outbound-Erst-Turn injiziert den deutschen Bootstr
   );
 });
 
-test("GAP-28 (SOLL rot, 2/4): stiller Folge-Turn injiziert den deutschen Silent-Marker trotz language=en", async () => {
+test("stiller Folge-Turn injiziert keinen deutschen Silent-Marker bei language=en (ex GAP-28, 2/4)", async () => {
   bodies = [];
   queue = [textMessage("Sure, take your time.")];
   const call = store.getCall("call_gap28_silent");
@@ -139,7 +139,7 @@ test("GAP-28 (SOLL rot, 2/4): stiller Folge-Turn injiziert den deutschen Silent-
   );
 });
 
-test("GAP-28 (SOLL rot, 3/4): take_message liefert ein deutsches tool_result trotz language=en", async () => {
+test("take_message liefert kein deutsches tool_result bei language=en (ex GAP-28, 3/4)", async () => {
   bodies = [];
   queue = [
     toolUseOnlyMessage("take_message", { message: "Please note something for Jonas." }),
@@ -154,7 +154,7 @@ test("GAP-28 (SOLL rot, 3/4): take_message liefert ein deutsches tool_result tro
   );
 });
 
-test("GAP-28 (SOLL rot, 4/4): unterdruecktes end_call im Erst-Turn liefert ein deutsches tool_result trotz language=en", async () => {
+test("unterdruecktes end_call im Erst-Turn liefert kein deutsches tool_result bei language=en (ex GAP-28, 4/4)", async () => {
   bodies = [];
   queue = [toolUseOnlyMessage("end_call", {}), textMessage("Alright, I'll wait.")];
   const call = store.getCall("call_gap28_wait");

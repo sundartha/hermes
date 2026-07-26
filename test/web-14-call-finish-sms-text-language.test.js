@@ -49,7 +49,7 @@ function makeHarness({ call, summarizeCall, planSummarySms, smsCapture, notifyCa
   return callFinish;
 }
 
-test("WEB-14 (SOLL rot): abgebrochener EN-Call -> Notification enthaelt kein 'Anruf'", async () => {
+test("abgebrochener EN-Call -> Notification enthaelt kein 'Anruf' (ex WEB-14)", async () => {
   const notifyCapture = [];
   const call = seedCall({ language: "en", status: "cancelled", transcript: [] });
   const callFinish = makeHarness({
@@ -68,7 +68,7 @@ test("WEB-14 (SOLL rot): abgebrochener EN-Call -> Notification enthaelt kein 'An
   );
 });
 
-test("WEB-14 (SOLL rot): abgeschlossener EN-Call -> Summary-SMS-Body enthaelt kein 'Anruf'", async () => {
+test("abgeschlossener EN-Call -> Summary-SMS-Body enthaelt kein 'Anruf' (ex WEB-14)", async () => {
   const smsCapture = [];
   const notifyCapture = [];
   const call = seedCall({

@@ -8,7 +8,7 @@ import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
@@ -363,7 +363,11 @@ export function seedState({
   return {
     settings: {
       agentName: "Hermes",
-      greeting: "Hallo, hier ist der KI-Assistent von {owner}. Wie kann ich helfen?",
+      // P11: der reale Produkt-Default (DEFAULT_GREETING, store/defaults.js), NICHT ein
+      // handgeschriebener Kurztext - sonst erkennt greetingForLanguage (PROMPT-03) den
+      // Seed-Default nicht als Katalog-Vorlage und behandelt ihn faelschlich wie
+      // Admin-Freitext. Kein Bestandstest pinnt den frueheren Kurztext (geprueft).
+      greeting: DEFAULT_GREETING,
       allowCalendar: true,
       allowBooking: true,
       allowSummaries: true,

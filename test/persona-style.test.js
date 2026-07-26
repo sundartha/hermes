@@ -28,12 +28,13 @@ const FORMELL = {
   en: "Use a formal, neutral tone and address the other person politely.",
 };
 const NEUTRAL = "Sieze fremde Anrufer.";
-// P5: FIXED_RULE_FRAGE entfaellt - Laenge und "hoechstens eine Frage" sind in Anhang A
-// EIN Punkt geworden (siehe FIXED_RULE_KURZ). end_call-Regel lebt jetzt im
-// SO-KOMMST-DU-ZUM-ERGEBNIS-Block statt in einer eigenen Regelzeile.
-const FIXED_RULE_ENDCALL = "Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.";
-const FIXED_RULE_KURZ =
-  "- Höchstens zwei gesprochene Sätze pro Antwort, höchstens eine Frage darin.";
+// P11: Neutral-Anrede pro Sprache (i18n/locales.js NEUTRAL_ADDRESS_CLAUSE_*), fuer die
+// strukturelle PS3-Pruefung unten (Golden-Master-Pin wie WARM/FORMELL).
+const NEUTRAL_FOR = {
+  de: NEUTRAL,
+  fr: "Vouvoie les interlocuteurs que tu ne connais pas.",
+  en: "Address unfamiliar callers politely.",
+};
 
 const call = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, ...over });
 
@@ -75,30 +76,61 @@ test("PS2 agentStyle=null: Siez-Zeile byte-identisch im fixen Kontext, kein Stil
   assert.ok(!p.includes("duze") && !p.includes("tutoie"), "kein Stilsatz bei null");
 });
 
-// (3) gueltige ID -> lokalisierte Klausel ersetzt die Siez-Zeile; Stil-ID aus Tenant-
-// Settings, Sprache aus call.language (echte Komposition). Vollstaendigkeit ueber alle
-// drei Sprachen (Drift gegen PERSONA_STYLE_IDS faellt hier auf).
+// (3) gueltige ID -> lokalisierte Klausel ersetzt die Anrede-Klausel; Stil-ID aus
+// Tenant-Settings, Sprache aus call.language (echte Komposition). Vollstaendigkeit ueber
+// alle drei Sprachen (Drift gegen PERSONA_STYLE_IDS faellt hier auf).
+//
+// P11: die fixen Zeilen (Laenge/Frage-Regel, end_call-Abschluss) sind jetzt je Sprache
+// uebersetzt - kein DE-Literal-Pin mehr moeglich. Stattdessen strukturell: die
+// SO-SPRICHST-DU-Sektion (Index 2 in der "\n\n"-Sektionsliste, s. claude.js systemPrompt)
+// und die letzte Sektion (Abschluss) bleiben zwischen neutral/warm/formell IDENTISCH bis
+// auf die ausgetauschte Stil-Klausel. INBOUND (nicht outbound): die outbound-SITUATION
+// enthaelt selbst ein internes "\n\n" (Situation + Auftragsblock, claude.js
+// outboundSituation) und wuerde die Split-Indizes verschieben - inbound bleibt 1:1 zur
+// systemPrompt-Array-Reihenfolge.
+const SPEECH_SECTION_INDEX = 2;
 for (const lang of ["de", "fr", "en"]) {
-  test(`PS3 ${lang}: warm/formell ersetzen die Siez-Zeile`, () => {
-    const warm = systemPrompt(call({ tenantId: T_WARM, direction: "outbound", language: lang }));
-    assert.ok(
-      warm.includes(`- ${WARM[lang]} Freundlich, konkret, ohne Floskelketten.`),
-      "warm-Klausel eingewoben",
-    );
-    assert.ok(!warm.includes(NEUTRAL), "Siez-Zeile ersetzt (warm)");
+  test(`PS3 ${lang}: warm/formell ersetzen die Anrede-Klausel, fixe Zeilen bleiben unveraendert`, () => {
+    const neutralSections = systemPrompt(
+      call({ direction: "inbound", language: lang }),
+    ).split("\n\n");
+    const neutralSpeech = neutralSections[SPEECH_SECTION_INDEX];
+    const lastIdx = neutralSections.length - 1;
 
-    const formell = systemPrompt(
-      call({ tenantId: T_FORMELL, direction: "outbound", language: lang }),
+    const warmPrompt = systemPrompt(call({ tenantId: T_WARM, direction: "inbound", language: lang }));
+    const formellPrompt = systemPrompt(
+      call({ tenantId: T_FORMELL, direction: "inbound", language: lang }),
     );
+    const warmSections = warmPrompt.split("\n\n");
+    const formellSections = formellPrompt.split("\n\n");
+
+    assert.ok(warmSections[SPEECH_SECTION_INDEX].includes(WARM[lang]), `warm-Klausel eingewoben (${lang})`);
     assert.ok(
-      formell.includes(`- ${FORMELL[lang]} Freundlich, konkret, ohne Floskelketten.`),
-      "formell-Klausel eingewoben",
+      formellSections[SPEECH_SECTION_INDEX].includes(FORMELL[lang]),
+      `formell-Klausel eingewoben (${lang})`,
     );
-    // Die fixen Regeln bleiben in JEDEM Fall unveraendert.
-    for (const p of [warm, formell]) {
-      assert.ok(p.includes(FIXED_RULE_KURZ), "Laengen-/Frage-Regel fix");
-      assert.ok(p.includes(FIXED_RULE_ENDCALL), "end_call-Regel fix");
-    }
+
+    // Fixe Zeilen der SO-SPRICHST-DU-Sektion bleiben identisch, nur die Stil-Klausel
+    // wechselt (strukturelle Gleichheit statt DE-Literal-Pin).
+    const stripClause = (text, clause) => text.split(clause).join("<STYLE>");
+    assert.equal(
+      stripClause(warmSections[SPEECH_SECTION_INDEX], WARM[lang]),
+      stripClause(neutralSpeech, NEUTRAL_FOR[lang]),
+      `fixe Zeilen unveraendert, warm (${lang})`,
+    );
+    assert.equal(
+      stripClause(formellSections[SPEECH_SECTION_INDEX], FORMELL[lang]),
+      stripClause(neutralSpeech, NEUTRAL_FOR[lang]),
+      `fixe Zeilen unveraendert, formell (${lang})`,
+    );
+
+    // Abschluss-Sektion (end_call) bleibt in JEDEM Fall unveraendert.
+    assert.equal(warmSections[lastIdx], neutralSections[lastIdx], `end_call-Abschluss fix, warm (${lang})`);
+    assert.equal(
+      formellSections[lastIdx],
+      neutralSections[lastIdx],
+      `end_call-Abschluss fix, formell (${lang})`,
+    );
   });
 }
 

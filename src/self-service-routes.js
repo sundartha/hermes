@@ -13,12 +13,8 @@
 // store.updateSettings (greeting nur als Vorlage; Permission-Flags nur restriktiver;
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
 import { Router } from "express";
-import {
-  selfServicePatch,
-  greetingTemplatesFor,
-  hasCardOnFile,
-  lockedSelfServiceKeys,
-} from "./self-service.js";
+import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
+import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { requirePaymentEnabled } from "./billing/payment-gate.js";

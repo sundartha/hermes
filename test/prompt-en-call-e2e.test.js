@@ -61,7 +61,7 @@ async function startCapturingMock() {
   };
 }
 
-test("PROMPT-03 (SOLL rot): Inbound-Greeting fuer einen EN-Tenant ist strukturell englisch", async () => {
+test("Inbound-Greeting fuer einen EN-Tenant ist strukturell englisch (ex PROMPT-03)", async () => {
   const srv = await startServer({ seed: seedState({ settings: { language: "en" } }) });
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
@@ -83,7 +83,7 @@ test("PROMPT-03 (SOLL rot): Inbound-Greeting fuer einen EN-Tenant ist strukturel
   }
 });
 
-test("PROMPT-14 (SOLL rot): EN-Call bleibt NICHT frei von hartcodiertem Deutsch (Greeting + Prompt-Geruest + toolDefs)", async () => {
+test("EN-Call ist frei von hartcodiertem Deutsch: Greeting + Prompt-Geruest + toolDefs (ex PROMPT-14)", async () => {
   const mock = await startCapturingMock();
   const srv = await startServer({
     env: { ANTHROPIC_BASE_URL: mock.url },

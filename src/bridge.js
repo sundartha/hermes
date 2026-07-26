@@ -12,7 +12,7 @@ import {
   systemPrompt,
   shapeForSpeech,
   shouldSuppressEndCall,
-  END_CALL_WAIT_INSTRUCTION,
+  endCallWaitInstruction,
 } from "./claude.js";
 import { localeFor } from "./i18n/locales.js";
 import { safeEqual } from "./util.js";
@@ -59,9 +59,10 @@ function sendFunctionOutput(openaiWs, callId, output) {
   openaiWs.send(JSON.stringify({ type: "response.create" }));
 }
 
-// Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters)
-function realtimeTools() {
-  return toolDefs().map((t) => ({
+// Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters). P11:
+// sprachabhaengig (toolDefs(language)) - call ist an beiden Call-Sites in Scope.
+function realtimeTools(language) {
+  return toolDefs(language).map((t) => ({
     type: "function",
     name: t.name,
     description: t.description,
@@ -72,11 +73,11 @@ function realtimeTools() {
 // Gleiche Persona/Regeln wie die Budget-Engine, plus Sprech-Hinweis fuer Speech-to-Speech.
 // P5: der Barge-in-Halbsatz ("Mache kleine Pausen moeglich, lass dich unterbrechen.") ist
 // gestrichen - Barge-in laeuft auf Audio-Ebene per server_vad, nicht durch eine
-// Modellentscheidung, die Anweisung war irrefuehrend. Der Prosodie-Hinweis bleibt.
-// Reststring bleibt transliteriert (bridge.js ist laut L3 dormant, P5 investiert hier
-// keine Umlaut-Arbeit).
+// Modellentscheidung, die Anweisung war irrefuehrend. Der Prosodie-Hinweis bleibt. P11:
+// der Sprech-Hinweis kommt jetzt aus dem Sprach-Baustein (loc.prompt.realtimeSpeechStyle,
+// DE byte-identisch zum frueheren Inline-Suffix, transliteriert wie zuvor).
 function instructions(call) {
-  return systemPrompt(call) + "\n\nSPRECHWEISE: natuerlich, zuegig, kurze Saetze.";
+  return systemPrompt(call) + "\n\n" + localeFor(call.language).prompt.realtimeSpeechStyle;
 }
 
 // HEIKLE STELLE 2: Call-Ende-Puffer. Ruft die KI das end_call-Tool auf, wird NICHT sofort
@@ -190,7 +191,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
               output_audio_format: "g711_ulaw",
               input_audio_transcription: transcription,
               turn_detection: { type: "server_vad" },
-              tools: realtimeTools(),
+              tools: realtimeTools(call.language),
               tool_choice: "auto",
             },
           }),
@@ -373,7 +374,7 @@ export function handleOpenAiEvent(ev, ctx) {
           // (auch nicht waehrend/direkt nach der Offenlegung). Unterdrueckt -> Wait-Instruktion
           // zurueckspielen statt aufzulegen; sonst (d) HANGUP_MS-Puffer fuer die Verabschiedung.
           if (shouldSuppressEndCall(call)) {
-            sendFunctionOutput(openaiWs, item.call_id, END_CALL_WAIT_INSTRUCTION);
+            sendFunctionOutput(openaiWs, item.call_id, endCallWaitInstruction(call));
           } else {
             ctx.scheduleHangup("end_call von KI");
           }

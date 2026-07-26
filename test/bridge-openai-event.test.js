@@ -56,7 +56,7 @@ register("data:text/javascript," + encodeURIComponent(loaderSrc), import.meta.ur
 // config.js wuerde mit falschem Env eingefroren).
 const { attachMediaBridge } = await import("../src/bridge.js");
 const store = await import("../src/store.js");
-const { disclosureSentence, END_CALL_WAIT_INSTRUCTION } = await import("../src/claude.js");
+const { disclosureSentence, endCallWaitInstruction } = await import("../src/claude.js");
 const {
   openAiSockets,
   resetOpenAiSockets,
@@ -566,7 +566,7 @@ test("response.done setzt activeResponse=false (danach kein Barge-in-cancel)", a
 // aus wie bei jeder anderen Antwort - keine Sonderbehandlung, keine Kollision, kein
 // haengengebliebener Zustand.
 test("unterdrueckter end_call: response.create-Roundtrip + folgender Barge-in kollidieren nicht", async () => {
-  const { fake, sends, cleanup } = await setupCall(); // outbound, kein Transkript -> unterdrueckt
+  const { call, fake, sends, cleanup } = await setupCall(); // outbound, kein Transkript -> unterdrueckt
   try {
     feed(fake, {
       type: "response.done",
@@ -581,7 +581,7 @@ test("unterdrueckter end_call: response.create-Roundtrip + folgender Barge-in ko
         "openai",
         JSON.stringify({
           type: "conversation.item.create",
-          item: { type: "function_call_output", call_id: "e1", output: END_CALL_WAIT_INSTRUCTION },
+          item: { type: "function_call_output", call_id: "e1", output: endCallWaitInstruction(call) },
         }),
       ],
       ["openai", JSON.stringify({ type: "response.create" })],

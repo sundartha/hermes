@@ -45,7 +45,7 @@ function twoTenantSeed() {
   return s;
 }
 
-test("E2E-02 (SOLL rot): Inbound-Greeting - Tenant B (EN) darf keine deutschen Signalwoerter sprechen", async () => {
+test("Inbound-Greeting - Tenant B (EN) spricht keine deutschen Signalwoerter (ex E2E-02)", async () => {
   const srv = await startServer({ seed: twoTenantSeed() });
   try {
     const [resA, resB] = await Promise.all([
@@ -107,7 +107,7 @@ function makeHarness({ summarizeCall, smsCapture, notifyCapture }) {
   });
 }
 
-test("E2E-02 (SOLL rot): Summary-SMS - Tenant B (EN) darf kein 'Anruf' im SMS-Body tragen", async () => {
+test("Summary-SMS - Tenant B (EN) traegt kein 'Anruf' im SMS-Body (ex E2E-02)", async () => {
   const smsA = [];
   const smsB = [];
   const callA = seedCall({

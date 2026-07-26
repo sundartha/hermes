@@ -62,7 +62,7 @@ test("Web-Login-Tenant ohne Geo bekommt eine US-DID, language folgt dem Weltdefa
   );
 });
 
-test("E2E-04 (SOLL rot): Inbound-Greeting auf der resultierenden US-DID bleibt deutsch", async () => {
+test("Inbound-Greeting auf der resultierenden US-DID ist englisch (ex E2E-04)", async () => {
   const s = makeDefaultState();
   s.numbers.push({
     id: "num_owner",
@@ -101,7 +101,7 @@ test("E2E-04 (SOLL rot): Inbound-Greeting auf der resultierenden US-DID bleibt d
   }
 });
 
-test("E2E-04 (SOLL rot): Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf'", async () => {
+test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", async () => {
   const s = makeDefaultState();
   registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
   const r = requestNumberForPaidTenant(s, {

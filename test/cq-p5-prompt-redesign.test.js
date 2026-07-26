@@ -14,9 +14,13 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 
 const OWNER = "Jonas Beispiel";
-const LANGUAGES = ["de", "fr", "en"];
 const DIRECTIONS = ["inbound", "outbound"];
 const REAL_UMLAUT = /[äöüÄÖÜ]/u;
+// P11: FR-Entsprechung der Umlaut-Zusage - kein transliteriertes Akzent-Ersatzmuster
+// (Wortstamm-Denylist analog TRANSLITERATION_STEMS, aber fuer franzoesische Akzente:
+// wuerde ein Fix versehentlich Akzente durch ASCII ersetzen, faengt dieser Stamm es).
+const FR_TRANSLITERATION_STEMS = /\betre\b|\bmeme\b|\bresponsable\b|\bnumero\b/i;
+const REAL_ACCENT = /[éèêëàâäùûüôöîïç]/iu;
 
 let systemPrompt, toolDefs;
 before(async () => {
@@ -33,30 +37,46 @@ before(async () => {
 const promptFor = (language, direction) =>
   systemPrompt(seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language, direction }));
 
-// (A1) Das Prompt-Geruest ist in JEDER Sprache deutsch -> alle sechs Kombinationen
-// muessen sauber sein, nicht nur de.
-test("P5-O1 systemPrompt traegt in keiner Sprache/Richtung eine Umlaut-Transliteration", () => {
-  for (const language of LANGUAGES) {
-    for (const direction of DIRECTIONS) {
-      const prompt = promptFor(language, direction);
-      const hit = prompt.match(TRANSLITERATION_STEMS);
-      assert.equal(hit, null, `${language}/${direction}: Transliteration "${hit?.[0]}" gefunden`);
-    }
+// (A1) P11-Korrektur: die Praemisse "Geruest ist in JEDER Sprache deutsch" faellt mit
+// P11 (das Geruest ist jetzt je Sprache uebersetzt) - die Umlaut-Orthografie-Zusage gilt
+// nur noch fuer DE (das ist die Invariante, die sie eigentlich schuetzt: kein
+// transliterierter Umlaut im deutschen Prompt-Text).
+test("P5-O1 systemPrompt(de) traegt in keiner Richtung eine Umlaut-Transliteration", () => {
+  for (const direction of DIRECTIONS) {
+    const prompt = promptFor("de", direction);
+    const hit = prompt.match(TRANSLITERATION_STEMS);
+    assert.equal(hit, null, `de/${direction}: Transliteration "${hit?.[0]}" gefunden`);
   }
 });
 
 // (A2) Gegenprobe: ein "Fix", der die betroffenen Woerter streicht, faerbt O1 sonst gruen.
-test("P5-O2 Gegenprobe - jeder Prompt traegt echte Umlaut-Zeichen", () => {
-  for (const language of LANGUAGES) {
-    for (const direction of DIRECTIONS) {
-      const prompt = promptFor(language, direction);
-      assert.match(prompt, REAL_UMLAUT, `${language}/${direction}: kein echter Umlaut gefunden`);
-    }
+test("P5-O2 Gegenprobe - jeder DE-Prompt traegt echte Umlaut-Zeichen", () => {
+  for (const direction of DIRECTIONS) {
+    const prompt = promptFor("de", direction);
+    assert.match(prompt, REAL_UMLAUT, `de/${direction}: kein echter Umlaut gefunden`);
   }
 });
 
-test("P5-O3 end_call- und take_message-Description sind frei von Transliteration", () => {
-  for (const tool of toolDefs()) {
+// P11-Ergaenzung: FR-Entsprechung der Umlaut-Zusage - Akzente vorhanden, keine
+// Transliteration (FR hat, anders als DE, nie transliteriert - i18n/locales.js Kopfkommentar).
+test("P5-O1b systemPrompt(fr) traegt in keiner Richtung eine Akzent-Transliteration", () => {
+  for (const direction of DIRECTIONS) {
+    const prompt = promptFor("fr", direction);
+    const hit = prompt.match(FR_TRANSLITERATION_STEMS);
+    assert.equal(hit, null, `fr/${direction}: Transliteration "${hit?.[0]}" gefunden`);
+  }
+});
+test("P5-O2b Gegenprobe - jeder FR-Prompt traegt echte Akzent-Zeichen", () => {
+  for (const direction of DIRECTIONS) {
+    const prompt = promptFor("fr", direction);
+    assert.match(prompt, REAL_ACCENT, `fr/${direction}: kein echter Akzent gefunden`);
+  }
+});
+
+test("P5-O3 end_call- und take_message-Description (de) sind frei von Transliteration", () => {
+  // toolDefs("de"): die Umlaut-Zusage gilt fuer den deutschen Tool-Text (P11 - ohne
+  // Argument haengt das Ergebnis am Weltdefault-Schalter, nicht an DE).
+  for (const tool of toolDefs("de")) {
     const hit = tool.description.match(TRANSLITERATION_STEMS);
     assert.equal(hit, null, `${tool.name}: Transliteration "${hit?.[0]}" in Description`);
     assert.match(tool.description, REAL_UMLAUT, `${tool.name}: kein echter Umlaut in Description`);
