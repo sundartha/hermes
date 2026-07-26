@@ -14,7 +14,10 @@
 // outbound-gates-order.test.js/effective-cap-fallback.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { makeOutboundGates, E164_FORMAT_ERROR } from "../src/telephony/outbound-gates.js";
+import { ROOT } from "./helpers.js";
 import { localeFor, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { spendMonthEndDate } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -276,16 +279,56 @@ test("platformHalt und budgetUnreadable tragen in KEINER Sprache eine Ziffer", (
   }
 });
 
-// Dokumentierte Ausnahme (P15 Abschnitt 6.1): der reine E.164-Formatfehler bleibt
+// Dokumentierte Systemgrenze (P15b/C1, tasks/p15b-spec.md): der reine E.164-Formatfehler bleibt
 // sprach-UNABHAENGIG. Er ist ein 400 ohne Audit und wird auch VOR der Gate-Kette
 // ausgeliefert (routes/api-calls.js Pre-Gate), wo noch kein Tenant aufgeloest ist - eine
 // halbe Lokalisierung ergaebe zwei Texte fuer denselben Fehler.
 test("Formatfehler (400): sprach-unabhaengiger E164_FORMAT_ERROR, kein Audit", async () => {
   for (const language of SUPPORTED_LANGUAGES) {
     const { gates } = makeOutboundGates(makeDeps(language));
-    const denial = await gateBy(gates, "number_gate").run(baseCtx({ to: "keine-nummer" }));
-    assert.equal(denial.status, 400);
-    assert.equal(denial.audit, null);
-    assert.equal(denial.body.error, E164_FORMAT_ERROR);
+    const formatDenial = await gateBy(gates, "number_gate").run(baseCtx({ to: "keine-nummer" }));
+    assert.equal(formatDenial.status, 400);
+    assert.equal(formatDenial.audit, null);
+    assert.equal(formatDenial.body.error, E164_FORMAT_ERROR);
+    // Zweite Ausgabestelle derselben Fehlerklasse: identischer Text, nicht nur identischer Status.
+    const trunkDenial = await gateBy(gates, "trunk_zero_normalized").run(
+      baseCtx({ to: "+4901737123456" }),
+    );
+    assert.equal(trunkDenial.status, 400);
+    assert.equal(trunkDenial.audit, null);
+    assert.equal(trunkDenial.body.error, E164_FORMAT_ERROR);
   }
+});
+
+// P15b/C1: die Sprachfreiheit haengt an der Fehlerklasse. Landete der Text spaeter "der
+// Konsistenz wegen" im Locale-Buendel, waere die Systemgrenze lautlos weg - dieser Test
+// faengt genau das.
+test("P15b/C1: der E.164-Formattext ist englisch und liegt in KEINEM Locale-Buendel", () => {
+  assert.match(E164_FORMAT_ERROR, /must be E\.164/);
+  for (const language of SUPPORTED_LANGUAGES) {
+    const gates = localeFor(language).gates;
+    const values = Object.values(gates).map((v) =>
+      typeof v === "function" ? v(...Array.from({ length: v.length }, () => "<arg>")) : v,
+    );
+    assert.ok(
+      !values.includes(E164_FORMAT_ERROR),
+      `${language}: der Formatfehler gehoert NICHT in LOCALES.${language}.gates`,
+    );
+  }
+});
+
+// Dritte Ausgabestelle: der Pre-Gate-400 in routes/api-calls.js laeuft VOR der
+// Identitaetsaufloesung (kein Tenant, kein resolveCallLanguage - das wuerde ueber
+// settingsFor lazy einen Settings-Bucket auf einer unaufgeloesten Identitaet anlegen).
+// Sie MUSS dieselbe Konstante ausliefern, nicht ein eigenes Literal.
+test("P15b/C1: der Pre-Gate-400 liefert dieselbe Konstante, kein eigenes Literal", () => {
+  const src = fs.readFileSync(path.join(ROOT, "src/routes/api-calls.js"), "utf8");
+  assert.match(src, /error:\s*E164_FORMAT_ERROR/);
+  // Nur CODE-Zeilen: die Route BEGRUENDET E.164 an einer Stelle im Fliesstext (GAP-35,
+  // "aus der E.164-Vorwahl abgeleitete Landangabe"). Verboten ist ein zweitgefasster
+  // Formatfehler-TEXT, nicht die Erwaehnung des Standards in einem Kommentar.
+  const codeMentions = src
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//") && /E\.164/.test(line));
+  assert.deepEqual(codeMentions, [], "kein zweitgefasster Formatfehler-Text in der Route");
 });

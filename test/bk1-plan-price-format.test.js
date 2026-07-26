@@ -12,6 +12,7 @@ import vm from "node:vm";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const html = fs.readFileSync(path.join(dir, "../public/tenant.html"), "utf8");
@@ -33,10 +34,19 @@ function extractPriceUi() {
     return m[0];
   };
   const cents = grab(/const CENTS_PER_EURO = \d+;/, "CENTS_PER_EURO");
+  // P15b/C2: die Preisformatierung liest dieselbe Formatlocale wie Datum/Zeit - Deklaration
+  // und Setter muessen deshalb mit in den Kontext, sonst laeuft die extrahierte Funktion ins
+  // Leere. Ohne setFormatLocale-Aufruf gilt der statische Fallback (de-DE) wie im Browser
+  // vor der ersten /state-Antwort - die Erwartungen unten bleiben damit unveraendert.
+  const staticLocale = grab(/const STATIC_FORMAT_LOCALE = "[^"]+";/, "STATIC_FORMAT_LOCALE");
+  const letLocale = grab(/let formatLocale = STATIC_FORMAT_LOCALE;/, "formatLocale");
+  const setLocale = grab(/function setFormatLocale\([\s\S]*?\n\}/, "setFormatLocale");
   const format = grab(/function formatPlanPrice\([\s\S]*?\n\}/, "formatPlanPrice");
   const escFn = grab(/function esc\([\s\S]*?\n/, "esc"); // einzeilig: bis zum Zeilenende
   const card = grab(/function planCard\([\s\S]*?\n\}/, "planCard");
-  const code = `${cents} ${format} ${escFn} ${card} ({ formatPlanPrice, planCard });`;
+  const code =
+    `${staticLocale} ${letLocale} ${setLocale} ${cents} ${format} ${escFn} ${card} ` +
+    `({ formatPlanPrice, planCard, setFormatLocale });`;
   return vm.runInNewContext(code, {});
 }
 
@@ -52,6 +62,34 @@ test("formatPlanPrice: currency wird geehrt (kein hartkodiertes Euro)", () => {
   const usd = normSpace(formatPlanPrice(499, "usd"));
   assert.equal(usd, "4,99 $");
   assert.ok(!usd.includes("€"), "USD-Preis darf kein Euro-Symbol tragen");
+});
+
+// P15b/C2 - HARTE INVARIANTE Geld-Achse: die Locale aendert NUR die Darstellung. Der
+// Waehrungscode kommt aus den DATEN (Argument currency) und wandert NIE mit der Sprache
+// mit - sonst saehe ein Tenant einen anderen Betrag, als ihm belastet wird (Entscheidung
+// 7.1/O12). Geprueft ueber genau die drei Locales, die der Server ausliefern kann
+// (EINE Quelle: i18n/locales.js), in einem FRISCHEN vm-Kontext (P12-I: kein geteilter
+// Zustand mit den Tests oben).
+test("formatPlanPrice: EUR bleibt EUR in de/en/fr - nur die Darstellung folgt der Locale", () => {
+  const ui = extractPriceUi();
+  const locales = SUPPORTED_LANGUAGES.map((l) => localeFor(l).dateLocale);
+  const rendered = locales.map((l) => {
+    ui.setFormatLocale(l);
+    return normSpace(ui.formatPlanPrice(499, "eur"));
+  });
+  for (const [i, out] of rendered.entries()) {
+    assert.ok(out.includes("€"), `${locales[i]}: EUR-Betrag traegt das Euro-Zeichen`);
+    assert.equal(out.replace(/\D/g, ""), "499", `${locales[i]}: identischer Zahlwert`);
+  }
+  assert.ok(new Set(rendered).size > 1, "die DARSTELLUNG verzweigt wirklich je Locale");
+});
+
+test("formatPlanPrice: eine fremde Locale erzeugt KEINE fremde Waehrung", () => {
+  const ui = extractPriceUi();
+  ui.setFormatLocale("en-GB");
+  const usd = normSpace(ui.formatPlanPrice(499, "usd"));
+  assert.ok(!usd.includes("€"), "USD bleibt USD, auch unter einer EUR-Locale");
+  assert.equal(usd.replace(/\D/g, ""), "499");
 });
 
 test("planCard: lokalisierter Katalog-Preis und Popular-Badge landen in der Kachel", () => {

@@ -190,7 +190,11 @@ test("Sprachreinheit: germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-Ten
 
   // Kanal 9: tenant.html Labels/Zahlenformate (de-DE hartkodiert).
   const tenantHtml = fs.readFileSync(path.join(ROOT, "public/tenant.html"), "utf8");
-  if (/toLocaleString\("de-DE"\)|Intl\.NumberFormat\("de-DE"\)/.test(tenantHtml)) leaks.push("tenantHtmlFormat");
+  // P15b/C2: die schliessende Klammer war eine blinde Stelle - `Intl.NumberFormat("de-DE", {...})`
+  // rutschte durch, weil ein Komma folgte. Der Anker endet jetzt am Locale-Literal (deckungs-
+  // gleich mit dem Abnahme-Grep der Phase). Stopwortliste, Kanalzahl, TOTAL_CHECKED_LABELS
+  // und die leere leaks-Erwartung bleiben unveraendert.
+  if (/toLocaleString\("de-DE"|Intl\.NumberFormat\("de-DE"/.test(tenantHtml)) leaks.push("tenantHtmlFormat");
 
   const TOTAL_CHECKED_LABELS = 10; // systemPrompt, toolDefs, openingText, inboundGreeting,
   // summarySms, notificationTitle, gateRejectionLiterals, mcpErrorLiterals, authCsrfError,
