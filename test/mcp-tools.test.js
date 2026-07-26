@@ -159,6 +159,29 @@ test("T-P4-07: Handler-Throw (Gateway 500) -> MCP-Fehlerantwort, keine unhandled
   }
 });
 
+// P13/MCP-12: EN-Szenario fuer den Durchreiche-Zweig von wrapHandler (Gateway-500 ->
+// err.message). Ergaenzt T-P4-07 um die Sprachachse: ein EN-Tenant darf auf KEINEM
+// Fehlerpfad einen deutschen Satz sehen.
+test("T-P4-07b: Gateway-500 zeigt einem EN-Tenant keinen deutschen Fehlertext", async () => {
+  const mock = await startGatewayMock({ body: { error: "boom" }, status: 500 });
+  const prev = process.env.GATEWAY_URL;
+  process.env.GATEWAY_URL = mock.url;
+  try {
+    const handlers = captureTools({ identity: null, allowCalendar: true, language: "en" });
+    const result = await handlers.get("get_my_number")();
+    assert.ok(result?.isError);
+    assert.doesNotMatch(
+      toolText(result),
+      /Telefon-Agent|erreichbar|nicht gefunden/,
+      "kein deutscher Satz fuer einen EN-Tenant",
+    );
+  } finally {
+    if (prev === undefined) delete process.env.GATEWAY_URL;
+    else process.env.GATEWAY_URL = prev;
+    await mock.close();
+  }
+});
+
 test("T-C3-01: duration_s springt bei markAnswered nicht zurueck (Monotonie)", async () => {
   // Anker-Beweis ueber zwei Polls. Zeitstempel relativ zu 'jetzt', sodass die Dauer
   // ueber 'end = now' laeuft (genau der Live-Pfad, in dem der Bug auftrat). Die Luecke

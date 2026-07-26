@@ -202,10 +202,12 @@ function normalizeContextReceived(cr) {
 // rendert Nicht-Arrays via textContent). EINE Quelle - auch der Stufe-0-Textblock liest
 // data.permissions (keine Duplizierung der allow*-Formatierung, G5/S2).
 // Kalender/Buchen entfielen mit P1b - der Agent hat diese Faehigkeiten nicht mehr.
-function permissionsSummary(settings) {
+// Die Feldnamen folgen der Tenant-Sprache (MCP-09): sie kommen aus DEMSELBEN Locale-
+// Buendel wie Rollen-Praefix und Fehlertexte (loc.mcp), kein zweiter Lookup.
+function permissionsSummary(settings, labels) {
   return (
-    `Summaries=${settings.allowSummaries}, PersoenlicheDaten=${settings.allowPersonalData}, ` +
-    `Bankdaten=${settings.allowBankData}`
+    `${labels.summaries}=${settings.allowSummaries}, ${labels.personalData}=${settings.allowPersonalData}, ` +
+    `${labels.bankData}=${settings.allowBankData}`
   );
 }
 
@@ -228,7 +230,7 @@ function chargeCurrencyLabel() {
 // owner koennen fail-closed leer sein (kein aktiver Nummern-Seed / Tenant ohne
 // ownerName) -> auf null normalisiert, damit der Schluessel erhalten bleibt und das
 // Schema (nullable) NICHT zu isError fuehrt. Kein Secret/internes Feld passiert hier.
-function pickAgentStatus(s) {
+function pickAgentStatus(s, texts) {
   return {
     number: s.agent.number ?? null,
     owner: s.agent.owner ?? null,
@@ -242,7 +244,7 @@ function pickAgentStatus(s) {
     spendMonthCostEur: s.usage.spendMonthCostEur,
     spendMonthKey: s.usage.spendMonthKey,
     reservedEur: s.usage.reservedEur,
-    permissions: permissionsSummary(s.settings),
+    permissions: permissionsSummary(s.settings, texts.permissionLabels),
   };
 }
 
@@ -345,7 +347,10 @@ export function registerTools(
   // Request).
   const enableWidgetUi = (widgetId) => {
     if (!uiRenderer || !uiRenderer.hasWidget(widgetId)) return {};
-    uiRenderer.registerResource(server, widgetId);
+    // E4/P13: die servergerenderte Widget-Sprache ist die Agentensprache. Weitergereicht
+    // wird die BEREITS aufgeloeste loc.language (nie das rohe language-Feld) - damit gilt
+    // im Widget dieselbe eine Aufloesungsregel wie im Text- und im Anrufkanal.
+    uiRenderer.registerResource(server, widgetId, loc.language);
     return { _meta: uiRenderer.toolMeta(widgetId) };
   };
 
@@ -727,7 +732,7 @@ export function registerTools(
     async () => {
       const s = await call("GET", "/api/state");
       requireFields(s, { agent: "object", usage: "object", settings: "object" });
-      const data = pickAgentStatus(s); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      const data = pickAgentStatus(s, loc.mcp); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
       const currency = chargeCurrencyLabel();
       return {
         content: [

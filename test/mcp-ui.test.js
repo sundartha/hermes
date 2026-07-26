@@ -20,7 +20,9 @@ import {
   WIDGET_CALLS,
   WIDGET_CALENDAR,
   WIDGET_CALL,
+  widgetHtml,
 } from "../src/ui/widget-catalog.js";
+import { localeFor } from "../src/i18n/locales.js";
 import {
   UI_MIME,
   CHATGPT_UI_MIME,
@@ -679,7 +681,9 @@ const AGENT_KEYS = [
   "tenantCapEur",
   "voiceEngine",
 ];
-const PERMISSIONS_STR = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
+// Pin bleibt WOERTLICH, wird nur explizit an seine Sprache gebunden (P13 ENTSCHAERFT 1:
+// mitgezogen, nicht "passend gemacht").
+const PERMISSIONS_STR_DE = "Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
 const agentStatusOutput = z.object({
   number: z.string().nullable(),
   owner: z.string().nullable(),
@@ -696,7 +700,7 @@ const agentStatusOutput = z.object({
 
 test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes structuredContent", async () => {
   await withGateway(RICH_STATE, async () => {
-    const { tools } = captureUi({ uiHost: capableHost() });
+    const { tools } = captureUi({ uiHost: capableHost(), language: "de" });
     const { config, handler } = tools.get("get_agent_status");
     assert.ok(config.outputSchema, "outputSchema am config deklariert");
     const result = await handler({});
@@ -724,7 +728,7 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
 
     assert.ok(result.structuredContent, "structuredContent vorhanden");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
-    assert.equal(result.structuredContent.permissions, PERMISSIONS_STR);
+    assert.equal(result.structuredContent.permissions, PERMISSIONS_STR_DE);
     assert.doesNotThrow(
       () => agentStatusOutput.parse(result.structuredContent),
       "structuredContent validiert gegen outputSchema",
@@ -760,6 +764,27 @@ test("T-W3-AC1b: spendMonthKey=null (unlesbare Uhr) - Text-Fallback 'unbekannt' 
       () => agentStatusOutput.parse(result.structuredContent),
       "nullable-Schema-Zweig (spendMonthKey) validiert bei echtem null",
     );
+  });
+});
+
+// P13/E4: die registrierte ui://-Resource traegt die Agentensprache. Verdrahtungsbeweis
+// ueber die ECHTE Kette registerTools -> enableWidgetUi -> registerResource -> widgetHtml.
+test("T-W3-AC1c: language: \"en\" registriert die englische agent-status-Resource", async () => {
+  await withGateway(RICH_STATE, async () => {
+    const { resources } = captureUi({ uiHost: capableHost(), language: "en" });
+    const html = (await resources.find((r) => r.uri === RESOURCE_URI_AGENT).readCallback()).contents[0].text;
+    assert.equal(html, widgetHtml(WIDGET_AGENT_STATUS, "en"));
+    assert.notEqual(html, widgetHtml(WIDGET_AGENT_STATUS, "de"), "Sprache erreicht die Resource wirklich");
+  });
+});
+
+// Ohne language-Feld gilt DERSELBE eine Resolver wie im Text-/Anrufkanal (localeFor),
+// nicht blind Englisch - sonst haette das Widget einen zweiten Fallback.
+test("T-W3-AC1d: ohne language-Feld folgt die Resource localeFor(null)", async () => {
+  await withGateway(RICH_STATE, async () => {
+    const { resources } = captureUi({ uiHost: capableHost() });
+    const html = (await resources.find((r) => r.uri === RESOURCE_URI_AGENT).readCallback()).contents[0].text;
+    assert.equal(html, widgetHtml(WIDGET_AGENT_STATUS, localeFor(null).language));
   });
 });
 
