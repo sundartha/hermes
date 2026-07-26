@@ -315,6 +315,14 @@ CREATE TABLE IF NOT EXISTS usage (
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_key TEXT;
 ALTER TABLE usage ADD COLUMN IF NOT EXISTS spend_month_cost_cents BIGINT NOT NULL DEFAULT 0;
 
+-- GAP-01 (P6): Perioden-Fenster des Budget-Gates. budget_period_key = ISO-Start der
+-- STRIPE-Abrechnungsperiode (NICHT der Kalendermonat daneben), NULL = nie gestempelt ->
+-- das Gate misst die Lebenszeit. budget_period_baseline_cents = cost_eur-Stand (in
+-- GANZZAHL Cents, G26) bei Periodenbeginn; der Reset ist eine Subtraktion, kein Nullen -
+-- cost_eur bleibt monoton. Idempotent, kein Backfill (NULL ist gueltig).
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS budget_period_key TEXT;
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS budget_period_baseline_cents BIGINT NOT NULL DEFAULT 0;
+
 -- LCT P4: Sub-Cent-Rest der Korrekturbuchungen, GANZZAHL Mikro-Cent des ZIEL-Buckets.
 -- PERSISTIERT - bewusst anders als der Schwester-Rest costMicroCentsRem (ephemer, Boot
 -- startet bei 0, s. Kommentarblock oben). Begruendung der Asymmetrie: der Korrektur-Rest

@@ -159,10 +159,12 @@ function assertCostTruingBooking(config, store) {
   for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }
 
-// LCT P5: Alarmkanal-Guard (alertChannelFindings). WARN, kein exit(1) - Begruendung im
-// Guard. Loggt NIE den Wert (der besetzte Fall liefert [] und meldet damit gar nichts).
+// LCT P5: Alarmkanal-Guard (alertChannelFindings). Loggt NIE den Wert (der besetzte Fall
+// liefert [] und meldet damit gar nichts). Der seit GAP-07 moegliche FATALE Befund ist hier
+// per Konstruktion unerreichbar: assertConfig() faltet ihn in seine Fatal-Menge und hat den
+// Prozess bei diesem Zustand laengst mit exit(1) beendet - hier bleibt nur die WARN.
 function warnAlertChannelUnset(config) {
-  for (const f of alertChannelFindings(config.billing.platformAlertSmsTo))
+  for (const f of alertChannelFindings(config.billing))
     console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }
 
@@ -284,10 +286,18 @@ function assertBootGates(config, store) {
 
 // Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die
 // Banner-Zeile eine Abstraktionsebene bleibt (G34) und die Bedingung einen Namen hat (G28).
-function budgetAxisLabel(budgetMonthEnabled) {
+//
+// GAP-01 (P6) hat gateUsageCents (Tenant-Achse) und gatePlatformUsageCents (Plattform-
+// Achse) bei Flag AUS auseinandergezogen: die Tenant-Achse misst seither das Stripe-
+// Perioden-Fenster (budgetPeriodUsageCents), die Plattform-Achse bleibt beim Lebenszeit-
+// Topf (globalUsageTotals, Absolute Regel 1). Bei Flag AN messen BEIDE Achsen weiter
+// denselben Spend-Monat (spendMonthUsageCents/platformSpendMonthCents) - dort gibt es
+// keine Divergenz. axisLabelWhenFlagOff traegt daher NUR den Flag-AUS-Text der jeweiligen
+// Achse (G5: der Flag-AN-Zweig ist fuer beide Achsen identisch und steht nur einmal hier).
+export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {
   return budgetMonthEnabled
-    ? "Perioden-Topf (BUDGET_MONTH_ENABLED=true)"
-    : "Lebenszeit-Topf (BUDGET_MONTH_ENABLED=false)";
+    ? "Spend-Monat (BUDGET_MONTH_ENABLED=true)"
+    : `${axisLabelWhenFlagOff} (BUDGET_MONTH_ENABLED=false)`;
 }
 
 function logBootBanner(config, port) {
@@ -314,12 +324,17 @@ function logBootBanner(config, port) {
     `  Outbound:       ${config.safety.outboundFrozen ? "EINGEFROREN (OUTBOUND_FROZEN=true)" : "aktiv (Verifikation per Tenant: Abo+KYC)"}`,
   );
   console.log(
-    `  Nummern-Gates:  Land ${config.safety.allowedCountryCodes.join(",")} | max ${config.safety.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
+    `  Nummern-Gates:  Land ${config.safety.allowedCountryCodes.join(",")} | max ${config.safety.maxCallsPerHour} Calls/h pro Tenant | Notruf-/Premium-Denylist aktiv`,
   );
   // GAP-36-Zusatz: welche Achse das Budget-Gate misst, war bisher NUR per DB-Messung
   // ablesbar (der Flip hat keine Boot-Ausgabe) - genau die Blindheit, die diese Phase
   // schliesst. Ein Safety-Gate-Schalter gehoert in den Boot-Banner.
-  console.log(`  Budget-Achse:   ${budgetAxisLabel(config.billing.budgetMonthEnabled)}`);
+  // Zwei Zeilen statt einer (GAP-01-Review-Fix): Tenant- und Plattform-Achse messen bei
+  // Flag AUS verschiedene Fenster (s. budgetAxisLabel oben) - EIN gemeinsames Label haette
+  // hier zwangslaeufig eine der beiden Achsen falsch beschrieben.
+  console.log(
+    `  Budget-Achse:   Tenant ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Perioden-Fenster")} | Plattform ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Lebenszeit-Topf")}`,
+  );
 }
 
 export async function bootServer({ app, config, store, lifecycle, callFinish, provisioning, costTruing }) {

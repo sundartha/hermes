@@ -140,7 +140,9 @@ services:
       # Land + Stundenlimit greifen vor der Verifikation; statische Liste entfaellt (outbound-p3).
       - key: ALLOWED_COUNTRY_CODES
         value: "+49,+33,+44"
-      # Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, nicht RATE_LIMIT_PER_MIN).
+      # Max. Outbound-Calls EINES TENANTS pro gleitender Stunde (eigenes Gate, nicht
+      # RATE_LIMIT_PER_MIN). Default UND Obergrenze fuer Profile - ein Profil kann nur
+      # senken. Es gibt KEINE plattformweite Stundenbremse - Not-Aus ist OUTBOUND_FROZEN.
       - key: MAX_CALLS_PER_HOUR
         value: "6"
       # ---- Per-(Tenant,Ziel)-Cap + Cooldown (outbound-p1d) ----

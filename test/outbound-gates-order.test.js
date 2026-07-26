@@ -221,7 +221,11 @@ test("number_gate: LAND-Gate (config.safety.allowedCountryCodes) -> 403 grund=la
   assert.match(denial.audit.detail, /grund=land/);
 });
 
-test("number_gate: STUNDENLIMIT (config.safety.maxCallsPerHour) -> 429, Meldung nennt den Blattwert", async () => {
+// GAP-10: der Ablehnungstext nennt den Env-Namen NICHT mehr (er darf die
+// Konfigurationsflaeche nicht preisgeben). Die PA-15-Intention - ein vertauschter
+// Blattname wird gefangen - bleibt SCHAERFER erhalten: das Gate feuert exakt am
+// Blattwert (5 -> 429) und exakt darunter nicht (4 -> null).
+test("number_gate: STUNDENLIMIT (config.safety.maxCallsPerHour) -> 429, Gate feuert exakt am Blattwert", async () => {
   const { gates } = makeOutboundGates(
     makeDeps({
       config: { maxCallsPerHour: 5 },
@@ -230,7 +234,20 @@ test("number_gate: STUNDENLIMIT (config.safety.maxCallsPerHour) -> 429, Meldung 
   );
   const denial = await gateBy(gates, "number_gate").run(baseCtx());
   assert.equal(denial.status, 429);
-  assert.match(denial.body.error, /MAX_CALLS_PER_HOUR=5/);
+  assert.match(denial.audit.detail, /grund=stundenlimit/);
+  assert.ok(!/MAX_CALLS_PER_HOUR/.test(denial.body.error), "kein interner Env-Name im Kundentext");
+
+  const { gates: below } = makeOutboundGates(
+    makeDeps({
+      config: { maxCallsPerHour: 5 },
+      store: { countOutboundCallsSince: () => 4 },
+    }),
+  );
+  assert.equal(
+    await gateBy(below, "number_gate").run(baseCtx()),
+    null,
+    "ein Call unter dem Blattwert passiert - ein vertauschter Blattname faellt hier auf",
+  );
 });
 
 test("number_gate: PER-ZIEL-CAP (config.safety.perTargetCallCap + perTargetWindowMs) -> 429 grund=ziel_limit", async () => {

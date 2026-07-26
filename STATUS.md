@@ -132,6 +132,13 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
    Fix = eigener Store-Schnitt: read-through-Rehydrate im Webhook-Pfad + Reconcile-Schutz fuer
    aktive Calls + Deploy-Draining. Bei Skala PFLICHT (jeder Deploy trifft laufende Calls).
    Details: `tasks/call-quality-2-report.md` (Diagnose S-A).
+8. **i18n-Launch-Gate P6 (GAP-01/GAP-07/GAP-10) - ERLEDIGT (2026-07-26), NICHT deployt.**
+   Rot-Liste von `npm run test:gates` **39 -> 36** (gemessen: `tests 74/pass 25/fail 49` ->
+   `tests 70/pass 25/fail 45`), `npm test` gruen (3129/0). **DEPLOY-VORBEDINGUNG:** bei
+   `PAYMENT_ENABLED=true` + `PLATFORM_SPEND_WARN_PERCENT>0` verweigert der Boot jetzt den
+   Start, wenn `PLATFORM_ALERT_SMS_TO` leer ist - Live-Env VOR dem Deploy ablesen
+   (Abhilfe: Empfaenger setzen ODER `PLATFORM_SPEND_WARN_PERCENT=0`). Details + getragene
+   Restrisiken: `PLAN-SECURITY.md` Abschnitt `P6-BUDGETFENSTER`.
 
 ## 3. Bewusst vertagt (nur Tracking, kein akuter Task)
 

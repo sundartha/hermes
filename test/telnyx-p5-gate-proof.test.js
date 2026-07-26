@@ -184,8 +184,8 @@ test("Gate 6 Land: Ziel ausserhalb ALLOWED_COUNTRY_CODES blockt auch mit Flag an
   assert.match((await res.json()).error, /Laendervorwahl/);
 });
 
-// ---- Gate 7: globales Stundenlimit (Muster number-gate.test.js) ----
-test("Gate 7 globales Stundenlimit: MAX_CALLS_PER_HOUR erreicht blockt auch mit Flag an (429)", async () => {
+// ---- Gate 7: Stundenlimit pro Tenant (Muster number-gate.test.js) ----
+test("Gate 7 Stundenlimit: MAX_CALLS_PER_HOUR erreicht blockt auch mit Flag an (429)", async () => {
   const res = await placeCallFlagOn({
     env: { MAX_CALLS_PER_HOUR: "1" },
     seed: seedState({ calls: [seedCall({ id: "c_recent" })] }), // ownerNumber-Default (Twilio) reicht
@@ -195,14 +195,14 @@ test("Gate 7 globales Stundenlimit: MAX_CALLS_PER_HOUR erreicht blockt auch mit 
   assert.match((await res.json()).error, /Stundenlimit/);
 });
 
-// ---- Gate 8: pro-Nutzer-Stundenlimit (Muster a4-default-profile-zero.test.js) ----
-test("Gate 8 pro-Nutzer-Limit: profil-loser Tenant (DEFAULT=0) blockt auch mit Flag an (429)", async () => {
+// ---- Gate 8: Profil-Senkung auf 0 (Muster a4-default-profile-zero.test.js) ----
+test("Gate 8 Profil-Limit 0: profil-loser Tenant (DEFAULT=0) blockt auch mit Flag an (429)", async () => {
   const res = await placeCallFlagOn({
     env: { MULTI_TENANT: "true" },
     seed: seedTenantATelnyx({ profiles: {} }), // KEIN Profil unter A -> DEFAULT_PROFILE(0)
     identity: SUB_A,
     status: 429,
-    grund: "stundenlimit_nutzer",
+    grund: "stundenlimit",
   });
   assert.match((await res.json()).error, /Stundenlimit/);
 });

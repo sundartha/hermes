@@ -251,20 +251,24 @@ export function makeOutboundGates({
   }
 
   // Cooldown-Fensterstart fuer den per-(Tenant,Ziel)-Cap (outbound-p1d). Eigenes Fenster
-  // (config.safety.perTargetWindowMs) - die Stundenlimits unten nutzen hourWindowStart.
+  // (config.safety.perTargetWindowMs) - das Stundenlimit unten nutzt hourWindowStart.
   const perTargetWindowStart = () =>
     new Date(Date.now() - config.safety.perTargetWindowMs).toISOString();
-  // Globales Stundenlimit ueber ALLE Outbound-Calls (Plattform-Notbremse, Bestand, wird nie
-  // entfernt). Tenant-unabhaengig (ohne Filter = alle Calls).
-  const globalHourReached = () =>
-    store.countOutboundCallsSince(hourWindowStart()) >= config.safety.maxCallsPerHour;
-  // Pro-Nutzer-Stundenlimit: effektiv min(global, profil) - ein Profil kann nur senken.
-  function userHourReached(profile, requestedBy) {
+  // Stundenlimit PRO TENANT - die EINZIGE Stunden-Achse (O5, PLAN-I18N-FIX P6). Eine
+  // plattformweite Stundenbremse gibt es NICHT mehr: sie ist ersatzlos entfallen, weil ein
+  // globales Anruflimit mit wachsender Tenant-Zahl jeden zusaetzlichen Kunden zum Gegner
+  // aller anderen macht. Verbleibender Not-Aus fuer die Plattform ist OUTBOUND_FROZEN; die
+  // GELD-Achse bleibt unveraendert eine Schnittmenge (globalBudgetExceeded, Regel 1).
+  // Gezaehlt wird nach tenantId, nicht nach requestedBy: ein Tenant kann sein Limit sonst
+  // durch zusaetzliche Nutzer-Identitaeten vervielfachen (der Tausch ist strikt strenger).
+  // Grenze = min(config, profil): MAX_CALLS_PER_HOUR ist Pro-Tenant-DEFAULT *und* Decke -
+  // ein Profil kann nur senken; maxCallsPerHour:0 bleibt 0 (harter Block).
+  function tenantHourReached(profile, tenantId) {
     const limit =
       profile.maxCallsPerHour == null
         ? config.safety.maxCallsPerHour
         : Math.min(config.safety.maxCallsPerHour, profile.maxCallsPerHour);
-    return store.countOutboundCallsSince(hourWindowStart(), { requestedBy }) >= limit;
+    return store.countOutboundCallsSince(hourWindowStart(), { tenantId }) >= limit;
   }
   // Per-(Tenant,Ziel)-Wiederhol-Cap (outbound-p1d, D4, Belaestigungs-Bremse, Schutz Dritter):
   // wie oft DIESER Tenant DASSELBE Ziel im Cooldown-Fenster schon angerufen hat; ab dem Cap
@@ -345,15 +349,15 @@ export function makeOutboundGates({
   }
 
   // Liefert {status, grund, message} fuer das erste verletzte Gate, sonst null. Feste
-  // Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit (global + Nutzer)
+  // Pruefreihenfolge: Denylist -> E.164 -> Laender-Gate -> Pro-Stunde-Limit (pro Tenant)
   // -> Pro-Ziel-Cap -> Verifikations-Gate. Die Denylist laeuft BEWUSST vor der
   // Formatpruefung: so erscheint eine Notruf-Kurzwahl (112) als bewusste Sperre (403
-  // denylist), nicht als Formatfehler (400). caller = { profile, requestedBy, tenantId }:
-  // profile/requestedBy steuern Land-Schnittmenge + pro-Nutzer-Limit, tenantId die
-  // Abo-Kopplung, den per-(Tenant,Ziel)-Cap UND den Defense-in-depth-Block im
-  // Allowlist-Gate.
+  // denylist), nicht als Formatfehler (400). caller = { profile, tenantId }: profile
+  // steuert die Land-Schnittmenge und senkt das Stundenlimit, tenantId traegt das
+  // Stundenlimit selbst, die Abo-Kopplung, den per-(Tenant,Ziel)-Cap UND den
+  // Defense-in-depth-Block im Allowlist-Gate.
   function numberGateError(to, caller) {
-    const { profile, requestedBy, tenantId } = caller;
+    const { profile, tenantId } = caller;
     const denied = deniedPrefix(to);
     if (denied)
       return {
@@ -369,17 +373,14 @@ export function makeOutboundGates({
         grund: "land",
         message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.`,
       };
-    if (globalHourReached())
+    // Ein Ablehnungstext nennt NIE einen internen Env-Namen (Regel-4-Nachbarschaft): der
+    // Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche. Der Blattwert bleibt
+    // im Audit-Log (grund=stundenlimit) forensisch nachvollziehbar.
+    if (tenantHourReached(profile, tenantId))
       return {
         status: 429,
         grund: "stundenlimit",
-        message: `Stundenlimit fuer Outbound-Anrufe erreicht (MAX_CALLS_PER_HOUR=${config.safety.maxCallsPerHour}). Bitte spaeter erneut.`,
-      };
-    if (userHourReached(profile, requestedBy))
-      return {
-        status: 429,
-        grund: "stundenlimit_nutzer",
-        message: "Persoenliches Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
+        message: "Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
       };
     if (perTargetCapReached(tenantId, to))
       return {
@@ -625,11 +626,7 @@ export function makeOutboundGates({
     {
       name: "number_gate",
       run(ctx) {
-        const e = numberGateError(ctx.to, {
-          profile: ctx.profile,
-          requestedBy: ctx.requestedBy,
-          tenantId: ctx.tenantId,
-        });
+        const e = numberGateError(ctx.to, { profile: ctx.profile, tenantId: ctx.tenantId });
         if (!e) return null;
         if (e.status === 400) return deny(400, { error: e.message });
         // GAP-18: die getroffene Sperr-Range steht im Audit (Plan: "Grund + Praefix"),

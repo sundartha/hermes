@@ -17,6 +17,10 @@ const REQUIRED_OK = {
   paymentEnabled: true,
   stripeSecretKey: "x",
   stripeWebhookSecret: "x", // W4: Boot-Pflicht bei PAYMENT_ENABLED (sonst Webhook unverifizierbar)
+  // GAP-07: besetzter Kanal, damit NUR der Fee-Wert entscheidet. Ohne diese Zeile
+  // haengt das Urteil zusaetzlich am Code-Default PLATFORM_SPEND_WARN_PERCENT=80, der
+  // bei PAYMENT_ENABLED einen leeren PLATFORM_ALERT_SMS_TO fatal macht.
+  platformAlertSmsTo: "+15005550006",
 };
 
 test("assertConfig: NaN NUMBER_SETUP_FEE_CENTS bei PAYMENT_ENABLED ist fail-closed (KORR1)", () => {

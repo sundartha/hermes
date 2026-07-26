@@ -116,8 +116,9 @@ function finishLoad() {
 // Konvertiert einen (evtl. Alt-Shape) Usage-Bucket auf costCents als autoritativen Geldwert
 // (P1). Alt-Bucket traegt numerisches costEur (Float) -> Ganzzahl-Cents; costEur wird entfernt.
 // costMicroCentsRem ist ephemer -> defaultet ueber emptyUsage() auf 0 (Boot startet bei 0).
-// spendMonthKey/spendMonthCostCents (P4) defaulten fuer Bestandsbuckets ueber denselben
-// emptyUsage()-Spread auf null/0 - keine eigene Migration noetig.
+// spendMonthKey/spendMonthCostCents (P4) und budgetPeriodKey/budgetPeriodBaselineCents
+// (GAP-01) defaulten fuer Bestandsbuckets ueber denselben emptyUsage()-Spread auf null/0 -
+// keine eigene Migration noetig.
 function bucketToCents(bucket) {
   const merged = { ...emptyUsage(), ...bucket };
   if (typeof bucket.costEur === "number") merged.costCents = Math.round(bucket.costEur * CENTS_PER_EUR);
@@ -669,6 +670,15 @@ export function setSuspendedAtIfAbsent(tenantId) {
 export function clearSuspendedAt(tenantId) {
   const { changed } = ops.clearSuspendedAt(load(), tenantId);
   if (changed) save();
+}
+
+// ---- Perioden-Fenster des Budget-Gates (GAP-01) ----
+// Mutiert -> save bei changed (Muster clearSuspendedAt). Liefert den Boolean nach aussen:
+// der Aufrufer (billing/activation.js) auditiert, OB ein neues Fenster begonnen hat.
+export function stampBudgetPeriod(tenantId, periodStartIso) {
+  const { changed } = ops.stampBudgetPeriod(load(), tenantId, periodStartIso);
+  if (changed) save();
+  return changed;
 }
 
 export function tenantSuspendedAt(tenantId) {

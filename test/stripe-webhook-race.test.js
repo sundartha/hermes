@@ -41,6 +41,9 @@ function fakeDeps({ delays = {}, executionOrder = null, tenant = TENANT } = {}) 
       setProfile: () => ({ profile: {}, changed: [] }),
       setSuspendedAtIfAbsent: (t) => calls.suspend.push(t),
       clearSuspendedAt: () => {},
+      // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
+      billingHoldActive: () => null,
+      stampBudgetPeriod: () => false,
       // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
       // clearBillingHold (Reversibilitaet bei ACTIVATE) - beide No-op-Fakes, dieser Test
       // prueft die Serialisierungs-/Ordnungswache-Invariante, nicht die Geld-Wirkung.

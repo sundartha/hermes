@@ -120,6 +120,9 @@ test("ACTIVATE loescht Hold UND Revocation (Reversibilitaet)", async () => {
   const priorTenantSubscription = store.tenantSubscription;
   store.tenantSubscription = () => ({ planSlug: null });
   store.ensureTenant = async () => {};
+  // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
+  store.billingHoldActive = () => null;
+  store.stampBudgetPeriod = () => false;
   const setStatusCalls = [];
   await applyStripeWebhook(
     {

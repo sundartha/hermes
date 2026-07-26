@@ -127,6 +127,9 @@ test("BK3-T4 signierter active-Webhook -> eine Dry-Run-Nummer, Retry idempotent"
       tenantSubscription: () => ({ planSlug: null }), setProfile: () => ({ changed: [] }),
       // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
       clearSuspendedAt: () => {},
+      // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
+      billingHoldActive: () => null,
+      stampBudgetPeriod: () => false,
       // GAP-04/GAP-03: ensureTenant (Spiegel-Nachzug) + clearBillingHold (Reversibilitaet)
       // laufen NUR bei geklaertem provision-Ergebnis (der idempotente Retry liefert
       // reason=already_provisioned, s. requestNumberForPaidTenant) - beide No-op-Fakes.

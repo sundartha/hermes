@@ -429,6 +429,14 @@ export function makePgStore(runner) {
       const { changed } = ops.clearSuspendedAt(requireState(), tenantId);
       if (changed) save();
     },
+
+    // Perioden-Fenster des Budget-Gates (GAP-01): Wrapper-Parity zu json.js. Liefert den
+    // Boolean nach aussen (der Aufrufer auditiert, OB ein neues Fenster begonnen hat).
+    stampBudgetPeriod(tenantId, periodStartIso) {
+      const { changed } = ops.stampBudgetPeriod(requireState(), tenantId, periodStartIso);
+      if (changed) save();
+      return changed;
+    },
     tenantSuspendedAt: (tenantId) => ops.tenantSuspendedAt(requireState(), tenantId),
 
     // ---- Stripe-Customer/Karte pro Tenant (Pay1): Wrapper-Parity zu json.js ----
@@ -1050,6 +1058,12 @@ function rowToUsage(r) {
     // KE-P6: Bestandszeile ohne Wert -> 0 (die Spalte kommt per ADD COLUMN IF NOT EXISTS mit
     // DEFAULT 0 dazu). BIGINT liefert der Treiber als String -> Number, wie calls.
     ttsCharacters: Number(r.tts_characters ?? 0),
+    // GAP-01: Perioden-Fenster des Budget-Gates. Bestandszeile ohne Wert -> null/0 (die
+    // Spalten kommen per ADD COLUMN IF NOT EXISTS dazu; NULL ist gueltig = nie gestempelt).
+    // BIGINT liefert der Treiber als String -> Number, wie spend_month_cost_cents; keine
+    // isBookableCents-Heilkante (BIGINT kann kein 'NaN' darstellen, waere toter Code).
+    budgetPeriodKey: r.budget_period_key ?? null,
+    budgetPeriodBaselineCents: Number(r.budget_period_baseline_cents ?? 0),
   };
 }
 
@@ -1227,15 +1241,17 @@ async function flushUsage(client, tenantId, usage) {
   await client.query(
     `INSERT INTO usage (tenant_id, input_tokens, output_tokens, cost_eur, calls,
                         spend_month_key, spend_month_cost_cents, cost_correction_micro_cents_rem,
-                        tts_characters)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                        tts_characters, budget_period_key, budget_period_baseline_cents)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      ON CONFLICT (tenant_id) DO UPDATE SET
        input_tokens=EXCLUDED.input_tokens, output_tokens=EXCLUDED.output_tokens,
        cost_eur=EXCLUDED.cost_eur, calls=EXCLUDED.calls,
        spend_month_key=EXCLUDED.spend_month_key,
        spend_month_cost_cents=EXCLUDED.spend_month_cost_cents,
        cost_correction_micro_cents_rem=EXCLUDED.cost_correction_micro_cents_rem,
-       tts_characters=EXCLUDED.tts_characters`,
+       tts_characters=EXCLUDED.tts_characters,
+       budget_period_key=EXCLUDED.budget_period_key,
+       budget_period_baseline_cents=EXCLUDED.budget_period_baseline_cents`,
     // costCents ist autoritativ (P1); die Spalte bleibt cost_eur (keine Schema-Migration) ->
     // hier die EINE Ableitungsstelle zur Persistenz (Schwester zu rowToUsage).
     // spend_month_cost_cents geht als GANZZAHL Cents raus (keine EUR-Ableitung, G26).
@@ -1243,7 +1259,9 @@ async function flushUsage(client, tenantId, usage) {
     // und rowToUsage sind die beiden einzigen Bucket-Quellen und garantieren das Feld - ein
     // '??' wuerde einen echten Shape-Defekt maskieren statt ihn an der NOT-NULL-Spalte laut
     // werden zu lassen. cost_correction_micro_cents_rem (LCT P4) und tts_characters (KE-P6)
-    // ebenfalls OHNE ?? 0 - derselbe Garantie-Grund.
+    // ebenfalls OHNE ?? 0 - derselbe Garantie-Grund, und er gilt genauso fuer
+    // budget_period_baseline_cents (GAP-01). budgetPeriodKey traegt - wie spendMonthKey -
+    // ein ?? null, weil NULL dort die gueltige "nie gestempelt"-Auspraegung IST.
     [
       tenantId,
       usage.inputTokens,
@@ -1254,6 +1272,8 @@ async function flushUsage(client, tenantId, usage) {
       usage.spendMonthCostCents,
       usage.costCorrectionMicroCentsRem,
       usage.ttsCharacters,
+      usage.budgetPeriodKey ?? null,
+      usage.budgetPeriodBaselineCents,
     ],
   );
 }

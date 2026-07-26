@@ -1,6 +1,6 @@
 // A4 (go-live-Haertung): DEFAULT_PROFILE.maxCallsPerHour = 0. Pinnt die zwei Invarianten:
 // (a) der DEFAULT-Wert ist 0 und 0 ist kein Falsy-Missverstaendnis (echte Schwelle), (b) am
-// HTTP-Gate blockt ein profil-loser Tenant hart bei 0 Calls (429 stundenlimit_nutzer),
+// HTTP-Gate blockt ein profil-loser Tenant hart bei 0 Calls (429 stundenlimit),
 // waehrend ein A2/A3-provisionierter Subscriber (maxCallsPerHour=null) UND der Owner
 // (OWNER_PROFILE) das Gate passieren. Phase S: das Profil keyt auf die tenantId, deshalb
 // laufen die Integration-Faelle unter MULTI_TENANT=true mit geseedeten Tenants (idpSubject,

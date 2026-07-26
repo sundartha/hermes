@@ -149,19 +149,20 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
   }
 });
 
-// ---- (d) Globales Stundenlimit bleibt harte Obergrenze (ueber dem Profil-Limit) ----
-test("(d) global erschoepft -> Tenant mit hohem Profil-Limit trotzdem 429", async () => {
+// ---- (d) MAX_CALLS_PER_HOUR bleibt harte Obergrenze (ueber dem Profil-Limit) ----
+test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "1", ...OFFLINE },
     seed: seedState({
-      calls: [seedCall({ id: "g1" })], // 1 Outbound in der letzten Stunde (global erschoepft)
+      // 1 Outbound DIESES Tenants in der letzten Stunde -> min(config=1, profil=100) = 1 erschoepft
+      calls: [seedCall({ id: "g1", tenantId: "t_fresh" })],
       tenants: [subTenant("t_fresh", "fresh@team.test")],
       numbers: [activeNum("num_fresh", "+4915110000021", "t_fresh")],
       profiles: { t_fresh: { unrestricted: true, maxCallsPerHour: 100 } },
     }),
   });
   try {
-    // fresh hat 0 EIGENE Calls + hohes Profil-Limit, aber global (1>=1) ist erschoepft.
+    // MAX_CALLS_PER_HOUR=1 deckelt das Profil-Limit 100 - ein Profil kann nur senken.
     const res = await postCall(srv.localUrl, "+4915999999999", "fresh@team.test");
     assert.equal(res.status, 429);
     assert.match((await res.json()).error, /Stundenlimit/);

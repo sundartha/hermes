@@ -46,6 +46,9 @@ function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
     setProfile: () => ({ changed: ["maxNumbers"] }),
     // tenant-prolif-c: activatePaidTenant loescht den Grace-Anker bei Reaktivierung.
     clearSuspendedAt: () => {},
+    // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
+    billingHoldActive: () => null,
+    stampBudgetPeriod: () => false,
     // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
     // clearBillingHold (Reversibilitaet) - hier nicht relevant, wird aber nur vom Webhook-
     // Pfad gerufen (applyStripeWebhook), nicht von activateSubscriptionFromCheckoutSession.

@@ -39,8 +39,8 @@ function subscriberTenant(id, idpSubject) {
 
 // (a) Subscriber sub-only passiert das Profil-Gate. Token traegt NUR sub (kein email-Claim,
 // genau der Go-live-Bug-Fall). Profil unter der tenantId -> place_call laeuft bis zum
-// SPAETEREN Nummern-Gate (keine_tenant_nummer), NICHT zum frueheren stundenlimit_nutzer.
-test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, NICHT stundenlimit_nutzer", async () => {
+// SPAETEREN Nummern-Gate (keine_tenant_nummer), NICHT zum frueheren stundenlimit.
+test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, NICHT stundenlimit", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -64,8 +64,8 @@ test("(a) Subscriber sub-only passiert das Profil-Gate -> keine_tenant_nummer, N
       /\[audit\] place_call_denied ip=\S+ to=\+4915123123201 grund=keine_tenant_nummer tenant=t_sub/,
     );
     assert.ok(
-      !/grund=stundenlimit_nutzer/.test(srv.stdout),
-      "Profil-Gate darf NICHT am stundenlimit_nutzer blocken (Go-live-Bug)",
+      !/grund=stundenlimit/.test(srv.stdout),
+      "Profil-Gate darf NICHT am stundenlimit blocken (Go-live-Bug)",
     );
   } finally {
     await srv.stop();
@@ -94,7 +94,7 @@ test("(b) Owner sub-only nicht per Stundenlimit gesperrt (R2-Regressionsriegel)"
       /\[audit\] place_call ip=\S+ to=\+4915123123202 call=\S+ provider=\S+ requestedBy=owner-sub/,
     );
     assert.ok(
-      !/grund=stundenlimit_nutzer/.test(srv.stdout),
+      !/grund=stundenlimit/.test(srv.stdout),
       "Owner darf NIE per Stundenlimit gesperrt werden (R2)",
     );
   } finally {
@@ -104,9 +104,9 @@ test("(b) Owner sub-only nicht per Stundenlimit gesperrt (R2-Regressionsriegel)"
 });
 
 // (c) Profilloser Tenant bleibt 429 (kein Leck, Sec1). t_np ist aktiv+CARD+ownerName (passiert
-// KYC/Identitaet), hat aber KEIN Profil -> DEFAULT_PROFILE(0) greift -> stundenlimit_nutzer.
+// KYC/Identitaet), hat aber KEIN Profil -> DEFAULT_PROFILE(0) greift -> stundenlimit.
 // Isoliert das Profil-Gate: BOOTSTRAP-Gleichheit, KEIN Falsy-Kollaps auf Owner.
-test("(c) Profilloser Tenant -> stundenlimit_nutzer (DEFAULT_PROFILE greift, kein Leck)", async () => {
+test("(c) Profilloser Tenant -> stundenlimit (DEFAULT_PROFILE greift, kein Leck)", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
@@ -126,7 +126,7 @@ test("(c) Profilloser Tenant -> stundenlimit_nutzer (DEFAULT_PROFILE greift, kei
     // zeigt tenant=t_np, requestedBy=sub-np bindet die Ablehnung an das Token.
     await waitForLog(
       srv,
-      /\[audit\] place_call_denied ip=\S+ to=\+4915123123203 grund=stundenlimit_nutzer requestedBy=sub-np/,
+      /\[audit\] place_call_denied ip=\S+ to=\+4915123123203 grund=stundenlimit requestedBy=sub-np/,
     );
   } finally {
     await srv.stop();

@@ -119,14 +119,58 @@ test("S1-7: meterMappingGaps meldet fehlende Meter-Abbildungen (Boot-Assertion)"
 });
 
 // LCT P5 (Drift-Waechter): alertChannelFindings ist die reine Wahrheitstabelle des
-// Alarmkanal-Guards (kein Spawn noetig, Muster meterMappingGaps).
+// Alarmkanal-Guards (kein Spawn noetig, Muster meterMappingGaps). Seit GAP-07 (P6) nimmt
+// sie das ganze config.billing-Objekt statt nur der Nummer - die Assertions der beiden
+// Bestandsfaelle bleiben unveraendert, nur die Signatur zieht nach.
 test("P5-B1: alertChannelFindings('') -> genau ein Befund, UNSET, nicht fatal", () => {
-  const findings = alertChannelFindings("");
+  const findings = alertChannelFindings({ platformAlertSmsTo: "" });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
   assert.equal(findings[0].fatal, false);
 });
 
 test("P5-B2: alertChannelFindings(nummer) -> [] (Kanal besetzt, kein Befund)", () => {
-  assert.deepEqual(alertChannelFindings("+491234567890"), []);
+  assert.deepEqual(alertChannelFindings({ platformAlertSmsTo: "+491234567890" }), []);
+});
+
+// GAP-07 (P6): die scharfe Konjunktion ist FATAL, jede Abschwaechung faellt auf die WARN
+// zurueck. Hoechstens EIN Befund je Zustand.
+test("Alarmkanal-Wahrheitstabelle (GAP-07): leerer Kanal + Buchung + Warnschwelle>0 -> genau ein FATALER Befund", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "",
+    paymentEnabled: true,
+    platformSpendWarnPercent: 80,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET_WITH_ACTIVE_WARNING);
+  assert.equal(findings[0].fatal, true);
+});
+
+test("Alarmkanal-Wahrheitstabelle (GAP-07): Warnschwelle 0 bzw. keine Buchung -> WARN statt FATAL", () => {
+  const warnOff = alertChannelFindings({
+    platformAlertSmsTo: "",
+    paymentEnabled: true,
+    platformSpendWarnPercent: 0,
+  });
+  assert.equal(warnOff.length, 1);
+  assert.equal(warnOff[0].fatal, false, "abgeschaltete Warnschwelle braucht keinen Empfaenger");
+
+  const noPayment = alertChannelFindings({
+    platformAlertSmsTo: "",
+    paymentEnabled: false,
+    platformSpendWarnPercent: 80,
+  });
+  assert.equal(noPayment.length, 1);
+  assert.equal(noPayment[0].fatal, false, "ohne Buchung ist der Dienst blind, nicht unsicher");
+});
+
+test("Alarmkanal-Wahrheitstabelle (GAP-07): besetzter Kanal liefert auch bei scharfer Warnung [] (Nummer wird nie geloggt)", () => {
+  assert.deepEqual(
+    alertChannelFindings({
+      platformAlertSmsTo: "+491234567890",
+      paymentEnabled: true,
+      platformSpendWarnPercent: 80,
+    }),
+    [],
+  );
 });
