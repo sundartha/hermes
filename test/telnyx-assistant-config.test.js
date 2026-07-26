@@ -66,6 +66,9 @@ test("buildAssistantConfig: Barge-in (interruption_settings) ist an", () => {
 
 // K1 (PLAN-CONVERSATION-OPTIMIZATION.md): Regressionsbremse gegen versehentliches Abschalten
 // von Barge-in. enable MUSS true bleiben, unabhaengig vom Threshold-Tuning-Wert daneben.
+// VOICE-24 (tasks/i18n-tests/03-telefonie-render.md): Barge-in im Assistant-Pfad AN - der
+// Kontrast zu VOICE-23 (Budget-Engine ohne Barge-in). buildAssistantConfig nimmt kein
+// Sprach-Argument; ein "sprachunabhaengig"-Test waere vakuum, deshalb nur dieser Verweis.
 test("K1: interruption_settings.enable bleibt true UND interrupt_prediction_threshold=0.4", () => {
   const cfg = buildAssistantConfig(ARGS);
   assert.equal(cfg.interruption_settings.enable, true, "Barge-in ist Launch-Pflicht, darf nie aus sein");

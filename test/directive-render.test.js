@@ -204,3 +204,19 @@ test("EN/R9: leeres Gather traegt en-GB-STT (volles BCP-47, nicht 'en')", () => 
   assert.match(out, /<Gather\b[^>]*\blanguage="en-GB"/, "EN-STT = volles Locale en-GB");
   assert.doesNotMatch(out, /language="en"[ />]/, "nicht das blosse 'en'");
 });
+
+// VOICE-22 (tasks/i18n-tests/03-telefonie-render.md): das Twilio-STT-Modell ist ein Literal
+// in gatherOpts und darf NICHT sprachabhaengig werden - nur `language` kommt aus dem Profil.
+// Die DE/FR/EN-Snapshots oben enthalten den Wert je einzeln; erst diese Schleife formuliert
+// ihn als sprachuebergreifende Invariante (ein neues Profil erbt sie automatisch).
+const TWILIO_STT_MODEL = "deepgram_nova-2-general";
+test("VOICE-22 (Mechanismus, gruen) - Twilio-Gather traegt fuer JEDES Voice-Profil dasselbe STT-Modell", () => {
+  for (const profile of Object.values(VOICE_PROFILE)) {
+    const out = renderDirectives([gather({ action: "/voice/turn?callId=c1", voiceProfile: profile })]);
+    assert.match(
+      out,
+      new RegExp(`<Gather\\b[^>]*\\bspeechModel="${TWILIO_STT_MODEL}"`),
+      `speechModel fehlt/weicht ab fuer ${profile}`,
+    );
+  }
+});

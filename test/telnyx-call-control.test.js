@@ -235,6 +235,9 @@ test("startAssistant: transcription={model,language} bei bekannter Sprache EN (V
 
 // afix-p2 (P2-T2): Sprache ausserhalb der flux-Hint-Liste -> "auto" (Telnyx-Detection statt
 // Hint-los), Modell bleibt deepgram/flux.
+// VOICE-18 (tasks/i18n-tests/03-telefonie-render.md): Katalog-Erwartung 07-22 war "rot",
+// ist seit der Assistant-Fix-Kette ueberholt (tasks/i18n-tests/19-w2-baseline.md §3.4) -
+// Fail-open auf "auto" ist bereits hier UND im "multi"-Test darunter belegt.
 test("startAssistant: unbekannte Sprache -> transcription.language=auto", async () => {
   const calls = stubFetch({ json: {} });
   await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "tr" });
@@ -255,6 +258,9 @@ test("startAssistant: language=multi -> NIE durchgereicht, wird zu auto", async 
 
 // afix-p2 (P2-T4): Regression Inbound-Pfad - ohne language bleibt der Body byte-identisch
 // zum Bestand (telnyx-inbound.js reicht language nie durch, P6 bleibt unangetastet).
+// VOICE-19 (tasks/i18n-tests/03-telefonie-render.md): Katalog-Erwartung 07-22 war "rot",
+// ebenfalls ueberholt - transcriptionFields(null/undefined/"") -> {} ist hier UND im
+// ''/null-Test darunter belegt.
 test("startAssistant: ohne language -> kein transcription-Feld (Inbound-Regression)", async () => {
   const calls = stubFetch({ json: {} });
   await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "assistant-77" });

@@ -118,6 +118,43 @@ test("startInboundAiAssistant: call.language gesetzt -> startAssistant OHNE lang
   );
 });
 
+// GAP-24 (i18n-Launch-Testkatalog, tasks/i18n-tests/11-luecken-und-e2e.md): der STT-Hint
+// MUSS an der Sprache des Calls haengen - auf JEDEM Assistant-Pfad. Der Ingest-Pfad tut das
+// seit der Assistant-Fix-Kette (test/telnyx-event-ingest-machine.test.js, "speak.ended MIT
+// call.language=fr"); der Inbound-Pfad reicht die Sprache bis heute NICHT durch. Fuer einen
+// EN-Tenant entscheidet damit die GLOBALE Assistant-Config ueber die Transkriptionssprache
+// seines Inbound-Anrufs - dieselbe Klasse Defekt wie die historische RCA-Wurzel R2.
+//
+// HEUTE ROT, und rot ist hier das Arbeitsergebnis (PLAN-I18N-TESTS.md 4.1). Der Test steht
+// bewusst neben dem gruenen Bestands-Test darueber, der die heutige Byte-Identitaet pinnt:
+// KOPPLUNG - wer den Inbound-Hint nachruestet, aendert BEIDE Tests in EINER Aenderung
+// (der Byte-Identitaets-Test darueber wird dann sachlich falsch).
+// NICHT Gegenstand dieses Tests: eine eigene Assistant-INSTANZ je Sprache. Die eine globale
+// Instanz ist ein dokumentiert getragenes Risiko (tasks/i18n-tests/19-w2-baseline.md §7),
+// keine gefallene Produktentscheidung - ein Pin darauf waere ein erfundenes Soll.
+test("GAP-24 (SOLL, rot) - Inbound-startAssistant traegt den Sprach-Hint des Calls", async () => {
+  const store = spyStore();
+  const voiceControl = spyVoiceControl();
+  const call = { id: "call_gap24", provider: "telnyx", language: "en" };
+  const config = withConfigNamespaces({ telnyxAssistant: { assistantId: "asst_x" } });
+
+  await startInboundAiAssistant({
+    store,
+    voiceControl,
+    config,
+    call,
+    callControlId: "cc_inbound_gap24",
+    greeting: "Hello, this is the AI assistant.",
+    voiceProfile: "en-GB-SoniaNeural",
+  });
+
+  assert.equal(
+    voiceControl.order[1].params.language,
+    "en",
+    "ohne Sprach-Hint entscheidet die globale Assistant-Config ueber die STT-Sprache",
+  );
+});
+
 test("inboundCallControlId: Feld gesetzt -> Wert; fehlend/leer/nicht-string -> null", () => {
   assert.equal(inboundCallControlId({ CallControlId: "cc_1" }), "cc_1");
   assert.equal(inboundCallControlId({}), null, "Feld fehlt");
