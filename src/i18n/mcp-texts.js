@@ -1,4 +1,5 @@
-// MCP-Textkanal (PLAN-I18N-FIX P12): die sprachabhaengigen Strings der MCP-Tool-Schicht.
+// MCP-Textkanal (PLAN-I18N-FIX P12): die sprachabhaengigen Strings der MCP-Tool-Schicht,
+// inklusive der Feldnamen der Berechtigungs-Zusammenfassung (P13).
 // GETRENNT von den gesprochenen Locale-Strings: diese Texte werden NIE gesprochen,
 // sondern als Chat-Text ausgeliefert - die deutschen Werte bleiben deshalb in der
 // ASCII-Transliteration des Bestands (Repo-Konvention, wie summarySystem/realtimeOpener,
@@ -22,6 +23,15 @@ export const MCP_TEXTS = Object.freeze({
     // Transkript-Rollen-Praefix (MCP-06). DE byte-identisch zum Bestand.
     roleAgent: "Agent",
     roleCounterparty: "Gegenseite",
+    // Feldnamen der Berechtigungs-Zusammenfassung (MCP-09/P13): sie erscheinen als WERT
+    // der Widget-Zeile "Permissions" und im Stufe-0-Textblock. DE bleibt byte-identisch
+    // zum Bestand - "Summaries" war dort bereits englisch und wird NICHT nebenbei
+    // eingedeutscht (das waere eine unbeauftragte Textaenderung).
+    permissionLabels: Object.freeze({
+      summaries: "Summaries",
+      personalData: "PersoenlicheDaten",
+      bankData: "Bankdaten",
+    }),
     errors: Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_INVALID]:
         "Der Telefon-Agent hat keine gueltige Antwort geliefert. Bitte spaeter erneut versuchen.",
@@ -34,6 +44,11 @@ export const MCP_TEXTS = Object.freeze({
   en: Object.freeze({
     roleAgent: "Agent",
     roleCounterparty: "Other party",
+    permissionLabels: Object.freeze({
+      summaries: "Summaries",
+      personalData: "PersonalData",
+      bankData: "BankData",
+    }),
     errors: Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_INVALID]:
         "The phone agent did not return a valid response. Please try again later.",
@@ -46,6 +61,11 @@ export const MCP_TEXTS = Object.freeze({
   fr: Object.freeze({
     roleAgent: "Agent",
     roleCounterparty: "Interlocuteur",
+    permissionLabels: Object.freeze({
+      summaries: "Résumés",
+      personalData: "DonnéesPersonnelles",
+      bankData: "DonnéesBancaires",
+    }),
     errors: Object.freeze({
       [MCP_ERROR_CODE.UPSTREAM_INVALID]:
         "L'agent téléphonique n'a pas renvoyé de réponse valide. Veuillez réessayer plus tard.",

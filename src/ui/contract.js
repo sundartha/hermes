@@ -62,13 +62,16 @@ export function makeUiRenderer({ mimeType, metaKey, buildMeta }) {
     mimeType,
     hasWidget: (widgetId) => hasWidget(widgetId),
     resourceUri: (widgetId) => uiResourceUri(widgetId),
-    registerResource(server, widgetId) {
+    // language (P13/E4): die Agentensprache, in der die statische Resource gerendert
+    // wird. Die ui://-URI bleibt bewusst sprachfrei (ein live etablierter Wire-
+    // Bezeichner); pro Request steht ohnehin genau eine Sprache fest (stateless, INV-8).
+    registerResource(server, widgetId, language) {
       const uri = uiResourceUri(widgetId);
       server.registerResource(
         widgetId,
         uri,
         { title: widgetTitle(widgetId), mimeType },
-        async () => ({ contents: [{ uri, mimeType, text: widgetHtml(widgetId) }] }),
+        async () => ({ contents: [{ uri, mimeType, text: widgetHtml(widgetId, language) }] }),
       );
     },
     toolMeta: (widgetId) => ({ [metaKey]: buildMeta(uiResourceUri(widgetId)) }),

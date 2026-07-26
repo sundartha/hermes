@@ -1,12 +1,13 @@
 // Host-agnostischer Widget-Katalog: kennt die Hermes-Widgets (Id, Datei, Titel) und
-// laedt ihre self-contained HTML EINMAL beim Modul-Load. KEIN Host-/Protokoll-Wissen
-// hier (kein mimeType, kein _meta) - dasselbe Widget rendert in JEDEM Host (P3-Ziel).
-// Beide Adapter (mcp-native, chatgpt) konsumieren diesen Katalog (G5/S2 - eine Quelle
-// fuer die Lade-Logik, keine Duplizierung).
+// laedt ihre self-contained HTML EINMAL beim Modul-Load - und je unterstuetzter
+// Sprache eine Fassung (P13/E4). KEIN Host-/Protokoll-Wissen hier (kein mimeType, kein
+// _meta) - dasselbe Widget rendert in JEDEM Host (P3-Ziel). Beide Adapter (mcp-native,
+// chatgpt) konsumieren diesen Katalog (G5/S2 - eine Quelle fuer die Lade-Logik, keine
+// Duplizierung).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BIND_SCRIPT } from "./widget-bind.js";
-import { I18N_SCRIPT } from "./widget-i18n.js";
+import { I18N_SCRIPT_BY_LOCALE, WIDGET_LOCALES, resolveWidgetLocale } from "./widget-i18n.js";
 import {
   WING_CSS_DARK_STATIC, WING_MARKUP_DARK_STATIC,
   WING_CSS_DARK_LIVE, WING_MARKUP_DARK_LIVE,
@@ -84,9 +85,12 @@ export function withWingCanvasMount(html) {
 // Widget-Quellen steht, sichert der Injektions-Test (mcp-ui-widget-i18n).
 const I18N_PLACEHOLDER = "<!--__I18N__-->";
 
-export function withI18nScript(html) {
+// Injiziert das Lokalisierungs-Script DER uebergebenen Sprache (P13/E4). Unbekannte/
+// fehlende Sprache -> englische Fassung (resolveWidgetLocale, fail-safe) - die Funktion
+// bleibt total, kein "undefined" kann je ins ausgelieferte HTML geraten.
+export function withI18nScript(html, language) {
   if (!html.includes(I18N_PLACEHOLDER)) return html;
-  return html.replace(I18N_PLACEHOLDER, I18N_SCRIPT);
+  return html.replace(I18N_PLACEHOLDER, I18N_SCRIPT_BY_LOCALE[resolveWidgetLocale(language)]);
 }
 
 // Gemeinsamer Olympus-HUD-Kartenrahmen (H4): eine Quelle (hud-card-css.js)
@@ -136,20 +140,38 @@ function withWingAssets(html, def) {
 // Self-contained Widget-HTML EINMAL beim Modul-Load lesen (kein per-Request-IO,
 // kein Lazy-Init) und das gemeinsame Binding einbetten. Iframe-Sandbox: kein
 // @import/Linkback (Token inline, siehe Datei).
+//
+// Stufe 1: die sprachneutrale Basis je Widget - alles ausser der Lokalisierung, EINMAL
+// beim Modul-Load gelesen und zusammengesetzt. Der I18N-Platzhalter bleibt hier stehen.
 const widgetDir = fileURLToPath(new URL("./widgets/", import.meta.url));
-const WIDGET_HTML = Object.fromEntries(
+const WIDGET_BASE_HTML = Object.fromEntries(
   Object.entries(WIDGET_DEFS).map(([id, def]) => {
     const raw = readFileSync(widgetDir + def.file, "utf8");
     const withCss = withHudCardCss(raw);
     const withAssets = withWingAssets(withCss, def);
-    const withI18n = withI18nScript(withAssets);
-    const withEngine = withWingEngine(withI18n);
+    const withEngine = withWingEngine(withAssets);
     const withMount = withWingCanvasMount(withEngine);
     return [id, withBindScript(withMount)];
   }),
 );
 
+// Stufe 2: je Sprache eine fertige Fassung (P13/E4). Die SPRACHE IST TEIL DES
+// SCHLUESSELS - sie kann strukturell nicht "vergessen" werden (Pre-Mortem 2). Ebenfalls
+// EINMAL beim Modul-Load, kein per-Request-IO und kein Lazy-Init (P15).
+const WIDGET_HTML_BY_LOCALE = Object.fromEntries(
+  WIDGET_LOCALES.map((locale) => [
+    locale,
+    Object.fromEntries(
+      Object.entries(WIDGET_BASE_HTML).map(([id, base]) => [id, withI18nScript(base, locale)]),
+    ),
+  ]),
+);
+
 export const hasWidget = (widgetId) =>
-  Object.prototype.hasOwnProperty.call(WIDGET_HTML, widgetId);
-export const widgetHtml = (widgetId) => WIDGET_HTML[widgetId];
+  Object.prototype.hasOwnProperty.call(WIDGET_BASE_HTML, widgetId);
+// language = die Agentensprache (mcp-tools reicht die bereits per localeFor aufgeloeste
+// durch). Fehlt sie (Direktaufruf/Test), gilt die englische Fassung - dieselbe fail-safe
+// Regel wie in resolveLocale, kein eigener zweiter Fallback.
+export const widgetHtml = (widgetId, language) =>
+  WIDGET_HTML_BY_LOCALE[resolveWidgetLocale(language)][widgetId];
 export const widgetTitle = (widgetId) => WIDGET_DEFS[widgetId].title;

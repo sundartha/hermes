@@ -1,11 +1,11 @@
 // Gemeinsame Lokalisierung fuer ALLE Hermes-Widgets. Der MCP ist international -
-// das Widget zeigt seine Oberflaeche in der Sprache des Betrachters (Browser-
-// Locale), NICHT hart deutsch.
+// das Widget zeigt seine Oberflaeche in der Sprache des Agenten (seit P13/E4
+// SERVERGERENDERT, nicht mehr Browser-Locale), NICHT hart deutsch.
 //
 // Mechanik (Muster widget-bind.js): dieselben Funktionen laufen in Node-Tests
 // UND - via Function.prototype.toString projiziert - als self-contained
-// Iframe-Script (I18N_SCRIPT, injiziert von widget-catalog.js in den <head>
-// jedes Widgets, VOR den Inline-Skripten -> window.HermesI18n ist dort
+// Iframe-Script (I18N_SCRIPT_BY_LOCALE, injiziert von widget-catalog.js in den
+// <head> jedes Widgets, VOR den Inline-Skripten -> window.HermesI18n ist dort
 // synchron verfuegbar).
 //
 // Uebersetzungs-Modell: die Keys SIND die englischen Anzeigetexte. Englisch ist
@@ -102,14 +102,19 @@ export const WIDGET_DICT = {
   },
 };
 
+// Alle Sprachfassungen, die es vom Widget geben kann = die moeglichen Ergebnisse von
+// resolveLocale: der eingebaute englische Fallback plus jede Uebersetzungstabelle.
+// EINE Quelle fuer die Script- und die HTML-Matrix (widget-catalog.js).
+export const WIDGET_LOCALES = Object.freeze([DEFAULT_LOCALE, ...Object.keys(WIDGET_DICT)]);
+
 // "de-DE"/"fr_CH" -> "de"/"fr". Nur der primaere Subtag entscheidet - die
 // Widgets haben keine regionalen Varianten.
 export function primaryLanguage(tag) {
   return String(tag || "").toLowerCase().split(/[-_]/)[0];
 }
 
-// Erster Kandidat (z.B. [navigator.language]), dessen Sprache
-// unterstuetzt wird; nichts passt -> DEFAULT_LOCALE (fail-safe englisch).
+// Erster Kandidat (seit P13/E4: die servergerenderte Agentensprache), dessen
+// Sprache unterstuetzt wird; nichts passt -> DEFAULT_LOCALE (fail-safe englisch).
 export function resolveLocale(candidates, dict) {
   for (const candidate of candidates) {
     const lang = primaryLanguage(candidate);
@@ -117,6 +122,20 @@ export function resolveLocale(candidates, dict) {
     if (lang && Object.prototype.hasOwnProperty.call(dict, lang)) return lang;
   }
   return DEFAULT_LOCALE;
+}
+
+// Agentensprache -> Widget-Locale. DER eine Normalisierer beider Eintrittspunkte
+// (widgetHtml, withI18nScript); unbekannt/fehlend -> DEFAULT_LOCALE. Im Produktivpfad
+// ist er die Identitaet: mcp-tools reicht die bereits ueber localeFor() aufgeloeste
+// Sprache herein - hier entsteht KEIN zweiter Fallback (Test T-i18n-locale-keyset).
+export const resolveWidgetLocale = (language) => resolveLocale([language], WIDGET_DICT);
+
+// Nur die Tabelle der gerenderten Sprache ins Iframe projizieren: seit die Sprache
+// serverseitig feststeht (E4), waeren die uebrigen Tabellen dort unerreichbarer Ballast.
+// en -> {} (die Keys SIND die englischen Texte, s. Kopfkommentar).
+export function widgetDictFor(locale) {
+  const table = WIDGET_DICT[locale];
+  return table ? { [locale]: table } : {};
 }
 
 // Key = englischer Text (siehe Kopfkommentar): en -> Key selbst, sonst Eintrag
@@ -137,28 +156,23 @@ export function localizeStaticLabels(doc, t) {
 }
 
 // Projiziert dieselben Funktionen als Iframe-Script-Text (eine Quelle, G5/S2 -
-// exakt das buildBindScript-Muster). Bootstrap: Locale einmal aufloesen,
+// exakt das buildBindScript-Muster). Bootstrap: Locale liegt servergerendert fest,
 // window.HermesI18n bereitstellen (fuer die Inline-Skripte der Widgets) und
 // die statischen Labels beim DOM-Ready lokalisieren.
-function buildI18nScript() {
+function buildI18nScript(locale) {
   const body = [
     '"use strict";',
     `var DEFAULT_LOCALE = ${JSON.stringify(DEFAULT_LOCALE)};`,
-    `var WIDGET_DICT = ${JSON.stringify(WIDGET_DICT)};`,
-    primaryLanguage.toString(),
-    resolveLocale.toString(),
+    `var WIDGET_DICT = ${JSON.stringify(widgetDictFor(locale))};`,
     translate.toString(),
     localizeStaticLabels.toString(),
-    // Nur die Browser-Locale: der frueher zusaetzlich abgefragte ChatGPT-Host-Kandidat
-    // (window.openai.locale) ist entfallen - das ausgelieferte Widget-HTML darf seit
-    // widget-wire kein window.openai mehr enthalten, denn der EINZIGE erlaubte Sendeweg
-    // ist jetzt tools/call-postMessage (Wire-Vertrag, siehe widgets/call.html). Der
-    // server-seitige ChatGPT-Adapter (src/ui/adapters/chatgpt.js) bleibt dabei verdrahtet
-    // und liefert dasselbe HTML weiter aus - die volle Entscheidung samt bekannter
-    // Interaktivitaets-Luecke bei einem echten ChatGPT-Host steht in src/ui/registry.js.
-    // Die Kandidaten-Liste hier bleibt (naechste Locale-Quelle = ein Eintrag mehr, sonst
-    // nichts).
-    'var locale = resolveLocale([navigator.language], WIDGET_DICT);',
+    // P13/E4: die Locale wird SERVERSEITIG entschieden (Agentensprache) und hier als
+    // Literal eingesetzt - kein Browser-Signal mehr. Der frueher hier gelesene
+    // navigator.language war die einzige verfuegbare Naeherung an die Chat-Sprache;
+    // ein echtes Host-Signal existiert im MCP-Wire-Vertrag nicht (UI-14), deshalb
+    // gewinnt die Achse, die der Nutzer selbst einstellt und die zum Anruf passt.
+    // Folge: alle Betrachter derselben Karte sehen dieselbe Sprache (frueher UI-19).
+    `var locale = ${JSON.stringify(locale)};`,
     "function t(key) { return translate(WIDGET_DICT, locale, key); }",
     "function localizeDocument() {",
     "  document.documentElement.lang = locale;",
@@ -171,5 +185,8 @@ function buildI18nScript() {
   return `<script>\n(function () {\n${body}\n})();\n</script>`;
 }
 
-// Geteilte i18n-Quelle, EINMAL je Widget in den <head> injiziert (widget-catalog.js).
-export const I18N_SCRIPT = buildI18nScript();
+// Ein fertiges Script je Widget-Sprache, EINMAL beim Modul-Load gebaut (kein Lazy-Init,
+// P15). Schluessel = exakt die moeglichen resolveWidgetLocale-Ergebnisse.
+export const I18N_SCRIPT_BY_LOCALE = Object.freeze(
+  Object.fromEntries(WIDGET_LOCALES.map((locale) => [locale, buildI18nScript(locale)])),
+);

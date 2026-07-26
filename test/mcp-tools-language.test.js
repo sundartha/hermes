@@ -262,6 +262,8 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
         `Fehlertext fuer Code "${code}" fehlt in Sprache "${language}" (sonst landet der rohe Code im Chat)`,
       );
     }
+    for (const key of ["summaries", "personalData", "bankData"])
+      assert.ok(texts.permissionLabels?.[key], `permissionLabels.${key} fehlt fuer ${language}`);
   }
 });
 
@@ -282,4 +284,45 @@ test("/mcp loest die Sprache aus dem Tenant-Feld auf (Wiring, Spawn)", async () 
   } finally {
     await srv.stop();
   }
+});
+
+// ==================== T11 (ex MCP-09) ====================
+// Die Feldnamen der Berechtigungs-Zusammenfassung folgen der Tenant-Sprache. DE bleibt
+// byte-identisch (derselbe String, den test/mcp-ui.test.js als Widget-Wert pinnt).
+test("permissionsSummary-Feldnamen folgen der Tenant-Sprache; DE byte-identisch (ex MCP-09)", async () => {
+  await withGateway(AGENT_STATE_FIXTURE, async () => {
+    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
+      .get("get_agent_status")();
+    assert.equal(
+      de.structuredContent.permissions,
+      "Summaries=true, PersoenlicheDaten=false, Bankdaten=false",
+      "DE bleibt byte-identisch zum Bestand",
+    );
+    for (const language of ["en", "fr"]) {
+      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        .get("get_agent_status")();
+      assert.doesNotMatch(r.structuredContent.permissions, /PersoenlicheDaten|Bankdaten/,
+        `Sprache ${language} darf keine deutschen Feldnamen tragen`);
+      assert.match(r.structuredContent.permissions,
+        new RegExp(`^${MCP_TEXTS[language].permissionLabels.summaries}=true, `),
+        "Wert kommt aus DEMSELBEN Locale-Buendel, kein zweiter Katalog");
+    }
+  });
+});
+
+// ==================== T12 (ex MCP-12) ====================
+// Kanarienvogel: die drei Bestands-Testdateien der MCP-Schicht decken mindestens ein
+// EN-Sprachszenario ab. Bleibt als DAUERHAFTER Waechter stehen (nicht abgesenkt, nicht
+// geloescht): faellt die EN-Abdeckung dort je wieder heraus, schlaegt er rot.
+test("Bestandstests der MCP-Schicht decken ein EN-Sprachszenario ab (ex MCP-12)", () => {
+  const files = ["mcp-tools.test.js", "mcp-ui.test.js", "mcp-ui-widget-i18n.test.js"];
+  let hits = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(ROOT, "test", f), "utf8");
+    hits += (src.match(/language\s*[:=]\s*["']en/g) || []).length;
+  }
+  assert.ok(
+    hits > 0,
+    "kein bestehender Bestandstest deckt heute ein EN-/US-Sprachszenario der MCP-Schicht ab",
+  );
 });
