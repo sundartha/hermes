@@ -20,7 +20,7 @@ const SECRET = "web-09-web-secret-0123456789";
 const SUB = "sub-web09";
 const TENANT_ID = "t_sub-web09"; // upsertOnFirstLogin: tenantId = `t_${sub}`
 
-async function setup() {
+async function setup({ paymentEnabled = false, publicUrl = "https://agent.test" } = {}) {
   const { store, runner } = await makePgTestStore();
   const accounts = makeAccounts(runner);
   const sessions = makeSessions(runner);
@@ -44,7 +44,7 @@ async function setup() {
       webAuthMw,
       webAuthPendingMw: webAuthMw,
       audit: () => {},
-      config: withConfigNamespaces({ paymentEnabled: false }),
+      config: withConfigNamespaces({ paymentEnabled, publicUrl }),
       billing: {},
       provision: async () => {},
     }),
@@ -70,6 +70,26 @@ test("private-number: ungueltiger Wert liefert 400 + stabilen Code invalid_priva
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.equal(json.error, "invalid_private_number");
+  } finally {
+    await srv.close();
+  }
+});
+
+// WEB-10 (R-G): Katalogtitel nennt api-onboard.js, dort gibt es keinen PUBLIC_URL-Treffer.
+// Gemessene Belegstelle ist der Checkout-Handler in self-service-routes.js - dieselbe
+// Funktion, die zwei Zeilen weiter plan_unconfigured/already_subscribed als Codes liefert.
+test("WEB-10 (SOLL, rot) - fehlende PUBLIC_URL liefert einen sprachneutralen Code, keinen deutschen Klartext", async () => {
+  const srv = await setup({ paymentEnabled: true, publicUrl: "" });
+  try {
+    const res = await fetch(`${srv.base}/api/self-service/billing/setup-checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: srv.cookie },
+      body: JSON.stringify({}),
+    });
+    assert.equal(res.status, 500);
+    const json = await res.json();
+    assert.doesNotMatch(json.error, /\s/, "Code darf kein Satz sein (Leerzeichen), heute 'PUBLIC_URL fehlt'");
+    assert.doesNotMatch(json.error, /fehlt/, "kein deutsches Wort im Code");
   } finally {
     await srv.close();
   }

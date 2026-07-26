@@ -69,6 +69,9 @@ test(
   },
 );
 
+// WEB-03 (Buchhaltung) - die Redirect-/Query-/SPA-Haelfte der ID ist bereits in den drei
+// folgenden Tests gepinnt (302, Query-Erhalt, SPA-Fallback). Kein Duplikat (G5); die
+// App-Shell-Haelfte (englische Sprache) steht am Dateiende.
 test("WEB_DIST_DIR: /tenant.html -> 302 /app (Altpfad-Redirect, Bookmarks)", async () => {
   const srv = await startServer({ env: { WEB_DIST_DIR: WEB_DIST } });
   try {
@@ -134,4 +137,13 @@ test("WEB_DIST_DIR relativ: /app-Deep-Link liefert die App-Shell (sendFile absol
   } finally {
     await srv.stop();
   }
+});
+
+// WEB-03 (i18n-Testkatalog, tasks/i18n-tests/08-web-dashboard-onboarding.md). Reiner
+// Quelltext-Read (kein Build noetig, apps/web/dist ist gitignored) - die App-Shell
+// hinter dem /tenant.html-Redirect ist die englische Astro-Layout-Datei.
+test("WEB-03 (Mechanismus, gruen) - die App-Shell hinter dem /tenant.html-Redirect ist englisch", () => {
+  const layout = fs.readFileSync(path.join(ROOT, "apps/web/src/layouts/App.astro"), "utf8");
+  assert.match(layout, /<html lang="en">/, "App-Shell muss lang=en tragen");
+  assert.doesNotMatch(layout, /<html lang="de">/, "App-Shell darf nicht hart deutsch sein");
 });
