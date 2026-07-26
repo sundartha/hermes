@@ -11,7 +11,7 @@ import { makeStubGeoLookup, nullGeoLookup } from "../src/geo/stub.js";
 import { makeMaxmindGeoLookup } from "../src/geo/maxmind.js";
 import { normCountry, resolveOnboardCountry, resolveNumberCountry } from "../src/geo/resolve.js";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY, localeFor } from "../src/i18n/locales.js";
-import { DEFAULT_COUNTRY } from "../src/store/defaults.js";
+import { DEFAULT_COUNTRY, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 
 // ---- (A) Stub-Adapter ----
 test("makeStubGeoLookup: bekannte IP -> {country}; unbekannte -> null", () => {
@@ -55,6 +55,19 @@ test("languageForCountry: DE/AT/CH -> de, FR -> fr, GB/IE -> en", () => {
 test("languageForCountry: case-insensitiv (fr -> fr)", () => {
   assert.equal(languageForCountry("fr"), "fr");
   assert.equal(languageForCountry("gb"), "en");
+});
+
+// LANG-09 (i18n-Testkatalog, tasks/i18n-tests/01-sprachaufloesung.md). Die Case-
+// Insensitivitaet gilt auch fuer ein Land OHNE Tabelleneintrag: die Normalisierung
+// (String(country||"").toUpperCase()) laeuft VOR dem Nachschlagen, der Fallback ist
+// deshalb fuer alle drei Schreibweisen derselbe. Gegen DEFAULT_LANGUAGE formuliert,
+// nicht gegen "en" - sonst wird der Test beim naechsten Weltdefault-Flip falsch-rot
+// (Baseline 19-w2-baseline.md 1.1). Die Katalog-Aussage "US unveraenderlich de" ist
+// seit P10 inhaltlich ueberholt; der gepruefte MECHANISMUS ist unveraendert.
+test("LANG-09 (Mechanismus, gruen) - languageForCountry ist auch fuer Tabellen-fremde Laender case-insensitiv", () => {
+  assert.equal(languageForCountry("us"), DEFAULT_LANGUAGE);
+  assert.equal(languageForCountry("Us"), DEFAULT_LANGUAGE);
+  assert.equal(languageForCountry("US"), DEFAULT_LANGUAGE);
 });
 
 test("LANGUAGE_FOR_COUNTRY ist frozen (eine Quelle, kein Laufzeit-Drift)", () => {

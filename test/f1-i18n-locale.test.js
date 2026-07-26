@@ -52,6 +52,13 @@ test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck
 // A3-Migration (P10): DEFAULT_LANGUAGE ist geflippt, der Test ist Regressionsschutz.
 // Beleg: tasks/i18n-tests/00-kanonische-liste.md Abschnitt 4 (Nachtrag 7.12);
 // PLAN-I18N-TESTS.md Abschnitt 7.12.
+//
+// LANG-21 (i18n-Launch-Testkatalog, tasks/i18n-tests/01-sprachaufloesung.md). Der
+// Katalogfall ist durch DIESEN Test und den Charakterisierungs-Test darueber bereits
+// vollstaendig abgedeckt: alle vier Eingaben der Spezifikation ("xx", "", null, undefined)
+// sind hier gepinnt. tasks/i18n-tests/00-kanonische-liste.md (Nachtrag zu D4) weist
+// ausdruecklich darauf hin, dass LANG-21 und WORLD-3 sonst kollidieren. Deshalb hier nur
+// die Katalog-Referenz statt einer dritten Kopie (G5) - kein neuer Test.
 test("localeFor(null|undefined|'xx') liefert das EN-Locale (Weltdefault) (ex WORLD-03)", () => {
   assert.equal(localeFor("xx").language, "en");
   assert.equal(localeFor(undefined).language, "en");
@@ -319,6 +326,21 @@ test("Gegenprobe: ein FR-Call faerbt einen parallelen DE-Call nicht ab (Resolver
   const deText = disclosureSentence(deCall());
   assert.equal(deText, DE_DISCLOSURE, "DE bleibt unveraendert, auch nachdem FR aufgeloest wurde");
   assert.notEqual(frText, deText);
+});
+
+// PROMPT-18 (tasks/i18n-tests/02-llm-prompts.md): die EN-Achse desselben Beweises wie der
+// FR/DE-Test darueber - promptInputs loest loc = localeFor(call.language) PRO AUFRUF auf,
+// es gibt keinen modulweiten Sprach-State in claude.js. Promise.all statt sequenziell:
+// nur so beruehrt der Test die Nebenlaeufigkeits-Aussage des Katalogs ueberhaupt.
+test("PROMPT-18 (Mechanismus, gruen) - paralleler EN- und DE-Call faerben sich nicht gegenseitig ab", async () => {
+  const [de, en] = await Promise.all([
+    Promise.resolve(systemPrompt(deCall())),
+    Promise.resolve(systemPrompt(enCall())),
+  ]);
+  assert.ok(de.includes(DE_SPEECH_CLAUSE));
+  assert.ok(!de.includes(LOCALES.en.speechClause));
+  assert.ok(en.includes(LOCALES.en.speechClause));
+  assert.ok(!en.includes(DE_SPEECH_CLAUSE));
 });
 
 // ---- LAW-02 (i18n-Testkatalog): EN end-to-end ueber disclosureSentence/openingText ----

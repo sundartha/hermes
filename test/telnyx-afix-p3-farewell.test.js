@@ -175,6 +175,13 @@ test("F9: Asymmetrie-Regressionsschutz (de) - Delay unterschreitet NIE die real 
 // global - der Fallback behaelt seinen ALTEN Sockel 3000ms (Bestand), NUR 'de' hat den
 // niedrigeren, gemessenen Sockel 1500ms (s. F5). MAX bleibt der einzige weiterhin globale Wert
 // (verlaengert nur, kann also nie abschneiden).
+//
+// PROMPT-21 (i18n-Launch-Testkatalog, tasks/i18n-tests/02-llm-prompts.md). Der Katalogfall
+// ("nur 'de' ist vermessen; EN/FR nutzen die alte, ungemessene Fallback-Kalibrierung, X != Y
+// bei identischer Zeichenzahl") ist durch F7 (de, 100 Zeichen -> 7000 ms) zusammen mit F10
+// (en/fr/undefined, 100 Zeichen -> 8500 ms) und F11/F12 exakt abgedeckt. Referenz statt
+// Duplikat (G5); die Kalibrierungs-Luecke selbst ist ein bewusst getragenes Risiko
+// (19-w2-baseline.md 7).
 test("F10: en/fr/undefined bekommen die ALTEN Fallback-Konstanten (1500ms + 70ms/Zeichen, minMs 3000ms) - Regressionsschutz gegen R4", () => {
   const { call, watchdog } = setup();
 

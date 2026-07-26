@@ -135,6 +135,60 @@ test("resolveCallLanguage: alles leer -> DEFAULT_LANGUAGE (de, letzter Notnagel)
   assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: null }), DEFAULT_LANGUAGE);
 });
 
+// LANG-17 (tasks/i18n-tests/01-sprachaufloesung.md): die Praezedenz vollstaendig statt in
+// vier Einzelfaellen - alle 2^3 Kombinationen aus settings.language / numberRecord.language
+// / tenant.defaultLanguage, jede Stufe zusaetzlich in der ""-Variante. "" ist KEIN
+// Sonderfall: JS-|| behandelt es wie null, die naechste Stufe greift. Endstufe ist
+// DEFAULT_LANGUAGE (Weltdefault, P10) - bewusst gegen die Konstante formuliert, nicht
+// gegen "en" (sonst falsch-rot beim naechsten Flip).
+// Abgrenzung zu PROMPT-17 unten: hier variieren die WERTE (null / "" / gesetzt), dort die
+// SATZFORM des Records (Feld fehlt ganz) - kein Duplikat (G5).
+test("LANG-17 (Mechanismus, gruen) - resolveCallLanguage-Praezedenz ueber alle Falsy-Kombinationen", () => {
+  const FALSY = [null, ""]; // beide muessen zur naechsten Stufe durchfallen
+  for (const settingsLang of [...FALSY, "en"]) {
+    for (const numberLang of [...FALSY, "fr"]) {
+      for (const tenantLang of [...FALSY, "de"]) {
+        const s = makeDefaultState();
+        s.tenants = [{ id: A, status: "active", defaultLanguage: tenantLang }];
+        s.settings[A] = { ...defaultSettings(), language: settingsLang };
+        const expected = settingsLang || numberLang || tenantLang || DEFAULT_LANGUAGE;
+        assert.equal(
+          resolveCallLanguage(s, { tenantId: A, numberRecord: { language: numberLang } }),
+          expected,
+          `settings=${settingsLang} number=${numberLang} tenant=${tenantLang}`,
+        );
+      }
+    }
+  }
+});
+
+// PROMPT-17 (tasks/i18n-tests/02-llm-prompts.md): ein Nummern-Record aus der Zeit VOR F1
+// traegt das language-Feld ueberhaupt nicht (additiv NULLABLE, Backfill-frei). Der
+// optionale Zugriff numberRecord?.language darf daran weder werfen noch die Stufe
+// ueberspringen - tenant.defaultLanguage greift.
+test("PROMPT-17 (Mechanismus, gruen) - Nummern-Record OHNE language-Feld faellt sauber auf tenant.defaultLanguage", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: A, status: "active", defaultLanguage: "en" }];
+  s.settings[A] = { ...defaultSettings(), language: null };
+  const legacyRecord = { id: "num_legacy", e164: "+4930111222333" }; // KEIN language-Key
+  assert.equal(Object.hasOwn(legacyRecord, "language"), false, "Vorbedingung: Feld fehlt wirklich");
+  assert.equal(resolveCallLanguage(s, { tenantId: A, numberRecord: legacyRecord }), "en");
+});
+
+// LANG-19 (SOLL) - Entscheidung E1 (tasks/i18n-tests/00-kanonische-liste.md, Cluster D6):
+// "EN" ist KEIN Nutzerfehler - SUPPORTED_LANGUAGES ist schlicht kleingeschrieben. Der
+// Owner hat "normalisieren" entschieden; stilles Verwerfen ist die schlechteste der drei
+// Optionen. HEUTE ROT: isOptionalEnumOverride prueft allowedValues.includes(value) ohne
+// Normalisierung, updateSettings ueberspringt den Key per continue - kein Fehler, kein
+// changed-Eintrag, kein Schreiben. Rot ist hier das Arbeitsergebnis (PLAN-I18N-TESTS 4.1).
+test("LANG-19 (SOLL, rot) - updateSettings normalisiert language='EN' zu 'en' statt es still zu verwerfen", () => {
+  const s = makeDefaultState();
+  s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
+  const res = updateSettings(s, BOOTSTRAP_TENANT_ID, { language: "EN" });
+  assert.ok(res.changed.includes("language"), "E1: die Grossschreibung darf nicht still verpuffen");
+  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].language, "en");
+});
+
 // ---- (P4 #8) updateSettings: language-Override fail-closed validiert ----
 test("updateSettings: bekannte Sprache uebernommen; '' setzt zurueck auf null; Freitext/unbekannt ignoriert", () => {
   const s = makeDefaultState();

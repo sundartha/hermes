@@ -188,6 +188,20 @@ test("M10 Anti-Spoofing: disclosureSentence + openingText byte-identisch mit/ohn
   );
 });
 
+// PROMPT-22 (tasks/i18n-tests/02-llm-prompts.md), NACH P11 umformuliert wie PROMPT-08:
+// die Mandats-Texte kommen aus loc.prompt.mandate (19-w2-baseline.md 3.3). Geprueft wird
+// Sprachreinheit statt "bleibt deutsch": EN-Call -> englische Mandats-Labels, keine
+// deutschen. Der DE-Wortlaut bleibt woertlich von M3 gepinnt (kein Duplikat, G5).
+test("PROMPT-22 (Sprachreinheit, gruen) - Mandats-Sektion eines EN-Calls ist englisch", () => {
+  const prompt = systemPrompt(call({ direction: "outbound", language: "en", mandate: FULL_MANDATE }));
+  assert.ok(prompt.includes("YOUR LEEWAY:"));
+  assert.ok(prompt.includes("IF THE FIRST CHOICE DOESN'T WORK:"));
+  assert.ok(prompt.includes("OUTSIDE YOUR LEEWAY:"));
+  assert.ok(!prompt.includes("DEIN SPIELRAUM:"));
+  assert.ok(!prompt.includes("AUSSERHALB DEINES SPIELRAUMS:"));
+  assert.ok(!prompt.includes("WENN DER ERSTWUNSCH NICHT GEHT:"));
+});
+
 test("M11 Mandats-Sektion traegt keine ASCII-Transliteration und mindestens einen echten Umlaut", () => {
   const prompt = systemPrompt(call({ direction: "outbound", language: "de", mandate: FULL_MANDATE }));
   const iStart = prompt.indexOf("DEIN SPIELRAUM:");
