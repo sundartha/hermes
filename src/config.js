@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { CENTS_PER_EUR } from "./store/defaults.js";
+import { CENTS_PER_EUR, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js hat KEINE Imports -> kein Zyklus, obwohl der Boot-Guard sonst
 // downstream von config.js sitzt.
 import { alertChannelFindings } from "./boot-guard.js";
@@ -835,6 +835,19 @@ const rawConfig = {
   // Pfad zur lokalen GeoLite2-Country-mmdb (nur relevant bei GEO_ENABLED=true). Leer ->
   // der maxmind-Adapter liefert fail-safe null (DE-Fallback). Das Asset committen wir NICHT.
   geoDbPath: process.env.GEO_DB_PATH || "",
+  // Review-Fix (Runde 1, P10-Blocker "ENTSCHAERFT (1)"): Env-Schalter fuer den P10-
+  // Weltdefault-Flip (DEFAULT_LANGUAGE de->en, src/store/defaults.js). DEFAULT true
+  // (Code-Default = der Flip, byte-identisch zum unveraenderten Bestand/den Tests).
+  // Das PLAN-I18N-FIX.md-Aktivierungsfenster (S2, P10-P13) verlangt aber, dass der
+  // Schalter in PRODUKTION erst nach der P13-Abnahme scharf ist - das setzt render.yaml
+  // explizit auf "false", nicht dieser Code-Default (sonst waere lokale Entwicklung/CI
+  // ohne jeden Grund vom Weltdefault abgekoppelt). false -> Rueckfall auf "de" ohne
+  // Deploy (Render-Dashboard-Env-Aenderung genuegt).
+  worldDefaultLanguageEnabled: boolEnv(
+    "WORLD_DEFAULT_LANGUAGE_ENABLED",
+    process.env.WORLD_DEFAULT_LANGUAGE_ENABLED,
+    { fallback: true },
+  ),
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
   // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
@@ -1115,7 +1128,7 @@ function guardedConfig(target, path = "config") {
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
@@ -1177,6 +1190,11 @@ function buildNamespaceSurface(storage, namespaces) {
 }
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
+
+// Wiring (P15, Kompositions-Root): der Env-Schalter (s.o., worldDefaultLanguageEnabled)
+// wird EINMAL beim Laden von config.js in defaults.js gedrueckt - defaults.js bleibt
+// dabei config-frei importierbar (kein Rueck-Import), s. Kommentar dort.
+setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
 
 // ---- Gateway-URL (G5: EINE Quelle fuer den localhost-Fallback, S2-20) ----
 // Die MCP-Tools/-Server sprechen mit der eigenen REST-API. Ohne gesetztes GATEWAY_URL

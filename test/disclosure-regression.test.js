@@ -7,7 +7,8 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import { LOCALES } from "../src/i18n/locales.js";
 
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ";
 const DISCLOSURE_TAIL = "wird für meinen Auftraggeber zusammengefasst";
@@ -50,6 +51,22 @@ test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerNa
   );
   assert.ok(sentence.includes(OWNER_NAME), "ownerName muss eingesetzt sein");
   assert.ok(sentence.includes(DISCLOSURE_TAIL), `Zusammenfassungs-Hinweis fehlt: ${sentence}`);
+});
+
+// P10-S1-1 (Review-Fix, Runde 1): der alte DE-Byte-Pin fuer den "language fehlt"-Fall
+// wurde beim Weltdefault-Flip ersatzlos geloescht (Blocker-Befund) - dieser Test
+// pinnt den NEUEN Default explizit (Absolute Regel 2, OFFENLEGUNG), statt dass er
+// ungetestet vom Weltdefault-Wert abhaengt. Flip-stabil formuliert (gegen
+// LOCALES[DEFAULT_LANGUAGE], nicht gegen ein hartes "en"-Literal) UND zusaetzlich mit
+// dem heute gueltigen Wortlaut gegengeprueft, damit ein kuenftiger Fallback-Wechsel auf
+// eine dritte Sprache hier ebenfalls auffaellt.
+test("P10-S1-1: disclosureSentence ohne language faellt auf den Weltdefault (DEFAULT_LANGUAGE) zurueck", () => {
+  const sentence = disclosureSentence({ tenantId: BOOTSTRAP_TENANT_ID });
+  assert.equal(sentence, LOCALES[DEFAULT_LANGUAGE].disclosure(OWNER_NAME));
+  assert.ok(
+    sentence.startsWith("Hello, this is an AI assistant"),
+    `EN-Weltdefault-Wortlaut fehlt: ${sentence}`,
+  );
 });
 
 test("T-P2-10: Outbound-Prompt weist den LLM an, die LLM-frei gesprochene Offenlegung NICHT zu wiederholen (G2)", () => {

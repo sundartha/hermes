@@ -175,6 +175,19 @@ services:
       # = Kauf-Land = erkanntes Land. Geo-/Sprach-Erkennung bleibt aktiv.
       - key: FORCE_NUMBER_COUNTRY
         value: "US"
+      # PLAN-I18N-FIX.md P10, Aktivierungsfenster (S2, quer zu P10-P13): der Weltdefault-
+      # Flip (DEFAULT_LANGUAGE de->en fuer Laender ohne eigenes Sprach-Bundle) soll in
+      # Produktion erst NACH der P13-Abnahme scharf sein (sonst STT/TTS/Offenlegung eines
+      # neuen Nicht-DE/FR-Tenants auf Englisch, waehrend Systemprompt/Greeting/SMS/MCP/
+      # Widget noch Deutsch sind - "wirkt kaputt"). ACHTUNG (wie METRICS_ENABLED oben):
+      # der Live-Service ist Dashboard-managed - dieser Blueprint-Wert schaltet live NICHTS.
+      # Der Katalog (test/e2e-05-us-launch-full-chain.test.js "Schritt 1b", prodEnv())
+      # faehrt bewusst gegen den ZIEL-Zustand "true"; die Betriebsauflage "bis P13 AUS"
+      # ist daher separat ueber das Render-Dashboard zu setzen (WORLD_DEFAULT_LANGUAGE_
+      # ENABLED=false), NICHT ueber diesen Blueprint-Wert - sonst divergiert render.yaml
+      # von dem, was der Katalog als Abnahmekriterium misst.
+      - key: WORLD_DEFAULT_LANGUAGE_ENABLED
+        value: "true"
       # ---- Payment/Billing (Stripe Hold/Capture, P6b1) ----
       - key: PAYMENT_ENABLED
         value: "false"

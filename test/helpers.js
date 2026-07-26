@@ -208,6 +208,12 @@ export const BASE_ENV = {
   // in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   GEO_ENABLED: "false",
   GEO_DB_PATH: "",
+  // Review-Fix (Runde 1, P10-Blocker "ENTSCHAERFT (1)"): Weltdefault-Flip-Schalter neutral
+  // AN (Code-/Test-Default, byte-identisch zur Bestandssuite vor diesem Fix). Ohne diese
+  // Zeile leakt eine lokale .env mit WORLD_DEFAULT_LANGUAGE_ENABLED=false via dotenv in
+  // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Der eigene Switch-Test
+  // (test/p10-world-default-language-switch.test.js) setzt "false" gezielt.
+  WORLD_DEFAULT_LANGUAGE_ENABLED: "true",
   // Multi-Tenant default AUS: Bestandssuite laeuft byte-identisch im Owner-Pfad.
   // Ohne diesen Eintrag wuerde eine lokale .env mit MULTI_TENANT=true via dotenv
   // in Spawn-Tests lecken -> Baseline-Drift (Lehre test-base-env-drift).

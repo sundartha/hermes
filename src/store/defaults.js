@@ -341,10 +341,25 @@ export const DEFAULT_COUNTRY = "DE";
 // Weltdefault (Owner-Entscheidung 7.12, PLAN-I18N-FIX P10): "en", NICHT mehr "de".
 // LANGUAGE_FOR_COUNTRY (i18n/locales.js) bleibt unveraendert - DE/AT/CH/FR/GB/IE loesen
 // weiterhin auf ihre eigene Sprache auf, dieser Flip aendert nur den Fallback fuer JEDES
-// andere/unbekannte Land. Rollback: Revert dieses Commits, oder pro Tenant sofort ueber
-// settings.language (hoechste Praezedenzstufe, SELF_SERVICE_FREE_FIELDS) bzw.
-// tenant.default_language auf "de" pinnen - kein Deploy noetig.
-export const DEFAULT_LANGUAGE = "en";
+// andere/unbekannte Land.
+//
+// Review-Fix (Runde 1, P10-Blocker "ENTSCHAERFT (1)"): der Flip haengt zusaetzlich an
+// einem Env-Schalter (WORLD_DEFAULT_LANGUAGE_ENABLED, s. config.js) - Rueckflip ohne
+// Deploy in Minuten (Render-Dashboard-Env-Aenderung statt Commit-Revert). Diese Datei
+// bleibt IO-/config-frei (s. Datei-Kopf, "reine Code-Defaults", von beiden Backends UND
+// von reinen Unit-Tests config-frei importierbar): config.js liest den Schalter EINMAL
+// beim Boot und drueckt das Ergebnis ueber setWorldDefaultLanguageEnabled() hier rein
+// (Wiring im Kompositions-Root, P15) - kein Rueck-Import defaults.js->config.js noetig.
+// Reine Unit-Tests, die config.js nie laden, sehen weiterhin den unveraenderten
+// Default "en" (byte-identisch zum Bestand vor diesem Fix).
+export let DEFAULT_LANGUAGE = "en";
+
+// NUR von config.js aufgerufen (s.o.), sonst bleibt der Code-Default "en" stehen.
+// enabled=false -> Rueckfall auf "de" (Vor-Flip-Verhalten, Aktivierungsfenster-Default
+// laut PLAN-I18N-FIX.md P10 bis zur Abnahme von P13); enabled=true -> "en" (Weltdefault).
+export function setWorldDefaultLanguageEnabled(enabled) {
+  DEFAULT_LANGUAGE = enabled ? "en" : "de";
+}
 
 // P8/FMT-28 (Owner-Entscheidung 7.6): IANA-Zeitzone des Default-Landes. Reine ANZEIGE -
 // sie faerbt nur die Uhrzeit im Systemprompt (claude.js). Ein Anrufzeit-Gate ist
