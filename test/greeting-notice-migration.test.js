@@ -14,7 +14,9 @@ import { makePgTestStore, BOOTSTRAP_TENANT_ID } from "./pg-helpers.js";
 test("backfillGreetingNotices: markerlose Greetings bekommen den sprachrichtigen Satz voran, Rueckgabe = beide tenantIds", () => {
   const s = {
     settings: {
-      de_tenant: { greeting: "Hallo, hier ist Hermes." },
+      // language: "de" (P10) - Subjekt ist der sprachrichtige Satz je Tenant, nicht die
+      // Sprachaufloesung; ohne den Pin faellt de_tenant auf den Weltdefault (en) durch.
+      de_tenant: { greeting: "Hallo, hier ist Hermes.", language: "de" },
       en_tenant: { greeting: "Hi, this is Hermes.", language: "en" },
     },
     numbers: [],
@@ -49,8 +51,10 @@ test("backfillGreetingNotices: json.load() ergaenzt ein markerloses Bestandsgree
   const fs = await import("fs");
   const path = await import("path");
   const config = (await import("../src/config.js")).config;
+  // language: "de" (P10) - Subjekt ist die json.load()-Integration, nicht die
+  // Sprachaufloesung; ohne den Pin faellt der Weltdefault (en) durch.
   const flat = {
-    settings: { agentName: "Alt", greeting: "Hallo, hier ist Hermes." },
+    settings: { agentName: "Alt", greeting: "Hallo, hier ist Hermes.", language: "de" },
     calendar: [],
     numbers: [],
   };
@@ -81,7 +85,9 @@ test("backfillGreetingNotices: init() auf pg schreibt den Pflichtsatz in die DB-
   const { db } = await makePgTestStore();
   // markerloses Bestandsgreeting DIREKT in die DB schreiben (wie ein Zeilenstand vor P3).
   await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [BOOTSTRAP_TENANT_ID]);
-  await db.query(`UPDATE settings SET greeting = $1 WHERE tenant_id = $2`, [
+  // language='de' (P10) - Subjekt ist der FORCE-RLS-Schreibpfad, nicht die
+  // Sprachaufloesung; ohne den Pin faellt der Weltdefault (en) durch.
+  await db.query(`UPDATE settings SET greeting = $1, language = 'de' WHERE tenant_id = $2`, [
     "Hallo, hier ist Hermes.",
     BOOTSTRAP_TENANT_ID,
   ]);

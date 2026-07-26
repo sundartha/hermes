@@ -34,13 +34,15 @@ test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () =>
   assert.equal(r.number.country, "US");
 });
 
-// DID-03 (i18n-Testkatalog). Beleg: src/billing/provision-trigger.js:36-45;
-// tasks/i18n-tests/06-nummern-provisioning.md ("DID-03"). SOLL-Test (heute rot),
-// eigener Test statt Erweiterung des Bestandstests oben (Zeile 29-35): der Bestand
-// bleibt gruen und byte-identisch (Regel 3), das ist zugleich der Beleg fuer DID-15
-// (die bestehende Assertion dort deckt r.number.language BEWUSST NICHT ab). Der Fix
-// (languageForCountry("US") -> "en") ist NICHT Teil dieses Testbaus (SCOPE-Regel).
-test("DID-03 (SOLL, heute rot) - BK3 fallbackCountry US (Webhook-/Aktivierungspfad) soll number.language='en' liefern", () => {
+// Beleg: src/billing/provision-trigger.js; tasks/i18n-tests/06-nummern-provisioning.md
+// ("DID-03"). Eigener Test statt Erweiterung des Bestandstests oben (Zeile 29-35): der
+// Bestand bleibt gruen und byte-identisch (Regel 3), das ist zugleich der Beleg fuer
+// DID-15 (die bestehende Assertion dort deckt r.number.language BEWUSST NICHT ab).
+// A3-Migration (P10): t_us_lang hat KEINE eigene Geo -> die Sprache kommt seit Schritt 1
+// NICHT mehr von fallbackCountry, sondern vom Weltdefault (beide liefern hier zufaellig
+// denselben Wert "en" - der Test bleibt trotzdem als Regressionsschutz auf der neuen
+// Achse stehen, s. requestNumberForPaidTenant Achsentrennung).
+test("BK3 fallbackCountry US (Webhook-/Aktivierungspfad) liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_us_lang", {});
   const r = requestNumberForPaidTenant(s, {
@@ -70,6 +72,39 @@ test("BK3 forceNumberCountry US ueberschreibt Kauf-Land, Sprache bleibt am Herku
   assert.equal(r.ok, true);
   assert.equal(r.number.country, "US", "Kauf-Land erzwungen US");
   assert.equal(r.number.language, "de", "Sprache am Herkunftsland DE");
+});
+
+// A1 (PLAN-I18N-FIX, P10): der Wurzelfix von E2E-04 Teil 1 - fallbackCountry faerbt NUR
+// das Kauf-Land, NIEMALS die Sprache eines Tenants ohne eigene Geo. Flip-stabil (gilt vor
+// UND nach dem DEFAULT_LANGUAGE-Flip): der Tenant ohne Geo bekommt IMMER den Weltdefault,
+// nie die Sprache des Landes, in dem die Plattform zufaellig fuer ihn einkauft.
+test("requestNumberForPaidTenant: Tenant OHNE Geo erbt die Sprache NICHT vom Plattform-Fallback-Land", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_no_geo", {});
+  const r = requestNumberForPaidTenant(s, {
+    tenantId: "t_no_geo",
+    fallbackCountry: "FR",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.country, "FR", "Kauf-Land folgt dem Fallback");
+  assert.notEqual(r.number.language, "fr", "Sprache folgt dem Fallback-Land NICHT");
+});
+
+// Schwester-Pin: MIT eigener Tenant-Geo gewinnt die Tenant-Sprache ueber fallbackCountry.
+test("requestNumberForPaidTenant: Tenant MIT Geo DE schlaegt fallbackCountry FR -> 'de'", () => {
+  const s = makeDefaultState();
+  registerTenant(s, "t_geo_de", {});
+  setTenantGeo(s, "t_geo_de", { country: "DE", defaultLanguage: "de" });
+  const r = requestNumberForPaidTenant(s, {
+    tenantId: "t_geo_de",
+    fallbackCountry: "FR",
+    maxNumbers: HIGH,
+    maxNumbersPerTenant: HIGH,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.number.language, "de", "Tenant-Geo gewinnt ueber den Plattform-Fallback");
 });
 
 // T2: Idempotenz - zweite Aktivierung kauft nicht doppelt.

@@ -12,7 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 
 const TO = "+4915112345678"; // erlaubtes DE-Ziel (in Allowlist, kein Premium/Notruf)
 // Owner-Absendernummer mit FR-Geo-Anker: ersetzt die DE-Default-Owner-Nummer aus dem
@@ -89,16 +89,17 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
   }
 });
 
-// (3) DE byte-identisch: Nummer ohne language + ohne Override -> call.language=de (wie
-// vor Phase 8). Faengt eine ungewollte Verhaltens-Aenderung des DE-Default-Pfads.
-test("DE-Default byte-identisch: Nummer ohne language -> call.language=de", async () => {
+// (3) Letzte Praezedenz-Stufe: Nummer ohne language + ohne Override -> call.language faellt
+// auf DEFAULT_LANGUAGE (Weltdefault, P10). Faengt eine ungewollte Verhaltens-Aenderung des
+// Default-Pfads - flip-stabil formuliert (gegen DEFAULT_LANGUAGE, nicht gegen "de").
+test("Letzte Praezedenz-Stufe: Nummer ohne language -> call.language = Weltdefault", async () => {
   const srv = await startServer({ env: ENV, seed: ownerSeed() }); // weder number.language noch settings.language
   try {
     assert.equal((await placeCall(srv)).status, 500);
     assert.equal(
       outboundCall(srv).language,
-      "de",
-      "ohne Geo-Anker faellt die Praezedenz auf de (byte-identisch)",
+      DEFAULT_LANGUAGE,
+      "ohne Geo-Anker faellt die Praezedenz auf den Weltdefault durch",
     );
   } finally {
     await srv.stop();

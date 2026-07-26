@@ -34,7 +34,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   billing: 36,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
-  provisioning: 13,
+  // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
+  // den Weltdefault-Flip, s. src/store/defaults.js) -> 14.
+  provisioning: 14,
   auth: 15,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
@@ -54,9 +56,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
 };
-const EXPECTED_TOTAL_KEYS = 128;
+const EXPECTED_TOTAL_KEYS = 129;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (128 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (129 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -135,7 +137,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // GAP-21: machineDetection ist ein NEUES nested Objekt (kein primitives Blatt) -> checked
   // bleibt 117, nur die Nested-Objekt-Zahl in der Assertion unten steigt.
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider sind primitiv (String) -> 119.
-  assert.equal(checked, 119, "alle primitiven Blaetter (128 - 4 Arrays - 5 nested Objekte) geprueft");
+  // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ist primitiv (Boolean) -> 120.
+  assert.equal(checked, 120, "alle primitiven Blaetter (129 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

@@ -235,7 +235,8 @@ export function makeVoiceRoutes({
       }
       const tenantId = numberRecord.tenantId;
       // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
-      // tenant.defaultLanguage -> "de". Hier liegt der Geo-Anker der angerufenen Nummer vor.
+      // tenant.defaultLanguage -> Weltdefault (P10). Hier liegt der Geo-Anker der
+      // angerufenen Nummer vor.
       const language = store.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 

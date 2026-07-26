@@ -52,7 +52,7 @@ import {
   KYC_ORDER,
   COST_TRUING_SOURCE,
 } from "./defaults.js";
-import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
 import { isKnownPlanSlug } from "../plans.js";
 // GAP-14: Wert-Guard fuer updateSettings (greeting muss den Inbound-Pflichtsatz tragen).
@@ -649,10 +649,11 @@ export function findTenantByNumber(s, e164) {
 
 // Aufloesungs-Praezedenz der Gespraechssprache (F1 Phase 4, Owner-Entscheidung #8) an
 // EINER Stelle: settings.language (Owner-Override, falls gesetzt) -> number.language ->
-// tenant.defaultLanguage -> DEFAULT_LANGUAGE ("de"). Jede Stufe greift nur, wenn truthy
-// (additiv NULLABLE, Backfill-frei: fehlend/leer = nicht gesetzt = naechste Stufe). Eine
-// unbekannte/getippte Sprache wirft hier NICHT - der nachgelagerte localeFor()-Resolver
-// faellt fail-safe auf "de" (R7). numberRecord ist der bereits aufgeloeste Record (oder
+// tenant.defaultLanguage -> DEFAULT_LANGUAGE (Weltdefault, P10). Jede Stufe greift nur,
+// wenn truthy (additiv NULLABLE, Backfill-frei: fehlend/leer = nicht gesetzt = naechste
+// Stufe). Eine unbekannte/getippte Sprache wirft hier NICHT - der nachgelagerte
+// localeFor()-Resolver faellt fail-safe auf den Weltdefault zurueck (R7). numberRecord
+// ist der bereits aufgeloeste Record (oder
 // null/undefined, dann faellt die Number-Stufe durch). Reine Lese-Logik, kein Nebeneffekt
 // (settingsFor legt zwar lazy einen Bucket an, aber das ist Bestandsverhalten).
 export function resolveCallLanguage(s, { tenantId, numberRecord }) {
@@ -670,18 +671,22 @@ export function resolveCallLanguage(s, { tenantId, numberRecord }) {
 // laufen, damit die gespeicherte Form mit dem normalisierten Inbound-To-Lookup
 // (findTenantByNumber) uebereinstimmt - sonst routet eine Owner-Nummer mit
 // Trennzeichen nicht (TD-2). Sauberes E.164 -> No-Op (byte-identisch).
-// country/language (F1, Phase 1) als optionale Params mit DE/de-Default (eine Quelle:
-// defaults.js): die geseedete Owner-/Bestandsnummer traegt damit ihren Geo-Anker
-// (Inbound-Sprache, Outbound-Absenderwahl). Bestehende 3-/4-Arg-Aufrufe bleiben
-// verhaltens-erhaltend (Default DE/de = heutiger De-facto-Zustand). Additiv NULLABLE
-// in der DB; ein Bestands-Record ohne Werte faellt ueber den Code-Fallback zurueck.
+// country/language (F1, Phase 1) als optionale Params: die geseedete Owner-/
+// Bestandsnummer traegt damit ihren Geo-Anker (Inbound-Sprache, Outbound-
+// Absenderwahl). Additiv NULLABLE in der DB; ein Bestands-Record ohne Werte faellt
+// ueber den Code-Fallback zurueck.
+// A1 (PLAN-I18N-FIX): die Sprache wird aus dem LAND abgeleitet, nie aus dem Weltdefault.
+// Sonst materialisiert dieser Schreibpfad ab dem Flip "en" IN den Datensatz - auch fuer
+// country=DE - und zwar non-NULL, also unsichtbar fuer jede NULL-Zaehlung. Bestehende
+// 3-/4-Arg-Aufrufe bleiben verhaltens-erhaltend (DEFAULT_COUNTRY -> languageForCountry
+// (DEFAULT_COUNTRY) = heutiger De-facto-Zustand "de").
 export function seedBootstrapNumber(
   s,
   e164,
   tenantId,
   provider = DEFAULT_PROVIDER,
   country = DEFAULT_COUNTRY,
-  language = DEFAULT_LANGUAGE,
+  language = languageForCountry(country),
 ) {
   const norm = normNum(e164);
   if (!norm) return;
@@ -1339,10 +1344,11 @@ function clearNumberProvisionSkip(tenant) {
 // das uebersprungene Stripe-Schloss ersetzt - jede echte Nummer kostet Geld.
 // KEIN Provider-Kauf hier (der haengt an beginProvisioning). caps kommen aus
 // config (state-ops bleibt config-frei). Liefert {ok, number} oder {ok:false, reason}.
-// country/language (F1, Phase 1) im Destructure mit DE/de-Default (eine Quelle:
-// defaults.js): die angefragte Nummer traegt von Anfang an ihren Geo-Anker, den der
-// spaetere Provider-Kauf (Telnyx-Laendersuche) und das Inbound-/Outbound-Routing
-// lesen. Bestehende Aufrufer ohne country/language bleiben verhaltens-erhaltend (DE/de).
+// country/language (F1, Phase 1) im Destructure: die angefragte Nummer traegt von
+// Anfang an ihren Geo-Anker, den der spaetere Provider-Kauf (Telnyx-Laendersuche) und
+// das Inbound-/Outbound-Routing lesen. A1 (PLAN-I18N-FIX): language ist LAND-abgeleitet,
+// s. seedBootstrapNumber - Bestandsaufrufer ohne country bleiben verhaltens-erhaltend
+// (DEFAULT_COUNTRY -> languageForCountry(DEFAULT_COUNTRY)).
 // GAP-04: darf fuer diesen Tenant eine Nummer angefragt werden? Zwei Wege, strikt getrennt:
 //  (1) status ACTIVE - der Bestandspfad (POST /api/onboard, Operator-Retry): UNVERAENDERT.
 //  (2) GAP-04-Wartezustand: die Zahlung ist bestaetigt (activatePaidTenant hat den Marker
@@ -1366,7 +1372,7 @@ export function requestNumber(
     tenantId,
     provider = DEFAULT_PROVIDER,
     country = DEFAULT_COUNTRY,
-    language = DEFAULT_LANGUAGE,
+    language = languageForCountry(country),
     maxNumbers,
     maxNumbersPerTenant,
   },

@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { CENTS_PER_EUR } from "./store/defaults.js";
+import { CENTS_PER_EUR, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js hat KEINE Imports -> kein Zyklus, obwohl der Boot-Guard sonst
 // downstream von config.js sitzt.
 import { alertChannelFindings } from "./boot-guard.js";
@@ -835,6 +835,29 @@ const rawConfig = {
   // Pfad zur lokalen GeoLite2-Country-mmdb (nur relevant bei GEO_ENABLED=true). Leer ->
   // der maxmind-Adapter liefert fail-safe null (DE-Fallback). Das Asset committen wir NICHT.
   geoDbPath: process.env.GEO_DB_PATH || "",
+  // Env-Schalter fuer den P10-Weltdefault-Flip (DEFAULT_LANGUAGE de->en,
+  // src/store/defaults.js). Code-Default FAIL-CLOSED auf false: der Flip muss ausdruecklich
+  // eingeschaltet werden, er passiert nie durch blosses Deployen.
+  //
+  // Warum nicht true (Safety-Review P10, Runde 2, empirisch belegt): der Blueprint-Wert
+  // "false" in render.yaml reicht als Schutz NICHT. Dieser Service ist dashboard-managed -
+  // render.yaml ist dort ausdruecklich Referenz und nicht Wahrheit, und die Variable ist im
+  // Dashboard heute gar nicht gesetzt. Bei Code-Default true gewinnt am Deploy-Tag also der
+  // Code: jeder settings/number/tenant-Datensatz mit language=NULL faellt ueber
+  // resolveCallLanguage auf den Weltdefault durch, womit Gather-Locale, Say-Stimme UND der
+  // Offenlegungssatz eines deutschen Bestandstenants schlagartig englisch werden. Genau das
+  // schliesst P10 "ENTSCHAERFT (5)" als Abnahmekriterium aus.
+  //
+  // Das Aktivierungsfenster (PLAN-I18N-FIX.md P10, "S2, quer zu P10-P13") wird damit vom
+  // Code getragen, nicht von einer Datei, die die Live-Config nicht bestimmt. Der
+  // Freischalt-Weg steht EINMAL bei WORLD_DEFAULT_LANGUAGE_ENABLED in render.yaml, nicht
+  // hier dupliziert. Die Suite faehrt den Flip scharf (test/helpers.js BASE_ENV setzt den
+  // Schluessel explizit auf "true"), das Verhalten der Tests aendert sich also nicht.
+  worldDefaultLanguageEnabled: boolEnv(
+    "WORLD_DEFAULT_LANGUAGE_ENABLED",
+    process.env.WORLD_DEFAULT_LANGUAGE_ENABLED,
+    { fallback: false },
+  ),
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
   // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
@@ -1115,7 +1138,7 @@ function guardedConfig(target, path = "config") {
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
@@ -1177,6 +1200,11 @@ function buildNamespaceSurface(storage, namespaces) {
 }
 
 export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAMESPACES));
+
+// Wiring (P15, Kompositions-Root): der Env-Schalter (s.o., worldDefaultLanguageEnabled)
+// wird EINMAL beim Laden von config.js in defaults.js gedrueckt - defaults.js bleibt
+// dabei config-frei importierbar (kein Rueck-Import), s. Kommentar dort.
+setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
 
 // ---- Gateway-URL (G5: EINE Quelle fuer den localhost-Fallback, S2-20) ----
 // Die MCP-Tools/-Server sprechen mit der eigenen REST-API. Ohne gesetztes GATEWAY_URL

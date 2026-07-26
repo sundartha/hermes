@@ -60,6 +60,9 @@ async function seedActiveTenant(store, accounts, { sub, tenantId, bankData }) {
   const t = s.tenants.find((x) => x.id === tenantId);
   t.status = "active"; // Mirror-Status konsistent zur DB (Flush darf nicht downgraden)
   t.idpSubject = sub;
+  // P10: Subjekt dieses Tests-Setups sind Self-Service-Reads/-Writes, nicht die
+  // Sprachaufloesung - ohne den Pin faellt der Tenant auf den Weltdefault (en) durch.
+  t.defaultLanguage = "de";
   const bucket = ops.settingsFor(s, tenantId);
   if (bankData !== undefined) bucket.allowBankData = bankData;
   // Identitaet in die DB: Tenant + Account anlegen, dann aktivieren (Session-Auth liest die DB).
@@ -202,7 +205,7 @@ test("(a) Lese-Sicht: B sieht nur B's Daten, kein Owner-Call, kein streamToken, 
       "Owner-Call NICHT enthalten",
     );
     assert.equal("streamToken" in body.calls[0], false, "streamToken NIE geleakt (publicCall)");
-    assert.deepEqual(body.greetingTemplates, greetingTemplatesFor("de"), "Vorlagen mitgeliefert (Tenant B hat keine gesetzte Sprache)");
+    assert.deepEqual(body.greetingTemplates, greetingTemplatesFor("de"), "Vorlagen mitgeliefert in der Sprache des Tenants");
     assert.deepEqual(
       body.calendar.map((e) => e.title),
       ["B-Termin"],
