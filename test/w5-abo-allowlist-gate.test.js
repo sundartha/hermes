@@ -169,11 +169,14 @@ test("W5-6a: aktiver Subscriber -> Land-Gate greift weiter (US -> 403 grund=land
   }
 });
 
-test("W5-6b: aktiver Subscriber -> globales Stundenlimit greift weiter (429)", async () => {
+test("W5-6b: aktiver Subscriber -> Stundenlimit (pro Tenant) greift weiter (429)", async () => {
   const srv = await startServer({
     env: { ...MT, MAX_CALLS_PER_HOUR: "1" },
-    // ein frischer Outbound-Call fuellt das globale Stundenfenster (Limit 1).
-    seed: seed({ kycLevel: "card", calls: [seedCall({ id: "c_recent", startedAt: recent() })] }),
+    // ein frischer Outbound-Call DIESES Tenants fuellt sein Stundenfenster (Limit 1).
+    seed: seed({
+      kycLevel: "card",
+      calls: [seedCall({ id: "c_recent", startedAt: recent(), tenantId: A })],
+    }),
   });
   try {
     const res = await placeCall(srv, SUB_A);

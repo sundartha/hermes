@@ -461,10 +461,11 @@ export const PROFILE_FIELDS = {
   unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
   allowCalendar: "boolean", // get_calendar-MCP-Tool
   allowBooking: "boolean", // POST /api/calendar
-  // number ODER null: null = kein pro-Nutzer-Limit (effektiv globaler Cap, server.js
-  // userHourReached). Muss als null erhalten bleiben (PLAN_PROFILE/OWNER_PROFILE) - sonst
-  // faellt das Profil ueber resolveProfileFrom still auf DEFAULT_PROFILE.maxCallsPerHour (A11).
-  maxCallsPerHour: "number?", // pro-Nutzer-Stundenlimit (effektiv min(global, profil))
+  // number ODER null: null = keine Profil-Senkung (effektiv der Pro-Tenant-Default
+  // config.safety.maxCallsPerHour, telephony/outbound-gates tenantHourReached). Muss als
+  // null erhalten bleiben (PLAN_PROFILE/OWNER_PROFILE) - sonst faellt das Profil ueber
+  // resolveProfileFrom still auf DEFAULT_PROFILE.maxCallsPerHour (A11).
+  maxCallsPerHour: "number?", // pro-Tenant-Stundenlimit (effektiv min(config, profil))
 };
 
 // E.164-Normalisierung: entfernt Whitespace/Bindestriche/Klammern aus einer
@@ -689,16 +690,17 @@ export function sanitizeProfile(patch) {
 }
 
 // Default-Profil: KEIN Outbound (0 = harter Block, fail-closed fuer profillose Nutzer).
-// 0 ist eine echte Schwelle, kein Falsy-"kein Limit": userHourReached rechnet
-// limit=min(global,0)=0, count>=0 ist immer wahr (server.js). Nur ein Plan-Profil
+// 0 ist eine echte Schwelle, kein Falsy-"kein Limit": tenantHourReached rechnet
+// limit=min(config,0)=0, count>=0 ist immer wahr (telephony/outbound-gates). Nur ein Plan-Profil
 // (A2/A3, maxCallsPerHour=null) ODER der Owner (OWNER_PROFILE) schaltet Outbound frei.
 const DEFAULT_PROFILE_MAX_CALLS_PER_HOUR = 0;
 
 // Owner-Profil: gilt fuer den Bootstrap-Tenant (resolveProfileFrom matcht tenantId ===
 // BOOTSTRAP_TENANT_ID). Das Profil lockert nichts (unrestricted=false, leere Profil-
 // Allowlist) - der Owner passiert das Verifikations-Gate ueber Pfad 2 (aktiver Subscriber
-// via Boot-Seed, outbound-p1/p3), kein Zusatz-Stundenlimit (maxCallsPerHour=null ->
-// effektiv global), Kalender/Booking erlaubt. So wird der Owner NIE per Stundenlimit
+// via Boot-Seed, outbound-p1/p3), keine Profil-Senkung des Stundenlimits
+// (maxCallsPerHour=null -> effektiv der Pro-Tenant-Default), Kalender/Booking erlaubt.
+// So wird der Owner NIE per Stundenlimit
 // gesperrt (R2) - hart auf OWNER_PROFILE gepinnt; ein etwaiges s.profiles[BOOTSTRAP] wird
 // bewusst ignoriert.
 const OWNER_PROFILE = {

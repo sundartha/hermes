@@ -316,7 +316,7 @@ function logBootBanner(config, port) {
     `  Outbound:       ${config.safety.outboundFrozen ? "EINGEFROREN (OUTBOUND_FROZEN=true)" : "aktiv (Verifikation per Tenant: Abo+KYC)"}`,
   );
   console.log(
-    `  Nummern-Gates:  Land ${config.safety.allowedCountryCodes.join(",")} | max ${config.safety.maxCallsPerHour} Calls/h | Notruf-/Premium-Denylist aktiv`,
+    `  Nummern-Gates:  Land ${config.safety.allowedCountryCodes.join(",")} | max ${config.safety.maxCallsPerHour} Calls/h pro Tenant | Notruf-/Premium-Denylist aktiv`,
   );
   // GAP-36-Zusatz: welche Achse das Budget-Gate misst, war bisher NUR per DB-Messung
   // ablesbar (der Flip hat keine Boot-Ausgabe) - genau die Blindheit, die diese Phase

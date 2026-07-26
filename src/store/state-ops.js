@@ -553,11 +553,14 @@ export function clearNoSpeechStreak(s, callId) {
 
 // Zaehlt Outbound-Calls mit startedAt >= sinceIso (gleitendes Fenster fuers Pro-Stunde-Gate
 // + den per-(Tenant,Ziel)-Cap in server.js). filters (alle optional, kombinierbar als UND):
-//   requestedBy : nur Calls dieses Nutzers (pro-Nutzer-Limit, Bestand)
-//   tenantId    : nur Calls dieses Tenants (pro-Tenant-Achse, P4)
+//   requestedBy : nur Calls dieses Nutzers - forensischer Filter, kein Gate liest ihn mehr
+//   tenantId    : nur Calls dieses Tenants (pro-Tenant-Achse, P4; seit O5 die EINZIGE
+//                 Stunden-Achse, telephony/outbound-gates tenantHourReached)
 //   to          : nur Calls an dieses Ziel (per-(Tenant,Ziel)-Cap, outbound-p1d)
-// Ohne Filter: ALLE Outbound-Records (globale Plattform-Bremse, Bestand). Zaehlt
-// bewusst auch fehlgeschlagene - konservative Toll-Fraud-Bremse.
+// Ohne Filter: ALLE Outbound-Records. Seit O5 liest KEIN Gate mehr diese ungefilterte
+// Achse - sie bleibt als Diagnose-/Query-Faehigkeit (test/store-pg-tenant-budget.test.js);
+// die einzige Stunden-Achse ist tenant-gefiltert. Zaehlt bewusst auch fehlgeschlagene -
+// konservative Toll-Fraud-Bremse.
 export function countOutboundCallsSince(
   s,
   sinceIso,

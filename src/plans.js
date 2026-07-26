@@ -86,9 +86,10 @@ export function findPlan(slug) {
 //   allowedCountryCodes=[]   - kein per-Profil-Land-Freibrief; globales Land-Gate bleibt
 //                              Schnittmenge (so restriktiv wie heute)
 //   allowCalendar/Booking=false - Funktion bewusst verworfen
-//   maxCallsPerHour=null     - nur globaler Plattform-Cap (telephony/outbound-gates.js
-//                              userHourReached: null -> config.safety.maxCallsPerHour). Minuten-Quota (GAP B) +
-//                              Budget sind die echten Deckel.
+//   maxCallsPerHour=null     - keine Profil-Senkung; faellt auf den Pro-Tenant-Default
+//                              config.safety.maxCallsPerHour (telephony/outbound-gates.js
+//                              tenantHourReached). Minuten-Quota (GAP B) + Budget sind die
+//                              echten Deckel.
 //
 // KOPPLUNG A2: sanitizeProfile (defaults.js) droppt maxCallsPerHour=null heute (typeof
 // null === "object" != "number") -> A2 muss sanitizeProfile null-tolerant machen, BEVOR
