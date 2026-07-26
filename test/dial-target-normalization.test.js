@@ -54,6 +54,11 @@ test("homeCountryCode (Heimatland-Ableitung)", async (t) => {
     assert.equal(homeCountryCode(["+15005550006", "+491737252163"], null), "+49");
   });
 
+  // FMT-22 (Buchhaltung, kein eigener Test - G5): "homeCountryCode() liefert fuer reinen
+  // US-Tenant null" ist seit dem GAP-25-Review-Fix Runde 2 PRAEZISER zu lesen und wird von
+  // genau diesem Subtest plus seinem Nachbarn darueber vollstaendig getragen: ohne
+  // bestaetigtes NANP-Herkunftsland -> null (hier), mit country="US" -> "+1" (Nachbar).
+  //
   // OUT-04 (GAP-25, SOLL): ein reiner +1-Kandidat liefert "+1" NUR mit bestaetigtem
   // NANP-Herkunftsland (Review-Fix Runde 2); ohne Bestaetigung -> null (fail-closed, kein
   // Raten). Laender OHNE bekannte Wahl-Konvention (z.B. +39 IT) bleiben in jedem Fall null.
@@ -108,6 +113,16 @@ test("NANP-Schreibweisen: normNum entfernt nur Trennzeichen (OUT-06/GAP-25)", ()
   // Ohne ableitbares NANP-Heimatland bleibt "011..." unveraendert (E164-Gate lehnt ab).
   assert.equal(normalizeDialTarget("011491701234567", null), "011491701234567");
   assert.equal(E164.test("011491701234567"), false);
+});
+
+// OUT-17 (Positiv-Fall): die uebliche US-Schreibweise MIT Laendervorwahl. Der OUT-06-Test
+// darueber deckt nur die Form OHNE "+" ab. Die zweite Haelfte der Katalog-Aussage ("besteht
+// danach die E164-Regex") traegt FMT-20 in test/e164-trunk-zero-reject.test.js - hier keine
+// zweite Assertion darauf (G5).
+test("OUT-17 (Mechanismus, gruen) - normNum bereinigt US-Trennzeichen-Schreibweisen korrekt", () => {
+  assert.equal(normNum("+1 (202) 555-0123"), "+12025550123");
+  assert.equal(normNum("+1-202-555-0123"), "+12025550123");
+  assert.equal(normNum("+12025550123"), "+12025550123", "idempotent auf bereits kanonischer Form");
 });
 
 // GAP-18/25-Nachbar: Invariante "kein stiller Landeswechsel bei der Wahl-Normalisierung"
@@ -409,6 +424,13 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
   });
 });
 
+// OUT-18 (Buchhaltung, kein eigener Test): die Katalog-Aussage "die US-Testnummer bleibt der
+// einzige Negativ-/Randfall der Suite" traegt nicht mehr - test/number-gate.test.js fuehrt mit
+// "OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates" einen gruenen
+// US-POSITIV-Pfad. Ein automatisierter Waechter darueber waere eine Aussage ueber die
+// Testsuite selbst und altert mit jedem neuen Test (auch mit denen aus W2) - deshalb bleibt
+// es bei diesem Anker-Test fuer die Annahme "Default-DID ist NANP".
+//
 // OWNER_TEST_NUMBER dokumentiert die Annahme: der Default-Seed ist eine US-Nummer
 // (NANP-Heimatland, GAP-25) - kein Trunk-0-Land, aber seit GAP-25 ein bekanntes
 // NANP-Heimatland (mit bestaetigtem NANP-Tenant-Herkunftsland, Review-Fix Runde 2 - ohne

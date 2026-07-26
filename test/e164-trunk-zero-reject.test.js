@@ -11,7 +11,8 @@
 // Sperre als 403.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hasTrunkZeroAfterCountryCode } from "../src/store/defaults.js";
+import { E164, hasTrunkZeroAfterCountryCode } from "../src/store/defaults.js";
+import { isTrunkZeroFormatError } from "../src/telephony/outbound-gates.js";
 import { startServer } from "./helpers.js";
 
 const postCall = (url, to) =>
@@ -45,6 +46,38 @@ test("hasTrunkZeroAfterCountryCode (Praedikat)", async (t) => {
       assert.equal(hasTrunkZeroAfterCountryCode(n), false, `${n} -> false`);
     }
   });
+});
+
+// FMT-20: reine Regressions-Absicherung der Format-Kante - der E164-Regex ist generisch
+// (kein Landfilter), NANP-Nummern (+1 + 10 Ziffern) sind gueltig. Ohne diesen Pin koennte
+// eine kuenftige Verschaerfung des Regex den US-Pfad lautlos schliessen.
+test("FMT-20 (Mechanismus, gruen) - E164 akzeptiert NANP-Nummern (+1 + 10 Ziffern)", () => {
+  for (const n of ["+12025550123", "+14155550123", "+18005550123"]) {
+    assert.equal(E164.test(n), true, `${n} ist gueltiges E.164`);
+  }
+});
+
+// FMT-21: TRUNK_ZERO_COUNTRY_CODES ist bewusst eng (+49/+33/+44); +1 laeuft ueber die
+// eigene NANP-Achse, in der die "fuehrende 0"-Regel NIE gilt. Der Kontrastfall unten ist
+// dieselbe Ziffernfolge mit +49 - er beweist, dass die Assertion nicht leer ist.
+test("FMT-21 (Mechanismus, gruen) - TRUNK_ZERO_COUNTRY_CODES betrifft +1 nicht (kein False-Positive fuer US)", () => {
+  assert.equal(hasTrunkZeroAfterCountryCode("+10202555123"), false, "0 nach +1 ist kein Trunk-Praefix");
+  assert.equal(hasTrunkZeroAfterCountryCode("+12025550123"), false);
+  assert.equal(hasTrunkZeroAfterCountryCode("+490202555123"), true, "Kontrast: dieselbe Form mit +49 ist ein Verstoss");
+});
+
+// OUT-16: der Pre-Check VOR der Gate-Kette (routes/api-calls.js) ist fuer NANP nie
+// einschlaegig. Eigener Test neben FMT-21, weil er eine andere Kante prueft: das Praedikat
+// PLUS den !isDenied-Guard.
+// R-G-Abweichung: der Katalog wollte einen HTTP-Vergleich der beiden 400-Pfade
+// (Pre-Check vs. regulaeres Format-Gate). Gemessen sind beide Pfade nach aussen
+// UNUNTERSCHEIDBAR - gleicher Status 400, dieselbe Konstante E164_FORMAT_ERROR als Text,
+// beide ohne Audit-Eintrag. Ein HTTP-Vergleich koennte deshalb gar nichts beweisen.
+test("OUT-16 (Mechanismus, gruen) - der Pre-Check isTrunkZeroFormatError ist fuer NANP-Nummern nie einschlaegig", () => {
+  for (const n of ["+10202555123", "+12025550123", "+19005550123"]) {
+    assert.equal(isTrunkZeroFormatError(n), false, `${n} darf den Pre-Check nie ausloesen`);
+  }
+  assert.equal(isTrunkZeroFormatError("+4901737252163"), true, "Kontrast: +49 mit Trunk-0 loest aus");
 });
 
 // ---- Sektion 2: Producer-Gate ueber HTTP (POST /api/calls) ----

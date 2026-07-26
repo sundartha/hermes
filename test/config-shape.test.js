@@ -29,6 +29,24 @@ test("Proxy-Guard: Arrays bleiben unverpackte echte Arrays (keine Namens-Zugriff
   assert.ok(config.safety.allowedCountryCodes.includes("+49"));
 });
 
+// OUT-23: Laendercode-Praefixe sind reine E.164-Ziffernstrings - es gibt keinen Buchstaben,
+// der eine Gross-/Kleinschreibung tragen koennte, deshalb braucht die Praefix-Achse (anders
+// als die ISO-Land-Achse in languageForCountry, die per .toUpperCase() normalisiert - gepinnt
+// von LANG-09 in test/f1-geo-port.test.js, hier bewusst NICHT wiederholt, G5) keine
+// Casing-Normalisierung. Der Test schuetzt genau den Fehlgriff, den es dadurch gaebe: ein
+// ISO-Code ("US") in einer Praefix-Liste wuerde lautlos NIE matchen.
+// R-G-Abweichung: die Katalog-Schritte messen languageForCountry-Casing - das ist LANG-09s
+// Gegenstand (W2-B1) und waere hier ein Duplikat.
+test("OUT-23 (Mechanismus, gruen) - Laendercode-Praefixe sind casing-frei per Konstruktion (E.164 kennt kein Casing)", () => {
+  const E164_PREFIX_OR_WILDCARD = /^(\*|\+\d+)$/;
+  for (const code of config.safety.allowedCountryCodes) {
+    assert.match(code, E164_PREFIX_OR_WILDCARD, `ALLOWED_COUNTRY_CODES-Eintrag '${code}' ist kein E.164-Praefix`);
+  }
+  for (const prefix of config.billing.voiceTariffDomesticPrefixes) {
+    assert.match(prefix, /^\+\d+$/, `Inlands-Vorwahl '${prefix}' ist kein E.164-Praefix`);
+  }
+});
+
 test("Proxy-Guard: Symbol-Zugriffe werden NICHT bewacht (kein Crash bei util.inspect)", () => {
   assert.equal(config[Symbol.for("nichts")], undefined);
 });
