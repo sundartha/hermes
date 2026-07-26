@@ -169,7 +169,7 @@ Env-Flip falsch-rot.
 | UI-19 | B6 | zwei Betrachter sehen unterschiedliche Chrome-Sprache | **ueberholt**: die Locale steht servergerendert fest, ist also fuer alle Betrachter derselben Karte identisch - genau die Divergenz, die UI-19 beschreibt, existiert nicht mehr | **JA** | Fix-Phase P13/E4 | `WIDGET_HTML_BY_LOCALE` (`src/ui/widget-catalog.js`) |
 | FMT-15 | B6 | rot: `tenant.html` formatiert immer `de-DE` | **ueberholt**: `formatLocale` kommt vom SERVER (`formatLocale: localeFor(language).dateLocale`) und wird per `setFormatLocale(s.formatLocale)` gesetzt; `STATIC_FORMAT_LOCALE = "de-DE"` ist nur noch der Vor-`/state`-Fallback (401/403-Pfad) | **JA** | Fix-Phase P15b/C2 | `formatLocale`/`setFormatLocale`/`STATIC_FORMAT_LOCALE` (`public/tenant.html`), `formatLocale`-Feld (`src/self-service-routes.js`) |
 | GAP-30 | B6 | rot | offen zu messen: der Server validiert gegen `defaultSettings()` + `OPTIONAL_ENUM_FIELDS`; der Frontend-Feldkatalog liegt in `public/tenant.html`. Es gibt keine gemeinsame Quelle beider Kataloge -> Erwartung "rot" plausibel, beim Testbau gegen beide Symbole zu pruefen | - | - | `updateSettings`/`defaultSettings` (`src/store/state-ops.js`), Formularfelder (`public/tenant.html`) |
-| GAP-37 | B6 | rot | **Praemisse traegt nicht**: `buildFilter` existiert im Repo nicht (0 Treffer ausserhalb `node_modules`). Zu pruefen ist stattdessen der `WEB_DIST_DIR`-Mount gegen die Auth-Gate-Reihenfolge | **JA** | Symbol umbenannt/entfallen | Negativbefund `buildFilter`; `webDistDir`-Mount (`src/app.js`) |
+| GAP-37 | B6 | rot | ~~Praemisse traegt nicht~~ **DIESE ZEILE WAR FALSCH, s. Korrektur unten**: `buildFilter` existiert sehr wohl (`grep -c buildFilter render.yaml` = 2). Erwartung "rot" traegt unveraendert; in W2-B6 als SOLL gebaut | - | - | `buildFilter`/`ignoredPaths` (`render.yaml`), `test/render-buildfilter.test.js` (seit W0) |
 
 ### 2.7 W2-B7 - Rest: MCP, Sicherungs-Vertraege, Formate (12)
 
@@ -248,7 +248,7 @@ deshalb nur noch fuer den Fallback-Zweig formulieren, nicht mehr fuer die Seite 
 | **PAY-25** | "Env-Doku-Kohaerenz `VOICE_TARIFF_DOMESTIC_PREFIXES`" laeuft ins Leere: die Vorwahlliste ist eine **Code-Konstante**, keine Env-Variable. Es gibt nichts zu dokumentieren. |
 | **PAY-20** | "ohne automatisierten Drift-Alarm" ist ueberholt: `providerRateOutOfBand` (Boot-Guard) und `src/billing/cost-calibration.js` (p95-Vergleich gegen `warnPercent`/`minSamples`) sind der Alarm. |
 | **WEB-10** | `apps/web/src/` enthaelt heute weder eine `api/onboard`-Route noch einen `PUBLIC_URL`-Treffer - die ID beschreibt einen Stand vor dem Single-Origin-Umbau. |
-| **GAP-37** | `buildFilter` existiert im Repo nicht (0 Treffer ausserhalb `node_modules`). Die ID braucht ein neues Subjekt oder faellt weg. |
+| ~~**GAP-37**~~ | **FALSCHBEFUND, zurueckgezogen 2026-07-27 (Korrektur K4).** Die Behauptung "`buildFilter` existiert im Repo nicht" ist falsch: `grep -c buildFilter render.yaml` liefert **2**, und `test/render-buildfilter.test.js` prueft ihn seit W0. GAP-37 hat ein tragfaehiges Subjekt und wurde in W2-B6 als SOLL-Gate gebaut. |
 | **OUT-18** | Ist eine Aussage ueber die TESTSUITE, nicht ueber `src/` - sie altert mit jedem neuen Test in W2 selbst. Beim Bau als Momentaufnahme kennzeichnen. |
 
 ### 3.8 GAP-34 - bestaetigt offen
@@ -368,3 +368,30 @@ Unveraendert aus [`18-w2-scope.md`](18-w2-scope.md) §2 uebernommen, hier nur ve
   Tabelleneintrag entsteht erst nach einer echten Messung in der jeweiligen Sprache).
 - **VOICE-12 / GAP-09**: die ElevenLabs-Stimme und das TTS-Kontingent sind global konfiguriert,
   nicht pro Tenant/Sprache.
+
+---
+
+## 6. Korrektur K4 (2026-07-27, aus der Umsetzung von W2-B6)
+
+**Eine Aussage dieses Berichts war falsch und ist zurueckgezogen.** §2.6 und §3.7 behaupteten,
+`buildFilter` existiere im Repo nicht ("0 Treffer ausserhalb `node_modules`"), und GAP-37
+brauche deshalb ein neues Subjekt oder falle weg. Gemessen:
+
+```
+grep -c buildFilter render.yaml   ->  2
+```
+
+`render.yaml` traegt `buildFilter` an beiden Services, und `test/render-buildfilter.test.js`
+prueft ihn seit W0 (drei gruene Tests). Der Negativbefund kam vermutlich aus einem `grep` ueber
+`src/` statt ueber das Repo - `buildFilter` ist ein **Blueprint-Schluessel**, kein JS-Symbol.
+
+**Folge:** GAP-37 wurde in W2-B6 entgegen dieser Baseline gebaut (SOLL, rot) und ist ein
+gueltiges Launch-Gate: derselbe Service baut `apps/web` (`buildCommand`) und liefert es aus
+(`WEB_DIST_DIR`), ignoriert es aber im `buildFilter` - ein reiner Frontend-Commit deployt
+deshalb nie.
+
+**Lehre fuer die restlichen Bloecke und fuer W3:** eine Baseline-Aussage der Form "Praemisse
+entfaellt" ist ein **Hinweis, kein Beweis**. Bevor eine ID deswegen uebersprungen wird, ist der
+Negativbefund am Code nachzumessen - und zwar am richtigen Artefakt (Blueprint, Frontend,
+Skripte), nicht nur in `src/`. Der B6-Agent hat genau das getan, obwohl Scope-Datei UND
+Per-Run-Wrapper ihm das Gegenteil vorgaben.

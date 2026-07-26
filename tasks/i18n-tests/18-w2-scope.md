@@ -148,7 +148,7 @@ Duplikat (G5).
 >    (`loc.prompt.mandate`), **PAY-12** (`localeFor(store.tenantLanguage(...)).gates`).
 > 3. **Vier IDs haben kein tragfaehiges Subjekt mehr.** Sie werden im jeweiligen Block
 >    NICHT blind gebaut, sondern zuerst entschieden - Ergebnis in den Blockreport:
->    **GAP-37** (`buildFilter` existiert im Repo nicht, 0 Treffer ausserhalb
+>    ~~**GAP-37**~~ (ZURUECKGEZOGEN, s. 19-w2-baseline.md K4 - `buildFilter` existiert sehr wohl, 2 Treffer in
 >    `node_modules`), **PAY-25** (`VOICE_TARIFF_DOMESTIC_PREFIXES` ist eine Code-Konstante,
 >    keine Env-Variable - es gibt keine Env-Doku zu pruefen), **PAY-20** (der unterstellte
 >    fehlende Drift-Alarm existiert: `providerRateOutOfBand` + `src/billing/cost-calibration.js`),
