@@ -334,3 +334,83 @@ test("(b3) Warnung aus recordTtsCharacters wird an onQuotaWarning durchgereicht"
   await withFakeFetch(okFetch(), () => synthesizeDirectiveAudio({ provider: "telnyx" }, [say("Hallo")]));
   assert.deepEqual(seen, { characters: 800, quota: 1000, cycleKey: "2026-08" });
 });
+
+// ==== GAP-09 (SOLL, rot): Zurechenbarkeit + definierter Erschoepfungs-Zustand =======
+// Beide Bloecke sind SOLL-Tests (rot vor Fix, R2 der kanonischen Liste). Sie nutzen den
+// directive-synth-Harness der Bloecke (b1)-(b3), verdrahten den Zaehler-Seam aber gegen
+// die ECHTEN state-ops-Funktionen - nur so ist die Frage "deckt die Tenant-Summe den
+// Plattform-Zaehler?" ueberhaupt stellbar.
+
+// store-Seam des Play-TTS-Pfads gegen den ECHTEN Plattform-Zaehler auf state s.
+function realPlatformCounterStore(s, cfg) {
+  return { recordTtsCharacters: (chars, nowIso) => recordTtsCharacters(s, chars, cfg, nowIso).warning };
+}
+
+function synthFor(store) {
+  return makeDirectiveSynth({
+    config: fakeSynthConfig(),
+    ttsStore: fakeTtsStore(),
+    store,
+    onQuotaWarning: () => {},
+  }).synthesizeDirectiveAudio;
+}
+
+const tenantTtsCharactersTotal = (s) =>
+  Object.values(s.usage).reduce((sum, bucket) => sum + (bucket.ttsCharacters || 0), 0);
+
+// (a) Gemessen gibt es zwei UNVERBUNDENE Zaehler: der Play-TTS-Pfad (directive-synth)
+// schreibt AUSSCHLIESSLICH den Plattform-Zaehler, der Tenant-Zaehler wird NUR vom
+// Cost-Truing-Sweep aus Telnyx-Belegen gespeist ((t1)-(t4) oben). Der Play-TTS-Verbrauch
+// ist damit keinem Tenant zurechenbar - eine Kostenstelle ohne Kostentraeger.
+test("GAP-09 (SOLL, rot): die Summe der tenant-gekeyten TTS-Zeichen deckt den Plattform-Zaehler", async () => {
+  const s = makeDefaultState();
+  const text = "Guten Tag";
+  const nowIso = new Date().toISOString();
+
+  await withFakeFetch(okFetch(), () =>
+    synthFor(realPlatformCounterStore(s, CFG))({ provider: "telnyx" }, [say(text)]),
+  );
+
+  const platformCharacters = platformTtsUsageView(s, CFG, nowIso).characters;
+  assert.equal(platformCharacters, text.length, "Vorbedingung: der Play-TTS-Pfad hat gezaehlt");
+  assert.equal(
+    tenantTtsCharactersTotal(s),
+    platformCharacters,
+    "kein einziges der plattformweit verbuchten Zeichen ist einem Tenant zugeordnet",
+  );
+});
+
+// (b) Ein erschoepftes Kontingent hat heute KEINEN definierten Zustand: ueber 100 % meldet
+// recordTtsCharacters nur noch {changed:true, warning:null} (die eine Warnung ist bei
+// warnPercent bereits verbraucht) und der Synth-Pfad laeuft unveraendert weiter - stille
+// Overage auf einem Konto, das wir nicht deckeln koennen. Erwartet waere entweder eine
+// Sperre (kein Provider-Call) oder eine Degradation auf Azure-<Say> (keine audioUrl).
+const TINY_QUOTA_CFG = { ...CFG, ttsCharacterQuota: 10 };
+const QUOTA_OVERSHOOT_FACTOR = 2;
+
+test("GAP-09 (SOLL, rot): ist das TTS-Kontingent erschoepft, tritt ein definierter Zustand ein", async () => {
+  const s = makeDefaultState();
+  const nowIso = new Date().toISOString();
+  recordTtsCharacters(s, TINY_QUOTA_CFG.ttsCharacterQuota * QUOTA_OVERSHOOT_FACTOR, TINY_QUOTA_CFG, nowIso);
+  assert.ok(
+    platformTtsUsageView(s, TINY_QUOTA_CFG, nowIso).characters > TINY_QUOTA_CFG.ttsCharacterQuota,
+    "Vorbedingung: das Kontingent ist ueberschritten",
+  );
+
+  const providerCalls = [];
+  const countingOkFetch = async (...args) => {
+    providerCalls.push(args);
+    return okFetch()(...args);
+  };
+  const [directive] = await withFakeFetch(countingOkFetch, () =>
+    synthFor(realPlatformCounterStore(s, TINY_QUOTA_CFG))({ provider: "telnyx" }, [say("Hallo")]),
+  );
+
+  const gesperrt = providerCalls.length === 0;
+  const degradiert = directive.audioUrl === undefined;
+  assert.ok(
+    gesperrt || degradiert,
+    "ueber 100 % laeuft der Play-TTS-Pfad unveraendert weiter - weder Sperre noch Degradation, " +
+      "also unbegrenzte Overage auf dem ElevenLabs-Konto",
+  );
+});

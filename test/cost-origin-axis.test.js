@@ -135,6 +135,18 @@ test("OUT-12 (Charakterisierung, gruen) - Toll-Free-Ziele werden zum Worst-Case-
   );
 });
 
+// PAY-22: die ZIEL-Achse desselben Praedikats. Der fail-closed-Test darueber deckt die
+// HERKUNFT ab (from fehlt/unbrauchbar); leer/unbekannt am ZIEL ist der zweite Weg in
+// denselben Zweig und bisher ungepinnt. Fail-safe teuer statt fail-open billig - die
+// gefaehrliche Richtung waere ein stiller Kipp auf den Inlandssatz. Dass beide Saetze
+// ueberhaupt verschieden sind, sichert der Vorbedingungs-Test am Dateikopf (G5).
+test("PAY-22: leere/unbekannte Zielvorwahl faellt auf den teuren Default-Tarif", () => {
+  const abroad = config.billing.voiceTariffDefaultCents;
+  assert.equal(tariffCentsPerMin("", DE_OWN_DID), abroad, "leeres Ziel");
+  assert.equal(tariffCentsPerMin("+999", DE_OWN_DID), abroad, "erfundene Vorwahl");
+  assert.equal(tariffCentsPerMin(undefined, DE_OWN_DID), abroad, "fehlendes Ziel");
+});
+
 // ---- ORIG-02: Buchung outbound ---------------------------------------------------
 test("Herkunfts-Achse (ORIG-02): DE-Ziel von einer US-DID bucht den Auslandssatz", () => {
   const store = fakeStore();
@@ -151,6 +163,11 @@ test("DE-Ziel von einer DE-DID bucht den Inlandssatz", () => {
 });
 
 // ---- ORIG-03: Inbound haengt am Land der EIGENEN DID -----------------------------
+// PAY-09 (Buchhaltung, kein eigener Test): "recordVoiceMinuteMeter rechnet auch fuer
+// INBOUND-Calls mit dem Auslandstarif, wenn call.to eine US-DID ist" ist woertlich die
+// Aussage des Tests direkt darunter. Ein zweiter Test waere ein Duplikat (G5); die
+// Katalog-ID steht deshalb hier und nicht im Testnamen - der Test bleibt damit im
+// Regressionslauf.
 test("Herkunfts-Achse (ORIG-03): Inbound auf eine US-DID bucht den Satz des DID-Landes, nie den Anrufer", () => {
   const store = fakeStore();
   const { recordVoiceMinuteMeter } = makeMetering({ store, config });

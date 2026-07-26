@@ -13,6 +13,13 @@
 // gefahren (Boot-Refusal trotz "richtiger" Doku). Datei-Read statt config.js-Import:
 // ein Import wuerde die ambiente Shell-Env auswerten (Lehre test-base-env-drift), der
 // Datei-Read prueft die geschriebene Konstante selbst.
+//
+// PAY-25 (Buchhaltung, kein eigener Test): die Katalog-ID verlangt eine Env-Doku-Kohaerenz
+// fuer VOICE_TARIFF_DOMESTIC_PREFIXES. Sie ENTFAELLT - die Vorwahlliste ist eine
+// Code-Konstante in src/config.js, keine Env-Variable; .env.example dokumentiert korrekt
+// VOICE_TARIFF_DOMESTIC_CENTS/_DEFAULT_CENTS/_FULL_COST_FLOOR_CENTS und bewusst kein
+// _PREFIXES (Re-Baseline tasks/i18n-tests/19-w2-baseline.md §3.7). Es gibt hier also keine
+// zweite Quelle, gegen die sich etwas pruefen liesse.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";

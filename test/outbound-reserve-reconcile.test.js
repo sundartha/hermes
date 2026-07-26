@@ -79,6 +79,10 @@ test("INV(5): Owner ohne tenant_budget-Zeile -> Cap = platformSpendCapCents (byt
   assert.equal(reserveExceedsBudget(s, TENANT_A, 900, PRICES), true, "9 EUR Reserve > 8 EUR platformSpendCapCents");
 });
 
+// PAY-23 (Buchhaltung, kein eigener Test): "Reserve exakt gleich dem verbleibenden Cap ist
+// ERLAUBT (strikt >, nicht >=)" ist woertlich die Aussage des Tests darunter - er pinnt
+// beide Seiten der Kante (100 -> false, 101 -> true). Ein zweiter Test waere ein Duplikat
+// (G5); die Katalog-ID steht deshalb hier und nicht im Testnamen.
 test("Grenzfall (T5): Reserve exakt = Rest -> false (strikt >, erlaubt)", () => {
   const s = makeDefaultState();
   setTenantBudget(s, TENANT_A, { budgetCents: 100, hardCapCents: 100 }); // 1.00 EUR Cap

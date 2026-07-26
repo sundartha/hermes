@@ -11,26 +11,32 @@ import { handleProvisionJob } from "../src/worker/provisioning.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
 import { config } from "../src/config.js";
 import { fakeProvisioner } from "./helpers.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { makeMetering } from "../src/billing/metering.js";
 import {
   makeDefaultState,
   registerTenant,
   requestNumber,
   findNumber,
   recordProvisioningJob,
+  setTenantStripe,
 } from "../src/store/state-ops.js";
 import {
   NUMBER_STATUS,
   PROVISION_NUMBER_JOB,
   PROVISIONING_JOB_STATUS,
+  USAGE_EVENT_KIND,
 } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
+// Der eine Tenant aller Fixturen dieser Datei (seedRequested, enqueueProvision, GAP-11).
+const TENANT_ID = "t_user1";
 
 // Seedet eine 'requested' Number mit explizitem Land (Default DE).
 function seedRequested(country = "DE") {
   const s = makeDefaultState();
-  registerTenant(s, "t_user1");
-  const { number } = requestNumber(s, { tenantId: "t_user1", country, ...CAPS });
+  registerTenant(s, TENANT_ID);
+  const { number } = requestNumber(s, { tenantId: TENANT_ID, country, ...CAPS });
   return { s, numberId: number.id };
 }
 
@@ -63,7 +69,7 @@ function drainWithGeo(queue, s, deps, defaultHoldCents, onHold) {
 function enqueueProvision(queue, s, numberId) {
   const idempotencyKey = `provision_${numberId}`;
   queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
-  recordProvisioningJob(s, { numberId, tenantId: "t_user1", idempotencyKey });
+  recordProvisioningJob(s, { numberId, tenantId: TENANT_ID, idempotencyKey });
 }
 
 // ---- searchParamsForCountry (Tabelle) ----
@@ -119,6 +125,48 @@ test("holdAmountForCountry: unbekannt/leer/null/undefined -> Default-Hold", () =
 
 test("holdAmountForCountry: case-insensitiv -> Default-Hold (fr ohne eigenen Tarif)", () => {
   assert.equal(holdAmountForCountry("fr", DEFAULT_HOLD), DEFAULT_HOLD);
+});
+
+// Zwei UNTERSCHIEDLICHE Sentinel-Defaults: stimmt das Ergebnis bei BEIDEN mit dem
+// Aufrufer-Default ueberein, kann es kein zufaellig gleicher Tabellenwert sein.
+const SENTINEL_HOLD_A = 500;
+const SENTINEL_HOLD_B = 777;
+
+// PAY-17: US ist heute PREIS-GLEICH zu DE. Die Land-Differenzierung existiert fuer die
+// SUCHPARAMETER (Test oben: US -> countryCode US), fuer den PREIS aber nicht - kein
+// Tabellen-Eintrag traegt holdAmountCents.
+test("PAY-17: holdAmountForCountry liefert fuer US denselben Betrag wie fuer DE (kein eigener US-Preis)", () => {
+  assert.equal(holdAmountForCountry("US", SENTINEL_HOLD_A), holdAmountForCountry("DE", SENTINEL_HOLD_A));
+  assert.equal(
+    holdAmountForCountry("US", SENTINEL_HOLD_B),
+    SENTINEL_HOLD_B,
+    "US traegt keinen eigenen Tarif - der Wert stammt zu 100 % vom Aufrufer-Default",
+  );
+});
+
+// Die Laender, in denen heute tatsaechlich gekauft wird: DE ist der
+// provisioningCountry-Fallback, FR/GB/US sind die Tabellen-Eintraege, US zusaetzlich das
+// LIVE gesetzte FORCE_NUMBER_COUNTRY-Kaufland (tasks/i18n-tests/13-live-env-befund.md).
+// Die Liste steht bewusst hier im Test: COUNTRY_SEARCH_PARAMS ist modul-privat, ein
+// Zugriff darauf braeche die Kapselung von provisioning-geo.js.
+const ACTIVE_PURCHASE_COUNTRIES = Object.freeze(["DE", "FR", "GB", "US"]);
+
+// GAP-11 (b), SOLL/rot: fuer jedes AKTIV bespielte Kauf-Land ist ein EXPLIZITER
+// Laenderpreis zu pflegen. Heute faellt jedes Land auf den globalen Default zurueck -
+// weicht der reale Telnyx-Preis ab, driftet der Hold unbemerkt vom Ist (R3). Die
+// Hold==Capture==Ledger-Haelfte derselben ID steht als gruener Test am Dateiende.
+test("GAP-11 (SOLL, rot): jedes bespielte Kauf-Land traegt einen EXPLIZITEN holdAmountCents", () => {
+  const ohneEigenenPreis = ACTIVE_PURCHASE_COUNTRIES.filter(
+    (c) =>
+      holdAmountForCountry(c, SENTINEL_HOLD_A) === SENTINEL_HOLD_A &&
+      holdAmountForCountry(c, SENTINEL_HOLD_B) === SENTINEL_HOLD_B,
+  );
+  assert.deepEqual(
+    ohneEigenenPreis,
+    [],
+    "diese Kauf-Laender fallen auf den globalen Default zurueck, statt einen bestaetigten " +
+      "Laenderpreis zu tragen - der Hold kann dort lautlos vom realen Provider-Preis abweichen",
+  );
 });
 
 // ---- Drain-Pfad (per-Job-countryCode) ----
@@ -202,4 +250,63 @@ test("R5: 0 Treffer -> sauberer Fehler (failed), KEIN Kauf, KEIN Crash", async (
 
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED, "0 Treffer -> failed");
   assert.ok(!prov.log.some((l) => l.startsWith("order")), "kein Order ohne Kandidat");
+});
+
+// ---- GAP-11 (a): Hold == Capture == number_month-Beleg (eine Quelle) ----
+
+// Protokolliert die beiden Geld-Betraege der Provisionierung (placeHold/captureHold).
+function fakeSetupFeeBilling() {
+  const holdAmounts = [];
+  const captureAmounts = [];
+  return {
+    holdAmounts,
+    captureAmounts,
+    async placeHold({ amountCents }) {
+      holdAmounts.push(amountCents);
+      return { paymentIntentId: "pi_gap11" };
+    },
+    async captureHold(_paymentIntentId, amountCents) {
+      captureAmounts.push(amountCents);
+    },
+    async cancelHold() {},
+  };
+}
+
+// Faengt das number_month-usage_event auf (Muster test/metering-unit.test.js).
+function fakeMeteringStore() {
+  const usageEvents = [];
+  return { usageEvents, recordUsageEvent: (ev) => usageEvents.push(ev) };
+}
+
+// Die DREI Geld-Legs einer Provisionierung teilen sich EINE Quelle (holdAmountForCountry).
+// Bisher belegen das zwei benachbarte Tests getrennt (Drain reicht durch / Ledger nutzt
+// dieselbe Funktion); die INVARIANTE "Hold == Capture == number_month-costCents" steht
+// nirgends als EINE Assertion - genau daran driftete R3 (Capture-Mismatch).
+test("GAP-11: Hold, Capture und der number_month-Beleg tragen denselben Betrag (eine Quelle)", async () => {
+  const country = "DE";
+  const { s, numberId } = seedRequested(country);
+  setTenantStripe(s, TENANT_ID, { customerId: "cus_gap11", paymentMethodId: "pm_gap11" });
+  const queue = makeMemoryQueue();
+  const prov = fakeProvisioner();
+  const billing = fakeSetupFeeBilling();
+  enqueueProvision(queue, s, numberId);
+
+  await drainWithGeo(queue, s, { provisioner: prov, billing }, DEFAULT_HOLD);
+
+  const number = findNumber(s, numberId);
+  assert.equal(number.status, NUMBER_STATUS.ACTIVE, "Vorbedingung: die Nummer wurde aktiviert");
+  // Spiegel des Produktionspfads: der Orchestrator ruft metering.recordNumberMonthMeter mit
+  // GENAU dieser frisch aktivierten Nummer (src/worker/provisioning-orchestrator.js).
+  const meteringStore = fakeMeteringStore();
+  makeMetering({
+    store: meteringStore,
+    config: withConfigNamespaces({ numberSetupFeeCents: DEFAULT_HOLD }),
+  }).recordNumberMonthMeter(number);
+
+  const erwartet = holdAmountForCountry(country, DEFAULT_HOLD);
+  const belege = meteringStore.usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.NUMBER_MONTH);
+  assert.deepEqual(billing.holdAmounts, [erwartet], "gehalten wurde der Laender-Setup-Tarif");
+  assert.deepEqual(billing.captureAmounts, [erwartet], "eingezogen wurde derselbe Betrag");
+  assert.equal(belege.length, 1, "genau ein number_month-Beleg");
+  assert.equal(belege[0].costCents, erwartet, "und das Ledger bucht denselben Betrag");
 });

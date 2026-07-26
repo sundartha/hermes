@@ -96,6 +96,11 @@ test("recordVoiceMinuteMeter: N Minuten -> Event mit kind/quantity/costCents aus
   assert.equal(ev.costCents, 1 * tariffCentsPerMin(call.to, call.from));
 });
 
+// PAY-08 (Buchhaltung, kein eigener Test): "ein Inbound-Anruf zieht das Tenant-Budget nie
+// ab" ist woertlich die Aussage des Tests darunter (Beleg: `if (call.direction !==
+// "outbound") return;` als erste Zeile von reconcileOutboundVoiceBudget in
+// src/billing/metering.js). Ein zweiter Test waere ein Duplikat (G5); die Katalog-ID steht
+// deshalb hier und nicht im Testnamen - der Test bleibt damit im Regressionslauf.
 test("reconcileOutboundVoiceBudget: inbound -> kein addVoiceUsageCostCents", () => {
   const store = fakeStore();
   const { reconcileOutboundVoiceBudget } = makeMetering({ store, config: {} });
@@ -148,6 +153,31 @@ test("recordNumberMonthMeter: Number -> Event mit kind/quantity/costCents aus ho
   assert.equal(ev.kind, USAGE_EVENT_KIND.NUMBER_MONTH);
   assert.equal(ev.quantity, 1);
   assert.equal(ev.costCents, holdAmountForCountry(number.country, config.numberSetupFeeCents));
+});
+
+// GAP-06 (SOLL, rot): pro angebrochenem Kalendermonat einer aktiven Nummer soll GENAU EIN
+// number_month-Beleg existieren. Gemessen hat recordNumberMonthMeter GENAU EINE
+// Aufrufstelle - den Provisioning-Drain bei der AKTIVIERUNG (src/worker/
+// provisioning-orchestrator.js). Einen zweiten, zeitgesteuerten Pfad gibt es nicht; die
+// Miete wird also genau einmal gebucht, egal wie lange die Nummer gehalten wird. Der rote
+// Lauf dieses Tests IST der Beweis (R2) - es gibt heute keine Handlung, die ihn gruen
+// machen koennte, und genau das ist der Befund.
+const ACTIVE_MONTHS = 3;
+
+test("GAP-06 (SOLL, rot): eine seit drei Monaten aktive Nummer traegt drei number_month-Belege", () => {
+  const store = fakeStore();
+  const { recordNumberMonthMeter } = makeMetering({
+    store,
+    config: withConfigNamespaces({ numberSetupFeeCents: NUMBER_SETUP_FEE_CENTS }),
+  });
+  recordNumberMonthMeter({ tenantId: TENANT_A, country: "DE" }); // der einzige Produktionspfad
+  const belege = store.usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.NUMBER_MONTH);
+  assert.equal(
+    belege.length,
+    ACTIVE_MONTHS,
+    "es gibt keinen wiederkehrenden Pfad - die Miete wird nur bei der Aktivierung gebucht, " +
+      "die Anzeige (numberMonthlyCostCents) laeuft dem Ledger damit dauerhaft davon",
+  );
 });
 
 test("Modul bucht ungated: paymentEnabled=false bucht trotzdem (Gate liegt beim Aufrufer, nicht im Modul)", () => {

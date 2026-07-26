@@ -92,6 +92,14 @@ function baseCtx(overrides = {}) {
   };
 }
 
+// PAY-12 (Buchhaltung, kein eigener Test): die Katalog-Aussage "der 402-Ablehnungstext des
+// Budget-Gates ist hartkodiertes Deutsch ohne Locale-Anbindung" ist UEBERHOLT (Re-Baseline
+// tasks/i18n-tests/19-w2-baseline.md §3.3). Seit P15/T2 kommen die Texte aus
+// localeFor(store.tenantLanguage(tenantId)).gates, und die Faelle budget_tenant,
+// budget_platform, reserve_ueber_rest und reserve_erschoepft laufen unten ueber alle drei
+// Sprachen. Ein "hart deutsch"-Pin waere heute genau der Mischsprach-Pin, den der
+// GAP-27-Waechter meldet (test/characterization-marking.test.js).
+//
 // Ein Ablehnungsfall: wie er ausgeloest wird (deps/ctx), was Protokoll bleibt (status/grund)
 // und welcher Buendel-Schluessel den Anzeigetext liefert (textOf(gates) je Sprache).
 const CASES = [

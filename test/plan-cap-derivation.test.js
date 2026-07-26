@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 let PGlite, makePgStore, config, ops, subscribeMod, webhookMod, activationMod, backfillMod, planCapsMod;
-let USAGE_EVENT_KIND, KYC_LEVEL;
+let USAGE_EVENT_KIND, KYC_LEVEL, CATALOG_SLUGS;
 
 before(async () => {
   ({ PGlite } = await import("@electric-sql/pglite"));
@@ -34,6 +34,7 @@ before(async () => {
   activationMod = await import("../src/billing/activation.js");
   backfillMod = await import("../src/billing/backfill-profiles.js");
   planCapsMod = await import("../src/billing/plan-caps.js");
+  ({ CATALOG_SLUGS } = await import("../src/plans.js")); // PAY-16: die Katalog-Slug-Quelle
   ({ USAGE_EVENT_KIND, KYC_LEVEL } = await import("../src/store/defaults.js"));
   // createTenantSubscription/priceIdForPlan brauchen konfigurierte Price-Ids (sonst
   // plan_unconfigured). Direkte Namespace-Zuweisung (Getter+Setter auf denselben
@@ -109,6 +110,43 @@ test("(a) createTenantSubscription(starter) -> abgeleitete Decke 300 ct", async 
   assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 300);
 });
 
+// ---- PAY-15/16: fail-closed bei fehlender Kopffreiheit ---------------------------
+// (a) oben pinnt die WERTE der zwei heutigen Slugs. Hier steht die andere Haelfte: was
+// passiert mit einem Slug, den die Kopffreiheit-Tabelle nicht kennt. Beide Faelle teilen
+// sich EINEN Wurf (`!plan || !headroom`) und sind trotzdem zwei Tests (ein Konzept je
+// Test, P14): PAY-15 ist der unbekannte Slug (keine Katalog-Zeile), PAY-16 die
+// OCP-Frage - ein KUENFTIGER Katalog-Slug ohne Kopffreiheit-Eintrag.
+//
+// Die Basissatz-Fixtur spiegelt die VOICE_CAP_RATE_CENTS_PER_MIN-Zeile am Dateikopf
+// (Punkt 0): dieselbe Zahl, damit die abgeleiteten Decken hier und in der Ableitung
+// darunter dieselben sind.
+const PLAN_CAP_CFG = Object.freeze({ voiceCapRateCentsPerMin: 6 });
+const UNKNOWN_PLAN_SLUG = "enterprise_us"; // weder im Katalog noch in der Kopffreiheit-Tabelle
+
+test("PAY-15: planCapCents wirft fail-closed bei unbekanntem Plan-Slug (kein stiller Default)", () => {
+  assert.throws(
+    () => planCapsMod.planCapCents(UNKNOWN_PLAN_SLUG, PLAN_CAP_CFG),
+    new RegExp(`planCapCents: unbekannter Plan-Slug '${UNKNOWN_PLAN_SLUG}'`),
+    "ein unbekannter Slug darf NIE einen Zahlenwert liefern - das waere eine erfundene Decke",
+  );
+});
+
+test("PAY-16: JEDER Katalog-Slug hat eine Kopffreiheit (ein neuer Plan ohne Eintrag blockiert sofort)", () => {
+  for (const slug of CATALOG_SLUGS) {
+    const cap = planCapsMod.planCapCents(slug, PLAN_CAP_CFG);
+    assert.ok(Number.isInteger(cap) && cap > 0, `${slug}: keine ganzzahlige, positive Decke`);
+  }
+  // Der Waechter-Anteil: dieselbe Klausel greift fuer einen Slug OHNE Eintrag. Waere sie
+  // fail-open, kaeme hier eine Zahl statt eines Wurfs - und ein neu eingefuehrter Plan
+  // bekaeme lautlos eine falsche Decke statt eines lauten Boot-Abbruchs (erste Linie:
+  // planCapInertFindings, gepinnt in test/env-docs-spend-cap-coherence.test.js).
+  assert.throws(
+    () => planCapsMod.planCapCents("starter_us", PLAN_CAP_CFG),
+    /kein Katalog-\/Kopffreiheit-Eintrag/,
+    "ein kuenftiger Katalog-Slug ohne Kopffreiheit-Eintrag muss werfen, nie rechnen",
+  );
+});
+
 // ---- (b) Downgrade senkt die Decke, auch bei bereits hoeherem Verbrauch ----------
 
 test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH dem Downgrade exceeded", async () => {
@@ -127,6 +165,48 @@ test("(b) Downgrade business(900)->starter(300): Verbrauch 400 wird erst NACH de
     store.budgetExceeded(tenantId, config.billing),
     true,
     "400 >= 300 (starter) -> exceeded (Decke ist Grenze, kein Guthaben)",
+  );
+});
+
+// ---- PAY-24: Downgrade waehrend einer OFFENEN In-Flight-Reserve ------------------
+// (b) oben prueft den Downgrade gegen SETTLED Verbrauch. Der gefaehrlichere Fall ist die
+// noch nicht abgerechnete Reserve eines LAUFENDEN Calls: sie sitzt im ephemeren
+// Reserve-Ledger (s.reservations), nicht im usage-Bucket. Der Test beweist, dass
+// effectiveCapCents bei JEDER Pruefung frisch gelesen wird (kein zwischengespeicherter
+// Cap, der die alte Business-Decke ueberleben liesse). Reine state-ops-Ebene, kein
+// pglite noetig.
+const BUSINESS_CAP_CENTS = 900;
+const STARTER_CAP_CENTS = 300;
+
+test("PAY-24: Downgrade business->starter wirkt sofort auf eine bereits offene Nicht-Inlands-Reserve", () => {
+  const s = ops.makeDefaultState();
+  const tenantId = "t_pay24";
+  ops.registerTenant(s, tenantId, {});
+  ops.setTenantSubscription(s, tenantId, { planSlug: "business" });
+  ops.deriveTenantBudgetFromPlan(s, tenantId, config.billing);
+  assert.equal(
+    ops.tenantBudgetSnapshot(s, tenantId, config.billing).capCents,
+    BUSINESS_CAP_CENTS,
+    "Vorbedingung: Business-Decke unclamped (MAX_BUDGET_EUR=30 am Dateikopf)",
+  );
+
+  assert.equal(
+    ops.tryReserveOutboundBudget(s, tenantId, BUSINESS_CAP_CENTS, config.billing),
+    true,
+    "Vorbedingung: die volle Decke ist als In-Flight-Reserve gebucht",
+  );
+
+  ops.setTenantSubscription(s, tenantId, { planSlug: "starter" });
+  ops.deriveTenantBudgetFromPlan(s, tenantId, config.billing);
+  assert.equal(
+    ops.tenantBudgetSnapshot(s, tenantId, config.billing).capCents,
+    STARTER_CAP_CENTS,
+    "Decke gesunken",
+  );
+  assert.equal(
+    ops.reserveExceedsBudget(s, tenantId, 1, config.billing),
+    true,
+    "die 900er-Reserve allein sprengt die neue 300er-Decke - schon ein Cent mehr wird abgelehnt",
   );
 });
 

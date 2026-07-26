@@ -18,6 +18,13 @@ test("Katalog hat genau die zwei Spec-Tiers in Reihenfolge", () => {
   assert.deepEqual([...CATALOG_SLUGS], EXPECTED_SLUGS);
 });
 
+// PAY-01 (Buchhaltung, kein eigener Test): "Plan-Katalog bleibt EUR und
+// Cross-Package-identisch" ist bereits doppelt gepinnt - die Waehrung im Test direkt
+// darunter (`currency === "eur"` je Plan), die Spiegel-Gleichheit im Cross-Package-Drift-
+// Test weiter unten. Die ANZEIGE-Haelfte derselben ID (EUR bleibt EUR in de/en/fr) liegt
+// in test/bk1-plan-price-format.test.js. Ein weiterer Test waere ein Duplikat (G5); die
+// Katalog-ID steht deshalb hier und nicht im Testnamen - die Tests bleiben im
+// Regressionslauf.
 test("jeder Plan: Ganzzahl-Cents > 0, eur, ganzzahlige Mengen > 0", () => {
   for (const plan of PLAN_CATALOG) {
     assert.ok(
