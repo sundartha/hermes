@@ -14,6 +14,7 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import { readFileSync } from "node:fs";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
@@ -250,6 +251,30 @@ test("B11 assistantContextEnabled aus (Briefing-Flag bleibt an) -> null, kein Re
 // assistant-context-render/cq-p6-mandate).
 const NOW_TOKEN = "<NOW>";
 const freezeNow = (prompt) => prompt.replace(/Heute ist [^\n]+\./, `Heute ist ${NOW_TOKEN}.`);
+
+// PROMPT-06 (tasks/i18n-tests/02-llm-prompts.md): call.language wird NICHT ans Briefing
+// durchgereicht - weder in der Signatur von fetchPrecallBriefing noch im Aufrufobjekt in
+// api-calls.js (obwohl die Sprache dort wenige Zeilen vorher aufgeloest wird). Struktur-
+// Pruefung am Quelltext (Muster call-termination-order.test.js): der Parameter existiert
+// gar nicht, es gibt also kein Laufzeitverhalten, das man variieren koennte.
+// Anker sind Symbole, keine Zeilennummern (C2).
+test("PROMPT-06 (Luecke, gruen) - fetchPrecallBriefing kennt keine Sprache, der Aufrufer reicht keine durch", () => {
+  const briefingSrc = readFileSync(new URL("../src/precall-briefing.js", import.meta.url), "utf8");
+  assert.doesNotMatch(briefingSrc, /language/, "das Briefing-Modul kennt den Begriff nicht");
+  const apiCallsSrc = readFileSync(new URL("../src/routes/api-calls.js", import.meta.url), "utf8");
+  const args = apiCallsSrc.match(/fetchPrecallBriefing\(\{([\s\S]*?)\}\)/)?.[1];
+  assert.ok(args, "Aufrufstelle nicht gefunden - Test muss nachgezogen werden");
+  assert.doesNotMatch(args, /\blanguage\s*:/, "kein language-Key im Aufrufobjekt");
+});
+
+// PROMPT-07 (tasks/i18n-tests/02-llm-prompts.md): der Briefing-System-Prompt gibt dem
+// Modell KEINE Ausgabesprache vor. Er ist durchgehend deutsch; ein EN-Tenant bekommt
+// damit deutsche Freitextfelder in seinen HINTERGRUND-Block. Dokumentiert die Luecke am
+// echten Request-Body (nicht am Quelltext) - dieselbe Naht wie B9.
+test("PROMPT-07 (Luecke, gruen) - der Briefing-System-Prompt enthaelt keine Sprachvorgabe fuer die Freitextfelder", async () => {
+  await fetchPrecallBriefing(briefingArgs());
+  assert.doesNotMatch(lastRequest.system, /english|englisch|reply in|answer in|antworte auf|sprache/i);
+});
 
 test("B12 Byte-Identitaet (Abnahme b): systemPrompt nach fehlgeschlagenem Briefing ist byte-identisch zur Baseline", () => {
   const base = {

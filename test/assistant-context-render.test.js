@@ -110,3 +110,20 @@ test("R4 Flag an + leeres key_facts: kein HINTERGRUND-Block (Grenzfall, Section 
   const prompt = systemPrompt(call({ direction: "outbound", language: "de", context: { key_facts: [] } }));
   assert.ok(!prompt.includes("HINTERGRUND"), "leere Teilfelder -> Section '' -> kein Block");
 });
+
+// PROMPT-08 (tasks/i18n-tests/02-llm-prompts.md), NACH Fix-Phase P11 umformuliert: die
+// Katalog-Aussage "Labels bleiben deutsch" ist ueberholt - assistantContextSection zieht
+// sie aus loc.prompt.background (19-w2-baseline.md 3.3). Sie als deutsch zu pinnen waere
+// genau der Mischsprach-Pin, gegen den der GAP-27-Waechter antritt. Geprueft wird deshalb
+// SPRACHREINHEIT: ein EN-Call bekommt englische Labels und KEINE deutschen.
+// Erwartungswerte englisch = kein Mischsprach-Pin (test/helpers/characterization-scan.mjs).
+test("PROMPT-08 (Sprachreinheit, gruen) - HINTERGRUND-Labels eines EN-Calls sind englisch", () => {
+  const prompt = systemPrompt(call({ direction: "outbound", language: "en", context: CTX }));
+  assert.ok(prompt.includes("BACKGROUND (for your information only):"));
+  assert.ok(prompt.includes("- What it's about: "));
+  assert.ok(prompt.includes("- Relationship to the person being called: "));
+  assert.ok(prompt.includes("- Desired outcome: "));
+  assert.ok(prompt.includes("- Key facts: "));
+  assert.ok(!prompt.includes(HEADER), "kein deutscher HINTERGRUND-Kopf im EN-Prompt");
+  assert.ok(!prompt.includes(GUARDRAIL), "keine deutsche Guardrail-Zeile im EN-Prompt");
+});

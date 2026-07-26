@@ -53,6 +53,57 @@ const ENV = { ALLOWED_NUMBERS: TO, TWILIO_ACCOUNT_SID: "x" };
 const outboundCall = (srv) =>
   srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === TO);
 
+// Wie placeCall, aber MIT explizitem, abweichendem Sprachwunsch im Body - der einzige
+// Unterschied, den LANG-15 misst. Eigene Funktion statt Flag-Parameter (F3/G15).
+function placeCallWithLanguageWish(srv, language) {
+  return fetch(`${srv.localUrl}/api/calls`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: TO, objective: "Termin vereinbaren", language }),
+  });
+}
+
+// LANG-15 (tasks/i18n-tests/01-sprachaufloesung.md): der Sprachwunsch aus dem Call-Body -
+// und damit auch der aus dem MCP-Tool place_call, das nur diese REST-Route ruft - wird
+// serverseitig ignoriert. Die Sprache kommt ausschliesslich aus resolveCallLanguage
+// (Geo-Anker/Override). Die SOLL-Haelfte (das Feld gehoert nach Entscheidung E3 ganz
+// entfernt) traegt test/p15-mcp-tool-descriptions-en.test.js.
+test("LANG-15 (Mechanismus, gruen) - body.language wird serverseitig ignoriert, der Geo-Anker gewinnt", async () => {
+  const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });
+  try {
+    assert.equal((await placeCallWithLanguageWish(srv, "en")).status, 500);
+    assert.equal(outboundCall(srv).language, "fr", "der Geo-Anker der Nummer gewinnt, nicht der Body-Wunsch");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// LANG-26 (tasks/i18n-tests/01-sprachaufloesung.md): Symmetrie-Beweis. Inbound und
+// Outbound teilen EINEN Anker (dieselbe aktive Nummer, dieselbe resolveCallLanguage-
+// Funktion). Beide Richtungen in EINEM Test, weil genau die GLEICHHEIT das Konzept ist
+// (P14) - zwei getrennte Tests koennten beide gruen sein und trotzdem divergieren.
+test("LANG-26 (Mechanismus, gruen) - Inbound und Outbound leiten dieselbe Sprache aus derselben Nummer ab", async () => {
+  const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });
+  try {
+    const inboundRes = await fetch(`${srv.localUrl}/voice/incoming`, {
+      method: "POST",
+      body: new URLSearchParams({
+        CallSid: "CAlang26",
+        From: "+4915112345678",
+        To: OWNER_FR_NUMBER,
+      }),
+    });
+    assert.equal(inboundRes.status, 200);
+    assert.equal((await placeCall(srv)).status, 500);
+    const inboundCall = srv.readStore().calls.find((c) => c.direction === "inbound");
+    assert.equal(inboundCall.language, "fr");
+    assert.equal(outboundCall(srv).language, "fr");
+    assert.equal(inboundCall.language, outboundCall(srv).language, "beide Richtungen stimmen ueberein");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // (1) number.language faellt durch auf call.language: FR-Nummer -> Outbound fuehrt FR.
 test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.language=fr)", async () => {
   const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });

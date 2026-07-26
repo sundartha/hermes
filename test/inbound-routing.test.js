@@ -69,6 +69,30 @@ test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record
   }
 });
 
+// Charakterisierung LANG-16 (tasks/i18n-tests/01-sprachaufloesung.md): der Unrouted-
+// Hangup spricht FEST Deutsch - ohne Tenant gibt es keinen Sprach-Anker, der Satz haengt
+// an keinem Locale-Bundle (src/routes/voice.js, sayD(...) im numberRecord-null-Zweig).
+// Als CHARAKTERISIERUNG gekennzeichnet: der Ist-Zustand wird dokumentiert, nicht als
+// Sollzustand erklaert - fuer einen weltweiten Start ist ein deutscher Satz an eine
+// unbekannte Nummer der falsche Default. Der Satz ist der EINZIGE Pin dieses Tests.
+test("Charakterisierung LANG-16 - Inbound-Ablehnung fuer unbekannte Zielnummer ist fest Deutsch", async () => {
+  const srv = await startServer();
+  try {
+    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+      method: "POST",
+      headers: { "Accept-Language": "en-US" }, // kein Header-Signal beeinflusst den Satz
+      body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: UNKNOWN_TO }),
+    });
+    assert.equal(res.status, 200);
+    const twiml = await res.text();
+    assert.match(twiml, /Diese Nummer ist nicht erreichbar\. Auf Wiederhören\./);
+    assert.match(twiml, /<Hangup/);
+    assert.equal(srv.readStore().calls.length, 0, "kein Call-Record fuer unbekannte To");
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("fehlende To -> fail-closed Hangup + Audit, kein Call-Record", async () => {
   const srv = await startServer();
   try {

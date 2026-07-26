@@ -59,6 +59,38 @@ test("Onboard mit body.country=GB -> en (country->language-Tabelle generisch)", 
   }
 });
 
+// LANG-23 (tasks/i18n-tests/01-sprachaufloesung.md, Nebenlaeufigkeit): zwei gleichzeitige
+// Onboardings duerfen sich nicht vermischen. registerTenant -> setTenantGeo ->
+// requestNumber -> save laufen in EINEM withStoreLock-Abschnitt ohne fremdes await
+// dazwischen (src/store.js, src/routes/api-onboard.js). Promise.all statt sequenziell -
+// sequenziell wuerde die Invariante gar nicht beruehren.
+test("LANG-23 (Mechanismus, gruen) - parallele Onboards bleiben isoliert (kein Geo-/Sprach-Mix)", async () => {
+  const srv = await startServer();
+  try {
+    const [frRes, gbRes] = await Promise.all([
+      postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_par_fr", country: "FR" }),
+      postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_par_gb", country: "GB" }),
+    ]);
+    assert.equal(frRes.status, 200);
+    assert.equal(gbRes.status, 200);
+    const frJson = await frRes.json();
+    const gbJson = await gbRes.json();
+    assert.equal(frJson.language, "fr");
+    assert.equal(gbJson.language, "en");
+
+    const store = srv.readStore();
+    assert.equal(store.tenants.find((t) => t.id === "t_par_fr").defaultLanguage, "fr");
+    assert.equal(store.tenants.find((t) => t.id === "t_par_gb").defaultLanguage, "en");
+    const frNum = store.numbers.find((n) => n.id === frJson.numberId);
+    const gbNum = store.numbers.find((n) => n.id === gbJson.numberId);
+    assert.equal(frNum.language, "fr");
+    assert.equal(gbNum.language, "en");
+    assert.notEqual(frJson.numberId, gbJson.numberId, "keine geteilte Nummer zwischen den Tenants");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // Geo aus (Default) + kein body.country -> Fallback DE/de (byte-identisch zum Bestand).
 test("Onboard ohne country (Geo aus) -> Fallback DE/de (byte-identisch)", async () => {
   const srv = await startServer();

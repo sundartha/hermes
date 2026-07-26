@@ -138,3 +138,14 @@ test("O14: die Systemgrenze Modellsprache != Nutzersprache ist im Code dokumenti
   const src = fs.readFileSync(path.join(ROOT, "src/mcp-tools.js"), "utf8");
   assert.match(src, /MODELLSPRACHE != NUTZERSPRACHE/);
 });
+
+// LANG-15 (SOLL) - Entscheidung E3 (tasks/i18n-tests/00-kanonische-liste.md, Cluster D11):
+// place_call.language gehoert ENTFERNT. Die Sprache haengt an Tenant/Nummer und wird
+// serverseitig ueber resolveCallLanguage aufgeloest; ein wirkungsloser Parameter fuehrt das
+// Modell in die Irre. HEUTE ROT: das Feld steht weiter im Zod-Schema, und seine Beschreibung
+// nennt sogar einen falschen Default ("default 'de'", waehrend der Code-Default seit P10
+// "en" ist) - eine nutzersichtbare Falschaussage. Wird E3 umgesetzt, faellt der Pfad
+// place_call.language zugleich aus EXPECTED_MARKERS oben (mitziehen).
+test("LANG-15 (SOLL, rot) - das MCP-Schema bietet keinen wirkungslosen place_call.language-Parameter mehr", () => {
+  assert.ok(!captureDescriptions().has("place_call.language"));
+});
