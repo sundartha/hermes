@@ -60,3 +60,17 @@ test("T-P2b-G-04: leere Namen -> No-Op -> false (Dev-Login-/namloses-Profil-Aequ
   assert.equal(changed, false, "kein komponierter ownerName -> false");
   assert.equal("ownerName" in s.tenants.find((t) => t.id === "t_web"), false);
 });
+
+// FMT-23 (tasks/i18n-tests/10-zeit-format-daten.md): firstNameOf ist modul-privat und
+// wird ueber seinen einzigen Aufrufer tenantContext gemessen. Ein CJK-Name ohne
+// Leerzeichen darf nicht "zerschnitten" werden - split(/\s+/)[0] liefert den ganzen
+// String. Die Luecke war die ABWESENHEIT der Absicherung, kein bekannter Bug.
+const CJK_FULL_NAME = "田中太郎"; // kein Whitespace -> nichts zu splitten
+const CJK_SPACED_NAME = "田中 太郎"; // Gegenprobe: mit Trenner greift die Regel normal
+test("FMT-23 (Mechanismus, gruen) - tenantContext leitet aus einem CJK-Namen ohne Leerzeichen den vollen String ab", () => {
+  const s = makeDefaultState();
+  s.tenants = [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: CJK_FULL_NAME }];
+  assert.equal(tenantContext(s, "", BOOTSTRAP_TENANT_ID).firstName, CJK_FULL_NAME);
+  s.tenants[0].ownerName = CJK_SPACED_NAME;
+  assert.equal(tenantContext(s, "", BOOTSTRAP_TENANT_ID).firstName, "田中");
+});

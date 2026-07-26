@@ -48,8 +48,10 @@ function readRenderValue(text, name) {
 // Liest den numEnv(..., { fallback: N, ... })-Wert fuer eine gegebene Env-Var direkt aus
 // dem src/config.js-Quelltext (kein Import, s. Datei-Kommentar oben). [^)] statt . matcht
 // ueber Zeilenumbrueche (config.js bricht die numEnv-Optionen auf mehrere Zeilen um).
+// \s* nach der Klammer: config.js bricht laengere numEnv-Aufrufe hinter "numEnv(" um
+// (z.B. DIAGNOSTIC_RETENTION_DAYS) - ohne das findet der Parser den Fallback nicht.
 function readCodeFallback(text, envName) {
-  const m = text.match(new RegExp(`numEnv\\("${envName}",[^)]*?fallback:\\s*(-?\\d+(?:\\.\\d+)?)`));
+  const m = text.match(new RegExp(`numEnv\\(\\s*"${envName}",[^)]*?fallback:\\s*(-?\\d+(?:\\.\\d+)?)`));
   if (!m) throw new Error(`numEnv-Fallback fuer ${envName} nicht in src/config.js gefunden`);
   return Number(m[1]);
 }
@@ -145,5 +147,26 @@ test("LCT P6: src/config.js numEnv-CODE-Fallback MAX_BUDGET_EUR=30 ist kohaerent
     planCapFatalFor(platformCapCents),
     false,
     "der CODE-Fallback liefert einen Plattform-Cap, unter dem die abgeleitete Business-Plan-Decke inert waere",
+  );
+});
+
+const RETENTION_DAYS_DEFAULT = 30;
+const DIAGNOSTIC_RETENTION_DAYS_DEFAULT = 7;
+
+// LAW-15 (tasks/i18n-tests/09-recht-und-compliance.md): die Retention-Defaults. Die
+// "fail-closed bei 0"-Haelfte ist am KONSUMENTEN bereits gepinnt (diagnostic-retention
+// P2b-05/12/24/31, retention.test.js "RETENTION_DAYS=0") - ungepinnt war nur die ZAHL
+// selbst: Code-Fallback und .env.example sind zwei Quellen, die auseinanderlaufen
+// koennen (dieselbe Klasse Defekt wie die Budget-Achsen oben).
+test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/config.js und .env.example ueberein", () => {
+  const configSource = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  assert.equal(readCodeFallback(configSource, "RETENTION_DAYS"), RETENTION_DAYS_DEFAULT);
+  assert.equal(readCodeFallback(configSource, "DIAGNOSTIC_RETENTION_DAYS"), DIAGNOSTIC_RETENTION_DAYS_DEFAULT);
+  assert.equal(Number(readEnvValue(envExample, "RETENTION_DAYS")), RETENTION_DAYS_DEFAULT);
+  assert.equal(Number(readEnvValue(envExample, "DIAGNOSTIC_RETENTION_DAYS")), DIAGNOSTIC_RETENTION_DAYS_DEFAULT);
+  assert.ok(
+    DIAGNOSTIC_RETENTION_DAYS_DEFAULT < RETENTION_DAYS_DEFAULT,
+    "die Diagnose-Frist ist die STRENGERE und damit immer die bindende (src/config.js)",
   );
 });

@@ -348,3 +348,21 @@ test("T17 P6-Kohaerenz: die Fruehwarnung misst dieselbe Achse wie das Gate (kein
     "misst die Warnung die Lebenszeit-Achse statt der Gate-Achse, waere das nach dem Flip ein Dauer-Fehlalarm",
   );
 });
+
+// FMT-30 (tasks/i18n-tests/10-zeit-format-daten.md, Positivbeispiel): die Spend-Monat-
+// Achse ist UTC-verankert. Gepinnt wird der Fall, der den getUTC*-Kommentar in
+// spendMonthKeyOf ueberhaupt begruendet - ein ISO-String MIT Offset traegt im PRAEFIX
+// den lokalen Monat. Die Schwesterfunktion spendMonthEndDate deckt
+// test/deny-diagnosability.test.js bereits ab (kein Duplikat, G5).
+// Jahr bewusst in der Zukunft: der frische Bucket traegt spendMonthKey=null, ein Anker
+// im laufenden Kalendermonat waere auch bei LOKALER Rechnung gruen (falsch-gruen).
+const OFFSET_ISO_AT_MONTH_EDGE = "2027-08-01T01:00:00+02:00"; // = 2027-07-31T23:00Z
+const UTC_MONTH_KEY_AT_EDGE = "2027-07";
+const BOOKED_CENTS = 42;
+test("FMT-30 (Mechanismus, gruen) - Offset-ISO an der Monatsgrenze stempelt den UTC-Monat, nicht den lokalen", () => {
+  const s = makeDefaultState();
+  s.usage[TENANT_A] = emptyUsage();
+  addVoiceUsageCostCents(s, TENANT_A, BOOKED_CENTS, OFFSET_ISO_AT_MONTH_EDGE);
+  assert.equal(usageFor(s, TENANT_A).spendMonthKey, UTC_MONTH_KEY_AT_EDGE);
+  assert.equal(usageFor(s, TENANT_A).spendMonthCostCents, BOOKED_CENTS);
+});
