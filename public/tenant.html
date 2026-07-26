@@ -206,13 +206,17 @@ const $ = (id) => document.getElementById(id);
 // BK1: Pricing-Kacheln aus dem geteilten Plan-Katalog (GET /api/plans, SSoT src/plans.js).
 // Kein lokales Preis-/Leistungs-Literal mehr (G5/S2: eine Quelle, kein Drift zur Marketing-
 // Seite). amountCents bleibt Ganzzahl (G26); erst an der Anzeige-Grenze wird durch CENTS_PER_EURO
-// dividiert und ueber Intl.NumberFormat im de-DE-Format lokalisiert (Komma-Dezimaltrenner +
-// Euro-Symbol). currency ist server-kontrolliert (eingefrorener Katalog), kein User-Input.
+// dividiert und ueber Intl.NumberFormat in der EINEN Formatlocale des Dashboards
+// (formatLocale, s.u.) lokalisiert - dieselbe Locale wie Datum/Zeit, damit ein EN-Dashboard
+// nicht englisches Datum neben deutscher Waehrungsformatierung zeigt (P15b/C2).
+// GELD-ACHSE: die Locale bestimmt NUR die Darstellung (Trennzeichen, Symbolstellung). Der
+// WAEHRUNGSCODE kommt unveraendert aus den DATEN (Argument currency, server-kontrollierter
+// Katalog) und wird NIE aus der Locale abgeleitet: Anzeige-Waehrung == Belastungs-Waehrung.
 const CENTS_PER_EURO = 100; // Anzeige-Grenze: Katalog haelt Cents, Intl will die Major-Einheit
 let planCatalog = null;     // einmal geladener Katalog (gecacht; aendert sich pro Sitzung nicht)
 
 function formatPlanPrice(amountCents, currency){
-  return new Intl.NumberFormat("de-DE", { style:"currency", currency: String(currency).toUpperCase() })
+  return new Intl.NumberFormat(formatLocale, { style:"currency", currency: String(currency).toUpperCase() })
     .format(amountCents / CENTS_PER_EURO);
 }
 
@@ -317,7 +321,7 @@ function renderCalls(calls){
 // "Invalid Date".
 function formatNotificationTime(at){
   const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(dateLocale);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(formatLocale);
 }
 
 // P2a: Meldungs-Feed. Kein Array vom Server (alter Server / Feld fehlt) -> Karte bleibt
@@ -363,15 +367,19 @@ function setDocumentLanguage(language){
   if(typeof language==="string" && language) document.documentElement.lang = language;
 }
 
-// P15/T1: das Datums-/Zeitformat kommt vom SERVER (Feld `dateLocale` aus
-// /api/self-service/state, abgeleitet aus derselben Sprachaufloesung wie `language`).
+// P15b/C2: die EINE Formatlocale dieser Seite kommt vom SERVER (Feld `formatLocale` aus
+// /api/self-service/state, abgeleitet aus derselben Sprachaufloesung wie `language`). Sie
+// regiert Datum/Zeit UND Zahl/Waehrung - eine zweite Quelle im Client (Browser-Spracheinstellung,
+// eigenes Mapping) wuerde beim Sprachwechsel auseinanderfallen. Der Test dieser Achse verbietet
+// sie deshalb sogar als Quelltext-Vorkommen.
 // Fehlendes/leeres Feld (alter Server, 401/403-Pfad) -> der statische Ausgangswert bleibt
 // stehen - dieselbe fail-soft-Regel wie beim lang-Attribut, passend zum <html lang="de">
-// dieses Dokuments.
-const STATIC_DATE_LOCALE = "de-DE";
-let dateLocale = STATIC_DATE_LOCALE;
-function setDateLocale(value){
-  if(typeof value==="string" && value) dateLocale = value;
+// dieses Dokuments. Der gefuehrte Aktivierungs-Pfad (403 -> renderActivation) sieht /state
+// nie und rendert deshalb bewusst im Fallback - unveraendert zum Bestand.
+const STATIC_FORMAT_LOCALE = "de-DE";
+let formatLocale = STATIC_FORMAT_LOCALE;
+function setFormatLocale(value){
+  if(typeof value==="string" && value) formatLocale = value;
 }
 
 async function refresh(){
@@ -383,8 +391,9 @@ async function refresh(){
   showAuth("Angemeldet.", false, true);
   const s = await r.json();
   setDocumentLanguage(s.language);
-  // G31: der Formatwert steht, BEVOR ihn der erste render*-Aufruf liest.
-  setDateLocale(s.dateLocale);
+  // G31: der Formatwert steht, BEVOR ihn der erste render*-Aufruf liest (renderCalls/
+  // renderNotifications/renderBilling lesen ihn fuer Datum UND Geld).
+  setFormatLocale(s.formatLocale);
   $("agentNum").textContent = agentNumberText(s.agent);
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
   renderCalls(s.calls);
@@ -411,7 +420,7 @@ function renderSubscription(s){
   const sub = s.subscription || {};
   if(sub.planSlug){
     // Gleiche Achse Datum/Zeit wie formatNotificationTime -> dieselbe eine Quelle (G5).
-    const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString(dateLocale) : "";
+    const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString(formatLocale) : "";
     const name = planName(sub.planSlug);
     $("subStatus").textContent = until ? `Aktiver Plan: ${name} (verlaengert am ${until}).` : `Aktiver Plan: ${name}.`;
     renderQuota(s.quota);

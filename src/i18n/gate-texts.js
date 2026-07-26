@@ -18,6 +18,12 @@
 // ueber fremde Tenants, und kein "NaN EUR" auf einer Geld-Kante. Das gilt in JEDER
 // Sprache; test/deny-diagnosability.test.js tastet es ziffern-genau ab.
 //
+// NAMENS-REGEL (Absolute Regel 4, Nachbarschaft der Ziffern-Regel): kein Text dieses
+// Buendels nennt einen internen Konfigurations-Bezeichner (Env-/Setting-Name). Der
+// Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche; der Blattwert bleibt
+// ueber grund=<...> im Audit-Log forensisch nachvollziehbar. Gilt in JEDER Sprache und
+// wird generisch geprueft (test/p15b-gate-texts-no-config-names.test.js).
+//
 // FR traegt Akzente (wie jeder FR-String im Bundle), EN ist kuratiert.
 export const GATE_TEXTS = Object.freeze({
   de: Object.freeze({
@@ -30,7 +36,7 @@ export const GATE_TEXTS = Object.freeze({
     deniedNumber: (to) =>
       `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
     countryBlocked: (to) =>
-      `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.`,
+      `Laendervorwahl von ${to} ist nicht erlaubt. Anruf verweigert.`,
     hourLimit: "Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
     perTargetLimit: "Wiederhol-Limit fuer dieses Ziel erreicht. Bitte spaeter erneut.",
     budgetCapReached: (spentEur, capEur) =>
@@ -54,7 +60,7 @@ export const GATE_TEXTS = Object.freeze({
     deniedNumber: (to) =>
       `Number ${to} is blocked (emergency/premium/service number). Call refused.`,
     countryBlocked: (to) =>
-      `Country code of ${to} is not allowed (ALLOWED_COUNTRY_CODES). Call refused.`,
+      `Country code of ${to} is not allowed. Call refused.`,
     hourLimit: "Hourly limit for outbound calls reached. Please try again later.",
     perTargetLimit: "Repeat limit for this destination reached. Please try again later.",
     budgetCapReached: (spentEur, capEur) =>
@@ -78,7 +84,7 @@ export const GATE_TEXTS = Object.freeze({
     deniedNumber: (to) =>
       `Le numéro ${to} est bloqué (numéro d'urgence/surtaxé/de service). Appel refusé.`,
     countryBlocked: (to) =>
-      `L'indicatif pays de ${to} n'est pas autorisé (ALLOWED_COUNTRY_CODES). Appel refusé.`,
+      `L'indicatif pays de ${to} n'est pas autorisé. Appel refusé.`,
     hourLimit: "Limite horaire d'appels sortants atteinte. Veuillez réessayer plus tard.",
     perTargetLimit: "Limite de rappels pour cette destination atteinte. Veuillez réessayer plus tard.",
     budgetCapReached: (spentEur, capEur) =>

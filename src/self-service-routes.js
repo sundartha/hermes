@@ -226,12 +226,19 @@ export function makeSelfServiceRoutes({
       // settings.language taugt dafuer NICHT - es ist per Default null; die Praezedenz
       // (settings -> number -> tenant) gehoert in den Server, nicht in den Client.
       language,
-      // P15/T1: das Datums-/Zeitformat des Dashboards folgt DERSELBEN Aufloesung wie das
-      // lang-Attribut (WEB-01) - die Abbildung Sprache -> BCP-47-Formatlocale lebt an genau
-      // EINER Stelle (i18n/locales.js dateLocale, dieselbe Quelle wie mcp-tools.js
-      // makeDateFormatter). Der Client bekommt sie fertig und leitet NICHTS ab (kein
-      // navigator.language, keine zweite Praezedenz).
-      dateLocale: localeFor(language).dateLocale,
+      // P15b/C2: die EINE BCP-47-Formatlocale dieses Dashboards - sie regiert Datum/Zeit
+      // UND Zahl/Waehrung, deshalb heisst das Feld formatLocale und nicht mehr dateLocale.
+      // Sie folgt DERSELBEN Aufloesung wie das lang-Attribut (WEB-01); die Abbildung
+      // Sprache -> Locale lebt an genau EINER Stelle (i18n/locales.js, dieselbe Quelle wie
+      // mcp-tools.js makeDateFormatter). Der Client bekommt sie fertig und leitet NICHTS ab
+      // (kein navigator.language, keine zweite Praezedenz).
+      // GELD-ACHSE: hier reist NUR die Darstellung. Der Waehrungscode kommt aus den Daten
+      // (Feld currency unten bzw. plan.currency aus dem Katalog) und wird NIE aus einer
+      // Locale abgeleitet - Anzeige-Waehrung == Belastungs-Waehrung (Entscheidung 7.1/O12).
+      // Der Buendel-Schluessel heisst weiterhin dateLocale: er speist ausser dieser Route
+      // auch claude.js und mcp-tools.js; eine Umbenennung dort gehoert in eine Runde, die
+      // alle drei Konsumenten zusammen betrachtet.
+      formatLocale: localeFor(language).dateLocale,
       // WEB-04: Vorlagen in der Sprache, in der dieser Tenant auch telefoniert
       // (gleiche Praezedenz wie im Anruf, G5) - agentState ist oben bereits geladen.
       greetingTemplates: greetingTemplatesFor(language),

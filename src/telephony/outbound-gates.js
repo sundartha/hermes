@@ -51,8 +51,20 @@ import { localeFor } from "../i18n/locales.js";
 const HOUR_MS = 60 * 60 * 1000;
 const SECONDS_PER_MINUTE = 60;
 
-// EXPORT (server.js Pre-Gate-Check + numberGateError-Format-Branch nutzen ihn).
-export const E164_FORMAT_ERROR = "to muss E.164 sein, z.B. +4917212345678";
+// EXPORT: drei Ausgabestellen - der Pre-Gate-Check in routes/api-calls.js, das Gate
+// trunk_zero_normalized und der Format-Zweig in numberGateError.
+//
+// SYSTEMGRENZE (P15b/C1, Owner-Entscheidung 2026-07-26): dieser Text ist EINSPRACHIG
+// ENGLISCH und folgt NICHT der Tenant-Sprache. Ein reiner Eingabe-/Formatfehler ist ein
+// Vertragsfehler der API-Kante, keine Nutzeransprache - dieselbe Denkweise wie O14
+// (Modellsprache != Nutzersprache). Er gehoert deshalb NICHT ins Locale-Buendel
+// (LOCALES.<lang>.gates). ALLE drei Stellen benutzen DIESELBE Konstante, auch der
+// Format-Zweig in numberGateError, wo ein tenantId in Reichweite waere: die
+// Sprachfreiheit haengt an der FEHLERKLASSE, nicht am Zufall des Aufrufpfads - eine
+// Meldung, die je nach Pfad die Sprache wechselt, waere zwei Meldungen fuer denselben
+// Fehler. Feldname und Beispielnummer bleiben stehen (Hinweiswert).
+// Beides gepinnt in test/p15-gate-denial-language.test.js.
+export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
 // ---- Ablehnungstexte nach Achse getrennt (P5a) -----------------------------------
 // Die ANZEIGETEXTE aller Ablehnungen liegen seit P15 im Locale-Buendel (i18n/gate-texts.js,
