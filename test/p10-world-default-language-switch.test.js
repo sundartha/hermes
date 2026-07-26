@@ -12,6 +12,7 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { startServer } from "./helpers.js";
 import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { RENDER_ENV, prodEnv } from "./prod-env.js";
 
 const postJson = (url, body) =>
   fetch(url, {
@@ -43,6 +44,30 @@ test("setWorldDefaultLanguageEnabled(false) -> 'de', setWorldDefaultLanguageEnab
 // nachfolgende Tests im selben Worker durchreichen.
 after(() => {
   setWorldDefaultLanguageEnabled(true);
+});
+
+// ---- (A2) Aktivierungsfenster (Review-Fix Runde 2, P10-Blocker "Aktivierungsfenster") ----
+// PLAN-I18N-FIX.md P10 verlangt, dass der Flip in Produktion bis zur P13-Abnahme AUS
+// bleibt. Die Var existiert im Render-Dashboard heute nicht (Beleg im PR-Kontext) - beim
+// Deploy gewinnt also der Blueprint-Wert. Waere der auf "true", waere der Flip ab der
+// ersten Sekunde scharf (fail-open), unabhaengig vom Code-Default. Dieser Test pinnt den
+// Blueprint-Wert direkt gegen genau dieses Risiko.
+
+test("Aktivierungsfenster: render.yaml haelt WORLD_DEFAULT_LANGUAGE_ENABLED auf 'false', bis P13 abgenommen ist", () => {
+  assert.equal(
+    RENDER_ENV.WORLD_DEFAULT_LANGUAGE_ENABLED,
+    "false",
+    "SOLL: der Blueprint darf den Weltdefault-Flip nicht scharf schalten, bevor P13 " +
+      "abgenommen ist (sonst fail-open beim Deploy, da die Var im Dashboard nicht existiert)",
+  );
+});
+
+test("Aktivierungsfenster: prodEnv() ohne Override faehrt den Weltdefault-Flip AUS (Blueprint-Default)", () => {
+  assert.equal(
+    prodEnv().WORLD_DEFAULT_LANGUAGE_ENABLED,
+    "false",
+    "SOLL: ohne expliziten Override spiegelt prodEnv() den geschlossenen Aktivierungsfenster-Zustand",
+  );
 });
 
 // ---- (B) Wiring ueber config.js (echter Server-Kindprozess) ----

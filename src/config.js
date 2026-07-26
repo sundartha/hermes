@@ -836,13 +836,12 @@ const rawConfig = {
   // der maxmind-Adapter liefert fail-safe null (DE-Fallback). Das Asset committen wir NICHT.
   geoDbPath: process.env.GEO_DB_PATH || "",
   // Review-Fix (Runde 1, P10-Blocker "ENTSCHAERFT (1)"): Env-Schalter fuer den P10-
-  // Weltdefault-Flip (DEFAULT_LANGUAGE de->en, src/store/defaults.js). DEFAULT true
-  // (Code-Default = der Flip, byte-identisch zum unveraenderten Bestand/den Tests).
-  // Das PLAN-I18N-FIX.md-Aktivierungsfenster (S2, P10-P13) verlangt aber, dass der
-  // Schalter in PRODUKTION erst nach der P13-Abnahme scharf ist - das setzt render.yaml
-  // explizit auf "false", nicht dieser Code-Default (sonst waere lokale Entwicklung/CI
-  // ohne jeden Grund vom Weltdefault abgekoppelt). false -> Rueckfall auf "de" ohne
-  // Deploy (Render-Dashboard-Env-Aenderung genuegt).
+  // Weltdefault-Flip (DEFAULT_LANGUAGE de->en, src/store/defaults.js). Code-Default true
+  // (byte-identisch zum unveraenderten Bestand/den Tests, s. test/helpers.js BASE_ENV).
+  // Das PLAN-I18N-FIX.md-Aktivierungsfenster (S2, P10-P13) haelt den Schalter in
+  // PRODUKTION separat auf "false", solange P13 nicht abgenommen ist - Begruendung und
+  // Freischalt-Weg stehen EINMAL bei WORLD_DEFAULT_LANGUAGE_ENABLED in render.yaml,
+  // nicht hier dupliziert. false -> Rueckfall auf "de" ohne Deploy.
   worldDefaultLanguageEnabled: boolEnv(
     "WORLD_DEFAULT_LANGUAGE_ENABLED",
     process.env.WORLD_DEFAULT_LANGUAGE_ENABLED,

@@ -54,7 +54,13 @@ test("Schritt 1a: Onboard country=US + passende US-Privatnummer darf nicht am +4
 });
 
 test("Schritt 1b: Onboard country=US liefert language=en ueber den Weltdefault (ex E2E-05)", async () => {
-  const srv = await startServer({ env: prodEnv() });
+  // Review-Fix (Runde 2, P10-Blocker "Aktivierungsfenster"): render.yaml faehrt
+  // WORLD_DEFAULT_LANGUAGE_ENABLED bis zur P13-Abnahme bewusst auf "false" (das
+  // Aktivierungsfenster P10-P13 bleibt geschlossen). Dieser Test prueft den Flip-
+  // MECHANISMUS (D1/DID-01, "US" -> language=en ueber den Weltdefault), nicht das
+  // Aktivierungsfenster - der Override haelt beides auseinander, statt den Blueprint-
+  // Wert zu missbrauchen, um den Test gruen zu bekommen.
+  const srv = await startServer({ env: prodEnv({ WORLD_DEFAULT_LANGUAGE_ENABLED: "true" }) });
   try {
     // Ohne privateNumber, um den unabhaengigen Befund aus 1a nicht doppelt zu treffen -
     // dieser Test misst NUR die Sprachaufloesung (D1/DID-01).
