@@ -3,8 +3,8 @@
 // §2.3). claude.js (LLM-Schicht) konsumiert System-Prompt-/Offenlegungs-/Summary-Teile
 // pro Sprache; der Telephonie-Renderer (Phase 3) konsumiert sttLocale + voiceProfile aus
 // DEMSELBEN Bundle (eine Quelle, kein Drift). Der Resolver localeFor() faellt fail-safe
-// auf DEFAULT_LANGUAGE (de) zurueck, wenn call.language unbekannt/fehlend ist (R7,
-// heutiges Verhalten) - so faerbt kein FR-Pfad den DE-Bestand ab.
+// auf DEFAULT_LANGUAGE (Weltdefault, P10) zurueck, wenn call.language unbekannt/fehlend
+// ist (R7) - so faerbt kein FR-Pfad den DE-Bestand ab.
 //
 // Konvention: Deutsche GESPROCHENE Strings tragen die korrekten Umlaute (UTF-8) - aus
 // demselben Grund wie die franzoesischen Akzente: die TTS-Stimme (Azure/Polly) liest
@@ -293,7 +293,7 @@ export const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LOCALES));
 // sprache (Bundle-Schluessel) abbildet. Lebt an der i18n-Quelle (nicht in state-ops, das
 // config-frei bleibt) und nutzt das vorhandene Sprach-Set (DE/FR/EN). Generisch: eine
 // weitere Sprache = ein weiterer Eintrag (Owner #1). Unbekanntes Land -> DEFAULT_LANGUAGE
-// (de), NIE Crash (R7) - so faerbt kein unbekanntes Land den DE-Bestand ab.
+// (Weltdefault, P10), NIE Crash (R7) - so faerbt kein unbekanntes Land den DE-Bestand ab.
 export const LANGUAGE_FOR_COUNTRY = Object.freeze({
   DE: "de",
   AT: "de",
@@ -303,14 +303,14 @@ export const LANGUAGE_FOR_COUNTRY = Object.freeze({
   IE: "en",
 });
 
-// Land (ISO-2, case-insensitiv) -> Default-Sprache. Fehlend/leer/unbekannt -> de.
+// Land (ISO-2, case-insensitiv) -> Default-Sprache. Fehlend/leer/unbekannt -> Weltdefault.
 export function languageForCountry(country) {
   return LANGUAGE_FOR_COUNTRY[String(country || "").toUpperCase()] || DEFAULT_LANGUAGE;
 }
 
 // Resolver: language (z.B. call.language) -> Locale. Fail-safe Fallback auf
-// DEFAULT_LANGUAGE (de) bei unbekannter/fehlender/null Sprache (R7). EINE Stelle, die den
-// frueher toten Kanal call.language in ein konkretes Locale aufloest.
+// DEFAULT_LANGUAGE (Weltdefault, P10) bei unbekannter/fehlender/null Sprache (R7). EINE
+// Stelle, die den frueher toten Kanal call.language in ein konkretes Locale aufloest.
 export function localeFor(language) {
   return LOCALES[language] || LOCALES[DEFAULT_LANGUAGE];
 }

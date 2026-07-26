@@ -27,6 +27,11 @@ function seedWithTelnyxNumber() {
         tenantId: TENANT_B,
         provider: "telnyx",
         status: "active",
+        // P10: language explizit "de" - Subjekt dieses Tests ist die ElevenLabs-Stimmen-
+        // Auswahl, nicht die Sprachaufloesung. Ohne den Pin faellt die Nummer (kein
+        // eigenes language) auf den Weltdefault (en) durch und der Gather rendert
+        // en-GB/Azure statt der deutschen Assertions unten.
+        language: "de",
         providerNumberId: null,
       },
     ],

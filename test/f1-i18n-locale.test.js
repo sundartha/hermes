@@ -35,26 +35,20 @@ test("localeFor: bekannte Sprache liefert das passende Locale (de/fr/en)", () =>
   assert.equal(localeFor("en").language, "en");
 });
 
-// Charakterisierung (i18n-Testkatalog, Regel 5): pinnt den HEUTIGEN Ist-Wert von
-// DEFAULT_LANGUAGE ("de") als Fail-Safe-Ergebnis. Der Fail-Safe-MECHANISMUS selbst ist
-// korrekt und bleibt (R3 der kanonischen Liste, tasks/i18n-tests/00-kanonische-liste.md) -
-// nur der WERT am Ende der Kette steht zur Debatte. Das SOLL-Gegenstueck fuer denselben
-// Sachverhalt ist WORLD-03 (heute rot, erwartet "en" statt DEFAULT_LANGUAGE): sobald
-// DEFAULT_LANGUAGE auf "en" gestellt wird (Owner-Entscheidung 7.12, weltweiter Start),
-// wird DIESER Test zwangslaeufig rot und muss dann nachgezogen werden (kanonische Liste,
-// Nachtrag 2026-07-25: "D4/LANG-21 aendert seinen erwarteten Wert").
-test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck (heute 'de', R7)", () => {
+// Charakterisierung (i18n-Testkatalog, Regel 5): der Fail-Safe-MECHANISMUS (R3 der
+// kanonischen Liste, tasks/i18n-tests/00-kanonische-liste.md) bleibt Regressionsschutz,
+// unabhaengig vom konkreten Wert von DEFAULT_LANGUAGE.
+test("Charakterisierung: localeFor faellt fail-safe auf DEFAULT_LANGUAGE zurueck (R7)", () => {
   assert.equal(localeFor("xx").language, DEFAULT_LANGUAGE);
   assert.equal(localeFor(undefined).language, DEFAULT_LANGUAGE);
   assert.equal(localeFor(null).language, DEFAULT_LANGUAGE);
   assert.equal(localeFor("").language, DEFAULT_LANGUAGE);
-  assert.equal(DEFAULT_LANGUAGE, "de");
 });
 
-// WORLD-03 (i18n-Testkatalog, Owner-Entscheidung 7.12): SOLL-Gegenstueck zur obigen
-// Charakterisierung. Beleg: tasks/i18n-tests/00-kanonische-liste.md Abschnitt 4 (Nachtrag
-// 7.12); PLAN-I18N-TESTS.md Abschnitt 7.12. Heute rot (liefert "de"-Locale statt "en").
-test("WORLD-03 (SOLL, heute rot) - localeFor(null|undefined|'xx') liefert das EN-Locale (Weltdefault)", () => {
+// A3-Migration (P10): DEFAULT_LANGUAGE ist geflippt, der Test ist Regressionsschutz.
+// Beleg: tasks/i18n-tests/00-kanonische-liste.md Abschnitt 4 (Nachtrag 7.12);
+// PLAN-I18N-TESTS.md Abschnitt 7.12.
+test("localeFor(null|undefined|'xx') liefert das EN-Locale (Weltdefault) (ex WORLD-03)", () => {
   assert.equal(localeFor("xx").language, "en");
   assert.equal(localeFor(undefined).language, "en");
   assert.equal(localeFor(null).language, "en");
@@ -138,9 +132,12 @@ test("Realtime-Bundle: Opener (outbound/inbound) je Sprache vorhanden, DE byte-i
   );
 });
 
-test("Realtime-Bundle: localeFor-Fallback liefert DE-Sentinels (unbekannte Sprache -> de)", () => {
-  assert.equal(localeFor("xx").realtimeVoice, null);
-  assert.equal(localeFor("xx").whisperLocale, null);
+// P10: der Fallback zeigt seit dem Weltdefault-Flip auf das EN-Bundle (WORLD-03), nicht
+// mehr auf die DE-Sentinels - das Subjekt bleibt der MECHANISMUS (Fallback = DEFAULT_
+// LANGUAGE-Bundle, R7), der konkrete Wert folgt DEFAULT_LANGUAGE statt fest "de".
+test("Realtime-Bundle: localeFor-Fallback liefert das DEFAULT_LANGUAGE-Bundle (unbekannte Sprache)", () => {
+  assert.equal(localeFor("xx").realtimeVoice, LOCALES[DEFAULT_LANGUAGE].realtimeVoice);
+  assert.equal(localeFor("xx").whisperLocale, LOCALES[DEFAULT_LANGUAGE].whisperLocale);
 });
 
 // ---- (A2) EN-Bundle (F1 P4): kuratierte Offenlegung + statische Texte ----
@@ -262,11 +259,6 @@ const enCall = (over = {}) => seedCall({ tenantId: BOOTSTRAP_TENANT_ID, language
 // deshalb hier nur die Katalog-Referenz angehaengt statt einer Kopie.
 test("DE-Wortlaut: disclosureSentence(de) == gepinnter Offenlegungssatz", () => {
   assert.equal(disclosureSentence(deCall()), DE_DISCLOSURE);
-});
-
-test("DE byte-identisch: fehlende Sprache faellt auf de zurueck (Bestands-Aufrufer ohne language)", () => {
-  // disclosure-regression ruft disclosureSentence OHNE language auf -> muss de bleiben.
-  assert.equal(disclosureSentence({ tenantId: BOOTSTRAP_TENANT_ID }), DE_DISCLOSURE);
 });
 
 test("DE byte-identisch: systemPrompt(de) traegt die deutsche Output-Sprach-Regel", () => {

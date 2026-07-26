@@ -52,9 +52,9 @@ test("tenantGeoForCountry: DE liefert das volle Tripel", () => {
   });
 });
 
-test("tenantGeoForCountry: US aendert die Sprachsemantik NICHT (Neutralitaets-Invariante P8, P10 dreht das bewusst)", () => {
+test("tenantGeoForCountry: US -> defaultLanguage 'en' (Weltdefault) + America/New_York", () => {
   const geo = tenantGeoForCountry("US");
-  assert.equal(geo.defaultLanguage, "de");
+  assert.equal(geo.defaultLanguage, "en");
   assert.equal(geo.timezone, "America/New_York");
 });
 

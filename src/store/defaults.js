@@ -338,7 +338,13 @@ export const DEFAULT_GREETING = withInboundNotice(
 // (Bestand ohne Wert -> Code-Fallback hier, nie hart angenommen, R7). country =
 // ISO-3166-1-alpha-2, language = BCP-47-kurz.
 export const DEFAULT_COUNTRY = "DE";
-export const DEFAULT_LANGUAGE = "de";
+// Weltdefault (Owner-Entscheidung 7.12, PLAN-I18N-FIX P10): "en", NICHT mehr "de".
+// LANGUAGE_FOR_COUNTRY (i18n/locales.js) bleibt unveraendert - DE/AT/CH/FR/GB/IE loesen
+// weiterhin auf ihre eigene Sprache auf, dieser Flip aendert nur den Fallback fuer JEDES
+// andere/unbekannte Land. Rollback: Revert dieses Commits, oder pro Tenant sofort ueber
+// settings.language (hoechste Praezedenzstufe, SELF_SERVICE_FREE_FIELDS) bzw.
+// tenant.default_language auf "de" pinnen - kein Deploy noetig.
+export const DEFAULT_LANGUAGE = "en";
 
 // P8/FMT-28 (Owner-Entscheidung 7.6): IANA-Zeitzone des Default-Landes. Reine ANZEIGE -
 // sie faerbt nur die Uhrzeit im Systemprompt (claude.js). Ein Anrufzeit-Gate ist
@@ -383,8 +389,9 @@ export function defaultSettings() {
     allowBankData: false,
     // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):
     // null = "nicht gesetzt" -> die Aufloesungs-Praezedenz (resolveCallLanguage) faellt
-    // auf number.language -> tenant.defaultLanguage -> "de" durch. Ein harter Default "de"
-    // wuerde number.language IMMER ueberstimmen (Praezedenz-Bug) -> deshalb null statt "de".
+    // auf number.language -> tenant.defaultLanguage -> DEFAULT_LANGUAGE (Weltdefault, P10)
+    // durch. Ein harter Default wuerde number.language IMMER ueberstimmen (Praezedenz-Bug)
+    // -> deshalb null statt eines festen Sprachcodes.
     // Im Dashboard umstellbar (updateSettings hat eine eigene language-Validierung gegen
     // SUPPORTED_LANGUAGES, da typeof null === "object" den generischen Typ-Check umgeht).
     language: null,

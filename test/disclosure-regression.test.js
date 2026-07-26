@@ -35,7 +35,14 @@ before(async () => {
 test("T-P2-09: disclosureSentence - fester Wortlaut + Tenant-ownerName (callerName ignoriert, G1)", () => {
   // G1: callerName ist NICHT mehr setzbar - selbst wenn der Aufrufer einen anderen
   // Namen anhaengt, gewinnt die gebundene Tenant-Identitaet (ownerName).
-  const sentence = disclosureSentence({ callerName: "Klaus", tenantId: BOOTSTRAP_TENANT_ID });
+  // language: "de" (P10): dieser Test pinnt den DEUTSCHEN Wortlaut - Subjekt ist
+  // callerName-Ignoranz, nicht die Sprachaufloesung. Ohne den Pin faellt die Sprache auf
+  // den Weltdefault (en) durch, seit DEFAULT_LANGUAGE nicht mehr "de" ist.
+  const sentence = disclosureSentence({
+    callerName: "Klaus",
+    tenantId: BOOTSTRAP_TENANT_ID,
+    language: "de",
+  });
   assert.ok(sentence.startsWith(DISCLOSURE_PREFIX), `Wortlaut-Praefix fehlt: ${sentence}`);
   assert.ok(
     !sentence.includes("Klaus"),

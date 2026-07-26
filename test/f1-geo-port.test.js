@@ -11,7 +11,7 @@ import { makeStubGeoLookup, nullGeoLookup } from "../src/geo/stub.js";
 import { makeMaxmindGeoLookup } from "../src/geo/maxmind.js";
 import { normCountry, resolveOnboardCountry, resolveNumberCountry } from "../src/geo/resolve.js";
 import { languageForCountry, LANGUAGE_FOR_COUNTRY, localeFor } from "../src/i18n/locales.js";
-import { DEFAULT_LANGUAGE, DEFAULT_COUNTRY } from "../src/store/defaults.js";
+import { DEFAULT_COUNTRY } from "../src/store/defaults.js";
 
 // ---- (A) Stub-Adapter ----
 test("makeStubGeoLookup: bekannte IP -> {country}; unbekannte -> null", () => {
@@ -57,13 +57,6 @@ test("languageForCountry: case-insensitiv (fr -> fr)", () => {
   assert.equal(languageForCountry("gb"), "en");
 });
 
-test("languageForCountry: unbekanntes/leeres/null Land -> DEFAULT_LANGUAGE (de, R7)", () => {
-  assert.equal(languageForCountry("US"), DEFAULT_LANGUAGE);
-  assert.equal(languageForCountry(""), DEFAULT_LANGUAGE);
-  assert.equal(languageForCountry(null), DEFAULT_LANGUAGE);
-  assert.equal(languageForCountry(undefined), DEFAULT_LANGUAGE);
-});
-
 test("LANGUAGE_FOR_COUNTRY ist frozen (eine Quelle, kein Laufzeit-Drift)", () => {
   assert.ok(Object.isFrozen(LANGUAGE_FOR_COUNTRY));
 });
@@ -74,9 +67,8 @@ test("LANGUAGE_FOR_COUNTRY ist frozen (eine Quelle, kein Laufzeit-Drift)", () =>
 // Beleg: tasks/i18n-tests/00-kanonische-liste.md Abschnitt 4 (Nachtrag 7.12);
 // PLAN-I18N-TESTS.md Abschnitt 7.12.
 //
-// SOLL-Test (rot, bis DEFAULT_LANGUAGE auf "en" gestellt wird). Das ist der
-// spaetere Fix, NICHT Teil dieses Testbaus (CLAUDE.md SCOPE-Regel).
-test("WORLD-01 (SOLL, heute rot) - languageForCountry liefert 'en' fuer Laender ohne eigenes Bundle (Weltdefault)", () => {
+// A3-Migration (P10): DEFAULT_LANGUAGE ist geflippt, der Test ist Regressionsschutz.
+test("languageForCountry liefert 'en' fuer Laender ohne eigenes Bundle (Weltdefault) (ex WORLD-01)", () => {
   assert.equal(languageForCountry("ES"), "en", "ES hat kein eigenes Bundle -> Weltdefault en");
   assert.equal(languageForCountry("JP"), "en", "JP hat kein eigenes Bundle -> Weltdefault en");
   assert.equal(languageForCountry("BR"), "en", "BR hat kein eigenes Bundle -> Weltdefault en");
@@ -96,13 +88,10 @@ test("WORLD-02 (Regressionsachse, gruen) - DE/AT/CH bleiben 'de', FR bleibt 'fr'
   assert.equal(localeFor("fr").language, "fr");
 });
 
-// ---- DID-01 (i18n-Testkatalog) ----
 // Beleg: tasks/i18n-tests/06-nummern-provisioning.md ("DID-01"); src/i18n/locales.js:268-280.
-// SOLL-Test (rot): US fehlt heute in LANGUAGE_FOR_COUNTRY, Fallback liefert DEFAULT_LANGUAGE
-// ("de"). Nach dem Weltdefault-Wechsel (WORLD-01) wird dieser Test automatisch gruen,
-// OHNE dass US eigens in die Tabelle eingetragen werden muss (00-kanonische-liste.md,
-// Nachtrag 2026-07-25: "D1/DID-01 wird durch den Weltdefault miterledigt").
-test("DID-01 (SOLL, heute rot) - languageForCountry('US') liefert 'en' (US-Kunden sprechen Englisch)", () => {
+// A3-Migration (P10): US ist nicht eigens in LANGUAGE_FOR_COUNTRY eingetragen (bewusst,
+// s. WORLD-01/00-kanonische-liste.md Nachtrag 2026-07-25) - der Weltdefault traegt US mit.
+test("languageForCountry('US') liefert 'en' (US-Kunden sprechen Englisch, ueber den Weltdefault) (ex DID-01)", () => {
   assert.equal(languageForCountry("US"), "en");
 });
 

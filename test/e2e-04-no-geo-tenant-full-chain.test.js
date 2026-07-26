@@ -1,8 +1,12 @@
 // E2E-04 (i18n-Testkatalog, tasks/i18n-tests/11-luecken-und-e2e.md:943) - Bestandstenant
 // ohne country/language durch die volle Kette.
 //
-// SOLL (rot): die Kette soll fuer einen US-Nutzer ein durchgehend englisches Produkt
-// liefern. Vorbedingung ist ein Tenant, der genau den Zustand des REALEN Web-Login-Pfads
+// SOLL: die Kette soll fuer einen US-Nutzer ein durchgehend englisches Produkt liefern.
+// P10 (PLAN-I18N-FIX) loest NUR Teil 1 (number.language) - die Aufloesung, worauf die
+// Sprache zeigt. Teil 2 (Inbound-Greeting) und Teil 3 (Summary-SMS) sind eigene Wurzeln
+// (settings.greeting folgt der Sprache strukturell nicht, PROMPT-03/WEB-04/WEB-14) und
+// bleiben bis P11 rot - P10 aendert bewusst NICHT, OB das Greeting der Sprache folgt.
+// Vorbedingung ist ein Tenant, der genau den Zustand des REALEN Web-Login-Pfads
 // traegt (country=null, defaultLanguage=null) - LANG-02 (test/web-login-wiring.test.js)
 // beweist bereits empirisch gegen die echte DB, dass POST /auth/dev-login exakt diesen
 // Zustand erzeugt (resolveOrCreateTenant, src/web-auth.js:503-518, schreibt nur id/status/
@@ -29,7 +33,7 @@ const HIGH = 100;
 const TENANT_ID = "t_e2e04";
 const AT = "2026-01-01T00:00:00Z";
 
-test("E2E-04 (SOLL rot): Web-Login-Tenant ohne Geo bekommt eine US-DID, aber language bleibt 'de'", () => {
+test("Web-Login-Tenant ohne Geo bekommt eine US-DID, language folgt dem Weltdefault (ex E2E-04, Teil 1)", () => {
   const s = makeDefaultState();
   // Schritt 1: Tenant exakt wie der reale Web-Login-Pfad - KEIN setTenantGeo-Aufruf.
   registerTenant(s, TENANT_ID, { firstName: "Web", lastName: "Login" });
@@ -48,11 +52,12 @@ test("E2E-04 (SOLL rot): Web-Login-Tenant ohne Geo bekommt eine US-DID, aber lan
   assert.equal(r.ok, true);
   assert.equal(r.number.country, "US", "Kauf-Land ist US (FORCE_NUMBER_COUNTRY)");
 
-  // SOLL: fuer einen US-Nutzer sollte die Sprache am Ende Englisch sein.
+  // Ein Tenant ohne eigene Geo bekommt den Weltdefault, NICHT die Sprache des Landes,
+  // in dem die Plattform fuer ihn zufaellig einkauft (Achsentrennung, P10 Schritt 1).
   assert.equal(
     r.number.language,
     "en",
-    `SOLL: ein US-Nutzer (Web-Login ohne Geo, US-DID) muss "en" bekommen, ` +
+    `ein US-Nutzer (Web-Login ohne Geo, US-DID) muss "en" bekommen, ` +
       `nicht das Herkunftsland-Fallback (war "${r.number.language}")`,
   );
 });

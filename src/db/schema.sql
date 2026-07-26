@@ -58,7 +58,8 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_number_setup_fee_exempt BOOLE
 -- F1 Geo-Location (Phase 1): Tenant-Default-Land + -Sprache, die die Registrierung
 -- (IP-Geo-Vorschlag bzw. explizite User-Wahl) schreibt - Fallback fuer neue Nummern
 -- dieses Tenants. Additiv NULLABLE: Owner/Bestand ohne Wert -> NULL, Code-Fallback
--- || DE/de greift (kein Routing-/Sprach-Bruch, R7). Muster wie kyc_level/stripe_*
+-- Land=DE/Sprache=Weltdefault (P10) greift (kein Routing-/Sprach-Bruch, R7). Muster wie
+-- kyc_level/stripe_*
 -- (ALTER-only, nullable, KEIN CHECK; die Validierung lebt im Code).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS country          TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS default_language TEXT;
@@ -424,8 +425,8 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS payment_intent_id TEXT;
 -- F1 Geo-Location (Phase 1): country (ISO-2) + language (BCP-47-kurz) der Nummer. Die
 -- Nummer ist der dauerhafte Geo-Anker (Inbound-Sprache nach angerufener Nummer,
 -- Outbound-Absenderwahl nach Ziel-Vorwahl). Additiv NULLABLE: Bestands-Nummern ohne
--- Wert -> NULL, Code-Fallback || DE/de greift (kein Routing-Bruch, R7). Muster wie
--- payment_intent_id (ALTER-only, nullable).
+-- Wert -> NULL, Code-Fallback Land=DE/Sprache=Weltdefault (P10) greift (kein Routing-
+-- Bruch, R7). Muster wie payment_intent_id (ALTER-only, nullable).
 ALTER TABLE number ADD COLUMN IF NOT EXISTS country  TEXT;
 ALTER TABLE number ADD COLUMN IF NOT EXISTS language TEXT;
 

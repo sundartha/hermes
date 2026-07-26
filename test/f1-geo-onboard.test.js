@@ -109,13 +109,11 @@ test("Onboard ohne country erbt PROVISIONING_COUNTRY (Fallback-Stufe) -> FR/fr",
   }
 });
 
-// DID-02 (i18n-Testkatalog). Beleg: src/routes/api-onboard.js:141-152,168,172-173;
-// src/i18n/locales.js:268-280; tasks/i18n-tests/06-nummern-provisioning.md ("DID-02").
-// SOLL-Test (heute rot): languageForCountry("US") liefert heute "de" (US fehlt in
-// LANGUAGE_FOR_COUNTRY), der SOLL-Zustand ist "en" (US-Kunden sprechen Englisch). Das
-// ist der spaetere Fix (Weltdefault bzw. US-Tabelleneintrag), NICHT Teil dieses
-// Testbaus (CLAUDE.md SCOPE-Regel) - dieser Test bleibt rot, bis er landet.
-test("DID-02 (SOLL, heute rot) - Onboard mit body.country=US -> tenant/number.language = 'en'", async () => {
+// Beleg: src/routes/api-onboard.js:141-152,168,172-173; src/i18n/locales.js:268-280;
+// tasks/i18n-tests/06-nummern-provisioning.md ("DID-02"). A3-Migration (P10): US ist
+// nicht eigens in LANGUAGE_FOR_COUNTRY eingetragen (bewusst) - der Weltdefault traegt
+// US mit (languageForCountry("US") -> "en").
+test("Onboard mit body.country=US -> tenant/number.language = 'en' (ueber den Weltdefault) (ex DID-02)", async () => {
   const srv = await startServer();
   try {
     const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_us", country: "US" });

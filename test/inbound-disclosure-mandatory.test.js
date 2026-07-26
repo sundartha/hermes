@@ -87,9 +87,12 @@ test("Inbound-Pflichtsatz: ein Greeting MIT Marker wird angenommen (Gegenprobe)"
 });
 
 test("Inbound-Pflichtsatz: auch die Realtime-Engine rendert ihn vor dem Stream-Handoff", async () => {
+  // P10: language explizit "de" - Subjekt dieses Tests ist der Realtime-Rendering-Pfad,
+  // nicht die Sprachaufloesung. Ohne den Pin faellt der ungeseedete Tenant auf den
+  // Weltdefault (en) durch und der Pflichtsatz-Assert (INBOUND_NOTICES.de) schlaegt fehl.
   const srv = await startServer({
     env: { VOICE_ENGINE: "realtime" },
-    seed: seedState({}),
+    seed: seedState({ settings: { language: "de" } }),
   });
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {

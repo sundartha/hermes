@@ -649,10 +649,11 @@ export function findTenantByNumber(s, e164) {
 
 // Aufloesungs-Praezedenz der Gespraechssprache (F1 Phase 4, Owner-Entscheidung #8) an
 // EINER Stelle: settings.language (Owner-Override, falls gesetzt) -> number.language ->
-// tenant.defaultLanguage -> DEFAULT_LANGUAGE ("de"). Jede Stufe greift nur, wenn truthy
-// (additiv NULLABLE, Backfill-frei: fehlend/leer = nicht gesetzt = naechste Stufe). Eine
-// unbekannte/getippte Sprache wirft hier NICHT - der nachgelagerte localeFor()-Resolver
-// faellt fail-safe auf "de" (R7). numberRecord ist der bereits aufgeloeste Record (oder
+// tenant.defaultLanguage -> DEFAULT_LANGUAGE (Weltdefault, P10). Jede Stufe greift nur,
+// wenn truthy (additiv NULLABLE, Backfill-frei: fehlend/leer = nicht gesetzt = naechste
+// Stufe). Eine unbekannte/getippte Sprache wirft hier NICHT - der nachgelagerte
+// localeFor()-Resolver faellt fail-safe auf den Weltdefault zurueck (R7). numberRecord
+// ist der bereits aufgeloeste Record (oder
 // null/undefined, dann faellt die Number-Stufe durch). Reine Lese-Logik, kein Nebeneffekt
 // (settingsFor legt zwar lazy einen Bucket an, aber das ist Bestandsverhalten).
 export function resolveCallLanguage(s, { tenantId, numberRecord }) {

@@ -34,13 +34,15 @@ test("BK3 fallbackCountry US (keine Tenant-Geo) -> Nummer mit country US", () =>
   assert.equal(r.number.country, "US");
 });
 
-// DID-03 (i18n-Testkatalog). Beleg: src/billing/provision-trigger.js:36-45;
-// tasks/i18n-tests/06-nummern-provisioning.md ("DID-03"). SOLL-Test (heute rot),
-// eigener Test statt Erweiterung des Bestandstests oben (Zeile 29-35): der Bestand
-// bleibt gruen und byte-identisch (Regel 3), das ist zugleich der Beleg fuer DID-15
-// (die bestehende Assertion dort deckt r.number.language BEWUSST NICHT ab). Der Fix
-// (languageForCountry("US") -> "en") ist NICHT Teil dieses Testbaus (SCOPE-Regel).
-test("DID-03 (SOLL, heute rot) - BK3 fallbackCountry US (Webhook-/Aktivierungspfad) soll number.language='en' liefern", () => {
+// Beleg: src/billing/provision-trigger.js; tasks/i18n-tests/06-nummern-provisioning.md
+// ("DID-03"). Eigener Test statt Erweiterung des Bestandstests oben (Zeile 29-35): der
+// Bestand bleibt gruen und byte-identisch (Regel 3), das ist zugleich der Beleg fuer
+// DID-15 (die bestehende Assertion dort deckt r.number.language BEWUSST NICHT ab).
+// A3-Migration (P10): t_us_lang hat KEINE eigene Geo -> die Sprache kommt seit Schritt 1
+// NICHT mehr von fallbackCountry, sondern vom Weltdefault (beide liefern hier zufaellig
+// denselben Wert "en" - der Test bleibt trotzdem als Regressionsschutz auf der neuen
+// Achse stehen, s. requestNumberForPaidTenant Achsentrennung).
+test("BK3 fallbackCountry US (Webhook-/Aktivierungspfad) liefert number.language='en' ueber den Weltdefault (ex DID-03)", () => {
   const s = makeDefaultState();
   registerTenant(s, "t_us_lang", {});
   const r = requestNumberForPaidTenant(s, {

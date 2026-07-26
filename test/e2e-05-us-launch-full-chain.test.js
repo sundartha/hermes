@@ -5,15 +5,15 @@
 // NICHT die neutralisierte BASE_ENV: sonst misst dieser Test genau den Zustand, gegen den
 // GAP-33 gebaut wurde, und jedes gruene Ergebnis waere wertlos (Vorgabe des Workflows).
 //
-// SOLL (rot ab Schritt 1): der Katalog verlangt alle sechs Schritte (Onboard, Abo+DID,
-// Inbound, Outbound, Summary-SMS, MCP get_agent_status) englisch/US-korrekt. Zwei
-// eigenstaendige Wurzeln blockieren bereits Schritt 1 (Beleg tasks/i18n-tests/11-luecken-
-// und-e2e.md:981-984):
+// Der Katalog verlangt alle sechs Schritte (Onboard, Abo+DID, Inbound, Outbound,
+// Summary-SMS, MCP get_agent_status) englisch/US-korrekt. Schritt 1 hatte zwei
+// eigenstaendige Wurzeln (Beleg tasks/i18n-tests/11-luecken-und-e2e.md:981-984):
 //   (a) normalizePrivateNumber() im Onboard-Pfad ignoriert country=US komplett und
 //       erbt den ["+49"]-Default (FMT-11, src/routes/api-onboard.js:125) -> 400, BEVOR
-//       das Land ueberhaupt gelesen wird.
-//   (b) selbst OHNE die private Nummer bleibt language="de" (D1/DID-01,
-//       src/i18n/locales.js:268-280: "US" fehlt in LANGUAGE_FOR_COUNTRY).
+//       das Land ueberhaupt gelesen wird. Weiterhin offen.
+//   (b) selbst OHNE die private Nummer blieb language="de" (D1/DID-01,
+//       src/i18n/locales.js:268-280: "US" fehlt in LANGUAGE_FOR_COUNTRY). Ueber den
+//       Weltdefault-Flip (P10) geloest - Schritt 1b ist gruen.
 // Die restlichen vier Schritte (DID-Kauf, Inbound, Outbound, SMS, MCP) sind nachgelagert
 // zu (a)/(b) und werden hier NICHT zusaetzlich durchgespielt: ein spawnbasierter Versuch,
 // unter prodEnv() weiter bis zur Reserve-/Cap-Kollision (Schritt 4) vorzudringen, traf in
@@ -33,7 +33,7 @@ const postJson = (url, body) =>
     body: JSON.stringify(body),
   });
 
-test("E2E-05 Schritt 1a (SOLL rot): Onboard country=US + passende US-Privatnummer darf nicht am +49-Gate scheitern", async () => {
+test("Schritt 1a: Onboard country=US + passende US-Privatnummer darf nicht am +49-Gate scheitern (ex E2E-05)", async () => {
   const srv = await startServer({ env: prodEnv() });
   try {
     const res = await postJson(`${srv.localUrl}/api/onboard`, {
@@ -53,7 +53,7 @@ test("E2E-05 Schritt 1a (SOLL rot): Onboard country=US + passende US-Privatnumme
   }
 });
 
-test("E2E-05 Schritt 1b (SOLL rot): Onboard country=US liefert language=en, nicht das de-Fallback", async () => {
+test("Schritt 1b: Onboard country=US liefert language=en ueber den Weltdefault (ex E2E-05)", async () => {
   const srv = await startServer({ env: prodEnv() });
   try {
     // Ohne privateNumber, um den unabhaengigen Befund aus 1a nicht doppelt zu treffen -
