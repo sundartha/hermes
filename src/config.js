@@ -835,17 +835,28 @@ const rawConfig = {
   // Pfad zur lokalen GeoLite2-Country-mmdb (nur relevant bei GEO_ENABLED=true). Leer ->
   // der maxmind-Adapter liefert fail-safe null (DE-Fallback). Das Asset committen wir NICHT.
   geoDbPath: process.env.GEO_DB_PATH || "",
-  // Review-Fix (Runde 1, P10-Blocker "ENTSCHAERFT (1)"): Env-Schalter fuer den P10-
-  // Weltdefault-Flip (DEFAULT_LANGUAGE de->en, src/store/defaults.js). Code-Default true
-  // (byte-identisch zum unveraenderten Bestand/den Tests, s. test/helpers.js BASE_ENV).
-  // Das PLAN-I18N-FIX.md-Aktivierungsfenster (S2, P10-P13) haelt den Schalter in
-  // PRODUKTION separat auf "false", solange P13 nicht abgenommen ist - Begruendung und
-  // Freischalt-Weg stehen EINMAL bei WORLD_DEFAULT_LANGUAGE_ENABLED in render.yaml,
-  // nicht hier dupliziert. false -> Rueckfall auf "de" ohne Deploy.
+  // Env-Schalter fuer den P10-Weltdefault-Flip (DEFAULT_LANGUAGE de->en,
+  // src/store/defaults.js). Code-Default FAIL-CLOSED auf false: der Flip muss ausdruecklich
+  // eingeschaltet werden, er passiert nie durch blosses Deployen.
+  //
+  // Warum nicht true (Safety-Review P10, Runde 2, empirisch belegt): der Blueprint-Wert
+  // "false" in render.yaml reicht als Schutz NICHT. Dieser Service ist dashboard-managed -
+  // render.yaml ist dort ausdruecklich Referenz und nicht Wahrheit, und die Variable ist im
+  // Dashboard heute gar nicht gesetzt. Bei Code-Default true gewinnt am Deploy-Tag also der
+  // Code: jeder settings/number/tenant-Datensatz mit language=NULL faellt ueber
+  // resolveCallLanguage auf den Weltdefault durch, womit Gather-Locale, Say-Stimme UND der
+  // Offenlegungssatz eines deutschen Bestandstenants schlagartig englisch werden. Genau das
+  // schliesst P10 "ENTSCHAERFT (5)" als Abnahmekriterium aus.
+  //
+  // Das Aktivierungsfenster (PLAN-I18N-FIX.md P10, "S2, quer zu P10-P13") wird damit vom
+  // Code getragen, nicht von einer Datei, die die Live-Config nicht bestimmt. Der
+  // Freischalt-Weg steht EINMAL bei WORLD_DEFAULT_LANGUAGE_ENABLED in render.yaml, nicht
+  // hier dupliziert. Die Suite faehrt den Flip scharf (test/helpers.js BASE_ENV setzt den
+  // Schluessel explizit auf "true"), das Verhalten der Tests aendert sich also nicht.
   worldDefaultLanguageEnabled: boolEnv(
     "WORLD_DEFAULT_LANGUAGE_ENABLED",
     process.env.WORLD_DEFAULT_LANGUAGE_ENABLED,
-    { fallback: true },
+    { fallback: false },
   ),
   // Rechteprofile (Phase 2) als JSON {"<email|idp-sub>": {<Profil-Felder>}}. Beim
   // Start in den Store geseedet (store.js). Noetig, weil Render (free plan) ein
