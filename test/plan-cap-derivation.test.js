@@ -146,8 +146,8 @@ test("(c) Tenant ohne stripePlanSlug: keine tenant_budget-Zeile, Cap = Registrie
   );
   assert.equal(
     store.tenantBudgetSnapshot(tenantId, config.billing).capCents,
-    600,
-    "faellt auf den DEFAULT_TENANT_BUDGET_CENTS-Code-Fallback (600) zurueck",
+    1500,
+    "faellt auf den DEFAULT_TENANT_BUDGET_CENTS-Code-Fallback (seit P7 1500) zurueck",
   );
 });
 

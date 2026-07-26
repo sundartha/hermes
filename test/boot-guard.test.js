@@ -11,7 +11,9 @@ import {
   fakeOriginateBootBlocked,
   meterMappingGaps,
   alertChannelFindings,
+  bootstrapHealDecision,
   ALERT_CHANNEL_FINDING,
+  BOOTSTRAP_HEAL,
 } from "../src/boot-guard.js";
 import { createPortalRunner } from "../src/portal-pool.js";
 
@@ -173,4 +175,52 @@ test("Alarmkanal-Wahrheitstabelle (GAP-07): besetzter Kanal liefert auch bei sch
     }),
     [],
   );
+});
+
+// GAP-38 (Boot-Heilung eines leeren Stores): reine Wahrheitstabelle der Entscheidung, ohne
+// Spawn (Muster fakeOriginateBootBlocked). Die Reihenfolge der Klauseln IST die Spezifikation
+// - deshalb je Ausgang mindestens ein Fall, inkl. der beiden Riegel gegen einen stillen
+// Fehl-Seed (Muell-E.164, Provider-Tippfehler).
+const FRESH_STORE = Object.freeze({
+  activeNumberPresent: false,
+  numberCount: 0,
+  foreignTenantCount: 0,
+  callCount: 0,
+  e164: "+15005550006",
+  provider: "twilio",
+});
+
+test("Boot-Heilung (GAP-38): aktive Nummer vorhanden -> NOT_NEEDED (Parameter egal)", () => {
+  assert.equal(
+    bootstrapHealDecision({ ...FRESH_STORE, activeNumberPresent: true }),
+    BOOTSTRAP_HEAL.NOT_NEEDED,
+  );
+  assert.equal(
+    bootstrapHealDecision({ ...FRESH_STORE, activeNumberPresent: true, e164: "", provider: "" }),
+    BOOTSTRAP_HEAL.NOT_NEEDED,
+  );
+});
+
+test("Boot-Heilung (GAP-38): jede Spur eines gelebten Stores -> BLOCKED_STORE_NOT_FRESH", () => {
+  for (const spur of [{ numberCount: 1 }, { foreignTenantCount: 1 }, { callCount: 1 }]) {
+    assert.equal(
+      bootstrapHealDecision({ ...FRESH_STORE, ...spur }),
+      BOOTSTRAP_HEAL.BLOCKED_STORE_NOT_FRESH,
+      `${JSON.stringify(spur)} beweist einen gelebten Store - hier wird NIE geheilt`,
+    );
+  }
+});
+
+test("Boot-Heilung (GAP-38): fehlende/unbrauchbare Parameter -> BLOCKED_PARAMS (kein stiller Fehl-Seed)", () => {
+  for (const params of [{ e164: "" }, { e164: "hallo" }, { provider: "twillio" }, { provider: "" }]) {
+    assert.equal(
+      bootstrapHealDecision({ ...FRESH_STORE, ...params }),
+      BOOTSTRAP_HEAL.BLOCKED_PARAMS,
+      `${JSON.stringify(params)} darf keine Nummer seeden (sonst gruener Boot mit totem Routing)`,
+    );
+  }
+});
+
+test("Boot-Heilung (GAP-38): frischer Store + brauchbare Parameter -> HEAL", () => {
+  assert.equal(bootstrapHealDecision(FRESH_STORE), BOOTSTRAP_HEAL.HEAL);
 });

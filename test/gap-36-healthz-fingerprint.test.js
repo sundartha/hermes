@@ -72,7 +72,15 @@ test("zwei Konfigurationen liefern zwei configHash (GAP-36)", async () => {
 function fingerprintConfig(overrides = {}) {
   return {
     safety: { allowedCountryCodes: ["+49"], maxCallsPerHour: 20, ...overrides.safety },
-    billing: { budgetMonthEnabled: false, paymentCurrency: "eur", ...overrides.billing },
+    billing: {
+      budgetMonthEnabled: false,
+      paymentCurrency: "eur",
+      // P7: die beiden Kosten-Decken sind Achsen 6 und 7 - ohne sie war eine reine
+      // Zahlen-Aenderung an den Decken am laufenden Dienst nicht belegbar.
+      platformSpendCapCents: 3000,
+      defaultTenantBudgetCents: 1500,
+      ...overrides.billing,
+    },
     tenancy: { multiTenant: true, ...overrides.tenancy },
   };
 }
@@ -85,14 +93,16 @@ test("configFingerprint ist deterministisch und 64 Hex-Zeichen (GAP-36)", () => 
   assert.match(a, /^[a-f0-9]{64}$/);
 });
 
-test("jede der fuenf Achsen aendert den configFingerprint (GAP-36)", () => {
+test("jede der sieben Achsen aendert den configFingerprint (GAP-36, P7)", () => {
   const base = configFingerprint(fingerprintConfig());
   const variants = [
     fingerprintConfig({ safety: { allowedCountryCodes: ["+49", "+33"] } }),
     fingerprintConfig({ safety: { maxCallsPerHour: 999 } }),
-    fingerprintConfig({ billing: { budgetMonthEnabled: true, paymentCurrency: "eur" } }),
+    fingerprintConfig({ billing: { budgetMonthEnabled: true } }),
     fingerprintConfig({ tenancy: { multiTenant: false } }),
-    fingerprintConfig({ billing: { budgetMonthEnabled: false, paymentCurrency: "usd" } }),
+    fingerprintConfig({ billing: { paymentCurrency: "usd" } }),
+    fingerprintConfig({ billing: { platformSpendCapCents: 800 } }),
+    fingerprintConfig({ billing: { defaultTenantBudgetCents: 600 } }),
   ];
   for (const variant of variants) {
     assert.notEqual(configFingerprint(variant), base, "Achse muss den Hash aendern");

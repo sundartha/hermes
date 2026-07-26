@@ -693,3 +693,79 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > `globalBudgetExceeded`/`gatePlatformUsageCents`, `DEFAULT_TENANT_BUDGET_CENTS`,
 > `BUDGET_MONTH_ENABLED`-AN-Pfad, `render.yaml`-Werte (`MAX_CALLS_PER_HOUR` bleibt `6`).
 > Keine neue Dependency, kein neuer Env-Schluessel.
+
+## P7-BOOTKOHAERENZ — startfaehiger Blueprint + In-Prozess-Heilung des leeren Stores (2026-07-26)
+
+> **Kosten-Decken kohaerent gemacht (GAP-32/GAP-33).** Die ausgelieferte Konfiguration war
+> auf zwei Achsen inkohaerent: `MAX_BUDGET_EUR=8` (800 ct) lag unter der abgeleiteten
+> Business-Plan-Decke (900 ct) → `plan_cap_inert`, `exit 1` (der Blueprint war nicht
+> startfaehig), und `DEFAULT_TENANT_BUDGET_CENTS=600` lag unter der Worst-Case-Reserve
+> `VOICE_TARIFF_DEFAULT_CENTS(300) * ceil(MAX_CALL_DURATION_CAP_S(300)/60) = 1500` → jedes
+> Ziel ohne gemessenen Inlandssatz fiel schon vor dem Dial ins Reserve-Gate (402). Angehoben
+> wurde ausschliesslich die **Decke** (30 / 1500), gegen die reserviert wird — auf exakt den
+> Betrag, den die eigene Rechnung fordert. **Kein Gate wurde aufgeweicht:** Tarif, Land-Gate,
+> Stundenlimit, Denylist, Max-Dauer und die Signaturpruefung sind unveraendert (O6: Tarif
+> NICHT senken, `MAX_CALL_DURATION_CAP_S` bleibt 300 s und Code-Konstante). **Geld-Folge,
+> ausdruecklich:** ein Tenant ohne eigene `tenant_budget`-Zeile darf 15,00 EUR statt 6,00 EUR
+> pro Fenster verbrauchen; der Plattform-Backstop bleibt als Schnittmenge bei 30,00 EUR.
+>
+> **Neuer FATALER Boot-Guard (GAP-32).** `spendCapCoherence` Klausel B
+> (`WORST_CASE_UNAFFORDABLE`: Worst-Case-Reserve > Tenant-Decke) ist von WARN auf **FATAL**
+> gedreht. Bis dahin stand die Zeile seit dem ersten Deploy folgenlos im Log, waehrend der
+> Dienst fuer jedes Ziel ohne gemessenen Inlandssatz faktisch abgeschaltet war — eine
+> Konfiguration, unter der ein ganzer Zielbereich **vor dem Dial** abgewiesen wird, ist kein
+> Betriebszustand. Die Meldung nennt beide Env-Namen, die berechnete Reserve und den
+> Zielwert (`Abhilfe: … auf mindestens <n> anheben`), ausschliesslich Betreiber-Zahlen —
+> kein Secret, kein PII. `AUDITED_BOOT_FINDINGS` in `src/boot.js` ist damit unerreichbar
+> geworden und ersatzlos entfallen (toter Code). **Rollback ohne Deploy:**
+> `DEFAULT_TENANT_BUDGET_CENTS` im Dashboard anheben; mit Deploy: `git revert` dieses einen
+> Commits.
+>
+> **Neuer SCHREIBENDER Boot-Pfad (GAP-38).** `healBootstrapStore` (`src/boot.js`) legt beim
+> Start Bootstrap-Tenant + aktive Nummer aus `BOOTSTRAP_E164`/`BOOTSTRAP_PROVIDER` an. Er
+> ersetzt den `preDeployCommand` in `render.yaml`, den Render auf `plan: free` **nie
+> ausgefuehrt** hat — der Bootstrap-Seed lief live also nie, und ein frischer/leerer Store
+> endete bei jedem Deploy im fail-closed Boot-Refusal (`hasActiveNumber`).
+>
+> **Riegel dieses Pfads** (Entscheidung `bootstrapHealDecision`, `src/boot-guard.js`, rein
+> und arg-injiziert; die Reihenfolge ist die Spezifikation):
+>
+> 1. `NOT_NEEDED` — irgendeine aktive Nummer da → nichts tun (idempotent, strukturell:
+>    nach der Heilung ist genau das der Zustand).
+> 2. `BLOCKED_STORE_NOT_FRESH` — **jede** Spur eines gelebten Stores (Nummer in *irgendeinem*
+>    Zustand, fremder Tenant neben dem Code-Default-Bootstrap-Tenant, Call-Historie) → **NIE**
+>    heilen; der bestehende fail-closed Refusal greift stattdessen. Das ist der Riegel gegen
+>    Tenant-/Nummern-Proliferation.
+> 3. `BLOCKED_PARAMS` — leere ODER unbrauchbare Parameter (E.164-Regex + `twilio|telnyx`).
+>    Pflicht, kein Stil: `seedBootstrapNumber` **normalisiert nur, es validiert nicht** — ein
+>    Tippfehler wuerde sonst als "aktive Nummer" geseedet und der Boot liefe gruen mit totem
+>    Routing (Lehre `seedOwnerNumberFromEnv`).
+> 4. `HEAL` — nur hier wird geschrieben.
+>
+> Die Funktion **verweigert nie selbst**: sie heilt oder schweigt. `assertBootGates` bleibt
+> die EINZIGE Stelle, die "keine Nummer → kein Start" entscheidet (eine Exit-Stelle). Sie
+> laeuft **nach** `store.load()` (ein Ladefehler hat den Prozess dort bereits beendet) und
+> **vor** den Gates. Kein Nummern-**Kauf** ist beteiligt (`bootstrapTenant` ist reine
+> State-Mutation, kein Provider-IO, keine Kosten).
+>
+> **Regel 4 (Secrets/PII):** die Nummer wird **nie** geloggt — weder im Erfolgs-Log noch in
+> der Fehlermeldung noch im Audit (`bootstrap_store_geheilt` traegt nur `provider=`). Der
+> Vorgang ist ueber Audit-Zeile + Plattform-SMS (`PLATFORM_ALERT_SMS_TO`) sichtbar, damit
+> eine unerwartete Heilung nicht unbemerkt bleibt.
+>
+> **Getragenes Restrisiko:** ein korrupter `store.json` wird forensisch umbenannt und auf
+> Defaults zurueckgesetzt; dieser Zustand ist nach obigem Kriterium "frisch" und wuerde bei
+> gesetzten Parametern geheilt. Bewusst so: die Forensik-Kopie bleibt, `[store] KORRUPTES
+> store.json erkannt` bleibt laut, Heilung + Audit + SMS machen das Ereignis sichtbar — die
+> Alternative waere ein toter Telefondienst.
+>
+> **Follow-up ausserhalb dieser Phase:** `OWNER_NUMBER_SEED`/`OWNER_NUMBER_PROVIDER`
+> (json-only, seedet nur die Nummer ohne Tenant) und `BOOTSTRAP_E164`/`BOOTSTRAP_PROVIDER`
+> (backend-agnostisch, Tenant + Nummer) sind zwei Env-Paare fuer dieselbe Sache. Sie
+> komponieren heute sauber (der json-Seed laeuft in `load()`, die Heilung wird danach
+> `NOT_NEEDED` — gepinnt in `test/bootstrap-heal-boot.test.js`), sollten aber konsolidiert
+> werden.
+>
+> **Nicht beruehrt:** `disclosureSentence`, Signaturpruefung, Auth, alle Outbound-Gates,
+> `scripts/bootstrap-tenant.js` (bleibt der manuelle Weg), `VOICE_TARIFF_*`,
+> `MAX_CALL_DURATION_*`, die Plan-Decken (`planCapCents`). Keine neue Dependency.

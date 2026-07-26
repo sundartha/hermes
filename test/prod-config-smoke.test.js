@@ -12,7 +12,11 @@
 //   3. Die Live-Konfiguration bootet (ein Boot-Refusal macht jede weitere Aussage leer).
 //   4. Outbound kommt unter den Live-Werten bis zum Provider-Aufruf durch - je einmal
 //      auf der Inlands-Tarifachse und auf der Auslands-Tarifachse.
-//   5. BEFUND - der Blueprint render.yaml ist nicht startfaehig.
+//   5. Der Blueprint render.yaml ist startfaehig (bis P7 ein BEFUND: er war es nicht).
+//
+// A3-Migration (P7): die Testnamen tragen die Katalog-ID nicht mehr am ANFANG, sondern in
+// Klammern - alle sechs Aussagen sind gruen und gehoeren damit in den Regressionslauf
+// (npm test), nicht mehr ins Launch-Gate (npm run test:gates). Praezedenz: P4/GAP-04, P6.
 //
 // Signal fuer (4): TWILIO_ACCOUNT_SID ist ein Dummy ohne "AC"-Praefix (PROD_DUMMY_SECRETS),
 // der Twilio-Client wirft damit synchron VOR jedem Netzzugriff. 500 = alle Gates passiert,
@@ -39,7 +43,7 @@ const TARGET_DOMESTIC = "+4915112345678";
 // durchkommen - der Test formuliert diesen Sollzustand (kanonische Liste R1).
 const TARGET_INTERNATIONAL = "+12025550143";
 
-test("GAP-33 Meta: prodEnv() setzt jeden in BASE_ENV neutralisierten Gate-Schluessel auf den ausgelieferten Wert", () => {
+test("Produktionskonfiguration (GAP-33) Meta: prodEnv() setzt jeden in BASE_ENV neutralisierten Gate-Schluessel auf den ausgelieferten Wert", () => {
   const env = prodEnv();
   const uncovered = divergentGateKeys().filter((key) => env[key] !== LIVE_ENV[key]);
   assert.deepEqual(
@@ -50,7 +54,7 @@ test("GAP-33 Meta: prodEnv() setzt jeden in BASE_ENV neutralisierten Gate-Schlue
   );
 });
 
-test("GAP-33 Meta: die ungemessenen Achsen sind widerspruchsfrei und keine Karteileichen", () => {
+test("Produktionskonfiguration (GAP-33) Meta: die ungemessenen Achsen sind widerspruchsfrei und keine Karteileichen", () => {
   const contradicting = Object.keys(LIVE_UNMEASURED).filter((key) => key in LIVE_MEASURED);
   assert.deepEqual(
     contradicting,
@@ -79,7 +83,7 @@ test("GAP-33 Meta: die ungemessenen Achsen sind widerspruchsfrei und keine Karte
   );
 });
 
-test("GAP-33: der Server bootet unter den ausgelieferten Live-Werten", async () => {
+test("Produktionskonfiguration (GAP-33): der Server bootet unter den ausgelieferten Live-Werten", async () => {
   const srv = await startServer({ env: prodEnv() });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -89,7 +93,7 @@ test("GAP-33: der Server bootet unter den ausgelieferten Live-Werten", async () 
   }
 });
 
-test("GAP-33: Outbound ins Inland kommt unter ausgelieferten Werten bis zum Provider durch", async () => {
+test("Produktionskonfiguration (GAP-33): Outbound ins Inland kommt unter ausgelieferten Werten bis zum Provider durch", async () => {
   const srv = await startServer({ env: prodEnv() });
   try {
     const res = await placeCall(srv, TARGET_DOMESTIC);
@@ -104,7 +108,7 @@ test("GAP-33: Outbound ins Inland kommt unter ausgelieferten Werten bis zum Prov
   }
 });
 
-test("GAP-33: Outbound ins Ausland kommt unter ausgelieferten Werten bis zum Provider durch", async () => {
+test("Produktionskonfiguration (GAP-33): Outbound ins Ausland kommt unter ausgelieferten Werten bis zum Provider durch", async () => {
   const srv = await startServer({ env: prodEnv() });
   try {
     const res = await placeCall(srv, TARGET_INTERNATIONAL);
@@ -120,15 +124,15 @@ test("GAP-33: Outbound ins Ausland kommt unter ausgelieferten Werten bis zum Pro
   }
 });
 
-// Abgrenzung zu test/env-docs-spend-cap-coherence.test.js:127 (LCT P6): jener Test rechnet
-// STATISCH EINE Achse nach (plan_cap_inert aus MAX_BUDGET_EUR) und pinnt sie bewusst als
-// bekannte Luecke, mit Aufhebungsanleitung im Kommentar. Dieser hier startet den Prozess
-// wirklich und deckt damit JEDEN Boot-Blocker des Blueprints - er hat den zweiten,
-// unabhaengigen Blocker (COST_TRUING_REQUIRED_RECORD_TYPES leer, render.yaml:212-213)
-// ueberhaupt erst sichtbar gemacht. Wer MAX_BUDGET_EUR im Blueprint anhebt, dreht dort die
-// Assertion und muss hier NICHTS aendern - dieser Test wird von selbst gruen, sobald der
-// Blueprint wirklich startet.
-test("GAP-33 Befund: der Blueprint render.yaml ist startfaehig", async () => {
+// Abgrenzung zu test/env-docs-spend-cap-coherence.test.js (LCT P6): jener Test rechnet
+// STATISCH einzelne Achsen nach (plan_cap_inert bzw. spendCapCoherence aus den drei
+// Quellen). Dieser hier startet den Prozess wirklich und deckt damit JEDEN Boot-Blocker
+// des Blueprints - er hat den zweiten, unabhaengigen Blocker
+// (COST_TRUING_REQUIRED_RECORD_TYPES leer) ueberhaupt erst sichtbar gemacht. Der ist
+// weiterhin NICHT behoben: er laeuft nur deshalb nicht ins exit(1), weil PROD_ENV_EXEMPTIONS
+// den Schluessel auf seinem neutralen BASE_ENV-Wert laesst (Begruendung dort). Ein echter
+// Deploy allein aus render.yaml scheitert also weiter an dieser einen Achse.
+test("Produktionskonfiguration (GAP-33): der Blueprint render.yaml ist startfaehig", async () => {
   let srv = null;
   try {
     srv = await startServer({ env: blueprintEnv() });

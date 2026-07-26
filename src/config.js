@@ -144,8 +144,13 @@ const rawConfig = {
   // Ganzzahl-Cents (G26: Geld nie als Fliesskomma) - Env-Name bleibt MAX_BUDGET_EUR
   // (Operator gibt weiter EUR ein), interne Einheit ist Cents wie defaultTenantBudgetCents/
   // hardCapCents (Gate-Schnittmenge, Regel 1 - einheitlicher Typ verhindert Einheiten-Mix).
+  //
+  // Fallback-Wert 30 (P7, vorher 8): 8 (=800 ct) bestand den eigenen Boot-Guard nicht mehr -
+  // die abgeleitete Business-Plan-Decke (900 ct) haette den Plattform-Cap uebersprungen
+  // (planCapInertFindings, fatal). 30 ist zugleich der live gefahrene Wert und laesst
+  // gleichzeitig Raum fuer defaultTenantBudgetCents=1500 (Klausel A: echt darunter).
   platformSpendCapCents: eurToCents(
-    numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 8, min: 0, integer: false }),
+    numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 30, min: 0, integer: false }),
   ),
 
   // ---- LLM-Resilienz-Seam (P3b-R Schicht 2, src/llm.js) ----
@@ -520,14 +525,19 @@ const rawConfig = {
   // das wuerde jeden Outbound, jeden kostenlosen Inbound und jeden laufenden Call sperren.
   // Globaler Backstop (platformSpendCapCents) bleibt PARALLEL (Schnittmenge, Regel 1).
   //
-  // Fallback-Wert 600 (P3 Review-Fix, vorher 1000): MUSS echt kleiner als der Fallback von
-  // platformSpendCapCents (eurToCents(8)=800) sein, sonst besteht der ausgelieferte
-  // CODE-Default den eigenen Boot-Guard NICHT (spendCapCoherence, Klausel A) - jeder Host
-  // OHNE gesetzte DEFAULT_TENANT_BUDGET_CENTS/MAX_BUDGET_EUR wuerde beim naechsten Boot
-  // fail-closed abbrechen. 600 = Minutenwert des Starter-Abos (30 min * 20 ct), synchron
-  // mit dem in .env.example/render.yaml dokumentierten Wert (EINE Zahl, drei Stellen).
+  // Fallback-Wert 1500 (P7, vorher 600): Zwei Schranken gleichzeitig, beide vom eigenen
+  // Boot-Guard erzwungen (spendCapCoherence):
+  //   Klausel A - echt KLEINER als der Fallback von platformSpendCapCents
+  //               (eurToCents(30)=3000), sonst waere die Tenant-Achse inert.
+  //   Klausel B - mindestens VOICE_TARIFF_DEFAULT_CENTS * ceil(MAX_CALL_DURATION_CAP_S/60)
+  //               = 300 * 5 = 1500, sonst ist der teuerste Zielverkehr unter dieser Decke
+  //               unbezahlbar und JEDES Ziel ohne gemessenen Inlandssatz faellt schon vor
+  //               dem Dial ins Reserve-Gate (402). Seit P7 ist dieser Befund FATAL.
+  // Der Tarif wird dafuer NICHT gesenkt (Owner-Entscheidung O6) - der Tarif ist die
+  // Messgroesse des Gates. Dieselbe Zahl steht an drei Stellen: hier, .env.example und
+  // render.yaml; test/env-docs-spend-cap-coherence.test.js prueft alle drei gegen den Guard.
   defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
-    fallback: 600,
+    fallback: 1500,
     min: 0,
   }),
   // Grober Kostenbeleg pro gesendeter Summary-SMS in GANZZAHL Cents (G26), F2 P8. Jede
@@ -633,6 +643,13 @@ const rawConfig = {
   // (Tippfehler) -> KEIN Seed -> Boot-Refusal (fail-closed, kein stiller Falsch-Carrier,
   // R1). Telnyx-Owner MUSS OWNER_NUMBER_PROVIDER=telnyx setzen. Lowercase-normalisiert.
   ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
+
+  // GAP-38: Bootstrap-Parameter des Deploys (frueher nur vom preDeploy-Kommando gelesen,
+  // das Render auf plan:free nie ausfuehrt). Der Boot heilt damit einen NACHWEISLICH
+  // frischen Store in-prozess. Leer = keine Heilung (Boot bleibt fail-closed).
+  // Backend-agnostisch, anders als OWNER_NUMBER_SEED (json-only, nur Nummer ohne Tenant).
+  bootstrapE164: process.env.BOOTSTRAP_E164 || "",
+  bootstrapProvider: process.env.BOOTSTRAP_PROVIDER || "",
 
   // AM6: Owner-OAuth-Identitaet (WorkOS sub/user.id) idempotent an den Bootstrap-Tenant
   // binden (idp_subject). Wie OWNER_NUMBER_SEED ein Boot-Seed gegen Renders fluechtiges FS /
@@ -1098,7 +1115,7 @@ function guardedConfig(target, path = "config") {
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],

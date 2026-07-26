@@ -148,6 +148,18 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
    - Bis dahin migriert der Boot selbst (`src/store.js` Top-Level-Import).
 5. **Noch KEINEN Inbound-Traffic / keine Nummer freigeben** — zuerst Abschnitt 7.
 
+> **Frische/leere DB (GAP-38):** eine Instanz ganz ohne Bestandsdaten heilt sich beim
+> **ersten Boot selbst**, sofern `BOOTSTRAP_E164` (E.164 einer echten Provider-DID) und
+> `BOOTSTRAP_PROVIDER` (`twilio|telnyx`) im Render-Dashboard gesetzt sind — der Boot legt
+> Bootstrap-Tenant + aktive Nummer an, statt fail-closed mit `exit 1` abzubrechen. Das
+> ersetzt den frueheren `preDeployCommand`, den Render auf `plan: free` nie ausgefuehrt hat.
+> Erfolgsbeleg: die Log-Zeile `[bootstrap-heal] Leerer Store … geheilt` plus die
+> Plattform-SMS an `PLATFORM_ALERT_SMS_TO`.
+>
+> **Ein Store mit Daten, aber ohne aktive Nummer wird NICHT geheilt** (Proliferations-Schutz;
+> Log: `Proliferations-Schutz`). Das ist der Restore-Normalfall bei Teil-Wiederherstellung —
+> dann manuell: `npm run bootstrap-tenant -- <e164> <provider>`.
+
 ---
 
 ## 7. Verifikation VOR Produktiv-Schaltung

@@ -113,23 +113,21 @@ test("T-P3-11: BASE_ENV (Default=0) bootet gruen, genau eine A0-Konfig-Warnung (
   }
 });
 
-// T-P3-12: die AUSGELIEFERTE Beispiel-Konfiguration (.env.example/render.yaml nach der
-// P3-Korrektur: DEFAULT_TENANT_BUDGET_CENTS=600, VOICE_TARIFF_DEFAULT_CENTS=300) bootet
-// gruen, feuert aber die Klausel-B-Warnung inkl. Audit-Zeile (600 < 300*5=1500).
-test("T-P3-12: ausgelieferte Beispiel-Konfig (600/300) bootet gruen, Klausel-B-Warnung + Audit", async () => {
-  const srv = await startServer({
+// T-P3-12 (P7/GAP-32 GEDREHT): 600/300 war bis P6 die ausgelieferte Konfiguration und
+// bootete mit einer folgenlosen Klausel-B-Warnung durch - waehrend der Dienst fuer jedes
+// Ziel ohne gemessenen Inlandssatz faktisch abgeschaltet war (600 < 300*5=1500). Seit dem
+// Flip bricht genau diese Kombination den Start ab. Das ist zugleich der Beweis, dass der
+// Flip greift: ein Boot mit absichtlich inkohaerenten Werten startet nicht.
+test("T-P3-12: inkohaerente Werte (600/300) brechen den Start ab und nennen den Zielwert", async () => {
+  const { code, output } = await startServerExpectExit({
     env: { DEFAULT_TENANT_BUDGET_CENTS: "600", VOICE_TARIFF_DEFAULT_CENTS: "300" },
   });
-  try {
-    const res = await fetch(`${srv.localUrl}/healthz`);
-    assert.equal(res.status, 200);
-    assert.match(srv.stdout, /\[boot\] Konfig-Warnung: .*max_duration_s=120/);
-    assert.match(srv.stdout, /\[audit\] boot_konfig_warnung ip=system grund=worst_case_unaffordable/);
-    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
-    assert.doesNotMatch(srv.stdout, /DEFAULT_TENANT_BUDGET_CENTS=0/);
-  } finally {
-    await srv.stop();
-  }
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /Start abgebrochen/);
+  assert.match(output, /DEFAULT_TENANT_BUDGET_CENTS=600/);
+  assert.match(output, /VOICE_TARIFF_DEFAULT_CENTS=300/);
+  assert.match(output, /mindestens 1500/, "Betreiber muss den Zielwert ohne Raten ablesen koennen");
+  assert.doesNotMatch(output, /Gateway laeuft/);
 });
 
 // T-P3-13 (Review-Fix Runde 1, Merge-Gate; LCT P6 GEDREHT): ECHTER Spawn OHNE jeden
@@ -139,23 +137,27 @@ test("T-P3-12: ausgelieferte Beispiel-Konfig (600/300) bootet gruen, Klausel-B-W
 // Kind-Env entfernt (nicht als String "undefined" gesetzt) - process.env sieht die Var
 // damit als echt ABWESEND, genau wie ein Host ohne diese Env-Zeilen.
 //
-// LCT P6 / Punkt 0 (bewusst NICHT Teil dieser Phase): der Plan-Cap-Boot-Guard prueft die
-// abgeleitete Business-Decke (900 ct) gegen platformSpendCapCents. Der CODE-Fallback von
-// MAX_BUDGET_EUR bleibt bei 8 (800 ct) - die Anhebung ist Entscheidung 8/PLAN-BUDGET-AXES,
-// ausdruecklich NICHT Teil von P6 (der LIVE-Wert ist bereits 30, nur der Repo-Fallback
-// nicht). Diese Konstellation war VOR P6 gruen (T-P3-13 bewies das damals) und ist es nach
-// P6 zu Recht NICHT mehr: 900 >= 800 macht die Tenant-Achse fuer Business WIRKUNGSLOS -
-// genau die Inkohaerenz, die die erste Linie fangen soll. Der Test pinnt jetzt die
-// UMGEKEHRTE Erwartung (fatal), bis der Fallback in einer Folge-Phase angehoben wird.
-test("T-P3-13: reiner CODE-Fallback fuer MAX_BUDGET_EUR (8) ist seit LCT P6 plan_cap_inert -> Boot verweigert (exit 1)", async () => {
-  const { code, output } = await startServerExpectExit({
+// P7 hat den Fallback angehoben (MAX_BUDGET_EUR 8->30, DEFAULT_TENANT_BUDGET_CENTS
+// 600->1500) - genau die Folge-Phase, auf die der P6-Stand hier verwies. Der reine
+// CODE-Fallback ist damit auf BEIDEN Achsen kohaerent: die abgeleitete Business-Decke
+// (900 ct) liegt unter platformSpendCapCents=3000 (kein plan_cap_inert) UND die
+// Tenant-Decke traegt die Worst-Case-Reserve (kein worst_case_unaffordable, seit P7 fatal).
+test("T-P3-13: reiner CODE-Fallback (MAX_BUDGET_EUR/DEFAULT_TENANT_BUDGET_CENTS ungesetzt) bootet seit P7 gruen", async () => {
+  const srv = await startServer({
     env: { DEFAULT_TENANT_BUDGET_CENTS: undefined, MAX_BUDGET_EUR: undefined },
   });
-  assert.equal(code, 1, `erwartet exit 1 (plan_cap_inert), Output:\n${output}`);
-  assert.match(output, /Start abgebrochen/);
-  assert.match(output, /business/);
-  assert.match(output, /800/);
-  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+  try {
+    const res = await fetch(`${srv.localUrl}/healthz`);
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+    assert.doesNotMatch(
+      srv.stdout,
+      /max_duration_s=/,
+      "Klausel B (worst_case_unaffordable) darf der CODE-Fallback nicht mehr ausloesen",
+    );
+  } finally {
+    await srv.stop();
+  }
 });
 
 // (j1, LCT P6) Erste Linie, fatal am Boot OHNE jede tenant_budget-Zeile (frischer Deploy,

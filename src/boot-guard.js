@@ -1,3 +1,7 @@
+// Datenkonstanten des Store-Blatt-Moduls (Format-/Provider-Wahrheit, kein IO, keine
+// config) - die einzige Abhaengigkeit dieser Datei. Genutzt von bootstrapHealDecision.
+import { E164, PROVIDER, normNum } from "./store/defaults.js";
+
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
 // und laeuft weiter (kein throw). Damit killt ein Portal-Pool-Fehler (DB unerreichbar
@@ -18,6 +22,42 @@ export async function guardedBoot(label, fn) {
     );
     return false;
   }
+}
+
+// GAP-38: darf der Boot einen leeren Store aus den Deploy-Parametern heilen?
+// Vier sich ausschliessende Ausgaenge (die Reihenfolge ist die Spezifikation). Reine
+// Entscheidung (arg-injiziert, config-/IO-frei, testbar; Muster spendCapCoherence);
+// importiert nur Datenkonstanten aus dem Blatt-Modul store/defaults.js.
+export const BOOTSTRAP_HEAL = Object.freeze({
+  NOT_NEEDED: "not_needed", // aktive Nummer da -> nichts tun
+  HEAL: "heal", // frischer Store + brauchbare Parameter
+  BLOCKED_STORE_NOT_FRESH: "blocked_store_not_fresh", // gelebter Store -> NIE heilen
+  BLOCKED_PARAMS: "blocked_params", // ohne/mit unbrauchbaren Parametern
+});
+
+// "Nachweislich frisch" heisst: KEINE Nummer (in keinem Zustand), KEIN Tenant ausser dem
+// Code-Default-Bootstrap-Tenant (makeDefaultState legt ihn IMMER an - seine Existenz
+// beweist also nichts) und KEINE Call-Historie. Jede weitere Zeile heisst "der Store hat
+// gelebt": dann wird NICHT geheilt, sondern der bestehende fail-closed Refusal greift
+// (Pre-Mortem: Nummern-Proliferation).
+//
+// Die E.164-Pruefung ist Pflicht und kein Stil: seedBootstrapNumber normalisiert nur, es
+// validiert NICHT - ein Tippfehler in BOOTSTRAP_E164 wuerde sonst als "aktive Nummer"
+// geseedet und der Boot liefe gruen mit totem Routing (Lehre seedOwnerNumberFromEnv).
+export function bootstrapHealDecision({
+  activeNumberPresent,
+  numberCount,
+  foreignTenantCount,
+  callCount,
+  e164,
+  provider,
+}) {
+  if (activeNumberPresent) return BOOTSTRAP_HEAL.NOT_NEEDED;
+  if (numberCount > 0 || foreignTenantCount > 0 || callCount > 0)
+    return BOOTSTRAP_HEAL.BLOCKED_STORE_NOT_FRESH;
+  if (!E164.test(normNum(e164 || "")) || !Object.values(PROVIDER).includes(provider))
+    return BOOTSTRAP_HEAL.BLOCKED_PARAMS;
+  return BOOTSTRAP_HEAL.HEAL;
 }
 
 // Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE ersetzt den Provider-Transport durch einen
@@ -50,7 +90,7 @@ const SECONDS_PER_MINUTE = 60;
 export const SPEND_CAP_FINDING = Object.freeze({
   TENANT_DEFAULT_INERT: "tenant_default_inert", // Klausel A  - FATAL
   TENANT_DEFAULT_UNSET: "tenant_default_unset", // Klausel A0 - WARN
-  WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable", // Klausel B - WARN + Audit
+  WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable", // Klausel B - FATAL
 });
 
 // P3: laengste Gespraechsdauer, die unter der Tenant-Decke zum Worst-Case-Tarif noch
@@ -71,11 +111,14 @@ function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
 //   globale Cap bindet immer zuerst, die per-Tenant-Decke wirkt nie (Regel 1: eine
 //   inerte Kosten-Achse ist echter Schutzverlust). >=, NICHT >: bei Gleichstand bindet
 //   die Tenant-Achse ebenfalls nie.
-// B (WARN + Audit): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
+// B (FATAL, GAP-32): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
 //   Zielverkehr (maxTariffCents) ueber die laengstmoegliche Gespraechsdauer
-//   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes
-//   Auslandsziel scheitert am Reserve-Gate, bevor die Tenant-Decke erreicht ist. Das
-//   ist eine Ablehnungs-Ursache (Forensik), aber niemals fatal.
+//   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes Ziel
+//   ohne gemessenen Inlandssatz scheitert am Reserve-Gate, bevor die Tenant-Decke erreicht
+//   ist. Bis P7 war das eine blosse WARN: die Zeile stand seit dem ersten Deploy folgenlos
+//   im Log, waehrend der Dienst fuer genau diese Ziele faktisch abgeschaltet war. Eine
+//   Konfiguration, unter der ein ganzer Zielbereich vor dem Dial abgewiesen wird, ist kein
+//   Betriebszustand - der Start wird verweigert und die Meldung nennt den Zielwert.
 //
 // Der A0-Early-Return VOR Klausel A macht "tenantDefaultCents > 0" fuer Klausel A
 // strukturell wahr (G27: Struktur statt Konvention) - Klausel B erbt das ebenfalls.
@@ -117,11 +160,13 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
     return [
       {
         code: SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE,
-        fatal: false,
+        fatal: true,
         message:
           `Worst-Case-Reserve ${worstCaseReserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
           `* max. Gespraechsdauer) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
-          `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar.`,
+          `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar. ` +
+          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${worstCaseReserveCents} anheben ` +
+          `(und echt unter MAX_BUDGET_EUR*100=${platformCapCents} halten).`,
       },
     ];
   }
