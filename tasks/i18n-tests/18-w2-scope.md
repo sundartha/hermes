@@ -129,6 +129,33 @@ Duplikat (G5).
 
 ### Blocktabellen B1-B7
 
+> **NACHTRAG NACH W2-B0 (2026-07-26, `1dd5917`) - BINDEND fuer alle Bloecke.**
+> Die Spalte "Katalog-Erwartung" unten ist vom 2026-07-22. Wo
+> [`19-w2-baseline.md`](19-w2-baseline.md) eine Abweichung notiert, **gewinnt die dort
+> gemessene Lage** (R-G). Jeder Block liest vor dem Testbau den Abschnitt seiner IDs in
+> §2 jener Datei sowie §3 (Abweichungen) vollstaendig.
+>
+> Drei Querschnitts-Befunde, die keinen Block auslassen:
+>
+> 1. **Der Weltdefault-Flip (P10) ist vollzogen:** `DEFAULT_LANGUAGE` ist `"en"`, nicht
+>    `"de"` (`src/store/defaults.js`, umschaltbar ueber `setWorldDefaultLanguageEnabled`).
+>    Ein Test, der einen `"de"`-Fallback festnagelt, pinnt den Vor-P10-Zustand und wird beim
+>    naechsten Env-Flip falsch-rot. Betroffen: LANG-09 (Katalogaussage inhaltlich falsch
+>    geworden), LANG-17, LANG-21, PROMPT-17, FMT-22, FMT-27, WEB-25, LAW-18, LAW-22, DID-05.
+> 2. **Drei Defekt-IDs sind bereits geschlossen** und duerfen NICHT als "hart deutsch"
+>    gepinnt werden - ein solcher Test waere genau der Mischsprach-Pin, den der GAP-27-
+>    Waechter meldet: **PROMPT-08** (Labels aus `loc.prompt.background`), **PROMPT-22**
+>    (`loc.prompt.mandate`), **PAY-12** (`localeFor(store.tenantLanguage(...)).gates`).
+> 3. **Vier IDs haben kein tragfaehiges Subjekt mehr.** Sie werden im jeweiligen Block
+>    NICHT blind gebaut, sondern zuerst entschieden - Ergebnis in den Blockreport:
+>    **GAP-37** (`buildFilter` existiert im Repo nicht, 0 Treffer ausserhalb
+>    `node_modules`), **PAY-25** (`VOICE_TARIFF_DOMESTIC_PREFIXES` ist eine Code-Konstante,
+>    keine Env-Variable - es gibt keine Env-Doku zu pruefen), **PAY-20** (der unterstellte
+>    fehlende Drift-Alarm existiert: `providerRateOutOfBand` + `src/billing/cost-calibration.js`),
+>    **WEB-10** (beschreibt den Stand vor dem Single-Origin-Umbau).
+>
+> Der W2-Umfang sinkt dadurch voraussichtlich von 103 auf 99-102.
+
 #### W2-B1 (16 Tests)
 
 | ID | Titel | Prio | Katalog-Erwartung (STAND 07-22, zu pruefen) | Beleglage |
