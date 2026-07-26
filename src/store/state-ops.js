@@ -2127,8 +2127,8 @@ function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
   });
 }
 
-// Pro-Tenant-Budget (P6b3): der GATE-Verbrauch (gateUsageCents - Lebenszeit bei Flag AUS,
-// Spend-Monat bei Flag AN) gegen den EFFEKTIVEN Cap (pro-Tenant hard_cap_cents wenn
+// Pro-Tenant-Budget (P6b3): der GATE-Verbrauch (gateUsageCents - Perioden-Fenster bei Flag
+// AUS seit GAP-01, Spend-Monat bei Flag AN) gegen den EFFEKTIVEN Cap (pro-Tenant hard_cap_cents wenn
 // gesetzt, sonst die Tenant-Default-Decke, sonst der Plattform-Cap - Praezedenz s.
 // effectiveCapCents). globalBudgetExceeded bleibt PARALLEL. Rein Integer
 // gateCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap aequivalent zu
