@@ -190,7 +190,7 @@ const FRESH_STORE = Object.freeze({
   provider: "twilio",
 });
 
-test("GAP-38-Wahrheitstabelle: aktive Nummer vorhanden -> NOT_NEEDED (Parameter egal)", () => {
+test("Boot-Heilung (GAP-38): aktive Nummer vorhanden -> NOT_NEEDED (Parameter egal)", () => {
   assert.equal(
     bootstrapHealDecision({ ...FRESH_STORE, activeNumberPresent: true }),
     BOOTSTRAP_HEAL.NOT_NEEDED,
@@ -201,7 +201,7 @@ test("GAP-38-Wahrheitstabelle: aktive Nummer vorhanden -> NOT_NEEDED (Parameter 
   );
 });
 
-test("GAP-38-Wahrheitstabelle: jede Spur eines gelebten Stores -> BLOCKED_STORE_NOT_FRESH", () => {
+test("Boot-Heilung (GAP-38): jede Spur eines gelebten Stores -> BLOCKED_STORE_NOT_FRESH", () => {
   for (const spur of [{ numberCount: 1 }, { foreignTenantCount: 1 }, { callCount: 1 }]) {
     assert.equal(
       bootstrapHealDecision({ ...FRESH_STORE, ...spur }),
@@ -211,7 +211,7 @@ test("GAP-38-Wahrheitstabelle: jede Spur eines gelebten Stores -> BLOCKED_STORE_
   }
 });
 
-test("GAP-38-Wahrheitstabelle: fehlende/unbrauchbare Parameter -> BLOCKED_PARAMS (kein stiller Fehl-Seed)", () => {
+test("Boot-Heilung (GAP-38): fehlende/unbrauchbare Parameter -> BLOCKED_PARAMS (kein stiller Fehl-Seed)", () => {
   for (const params of [{ e164: "" }, { e164: "hallo" }, { provider: "twillio" }, { provider: "" }]) {
     assert.equal(
       bootstrapHealDecision({ ...FRESH_STORE, ...params }),
@@ -221,6 +221,6 @@ test("GAP-38-Wahrheitstabelle: fehlende/unbrauchbare Parameter -> BLOCKED_PARAMS
   }
 });
 
-test("GAP-38-Wahrheitstabelle: frischer Store + brauchbare Parameter -> HEAL", () => {
+test("Boot-Heilung (GAP-38): frischer Store + brauchbare Parameter -> HEAL", () => {
   assert.equal(bootstrapHealDecision(FRESH_STORE), BOOTSTRAP_HEAL.HEAL);
 });
