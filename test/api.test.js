@@ -175,6 +175,28 @@ test("Settings-Whitelist", async (t) => {
   }
 });
 
+// VOICE-09 (tasks/i18n-tests/03-telefonie-render.md): die POSITIVE Haelfte ("language='en'
+// wird gesetzt") ist seit W2-B1 end-to-end belegt - test/language-switch-midcall.test.js
+// postet genau diesen Patch, prueft 200 + settings.language==='en' und die Wirkung auf den
+// naechsten Anruf. Hier steht die bislang ungetestete NEGATIVE Haelfte: die Route validiert
+// fail-closed gegen SUPPORTED_LANGUAGES (OPTIONAL_ENUM_FIELDS in src/store/state-ops.js) -
+// ein unbekannter Code wird IGNORIERT, nicht geschrieben, und ist kein Fehler (kein 400/500).
+// Kein Duplikat der Store-Ebene (f1-geo-store.test.js): gemessen wird die HTTP-Naht.
+test("VOICE-09 (Mechanismus, gruen) - POST /api/settings mit unbekanntem language-Code schreibt nichts", async () => {
+  const srv = await startServer();
+  try {
+    const ok = await postJson(`${srv.localUrl}/api/settings`, { language: "en" });
+    assert.equal((await ok.json()).language, "en", "Vorbedingung: gueltiger Code kommt an");
+
+    const res = await postJson(`${srv.localUrl}/api/settings`, { language: "xx" });
+    assert.equal(res.status, 200, "unbekannter Code ist kein Fehler, sondern wird ignoriert");
+    assert.equal((await res.json()).language, "en", "der alte Wert bleibt stehen");
+    assert.equal(srv.readStore().settings[BOOTSTRAP_TENANT_ID].language, "en");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // P8b: Auskunft/Export (Art. 15/20). Read-only Owner-Tenant-Export hinter der
 // /api/*-Basic-Auth, Calls OHNE streamToken (publicCall-Invariante wie /api/state).
 test("GET /api/tenant-data/export liefert Owner-Daten ohne streamToken", async (t) => {

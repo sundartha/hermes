@@ -39,6 +39,10 @@ test("ElevenLabs-Gather: STT-Attribute byte-identisch zum Azure-Bestand, innerer
   );
 });
 
+// VOICE-12 (tasks/i18n-tests/03-telefonie-render.md): eine Voice-ID fuer alle drei
+// Sprachen, kein `language`-Attribut am ElevenLabs-<Say>. DE traegt der byte-exakte Test
+// oben, FR/EN dieser Test - der Regex unten schliesst unmittelbar hinter `api_key_ref` mit
+// `>`, das IST der Beweis fuer das fehlende `language`-Attribut. Kein zweiter Test (G5).
 test("ElevenLabs + FR/EN-Profil: STT-Locale folgt dem Profil, Voice bleibt dieselbe ID (multilingual)", () => {
   for (const [profile, locale] of [
     [VOICE_PROFILE.FR_FEMALE_NEURAL, "fr-FR"],

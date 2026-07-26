@@ -31,3 +31,24 @@ test("S1-15b: GEO_ENABLED an -> geoLookupAdapter() ist NICHT nullGeoLookup, aber
     assert.equal(typeof adapter, "function");
   });
 });
+
+// VOICE-05 (i18n-Launch-Testkatalog, tasks/i18n-tests/03-telefonie-render.md): ohne
+// GEO_ENABLED in der Env ist der IP-Land-Vorschlag strukturell null - proposedCountry in
+// src/routes/api-onboard.js steht hinter genau diesem Flag. Getestet wird hier NUR die
+// bislang ungetestete Haelfte: der boolEnv-Fallback bei FEHLENDER Var. Die Kette danach
+// (geoLookupAdapter -> nullGeoLookup -> immer null) tragen S1-15a oben und
+// "nullGeoLookup: loest NIE auf" in f1-geo-port.test.js; hier bewusst nicht wiederholt (G5).
+// Frischer config-Import mit Query-String-Cache-Buster, weil config EINMAL beim Import aus
+// process.env gebaut wird (Muster PA-11 in config-shape.test.js). Unter NODE_ENV=test ist
+// dotenv aus -> keine .env-Interferenz.
+test("VOICE-05 (Mechanismus, gruen) - ohne GEO_ENABLED in der Env bleibt geoEnabled false (Default AUS)", async () => {
+  const saved = process.env.GEO_ENABLED;
+  try {
+    delete process.env.GEO_ENABLED;
+    const fresh = await import("../src/config.js?voice05");
+    assert.equal(fresh.config.provisioning.geoEnabled, false);
+  } finally {
+    if (saved === undefined) delete process.env.GEO_ENABLED;
+    else process.env.GEO_ENABLED = saved;
+  }
+});
