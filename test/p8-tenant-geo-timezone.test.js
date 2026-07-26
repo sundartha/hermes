@@ -14,7 +14,11 @@ import {
   tenantTimezone,
   findTenant,
 } from "../src/store/state-ops.js";
-import { DEFAULT_TIMEZONE, resolveTimezone } from "../src/store/defaults.js";
+import {
+  DEFAULT_TIMEZONE,
+  resolveTimezone,
+  setWorldDefaultLanguageEnabled,
+} from "../src/store/defaults.js";
 import { timezoneForCountry, tenantGeoForCountry } from "../src/geo/resolve.js";
 
 const A = "tenant_a";
@@ -32,6 +36,12 @@ let jsonBackend;
 before(async () => {
   process.env.DATA_DIR = tempDataDir();
   jsonBackend = await import("../src/store/json.js");
+  // P10-Blocker-Folgefix: der statische pg.js-Import oben laedt config.js, das DEFAULT_LANGUAGE
+  // via setWorldDefaultLanguageEnabled() auf den fail-closed Boot-Default ("de", Env-Schalter
+  // WORLD_DEFAULT_LANGUAGE_ENABLED steht bis P13 auf AUS) drueckt. Der "US -> Weltdefault"-Test
+  // unten prueft explizit den Weltdefault-MECHANISMUS (analog e2e-05, "Flip unter eigenem
+  // Override") - deshalb hier scharf stellen, statt unbemerkt vom Boot-Default abzuhaengen.
+  setWorldDefaultLanguageEnabled(true);
 });
 
 // ---- timezoneForCountry ----

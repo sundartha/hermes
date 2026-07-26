@@ -7,7 +7,11 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  DEFAULT_LANGUAGE,
+  setWorldDefaultLanguageEnabled,
+} from "../src/store/defaults.js";
 import { LOCALES } from "../src/i18n/locales.js";
 
 const DISCLOSURE_PREFIX = "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ";
@@ -30,6 +34,12 @@ before(async () => {
     }),
   );
   await import("../src/config.js");
+  // P10-Blocker-Folgefix: der config.js-Import druesst DEFAULT_LANGUAGE via
+  // setWorldDefaultLanguageEnabled() auf den fail-closed Boot-Default ("de", Env-Schalter
+  // WORLD_DEFAULT_LANGUAGE_ENABLED steht bis P13 auf AUS). P10-S1-1 prueft explizit den
+  // Weltdefault-MECHANISMUS (analog e2e-05, "Flip unter eigenem Override") - deshalb hier
+  // scharf stellen, statt den Test unbemerkt vom Boot-Default abhaengen zu lassen.
+  setWorldDefaultLanguageEnabled(true);
   ({ systemPrompt, disclosureSentence } = await import("../src/claude.js"));
 });
 

@@ -11,7 +11,11 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  DEFAULT_LANGUAGE,
+  setWorldDefaultLanguageEnabled,
+} from "../src/store/defaults.js";
 import { localeFor, LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
 // Heutiges DE-Verhalten, woertlich gepinnt. OWNER_NAME ist ein lokales Literal, das
@@ -241,6 +245,14 @@ before(async () => {
   });
   process.env.DATA_DIR = tempDataDir(seed);
   await import("../src/config.js");
+  // P10-Blocker-Folgefix: der config.js-Import druesst DEFAULT_LANGUAGE via
+  // setWorldDefaultLanguageEnabled() auf den fail-closed Boot-Default ("de", Env-Schalter
+  // WORLD_DEFAULT_LANGUAGE_ENABLED steht bis P13 auf AUS). Dieses EINE root-before() laeuft
+  // vor JEDEM Test der Datei (auch den oben deklarierten WORLD-03-/Bundle-Tests, node:test
+  // fuehrt alle before()-Hooks vor allen Tests der Suite aus) - deshalb hier den
+  // Weltdefault-MECHANISMUS explizit scharf stellen (analog e2e-05, "Flip unter eigenem
+  // Override"), statt die Tests unbemerkt vom Boot-Default abhaengen zu lassen.
+  setWorldDefaultLanguageEnabled(true);
   ({ systemPrompt, disclosureSentence, openingText } = await import("../src/claude.js"));
 });
 
