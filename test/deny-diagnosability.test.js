@@ -23,6 +23,10 @@ const DURATION_LEAK = /(max_duration|Sekunden|Dauer|Minute)/;
 // ueberschreiben NUR die Methode(n), die die jeweils gepruefte Achse feuern lassen sollen.
 function defaultStore(overrides = {}) {
   return {
+    // P15/T2: die Gate-Kette liest die Anzeigesprache aus dem Store. Diese Datei pinnt die
+    // DEUTSCHEN Achsentexte byte-genau - der Fake waehlt sein Szenario deshalb explizit,
+    // statt implizit vom Weltdefault zu leben.
+    tenantLanguage: () => "de",
     budgetExceeded: () => false,
     globalBudgetExceeded: () => false,
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),

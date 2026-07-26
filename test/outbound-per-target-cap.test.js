@@ -33,7 +33,7 @@ test("per-Target-Cap: 3x dasselbe Ziel ok, 4. -> 429; anderes Ziel frei", async 
     await t.test("4. Call aufs selbe Ziel -> 429 grund=ziel_limit", async () => {
       const res = await postCall(srv.localUrl, TARGET_A);
       assert.equal(res.status, 429, "Cap (3) erreicht -> 429 VOR Dial");
-      assert.match((await res.json()).error, /Wiederhol-Limit/, "per-Target-Fehlertext");
+      assert.match((await res.json()).error, /Repeat limit/, "per-Target-Fehlertext");
     });
     await t.test("anderes Ziel unberuehrt -> passiert (500)", async () => {
       const res = await postCall(srv.localUrl, TARGET_B);

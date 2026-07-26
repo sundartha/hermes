@@ -46,6 +46,7 @@ import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "../billing/period.js";
 import { includedMinutesFor } from "../billing/plan-caps.js";
 import { deniedPrefix, isDenied } from "./number-denylist.js";
+import { localeFor } from "../i18n/locales.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const SECONDS_PER_MINUTE = 60;
@@ -54,20 +55,18 @@ const SECONDS_PER_MINUTE = 60;
 export const E164_FORMAT_ERROR = "to muss E.164 sein, z.B. +4917212345678";
 
 // ---- Ablehnungstexte nach Achse getrennt (P5a) -----------------------------------
-// Der Plattform-Notaus ist eine BETREIBER-Groesse: die Meldung benennt ihn, nennt aber
-// NIE eine Zahl - weder den Cap noch die Summe ueber fremde Tenants. Eine Plattform-Zahl
-// in einer Tenant-Antwort waere ein Cross-Tenant-Leck (Absolute Regel 4/6). KONSTANTE
-// statt Template: der String kann per Konstruktion keinen Wert interpolieren.
-const PLATFORM_DENIAL = "Plattform-Notaus aktiv, bitte Betreiber kontaktieren.";
+// Die ANZEIGETEXTE aller Ablehnungen liegen seit P15 im Locale-Buendel (i18n/gate-texts.js,
+// eingehaengt als LOCALES.<lang>.gates) und folgen der Tenant-Sprache. Hier bleibt nur der
+// sprachfreie GRUND - er ist Protokoll (Audit/Forensik/Metrik), keine Anzeige.
+// Der Plattform-Notaus ist eine BETREIBER-Groesse: sein Text benennt ihn, nennt aber NIE
+// eine Zahl - weder den Cap noch die Summe ueber fremde Tenants. Eine Plattform-Zahl in
+// einer Tenant-Antwort waere ein Cross-Tenant-Leck (Absolute Regel 4/6); die Ziffernfreiheit
+// ist im Buendel per Konstruktion (Konstante statt Template) und per Test gesichert.
 const PLATFORM_DENIAL_REASON = "budget_platform";
-// Unlesbarer Verbrauchsstand (D7): die EIGENE Achse sperrt, aber es wird KEINE Zahl
-// gerendert - "NaN EUR" waere eine Falschauskunft auf einer Geld-Kante.
-const TENANT_UNREADABLE_DENIAL =
-  "Dein Budget ist gesperrt: der Verbrauchsstand ist nicht lesbar. Bitte Betreiber kontaktieren.";
 
 // Fruehwarnung (Budget-Achsen P6): eigenes Ereignis + eigener SMS-Praefix, GETRENNT von
-// PLATFORM_DENIAL/PLATFORM_DENIAL_REASON oben - eine Warnung ist keine Ablehnung und
-// aendert keine Gate-Entscheidung (s. reserve_budget-Gate unten).
+// PLATFORM_DENIAL_REASON oben - eine Warnung ist keine Ablehnung und aendert keine
+// Gate-Entscheidung (s. reserve_budget-Gate unten).
 const PLATFORM_WARN_EVENT = "platform_spend_warning";
 const PLATFORM_WARN_SMS_PREFIX = "[Hermes] Plattform-Warnschwelle erreicht: ";
 
@@ -79,7 +78,7 @@ const logWarningFailure = (e) => console.error(`[${PLATFORM_WARN_EVENT}]`, e.mes
 // Audit-Detail = die EINE Faktenquelle, aus der auch der SMS-Body gebaut wird (G5).
 // AUSSCHLIESSLICH Summen-Cents + Monatsschluessel: KEINE tenantId, kein to, keine
 // requestedBy. Die Plattform-Summe ist eine Betreiber-Groesse; eine tenantId daneben
-// waere ein Cross-Tenant-Leck (Absolute Regel 4/6, wie PLATFORM_DENIAL).
+// waere ein Cross-Tenant-Leck (Absolute Regel 4/6, wie beim Plattform-Notaus-Text).
 const warningDetail = (w) => `summe_cents=${w.totalCents} monat=${w.monthKey}`;
 
 // Audit-Ereignis jeder Outbound-Ablehnung. EINE Konstante statt elf Literalen (G25).
@@ -216,6 +215,15 @@ export function makeOutboundGates({
     );
   }
 
+  // Anzeigetexte einer Ablehnung in der Sprache des TENANTS (P15/T2). EINE Aufloesungsregel:
+  // store.tenantLanguage (= views.tenantLanguage -> resolveCallLanguage mit der aktiven
+  // Nummer als Geo-Anker) - dieselbe Funktion, aus der auch der MCP-Transport
+  // (routes/mcp.js) und die Self-Service-Antwort ihre Sprache ziehen; kein zweiter Lookup,
+  // kein zweiter Fallback (localeFor faellt fail-safe auf den Weltdefault, R7).
+  // Aufgeloest wird ERST, wenn eine Ablehnung feststeht: kein Gate-PRAEDIKAT liest die
+  // Sprache, und der erlaubte Anruf zahlt keinen Lookup.
+  const gateTexts = (tenantId) => localeFor(store.tenantLanguage(tenantId)).gates;
+
   // KYC-Gate (P6b4): vor dem ersten Outbound muss der Tenant mindestens KYC_OUTBOUND_MIN
   // (card) erreicht haben. fail-closed - fehlendes kyc_level -> store.kycReached liefert
   // FALSE (403); der Owner passiert, weil seedBootstrapKyc ihn beim Boot auf id_verified
@@ -225,7 +233,7 @@ export function makeOutboundGates({
     return {
       status: 403,
       grund: "kyc",
-      message: "Verifikation unzureichend (KYC) fuer Outbound-Anrufe. Bitte Identitaet bestaetigen.",
+      message: gateTexts(tenantId).kycInsufficient,
     };
   }
 
@@ -242,7 +250,7 @@ export function makeOutboundGates({
       return {
         status: 403,
         grund: "abo",
-        message: "Abo inaktiv (Tenant gesperrt). Outbound-Anrufe sind gesperrt.",
+        message: gateTexts(tenantId).subscriptionInactive,
       };
     // O2/GAP-03: Zahlungsbeanstandung sperrt OUTBOUND, laesst Inbound unberuehrt (dieses
     // Gate laeuft nur im Ausgangspfad). Reversibel: ein bestaetigtes aktives Abo loescht
@@ -254,7 +262,7 @@ export function makeOutboundGates({
       return {
         status: 403,
         grund: "billing_hold",
-        message: "Outbound gesperrt: Zahlungsproblem. Bitte Zahlungsmittel/Betreiber pruefen.",
+        message: gateTexts(tenantId).billingHold,
       };
     if (profile.unrestricted) return null;
     if (profile.allowedNumbers?.includes(to)) return null;
@@ -262,8 +270,7 @@ export function makeOutboundGates({
     return {
       status: 403,
       grund: "allowlist",
-      message:
-        "Outbound nicht freigegeben: kein aktives Abo / keine Verifikation fuer diesen Tenant.",
+      message: gateTexts(tenantId).notAuthorized,
     };
   }
 
@@ -299,14 +306,14 @@ export function makeOutboundGates({
         status: 403,
         grund: "denylist",
         praefix: denied,
-        message: `Nummer ${to} ist gesperrt (Notruf-/Premium-/Service-Nummer). Anruf verweigert.`,
+        message: gateTexts(tenantId).deniedNumber(to),
       };
     if (!E164.test(to)) return { status: 400, grund: "format", message: E164_FORMAT_ERROR };
     if (!countryGateAllowed(to, profile))
       return {
         status: 403,
         grund: "land",
-        message: `Laendervorwahl von ${to} ist nicht erlaubt (ALLOWED_COUNTRY_CODES). Anruf verweigert.`,
+        message: gateTexts(tenantId).countryBlocked(to),
       };
     // Ein Ablehnungstext nennt NIE einen internen Env-Namen (Regel-4-Nachbarschaft): der
     // Anrufer erfaehrt die Sperre, nicht die Konfigurationsflaeche. Der Blattwert bleibt
@@ -315,13 +322,13 @@ export function makeOutboundGates({
       return {
         status: 429,
         grund: "stundenlimit",
-        message: "Stundenlimit fuer Outbound-Anrufe erreicht. Bitte spaeter erneut.",
+        message: gateTexts(tenantId).hourLimit,
       };
     if (perTargetCapReached(tenantId, to))
       return {
         status: 429,
         grund: "ziel_limit",
-        message: "Wiederhol-Limit fuer dieses Ziel erreicht. Bitte spaeter erneut.",
+        message: gateTexts(tenantId).perTargetLimit,
       };
     return allowlistError(to, caller);
   }
@@ -338,15 +345,17 @@ export function makeOutboundGates({
   }
 
   // Ablehnungsgrund + -text der TENANT-Achse im budget-Gate (Bucket lesbar -> eigene Decke
-  // + eigener Verbrauch; unbuchbar (D7) -> ziffernfreier Sperrtext, s. TENANT_UNREADABLE_DENIAL).
-  // EIGENE Zahlen, NIE eine Plattform-Groesse (Absolute Regel 4/6, s. PLATFORM_DENIAL oben).
+  // + eigener Verbrauch; unbuchbar (D7) -> ziffernfreier Sperrtext budgetUnreadable: "NaN EUR"
+  // waere eine Falschauskunft auf einer Geld-Kante). EIGENE Zahlen, NIE eine
+  // Plattform-Groesse (Absolute Regel 4/6, s. PLATFORM_DENIAL_REASON oben).
   function tenantBudgetDenial(tenantId) {
     const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
+    const texts = gateTexts(tenantId);
     if (snapshot.spentCents === null)
-      return { grund: "budget_tenant", message: TENANT_UNREADABLE_DENIAL };
+      return { grund: "budget_tenant", message: texts.budgetUnreadable };
     return {
       grund: "budget_tenant",
-      message: `Dein Budget-Limit ist erreicht: ${eurText(snapshot.spentCents)} von ${eurText(snapshot.capCents)} EUR verbraucht.`,
+      message: texts.budgetCapReached(eurText(snapshot.spentCents), eurText(snapshot.capCents)),
     };
   }
 
@@ -357,18 +366,19 @@ export function makeOutboundGates({
   // dritter Grund fuer denselben Sperrzustand).
   function tenantReserveDenial(tenantId, reserveCents) {
     const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
+    const texts = gateTexts(tenantId);
     if (snapshot.remainingCents === null)
-      return { grund: "reserve_erschoepft", message: TENANT_UNREADABLE_DENIAL };
+      return { grund: "reserve_erschoepft", message: texts.budgetUnreadable };
     const missingEur = eurText(reserveCents - snapshot.remainingCents);
     const monthEnd = spendMonthEndDate(Date.now());
     if (snapshot.remainingCents > 0)
       return {
         grund: "reserve_ueber_rest",
-        message: `Dieser Anruf passt nicht mehr in dein Budget: es fehlen ${missingEur} EUR. Aktueller Spend-Monat endet am ${monthEnd}.`,
+        message: texts.reserveOverRemaining(missingEur, monthEnd),
       };
     return {
       grund: "reserve_erschoepft",
-      message: `Dein Budget ist erschoepft: es fehlen ${missingEur} EUR. Aktueller Spend-Monat endet am ${monthEnd}.`,
+      message: texts.reserveExhausted(missingEur, monthEnd),
     };
   }
 
@@ -397,7 +407,11 @@ export function makeOutboundGates({
     if (reserved) return { reserved: true, warning: claimSpendWarning() };
     if (store.reserveExceedsBudget(ctx.tenantId, ctx.reserveCents, config.billing))
       return { reserved: false, ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents) };
-    return { reserved: false, grund: PLATFORM_DENIAL_REASON, message: PLATFORM_DENIAL };
+    return {
+      reserved: false,
+      grund: PLATFORM_DENIAL_REASON,
+      message: gateTexts(ctx.tenantId).platformHalt,
+    };
   }
 
   // Fruehwarnung melden (Budget-Achsen P6). TRIFFT KEINE ENTSCHEIDUNG: der Call ist hier
@@ -655,7 +669,7 @@ export function makeOutboundGates({
         if (store.globalBudgetExceeded(config.billing)) {
           return deny(
             402,
-            { error: PLATFORM_DENIAL },
+            { error: gateTexts(ctx.tenantId).platformHalt },
             denialAudit(PLATFORM_DENIAL_REASON, ctx, ` tenant=${ctx.tenantId}`),
           );
         }

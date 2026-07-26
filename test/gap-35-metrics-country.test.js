@@ -71,6 +71,10 @@ test("das Ablehnungs-Ereignis schweigt bei METRICS_ENABLED=false (GAP-35)", () =
 
 function defaultStore() {
   return {
+    // P15/T2: die Gate-Kette liest die Anzeigesprache der Ablehnung aus dem Store. Dieser
+    // Test prueft ausschliesslich die sprachfreie Audit-Achse (grund) - die Sprache wird
+    // trotzdem explizit gesetzt, damit der Fake die reale Kontraktflaeche spiegelt.
+    tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
     load: () => ({

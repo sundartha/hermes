@@ -134,7 +134,7 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
     await t.test("Profil-Land * bei global +49 blockt +1 (Land = Schnittmenge)", async () => {
       const res = await postCall(srv.localUrl, "+12025550123", "alice@team.test");
       assert.equal(res.status, 403);
-      assert.match((await res.json()).error, /Laendervorwahl/);
+      assert.match((await res.json()).error, /Country code/);
     });
 
     await t.test(
@@ -165,7 +165,7 @@ test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
     // MAX_CALLS_PER_HOUR=1 deckelt das Profil-Limit 100 - ein Profil kann nur senken.
     const res = await postCall(srv.localUrl, "+4915999999999", "fresh@team.test");
     assert.equal(res.status, 429);
-    assert.match((await res.json()).error, /Stundenlimit/);
+    assert.match((await res.json()).error, /Hourly limit/);
   } finally {
     await srv.stop();
   }

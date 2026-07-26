@@ -15,7 +15,7 @@
 import { Router } from "express";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
 import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
-import { PERSONA_STYLE_IDS } from "./i18n/locales.js";
+import { PERSONA_STYLE_IDS, localeFor } from "./i18n/locales.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
 import { requirePaymentEnabled } from "./billing/payment-gate.js";
 import {
@@ -226,6 +226,12 @@ export function makeSelfServiceRoutes({
       // settings.language taugt dafuer NICHT - es ist per Default null; die Praezedenz
       // (settings -> number -> tenant) gehoert in den Server, nicht in den Client.
       language,
+      // P15/T1: das Datums-/Zeitformat des Dashboards folgt DERSELBEN Aufloesung wie das
+      // lang-Attribut (WEB-01) - die Abbildung Sprache -> BCP-47-Formatlocale lebt an genau
+      // EINER Stelle (i18n/locales.js dateLocale, dieselbe Quelle wie mcp-tools.js
+      // makeDateFormatter). Der Client bekommt sie fertig und leitet NICHTS ab (kein
+      // navigator.language, keine zweite Praezedenz).
+      dateLocale: localeFor(language).dateLocale,
       // WEB-04: Vorlagen in der Sprache, in der dieser Tenant auch telefoniert
       // (gleiche Praezedenz wie im Anruf, G5) - agentState ist oben bereits geladen.
       greetingTemplates: greetingTemplatesFor(language),

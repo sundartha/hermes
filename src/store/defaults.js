@@ -245,7 +245,8 @@ export const TOKENS_PER_M_TOK = 1_000_000;
 // cfg.platformSpendCapCents ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix
 // im Gate. Die EUR-Anzeige-Schwester (frueher globalCapEur) ist mit P5a entfallen: die
 // Plattform-Achse gibt NIE eine Zahl an einen Tenant heraus (Cross-Tenant-Leck-Riegel,
-// s. outbound-gates.js PLATFORM_DENIAL) - eine EUR-Ableitung dieses Caps hatte ab da
+// s. den ziffernfreien platformHalt-Text in i18n/gate-texts.js) - eine EUR-Ableitung
+// dieses Caps hatte ab da
 // keinen Aufrufer mehr (F4, tote Funktion).
 export function globalCapCents(cfg) {
   return cfg.platformSpendCapCents;

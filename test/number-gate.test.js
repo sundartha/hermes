@@ -31,7 +31,7 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
       for (const to of ["110", "112", "911", "999"]) {
         const res = await postCall(srv.localUrl, to);
         assert.equal(res.status, 403, `${to} muss als Denylist-Sperre abgewiesen werden`);
-        assert.match((await res.json()).error, /gesperrt/);
+        assert.match((await res.json()).error, /is blocked/);
       }
     });
 
@@ -72,7 +72,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
     try {
       const blocked = await postCall(srv.localUrl, "+12025550123"); // US
       assert.equal(blocked.status, 403);
-      assert.match((await blocked.json()).error, /Laendervorwahl/);
+      assert.match((await blocked.json()).error, /Country code/);
 
       const ok = await postCall(srv.localUrl, ALLOWED); // +49 passiert das Land-Gate
       assert.equal(ok.status, 500, "+49 darf das Land-Gate passieren (bis Twilio)");
@@ -110,7 +110,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
 
       const blocked = await postCall(srv.localUrl, US); // US ausserhalb der drei Vorwahlen
       assert.equal(blocked.status, 403, "+1 bleibt fail-closed geblockt");
-      assert.match((await blocked.json()).error, /Laendervorwahl/);
+      assert.match((await blocked.json()).error, /Country code/);
     } finally {
       await srv.stop();
     }
@@ -165,7 +165,7 @@ test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erl
       await t.test(`${to} -> 403 grund=denylist`, async () => {
         const res = await postCall(srv.localUrl, to);
         assert.equal(res.status, 403, `${to} muss als Denylist-Sperre abgewiesen werden`);
-        assert.match((await res.json()).error, /gesperrt/);
+        assert.match((await res.json()).error, /is blocked/);
       });
     }
   } finally {
@@ -213,6 +213,9 @@ test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
   const to = "+19005550123";
   const { gates } = makeOutboundGates({
     store: {
+      // P15/T2: die Gate-Kette liest die Anzeigesprache der Ablehnung aus dem Store.
+      // Dieser Test prueft nur das sprachfreie Audit-Detail (grund + praefix).
+      tenantLanguage: () => "de",
       countOutboundCallsSince: () => 0,
       tenantPrivateNumber: () => null,
       load: () => ({
@@ -289,7 +292,7 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
     try {
       const res = await postCall(srv.localUrl, ALLOWED);
       assert.equal(res.status, 429);
-      assert.match((await res.json()).error, /Stundenlimit/);
+      assert.match((await res.json()).error, /Hourly limit/);
     } finally {
       await srv.stop();
     }
@@ -351,7 +354,7 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
     try {
       const res = await postCall(srv.localUrl, "+4990012345678");
       assert.equal(res.status, 403);
-      assert.match((await res.json()).error, /gesperrt/);
+      assert.match((await res.json()).error, /is blocked/);
     } finally {
       await srv.stop();
     }
@@ -362,7 +365,7 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
     try {
       const res = await postCall(srv.localUrl, "+12025550123");
       assert.equal(res.status, 403);
-      assert.match((await res.json()).error, /Laendervorwahl/);
+      assert.match((await res.json()).error, /Country code/);
     } finally {
       await srv.stop();
     }
@@ -401,7 +404,7 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
   const blockedByDenylist = async (to) => {
     const res = await postCall(srv.localUrl, to);
     assert.equal(res.status, 403, `${to} muss am Denylist-Gate sperren`);
-    assert.match((await res.json()).error, /gesperrt/, `${to} muss grund=denylist sein`);
+    assert.match((await res.json()).error, /is blocked/, `${to} muss grund=denylist sein`);
   };
   try {
     await t.test("UK 118/070/09/084x/087x -> 403 denylist", async () => {

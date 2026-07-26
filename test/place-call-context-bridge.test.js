@@ -10,6 +10,12 @@
 // ergaenzt zusaetzlich das OPTIONALE Diagnose-Retention-Flag diagnostic (Server bleibt
 // autoritativ, siehe src/diagnostic-retention.js); auch das aendert die Required-Menge nicht.
 //
+// P15/O14: die Beschreibungen sind seit dem Sprachreinheits-Rest EINSPRACHIG ENGLISCH
+// (Modellsprache != Nutzersprache, s. Kopf von src/mcp-tools.js). Die AUSSAGE dieser Tests
+// ist unveraendert - nur die Regex-Anker greifen jetzt den englischen Wortlaut. Die
+// Vollstaendigkeit der Emphase-Marker haelt zusaetzlich
+// test/p15-mcp-tool-descriptions-en.test.js.
+//
 // Seam wie mcp-tools.test.js / mcp-ui.test.js: ein fakeServer faengt die per
 // server.tool ODER server.registerTool registrierten Schemas ein, ohne echten
 // MCP-Transport. place_call laeuft seit W2 ueber registerTool (uiTool) statt
@@ -55,10 +61,10 @@ test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext
   const schema = captureSchemas().get("place_call");
   assert.ok(schema, "place_call ist registriert");
   const briefing = schema.briefing.description || "";
-  assert.match(briefing, /kontext/i, "nennt 'Kontext'");
-  assert.match(briefing, /zusammenfass/i, "verlangt Zusammenfassen statt Roh-Dump");
+  assert.match(briefing, /context/i, "nennt 'Kontext'");
+  assert.match(briefing, /summari/i, "verlangt Zusammenfassen statt Roh-Dump");
   assert.match(briefing, /secret/i, "untersagt Secrets");
-  assert.match(briefing, /assistent/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
+  assert.match(briefing, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
 });
 
 test("P1-02 (nach P2b): place_call-Schema bleibt strukturell unveraendert (gleiche Felder + Optionalitaet)", () => {
@@ -84,12 +90,12 @@ test("P1-02 (nach P2b): place_call-Schema bleibt strukturell unveraendert (gleic
 test("I9-01: place_call-objective-Beschreibung verlangt Ich-Satz + konkretes Thema + warnt vor woertlichem Vorsprechen", () => {
   const schema = captureSchemas().get("place_call");
   const objective = schema.objective.description || "";
-  assert.match(objective, /woertlich vorgesprochen/i, "nennt das woertliche Vorsprechen");
-  assert.match(objective, /ich-satz/i, "verlangt einen sprechbaren Ich-Satz");
-  assert.match(objective, /kein infinitiv-stummel/i, "untersagt Infinitiv-Stummel");
-  assert.match(objective, /offenlegung/i, "verortet es nach der Offenlegung");
-  assert.match(objective, /konkretes thema/i, "verlangt konkretes Thema/Anlass");
-  assert.match(objective, /frage zuerst kurz beim nutzer nach/i, "verlangt Rueckfrage statt vagem Auftrag");
+  assert.match(objective, /read out VERBATIM/i, "nennt das woertliche Vorsprechen");
+  assert.match(objective, /first-person/i, "verlangt einen sprechbaren Ich-Satz");
+  assert.match(objective, /no bare-infinitive stub/i, "untersagt Infinitiv-Stummel");
+  assert.match(objective, /disclosure/i, "verortet es nach der Offenlegung");
+  assert.match(objective, /concrete topic/i, "verlangt konkretes Thema/Anlass");
+  assert.match(objective, /ask the user FIRST/i, "verlangt Rueckfrage statt vagem Auftrag");
 });
 
 // P3 (PLAN-PERSONAL-ASSISTANT): das context-Feld ist OPTIONAL (advisory) und seine
@@ -100,9 +106,9 @@ test("P3-01: place_call-context ist optional + Beschreibung haelt Hintergrund-/S
   assert.ok(schema.context, "context ist registriert");
   assert.equal(schema.context.isOptional(), true, "context ist optional (advisory)");
   const desc = schema.context.description || "";
-  assert.match(desc, /hintergrund/i, "nennt 'Hintergrund'");
+  assert.match(desc, /background/i, "nennt 'Hintergrund'");
   assert.match(desc, /secret/i, "untersagt Secrets");
-  assert.match(desc, /assistent/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
+  assert.match(desc, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
 });
 
 // P6 (PLAN-CONVERSATION-QUALITY-V2): das mandate-Feld ist OPTIONAL (advisory Schema, der
@@ -115,20 +121,16 @@ test("P6-01: place_call-mandate ist optional + Beschreibungen halten E1-/Vorrang
   assert.ok(schema.mandate, "mandate ist registriert");
   assert.equal(schema.mandate.isOptional(), true, "mandate ist optional (advisory)");
   const desc = schema.mandate.description || "";
-  assert.match(desc, /mandat/i, "nennt 'Mandat'");
+  assert.match(desc, /mandate/i, "nennt 'Mandat'");
   assert.match(
     desc,
-    /bucht.*nichts|keinen kalenderzugriff/i,
+    /books NOTHING|NO calendar access/i,
     "haelt den E1-Vertrag (kein Buchen/Kalenderzugriff)",
   );
-  assert.match(
-    desc,
-    /gewinnt immer constraints|gewinnt IMMER constraints/i,
-    "nennt den constraints-Vorrang",
-  );
+  assert.match(desc, /constraints ALWAYS win/i, "nennt den constraints-Vorrang");
   const inner = schema.mandate.unwrap();
   const decideFreely = inner.shape.decide_freely.description || "";
-  assert.match(decideFreely, /konkret/i, "decide_freely verlangt Konkretheit");
+  assert.match(decideFreely, /concretely/i, "decide_freely verlangt Konkretheit");
   assert.match(decideFreely, /constraints/i, "decide_freely verweist auf constraints");
   const onOutOfScope = inner.shape.on_out_of_scope.description || "";
   assert.match(onOutOfScope, /take_message/, "on_out_of_scope dokumentiert take_message");

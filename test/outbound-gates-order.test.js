@@ -41,6 +41,10 @@ const VALID_TO = "+491711234567";
 // (P13 Build-Operate-Check: Setup-Boilerplate hinter diesem Helper versteckt).
 function defaultStore() {
   return {
+    // P15/T2: die Gate-Kette liest die Anzeigesprache aus dem Store. Der Budget-Test unten
+    // pinnt den DEUTSCHEN Text byte-genau - der Fake waehlt sein Szenario deshalb explizit,
+    // statt implizit vom Weltdefault zu leben.
+    tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
     load: () => ({

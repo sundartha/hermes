@@ -92,7 +92,7 @@ test("POST /api/calls: denied UND trunk-0-foermig bleibt 403 denylist (C4-Bypass
   const blockedByDenylist = async (to) => {
     const res = await postCall(srv.localUrl, to);
     assert.equal(res.status, 403, `${to} muss am Denylist-Gate sperren (nicht 400)`);
-    assert.match((await res.json()).error, /gesperrt/, `${to} muss grund=denylist sein`);
+    assert.match((await res.json()).error, /is blocked/, `${to} muss grund=denylist sein`);
   };
   try {
     // +49090012345678: denied (+490900) UND trunk-0-foermig (+490) -> Denylist gewinnt.

@@ -1,5 +1,15 @@
 // MCP-Tool-Definitionen (gemeinsam fuer stdio-Transport und Streamable HTTP /mcp).
 // Die Tools sprechen mit der REST-API des Gateways.
+//
+// SYSTEMGRENZE (Owner-Entscheidung O14, PLAN-I18N-FIX P15): MODELLSPRACHE != NUTZERSPRACHE.
+// Alles, was der TENANT liest (Fehler-/Leertexte, Feldnamen, Widget), folgt seiner
+// Sprache (loc.mcp, aufgeloest ueber das language-Argument von registerTools).
+// Alles, was NUR das Client-Modell liest - die Tool-Beschreibungen und alle
+// .describe()-Schematexte - ist EINSPRACHIG ENGLISCH und bekommt bewusst KEINE
+// Sprachverzweigung: sie sind der Tool-Entscheidungspunkt, an dem die Anrufqualitaets-
+// Kette enge Verbote erarbeitet hat; dreifache Pflege wuerde sie je Sprache verschieben.
+// Emphase (Grossschreibung, Negation, Negativ-Beispiele) ist Teil des Vertrags und per
+// Test gepinnt (test/p15-mcp-tool-descriptions-en.test.js). NICHT lokalisieren.
 import { z } from "zod";
 import { uiRendererFor } from "./ui/registry.js";
 import { WIDGET_AGENT_STATUS } from "./ui/adapters/mcp-native.js";
@@ -399,29 +409,29 @@ export function registerTools(
     "place_call",
     {
       description:
-        "Startet einen echten Telefonanruf des KI-Agenten an eine Telefonnummer und verfolgt dabei das angegebene Ziel. Welche Ziele erlaubt sind, entscheidet der Server ueber seine Safety-Gates (Rechteprofil/Allowlist, Denylist, Land, Limits) - einfach aufrufen; unerlaubte Ziele weist der Server mit einer klaren Meldung ab. Gibt sofort eine call_id zurueck und zeigt eine Live-Karte, die sich selbst aktualisiert (Status, Dauer, Transkript, Ergebnis). Du musst NICHT pollen - falls keine Live-Aktualisierung ankommt, bleibt get_call_status als Fallback verfuegbar.",
+        "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately and shows a live card that updates itself (status, duration, transcript, result). You do NOT need to poll - if no live update arrives, get_call_status remains available as a fallback.",
       inputSchema: {
         to: z
           .string()
           .describe(
-            "Zielrufnummer EXAKT so uebernehmen, wie der Nutzer sie angegeben hat - Ziffern zeichengenau kopieren, NIEMALS umrechnen oder in E.164 umformen (beim Umformen entstehen Ziffernfehler; der Server normalisiert deterministisch). Nationale Schreibweise mit fuehrender 0 loest der Server ueber das Heimatland des Nutzers auf; Auslandsziele brauchen +XX/00XX - wirkt eine Nummer wie ein auslaendisches nationales Format, frage den Nutzer nach der internationalen Schreibweise statt zu raten. Wird serverseitig durch die Safety-Gates geprueft (Rechteprofil/Allowlist, Denylist, Land).",
+            "Take the destination number over EXACTLY as the user gave it - copy the digits character by character, NEVER convert them or reshape them into E.164 (reshaping introduces digit errors; the server normalises deterministically). A national notation with a leading 0 is resolved by the server via the user's home country; international destinations need +XX/00XX - if a number looks like a foreign national format, ask the user for the international notation instead of guessing. Checked server-side by the safety gates (permission profile/allowlist, denylist, country).",
           ),
         objective: z
           .string()
           .describe(
-            "Das Ziel des Anrufs als EIN sprechbarer Ich-Satz aus Sicht des anrufenden Assistenten - er wird dem Angerufenen direkt nach der Offenlegung WOERTLICH vorgesprochen, BEVOR er antwortet. Formuliere ihn so, wie ein Mensch am Telefon sein Anliegen nennt, z.B. 'Ich moechte fuer Max einen Herrenhaarschnitt am Samstagvormittag vereinbaren.' KEIN Infinitiv-Stummel wie 'Termin vereinbaren'. Nenne IMMER ein konkretes Thema/Anlass, wenn es bekannt ist; ist Thema oder Praeferenz noch unbekannt, frage ZUERST kurz beim Nutzer nach, statt einen vagen Auftrag abzusetzen. Hintergrund und Details gehoeren NICHT hierher, sondern ins briefing.",
+            "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic or preference is still unknown, ask the user FIRST, instead of sending off a vague task. Background and details do NOT belong here, they belong in the briefing.",
           ),
         briefing: z
           .string()
           .optional()
           .describe(
-            "Relevanter Kontext aus dem bisherigen Chat, den der Agent fuers Telefonat braucht: worum es geht, beteiligte Namen, Vorlieben/Praeferenzen, Vorgeschichte sowie gewuenschtes Ergebnis und Ton. ZUSAMMENFASSEN statt roh hineinkopieren - nur was fuers Gespraech zaehlt. KEINE Secrets, Passwoerter oder Zahlungsdaten. Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers (nicht als Claude/Gemini); formuliere den Kontext aus dessen Sicht.",
+            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
           ),
         constraints: z
           .string()
           .optional()
           .describe(
-            "Harte Grenzen, die der Agent im Gespraech nicht ueberschreiten darf, z.B. 'Nicht vor 10 Uhr, maximal 40 Euro, keine Anzahlung zusagen.'",
+            "Hard limits the agent must not cross in the conversation, e.g. 'Not before 10 am, at most 40 euros, do not promise a deposit.'",
           ),
         // P6 (PLAN-CONVERSATION-QUALITY-V2): Vorab-Mandat. Ohne Eintrag im zod-Schema
         // erreichte das Feld /api/calls nie (zod strippt unbekannte Keys - dieselbe
@@ -433,24 +443,24 @@ export function registerTools(
               .string()
               .optional()
               .describe(
-                "Die Vollmacht - was der Agent im Gespraech OHNE Rueckfrage verbindlich zusagen darf, z.B. 'Termin an jedem Werktag zwischen 9 und 12 Uhr, bis 60 Euro'. Formuliere sie so konkret, dass am Telefon eine Ja/Nein-Entscheidung daraus ableitbar ist; vage Rahmen ('flexibel', 'irgendwann') helfen nicht. Frage den Nutzer ZUERST kurz nach seinem Rahmen, statt einen zu erfinden. OHNE dieses Feld darf der Agent gar nichts zusagen und gibt jeden Vorschlag nur als Nachricht weiter. Harte Verbote gehoeren NICHT hierher, sondern in constraints.",
+                "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Ask the user FIRST about their frame, instead of inventing one. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
               ),
             fallback_order: z
               .string()
               .optional()
               .describe(
-                "Praeferenz-Reihenfolge, die der Agent selbstaendig abarbeitet, wenn der Erstwunsch nicht geht, z.B. 'zuerst Donnerstag frueh, sonst Freitag, sonst naechste Woche'. Ohne dieses Feld probiert er von sich aus keine Alternative.",
+                "Preference order the agent works through on its own if the first choice does not work, e.g. 'Thursday morning first, otherwise Friday, otherwise next week'. Without this field it will not try any alternative on its own.",
               ),
             on_out_of_scope: z
               .enum(MANDATE_OUT_OF_SCOPE_VALUES)
               .optional()
               .describe(
-                "Was der Agent tut, wenn ein Angebot AUSSERHALB von decide_freely liegt: 'take_message' (Default) - Angebot mit allen Details festhalten, weitergeben und zusagen, dass der Nutzer sich meldet; 'decline' - hoeflich ablehnen, ohne Gegenangebot; 'accept_best' - die beste angebotene Moeglichkeit trotzdem annehmen und festhalten. Setze 'accept_best' NUR, wenn der Nutzer ausdruecklich sagt, dass ihm jede Option recht ist.",
+                "What the agent does when an offer lies OUTSIDE decide_freely: 'take_message' (default) - record the offer with all details, pass it on and promise that the user will get back; 'decline' - politely refuse, without a counter-offer; 'accept_best' - accept and record the best offer made anyway. Set 'accept_best' ONLY when the user explicitly says that any option suits them.",
               ),
           })
           .optional()
           .describe(
-            "Optionales Vorab-MANDAT: der Rahmen, in dem der Agent im Gespraech SELBST entscheiden darf, statt jede Frage als Nachricht zurueckzugeben. Der Agent bucht dadurch NICHTS und bekommt KEINEN Kalenderzugriff - er sagt nur muendlich zu, was der Nutzer ihm vorab erlaubt hat. Frage den Nutzer nach seinem Rahmen, wenn im Anruf eine Termin- oder Preisfrage zu erwarten ist; ohne Mandat kann der Agent auf 'Wann passt es Ihnen?' nur mit 'Ich gebe das weiter' antworten. Bei Konflikt mit constraints gewinnt IMMER constraints.",
+            "Optional advance MANDATE: the frame within which the agent may decide ITSELF in the conversation, instead of returning every question as a message. Through this the agent books NOTHING and gets NO calendar access - it only commits verbally to what the user allowed in advance. Ask the user about their frame when an appointment or price question is to be expected in the call; without a mandate the agent can only answer 'When suits you?' with 'I will pass that on'. In a conflict with constraints, constraints ALWAYS win.",
           ),
         context: z
           .object({
@@ -458,30 +468,30 @@ export function registerTools(
               .string()
               .optional()
               .describe(
-                "Worum es im Anruf geht, in 1-3 Saetzen zusammengefasst (kein Roh-Dump des Chats).",
+                "What the call is about, summarised in 1-3 sentences (not a raw dump of the chat).",
               ),
             key_facts: z
               .array(z.string())
               .optional()
               .describe(
-                "Wenige (max. 10) kurze Stichpunkte mit fuers Gespraech relevanten Fakten (Namen, Daten, Praeferenzen). KEINE Secrets/Passwoerter/Zahlungsdaten.",
+                "A few (max. 10) short bullet points with facts relevant to the conversation (names, dates, preferences). NO secrets/passwords/payment data.",
               ),
             recipient_relationship: z
               .string()
               .optional()
-              .describe("Verhaeltnis des Auftraggebers zum Angerufenen, z.B. 'Stammfriseur', 'Neukunde'."),
+              .describe("Relationship of the principal to the called party, e.g. 'regular hairdresser', 'new customer'."),
             desired_outcome: z
               .string()
               .optional()
-              .describe("Das gewuenschte Ergebnis aus Sicht des Auftraggebers, knapp formuliert."),
+              .describe("The desired outcome from the principal's perspective, phrased briefly."),
           })
           .optional()
           .describe(
-            "Optionaler strukturierter HINTERGRUND fuers Gespraech (nur zur Information des Agenten, ZUSAETZLICH zum briefing). Der Agent spricht als persoenlicher KI-Assistent des Auftraggebers, NIE als Claude/Gemini; gib nur weiter, was der Auftrag erfordert. KEINE Secrets.",
+            "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
           ),
         // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
         // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
-        language: z.string().optional().describe("Gespraechssprache, Default 'de'."),
+        language: z.string().optional().describe("Conversation language, default 'de'."),
         // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
         // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
         // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).
@@ -491,7 +501,7 @@ export function registerTools(
           .positive()
           .max(MAX_CALL_DURATION_CAP_S)
           .optional()
-          .describe("Maximale Gespraechsdauer in Sekunden (Default 180, Max 300)."),
+          .describe("Maximum call duration in seconds (default 180, max 300)."),
         // P2b (Diagnose-Retention): reiner WUNSCH. Der Server gewaehrt ihn NUR, wenn das
         // Ziel die eigene verifizierte Nummer des Nutzers ist - sonst still ignoriert.
         // Ohne dieses Feld erreichte das Flag /api/calls nie (Zod strippt unbekannte Keys).
@@ -499,7 +509,7 @@ export function registerTools(
           .boolean()
           .optional()
           .describe(
-            "NUR setzen, wenn der Nutzer ausdruecklich einen Testanruf an die EIGENE Nummer machen und das Gespraech hinterher analysieren will. Behaelt das Roh-Transkript fuer eine begrenzte Frist. Bei jedem anderen Ziel ignoriert der Server das Feld. Niemals ungefragt setzen.",
+            "Set this ONLY when the user explicitly wants to make a test call to their OWN number and analyse the conversation afterwards. Keeps the raw transcript for a limited period. For any other destination the server ignores the field. Never set it unasked.",
           ),
       },
       outputSchema: CALL_OUTPUT,
@@ -563,8 +573,8 @@ export function registerTools(
     "get_call_status",
     {
       description:
-        "Liefert den Live-Zustand eines Anrufs: status (dialing|in_progress|completed|failed|cancelled), Dauer und die letzten Transkriptzeilen. Die Live-Karte von place_call aktualisiert sich normalerweise von selbst; dieses Tool bleibt als manueller Fallback verfuegbar, falls keine Live-Aktualisierung ankommt.",
-      inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
+        "Returns the live state of a call: status (dialing|in_progress|completed|failed|cancelled), duration and the last transcript lines. The live card from place_call normally updates itself; this tool remains available as a manual fallback if no live update arrives.",
+      inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: CALL_STATUS_OUTPUT,
     },
     async ({ call_id }) => callStatusResult(call_id),
@@ -579,16 +589,13 @@ export function registerTools(
     "get_transcript",
     {
       description:
-        "Liefert nach Gespraechsende die Ergebnis-Zusammenfassung und ob das Ziel erreicht wurde. Aus Datenschutzgruenden wird das Roh-Transkript nach der Zusammenfassung nicht aufbewahrt (Datenminimierung) und NICHT zurueckgegeben - nur Zusammenfassung und Ziel-Status. Erst aufrufen, wenn get_call_status status=completed meldet.",
-      inputSchema: { call_id: z.string().describe("Die call_id aus place_call") },
+        "After the call has ended, returns the result summary and whether the objective was achieved. For data protection reasons the raw transcript is not kept after the summary (data minimisation) and is NOT returned - only summary and objective status. Call this only once get_call_status reports status=completed.",
+      inputSchema: { call_id: z.string().describe("The call_id from place_call") },
       outputSchema: TRANSCRIPT_OUTPUT,
     },
     async ({ call_id }) => {
       const c = await call("GET", `/api/calls/${call_id}`);
-      if (c.status === "active")
-        return text({
-          error: "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
-        });
+      if (c.status === "active") return text({ error: loc.mcp.callStillRunning });
       // Validiert, dass ein echtes Call-Objekt zurueckkam (transcript-Feld vorhanden);
       // das Roh-Transkript selbst wird bewusst NICHT durchgereicht (Whitelist unten).
       requireFields(c, { transcript: "array" });
@@ -614,8 +621,8 @@ export function registerTools(
 
   tool(
     "cancel_call",
-    "Bricht einen laufenden Anruf sauber ab.",
-    { call_id: z.string().describe("Die call_id aus place_call") },
+    "Cancels a running call cleanly.",
+    { call_id: z.string().describe("The call_id from place_call") },
     async ({ call_id }) => {
       await call("POST", `/api/calls/${call_id}/cancel`);
       return text({ status: "cancelled" });
@@ -629,7 +636,7 @@ export function registerTools(
   uiTool(
     "get_my_number",
     {
-      description: "Liefert die Rufnummer des Telefon-Agenten (die Twilio-Nummer).",
+      description: "Returns the phone number of the phone agent (the Twilio number).",
       inputSchema: {},
       outputSchema: MY_NUMBER_OUTPUT,
       ...enableWidgetUi(WIDGET_MY_NUMBER),
@@ -657,7 +664,7 @@ export function registerTools(
     "list_calls",
     {
       description:
-        "Listet die letzten Telefonate des Agenten (inbound und outbound) mit Status und Summary.",
+        "Lists the agent's most recent calls (inbound and outbound) with status and summary.",
       inputSchema: {},
       outputSchema: CALLS_OUTPUT,
       ...enableWidgetUi(WIDGET_CALLS),
@@ -666,7 +673,7 @@ export function registerTools(
       const s = await call("GET", "/api/state");
       requireFields(s, { calls: "array" });
       const entries = s.calls.map((c) => pickCall(c, formatDate)); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
-      const txt = entries.length ? entries.map(callTextLine).join("\n") : "Noch keine Anrufe.";
+      const txt = entries.length ? entries.map(callTextLine).join("\n") : loc.mcp.emptyCalls;
       return {
         content: [{ type: "text", text: txt }],
         structuredContent: { calls: entries },
@@ -674,7 +681,7 @@ export function registerTools(
     },
   );
 
-  tool("list_action_items", "Listet offene Action Items aus allen Telefonaten.", {}, async () => {
+  tool("list_action_items", "Lists open action items from all calls.", {}, async () => {
     const s = await call("GET", "/api/state");
     requireFields(s, { actionItems: "array" });
     const open = s.actionItems.filter((a) => !a.done);
@@ -695,7 +702,7 @@ export function registerTools(
     uiTool(
       "get_calendar",
       {
-        description: "Zeigt die naechsten Kalendereintraege des Besitzers.",
+        description: "Shows the owner's next calendar entries.",
         inputSchema: {},
         outputSchema: CALENDAR_OUTPUT,
         ...enableWidgetUi(WIDGET_CALENDAR),
@@ -708,7 +715,7 @@ export function registerTools(
         const entries = s.calendar.map((e) => pickCalendarEntry(e, formatDate)); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
         const txt = entries.length
           ? entries.map((e) => `${e.title}: ${e.start} bis ${e.end}`).join("\n")
-          : "Kalender ist leer.";
+          : loc.mcp.emptyCalendar;
         return {
           content: [{ type: "text", text: txt }],
           structuredContent: { calendar: entries },
@@ -724,7 +731,7 @@ export function registerTools(
     "get_agent_status",
     {
       description:
-        "Status des Telefon-Agenten: Rufnummer, Voice-Engine, Modell, Kosten/Budget, Berechtigungen.",
+        "Status of the phone agent: phone number, voice engine, model, cost/budget, permissions.",
       inputSchema: {},
       outputSchema: AGENT_STATUS_OUTPUT,
       ...enableWidgetUi(WIDGET_AGENT_STATUS),
@@ -734,17 +741,19 @@ export function registerTools(
       requireFields(s, { agent: "object", usage: "object", settings: "object" });
       const data = pickAgentStatus(s, loc.mcp); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
       const currency = chargeCurrencyLabel();
+      const A = loc.mcp.agentStatus;
       return {
         content: [
           {
             type: "text",
             text:
-              `Agent-Nummer: ${data.number}\nBesitzer: ${data.owner}\nVoice-Engine: ${data.voiceEngine}\nModell: ${data.model}\n` +
-              `Calls bisher: ${data.calls}\n` +
-              `KI-Kosten gesamt (Lebenszeit): ${costDigits(data.costEur)} ${currency} von ${data.tenantCapEur} ${currency} eigenem Budget\n` +
-              `KI-Kosten Spend-Monat ${data.spendMonthKey ?? "unbekannt"}: ${costDigits(data.spendMonthCostEur)} ${currency}\n` +
-              `Aktuell reserviert: ${costDigits(data.reservedEur)} ${currency}\n` +
-              `Berechtigungen: ${data.permissions}`,
+              `${A.number}: ${data.number}\n${A.owner}: ${data.owner}\n` +
+              `${A.voiceEngine}: ${data.voiceEngine}\n${A.model}: ${data.model}\n` +
+              `${A.calls}: ${data.calls}\n` +
+              `${A.costLifetime(`${costDigits(data.costEur)} ${currency}`, `${data.tenantCapEur} ${currency}`)}\n` +
+              `${A.costSpendMonth(data.spendMonthKey ?? A.unknownMonth, `${costDigits(data.spendMonthCostEur)} ${currency}`)}\n` +
+              `${A.reserved(`${costDigits(data.reservedEur)} ${currency}`)}\n` +
+              `${A.permissions}: ${data.permissions}`,
           },
         ],
         structuredContent: data,

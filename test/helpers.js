@@ -1005,3 +1005,12 @@ export async function startServer({
     },
   };
 }
+
+// Deutsche Signal-/Funktionswoerter, die in einem rein-englischen Kanal NICHT vorkommen
+// duerfen (Muster WEB-05/E2E-02: "Guten Tag"/"Hallo"/"kann gerade nicht"/"Anruf").
+// Liegt hier statt in e2e-06-en-purity-aggregate.test.js, weil der T3b-Waechter
+// (test/p15-mcp-tool-descriptions-en.test.js) DIESELBE Liste prueft, statt sie zu
+// duplizieren (G5). VERBOTEN aufzuweichen (PLAN-I18N-FIX P15/T4); der Wortlaut ist in
+// test/p15-mcp-tool-descriptions-en.test.js zusaetzlich byte-gepinnt.
+export const GERMAN_STOPWORDS =
+  /Guten Tag|Hallo|kann gerade nicht|Anruf|Gegenseite|Bitte spaeter erneut|Nachricht|Ungueltige|Anmeldung fehlgeschlagen|Sitzung abgelaufen|Grund|Besitzer|Auftrag/;

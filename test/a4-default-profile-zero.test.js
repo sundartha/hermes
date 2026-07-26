@@ -81,7 +81,7 @@ test("A4: profil-loser Tenant -> 429 bei 0 Calls (harter Block)", async () => {
   try {
     const res = await postCall(srv.localUrl, TO, "sub-np");
     assert.equal(res.status, 429, "DEFAULT_PROFILE(maxCallsPerHour=0) blockt sofort");
-    assert.match((await res.json()).error, /Stundenlimit/);
+    assert.match((await res.json()).error, /Hourly limit/);
     assert.equal(outboundCalls(srv).length, 0, "Block VOR createCall -> kein Call-Record");
   } finally {
     await srv.stop();

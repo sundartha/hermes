@@ -315,7 +315,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
     try {
       const res = await postCall(srv.localUrl, "9005550123");
       assert.equal(res.status, 403);
-      assert.match((await res.json()).error, /gesperrt/);
+      assert.match((await res.json()).error, /is blocked/);
     } finally {
       await srv.stop();
     }

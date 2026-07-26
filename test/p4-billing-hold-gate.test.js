@@ -11,6 +11,10 @@ const VALID_TO = "+491711234567";
 
 function defaultStore(overrides = {}) {
   return {
+    // P15/T2: die Gate-Kette liest die Anzeigesprache der Ablehnung aus dem Store. Dieser
+    // Test prueft nur die sprachfreie Achse (grund/status) - die Sprache wird trotzdem
+    // explizit gesetzt, damit der Fake die reale Kontraktflaeche spiegelt.
+    tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
     load: () => ({

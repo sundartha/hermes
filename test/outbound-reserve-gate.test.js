@@ -44,7 +44,7 @@ test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert"
       assert.equal(res.status, 402, "Worst-Case-Reserve ueberschreitet den Cap -> 402 vor Dial");
       assert.match(
         (await res.json()).error,
-        /es fehlen 2\.00 EUR/,
+        /2\.00 EUR short/,
         "Reserve-Fehlertext (nicht das nachgelagerte Budget-Gate) nennt den Fehlbetrag",
       );
     });

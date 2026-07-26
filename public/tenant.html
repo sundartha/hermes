@@ -313,10 +313,11 @@ function renderCalls(calls){
   }).join("");
 }
 
-// ISO-Zeitstempel -> de-DE-Anzeige. Unparsebar/fehlend -> leer, nie "Invalid Date".
+// ISO-Zeitstempel -> Anzeige in der Tenant-Sprache. Unparsebar/fehlend -> leer, nie
+// "Invalid Date".
 function formatNotificationTime(at){
   const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("de-DE");
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(dateLocale);
 }
 
 // P2a: Meldungs-Feed. Kein Array vom Server (alter Server / Feld fehlt) -> Karte bleibt
@@ -362,6 +363,17 @@ function setDocumentLanguage(language){
   if(typeof language==="string" && language) document.documentElement.lang = language;
 }
 
+// P15/T1: das Datums-/Zeitformat kommt vom SERVER (Feld `dateLocale` aus
+// /api/self-service/state, abgeleitet aus derselben Sprachaufloesung wie `language`).
+// Fehlendes/leeres Feld (alter Server, 401/403-Pfad) -> der statische Ausgangswert bleibt
+// stehen - dieselbe fail-soft-Regel wie beim lang-Attribut, passend zum <html lang="de">
+// dieses Dokuments.
+const STATIC_DATE_LOCALE = "de-DE";
+let dateLocale = STATIC_DATE_LOCALE;
+function setDateLocale(value){
+  if(typeof value==="string" && value) dateLocale = value;
+}
+
 async function refresh(){
   const r = await fetch("/api/self-service/state");
   // fail-closed: ohne gueltige Session bleibt die Seite leer (kein Tenant-Datenleck).
@@ -371,6 +383,8 @@ async function refresh(){
   showAuth("Angemeldet.", false, true);
   const s = await r.json();
   setDocumentLanguage(s.language);
+  // G31: der Formatwert steht, BEVOR ihn der erste render*-Aufruf liest.
+  setDateLocale(s.dateLocale);
   $("agentNum").textContent = agentNumberText(s.agent);
   $("liveDot").classList.toggle("off", !s.calls.some(c=>c.status==="active"));
   renderCalls(s.calls);
@@ -396,7 +410,8 @@ function renderBilling(s){
 function renderSubscription(s){
   const sub = s.subscription || {};
   if(sub.planSlug){
-    const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString("de-DE") : "";
+    // Gleiche Achse Datum/Zeit wie formatNotificationTime -> dieselbe eine Quelle (G5).
+    const until = sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd*1000).toLocaleDateString(dateLocale) : "";
     const name = planName(sub.planSlug);
     $("subStatus").textContent = until ? `Aktiver Plan: ${name} (verlaengert am ${until}).` : `Aktiver Plan: ${name}.`;
     renderQuota(s.quota);
