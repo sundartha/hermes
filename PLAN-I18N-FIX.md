@@ -820,11 +820,39 @@ weil sonst ein falscher Verbrauch periodisiert wird.
   aktive Spend-Warnung); ein Dienst ohne scharfe Warnschwellen bootet weiter. Die Abbruchmeldung
   nennt die Variable woertlich. Zusaetzlich zeigt der `configHash` aus P1 die Drift, bevor sie den
   Boot trifft - das ist der Grund, warum P1 vor P6 **deployed** wird.
-- **ENTSCHAERFT (3):** das globale Limit **bleibt** und wirkt als **Schnittmenge** mit dem neuen
-  Pro-Tenant-Limit (Absolute Regel 1: kein ersatzloser Wegfall). Ein Test pinnt beide Achsen
-  gleichzeitig. Der Fehlertext nennt keinen Env-Namen mehr (Regel-4-Nachbarschaft).
-- **ENTSCHAERFT (4), A4:** ein eigener Test belegt, dass der **globale Plattform-Topf** nach dem
-  Umbau weiterhin greift, wenn viele Tenants je unter ihrer eigenen Periodendecke bleiben.
+- ~~**ENTSCHAERFT (3):** das globale Limit **bleibt** und wirkt als **Schnittmenge**~~ -
+  **UEBERHOLT durch O5, siehe Klarstellung unten.**
+- ~~**ENTSCHAERFT (4), A4:** ein eigener Test belegt, dass der **globale Plattform-Topf** nach dem
+  Umbau weiterhin greift~~ - **UEBERHOLT durch O5**, soweit es die **Stunden**-Achse betrifft.
+  Fuer die **Geld**-Achse (geteilter Plattform-Topf `MAX_BUDGET_EUR`) bleibt die Auflage
+  unveraendert bestehen: sie ist von O5 nicht beruehrt, O5 spricht ausschliesslich vom
+  Stundenlimit.
+
+> **KLARSTELLUNG 2026-07-26 (Lead, nach einem BLOCKED-Lauf) - dieser Abschnitt widersprach der
+> Owner-Entscheidung, und der Widerspruch hat die Phase zwei Fix-Runden gekostet.** Der Text oben
+> stammt aus der Zeit VOR der Owner-Runde und argumentiert noch aus Absoluter Regel 1 ("kein
+> ersatzloser Wegfall"). **Bindend ist O5** (Abschnitt 3, dort ausdruecklich "bindend und
+> umsetzbar") in Verbindung mit 7.7: *"Das Stundenlimit gilt ausschliesslich pro Tenant. Es gibt
+> KEINE globale Plattformbremse und auch keinen globalen Alarm."* - eine plattformweite
+> Obergrenze wird **ersatzlos** nicht eingefuehrt, als bewusst getragenes Risiko und als bewusste
+> Abweichung von Absoluter Regel 1. Der verbleibende Not-Aus ist `OUTBOUND_FROZEN`.
+>
+> **Folgen, bindend fuer jede Umsetzung von P6:**
+> 1. Die plattformweite Stunden-Achse (`globalHourReached` bzw. der ungefilterte
+>    `countOutboundCallsSince`-Zaehler) **entfaellt ersatzlos**. Sie wird nicht als Schnittmenge
+>    beibehalten und nicht durch einen Alarm ersetzt. Die Kommentare an den betroffenen Stellen
+>    muessen den Endzustand beschreiben, nicht einen Zwischenstand - ein Kommentar, der eine
+>    aktive Gate-Achse als "liest niemand" ausweist (oder umgekehrt), ist selbst ein Blocker.
+> 2. **`MAX_CALLS_PER_HOUR` behaelt den Code-Default `6`** und wird zum reinen
+>    Pro-Tenant-Default. Ein Anheben des Defaults (etwa auf `60`, um eine weiterhin vorhandene
+>    Plattformbremse unwirksam zu machen) ist eine **stille Aufweichung eines Safety-Gates** und
+>    verboten: laut O1 ist der Schluessel im Dashboard gar nicht gesetzt, der naechste Deploy
+>    wuerde die Grenze also lautlos verzehnfachen. Ein Profil mit `maxCallsPerHour: 0` hat auch
+>    nach dem Umbau `0`.
+> 3. Die **Geld**-Achse bleibt unberuehrt: `MAX_BUDGET_EUR` ist weiterhin der geteilte
+>    Plattform-Topf und wirkt als Schnittmenge mit der Pro-Tenant-Decke (A4). O5 spricht nur vom
+>    Stundenlimit - wer beim Umbau die Geld-Schnittmenge mit entfernt, hat die Entscheidung
+>    ueberdehnt.
 - **GETRAGEN:** steht `BUDGET_MONTH_ENABLED` laut O1 bereits live auf `true`, ist GAP-01 heute
   weniger dringlich als eingestuft. Der Fix bleibt trotzdem noetig, weil sein Test genau den
   `false`-Pfad verlangt.
@@ -834,9 +862,18 @@ A6 erfuellt. Zusaetzlich: ein Lauf, der einen Perioden-Wechsel ueber den Stripe-
 die Gate-Achse zurueckgesetzt sieht **bei `status: 'active'`, aber unveraendert stehen bleibt bei
 `status: 'past_due'`**; ein Boot mit leerem `PLATFORM_ALERT_SMS_TO` + scharfen Warnungen
 (exit != 0) und einer mit unscharfen Warnungen (Boot ok); ein Gate-Lauf, der zeigt, dass zwei
-Tenants sich nicht mehr gegenseitig aus dem Stundenlimit verdraengen **und** dass die globale
-Bremse weiterhin greift, mit **eigenem, im Dashboard vor dem Deploy gesetztem** Env-Schluessel
-(O5) und einem Profil mit `maxCallsPerHour: 0`, das nach dem Umbau weiterhin 0 hat.
+Tenants sich nicht mehr gegenseitig aus dem Stundenlimit verdraengen, dass **kein** Gate-Pfad
+mehr eine plattformweite Stunden-Achse liest (O5, Klarstellung oben) und dass ein Profil mit
+`maxCallsPerHour: 0` nach dem Umbau weiterhin 0 hat. Die **Geld**-Schnittmenge
+(`MAX_BUDGET_EUR` gegen die Pro-Tenant-Decke) bleibt durch einen eigenen Test belegt.
+
+**Deploy-Vorbedingung (kein Merge-Blocker, aber vor dem Deploy zu quittieren).** Die neue
+GAP-07-Pflicht bricht den Boot ab, wenn `PAYMENT_ENABLED=true` UND
+`PLATFORM_SPEND_WARN_PERCENT > 0` UND `PLATFORM_ALERT_SMS_TO` leer ist. Genau das ist laut
+`tasks/i18n-tests/13-live-env-befund.md` der **heutige Live-Zustand**. Das ist gewolltes
+GAP-07-Verhalten - aber ein Deploy ohne vorherige Dashboard-Aktion (Empfaenger setzen ODER
+Warnschwelle bewusst auf `0`) laesst den Dienst nicht mehr starten: kein Inbound, kein Outbound.
+Diese Zeile ist der Grund, warum P1 (`configHash`, Boot-Banner) vor P6 deployed wird.
 
 **R5-Loeschpflichten.** Keine.
 
