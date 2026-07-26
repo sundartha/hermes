@@ -3,6 +3,9 @@ import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { CENTS_PER_EUR } from "./store/defaults.js";
+// GAP-07: boot-guard.js hat KEINE Imports -> kein Zyklus, obwohl der Boot-Guard sonst
+// downstream von config.js sitzt.
+import { alertChannelFindings } from "./boot-guard.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
@@ -1304,8 +1307,17 @@ export function assertConfig() {
   //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
   //  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete
   //    Auth-/Signatur-Gates. Lokal liefert productionFootguns() ein leeres Array.
+  //  - Alarmkanal (GAP-07): scharfe Spend-Warnung ohne Empfaenger. Die Entscheidung selbst
+  //    lebt NICHT hier, sondern in der einen Wahrheitstabelle (boot-guard.alertChannelFindings) -
+  //    diese Zeile faltet nur ihren fatalen Anteil in dieselbe Ausgabe wie die uebrigen Fatals.
   const isProduction = detectProduction();
-  const fatal = configFatalErrors().concat(productionFootguns(config, isProduction));
+  const fatal = configFatalErrors()
+    .concat(productionFootguns(config, isProduction))
+    .concat(
+      alertChannelFindings(config.billing)
+        .filter((f) => f.fatal)
+        .map((f) => f.message),
+    );
   if (missing.length || fatal.length) {
     console.error("\n[Konfiguration fatal] Boot wird verweigert:");
     for (const m of missing) console.error(`  - fehlt/ungueltig: ${m}`);

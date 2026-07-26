@@ -159,10 +159,12 @@ function assertCostTruingBooking(config, store) {
   for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }
 
-// LCT P5: Alarmkanal-Guard (alertChannelFindings). WARN, kein exit(1) - Begruendung im
-// Guard. Loggt NIE den Wert (der besetzte Fall liefert [] und meldet damit gar nichts).
+// LCT P5: Alarmkanal-Guard (alertChannelFindings). Loggt NIE den Wert (der besetzte Fall
+// liefert [] und meldet damit gar nichts). Der seit GAP-07 moegliche FATALE Befund ist hier
+// per Konstruktion unerreichbar: assertConfig() faltet ihn in seine Fatal-Menge und hat den
+// Prozess bei diesem Zustand laengst mit exit(1) beendet - hier bleibt nur die WARN.
 function warnAlertChannelUnset(config) {
-  for (const f of alertChannelFindings(config.billing.platformAlertSmsTo))
+  for (const f of alertChannelFindings(config.billing))
     console.warn(`[boot] Konfig-Warnung: ${f.message}`);
 }
 

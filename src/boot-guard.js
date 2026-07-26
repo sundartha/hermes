@@ -306,16 +306,38 @@ export function tenantCapRowInertFindings({ budgetRows, platformCapCents }) {
   ];
 }
 
-// LCT P5: der Alarmkanal selbst. Ein Alarm ohne Empfaenger ist kein Alarm - und diese
-// Vorbedingung stand bisher nur im Planungsdokument, haftete also an der Disziplin
-// dessen, der die Phase umsetzt. WARN und NICHT fatal: ein fehlender Alarmkanal macht
-// den Dienst nicht unsicherer als heute, er macht ihn blind - und Blindheit ist das
-// Thema dieses Plans, kein Grund, die Telefonie auf einem Free Tier abzuschalten.
-// Der BESETZTE Fall liefert [] -> die Nummer wird nie geloggt (Regel 4/PII).
-export const ALERT_CHANNEL_FINDING = Object.freeze({ UNSET: "platform_alert_sms_unset" });
+// LCT P5 / GAP-07: der Alarmkanal selbst. Ein Alarm ohne Empfaenger ist kein Alarm - und
+// diese Vorbedingung stand bisher nur im Planungsdokument, haftete also an der Disziplin
+// dessen, der die Phase umsetzt.
+export const ALERT_CHANNEL_FINDING = Object.freeze({
+  UNSET: "platform_alert_sms_unset", // WARN
+  UNSET_WITH_ACTIVE_WARNING: "platform_alert_sms_unset_with_active_warning", // FATAL
+});
 
-export function alertChannelFindings(platformAlertSmsTo) {
+// GAP-07: eine SCHARFE Spend-Warnung ohne Empfaenger ist keine Sicherung, sondern
+// eine Sicherung, die niemand hoert - bei aktiver Buchung (paymentEnabled) UND
+// gesetzter Warnschwelle (>0) UND leerem Kanal bricht der Boot ab (assertConfig).
+// Ohne Buchung oder mit abgeschalteter Warnschwelle (0) bleibt es bei der
+// bestehenden WARN: ein Dienst ohne scharfe Warnung bootet weiter - ein fehlender
+// Alarmkanal macht ihn dann nicht unsicherer, nur blind, und das ist kein Grund, die
+// Telefonie auf einem Free Tier abzuschalten.
+// Liefert IMMER hoechstens EINEN Befund - der Boot loggt nie zwei Zeilen zur selben
+// Sache. Der besetzte Kanal liefert [] -> die Nummer wird NIE geloggt (Regel 4/PII).
+// Arg-injiziert (config-frei) wie fakeOriginateBootBlocked; die Aufrufer reichen
+// config.billing herein.
+export function alertChannelFindings({ platformAlertSmsTo, paymentEnabled, platformSpendWarnPercent } = {}) {
   if (platformAlertSmsTo) return [];
+  if (paymentEnabled && platformSpendWarnPercent > 0)
+    return [
+      {
+        code: ALERT_CHANNEL_FINDING.UNSET_WITH_ACTIVE_WARNING,
+        fatal: true,
+        message:
+          "PLATFORM_ALERT_SMS_TO ist leer, obwohl PAYMENT_ENABLED=true und " +
+          "PLATFORM_SPEND_WARN_PERCENT>0 - die Plattform-Spend-Warnung haette keinen " +
+          "Empfaenger. Empfaenger setzen ODER PLATFORM_SPEND_WARN_PERCENT=0 (Warnung bewusst aus).",
+      },
+    ];
   return [
     {
       code: ALERT_CHANNEL_FINDING.UNSET,
