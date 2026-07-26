@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runReleaseReconcile } from "../src/release-reconcile.js";
-import { NUMBER_STATUS, TENANT_STATUS, PROVIDER } from "../src/store/defaults.js";
+import { requestNumber } from "../src/store/state-ops.js";
+import { GLOBAL_CAP_REASON, NUMBER_STATUS, TENANT_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 
 const NOW = Date.parse("2026-07-11T12:00:00.000Z");
@@ -173,4 +174,38 @@ test("(g) OBSERVE-ONLY (graceMs=0): NICHTS wird freigegeben, egal wie alt (Pre-M
   assert.deepEqual(result, { released: 0, aborted: 0, observed: 1 });
   assert.deepEqual(prov.log, []);
   assert.equal(s.numbers[0].status, NUMBER_STATUS.ACTIVE);
+});
+
+// DID-17 (06-nummern-provisioning.md): die Kombination der beiden Mechanismen ist das
+// Skalierungsrisiko, nicht jeder fuer sich - RELEASE_GRACE_DAYS=0 (Observe-Only, Default)
+// haelt die DID eines laengst suspendierten Tenants belegt, und ein knapper globaler Cap
+// macht genau diese belegte DID zur Sperre fuer einen NEUEN, zahlenden Signup. Beide
+// Bausteine sind einzeln gepinnt ((g) hier / test/number-lifecycle.test.js); ihre
+// Verkettung nirgends (G5: kein Duplikat, sondern die fehlende Invariante).
+const NEUER_TENANT = "t2";
+const KNAPPER_CAP = { maxNumbers: 1, maxNumbersPerTenant: 1 };
+
+test("DID-17 (Mechanismus, gruen) - Observe-Only-Grace haelt die DID belegt und blockiert damit den naechsten Signup", async () => {
+  const s = seed();
+  s.tenants.push({ id: NEUER_TENANT, status: TENANT_STATUS.ACTIVE });
+  const prov = fakeProvisioner();
+
+  const result = await runReleaseReconcile({
+    store: fakeStore(s),
+    provisioner: prov,
+    audit: fakeAudit(),
+    logger: fakeLogger(),
+    nowMs: NOW,
+    graceMs: 0,
+  });
+
+  assert.deepEqual(result, { released: 0, aborted: 0, observed: 1 });
+  assert.deepEqual(prov.log, [], "Observe-Only gibt NIE frei");
+  const blockiert = requestNumber(s, { tenantId: NEUER_TENANT, ...KNAPPER_CAP });
+  assert.equal(blockiert.ok, false);
+  assert.equal(
+    blockiert.reason,
+    GLOBAL_CAP_REASON,
+    "die Nummer eines seit 30 Tagen suspendierten Tenants sperrt den Platz fuer einen neuen Kunden",
+  );
 });

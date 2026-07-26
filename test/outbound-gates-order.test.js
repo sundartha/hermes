@@ -56,6 +56,9 @@ function defaultStore() {
     tenantLanguage: () => "de",
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
+    // normalize_target liest das Herkunftsland (store.tenantGeo) als NANP-Guard. Der Fake
+    // spiegelt die reale Kontraktflaeche, damit ein Test die Kette bis zum Ende fahren kann.
+    tenantGeo: () => ({ country: "DE" }),
     load: () => ({
       numbers: [{ tenantId: "T", status: "active", provider: "twilio", e164: "+491700000000" }],
     }),
@@ -432,6 +435,39 @@ test("reserve_budget: tryReserveOutboundBudget=false -> 402 grund=reserve_ueber_
   const denial = await gateBy(gates, "reserve_budget").run(baseCtx({ reserveCents: 100 }));
   assert.equal(denial.status, 402);
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_ueber_rest tenant=T requestedBy=owner`);
+});
+
+// GAP-19 (11-luecken-und-e2e.md), zweite Haelfte der ID: der Absender ist eine US-DID,
+// Tenant und Ziel sind deutsch - exakt der Live-Zustand (FORCE_NUMBER_COUNTRY=US bei
+// PROVISIONING_COUNTRY=DE). normalize_target hat BEIDE Fakten in der Hand (aktive DID +
+// store.tenantGeo) und nutzt sie nur zum Normalisieren; danach faellt die Herkunft aus
+// der Betrachtung. SOLL: ein Glied der Kette lehnt ab oder haelt die Konstellation
+// wenigstens im Audit fest. Gemessen passiert der Anruf die volle Kette lautlos.
+const FREMDLAENDISCHE_DID = "+12025550123";
+
+test("GAP-19 (SOLL, rot) - ein Anruf unter fremdlaendischer Absender-DID passiert die Gate-Kette nicht unbemerkt", async () => {
+  const { gates } = makeOutboundGates(
+    makeDeps({
+      store: {
+        load: () => ({
+          numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: FREMDLAENDISCHE_DID }],
+        }),
+      },
+    }),
+  );
+  const ctx = baseCtx();
+  let denial = null;
+  for (const gate of gates) {
+    denial = await gate.run(ctx);
+    if (denial) break;
+  }
+
+  assert.equal(ctx.fromNumber, FREMDLAENDISCHE_DID, "Vorbedingung: der Absender ist wirklich die US-DID");
+  assert.ok(
+    denial,
+    "kein Gate sieht, dass ein deutscher Tenant ein deutsches Ziel unter US-Nummer anruft - " +
+      "weder Ablehnung noch Audit-Spur, obwohl genau diese Konstellation Zustellraten und Rufnummern-Reputation kostet",
+  );
 });
 
 // === (c) Derivations-Gates (mutieren ctx, lehnen nie ab) =========================

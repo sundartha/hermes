@@ -29,15 +29,29 @@ import {
 } from "../src/store/defaults.js";
 
 const CAPS = { maxNumbers: 5, maxNumbersPerTenant: 1 };
-// Der eine Tenant aller Fixturen dieser Datei (seedRequested, enqueueProvision, GAP-11).
+// Der Default-Tenant der Fixturen dieser Datei (seedRequested, GAP-11). DID-19 stellt ihm
+// einen zweiten Tenant zur Seite.
 const TENANT_ID = "t_user1";
 
-// Seedet eine 'requested' Number mit explizitem Land (Default DE).
+// Die Laender, in denen heute tatsaechlich gekauft wird: DE ist der
+// provisioningCountry-Fallback, FR/GB/US sind die Tabellen-Eintraege, US zusaetzlich das
+// LIVE gesetzte FORCE_NUMBER_COUNTRY-Kaufland (tasks/i18n-tests/13-live-env-befund.md).
+// Die Liste steht bewusst hier im Test: COUNTRY_SEARCH_PARAMS ist modul-privat, ein
+// Zugriff darauf braeche die Kapselung von provisioning-geo.js. EINE Liste fuer beide
+// Achsen (DID-09 Suchparameter / GAP-11 Hold), deshalb ganz oben (G5/G10).
+const ACTIVE_PURCHASE_COUNTRIES = Object.freeze(["DE", "FR", "GB", "US"]);
+
+// Registriert den Tenant und fragt EINE Nummer an -> numberId. EINE Quelle fuer die
+// Einzel- (seedRequested) UND die Zwei-Laender-Fixture von DID-19 (G5).
+function requestFor(s, tenantId, country) {
+  registerTenant(s, tenantId);
+  return requestNumber(s, { tenantId, country, ...CAPS }).number.id;
+}
+
+// Seedet eine 'requested' Number des Default-Tenants mit explizitem Land (Default DE).
 function seedRequested(country = "DE") {
   const s = makeDefaultState();
-  registerTenant(s, TENANT_ID);
-  const { number } = requestNumber(s, { tenantId: TENANT_ID, country, ...CAPS });
-  return { s, numberId: number.id };
+  return { s, numberId: requestFor(s, TENANT_ID, country) };
 }
 
 // Spiegelt den Drain aus server.js (runProvisioningDrain): leitet die Suchparameter
@@ -69,7 +83,9 @@ function drainWithGeo(queue, s, deps, defaultHoldCents, onHold) {
 function enqueueProvision(queue, s, numberId) {
   const idempotencyKey = `provision_${numberId}`;
   queue.enqueue({ kind: PROVISION_NUMBER_JOB, payload: { numberId }, idempotencyKey });
-  recordProvisioningJob(s, { numberId, tenantId: TENANT_ID, idempotencyKey });
+  // tenantId aus dem Number-Record statt aus der Datei-Konstante: die DID-19-Fixture
+  // provisioniert zwei Nummern ZWEIER Tenants ueber denselben Helfer (kein 4. Argument, F1).
+  recordProvisioningJob(s, { numberId, tenantId: findNumber(s, numberId).tenantId, idempotencyKey });
 }
 
 // ---- searchParamsForCountry (Tabelle) ----
@@ -104,6 +120,34 @@ test("searchParamsForCountry: US -> +1-Suche (countryCode US, case-insensitiv)",
   assert.equal(searchParamsForCountry("US").connectionId, config.telephony.telnyxConnectionId);
 });
 
+// DID-05 (06-nummern-provisioning.md): reale Zielmaerkte OHNE Tabellen-Eintrag. Bewusst
+// gegen das jeweilige Land formuliert, NICHT gegen den Literalwert "DE": der Fallback ist
+// config.provisioning.provisioningCountry (Env-abhaengig, Baseline 1.1).
+const LAENDER_OHNE_EINTRAG = Object.freeze(["CA", "IE", "AU", "CH", "AT", "ES", "IT"]);
+
+test("DID-05 (SOLL, rot) - reale Laender ohne Tabellen-Eintrag kaufen im eigenen Land, nicht still im Provisioning-Default", () => {
+  const stillUmgeleitet = LAENDER_OHNE_EINTRAG.filter((c) => searchParamsForCountry(c).countryCode !== c);
+  assert.deepEqual(
+    stillUmgeleitet,
+    [],
+    `diese Laender fallen unmarkiert auf ${config.provisioning.provisioningCountry} zurueck - ` +
+      `ein Kunde aus diesen Laendern bekommt eine auslaendische Rufnummer, ohne dass es irgendwo auffaellt`,
+  );
+});
+
+// DID-09 (06-nummern-provisioning.md): ohne expliziten Typ entscheidet der Provider-Default,
+// WELCHE Nummernart gekauft wird. Die Luecke sitzt in der TABELLE, nicht im Adapter - die
+// Gegenprobe dazu steht als gruener Mechanismus-Test in test/telnyx-numbers.test.js.
+test("DID-09 (SOLL, rot) - jedes bespielte Kauf-Land waehlt seinen phone_number_type explizit", () => {
+  const ohneTyp = ACTIVE_PURCHASE_COUNTRIES.filter((c) => searchParamsForCountry(c).type === undefined);
+  assert.deepEqual(
+    ohneTyp,
+    [],
+    "ohne filter[phone_number_type] entscheidet der Telnyx-Default, welche Nummernart gekauft wird - " +
+      "in den USA ist das der Unterschied zwischen local, toll-free und mobile",
+  );
+});
+
 // ---- holdAmountForCountry (Hold pro Land, P9) ----
 
 const DEFAULT_HOLD = 1234; // beliebiger Default-Cent-Wert (steht fuer numberSetupFeeCents)
@@ -135,6 +179,11 @@ const SENTINEL_HOLD_B = 777;
 // PAY-17: US ist heute PREIS-GLEICH zu DE. Die Land-Differenzierung existiert fuer die
 // SUCHPARAMETER (Test oben: US -> countryCode US), fuer den PREIS aber nicht - kein
 // Tabellen-Eintrag traegt holdAmountCents.
+//
+// DID-11 (Buchhaltung, 06-nummern-provisioning.md): "holdAmountForCountry liefert fuer
+// US/FR/GB/DE identischen Betrag" ist die Vereinigung der drei Bloecke darueber
+// (DE ohne Eintrag, FR/GB ohne eigenen Tarif, unbekannt/leer) mit diesem PAY-17-Block
+// (US == DE gegen ZWEI Sentinels). Ein vierter Test waere dieselbe Assertion (G5).
 test("PAY-17: holdAmountForCountry liefert fuer US denselben Betrag wie fuer DE (kein eigener US-Preis)", () => {
   assert.equal(holdAmountForCountry("US", SENTINEL_HOLD_A), holdAmountForCountry("DE", SENTINEL_HOLD_A));
   assert.equal(
@@ -143,13 +192,6 @@ test("PAY-17: holdAmountForCountry liefert fuer US denselben Betrag wie fuer DE 
     "US traegt keinen eigenen Tarif - der Wert stammt zu 100 % vom Aufrufer-Default",
   );
 });
-
-// Die Laender, in denen heute tatsaechlich gekauft wird: DE ist der
-// provisioningCountry-Fallback, FR/GB/US sind die Tabellen-Eintraege, US zusaetzlich das
-// LIVE gesetzte FORCE_NUMBER_COUNTRY-Kaufland (tasks/i18n-tests/13-live-env-befund.md).
-// Die Liste steht bewusst hier im Test: COUNTRY_SEARCH_PARAMS ist modul-privat, ein
-// Zugriff darauf braeche die Kapselung von provisioning-geo.js.
-const ACTIVE_PURCHASE_COUNTRIES = Object.freeze(["DE", "FR", "GB", "US"]);
 
 // GAP-11 (b), SOLL/rot: fuer jedes AKTIV bespielte Kauf-Land ist ein EXPLIZITER
 // Laenderpreis zu pflegen. Heute faellt jedes Land auf den globalen Default zurueck -
@@ -250,6 +292,47 @@ test("R5: 0 Treffer -> sauberer Fehler (failed), KEIN Kauf, KEIN Crash", async (
 
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED, "0 Treffer -> failed");
   assert.ok(!prov.log.some((l) => l.startsWith("order")), "kein Order ohne Kandidat");
+});
+
+// DID-19: der Idempotency-Key haengt an der numberId (src/onboarding.js: `order_${numberId}`),
+// NICHT am Land. Waere er land-abgeleitet, bekaeme bei zwei gleichzeitig laufenden
+// Provisionierungen der zweite Tenant per Telnyx-Idempotenz die Nummer des ersten
+// zurueck. Der Memory-Adapter drainet vertragsgemaess sequentiell - "gleichzeitig"
+// heisst hier deshalb: ZWEI Nummern gleichzeitig in Arbeit, nicht zwei Drains.
+const TENANT_ID_B = "t_user2";
+const E164_JE_LAND = Object.freeze({ US: "+12025550123", FR: "+33123456789" });
+
+test("DID-19 (Mechanismus, gruen) - zwei Laender in einem Lauf bekommen getrennte, number-id-gebundene Idempotency-Keys", async () => {
+  const s = makeDefaultState();
+  const usId = requestFor(s, TENANT_ID, "US");
+  const frId = requestFor(s, TENANT_ID_B, "FR");
+  const queue = makeMemoryQueue();
+  const prov = fakeProvisioner({
+    async searchNumbers({ countryCode }) {
+      return [{ e164: E164_JE_LAND[countryCode] }];
+    },
+  });
+  enqueueProvision(queue, s, usId);
+  enqueueProvision(queue, s, frId);
+
+  await drainWithGeo(queue, s, { provisioner: prov });
+
+  const keys = prov.orderCalls.map((c) => c.idempotencyKey);
+  assert.equal(new Set(keys).size, 2, "zwei Nummern -> zwei verschiedene Schluessel (keine Land-Kollision)");
+  for (const id of [usId, frId]) {
+    assert.ok(
+      keys.some((k) => k.includes(id)),
+      `Schluessel traegt die numberId ${id}`,
+    );
+    assert.equal(findNumber(s, id).status, NUMBER_STATUS.ACTIVE);
+  }
+  assert.deepEqual(
+    prov.orderCalls.map((c) => c.e164).sort(),
+    [E164_JE_LAND.FR, E164_JE_LAND.US].sort(),
+    "jede Nummer wurde in IHREM Land gekauft",
+  );
+  assert.equal(await drainWithGeo(queue, s, { provisioner: prov }), 0, "zweiter Drain kauft nichts nach");
+  assert.equal(prov.orderCalls.length, 2, "genau EIN Kauf je Nummer");
 });
 
 // ---- GAP-11 (a): Hold == Capture == number_month-Beleg (eine Quelle) ----

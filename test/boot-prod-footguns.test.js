@@ -56,6 +56,33 @@ test("T-P0-5-14: Saubere Basis-Config (kein RENDER_EXTERNAL_URL) -> bootet, /hea
   }
 });
 
+// GAP-19 (11-luecken-und-e2e.md), erste Haelfte: FORCE_NUMBER_COUNTRY=US bei
+// PROVISIONING_COUNTRY=DE (BASE_ENV) ist der reale Deployment-Zustand aus render.yaml -
+// Kauf-Land und Herkunftsland laufen auseinander. SOLL: der Start bricht ab ODER weist
+// die Konstellation ausdruecklich aus (ein Betriebs-Ack). Gemessen tut er beides nicht:
+// der Boot laeuft durch, und das Boot-Log - das jede andere Konfig-Inkohaerenz als
+// "[boot] Konfig-Warnung: ..." nennt - erwaehnt den Schalter mit keinem Wort.
+// Der Test traegt BEIDE Soll-Varianten: bricht der Start ab, haengt der Helper den
+// gesammelten Output an seine Fehlermeldung - auch dort muss der Schalter benannt sein.
+test("GAP-19 (SOLL, rot) - Kauf-Land != Herkunftsland wird beim Start nicht stumm hingenommen", async () => {
+  let bootLog;
+  let srv = null;
+  try {
+    srv = await startServer({ env: { FORCE_NUMBER_COUNTRY: "US" } });
+    bootLog = srv.stdout;
+  } catch (err) {
+    bootLog = err.message; // Abbruch-Variante (Soll a): Output steckt in der Meldung
+  } finally {
+    if (srv) await srv.stop();
+  }
+  assert.match(
+    bootLog,
+    /FORCE_NUMBER_COUNTRY/,
+    "der Start nimmt das entkoppelte Kauf-Land wortlos hin - niemand sieht beim Deploy, " +
+      "dass jeder neue Kunde eine auslaendische Rufnummer bekommt",
+  );
+});
+
 test("T-P0-1-AC1-05: Hosting + STORE_BACKEND=json -> Boot verweigert (exit 1), nennt STORE_BACKEND", async () => {
   const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE, STORE_BACKEND: "json" } });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
