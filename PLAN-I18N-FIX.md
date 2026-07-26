@@ -1447,13 +1447,23 @@ Platzhalter-Marker mehr.
 | P7 | Boot-Kohaerenz und Blueprint | GAP-32, GAP-38, GAP-33 | 3 |
 | P8 | Geo-Identitaet am Eintritt | LANG-02, FMT-11, FMT-28, E2E-01 | 4 |
 | P9 | Web-Textoberflaechen | WEB-01, WEB-09, WEB-11, WEB-12 | 4 |
-| P10 | Schreibpfad, Backfill, Weltdefault-Flip | WORLD-01, WORLD-03, DID-01, DID-02, DID-03, E2E-04, E2E-05 | 7 |
+| P10 | Schreibpfad, Backfill, Weltdefault-Flip | WORLD-01, WORLD-03, DID-01, DID-02, DID-03, ~~E2E-04~~ (-> P11, s.u.), E2E-05 | 7 |
 | P11 | Die gesprochene Sprache | PROMPT-01, PROMPT-02, PROMPT-03, PROMPT-14, GAP-28, WEB-14, E2E-02, E2E-06 | 8 |
 | P12 | MCP-Textkanal | PROMPT-09, FMT-03, MCP-04, MCP-06, MCP-08 | 5 |
 | P13 | Widget und Kanarienvogel | MCP-09, UI-14, UI-18, MCP-12 | 4 |
 | P14 | Rechtstexte | GAP-15 | 1 |
 
 **Nachzaehlung:** 2 + 4 + 2 + 3 + 3 + 3 + 3 + 4 + 4 + 7 + 8 + 5 + 4 + 1 = **53**.
+
+> **Zuordnungs-Korrektur 2026-07-26 (in der Umsetzung gemessen): E2E-04 faellt mit P11, nicht mit
+> P10.** Nach P10 loest die Sprache korrekt auf - der gerenderte Inbound zeigt
+> `Gather language="en-GB"` und `Say voice="Azure.en-GB-SoniaNeural"`. Rot bleiben genau die zwei
+> Assertions, die den **Text** pruefen: das Greeting spricht weiter deutsch (mit englischer
+> Stimme - die Divergenz aus Praemisse P-A), und die Summary-SMS traegt "Anruf bei". Beide Texte
+> sind P11-Arbeit (PROMPT-03 Greeting folgt `settings.language`, WEB-14/E2E-02 Benachrichtigungs-
+> texte). E2E-04 ist ein **Aggregat ueber P10 UND P11** und war der Uebersichtstabelle zu frueh
+> zugeordnet. Erwartete Rot-Liste damit: nach P10 **20** statt 18 (die zwei zusaetzlichen sind
+> E2E-04 und das inhaltlich blockierte GAP-15), nach P11 dann 11.
 
 Gegenprobe gegen die Buendel der Klassifikation:
 
