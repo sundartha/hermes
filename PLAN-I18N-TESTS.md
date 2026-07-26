@@ -873,6 +873,24 @@ als vergessen gelten:
    weltweit verkauft wird.
 4. **Nur drei Sprachbundles** bei weltweitem Start: jeder nicht-deutsche, nicht-franzoesische
    Markt bekommt Englisch - inklusive Offenlegungssatz und Rechtstexten.
+5. **Kalender-Oberflaechen bleiben deutsch** (Entscheidung 7.14): `public/calendar.html` und
+   `public/calls.html` formatieren dauerhaft hart deutsch, auch fuer EN-Tenants.
+
+### 7.14 Zuschnitt der Welle W2 (Owner, 2026-07-26)
+
+Vier Streichungen am W2-Vorrat. Verbindliche Herleitung, Blockschnitt und die vollstaendige
+ID-Liste stehen in [`tasks/i18n-tests/18-w2-scope.md`](tasks/i18n-tests/18-w2-scope.md); diese
+Datei ist ab hier die autoritative Scope-Quelle fuer W2 und gewinnt gegen Abschnitt 5.
+
+| Streichung | IDs | Entscheidung |
+| --- | --- | --- |
+| **Realtime** | VOICE-15, VOICE-16 | Kein Produktpfad; die Sprachachse des Realtime-Zweigs wird nicht mehr gepinnt. |
+| **Kalender-Achse** | FMT-29, FMT-06, FMT-31, UI-12 | Der Agent soll im Kalender nichts buchen - und tut es heute auch nicht (`toolDefs()` kennt nur `end_call`/`take_message`, kein `book_appointment` in `src/`, `get_calendar` ist reine Anzeige). Damit ist die Kalender-Oberflaeche kein Launch-Gate. Risiko getragen (7.13 Punkt 5). |
+| **Recht** | LAW-13, GAP-16, GAP-17 | Loeschendpunkt, `audit_log`-Retention und Subprozessor-Verzeichnis sind Policy-, keine Testfragen (Abgrenzung 1.4). LAW-14/15/18/22 bleiben - sie sind trotz Praefix Code-Vertraege, keine Rechtspruefung. |
+| **Zeitzone** | FMT-01 | Sachlich durch Fix-Phase P8 erledigt (`src/claude.js` gibt `timeZone` in den `now`-Zeitstempel, `test/p8-prompt-timezone.test.js`). Es fehlt nur der Katalog-ID-Verweis. |
+
+Dazu eine Modus-Korrektur: **UI-20** ist Modus manuell (Cluster D33) und gehoert nach W3.
+**W2-Umfang danach: 103 Tests** in acht Bloecken.
 
 ### 7.1 Waehrung des US-Markts
 
