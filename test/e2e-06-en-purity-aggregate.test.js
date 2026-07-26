@@ -11,6 +11,12 @@
 // Kanaele tragen die Aussage bereits mit einem zweistelligen Befund (s.u.), das entspricht
 // der im Katalog dokumentierten Erwartung ("mit einem zweistelligen Zaehler").
 //
+// P11-Stand (Phasenbericht): P11 senkt den Zaehler von 8 auf 3 (systemPrompt/toolDefs/
+// openingText/inboundGreeting/summarySms/notificationTitle sind jetzt sprachrein) -
+// dieser Test bleibt bewusst ROT, weil drei Kanaele ausserhalb der P11-Wurzel liegen:
+// gateRejectionLiterals (naechstliegend P12), mcpErrorLiterals (P12), tenantHtmlFormat
+// (P13). Gruen wird der Test erst in der letzten der drei Folgephasen.
+//
 // DATA_DIR im before VOR dem ersten claude.js-Import (Repo-Regel, Muster
 // test/claude-identity.test.js) - store.tenantContext() liest sonst das echte
 // data/store.json.
@@ -64,8 +70,9 @@ test("E2E-06 (SOLL rot): germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-
 
   // Kanal 2: systemPrompt (D28/PROMPT-09 - locale-frei, deutsches Prompt-Geruest).
   leaksOf("systemPrompt", systemPrompt(callEn), leaks);
-  // Kanal 2b: toolDefs() (locale-frei per Konstruktion, Beleg claude.js:303-353).
-  leaksOf("toolDefs", JSON.stringify(toolDefs()), leaks);
+  // Kanal 2b: toolDefs("en") (P11: sprachabhaengig; ohne Argument haengt das Ergebnis
+  // am Weltdefault-Schalter statt an der Tenant-Sprache).
+  leaksOf("toolDefs", JSON.stringify(toolDefs("en")), leaks);
   // Kanal 4: openingText/goal-Rahmung (GAP-29) - disclosureSentence + bridgePhrase.
   leaksOf("openingText", openingText(callEn), leaks);
 

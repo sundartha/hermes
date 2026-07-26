@@ -5,7 +5,8 @@
 // config.i18nCatalogPattern).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { greetingTemplatesFor, ALL_GREETING_TEMPLATES, selfServicePatch } from "../src/self-service.js";
+import { greetingTemplatesFor, ALL_GREETING_TEMPLATES } from "../src/i18n/greeting-catalog.js";
+import { selfServicePatch } from "../src/self-service.js";
 import { hasInboundNotice } from "../src/i18n/inbound-notice.js";
 
 test("Greeting-Vorlagen: jede unterstuetzte Sprache hat mindestens eine Vorlage in ihrer Sprache (ex WEB-04)", () => {

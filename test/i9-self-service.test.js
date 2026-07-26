@@ -17,7 +17,7 @@ import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
 import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
-import { greetingTemplatesFor } from "../src/self-service.js";
+import { greetingTemplatesFor } from "../src/i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS } from "../src/i18n/locales.js";
 import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";

@@ -319,7 +319,7 @@ function nextWeekday(daysAhead, hour) {
 }
 
 // Default-Begruessung (erster Inbound-Satz). EINE Quelle (G5): defaultSettings()
-// UND die Self-Service-Vorlagen (self-service.js greetingTemplatesFor) referenzieren
+// UND der Greeting-Katalog (i18n/greeting-catalog.js greetingTemplatesFor) referenzieren
 // sie, damit der geseedete Default IMMER eine waehlbare Vorlage bleibt (kein Drift).
 //
 // GAP-14: der geseedete Default traegt den Pflichtsatz bereits AT REST. Sonst waere der

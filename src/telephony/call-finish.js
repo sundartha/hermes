@@ -11,6 +11,7 @@
 // config.billing fuer das Metering, nur fuer den Roh-Transkript-Purge-Entscheid.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
+import { localeFor } from "../i18n/locales.js";
 
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
@@ -39,6 +40,9 @@ export function makeCallFinish({
   async function finishCall(call) {
     if (!call || call._finished) return;
     call._finished = true;
+    // WEB-14: die Rahmentexte folgen der Sprache des Calls (dieselbe Aufloesung wie im
+    // Anrufpfad, localeFor). DE byte-identisch.
+    const t = localeFor(call.language).postCall;
     // F9 (A6): Abrechnung genau EINMAL ueber Prozessgrenzen. Der persistierte billedAt-Marker
     // (ueberlebt Restart, anders als _finished) gated NUR den Abrechnungsblock; Summary/
     // Notification bleiben retry-bar, SMS bleibt ueber summarySmsSentAt idempotent (R-8.5).
@@ -53,9 +57,10 @@ export function makeCallFinish({
     store.save();
 
     if (call.status !== "completed" || !call.transcript.length) {
+      const target = call.direction === "outbound" ? call.to : call.from;
       store.addNotification(
-        call.status === "cancelled" ? "Anruf abgebrochen" : "Anruf nicht zustande gekommen",
-        `${call.direction === "outbound" ? call.to : call.from} (Status: ${call.status})`,
+        call.status === "cancelled" ? t.cancelledTitle : t.failedTitle,
+        t.statusBody(target, call.status),
         call.id,
       );
       return;
@@ -77,8 +82,8 @@ export function makeCallFinish({
       if (!keepsTranscriptForDiagnosis(call, config.privacy)) store.purgeTranscript(call.id);
       if (!result) return;
       const aiCount = (result.actionItems || []).length;
-      const who = call.direction === "outbound" ? `Anruf bei ${call.to}` : `Anruf von ${call.from}`;
-      store.addNotification("Neue Call Summary", `${who}: ${result.summary}`, call.id);
+      const who = call.direction === "outbound" ? t.subjectOutbound(call.to) : t.subjectInbound(call.from);
+      store.addNotification(t.summaryTitle, `${who}: ${result.summary}`, call.id);
 
       // F2 P7: Ziel + Sende-Entscheidung in planSummarySms ausgelagert (offline testbar -
       // server.js bootet beim Import). Ziel ist die PRIVATE Nummer des Call-Tenants (ueber
@@ -92,7 +97,7 @@ export function makeCallFinish({
         const sms =
           `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
           (aiCount
-            ? `\n\nAction Items:\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
+            ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
             : "");
         try {
           await messaging(call.provider).sendSms({

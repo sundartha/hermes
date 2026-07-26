@@ -25,6 +25,9 @@
 // KOMMENTARE bleiben ASCII (Repo-Konvention) - nur die Strings aendern sich.
 import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
 import { INBOUND_NOTICES } from "./inbound-notice.js";
+import { PROMPT_DE } from "./prompts/de.js";
+import { PROMPT_FR } from "./prompts/fr.js";
+import { PROMPT_EN } from "./prompts/en.js";
 
 // Logische Voice-Profile (Strings) als Forward-Referenz fuer den Telephonie-Renderer
 // (Phase 3 mappt sie auf provider-spezifische Voice-Namen Polly/Azure). Im Bundle steht
@@ -60,11 +63,13 @@ const REALTIME_VOICE_EN = "alloy";
 // hoechstens eine Frage und end_call bleiben FIX (sie liegen ausserhalb des Katalogs).
 export const PERSONA_STYLE_IDS = Object.freeze(["warm-persoenlich", "formell-professionell"]);
 
-// Neutral-Anrede = die frueher hart in claude.js stehende Siez-Anweisung. EINE Quelle (G5),
-// in JEDER Sprache identisch deutsch, weil das System-Prompt-Geruest deutsch ist (nur
-// speechClause + Datums-Locale wechseln, vgl. SP4/SP5 in der P0-Charakterisierung).
-// styleClause(null|unbekannt) faellt hierauf zurueck -> agentStyle=null byte-identisch.
-const NEUTRAL_ADDRESS_CLAUSE = "Sieze fremde Anrufer.";
+// Neutral-Anrede = die frueher hart in claude.js stehende Siez-Anweisung, jetzt PRO
+// SPRACHE (P11: das Prompt-Geruest ist nicht mehr in jeder Sprache deutsch). DE bleibt
+// byte-identisch zum Bestand. styleClause(null|unbekannt) faellt auf die jeweilige
+// Sprach-Klausel zurueck -> agentStyle=null byte-identisch je Sprache.
+const NEUTRAL_ADDRESS_CLAUSE_DE = "Sieze fremde Anrufer.";
+const NEUTRAL_ADDRESS_CLAUSE_FR = "Vouvoie les interlocuteurs que tu ne connais pas.";
+const NEUTRAL_ADDRESS_CLAUSE_EN = "Address unfamiliar callers politely.";
 
 // Pro Sprache: Stil-ID -> kuratierte Klausel (Ton + Anrede). Modul-Konstanten analog
 // VOICE_PROFILE_* (Forward-Referenz fuer die Locale-Objekte). FR/EN sind kuratiert/
@@ -83,11 +88,11 @@ const STYLE_CLAUSES_EN = Object.freeze({
   "formell-professionell": "Use a formal, neutral tone and address the other person politely.",
 });
 
-// EINE Quelle (G5) fuer die drei sprach-identischen styleClause-Lookups: Stil-Id -> Klausel,
-// unbekannt/null -> NEUTRAL (Siezen). Faktorei statt drei woertlich gleicher Lambdas; der
-// Anti-Injection-Pfad (nur bekannte Keys ODER NEUTRAL) bleibt exakt.
-function makeStyleClause(clauses) {
-  return (styleId) => clauses[styleId] || NEUTRAL_ADDRESS_CLAUSE;
+// EINE Quelle (G5) fuer die drei styleClause-Lookups: Stil-Id -> Klausel, unbekannt/null
+// -> die sprachspezifische Neutral-Klausel (P11). Faktorei statt drei woertlich
+// gleicher Lambdas; der Anti-Injection-Pfad (nur bekannte Keys ODER NEUTRAL) bleibt exakt.
+function makeStyleClause(clauses, neutralClause) {
+  return (styleId) => clauses[styleId] || neutralClause;
 }
 
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
@@ -118,7 +123,7 @@ export const LOCALES = Object.freeze({
     // an Ort und Stelle (claude.js, gleiche Zeile). Unbekannt/null -> NEUTRAL (Siezen) =>
     // agentStyle=null byte-identisch. KEIN Freitext erreicht je den Prompt (nur Katalog-
     // Werte oder NEUTRAL) -> Anti-Injection (Pre-Mortem 1), staerker als der typeof-Pfad.
-    styleClause: makeStyleClause(STYLE_CLAUSES_DE),
+    styleClause: makeStyleClause(STYLE_CLAUSES_DE, NEUTRAL_ADDRESS_CLAUSE_DE),
     // Outbound-Bruecke (claude.js openingText): nach der Offenlegung gesprochen.
     // Ich-Satz-Passthrough (Runde 2, S-B): ein bereits sprechbarer Ich-Satz (neue
     // place_call-objective-Description) wird woertlich gesprochen - keine Bruecke.
@@ -175,6 +180,20 @@ export const LOCALES = Object.freeze({
       inbound: "Alles klar, vielen Dank für Ihren Anruf. Auf Wiederhören!",
       outbound: "Alles klar, vielen Dank für Ihre Zeit. Auf Wiederhören!",
     },
+    // P11: Modell-Text (Systemprompt-Geruest, Tool-Beschreibungen, Steuer-Marker) - s.
+    // i18n/prompts/. Wird nie gesprochen. bridge.js-Suffix liegt in prompt.realtimeSpeechStyle
+    // (nicht hier doppelt).
+    prompt: PROMPT_DE,
+    // Nutzer-sichtbare Post-Call-Texte (Notification + Summary-SMS), NIE gesprochen (WEB-14).
+    postCall: Object.freeze({
+      cancelledTitle: "Anruf abgebrochen",
+      failedTitle: "Anruf nicht zustande gekommen",
+      statusBody: (target, status) => `${target} (Status: ${status})`,
+      summaryTitle: "Neue Call Summary",
+      subjectOutbound: (to) => `Anruf bei ${to}`,
+      subjectInbound: (from) => `Anruf von ${from}`,
+      actionItemsHeading: "Action Items:",
+    }),
   }),
   fr: Object.freeze({
     language: "fr",
@@ -190,7 +209,7 @@ export const LOCALES = Object.freeze({
       inbound: "L'appelant est en ligne. Salue-le maintenant conformément à tes instructions.",
     },
     speechClause: "Réponds exclusivement en français parlé et naturel.",
-    styleClause: makeStyleClause(STYLE_CLAUSES_FR),
+    styleClause: makeStyleClause(STYLE_CLAUSES_FR, NEUTRAL_ADDRESS_CLAUSE_FR),
     // Ich-Satz-Passthrough wie DE (je/j'); sonst kuratierte, natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
@@ -230,6 +249,16 @@ export const LOCALES = Object.freeze({
       inbound: "Très bien, merci pour votre appel. Au revoir !",
       outbound: "Très bien, merci pour votre temps. Au revoir !",
     },
+    prompt: PROMPT_FR,
+    postCall: Object.freeze({
+      cancelledTitle: "Appel annulé",
+      failedTitle: "Appel non abouti",
+      statusBody: (target, status) => `${target} (statut : ${status})`,
+      summaryTitle: "Nouveau résumé d'appel",
+      subjectOutbound: (to) => `Appel vers ${to}`,
+      subjectInbound: (from) => `Appel de ${from}`,
+      actionItemsHeading: "Actions à mener :",
+    }),
   }),
   // EN-Bundle (F1 Phase 4, Owner-Entscheidung #1: DE+FR+EN). GB/IE -> en. Voice/STT
   // fail-closed (R9/R10): unbekanntes Profil wirft, kein stiller DE/FR-Fallback. Live-
@@ -248,7 +277,7 @@ export const LOCALES = Object.freeze({
       inbound: "The caller is on the line. Greet them now according to your instructions.",
     },
     speechClause: "Reply only in natural, spoken English.",
-    styleClause: makeStyleClause(STYLE_CLAUSES_EN),
+    styleClause: makeStyleClause(STYLE_CLAUSES_EN, NEUTRAL_ADDRESS_CLAUSE_EN),
     // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
@@ -282,6 +311,16 @@ export const LOCALES = Object.freeze({
       inbound: "Alright, thank you for calling. Goodbye!",
       outbound: "Alright, thank you for your time. Goodbye!",
     },
+    prompt: PROMPT_EN,
+    postCall: Object.freeze({
+      cancelledTitle: "Call cancelled",
+      failedTitle: "Call did not connect",
+      statusBody: (target, status) => `${target} (status: ${status})`,
+      summaryTitle: "New call summary",
+      subjectOutbound: (to) => `Call to ${to}`,
+      subjectInbound: (from) => `Call from ${from}`,
+      actionItemsHeading: "Action items:",
+    }),
   }),
 });
 

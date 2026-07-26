@@ -44,8 +44,13 @@ for (const [language, notice] of CASES) {
 }
 
 test("Inbound-Pflichtsatz: kein Doppelsatz, wenn das Greeting ihn bereits traegt", async () => {
+  // P11: greetingForLanguage tauscht eine Katalog-Vorlage EINER ANDEREN Sprache gegen
+  // die Standardvorlage der Anrufsprache aus (PROMPT-03) - language:"de" muss deshalb
+  // EXPLIZIT gesetzt sein, damit DEFAULT_GREETING (eine DE-Vorlage) unveraendert bleibt.
+  // Ohne diese Zeile loest der Weltdefault (WORLD_DEFAULT_LANGUAGE_ENABLED=true im
+  // Test-Env) auf "en" auf, und das Greeting wuerde bewusst auf die EN-Vorlage wechseln.
   const srv = await startServer({
-    seed: seedState({ settings: { greeting: DEFAULT_GREETING } }),
+    seed: seedState({ settings: { language: "de", greeting: DEFAULT_GREETING } }),
   });
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {

@@ -26,6 +26,7 @@ import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
 import { withInboundNotice } from "../i18n/inbound-notice.js";
+import { greetingForLanguage } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
@@ -273,10 +274,13 @@ export function makeVoiceRoutes({
       // GAP-14: der Pflichtsatz wird GERENDERT, nie gepromptet (Regel-2-Analogie fuer
       // Inbound) - und nur vorangestellt, wenn er im Greeting fehlt (kein Doppelsatz).
       // Deckt BEIDE Live-Kanaele: TeXML-Gather UND den Assistant-Speak-Node (derselbe
-      // String). replaceAll bleibt VOR dem Praefix -> der Fehlerpfad bei greeting=null
-      // wirft unveraendert (voice-incoming-catch-path).
+      // String). PROMPT-03: die gespeicherte Vorlage folgt der Anrufsprache
+      // (greetingForLanguage) - der deutsche Seed-Default darf einem EN-/FR-Tenant nicht
+      // mehr vorgelesen werden. replaceAll bleibt VOR dem Pflichtsatz-Praefix: der
+      // Fehlerpfad bei greeting=null wirft unveraendert (voice-incoming-catch-path,
+      // greetingForLanguage(null, ...) gibt null zurueck).
       const greeting = withInboundNotice(
-        ctx.settings.greeting.replaceAll("{owner}", ctx.ownerName),
+        greetingForLanguage(ctx.settings.greeting, language).replaceAll("{owner}", ctx.ownerName),
         locale.inboundNotice,
       );
 

@@ -28,7 +28,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { handleOpenAiEvent } from "../src/bridge.js";
-import { shapeForSpeech, END_CALL_WAIT_INSTRUCTION } from "../src/claude.js";
+import { shapeForSpeech, endCallWaitInstruction } from "../src/claude.js";
 
 // Fake-Socket: zeichnet jeden .send(...)-Aufruf als Nutzlast-String auf; readyState
 // steuert canSend(ws) (=== WebSocket.OPEN). Default OPEN, damit ein versehentlicher
@@ -213,7 +213,7 @@ test("end_call bei Outbound ohne substanzielle Antwort: unterdrueckt, kein sched
   assert.deepStrictEqual(ctx.openaiWs.sent, [
     JSON.stringify({
       type: "conversation.item.create",
-      item: { type: "function_call_output", call_id: "c1", output: END_CALL_WAIT_INSTRUCTION },
+      item: { type: "function_call_output", call_id: "c1", output: endCallWaitInstruction(ctx.call) },
     }),
     JSON.stringify({ type: "response.create" }),
   ]);

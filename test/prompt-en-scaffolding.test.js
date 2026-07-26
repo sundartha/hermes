@@ -40,7 +40,7 @@ const GERMAN_HEADINGS = [
   "SO KOMMST DU ZUM ERGEBNIS:",
 ];
 
-test("PROMPT-01 (SOLL rot): systemPrompt(en) traegt KEINE deutschen Sektions-Ueberschriften mehr", () => {
+test("systemPrompt(en) traegt keine deutschen Sektions-Ueberschriften (ex PROMPT-01)", () => {
   const prompt = systemPrompt(enCall({ direction: "inbound" }));
   const leaked = GERMAN_HEADINGS.filter((h) => prompt.includes(h));
   assert.deepEqual(
@@ -50,8 +50,11 @@ test("PROMPT-01 (SOLL rot): systemPrompt(en) traegt KEINE deutschen Sektions-Ueb
   );
 });
 
-test("PROMPT-02 (SOLL rot): toolDefs()-Beschreibungen sind nicht mehr hartcodiert deutsch", () => {
-  const defs = toolDefs();
+test("toolDefs()-Beschreibungen sind nicht hartcodiert deutsch (ex PROMPT-02)", () => {
+  // toolDefs("en") statt toolDefs(): ohne Argument haengt das Ergebnis am
+  // Weltdefault-Schalter (WORLD_DEFAULT_LANGUAGE_ENABLED, Code-Default false -> de) und
+  // der Test waere nicht deterministisch (P11).
+  const defs = toolDefs("en");
   const endCall = defs.find((t) => t.name === "end_call");
   const takeMessage = defs.find((t) => t.name === "take_message");
   assert.ok(endCall, "end_call fehlt in toolDefs()");

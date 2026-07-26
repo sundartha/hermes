@@ -9,6 +9,7 @@ import {
   startServer,
   placeCall,
   waitForStoreState,
+  seedState,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_TEST_PEER_NUMBER,
   TELNYX_ASSISTANT_BOOT_ENV,
@@ -152,6 +153,11 @@ test("Flag an + Telnyx: originateViaCallControl-Fehlschlag -> 500, call failed, 
       ...TELNYX_ASSISTANT_BOOT_ENV,
       TELNYX_API_BASE: "http://127.0.0.1:1", // reservierter, garantiert verweigerter Port
     },
+    // P11: language:"de" EXPLIZIT - der Notification-Titel unten ist ein DE-Literal-Pin
+    // (WEB-14, call-finish.js postCall). Ohne diese Zeile loest der Weltdefault
+    // (WORLD_DEFAULT_LANGUAGE_ENABLED=true im Test-Env) auf "en" auf und der Titel waere
+    // englisch, unabhaengig vom hier getesteten Origination-Fehlerpfad.
+    seed: seedState({ settings: { language: "de" } }),
     ownerNumber: TELNYX_TEST_OWNER_NUMBER,
   });
   try {
