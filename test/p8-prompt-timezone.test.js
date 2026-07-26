@@ -2,6 +2,15 @@
 // TENANTS (store.tenantTimezone), nicht der Server-Prozess-Zeitzone. In-process, Muster
 // test/personal-assistant-characterization.test.js (DATA_DIR vor config-Import, dann
 // dynamischer Import der reinen Funktionen).
+//
+// Traegt zugleich FMT-01 des i18n-Launch-Testkatalogs (Welle W2, Buchhaltung statt Testbau,
+// Spezifikation in tasks/i18n-tests/10-zeit-format-daten.md). Der Katalogfall beschreibt die
+// LUECKE - "der now-Zeitstempel traegt keine timeZone-Option" - und Fix-Phase P8 hat sie
+// geschlossen: promptInputs in src/claude.js loest store.tenantTimezone(...) auf und gibt
+// timeZone in den now-Zeitstempel. Die Assertions unten pruefen genau diesen Sachverhalt,
+// deshalb steht er hier EINMAL (G5) statt als zweite Fassung in einer eigenen Datei. Die
+// Katalog-Erwartung "heute erwartbar rot" ist damit ueberholt; festgehalten nach R-G in
+// tasks/i18n-tests/19-w2-baseline.md.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
