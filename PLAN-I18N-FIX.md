@@ -1434,6 +1434,81 @@ Platzhalter-Marker mehr.
 
 ---
 
+### P15 - Sprachreinheits-Rest (nachtraeglich geschnitten, 2026-07-26)
+
+**IDs (1):** E2E-06. Kein neuer Katalogbefund - diese Phase holt nach, was der Phasenschnitt
+zwischen P11, P12 und P13 hat durchfallen lassen.
+
+**Warum es diese Phase gibt.** Die Uebersichtstabelle ordnet E2E-06 der Phase P11 zu. P11 hat den
+Zaehler von 8 auf 3 gesenkt und die drei Restlecks an P12 (`gateRejectionLiterals`,
+`mcpErrorLiterals`) und P13 (`tenantHtmlFormat`) abgegeben. **Keine der beiden Phasen hat sie
+uebernommen:** P12 hat den MCP-Fehler-Textkanal lokalisiert, aber nicht die uebrigen Literale
+derselben Datei (eigener S3-Befund des P12-Reviews); P13 hat diesen S3 ausdruecklich aus dem Scope
+genommen und `public/tenant.html` nie angefasst. Nach dem P13-Merge (`f07669f`) meldet der Test
+deshalb unveraendert dieselben drei Lecks - gemessen, nicht vermutet.
+
+**Befund (gemessen am 2026-07-26 auf `f07669f`).**
+1. `tenantHtmlFormat` - `public/tenant.html:319` formatiert Datum/Zeit hart mit
+   `toLocaleString("de-DE")`. Ein EN-Tenant sieht deutsche Datumsformate im eigenen Dashboard.
+2. `gateRejectionLiterals` - `src/telephony/outbound-gates.js` traegt zehn deutsche
+   `message:`-Literale (Zeilen 228, 245, 257, 302, 309, 318, 324, 349, 367, 371: KYC, Abo inaktiv,
+   Zahlungsproblem, gesperrte Nummer, Land-Gate, Stundenlimit, Wiederhol-Limit, drei
+   Budget-Texte). Keine Sprachverzweigung. Das ist der Kanal, ueber den ein EN-Tenant erfaehrt,
+   **warum** sein Anruf verweigert wurde - also genau der Moment, in dem Verstaendlichkeit zaehlt.
+3. `mcpErrorLiterals` - `src/mcp-tools.js` traegt 14 deutsche Nicht-Kommentar-Treffer, in der Masse
+   **Tool-Beschreibungen und `.describe()`-Schematexte** (u.a. Zeilen 412, 418, 436, 453, 461, 472,
+   476, 480, 566, 590, 617) plus die Leertexte `"Noch keine Anrufe."` (669) und
+   `"Kalender ist leer."` (706) und die Textblock-Labels aus dem P12-S3.
+
+**Vorbedingung - eine Owner-Frage, sie blockiert Teil 3.** Sollen die **MCP-Tool-Beschreibungen**
+ueberhaupt der Tenant-Sprache folgen? Sie werden nicht vom Tenant gelesen, sondern vom **Client-
+Modell** (Claude in claude.ai), das aus ihnen ableitet, wann und wie es `place_call` aufruft. Drei
+Optionen: (a) mituebersetzen - konsequent, aber die in der Anrufqualitaets-Kette teuer erarbeiteten
+Verbots-Formulierungen muessten dreifach gepflegt werden und wirken je Sprache anders;
+(b) Beschreibungen bewusst EN-only halten (Modellsprache != Nutzersprache) und den Testkanal
+entsprechend eingrenzen; (c) Beschreibungen unangetastet lassen und E2E-06 dauerhaft rot fuehren
+wie GAP-05. Teil 1 und 2 sind von dieser Frage **nicht** betroffen und koennen sofort laufen.
+
+**Pre-Mortem.**
+1. Die Ablehnungstexte wurden uebersetzt, aber der Grund-Code (`grund=budget` vs. `grund=reserve`)
+   verschob sich dabei - die Betriebs-Forensik las danach falsche Ursachen aus den Logs, und die
+   Budget-Diagnose der Kosten-Kette wurde stumm wertlos.
+2. E2E-06 wurde "gruen gemacht", indem die Stopwort-Liste des Tests entschaerft wurde. Der Test hiess
+   weiter E2E-06 und mass nichts mehr - derselbe Fehler, den P13 fuer MCP-12 ausdruecklich verboten
+   hat.
+3. `public/tenant.html` bekam eine Sprachverzweigung, aber das Dashboard laedt seine Sprache aus
+   einer zweiten Quelle als der Rest des Systems - zwei Aufloesungsregeln, und ab da faellt die
+   Anzeige bei jedem Sprachwechsel auseinander.
+
+**Gegenmassnahme.**
+- **Zu (1):** die Gate-Texte sind Anzeige, der Ablehnungsgrund ist Protokoll. Der `reason`/`grund`-
+  Schluessel bleibt **byte-identisch** und sprachfrei; uebersetzt wird nur das `message`-Feld. Test
+  dagegen: je Gate ein Fall, der den Grund-Schluessel pinnt und den Text als sprachabhaengig prueft.
+- **Zu (2):** die Stopwort-Liste in `test/e2e-06-en-purity-aggregate.test.js` wird **nicht**
+  aufgeweicht. Erlaubt ist genau eine Praezisierung, und die ist ein **R5-Fall** (der Test misst
+  heute das Falsche): der Kanal `mcpErrorLiterals` greppt aktuell die **komplette Quelldatei**,
+  inklusive der acht deutschen **Kommentarzeilen**, die die Repo-Konvention ausdruecklich verlangt.
+  So kann er strukturell nie gruen werden. Er wird auf ausgelieferten Text eingegrenzt - wie es der
+  Nachbarkanal `gateRejectionLiterals` mit seinem `message:`-Muster bereits vormacht. Diese
+  Korrektur wird im Phasenreport als R5 benannt, nicht nebenbei mitgenommen.
+- **Zu (3):** `public/tenant.html` benutzt **dieselbe** Sprache, die die Seite ohnehin schon
+  ausliefert (P9-Wurzel), und leitet daraus das Format ab. Keine zweite Aufloesungsfunktion, kein
+  `navigator.language` - dieselbe Regel, die P13 fuer das Widget durchgesetzt hat.
+
+**Abnahme.** E2E-06 nicht mehr in der Rot-Liste - **falls** die Owner-Frage auf (a) oder (b) faellt;
+bei (c) bleibt E2E-06 dauerhaft rot und wird wie GAP-05 als getragenes Risiko gefuehrt, nicht als
+offener Punkt. `npm test` gruen. Zusaetzlich ein Smoke gegen einen laufenden Server: ein
+abgelehnter Outbound eines EN-Tenants liefert englischen `message`-Text **und** unveraenderten
+Grund-Schluessel.
+
+**R5-Loeschpflichten.** Keine Loeschung. Eine R5-**Korrektur** an
+`test/e2e-06-en-purity-aggregate.test.js` (Kanal `mcpErrorLiterals` auf ausgelieferten Text
+eingrenzen), analog zur GAP-15-Korrektur in P14.
+
+**Aufwand.** 1 bis 2 Tage fuer Teil 1 und 2; Teil 3 haengt an der Owner-Entscheidung.
+
+---
+
 ## 6. Uebersichtstabelle: alle 53 IDs -> Phase
 
 | Phase | Titel | IDs | Anzahl |
@@ -1501,6 +1576,13 @@ Gegenprobe gegen die Buendel der Klassifikation:
 > Zeile lautet **1 (P14)**. Das ist kein Restfehler, sondern ein getragenes Risiko mit
 > Wiedervorlage - es darf nicht als "noch nicht fertig" gelesen und nicht stillschweigend
 > weggefixt werden.
+>
+> **Dritte Korrektur (2026-07-26, nach dem P13-Merge gemessen): E2E-06 faellt mit keiner der 14
+> Phasen.** Die Tabelle fuehrt die ID unter P11; P11 hat sie an P12/P13 abgegeben, und beide haben
+> sie nicht uebernommen (Begruendung und Messung in **P15**). Der Zielwert der Rot-Liste ist damit
+> nach P14 **2** (GAP-05 dauerhaft, E2E-06 offen) und faellt erst mit P15 auf 1. Das ist ein echter
+> Schnittfehler dieses Plans, kein getragenes Risiko - deshalb eine eigene Phase statt einer
+> Fussnote.
 
 **Gesamtaufwand:** rund 33 bis 40 Arbeitstage reine Umsetzung, ohne Wartezeiten auf
 Owner-Entscheidungen und ohne die externe Rechtstext-Lieferung.
