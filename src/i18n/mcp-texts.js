@@ -46,6 +46,16 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalendar: "Kalender ist leer.",
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
+    // Stufe-0-Zeilenbausteine (P10/MCP-14): tenant-sichtbarer Text von list_action_items
+    // und get_calendar. Sie standen bis hierher als deutsche Literale in mcp-tools.js -
+    // in einer Oberflaeche, deren Weltdefault "en" ist. DE bleibt byte-identisch zum
+    // Bestand, inklusive des abschliessenden Leerzeichens im Praefix. calendarLine ist
+    // eine ZEILEN-Funktion (nicht nur ein Trennwort), weil Verbinder UND Interpunktion
+    // um den Zeitraum sprachabhaengig sind - dieselbe Begruendung wie bei den
+    // Geld-/Monatszeilen unten. Die Zeitwerte kommen fertig formatiert herein.
+    emptyActionItems: "Keine offenen Action Items.",
+    appointmentPrefix: "(Termin) ",
+    calendarLine: ({ title, start, end }) => `${title}: ${start} bis ${end}`,
     // Feldnamen des get_agent_status-Textblocks (P15/T3a). LABEL, wo der Wert nur
     // angehaengt wird; ZEILEN-Funktion, wo die Sprache die Wortstellung bestimmt
     // (Geld-/Monatszeilen). Die Betraege kommen fertig formatiert herein (costDigits +
@@ -82,8 +92,10 @@ export const MCP_TEXTS = Object.freeze({
     }),
     emptyCalls: "No calls yet.",
     emptyCalendar: "Calendar is empty.",
-    callStillRunning:
-      "Call is still running. Please poll get_call_status and try again later.",
+    callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
+    emptyActionItems: "No open action items.",
+    appointmentPrefix: "(Appointment) ",
+    calendarLine: ({ title, start, end }) => `${title}: ${start} to ${end}`,
     agentStatus: Object.freeze({
       number: "Agent number",
       owner: "Owner",
@@ -117,6 +129,9 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalendar: "L'agenda est vide.",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
+    emptyActionItems: "Aucune action en attente.",
+    appointmentPrefix: "(Rendez-vous) ",
+    calendarLine: ({ title, start, end }) => `${title} : ${start} à ${end}`,
     agentStatus: Object.freeze({
       number: "Numéro de l'agent",
       owner: "Propriétaire",
