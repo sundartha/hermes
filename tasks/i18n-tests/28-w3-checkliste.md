@@ -564,3 +564,84 @@ liegen bei rund 5,4 ct/min, also ~9 ct fuer diesen Anruf - Faktor ~65 darueber. 
 stuendliche Cost-Truing-Sweep sollte das nach unten korrigieren
 (Session-Memory `kosten-endspiel-live-verified`). **Noch nicht gegengeprueft** - erst nach
 dem naechsten Sweep entscheidbar, ob das erwartete Verhalten ist oder ein Befund.
+
+---
+
+## 8. W3-Reste abgeschlossen (2026-07-27)
+
+### 8.1 NEUER BEFUND B5 - `diagnostic: true` ist ein stiller Blindgaenger
+
+**Beide Testanrufe wurden mit `diagnostic: true` gefahren, und bei BEIDEN ist das
+Roh-Transkript trotzdem weg.** Beleg: `get_call_status` liefert nach `completed` fuer
+`call_ms35d4vfqfad` UND `call_ms35q1u5livq` ein **leeres** `last_transcript_lines` -
+waehrend des Gespraechs waren die Zeilen da.
+
+Die Regel steht in `src/diagnostic-retention.js:28-32`; lokal durchgespielt:
+
+```
+true  <- private Nummer gesetzt und gleich dem Ziel
+false <- private Nummer NICHT gesetzt
+false <- private Nummer gesetzt, aber anderes Ziel
+false <- Frist auf 0 gedreht
+```
+
+Die Aufbewahrung wird also nur gewaehrt, wenn das Ziel **exakt der verifizierten privaten
+Nummer des Tenants** entspricht (`store.tenantPrivateNumber`). Ist sie nicht gesetzt -
+oder steht `DIAGNOSTIC_RETENTION_DAYS` auf 0 - wird der Wunsch **wortlos verworfen**.
+
+**Das eigentliche Problem ist nicht die Regel, sondern das Schweigen.** `diagnostic` ist im
+MCP-Schema ein reines EINGABE-Feld (`src/mcp-tools.js:508`); **kein Ausgabefeld irgendeiner
+Antwort meldet, ob es gewaehrt wurde**. Die Tool-Beschreibung verspricht woertlich "Keeps
+the raw transcript for a limited period". Der Aufrufer erfaehrt das Gegenteil erst, wenn er
+die Forensik braucht - und dann ist sie weg.
+
+**Direkte Folge in dieser Sitzung:** B3 (Abschnitt 7.10) ist **nicht mehr aufklaerbar**. Ob
+die Zusammenfassung "10:00 Uhr" erfunden hat oder ob die Uhrzeit in den unbeobachteten
+Turns wirklich fiel, laesst sich an keinen Daten mehr entscheiden - nur noch an der
+Erinnerung des Owners.
+
+**Zu klaeren (eine Frage an den Owner):** ist im Dashboard eine private Nummer hinterlegt?
+Wenn ja, war `DIAGNOSTIC_RETENTION_DAYS=0` die Ursache; wenn nein, war es die fehlende
+Nummer. Fuer den Befund selbst - der stille Blindgaenger - ist die Antwort egal.
+
+**Einordnung:** kein i18n-Thema. Gehoert zur Gespraechsqualitaets-/Forensik-Achse und
+verschaerft eine bereits bekannte Lehre (`umlaut-transliteration-root-cause`:
+"Roh-Transkript nach Summary geloescht = keine Call-Forensik").
+
+### 8.2 PAY-19 - LIVE BESTAETIGT, und schaerfer als der Katalog vermutete
+
+Probe gegen Stripe **TEST** (Key-Praefix vor dem Lauf geprueft, Abbruch bei Live-Key),
+`placeHold` (`src/billing/stripe.js:148-156`) 1:1 repliziert, 3DS-Pflicht ueber das
+dokumentierte Test-Token `pm_card_authenticationRequired` - **keine Karteneingabe, kein
+Echtgeld**. Testkunde nach dem Lauf geloescht.
+
+| Feld | Wert |
+| --- | --- |
+| HTTP | **402** |
+| `error.code` / `decline_code` | **`authentication_required`** |
+| `payment_intent.status` | **`requires_payment_method`** |
+| `next_action` | **nicht vorhanden** |
+| `message` | "Your card was declined. This transaction requires authentication." |
+
+**Der Katalog erwartet einen `requires_action`-Fehler. Das trifft nicht zu** - Stripe
+liefert `requires_payment_method` mit dem Code `authentication_required`, und vor allem:
+**es gibt gar kein `next_action`**. Damit ist der Befund staerker als formuliert. Nicht nur
+fehlt dem Code ein Redirect-/Retry-Zweig (`grep -rniE "requires_action|next_action|3ds"
+src/billing/` -> 0 Treffer); es gibt in dieser Antwort **nichts, wohin man umleiten
+koennte**. Eine Erholung muesste eine NEUE on-session-Bestaetigung durch den Kunden sein,
+kein Redirect.
+
+`assertOk` wirft bei 402 -> der Call gilt als fehlgeschlagen, der Kunde bekommt nie die
+Gelegenheit zur Authentifizierung. **PAY-19 bestaetigt, Live-Teil erledigt.**
+
+### 8.3 Verbleibende W3-Reste
+
+| Rest | Stand |
+| --- | --- |
+| **B1/B2 (eingeloggtes Dashboard)** | **faktisch erledigt** - der Owner hat sich eingeloggt und die Sprache auf German umgestellt (s. 7.9). Damit ist belegt: das Dashboard ist erreichbar, es traegt ein bedienbares Sprach-Dropdown (PROMPT-05) und die Aenderung wirkt. Ein Screenshot fehlt, die Aussage nicht. |
+| **C1 (Connector)** | erledigt (s. 5.2, MCP-17) - die Tool-Beschreibungen kommen englisch. |
+| **OUT-26** | geparkt - keine DE-DID (s. 7.6). Beschaffungsfrage. |
+| **B3/B4** | **nicht mehr aufklaerbar** (s. 8.1). Als offene Beobachtung an die Gespraechsqualitaets-Achse uebergeben. |
+
+**W3 ist damit abgeschlossen** - bis auf OUT-26, das an einer Nummer haengt, die es noch
+nicht gibt.
