@@ -31,6 +31,20 @@
 // sie reserviert nichts und kauft nichts. Die geld-tragende Invariante ist unveraendert
 // "kein orderNumber ohne erfolgreichen Hold", und das Karten-Gate sitzt jetzt sogar
 // FRUEHER als zuvor (vor jedem Provider-Kontakt).
+//
+// R4-PRAEZISIERUNG (GAP-11, explizite Owner-Entscheidung 2026-07-27, s.
+// tasks/gates-fix-chain.md Abschnitt P4-Soll: "Der Preis aus der Provider-Antwort
+// wird behalten und als Hold verwendet"): dieser Satz ist nur erfuellbar, wenn die
+// (kostenlose, read-only) Preis-Suche VOR dem Hold laeuft - der Preis existiert erst
+// nach der Antwort. R4 verengt sich dadurch zwangslaeufig von "Hold vor JEDEM
+// Provider-Call" auf "Hold vor jedem GELD-bewegenden Provider-Call (order)"; das ist
+// eine unmittelbare, offengelegte Folge der zitierten Owner-Entscheidung, keine
+// eigenmaechtige Phasen-Lockerung. AKZEPTIERTES RESTRISIKO: ein Tenant mit
+// hinterlegter, aber am Hold abgelehnter Karte loest je manuellem Provisionierungs-
+// Versuch (kein Auto-Retry, s. worker/provisioning-orchestrator.js) einen zusaetzlichen
+// read-only Telnyx-Suchaufruf aus, BEVOR der Hold scheitert. Es wird dabei nie Geld
+// bewegt und keine Nummer gekauft (order bleibt strikt hinter dem Hold) - das
+// Restrisiko ist Provider-Traffic, kein Geldverlust.
 import {
   beginProvisioning,
   beginCapturing,
