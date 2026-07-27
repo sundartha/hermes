@@ -334,7 +334,7 @@ test("AM2: Callback ohne Cookie + markierter state -> terminale Seite (Loop-Guar
     const res = await rawGet(`${srv.base}/auth/callback?code=authcode&state=abc~retry`);
     assert.equal(res.status, 200);
     assert.notEqual(res.status, 302);
-    assert.match(res.body, /Sitzung abgelaufen/);
+    assert.match(res.body, /Session expired/);
     assert.match(res.body, /\/auth\/login/);
     assert.equal(calls.create.length, 0);
     assert.equal(cookieValue(res.setCookie, "session"), null);
@@ -343,8 +343,8 @@ test("AM2: Callback ohne Cookie + markierter state -> terminale Seite (Loop-Guar
   }
 });
 
-// WEB-13 - SOLL-Gegenstueck zum AM2-Ist-Pin darueber (der /Sitzung abgelaufen/ heute
-// bestaetigt). Die terminale Recovery-Seite erscheint, BEVOR eine Identitaet existiert
+// WEB-13 - SOLL-Gegenstueck zum AM2-Ist-Pin darueber (der /Session expired/ pinnt).
+// Die terminale Recovery-Seite erscheint, BEVOR eine Identitaet existiert
 // (kein Cookie, kein Tenant) - eine Tenant-Sprache gibt es dort strukturell nicht. Der
 // SOLL-Massstab ist deshalb der Weltdefault (P10: DEFAULT_LANGUAGE "en"), nicht "irgendeine
 // Sprache". Welcher Kanal ihn kuenftig traegt (Accept-Language, Weltdefault, sprachneutraler

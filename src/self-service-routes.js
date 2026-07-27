@@ -17,7 +17,7 @@ import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-s
 import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS, localeFor } from "./i18n/locales.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "./billing/card-setup.js";
-import { requirePaymentEnabled } from "./billing/payment-gate.js";
+import { requirePaymentEnabled, requirePublicUrl } from "./billing/payment-gate.js";
 import {
   createTenantSubscription,
   priceIdForPlan,
@@ -363,7 +363,9 @@ export function makeSelfServiceRoutes({
     asyncBilling(
       async (req, res) => {
         if (!requirePaymentEnabled(res, config)) return;
-        if (!config.server.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
+        // WEB-10: stabiler, sprachneutraler Code statt deutschem Klartext mit Env-Namen -
+        // gleiche Vokabelform wie plan_unconfigured/already_subscribed weiter unten.
+        if (!requirePublicUrl(res, config)) return;
         const tenant = req.tenant.tenantId;
         // BK2: optionaler Plan aus dem Kachel-Flow. Bare "Karte hinzufuegen" (kein Plan)
         // -> setup-Mode-successUrl ohne &plan= (byte-identisch zum Bestand).
