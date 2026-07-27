@@ -20,13 +20,14 @@ Aenderungsort, was darf parallel laufen, was erzwingt eine Reihenfolge.**
 | Launch-Gates | `npm run test:gates` | **131 / 36 rot** (roh 515, minus 384 Datei-Wrapper) |
 | Verteilung | — | 36 rote Gates in **22 Testdateien** |
 
-**Stand nach Welle 1** (gemessen 2026-07-27, master nach den Merges P1/P3/P6/P8/P13):
-`npm test` = **3296 / 0** (die Welle hat einen Regressionstest mitgeliefert),
-`npm run test:gates` = **131 / 24 rot**. Zwoelf Gates sind gefallen: PAY-19 x2, DID-05,
-DID-09, LANG-19, GAP-09 x2, GAP-34 x2, WEB-07, WEB-19, GAP-30. Kein neues rotes Gate.
-P2 blieb BLOCKED (Scope-Verletzung, s. 6). Die unten genannte Zahl "3295 / 0" ist damit die
-Zahl der AUSGANGSLAGE — massgeblich als Abnahme ist `fail = 0` plus "kein bestehender Test
-wird rot", nicht eine feste Gesamtzahl.
+**Stand nach Welle 1** (gemessen 2026-07-27, master nach den Merges P1/P2/P3/P6/P8/P13):
+`npm test` = **3298 / 0** (die Welle hat drei Regressionstests mitgeliefert),
+`npm run test:gates` = **131 / 22 rot**. **Vierzehn Gates sind gefallen:** PAY-19 x2,
+GAP-08 x2, DID-05, DID-09, LANG-19, GAP-09 x2, GAP-34 x2, WEB-07, WEB-19, GAP-30. Kein
+neues rotes Gate. P2 brauchte drei Fix-Runden (die ersten beiden verliessen den Scope,
+s. `tasks/gates-fix-chain.md` P2). Die unten genannte Zahl "3295 / 0" ist damit die Zahl
+der AUSGANGSLAGE — massgeblich als Abnahme ist `fail = 0` plus "kein bestehender Test wird
+rot", nicht eine feste Gesamtzahl.
 
 ---
 

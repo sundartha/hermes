@@ -3,18 +3,33 @@
 ## Kopfdaten
 
 - **Phase:** GATES-P2 — Wechselkurs-Vereinheitlichung (GAP-08, 2 Gates)
-- **Gate:** **BLOCKED**
-- **finalBranch:** `phase/gates-p2-fx-single-source-fix2`
-- **Merge:** NICHT erfolgt (Gate rot)
+- **Gate:** **PASS**
+- **finalBranch:** `phase/gates-p2-fx-single-source-fix3`
+- **Vorlaeufer:** `phase/gates-p2-fx-single-source-fix2` (BLOCKED, siehe Git-History dieser Datei) — nach Scope-Rueckbau (boot.js/boot-guard.js-Kreuz-Check entfernt) neu geprueft und PASS.
 
 ## Hinweis zur Herkunft dieses Workflows
 
-Die Implementierung dieser Phase stammt aus einem Lauf, der am **2026-07-27 abgestuerzt** ist,
-bevor er einen Abschlussbericht schreiben konnte. Dieser Workflow hat den Branch
-`phase/gates-p2-fx-single-source-fix2` in seinem damaligen Stand vorgefunden und **nur
-Review (Safety + Clean-Code) und die daraus folgenden Self-Fix-Runden nachgeholt** — die
-urspruengliche Implementierungsarbeit (Plan, erste Umsetzung) wurde nicht von diesem Workflow
-selbst durchgefuehrt, sondern uebernommen und geprueft.
+Die Implementierung dieser Phase stammt aus dem Lauf, der am **2026-07-27 abgestuerzt** ist.
+Dieser Workflow hat den Branch `phase/gates-p2-fx-single-source-fix3` in seinem finalen Stand
+(Commit `7cc642b`) vorgefunden und **nur Review (Safety + Clean-Code) nachgeholt** — keine
+eigene Implementierungsarbeit in diesem Durchlauf.
+
+---
+
+## Scope-Rueckbau gegenueber fix2
+
+Der vorherige Stand (`fix2`, BLOCKED) hatte zusaetzlich zu `src/config.js`/`.env.example` auch
+`src/boot.js` und `src/boot-guard.js` angefasst und dort ein neues fatales Boot-Gate
+(`fxRateAxesDiverged`/`assertFxRateCoherent`) mit eigener zweiter Env-Variable `USD_TO_EUR`
+gebaut — Scope-Ueberschreitung gegenueber der P2-Dateiliste, blockierendes Deploy-Risiko
+(Live-Dashboard-Env unbekannt).
+
+Der finale Commit `7cc642b` hat diesen Zwischenschritt bewusst zurueckgebaut: `boot.js` und
+`boot-guard.js` sind gegenueber der Basis `695505e` wieder **byte-identisch**, keine eigene
+`USD_TO_EUR`-Variable, kein `fxRateAxesDiverged`, keine verwaiste
+`test/fx-rate-axes-coherence.test.js`. Stattdessen wird `llm.usdToEur` **rechnerisch aus
+derselben** `PROVIDER_TO_BUCKET_RATE_MICRO`-Variable abgeleitet — eine echte Ein-Quelle-Loesung
+statt eines Laufzeit-Kreuz-Checks zwischen zwei unabhaengigen Variablen.
 
 ---
 
@@ -22,126 +37,150 @@ selbst durchgefuehrt, sondern uebernommen und geprueft.
 
 ### 1. Gates (GAP-08 x2)
 
-Beide Ziel-Gates sind **gruen**:
+Beide Ziel-Gates sind **gruen**, Beleg aus dem Safety-Review:
 
-- `GAP-08 (SOLL, rot): der USD/EUR-Kurs ist ueber die Umgebung korrigierbar` → **ok 180**
-- `GAP-08 (SOLL, rot): beide Kosten-Achsen rechnen mit DEMSELBEN Kurs` → **ok 181**
+- `test/fx-single-source.test.js:54` — "GAP-08 (SOLL, rot): der USD/EUR-Kurs ist ueber die
+  Umgebung korrigierbar"
+- `test/fx-single-source.test.js:63` — "GAP-08 (SOLL, rot): beide Kosten-Achsen rechnen mit
+  DEMSELBEN Kurs"
 
-Beide in `test/fx-single-source.test.js`, Datei **unveraendert** gegenueber Basis-Commit
-`695505e` (nicht im Diff enthalten).
+Eigener Lauf: `NODE_ENV=test node test/i18n-catalog-run.mjs gates` auf `review-gates-p2-fx3`
+(= `phase/gates-p2-fx-single-source-fix3`, `7cc642b`). Gesamtlauf: tests 131 / pass 97 /
+fail 34 — kein GAP-08 unter den 34 roten.
 
-**Rot-vor-Fix am Basis-Commit belegt:** `git show 695505e:src/config.js` enthaelt
-`usdToEur: 0.93,` als nacktes Literal und 0 Treffer fuer `usdToEur: numEnv(` →
-`isEnvBacked=false` (Test 1 waere rot) und `readLiteral=0.93 != 920000/1e6=0.92`
-(Test 2 waere rot).
+**Negativkontrolle gegen die Basis:** `git show 695505e:src/config.js` zeigt `usdToEur: 0.93`
+als nacktes Literal → `isEnvBacked=false` und `0.93 != 920000/1e6` — beide Gates waren an der
+Basis echt rot.
 
-**Gesamtlauf `test:gates`:** 131 Tests / 97 pass / 34 fail; alle 34 Fehlschlaege gehoeren
-fremden Phasen (PAY-19 x2, DID-05, DID-09, GAP-11, GAP-34 x2, GAP-09 x2, LANG-19, GAP-19 x2,
-OUT-14, MCP-14, LANG-15, VOICE-12, GAP-31, GAP-06, GAP-24, GAP-26, WEB-07/08/10/13/19, GAP-30,
-GAP-23 x2, GAP-05, GAP-15 x2, GAP-37, FMT-15 x2) — kein einziger fx-/Wechselkurs-Test darunter.
-36 Baseline-Gates minus die 2 GAP-08 = 34, stimmig.
+Das Gruen kommt vom Produkt, nicht von einer Testaenderung: `git diff 695505e..HEAD --
+test/fx-single-source.test.js` ist leer (Gate-Datei byte-identisch).
 
-### 2. Regression (`npm test`)
+### 2. Regression (`npm test` / `test:gates`-Regressionslauf)
 
-**3303 bestanden / 0 rot** (roh 3324, davon 21 Datei-Wrapper abgezogen), skipped 0, todo 0,
-EXIT=0, Dauer 90,6 s.
+**3297 bestanden / 0 rot** (eigener Lauf
+`NODE_ENV=test node test/i18n-catalog-run.mjs regression`, exit 0; tests 3297 / pass 3297 /
+fail 0, cancelled 0, skipped 0, todo 0, 0 Zeilen "not ok").
 
-Ziel laut Spec: 3295/0 → Abweichung **+8 bestanden**, exakt die 8 neu hinzugefuegten Tests der
-Phase (6 in `test/fx-rate-axes-coherence.test.js`: F1-01..F1-04, F2-01, F2-02; 2 in
-`test/fx-single-source-fallback-wiring.test.js`).
+Spec-Ziel 3295 + genau die 2 neu hinzugekommenen Regressionstests
+(`test/fx-single-source-fallback-wiring.test.js`) = 3297. Kein einziger Bestandstest wurde
+entfernt oder ist rot; ausser einer Kommentarzeile in `test/helpers.js` wurde keine bestehende
+Testdatei angefasst. Ein erster Hintergrundlauf wurde extern abgebrochen ("Interrupted while
+running") und ist verworfen — gewertet ist der vollstaendige Vordergrundlauf.
 
-Kein Bestandstest geaendert, umgeschrieben oder geloescht — der Diff beruehrt an `test/` nur
-die 2 neuen Dateien + `BASE_ENV` in `test/helpers.js` → kein neu roter Bestandstest, keine
-stille Stilllegung.
+Volle Suite (Voll-Last, alle Tests): 3317/3318 gruen, der eine Fehlschlag
+(`test/a4-default-profile-zero.test.js`) ist bei Isolation gruen — deckt sich mit dem bekannten
+vorbestehenden ~12%-Voll-Last-Flake (Seed-vor-Boot-Race, MEMORY:
+`suite-flake-p5-gate-proof-spawn-race`), keine Regression durch diesen Diff.
 
 ### 3. Produkt-Diff
 
-Nicht leer, betrifft:
+Nicht leer, betrifft ausschliesslich:
 
 - `src/config.js`
-- `src/boot.js`
-- `src/boot-guard.js`
+
+(plus `.env.example` als Dokumentation, wie von der Spec vorgesehen). Kein Griff in
+`src/boot.js`/`src/boot-guard.js` mehr — das war genau die in fix2 blockierte
+Scope-Ueberschreitung.
 
 ### 4. Testaenderungen
 
-Im von der Spec gedeckten Rahmen (`testChangesAllowed: true`) — additive Deckung neuen
-Verhaltens, keine Modifikation bestehender gruener Tests. `test/helpers.js`
-(`BASE_ENV += USD_TO_EUR='0.92'`) ist trotz "zulaessige Testaenderung: keine" korrekt, weil die
-verbindliche Liste von P2 genau das ausdruecklich fordert (Lehre Test-BASE_ENV-Drift: eine neue
-config-Env-Var MUSS in BASE_ENV nachgezogen werden).
+Gate-Datei `test/fx-single-source.test.js` unangetastet (byte-identisch). `test/helpers.js`
+nur eine Kommentarzeile geaendert. Neu, additiv:
+`test/fx-single-source-fallback-wiring.test.js` (2 Tests, ohne Katalog-ID-Praefix, laeuft im
+Regressionslauf mit) — prueft den **gebauten** Wert im Kindprozess statt den Quelltext und
+schliesst damit die Luecke, die der (fixierte) Quelltext-Regex-Gate-Test hat.
+
+Auslegungsspannung zu "Zulaessige Testaenderung: keine" wurde im Safety-Review geprueft und
+nicht als Blocker gewertet: (a) die Gate-Datei ist byte-identisch, (b) beide neuen Testnamen
+tragen keine Katalog-ID und koennen kein Gate gruen faerben (GAP-08 kommt im Regressionslog
+0x vor), (c) die Phasenregeln erlauben neue Regressionstests fuer eine neue Sperre ausdruecklich.
 
 ---
 
-## Safety-Review (final) — Verdikt: BLOCKED
+## Safety-Review (final) — Verdikt: FREIGABE (`approved: true`)
 
-Alle vier Abnahmepunkte sind fuer sich erfuellt — beide GAP-08-Gates gruen, Regression
-vollstaendig gruen (+8 = exakt die neuen Tests), Produkt-Diff nicht leer, Testaenderungen im
-gedeckten Rahmen. Die Phase ist **kein VOICE-12-Fall**: das Gate ging gruen, weil sich das
-Produkt tatsaechlich geaendert hat (`usdToEur` 0.93-Literal → `numEnv` mit gemeinsamem Default
-0.92).
+Alle vier Abnahmepunkte selbst gefahren und erfuellt:
 
-**Blockierend ist allein die Scope-Ueberschreitung:**
+1. **Gates gruen:** beide GAP-08-Tests gruen, an der Basis `695505e` beweisbar rot. 34 Gates
+   bleiben rot, keiner davon gehoert zu P2.
+2. **Regression:** 3297/0. Kein neu roter Bestandstest, kein verschwundener Test.
+3. **Produkt-Diff nicht leer:** `src/config.js`. Das Gate ist gruen, WEIL sich das Produkt
+   geaendert hat — kein VOICE-12-Muster.
+4. **Testaenderungen:** Gate-Datei unangetastet; `test/helpers.js` nur eine Kommentarzeile;
+   eine neue, additive Regressionstestdatei ohne Katalog-ID.
 
-- P2 nennt abschliessend `**Dateien:** src/config.js, .env.example` und schaerft nach:
-  "Halte den Eingriff eng: eine Quelle, ihre Leser, sonst nichts."
-- Der Branch aendert zusaetzlich `src/boot.js` (+24) und `src/boot-guard.js` (+47) und baut
-  dort ein neues, **fatales** Boot-Gate (`fxRateAxesDiverged` / `assertFxRateCoherent`).
-- Ein Boot-Guard ist kein "Leser der Quelle". `src/boot.js` ist laut PLAN-GATES.md
-  ausdruecklich anderen Phasen zugeteilt (P5/W3 und P7/W2: "P7 gegen P5: beide beruehren
-  src/boot.js — deshalb liegen sie in verschiedenen Wellen", "In dieser Welle haelt P7 die
-  Datei"). `src/boot-guard.js` gehoert laut Spec ueberhaupt keiner Phase.
-- P2 liegt in W1 und greift damit zwei Hochrisiko-Phasen vor — keine Formalie: die Kette hat
-  die Dateilisten bewusst disjunkt geschnitten.
+**Substanz des Fixes, unabhaengig nachgemessen** (Kindprozess-Sonde gegen `src/config.js`,
+nicht dem Bericht geglaubt):
 
-**Deploy-Risiko aus genau dieser ungefragten Erweiterung:**
+- Ohne Env: `usdToEur` 0.92 / micro 920000, keine Fatals.
+- `PROVIDER_TO_BUCKET_RATE_MICRO=1500000`: `usdToEur` 1.5 / micro 1500000 — **eine** Variable
+  bewegt beide Achsen, gluecklicher Pfad erlaubt.
+- `=abc` bzw. `=0.92`: beide Achsen auf Fallback, Fatal gesetzt (Boot verweigert) — fail-closed
+  intakt.
 
-`assertFxRateCoherent` ruft `process.exit(1)`, wenn
-`|USD_TO_EUR - PROVIDER_TO_BUCKET_RATE_MICRO/1e6| >= 0.005`. `USD_TO_EUR` wird in `render.yaml`
-nicht deklariert (P2 darf `render.yaml` laut Spec nicht anfassen — P15 haelt die Datei), faellt
-live also auf den Code-Default 0.92. `render.yaml` traegt
-`PROVIDER_TO_BUCKET_RATE_MICRO=920000`, das passt — aber die Render-Services sind laut
-Betriebsstand dashboard-managed (Live != render.yaml). Traegt das Live-Dashboard einen
-abweichenden, von Hand korrigierten Kurs (z. B. 860000), verweigert der Dienst beim naechsten
-Deploy den Start — der Ausgang, den die Spec selbst als teuersten benennt ("ein Live-Dienst,
-der nicht mehr startet, ist der teuerste Fehlausgang", P7). Ein neues fatales Boot-Gate braucht
-eine Owner-Entscheidung und die Pruefung der echten Dashboard-Env — beides ist hier weder
-erfolgt noch aus dem Repo verifizierbar.
+Damit ist die Zusage der Phase am gebauten Objekt belegt, nicht nur am Quelltext-Regex des
+Gates.
 
-**Weitere Concerns (nicht blockierend):**
+**Absolute Regeln:** Der Produkt-Diff besteht ausschliesslich aus einem Feld in `src/config.js`
+plus Kommentaren. Kein Safety-Gate (Denylist/Land/Stundenlimit/Budget-Guard/Max-Dauer/
+Signaturpruefung) beruehrt, kein Endpunkt hinzugefuegt, `disclosureSentence` in `claude.js`/
+`bridge.js` unveraendert, kein Auth-Pfad und kein `safeEqual` angefasst, kein Secret in
+Logs/Responses (die `numEnv`-Diagnose nennt nur `PROVIDER_TO_BUCKET_RATE_MICRO`, kein
+Geheimnis), kein MCP-Pfad, kein Audio. Keine neue npm-Dependency (`package.json`/
+`package-lock.json` unveraendert). `render.yaml` wie von der Spec verlangt nur geprueft,
+**nicht** geaendert — kein Wellen-Konflikt mit P15. Dateiliste eingehalten (`src/config.js`,
+`.env.example`), kein Griff in eine Nachbarphase.
 
-- Bewusster Kurssprung: gemeinsamer Default wird 0.92 (Provider-Achse gewinnt), KI-Achse faellt
-  von 0.93 auf 0.92. Beide Verbraucher von `cfg.usdToEur` sind Geldpfade —
-  `src/store/state-ops.js:1928` (KI-Kosten-Akku des Budget-Gates) und `:2241` (`aiCostCents`
-  fuer den Stripe-Ledger). KI-Kosten werden damit ~1,08 % niedriger in EUR gebucht — kein
-  Schutzverlust (kein Gate entfernt/umgangen), aber der Owner sollte 0.92 als gewollten Kurs
-  bestaetigen.
-- "EINE Quelle" nur zur Haelfte erreicht: `EXCHANGE_RATE_DEFAULTS.usdToEur = 0.92` und das
-  Literal `920000` am `numEnv`-Fallback von `PROVIDER_TO_BUCKET_RATE_MICRO` bleiben zwei Zahlen
-  im Quelltext, gekoppelt nur durch Kommentar + Gate-Test. Eine staerkere, strikt in-scope
-  Loesung waere greifbar gewesen: den `usdToEur`-Fallback aus dem env-aufgeloesten
-  Provider-Kurs ableiten (nur `src/config.js`) — dann haette das Setzen von
-  `PROVIDER_TO_BUCKET_RATE_MICRO` die Achsen gar nicht mehr auseinandertreiben koennen, und der
-  Griff nach `boot.js` waere unnoetig gewesen.
-- Namens-Falle: `test/fx-single-source-fallback-wiring.test.js` matcht das Gate-Glob
-  `test/fx-single-source*.test.js` der Spec. Funktional harmlos (Lauf-Trennung geht ueber
-  Testnamen, nicht Dateinamen), aber irrefuehrend fuer kuenftige Suche nach "den
-  GAP-08-Gates".
-- Positiv, unbeauftragt: `numEnv('USD_TO_EUR', ..., {min: 0.1, integer:false})` ist
-  fail-closed, Konstanten benannt (`USD_TO_EUR_MIN`, `FX_RATE_MICRO_PER_UNIT`,
-  `FX_RATE_TOLERANCE`), keine Magic Numbers, keine neue npm-Dependency, `node --check` gruen
-  fuer alle drei Produktdateien, Fehlertext des neuen Guards nennt nur Kurse, keine Secrets.
+### Concerns (nicht blockierend, vor Merge zur Kenntnis zu nehmen)
 
-**Empfehlung des Reviews:** entweder der Owner erweitert die P2-Dateiliste ausdruecklich und
-bestaetigt das neue fatale Gate gegen die echte Render-Env, oder der Kreuz-Check wandert nach
-P7 (haelt `boot.js` ohnehin) und P2 schliesst die Divergenz in-scope, indem der
-`usdToEur`-Fallback in `src/config.js` aus dem env-aufgeloesten Provider-Kurs abgeleitet wird.
-Zusaetzlich vom Owner zu bestaetigen: der gemeinsame Kurs ist 0.92.
+1. **Bewusster Kurs-Sprung auf der KI-Achse:** `config.llm.usdToEur` faellt von 0,93 auf 0,92
+   (-1,1 %). `render.yaml:210` pinnt `PROVIDER_TO_BUCKET_RATE_MICRO=920000`, der Sprung wird
+   also mit dem Deploy real. Richtung: gebuchte KI-Kosten ~1,1 % niedriger → Budget-Gate
+   minimal spaeter scharf, Stripe-Ledger bucht minimal weniger. Von der Spec ausdruecklich als
+   bewusste Entscheidung verlangt und im Code-Kommentar (`src/config.js`) begruendet;
+   Groessenordnung unkritisch, aber der Lead sollte sie explizit abnicken.
+2. **Sprengweite gewachsen:** bisher war `llm.usdToEur` ein Literal und gegen jede Env immun;
+   jetzt bewegt eine falsch gesetzte `PROVIDER_TO_BUCKET_RATE_MICRO` auch die
+   Budget-Gate-Buchhaltung. Selbst gemessen: `micro=1500000` → `usdToEur=1.5`, keine
+   Fatal-Meldung. Das Toleranzband in `src/boot-guard.js` (Anker 920000, Faktor 0,5..2,0 →
+   460000..1840000) laesst also 0,46..1,84 zu; am unteren Rand wuerde die KI-Kosten-Buchung
+   halbiert und das Budget-Gate doppelt blind — bei bootendem Dienst. Gegengewicht: der
+   Band-Guard ist fatal und unkonditional und deckt die KI-Achse damit erstmals ueberhaupt ab
+   (vorher hatte sie gar keinen Guard). Netto eine Haertung, das untere Bandende ist aber jetzt
+   geld-relevanter als vorher.
+3. **Zwei Literale im Quelltext:** Der Default-Kurs steht als zwei Literale im Quelltext
+   (`EXCHANGE_RATE_DEFAULTS.usdToEur = 0.92` und der `numEnv`-Fallback `920000`), plus die
+   dritte, vorbestehende Kopie `PROVIDER_RATE_ANCHOR_MICRO = 920000` in
+   `src/boot-guard.js:235`. Erzwungen durch die Regex-Form des unveraenderlichen Gate-Tests
+   (`readLiteral` verlangt ein nacktes `usdToEur: <Zahl>,`, `readEnvFallback` eine nackte Zahl
+   am `fallback`). Gegen Drift doppelt gepinnt (Gate-Test + neuer Verdrahtungstest), im Code
+   offen begruendet — aber es bleibt Code, der von einem Quelltext-Regex geformt wurde.
+4. **Doppelte Fatal-Meldung:** `numEnv` wird zweimal mit derselben Variablen aufgerufen, ein
+   ungueltiger Wert landet dadurch zweimal in `fatalConfigErrors`. Selbst verifiziert mit
+   `PROVIDER_TO_BUCKET_RATE_MICRO=abc` → zwei identische Eintraege, beide Achsen auf Fallback
+   (0,92 / 920000). Fail-closed bleibt intakt (`assertConfig` bricht ab), die Verdopplung ist
+   reine Kosmetik in der Boot-Ausgabe.
+5. **Kein Phasenbericht im Branch** (`git diff --name-status` zeigt dort keine `tasks/`-Datei).
+   Abnahmepunkt 4 der Spec ("Der Bericht nennt je Datei die getragene Verhaltensaenderung") war
+   am Branch selbst nicht pruefbar; die geforderte Begruendung des Kurs-Defaults existiert nur
+   als Code-Kommentar — dort allerdings vollstaendig. Dieser Bericht holt die fehlende
+   Dokumentation nach.
+6. **Auslegungsspannung zu "Zulaessige Testaenderung: keine":** die Phase legt
+   `test/fx-single-source-fallback-wiring.test.js` neu an (2 Tests). Nicht als Blocker
+   gewertet (Begruendung s. Abschnitt 4 oben), koennte bei strenger woertlicher Lesart aber
+   anders entschieden werden.
+
+**Verdikt (Safety, final):** FREIGABE. Vor dem Merge bewusst zur Kenntnis nehmen: der
+Live-Kurs der KI-Kosten-Achse wandert mit dem Deploy von 0,93 auf 0,92, und eine kuenftige
+Fehlkonfiguration der Kurs-Variablen trifft ab jetzt auch das Budget-Gate (begrenzt durch das
+fatale Toleranzband 0,46..1,84). Beides ist die gewollte Folge von "ein Kurs, eine
+Stellschraube" und kein Grund zu blockieren.
 
 ---
 
 ## Clean-Code-Audit (final)
 
-**Blocker:** `true` (S1/S2 zaehlen als Blocker in diesem Repo, s. `.claude/refs/clean-code.md`)
+**Blocker:** `false`
 
 ### S1
 
@@ -149,90 +188,95 @@ Keine.
 
 ### S2
 
-1. **G5 (S2)** — `src/config.js:1071-1076` (`usdToEur`) + `src/config.js:432-441`
-   (`providerToBucketRateMicro`): Der Kurs existiert weiterhin als **zwei unabhaengig
-   gepflegte Literale** (`EXCHANGE_RATE_DEFAULTS.usdToEur=0.92` und der `numEnv`-Fallback
-   `providerToBucketRateMicro=920000`) statt einer Quelle — genau das Problem, das GAP-08
-   ("ein gepflegter Kurs") laut Kommentar loesen sollte, bleibt strukturell bestehen; die
-   Kohaerenz wird nur durch 3 Tests (`fx-single-source`, `fx-rate-axes-coherence`,
-   `fx-single-source-fallback-wiring`) UND den neuen Boot-Guard erzwungen, nicht durch die
-   Struktur selbst (G27: Disziplin/Tests statt Struktur). Fix: den Mikro-Fallback rechnerisch
-   aus `EXCHANGE_RATE_DEFAULTS.usdToEur` ableiten, z. B.
-   `fallback: Math.round(EXCHANGE_RATE_DEFAULTS.usdToEur * FX_RATE_MICRO_PER_UNIT)` — dann
-   gaebe es nur noch eine echte Zahl im Code, die drei Tests wuerden zu reinen
-   Regressions-Ankern statt zur einzigen Kohaerenz-Sicherung.
-2. **G5 (S2, klein)** — `test/fx-single-source-fallback-wiring.test.js:20-51`
-   (`readBuiltRates` / `readBuiltRatesWithoutUsdToEurEnv`): Zwei Funktionen mit identischem
-   `script`-String und identischem `execFileSync`-Aufruf, die sich nur in der
-   env-Berechnung unterscheiden (Form 2 aus G5: gemeinsame Schritte nicht extrahiert). Fix:
-   eine Funktion `readBuiltRates(envOverrides)`, die intern optional `USD_TO_EUR` aus
-   `BASE_ENV` entfernt, oder den `script`-String in eine gemeinsame Konstante auslagern.
+Keine.
 
 ### S3
 
-- **G16/G26 (S3, unkritisch)** — `src/boot-guard.js` `fxRateAxesDiverged` /
-  `FX_RATE_TOLERANCE=0.005`: Grenzwert ist plausibel begruendet (faengt 0.01-Differenz aus dem
-  Original-Bug, tolerant genug fuer Rundung), aber willkuerlich gewaehlt ohne expliziten Bezug
-  zur Mikro-Ganzzahl-Rundungsgrenze (1 Mikro-Einheit = 0.000001) — ein Kommentar mit der
-  rechnerischen Herleitung waere praeziser, aber nicht blockierend.
+- `src/config.js:156` — Kommentar zitiert die Gate-Test-Anforderung als woertliches Muster
+  `usdToEur: numEnv(`; im Quelltext steht wegen Zeilenumbruch tatsaechlich
+  `usdToEur:\n    numEnv(`. Das Regex im Gate-Test matcht wegen `\s` auch ueber
+  Zeilenumbrueche, funktioniert also, ist aber keine woertliche Uebereinstimmung wie im
+  Kommentar behauptet. Empfehlung: Kommentar praezisieren ("per Regex, `\s` ueberbrueckt den
+  Zeilenumbruch") statt "woertlich" zu sagen. Nicht blockierend, optional.
 
 ### S4
 
-Keine nennenswerten Befunde (Anzahl neuer Funktionen/Konstanten angemessen fuer die Aufgabe,
-keine Ein-Methoden-Klassen oder unnoetige Indirektion).
+Keine.
 
 ### Verdikt Clean-Code-Auditor
 
-Die Phase ist funktional korrekt und sicherheitsseitig sauber: `assertFxRateCoherent` ist
-fail-closed vor jedem `process.exit`-Gate eingehaengt, die Reihenfolge in `assertBootGates` ist
-korrekt aktualisiert (sechstes→siebtes Gate verschoben, achtes neu), und die vier neuen
-Testdateien belegen sowohl den reinen Unit-Vergleich (`fxRateAxesDiverged`) als auch den echten
-Boot-Beweis via Kindprozess (F2-01/02). Verifiziert in isolierter Kopie des Branches (kein
-Git-Checkout im Worktree, nur `git show` + `rsync`), `npm install` ausgefuehrt: `node --check`
-fuer alle drei geaenderten `src`-Dateien gruen, die 4 neuen/betroffenen Testdateien (16 Tests)
-gruen, volle Regressions-Suite `npm test` bleibt gruen (3323/3323, nach i18n-Wrapper-Abzug
-3303/3303 — keine Regression).
+**PASS.** `providerToBucketRateMicro` (Mikro-Ganzzahl, G26) bleibt die einzige Stellschraube,
+`usdToEur` wird rechnerisch aus derselben Env-Variable abgeleitet (kein zweites Env-Var
+`USD_TO_EUR`, kein separater Boot-Guard mehr — der Zwischenschritt `e3a8733`/`7001e89` mit
+eigenem `USD_TO_EUR` + Boot-Guard `fxRateAxesDiverged` wurde im letzten Commit `7cc642b` bewusst
+zurueckgebaut, weil die einfachere Struktur (G27: ein Wert, keine zwei die man synchron halten
+muss) denselben Zweck ohne Laufzeit-Kreuz-Check erreicht). `boot.js`/`boot-guard.js` sind
+gegenueber der Basis `695505e` byte-identisch — die Rueckbaute liess keine Reste (kein
+`USD_TO_EUR`, kein `fxRateAxesDiverged`, keine verwaiste `test/fx-rate-axes-coherence.test.js`)
+im finalen Diff.
 
-Der einzige echte Befund ist strukturell, nicht funktional: der Kurs ist trotz des Namens
-"GAP-08: ein gepflegter Kurs" weiterhin zwei separat gepflegte Literale, deren Kohaerenz per
-Tests statt per Struktur erzwungen wird (G27/G5, S2) — real, aber klein und durch die Tests
-bereits vollstaendig abgesichert; kein Sicherheits- oder Korrektheitsrisiko, da ein
-Auseinanderlaufen den Boot zuverlaessig blockiert.
+Der bestehende, unveraenderbare Gate-Test `test/fx-single-source.test.js` zwingt zu einer
+doppelten `numEnv(...)`-Auswertung derselben Env-Variable (einmal in
+`providerToBucketRateMicro`, einmal abgeleitet in `llm.usdToEur`) — das ist auf den ersten
+Blick G5-Duplizierung, aber im Kommentar (`src/config.js:150-158`) ausfuehrlich und korrekt als
+vom Gate-Test erzwungene, bewusste Ausnahme begruendet (Pruefkatalog-Regel 3: "Vorrang
+Lesbarkeit/bewusste begruendete Ausnahme") — eine Alternative ohne diese Duplizierung wuerde den
+(laut Commit-Historie nicht aenderbaren) Gate-Test brechen.
+
+Neuer Regressionstest `test/fx-single-source-fallback-wiring.test.js` schliesst die Luecke, die
+der Quelltext-Regex-Gate-Test hat (prueft den GEBAUTEN Wert im Kindprozess, nicht den
+Quelltext) — beide neuen Tests plus die 2 GAP-08-Gate-Tests liefen isoliert gruen (4/4). Volle
+Suite: 3317/3318 gruen, der eine Fehlschlag (`test/a4-default-profile-zero.test.js`) ist bei
+Isolation gruen — deckt sich mit dem in MEMORY dokumentierten vorbestehenden
+~12%-Voll-Last-Flake (Seed-vor-Boot-Race), keine Regression durch diesen Diff. `.env.example`
+und `test/helpers.js` wurden konsistent nachgezogen (Doku + Lehre test-base-env-drift). Kein
+Geld-als-Float, kein toter Code, kein abgeschalteter Guard.
+
+**Pass-Notizen:** Money bleibt Ganzzahl (`providerToBucketRateMicro`); der frueher versuchte
+Boot-Guard-Umweg (eigene `USD_TO_EUR`-Variable + `fxRateAxesDiverged`) wurde selbst-kritisch
+wieder entfernt zugunsten der strukturell einfacheren Loesung — genau der in P1/G27 geforderte
+Reflex (Struktur statt Disziplin, aber auch: keine unnoetige Indirektion). `.env.example`-
+Kommentar und `test/helpers.js`-`BASE_ENV`-Kommentar wurden korrekt nachgezogen. Der neue
+Regressionstest ist ein sauberes Beispiel fuer Build-Operate-Check (P13) und deckt genau die
+Luecke ab, die der (fixierte) Gate-Test hat.
 
 **Top-TODOs:**
 
-1. `config.js`: `providerToBucketRateMicro`-Fallback rechnerisch aus
-   `EXCHANGE_RATE_DEFAULTS.usdToEur` ableiten statt als zweites Literal zu fuehren (echte
-   Single-Source statt test-erzwungener Kohaerenz).
-2. `test/fx-single-source-fallback-wiring.test.js`: `readBuiltRates`/
-   `readBuiltRatesWithoutUsdToEurEnv` auf eine gemeinsame Helper-Funktion zusammenziehen.
-
-**Pass-Notizen:** Sehr sorgfaeltige Arbeit: fail-closed-Muster konsequent uebernommen (Muster
-`providerRateOutOfBand`/`assertProviderRateInBand` 1:1 gespiegelt), Kommentare erklaeren
-Ursache, Reihenfolge und Testabdeckung praezise, `BASE_ENV` korrekt um `USD_TO_EUR` ergaenzt
-(Lehre test-base-env-drift beachtet), Boot-Gate-Reihenfolge-Kommentar in `assertBootGates`
-korrekt mitgezogen. Money-as-integer (G26) auf der Provider-Achse weiter respektiert, die
-Dezimal-Achse (`usdToEur`) bewusst und begruendet als Float belassen (Kurs, kein Geldbetrag).
-Boot-Beweis-Tests (F2-01/02) sind das staerkste Element — sie zeigen echtes Verhalten (Server
-startet nicht / startet doch) statt nur die reine Funktion zu pruefen.
+1. Keine blockierenden Befunde — S3-Praezisierung des Kommentars an `config.js:156` ist
+   optional.
+2. Bei Gelegenheit pruefen, ob der bestehende ~12%-Flake in `test/a4-default-profile-zero.test.js`
+   (Seed-vor-Boot-Race, MEMORY: `suite-flake-p5-gate-proof-spawn-race`) endlich behoben werden
+   soll — nicht Teil dieser Phase.
 
 ---
 
 ## Fix-Runden
 
-- **r1:** GAP-08-TEST-MASKED behoben (einziger Blocker der Runde). Befund: Der Testcode las den
-  USD/EUR-Kurs per Regex ueber den Property-Namen `usdToEur:` im Quelltext und traf dabei den
-  **ersten** Treffer — die dekorative Kopie in `EXCHANGE_RATE_DEFAULTS`, nicht zwingend die
-  `numEnv`-gebundene Konfiguration. Behoben.
-- **r2:** Einziger Review-Blocker der Phase (S1, GAP-08 Kreuz-Check) behoben. Neue reine
-  Entscheidungsfunktion `fxRateAxesDiverged` (`src/boot-guard.js`) vergleicht
-  `config.llm.usdToEur` gegen `config.billing.providerToBucketRateMicro/1_000_000` mit einer
-  benannten Toleranz (`FX_RATE_TOLERANCE=0.005` — faengt den urspruenglichen Bug).
+Die aktenkundigen Fix-Runden dieser Phase liegen im urspruenglichen, am 2026-07-27
+abgestuerzten Lauf:
 
-**Ergebnis nach r1/r2:** Beide GAP-08-Gates gruen, Regression gruen, Clean-Code-Auditor gibt
-PASS (mit S2-Empfehlungen, nicht blockierend) — **aber** das Safety-Review haelt den Branch
-wegen der Scope-Ueberschreitung (`src/boot.js`, `src/boot-guard.js` statt nur
-`src/config.js`, `.env.example`) weiterhin fuer **BLOCKED**. Die Phase ist damit nicht
-merge-faehig; es bedarf einer Owner-Entscheidung (Dateiliste erweitern + Render-Dashboard-Env
-pruefen) oder einer In-Scope-Umsetzung, die den Kreuz-Check aus `boot.js`/`boot-guard.js`
-entfernt und stattdessen den Fallback rechnerisch ableitet.
+- **r1 (Vorlauf zu fix2):** GAP-08-TEST-MASKED behoben — der Testcode las den USD/EUR-Kurs per
+  Regex ueber den Property-Namen `usdToEur:` im Quelltext und traf dabei den ersten Treffer,
+  die dekorative Kopie in `EXCHANGE_RATE_DEFAULTS`, nicht zwingend die `numEnv`-gebundene
+  Konfiguration.
+- **r2 (Vorlauf zu fix2):** ein Kreuz-Check-Boot-Gate (`fxRateAxesDiverged`,
+  `src/boot-guard.js`) wurde eingefuehrt, um die beiden Achsen (`usdToEur`-Literal vs.
+  `providerToBucketRateMicro`) laufzeitseitig auf Kohaerenz zu pruefen. Ergebnis: beide
+  GAP-08-Gates gruen, Regression gruen, Clean-Code-Auditor PASS — aber das **Safety-Review
+  dieses damaligen Standes (`fix2`) haelt fest: BLOCKED**, wegen Scope-Ueberschreitung
+  (`src/boot.js`, `src/boot-guard.js` statt nur `src/config.js`, `.env.example`) und dem daraus
+  folgenden Deploy-Risiko bei abweichender Live-Dashboard-Env (siehe fruehere Fassung dieser
+  Datei in der Git-History).
+- **fix3 (finaler Rueckbau, Commit `7cc642b`):** Reaktion auf den BLOCKED-Befund von fix2 — der
+  Kreuz-Check-Boot-Guard wurde vollstaendig entfernt, `boot.js`/`boot-guard.js` sind wieder
+  byte-identisch zur Basis. Stattdessen wird `llm.usdToEur` direkt rechnerisch aus
+  `PROVIDER_TO_BUCKET_RATE_MICRO` abgeleitet — eine strukturelle Ein-Quelle-Loesung statt eines
+  Laufzeit-Kreuz-Checks zwischen zwei unabhaengigen Variablen. Dieser Stand wurde in diesem
+  Workflow gepruft (kein weiterer Code-Fix mehr noetig) und mit **PASS** abgenommen.
+
+**Ergebnis:** Der finale Stand `phase/gates-p2-fx-single-source-fix3` (`7cc642b`) ist
+**merge-faehig**. Beide GAP-08-Gates gruen, Regression 3297/0, Produkt-Diff sauber auf
+`src/config.js` (+`.env.example`) begrenzt, Clean-Code PASS ohne Blocker, Safety-Review
+FREIGABE mit dokumentierten, nicht-blockierenden Concerns (Kurs-Sprung 0.93→0.92, verbreiterte
+Sprengweite der Env-Variable, doppelte Fatal-Meldung — alle zur Kenntnisnahme, keiner
+blockierend).

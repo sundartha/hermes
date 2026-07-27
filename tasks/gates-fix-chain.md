@@ -120,6 +120,29 @@ Eine LLM-Rechnung und eine Provider-Rechnung ueber denselben Dollar ergeben vers
 
 **Zulaessige Testaenderung:** keine.
 
+**ERLEDIGT 2026-07-27 (Runde 3, gemergt).** Drei Befunde aus dem Lauf, die spaetere Phasen
+angehen:
+
+1. **Der Gate schreibt die Implementierungsform vor.** GAP-08 liest den Kurs per
+   Quelltext-Regex (`^\s*usdToEur:\s*(-?\d+(\.\d+)?)\s*,` bzw. eine Ziffer direkt hinter
+   `fallback:`). Eine abgeleitete Zahl (`fallback: Math.round(… * FX_MICRO_PER_UNIT)`)
+   matcht nicht — der Test wird rot. Die geforderte **eine** Zahl ist mit dem eingefrorenen
+   Gate also nachweislich unvereinbar. Geloest wurde stattdessen die staerkere Haelfte:
+   die zweite Env-Variable `USD_TO_EUR` ist ersatzlos weg, **beide Achsen lesen
+   `PROVIDER_TO_BUCKET_RATE_MICRO`**. Divergenz zur Laufzeit ist strukturell unmoeglich.
+2. **Ein neues fatales Boot-Gate ist keine Loesung, sondern ein Risiko.** Die Fix-Runden 1/2
+   bauten `assertFxRateCoherent` mit `process.exit(1)` — bei dashboard-managed
+   Render-Services (Live != `render.yaml`) haette ein von Hand gesetzter Kurs den Dienst am
+   Start getoetet. Vollstaendig zurueckgebaut. Wer eine Kohaerenz erzwingen will, nimmt die
+   Struktur, nicht den Waechter.
+3. **Offen, ausserhalb der Phase:** `src/boot-guard.js` traegt `PROVIDER_RATE_ANCHOR_MICRO
+   = 920000` (Anker des Toleranzbandes seit LCT P4, nicht der wirksame Kurs) — eine dritte
+   Stelle mit derselben Zahl. Und der Kommentar in `test/model-price-gate.test.js`
+   ("Literale, keine Env-Vars") ist seither ueberholt (C2).
+
+**Gemeinsamer Default:** 0,92 (Wert der Provider-Achse). Die KI-Achse faellt von 0,93 auf
+0,92 — KI-Kosten werden rund 1,08 % niedriger in EUR gebucht.
+
 ---
 
 ## P3 — Kauf-Land-Tabelle (DID-05, DID-09)
