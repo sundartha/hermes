@@ -154,6 +154,12 @@ export function stripTrailingSlash(url) {
 //
 // Object.freeze ist hier unbedenklich (anders als bei modelPricesUsd): nur die ZAHL
 // wandert nach rawConfig, das Objekt selbst wird nie ein Blatt des guardedConfig-Proxys.
+// Der numEnv-Fallback unten referenziert DIESE Konstante (keine eigene Kopie der Zahl) -
+// eine zweite, unabhaengige Zahl an der Fallback-Stelle waere der genau umgekehrte Fehler
+// (GAP-08-Ruecksturz). test/fx-single-source-fallback-wiring.test.js pinnt zusaetzlich zu
+// test/fx-single-source.test.js die tatsaechliche numEnv-Fallback-Stelle per Env-Namen
+// (nicht per Property-Namen) - das faengt eine kuenftige Entkopplung dieser Referenz, die
+// der Property-Namen-Regex-Test blind fuer waere.
 const EXCHANGE_RATE_DEFAULTS = Object.freeze({
   usdToEur: 0.92,
 });
