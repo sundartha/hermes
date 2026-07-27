@@ -569,7 +569,7 @@ dem naechsten Sweep entscheidbar, ob das erwartete Verhalten ist oder ein Befund
 
 ## 8. W3-Reste abgeschlossen (2026-07-27)
 
-### 8.1 NEUER BEFUND B5 - `diagnostic: true` ist ein stiller Blindgaenger
+### 8.1 B5 - ZURUECKGESTUFT (Owner-Einwand, 2026-07-27)
 
 **Beide Testanrufe wurden mit `diagnostic: true` gefahren, und bei BEIDEN ist das
 Roh-Transkript trotzdem weg.** Beleg: `get_call_status` liefert nach `completed` fuer
@@ -604,9 +604,23 @@ Erinnerung des Owners.
 Wenn ja, war `DIAGNOSTIC_RETENTION_DAYS=0` die Ursache; wenn nein, war es die fehlende
 Nummer. Fuer den Befund selbst - der stille Blindgaenger - ist die Antwort egal.
 
-**Einordnung:** kein i18n-Thema. Gehoert zur Gespraechsqualitaets-/Forensik-Achse und
-verschaerft eine bereits bekannte Lehre (`umlaut-transliteration-root-cause`:
-"Roh-Transkript nach Summary geloescht = keine Call-Forensik").
+> **ZURUECKSTUFUNG (Owner-Einwand, direkt nach der ersten Fassung).** Der Owner haelt
+> dagegen: das Loeschen nach der Zusammenfassung IST so gewollt. Das trifft zu, und der
+> Code sagt es woertlich (`src/diagnostic-retention.js:9-11`): *"FAIL-CLOSED
+> (DSGVO/Datenminimierung): kein Flag, kein Treffer oder Frist 0 ergibt EXAKT das heutige
+> Verhalten (Purge nach der Summary). Der Wunsch aus dem Request-Body ist NIE die
+> Wahrheit."* Die wortlose Ablehnung ist **bewusst konstruiert**, kein Versehen.
+>
+> **Was vom Befund bleibt, ist deutlich kleiner:** die MCP-Tool-BESCHREIBUNG
+> (`src/mcp-tools.js:512`) verspricht ohne Vorbehalt "Keeps the raw transcript for a
+> limited period" und nennt die Bedingung nicht (Ziel == eigene verifizierte Nummer).
+> Das ist eine Formulierungsluecke in einem Beschreibungstext - **kein Mechanismus-Defekt,
+> kein P0, kein Launch-Gate**. Wer sich auf die Beschreibung verlaesst, plant Forensik ein,
+> die er nicht bekommt; genau das ist hier passiert.
+>
+> **Die erste Fassung dieses Abschnitts war ueberzogen.** Sie ist als Messung korrekt (das
+> Roh-Transkript IST weg, das Flag WURDE verworfen), aber die Bewertung war falsch
+> gewichtet. Bewertung hiermit korrigiert; die Messung bleibt stehen.
 
 ### 8.2 PAY-19 - LIVE BESTAETIGT, und schaerfer als der Katalog vermutete
 
