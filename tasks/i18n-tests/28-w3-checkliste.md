@@ -230,8 +230,8 @@ ist der staerkere Beweis als ein Screenshot, weil es zeigt, was live wirklich li
 | **WEB-02** | **gemessen, ohne Login entschieden** | `curl -o /dev/null -w "%{http_code} %{redirect_url}" https://vodafone-agent.onrender.com/tenant.html` -> **`302 -> /app`**. Damit ist `WEB_DIST_DIR` live **gesetzt** (die Weiche in `src/app.js` registriert diesen Redirect nur dann). Im Browser auf `https://app.sundartha.com/app`: `document.documentElement.lang` = **`"en"`**, `location.pathname` = **`/app/`**, Titel `Hermes - App`. Das ist genau der Katalog-Zweig "`<html lang="en">` und `/app`". **Offen bleibt allein die eingeloggte Sicht** (Stufe B1). |
 | **PROMPT-05** | **UEBERHOLT - die Luecke ist geschlossen** | Der Katalog behauptet "kein Dashboard-Weg, `settings.language` zu korrigieren". Gegenbeweis: `apps/web/src/components/app/SettingsIsland.astro:58-59` traegt `<select id="settings-language">`, und `src/self-service.js:20` fuehrt `language` in `SELF_SERVICE_FREE_FIELDS` - der Tenant darf es selbst schreiben. Live gegengeprueft: das ausgelieferte `/app`-HTML enthaelt `settings-language`. |
 | **LANG-20** | **BEFUND bestaetigt - LIVE** | `"Automatic (by number)"` liegt woertlich im ausgelieferten `/app`-HTML UND im Chunk `/_astro/api.*.js`; `apps/web/src/lib/api.js:459-464` zeigt den Grund: statischer Label-Katalog ohne dynamischen Teil. Kein Hinweis, welche Sprache "Automatic" fuer DIESEN Tenant bedeutet. |
-| **PAY-11** | **Anker TOT, Achse GEKIPPT** | s. 5.3. `public/tenant.html` ist live nicht mehr erreichbar (302 -> `/app`); dort steht heute genau **1** `de-DE` (`STATIC_FORMAT_LOCALE`, dokumentierter fail-soft-Ausgangswert), P15b holt die Locale vom Server. Die LIVE-Oberflaeche `apps/web` haelt dagegen `en-US` hart. |
-| **DID-18** | **Anker TOT, Defekt GESPIEGELT** | `"Einrichtung fehlgeschlagen."` steht in `public/tenant.html:348` - diese Datei ist live geschattet. Im ausgelieferten Live-Bundle `/_astro/api.*.js` steht stattdessen **`"Number setup failed"`** (`apps/web/src/lib/api.js:191`), hart **englisch**. Der Defekt ist nicht behoben, sondern hat die Sprache gewechselt. |
+| **PAY-11** | **GETRAGEN** (Entscheidung 7.15) | s. 5.3. `public/tenant.html` ist live nicht mehr erreichbar (302 -> `/app`); dort steht heute genau **1** `de-DE` (`STATIC_FORMAT_LOCALE`, dokumentierter fail-soft-Ausgangswert), P15b holt die Locale vom Server. Die LIVE-Oberflaeche `apps/web` haelt dagegen `en-US` hart. **Owner 2026-07-27: das Dashboard bleibt einsprachig englisch** - damit ist das kein Defekt mehr, sondern ein getragenes Risiko (7.13 Punkt 6). |
+| **DID-18** | **GETRAGEN, mit latentem Rest** (Entscheidung 7.15) | `"Einrichtung fehlgeschlagen."` steht in `public/tenant.html:348` - diese Datei ist live geschattet. Im ausgelieferten Live-Bundle `/_astro/api.*.js` steht stattdessen **`"Number setup failed"`** (`apps/web/src/lib/api.js:191`), hart **englisch** - und das ist nach 7.15 der Sollzustand. **Latenter Rest:** faellt `WEB_DIST_DIR` je weg, entfaellt der 302 und der deutsche Text wird wieder ausgeliefert. |
 | **MCP-21** | **GESCHLOSSEN** | Der Katalog sagt vorher: Label englisch, Wert deutsch. Heute nimmt `permissionsSummary(settings, labels)` (`src/mcp-tools.js:217-222`) die Labels als Parameter, und `src/i18n/mcp-texts.js` fuehrt sie je Sprache (`PersoenlicheDaten` / `PersonalData` / `DonneesPersonnelles`). Label und Wert stammen aus DERSELBEN Quelle (`loc.mcp`, `:742`) - der beschriebene Bruch ist strukturell ausgeschlossen. |
 | **MCP-18** | **GEGENSTANDSLOS** | Der Test misst die Verlaesslichkeit von `navigator.language` im claude.ai-Iframe. Seit **P13/E4** liest das Produkt dieses Signal nicht mehr: `src/ui/widget-i18n.js:170-175` setzt die Locale serverseitig als Literal. `grep -rn "navigator.language" src/` -> nur noch **zwei Kommentarzeilen**, keine Codestelle. Ein Signal, das niemand liest, braucht keine Verlaesslichkeitsmessung. |
 | **UI-20** | **GEGENSTANDSLOS** | Identische Begruendung wie MCP-18 (beide beschreiben denselben Sachverhalt; UI-20 wurde in 7.14 nur im Modus korrigiert). |
@@ -274,18 +274,37 @@ englische Marketing-Oberflaeche. Nur ist `/app` inzwischen nicht mehr Marketing,
 **das Tenant-Dashboard fuer alle Sprachen weltweit**. Ein deutscher Tenant sieht dort
 `7/27/2026` und `€4.99` statt `27.07.2026` und `4,99 €`, ein franzoesischer ebenso.
 
-**Das ist eine Produktfrage, kein Bug:** soll `/app` der Tenant-Sprache folgen (dann faellt
-WEB-18 als Baseline und die Kette `formatLocale` aus P15b wandert nach `apps/web`), oder
-bleibt das Dashboard bewusst einsprachig englisch (dann sind PAY-11 und DID-18
-**getragene Risiken** und gehoeren nach 7.13)? **Diese Entscheidung fehlt und blockiert die
-Endbewertung beider IDs.**
+**Das war eine Produktfrage, kein Bug** - und sie ist entschieden.
+
+> **ENTSCHIEDEN (Owner, 2026-07-27): `/app` bleibt einsprachig englisch.** Begruendung: der
+> Umbau waere zu viel Aufwand fuer den Gewinn. Festgehalten als **Entscheidung 7.15** in
+> `PLAN-I18N-TESTS.md`, das getragene Risiko als **7.13 Punkt 6**.
+>
+> **PAY-11 und DID-18 sind damit abgeschlossen** - als getragene Risiken, nicht als Defekte.
+>
+> **Gegenprobe an den Gates (2026-07-27):** alle sechs roten WEB-/GAP-Gates durchgesehen -
+> **keines** schreibt die jetzt verworfene Richtung fest, es musste nichts geloescht oder
+> aufgeweicht werden. Im Gegenteil:
+> - **WEB-18** steigt von der Regressions-Baseline zum **Waechter dieser Entscheidung** auf
+>   (`CAL_LOCALE`/`DATE_LOCALE` = `en-US`, Verbot von `de-DE`/`fr-FR` unter `apps/web/src`).
+> - **WEB-10** und **WEB-13** bleiben **zu Recht rot**: die Entscheidung lautet "das Dashboard
+>   ist englisch", NICHT "deutscher Text ist dort in Ordnung". Ein deutscher Klartext-Fehler
+>   und eine deutsche Session-abgelaufen-Seite bleiben auf einer englischen Oberflaeche
+>   Defekte.
+> - **WEB-07/08/19, GAP-30** fordern Funktion bzw. Katalog-Deckungsgleichheit - unberuehrt.
+>
+> **Ein latenter Rest bleibt bestehen** (DID-18): der deutsche Text in
+> `public/tenant.html:348` verschwindet nicht, er ist nur durch den 302 unerreichbar. Faellt
+> `WEB_DIST_DIR` je weg, wird er wieder ausgeliefert. Kein Handlungsbedarf heute, aber ein
+> Grund, `WEB_DIST_DIR` als betriebskritisch zu behandeln (es entscheidet nicht nur ueber
+> das Aussehen, sondern darueber, WELCHES Dashboard ein Kunde sieht).
 
 ### 5.4 Stand nach diesem Durchgang
 
 | | Anzahl | IDs |
 | --- | --- | --- |
-| **abgeschlossen** | 19 | MCP-19, DID-13, LAW-05, LAW-10, LAW-11, LAW-12, LAW-16, LAW-23, LAW-24, FMT-02, PAY-02, WEB-02 (Shell), PROMPT-05, LANG-20, MCP-21, MCP-18, UI-20, MCP-17 (Code-Teil), PAY-19 (Code-Teil) |
-| **wartet auf Owner-Entscheidung** | 2 | PAY-11, DID-18 (s. B2) |
+| **abgeschlossen** | 21 | MCP-19, DID-13, LAW-05, LAW-10, LAW-11, LAW-12, LAW-16, LAW-23, LAW-24, FMT-02, PAY-02, WEB-02 (Shell), PROMPT-05, LANG-20, MCP-21, MCP-18, UI-20, MCP-17 (Code-Teil), PAY-19 (Code-Teil), **PAY-11 + DID-18 (getragen, 7.15)** |
+| **wartet auf Owner-Entscheidung** | 0 | - |
 | **Bahn 3 - Owner** | 6 | PROMPT-23, LANG-25, MCP-20, OUT-26 (Live-Anrufe) + VOICE-27, VOICE-28 (haengen an D1) |
 | **Rest-Aufgaben aus Bahn 2** | 3 | B1 eingeloggte Sicht, C1 Connector-Neuverbindung, PAY-19 Live-Stripe-Probe |
 

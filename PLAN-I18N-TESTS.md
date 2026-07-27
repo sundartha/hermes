@@ -875,6 +875,31 @@ als vergessen gelten:
    Markt bekommt Englisch - inklusive Offenlegungssatz und Rechtstexten.
 5. **Kalender-Oberflaechen bleiben deutsch** (Entscheidung 7.14): `public/calendar.html` und
    `public/calls.html` formatieren dauerhaft hart deutsch, auch fuer EN-Tenants.
+6. **Das Tenant-Dashboard `/app` bleibt einsprachig englisch** (Entscheidung 7.15, s.u.):
+   ein deutscher oder franzoesischer Tenant sieht dort dauerhaft `7/27/2026` statt
+   `27.07.2026` und `€4.99` statt `4,99 €`.
+
+### 7.15 Sprache des Tenant-Dashboards (Owner, 2026-07-27)
+
+**ENTSCHIEDEN: `/app` bleibt einsprachig englisch.** Begruendung des Owners: der Umbau waere
+zu viel Aufwand fuer den Gewinn. Damit ist die Frage geschlossen, die der W3-Durchgang
+aufgeworfen hat ([`tasks/i18n-tests/28-w3-checkliste.md`](tasks/i18n-tests/28-w3-checkliste.md)
+Abschnitt 5.3 B2): `public/tenant.html` ist live per `302` auf `/app` geschattet, und die
+tatsaechlich ausgelieferte Oberflaeche (`apps/web`) haelt `en-US` hart.
+
+**Folgen fuer den Testvorrat:**
+
+| Test | Folge |
+| --- | --- |
+| **PAY-11** | **getragen** (7.13 Punkt 6), nicht mehr Defekt. Kein Fix, kein weiterer Test. |
+| **DID-18** | **getragen**, mit einer Einschraenkung: der englische Live-Text `"Number setup failed"` ist jetzt der Sollzustand. Der deutsche Text in `public/tenant.html:348` bleibt ein **latenter** Defekt - er wird sichtbar, sobald `WEB_DIST_DIR` je leer ist (dann faellt der 302 weg und die Datei wird wieder ausgeliefert). |
+| **WEB-18** | steigt von der "Regressions-Baseline" zum **Waechter dieser Entscheidung** auf: `const CAL_LOCALE = "en-US"` / `const DATE_LOCALE = "en-US"` und das Verbot von `de-DE`/`fr-FR`-Literalen unter `apps/web/src` sind ab jetzt gewollt, nicht geduldet. |
+| **WEB-10, WEB-13** | bleiben **zu Recht rot**. Die Entscheidung lautet "das Dashboard ist englisch", NICHT "deutscher Text ist dort in Ordnung". Ein deutscher Klartext-Fehler bzw. eine deutsche Session-abgelaufen-Seite auf einer englischen Oberflaeche ist unveraendert ein Defekt. |
+| **WEB-07, WEB-08, WEB-19, GAP-30** | unberuehrt - sie fordern Funktion bzw. Katalog-Deckungsgleichheit, keine Sprachverzweigung. |
+
+**Kein Gate-Test musste geloescht oder aufgeweicht werden** (gegen alle sechs roten
+WEB-/GAP-Gates geprueft, 2026-07-27). Die Entscheidung nimmt dem Testvorrat nichts weg -
+sie erklaert zwei Befunde zu getragenen Risiken und schaerft die Lesart von vier weiteren.
 
 ### 7.14 Zuschnitt der Welle W2 (Owner, 2026-07-26)
 
