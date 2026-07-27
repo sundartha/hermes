@@ -109,6 +109,37 @@ leer sein.
    franzoesische ElevenLabs-Stimme AUSSUCHEN (Geschmack, nicht Technik).
 6. **Kickoff-Prompt** fuer die Ausfuehrungs-Session (siehe unten).
 
+## Token-Disziplin — gilt fuer DIESE Session, nicht erst fuer die Ausfuehrung
+
+Die Triage ist der Loewenanteil des Verbrauchs. Drei Vorgaben:
+
+**1. Buendle nach TESTDATEI, nicht nach Gate-ID.** Gemessen: die 36 roten Gates liegen in
+**21 Dateien** — `dashboard-i18n-surface.test.js` allein traegt vier (`WEB-07/08/19`,
+`GAP-30`), `gap-15-...`, `fx-single-source`, `tts-quota-counter` je zwei. Ein Agent je Datei
+liest den Anker EINMAL statt mehrfach: **21 Agenten statt 36**. Thematisch verwandte Dateien
+darfst du weiter zusammenlegen (z.B. `f1-geo-store` + `f1-provisioning-geo`).
+
+**2. Modelle und Effort gezielt setzen — NIE das geerbte Modell durchreichen.**
+
+| Aufgabe | Modell | Effort |
+| --- | --- | --- |
+| Triage je Testdatei (mechanisch: Test lesen, Code lesen, klassifizieren) | **Sonnet** | `low`-`medium` |
+| Cluster-Schnitt + Parallelitaets-Matrix (Urteil, Folgekosten) | **Opus** | hoch |
+| Pre-Mortem + Endfassung des Dokuments | **Opus** | hoch |
+
+36 Triage-Agenten auf Opus waeren die teuerste und unnoetigste Variante dieser Session.
+
+**3. Der Lead bekommt Urteile, keinen Code.** Erzwinge strukturierte Rueckgabe
+(`schema`-Option) mit knappen Feldern: `gateId`, `klasse`, `beleg` (Datei:Zeile ODER
+Kommando + beobachtete Ausgabe, **maximal zwei Zeilen**), `betroffeneDateien`. Keine
+Quelltext-Ausschnitte, keine Fliesstext-Analysen. **Der Lead liest KEINEN Produktionscode** —
+er synthetisiert aus den Rueckgaben.
+
+**Fallstrick dazu (aus dem Team-Gedaechtnis):** ein erzwungenes Schema garantiert die
+STRUKTUR, nicht den INHALT — ein Low-Effort-Agent hat Pflichtfelder schon mit `"Test"`
+gefuellt. Grepp die Rueckgaben auf Platzhalter (`Test`, `TODO`, `n/a`, leere `beleg`-Felder)
+und zieh die faulen Einzel-Agenten gezielt nach, statt den ganzen Lauf zu wiederholen.
+
 ## Ausfuehrungs-Modell, das du im Dokument festschreibst
 
 Die naechste Session faehrt **pro Phase einen `phase-impl-lean`-Workflow**, parallel wo die
@@ -133,5 +164,6 @@ Lies zuerst `CLAUDE.md`, `.claude/refs/workflow.md`, `tasks/i18n-tests/28-w3-che
 (die W3-Protokolle, besonders Abschnitte 5-8) und `PLAN-SECURITY.md` (Rubrik `SCA-DEADEND`).
 Lauf dann `npm run test:gates` selbst — verlass dich nicht auf die Zahl in diesem Prompt.
 
-Fuer die Triage darfst du einen Dynamic Workflow fahren (die 36 Gates sind unabhaengig
-pruefbar und damit ideal parallelisierbar). Das Dokument selbst schreibst du als Lead.
+Fuer die Triage faehrst du EINEN Dynamic Workflow (die Gates sind unabhaengig pruefbar und
+damit ideal parallelisierbar) — gebuendelt nach Testdatei und mit den Modell-/Effort-Pins
+aus "Token-Disziplin". Cluster-Schnitt, Pre-Mortem und Dokument schreibst du als Lead.
