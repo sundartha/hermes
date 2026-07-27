@@ -56,7 +56,7 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   assert.deepEqual(billing.log[1], ["captureHold", "pi_fake_1", 500]);
 });
 
-test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-Call, KEIN cancelHold", async () => {
+test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-KAUF, KEIN cancelHold", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
   const billing = fakeBilling({
@@ -70,8 +70,31 @@ test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-Call, KEIN cancel
   );
 
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
-  assert.deepEqual(prov.log, [], "kein Provider-Call ohne reserviertes Geld");
+  assert.ok(
+    !prov.log.some((l) => l.startsWith("order")),
+    "kein Provider-KAUF ohne reserviertes Geld (die read-only Preis-Suche laeuft davor, GAP-11)",
+  );
   assert.ok(!methodsOf(billing).includes("cancelHold"), "nichts gehalten -> kein cancelHold");
+});
+
+// P4/GAP-11: seit der Hold dem LIVE-Preis folgt, laeuft die (read-only, kostenlose)
+// Preis-Suche vor dem Hold. Die geld-tragende Invariante ist dadurch UNVERAENDERT -
+// dieser Test schreibt sie als eigene Aussage fest, statt sie nur aus der aufgeweichten
+// log-Assertion darueber zu folgern: gesucht ja, GEKAUFT nie ohne reserviertes Geld.
+test("Preis-Suche laeuft vor dem Hold - der KAUF nie: placeHold wirft -> search ja, order nein", async () => {
+  const { s, numberId } = seedRequested();
+  const prov = fakeProvisioner();
+  const billing = fakeBilling({
+    async placeHold() {
+      throw new Error("Stripe placeHold fehlgeschlagen: HTTP 402");
+    },
+  });
+  await assert.rejects(
+    () => provisionNumber(s, { provisioner: prov, billing }, { numberId, ...ARGS }),
+    /HTTP 402/,
+  );
+
+  assert.deepEqual(prov.log, ["search:DE"], "genau die Preis-Suche - und kein Kauf");
 });
 
 test("kein active ohne Capture: captureHold wirft -> failed/released, releaseNumber + cancelHold, NIE active", async () => {

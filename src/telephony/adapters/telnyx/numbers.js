@@ -6,6 +6,8 @@
 // Verifiziert gegen die Telnyx-Doku (2026-06-15), live UNBESTAETIGT (mit dem Owner
 // live fixen, falls Felder abweichen):
 //   search:    GET  /v2/available_phone_numbers?filter[country_code]=..&filter[features][]=voice
+//              -> liefert je Treffer zusaetzlich cost_information (upfront_cost,
+//                 monthly_cost, currency) = der Angebotspreis DIESER Nummer (GAP-11)
 //   order:     POST /v2/number_orders  {phone_numbers:[{phone_number}], connection_id}  (Idempotency-Key-Header)
 //              -> connection_id im Order-Body setzt das Voice-Routing in EINEM Schritt
 //                 (kein separater configure-PATCH; die Order ist async-pending).
@@ -13,6 +15,7 @@
 //   release:   DELETE /v2/phone_numbers/{id}
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
+import { parseDecimalToMicroCents } from "./cost-parse.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
@@ -63,6 +66,21 @@ async function resolveNumberId(e164) {
   throw new Error("Telnyx orderNumber: phone_number-Ressource nicht aufloesbar (Order async pending)");
 }
 
+// Telnyx cost_information -> neutraler Port-Preis (GANZZAHL Mikro-Cent der PROVIDER-
+// Waehrung), oder null. ALLES-ODER-NICHTS: nur wenn die Waehrung da ist UND beide
+// Betraege parsebar sind, reist ein Preis mit. Ein Teil-Preis waere die gefaehrlichere
+// Variante - er saehe aus wie eine Messung. Ohne Preis faellt der Aufrufer auf die
+// Pauschale zurueck (GAP-11), NIE auf 0. Geparst wird mit demselben strengen,
+// string-basierten Money-Parser wie die Kosten-Belege (G5/G26, kein parseFloat).
+function providerPriceOf(costInformation) {
+  if (!costInformation) return null;
+  const currency = String(costInformation.currency || "").trim().toUpperCase();
+  const upfrontMicroCents = parseDecimalToMicroCents(costInformation.upfront_cost);
+  const monthlyMicroCents = parseDecimalToMicroCents(costInformation.monthly_cost);
+  if (!currency || upfrontMicroCents === null || monthlyMicroCents === null) return null;
+  return { upfrontMicroCents, monthlyMicroCents, currency };
+}
+
 /** @type {import("../../ports.js").NumberProvisioning} */
 export const telnyxNumberProvisioning = {
   async searchNumbers({ countryCode, type, limit = DEFAULT_SEARCH_LIMIT }) {
@@ -74,7 +92,14 @@ export const telnyxNumberProvisioning = {
     const res = await fetch(`${url(AVAILABLE_PATH)}?${q}`, { headers: authHeaders() });
     await assertTelnyxOk(res, "searchNumbers", INCLUDE_TELNYX_DETAIL);
     const json = await res.json().catch(() => ({}));
-    return (json.data || []).map((d) => ({ e164: d.phone_number }));
+    // price NUR wenn die Antwort ihn vollstaendig liefert -> eine Antwort ohne
+    // cost_information ergibt exakt die Bestandsform { e164 } (kein null-Feld).
+    return (json.data || []).map((d) => {
+      const available = { e164: d.phone_number };
+      const price = providerPriceOf(d.cost_information);
+      if (price) available.price = price;
+      return available;
+    });
   },
 
   // connection_id wandert in den Order-Body (Voice-Routing in EINEM Schritt): Telnyx wendet

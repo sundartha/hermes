@@ -1413,12 +1413,22 @@ export function transitionNumber(s, numberId, toStatus) {
   return number;
 }
 
-// requested -> provisioning. Optionaler paymentIntentId (Payment-Pfad): wird auf
-// der Nummer hinterlegt, damit die Rollback-Pfade (cancelHold) ihn nach einer
-// Re-Hydrierung wiederfinden. Ohne den Param (payment-off, 2-arg) byte-identisch.
-export function beginProvisioning(s, numberId, paymentIntentId = null) {
-  const number = transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
-  if (paymentIntentId) number.paymentIntentId = paymentIntentId;
+// requested -> provisioning. REINER Zustandswechsel: die PaymentIntent-Referenz des
+// Payment-Pfads haengt seit P4/GAP-11 attachNumberPaymentIntent an (der Hold faellt jetzt
+// NACH diesen Wechsel, s. dort).
+export function beginProvisioning(s, numberId) {
+  return transitionNumber(s, numberId, NUMBER_STATUS.PROVISIONING);
+}
+
+// Haengt die Stripe-PaymentIntent-Referenz an eine bereits laufende Provisionierung.
+// Die Rollback-Pfade (cancelHold) finden sie damit auch nach einer Re-Hydrierung wieder.
+// Getrennt von beginProvisioning, seit die Preis-Suche (GAP-11) zwischen Zustands-
+// wechsel und Hold liegt: der Zustandswechsel darf NICHT auf den Hold warten, sonst
+// verbreitert sich das Doppelkauf-Fenster des 'requested'-Schlosses.
+export function attachNumberPaymentIntent(s, numberId, paymentIntentId) {
+  const number = findNumber(s, numberId);
+  if (!number) throw new Error(`attachNumberPaymentIntent: Nummer ${numberId} nicht gefunden`);
+  number.paymentIntentId = paymentIntentId;
   return number;
 }
 
@@ -1431,10 +1441,15 @@ export function beginCapturing(s, numberId) {
 // provisioning -> active: NUR nach erfolgreichem Provider-Kauf. Setzt die gekaufte
 // e164 + provider_number_id und legt die assignment-Zeile an. KEIN active ohne
 // diese Transition (zentrale fail-closed-Eigenschaft).
-export function activateNumber(s, numberId, { e164, providerNumberId }) {
+// monthlyCostCents (P4/GAP-11): die beim Kauf uebernommene Monatsmiete in GANZZAHL
+// Cents der Bucket-Waehrung. NUR gesetzt, wenn der Provider einen verwertbaren Preis
+// geliefert hat - fehlt er, bleibt das Feld ABWESEND (nicht 0): P5 unterscheidet daran
+// "keine Miete gelernt" von "Miete ist 0" und faellt sonst auf seinen Fallback zurueck.
+export function activateNumber(s, numberId, { e164, providerNumberId, monthlyCostCents = null }) {
   const number = transitionNumber(s, numberId, NUMBER_STATUS.ACTIVE);
   number.e164 = e164;
   number.providerNumberId = providerNumberId ?? null;
+  if (monthlyCostCents !== null) number.monthlyCostCents = monthlyCostCents;
   s.numberAssignments.push({
     id: newId("asg"),
     numberId: number.id,

@@ -61,7 +61,10 @@ test("exempt + placeHold wirft -> failNumber, KEIN orderNumber", async () => {
     () => provisionNumber(s, { provisioner: prov, billing }, { numberId: number.id, ...ARGS }),
     /stripe down/,
   );
-  assert.deepEqual(prov.log, [], "kein Provider-Kauf ohne gestellten Hold");
+  assert.ok(
+    !prov.log.some((l) => l.startsWith("order")),
+    "kein Provider-Kauf ohne gestellten Hold (die read-only Preis-Suche laeuft davor, GAP-11)",
+  );
 });
 
 test("createSubscriptionCheckoutSession traegt payment_method_collection=always UND allow_promotion_codes=true", async () => {
