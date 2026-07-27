@@ -13,3 +13,18 @@ export class CustomerMissingError extends Error {
     this.name = "CustomerMissingError";
   }
 }
+
+// PAY-19: geworfen, wenn die Bank fuer eine off-session-Belastung eine Authentifizierung
+// verlangt (Stripe: HTTP 402 card_error mit code=authentication_required, 3-D Secure).
+// Das ist KEINE gewoehnliche Ablehnung - die Karte ist gueltig, es fehlt nur die Zustimmung
+// des Karteninhabers. Stripe liefert dabei KEIN next_action, es gibt also kein Ziel zum
+// Weiterleiten: der Ausweg ist eine NEUE on-session-Bestaetigung (Checkout mit dem Kunden
+// davor), NICHT ein Retry derselben off-session-Belastung. Traegt dieselbe Diagnose-Message
+// wie der generische Fehlerpfad (KEINE Secrets, KEIN Provider-Rohkoerper). Muster:
+// CustomerMissingError / LlmUnavailableError.
+export class PaymentAuthenticationRequiredError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "PaymentAuthenticationRequiredError";
+  }
+}
