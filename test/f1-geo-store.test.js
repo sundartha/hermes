@@ -345,10 +345,13 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   // Eine Zeile DIREKT in die DB schreiben, OHNE country/language (simuliert eine vor
   // der Migration angelegte Nummer). Die nullable Spalten + ?? null halten den
   // Re-Hydrierungs-Shape stabil (Code-Fallback DE/de der Konsumenten greift spaeter).
+  // Vorwahl bewusst NANP (+1): nicht ableitbar (25 Mitgliedslaender teilen sie), der
+  // Geo-Backfill (GAP-34) laesst die Zeile also in Ruhe - dieser Test prueft den
+  // Hydrierungs-Shape, nicht das Fehlen des Backfills.
   const { db } = await makePgTestStore();
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'twilio','active')`,
-    ["num_legacy", BOOTSTRAP_TENANT_ID, "+4915700099999"],
+    ["num_legacy", BOOTSTRAP_TENANT_ID, "+15005550006"],
   );
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_legacy");
