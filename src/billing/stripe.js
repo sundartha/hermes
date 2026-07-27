@@ -15,7 +15,7 @@
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
 import { config } from "../config.js";
 import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
-import { CustomerMissingError } from "./errors.js";
+import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -47,16 +47,12 @@ const PI_STATUS_SUCCEEDED = "succeeded";
 const RESOURCE_MISSING_CODE = "resource_missing";
 const CUSTOMER_PARAM = "customer";
 
-// Erwartet den ROHEN Fehlerbody-Text. Defensiv: kein/kaputtes JSON -> kein Match
-// (dann bleibt es der generische Fehlerpfad, nie raten - G26).
-function isMissingCustomerDetail(detail) {
-  try {
-    const err = JSON.parse(detail).error;
-    return Boolean(err && err.code === RESOURCE_MISSING_CODE && err.param === CUSTOMER_PARAM);
-  } catch {
-    return false;
-  }
-}
+// PAY-19 (SCA/3-D Secure): Stripe lehnt eine off-session-Belastung mit GENAU diesem
+// error.code ab, wenn die Bank eine Authentifizierung verlangt. Kein Magic-String (G25;
+// Muster PI_UNEXPECTED_STATE_CODE / RESOURCE_MISSING_CODE). Bewusst NUR error.code als
+// Anker - decline_code traegt bei diesem Fall denselben Wert und waere ein zweiter,
+// redundanter Vertrag mit dem Provider (nie raten, G26).
+const AUTHENTICATION_REQUIRED_CODE = "authentication_required";
 
 // Logischer kind -> Stripe-Meter-event_name (Provider-Spezifik adapter-intern, G25).
 // Live mit dem Owner gegen die echten Stripe-Meter abgleichen (geparkt, wie P6b1):
@@ -89,8 +85,18 @@ function idempotentHeaders(idempotencyKey) {
   return authHeaders(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
 }
 
+// Diagnose-Text einer gescheiterten Stripe-Operation: EINE Quelle (G5) fuer alle drei
+// Fehlergrenzen unten. `detail` ist der Provider-Rohtext; ohne ihn bleibt die Meldung
+// byte-identisch zur bisherigen Form. Regel 4: NIE der Secret-Key - der liegt
+// ausschliesslich im Request-Header.
+function failureMessage(op, status, detail = "") {
+  return `Stripe ${op} fehlgeschlagen: HTTP ${status} ${detail}`.trimEnd();
+}
+
+// Stufe 1 der Fehlergrenze: Operation + HTTP-Status, der Fehlerkoerper wird nicht gelesen.
+// Fuer Calls, deren Aufrufer ohnehin nur abbrechen kann (kein eigener Erholungspfad).
 function assertOk(res, op) {
-  if (!res.ok) throw new Error(`Stripe ${op} fehlgeschlagen: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(failureMessage(op, res.status));
 }
 
 // Praezise Diskriminierung des idempotenten "bereits captured"-Falls (PROV-01/F6): NUR
@@ -107,24 +113,58 @@ function isAlreadyCapturedError(errorBody) {
   );
 }
 
-// Wie assertOk, aber liest den Stripe-Fehlerbody mit (error.message/code) fuer
-// bessere Diagnose bei den Geld-kritischen Subscription-Calls (Regel 4: Body
-// enthaelt KEINE Secrets, nur Provider-Fehlertext - sk_/Bearer liegen nur im
-// Request-Header). Body nicht lesbar -> nur Status melden (wie assertOk).
-async function assertOkWithDetail(res, op) {
-  if (res.ok) return;
-  let detail = "";
+// Liest den Fehlerkoerper einer Nicht-2xx-Antwort GENAU EINMAL und liefert beide Sichten:
+// den Rohtext (Diagnose) und die geparste Form (Klassifikation). Nicht lesbarer Body oder
+// kein JSON -> "" bzw. {}; dann bleibt es der generische Fehlerpfad (nie raten, G26).
+async function readErrorBody(res) {
+  let text = "";
   try {
-    detail = await res.text();
+    text = await res.text();
   } catch {
     /* Body nicht lesbar -> nur Status melden */
   }
-  const message = `Stripe ${op} fehlgeschlagen: HTTP ${res.status} ${detail}`.trim();
-  // Tote/unsichtbare Customer-Referenz als eigener Typ (P9): die Checkout-Orchestrierung
-  // (card-setup.js) heilt GENAU diesen Fall; alles andere bleibt generisch. Message
-  // identisch zum generischen Pfad -> Log-Output unveraendert.
-  if (isMissingCustomerDetail(detail)) throw new CustomerMissingError(message);
-  throw new Error(message);
+  try {
+    return { text, body: JSON.parse(text) };
+  } catch {
+    return { text, body: {} };
+  }
+}
+
+// Klassifikation nach AUFRUFER-Sicht (P9): der Stripe-Fehlercode entscheidet ueber den
+// Port-Fehlertyp, nicht die technische Herkunft. Erwartet den GEPARSTEN Fehlerkoerper -
+// dieselbe Form wie isAlreadyCapturedError (G11). Kennt der Adapter den Fall nicht, bleibt
+// es der generische Error. Die Message ist in allen drei Zweigen dieselbe, damit sich der
+// Log-Output nicht nach Fehlertyp veraendert.
+function billingErrorFor(errorBody, message) {
+  const err = (errorBody && errorBody.error) || {};
+  // PAY-19: die Bank verlangt 3-D Secure. Die Karte ist gueltig - ein Retry derselben
+  // off-session-Belastung kann nicht helfen; der Aufrufer braucht den Zustand, um dem
+  // Kunden eine on-session-Bestaetigung anzubieten.
+  if (err.code === AUTHENTICATION_REQUIRED_CODE)
+    return new PaymentAuthenticationRequiredError(message);
+  // Tote/unsichtbare Customer-Referenz (P9/Fix B): NUR code+param=customer heilt
+  // card-setup.js; resource_missing auf einem anderen param bleibt generisch.
+  if (err.code === RESOURCE_MISSING_CODE && err.param === CUSTOMER_PARAM)
+    return new CustomerMissingError(message);
+  return new Error(message);
+}
+
+// Stufe 2: wie assertOk, aber der Stripe-Fehlercode bestimmt den Port-Fehlertyp. Der
+// Provider-Rohkoerper bleibt AUSSEN VOR - nur Code/Typ werden uebernommen (Regel 4).
+// Fuer Geld-Calls, deren Aufrufer den Erholungspfad unterscheiden koennen muss.
+async function assertOkClassified(res, op) {
+  if (res.ok) return;
+  const { body } = await readErrorBody(res);
+  throw billingErrorFor(body, failureMessage(op, res.status));
+}
+
+// Stufe 3: wie assertOkClassified, haengt zusaetzlich den Provider-Rohtext an die Diagnose
+// (Bestand der Checkout-/Subscription-Calls; der Body enthaelt keine Secrets - sk_/Bearer
+// liegen nur im Request-Header). Body nicht lesbar -> nur Status melden (wie assertOk).
+async function assertOkWithDetail(res, op) {
+  if (res.ok) return;
+  const { text, body } = await readErrorBody(res);
+  throw billingErrorFor(body, failureMessage(op, res.status, text));
 }
 
 const url = (path) => config.billing.stripeApiBase + path;
@@ -155,7 +195,10 @@ export const stripeBilling = {
     });
     body.set("metadata[tenant_ref]", tenantRef); // Audit, kein Geheimnis
     const res = await fetch(url(PAYMENT_INTENTS_PATH), { method: "POST", headers, body });
-    assertOk(res, "placeHold");
+    // PAY-19: eine an 3-D Secure gescheiterte Reserve muss am Fehlertyp von einer echten
+    // Ablehnung unterscheidbar sein - sonst landet die Nummer still auf failed und der
+    // Kunde erfaehrt nie, dass eine Bestaetigung ihn zahlen liesse.
+    await assertOkClassified(res, "placeHold");
     const json = await res.json().catch(() => ({}));
     return { paymentIntentId: json.id };
   },
