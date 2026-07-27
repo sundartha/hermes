@@ -271,6 +271,53 @@ export function providerRateOutOfBand(rateMicro) {
   ];
 }
 
+// GAP-08 Review-Blocker (P2, Runde 2): providerRateOutOfBand oben prueft NUR, ob die
+// Provider-Achse fuer sich im Toleranzband liegt - nicht, ob sie mit der LLM-Achse
+// (config.llm.usdToEur) NOCH denselben Kurs meint. Beide Achsen sind unabhaengig per Env
+// setzbar (USD_TO_EUR bzw. PROVIDER_TO_BUCKET_RATE_MICRO); ohne Kreuz-Check haelt nur
+// Konvention/Kommentar sie synchron. Setzt ein Operator in Render bei einer Kurskorrektur
+// nur EINE der beiden Variablen, laufen beide Achsen wieder auseinander - exakt der
+// Fehler, den GAP-08 schliessen sollte, nur jetzt in Produktion statt im Code-Default.
+//
+// FX_RATE_MICRO_PER_UNIT: Mikro-Einheiten je ganzer Einheit (dieselbe Umrechnung wie
+// test/fx-single-source.test.js MICRO_PER_UNIT, hier eine eigene Konstante - kein
+// Modul-Import zwischen Test und Produktionscode).
+const FX_RATE_MICRO_PER_UNIT = 1_000_000;
+
+// Toleranz in EUR je USD (G25: benannte Konstante statt Literal im Rumpf). Faengt den
+// urspruenglichen GAP-08-Fehler (0,93 vs. 0,92, Differenz 0,01) sicher, ist aber grosszuegig
+// genug fuer Rundung aus der Mikro-Ganzzahl-Darstellung (920000 Mikro = exakt 0,92).
+const FX_RATE_TOLERANCE = 0.005;
+
+export const FX_RATE_FINDING = Object.freeze({
+  AXES_DIVERGED: "fx_rate_axes_diverged",
+});
+
+// Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster providerRateOutOfBand):
+// leer = beide Achsen im Einklang. FATAL wie providerRateOutOfBand - ab hier bewegt der
+// Kurs auf BEIDEN Achsen Geld (Budget-Gate ueber die LLM-Achse, Korrekturbuchung ueber
+// die Provider-Achse), ein Auseinanderlaufen ist damit derselbe Schutzverlust wie das
+// bestehende Toleranzband, nicht bloss eine Diagnose.
+//
+// Voraussetzung: laeuft NACH assertConfig() - beide Eingaben sind dort bereits
+// fail-closed als gueltige Zahlen abgesichert (numEnv, USD_TO_EUR_MIN bzw. min 1).
+export function fxRateAxesDiverged({ usdToEur, providerToBucketRateMicro }) {
+  const providerRate = providerToBucketRateMicro / FX_RATE_MICRO_PER_UNIT;
+  if (Math.abs(usdToEur - providerRate) < FX_RATE_TOLERANCE) return [];
+  return [
+    {
+      code: FX_RATE_FINDING.AXES_DIVERGED,
+      fatal: true,
+      message:
+        `USD_TO_EUR=${usdToEur} (LLM-Achse) und PROVIDER_TO_BUCKET_RATE_MICRO=${providerToBucketRateMicro} ` +
+        `(Provider-Achse, = ${providerRate} je Einheit) weichen um mehr als ${FX_RATE_TOLERANCE} voneinander ab ` +
+        "- dieselben USD ergeben je Kostenpfad einen anderen EUR-Betrag (GAP-08). Haeufigste Ursache: " +
+        "nur eine der beiden Env-Variablen wurde bei einer Kurskorrektur gesetzt. Abhilfe: beide auf " +
+        "denselben Kurs bringen.",
+    },
+  ];
+}
+
 // LCT P6: Befund-Codes der Tenant-Kostendecke-aus-Plan-Ableitung gegen den Plattform-Cap
 // (kein Magic-String im Guard/in der Verdrahtung, G25/G11).
 export const PLAN_CAP_FINDING = Object.freeze({
