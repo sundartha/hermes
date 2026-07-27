@@ -489,9 +489,10 @@ export function registerTools(
           .describe(
             "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
           ),
-        // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
-        // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
-        language: z.string().optional().describe("Conversation language, default 'de'."),
+        // LANG-15: KEIN language-Feld hier. Die Sprache wird serverseitig ausschliesslich
+        // ueber store.resolveCallLanguage (Geo/Settings, Weltdefault siehe DEFAULT_LANGUAGE)
+        // aufgeloest - ein Client-Feld waere wirkungslos und dessen Beschreibung wuerde
+        // veralten (Bestand nannte faelschlich 'de' statt des Weltdefaults 'en').
         // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
         // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
         // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).

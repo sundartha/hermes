@@ -77,7 +77,6 @@ const EXPECTED_MARKERS = {
   "place_call.context.key_facts": ["NO"],
   "place_call.context.recipient_relationship": [],
   "place_call.context.desired_outcome": [],
-  "place_call.language": [],
   "place_call.max_duration_s": [],
   "place_call.diagnostic": ["ONLY", "OWN"],
   get_call_status: [],

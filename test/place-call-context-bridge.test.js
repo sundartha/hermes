@@ -42,9 +42,11 @@ function captureSchemas() {
   return schemas;
 }
 
-// Soll-Form von place_call NACH P2b (= P1 + das optionale advisory-Feld context + das
-// optionale Diagnose-Retention-Flag diagnostic). Aus diesen Eintraegen leiten sich
-// Feldanzahl + Optionalitaet ab - kein nacktes Zahl-Literal (G25).
+// Soll-Form von place_call NACH P10/LANG-15 (= P1 + das optionale advisory-Feld context +
+// das optionale Diagnose-Retention-Flag diagnostic, MINUS das wirkungslose language-Feld,
+// das P10 entfernt hat - die Sprache loest der Server ausschliesslich ueber
+// store.resolveCallLanguage auf). Aus diesen Eintraegen leiten sich Feldanzahl +
+// Optionalitaet ab - kein nacktes Zahl-Literal (G25).
 const PLACE_CALL_SHAPE = {
   to: { optional: false },
   objective: { optional: false },
@@ -52,7 +54,6 @@ const PLACE_CALL_SHAPE = {
   constraints: { optional: true },
   mandate: { optional: true },
   context: { optional: true },
-  language: { optional: true },
   max_duration_s: { optional: true },
   diagnostic: { optional: true },
 };
@@ -67,7 +68,7 @@ test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext
   assert.match(briefing, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
 });
 
-test("P1-02 (nach P2b): place_call-Schema bleibt strukturell unveraendert (gleiche Felder + Optionalitaet)", () => {
+test("P1-02 (nach P10/LANG-15): place_call-Schema bleibt strukturell unveraendert (gleiche Felder + Optionalitaet)", () => {
   const schema = captureSchemas().get("place_call");
   const actualKeys = Object.keys(schema).sort();
   const expectedKeys = Object.keys(PLACE_CALL_SHAPE).sort();
