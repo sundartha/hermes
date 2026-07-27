@@ -707,5 +707,20 @@ mit `generic_decline` - anderes Objekt, anderer Code. Kein belegter Zusammenhang
 
 **Einordnung: Launch-Blocker.** Nicht, weil die Rate hoch waere - sie ist **unbekannt** -
 sondern weil die Folge ein Kunde ist, der nicht zahlen KANN und keinen Weg zurueck hat,
-und weil kein Test und kein Gate diesen Pfad heute abdeckt. **PAY-19 gehoert nicht zu den
-34 roten Gates; dass es dort fehlt, ist eine Luecke der Gate-Liste, kein Trost.**
+und weil der Pfad in Produktion nie ausgefuehrt wurde.
+
+> **NACHGETRAGEN (Owner-Auftrag "kann das nicht zu den 34 Gates hinzu"): PAY-19 IST jetzt
+> ein Launch-Gate.** `test/pay-19-sca-authentication-required.test.js` haelt zwei SOLL-Tests
+> - je einer fuer die Reserve (`placeHold`) und fuer das Abo (`createSubscription`) - die
+> verlangen, dass ein SCA-Fehlschlag am Ergebnis **maschinenlesbar** von einer echten
+> Ablehnung unterscheidbar ist. Der ID-Praefix `PAY-19` ordnet sie ueber
+> `config.i18nCatalogPattern` automatisch dem Gate-Lauf zu; eine Pflegeliste gibt es nicht.
+>
+> **Gemessen nach dem Nachtrag:** `npm test` 3295 / **0 rot** (unveraendert - der
+> Regressionsschutz bleibt unberuehrt), `npm run test:gates` 513 -> **515 Tests / 34 -> 36 rot**.
+>
+> **Der Beweis steht in der Fehlermeldung:** beide Faelle ergeben heute
+> `{"type":"Error","own":{}}` - identisch. `assertOk` (`src/billing/stripe.js:92-94`) baut aus
+> beiden 402-Antworten denselben Fehler; der Stripe-Code `authentication_required` wird an der
+> Adapter-Grenze **verworfen**. Ein Aufrufer KANN die Faelle nicht trennen, selbst wenn er
+> wollte - das ist die Wurzel, nicht die fehlende Behandlung weiter oben.

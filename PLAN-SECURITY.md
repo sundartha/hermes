@@ -818,4 +818,10 @@ anderer Code, kein belegter Zusammenhang.)
   genau die Information weg, die die Erholung traegt.
 - Reserve: `authentication_required` am `error.code` erkennen, eigener typisierter Grund
   statt stiller `failed`-Zustand, Kunde benachrichtigen.
-- Beide Pfade brauchen einen Test — heute deckt **kein** Launch-Gate diesen Fall ab.
+- Beide Pfade brauchen einen Test — **seit 2026-07-27 vorhanden**:
+  `test/pay-19-sca-authentication-required.test.js` haelt zwei SOLL-Gates (`PAY-19`), die
+  verlangen, dass ein SCA-Fehlschlag am Ergebnis **maschinenlesbar** von einer echten
+  Ablehnung unterscheidbar ist. Beide heute rot; die Fehlermeldung nennt den Beweis:
+  `{"type":"Error","own":{}}` fuer BEIDE Faelle. Formuliert am beobachtbaren Ergebnis, nicht
+  an einer Signatur — der Fix darf einen eigenen Fehlertyp (Praezedenz: `CustomerMissingError`),
+  ein Feld am Fehler oder ein typisiertes Ergebnis waehlen.
