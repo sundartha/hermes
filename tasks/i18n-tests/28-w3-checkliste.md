@@ -496,3 +496,71 @@ gehoert ins Protokoll.
 | **OUT-26** | **geparkt** - keine DE-DID vorhanden | 0 |
 
 **Gesamtkosten der Stufe: ein Anruf von 76 Sekunden.** Geplant waren vier.
+
+### 7.9 DE-Gegenprobe - die Dashboard-Einstellung wirkt SOFORT
+
+Nachdem der Owner im Dashboard (`/app` -> Settings -> Language -> German)
+`settings.language="de"` gesetzt hatte, zweiter Anruf an dieselbe Nummer.
+
+| | |
+| --- | --- |
+| Call-ID | `call_ms35q1u5livq` |
+| Dauer | **100 s**, Status `completed`, `diagnostic: true` |
+| Ergebnis | **Durchgehend Deutsch, ab dem ersten Satz.** Kein Neustart, kein Deploy, keine Wartezeit. |
+| `objective_achieved` | `true` |
+
+**Drei unabhaengige Belege aus demselben Vorgang:**
+
+1. **Vor** dem Waehlen meldete `get_agent_status` wieder `PersoenlicheDaten` / `Bankdaten`
+   statt der EN-Labels - die Aenderung war bereits wirksam, bevor ein Anruf lief.
+2. Im Gespraech sprach der Agent durchgehend Deutsch, inklusive Rueckfragen.
+3. Das Transkript-Praefix kam als **`Gegenseite:`** herein; im EN-Anruf davor war es
+   **`Other party:`**.
+
+**Damit ist die Sprachachse in BEIDEN Polaritaeten live bewiesen** - nicht nur "Englisch
+funktioniert", sondern "die Achse folgt der Einstellung, in beide Richtungen, sofort".
+
+**Nebenbefund zur MCP-Bindung:** derselbe Connector, dieselbe Sitzung lieferte erst EN-,
+dann DE-Labels. Die Sprache wird also **pro Anfrage** aufgeloest, nicht einmal je
+Registrierung. Das **schwaecht die Cache-These aus Abschnitt 6**: die deutsche
+Vormittagsmessung erklaert sich eher damit, dass sie VOR dem Wirksamwerden des Flips
+erhoben und erst spaeter niedergeschrieben wurde. An der Kern-Korrektur (der Tenant war
+NICHT explizit `de`) aendert das nichts - sie ist durch den Flip-Effekt selbst bewiesen.
+
+**Nebenbefund STT:** die deutsche Erkennung war hoerbar besser als die englische im Anruf
+davor - konsistent mit VOICE-28 (`en-GB` kaempft mit deutschem Akzent).
+
+### 7.10 Zwei offene Beobachtungen aus dem DE-Anruf
+
+**B3 - die Zusammenfassung nennt eine Uhrzeit, die im mitgelesenen Transkript nicht fiel.**
+`result_summary`: *"Ein Termin wurde fuer Samstag um 10:00 Uhr gebucht."* In den
+mitgelesenen Zeilen sagte die Gegenseite **"Um siebzehn Uhr"**. Der Anruf lief danach noch
+rund 35 s weiter - eine Korrektur in den unbeobachteten Turns ist moeglich und ungeprueft.
+`get_transcript` liefert bewusst nur die Zusammenfassung; das Rohtranskript liegt im
+Diagnose-Speicher (`diagnostic: true`). **Zu klaeren, bevor daraus ein Befund wird.** Faellt
+die Uhrzeit im Rohtranskript nirgends, erfindet die Zusammenfassung Termindaten - das waere
+ein P0 der Gespraechsqualitaet, kein i18n-Thema.
+
+**B4 - die Zusammenfassung behauptet eine Buchung, die untersagt war.** `constraints`
+lauteten woertlich "Nichts zusagen und nichts verbindlich buchen"; die Zusammenfassung sagt
+"Ein Termin wurde gebucht". Der Agent hat im beobachteten Teil nur erfragt, nicht zugesagt -
+der Fehler liegt also vermutlich in der Zusammenfassung, nicht im Gespraech. Gleiche
+Klaerung wie B3.
+
+### 7.11 Kostenachse - die zwei Testanrufe haben den Tenant-Deckel fast erschoepft
+
+| Zeitpunkt | `costEur` | Delta |
+| --- | --- | --- |
+| vor den Tests | 3,94 | - |
+| nach PROMPT-23 (76 s) | 6,94 | **+3,00** |
+| nach der DE-Gegenprobe (100 s) | 12,97 | **+6,03** |
+
+**12,97 von 15,00 EUR Tenant-Deckel.** Zwei weitere Anrufe und der Budget-Guard friert
+Outbound ein.
+
+Die Zahlen passen exakt auf eine **vorlaeufige Buchung zum Worst-Case-Satz**
+(100 s -> 2 angefangene Minuten x 300 ct/min = 6,00 EUR). Die gemessenen ECHTEN Kosten
+liegen bei rund 5,4 ct/min, also ~9 ct fuer diesen Anruf - Faktor ~65 darueber. Der
+stuendliche Cost-Truing-Sweep sollte das nach unten korrigieren
+(Session-Memory `kosten-endspiel-live-verified`). **Noch nicht gegengeprueft** - erst nach
+dem naechsten Sweep entscheidbar, ob das erwartete Verhalten ist oder ein Befund.
