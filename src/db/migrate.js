@@ -65,11 +65,16 @@ export async function backfillAccountEmailCase(db) {
 }
 
 // Der Alt-Default der Spalte number.language: bis zum Weltdefault-Flip trug JEDE
-// geschriebene Zeile "de", ohne dass ein Mensch das gewaehlt haette. NUR dieser Wert und
-// NULL gelten als "nicht gewaehlt" und duerfen geheilt werden - eine explizit gesetzte
-// Sprache bleibt unangetastet (der Schaden waere sonst still: der Agent spraeche die
-// falsche Sprache und niemand saehe einen Fehler). Historische Tatsache am Bestand, kein
-// Policy-Schalter -> bewusst kein Env-Knopf.
+// geschriebene Zeile "de" hartverdrahtet, UNABHAENGIG vom Kauf-Land der Nummer. Dieser Wert
+// ist aber KEIN sicherer Alters-Marker: ein deutscher Tenant bekommt language="de" auch
+// HEUTE noch ganz regulaer zugewiesen (requestNumberForPaidTenant leitet sie aus dem
+// Herkunftsland des Tenants ab, s. provision-trigger.js) - der Sentinel-Wert und ein
+// legitim gewaehltes Deutsch sind wertgleich, NICHT unterscheidbar. Deshalb heilt
+// healedNumberGeo() bei einem Treffer NICHT blind auf das Kauf-Land der Nummer um (das
+// waere bei FORCE_NUMBER_COUNTRY falsch, s. dort), sondern zuerst auf die Herkunfts-Geo
+// des TENANTS - trifft sie zufaellig denselben Wert, ist das UPDATE ein No-Op (Idempotenz
+// bleibt erhalten, kein stiller Sprachwechsel fuer korrekt angelegte Zeilen). Historische
+// Tatsache am Bestand, kein Policy-Schalter -> bewusst kein Env-Knopf.
 const LEGACY_NUMBER_LANGUAGE = "de";
 
 // Setzt die RLS-GUC der laufenden Verbindung (session-weit, Muster wie pg.js setTenant).
@@ -83,13 +88,31 @@ async function setCurrentTenant(db, tenantId) {
 
 // SOLL-Geo EINER Bestandszeile - rein, ohne DB. Das Land kommt aus der Zeile, sonst aus der
 // DID-Vorwahl; ohne ableitbares Land -> null, die Zeile bleibt komplett unberuehrt (E2,
-// "kein Raten"). Die Sprache folgt dem Land, aber nur wo sie nicht gewaehlt wurde; ein
-// expliziter Wert wird durchgereicht und damit vom Aufrufer als "keine Aenderung" erkannt.
-function healedNumberGeo(row) {
+// "kein Raten"). Die Sprache folgt NICHT dem Kauf-Land der Nummer (Review-Blocker Runde 1,
+// A1-Zwei-Achsen-Vertrag): number.country ist per Design vom Herkunftsland entkoppelt
+// (FORCE_NUMBER_COUNTRY faerbt NUR das Kauf-Land, s. provision-trigger.js). Die Sprache
+// heilt deshalb aus dem Herkunftsland DES TENANTS (tenantGeo) - genau die Achse, aus der
+// requestNumberForPaidTenant sie beim Kauf bereits ableitet. Fehlt auch die Tenant-Geo
+// (uralter Bestand ohne F1-Geo), bleibt als letzter Anker das Kauf-Land selbst (alte
+// Regel) - besser eine plausible Sprache als keine. Ein expliziter Wert wird durchgereicht
+// und damit vom Aufrufer als "keine Aenderung" erkannt.
+function healedNumberGeo(row, tenantGeo) {
   const country = row.country || countryForE164(row.e164);
   if (!country) return null;
   const chosen = row.language && row.language !== LEGACY_NUMBER_LANGUAGE;
-  return { country, language: chosen ? row.language : languageForCountry(country) };
+  if (chosen) return { country, language: row.language };
+  const language = tenantGeo.defaultLanguage || languageForCountry(tenantGeo.country || country);
+  return { country, language };
+}
+
+// Liest die Herkunfts-Geo EINES Tenants (fuer die Sprachwahl beim Heilen, s.o.). Fehlende
+// Spalten/Tenant -> beide null (der Aufrufer faellt dann auf das Kauf-Land zurueck).
+async function fetchTenantGeo(db, tenantId) {
+  const { rows } = await db.query(
+    `SELECT country, default_language AS "defaultLanguage" FROM tenant WHERE id = $1`,
+    [tenantId],
+  );
+  return { country: rows[0]?.country ?? null, defaultLanguage: rows[0]?.defaultLanguage ?? null };
 }
 
 // Heilt die Bestandszeilen EINES Tenants (die RLS-GUC steht bereits auf ihm). Der SELECT
@@ -104,9 +127,11 @@ async function healNumberGeoForTenant(db, tenantId) {
       WHERE tenant_id = $1 AND (country IS NULL OR language IS NULL OR language = $2)`,
     [tenantId, LEGACY_NUMBER_LANGUAGE],
   );
+  if (rows.length === 0) return 0;
+  const tenantGeo = await fetchTenantGeo(db, tenantId);
   let written = 0;
   for (const row of rows) {
-    const healed = healedNumberGeo(row);
+    const healed = healedNumberGeo(row, tenantGeo);
     if (!healed) continue;
     if (healed.country === row.country && healed.language === row.language) continue;
     await db.query(
