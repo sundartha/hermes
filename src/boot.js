@@ -13,7 +13,6 @@ import {
   spendCapCoherence,
   unpricedModels,
   providerRateOutOfBand,
-  fxRateAxesDiverged,
   alertChannelFindings,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
@@ -126,23 +125,6 @@ function assertProviderRateInBand(config) {
   process.exit(1);
 }
 
-// GAP-08 Review-Blocker (P2, Runde 2): die LLM-Achse (config.llm.usdToEur) und die
-// Provider-Achse (config.billing.providerToBucketRateMicro) sind BEIDE unabhaengig per
-// Env setzbar (USD_TO_EUR bzw. PROVIDER_TO_BUCKET_RATE_MICRO) - assertProviderRateInBand
-// oben prueft nur die Provider-Achse fuer sich, nicht die beiden GEGENEINANDER. Ohne
-// diesen Guard haelt nur Konvention die zwei Werte synchron; ein Operator, der bei einer
-// Kurskorrektur nur eine der beiden Variablen setzt, reisst sie sonst wieder auseinander.
-// Muster assertProviderRateInBand (reine Entscheidung in boot-guard.js, FATAL).
-function assertFxRateCoherent(config) {
-  const fatal = fxRateAxesDiverged({
-    usdToEur: config.llm.usdToEur,
-    providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
-  }).find((f) => f.fatal);
-  if (!fatal) return;
-  console.error(`[boot] Start abgebrochen: ${fatal.message}`);
-  process.exit(1);
-}
-
 // LCT P4b (G5): die Deckungs-Eingabe beider Boot-Guards (P4 assertCostTruingBooking,
 // P4b warnVoiceTariffBelowFullCost) an EINER Stelle - beide vergleichen dieselbe live
 // aus dem Spiegel gerechnete Quote gegen dieselbe Schwelle. costTruingCoveragePercent
@@ -235,9 +217,8 @@ function warnTurnBudgetOverrun(config) {
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
-// das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertFxRateCoherent
-// (GAP-08 Review-Blocker, P2 Runde 2) das siebte und assertCostTruingBooking (LCT P4)
-// das achte, das noch process.exit(1) rufen kann - warnUnpricedModels/
+// das fuenfte, assertProviderRateInBand (LCT P4) das sechste und assertCostTruingBooking
+// (LCT P4) das siebte, das noch process.exit(1) rufen kann - warnUnpricedModels/
 // warnAlertChannelUnset/warnTariffDrift sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
@@ -296,7 +277,6 @@ function assertBootGates(config, store) {
   assertSpendCapCoherence(config, store);
   warnUnpricedModels(config);
   assertProviderRateInBand(config);
-  assertFxRateCoherent(config);
   assertCostTruingBooking(config, store);
   warnAlertChannelUnset(config);
   warnTariffDrift(config, store);

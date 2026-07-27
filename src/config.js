@@ -138,38 +138,38 @@ export function stripTrailingSlash(url) {
   return url.replace(/\/$/, "");
 }
 
-// ---- Wechselkurs USD -> EUR: EIN gepflegter Kurs (GAP-08) ----
+// ---- Wechselkurs USD -> EUR: EIN Kurs, EINE Stellschraube (GAP-08) ----
 // Vor P2 trugen die beiden Kosten-Achsen zwei Kurse: der KI-Kostenpfad ein nacktes
 // Literal 0,93 (nur per Deploy korrigierbar), die Provider-Achse 920000 Mikro-Einheiten
 // = 0,92. Derselbe Dollar ergab je Kostenpfad einen anderen Euro.
 //
-// Seither ist DIES der gepflegte Kurs. Beide Achsen fahren denselben Wert in zwei
-// Darstellungen: die KI-Achse als Faktor EUR je USD (hier), die Provider-Achse als
-// Mikro-GANZZAHL (Geld nie als Float, G26 - numEnv braucht dort ein Ganzzahl-Literal als
-// Default, deshalb steht 920000 am Feld selbst). Dass beide denselben Kurs meinen, haelt
-// der Gate-Test test/fx-single-source.test.js fest.
+// Seither speisen sich BEIDE Achsen aus DERSELBEN Umgebungsvariablen
+// PROVIDER_TO_BUCKET_RATE_MICRO: die Provider-Achse nimmt sie als Mikro-Ganzzahl (Geld
+// nie als Float, G26), die KI-Achse dieselbe Zahl geteilt durch FX_MICRO_PER_UNIT. Eine
+// Kurskorrektur im Betrieb setzt damit EINE Variable und bewegt beide Achsen
+// zwangslaeufig gemeinsam - ein Auseinanderlaufen zur Laufzeit ist strukturell
+// ausgeschlossen (G27: Struktur statt Disziplin), es braucht dafuer keinen Waechter, der
+// zwei Zahlen vergleicht.
 //
-// Stand 2026-07, ANNAHME - quartalsweise von Hand zu pflegen. Im Betrieb ohne Deploy
-// ueber USD_TO_EUR bzw. PROVIDER_TO_BUCKET_RATE_MICRO korrigierbar, beide zusammen.
+// Warum die numEnv-Auswertung zweimal im Quelltext steht statt einmal in einer
+// Konstanten: der Gate-Test test/fx-single-source.test.js liest den QUELLTEXT und
+// verlangt woertlich "usdToEur: numEnv(" an der KI-Achse sowie ein nacktes Zahlen-Literal
+// am numEnv-Fallback von PROVIDER_TO_BUCKET_RATE_MICRO. Beide Aufrufe tragen deshalb
+// dieselbe Variable, denselben Default und dasselbe Minimum. Folge bei ungueltiger Env:
+// assertConfig meldet den Befund zweimal - der Boot bricht in jedem Fall ab.
+const FX_MICRO_PER_UNIT = 1_000_000;
+
+// Der ausgelieferte Default-Kurs in EUR je USD (Stand 2026-07, ANNAHME - quartalsweise
+// von Hand zu pflegen). Die KI-Achse leitet ihren numEnv-Fallback rechnerisch hieraus ab;
+// am Provider-Feld steht dieselbe Zahl als Mikro-Ganzzahl (920000), weil der Gate-Test
+// dort ein Literal verlangt. Dass beide Schreibweisen denselben Kurs meinen, haelt
+// derselbe Gate-Test fest: eine einseitig geaenderte Zahl faellt dort rot.
 //
 // Object.freeze ist hier unbedenklich (anders als bei modelPricesUsd): nur die ZAHL
 // wandert nach rawConfig, das Objekt selbst wird nie ein Blatt des guardedConfig-Proxys.
-// Der numEnv-Fallback unten referenziert DIESE Konstante (keine eigene Kopie der Zahl) -
-// eine zweite, unabhaengige Zahl an der Fallback-Stelle waere der genau umgekehrte Fehler
-// (GAP-08-Ruecksturz). test/fx-single-source-fallback-wiring.test.js pinnt zusaetzlich zu
-// test/fx-single-source.test.js die tatsaechliche numEnv-Fallback-Stelle per Env-Namen
-// (nicht per Property-Namen) - das faengt eine kuenftige Entkopplung dieser Referenz, die
-// der Property-Namen-Regex-Test blind fuer waere.
 const EXCHANGE_RATE_DEFAULTS = Object.freeze({
   usdToEur: 0.92,
 });
-
-// Kleinster akzeptierter Kurs (fail-closed, Regel 1). NICHT 0: ein Kurs 0 buchte jede
-// KI-Nutzung mit 0 EUR und schaltete die KI-Achse des Budget-Gates lautlos ab. Der Wert
-// liegt weit unter jedem realen USD/EUR-Kurs - er faengt die 0, negative Werte und den
-// Zehnerpotenz-Vertipper (0.092), nie eine echte Kursbewegung. Bewusst KEINE Obergrenze:
-// numEnvs max ist ein STILLER Clamp, und ein zu hoher Kurs ist hoechstens zu streng.
-const USD_TO_EUR_MIN = 0.1;
 
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -425,8 +425,8 @@ const rawConfig = {
   // (G26, Geld nie als Float): wie viele Mikro-Einheiten EUR-Cent auf eine Mikro-Einheit
   // USD-Cent entfallen. Default 920000 = 0,92 EUR je USD - dieselbe Zahl wie
   // EXCHANGE_RATE_DEFAULTS.usdToEur, nur in Mikro-Ganzzahl-Darstellung (GAP-08: EIN Kurs
-  // fuer beide Kosten-Achsen). Beide Defaults werden ZUSAMMEN gepflegt; laufen sie
-  // auseinander, faellt der Gate-Test test/fx-single-source.test.js.
+  // fuer beide Kosten-Achsen). Diese Variable ist seit P2 die EINZIGE Stellschraube des
+  // Kurses: die KI-Kosten-Achse (llm.usdToEur) liest dieselbe Variable.
   //
   // In P2/P3 hat der Kurs KEINEN Verbraucher - er wird hier eingefuehrt, weil ein Guard,
   // der zwei Phasen spaeter scharf wird, zwei Phasen lang keine Sicherung ist. Ab P4
@@ -1104,13 +1104,15 @@ const rawConfig = {
     "claude-sonnet-5": { inPerMTok: 3.0, outPerMTok: 15.0 },
   },
   // KI-Kosten-Achse des Budget-Gates (trackUsage) UND des Stripe-Ledgers (aiCostCents):
-  // USD-Token-Preise -> EUR. Derselbe Kurs wie providerToBucketRateMicro, EINE Quelle
-  // (EXCHANGE_RATE_DEFAULTS, GAP-08). integer:false - der Kurs ist eine Dezimalzahl.
-  usdToEur: numEnv("USD_TO_EUR", process.env.USD_TO_EUR, {
-    fallback: EXCHANGE_RATE_DEFAULTS.usdToEur,
-    min: USD_TO_EUR_MIN,
-    integer: false,
-  }),
+  // USD-Token-Preise -> EUR. DIESELBE Umgebungsvariable, derselbe Default und dasselbe
+  // Minimum wie providerToBucketRateMicro oben (GAP-08: ein Kurs, eine Stellschraube) -
+  // hier nur als Faktor EUR je USD statt in Mikro-Einheiten. Der Fallback wird aus
+  // EXCHANGE_RATE_DEFAULTS abgeleitet, damit der Kurs nicht als zweite Zahl gepflegt wird.
+  usdToEur:
+    numEnv("PROVIDER_TO_BUCKET_RATE_MICRO", process.env.PROVIDER_TO_BUCKET_RATE_MICRO, {
+      fallback: Math.round(EXCHANGE_RATE_DEFAULTS.usdToEur * FX_MICRO_PER_UNIT),
+      min: 1,
+    }) / FX_MICRO_PER_UNIT,
 
   // DATA_DIR-Override, damit Tests nicht das echte data/store.json anfassen
   dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),

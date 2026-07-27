@@ -1,18 +1,15 @@
-// Regressionstest zu GAP-08 (s. test/fx-single-source.test.js). Review-Befund an
-// Phase P2 (tasks/gates-fix-chain.md): der Gate-Test dort liest den USD/EUR-Kurs per
-// readLiteral("usdToEur") - eine Regex, die den ERSTEN Treffer des Bezeichners
-// "usdToEur:" im Quelltext nimmt. Das trifft die dekorative Kopie in
-// EXCHANGE_RATE_DEFAULTS, NICHT zwingend die numEnv-Fallback-Stelle, die tatsaechlich
-// verwendet wird (die Fallback-Stelle referenziert die Konstante, ist selbst also kein
-// Zahlen-Literal). Aendert jemand kuenftig NUR die Fallback-Stelle (z.B. auf einen
-// abweichenden Wert statt der Referenz), bleibt der Gate-Test bei genau diesem Szenario
-// gruen - er hat die Aenderung nie gesehen.
+// Regressionstest zu GAP-08 (s. test/fx-single-source.test.js). Der Gate-Test dort liest
+// den QUELLTEXT von src/config.js per Regex: er verlangt ein Zahlen-Literal an der
+// Konstanten EXCHANGE_RATE_DEFAULTS.usdToEur und eines am numEnv-Fallback von
+// PROVIDER_TO_BUCKET_RATE_MICRO und vergleicht die beiden. Was er NICHT sieht: welche
+// Umgebungsvariable die KI-Achse am Ende tatsaechlich liest und welchen Wert sie gebaut
+// annimmt. Genau daran haengt aber die Zusage der Phase - EIN Kurs mit EINER
+// Stellschraube.
 //
 // Dieser Test schliesst die Luecke, ohne den Gate-Test selbst anzufassen: er startet
 // einen Kindprozess mit kontrollierter Umgebung (BASE_ENV, Lehre test-base-env-drift)
-// und liest den ECHTEN, gebauten config-Wert - nicht den Quelltext per Regex. Das ist
-// immun gegen jede dekorative Kopie und findet eine Entkopplung unabhaengig davon, ob
-// die Fallback-Stelle am Ende ein Literal oder eine Referenz ist.
+// und liest die ECHTEN, gebauten config-Werte - nicht den Quelltext. Das ist immun gegen
+// jede dekorative Kopie im Quelltext.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -22,8 +19,17 @@ const MICRO_PER_UNIT = 1_000_000;
 
 // Liest config.llm.usdToEur und config.billing.providerToBucketRateMicro aus einem
 // frisch importierten src/config.js - im Kindprozess, damit die lokale .env dieses
-// Arbeitsplatzes (Lehre test-base-env-drift) den Wert nicht verfaelscht.
-function readBuiltRates(env) {
+// Arbeitsplatzes (Lehre test-base-env-drift) den Wert nicht verfaelscht. NODE_ENV=test
+// ist dabei Pflicht und nicht bloss Kosmetik: ohne sie laedt config.js dotenv, und ein
+// lokales .env koennte genau die Variable setzen, die dieser Test gerade WEGLAESST.
+//
+// overrides: Zusatzvariablen ueber BASE_ENV. Der Wert `undefined` ENTFERNT die Variable
+// aus der Umgebung des Kindprozesses - so wird der Code-Fallback selbst pruefbar.
+function readBuiltRates(overrides = {}) {
+  const env = { PATH: process.env.PATH, ...BASE_ENV, ...overrides, NODE_ENV: "test" };
+  for (const [name, value] of Object.entries(env)) {
+    if (value === undefined) delete env[name];
+  }
   const script =
     "import(\"./src/config.js\").then(({ config }) => " +
     "process.stdout.write(JSON.stringify({ " +
@@ -31,50 +37,35 @@ function readBuiltRates(env) {
     "providerToBucketRateMicro: config.billing.providerToBucketRateMicro })));";
   const out = execFileSync(process.execPath, ["--input-type=module", "-e", script], {
     cwd: ROOT,
-    env: { PATH: process.env.PATH, ...BASE_ENV, ...env },
+    env,
     encoding: "utf8",
   });
   return JSON.parse(out);
 }
 
-// BASE_ENV pinnt USD_TO_EUR explizit (Lehre test-base-env-drift) - fuer den FALLBACK-Wert
-// (was ohne gesetzte Umgebungsvariable gebaut wird) muss die Variable hier gezielt
-// entfernt werden, sonst prueft der erste Test nur den env-gesetzten Wert, nie den
-// Code-Fallback selbst. NODE_ENV=test bleibt trotzdem gesetzt (config.js laedt sonst
-// dotenv und ein lokales .env dieses Arbeitsplatzes koennte USD_TO_EUR selbst setzen -
-// dieselbe Lehre test-base-env-drift, nur am Fehlen statt am Vorhandensein der Variable).
-function readBuiltRatesWithoutUsdToEurEnv() {
-  const { USD_TO_EUR: _unused, ...envWithoutUsdToEur } = BASE_ENV;
-  const script =
-    "import(\"./src/config.js\").then(({ config }) => " +
-    "process.stdout.write(JSON.stringify({ " +
-    "usdToEur: config.llm.usdToEur, " +
-    "providerToBucketRateMicro: config.billing.providerToBucketRateMicro })));";
-  const out = execFileSync(process.execPath, ["--input-type=module", "-e", script], {
-    cwd: ROOT,
-    env: { PATH: process.env.PATH, ...envWithoutUsdToEur, NODE_ENV: "test" },
-    encoding: "utf8",
+test("der GEBAUTE Fallback beider Kosten-Achsen (ohne gesetzte Kurs-Variable) meint denselben Kurs", () => {
+  const { usdToEur, providerToBucketRateMicro } = readBuiltRates({
+    PROVIDER_TO_BUCKET_RATE_MICRO: undefined,
   });
-  return JSON.parse(out);
-}
-
-test("der GEBAUTE Fallback-Wert von usdToEur (ohne gesetztes USD_TO_EUR) stimmt mit der Provider-Achse ueberein", () => {
-  const { usdToEur, providerToBucketRateMicro } = readBuiltRatesWithoutUsdToEurEnv();
   assert.equal(
     usdToEur,
     providerToBucketRateMicro / MICRO_PER_UNIT,
-    "config.llm.usdToEur weicht vom tatsaechlich gebauten Provider-Kurs " +
+    "config.llm.usdToEur weicht vom gebauten Provider-Kurs " +
       "(config.billing.providerToBucketRateMicro) ab - dieselben USD ergeben je " +
       "Kostenpfad einen anderen EUR-Betrag",
   );
 });
 
-test("USD_TO_EUR ist am gebauten config-Wert env-korrigierbar (kein Deploy noetig)", () => {
-  const { usdToEur } = readBuiltRates({ USD_TO_EUR: "0.5" });
+test("eine Kurskorrektur ueber PROVIDER_TO_BUCKET_RATE_MICRO bewegt BEIDE Achsen (kein Deploy noetig)", () => {
+  const { usdToEur, providerToBucketRateMicro } = readBuiltRates({
+    PROVIDER_TO_BUCKET_RATE_MICRO: "500000",
+  });
+  assert.equal(providerToBucketRateMicro, 500000, "Provider-Achse ignoriert die Umgebung");
   assert.equal(
     usdToEur,
     0.5,
-    "config.llm.usdToEur ignoriert USD_TO_EUR aus der Umgebung - waere das der Fall, " +
-      "braeuchte eine Kurskorrektur wieder einen Deploy",
+    "die KI-Achse haengt nicht an derselben Variablen - damit gaebe es wieder zwei " +
+      "Stellschrauben fuer einen Kurs, und eine einseitige Korrektur liesse die Achsen " +
+      "auseinanderlaufen",
   );
 });

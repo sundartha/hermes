@@ -257,11 +257,8 @@ export const BASE_ENV = {
   PROVIDER_CURRENCY: "USD",
   // LCT P2: Kurs explizit im Band (Lehre test-base-env-drift). Ohne diese Zeile leakt eine
   // lokale .env via dotenv in die Spawn-Tests und erzeugte dort eine fremde Boot-WARN.
+  // Seit GAP-08 (P2) speist dieselbe Zeile auch die KI-Kosten-Achse (config.llm.usdToEur).
   PROVIDER_TO_BUCKET_RATE_MICRO: "920000",
-  // GAP-08 (P2): USD/EUR-Kurs der KI-Kosten-Achse, auf den ausgelieferten Code-Default
-  // gepinnt (Lehre test-base-env-drift). Ohne diese Zeile leakt ein lokales .env via
-  // dotenv in die Spawn-Tests - der Kindprozess laeuft ohne NODE_ENV=test.
-  USD_TO_EUR: "0.92",
   // LCT P3: Kosten-Abgleich explizit auf den Code-Defaults gepinnt (Lehre
   // test-base-env-drift). Ohne diese Zeilen faerbte eine lokale .env die Spawn-Suite.
   // Der Sweep laeuft ohnehin nur per Intervall (KE-P6B: 1 h, unref) - in einem Spawn-Test
