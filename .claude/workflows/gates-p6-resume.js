@@ -25,7 +25,8 @@ return await workflow(
     phaseId: "GATES-P6",
     phaseTitle: "Store-Vertraege + TTS-Kontingent (LANG-19, GAP-09 x2)",
     branch: "phase/gates-p6-store-tts-quota",
-    baseBranch: "master",
+    // Basis ist der Commit, auf dem der Impl-Lauf stand - NICHT "master" (s. gates-p2-resume.js).
+    baseBranch: "695505e",
     specFile: "tasks/gates-fix-chain.md",
     specSection: "P6",
     gates:

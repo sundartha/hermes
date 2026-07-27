@@ -23,7 +23,8 @@ return await workflow(
     phaseId: "GATES-P3",
     phaseTitle: "Kauf-Land-Tabelle (DID-05, DID-09)",
     branch: "phase/gates-p3-provisioning-geo",
-    baseBranch: "master",
+    // Basis ist der Commit, auf dem der Impl-Lauf stand - NICHT "master" (s. gates-p2-resume.js).
+    baseBranch: "695505e",
     specFile: "tasks/gates-fix-chain.md",
     specSection: "P3",
     gates: "DID-05 und DID-09 in test/f1-provisioning-geo.test.js",

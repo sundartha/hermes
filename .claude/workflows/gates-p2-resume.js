@@ -24,7 +24,10 @@ return await workflow(
     phaseId: "GATES-P2",
     phaseTitle: "Wechselkurs - eine Quelle (GAP-08 x2)",
     branch: "phase/gates-p2-fx-single-source",
-    baseBranch: "master",
+    // Basis ist der Commit, auf dem der Impl-Lauf stand - NICHT "master". master traegt
+    // seit dem Absturz einen Werkzeug-Commit (Run-Skripte); gegen ihn gediffed saehe der
+    // Review diese Dateien faelschlich als Loeschungen des Branches.
+    baseBranch: "695505e",
     specFile: "tasks/gates-fix-chain.md",
     specSection: "P2",
     gates: "die beiden GAP-08-Tests in test/fx-single-source*.test.js",
