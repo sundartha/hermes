@@ -138,6 +138,33 @@ export function stripTrailingSlash(url) {
   return url.replace(/\/$/, "");
 }
 
+// ---- Wechselkurs USD -> EUR: EIN gepflegter Kurs (GAP-08) ----
+// Vor P2 trugen die beiden Kosten-Achsen zwei Kurse: der KI-Kostenpfad ein nacktes
+// Literal 0,93 (nur per Deploy korrigierbar), die Provider-Achse 920000 Mikro-Einheiten
+// = 0,92. Derselbe Dollar ergab je Kostenpfad einen anderen Euro.
+//
+// Seither ist DIES der gepflegte Kurs. Beide Achsen fahren denselben Wert in zwei
+// Darstellungen: die KI-Achse als Faktor EUR je USD (hier), die Provider-Achse als
+// Mikro-GANZZAHL (Geld nie als Float, G26 - numEnv braucht dort ein Ganzzahl-Literal als
+// Default, deshalb steht 920000 am Feld selbst). Dass beide denselben Kurs meinen, haelt
+// der Gate-Test test/fx-single-source.test.js fest.
+//
+// Stand 2026-07, ANNAHME - quartalsweise von Hand zu pflegen. Im Betrieb ohne Deploy
+// ueber USD_TO_EUR bzw. PROVIDER_TO_BUCKET_RATE_MICRO korrigierbar, beide zusammen.
+//
+// Object.freeze ist hier unbedenklich (anders als bei modelPricesUsd): nur die ZAHL
+// wandert nach rawConfig, das Objekt selbst wird nie ein Blatt des guardedConfig-Proxys.
+const EXCHANGE_RATE_DEFAULTS = Object.freeze({
+  usdToEur: 0.92,
+});
+
+// Kleinster akzeptierter Kurs (fail-closed, Regel 1). NICHT 0: ein Kurs 0 buchte jede
+// KI-Nutzung mit 0 EUR und schaltete die KI-Achse des Budget-Gates lautlos ab. Der Wert
+// liegt weit unter jedem realen USD/EUR-Kurs - er faengt die 0, negative Werte und den
+// Zehnerpotenz-Vertipper (0.092), nie eine echte Kursbewegung. Bewusst KEINE Obergrenze:
+// numEnvs max ist ein STILLER Clamp, und ein zu hoher Kurs ist hoechstens zu streng.
+const USD_TO_EUR_MIN = 0.1;
+
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -390,8 +417,10 @@ const rawConfig = {
   providerCurrency: (process.env.PROVIDER_CURRENCY || "USD").toUpperCase(),
   // Umrechnungskurs Provider-Waehrung -> Ziel-Bucket, als GANZZAHL in Mikro-Einheiten
   // (G26, Geld nie als Float): wie viele Mikro-Einheiten EUR-Cent auf eine Mikro-Einheit
-  // USD-Cent entfallen. Default 920000 = 0,92 EUR je USD (Stand 2026-07, ANNAHME, vom
-  // Owner quartalsweise von Hand zu pflegen).
+  // USD-Cent entfallen. Default 920000 = 0,92 EUR je USD - dieselbe Zahl wie
+  // EXCHANGE_RATE_DEFAULTS.usdToEur, nur in Mikro-Ganzzahl-Darstellung (GAP-08: EIN Kurs
+  // fuer beide Kosten-Achsen). Beide Defaults werden ZUSAMMEN gepflegt; laufen sie
+  // auseinander, faellt der Gate-Test test/fx-single-source.test.js.
   //
   // In P2/P3 hat der Kurs KEINEN Verbraucher - er wird hier eingefuehrt, weil ein Guard,
   // der zwei Phasen spaeter scharf wird, zwei Phasen lang keine Sicherung ist. Ab P4
@@ -1068,7 +1097,14 @@ const rawConfig = {
     "claude-haiku-4-5": { inPerMTok: 1.0, outPerMTok: 5.0 },
     "claude-sonnet-5": { inPerMTok: 3.0, outPerMTok: 15.0 },
   },
-  usdToEur: 0.93,
+  // KI-Kosten-Achse des Budget-Gates (trackUsage) UND des Stripe-Ledgers (aiCostCents):
+  // USD-Token-Preise -> EUR. Derselbe Kurs wie providerToBucketRateMicro, EINE Quelle
+  // (EXCHANGE_RATE_DEFAULTS, GAP-08). integer:false - der Kurs ist eine Dezimalzahl.
+  usdToEur: numEnv("USD_TO_EUR", process.env.USD_TO_EUR, {
+    fallback: EXCHANGE_RATE_DEFAULTS.usdToEur,
+    min: USD_TO_EUR_MIN,
+    integer: false,
+  }),
 
   // DATA_DIR-Override, damit Tests nicht das echte data/store.json anfassen
   dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
