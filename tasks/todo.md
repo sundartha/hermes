@@ -122,3 +122,50 @@ inkrementell entschaerfen. Quelle: `tasks/clean-code-confirm-audit-2026-07-17.md
   Shim-zuerst. Enthaelt Pre-Mortem (10), Ausfuehrungs-Modell, 6 offene Fragen (OQ-1..6), Kickoff-Prompt.
   **Verifikation:** `grep -cE '^#### PA-'` = 20; alle Pflicht-Sektionen present; 0 Umlaute. KEIN Prod-Code
   geaendert, kein Deploy. Naechster Schritt: Owner-Go + OQ-1..6 klaeren, dann Ausfuehrungs-Session.
+
+---
+
+## W3 Bahn 1+2 — die 26 manuellen/Live-Tests der i18n-Welle W3 (2026-07-27)
+
+Auftrag: Bahn 1 (Schreibtisch, offline) und Bahn 2 (Browser, kein Anruf, kein Geld)
+autonom abarbeiten. Bahn 3 (claude.ai-Connector + 4 Live-Anrufe) bleibt beim Owner.
+Ausgangslage: `tasks/i18n-tests/28-w3-checkliste.md` deckt nur 16 der 26 Katalog-IDs ab;
+10 IDs (LAW-05/10/11/12/24, PAY-02, PAY-19, FMT-02, MCP-17, MCP-21) fehlen dort ganz.
+
+**Deliverable ist ein PROTOKOLL, kein Fix.** W3 misst den Ist-Zustand; gefundene Defekte
+werden benannt und der Fix-Kette nach W3 uebergeben, NICHT in dieser Session behoben.
+
+- **Erwartetes Ergebnis (deterministisch):** `tasks/i18n-tests/28-w3-checkliste.md` traegt
+  fuer JEDE der 26 W3-Katalog-IDs genau eine Protokollzeile mit {Datum, Beleg (Kommando +
+  beobachtete Ausgabe / Screenshot-Pfad), Urteil BESTANDEN|BEFUND|GEPARKT}. Keine ID ohne
+  Zeile. Geparkte IDs nennen den Grund und die Vorbedingung, unter der sie laufen koennen.
+- **Verifikation:** `grep -c` je ID in der Checkliste = mindestens 1; kein Produktionscode
+  geaendert (`git diff --name-only -- src/ public/ apps/ scripts/ render.yaml` = leer);
+  `npm test` unveraendert gruen (Gegenprobe, dass die Session nichts angefasst hat).
+- **Bindende Grenzen dieser Session:** kein Live-Anruf, keine DID-Bestellung, kein
+  Stripe-Charge, keine Env-Aenderung am Live-Service, kein Deploy. Browser-Arbeit gegen
+  LOKALEN Server (praeparierter Temp-Store) wo immer moeglich; gegen Live NUR lesend.
+
+- [x] Bahn 1 (offline): LAW-05, LAW-10, LAW-11, LAW-12, LAW-16, LAW-23, LAW-24, FMT-02, PAY-02
+  **Verifikation:** je ID Kommando + beobachtete Ausgabe in `28-w3-checkliste.md` 5.1.
+  Ergebnis: LAW-05/10/23/24 Befund bestaetigt, LAW-11/12 Anker verschoben (Text liegt seit
+  P14 in `apps/web/src/data/legal/*.json`), LAW-16 + PAY-02 bestanden, FMT-02 Wurzel durch
+  P8 behoben -> Ersatzbefund B1 (Zeitzone hat weltweit keinen Default, `Europe/Berlin`).
+- [x] Bahn 2 (Browser, live, lesend): WEB-02, PROMPT-05, LANG-20, PAY-11, DID-18, MCP-21
+  **Verifikation:** `curl /tenant.html` -> `302 -> /app` (beweist `WEB_DIST_DIR` live gesetzt);
+  Browser auf `app.sundartha.com/app`: `documentElement.lang="en"`, `pathname="/app/"`;
+  Suche im AUSGELIEFERTEN Bundle: `Automatic (by number)` + `Number setup failed` + `en-US`
+  vorhanden, `de-DE` + `Einrichtung fehlgeschlagen` **nicht**. Ergebnis: PROMPT-05 ueberholt
+  (Luecke geschlossen), LANG-20 bestaetigt, MCP-21 geschlossen, PAY-11 + DID-18 -> Befund B2
+  (Katalog-Anker `public/tenant.html` ist live geschattet; die Achse ist auf `en-US`/englisch
+  gekippt) -> **Owner-Entscheidung noetig**.
+- [x] MCP-17, MCP-18, UI-20 **nicht geparkt, sondern erledigt**: MCP-18/UI-20 sind
+  gegenstandslos (seit P13/E4 liest niemand mehr `navigator.language`, `grep -rn` -> nur
+  Kommentare), MCP-17s Praemisse ist entfallen (Tool-Beschreibungen sind laut
+  `src/mcp-tools.js:4-12` bewusst einsprachig englisch). PAY-19 code-seitig bestaetigt
+  (kein `requires_action`-Handling in `src/billing/`), Live-Stripe-Probe geparkt.
+- [x] Checkliste geschrieben: `tasks/i18n-tests/28-w3-checkliste.md` Abschnitt 5 (5.1 Bahn 1,
+  5.2 Bahn 2, 5.3 die zwei uebergreifenden Befunde, 5.4 Stand).
+  **Verifikation:** `npm test` -> **3295 / 0 rot**; `git diff --name-only -- src/ public/
+  apps/ scripts/ render.yaml .env.example package.json` -> **leer**. Kein Abbruchpunkt
+  ausgeloest -> Stufe D bleibt freigegeben.

@@ -187,3 +187,107 @@ haengen sich an D1 an und brauchen **keinen eigenen Anruf**.
 **O13 - Rechtstexte liefern.** `/legal/privacy` und `/legal/terms` sind live 404,
 `/datenschutz` traegt weiter "Platzhalter". Solange das so ist, bleiben GAP-15 x2 rot. Das ist
 Textarbeit (ggf. mit Anwalt), keine Testarbeit - und sie blockiert keinen anderen W3-Test.
+
+---
+
+## 5. PROTOKOLL Bahn 1 + Bahn 2 (2026-07-27, autonom)
+
+**Auftrag des Owners:** Bahn 1 (Schreibtisch/offline) und Bahn 2 (Browser, kein Anruf,
+kein Geld) autonom abarbeiten. Bahn 3 (claude.ai-Connector + die vier Live-Anrufe) bleibt
+beim Owner.
+
+**Vorbefund, der diesen Abschnitt ueberhaupt noetig macht.** Die Stufen A-D oben decken
+16 Katalog-IDs ab. W3 hat aber **26** (Abschnitt 6.1/6.2 in `PLAN-I18N-TESTS.md`, plus die
+Modus-Korrektur UI-20 aus 7.14). **Zehn IDs standen in keiner Stufe**: LAW-05, LAW-10,
+LAW-11, LAW-12, LAW-24, PAY-02, PAY-19, FMT-02, MCP-17, MCP-21. Sie sind hier nachgezogen.
+
+**Methode und ihre Grenze.** Kein Produktionscode angefasst (`git diff --name-only --
+src/ public/ apps/ scripts/ render.yaml` = leer). Live-Zugriffe ausschliesslich LESEND
+(`curl`, Browser ohne Login). **Ich habe mich NICHT eingeloggt** - Zugangsdaten einzugeben
+ist mir untersagt. Wo ein Test die eingeloggte Sicht braucht, steht das ausdruecklich als
+Rest-Aufgabe. Wo der Katalog eine Sichtpruefung verlangt, deren Aussage sich am
+AUSGELIEFERTEN Live-Bundle deterministisch belegen laesst, ist das Bundle der Beleg - es
+ist der staerkere Beweis als ein Screenshot, weil es zeigt, was live wirklich liegt.
+
+### 5.1 Bahn 1 - Schreibtisch (9 IDs)
+
+| ID | Urteil | Beleg (Kommando -> beobachtet) |
+| --- | --- | --- |
+| **LAW-05** | **BEFUND bestaetigt** - Land-Gate ist reine Whitelist | `grep -ciE "consent\|dnc\|timezone\|zeitfenster" src/telephony/outbound-gates.js` -> **0**. Die Ablehnungsgruende der Kette: `kyc, abo, billing_hold, allowlist, denylist, format, land, stundenlimit, ziel_limit, budget_tenant, reserve_*, platform`. Kein Consent-, kein Zeitfenster-Glied. |
+| **LAW-10** | **BEFUND bestaetigt** - keine KI-Stimmen-Einwilligung | `grep -ciE "aiVoiceConsent\|artificial.?voice" src/telephony/outbound-gates.js` -> **0**. Ein Anruf mit KI-Stimme an eine US-Nummer laeuft durch die gesamte Kette ohne Consent-Pruefung. |
+| **LAW-11** | **BEFUND bestaetigt, Anker verschoben** | Der Katalog-Anker `datenschutz.astro` traegt seit P14 KEINEN Text mehr (`grep -c "Platzhalter"` -> **0**); die Seite ist nur noch Huelle um `apps/web/src/data/legal/privacy.de.json`. Dort: `grep -c "Platzhalter"` -> **1**, `grep -ciE "CCPA\|Do Not Sell\|California"` -> **0**. Live gegengeprueft: `curl https://sundartha.com/datenschutz \| grep -c "Platzhalter"` -> **1**. |
+| **LAW-12** | **bestaetigt** (Zustand wie dokumentiert) | `apps/web/src/data/legal/terms.de.json`: `grep -c "Platzhalter"` -> **1**. Kein final verbindlicher Text. Gleicher Ankerwechsel wie LAW-11. |
+| **LAW-16** | **BESTANDEN** | `grep -n "region:" render.yaml` -> `11: region: frankfurt`. EU-Residenz fuer ALLE Tenants, keine Region-Wahl pro Land. Die Luecke ist die fehlende Offenlegung ggue. Nicht-EU-Kunden - sie haengt an O13 (Rechtstexte), nicht an der Technik. |
+| **LAW-23** | **BEFUND bestaetigt** - Doku-Luecke | `grep -ciE "consent\|TCPA\|Ofcom" PLAN-SECURITY.md` -> **0**. Die 21 Rubriken decken Budget/Reserve/Provisioning/Billing/Identitaet/Kosten ab, keine einzige Recht/Consent. |
+| **LAW-24** | **BEFUND bestaetigt UND praezisiert** | `src/i18n/locales.js:287-291` (EN) instruiert das Modell per Prompt (`Your first sentence must be exactly: ...`) statt es LLM-frei zu erzwingen. **Praezisierung:** DE (`:116-121`) und FR (`:215-219`) sind strukturell IDENTISCH - die schwaechere Garantie haengt am PFAD (realtime), nicht an der Sprache. Der Katalog rahmt sie faelschlich als EN-Eigenheit. Zusatz: Entscheidung 7.14 erklaert den Realtime-Zweig zu "kein Produktpfad". |
+| **FMT-02** | **Wurzel behoben - NEUER, groesserer Befund an ihrer Stelle** | s. 5.3 unten. Die Simulation selbst: bei `2026-07-28T00:30:00Z` steht UTC auf `Tuesday 28/07`, `America/Los_Angeles` auf `Monday 27/07` -> **Tagesabweichung reproduziert**. |
+| **PAY-02** | **ENTSCHIEDEN, kein offener Widerspruch** | Owner-Entscheidung 7.1 (EUR ueberall) + live `PAYMENT_CURRENCY=eur` (Stufe A oben). Anzeige-Waehrung == Belastungs-Waehrung haelt. **Rest-Aufgabe (Doku, kein Test):** den "USD bindend"-Vermerk in der Projekt-Historie und den Kommentar in `apps/web/src/pages/preise.astro` als ueberholt markieren. |
+
+### 5.2 Bahn 2 - Browser / Live-Oberflaechen (10 IDs)
+
+| ID | Urteil | Beleg |
+| --- | --- | --- |
+| **WEB-02** | **gemessen, ohne Login entschieden** | `curl -o /dev/null -w "%{http_code} %{redirect_url}" https://vodafone-agent.onrender.com/tenant.html` -> **`302 -> /app`**. Damit ist `WEB_DIST_DIR` live **gesetzt** (die Weiche in `src/app.js` registriert diesen Redirect nur dann). Im Browser auf `https://app.sundartha.com/app`: `document.documentElement.lang` = **`"en"`**, `location.pathname` = **`/app/`**, Titel `Hermes - App`. Das ist genau der Katalog-Zweig "`<html lang="en">` und `/app`". **Offen bleibt allein die eingeloggte Sicht** (Stufe B1). |
+| **PROMPT-05** | **UEBERHOLT - die Luecke ist geschlossen** | Der Katalog behauptet "kein Dashboard-Weg, `settings.language` zu korrigieren". Gegenbeweis: `apps/web/src/components/app/SettingsIsland.astro:58-59` traegt `<select id="settings-language">`, und `src/self-service.js:20` fuehrt `language` in `SELF_SERVICE_FREE_FIELDS` - der Tenant darf es selbst schreiben. Live gegengeprueft: das ausgelieferte `/app`-HTML enthaelt `settings-language`. |
+| **LANG-20** | **BEFUND bestaetigt - LIVE** | `"Automatic (by number)"` liegt woertlich im ausgelieferten `/app`-HTML UND im Chunk `/_astro/api.*.js`; `apps/web/src/lib/api.js:459-464` zeigt den Grund: statischer Label-Katalog ohne dynamischen Teil. Kein Hinweis, welche Sprache "Automatic" fuer DIESEN Tenant bedeutet. |
+| **PAY-11** | **Anker TOT, Achse GEKIPPT** | s. 5.3. `public/tenant.html` ist live nicht mehr erreichbar (302 -> `/app`); dort steht heute genau **1** `de-DE` (`STATIC_FORMAT_LOCALE`, dokumentierter fail-soft-Ausgangswert), P15b holt die Locale vom Server. Die LIVE-Oberflaeche `apps/web` haelt dagegen `en-US` hart. |
+| **DID-18** | **Anker TOT, Defekt GESPIEGELT** | `"Einrichtung fehlgeschlagen."` steht in `public/tenant.html:348` - diese Datei ist live geschattet. Im ausgelieferten Live-Bundle `/_astro/api.*.js` steht stattdessen **`"Number setup failed"`** (`apps/web/src/lib/api.js:191`), hart **englisch**. Der Defekt ist nicht behoben, sondern hat die Sprache gewechselt. |
+| **MCP-21** | **GESCHLOSSEN** | Der Katalog sagt vorher: Label englisch, Wert deutsch. Heute nimmt `permissionsSummary(settings, labels)` (`src/mcp-tools.js:217-222`) die Labels als Parameter, und `src/i18n/mcp-texts.js` fuehrt sie je Sprache (`PersoenlicheDaten` / `PersonalData` / `DonneesPersonnelles`). Label und Wert stammen aus DERSELBEN Quelle (`loc.mcp`, `:742`) - der beschriebene Bruch ist strukturell ausgeschlossen. |
+| **MCP-18** | **GEGENSTANDSLOS** | Der Test misst die Verlaesslichkeit von `navigator.language` im claude.ai-Iframe. Seit **P13/E4** liest das Produkt dieses Signal nicht mehr: `src/ui/widget-i18n.js:170-175` setzt die Locale serverseitig als Literal. `grep -rn "navigator.language" src/` -> nur noch **zwei Kommentarzeilen**, keine Codestelle. Ein Signal, das niemand liest, braucht keine Verlaesslichkeitsmessung. |
+| **UI-20** | **GEGENSTANDSLOS** | Identische Begruendung wie MCP-18 (beide beschreiben denselben Sachverhalt; UI-20 wurde in 7.14 nur im Modus korrigiert). |
+| **MCP-17** | **Praemisse entfallen** | Der Test fragt, ob **deutsche** Tool-Beschreibungen eine englische Chat-Session verschlechtern. `src/mcp-tools.js:4-12` haelt als Systemgrenze fest: alles, was nur das Modell liest, ist **einsprachig englisch** und wird bewusst nicht lokalisiert (per `test/p15-mcp-tool-descriptions-en.test.js` gepinnt). Stichprobe: `get_agent_status` -> "Status of the phone agent: ...". Es gibt keine deutschen Beschreibungen mehr, deren Wirkung zu messen waere. **Rest-Aufgabe bleibt C1**: dass der LIVE verbundene Connector diese Texte auch ausliefert (Cache-Frage, kein Code-Zustand). |
+| **PAY-19** | **code-seitig BESTAETIGT, Live-Probe geparkt** | `grep -rniE "requires_action\|authentication_required\|next_action\|3ds" src/billing/` -> **kein Handling**; `src/billing/stripe.js:32` haelt `OFF_SESSION = "true"` mit dem Kommentar "kein 3DS-Redirect noetig". Ein SCA-Fehlschlag hat damit keinen Retry-/Redirect-Zweig - `assertOk` wirft, der Kunde bekommt nie die Chance zur Authentifizierung. **Geparkt:** die Live-Bestaetigung braucht einen Checkout mit 3DS-Testkarte plus `placeHold` gegen echtes Stripe-TEST - eine eigene Sitzung mit Geld-Naht, nicht Teil dieser. |
+
+### 5.3 Zwei Befunde, die groesser sind als ihre Test-ID
+
+**B1 - Die Zeitzonen-Achse hat exakt den Defekt, den die Sprach-Achse gerade behoben hat.**
+P8 hat FMT-01/FMT-02 an der Wurzel gefixt: `src/claude.js:43` nimmt die Zeitzone des
+TENANTS statt der des Serverprozesses. Der Katalogtext zu FMT-02 ist damit doppelt
+ueberholt - und er war zusaetzlich sachlich falsch: er nennt das Abweichungsfenster
+"UTC 22:00-24:00", gemessen liegt es bei **UTC 00:00-07:00** (bei `2026-07-28T07:30:00Z`
+stehen UTC und LA wieder auf demselben Tag).
+
+Der ERSATZBEFUND wiegt schwerer. `TIMEZONE_FOR_COUNTRY` (`src/geo/resolve.js:44-48`) kennt
+**acht** Laender (DE/AT/CH/FR/GB/IE/US/CA); `timezoneForCountry` faellt fuer alles andere
+auf `DEFAULT_TIMEZONE = "Europe/Berlin"` (`src/store/defaults.js:369`). Bei dem in 7.11
+beschlossenen **weltweiten** Start heisst das: ein Tenant in Japan, Brasilien oder Indien
+bekommt eine **Berliner Uhr** in seinem Prompt - bis zu 12 Stunden daneben, also regelmaessig
+der falsche Wochentag. Selbst innerhalb der acht: `US -> America/New_York`, ein Kunde in
+Los Angeles liegt 3 h daneben (der Code nennt das ausdruecklich eine "Anzeige-Naeherung").
+
+Das ist strukturell **dieselbe** Luecke, die fuer die Sprache mit 7.12 (`en` als Weltdefault,
+WORLD-01/02/03) geschlossen wurde. Fuer die Zeitzone gibt es keine entsprechende
+Entscheidung. **Empfehlung: eigene Katalog-IDs in der Fix-Kette nach W3**, nicht in W3.
+
+**B2 - Beide Dashboard-Befunde zeigen auf eine Oberflaeche, die live niemand mehr sieht.**
+PAY-11 und DID-18 zielen auf `public/tenant.html`. Live faengt `src/app.js` diesen Pfad ab
+und leitet mit **302 auf `/app`** um (der Astro-Build). Gemessen:
+
+| Achse | Katalog-Anker `public/tenant.html` | LIVE-Oberflaeche `apps/web` -> `/app` |
+| --- | --- | --- |
+| Geld/Datum | seit P15b **serverseitig** (`formatLocale` aus `/api/self-service/state`), nur der fail-soft-Ausgangswert ist `de-DE` | **hart `en-US`** (`lib/api.js:332`, `lib/subscribe.js:34`), Preise als `€4.99` ueber `formatPlanPrice` |
+| Fehlertext Nummer | `"Einrichtung fehlgeschlagen."` (deutsch) | `"Number setup failed"` (**englisch**, `lib/api.js:191`) |
+
+Der PAY-11-Zustand ist **kein Versehen**: `test/dashboard-i18n-surface.test.js` pinnt
+`en-US` als gruene Regressions-Baseline (WEB-18) - eine bewusste Entscheidung fuer die
+englische Marketing-Oberflaeche. Nur ist `/app` inzwischen nicht mehr Marketing, sondern
+**das Tenant-Dashboard fuer alle Sprachen weltweit**. Ein deutscher Tenant sieht dort
+`7/27/2026` und `€4.99` statt `27.07.2026` und `4,99 €`, ein franzoesischer ebenso.
+
+**Das ist eine Produktfrage, kein Bug:** soll `/app` der Tenant-Sprache folgen (dann faellt
+WEB-18 als Baseline und die Kette `formatLocale` aus P15b wandert nach `apps/web`), oder
+bleibt das Dashboard bewusst einsprachig englisch (dann sind PAY-11 und DID-18
+**getragene Risiken** und gehoeren nach 7.13)? **Diese Entscheidung fehlt und blockiert die
+Endbewertung beider IDs.**
+
+### 5.4 Stand nach diesem Durchgang
+
+| | Anzahl | IDs |
+| --- | --- | --- |
+| **abgeschlossen** | 19 | MCP-19, DID-13, LAW-05, LAW-10, LAW-11, LAW-12, LAW-16, LAW-23, LAW-24, FMT-02, PAY-02, WEB-02 (Shell), PROMPT-05, LANG-20, MCP-21, MCP-18, UI-20, MCP-17 (Code-Teil), PAY-19 (Code-Teil) |
+| **wartet auf Owner-Entscheidung** | 2 | PAY-11, DID-18 (s. B2) |
+| **Bahn 3 - Owner** | 6 | PROMPT-23, LANG-25, MCP-20, OUT-26 (Live-Anrufe) + VOICE-27, VOICE-28 (haengen an D1) |
+| **Rest-Aufgaben aus Bahn 2** | 3 | B1 eingeloggte Sicht, C1 Connector-Neuverbindung, PAY-19 Live-Stripe-Probe |
+
+**Kein einziger Test dieser beiden Bahnen hat einen Abbruchpunkt ausgeloest.** Die
+Live-Anrufe der Stufe D sind damit weiterhin freigegeben - vorbehaltlich der Regeln dort.
