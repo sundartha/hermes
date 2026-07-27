@@ -138,6 +138,39 @@ export function stripTrailingSlash(url) {
   return url.replace(/\/$/, "");
 }
 
+// ---- Wechselkurs USD -> EUR: EIN Kurs, EINE Stellschraube (GAP-08) ----
+// Vor P2 trugen die beiden Kosten-Achsen zwei Kurse: der KI-Kostenpfad ein nacktes
+// Literal 0,93 (nur per Deploy korrigierbar), die Provider-Achse 920000 Mikro-Einheiten
+// = 0,92. Derselbe Dollar ergab je Kostenpfad einen anderen Euro.
+//
+// Seither speisen sich BEIDE Achsen aus DERSELBEN Umgebungsvariablen
+// PROVIDER_TO_BUCKET_RATE_MICRO: die Provider-Achse nimmt sie als Mikro-Ganzzahl (Geld
+// nie als Float, G26), die KI-Achse dieselbe Zahl geteilt durch FX_MICRO_PER_UNIT. Eine
+// Kurskorrektur im Betrieb setzt damit EINE Variable und bewegt beide Achsen
+// zwangslaeufig gemeinsam - ein Auseinanderlaufen zur Laufzeit ist strukturell
+// ausgeschlossen (G27: Struktur statt Disziplin), es braucht dafuer keinen Waechter, der
+// zwei Zahlen vergleicht.
+//
+// Warum die numEnv-Auswertung zweimal im Quelltext steht statt einmal in einer
+// Konstanten: der Gate-Test test/fx-single-source.test.js liest den QUELLTEXT und
+// verlangt woertlich "usdToEur: numEnv(" an der KI-Achse sowie ein nacktes Zahlen-Literal
+// am numEnv-Fallback von PROVIDER_TO_BUCKET_RATE_MICRO. Beide Aufrufe tragen deshalb
+// dieselbe Variable, denselben Default und dasselbe Minimum. Folge bei ungueltiger Env:
+// assertConfig meldet den Befund zweimal - der Boot bricht in jedem Fall ab.
+const FX_MICRO_PER_UNIT = 1_000_000;
+
+// Der ausgelieferte Default-Kurs in EUR je USD (Stand 2026-07, ANNAHME - quartalsweise
+// von Hand zu pflegen). Die KI-Achse leitet ihren numEnv-Fallback rechnerisch hieraus ab;
+// am Provider-Feld steht dieselbe Zahl als Mikro-Ganzzahl (920000), weil der Gate-Test
+// dort ein Literal verlangt. Dass beide Schreibweisen denselben Kurs meinen, haelt
+// derselbe Gate-Test fest: eine einseitig geaenderte Zahl faellt dort rot.
+//
+// Object.freeze ist hier unbedenklich (anders als bei modelPricesUsd): nur die ZAHL
+// wandert nach rawConfig, das Objekt selbst wird nie ein Blatt des guardedConfig-Proxys.
+const EXCHANGE_RATE_DEFAULTS = Object.freeze({
+  usdToEur: 0.92,
+});
+
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -390,8 +423,10 @@ const rawConfig = {
   providerCurrency: (process.env.PROVIDER_CURRENCY || "USD").toUpperCase(),
   // Umrechnungskurs Provider-Waehrung -> Ziel-Bucket, als GANZZAHL in Mikro-Einheiten
   // (G26, Geld nie als Float): wie viele Mikro-Einheiten EUR-Cent auf eine Mikro-Einheit
-  // USD-Cent entfallen. Default 920000 = 0,92 EUR je USD (Stand 2026-07, ANNAHME, vom
-  // Owner quartalsweise von Hand zu pflegen).
+  // USD-Cent entfallen. Default 920000 = 0,92 EUR je USD - dieselbe Zahl wie
+  // EXCHANGE_RATE_DEFAULTS.usdToEur, nur in Mikro-Ganzzahl-Darstellung (GAP-08: EIN Kurs
+  // fuer beide Kosten-Achsen). Diese Variable ist seit P2 die EINZIGE Stellschraube des
+  // Kurses: die KI-Kosten-Achse (llm.usdToEur) liest dieselbe Variable.
   //
   // In P2/P3 hat der Kurs KEINEN Verbraucher - er wird hier eingefuehrt, weil ein Guard,
   // der zwei Phasen spaeter scharf wird, zwei Phasen lang keine Sicherung ist. Ab P4
@@ -1068,7 +1103,16 @@ const rawConfig = {
     "claude-haiku-4-5": { inPerMTok: 1.0, outPerMTok: 5.0 },
     "claude-sonnet-5": { inPerMTok: 3.0, outPerMTok: 15.0 },
   },
-  usdToEur: 0.93,
+  // KI-Kosten-Achse des Budget-Gates (trackUsage) UND des Stripe-Ledgers (aiCostCents):
+  // USD-Token-Preise -> EUR. DIESELBE Umgebungsvariable, derselbe Default und dasselbe
+  // Minimum wie providerToBucketRateMicro oben (GAP-08: ein Kurs, eine Stellschraube) -
+  // hier nur als Faktor EUR je USD statt in Mikro-Einheiten. Der Fallback wird aus
+  // EXCHANGE_RATE_DEFAULTS abgeleitet, damit der Kurs nicht als zweite Zahl gepflegt wird.
+  usdToEur:
+    numEnv("PROVIDER_TO_BUCKET_RATE_MICRO", process.env.PROVIDER_TO_BUCKET_RATE_MICRO, {
+      fallback: Math.round(EXCHANGE_RATE_DEFAULTS.usdToEur * FX_MICRO_PER_UNIT),
+      min: 1,
+    }) / FX_MICRO_PER_UNIT,
 
   // DATA_DIR-Override, damit Tests nicht das echte data/store.json anfassen
   dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
