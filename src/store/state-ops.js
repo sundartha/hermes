@@ -2474,6 +2474,31 @@ export function claimPlatformSpendWarning(s, cfg, nowIso) {
 // Achse - die Zahlen dienen ausschliesslich dem Anzeige-Endpunkt (GET /api/billing/
 // platform-costs).
 
+// GAP-09: reservierter Kostentraeger des Play-TTS-Pfads. Der Zaehl-Seam der Store-Fassade
+// (recordTtsCharacters(chars, nowIso)) hat KEINE Tenant-Dimension - der Verbrauch war damit
+// plattformweit gebucht und KEINEM Kostentraeger zugeordnet (eine Kostenstelle ohne
+// Kostentraeger). Jedes plattformweit gebuchte Zeichen landet deshalb zusaetzlich auf
+// diesem einen reservierten Bucket; strukturell gilt ab jetzt
+// Summe(usage[*].ttsCharacters) >= platformTtsUsage.characters.
+// Der Doppelpunkt haelt den Schluessel kollisionsfrei gegen jede echte tenantId
+// (BOOTSTRAP_TENANT_ID "owner" / newId("t")). Es ist KEIN Tenant: er steht nicht in
+// s.tenants, wird also weder vom pg-Flush (der ueber state.tenants laeuft) noch von einer
+// Tenant-Projektion beruehrt; alle Geldfelder des Buckets bleiben 0, weshalb
+// globalUsageTotals/platformSpendMonthCents byte-identisch bleiben.
+// Die echte Pro-Tenant-Aufteilung des Play-TTS-Pfads verlangt eine Signatur-Erweiterung
+// der Store-Fassade und ist damit Folgearbeit.
+export const PLATFORM_TTS_COST_CENTER_ID = "platform:play-tts";
+
+// EINE Regel fuer "ElevenLabs-Kontingent erschoepft" (G5): der Vorab-Riegel in
+// tts/directive-synth.js prueft damit die Leseprojektion platformTtsUsageView, der
+// Nach-Buchungs-Riegel in recordTtsCharacters denselben Ausdruck gegen den Stand VOR der
+// Buchung. quota <= 0 = kein Kontingent hinterlegt -> nie erschoepft (derselbe
+// Aus-Sentinel wie warnPercent=0 in scaledThresholdCrossed; die Abweichung geht immer
+// Richtung Bestand). Reine Funktion ueber die Projektionsform {characters, quota}.
+export function ttsQuotaExhausted({ characters, quota }) {
+  return quota > 0 && characters >= quota;
+}
+
 // Zyklus-Schluessel des ElevenLabs-Kontingents ('YYYY-MM'). Anker = anchorDay (Tag im
 // Monat, aus config.billing.ttsQuotaCycleAnchorDay): ab anchorDay laeuft der aktuelle
 // Monat als Schluessel, DAVOR gilt noch der VORmonat -> der Reset faellt auf den
@@ -2498,23 +2523,41 @@ function ttsCycleWindowKey(row, cfg, nowIso) {
   return laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
 }
 
-// Verbucht erfolgreich an ElevenLabs gesendete Zeichen auf dem globalen Zaehler und
-// meldet die Warnschwelle GENAU EINMAL je Zyklus (Muster claimPlatformSpendWarning).
-// nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei). Liefert {changed, warning}:
-// warning != null NUR beim ERSTmaligen Ueberschreiten im Zyklus (sonst null - keine
-// zweite SMS je Zyklus). Ganzzahl-Arithmetik durchweg (G26); Zukunfts-/Unlesbar-Riegel
-// ueber laterMonotonicKey (dieselbe Regel wie die Spend-Monat-Achse, G5).
+// Verbucht erfolgreich an ElevenLabs gesendete Zeichen auf dem globalen Zaehler UND auf dem
+// reservierten Kostentraeger (GAP-09), und meldet die Warnschwelle GENAU EINMAL je Zyklus
+// (Muster claimPlatformSpendWarning). nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei).
+// Liefert {changed, warning}; warning ist eine unterschiedene Union:
+//   {characters, quota, cycleKey}                  = Warnschwelle (genau einmal je Zyklus, Alarm-Pflicht)
+//   dieselben Felder + exhausted:true              = Kontingent erschoepft (jede Buchung, Riegel-Pflicht, KEIN Alarm)
+//   null                                           = nichts zu melden
+// Ganzzahl-Arithmetik durchweg (G26); Zukunfts-/Unlesbar-Riegel ueber laterMonotonicKey
+// (dieselbe Regel wie die Spend-Monat-Achse, G5).
 export function recordTtsCharacters(s, chars, cfg, nowIso) {
   const row = s.platformTtsUsage;
   const key = ttsCycleWindowKey(row, cfg, nowIso);
   if (key === null) return { changed: false, warning: null }; // kein Anker je gestempelt UND Uhr unlesbar -> No-op
-  const rolledOver = key !== row.cycleKey;
-  row.characters = rolledOver ? chars : row.characters + chars;
+  const charactersBefore = key !== row.cycleKey ? 0 : row.characters; // Rollover startet frisch
+  row.characters = charactersBefore + chars;
   row.cycleKey = key;
+  // GAP-09: derselbe Betrag zusaetzlich auf den reservierten Kostentraeger - ueber die
+  // BESTEHENDE Erhoehungsregel (G5: recordTenantTtsCharacters bringt die Ganzzahl-/<=0-
+  // Riegel schon mit). Lebenszeit-Summe wie dort; nach einem Zyklus-Rollover liegt die
+  // Bucket-Summe damit UEBER dem Zyklus-Zaehler - "deckt" ist >=, nicht ==.
+  recordTenantTtsCharacters(s, PLATFORM_TTS_COST_CENTER_ID, chars);
+  const notice = { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key };
+  // GAP-09: war das Kontingent schon VOR dieser Buchung erschoepft, ist diese Buchung reine
+  // Overage -> eigene Meldeform (Marker exhausted), damit der Play-TTS-Pfad auf Azure-<Say>
+  // degradieren kann (Degradation, KEINE Sperre - ein Anruf ohne Stimme ist der schlimmere
+  // Ausgang). Bewusst der Stand VORHER: der Aufruf, der die Wand durchbricht, ist bereits
+  // bezahlt und behaelt sein Audio; erst der naechste degradiert. Diese Meldung ist
+  // ABSICHTLICH nicht warn-once (der Riegel braucht sie bei JEDEM Aufruf) - der Aufrufer
+  // alarmiert deshalb nicht ueber sie, sondern loggt (sonst eine SMS je Turn).
+  if (ttsQuotaExhausted({ characters: charactersBefore, quota: cfg.ttsCharacterQuota }))
+    return { changed: true, warning: { ...notice, exhausted: true } };
   const crossed = scaledThresholdCrossed(row.characters, cfg.ttsCharacterQuota, cfg.ttsCharacterQuotaWarnPercent);
   if (crossed && row.warnedCycle !== key) {
-    row.warnedCycle = key;
-    return { changed: true, warning: { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key } };
+    row.warnedCycle = key; // Warnschwelle: GENAU EINE Meldung je Zyklus, Form unveraendert (3 Felder)
+    return { changed: true, warning: notice };
   }
   return { changed: true, warning: null };
 }
@@ -2637,20 +2680,27 @@ export function settingsFor(s, tenantId) {
   return (s.settings[tenantId] ||= defaultSettings());
 }
 
-// Gemeinsame Form fuer optionale Enum-Overrides (language, agentStyle): null/"" setzt das
-// Override zurueck (= nicht gesetzt), sonst MUSS der Wert ein String aus der kuratierten
-// Whitelist sein. EINE Quelle (G5) statt zweier paralleler Sonderpruefungen. Der generische
-// typeof-Vergleich greift hier nicht, weil der Default null ist (typeof null === "object"
-// wuerde jeden gueltigen String-Patch ablehnen). Fail-closed: alles ausserhalb der
-// Whitelist wird verworfen (kein Schreiben) -> kein Freitext/PII/Impersonation im Feld.
-function isOptionalEnumOverride(value, allowedValues) {
-  if (value === null || value === "") return true;
-  return typeof value === "string" && allowedValues.includes(value);
+// Loest einen optionalen Enum-Override (language, agentStyle) auf seine KANONISCHE Form
+// auf. null/"" = Override zuruecksetzen (gespeichert wird null - EINE Form fuer "nicht
+// gesetzt"). Sonst muss der Wert ein String sein, der - Gross-/Kleinschreibung ignoriert -
+// in der kuratierten Whitelist steht; zurueck kommt IMMER der Eintrag aus der Whitelist,
+// nie die Nutzer-Schreibweise. LANG-19/E1: "EN" ist kein Nutzerfehler, sondern nur eine
+// Schreibweise von "en" - stilles Verwerfen ist Datenverlust. Fail-closed bleibt
+// fail-closed: alles, was nicht case-insensitiv trifft (Freitext/PII/Impersonation), wird
+// weiterhin verworfen. Der generische typeof-Vergleich greift hier nicht, weil der Default
+// null ist (typeof null === "object" wuerde jeden gueltigen String-Patch ablehnen). EINE
+// Quelle (G5) fuer beide Enum-Felder. Reine Funktion.
+function resolveOptionalEnumOverride(value, allowedValues) {
+  if (value === null || value === "") return { accepted: true, value: null };
+  if (typeof value !== "string") return { accepted: false, value: null };
+  const canonical = allowedValues.find((allowed) => allowed.toLowerCase() === value.toLowerCase());
+  return canonical === undefined ? { accepted: false, value: null } : { accepted: true, value: canonical };
 }
 
 // Optionale Enum-Override-Felder (Default null): eigene fail-closed Katalog-Validierung
-// statt typeof. language gegen SUPPORTED_LANGUAGES, agentStyle (P2) gegen PERSONA_STYLE_IDS
-// (kuratierte Stil-IDs, NON-PII). "" und null = zuruecksetzen auf "nicht gesetzt".
+// statt typeof, case-insensitiv normalisierend (LANG-19). language gegen
+// SUPPORTED_LANGUAGES, agentStyle (P2) gegen PERSONA_STYLE_IDS (kuratierte Stil-IDs,
+// NON-PII). "" und null = zuruecksetzen auf "nicht gesetzt".
 const OPTIONAL_ENUM_FIELDS = Object.freeze({
   language: SUPPORTED_LANGUAGES,
   agentStyle: PERSONA_STYLE_IDS,
@@ -2666,7 +2716,7 @@ const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
 // Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
 // so keine fremden Felder in den Store schreiben oder Typen kippen. Optionale Enum-
 // Overrides (language, agentStyle) haben eine eigene fail-closed Katalog-Validierung
-// (siehe OPTIONAL_ENUM_FIELDS / isOptionalEnumOverride) statt des typeof-Checks.
+// (siehe OPTIONAL_ENUM_FIELDS / resolveOptionalEnumOverride) statt des typeof-Checks.
 // Liefert auch die uebernommenen Keys (fuers Audit-Log in server.js).
 export function updateSettings(s, tenantId, patch) {
   const allowed = defaultSettings();
@@ -2676,9 +2726,9 @@ export function updateSettings(s, tenantId, patch) {
     if (!(key in allowed)) continue;
     const enumValues = OPTIONAL_ENUM_FIELDS[key];
     if (enumValues) {
-      if (!isOptionalEnumOverride(value, enumValues)) continue;
-      // "" (= "nicht gesetzt") wird als null gespeichert (eine Form fuer "nicht gesetzt").
-      target[key] = value === "" ? null : value;
+      const override = resolveOptionalEnumOverride(value, enumValues);
+      if (!override.accepted) continue;
+      target[key] = override.value; // kanonisch (Whitelist-Schreibweise) bzw. null
       changed.push(key);
     } else if (typeof value === typeof allowed[key]) {
       const guard = FIELD_GUARDS[key];

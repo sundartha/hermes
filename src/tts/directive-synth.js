@@ -7,9 +7,10 @@
 // Play-TTS-Einwebung (fail-safe): synthetisiert die gesprochenen Texte einer Direktiven-
 // Liste zur Webhook-Zeit (hartes Timeout in synthesizeSpeech), legt die Bytes in den
 // ttsStore und webt die Serve-URL als audioUrl/promptAudioUrl ein -> der Telnyx-Renderer
-// gibt <Play> statt <Say>. Flag AUS oder Nicht-Telnyx oder Synth-Fehler/Timeout -> Liste
-// UNVERAENDERT zurueck -> Azure-<Say> byte-identisch (NIE den Call toeten). Genau EIN
-// sprechender Text pro Turn -> genau ein Synth-Call pro Webhook.
+// gibt <Play> statt <Say>. Flag AUS oder Nicht-Telnyx oder Synth-Fehler/Timeout oder
+// erschoepftes ElevenLabs-Kontingent (GAP-09) -> Liste UNVERAENDERT zurueck -> Azure-<Say>
+// byte-identisch (NIE den Call toeten). Genau EIN sprechender Text pro Turn -> genau ein
+// Synth-Call pro Webhook.
 //
 // LCT P7 (Fixkosten sichtbar machen): store/onQuotaWarning sind injizierte Abhaengigkeiten
 // (DIP/P15, wie config/ttsStore) - GENAU HIER, wo text VOR dem Aufruf und result.ok DANACH
@@ -22,8 +23,16 @@
 import { synthesizeSpeech } from "./synth.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
+import { ttsQuotaExhausted } from "../store/state-ops.js";
 
 export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) {
+  // Beobachtbarkeit: die Degradation darf nicht still ausfallen (Betriebs-Symptom "Anruf
+  // verbindet, aber Azure statt ElevenLabs"). Gleiche Form wie der Synth-Fehlerpfad
+  // daneben: Zahlen und Zyklus, NIE Key/Secret. EINE Log-Form fuer beide Riegel (G5).
+  function warnQuotaDegradation({ characters, quota, cycleKey }) {
+    console.warn(`[play-tts] Kontingent erschoepft (${characters}/${quota}, Zyklus ${cycleKey}) -> Azure-Fallback`);
+  }
+
   async function synthesizeDirectiveAudio(call, directives) {
     const cfg = config.voice.elevenLabsPlayTts;
     if (!cfg.enabled || !providerSupports(call.provider, CAPABILITY.PLAY_AUDIO_TTS)) return directives;
@@ -41,6 +50,19 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   }
 
   async function synthToServeUrl(text, cfg) {
+    const nowIso = new Date().toISOString(); // EIN Zeitpunkt fuer Riegel UND Buchung
+    // GAP-09 Vorab-Riegel: ist das Kontingent bereits erschoepft, wird ElevenLabs gar nicht
+    // erst gerufen - der Anruf laeuft mit Azure-<Say> weiter (Degradation, KEINE Sperre).
+    // Zaehler UND Kontingent kommen aus DERSELBEN Projektion (G5, kein zweiter
+    // Wahrheitsanker, kein config-Zugriff hier) und sind unabhaengig von der Warn-Schwelle.
+    // Optional gelesen: platformTtsUsageView liegt auf der Store-Fassade (store.js
+    // re-exportiert sie), die Bestands-Test-Fakes des Zaehl-Seams kennen aber nur den
+    // Schreiber - fehlt die Projektion, faengt der Nach-Buchungs-Riegel unten.
+    const usage = store.platformTtsUsageView?.(nowIso);
+    if (usage && ttsQuotaExhausted(usage)) {
+      warnQuotaDegradation(usage);
+      return null; // erschoepft heisst NICHT bezahlen -> kein Provider-Aufruf
+    }
     const chars = text.length; // VOR dem Aufruf bekannt (LCT P7)
     const result = await synthesizeSpeech(text, {
       fetchImpl: fetch,
@@ -61,7 +83,15 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
       return null;
     }
     // LCT P7: NUR bei result.ok verbuchen, platformweit (ausserhalb RLS, kein Gate liest es).
-    const warning = store.recordTtsCharacters(chars, new Date().toISOString());
+    const warning = store.recordTtsCharacters(chars, nowIso);
+    // GAP-09 Nach-Buchungs-Riegel: diese Buchung war reine Overage -> Audio verwerfen,
+    // Direktive bleibt unveraendert -> Azure-<Say>. KEIN onQuotaWarning: diese Meldung
+    // kommt bei JEDEM Aufruf (sie ist der Riegel, nicht der Alarm) - alarmiert wuerde
+    // eine SMS je Turn. Der Alarm ist die warn-once-Schwelle darunter.
+    if (warning?.exhausted) {
+      warnQuotaDegradation(warning);
+      return null;
+    }
     if (warning) onQuotaWarning(warning);
     const token = ttsStore.put(result.bytes, result.contentType);
     return `${config.server.publicUrl}/voice/tts/${token}`;
