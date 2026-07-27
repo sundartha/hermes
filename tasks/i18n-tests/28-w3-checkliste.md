@@ -89,6 +89,35 @@ Ergebnis notieren, keine Aenderung noetig.
 > wuerde weiterlaufen und dabei aufhoeren, ein Produkt zu sein. Gehoert in die Fix-Kette nach W3,
 > nicht in W3 selbst.
 
+> **PROTOKOLL Sprach-Achse, 2026-07-27 - der Weltdefault ist LIVE eingeschaltet.**
+>
+> `WORLD_DEFAULT_LANGUAGE_ENABLED=true` am Service `vodafone-agent` gesetzt (Render-API,
+> Deploy `dep-d9jget3eo5us73bch3j0`, live 07:24:18 UTC). Owner-Auftrag; Risiko vertretbar,
+> weil es keine fremden Kunden gibt ([[no-existing-customers-premise]]) und `en` als
+> Weltdefault ohnehin die beschlossene Produktrichtung ist (7.12).
+>
+> **Messung danach (kostenlos, ueber den MCP-Connector):** `list_calls` liefert weiterhin
+> deutsches Datumsformat (`Mo., 27.07., 07:17`). Das Format stammt seit P12 aus der
+> Tenant-Sprache (`makeDateFormatter(loc.dateLocale)`, `src/mcp-tools.js`).
+>
+> **Zwei Schluesse:**
+> 1. **Der Owner-Tenant ist EXPLIZIT auf `de` gesetzt** (eine der Stufen settings/number/
+>    tenant), nicht auf den Fallback angewiesen. Waere ueberall `null`, haette der Flip die
+>    Aufloesung soeben auf `en` gekippt. Das beobachtete deutsche Anruferlebnis ist damit
+>    korrekte Konfiguration, kein Defekt.
+> 2. **Der Flip laesst den Bestand unberuehrt** - genau die Zusage aus P10. Bemerkenswert:
+>    die DID ist eine US-Nummer (`+1 706`); waere die Sprache aus der Nummer abgeleitet,
+>    stuende jetzt Englisch da. Der Tenant gewinnt ueber die Nummer, wie vorgesehen.
+>
+> **NEUER BEFUND - der configHash sieht diese Aenderung nicht.**
+> `configFingerprint` (`src/config-fingerprint.js`) hasht sieben Achsen: Land-Gate,
+> Stundenlimit, Budget-Monat, Multi-Tenant, Waehrung, Plattform-Cap, Tenant-Cap.
+> `worldDefaultLanguageEnabled` ist NICHT dabei - `/healthz` meldete vor und nach dem Flip
+> denselben Hash (`90c7d824...`, ueber 10 Minuten gepollt). Ein Schalter, der die
+> **gesprochene Sprache jedes ungesetzten Tenants** umstellt, ist am Deploy-Wahrheitssignal
+> also unsichtbar. Das ist keine Fehlfunktion, aber eine Luecke in genau der Sicht, die
+> GAP-36/W26 herstellen sollte. Kandidat fuer die Fix-Kette nach W3.
+
 ### Stufe B - Browser, kein Anruf (6 Handgriffe)
 
 **B1 - WEB-02: echter Login gegen die Live-Instanz.** `https://app.sundartha.com` einloggen.
