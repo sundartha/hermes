@@ -63,6 +63,32 @@ Entscheidung, kein Test.
 **A4 - LAW-23: `PLAN-SECURITY.md` sichten** - gibt es eine Rubrik zu Consent/TCPA? Heute nein.
 Ergebnis notieren, keine Aenderung noetig.
 
+> **PROTOKOLL Stufe A, 2026-07-27 (Owner am Render-Dashboard abgelesen).**
+>
+> | Test | Wert | Urteil |
+> | --- | --- | --- |
+> | **MCP-19 / DID-13** - `PAYMENT_CURRENCY` | **`eur`** | **BESTANDEN.** Deckt sich mit dem Code-Default (`src/config.js`) und mit Owner-Entscheidung 7.1. Die Invariante *Anzeige-Waehrung = Belastungs-Waehrung* haelt live. **Der Abbruchpunkt aus `PLAN-I18N-TESTS.md` 5 (W3) greift NICHT** - die Geld-Ergebnisse aus W1/W2 bleiben gueltig. |
+> | **A2** - `MULTI_TENANT` | **`true`** | Live-Wert steht, siehe Divergenz unten. |
+> | **A2** - `SELF_SERVICE_ENABLED` | **`true`** | dito |
+>
+> **Damit sind alle vier nie verifizierten Env-Achsen belegt:** `BUDGET_MONTH_ENABLED` (Boot-Banner),
+> `PLATFORM_ALERT_SMS_TO` (fataler Guard haette sonst `exit(1)` ausgeloest), `MULTI_TENANT` und
+> `SELF_SERVICE_ENABLED` (hier). Der offene Punkt 3 aus dem W1-Bericht ist geschlossen.
+>
+> **NEUER BEFUND - der Blueprint wuerde das Produkt abschalten.** Gemessene Divergenz:
+>
+> | Schluessel | `render.yaml` | live |
+> | --- | --- | --- |
+> | `PAYMENT_CURRENCY` | `"eur"` | `eur` (deckungsgleich) |
+> | `MULTI_TENANT` | **`"false"`** | **`true`** |
+> | `SELF_SERVICE_ENABLED` | **`"false"`** | **`true`** |
+>
+> Das bestaetigt Wurzel **W26** ("`render.yaml` ist Doku, nicht Wahrheit") nicht mehr als
+> Vermutung, sondern als Messung - und macht sie zur **Falle**: wer den Blueprint jemals auf den
+> dashboard-verwalteten Service anwendet, schaltet Multi-Tenancy und Self-Service ab. Der Dienst
+> wuerde weiterlaufen und dabei aufhoeren, ein Produkt zu sein. Gehoert in die Fix-Kette nach W3,
+> nicht in W3 selbst.
+
 ### Stufe B - Browser, kein Anruf (6 Handgriffe)
 
 **B1 - WEB-02: echter Login gegen die Live-Instanz.** `https://app.sundartha.com` einloggen.
