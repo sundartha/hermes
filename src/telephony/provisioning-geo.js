@@ -1,8 +1,13 @@
 // F1 Geo-Location (Phase P7) - Land -> Telnyx-Suchparameter. DIE eine Quelle, die ein
 // ISO-3166-1-alpha-2-Land (vom Number-Record) auf die telnyx-spezifischen Provisioning-
-// Parameter abbildet: { countryCode, connectionId?, phoneNumberType? }. Liegt in der
+// Parameter abbildet: { countryCode, connectionId, type }. Liegt in der
 // Telephonie-Schicht (NICHT in i18n/locales.js, das ist Sprache; NICHT in state-ops, das
 // config-frei bleibt). Generisch: ein weiteres Land = ein weiterer Eintrag.
+//
+// NUMMERNART (P3, DID-09): jeder Suchaufruf traegt ab jetzt eine explizite Nummernart
+// (DEFAULT_PHONE_NUMBER_TYPE, s.u.) - auch der config-Fallback. Der Telnyx-Default
+// entscheidet damit NIE mehr, ob wir local, toll-free, national oder mobile kaufen.
+// P3 aendert NUR den Suchparameter, keinen Geld-Betrag und kein Idempotenz-Schloss.
 //
 // KOSTEN/IDEMPOTENZ (Regel 1): diese Tabelle aendert den SUCHPARAMETER pro Job UND - seit
 // P9 - optional den HOLD-Betrag pro Land (holdAmountCents, Integer Cents). Die drei
@@ -24,38 +29,51 @@
 // DE-Bestand ab und der Dry-Run (PROVISIONING_ENABLED=false) bleibt byte-identisch.
 import { config } from "../config.js";
 
-// Land (ISO-2) -> telnyx-spezifische Such-/Configure-Parameter. NUR Laender, die von DE
-// abweichen, brauchen einen Eintrag (telnyxCountryCode != Land oder eigene connectionId/
-// Typ). DE bewusst NICHT hier: es faellt auf den globalen config-Fallback (siehe unten).
-// phoneNumberType optional (Telnyx filter[phone_number_type]) - nur setzen, wenn das Land
-// es braucht; sonst weglassen (Adapter laesst den Filter dann weg).
-// holdAmountCents optional (P9, Integer Cents) - nur setzen, wenn der reale Laenderpreis
-// vom config-Default abweicht UND live bestaetigt ist; sonst weglassen -> Default greift.
+// Telnyx-Nummernart (filter[phone_number_type]) fuer JEDEN Kauf. "local" = geografische
+// Ortsnummer - das ist das Produkt, das Hermes verkauft, und es ist EINE Entscheidung,
+// nicht eine pro Land (deshalb hier eine Konstante statt eines Feldes je Eintrag).
+// Ohne den Filter entscheidet der Telnyx-Default zwischen local/toll-free/national/mobile
+// und faerbt damit Zustellbarkeit UND Preis jeder gekauften Nummer (DID-09). Fehlt "local"
+// im Inventar eines Landes, liefert die Suche 0 Treffer -> kontrollierter Fehlschlag
+// (failNumber + Hold-Freigabe, R5), NIE ein stiller Kauf der falschen Nummernart.
+const DEFAULT_PHONE_NUMBER_TYPE = "local";
+
+// Kauf-Land (ISO-2) -> Abweichungen von den globalen Defaults. Der SCHLUESSEL ist das
+// Land, in dem gesucht wird: ein Land mit Eintrag kauft IMMER im eigenen Land und nie
+// still im Plattform-Default (DID-05). Der Wert traegt NUR Abweichungen -
+//   connectionId    : eigene Telnyx-App statt config.telephony.telnyxConnectionId
+//   phoneNumberType : andere Nummernart als DEFAULT_PHONE_NUMBER_TYPE
+//   holdAmountCents : eigener Setup-Tarif (P9, Integer Cents) statt des config-Defaults
+// - und ist deshalb heute fuer jedes Land leer. Ein weiteres Land = ein weiterer Schluessel.
+// DE bewusst NICHT hier: der config-Fallback (provisioningCountry) IST das Plattform-Land;
+// ein DE-Eintrag waere eine zweite Quelle fuer denselben Wert (G5) und wuerde den
+// byte-identischen Fallback-Pfad an ein Literal koppeln.
 const COUNTRY_SEARCH_PARAMS = Object.freeze({
-  FR: { telnyxCountryCode: "FR" },
-  GB: { telnyxCountryCode: "GB" },
-  US: { telnyxCountryCode: "US" },
+  AT: {},
+  AU: {},
+  CA: {},
+  CH: {},
+  ES: {},
+  FR: {},
+  GB: {},
+  IE: {},
+  IT: {},
+  US: {},
 });
 
 // Loest das Land (ISO-2, case-insensitiv) auf die telnyx-Suchparameter auf.
-// Bekanntes Land -> Tabellen-Eintrag (telnyxCountryCode + optional connectionId/Typ),
-// connectionId faellt mangels Tabellen-Wert auf den globalen config-Wert (eine Telnyx-
-// App fuer alle Laender, bis ein Land eine eigene braucht). DE/leer/unbekannt -> globaler
-// Fallback (provisioningCountry/telnyxConnectionId) = byte-identisch zum Bestand.
+// Land MIT Tabellen-Eintrag -> es wird in genau diesem Land gesucht (DID-05).
+// DE/leer/unbekannt -> globaler Fallback (provisioningCountry/telnyxConnectionId),
+// byte-identisch zum Bestand (Regel 6: unbekannt -> sicherer Default).
+// connectionId und Nummernart kommen vom globalen Default, bis ein Land davon abweicht.
 export function searchParamsForCountry(country) {
   const key = String(country || "").toUpperCase();
   const entry = COUNTRY_SEARCH_PARAMS[key];
-  if (!entry) {
-    // DE/unbekannt/leer: globales Verhalten (Regel 6: unbekannt -> sicherer Default).
-    return {
-      countryCode: config.provisioning.provisioningCountry,
-      connectionId: config.telephony.telnyxConnectionId,
-    };
-  }
   return {
-    countryCode: entry.telnyxCountryCode,
-    connectionId: entry.connectionId || config.telephony.telnyxConnectionId,
-    ...(entry.phoneNumberType ? { type: entry.phoneNumberType } : {}),
+    countryCode: entry ? key : config.provisioning.provisioningCountry,
+    connectionId: entry?.connectionId || config.telephony.telnyxConnectionId,
+    // IMMER gesetzt (DID-09): der Provider-Default darf die Nummernart nie entscheiden.
+    type: entry?.phoneNumberType || DEFAULT_PHONE_NUMBER_TYPE,
   };
 }
 
