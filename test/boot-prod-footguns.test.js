@@ -83,6 +83,29 @@ test("GAP-19 (SOLL, rot) - Kauf-Land != Herkunftsland wird beim Start nicht stum
   );
 });
 
+// Nummern-Lebenszyklus (Owner-Entscheidung 2026-07-27, Ersatz fuer die zurueckgezogenen
+// GAP-23-Tests): mit aktivem Provisioning geht die Telnyx-Bestellung ohne connection_id
+// raus - die Nummer wird gekauft, kostet Miete und traegt trotzdem kein Voice-Routing.
+// Der Guard muss 'fehlt' von 'gesetzt' unterscheiden (T5) und darf einen gesunden Start
+// nicht verhindern (WARN, kein exit(1)).
+test("Boot-Guard: PROVISIONING_ENABLED ohne TELNYX_CONNECTION_ID -> Konfig-Warnung nennt die Variable", async () => {
+  const srv = await startServer({ env: { PROVISIONING_ENABLED: "true", TELNYX_CONNECTION_ID: "" } });
+  try {
+    assert.match(srv.stdout, /\[boot\] Konfig-Warnung: .*TELNYX_CONNECTION_ID/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Boot-Guard: gesetzte TELNYX_CONNECTION_ID -> keine Warnung (gesunder Start bleibt still)", async () => {
+  const srv = await startServer({ env: { PROVISIONING_ENABLED: "true", TELNYX_CONNECTION_ID: "conn_x" } });
+  try {
+    assert.doesNotMatch(srv.stdout, /TELNYX_CONNECTION_ID/);
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("T-P0-1-AC1-05: Hosting + STORE_BACKEND=json -> Boot verweigert (exit 1), nennt STORE_BACKEND", async () => {
   const { code, output } = await startServerExpectExit({ env: { ...PROD_SAFE, STORE_BACKEND: "json" } });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);

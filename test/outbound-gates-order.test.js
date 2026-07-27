@@ -470,6 +470,67 @@ test("GAP-19 (SOLL, rot) - ein Anruf unter fremdlaendischer Absender-DID passier
   );
 });
 
+// GAP-19-Regressionsschutz: das Herkunfts-Gate in resolve_outbound. Der SOLL-Test darueber
+// beweist nur, DASS die Kette die Konstellation nicht mehr durchlaesst; die fuenf Tests hier
+// pinnen den Sperrgrund UND - wichtiger - die drei Kanten, an denen bewusst NICHT gesperrt
+// wird. Ohne sie waere die Breite der Sperre unbewiesen, und eine zu breite Sperre toetet
+// live jeden Outbound.
+const FREMDES_ZIEL_GB = "+442071234567";
+const US_DID_STORE = {
+  load: () => ({
+    numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: FREMDLAENDISCHE_DID }],
+  }),
+};
+
+test("resolve_outbound: Herkunfts-Gate - DE-Tenant, DE-Ziel, US-DID -> 403 grund=herkunft", async () => {
+  const { gates } = makeOutboundGates(makeDeps({ store: US_DID_STORE }));
+  const ctx = baseCtx();
+  const denial = await gateBy(gates, "resolve_outbound").run(ctx);
+  assert.equal(denial.status, 403);
+  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=herkunft tenant=T requestedBy=owner`);
+  assert.equal(ctx.fromNumber, FREMDLAENDISCHE_DID, "die Derivation wird von der Ablehnung nicht verschluckt");
+});
+
+test("resolve_outbound: Glueckspfad - eigene DE-DID zum DE-Ziel bleibt erlaubt", async () => {
+  const { gates } = makeOutboundGates(makeDeps());
+  const ctx = baseCtx();
+  assert.equal(await gateBy(gates, "resolve_outbound").run(ctx), null);
+  assert.equal(ctx.fromNumber, "+491700000000");
+  assert.equal(ctx.outboundProvider, "twilio");
+  assert.ok(ctx.numberRecord, "numberRecord bleibt der Geo-Anker der Sprachaufloesung");
+});
+
+test("resolve_outbound: echter Auslandsanruf (DE-Tenant, GB-Ziel, DE-DID) bleibt erlaubt", async () => {
+  const { gates } = makeOutboundGates(makeDeps());
+  assert.equal(
+    await gateBy(gates, "resolve_outbound").run(baseCtx({ to: FREMDES_ZIEL_GB })),
+    null,
+    "die Sperre trifft NUR Inlandsanrufe - Auslandstelefonie bleibt unberuehrt",
+  );
+});
+
+test("resolve_outbound: ohne bekanntes Tenant-Herkunftsland faellt kein Urteil", async () => {
+  const { gates } = makeOutboundGates(
+    makeDeps({ store: { ...US_DID_STORE, tenantGeo: () => ({ country: null }) } }),
+  );
+  assert.equal(
+    await gateBy(gates, "resolve_outbound").run(baseCtx()),
+    null,
+    "ein Anruf, von dem niemand weiss, ob er ein Inlandsanruf ist, wird nicht abgelehnt",
+  );
+});
+
+test("resolve_outbound: gesetztes FORCE_NUMBER_COUNTRY ist der Betriebs-Ack -> kein Herkunfts-Deny", async () => {
+  const { gates } = makeOutboundGates(
+    makeDeps({ store: US_DID_STORE, config: { forceNumberCountry: "US" } }),
+  );
+  assert.equal(
+    await gateBy(gates, "resolve_outbound").run(baseCtx()),
+    null,
+    "der erklaerte Override haelt den Live-Pfad offen - die Sichtbarkeit traegt der Boot-Guard",
+  );
+});
+
 // === (c) Derivations-Gates (mutieren ctx, lehnen nie ab) =========================
 
 test("resolve_identity: setzt ctx.requestedBy/ctx.tenantId, lehnt nie ab", async () => {

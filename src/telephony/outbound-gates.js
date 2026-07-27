@@ -9,9 +9,15 @@
 // Denial { status, body, audit }. audit ist null bei reinen 400-Formatfehlern (keine
 // Sicherheits-Ablehnung, kein Audit-Log-Eintrag), sonst { event, detail } fuer den Aufrufer.
 // Manche Gates lehnen NIE ab, sondern reichern nur ctx an (Derivations-Gates: resolve_identity,
-// normalize_target, resolve_profile, resolve_outbound, compute_reserve - der Name sagt es,
-// N7: Nebeneffekte sind im Namen sichtbar). ctx ist der EINE Transportweg zwischen den Gates
+// normalize_target, resolve_profile, compute_reserve - der Name sagt es, N7: Nebeneffekte
+// sind im Namen sichtbar). ctx ist der EINE Transportweg zwischen den Gates
 // (normalisiertes to, aufgeloester Tenant, Absendernummer, Reserve-Betrag...).
+//
+// INVARIANTE ABSENDER-HERKUNFT (GAP-19): eine fremdlaendische Absender-Herkunft ist NIE
+// stumm. Entweder der Betreiber hat sie erklaert (FORCE_NUMBER_COUNTRY gesetzt) - dann
+// meldet der Boot sie bei JEDEM Start (src/boot.js) - oder sie ist unerklaert, dann lehnt
+// resolve_outbound den INLANDSANRUF unter fremder Kennung ab. Genau eine der beiden
+// Sicherungen ist damit immer aktiv; beide lesen dasselbe Praedikat (numberOriginDecoupled).
 //
 // PRE-MORTEM (haerteste Invariante hier): `reserve_budget` ist das LETZTE Gate. Alles, was
 // NACH der Schleife im Aufrufer laeuft, dialt und kostet Geld - kein Gate darf hinter
@@ -31,6 +37,7 @@ import { config as defaultConfig } from "../config.js";
 import {
   BOOTSTRAP_TENANT_ID,
   KYC_OUTBOUND_MIN,
+  countryForE164,
   hasTrunkZeroAfterCountryCode,
   homeCountryCode,
   normalizeDialTarget,
@@ -137,6 +144,29 @@ function domesticPrefixOf(number) {
   return defaultConfig.billing.voiceTariffDomesticPrefixes.find((p) => hasCountryPrefix(number, p)) ?? null;
 }
 
+// Hat der Betreiber das Kauf-Land bewusst vom Herkunftsland entkoppelt (FORCE_NUMBER_COUNTRY)?
+// EINE Quelle fuer beide Haelften von GAP-19 (G5): das Herkunfts-Gate unten wertet sie als
+// Betriebs-Ack und laesst fremde Absender-Herkunft passieren, der Boot-Guard (src/boot.js)
+// meldet dieselbe Konstellation bei JEDEM Start. Genau eine der beiden Sicherungen ist damit
+// immer aktiv - stumm ist die Konstellation nie.
+export const numberOriginDecoupled = (provisioning) => Boolean(provisioning.forceNumberCountry);
+
+// GAP-19: ein INLANDSANRUF des Tenants, gefuehrt unter einer DID aus einem anderen Land -
+// genau die Konstellation, die Zustellrate und Rufnummern-Reputation kostet. Die beiden
+// Seiten sind bewusst ASYMMETRISCH:
+//   Ziel     - nur ein POSITIV abgeleitetes Land begruendet ueberhaupt einen Inlandsanruf.
+//              countryForE164 liefert fuer +1 bewusst null (25 NANP-Laender teilen die
+//              Vorwahl) -> kein Urteil, kein Raten.
+//   Absender - muss seine Zugehoerigkeit zu genau diesem Land BEWEISEN; nicht ableitbar
+//              (fremde/ungueltige Vorwahl) zaehlt als fremd (fail-closed).
+// Kein bekanntes Tenant-Herkunftsland -> kein Urteil: ein Anruf, von dem niemand weiss, ob er
+// ein Inlandsanruf ist, wird nicht abgelehnt.
+function foreignOriginOnHomeCall({ to, fromNumber, tenantCountry }) {
+  const targetCountry = countryForE164(to);
+  if (!targetCountry || targetCountry !== String(tenantCountry || "").toUpperCase()) return false;
+  return countryForE164(fromNumber) !== targetCountry;
+}
+
 // Herkunfts-Achse (P5, ORIG-01/02): ein Leg ist nur INLAND, wenn Ziel UND Absender dieselbe
 // bekannte Inlands-Vorwahl tragen. Verschiedene Laender -> Ausland; ein Land OHNE gemessenen
 // Inlandssatz (z.B. +1) -> ebenfalls Ausland, denn der guenstige Satz ist fuer +49/+33/+44
@@ -174,6 +204,12 @@ export function resolveMaxDurationS(raw, cfg) {
   );
   return Math.min(chosen, MAX_CALL_DURATION_CAP_S);
 }
+
+// Sollstaerke der Gate-Kette (17 Glieder). Erzwungen statt zugesichert (G27, OUT-14): weicht
+// die gebaute Kette hiervon ab, wirft die Fabrik beim Bau - jeder Testlauf und jeder Boot
+// faellt sofort auf, statt dass Kommentar und Wirklichkeit lautlos auseinanderlaufen (die
+// alte Zaehlung stand lange falsch im Code). Die Zahl steht bewusst NUR hier.
+const GATE_CHAIN_LENGTH = 17;
 
 // Fabrik: baut die geordnete Gate-Kette einmal beim Boot (P15, wie makeTenantResolver) -
 // gebunden an store/config und die Tenant-Identitaets-Bausteine des Aufrufers (requestTenant/
@@ -356,6 +392,26 @@ export function makeOutboundGates({
     return own ? { fromNumber: own.e164, provider: own.provider, numberRecord: own } : null;
   }
 
+  // Liefert {status,grund,message} fuer das Herkunfts-Gate oder null (Vertrag wie
+  // kycGateError). Der Text ist EINSPRACHIG ENGLISCH - dieselbe Systemgrenze wie
+  // E164_FORMAT_ERROR (P15b/C1): eine Fehlkonfiguration der eigenen Absenderflaeche ist
+  // keine Nutzeransprache, sie folgt deshalb nicht der Tenant-Sprache.
+  function originGateError(ctx) {
+    if (numberOriginDecoupled(config.provisioning)) return null;
+    const foreign = foreignOriginOnHomeCall({
+      to: ctx.to,
+      fromNumber: ctx.fromNumber,
+      tenantCountry: store.tenantGeo(ctx.tenantId).country,
+    });
+    if (!foreign) return null;
+    return {
+      status: 403,
+      grund: "herkunft",
+      message:
+        "Outbound blocked: the active number of this tenant is not registered in the destination country.",
+    };
+  }
+
   // Ablehnungsgrund + -text der TENANT-Achse im budget-Gate (Bucket lesbar -> eigene Decke
   // + eigener Verbrauch; unbuchbar (D7) -> ziffernfreier Sperrtext budgetUnreadable: "NaN EUR"
   // waere eine Falschauskunft auf einer Geld-Kante). EIGENE Zahlen, NIE eine
@@ -463,7 +519,8 @@ export function makeOutboundGates({
   // (ein audit()-Aufruf braucht beide oder keins) -> EIN audit-Objekt statt zwei Args.
   const deny = (status, body, audit = null) => ({ status, body, audit });
 
-  // Die geordnete Gate-Kette (16 Glieder). Reihenfolge load-bearing, per Snapshot-Test
+  // Die geordnete Gate-Kette (Sollstaerke: GATE_CHAIN_LENGTH, unten erzwungen). Reihenfolge
+  // load-bearing, per Snapshot-Test
   // (test/outbound-gates-order.test.js) festgenagelt. reserve_budget bleibt LETZTES Gate
   // (s. Modul-Doc, Pre-Mortem).
   const gates = [
@@ -647,7 +704,8 @@ export function makeOutboundGates({
     },
     // Absendernummer + Provider tenant-aware (Toll-Fraud-Riegel R3): JEDER Tenant - auch der
     // Owner - telefoniert nur unter EIGENER aktiver Store-Nummer; keine -> Reject, NIE die
-    // Nummer eines anderen Tenants als Fallback.
+    // Nummer eines anderen Tenants als Fallback. Das Glied prueft die aufgeloeste
+    // Absendernummer zusaetzlich auf Tauglichkeit fuer DIESES Ziel (GAP-19, s. Modul-Doc).
     {
       name: "resolve_outbound",
       run(ctx) {
@@ -662,7 +720,17 @@ export function makeOutboundGates({
         ctx.fromNumber = o.fromNumber;
         ctx.outboundProvider = o.provider;
         ctx.numberRecord = o.numberRecord;
-        return null;
+        // GAP-19: die aufgeloeste Absendernummer wird gegen das Ziel geprueft, BEVOR gewaehlt
+        // wird. Erst hier steht die Herkunft fest (number_gate laeuft vorher, ohne Absender).
+        // ctx ist zu diesem Zeitpunkt bereits vollstaendig befuellt - eine Ablehnung darf die
+        // Derivation nicht verschlucken (Forensik/Audit des Aufrufers liest ctx.fromNumber).
+        const originError = originGateError(ctx);
+        if (!originError) return null;
+        return deny(
+          originError.status,
+          { error: originError.message },
+          denialAudit(originError.grund, ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+        );
       },
     },
     // Budget-Schnittmenge (R2): pro-Tenant-Budget UND globaler Notaus (Summe ueber alle
@@ -758,6 +826,12 @@ export function makeOutboundGates({
       },
     },
   ];
+
+  if (gates.length !== GATE_CHAIN_LENGTH)
+    throw new Error(
+      `Outbound-Gate-Kette: ${gates.length} Glieder gebaut, erwartet ${GATE_CHAIN_LENGTH} - ` +
+        "Kette und Sollstaerke (GATE_CHAIN_LENGTH) sind auseinandergelaufen.",
+    );
 
   return { gates };
 }

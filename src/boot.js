@@ -43,6 +43,10 @@ import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 import { turnBudgetOverrun } from "./turn-budget.js";
+// GAP-19: EIN Praedikat fuer beide Haelften - der Boot meldet genau die Konstellation, die
+// in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
+// importiert boot.js nicht.
+import { numberOriginDecoupled } from "./telephony/outbound-gates.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -214,12 +218,46 @@ function warnTurnBudgetOverrun(config) {
   );
 }
 
+// GAP-19 (erste Haelfte): FORCE_NUMBER_COUNTRY entkoppelt das Kauf-Land vom Herkunftsland -
+// jeder neue Tenant telefoniert dann unter auslaendischer Absenderkennung. WARN, kein exit(1):
+// das IST der gewollte Live-Zustand (render.yaml), ein Boot-Refusal waere ein selbst
+// verursachter Totalausfall der Telefonie (Praezedenz warnUnpricedModels). Die Zeile ist der
+// Betriebs-Ack, den GAP-19 verlangt: sie erscheint bei JEDEM Start, solange der Override
+// steht - und genau derselbe Zustand schaltet in der Outbound-Kette das Herkunfts-Gate ab
+// (numberOriginDecoupled, EINE Quelle). Landescodes sind kein Secret und kein PII.
+function warnNumberOriginDecoupled(config) {
+  if (!numberOriginDecoupled(config.provisioning)) return;
+  console.warn(
+    `[boot] Konfig-Warnung: FORCE_NUMBER_COUNTRY=${config.provisioning.forceNumberCountry} kauft JEDE neue ` +
+      "Rufnummer in diesem Land, unabhaengig vom Herkunftsland des Kunden " +
+      `(Plattform-Land PROVISIONING_COUNTRY=${config.provisioning.provisioningCountry}). Betroffene Tenants ` +
+      "telefonieren unter auslaendischer Absenderkennung (Zustellrate/Reputation); das Herkunfts-Gate der " +
+      "Outbound-Kette laesst diese Anrufe deshalb bewusst passieren.",
+  );
+}
+
+// Restluecke im Nummern-Lebenszyklus (Owner-Entscheidung 2026-07-27): mit aktivem
+// Provisioning geht die Telnyx-Bestellung ohne connection_id raus (numbers.js setzt das Feld
+// nur, wenn es gesetzt ist) - die Nummer wird gekauft, kostet Miete und traegt trotzdem KEIN
+// Voice-Routing, waehrend activateNumber sie auf 'active' hebt. Der Guard unterscheidet
+// 'fehlt' von 'gesetzt' und feuert nur, wenn ueberhaupt gekauft werden kann. WARN, kein
+// exit(1): der Fehlausgang trifft KUENFTIGE Kaeufe, ein Boot-Refusal legte den gesamten
+// laufenden Telefoniebetrieb still - der teuerste Fehlausgang (Praezedenz warnUnpricedModels).
+function warnMissingProvisioningConnection(config) {
+  if (!config.provisioning.provisioningEnabled || config.telephony.telnyxConnectionId) return;
+  console.warn(
+    "[boot] Konfig-Warnung: PROVISIONING_ENABLED=true ohne TELNYX_CONNECTION_ID - gekaufte Nummern " +
+      "gehen ohne Voice-Routing raus und werden trotzdem aktiv geschaltet.",
+  );
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste und assertCostTruingBooking
 // (LCT P4) das siebte, das noch process.exit(1) rufen kann - warnUnpricedModels/
-// warnAlertChannelUnset/warnTariffDrift sind reine Diagnose (nie fatal).
+// warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
+// warnMissingProvisioningConnection sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -282,6 +320,8 @@ function assertBootGates(config, store) {
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
+  warnNumberOriginDecoupled(config); // GAP-19, WARN
+  warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
 }
 
 // Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die
