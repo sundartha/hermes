@@ -131,3 +131,28 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   Kandidatenmenge zeigte. Bei periodischen Jobs immer >=2 Laeufe vergleichen.
 - **Call-IDs sind Zeitstempel:** `call_` + `Date.now().toString(36)` in den ersten 8 Zeichen.
   Damit laesst sich ein bestimmter Anruf ohne DB-Zugriff in Sweep-Logs wiederfinden.
+
+---
+
+## Gate-Triage (2026-07-27, PLAN-GATES.md)
+
+- **Ein roter SOLL-Test ist eine Behauptung, kein Beweis.** 20 Triage-Agenten haben alle 36
+  roten Launch-Gates als `GUELTIG` klassifiziert - mit korrekten Belegen am Code. Zwei davon
+  (GAP-23) waren trotzdem falsch: der Test setzt in seinem eigenen Setup
+  `maxNumbersPerTenant: 9` und beklagt dann das Fehlen des Schutzes, den die Produktion mit
+  `MAX_NUMBERS_PER_TENANT=1` laengst hat. **Regel: bei einem SOLL-Test zuerst pruefen, ob sein
+  Setup eine Konfiguration herstellt, die es in Produktion nicht gibt.** Ein Agent, der nur
+  Test und Zielcode liest, kann das strukturell nicht sehen.
+- **Die Domaenenfrage des Owners schlaegt die Codeanalyse.** "Ein User kann doch gar keine
+  zweite Nummer kaufen" hat in einem Satz zwei Phasen erledigt, die drei Agenten-Belege
+  gestuetzt hatten. Bei Gates, die eine neue Sperre fordern, IMMER zuerst fragen: existiert
+  die Bedrohung im Produkt ueberhaupt?
+- **Nicht vom lokalen `.env`/Blueprint auf live schliessen.** Behauptung "Kunde ohne
+  Tabelleneintrag bekommt eine deutsche Nummer" war falsch: `FORCE_NUMBER_COUNTRY=US`
+  (`render.yaml:176`) sticht `PROVISIONING_COUNTRY=DE` aus - live bekommt JEDER eine
+  US-Nummer. Ein Override, der vor der Tabelle greift, macht die ganze Tabellen-Phase live
+  wirkungslos.
+- **"Nichts ist hartkodiert" gilt achsenweise, nicht global.** Anruf-Kosten werden live bei
+  Telnyx abgefragt (Cost-Truing), der Nummern-Hold ist eine Pauschale - und
+  `searchNumbers` wirft das mitgelieferte `cost_information` weg. Vor einer Aussage ueber
+  "wie das Produkt Preise behandelt" die konkrete Achse pruefen.
