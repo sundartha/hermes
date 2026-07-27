@@ -21,7 +21,10 @@ den benannten Basis-Commit, NICHT gegen den zufaelligen Worktree-HEAD.
 **Abnahme (alle vier Punkte, sonst BLOCKED).**
 
 1. Die in der Phase genannten Gates sind gruen: `npm run test:gates`
-2. `npm test` = **3295 / 0** (Regressionsschutz, vollstaendig — nicht nur betroffene Dateien)
+2. `npm test` = **0 rot** (Regressionsschutz, vollstaendig — nicht nur betroffene Dateien).
+   Die Zahl der bestandenen Tests waechst mit jeder Welle, weil Phasen Regressionstests
+   mitliefern: Basis der Kette 3295, nach Welle 1 **3296**. Massgeblich ist `fail = 0` und
+   dass kein BESTEHENDER Test rot wird — nicht eine feste Gesamtzahl.
 3. `git diff --name-only <base>..<branch> -- src/ public/ apps/ render.yaml` ist **nicht leer**
 4. Der Bericht nennt je Datei die getragene Verhaltensaenderung
 

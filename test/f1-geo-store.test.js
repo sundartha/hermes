@@ -442,7 +442,10 @@ test("GAP-34 (SOLL, rot) - fehlendes Land wird aus der DID-Vorwahl abgeleitet, o
 // deutscher Tenant (country=DE) mit einer unter FORCE_NUMBER_COUNTRY=US gekauften Nummer
 // (number.country=US, language korrekt auf "de" gesetzt) darf nach der Migration NICHT
 // englisch werden - genau der stille Schaden, den der Review nachgewiesen hat.
-test("GAP-34 Regression (Review-Blocker R1) - Kauf-Land US ueberstimmt NICHT die Sprache eines deutschen Tenants", async () => {
+// Der Name traegt die Katalog-ID BEWUSST nicht am Anfang: das Praefix-Muster
+// (package.json config.i18nCatalogPattern) wuerde den Test sonst dem Gates-Lauf zuordnen,
+// wo ein rotes Ergebnis erlaubt ist - als Regressionsschutz gehoert er in "npm test".
+test("Geo-Backfill Regression (Review-Blocker R1 zu GAP-34) - Kauf-Land US ueberstimmt NICHT die Sprache eines deutschen Tenants", async () => {
   const conn = new PGlite();
   await applySchema(conn);
   await conn.query(
