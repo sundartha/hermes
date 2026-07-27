@@ -88,7 +88,8 @@ const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
 // Die Abnahme der Gates-Kette (PLAN-GATES.md Abschnitt 6) - vier Punkte, alle vier hart.
 const ABNAHME = `ABNAHME DER PHASE ${PHASE} (alle vier Punkte, sonst approved=false):
 1. GATES GRUEN: "npm run test:gates" -> die Gates dieser Phase (${GATES}) laufen gruen. Nenne sie namentlich in gatesEvidence (Testname + Ergebnis).
-2. REGRESSION: "npm test" laeuft vollstaendig -> Ziel 3295 bestanden / 0 rot. Abweichungen mit Zahl melden (regressionSummary). Ein NEU roter Bestandstest ist ein Blocker.
+2. REGRESSION: "npm test" laeuft vollstaendig -> **fail = 0** und KEIN bestehender Test wird rot. Die Gesamtzahl der bestandenen Tests waechst mit jeder Phase, die einen Regressionstest mitliefert - sie ist deshalb KEIN Abnahmekriterium (Basis der Kette 3295, nach Welle 1 3298). Zahlen trotzdem melden (regressionSummary). Ein NEU roter Bestandstest ist ein Blocker.
+   VORSICHT bei roten Spawn-Tests ("Server-Start Timeout"): das ist der bekannte Voll-Last-Flake. Protokoll: dieselben Dateien ISOLIERT nachfahren; nur wenn sie dann noch rot sind, ist es ein echter Befund.
 3. PRODUKT-DIFF: "git diff --name-only ${BASE}..${BRANCH} -- src/ public/ apps/ render.yaml" ist NICHT leer. Ein Diff, der nur test/ beruehrt, ist ein FEHLSCHLAG der Phase, kein Erfolg (Praezedenzfall VOICE-12: ein Gate wurde lautlos zur Bestaetigung des Defekts umgeschrieben, beide Reviews gaben es frei).
 4. TESTAENDERUNGEN: Die Spec nennt je Phase abschliessend, welche Testaenderung zulaessig ist. Jede darueber hinausgehende Aenderung an test/ - und JEDER heute gruene Test, der faellt oder umgeschrieben wurde - ist ein BLOCKER, kein Befund zum Anpassen.`;
 
