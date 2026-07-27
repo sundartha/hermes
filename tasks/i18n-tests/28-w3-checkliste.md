@@ -310,3 +310,86 @@ englische Marketing-Oberflaeche. Nur ist `/app` inzwischen nicht mehr Marketing,
 
 **Kein einziger Test dieser beiden Bahnen hat einen Abbruchpunkt ausgeloest.** Die
 Live-Anrufe der Stufe D sind damit weiterhin freigegeben - vorbehaltlich der Regeln dort.
+
+---
+
+## 6. KORREKTUR (2026-07-27, spaeter am Tag): der Owner-Tenant ist NICHT `de`
+
+**Der Eintrag in Abschnitt 3 ("PROTOKOLL Sprach-Achse") ist falsch** und wird hiermit
+zurueckgezogen. Er schloss aus einem deutschen Datumsformat in `list_calls`, der
+Owner-Tenant sei "EXPLIZIT auf `de` gesetzt" und "der Flip laesst den Bestand unberuehrt".
+Beides trifft nicht zu.
+
+**Zwei unabhaengige Live-Messungen ueber den MCP-Connector, beide heute:**
+
+| Signal | frueherer Eintrag | jetzt gemessen |
+| --- | --- | --- |
+| `list_calls`, Datum desselben Anrufs | `Mo., 27.07., 07:17` (deutsch) | **`Mon 27/07, 07:17`** (englisch) |
+| `get_agent_status`, Permission-Feldnamen | (nicht gemessen) | **`PersonalData`, `BankData`** - die EN-Labels aus `src/i18n/mcp-texts.js:70-74` |
+
+Beide Renderings stammen aus derselben Quelle (`tenantLanguage` ->
+`resolveCallLanguage`, `src/store/state-ops.js:659-663`). Waere der Tenant explizit `de`,
+koennte **keine** Cache- oder Sitzungsfrage daraus Englisch machen.
+
+**Die Kette, die das erklaert.** `resolveCallLanguage` ist
+`settings.language || numberRecord.language || tenant.defaultLanguage || DEFAULT_LANGUAGE`.
+Der Owner-Tenant traegt auf allen drei ersten Stufen `null` (Bestandsdaten von vor F1/A1) -
+also entscheidet `DEFAULT_LANGUAGE`, und genau die haengt seit P10 am geflippten Schalter
+(`src/store/defaults.js:356-362`). Lokal reproduziert:
+
+```
+WORLD_DEFAULT_LANGUAGE_ENABLED=false -> resolveCallLanguage = de
+WORLD_DEFAULT_LANGUAGE_ENABLED=true  -> resolveCallLanguage = en
+```
+
+Die frueher notierte Beobachtung ("bemerkenswert: die DID ist eine US-Nummer `+1 706`;
+waere die Sprache aus der Nummer abgeleitet, stuende jetzt Englisch da") war der richtige
+Hinweis - nur die Schlussfolgerung war umgekehrt. `languageForCountry("US")` steht **nicht**
+in `LANGUAGE_FOR_COUNTRY` und faellt deshalb auf genau diesen Weltdefault.
+
+**Warum die erste Messung deutsch aussah:** der geloggte Anruf lief um **07:17 UTC**, der
+Flip ging um **07:24 UTC** live. Die MCP-Sitzung, die ihn rendert, bindet ihre Sprache
+EINMAL bei der Registrierung (`registerTools`, `src/mcp-tools.js:63`) - die damalige
+Verbindung hielt also noch den Vor-Flip-Zustand. Genau das Cache-Artefakt, das dieselbe
+Checkliste unter C1 fuer die Tool-Beschreibungen bereits vermutet hatte; es betrifft auch
+die Sprache.
+
+### 6.1 Was daraus fuer den Betrieb folgt
+
+**Der Live-Agent spricht ab dem naechsten Anruf Englisch.** Konkret, fuer einen Anruf an
+das deutsche Mobiltelefon, mit dem alle 26 bisherigen Testanrufe gefuehrt wurden:
+
+- der **Offenlegungssatz** - der fest verdrahtete erste Satz jedes Outbound-Calls - kommt
+  auf Englisch,
+- **STT und TTS** laufen auf `en-GB`, waehrend der Gegenueber Deutsch spricht,
+- Zusammenfassungen und Dashboard-Texte folgen ebenfalls `en`.
+
+**Noch ist nichts passiert:** der letzte Anruf (27/07, 07:17 UTC) liegt VOR dem Flip
+(07:24 UTC). Es hat also seit der Umstellung kein echtes Gespraech gegeben - der Befund ist
+eine Konfigurationslage, kein eingetretener Schaden.
+
+### 6.2 Was daraus fuer die offenen Live-Tests folgt
+
+| Test | Auswirkung |
+| --- | --- |
+| **PROMPT-23** (EN-Anruf auf Deutsch-Drift abhoeren) | **Vorbedingung ist unbeabsichtigt bereits erfuellt** - der Tenant loest auf `en` auf. Der Test ist ohne weitere Vorbereitung fahrbar. |
+| **LANG-25** (hoert ein US-Empfaenger zuerst Deutsch?) | **Fragestellung ueberholt.** Der Offenlegungssatz ist jetzt englisch; die im Katalog befuerchtete Lage (Deutsch an US-Ziel) kann in dieser Konfiguration gar nicht mehr eintreten. |
+| **VOICE-27/28** (klingt EN britisch? STT-Guete) | unveraendert an PROMPT-23 haengend, jetzt aber am echten Zustand statt an einer herbeigefuehrten Sonderlage. |
+| **MCP-20, OUT-26** | unveraendert. |
+
+### 6.3 Offene Entscheidung
+
+Der Zustand ist **nicht falsch, sondern ungewollt entstanden**: die Owner-Entscheidung 7.12
+("`en` als Weltdefault") zielte auf Laender OHNE eigenes Bundle - nicht darauf, den
+deutschsprachigen Betreiber-Tenant mit deutschen Gespraechspartnern auf Englisch zu stellen.
+Dass es ihn trotzdem trifft, liegt allein an der **US-DID** und an drei `null`-Feldern.
+
+Drei Wege, alle ohne Deploy:
+1. **Tenant explizit auf `de` setzen** (`settings.language="de"`) - der Weltdefault bleibt
+   fuer alle anderen an. Praeziseste Loesung, aendert nichts an der Produktrichtung.
+2. **`WORLD_DEFAULT_LANGUAGE_ENABLED=false`** - nimmt 7.12 zurueck, trifft alle.
+3. **So lassen** - dann sind PROMPT-23 und die Sprachtests am echten Zustand fahrbar, aber
+   jeder Anruf an einen deutschen Gespraechspartner laeuft auf Englisch.
+
+**Bis diese Entscheidung faellt, wird kein Live-Anruf gefahren** - er wuerde sonst einen
+Zustand messen, der danach womoeglich nicht mehr gilt, und dabei echtes Geld kosten.
