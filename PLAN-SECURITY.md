@@ -769,3 +769,53 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > **Nicht beruehrt:** `disclosureSentence`, Signaturpruefung, Auth, alle Outbound-Gates,
 > `scripts/bootstrap-tenant.js` (bleibt der manuelle Weg), `VOICE_TARIFF_*`,
 > `MAX_CALL_DURATION_*`, die Plan-Decken (`planCapCents`). Keine neue Dependency.
+
+## SCA-DEADEND — off-session-Zahlung ohne Authentifizierungs-Ausweg (offen, 2026-07-27)
+
+**Status: OFFEN. Launch-Blocker der Geld-Achse.** Gefunden in W3/PAY-19, live gegen Stripe
+TEST gemessen — nicht vermutet.
+
+**Symptom.** Verlangt die Bank eines Kunden bei einer off-session-Belastung eine
+Authentifizierung (3-D Secure / SCA), lehnt Hermes ab und behandelt den Vorgang als
+Fehlschlag. Der Kunde wird nie gefragt und hat keinen Weg, die Zahlung zu bestaetigen.
+
+**Gemessen** (Replikat von `placeHold` gegen Stripe TEST mit dem dokumentierten Test-Token
+`pm_card_authenticationRequired`; kein Echtgeld, keine Karteneingabe):
+
+```
+HTTP 402 · error.code = authentication_required · decline_code = authentication_required
+payment_intent.status = requires_payment_method · next_action = NICHT VORHANDEN
+```
+
+Das fehlende `next_action` ist der Kern: es gibt in dieser Antwort **nichts, wohin man
+umleiten koennte**. Eine Erholung muss eine NEUE on-session-Bestaetigung sein.
+
+**Zwei betroffene Pfade.**
+
+| Pfad | Stelle | Heute |
+| --- | --- | --- |
+| Abo anlegen | `src/billing/stripe.js:338-356` | `off_session=true` + `payment_behavior: error_if_incomplete`; der Kommentar `:330-333` nennt 3DS ausdruecklich und waehlt fail-closed. Stripe wirft -> **der Kunde kann nicht abonnieren**. |
+| Reserve vor Anruf/Nummernkauf | `src/billing/stripe.js:135-161` | `assertOk` wirft bei 402 -> Nummer auf `failed` (`src/store/views.js:83`) bzw. Anruf abgelehnt. |
+
+**Drei Luecken.**
+1. Keine Erkennung: `grep -rniE "requires_action|authentication_required|next_action|3ds"
+   src/billing/` -> 0 Treffer. Der Fall ist von einer echten Ablehnung ununterscheidbar.
+2. Kein typisierter Grund: `subscribeAndActivate` (`src/billing/subscribe.js:95-112`) kennt
+   `plan_unconfigured`/`already_subscribed`/`no_card`; ein Wurf aus `createSubscription`
+   ist keiner davon und propagiert unbehandelt.
+3. Keine Benachrichtigung und kein Wiederaufnahme-Pfad fuer den Kunden.
+
+**Warum das nie aufgefallen ist.** Laut der Checkout-Forensik vom 2026-07-10 waren alle
+vier Live-Rechnungen 0,00 EUR (Owner-Coupon) — der Vollpreis-Pfad mit echtem PaymentIntent
+**lief in Produktion noch nie**. Die Fehlerrate ist damit nicht "niedrig", sondern
+**ungemessen**; der erste echte zahlende Kunde ist das Experiment. (Nicht verwechseln mit
+der dortigen Blockade: die betraf einen SetupIntent mit `generic_decline` — anderes Objekt,
+anderer Code, kein belegter Zusammenhang.)
+
+**Vorgesehene Abhilfe** (Stripe-Standardweg, noch nicht umgesetzt):
+- Abo: `payment_behavior: default_incomplete`, dann `next_action` bzw. die
+  Hosted-Invoice-URL der ersten Rechnung an den Kunden reichen. `error_if_incomplete` wirft
+  genau die Information weg, die die Erholung traegt.
+- Reserve: `authentication_required` am `error.code` erkennen, eigener typisierter Grund
+  statt stiller `failed`-Zustand, Kunde benachrichtigen.
+- Beide Pfade brauchen einen Test — heute deckt **kein** Launch-Gate diesen Fall ab.

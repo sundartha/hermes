@@ -659,3 +659,53 @@ Gelegenheit zur Authentifizierung. **PAY-19 bestaetigt, Live-Teil erledigt.**
 
 **W3 ist damit abgeschlossen** - bis auf OUT-26, das an einer Nummer haengt, die es noch
 nicht gibt.
+
+### 8.4 PAY-19 - SCHWERE KORRIGIERT: das ist ein Launch-Blocker der Geld-Achse
+
+**Die erste Bewertung ("selten, kein Normalfall") war falsch und wird zurueckgezogen.**
+Sie war keine Messung, sondern eine Vermutung - und der Owner hat widersprochen. Zu Recht.
+Nachgemessen ergibt sich folgendes Bild.
+
+**Es sind ZWEI off-session-Geldpfade betroffen, nicht einer:**
+
+| Pfad | Stelle | Verhalten bei SCA-Nachfrage |
+| --- | --- | --- |
+| **Abo anlegen** | `src/billing/stripe.js:338-356` | `off_session=true` + `payment_behavior: error_if_incomplete`. Der Modul-Kommentar (`:330-333`) nennt 3DS **ausdruecklich** als Fehlerursache und waehlt fail-closed. Stripe wirft -> **der Kunde kann gar nicht abonnieren.** |
+| **Reserve vor Anruf/Kauf** | `src/billing/stripe.js:135-161` | `assertOk` wirft bei 402 -> Nummer geht auf `failed` (`views.js:83`) bzw. der Anruf wird abgelehnt. |
+
+**Gemessen (Stripe TEST, s. 8.2):** HTTP 402, `code=authentication_required`,
+`payment_intent.status=requires_payment_method`, **kein `next_action`**.
+
+**Was fehlt, an drei Stellen:**
+
+1. **Keine Erkennung.** `grep -rniE "requires_action|authentication_required|next_action|3ds"
+   src/billing/` -> 0 Treffer. Der Code kann diesen Fall nicht von einer echten Ablehnung
+   unterscheiden.
+2. **Kein typisierter Grund.** `subscribeAndActivate` (`src/billing/subscribe.js:95-112`)
+   kennt `plan_unconfigured`, `already_subscribed`, `no_card` - ein Wurf aus
+   `createSubscription` ist **keiner davon** und propagiert als unbehandelter Fehler.
+3. **Kein Weg zurueck.** Der Kunde erfaehrt nicht, dass seine Bank nachfragen wollte, und
+   bekommt keine Gelegenheit zur Bestaetigung.
+
+**Der Satz, der die Bewertung kippt:** laut der Forensik vom 2026-07-10
+(Session-Memory `stripe-checkout-issuer-decline`) waren **alle vier Live-Rechnungen
+0,00 EUR** (Owner-Coupon) - *"Vollpreis-Pfad (9,99 EUR, PaymentIntent) lief live noch nie"*.
+**Die gesamte off-session-Belastung ist in Produktion nie ausgefuehrt worden.** Es gibt
+also keinerlei empirische Grundlage fuer "selten" - weder dafuer noch dagegen. Der erste
+echte zahlende Kunde IST das Experiment.
+
+**Nicht verwechseln mit der Checkout-Blockade vom 10.07.**: die betraf einen *SetupIntent*
+mit `generic_decline` - anderes Objekt, anderer Code. Kein belegter Zusammenhang.
+
+**Standard-Abhilfe ist dokumentiert und klein:**
+- Abo: `payment_behavior: default_incomplete` statt `error_if_incomplete`, dann die
+  `next_action`/Hosted-Invoice-URL der ersten Rechnung an den Kunden geben (der von Stripe
+  vorgesehene SCA-Weg). `error_if_incomplete` wirft genau die Information weg, die die
+  Erholung ermoeglicht.
+- Reserve: `authentication_required` am `error.code` erkennen, eigener typisierter Grund,
+  Kunden benachrichtigen statt still auf `failed` zu laufen.
+
+**Einordnung: Launch-Blocker.** Nicht, weil die Rate hoch waere - sie ist **unbekannt** -
+sondern weil die Folge ein Kunde ist, der nicht zahlen KANN und keinen Weg zurueck hat,
+und weil kein Test und kein Gate diesen Pfad heute abdeckt. **PAY-19 gehoert nicht zu den
+34 roten Gates; dass es dort fehlt, ist eine Luecke der Gate-Liste, kein Trost.**
