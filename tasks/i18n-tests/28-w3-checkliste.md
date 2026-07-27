@@ -393,3 +393,106 @@ Drei Wege, alle ohne Deploy:
 
 **Bis diese Entscheidung faellt, wird kein Live-Anruf gefahren** - er wuerde sonst einen
 Zustand messen, der danach womoeglich nicht mehr gilt, und dabei echtes Geld kosten.
+
+---
+
+## 7. PROTOKOLL Stufe D - Live-Anrufe (2026-07-27)
+
+**Freigabe:** Owner, ausdruecklich, "erst einen Anruf, dann berichten". Ziel
+`+49 173 725 2163` (die Nummer aller 26 vorherigen Testanrufe, im eigenen Besitz).
+`OUTBOUND_FROZEN` aus, `FAKE_ORIGINATE` aus, Absender `+1 706 710 1188` (US-DID).
+
+**Es blieb bei EINEM Anruf** - die drei uebrigen Live-Tests brauchen keinen eigenen, jeder
+aus einem anderen Grund (s. 7.2-7.4).
+
+### 7.1 PROMPT-23 - BESTANDEN (der wichtigste Test der Welle)
+
+| | |
+| --- | --- |
+| Call-ID | `call_ms35d4vfqfad` |
+| Dauer | **76 s**, Status `completed`, `diagnostic: true` (Rohtranskript gesichert) |
+| Sprachlage | Tenant loeste ueber den Weltdefault auf **`en`** auf (s. Abschnitt 6) - die Vorbedingung "Tenant mit `settings.language="en"`" war damit ohne Vorbereitung erfuellt |
+| Ergebnis | **KEIN Deutsch-Drift.** Ueber sechs Turns durchgehend Englisch, inklusive dreier Rueckfragen bei unklarer Antwort. |
+| `objective_achieved` | `unclear` - nicht wegen der Sprache, sondern weil die Rueckfrage nach dem Terminvorlauf dreimal nur mit "Yes" beantwortet wurde (s. VOICE-28) |
+
+**Damit ist die zentrale Frage der 15 Fix-Phasen beantwortet:** die gesprochene Sprache ist
+wirklich umgestellt, sie kippt auch ueber mehrere Turns nicht zurueck ins Deutsche.
+
+### 7.2 VOICE-27 - gemessen, aber die Katalogfrage ist falsch gestellt
+
+Der Katalog fragt: "klingt der EN-Outbound hoerbar **britisch statt US-amerikanisch**?"
+Owner-Hoereindruck am echten Anruf: **weder noch - es klingt deutsch.** Englische Saetze,
+gesprochen mit eindeutig deutschem Akzent.
+
+**Ursache, im Code belegt:** die ElevenLabs-Stimme ist **eine einzige globale ID**
+(`ELEVENLABS_VOICE_ID`, `src/config.js:260`), die der Renderer sprachblind in jedes `<Say>`
+schreibt. `synthToServeUrl` (`src/tts/directive-synth.js:45-55`) bekommt die Sprache nicht
+einmal als Parameter - es gibt dort keine Verzweigung, die es geben koennte. Das Modell ist
+`eleven_flash_v2_5` (`src/config.js:261`), also **multilingual**: es spricht andere Sprachen,
+behaelt aber den Akzent der STIMME.
+
+**Nicht verwechseln:** `en-GB` regiert nur die **Erkennung** (`<Gather language="en-GB">`),
+nicht die Stimme. Die beiden Achsen sind getrennt, und nur eine loest pro Sprache auf.
+
+**VOICE-27 ist damit gegenstandslos in seiner heutigen Formulierung** - eine Wahl zwischen
+britisch und amerikanisch setzt eine englische Stimme voraus, die es nicht gibt. Der
+Sachverhalt gehoert vollstaendig zu **VOICE-12**.
+
+### 7.3 VOICE-12 - vom Quelltext-Befund zum LIVE gehoerten Defekt
+
+VOICE-12 steht seit W2 als roter Launch-Gate im Katalog
+(`test/telnyx-elevenlabs-render.test.js:80`, Sollzustand aus Owner-Entscheidung 7.5:
+"TTS-Stimme loest regional auf"). Bisher war er **allein aus dem Quelltext hergeleitet**.
+Mit diesem Anruf ist er **empirisch bestaetigt**: ein Mensch hat den Defekt gehoert.
+
+Der Gate-Test ist bewusst am gerenderten Ergebnis formuliert, nicht an einer Signatur - ein
+Fix darf die Stimme aus dem Locale-Bundle, einer Env-Tabelle oder vom Tenant ziehen.
+
+### 7.4 MCP-20 - GESCHLOSSEN, ohne eigenen Anruf
+
+Der Katalog sagt vorher: "JEDE Zeile der Gegenseite traegt das Praefix `"Gegenseite:"`,
+unabhaengig vom EN-Tenant", und verlangt als Beleg genau das, was hier ohnehin passiert ist -
+ein `place_call` aus claude.ai mit Beobachtung der Live-Karte.
+
+**Gemessen am selben Anruf:** die Zeilen kamen als **`"Other party: ..."`** und
+**`"Agent: ..."`** herein - die EN-Varianten aus `src/i18n/mcp-texts.js:69`. Der Code fuehrt
+das Praefix je Sprache (`de` "Gegenseite" / `en` "Other party" / `fr` "Interlocuteur",
+konsumiert in `src/mcp-tools.js:131`).
+
+**Der vorhergesagte Defekt tritt nicht ein.** Und es ist genau der End-to-End-Beweis, den
+MCP-20 forderte: echter Gateway, echtes Netz, echte Karte, kein Mock.
+
+### 7.5 LANG-25 - entfaellt (gegenstandslos)
+
+Die Frage lautet "hoert ein US-Empfaenger bei Outbound zuerst **Deutsch**?". In der
+aktuellen Konfiguration ist der Offenlegungssatz **englisch** (s. Abschnitt 6) - die
+befuerchtete Lage kann nicht mehr eintreten. Kein Anruf, keine Kosten.
+
+### 7.6 OUT-26 - NICHT FAHRBAR (Vorbedingung existiert nicht)
+
+OUT-26 verlangt **DE-Origin nach US-Ziel**. Es gibt keine DE-DID: beide vorhandenen Nummern
+sind US-Nummern (`+1 706 710 1188` am MCP-Tenant, `+1 864 302 8341` am Bootstrap-Tenant
+`owner`, s. Abschnitt 8). Ein `+49`-Anschluss haengt an einer offenen
+Regulatory-Freigabe bei Telnyx. **Geparkt, bis eine DE-DID existiert** - das ist keine
+Test-, sondern eine Beschaffungsfrage.
+
+### 7.7 Nebenbefund: die als intermittent bekannte Richtung hat zugestellt
+
+Der Anruf lief **US-DID -> DE-Mobil** - genau die Richtung, die als unzuverlaessig
+dokumentiert ist (Session-Memory `telnyx-fresh-did-no-de-routing`). Er kam zustande und
+lief 76 s sauber durch. Ein einzelner Datenpunkt widerlegt keine Intermittenz, aber er
+gehoert ins Protokoll.
+
+### 7.8 Stufe D - Bilanz
+
+| Test | Ergebnis | Anrufe |
+| --- | --- | --- |
+| **PROMPT-23** | **BESTANDEN** - kein Deutsch-Drift ueber 6 Turns | 1 |
+| **MCP-20** | **GESCHLOSSEN** - Praefix folgt der Tenant-Sprache, live bewiesen | 0 (am selben Anruf) |
+| **VOICE-28** | **BEFUND** - STT unter `en-GB` verstuemmelt deutsch akzentuiertes Englisch | 0 (am selben Anruf) |
+| **VOICE-27** | **gegenstandslos** - geht in VOICE-12 auf | 0 |
+| **VOICE-12** | **live bestaetigt** (war nur Quelltext-Befund) | 0 (am selben Anruf) |
+| **LANG-25** | **entfaellt** - Offenlegung ist englisch | 0 |
+| **OUT-26** | **geparkt** - keine DE-DID vorhanden | 0 |
+
+**Gesamtkosten der Stufe: ein Anruf von 76 Sekunden.** Geplant waren vier.
