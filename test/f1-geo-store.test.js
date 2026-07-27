@@ -345,10 +345,13 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   // Eine Zeile DIREKT in die DB schreiben, OHNE country/language (simuliert eine vor
   // der Migration angelegte Nummer). Die nullable Spalten + ?? null halten den
   // Re-Hydrierungs-Shape stabil (Code-Fallback DE/de der Konsumenten greift spaeter).
+  // Vorwahl bewusst NANP (+1): nicht ableitbar (25 Mitgliedslaender teilen sie), der
+  // Geo-Backfill (GAP-34) laesst die Zeile also in Ruhe - dieser Test prueft den
+  // Hydrierungs-Shape, nicht das Fehlen des Backfills.
   const { db } = await makePgTestStore();
   await db.query(
     `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'twilio','active')`,
-    ["num_legacy", BOOTSTRAP_TENANT_ID, "+4915700099999"],
+    ["num_legacy", BOOTSTRAP_TENANT_ID, "+15005550006"],
   );
   const reopened = await reopen(db);
   const num = reopened.load().numbers.find((n) => n.id === "num_legacy");
@@ -430,6 +433,35 @@ test("GAP-34 (SOLL, rot) - fehlendes Land wird aus der DID-Vorwahl abgeleitet, o
       { id: "num_ohne_did", country: null, language: null },
     ],
     "eine Bestandsnummer mit eindeutiger Vorwahl bleibt ohne Land - und eine ohne Vorwahl darf keines bekommen",
+  );
+});
+
+// Review-Blocker Runde 1 (GATES-P8): der Geo-Backfill darf die Sprache NICHT aus dem
+// Kauf-Land der Nummer nachziehen, wenn dieses per FORCE_NUMBER_COUNTRY vom Herkunftsland
+// des Tenants entkoppelt ist (A1-Zwei-Achsen-Vertrag, provision-trigger.js). Sonde: ein
+// deutscher Tenant (country=DE) mit einer unter FORCE_NUMBER_COUNTRY=US gekauften Nummer
+// (number.country=US, language korrekt auf "de" gesetzt) darf nach der Migration NICHT
+// englisch werden - genau der stille Schaden, den der Review nachgewiesen hat.
+test("GAP-34 Regression (Review-Blocker R1) - Kauf-Land US ueberstimmt NICHT die Sprache eines deutschen Tenants", async () => {
+  const conn = new PGlite();
+  await applySchema(conn);
+  await conn.query(
+    `INSERT INTO tenant (id, status, country, default_language) VALUES ($1, $2, $3, $4)`,
+    [LEGACY_TENANT, TENANT_STATUS.ACTIVE, "DE", "de"],
+  );
+  await conn.query(
+    `INSERT INTO number (id, tenant_id, e164, provider, status, country, language)
+     VALUES ($1, $2, $3, 'telnyx', 'active', $4, $5)`,
+    ["num_forced_us", LEGACY_TENANT, LEGACY_US_E164, "US", "de"],
+  );
+  await migrate(conn, LEGACY_TENANT);
+  const { rows } = await conn.query(
+    `SELECT id, country, language FROM number WHERE id = 'num_forced_us'`,
+  );
+  assert.deepEqual(
+    rows,
+    [{ id: "num_forced_us", country: "US", language: "de" }],
+    "Kauf-Land bleibt US, Sprache bleibt de - beide Achsen bleiben entkoppelt",
   );
 });
 

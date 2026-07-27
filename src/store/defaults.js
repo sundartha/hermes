@@ -728,6 +728,29 @@ export function allowedPrivateNumberCodes(countryIso) {
   return code ? [code] : DEFAULT_PRIVATE_NUMBER_CODES;
 }
 
+// Vorwahl -> Land: die UMKEHRUNG von CALLING_CODE_FOR_COUNTRY. Bewusst aus derselben
+// Tabelle abgeleitet und nicht zweitgepflegt (G5) - ein Land dazu heisst weiterhin EIN
+// Eintrag. Laengste Vorwahl zuerst, damit eine geschachtelte Vorwahl nie von einer
+// kuerzeren geschlagen wird (heute keine im Bestand, aber die Reihenfolge darf nicht von
+// der Schluessel-Reihenfolge eines Objekts abhaengen).
+const CALLING_CODES_LONGEST_FIRST = Object.freeze(
+  Object.values(CALLING_CODE_FOR_COUNTRY).sort((a, b) => b.length - a.length),
+);
+const COUNTRY_FOR_CALLING_CODE = Object.freeze(
+  Object.fromEntries(Object.entries(CALLING_CODE_FOR_COUNTRY).map(([iso, code]) => [code, iso])),
+);
+
+// Land einer DID aus ihrer E.164-Vorwahl ABLEITEN - nie raten (Owner-Entscheidung E2).
+// Eindeutig ist die Zuordnung nur fuer die Vorwahlen aus CALLING_CODE_FOR_COUNTRY; NANP
+// (+1) steht dort bewusst NICHT (25 Mitgliedslaender teilen die Vorwahl, s.
+// NANP_ISO_COUNTRIES / isNanpCountry) und bleibt damit unableitbar. Fehlende, formal
+// ungueltige oder unbekannte Nummer -> null; der Aufrufer laesst das Feld dann leer.
+export function countryForE164(e164) {
+  if (typeof e164 !== "string" || !E164.test(e164)) return null;
+  const code = CALLING_CODES_LONGEST_FIRST.find((c) => e164.startsWith(c));
+  return code ? COUNTRY_FOR_CALLING_CODE[code] : null;
+}
+
 // Laendercode-Gate fuer die private Summary-Nummer (F2, Toll-Fraud-Schutz H1). Reines
 // Praefix-Praedikat: erlaubt nur Nummern, deren E.164-Praefix in allowedCodes liegt.
 // Default DEFAULT_PRIVATE_NUMBER_CODES - BEWUSST strenger als das globale Call-Gate

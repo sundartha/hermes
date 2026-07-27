@@ -8,7 +8,8 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { defaultSettings, demoCalendar, TENANT_STATUS } from "../store/defaults.js";
+import { countryForE164, defaultSettings, demoCalendar, TENANT_STATUS } from "../store/defaults.js";
+import { languageForCountry } from "../i18n/locales.js";
 import { MS_PER_SECOND, periodStartFromEnd } from "../billing/period.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +62,107 @@ export async function backfillPeriodStart(db) {
 // Schluessel tragen.
 export async function backfillAccountEmailCase(db) {
   await db.query(`UPDATE account SET email = lower(trim(email)) WHERE email <> lower(trim(email))`);
+}
+
+// Der Alt-Default der Spalte number.language: bis zum Weltdefault-Flip trug JEDE
+// geschriebene Zeile "de" hartverdrahtet, UNABHAENGIG vom Kauf-Land der Nummer. Dieser Wert
+// ist aber KEIN sicherer Alters-Marker: ein deutscher Tenant bekommt language="de" auch
+// HEUTE noch ganz regulaer zugewiesen (requestNumberForPaidTenant leitet sie aus dem
+// Herkunftsland des Tenants ab, s. provision-trigger.js) - der Sentinel-Wert und ein
+// legitim gewaehltes Deutsch sind wertgleich, NICHT unterscheidbar. Deshalb heilt
+// healedNumberGeo() bei einem Treffer NICHT blind auf das Kauf-Land der Nummer um (das
+// waere bei FORCE_NUMBER_COUNTRY falsch, s. dort), sondern zuerst auf die Herkunfts-Geo
+// des TENANTS - trifft sie zufaellig denselben Wert, ist das UPDATE ein No-Op (Idempotenz
+// bleibt erhalten, kein stiller Sprachwechsel fuer korrekt angelegte Zeilen). Historische
+// Tatsache am Bestand, kein Policy-Schalter -> bewusst kein Env-Knopf.
+const LEGACY_NUMBER_LANGUAGE = "de";
+
+// Setzt die RLS-GUC der laufenden Verbindung (session-weit, Muster wie pg.js setTenant).
+// number steht unter FORCE ROW LEVEL SECURITY: ohne passende GUC traefe jedes UPDATE unter
+// einer nicht-privilegierten DB-Rolle lautlos 0 Zeilen - genau die stille Wirkungslosigkeit,
+// vor der schema.sql beim call-Backfill warnt. Eigene Kopie statt Import aus pg.js: pg.js
+// importiert dieses Modul, ein Rueckimport waere ein Zyklus.
+async function setCurrentTenant(db, tenantId) {
+  await db.query(`SELECT set_config('app.current_tenant', $1, false)`, [tenantId]);
+}
+
+// SOLL-Geo EINER Bestandszeile - rein, ohne DB. Das Land kommt aus der Zeile, sonst aus der
+// DID-Vorwahl; ohne ableitbares Land -> null, die Zeile bleibt komplett unberuehrt (E2,
+// "kein Raten"). Die Sprache folgt NICHT dem Kauf-Land der Nummer (Review-Blocker Runde 1,
+// A1-Zwei-Achsen-Vertrag): number.country ist per Design vom Herkunftsland entkoppelt
+// (FORCE_NUMBER_COUNTRY faerbt NUR das Kauf-Land, s. provision-trigger.js). Die Sprache
+// heilt deshalb aus dem Herkunftsland DES TENANTS (tenantGeo) - genau die Achse, aus der
+// requestNumberForPaidTenant sie beim Kauf bereits ableitet. Fehlt auch die Tenant-Geo
+// (uralter Bestand ohne F1-Geo), bleibt als letzter Anker das Kauf-Land selbst (alte
+// Regel) - besser eine plausible Sprache als keine. Ein expliziter Wert wird durchgereicht
+// und damit vom Aufrufer als "keine Aenderung" erkannt.
+function healedNumberGeo(row, tenantGeo) {
+  const country = row.country || countryForE164(row.e164);
+  if (!country) return null;
+  const chosen = row.language && row.language !== LEGACY_NUMBER_LANGUAGE;
+  if (chosen) return { country, language: row.language };
+  const language = tenantGeo.defaultLanguage || languageForCountry(tenantGeo.country || country);
+  return { country, language };
+}
+
+// Liest die Herkunfts-Geo EINES Tenants (fuer die Sprachwahl beim Heilen, s.o.). Fehlende
+// Spalten/Tenant -> beide null (der Aufrufer faellt dann auf das Kauf-Land zurueck).
+async function fetchTenantGeo(db, tenantId) {
+  const { rows } = await db.query(
+    `SELECT country, default_language AS "defaultLanguage" FROM tenant WHERE id = $1`,
+    [tenantId],
+  );
+  return { country: rows[0]?.country ?? null, defaultLanguage: rows[0]?.defaultLanguage ?? null };
+}
+
+// Heilt die Bestandszeilen EINES Tenants (die RLS-GUC steht bereits auf ihm). Der SELECT
+// liest nur Kandidaten - eine geheilte DB liefert 0 Zeilen und schreibt nichts. Geschrieben
+// wird ausschliesslich bei echter Abweichung: der zweite Lauf setzt kein einziges UPDATE ab
+// (Idempotenz per Konstruktion, nicht per Zufall). tenant_id steht zusaetzlich zum
+// RLS-Filter im Statement - dieselbe doppelte Linie wie im Flush-Pfad. Liefert die Zahl der
+// geschriebenen Zeilen.
+async function healNumberGeoForTenant(db, tenantId) {
+  const { rows } = await db.query(
+    `SELECT id, e164, country, language FROM number
+      WHERE tenant_id = $1 AND (country IS NULL OR language IS NULL OR language = $2)`,
+    [tenantId, LEGACY_NUMBER_LANGUAGE],
+  );
+  if (rows.length === 0) return 0;
+  const tenantGeo = await fetchTenantGeo(db, tenantId);
+  let written = 0;
+  for (const row of rows) {
+    const healed = healedNumberGeo(row, tenantGeo);
+    if (!healed) continue;
+    if (healed.country === row.country && healed.language === row.language) continue;
+    await db.query(
+      `UPDATE number SET country = $1, language = $2 WHERE id = $3 AND tenant_id = $4`,
+      [healed.country, healed.language, row.id, tenantId],
+    );
+    written++;
+  }
+  return written;
+}
+
+// Einmaliger, idempotenter Geo-Backfill (GAP-34): Bestands-Nummern aus der Zeit vor F1
+// tragen kein Land bzw. den Alt-Default "de". Der number-Record ist der dauerhafte
+// Geo-Anker (Inbound-Sprache nach angerufener Nummer) - ohne Backfill spricht eine
+// franzoesische DID auf ewig Deutsch. tenant hat keine RLS -> die Tenant-Liste ist ohne GUC
+// lesbar; number hat FORCE-RLS -> die GUC wird pro Tenant gesetzt. Am Ende steht sie wieder
+// auf restoreTenantId: das nachfolgende seedDefaults schreibt in RLS-Tabellen (settings/
+// usage/calendar_event) und wuerde sonst unter der GUC des zuletzt behandelten Tenants
+// laufen. Die Wiederherstellung gehoert deshalb IN diese Funktion, nicht in die Disziplin
+// des Aufrufers. Keine eigene Transaktion (Muster der Schwester-Backfills): ein
+// abgebrochener Lauf hinterlaesst nur teilweise geheilte Zeilen, die der naechste Lauf
+// fertig heilt. Geloggt wird nur eine Zahl (kein e164, keine tenantId - PII-frei).
+export async function backfillNumberGeo(db, restoreTenantId) {
+  const { rows } = await db.query(`SELECT id FROM tenant`);
+  let written = 0;
+  for (const { id } of rows) {
+    await setCurrentTenant(db, id);
+    written += await healNumberGeoForTenant(db, id);
+  }
+  await setCurrentTenant(db, restoreTenantId);
+  if (written) console.log(`[migrate] number geo backfill: ${written} Zeile(n) geheilt`);
 }
 
 // Phase S: re-keyt die globale profile-Tabelle von email- auf tenantId-Schluessel (die
@@ -156,12 +258,17 @@ export async function seedDefaults(db, tenantId) {
 
 // Eine oeffentliche Einstiegsfunktion: Schema anwenden, Bestands-Backfills laufen lassen,
 // dann Owner-Defaults seeden. rekeyProfilesToTenant laeuft NACH applySchema (Spalte ist dann
-// schon tenant_id) und VOR seedDefaults (haengt nicht an den Owner-Seeds).
+// schon tenant_id) und VOR seedDefaults (haengt nicht an den Owner-Seeds). backfillNumberGeo
+// heilt die Geo-Felder der Bestands-Nummern.
 export async function migrate(db, tenantId) {
   await applySchema(db);
   await backfillPeriodStart(db);
   // MUSS NACH applySchema laufen (Spalte tenant_id existiert erst dann, siehe oben).
   await rekeyProfilesToTenant(db);
   await backfillAccountEmailCase(db);
+  // MUSS NACH applySchema (number.country/language werden dort idempotent angelegt) und VOR
+  // seedDefaults laufen: der Backfill schaltet die RLS-GUC tenantweise um und stellt sie am
+  // Ende auf tenantId zurueck - genau den Scope, den seedDefaults zum Schreiben braucht.
+  await backfillNumberGeo(db, tenantId);
   await seedDefaults(db, tenantId);
 }
