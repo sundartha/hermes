@@ -110,7 +110,8 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       "Pour une demande de rendez-vous, consigne le jour, l'heure et la validité. " +
       "Ne l'utilise PAS à la place d'une réponse normale, ni PAS pour éviter une question de clarification - " +
       "si une brève question permettrait de clarifier la demande, pose-la d'abord. " +
-      "Dis à ton interlocuteur, dans la même réponse, que tu transmets le message. " +
+      "Dis à ton interlocuteur que tu transmets le message dans la réponse MÊME où tu " +
+      "appelles take_message, pas dans une réponse ultérieure. " +
       "Ne promets JAMAIS que tu rappelleras toi-même plus tard, et n'affirme JAMAIS " +
       "qu'un rendez-vous est enregistré ou réservé. " +
       "Ne l'utilise PAS pour quelque chose que ta mission te laisse décider toi-même - " +

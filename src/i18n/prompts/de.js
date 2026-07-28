@@ -114,7 +114,9 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "Halte bei einem Terminwunsch Tag, Uhrzeit und Gültigkeit mit fest. " +
       "Nutze es NICHT anstelle einer normalen Antwort und NICHT, um eine Rückfrage zu vermeiden - " +
       "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
-      "Sage dem Gegenüber in derselben Antwort, dass du die Nachricht weitergibst. " +
+      "Sage dem Gegenüber im SELBEN Zug, dass du die Nachricht weitergibst: dein " +
+      "gesprochener Satz gehört in dieselbe Antwort, in der du take_message aufrufst, " +
+      "nicht in eine spätere. " +
       "Versprich dabei NIEMALS, dass du selbst später nochmal anrufst, und behaupte NIE, " +
       "ein Termin sei eingetragen oder gebucht. " +
       "Nutze es NICHT für etwas, das dein Auftrag dich selbst entscheiden lässt - " +
