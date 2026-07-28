@@ -3,8 +3,7 @@
 > Das EINZIGE Status-/Offene-Punkte-Doc. Abgeschlossene Phasen stehen in der Git-History
 > und in der Memory, nicht hier. Lebende Referenz-Docs (bleiben separat):
 > `PLAN-SECURITY.md` (Security-Plan), `docs/RUNBOOK-OPERATOR.md` (Betrieb/Live-Gates),
-> `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/rebrand-sundartha.md` (Rebrand-Task),
-> `tasks/lessons.md` (Lehren).
+> `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/lessons.md` (Lehren).
 >
 > **Stand:** 2026-06-23 - HEAD lokal = `4e5d4e9` = **origin/master = upstream/master** (alle in
 > sync). Der Render-Deploy von `4e5d4e9` ist **live** (gesund hochgekommen) - der Frontend-Track
@@ -101,9 +100,6 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
 
 ## 2. Autonome Code-Follow-ups
 
-> Diese Items mit Vorgehen pro Item + Workflow-Einschaetzung (ist phase-impl noetig?):
-> siehe **`AUTONOM.md`**.
-
 > **Stand 2026-06-23:** A1, A3, A4 + Rebrand-Track-A sind GEMERGT. Offen bleiben hier nur noch
 > A5 (sequenziell) und A2 (in Arbeit, inkrementell).
 
@@ -169,6 +165,16 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
 - P3b-R CP5/CP6 (Metrik-Seam / Breaker-Tuning) -> W4 uebersprungen; **Path B** (undici als Dep
   - expliziter Dispatcher) nur falls "Premature close" unter 0.105 erneut auftritt
 - TD-8 MCP-sub-Threading (I5; aktuell fail-closed, kein Leak)
+
+Aus der Fragilitaets-Remediation (P1-P7, gemergt `ee296c3`) bewusst zurueckgestellt:
+
+- S1-4 `usage.costEur` -> Cents (eigener Cluster; der Rest der Geldachse liegt seit P2 in Cents)
+- C6b `state-ops.js`-Split (S4, nur bei Trigger)
+- `bridge.js` als vollwertiger 6. Terminierungspfad (aus dem C5-Pre-Mortem; heute decken die
+  5 Pfade ueber `terminateAndBillCall` ab, `bridge.js` nur bei `VOICE_ENGINE=realtime`)
+- **OFFEN (Owner):** echter Realtime-Probe-Anruf als Post-Merge-Validierung von P7
+  (`VOICE_ENGINE=realtime`). Restrisiko gering und auf realtime-only begrenzt — der
+  Live-Default ist `budget`.
 
 ## 4. Rebrand: "Hermes" (Produkt) / "Sundartha" (Firma)
 

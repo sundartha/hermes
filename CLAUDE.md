@@ -120,15 +120,14 @@ Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js
 (node:test `--test-skip-pattern`/`--test-name-pattern` gegen `package.json` `config.i18nCatalogPattern`).
 Jeder i18n-Launch-Testkatalog-Test traegt seine Katalog-ID (z.B. `GAP-18`, `PROMPT-01`) am
 Namensanfang — das ist die einzige Zuordnungsregel, keine gepflegte Liste. `npm test` schliesst
-diese Tests aus (Regressionsschutz, PLAN-I18N-TESTS.md 4.1: "kein roter Test in diesem Katalog ist
-ein Regressionsfang"); `test:gates` faehrt NUR sie (inkl. gruener R3-Mechanismus-Tests als
-Regressionsschutz, s. `tasks/i18n-tests/00-kanonische-liste.md`).
+diese Tests aus, weil kein roter Test in diesem Katalog ein Regressionsfang ist; `test:gates`
+faehrt NUR sie (inkl. gruener Mechanismus-Tests als Regressionsschutz).
 
 Die Invariante der Trennung ist nicht eine feste Gesamtzahl, sondern: **beide Laeufe zusammen
 ergeben denselben Testbestand wie ein ungefilterter `node --test "test/*.test.js"`** — der Split
 verliert und dupliziert nichts. Bei der Einfuehrung nachgerechnet: 2930 + 114 = 3044 (dazu die 10
 Selbsttests in `test/i18n-catalog-run.test.js`, die die Wrapper-Logik abdecken und
-regressionsseitig mitzaehlen). Herleitung: `tasks/i18n-tests/17-lauf-trennung-bericht.md`.
+regressionsseitig mitzaehlen).
 
 ## Referenzen
 

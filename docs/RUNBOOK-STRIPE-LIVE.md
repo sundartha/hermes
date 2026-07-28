@@ -155,8 +155,7 @@ Schritt 7 ohne echte Belastung fahren. Alles Folgende ist NUR Stripe-Dashboard
 3. Smoke (Schritt 7): im Stripe-Checkout unter dem Kartenformular
    "Gutscheincode hinzufuegen" -> `OWNER100` -> erste Rechnung 0,00 EUR;
    Karte wird trotzdem gespeichert, Abo + Webhook-Events laufen normal.
-4. Restriktion lebt KOMPLETT in Stripe (Design-Entscheidung 2026-07-03,
-   `docs/superpowers/specs/2026-07-03-stripe-discount-code-checkout-design.md`):
+4. Restriktion lebt KOMPLETT in Stripe (Design-Entscheidung 2026-07-03):
    die App validiert keine Codes. Leakt ein Code, begrenzen NUR
    max_redemptions/Ablauf/Customer-Bindung den Schaden -> Codes knapp halten.
 
