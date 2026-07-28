@@ -267,6 +267,11 @@ export function createCall(
     // rowToCall -> nach einem Deploy-Instanzwechsel beginnt die Staffel fail-safe von
     // vorn (mehr Hoeflichkeit, nie ein frueherer Hangup).
     noSpeechStreak: 0,
+    // AL-P1: Telnyx-Conversation-UUID (Latenz-Achse) + purge-fester Anrufer-Turn-Zaehler
+    // (Abbruch-Achse). Initial null/0 - byte-identisch zur pg-Hydrierung (rowToCall),
+    // kein json<->pg-Shape-Drift.
+    telnyxConversationId: null,
+    callerTurns: 0,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -535,6 +540,32 @@ export function recordFailureReason(s, callId, reason) {
     changed = true;
   }
   return { call, changed };
+}
+
+// AL-P1: Telnyx-Conversation-UUID am Call. Set-once + nur bei truthy Wert (Muster
+// recordFailureReason): ein Webhook-Retry ueberschreibt die erste UUID nicht, ein
+// fehlendes Feld ist ein No-op (changed=false -> kein Save). Wrapper saved bei changed.
+export function recordTelnyxConversationId(s, callId, conversationId) {
+  const call = getCall(s, callId);
+  let changed = false;
+  if (call && conversationId && !call.telnyxConversationId) {
+    call.telnyxConversationId = conversationId;
+    changed = true;
+  }
+  return { call, changed };
+}
+
+// AL-P1: eine substanzlose Nullzeile gibt es hier nicht - der Aufrufer (agentTurn) ruft
+// NUR bei nicht-leerem callerText. Zaehlt den Anrufer-Turn mit und liefert den NEUEN
+// Stand (Nebeneffekt im Namen, N7 - Muster countNoSpeechTurn). Fehlendes Feld
+// (pg-hydrierter Altbestand) -> 0 als Basis, nie NaN. Liefert { call, changed } wie die
+// uebrigen PERSISTENTEN Mutatoren, weil der Wrapper hier - anders als countNoSpeechTurn -
+// speichern muss (es gibt eine Spalte).
+export function countCallerTurn(s, callId) {
+  const call = getCall(s, callId);
+  if (!call) return { call: null, changed: false };
+  call.callerTurns = (Number.isSafeInteger(call.callerTurns) ? call.callerTurns : 0) + 1;
+  return { call, changed: true };
 }
 
 // P3.2: konsekutiven Leer-Gather-Turn mitzaehlen und den NEUEN Streak liefern (Nebeneffekt

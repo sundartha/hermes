@@ -5,7 +5,11 @@
 // finishCall (Regel 1, verhindert Reserve-Leak/gesperrtes Tenant-Budget). Factory+DI wie
 // makeTelnyxLlmShim: alle Seiteneffekt-Deps injiziert -> Zustandsmaschine offline mit
 // Spies testbar.
-import { parseCallControlEvent, CALL_CONTROL_EVENT } from "./telephony/adapters/telnyx/call-control-events.js";
+import {
+  parseCallControlEvent,
+  conversationIdFrom,
+  CALL_CONTROL_EVENT,
+} from "./telephony/adapters/telnyx/call-control-events.js";
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
@@ -20,6 +24,10 @@ const CALL_CONTROL_LOG_PREFIX = "[voice/call-control]";
 // NICHT config.js (G35). Der /voice/call-control-Mount ist Ed25519-signaturgeprueft, der Body
 // also provider-authentisch; der Bound ist reine Defense-in-Depth gegen ein unerwartet grosses Feld.
 const EVENT_TOKEN_MAX_LEN = 64;
+
+// AL-P1: Obergrenze der keys-only Payload-Liste im Conversation-Miss-Log. Interner
+// Log-Volumen-Schutz, KEIN Operator-Knopf -> modul-lokal (Muster EVENT_TOKEN_MAX_LEN).
+const PAYLOAD_KEY_MAX = 20;
 
 // Roher Telnyx-Protokoll-Token PII-frei fuer den Log: null/undefined -> "none", sonst
 // String-coerced + gekuerzt. event_type/status sind Lifecycle-Enums (kein Freitext/PII).
@@ -241,6 +249,31 @@ export function makeCallControlIngest({
     console.log(`${CALL_CONTROL_LOG_PREFIX} hangup (call=${call.id}) -> Settlement finishCall`);
   }
 
+  // AL-P1 (Latenz-Achse): Telnyx' Conversation-UUID am Call festhalten - ohne sie ist die
+  // Latenz-Zerlegung nur mit Handarbeit erzeugbar. Set-once im Store; KEIN Gate, kein
+  // Call-Effekt, rein additiv.
+  //
+  // Der Miss-Zweig ist der Kern dieser Zeile: der Feldname ist LIVE UNBESTAETIGT. Statt
+  // still null zu speichern, legt der Log die tatsaechlichen Payload-SCHLUESSEL offen
+  // (keys-only, nie Werte, Muster forwardMetadataShape im Shim) - ein falscher Feldname
+  // faellt damit beim ERSTEN echten Anruf auf. Der UUID-WERT selbst bleibt wie die ccid
+  // aus dem Log draussen (nur Praesenz), er steht im Store.
+  function onConversationCreated(call, body) {
+    const conversationId = conversationIdFrom(body);
+    if (!conversationId) {
+      const keys = Object.keys(eventEnvelope(body)?.payload ?? {})
+        .slice(0, PAYLOAD_KEY_MAX)
+        .map(rawToken)
+        .join(",");
+      console.warn(
+        `${CALL_CONTROL_LOG_PREFIX} conversation_created OHNE conversation_id (call=${call.id}) payload_keys=${keys}`,
+      );
+      return;
+    }
+    store.recordTelnyxConversationId(call.id, conversationId);
+    console.log(`${CALL_CONTROL_LOG_PREFIX} conversation_created (call=${call.id}) -> UUID gespeichert`);
+  }
+
   // A6 (stab-p10): Read-through-Rehydrate. Kennt der Prozess-Spiegel den Call nicht
   // (Deploy-/Instanzwechsel liess die aktive DB-Zeile aus diesem Spiegel fallen), wird er
   // RLS-sauber aus dem Store nachgeladen - inkl. tenantId (I8) und aller vom Turn-/Gate-Fluss
@@ -273,6 +306,8 @@ export function makeCallControlIngest({
       if (eventType === CALL_CONTROL_EVENT.SPEAK_ENDED) return void (await onSpeakEnded(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.SPEAK_FAILED) return void (await onSpeakFailed(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.HANGUP) return void (await onHangup(call));
+      // AL-P1: rein diagnostischer Zweig (Store-Write, kein Call-Effekt, kein Gate).
+      if (eventType === CALL_CONTROL_EVENT.CONVERSATION_CREATED) return void onConversationCreated(call, req.body);
       // unbekannt/sonstiges -> keine Wirkung (200 bereits gesendet)
     } catch (err) {
       // 200 ist raus; Fehler nur secret-frei loggen (kein Roh-Body/Key), keine unhandled rejection.

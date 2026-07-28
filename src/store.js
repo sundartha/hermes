@@ -97,6 +97,11 @@ export const {
   recordCallEstimatedCostCents, // LCT P2: gebuchter Schaetzbetrag am Call
   recordCallCostTruingResult, // LCT P3: Ergebnis des Kosten-Abgleichs am Call
   recordFailureReason,
+  // AL-P1: Conversation-UUID (Latenz-Achse) + Anrufer-Turn-Zaehler (Abbruch-Achse).
+  // OHNE diese Re-Exports waeren sie auf der Fassade undefined -> der Call-Control-Ingest
+  // bzw. agentTurn wuerfen zur Laufzeit einen TypeError.
+  recordTelnyxConversationId,
+  countCallerTurn,
   // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
   // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
   countNoSpeechTurn,

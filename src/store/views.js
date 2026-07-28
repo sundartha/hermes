@@ -13,10 +13,17 @@ import { findTenant, resolveCallLanguage } from "./state-ops.js";
 // interne Abrechnungs-/Forensik-Groessen, kein Anzeige-Vertrag. Haelt /api/state und die
 // Self-Service-Antwort BYTE-IDENTISCH zum Bestand; die Sichtbarkeit entscheidet P5, nicht
 // diese inerte Phase.
+// AL-P1: telnyxConversationId (Provider-Handle) und callerTurns (Forensik-Zaehler)
+// verlassen die API NICHT (Muster summarySmsSentAt / LCT-P2-Kostenfelder) - kein
+// Anzeige-Vertrag, kein Nutzer wartet darauf. Haelt /api/state + die Self-Service-
+// Antwort BYTE-IDENTISCH zum Bestand; Sichtbarkeit entscheidet spaeter eine Phase, die
+// sie braucht, nicht diese Messphase.
 export function publicCall({
   streamToken,
   _finished,
   summarySmsSentAt,
+  telnyxConversationId,
+  callerTurns,
   estimatedCostCents,
   actualCostMicroCents,
   costTruedAt,

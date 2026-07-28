@@ -340,6 +340,16 @@ export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {
     : `${axisLabelWhenFlagOff} (BUDGET_MONTH_ENABLED=false)`;
 }
 
+// AL-P1 (O1-Sonde): welcher Pfad live laeuft, waren ZWEI unabhaengige Schalter -
+// VOICE_ENGINE stand im Banner, das Assistant-Flag nirgends. Genau diese Blindheit hat den
+// Plan eine Messrunde gekostet. Eigene Funktion, damit die Banner-Zeile eine
+// Abstraktionsebene bleibt (G34) und die Bedingung einen Namen hat (G28).
+export function assistantPathLabel(assistantEnabled) {
+  return assistantEnabled
+    ? "AKTIV (TELNYX_AI_ASSISTANT_ENABLED=true)"
+    : "aus (TELNYX_AI_ASSISTANT_ENABLED=false)";
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -352,6 +362,7 @@ function logBootBanner(config, port) {
   console.log(
     `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
+  console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );

@@ -1047,7 +1047,10 @@ test("OBS-FLAG an + falsches Bearer: KEINE shape-Zeile (Dump erst nach der Auth)
 // === P5: messages-Shape + speechEmpty-Diskriminator (default-off, hinter Bearer) =====
 // Eigenes distinktes Feld (speechEmpty) trennt diese Zeile von forwardMetadataShape (die
 // ebenfalls kind="shape" traegt, aber kein speechEmpty hat) - siehe shapeLines oben.
-const turnShapeLines = (lines) => lines.filter((l) => l.includes('"speechEmpty"'));
+// AL-P1: turn_ok traegt seit AL-P1 (turnDiagnostics) ZUSAETZLICH ein eigenes speechEmpty-
+// Feld (unconditional, nicht hinter TELNYX_SHIM_DEBUG_SHAPE) - der reine ".includes"-Filter
+// muss deshalb zusaetzlich den shape-Marker verlangen, sonst zaehlt er die turn_ok-Zeile mit.
+const turnShapeLines = (lines) => lines.filter((l) => l.includes(SHAPE_LINE_MARKER) && l.includes('"speechEmpty"'));
 
 test("P5-1: erfolgreicher Turn -> genau 1 turn-shape-Zeile mit exakten Feldern, KEIN Nachrichtentext (PII)", async () => {
   const store = fakeStore({ call: makeCall() });
