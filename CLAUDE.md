@@ -60,7 +60,7 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
 
 ## Absolute Regeln
 
-1. **SAFETY-GATES**: Allowlist (`ALLOWED_NUMBERS`), Denylist/Land-Gate/Stundenlimit, Budget-Guard (`MAX_BUDGET_EUR`, global UND pro-Tenant — Schnittmenge), Max-Gespraechsdauer und die Provider-Signaturpruefung (Twilio HMAC + Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates.
+1. **SAFETY-GATES**: die per-Tenant-Verifikation als Outbound-Permit (Abo+KYC) und der globale Kill-Switch `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, Budget-Guard (`MAX_BUDGET_EUR`, global UND pro-Tenant — Schnittmenge), Max-Gespraechsdauer und die Provider-Signaturpruefung (Twilio HMAC + Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates. (`ALLOWED_NUMBERS` ist seit dem outbound-p3-Cutover wirkungslos — der Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`. Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
 2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
 3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind standardmaessig hinter Basic-Auth; Ausnahmen (wie `/voice`, `/mcp`, `/healthz`) brauchen eine eigene Absicherung und eine Begruendung im Code-Kommentar. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
