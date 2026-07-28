@@ -83,10 +83,11 @@ werden:**
 Prod-DB, nicht in der Telnyx-Antwort (alle drei haengen an derselben Connection). **Vor jedem
 Eingriff feststellen**, sonst wird am Live-Anschluss experimentiert.
 
-**Vorschlag der naechsten Session (braucht ein Ja vom Owner):** eine neue Connection/TeXML-App
-anlegen (kostenlos, reversibel), eine der beiden NICHT-live DIDs darauf zeigen und einen der
-`Blank`-Assistants als Wegwerf-Assistant verwenden. **Kein Kauf, keine Aenderung am
-Live-Assistant.**
+> **FREIGEGEBEN vom Owner am 2026-07-28:** die naechste Session **darf** eine neue
+> Telnyx-Connection/TeXML-App anlegen. Kostenlos und reversibel. Eine der beiden NICHT-live DIDs
+> wird darauf gezeigt, einer der `Blank`-Assistants dient als Wegwerf-Assistant.
+> **Kein Kauf, keine Aenderung am Live-Assistant.** Die Klaerung, welche DID live ist, bleibt
+> zwingende Vorbedingung — sie ist von dieser Freigabe nicht gedeckt.
 
 **Weiterhin gesperrt: NICHT ueber `scripts/telnyx-assistant-provision.mjs`.** Das Skript schreibt
 die GANZE Live-Config aus der lokalen `.env`: ohne gesetzte `TELNYX_ASSISTANT_ID` entstuende ein
