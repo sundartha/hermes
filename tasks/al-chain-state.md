@@ -13,8 +13,8 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 |---|---|---|---|---|
 | AL-P1 | `phase/al-p1-latenz-achse` | PASS (0 Fix-Runden, 3350 gruen) | `dd0c0dc` | **gemergt** — 4 Abnahmen in der Checkliste |
 | AL-P2 | — | — | — | offen |
-| AL-P3 | — | — | — | offen |
-| AL-P4 | — | — | — | offen |
+| AL-P3 | `phase/al-p3-endpointing` | PASS (0 Fix-Runden, 3374 gruen) | `a4cbdd1` | **gemergt** — 3 Abnahmen in der Checkliste |
+| AL-P4 | `phase/al-p4-tool-loop` | PASS (0 Fix-Runden, 3359 gruen) | `1021bc1` | **gemergt** — 2 Abnahmen in der Checkliste |
 | AL-P5 | — | — | — | offen |
 | AL-P6 | — | — | — | offen |
 | AL-P7 | — | — | — | offen (haengt an AL-P2) |
@@ -48,3 +48,22 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   `status=active` und jede ist die einzige Nummer eines eigenen Tenants. Zurueckhaengen ist
   deshalb Teil von AL-P2, nicht Nacharbeit. Details im AL-P2-Abschnitt der Kette.
 - **Welle 0: AL-P1 gemergt** (`dd0c0dc`). Gate PASS ohne Fix-Runde.
+- **Welle 1: AL-P4 (`1021bc1`) und AL-P3 (`a4cbdd1`) gemergt.** Beide PASS ohne Fix-Runde.
+  Konflikt beim zweiten Merge nur in `tasks/al-testcall-checklist.md` (beide Bahnen haben Zeilen
+  angehaengt) — beide Saetze behalten.
+  AL-P3 hat die im Plan geforderte Vorpruefung per Objekt-GET am Live-Assistant erledigt und den
+  spekulativen Absatz im Plan-Doc durch den Messwert ersetzt: `start_speaking_plan` haengt unter
+  `interruption_settings`, **nicht** unter `transcription`. Der befuerchtete Guard-Wechsel
+  entfaellt. Die Entscheidungen O1-O9 blieben unberuehrt (nachgeprueft).
+- **Lastwaechter** laeuft seit Welle 1 (`scratchpad/al-load-guard.sh`): misst jede Minute und
+  sammelt `node src/server.js`-Prozesse aelter als 10 min ein. Waehrend zweier paralleler
+  Workflows blieb Load1 zwischen **4,1 und 8,1 bei 15 Kernen**, Speicher ~50 % frei, **null**
+  verwaiste Server. Zwei parallele Workflows sind fuer diese Maschine unkritisch; drei werden
+  nicht gestartet.
+- **Flake nach dem Welle-1-Merge, ehrlich festgehalten:** der erste Volllauf auf dem gemergten
+  master meldete **1 Fehlschlag von 3364**. Die Identitaet des Tests wurde nicht mitgeschnitten
+  (Ausgabe lief durch `tail`). Die beiden folgenden Volllaeufe auf demselben Baum waren
+  **grün (3364/3364)**. Das entspricht dem dokumentierten, vorbestehenden Spawn-Race unter
+  Volllast; nach dem Gate-Protokoll gilt rot nur, wenn es isoliert rot bleibt. Sollte in einer
+  spaeteren Welle erneut genau ein Test kippen: **Ausgabe mitschneiden und den Namen
+  festhalten**, statt wieder nur die Zusammenfassung zu lesen.
