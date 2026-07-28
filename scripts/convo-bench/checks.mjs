@@ -297,12 +297,13 @@ export const MEASUREMENT_CHECKS = Object.freeze([
 // AL-P5: Obergrenze fuer die LLM-freie Eroeffnung (agentSamples[0]) im Check
 // opening_chars_before_yield - die Schwelle, die der AL-P8-Kommentar unten an AL-P5
 // uebergeben hat. KEINE frei gewaehlte Zahl, sondern die laengstmoegliche deutsche
-// Eroeffnung nach der Kuerzung: Offenlegung (130 Zeichen beim Bench-Owner
-// "Jonas Beispiel") + Leerzeichen + Bruecke (22) + gekapptes Anliegen (70) + Punkt.
+// Eroeffnung nach der Kuerzung: Offenlegung (129 Zeichen beim Bench-Owner
+// "Jonas Beispiel") + Leerzeichen + Bruecke (22) + gekapptes Anliegen (75) + Punkt.
 // Die Bench seedet ausschliesslich language="de" (s. expectedDisclosure oben).
 // Gekoppelt an src/claude.js: test/al-p5-opening.test.js rechnet den Wert gegen das
-// echte openingText nach - die Zahl kann nicht stumm rotten.
-export const BENCH_MAX_OPENING_CHARS = 224;
+// echte openingText nach - die Zahl kann nicht stumm rotten. AL-P5-Review-Runde 1 hat
+// die Kappe von 70 auf 75 angehoben (s. OPENING_GOAL_MAX_CHARS-Kommentar in claude.js).
+export const BENCH_MAX_OPENING_CHARS = 229;
 
 // Die frei generierten Agenten-SAMPLES (ohne die LLM-freie Eroeffnung, Muster
 // freeAgentTexts) - Grundlage fuer alle turn-weisen Messungen unten.

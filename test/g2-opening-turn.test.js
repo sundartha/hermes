@@ -10,11 +10,13 @@ import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { runOutbound, GATHER_OPEN, HANGUP_TAG, DISCLOSURE_JONAS } from "./_outbound-harness.js";
 
-// Muss zu OPENING_GOAL_MAX_CHARS (claude.js, 70) passen: dieser Test pinnt das
+// Muss zu OPENING_GOAL_MAX_CHARS (claude.js, 75) passen: dieser Test pinnt das
 // beobachtbare Kapp-Verhalten (Wortgrenze, kein Satzzeichen-Salat), nicht die Zahl.
-// AL-P5 hat die Kappe von 160 auf 70 gesenkt (Eroeffnungsfenster). Die Duplikation hier
-// ist beabsichtigt und wird bewusst mitgezogen - sie ist keine stille Reparatur.
-const OPENING_GOAL_MAX_CHARS = 70;
+// AL-P5 hat die Kappe von 160 auf 70 gesenkt (Eroeffnungsfenster); AL-P5-Review-Runde 1
+// hat sie auf 75 angehoben (reale Auftraege verloren bei 70 ihr zweck-tragendes Verb,
+// s. Kommentar in claude.js). Die Duplikation hier ist beabsichtigt und wird bewusst
+// mitgezogen - sie ist keine stille Reparatur.
+const OPENING_GOAL_MAX_CHARS = 75;
 
 let systemPrompt, openingText, disclosureSentence;
 before(async () => {

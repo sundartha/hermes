@@ -1,8 +1,9 @@
 // AL-P5 (PLAN-ASSISTANT-LEAP.md, Phase 5): die Eroeffnung ist gekuerzt. Diese Datei haelt
 // die Zusagen fest, die OHNE echten Anruf entscheidbar sind:
-// (1) die Kappe beisst in allen drei Sprachen UND der Erst-Turn benennt den Zweck des
-//     Anrufs weiterhin (Plan-Abnahme 3) - die Abnahme am Telefon steht in
-//     tasks/al-testcall-checklist.md;
+// (1) die Kappe beisst in allen drei Sprachen, in BEIDEN bridgePhrase-Zweigen (Bruecken-
+//     Auftraege UND der Ich-/Je-/I-Passthrough-Shape aus place_call.objective, s.
+//     src/mcp-tools.js) UND der Erst-Turn benennt den Zweck des Anrufs weiterhin
+//     (Plan-Abnahme 3) - die Abnahme am Telefon steht in tasks/al-testcall-checklist.md;
 // (2) die Bench-Schwelle BENCH_MAX_OPENING_CHARS bleibt rechnerisch an die Kappe
 //     gekoppelt: wird OPENING_GOAL_MAX_CHARS (src/claude.js) veraendert, ohne die
 //     Schwelle nachzuziehen, faellt genau dieser Test - die Zahl kann nicht stumm rotten.
@@ -43,12 +44,17 @@ const outboundCall = (over = {}) =>
   seedCall({ tenantId: BOOTSTRAP_TENANT_ID, direction: OUTBOUND, ...over });
 
 // Reale Auftraege an der Schnittgrenze, je Sprache. mustContain = die Woerter, an denen
-// ein Mensch den ZWECK erkennt; sie muessen die Kappe ueberleben.
+// ein Mensch den ZWECK erkennt (das tragende Verb/Objekt, NICHT irgendein ueberlebendes
+// Praefix-Wort) - sie muessen die Kappe ueberleben. Deckt BEIDE bridgePhrase-Zweige ab
+// (src/i18n/locales.js): Imperativ-/Infinitiv-Auftraege bekommen die Bruecke ("Es geht
+// um Folgendes: ..."), Ich-/Je-/I-Auftraege (der von place_call.objective mandatierte
+// Ich-Satz-Shape, s. src/mcp-tools.js) laufen OHNE Bruecke woertlich durch - beide Zweige
+// muessen den Zweck ueberleben lassen (AL-P5-Review-Runde 1).
 const BOUNDARY_GOALS = Object.freeze([
   {
     language: "de",
-    goal: "Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren",
-    mustContain: ["Termin", "Herrenhaarschnitt"],
+    goal: "Naechsten freien Termin fuer einen Herrenhaarschnitt bei Petra vereinbaren wenn moeglich",
+    mustContain: ["Termin", "Herrenhaarschnitt", "vereinbaren"],
   },
   {
     language: "de",
@@ -63,6 +69,22 @@ const BOUNDARY_GOALS = Object.freeze([
   {
     language: "en",
     goal: "Ask whether the spare part for the dishwasher has arrived and when it can be collected",
+    mustContain: ["spare part", "arrived"],
+  },
+  // Ich-/Je-/I-Passthrough-Zweig (keine Bruecke, woertlicher Ich-Satz-Shape).
+  {
+    language: "de",
+    goal: "Ich moechte wissen, ob der Vertrag zum naechsten Monat gekuendigt werden kann und was das kostet",
+    mustContain: ["Vertrag", "gekuendigt"],
+  },
+  {
+    language: "fr",
+    goal: "Je voudrais reserver une table pour deux personnes samedi soir vers dix-neuf heures",
+    mustContain: ["reserver", "table pour deux personnes"],
+  },
+  {
+    language: "en",
+    goal: "I would like to ask whether the spare part for the dishwasher has arrived yet or is still delayed",
     mustContain: ["spare part", "arrived"],
   },
 ]);
