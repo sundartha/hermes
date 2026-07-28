@@ -492,6 +492,13 @@ CREATE TABLE IF NOT EXISTS usage_event (
   stripe_meter_sent BOOLEAN NOT NULL DEFAULT false
 );
 
+-- number_id (P5/GAP-06): der Anker der Monatsmiete-Idempotenz - EIN number_month-Beleg
+-- je Nummer und Kalendermonat. Additiv NULLABLE: Bestands-Belege und jedes andere kind
+-- (voice_minute/ai_token/sms) tragen NULL. BEWUSST OHNE FK auf number(id) - identische
+-- Begruendung wie bei call_id: ein DID-Release/Erase darf den Abrechnungsnachweis NIE
+-- mitloeschen. tenant_id + RLS bleibt die Isolationslinie.
+ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS number_id TEXT;
+
 -- account: identity(sub)->tenant Resolver. RLS-EXEMPT (laeuft VOR app.current_tenant).
 -- tenant_id NICHT unique -> Schema traegt spaeter mehrere Accounts pro Tenant (B2B),
 -- jetzt aber Single-User pro Tenant (B2C). role: member|admin.

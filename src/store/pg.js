@@ -825,7 +825,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const ueRows = (
     await client.query(
-      `SELECT id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
+      `SELECT id, tenant_id, call_id, number_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
        FROM usage_event WHERE tenant_id = $1 ORDER BY id ASC`,
       [tenantId],
     )
@@ -886,6 +886,8 @@ async function hydrateTenantInto(client, state, tenantId) {
       id: r.id,
       tenantId: r.tenant_id,
       callId: r.call_id,
+      // P5/GAP-06: NULL -> null (kein undefined-Drift, Muster call_id).
+      numberId: r.number_id ?? null,
       kind: r.kind,
       quantity: Number(r.quantity),
       costCents: Number(r.cost_cents),
@@ -1618,10 +1620,20 @@ async function flushUsageEvents(client, tenantId, events) {
     rows: events,
     insertRow: (e) =>
       client.query(
-        `INSERT INTO usage_event (id, tenant_id, call_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        `INSERT INTO usage_event (id, tenant_id, call_id, number_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
-        [e.id, tenantId, e.callId, e.kind, e.quantity, e.costCents, e.occurredAt, e.stripeMeterSent],
+        [
+          e.id,
+          tenantId,
+          e.callId,
+          e.numberId ?? null,
+          e.kind,
+          e.quantity,
+          e.costCents,
+          e.occurredAt,
+          e.stripeMeterSent,
+        ],
       ),
   });
 }

@@ -80,7 +80,7 @@ const { gates: outboundGates } = makeOutboundGates({
 // (Naht wie outboundGates/provisioningQueue, nicht im Handler; INV-7). store+config
 // werden geschlossen; die Gating-Bedingung `if (config.billing.paymentEnabled)` bleibt beim
 // Aufrufer (finishCall / Provisioning-Drain), nicht im Modul.
-const metering = makeMetering({ store, config });
+const metering = makeMetering({ store });
 
 // Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
 // Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und

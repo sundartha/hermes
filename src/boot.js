@@ -481,13 +481,23 @@ export async function bootServer({
   //
   // runCostTruingSweep wirft nicht (interner try/finally + per-Call-catch); zusaetzlich
   // .catch() am Aufruf, damit ein unerwarteter Wurf nie zum unhandled rejection wird.
-  setInterval(
-    () =>
-      void costTruing
-        .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
-        .catch((e) => console.error("[cost-truing]", e.message)),
-    config.billing.costTruingSweepIntervalMs,
-  ).unref();
+  //
+  // GAP-06: die DID-Monatsmiete faehrt als ZWEITER Schritt in DIESEM Intervall mit
+  // (Owner-Vorgabe: kein Cron, kein neuer Endpunkt, keine neue Ressource - der Render
+  // Free Tier hat weder preDeploy noch Jobs). Bewusst derselbe Stunden-Takt, KEIN zweiter
+  // Timer und KEINE neue Env-Variable. Der Schritt ist store-lokal (kein Provider-IO) und
+  // faengt Tenants ab, die in diesem Monat kein Abo-Ereignis hatten. Die beiden Schritte
+  // sind voneinander unabhaengig: ein haengender CDR-Abruf blockiert die Miete nicht.
+  // settleDueNumberMonthMeters wirft nicht (interner catch); das .catch() hier ist
+  // derselbe Riegel gegen unhandled rejections wie beim Sweep darueber.
+  setInterval(() => {
+    void costTruing
+      .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
+      .catch((e) => console.error("[cost-truing]", e.message));
+    void provisioning
+      .settleDueNumberMonthMeters()
+      .catch((e) => console.error("[number-month]", e.message));
+  }, config.billing.costTruingSweepIntervalMs).unref();
 
   // F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
   // allen Boot-Gates (assertConfig/fakeOriginateBootBlocked/hasActiveNumber), unmittelbar

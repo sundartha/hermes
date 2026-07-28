@@ -564,9 +564,19 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
   const ev = store.recordUsageEvent({
     tenantId: BOOTSTRAP_TENANT_ID,
     callId: null,
+    // P5/GAP-06: der number_month-Beleg traegt die Nummer - der Idempotenz-Anker der
+    // Monatsmiete muss den Flush ueberleben, sonst bucht der naechste Sweep neu.
+    numberId: "num_pg",
     kind: USAGE_EVENT_KIND.NUMBER_MONTH,
     quantity: 1,
     costCents: 500,
+  });
+  const voiceEv = store.recordUsageEvent({
+    tenantId: BOOTSTRAP_TENANT_ID,
+    callId: null,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 1,
+    costCents: 10,
   });
   await store.save();
 
@@ -575,13 +585,19 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
   assert.ok(persisted, "usage_event ueberlebt Re-Hydrierung");
   assert.equal(persisted.kind, USAGE_EVENT_KIND.NUMBER_MONTH);
   assert.equal(persisted.callId, null, "number_month ohne Call -> null (kein undefined-Drift)");
+  assert.equal(persisted.numberId, "num_pg", "numberId ueberlebt den Round-Trip");
   assert.equal(persisted.quantity, 1);
   assert.equal(persisted.costCents, 500);
   assert.equal(persisted.stripeMeterSent, false, "frisch ungesendet");
+  assert.equal(
+    r1.load().usageEvents.find((e) => e.id === voiceEv.id).numberId,
+    null,
+    "Event ohne Nummer -> null (kein undefined-Drift)",
+  );
 
   // Flush-Flip: markMeterEventsSent + save -> Re-Hydrierung sieht stripe_meter_sent=true.
-  const n = r1.markMeterEventsSent([ev.id]);
-  assert.equal(n, 1, "ein Event geflippt");
+  const n = r1.markMeterEventsSent([ev.id, voiceEv.id]);
+  assert.equal(n, 2, "beide Events geflippt");
   await r1.save();
   const r2 = await reopen(db);
   assert.equal(
