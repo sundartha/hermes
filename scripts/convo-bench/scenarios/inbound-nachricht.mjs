@@ -2,6 +2,8 @@
 // will lediglich eine Nachricht fuer den Besitzer hinterlassen. Prueft, dass die
 // Pflicht-Offenlegung (NUR fuer Outbound vorgeschrieben) hier NICHT faelschlich
 // mitgesprochen wird, und dass das Anliegen als Action Item ankommt.
+import { MEASUREMENT_CHECKS } from "../checks.mjs";
+
 export default {
   id: "inbound-nachricht",
   direction: "inbound",
@@ -21,6 +23,7 @@ export default {
   maxTurns: 6,
   expectDegradation: false,
   checks: [
+    ...MEASUREMENT_CHECKS,
     "inbound_no_disclosure_leak",
     "message_taken",
     "turn_count_within_budget",

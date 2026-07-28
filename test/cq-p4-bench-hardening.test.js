@@ -13,8 +13,8 @@ const OWNER_NAME = "Jonas Beispiel";
 
 // Vollstaendiges runResult-Geruest (Build-Helper, P13): jeder Check greift auf andere
 // Felder zu, ein Teil-Fake wuerde je nach Check-Reihenfolge zufaellig durchfallen.
-// texmlSamples[0] ist immer die LLM-freie Eroeffnung (F-1); agentSays fuellt die
-// FREI GENERIERTEN Folge-Turns ab texmlSamples[1] - genau die Turns, auf denen der
+// agentSamples[0] ist immer die LLM-freie Eroeffnung (F-1); agentSays fuellt die
+// FREI GENERIERTEN Folge-Turns ab agentSamples[1] - genau die Turns, auf denen der
 // Umlaut-Check (freeAgentTexts) und die Phrasen-Heuristiken (agentTexts) arbeiten.
 function runResult({
   agentSays = [],
@@ -25,14 +25,14 @@ function runResult({
 } = {}) {
   const opening = { turn: 0, sayTexts: [`Ich rufe im Auftrag von ${OWNER_NAME} an. Testanliegen.`] };
   const followUps = agentSays.map((text, i) => ({ turn: i + 1, sayTexts: [text] }));
-  const texmlSamples = [opening, ...followUps];
+  const agentSamples = [opening, ...followUps];
   return {
     call: { direction, language },
     ownerName: OWNER_NAME,
-    transcript: texmlSamples.map((s) => ({ role: "agent", text: s.sayTexts.join(" ") })),
-    texmlSamples,
+    transcript: agentSamples.map((s) => ({ role: "agent", text: s.sayTexts.join(" ") })),
+    agentSamples,
     endedVia,
-    turnCount: texmlSamples.length,
+    turnCount: agentSamples.length,
     metricsParsed: [],
     storeSnapshot: { actionItems, calendarNewEvents: [] },
   };
@@ -79,7 +79,7 @@ test("T-P4-2 Transliteration NUR im LLM-freien Eroeffnungs-Sample faellt nicht d
   // Fixture-Text, nicht Modell-Text. Ohne LLM_FREE_OPENING_SAMPLE_COUNT waere dieser
   // Check auf jedem Bestands-Szenario konstant rot.
   const rr = runResult({ agentSays: [] });
-  rr.texmlSamples[0].sayTexts = [
+  rr.agentSamples[0].sayTexts = [
     "Ich rufe im Auftrag von Jonas Beispiel an. Naechsten freien Termin fuer einen Herrenhaarschnitt vereinbaren.",
   ];
   const result = only("no_transliterated_umlauts_de", rr, scenario());

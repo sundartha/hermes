@@ -7,6 +7,8 @@
 // Erkennung liefert. Bewusst ZWEI stille Turns: die P3.2-Staffel (no-speech-escalation)
 // legt erst beim DRITTEN leeren Gather selbst auf; drei stille Turns wuerden also den
 // deterministischen Server-Pfad messen statt die Modell-Entscheidung.
+import { MEASUREMENT_CHECKS } from "../checks.mjs";
+
 export default {
   id: "hold-warteschleife",
   direction: "outbound",
@@ -29,7 +31,14 @@ export default {
   // der Klaerung".
   minTurnsBeforeAgentHangup: 5,
   expectDegradation: false,
+  // AL-P8: NUR TeXML. Dieses Szenario misst die serverseitige No-Speech-Staffel
+  // (src/no-speech-escalation.js) - minTurnsBeforeAgentHangup:5 ist auf ihre zwei
+  // Reprompts kalibriert. Im Assistant-Pfad gibt es sie nicht (Stille erzeugt dort
+  // gar keinen Shim-Request). Auf shim gemessen waere die Zahl eine andere Groesse
+  // unter demselben Namen. Ein shim-eigenes Hold-Szenario ist NICHT diese Phase.
+  drivers: ["texml"],
   checks: [
+    ...MEASUREMENT_CHECKS,
     "disclosure_first",
     "no_early_agent_hangup",
     "no_verbatim_question_repeat",

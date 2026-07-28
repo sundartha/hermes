@@ -12,6 +12,9 @@ import spaeterNochmal from "./spaeter-nochmal.mjs";
 import unerfuellbareRecherche from "./unerfuellbare-recherche.mjs";
 import mandatInnerhalb from "./mandat-innerhalb.mjs";
 import mandatAusserhalb from "./mandat-ausserhalb.mjs";
+import zweiterAnrufGedaechtnis from "./zweiter-anruf-gedaechtnis.mjs";
+import rueckfrageNotausgang from "./rueckfrage-notausgang.mjs";
+import anrufbeantworter from "./anrufbeantworter.mjs";
 
 export const SCENARIOS = Object.freeze({
   [friseurVoll.id]: friseurVoll,
@@ -26,6 +29,9 @@ export const SCENARIOS = Object.freeze({
   [unerfuellbareRecherche.id]: unerfuellbareRecherche,
   [mandatInnerhalb.id]: mandatInnerhalb,
   [mandatAusserhalb.id]: mandatAusserhalb,
+  [zweiterAnrufGedaechtnis.id]: zweiterAnrufGedaechtnis,
+  [rueckfrageNotausgang.id]: rueckfrageNotausgang,
+  [anrufbeantworter.id]: anrufbeantworter,
 });
 
 export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));

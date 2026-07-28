@@ -26,14 +26,16 @@ function agentTexts(runResult) {
   return runResult.transcript.filter((t) => t.role === "agent").map((t) => t.text);
 }
 
-// Nur der FREI GENERIERTE Agententext (P4). texmlSamples[0] ist die LLM-freie Eroeffnung
+// Nur der FREI GENERIERTE Agententext (P4). agentSamples[0] ist die LLM-freie Eroeffnung
 // - Offenlegung + Auftragssatz stammen aus dem Locale-Bundle bzw. dem Szenario-Goal und
 // sagen nichts ueber die Schreibweise des MODELLS aus. Wuerde der Umlaut-Check sie
 // mitlesen, naegelte er sich auf unsere eigene Fixture fest statt auf die Modell-Ausgabe.
+// AL-P8: agentSamples (vormals texmlSamples) haelt EINEN Eintrag je Agenten-Turn,
+// transportunabhaengig (TeXML- UND Shim-Treiber fuellen dieselbe Form).
 const LLM_FREE_OPENING_SAMPLE_COUNT = 1;
 
 function freeAgentTexts(runResult) {
-  return runResult.texmlSamples
+  return runResult.agentSamples
     .slice(LLM_FREE_OPENING_SAMPLE_COUNT)
     .flatMap((sample) => sample.sayTexts);
 }
@@ -73,7 +75,7 @@ function checkNoTransliteratedUmlautsDe(runResult) {
 function checkDisclosureFirst(runResult) {
   const id = "disclosure_first";
   if (runResult.call.direction !== "outbound") return { id, pass: true, detail: "n/a (inbound)" };
-  const firstSay = runResult.texmlSamples[0]?.sayTexts[0] || "";
+  const firstSay = runResult.agentSamples[0]?.sayTexts[0] || "";
   const expected = expectedDisclosure(runResult.ownerName, runResult.call.language);
   const pass = firstSay.startsWith(expected);
   return {
@@ -127,14 +129,21 @@ function foldForPhraseMatch(text) {
   return out;
 }
 
+// AL-P8: EINE Trefferquelle fuer alle Phrasen-Heuristiken (G5) - gefaltete Nadeln gegen
+// gefaltete Texte. Die Aufrufer interpretieren den Trefferbestand unterschiedlich -
+// Denylist (leer = gut), Recap (nicht leer = gut), handoff_rate (Anteil je Turn).
+function foldedHits(texts, substrings) {
+  const folded = texts.map(foldForPhraseMatch);
+  return substrings.filter((s) => folded.some((t) => t.includes(foldForPhraseMatch(s))));
+}
+
 // Best-effort-Heuristik: NIEMALS zum Hard-Gate hochstufen - Overfitting-Risiko auf
 // konkreten Wortlaut. Ein Treffer ist ein Befund fuer Judge/Owner, kein "Bench kaputt".
 // EINE Implementierung fuer beide Phrasen-Checks (G5) - sie unterscheiden sich nur in
 // Check-ID, Szenario-Feld und Befund-Text.
 function phraseDenylistResult({ id, runResult, substrings, fieldName, hitLabel }) {
   if (!substrings.length) return { id, pass: true, detail: `n/a (keine ${fieldName})` };
-  const folded = agentTexts(runResult).map(foldForPhraseMatch);
-  const hits = substrings.filter((s) => folded.some((t) => t.includes(foldForPhraseMatch(s))));
+  const hits = foldedHits(agentTexts(runResult), substrings);
   return {
     id,
     pass: hits.length === 0,
@@ -170,11 +179,17 @@ function checkTurnCountWithinBudget(runResult, scenario) {
   return { id, pass: runResult.turnCount <= max, detail: `${runResult.turnCount}/${max} Agenten-Turns` };
 }
 
+// AL-P8: EINE Quelle fuer die Roundtrip-Zahlen eines Laufs (G5) - genutzt vom
+// Ausschoepfungs-Check UND von roundtrips_per_turn.
+function turnRoundtrips(runResult) {
+  return runResult.metricsParsed
+    .filter((m) => m.kind === "turn" && Number.isFinite(m.payload.roundtrips))
+    .map((m) => m.payload.roundtrips);
+}
+
 function checkNoToolLoopExhaustion(runResult) {
   const id = "no_tool_loop_exhaustion";
-  const exhausted = runResult.metricsParsed.some(
-    (m) => m.kind === "turn" && m.payload.roundtrips === TOOL_LOOP_EXHAUSTION_ROUNDTRIPS,
-  );
+  const exhausted = turnRoundtrips(runResult).includes(TOOL_LOOP_EXHAUSTION_ROUNDTRIPS);
   return {
     id,
     pass: !exhausted,
@@ -215,7 +230,7 @@ function checkNoMessageTaken(runResult) {
 }
 
 // afix-p4 (RCA R3): Der Agent darf nach einer unverstaendlichen Aeusserung nicht SOFORT
-// auflegen. texmlSamples[0] ist das Opening, texmlSamples[1] die erste Reaktion auf die
+// auflegen. agentSamples[0] ist das Opening, agentSamples[1] die erste Reaktion auf die
 // Aeusserung des Gegenuebers; ein agent_hangup mit turnCount <= 2 heisst also "aufgelegt
 // statt nachgefragt" (G25: benannte Konstante statt nackter 2/3).
 const MIN_TEXML_TURNS_BEFORE_AGENT_HANGUP = 3;
@@ -257,6 +272,103 @@ function checkNoEarlyAgentHangup(runResult, scenario) {
   });
 }
 
+// ---- AL-P8: transportunabhaengige Messungen (Bench misst den Pfad, der live ist) ----
+// Weitergabe-Phrasen fuer handoff_rate. Bewusst eine DENYLIST konkreter Wendungen
+// (Muster DE_TRANSLITERATION_STEMS/mustNotPromiseSubstrings) - der Anteil der Agenten-
+// Turns, in denen der Agent das Anliegen an den Besitzer zurueckgibt, statt selbst zu
+// entscheiden. Deutsch, weil die Bench ausschliesslich language="de" seedet; jede andere
+// Sprache -> n/a (dieselbe Grenze wie no_transliterated_umlauts_de).
+const HANDOFF_PHRASES = Object.freeze([
+  "gebe ich weiter", "gebe das weiter", "leite ich weiter", "gebe ich durch",
+  "richte ich aus", "sage ich bescheid", "melde sich", "meldet sich dann",
+  "muss ich rueckfragen", "muss ich nachfragen", "kann ich nicht entscheiden",
+]);
+const MULTI_QUESTION_MIN_MARKS = 2; // ab zwei "?" in EINEM Turn: mehr als eine Frage
+const VALUE_ROUNDING = 1e4; // handoff_rate/roundtrips auf 4 Stellen (Muster round4 im runner)
+
+// Die Checks, die in JEDEM Szenario laufen sollen (AL-P8): reine MESSUNGEN ohne
+// Schwelle. Ihre Schwelle ist optional und szenario-lokal - ohne sie passen sie immer
+// und liefern nur `value`. Genau diese Zahlen vergleichen AL-P5 (Eroeffnung), AL-P6
+// (Turn-Budget) und AL-P9 (Briefing) per `compare` gegen die Baseline.
+export const MEASUREMENT_CHECKS = Object.freeze([
+  "opening_chars_before_yield", "handoff_rate", "one_question_per_turn", "roundtrips_per_turn",
+]);
+
+// Die frei generierten Agenten-SAMPLES (ohne die LLM-freie Eroeffnung, Muster
+// freeAgentTexts) - Grundlage fuer alle turn-weisen Messungen unten.
+function freeAgentTurns(runResult) {
+  return runResult.agentSamples.slice(LLM_FREE_OPENING_SAMPLE_COUNT);
+}
+
+// EIN Text je frei generiertem Agenten-Turn (sayTexts eines Turns zusammengefuegt) -
+// im Unterschied zu freeAgentTexts (das die Turn-Grenze wegflacht) brauchen
+// handoff_rate/one_question_per_turn/recap_present genau diese Turn-Granularitaet.
+function freeAgentTurnTexts(runResult) {
+  return freeAgentTurns(runResult).map((sample) => sample.sayTexts.join(" "));
+}
+
+// AL-P8: Zeichen, die der Agent spricht, BEVOR er das Wort abgibt (= Sample 0, die
+// LLM-freie Eroeffnung). Transportunabhaengig: TeXML rendert sie als Say vor dem
+// Gather, der Assistant-Pfad als Call-Control-speak vor ai_assistant_start. Schwelle
+// optional (scenario.maxOpeningChars) - AL-P5 setzt sie, hier wird gemessen.
+function checkOpeningCharsBeforeYield(runResult, scenario) {
+  const id = "opening_chars_before_yield";
+  const chars = (runResult.agentSamples[0]?.sayTexts || []).join(" ").length;
+  const max = scenario.maxOpeningChars;
+  if (max == null) return { id, pass: true, detail: `n/a (kein maxOpeningChars, ${chars} Zeichen)`, value: chars };
+  return { id, pass: chars <= max, detail: `${chars}/${max} Zeichen`, value: chars };
+}
+
+// AL-P8: Anteil der frei generierten Agenten-Turns mit einer Weitergabe-Phrase.
+// Best-effort-Heuristik, NIEMALS Hard-Gate (Muster phraseDenylistResult) - reine Messung.
+function checkHandoffRate(runResult) {
+  const id = "handoff_rate";
+  const language = runResult.call.language;
+  if (language !== DE_LANGUAGE) return { id, pass: true, detail: `n/a (language=${language})`, value: null };
+  const turns = freeAgentTurnTexts(runResult);
+  if (!turns.length) return { id, pass: true, detail: "n/a (keine frei generierten Turns)", value: null };
+  const hitTurns = turns.filter((t) => foldedHits([t], HANDOFF_PHRASES).length > 0).length;
+  const rate = Math.round((hitTurns / turns.length) * VALUE_ROUNDING) / VALUE_ROUNDING;
+  return { id, pass: true, detail: `${hitTurns}/${turns.length} Turns mit Weitergabe-Phrase`, value: rate };
+}
+
+// AL-P8: hat der Agent das Ergebnis am Ende zusammengefasst? Geprueft wird NUR der
+// LETZTE frei generierte Turn - eine Wiederholung mittendrin ist kein Recap. Die
+// Deklaration (scenario.recapSubstrings) IST die Anwendbarkeitsentscheidung (Muster
+// message_taken).
+function checkRecapPresent(runResult, scenario) {
+  const id = "recap_present";
+  const substrings = scenario.recapSubstrings || [];
+  if (!substrings.length) return { id, pass: true, detail: "n/a (keine recapSubstrings)", value: null };
+  const last = freeAgentTurnTexts(runResult).at(-1) || "";
+  const present = foldedHits([last], substrings).length > 0;
+  return { id, pass: present, detail: present ? "ok" : "kein Recap im letzten Agenten-Turn", value: present };
+}
+
+// AL-P8: Turns, in denen der Agent mehr als eine Frage stellt (>= 2 Fragezeichen).
+// Deterministisch und sprachunabhaengig - keine Phrasenliste. Schwelle optional
+// (scenario.maxMultiQuestionTurns) - ohne sie ist es eine reine Messung.
+function checkOneQuestionPerTurn(runResult, scenario) {
+  const id = "one_question_per_turn";
+  const multiQuestionTurns = freeAgentTurnTexts(runResult).filter(
+    (t) => (t.match(/\?/g) || []).length >= MULTI_QUESTION_MIN_MARKS,
+  ).length;
+  const max = scenario.maxMultiQuestionTurns;
+  const pass = max == null ? true : multiQuestionTurns <= max;
+  const bound = max == null ? "" : ` (max ${max})`;
+  return { id, pass, detail: `${multiQuestionTurns} Turn(s) mit >=2 Fragen${bound}`, value: multiQuestionTurns };
+}
+
+// AL-P8 (Quelle: AL-P1): mittlere llm.complete-Roundtrips je agentTurn aus den
+// metrics-turn-Zeilen. Ohne turn-Zeilen (METRICS_ENABLED aus) -> n/a, value null.
+function checkRoundtripsPerTurn(runResult) {
+  const id = "roundtrips_per_turn";
+  const values = turnRoundtrips(runResult);
+  if (!values.length) return { id, pass: true, detail: "n/a (keine turn-Metriken)", value: null };
+  const mean = Math.round((values.reduce((sum, n) => sum + n, 0) / values.length) * VALUE_ROUNDING) / VALUE_ROUNDING;
+  return { id, pass: true, detail: `Mittelwert ${mean} ueber ${values.length} Turns`, value: mean };
+}
+
 // EIN Registry-Objekt statt verstreuter switch/if-Ketten (G23) - jede Check-Funktion
 // entscheidet selbst per n/a-Pass, ob sie fuer Richtung/Szenario ueberhaupt zutrifft.
 const CHECKS = {
@@ -274,6 +386,11 @@ const CHECKS = {
   no_hangup_on_unintelligible_reply: checkNoHangupOnUnintelligibleReply,
   no_early_agent_hangup: checkNoEarlyAgentHangup,
   no_transliterated_umlauts_de: checkNoTransliteratedUmlautsDe,
+  opening_chars_before_yield: checkOpeningCharsBeforeYield,
+  handoff_rate: checkHandoffRate,
+  recap_present: checkRecapPresent,
+  one_question_per_turn: checkOneQuestionPerTurn,
+  roundtrips_per_turn: checkRoundtripsPerTurn,
 };
 
 // Nur die vom Szenario deklarierten Check-IDs laufen lassen (scenario.checks: string[]).
