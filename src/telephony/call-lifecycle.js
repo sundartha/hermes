@@ -12,6 +12,15 @@
 import { VOICE_ENGINE } from "../config.js";
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 
+// GAP-26: maschinenlesbarer Grund einer Terminalisierung DURCH DEN MAX-DAUER-CAP. Eigener
+// Token neben der Provider-Vokabel aus telephony/failure-reason.js: die wird aus dem
+// PROVIDER-Lifecycle abgeleitet (CallStatus/SIP-Cause) und hat fuer einen intern, vom
+// Timer ausgeloesten Abbruch kein Gegenstueck - deshalb entsteht er hier, an seiner
+// einzigen Quelle, statt als Sonderfall in einer Provider-Mapping-Funktion.
+// Stabil und PII-frei: get_call_status reicht failure_reason unveraendert an MCP-Clients
+// weiter; das Call-Widget rendert unbekannte Tokens roh (Diagnosewert, kein Bruch).
+export const CAP_FAILURE_REASON = "max-duration-cap";
+
 export function makeCallLifecycle({
   store,
   config,
@@ -47,6 +56,14 @@ export function makeCallLifecycle({
   // 'active' (ein zwischenzeitlich beendeter Call -> No-op). Self-swallowing (Muster
   // releaseReserve): ein Store-/IO-Fehler ist secret-frei geloggt (err.message), nie eine
   // unhandled rejection. Nebeneffekt (Terminalisierung + Buchung) im Namen (N7).
+  // GAP-26: schreibt zusaetzlich den maschinenlesbaren Grund (CAP_FAILURE_REASON) an den
+  // Record. Ohne ihn ist ein am Dauer-Cap gestorbener Anruf hinterher von jedem anderen
+  // Abbruch ununterscheidbar - genau die Forensik-Luecke, die dieses Repo schon einmal Tage
+  // gekostet hat. Der Cap selbst aendert sich dadurch NICHT (Absolute Regel Max-Dauer):
+  // Reihenfolge, Idempotenz und der EINE Terminalisierungspfad bleiben unberuehrt.
+  // recordFailureReason ist set-once (state-ops.js) -> ein spaeterer /voice/status-Callback
+  // ueberschreibt den Cap-Grund nicht, und umgekehrt gewinnt ein bereits vom Provider
+  // gemeldeter Grund.
   async function terminateCappedCall(callId, providerCallSid, status) {
     try {
       const call = store.getCall(callId);
@@ -55,7 +72,10 @@ export function makeCallLifecycle({
         cappedEndedAtMs(call, Date.now(), config.safety.maxCallDurationS),
       ).toISOString();
       await terminateAndBillCall({
-        persistEnd: () => store.setCallEndedAt(callId, status, endedAtIso),
+        persistEnd: () => {
+          store.setCallEndedAt(callId, status, endedAtIso);
+          store.recordFailureReason(callId, CAP_FAILURE_REASON); // GAP-26, s.o.
+        },
         // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Call (callControlId
         // gesetzt) wird via endCallViaCallControl beendet, TeXML/Twilio byte-identisch ueber
         // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
