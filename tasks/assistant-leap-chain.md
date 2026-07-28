@@ -165,6 +165,24 @@ Die naechste Session fuehrt diese Liste in `tasks/al-testcall-checklist.md` fort
    einen **zweiten Auftragsverarbeiter** — das durchbricht die Randbedingung aus
    `src/precall-briefing.js:5-7` und gehoert in `README.md` und `PLAN-SECURITY.md`.
 
+## 7b. WARNUNG: eine zweite Kette liegt auf master
+
+Am 2026-07-28 hat eine **parallele Session** `a727804 docs: PLAN-AUTH-GATE` committet —
+9 Phasen, **nichts davon umgesetzt**. Diese Kette loest das Basic-Auth-Gate ab und fasst
+`src/routes/`, `src/auth.js`, `src/middleware.js` und `src/config.js` an.
+
+Kollisionsflaechen mit der AL-Kette:
+- **`src/config.js`** — beide Ketten legen neue Namespaces/Variablen an. Kleine, haeufige
+  Konflikte; loesbar, aber nur wenn nicht gleichzeitig gemergt wird.
+- **`src/routes/`** — AL-P13 (Consult-Kanal) legt neue Routen an. Deren Absicherung haengt
+  davon ab, welches Auth-Modell gilt. **AL-P13 nicht starten, ohne vorher zu pruefen, ob
+  PLAN-AUTH-GATE inzwischen umgesetzt ist** (`git log --oneline -20`), sonst wird die neue
+  Route gegen ein Gate gebaut, das gerade abgeloest wird.
+
+**Regel fuer die naechste Session:** vor dem Start `git log --oneline -20` lesen und pruefen,
+ob seit `2e0360b` fremde Commits dazugekommen sind. Falls die AUTH-GATE-Kette parallel laeuft:
+**nicht beide gleichzeitig fahren.** Die AL-Kette hat Vorrang, weil der Owner sie beauftragt hat.
+
 ## 8. Buchfuehrung
 
 Die naechste Session pflegt fortlaufend:
