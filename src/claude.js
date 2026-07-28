@@ -212,7 +212,21 @@ export function disclosureSentence(call) {
 
 // Maximale Zeichenzahl des Anliegens im gesprochenen Erst-Turn (G25). Kappt NUR die
 // TTS-Ausgabe; das goal-Validierungslimit (TEXT_LIMITS.objective) bleibt unberuehrt.
-const OPENING_GOAL_MAX_CHARS = 160;
+// AL-P5 (PLAN-ASSISTANT-LEAP.md, Phase 5): 160 -> 75. Das ununterbrechbare Fenster am
+// Anfang ist die Sekunde, in der Menschen auflegen. Es besteht aus Offenlegung (DE 129
+// Zeichen, unveraenderlich - Regel 2/O2) + Bruecke (22) + diesem Anliegen: 160 ergab bis
+// 314 Zeichen (~16-18 s bei den in AL-P1 gemessenen 17,3-20,3 Zeichen/s), 75 ergibt
+// hoechstens 229 (~11-13 s). URSPRUENGLICH stand hier 70, mit der Begruendung "bei 60
+// verlieren reale Auftraege ihr Verb, bei 70 nicht". Das war falsch: gegen den in
+// test/al-p5-opening.test.js gepinnten Auftrag "Naechsten freien Termin fuer einen
+// Herrenhaarschnitt bei Petra vereinbaren" (74 Zeichen) verliert auch die Kappe 70 das
+// Verb ("vereinbaren"). 75 ist die kleinste Kappe, bei der alle im Test gepinnten
+// Grenzfaelle - Bruecken-Auftraege UND der Ich-/Je-/I-Passthrough-Zweig aus
+// bridgePhrase (Ich-Saetze werden woertlich gesprochen, MCP-Kontrakt in mcp-tools.js) -
+// ihr zweck-tragendes Verb/Objekt behalten (test/al-p5-opening.test.js AL-P5-1). Klingt
+// der Erst-Turn live trotzdem unvollstaendig, wird DIESE Zahl angehoben - nie die
+// Nicht-Wiederholen-Anweisung in situationOutbound (die traegt den RCA-Fix R5/stab-p8).
+const OPENING_GOAL_MAX_CHARS = 75;
 
 // Tool-Name des end_call-Tools (G25): EINE Quelle fuer Schema-Name/Dispatch-Case/Guard.
 const END_CALL_TOOL_NAME = "end_call";

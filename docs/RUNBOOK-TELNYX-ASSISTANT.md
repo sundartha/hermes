@@ -200,3 +200,23 @@ Parameter-Runden, danach Phase beenden statt weiter tunen.
 `TELNYX_ELEVENLABS_MODEL` müssen explizit gesetzt sein. Ohne ID entsteht ein
 neuer Assistant, ohne Voice-Model wird die Live-Stimme still umgestellt —
 das Skript schreibt die ganze Config aus der lokalen `.env`.
+
+## 10. Idle-Nudge (`user_idle_reply_secs`) — AL-P5
+
+Wert und Grund: Modul-Konstante `USER_IDLE_REPLY_SECS` in
+`scripts/telnyx-assistant-provision.mjs` (AL-P5: 4 -> 2 s). Keine Env-Var.
+
+Die Stille zählt nach jeder Agenten-Äußerung; läuft sie ab, stößt Telnyx den
+Assistant mit einer `[long silence]`-System-Message an — das ist ein **vollständiger
+Shim-Turn mit `bookTokenUsage`**, kein Gratis-Nachhaken.
+
+**Abnahme (Reihenfolge wie in Abschnitt 9):**
+
+1. Basislinie `turns/Anruf` und `Tokens/Anruf` **vor** dem Provisioner-Lauf (AL-P1-Sonde
+   `turn_ok`, >= 5 Anrufe).
+2. Provisioner laufen lassen — **Env-Falle**: `TELNYX_ASSISTANT_ID` **und**
+   `TELNYX_ELEVENLABS_MODEL` explizit setzen.
+3. Nachher-Messung über >= 5 Anrufe.
+
+**Abbruch/Zurückdrehen:** `turns/Anruf` +15 % oder hörbares Ins-Wort-Fallen ->
+zurück auf 4 (Zwischenstufe 3), Provisioner erneut laufen lassen. Höchstens zwei Runden.

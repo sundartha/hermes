@@ -11,7 +11,7 @@
 // Wichtig: das Fragment ist laenger als CALLER_SUBSTANCE_MIN_LEN -> der bestehende
 // suppressEndCall-Seam greift hier NICHT. Die Prompt-Regel (end_call-Tool-Description)
 // ist der einzige Schutz - das Szenario testet also sie und nicht den Seam.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "kauderwelsch-erstantwort",
@@ -31,6 +31,7 @@ export default {
   sttNoise: false,
   maxTurns: 6,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",

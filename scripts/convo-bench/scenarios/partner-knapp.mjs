@@ -1,7 +1,7 @@
 // Szenario "partner-knapp" (Spec §9): outbound, Persona erzwingt 1-3-Wort-Antworten,
 // teils unkooperativ. Prueft, ob der Agent auf einsilbige/wortkarge Antworten sinnvoll
 // reagiert statt sich zu wiederholen oder das Gespraech abrupt/unhoeflich zu beenden.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "partner-knapp",
@@ -19,6 +19,7 @@ export default {
   sttNoise: false,
   maxTurns: 8,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "no_verbatim_question_repeat",

@@ -3,7 +3,7 @@
 // hat. Gemessen wird, ob der Agent den Wechsel bemerkt und sein Anliegen der NEUEN Person
 // knapp neu darlegt - statt weiterzureden, als spraeche er noch mit der ersten Person,
 // oder verwirrt aufzulegen. scriptedTurns[1] pinnt die Uebergabe-Ansage deterministisch.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "personenwechsel",
@@ -31,6 +31,7 @@ export default {
   maxTurns: 8,
   minTurnsBeforeAgentHangup: 5,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",

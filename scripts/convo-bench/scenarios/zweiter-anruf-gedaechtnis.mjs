@@ -4,7 +4,7 @@
 // erfindet, die er strukturell nicht haben kann - der Agent kennt NUR das Transkript
 // dieses einen Calls, kein frueheres Gespraech. scriptedTurns[0] pinnt den Ausloeser
 // deterministisch (Muster termin-duenn). Eingabe fuer AL-P12.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "zweiter-anruf-gedaechtnis",
@@ -26,6 +26,7 @@ export default {
   maxTurns: 7,
   minTurnsBeforeAgentHangup: 3,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",
