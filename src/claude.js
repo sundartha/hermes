@@ -247,6 +247,27 @@ function trimGoalForSpeech(goal) {
 // gebraucht (Schema, Dispatch, Test) - EINE Quelle statt eines zweiten Literals.
 const TAKE_MESSAGE_TOOL_NAME = "take_message";
 
+// AL-P4: die zwei Werkzeug-KLASSEN des Tool-Loops (G25, EINE Quelle).
+// nur-Seiteneffekt = das tool_result traegt KEINE Information, auf die das Modell noch
+// antworten muesste (end_call -> "OK", take_message -> "Nachricht ist notiert."). Genau
+// dann darf der Loop nach diesem Roundtrip enden, sobald bereits Text vorliegt - der
+// zweite llm.complete-Roundtrip war reine Latenz.
+// informationsliefernd = alles NICHT Gelistete (heute keines; kuenftig look_up/get_consult).
+// Die Liste ist bewusst eine NAMENS-Liste und kein Feld an den toolDefs-Objekten: die
+// gehen 1:1 an Anthropic (agentTurn) UND an die Realtime-API (bridge.js realtimeTools),
+// ein Zusatzfeld waere dort ein unbekanntes Schema-Feld.
+// Fail-safe-Richtung: ein UNBEKANNTER Name gilt als informationsliefernd -> der Loop
+// laeuft weiter wie im Bestand.
+const SIDE_EFFECT_ONLY_TOOL_NAMES = Object.freeze(
+  new Set([END_CALL_TOOL_NAME, TAKE_MESSAGE_TOOL_NAME]),
+);
+
+// Rein (N7), ohne Store-/Netz-Zugriff. Exportiert, weil die Klassifikation der eigentliche
+// Gegenstand dieser Phase ist und direkt pinnbar sein muss.
+export function isSideEffectOnlyTool(name) {
+  return SIDE_EFFECT_ONLY_TOOL_NAMES.has(name);
+}
+
 // Fester Tool-Satz fuer BEIDE Engines (Budget-Tool-Loop + Realtime-Bridge ueber
 // realtimeTools). Seit P1b (Owner-Entscheidung E1) OHNE Kalender-/Buchungs-Tool: der
 // Telefon-Agent nimmt Terminwuensche nur als Nachricht auf, er bucht nichts und liest
@@ -576,7 +597,16 @@ export async function agentTurn(call, callerText) {
     // nicht weiter re-prompten. Bei unterdruecktem end_call bleibt endCall=false, der
     // Webhook rendert also ein <Gather>. Ohne speech weiterlaufen (max. 4 Runden),
     // damit das Modell nach end_call doch noch eine kurze Antwort liefern kann.
-    if ((endCall || suppressedEndCall) && speech) break;
+    //
+    // AL-P4: derselbe Ausstieg gilt fuer JEDEN Roundtrip, der ausschliesslich
+    // Seiteneffekt-Werkzeuge angefordert hat - deren tool_result traegt nichts, worauf das
+    // Modell noch antworten muesste (bisher lief nach take_message unbedingt eine zweite
+    // llm.complete-Runde, ~1,4-1,9 s pro Turn). Die Bedingung wird dabei NUR ERWEITERT,
+    // nie verengt: der end_call-Arm bleibt eigenstaendig stehen, damit ein end_call NEBEN
+    // einem unbekannten Werkzeug weiterhin auflegt statt eine Runde nachzulegen.
+    // Bei leerem speech aendert sich nichts - der schlechteste Fall ist Bestandsverhalten.
+    const sideEffectOnlyRound = toolUses.every((tu) => isSideEffectOnlyTool(tu.name));
+    if (speech && (endCall || suppressedEndCall || sideEffectOnlyRound)) break;
   }
 
   metrics.logTurn({

@@ -112,7 +112,9 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "For an appointment request, keep the day, time and validity on record. " +
       "Do NOT use this instead of a normal reply, and NOT to avoid a follow-up question - " +
       "if a short question would clarify the request, ask first. " +
-      "Tell the other person in the same reply that you are passing the message on. " +
+      "Tell the other person in the SAME turn that you are passing the message on: your " +
+      "spoken sentence belongs in the very same reply in which you call take_message, " +
+      "not in a later one. " +
       "NEVER promise that you yourself will call back later, and NEVER claim " +
       "that an appointment is entered or booked. " +
       "Do NOT use this for something your task lets you decide yourself - " +
