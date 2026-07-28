@@ -266,6 +266,23 @@ Abnahme ist IMMER: *die Gates der Phase gruen* + *`npm test` 3295 / 0* + *Diff b
 | **P13** | Dashboard `apps/web` | WEB-07, WEB-19, GAP-30 | `apps/web/src/lib/api.js`, `apps/web/…/SettingsIsland.astro` | Web | — |
 | **P14** | Altes Dashboard loeschen | (WEB-08, FMT-15 x2 entfallen) | `public/tenant.html`, `src/app.js`, `src/self-service-routes.js`, `src/middleware.js`, 21 Testdateien | **Geld-Pfad!** | P12, P13 |
 | **P15** | Deploy-Filter | GAP-37 | `render.yaml` (NUR `ignoredPaths`) | Ops | — |
+| **P16** | **US-Stimme (Rest von VOICE-12)** | — (offen, kein eigenes Gate) | `src/i18n/locales.js`, `src/telephony/registry.js`, Call-Record oder `SUPPORTED_LANGUAGES` | Sprache | **P9** |
+
+**P16 — was P9 offen gelassen hat (Lead-Entscheidung 2026-07-28).** P9 hat die
+Owner-Tabelle nur zur Haelfte geliefert: `de`, `fr` und `en-GB` sind verdrahtet, **`en-US`
+(`EST9Ui6982FZPSi7gCHi`) steht in keiner Zeile Code**. Der Grund ist strukturell, nicht
+Nachlaessigkeit: `call.language` traegt die Sprache, **nicht das aufgeloeste Land**.
+`tenant.country`/`number.country` existieren als Daten — es fehlt der Weg von dort bis zum
+Renderer. Zwei Wege, beide zu gross fuer eine Fix-Runde: `country` am Call-Record mitfuehren
+(Migration + jede Call-Erzeugungsstelle) **oder** `SUPPORTED_LANGUAGES` um `en-US`/`en-GB`
+erweitern (bricht den harten Pin in `f1-i18n-locale.test.js` und braucht eine eigene
+Testfreigabe).
+
+**Die Owner-Tabelle in Abschnitt 5 bleibt unveraendert** — die Entscheidung "US-Stimme fuer
+die USA" ist nicht zurueckgenommen, nur **sequenziert**. Bis P16 laeuft, sprechen
+US-Anrufer mit der britischen Default-Stimme. **Achtung beim Lesen der Gate-Bilanz:**
+VOICE-12 ist gruen und deckt nur die Sprach-Achse (drei verschiedene IDs) — der
+Gruenstand ueberzeichnet die Lieferung um genau diese US-Haelfte.
 
 ### Anmerkungen, die den Schnitt begruenden
 
@@ -367,7 +384,7 @@ nicht angepasst:
 | Phase | Zulaessige Aenderung | Grund |
 | --- | --- | --- |
 | **P4** | `f1-provisioning-geo.test.js:200` (GAP-11) neu fassen: Hold == Preis aus der Provider-Antwort statt Tabelleneintrag | Owner-Entscheidung 2026-07-27 (2.2) |
-| **P9** | `telnyx-elevenlabs-render.test.js` (der W2-Ist-Pin "eine Voice-ID fuer alle Sprachen") auf den VOICE-12-Sollzustand heben (zwei sprachaufgeloeste IDs) | Testinhalt in Review-Runde 1 als sachlich korrekt bestaetigt (Ist-Pin ist die Negation von VOICE-12, das Gate selbst mit drei distinct IDs bleibt unveraendert) — die Aufnahme in diese Zeile kam aber aus demselben Impl-Commit, der den Code aendert (Selbstautorisierungs-Blocker, Review-Runde 2). Diese Zeile ist ein VORSCHLAG, keine Freigabe; Owner-/Lead-Bestaetigung steht vor dem naechsten Merge nach `master` noch aus. Siehe `tasks/gates-fix-chain.md` P9-Nachtrag |
+| **P9** | `telnyx-elevenlabs-render.test.js` (der W2-Ist-Pin "eine Voice-ID fuer alle Sprachen") auf den VOICE-12-Sollzustand heben (zwei sprachaufgeloeste IDs) | **FREIGEGEBEN (Lead, 2026-07-28, vor dem Merge).** Der alte Test pinnte woertlich den Defekt, den VOICE-12 misst — sein eigener Kommentar sagte, er beweise die Tatsache und pinne NICHT den Sollzustand. Nach dem Fix MUSS er sich aendern: er traegt keine Katalog-ID, laeuft also im Regressionslauf und waere sonst rot. Die urspruengliche Aufnahme kam aus demselben Impl-Commit (Selbstautorisierung, zu Recht blockiert); diese Zeile ist die nachgeholte Freigabe |
 | **P7** | `did-reputation-metric.test.js` beide Tests stilllegen; Ersatz: Boot-Guard-Test fuer `TELNYX_CONNECTION_ID` | Owner-Entscheidung (2.1); Deckung bleibt ueber `number-lifecycle.test.js:129` + `bk3-auto-provision.test.js:125-130` |
 | **P10** | `EXPECTED_MARKERS` in `p15-mcp-tool-descriptions-en.test.js` | der entfernte `language`-Param ist dort als Marker gelistet |
 | **P11** | der Byte-Identitaets-Test ueber `telnyx-p8-inbound.test.js:135` | pinnt den Aufruf ohne `language`; Kopplung im Testkommentar `:128-131` |
