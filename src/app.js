@@ -45,22 +45,18 @@ import {
   OWNER_ID,
   tenantOwnsCall,
 } from "./request-tenant.js";
+// P14: App-Shell- und Altpfad als EINE Quelle (src/portal-paths.js) - dieselben
+// Konstanten brauchen die Stripe-Rueckkehr-Ziele in self-service-routes.js und
+// api-billing.js (Import in die Gegenrichtung waere ein Zyklus).
+import { APP_PATH, LEGACY_PORTAL_PATH } from "./portal-paths.js";
 
 // Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
 // und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
 const BODY_LIMIT = "100kb";
-// Kunden-Portal (Self-Service-Shell). Ziel des Post-Login-Redirects UND der Basic-Auth-
-// Exemption: ein frisch eingeloggter (suspendierter) Tenant landet hier (zeigt
-// "Choose your plan"), NICHT auf "/" (Owner-Dashboard hinter Basic-Auth = Sackgasse).
-const CUSTOMER_PORTAL_PATH = "/tenant.html";
 // P5: Ziel des Landing-Redirects (kein Magic-String, G25). "/" hat kein Index ->
 // 302 auf den Login (= Registrierung, Strategie R2). Pfad lebt auf dem Gateway
 // (makeWebAuthRoutes GET /auth/login), nicht auf der Static Site.
 const LOGIN_PATH = "/auth/login";
-// Single-Origin (P1): App-Shell-Pfad im apps/web-Build (kein Magic-String, G25). Ziel
-// des Post-Login-Redirects UND des /tenant.html-Altpfad-Redirects, sobald WEB_DIST_DIR
-// aktiv ist (das Tenant-Dashboard lebt dann unter /app im unified Build).
-const APP_PATH = "/app";
 // W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
 // den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
@@ -143,7 +139,7 @@ export function registerPublicRoutes({ app, config, store, watchdog }) {
   // als die EINE Wurzel-Instanz herein (INV-7, in server.js konstruiert).
   app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog }));
 
-  // P5: "/" hat kein Index (public/ traegt nur tenant.html) -> ginge sonst auf 404 bzw. die
+  // P5: "/" hat kein Index (public/ traegt nur statische Marken-Assets) -> ginge sonst auf 404 bzw. die
   // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
   // Basic-Auth + express.static gemountet wie /auth/*; traegt keine Tenant-Daten, braucht
   // keine Session - daher unkonditional (greift auch ohne Web-Login-Infra).
@@ -167,13 +163,14 @@ export function registerStaticServing({ app, config }) {
   // Webhook und /healthz sind oben bereits gematcht (Mount-Reihenfolge) -> kein Shadowing;
   // die Owner-Legacy-API liegt HINTER der Basic-Auth (unten) -> von diesem Mount unberuehrt.
   if (config.server.webDistDir) {
-    // /tenant.html -> /app: schattet die public/tenant.html (Owner-Removal-Altpfad) und
-    // erhaelt alte Bookmarks - das Tenant-Dashboard lebt im Build unter /app. P2/D2: den
-    // Query-String ERHALTEN. Der Post-Checkout-Rueckkehrpfad landet auf /tenant.html?sub=ok
-    // bzw. ?card=ok (self-service-routes.js); ohne Weitergabe ginge der Parameter beim
-    // Redirect verloren und die BillingIsland (?sub/?card-Handler) saehe ihn nie. Nur den
-    // Such-Teil anhaengen (kein Query -> reines /app, byte-identisch zum Altverhalten).
-    app.get(CUSTOMER_PORTAL_PATH, (req, res) => {
+    // Altpfad /tenant.html -> /app. Die Datei public/tenant.html ist mit P14 geloescht;
+    // dieser Redirect bleibt trotzdem, und zwar NICHT nur wegen Bookmarks: eine Stripe-
+    // Checkout-Session, die VOR dem Deploy geoeffnet wurde, traegt die alte Rueckkehr-
+    // Adresse in der Stripe-Session - ohne den Redirect landet genau der Kunde, der
+    // gerade bezahlt hat, auf einem 404. P2/D2: den Query-String ERHALTEN, sonst saehe
+    // die BillingIsland (?card/?sub-Handler) den Parameter nie. Nur den Such-Teil
+    // anhaengen (kein Query -> reines /app).
+    app.get(LEGACY_PORTAL_PATH, (req, res) => {
       const queryAt = req.originalUrl.indexOf("?");
       const search = queryAt === -1 ? "" : req.originalUrl.slice(queryAt);
       res.redirect(302, APP_PATH + search);
@@ -201,7 +198,7 @@ export function installAuthGate({ app, config, audit }) {
       safeEqual,
       BRAND_ASSETS_PREFIX,
       VOICE_PATH_PREFIX,
-      paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
+      paths: { STRIPE_WEBHOOK_PATH },
     }),
   );
 }
@@ -245,7 +242,7 @@ export async function buildApp(deps) {
     // (404), aber /voice, /healthz, /mcp und das Owner-Dashboard leben weiter. Q1: wireWebLogin
     // loggt im Erfolgsfall "[boot] Web-Login aktiv" (eigene Zeile), sodass der fail-open-
     // Zustand nicht mehr unsichtbar ist. createPortalRunner injiziert (DIP-Seam, offline
-    // fakebar); STRIPE_WEBHOOK_PATH/CUSTOMER_PORTAL_PATH/APP_PATH bleiben EINE Konstante
+    // fakebar); STRIPE_WEBHOOK_PATH/APP_PATH bleiben EINE Konstante
     // (INV-1) und werden hereingereicht. provision = provisioning.triggerTenantProvisioning
     // (die EINE P6-Orchestrator-Instanz, in server.js konstruiert, TDZ-Vermeidung).
     await guardedBoot("Web-Login/Portal", () =>
@@ -257,7 +254,6 @@ export async function buildApp(deps) {
         provision: provisioning.triggerTenantProvisioning,
         createPortalRunner,
         stripeWebhookPath: STRIPE_WEBHOOK_PATH,
-        customerPortalPath: CUSTOMER_PORTAL_PATH,
         appPath: APP_PATH,
         messaging,
       }),

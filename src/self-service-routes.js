@@ -41,20 +41,10 @@ import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 import { resolveNumberCountry } from "./geo/resolve.js";
 import { isKnownPlanSlug } from "./plans.js";
 import { quotaView } from "./billing/meter.js";
-
-// Pay3: Redirect-Ziele nach Rueckkehr von Stripe Checkout (kein Magic-String, G25).
-// Die UI (tenant.html) liest den ?card-Parameter und zeigt eine kurze Rueckmeldung.
-const CARD_RETURN_OK = "/tenant.html?card=ok";
-const CARD_RETURN_CANCELED = "/tenant.html?card=canceled";
-// Stripe-/Netzwerkfehler im Karten-Rueckkehr-Pfad: der Browser bekommt eine klare
-// Rueckmeldung statt eines haengenden Requests (s. asyncBilling). UI zeigt einen Fehler.
-const CARD_RETURN_ERROR = "/tenant.html?card=error";
-
-// BK2: Rueckkehr-Ziele bei getragenem Plan (Kachel-Flow). sub=ok: gebucht+aktiviert.
-// sub=failed: Karte gespeichert, Buchung scheiterte (z.B. already_subscribed) -> UI sagt
-// das, Kunde kann erneut. Kein Magic-String (G25).
-const SUB_RETURN_OK = "/tenant.html?sub=ok";
-const SUB_RETURN_FAILED = "/tenant.html?sub=failed";
+// P14: die Rueckkehr-Ziele nach Stripe Checkout kommen aus der EINEN Quelle
+// (src/portal-paths.js) - dieselbe Konstante nutzt src/routes/api-billing.js fuer
+// seine cancelUrl (frueher ein zweites, driftfaehiges Inline-Literal, G5).
+import { CHECKOUT_RETURN } from "./portal-paths.js";
 
 // AM4: maschinenlesbarer Funnel-Hinweis im no_card-Response. Der Client (lib/subscribe.js)
 // springt bei next==="setup-checkout" deterministisch in die Karten-Erfassung, statt ein
@@ -142,7 +132,7 @@ function returnSuccessUrl(publicUrl, planSlug) {
 // planSlug != null vom Aufrufer bereits aufgeloest (plan_unconfigured-Gate davor).
 function createCheckoutSession({ billing, config, tenant, customerId, planSlug, priceId }) {
   const successUrl = returnSuccessUrl(config.server.publicUrl, planSlug);
-  const cancelUrl = `${config.server.publicUrl}${CARD_RETURN_CANCELED}`;
+  const cancelUrl = `${config.server.publicUrl}${CHECKOUT_RETURN.CARD_CANCELED}`;
   if (!planSlug)
     return billing.createSetupCheckoutSession({ tenantRef: tenant, customerId, successUrl, cancelUrl });
   return billing.createSubscriptionCheckoutSession({
@@ -331,7 +321,7 @@ export function makeSelfServiceRoutes({
 
   // ---- P5: schlanker Billing-Status fuer die gefuehrte Aktivierung -----------------
   // Hinter webAuthPendingMw (suspended erreichbar): liefert NUR die Flags, die die
-  // Aktivierungs-Ansicht (tenant.html 403-Zweig) braucht - paymentEnabled (gibt es etwas
+  // Aktivierungs-Ansicht (403-Zweig der App-Shell) braucht - paymentEnabled (gibt es etwas
   // zu tun?), hasCard (zuerst Karte?), planSlug (schon abonniert?), status (schon aktiv?).
   // OEFFNET NICHT die active-only /state-View: kein calls/settings/Nummer-Leak (H4). Reine
   // Lifecycle-Flags, keine Secrets/PII (kein cus_/sub_/pm_). Read-only -> kein Audit (wie /state).
@@ -427,7 +417,7 @@ export function makeSelfServiceRoutes({
             return res.status(403).json({ error: "Customer-Mismatch" });
           }
           audit("self_service_card_saved", req, `tenant=${tenant}`);
-          return res.redirect(CARD_RETURN_OK); // 302 -> "Karte hinterlegt"
+          return res.redirect(CHECKOUT_RETURN.CARD_OK); // 302 -> "Karte hinterlegt"
         }
 
         const result = await activateSubscriptionFromCheckoutSession({
@@ -452,7 +442,7 @@ export function makeSelfServiceRoutes({
             req,
             `tenant=${tenant} plan=${carriedPlan} orphanedSubscriptionId=${result.subscriptionId}`,
           );
-          return res.redirect(SUB_RETURN_FAILED);
+          return res.redirect(CHECKOUT_RETURN.SUB_FAILED);
         }
         audit(
           "self_service_subscribe",
@@ -463,9 +453,9 @@ export function makeSelfServiceRoutes({
         // already_subscribed = idempotent-erfolgreich (Doppel-Redirect/Reload derselben
         // Session, Abo ist aktiv) -> sub=ok. Jeder andere/kuenftige reason -> sub=failed.
         const succeeded = result.ok || result.reason === "already_subscribed";
-        res.redirect(succeeded ? SUB_RETURN_OK : SUB_RETURN_FAILED);
+        res.redirect(succeeded ? CHECKOUT_RETURN.SUB_OK : CHECKOUT_RETURN.SUB_FAILED);
       },
-      (res) => res.redirect(CARD_RETURN_ERROR),
+      (res) => res.redirect(CHECKOUT_RETURN.CARD_ERROR),
     ),
   );
 

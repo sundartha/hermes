@@ -362,7 +362,7 @@ test("(f2) Fail-closed: suspendierter Tenant -> 403 (kein Self-Service bis Freig
       cookie: s.cookieSuspended,
     });
     // W3-Backend der "Choose your plan"-Landeseite: 403 ist die erreichbare Antwort,
-    // die die tenant.html-Shell abfaengt (kein roher Basic-Auth-Prompt). Der Body
+    // die die App-Shell abfaengt (kein roher Basic-Auth-Prompt). Der Body
     // traegt KEINE Tenant-Daten (kein calls/settings) -> suspended ist nicht datenfaehig.
     assert.equal(res.status, 403);
     assert.equal(res.body.includes("calls"), false, "kein Datenleck im 403-Body");
@@ -438,13 +438,13 @@ test("(g3) return mit fremder session_id -> 403, KEIN payment_method gebunden (C
   }
 });
 
-test("(g4) return -> 302 mit Location /tenant.html?card=ok", async () => {
+test("(g4) return -> 302 mit Location /app?card=ok", async () => {
   const s = await setup();
   try {
     await postSetupCheckout(s);
     const ret = await getCardReturn(s, FAKE_SESSION);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?card=ok", "Redirect in die UI");
+    assert.equal(ret.location, "/app?card=ok", "Redirect in die UI");
   } finally {
     await s.close();
   }

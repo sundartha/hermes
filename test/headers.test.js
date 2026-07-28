@@ -12,10 +12,11 @@ const EXPECTED = {
 test("Security-Header", async (t) => {
   const srv = await startServer();
   try {
-    await t.test("auf /tenant.html (Dashboard) gesetzt, CSP erlaubt Inline + Google Fonts", async () => {
-      // P4: index.html aufgegeben -> tenant.html ist das einzige Dashboard. Die Security-
-      // Header + CSP gelten unveraendert (securityHeaders laeuft global vor express.static).
-      const res = await fetch(`${srv.localUrl}/tenant.html`);
+    await t.test("auf einer Nicht-API-Route gesetzt, CSP erlaubt Inline + Google Fonts", async () => {
+      // P14: public/tenant.html ist geloescht - der Anker ist jetzt /healthz (oeffentlich,
+      // 200, NICHT unter /api/). Die Security-Header + CSP gelten unveraendert
+      // (securityHeaders laeuft global vor jedem Mount).
+      const res = await fetch(`${srv.localUrl}/healthz`);
       assert.equal(res.status, 200);
       for (const [name, value] of Object.entries(EXPECTED))
         assert.equal(res.headers.get(name), value);
@@ -34,8 +35,8 @@ test("Security-Header", async (t) => {
       assert.equal(res.headers.get("cache-control"), "no-store");
     });
 
-    await t.test("Dashboard-HTML wird ohne no-store ausgeliefert", async () => {
-      const res = await fetch(`${srv.localUrl}/tenant.html`);
+    await t.test("eine Nicht-API-Route wird ohne no-store ausgeliefert", async () => {
+      const res = await fetch(`${srv.localUrl}/healthz`);
       assert.notEqual(res.headers.get("cache-control"), "no-store");
     });
   } finally {

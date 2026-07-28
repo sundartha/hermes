@@ -56,6 +56,7 @@
   const RETURN_PARAM_SUB = "sub";
   const RETURN_OK = "ok";
   const RETURN_CANCELED = "canceled";
+  const RETURN_ERROR = "error";
   const RETURN_FAILED = "failed";
 
   // Prompt ohne aktives Abo (no-sub). Eine Quelle (G25).
@@ -149,11 +150,15 @@
   wireSubscribe(subTilesEl, { onSubscribed: refreshState, onMessage: showSubMessage });
 
   // Rueckkehr von Stripe Checkout: kurze Rueckmeldung. Der echte Status kommt ohnehin
-  // aus dem naechsten state-Fetch (AUTH_EVENT). ?card=ok|canceled = reiner Karten-Flow;
-  // ?sub=ok|failed = Kachel-Flow (BK2). Query danach entfernen (kein Wiederholen).
+  // aus dem naechsten state-Fetch (AUTH_EVENT). ?card=ok|canceled|error = reiner
+  // Karten-Flow; ?sub=ok|failed = Kachel-Flow (BK2). P14: ?card=error ist der Stripe-/
+  // Netzwerk-Fehlerpfad des Servers (asyncBilling) - ohne Zweig bliebe genau der
+  // Fehlerfall des Geldwegs fuer den Kunden stumm. Query danach entfernen (kein
+  // Wiederholen).
   function returnMessageText(card, sub) {
     if (card === RETURN_OK) return "Card saved.";
     if (card === RETURN_CANCELED) return "Cancelled - no card saved.";
+    if (card === RETURN_ERROR) return "Something went wrong - no card was saved. Please try again.";
     if (sub === RETURN_OK) return "Subscription booked.";
     if (sub === RETURN_FAILED)
       return "Card saved, but the subscription couldn't be booked. Please try again.";

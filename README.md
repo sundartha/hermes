@@ -189,6 +189,5 @@ src/mcp-tools.js   MCP-Tool-Definitionen (gemeinsam fuer HTTP- und stdio-Transpo
 src/mcp-server.js  MCP stdio-Einstieg fuer Claude Desktop
 src/store.js       JSON-Persistenz: Calls, Transkripte, Action Items, Kalender, Budget
 src/config.js      .env-Konfiguration + Validierung
-public/tenant.html Dashboard (Navy-Design, Live-Polling)
 scripts/check-setup.js  Setup-Checker: npm run check
 ```

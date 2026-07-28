@@ -92,7 +92,6 @@ async function makeDeps(overrides) {
     provision: async () => ({}),
     createPortalRunner: () => runner,
     stripeWebhookPath: "/webhooks/stripe",
-    customerPortalPath: "/tenant.html",
     appPath: "/app",
     ...overrides,
   };

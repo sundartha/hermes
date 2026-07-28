@@ -112,7 +112,7 @@ test(
       const favicon = await fetch(`${srv.externalUrl}/favicon.ico`);
       assert.equal(favicon.status, 200, "favicon.ico muss ohne Basic-Auth erreichbar sein");
       // Gegenprobe: die Ausnahme ist eng - eine andere Route bleibt weiter gesperrt.
-      const guarded = await fetch(`${srv.externalUrl}/tenant.html`);
+      const guarded = await fetch(`${srv.externalUrl}/api/state`);
       assert.equal(guarded.status, 401, "Basic-Auth bleibt fuer andere Routen scharf");
     } finally {
       await srv.stop();

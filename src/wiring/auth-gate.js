@@ -6,13 +6,14 @@
 // UNVERAENDERTER Position (nach der WEB_DIST_DIR-Static-Schicht, VOR
 // express.static(publicDir), INV-2). AUTH FAIL-CLOSED (Absolute Regel 3): ohne
 // gueltige Credentials -> 401. Die Exemption-Reihenfolge ist EINGEFROREN (INV-3,
-// test/auth-gate-exemption-order.test.js): CUSTOMER_PORTAL_PATH (nur unter
-// SELF_SERVICE + MULTI_TENANT) -> /voice* -> /mcp* -> /.well-known* ->
+// test/auth-gate-exemption-order.test.js): /voice* -> /mcp* -> /.well-known* ->
 // STRIPE_WEBHOOK_PATH -> /healthz -> BRAND_ASSETS_PREFIX* -> /favicon.ico ->
-// isTrustedLocalCaller -> safeEqual. Jede ausgelassene Exemption blockt einen
-// Provider (tote Webhooks); jede zusaetzliche oeffnet das Dashboard.
+// isTrustedLocalCaller -> safeEqual. Die frueher erste, flag-gegatete Ausnahme fuer
+// das alte Kunden-Portal (public/tenant.html) ist mit P14 entfallen - die Datei
+// existiert nicht mehr, die App-Shell liegt im WEB_DIST_DIR-Mount VOR diesem Gate.
+// Jede ausgelassene Exemption blockt einen Provider (tote Webhooks); jede
+// zusaetzliche oeffnet das Dashboard.
 //
-import { isSelfServiceLive } from "../config.js";
 
 // deps (injiziert, EINE Quelle je Kollaborator, DIP/G5): config wird per-Request
 // gelesen (dashboardPassword/selfServiceEnabled/multiTenant) -> die Factory SCHLIESST
@@ -28,17 +29,10 @@ export function makeAuthGate({
   safeEqual,
   BRAND_ASSETS_PREFIX,
   VOICE_PATH_PREFIX,
-  paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
+  paths: { STRIPE_WEBHOOK_PATH },
 }) {
   return (req, res, next) => {
     if (!config.auth.dashboardPassword) return next();
-    // Self-Service-Seite (I9 + #3) ist die GETRENNTE Tenant-Sicht: NICHT hinter der
-    // Admin-Basic-Auth. Nur die statische HTML-Seite ist frei - sie enthaelt KEINE
-    // Tenant-Daten (die kommen ueber /api/self-service/*, abgesichert per webAuthMw +
-    // Session-Cookie aus dem OIDC-Browser-Login, nicht mehr per Bearer-Paste).
-    // Hinter den Flags (Self-Service + MULTI_TENANT): aus -> nicht ausgenommen ->
-    // byte-identisch zum Bestand.
-    if (isSelfServiceLive(config) && req.path === CUSTOMER_PORTAL_PATH) return next();
     // /webhooks/stripe ist Basic-Auth-exempt: Stripe kann KEINE Basic-Auth-Credentials
     // senden. Die Sicherung ist die HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET
     // (fail-closed, Regel 3) - exakt analog zu /voice (Twilio-/Telnyx-Signatur). Zusaetzlich

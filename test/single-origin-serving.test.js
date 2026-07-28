@@ -2,7 +2,10 @@
 // Basic-Auth. Spawn-Tests (startServer) gegen ein winziges Fixture-dist. Beweist:
 //  (1) Marketing-Pfad ist OHNE Auth erreichbar (static vor Basic-Auth), die Owner-Legacy-
 //      API (/api/calls) bleibt HINTER der Basic-Auth (401 - kein Freilegen).
-//  (2) /tenant.html -> 302 /app (Owner-Removal-Altpfad, Bookmarks).
+//  (2) /tenant.html -> 302 /app (Altpfad des mit P14 geloeschten Dashboards). Der
+//      Redirect bleibt NICHT nur wegen Bookmarks: eine Stripe-Checkout-Session, die VOR
+//      dem Deploy geoeffnet wurde, traegt die alte Rueckkehr-Adresse IN der Stripe-
+//      Session - ohne ihn landet genau der Kunde, der gerade bezahlt hat, auf einem 404.
 // KEIN pglite hier (nur Server-Spawn, Lehre P6a). node:http-GET ohne Redirect-Follow.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";

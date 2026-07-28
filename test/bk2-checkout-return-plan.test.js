@@ -245,7 +245,7 @@ test("(4) return ?plan=starter -> 302 sub=ok, Abo aus der Session aktiviert (KEI
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?sub=ok", "Redirect ins Abo-gebucht-Ziel");
+    assert.equal(ret.location, "/app?sub=ok", "Redirect ins Abo-gebucht-Ziel");
     assert.equal(s.billingSpy.resultSessionId, SESSION, "liest die abgeschlossene Session");
     assert.equal("subParams" in s.billingSpy, false, "kein zweiter Geld-Call (createSubscription)");
     // Abo-Referenzen im Mirror.
@@ -268,7 +268,7 @@ test("(5) return ohne Plan -> 302 card=ok, KEIN subscribe (Regressions-Guard)", 
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}`);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?card=ok", "reiner Karten-Flow");
+    assert.equal(ret.location, "/app?card=ok", "reiner Karten-Flow");
     assert.equal("subParams" in s.billingSpy, false, "createSubscription nicht gerufen");
     assert.deepEqual(s.provisionSpy, [], "kein Provisioning ohne getragenen Plan");
   } finally {
@@ -281,7 +281,7 @@ test("(6) return ?plan=gold (unbekannt) -> 302 card=ok, kein subscribe (Muell ve
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=gold`);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?card=ok", "unbekannter Slug -> reiner Karten-Flow");
+    assert.equal(ret.location, "/app?card=ok", "unbekannter Slug -> reiner Karten-Flow");
     assert.equal("subParams" in s.billingSpy, false, "kein Subscribe mit Muell");
   } finally {
     await s.close();
@@ -301,7 +301,7 @@ test("(7) return ?plan=starter bei bereits aboniertem Tenant MIT Karte, IDENTISC
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?sub=ok", "already_subscribed ist idempotent-erfolgreich");
+    assert.equal(ret.location, "/app?sub=ok", "already_subscribed ist idempotent-erfolgreich");
     assert.deepEqual(s.provisionSpy, [], "kein zweites Provisioning");
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripeSubscriptionId, "sub_old", "bestehendes Abo bleibt unveraendert");
@@ -378,10 +378,10 @@ test("(13) doppelter return derselben Session -> beide sub=ok, Provisioning gena
   const s = await setup();
   try {
     const first = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
-    assert.equal(first.location, "/tenant.html?sub=ok");
+    assert.equal(first.location, "/app?sub=ok");
     const second = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(second.status, 302);
-    assert.equal(second.location, "/tenant.html?sub=ok", "Doppel-Redirect idempotent-erfolgreich");
+    assert.equal(second.location, "/app?sub=ok", "Doppel-Redirect idempotent-erfolgreich");
     assert.deepEqual(s.provisionSpy, [TENANT], "Provisioning bleibt bei genau 1x");
   } finally {
     await s.close();
@@ -435,7 +435,7 @@ test("(15) return ?plan=business bei bereits (starter-)aboniertem Tenant, ABWEIC
     assert.equal(ret.status, 302);
     assert.equal(
       ret.location,
-      "/tenant.html?sub=failed",
+      "/app?sub=failed",
       "abweichende subscriptionId ist NIE ein idempotenter Erfolg (kein falsches sub=ok)",
     );
     assert.deepEqual(s.provisionSpy, [], "kein Provisioning der verwaisten Subscription");
@@ -460,7 +460,7 @@ test("(16) return ?plan=starter nach Webhook-gewonnenem Rennen (Abo gespeichert,
   try {
     const ret = await billingReturn(s, `session_id=${SESSION}&plan=starter`);
     assert.equal(ret.status, 302);
-    assert.equal(ret.location, "/tenant.html?sub=ok", "Heilung ist idempotent-erfolgreich");
+    assert.equal(ret.location, "/app?sub=ok", "Heilung ist idempotent-erfolgreich");
     const t = s.store.load().tenants.find((x) => x.id === TENANT);
     assert.equal(t.stripePaymentMethodId, "pm_b", "Karte aus der verifizierten Session gebunden");
     assert.equal(t.stripeSubscriptionId, "sub_old", "bestehendes Abo bleibt unveraendert");

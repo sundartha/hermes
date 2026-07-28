@@ -4,6 +4,10 @@
 // (fakeRes()/next-Flag): offline, kein Spawn, keine DB, kein Netz. Ruft
 // makeAuthGate(deps) direkt auf (nicht die Server-Loop in server.js).
 //
+// Gates-P14: die frueher erste, flag-gegatete Exemption (altes Kunden-Portal
+// public/tenant.html) ist mit dem Loeschen der Datei entfallen - Test (c) prueft jetzt
+// ihre Abwesenheit statt ihres Flag-Gates.
+//
 // UNCONDITIONAL_EXEMPT_PATHS ist bewusst NICHT aus dem Modul reexportiert, sondern
 // hier hartkodiert (wie EXPECTED_ORDER in outbound-gates-order.test.js): eine
 // kuenftige Umsortierung/Auslassung der Exemption-Kette (INV-3) soll DIESEN Test
@@ -18,7 +22,10 @@ import { BRAND_ASSETS_PREFIX } from "../src/mcp-server-info.js";
 // hartkodiert, genau wie server.js sie an makeAuthGate hereinreicht (INV-1 bleibt
 // die EINE Quelle in server.js selbst - dieser Test prueft nur die Gate-Logik, die
 // die injizierten Werte entgegennimmt).
-const CUSTOMER_PORTAL_PATH = "/tenant.html";
+// LEGACY_PORTAL_PATH: der Altpfad des mit Gates-P14 geloeschten Kunden-Dashboards.
+// KEINE Gate-Konstante mehr (die frueher erste, flag-gegatete Exemption ist entfallen) -
+// hier nur noch als Gegenprobe-Pfad, s. Test (c).
+const LEGACY_PORTAL_PATH = "/tenant.html";
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 const VOICE_PATH_PREFIX = "/voice";
 
@@ -69,7 +76,7 @@ function makeGate(overrides = {}) {
     safeEqual,
     BRAND_ASSETS_PREFIX,
     VOICE_PATH_PREFIX,
-    paths: { STRIPE_WEBHOOK_PATH, CUSTOMER_PORTAL_PATH },
+    paths: { STRIPE_WEBHOOK_PATH },
   });
 }
 
@@ -108,7 +115,7 @@ test("auth-gate: unbedingte Exemptions passieren ohne Credentials", async () => 
 
 // === (b) Gegenprobe: geschuetzte Pfade -> 401, kein next() =======================
 
-const GUARDED_PATHS = ["/api/state", "/api/calls", "/", "/index.html", "/tenant.html"];
+const GUARDED_PATHS = ["/api/state", "/api/calls", "/", "/index.html"];
 
 test("auth-gate: geschuetzte Pfade ohne Credentials -> 401, auth_failed geloggt", async () => {
   for (const path of GUARDED_PATHS) {
@@ -122,20 +129,16 @@ test("auth-gate: geschuetzte Pfade ohne Credentials -> 401, auth_failed geloggt"
   }
 });
 
-// === (c) Flag-Gate: CUSTOMER_PORTAL_PATH nur unter selfService+multiTenant =======
+// === (c) Gates-P14: die flag-gegatete Portal-Exemption ist ERSATZLOS entfallen =====
+// Frueher passierte /tenant.html das Gate, wenn SELF_SERVICE und MULTI_TENANT beide an
+// waren. Die Datei public/tenant.html ist geloescht, die Ausnahme entfernt (Richtung
+// fail-closed). Der Test prueft die Abwesenheit da, wo sie frueher griff: BEIDE Flags an.
 
-test("auth-gate: /tenant.html nur bei BEIDEN Flags exempt (Schnittmenge, kein OR)", async () => {
+test("auth-gate: /tenant.html ist auch mit beiden Flags NICHT mehr exempt (Gates-P14)", async () => {
   const beideFlagsAn = makeGate({ config: { tenancy: { selfServiceEnabled: true, multiTenant: true } } });
-  assert.equal(await run(beideFlagsAn, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), true);
-
-  const nurSelfService = makeGate({ config: { tenancy: { selfServiceEnabled: true, multiTenant: false } } });
-  assert.equal(await run(nurSelfService, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), false);
-
-  const nurMultiTenant = makeGate({ config: { tenancy: { selfServiceEnabled: false, multiTenant: true } } });
-  assert.equal(await run(nurMultiTenant, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), false);
-
-  const beideAus = makeGate({ config: { tenancy: { selfServiceEnabled: false, multiTenant: false } } });
-  assert.equal(await run(beideAus, fakeReq(CUSTOMER_PORTAL_PATH), fakeRes()), false);
+  const res = fakeRes();
+  assert.equal(await run(beideFlagsAn, fakeReq(LEGACY_PORTAL_PATH), res), false);
+  assert.equal(res.statusCode, 401);
 });
 
 // === (d) Gate deaktiviert (kein dashboardPassword): alles offen ==================
