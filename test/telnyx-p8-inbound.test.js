@@ -90,12 +90,14 @@ test("startInboundAiAssistant: speak EINMAL, startAssistant EINMAL, Reihenfolge 
   );
 });
 
-// afix-p2 (Review-Blocker Runde 2): der Inbound-Pfad bleibt in dieser Phase BYTE-IDENTISCH
-// (STT-Sprach-Hint ist P6-Scope). call.language ist auf Inbound-Legs IMMER gesetzt
-// (createCall-Default "de", server.js loest es vor dem Handoff auf) - der Test setzt
-// bewusst einen Nicht-Default-Wert ("fr"), damit ein versehentlicher Passthrough sicher
-// auffliegt und nicht durch einen Default-Treffer maskiert wird.
-test("startInboundAiAssistant: call.language gesetzt -> startAssistant OHNE language-Feld (Inbound-Byte-Identitaet, afix-p2)", async () => {
+// P11/GAP-24: bis hierher war das der Byte-Identitaets-Pin ("Inbound ruft startAssistant OHNE
+// language, STT-Hint ist P6-Scope"). Mit dem Sprach-Durchstich ist diese Aussage sachlich
+// falsch geworden - die Kopplung war im GAP-24-Kommentar unten ausdruecklich angekuendigt
+// (einzige zulaessige Testaenderung dieser Phase, PLAN-GATES.md Abschnitt 7). Der Test bleibt
+// als REGRESSIONSSCHUTZ stehen (kein Katalog-Praefix -> npm test) und pinnt jetzt die
+// Gegenrichtung: der Hint darf nie wieder verloren gehen. Nicht-Default-Wert "fr", damit ein
+// Default-Treffer nichts maskiert.
+test("startInboundAiAssistant: call.language=fr -> startAssistant traegt language=fr (Sprach-Durchstich, P11)", async () => {
   const store = spyStore();
   const voiceControl = spyVoiceControl();
   const call = { id: "call_in2b", provider: "telnyx", language: "fr" };
@@ -113,8 +115,8 @@ test("startInboundAiAssistant: call.language gesetzt -> startAssistant OHNE lang
 
   assert.deepEqual(
     voiceControl.order[1].params,
-    { callControlId: "cc_inbound_9", assistantId: "asst_x" },
-    "kein language-Feld trotz gesetztem call.language - Inbound bleibt byte-identisch bis P6",
+    { callControlId: "cc_inbound_9", assistantId: "asst_x", language: "fr" },
+    "der Sprach-Hint des Calls geht an den Adapter - sonst entscheidet die globale Assistant-Config",
   );
 });
 
@@ -125,10 +127,9 @@ test("startInboundAiAssistant: call.language gesetzt -> startAssistant OHNE lang
 // EN-Tenant entscheidet damit die GLOBALE Assistant-Config ueber die Transkriptionssprache
 // seines Inbound-Anrufs - dieselbe Klasse Defekt wie die historische RCA-Wurzel R2.
 //
-// HEUTE ROT, und rot ist hier das Arbeitsergebnis (PLAN-I18N-TESTS.md 4.1). Der Test steht
-// bewusst neben dem gruenen Bestands-Test darueber, der die heutige Byte-Identitaet pinnt:
-// KOPPLUNG - wer den Inbound-Hint nachruestet, aendert BEIDE Tests in EINER Aenderung
-// (der Byte-Identitaets-Test darueber wird dann sachlich falsch).
+// P11: umgesetzt. Der Test darueber pinnt jetzt die Gegenrichtung (Sprach-Hint MUSS
+// durchgereicht werden) statt der frueheren Byte-Identitaet - die angekuendigte Kopplung
+// ist eingetreten (PLAN-GATES.md Abschnitt 7, einzige zulaessige Testaenderung dieser Phase).
 // NICHT Gegenstand dieses Tests: eine eigene Assistant-INSTANZ je Sprache. Die eine globale
 // Instanz ist ein dokumentiert getragenes Risiko (tasks/i18n-tests/19-w2-baseline.md §7),
 // keine gefallene Produktentscheidung - ein Pin darauf waere ein erfundenes Soll.

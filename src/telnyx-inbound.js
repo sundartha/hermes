@@ -38,5 +38,15 @@ export async function startInboundAiAssistant({
   store.save();
   const vc = voiceControl(call.provider);
   await vc.speak({ callControlId, text: greeting, voiceProfile });
-  await vc.startAssistant({ callControlId, assistantId: call.assistantId });
+  // GAP-24: der STT-Sprach-Hint haengt an der Sprache DES CALLS, auf jedem Assistant-Pfad -
+  // keine neue Sprachquelle, sondern dieselbe wie der Ingest-Pfad (telnyx-call-control-ingest.js
+  // #onSpeakEnded, G5). call.language ist auf Inbound-Legs gesetzt: /voice/incoming loest sie
+  // ueber store.resolveCallLanguage aus dem Tenant-Kontext auf und uebergibt sie an createCall.
+  // Ohne Hint entschiede die GLOBALE Assistant-Config ueber die Transkriptionssprache eines
+  // EN-/FR-Tenants (dieselbe Klasse Defekt wie RCA-Wurzel R2).
+  // language ist am Port OPTIONAL: laesst sich die Sprache eines Legs ausnahmsweise nicht
+  // aufloesen, bleibt das Feld WEG (statt undefined) - der Adapter sendet dann wie bisher
+  // KEIN transcription-Feld (Bestandsverhalten, kein halb gefuellter Hint).
+  const languageHint = call.language ? { language: call.language } : {};
+  await vc.startAssistant({ callControlId, assistantId: call.assistantId, ...languageHint });
 }

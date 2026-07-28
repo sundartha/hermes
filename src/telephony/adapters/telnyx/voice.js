@@ -306,10 +306,9 @@ export function assistantVoiceConfigured() {
 
 // Neutrale Gespraechssprache (call.language: de|fr|en) -> Telnyx-transcription-Felder. Das Mapping
 // lebt ADAPTER-INTERN (kein Provider-String durch den Port) in startAssistant (G5), das von
-// Ingest- UND Inbound-Pfad genutzt wird - reicht call.language aber nur der Ingest-Pfad durch.
-// Der Inbound-Pfad ruft startAssistant ohne language (BYTE-IDENTISCH, STT-Hint dort P6-Scope),
-// hier greift der Ohne-language-Zweig. Ohne language -> KEIN transcription-Feld, Body
-// byte-identisch zum Bestand (Grenzfall, z.B. call.language nicht aufloesbar).
+// Ingest- UND Inbound-Pfad genutzt wird; beide reichen call.language durch (GAP-24).
+// Der Ohne-language-Zweig bleibt der Grenzfall (Sprache nicht aufloesbar): dann KEIN
+// transcription-Feld, Body byte-identisch zum Bestand.
 // Sprache ausserhalb der flux-Hint-Liste (auch "multi") -> "auto": Telnyx-Detection statt Hint-los.
 function transcriptionFields(language) {
   if (!language) return {};
@@ -765,9 +764,9 @@ export const telnyxVoice = {
   // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
   // Assistant-Config (P7), NICHT hier. Der per-Call-transcription-Block gewinnt laut
   // Telnyx-OpenAPI ueber das Assistant-Objekt; language ist OPTIONAL - fehlt sie, sendet der
-  // Adapter KEIN transcription-Feld und der Body bleibt Bestand. Nur telnyx-call-control-ingest.js
-  // reicht call.language durch; telnyx-inbound.js ruft startAssistant OHNE language (Inbound
-  // bleibt in dieser Phase BYTE-IDENTISCH, STT-Sprach-Hint dort ist P6-Scope).
+  // Adapter KEIN transcription-Feld und der Body bleibt Bestand. Beide Aufrufer reichen
+  // call.language durch: telnyx-call-control-ingest.js (Outbound-Ingest) und
+  // telnyx-inbound.js (Inbound, GAP-24).
   async startAssistant({ callControlId, assistantId, language }) {
     if (!config.telephony.telnyxApiKey)
       throw new Error("Telnyx startAssistant: TELNYX_API_KEY fehlt");
