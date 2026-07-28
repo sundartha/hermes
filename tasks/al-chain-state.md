@@ -20,7 +20,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P7 | — | — | — | offen (haengt an AL-P2) |
 | AL-P7b | — | — | — | offen |
 | AL-P8 | `phase/al-p8-bench-fix1` | PASS (1 Fix-Runde, 3412 gruen) | `61d7563` | **gemergt** — 2 Abnahmen (kosten Geld) |
-| AL-P9 | — | — | — | offen |
+| AL-P9 | `phase/al-p9-briefing-impl` (NICHT der gemeldete) | PASS (0 Fix-Runden, 3426 gruen) | `479721e` | **gemergt** — Flag bleibt AUS |
 | AL-P10 | — | — | — | offen |
 | AL-P10b | — | — | — | offen |
 | AL-P11 | — | — | — | offen |
@@ -111,3 +111,31 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   kleinste Kappe, die alle Grenzfaelle traegt.
 - **AL-P9 wird neu gestartet, nicht per `resume` fortgesetzt** (Kickoff-Vorgabe „kein resume").
   Nebeneffekt: der Plan-Agent gruendet auf dem aktuellen master statt auf dem Stand vor AL-P5.
+
+- **AL-P9 gemergt (`479721e`), PASS ohne Fix-Runde, 3426/3426 gruen** —
+  aber nur, weil die Merge-Pruefung den **falschen** zurueckgegebenen Branch abgefangen hat:
+
+  > **NEUER FALLSTRICK: ein abgebrochener Lauf hinterlaesst seinen Branch, und der naechste
+  > Lauf weicht still auf einen anderen Namen aus.**
+  >
+  > Der per `TaskStop` abgebrochene erste AL-P9-Lauf hatte `phase/al-p9-briefing` bereits
+  > angelegt (`4d3e02c`, Basis `11ccd39` = master **vor** AL-P5, halbfertiger
+  > „Vorbereitung"-Commit). Im zweiten Lauf schlug `git checkout -b phase/al-p9-briefing
+  > master` deshalb fehl; der Impl-Agent wich auf **`phase/al-p9-briefing-impl`** aus
+  > (`6249608`, korrekt auf aktuellem master). Der Workflow meldete trotzdem
+  > `finalBranch: phase/al-p9-briefing` — den **stale Torso**, weil das Template
+  > `finalBranch` aus dem GEPLANTEN Namen ableitet, nicht aus dem, was der Agent wirklich
+  > gebaut hat.
+  >
+  > Ein blinder Merge haette die halbfertige Arbeit des abgebrochenen Laufs auf master
+  > gebracht **und die echte Umsetzung verloren** — lautlos, mit gruenem Gate.
+  >
+  > **Zwei Konsequenzen, ab sofort verbindlich:**
+  > 1. `git merge-base --is-ancestor master <finalBranch>` ist **kein Formalismus**. Genau
+  >    diese Pruefung hat den Fehler gefangen.
+  > 2. **Vor dem Neustart einer abgebrochenen Phase deren Branch loeschen**
+  >    (`git branch -D <branch>` + `git worktree remove`), sonst weicht der naechste Lauf
+  >    wieder aus. Erledigt: Torso und sein Review-Branch sind entfernt.
+
+- **AL-P9 legt keine neue Env-Variable an** — `.env.example` bekommt nur einen erklaerenden
+  Kommentar. Keine Vier-Stellen-Pflicht, keine BASE_ENV-Drift.
