@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives as renderTwilio } from "../src/telephony/adapters/twilio/render.js";
 import { renderDirectives as renderTelnyx } from "../src/telephony/adapters/telnyx/render.js";
-import { elevenLabsVoiceNameFor } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
+import { elevenLabsVoiceName } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 import { sttLocaleForVoiceProfile } from "../src/telephony/voice-locale.js";
 import { say, gather, VOICE_PROFILE } from "../src/telephony/directives.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
@@ -58,13 +58,27 @@ test("ElevenLabs-Stimme je Sprache: DE = Plattform-Stimme, FR/EN = kuratierte ID
   assert.equal(voiceIdOf(VOICE_PROFILE.EN_FEMALE_NEURAL), EN_VOICE_ID);
 });
 
-test("Assistant-speak folgt derselben Sprachaufloesung wie der Renderer - eine Stimme im ganzen Call", () => {
+test("Assistant-speak (Call-Control) bleibt bewusst bei der GLOBALEN Stimme - der Renderer (TeXML/Play-TTS) loest sprachaufgeloest auf, der Assistant danach nicht (RCA-Wurzel R5)", () => {
+  // speakVoiceFields (src/telephony/adapters/telnyx/voice.js) nutzt elevenLabsVoiceName(el)
+  // OHNE voiceProfile - das ist die einzige Stelle, an der der Assistant-Pfad danach spricht
+  // (EIN global provisioniertes Voice-Setting, scripts/telnyx-assistant-provision.mjs). Fuer
+  // DE stimmt das mit dem Renderer ueberein (beide = el.voiceId); fuer FR/EN weicht der
+  // Assistant-Pfad ABSICHTLICH vom sprachaufgeloesten Renderer ab, sonst spraeche der
+  // speak-Node FR/EN, der folgende Assistant aber weiter DE (Review-Runde 2, R5-Regression).
+  const globalVoice = elevenLabsVoiceName(EL);
   for (const voiceProfile of Object.values(VOICE_PROFILE)) {
-    const speakVoice = elevenLabsVoiceNameFor(EL, voiceProfile);
     const rendered = renderTelnyx([say("Text", voiceProfile)], OPTS).match(
       /<Say voice="([^"]+)"/,
     )[1];
-    assert.equal(speakVoice, rendered, `speak und Renderer muessen fuer ${voiceProfile} gleich klingen`);
+    if (voiceProfile === VOICE_PROFILE.DE_FEMALE_NEURAL) {
+      assert.equal(globalVoice, rendered, "DE: Assistant-Stimme und Renderer-Stimme sind dieselbe");
+    } else {
+      assert.notEqual(
+        globalVoice,
+        rendered,
+        `${voiceProfile}: Renderer loest sprachaufgeloest auf, Assistant-Pfad bleibt bewusst global`,
+      );
+    }
   }
 });
 

@@ -5,6 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { captureConsole, makeConfigOverrides } from "./helpers.js";
+import { VOICE_PROFILE } from "../src/telephony/directives.js";
 
 const API_BASE = "https://telnyx.test";
 const API_KEY = "KEYtest-secret-do-not-leak";
@@ -400,6 +401,30 @@ test("afix-p1 (T-neu 1): speak useAssistantVoice=true + volle Config -> ElevenLa
   assert.equal(body.voice, `ElevenLabs.${EL_MODEL}.${EL_VOICE_ID}`);
   assert.deepEqual(body.voice_settings, { type: "elevenlabs", api_key_ref: EL_API_KEY_REF });
   assert.ok(!("language" in body), "kein language-Feld bei ElevenLabs-Voice");
+});
+
+// Regressionstest Review-Runde 2 (R5): useAssistantVoice=true MUSS bei JEDEM voiceProfile
+// die GLOBALE Plattform-Stimme (el.voiceId) senden, NIE die sprachaufgeloeste voiceProfile-
+// Stimme aus P9 (VOICE-12) - sonst spricht die Offenlegung FR/EN, der nachfolgende
+// Telnyx-Assistant (EIN global provisioniertes Voice-Setting) aber weiter DE (RCA-Wurzel
+// R5, "EINE Stimme im ganzen Call"). Faengt exakt die Regression, die P9 kurzzeitig
+// einfuehrte: elevenLabsVoiceNameFor(el, voiceProfile) statt elevenLabsVoiceName(el).
+test("R5-Regression: speak useAssistantVoice=true bleibt bei FR/EN die globale Assistant-Stimme, nicht die sprachaufgeloeste VOICE-12-ID", async () => {
+  for (const voiceProfile of [VOICE_PROFILE.FR_FEMALE_NEURAL, VOICE_PROFILE.EN_FEMALE_NEURAL]) {
+    const calls = stubFetch({ json: {} });
+    await telnyxVoice.speak({
+      callControlId: "cc_1",
+      text: "Bonjour, ceci est l'assistant IA.",
+      voiceProfile,
+      useAssistantVoice: true,
+    });
+    const body = JSON.parse(calls[0].body);
+    assert.equal(
+      body.voice,
+      `ElevenLabs.${EL_MODEL}.${EL_VOICE_ID}`,
+      `speak(${voiceProfile}) muss die globale Assistant-Stimme senden, nicht eine sprachaufgeloeste ID`,
+    );
+  }
 });
 
 // T-neu 2 (Fallback a): useAssistantVoice=true, aber die ElevenLabs-Config ist LEER ->
