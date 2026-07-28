@@ -35,6 +35,12 @@ export const TEXT_LIMITS = {
 // Kosten-/DoS-Deckel analog TEXT_LIMITS, im Review justierbar.
 const KEY_FACTS_LIMITS = { maxItems: 10, maxLen: 200 };
 
+// AL-P9: open_questions ("was ich nicht klaeren konnte", Eingabe fuer Phase 13). Gleiche
+// Klasse wie key_facts, deshalb dieselbe Item-Zahl; maxLen groesser, weil eine Frage
+// laenger ist als ein Stichwort. Bewusst grosszuegig: ein Cap-Verstoss laesst
+// sanitizedBriefing (precall-briefing.js) die GANZE Briefing-Antwort verwerfen.
+const OPEN_QUESTIONS_LIMITS = { maxItems: 10, maxLen: 300 };
+
 // Fehlertext oder null; optionale Felder (null/undefined) sind erlaubt
 export function invalidText(name, value) {
   if (value == null) return null;
@@ -88,15 +94,21 @@ function validateSubObject({ name, raw, fields, checkFields }) {
   return error ? { error } : { value };
 }
 
-const CONTEXT_FIELDS = ["summary", "recipient_relationship", "desired_outcome", "key_facts"];
+const CONTEXT_FIELDS = [
+  "summary",
+  "recipient_relationship",
+  "desired_outcome",
+  "key_facts",
+  "open_questions",
+];
 const MANDATE_FIELDS = ["decide_freely", "fallback_order", "on_out_of_scope"];
 
 // P3-Kontext validieren UND normalisieren (parse-don't-validate): nimmt den rohen
 // Body-Wert, weist Teilfeld-Verstoesse als 400 zurueck und gibt sonst ein Objekt aus NUR
-// den vier bekannten Teilfeldern zurueck (unbekannte/uebergrosse Keys fallen weg ->
+// den fuenf bekannten Teilfeldern zurueck (unbekannte/uebergrosse Keys fallen weg ->
 // Storage-/DoS-Deckel). { error } -> HTTP 400; { value } -> persistierbar (Objekt|null).
-// EINE Quelle der Teilfeld-Regeln (kein Copy-Paste, G5): je Textfeld invalidText, das
-// Array ueber invalidStringArray.
+// EINE Quelle der Teilfeld-Regeln (kein Copy-Paste, G5): je Textfeld invalidText, die
+// Arrays ueber invalidStringArray.
 export function validateAssistantContext(raw) {
   return validateSubObject({
     name: "context",
@@ -106,7 +118,8 @@ export function validateAssistantContext(raw) {
       invalidText("context.summary", v.summary) ||
       invalidText("context.recipient_relationship", v.recipient_relationship) ||
       invalidText("context.desired_outcome", v.desired_outcome) ||
-      invalidStringArray("context.key_facts", v.key_facts, KEY_FACTS_LIMITS),
+      invalidStringArray("context.key_facts", v.key_facts, KEY_FACTS_LIMITS) ||
+      invalidStringArray("context.open_questions", v.open_questions, OPEN_QUESTIONS_LIMITS),
   });
 }
 

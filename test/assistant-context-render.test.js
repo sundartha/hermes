@@ -117,6 +117,22 @@ test("R4 Flag an + leeres key_facts: kein HINTERGRUND-Block (Grenzfall, Section 
 // genau der Mischsprach-Pin, gegen den der GAP-27-Waechter antritt. Geprueft wird deshalb
 // SPRACHREINHEIT: ein EN-Call bekommt englische Labels und KEINE deutschen.
 // Erwartungswerte englisch = kein Mischsprach-Pin (test/helpers/characterization-scan.mjs).
+test("AL-P9-8 open_questions veraendert den gesprochenen Prompt nicht", () => {
+  const without = freezeNow(
+    systemPrompt(call({ direction: "outbound", language: "de", context: CTX })),
+  );
+  const withOpenQuestions = freezeNow(
+    systemPrompt(
+      call({
+        direction: "outbound",
+        language: "de",
+        context: { ...CTX, open_questions: ["Wie lange dauert das?"] },
+      }),
+    ),
+  );
+  assert.equal(withOpenQuestions, without, "open_questions ist Eingabe fuer Phase 13, nicht Sprechstoff");
+});
+
 test("PROMPT-08 (Sprachreinheit, gruen) - HINTERGRUND-Labels eines EN-Calls sind englisch", () => {
   const prompt = systemPrompt(call({ direction: "outbound", language: "en", context: CTX }));
   assert.ok(prompt.includes("BACKGROUND (for your information only):"));

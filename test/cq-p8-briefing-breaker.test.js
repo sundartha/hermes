@@ -111,10 +111,19 @@ test("BR1 ein fehlschlagender Briefing-Aufruf oeffnet den Briefing-Breaker: zwei
   assert.equal(first, null, "erster Aufruf scheitert am HTTP-500");
   const afterFirst = requestCount;
   assert.equal(afterFirst, before + 1, "erster Aufruf loest genau EINEN Request aus");
+  // AL-P9: der 500er ging raus (retries-exhausted) -> die Schaetzung wird gebucht.
+  const usageAfterFirst = { ...store.usageOf(BOOTSTRAP_TENANT_ID) };
+  assert.ok(usageAfterFirst.costCents > 0, "der gesendete 500er bucht eine Schaetzung");
 
   const second = await fetchPrecallBriefing(briefingArgs());
   assert.equal(second, null, "zweiter Aufruf ist sofort null (Breaker offen)");
   assert.equal(requestCount, afterFirst, "Breaker offen -> KEIN zweiter HTTP-Request");
+  // AL-P9: circuit-open ist kostenlos, kein Request, keine Schaetzung.
+  assert.deepEqual(
+    store.usageOf(BOOTSTRAP_TENANT_ID),
+    usageAfterFirst,
+    "Breaker-open darf keine weitere Buchung ausloesen",
+  );
 });
 
 test("BR2 der Gespraechs-Breaker (claude.js) bleibt UNBERUEHRT: summarizeCall liefert weiterhin ein Ergebnis", async () => {

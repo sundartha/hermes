@@ -40,6 +40,16 @@ const PREMATURE_CLOSE_MESSAGE = "Premature close";
 // Voll-Jitter-Backoff verdoppelt die Basis pro Versuch (gegen Thundering Herd).
 const BACKOFF_FACTOR = 2;
 
+// AL-P9: die beiden Abbruch-Gruende als EINE Quelle statt Roh-Strings an den throw-
+// Stellen und beim Leser. Der Unterschied ist KOSTENRELEVANT: bei CIRCUIT_OPEN ging nie
+// ein Request raus (isOpen wirft VOR create()), bei RETRIES_EXHAUSTED war mindestens ein
+// Versuch auf der Leitung und kann beim Anbieter Token erzeugt haben - genau darauf
+// bucht src/precall-briefing.js seine pessimistische Schaetzung.
+export const LLM_UNAVAILABLE_REASON = Object.freeze({
+  CIRCUIT_OPEN: "circuit-open",
+  RETRIES_EXHAUSTED: "retries-exhausted",
+});
+
 // Geworfen, wenn der Breaker offen ist ODER die Retry-Obergrenze erschoepft ist.
 // Der Aufrufer faengt diesen Typ und rendert eine wuerdevolle Degradation.
 // Traegt nur den Grund - niemals params, Key oder rohe Fehlerdetails (Secret-Schutz).
@@ -47,7 +57,7 @@ export class LlmUnavailableError extends Error {
   constructor(reason) {
     super(`LLM nicht verfuegbar: ${reason}`);
     this.name = "LlmUnavailableError";
-    this.reason = reason; // "circuit-open" | "retries-exhausted"
+    this.reason = reason; // LLM_UNAVAILABLE_REASON
   }
 }
 
@@ -203,7 +213,7 @@ export function createLlmClient({
         breakerState: "open",
         ...metricsExtra(callId),
       });
-      throw new LlmUnavailableError("circuit-open");
+      throw new LlmUnavailableError(LLM_UNAVAILABLE_REASON.CIRCUIT_OPEN);
     }
     const startedAt = Date.now();
     let attempts = 0;
@@ -240,7 +250,7 @@ export function createLlmClient({
         breakerState: breaker.state(),
         ...metricsExtra(callId),
       });
-      if (exhausted) throw new LlmUnavailableError("retries-exhausted");
+      if (exhausted) throw new LlmUnavailableError(LLM_UNAVAILABLE_REASON.RETRIES_EXHAUSTED);
       throw err; // nicht-transient (4xx/Auth) unveraendert nach oben
     }
   }

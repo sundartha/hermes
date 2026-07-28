@@ -63,6 +63,18 @@ test("HC2 Flag an, key_facts-Eintrag > 200 Zeichen -> 400 (Validierung vor Telef
   }
 });
 
+test("AL-P9-9 Flag an, open_questions-Eintrag > 300 Zeichen -> 400 (Validierung vor Telefonie)", async () => {
+  const srv = await startServer({ env: FLAG_ON });
+  try {
+    const res = await placeCall(srv, { context: { open_questions: ["a".repeat(301)] } });
+    assert.equal(res.status, 400, "uebergrosser open_questions-Eintrag -> 400");
+    assert.match((await res.json()).error, /open_questions/i);
+    assert.equal(outboundCallsTo(srv).length, 0, "kein Call bei 400");
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("HC3 Flag an, summary > 1000 Zeichen -> 400", async () => {
   const srv = await startServer({ env: FLAG_ON });
   try {

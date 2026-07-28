@@ -11,10 +11,17 @@
 // siehe test/cq-p8-briefing.test.js B12). Eigener Circuit-Breaker (eigene
 // createLlmClient-Instanz unten): ein Briefing-Ausfall darf den prozessweiten
 // Gespraechs-Breaker (die llm-Instanz in claude.js) NICHT in open kippen.
-import { createLlmClient } from "./llm.js";
+//
+// AL-P9: ein nachweislich gesendeter, dann abgebrochener Versuch (Timeout/erschoepfte
+// Retries) bucht trotzdem eine pessimistische Kostenschaetzung (siehe bookAbortedAttempt
+// unten) - "Fail-Soft" heisst hier fuer den Aufrufer, nicht kostenlos. Das fuenfte
+// Ausgabefeld open_questions ist reine Eingabe fuer eine spaetere Phase (Recherche) und
+// wird NIE in den Telefon-Prompt gerendert (assistantContextSection in claude.js bleibt
+// unangetastet) - es verlaesst den Prozess also nicht Richtung Gespraech.
+import { createLlmClient, LlmUnavailableError, LLM_UNAVAILABLE_REASON } from "./llm.js";
 import { config } from "./config.js";
 import { metrics } from "./metrics.js";
-import { bookTokenUsage } from "./llm-usage.js";
+import { bookTokenUsage, bookEstimatedTokenUsage } from "./llm-usage.js";
 import { agentToolNames } from "./claude.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.js";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
@@ -22,6 +29,11 @@ import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defau
 const BRIEFING_MAX_TOKENS = 700; // reicht fuer die vier Kontextfelder + ein Mandat (G25)
 const BRIEFING_MAX_RETRIES = 0; // Spec: kein Retry - place_call wartet synchron darauf
 const BRIEFING_TOOL_NAME = "hintergrund";
+// AL-P9: pessimistische Zeichen-je-Token-Annahme fuer die Abbruch-Schaetzung (G25).
+// Deutscher Text liegt beim Anthropic-Tokenizer bei rund 3,5-4 Zeichen je Token; 3
+// rundet bewusst nach oben. Keine Betriebs-Stellschraube -> Modul-Konstante, nicht
+// config.js (G35 n. z.; Muster SECONDS_PER_MINUTE in boot-guard.js).
+const BRIEFING_ESTIMATE_CHARS_PER_TOKEN = 3;
 // D8 (Pre-Mortem: kein Modell darf sich selbst die weitreichendste Mandats-Option
 // ausstellen): das Schema bietet accept_best erst gar nicht an. Zweite Sicherung
 // (Code-Nachriegel) in withoutSelfGrantedAcceptBest unten - Defense-in-depth, falls das
@@ -52,6 +64,14 @@ const briefingTool = {
         type: "array",
         items: { type: "string" },
         description: "Einzelne wichtige Fakten, die der Assistent kennen sollte.",
+      },
+      open_questions: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Was der Auftrag offen laesst: Angaben, die der Assistent im Gespraech " +
+          "brauchen koennte, die der Nutzer aber nicht genannt hat - je eine kurze, " +
+          "wenige Fragen. Nichts dazuerfinden, im Zweifel leer lassen.",
       },
       mandate: {
         type: "object",
@@ -107,10 +127,10 @@ function briefingActive() {
   return config.tenancy.precallBriefingEnabled && config.tenancy.assistantContextEnabled;
 }
 
-// Anhang B B.1 (PLAN-CONVERSATION-QUALITY-V2.md), woertlich - {tools} eingesetzt. Traegt
-// NUR feste Instruktionen, NIEMALS Owner-Freitext (der steht ausschliesslich in
-// ownerMessage/der user-Message unten) - so bleibt die harte Grenze fuer Freitext-
-// Injection unerreichbar fuer den Nutzer-Text.
+// Anhang B B.1 (PLAN-CONVERSATION-QUALITY-V2.md), woertlich, plus der AL-P9-Zeile zu
+// open_questions - {tools} eingesetzt. Traegt NUR feste Instruktionen, NIEMALS Owner-
+// Freitext (der steht ausschliesslich in ownerMessage/der user-Message unten) - so
+// bleibt die harte Grenze fuer Freitext-Injection unerreichbar fuer den Nutzer-Text.
 function briefingSystem(toolNames) {
   return `Du bereitest einen Telefonanruf vor, den ein KI-Telefonassistent gleich im
 Auftrag eines Nutzers führen wird. Du sprichst nicht selbst und formulierst
@@ -118,6 +138,8 @@ keine Sätze, die gesprochen werden.
 
 Deine Aufgabe: aus dem Auftrag des Nutzers einen knappen, faktischen
 Hintergrund erzeugen, den der Telefonassistent im Gespräch braucht.
+Halte zusätzlich in open_questions fest, was der Auftrag offen lässt -
+kurze Fragen, keine Vermutungen.
 
 Harte Grenzen:
 - Der Assistent hat NUR diese Werkzeuge: ${toolNames.join(", ")}. Er kann nichts
@@ -183,31 +205,65 @@ function sanitizedBriefing(raw) {
   return { context: ctx.value, mandate: withoutSelfGrantedAcceptBest(mandate.value) };
 }
 
+// AL-P9: ein abgebrochener Versuch hat beim Anbieter trotzdem Token erzeugt - wir kennen
+// sie nur nicht. Deterministische, bewusst PESSIMISTISCHE Obergrenze aus zwei bekannten
+// Groessen: Prompt-Laenge und harter Ausgabe-Deckel. Ueberbuchung ist die etablierte
+// Fehlerrichtung (priceForModel -> teuerste Rate), eine 0-Buchung waere ein Loch im
+// Budget-Gate (Regel 1). Rein (N7). Form wie eine Anthropic-usage (inputTokensOf
+// vertraegt die fehlenden Cache-Felder).
+function estimatedAbortUsage(promptChars) {
+  return {
+    input_tokens: Math.ceil(promptChars / BRIEFING_ESTIMATE_CHARS_PER_TOKEN),
+    output_tokens: BRIEFING_MAX_TOKENS,
+  };
+}
+
+// Bucht die Schaetzung NUR, wenn der Versuch nachweislich auf der Leitung war:
+// RETRIES_EXHAUSTED (Timeout/5xx/429 - BRIEFING_MAX_RETRIES ist 0, also genau EIN
+// Versuch). NICHT bei CIRCUIT_OPEN (der Breaker wirft vor dem Request - dort stimmt die
+// alte Annahme "nichts verbraucht") und NICHT bei nicht-transienten Fehlern (4xx/Auth:
+// der Anbieter weist ohne Generierung ab; eine Fehlkonfiguration wuerde sonst still
+// Budget abziehen, bis Outbound einfriert). Nebeneffekt im Namen (N7).
+function bookAbortedAttempt({ err, tenantId, promptChars }) {
+  if (!(err instanceof LlmUnavailableError) || err.reason !== LLM_UNAVAILABLE_REASON.RETRIES_EXHAUSTED)
+    return;
+  const usage = estimatedAbortUsage(promptChars);
+  bookEstimatedTokenUsage({ tenantId, usage, model: config.llm.briefingModel });
+  console.warn(
+    `[precall-briefing] geschaetzte Kosten gebucht (grund=${err.reason}, ` +
+      `in~${usage.input_tokens}, out~${usage.output_tokens})`,
+  );
+}
+
 // Haupteinstieg (P8): {objective, ownerNotes, constraints, to, tenantId} -> {context,
 // mandate} | null. null ist der Bestandspfad (assistantContextSection rendert dann
 // weiterhin ""). Der Aufrufer (src/routes/api-calls.js) ruft dies NUR, wenn der Owner
 // selbst keinen Kontext mitgeschickt hat - der Owner gewinnt immer.
 export async function fetchPrecallBriefing({ objective, ownerNotes, constraints, to, tenantId }) {
   if (!briefingActive()) return null;
+  const system = briefingSystem(agentToolNames());
+  const userText = ownerMessage({ objective, ownerNotes, constraints, to });
   let resp;
   try {
     resp = await briefingLlm.complete({
       model: config.llm.briefingModel,
       max_tokens: BRIEFING_MAX_TOKENS,
-      system: briefingSystem(agentToolNames()),
-      messages: [{ role: "user", content: ownerMessage({ objective, ownerNotes, constraints, to }) }],
+      system,
+      messages: [{ role: "user", content: userText }],
       tools: [briefingTool],
       tool_choice: { type: "tool", name: BRIEFING_TOOL_NAME },
     });
   } catch (err) {
-    // Fail-Soft: Timeout, Breaker-open, Non-2xx - vor jeder Antwort gescheitert, also
-    // NICHTS verbraucht. place_call laeuft ohne Kontext weiter (Bestandspfad).
+    // Fail-Soft fuer den Aufrufer, ABER nicht kostenlos: AL-P9 bucht eine pessimistische
+    // Schaetzung, sobald der Versuch nachweislich raus war (Timeout/erschoepfte Retries).
+    // Die frueher hier stehende Annahme "vor jeder Antwort gescheitert, also NICHTS
+    // verbraucht" gilt NUR fuer Breaker-open - beim client-seitigen Timeout
+    // (config.llm.briefingTimeoutMs) generiert und berechnet Anthropic trotzdem.
+    // place_call laeuft weiter ohne Kontext (Bestandspfad).
+    bookAbortedAttempt({ err, tenantId, promptChars: system.length + userText.length });
     console.warn(`[precall-briefing] uebersprungen: ${err?.message || String(err)}`);
     return null;
   }
-  // Kostenbuchung VOR dem Parsen, ausserhalb des try/catch oben: die Token sind
-  // verbraucht, egal ob die Antwort brauchbar ist (Regel 1 - sonst ein Loch im
-  // Budget-Gate). callId: null, es gibt zu diesem Zeitpunkt noch keinen store.createCall.
   bookTokenUsage({ tenantId, callId: null, usage: resp.usage, model: config.llm.briefingModel });
   return sanitizedBriefing(briefingInput(resp));
 }
