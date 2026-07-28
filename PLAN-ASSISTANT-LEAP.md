@@ -619,16 +619,17 @@ Wegwerf-Assistant loeschen.
 Konfiguration, null Produktivcode, und die Wartezeit sitzt vor **jedem** Turn.
 
 **Was konkret:**
-- **20-Minuten-Vorpruefung, bevor eine Zeile geaendert wird:** ein GET auf das Live-Assistant-Objekt
-  zeigt, wo Telnyx `start_speaking_plan` einhaengt. Liegt es unter `transcription`, kollidiert das
-  mit `PRESERVED_SAFETY_FIELDS` (`scripts/telnyx-assistant-provision.mjs:98-103`), dessen Semantik
-  lautet "vorher == nachher ist der Erfolgsbeweis". Dann muss `transcription` **vorher** von
-  `PRESERVED_SAFETY_FIELDS` nach `APPLIED_FIELDS_TO_VERIFY` wandern (Guard-**Wechsel**, kein
-  Guard-Verlust) — sonst feuert `fieldsLostOnUpdate` bei jedem Lauf falsch-positiv.
+- **Vorpruefung ERLEDIGT (AL-P3, GET auf das Live-Assistant-Objekt, 2026-07-28):** das Feld haengt
+  unter `interruption_settings.start_speaking_plan` (live `null` — B3 bestaetigt), NICHT unter
+  `transcription`. Der befuerchtete Guard-Wechsel `transcription`
+  `PRESERVED_SAFETY_FIELDS` -> `APPLIED_FIELDS_TO_VERIFY` entfaellt damit ersatzlos: diese Phase
+  sendet `transcription` nicht. Die beiden Endpointing-Sekunden liegen eine Ebene TIEFER, unter
+  `start_speaking_plan.transcription_endpointing_plan` (dort auch `on_number_seconds`).
 - `buildAssistantConfig` (`scripts/telnyx-assistant-provision.mjs:175`): `start_speaking_plan`
-  mit `wait_seconds` / `on_punctuation_seconds` / `on_no_punctuation_seconds` als **benannte
-  Modul-Konstanten** neben `INTERRUPT_PREDICTION_THRESHOLD` (keine Magic Numbers).
-- `interruption_settings` bleibt unangetastet.
+  mit `wait_seconds` / `on_punctuation_seconds` / `on_no_punctuation_seconds` (unter
+  `transcription_endpointing_plan`) als **benannte Modul-Konstanten** neben
+  `INTERRUPT_PREDICTION_THRESHOLD` (keine Magic Numbers).
+- die **Barge-in-Felder** `enable` / `interrupt_prediction_threshold` bleiben unangetastet.
 
 **Abnahme:**
 1. Der in Phase 1 gemessene Rest-Anteil (`end_user_perceived_latency_ms` minus unser `latencyMs`)

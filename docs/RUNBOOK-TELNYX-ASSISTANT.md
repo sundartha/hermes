@@ -116,9 +116,9 @@ Z. 6-12, dieselbe Ehrlichkeits-Konvention):
   Sub-Schema (Append-Verhalten der Custom-LLM-URL).
 - Voice-Slot-Casing `ElevenLabs` vs. `elevenlabs` (dieser Lauf setzt
   `ElevenLabs`, spec-autoritativ — beim Live-Lauf abgleichen).
-- `interruption_settings.start_speaking_plan.wait_seconds`-Feintuning ist
-  bewusst **nicht** Teil dieser Phase (keine neue Env-Var, kein Tuning-Knopf
-  in P7) — Telnyx-Default bleibt stehen, Feintuning ist P10/Owner-Sache.
+- `start_speaking_plan` ist seit **AL-P3 erledigt** und nicht mehr offen: der
+  Schema-Slot ist per GET auf das Live-Objekt bestätigt (siehe Abschnitt 9).
+  Weiterhin **keine** Env-Var — die Werte sind Modul-Konstanten.
 - Ob der Update-POST das Assistant-Objekt feldweise mergt oder als Ganzes
   ersetzt (relevant für den Teil-Update von `telephony_settings.
   user_idle_reply_secs`, s. Abschnitt 3), ist ebenfalls live unbestätigt —
@@ -164,3 +164,39 @@ Cutover-Reihenfolge:
 4. Die ausgegebene `assistant_id` in `TELNYX_ASSISTANT_ID` übernehmen (Abschnitt 4).
 5. Live-Testanruf (P11).
 6. Rollback = `TELNYX_AI_ASSISTANT_ENABLED=false` (sofortiger 404, Budget-Engine bleibt Live-Default).
+
+## 9. Endpointing (`start_speaking_plan`) — AL-P3
+
+Live per GET verifizierte Form (2026-07-28), kein Rateschluss:
+
+    interruption_settings.start_speaking_plan.wait_seconds
+    interruption_settings.start_speaking_plan.transcription_endpointing_plan.on_punctuation_seconds
+    interruption_settings.start_speaking_plan.transcription_endpointing_plan.on_no_punctuation_seconds
+    interruption_settings.start_speaking_plan.transcription_endpointing_plan.on_number_seconds
+
+Vor AL-P3 stand das Feld auf `null` — Telnyx entschied mit unbekannten internen
+Defaults, und diese Wartezeit sitzt vor **jedem** Turn.
+
+Gesetzte Werte und der Grund je Wert: siehe die Modul-Konstanten in
+`scripts/telnyx-assistant-provision.mjs` (`START_SPEAKING_WAIT_SECONDS`,
+`ENDPOINTING_ON_*`). Anker ist Telnyx' eigenes „Order collection"-Preset;
+abgewichen wird an genau einem Knopf (`on_no_punctuation_seconds`).
+
+**Reihenfolge der Abnahme — nicht vertauschbar:**
+1. Basislinie **vor** dem Provisioning: `start_speaking_plan_extra_wait_duration_ms`-Median
+   über >= 5 Anrufe (`node scripts/telnyx-call-latency.mjs --call <call_id>`).
+   Ohne sie ist „sinkt um >= 200 ms" nicht entscheidbar.
+2. Provisioner laufen lassen. Meldet er
+   `K1/K2-Verifikation fehlgeschlagen: … start_speaking_wait_seconds …`,
+   hat Telnyx das Feld still verworfen — Schema-Slot erneut per GET prüfen,
+   nicht raten.
+3. Nachher-Messung: Rest-Anteil, `chars`-Median, `turns/Anruf`, `Tokens/Anruf`.
+
+**Abbruch/Zurückdrehen:** `turns/Anruf` +15 % oder sinkender `chars`-Median
+(= abgeschnittene Anrufer) -> Werte zurückdrehen. Höchstens **zwei**
+Parameter-Runden, danach Phase beenden statt weiter tunen.
+
+**Env-Falle beim Provisioner-Lauf:** `TELNYX_ASSISTANT_ID` **und**
+`TELNYX_ELEVENLABS_MODEL` müssen explizit gesetzt sein. Ohne ID entsteht ein
+neuer Assistant, ohne Voice-Model wird die Live-Stimme still umgestellt —
+das Skript schreibt die ganze Config aus der lokalen `.env`.

@@ -38,7 +38,10 @@ test("buildAssistantConfig: reales Custom-LLM-Schema (base_url/model/llm_api_key
 
 test("buildAssistantConfig: base_url + SHIM_ROUTE-Suffix == SHIM_ROUTE (Drift-Test-Invariante)", () => {
   const cfg = buildAssistantConfig(ARGS);
-  assert.equal(cfg.external_llm.base_url + "/chat/completions", "https://hermes.example" + SHIM_ROUTE);
+  assert.equal(
+    cfg.external_llm.base_url + "/chat/completions",
+    "https://hermes.example" + SHIM_ROUTE,
+  );
 });
 
 test("buildAssistantConfig: Ela-Voice-Referenz aus voiceModel + voiceId, apiKeyRef durchgereicht", () => {
@@ -71,7 +74,11 @@ test("buildAssistantConfig: Barge-in (interruption_settings) ist an", () => {
 // Sprach-Argument; ein "sprachunabhaengig"-Test waere vakuum, deshalb nur dieser Verweis.
 test("K1: interruption_settings.enable bleibt true UND interrupt_prediction_threshold=0.4", () => {
   const cfg = buildAssistantConfig(ARGS);
-  assert.equal(cfg.interruption_settings.enable, true, "Barge-in ist Launch-Pflicht, darf nie aus sein");
+  assert.equal(
+    cfg.interruption_settings.enable,
+    true,
+    "Barge-in ist Launch-Pflicht, darf nie aus sein",
+  );
   assert.equal(cfg.interruption_settings.interrupt_prediction_threshold, 0.4);
 });
 
@@ -124,6 +131,39 @@ test("missingRequired: genau ein Pflichtwert fehlt -> dessen Name in der Liste",
     ["TELNYX_ELEVENLABS_VOICE_ID", "voice_xyz"],
   ];
   assert.deepEqual(missingRequired(required), ["PUBLIC_URL"]);
+});
+
+// AL-P3: nagelt Verschachtelung UND Werte fest - ein flaches Objekt haette Telnyx
+// stillschweigend ignoriert (undokumentiertes Feld, kein Fehler-Status beim Drop).
+test("AL-P3: start_speaking_plan haengt unter interruption_settings, Endpointing eine Ebene tiefer", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.deepEqual(cfg.interruption_settings.start_speaking_plan, {
+    wait_seconds: 0.4,
+    transcription_endpointing_plan: {
+      on_punctuation_seconds: 0.1,
+      on_no_punctuation_seconds: 0.8,
+      on_number_seconds: 0.5,
+    },
+  });
+});
+
+// AL-P3: Regressionsschutz fuer "Barge-in bleibt unangetastet" - kein Feld verloren,
+// keins dazuerfunden, wenn start_speaking_plan als Schwesterfeld dazukommt.
+test("AL-P3: interruption_settings traegt genau enable, interrupt_prediction_threshold, start_speaking_plan", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.deepEqual(Object.keys(cfg.interruption_settings).sort(), [
+    "enable",
+    "interrupt_prediction_threshold",
+    "start_speaking_plan",
+  ]);
+});
+
+// AL-P3: verankert die Vorpruefungs-Entscheidung GEGEN den Guard-Umzug (PLAN-ASSISTANT-LEAP.md
+// Phase 3) - sobald jemand transcription sendet, wird fieldsLostOnUpdate falsch-positiv, und
+// dieser Test schlaegt vorher an.
+test("AL-P3: transcription wird NICHT gesendet (PRESERVED_SAFETY_FIELDS.transcription bleibt gueltig)", () => {
+  const cfg = buildAssistantConfig(ARGS);
+  assert.equal("transcription" in cfg, false);
 });
 
 // afix-p1 (T-neu 12, BUGFIX-Regression): der Update-Request ist POST, NIE PUT - ein PUT
