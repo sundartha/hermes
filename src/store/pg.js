@@ -806,7 +806,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -853,6 +853,11 @@ async function hydrateTenantInto(client, state, tenantId) {
       // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
       country: r.country ?? null,
       language: r.language ?? null,
+      // P4: Feld nur bei vorhandenem Wert (NULL -> abwesend). Haelt den Round-Trip
+      // jeder Bestands-Nummer form-identisch und trennt "nicht gelernt" von 0.
+      ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
+        ? {}
+        : { monthlyCostCents: r.monthly_cost_cents }),
     })),
   );
   state.provisioningJobs.push(
@@ -1529,13 +1534,14 @@ async function flushNumbers(client, tenantId, numbers) {
     rows: numbers,
     insertRow: (n) =>
       client.query(
-        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (id) DO UPDATE SET
            e164=EXCLUDED.e164, provider=EXCLUDED.provider,
            status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
            payment_intent_id=EXCLUDED.payment_intent_id,
-           country=EXCLUDED.country, language=EXCLUDED.language`,
+           country=EXCLUDED.country, language=EXCLUDED.language,
+           monthly_cost_cents=EXCLUDED.monthly_cost_cents`,
         [
           n.id,
           tenantId,
@@ -1546,6 +1552,7 @@ async function flushNumbers(client, tenantId, numbers) {
           n.paymentIntentId ?? null,
           n.country ?? null,
           n.language ?? null,
+          n.monthlyCostCents ?? null,
         ],
       ),
   });

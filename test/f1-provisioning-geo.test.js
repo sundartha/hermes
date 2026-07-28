@@ -22,7 +22,10 @@ import {
   setTenantStripe,
 } from "../src/store/state-ops.js";
 import {
+  CENTS_PER_EUR,
+  MICRO_CENTS_PER_CENT,
   NUMBER_STATUS,
+  PROVIDER_RATE_SCALE,
   PROVISION_NUMBER_JOB,
   PROVISIONING_JOB_STATUS,
   USAGE_EVENT_KIND,
@@ -190,24 +193,6 @@ test("PAY-17: holdAmountForCountry liefert fuer US denselben Betrag wie fuer DE 
     holdAmountForCountry("US", SENTINEL_HOLD_B),
     SENTINEL_HOLD_B,
     "US traegt keinen eigenen Tarif - der Wert stammt zu 100 % vom Aufrufer-Default",
-  );
-});
-
-// GAP-11 (b), SOLL/rot: fuer jedes AKTIV bespielte Kauf-Land ist ein EXPLIZITER
-// Laenderpreis zu pflegen. Heute faellt jedes Land auf den globalen Default zurueck -
-// weicht der reale Telnyx-Preis ab, driftet der Hold unbemerkt vom Ist (R3). Die
-// Hold==Capture==Ledger-Haelfte derselben ID steht als gruener Test am Dateiende.
-test("GAP-11 (SOLL, rot): jedes bespielte Kauf-Land traegt einen EXPLIZITEN holdAmountCents", () => {
-  const ohneEigenenPreis = ACTIVE_PURCHASE_COUNTRIES.filter(
-    (c) =>
-      holdAmountForCountry(c, SENTINEL_HOLD_A) === SENTINEL_HOLD_A &&
-      holdAmountForCountry(c, SENTINEL_HOLD_B) === SENTINEL_HOLD_B,
-  );
-  assert.deepEqual(
-    ohneEigenenPreis,
-    [],
-    "diese Kauf-Laender fallen auf den globalen Default zurueck, statt einen bestaetigten " +
-      "Laenderpreis zu tragen - der Hold kann dort lautlos vom realen Provider-Preis abweichen",
   );
 });
 
@@ -392,4 +377,98 @@ test("GAP-11: Hold, Capture und der number_month-Beleg tragen denselben Betrag (
   assert.deepEqual(billing.captureAmounts, [erwartet], "eingezogen wurde derselbe Betrag");
   assert.equal(belege.length, 1, "genau ein number_month-Beleg");
   assert.equal(belege[0].costCents, erwartet, "und das Ledger bucht denselben Betrag");
+});
+
+// ---- GAP-11 (b, neu gefasst): der Hold traegt den LIVE-Preis der Provider-Antwort ----
+// (Owner-Entscheidung 2026-07-27: nichts Hartkodiertes - der Preis wird beim Provider
+// angefragt. Die Laender-Tabelle bleibt die Ausnahme, der Live-Preis schlaegt sie.)
+
+// Ein Einmalpreis von genau EINER Waehrungseinheit (z.B. 1,00 USD) in der Einheit des
+// Ports: GANZZAHL Mikro-Cent der PROVIDER-Waehrung.
+const ONE_CURRENCY_UNIT_MICRO_CENTS = CENTS_PER_EUR * MICRO_CENTS_PER_CENT;
+
+// Erwarteter Bucket-Betrag, UNABHAENGIG von der Produktionsfunktion hergeleitet (Betrag
+// mal Kurs, aufgerundet auf ganze Bucket-Cent) - sonst pruefte der Test die
+// Implementierung gegen sich selbst.
+function erwarteterBucketBetrag(providerMicroCents) {
+  return Math.ceil(
+    (providerMicroCents * config.billing.providerToBucketRateMicro) /
+      (MICRO_CENTS_PER_CENT * PROVIDER_RATE_SCALE),
+  );
+}
+
+// Provider-Preis, wie ihn der Telnyx-Adapter aus cost_information baut. Abweichungen
+// (fremde Waehrung, Preis 0) kommen als overrides.
+function providerPrice(overrides = {}) {
+  return {
+    upfrontMicroCents: ONE_CURRENCY_UNIT_MICRO_CENTS,
+    monthlyMicroCents: ONE_CURRENCY_UNIT_MICRO_CENTS,
+    currency: config.billing.providerCurrency,
+    ...overrides,
+  };
+}
+
+// Build-Operate (P13): provisioniert EINE DE-Nummer im Geld-Pfad, deren Such-Antwort
+// den uebergebenen Provider-Preis traegt (price=null -> Antwort ohne Preis, Bestandsform).
+async function provisionWithProviderPrice(price) {
+  const { s, numberId } = seedRequested("DE");
+  setTenantStripe(s, TENANT_ID, { customerId: "cus_p4", paymentMethodId: "pm_p4" });
+  const queue = makeMemoryQueue();
+  const prov = fakeProvisioner({
+    async searchNumbers() {
+      const available = { e164: "+4915799990001" };
+      if (price) available.price = price;
+      return [available];
+    },
+  });
+  const billing = fakeSetupFeeBilling();
+  enqueueProvision(queue, s, numberId);
+
+  await drainWithGeo(queue, s, { provisioner: prov, billing }, DEFAULT_HOLD);
+
+  return { billing, number: findNumber(s, numberId) };
+}
+
+test("GAP-11: der Hold traegt den Preis aus der Provider-Antwort, nicht die Pauschale", async () => {
+  const erwartet = erwarteterBucketBetrag(ONE_CURRENCY_UNIT_MICRO_CENTS);
+  assert.notEqual(erwartet, DEFAULT_HOLD, "Vorbedingung: Live-Preis != Pauschale (sonst prueft der Test nichts)");
+
+  const { billing, number } = await provisionWithProviderPrice(providerPrice());
+
+  assert.equal(number.status, NUMBER_STATUS.ACTIVE, "Vorbedingung: die Nummer wurde aktiviert");
+  assert.deepEqual(billing.holdAmounts, [erwartet], "gehalten wurde der angefragte Provider-Preis");
+  assert.deepEqual(billing.captureAmounts, [erwartet], "eingezogen wurde derselbe Betrag (R3)");
+});
+
+test("Fallback: Antwort ohne Preis -> Pauschale (Bestandsverhalten)", async () => {
+  const { billing, number } = await provisionWithProviderPrice(null);
+
+  assert.equal(number.status, NUMBER_STATUS.ACTIVE);
+  assert.deepEqual(billing.holdAmounts, [DEFAULT_HOLD], "ohne cost_information gilt die Pauschale");
+  assert.ok(!("monthlyCostCents" in number), "kein Preis gelernt -> Feld bleibt ABWESEND, nicht 0");
+});
+
+test("Fallback: fremde Waehrung im Provider-Preis -> Pauschale, NIE umgerechnet", async () => {
+  // Per Konstruktion eine ANDERE Waehrung als die konfigurierte (kein Literal, das eine
+  // Env-Aenderung stillschweigend gueltig machen koennte).
+  const fremd = `${config.billing.providerCurrency}X`;
+  const { billing } = await provisionWithProviderPrice(providerPrice({ currency: fremd }));
+
+  assert.deepEqual(billing.holdAmounts, [DEFAULT_HOLD], "fremde Waehrung wird verworfen, nicht umgerechnet");
+});
+
+test("Fallback: Provider-Preis 0 -> Pauschale (ein Hold ueber 0 ist kein Hold)", async () => {
+  const { billing } = await provisionWithProviderPrice(providerPrice({ upfrontMicroCents: 0 }));
+
+  assert.deepEqual(billing.holdAmounts, [DEFAULT_HOLD], "0 waere ein von Stripe abgelehnter Hold");
+});
+
+test("monthlyCostCents wird am aktivierten Nummern-Datensatz persistiert (Uebergabe an P5)", async () => {
+  const { number } = await provisionWithProviderPrice(providerPrice());
+
+  assert.equal(
+    number.monthlyCostCents,
+    erwarteterBucketBetrag(ONE_CURRENCY_UNIT_MICRO_CENTS),
+    "die Monatsmiete aus derselben Antwort steht am Datensatz",
+  );
 });

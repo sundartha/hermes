@@ -13,7 +13,7 @@
 // nur eine bereits angefragte Nummer durchgereicht.
 //
 // Payment (P6b1, optional ueber deps.billing): ist ein Billing-Client injiziert,
-// wird VOR dem ersten Provider-Call Geld reserviert (placeHold) und NACH dem Order -
+// wird VOR dem Kauf Geld reserviert (placeHold) und NACH dem Order -
 // direkt vor der Aktivierung - geschlossen (settleSetupFeeHold: Einzug ODER Storno,
 // GAP-05). Schlaegt etwas nach dem Hold fehl, gibt cancelHold die Reservierung wieder
 // frei. 'billing' ist eine Dependency (kein Datum) -> sie reist mit 'provisioner' im
@@ -24,16 +24,43 @@
 // per numberSetupFeeExempt befreiten Tenant - eine Karte OHNE gueltigen Hold darf nie
 // eine Nummer bekommen. Die Befreiung wirkt nur noch auf die PREIS-Achse: statt
 // captureHold laeuft cancelHold (settleSetupFeeHold).
+//
+// REIHENFOLGE (P4/GAP-11): (1) Karten-Gate, (2) Zustands-Schloss, (3) read-only
+// Preis-Suche, (4) Hold in Hoehe des Provider-Preises, (5) Kauf, (6) Abschluss. Die
+// Suche steht VOR dem Hold, weil der Einmalpreis erst in der Provider-Antwort steht -
+// sie reserviert nichts und kauft nichts. Die geld-tragende Invariante ist unveraendert
+// "kein orderNumber ohne erfolgreichen Hold", und das Karten-Gate sitzt jetzt sogar
+// FRUEHER als zuvor (vor jedem Provider-Kontakt).
+//
+// R4-PRAEZISIERUNG (GAP-11) - sie steht NICHT im Ermessen dieser Implementierung,
+// sondern folgt der Owner-Entscheidung vom 2026-07-28, protokolliert in der Phasen-
+// Spezifikation der Gates-Fix-Kette (Abschnitt P4, Nachtrag zur Reihenfolgen-Frage):
+// Die Einrichtungsgebuehr, die dieser Hold reserviert, ist per Konfiguration
+// abgeschaltet - der Kunde zahlt sein Abo und sonst nichts; die Nummer ist unsere
+// Kosten, gedeckt vom Abo. searchNumbers ist eine reine Preisabfrage: kostenlos,
+// reserviert nichts, kauft nichts. Die geld-tragende Zusage lautet deshalb praezise
+// "kein KAUF ohne reserviertes Geld" (statt: kein Kontakt zum Provider) - orderNumber,
+// der einzige geldbewegende Schritt, liegt weiterhin strikt HINTER dem erfolgreichen
+// Hold. AKZEPTIERTES RESTRISIKO: ein Tenant mit hinterlegter, aber am Hold abgelehnter
+// Karte loest je manuellem Provisionierungs-Versuch (kein Auto-Retry) einen
+// zusaetzlichen read-only Suchaufruf beim Provider aus, BEVOR der Hold scheitert. Es
+// wird dabei nie Geld bewegt und keine Nummer gekauft - das Restrisiko ist
+// Provider-Traffic, kein Geldverlust.
 import {
   beginProvisioning,
   beginCapturing,
   activateNumber,
+  attachNumberPaymentIntent,
   failNumber,
   releaseNumber,
   findNumber,
   tenantStripe,
   tenantSubscription,
 } from "./store/state-ops.js";
+import {
+  holdAmountForProviderPrice,
+  monthlyCostCentsForProviderPrice,
+} from "./telephony/provisioning-geo.js";
 
 // R5 (Phase P7): statt limit:1 mehrere Kandidaten holen und den ersten verfuegbaren
 // waehlen. Eine einzelne Treffer-Anfrage scheitert haeufiger an einer zwischenzeitlich
@@ -44,8 +71,9 @@ const PROVISION_SEARCH_LIMIT = 10;
 
 // Orchestriert requested -> provisioning -> (search + order[+routing]) -> active,
 // mit optionalem Hold-vor-Order + Capture-vor-Active (deps.billing). Fehlerpfade:
-// search/order-Fehler -> failed (kein Kauf) + Hold-Freigabe; capture-Fehler (Payment-
-// Pfad) nach dem Kauf -> Provider-Release + failed + Hold-Freigabe. Liefert die aktivierte Nummer.
+// search-Fehler -> failed (kein Kauf, noch kein Hold gestellt); order-Fehler -> failed
+// (kein Kauf) + Hold-Freigabe; capture-Fehler (Payment-Pfad) nach dem Kauf ->
+// Provider-Release + failed + Hold-Freigabe. Liefert die aktivierte Nummer.
 export async function provisionNumber(
   s,
   deps,
@@ -55,21 +83,40 @@ export async function provisionNumber(
   const number = findNumber(s, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
-  // Hold VOR jedem Provider-Call (Money-Safety R4, GAP-05: der Hold ist der GATE - er wird
-  // IMMER gestellt, auch fuer einen per Gutschein befreiten Tenant). Schlaegt der Hold fehl,
-  // bleibt die Nummer 'requested' -> failNumber, KEIN Provider-Call, KEIN cancelHold (es
-  // wurde nichts gehalten).
+  // Zahlungsfaehigkeit als ERSTES (fail-closed, unveraendert scharf): ohne hinterlegte
+  // Karte gibt es weder Preis-Suche noch Kauf. Reiner Zustands-Check, kein Provider-Call.
+  const card = billing ? requireTenantCard(s, numberId, number.tenantId) : null;
+
+  // Zustands-Schloss #2 frueh setzen (requested -> provisioning), damit die zusaetzliche
+  // Preis-Suche das Doppelkauf-Fenster NICHT verbreitert.
+  beginProvisioning(s, numberId);
+
+  // Preis-Suche VOR dem Hold (GAP-11): der Einmalpreis steht in der Provider-Antwort,
+  // ein Hold in seiner Hoehe ist ohne sie unmoeglich. Read-only: reserviert nichts,
+  // kauft nichts. Die geld-tragende Invariante bleibt "kein orderNumber ohne Hold".
+  const candidate = await findPurchasableNumber(s, numberId, {
+    provisioner,
+    countryCode,
+    type,
+  });
+
+  // Hold in Hoehe des Provider-Preises; ohne verwertbaren Preis die hereingereichte
+  // Pauschale (holdAmountForCountry-Ergebnis des Aufrufers) - NIE 0, NIE geraten.
+  const effectiveHoldCents = holdAmountForProviderPrice(candidate.price, holdAmountCents);
+
+  // GAP-05: der Hold ist der GATE - er wird IMMER gestellt, auch fuer einen per Gutschein
+  // befreiten Tenant. Schlaegt er fehl -> failNumber, KEIN Kauf, KEIN cancelHold (es wurde
+  // nichts gehalten).
   let paymentIntentId = null;
   let setupFeeExempt = false;
   if (billing) {
     ({ paymentIntentId, exempt: setupFeeExempt } = await placeSetupFeeHold(s, numberId, {
       tenantId: number.tenantId,
       billing,
-      holdAmountCents,
+      card,
+      holdAmountCents: effectiveHoldCents,
       currency,
     }));
-  } else {
-    beginProvisioning(s, numberId); // payment-off: 2-arg, byte-identisch
   }
 
   // Idempotency-Key an die number-id gebunden: ein Retry desselben Provisioning
@@ -78,16 +125,6 @@ export async function provisionNumber(
 
   let ordered;
   try {
-    const candidates = await provisioner.searchNumbers({
-      countryCode,
-      type,
-      limit: PROVISION_SEARCH_LIMIT,
-    });
-    const candidate = candidates[0];
-    // R5: 0 Treffer -> kontrollierter Fehler (NICHT Crash). Faengt im try/catch ->
-    // failNumber + Hold-Freigabe, kein Provider-Kauf (kein bezahlter Orphan).
-    if (!candidate)
-      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
     ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
     failNumber(s, numberId); // provisioning -> failed (kein Kauf zustande gekommen)
@@ -103,7 +140,7 @@ export async function provisionNumber(
       await settleSetupFeeHold(s, numberId, {
         billing,
         paymentIntentId,
-        holdAmountCents,
+        holdAmountCents: effectiveHoldCents, // Hold == Capture (R3) bleibt EINE Zahl
         exempt: setupFeeExempt,
       });
     } catch (capErr) {
@@ -121,7 +158,42 @@ export async function provisionNumber(
   return activateNumber(s, numberId, {
     e164: ordered.e164,
     providerNumberId: ordered.providerNumberId,
+    // Monatsmiete aus derselben Provider-Antwort -> P5 bucht genau diesen Wert.
+    monthlyCostCents: monthlyCostCentsForProviderPrice(candidate.price),
   });
+}
+
+// Read-only Preis-/Verfuegbarkeitssuche: liefert den ersten Kandidaten (mit seinem
+// Provider-Preis, falls die Antwort ihn traegt). R5: 0 Treffer -> kontrollierter Fehler
+// (NICHT Crash). Jeder Fehlschlag setzt die Nummer auf 'failed'; ein Hold ist an dieser
+// Stelle noch nicht gestellt, also gibt es auch nichts freizugeben.
+async function findPurchasableNumber(s, numberId, { provisioner, countryCode, type }) {
+  try {
+    const candidates = await provisioner.searchNumbers({
+      countryCode,
+      type,
+      limit: PROVISION_SEARCH_LIMIT,
+    });
+    const candidate = candidates[0];
+    if (!candidate)
+      throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
+    return candidate;
+  } catch (err) {
+    failNumber(s, numberId); // nichts gehalten -> nichts freizugeben
+    throw err;
+  }
+}
+
+// Fail-closed-Gate VOR jedem Provider-Call: ohne hinterlegte Karte kein Kauf und keine
+// Preis-Suche. EINE Stelle, die tenantStripe liest (G5); der Hold bekommt das Ergebnis
+// gereicht. Fehlermeldung woertlich wie bisher (Bestandstest pinnt sie).
+function requireTenantCard(s, numberId, tenantId) {
+  const card = tenantStripe(s, tenantId);
+  if (!card.customerId || !card.paymentMethodId) {
+    failNumber(s, numberId);
+    throw new Error(`provisionNumber: Tenant ${tenantId} hat kein hinterlegtes Zahlungsmittel`);
+  }
+  return card;
 }
 
 // Hold freigeben, falls einer gehalten wurde (Rollback). billing/paymentIntentId
@@ -142,17 +214,13 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
 // Die Befreiung wirkt nur noch auf die PREIS-Achse: sie entscheidet am Ende ueber Storno
 // statt Einzug (settleSetupFeeHold). Money-Safety (R4, fail-closed) bleibt unveraendert:
 // ohne hinterlegte Karte KEIN placeHold und KEIN Provider-Call - off_session-Hold braucht
-// customer + payment_method, auch im befreiten Pfad (ohne gueltige Karte lehnt Stripe den
-// Hold ab -> failNumber, also auch dort KEINE Nummer ohne Karte; zusaetzlich strukturell
-// abgesichert ueber payment_method_collection='always' im Checkout, stripe.js).
+// customer + payment_method, auch im befreiten Pfad; geprueft wird das beim Aufrufer
+// (requireTenantCard), der die Karte hier hereinreicht. Zusaetzlich strukturell
+// abgesichert ueber payment_method_collection='always' im Checkout (stripe.js).
 // Liefert { paymentIntentId, exempt } (EIN Rueckgabewert statt Output-Argument, F2).
-async function placeSetupFeeHold(s, numberId, { tenantId, billing, holdAmountCents, currency }) {
+async function placeSetupFeeHold(s, numberId, { tenantId, billing, card, holdAmountCents, currency }) {
   const exempt = tenantSubscription(s, tenantId).numberSetupFeeExempt;
-  const { customerId, paymentMethodId } = tenantStripe(s, tenantId);
-  if (!customerId || !paymentMethodId) {
-    failNumber(s, numberId);
-    throw new Error(`provisionNumber: Tenant ${tenantId} hat kein hinterlegtes Zahlungsmittel`);
-  }
+  const { customerId, paymentMethodId } = card;
   let paymentIntentId;
   try {
     const hold = await billing.placeHold({
@@ -168,7 +236,7 @@ async function placeSetupFeeHold(s, numberId, { tenantId, billing, holdAmountCen
     failNumber(s, numberId);
     throw holdErr;
   }
-  beginProvisioning(s, numberId, paymentIntentId);
+  attachNumberPaymentIntent(s, numberId, paymentIntentId);
   return { paymentIntentId, exempt };
 }
 

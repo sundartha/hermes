@@ -177,8 +177,20 @@
  */
 
 /**
+ * @typedef {Object} ProviderNumberPrice
+ *   Angebotspreis des Providers, bereits geparst: GANZZAHL Mikro-Cent in der
+ *   PROVIDER-Waehrung (keine Fliesskomma-Geldwerte ueber die Port-Grenze, G26).
+ *   Umrechnung in die Bucket-Waehrung passiert beim Aufrufer, nicht im Adapter.
+ * @property {number} upfrontMicroCents - Einmalpreis des Kaufs
+ * @property {number} monthlyMicroCents - Monatsmiete der Nummer
+ * @property {string} currency - ISO-4217, Grossschreibung
+ */
+
+/**
  * @typedef {Object} AvailableNumber
  * @property {string} e164 - verfuegbare Rufnummer (E.164)
+ * @property {ProviderNumberPrice} [price] - NUR wenn der Provider ihn vollstaendig und
+ *   parsebar liefert; fehlt er, gilt beim Aufrufer die Pauschale (GAP-11).
  */
 
 /**

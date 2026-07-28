@@ -22,12 +22,16 @@
 // Default vom Aufrufer = config.billing.numberSetupFeeCents = byte-identisch zum Bestand.
 // KONSERVATIV: ein abweichender Wert wird erst eingetragen, wenn der Live-Preis bestaetigt
 // ist (PROVISIONING_ENABLED bleibt false). Solange kein Wert gesetzt ist -> Default.
+// Seit P4/GAP-11 ist die Praezedenz: Provider-Preis aus der Such-Antwort -> Laender-Tabelle
+// -> config-Pauschale. Die Tabelle bleibt der Platz fuer eine bewusst gepflegte Ausnahme,
+// der LIVE-Preis schlaegt sie.
 //
 // DE byte-identisch (R-Dichtheit): fuer DE UND fuer jedes unbekannte/leere Land liefert
 // die Aufloesung den globalen config-Fallback (provisioningCountry/telnyxConnectionId) -
 // also exakt das frueher global verwendete Verhalten. So faerbt kein neues Land den
 // DE-Bestand ab und der Dry-Run (PROVISIONING_ENABLED=false) bleibt byte-identisch.
 import { config } from "../config.js";
+import { providerMicroCentsToBucketCents } from "../billing/cost-calibration.js";
 
 // Telnyx-Nummernart (filter[phone_number_type]) fuer JEDEN Kauf. "local" = geografische
 // Ortsnummer - das ist das Produkt, das Hermes verkauft, und es ist EINE Entscheidung,
@@ -92,4 +96,32 @@ export function holdAmountForCountry(country, defaultHoldCents) {
     throw new Error(`holdAmountCents fuer ${key} muss Integer-Cents sein`);
   }
   return entry.holdAmountCents;
+}
+
+// PROVIDER-PREIS (P4, GAP-11): der Preis aus der Telnyx-Antwort schlaegt die Tabelle
+// und die Pauschale. Umgerechnet ueber die EINE Kursquelle (P2,
+// PROVIDER_TO_BUCKET_RATE_MICRO) - ein USD-Betrag, der als EUR gebucht wird, ist ein
+// stiller Geldfehler. Fremde Waehrung wird VERWORFEN, nie umgerechnet (Praezedenz:
+// Kosten-Belege in adapters/telnyx/voice.js).
+function bucketCentsFromProviderPrice(price, providerMicroCents) {
+  if (!price) return null;
+  if (price.currency !== config.billing.providerCurrency) return null;
+  if (!Number.isInteger(providerMicroCents)) return null;
+  return providerMicroCentsToBucketCents(providerMicroCents, config.billing.providerToBucketRateMicro);
+}
+
+// Einmalpreis -> Hold-Betrag (Ganzzahl Cents der Bucket-Waehrung). Ohne verwertbaren
+// Preis, bei fremder Waehrung, bei Ueberlauf ODER bei einem Preis von 0 gilt der
+// Aufrufer-Default (= holdAmountForCountry-Ergebnis): ein Hold ueber 0 ist kein Hold,
+// Stripe lehnt ihn ab - der Kunde bekaeme keine Nummer. NIE geraten, NIE 0.
+export function holdAmountForProviderPrice(price, defaultHoldCents) {
+  const cents = bucketCentsFromProviderPrice(price, price?.upfrontMicroCents);
+  return cents !== null && cents > 0 ? cents : defaultHoldCents;
+}
+
+// Monatsmiete -> Betrag am Nummern-Datensatz (Ganzzahl Cents der Bucket-Waehrung),
+// oder null = "kein Preis gelernt". Anders als beim Hold bleibt eine ECHTE 0 gueltig
+// (eine kostenlose Nummer ist ein zulaessiger Ledger-Betrag, kein fehlender Wert).
+export function monthlyCostCentsForProviderPrice(price) {
+  return bucketCentsFromProviderPrice(price, price?.monthlyMicroCents);
 }

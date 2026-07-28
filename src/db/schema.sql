@@ -429,6 +429,11 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS payment_intent_id TEXT;
 -- Bruch, R7). Muster wie payment_intent_id (ALTER-only, nullable).
 ALTER TABLE number ADD COLUMN IF NOT EXISTS country  TEXT;
 ALTER TABLE number ADD COLUMN IF NOT EXISTS language TEXT;
+-- Monatsmiete der DID (P4/GAP-11) in GANZZAHL Cents der Bucket-Waehrung, beim Kauf aus
+-- der Provider-Antwort uebernommen und ueber den EINEN Kurs umgerechnet. Additiv
+-- NULLABLE: Bestands-Nummern und Kaeufe ohne cost_information -> NULL = "keine Miete
+-- gelernt" (P5 faellt dann auf seinen Fallback zurueck), ausdruecklich NICHT 0.
+ALTER TABLE number ADD COLUMN IF NOT EXISTS monthly_cost_cents INTEGER;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht

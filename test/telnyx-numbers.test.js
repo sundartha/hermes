@@ -13,7 +13,7 @@ process.env.TELNYX_API_KEY = API_KEY;
 const { telnyxNumberProvisioning: prov } =
   await import("../src/telephony/adapters/telnyx/numbers.js");
 const { numberProvisioning } = await import("../src/telephony/registry.js");
-const { PROVIDER } = await import("../src/store/defaults.js");
+const { PROVIDER, CENTS_PER_EUR, MICRO_CENTS_PER_CENT } = await import("../src/store/defaults.js");
 const { config } = await import("../src/config.js");
 
 // response: statisches Antwort-Objekt ODER ein per-URL-Responder (url, opts) => Antwort.
@@ -46,6 +46,68 @@ test("searchNumbers: GET available_phone_numbers mit country/voice-Filter -> e16
   assert.match(decodeURIComponent(calls[0].url), /filter\[country_code\]=DE/);
   assert.match(decodeURIComponent(calls[0].url), /filter\[features\]\[\]=voice/);
   assert.equal(calls[0].headers.Authorization, `Bearer ${API_KEY}`);
+});
+
+// ---- GAP-11 (P4): cost_information reist als geparster Preis mit ----
+
+// Ein Betrag von genau EINER Waehrungseinheit in Mikro-Cent - die Einheit, in der der
+// Port den Provider-Preis fuehrt. Aus den vorhandenen Konstanten zusammengesetzt statt
+// als nackte 10^8 (G25).
+const MICRO_CENTS_PER_CURRENCY_UNIT = CENTS_PER_EUR * MICRO_CENTS_PER_CENT;
+
+test("searchNumbers uebernimmt cost_information als geparsten Preis (GANZZAHL Mikro-Cent)", async () => {
+  stubFetch({
+    json: {
+      data: [
+        {
+          phone_number: "+4915112340001",
+          cost_information: { upfront_cost: "1.00", monthly_cost: "0.50", currency: "usd" },
+        },
+      ],
+    },
+  });
+  const res = await prov.searchNumbers({ countryCode: "DE" });
+  assert.deepEqual(res, [
+    {
+      e164: "+4915112340001",
+      price: {
+        upfrontMicroCents: MICRO_CENTS_PER_CURRENCY_UNIT,
+        monthlyMicroCents: MICRO_CENTS_PER_CURRENCY_UNIT / 2,
+        currency: "USD",
+      },
+    },
+  ]);
+});
+
+test("searchNumbers ohne cost_information -> Bestandsform { e164 } (kein null-Feld)", async () => {
+  stubFetch({
+    json: {
+      data: [
+        { phone_number: "+4915112340001", cost_information: null },
+        {
+          phone_number: "+4915112340002",
+          cost_information: { upfront_cost: "1.00", monthly_cost: "1.00", currency: "USD" },
+        },
+      ],
+    },
+  });
+  const res = await prov.searchNumbers({ countryCode: "DE" });
+  assert.deepEqual(res[0], { e164: "+4915112340001" }, "kein price-Feld, kein price:null");
+  assert.ok(res[1].price, "der Treffer MIT Preis bleibt davon unberuehrt");
+});
+
+test("searchNumbers verwirft einen unvollstaendigen/unparsbaren Preis ganz (nie Teil-Preis)", async () => {
+  const unvollstaendig = [
+    { upfront_cost: "1.00", monthly_cost: "0.50" }, // Waehrung fehlt
+    { upfront_cost: "1.00", currency: "USD" }, // monthly_cost fehlt
+    { upfront_cost: "gratis", monthly_cost: "0.50", currency: "USD" }, // nicht parsebar
+    { upfront_cost: "-1.00", monthly_cost: "0.50", currency: "USD" }, // negativ
+  ];
+  for (const cost_information of unvollstaendig) {
+    stubFetch({ json: { data: [{ phone_number: "+4915112340001", cost_information }] } });
+    const res = await prov.searchNumbers({ countryCode: "DE" });
+    assert.deepEqual(res, [{ e164: "+4915112340001" }], `Teil-Preis ${JSON.stringify(cost_information)}`);
+  }
 });
 
 // Routet POST /v2/number_orders -> Order-Sub-Resource (id ord_sub_1, vom Adapter ignoriert);

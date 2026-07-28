@@ -256,6 +256,24 @@ test("T-PA6-1 number: volle Lifecycle-Spalten round-trippen (Golden-Master)", as
   );
 });
 
+// P4/GAP-11: die beim Kauf gelernte Monatsmiete muss die Prozessgrenze ueberleben -
+// STORE_BACKEND=pg ist live, ohne Spalte verdampft der Wert in Produktion (P5 liest ihn).
+// Getrennt vom Golden-Master oben, weil dieser bewusst die Bestandsform OHNE das neue
+// Feld pinnt (NULL -> Feld abwesend).
+test("number: monthly_cost_cents round-trippt (Provider-Preis, P4)", async () => {
+  const { store, db } = await makePgTestStore();
+  const s = store.load();
+  ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
+  s.numbers.push(
+    makeNumberRow({ id: "num_b_cost", e164: "+49999000555", monthlyCostCents: 92 }),
+  );
+
+  await store.save();
+  const rs = (await reopen(db)).load();
+
+  assert.equal(rs.numbers.find((n) => n.id === "num_b_cost").monthlyCostCents, 92);
+});
+
 test("T-PA6-2 provisioning_job: Cross-Tenant own-Filter + volle Spalten round-trippen", async () => {
   const { store, db } = await makePgTestStore();
   const s = store.load();
