@@ -34,7 +34,7 @@ Diese Datei ist der `specFile` fuer `phase-impl-lean`. `planDoc` ist immer
 
 | Frage | Entscheidung |
 |---|---|
-| Such-Anbieter (Phase 10b) | **Exa**, Fast-Endpunkt. **Der Key wird zum BAUEN nicht gebraucht** — Adapter gegen Fixtures. `EXA_API_KEY` kommt in `.env.example` und `render.yaml` als leerer, dokumentierter Platzhalter; ohne Key ist der Adapter inaktiv (fail-closed). |
+| Such-Anbieter (Phase 10b) | **Brave Search** (`BRAVE_SEARCH_API_KEY`) — korrigiert am 28.07.: der Owner hat seinen frueheren Recherche-Agenten mit Brave betrieben, nicht mit Exa. Betriebserfahrung schlaegt Benchmark-Tabelle; Exa bleibt Ausweichkandidat hinter demselben Port. **Der Key wird zum BAUEN nicht gebraucht** — Adapter gegen Fixtures; leerer, dokumentierter Platzhalter in `.env.example` und `render.yaml`, ohne Key fail-closed inaktiv. |
 | Render-Env-Vars aendern | **Erlaubt, mit Protokoll** — jede Aenderung mit Zeitstempel, Variable, Alt-/Neuwert und Phase in `tasks/al-env-changes.md`. |
 | ABER: geldrelevante Flags | **Bleiben AUS.** `PRECALL_BRIEFING_ENABLED`, `RESEARCH_ENABLED`, `LOOKUP_ENABLED`, `THINKING_SIGNAL_ENABLED`: ihr Anschalten IST die Abnahme, und die hat der Owner auf "offen protokollieren" gesetzt. Erlaubt sind nur neue Variablen mit Default-aus und inerte Werte. |
 | Phasen mit Testanruf-Abnahme | **Code bauen, Flag AUS lassen, Abnahme offen protokollieren** in `tasks/al-testcall-checklist.md`. Nicht zurueckstellen. |
@@ -96,7 +96,7 @@ Spalte "autonom": ob die Phase ohne den Owner vollstaendig abnehmbar ist.
 | ID | Titel | Branch | Bahn | Blockiert durch | Autonom |
 |---|---|---|---|---|---|
 | AL-P1 | Latenz-Achse und Abbruch-Achse schliessen | `phase/al-p1-latenz-achse` | 0 | — | ja |
-| AL-P2 | SSE-Spike: konsumiert Telnyx inkrementell? | — | A | **OWNER** | **nein** |
+| AL-P2 | SSE-Spike: konsumiert Telnyx inkrementell? | `phase/al-p2-sse-spike` | A | Owner-Freigabe fuer eine Wegwerf-Connection | **evtl. ja** — s. `al-owner-notes.md` §4: der Spike braucht keinen Menschen, wenn Hermes eine eigene Ersatz-DID anruft, die abnimmt und schweigt |
 | AL-P3 | Endpointing konfigurieren | `phase/al-p3-endpointing` | B | — | Code ja, Wirkung nur live |
 | AL-P4 | Seiteneffekt-Werkzeuge brechen den Tool-Loop | `phase/al-p4-tool-loop` | A | AL-P1 | ja |
 | AL-P5 | Die Eroeffnung kuerzen | `phase/al-p5-eroeffnung` | A | AL-P4 | Code ja, **Abnahme = Testanruf** |

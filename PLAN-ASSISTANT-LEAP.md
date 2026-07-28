@@ -406,7 +406,8 @@ Rechtsgrundlage fuer Daten des Angerufenen; Dependency-Politik.
 > vor dem Waehlen UND im Gespraech, beides hinter EINEM Port `src/research/`.** Der Port hat
 > zwei Adapter-Plaetze, weil die beiden Faelle unterschiedliche Anforderungen haben:
 > **pre-call** = Gruendlichkeit (Anthropics serverseitiges `web_search` im bestehenden
-> `src/llm.js`-Seam); **in-call** = Geschwindigkeit (eigener Such-Adapter mit API-Key, z.B. Exa
+> `src/llm.js`-Seam); **in-call** = Geschwindigkeit (eigener Such-Adapter mit API-Key, **Brave
+> Search** — s. Phase 10b, Owner-Erfahrung schlaegt Benchmark-Tabelle; frueher stand hier Exa
 > Fast). Ein Anbieterwechsel bleibt eine Adapter-Datei.
 
 Begruendung fuer den zweiten Adapter statt "auch in-call ueber `web_search`": Anthropics
@@ -916,9 +917,14 @@ jeden langsamen Zug ertraeglich, den die Phasen 3-7 nicht wegbekommen haben. Set
   Modells im selben Antwort-Block wie der Werkzeugaufruf** — kein zusaetzlicher Roundtrip, kein
   zusaetzliches Token-Budget von Belang. Der Streaming-Pfad aus Phase 7 schickt diesen Text sofort
   raus, `agentTurn` arbeitet weiter, die Antwort folgt in denselben Stream. Der Prompt bekommt die
-  Regel, bei Werkzeugaufrufen einen kurzen Ueberbrueckungssatz voranzustellen; die Saetze selbst
-  kommen **aus dem Locale-Buendel** (`src/i18n/locales.js`), nicht aus Modell-Ermessen — sonst
-  driftet die Sprache und die ASCII-Transliterations-Regel fuer gesprochene DE-Strings bricht.
+  Regel, bei Werkzeugaufrufen einen kurzen Ueberbrueckungssatz voranzustellen. **Der Satz ist
+  KONTEXTABHAENGIG, kein Standardsatz** — Owner-Erfahrung aus einem frueher selbst betriebenen
+  Recherche-Agenten: gerade dass die Ueberbrueckung zum Gespraech passte statt immer gleich zu
+  lauten, liess sie natuerlich wirken. Auf Weg A ist das gratis, weil der Text die fuehrende
+  Ausgabe des Modells ist und damit ohnehin in der Gespraechssprache und im Kontext steht. Die
+  Saetze aus dem Locale-Buendel (`src/i18n/locales.js`) sind **nur** der Fallback fuer Weg B.
+  Fuer Weg A wird die Sprachbindung stattdessen ueber den bestehenden Prompt-Sprachvertrag
+  getragen und per Fixture geprueft (de/fr/en, DE ohne Umlaute).
 - **Weg B (Phase 2 ROT):** Der Fueller wird out-of-band gesprochen, ueber `voiceControl.speak`
   waehrend die Assistant-Session laeuft (`src/telephony/ports.js`, heute nur **vor**
   `ai_assistant_start` genutzt). Das ist derselbe Kanal, den die urspruengliche Phase 15 als
@@ -928,7 +934,23 @@ jeden langsamen Zug ertraeglich, den die Phasen 3-7 nicht wegbekommen haben. Set
   (Regel 2 — er kann die Offenlegung weder ersetzen noch ihr vorausgehen); er verlaengert weder
   die Max-Dauer- noch die Budget-Achse.
 
-**Beide Wege gemeinsam:**
+**Beide Wege gemeinsam — und der wichtigste Punkt zuerst:**
+
+> **Der Ueberbrueckungssatz wird IMMER zu Ende gesprochen.** Kommt das Werkzeug-Ergebnis
+> frueher, wartet die Ergebnis-Ausgabe auf `speak.ended` — sie unterbricht die Ueberbrueckung
+> nie. Das ist der einzige konkrete Defekt, den der Owner an seinem frueheren Recherche-Agenten
+> benannt hat: die Ueberbrueckung wurde abrupt abgeschnitten, sobald die Suche fertig war, und
+> genau das hat den Bruch hoerbar gemacht. Umsetzung: **ein Sprech-Auftrag zur Zeit**, der
+> naechste wird auf `speak.ended` in die Warteschlange gehaengt (das Ereignis wird bereits
+> verarbeitet, `src/telephony/adapters/telnyx/speak-events.js` und
+> `src/telnyx-call-control-ingest.js` in `onSpeakEnded`). Barge-in des Angerufenen bleibt davon
+> unberuehrt — der Mensch darf unterbrechen, wir uns selbst nicht.
+
+> **Der Agent kuendigt die Suche nie an.** Kein "die Suchanfrage hat ergeben", kein "ich habe
+> nachgeschaut". Er ueberbrueckt, und dann sagt er das Ergebnis, als wuesste er es. Ebenfalls
+> Owner-Erfahrung: genau so hat es sich natuerlich angefuehlt. Als Verbot in den Prompt, mit
+> Bench-Fixture.
+
 - **Schwelle statt Dauergeplapper:** das Signal feuert erst, wenn ein Zug die gemessene
   Normaldauer ueberschreitet (Startwert: `agentTurn`-Median aus Phase 1, also ~1,3 s), und
   **hoechstens einmal pro Zug**. Ein Agent, der vor jedem Satz "einen Moment" sagt, ist
@@ -945,8 +967,14 @@ jeden langsamen Zug ertraeglich, den die Phasen 3-7 nicht wegbekommen haben. Set
    Signal, danach die eigentliche Antwort. In der Aufnahme belegt, nicht behauptet.
 2. Ein Zug unter der Schwelle loest **kein** Signal aus (Regressionstest gegen Dauergeplapper).
 3. Waehrend eines laufenden Werkzeugaufrufs feuert **kein** Idle-Nachhaken.
-4. Der Fuellsatz stammt nachweislich aus dem Locale-Buendel — Sprach-Fixture fuer de/fr/en,
-   DE ohne Umlaute (bestehende Transliterations-Tests bleiben gruen).
+4. Sprach-Fixture fuer de/fr/en, DE ohne Umlaute (bestehende Transliterations-Tests bleiben
+   gruen). Weg B zusaetzlich: der Satz stammt nachweislich aus dem Locale-Buendel.
+6. **Kein Abschneiden** (das Owner-Kriterium): in einem Lauf, in dem das Werkzeug schneller
+   fertig ist als die Ueberbrueckung gesprochen, wird die Ueberbrueckung vollstaendig gesprochen
+   und die Antwort folgt danach. Belegt an der Aufnahme UND an der Ereignisfolge
+   (`speak.ended` vor dem zweiten Sprech-Auftrag), nicht nur am Gehoer.
+7. Der Agent sagt in keinem Bench-Szenario einen Satz, der die Suche ankuendigt oder als Quelle
+   benennt.
 5. Die maximale Stille pro Zug, gemessen an Aufnahmen vor/nach der Phase, sinkt messbar.
 
 **Aufwand:** 2 Tage (Weg A) bzw. 3,5 Tage (Weg B, weil der out-of-band-Kanal samt Riegeln dazu
@@ -1118,7 +1146,10 @@ Die drei Freigabe-Bedingungen aus A3 sind die Checkliste dieser Phase.
 
 **Was konkret:**
 - Zweiter Adapter unter `src/research/adapters/` fuer einen **latenzoptimierten** Such-Anbieter
-  mit API-Key (Kandidat: Exa Fast; austauschbar, das ist der Sinn des Ports). Neues Secret in
+  mit API-Key: **Brave Search**. Begruendung ist keine Benchmark-Tabelle, sondern Betriebs-
+  erfahrung des Owners — sein frueherer Telefonagent hat mit Brave recherchiert, "ging relativ
+  schnell" und fuehlte sich im Gespraech natuerlich an. Exa Fast bleibt der dokumentierte
+  Ausweichkandidat; austauschbar zu sein ist der Sinn des Ports. Neues Secret in
   `.env.example`, `render.yaml` und `src/config.js` (Namespace `research`).
 - Neues Werkzeug `look_up` in `toolDefs` (`src/claude.js`) — **mit Richtungs-Gate**: outbound-only,
   zweiter Riegel in `execTool` (`unknownTool` fuer Inbound), `agentToolNames()` zieht mit. Exakt
@@ -1703,7 +1734,7 @@ existiert; Riegel zusaetzlich in `execTool`; eigener Inbound-Test in der Abnahme
 |---|---|
 | **Eigener Streaming-Stack / `bridge.js`-Umbau** | ~200 ms Gewinn gegen mehrere Wochen Neubau; `bridge.js` ist fest auf OpenAI Realtime verdrahtet, kein `RealtimeBackend`-Port; Barge-in muesste von Grund auf neu und waere zunaechst schlechter. Migrationspfad in A1 dokumentiert. |
 | **OpenAI Realtime reaktivieren** | 0,30-0,50 EUR/min gegen 0,083-0,166 EUR/min Abo-Umsatz. Oekonomisch tot. |
-| **Externer Such-Anbieter (Exa/Tavily/Brave/Perplexity)** | Neue Dependency, neues Secret, neuer Ausfallpfad, **neuer Auftragsverarbeiter fuer Gespraechsinhalte** — fuer etwas, das Anthropic serverseitig im bestehenden Seam liefert. |
+| ~~Externer Such-Anbieter~~ | **GESTRICHEN (O8).** Der In-Call-Fall braucht ihn: Anthropics serverseitige Suche laeuft INNERHALB des Modell-Aufrufs, wir sehen ihren Beginn nicht und koennen die Wartezeit deshalb nicht mit dem Denk-Signal ueberbruecken. Anbieter: **Brave** (Owner-Betriebserfahrung). Die Kosten der Entscheidung — neues Secret, neuer Ausfallpfad, **zweiter Auftragsverarbeiter fuer Gespraechsinhalte** — bleiben bestehen und sind in A3 als bewusste Abweichung dokumentiert. Fuer den **pre-call**-Fall bleibt es bei Anthropic im bestehenden Seam. |
 | ~~`look_up` als In-Call-Werkzeug~~ | **GESTRICHEN am 2026-07-28 (O8, Owner-Weisung).** Wird gebaut, siehe **Phase 10b**. Die frueher hier stehenden drei Bedingungen sind erhalten geblieben, aber als **Freigabe-Checkliste** in A3 und Phase 10b, nicht als Ablehnungsgrund. Was in dieser Tabelle bleibt: `look_up` **ohne** Kontingent, `look_up` fuer **Inbound**, und das woertliche **Vorlesen** roher Suchergebnisse. |
 | **Opening-Split (Anliegen in den ersten Modell-Turn)** | Reisst den geschlossenen RCA-Fix R5/stab-p8 auf (`src/telnyx-call-control-ingest.js:143-146`) und stuft die Produkt-Garantie "der Angerufene erfaehrt zuverlaessig das Anliegen" von deterministisch auf wahrscheinlich herab. Ersatz: Kuerzung (Phase 5). |
 | **Opening-Prefetch (`agentTurn` auf `call.answered`)** | Bricht den Eroeffnungs-Bootstrap (`store.addTranscript` unbedingt, keine Rollback-Op) und laeuft **vor** dem Budget-Gate des Shims. |
