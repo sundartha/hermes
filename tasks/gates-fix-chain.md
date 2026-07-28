@@ -454,6 +454,35 @@ Locale-Aufloesung.
 `test/p15-mcp-tool-descriptions-en.test.js` — der entfernte `language`-Parameter ist dort als
 Marker gelistet.
 
+### Nachtrag 2026-07-28 — die Spec-Luecke ist geschlossen
+
+Der Review hat die Phase zu Recht blockiert: **unter der obigen Liste war P10 gar nicht
+abschliessbar.** LANG-15 verlangt, `place_call.language` aus dem MCP-Schema zu entfernen —
+aber ein zweiter, heute gruener Bestandstest pinnt den Feldsatz des Tools **einschliesslich
+dieses Feldes**: `PLACE_CALL_SHAPE` in `test/place-call-context-bridge.test.js`
+("place_call-Schema bleibt strukturell unveraendert"). Beides gleichzeitig geht nicht.
+
+**Entscheidung: die Liste wird erweitert, LANG-15 bleibt in P10.** Begruendung:
+
+- Der Parameter ist **nachweislich wirkungslos** — der gruene Mechanismus-Test haelt fest,
+  dass `body.language` serverseitig ignoriert wird und der Geo-Anker gewinnt. Entfernt wird
+  also eine Attrappe, kein Verhalten.
+- `PLACE_CALL_SHAPE` existiert, um **unabsichtliches** Schema-Driften zu fangen. Gegen eine
+  ausdrueckliche Entscheidung, ein totes Feld zu streichen, kann ein solcher Waechter nicht
+  stechen — sonst friert er den Ist-Zustand fuer immer ein.
+
+**Zusaetzlich zulaessige Testaenderung (nur diese):** `PLACE_CALL_SHAPE` und der zugehoerige
+Testtitel in `test/place-call-context-bridge.test.js` duerfen um das Feld `language`
+bereinigt werden. **Gepinnt bleiben MUSS:** der uebrige Feldsatz von `place_call` samt
+Optionalitaet — der Test bleibt ein Schema-Waechter, er wird nur um das gestrichene Feld
+korrigiert.
+
+**Vorher zu pruefen (Vertrag nach aussen):** `/mcp` bedient echte Clients. Ein Aufruf, der
+`language` weiterhin mitschickt, darf danach **nicht hart abgelehnt** werden — bisher wurde
+das Feld stillschweigend ignoriert, und genau dieses Verhalten bleibt die Zusage. Wenn das
+Schema unbekannte Felder zurueckweist, ist die Toleranz ausdruecklich herzustellen und zu
+testen.
+
 ---
 
 ## P11 — Telefonie-Kleinvertraege (GAP-24, GAP-26)
