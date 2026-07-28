@@ -3,7 +3,7 @@
 // Kontext-Flag wie zum Zeitpunkt des Live-Calls AUS. scriptedTurns[0] pinnt exakt die
 // damalige Anrufer-Antwort - deterministische Repro statt Persona-Zufall an dieser
 // kritischen Stelle.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "termin-duenn",
@@ -23,6 +23,7 @@ export default {
   // AL-P8: recap_present - der Angerufene nannte "17 Uhr", der Abschluss sollte genau
   // das aufgreifen (Muster mustNotPromiseSubstrings, gefaltete Wendungen).
   recapSubstrings: ["17 uhr", "siebzehn uhr"],
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "no_raw_iso_date_spoken",

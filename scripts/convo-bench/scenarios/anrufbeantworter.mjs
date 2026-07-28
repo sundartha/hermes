@@ -4,7 +4,7 @@
 // stumm auf). Gemessen wird eine knappe Nachricht + Auflegen statt eines Dialogversuchs
 // mit einer Maschine. Die PROVIDER-seitige AMD (MACHINE_DETECTION_ENABLED) wird hier
 // NICHT simuliert - gemessen wird das Gespraechsverhalten, nicht die Erkennung.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "anrufbeantworter",
@@ -24,6 +24,7 @@ export default {
   sttNoise: false,
   maxTurns: 6,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",

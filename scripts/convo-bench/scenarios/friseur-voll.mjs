@@ -5,7 +5,7 @@
 // P4/P1b: Der Agent BUCHT nicht mehr (book_appointment existiert nicht mehr). Die
 // Erfolgsdefinition ist deshalb umgestellt - nicht "gebucht", sondern: den Terminwunsch
 // sauber als Nachricht fuer den Besitzer abliefern (message_taken) statt scheinzubuchen.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "friseur-voll",
@@ -33,6 +33,7 @@ export default {
   // AL-P8: recap_present - hat der Agent vor Abschluss zusammengefasst, was er fuer
   // den Besitzer festhaelt? Gefaltete Wendungen (Muster mustNotPromiseSubstrings).
   recapSubstrings: ["ich notiere", "ich habe notiert", "ich gebe das weiter", "richte ich aus", "sage ich bescheid"],
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",

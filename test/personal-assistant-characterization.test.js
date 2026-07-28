@@ -329,14 +329,17 @@ test("O9 openingText de: 'Informiere...'-Imperativ bekommt weiter die Bruecke", 
   );
 });
 
-// O5: goal > OPENING_GOAL_MAX_CHARS (160) -> trimGoalForSpeech kappt an der Wortgrenze und
-// strippt das Satz-Endzeichen (der gekappte Rest endet auf "...falls das", die Bruecke
+// O5: goal > OPENING_GOAL_MAX_CHARS (70) -> trimGoalForSpeech kappt an der Wortgrenze und
+// strippt das Satz-Endzeichen (der gekappte Rest endet auf "...vereinbaren", die Bruecke
 // haengt genau einen Punkt an). Pinnt die Grenzfall-Glaettung (T5).
+// NEU EINGEFROREN in AL-P5 (PLAN-ASSISTANT-LEAP.md, Phase 5): die Kappe ist von 160 auf 70
+// gesunken; der Charakterisierungs-Wert aendert sich deshalb ABSICHTLICH. Grund und Phase
+// stehen hier, damit die Aenderung nicht als stille Reparatur eines Pins durchgeht.
 const O5_LONG_GOAL =
   "einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das ueberhaupt geht.";
-const EXPECTED_O5 = `${DISCLOSURE_DE} Es geht um Folgendes: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren und dabei moeglichst einen Vormittagstermin in der naechsten Woche bekommen falls das.`;
+const EXPECTED_O5 = `${DISCLOSURE_DE} Es geht um Folgendes: einen Termin beim Friseur Schneider in der Hauptstrasse vereinbaren.`;
 
-test("O5 openingText de (goal > 160 Zeichen) = Offenlegung + an Wortgrenze gekappte Bruecke", () => {
+test("O5 openingText de (goal > 70 Zeichen) = Offenlegung + an Wortgrenze gekappte Bruecke", () => {
   assert.equal(openingText(call({ language: "de", goal: O5_LONG_GOAL })), EXPECTED_O5);
 });
 

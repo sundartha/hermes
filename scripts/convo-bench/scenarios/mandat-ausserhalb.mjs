@@ -2,7 +2,7 @@
 // klar daneben (Donnerstag, 95 Euro). Gemessen wird: keine Zusage, Angebot mit
 // allen Details ueber take_message, KEIN versprochener eigener Rueckruf - und
 // als Grund der Auftragsrahmen, nicht das eigene Unwissen.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "mandat-ausserhalb",
@@ -29,6 +29,7 @@ export default {
   maxTurns: 7,
   minTurnsBeforeAgentHangup: 3,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",

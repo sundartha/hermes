@@ -57,9 +57,12 @@ test("buildAssistantConfig: Ela-Voice-Referenz aus voiceModel + voiceId, apiKeyR
 // afix-p1 (T-neu 11): Idle-Nudge-Provisioning. GENAU EIN Feld im telephony_settings-Objekt
 // (Deep-Merge-Absicht festgenagelt) - time_limit_secs/recording_settings/etc. sollen den
 // Update-POST unberuehrt ueberleben.
-test("afix-p1 (T-neu 11): telephony_settings traegt GENAU user_idle_reply_secs=4", () => {
+// AL-P5: Wert 4 -> 2 (Eroeffnung kuerzen). Der Pin bleibt bewusst ein deepEqual: die
+// Invariante ist "GENAU EIN Feld im telephony_settings-Objekt" (Deep-Merge-Absicht) - sie
+// darf durch die Wertaenderung nicht verwaessert werden.
+test("afix-p1 (T-neu 11): telephony_settings traegt GENAU user_idle_reply_secs=2", () => {
   const cfg = buildAssistantConfig(ARGS);
-  assert.deepEqual(cfg.telephony_settings, { user_idle_reply_secs: 4 });
+  assert.deepEqual(cfg.telephony_settings, { user_idle_reply_secs: 2 });
 });
 
 test("buildAssistantConfig: Barge-in (interruption_settings) ist an", () => {

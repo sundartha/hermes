@@ -41,9 +41,16 @@ const AI_ASSISTANTS_PATH = "/v2/ai/assistants";
 const ASSISTANT_NAME = "Hermes"; // Telnyx-Pflicht-Scaffold, kein Verhaltensfeld
 // R5: Telnyx wartet nach dem Opening-Speak diese Stille ab, bevor es den Assistant mit einer
 // "[long silence]"-System-Message anstoesst (Assistant-Greeting ist leer, Regel 2). Default 10
-// erzeugte 12.4s Totzeit im Live-Call (RCA 2026-07-12); 4s = spuerbarer Anlauf, ohne dem
-// Angerufenen ins Wort zu fallen. Telnyx-Spec: telephony_settings.user_idle_reply_secs, integer >= 0.
-const USER_IDLE_REPLY_SECS = 4;
+// erzeugte 12.4s Totzeit im Live-Call (RCA 2026-07-12).
+// AL-P5 (PLAN-ASSISTANT-LEAP.md, Phase 5): 4 -> 2. Die Stille direkt nach der Offenlegung
+// liegt an der eindruckspraegendsten Stelle des Anrufs. NICHT kostenneutral: jede
+// "[long silence]"-Message wird ein vollstaendiger Shim-Turn mit bookTokenUsage, Halbieren
+// verdoppelt naeherungsweise die Rate idle-getriebener Turns je Sprechpause. Abnahme und
+// Abbruchkriterium wie in AL-P3: Median turns/Anruf vorher/nachher, Anstieg > 15 % ->
+// zurueck auf 4 (Zwischenstufe 3 moeglich), hoechstens zwei Runden. Der Wert wirkt erst
+// nach einem Provisioner-Lauf; der Code allein aendert am Live-Assistant nichts.
+// Telnyx-Spec: telephony_settings.user_idle_reply_secs, integer >= 0.
+const USER_IDLE_REPLY_SECS = 2;
 // K1 (PLAN-CONVERSATION-OPTIMIZATION.md): Range 0.0-1.0, Default 0.0 (=aus). HOEHER = STRIKTER,
 // d.h. WENIGER Unterbrechungen - filtert kurze Backchannels ("ja"/"mhm"/"okay") aus der
 // Unterbrechungs-Erkennung, echtes Ins-Wort-Fallen loest weiterhin aus. 0.4 ist Telnyx' eigener

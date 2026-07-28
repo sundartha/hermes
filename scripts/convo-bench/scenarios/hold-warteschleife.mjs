@@ -7,7 +7,7 @@
 // Erkennung liefert. Bewusst ZWEI stille Turns: die P3.2-Staffel (no-speech-escalation)
 // legt erst beim DRITTEN leeren Gather selbst auf; drei stille Turns wuerden also den
 // deterministischen Server-Pfad messen statt die Modell-Entscheidung.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "hold-warteschleife",
@@ -37,6 +37,7 @@ export default {
   // gar keinen Shim-Request). Auf shim gemessen waere die Zahl eine andere Groesse
   // unter demselben Namen. Ein shim-eigenes Hold-Szenario ist NICHT diese Phase.
   drivers: ["texml"],
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",

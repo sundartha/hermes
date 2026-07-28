@@ -212,7 +212,16 @@ export function disclosureSentence(call) {
 
 // Maximale Zeichenzahl des Anliegens im gesprochenen Erst-Turn (G25). Kappt NUR die
 // TTS-Ausgabe; das goal-Validierungslimit (TEXT_LIMITS.objective) bleibt unberuehrt.
-const OPENING_GOAL_MAX_CHARS = 160;
+// AL-P5 (PLAN-ASSISTANT-LEAP.md, Phase 5): 160 -> 70. Das ununterbrechbare Fenster am
+// Anfang ist die Sekunde, in der Menschen auflegen. Es besteht aus Offenlegung (DE 130
+// Zeichen, unveraenderlich - Regel 2/O2) + Bruecke (23) + diesem Anliegen: 160 ergab bis
+// 314 Zeichen (~16-18 s bei den in AL-P1 gemessenen 17,3-20,3 Zeichen/s), 70 ergibt
+// hoechstens 224 (~11-13 s). 70 statt der unteren Bandgrenze 60, weil hier hart an der
+// Wortgrenze geschnitten wird, ohne Satzbau zu kennen: bei 60 verlieren reale Auftraege
+// ihr Verb ("... Herrenhaarschnitt" statt "... Herrenhaarschnitt vereinbaren"), bei 70
+// nicht. Klingt der Erst-Turn live unvollstaendig, wird DIESE Zahl angehoben - nie die
+// Nicht-Wiederholen-Anweisung in situationOutbound (die traegt den RCA-Fix R5/stab-p8).
+const OPENING_GOAL_MAX_CHARS = 70;
 
 // Tool-Name des end_call-Tools (G25): EINE Quelle fuer Schema-Name/Dispatch-Case/Guard.
 const END_CALL_TOOL_NAME = "end_call";

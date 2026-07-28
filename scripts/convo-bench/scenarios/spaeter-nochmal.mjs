@@ -4,7 +4,7 @@
 // zu (Halluzination einer Faehigkeit), oder sichert er das Anliegen ehrlich als Nachricht
 // fuer den Besitzer und schliesst hoeflich ab? Ein Agent-Hangup ist hier RICHTIG - dieses
 // Szenario traegt daher bewusst KEIN no_early_agent_hangup.
-import { MEASUREMENT_CHECKS } from "../checks.mjs";
+import { BENCH_MAX_OPENING_CHARS, MEASUREMENT_CHECKS } from "../checks.mjs";
 
 export default {
   id: "spaeter-nochmal",
@@ -25,6 +25,7 @@ export default {
   sttNoise: false,
   maxTurns: 6,
   expectDegradation: false,
+  maxOpeningChars: BENCH_MAX_OPENING_CHARS,
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",
