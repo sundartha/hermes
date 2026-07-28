@@ -20,6 +20,19 @@ Aenderungsort, was darf parallel laufen, was erzwingt eine Reihenfolge.**
 | Launch-Gates | `npm run test:gates` | **131 / 36 rot** (roh 515, minus 384 Datei-Wrapper) |
 | Verteilung | — | 36 rote Gates in **22 Testdateien** |
 
+> **ENDSTAND 2026-07-28 — die Kette ist durch.** Alle 15 Phasen sind gemergt.
+> `npm test` = **3326 / 0**, `npm run test:gates` = **129 / 3 rot**. Von 36 roten Gates
+> bleiben genau die drei, die per Owner-Entscheidung offen bleiben SOLLEN: **GAP-05**
+> (getragenes Risiko, Rabattcode-Feld bleibt) und **GAP-15 x2** (Rechtstexte zurueckgestellt).
+> Kein Gate ist rot geworden, das vorher gruen war.
+>
+> **Zwei Dinge, die der Gruenstand NICHT abdeckt** — beide bewusst und dokumentiert:
+> **P16** (US-Stimme, s. Abschnitt 6) und die CSP-Verschaerfung, die nach der Loeschung von
+> `public/tenant.html` moeglich waere (`src/middleware.js` lockert sie ausdruecklich wegen
+> dieser Datei; P14 hat das Array byte-identisch gelassen). Beides sind eigene Auftraege.
+>
+> **Nichts davon ist deployed.**
+
 **Stand nach Welle 1** (gemessen 2026-07-27, master nach den Merges P1/P2/P3/P6/P8/P13):
 `npm test` = **3298 / 0** (die Welle hat drei Regressionstests mitgeliefert),
 `npm run test:gates` = **131 / 22 rot**. **Vierzehn Gates sind gefallen:** PAY-19 x2,
