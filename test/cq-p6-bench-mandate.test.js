@@ -24,7 +24,7 @@ function fullRunResult(direction) {
     call: { direction, language: "de" },
     ownerName: OWNER_NAME,
     transcript: [{ role: "agent", text: opening.sayTexts.join(" ") }],
-    texmlSamples: [opening],
+    agentSamples: [opening],
     endedVia: "turn_cap",
     turnCount: 1,
     metricsParsed: [],

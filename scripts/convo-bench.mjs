@@ -6,11 +6,12 @@
 // NIEMALS Teil von `npm test` (braucht Netz + echten ANTHROPIC_API_KEY, Spec §0).
 // Aufruf: node scripts/convo-bench.mjs run --scenario <id>|--all [--repeat 3]
 //         [--label ...] [--persona-model ...] [--judge-model ...] [--max-turns 10]
-//         [--provider telnyx|twilio] [--out data/convo-bench/<run-id>]
+//         [--provider telnyx|twilio] [--driver texml|shim] [--out data/convo-bench/<run-id>]
 //         node scripts/convo-bench.mjs compare <reportDirA> <reportDirB>
 import path from "path";
 import { fileURLToPath } from "url";
 import { SCENARIOS, SCENARIO_IDS } from "./convo-bench/scenarios/index.mjs";
+import { DRIVERS, DRIVER_IDS, DEFAULT_DRIVER_ID, scenarioSupportsDriver } from "./convo-bench/drivers.mjs";
 import { runScenarioRepeat } from "./convo-bench/runner.mjs";
 import { PERSONA_MODEL_DEFAULT } from "./convo-bench/persona.mjs";
 import { JUDGE_MODEL_DEFAULT } from "./convo-bench/judge.mjs";
@@ -46,11 +47,40 @@ function parseArgs(argv) {
   return args;
 }
 
-function resolveScenarioIds(args) {
-  if (args.all) return SCENARIO_IDS;
+// AL-P8: Welcher Treiber (= welche Transportschicht des Servers) gemessen wird. Default
+// ist der LIVE laufende Assistant-Pfad (O1). Ein Treiber, der einen bestimmten Provider
+// verlangt, faellt hier fail-closed auf - eine stille Umschaltung waere eine Messung an
+// der falschen Konfiguration.
+function resolveDriverId(args, provider) {
+  const id = typeof args.driver === "string" ? args.driver : DEFAULT_DRIVER_ID;
+  const driver = DRIVERS[id];
+  if (!driver) throw new Error(`Unbekannter Treiber "${id}" (verfuegbar: ${DRIVER_IDS.join(", ")})`);
+  if (driver.requiresProvider && provider !== driver.requiresProvider) {
+    throw new Error(`Treiber "${id}" laeuft nur mit --provider ${driver.requiresProvider} (aktuell: ${provider})`);
+  }
+  return id;
+}
+
+// AL-P8: bei --all werden Szenarien, die den Treiber nicht unterstuetzen (z.B.
+// hold-warteschleife nur texml), SICHTBAR uebersprungen (kein stiller Verlust der
+// Szenario-Menge, s. Pre-Mortem "andere Szenario-Menge ohne dass es auffiel"). Ein
+// explizit gewaehltes --scenario auf einem unpassenden Treiber ist dagegen ein harter
+// Fehler, kein stiller Skip.
+function resolveScenarioIds(args, driverId) {
+  if (args.all) {
+    return SCENARIO_IDS.filter((id) => {
+      const supported = scenarioSupportsDriver(SCENARIOS[id], driverId);
+      if (!supported) console.log(`[convo-bench] uebersprungen: ${id} (nur Treiber ${SCENARIOS[id].drivers.join(",")})`);
+      return supported;
+    });
+  }
   if (args.scenario) {
-    if (!SCENARIOS[args.scenario]) {
+    const scenario = SCENARIOS[args.scenario];
+    if (!scenario) {
       throw new Error(`Unbekanntes Szenario "${args.scenario}" (verfuegbar: ${SCENARIO_IDS.join(", ")})`);
+    }
+    if (!scenarioSupportsDriver(scenario, driverId)) {
+      throw new Error(`Szenario "${args.scenario}" laeuft nur mit Treiber ${scenario.drivers.join(",")} (aktuell: ${driverId})`);
     }
     return [args.scenario];
   }
@@ -75,18 +105,22 @@ function requireApiKey() {
 }
 
 async function runCommand(args) {
+  // AL-P8: Treiber-/Szenario-Validierung VOR dem API-Key-Gate - ein falscher --driver
+  // oder ein Szenario auf dem falschen Treiber ist ein reiner Konfigurationsfehler und
+  // darf ohne bezahlten Request auffallen (Abnahme-Beweis in tasks/al-testcall-checklist.md).
+  const provider = typeof args.provider === "string" ? args.provider : DEFAULT_PROVIDER;
+  const driverId = resolveDriverId(args, provider);
+  const scenarioIds = resolveScenarioIds(args, driverId);
   const apiKey = requireApiKey();
-  const scenarioIds = resolveScenarioIds(args);
   const repeat = Number(args.repeat) || DEFAULT_REPEAT;
   const label = typeof args.label === "string" ? args.label : DEFAULT_LABEL;
   const personaModel = typeof args["persona-model"] === "string" ? args["persona-model"] : PERSONA_MODEL_DEFAULT;
   const judgeModel = typeof args["judge-model"] === "string" ? args["judge-model"] : JUDGE_MODEL_DEFAULT;
   const maxTurnsCap = Number(args["max-turns"]) || DEFAULT_MAX_TURNS_CAP;
-  const provider = typeof args.provider === "string" ? args.provider : DEFAULT_PROVIDER;
   const outDir = resolveOutDir(args);
 
   console.log(
-    `[convo-bench] Lauf: scenarios=${scenarioIds.join(",")} repeat=${repeat} provider=${provider} ` +
+    `[convo-bench] Lauf: scenarios=${scenarioIds.join(",")} repeat=${repeat} provider=${provider} driver=${driverId} ` +
       `persona=${personaModel} judge=${judgeModel} max-turns=${maxTurnsCap} out=${outDir}`,
   );
 
@@ -103,6 +137,7 @@ async function runCommand(args) {
         judgeModel,
         maxTurnsCap,
         provider,
+        driverId,
         apiKey,
       });
       const file = writeReport(outDir, result);

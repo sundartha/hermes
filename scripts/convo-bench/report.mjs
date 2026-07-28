@@ -18,6 +18,7 @@ export function writeSummary(outDir, results) {
   const summary = results.map((r) => ({
     scenario: r.meta.scenario,
     repeat_index: r.meta.repeat_index,
+    driver: r.meta.driver,
     ended_via: r.ended_via,
     turn_count: r.turn_count,
     checks_passed: r.checks.filter((c) => c.pass).length,
@@ -56,12 +57,34 @@ function reportKey(r) {
   return `${r.meta.scenario}-r${r.meta.repeat_index}`;
 }
 
+// AL-P8: Check-Werte EINES Reports als id -> value-Map (nur Checks mit gesetztem
+// value-Feld, additiver Vertrag s. checks.mjs).
+function checkValues(report) {
+  const values = new Map();
+  for (const c of report?.checks ?? []) {
+    if (c.value !== undefined) values.set(c.id, c.value);
+  }
+  return values;
+}
+
 // A/B-Diff-Tabelle (Spec §2 `compare`-Subcommand): baseline (A) im Master-Stand,
 // candidate (B) im Arbeits-Worktree, IDENTISCHE Szenarien+scriptedTurns+repeat.
 export function printCompareTable(reportsA, reportsB) {
   const a = new Map(reportsA.map((r) => [reportKey(r), r]));
   const b = new Map(reportsB.map((r) => [reportKey(r), r]));
   const keys = [...new Set([...a.keys(), ...b.keys()])].sort();
+
+  // AL-P8 (Pre-Mortem): unterschiedliche Treiber sind KEINE vergleichbare Messung -
+  // eine Messung gilt nur fuer die Konfiguration, in der sie erhoben wurde.
+  const driverA = reportsA[0]?.meta.driver;
+  const driverB = reportsB[0]?.meta.driver;
+  if (driverA && driverB && driverA !== driverB) {
+    console.log(
+      `[convo-bench] WARNUNG: A(driver=${driverA}) und B(driver=${driverB}) sind NICHT vergleichbar ` +
+        `— eine Messung gilt nur fuer die Konfiguration, in der sie erhoben wurde.`,
+    );
+  }
+
   console.log("\n[convo-bench] A/B-Vergleich:");
   for (const key of keys) {
     const ra = a.get(key);
@@ -72,5 +95,12 @@ export function printCompareTable(reportsA, reportsB) {
       `  ${key.padEnd(24)} A: checks=${passedA.padEnd(5)} turns=${ra?.turn_count ?? "-"}` +
         `  |  B: checks=${passedB.padEnd(5)} turns=${rb?.turn_count ?? "-"}`,
     );
+    const valuesA = checkValues(ra);
+    const valuesB = checkValues(rb);
+    for (const id of new Set([...valuesA.keys(), ...valuesB.keys()])) {
+      const vA = valuesA.has(id) ? valuesA.get(id) : "-";
+      const vB = valuesB.has(id) ? valuesB.get(id) : "-";
+      console.log(`      ${id}: ${vA} -> ${vB}`);
+    }
   }
 }

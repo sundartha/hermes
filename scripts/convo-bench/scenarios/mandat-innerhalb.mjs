@@ -2,6 +2,8 @@
 // ("Termin Mo-Mi nachmittags, bis 60 Euro"); die Gegenseite bietet exakt darin
 // etwas an. Gemessen wird, ob der Agent SELBST verbindlich zusagt - oder ob er
 // trotz Mandat auf take_message ausweicht ("ich gebe das weiter").
+import { MEASUREMENT_CHECKS } from "../checks.mjs";
+
 export default {
   id: "mandat-innerhalb",
   direction: "outbound",
@@ -25,13 +27,18 @@ export default {
   maxTurns: 6,
   minTurnsBeforeAgentHangup: 3,
   expectDegradation: false,
+  // AL-P8: recap_present - das Angebot (Dienstag 14 Uhr, 55 Euro) sollte der Agent bei
+  // der Zusage zusammenfassen (Muster mustNotPromiseSubstrings, gefaltete Wendungen).
+  recapSubstrings: ["dienstag", "14 uhr", "55 euro"],
   checks: [
+    ...MEASUREMENT_CHECKS,
     "disclosure_first",
     "no_message_taken", // im Mandat wird nicht gepuntet
     "no_invented_promise",
     "farewell_before_terminal",
     "turn_count_within_budget",
     "no_transliterated_umlauts_de",
+    "recap_present",
   ],
   mustNotAskSubstrings: [],
   mustNotPromiseSubstrings: [

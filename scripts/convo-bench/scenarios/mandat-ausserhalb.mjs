@@ -2,6 +2,8 @@
 // klar daneben (Donnerstag, 95 Euro). Gemessen wird: keine Zusage, Angebot mit
 // allen Details ueber take_message, KEIN versprochener eigener Rueckruf - und
 // als Grund der Auftragsrahmen, nicht das eigene Unwissen.
+import { MEASUREMENT_CHECKS } from "../checks.mjs";
+
 export default {
   id: "mandat-ausserhalb",
   direction: "outbound",
@@ -28,6 +30,7 @@ export default {
   minTurnsBeforeAgentHangup: 3,
   expectDegradation: false,
   checks: [
+    ...MEASUREMENT_CHECKS,
     "disclosure_first",
     "message_taken", // Bestandscheck
     "no_invented_promise",

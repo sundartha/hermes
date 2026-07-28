@@ -4,6 +4,11 @@
 // via seedState/seedCall, NIEMALS POST /api/calls (einzige Route mit originateCall,
 // Spec §6 Sicherheitsargument). ANTHROPIC_API_KEY erreicht diese Datei nur als
 // Funktionsargument, nie geloggt.
+//
+// AL-P8: die TRANSPORTSCHICHT (wie der gespawnte Server angesprochen wird) sitzt hinter
+// dem Treiber-Port (drivers.mjs) - dieser Runner kennt nur noch turn.sayTexts/endedVia,
+// nicht mehr TeXML-Interna. Env/Seed/Persona-Schleife/Metrics/Snapshot/Checks/Judge/
+// Kosten/Report-Bau bleiben hier (S2: EIN Runner statt Duplizierung je Treiber).
 import { execSync } from "node:child_process";
 import {
   startServer,
@@ -15,7 +20,7 @@ import {
   OWNER_TEST_NUMBER,
 } from "../../test/helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
-import { parseVoiceBody } from "./texml.mjs";
+import { DRIVERS } from "./drivers.mjs";
 import { nextCalleeTurn } from "./persona.mjs";
 import { judgeConversation } from "./judge.mjs";
 import { runChecks } from "./checks.mjs";
@@ -29,21 +34,10 @@ const PRODUCTION_CLAUDE_MODEL = "claude-haiku-4-5";
 // Defensive Anhebung des Bench-Budgets (Spec §3-1): der Store-Default (BASE_ENV) waere
 // zu knapp fuer mehrere Repeats/Turns in einem Lauf.
 const BENCH_MAX_BUDGET_EUR = "20";
-const CALL_SID = "CAtest_bench";
 const BENCH_CALL_ID_PREFIX = "call_bench";
-const BENCH_DEFAULT_CALLER = "+4915100000099";
 // Dummy-Telnyx-Owner-Nummer NUR fuer die Bench (nie real gekauft/angerufen - Provider-
 // Credentials bleiben leer, VOICE_ENGINE=budget, kein /api/calls -> physisch kein Dial).
 const BENCH_TELNYX_OWNER = Object.freeze({ e164: "+13125557000", provider: "telnyx" });
-// Fail-closed-Signatur-Header (Spec: SKIP_TWILIO_SIGNATURE_CHECK umgeht nur die
-// KRYPTO-Pruefung, NICHT providerFromHeaders - dessen Header-Praesenz entscheidet, ob
-// server.js /voice/incoming als Telnyx oder Twilio rendert). Werte sind Dummies wie in
-// test/telnyx-signature.test.js (kein echter Ed25519-Beweis noetig, da die
-// Krypto-Pruefung selbst uebersprungen wird).
-const TELNYX_DUMMY_HEADERS = Object.freeze({
-  "telnyx-signature-ed25519": "bench-dummy",
-  "telnyx-timestamp": "0",
-});
 
 const SUMMARY_POLL_TIMEOUT_MS = 20000;
 const SUMMARY_POLL_INTERVAL_MS = 150;
@@ -64,7 +58,7 @@ function gitRev() {
   }
 }
 
-function buildEnv({ apiKey, scenario }) {
+function buildEnv({ apiKey, scenario, driverEnv }) {
   return {
     ANTHROPIC_API_KEY: apiKey,
     CLAUDE_MODEL: PRODUCTION_CLAUDE_MODEL,
@@ -72,10 +66,13 @@ function buildEnv({ apiKey, scenario }) {
     ASSISTANT_CONTEXT_ENABLED: scenario.assistantContextEnabled ? "true" : "false",
     MAX_BUDGET_EUR: BENCH_MAX_BUDGET_EUR,
     VOICE_ENGINE: "budget",
+    ...driverEnv,
   };
 }
 
-function buildCallSeed(scenario, provider) {
+// F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder, z.B.
+// callControlId/assistantId des Shim-Treibers) geht ans Ende von seedCall durch.
+function buildCallSeed({ scenario, provider, extra }) {
   return seedCall({
     id: `${BENCH_CALL_ID_PREFIX}_${scenario.id}`,
     tenantId: BOOTSTRAP_TENANT_ID,
@@ -88,12 +85,8 @@ function buildCallSeed(scenario, provider) {
     mandate: scenario.mandate, // P6: undefined bei Bestands-Szenarien -> Sektion ""
     language: "de",
     status: "active",
+    ...extra,
   });
-}
-
-function recordAgentSay(transcript, parsed) {
-  if (!parsed.sayTexts.length) return;
-  transcript.push({ role: "agent", text: parsed.sayTexts.join(" ") });
 }
 
 // P4: ein stiller Callee-Turn geht als LEERES SpeechResult raus; im Transkript steht
@@ -106,46 +99,19 @@ function calleeTranscriptText(callee) {
   return callee.silent ? SILENT_TURN_TRANSCRIPT_TEXT : callee.text;
 }
 
-function extractCallIdFromUrl(url) {
-  return new URL(url).searchParams.get("callId");
+// G5: das Sample-Push (agent_samples-Report-Feld) UND der Transkript-Append gehoerten
+// immer zusammen (frueher an drei Stellen dupliziert: Erst-Turn, Schleife, beide
+// Aufrufer) - EIN Aufruf traegt beides.
+function pushSample(agentSamples, transcript, turn) {
+  agentSamples.push({ turn: agentSamples.length, sayTexts: turn.sayTexts });
+  if (turn.sayTexts.length) transcript.push({ role: "agent", text: turn.sayTexts.join(" ") });
 }
 
-// Erster Request der Choreografie (Spec §3-2): outbound -> /voice/outbound, inbound
-// -> /voice/incoming (To=aktive Owner-Nummer, From=Anrufer). Fuer Telnyx werden die
-// Dummy-Signatur-Header gesetzt, damit providerFromHeaders() korrekt telnyx erkennt
-// (SKIP_TWILIO_SIGNATURE_CHECK umgeht nur die Krypto-Pruefung selbst).
-async function runFirstTurn({ srv, scenario, call, provider, activeOwnerNumber, transcript, texmlSamples }) {
-  const isInbound = scenario.direction === "inbound";
-  const res = isInbound
-    ? await fetch(`${srv.localUrl}/voice/incoming`, {
-        method: "POST",
-        headers: provider === "telnyx" ? TELNYX_DUMMY_HEADERS : {},
-        body: new URLSearchParams({
-          To: activeOwnerNumber.e164,
-          From: scenario.callerNumber || BENCH_DEFAULT_CALLER,
-          CallSid: CALL_SID,
-        }),
-      })
-    : await fetch(`${srv.localUrl}/voice/outbound?callId=${call.id}`, {
-        method: "POST",
-        body: new URLSearchParams({ CallSid: CALL_SID }),
-      });
-  const body = await res.text();
-  const parsed = parseVoiceBody(body, srv.localUrl);
-  texmlSamples.push({ turn: 0, ...parsed });
-  recordAgentSay(transcript, parsed);
-  return parsed;
-}
-
-// Beendet den Call ueber die echte /voice/status-Webhook-Route (reiner Status-
-// Renderer, KEIN originateCall - Spec §6) und wartet best-effort, bis summarizeCall
-// (async, nicht awaited im Handler) die Summary persistiert hat. Timeout -> Report
-// zeigt summary=null statt die Bench abstuerzen zu lassen.
-async function finalizeCall(srv, callId) {
-  await fetch(`${srv.localUrl}/voice/status?callId=${callId}`, {
-    method: "POST",
-    body: new URLSearchParams({ CallStatus: "completed" }),
-  }).catch(() => {});
+// Wartet best-effort, bis summarizeCall (async, nicht awaited im Handler) die Summary
+// persistiert hat. Timeout -> Report zeigt summary=null statt die Bench abstuerzen zu
+// lassen. Reines Store-Polling - der terminale Provider-Webhook (Settlement) gehoert
+// seit AL-P8 dem Treiber (transport.finish), nicht mehr diesem Runner.
+async function waitForSummary(srv, callId) {
   const deadline = Date.now() + SUMMARY_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const call = (srv.readStore().calls || []).find((c) => c.id === callId);
@@ -208,43 +174,45 @@ export async function runScenarioRepeat({
   judgeModel,
   maxTurnsCap,
   provider,
+  driverId,
   apiKey,
 }) {
   const startedAt = new Date().toISOString();
   const isInbound = scenario.direction === "inbound";
   const activeOwnerNumber = provider === "telnyx" ? BENCH_TELNYX_OWNER : OWNER_TEST_NUMBER;
   const ownerNumber = provider === "telnyx" ? BENCH_TELNYX_OWNER : undefined;
-  const call = isInbound ? null : buildCallSeed(scenario, provider);
-  const env = buildEnv({ apiKey, scenario });
+
+  // Der Treiber-Transport lebt VOR startServer (ein evtl. lokaler Provider-Fake muss
+  // laufen, bevor der Server-Env darauf zeigt) und wird im aeusseren finally NACH
+  // srv.stop() geschlossen.
+  const transport = await DRIVERS[driverId].create({ scenario, provider });
+  const call = isInbound ? null : buildCallSeed({ scenario, provider, extra: transport.seedOverrides });
+  const env = buildEnv({ apiKey, scenario, driverEnv: transport.env });
   const seed = isInbound ? seedState({}) : seedState({ calls: [call] });
 
-  const srv = await startServer({ env, seed, ownerNumber });
   const transcript = [];
-  const texmlSamples = [];
+  const agentSamples = [];
   const personaUsages = [];
   let endedVia = null;
   let personaError = null;
   let callId = call?.id ?? null;
+  let srv;
 
   try {
-    let parsed = await runFirstTurn({ srv, scenario, call, provider, activeOwnerNumber, transcript, texmlSamples });
-    if (isInbound) {
-      if (!parsed.nextTurnUrl) throw new Error("Inbound-Erst-Turn lieferte kein Gather (unbekannte Nummer?)");
-      callId = extractCallIdFromUrl(parsed.nextTurnUrl);
-    }
+    srv = await startServer({ env, seed, ownerNumber });
+    const opened = await transport.open({ srv, scenario, call, activeOwnerNumber });
+    callId = opened.callId;
+    let turn = opened.turn;
+    pushSample(agentSamples, transcript, turn);
 
     let calleeTurnIndex = 0;
     for (;;) {
-      if (parsed.hasHangup) {
-        endedVia = "agent_hangup";
+      if (turn.endedVia) {
+        endedVia = turn.endedVia;
         break;
       }
-      if (texmlSamples.length >= maxTurnsCap) {
+      if (agentSamples.length >= maxTurnsCap) {
         endedVia = "turn_cap";
-        break;
-      }
-      if (!parsed.nextTurnUrl) {
-        endedVia = "no_gather";
         break;
       }
       // Persona-Call gegen echtes Netz (Anthropic-API) - genau wie beim Judge (weiter
@@ -272,18 +240,16 @@ export async function runScenarioRepeat({
       if (callee.usage) personaUsages.push(callee.usage);
       transcript.push({ role: "caller", text: calleeTranscriptText(callee) });
 
-      const turnRes = await fetch(parsed.nextTurnUrl, {
-        method: "POST",
-        body: new URLSearchParams({ SpeechResult: callee.text }),
-      });
+      turn = await transport.say(callee.text);
       calleeTurnIndex += 1;
-      parsed = parseVoiceBody(await turnRes.text(), srv.localUrl);
-      texmlSamples.push({ turn: texmlSamples.length, ...parsed });
-      recordAgentSay(transcript, parsed);
+      pushSample(agentSamples, transcript, turn);
     }
 
     const metricsParsed = parseMetricsLog(srv.stdout);
-    if (callId) await finalizeCall(srv, callId);
+    if (callId) {
+      await transport.finish(callId); // terminaler Provider-Webhook (Settlement)
+      await waitForSummary(srv, callId); // best-effort, Timeout -> summary=null (Bestand)
+    }
     const store = srv.readStore();
     const storeSnapshot = extractStoreSnapshot(store, BOOTSTRAP_TENANT_ID, callId);
     const agentUsageBucket = store.usage?.[BOOTSTRAP_TENANT_ID];
@@ -292,9 +258,9 @@ export async function runScenarioRepeat({
       call: call || { direction: "inbound", language: "de" },
       ownerName: `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`,
       transcript,
-      texmlSamples,
+      agentSamples,
       endedVia,
-      turnCount: texmlSamples.length,
+      turnCount: agentSamples.length,
       metricsParsed,
       storeSnapshot,
     };
@@ -319,10 +285,11 @@ export async function runScenarioRepeat({
         persona_model: personaModel,
         judge_model: judgeModel,
         provider,
+        driver: driverId,
         git_rev: gitRev(),
       },
       transcript,
-      texml_samples: texmlSamples,
+      agent_samples: agentSamples,
       metrics: summarizeMetrics(metricsParsed),
       store_snapshot: {
         summary: storeSnapshot.summary,
@@ -333,14 +300,16 @@ export async function runScenarioRepeat({
       checks,
       judge,
       cost_estimate_usd: cost,
-      turn_count: texmlSamples.length,
+      turn_count: agentSamples.length,
       ended_via: endedVia,
       // Nur gesetzt, wenn ended_via==="persona_error" (Netz-/Auth-Fehler auf dem
       // Persona-Call) - err.message der Anthropic-SDK-Fehlerklassen enthaelt NIE den
       // Key selbst (nur HTTP-Status + API-Fehlertyp/-message).
       persona_error: personaError,
+      shim_gates: transport.diagnostics().shim_gate_reasons ?? [],
     };
   } finally {
-    await srv.stop();
+    if (srv) await srv.stop();
+    await transport.close();
   }
 }

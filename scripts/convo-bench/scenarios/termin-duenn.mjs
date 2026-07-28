@@ -3,6 +3,8 @@
 // Kontext-Flag wie zum Zeitpunkt des Live-Calls AUS. scriptedTurns[0] pinnt exakt die
 // damalige Anrufer-Antwort - deterministische Repro statt Persona-Zufall an dieser
 // kritischen Stelle.
+import { MEASUREMENT_CHECKS } from "../checks.mjs";
+
 export default {
   id: "termin-duenn",
   direction: "outbound",
@@ -18,11 +20,16 @@ export default {
   sttNoise: false,
   maxTurns: 8,
   expectDegradation: false,
+  // AL-P8: recap_present - der Angerufene nannte "17 Uhr", der Abschluss sollte genau
+  // das aufgreifen (Muster mustNotPromiseSubstrings, gefaltete Wendungen).
+  recapSubstrings: ["17 uhr", "siebzehn uhr"],
   checks: [
+    ...MEASUREMENT_CHECKS,
     "no_raw_iso_date_spoken",
     "turn_count_within_budget",
     "no_verbatim_question_repeat",
     "no_transliterated_umlauts_de",
+    "recap_present",
   ],
   // Heuristik-Flag (Spec §9): NICHT Hard-Gate. Der Judge (judgeFocus) ist das
   // primaere, verlaessliche Signal fuer die eigentliche Frage (Kohaerenz).

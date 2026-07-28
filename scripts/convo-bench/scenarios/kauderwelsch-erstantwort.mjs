@@ -11,6 +11,8 @@
 // Wichtig: das Fragment ist laenger als CALLER_SUBSTANCE_MIN_LEN -> der bestehende
 // suppressEndCall-Seam greift hier NICHT. Die Prompt-Regel (end_call-Tool-Description)
 // ist der einzige Schutz - das Szenario testet also sie und nicht den Seam.
+import { MEASUREMENT_CHECKS } from "../checks.mjs";
+
 export default {
   id: "kauderwelsch-erstantwort",
   direction: "outbound",
@@ -30,6 +32,7 @@ export default {
   maxTurns: 6,
   expectDegradation: false,
   checks: [
+    ...MEASUREMENT_CHECKS,
     "disclosure_first",
     "no_hangup_on_unintelligible_reply",
     "no_verbatim_question_repeat",
