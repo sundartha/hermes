@@ -442,3 +442,69 @@ test("Bestandstests der MCP-Schicht decken ein EN-Sprachszenario ab (ex MCP-12)"
     "kein bestehender Bestandstest deckt heute ein EN-/US-Sprachszenario der MCP-Schicht ab",
   );
 });
+
+// ==================== T16 (P10/MCP-14) ====================
+// Leertext UND Termin-Praefix von list_action_items folgen der Tenant-Sprache; DE bleibt
+// byte-identisch zum frueheren Inline-String. Die Schleife ueber SUPPORTED_LANGUAGES ist
+// zugleich die Vollstaendigkeitsprobe: ein fehlender Buendel-Schluessel wuerde
+// "undefined" in tenant-sichtbaren Text rendern und hier scheitern.
+test("list_action_items: Leertext + Termin-Praefix folgen der Tenant-Sprache; DE byte-identisch", async () => {
+  await withGateway({ actionItems: [] }, async () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+        .get("list_action_items")();
+      assert.equal(toolText(r), MCP_TEXTS[language].emptyActionItems);
+    }
+    const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
+      .get("list_action_items")();
+    assert.equal(toolText(de), "Keine offenen Action Items.", "DE bleibt byte-identisch");
+  });
+  await withGateway(
+    { actionItems: [{ id: "a1", text: "Zahnarzt", type: "appointment", done: false }] },
+    async () => {
+      for (const language of SUPPORTED_LANGUAGES) {
+        const r = await captureTools({ identity: null, scopedTenant: `tenant-${language}`, language })
+          .get("list_action_items")();
+        assert.equal(toolText(r), `[a1] ${MCP_TEXTS[language].appointmentPrefix}Zahnarzt`);
+      }
+      const de = await captureTools({ identity: null, scopedTenant: "tenant-de", language: "de" })
+        .get("list_action_items")();
+      assert.equal(toolText(de), "[a1] (Termin) Zahnarzt", "DE bleibt byte-identisch");
+    },
+  );
+});
+
+// ==================== T17 (P10/MCP-14) ====================
+// Die befuellte get_calendar-Zeile folgt der Tenant-Sprache (nicht nur der Leertext), und
+// der Verbinder kommt aus DEMSELBEN Buendel wie die Zeitwerte aus demselben Formatter.
+test("get_calendar: die befuellte Zeile folgt der Tenant-Sprache; DE byte-identisch", async () => {
+  const calendar = [
+    { title: "Zahnarzt", start: "2026-06-26T09:59:50.000Z", end: "2026-06-26T10:30:00.000Z" },
+  ];
+  await withGateway({ calendar }, async () => {
+    for (const language of SUPPORTED_LANGUAGES) {
+      const r = await captureTools({
+        identity: null,
+        scopedTenant: `tenant-${language}`,
+        allowCalendar: true,
+        language,
+      }).get("get_calendar")();
+      const e = r.structuredContent.calendar[0];
+      assert.equal(toolText(r), MCP_TEXTS[language].calendarLine(e));
+    }
+    const de = await captureTools({
+      identity: null,
+      scopedTenant: "tenant-de",
+      allowCalendar: true,
+      language: "de",
+    }).get("get_calendar")();
+    assert.match(toolText(de), /^Zahnarzt: .+ bis .+$/, "DE bleibt byte-identisch (title: start bis end)");
+    const en = await captureTools({
+      identity: null,
+      scopedTenant: "tenant-en",
+      allowCalendar: true,
+      language: "en",
+    }).get("get_calendar")();
+    assert.doesNotMatch(toolText(en), / bis /, "EN traegt keinen deutschen Verbinder");
+  });
+});

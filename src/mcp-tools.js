@@ -489,9 +489,10 @@ export function registerTools(
           .describe(
             "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
           ),
-        // b.language wird serverseitig ueber store.resolveCallLanguage (Geo/Settings)
-        // aufgeloest und hier ignoriert; das Feld bleibt nur abwaertskompatibel im Schema.
-        language: z.string().optional().describe("Conversation language, default 'de'."),
+        // LANG-15: KEIN language-Feld hier. Die Sprache wird serverseitig ausschliesslich
+        // ueber store.resolveCallLanguage (Geo/Settings, Weltdefault siehe DEFAULT_LANGUAGE)
+        // aufgeloest - ein Client-Feld waere wirkungslos und dessen Beschreibung wuerde
+        // veralten (Bestand nannte faelschlich 'de' statt des Weltdefaults 'en').
         // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
         // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
         // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).
@@ -681,14 +682,20 @@ export function registerTools(
     },
   );
 
+  // Leertext und Termin-Praefix folgen der Tenant-Sprache (MCP-14): sie kommen aus
+  // DEMSELBEN Locale-Buendel wie Rollen-Praefix, Fehler- und Leertexte (loc.mcp), kein
+  // zweiter Lookup. DE bleibt byte-identisch zum Bestand.
   tool("list_action_items", "Lists open action items from all calls.", {}, async () => {
     const s = await call("GET", "/api/state");
     requireFields(s, { actionItems: "array" });
     const open = s.actionItems.filter((a) => !a.done);
-    if (!open.length) return text("Keine offenen Action Items.");
+    if (!open.length) return text(loc.mcp.emptyActionItems);
     return text(
       open
-        .map((a) => `[${a.id}] ${a.type === "appointment" ? "(Termin) " : ""}${a.text}`)
+        .map(
+          (a) =>
+            `[${a.id}] ${a.type === "appointment" ? loc.mcp.appointmentPrefix : ""}${a.text}`,
+        )
         .join("\n"),
     );
   });
@@ -697,7 +704,8 @@ export function registerTools(
   // restriktives Profil sieht get_calendar gar nicht erst. Stufe 0 (Text byte-identisch)
   // + structuredContent (Whitelist: title/start/end je Eintrag) + Stufe 1 (calendar
   // Widget) bei faehigem Host. Text UND structuredContent lesen dieselben gewhitelisteten
-  // Eintraege (eine Quelle); leerer Kalender behaelt "Kalender ist leer." + leere Liste.
+  // Eintraege (eine Quelle); leerer Kalender behaelt DE byte-identisch "Kalender ist
+  // leer." + leere Liste.
   if (allowCalendar)
     uiTool(
       "get_calendar",
@@ -713,8 +721,12 @@ export function registerTools(
         // und behaelt den bestehenden "Kalender ist leer."-Pfad.
         requireFields(s, { calendar: "array" });
         const entries = s.calendar.map((e) => pickCalendarEntry(e, formatDate)); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+        // Auch die BEFUELLTE Zeile folgt der Tenant-Sprache (MCP-14), nicht nur der
+        // Leertext: Verbinder und Interpunktion um den Zeitraum liegen im Locale-Buendel
+        // (loc.mcp.calendarLine). Explizite Arrow statt punktfreiem map(loc.mcp.calendarLine),
+        // damit map() nicht Index/Array als weitere Argumente durchreicht.
         const txt = entries.length
-          ? entries.map((e) => `${e.title}: ${e.start} bis ${e.end}`).join("\n")
+          ? entries.map((e) => loc.mcp.calendarLine(e)).join("\n")
           : loc.mcp.emptyCalendar;
         return {
           content: [{ type: "text", text: txt }],
