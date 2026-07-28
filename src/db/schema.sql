@@ -205,7 +205,18 @@ CREATE TABLE IF NOT EXISTS call (
   actual_cost_micro_cents BIGINT,
   cost_trued_at TEXT,
   cost_trued_source TEXT,
-  cost_truing_attempts INTEGER NOT NULL DEFAULT 0
+  cost_truing_attempts INTEGER NOT NULL DEFAULT 0,
+  -- AL-P1 (Latenz-Achse): Telnyx' EIGENE Conversation-UUID dieses Calls, aus dem
+  -- call.conversation.created-Webhook. Additiv NULLABLE - nur der Assistant-Pfad
+  -- setzt sie, jeder andere Call bleibt NULL. Speist scripts/telnyx-call-latency.mjs
+  -- --call, damit die Latenz-Tabelle ohne Handarbeit erzeugbar ist.
+  telnyx_conversation_id TEXT,
+  -- AL-P1 (Abbruch-Achse): Anzahl Turns dieses Calls mit nicht-leerer Anrufer-
+  -- Aeusserung. PII-FREI (nur ein Zaehler, nie Text) und PURGE-FEST: purgeTranscript
+  -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
+  -- JEDEN Call zu. NOT NULL DEFAULT 0 fuellt Bestandszeilen ohne Backfill; RUECKWIRKEND
+  -- ist die Zahl nicht erhebbar, sie misst ab Deploy vorwaerts.
+  caller_turns INTEGER NOT NULL DEFAULT 0
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -253,6 +264,13 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS actual_cost_micro_cents BIGINT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_trued_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_trued_source TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_truing_attempts INTEGER NOT NULL DEFAULT 0;
+
+-- AL-P1: beide Spalten auf Bestands-call-Tabellen nachziehen (Muster context/mandate/
+-- cost_truing_attempts). Idempotent; frische DB = No-op. KEIN Backfill (migrate() laeuft
+-- auf EINER Connection mit app.current_tenant fest auf BOOTSTRAP_TENANT_ID und saehe unter
+-- FORCE-RLS ohnehin nur die Bootstrap-Zeilen).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS telnyx_conversation_id TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_turns INTEGER NOT NULL DEFAULT 0;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

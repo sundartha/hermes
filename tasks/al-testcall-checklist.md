@@ -27,4 +27,7 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 
 | Phase | Was abzunehmen ist | Woran man Erfolg erkennt | Stand |
 |---|---|---|---|
-| — | — | — | — |
+| AL-P1 | Latenz-Tabelle fuer EINEN echten Anruf: `node scripts/telnyx-call-latency.mjs --call <call_id>` | Fusszeile `status=ok` (unaccounted-Median <= 300 ms). `status=unknown_component` = wichtigster Einzelbefund, **blockiert AL-P7** | offen |
+| AL-P1 | Baseline aus **>= 5** gescripteten Anrufen: Median `roundtrips`/Turn, Turns/Anruf, Tokens/Anruf | `turn_ok`-Zeilen im Render-Log tragen `roundtrips`/`toolNames`/`chars`/`speechEmpty`; Mediane notiert | offen |
+| AL-P1 | Eroeffnungsfenster aus **>= 3 echten Aufnahmen** (Annahme bis `speak.ended`) | gemessene Sekunden notiert — Basislinie fuer AL-P5, **nicht** hochgerechnet | offen |
+| AL-P1 | Feldnamen-Verifikation `conversation_id` | im Render-Log erscheint `conversation_created (call=…) -> UUID gespeichert`. Erscheint stattdessen `… OHNE conversation_id … payload_keys=…`, ist der Feldname falsch -> Ein-Zeilen-Fix aus den geloggten Schluesseln | offen |

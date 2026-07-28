@@ -15,6 +15,8 @@ export const CALL_CONTROL_EVENT = Object.freeze({
   SPEAK_ENDED: "speak_ended",
   SPEAK_FAILED: "speak_failed",
   HANGUP: "hangup",
+  // AL-P1 (Latenz-Achse): rein diagnostischer Zweig - kein Call-Effekt, kein Gate.
+  CONVERSATION_CREATED: "conversation_created",
 });
 
 // Roh-Telnyx-event_type -> neutraler Typ. Unbekannt -> undefined (neutral ignoriert).
@@ -23,6 +25,7 @@ const EVENT_TYPE_MAP = Object.freeze({
   "call.answered": CALL_CONTROL_EVENT.ANSWERED,
   "call.speak.ended": CALL_CONTROL_EVENT.SPEAK_ENDED,
   "call.hangup": CALL_CONTROL_EVENT.HANGUP,
+  "call.conversation.created": CALL_CONTROL_EVENT.CONVERSATION_CREATED,
 });
 
 /**
@@ -41,4 +44,17 @@ export function parseCallControlEvent(body) {
   const rawId = payload.call_control_id;
   const callControlId = typeof rawId === "string" && rawId ? rawId : null;
   return { eventType, callControlId };
+}
+
+/**
+ * AL-P1: Telnyx' EIGENE Conversation-UUID aus dem call.conversation.created-Payload.
+ * LIVE UNBESTAETIGT wie die uebrigen Formen in diesem Modul (Header): der Feldname folgt
+ * der in telephony/adapters/telnyx/voice.js gemessenen Konvention (`conversation_id`).
+ * Fail-safe null - der Aufrufer loggt den Fehlschlag keys-only, statt still 0 zu messen.
+ * @returns {string|null}
+ */
+export function conversationIdFrom(body) {
+  const ev = eventEnvelope(body);
+  const raw = ev && ev.payload && typeof ev.payload === "object" ? ev.payload.conversation_id : null;
+  return typeof raw === "string" && raw ? raw : null;
 }

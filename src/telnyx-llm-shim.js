@@ -133,17 +133,38 @@ function speechTextOf(turn) {
   return turn && typeof turn.speech === "string" ? turn.speech : "";
 }
 
+// EIN Praedikat fuer den §2.2-Diskriminator, genutzt von der Shape-Diagnose UND der
+// unconditional turn_ok-Zeile (G5, statt zweimal .length === 0).
+function speechEmptyOf(turn) {
+  return speechTextOf(turn).length === 0;
+}
+
+// AL-P1: die vier PII-freien Turn-Fakten der unconditional turn_ok-Zeile. Warum NICHT in
+// den metrics-Seam: metrics.logTurn/logSpeechResult stehen hinter metricsEnabled
+// (Fallback false) und speechEmpty existierte nur hinter TELNYX_SHIM_DEBUG_SHAPE - beide
+// Signale waren im Prod-Log stumm, genau darauf stehen aber die Abnahmen von Phase 3
+// (Truncation) und 4 (leeres speech). Fail-safe gegen jede Turn-Form (auch Test-Spies
+// ohne die neuen Felder): roundtrips nur als Ganzzahl, sonst null; toolNames nur als
+// Array, sonst []. NIE Text - chars ist eine Laenge, toolNames sind Werkzeugnamen.
+function turnDiagnostics(turn, callerText) {
+  return {
+    roundtrips: Number.isSafeInteger(turn?.roundtrips) ? turn.roundtrips : null,
+    toolNames: Array.isArray(turn?.toolNames) ? turn.toolNames : [],
+    chars: callerText.length,
+    speechEmpty: speechEmptyOf(turn),
+  };
+}
+
 function messagesTurnShape(body, turn) {
   const messages = messagesArray(body);
   const { contentType, length } = lastUserContentShape(messages);
-  const speech = speechTextOf(turn);
   return {
     messagesCount: messages.length,
     roleCounts: roleCounts(messages),
     lastUserContentType: contentType,
     lastUserLength: length,
     lastUserTextPresent: lastUserText(body).trim().length > 0,
-    speechEmpty: speech.length === 0,
+    speechEmpty: speechEmptyOf(turn),
   };
 }
 
@@ -429,7 +450,7 @@ export function makeTelnyxLlmShim({
       // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
       // war metricsEnabled AUS = kein Lebenszeichen). Bewusst getrennte Kanaele/Prefixe.
       metrics.logShimTurn({ callId: call.id, latencyMs });
-      logShimTurnOk({ callId: call.id, latencyMs, turnSeq });
+      logShimTurnOk({ callId: call.id, latencyMs, turnSeq, ...turnDiagnostics(turn, callerText) });
       // P5 (OBS/R6): unter demselben default-off TELNYX_SHIM_DEBUG_SHAPE-Flag und demselben
       // shape-Kanal (logShimShape) eine PII-freie Zeile, die den eingehenden messages-Payload
       // mit speechEmpty verknuepft - trennt "Brain lieferte leeren Text" von "Vendor sprach

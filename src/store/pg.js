@@ -273,6 +273,19 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // AL-P1: Conversation-UUID + Anrufer-Turn-Zaehler - Wrapper-Paritaet zu json.js.
+    // BEIDE saven (anders als countNoSpeechTurn): es gibt Spalten, und der Flush schreibt
+    // sie aus dem Spiegel.
+    recordTelnyxConversationId(callId, conversationId) {
+      const { call, changed } = ops.recordTelnyxConversationId(requireState(), callId, conversationId);
+      if (changed) save();
+      return call;
+    },
+    countCallerTurn(callId) {
+      const { call, changed } = ops.countCallerTurn(requireState(), callId);
+      if (changed) save();
+      return call ? call.callerTurns : 0;
+    },
     // P3.2: ephemerer No-Speech-Streak - Wrapper-Paritaet zu json.js. KEIN save(): es gibt
     // keine Spalte (Muster releaseOutboundReserve), der Flush-Spaltenblock bleibt unberuehrt.
     countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),
@@ -1017,6 +1030,11 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     costTruedAt: r.cost_trued_at ?? null,
     costTruedSource: r.cost_trued_source ?? null,
     costTruingAttempts: r.cost_truing_attempts ?? 0,
+    // AL-P1: beide Felder hydrieren. Ohne diese Zeilen gingen sie beim Restart verloren
+    // UND der naechste Flush schriebe sie auf NULL/0 zurueck (Lehre i8-design-decisions).
+    // Bestandszeile ohne Wert -> null bzw. 0 (json-Parity zu createCall).
+    telnyxConversationId: r.telnyx_conversation_id ?? null,
+    callerTurns: r.caller_turns ?? 0,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -1308,8 +1326,8 @@ async function flushCalls(client, tenantId, calls) {
           summary_sms_sent_at, context, failure_reason, billed_at,
           call_control_id, assistant_id, diagnostic, mandate,
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
-          cost_trued_source, cost_truing_attempts)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+          cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1320,7 +1338,9 @@ async function flushCalls(client, tenantId, calls) {
          estimated_cost_cents=EXCLUDED.estimated_cost_cents,
          actual_cost_micro_cents=EXCLUDED.actual_cost_micro_cents,
          cost_trued_at=EXCLUDED.cost_trued_at, cost_trued_source=EXCLUDED.cost_trued_source,
-         cost_truing_attempts=EXCLUDED.cost_truing_attempts`,
+         cost_truing_attempts=EXCLUDED.cost_truing_attempts,
+         telnyx_conversation_id=EXCLUDED.telnyx_conversation_id,
+         caller_turns=EXCLUDED.caller_turns`,
       [
         c.id,
         tenantId,
@@ -1377,6 +1397,12 @@ async function flushCalls(client, tenantId, calls) {
         c.costTruedAt ?? null,
         c.costTruedSource ?? null,
         c.costTruingAttempts ?? 0,
+        // AL-P1 ($35-$36): BEIDE im ON CONFLICT DO UPDATE SET - anders als context/mandate/
+        // diagnostic mutieren sie NACH dem Create (Conversation-Webhook bzw. jeder
+        // Anrufer-Turn). Fehlten sie im UPDATE-SET, fiele der Wert beim naechsten Flush auf
+        // den Create-Zustand zurueck und die ganze Achse maesse dauerhaft 0.
+        c.telnyxConversationId ?? null,
+        c.callerTurns ?? 0,
       ],
     );
     await flushTranscript(client, tenantId, c);

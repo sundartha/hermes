@@ -478,7 +478,14 @@ export async function agentTurn(call, callerText) {
   // summarizeCall noch in den ans Modell gesendeten messages auftauchte (Datenverlust). Der
   // Substanz-Filter gated NICHT mehr das Recording, sondern nur noch die Turn-STEUERUNG
   // (suppressEndCall unten + die Empty-Turn-Zaehlung in unansweredAgentTurns).
-  if (callerText) store.addTranscript(call.id, "caller", callerText);
+  if (callerText) {
+    store.addTranscript(call.id, "caller", callerText);
+    // AL-P1 (Abbruch-Achse): derselbe Riegel wie das Transkript-Recording - genau dann,
+    // wenn der Anrufer wirklich etwas gesagt hat. Purge-fest (purgeTranscript leert nur
+    // transcript). BEWUSSTE GRENZE: der Realtime-Pfad (bridge.js) laeuft nicht durch
+    // agentTurn und zaehlt nicht mit - er ist nicht der live laufende Pfad (O1).
+    store.countCallerTurn(call.id);
+  }
 
   // Verlauf -> Messages (Transkript kompakt halten: letzte 24 Beitraege)
   const history = call.transcript.slice(-24).map((t) => ({
@@ -585,7 +592,13 @@ export async function agentTurn(call, callerText) {
   speech = shapeForSpeech(speech);
   if (!speech) speech = localeFor(call.language).turnFallbackSpeech[call.direction];
   store.addTranscript(call.id, "agent", speech);
-  return { speech, endCall };
+  // AL-P1: roundtrips/firedTools wurden bisher NUR in metrics.logTurn geschrieben - und der
+  // Seam steht hinter METRICS_ENABLED (Fallback false), war live also stumm. Genau auf
+  // diesen zwei Zahlen stehen die Abnahmen ab Phase 3/4. Sie wandern deshalb zusaetzlich
+  // in den Rueckgabewert; metrics.logTurn bleibt UNVERAENDERT (sein Payload-Schluesselsatz
+  // ist in test/l0-metrics.test.js woertlich gepinnt). EINE Quelle bleibt firedTools.
+  // toolNames statt tools: es sind NAMEN - genau daran haengt die PII-Freiheit der Logzeile.
+  return { speech, endCall, roundtrips, toolNames: firedTools };
 }
 
 // ---------- Summary + Action Items nach dem Call ----------

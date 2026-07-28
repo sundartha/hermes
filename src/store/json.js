@@ -57,7 +57,7 @@ export function load() {
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
     state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
     state.platformTtsUsage ||= emptyPlatformTtsUsage(); // LCT P7: Bestands-store.json ohne die Zeile nachziehen
-    state.calls = migrateCallCostFields(state.calls || []);
+    state.calls = migrateCallDiagnosticFields(migrateCallCostFields(state.calls || []));
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
     // forensisch nach .corrupt-<ts> sichern. NUR wenn die Sicherung GELINGT, darf der Store mit
@@ -192,6 +192,18 @@ function migrateCallCostFields(calls) {
     c.costTruedAt ??= null;
     c.costTruedSource ??= null;
     c.costTruingAttempts ??= 0;
+  }
+  return calls;
+}
+
+// AL-P1: Bestands-store.json traegt die beiden neuen Felder nicht. undefined ist hier
+// gefaehrlich und nicht bloss unsauber: callerTurns wird inkrementiert, und undefined + 1
+// waere NaN - die Abbruch-Achse maesse dauerhaft nichts. "fehlt" heisst deshalb strukturell
+// null bzw. 0 (G27). Idempotent: ??= laesst gesetzte Werte - auch die 0 - unangetastet.
+function migrateCallDiagnosticFields(calls) {
+  for (const c of calls) {
+    c.telnyxConversationId ??= null;
+    c.callerTurns ??= 0;
   }
   return calls;
 }
@@ -429,6 +441,20 @@ export function recordFailureReason(callId, reason) {
   const { call, changed } = ops.recordFailureReason(load(), callId, reason);
   if (changed) save();
   return call;
+}
+
+// AL-P1: Conversation-UUID + Anrufer-Turn-Zaehler - Wrapper-Paritaet zu pg.js. BEIDE
+// saven: die Felder liegen persistent auf Platte (migrateCallDiagnosticFields).
+export function recordTelnyxConversationId(callId, conversationId) {
+  const { call, changed } = ops.recordTelnyxConversationId(load(), callId, conversationId);
+  if (changed) save();
+  return call;
+}
+
+export function countCallerTurn(callId) {
+  const { call, changed } = ops.countCallerTurn(load(), callId);
+  if (changed) save();
+  return call ? call.callerTurns : 0;
 }
 
 // P3.2: ephemerer No-Speech-Streak - KEIN save() (das Feld ist wie reserveCents nicht
