@@ -295,6 +295,15 @@ Abnahme ist IMMER: *die Gates der Phase gruen* + *`npm test` 3295 / 0* + *Diff b
     zweimal buchen (ein Beleg je Nummer und Kalendermonat).
 - **P9** ist groesser als zunaechst geplant: die Stimme loest **regional** auf (US vs. GB),
   das beruehrt `SUPPORTED_LANGUAGES`/Locale-Aufloesung, nicht nur eine Tabelle.
+  **Nachtrag 2026-07-28 (Review-Runde 1):** die US-Haelfte (`en-US`) ist NICHT geliefert —
+  `call.language` traegt nur die Sprache, nicht das aufgeloeste Land, es gibt keinen
+  Laufzeit-Signal fuer "US vs. GB". Eine echte Aufloesung braucht entweder `country` am
+  Call-Record (DB-Migration) oder eine `SUPPORTED_LANGUAGES`-Erweiterung um `en-US`/`en-GB`
+  — Letzteres bricht den harten Pin `f1-i18n-locale.test.js:70` und ist ausserhalb der
+  Zulaessige-Testaenderung-Liste (Abschnitt 7). Bleibt offener Folgeauftrag fuer den Owner
+  (Details: `tasks/gates-fix-chain.md` P9-Nachtrag). Der Play-TTS-Vorabsynthese-Pfad
+  (`src/tts/directive-synth.js`) wurde in derselben Runde nachgezogen und folgt jetzt
+  ebenfalls der Sprachaufloesung (vorher: eine globale Stimme, unabhaengig vom Renderer-Fix).
 - **P14** ist keine Datei-Loeschung, sondern eine Phase mit Geld-Pfad-Beruehrung (PM-6) und
   einer Sicherheits-Nebenwirkung: `src/middleware.js:4` lockert die CSP ausdruecklich **wegen**
   dieser Datei (Inline-`<script>`/`onclick`). Faellt sie, kann die CSP enger werden — das ist
@@ -349,6 +358,7 @@ nicht angepasst:
 | Phase | Zulaessige Aenderung | Grund |
 | --- | --- | --- |
 | **P4** | `f1-provisioning-geo.test.js:200` (GAP-11) neu fassen: Hold == Preis aus der Provider-Antwort statt Tabelleneintrag | Owner-Entscheidung 2026-07-27 (2.2) |
+| **P9** | `telnyx-elevenlabs-render.test.js` (der W2-Ist-Pin "eine Voice-ID fuer alle Sprachen") auf den VOICE-12-Sollzustand heben (zwei sprachaufgeloeste IDs) | nachtraeglich freigegeben 2026-07-28 (Review-Runde 1, B3) — der Ist-Pin ist die Negation von VOICE-12; das Gate selbst (drei distinct IDs) bleibt unveraendert. Siehe `tasks/gates-fix-chain.md` P9-Nachtrag |
 | **P7** | `did-reputation-metric.test.js` beide Tests stilllegen; Ersatz: Boot-Guard-Test fuer `TELNYX_CONNECTION_ID` | Owner-Entscheidung (2.1); Deckung bleibt ueber `number-lifecycle.test.js:129` + `bk3-auto-provision.test.js:125-130` |
 | **P10** | `EXPECTED_MARKERS` in `p15-mcp-tool-descriptions-en.test.js` | der entfernte `language`-Param ist dort als Marker gelistet |
 | **P11** | der Byte-Identitaets-Test ueber `telnyx-p8-inbound.test.js:135` | pinnt den Aufruf ohne `language`; Kopplung im Testkommentar `:128-131` |

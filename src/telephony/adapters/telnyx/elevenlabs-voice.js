@@ -27,11 +27,18 @@ export function elevenLabsVoiceName(el) {
   return `${ELEVENLABS_PROVIDER}.${el.model || DEFAULT_MODEL}.${el.voiceId}`;
 }
 
-// Sprach-aufgeloester Voice-Name: Profil mit eigener Stimme -> diese, sonst die
-// injizierte Plattform-Stimme (DE). Komposition statt zweiter Formatierungsstelle (G5).
+// Sprach-aufgeloeste rohe Voice-ID: Profil mit eigener Stimme -> diese, sonst die
+// injizierte Plattform-Stimme (DE). EINE Aufloesungsstelle fuer beide Konsumenten
+// (Renderer-Voice-Name unten UND der Play-TTS-Vorabsynthese-Pfad in src/tts/*, der
+// dieselbe Aufloesung braucht statt einer zweiten globalen Stimme, G5/S2).
+export function elevenLabsVoiceIdFor(defaultVoiceId, voiceProfile) {
+  return ELEVENLABS_VOICE_ID_BY_PROFILE[voiceProfile] || defaultVoiceId;
+}
+
+// Sprach-aufgeloester Voice-Name: Komposition aus der ID-Aufloesung + Namensformat
+// (kein zweiter Formatierungs- oder Aufloesungsort, G5).
 export function elevenLabsVoiceNameFor(el, voiceProfile) {
-  const voiceId = ELEVENLABS_VOICE_ID_BY_PROFILE[voiceProfile] || el.voiceId;
-  return elevenLabsVoiceName({ model: el.model, voiceId });
+  return elevenLabsVoiceName({ model: el.model, voiceId: elevenLabsVoiceIdFor(el.voiceId, voiceProfile) });
 }
 
 // Fail-SAFE-Gate (kein Programmierfehler, anders als das werfende voiceAttrs): eine halbe/
