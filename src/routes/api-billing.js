@@ -13,7 +13,7 @@
 import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
-import { requirePaymentEnabled } from "../billing/payment-gate.js";
+import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.js";
 import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
 import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
@@ -52,7 +52,8 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   // gespeichert; der spaetere Hold/Capture (Pay2) nutzt customer+payment_method.
   router.post("/api/billing/setup-checkout", async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
-    if (!config.server.publicUrl) return res.status(500).json({ error: "PUBLIC_URL fehlt" }); // kein Leak
+    // WEB-10: stabiler, sprachneutraler Code statt deutschem Klartext mit Env-Namen.
+    if (!requirePublicUrl(res, config)) return;
     const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
     if (!tenant) return;
 

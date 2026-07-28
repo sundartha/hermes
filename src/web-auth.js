@@ -29,11 +29,15 @@ const isRetryState = (state) => String(state ?? "").endsWith(STATE_RETRY_MARKER)
 // Terminale Recovery-Seite: erscheint NUR, wenn auch der zweite (markierte) Login-Versuch
 // ohne Login-Cookie zurueckkommt (Browser blockiert Cookies) -> bricht den Loop statt
 // Endlos-302. Mintet KEINE Session, setzt KEIN Cookie, leakt nichts.
-const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="de"><head><meta charset="utf-8">
-<title>Sitzung abgelaufen</title></head><body>
-<h1>Sitzung abgelaufen</h1>
-<p>Deine Anmeldesitzung ist abgelaufen oder dein Browser blockiert Cookies. Bitte erlaube Cookies fuer diese Seite und melde dich erneut an.</p>
-<p><a href="${LOGIN_ROUTE}">Erneut anmelden</a></p>
+// WEB-13: Englisch statt Deutsch. Die Seite erscheint, BEVOR eine Identitaet existiert
+// (kein Cookie, keine Session, kein Tenant) - eine Tenant-Sprache gibt es hier strukturell
+// nicht, also gilt der Weltdefault "en" (derselbe Massstab wie /app). Bewusst hart
+// verdrahtet und NICHT ueber config: web-auth bleibt config-frei (DI-Naht, s.o.).
+const SESSION_EXPIRED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Session expired</title></head><body>
+<h1>Session expired</h1>
+<p>Your sign-in session has expired, or your browser is blocking cookies. Please allow cookies for this site and sign in again.</p>
+<p><a href="${LOGIN_ROUTE}">Sign in again</a></p>
 </body></html>`;
 
 // P9 (Fehler-Vertrag): die nutzersichtbaren Fehlerantworten der Auth-Pfade tragen stabile,
