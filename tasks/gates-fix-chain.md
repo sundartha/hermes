@@ -293,6 +293,54 @@ hat.
 
 **Zulaessige Testaenderung:** keine.
 
+### Nachtrag 2026-07-28 — nach dem ersten, blockierten Anlauf
+
+Der erste Anlauf endete BLOCKED. Der Review hat vier Befunde gemeldet; drei davon sind
+bestaetigt und aendern die Vorgaben dieser Phase.
+
+**1. GAP-06 ist als Gate unerfuellbar und wird neu gefasst (autorisiert).** Der Test ruft
+`recordNumberMonthMeter` **einmal** auf und erwartet **drei** Belege — das kann kein
+Produktcode leisten; sein eigener Kommentar nennt ihn einen R2-Beweistest ("es gibt heute
+keine Handlung, die ihn gruen machen koennte"). Er misst den Befund, nicht die Anforderung.
+
+**Sollform des neu gefassten Gates** (beides MUSS drin sein, sonst ist es keine Neufassung,
+sondern eine Abschwaechung):
+
+- *Wiederkehr:* der wiederkehrende Ausloeser, ueber drei Kalendermonate gefahren, erzeugt
+  fuer **eine** aktive Nummer **drei** Belege — einen je Monat.
+- *Idempotenz:* derselbe Ausloeser zweimal im **selben** Monat gefahren erzeugt **einen**
+  Beleg, nicht zwei.
+
+**2. Die Idempotenz wird an der NUMMER gefuehrt, nicht am Tenant.** Der erste Anlauf zaehlte
+Belege je Tenant und liess je Beleg eine beliebige aktive Nummer aus der Faelligkeit fallen.
+Der Review hat daraus eine konkrete **Doppelbuchung** hergeleitet: bei zwei Nummern A und B
+bucht Stunde 1 nur B (A hat keinen gelernten Preis), in Stunde 2 absorbiert A den Zaehler und
+**B wird erneut gebucht**. Heute unerreichbar (`MAX_NUMBERS_PER_TENANT=1`,
+`PAYMENT_ENABLED=false`) — aber der einzige Riegel ist eine Konfigurationszahl, die genau
+dafuer existiert, spaeter erhoeht zu werden.
+
+**Verbindlich:** Der Beleg MUSS die **Nummer identifizieren**; fehlt das Feld heute, gehoert
+es ergaenzt. Eine Zaehlung je Tenant ist ausdruecklich **keine** zulaessige Naeherung. Der
+Fall "zwei aktive Nummern, eine schlaegt fehl" gehoert getestet.
+
+**3. Der GAP-11-Test darf angepasst werden — aber nur ERWEITERND (autorisiert).** Dass ohne
+gelernten Preis **gar nicht** gebucht wird, ist richtig und von dieser Spec verlangt (die
+Einrichtungsgebuehr ist ausdruecklich kein Miet-Fallback, sonst zahlt jede Bestandsnummer sie
+dauerhaft als "Miete"). Der erste Anlauf hat den Test dafuer aber **umgedreht**: aus
+"genau ein Beleg mit dem richtigen Betrag" wurde "kein Beleg" — und damit fiel die
+Anti-Drift-Zusage weg, die nach dem R3-Capture-Mismatch eingezogen worden war.
+
+**Verbindlich:** `test/f1-provisioning-geo.test.js` muss nach der Aenderung **beide** Faelle
+pinnen — *ohne* gelernten Preis kein Beleg (fail-closed) **und** *mit* gelerntem Preis genau
+ein Beleg, der diesen Preis traegt, waehrend Hold und Capture weiter aus einer Quelle kommen.
+Ein Ergebnis, das nur den Nullfall pinnt, ist ein Blocker.
+
+**4. Dateiliste.** Zusaetzlich erlaubt ist `src/store/state-ops.js` (P6 ist gemergt, die
+Wellen laufen sequentiell — die urspruengliche Kollisionssorge ist erledigt). **Verboten
+bleibt `src/app.js`** (Dateiliste von P14, das noch aussteht). `src/routes/stripe-webhook.js`
+und `src/wiring/web-login.js` stehen in keiner Phasenliste: entweder ohne sie loesen oder je
+Datei begruenden, warum es ohne sie nicht geht.
+
 ---
 
 ## P6 — Store-Vertraege + TTS-Kontingent (LANG-19, GAP-09 x2)
