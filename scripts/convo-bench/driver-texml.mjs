@@ -5,11 +5,11 @@
 // geaendert (Muster scripts/convo-bench/drivers.mjs, Port-Vertrag im Kopfkommentar).
 import { parseVoiceBody } from "./texml.mjs";
 import { TELNYX_DUMMY_HEADERS } from "./telnyx-fake.mjs";
+import { BENCH_DEFAULT_CALLER } from "./bench-constants.mjs";
 
 export const TEXML_DRIVER_ID = "texml";
 
 const CALL_SID = "CAtest_bench";
-const BENCH_DEFAULT_CALLER = "+4915100000099";
 
 function extractCallIdFromUrl(url) {
   return new URL(url).searchParams.get("callId");

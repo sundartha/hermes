@@ -16,6 +16,9 @@ import { parseCallControlEvent } from "../src/telephony/adapters/telnyx/call-con
 import { DRIVERS, DRIVER_IDS, DEFAULT_DRIVER_ID, scenarioSupportsDriver } from "../scripts/convo-bench/drivers.mjs";
 import { TEXML_DRIVER_ID } from "../scripts/convo-bench/driver-texml.mjs";
 import { SHIM_DRIVER_ID } from "../scripts/convo-bench/driver-shim.mjs";
+import { BENCH_DEFAULT_CALLER } from "../scripts/convo-bench/bench-constants.mjs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 test("AL-P8-13 shimTurnRequest setzt Bearer, extra_metadata.call_control_id und stream:true", () => {
   const req = shimTurnRequest({ baseUrl: "http://127.0.0.1:1234", secret: "s3cr3t", callControlId: "cc_1", text: "Hallo", model: "gpt-4o-mini" });
@@ -139,4 +142,16 @@ test("AL-P8-22 scenarioSupportsDriver: hold-warteschleife nur texml, alle andere
   const ohneDriversFeld = {};
   assert.equal(scenarioSupportsDriver(ohneDriversFeld, "texml"), true);
   assert.equal(scenarioSupportsDriver(ohneDriversFeld, "shim"), true);
+});
+
+test("AL-P8-23 der Default-Anrufer-Literal ist NUR in bench-constants.mjs definiert, beide Treiber importieren ihn (G5)", () => {
+  assert.equal(BENCH_DEFAULT_CALLER, "+4915100000099");
+
+  const texmlSrc = readFileSync(fileURLToPath(new URL("../scripts/convo-bench/driver-texml.mjs", import.meta.url)), "utf8");
+  const shimSrc = readFileSync(fileURLToPath(new URL("../scripts/convo-bench/driver-shim.mjs", import.meta.url)), "utf8");
+
+  assert.ok(texmlSrc.includes('from "./bench-constants.mjs"'), "driver-texml.mjs muss BENCH_DEFAULT_CALLER importieren");
+  assert.ok(shimSrc.includes('from "./bench-constants.mjs"'), "driver-shim.mjs muss BENCH_DEFAULT_CALLER importieren");
+  assert.ok(!texmlSrc.includes(`"${BENCH_DEFAULT_CALLER}"`), "driver-texml.mjs darf den Literal nicht erneut deklarieren");
+  assert.ok(!shimSrc.includes(`"${BENCH_DEFAULT_CALLER}"`), "driver-shim.mjs darf den Literal nicht erneut deklarieren");
 });

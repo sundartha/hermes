@@ -8,11 +8,11 @@
 // geseedeten aktiven Call mit passender callControlId - nicht mit einem Schalter.
 import { TELNYX_ASSISTANT_BOOT_ENV } from "../../test/helpers.js";
 import { startTelnyxFake, TELNYX_DUMMY_HEADERS, callControlEventBody } from "./telnyx-fake.mjs";
+import { BENCH_DEFAULT_CALLER as SHIM_DEFAULT_CALLER } from "./bench-constants.mjs";
 
 export const SHIM_DRIVER_ID = "shim";
 
 const BENCH_CALL_CONTROL_ID = "cc_bench";
-const SHIM_DEFAULT_CALLER = "+4915100000099";
 // Nachlauf nach einer 200er Shim-Antwort: der Abschieds-Log (farewell_scheduled) ist
 // unconditional, aber async zur HTTP-Antwort - ein kurzer, fruehzeitig abbrechender
 // Poll-Takt reicht (Muster ACTION_POLL_INTERVAL_MS in telnyx-fake.mjs).
