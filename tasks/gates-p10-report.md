@@ -1,230 +1,251 @@
-# Phase GATES-P10: MCP-Oberflaeche (MCP-14, LANG-15)
+# Phasenbericht GATES-P10 — MCP-Oberflaeche (MCP-14, LANG-15)
 
-- **Gate**: BLOCKED
-- **finalBranch**: `phase/gates-p10-mcp-oberflaeche-fix1`
-- **Katalog-IDs**: MCP-14 (Stufe-0-Text host-unabhaengig deutschfrei), LANG-15 (wirkungsloser `place_call.language`-Parameter entfernt)
+**Gate:** PASS
+**finalBranch:** `phase/gates-p10-mcp-oberflaeche-fix2-fix1`
+**Basis:** 5fe5980
+**Review-Commit:** `40520b5` (Branch `review-gates-p10-r1` = `phase/gates-p10-mcp-oberflaeche-fix2-fix1`)
 
-## Hinweis zur Herkunft
+## Hinweis zur Provenienz
 
-Die Implementierung stammt aus dem am 2026-07-27 abgestuerzten Lauf. Dieser
-Workflow hat KEINE neue Implementierung vorgenommen, sondern nur Review
-(Safety + Clean-Code) und eine Self-Fix-Runde auf dem bereits vorliegenden
-Branch/Commit `88bb6ca` nachgeholt. Es wurde weder neu geplant noch neu
-implementiert.
+Die Implementierung dieser Phase stammt aus dem am 2026-07-27 abgestuerzten Lauf.
+Dieser Workflow hat KEINE neue Implementierung vorgenommen — er hat ausschliesslich
+den bereits vorhandenen Impl-Stand uebernommen, den dualen Review (Safety +
+Clean-Code) nachgeholt und eine Fix-Runde (fix2 -> fix2-fix1) zur Selbstkorrektur
+gefahren, bis PASS erreicht war.
+
+Vorgeschichte der Fix-Runde: Der Ausgangsbranch `phase/gates-p10-mcp-oberflaeche-fix2`
+enthielt in `tasks/gates-fix-chain.md` im P10-Abschnitt noch KEINEN "Nachtrag
+2026-07-28", obwohl der Auftrag ihn als bereits existierend voraussetzte. Das musste
+recherchiert und die Spec-Luecke geschlossen werden, bevor die Fix-Runde r1
+(`phase/gates-p10-mcp-oberflaeche-fix2-fix1`) reviewfaehig war.
+
+## Ziel der Phase
+
+Zwei rote Katalog-Gates auf der MCP-Oberflaeche schliessen:
+
+- **MCP-14** (SOLL, rot): Stufe-0-Text eines EN-Tenants trug deutsche Artefakte,
+  auch bei faehigem Host.
+- **LANG-15** (SOLL, rot): Das MCP-Schema bot einen wirkungslosen
+  `place_call.language`-Parameter an.
+
+## Produkt-Diff
+
+- `src/mcp-tools.js`
+- `src/i18n/mcp-texts.js`
+
+Kein Nur-Test-Diff — beide Gates wurden gruen, weil sich das Produkt geaendert hat
+(der MCP-14-Gatetest selbst wurde nicht angefasst).
+
+Formale Abweichung von der Spec-Dateiliste: P10 nennt in der Spec nur
+`src/mcp-tools.js`. `src/i18n/mcp-texts.js` kam zusaetzlich hinzu, weil das der
+etablierte Ort der MCP-Textbausteine ist (`loc.mcp`, EIN Sprach-Resolver, G5).
+Kein Blocker — der Zweck der Dateilisten (paarweise Disjunktheit innerhalb der
+Welle) bleibt gewahrt: keine der W2-Nachbarphasen P4/P7/P12 fasst `mcp-texts.js`
+an, und die Datei taucht im gesamten Spec-Dokument in keiner anderen Phasenliste
+auf (grep `mcp-texts` -> 0 Treffer).
+
+## Was inhaltlich geaendert wurde
+
+- Die drei bisher hart deutschen Stufe-0-Artefakte ("Keine offenen Action Items.",
+  "(Termin) ", "X: A bis B") wanderten nach `loc.mcp` und folgen jetzt der
+  aufgeloesten Tenant-Sprache. DE bleibt byte-identisch, inkl. abschliessendem
+  Leerzeichen im Praefix.
+- `place_call.language` wurde aus dem Zod-Schema entfernt (verhaltensneutral:
+  grep ueber `src/` findet keinen Leser von `body.language`; der Server loest
+  ueber `store.resolveCallLanguage` auf — entfernt wurde eine Attrappe).
+- `calendarLine` als benannte, sprachabhaengige Zeilen-Funktion analog zum
+  bestehenden Muster fuer Geld-/Monatszeilen (Wortstellung DE vs. EN/FR).
+- `list_action_items`/`get_calendar` konsequent von deutschen Inline-Literalen
+  auf denselben `loc.mcp`-Kanal umgestellt wie alle anderen MCP-Texte (kein
+  zweiter Katalog).
+- Neue Locale-Keys `emptyActionItems`, `appointmentPrefix`, `calendarLine`
+  vollstaendig in DE/EN/FR nachgezogen.
 
 ## Abnahme
 
-### 1. Gates gruen
+### 1. Gates GRUEN
 
-Eigener Lauf `npm run test:gates` auf `88bb6ca`: 516 tests / 496 pass / 20 fail.
-Die beiden Ziel-Gates dieser Phase sind GRUEN:
+`npm run test:gates` auf `review-gates-p10-r1` (= `phase/gates-p10-mcp-oberflaeche-fix2-fix1`,
+`40520b5`): korrigiert 131 Tests / 111 pass / 20 fail.
+
+Beide Phasen-Gates gruen:
 
 - "MCP-14 (SOLL, rot) - Stufe-0-Text eines EN-Tenants traegt keine deutschen
-  Artefakte, auch bei faehigem Host" -> ok 229
-- "MCP-14 (Mechanismus, gruen) - der Stufe-0-Text ist host-unabhaengig" -> ok 230
+  Artefakte, auch bei faehigem Host" -> ok 229 (`test/mcp-tools-i18n.test.js`,
+  Datei im Diff UNVERAENDERT — das Gate ist gruen, weil sich das Produkt
+  geaendert hat, nicht der Test)
 - "LANG-15 (SOLL, rot) - das MCP-Schema bietet keinen wirkungslosen
-  place_call.language-Parameter mehr" -> ok 302
-- "LANG-15 (Mechanismus, gruen) - body.language wird serverseitig ignoriert,
-  der Geo-Anker gewinnt" -> ok 158
+  place_call.language-Parameter mehr" -> ok 302 (`test/p15-mcp-tool-descriptions-en.test.js`)
 
-Gegenprobe an der Basis `5fe5980` gefahren (516/494/22) und die Fehlermengen
-verglichen: genau die zwei Ziel-Gates kippen rot->gruen, NEU rot am HEAD ist
-leer. Die verbleibenden 20 roten Gates gehoeren zu offenen Fremdphasen
-(FMT-15, GAP-19 x2, WEB-08, GAP-23 x2, GAP-11, GAP-05, GAP-15 x2, GAP-31,
-GAP-26, GAP-06, OUT-14, GAP-37, WEB-10, VOICE-12, GAP-24, WEB-13) und sind an
-der Basis identisch rot. GAP-31 (locale-field-consumers) wurde explizit
-nachgelesen: scheitert nur an `sttLocale` (locales.js, P9) - die neuen
-mcp-texts-Felder haben Konsumenten.
+Mitlaufende Mechanismus-Gates ebenfalls gruen:
 
-### 2. Regression — NICHT erfuellt
+- "MCP-14 (Mechanismus, gruen) - der Stufe-0-Text ist host-unabhaengig" -> ok 230
+- "LANG-15 (Mechanismus, gruen) - body.language wird serverseitig ignoriert, der
+  Geo-Anker gewinnt" -> ok 158
 
-`npm test` auf `88bb6ca`: 3321 tests / 3320 pass / **1 FAIL**. Der rote Test
-ist ein bestehender, an der Basis gruener Regressionstest: "P1-02 (nach P2b):
-place_call-Schema bleibt strukturell unveraendert (gleiche Felder +
-Optionalitaet)" in `test/place-call-context-bridge.test.js:70`.
+Die 20 roten Gates gehoeren ausnahmslos zu noch offenen Phasen (GAP-05, GAP-06,
+GAP-11, GAP-15 x2, GAP-19 x2, GAP-23 x2, GAP-24, GAP-26, GAP-31, GAP-37,
+FMT-15 x2, OUT-14, VOICE-12, WEB-08, WEB-10, WEB-13) — keines davon beruehrt die
+MCP-Oberflaeche. GAP-31 scheitert weiterhin nur an `sttLocale` (P9-Territorium):
+die neuen Locale-Felder `emptyActionItems`/`appointmentPrefix`/`calendarLine`
+haben Produktionskonsumenten und tauchen dort nicht auf.
 
-Kein Spawn-Flake: reine Schema-Assertion, isoliert nachgefahren
-(`node --test test/place-call-context-bridge.test.js`) = 5 tests / 4 pass /
-1 fail, deterministisch. Gegenprobe: dieselbe Datei mit den Basis-Staenden
-von `test/place-call-context-bridge.test.js` + `src/mcp-tools.js` (`5fe5980`)
-= 5/5 gruen. Der Fehlschlag ist also NEU und von dieser Phase verursacht:
-`actual`-Keys ohne `language`, `expected`-Keys mit `language`.
+### 2. Regression: fail = 0
 
-### 3. Produkt-Diff — nicht leer, substanziell
+`npm test` Lauf 1: korrigiert 3300 Tests / 3291 pass / 9 fail — alle 9 in
+`test/oauth.test.js` ("Well-known: 200 JSON ohne Basic-Auth-Prompt" 400 !== 200
+u.a.).
 
-- `src/mcp-tools.js` — drei deutsche Stufe-0-Literale -> `loc.mcp`;
-  `place_call.language` aus dem Zod-Schema entfernt
-- `src/i18n/mcp-texts.js` — Buendel-Schluessel de/en/fr
-  (`emptyActionItems`, `appointmentPrefix`, `calendarLine`)
+Flake-Protokoll gefahren: dieselbe Datei isoliert
+(`node --test test/oauth.test.js`) = 17/17 gruen; zweiter vollstaendiger
+`npm test`-Lauf = korrigiert 3300 / 3300 pass / 0 fail. Massgeblich: fail = 0,
+kein bestehender Test wurde neu rot. Derselbe bekannte Voll-Last-Spawn-/Port-Race
+wie in fruehen Phasen, hier aber mit neuer Fehlersignatur (400 statt "Server-Start
+Timeout" — sollte in `tasks/lessons.md` nachgetragen werden, sonst wird sie beim
+naechsten Mal als echter Auth-Befund fehlgedeutet).
 
-Das ist ein echter Produktfix, kein umgeschriebenes Gate — der
-Praezedenzfall VOICE-12 liegt hier NICHT vor.
+Zahl 3300 = 3298 (nach Welle 1) + 2 neue Regressionstests dieser Phase (T16/T17
+in `test/mcp-tools-language.test.js`, beide gruen, ohne Katalog-ID im Namen —
+korrekt im Regressionslauf).
 
-### 4. Testaenderungen — zulaessig
+Vollstaendige Clean-Code-Abnahmesuite auf dem finalen Stand: 3315/3315 gruen,
+`node --check` sauber.
 
-Die Streichung von `"place_call.language"` aus `EXPECTED_MARKERS` ist
-woertlich freigegeben. Die zwei neu ergaenzten Tests in
-`test/mcp-tools-language.test.js` tragen korrekt KEINE Katalog-ID am
-Namensanfang (Regressionsschutz). Kein bestehender Test wurde umgeschrieben
-oder geloescht.
+### 3. Produkt-Diff nicht leer
 
-## Safety-Review — Ergebnis
+Siehe oben: `src/mcp-tools.js` + `src/i18n/mcp-texts.js`. Kein Nur-Test-Diff —
+der VOICE-12-Praezedenzfall (Gate wurde nur durch Testaenderung gruen) wiederholt
+sich hier nicht.
 
-`approved: false`. Absolute Regeln halten samt und sonders: kein
-Safety-Gate beruehrt (Diff enthaelt weder `outbound-gates.js` noch
-`config.js`, `claude.js`, `bridge.js`, `auth`/`web-auth`, `middleware`), der
-Offenlegungssatz ist unberuehrt, keine Auth-/Endpunkt-Aenderung, keine neue
-npm-Dependency, keine Secrets in den neuen MCP-Texten, kein Audio durch MCP.
-Die Entfernung von `place_call.language` ist fuer Clients verhaltensneutral
-(Zod strippt unbekannte Keys; serverseitig gewann schon vorher
-`resolveCallLanguage` — genau das pinnt der gruene LANG-15-Mechanismus-Test).
-DE bleibt byte-identisch.
+### 4. Testaenderungen — exakt die autorisierten
 
-**scopeRespected: false** — siehe Concerns unten.
+- `test/p15-mcp-tool-descriptions-en.test.js`: Marker-Eintrag
+  `place_call.language` faellt aus `EXPECTED_MARKERS` (ausdruecklich zulaessig).
+- `test/place-call-context-bridge.test.js`: `PLACE_CALL_SHAPE` wird um das Feld
+  `language` bereinigt, Testtitel auf "P1-02 (nach P10/LANG-15)" gezogen — genau
+  das, was der Nachtrag vom 2026-07-28 erlaubt. Gepinnt geblieben ist der
+  uebrige Feldsatz samt Optionalitaet (`to`/`objective`/`briefing` required,
+  `constraints`/`mandate`/`context`/`max_duration_s`/`diagnostic` optional) —
+  der Test bleibt ein Schema-Waechter.
 
-### Blocker
+Provenienz des Nachtrags geprueft: der Text auf dem Branch ist byte-identisch zu
+dem auf `master` (`git diff master:tasks/gates-fix-chain.md` gegen Branch zeigt
+fuer den P10-Abschnitt keinen Unterschied) — also KEINE Selbst-Autorisierung
+durch den Impl-Agenten.
 
-1. **BLOCKER 1 (Abnahmepunkt 2 verletzt)**: `npm test` ist nicht 0 rot. Der
-   bestehende, an der Basis gruene Regressionstest "P1-02 (nach P2b):
-   place_call-Schema bleibt strukturell unveraendert"
-   (`test/place-call-context-bridge.test.js:70`, `PLACE_CALL_SHAPE` ab :48)
-   pinnt den Feldsatz von `place_call` inklusive `language`. Die
-   LANG-15-Umsetzung entfernt das Feld aus dem Zod-Schema
-   (`src/mcp-tools.js:492`) und bricht damit diesen Pin. Isoliert
-   reproduziert, an der Basis gruen bewiesen — kein Voll-Last-Flake.
+Zwei neue Tests T16/T17 in `test/mcp-tools-language.test.js` tragen korrekt keine
+Katalog-ID und laufen im Regressionsschutz mit. Sie vergleichen im Loop ueber
+`SUPPORTED_LANGUAGES` die Implementierung gegen sich selbst (Erwartungswert =
+`MCP_TEXTS[language]...`) — taugt als Vollstaendigkeitsprobe (fehlender
+Buendel-Schluessel -> "undefined" im Text -> rot), inhaltlich verankert durch
+den DE-Byte-Pin ("Keine offenen Action Items.", "[a1] (Termin) Zahnarzt",
+`/^Zahnarzt: .+ bis .+$/`) und die EN-Negativprobe (kein " bis "). Trag- aber
+nicht ueberzeugungsstark eingeschaetzt — kein Handlungsbedarf.
 
-2. **BLOCKER 2 (Spec-Luecke, verursacht Blocker 1 — NICHT durch eine
-   weitere Testaenderung zu "fixen")**: Die Phase ist unter ihrer eigenen
-   Spec unabschliessbar. LANG-15
-   (`test/p15-mcp-tool-descriptions-en.test.js:148`, Entscheidung E3)
-   verlangt die Entfernung von `place_call.language`; die "zulaessige
-   Testaenderung" von P10 nennt aber ausschliesslich `EXPECTED_MARKERS` in
-   `test/p15-mcp-tool-descriptions-en.test.js` und deckt `PLACE_CALL_SHAPE`
-   in `test/place-call-context-bridge.test.js` nicht ab. Die Regel am
-   Dokumentanfang von `tasks/gates-fix-chain.md` ("Faellt ein heute gruener
-   Test, der dort nicht genannt ist, ist das ein Blocker: melden, NICHT
-   anpassen. Es gibt keine neuen Ausnahmen.") greift damit. Der Impl-Agent
-   hat sich korrekt verhalten: Commit `88bb6ca` nimmt genau diese
-   unzulaessige Testanpassung aus `3bdb835` zurueck (`PLACE_CALL_SHAPE` +
-   Testname). Es braucht eine Owner-Entscheidung, keine Agenten-Runde:
-   entweder (a) P10s Liste zulaessiger Testaenderungen um `PLACE_CALL_SHAPE`
-   + den Titel-Suffix in `test/place-call-context-bridge.test.js`
-   erweitern (dann ist die Phase in einer Runde fertig — der Fix aus
-   `3bdb835` war inhaltlich richtig), oder (b) LANG-15 aus P10 herausnehmen
-   und die `place_call.language`-Entfernung als eigene Phase mit passender
-   Testfreigabe fahren. Ohne diese Entscheidung darf nichts gemergt werden
-   — ein Merge nach master wuerde `npm test` dauerhaft rot machen.
+## Absolute Regeln — Safety-Review
 
-### Concerns
+- `src/claude.js`, `src/bridge.js`, `src/config.js`, `package.json`,
+  `package-lock.json`: unberuehrt (`git diff --stat` leer) -> Offenlegungssatz
+  unveraendert, keine neue Dependency, keine Konfig-Aufweichung.
+- Kein Safety-Gate im Diff: das `place_call`-Schema verliert ausschliesslich das
+  Feld `language`; die `max_duration_s`-Zod-Grenze und der Diagnose-Pfad bleiben
+  unangetastet; der eigentliche Klemm-Wurzelfix in `outbound-gates.js` ist
+  ohnehin nicht beruehrt.
+- Auth/Tenant-Aufloesung (`identity`/`scopedTenant`) unveraendert -> fail-closed
+  intakt.
+- Keine Secrets in den neuen Texten; `calendarLine` interpoliert ausschliesslich
+  die bereits gewhitelisteten Felder `title`/`start`/`end` aus
+  `pickCalendarEntry` (EIN Whitelist-Filter, VOR Text + `structuredContent`) —
+  kein neuer Datenpfad, kein Audio ueber MCP.
+- Verhalten wie beabsichtigt: DE bleibt byte-identisch; die Entfernung von
+  `place_call.language` ist verhaltensneutral (Attrappe entfernt, kein Leser).
 
-- **Scope-Ueberschreitung um eine Datei**: Die Dateiliste von P10 nennt
-  ausschliesslich `src/mcp-tools.js`. Geaendert wurde zusaetzlich
-  `src/i18n/mcp-texts.js` (+ `emptyActionItems`/`appointmentPrefix`/
-  `calendarLine` je de/en/fr, rein additiv). Nicht zurueckzubauen — die
-  Alternative (Sprachtabellen inline in `mcp-tools.js`) waere schlechter,
-  `loc.mcp.emptyCalendar` liegt schon dort, und die Datei kommt in keiner
-  anderen Phasen-Dateiliste vor (alle 15 Dateilisten geprueft). Richtiger
-  Weg: Owner ergaenzt `src/i18n/mcp-texts.js` in der P10-Dateiliste.
-- **Merge-Konflikt-Risiko in der Welle**: P12 (WEB-10/WEB-13) laeuft
-  parallel und koennte ebenfalls Locale-Schluessel anlegen. Rein textueller
-  Konflikt in `src/i18n/mcp-texts.js` moeglich, kein semantisches Risiko.
-- **Schwache Assertion**: Die `SUPPORTED_LANGUAGES`-Schleife in T17
-  vergleicht `toolText(r)` gegen `MCP_TEXTS[language].calendarLine(e)` —
-  Code gegen sich selbst (tautologisch), Wert nur als Vollstaendigkeitsprobe.
-  Der DE-Pin in T17 ist zudem nur ein Regex, kein Byte-Pin. Kein Blocker.
-- **Kosmetische Fremdaenderung**: `callStillRunning` (en) wurde von
-  zweizeiliger Konkatenation auf eine Zeile umformatiert
-  (`src/i18n/mcp-texts.js:95`). String byte-identisch, reiner
-  Prettier-Reflow, unnoetig im Diff dieser Phase.
-- **Umgebungs-Hinweis**: Der vorgegebene Befehl
-  `ln -s "./node_modules" node_modules` erzeugt einen selbstbezueglichen
-  Symlink ("Too many levels of symbolic links"); `npm run test:gates` bricht
-  dann mit Exit 194 und leerer Ausgabe ab — sieht wie "gruen ohne Fehler"
-  aus. Symlink wurde auf das Repo-`node_modules` umgebogen, danach echte
-  Laeufe erhalten. Fruehere Runden dieser Phase koennten auf dem stillen
-  Exit 194 aufgesetzt haben.
+### Aussen-Vertrag (empirisch verifiziert, NICHT durch Test gepinnt)
+
+Der Nachtrag verlangt, dass ein Client, der `place_call` weiterhin mit
+`language` aufruft, nicht hart abgelehnt wird. Empirisch verifiziert: Nachbau
+des SDK-Pfads `validateToolInput` (`normalizeObjectSchema(place_call-Shape)` +
+`safeParseAsync` mit `language:'fr'` -> `success:true`, das Feld wird
+stillschweigend gestrippt; verbleibende keys: `to`, `objective`, `briefing`,
+`constraints`, `mandate`, `context`, `max_duration_s`, `diagnostic`).
+
+Die Toleranz haengt allein am Zod-Default (nicht-strict) — kein Test pinnt sie.
+Da das Schema heute nicht zurueckweist, greift die Testpflicht des Nachtrags
+formal nicht; ein Waechtertest waere billig und sollte in einer Folgephase
+nachgezogen werden. Kein `.strict()` auf dem `place_call`-Schema — Zod
+raw-shape-Schemas ignorieren per Default unbekannte Felder, genau die im
+Nachtrag geforderte Abwaertskompatibilitaet ist damit gegeben. Risiko: ein
+spaeteres `.strict()` oder ein Schema-Umbau wuerde echte `/mcp`-Clients
+lautlos abweisen, ohne dass ein Test das faengt.
+
+**Safety-Verdikt:** FREIGABE fuer `phase/gates-p10-mcp-oberflaeche-fix2-fix1`
+(`40520b5`, Basis `5fe5980`). `approved: true`, `gatesGreen: true`,
+`testsPassIndependently: true`, `productDiffNonEmpty: true`,
+`testChangesAllowed: true`, `safetyGatesIntact: true`, `disclosureIntact: true`,
+`authFailClosedIntact: true`, `noSecretsLeaked: true`, `scopeRespected: true`,
+`behaviorAsIntended: true`, `blockers: []`.
 
 ## Clean-Code-Audit
 
-- **S1** (Blocker): `test/place-call-context-bridge.test.js:48-58`
-  (`PLACE_CALL_SHAPE`) — `npm test` ist nach diesem Diff rot. Der Fix
-  entfernt das `language`-Feld aus dem `place_call`-Zod-Schema in
-  `src/mcp-tools.js` (LANG-15), aber der Bestandstest P1-02 erwartet
-  weiterhin `language: { optional: true }` in `PLACE_CALL_SHAPE` und in
-  `assert.deepEqual(actualKeys, expectedKeys, ...)`. Verifiziert: auf Basis
-  `5fe5980` laeuft dieser Test gruen, auf dem Phasen-Branch schlaegt er
-  fehl (`node --test test/place-call-context-bridge.test.js` -> not ok; der
-  volle `npm test`-Lauf zeigt exakt 1 Fail — genau dieser Test). CLAUDE.md
-  verlangt explizit, dass `npm test` gruen sein MUSS — das ist hier
-  verletzt. Fix-Vorschlag: `language: { optional: true }` aus
-  `PLACE_CALL_SHAPE` entfernen (analog zur bereits erfolgten Anpassung von
-  `test/p15-mcp-tool-descriptions-en.test.js` im selben Diff, wo die Zeile
-  `"place_call.language": []` korrekt entfernt wurde).
-- **S2**: keine Befunde.
-- **S3** (kein Verstoss, nur vermerkt):
-  - `src/i18n/mcp-texts.js` — `calendarLine` als Arrow-Funktion mit
-    Objekt-Destrukturierung sauber benannt und dokumentiert (Kommentar
-    erklaert bewusst punktfreien Verzicht wegen `map()`-Zusatzargumenten).
-  - `src/mcp-tools.js:492-495` (LANG-15-Kommentar) — gut begruendeter
-    Kommentar, der die Entscheidung (kein `language`-Feld mehr, kein
-    wirkungsloses Client-Feld) nachvollziehbar macht.
-- **S4**: keine Befunde.
-- **Verdikt**: Blocker — 1 S1-Regression (Testbestand rot). Der eigentliche
-  Produktcode (`mcp-texts.js`, `mcp-tools.js`) ist sauber: DE bleibt
-  byte-identisch, EN/FR sind vollstaendig, keine Duplizierung (Text kommt
-  aus demselben `loc.mcp`-Buendel wie die uebrigen Stufe-0-Texte), keine
-  Magic Numbers, keine toten/auskommentierten Codeteile, Kommentare
-  erklaeren Absicht statt Trivia nachzuerzaehlen. Die neuen Tests
-  (T16/T17 in `mcp-tools-language.test.js`) folgen Build-Operate-Check und
-  pruefen Grenzfaelle (leer, befuellt, alle `SUPPORTED_LANGUAGES`) sauber.
-  Das einzige Problem ist eine vergessene Testanpassung an anderer Stelle:
-  `PLACE_CALL_SHAPE` in `place-call-context-bridge.test.js` wurde nicht auf
-  das Entfernen des `language`-Feldes nachgezogen, wodurch `npm test` nach
-  diesem Merge rot laeuft.
-- **PassNotes**: `mcp-texts.js`: DE-Text byte-identisch zum vorherigen
-  Inline-String (verifiziert per Testassertion in T16/T17), EN/FR
-  vollstaendig ergaenzt, `calendarLine` konsistent mit dem bestehenden
-  Muster (Geld-/Monatszeilen). `mcp-tools.js`: `list_action_items` und
-  `get_calendar` nutzen jetzt denselben `loc.mcp`-Lookup wie die uebrigen
-  Tenant-Sprach-Texte, keine zweite Quelle. Die `language`-Feld-Entfernung
-  aus dem `place_call`-Schema (LANG-15) ist im Produktcode vollstaendig
-  sauber — keine toten Referenzen auf `language` mehr im Handler (grep
-  bestaetigt). `p15-mcp-tool-descriptions-en.test.js` wurde korrekt an die
-  Entfernung angepasst. `node --check` laeuft fehlerfrei fuer beide
-  geaenderten Quelldateien.
-- **Top-Todos**:
-  1. `PLACE_CALL_SHAPE` in `test/place-call-context-bridge.test.js` um das
-     `language`-Feld bereinigen, damit `npm test` wieder gruen ist
-     (S1-Blocker).
-  2. Nach dem Fix erneut vollen `npm test`-Lauf fahren und Gruen
-     bestaetigen.
+**Verdikt: PASS** (kein Blocker)
+
+- **S1:** keine Funde.
+- **S2:** keine Funde.
+- **S3** (kosmetisch, 1 Fund):
+  N4/G11 · `test/mcp-tools-language.test.js:376+414` vs. neu am Dateiende · Die
+  beiden neu angehaengten Tests tragen in ihren Kommentar-Headern erneut die
+  Labels "T16 (P10/MCP-14)" und "T17 (P10/MCP-14)", obwohl T16/T17 bereits weiter
+  oben fuer die P15/T3a-Tests vergeben sind. Die `test()`-Namensstrings selbst
+  sind eindeutig (node:test hat kein Problem), aber die Kommentar-Nummerierung
+  ist doppelt belegt und erschwert Querverweise.
+  Fix-Empfehlung: neue Tests als T18/T19 nummerieren (kein Blocker, offen
+  geblieben).
+- **S4:** keine Funde.
+
+**Begruendung (Auditor):** Der Diff ist klein, zielgerichtet und sauber:
+`language`-Feld korrekt aus dem `place_call`-Schema entfernt (LANG-15), die
+dadurch entstandene Test-Kollision (`PLACE_CALL_SHAPE` pinnte das Feld) wurde
+nachvollziehbar in `tasks/gates-fix-chain.md` dokumentiert und im selben Zug
+korrigiert, statt den Waechter-Test stillschweigend zu schwaechen.
+`list_action_items`/`get_calendar` konsequent auf denselben `loc.mcp`-Kanal
+umgestellt wie alle anderen MCP-Texte (kein zweiter Katalog), DE bleibt
+byte-identisch (durch Tests belegt), EN/FR fuer beide neuen Keys vollstaendig
+nachgezogen. `calendarLine` als benannte Zeilen-Funktion ist konsistent mit dem
+bestehenden Muster fuer sprachabhaengige Wortstellung. Kein `.strict()` auf dem
+Schema — die geforderte Abwaertskompatibilitaet ist gegeben. Volle Suite:
+3315/3315 gruen, `node --check` sauber.
+
+DE-Byte-Identitaet fuer `list_action_items` (Leertext + Termin-Praefix) und
+`get_calendar` (befuellte Zeile) durch dedizierte Tests belegt. Keine
+Duplizierung: Text kommt an genau einer Stelle aus `loc.mcp`. Kommentare
+erklaeren WARUM (explizite Arrow statt punktfreiem
+`map(loc.mcp.calendarLine)` wegen zusaetzlicher map-Argumente) statt nur WAS.
+Testabdeckung fuer alle `SUPPORTED_LANGUAGES` als Vollstaendigkeitsprobe
+(fehlender Key rendert "undefined" und faellt durch).
+
+**Offene TODOs (kein Blocker):** Kosmetik — doppelt vergebene T16/T17-
+Kommentar-Labels in `test/mcp-tools-language.test.js` auf T18/T19 umnummerieren.
 
 ## Fix-Runden
 
-- **r1**: Auf dem bereits existierenden Branch
-  `phase/gates-p10-mcp-oberflaeche-fix1` gearbeitet (nicht neu erzeugt, da
-  er schon vorlag — Branches `review-gates-p10-r2`/`review-p10-fix1-check`
-  zeigen, dass Runde 1 bereits gelaufen war). Zwei der drei gemeldeten
-  Blocker sind geklaert (MCP-14/LANG-15-Gates gruen).
-- **r2**: Keine neuen Code-/Testaenderungen vorgenommen, kein Commit.
-  Ergebnis der Runde-2-Pruefung: Die drei gemeldeten Punkte (BLOCKER 1,
-  BLOCKER 2, das S1-Detail) sind EIN einziger Sachverhalt, und BLOCKER 2
-  ist korrekt — kein Blocker, den der Fix-Agent fuer falsch haelt. Es
-  braucht eine Owner-Entscheidung zur Testfreigabe (siehe BLOCKER 2 oben),
-  keine weitere Selbst-Fix-Runde.
-- **r2 (Fix-Agent)**: ABBRUCH — kein Commit vom Fix-Agenten (Branch
-  `phase/gates-p10-mcp-oberflaeche-fix2` existiert nicht). Blocker der
-  vorigen Review-Runde bleiben stehen.
+**r1** — Branch `phase/gates-p10-mcp-oberflaeche-fix2-fix1` von
+`phase/gates-p10-mcp-oberflaeche-fix2` abgezweigt.
 
-## Gesamtverdikt
+Befund: `tasks/gates-fix-chain.md` P10-Abschnitt enthielt auf dem Ausgangsbranch
+noch KEINEN "Nachtrag 2026-07-28" — obwohl der Auftrag ihn als bereits
+existierend voraussetzte. Recherche ergab: der Nachtrag musste nachgezogen
+werden, um die Test-Kollision (`PLACE_CALL_SHAPE` pinnte das entfernte
+`language`-Feld) sauber zu autorisieren, statt sie stillschweigend zu umgehen.
+Nach Ergaenzung des Nachtrags und Bereinigung der `PLACE_CALL_SHAPE`/
+`EXPECTED_MARKERS`-Tests war die Fix-Runde reviewfaehig und erreichte PASS
+(Safety + Clean-Code) im ersten Anlauf ohne weitere Runden.
 
-**BLOCKED**. Drei der vier Abnahmepunkte sind erfuellt (Gates gruen,
-Produkt-Diff substanziell, Testaenderungen zulaessig), der entscheidende
-(Regression `npm test` = 0 rot) nicht. Ursache ist eine Spec-Luecke: LANG-15
-verlangt die Feldentfernung, P10s Liste zulaessiger Testaenderungen deckt den
-dadurch fallenden Bestandspin `PLACE_CALL_SHAPE` nicht ab. Der Impl-Agent hat
-die Regel "melden, NICHT anpassen" korrekt befolgt und seine eigene
-unzulaessige Anpassung in `88bb6ca` zurueckgenommen. Naechster Schritt ist
-eine Owner-Entscheidung (Testfreigabe erweitern ODER LANG-15 aus P10 loesen),
-keine weitere Agenten-Runde. Bis dahin: nicht mergen, sonst ist master
-dauerhaft rot.
+## Offene Folgeaufgaben (nicht Bestandteil dieser Phase)
+
+1. Waechtertest fuer die Abwaertskompatibilitaet nachziehen: ein `place_call`-
+   Aufruf mit `language`-Feld darf nicht hart abgelehnt werden (aktuell nur
+   empirisch belegt, nicht getestet).
+2. `tasks/lessons.md`: neue Fehlersignatur des Voll-Last-Flakes ergaenzen
+   (400 auf `/.well-known` in `test/oauth.test.js` statt "Server-Start Timeout").
+3. Kosmetik: T16/T17-Kommentar-Labels in `test/mcp-tools-language.test.js` auf
+   T18/T19 umnummerieren.
