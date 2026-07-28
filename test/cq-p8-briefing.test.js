@@ -75,6 +75,14 @@ before(async () => {
         res.end(JSON.stringify({ type: "error", error: { type: "api_error", message: "boom" } }));
         return;
       }
+      if (mode === "error400") {
+        res.statusCode = 400;
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "bad" } }),
+        );
+        return;
+      }
       if (mode === "delay") {
         setTimeout(() => {
           res.setHeader("content-type", "application/json");
@@ -290,4 +298,72 @@ test("B12 Byte-Identitaet (Abnahme b): systemPrompt nach fehlgeschlagenem Briefi
     systemPrompt(seedCall({ ...base, context: null, mandate: null })),
   );
   assert.equal(afterFailedBriefing, baseline, "context:null/mandate:null muss byte-identisch bleiben");
+});
+
+// AL-P9: Kostenbuchung im Abbruchpfad + fuenftes Ausgabefeld open_questions.
+
+test("AL-P9-1 Timeout bucht eine pessimistische Schaetzung (nie 0)", async () => {
+  mode = "delay";
+  const before = { ...store.usageOf(BOOTSTRAP_TENANT_ID) };
+  const result = await fetchPrecallBriefing(briefingArgs());
+  assert.equal(result, null);
+  const after = store.usageOf(BOOTSTRAP_TENANT_ID);
+  assert.equal(
+    after.outputTokens - before.outputTokens,
+    lastRequest.max_tokens,
+    "geschaetzte Output-Token = der tatsaechlich gesendete max_tokens-Deckel",
+  );
+  assert.ok(after.inputTokens - before.inputTokens > 0, "geschaetzte Input-Token > 0");
+  assert.ok(after.costCents > before.costCents, "Kosten steigen (Regel 1: kein Loch im Budget-Gate)");
+});
+
+test("AL-P9-2 HTTP 500 zaehlt ebenfalls als gesendeter Versuch (bewusste Ueberbuchung)", async () => {
+  mode = "error500";
+  const before = { ...store.usageOf(BOOTSTRAP_TENANT_ID) };
+  const result = await fetchPrecallBriefing(briefingArgs());
+  assert.equal(result, null);
+  const after = store.usageOf(BOOTSTRAP_TENANT_ID);
+  assert.equal(
+    after.outputTokens - before.outputTokens,
+    lastRequest.max_tokens,
+    "500 ist transient (isTransient) -> erschoepfte Retries -> Schaetzung wird gebucht",
+  );
+});
+
+test("AL-P9-3 nicht-transienter Fehler (HTTP 400) bucht NICHT", async () => {
+  mode = "error400";
+  const before = { ...store.usageOf(BOOTSTRAP_TENANT_ID) };
+  const result = await fetchPrecallBriefing(briefingArgs());
+  assert.equal(result, null);
+  const after = store.usageOf(BOOTSTRAP_TENANT_ID);
+  assert.deepEqual(after, before, "400 wird sofort geworfen, kein retries-exhausted -> keine Buchung");
+});
+
+test("AL-P9-4 Schaetzung ist kein Kundenbeleg: kein usage_event trotz PAYMENT_ENABLED", async () => {
+  mode = "delay";
+  const eventsBefore = store.load().usageEvents.length;
+  const costBefore = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
+  await withConfig("paymentEnabled", true, () => fetchPrecallBriefing(briefingArgs()));
+  assert.equal(store.load().usageEvents.length, eventsBefore, "kein Ledger-Beleg fuer eine Schaetzung");
+  assert.ok(store.usageOf(BOOTSTRAP_TENANT_ID).costCents > costBefore, "Budget-Achse bucht trotzdem");
+});
+
+test("AL-P9-5 open_questions kommt durch", async () => {
+  nextToolInput = { ...FULL_BRIEFING_INPUT, open_questions: ["Welche Uhrzeit passt genau?"] };
+  const result = await fetchPrecallBriefing(briefingArgs());
+  assert.deepEqual(result.context.open_questions, ["Welche Uhrzeit passt genau?"]);
+});
+
+test("AL-P9-6 zu langer open_questions-Eintrag -> null (Fail-Soft)", async () => {
+  nextToolInput = { ...FULL_BRIEFING_INPUT, open_questions: ["a".repeat(301)] };
+  const result = await fetchPrecallBriefing(briefingArgs());
+  assert.equal(result, null);
+});
+
+test("AL-P9-7 das Werkzeug bietet open_questions ueberhaupt an", async () => {
+  await fetchPrecallBriefing(briefingArgs());
+  const prop = lastRequest.tools[0].input_schema.properties.open_questions;
+  assert.ok(prop, "open_questions muss im Tool-Schema stehen");
+  assert.equal(prop.type, "array");
+  assert.equal(prop.items.type, "string");
 });

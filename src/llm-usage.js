@@ -4,6 +4,9 @@
 // - den Stripe-Ledger. Der Pre-Call-Briefing-Aufruf (src/precall-briefing.js) hat noch
 // KEINEN call (er laeuft vor store.createCall) - deshalb nimmt bookTokenUsage
 // tenantId/callId einzeln entgegen statt eines call-Objekts.
+//
+// AL-P9: bookEstimatedTokenUsage bucht NUR die Live-Budget-Achse, nicht beide - fuer
+// GESCHAETZTEN Verbrauch eines abgebrochenen Aufrufs (siehe dort).
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { USAGE_EVENT_KIND } from "./store/defaults.js";
@@ -62,4 +65,14 @@ export function bookTokenUsage({ tenantId, callId, usage, model }) {
   const tokens = billedTokens(usage, model);
   store.trackUsage(tenantId, tokens, config.llm);
   meterAiTokens({ tenantId, callId, tokens });
+}
+
+// AL-P9: GESCHAETZTER Verbrauch eines ABGEBROCHENEN Anthropic-Aufrufs (Timeout /
+// erschoepfte Retries). Bucht bewusst NUR die Live-Budget-Achse (Regel 1: das Gate darf
+// nie 0 sehen, wo Token geflossen sein koennen) und NICHT den Stripe-Ledger: eine
+// Schaetzung ist kein Kundenbeleg, und der Kunde hat kein Ergebnis bekommen.
+// Unterbuchung im Ledger ist Umsatzverlust bei uns, kein Schutzverlust. Nebeneffekt im
+// Namen (N7); der Aufrufer entscheidet, OB gebucht wird, diese Stelle nur WOHIN.
+export function bookEstimatedTokenUsage({ tenantId, usage, model }) {
+  store.trackUsage(tenantId, billedTokens(usage, model), config.llm);
 }
