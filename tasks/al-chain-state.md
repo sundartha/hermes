@@ -16,10 +16,10 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P3 | `phase/al-p3-endpointing` | PASS (0 Fix-Runden, 3374 gruen) | `a4cbdd1` | **gemergt** — 3 Abnahmen in der Checkliste |
 | AL-P4 | `phase/al-p4-tool-loop` | PASS (0 Fix-Runden, 3359 gruen) | `1021bc1` | **gemergt** — 2 Abnahmen in der Checkliste |
 | AL-P5 | — | — | — | offen |
-| AL-P6 | — | — | — | offen |
+| AL-P6 | `phase/al-p6-turn-budget` | PASS (0 Fix-Runden, highStakes, 3385 gruen) | `f16c00a` | **gemergt** |
 | AL-P7 | — | — | — | offen (haengt an AL-P2) |
 | AL-P7b | — | — | — | offen |
-| AL-P8 | — | — | — | offen |
+| AL-P8 | `phase/al-p8-bench-fix1` | PASS (1 Fix-Runde, 3412 gruen) | `61d7563` | **gemergt** — 2 Abnahmen (kosten Geld) |
 | AL-P9 | — | — | — | offen |
 | AL-P10 | — | — | — | offen |
 | AL-P10b | — | — | — | offen |
@@ -67,3 +67,16 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   Volllast; nach dem Gate-Protokoll gilt rot nur, wenn es isoliert rot bleibt. Sollte in einer
   spaeteren Welle erneut genau ein Test kippen: **Ausgabe mitschneiden und den Namen
   festhalten**, statt wieder nur die Zusammenfassung zu lesen.
+- **Welle 2: AL-P6 (`f16c00a`) und AL-P8 (`61d7563`) gemergt.** Verifikationslauf auf dem
+  gemergten master: **3414/3414 gruen**, diesmal mit vollem Mitschnitt (`exit=0`, keine
+  `not ok`-Zeile). Kein Merge-Konflikt.
+  - AL-P6 legt **keine** neue Env-Variable an (nachgeprueft: kein neues `numEnv`/`boolEnv` in
+    `src/config.js`, die `process.env`-Zuweisungen im Diff stehen alle im Test-Setup). Damit
+    keine BASE_ENV-Drift.
+  - AL-P8 brauchte **eine** Fix-Runde; der zurueckgegebene `finalBranch` hiess deshalb
+    `phase/al-p8-bench-fix1` — gemergt wurde dieser, nicht der geplante Branch.
+  - Beide AL-P8-Abnahmen **kosten echtes Geld** (Bench-Laeufe gegen die echte Anthropic-API)
+    und gehoeren damit dem Owner.
+- **Lastregel nachgeschaerft:** Spitze ueber die Kette war Load1 = **21,9** bei 15 Kernen — das
+  entstand, als der Lead waehrend laufender Workflows selbst die Suite fuhr. Seither gilt:
+  eigene Verifikationslaeufe **nur zwischen den Wellen**, nie parallel zu einem Workflow.
