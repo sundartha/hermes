@@ -42,7 +42,8 @@ import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibrati
 import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
-import { turnBudgetOverrun } from "./turn-budget.js";
+import { deadAirOverrun, turnBudgetOverrun } from "./turn-budget.js";
+import { MS_PER_SECOND } from "./utils/timer.js";
 // GAP-19: EIN Praedikat fuer beide Haelften - der Boot meldet genau die Konstellation, die
 // in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
 // importiert boot.js nicht.
@@ -218,6 +219,30 @@ function warnTurnBudgetOverrun(config) {
   );
 }
 
+// AL-P6: der Bestands-Waechter oben misst EINE llm.complete-Kette gegen den Provider-
+// Hardcut. Dieser hier misst den TURN als Ganzes (bis zu MAX_TOOL_ROUNDS_PER_TURN Runden,
+// mit greifender Frist) gegen den Dead-Air-Watchdog des Assistant-Pfads: reisst der Turn
+// ihn, beendet der Watchdog mitten im Satz. WARN, kein exit(1) - eine gesprengte Wanduhr
+// ist kein Safety-Gate (Muster warnTurnBudgetOverrun). Nur bei aktivem Assistant-Pfad:
+// ohne Flag wird der Dead-Air-Timer nie armiert, die Warnung waere irrefuehrend
+// (Praezedenz warnMissingProvisioningConnection).
+function warnTurnOutlivesDeadAir(config) {
+  if (!config.telnyx.telnyxAssistant.enabled) return;
+  const finding = deadAirOverrun({
+    deadAirTimeoutMs: config.telnyx.telnyxAssistant.deadAirTimeoutS * MS_PER_SECOND,
+    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
+    maxRetries: config.llm.llmMaxRetries,
+    backoffMs: config.llm.llmBackoffMs,
+    synthTimeoutMs: config.voice.elevenLabsPlayTts.synthTimeoutMs,
+  });
+  if (!finding) return;
+  console.warn(
+    `[boot] Konfig-Warnung: ein Turn kann ${finding.worstCaseMs} ms dauern und reisst den ` +
+      `Dead-Air-Watchdog ${finding.limitMs} ms um ${finding.overrunMs} ms ` +
+      "(TELNYX_DEAD_AIR_TIMEOUT_S/LLM_REQUEST_TIMEOUT_MS/LLM_MAX_RETRIES/LLM_BACKOFF_MS/ELEVENLABS_SYNTH_TIMEOUT_MS).",
+  );
+}
+
 // GAP-19 (erste Haelfte): FORCE_NUMBER_COUNTRY entkoppelt das Kauf-Land vom Herkunftsland -
 // jeder neue Tenant telefoniert dann unter auslaendischer Absenderkennung. WARN, kein exit(1):
 // das IST der gewollte Live-Zustand (render.yaml), ein Boot-Refusal waere ein selbst
@@ -320,6 +345,7 @@ function assertBootGates(config, store) {
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
+  warnTurnOutlivesDeadAir(config); // AL-P6, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
 }

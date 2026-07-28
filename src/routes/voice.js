@@ -30,6 +30,7 @@ import { greetingForLanguage } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
+import { isBudgetAxis } from "../budget-gate.js";
 import { remainingMaxDurationMs } from "../store/state-ops.js";
 import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
@@ -106,6 +107,15 @@ export function makeVoiceRoutes({
     const remaining = remainingMaxDurationMs(call, Date.now(), config.safety.maxCallDurationS);
     if (remaining >= config.safety.capFarewellLeadMs) return null;
     return { speech: localeFor(call.language).capFarewellSpeech, endCall: true };
+  }
+
+  // AL-P6 (Regel 1): bricht agentTurn wegen einer erschoepften Budget-Achse ab, endet der
+  // Call mit demselben Satz wie der Inbound-Gate-Pfad (/voice/incoming) und legt auf -
+  // sonst liefe er auf Carrier-Minuten weiter, waehrend das Modell schon nichts mehr
+  // beitragen darf. Der Satz ist ein Locale-String, kein LLM-Text. Kein Grund -> null.
+  function budgetHangupOutcome(turn, call) {
+    if (!isBudgetAxis(turn.stopReason)) return null;
+    return { speech: localeFor(call.language).budgetExhaustedHangup, endCall: true };
   }
 
   // P3.2: gestaffelte Antwort auf einen leeren Gather. Der Streak lebt ephemer am Call;
@@ -361,7 +371,11 @@ export function makeVoiceRoutes({
       // P3.1: NACH agentTurn geprueft - sonst fiele die letzte Anrufer-Zeile aus Transkript,
       // Summary und Export. Trifft der Cap-Vorlauf, ersetzt der deterministische Abschluss-
       // Satz die Modell-Antwort (derselbe [Say, Hangup]-Zweig wie ein echtes end_call).
-      await sendTurnOutcome(res, call, capFarewellOutcome(call) ?? modelOutcome);
+      await sendTurnOutcome(
+        res,
+        call,
+        capFarewellOutcome(call) ?? budgetHangupOutcome(modelOutcome, call) ?? modelOutcome,
+      );
     } catch (err) {
       console.error("[turn]", err.message);
       // Schicht 2 (P3b-R): bei anhaltender LLM-Nichtverfuegbarkeit

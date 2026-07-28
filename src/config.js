@@ -194,7 +194,9 @@ const rawConfig = {
   // Webhook laeuft zusaetzlich die Play-TTS-Vorab-Synthese (elevenLabsPlayTts.
   // synthTimeoutMs) plus Netzreserve. Die vollstaendige Rechnung und der Boot-Waechter
   // stehen in src/turn-budget.js (EINE Quelle, G5) - wer hier einen Wert anhebt, muss
-  // dort nachrechnen.
+  // dort nachrechnen. AL-P6: aus denselben Werten leitet sich die Wanduhr-Frist des
+  // Tool-Loops ab (turnLoopDeadlineMs), die agentTurn vor jeder Runde ab der zweiten
+  // prueft - es gibt dafuer bewusst KEINEN eigenen Env-Knopf.
   llmRequestTimeoutMs: numEnv("LLM_REQUEST_TIMEOUT_MS", process.env.LLM_REQUEST_TIMEOUT_MS, {
     fallback: 3500,
     min: 1,

@@ -7,6 +7,8 @@ import { MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
+import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
+import { blockingBudgetAxis } from "./budget-gate.js";
 
 // Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
@@ -488,6 +490,37 @@ export function shapeForSpeech(text) {
   return out;
 }
 
+// AL-P6: Grund-Token eines vorzeitig beendeten Tool-Loops. Die GELD-Gruende kommen aus
+// budget-gate.js (BUDGET_AXIS - dieselben Token wie im Shim-Log); hier steht nur die
+// ZEIT-Achse. null = der Loop lief regulaer zu Ende.
+export const TURN_STOP_DEADLINE = "deadline";
+
+// Die EINE Frage vor JEDER Schleifenrunde: darf sie noch gefahren werden? Liefert den
+// maschinenlesbaren Grund oder null. Zwei Achsen mit bewusst UNTERSCHIEDLICHER Reichweite:
+//   - GELD (Regel 1) gilt ab der ERSTEN Runde. bookTokenUsage laeuft in JEDER Runde;
+//     geprueft wurde bisher nur EINMAL vor dem Turn (Shim Schritt 6) bzw. gar nicht
+//     (/voice/turn). Ein erschoepfter Cap darf keinen einzigen Token mehr kosten.
+//   - ZEIT erst ab der ZWEITEN Runde: die erste laeuft immer, sonst koennte eine zu knapp
+//     konfigurierte Frist den Agenten stumm schalten (fail-safe Richtung Bestand). Eine
+//     solche Konfiguration meldet der Boot-Waechter (warnTurnOutlivesDeadAir).
+// Nicht injizierbar (Regel 1): ein Gate, das ein Aufrufer per No-op abschalten darf, ist
+// keines. Injizierbar ist allein die REAKTION beim Aufrufer.
+function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
+  const axis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
+  if (axis) return axis;
+  if (roundIndex === 0) return null;
+  const fits = roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs });
+  return fits ? null : TURN_STOP_DEADLINE;
+}
+
+// UNCONDITIONAL (metrics.logTurn steht hinter METRICS_ENABLED und war live stumm) und
+// PII-frei: server-generierte callId, Grund-Token, Zaehler - nie Text, nie Nummern.
+// grund= folgt dem Bestandsmuster der Gate-Logs (outbound-gates.js) und macht den
+// Zeit-Abbruch vom Geld-Abbruch maschinenlesbar unterscheidbar.
+function logTurnStop({ callId, grund, roundtrips }) {
+  console.warn(`[turn] abbruch grund=${grund} call=${callId} runden=${roundtrips}`);
+}
+
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
 export async function agentTurn(call, callerText) {
   // G3/G26-Fix: das Transkript-Record-Gate ist
@@ -550,8 +583,22 @@ export async function agentTurn(call, callerText) {
   // bepreisen, das gefragt wurde.
   const model = config.llm.claudeModel;
 
-  // Tool-Loop (max. 4 Runden pro Turn)
-  for (let i = 0; i < 4; i++) {
+  // AL-P6: Start und Frist stehen VOR der Schleife - eine Frist, die sich in der Schleife
+  // neu berechnet, waere keine.
+  const loopStartedAt = Date.now();
+  const deadlineMs = turnLoopDeadlineMs(config.voice.elevenLabsPlayTts.synthTimeoutMs);
+  let stopReason = null;
+
+  // Tool-Loop (max. MAX_TOOL_ROUNDS_PER_TURN Runden pro Turn)
+  for (let i = 0; i < MAX_TOOL_ROUNDS_PER_TURN; i++) {
+    stopReason = roundStopReason({
+      call,
+      roundIndex: i,
+      elapsedMs: Date.now() - loopStartedAt,
+      deadlineMs,
+    });
+    if (stopReason) break;
+
     const resp = await llm.complete({
       model,
       max_tokens: 300,
@@ -609,6 +656,8 @@ export async function agentTurn(call, callerText) {
     if (speech && (endCall || suppressedEndCall || sideEffectOnlyRound)) break;
   }
 
+  if (stopReason) logTurnStop({ callId: call.id, grund: stopReason, roundtrips });
+
   metrics.logTurn({
     callId: call.id,
     direction: call.direction,
@@ -628,7 +677,10 @@ export async function agentTurn(call, callerText) {
   // in den Rueckgabewert; metrics.logTurn bleibt UNVERAENDERT (sein Payload-Schluesselsatz
   // ist in test/l0-metrics.test.js woertlich gepinnt). EINE Quelle bleibt firedTools.
   // toolNames statt tools: es sind NAMEN - genau daran haengt die PII-Freiheit der Logzeile.
-  return { speech, endCall, roundtrips, toolNames: firedTools };
+  // AL-P6: stopReason ist rein additiv (null im Normalfall). Der Aufrufer entscheidet die
+  // REAKTION: der Shim beendet ueber Call-Control, die Budget-Engine ueber den TeXML-
+  // Render. Die PRUEFUNG liegt an genau einer Stelle (oben, roundStopReason).
+  return { speech, endCall, roundtrips, toolNames: firedTools, stopReason };
 }
 
 // ---------- Summary + Action Items nach dem Call ----------

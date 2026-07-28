@@ -854,6 +854,44 @@ Der urspruengliche Grund ist entfallen, die Regel bleibt vorerst unveraendert �
 Verschaerfen verlangt, die App-Shell aus `apps/web` vorher gegen die engere Policy zu
 messen, und ist deshalb ein eigener Auftrag, kein Nebeneffekt der Loeschung.
 
+## AL-P6-TURNBUDGET — Budget-Pruefung pro Tool-Loop-Runde + Turn-Frist (2026-07-28)
+
+**Das Loch.** `agentTurn` (`src/claude.js`) fuhr eine feste Schleife ueber bis zu vier
+`llm.complete`-Runden und buchte in **jeder** Runde `bookTokenUsage(...)` — geprueft wurde
+das Budget aber hoechstens **einmal je Request**: im Assistant-Pfad vor dem Turn (Shim,
+Schritt 6), im Budget-Pfad `/voice/turn` **gar nicht** (nur `/voice/incoming` hat ein
+Gate). Ein Cap, der mitten im Turn riss, kostete also bis zu drei weitere Runden Tokens,
+und ein Folge-Turn der Budget-Engine lief unabhaengig vom Cap durch.
+
+**Der Fix.** Vor **jeder** Schleifenrunde fragt `agentTurn` eine Stelle
+(`roundStopReason`): die GELD-Achsen ab der ersten Runde (`blockingBudgetAxis` in
+`src/budget-gate.js` — dieselbe Schnittmenge Tenant-Cap/Plattform-Notaus und dieselben
+Grund-Token `budget_tenant`/`budget_global`, die der Shim schon loggte), die ZEIT-Frist
+(`turnLoopDeadlineMs`, abgeleitet aus Provider-Hardcut minus Synthese minus Netzreserve —
+**kein** eigener Env-Knopf) erst ab der zweiten. Die Pruefung ist **nicht injizierbar**:
+sie laeuft gegen den Modul-Store und die Modul-Config; kein Aufrufer kann sie per No-op
+abschalten. Injizierbar ist allein die REAKTION: der Shim beendet den Call ueber
+Call-Control (`killCallForBudget`, derselbe Notaus wie das Gate vor dem Turn), die
+Budget-Engine rendert `budgetExhaustedHangup` + `<Hangup>` (`budgetHangupOutcome` in
+`src/routes/voice.js`). Der Zeit-Abbruch legt bewusst **nicht** auf — der Turn hat eine
+gueltige Antwort. Ein zweiter Boot-Waechter (`warnTurnOutlivesDeadAir`, WARN) meldet
+Konfigurationen, in denen ein ganzer Turn den Dead-Air-Watchdog des Assistant-Pfads
+reissen kann; mit ausgelieferten Werten schweigt er.
+
+**Benannte Folge (bewusst akzeptiert).** `budgetExceeded` sperrt fail-closed auch bei
+KORRUPTEM Usage-Bucket (D7, Grund `usage_korrupt` in `src/store/state-ops.js`). Diese
+Sperre beendet damit jetzt auch einen laufenden **Budget-Engine**-Call — bisher galt das
+nur fuer den Shim und die Inbound-Annahme. Bei NaN-Verbrauch ist genau das richtig; die
+Gruende bleiben im Log unterscheidbar (`usage_korrupt` an der Store-Kante,
+`[turn] abbruch grund=budget_tenant` an der Turn-Kante).
+
+**Ausdruecklich NICHT geaendert:** die Schnittmenge global/Tenant, Perioden- vs.
+Lebenszeit-Topf, die Buchungskante selbst (`bookTokenUsage`/`trackUsage` — der KI-Kosten-
+Akku wird weiterhin NICHT pro Inkrement gerundet), das Gate in `/voice/incoming`, sowie
+Denylist/Land-Gate/Stundenlimit/Max-Gespraechsdauer/Provider-Signaturpruefung.
+
+---
+
 ## SECRETS-HYGIENE — Inventar, Rotation, Provider-Minimalrechte (begleitend, kein Einmal-Gate)
 
 > Hierher gezogen aus `docs/RUNBOOK-OPERATOR.md` Gate 7 (2026-07-28), als das Operator-Runbook
