@@ -2259,18 +2259,35 @@ export function aiCostCents(tokens, cfg) {
 // Append-only Usage-Ledger-Eintrag (P6b3, Stripe-Meter-Quelle). NIE mutiert
 // (nur stripeMeterSent flippt beim Flush). costCents als GANZZAHL Cents (G26).
 // kind aus USAGE_EVENT_KIND (fail-closed: unbekanntes kind wirft). callId
-// optional (number_month-Meter hat keinen Call). Liefert den Eintrag.
-export function recordUsageEvent(s, { tenantId, callId = null, kind, quantity, costCents }) {
+// optional (number_month-Meter hat keinen Call). numberId optional - nur der
+// number_month-Meter traegt sie, sie ist dort der Idempotenz-Anker der Monatsmiete
+// (P5/GAP-06, numbersDueForMonthMeter). occurredAt optional: der Aufrufer reicht
+// SEINE Uhr durch, wenn Faelligkeits-Pruefung und Buchung dieselbe Monatsgrenze
+// sehen muessen (sonst faellt ein Monat zwischen zwei Uhren durch); ohne Argument
+// unveraendert new Date(). Liefert den Eintrag.
+export function recordUsageEvent(
+  s,
+  {
+    tenantId,
+    callId = null,
+    numberId = null,
+    kind,
+    quantity,
+    costCents,
+    occurredAt = new Date().toISOString(),
+  },
+) {
   if (!Object.values(USAGE_EVENT_KIND).includes(kind))
     throw new Error(`recordUsageEvent: unbekanntes kind '${kind}'`);
   const event = {
     id: newId("ue"),
     tenantId,
     callId,
+    numberId,
     kind,
     quantity,
     costCents,
-    occurredAt: new Date().toISOString(),
+    occurredAt,
     stripeMeterSent: false,
   };
   s.usageEvents.push(event);
@@ -2306,6 +2323,38 @@ export function voiceMinutesUsedSince(s, tenantId, sinceIso) {
         e.occurredAt >= sinceIso,
     )
     .reduce((sum, e) => sum + e.quantity, 0);
+}
+
+// GAP-06 (P5): welche AKTIVEN Nummern haben im UTC-Kalendermonat von nowIso noch keinen
+// number_month-Beleg? DIE eine Idempotenz-Entscheidung der DID-Monatsmiete (G5/G31) -
+// beide Ausloeser (Abo-Verlaengerung, stuendlicher Sweep) fragen ueber DIESE Funktion,
+// keiner haelt eine eigene Kopie der Regel.
+//
+// ANKER IST DIE NUMMER, NICHT DER TENANT: eine Zaehlung je Tenant erzeugt bei zwei
+// Nummern, von denen eine keinen gelernten Preis hat, eine echte DOPPELBUCHUNG der
+// anderen. Belege ohne numberId (Bestand von vor P5) koennen keiner Nummer zugeordnet
+// werden und sperren deshalb nichts - sie werden ignoriert.
+//
+// Zeit-frei wie voiceMinutesUsedSince: nowIso kommt vom Aufrufer. Unlesbare Uhr -> LEER
+// (fail-closed: eine kaputte Uhr bucht nichts, statt jeden Lauf neu zu buchen).
+// tenantId gesetzt -> nur dieser Tenant (Abo-Ereignis); null -> alle (Sweep). Nur ACTIVE:
+// eine gekuendigte/freigegebene Nummer erzeugt keine Miete mehr. Reine Query, kein IO.
+export function numbersDueForMonthMeter(s, { nowIso, tenantId = null }) {
+  const monthKey = spendMonthKeyOf(nowIso);
+  if (!monthKey) return [];
+  const gebucht = new Set();
+  for (const e of s.usageEvents) {
+    if (e.kind !== USAGE_EVENT_KIND.NUMBER_MONTH) continue;
+    if (!e.numberId) continue;
+    if (spendMonthKeyOf(e.occurredAt) !== monthKey) continue;
+    gebucht.add(e.numberId);
+  }
+  return s.numbers.filter(
+    (n) =>
+      n.status === NUMBER_STATUS.ACTIVE &&
+      (tenantId === null || n.tenantId === tenantId) &&
+      !gebucht.has(n.id),
+  );
 }
 
 // Minuten-Kontingent-Gate-Praedikat (B1b, GAP B): sind die im laufenden Abrechnungs-

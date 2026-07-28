@@ -67,18 +67,34 @@ function makeNumber(id, tenantId) {
   return { id, tenantId, status: NUMBER_STATUS.REQUESTED, e164: null, country: "DE" };
 }
 
-// Orchestrator mit den fuer den queueProvisioning/Drain-Pfad noetigen Deps. paymentEnabled:
-// false -> billing/metering werden nie gerufen (die Enqueue-Order-Invariante ist zahlungs-
-// unabhaengig). Der Rest der Factory-Deps (trigger/reconcile) wird auf diesem Pfad nicht
-// gerufen; Minimal-Stubs dokumentieren nur den Seam.
-function makeOrchestrator(store) {
+// Metering-Stub, der protokolliert, OB der Monatsmiete-Lauf ueberhaupt gerufen wurde -
+// die Gate-Aussage von settleDueNumberMonthMeters (kein Ledger-Schreiben ohne
+// PAYMENT_ENABLED) laesst sich sonst nicht falsifizieren.
+function meteringStub() {
+  const laeufe = [];
+  return {
+    laeufe,
+    recordNumberMonthMeter() {},
+    recordDueNumberMonthMeters(_s, opts) {
+      laeufe.push(opts);
+      return { faellig: 0, gebucht: 0, ohnePreis: 0, fehler: 0 };
+    },
+  };
+}
+
+// Orchestrator mit den fuer den queueProvisioning/Drain-Pfad noetigen Deps. paymentEnabled
+// per Default false -> billing/metering werden nie gerufen (die Enqueue-Order-Invariante ist
+// zahlungs-unabhaengig); die Monatsmiete-Tests (GAP-06) schalten es an. Der Rest der
+// Factory-Deps (trigger/reconcile) wird auf diesem Pfad nicht gerufen; Minimal-Stubs
+// dokumentieren nur den Seam.
+function makeOrchestrator(store, { paymentEnabled = false, metering = meteringStub() } = {}) {
   const queue = makeMemoryQueue();
   const orchestrator = makeProvisioningOrchestrator({
     store,
-    config: withConfigNamespaces({ paymentEnabled: false }),
+    config: withConfigNamespaces({ paymentEnabled }),
     queue,
     billing: {},
-    metering: { recordNumberMonthMeter() {} },
+    metering,
     numberProvisioning: () => ({}),
     handleProvisionJob: fakeHandleProvisionJob,
     resolveProvisionRetry: () => ({ ok: false }),
@@ -130,5 +146,49 @@ test("PA-2: kein enqueue vor persistierter Job-Spur - persist-Fehler wird nicht 
     s.provisioningJobs.find((j) => j.numberId === "num1"),
     undefined,
     "verwaiste num1 hat keine Job-Spur",
+  );
+});
+
+// ---- GAP-06: settleDueNumberMonthMeters (der wiederkehrende Miet-Ausloeser) ----
+
+test("settleDueNumberMonthMeters wirft NIE (ein Store-Fehler beendet den stuendlichen Sweep nicht)", async () => {
+  const s = makeDefaultState();
+  const store = makeFakeStore(s);
+  store.withStoreLock = async () => {
+    throw new Error("Store nicht schreibbar");
+  };
+  const { orchestrator } = makeOrchestrator(store, { paymentEnabled: true });
+
+  const res = await orchestrator.settleDueNumberMonthMeters();
+
+  assert.deepEqual(res, { gebucht: 0 }, "der Fehler wird verschluckt, nicht geworfen");
+});
+
+test("settleDueNumberMonthMeters ist ohne PAYMENT_ENABLED ein No-op (kein Ledger-Schreiben)", async () => {
+  const s = makeDefaultState();
+  const metering = meteringStub();
+  const { orchestrator } = makeOrchestrator(makeFakeStore(s), { metering });
+
+  const res = await orchestrator.settleDueNumberMonthMeters();
+
+  assert.deepEqual(res, { gebucht: 0 });
+  assert.equal(metering.laeufe.length, 0, "das Metering-Modul wird gar nicht erst gerufen");
+});
+
+test("settleDueNumberMonthMeters reicht die tenantId des Abo-Ereignisses durch (null = alle)", async () => {
+  const s = makeDefaultState();
+  const metering = meteringStub();
+  const { orchestrator } = makeOrchestrator(makeFakeStore(s), { paymentEnabled: true, metering });
+
+  await orchestrator.settleDueNumberMonthMeters({ tenantId: "t1" });
+  await orchestrator.settleDueNumberMonthMeters();
+
+  assert.deepEqual(
+    metering.laeufe.map((o) => o.tenantId),
+    ["t1", null],
+  );
+  assert.ok(
+    metering.laeufe.every((o) => typeof o.nowIso === "string"),
+    "die Uhr wird vom Aufrufer gestellt und durchgereicht",
   );
 });

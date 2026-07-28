@@ -79,6 +79,16 @@ export function makeProvisioningOrchestrator({
     // status nach. Laeuft VOR dem withStoreLock (eigener DB-Read via withClient, fail-safe,
     // kein Re-Entrancy-Konflikt mit dem Lock-Body).
     await store.ensureTenant(tenantId);
+    // GAP-06 (Uhr): die Stripe-Abo-Verlaengerung ist der eine der beiden Ausloeser der
+    // DID-Monatsmiete - die Buchung liegt damit auf genau der Periode, fuer die der Kunde
+    // zahlt. Dieser Trigger IST der Seam, den applyStripeWebhook im ACTIVATE-Zweig ueber
+    // activatePaidTenant ruft (customer.subscription.updated mit status=active); ein
+    // eigener Seam durch app.js/web-login/stripe-webhook waere eine zweite Verdrahtung
+    // desselben Ereignisses. Idempotent (ein Beleg je Nummer und Monat), also bei
+    // Webhook-Retry, .created und beim Operator-Re-Trigger ein No-op. Wirft nie und
+    // beeinflusst das Provisioning-Ergebnis NICHT. SEQUENTIELL vor dem withStoreLock -
+    // nie darin verschachtelt (Re-Entrancy).
+    await settleDueNumberMonthMeters({ tenantId });
     const numberResult = await store
       .withStoreLock(() => {
         const s = store.load();
@@ -170,9 +180,12 @@ export function makeProvisioningOrchestrator({
         const r = await handleProvisionJob(s, queuedJob, deps, opts);
         if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.DONE);
         // number_month-Meter (P6b3, Meter 1): NUR wenn eine Nummer NEU aktiviert wurde
-        // (r.number, nicht skipped) UND im Metering-Pfad. Erste Periode bei Aktivierung
-        // (monatlicher Scheduler = P8). costCents = der Setup-Tarif (numberSetupFeeCents).
-        if (config.billing.paymentEnabled) metering.recordNumberMonthMeter(r.number);
+        // (r.number, nicht skipped) UND im Metering-Pfad - der Beleg der ERSTEN Periode.
+        // Die Folgemonate bucht settleDueNumberMonthMeters (GAP-06); weil dieser Beleg
+        // numberId + Monat traegt, sieht der wiederkehrende Pfad ihn und bucht denselben
+        // Monat NICHT erneut. costCents = die Monatsmiete aus dem Nummern-Datensatz (P4).
+        if (config.billing.paymentEnabled)
+          metering.recordNumberMonthMeter(r.number, new Date().toISOString());
         store.save();
         return r;
       } catch (err) {
@@ -245,11 +258,44 @@ export function makeProvisioningOrchestrator({
     redriveProvisioningJobs(buckets.redrive);
   }
 
-  // Minimale oeffentliche Flaeche (G8): nur die 4 extern gerufenen Funktionen.
+  // GAP-06 (Miete, wiederkehrend): bucht die offenen DID-Monatsmieten. ZWEI Ausloeser
+  // teilen sich diese EINE Funktion (Owner-Vorgabe 2026-07-27): die Stripe-Abo-
+  // Verlaengerung (tenantId gesetzt, ueber triggerTenantProvisioning) und ein Schritt im
+  // bestehenden stuendlichen Sweep (tenantId null = alle Tenants, boot.js) - KEIN Cron,
+  // KEIN neuer Endpunkt, KEINE neue Ressource. Hier liegt - wie beim Aktivierungs-Beleg
+  // im Drain - das paymentEnabled-Gate (INV-9: das Metering-Modul bucht ungated, der
+  // Aufrufer gated). Kurzer Schreibabschnitt unter withStoreLock OHNE Netz-IO (Muster
+  // queueProvisioning). WIRFT NIE: der stuendliche Sweep darf daran nicht scheitern.
+  // EINE Log-Zeile, und nur wenn ueberhaupt etwas faellig war - eine stuendlich
+  // identische Zeile ist Rauschen, kein Betrieb. PII-frei (Zahlen, keine e164).
+  // Nebeneffekt (Ledger-Schreibung) im Namen (N7).
+  async function settleDueNumberMonthMeters({ tenantId = null } = {}) {
+    if (!config.billing.paymentEnabled) return { gebucht: 0 };
+    try {
+      const bilanz = await store.withStoreLock(() =>
+        metering.recordDueNumberMonthMeters(store.load(), {
+          nowIso: new Date().toISOString(),
+          tenantId,
+        }),
+      );
+      if (bilanz.faellig)
+        console.log(
+          `[number-month] faellig=${bilanz.faellig} gebucht=${bilanz.gebucht} ` +
+            `ohne_preis=${bilanz.ohnePreis} fehler=${bilanz.fehler}`,
+        );
+      return { gebucht: bilanz.gebucht };
+    } catch (e) {
+      console.error("[number-month] Buchung fehlgeschlagen:", e.message);
+      return { gebucht: 0 };
+    }
+  }
+
+  // Minimale oeffentliche Flaeche (G8): nur die extern gerufenen Funktionen.
   return {
     queueProvisioning,
     triggerTenantProvisioning,
     runProvisioningDrainExclusive,
     reconcileOrphanedProvisioning,
+    settleDueNumberMonthMeters,
   };
 }

@@ -5,13 +5,24 @@
 // Quelle, NICHT das Budget-Gate (getrennte Quelle, kein Doppelzaehlen).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeDefaultState, recordUsageEvent, pendingMeterEvents } from "../src/store/state-ops.js";
+import {
+  makeDefaultState,
+  numbersDueForMonthMeter,
+  recordUsageEvent,
+  pendingMeterEvents,
+} from "../src/store/state-ops.js";
 import { aggregatePendingMeters, flushMeters } from "../src/billing/meter.js";
-import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { fakeBilling } from "./helpers.js";
 
 const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
+// P5/GAP-06-Fixturen: zwei Nummern, ein fester Monatsanker + sein Folgemonat.
+const NUMBER_ID_A = "num_a";
+const NUMBER_ID_B = "num_b";
+const MIETE_CENTS = 92;
+const JANUAR = "2026-01-15T09:00:00.000Z";
+const FEBRUAR = "2026-02-15T09:00:00.000Z";
 
 test("INV(6): recordUsageEvent speichert Cents als Ganzzahl + setzt Defaults", () => {
   const s = makeDefaultState();
@@ -47,6 +58,117 @@ test("recordUsageEvent: callId optional (number_month-Meter ohne Call -> null)",
     costCents: 500,
   });
   assert.equal(ev.callId, null);
+});
+
+// ---- P5/GAP-06: numberId + durchgereichte Uhr am Ledger-Eintrag ----
+
+test("recordUsageEvent: numberId optional (Default null, voice_minute traegt keine Nummer)", () => {
+  const s = makeDefaultState();
+  const ohne = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "call_1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 1,
+    costCents: 10,
+  });
+  const mit = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    numberId: NUMBER_ID_A,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: MIETE_CENTS,
+  });
+  assert.equal(ohne.numberId, null, "kein undefined-Drift");
+  assert.equal(mit.numberId, NUMBER_ID_A);
+});
+
+test("recordUsageEvent: occurredAt vom Aufrufer wird uebernommen (Default bleibt die Uhr)", () => {
+  const s = makeDefaultState();
+  const vorher = new Date().toISOString();
+  const gestempelt = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    numberId: NUMBER_ID_A,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: MIETE_CENTS,
+    occurredAt: JANUAR,
+  });
+  const default_ = recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    callId: "call_1",
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 1,
+    costCents: 10,
+  });
+  assert.equal(gestempelt.occurredAt, JANUAR, "der Aufrufer reicht seine Uhr durch");
+  assert.ok(default_.occurredAt >= vorher, "ohne Argument stempelt weiterhin new Date()");
+});
+
+// ---- P5/GAP-06: numbersDueForMonthMeter (DIE eine Idempotenz-Regel) ----
+
+function seedNumber(s, { id, tenantId = TENANT_A, status = NUMBER_STATUS.ACTIVE }) {
+  s.numbers.push({ id, tenantId, status, e164: null, country: "DE" });
+  return id;
+}
+
+function faelligeIds(s, opts) {
+  return numbersDueForMonthMeter(s, opts).map((n) => n.id);
+}
+
+test("numbersDueForMonthMeter: nur ACTIVE (requested/failed/released nicht faellig)", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: NUMBER_ID_A });
+  for (const status of [NUMBER_STATUS.REQUESTED, NUMBER_STATUS.FAILED, NUMBER_STATUS.RELEASED])
+    seedNumber(s, { id: `num_${status}`, status });
+
+  assert.deepEqual(faelligeIds(s, { nowIso: JANUAR }), [NUMBER_ID_A]);
+});
+
+test("numbersDueForMonthMeter: tenantId filtert; null liefert alle", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: NUMBER_ID_A });
+  seedNumber(s, { id: NUMBER_ID_B, tenantId: TENANT_B });
+
+  assert.deepEqual(faelligeIds(s, { nowIso: JANUAR, tenantId: TENANT_B }), [NUMBER_ID_B]);
+  assert.deepEqual(faelligeIds(s, { nowIso: JANUAR }), [NUMBER_ID_A, NUMBER_ID_B]);
+});
+
+test("numbersDueForMonthMeter: Beleg im VORmonat -> wieder faellig; Beleg im selben Monat -> nicht", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: NUMBER_ID_A });
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    numberId: NUMBER_ID_A,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: MIETE_CENTS,
+    occurredAt: JANUAR,
+  });
+
+  assert.deepEqual(faelligeIds(s, { nowIso: JANUAR }), [], "im Januar bereits gebucht");
+  assert.deepEqual(faelligeIds(s, { nowIso: FEBRUAR }), [NUMBER_ID_A], "im Februar wieder faellig");
+});
+
+test("numbersDueForMonthMeter: unlesbare Uhr -> leer (fail-closed, bucht nichts)", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: NUMBER_ID_A });
+
+  assert.deepEqual(faelligeIds(s, { nowIso: "kein-datum" }), []);
+});
+
+test("numbersDueForMonthMeter: Beleg OHNE numberId sperrt keine Nummer (Bestands-Beleg)", () => {
+  const s = makeDefaultState();
+  seedNumber(s, { id: NUMBER_ID_A });
+  // Bestands-Beleg von vor P5: derselbe Tenant, derselbe Monat, aber ohne Nummern-Bezug.
+  recordUsageEvent(s, {
+    tenantId: TENANT_A,
+    kind: USAGE_EVENT_KIND.NUMBER_MONTH,
+    quantity: 1,
+    costCents: MIETE_CENTS,
+    occurredAt: JANUAR,
+  });
+
+  assert.deepEqual(faelligeIds(s, { nowIso: JANUAR }), [NUMBER_ID_A]);
 });
 
 test("INV(4): aggregatePendingMeters summiert je (tenant,kind), Tenants getrennt", () => {

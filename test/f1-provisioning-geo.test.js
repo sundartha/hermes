@@ -11,7 +11,6 @@ import { handleProvisionJob } from "../src/worker/provisioning.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../src/telephony/provisioning-geo.js";
 import { config } from "../src/config.js";
 import { fakeProvisioner } from "./helpers.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { makeMetering } from "../src/billing/metering.js";
 import {
   makeDefaultState,
@@ -340,17 +339,24 @@ function fakeSetupFeeBilling() {
   };
 }
 
-// Faengt das number_month-usage_event auf (Muster test/metering-unit.test.js).
-function fakeMeteringStore() {
+// Spiegel des Produktionspfads: der Orchestrator ruft metering.recordNumberMonthMeter mit
+// GENAU der frisch aktivierten Nummer und seiner Uhr (src/worker/provisioning-
+// orchestrator.js). Liefert die entstandenen number_month-Belege - EINE Quelle fuer beide
+// GAP-11-Haelften (ohne / mit gelerntem Preis), damit sie nicht auseinanderdriften (G5).
+function numberMonthBelege(number) {
   const usageEvents = [];
-  return { usageEvents, recordUsageEvent: (ev) => usageEvents.push(ev) };
+  makeMetering({ store: { recordUsageEvent: (ev) => usageEvents.push(ev) } }).recordNumberMonthMeter(
+    number,
+    new Date().toISOString(),
+  );
+  return usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.NUMBER_MONTH);
 }
 
 // Die DREI Geld-Legs einer Provisionierung teilen sich EINE Quelle (holdAmountForCountry).
 // Bisher belegen das zwei benachbarte Tests getrennt (Drain reicht durch / Ledger nutzt
 // dieselbe Funktion); die INVARIANTE "Hold == Capture == number_month-costCents" steht
 // nirgends als EINE Assertion - genau daran driftete R3 (Capture-Mismatch).
-test("GAP-11: Hold, Capture und der number_month-Beleg tragen denselben Betrag (eine Quelle)", async () => {
+test("GAP-11: Hold und Capture tragen denselben Betrag (eine Quelle) und ohne gelernten Preis entsteht KEIN Beleg (fail-closed)", async () => {
   const country = "DE";
   const { s, numberId } = seedRequested(country);
   setTenantStripe(s, TENANT_ID, { customerId: "cus_gap11", paymentMethodId: "pm_gap11" });
@@ -363,20 +369,18 @@ test("GAP-11: Hold, Capture und der number_month-Beleg tragen denselben Betrag (
 
   const number = findNumber(s, numberId);
   assert.equal(number.status, NUMBER_STATUS.ACTIVE, "Vorbedingung: die Nummer wurde aktiviert");
-  // Spiegel des Produktionspfads: der Orchestrator ruft metering.recordNumberMonthMeter mit
-  // GENAU dieser frisch aktivierten Nummer (src/worker/provisioning-orchestrator.js).
-  const meteringStore = fakeMeteringStore();
-  makeMetering({
-    store: meteringStore,
-    config: withConfigNamespaces({ numberSetupFeeCents: DEFAULT_HOLD }),
-  }).recordNumberMonthMeter(number);
-
   const erwartet = holdAmountForCountry(country, DEFAULT_HOLD);
-  const belege = meteringStore.usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.NUMBER_MONTH);
   assert.deepEqual(billing.holdAmounts, [erwartet], "gehalten wurde der Laender-Setup-Tarif");
   assert.deepEqual(billing.captureAmounts, [erwartet], "eingezogen wurde derselbe Betrag");
-  assert.equal(belege.length, 1, "genau ein number_month-Beleg");
-  assert.equal(belege[0].costCents, erwartet, "und das Ledger bucht denselben Betrag");
+  // Die Beleg-Haelfte (P5/GAP-06): die Fixture kauft OHNE cost_information, es wurde also
+  // kein Provider-Preis gelernt. Die Einrichtungsgebuehr ist ausdruecklich KEIN
+  // Miet-Fallback (sonst zahlte jede Bestandsnummer sie monatlich als "Miete") -> kein
+  // Beleg. Der Fall MIT gelerntem Preis steht im GAP-11-(b)-Block darunter.
+  assert.deepEqual(
+    numberMonthBelege(number),
+    [],
+    "ohne gelernten Preis wird nicht gebucht (fail-closed)",
+  );
 });
 
 // ---- GAP-11 (b, neu gefasst): der Hold traegt den LIVE-Preis der Provider-Antwort ----
@@ -471,4 +475,23 @@ test("monthlyCostCents wird am aktivierten Nummern-Datensatz persistiert (Ueberg
     erwarteterBucketBetrag(ONE_CURRENCY_UNIT_MICRO_CENTS),
     "die Monatsmiete aus derselben Antwort steht am Datensatz",
   );
+});
+
+test("GAP-11: mit gelerntem Preis traegt der number_month-Beleg genau diesen Preis, waehrend Hold und Capture weiter aus einer Quelle kommen", async () => {
+  const erwartet = erwarteterBucketBetrag(ONE_CURRENCY_UNIT_MICRO_CENTS);
+
+  const { billing, number } = await provisionWithProviderPrice(providerPrice());
+
+  // Die Anti-Drift-Zusage (R3) bleibt: Hold == Capture, weiterhin aus EINER Quelle.
+  assert.deepEqual(billing.holdAmounts, [erwartet], "gehalten wurde der Provider-Preis");
+  assert.deepEqual(billing.captureAmounts, [erwartet], "eingezogen wurde derselbe Betrag");
+
+  const belege = numberMonthBelege(number);
+  assert.equal(belege.length, 1, "genau ein number_month-Beleg");
+  assert.equal(
+    belege[0].costCents,
+    number.monthlyCostCents,
+    "das Ledger bucht die gelernte MIETE (nicht die Einrichtungsgebuehr)",
+  );
+  assert.equal(belege[0].numberId, number.id, "der Beleg identifiziert die Nummer (Idempotenz-Anker)");
 });

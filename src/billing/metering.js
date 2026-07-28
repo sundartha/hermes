@@ -1,12 +1,14 @@
 // Metering: Voice-Minuten-/Nummern-Meter (P6b3) + Budget-Reconcile (outbound-p1c).
-// Reine Verschiebung aus server.js (Server-Slim P1). Die Factory schliesst store+config;
-// die Kosten-/Kind-Quellen (tariffCentsPerMin, holdAmountForCountry, USAGE_EVENT_KIND)
-// importiert das Modul selbst (EINE Quelle je, G5). Die paymentEnabled-Gating-Bedingung liegt
-// beim AUFRUFER (finishCall / Provisioning-Drain), NICHT hier: reconcileOutboundVoiceBudget
-// laeuft immer, recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
+// Reine Verschiebung aus server.js (Server-Slim P1). Die Factory schliesst NUR den store -
+// die Monatsmiete kommt seit P5 aus dem Nummern-Datensatz, nicht mehr aus config; die
+// Kosten-/Kind-Quellen (tariffCentsPerMin, USAGE_EVENT_KIND) und die Faelligkeits-Regel
+// (numbersDueForMonthMeter) importiert das Modul selbst (EINE Quelle je, G5). Die
+// paymentEnabled-Gating-Bedingung liegt beim AUFRUFER (finishCall / Provisioning-Drain /
+// Monatsmiete-Ausloeser), NICHT hier: reconcileOutboundVoiceBudget laeuft immer,
+// recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
+import { numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
-import { holdAmountForCountry } from "../telephony/provisioning-geo.js";
 
 const MS_PER_MINUTE = 60 * 1000;
 
@@ -41,7 +43,7 @@ export function callTariffCentsPerMin(call) {
   return tariffCentsPerMin(call.to, call.from);
 }
 
-export function makeMetering({ store, config }) {
+export function makeMetering({ store }) {
   // Voice-Minuten-Meter EINES beendeten Calls (P6b3, Meter 2). NUR im Metering-Pfad
   // (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt (recordUsageEvent) im Namen.
   // 0 Minuten -> kein Event (kein Null-Beleg). Kosten-Cents aus dem Leg-Tarif (Ziel UND
@@ -82,21 +84,66 @@ export function makeMetering({ store, config }) {
     store.recordCallEstimatedCostCents(call.id, estimatedCostCents);
   }
 
-  // number_month-Meter EINER neu aktivierten Nummer (P6b3, Meter 1). NUR im Metering-
-  // Pfad (PAYMENT_ENABLED, vom Aufrufer gegated) - der Nebeneffekt steht im Namen.
-  // number ist undefined, wenn der Job uebersprungen wurde (Re-Drain) -> kein Event.
-  // callId bewusst null (Nummern-Meter hat keinen Call). costCents = der per-Land-Setup-Tarif
-  // (P9): MUSS denselben Wert nutzen wie der Hold, sonst driftet das Ledger vom real
-  // gehaltenen/gecaptureten Betrag (Mini-R3 im usage_event). Land ohne eigenen Tarif / DE
-  // -> numberSetupFeeCents (byte-identisch).
-  function recordNumberMonthMeter(number) {
-    if (!number) return;
+  // Monatsmiete EINER Nummer in GANZZAHL Cents (G26: nie Float-Euro), oder null ohne
+  // gelernten Preis. VERBINDLICH (Owner 2026-07-27): NUR der beim Kauf uebernommene
+  // Provider-Preis am Nummern-Datensatz (P4/GAP-11) ist die Miete. KEIN Fallback auf die
+  // Einrichtungsgebuehr, KEIN NUMBER_MONTHLY_COST_CENTS, KEINE Schaetzung aus der ersten
+  // Buchung - jede dieser drei Quellen ist ausdruecklich verboten. Reine Funktion.
+  function monthlyRentCents(number) {
+    return Number.isInteger(number.monthlyCostCents) ? number.monthlyCostCents : null;
+  }
+
+  // number_month-Meter EINER Nummer (P6b3 Meter 1, seit P5 wiederkehrend). NUR im
+  // Metering-Pfad (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt im Namen (N7).
+  // nowIso ist DIESELBE Uhr, mit der die Faelligkeit geprueft wurde: Pruefung und Beleg
+  // muessen im selben Kalendermonat liegen, sonst faellt ein Monat zwischen zwei Uhren
+  // durch. numberId ist der Idempotenz-Anker (ein Beleg je Nummer und Monat), callId
+  // bleibt null (Nummern-Meter hat keinen Call). number undefined (uebersprungener
+  // Re-Drain) -> kein Event. Ohne gelernten Preis wird NICHT gebucht (fail-closed, s.
+  // monthlyRentCents). Liefert true, wenn wirklich ein Beleg entstand.
+  function recordNumberMonthMeter(number, nowIso) {
+    if (!number) return false;
+    const costCents = monthlyRentCents(number);
+    if (costCents === null) return false;
     store.recordUsageEvent({
       tenantId: number.tenantId,
+      numberId: number.id,
       kind: USAGE_EVENT_KIND.NUMBER_MONTH,
       quantity: 1,
-      costCents: holdAmountForCountry(number.country, config.billing.numberSetupFeeCents),
+      costCents,
+      occurredAt: nowIso,
     });
+    return true;
+  }
+
+  // GAP-06: bucht die im Kalendermonat von nowIso noch OFFENEN Monatsmieten. Der
+  // Idempotenz-Riegel liegt vollstaendig in numbersDueForMonthMeter (EINE Regel, G5) -
+  // diese Funktion bucht nur, was faellig ist, und ist damit unter BEIDEN Ausloesern
+  // (Abo-Verlaengerung, stuendlicher Sweep) zusammen sicher. Ein Fehler an EINER Nummer
+  // beendet den Lauf NICHT (Spec-Invariante); geloggt wird PII-frei (interne numberId,
+  // nie e164). Den State reicht der Aufrufer herein, er haelt auch den Lock (Vertrag wie
+  // billing/meter.js). Liefert die Zaehlung fuer die EINE Log-Zeile des Aufrufers.
+  //
+  // BEWUSSTE ABWAEGUNG: der Schreibpfad bleibt EINER - store.recordUsageEvent, das je
+  // Beleg selbst persistiert. Ein zweiter, ops-direkter Schreibpfad nur zur Einsparung
+  // von Flushes waere eine Kopie derselben Buchungslogik (G5/S2). Die Schleife laeuft je
+  // Nummer EINMAL PRO MONAT, nicht stuendlich: nach dem ersten erfolgreichen Lauf ist
+  // nichts mehr faellig. Nebeneffekt im Namen (N7).
+  function recordDueNumberMonthMeters(s, { nowIso, tenantId = null }) {
+    const faellige = numbersDueForMonthMeter(s, { nowIso, tenantId });
+    let gebucht = 0;
+    let ohnePreis = 0;
+    let fehler = 0;
+    for (const number of faellige) {
+      try {
+        if (recordNumberMonthMeter(number, nowIso)) gebucht++;
+        else ohnePreis++;
+      } catch (err) {
+        fehler++;
+        console.error(`[number-month] Beleg fehlgeschlagen number=${number.id}:`, err.message);
+      }
+    }
+    return { faellig: faellige.length, gebucht, ohnePreis, fehler };
   }
 
   return {
@@ -104,5 +151,6 @@ export function makeMetering({ store, config }) {
     recordVoiceMinuteMeter,
     reconcileOutboundVoiceBudget,
     recordNumberMonthMeter,
+    recordDueNumberMonthMeters,
   };
 }
