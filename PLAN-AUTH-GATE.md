@@ -189,9 +189,8 @@ nur bei `devLoginEnabled`, fail-closed), `/api/portal/state` (`wiring/web-login.
    `adminMw`. `scripts/sweep-jetzt.sh` entfaellt dabei ersatzlos (Entscheidung 3).
 4. **`GET /api/tenant-data/export`** — DSGVO Art. 15. Kein Aufrufer (`state-ops.js:366` ist
    ein Kommentar). **Entschieden (1): `internalOnly`, KEIN Selbstbedienungs-Export** — der
-   Owner beantwortet Auskunftsersuchen von Hand. Konsequenzen und die dafuer noetige
-   Handarbeit stehen in Abschnitt 10, Entscheidung 1 (inklusive einer Luecke, die dabei
-   auffiel: ein Export-Gegenstueck zu `scripts/erase-tenant.js` existiert nicht).
+   Owner beantwortet Auskunftsersuchen von Hand. Mehr passiert in diesem Plan dazu nicht;
+   das Werkzeug fuer den manuellen Weg ist bewusst ausgelagert nach `PLAN-TENANT-EXPORT.md`.
 
 ### (b2) — ersatzlos loeschen (Beleg fuer "tot")
 
@@ -331,7 +330,7 @@ Review-Entscheidung. Bewusst als Restrisiko festgehalten.
 | Szenario | Was passiert waere | Entschaerfung |
 | --- | --- | --- |
 | **API stand ungeschuetzt im Netz** | Beim Entfernen der Sammelsicherung wurde genau eine Route uebersehen. `GET /api/state` liefert Agenten-Einstellungen; `POST /api/calls` telefoniert auf fremde Rechnung. | P1 (Inventar-Test, gegen den Prod-Graph) + P2 (Live-Probe) **vor** P7. Fail-closed bleibt strukturell: keine Middleware UND kein Eintrag in der Oeffentlich-Liste = roter Test. |
-| **Transkripte geleakt** | `GET /api/tenant-data/export` und `GET /api/calls/:id` haengen am Bootstrap-Tenant-Fallback (`_tenant.js:151`). Anonym = Owner-Tenant = alle Gespraeche. | (b1)-4: `webAuthMw`, Scoping ueber `req.tenant` statt ueber den Fallback. Negativ-Test (ohne Session -> 401) ist Pflicht. |
+| **Transkripte geleakt** | `GET /api/tenant-data/export` und `GET /api/calls/:id` haengen am Bootstrap-Tenant-Fallback (`_tenant.js:151`). Anonym = Owner-Tenant = alle Gespraeche. | Zwei Schichten: P3 macht den Fallback fail-closed, P5 legt `internalOnly` davor. Negativ-Test (externer Request -> 403) ist Pflicht. |
 | **Provider-Webhook stumm geblockt** | Eine zu breit gemountete Middleware toetet `/voice` — der Ausfall ist nur an ausbleibenden Anrufen sichtbar, nicht an einem Fehler. | S2: die Live-Probe prueft `/voice/incoming` und `/webhooks/stripe` auf nicht-401 als Abnahme JEDER Phase. |
 | **Spaeter hinzugefuegte Route versehentlich oeffentlich** | Die Default-Sicherung existiert nicht mehr; "hinter Basic-Auth (Bestand deckt `/api/*` ab)" — der Satz steht heute in 6 Modulkommentaren — ist ab dann falsch. | P1 macht den Default maschinell: neue Route ohne Auth und ohne bewussten Oeffentlich-Eintrag = roter `npm test`. Die neue Regel 3 (Abschnitt 9) verlangt den Eintrag ausdruecklich. Die 6 veralteten Kommentare werden in P7 mitkorrigiert. |
 | **Kosten explodieren** | Anonymer `POST /api/calls` / `POST /api/onboard` (DID-Kauf). | (b1)-1 und (b1)-2. Die bestehenden Geld-Gates (Budget, Caps, KYC, `OUTBOUND_FROZEN`) bleiben unberuehrt — sie sind die zweite Schicht, nicht die erste. |
@@ -550,10 +549,12 @@ P9 (Cache-Header, Legacy-Checkout) ist unabhaengig und kann jederzeit laufen.
   `GET /api/calls/:id` **und `GET /api/tenant-data/export`** (Entscheidung 1 — bewusst
   `internalOnly` statt `webAuthMw`). Zusaetzlich schreiben `webAuthMw`/`adminMw`/
   `internalOnly` bei Ablehnung `audit("auth_failed", req, ...)` (S4).
-- **Dateien:** neu `src/wiring/internal-only.js`; neu `scripts/export-tenant.js` (Spiegel von
-  `scripts/erase-tenant.js`, s. Entscheidung 1 — ohne dieses Skript hat der manuelle
-  DSGVO-Weg kein Werkzeug); `src/routes/api-calls.js`, `src/routes/api-read.js`,
-  `src/web-auth.js` (Audit in den Ablehnungszweigen), `src/app.js`.
+- **Dateien:** neu `src/wiring/internal-only.js`; `src/routes/api-calls.js`,
+  `src/routes/api-read.js`, `src/web-auth.js` (Audit in den Ablehnungszweigen), `src/app.js`.
+- **Ausserhalb des Umfangs (bewusst ausgelagert, nicht vergessen):** ein Werkzeug fuer den
+  manuellen DSGVO-Auskunftsweg gehoert NICHT in diesen Plan — dieser Plan loest das
+  Basic-Auth-Gate ab. Der Merkposten liegt in `PLAN-TENANT-EXPORT.md` (geparkt). Hier
+  passiert nur die Einstufung der Route, eine Zeile Klassifikation.
 - **W9 (bestaetigt als Risiko, heute nicht realisiert) — per Test pinnen:** `util.audit`
   (`util.js:48-49`) loggt `action`, `req.ip` und `details`. `auth-gate.js:72` uebergibt
   `path=${req.path}` — `req.path` enthaelt **keinen** Query-String, heute leakt also nichts.
@@ -736,22 +737,12 @@ eingearbeitet; die Phase, in der sie wirken, steht jeweils dabei.
 
 **1. `/api/tenant-data/export` — NEIN, kein Selbstbedienungs-Export.** Die Route bekommt in
 **P5** `internalOnly` (nicht `webAuthMw`); Auskunftsersuchen nach DSGVO Art. 15 beantwortet
-der Owner von Hand.
-- *Bewusst akzeptiertes Risiko:* die Art.-15-Frist von einem Monat haengt damit an manueller
-  Arbeit und an der Verfuegbarkeit des Owners. Es gibt keinen automatischen Ausweg.
-- *Der manuelle Weg — und eine Luecke, die dabei auffiel:* die Daten liefert
-  `store.exportTenantData(tenantId)` (`src/store/state-ops.js:368`; liefert Calls inkl.
-  Transkripte, Action Items, Notifications und die private Summary-Nummer — spiegelbildlich
-  zu dem, was `eraseTenantData` loescht). **Ein Skript-Gegenstueck zu
-  `scripts/erase-tenant.js` existiert NICHT** (`ls scripts/` geprueft). Ueber die HTTP-Route
-  kommt der Owner nach P5 in Produktion ebenfalls nicht mehr heran: `internalOnly` verlangt
-  einen echten Loopback-Aufruf ohne `X-Forwarded-For`, und der Render-Free-Tier bietet keine
-  Shell auf dem laufenden Dienst. **Konsequenz, die in P5 mitgehoert:** ein
-  `scripts/export-tenant.js` als exakter Spiegel von `scripts/erase-tenant.js` (gleiche
-  Aufrufform, liest `store.exportTenantData`, laeuft lokal gegen die Prod-`DATABASE_URL` —
-  genau wie das Erase-Skript heute). Ohne dieses Skript hat "der Owner macht es von Hand"
-  kein Werkzeug; ein direkter `psql`-Zugriff scheitert zudem an FORCE-RLS (naives `SELECT`
-  liefert 0 Zeilen).
+der Owner von Hand. Fuer diesen Plan ist das die ganze Aenderung: eine Einstufung.
+
+Die Frage, **womit** der Owner eine solche Auskunft praktisch erstellt, ist ein eigenes Thema
+und vom Owner am 2026-07-28 bewusst zurueckgestellt. Sie liegt als geparkter Merkposten in
+**`PLAN-TENANT-EXPORT.md`** — inklusive des dabei aufgefallenen Befunds, dass heute kein
+Export-Werkzeug existiert. Dieser Plan baut es ausdruecklich nicht (Absolute Regel 6).
 
 **2. Betreiber-Routen — JA, Admin-Session.** `webAuthMw` + `adminMw` (`role==='admin'` bzw.
 `ADMIN_EMAILS`) vor `/api/onboard*` und den vier Billing-Operator-Routen. Wirkt in **P6**.
@@ -853,9 +844,9 @@ nachgeprueft.
   geloest.
 - Die Live-Probe bleibt manuell; sie erzwingt sich nicht selbst nach einem Deploy.
 - **Aus den Owner-Entscheidungen neu hinzugekommen:**
-  - Die DSGVO-Art.-15-Frist haengt an manueller Arbeit (Entscheidung 1). Der Plan liefert das
-    Werkzeug (`scripts/export-tenant.js` in P5), nicht die Zusicherung, dass jemand es
-    fristgerecht bedient.
+  - Die DSGVO-Art.-15-Frist haengt an manueller Arbeit (Entscheidung 1) — und es existiert
+    heute kein Werkzeug dafuer. Dieser Plan liefert bewusst keines; der Merkposten liegt in
+    `PLAN-TENANT-EXPORT.md` (geparkt).
   - Der Cost-Truing-Sweep hat keinen Boot-Lauf; nach dem Wegfall des manuellen Ausloesers
     (Entscheidung 3) kann er bei dichten Deploys still ausbleiben. Bestehender Zustand,
     bewusst nicht in diesen Plan gezogen.
