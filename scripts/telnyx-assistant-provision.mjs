@@ -51,6 +51,39 @@ const USER_IDLE_REPLY_SECS = 4;
 // fehlt in der oeffentlichen OpenAPI-Spec, existiert aber real am Live-Objekt (kein Tippfehler,
 // per GET verifiziert - Doku-Drift ist bei Telnyx systematisch, s. PLAN-CONVERSATION-OPTIMIZATION.md §9.6).
 const INTERRUPT_PREDICTION_THRESHOLD = 0.4;
+// AL-P3 (PLAN-ASSISTANT-LEAP.md, Phase 3): Endpointing - wie lange Telnyx nach dem letzten Wort
+// des Anrufers wartet, bevor es unseren Shim ruft. Diese Wartezeit sitzt VOR jedem einzelnen
+// Turn und war nie konfiguriert (Befund B3): der Live-GET auf den Assistant zeigte
+// interruption_settings.start_speaking_plan = null - Telnyx entschied mit unbekannten internen
+// Defaults.
+//
+// SCHEMA-SLOT LIVE VERIFIZIERT (GET /v2/ai/assistants/{id}, 2026-07-28): start_speaking_plan
+// haengt unter interruption_settings - NICHT unter transcription, wie im Plan als Moeglichkeit
+// erwogen. on_punctuation_seconds/on_no_punctuation_seconds/on_number_seconds liegen NOCH eine
+// Ebene tiefer unter transcription_endpointing_plan. Folge: `transcription` wird von dieser
+// Phase NICHT gesendet, der PRESERVED_SAFETY_FIELDS-Eintrag dafuer bleibt ein gueltiger
+// "vorher == nachher"-Guard (kein Guard-Umzug noetig).
+//
+// ANKER der Werte ist Telnyx' eigenes "Order collection"-Preset (0.4 / 0.1 / 1.5 / 0.5, Quelle:
+// telnyx.com/resources/control-voice-ai-response-timing-with-start-speaking-plan). Diese Runde
+// weicht an GENAU EINEM Knopf davon ab. Welchen Wert Telnyx bei start_speaking_plan=null intern
+// benutzt, ist NICHT dokumentiert und NICHT gemessen - deshalb ist die Basislinie
+// (start_speaking_plan_extra_wait_duration_ms aus scripts/telnyx-call-latency.mjs, VOR dem
+// Provisioning erhoben) Vorbedingung der Abnahme, nicht Kuer.
+// Grundstille nach dem erkannten Turn-Ende; auf dem Anker-Wert, in dieser Runde nicht getunt.
+const START_SPEAKING_WAIT_SECONDS = 0.4;
+// Transkript endet mit Satzzeichen = starkes Ende-Signal -> kurz. Auf dem Anker-Wert.
+const ENDPOINTING_ON_PUNCTUATION_SECONDS = 0.1;
+// DER Hebel dieser Phase: Transkript ohne Satzzeichen, 1.5 -> 0.8 s. Abbruchkriterium steht in
+// der Abnahme (Plan Phase 3, Punkt 3): steigt turns/Anruf um mehr als 15 %, wird zurueckgedreht
+// statt weiter getunt - jeder zusaetzliche Turn ist ein voller Shim-Turn mit bookTokenUsage.
+const ENDPOINTING_ON_NO_PUNCTUATION_SECONDS = 0.8;
+// Diktierte Ziffern (Telefonnummer, Uhrzeit, Hausnummer) brauchen MEHR Geduld, nicht weniger -
+// hier zu kuerzen waere genau das "Anrufer abschneiden", das der Plan als Hauptrisiko benennt.
+// Wird trotzdem EXPLIZIT gesendet: sobald start_speaking_plan von null zu einem Objekt wird,
+// entscheidet ueber ein weggelassenes Sub-Feld ein unbekannter Feld-Default (gleiche Logik wie
+// bei BACKGROUND_AUDIO_VALUE - Weglassen ist keine Neutralitaet).
+const ENDPOINTING_ON_NUMBER_SECONDS = 0.5;
 // K2 (PLAN-CONVERSATION-OPTIMIZATION.md) stand auf "office": leises Buero-Ambiente statt
 // digitaler Stille in den Antwortpausen, gegen das Totzeit-Empfinden. Der Owner-Testanruf
 // hat die dort offen gelassene Erwartung E2.3 ("fuehlt sich die Pause weniger tot an?")
@@ -125,10 +158,23 @@ const PRESERVED_SAFETY_FIELDS = Object.freeze({
 // einen echten Fehler vortaeuscht). Jeder Eintrag hier ist deshalb ein PFAD BIS ZUM SKALAR
 // (Zahl/String), den fieldsNotApplied mit === vergleicht - reihenfolge-unabhaengig und tolerant
 // gegen Zusatzfelder, die Telnyx an anderer Stelle im selben Objekt ergaenzt.
+// AL-P3: gemeinsame Pfad-Praefixe, damit die vier Endpointing-Blaetter unten nicht viermal
+// dieselbe Verschachtelung wiederholen (G5) - und damit die Zeilen unter printWidth bleiben.
+const START_SPEAKING_PLAN_PATH = ["interruption_settings", "start_speaking_plan"];
+const ENDPOINTING_PLAN_PATH = [...START_SPEAKING_PLAN_PATH, "transcription_endpointing_plan"];
+
 const APPLIED_FIELDS_TO_VERIFY = Object.freeze({
   interrupt_prediction_threshold: ["interruption_settings", "interrupt_prediction_threshold"],
   background_audio_value: ["voice_settings", "background_audio", "value"],
   background_audio_volume: ["voice_settings", "background_audio", "volume"],
+  // AL-P3 (Abnahme 4): dieselbe "gesendet == live"-Semantik. start_speaking_plan ist in der
+  // oeffentlichen Telnyx-Spec duenn dokumentiert; der wahrscheinlichste Fehlermodus ist der
+  // STILLE Drop (POST bleibt 200, das Feld bleibt null) - ohne diesen Check meldete das Skript
+  // smokePass=true, obwohl das Endpointing live gar nicht wirkt. NUR SKALARE BLAETTER (MAJOR-3).
+  start_speaking_wait_seconds: [...START_SPEAKING_PLAN_PATH, "wait_seconds"],
+  endpointing_on_punctuation_seconds: [...ENDPOINTING_PLAN_PATH, "on_punctuation_seconds"],
+  endpointing_on_no_punctuation_seconds: [...ENDPOINTING_PLAN_PATH, "on_no_punctuation_seconds"],
+  endpointing_on_number_seconds: [...ENDPOINTING_PLAN_PATH, "on_number_seconds"],
 });
 
 // Liest einen Wert ueber eine Pfad-Segmentliste (kein IO, keine Ausnahme bei fehlenden
@@ -172,7 +218,14 @@ export function fieldsNotApplied(sent, live) {
  * lebt im Shim (agentTurn/claude.js); die disclosureSentence ist ein per-Call/tenant/
  * sprachgebundener Laufzeitwert.
  */
-export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef, model, llmApiKeyRef }) {
+export function buildAssistantConfig({
+  publicUrl,
+  voiceId,
+  voiceModel,
+  apiKeyRef,
+  model,
+  llmApiKeyRef,
+}) {
   return {
     name: ASSISTANT_NAME,
     // KEIN top-level `model`: bei gesetztem external_llm lehnt Telnyx beides zusammen ab
@@ -204,6 +257,18 @@ export function buildAssistantConfig({ publicUrl, voiceId, voiceModel, apiKeyRef
     interruption_settings: {
       enable: true, // Barge-in an (Launch-Pflicht) - bleibt UNVERAENDERT an, K1 ist reines Tuning
       interrupt_prediction_threshold: INTERRUPT_PREDICTION_THRESHOLD,
+      // AL-P3: das Barge-in-Tuning oben bleibt woertlich unangetastet ("interruption_settings
+      // bleibt unangetastet" im Plan meint die Barge-in-Felder). start_speaking_plan ist ein
+      // SCHWESTERFELD im selben Objekt und die eigentliche Aenderung dieser Phase - der
+      // Schema-Slot inkl. der zweiten Verschachtelungsebene ist live per GET verifiziert.
+      start_speaking_plan: {
+        wait_seconds: START_SPEAKING_WAIT_SECONDS,
+        transcription_endpointing_plan: {
+          on_punctuation_seconds: ENDPOINTING_ON_PUNCTUATION_SECONDS,
+          on_no_punctuation_seconds: ENDPOINTING_ON_NO_PUNCTUATION_SECONDS,
+          on_number_seconds: ENDPOINTING_ON_NUMBER_SECONDS,
+        },
+      },
     },
     // NUR dieses eine Feld senden - die Annahme, dass der Update-POST ein Deep-Merge ist und
     // PRESERVED_SAFETY_FIELDS (time_limit_secs etc.) dabei unveraendert ueberleben, ist live
@@ -316,7 +381,11 @@ export function fieldsLostOnUpdate(before, after) {
 export async function sendAssistantConfig(assistantConfig, existingId) {
   const before = existingId ? preservedFieldSnapshot(await fetchAssistant(existingId)) : {};
   const { method, url } = assistantRequest(existingId);
-  const res = await fetch(url, { method, headers: headers(), body: JSON.stringify(assistantConfig) });
+  const res = await fetch(url, {
+    method,
+    headers: headers(),
+    body: JSON.stringify(assistantConfig),
+  });
   await assertTelnyxOk(res, "provisionAssistant", { attachStatus: true });
   const json = await res.json().catch(() => ({}));
   const data = json.data || json; // Telnyx-v2 wrappt teils in {data} (Muster voice.js)
@@ -338,7 +407,10 @@ export async function sendAssistantConfig(assistantConfig, existingId) {
     }
   }
 
-  const notApplied = fieldsNotApplied(appliedFieldSnapshot(assistantConfig), appliedFieldSnapshot(liveAfter));
+  const notApplied = fieldsNotApplied(
+    appliedFieldSnapshot(assistantConfig),
+    appliedFieldSnapshot(liveAfter),
+  );
   if (notApplied.length) {
     throw new Error(
       `K1/K2-Verifikation fehlgeschlagen: Telnyx hat folgende Felder NICHT wie gesendet uebernommen ` +
@@ -369,7 +441,9 @@ async function main() {
   // sie in die Env (P10-Doku).
   report(
     Boolean(id),
-    id ? `assistant_id=${id} (in ${ASSISTANT_ID_ENV} uebernehmen)` : "keine assistant_id in der Antwort",
+    id
+      ? `assistant_id=${id} (in ${ASSISTANT_ID_ENV} uebernehmen)`
+      : "keine assistant_id in der Antwort",
   );
 }
 

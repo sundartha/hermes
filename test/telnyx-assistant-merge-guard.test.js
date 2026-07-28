@@ -111,19 +111,19 @@ test("preservedFieldSnapshot: fehlendes telephony_settings-Objekt -> kein Crash,
 test("sendAssistantConfig: Create (kein existingId) macht POST + Nachher-GET, KEIN Merge-Check", async () => {
   config.telephony.telnyxApiBase = "https://telnyx.test";
   config.telephony.telnyxApiKey = "test-key";
-  await withQueuedFetch(
-    [{ json: { data: { id: "asst_new" } } }],
-    async (calls) => {
-      const id = await sendAssistantConfig(MINIMAL_CONFIG, "");
-      assert.equal(id, "asst_new");
-      assert.deepEqual(
-        calls.map((c) => c.method),
-        ["POST", "GET"],
-        "Create macht keinen Vorher-GET (nichts zu verlieren), aber einen Nachher-GET (K1/K2)",
-      );
-      assert.ok(calls[1].url.endsWith("/v2/ai/assistants/asst_new"), "Nachher-GET zielt auf die frische ID");
-    },
-  );
+  await withQueuedFetch([{ json: { data: { id: "asst_new" } } }], async (calls) => {
+    const id = await sendAssistantConfig(MINIMAL_CONFIG, "");
+    assert.equal(id, "asst_new");
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ["POST", "GET"],
+      "Create macht keinen Vorher-GET (nichts zu verlieren), aber einen Nachher-GET (K1/K2)",
+    );
+    assert.ok(
+      calls[1].url.endsWith("/v2/ai/assistants/asst_new"),
+      "Nachher-GET zielt auf die frische ID",
+    );
+  });
 });
 
 test("sendAssistantConfig: Update, Sicherheitsfelder unveraendert -> GET/POST/GET, id kommt durch", async () => {
@@ -188,7 +188,10 @@ test("sendAssistantConfig: Update ersetzt telephony_settings als Ganzes -> wirft
           assert.match(err.message, /time_limit_secs/);
           assert.match(err.message, /recording_settings/);
           assert.match(err.message, /default_texml_app_id/);
-          assert.ok(!/transcription/.test(err.message), "transcription blieb unveraendert -> kein Verlust");
+          assert.ok(
+            !/transcription/.test(err.message),
+            "transcription blieb unveraendert -> kein Verlust",
+          );
           return true;
         },
       );
@@ -214,22 +217,34 @@ const K_CONFIG = {
 // eingetragen (background_audio_value/-_volume), nicht mehr als verschachteltes Objekt -
 // appliedFieldSnapshot liest ueber readByPath weiterhin generisch, liefert fuer die tieferen
 // Pfade jetzt aber Zahl/String statt eines Objekts.
+// AL-P3: K_CONFIG hat kein start_speaking_plan -> undefined ist der korrekte Snapshot-Wert;
+// ein Weglassen im Snapshot wuerde den Drop-Guard fuer die vier neuen Blaetter blind machen.
 test("appliedFieldSnapshot: liest interrupt_prediction_threshold + background_audio_value/-_volume ueber den vollen Pfad", () => {
   const snapshot = appliedFieldSnapshot(K_CONFIG);
   assert.deepEqual(snapshot, {
     interrupt_prediction_threshold: 0.4,
     background_audio_value: "office",
     background_audio_volume: 0.3,
+    start_speaking_wait_seconds: undefined,
+    endpointing_on_punctuation_seconds: undefined,
+    endpointing_on_no_punctuation_seconds: undefined,
+    endpointing_on_number_seconds: undefined,
   });
 });
 
 test("fieldsNotApplied: abweichender/fehlender Wert -> im Ergebnis; identisch -> leer", () => {
   assert.deepEqual(
-    fieldsNotApplied({ interrupt_prediction_threshold: 0.4 }, { interrupt_prediction_threshold: undefined }),
+    fieldsNotApplied(
+      { interrupt_prediction_threshold: 0.4 },
+      { interrupt_prediction_threshold: undefined },
+    ),
     ["interrupt_prediction_threshold"],
   );
   assert.deepEqual(
-    fieldsNotApplied({ interrupt_prediction_threshold: 0.4 }, { interrupt_prediction_threshold: 0.4 }),
+    fieldsNotApplied(
+      { interrupt_prediction_threshold: 0.4 },
+      { interrupt_prediction_threshold: 0.4 },
+    ),
     [],
   );
 });
@@ -264,7 +279,9 @@ test("sendAssistantConfig: K1/K2-Felder live bestaetigt (GET-nachher matcht den 
   const after = {
     data: assistantWithSafetyFields({
       interruption_settings: { enable: true, interrupt_prediction_threshold: 0.4 },
-      voice_settings: { background_audio: { type: "predefined_media", value: "office", volume: 0.3 } },
+      voice_settings: {
+        background_audio: { type: "predefined_media", value: "office", volume: 0.3 },
+      },
     }),
   };
   await withQueuedFetch(
@@ -272,7 +289,11 @@ test("sendAssistantConfig: K1/K2-Felder live bestaetigt (GET-nachher matcht den 
     async (calls) => {
       const id = await sendAssistantConfig(K_CONFIG, "asst_1");
       assert.equal(id, "asst_1");
-      assert.equal(calls.length, 3, "kein zusaetzlicher GET - derselbe GET-nachher deckt beide Pruefungen ab");
+      assert.equal(
+        calls.length,
+        3,
+        "kein zusaetzlicher GET - derselbe GET-nachher deckt beide Pruefungen ab",
+      );
     },
   );
 });
@@ -286,7 +307,9 @@ test("sendAssistantConfig: Telnyx verwirft interrupt_prediction_threshold still 
       // interrupt_prediction_threshold fehlt (still verworfen), enable bleibt allein uebrig;
       // background_audio kam korrekt an - nur EIN Feld darf im Fehler genannt werden.
       interruption_settings: { enable: true },
-      voice_settings: { background_audio: { type: "predefined_media", value: "office", volume: 0.3 } },
+      voice_settings: {
+        background_audio: { type: "predefined_media", value: "office", volume: 0.3 },
+      },
     }),
   };
   await withQueuedFetch(
@@ -297,7 +320,10 @@ test("sendAssistantConfig: Telnyx verwirft interrupt_prediction_threshold still 
         (err) => {
           assert.match(err.message, /K1\/K2-Verifikation fehlgeschlagen/);
           assert.match(err.message, /interrupt_prediction_threshold/);
-          assert.ok(!/background_audio/.test(err.message), "background_audio kam korrekt an -> kein Verlust");
+          assert.ok(
+            !/background_audio/.test(err.message),
+            "background_audio kam korrekt an -> kein Verlust",
+          );
           return true;
         },
       );
@@ -315,11 +341,18 @@ test("sendAssistantConfig: Create, K1/K2-Felder live bestaetigt -> kein Fehler (
   config.telephony.telnyxApiBase = "https://telnyx.test";
   config.telephony.telnyxApiKey = "test-key";
   const after = { data: { id: "asst_new", ...K_CONFIG } };
-  await withQueuedFetch([{ json: { data: { id: "asst_new" } } }, { json: after }], async (calls) => {
-    const id = await sendAssistantConfig(K_CONFIG, "");
-    assert.equal(id, "asst_new");
-    assert.equal(calls.length, 2, "POST + genau ein Nachher-GET, kein Vorher-GET (kein existingId)");
-  });
+  await withQueuedFetch(
+    [{ json: { data: { id: "asst_new" } } }, { json: after }],
+    async (calls) => {
+      const id = await sendAssistantConfig(K_CONFIG, "");
+      assert.equal(id, "asst_new");
+      assert.equal(
+        calls.length,
+        2,
+        "POST + genau ein Nachher-GET, kein Vorher-GET (kein existingId)",
+      );
+    },
+  );
 });
 
 test("sendAssistantConfig: Create, Telnyx verwirft interrupt_prediction_threshold still -> wirft AUCH ohne existingId (MAJOR-2)", async () => {
@@ -329,7 +362,9 @@ test("sendAssistantConfig: Create, Telnyx verwirft interrupt_prediction_threshol
     data: {
       id: "asst_new",
       interruption_settings: { enable: true }, // interrupt_prediction_threshold fehlt (still verworfen)
-      voice_settings: { background_audio: { type: "predefined_media", value: "office", volume: 0.3 } },
+      voice_settings: {
+        background_audio: { type: "predefined_media", value: "office", volume: 0.3 },
+      },
     },
   };
   await withQueuedFetch([{ json: { data: { id: "asst_new" } } }, { json: after }], async () => {
@@ -342,4 +377,76 @@ test("sendAssistantConfig: Create, Telnyx verwirft interrupt_prediction_threshol
       },
     );
   });
+});
+
+// AL-P3: K_CONFIG + start_speaking_plan (K_CONFIG selbst bleibt unangetastet -> minimale
+// Churn an den Bestandstests oben).
+const AL_P3_CONFIG = {
+  ...K_CONFIG,
+  interruption_settings: {
+    ...K_CONFIG.interruption_settings,
+    start_speaking_plan: {
+      wait_seconds: 0.4,
+      transcription_endpointing_plan: {
+        on_punctuation_seconds: 0.1,
+        on_no_punctuation_seconds: 0.8,
+        on_number_seconds: 0.5,
+      },
+    },
+  },
+};
+
+test("AL-P3: appliedFieldSnapshot liest die vier Endpointing-Blaetter ueber den vollen Pfad", () => {
+  const snapshot = appliedFieldSnapshot(AL_P3_CONFIG);
+  assert.deepEqual(snapshot, {
+    interrupt_prediction_threshold: 0.4,
+    background_audio_value: "office",
+    background_audio_volume: 0.3,
+    start_speaking_wait_seconds: 0.4,
+    endpointing_on_punctuation_seconds: 0.1,
+    endpointing_on_no_punctuation_seconds: 0.8,
+    endpointing_on_number_seconds: 0.5,
+  });
+});
+
+// AL-P3 (der eigentliche Regressionsschutz, Abnahme 4): Telnyx laesst start_speaking_plan
+// still auf null (undokumentiertes Feld, wahrscheinlichster Fehlermodus ist der stille Drop) -
+// sendAssistantConfig muss werfen, statt smokePass=true zu melden, obwohl das Endpointing live
+// gar nicht wirkt. background_audio kam korrekt an -> darf NICHT im Fehler stehen.
+test("AL-P3: Telnyx laesst start_speaking_plan still auf null -> sendAssistantConfig wirft, kein falsch-gruener Lauf", async () => {
+  config.telephony.telnyxApiBase = "https://telnyx.test";
+  config.telephony.telnyxApiKey = "test-key";
+  const before = { data: assistantWithSafetyFields() };
+  const after = {
+    data: assistantWithSafetyFields({
+      interruption_settings: {
+        enable: true,
+        interrupt_prediction_threshold: 0.4,
+        start_speaking_plan: null,
+      },
+      voice_settings: {
+        background_audio: { type: "predefined_media", value: "office", volume: 0.3 },
+      },
+    }),
+  };
+  await withQueuedFetch(
+    [{ json: before }, { json: { data: { id: "asst_1" } } }, { json: after }],
+    async () => {
+      await assert.rejects(
+        () => sendAssistantConfig(AL_P3_CONFIG, "asst_1"),
+        (err) => {
+          assert.match(err.message, /K1\/K2-Verifikation fehlgeschlagen/);
+          assert.match(err.message, /start_speaking_wait_seconds/);
+          assert.match(err.message, /endpointing_on_punctuation_seconds/);
+          assert.match(err.message, /endpointing_on_no_punctuation_seconds/);
+          assert.match(err.message, /endpointing_on_number_seconds/);
+          assert.ok(
+            !/background_audio/.test(err.message),
+            "background_audio kam korrekt an -> kein Verlust",
+          );
+          return true;
+        },
+      );
+    },
+  );
 });
