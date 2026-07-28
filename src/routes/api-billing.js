@@ -17,6 +17,9 @@ import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate
 import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
 import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
+// P14: dieselbe EINE Quelle der Stripe-Rueckkehr-Ziele wie self-service-routes.js
+// (frueher stand die cancelUrl hier als zweites Inline-Literal, driftfaehig, G5).
+import { CHECKOUT_RETURN } from "../portal-paths.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
@@ -58,7 +61,7 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
     if (!tenant) return;
 
     const successUrl = `${config.server.publicUrl}/api/billing/checkout-return?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${config.server.publicUrl}/tenant.html?card=canceled`;
+    const cancelUrl = `${config.server.publicUrl}${CHECKOUT_RETURN.CARD_CANCELED}`;
     // Fix B: derselbe Self-Heal wie der Pay3-Pfad (geteilte Logik, G5 - s. card-setup.js).
     const { session, healed } = await startCheckoutWithStaleCustomerHeal(
       { store, billing, tenant, retryDelayMs: config.billing.stripeCustomerRetryDelayMs },

@@ -4,12 +4,13 @@
 //
 // SOLL (rot): germanLeakCount === 0 fuer einen EN-Tenant, ueber alle Kanaele.
 //
-// Abdeckung dieses Tests: 8 der 9 im Katalog genannten Kanaele, real ausgefuehrt oder per
+// Abdeckung dieses Tests: 7 der 9 im Katalog genannten Kanaele, real ausgefuehrt oder per
 // statischem Text-Check (kein Build/Netz). NICHT nachgebaut: Kanal 3 (die messages-/
 // tool_result-Kette, GAP-28) - das braucht den vollen Claude-Tool-Loop (echter/gemockter
-// LLM-Turn) und ist damit ein eigenstaendiges, deutlich teureres Vorhaben; die anderen acht
-// Kanaele tragen die Aussage bereits mit einem zweistelligen Befund (s.u.), das entspricht
-// der im Katalog dokumentierten Erwartung ("mit einem zweistelligen Zaehler").
+// LLM-Turn) und ist damit ein eigenstaendiges, deutlich teureres Vorhaben. ENTFALLEN mit
+// P14: Kanal 9 (Zahlenformate in public/tenant.html) - die gemessene Oberflaeche ist
+// geloescht, apps/web formatiert bewusst en-US (WEB-18 in dashboard-i18n-surface.test.js
+// haelt genau das). Die verbleibenden Kanaele tragen die Aussage weiter.
 //
 // P11-Stand (Phasenbericht): P11 senkte den Zaehler von 8 auf 3 (systemPrompt/toolDefs/
 // openingText/inboundGreeting/summarySms/notificationTitle wurden sprachrein); die drei
@@ -72,7 +73,7 @@ function leaksOf(label, text, leaks) {
   if (GERMAN_STOPWORDS.test(text)) leaks.push(label);
 }
 
-test("Sprachreinheit: germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-Tenant (ex E2E-06)", async () => {
+test("Sprachreinheit: germanLeakCount ueber sieben Kanaele ist 0 fuer einen EN-Tenant (ex E2E-06)", async () => {
   const leaks = [];
   const callEn = seedCall({ tenantId: TENANT_EN, language: "en", direction: "outbound", goal: "Termin verschieben" });
 
@@ -188,17 +189,11 @@ test("Sprachreinheit: germanLeakCount ueber acht Kanaele ist 0 fuer einen EN-Ten
     await new Promise((r) => server.close(r));
   }
 
-  // Kanal 9: tenant.html Labels/Zahlenformate (de-DE hartkodiert).
-  const tenantHtml = fs.readFileSync(path.join(ROOT, "public/tenant.html"), "utf8");
-  // P15b/C2: die schliessende Klammer war eine blinde Stelle - `Intl.NumberFormat("de-DE", {...})`
-  // rutschte durch, weil ein Komma folgte. Der Anker endet jetzt am Locale-Literal (deckungs-
-  // gleich mit dem Abnahme-Grep der Phase). Stopwortliste, Kanalzahl, TOTAL_CHECKED_LABELS
-  // und die leere leaks-Erwartung bleiben unveraendert.
-  if (/toLocaleString\("de-DE"|Intl\.NumberFormat\("de-DE"/.test(tenantHtml)) leaks.push("tenantHtmlFormat");
+  // Kanal 9 (tenant.html Labels/Zahlenformate) ist mit P14 entfallen - Datei geloescht.
 
-  const TOTAL_CHECKED_LABELS = 10; // systemPrompt, toolDefs, openingText, inboundGreeting,
-  // summarySms, notificationTitle, gateRejectionLiterals, mcpErrorLiterals, authCsrfError,
-  // tenantHtmlFormat - ueber 8 der 9 Katalog-Kanaele (Kanal 3 fehlt, s. Kopfkommentar).
+  const TOTAL_CHECKED_LABELS = 9; // systemPrompt, toolDefs, openingText, inboundGreeting,
+  // summarySms, notificationTitle, gateRejectionLiterals, mcpErrorLiterals, authCsrfError
+  // - ueber 7 der 9 Katalog-Kanaele (Kanal 3 und 9 fehlen, s. Kopfkommentar).
   assert.deepEqual(
     leaks,
     [],

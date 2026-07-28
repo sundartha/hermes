@@ -825,3 +825,31 @@ anderer Code, kein belegter Zusammenhang.)
   `{"type":"Error","own":{}}` fuer BEIDE Faelle. Formuliert am beobachtbaren Ergebnis, nicht
   an einer Signatur — der Fix darf einen eigenen Fehlertyp (Praezedenz: `CustomerMissingError`),
   ein Feld am Fehler oder ein typisiertes Ergebnis waehlen.
+
+---
+
+## P14-PORTALPFAD — Basic-Auth-Ausnahme fuer `/tenant.html` entfallen (2026-07-28)
+
+`public/tenant.html` (das alte Kunden-Dashboard) ist geloescht; die App-Shell aus
+`apps/web` (`/app`, `WEB_DIST_DIR`) ist das einzige Kunden-Dashboard. Sicherheits-Folgen:
+
+- Die flag-gegatete Basic-Auth-**Ausnahme** fuer `/tenant.html` (`src/wiring/auth-gate.js`,
+  frueher der erste Eintrag der eingefrorenen Exemption-Kette INV-3) ist **entfernt**. Die
+  Kette ist um einen Eintrag kuerzer: `/voice*` -> `/mcp*` -> `/.well-known*` ->
+  `STRIPE_WEBHOOK_PATH` -> `/healthz` -> `BRAND_ASSETS_PREFIX*` -> `/favicon.ico` ->
+  `isTrustedLocalCaller` -> `safeEqual`. Richtung **fail-closed**: eine Ausnahme faellt
+  weg, das kann nie etwas oeffnen. Live-Wirkung: keine — mit `WEB_DIST_DIR` beantwortet
+  der Altpfad-Redirect `/tenant.html` bereits **vor** dem Gate (`registerStaticServing`
+  wird vor `installAuthGate` gemountet), die Ausnahme war dort schon unerreichbar.
+- Der Post-Login-Zweig auf `/tenant.html` (`src/wiring/web-login.js`) ist entfallen — ein
+  Redirect dorthin waere nach der Loeschung ein 404 direkt nach dem Login.
+- Der **Redirect** `/tenant.html` -> `/app` (inkl. Query-String) bleibt bewusst bestehen:
+  Stripe-Checkout-Sessions, die vor dem Deploy geoeffnet wurden, tragen die alte
+  Rueckkehr-Adresse in der Stripe-Session; ohne den Redirect landet genau der Kunde, der
+  gerade bezahlt hat, auf einem 404 (`test/single-origin-serving.test.js`).
+
+**Offen (Folgeauftrag, bewusst NICHT Teil von P14):** die CSP in `src/middleware.js`
+lockert `script-src`/`style-src` auf `'unsafe-inline'` **wegen** der geloeschten Datei.
+Der urspruengliche Grund ist entfallen, die Regel bleibt vorerst unveraendert — das
+Verschaerfen verlangt, die App-Shell aus `apps/web` vorher gegen die engere Policy zu
+messen, und ist deshalb ein eigener Auftrag, kein Nebeneffekt der Loeschung.

@@ -64,7 +64,6 @@ export async function wireWebLogin({
   provision,
   createPortalRunner,
   stripeWebhookPath,
-  customerPortalPath,
   appPath,
   messaging,
 }) {
@@ -126,15 +125,11 @@ export async function wireWebLogin({
       accounts,
       sessions,
       audit: auditStore,
-      // Post-Login ins Kunden-Portal NUR wenn die Self-Service-Shell gemountet ist (gleicher
-      // Flag-Gate wie die /tenant.html-Basic-Auth-Exemption in der Wurzel). Sonst Default
-      // "/" -> byte-identisch zum Bestand. Single-Origin: mit WEB_DIST_DIR landet der frisch
-      // eingeloggte Tenant auf der App-Shell (/app) im unified Build (vorrangig).
-      postLoginPath: config.server.webDistDir
-        ? appPath
-        : isSelfServiceLive(config)
-          ? customerPortalPath
-          : undefined,
+      // Post-Login auf die App-Shell (/app) im unified Build. P14: der frueher zweite
+      // Zweig (altes Kunden-Portal public/tenant.html, flag-gegatet) ist entfallen - die
+      // Datei existiert nicht mehr, ein Redirect dorthin waere ein 404 direkt nach dem
+      // Login. Ohne WEB_DIST_DIR bleibt der Default "/" (byte-identisch zum Bestand).
+      postLoginPath: config.server.webDistDir ? appPath : undefined,
       // WorkOS-Sign-out-Rueckkehr-URL (return_to), symmetrisch zu redirectUri oben. Muss im
       // WorkOS-Dashboard als Sign-out-Redirect-URL registriert sein.
       postLogoutUrl: config.server.publicUrl + LOGIN_ROUTE,

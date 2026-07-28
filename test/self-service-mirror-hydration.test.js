@@ -41,7 +41,7 @@ const PERIOD_START = 1890864000; // Unix-Sek, Periodenanker der Fake-Session (fi
 const PLAN = "starter";
 const HIGH_CAP = 100; // Caps weit offen: kein Cap-Block im Happy-Funnel
 const SESSION_TTL_S = 3600;
-const RETURN_SUB_OK = "/tenant.html?sub=ok"; // Rueckkehr-Ziel bei gebuchtem Abo
+const RETURN_SUB_OK = "/app?sub=ok"; // Rueckkehr-Ziel bei gebuchtem Abo
 
 const CONFIG = Object.freeze({
   paymentEnabled: true,

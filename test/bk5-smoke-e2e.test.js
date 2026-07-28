@@ -61,7 +61,7 @@ const SESSION_TTL_S = 3600; // Lebensdauer der Test-Web-Session (1h)
 // (PERIOD_END=2030-01-01Z -> Start 2029-12-01Z). Fix gewaehlt, zeit-frei (P12/R).
 const USAGE_OCCURRED_AT = "2029-12-15T10:00:00.000Z";
 // Erwartetes Redirect-Ziel des Rueckkehr-Flows bei gebuchtem Abo (G25, kein Magic-String).
-const RETURN_SUB_OK = "/tenant.html?sub=ok";
+const RETURN_SUB_OK = "/app?sub=ok";
 
 const CONFIG = Object.freeze({
   paymentEnabled: true,
