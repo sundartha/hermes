@@ -181,7 +181,28 @@ Kollisionsflaechen mit der AL-Kette:
 
 **Regel fuer die naechste Session:** vor dem Start `git log --oneline -20` lesen und pruefen,
 ob seit `2e0360b` fremde Commits dazugekommen sind. Falls die AUTH-GATE-Kette parallel laeuft:
-**nicht beide gleichzeitig fahren.** Die AL-Kette hat Vorrang, weil der Owner sie beauftragt hat.
+**nicht beide gleichzeitig fahren.**
+
+> **Owner-Entscheidung 2026-07-28: die AL-Kette hat Vorrang. PLAN-AUTH-GATE wird
+> zurueckgestellt.** Wer die AUTH-GATE-Kette starten will, fragt vorher den Owner.
+
+## 7c. ZUERST LESEN: `tasks/al-owner-notes.md`
+
+Der Owner traegt dort vor Beginn ein, was nur er beschaffen kann. **Diese Datei ist das Erste,
+was die naechste Session liest.** Ausgefuellte Abschnitte sind bindend:
+
+- **Abschnitt 1 (Telnyx-Support zu SSE-Streaming)** — bei der Antwort "puffert bis `[DONE]`"
+  wird AL-P7 zurueckgestellt und AL-P7b direkt auf **Weg B** geplant. Die endgueltige
+  Streichung von AL-P7 erst nach dem Spike AL-P2: eine Doku-/Support-Aussage entrisikt, sie
+  beweist nicht (Repo-Lehre: nur der Objekt-GET zaehlt).
+- **Abschnitt 2 (der frueher gebaute Recherche-Agent)** — schlaegt die Benchmark-Zahlen aus dem
+  Dossier. Fuellsatz-Formulierungen und Suchhaeufigkeit von dort uebernehmen, statt sie neu zu
+  erfinden.
+- **Abschnitt 4 (Wegwerf-Umgebung)** — ohne diese IDs kann AL-P2 nicht laufen, egal wie weit
+  der Code ist.
+
+Leere Abschnitte heissen: die betroffene Phase laeuft bis vor die Abnahme, Flag bleibt aus,
+offener Punkt nach `tasks/al-testcall-checklist.md`.
 
 ## 8. Buchfuehrung
 
