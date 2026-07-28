@@ -15,7 +15,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P2 | — | — | — | offen |
 | AL-P3 | `phase/al-p3-endpointing` | PASS (0 Fix-Runden, 3374 gruen) | `a4cbdd1` | **gemergt** — 3 Abnahmen in der Checkliste |
 | AL-P4 | `phase/al-p4-tool-loop` | PASS (0 Fix-Runden, 3359 gruen) | `1021bc1` | **gemergt** — 2 Abnahmen in der Checkliste |
-| AL-P5 | — | — | — | offen |
+| AL-P5 | `phase/al-p5-eroeffnung-fix2` | PASS (2 Fix-Runden, highStakes, 3417 gruen) | `e208bc9` | **gemergt** — Abnahme = Testanruf |
 | AL-P6 | `phase/al-p6-turn-budget` | PASS (0 Fix-Runden, highStakes, 3385 gruen) | `f16c00a` | **gemergt** |
 | AL-P7 | — | — | — | offen (haengt an AL-P2) |
 | AL-P7b | — | — | — | offen |
@@ -56,10 +56,11 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   `interruption_settings`, **nicht** unter `transcription`. Der befuerchtete Guard-Wechsel
   entfaellt. Die Entscheidungen O1-O9 blieben unberuehrt (nachgeprueft).
 - **Lastwaechter** laeuft seit Welle 1 (`scratchpad/al-load-guard.sh`): misst jede Minute und
-  sammelt `node src/server.js`-Prozesse aelter als 10 min ein. Waehrend zweier paralleler
-  Workflows blieb Load1 zwischen **4,1 und 8,1 bei 15 Kernen**, Speicher ~50 % frei, **null**
-  verwaiste Server. Zwei parallele Workflows sind fuer diese Maschine unkritisch; drei werden
-  nicht gestartet.
+  sammelt `node src/server.js`-Prozesse aelter als 10 min ein.
+  **NACHTRAEGLICH KORRIGIERT (s. Welle 3):** die erste Fassung zaehlte die Prozesse mit
+  `pgrep`. `pgrep` sieht in dieser Sandbox **keine fremden Prozesse** und lieferte stur `0`.
+  Die damals notierte Entwarnung („null verwaiste Server, node=0") war deshalb **keine
+  Messung, sondern ein blinder Zaehler**. Der Load-Wert selbst stimmte.
 - **Flake nach dem Welle-1-Merge, ehrlich festgehalten:** der erste Volllauf auf dem gemergten
   master meldete **1 Fehlschlag von 3364**. Die Identitaet des Tests wurde nicht mitgeschnitten
   (Ausgabe lief durch `tail`). Die beiden folgenden Volllaeufe auf demselben Baum waren
@@ -80,3 +81,33 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 - **Lastregel nachgeschaerft:** Spitze ueber die Kette war Load1 = **21,9** bei 15 Kernen — das
   entstand, als der Lead waehrend laufender Workflows selbst die Suite fuhr. Seither gilt:
   eigene Verifikationslaeufe **nur zwischen den Wellen**, nie parallel zu einem Workflow.
+
+### 2026-07-29 — Welle 3 und die Lastbremse
+
+- **UEBERLAST, gemessen und behoben.** Waehrend AL-P5 und AL-P9 parallel liefen, stieg Load1 auf
+  **32,4 bei 15 Kernen** (anhaltend ueber Minuten, Swap zu 94 % belegt). Ursache war **nicht**,
+  was der Waechter vermutete: es lagen **null** verwaiste Testserver herum. Der Treiber waren die
+  Suiten selbst — **39 node-Prozesse, davon 35 `node --test`**, weil in zwei Workflows jeweils
+  Impl- und Safety-Agent gleichzeitig `npm test` fahren und `node --test` intern noch einmal
+  auffaechert.
+- **Wurzel der Fehlmessung:** der Waechter zaehlte mit `pgrep` (`pgrep -c node` -> 0, waehrend
+  `ps -Ao comm | grep -c bin/node` -> 39). In dieser Sandbox sieht `pgrep` keine fremden
+  Prozesse. **Lehre: in diesem Repo NIE mit `pgrep` messen, immer mit `ps`.** Der Waechter ist
+  umgestellt und zaehlt `node --test` jetzt getrennt aus.
+- **Eingriff:** AL-P9 per `TaskStop` angehalten, AL-P5 allein weiterlaufen lassen. Load fiel
+  binnen zwei Minuten von 32,4 auf 12,5, danach auf 3,8.
+- **Neue Betriebsregel, ersetzt „maximal zwei Workflows":** **eine Bahn zur Zeit.** Die Kette
+  laeuft dadurch spuerbar laenger; das ist der Preis dafuer, dass der Arbeitsrechner benutzbar
+  bleibt (ausdrueckliche Owner-Weisung).
+- **Swap-Alarm wieder entfernt:** macOS holt ausgelagerte Seiten nicht zurueck, der Wert bleibt
+  nach einer Spitze dauerhaft niedrig und feuerte im Minutentakt ohne Aussage. Der Wert wird
+  weiter protokolliert; entschieden wird ueber Load und freien Speicher.
+- **AL-P5 gemergt (`e208bc9`), PASS nach 2 Fix-Runden**, Verifikationslauf **3417/3417 gruen**.
+  Regel 2 selbst nachgeprueft: der Offenlegungssatz ist unveraendert, gekuerzt wurde
+  ausschliesslich die Anliegen-Zusammenfassung dahinter (`OPENING_GOAL_MAX_CHARS` 160 -> 75).
+  Ein neuer Test pinnt, dass die Offenlegung der erste Satz bleibt.
+  Die Fix-Runden haben eine **empirisch falsche Begruendung** im Kommentar korrigiert: die
+  urspruengliche Kappe 70 haette dem gepinnten Testauftrag das Verb genommen — 75 ist die
+  kleinste Kappe, die alle Grenzfaelle traegt.
+- **AL-P9 wird neu gestartet, nicht per `resume` fortgesetzt** (Kickoff-Vorgabe „kein resume").
+  Nebeneffekt: der Plan-Agent gruendet auf dem aktuellen master statt auf dem Stand vor AL-P5.
