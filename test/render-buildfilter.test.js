@@ -1,7 +1,9 @@
 // W0 (Pre-Mortem a / R2): buildFilter-Guard. render.yaml MUSS die Deploy-Isolation
 // zwischen dem live telefonierenden Gateway (vodafone-agent) und dem Static-Frontend
 // (hermes-web) tragen, sonst kippt ein spaeterer YAML-Edit den Schutz lautlos:
-//   (1) Gateway ignoriert apps/web/** (rein-Frontend-Commit redeployt den Gateway NICHT),
+//   (1) Gateway ignoriert docs/** (rein-Doku-Commit redeployt den Gateway NICHT); das
+//       Frontend-Verzeichnis steht bewusst NICHT im Filter - derselbe Service baut und
+//       serviert es (GAP-37 unten), ein Filter wuerde es nie deployen,
 //   (2) Gateway ignoriert src/** NICHT (Backend-/Security-Fixes deployen weiterhin),
 //   (3) hermes-web baut nur bei apps/web/** (paths-Whitelist).
 // Reiner Datei-Read + Block-Split pro Service, keine yaml-Dependency (wie render-region.test.js).
@@ -27,13 +29,18 @@ function serviceBlock(name) {
 const gateway = serviceBlock("vodafone-agent");
 const web = serviceBlock("hermes-web");
 
-test("Gateway (vodafone-agent) ignoriert apps/web/** im buildFilter", () => {
+// W0 neu gefasst (GATES-P15 / GAP-37, PLAN-GATES.md Abschnitt 7): der Filter-Schutz
+// bleibt, sein Gegenstand wechselt. Der Gateway baut UND serviert apps/web - dieses
+// Verzeichnis darf er deshalb nicht filtern (der GAP-37-Test unten prueft genau das,
+// hier bewusst nicht doppelt). Was der Filter weiter traegt, ist der reine Doku-Commit:
+// er darf den live telefonierenden Prozess nicht mitten im Anruf neu deployen.
+test("Gateway (vodafone-agent) filtert reine Doku-Commits ueber buildFilter.ignoredPaths", () => {
   assert.match(gateway, /buildFilter:/, "Gateway hat keinen buildFilter");
   assert.match(gateway, /ignoredPaths:/, "Gateway-buildFilter hat keine ignoredPaths");
   assert.match(
     gateway,
-    /ignoredPaths:[\s\S]*?-\s*["']?apps\/web\/\*\*/,
-    "Gateway ignoriert apps/web/** NICHT -> Frontend-Commit wuerde den Gateway redeployen",
+    /ignoredPaths:[\s\S]*?-\s*["']?docs\/\*\*/,
+    "Gateway ignoriert docs/** NICHT -> ein reiner Doku-Commit wuerde den Gateway redeployen",
   );
 });
 
