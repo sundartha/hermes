@@ -39,7 +39,10 @@ services:
     # setzen. Der Wert + render-buildfilter.test.js sind der eigentliche Schutz.
     buildFilter:
       ignoredPaths:
-        - "apps/web/**"
+        # GAP-37: KEIN Eintrag fuer das Frontend-Verzeichnis. Derselbe Service baut es
+        # (buildCommand oben) und liefert es aus (WEB_DIST_DIR unten) - wer es hier
+        # filtert, laesst einen reinen Frontend-Commit nie deployen und serviert
+        # dauerhaft ein veraltetes Frontend. Reine Doku-Commits bleiben gefiltert.
         - "docs/**"
     envVars:
       - key: ANTHROPIC_API_KEY
