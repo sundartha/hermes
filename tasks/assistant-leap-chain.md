@@ -277,9 +277,27 @@ tragen darum exakt diese IDs.
   eine der **nicht-live** DIDs darf darauf zeigen, einer der drei ungenutzten `Blank`-Assistants
   dient als Wegwerf-Assistant. Kein Kauf. Keine Aenderung am Live-Assistant `Hermes`
   (`assistant-dcf48d08-…`).
-- **Zwingende Vorbedingung:** feststellen, **welche der drei DIDs live genutzt wird**. Das steht
-  in der Prod-DB, nicht in der Telnyx-Antwort (alle drei haengen an derselben Connection). Ohne
-  diese Klaerung wird nichts angefasst — dann Abbruch mit Vorlage an den Owner.
+- **Vorbedingung ERLEDIGT am 2026-07-28** (read-only `psql` auf der Prod-DB, RLS pro Tenant
+  gesetzt). Ergebnis — und es korrigiert die Annahme aus `tasks/al-owner-notes.md` §4:
+
+  | DID | Tenant | letzter Call | Bewertung |
+  |---|---|---|---|
+  | `+17067101188` | `t_user_01KX6008…` | 2026-07-27, 9 outbound | **DIE LIVE GENUTZTE — nicht anfassen** |
+  | `+15739090177` | `t_user_01KXH2B7…` | 2026-07-24, 2 outbound | seit 4 Tagen still |
+  | `+18643028341` | `owner` | 2026-06-28, 2 outbound | seit 30 Tagen still |
+
+  **Wichtige Abweichung von der Annahme:** es gibt **keine herrenlose Ersatz-DID**. Alle drei
+  stehen auf `status=active` und jede ist die **einzige** Nummer eines eigenen Tenants
+  (`number`-Tabelle, ein Datensatz je Tenant). Umhaengen einer DID auf eine Wegwerf-Connection
+  nimmt dem betroffenen Tenant Inbound **und** Outbound.
+  Entschaerfend: laut Bestandslage sind **alle drei Accounts wir selbst** — es gibt keine
+  fremden Kunden. Daraus folgt fuer die Phase:
+  - Wegwerf-**Absender** = `+18643028341` (30 Tage still, `owner`-Tenant).
+  - Wegwerf-**Ziel** (nimmt ab und schweigt) = `+15739090177`.
+  - `+17067101188` bleibt unberuehrt.
+  - **Das Zurueckhaengen beider DIDs auf die Connection `Hermes` (`2982643896460248193`) ist
+    Teil der Phase, nicht Nacharbeit.** Vorher-Zustand (Connection-ID je DID) wird notiert,
+    nachher wird er per Objekt-GET verifiziert — nicht angenommen.
 - **Verboten:** `scripts/telnyx-assistant-provision.mjs` fuer diesen Zweck. Es schreibt die ganze
   Live-Config aus der lokalen `.env` (ohne `TELNYX_ASSISTANT_ID` entsteht ein neuer Assistant,
   ohne `TELNYX_ELEVENLABS_MODEL` wird die Live-Stimme still umgestellt).

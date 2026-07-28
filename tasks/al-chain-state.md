@@ -11,7 +11,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 
 | Phase | Branch (zurueckgegeben) | Gate | Merge-Commit | Stand |
 |---|---|---|---|---|
-| AL-P1 | — | — | — | offen |
+| AL-P1 | `phase/al-p1-latenz-achse` | PASS (0 Fix-Runden, 3350 gruen) | `dd0c0dc` | **gemergt** — 4 Abnahmen in der Checkliste |
 | AL-P2 | — | — | — | offen |
 | AL-P3 | — | — | — | offen |
 | AL-P4 | — | — | — | offen |
@@ -42,3 +42,9 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   im Plan-Doc) — der Plan-Agent haette den Abschnitt nicht gefunden.
   **Behoben:** Abschnitt 9 „Phasen-Spezifikationen" in `tasks/assistant-leap-chain.md`
   (Namensbruecke + Betriebsregeln je Phase).
+- **AL-P2-Vorbedingung geklaert** (read-only `psql`, RLS pro Tenant gesetzt): `+17067101188` ist
+  die live genutzte DID (letzter Outbound 2026-07-27). **Korrektur an der Annahme in
+  `al-owner-notes.md` §4:** es gibt keine herrenlose Ersatz-DID — alle drei stehen auf
+  `status=active` und jede ist die einzige Nummer eines eigenen Tenants. Zurueckhaengen ist
+  deshalb Teil von AL-P2, nicht Nacharbeit. Details im AL-P2-Abschnitt der Kette.
+- **Welle 0: AL-P1 gemergt** (`dd0c0dc`). Gate PASS ohne Fix-Runde.
