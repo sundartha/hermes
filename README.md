@@ -161,6 +161,18 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 4. **Inbound:** Kollege ruft deine Handynummer an, du gehst nicht ran → Umleitung → Agent bucht den Termin gegen deinen Kalender. Danach: **SMS mit Summary + Action Items**.
 5. **Permissions live:** Kalender-Toggle aus → gleicher Anruf → Agent nimmt nur noch eine Nachricht auf.
 
+## Deploy-Realität (Repo-Split) — ZUERST LESEN
+
+**Render deployt `upstream` (`jonas986/vodafone-agent`), NICHT `origin` (`Antonio20045`).**
+
+- `git push origin master` macht **NICHTS** live.
+- Live deployen = zusätzlich `git push upstream master` — ein eigener, bewusster Schritt.
+- Live-Stand verifizieren: `gh api repos/jonas986/vodafone-agent/commits/master --jq .sha`
+  bzw. nach dem Deploy im Render-Log das `[boot]`-Banner gegen den erwarteten Commit prüfen.
+- Vor jeder Aussage über „live": `git fetch --all`, dann origin und upstream **getrennt**
+  vermessen (`git rev-list --left-right --count master...upstream/master`). Die beiden
+  divergieren aktiv.
+
 ## Bekannte Stolpersteine
 
 - **Twilio Trial:** nur verifizierte Zielnummern; Ansage vor jedem Gespräch (Upgrade ~20 € entfernt beides). Eingehend darf jeder anrufen.

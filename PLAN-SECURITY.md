@@ -853,3 +853,92 @@ lockert `script-src`/`style-src` auf `'unsafe-inline'` **wegen** der geloeschten
 Der urspruengliche Grund ist entfallen, die Regel bleibt vorerst unveraendert — das
 Verschaerfen verlangt, die App-Shell aus `apps/web` vorher gegen die engere Policy zu
 messen, und ist deshalb ein eigener Auftrag, kein Nebeneffekt der Loeschung.
+
+## SECRETS-HYGIENE — Inventar, Rotation, Provider-Minimalrechte (begleitend, kein Einmal-Gate)
+
+> Hierher gezogen aus `docs/RUNBOOK-OPERATOR.md` Gate 7 (2026-07-28), als das Operator-Runbook
+> als veraltete Ableitung von `STATUS.md` entfernt wurde. Der Inhalt hier ist das Unikat: er
+> stand nirgends sonst. Die uebrigen Runbook-Abschnitte (Gates 1-6, Anhaenge) waren Duplikate
+> oder ueberholt.
+
+**Grundregeln (Absolute Regel 4):** Secrets NUR ueber Render-Dashboard / lokale `.env` — nie
+committen, nie loggen, nie in API-/MCP-Antworten oder MCP-Tool-Ausgaben leaken. Selbst-erzeugte
+Secrets mit `openssl rand -hex 32` (gilt fuer `MCP_AUTH_TOKEN`, `SESSION_SECRET`,
+`DASHBOARD_PASSWORD`).
+
+### Secrets-Inventar (was leakt was)
+
+| Secret (Env)         | Anbieter / Quelle               | Gewaehrt bei Leak                                              | Blast-Radius                                     |
+| -------------------- | ------------------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
+| `ANTHROPIC_API_KEY`  | console.anthropic.com           | LLM-Calls auf deine Kosten                                     | Kosten (kein Daten-Leak)                         |
+| `TWILIO_AUTH_TOKEN`  | Twilio Console                  | Voice/SMS-API **und** Webhook-HMAC-Schluessel                  | Calls/SMS auf deine Kosten + Signatur-Faelschung |
+| `TELNYX_API_KEY`     | Telnyx Portal                   | Voice/SMS-API (Telnyx)                                         | Calls/SMS auf deine Kosten                       |
+| `TELNYX_PUBLIC_KEY`  | Telnyx Portal                   | **KEIN Secret** (Ed25519-Verify), aber falsch = Inbound bricht | Verfuegbarkeit (kein Leak)                       |
+| `OPENAI_API_KEY`     | platform.openai.com             | Realtime-API (nur `VOICE_ENGINE=realtime`)                     | Kosten                                           |
+| `STRIPE_SECRET_KEY`  | Stripe Dashboard                | Hold/Capture, Charges (**echtes Geld** bei `sk_live`)          | Geld + Kundendaten                               |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard | Faelschung von Webhook-Events (Fake-Subscription-Aktivierung) | Unautorisierte Plan-Aktivierung/Provisioning |
+| `MCP_AUTH_TOKEN`     | selbst (`openssl rand -hex 32`) | `/mcp`-Zugang (Legacy-Bearer); bei `MCP_AUTH=oauth` ungenutzt  | Voller MCP-Tool-Zugriff                          |
+| `SESSION_SECRET`     | selbst (`openssl rand -hex 32`) | Faelschung von Browser-Session-Cookies                         | Account-Uebernahme im Portal                     |
+| `OIDC_CLIENT_SECRET` | WorkOS AuthKit                  | OIDC-Auth-Code-Tausch (Browser-Login)                          | Login-Flow-Kompromittierung                      |
+| `DASHBOARD_PASSWORD` | selbst gesetzt                  | Owner-Dashboard (Basic-Auth)                                   | Voller Owner-Dashboard-Zugriff                   |
+| `DATABASE_URL`       | Render Postgres                 | DB-Passwort (in der URL)                                       | Voller DB-Zugriff (alle Tenants)                 |
+
+> Stand 2026-07-03: `STRIPE_WEBHOOK_SECRET` existiert seit W4 (fail-closed, HMAC-verifizierter
+> Inbound-Webhook `src/billing/webhook.js`, Route `/webhooks/stripe`). Einen separaten
+> WorkOS-API-Key gibt es weiterhin **nicht** (nur OIDC-Client + AuthKit-Issuer). Bei Aenderung
+> der Billing-/IdP-Integration neu pruefen.
+
+### Token-Rotation — Standard-Prozedur (Ueberlappung = Zero-Downtime)
+
+Generisches 5-Schritt-Muster fuer jedes Secret oben:
+
+1. **Neuen Wert erzeugen** beim Anbieter — der **alte bleibt zunaechst gueltig** (Ueberlappung).
+2. **Render-Dashboard → Service → Environment** → Wert ersetzen → speichern (loest Re-Deploy aus).
+3. **Verifizieren:** `/healthz` gruen, `[boot]`-Banner = erwarteter Commit, betroffene Route
+   testen (z.B. Test-Call fuer Twilio/Telnyx, Login fuer OIDC).
+4. **Alten Wert widerrufen/loeschen** beim Anbieter — erst NACH bestaetigter Verifikation.
+5. **Rotation protokollieren** (Datum + welches Secret + Anlass) im privaten Rotation-Log
+   (nie ins Repo). Anlass = Quartals-Routine **oder** Verdacht/Personalwechsel.
+
+**Empfohlene Kadenz:** vierteljaehrlich routinemaessig; **sofort** bei Verdacht auf Leak,
+ausgeschiedenem Teammitglied oder kompromittiertem Geraet.
+
+### Rotation — Besonderheiten pro Secret
+
+| Secret                                 | Rotations-Besonderheit                                                                                                                                                                                                                                                        |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TWILIO_AUTH_TOKEN`                    | Twilio fuehrt **Primary + Secondary Auth Token**. Secondary erzeugen → in Env eintragen → Primary "promote/regenerate". Echtes Zero-Downtime, da kurzzeitig beide gueltig sind. Achtung: derselbe Token validiert auch die Webhook-HMAC — nach Rotation Test-Inbound pruefen. |
+| `STRIPE_SECRET_KEY`                    | Im Stripe-Dashboard **"Roll key"** mit Ablauf-Frist (alter Key laeuft kontrolliert aus) statt Sofort-Widerruf. Test- (`sk_test`) und Live-Key (`sk_live`) **getrennt** rotieren.                                                                                              |
+| `SESSION_SECRET`                       | Rotation **invalidiert alle aktiven Browser-Sessions** (User muessen neu einloggen). Geplant ausserhalb der Stosszeit, ggf. ankuendigen. Kein Ueberlappungs-Mechanismus.                                                                                                      |
+| `DATABASE_URL`                         | Postgres-Passwort in Render rotieren (Render Postgres → Rotate) → URL in der Env des Web-Service nachziehen. Kurzer Reconnect; Pool baut neu auf.                                                                                                                             |
+| `MCP_AUTH_TOKEN`                       | Bei `MCP_AUTH=oauth` **nicht in Benutzung** — dann ganz aus der Env nehmen statt rotieren. Im Legacy-/`token`-Modus: Client (z.B. curl-Skripte) und Env **gleichzeitig** umstellen (keine Ueberlappung moeglich).                                                             |
+| `OIDC_CLIENT_SECRET`                   | In WorkOS AuthKit ein neues Client-Secret erzeugen (WorkOS erlaubt Ueberlappung) → Env tauschen → altes in WorkOS loeschen.                                                                                                                                                   |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Zweiten Key erstellen → Env tauschen → ersten widerrufen. Ueberlappung trivial.                                                                                                                                                                                               |
+
+### Twilio-/Telnyx-Subaccount auf minimale Rechte
+
+**Ziel:** Hermes laeuft nie mit Master-/Account-weiten Vollrechten — ein geleaktes Token darf nur
+den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
+
+**Twilio:**
+
+- [ ] **Subaccount** anlegen (Twilio Console → Account → Subaccounts); Hermes nutzt **nur** dessen
+      `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN`. Master-Auth-Token nie in Hermes.
+- [ ] Im Subaccount **nur** die genutzten Produkte aktiv: **Voice** + **Messaging**. Ungenutzte
+      (Verify, Lookup, etc.) nicht freischalten.
+- [ ] **Usage-Trigger / Spend-Limit** auf dem Subaccount setzen (zweite Kostenbremse zusaetzlich
+      zum app-internen Budget-Guard — die Provider-Add-on-Minuten laufen ausserhalb).
+- [ ] Geo-Permissions auf die benoetigten Laender beschraenken (passt zum Kauf-Land-Gate).
+
+**Telnyx:**
+
+- [ ] **Scoped API Key** (V2, least-privilege) statt Account-weitem Key; nur die fuer Voice/SMS
+      noetigen Scopes. Pro Umgebung (Staging/Prod) eigener Key.
+- [ ] API-Key/TeXML-App an die **eine** genutzte Connection/Nummerngruppe binden.
+- [ ] Outbound-Voice-/Messaging-Profile mit Land-/Ziel-Restriktionen (die Notruf-/Premium-Sperre
+      bleibt zusaetzlich app-seitig hardcoded, s. Absolute Regel 1 in `CLAUDE.md`).
+- [ ] Spend-/Concurrency-Limits im Telnyx-Portal als zweite Bremse.
+
+**Akzeptanz:** Inventar oben stimmt mit der gesetzten Render-Env ueberein; fuer jedes Secret ist
+die Rotations-Besonderheit verstanden; Twilio-Subaccount + Telnyx-Scoped-Key sind mit Spend-Limit
+aktiv und Master-Credentials nirgends in der Hermes-Env.

@@ -15,7 +15,7 @@
   bestaetigter Verifikation (Abschnitt 7) wird produktiv umgeschaltet.
 - **Repo-Split beachten.** Render deployt `upstream` (jonas986/vodafone-agent), **nicht**
   `origin`. Ein "Redeploy" nach dem Umhaengen der DB muss auf dem Service laufen, der
-  `upstream` deployt. Details: `docs/RUNBOOK-OPERATOR.md` Abschnitt 0.
+  `upstream` deployt. Details: `README.md`, Abschnitt „Deploy-Realität (Repo-Split)".
 - **Secret-frei arbeiten.** `DATABASE_URL` ist ein Secret (Internal Connection String).
   Nie in Logs, Tickets, Chat oder Commits kopieren. Nur ueber das Render-Dashboard / die
   Env-Var setzen.
@@ -190,8 +190,9 @@ Statement zu treffen — sonst stellt man den Schaden mit wieder her.
    ```sql
    SELECT max(at) AS newest_audit FROM audit_log;  -- muss <= T sein
    ```
-6. **Erst wenn 1-5 gruen sind:** Inbound / Telefonnummer wieder freigeben (siehe
-   `docs/RUNBOOK-OPERATOR.md` fuer die scharfen Schalter).
+6. **Erst wenn 1-5 gruen sind:** Inbound / Telefonnummer wieder freigeben (die scharf
+   schaltenden Env-Vars und ihre fail-closed Defaults stehen in `.env.example` und
+   `src/config.js` — das ist die einzige aktuelle Quelle).
 
 ---
 
@@ -266,9 +267,9 @@ Region-/Account-/Provider-Totalausfall **nicht** ab. Gegenmassnahme:
 
 ## 12. Querverweise
 
-- `docs/strategy/p0-1-datenhaltung.md` — Strategie (4.4 RTO/RPO, 4.5 Runbook, 5.4 Reimport).
-- `docs/RUNBOOK-OPERATOR.md` — Repo-Split (Abschnitt 0), scharfe Schalter (Anhang A),
-  Postgres-Prod + Killer-Test (Gate 6).
+- `README.md` — Deploy-Realität (Repo-Split: Render deployt `upstream`, nicht `origin`).
+- `.env.example` / `src/config.js` — die scharf schaltenden Env-Vars + fail-closed Defaults.
+- `STATUS.md` §1 — Postgres-Prod (non-superuser/NOBYPASSRLS + pgBouncer) als offenes Live-Gate.
 - `docs/RELEASE-GATE-killer-test.md` — manuelles RLS-/Pooling-Gate vor Prod-Deploy.
 - `STATUS-OFFENE-PHASEN.md` Abschnitt 3 — Betreiber-ToDo "Postgres prod:
   non-superuser/NOBYPASSRLS + pgBouncer (transaction mode), EU/DE".

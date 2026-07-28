@@ -2,7 +2,7 @@
 
 > Das EINZIGE Status-/Offene-Punkte-Doc. Abgeschlossene Phasen stehen in der Git-History
 > und in der Memory, nicht hier. Lebende Referenz-Docs (bleiben separat):
-> `PLAN-SECURITY.md` (Security-Plan), `docs/RUNBOOK-OPERATOR.md` (Betrieb/Live-Gates),
+> `PLAN-SECURITY.md` (Security-Plan inkl. Secrets-Hygiene/Rotation),
 > `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/lessons.md` (Lehren).
 >
 > **Stand:** 2026-06-23 - HEAD lokal = `4e5d4e9` = **origin/master = upstream/master** (alle in
@@ -73,8 +73,9 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
 6. **`MCP_AUTH=oauth`** end-to-end gegen claude.ai im Dauerbetrieb; **Secrets-Hygiene**.
    - **Secrets-Hygiene ERLEDIGT (2026-06-21, Doku):** Secrets-Inventar (Blast-Radius pro Secret),
      Token-Rotations-Prozedur (Ueberlappung/Zero-Downtime + Besonderheiten pro Secret) und
-     Twilio-Subaccount-/Telnyx-Scoped-Key-Minimalrechte-Checkliste stehen jetzt vollstaendig in
-     `docs/RUNBOOK-OPERATOR.md` Gate 7. Der OAuth-Code ist test-gedeckt (`test/oauth.test.js`).
+     Twilio-Subaccount-/Telnyx-Scoped-Key-Minimalrechte-Checkliste stehen vollstaendig in
+     `PLAN-SECURITY.md`, Abschnitt `SECRETS-HYGIENE`. Der OAuth-Code ist test-gedeckt
+     (`test/oauth.test.js`).
    - **Live-Infra VERIFIZIERT (2026-06-21):** Render-Env steht auf `MCP_AUTH=oauth`; gegen
      `https://vodafone-agent.onrender.com` sind Gate-5b-Steps 1-2 gruen - Protected-Resource-Metadata
      (beide Pfade) zeigt `resource=…/mcp` + WorkOS-Issuer, unautorisierter `POST /mcp` -> `401` +

@@ -74,7 +74,8 @@ Dashboard -> Entwickler -> API-Schluessel (Live-Modus) -> `sk_live_...` kopieren
 
 - **NIEMALS committen, loggen oder in Chat/Tickets einfuegen** (Repo-Regel 4).
 - Einziger Bestimmungsort: Render-Dashboard (Schritt 6).
-- Rotation spaeter: "Roll key" mit Ablauf-Frist (siehe RUNBOOK-OPERATOR.md, Secrets-Tabelle).
+- Rotation spaeter: "Roll key" mit Ablauf-Frist (siehe `PLAN-SECURITY.md`, Abschnitt
+  `SECRETS-HYGIENE`).
 
 ## 6. Render: Env umstellen
 
@@ -103,7 +104,7 @@ Im Render-Log KEINE `[Konfiguration]`/Boot-Refusal-Zeilen zu Payment.
 ## 7. Live-Smoke (echtes Geld, eigene Karte)
 
 > Es gibt im Live-Modus keine Testkarten. Smoke = ein echter Durchlauf mit der
-> eigenen Karte, danach Storno/Refund. Ablauf wie RUNBOOK-OPERATOR.md Gate 4,
+> eigenen Karte, danach Storno/Refund. Ablauf wie der Test-Mode-Smoke in Schritt 7,
 > nur eben live.
 
 1. Onboarding-Flow als neuer Tenant durchlaufen: Karte im Checkout (setup-Mode) speichern.
