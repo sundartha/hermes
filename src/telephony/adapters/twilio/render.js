@@ -2,30 +2,32 @@
 // in TwiML. EINZIGER Ort mit Twilio-VoiceResponse + Provider-Voice-Namen.
 import twilio from "twilio";
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
+import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-// Logisches Voice-Profil -> Twilio-Voice-Attribute. Fail-closed: unbekanntes
-// Profil ist ein Programmierfehler (wirft), kein stiller Default-Voice-Fallback.
-// Pro Sprache ein Eintrag; `language` (volles BCP-47) gilt fuer TTS-Voice UND
-// STT-Locale (siehe gatherOpts) - eine Quelle, kein DE/FR-Drift.
-const TWILIO_VOICE = Object.freeze({
-  [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Polly.Vicki-Neural", language: "de-DE" },
-  [VOICE_PROFILE.FR_FEMALE_NEURAL]: { voice: "Polly.Lea-Neural", language: "fr-FR" },
-  // EN (F1 P4): GB-Englisch. Polly Amy-Neural ist die britische Neural-Stimme; en-GB
-  // als volles BCP-47 fuer TTS UND STT (R9). Live-Freischaltung = Smoke-Gate (R10).
-  [VOICE_PROFILE.EN_FEMALE_NEURAL]: { voice: "Polly.Amy-Neural", language: "en-GB" },
+// Logisches Voice-Profil -> Twilio-Voice-NAME. Das Sprach-Locale steht hier NICHT mehr:
+// es kommt aus dem Locale-Buendel (voice-locale.js) - eine Quelle fuer Say-TTS UND
+// Gather-STT, kein Drift zwischen Buendel und Adapter. EN = GB-Englisch (Polly Amy).
+// Fail-closed: unbekanntes Profil ist ein Programmierfehler (wirft), kein stiller Default.
+const TWILIO_VOICE_NAME = Object.freeze({
+  [VOICE_PROFILE.DE_FEMALE_NEURAL]: "Polly.Vicki-Neural",
+  [VOICE_PROFILE.FR_FEMALE_NEURAL]: "Polly.Lea-Neural",
+  [VOICE_PROFILE.EN_FEMALE_NEURAL]: "Polly.Amy-Neural",
 });
 
+// Attribut-Reihenfolge (voice, language) ist vertraglich - Twilio serialisiert in
+// Einfuege-Reihenfolge, der Snapshot-Test nagelt sie fest.
 function voiceAttrs(profile) {
-  const attrs = TWILIO_VOICE[profile];
-  if (!attrs) throw new Error(`unbekanntes voiceProfile: ${profile}`);
-  return attrs;
+  const voice = TWILIO_VOICE_NAME[profile];
+  if (!voice) throw new Error(`unbekanntes voiceProfile: ${profile}`);
+  return { voice, language: sttLocaleForVoiceProfile(profile) };
 }
 
 // Spracherkennung (Budget-Engine). `language` kommt aus dem voiceProfile des Gathers
-// (dieselbe TWILIO_VOICE-Map wie der Say-Voice), nicht hartkodiert: so transkribiert
-// STT IMMER in der Sprache, in der gesprochen wird. R9: Locale MUSS volles BCP-47 sein
+// (ueber voiceAttrs aus dem Locale-Buendel, dieselbe Quelle wie der Say-Voice), nicht
+// hartkodiert: so transkribiert STT IMMER in der Sprache, in der gesprochen wird. Der
+// Snapshot-Wert ist damit derselbe wie zuvor. R9: Locale MUSS volles BCP-47 sein
 // (de-DE/fr-FR) - ein blosses "de"/"fr" laesst den Provider still auf Englisch fallen.
 // Fail-closed: unbekanntes Profil wirft (via voiceAttrs), kein stiller DE-Fallback.
 // Attribut-Reihenfolge ist vertraglich: Twilio serialisiert in Einfuege-Reihenfolge,

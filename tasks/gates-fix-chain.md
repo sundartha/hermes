@@ -503,6 +503,82 @@ Locale-Aufloesung.
 
 **Zulaessige Testaenderung:** keine.
 
+### Nachtrag 2026-07-28 — Review-Runde 1 (GATES-P9): zwei offene Punkte geklaert
+
+Der Review hat die Phase zu Recht mit drei Blockern zurueckgewiesen (B1-B3). Fix-Runde 1
+hat B2 (Play-TTS-Pfad umgeht die Sprachaufloesung) im Code behoben: `src/tts/directive-
+synth.js` loest die Voice-ID der Vorabsynthese jetzt ueber dieselbe eine Quelle auf
+(`elevenLabsVoiceIdFor`, `src/telephony/adapters/telnyx/elevenlabs-voice.js`) statt der
+globalen `cfg.voiceId` — Regressionstest in `test/directive-synth.test.js`. Der
+Assistant-Provisioner (`scripts/telnyx-assistant-provision.mjs`) bleibt bewusst
+unangetastet: die Telnyx-Assistant-Ressource ist EIN globales Voice-Setting je Assistant
+(keine Per-Call-Direktive wie beim Renderer/Play-TTS) — eine sprachaufgeloeste Assistant-
+Stimme braeuchte mehrere Assistant-Ressourcen oder eine Laufzeit-Umschaltung und ist eine
+eigene Architektur-Entscheidung, kein minimaler Fix dieser Runde.
+
+**B1 (US-Stimme/en-US) bleibt offen — bewusst, nicht nachgeliefert.** Der Grund ist
+strukturell, nicht Faulheit: `call.language` traegt heute NUR die ISO-639-Sprache
+(`de`/`fr`/`en`), abgeleitet einmalig ueber `languageForCountry(country)` bei
+Registrierung/Nummernkauf (`src/store/state-ops.js`). Das aufgeloeste Land selbst wird
+NICHT am Call gespeichert. **Richtigstellung (Review-Runde 2):** die vorherige Formulierung
+"es gibt buchstaeblich kein Datenfeld" war ueberzogen — `tenant.country` und
+`number.country` existieren bereits (`src/store/state-ops.js:1278`, `src/store/pg.js:1545`).
+Was fehlt, ist NICHT das Datum, sondern der Weg von dort bis zum Renderer: keine
+Call-Erzeugungsstelle liest `tenant.country`/`number.country` und schreibt es an
+`call.language` bzw. an ein neues Feld weiter. Eine echte Regionalaufloesung braucht eine
+von zwei Erweiterungen, beide ausserhalb einer minimalen Fix-Runde:
+(a) `country` zusaetzlich zu `language` am Call-Record mitfuehren (kein neues Feld an der
+Quelle, aber Migration + jede Call-Erzeugungsstelle muss es lesen und durchreichen), oder
+(b) `en` in zwei SUPPORTED_LANGUAGES-Eintraege spalten (`en-US`/`en-GB`) ueber
+`LANGUAGE_FOR_COUNTRY`. Letzteres bricht sofort den harten Pin
+`test/f1-i18n-locale.test.js:70` (`SUPPORTED_LANGUAGES` == genau `["de","en","fr"]`) sowie
+vermutlich Dashboard-/Onboarding-Sprachlisten (P13) — eine Aenderung, die **ausserhalb der
+Zulaessige-Testaenderung-Liste dieser Phase** liegt ("keine").
+Der mechanisch gepruefte VOICE-12-Gate-Test (`test/telnyx-elevenlabs-render.test.js`)
+verlangt nur drei verschiedene Stimmen fuer DE/FR/EN und ist damit weiterhin korrekt
+gruen; die Regionalaufloesung aus der Owner-Entscheidung 7.5 (PLAN-GATES.md Abschnitt 5)
+ist davon unabhaengig und bleibt ein offener Folgeauftrag. **Owner-Entscheidung noch
+ausstehend (weder Runde 1 noch Runde 2 hat sie autonom getroffen):** entweder (a) eigene
+Phase mit Call-Schema-Aenderung, oder (b) die bindende Owner-Tabelle in PLAN-GATES.md
+Abschnitt 5 (VOICE-12-Zeile) formal auf "en-GB Default, en-US zurueckgestellt" kuerzen. Bis
+zu dieser Entscheidung bleibt die Tabelle unveraendert und der Delta hier dokumentiert.
+
+**B3 (Testaenderung ausserhalb der Erlaubnisliste) — die Kollision wird hiermit sichtbar
+gemacht, die Freigabe selbst steht noch aus.** Der W2-Ist-Pin in
+`test/telnyx-elevenlabs-render.test.js` ("eine Voice-ID fuer alle Sprachen") war die
+Negation von VOICE-12 selbst — ein Ist-Zustand-Pin, der nach P9 zwangslaeufig falsch wird,
+sobald VOICE-12 gruen geht. Der Testinhalt wurde im Review als sachlich korrekt bestaetigt.
+**Richtigstellung (Review-Runde 2, Selbstautorisierungs-Blocker):** anders als beim
+P10-Praezedenzfall (eigener `docs(gates)`-Commit `fbef82e` aus der Lead-/Owner-Session) kam
+die Aufnahme dieser Testaenderung in die Erlaubnisliste (PLAN-GATES.md Abschnitt 7) aus
+demselben Impl-Commit, der den Code aendert — der Impl-Agent hat sich selbst freigegeben.
+Das ist hiermit zurueckgenommen: PLAN-GATES.md Abschnitt 7 markiert die Zeile jetzt als
+VORSCHLAG, nicht als Freigabe. **Zusaetzlich VORGESCHLAGENE Testaenderung (Owner-/
+Lead-Bestaetigung vor dem naechsten Merge nach `master` noch ausstehend):**
+`test/telnyx-elevenlabs-render.test.js` darf den Ist-Pin auf den VOICE-12-Sollzustand
+heben (zwei sprachaufgeloeste IDs statt einer globalen), solange das VOICE-12-Gate selbst
+(Zeile ~80, drei distinct IDs) unveraendert bleibt.
+
+### Nachtrag 2026-07-28 — Review-Runde 2 (GATES-P9): R5-Regression auf dem Assistant-Pfad behoben
+
+Review-Runde 2 fand einen vierten, sicherheits-/verhaltensrelevanten Blocker: der
+Call-Control-`speak`-Node (`src/telephony/adapters/telnyx/voice.js`, Pflicht-Offenlegung
+unmittelbar vor `ai_assistant_start`) loeste seine ElevenLabs-Voice-ID seit P9 ueber
+`elevenLabsVoiceNameFor(el, voiceProfile)` auf — sprachabhaengig, genau wie der Renderer.
+Der nachfolgende Telnyx-Assistant hat aber EIN global provisioniertes Voice-Setting
+(`scripts/telnyx-assistant-provision.mjs`, unangetastet). Fuer FR-/EN-Calls auf dem
+Assistant-Pfad (Flag live an) haette die Offenlegung FR/EN gesprochen, der Assistant direkt
+danach weiter DE — RCA-Wurzel R5 ("EINE Stimme im ganzen Call") erneut verletzt, und zwar
+undokumentiert. **Fix:** `speakVoiceFields` nutzt fuer den `useAssistantVoice`-Zweig wieder
+`elevenLabsVoiceName(el)` (die globale Plattform-Stimme, Vor-P9-Verhalten) statt der
+sprachaufgeloesten Funktion — die sprachaufgeloeste Stimme (VOICE-12) bleibt auf Renderer
+(`render.js`) und Play-TTS-Vorabsynthese (`directive-synth.js`) beschraenkt, die beide
+keinen nachfolgenden Assistant haben. Die irrefuehrenden Kommentare an `speakVoiceFields`
+sind korrigiert. Regressionstest: `test/telnyx-call-control.test.js`
+("R5-Regression: speak useAssistantVoice=true bleibt bei FR/EN die globale
+Assistant-Stimme..."), zusaetzlich `test/p9-voice-locale-source.test.js` auf das jetzt
+korrekte Verhalten (Assistant-Pfad weicht fuer FR/EN bewusst vom Renderer ab) umgestellt.
+
 ---
 
 ## P10 — MCP-Oberflaeche (MCP-14, LANG-15)

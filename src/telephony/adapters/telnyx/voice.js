@@ -273,10 +273,20 @@ async function postCallControlAction(callControlId, { action, body, op }) {
 }
 
 // Voice-Felder des speak-Bodys (eine Aufgabe, eine Abstraktionsebene: G30/G34).
-// ElevenLabs-Zweig = dieselbe Stimme, die der AI-Assistant danach spricht (RCA-Wurzel R5:
-// EINE Stimme im ganzen Call). KEIN `language`: im SpeakRequest optional (required =
+// ElevenLabs-Zweig = ABSICHTLICH die GLOBALE Plattform-Stimme (el, NICHT die
+// sprachaufgeloeste voiceProfile-Stimme aus P9), NIE die per-voiceProfile aufgeloeste ID:
+// dieser speak-Node ist die Pflicht-Offenlegung unmittelbar VOR ai_assistant_start, und
+// die Telnyx-Assistant-Ressource danach hat EIN global provisioniertes Voice-Setting
+// (scripts/telnyx-assistant-provision.mjs), keine Per-Call-Sprachaufloesung. Wuerde dieser
+// speak-Node sprachabhaengig eine andere Stimme waehlen als der folgende Assistant, spraeche
+// derselbe Call in zwei Stimmen (RCA-Wurzel R5: "EINE Stimme im ganzen Call" verletzt) -
+// genau der Fehler, den P9 hier kurzzeitig eingefuehrt und Review-Runde 2 zurueckgenommen
+// hat (Gates-P9 B-R5-Nachtrag). KEIN `language`: im SpeakRequest optional (required =
 // payload+voice), es steuert die Azure-/Telnyx-TTS-Sprache; ElevenLabs-Modelle sind
 // multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
+// Die sprachaufgeloeste voiceProfile-Stimme (P9, VOICE-12) bleibt auf dem TeXML-Renderer
+// (render.js) und dem Play-TTS-Vorabsynthese-Pfad (directive-synth.js) beschraenkt - beide
+// haben keinen nachfolgenden Assistant, der die Stimme wechseln koennte.
 // Fail-SAFE (Fallback a): unvollstaendige ElevenLabs-Config -> Azure-Bestand byte-identisch.
 function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
   const el = config.telnyx.telnyxElevenLabs;

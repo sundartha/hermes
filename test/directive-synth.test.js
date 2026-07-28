@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
-import { say, gather, hangup } from "../src/telephony/directives.js";
+import { say, gather, hangup, VOICE_PROFILE } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PUBLIC_URL = "https://agent.test";
@@ -76,6 +76,17 @@ function failFetch() {
   return async () => ({ ok: false, status: 500, text: async () => "boom" });
 }
 
+// Faengt die aufgerufene URL ein (voiceId steckt darin, s. src/tts/synth.js TTS_PATH) -
+// ohne diesen Fake bliebe die Play-TTS-Vorabsynthese fuer B2 unsichtbar getestet.
+function recordingFetch() {
+  const urls = [];
+  const fetchImpl = async (url) => {
+    urls.push(url);
+    return { ok: true, headers: { get: () => "audio/mpeg" }, arrayBuffer: async () => new Uint8Array([1]).buffer };
+  };
+  return { urls, fetchImpl };
+}
+
 test("Flag AUS -> Direktiven referenz-identisch zurueck, kein put, kein fetch", async () => {
   const ttsStore = fakeTtsStore();
   const { synthesizeDirectiveAudio } = makeDirectiveSynth({
@@ -124,6 +135,32 @@ test("Telnyx + Flag AN + Synth-OK -> GATHER bekommt promptAudioUrl, SAY bekommt 
   assert.equal(out[0].audioUrl, `${PUBLIC_URL}/voice/tts/${FIXED_TOKEN}`);
   assert.equal(out[1].promptAudioUrl, `${PUBLIC_URL}/voice/tts/${FIXED_TOKEN}`);
   assert.equal(ttsStore.putCalls.length, 2, "genau ein put je sprechender Direktive");
+});
+
+// B2 (Review GATES-P9): der Play-TTS-Pfad muss der P9-Sprachaufloesung folgen statt
+// der einen globalen Plattform-Stimme - sonst umgeht die Vorabsynthese VOICE-12
+// vollstaendig, sobald ELEVENLABS_PLAY_TTS_ENABLED=true laeuft (der <Say>-Zweig allein
+// wird davon nie beruehrt).
+test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (FR/EN), nicht der globalen Plattform-Stimme", async () => {
+  const ttsStore = fakeTtsStore();
+  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
+    config: fakeConfig({ enabled: true }),
+    ttsStore,
+    store: fakeCounterStore(),
+    onQuotaWarning: noopQuotaWarning,
+  });
+  const call = { provider: "telnyx" };
+  const directives = [
+    say("Bonjour", VOICE_PROFILE.FR_FEMALE_NEURAL),
+    say("Hello", VOICE_PROFILE.EN_FEMALE_NEURAL),
+    say("Hallo", VOICE_PROFILE.DE_FEMALE_NEURAL),
+  ];
+  const { urls, fetchImpl } = recordingFetch();
+  await withFakeFetch(fetchImpl, () => synthesizeDirectiveAudio(call, directives));
+  assert.equal(urls.length, 3);
+  assert.match(urls[0], /text-to-speech\/FFXYdAYPzn8Tw8KiHZqg\b/, "FR folgt der bindenden FR-ID");
+  assert.match(urls[1], /text-to-speech\/wOPou4MhRIYEqQHVxjmp\b/, "EN folgt der bindenden EN-ID");
+  assert.match(urls[2], /text-to-speech\/voice123\b/, "DE bleibt die konfigurierte Plattform-Stimme");
 });
 
 test("Telnyx + Flag AN + Synth-FAIL -> Liste unveraendert (Fail-safe -> Azure-Say), kein put", async () => {

@@ -4,24 +4,24 @@
 // Fail-closed wie der Twilio-Renderer (unbekanntes voiceProfile -> wirft). STREAM
 // rendert seit P7 echtes <Connect><Stream> (Telnyx-Realtime ueber Port 4).
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
-import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
+import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
+import { elevenLabsVoiceNameFor, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 
-// Logisches Voice-Profil -> Telnyx-TeXML-Voice-Attribute. Telnyx TeXML akzeptiert
+// Logisches Voice-Profil -> Telnyx-TeXML-Voice-NAME. Telnyx TeXML akzeptiert
 // Azure-NTTS-Voices im Format "Azure.<locale>-<VoiceId>Neural" (Telnyx-Doku, Say-Verb;
 // Owner-Wahl 2026-06-16: natuerlichere deutsche Stimme als AWS Polly Vicki-Neural).
-// Die Locale steckt im Voice-Namen; `language` (volles BCP-47) bleibt konsistent und
-// liefert zugleich die STT-Locale des Gathers (siehe gatherAttrs) - eine Quelle pro
-// Sprache. Fail-closed: unbekanntes Profil ist ein Programmierfehler (wirft), kein
-// stiller Default-Voice-Fallback. Twilio-Renderer bleibt bewusst auf Polly (anderer Pfad).
-const TELNYX_VOICE = Object.freeze({
-  [VOICE_PROFILE.DE_FEMALE_NEURAL]: { voice: "Azure.de-DE-KatjaNeural", language: "de-DE" },
-  [VOICE_PROFILE.FR_FEMALE_NEURAL]: { voice: "Azure.fr-FR-DeniseNeural", language: "fr-FR" },
-  // EN (F1 P4): GB-Englisch. Azure en-GB-SoniaNeural ist die britische Neural-Stimme;
-  // en-GB als volles BCP-47 fuer TTS UND STT-Locale (R9). Nova-3 deckt EN mit ab (kein
-  // model-Override noetig). Live-Freischaltung (Azure Sonia / Deepgram EN) = Smoke-Gate.
-  [VOICE_PROFILE.EN_FEMALE_NEURAL]: { voice: "Azure.en-GB-SoniaNeural", language: "en-GB" },
+// Die Locale steckt im Voice-Namen; das `language`-Attribut kommt seit P9 NICHT mehr aus
+// dieser Tabelle, sondern aus dem Locale-Buendel (voice-locale.js) - eine Quelle fuer den
+// Say-Voice UND die STT-Locale des Gathers (siehe gatherAttrs), kein Drift zwischen
+// Buendel und Adapter. EN = GB-Englisch (Azure Sonia); Nova-3 deckt EN mit ab (kein
+// model-Override noetig). Fail-closed: unbekanntes Profil ist ein Programmierfehler
+// (wirft), kein stiller Default-Voice-Fallback. Twilio-Renderer bleibt bewusst auf Polly.
+const TELNYX_VOICE_NAME = Object.freeze({
+  [VOICE_PROFILE.DE_FEMALE_NEURAL]: "Azure.de-DE-KatjaNeural",
+  [VOICE_PROFILE.FR_FEMALE_NEURAL]: "Azure.fr-FR-DeniseNeural",
+  [VOICE_PROFILE.EN_FEMALE_NEURAL]: "Azure.en-GB-SoniaNeural",
 });
 
 // XML-Sonderzeichen escapen (&, <, >, ", ' -> Entities). & zuerst, sonst werden
@@ -37,10 +37,11 @@ function escapeXml(s) {
 
 // Exportiert (P4.5, G5): der Call-Control-speak-Adapter (voice.js) nutzt dieselbe
 // Voice-Map statt eine zweite Telnyx-Voice-Namens-Quelle zu fuehren.
+// Attribut-Reihenfolge (voice, language) ist vertraglich (attrString, Snapshot).
 export function voiceAttrs(profile) {
-  const attrs = TELNYX_VOICE[profile];
-  if (!attrs) throw new Error(`unbekanntes voiceProfile: ${profile}`);
-  return attrs;
+  const voice = TELNYX_VOICE_NAME[profile];
+  if (!voice) throw new Error(`unbekanntes voiceProfile: ${profile}`);
+  return { voice, language: sttLocaleForVoiceProfile(profile) };
 }
 
 // Attribut-Objekt -> ' k="v" ...' in Einfuege-Reihenfolge (vertraglich, Snapshot).
@@ -50,13 +51,15 @@ function attrString(obj) {
     .join("");
 }
 
-// ElevenLabs-TTS (globale Plattform-Stimme): Telnyx relayt
+// ElevenLabs-TTS: Telnyx relayt
 // <Say voice="ElevenLabs.<Model>.<VoiceId>" api_key_ref="..."> an die ElevenLabs-
 // API; der ElevenLabs-API-Key liegt als Telnyx-Integration-Secret und wird ueber
 // den api_key_ref-IDENTIFIER referenziert. opts.elevenLabs injiziert die Registry
 // aus config.telnyx.telnyxElevenLabs - der Renderer bleibt config-frei und pur. KEIN
 // language-Attribut am ElevenLabs-Say: die Voice ist multilingual, die gesprochene
-// Sprache folgt dem Text (Telnyx-Doku-Beispiel traegt keins). Gate fail-safe statt
+// Sprache folgt dem Text (Telnyx-Doku-Beispiel traegt keins). Die VOICE-ID folgt seit P9
+// trotzdem der Sprache (Owner-Entscheidung 2026-07-27): das MODELL ist multilingual, die
+// Sprecherin soll dennoch Muttersprachlerin sein - kein Widerspruch. Gate fail-safe statt
 // fail-closed: ElevenLabs NUR wenn apiKeyRef UND voiceId gesetzt, sonst Azure-
 // Bestand byte-identisch - ein halbes/leeres Env ist ein Betriebszustand, kein
 // Programmierfehler, und darf kein laufendes Gespraech toeten (anders als das
@@ -72,7 +75,7 @@ function attrString(obj) {
 function sayVoiceAttrs(d, opts) {
   const el = opts.elevenLabs;
   if (hasElevenLabsVoice(el))
-    return { voice: elevenLabsVoiceName(el), api_key_ref: el.apiKeyRef };
+    return { voice: elevenLabsVoiceNameFor(el, d.voiceProfile), api_key_ref: el.apiKeyRef };
   return voiceAttrs(d.voiceProfile);
 }
 
@@ -94,8 +97,9 @@ function renderSay(d, opts) {
 // "deepgram/nova-3" = hoechste Erkennungsgenauigkeit (Owner-Wahl 2026-06-16; Premium-
 // Add-on, ersetzt die in-house-Engine); Nova-3 ist mehrsprachig (DE+FR), der model-Vendor
 // MUSS zu transcriptionEngine passen (Telnyx-Doku). language kommt aus dem voiceProfile
-// des Gathers (dieselbe TELNYX_VOICE-Map wie der Say-Voice), nicht hartkodiert: so
-// transkribiert STT IMMER in der Sprache, in der gesprochen wird. R9: language MUSS das
+// des Gathers (ueber voiceAttrs aus dem Locale-Buendel, dieselbe Quelle wie der
+// Say-Voice), nicht hartkodiert: so transkribiert STT IMMER in der Sprache, in der
+// gesprochen wird; der Snapshot-Wert bleibt derselbe. R9: language MUSS das
 // volle Locale ("de-DE"/"fr-FR") sein. Die fruehere Annahme "de allein" (2026-06-16) war
 // FALSCH und durch echte STT-Billing-Records widerlegt: Telnyx erkennt "de" nicht als
 // Deutsch -> Fallback auf Englisch (Records zeigten language:'en') -> deutsche Sprache wird

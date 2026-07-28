@@ -24,6 +24,7 @@ import { synthesizeSpeech } from "./synth.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { DIRECTIVE } from "../telephony/directives.js";
 import { ttsQuotaExhausted } from "../store/state-ops.js";
+import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.js";
 
 export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) {
   // Beobachtbarkeit: die Degradation darf nicht still ausfallen (Betriebs-Symptom "Anruf
@@ -44,7 +45,12 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
   async function withPlayAudio(d, cfg) {
     const text = d.kind === DIRECTIVE.GATHER ? d.promptText : d.kind === DIRECTIVE.SAY ? d.text : "";
     if (!text) return d;
-    const url = await synthToServeUrl(text, cfg);
+    // P9: die Vorabsynthese folgt derselben Sprach-Aufloesung wie der <Say>-Renderer
+    // (elevenLabsVoiceIdFor, EINE Quelle) statt der globalen Plattform-Stimme - sonst
+    // klingt der Play-TTS-Pfad in jeder Sprache gleich, obwohl VOICE-12 das fuer <Say>
+    // bereits loest (B2, Review GATES-P9).
+    const voiceId = elevenLabsVoiceIdFor(cfg.voiceId, d.voiceProfile);
+    const url = await synthToServeUrl(text, { ...cfg, voiceId });
     if (!url) return d; // fail-safe -> Azure-<Say>
     return d.kind === DIRECTIVE.GATHER ? { ...d, promptAudioUrl: url } : { ...d, audioUrl: url };
   }
