@@ -13,6 +13,7 @@ import { degradedSpeechFor } from "./llm.js";
 import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
+import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -402,6 +403,18 @@ export function makeTelnyxLlmShim({
     // EOT-Kostensichtbarkeit, K8).
     const callerText = lastUserText(req.body);
     const { loopExceeded, turnSeq } = watchdog.observeTurn(call.id, callerText);
+
+    // EINE Stelle (G5) fuer den Budget-Notaus: Abschluss-Ansage ZUERST, dann realer Hangup
+    // (Weg iii, telnyx-p6). Genutzt vom Gate VOR dem Turn (Schritt 6) UND vom Abbruch
+    // WAEHREND des Turns (Schritt 7, AL-P6) - derselbe Grund-Token, derselbe Satz,
+    // dieselbe Sofort-Terminierung. Kein Abschieds-Delay: hier gibt es keinen Abschied zu
+    // schuetzen, nur Kosten zu stoppen (Regel 1).
+    async function killCallForBudget(reason) {
+      logShimGate({ reason, callId: call.id, tenantId: call.tenantId, turnSeq });
+      writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
+      await terminateCall(call.id);
+    }
+
     if (loopExceeded) {
       logShimGate({ reason: "loop_guard", callId: call.id, turnSeq });
       writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
@@ -424,19 +437,8 @@ export function makeTelnyxLlmShim({
     // Skip + Log, eigener try/catch, secret-frei) - dasselbe GETEILTE Primitiv wie der
     // Loop-Guard (Schritt 4.6) und der end_call-Hangup (Schritt 8, G5). Settlement bleibt
     // P4.5 onHangup (EIN idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
-    const tenantBudgetOver = store.budgetExceeded(call.tenantId, config.billing);
-    const globalBudgetOver = !tenantBudgetOver && store.globalBudgetExceeded(config.billing);
-    if (tenantBudgetOver || globalBudgetOver) {
-      logShimGate({
-        reason: tenantBudgetOver ? "budget_tenant" : "budget_global",
-        callId: call.id,
-        tenantId: call.tenantId,
-        turnSeq,
-      });
-      writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
-      await terminateCall(call.id);
-      return;
-    }
+    const budgetAxis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
+    if (budgetAxis) return await killCallForBudget(budgetAxis);
 
     // 7) Kern: agentTurn (in-house Tool-Loop) gegen die per Call-Control-ID gebundene,
     // frische call-Referenz.
@@ -458,6 +460,12 @@ export function makeTelnyxLlmShim({
       // messagesTurnShape ist wurf-frei und darf die bereits erfolgreiche Turn-Response nicht
       // in den Catch reissen.
       if (config.telnyx.telnyxAssistant.shimDebugShape) logShimShape(messagesTurnShape(req.body, turn));
+      // AL-P6: agentTurn hat den Loop wegen einer erschoepften Budget-Achse abgebrochen.
+      // Derselbe Notaus wie das Gate VOR dem Turn - sonst liefe der Call auf Carrier-
+      // Minuten weiter, bis der naechste Turn Schritt 6 trifft (Regel 1, beide Achsen).
+      // Der Zeit-Abbruch (deadline) fuehrt bewusst NICHT hierher: der Turn hat eine
+      // gueltige Antwort, das Gespraech laeuft normal weiter.
+      if (isBudgetAxis(turn.stopReason)) return await killCallForBudget(turn.stopReason);
       endCall = turn.endCall === true;
       farewellChars = speechTextOf(turn).length;
       writeCompletion(res, { model, content: turn.speech, stream: wantsStream }); // Abschiedssatz geht ZUERST raus
