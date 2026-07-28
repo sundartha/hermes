@@ -39,17 +39,19 @@ test("ElevenLabs-Gather: STT-Attribute byte-identisch zum Azure-Bestand, innerer
   );
 });
 
-// Charakterisierung des Ist-Zustands zu VOICE-12: eine Voice-ID fuer alle drei Sprachen,
-// kein `language`-Attribut am ElevenLabs-<Say>. DE traegt der byte-exakte Test oben, FR/EN
+// FR/EN am ElevenLabs-Say: die STT-Locale folgt dem Profil und die Voice-ID folgt seit P9
+// der SPRACHE (Owner-Entscheidung 2026-07-27) - kein `language`-Attribut am <Say>, weil das
+// Modell multilingual ist und dem Text folgt. DE traegt der byte-exakte Test oben, FR/EN
 // dieser Test - der Regex unten schliesst unmittelbar hinter `api_key_ref` mit `>`, das IST
 // der Beweis fuer das fehlende `language`-Attribut.
-// ACHTUNG: dieser Test beweist die TATSACHE, er pinnt NICHT den Sollzustand. Das Launch-Gate
-// dazu ist der rote VOICE-12-Test unten - beide gehoeren zusammen (R1/R2 der kanonischen
-// Liste: ein Ist-Pin allein wuerde den Defekt als Sollzustand festschreiben).
-test("ElevenLabs + FR/EN-Profil: STT-Locale folgt dem Profil, Voice bleibt dieselbe ID (multilingual)", () => {
-  for (const [profile, locale] of [
-    [VOICE_PROFILE.FR_FEMALE_NEURAL, "fr-FR"],
-    [VOICE_PROFILE.EN_FEMALE_NEURAL, "en-GB"],
+// ACHTUNG (Grund der Korrektur in P9): dieser Test behauptete bis P9 "eine Voice-ID fuer
+// alle Sprachen" und schrieb damit genau den Defekt fest, den das Launch-Gate VOICE-12
+// unten misst - ein Ist-Pin, der als Sollzustand gelesen wurde. Er pinnt jetzt den
+// Sollzustand. Wer ihn wieder auf eine einzige ID zurueckdreht, bricht VOICE-12.
+test("ElevenLabs + FR/EN-Profil: STT-Locale UND Voice-ID folgen der Sprache", () => {
+  for (const [profile, locale, voiceId] of [
+    [VOICE_PROFILE.FR_FEMALE_NEURAL, "fr-FR", "FFXYdAYPzn8Tw8KiHZqg"],
+    [VOICE_PROFILE.EN_FEMALE_NEURAL, "en-GB", "wOPou4MhRIYEqQHVxjmp"],
   ]) {
     const out = renderDirectives(
       [gather({ promptText: "Oui?", action: "/x", voiceProfile: profile })],
@@ -58,8 +60,8 @@ test("ElevenLabs + FR/EN-Profil: STT-Locale folgt dem Profil, Voice bleibt diese
     assert.match(out, new RegExp(`<Gather\\b[^>]*\\blanguage="${locale}"`), `STT-Locale ${locale}`);
     assert.match(
       out,
-      /<Say voice="ElevenLabs\.Default\.abc123" api_key_ref="elevenlabs_prod">/,
-      "eine Voice-ID fuer alle Sprachen",
+      new RegExp(`<Say voice="ElevenLabs\\.Default\\.${voiceId}" api_key_ref="elevenlabs_prod">`),
+      "Voice-ID folgt der Sprache; kein language-Attribut am ElevenLabs-Say",
     );
   }
 });

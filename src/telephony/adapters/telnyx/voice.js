@@ -13,7 +13,7 @@
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { voiceAttrs } from "./render.js";
-import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
+import { elevenLabsVoiceNameFor, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
 import { createMinuteWindowThrottle } from "./rate-limit.js";
 
@@ -277,12 +277,15 @@ async function postCallControlAction(callControlId, { action, body, op }) {
 // EINE Stimme im ganzen Call). KEIN `language`: im SpeakRequest optional (required =
 // payload+voice), es steuert die Azure-/Telnyx-TTS-Sprache; ElevenLabs-Modelle sind
 // multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
+// Die VOICE-ID folgt seit P9 dem voiceProfile - dieselbe Sprach-Aufloesung wie im
+// Renderer, sonst spraeche die Pflicht-Offenlegung eines franzoesischen Calls deutsch,
+// waehrend der Renderer daneben schon franzoesisch klingt (Gegenteil von R5).
 // Fail-SAFE (Fallback a): unvollstaendige ElevenLabs-Config -> Azure-Bestand byte-identisch.
 function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
   const el = config.telnyx.telnyxElevenLabs;
   if (useAssistantVoice && hasElevenLabsVoice(el))
     return {
-      voice: elevenLabsVoiceName(el),
+      voice: elevenLabsVoiceNameFor(el, voiceProfile),
       voice_settings: { type: ELEVENLABS_VOICE_SETTINGS_TYPE, api_key_ref: el.apiKeyRef },
     };
   return voiceAttrs(voiceProfile); // { voice, language } - Bestand
