@@ -217,6 +217,35 @@ Hold == Preis aus der Provider-Antwort statt Tabelleneintrag. Grund: Owner-Entsc
 2026-07-27. Der neu gefasste Test muss den Fix **tatsaechlich pruefen** (Provider-Antwort mit
 `cost_information` → Hold traegt diesen Betrag), nicht nur den Defekt bestaetigen.
 
+### Nachtrag 2026-07-28 — die Reihenfolgen-Frage ist entschieden
+
+Der erste Anlauf lief in einen Konflikt: um den Hold auf den Provider-Preis zu setzen, muss
+die **Nummern-Suche vor den Hold** — und zwei gruene Bestandstests pinnen
+`prov.log === []`, also "kein Provider-Aufruf ohne reserviertes Geld"
+(`test/billing-hold-capture.test.js`, `test/p4-setup-fee-hold.test.js`).
+
+**Entscheidung: die Suche darf vor den Hold.** Begruendung am Produkt, nicht am Test:
+
+- Der Hold ist die **einmalige Setup-Gebuehr** `NUMBER_SETUP_FEE_CENTS`, und die ist
+  **aus**: `render.yaml` fuehrt `PAYMENT_ENABLED=false` und `NUMBER_SETUP_FEE_CENTS=0`.
+  **Der Kunde zahlt sein Abo und sonst nichts** (Owner, 2026-07-28) — die Nummer ist
+  UNSERE Kosten, gedeckt vom Abo, kein Kundenposten.
+- `searchNumbers` ist eine **Preisabfrage: kostenlos, kauft nichts**. Der geldbewegende
+  Schritt ist `orderNumber`, und der bleibt strikt hinter dem Hold.
+- Die Praezisierung lautet daher: **kein KAUF ohne reserviertes Geld** (statt: kein Kontakt
+  zum Provider). Die inhaltliche Zusage bleibt gepinnt — was wegfaellt, ist nur die zu
+  weite Formulierung `prov.log === []`.
+
+**Zusaetzlich zulaessige Testaenderung (nur diese zwei, nur diese Assertion):** in
+`test/billing-hold-capture.test.js` und `test/p4-setup-fee-hold.test.js` darf die Erwartung
+`prov.log === []` auf `['search:DE']` angehoben werden. **Weiterhin gepinnt bleiben MUSS:**
+kein `order:`-Eintrag ohne vorherigen Hold, `failNumber`/`failed` als Ausgang, kein
+`cancelHold`. Wer diese Zusage mit-entfernt, hat die Phase gebrochen.
+
+**Nicht zulaessig bleibt:** eine Aufweichung im Code-Kommentar ohne diesen Nachtrag. Die
+Praezisierung von R4 gilt, WEIL sie hier steht — nicht, weil ein Impl-Agent sie hingeschrieben
+hat.
+
 ---
 
 ## P5 — DID-Monatsmiete im Ledger (GAP-06)
