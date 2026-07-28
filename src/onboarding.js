@@ -32,19 +32,20 @@
 // "kein orderNumber ohne erfolgreichen Hold", und das Karten-Gate sitzt jetzt sogar
 // FRUEHER als zuvor (vor jedem Provider-Kontakt).
 //
-// R4-PRAEZISIERUNG (GAP-11, explizite Owner-Entscheidung 2026-07-27, s.
-// tasks/gates-fix-chain.md Abschnitt P4-Soll: "Der Preis aus der Provider-Antwort
-// wird behalten und als Hold verwendet"): dieser Satz ist nur erfuellbar, wenn die
-// (kostenlose, read-only) Preis-Suche VOR dem Hold laeuft - der Preis existiert erst
-// nach der Antwort. R4 verengt sich dadurch zwangslaeufig von "Hold vor JEDEM
-// Provider-Call" auf "Hold vor jedem GELD-bewegenden Provider-Call (order)"; das ist
-// eine unmittelbare, offengelegte Folge der zitierten Owner-Entscheidung, keine
-// eigenmaechtige Phasen-Lockerung. AKZEPTIERTES RESTRISIKO: ein Tenant mit
-// hinterlegter, aber am Hold abgelehnter Karte loest je manuellem Provisionierungs-
-// Versuch (kein Auto-Retry, s. worker/provisioning-orchestrator.js) einen zusaetzlichen
-// read-only Telnyx-Suchaufruf aus, BEVOR der Hold scheitert. Es wird dabei nie Geld
-// bewegt und keine Nummer gekauft (order bleibt strikt hinter dem Hold) - das
-// Restrisiko ist Provider-Traffic, kein Geldverlust.
+// R4-PRAEZISIERUNG (GAP-11) - sie steht NICHT im Ermessen dieser Implementierung,
+// sondern folgt der Owner-Entscheidung vom 2026-07-28, protokolliert in der Phasen-
+// Spezifikation der Gates-Fix-Kette (Abschnitt P4, Nachtrag zur Reihenfolgen-Frage):
+// Die Einrichtungsgebuehr, die dieser Hold reserviert, ist per Konfiguration
+// abgeschaltet - der Kunde zahlt sein Abo und sonst nichts; die Nummer ist unsere
+// Kosten, gedeckt vom Abo. searchNumbers ist eine reine Preisabfrage: kostenlos,
+// reserviert nichts, kauft nichts. Die geld-tragende Zusage lautet deshalb praezise
+// "kein KAUF ohne reserviertes Geld" (statt: kein Kontakt zum Provider) - orderNumber,
+// der einzige geldbewegende Schritt, liegt weiterhin strikt HINTER dem erfolgreichen
+// Hold. AKZEPTIERTES RESTRISIKO: ein Tenant mit hinterlegter, aber am Hold abgelehnter
+// Karte loest je manuellem Provisionierungs-Versuch (kein Auto-Retry) einen
+// zusaetzlichen read-only Suchaufruf beim Provider aus, BEVOR der Hold scheitert. Es
+// wird dabei nie Geld bewegt und keine Nummer gekauft - das Restrisiko ist
+// Provider-Traffic, kein Geldverlust.
 import {
   beginProvisioning,
   beginCapturing,

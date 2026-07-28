@@ -56,7 +56,7 @@ test("happy path: Hold vor Order, Capture nach Configure, active mit paymentInte
   assert.deepEqual(billing.log[1], ["captureHold", "pi_fake_1", 500]);
 });
 
-test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-Call, KEIN cancelHold", async () => {
+test("Hold vor Order: placeHold wirft -> failed, KEIN Kauf, KEIN cancelHold", async () => {
   const { s, numberId } = seedRequested();
   const prov = fakeProvisioner();
   const billing = fakeBilling({
@@ -69,8 +69,15 @@ test("Hold vor Order: placeHold wirft -> failed, KEIN Provider-Call, KEIN cancel
     /HTTP 402/,
   );
 
+  // Owner-Entscheidung 2026-07-28: die read-only Preisabfrage darf vor den Hold (sie
+  // kostet nichts und kauft nichts), der KAUF nicht. Gepinnt bleibt deshalb dreifach:
+  // Ausgang failed, KEIN order-Eintrag im Provider-Log, KEIN cancelHold.
   assert.equal(findNumber(s, numberId).status, NUMBER_STATUS.FAILED);
-  assert.deepEqual(prov.log, [], "kein Provider-Call ohne reserviertes Geld");
+  assert.deepEqual(prov.log, ["search:DE"], "nur die kostenlose Preis-Suche lief");
+  assert.ok(
+    !prov.log.some((l) => l.startsWith("order:")),
+    "kein Kauf ohne reserviertes Geld",
+  );
   assert.ok(!methodsOf(billing).includes("cancelHold"), "nichts gehalten -> kein cancelHold");
 });
 

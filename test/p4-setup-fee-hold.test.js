@@ -12,6 +12,7 @@ import {
   requestNumber,
   setTenantSubscription,
   setTenantStripe,
+  findNumber,
 } from "../src/store/state-ops.js";
 import { NUMBER_STATUS } from "../src/store/defaults.js";
 
@@ -61,7 +62,19 @@ test("exempt + placeHold wirft -> failNumber, KEIN orderNumber", async () => {
     () => provisionNumber(s, { provisioner: prov, billing }, { numberId: number.id, ...ARGS }),
     /stripe down/,
   );
-  assert.deepEqual(prov.log, [], "kein Provider-Kauf ohne gestellten Hold");
+  // Owner-Entscheidung 2026-07-28: die read-only Preisabfrage darf vor den Hold (sie
+  // kostet nichts und kauft nichts), der KAUF nicht. Gepinnt bleibt deshalb dreifach:
+  // KEIN order-Eintrag im Provider-Log, Ausgang failNumber, KEIN cancelHold.
+  assert.deepEqual(prov.log, ["search:DE"], "nur die kostenlose Preis-Suche lief");
+  assert.ok(
+    !prov.log.some((l) => l.startsWith("order:")),
+    "kein Provider-Kauf ohne gestellten Hold",
+  );
+  assert.equal(findNumber(s, number.id).status, NUMBER_STATUS.FAILED, "Ausgang bleibt failNumber");
+  assert.ok(
+    !billing.log.map((e) => e[0]).includes("cancelHold"),
+    "nichts gehalten -> kein cancelHold",
+  );
 });
 
 test("createSubscriptionCheckoutSession traegt payment_method_collection=always UND allow_promotion_codes=true", async () => {
