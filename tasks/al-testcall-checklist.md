@@ -104,16 +104,27 @@ Entwicklungsrechner deckt die Freigabe nicht.
 3. **Spike fahren, Urteil festhalten** — der Schalter ist seit AL-P2 gebaut (er war ohne
    Deploy nicht messbar, deshalb steht er im Code statt in dieser Liste). Fahr-Protokoll:
 
+   0. **Wegwerf-TeXML-App von Hand anlegen** (Telnyx-Portal), `voice_url =
+      https://<wegwerf-dienst>/voice/spike-silence`. Ohne sie verweigert der Treiber in
+      Schritt 2b den Dienst — der Testanruf liefe sonst in einen fremden/live Handler.
    1. **Deploy** des Branches (Weg a/b aus Schritt 1, unveraendert).
    2. `TELNYX_SSE_SPIKE_CALLEE=+15739090177` und `TELNYX_SSE_SPIKE_DELAY_MS=8000` setzen.
       Das Boot-Banner MUSS `SSE-Spike:      AKTIV (8000 ms …)` zeigen — fehlt die Zeile,
       wirkt der Schalter nicht (0 = aus, ohne Zielnummer = wirkungslos).
+   2b. `node scripts/al-p2-spike-driver.mjs --arm --service https://<wegwerf-dienst>
+      --assistant <blank-id> --texml-app <wegwerf-app-id>` — **erst den Dry-Run lesen**
+      (Default), danach denselben Aufruf mit `--apply`. Er schreibt `data/al-p2-spike-
+      snapshot.json` (Vorher-Zustand, einmalig) und meldet am Ende `armed=true`.
    3. **Anruf 1** von `+18643028341` auf `+15739090177`. Im Render-Log muss je Turn
       `[telnyx-shim] sse_spike_delay {"callId":…,"delayMs":8000}` stehen.
    4. `node scripts/telnyx-call-latency.mjs --call <call_id> --spike-delay-ms 8000`
       → `status=incremental` = **GRUEN** (AL-P7 gerechtfertigt), `status=buffered` = **ROT**
       (AL-P7 entfaellt, AL-P7b nimmt Weg B), `inconclusive`/`no_data` = erneut messen.
       Aufnahme als unabhaengigen Zweitbeleg anhoeren.
+   3b. Alternativ/ergaenzend gefuehrt: `node scripts/al-p2-spike-driver.mjs --measure
+      --service https://<wegwerf-dienst> --spike-delay-ms 8000 --apply` — loest den Anruf
+      ueber die regulaere `POST /api/calls` aus (alle Safety-Gates laufen), wartet auf das
+      Gespraechsende und druckt `sse-spike callId=… conversation=… median=… status=…`.
    5. **Timeout-Leiter:** `TELNYX_SSE_SPIKE_DELAY_MS` = 5000/10000/20000/30000, je ein
       Anruf. Die niedrigste Sprosse ohne assistant-Message und die hoechste mit Antwort
       klammern den **Telnyx-Turn-Timeout** — Zahl protokollieren (bisher steht dafuer nur
@@ -122,5 +133,9 @@ Entwicklungsrechner deckt die Freigabe nicht.
 4. **Rueckbau (Teil der Phase, nicht Nacharbeit):** Schalter, beide Env-Vars, Footgun,
    Banner-Zeile, Log-Kanal und die AL-P2-Tests ersatzlos entfernen — das ist NICHT
    „Flag auf 0". Env-Aenderungen nach `tasks/al-env-changes.md`; beide DIDs per Objekt-GET
-   zurueck auf Connection `Hermes` (`2982643896460248193`) verifizieren. Die Urteils-Funktion
+   zurueck auf Connection `Hermes` (`2982643896460248193`) verifizieren.
+   `node scripts/al-p2-spike-driver.mjs --restore --apply` MUSS **`restored=true`** melden
+   (es prueft genau diesen Objekt-GET, statt ihn zu behaupten); erst dann gilt der Rueckbau
+   als belegt. Danach `data/al-p2-spike-snapshot.json` loeschen und den Wegwerf-Branch
+   `phase/al-p2b-spike-betrieb` verwerfen — er wird **nie** nach `master` gemergt. Die Urteils-Funktion
    im Messwerkzeug (`sseSpikeVerdict`) darf bleiben, wenn die Leiter dokumentiert werden soll.

@@ -45,7 +45,9 @@ const ACCOUNTED_LATENCY_FIELDS = Object.freeze([
 // bewusst KEIN Urteil gefaellt - an dieser Zahl haengt eine ganze Phase (AL-P7).
 const SPIKE_INCREMENTAL_MAX_SHARE = 0.5;
 const SPIKE_BUFFERED_MIN_SHARE = 0.9;
-const SPIKE_FLAG = "--spike-delay-ms";
+// AL-P2b: exportiert, damit das Treiber-Skript denselben Flag-Namen benutzt statt ein
+// zweites Literal zu fuehren (G5).
+export const SPIKE_FLAG = "--spike-delay-ms";
 const TOTAL_LATENCY_FIELD = "end_user_perceived_latency_ms";
 // K0 (Plan §2): die fuenf Latenz-Bestandteile, die Telnyx pro assistant-Message im
 // metadata-Objekt mitliefert - EINE Liste (G5), sowohl fuer Tabellen-Spalten als auch fuer
@@ -88,6 +90,12 @@ async function fetchConversationSummary(conversationId) {
 async function fetchMessages(conversationId) {
   const data = await getJson(`${AI_CONVERSATIONS_PATH}/${conversationId}/messages`, "fetchMessages");
   return Array.isArray(data) ? data : [];
+}
+
+// AL-P2b: Abruf + assistant-Filter als EINE Stelle (G5) - main() und das Treiber-Skript
+// (scripts/al-p2-spike-driver.mjs) brauchen exakt dieselben Zeilen fuer sseSpikeVerdict.
+export async function assistantTurnRowsFor(conversationId) {
+  return assistantTurnRows(await fetchMessages(conversationId));
 }
 
 // Reine Extraktion (P11 testbar, kein IO): EINE assistant-Message -> Zeile mit sent_at +
@@ -261,7 +269,9 @@ export function parseLatencyArgs(argv) {
 // damit die Tabelle ohne Handarbeit entsteht. Der Store-Zugang wird DYNAMISCH importiert
 // und NUR hier - so bleibt der Offline-Unit-Test dieses Skripts (test/telnyx-call-
 // latency.test.js importiert nur die reinen Funktionen) frei von jedem DB-Pool.
-async function conversationIdForCall(hermesCallId) {
+// AL-P2b: exportiert - das Treiber-Skript loest dieselbe UUID auf demselben pg-Forensik-
+// Pfad auf; eine zweite Aufloesung waere ein zweites Fehlerbild (G5).
+export async function conversationIdForCall(hermesCallId) {
   const { pgBackendActive, readAcrossTenants } = await import("./prod-read.mjs");
   if (!pgBackendActive()) failClosed("--call ist nur im pg-Backend (STORE_BACKEND=pg) aufloesbar");
   const rows = await readAcrossTenants((client) =>
@@ -285,8 +295,7 @@ async function main() {
   const summary = await fetchConversationSummary(conversationId);
   if (summary) console.log(`Conversation ${conversationId} (status=${summary.status ?? NO_VALUE})`);
 
-  const messages = await fetchMessages(conversationId);
-  const rows = assistantTurnRows(messages);
+  const rows = await assistantTurnRowsFor(conversationId);
   if (rows.length === 0) failClosed(`keine assistant-Messages in Conversation ${conversationId} gefunden`);
 
   printTable(rows);

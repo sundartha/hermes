@@ -928,6 +928,56 @@ weiterhin nur `agentTurn`, die Verzoegerung faelscht die Zahl nicht).
 
 ---
 
+## AL-P2b-SPIKEENV — Wegwerf-Route "/voice/spike-silence" (2026-07-29)
+
+**Das Loch.** Der SSE-Spike aus AL-P2 braucht ein Gegenueber, das den Anruf annimmt und
+**nichts sagt** — sonst ist in der Aufnahme nicht zu trennen, wann unser Assistant zu
+sprechen beginnt. Eine Route, die einen Provider-Webhook beantwortet, ist per Definition
+eine unauthentifizierte Kante; sie falsch zu mounten hiesse, eine oeffentliche, unsignierte
+Antwortstelle im Dienst zu haben.
+
+**Der Fix.** Die Route lebt **nur** auf dem Wegwerf-Branch `phase/al-p2b-spike-betrieb` und
+dem Wegwerf-Dienst — sie wird **nie** nach `master` gemergt. Sie ist dreifach eingegrenzt:
+leere `TELNYX_SSE_SPIKE_CALLEE` -> 404 (Existenz hinter dem Schalter, Muster
+Shim-Existenz-Gate), `To`-Mismatch -> 404 plus genau eine `[spike-silence]`-Diagnosezeile,
+sonst statisches TeXML (`<Pause length="MAX_CALL_DURATION_S"/><Hangup/>`) aus dem
+Telnyx-Renderer. Kein Store-, Kosten- oder Gate-Pfad, kein Call-Record. Die **Auth-Kante
+ist geerbt, nicht neu**: die Route liegt unter `/voice` und wird in `src/app.js` **nach**
+`makeVoiceRoutes(...)` gemountet — damit greift die bestehende fail-closed
+Provider-Signaturpruefung (ungueltige Signatur -> 403 + `[voice-signature]`-Zeile, bevor der
+Handler laeuft) und die bestehende `/voice`-Basic-Auth-Exemption. **Keine neue Exemption,
+keine neue Zeile in der eingefrorenen Exemption-Reihenfolge (INV-3).** Diese Mount-Reihenfolge
+ist die Sicherung und wird per Spawn-Test gepinnt (`test/al-p2b-silence-route.test.js`,
+AL-P2b-3/AL-P2b-4), nicht per Kommentar behauptet. Das Treiber-Skript
+(`scripts/al-p2-spike-driver.mjs`) ist read-mostly mit `--dry-run`-Default, verweigert den
+Dienst, sobald die Live-DID `+17067101188` oder der Live-Assistant-Praefix
+`assistant-dcf48d08` in **irgendeinem** Argument auftaucht, benutzt und veraendert
+`scripts/telnyx-assistant-provision.mjs` **nicht**, schreibt den Vorher-Zustand **einmalig**
+als Snapshot (Allowlist-Projektion ohne Secrets) und loest den Messanruf ueber die
+**regulaere** `POST /api/calls` aus — alle Safety-Gates laufen (Absolute Regel 1).
+
+**Benannte Folge (bewusst akzeptiert).** Ob Telnyx die Webhooks einer **frisch angelegten**
+TeXML-App mit demselben Account-Ed25519-Key signiert, ist live unbestaetigt. Faellt es aus,
+antwortet die Route 403 und der Testanruf ist verloren — diagnostizierbar in einem Log-Griff
+ueber die `[voice-signature]`-Zeile. Es wird **keine** Signatur-Ausnahme auf Vorrat gebaut.
+Die Diagnosezeile bei `To`-Mismatch nennt beide Rufnummern im Klartext; die Spec erlaubt das
+ausdruecklich (es sind unsere eigenen Wegwerf-DIDs) und ohne sie endete ein fehlgeleiteter
+Testanruf stumm.
+
+**Rueckbau:** Branch verwerfen. Betrieblich zusaetzlich
+`node scripts/al-p2-spike-driver.mjs --restore --apply`, bis `restored=true` gemeldet wird
+(Verifikation per **Objekt-GET** gegen `2982643896460248193`, nicht per Behauptung), danach
+`data/al-p2-spike-snapshot.json` loeschen. Steht als Schritt 4 in
+`tasks/al-testcall-checklist.md`.
+
+**Ausdruecklich NICHT geaendert:** alle Safety-Gates (Denylist/Land-Gate/Stundenlimit/
+Budget-Guard/Max-Gespraechsdauer/Provider-Signaturpruefung), der Offenlegungssatz, jede
+bestehende `/voice/*`-Route, die Exemption-Liste in `src/wiring/auth-gate.js`, `/api/*`,
+`scripts/telnyx-assistant-provision.mjs`, `.env.example`/`render.yaml` (keine neue
+Env-Variable — der Spike nutzt `TELNYX_SSE_SPIKE_CALLEE` aus AL-P2).
+
+---
+
 ## SECRETS-HYGIENE — Inventar, Rotation, Provider-Minimalrechte (begleitend, kein Einmal-Gate)
 
 > Hierher gezogen aus `docs/RUNBOOK-OPERATOR.md` Gate 7 (2026-07-28), als das Operator-Runbook
