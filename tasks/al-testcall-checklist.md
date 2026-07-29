@@ -64,3 +64,41 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 | AL-P13 | **Abnahme 4 (Live-Teil):** X parallele Polls ueber Y Minuten am ECHTEN `/mcp`, ohne dass sich der Client selbst mit 429 blockiert | keine `429` in den Render-Logs waehrend eines Anrufs mit durchgehendem Polling. Die Arithmetik (`60000/22000 * 4` ~ 11 Requests/min gegen `RATE_LIMIT_PER_MIN`) ist testseitig gepinnt — der Live-Beleg fehlt | offen |
 | AL-P13 | **Abnahme 7:** der einmalige Berechtigungs-Hinweis am `place_call`-Ergebnis genuegt — kein Klick pro Rueckfrage | im echten claude.ai-Connector: nach einmaligem Setzen der Werkzeug-Berechtigung auf „Zulassen" kommen die Folge-Polls ohne weitere Rueckfrage durch | offen |
 | AL-P13 | Datenschutz-Grenze fuer AL-P14 vormerken: in P13 stammen Consult-Fragen NUR aus `context.open_questions` (Auftrag des Nutzers), NIE aus fremder Rede | Owner-Entscheidung dokumentiert, BEVOR AL-P14 Fragen aus dem laufenden Gespraech formuliert — dann exportiert ein Consult Aussagen eines Dritten, der nie eingewilligt hat | offen |
+
+---
+
+## BLOCKER Nr. 1 — ohne den geht die Kette nicht weiter
+
+**AL-P2 (SSE-Spike) braucht einen Deploy. Er ist die einzige Entscheidung, an der noch
+7 Phasen haengen: AL-P7, AL-P7b, AL-P10b, AL-P14, AL-P15.**
+
+Warum die Session ihn nicht selbst fahren konnte: Telnyx erreicht unseren Custom-LLM-Shim
+ueber `base_url = <oeffentliche URL>/v1`. Der Spike misst, ob Telnyx unseren SSE-Strom
+inkrementell konsumiert — dafuer muss der Verzoegerungs-Schalter **im laufenden, oeffentlich
+erreichbaren Shim** stecken. Deployen war dieser Session untersagt, und einen Tunnel auf den
+Entwicklungsrechner deckt die Freigabe nicht.
+
+**Was der Owner tun muss, in dieser Reihenfolge:**
+
+1. **Entscheiden, wo der Spike laeuft.** Zwei Wege:
+   - **(a) Wegwerf-Service auf Render** mit dem Spike-Branch — beruehrt den Live-Dienst nicht.
+     Sauberste Variante, kostet einen zusaetzlichen Service.
+   - **(b) Tunnel** (ngrok/cloudflared) auf einen lokal laufenden Shim. Billiger, aber ein
+     lokaler Server mit Live-Zugangsdaten haengt am oeffentlichen Netz.
+2. **Wegwerf-Umgebung anlegen** — Freigabe liegt vor, Bestand ist gemessen:
+   - Absender-DID: `+18643028341` (Tenant `owner`, seit 2026-06-28 ungenutzt)
+   - Ziel-DID (nimmt ab und schweigt): `+15739090177` (seit 2026-07-24 ungenutzt)
+   - **`+17067101188` NICHT anfassen** — das ist die live genutzte Nummer (Outbound 07-27).
+   - **Achtung, die Uebergabe-Notiz stimmt hier nicht:** es gibt **keine** herrenlose Ersatz-DID.
+     Alle drei sind `active` und je die einzige Nummer eines Tenants. Umhaengen nimmt dem
+     Tenant Inbound UND Outbound — **Vorher-Zustand notieren, hinterher per Objekt-GET
+     verifizieren, dass beide wieder auf `Hermes` (`2982643896460248193`) zeigen.**
+   - Wegwerf-Assistant: einer der drei ungenutzten `Blank`-Assistants.
+   - **NIE ueber `scripts/telnyx-assistant-provision.mjs`** — es schreibt die ganze Live-Config
+     aus der lokalen `.env`.
+3. **Spike fahren, Urteil festhalten:** Sprachbeginn nach ~1 s = **GRUEN** (AL-P7 ist
+   gerechtfertigt), nach ~8 s = **ROT** (AL-P7 wird ersatzlos gestrichen, AL-P7b nimmt Weg B).
+   Doppelt messbar: Aufnahme UND `audio_first_token_duration_ms`.
+   Den Telnyx-Turn-Timeout als Zahl mitprotokollieren (5/10/20/30 s).
+4. **Verzoegerungs-Schalter danach ersatzlos entfernen** — das ist Teil der Phase, nicht
+   „Flag auf 0". Er wurde bewusst **gar nicht erst** auf Vorrat gebaut.
