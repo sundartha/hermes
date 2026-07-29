@@ -59,6 +59,12 @@ function applyDirective(vr, d) {
     case DIRECTIVE.HANGUP:
       vr.hangup();
       break;
+    // Symmetrie-Pflicht: renderDirectives ist fail-closed (default: throw). Eine Direktive,
+    // die nur EIN Adapter kennt, macht den Port asymmetrisch und den throw zur Zufallsfalle -
+    // auch wenn der AL-P2b-Spike ausschliesslich Telnyx faehrt.
+    case DIRECTIVE.PAUSE:
+      vr.pause({ length: d.seconds });
+      break;
     case DIRECTIVE.STREAM: {
       const s = vr.connect().stream({ url: d.url });
       for (const p of d.params) s.parameter(p);

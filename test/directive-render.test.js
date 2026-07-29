@@ -5,6 +5,7 @@ import {
   say,
   gather,
   hangup,
+  pause,
   redirect,
   stream,
   VOICE_PROFILE,
@@ -209,6 +210,14 @@ test("EN/R9: leeres Gather traegt en-GB-STT (volles BCP-47, nicht 'en')", () => 
 // in gatherOpts und darf NICHT sprachabhaengig werden - nur `language` kommt aus dem Profil.
 // Die DE/FR/EN-Snapshots oben enthalten den Wert je einzeln; erst diese Schleife formuliert
 // ihn als sprachuebergreifende Invariante (ein neues Profil erbt sie automatisch).
+// AL-P2b (WEGWERF, nie nach master): die neutrale pause-Direktive muss BEIDE Adapter
+// bedienen - renderDirectives ist fail-closed (default: throw), eine nur einseitig
+// bekannte Direktive machte den Port asymmetrisch. Additiv, kein Bestandsfall geaendert.
+test("AL-P2b: Pause + Hangup -> TwiML byte-identisch", () => {
+  const out = renderDirectives([pause(180), hangup()]);
+  assert.equal(out, XML + '<Response><Pause length="180"/><Hangup/></Response>');
+});
+
 const TWILIO_STT_MODEL = "deepgram_nova-2-general";
 test("VOICE-22 (Mechanismus, gruen) - Twilio-Gather traegt fuer JEDES Voice-Profil dasselbe STT-Modell", () => {
   for (const profile of Object.values(VOICE_PROFILE)) {
