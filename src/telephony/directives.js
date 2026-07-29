@@ -20,7 +20,6 @@ export const DIRECTIVE = Object.freeze({
   HANGUP: "hangup",
   REDIRECT: "redirect",
   STREAM: "stream", // Realtime: Media-Stream an die Bridge
-  PAUSE: "pause", // Stille halten (Sekunden), ohne aufzulegen
 });
 
 // --- Builder (intentions-ausdrueckende Namen, <=3 Args via Objekt-Param) ---
@@ -59,11 +58,6 @@ export const gather = ({
 });
 
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
-
-// Stille von `seconds` Sekunden, ohne den Leg zu beenden. Einziger Aufrufer ist heute
-// die AL-P2b-Wegwerf-Route (abnehmen und schweigen); der Wert kommt vom Aufrufer aus
-// config (G35), nie als Literal aus dem Renderer.
-export const pause = (seconds) => ({ kind: DIRECTIVE.PAUSE, seconds });
 
 export const redirect = (url) => ({ kind: DIRECTIVE.REDIRECT, url });
 

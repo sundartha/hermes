@@ -6,14 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
-import {
-  say,
-  gather,
-  hangup,
-  pause,
-  redirect,
-  VOICE_PROFILE,
-} from "../src/telephony/directives.js";
+import { say, gather, hangup, redirect, VOICE_PROFILE } from "../src/telephony/directives.js";
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -267,14 +260,6 @@ test("EN/R9: Gather-STT-Locale ist en-GB (volles BCP-47, nicht 'en'); Nova-3 meh
 // & < > " ' - CJK-Zeichen sind keine XML-Sonderzeichen und muessen unveraendert durch
 // den TeXML-Renderpfad laufen. Der Fehlermodus waere unsichtbar (Mojibake/abgeschnitten),
 // deshalb zusaetzlich die Bytezahl-Invariante wie in de-umlaut-orthography P1-U4.
-// AL-P2b (WEGWERF, nie nach master): "abnehmen und schweigen" - genau dieses TeXML
-// liefert src/routes/voice-spike.js. Der Renderer bleibt der EINZIGE Telnyx-Ort mit
-// TeXML-Markup (die Route baut keinen String selbst). Additiv, kein Bestandsfall geaendert.
-test("AL-P2b: Pause + Hangup -> TeXML byte-identisch", () => {
-  const out = renderDirectives([pause(180), hangup()]);
-  assert.equal(out, XML + '<Response><Pause length="180"/><Hangup/></Response>');
-});
-
 const CJK_SPEECH = "田中様、お電話ありがとうございます";
 test("FMT-24 (Mechanismus, gruen) - CJK-Text passiert escapeXml und den Say-Renderpfad unveraendert", () => {
   const out = renderDirectives([say(CJK_SPEECH, VOICE_PROFILE.DE_FEMALE_NEURAL), hangup()]);

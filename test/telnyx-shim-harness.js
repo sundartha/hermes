@@ -11,7 +11,6 @@ import { makeTelnyxLlmShim } from "../src/telnyx-llm-shim.js";
 import { localeFor } from "../src/i18n/locales.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "../src/telnyx-conversation-watchdog.js";
 import { makeCallControlTerminator } from "../src/telnyx-call-terminate.js";
-import { sleepMs } from "../src/utils/timer.js";
 import { config } from "../src/config.js";
 
 const SSE_DATA_PREFIX = "data: ";
@@ -131,22 +130,8 @@ export function makeHandler({
   agentTurn,
   voiceControl,
   watchdog = noopWatchdog(),
-  // AL-P2: Prod-Default = der geteilte unref-Timer; die Spike-Tests reichen sleepSpy durch.
-  sleep = sleepMs,
 }) {
-  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog, sleep });
-}
-
-// AL-P2: Fake-Pause - wartet nicht, protokolliert nur ms UND wie viele SSE-Chunks zum
-// Zeitpunkt der Pause schon geschrieben waren. Erst der zweite Wert beweist die
-// REIHENFOLGE (erster Sprech-Chunk raus, DANN gewartet).
-export function sleepSpy(res) {
-  const calls = [];
-  async function sleep(ms) {
-    calls.push({ ms, chunksBefore: res.chunks.length });
-  }
-  sleep.calls = calls;
-  return sleep;
+  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog });
 }
 
 export function reqWith({ auth, body = {} } = {}) {

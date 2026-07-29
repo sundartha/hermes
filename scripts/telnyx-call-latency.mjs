@@ -25,29 +25,19 @@
 // UUID am Call gespeichert hat.
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
-import { telnyxRequest } from "../src/telephony/adapters/telnyx/http-client.js";
+import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
 
 const AI_CONVERSATIONS_PATH = "/v2/ai/conversations";
 const ASSISTANT_ROLE = "assistant";
 // AL-P1: die vier Posten, die Telnyx BENENNT, getrennt von der Gesamtzahl. Erst diese
 // Trennung macht "der Rest ist benannt und beziffert" (Abnahme 2) berechenbar statt
 // behauptet. LATENCY_FIELDS bleibt die EINE Liste fuer Tabelle+Mediane (G5).
-const AUDIO_FIRST_TOKEN_FIELD = "audio_first_token_duration_ms";
 const ACCOUNTED_LATENCY_FIELDS = Object.freeze([
   "transcription_duration_ms",
   "llm_first_token_duration_ms",
-  AUDIO_FIRST_TOKEN_FIELD,
+  "audio_first_token_duration_ms",
   "start_speaking_plan_extra_wait_duration_ms",
 ]);
-// AL-P2 (SSE-Spike): Urteilsschwellen als ANTEIL der armierten Verzoegerung. Unter der
-// Haelfte hat Telnyx gesprochen, bevor der Rest ueberhaupt am Draht war (inkrementell); ab
-// 90 % hat es die Verzoegerung mitgewartet (gepuffert bis data:[DONE]). Dazwischen wird
-// bewusst KEIN Urteil gefaellt - an dieser Zahl haengt eine ganze Phase (AL-P7).
-const SPIKE_INCREMENTAL_MAX_SHARE = 0.5;
-const SPIKE_BUFFERED_MIN_SHARE = 0.9;
-// AL-P2b: exportiert, damit das Treiber-Skript denselben Flag-Namen benutzt statt ein
-// zweites Literal zu fuehren (G5).
-export const SPIKE_FLAG = "--spike-delay-ms";
 const TOTAL_LATENCY_FIELD = "end_user_perceived_latency_ms";
 // K0 (Plan §2): die fuenf Latenz-Bestandteile, die Telnyx pro assistant-Message im
 // metadata-Objekt mitliefert - EINE Liste (G5), sowohl fuer Tabellen-Spalten als auch fuer
@@ -60,11 +50,17 @@ const UNACCOUNTED_COLUMN = "unaccounted";
 const NO_VALUE = "-"; // Platzhalter fuer fehlende Metadaten-Felder in der Tabelle/Konsole
 const COLUMN_WIDTH = 12; // feste Spaltenbreite (kein Table-Package, keine neue Dependency)
 
-// GET-only Wrapper um den geteilten Telnyx-HTTP-Baustein (AL-P2b-Fix1/S2-1,
-// src/telephony/adapters/telnyx/http-client.js) - EINE Fehlerstelle (G5), dieselbe
-// Konvention wie scripts/telnyx-assistant-provision.mjs und scripts/al-p2-spike-driver.mjs.
+function headers() {
+  return { Authorization: `Bearer ${config.telephony.telnyxApiKey}` };
+}
+
+// GET-only Fetch-Wrapper: EINE Fehlerstelle (G5), gleiche Konvention wie
+// telnyx-assistant-provision.mjs (assertTelnyxOk, {data}-Envelope-Unwrap).
 async function getJson(path, op) {
-  return telnyxRequest({ method: "GET", path, op });
+  const res = await fetch(`${config.telephony.telnyxApiBase}${path}`, { method: "GET", headers: headers() });
+  await assertTelnyxOk(res, op, { attachStatus: true });
+  const json = await res.json().catch(() => ({}));
+  return json.data ?? json;
 }
 
 // Conversation-Metadaten (Kopfzeile) - best-effort: wirft NICHT, wenn die Ressource fehlt
@@ -84,12 +80,6 @@ async function fetchConversationSummary(conversationId) {
 async function fetchMessages(conversationId) {
   const data = await getJson(`${AI_CONVERSATIONS_PATH}/${conversationId}/messages`, "fetchMessages");
   return Array.isArray(data) ? data : [];
-}
-
-// AL-P2b: Abruf + assistant-Filter als EINE Stelle (G5) - main() und das Treiber-Skript
-// (scripts/al-p2-spike-driver.mjs) brauchen exakt dieselben Zeilen fuer sseSpikeVerdict.
-export async function assistantTurnRowsFor(conversationId) {
-  return assistantTurnRows(await fetchMessages(conversationId));
 }
 
 // Reine Extraktion (P11 testbar, kein IO): EINE assistant-Message -> Zeile mit sent_at +
@@ -155,18 +145,6 @@ export function unaccountedVerdict(rows) {
   return { medianMs, exceedsTolerance };
 }
 
-// AL-P2: Urteil des SSE-Spikes, gemessen am Median von audio_first_token_duration_ms ueber
-// alle assistant-Turns, bezogen auf die ARMIERTE Verzoegerung. "no_data" statt einer
-// erfundenen 0, wenn Telnyx das Feld nicht liefert (Muster unaccountedVerdict) - der
-// Zweitbeleg ist ohnehin die Aufnahme.
-export function sseSpikeVerdict(rows, spikeDelayMs) {
-  const medianMs = median(rows.map((r) => r[AUDIO_FIRST_TOKEN_FIELD]));
-  if (typeof medianMs !== "number") return { medianMs, status: "no_data" };
-  if (medianMs < spikeDelayMs * SPIKE_INCREMENTAL_MAX_SHARE) return { medianMs, status: "incremental" };
-  if (medianMs >= spikeDelayMs * SPIKE_BUFFERED_MIN_SHARE) return { medianMs, status: "buffered" };
-  return { medianMs, status: "inconclusive" };
-}
-
 function fmt(value) {
   return typeof value === "number" ? String(Math.round(value)) : NO_VALUE;
 }
@@ -203,43 +181,18 @@ function printTable(rows) {
   );
 }
 
-// AL-P2: Fusszeile des Spike-Urteils. Eigene Funktion, damit printTable unberuehrt bleibt
-// (die Tabelle ist der Bestand, das Urteil eine zusaetzliche, opt-in Zeile).
-function printSpikeVerdict(rows, spikeDelayMs) {
-  const { medianMs, status } = sseSpikeVerdict(rows, spikeDelayMs);
-  console.log(
-    `sse-spike  delay=${spikeDelayMs} ms  ${AUDIO_FIRST_TOKEN_FIELD}-median=${fmt(medianMs)} ms  turns=${rows.length}  status=${status}`,
-  );
-  console.log(
-    "sse-spike  Deutung: incremental=GRUEN (AL-P7 gerechtfertigt) | buffered=ROT (AL-P7 entfaellt) | inconclusive/no_data=erneut messen, die Aufnahme entscheidet",
-  );
-}
-
 function failClosed(reason) {
   console.error(`Grund: ${reason}`);
-  console.error(
-    `Aufruf: node scripts/telnyx-call-latency.mjs <telnyx_conversation_id> | --call <hermes-call-id> [${SPIKE_FLAG} <ms>]`,
-  );
+  console.error("Aufruf: node scripts/telnyx-call-latency.mjs <telnyx_conversation_id> | --call <hermes-call-id>");
   process.exit(1);
 }
 
-// AL-P2: --spike-delay-ms <ms> aus der Argumentliste herausloesen. Fehlender/ungueltiger
-// Wert -> Fehler statt stiller Ignoranz (ein stumm verschluckter Wert wuerde ein Urteil
-// ohne Bezugsgroesse drucken).
-function extractSpikeDelay(args) {
-  const i = args.indexOf(SPIKE_FLAG);
-  if (i < 0) return { rest: args };
-  const ms = Number.parseInt(args[i + 1] ?? "", 10);
-  if (!Number.isSafeInteger(ms) || ms <= 0)
-    return { error: `${SPIKE_FLAG} braucht eine positive Ganzzahl in Millisekunden` };
-  return { rest: [...args.slice(0, i), ...args.slice(i + 2)], spikeDelayMs: ms };
-}
-
-// AL-P1: das AUSWERTUNGSZIEL aus den (spike-bereinigten) Argumenten.
+// AL-P1: reine Argumentform (statt process.argv-Gefummel in main).
 //   <conversation-uuid>       -> { conversationId }
 //   --call <hermes-call-id>   -> { hermesCallId }
 //   alles andere              -> { error: "<Grund>" }
-function latencyTarget(args) {
+export function parseLatencyArgs(argv) {
+  const args = argv.slice(2);
   if (args.length === 0) return { error: "kein Argument uebergeben (Telnyx-Conversation-ID fehlt)" };
   if (args[0] === "--call") {
     const hermesCallId = args[1];
@@ -249,23 +202,11 @@ function latencyTarget(args) {
   return { conversationId: args[0] };
 }
 
-// Reine Argumentform (statt process.argv-Gefummel in main). AL-P2: das optionale
-// --spike-delay-ms <ms> wird VORAB herausgeloest (Position egal) und als spikeDelayMs an das
-// Ergebnis gehaengt; ohne das Flag bleibt die Bestandsform exakt unveraendert.
-export function parseLatencyArgs(argv) {
-  const { rest, spikeDelayMs, error } = extractSpikeDelay(argv.slice(2));
-  if (error) return { error };
-  const target = latencyTarget(rest);
-  return spikeDelayMs === undefined || target.error ? target : { ...target, spikeDelayMs };
-}
-
 // AL-P1: --call loest die interne Hermes-call.id gegen die persistierte Telnyx-UUID auf,
 // damit die Tabelle ohne Handarbeit entsteht. Der Store-Zugang wird DYNAMISCH importiert
 // und NUR hier - so bleibt der Offline-Unit-Test dieses Skripts (test/telnyx-call-
 // latency.test.js importiert nur die reinen Funktionen) frei von jedem DB-Pool.
-// AL-P2b: exportiert - das Treiber-Skript loest dieselbe UUID auf demselben pg-Forensik-
-// Pfad auf; eine zweite Aufloesung waere ein zweites Fehlerbild (G5).
-export async function conversationIdForCall(hermesCallId) {
+async function conversationIdForCall(hermesCallId) {
   const { pgBackendActive, readAcrossTenants } = await import("./prod-read.mjs");
   if (!pgBackendActive()) failClosed("--call ist nur im pg-Backend (STORE_BACKEND=pg) aufloesbar");
   const rows = await readAcrossTenants((client) =>
@@ -289,11 +230,11 @@ async function main() {
   const summary = await fetchConversationSummary(conversationId);
   if (summary) console.log(`Conversation ${conversationId} (status=${summary.status ?? NO_VALUE})`);
 
-  const rows = await assistantTurnRowsFor(conversationId);
+  const messages = await fetchMessages(conversationId);
+  const rows = assistantTurnRows(messages);
   if (rows.length === 0) failClosed(`keine assistant-Messages in Conversation ${conversationId} gefunden`);
 
   printTable(rows);
-  if (args.spikeDelayMs) printSpikeVerdict(rows, args.spikeDelayMs);
 }
 
 // Nur als Skript ausfuehren, NICHT beim Import (Muster telnyx-assistant-provision.mjs -

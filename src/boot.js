@@ -377,17 +377,6 @@ export function assistantPathLabel(assistantEnabled) {
     : "aus (TELNYX_AI_ASSISTANT_ENABLED=false)";
 }
 
-// AL-P2: der SSE-Spike-Schalter ist ein BEFRISTETER Diagnose-Eingriff im Antwortpfad. Er
-// erscheint bei jedem Start im Banner, damit kein Deploy ihn unbemerkt weiterfaehrt
-// (Vorbild: Assistant-Pfad-Zeile aus AL-P1). "" = aus -> keine Zeile. Die Zielnummer wird
-// NIE gedruckt (kein PII im Banner, wie bei den Nummern-Gates).
-export function sseSpikeBannerLine({ sseSpikeDelayMs, sseSpikeCallee }) {
-  if (!sseSpikeDelayMs) return "";
-  return sseSpikeCallee
-    ? `SSE-Spike:      AKTIV (${sseSpikeDelayMs} ms, nur fuer die konfigurierte Wegwerf-Nummer) - nach der Messung ersatzlos entfernen`
-    : `SSE-Spike:      wirkungslos (${sseSpikeDelayMs} ms gesetzt, TELNYX_SSE_SPIKE_CALLEE fehlt)`;
-}
-
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -401,8 +390,6 @@ function logBootBanner(config, port) {
     `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
-  const sseSpike = sseSpikeBannerLine(config.telnyx.telnyxAssistant);
-  if (sseSpike) console.log(`  ${sseSpike}`);
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );

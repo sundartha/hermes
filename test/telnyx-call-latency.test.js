@@ -9,8 +9,6 @@ import {
   assistantTurnRows,
   median,
   medianRow,
-  parseLatencyArgs,
-  sseSpikeVerdict,
 } from "../scripts/telnyx-call-latency.mjs";
 
 // === turnRowFrom =====================================================================
@@ -142,55 +140,4 @@ test("medianRow: leeres Zeilen-Array -> jedes Feld undefined (kein Crash)", () =
 
   assert.equal(meds.end_user_perceived_latency_ms, undefined);
   assert.equal(meds.llm_first_token_duration_ms, undefined);
-});
-
-// === AL-P2: SSE-Spike-Urteil + Flag ====================================================
-
-// Eine Zeile mit gegebenem audio_first_token_duration_ms (das Mass des Spikes).
-const audioFirstTokenRow = (ms) => turnRowFrom({ sent_at: "t", metadata: { audio_first_token_duration_ms: ms } });
-
-test("AL-P2-18: sseSpikeVerdict - incremental / buffered / inconclusive / no_data", () => {
-  const spikeDelayMs = 8000;
-
-  assert.deepEqual(sseSpikeVerdict([audioFirstTokenRow(900), audioFirstTokenRow(1100)], spikeDelayMs), {
-    medianMs: 1000,
-    status: "incremental",
-  });
-  assert.deepEqual(sseSpikeVerdict([audioFirstTokenRow(8100)], spikeDelayMs), {
-    medianMs: 8100,
-    status: "buffered",
-  });
-  assert.deepEqual(sseSpikeVerdict([audioFirstTokenRow(5000)], spikeDelayMs), {
-    medianMs: 5000,
-    status: "inconclusive",
-  });
-  assert.deepEqual(sseSpikeVerdict([turnRowFrom({ sent_at: "t", metadata: {} })], spikeDelayMs), {
-    medianMs: undefined,
-    status: "no_data",
-  });
-});
-
-test("AL-P2-19: parseLatencyArgs - --spike-delay-ms vor/nach dem Ziel, auch mit --call", () => {
-  assert.deepEqual(parseLatencyArgs(["node", "s", "conv-1", "--spike-delay-ms", "8000"]), {
-    conversationId: "conv-1",
-    spikeDelayMs: 8000,
-  });
-  assert.deepEqual(parseLatencyArgs(["node", "s", "--spike-delay-ms", "8000", "conv-1"]), {
-    conversationId: "conv-1",
-    spikeDelayMs: 8000,
-  });
-  assert.deepEqual(parseLatencyArgs(["node", "s", "--call", "call_1", "--spike-delay-ms", "5000"]), {
-    hermesCallId: "call_1",
-    spikeDelayMs: 5000,
-  });
-});
-
-test("AL-P2-20: parseLatencyArgs - fehlender/ungueltiger Flag-Wert -> error; ohne Flag Bestandsform", () => {
-  assert.match(parseLatencyArgs(["node", "s", "conv-1", "--spike-delay-ms"]).error, /--spike-delay-ms/);
-  assert.match(parseLatencyArgs(["node", "s", "conv-1", "--spike-delay-ms", "acht"]).error, /--spike-delay-ms/);
-  assert.match(parseLatencyArgs(["node", "s", "conv-1", "--spike-delay-ms", "0"]).error, /--spike-delay-ms/);
-
-  const plain = parseLatencyArgs(["node", "s", "conv-1"]);
-  assert.deepEqual(plain, { conversationId: "conv-1" });
-  assert.equal(plain.spikeDelayMs, undefined, "ohne Flag bleibt die Bestandsform unveraendert");
 });

@@ -28,7 +28,6 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-
 import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
-import { makeSpikeSilenceRoutes } from "./routes/voice-spike.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeTenantWriteRoutes } from "./routes/api-tenant-write.js";
 import { makeProfileRoutes } from "./routes/api-profiles.js";
@@ -296,14 +295,6 @@ export async function buildApp(deps) {
       watchdog: conversationWatchdog,
     }),
   );
-
-  // ---- AL-P2b (WEGWERF, nie nach master): "abnehmen und schweigen" fuer den SSE-Spike --
-  // Mount-Position ist SICHERHEITSTRAGEND und MUSS nach makeVoiceRoutes bleiben: die
-  // /voice-Signatur-MW dort ruft next(), der Voice-Router findet keine Route, Express
-  // reicht hierher weiter - die Route erbt damit die fail-closed Provider-Signaturpruefung
-  // (Regel 3) UND die bestehende /voice-Basic-Auth-Exemption, ohne EINE neue Ausnahme.
-  // Vorgezogen waere sie unsigniert oeffentlich. Gepinnt in test/al-p2b-silence-route.test.js.
-  app.use(makeSpikeSilenceRoutes({ config, voiceRender }));
 
   // ================= REST-API (Dashboard + MCP-Tools) =================
 

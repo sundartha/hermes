@@ -14,7 +14,6 @@ import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
-import { sleepMs } from "./utils/timer.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -33,9 +32,6 @@ const HTTP_PAYMENT_REQUIRED = 402;
 // Per-IP-Fenster (middleware.js RATE_WINDOW_MS) - eigene Achse, eigenes Sweep-Intervall.
 const SHIM_RATE_WINDOW_MS = 60_000;
 const SHIM_RATE_SWEEP_MS = 5 * 60_000;
-// AL-P2: erstes Satzende samt folgendem Zwischenraum - die Trennstelle zwischen dem Teil,
-// der SOFORT rausgeht, und dem Rest. Nur im Spike-Pfad benutzt.
-const FIRST_SENTENCE = /^[^.!?]*[.!?]+\s*/;
 
 // Statischer Bearer-Wert (ohne "Bearer "-Praefix) aus dem Authorization-Header;
 // fail-closed "" (kein Header/kein Praefix). EINE Quelle (G5) fuer den Slice.
@@ -199,55 +195,14 @@ function streamChunk(envelope, delta, finishReason) {
   };
 }
 
-// AL-P2 (Spike): teilt den Sprechtext am ERSTEN Satzende in head (geht sofort raus) und
-// tail (folgt nach der Verzoegerung). Ohne Satzende oder ohne Rest liegt alles im head -
-// dann misst der Spike immer noch, ob Telnyx VOR data:[DONE] zu sprechen beginnt.
-export function splitAtFirstSentence(content) {
-  const text = typeof content === "string" ? content : "";
-  const match = text.match(FIRST_SENTENCE);
-  const head = match ? match[0] : text;
-  return { head, tail: text.slice(head.length) };
-}
-
-// AL-P2 (Spike-Schalter, streng eingegrenzt): die Verzoegerung greift NUR, wenn eine
-// Verzoegerung UND eine Wegwerf-Zielnummer konfiguriert sind UND dieser Call exakt an
-// diese Nummer geht (call.to ist an der API-Kante deterministisch nach E.164 normalisiert).
-// Jede andere Konstellation -> 0 = Bestandsverhalten. Das ist die EINE Stelle, an der
-// entschieden wird, ob ein echter Kundenanruf betroffen sein kann - exportiert, damit
-// genau das ein Testgegenstand ist statt einer Behauptung.
-export function sseSpikeDelayMsFor(call, assistantConfig) {
-  const delayMs = assistantConfig?.sseSpikeDelayMs ?? 0;
-  const callee = assistantConfig?.sseSpikeCallee ?? "";
-  if (!delayMs || !callee) return 0;
-  return call && call.to === callee ? delayMs : 0;
-}
-
-// AL-P2: baut den Pause-Haken fuer GENAU diesen Turn - null, wenn der Spike nicht greift
-// (Normalbetrieb, kein Timer, kein zusaetzlicher Tick). Geloggt wird beim ZIEHEN, nicht
-// beim Bauen: die Zeile soll die tatsaechlich gewartete Antwort belegen.
-function spikePauseFor({ callId, delayMs, sleep }) {
-  if (!delayMs) return null;
-  return async () => {
-    logShimSseSpike({ callId, delayMs });
-    await sleep(delayMs);
-  };
-}
-
 // stream:true -> OpenAI-spec-konforme SSE-Sequenz: role-Delta-Chunk, dann content-Delta-
 // Chunk, dann SEPARATER finish_reason-Chunk (delta:{}), dann data:[DONE]. Der Turn-TEXT
 // bleibt unveraendert - nur die Draht-Repraesentation wird spec-konform.
-// AL-P2: `pause` ist der BEFRISTETE Spike-Haken - eine Funktion, die zwischen dem ersten
-// Sprech-Chunk und dem Rest wartet. Ohne Pause (null, Normalbetrieb) bleibt der Rest leer,
-// es wird kein zweiter Content-Chunk geschrieben und die Sequenz ist chunk-fuer-chunk
-// dieselbe wie zuvor.
-async function writeStreamingCompletion(res, { model, content, pause }) {
+function writeStreamingCompletion(res, { model, content }) {
   res.setHeader("Content-Type", SSE_CONTENT_TYPE);
   const envelope = completionEnvelope(model);
-  const { head, tail } = pause ? splitAtFirstSentence(content) : { head: content, tail: "" };
   writeSseEvent(res, streamChunk(envelope, { role: ASSISTANT_ROLE }, null));
-  writeSseEvent(res, streamChunk(envelope, { content: head }, null));
-  if (pause) await pause();
-  if (tail) writeSseEvent(res, streamChunk(envelope, { content: tail }, null));
+  writeSseEvent(res, streamChunk(envelope, { content }, null));
   writeSseEvent(res, streamChunk(envelope, {}, FINISH_STOP));
   res.write(SSE_DONE);
   res.end();
@@ -267,11 +222,9 @@ function writeJsonCompletion(res, { model, content }) {
 // Aufrufer (rate/budget/happy/degradation) uebergeben denselben ausgehandelten stream-Modus,
 // damit die Modus-Weiche NICHT an vier Stellen dupliziert wird (S2). stream ist ein
 // Protokoll-Parameter, der mit dem Request reist - kein Verhaltens-Selektor des Aufrufers.
-// AL-P2: `pause` reist NUR mit dem SSE-Modus. Im JSON-Modus gibt es keine Chunk-Reihenfolge,
-// die man verzoegern koennte - der Parameter wird dort bewusst ignoriert.
-async function writeCompletion(res, { model, content, stream, pause = null }) {
-  if (stream) return await writeStreamingCompletion(res, { model, content, pause });
-  writeJsonCompletion(res, { model, content });
+function writeCompletion(res, { model, content, stream }) {
+  if (stream) writeStreamingCompletion(res, { model, content });
+  else writeJsonCompletion(res, { model, content });
 }
 
 // OBS-1 (Observability Shim-Gates): EINE Quelle (G5) fuer die strukturierte, PII-/secret-
@@ -309,13 +262,6 @@ function logShimTurnOk(payload) {
 // hat - PII-frei, kein Text).
 function logShimFarewell(payload) {
   console.log(formatShimLine("farewell_scheduled", payload));
-}
-
-// AL-P2: der Spike-Schalter ist NIE stumm. Jede verzoegerte Antwort schreibt eine Zeile
-// (callId + delayMs, PII-frei: keine Nummer, kein Text). Ein Schalter, den kein Log sieht,
-// waere genau die "abgeschaltete Sicherung", die CLAUDE.md verbietet.
-function logShimSseSpike(payload) {
-  console.warn(formatShimLine("sse_spike_delay", payload));
 }
 
 // OBS-FLAG (TELNYX_SHIM_DEBUG_SHAPE, default aus): Shape-Dump als eigenes Watched-Token
@@ -360,9 +306,6 @@ export function makeTelnyxLlmShim({
   voiceControl,
   watchdog,
   metrics = defaultMetrics,
-  // AL-P2: injizierbar, damit die Spike-Pause im Test ohne echte Wartezeit beweisbar ist
-  // (Muster setTimer/clearTimer im Watchdog). Prod-Default = der geteilte unref-Timer.
-  sleep = sleepMs,
 }) {
   // P5 (Scope 4, Carryover aus P4): per-callId-Fixed-Window - Toll-/Token-Fraud-Bremse
   // VOR agentTurn, zusaetzlich zum globalen Per-IP-Limiter + Budget-Cap. EINE Quelle
@@ -468,13 +411,13 @@ export function makeTelnyxLlmShim({
     // schuetzen, nur Kosten zu stoppen (Regel 1).
     async function killCallForBudget(reason) {
       logShimGate({ reason, callId: call.id, tenantId: call.tenantId, turnSeq });
-      await writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
+      writeCompletion(res, { model, content: locale.budgetExhaustedHangup, stream: wantsStream });
       await terminateCall(call.id);
     }
 
     if (loopExceeded) {
       logShimGate({ reason: "loop_guard", callId: call.id, turnSeq });
-      await writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
+      writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
       await terminateCall(call.id);
       return;
     }
@@ -484,7 +427,7 @@ export function makeTelnyxLlmShim({
     // (Muster Budget-Gate unten), damit Telnyx den Turn nicht als abgebrochen/stumm liest.
     if (!shimRateHit(call.id).allowed) {
       logShimGate({ reason: "rate_limited", callId: call.id, turnSeq });
-      return await writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
+      return writeCompletion(res, { model, content: locale.llmDegradedSpeech, stream: wantsStream });
     }
 
     // 6) Budget-Gate (Invariante 3 / Regel 1, Token-Achse): kein agentTurn-Aufruf bei
@@ -525,15 +468,7 @@ export function makeTelnyxLlmShim({
       if (isBudgetAxis(turn.stopReason)) return await killCallForBudget(turn.stopReason);
       endCall = turn.endCall === true;
       farewellChars = speechTextOf(turn).length;
-      // AL-P2 (befristet): nur DIESE Antwort kann verzoegert werden, und nur fuer die
-      // konfigurierte Wegwerf-Nummer. Die Notaus-Pfade oben bleiben sofortig (Regel 1).
-      const spikePause = spikePauseFor({
-        callId: call.id,
-        delayMs: sseSpikeDelayMsFor(call, config.telnyx.telnyxAssistant),
-        sleep,
-      });
-      // Abschiedssatz geht ZUERST raus
-      await writeCompletion(res, { model, content: turn.speech, stream: wantsStream, pause: spikePause });
+      writeCompletion(res, { model, content: turn.speech, stream: wantsStream }); // Abschiedssatz geht ZUERST raus
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
       // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie
@@ -554,7 +489,7 @@ export function makeTelnyxLlmShim({
       // in denselben kaputten Stream schreiben. Stattdessen nur end() (bestmoegliches
       // Aufraeumen); der Client sieht einen abgebrochenen Stream statt einer zweiten,
       // ueberlappenden Antwort. Regressionstest: T1 in telnyx-llm-shim.test.js.
-      if (!res.headersSent) await writeCompletion(res, { model, content, stream: wantsStream });
+      if (!res.headersSent) writeCompletion(res, { model, content, stream: wantsStream });
       else res.end();
       // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
       // endCall=true geliefert haben - der Fehler stammt dann aus writeCompletion selbst

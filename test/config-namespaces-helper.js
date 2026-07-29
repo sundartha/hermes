@@ -35,16 +35,12 @@ export function withConfigNamespaces(flatConfig) {
 // test-base-env-drift-Bug reproduzieren, s. Modul-Kommentar oben). withConfigNamespaces
 // haengt die Namespace-Getter an (dual-read: der migrierte Shim liest config.telnyx.
 // telnyxAssistant.X, Bestandsassertions auf den flachen Keys bleiben unveraendert gueltig).
-// AL-P2: sseSpike* default AUS (0/"") - alle Bestandstests bleiben damit unveraendert am
-// Bestandsverhalten, nur die Spike-Tests armieren den Schalter ausdruecklich.
 export function fakeTelnyxShimConfig({
   enabled = true,
   claudeModel = "claude-haiku-4-5",
   telnyxShimMaxTurnsPerMin = 100,
   telnyxShimSharedSecret = "shim-secret",
   telnyxShimDebugShape = false,
-  telnyxSseSpikeDelayMs = 0,
-  telnyxSseSpikeCallee = "",
 } = {}) {
   return withConfigNamespaces({
     claudeModel,
@@ -53,8 +49,6 @@ export function fakeTelnyxShimConfig({
       shimMaxTurnsPerMin: telnyxShimMaxTurnsPerMin,
       shimSharedSecret: telnyxShimSharedSecret,
       shimDebugShape: telnyxShimDebugShape,
-      sseSpikeDelayMs: telnyxSseSpikeDelayMs,
-      sseSpikeCallee: telnyxSseSpikeCallee,
     },
   });
 }

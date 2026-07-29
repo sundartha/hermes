@@ -158,8 +158,6 @@ function renderDirective(d, opts) {
       return `<Redirect method="POST">${escapeXml(d.url)}</Redirect>`;
     case DIRECTIVE.HANGUP:
       return "<Hangup/>";
-    case DIRECTIVE.PAUSE:
-      return `<Pause length="${escapeXml(d.seconds)}"/>`;
     case DIRECTIVE.STREAM:
       return renderStream(d);
     default:
