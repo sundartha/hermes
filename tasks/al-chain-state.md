@@ -21,7 +21,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P7b | — | — | — | offen |
 | AL-P8 | `phase/al-p8-bench-fix1` | PASS (1 Fix-Runde, 3412 gruen) | `61d7563` | **gemergt** — 2 Abnahmen (kosten Geld) |
 | AL-P9 | `phase/al-p9-briefing-impl` (NICHT der gemeldete) | PASS (0 Fix-Runden, 3426 gruen) | `479721e` | **gemergt** — Flag bleibt AUS |
-| AL-P10 | — | — | — | offen |
+| AL-P10 | `phase/al-p10-precall-research-fix1` | PASS (1 Fix-Runde, 3462 gruen) | `21a1f9c` | **gemergt** — Flag bleibt AUS |
 | AL-P10b | — | — | — | offen |
 | AL-P11 | — | — | — | offen |
 | AL-P12 | — | — | — | offen |
@@ -139,3 +139,15 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 
 - **AL-P9 legt keine neue Env-Variable an** — `.env.example` bekommt nur einen erklaerenden
   Kommentar. Keine Vier-Stellen-Pflicht, keine BASE_ENV-Drift.
+
+- **AL-P10 gemergt**, PASS nach 1 Fix-Runde, Verifikationslauf **3442/3442 gruen**.
+  **Spec-Fehler des Leads, hier korrigiert:** Abschnitt 9 dieser Kette schrieb AL-P10 den
+  Brave-Adapter samt `BRAVE_SEARCH_API_KEY` zu. Falsch — A3 des Plans trennt sauber:
+  **pre-call (AL-P10) = Anthropics serverseitiges `web_search`** im `llm.js`-Seam, ohne Key und
+  ohne zweiten Auftragsverarbeiter; **in-call (AL-P10b) = eigener Brave-Adapter**. Der
+  Clean-Code-Review hat den in AL-P10 angelegten Brave-Secret-Slot zu Recht als Scope-Drift
+  blockiert. Der Spec-Abschnitt ist berichtigt, damit AL-P10b nicht auf der falschen Annahme
+  aufsetzt.
+  Vier-Stellen-Pflicht fuer die neuen Variablen `RESEARCH_ENABLED` und
+  `RESEARCH_SEARCH_FEE_CENTS` vollstaendig erfuellt (`config.js`, `.env.example`, `render.yaml`,
+  `BASE_ENV` in `test/helpers.js`) — nachgeprueft, keine Drift.

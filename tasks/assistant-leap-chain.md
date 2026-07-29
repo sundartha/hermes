@@ -383,12 +383,17 @@ tragen darum exakt diese IDs.
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 10` (ausdruecklich **nur** die billige
   Sprosse — die In-Call-Recherche ist AL-P10b).
-- **Such-Anbieter ist Brave** (`BRAVE_SEARCH_API_KEY`), **nicht Exa** — Owner-Betriebserfahrung.
-  Exa bleibt dokumentierter Ausweichkandidat **hinter demselben Port**.
-- **Der Key wird zum BAUEN nicht gebraucht:** der Adapter entsteht gegen Fixtures. In
-  `.env.example` und `render.yaml` steht ein leerer, dokumentierter Platzhalter; **ohne Key ist
-  der Adapter fail-closed inaktiv** (kein Fallback auf „ungeprueft raus").
-- Flag `RESEARCH_ENABLED` bleibt **AUS**. Egress-Whitelist fail-closed (O3).
+- **KORREKTUR 2026-07-29 (diese Zeilen waren vorher falsch):** der Such-Anbieter dieser Phase ist
+  **Anthropics serverseitiges `web_search`** im bestehenden `src/llm.js`-Seam — **kein**
+  API-Key, **kein** zweiter Auftragsverarbeiter. So steht es in A3 des Plans:
+  „pre-call = Gruendlichkeit (Anthropics serverseitiges `web_search`)".
+  **Brave (`BRAVE_SEARCH_API_KEY`) gehoert ausschliesslich zu AL-P10b** (in-call =
+  Geschwindigkeit). Ein Secret-Slot fuer Brave in DIESER Phase ist Scope-Drift und wurde im
+  Review zu Recht als Blocker entfernt. Der gemeinsame Port `src/research/` hat zwei
+  Adapter-Plaetze; diese Phase fuellt nur den ersten.
+- Flag `RESEARCH_ENABLED` bleibt **AUS**, wirksam ist die **Schnittmenge** aus globalem Flag und
+  Per-Tenant-Setting `allowResearch` (beide Default aus). Egress-Riegel fail-closed (O3): die
+  Query wird ausschliesslich aus `goal`, `briefing`, `context`, `open_questions` komponiert.
 
 ### AL-P10b — `look_up`: Recherche IM Gespraech
 
