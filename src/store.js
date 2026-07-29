@@ -129,6 +129,10 @@ export const {
   // Laufzeit einen TypeError. Muster wie reserveExceedsBudget (reine Query).
   tenantBudgetSnapshot,
   addVoiceUsageCostCents,
+  // AL-P10: Suchgebuehr der Vorab-Recherche. Beide Backends exportieren die Fn -> die
+  // Fassade ist die EINE Quelle; ohne diesen Re-Export waere store.addResearchFeeCostCents
+  // undefined -> src/llm-usage.js wuerfe zur Laufzeit einen TypeError.
+  addResearchFeeCostCents,
   // LCT P4: Korrekturbuchung (Umrechnung + Fall-Entscheidung + Rest, ein Schritt). OHNE
   // diesen Re-Export waere die Methode auf der Fassade undefined -> der Sweep wuerfe zur
   // Laufzeit einen TypeError.

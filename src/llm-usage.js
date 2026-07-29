@@ -76,3 +76,19 @@ export function bookTokenUsage({ tenantId, callId, usage, model }) {
 export function bookEstimatedTokenUsage({ tenantId, usage, model }) {
   store.trackUsage(tenantId, billedTokens(usage, model), config.llm);
 }
+
+// AL-P10: Gebuehr der serverseitigen Vorab-Recherche. Anthropic rechnet web_search PRO
+// SUCHE ab; die Suchen tauchen in input_tokens/output_tokens NICHT auf - ohne diesen
+// Posten waere das Budget-Gate (Regel 1) an dieser Stelle blind.
+//
+// Bucht bewusst NUR die Live-Budget-Achse, NICHT den Stripe-Ledger: usage_event kennt
+// kein research-kind, und ein neues kind zoege den kompletten Stripe-Meter-Pfad in eine
+// Phase, die ihn nicht braucht. Unterbuchung im Ledger ist Umsatzverlust bei uns, kein
+// Schutzverlust (dieselbe Abwaegung wie bookEstimatedTokenUsage, AL-P9).
+//
+// searches = 0 -> No-Op (kein Muell-Beleg, keine 0-Buchung im Log). Nebeneffekt im
+// Namen (N7); der Aufrufer entscheidet OB, diese Stelle nur WOHIN.
+export function bookResearchSearchFee({ tenantId, searches }) {
+  if (!searches) return;
+  store.addResearchFeeCostCents(tenantId, searches * config.research.researchSearchFeeCents);
+}

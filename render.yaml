@@ -291,6 +291,12 @@ services:
         value: claude-sonnet-5
       - key: PRECALL_BRIEFING_TIMEOUT_MS
         value: "6000"
+      # ---- Vorab-Recherche im Briefing (AL-P10) ---- Default AUS; Anschalten ist
+      # Owner-Arbeit (mit RESEARCH_ENABLED=true wandert Auftragsmaterial an einen Suchindex).
+      - key: RESEARCH_ENABLED
+        value: "false"
+      - key: RESEARCH_SEARCH_FEE_CENTS
+        value: "1"
       # P7: 30 statt 8. 8 (=800 ct) war nicht startfaehig - die abgeleitete Business-Decke
       # (900 ct) haette den Plattform-Cap uebersprungen (plan_cap_inert, exit 1). 30 ist
       # zugleich der live gemessene Wert (test/prod-env.js LIVE_MEASURED), der Blueprint
