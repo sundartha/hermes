@@ -211,8 +211,8 @@ export async function seedDefaults(db, tenantId) {
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
         allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language,
-        allow_research)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        allow_research, allow_call_memory)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (tenant_id) DO NOTHING`,
     [
       tenantId,
@@ -226,6 +226,7 @@ export async function seedDefaults(db, tenantId) {
       s.smsSummaryOptIn,
       s.language,
       s.allowResearch ?? false,
+      s.allowCallMemory ?? false,
     ],
   );
 

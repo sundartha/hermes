@@ -292,6 +292,8 @@ export function makePgStore(runner) {
     clearNoSpeechStreak: (callId) => ops.clearNoSpeechStreak(requireState(), callId),
     countOutboundCallsSince: (sinceIso, filters = {}) =>
       ops.countOutboundCallsSince(requireState(), sinceIso, filters),
+    // AL-P12: reiner Leser auf dem Spiegel (Wrapper-Paritaet zu json.js).
+    counterpartyMemory: (tenantId, e164) => ops.counterpartyMemory(requireState(), tenantId, e164),
     findTenantByNumber: (e164) => ops.findTenantByNumber(requireState(), e164),
     // Schwester-Query + Sprach-Aufloesung (F1 Phase 4). Reine Leser auf dem Spiegel.
     numberRecordByE164: (e164) => ops.numberRecordByE164(requireState(), e164),
@@ -962,6 +964,10 @@ function rowToSettings(r) {
     // vor dem Migrate (Spalte fehlte) fallen auf "aus" zurueck - kein stiller Egress
     // von Auftragsmaterial (Muster sms_summary_opt_in, umgekehrte Fallback-Richtung).
     allowResearch: r.allow_research ?? false,
+    // AL-P12: ?? false = Bestands-Zeilen vor dem Migrate (Spalte fehlte) fallen auf "aus"
+    // zurueck - kein stilles Scharfschalten eines neuen Verarbeitungszwecks ueber
+    // Drittdaten (Muster allow_research).
+    allowCallMemory: r.allow_call_memory ?? false,
     // F1 Phase 4: optionales Override, Spalte NULLABLE. NULL -> null (nicht gesetzt);
     // die Praezedenz (resolveCallLanguage) faellt dann auf number/tenant/'de' durch.
     language: r.language ?? null,
@@ -1267,15 +1273,15 @@ async function flushSettings(client, tenantId, settings) {
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
         allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language,
-        agent_style, allow_research)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        agent_style, allow_research, allow_call_memory)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (tenant_id) DO UPDATE SET
        agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
        allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
        allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
        allow_bank_data=EXCLUDED.allow_bank_data, sms_summary_opt_in=EXCLUDED.sms_summary_opt_in,
        language=EXCLUDED.language, agent_style=EXCLUDED.agent_style,
-       allow_research=EXCLUDED.allow_research`,
+       allow_research=EXCLUDED.allow_research, allow_call_memory=EXCLUDED.allow_call_memory`,
     [
       tenantId,
       settings.agentName,
@@ -1289,6 +1295,7 @@ async function flushSettings(client, tenantId, settings) {
       settings.language,
       settings.agentStyle ?? null,
       settings.allowResearch ?? false,
+      settings.allowCallMemory ?? false,
     ],
   );
 }

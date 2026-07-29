@@ -85,6 +85,11 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
     for (const f of ["heading", "summary", "relationship", "outcome", "facts", "guardrail"]) {
       assert.ok(f in p.background, `${lang}: prompt.background.${f} fehlt`);
     }
+    // AL-P12: Beziehungsgedaechtnis-Bausteine. NICHT in GERMAN_HEADINGS (fester
+    // Fuenfer-Katalog) - der Block rendert in P11-2 ohnehin nicht (kein allowCallMemory).
+    for (const f of ["heading", "entryPrefix", "guardrail"]) {
+      assert.ok(f in p.memory, `${lang}: prompt.memory.${f} fehlt`);
+    }
     for (const f of ["endCallDescription", "endCallReasonParam", "takeMessageDescription", "takeMessageParam"]) {
       assert.equal(typeof p.tools[f], "string", `${lang}: prompt.tools.${f} ist kein String`);
       assert.ok(p.tools[f].length > 0, `${lang}: prompt.tools.${f} ist leer`);

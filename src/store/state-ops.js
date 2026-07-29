@@ -63,6 +63,10 @@ import { hasInboundNotice } from "../i18n/inbound-notice.js";
 import { isDenied } from "../telephony/number-denylist.js";
 // AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
 import { stripResultEvidence } from "../call-result.js";
+// AL-P12: K (=3) lebt im Prompt-Modul, weil dort auch das Zeichenbudget haengt - die
+// Query darf nicht mehr Eintraege liefern, als der Prompt je rendern kann (EINE Quelle).
+// call-memory.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus), Muster call-result.js.
+import { MEMORY_MAX_CALLS } from "../call-memory.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -616,6 +620,49 @@ export function countOutboundCallsSince(
       (tenantId == null || c.tenantId === tenantId) &&
       (to == null || c.to === to),
   ).length;
+}
+
+// AL-P12 (Beziehungsgedaechtnis): die Erinnerungen an EINE Gegenstelle, neueste zuerst.
+// Projektion, kein Record: je frueherem Anruf nur { outcome, facts } - keine Nummer,
+// kein Transkript, keine id (Datenminimierung).
+//
+// DREI Riegel, alle strukturell (nicht per Konvention, G27):
+//   1. TENANT-GATE: ohne settings.allowCallMemory kommt [] zurueck, BEVOR ueberhaupt
+//      gescannt wird. settingsFor ist dieselbe Per-Tenant-Quelle, die tenantContext
+//      exponiert (EINE Quelle, G5) - der Gate reist mit den Daten, ein kuenftiger
+//      zweiter Aufrufer kann ihn nicht vergessen.
+//   2. TENANT-SCOPE: c.tenantId === tenantId. Es gibt hier KEINEN tenant-uebergreifenden
+//      Zweig; ein Schluesselfehler waere ein PII-Leck ueber Tenant-Grenzen (Cross-Tenant-
+//      Test ist Pflicht, nicht Kuer).
+//   3. RICHTUNG: nur OUTBOUND-Calls, Schluessel ist das selbst gewaehlte Ziel `to`.
+//      Inbound-Anrufer-IDs sind faelschbar - ueber sie koennte ein Fremder Fakten in das
+//      Gedaechtnis einer Nummer legen, die der Tenant spaeter selbst anruft.
+// Leeres/fehlendes e164 -> [] (sonst matchten alle Calls mit to == null aufeinander).
+// Reiner Leser: filter() liefert eine NEUE Liste, sort() beruehrt s.calls also nicht.
+// Sortiert wird explizit ueber startedAt statt auf die Array-Reihenfolge zu vertrauen
+// (json unshift vs. pg ORDER BY seq DESC - eine Invariante per Konvention waere genau
+// die Sorte Fragilitaet, die dieses Repo teuer gelernt hat).
+export function counterpartyMemory(s, tenantId, e164) {
+  if (!e164) return [];
+  if (settingsFor(s, tenantId).allowCallMemory !== true) return [];
+  return s.calls
+    .filter((c) => c.tenantId === tenantId && c.direction === "outbound" && c.to === e164)
+    .sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0))
+    .map(memoryEntryOf)
+    .filter(Boolean)
+    .slice(0, MEMORY_MAX_CALLS);
+}
+
+// Traegt dieser Call eine Erinnerung? NUR outcome + facts der Ergebnis-Karte - der Rest
+// (commitments/open_points/next_step) gehoert dem Owner, nicht dem naechsten Gespraech,
+// und evidence (woertliche Zitate) gehoert dort erst recht nicht hinein. Kein
+// status-Vergleich (E3): eine Karte entsteht nur nach einem echten Gespraech, und ein
+// zweiter Status-Test waere eine zweite Stelle, die beim naechsten Enum-Wert driftet.
+// Der LAUFENDE Call faellt hier von selbst heraus (result ist noch null). Rein.
+function memoryEntryOf(call) {
+  const outcome = call.result?.outcome ?? null;
+  const facts = Array.isArray(call.result?.facts) ? call.result.facts : [];
+  return outcome || facts.length ? { outcome, facts } : null;
 }
 
 // ---- Action Items ----

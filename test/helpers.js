@@ -384,6 +384,9 @@ export function seedState({
       allowPersonalData: false,
       allowBankData: false,
       allowResearch: false,
+      // AL-P12: explizit statt implizit ueber migrateSettingsToMap (Bestand),
+      // verhaltensneutral - der Wert ist bereits der defaultSettings()-Default.
+      allowCallMemory: false,
       ...settings,
     },
     calls,

@@ -10,6 +10,7 @@ import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
 import { blockingBudgetAxis } from "./budget-gate.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.js";
+import { budgetedMemoryLines } from "./call-memory.js";
 
 // Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
@@ -49,6 +50,11 @@ function promptInputs(call) {
     settings: ctx.settings,
     owner: ctx.firstName,
     loc,
+    // AL-P12: Beziehungsgedaechtnis als aufgeloeste Eingabe wie alles andere hier - keine
+    // Sektion haengt selbst am Store (F1/G34). Der Tenant-Gate sitzt in
+    // store.counterpartyMemory (fail-closed); ohne Freigabe kostet der Aufruf einen
+    // Boolean-Vergleich, keinen Scan.
+    memory: counterpartyMemoryFor(call),
     now: new Date().toLocaleString(loc.dateLocale, {
       timeZone,
       weekday: "long",
@@ -62,6 +68,16 @@ function promptInputs(call) {
   };
 }
 
+// Die Gegenstelle eines Calls ist NUR bei Outbound `call.to`; bei Inbound ist `to` die
+// EIGENE Nummer des Tenants - sie als Gegenstellen-Schluessel zu lesen wuerde dem Agenten
+// die Notizen ueber sich selbst vorlegen. Der Gedaechtnis-Block rendert ohnehin nur im
+// Outbound-Zweig (er haengt am AUFTRAG-Block); diese Zeile macht die Regel strukturell
+// statt implizit. Rein bis auf den Store-Lesezugriff.
+function counterpartyMemoryFor(call) {
+  if (call.direction !== "outbound") return [];
+  return store.counterpartyMemory(call.tenantId, call.to);
+}
+
 // Persona + Live-Kontext. Text kommt aus dem Sprach-Baustein (loc.prompt, P11) - hier
 // bleibt nur die Weiterreichung, keine Verzweigungslogik (G5/S2).
 function personaHeader(p) {
@@ -73,13 +89,15 @@ function personaHeader(p) {
 // assistantContextSection behaelt sein fuehrendes "\n" -> context null bleibt
 // byte-identisch zur kontextlosen Baseline (assistant-context-render R2). Die Labels
 // (goalLabel/briefingLabel/constraintsLabel) kommen aus dem Sprach-Baustein (P11).
+// callMemorySection folgt derselben Regel wie assistantContextSection - fuehrendes "\n",
+// leerer String ohne Inhalt, damit der Bestandsprompt byte-identisch bleibt.
 function assignmentBlock(p) {
   const { call, loc } = p;
   const t = loc.prompt;
   const lines = [`${t.goalLabel} ${call.goal}`];
   if (call.briefing) lines.push(`${t.briefingLabel} ${call.briefing}`);
   if (call.constraints) lines.push(`${t.constraintsLabel} ${call.constraints}`);
-  return lines.join("\n") + assistantContextSection(p);
+  return lines.join("\n") + assistantContextSection(p) + callMemorySection(p);
 }
 
 // Outbound-SITUATION (D7: "fuer wen du anrufst" ist hier sachlich korrekt, der Agent
@@ -198,6 +216,21 @@ function assistantContextSection({ call, loc }) {
   if (Array.isArray(c.key_facts) && c.key_facts.length) lines.push(`${b.facts}${c.key_facts.join("; ")}`);
   if (!lines.length) return "";
   return `\n${b.heading}\n${lines.join("\n")}\n${b.guardrail}`;
+}
+
+// WAS-BISHER-GESCHAH-Sektion (AL-P12): die Ergebnisse/Fakten der letzten Anrufe an
+// dieselbe Nummer. Strukturell an drei Bedingungen gebunden, von denen KEINE hier liegt:
+// Richtung (nur outboundSituation rendert diesen Block), Tenant-Freigabe
+// (store.counterpartyMemory) und Budget (budgetedMemoryLines). Hier bleibt nur die
+// Zusammensetzung - dieselbe Form wie assistantContextSection: fuehrendes "\n", ""
+// wenn nichts zu sagen ist, damit der Bestandsprompt byte-identisch bleibt.
+// Die Guardrail-Zeile ist der Injektions-Riegel: der Inhalt stammt aus fremder Rede und
+// ist ausdruecklich Information, keine Anweisung.
+function callMemorySection({ memory, loc }) {
+  const lines = budgetedMemoryLines(memory);
+  if (!lines.length) return "";
+  const m = loc.prompt.memory;
+  return `\n${m.heading}\n${lines.map((line) => `${m.entryPrefix}${line}`).join("\n")}\n${m.guardrail}`;
 }
 
 // Fest verdrahteter Offenlegungssatz (erster gesprochener Satz bei Outbound-Calls).
