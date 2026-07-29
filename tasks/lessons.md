@@ -156,3 +156,27 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   Telnyx abgefragt (Cost-Truing), der Nummern-Hold ist eine Pauschale - und
   `searchNumbers` wirft das mitgelieferte `cost_information` weg. Vor einer Aussage ueber
   "wie das Produkt Preise behandelt" die konkrete Achse pruefen.
+
+---
+
+## Direkter Edit statt Phase (2026-07-29, Budget-Achsen-Divergenz)
+
+- **"Phase" im Owner-Wort heisst Phase, nicht "jetzt sofort tippen".** Auf die Antwort
+  "Phase von mir aus jetzt" wurde direkt auf master in `state-ops.js` editiert - am
+  Lean-Template, am Worktree und am dualen Review vorbei. CLAUDE.md stuft alles, was
+  Budget-Gates beruehrt, ausdruecklich als nicht-trivial ein: Plan Mode + Smoke-Test sind
+  Pflicht, nicht Ermessen. **Regel: bei Gate-/Geld-/Auth-Code nie direkt editieren, auch
+  wenn der Fix drei Zeilen gross ist.**
+- **`.claude/refs/clean-code.md` VOR dem Edit lesen, nicht danach.** Es wurde erst nach der
+  Ruecknahme gelesen. Der geschriebene Kommentar verstiess dann prompt gegen **C1**
+  (Aenderungshistorie im Quelltext: "Vorher las diese Funktion...", gemessene Live-Werte) -
+  genau das gehoert in die Commit-Message, nicht in den Code.
+- **Kommentardichte ist hier selbst der Tech-Debt, kein Vorbild.** `state-ops.js` hat 3122
+  Zeilen bei 1429 Kommentar- zu 1486 Codezeilen (fast 1:1) und ist die groesste Datei im
+  `src/`. Sich beim Schreiben am Bestand zu orientieren (G24, Konventionen) reproduziert
+  hier einen Missstand. Neue Kommentare nur, wo eine Invariante sonst unsichtbar waere.
+- **Der Owner-Satz "das sollte es doch gar nicht mehr geben" ist eine Messanweisung.** Die
+  Uebergabe hatte daraus eine Perioden-Anker-Hypothese gebaut; die Render-Audit-Zeile
+  (`grund=reserve_ueber_rest`, `tenant=t_user_...`) zeigte in einer Abfrage, dass sogar der
+  untersuchte Tenant der falsche war. **Runtime-Output vor Code-Rekonstruktion** (CLAUDE.md
+  Regel 7) haette die ganze Hypothese gespart.
